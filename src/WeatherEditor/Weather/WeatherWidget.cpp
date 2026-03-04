@@ -54,12 +54,12 @@ WeatherWidget::~WeatherWidget()
 
 void WeatherWidget::DrawWidget()
 {
-	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		ImGui::End();
 		return;
 	}
+	WeatherUtils::SetCurrentWidget(this);
 	// Draw header with search and all buttons
 	DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
 
@@ -76,7 +76,7 @@ void WeatherWidget::DrawWidget()
 		ImGui::SetNextWindowFocus();
 		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
-		if (ImGui::Begin("##SearchDropdown", nullptr,
+		if (ImGui::Begin(std::format("##SearchDropdown_{}", GetEditorID()).c_str(), nullptr,
 				ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
 					ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
 			for (size_t i = 0; i < std::min(size_t(5), searchResults.size()); ++i) {
@@ -239,7 +239,6 @@ void WeatherWidget::DrawWidget()
 			ImGui::Spacing();
 			ImGui::Separator();
 			ImGui::Spacing();
-			auto* editorWindow = EditorWindow::GetSingleton();
 
 			bool recordChanged = false;
 			bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
@@ -420,6 +419,7 @@ void WeatherWidget::DrawWidget()
 			}
 
 			if (recordChanged && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+				EditorWindow::GetSingleton()->PushUndoState(this);
 				ApplyChanges();
 			}
 
@@ -427,8 +427,8 @@ void WeatherWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 		ImGui::EndTabBar();
-		ImGui::End();
 	}
+	ImGui::End();
 }
 
 void WeatherWidget::LoadSettings()

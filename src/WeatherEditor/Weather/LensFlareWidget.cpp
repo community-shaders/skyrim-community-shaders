@@ -9,12 +9,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void LensFlareWidget::DrawWidget()
 {
-	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		ImGui::End();
 		return;
 	}
+	WeatherUtils::SetCurrentWidget(this);
 	DrawWidgetHeader("##LensFlareSearch", true, true);
 
 	BeginScrollableContent("##LFScroll");
@@ -40,16 +40,22 @@ void LensFlareWidget::LoadSettings()
 	if (!lensFlare)
 		return;
 
-	try {
-		if (!js.empty()) {
-			settings = js;
-		} else {
+	settings = vanillaSettings;
+	if (!js.empty()) {
+		try {
+			nlohmann::json merged = vanillaSettings;
+			merged.merge_patch(js);
+			settings = merged.get<Settings>();
+		} catch (const std::exception& e) {
+			logger::error("LensFlare {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 			settings = vanillaSettings;
 		}
-	} catch (const std::exception& e) {
-		logger::error("LensFlare {}: Failed to load from JSON: {}", GetEditorID(), e.what());
-		settings = vanillaSettings;
 	}
+
+	// Validate and clamp fields to safe ranges
+	settings.fadeDistRadiusScale = std::clamp(settings.fadeDistRadiusScale, 0.0f, 10.0f);
+	settings.colorInfluence = std::clamp(settings.colorInfluence, 0.0f, 1.0f);
+
 	originalSettings = settings;
 	ApplyChanges();
 }

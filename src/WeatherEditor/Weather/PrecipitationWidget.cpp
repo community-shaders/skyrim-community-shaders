@@ -20,12 +20,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void PrecipitationWidget::DrawWidget()
 {
-	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		ImGui::End();
 		return;
 	}
+	WeatherUtils::SetCurrentWidget(this);
 	DrawWidgetHeader("##PrecipitationSearch", true, true);
 
 	bool changed = false;
@@ -115,15 +115,16 @@ void PrecipitationWidget::LoadSettings()
 	if (!precipitation)
 		return;
 
-	try {
-		if (!js.empty()) {
-			settings = js;
-		} else {
+	settings = vanillaSettings;
+	if (!js.empty()) {
+		try {
+			nlohmann::json merged = vanillaSettings;
+			merged.merge_patch(js);
+			settings = merged.get<Settings>();
+		} catch (const std::exception& e) {
+			logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 			settings = vanillaSettings;
 		}
-	} catch (const std::exception& e) {
-		logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
-		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;
@@ -164,6 +165,15 @@ void PrecipitationWidget::ApplyChanges()
 {
 	if (!precipitation)
 		return;
+
+	// Validate and clamp fields to safe ranges before applying
+	settings.numSubtexturesX = std::max(1u, settings.numSubtexturesX);
+	settings.numSubtexturesY = std::max(1u, settings.numSubtexturesY);
+	settings.particleDensity = std::max(0.0f, settings.particleDensity);
+	settings.particleType = std::min(settings.particleType, 1u);
+	settings.boxSize = std::max(0.0f, settings.boxSize);
+	settings.particleSizeX = std::clamp(settings.particleSizeX, 0.0f, 10.0f);
+	settings.particleSizeY = std::clamp(settings.particleSizeY, 0.0f, 10.0f);
 
 	using DataID = RE::BGSShaderParticleGeometryData::DataID;
 	auto& runtime = precipitation->GetRuntimeData();

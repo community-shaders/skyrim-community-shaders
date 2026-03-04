@@ -19,12 +19,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void VolumetricLightingWidget::DrawWidget()
 {
-	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		ImGui::End();
 		return;
 	}
+	WeatherUtils::SetCurrentWidget(this);
 	DrawWidgetHeader("##VolumetricLightingSearch", true, true);
 
 	bool changed = false;
@@ -99,15 +99,16 @@ void VolumetricLightingWidget::LoadSettings()
 	if (!volumetricLighting)
 		return;
 
-	try {
-		if (!js.empty()) {
-			settings = js;
-		} else {
+	settings = vanillaSettings;
+	if (!js.empty()) {
+		try {
+			nlohmann::json merged = vanillaSettings;
+			merged.merge_patch(js);
+			settings = merged.get<Settings>();
+		} catch (const std::exception& e) {
+			logger::error("VolumetricLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 			settings = vanillaSettings;
 		}
-	} catch (const std::exception& e) {
-		logger::error("VolumetricLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
-		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;

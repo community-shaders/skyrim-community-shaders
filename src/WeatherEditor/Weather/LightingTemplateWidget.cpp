@@ -5,7 +5,7 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LightingTemplateWidget::DirectionalColor, max, min)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LightingTemplateWidget::DALC, specular, fresnelPower, directional)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LightingTemplateWidget::Settings,
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LightingTemplateWidget::Settings,
 	ambient,
 	directional,
 	fogColorNear,
@@ -24,12 +24,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LightingTemplateWidget::Settings,
 
 void LightingTemplateWidget::DrawWidget()
 {
-	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		ImGui::End();
 		return;
 	}
+	WeatherUtils::SetCurrentWidget(this);
 	DrawWidgetHeader("##LightingTemplateSearch", false, true);
 
 	bool changed = false;
@@ -255,10 +255,16 @@ void LightingTemplateWidget::LoadFromGameSettings()
 
 void LightingTemplateWidget::LoadSettings()
 {
+	settings = vanillaSettings;
 	if (!js.empty()) {
-		settings = js;
-	} else {
-		settings = vanillaSettings;
+		try {
+			nlohmann::json merged = vanillaSettings;
+			merged.merge_patch(js);
+			settings = merged.get<Settings>();
+		} catch (const nlohmann::json::exception& e) {
+			logger::error("LightingTemplate {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
+		}
 	}
 	originalSettings = settings;
 	ApplyChanges();

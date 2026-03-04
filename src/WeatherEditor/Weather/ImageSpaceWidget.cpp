@@ -23,7 +23,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void ImageSpaceWidget::DrawWidget()
 {
-	WeatherUtils::SetCurrentWidget(this);
 	auto editorWindow = EditorWindow::GetSingleton();
 
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
@@ -31,6 +30,7 @@ void ImageSpaceWidget::DrawWidget()
 		ImGui::End();
 		return;
 	}
+	WeatherUtils::SetCurrentWidget(this);
 	// Draw header with search and Save/Load/Delete buttons
 	DrawWidgetHeader("##ImageSpaceSearch", false, true);
 
@@ -87,8 +87,10 @@ void ImageSpaceWidget::DrawWidget()
 
 void ImageSpaceWidget::LoadSettings()
 {
-	if (!imageSpace)
+	if (!imageSpace) {
+		logger::warn("ImageSpaceWidget {}: imageSpace is null, skipping LoadSettings", GetEditorID());
 		return;
+	}
 
 	try {
 		if (!js.empty() && js.contains("Settings") && js["Settings"].is_object()) {
