@@ -186,12 +186,11 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
 
 		hdrLinear = Color::GammaToLinear(hdrGamma);
-		hdrLinear *= (Cinematic.w);
+		hdrLinear *= Cinematic.w;
 
 		// Power-curve contrast pivoted around photographic midgrey (0.18 linear).
 		// Cinematic.z maps from [-1, 1] to a [0.5, 1.5] exponent: 1.0 = neutral,
 		// >1.0 deepens blacks and lifts highlights without crushing toward a variable grey pivot.
-		hdrLinear = Color::GammaToLinear(hdrGamma);
 		float contrastExp = Cinematic.z * 0.5 + 1.0;
 		hdrLinear = 0.18 * pow(max(0, hdrLinear / 0.18), contrastExp);
 
@@ -199,13 +198,17 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);
 #		endif
 
-		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
-
 		// DICE tonemapping: compresses highlights from paper-white to peak brightness.
 		// Output remains in linear BT.709, values can exceed 1.0 up to peak/80.
 		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
 		float peak = peakNits / sRGB_WhiteLevelNits;
 		hdrLinear *= pw;
+
+		// Add bloom in paper-white space so it scales correctly with display brightness.
+		// Simple additive — DICE will compress any resulting values above peak naturally,
+		// giving proper HDR bloom flare around bright lights.
+		hdrLinear += Param.x * bloomColor * pw;
+
 		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, 0.5, CS_BT709, CS_BT709);
 
 		// Output gamma-encoded BT.709 to kFRAMEBUFFER (float16).
