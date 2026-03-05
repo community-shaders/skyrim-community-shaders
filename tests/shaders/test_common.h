@@ -3,6 +3,8 @@
 
 #include <Framework/ShaderTestFixture.h>
 #include <filesystem>
+#include <stdexcept>
+#include <vector>
 
 #ifdef _WIN32
 #	include <windows.h>
@@ -44,7 +46,14 @@ namespace ShaderTest
 
 	inline stf::GPUDevice::EDeviceType GetPreferredGPUDeviceType()
 	{
-		return ToGPUDeviceType(GetPreferredDevice());
+		const EPreferredDevice preferredDevice = GetPreferredDevice();
+		if (preferredDevice == EPreferredDevice::Undecided) {
+			throw std::logic_error(
+				"Preferred GPU device is undecided. Call ShaderTest::SetPreferredDevice(...) "
+				"or use ShaderTest::GetFixtureDesc(deviceType) with an explicit device.");
+		}
+
+		return ToGPUDeviceType(preferredDevice);
 	}
 
 	/// Get the directory containing the test executable

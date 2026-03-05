@@ -220,6 +220,10 @@ namespace HLSLTestDiscovery
 				return true;
 			};
 
+			if (ShaderTest::GetPreferredDevice() == ShaderTest::EPreferredDevice::Hardware) {
+				return runWithDevice(stf::GPUDevice::EDeviceType::Hardware);
+			}
+
 			if (ShaderTest::GetPreferredDevice() == ShaderTest::EPreferredDevice::Software) {
 				return runWithDevice(stf::GPUDevice::EDeviceType::Software);
 			}
@@ -234,8 +238,9 @@ namespace HLSLTestDiscovery
 					const bool softwareResult = runWithDevice(stf::GPUDevice::EDeviceType::Software);
 					ShaderTest::SetPreferredDevice(ShaderTest::EPreferredDevice::Software);
 					return softwareResult;
+				} else {
+					throw;
 				}
-				throw;
 			}
 		} catch (const std::exception& e) {
 			errorMsg = e.what();
