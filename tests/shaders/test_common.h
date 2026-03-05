@@ -53,13 +53,14 @@ namespace ShaderTest
 	}
 
 	/// Get standard fixture description for hardware testing
-	inline stf::ShaderTestFixture::FixtureDesc GetFixtureDesc()
+	inline stf::ShaderTestFixture::FixtureDesc GetFixtureDesc(
+		const stf::GPUDevice::EDeviceType deviceType = stf::GPUDevice::EDeviceType::Hardware)
 	{
 		return stf::ShaderTestFixture::FixtureDesc{
 			.Mappings = GetShaderDirectoryMappings(),
 			.GPUDeviceParams{
 				.DebugLevel = stf::GPUDevice::EDebugLevel::Off,       // Disable debug layer (may conflict with some drivers)
-				.DeviceType = stf::GPUDevice::EDeviceType::Hardware,  // Use real GPU instead of WARP
+				.DeviceType = deviceType,
 				.EnableGPUCapture = false }
 		};
 	}
