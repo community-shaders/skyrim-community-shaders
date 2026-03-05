@@ -59,7 +59,7 @@ namespace ShaderTest
 		return stf::ShaderTestFixture::FixtureDesc{
 			.Mappings = GetShaderDirectoryMappings(),
 			.GPUDeviceParams{
-				.DebugLevel = stf::GPUDevice::EDebugLevel::Off,       // Disable debug layer (may conflict with some drivers)
+				.DebugLevel = stf::GPUDevice::EDebugLevel::Off,  // Disable debug layer (may conflict with some drivers)
 				.DeviceType = deviceType,
 				.EnableGPUCapture = false }
 		};
