@@ -209,7 +209,7 @@ PS_OUTPUT main(PS_INPUT input)
 		// Shoulder anchored per Luma Framework DICE defaults.
 		// ShoulderStart = 1/3 means compression starts at 33% of peak, giving highlights a gentle, perceptually-correct rolloff curve.
 		float shoulderStart = 1.0 / 3.0;
-		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, pw, CS_BT709, CS_BT709);
+		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, shoulderStart, CS_BT709, CS_BT709);
 
 		// Output gamma-encoded BT.709 to kFRAMEBUFFER (float16).
 		// BT.2020 conversion and PQ encoding happen in HDROutputCS after all post-processing.
