@@ -1,6 +1,6 @@
-// Stochastic noise sampling for terrain textures to reduce tiling artifacts.
-// Based on "Procedural Stochastic Textures by Tiling and Blending" by Deliot & Heitz.
-// Height blend importance sampling per Jason Booth's technique.
+// Implements stochastic noise sampling for terrain textures to reduce tiling artifacts and improve visual quality.
+// Based on paper "Procedural Stochastic Textures by Tiling and Blending" by Thomas Deliot & Eric Heitz.
+// https://eheitzresearch.wordpress.com/722-2/
 
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
