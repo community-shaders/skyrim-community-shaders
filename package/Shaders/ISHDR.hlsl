@@ -198,16 +198,18 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);
 #		endif
 
+		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
+
 		// DICE tonemapping: compresses highlights from paper-white to peak brightness.
 		// Output remains in linear BT.709, values can exceed 1.0 up to peak/80.
 		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
 		float peak = peakNits / sRGB_WhiteLevelNits;
 		hdrLinear *= pw;
 
-		// Bloom: same threshold logic as SDR — fill where scene < Param.x, no bloom on bright areas
-		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
-
-		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, 0.5, CS_BT709, CS_BT709);
+		// Shoulder anchored per Luma Framework DICE defaults.
+		// ShoulderStart = 1/3 means compression starts at 33% of peak, giving highlights a gentle, perceptually-correct rolloff curve.
+		float shoulderStart = 1.0 / 3.0;
+		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, pw, CS_BT709, CS_BT709);
 
 		// Output gamma-encoded BT.709 to kFRAMEBUFFER (float16).
 		// BT.2020 conversion and PQ encoding happen in HDROutputCS after all post-processing.
