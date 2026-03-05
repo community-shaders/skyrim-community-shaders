@@ -204,10 +204,8 @@ PS_OUTPUT main(PS_INPUT input)
 		float peak = peakNits / sRGB_WhiteLevelNits;
 		hdrLinear *= pw;
 
-		// Add bloom in paper-white space so it scales correctly with display brightness.
-		// Simple additive — DICE will compress any resulting values above peak naturally,
-		// giving proper HDR bloom flare around bright lights.
-		hdrLinear += Param.x * bloomColor * pw;
+		// Bloom: same threshold logic as SDR — fill where scene < Param.x, no bloom on bright areas
+		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
 
 		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, 0.5, CS_BT709, CS_BT709);
 
