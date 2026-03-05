@@ -15,13 +15,6 @@
 
 namespace HLSLTestDiscovery
 {
-	enum class EPreferredDevice
-	{
-		Undecided,
-		Hardware,
-		Software
-	};
-
 	struct TestFunction
 	{
 		std::string name;
@@ -201,8 +194,6 @@ namespace HLSLTestDiscovery
 	inline bool runTest(const TestFunction& test, std::string& errorMsg)
 	{
 		try {
-			static EPreferredDevice preferredDevice = EPreferredDevice::Undecided;
-
 			auto runWithDevice = [&test, &errorMsg](const stf::GPUDevice::EDeviceType deviceType) {
 				stf::ShaderTestFixture fixture(ShaderTest::GetFixtureDesc(deviceType));
 				auto shaderDir = (ShaderTest::GetExecutableDirectory() / "Shaders").wstring();
@@ -229,23 +220,19 @@ namespace HLSLTestDiscovery
 				return true;
 			};
 
-			if (preferredDevice == EPreferredDevice::Hardware) {
-				return runWithDevice(stf::GPUDevice::EDeviceType::Hardware);
-			}
-
-			if (preferredDevice == EPreferredDevice::Software) {
+			if (ShaderTest::GetPreferredDevice() == ShaderTest::EPreferredDevice::Software) {
 				return runWithDevice(stf::GPUDevice::EDeviceType::Software);
 			}
 
 			try {
 				const bool hardwareResult = runWithDevice(stf::GPUDevice::EDeviceType::Hardware);
-				preferredDevice = EPreferredDevice::Hardware;
+				ShaderTest::SetPreferredDevice(ShaderTest::EPreferredDevice::Hardware);
 				return hardwareResult;
 			} catch (const stf::HrException& e) {
 				if (e.Error() == E_INVALIDARG) {
 					std::cout << "\n[ShaderTests] Hardware D3D12 path returned E_INVALIDARG; retrying with software WARP device.\n";
 					const bool softwareResult = runWithDevice(stf::GPUDevice::EDeviceType::Software);
-					preferredDevice = EPreferredDevice::Software;
+					ShaderTest::SetPreferredDevice(ShaderTest::EPreferredDevice::Software);
 					return softwareResult;
 				}
 				throw;

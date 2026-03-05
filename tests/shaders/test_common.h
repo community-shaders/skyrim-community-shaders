@@ -10,6 +10,43 @@
 
 namespace ShaderTest
 {
+	enum class EPreferredDevice
+	{
+		Undecided,
+		Hardware,
+		Software
+	};
+
+	inline EPreferredDevice& GetPreferredDeviceState()
+	{
+		static EPreferredDevice preferredDevice = EPreferredDevice::Undecided;
+		return preferredDevice;
+	}
+
+	inline void SetPreferredDevice(const EPreferredDevice preferredDevice)
+	{
+		GetPreferredDeviceState() = preferredDevice;
+	}
+
+	inline EPreferredDevice GetPreferredDevice()
+	{
+		return GetPreferredDeviceState();
+	}
+
+	inline stf::GPUDevice::EDeviceType ToGPUDeviceType(const EPreferredDevice preferredDevice)
+	{
+		if (preferredDevice == EPreferredDevice::Software) {
+			return stf::GPUDevice::EDeviceType::Software;
+		}
+
+		return stf::GPUDevice::EDeviceType::Hardware;
+	}
+
+	inline stf::GPUDevice::EDeviceType GetPreferredGPUDeviceType()
+	{
+		return ToGPUDeviceType(GetPreferredDevice());
+	}
+
 	/// Get the directory containing the test executable
 	/// This is portable across different working directories and drive letters
 	inline std::filesystem::path GetExecutableDirectory()
@@ -52,9 +89,8 @@ namespace ShaderTest
 		};
 	}
 
-	/// Get standard fixture description for hardware testing
-	inline stf::ShaderTestFixture::FixtureDesc GetFixtureDesc(
-		const stf::GPUDevice::EDeviceType deviceType = stf::GPUDevice::EDeviceType::Hardware)
+	/// Get fixture description for an explicitly selected GPU device type
+	inline stf::ShaderTestFixture::FixtureDesc GetFixtureDesc(const stf::GPUDevice::EDeviceType deviceType)
 	{
 		return stf::ShaderTestFixture::FixtureDesc{
 			.Mappings = GetShaderDirectoryMappings(),
@@ -63,5 +99,11 @@ namespace ShaderTest
 				.DeviceType = deviceType,
 				.EnableGPUCapture = false }
 		};
+	}
+
+	/// Get fixture description using the shared preferred device selection
+	inline stf::ShaderTestFixture::FixtureDesc GetFixtureDesc()
+	{
+		return GetFixtureDesc(GetPreferredGPUDeviceType());
 	}
 }
