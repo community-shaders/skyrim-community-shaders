@@ -194,9 +194,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 			float3 envSpecular, skySpecular;
 
 			if (SharedData::iblSettings.DALCMode == 2) {
-				// Mode 2: DALC-normalized env + sky overlay
+				// Mode 2: DALC-normalized env scaled by DALCAmount + sky overlay
 				float envLum = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
-				envSpecular = Color::IrradianceToLinear((envSample / max(envLum, 0.001)) * directionalAmbientColorSpecular);
+				envSpecular = Color::IrradianceToLinear((envSample / max(envLum, 0.001)) * directionalAmbientColorSpecular) * SharedData::iblSettings.DALCAmount;
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
 #		if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;

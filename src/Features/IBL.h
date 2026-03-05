@@ -52,7 +52,7 @@ public:
 		float EnvIBLSaturation = 1.0f;
 		float SkyIBLSaturation = 1.0f;
 		float FogAmount = 0.0f;
-		uint DALCMode = 0;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky
+		uint DALCMode = 2;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky
 		float pad0 = 0.0f;
 		float pad1 = 0.0f;
 	} settings;

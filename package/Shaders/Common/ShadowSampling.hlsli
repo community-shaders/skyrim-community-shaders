@@ -112,8 +112,8 @@ namespace ShadowSampling
 #if defined(IBL)
 		if (SharedData::iblSettings.EnableIBL) {
 			if (SharedData::iblSettings.DALCMode == 2) {
-				// Mode 2: keep vanilla DALC, add sky IBL overlay
-				ambientColorAmb += Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));
+				// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
+				ambientColorAmb = ambientColorAmb * SharedData::iblSettings.DALCAmount + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));
 			} else {
 				float3 envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(float3(0, 0, -1)));
 				float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));
