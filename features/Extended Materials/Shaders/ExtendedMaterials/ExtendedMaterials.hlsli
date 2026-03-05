@@ -87,6 +87,13 @@ namespace ExtendedMaterials
 				mipLevel++;
 		#endif
 
+		// Compensate for upscaler render scale (DLSS/FSR). At lower internal resolution,
+		// ddx/ddy are proportionally larger, which inflates the computed mip level and blurs
+		// the height map — weakening the apparent parallax depth. MipBias is negative for
+		// upscalers (set by the game to re-sharpen at their render scale), so subtracting
+		// it here restores the same height detail and parallax strength as native resolution.
+		mipLevel = max(mipLevel + SharedData::MipBias, 0.0);
+
 		// Stochastic mip selection: use screen noise to select between adjacent mip levels
 		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
 
@@ -133,7 +140,9 @@ namespace ExtendedMaterials
 
 	inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
 	{
-		return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+			return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
+		return tex.SampleLevel(samp, coords, mipLevel);
 	}
 
 	inline uint ComputeActiveMask(float4 w1, float2 w2)

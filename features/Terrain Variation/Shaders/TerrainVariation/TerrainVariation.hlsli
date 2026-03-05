@@ -145,21 +145,18 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
-// Parallax height queries — 2-sample branchless blend for smooth height fields across
-// simplex boundaries. Barycentric weights naturally importance-sample: deep inside a
-// triangle the dominant offset gets t -> 1.0; at edges both contribute equally for
-// artifact-free transitions. Zero compile-time branches in POM inner loop.
-#pragma warning(push)
-#pragma warning(disable : 4000)
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
 {
-	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return tex.SampleLevel(samp, uv, mipLevel);
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	return lerp(s2, s1, offsets.weights.x * rcp(offsets.weights.x + offsets.weights.y));
+	// weights are sorted descending so weights.z is always the smallest (0 at edges/vertices,
+	// max 0.333 at the centroid). Below the threshold it contributes negligible height error,
+	// so skip the third fetch. The branch is coherent at simplex-triangle scale (>> quad size).
+	if (offsets.weights.z < 0.1)
+		return (s1 * offsets.weights.x + s2 * offsets.weights.y) * rcp(offsets.weights.x + offsets.weights.y);
+	float4 s3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
+	return s1 * offsets.weights.x + s2 * offsets.weights.y + s3 * offsets.weights.z;
 }
-#pragma warning(pop)
 
 // Unified terrain sampling with importance-aware stochastic when enabled.
 // layerWeight is the Skyrim landscape blend weight — the natural importance signal
