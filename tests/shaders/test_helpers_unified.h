@@ -29,7 +29,7 @@
 	TEST_CASE(test_name, tags)                                                         \
 	{                                                                                  \
 		stf::ShaderTestFixture fixture(                                                \
-			ShaderTest::GetFixtureDesc(stf::GPUDevice::EDeviceType::Hardware));         \
+			ShaderTest::GetFixtureDesc(stf::GPUDevice::EDeviceType::Hardware));        \
 		auto shaderDir = (ShaderTest::GetExecutableDirectory() / "Shaders").wstring(); \
 		auto result = fixture.RunTest(stf::ShaderTestFixture::RuntimeTestDesc{         \
 			.CompilationEnv{ .Source = std::filesystem::path(shader_path),             \
