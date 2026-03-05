@@ -51,9 +51,8 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
 }
 
-void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view, in float roughness)
+void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il, in float3 normal, in float3 view, in float roughness)
 {
-	ao = 1 - SsgiAoTexture[pixCoord].x;
 	float NdotV = dot(normal, view);
 	ao = Color::SpecularAOLagarde(saturate(NdotV), ao, roughness);
 
@@ -159,7 +158,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
-	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
+	if (any(reflectance > 0.0)) {
 		float3 V = -normalize(positionWS.xyz);
 		float3 R = reflect(-V, normalWS);
 
@@ -261,7 +260,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 #	endif
 
 #	if defined(SSGI)
-		float ssgiAo;
 		float3 ssgiIlSpecular;
 		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
 

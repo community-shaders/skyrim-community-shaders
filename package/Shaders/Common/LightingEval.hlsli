@@ -140,7 +140,10 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 #	endif
 	lobeWeights.diffuse = material.BaseColor;
 #	if defined(DYNAMIC_CUBEMAPS)
-	lobeWeights.specular = material.F0;
+	if (any(material.F0 > 0.0)) {
+		float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
+		lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
+	}
 #	endif
 #endif
 }
