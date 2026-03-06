@@ -59,9 +59,8 @@ public:
 		PositionOpt positionWS[2];
 		uint128_t roomFlags = uint32_t(0);
 		stl::enumeration<LightFlags> lightFlags;
-		uint32_t shadowMaskIndex = 0;
 		uint32_t shadowMapIndex = 0;
-		uint pad1;
+		float2 pad0;
 	};
 	STATIC_ASSERT_ALIGNAS_16(LightData);
 

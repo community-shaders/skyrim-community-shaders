@@ -43,9 +43,8 @@ struct Light
 	float4 positionWS[2];
 	uint4 roomFlags;
 	uint lightFlags;
-	uint shadowLightIndex;
 	uint shadowMapIndex;
-	uint pad1;
+	float2 pad0;
 };
 
 #endif  //__LLF_COMMON_DEPENDENCY_HLSL__
