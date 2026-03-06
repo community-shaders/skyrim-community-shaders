@@ -203,57 +203,6 @@ void Deferred::SetupResources()
 		perShadows = new Buffer(sbDesc);
 		perShadows->CreateSRV(srvDesc);
 	}
-
-	// Recreate shadow array to support 16 shadows
-	{
-		auto& shadowMaps = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS];
-
-		if (shadowMaps.stencilSRV) {
-			shadowMaps.stencilSRV->Release();
-			shadowMaps.stencilSRV = nullptr;
-		}
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		shadowMaps.depthSRV->GetDesc(&srvDesc);
-		shadowMaps.depthSRV->Release();
-		shadowMaps.depthSRV = nullptr;
-		
-		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-		shadowMaps.views[0]->GetDesc(&dsvDesc);
-
-		for (int i = 0; i < 8; i++) {
-			if (shadowMaps.views[i]) {
-				shadowMaps.views[i]->Release();
-				shadowMaps.views[i] = nullptr;
-			}
-			if (shadowMaps.readOnlyViews[i]) {
-				shadowMaps.readOnlyViews[i]->Release();
-				shadowMaps.readOnlyViews[i] = nullptr;
-			}
-		}
-
-		D3D11_TEXTURE2D_DESC texDesc{};
-		shadowMaps.texture->GetDesc(&texDesc);
-		shadowMaps.texture->Release();
-		shadowMaps.texture = nullptr;
-
-		texDesc.ArraySize = 16;
-
-		auto device = globals::d3d::device;
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, &shadowMaps.texture));
-
-		for (uint i = 0; i < 16; i++) {
-			dsvDesc.Texture2DArray.FirstArraySlice = i;
-			if (i < 8) {
-				DX::ThrowIfFailed(device->CreateDepthStencilView(shadowMaps.texture, &dsvDesc, &shadowMaps.views[i]));
-			} else {
-				DX::ThrowIfFailed(device->CreateDepthStencilView(shadowMaps.texture, &dsvDesc, &shadowMaps.readOnlyViews[i - 8]));
-			}
-		}
-
-		srvDesc.Texture2DArray.ArraySize = 16;
-		DX::ThrowIfFailed(device->CreateShaderResourceView(shadowMaps.texture, &srvDesc, &shadowMaps.depthSRV));
-	}
 }
 
 void Deferred::ReflectionsPrepasses()
