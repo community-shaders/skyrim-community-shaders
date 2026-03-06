@@ -435,6 +435,17 @@ namespace FeatureIssues
 			ImGui::Text("Opens the main Shaders directory to view individual feature shader folders.");
 		}
 
+		std::filesystem::path logPath = Util::PathHelpers::GetLogPath();
+		if (!logPath.empty()) {
+			ImGui::SameLine();
+			if (ImGui::Button("Open Logs")) {
+				ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Opens the CommunityShaders.log file for manual review.");
+			}
+		}
+
 		ImGui::SameLine();
 		if (ImGui::Button("Clear Issue List")) {
 			ClearFeatureIssues();
@@ -451,6 +462,7 @@ namespace FeatureIssues
 		ImGui::TextColored(theme.Palette.Text, "General Actions:");
 		ImGui::BulletText("Use 'Open Features Folder' to manually review INI files");
 		ImGui::BulletText("Use 'Open Shaders Directory' to check for orphaned shader folders");
+		ImGui::BulletText("Use 'Open Logs' to manually review the logs");
 		ImGui::BulletText("Use 'Clear Issue List' to refresh after manual cleanup");
 	}
 
