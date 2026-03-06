@@ -246,8 +246,10 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		if (i < a_pass->numShadowLights) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-			GET_INSTANCE_MEMBER(maskIndex, shadowLight);
-			light.shadowMaskIndex = maskIndex;
+			if (globals::game::isVR)
+				light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+			else
+				light.shadowMapIndex = shadowLight->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
 			light.lightFlags.set(LightFlags::Shadow);
 		}
 
@@ -369,53 +371,6 @@ void LightLimitFix::ClearShaderCache()
 	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
 }
 
-struct CS_Data
-{
-	int32_t structVer{ 2 };
-	int64_t frameCounter;
-	RE::BSShadowLight** allShadowLights;
-	int32_t allShadowLightsCount;
-	RE::BSShadowLight** activeShadowLights;
-	int32_t activeShadowLightsCount;
-	RE::BSShadowLight** remShadowLights;
-	int32_t remShadowLightsCount;
-	RE::BSShadowLight** addShadowLights;
-	int32_t addShadowLightsCount;
-	RE::NiTransform* stencilBufferCameraTransform;
-	int32_t stencilBufferCameraTransformCount;
-	RE::BSShadowLight::ShadowmapDescriptor** stencilBufferShadowMap;
-	int32_t stencilBufferShadowMapCount;
-	RE::BSShadowLight** stencilBufferLight;
-	int32_t stencilBufferLightCount;
-	int32_t* stencilBufferDrawIndex;
-	int32_t stencilBufferDrawIndexCount;
-	RE::NiRect<float>* stencilBufferUnkFloat;
-	int32_t stencilBufferUnkFloatCount;
-};
-
-CS_Data* GetCSData_ext()
-{
-	static HMODULE _dll = 0;
-	static FARPROC _func = 0;
-
-	typedef void* (*GetCSData_fn)();
-
-	if (_dll == 0) {
-		_dll = GetModuleHandleA("intellightent-ng.dll");
-		if (_dll == 0)
-			return nullptr;
-	}
-
-	if (_func == 0) {
-		_func = GetProcAddress(_dll, "GetCSData");
-		if (_func == 0)
-			return nullptr;
-	}
-
-	auto fn = (GetCSData_fn)_func;
-	return (CS_Data*)fn();
-}
-
 void LightLimitFix::UpdateLights()
 {
 	auto smState = globals::game::smState;
@@ -480,25 +435,11 @@ void LightLimitFix::UpdateLights()
 						light.lightFlags.set(LightFlags::PortalStrict);
 					}
 
-					if (bsLight->IsShadowLight()) {
-						auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-						GET_INSTANCE_MEMBER(maskIndex, shadowLight);
-						light.shadowMaskIndex = maskIndex;
-						if (globals::game::isVR)
-							light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
-						else
-							light.shadowMapIndex = shadowLight->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
-						light.lightFlags.set(LightFlags::Shadow);
-					}
+					SetLightPosition(light, niLight->world.translate);
 
-					// Check for inactive shadow light
-					if (light.shadowMaskIndex != 255) {
-						SetLightPosition(light, niLight->world.translate);
-
-						if ((light.color.x + light.color.y + light.color.z) * light.fade > 1e-4 && light.radius > 1e-4) {
-							lightsData.push_back(light);
-						}
-					}
+					if ((light.color.x + light.color.y + light.color.z) * light.fade > 1e-4 && light.radius > 1e-4) {
+						lightsData.push_back(light);
+					}				
 				}
 			}
 		}
@@ -539,7 +480,6 @@ void LightLimitFix::UpdateLights()
 					light.lightFlags.set(LightFlags::PortalStrict);
 				}
 
-				light.shadowMaskIndex = 0;
 				if (globals::game::isVR)
 					light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
 				else

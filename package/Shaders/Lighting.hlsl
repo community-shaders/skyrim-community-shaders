@@ -1982,9 +1982,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif  // SPARKLE
 #	endif      // defined (MODELSPACENORMALS) && !defined (SKINNED)
 
-	// Shadow mask texture (t14) removed; all shadows are sampled from depth maps directly
-	// via ShadowSampling::GetLightingShadow() and ShadowSampling::GetShadowLightShadow().
-
 	float projectedMaterialWeight = 0;
 
 	float projWeight = 0;
@@ -2546,7 +2543,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float lightShadow = 1.f;
 		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
 			if (lightIndex < numShadowLights) {
-				//lightShadow *= ShadowSampling::GetShadowLightShadow(lightIndex, input.WorldPosition.xyz);
 			}
 		}
 
