@@ -3,6 +3,7 @@
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
 #include "Features/CloudShadows.h"
+#include "Features/DX12Interop.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
@@ -211,6 +212,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::extendedMaterials,
 		&globals::features::wetnessEffects,
 		&globals::features::lightLimitFix,
+		&globals::features::dx12Interop,
 		&globals::features::dynamicCubemaps,
 		&globals::features::cloudShadows,
 		&globals::features::waterEffects,

@@ -1,6 +1,7 @@
 #pragma once
 
 struct CloudShadows;
+struct DX12Interop;
 struct DynamicCubemaps;
 struct ExtendedMaterials;
 struct GrassCollision;
@@ -56,6 +57,7 @@ namespace globals
 	namespace features
 	{
 		extern CloudShadows cloudShadows;
+		extern DX12Interop dx12Interop;
 		extern DynamicCubemaps dynamicCubemaps;
 		extern ExtendedMaterials extendedMaterials;
 		extern GrassCollision grassCollision;

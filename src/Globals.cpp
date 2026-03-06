@@ -2,6 +2,7 @@
 
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
+#include "Features/DX12Interop.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
@@ -81,6 +82,7 @@ namespace globals
 		Upscaling upscaling{};
 		RenderDoc renderDoc{};
 		WeatherEditor weatherEditor{};
+		DX12Interop dx12Interop{};
 		Raytracing raytracing{};
 
 		namespace llf

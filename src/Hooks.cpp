@@ -16,6 +16,7 @@
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
+#include "Features/DX12Interop.h"
 #include "Features/Raytracing.h"
 
 #include "ShaderTools/BSShaderHooks.h"
@@ -307,9 +308,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		pFeatureLevel,
 		ppImmediateContext);
 
-	auto& rt = globals::features::raytracing;
-	if (rt.loaded)
-		rt.CreateD3D12Device(*ppDevice, *ppImmediateContext, pAdapter);
+	auto& dx12Interop = globals::features::dx12Interop;
+	if (dx12Interop.loaded)
+		dx12Interop.Init(*ppDevice, *ppImmediateContext, pAdapter);
 
 	return ret;
 }

@@ -8,11 +8,11 @@
 #include <shlobj.h>
 #include <windows.h>
 
+#include "DX12Interop.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
 	PerfOverlay,
-	EnablePIXCapture,
-	EnableDebugDevice,
 	CreationEngineRaytracingSettings)
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -251,117 +251,6 @@ void Raytracing::DrawOverlay()
 	ImGui::End();
 }
 
-static std::wstring GetLatestWinPixGpuCapturerPath()
-{
-	LPWSTR programFilesPath = nullptr;
-	SHGetKnownFolderPath(FOLDERID_ProgramFiles, KF_FLAG_DEFAULT, NULL, &programFilesPath);
-
-	std::filesystem::path pixInstallationPath = programFilesPath;
-	pixInstallationPath /= "Microsoft PIX";
-
-	std::wstring newestVersionFound;
-
-	for (auto const& directory_entry : std::filesystem::directory_iterator(pixInstallationPath)) {
-		if (directory_entry.is_directory()) {
-			if (newestVersionFound.empty() || newestVersionFound < directory_entry.path().filename().c_str()) {
-				newestVersionFound = directory_entry.path().filename().c_str();
-			}
-		}
-	}
-
-	if (newestVersionFound.empty()) {
-		// TODO: Error, no PIX installation found
-	}
-
-	return pixInstallationPath / newestVersionFound / L"WinPixGpuCapturer.dll";
-}
-
-void Raytracing::InitializePIX()
-{
-	if (!settings.EnablePIXCapture)
-		return;
-
-	// Check to see if a copy of WinPixGpuCapturer.dll has already been injected into the application.
-	// This may happen if the application is launched through the PIX UI.
-	if (GetModuleHandle(L"WinPixGpuCapturer.dll") == 0) {
-		auto pixGPUCapturerPath = GetLatestWinPixGpuCapturerPath();
-
-		if (pixGPUCapturerPath.empty()) {
-			logger::warn("[RT] PIX capture is enabled but binaries where not found.");
-		} else {
-			LoadLibrary(pixGPUCapturerPath.c_str());
-		}
-	}
-
-	DX::ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&ga)));
-}
-
-void Raytracing::CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter)
-{
-	if (forcedDisabled)
-		return;
-
-	// Set Device
-	DX::ThrowIfFailed(d3d11Device->QueryInterface(IID_PPV_ARGS(&m_D3D11Device)));
-
-	// Set Context Device
-	DX::ThrowIfFailed(immediateContext->QueryInterface(IID_PPV_ARGS(&m_D3D11Context)));
-
-	InitializePIX();
-
-	// Create device
-	DX::ThrowIfFailed(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&m_D3D12Device)));
-
-	// Check hardware raytracing tier
-	D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
-	if (SUCCEEDED(m_D3D12Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)))) {
-		if (options5.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED)
-			logger::info("[Raytracing] Hardware ray tracing supported! Tier: {}", magic_enum::enum_name(options5.RaytracingTier));
-		else
-			logger::warn("[Raytracing] Hardware ray tracing not supported.");
-	}
-
-	auto createCommandQueue = [&](D3D12_COMMAND_LIST_TYPE type, LPCWSTR name, winrt::com_ptr<ID3D12CommandQueue>& queue) {
-		D3D12_COMMAND_QUEUE_DESC queueDesc = {};
-		queueDesc.Type = type;
-		queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-		queueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-		queueDesc.NodeMask = 0;
-		DX::ThrowIfFailed(m_D3D12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)));
-		DX::ThrowIfFailed(queue->SetName(name));
-	};
-
-	// Command Queues
-	createCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT, L"Command Queue", m_CommandQueue);
-	createCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE, L"Compute Command Queue", m_ComputeCommandQueue);
-	createCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY, L"Copy Command Queue", m_CopyCommandQueue);
-
-	/*DX::ThrowIfFailed(m_D3D12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)));
-	DX::ThrowIfFailed(commandAllocator->SetName(L"Command Allocator"));
-
-	DX::ThrowIfFailed(m_D3D12Device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&commandList)));
-	DX::ThrowIfFailed(commandList->SetName(L"Command List"));
-
-	DX::ThrowIfFailed(commandAllocator->Reset());
-	DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));*/
-
-	// Create Interop
-	HANDLE sharedFenceHandle;
-	DX::ThrowIfFailed(m_D3D12Device->CreateFence(fenceValue, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
-	DX::ThrowIfFailed(m_D3D12Device->CreateSharedHandle(d3d12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
-	DX::ThrowIfFailed(m_D3D11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fence)));
-	CloseHandle(sharedFenceHandle);
-
-	InitializeCERaytracing(m_D3D11Device.get(), m_D3D12Device.get(), m_CommandQueue.get(), m_ComputeCommandQueue.get(), m_CopyCommandQueue.get());
-}
-
-void Raytracing::SetDevices(ID3D11Device* d3d11Device, ID3D12Device5* d3d12Device, ID3D11DeviceContext* immediateContext)
-{
-	DX::ThrowIfFailed(d3d11Device->QueryInterface(IID_PPV_ARGS(&m_D3D11Device)));
-	DX::ThrowIfFailed(immediateContext->QueryInterface(IID_PPV_ARGS(&m_D3D11Context)));
-	DX::ThrowIfFailed(d3d12Device->QueryInterface(IID_PPV_ARGS(&m_D3D12Device)));
-}
-
 void Raytracing::Load()
 {
 	Hooks::Install();
@@ -479,6 +368,8 @@ void Raytracing::SetupResources()
 		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
 	}
 
+	auto& d3d11Device = globals::features::dx12Interop.d3d11Device;
+
 	featureData = eastl::make_unique<FeatureData>();
 
 	logger::debug("Creating samplers...");
@@ -492,7 +383,7 @@ void Raytracing::SetupResources()
 			.MinLOD = 0,
 			.MaxLOD = D3D11_FLOAT32_MAX
 		};
-		DX::ThrowIfFailed(m_D3D11Device->CreateSamplerState(&samplerDesc, samplerState.put()));
+		DX::ThrowIfFailed(d3d11Device->CreateSamplerState(&samplerDesc, samplerState.put()));
 	}
 
 	// Sky Hemisphere
@@ -507,7 +398,7 @@ void Raytracing::SetupResources()
 		texDesc.SampleDesc.Quality = 0;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
-		skyHemisphere = eastl::make_unique<WrappedResource>(texDesc, m_D3D11Device.get(), m_D3D12Device.get());
+		skyHemisphere = eastl::make_unique<WrappedResource>(texDesc);
 		DX::ThrowIfFailed(skyHemisphere->resource->SetName(L"Sky Hemisphere"));
 
 		// Setup TESWaterReflections
@@ -603,7 +494,7 @@ void Raytracing::DeferredPasses()
 
 	if (!mainTexture || resolutionChanged) {
 		desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		mainTexture = eastl::make_unique<WrappedResource>(desc, m_D3D11Device.get(), m_D3D12Device.get());
+		mainTexture = eastl::make_unique<WrappedResource>(desc);
 		creationEngineRaytracing->SetCopyTarget(mainTexture->resource.get());
 	}
 
