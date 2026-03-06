@@ -1978,12 +1978,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float projWeight = 0;
 
 #	if defined(PROJECTED_UV)
-	// Triplanar projection: use geometric face normal (ddx/ddy) for stable per-face weights
 	float3 projWorldPos = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-	float3 triGeoNormal = normalize(-cross(ddx(input.WorldPosition.xyz), ddy(input.WorldPosition.xyz)));
-	float3 triWeights = Triplanar::GetWeightsDynamic(triGeoNormal);
-	float projNoise = Triplanar::Sample(TexCharacterLightProjNoiseSampler, SampCharacterLightProjNoiseSampler, projWorldPos, triWeights, ProjectedUVParams.z).x;
-	float3 texProj = normalize(input.TexProj);
+	float3 triGeoNormal = tbnTr[2];
+	float3 triWeights = Triplanar::GetWeights(triGeoNormal);
+	float projNoise = Triplanar::SampleStochastic(TexCharacterLightProjNoiseSampler, SampCharacterLightProjNoiseSampler, projWorldPos, triWeights, ProjectedUVParams.z, screenNoise).x;
+	float3 texProj = input.TexProj;
 #		if defined(TREE_ANIM) || defined(LODOBJECTSHD)
 	float vertexAlpha = 1;
 #		else
@@ -1997,8 +1996,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (projWeight < 0)
 		discard;
 
-	rawBaseColor = Triplanar::SampleBias(TexColorSampler, SampColorSampler, projWorldPos, triWeights, ProjectedUVParams2.y, SharedData::MipBias);
+	rawBaseColor = Triplanar::SampleStochasticBias(TexColorSampler, SampColorSampler, projWorldPos, triWeights, ProjectedUVParams2.y, SharedData::MipBias, screenNoise);
 	baseColor = float4(Color::Diffuse(rawBaseColor.rgb), rawBaseColor.a);
+
 	worldNormal.xyz = projectedNormal;
 #			if defined(SNOW)
 	psout.Parameters.y = 1;
@@ -2006,11 +2006,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		elif !defined(FACEGEN) && !defined(MULTI_LAYER_PARALLAX) && !defined(PARALLAX) && !defined(SPARKLE)
 	if (ProjectedUVParams3.w > 0.5) {
 		float diffuseNormalScale = ProjectedUVParams3.x * ProjectedUVParams.z;
-		float3 projNormal = TransformNormal(Triplanar::Sample(TexProjNormalSampler, SampProjNormalSampler, projWorldPos, triWeights, diffuseNormalScale).xyz);
+		float3 projNormal = Triplanar::SampleNormalStochastic(TexProjNormalSampler, SampProjNormalSampler, projWorldPos, triWeights, diffuseNormalScale, worldNormal.xyz, screenNoise);
 		float detailNormalScale = ProjectedUVParams3.y * ProjectedUVParams.z;
-		float3 projDetailNormal = Triplanar::Sample(TexProjDetail, SampProjDetailSampler, projWorldPos, triWeights, detailNormalScale).xyz;
-		float3 finalProjNormal = normalize(TransformNormal(projDetailNormal) * float3(1, 1, projNormal.z) + float3(projNormal.xy, 0));
-		float3 projBaseColor = Color::ColorToLinear(Triplanar::Sample(TexProjDiffuseSampler, SampProjDiffuseSampler, projWorldPos, triWeights, diffuseNormalScale).xyz) * Color::ColorToLinear(ProjectedUVParams2.xyz);
+		float3 projDetailNormal = Triplanar::SampleNormalStochastic(TexProjDetail, SampProjDetailSampler, projWorldPos, triWeights, detailNormalScale, worldNormal.xyz, screenNoise);
+		float3 finalProjNormal = normalize(projDetailNormal * float3(1, 1, projNormal.z) + float3(projNormal.xy, 0));
+		float3 projBaseColor = Color::ColorToLinear(Triplanar::SampleStochastic(TexProjDiffuseSampler, SampProjDiffuseSampler, projWorldPos, triWeights, diffuseNormalScale, screenNoise).xyz) * Color::ColorToLinear(ProjectedUVParams2.xyz);
 		projectedMaterialWeight = smoothstep(0, 1, 5 * (0.1 + projWeight));
 #			if defined(TRUE_PBR)
 		projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
