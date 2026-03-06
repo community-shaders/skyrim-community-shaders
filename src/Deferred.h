@@ -26,6 +26,8 @@ public:
 	struct alignas(16) DirectionalShadowData
 	{
 		DirectX::XMFLOAT4X4 ShadowProj[2];
+		DirectX::XMFLOAT4X4 InvShadowProj[2];
+
 		DirectX::XMFLOAT2   EndSplitDistances;
 		DirectX::XMFLOAT2   StartSplitDistances;
 	};
@@ -34,6 +36,8 @@ public:
 	struct alignas(16) ShadowData
 	{
 		DirectX::XMFLOAT4X4  ShadowProj;
+		DirectX::XMFLOAT4X4  InvShadowProj;
+
 		float4				 ShadowParam;
 	};
 

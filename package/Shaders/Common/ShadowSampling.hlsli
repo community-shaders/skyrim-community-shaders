@@ -24,6 +24,8 @@ Texture2D<float2> SharedShadowMap : register(t80);
 struct DirectionalShadowData
 {
 	column_major float4x4 ShadowProj[2];
+	column_major float4x4 InvShadowProj[2];
+
 	float2 EndSplitDistances;
 	float2 StartSplitDistances;
 };
@@ -35,6 +37,8 @@ Texture2DArray<float> DirectionalShadowCascades : register(t82);
 struct ShadowData
 {
 	column_major float4x4 ShadowProj;
+	column_major float4x4 InvShadowProj[2];
+
 	float4 ShadowParam;
 };
 
