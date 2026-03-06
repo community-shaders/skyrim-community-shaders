@@ -116,6 +116,7 @@ struct CreationEngineRaytracing
 	using SetSkyHemisphereFn = void (*)(ID3D12Resource*);
 	using GetFrameTimeFn = float* (*)();
 	using UpdateSettingsFn = void (*)(Settings);
+	using GetRRInputFn = void(*)(ID3D12Resource*&, ID3D12Resource*&, ID3D12Resource*&, ID3D12Resource*&);
 
 	InitializeFn Initialize = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
@@ -125,6 +126,7 @@ struct CreationEngineRaytracing
 	SetSkyHemisphereFn SetSkyHemisphere = nullptr;
 	GetFrameTimeFn GetFrameTime = nullptr;
 	UpdateSettingsFn UpdateSettings = nullptr;
+	GetRRInputFn GetRRInput = nullptr;
 
 	CreationEngineRaytracing()
 	{
@@ -177,6 +179,11 @@ struct CreationEngineRaytracing
 
 		if (!UpdateSettings)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateSettings is nullptr");
+
+		GetRRInput = reinterpret_cast<GetRRInputFn>(GetProcAddress(handle, "GetRRInput"));
+
+		if (!GetRRInput)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' GetRRInput is nullptr");
 	}
 };
 
@@ -242,6 +249,7 @@ struct Raytracing : public OverlayFeature
 
 	void CompileShaders();
 
+	void InitializePIX();
 	void CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
 	void SetDevices(ID3D11Device* d3d11Device, ID3D12Device5* d3d12Device, ID3D11DeviceContext* immediateContext);
 
@@ -256,6 +264,7 @@ struct Raytracing : public OverlayFeature
 	{
 		bool PerfOverlay = true;
 		bool EnablePIXCapture = false;
+		bool EnableDebugDevice = false;
 		CreationEngineRaytracing::Settings CreationEngineRaytracingSettings;
 	} settings;
 

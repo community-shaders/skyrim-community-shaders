@@ -12,6 +12,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
 	PerfOverlay,
 	EnablePIXCapture,
+	EnableDebugDevice,
 	CreationEngineRaytracingSettings)
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -184,6 +185,8 @@ void Raytracing::DrawDebugSettings()
 		}
 	}
 
+	ImGui::Checkbox("Enable Debug Device", &settings.EnableDebugDevice);
+
 	ImGui::PopID();
 
 	ImGui::EndTabItem();
@@ -273,24 +276,30 @@ static std::wstring GetLatestWinPixGpuCapturerPath()
 	return pixInstallationPath / newestVersionFound / L"WinPixGpuCapturer.dll";
 }
 
+void Raytracing::InitializePIX()
+{
+	if (!settings.EnablePIXCapture)
+		return;
+
+	// Check to see if a copy of WinPixGpuCapturer.dll has already been injected into the application.
+	// This may happen if the application is launched through the PIX UI.
+	if (GetModuleHandle(L"WinPixGpuCapturer.dll") == 0) {
+		auto pixGPUCapturerPath = GetLatestWinPixGpuCapturerPath();
+
+		if (pixGPUCapturerPath.empty()) {
+			logger::warn("[RT] PIX capture is enabled but binaries where not found.");
+		} else {
+			LoadLibrary(pixGPUCapturerPath.c_str());
+		}
+	}
+
+	DX::ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&ga)));
+}
+
 void Raytracing::CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter)
 {
 	if (forcedDisabled)
 		return;
-
-	if (settings.EnablePIXCapture) {
-		// Check to see if a copy of WinPixGpuCapturer.dll has already been injected into the application.
-		// This may happen if the application is launched through the PIX UI.
-		if (GetModuleHandle(L"WinPixGpuCapturer.dll") == 0) {
-			auto pixGPUCapturerPath = GetLatestWinPixGpuCapturerPath();
-
-			if (pixGPUCapturerPath.empty()) {
-				logger::warn("[RT] PIX capture is enabled but binaries where not found.");
-			} else {
-				LoadLibrary(pixGPUCapturerPath.c_str());
-			}
-		}
-	}
 
 	// Set Device
 	DX::ThrowIfFailed(d3d11Device->QueryInterface(IID_PPV_ARGS(&m_D3D11Device)));
@@ -298,9 +307,7 @@ void Raytracing::CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContex
 	// Set Context Device
 	DX::ThrowIfFailed(immediateContext->QueryInterface(IID_PPV_ARGS(&m_D3D11Context)));
 
-	if (settings.EnablePIXCapture) {
-		DX::ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&ga)));
-	}
+	InitializePIX();
 
 	// Create device
 	DX::ThrowIfFailed(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&m_D3D12Device)));
@@ -393,6 +400,36 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 {
 	if (initialized)
 		return;
+
+	bool debugDevice = !settings.EnablePIXCapture && settings.EnableDebugDevice;
+
+	// Create debug device
+	if (debugDevice) {
+		winrt::com_ptr<ID3D12Debug3> debugController;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+			debugController->EnableDebugLayer();
+			debugController->SetEnableGPUBasedValidation(TRUE);
+		} else {
+			logger::critical("[Raytracing] Debug layer creation failed.");
+		}
+
+		winrt::com_ptr<ID3D12DeviceRemovedExtendedDataSettings1> pDredSettings;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&pDredSettings)))) {
+			pDredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+			pDredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+		}
+
+		winrt::com_ptr<ID3D12InfoQueue> infoQueue;
+		if (SUCCEEDED(d3d12Device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, FALSE);
+		} else {
+			logger::critical("[Raytracing] Debug break creation failed.");
+		}
+	}
+
+
 
 	bool result = creationEngineRaytracing->Initialize(d3d11Device, d3d12Device, commandQueue, computeCommandQueue, copyCommandQueue);
 
@@ -555,19 +592,18 @@ void Raytracing::DeferredPasses()
 
 	bool resolutionChanged = UpdateResolution();
 
+	D3D11_TEXTURE2D_DESC desc{};
+	desc.Width = m_Resolution.x;
+	desc.Height = m_Resolution.y;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.SampleDesc.Count = 1;
+	desc.SampleDesc.Quality = 0;
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
 	if (!mainTexture || resolutionChanged) {
-		D3D11_TEXTURE2D_DESC desc{};
-		desc.Width = m_Resolution.x;
-		desc.Height = m_Resolution.y;
-		desc.MipLevels = 1;
-		desc.ArraySize = 1;
 		desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		desc.SampleDesc.Count = 1;
-		desc.SampleDesc.Quality = 0;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
 		mainTexture = eastl::make_unique<WrappedResource>(desc, m_D3D11Device.get(), m_D3D12Device.get());
-
 		creationEngineRaytracing->SetCopyTarget(mainTexture->resource.get());
 	}
 
