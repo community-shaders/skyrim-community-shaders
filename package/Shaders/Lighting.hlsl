@@ -873,6 +873,24 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "Common/PBR.hlsli"
 #	endif
 
+#	if defined(TERRAIN_VARIATION) && (defined(LANDSCAPE) || defined(LODLANDSCAPE) || defined(LOD_LAND_BLEND))
+#		include "TerrainVariation/TerrainVariation.hlsli"
+#	elif defined(LANDSCAPE) || defined(LODLANDSCAPE) || defined(LOD_LAND_BLEND)
+#		if !defined(TERRAIN_VARIATION_HLSLI)
+struct StochasticOffsets { float2 offset1; float2 offset2; float2 offset3; float3 weights; };
+struct StochasticGradients { float2 uvDx; float2 uvDy; };
+inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV) { return (StochasticOffsets)0; }
+inline StochasticGradients ComputeStochasticGradients(float2 uv) { return (StochasticGradients)0; }
+inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV) { return (StochasticOffsets)0; }
+inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets) { return tex.SampleBias(samp, uv, SharedData::MipBias); }
+inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets) { return tex.SampleLevel(samp, uv, mipLevel); }
+inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, StochasticGradients grad, float layerWeight)
+{
+	return tex.SampleBias(samp, uv, SharedData::MipBias);
+}
+#		endif
+#	endif
+
 #	if defined(EMAT)
 #		include "ExtendedMaterials/ExtendedMaterials.hlsli"
 #	endif
@@ -911,25 +929,6 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	if defined(HAIR) && defined(CS_HAIR)
 #		include "Hair/Hair.hlsli"
-#	endif
-
-#	if defined(TERRAIN_VARIATION) && (defined(LANDSCAPE) || defined(LODLANDSCAPE) || defined(LOD_LAND_BLEND))
-#		include "TerrainVariation/TerrainVariation.hlsli"
-#	elif defined(LANDSCAPE) || defined(LODLANDSCAPE) || defined(LOD_LAND_BLEND)
-// Stub types for unified terrain sampling when Terrain Variation is not installed
-#		if !defined(TERRAIN_VARIATION_HLSLI) && !defined(TERRAIN_SAMPLING_STUBS)
-#			define TERRAIN_SAMPLING_STUBS
-struct StochasticOffsets { float2 offset1; float2 offset2; float2 offset3; float3 weights; };
-struct StochasticGradients { float2 uvDx; float2 uvDy; };
-inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV) { return (StochasticOffsets)0; }
-inline StochasticGradients ComputeStochasticGradients(float2 uv) { return (StochasticGradients)0; }
-inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV) { return (StochasticOffsets)0; }
-inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets) { return tex.SampleBias(samp, uv, SharedData::MipBias); }
-inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, StochasticGradients grad, float layerWeight)
-{
-	return tex.SampleBias(samp, uv, SharedData::MipBias);
-}
-#		endif
 #	endif
 
 #	if defined(EXTENDED_TRANSLUCENCY) && !(defined(LOD) || defined(SKIN) || defined(HAIR) || defined(EYE) || defined(TREE_ANIM) || defined(LODOBJECTSHD) || defined(LODOBJECTS) || defined(DEPTH_WRITE_DECALS))

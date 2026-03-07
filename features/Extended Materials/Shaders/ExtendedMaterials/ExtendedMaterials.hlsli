@@ -5,25 +5,6 @@
 // http://www.diva-portal.org/smash/get/diva2:831762/FULLTEXT01.pdf
 // https://bartwronski.files.wordpress.com/2014/03/ac4_gdc.pdf
 
-#if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
-#	include "TerrainVariation/TerrainVariation.hlsli"
-#endif
-
-// Stub types for unified function signatures when Terrain Variation is not installed
-#if !defined(TERRAIN_VARIATION_HLSLI) && defined(LANDSCAPE)
-struct StochasticOffsets
-{
-	float2 offset1;
-	float2 offset2;
-	float2 offset3;
-	float3 weights;
-};
-inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
-{
-	return tex.SampleLevel(samp, uv, mipLevel);
-}
-#endif
-
 struct DisplacementParams
 {
 	float DisplacementScale;
