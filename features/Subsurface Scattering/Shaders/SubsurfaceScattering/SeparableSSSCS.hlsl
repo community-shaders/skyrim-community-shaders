@@ -30,8 +30,7 @@ cbuffer PerFrameSSS : register(b1)
 #	include "SubsurfaceScattering/SeparableSSS.hlsli"
 #endif
 
-[numthreads(8, 8, 1)] void main(uint3 DTid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 	// Early exit if dispatch thread is outside screen bounds
 	if (any(DTid.xy >= uint2(SharedData::BufferDim.xy)))
 		return;

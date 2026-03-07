@@ -5,7 +5,7 @@ SamplerState LinearSampler : register(s0);
 
 float2 GetVSMMoments(in float depth)
 {
-    return float2(depth, depth * depth);
+	return float2(depth, depth * depth);
 }
 
 float2 ReduceMoments(float2 a, float2 b, float2 c, float2 d)
@@ -21,8 +21,7 @@ static const uint CASCADE = 1;
 static const uint CASCADE = 0;
 #endif
 
-[numthreads(8, 8, 1)]
-void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID) {
 	uint2 pixCoord = dispatchThreadID.xy * 2;
 
 	uint inputW, inputH, inputSlices;
@@ -36,9 +35,12 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 	// Gather handles 2x, each group reduction handles another 2x
 	uint totalReduction = inputW / outputW;
 	uint groupReductions = 0;
-	if (totalReduction >= 4) groupReductions = 1;
-	if (totalReduction >= 8) groupReductions = 2;
-	if (totalReduction >= 16) groupReductions = 3;
+	if (totalReduction >= 4)
+		groupReductions = 1;
+	if (totalReduction >= 8)
+		groupReductions = 2;
+	if (totalReduction >= 16)
+		groupReductions = 3;
 
 	// Gather from shadow cascades and mix with ESRAM shadow
 	float4 depths = InputTexture.GatherRed(LinearSampler, float3(uv, CASCADE));
@@ -46,7 +48,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 	depths = min(depths, esramDepths);
 
 	float2 vsmDepth = 0;
-	for(uint i = 0; i < 4; i++)
+	for (uint i = 0; i < 4; i++)
 		vsmDepth += GetVSMMoments(depths[i]);
 	vsmDepth *= 0.25;
 

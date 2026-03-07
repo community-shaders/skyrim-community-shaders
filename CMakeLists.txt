@@ -169,8 +169,7 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     string(STRIP "${CONFIG_VALUE}" CONFIG_VALUE)
     if(CONFIG_VALUE)
         string(
-            REGEX MATCH
-            "Version = ([0-9]+)-([0-9]+)-([0-9]+)"
+            REGEX MATCH "Version = ([0-9]+)-([0-9]+)-([0-9]+)"
             _
             "${CONFIG_VALUE}"
         )
@@ -183,8 +182,7 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
             set(ver_minor ${CMAKE_MATCH_2})
             set(ver_patch ${CMAKE_MATCH_3})
             list(
-                APPEND
-                FEATURE_VERSIONS
+                APPEND FEATURE_VERSIONS
                 "\t\t{\"${FEATURE}\"sv, {${ver_major},${ver_minor},${ver_patch}}}"
             )
         else()
@@ -218,6 +216,37 @@ configure_file(
 target_sources(
     "${PROJECT_NAME}"
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/cmake/FeatureVersions.h
+)
+
+# #######################################################################################################################
+# # Theme presets
+# #######################################################################################################################
+set(THEMES_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/package/SKSE/Plugins/CommunityShaders/Themes"
+)
+file(GLOB THEME_JSON_FILES CONFIGURE_DEPENDS "${THEMES_DIR}/*.json")
+set(THEME_PRESET_NAMES_LIST "")
+foreach(f IN LISTS THEME_JSON_FILES)
+    get_filename_component(name "${f}" NAME_WE)
+    list(APPEND THEME_PRESET_NAMES_LIST "${name}")
+endforeach()
+list(SORT THEME_PRESET_NAMES_LIST)
+list(LENGTH THEME_PRESET_NAMES_LIST THEME_PRESET_COUNT)
+set(THEME_PRESET_NAMES "")
+foreach(p IN LISTS THEME_PRESET_NAMES_LIST)
+    set(THEME_PRESET_NAMES "${THEME_PRESET_NAMES}\t\t\"${p}\",\n")
+endforeach()
+string(REGEX REPLACE ",\n$" "" THEME_PRESET_NAMES "${THEME_PRESET_NAMES}")
+
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ThemePresets.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/ThemePresets.h
+    @ONLY
+)
+
+target_sources(
+    "${PROJECT_NAME}"
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/cmake/ThemePresets.h
 )
 
 # #######################################################################################################################
@@ -287,8 +316,7 @@ set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
 if(WIN32)
     set(ROBOCOPY_WRAPPER "${CMAKE_BINARY_DIR}/robocopy_wrapper.cmd")
     file(
-        WRITE
-        ${ROBOCOPY_WRAPPER}
+        WRITE ${ROBOCOPY_WRAPPER}
         "@echo off\r\nrem Robocopy wrapper: forwards all args to robocopy and normalizes exit codes\r\nrobocopy %*\r\nset rc=%ERRORLEVEL%\r\nif %rc% GEQ 8 exit /b %rc%\r\nexit /b 0\r\n"
     )
 endif()
@@ -346,8 +374,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     # Ensure SKSE/Plugins dir exists
     # Note: DLL and PDB are copied via POST_BUILD command to avoid race conditions
     list(
-        APPEND
-        _prepare_aio_cmds
+        APPEND _prepare_aio_cmds
         COMMAND
         ${CMAKE_COMMAND}
         -E
@@ -367,8 +394,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         set(_dst "${AIO_DIR}/${_rel}")
         get_filename_component(_dst_dir "${_dst}" DIRECTORY)
         list(
-            APPEND
-            _prepare_aio_cmds
+            APPEND _prepare_aio_cmds
             COMMAND
             ${CMAKE_COMMAND}
             -E
@@ -396,8 +422,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 set(_dst "${AIO_DIR}/${_rel}")
                 get_filename_component(_dst_dir "${_dst}" DIRECTORY)
                 list(
-                    APPEND
-                    _prepare_aio_cmds
+                    APPEND _prepare_aio_cmds
                     COMMAND
                     ${CMAKE_COMMAND}
                     -E
@@ -416,8 +441,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
 
     # Remove CORE from AIO if it exists (keep rest intact)
     list(
-        APPEND
-        _prepare_aio_cmds
+        APPEND _prepare_aio_cmds
         COMMAND
         ${CMAKE_COMMAND}
         -E
@@ -425,8 +449,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         "${AIO_DIR}/CORE"
     )
     list(
-        APPEND
-        _prepare_aio_cmds
+        APPEND _prepare_aio_cmds
         COMMAND
         ${CMAKE_COMMAND}
         -E
@@ -480,8 +503,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         set(_dst "${AIO_DIR}/Shaders/${_rel}")
         get_filename_component(_dst_dir "${_dst}" DIRECTORY)
         list(
-            APPEND
-            _shader_copy_cmds
+            APPEND _shader_copy_cmds
             COMMAND
             ${CMAKE_COMMAND}
             -E
@@ -512,8 +534,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 set(_dst "${AIO_DIR}/Shaders/${_rel}")
                 get_filename_component(_dst_dir "${_dst}" DIRECTORY)
                 list(
-                    APPEND
-                    _shader_copy_cmds
+                    APPEND _shader_copy_cmds
                     COMMAND
                     ${CMAKE_COMMAND}
                     -E
@@ -625,8 +646,7 @@ if(AUTO_PLUGIN_DEPLOYMENT)
             )
 
             list(
-                APPEND
-                SHADER_ONLY_HASHES
+                APPEND SHADER_ONLY_HASHES
                 ${DEPLOY_TARGET_HASH}_shaders_only.stamp
             )
 
@@ -653,8 +673,7 @@ if(AUTO_PLUGIN_DEPLOYMENT)
 
             list(APPEND DEPLOY_TARGET_HASHES ${DEPLOY_TARGET_HASH}_deploy.stamp)
             list(
-                APPEND
-                DEPLOY_TARGET_HASHES
+                APPEND DEPLOY_TARGET_HASHES
                 ${DEPLOY_TARGET_HASH}_shaders_full.stamp
             )
         endforeach()

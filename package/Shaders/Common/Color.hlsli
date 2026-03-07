@@ -319,6 +319,10 @@ namespace Color
 		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaDiffuseColorMult : 1.0f;
 	}
 #else
+	const static float PBRLightingScale = 1.0;
+	const static float ReflectionNormalisationScale = 1.0;
+	const static float PBRLightingCompensation = Math::PI;
+
 	float3 Diffuse(float3 color)
 	{
 #	if defined(TRUE_PBR)

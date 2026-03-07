@@ -1,13 +1,13 @@
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
-	float2 TexCoord : TEXCOORD0;
+	float4 Position: POSITION0;
+	float2 TexCoord: TEXCOORD0;
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION0;
-	float2 TexCoord : TEXCOORD0;
+	float4 Position: SV_POSITION0;
+	float2 TexCoord: TEXCOORD0;
 };
 
 #ifdef VSHADER
