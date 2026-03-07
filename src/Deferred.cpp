@@ -577,7 +577,7 @@ void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& light
 		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
 
 		DirectX::XMMATRIX invProj = DirectX::XMMatrixTranspose(proj);
-		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], proj);
+		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], invProj);
 	}
 }
 
@@ -588,7 +588,7 @@ void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& li
 		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
 
 		DirectX::XMMATRIX invProj = DirectX::XMMatrixTranspose(proj);
-		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], proj);
+		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], invProj);
 	}
 }
 
@@ -599,7 +599,7 @@ void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, S
 	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
 
 	DirectX::XMMATRIX invProj = DirectX::XMMatrixTranspose(proj);
-	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, proj);
+	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, invProj);
 }
 
 void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, ShadowData& sd)
@@ -609,7 +609,7 @@ void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData
 	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
 
 	DirectX::XMMATRIX invProj = DirectX::XMMatrixTranspose(proj);
-	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, proj);
+	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, invProj);
 }
 
 void Deferred::CopyShadowData()
