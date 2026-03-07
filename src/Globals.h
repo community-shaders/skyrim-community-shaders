@@ -34,7 +34,6 @@ struct VolumetricShadows;
 struct VR;
 struct WaterEffects;
 struct WeatherEditor;
-struct WeatherPicker;
 struct WetnessEffects;
 
 class State;
@@ -93,7 +92,6 @@ namespace globals
 		extern VR vr;
 		extern WaterEffects waterEffects;
 		extern WeatherEditor weatherEditor;
-		extern WeatherPicker weatherPicker;
 		extern WetnessEffects wetnessEffects;
 
 		namespace llf

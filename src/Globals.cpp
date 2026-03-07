@@ -85,7 +85,6 @@ namespace globals
 		VR vr{};
 		WaterEffects waterEffects{};
 		WeatherEditor weatherEditor{};
-		WeatherPicker weatherPicker{};
 		WetnessEffects wetnessEffects{};
 
 		namespace llf
