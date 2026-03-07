@@ -24,20 +24,14 @@ cbuffer PerFrame : register(b1)
 
 	float2 DynamicRes;
 
-	uint DynamicSampleCount;
-	uint DynamicReadCount;
-	float2 pad0;
-
 	float SurfaceThickness;
 	float BilinearThreshold;
 	float ShadowContrast;
 };
 
 [numthreads(WAVE_SIZE, 1, 1)] void main(
-	int3 groupID
-	: SV_GroupID,
-	int groupThreadID
-	: SV_GroupThreadID) {
+	int3 groupID : SV_GroupID,
+	int groupThreadID : SV_GroupThreadID) {
 	DispatchParameters parameters;
 	parameters.SetDefaults();
 
@@ -55,9 +49,6 @@ cbuffer PerFrame : register(b1)
 	parameters.ShadowContrast = ShadowContrast;
 
 	parameters.DynamicRes = DynamicRes;
-
-	parameters.DynamicSampleCount = DynamicSampleCount;
-	parameters.DynamicReadCount = DynamicReadCount;
 
 	parameters.UsePrecisionOffset = true;
 

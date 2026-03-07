@@ -1,6 +1,8 @@
 #pragma once
 #include "Menu.h"
 #include "OverlayFeature.h"
+#include "Utils/Input.h"
+#include "VR/OpenVRDetection.h"  // In Features/VR/
 #include <algorithm>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
@@ -10,190 +12,12 @@
 #include <unordered_map>
 #include <vector>
 #include <winrt/base.h>
+
 using namespace DirectX::SimpleMath;
 
-/**
- * @brief Identifies which VR controller(s) to target for input actions
- *
- * This enum is used throughout the VR system to specify which controller
- * should handle specific input events or UI interactions.
- */
-enum class ControllerDevice
-{
-	Primary = 0,    ///< The dominant hand controller (right for right-handed, left for left-handed)
-	Secondary = 1,  ///< The non-dominant hand controller
-	Both = 2        ///< Both controllers simultaneously
-};
-
-/**
- * @brief Converts a ControllerDevice enum value to a human-readable string
- * @param device The controller device to convert
- * @return String representation of the device ("Primary", "Secondary", "Both", or "Unknown")
- */
-constexpr const char* ToString(ControllerDevice device)
-{
-	switch (device) {
-	case ControllerDevice::Primary:
-		return "Primary";
-	case ControllerDevice::Secondary:
-		return "Secondary";
-	case ControllerDevice::Both:
-		return "Both";
-	default:
-		return "Unknown";
-	}
-}
-
-/**
- * @brief Validates if a ControllerDevice enum value is within valid range
- * @param device The controller device to validate
- * @return true if the device value is valid, false otherwise
- */
-constexpr bool IsValidDevice(ControllerDevice device)
-{
-	return device >= ControllerDevice::Primary && device <= ControllerDevice::Both;
-}
-
-/**
- * @brief Represents a combination of controller device and button/key for VR input mapping
- *
- * This structure efficiently encodes both the target controller and the specific button
- * into a single 32-bit value for performance and JSON serialization compatibility.
- * The upper 16 bits store the device type, lower 16 bits store the key code.
- *
- * @example
- * ```cpp
- * // Create a combo for the A button on the secondary controller
- * auto combo = ButtonCombo::Secondary(RE::BSOpenVRControllerDevice::Keys::kXA);
- *
- * // Check which device and key
- * ControllerDevice device = combo.GetDevice();
- * uint32_t key = combo.GetKey();
- * ```
- */
-struct ButtonCombo
-{
-private:
-	uint32_t deviceAndKey;  // device in upper bits, key in lower bits
-
-public:
-	/**
-	 * @brief Constructs a ButtonCombo with the specified device and key
-	 * @param device The target controller device
-	 * @param key The button/key code (must fit in 16 bits, values > 0xFFFF will be truncated)
-	 */
-	ButtonCombo(ControllerDevice device, uint32_t key) :
-		deviceAndKey((static_cast<uint32_t>(device) << 16) | (key & 0xFFFF))
-	{
-		// Validate that the device is within valid range
-		if (!IsValidDevice(device)) {
-			logger::warn("ButtonCombo: Invalid device value {} ({}), using as-is",
-				static_cast<uint32_t>(device), magic_enum::enum_name(device));
-		}
-
-		// Validate that the key fits within 16 bits to prevent silent data loss
-		if (key > 0xFFFF) {
-			logger::warn("ButtonCombo: Key value 0x{:X} exceeds 16-bit limit (0xFFFF), truncating to 0x{:X}",
-				key, key & 0xFFFF);
-		}
-	}
-
-	/**
-	 * @brief Creates a ButtonCombo for the primary controller
-	 * @param key The button/key code
-	 * @return ButtonCombo targeting the primary controller
-	 */
-	static ButtonCombo Primary(uint32_t key) { return ButtonCombo(ControllerDevice::Primary, key); }
-
-	/**
-	 * @brief Creates a ButtonCombo for the secondary controller
-	 * @param key The button/key code
-	 * @return ButtonCombo targeting the secondary controller
-	 */
-	static ButtonCombo Secondary(uint32_t key) { return ButtonCombo(ControllerDevice::Secondary, key); }
-
-	/**
-	 * @brief Creates a ButtonCombo for both controllers
-	 * @param key The button/key code
-	 * @return ButtonCombo targeting both controllers
-	 */
-	static ButtonCombo Both(uint32_t key) { return ButtonCombo(ControllerDevice::Both, key); }
-
-	/**
-	 * @brief Gets the controller device from this combo
-	 * @return The target controller device
-	 */
-	ControllerDevice GetDevice() const { return static_cast<ControllerDevice>(deviceAndKey >> 16); }
-	/**
-	 * @brief Gets the button/key code from this combo
-	 * @return The button/key code (16-bit value)
-	 */
-	uint32_t GetKey() const { return deviceAndKey & 0xFFFF; }
-
-	/**
-	 * @brief Validates if this ButtonCombo has valid device and key values
-	 * @return true if both device and key are valid, false otherwise
-	 */
-	bool IsValid() const
-	{
-		return IsValidDevice(GetDevice()) && GetKey() != 0;
-	}
-
-	/**
-	 * @brief Equality comparison operator for container usage
-	 * @param other The ButtonCombo to compare with
-	 * @return true if both combos represent the same device and key
-	 */
-	bool operator==(const ButtonCombo& other) const
-	{
-		return deviceAndKey == other.deviceAndKey;
-	}
-
-	/**
-	 * @brief Less-than comparison operator for ordered container usage
-	 * @param other The ButtonCombo to compare with
-	 * @return true if this combo sorts before the other
-	 */
-	bool operator<(const ButtonCombo& other) const
-	{
-		return deviceAndKey < other.deviceAndKey;
-	}
-
-	/**
-	 * @brief Creates a human-readable string representation for debugging
-	 * @return String in format "Device:Key" (e.g., "Primary:123")
-	 */
-	std::string ToString() const
-	{
-		return std::string(::ToString(GetDevice())) + ":" + std::to_string(GetKey());
-	}
-
-	/**
-	 * @brief Default constructor for JSON serialization compatibility
-	 */
-	ButtonCombo() :
-		deviceAndKey(0) {}
-
-	/**
-	 * @brief JSON serialization support - converts ButtonCombo to JSON
-	 * @param j Output JSON object
-	 * @param combo ButtonCombo to serialize
-	 */
-	friend void to_json(nlohmann::json& j, const ButtonCombo& combo)
-	{
-		j = combo.deviceAndKey;
-	}
-
-	/**
-	 * @brief JSON deserialization support - creates ButtonCombo from JSON
-	 * @param j Input JSON object
-	 * @param combo ButtonCombo to populate
-	 */
-	friend void from_json(const nlohmann::json& j, ButtonCombo& combo)
-	{
-		combo.deviceAndKey = j.get<uint32_t>();
-	}
-};
+// Backwards compatibility aliases
+using ControllerDevice = InputDeviceType;
+using ButtonCombo = InputCombo;
 
 /**
  * @brief Main VR feature class providing VR-specific optimizations and overlay UI system
@@ -236,9 +60,19 @@ public:
 	 */
 	struct Config
 	{
+		// Overlay texture dimensions
+		static constexpr int kOverlayWidth = 1920;                                                                       ///< Overlay texture width in pixels
+		static constexpr int kOverlayHeight = 1080;                                                                      ///< Overlay texture height in pixels
+		static constexpr float kOverlayAspect = static_cast<float>(kOverlayHeight) / static_cast<float>(kOverlayWidth);  ///< Aspect ratio (height/width)
+
+		static inline Matrix CreateOverlayScaleMatrix(float scale)
+		{
+			return Matrix::CreateScale(scale, scale * kOverlayAspect, scale);
+		}
+
 		static constexpr float kDefaultMenuScale = 1.0f;      ///< Default overlay scale factor
-		static constexpr float kMinMenuScale = 0.5f;          ///< Minimum allowed overlay scale
-		static constexpr float kMaxMenuScale = 2.0f;          ///< Maximum allowed overlay scale
+		static constexpr float kMinMenuScale = 0.1f;          ///< Minimum allowed overlay scale
+		static constexpr float kMaxMenuScale = 5.0f;          ///< Maximum allowed overlay scale
 		static constexpr float kDefaultComboTimeout = 3.0f;   ///< Default timeout for button combos (seconds)
 		static constexpr float kDefaultMouseDeadzone = 0.1f;  ///< Default thumbstick deadzone for mouse input
 		static constexpr float kDefaultMouseSpeed = 10.0f;    ///< Default mouse speed multiplier
@@ -246,14 +80,14 @@ public:
 		static constexpr int kMaxAutoHideSeconds = 300;       ///< Maximum auto-hide timeout (5 minutes)
 
 		// Default HMD overlay offset values (in meters, relative to HMD)
-		static constexpr float kDefaultHMDOffsetX = 0.26f;   ///< Default horizontal offset from HMD
-		static constexpr float kDefaultHMDOffsetY = -0.04f;  ///< Default vertical offset from HMD
-		static constexpr float kDefaultHMDOffsetZ = -0.41f;  ///< Default depth offset from HMD
+		static constexpr float kDefaultHMDOffsetX = 0.195f;   ///< Default horizontal offset from HMD
+		static constexpr float kDefaultHMDOffsetY = -0.375f;  ///< Default vertical offset from HMD
+		static constexpr float kDefaultHMDOffsetZ = -1.355f;  ///< Default depth offset from HMD
 
 		// Default controller overlay offset values (in meters, relative to controller)
-		static constexpr float kDefaultControllerOffsetX = 0.22f;  ///< Default horizontal offset from controller
-		static constexpr float kDefaultControllerOffsetY = 0.15f;  ///< Default vertical offset from controller
-		static constexpr float kDefaultControllerOffsetZ = 0.20f;  ///< Default depth offset from controller
+		static constexpr float kDefaultControllerOffsetX = 0.295f;  ///< Default horizontal offset from controller
+		static constexpr float kDefaultControllerOffsetY = 0.211f;  ///< Default vertical offset from controller
+		static constexpr float kDefaultControllerOffsetZ = 0.063f;  ///< Default depth offset from controller
 	};
 
 	//=============================================================================
@@ -267,14 +101,16 @@ public:
 		return {
 			"Provides VR-specific optimizations and enhancements for Community Shaders, improving performance and visual quality in virtual reality environments.",
 			{ "Depth buffer culling optimization for VR performance",
+				"In-scene overlay menu with HMD/Controller/Fixed World attach modes",
+				"VR controller input with customizable button mappings",
+				"Grip-to-drag overlay positioning with depth control",
 				"Configurable occlusion culling parameters",
-				"VR-specific rendering pipeline improvements",
-				"Performance optimizations for dual-eye rendering",
-				"Enhanced VR compatibility across all shader features" }
+				"Enhanced VR compatibility with SteamVR and OpenComposite" }
 		};
 	}
 
 	virtual void SetupResources() override;
+	virtual void ClearShaderCache() override;
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
 
@@ -282,7 +118,11 @@ public:
 	virtual void DataLoaded() override;
 	virtual void EarlyPrepass() override;
 
-	void UpdateDepthBufferCulling(bool desired);
+	void UpdateDepthBufferCulling();
+
+	// Stereo bilateral blend pass - called from Deferred::DeferredPasses after composite
+	void DrawStereoBlend();
+	static bool AnyScreenSpaceEffectLoaded();
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
@@ -297,7 +137,7 @@ public:
 	//=============================================================================
 
 	virtual void DrawOverlay() override;
-	virtual bool IsOverlayVisible() const override { return openVRInfo.isCompatible && settings.kAutoHideSeconds > 0 && !globals::menu->IsEnabled; }
+	virtual bool IsOverlayVisible() const override { return IsOpenVRCompatible() && settings.kAutoHideSeconds > 0 && globals::menu && !globals::menu->IsEnabled; }
 
 	//=============================================================================
 	// SETTINGS STRUCTURE
@@ -315,8 +155,15 @@ public:
 	{
 		// Performance optimization settings
 		bool EnableDepthBufferCullingExterior = true;  ///< Enable depth buffer culling for VR performance
-		bool EnableDepthBufferCullingInterior = false;
+		bool EnableDepthBufferCullingInterior = true;
 		float MinOccludeeBoxExtent = 10.0f;  ///< Minimum bounding box size for occlusion culling
+
+		// Stereo consistency blend pass (post-composite safety net)
+		bool EnableStereoBlend = true;            ///< Enable depth-aware bilateral blend between eyes
+		float StereoBlendDepthSigma = 0.01f;      ///< Depth sensitivity for bilateral weight (lower = stricter)
+		float StereoBlendMaxFactor = 0.1f;        ///< Maximum blend factor; keep low to preserve stereo parallax
+		float StereoBlendColorThreshold = 0.02f;  ///< Minimum color difference to trigger blending (luminance)
+		int StereoBlendDebugMode = 0;             ///< 0=off, 1=back-check, 2=blend weight, 3=edge detection
 
 		// VR Menu Overlay positioning settings
 		float VRMenuScale = Config::kDefaultMenuScale;  ///< Scale factor for overlay UI (0.5-2.0)
@@ -329,7 +176,8 @@ public:
 		{
 			HMDOnly = 0,         ///< Overlay attached to HMD only
 			ControllerOnly = 1,  ///< Overlay attached to controller only
-			Both = 2             ///< Overlay can be attached to both HMD and controller
+			Both = 2,            ///< Overlay can be attached to both HMD and controller
+			None = 3             ///< Overlay display disabled
 		};
 		OverlayAttachMode attachMode = OverlayAttachMode::HMDOnly;              ///< Current overlay attachment mode
 		ControllerDevice VRMenuAttachController = ControllerDevice::Secondary;  ///< Which controller to attach overlay to
@@ -348,6 +196,9 @@ public:
 		bool VRMenuControllerDiagnosticsTestMode = false;     ///< Enable controller diagnostics mode
 		float mouseDeadzone = Config::kDefaultMouseDeadzone;  ///< Thumbstick deadzone for mouse input (0.0-1.0)
 		float mouseSpeed = Config::kDefaultMouseSpeed;        ///< Mouse speed multiplier (0.1-50.0)
+
+		// Wand pointing settings
+		bool EnableWandPointing = true;  ///< Enable controller wand/ray-cast pointing (modern VR input)
 
 		// Visual customization
 		std::array<float, 4> dragHighlightColor = { 1.0f, 1.0f, 0.0f, 0.3f };  ///< RGBA color for drag highlight
@@ -389,7 +240,7 @@ public:
 		 */
 		bool IsAttachModeValid() const
 		{
-			return attachMode >= OverlayAttachMode::HMDOnly && attachMode <= OverlayAttachMode::Both;
+			return attachMode >= OverlayAttachMode::HMDOnly && attachMode <= OverlayAttachMode::None;
 		}
 
 		/**
@@ -406,6 +257,10 @@ public:
 			mouseSpeed = std::clamp(mouseSpeed, 0.1f, 50.0f);
 			comboTimeout = std::clamp(comboTimeout, 1.0f, 10.0f);
 			kAutoHideSeconds = std::clamp(kAutoHideSeconds, 0, Config::kMaxAutoHideSeconds);
+			StereoBlendDepthSigma = std::clamp(StereoBlendDepthSigma, 0.001f, 0.1f);
+			StereoBlendMaxFactor = std::clamp(StereoBlendMaxFactor, 0.0f, 0.5f);
+			StereoBlendColorThreshold = std::clamp(StereoBlendColorThreshold, 0.0f, 0.2f);
+			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 3);
 		}
 	};
 
@@ -415,17 +270,23 @@ public:
 	// VR-SPECIFIC PUBLIC API
 	//=============================================================================
 
-	void UpdateVROverlayPosition();
-	void UpdateVROverlayControllerPosition();
-
 	void ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents);
+
+	// Wand pointing methods
+	enum class OverlayType
+	{
+		HMD,
+		Controller
+	};
+	bool ComputeWandIntersection(vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
+	bool ComputeWandIntersectionForOverlayType(OverlayType type, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
+	void UpdateCursorFromWandPointing();
 	void UpdateOverlayMenuStateFromInput();
 	void ProcessVRButtonEvent(const Menu::KeyEvent& event);
 	void UpdateControllerState(const Menu::KeyEvent& event);
+	void ProcessThumbstickScroll(RE::VRControllerState& controllerState, size_t thumbstickIndex, float deadzone, ImGuiIO& io);
 	void ProcessControllerInputForImGui();
 
-	void EnsureOverlayInitialized();
-	void DestroyOverlay();
 	void RecreateOverlayTexturesIfNeeded();
 	void SubmitOverlayFrame();
 
@@ -477,6 +338,7 @@ public:
 	void UpdateActiveDrag();
 	void TryStartNewDrag();
 	void SetFixedOverlayToCurrentHMD();
+	void UpdateFixedWorldPositioning();
 	bool ShouldHighlightOverlayWindow() const { return overlayDragState.dragging; }
 
 	//=============================================================================
@@ -490,6 +352,24 @@ public:
 	winrt::com_ptr<ID3D11RenderTargetView> menuRTV;
 	winrt::com_ptr<ID3D11Texture2D> menuControllerTexture;
 	winrt::com_ptr<ID3D11RenderTargetView> menuControllerRTV;
+
+	// Stereo blend compute shader resources
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBackCheckCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBlendWeightCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugEdgeDetectionCS;
+	eastl::unique_ptr<Texture2D> stereoBlendCopyTex;
+	eastl::unique_ptr<ConstantBuffer> stereoBlendCB;
+
+	struct alignas(16) StereoBlendCB
+	{
+		float FrameDim[2];
+		float RcpFrameDim[2];
+		float DepthSigma;
+		float MaxBlendFactor;
+		float ColorDiffThreshold;
+		float pad;
+	};
 
 	// Engine hook integration points
 	bool* gDepthBufferCulling = nullptr;
@@ -517,6 +397,7 @@ public:
 	struct OverlayWorldPosition
 	{
 		Matrix m = Matrix::Identity;
+		bool initialized = false;
 	} fixedWorldOverlayPosition;
 
 	struct OverlayDragState
@@ -540,6 +421,7 @@ public:
 
 		Vector3 initialHMDOffset = Vector3::Zero;
 		Vector3 initialControllerOffset = Vector3::Zero;
+		float initialHMDScale = 1.0f;
 		Matrix startControllerMatrix = Matrix::Identity;
 	} overlayDragState;
 
@@ -576,20 +458,80 @@ public:
 	struct OpenVRInfo
 	{
 		bool isAvailable = false;
-		bool isCompatible = true;
+		bool isCompatible = false;
 		std::string dllPath;
 		std::string version;
 		uint64_t fileSize = 0;
 		std::string modificationTime;
+
+		// Interface probing results
+		bool hasOverlayInterface = false;
+		bool hasSystemInterface = false;
+		bool hasCompositorInterface = false;
+
+		// Detection metadata
+		VRDetection::RuntimeType runtimeType = VRDetection::RuntimeType::Unknown;
+		bool probingSucceeded = false;
 	} openVRInfo;
 
 	RE::NiPoint3 savedPlayerWorldPos = RE::NiPoint3();  // Used for auto-reset distance check
 
-public:
-	//=============================================================================
-	// PRIVATE IMPLEMENTATION
-	//=============================================================================
+	// Wand pointing state
+	struct WandIntersectionState
+	{
+		bool isIntersecting = false;
+		ImVec2 uvCoordinates = ImVec2(0.0f, 0.0f);
+		vr::TrackedDeviceIndex_t controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
+		Vector3 rayOrigin = Vector3::Zero;
+		Vector3 rayDirection = Vector3::Zero;
+	} wandState;
 
+	// In-Scene Overlay Rendering Resources (Fallback for incompatible runtimes)
+	struct InSceneResources
+	{
+		winrt::com_ptr<ID3D11VertexShader> vs;
+		winrt::com_ptr<ID3D11PixelShader> ps;
+		winrt::com_ptr<ID3D11Buffer> vb;
+		winrt::com_ptr<ID3D11Buffer> ib;
+		winrt::com_ptr<ID3D11Buffer> cb;
+		winrt::com_ptr<ID3D11InputLayout> inputLayout;
+		winrt::com_ptr<ID3D11BlendState> blendState;
+		winrt::com_ptr<ID3D11DepthStencilState> depthState;
+		winrt::com_ptr<ID3D11SamplerState> sampler;
+		winrt::com_ptr<ID3D11RasterizerState> rasterizerState;
+
+		// Cached SRV to avoid creating every frame
+		winrt::com_ptr<ID3D11ShaderResourceView> menuSRV;
+		ID3D11Texture2D* cachedMenuTexture = nullptr;
+
+		// Cached RTVs per eye to avoid creating every frame
+		struct CachedRTV
+		{
+			winrt::com_ptr<ID3D11RenderTargetView> rtv;
+			ID3D11Texture2D* texture = nullptr;
+		};
+		CachedRTV cachedEyeRTVs[2];
+
+		bool initialized = false;
+	} inSceneResources;
+
+	struct InSceneCB
+	{
+		Matrix wvp;
+	};
+
+	void InitInSceneResources();
+	void RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, const vr::VRTextureBounds_t* bounds);
+	void InstallSubmitHook();
 	void DetectOpenVRInfo();
 	bool IsOpenVRCompatible() const;
+
+private:
+	//=============================================================================
+	// PRIVATE HELPERS
+	//=============================================================================
+
+	bool GetGripPressed(bool isLeft, bool isRight) const;
+	void ResetComboRecording();
+	void ApplyRecordedCombo();
 };

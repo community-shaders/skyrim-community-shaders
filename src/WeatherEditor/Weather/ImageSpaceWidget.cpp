@@ -34,10 +34,12 @@ void ImageSpaceWidget::DrawWidget()
 	auto editorWindow = EditorWindow::GetSingleton();
 
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		// Draw header with search and Save/Load/Delete buttons
 		DrawWidgetHeader("##ImageSpaceSearch", false, true);
-
+	}
+	BeginScrollableContent("##ISScroll");
+	{
 		// Draw all settings in a unified table
 		if (PropertyDrawer::BeginTable("ImageSpaceSettings", 200.0f)) {
 			bool changed = false;
@@ -49,7 +51,7 @@ void ImageSpaceWidget::DrawWidget()
 			changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 10.0f, search);
 			changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 50.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f, search);
 
 			PropertyDrawer::DrawSeparator();
@@ -62,7 +64,11 @@ void ImageSpaceWidget::DrawWidget()
 			PropertyDrawer::DrawSeparator();
 
 			// Tint Settings
-			changed |= PropertyDrawer::DrawColor("Tint Color", settings.tintColor, search);
+			float3 tintColor{ settings.tintColor.x, settings.tintColor.y, settings.tintColor.z };
+			if (PropertyDrawer::DrawColor("Tint Color", tintColor, search)) {
+				settings.tintColor = tintColor;
+				changed = true;
+			}
 			changed |= PropertyDrawer::DrawFloat("Tint Amount", settings.tintAmount, 0.0f, 1.0f, search);
 
 			PropertyDrawer::DrawSeparator();
@@ -79,6 +85,7 @@ void ImageSpaceWidget::DrawWidget()
 			}
 		}
 	}
+	EndScrollableContent();
 	ImGui::End();
 }
 
@@ -88,17 +95,20 @@ void ImageSpaceWidget::LoadSettings()
 		if (!js.empty() && js.contains("Settings") && js["Settings"].is_object()) {
 			settings = js["Settings"];
 		} else {
-			LoadImageSpaceValues();
+			settings = vanillaSettings;
 		}
 	} catch (const std::exception& e) {
 		logger::error("Failed to load ImageSpace settings for {}: {}", GetEditorID(), e.what());
-		LoadImageSpaceValues();
+		settings = vanillaSettings;
 	}
+	originalSettings = settings;
+	ApplyChanges();
 }
 
 void ImageSpaceWidget::SaveSettings()
 {
 	js["Settings"] = settings;
+	originalSettings = settings;
 }
 
 void ImageSpaceWidget::SetImageSpaceValues()
@@ -167,6 +177,11 @@ void ImageSpaceWidget::LoadImageSpaceValues()
 	settings.dofRange = data.depthOfField.range;
 }
 
+void ImageSpaceWidget::LoadFromGameSettings()
+{
+	LoadImageSpaceValues();
+}
+
 void ImageSpaceWidget::ApplyChanges()
 {
 	SetImageSpaceValues();
@@ -174,5 +189,11 @@ void ImageSpaceWidget::ApplyChanges()
 
 void ImageSpaceWidget::RevertChanges()
 {
-	LoadImageSpaceValues();
+	settings = vanillaSettings;
+	ApplyChanges();
+}
+
+bool ImageSpaceWidget::HasUnsavedChanges() const
+{
+	return !(settings == originalSettings);
 }

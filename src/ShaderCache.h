@@ -2,8 +2,7 @@
 
 #include <BS_thread_pool.hpp>
 #include <efsw/efsw.hpp>
-
-static constexpr REL::Version SHADER_CACHE_VERSION = { 0, 0, 0, 42 };
+#include <vector>
 
 using namespace std::chrono;
 
@@ -333,6 +332,7 @@ namespace SIE
 		void SetAsync(bool value);
 		bool IsDump() const;
 		void SetDump(bool value);
+		void StopCompilation();
 
 		bool IsDiskCache() const;
 		void SetDiskCache(bool value);
@@ -418,6 +418,13 @@ namespace SIE
 		uint64_t GetCachedHitTasks();
 		uint64_t GetCompletedTasks();
 		uint64_t GetFailedTasks();
+		/**
+		 * @brief Count currently failed shader entries in the shader map.
+		 *
+		 * This inspects the `shaderMap` under lock and returns the number of
+		 * entries whose status is `ShaderCompilationTask::Status::Failed`.
+		 */
+		uint64_t GetCurrentFailedCount();
 		uint64_t GetTotalTasks();
 		void IncCacheHitTasks();
 		void ToggleErrorMessages();
@@ -435,6 +442,8 @@ namespace SIE
 		void ClearShaderMap(RE::BSShader::Type a_type);
 		void InsertModifiedShaderMap(const std::string& a_shader, std::chrono::time_point<std::chrono::system_clock> a_time);
 		std::chrono::time_point<std::chrono::system_clock> GetModifiedShaderMapTime(const std::string& a_shader);
+
+		ShaderFileDependencyTracker* GetDependencyTracker() { return dependencyTracker.get(); }
 
 		int32_t compilationThreadCount = std::max({ static_cast<int32_t>(std::thread::hardware_concurrency()) - 4, static_cast<int32_t>(std::thread::hardware_concurrency()) * 3 / 4, 1 });
 		int32_t backgroundCompilationThreadCount = std::max(static_cast<int32_t>(std::thread::hardware_concurrency()) / 2, 1);
@@ -547,25 +556,25 @@ namespace SIE
 
 		enum class WaterShaderTechniques
 		{
-			Underwater = 8,
-			Lod = 9,
-			Stencil = 10,
-			Simple = 11,
+			Underwater = 8,  // 0x8
+			Lod = 9,         // 0x9
+			Stencil = 10,    // 0xA
+			Simple = 11,     // 0xB
 		};
 
 		enum class WaterShaderFlags
 		{
-			Vc = 1 << 0,
-			NormalTexCoord = 1 << 1,
-			Reflections = 1 << 2,
-			Refractions = 1 << 3,
-			Depth = 1 << 4,
-			Interior = 1 << 5,
-			Wading = 1 << 6,
-			VertexAlphaDepth = 1 << 7,
-			Cubemap = 1 << 8,
-			Flowmap = 1 << 9,
-			BlendNormals = 1 << 10,
+			Vc = 1 << 0,                // 0x1
+			NormalTexCoord = 1 << 1,    // 0x2
+			Reflections = 1 << 2,       // 0x4
+			Refractions = 1 << 3,       // 0x8
+			Depth = 1 << 4,             // 0x10
+			Interior = 1 << 5,          // 0x20
+			Wading = 1 << 6,            // 0x40
+			VertexAlphaDepth = 1 << 7,  // 0x80
+			Cubemap = 1 << 8,           // 0x100
+			Flowmap = 1 << 9,           // 0x200
+			BlendNormals = 1 << 10,     // 0x400
 		};
 
 		enum class EffectShaderFlags
@@ -717,12 +726,15 @@ namespace SIE
 		efsw::FileWatcher* fileWatcher = nullptr;
 		efsw::WatchID watchID;
 		UpdateListener* listener = nullptr;
+
+		std::unique_ptr<ShaderFileDependencyTracker> dependencyTracker;
 	};
 
 	// Inherits from the abstract listener class, and implements the the file action handler
 	class UpdateListener : public efsw::FileWatchListener
 	{
 	public:
+		UpdateListener(ShaderFileDependencyTracker* deps);
 		/**
 		 * @brief Updates the shader cache for a specific file path and determines whether to clear the cache.
 		 *
@@ -745,6 +757,7 @@ namespace SIE
 		void handleFileAction(efsw::WatchID, const std::string& dir, const std::string& filename, efsw::Action action, std::string) override;
 
 	private:
+		ShaderFileDependencyTracker* deps;
 		struct fileAction
 		{
 			efsw::WatchID watchID;
@@ -755,6 +768,5 @@ namespace SIE
 		};
 		std::mutex actionMutex;
 		std::vector<fileAction> queue{};
-		size_t lastQueueSize = queue.size();
 	};
 }

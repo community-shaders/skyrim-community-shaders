@@ -9,6 +9,11 @@ public:
 		lensFlare(a_lensFlare)
 	{
 		form = a_lensFlare;
+		if (lensFlare) {
+			LoadFromGameSettings();
+			vanillaSettings = settings;
+			originalSettings = settings;
+		}
 	}
 
 	~LensFlareWidget() override = default;
@@ -23,12 +28,16 @@ public:
 	RE::BGSLensFlare* lensFlare = nullptr;
 
 private:
+	void LoadFromGameSettings();
+
 	struct Settings
 	{
 		float fadeDistRadiusScale = 1.0f;
 		float colorInfluence = 0.2f;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
 	Settings originalSettings;
 };

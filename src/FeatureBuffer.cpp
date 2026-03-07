@@ -2,6 +2,7 @@
 
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
+#include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassLighting.h"
@@ -12,6 +13,7 @@
 #include "Features/LinearLighting.h"
 #include "Features/Skylighting.h"
 #include "Features/SnowCover.h"
+#include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
 #include "Features/WetnessEffects.h"
@@ -39,6 +41,7 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 	return _GetFeatureBufferData(
 		globals::features::cloudShadows.settings,
 		globals::features::dynamicCubemaps.settings,
+		globals::features::exponentialHeightFog.settings,
 		globals::features::extendedMaterials.settings,
 		globals::features::extendedTranslucency.GetCommonBufferData(),
 		globals::features::grassLighting.settings,
@@ -49,7 +52,9 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::lodBlending.settings,
 		globals::features::skylighting.GetCommonBufferData(a_inWorld),
 		globals::features::snowCover.GetCommonBufferData(),
+		globals::features::terrainBlending.settings,
 		globals::features::terrainShadows.GetCommonBufferData(),
 		globals::features::terrainVariation.settings,
-		globals::features::wetnessEffects.GetCommonBufferData());
+		globals::features::wetnessEffects.GetCommonBufferData()
+	);
 }

@@ -99,6 +99,10 @@ globals::d3d::*       // DirectX 11 device/context access
 ### Common Development Commands
 
 ```bash
+# Fast shader deployment (dev iteration - no DLL build)
+# See docs/development/shader-workflow.md and docs/development/vscode-setup.md
+cmake --build ./build/ALL --target COPY_SHADERS
+
 # Shader validation (targeted testing recommended during development)
 cmake --build ./build/ALL --target prepare_shaders
 hlslkit-compile --shader-dir build/ALL/aio/Shaders/[specific-feature] --output-dir build/ShaderCache --config .github/configs/shader-validation.yaml

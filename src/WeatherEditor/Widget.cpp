@@ -59,6 +59,7 @@ void Widget::Save()
 		}
 
 		settingsFile.close();
+		EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
 
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("{}: JSON error while saving settings: {}", GetEditorID(), e.what());
@@ -162,6 +163,8 @@ void Widget::Delete()
 		// Apply the vanilla values to the game
 		ApplyChanges();
 
+		EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
+
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::format("Deleted {} - reverted to vanilla values", GetEditorID()),
 			ImVec4(0.0f, 1.0f, 0.0f, 1.0f),
@@ -187,48 +190,54 @@ void Widget::DrawMenu()
 			if (ImGui::MenuItem("Load")) {
 				Load();
 			}
-			if (ImGui::MenuItem("Revert to Defaults")) {
-				auto& settings = EditorWindow::GetSingleton()->settings;
-				if (settings.suppressDeleteWarning) {
-					// Delete directly if warning is suppressed
-					Delete();
-				} else {
-					// Open confirmation popup
-					ImGui::OpenPopup("ConfirmDelete");
-				}
+			if (ImGui::MenuItem("Delete Saved File")) {
+				ImGui::OpenPopup("DeleteConfirmation");
 			}
-
-			// Confirmation popup for delete
-			if (ImGui::BeginPopupModal("ConfirmDelete", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-				ImGui::Text("Are you sure you want to delete this file?");
-				ImGui::Text("This will revert to vanilla/mod provided values.");
-				ImGui::Spacing();
-				ImGui::Separator();
-				ImGui::Spacing();
-
-				auto& settings = EditorWindow::GetSingleton()->settings;
-				if (ImGui::Checkbox("Don't show this warning again", &settings.suppressDeleteWarning)) {
-					// Save the preference immediately
-					EditorWindow::GetSingleton()->Save();
-				}
-
-				ImGui::Spacing();
-
-				if (ImGui::Button("Yes", ImVec2(120, 0))) {
-					Delete();
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::SetItemDefaultFocus();
-				ImGui::SameLine();
-				if (ImGui::Button("No", ImVec2(120, 0))) {
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::EndPopup();
+			if (ImGui::MenuItem("Revert to Game Values")) {
+				RevertChanges();
 			}
 
 			ImGui::EndMenu();
 		}
 		ImGui::EndMenuBar();
+	}
+
+	DrawDeleteConfirmationModal();
+}
+
+void Widget::DrawDeleteConfirmationModal(const char* popupId)
+{
+	if (!ImGui::IsPopupOpen(popupId))
+		return;
+	if (deleteConfirmationFrame == ImGui::GetFrameCount())
+		return;
+
+	if (ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		deleteConfirmationFrame = ImGui::GetFrameCount();
+		ImGui::Text("Are you sure you want to delete the saved settings file?");
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		const float buttonWidth = 120.0f;
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		const float totalWidth = (buttonWidth * 2) + spacing;
+		const float cursorX = (ImGui::GetWindowWidth() - totalWidth) / 2.0f;
+
+		ImGui::SetCursorPosX(cursorX);
+
+		if (ImGui::Button("Yes, Delete", ImVec2(buttonWidth, 0))) {
+			Delete();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+
+		if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SetItemDefaultFocus();
+
+		ImGui::EndPopup();
 	}
 }
 
@@ -239,8 +248,6 @@ std::string Widget::GetFolderName()
 		return "Weathers";
 	case RE::FormType::LightingMaster:
 		return "Lighting Templates";
-	case RE::FormType::WorldSpace:
-		return "WorldSpaces";
 	case RE::FormType::ImageSpace:
 		return "ImageSpaces";
 	case RE::FormType::VolumetricLighting:
@@ -256,11 +263,54 @@ std::string Widget::GetFolderName()
 	}
 }
 
-void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool showSaveLoad, bool showForceWeather, RE::TESWeather* weather)
+void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather)
 {
 	auto editorWindow = EditorWindow::GetSingleton();
 	auto menu = globals::menu;
 	bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons;
+
+	auto drawSearchBar = [&]() {
+		ImGui::SetNextItemWidth(200.0f);
+		if (ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer)))
+			searchActive = searchBuffer[0] != '\0';
+		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false))
+			ImGui::SetKeyboardFocusHere(-1);
+	};
+
+	auto drawForceWeatherButton = [&](float height) {
+		if (!showForceWeather || !weather)
+			return;
+		ImGui::SameLine();
+		bool isLocked = editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather;
+		const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
+		ImVec2 lockSize = ImGui::CalcTextSize(lockLabel);
+		lockSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+		lockSize.y = height;
+
+		if (isLocked) {
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+		}
+		if (ImGui::Button(lockLabel, lockSize)) {
+			if (isLocked)
+				editorWindow->UnlockWeather();
+			else
+				editorWindow->LockWeather(weather);
+		}
+		if (isLocked)
+			ImGui::PopStyleColor(2);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
+	};
+
+	auto drawUnsavedIndicator = [&]() {
+		if (!HasUnsavedChanges() || !menu)
+			return;
+		ImGui::SameLine();
+		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES)");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Unsaved changes - click save to keep");
+	};
 
 	if (useIcons) {
 		const float iconSize = ImGui::GetFrameHeight() * 0.85f;
@@ -268,279 +318,109 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, ImGui::GetStyle().ItemSpacing.y));
 
-		ImGui::SetNextItemWidth(200.0f);
-		if (ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer))) {
-			searchActive = searchBuffer[0] != '\0';
-		}
+		drawSearchBar();
+		drawForceWeatherButton(iconSize);
 
-		// Handle Ctrl+F to focus search
-		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
-			ImGui::SetKeyboardFocusHere(-1);
-		}
-
-		// Force Weather button (Weather widget only)
-		if (showForceWeather && weather) {
-			ImGui::SameLine();
-
-			bool isLocked = editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather;
-			const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
-			ImVec2 lockTextSize = ImGui::CalcTextSize(lockLabel);
-			float lockButtonWidth = lockTextSize.x + ImGui::GetStyle().FramePadding.x * 2.0f;
-
-			if (isLocked) {
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
-			}
-			if (ImGui::Button(lockLabel, ImVec2(lockButtonWidth, iconSize))) {
-				if (isLocked) {
-					editorWindow->UnlockWeather();
-				} else {
-					editorWindow->LockWeather(weather);
-				}
-			}
-			if (isLocked) {
-				ImGui::PopStyleColor(2);
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
-			}
-		}
-
-		// Icon buttons
+		// Transparent icon button style
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
 
-		// Apply/Revert buttons
-		if (showApplyRevert && !editorWindow->settings.autoApplyChanges && menu->uiIcons.applyToGame.texture) {
+		auto iconButton = [&](const char* suffix, void* texture, const char* tooltip, auto callback) {
+			if (!texture)
+				return;
 			ImGui::SameLine();
-			if (ImGui::ImageButton((std::string(searchId) + "_Apply").c_str(), menu->uiIcons.applyToGame.texture, buttonSize)) {
-				ApplyChanges();
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Apply changes to the game");
-			}
+			if (ImGui::ImageButton((std::string(searchId) + suffix).c_str(), texture, buttonSize))
+				callback();
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", tooltip);
+		};
 
-			if (menu->uiIcons.featureSettingRevert.texture) {
-				ImGui::SameLine();
-				if (ImGui::ImageButton((std::string(searchId) + "_Revert").c_str(), menu->uiIcons.featureSettingRevert.texture, buttonSize)) {
-					RevertChanges();
-				}
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Revert to saved values");
-				}
-			}
-		}
+		// Apply button
+		if (showApply && !editorWindow->settings.autoApplyChanges)
+			iconButton("_Apply", menu->uiIcons.applyToGame.texture, "Apply changes to the game", [&]() { ApplyChanges(); });
 
-		// Save/Load/Delete buttons
-		if (showSaveLoad && menu->uiIcons.saveSettings.texture && menu->uiIcons.loadSettings.texture) {
-			ImGui::SameLine();
-			if (ImGui::ImageButton((std::string(searchId) + "_Save").c_str(), menu->uiIcons.saveSettings.texture, buttonSize)) {
-				Save();
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Save to file");
-			}
-
-			ImGui::SameLine();
-			if (ImGui::ImageButton((std::string(searchId) + "_Load").c_str(), menu->uiIcons.loadSettings.texture, buttonSize)) {
-				Load();
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Load saved file (or reset to vanilla if no file)");
-			}
+		// Save/Load/Revert/Delete group
+		if (showSaveLoadRevert) {
+			iconButton("_Save", menu->uiIcons.saveSettings.texture, "Save to file", [&]() { Save(); });
+			iconButton("_Load", menu->uiIcons.loadSettings.texture, "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
+			iconButton("_Revert", menu->uiIcons.featureSettingRevert.texture, "Revert to original game values", [&]() { RevertChanges(); });
 
 			if (HasSavedFile() && menu->uiIcons.deleteSettings.texture) {
 				ImGui::SameLine();
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 0.3f, 1.0f));
-				if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize)) {
-					if (editorWindow->settings.suppressDeleteWarning) {
-						Delete();
-					} else {
-						ImGui::OpenPopup("ConfirmDelete");
-					}
+				{
+					auto _style = Util::ErrorButtonStyle();
+					if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
+						ImGui::OpenPopup("DeleteConfirmation");
 				}
-				ImGui::PopStyleColor(2);
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Delete saved file and revert to defaults");
-				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Delete saved file");
 			}
 		}
 
+		drawUnsavedIndicator();
 		ImGui::PopStyleColor(2);
 		ImGui::PopStyleVar(2);
 	} else {
-		// Text button mode
 		const float buttonHeight = ImGui::GetFrameHeight();
-
-		// Search bar first
-		ImGui::SetNextItemWidth(200.0f);
-		if (ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer))) {
-			searchActive = searchBuffer[0] != '\0';
+		if (!menu) {
+			drawSearchBar();
+			drawForceWeatherButton(buttonHeight);
+			ImGui::Separator();
+			return;
 		}
+		const auto& palette = menu->GetTheme().StatusPalette;
 
-		// Handle Ctrl+F to focus search
-		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
-			ImGui::SetKeyboardFocusHere(-1);
-		}
+		drawSearchBar();
+		drawForceWeatherButton(buttonHeight);
 
-		// Force Weather button (Weather widget only)
-		if (showForceWeather && weather) {
+		auto styledTextButton = [&](const char* label, const ImVec4& color, const char* tooltip, auto callback) {
 			ImGui::SameLine();
-
-			bool isLocked = editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather;
-			const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
-			ImVec2 lockSize = ImGui::CalcTextSize(lockLabel);
-			lockSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			lockSize.y = buttonHeight;
-
-			if (isLocked) {
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
-			}
-			if (ImGui::Button(lockLabel, lockSize)) {
-				if (isLocked) {
-					editorWindow->UnlockWeather();
-				} else {
-					editorWindow->LockWeather(weather);
-				}
-			}
-			if (isLocked) {
-				ImGui::PopStyleColor(2);
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
-			}
-		}
-
-		// Apply/Revert buttons
-		if (showApplyRevert && !editorWindow->settings.autoApplyChanges) {
-			ImGui::SameLine();
-
-			ImVec2 applySize = ImGui::CalcTextSize("Apply");
-			applySize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			applySize.y = buttonHeight;
-
-			auto successColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-			auto successHover = successColor;
-			successHover.w = 0.8f;
-			auto successActive = successColor;
-			successActive.w = 1.0f;
+			ImVec2 size = ImGui::CalcTextSize(label);
+			size.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+			size.y = buttonHeight;
+			auto hover = color;
+			hover.w = 0.8f;
+			auto active = color;
+			active.w = 1.0f;
 			{
-				auto styledButton = Util::StyledButtonWrapper(successColor, successHover, successActive);
-				if (ImGui::Button("Apply", applySize)) {
-					ApplyChanges();
-				}
+				auto styledButton = Util::StyledButtonWrapper(color, hover, active);
+				if (ImGui::Button(label, size))
+					callback();
 			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Apply changes to the game");
-			}
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", tooltip);
+		};
 
+		auto textButton = [&](const char* label, const char* tooltip, auto callback) {
 			ImGui::SameLine();
+			ImVec2 size = ImGui::CalcTextSize(label);
+			size.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+			size.y = buttonHeight;
+			if (Util::ButtonWithFlash(label, size))
+				callback();
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", tooltip);
+		};
 
-			ImVec2 revertSize = ImGui::CalcTextSize("Revert");
-			revertSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			revertSize.y = buttonHeight;
+		// Apply button
+		if (showApply && !editorWindow->settings.autoApplyChanges)
+			styledTextButton("Apply", palette.SuccessColor, "Apply changes to the game", [&]() { ApplyChanges(); });
 
-			auto warningColor = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
-			auto warningHover = warningColor;
-			warningHover.w = 0.8f;
-			auto warningActive = warningColor;
-			warningActive.w = 1.0f;
-			{
-				auto styledButton = Util::StyledButtonWrapper(warningColor, warningHover, warningActive);
-				if (ImGui::Button("Revert", revertSize)) {
-					RevertChanges();
-				}
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Revert to saved values");
-			}
+		// Save/Load/Revert/Delete group
+		if (showSaveLoadRevert) {
+			textButton("Save", "Save to file", [&]() { Save(); });
+			textButton("Load", "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
+			styledTextButton("Revert", palette.Warning, "Revert to original game values", [&]() { RevertChanges(); });
+
+			if (HasSavedFile())
+				styledTextButton("Delete", palette.Error, "Delete saved file", [&]() { ImGui::OpenPopup("DeleteConfirmation"); });
 		}
 
-		// Save/Load/Delete buttons
-		if (showSaveLoad) {
-			ImGui::SameLine();
-
-			ImVec2 saveSize = ImGui::CalcTextSize("Save");
-			saveSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			saveSize.y = buttonHeight;
-
-			if (Util::ButtonWithFlash("Save", saveSize)) {
-				Save();
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Save to file");
-			}
-
-			ImGui::SameLine();
-
-			ImVec2 loadSize = ImGui::CalcTextSize("Load");
-			loadSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			loadSize.y = buttonHeight;
-
-			if (Util::ButtonWithFlash("Load", loadSize)) {
-				Load();
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Load saved file (or reset to vanilla if no file)");
-			}
-
-			if (HasSavedFile()) {
-				ImGui::SameLine();
-
-				ImVec2 deleteSize = ImGui::CalcTextSize("Delete");
-				deleteSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-				deleteSize.y = buttonHeight;
-
-				auto errorColor = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-				auto errorHover = errorColor;
-				errorHover.w = 0.8f;
-				auto errorActive = errorColor;
-				errorActive.w = 1.0f;
-				{
-					auto styledButton = Util::StyledButtonWrapper(errorColor, errorHover, errorActive);
-					if (ImGui::Button("Delete", deleteSize)) {
-						if (editorWindow->settings.suppressDeleteWarning) {
-							Delete();
-						} else {
-							ImGui::OpenPopup("ConfirmDelete");
-						}
-					}
-				}
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Delete saved file and revert to defaults");
-				}
-			}
-		}
+		drawUnsavedIndicator();
 	}
 
-	// Confirmation popup for delete (shared by all widgets)
-	if (showSaveLoad && ImGui::BeginPopupModal("ConfirmDelete", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::Text("Are you sure you want to delete this file?");
-		ImGui::Text("This will revert to vanilla/mod provided values.");
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		if (ImGui::Checkbox("Don't show this warning again", &editorWindow->settings.suppressDeleteWarning)) {
-			editorWindow->Save();
-		}
-
-		ImGui::Spacing();
-
-		if (Util::ButtonWithFlash("Yes", ImVec2(120, 0))) {
-			Delete();
-			ImGui::CloseCurrentPopup();
-		}
-		ImGui::SetItemDefaultFocus();
-		ImGui::SameLine();
-		if (Util::ButtonWithFlash("No", ImVec2(120, 0))) {
-			ImGui::CloseCurrentPopup();
-		}
-		ImGui::EndPopup();
-	}
+	DrawDeleteConfirmationModal();
 
 	ImGui::Separator();
 }

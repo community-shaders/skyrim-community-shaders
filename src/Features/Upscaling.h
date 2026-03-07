@@ -55,8 +55,10 @@ public:
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
-		float sharpnessFSR = 1.0f;
-		float sharpnessDLSS = 0.5f;
+		float sharpnessFSR = 0.0f;
+		float sharpnessDLSS = 0.0f;
+		uint presetDLSS = 0;           // 0=Default, 1=J, 2=K, 3=L, 4=M
+		uint useGatherWideKernel = 1;  // 0=Legacy 3x3, 1=Gather wide-kernel
 	};
 
 	Settings settings;
@@ -64,7 +66,8 @@ public:
 	struct JitterCB
 	{
 		float2 jitter;
-		float2 pad0;
+		float useWideKernel;
+		float useGatherWideKernel;
 	};
 
 	struct UpscalingDataCB
@@ -90,7 +93,7 @@ public:
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationActive() const;
 	float GetFrameGenerationFrameTime() const;
-	bool IsUpscalingActive();
+	bool IsUpscalingActive() const;
 
 	// Feature interface overrides
 	virtual void DrawSettings() override;
@@ -108,7 +111,7 @@ public:
 	virtual void PostPostLoad() override;
 	virtual void SetupResources() override;
 
-	UpscaleMethod GetUpscaleMethod();
+	UpscaleMethod GetUpscaleMethod() const;
 
 	void CheckResources(UpscaleMethod a_upscalemethod);
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
@@ -129,6 +132,35 @@ public:
 	winrt::com_ptr<ID3D11DepthStencilState> upscaleDepthStencilState;
 	winrt::com_ptr<ID3D11BlendState> upscaleBlendState;
 	winrt::com_ptr<ID3D11RasterizerState> upscaleRasterizerState;
+
+	// Shared VR HMD Mask Clearing
+	winrt::com_ptr<ID3D11ComputeShader> vrClearHMDMaskCS;
+	winrt::com_ptr<ID3D11Buffer> vrClearHMDMaskCB;
+	// Helper to dispatch mask clearing for a single eye region
+	void ClearHMDMask(ID3D11UnorderedAccessView* colorUAV, ID3D11ShaderResourceView* depthSRV,
+		uint32_t eyeWidth, uint32_t eyeHeight, uint32_t depthOffsetX, uint32_t colorOffsetX);
+
+	// Shared VR Per-Eye Intermediate Buffers
+	// Owned here so both Streamline (DLSS) and FidelityFX (FSR) can use them.
+	eastl::unique_ptr<Texture2D> vrIntermediateColorIn[2];           // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateColorOut[2];          // per-eye output resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateDepth[2];             // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateMotionVectors[2];     // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateReactiveMask[2];      // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateTransparencyMask[2];  // per-eye render resolution
+
+	// Helper to create/resize per-eye buffers matching source formats
+	void CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight, uint32_t outWidth, uint32_t outHeight,
+		ID3D11Resource* colorSrc, ID3D11Resource* mvecSrc, ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc);
+
+	// Helper: Create a Texture2D matching source format at a given size
+	static eastl::unique_ptr<Texture2D> CreateTextureFromSource(ID3D11Resource* src, uint32_t width, uint32_t height,
+		bool copyBindFlags = false, bool createSRV = false, bool createUAV = false, const char* name = nullptr);
+
+	// Shared Pipeline Steps
+	void PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* depthSrc, ID3D11Resource* mvecSrc,
+		ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc);
+	void FinalizePerEyeOutputs(ID3D11Resource* colorDst);
 
 	void ConfigureTAA();
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
@@ -157,6 +189,7 @@ public:
 	float dynamicResolutionHeightRatio = 1.0f;
 
 	bool previousUpscalingWasActive = false;
+	bool depthUpscaleUseWideKernel = false;
 
 	void CopySharedD3D12Resources();
 	void PostDisplay();
@@ -178,7 +211,6 @@ public:
 
 	// Unified interface methods - external code should use these instead of direct access
 	void LoadUpscalingSDKs();  // Loads all SDKs at once
-	void CheckFrameConstants();
 	void SetUIBuffer();
 	HANDLE GetFrameLatencyWaitableObject() const;
 	float GetFrameTime() const;
@@ -199,6 +231,11 @@ public:
 	void CreateProxySwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc);
 	void CreateProxyInterop();
 	IDXGISwapChain* GetProxySwapChain();
+
+	using BlurResources = DX12SwapChain::BlurResources;
+
+	// Get all D3D11 resources needed for background blur when D3D12 swap chain is active
+	BlurResources GetBlurResources() const;
 
 private:
 	struct Main_UpdateJitter

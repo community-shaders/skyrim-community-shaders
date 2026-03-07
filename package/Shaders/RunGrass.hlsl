@@ -3,9 +3,9 @@
 #include "Common/GBuffer.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/MotionBlur.hlsli"
+#include "Common/Permutation.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
-#include "Common/Permutation.hlsli"
 
 #define DEFERRED
 
@@ -19,65 +19,65 @@
 
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
-	float2 TexCoord : TEXCOORD0;
-	float4 Normal : NORMAL0;
-	float4 Color : COLOR0;
-	float4 InstanceData1 : TEXCOORD4;
-	float4 InstanceData2 : TEXCOORD5;
-	float4 InstanceData3 : TEXCOORD6;
-	float4 InstanceData4 : TEXCOORD7;
+	float4 Position: POSITION0;
+	float2 TexCoord: TEXCOORD0;
+	float4 Normal: NORMAL0;
+	float4 Color: COLOR0;
+	float4 InstanceData1: TEXCOORD4;
+	float4 InstanceData2: TEXCOORD5;
+	float4 InstanceData3: TEXCOORD6;
+	float4 InstanceData4: TEXCOORD7;
 #ifdef VR
-	uint InstanceID : SV_INSTANCEID;
+	uint InstanceID: SV_INSTANCEID;
 #endif  // VR
 };
 
 #ifdef GRASS_LIGHTING
 struct VS_OUTPUT
 {
-	float4 HPosition : SV_POSITION0;
-	float4 VertexColor : COLOR0;
-	float VertexMult : COLOR1;
-	float3 TexCoord : TEXCOORD0;
-	float3 ViewSpacePosition :
+	float4 HPosition: SV_POSITION0;
+	float4 VertexColor: COLOR0;
+	float VertexMult: COLOR1;
+	float3 TexCoord: TEXCOORD0;
+	float3 ViewSpacePosition:
 #	if !defined(VR)
 		TEXCOORD1;
 #	else
 		TEXCOORD2;
 #	endif
 #	if defined(RENDER_DEPTH)
-	float2 Depth :
+	float2 Depth:
 #		if !defined(VR)
 		TEXCOORD2;
 #		else
 		TEXCOORD3;
 #		endif
 #	endif  // RENDER_DEPTH
-	float4 WorldPosition : POSITION1;
-	float4 PreviousWorldPosition : POSITION2;
-	float4 VertexNormal : POSITION4;
+	float4 WorldPosition: POSITION1;
+	float4 PreviousWorldPosition: POSITION2;
+	float4 VertexNormal: POSITION4;
 #	ifdef VR
-	float ClipDistance : SV_ClipDistance0;
-	float CullDistance : SV_CullDistance0;
+	float ClipDistance: SV_ClipDistance0;
+	float CullDistance: SV_CullDistance0;
 #	endif  // VR
 };
 #else
 struct VS_OUTPUT
 {
-	float4 HPosition : SV_POSITION0;
-	float4 VertexColor : COLOR0;
-	float VertexMult : COLOR1;
-	float3 TexCoord : TEXCOORD0;
-	float4 AmbientColor : TEXCOORD1;
-	float3 ViewSpacePosition : TEXCOORD2;
+	float4 HPosition: SV_POSITION0;
+	float4 VertexColor: COLOR0;
+	float VertexMult: COLOR1;
+	float3 TexCoord: TEXCOORD0;
+	float4 AmbientColor: TEXCOORD1;
+	float3 ViewSpacePosition: TEXCOORD2;
 #	if defined(RENDER_DEPTH)
-	float2 Depth : TEXCOORD3;
+	float2 Depth: TEXCOORD3;
 #	endif  // RENDER_DEPTH
-	float4 WorldPosition : POSITION1;
-	float4 PreviousWorldPosition : POSITION2;
+	float4 WorldPosition: POSITION1;
+	float4 PreviousWorldPosition: POSITION2;
 #	ifdef VR
-	float ClipDistance : SV_ClipDistance0;
-	float CullDistance : SV_CullDistance0;
+	float ClipDistance: SV_ClipDistance0;
+	float CullDistance: SV_CullDistance0;
 #	endif  // VR
 };
 #endif
@@ -158,19 +158,19 @@ float3 CalculateWindDisplacement(VS_INPUT input, float windTimer)
 	return float3(WindVector.xy, 0) * windPower;
 }
 
-#ifdef GRASS_LIGHTING
+#	ifdef GRASS_LIGHTING
 float4 GetMSPosition(VS_INPUT input, float3x3 world3x3)
-#else
+#	else
 float4 GetMSPosition(VS_INPUT input)
-#endif
+#	endif
 {
 	float3 inputPosition = input.Position.xyz * (input.InstanceData4.yyy * ScaleMask.xyz + float3(1, 1, 1));
 
-#ifdef GRASS_LIGHTING
+#	ifdef GRASS_LIGHTING
 	float3 transformedPosition = mul(world3x3, inputPosition);
 	float4 msPosition;
 	msPosition.xyz = input.InstanceData1.xyz + transformedPosition;
-#else
+#	else
 	float3 instancePosition;
 	instancePosition.z = dot(
 		float3(input.InstanceData4.x, input.InstanceData2.w, input.InstanceData3.w), inputPosition);
@@ -179,7 +179,7 @@ float4 GetMSPosition(VS_INPUT input)
 
 	float4 msPosition;
 	msPosition.xyz = input.InstanceData1.xyz + instancePosition;
-#endif
+#	endif
 	msPosition.w = 1;
 
 	return msPosition;
@@ -347,19 +347,19 @@ typedef VS_OUTPUT PS_INPUT;
 struct PS_OUTPUT
 {
 #	if defined(RENDER_DEPTH)
-	float4 PS : SV_Target0;
+	float4 PS: SV_Target0;
 #	else
-	float4 Diffuse : SV_Target0;
-	float2 MotionVectors : SV_Target1;
-	float4 NormalGlossiness : SV_Target2;
-	float4 Albedo : SV_Target3;
-	float4 Specular : SV_Target4;
+	float4 Diffuse: SV_Target0;
+	float2 MotionVectors: SV_Target1;
+	float4 NormalGlossiness: SV_Target2;
+	float4 Albedo: SV_Target3;
+	float4 Specular: SV_Target4;
 #		if defined(TRUE_PBR)
-	float4 Reflectance : SV_Target5;
+	float4 Reflectance: SV_Target5;
 #		endif  // TRUE_PBR
-	float4 Masks : SV_Target6;
+	float4 Masks: SV_Target6;
 #		if defined(TRUE_PBR)
-	float4 Parameters : SV_Target7;
+	float4 Parameters: SV_Target7;
 #		endif  // TRUE_PBR
 #	endif      // RENDER_DEPTH
 };
@@ -367,13 +367,13 @@ struct PS_OUTPUT
 struct PS_OUTPUT
 {
 #	if defined(RENDER_DEPTH)
-	float4 PS : SV_Target0;
+	float4 PS: SV_Target0;
 #	else
-	float4 Diffuse : SV_Target0;
-	float2 MotionVectors : SV_Target1;
-	float4 Normal : SV_Target2;
-	float4 Albedo : SV_Target3;
-	float4 Masks : SV_Target6;
+	float4 Diffuse: SV_Target0;
+	float2 MotionVectors: SV_Target1;
+	float4 Normal: SV_Target2;
+	float4 Albedo: SV_Target3;
+	float4 Masks: SV_Target6;
 #	endif
 };
 #endif
@@ -434,24 +434,16 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #	endif
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
-
 #	if defined(SKYLIGHTING)
 #		include "Skylighting/Skylighting.hlsli"
 #	endif
 
-#	if defined(WATER_LIGHTING)
-#		include "WaterLighting/WaterCaustics.hlsli"
-#	endif
-
 #	if defined(IBL)
 #		include "IBL/IBL.hlsli"
+#	endif
+
+#	if defined(EXP_HEIGHT_FOG)
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
 #	endif
 
 #	define LinearSampler SampBaseSampler
@@ -493,7 +485,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 complexTest = TexBaseSampler.Load(int3(0, int(y) - 1, 0)).xyz * 2.0 - 1.0;
 	float complexLength = length(complexTest);
-	bool complex = abs(complexLength - 1.0) < 0.03;
+	bool complex = abs(complexLength - 1.0) < SharedData::grassLightingSettings.ComplexGrassThreshold;
 #		endif  // !TRUE_PBR
 
 	float4 baseColor;
@@ -630,28 +622,46 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 	float3 dirLightColorMultiplier = 1;
 
+#			if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		dirLightColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#			endif
+
 	float dirLightAngle = dot(normal, SharedData::DirLightDirection.xyz);
 
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
-	float dirShadow = !SharedData::InInterior ? shadowColor.x : 1.0;
-	float dirDetailShadow = 1.0;
+	// Apply world shadow (terrain shadows, cloud shadows) directly to light color
+	if (!SharedData::InInterior)
+		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	if (dirShadow > 0.0 && !SharedData::InInterior) {
-#			if defined(SCREEN_SPACE_SHADOWS)
-		dirDetailShadow = ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
-#			endif  // SCREEN_SPACE_SHADOWS
+	float dirSoftShadow = 1.0;
+	float dirVSMDetailedShadow = 1.0;
 
-		if (dirShadow != 0.0)
-			dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
-
-#			if defined(WATER_LIGHTING)
-		if (dirShadow > 0.0) {
-			float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
-			dirShadow *= WaterLighting::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
-		}
+#			if defined(VOLUMETRIC_SHADOWS)
+	if (!SharedData::InInterior)
+		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirVSMDetailedShadow);
 #			endif
+
+	float dirDetailedShadow = 1.0;
+
+	if (!SharedData::InInterior) {
+		dirDetailedShadow *= shadowColor.x;
+
+#			if defined(VOLUMETRIC_SHADOWS)
+		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
+#			else
+		dirSoftShadow = dirDetailedShadow;
+#			endif
+	} else {
+		dirDetailedShadow = dirVSMDetailedShadow;
 	}
+
+#			if defined(SCREEN_SPACE_SHADOWS)
+	if (!SharedData::InInterior)
+		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
+#			endif  // SCREEN_SPACE_SHADOWS
 
 	float3 diffuseColor = 0;
 	float3 specularColor = 0;
@@ -661,7 +671,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #			if defined(TRUE_PBR)
 	{
-		PBR::LightProperties lightProperties = PBR::InitLightProperties(SharedData::DirLightColor.xyz, dirLightColorMultiplier * dirShadow, 1);
+		PBR::LightProperties lightProperties = PBR::InitLightProperties(SharedData::DirLightColor.xyz, dirLightColorMultiplier * dirDetailedShadow, 1);
 		float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
 		PBR::GetDirectLightInput(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, normal, normal, viewDirection, viewDirection, DirLightDirection, DirLightDirection, lightProperties, pbrSurfaceProperties, tbn, input.TexCoord.xy);
 		lightsDiffuseColor += dirDiffuseColor;
@@ -670,10 +680,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #			else
 	dirLightColor *= dirLightColorMultiplier;
-	dirLightColor *= dirShadow;
-	dirLightColor *= dirDetailShadow;
 
-	lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::GrassDiffuseMult();
+	float wrapAmount = saturate(input.VertexNormal.w * 10.0) * 0.5 * (!complex);
+
+	if (SharedData::grassLightingSettings.EnableWrappedLighting) {
+		// Old Wrapped Model
+		float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
+		lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(wrappedDirLight) * Color::VanillaNormalization();
+	} else {
+		// Original Standard Model
+		lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(dirLightAngle) * Color::VanillaNormalization();
+	}
 
 	float3 vertexColor = input.VertexColor.xyz;
 
@@ -688,10 +705,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
 
 	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
-	float3 sss = dirLightColor * saturate(-dirLightAngle) * Color::GrassDiffuseMult();
+	float3 sss = dirLightColor * dirSoftShadow * saturate(-dirLightAngle) * Color::VanillaNormalization();
 
 	if (complex)
-		lightsSpecularColor += GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
+		lightsSpecularColor += dirDetailedShadow * GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX)
@@ -748,15 +765,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				float lightAngle = dot(normal, normalizedLightDirection);
 				float lightNoL = dot(normalizedLightDirection.xyz, viewDirection);
+				float3 lightDiffuseColor;
 
-				float3 lightDiffuseColor = lightColor * saturate(lightAngle);
+				if (SharedData::grassLightingSettings.EnableWrappedLighting) {
+					float wrappedLight = saturate(lightAngle + wrapAmount) / (1.0 + wrapAmount);
+					lightDiffuseColor = lightColor * wrappedLight;
+				} else {
+					lightDiffuseColor = lightColor * saturate(lightAngle);
+				}
 
 				sss += lightColor * saturate(-lightAngle);
 
-				lightsDiffuseColor += lightDiffuseColor * Color::GrassDiffuseMult();
+				lightsDiffuseColor += lightDiffuseColor * Color::VanillaNormalization();
 
 				if (complex)
-					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
+					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
 #				endif
 			}
 		}
@@ -802,8 +825,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-		{
+		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
 #					if defined(SKYLIGHTING)
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #					else
@@ -841,11 +863,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
 		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
-			diffuseColor.xyz = LightLimitFix::TurboColormap(0);
+			diffuseColor.xyz = Color::TurboColormap(0);
 		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 1) {
-			diffuseColor.xyz = LightLimitFix::TurboColormap(0);
+			diffuseColor.xyz = Color::TurboColormap(0);
 		} else {
-			diffuseColor.xyz = LightLimitFix::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
+			diffuseColor.xyz = Color::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
 		}
 	} else {
 		psout.Diffuse = float4(diffuseColor, 1);
@@ -899,27 +921,24 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
-	float dirShadow = !SharedData::InInterior ? shadowColor.x : 1.0;
-	float dirDetailShadow = 1.0;
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 
-	if (dirShadow > 0.0 && !SharedData::InInterior) {
+	// Apply world shadow (terrain shadows, cloud shadows) directly to light color
+	if (!SharedData::InInterior)
+		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+
+	float dirDetailedShadow = 1.0;
+
+	if (!SharedData::InInterior)
+		dirDetailedShadow = shadowColor.x;
+
 #			if defined(SCREEN_SPACE_SHADOWS)
-		dirDetailShadow = ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
+	if (!SharedData::InInterior)
+		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
 #			endif  // SCREEN_SPACE_SHADOWS
 
-		if (dirShadow != 0.0)
-			dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
-
-#			if defined(WATER_LIGHTING)
-		if (dirShadow > 0.0) {
-			float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
-			dirShadow *= WaterLighting::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
-		}
-#			endif
-	}
-
-	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * dirDetailShadow * 0.5 * llDirLightMult;
+	float3 diffuseColor = dirLightColor * dirDetailedShadow;
 
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;
@@ -963,7 +982,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 				lightColor *= lightShadow;
 
-				diffuseColor += lightColor * 0.5;
+				diffuseColor += lightColor;
 			}
 		}
 	}
@@ -1012,13 +1031,12 @@ PS_OUTPUT main(PS_INPUT input)
 #			if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-		{
-#					if defined(SKYLIGHTING)
+		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
+#				if defined(SKYLIGHTING)
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
+#				else
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
+#				endif
 			iblColor = Color::IrradianceToGamma(iblColor);
 			directionalAmbientColor += iblColor;
 		}

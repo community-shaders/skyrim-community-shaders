@@ -1,5 +1,6 @@
 #pragma once
 #include "D3D.h"
+#include "Utils/Input.h"
 #include <SimpleMath.h>
 #include <d3d11.h>
 #include <imgui.h>  // For ImVec4
@@ -7,8 +8,8 @@
 #include <vector>
 
 // Forward declarations - actual definitions are in Features/VR.h
-enum class ControllerDevice;
-struct ButtonCombo;
+using ControllerDevice = InputDeviceType;
+using ButtonCombo = InputCombo;
 
 /**
  * @brief VR utility functions and helpers for OpenVR integration
@@ -54,19 +55,6 @@ namespace Util
 	void DrawButtonCombo(const std::vector<ButtonCombo>& combo, bool showControllerLabels);
 
 	/**
-	 * @brief Sets standard input flags for a VR overlay
-	 * @param overlay Pointer to the OpenVR overlay interface
-	 * @param handle Handle to the VR overlay
-	 *
-	 * This function configures an overlay to accept VR input events including:
-	 * - Scroll events
-	 * - Touchpad events
-	 * - Gamepad events
-	 * - Dashboard visibility
-	 */
-	void SetOverlayInputFlags(vr::IVROverlay* overlay, vr::VROverlayHandle_t handle);
-
-	/**
 	 * @brief Computes a transformation matrix for positioning an overlay relative to the HMD
 	 * @param offsetX Horizontal offset from HMD in meters (positive = right)
 	 * @param offsetY Vertical offset from HMD in meters (positive = up)
@@ -77,20 +65,6 @@ namespace Util
 	 * in HMD local space to create a transformation matrix suitable for overlay positioning.
 	 */
 	vr::HmdMatrix34_t ComputeOverlayTransformFromHMD(float offsetX, float offsetY, float offsetZ);
-
-	/**
-	 * @brief Creates a transformation matrix for controller-relative overlay positioning
-	 * @param offsetX Horizontal offset from controller in meters
-	 * @param offsetY Vertical offset from controller in meters
-	 * @param offsetZ Depth offset from controller in meters
-	 * @param width Width of the overlay in meters
-	 * @param height Height of the overlay in meters
-	 * @return Transformation matrix for controller-relative positioning
-	 *
-	 * This function creates a transformation matrix that positions an overlay
-	 * relative to a VR controller with the specified dimensions and offsets.
-	 */
-	vr::HmdMatrix34_t CreateControllerOverlayTransform(float offsetX, float offsetY, float offsetZ, float width, float height);
 
 	/**
 	 * @brief Common OpenVR system access pattern with validation
@@ -125,17 +99,6 @@ namespace Util
 		 */
 		bool HasOverlay() const { return IsValid() && overlay; }
 	};
-
-	/**
-	 * @brief Get UI color for controller device type
-	 * @param device The controller device type
-	 * @param isRecording Whether the device is in recording mode (affects color)
-	 * @return ImVec4 color value for UI rendering
-	 *
-	 * This function provides consistent color coding for different controller
-	 * device types in the UI, with special handling for recording mode.
-	 */
-	ImVec4 GetControllerDeviceColor(ControllerDevice device, bool isRecording = false);
 
 	/**
 	 * @brief Get controller index for our ControllerDevice enum
@@ -187,11 +150,14 @@ namespace Util
 	 */
 	inline Matrix HmdMatrix34ToMatrix(const vr::HmdMatrix34_t& m)
 	{
+		// OpenVR matrices are row-major but designed for column-vector math (M * v).
+		// DirectX SimpleMath uses row-vector math (v * M).
+		// We need to transpose the rotation and move translation to the bottom row.
 		return Matrix(
-			m.m[0][0], m.m[0][1], m.m[0][2], m.m[0][3],
-			m.m[1][0], m.m[1][1], m.m[1][2], m.m[1][3],
-			m.m[2][0], m.m[2][1], m.m[2][2], m.m[2][3],
-			0, 0, 0, 1);
+			m.m[0][0], m.m[1][0], m.m[2][0], 0.0f,
+			m.m[0][1], m.m[1][1], m.m[2][1], 0.0f,
+			m.m[0][2], m.m[1][2], m.m[2][2], 0.0f,
+			m.m[0][3], m.m[1][3], m.m[2][3], 1.0f);
 	}
 
 	/**
@@ -205,18 +171,19 @@ namespace Util
 	inline vr::HmdMatrix34_t MatrixToHmdMatrix34(const Matrix& mat)
 	{
 		vr::HmdMatrix34_t m{};
+		// Transpose rotation back (row-vector → column-vector) and extract translation from row 4
 		m.m[0][0] = mat._11;
-		m.m[0][1] = mat._12;
-		m.m[0][2] = mat._13;
-		m.m[0][3] = mat._14;
-		m.m[1][0] = mat._21;
+		m.m[0][1] = mat._21;
+		m.m[0][2] = mat._31;
+		m.m[0][3] = mat._41;
+		m.m[1][0] = mat._12;
 		m.m[1][1] = mat._22;
-		m.m[1][2] = mat._23;
-		m.m[1][3] = mat._24;
-		m.m[2][0] = mat._31;
-		m.m[2][1] = mat._32;
+		m.m[1][2] = mat._32;
+		m.m[1][3] = mat._42;
+		m.m[2][0] = mat._13;
+		m.m[2][1] = mat._23;
 		m.m[2][2] = mat._33;
-		m.m[2][3] = mat._34;
+		m.m[2][3] = mat._43;
 		return m;
 	}
 
@@ -235,6 +202,47 @@ namespace Util
 			for (int j = 0; j < 4; ++j)
 				mat.m[i][j] = m[i][j];
 		return mat;
+	}
+
+	/**
+	 * @brief Gets the Inter-Pupillary Distance (IPD) from the HMD
+	 * @return IPD in meters, or 0.064 (average human IPD) as fallback
+	 *
+	 * Tries multiple methods to determine IPD:
+	 * 1. Query Prop_UserIpdMeters_Float property directly
+	 * 2. Calculate from eye-to-head transforms
+	 * 3. Fallback to average human IPD (64mm)
+	 */
+	inline float GetIPDFromHMD()
+	{
+		RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+		if (!openvr || !openvr->vrSystem)
+			return 0.064f;  // Default fallback IPD in meters
+
+		// Method 1: Query IPD property directly
+		vr::ETrackedPropertyError error = vr::TrackedProp_UnknownProperty;
+		float ipd = openvr->vrSystem->GetFloatTrackedDeviceProperty(
+			vr::k_unTrackedDeviceIndex_Hmd,
+			vr::Prop_UserIpdMeters_Float,
+			&error);
+
+		if (error == vr::TrackedProp_Success && ipd > 0.0f && ipd < 0.1f) {
+			return ipd;
+		}
+
+		// Method 2: Calculate from eye-to-head transforms
+		vr::HmdMatrix34_t leftEye = openvr->vrSystem->GetEyeToHeadTransform(vr::Eye_Left);
+		vr::HmdMatrix34_t rightEye = openvr->vrSystem->GetEyeToHeadTransform(vr::Eye_Right);
+
+		// Eye separation is in the X translation component (m[0][3])
+		float eyeSeparation = std::abs(leftEye.m[0][3] - rightEye.m[0][3]);
+
+		if (eyeSeparation > 0.0f && eyeSeparation < 0.1f) {
+			return eyeSeparation;
+		}
+
+		// Fallback to average human IPD
+		return 0.064f;
 	}
 
 }

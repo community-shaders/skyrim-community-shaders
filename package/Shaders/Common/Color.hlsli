@@ -18,6 +18,30 @@ namespace Color
 {
 	static float GammaCorrectionValue = 2.2;
 
+	// Copyright 2019 Google LLC.
+	// SPDX-License-Identifier: Apache-2.0
+	// Polynomial approximation in GLSL for the Turbo colormap
+	// Original LUT: https://gist.github.com/mikhailov-work/ee72ba4191942acecc03fe6da94fc73f
+	// Authors: Anton Mikhailov (mikhailov@google.com), Ruofei Du (ruofei@google.com)
+	// https://ai.googleblog.com/2019/08/turbo-improved-rainbow-colormap-for.html
+	float3 TurboColormap(float x)
+	{
+		const float4 kRedVec4 = float4(0.13572138, 4.61539260, -42.66032258, 132.13108234);
+		const float4 kGreenVec4 = float4(0.09140261, 2.19418839, 4.84296658, -14.18503333);
+		const float4 kBlueVec4 = float4(0.10667330, 12.64194608, -60.58204836, 110.36276771);
+		const float2 kRedVec2 = float2(-152.94239396, 59.28637943);
+		const float2 kGreenVec2 = float2(4.27729857, 2.82956604);
+		const float2 kBlueVec2 = float2(-89.90310912, 27.34824973);
+
+		x = saturate(x);
+		float4 v4 = float4(1.0, x, x * x, x * x * x);
+		float2 v2 = v4.zw * v4.z;
+		return float3(
+			dot(v4, kRedVec4) + dot(v2, kRedVec2),
+			dot(v4, kGreenVec4) + dot(v2, kGreenVec2),
+			dot(v4, kBlueVec4) + dot(v2, kBlueVec2));
+	}
+
 	// [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
 	float3 MultiBounceAO(float3 baseColor, float ao)
 	{
@@ -143,7 +167,7 @@ namespace Color
 	const static float PBRLightingScale = ENABLE_LL ? 1.0 : 0.65;
 
 	// Attempt to normalise reflection brightness against DALC
-	const static float ReflectionNormalisationScale = ENABLE_LL ? 1.0 : 0.65;
+	const static float ReflectionNormalisationScale = ENABLE_LL ? 1.0 : 1.0;
 
 	const static float PBRLightingCompensation = ENABLE_LL ? 1.0 : Math::PI;
 
@@ -191,7 +215,7 @@ namespace Color
 
 	float3 Light(float3 color, bool isLinear = false)
 	{
-		color = (ENABLE_LL && !isLinear) ? pow(abs(color), SharedData::linearLightingSettings.lightGamma) * SharedData::linearLightingSettings.lightMult : color;
+		color = (ENABLE_LL && !isLinear) ? pow(abs(color), SharedData::linearLightingSettings.lightGamma) : color;
 #	if defined(TRUE_PBR)
 		return color * PBRLightingCompensation;  // Compensate for traditional Lambertian diffuse
 #	else
@@ -226,7 +250,7 @@ namespace Color
 
 	float3 Ambient(float3 color)
 	{
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.ambientGamma) : color;
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.ambientGamma) * SharedData::linearLightingSettings.ambientMult : color;
 	}
 
 	float3 Fog(float3 color)
@@ -317,24 +341,9 @@ namespace Color
 		return ENABLE_LL ? color : LinearToGamma(color);
 	}
 
-	float VanillaDiffuseMult()
+	float VanillaNormalization()
 	{
-		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaDiffuseMult : 1.0f;
-	}
-
-	float VanillaSpecularMult()
-	{
-		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaSpecularMult : 1.0f;
-	}
-
-	float GrassDiffuseMult()
-	{
-		return ENABLE_LL ? SharedData::linearLightingSettings.grassDiffuseMult : 1.0f;
-	}
-
-	float GrassSpecularMult()
-	{
-		return ENABLE_LL ? SharedData::linearLightingSettings.grassSpecularMult : 1.0f;
+		return ENABLE_LL ? 1.0 / Math::PI : 1.0f;
 	}
 
 	float VanillaDiffuseColorMult()
@@ -342,6 +351,10 @@ namespace Color
 		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaDiffuseColorMult : 1.0f;
 	}
 #else
+	const static float PBRLightingScale = 1.0;
+	const static float ReflectionNormalisationScale = 1.0;
+	const static float PBRLightingCompensation = Math::PI;
+
 	float3 Diffuse(float3 color)
 	{
 #	if defined(TRUE_PBR)

@@ -151,12 +151,6 @@ void InteriorSun::ClearArrays()
 	arraysCleared = true;
 }
 
-namespace RE
-{
-	class BSMultiBoundRoom : public NiNode
-	{};
-}
-
 void InteriorSun::PopulateReplacementJobArrays(RE::TESObjectCELL* cell, const RE::NiPointer<RE::BSPortalGraph>& portalGraph, const RE::BSShadowDirectionalLight* dirLight, RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>>& jobArrays)
 {
 	if (cell != currentCell) {
@@ -185,7 +179,7 @@ void InteriorSun::PopulateReplacementJobArrays(RE::TESObjectCELL* cell, const RE
 	}
 
 	const auto playerPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
-	auto lightDir = -dirLight->GetShadowDirectionalLightRuntimeData().lightDirection;
+	auto lightDir = -dirLight->GetShadowDirectionalLightRuntimeData().sunVector;
 	lightDir.Unitize();
 
 	// Add extra rooms and portals that are in the direction of the sun

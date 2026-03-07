@@ -4,8 +4,8 @@ namespace GrassCollision
 
 	cbuffer GrassCollisionPerFrame : register(b5)
 	{
-		float2 PosOffset;  // cell origin in camera space
-		uint2 ArrayOrigin; // xy: array origin (clipmap wrapping)
+		float2 PosOffset;   // cell origin in camera space
+		uint2 ArrayOrigin;  // xy: array origin (clipmap wrapping)
 
 		int2 ValidMargin;
 		float TimeDelta;
@@ -19,7 +19,8 @@ namespace GrassCollision
 	const static float CELL_SIZE = WORLD_SIZE / TEXTURE_SIZE;
 	const static float2 ZRANGE = float2(2048.0, -2048.0);
 
-	float ProceduralAnimation(float x, float distanceFromCenter) {
+	float ProceduralAnimation(float x, float distanceFromCenter)
+	{
 		float fadeRate = 250;
 		x /= fadeRate;
 		x /= distanceFromCenter;
@@ -48,35 +49,34 @@ namespace GrassCollision
 		float wsum = 0;
 
 		for (int i = 0; i < 2; i++)
-			for (int j = 0; j < 2; j++)
-		{
-			int2 offset = int2(i, j);
-			int2 cellID = cell000 + offset;
+			for (int j = 0; j < 2; j++) {
+				int2 offset = int2(i, j);
+				int2 cellID = cell000 + offset;
 
-			if (any(cellID < 0) || any((uint2)cellID >= TEXTURE_SIZE))
-				continue;
+				if (any(cellID < 0) || any((uint2)cellID >= TEXTURE_SIZE))
+					continue;
 
-			float2 cellCentreMS = cellID + 0.5 - TEXTURE_SIZE / 2;
-			cellCentreMS = cellCentreMS * CELL_SIZE;
+				float2 cellCentreMS = cellID + 0.5 - TEXTURE_SIZE / 2;
+				cellCentreMS = cellCentreMS * CELL_SIZE;
 
-			float2 bilinearWeights = 1 - abs(offset - bilinearPos);
-			float w = bilinearWeights.x * bilinearWeights.y;
+				float2 bilinearWeights = 1 - abs(offset - bilinearPos);
+				float w = bilinearWeights.x * bilinearWeights.y;
 
-			uint2 cellTexID = (cellID + ArrayOrigin.xy) % TEXTURE_SIZE;
+				uint2 cellTexID = (cellID + ArrayOrigin.xy) % TEXTURE_SIZE;
 
-			float4 collisionSample = Collision[cellTexID];
-			collisionSample = lerp(ZRANGE.x, ZRANGE.y, collisionSample);
+				float4 collisionSample = Collision[cellTexID];
+				collisionSample = lerp(ZRANGE.x, ZRANGE.y, collisionSample);
 
-			collisionHeights += collisionSample.x * w;
-			collisionAmount += max(0, min(maximumDepth, worldPosition.z - collisionSample.x)) * ProceduralAnimation(collisionSample.y - collisionSample.x, distanceFromCenter) * w;
+				collisionHeights += collisionSample.x * w;
+				collisionAmount += max(0, min(maximumDepth, worldPosition.z - collisionSample.x)) * ProceduralAnimation(collisionSample.y - collisionSample.x, distanceFromCenter) * w;
 
-			previousCollisionHeights += collisionSample.z * w;
-			previousCollisionAmount += max(0, min(maximumDepth, worldPosition.z - collisionSample.z)) * ProceduralAnimation(collisionSample.w - collisionSample.z, distanceFromCenter) * w;
+				previousCollisionHeights += collisionSample.z * w;
+				previousCollisionAmount += max(0, min(maximumDepth, worldPosition.z - collisionSample.z)) * ProceduralAnimation(collisionSample.w - collisionSample.z, distanceFromCenter) * w;
 
-			wsum += w;
-		}
+				wsum += w;
+			}
 
-		if (wsum > 0.0){
+		if (wsum > 0.0) {
 			collisionHeights /= wsum;
 			collisionAmount /= wsum;
 			previousCollisionHeights /= wsum;
@@ -87,7 +87,6 @@ namespace GrassCollision
 			previousCollisionHeights = TEXTURE_SIZE;
 			previousCollisionAmount = 0.0;
 		}
-
 	}
 
 	float3 ComputeNormalFromHeights(float h0, float hX, float hY, float delta)
@@ -160,7 +159,7 @@ namespace GrassCollision
 			float alpha = saturate(input.Color.w * 10.0);
 
 			displacement = collision * alpha * nearFactor * 0.75;
-			previousDisplacement  = previousCollision * alpha * nearFactor * 0.75;
+			previousDisplacement = previousCollision * alpha * nearFactor * 0.75;
 		} else {
 			displacement = 0.0;
 			previousDisplacement = 0.0;

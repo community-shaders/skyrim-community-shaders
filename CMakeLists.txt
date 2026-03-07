@@ -5,7 +5,7 @@ set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 project(
     # gersemi: ignore
     CommunityShaders
-    VERSION 1.4.7
+    VERSION 1.4.11
     LANGUAGES CXX
 )
 
@@ -169,8 +169,7 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     string(STRIP "${CONFIG_VALUE}" CONFIG_VALUE)
     if(CONFIG_VALUE)
         string(
-            REGEX MATCH
-            "Version = ([0-9]+)-([0-9]+)-([0-9]+)"
+            REGEX MATCH "Version = ([0-9]+)-([0-9]+)-([0-9]+)"
             _
             "${CONFIG_VALUE}"
         )
@@ -183,8 +182,7 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
             set(ver_minor ${CMAKE_MATCH_2})
             set(ver_patch ${CMAKE_MATCH_3})
             list(
-                APPEND
-                FEATURE_VERSIONS
+                APPEND FEATURE_VERSIONS
                 "\t\t{\"${FEATURE}\"sv, {${ver_major},${ver_minor},${ver_patch}}}"
             )
         else()
@@ -218,6 +216,37 @@ configure_file(
 target_sources(
     "${PROJECT_NAME}"
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/cmake/FeatureVersions.h
+)
+
+# #######################################################################################################################
+# # Theme presets
+# #######################################################################################################################
+set(THEMES_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/package/SKSE/Plugins/CommunityShaders/Themes"
+)
+file(GLOB THEME_JSON_FILES CONFIGURE_DEPENDS "${THEMES_DIR}/*.json")
+set(THEME_PRESET_NAMES_LIST "")
+foreach(f IN LISTS THEME_JSON_FILES)
+    get_filename_component(name "${f}" NAME_WE)
+    list(APPEND THEME_PRESET_NAMES_LIST "${name}")
+endforeach()
+list(SORT THEME_PRESET_NAMES_LIST)
+list(LENGTH THEME_PRESET_NAMES_LIST THEME_PRESET_COUNT)
+set(THEME_PRESET_NAMES "")
+foreach(p IN LISTS THEME_PRESET_NAMES_LIST)
+    set(THEME_PRESET_NAMES "${THEME_PRESET_NAMES}\t\t\"${p}\",\n")
+endforeach()
+string(REGEX REPLACE ",\n$" "" THEME_PRESET_NAMES "${THEME_PRESET_NAMES}")
+
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ThemePresets.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/ThemePresets.h
+    @ONLY
+)
+
+target_sources(
+    "${PROJECT_NAME}"
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/cmake/ThemePresets.h
 )
 
 # #######################################################################################################################
@@ -283,6 +312,15 @@ string(TIMESTAMP UTC_NOW "%Y-%m-%dT%H-%MZ" UTC)
 # Set AIO directory path used by multiple targets below
 set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
 
+# Robocopy wrapper for Windows incremental file copy (used by deployment targets)
+if(WIN32)
+    set(ROBOCOPY_WRAPPER "${CMAKE_BINARY_DIR}/robocopy_wrapper.cmd")
+    file(
+        WRITE ${ROBOCOPY_WRAPPER}
+        "@echo off\r\nrem Robocopy wrapper: forwards all args to robocopy and normalizes exit codes\r\nrobocopy %*\r\nset rc=%ERRORLEVEL%\r\nif %rc% GEQ 8 exit /b %rc%\r\nexit /b 0\r\n"
+    )
+endif()
+
 # #######################################################################################################################
 # # CMake install() infrastructure for manual packaging
 # #######################################################################################################################
@@ -304,6 +342,7 @@ install(
     DIRECTORY ${CMAKE_SOURCE_DIR}/package/ ${FEATURE_PATHS_SLASH}
     DESTINATION .
     COMPONENT Shaders
+    PATTERN "Tests" EXCLUDE
 )
 install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
 
@@ -321,6 +360,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         LIST_DIRECTORIES FALSE
         "${CMAKE_SOURCE_DIR}/package/*"
     )
+    list(FILTER _AIO_PACKAGE_FILES EXCLUDE REGEX "/Tests/")
     foreach(_fpath IN LISTS FEATURE_PATHS)
         file(GLOB_RECURSE _tmp LIST_DIRECTORIES FALSE "${_fpath}/*")
         list(APPEND _AIO_PACKAGE_FILES ${_tmp})
@@ -334,8 +374,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     # Ensure SKSE/Plugins dir exists
     # Note: DLL and PDB are copied via POST_BUILD command to avoid race conditions
     list(
-        APPEND
-        _prepare_aio_cmds
+        APPEND _prepare_aio_cmds
         COMMAND
         ${CMAKE_COMMAND}
         -E
@@ -343,19 +382,19 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         "${AIO_DIR}/SKSE/Plugins"
     )
 
-    # Copy package files
+    # Copy package files (exclude test files from production packages)
     file(
         GLOB_RECURSE _AIO_PACKAGE_SOURCE_FILES
         LIST_DIRECTORIES FALSE
         "${CMAKE_SOURCE_DIR}/package/*"
     )
+    list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Tests/")
     foreach(_src IN LISTS _AIO_PACKAGE_SOURCE_FILES)
         file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}/package" "${_src}")
         set(_dst "${AIO_DIR}/${_rel}")
         get_filename_component(_dst_dir "${_dst}" DIRECTORY)
         list(
-            APPEND
-            _prepare_aio_cmds
+            APPEND _prepare_aio_cmds
             COMMAND
             ${CMAKE_COMMAND}
             -E
@@ -383,8 +422,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 set(_dst "${AIO_DIR}/${_rel}")
                 get_filename_component(_dst_dir "${_dst}" DIRECTORY)
                 list(
-                    APPEND
-                    _prepare_aio_cmds
+                    APPEND _prepare_aio_cmds
                     COMMAND
                     ${CMAKE_COMMAND}
                     -E
@@ -403,8 +441,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
 
     # Remove CORE from AIO if it exists (keep rest intact)
     list(
-        APPEND
-        _prepare_aio_cmds
+        APPEND _prepare_aio_cmds
         COMMAND
         ${CMAKE_COMMAND}
         -E
@@ -412,8 +449,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         "${AIO_DIR}/CORE"
     )
     list(
-        APPEND
-        _prepare_aio_cmds
+        APPEND _prepare_aio_cmds
         COMMAND
         ${CMAKE_COMMAND}
         -E
@@ -467,8 +503,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         set(_dst "${AIO_DIR}/Shaders/${_rel}")
         get_filename_component(_dst_dir "${_dst}" DIRECTORY)
         list(
-            APPEND
-            _shader_copy_cmds
+            APPEND _shader_copy_cmds
             COMMAND
             ${CMAKE_COMMAND}
             -E
@@ -490,6 +525,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 LIST_DIRECTORIES FALSE
                 "${_fpath}/Shaders/*"
             )
+            list(FILTER _feat_shaders EXCLUDE REGEX "/Tests/")
             get_filename_component(_feat_name "${_fpath}" NAME)
             foreach(_src IN LISTS _feat_shaders)
                 file(RELATIVE_PATH _rel "${_fpath}/Shaders" "${_src}")
@@ -498,8 +534,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 set(_dst "${AIO_DIR}/Shaders/${_rel}")
                 get_filename_component(_dst_dir "${_dst}" DIRECTORY)
                 list(
-                    APPEND
-                    _shader_copy_cmds
+                    APPEND _shader_copy_cmds
                     COMMAND
                     ${CMAKE_COMMAND}
                     -E
@@ -539,14 +574,6 @@ endif()
 if(AUTO_PLUGIN_DEPLOYMENT)
     set(DEPLOY_TARGET_HASHES)
     if(WIN32)
-        # Write a small wrapper once at configure time to normalize robocopy exit codes.
-        set(ROBOCOPY_WRAPPER "${CMAKE_BINARY_DIR}/robocopy_wrapper.cmd")
-        file(
-            WRITE
-            ${ROBOCOPY_WRAPPER}
-            "@echo off\r\nrem Robocopy wrapper: forwards all args to robocopy and normalizes exit codes\r\nrobocopy %*\r\nset rc=%ERRORLEVEL%\r\nif %rc% GEQ 8 exit /b %rc%\r\nexit /b 0\r\n"
-        )
-
         foreach(DEPLOY_TARGET $ENV{CommunityShadersOutputDir})
             message("Deploying AIO to ${DEPLOY_TARGET} (incremental)")
 
@@ -600,9 +627,10 @@ if(AUTO_PLUGIN_DEPLOYMENT)
 
             list(APPEND DEPLOY_TARGET_HASHES ${DEPLOY_TARGET_HASH}_plugin.stamp)
 
-            # Incremental shader copy (only changed/new shader files are copied)
+            # Incremental shader-only copy for fast dev iteration
+            # Depends ONLY on copy_shaders.stamp (no DLL, no PREPARE_AIO)
             add_custom_command(
-                OUTPUT ${DEPLOY_TARGET_HASH}.stamp
+                OUTPUT ${DEPLOY_TARGET_HASH}_shaders_only.stamp
                 COMMAND
                     ${CMAKE_COMMAND} -E make_directory
                     "${DEPLOY_TARGET}/Shaders"
@@ -610,16 +638,44 @@ if(AUTO_PLUGIN_DEPLOYMENT)
                     ${ROBOCOPY_WRAPPER} "${AIO_DIR}/Shaders"
                     "${DEPLOY_TARGET}/Shaders" "/E" "/COPY:DAT" "/XO" "/R:1"
                     "/W:1" "/NFL" "/NDL" "/NJH" "/NJS"
-                COMMAND ${CMAKE_COMMAND} -E touch ${DEPLOY_TARGET_HASH}.stamp
+                COMMAND
+                    ${CMAKE_COMMAND} -E touch
+                    ${DEPLOY_TARGET_HASH}_shaders_only.stamp
+                DEPENDS copy_shaders.stamp
+                COMMENT "Fast shader-only deploy to ${DEPLOY_TARGET}/Shaders"
+            )
+
+            list(
+                APPEND SHADER_ONLY_HASHES
+                ${DEPLOY_TARGET_HASH}_shaders_only.stamp
+            )
+
+            # Full shader copy for packaging (includes PREPARE_AIO dependency)
+            # This ensures DLL is built and all AIO files are ready
+            add_custom_command(
+                OUTPUT ${DEPLOY_TARGET_HASH}_shaders_full.stamp
+                COMMAND
+                    ${CMAKE_COMMAND} -E make_directory
+                    "${DEPLOY_TARGET}/Shaders"
+                COMMAND
+                    ${ROBOCOPY_WRAPPER} "${AIO_DIR}/Shaders"
+                    "${DEPLOY_TARGET}/Shaders" "/E" "/COPY:DAT" "/XO" "/R:1"
+                    "/W:1" "/NFL" "/NDL" "/NJH" "/NJS"
+                COMMAND
+                    ${CMAKE_COMMAND} -E touch
+                    ${DEPLOY_TARGET_HASH}_shaders_full.stamp
                 DEPENDS
                     copy_shaders.stamp
                     ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
                 COMMENT
-                    "Incremental shader copy to ${DEPLOY_TARGET}/Shaders (robocopy-wrapper)"
+                    "Full shader deploy to ${DEPLOY_TARGET}/Shaders (with PREPARE_AIO)"
             )
 
             list(APPEND DEPLOY_TARGET_HASHES ${DEPLOY_TARGET_HASH}_deploy.stamp)
-            list(APPEND DEPLOY_TARGET_HASHES ${DEPLOY_TARGET_HASH}.stamp)
+            list(
+                APPEND DEPLOY_TARGET_HASHES
+                ${DEPLOY_TARGET_HASH}_shaders_full.stamp
+            )
         endforeach()
     else()
         # AUTO_PLUGIN_DEPLOYMENT is enabled but the host is not Windows. Do
@@ -632,11 +688,21 @@ if(AUTO_PLUGIN_DEPLOYMENT)
         )
     endif()
 
+    # Lightweight target for fast shader dev iteration
+    # Deploys ONLY shaders to game directory (no DLL build, no tests)
     add_custom_target(
         COPY_SHADERS
+        DEPENDS ${SHADER_ONLY_HASHES}
+        COMMENT "Fast shader-only deploy to game directory (no DLL, no tests)"
+    )
+
+    # Full deployment target for packaging/CI
+    # Builds DLL, prepares AIO, deploys everything, runs tests
+    add_custom_target(
+        DEPLOY_ALL
         ALL
         DEPENDS copy_shaders.stamp ${DEPLOY_TARGET_HASHES}
-        COMMENT "Prepare and copy AIO/shaders to CommunityShadersOutputDir"
+        COMMENT "Full deployment: DLL + shaders + all files to game directory"
     )
 endif()
 
@@ -684,6 +750,7 @@ if(ZIP_TO_DIST)
         TARGET ${PROJECT_NAME}
         POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E remove "${ZIP_DIR}/CORE"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${ZIP_DIR}/Shaders/Tests"
     )
 
     set(TARGET_ZIP "${PROJECT_NAME}-${UTC_NOW}.7z")
@@ -799,6 +866,7 @@ add_custom_command(
     COMMAND
         ${CMAKE_COMMAND} -E copy_directory ${CORE_FEATURE_PATHS} ${FEATURE_PATH}
     COMMAND ${CMAKE_COMMAND} -E rm -f -- ${FEATURE_PATH}/Core
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${FEATURE_PATH}/Shaders/Tests"
     COMMAND ${CMAKE_COMMAND} -E tar cfv ${CORE_PACKAGE} --format=7zip -- .
     WORKING_DIRECTORY ${FEATURE_PATH}
     COMMENT "Creating Core zip package"
@@ -891,8 +959,8 @@ if(BUILD_SHADER_TESTS)
     if(TARGET prepare_shaders)
         add_dependencies(prepare_shaders run_shader_tests)
     endif()
-    if(TARGET COPY_SHADERS)
-        add_dependencies(COPY_SHADERS run_shader_tests)
+    if(TARGET DEPLOY_ALL)
+        add_dependencies(DEPLOY_ALL run_shader_tests)
     endif()
 
     message(

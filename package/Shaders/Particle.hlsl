@@ -1,40 +1,39 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
-#include "Common/VR.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/VR.hlsli"
 
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
+	float4 Position: POSITION0;
 #if !defined(ENVCUBE)
-	float4 Normal : NORMAL0;
+	float4 Normal: NORMAL0;
 #endif
-	float4 TexCoord0 : TEXCOORD0;
+	float4 TexCoord0: TEXCOORD0;
 #if defined(ENVCUBE)
 	float4
 #else
 	int4
 #endif
-		TexCoord1 : TEXCOORD1;
+		TexCoord1: TEXCOORD1;
 #if defined(VR)
-	uint InstanceID : SV_INSTANCEID;
+	uint InstanceID: SV_INSTANCEID;
 #endif  // VR
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION0;
-	float4 Color : COLOR0;
-	float2 TexCoord0 : TEXCOORD0;
+	float4 Position: SV_POSITION0;
+	float4 Color: COLOR0;
+	float2 TexCoord0: TEXCOORD0;
 #if defined(ENVCUBE)
-	float4 PrecipitationOcclusionTexCoord : TEXCOORD1;
+	float4 PrecipitationOcclusionTexCoord: TEXCOORD1;
 #endif
 #if defined(VR)
-	float ClipDistance : SV_ClipDistance0;  // o11
-	float CullDistance : SV_CullDistance0;  // p11
-	uint EyeIndex : EYEIDX0;
+	float ClipDistance: SV_ClipDistance0;  // o11
+	float CullDistance: SV_CullDistance0;  // p11
+	uint EyeIndex: EYEIDX0;
 #endif  // VR
-	float3 ViewPositionVS : TEXCOORD2;
 };
 
 #ifdef VSHADER
@@ -113,21 +112,6 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif
 	vsout.Position.xy = positionOffset + finalViewPosition.xy;
 	vsout.Position.zw = finalViewPosition.zw;
-
-    // Compute view-space for precipitation motion blend
-#	if defined(ENVCUBE)
-#  		if defined(RAIN)
-    float3 viewVS             = mul(WorldView[eyeIndex], msPosition).xyz;
-    float3 adjustedViewVS     = mul(WorldView[eyeIndex], adjustedMsPosition).xyz;
-    float3 finalViewPositionVS = lerp(adjustedViewVS, viewVS, positionBlendParam);
-    vsout.ViewPositionVS = finalViewPositionVS;
-#  		else
-    vsout.ViewPositionVS = mul(WorldView[eyeIndex], msPosition).xyz;
-#  		endif
-#	else
-    vsout.ViewPositionVS = mul(WorldView[eyeIndex], msPosition).xyz;
-#	endif
-
 	vsout.Color.xyz = 1.0.xxx;
 	vsout.Color.w = fVars1.w;
 
@@ -180,8 +164,6 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Position.xy = positionOffset * ScaleAdjust + viewPosition.xy;
 	vsout.Position.zw = viewPosition.zw;
 
-    vsout.ViewPositionVS = mul(WorldView[eyeIndex], msPosition).xyz;
-
 	float4 color1, color2;
 	float colorTmp1, colorTmp2;
 	if (tmp1 > fVars1.z) {
@@ -227,8 +209,8 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color : SV_Target0;
-	float4 Normal : SV_Target1;
+	float4 Color: SV_Target0;
+	float4 Normal: SV_Target1;
 };
 
 #ifdef PSHADER
@@ -264,6 +246,9 @@ cbuffer PerGeometry : register(b2)
 	float ColorScale : packoffset(c0);
 	float3 TextureSize : packoffset(c1);
 };
+
+#	define LinearSampler SampSourceTexture
+#	include "Common/ShadowSampling.hlsli"
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -304,18 +289,23 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 propertyColor = 0.0;
 
-	float3 dirLightColor = SharedData::DirLightColor.xyz * 0.5;
+	float2 uv = Stereo::ConvertFromStereoUV(input.Position.xy * SharedData::BufferDim.zw, eyeIndex);
+
+	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, input.Position.z, 1);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS.xyz = positionWS.xyz / positionWS.w;
+
+	float unusedDetailedShadow;
+	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetLightingShadow(positionWS.xyz, eyeIndex, unusedDetailedShadow);
 	float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)).xyz);
 
 	propertyColor += dirLightColor;
 	propertyColor += ambientColor;
 
-	float3 viewPosition = input.ViewPositionVS.xyz;
-	float3 worldPosition = FrameBuffer::ViewToWorld(viewPosition);
-
 #	if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
 	{
+		float3 viewPosition = FrameBuffer::WorldToView(positionWS.xyz, true, eyeIndex);
 		float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 
 		uint clusterIndex = 0;
@@ -329,17 +319,17 @@ PS_OUTPUT main(PS_INPUT input)
 				if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
 					continue;
 				}
-				float3 lightDirection = light.positionWS[eyeIndex].xyz - worldPosition.xyz;
+				float3 lightDirection = light.positionWS[eyeIndex].xyz - positionWS.xyz;
 				float lightDist = length(lightDirection);
 
-#			if defined(ISL)
+#		if defined(ISL)
 				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
-#			else
+#		else
 				float intensityFactor = saturate(lightDist / light.radius);
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-#			endif
+#		endif
 
-				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5;
+				float3 lightColor = light.color.xyz * intensityMultiplier;
 				propertyColor += lightColor;
 			}
 		}

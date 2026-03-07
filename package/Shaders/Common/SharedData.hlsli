@@ -33,7 +33,9 @@ namespace SharedData
 		bool OverrideComplexGrassSettings;
 
 		float BasicGrassBrightness;
-		float3 pad0;
+		bool EnableWrappedLighting;
+		float ComplexGrassThreshold;
+		float1 pad0;
 	};
 
 	struct CPMSettings
@@ -98,8 +100,8 @@ namespace SharedData
 
 		bool EnableSplashes;
 		bool EnableRipples;
-        uint EnableVanillaRipples;
-        float RaindropFxRange;
+		uint EnableVanillaRipples;
+		float RaindropFxRange;
 
 		float RaindropGridSizeRcp;
 		float RaindropIntervalRcp;
@@ -253,14 +255,10 @@ namespace SharedData
 		float skyGamma;
 		float waterGamma;
 		float vlGamma;
-		float vanillaDiffuseMult;
-		float vanillaSpecularMult;
-		float grassDiffuseMult;
-		float grassSpecularMult;
 		float vanillaDiffuseColorMult;
-		float lightMult;
 		float directionalLightMult;
 		float pointLightMult;
+		float ambientMult;
 		float emitColorMult;
 		float glowmapMult;
 		float effectLightingMult;
@@ -271,11 +269,33 @@ namespace SharedData
 		float otherEffectMult;
 	};
 
+	struct TerrainBlendingSettings
+	{
+		uint Enabled;
+		uint3 _padding;
+	};
+
+	struct ExponentialHeightFogSettings
+	{
+		uint enabled;
+		uint useDynamicCubemaps;
+		float startDistance;
+		float fogHeight;
+		float fogHeightFalloff;
+		float fogDensity;
+		float directionalInscatteringMultiplier;
+		float directionalInscatteringExponent;
+		float4 inscatteringTint;
+		float cubemapMipLevel;
+		float3 pad;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		CloudShadowsSettings cloudShadowsSettings;
 		CPMSettings extendedMaterialSettings;
 		CubemapCreatorSettings cubemapCreatorSettings;
+		ExponentialHeightFogSettings exponentialHeightFogSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		GrassLightingSettings grassLightingSettings;
 		HairSpecularSettings hairSpecularSettings;
@@ -285,6 +305,7 @@ namespace SharedData
 		LODBlendingSettings lodBlendingSettings;
 		SkylightingSettings skylightingSettings;
 		SnowCoverSettings snowCoverSettings;
+		TerrainBlendingSettings terrainBlendingSettings;
 		TerrainVariationSettings terrainVariationSettings;
 		TerraOccSettings terraOccSettings;
 		WetnessEffectsSettings wetnessEffectsSettings;

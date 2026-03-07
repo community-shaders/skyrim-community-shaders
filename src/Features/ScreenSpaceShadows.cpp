@@ -21,10 +21,33 @@ void ScreenSpaceShadows::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("General", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox("Enable", (bool*)&bendSettings.Enable);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Enable screen-space contact shadows from the sun/moon direction.");
+
 		ImGui::SliderInt("Sample Count Multiplier", (int*)&bendSettings.SampleCount, 1, 4);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Multiplier for shadow ray sample count. Higher values increase shadow reach at the cost of performance. Adapts to render resolution.");
+
 		ImGui::SliderFloat("Surface Thickness", &bendSettings.SurfaceThickness, 0.005f, 0.05f);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Assumed thickness of surfaces for shadow detection. Lower values produce thinner, more precise shadows.");
+
 		ImGui::SliderFloat("Bilinear Threshold", &bendSettings.BilinearThreshold, 0.02f, 1.0f);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Depth threshold for edge detection during bilinear interpolation. Higher values smooth more aggressively across edges.");
+
 		ImGui::SliderFloat("Shadow Contrast", &bendSettings.ShadowContrast, 0.0f, 4.0f);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Contrast boost for the shadow transition. Higher values produce harder shadow edges.");
+
+		if (globals::game::isVR && globals::state->IsDeveloperMode()) {
+			ImGui::Checkbox("VR Stereo Sync", &enableStereoSync);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text(
+					"Synchronizes shadow data between left and right eyes via bilateral reprojection "
+					"and applies a depth-weighted blur to reduce per-eye noise. "
+					"Uses min-blend so if either eye detects an occluder, the shadow is preserved. ");
+		}
 
 		ImGui::Spacing();
 		ImGui::Spacing();
@@ -32,7 +55,7 @@ void ScreenSpaceShadows::DrawSettings()
 	}
 }
 
-void ScreenSpaceShadows::ClearShaderCache()
+void ScreenSpaceShadows::InvalidateRaymarchShaders()
 {
 	if (raymarchCS) {
 		raymarchCS->Release();
@@ -44,38 +67,47 @@ void ScreenSpaceShadows::ClearShaderCache()
 	}
 }
 
-uint ScreenSpaceShadows::GetScaledSampleCount(bool a_dynamic)
+void ScreenSpaceShadows::ClearShaderCache()
 {
-	auto screenSize = globals::state->screenSize;
+	InvalidateRaymarchShaders();
+	if (stereoSyncCS) {
+		stereoSyncCS->Release();
+		stereoSyncCS = nullptr;
+	}
+}
 
-	if (a_dynamic)
-		screenSize = Util::ConvertToDynamic(globals::state->screenSize);
+uint ScreenSpaceShadows::GetScaledSampleCount()
+{
+	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+
+	// In VR, renderSize covers both eyes side-by-side; raymarch dispatches per-eye
+	if (globals::game::isVR)
+		renderSize.x /= 2.0f;
 
 	// Scale sample count based on both dimensions relative to 1920x1080 reference
-
 	float2 referenceRes = { 1920.0f, 1080.0f };
 	float referenceArea = referenceRes.x * referenceRes.y;
-	float currentArea = screenSize.x * screenSize.y;
+	float currentArea = renderSize.x * renderSize.y;
 	float areaScale = std::sqrt(currentArea / referenceArea);
 	uint scaledSampleCount = static_cast<uint>(std::round(bendSettings.SampleCount * 60 * areaScale));
+
+	// Quantize to steps of 8 to prevent frequent recompilation from small DRS oscillations
+	scaledSampleCount = ((scaledSampleCount + 7u) / 8u) * 8u;
+	scaledSampleCount = std::max(scaledSampleCount, 8u);
 
 	return scaledSampleCount;
 }
 
 ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 {
-	static uint sampleCount = bendSettings.SampleCount;
+	uint scaledSampleCount = GetScaledSampleCount();
 
-	if (sampleCount != bendSettings.SampleCount) {
-		sampleCount = bendSettings.SampleCount;
-		if (raymarchCS) {
-			raymarchCS->Release();
-			raymarchCS = nullptr;
-		}
+	if (scaledSampleCount != lastCompiledSampleCount) {
+		lastCompiledSampleCount = scaledSampleCount;
+		InvalidateRaymarchShaders();
 	}
 
 	if (!raymarchCS) {
-		uint scaledSampleCount = GetScaledSampleCount(false);
 		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() } }, "cs_5_0");
 	}
 	return raymarchCS;
@@ -83,18 +115,8 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 
 ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 {
-	static uint sampleCount = bendSettings.SampleCount;
-
-	if (sampleCount != bendSettings.SampleCount) {
-		sampleCount = bendSettings.SampleCount;
-		if (raymarchRightCS) {
-			raymarchRightCS->Release();
-			raymarchRightCS = nullptr;
-		}
-	}
-
 	if (!raymarchRightCS) {
-		uint scaledSampleCount = GetScaledSampleCount(false);
+		uint scaledSampleCount = GetScaledSampleCount();
 		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() }, { "RIGHT", "" } }, "cs_5_0");
 	}
 	return raymarchRightCS;
@@ -106,7 +128,6 @@ void ScreenSpaceShadows::DrawShadows()
 	auto state = globals::state;
 	TracyD3D11Zone(state->tracyCtx, "Screen Space Shadows");
 
-	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
 	auto accumulator = *globals::game::currentAccumulator.get();
@@ -136,8 +157,8 @@ void ScreenSpaceShadows::DrawShadows()
 	int maxRenderBounds[2] = { viewportSize[0], viewportSize[1] };
 
 	// Setup common render state
-	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-	context->CSSetShaderResources(0, 1, &depth.depthSRV);
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
+	context->CSSetShaderResources(0, 1, &depthSRV);
 
 	auto uav = screenSpaceShadowsTexture->uav.get();
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
@@ -151,18 +172,11 @@ void ScreenSpaceShadows::DrawShadows()
 
 	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
 
-	uint dynamicSampleCount = GetScaledSampleCount(true);
-	uint dynamicReadCount = (dynamicSampleCount / 64 + 2);
-
 	// Shared dispatch logic for both VR and non-VR
 	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
 						   float invTexSizeX, float invTexSizeY) {
-		std::string eventName;
-		const char* tracyName = "SSS - Ray March";
-
 		if (globals::state->frameAnnotations && eyeName) {
-			eventName = std::format("SSS - Ray March ({})", eyeName);
-			tracyName = eventName.c_str();
+			std::string eventName = std::format("SSS - Ray March ({})", eyeName);
 			globals::state->BeginPerfEvent(eventName);
 		} else if (globals::state->frameAnnotations) {
 			globals::state->BeginPerfEvent("SSS - Ray March");
@@ -173,7 +187,7 @@ void ScreenSpaceShadows::DrawShadows()
 		auto dispatchList = Bend::BuildDispatchList(const_cast<float*>(lightProj), viewportSize, minRenderBounds, maxRenderBounds);
 
 		for (int i = 0; i < dispatchList.DispatchCount; i++) {
-			TracyD3D11Zone(globals::state->tracyCtx, tracyName);
+			TracyD3D11Zone(globals::state->tracyCtx, "SSS - Ray March");
 
 			auto dispatchData = dispatchList.Dispatch[i];
 
@@ -190,9 +204,6 @@ void ScreenSpaceShadows::DrawShadows()
 			data.NearDepthValue = 0.0f;
 
 			data.DynamicRes = dynamicRes;
-
-			data.DynamicSampleCount = dynamicSampleCount;
-			data.DynamicReadCount = dynamicReadCount;
 
 			data.InvDepthTextureSize[0] = invTexSizeX;
 			data.InvDepthTextureSize[1] = invTexSizeY;
@@ -237,6 +248,64 @@ void ScreenSpaceShadows::DrawShadows()
 	context->CSSetConstantBuffers(1, 1, &buffer);
 }
 
+void ScreenSpaceShadows::DrawStereoSync()
+{
+	if (!globals::game::isVR || !enableStereoSync || !stereoSyncCopyTex || !stereoSyncCB)
+		return;
+
+	if (!stereoSyncCS)
+		stereoSyncCS = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\StereoSyncCS.hlsl", { { "VR", "" }, { "FRAMEBUFFER", "" } }, "cs_5_0"));
+	if (!stereoSyncCS)
+		return;
+
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "SSS - Stereo Sync");
+
+	if (globals::state->frameAnnotations)
+		globals::state->BeginPerfEvent("SSS - Stereo Sync");
+
+	auto context = globals::d3d::context;
+
+	context->CopyResource(stereoSyncCopyTex->resource.get(), screenSpaceShadowsTexture->resource.get());
+
+	float2 resolution = Util::ConvertToDynamic(globals::state->screenSize);
+
+	StereoSyncCB cbData{};
+	cbData.FrameDim[0] = resolution.x;
+	cbData.FrameDim[1] = resolution.y;
+	cbData.RcpFrameDim[0] = 1.0f / resolution.x;
+	cbData.RcpFrameDim[1] = 1.0f / resolution.y;
+
+	stereoSyncCB->Update(cbData);
+	auto cbPtr = stereoSyncCB->CB();
+
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
+	ID3D11ShaderResourceView* srvs[2]{ depthSRV, stereoSyncCopyTex->srv.get() };
+	ID3D11UnorderedAccessView* uavs[1]{ screenSpaceShadowsTexture->uav.get() };
+
+	context->CSSetConstantBuffers(1, 1, &cbPtr);
+	auto* sharedDataBuf = globals::state->sharedDataCB->CB();
+	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
+	context->CSSetShaderResources(0, 2, srvs);
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	context->CSSetShader(stereoSyncCS, nullptr, 0);
+
+	auto dispatchCount = Util::GetScreenDispatchCount(true);
+	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+	srvs[0] = nullptr;
+	srvs[1] = nullptr;
+	uavs[0] = nullptr;
+	cbPtr = nullptr;
+	context->CSSetShaderResources(0, 2, srvs);
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	context->CSSetConstantBuffers(1, 1, &cbPtr);
+	context->CSSetShader(nullptr, nullptr, 0);
+
+	if (globals::state->frameAnnotations)
+		globals::state->EndPerfEvent();
+}
+
 void ScreenSpaceShadows::Prepass()
 {
 	auto context = globals::d3d::context;
@@ -245,8 +314,10 @@ void ScreenSpaceShadows::Prepass()
 	context->ClearUnorderedAccessViewFloat(screenSpaceShadowsTexture->uav.get(), white);
 
 	if (auto sky = globals::game::sky)
-		if (bendSettings.Enable && sky->mode.get() == RE::Sky::Mode::kFull)
+		if (bendSettings.Enable && sky->mode.get() == RE::Sky::Mode::kFull) {
 			DrawShadows();
+			DrawStereoSync();
+		}
 
 	auto view = screenSpaceShadowsTexture->srv.get();
 	context->PSSetShaderResources(45, 1, &view);
@@ -275,6 +346,10 @@ bool ScreenSpaceShadows::HasShaderDefine(RE::BSShader::Type)
 void ScreenSpaceShadows::SetupResources()
 {
 	raymarchCB = new ConstantBuffer(ConstantBufferDesc<RaymarchCB>());
+
+	if (globals::game::isVR) {
+		stereoSyncCB = new ConstantBuffer(ConstantBufferDesc<StereoSyncCB>());
+	}
 
 	{
 		auto device = globals::d3d::device;
@@ -317,5 +392,10 @@ void ScreenSpaceShadows::SetupResources()
 		screenSpaceShadowsTexture = new Texture2D(texDesc);
 		screenSpaceShadowsTexture->CreateSRV(srvDesc);
 		screenSpaceShadowsTexture->CreateUAV(uavDesc);
+
+		if (globals::game::isVR) {
+			stereoSyncCopyTex = new Texture2D(texDesc);
+			stereoSyncCopyTex->CreateSRV(srvDesc);
+		}
 	}
 }

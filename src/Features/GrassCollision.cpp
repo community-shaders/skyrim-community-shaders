@@ -22,7 +22,7 @@ void GrassCollision::DrawSettings()
 
 void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 {
-	eastl::vector<RE::Actor*> actorList{};
+	eastl::vector<RE::ActorPtr> actorList{};
 
 	// Actor query code from po3 under MIT
 	// https://github.com/powerof3/PapyrusExtenderSSE/blob/7a73b47bc87331bec4e16f5f42f2dbc98b66c3a7/include/Papyrus/Functions/Faction.h#L24C7-L46
@@ -31,21 +31,21 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 		actors.push_back(&processLists->highActorHandles);  // High actors are in combat or doing something interesting
 		for (auto array : actors) {
 			for (auto& actorHandle : *array) {
-				auto actorPtr = actorHandle.get();
-				if (actorPtr && actorPtr.get()) {
-					actorList.push_back(actorPtr.get());
+				auto actorPtr = actorHandle.getsafe();
+				if (actorPtr && actorPtr.get() && actorPtr->Is3DLoaded()) {
+					actorList.push_back(actorPtr);
 				}
 			}
 		}
 	}
 
 	if (auto player = RE::PlayerCharacter::GetSingleton())
-		actorList.push_back(player);
+		actorList.push_back(player->GetHandle().get());
 
 	RE::NiPoint3 cameraPosition = Util::GetEyePosition(0);
 
 	// Sort actors by distance to eye, closest first
-	std::sort(actorList.begin(), actorList.end(), [&cameraPosition](RE::Actor* a, RE::Actor* b) {
+	std::sort(actorList.begin(), actorList.end(), [&cameraPosition](RE::ActorPtr a, RE::ActorPtr b) {
 		float distA = cameraPosition.GetSquaredDistance(a->GetPosition());
 		float distB = cameraPosition.GetSquaredDistance(b->GetPosition());
 		return distA < distB;
@@ -59,7 +59,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 
 	uint collisionIndexExtent = 0;
 
-	for (const auto actor : actorList) {
+	for (const auto& actor : actorList) {
 		if (actor && actor->Is3DLoaded()) {
 			auto root = actor->Get3D(false);
 			if (!root)

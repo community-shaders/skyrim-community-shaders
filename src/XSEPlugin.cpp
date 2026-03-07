@@ -5,6 +5,7 @@
 #include "Hooks.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
+#include "SceneSettingsManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -53,6 +54,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	InitializeLog();
 	logger::info("Loaded {} {}", Plugin::NAME, Plugin::VERSION.string());
 	SKSE::Init(a_skse);
+	SKSE::AllocTrampoline(1 << 10);
 	return Load();
 }
 
@@ -88,11 +90,10 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				auto shaderCache = globals::shaderCache;
 
 				// Run feature PostPostLoad() first so features can disable themselves if needed
-				for (auto* feature : Feature::GetFeatureList()) {
-					if (feature->loaded) {
-						feature->PostPostLoad();
-					}
-				}
+				Feature::ForEachLoadedFeature("PostPostLoad", [](Feature* feature) { feature->PostPostLoad(); });
+
+				// Register scene settings event handler (Interior Only transitions)
+				SceneSettingsManager::MenuOpenCloseEventHandler::Register();
 
 				// Now validate disk cache after features have had a chance to modify their state
 				shaderCache->ValidateDiskCache();
@@ -117,8 +118,14 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 
 				auto shaderCache = globals::shaderCache;
 				shaderCache->menuLoaded = true;
-				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
+
+				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation && !globals::game::quitGame) {
 					std::this_thread::sleep_for(100ms);
+				}
+
+				if (globals::game::quitGame) {
+					logger::info("Game was closed, skipping feature DataLoaded methods");
+					break;
 				}
 
 				if (shaderCache->IsDiskCache()) {
@@ -126,11 +133,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				}
 
 				globals::truePBR->DataLoaded();
-				for (auto* feature : Feature::GetFeatureList()) {
-					if (feature->loaded) {
-						feature->DataLoaded();
-					}
-				}
+				Feature::ForEachLoadedFeature("DataLoaded", [](Feature* feature) { feature->DataLoaded(); });
 			}
 
 			break;
@@ -146,7 +149,7 @@ bool Load()
 	}
 
 	if (REL::Module::IsVR()) {
-		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.193.0", true);
+		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.200.0", true);
 	}
 
 	auto privateProfileRedirectorVersion = Util::GetDllVersion(L"Data/SKSE/Plugins/PrivateProfileRedirector.dll");
@@ -179,7 +182,8 @@ bool Load()
 		L"Data/SKSE/Plugins/EVLaS.dll",
 		L"Data/SKSE/Plugins/AELAS.dll",
 		L"Data/SKSE/Plugins/SSEReShadeHelper.dll",
-		L"Data/SKSE/Plugins/trainwreck.dll"
+		L"Data/SKSE/Plugins/trainwreck.dll",
+		L"Data/SKSE/Plugins/TAASharpen.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {
@@ -206,11 +210,7 @@ bool Load()
 	if (errors.empty()) {
 		Hooks::InstallEarlyHooks();
 		logger::info("Calling feature Load methods");
-		for (auto* feature : Feature::GetFeatureList()) {
-			if (feature->loaded) {
-				feature->Load();
-			}
-		}
+		Feature::ForEachLoadedFeature("Load", [](Feature* feature) { feature->Load(); });
 	}
 
 	return true;

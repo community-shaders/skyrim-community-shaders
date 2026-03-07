@@ -40,6 +40,9 @@ public:
 	// Get the weather key for caching
 	static std::string GetWeatherKey(RE::TESWeather* weather);
 
+	// Clear all cached feature settings for a specific weather
+	void ClearAllFeatureSettingsForWeather(RE::TESWeather* weather);
+
 	// Check if settings exist for a weather
 	bool HasWeatherSettings(RE::TESWeather* weather) const;
 
@@ -57,4 +60,7 @@ private:
 
 	// Track last known weather state to detect changes
 	CurrentWeathers lastKnownWeather;
+
+	// Cached last weather - sky->lastWeather can be cleared before currentWeatherPct reaches 1.0
+	RE::TESWeather* cachedLastWeather = nullptr;
 };

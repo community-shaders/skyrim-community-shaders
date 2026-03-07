@@ -59,11 +59,19 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 			ImGui::EndChild();
 			ImGui::EndTabItem();
 		}
-
 		// Shader Debug Tab
 		if (MenuFonts::BeginTabItemWithFont("Shader Debug", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##ShaderDebugContent", ImVec2(0, 0), false)) {
 				RenderShaderDebugSection();
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
+		}
+
+		// Testing Tab (for A/B Testing and related settings)
+		if (MenuFonts::BeginTabItemWithFont("Testing", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##Testing", ImVec2(0, 0), false)) {
+				RenderTestingSection();
 			}
 			ImGui::EndChild();
 			ImGui::EndTabItem();
@@ -129,14 +137,22 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 			"The more threads the faster compilation will finish but may make the system unresponsive. ");
 	}
 
-	// A/B Testing settings
-	auto* abTestingManager = ABTestingManager::GetSingleton();
-	abTestingManager->DrawSettingsUI();
+	ImGui::Columns(2, nullptr, false);
 
 	// Dump Ini Settings button
 	if (ImGui::Button("Dump Ini Settings", { -1, 0 })) {
 		Util::DumpSettingsOptions();
 	}
+
+	ImGui::NextColumn();
+
+	// Open Logs button
+	std::filesystem::path logPath = Util::PathHelpers::GetLogPath();
+	if (!logPath.empty() && ImGui::Button("Open Logs", { -1, 0 })) {
+		ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+	}
+
+	ImGui::Columns(1);
 }
 
 void AdvancedSettingsRenderer::RenderShaderDebugSection()
@@ -302,7 +318,8 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 				ImGui::Text("Block Previous:");
 				ImGui::SameLine();
 				ImGui::AlignTextToFramePadding();
-				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.ShaderBlockPrevKey));
+				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
+					Util::Input::KeyIdToString(menuSettings.ShaderBlockPrevKey).c_str());
 				ImGui::SameLine();
 				if (ImGui::Button("Change##ShaderBlockPrev")) {
 					menu->settingShaderBlockPrevKey = true;
@@ -317,7 +334,8 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 				ImGui::Text("Block Next:");
 				ImGui::SameLine();
 				ImGui::AlignTextToFramePadding();
-				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.ShaderBlockNextKey));
+				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
+					Util::Input::KeyIdToString(menuSettings.ShaderBlockNextKey).c_str());
 				ImGui::SameLine();
 				if (ImGui::Button("Change##ShaderBlockNext")) {
 					menu->settingShaderBlockNextKey = true;
@@ -564,4 +582,11 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 			}
 		}
 	}
+}
+
+void AdvancedSettingsRenderer::RenderTestingSection()
+{
+	// A/B Testing settings
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	abTestingManager->DrawSettingsUI();
 }
