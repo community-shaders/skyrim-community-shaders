@@ -3,35 +3,15 @@
 
 namespace Triplanar
 {
-	static const float DEFAULT_SHARPNESS = 6.0;
-	static const float DYNAMIC_SHARPNESS = 8.0;
-	static const float DYNAMIC_THRESHOLD = 0.4;  // fraction of max weight below which an axis is suppressed
-
 	/// Compute triplanar blend weights from world-space normal.
-	/// Higher sharpness produces sharper transitions between projection planes.
-	float3 GetWeights(float3 normal, float sharpness)
-	{
-		float3 w = pow(abs(normal), sharpness);
-		return w / (dot(w, 1.0) + EPSILON_DIVISION);
-	}
-
 	float3 GetWeights(float3 normal)
 	{
-		return GetWeights(normal, DEFAULT_SHARPNESS);
-	}
-
-	/// Triplanar weights with threshold suppression to eliminate stretching on rigid surfaces.
-	/// Zeroes axes below `threshold` fraction of the dominant axis, then re-normalizes.
-	float3 GetWeightsDynamic(float3 normal, float sharpness, float threshold)
-	{
-		float3 w = GetWeights(normal, sharpness);
-		w = max(w - max(w.x, max(w.y, w.z)) * threshold, 0.0);
-		return w / (dot(w, 1.0) + EPSILON_DIVISION);
-	}
-
-	float3 GetWeightsDynamic(float3 normal)
-	{
-		return GetWeightsDynamic(normal, DYNAMIC_SHARPNESS, DYNAMIC_THRESHOLD);
+		float3 a = abs(normal);
+		float3 w = float3(
+			(a.x >= a.y && a.x >= a.z) ? 1.0 : 0.0,
+			(a.y > a.x && a.y >= a.z) ? 1.0 : 0.0,
+			(a.z > a.x && a.z > a.y) ? 1.0 : 0.0);
+		return w;
 	}
 
 	/// Sample texture using triplanar projection from world position.
