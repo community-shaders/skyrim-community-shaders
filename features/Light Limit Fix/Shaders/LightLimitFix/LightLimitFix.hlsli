@@ -39,10 +39,6 @@ namespace LightLimitFix
 
 	bool IsLightIgnored(Light light)
 	{
-		if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-			return !(ShadowBitMask & (1 << light.shadowLightIndex));
-		}
-
 		bool lightIgnored = false;
 		if ((light.lightFlags & LightFlags::PortalStrict) && RoomIndex >= 0) {
 			lightIgnored = true;
