@@ -12,12 +12,9 @@
 static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
-// Distance-based sample reduction
-static const float MIP_1SAMPLE = 3.0;   // Mip level for single-sample path
-static const float MIP_BUMP = 1.41421356;  // exp2(0.5) gradient scale for +0.5 mip bump
-// Importance sampling thresholds
 static const float HEIGHT_INFLUENCE = 0.3;
-static const float LOW_WEIGHT_THRESHOLD = 0.15;  // Layer blend weight below which 1-sample is used
+static const float LOW_WEIGHT_THRESHOLD = 0.15;
+static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 
 // --------------------- STRUCTURES --------------------- //
 struct StochasticOffsets
@@ -127,21 +124,21 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 	return lerp(s2, s1, 0.65);
 }
 
-// Stochastic sampling with importance-based sample reduction.
-// Layer blend weight controls quality: low-weight layers get cheap 1-sample path.
-// 2-sample height blend (Jason Booth technique) for close-range high-weight layers.
-// Branchless blend is smooth across simplex boundaries and compile-time friendly.
-inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel, StochasticGradients grad, float layerWeight)
+// Layer-weight-aware stochastic sampling (Jason Booth technique).
+// Low-weight layers use 1 sample — the branch is coherent because layer weights
+// are constant per terrain cell, so entire wavefronts take the same path.
+// High-weight layers get 2-sample height-blended for quality.
+// Height is derived from alpha when available (displacement maps), luminance otherwise.
+inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, StochasticGradients grad, float layerWeight)
 {
-	// Far distance or low-importance layer: single offset with bumped mip for coverage
-	if (mipLevel >= MIP_1SAMPLE || layerWeight < LOW_WEIGHT_THRESHOLD)
-		return tex.SampleGrad(samp, uv + offsets.offset1, grad.uvDx * MIP_BUMP, grad.uvDy * MIP_BUMP);
-
-	// 2-sample height-blended: barycentric weights squared x height-driven importance
 	float4 s1 = tex.SampleGrad(samp, uv + offsets.offset1, grad.uvDx, grad.uvDy);
+	if (layerWeight < LOW_WEIGHT_THRESHOLD)
+		return s1;
 	float4 s2 = tex.SampleGrad(samp, uv + offsets.offset2, grad.uvDx, grad.uvDy);
-	float w1 = offsets.weights.x * offsets.weights.x * (1.0 + HEIGHT_INFLUENCE * dot(s1.rgb, float3(0.2126, 0.7152, 0.0722)));
-	float w2 = offsets.weights.y * offsets.weights.y * (1.0 + HEIGHT_INFLUENCE * dot(s2.rgb, float3(0.2126, 0.7152, 0.0722)));
+	float h1 = s1.a > 0.001 ? s1.a : dot(s1.rgb, LUMINANCE_WEIGHTS);
+	float h2 = s2.a > 0.001 ? s2.a : dot(s2.rgb, LUMINANCE_WEIGHTS);
+	float w1 = offsets.weights.x * offsets.weights.x * (1.0 + HEIGHT_INFLUENCE * h1);
+	float w2 = offsets.weights.y * offsets.weights.y * (1.0 + HEIGHT_INFLUENCE * h2);
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
@@ -149,22 +146,16 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 {
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	// weights are sorted descending so weights.z is always the smallest (0 at edges/vertices,
-	// max 0.333 at the centroid). Below the threshold it contributes negligible height error,
-	// so skip the third fetch. The branch is coherent at simplex-triangle scale (>> quad size).
 	if (offsets.weights.z < 0.1)
 		return (s1 * offsets.weights.x + s2 * offsets.weights.y) * rcp(offsets.weights.x + offsets.weights.y);
 	float4 s3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
 	return s1 * offsets.weights.x + s2 * offsets.weights.y + s3 * offsets.weights.z;
 }
 
-// Unified terrain sampling with importance-aware stochastic when enabled.
-// layerWeight is the Skyrim landscape blend weight — the natural importance signal
-// for the 6-layer terrain system. Low-weight layers get cheaper 1-sample treatment.
-inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel, StochasticGradients grad, float layerWeight)
+inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, StochasticGradients grad, float layerWeight)
 {
 	[branch] if (enabled)
-		return StochasticEffect(tex, samp, uv, offsets, mipLevel, grad, layerWeight);
+		return StochasticEffect(tex, samp, uv, offsets, grad, layerWeight);
 	return tex.SampleBias(samp, uv, SharedData::MipBias);
 }
 
