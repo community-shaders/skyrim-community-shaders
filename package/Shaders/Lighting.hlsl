@@ -877,8 +877,18 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "TerrainVariation/TerrainVariation.hlsli"
 #	elif defined(LANDSCAPE) || defined(LODLANDSCAPE) || defined(LOD_LAND_BLEND)
 #		if !defined(TERRAIN_VARIATION_HLSLI)
-struct StochasticOffsets { float2 offset1; float2 offset2; float2 offset3; float3 weights; };
-struct StochasticGradients { float2 uvDx; float2 uvDy; };
+struct StochasticOffsets
+{
+	float2 offset1;
+	float2 offset2;
+	float2 offset3;
+	float3 weights;
+};
+struct StochasticGradients
+{
+	float2 uvDx;
+	float2 uvDy;
+};
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV) { return (StochasticOffsets)0; }
 inline StochasticGradients ComputeStochasticGradients(float2 uv) { return (StochasticGradients)0; }
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV) { return (StochasticOffsets)0; }
@@ -935,8 +945,18 @@ inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, floa
 #		include "TerrainVariation/TerrainVariation.hlsli"
 #	elif defined(LANDSCAPE) || defined(LODLANDSCAPE) || defined(LOD_LAND_BLEND)
 #		if !defined(TERRAIN_VARIATION_HLSLI)
-struct StochasticOffsets { float2 offset1; float2 offset2; float2 offset3; float3 weights; };
-struct StochasticGradients { float2 uvDx; float2 uvDy; };
+struct StochasticOffsets
+{
+	float2 offset1;
+	float2 offset2;
+	float2 offset3;
+	float3 weights;
+};
+struct StochasticGradients
+{
+	float2 uvDx;
+	float2 uvDy;
+};
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV) { return (StochasticOffsets)0; }
 inline StochasticGradients ComputeStochasticGradients(float2 uv) { return (StochasticGradients)0; }
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV) { return (StochasticOffsets)0; }
