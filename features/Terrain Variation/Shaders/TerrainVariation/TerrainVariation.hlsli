@@ -84,16 +84,28 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 
 	// Sort descending by barycentric weight (importance sampling)
 	if (o.weights.y > o.weights.x) {
-		float2 tO = o.offset1; o.offset1 = o.offset2; o.offset2 = tO;
-		float tW = o.weights.x; o.weights.x = o.weights.y; o.weights.y = tW;
+		float2 tO = o.offset1;
+		o.offset1 = o.offset2;
+		o.offset2 = tO;
+		float tW = o.weights.x;
+		o.weights.x = o.weights.y;
+		o.weights.y = tW;
 	}
 	if (o.weights.z > o.weights.x) {
-		float2 tO = o.offset1; o.offset1 = o.offset3; o.offset3 = tO;
-		float tW = o.weights.x; o.weights.x = o.weights.z; o.weights.z = tW;
+		float2 tO = o.offset1;
+		o.offset1 = o.offset3;
+		o.offset3 = tO;
+		float tW = o.weights.x;
+		o.weights.x = o.weights.z;
+		o.weights.z = tW;
 	}
 	if (o.weights.z > o.weights.y) {
-		float2 tO = o.offset2; o.offset2 = o.offset3; o.offset3 = tO;
-		float tW = o.weights.y; o.weights.y = o.weights.z; o.weights.z = tW;
+		float2 tO = o.offset2;
+		o.offset2 = o.offset3;
+		o.offset3 = tO;
+		float tW = o.weights.y;
+		o.weights.y = o.weights.z;
+		o.weights.z = tW;
 	}
 
 	return o;
@@ -154,8 +166,7 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 
 inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, StochasticGradients grad, float layerWeight)
 {
-	[branch] if (enabled)
-		return StochasticEffect(tex, samp, uv, offsets, grad, layerWeight);
+	[branch] if (enabled) return StochasticEffect(tex, samp, uv, offsets, grad, layerWeight);
 	return tex.SampleBias(samp, uv, SharedData::MipBias);
 }
 

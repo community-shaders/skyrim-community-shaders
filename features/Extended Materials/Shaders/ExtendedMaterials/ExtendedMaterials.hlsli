@@ -140,8 +140,7 @@ namespace ExtendedMaterials
 
 	inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
 	{
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-			return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
 		return tex.SampleLevel(samp, coords, mipLevel);
 	}
 
@@ -205,20 +204,17 @@ namespace ExtendedMaterials
 		if (activeMask & 1u) {
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand0HasDisplacement) != 0)
 				heights[0] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, mipLevels[0], sharedOffset).x, params[0]);
-			else
-				heights[0] = ScaleDisplacement(SampleHeightUnified(TexColorSampler, SampTerrainParallaxSampler, coords, mipLevels[0], sharedOffset).w, params[0]);
+			else heights[0] = ScaleDisplacement(SampleHeightUnified(TexColorSampler, SampTerrainParallaxSampler, coords, mipLevels[0], sharedOffset).w, params[0]);
 		}
 		if (activeMask & 2u) {
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand1HasDisplacement) != 0)
 				heights[1] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, mipLevels[1], sharedOffset).x, params[1]);
-			else
-				heights[1] = ScaleDisplacement(SampleHeightUnified(TexLandColor2Sampler, SampTerrainParallaxSampler, coords, mipLevels[1], sharedOffset).w, params[1]);
+			else heights[1] = ScaleDisplacement(SampleHeightUnified(TexLandColor2Sampler, SampTerrainParallaxSampler, coords, mipLevels[1], sharedOffset).w, params[1]);
 		}
 		if (activeMask & 4u) {
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand2HasDisplacement) != 0)
 				heights[2] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, mipLevels[2], sharedOffset).x, params[2]);
-			else
-				heights[2] = ScaleDisplacement(SampleHeightUnified(TexLandColor3Sampler, SampTerrainParallaxSampler, coords, mipLevels[2], sharedOffset).w, params[2]);
+			else heights[2] = ScaleDisplacement(SampleHeightUnified(TexLandColor3Sampler, SampTerrainParallaxSampler, coords, mipLevels[2], sharedOffset).w, params[2]);
 		}
 		[branch] if ((activeMask & 8u) && (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0)
 			heights[3] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, mipLevels[3], sharedOffset).x, params[3]);
@@ -480,7 +476,8 @@ namespace ExtendedMaterials
 			if (quality > 0.75)
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
 
-			[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+			{
 				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
 				shadowIntensity = pow(shadowIntensity, 0.8);
 				return pow(1.0 - shadowIntensity, 2.0);
@@ -495,7 +492,8 @@ namespace ExtendedMaterials
 			if (quality > 0.75)
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
 
-			[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+			{
 				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
 				shadowIntensity = pow(shadowIntensity, 0.8);
 				return pow(1.0 - shadowIntensity, 2.0);
@@ -507,4 +505,4 @@ namespace ExtendedMaterials
 	}
 
 #endif  // defined(LANDSCAPE)
-	}
+}

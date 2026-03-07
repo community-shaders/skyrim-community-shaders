@@ -919,8 +919,18 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 // Stub types for unified terrain sampling when Terrain Variation is not installed
 #		if !defined(TERRAIN_VARIATION_HLSLI) && !defined(TERRAIN_SAMPLING_STUBS)
 #			define TERRAIN_SAMPLING_STUBS
-struct StochasticOffsets { float2 offset1; float2 offset2; float2 offset3; float3 weights; };
-struct StochasticGradients { float2 uvDx; float2 uvDy; };
+struct StochasticOffsets
+{
+	float2 offset1;
+	float2 offset2;
+	float2 offset3;
+	float3 weights;
+};
+struct StochasticGradients
+{
+	float2 uvDx;
+	float2 uvDy;
+};
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV) { return (StochasticOffsets)0; }
 inline StochasticGradients ComputeStochasticGradients(float2 uv) { return (StochasticGradients)0; }
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV) { return (StochasticOffsets)0; }
@@ -1559,13 +1569,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	baseColor.xyz = pow(abs(baseColor.xyz), SharedData::lodBlendingSettings.LODObjectGamma) * SharedData::lodBlendingSettings.LODObjectBrightness;
 #		elif defined(LODLANDSCAPE)
 	// First apply terrain variation if enabled
-		if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
-			StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
-			float4 lodStochasticColor = StochasticSampleLOD(screenNoise, TexColorSampler, SampColorSampler, uv, lodOffset);
+	if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+		StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
+		float4 lodStochasticColor = StochasticSampleLOD(screenNoise, TexColorSampler, SampColorSampler, uv, lodOffset);
 
-			// Apply the stochastic result directly
-			baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
-		}
+		// Apply the stochastic result directly
+		baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
+	}
 	baseColor.xyz = pow(abs(baseColor.xyz), SharedData::lodBlendingSettings.LODTerrainGamma) * SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif
 #	endif  // LOD_BLENDING
