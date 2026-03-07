@@ -163,7 +163,7 @@ namespace ExtendedMaterials
 			float layerWeights[6] = { w1.x, w1.y, w1.z, w1.w, w2.x, w2.y };
 			weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0;
 			weights[layerIdx] = 1.0;
-			float total = heights[layerIdx] * layerWeights[layerIdx];
+			float total = layerWeights[layerIdx] >= 0.999 ? heights[layerIdx] : heights[layerIdx] * layerWeights[layerIdx];
 			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
 				total *= 1.3;
 			return total;
@@ -216,7 +216,7 @@ namespace ExtendedMaterials
 			float layerWeights[6] = { w1.x, w1.y, w1.z, w1.w, w2.x, w2.y };
 			weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0;
 			weights[layerIdx] = 1.0;
-			float total = heights[layerIdx] * layerWeights[layerIdx];
+			float total = layerWeights[layerIdx] >= 0.999 ? heights[layerIdx] : heights[layerIdx] * layerWeights[layerIdx];
 			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
 				total *= 1.3;
 			return total;
