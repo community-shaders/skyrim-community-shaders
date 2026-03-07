@@ -62,7 +62,7 @@ namespace globals
 	{
 		extern CloudShadows cloudShadows;
 		extern DynamicCubemaps dynamicCubemaps;
-		extern VolumetricShadows volumetricShadows;
+		extern ExponentialHeightFog exponentialHeightFog;
 		extern ExtendedMaterials extendedMaterials;
 		extern ExtendedTranslucency extendedTranslucency;
 		extern GrassCollision grassCollision;
@@ -85,28 +85,16 @@ namespace globals
 		extern TerrainBlending terrainBlending;
 		extern TerrainHelper terrainHelper;
 		extern TerrainShadows terrainShadows;
-<<<<<<< HEAD
 		extern TerrainVariation terrainVariation;
+		extern UnifiedWater unifiedWater;
 		extern Upscaling upscaling;
 		extern VolumetricLighting volumetricLighting;
+		extern VolumetricShadows volumetricShadows;
 		extern VR vr;
 		extern WaterEffects waterEffects;
 		extern WeatherEditor weatherEditor;
 		extern WeatherPicker weatherPicker;
 		extern WetnessEffects wetnessEffects;
-=======
-		extern UnifiedWater unifiedWater;
-		extern VolumetricLighting volumetricLighting;
-		extern VR vr;
-		extern WaterEffects waterEffects;
-		extern PerformanceOverlay performanceOverlay;
-		extern WetnessEffects wetnessEffects;
-		extern ExtendedTranslucency extendedTranslucency;
-		extern Upscaling upscaling;
-		extern RenderDoc renderDoc;
-		extern WeatherEditor weatherEditor;
-		extern ExponentialHeightFog exponentialHeightFog;
->>>>>>> dev
 
 		namespace llf
 		{
