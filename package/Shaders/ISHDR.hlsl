@@ -239,24 +239,18 @@ PS_OUTPUT main(PS_INPUT input)
 		// Apply saturation, contrast, and tint to the tonemapped result.
 
 		float blendedLuminance = Color::RGBToLuminance(blendedColor);
-
-		// Saturation adjustment: lerp between luminance (desaturated) and full color
-		float3 saturated = lerp(blendedLuminance, blendedColor, Cinematic.x);
-
-		// Brightness scaling and tint application
-		float3 tinted = lerp(saturated, blendedLuminance * Tint.xyz, Tint.w);
-
-		// Scale by brightness and apply contrast (pivot around scene average)
-		float3 linearColor = Cinematic.w * tinted;
+		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
 		linearColor = lerp(avgValue.x, linearColor, Cinematic.z);
-
-		// Clamp to prevent negative values
 		outputColor = max(0, linearColor);
 
 #		if defined(FADE)
-		// Screen fade (blending toward fade color)
 		outputColor = lerp(outputColor, Fade.xyz, Fade.w);
 #		endif
+
+		if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
+			outputColor = Color::TrueLinearToGamma(outputColor);
+		}
+		outputColor = FrameBuffer::ToSRGBColor(outputColor);
 	}
 
 	psout.Color = float4(outputColor, 1.0);
