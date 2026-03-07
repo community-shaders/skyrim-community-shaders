@@ -126,10 +126,9 @@ static const float STOCHASTIC_SHADOW_GAMMA = 0.8;
 
 	inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
 	{
-		float4 result = tex.SampleLevel(samp, coords, mipLevel);
 		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-			result = StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
-		return result;
+			return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets, (float2)0, (float2)0);
+		return tex.SampleLevel(samp, coords, mipLevel);
 	}
 
 	inline uint ComputeActiveMask(float4 w1, float2 w2)
@@ -179,18 +178,21 @@ static const float STOCHASTIC_SHADOW_GAMMA = 0.8;
 				heights[2] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, mipLevels[2], sharedOffset).x, params[2]);
 			else heights[2] = ScaleDisplacement(SampleHeightUnified(TexLandColor3Sampler, SampTerrainParallaxSampler, coords, mipLevels[2], sharedOffset).w, params[2]);
 		}
-		[branch] if ((activeMask & 8u) && (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0)
-			heights[3] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, mipLevels[3], sharedOffset).x, params[3]);
-		else if (activeMask & 8u)
-			heights[3] = ScaleDisplacement(SampleHeightUnified(TexLandColor4Sampler, SampTerrainParallaxSampler, coords, mipLevels[3], sharedOffset).w, params[3]);
-		[branch] if ((activeMask & 16u) && (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand4HasDisplacement) != 0)
-			heights[4] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, mipLevels[4], sharedOffset).x, params[4]);
-		else if (activeMask & 16u)
-			heights[4] = ScaleDisplacement(SampleHeightUnified(TexLandColor5Sampler, SampTerrainParallaxSampler, coords, mipLevels[4], sharedOffset).w, params[4]);
-		[branch] if ((activeMask & 32u) && (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand5HasDisplacement) != 0)
-			heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).x, params[5]);
-		else if (activeMask & 32u)
-			heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).w, params[5]);
+		if (activeMask & 8u) {
+			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0)
+				heights[3] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, mipLevels[3], sharedOffset).x, params[3]);
+			else heights[3] = ScaleDisplacement(SampleHeightUnified(TexLandColor4Sampler, SampTerrainParallaxSampler, coords, mipLevels[3], sharedOffset).w, params[3]);
+		}
+		if (activeMask & 16u) {
+			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand4HasDisplacement) != 0)
+				heights[4] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, mipLevels[4], sharedOffset).x, params[4]);
+			else heights[4] = ScaleDisplacement(SampleHeightUnified(TexLandColor5Sampler, SampTerrainParallaxSampler, coords, mipLevels[4], sharedOffset).w, params[4]);
+		}
+		if (activeMask & 32u) {
+			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand5HasDisplacement) != 0)
+				heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).x, params[5]);
+			else heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).w, params[5]);
+		}
 #	endif
 
 		//Single active layer fast path, skips expensive weight processing

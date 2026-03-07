@@ -12,7 +12,7 @@
 static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
-static const float HEIGHT_INFLUENCE = 0.8;
+static const float HEIGHT_INFLUENCE = 0.9;
 static const float LOW_WEIGHT_THRESHOLD = 0.5;
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 
@@ -23,12 +23,6 @@ struct StochasticOffsets
 	float2 offset2;
 	float2 offset3;
 	float3 weights;
-};
-
-struct StochasticGradients
-{
-	float2 uvDx;
-	float2 uvDy;
 };
 
 // --------------------- HASH FUNCTIONS --------------------- //
@@ -46,15 +40,6 @@ inline float2 hashLOD(float2 p)
 }
 
 // --------------------- COMPUTE FUNCTIONS --------------------- //
-inline StochasticGradients ComputeStochasticGradients(float2 uv)
-{
-	StochasticGradients g;
-	float biasScale = exp2(SharedData::MipBias);
-	g.uvDx = ddx(uv) * biasScale;
-	g.uvDy = ddy(uv) * biasScale;
-	return g;
-}
-
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 {
 	float2 skewUV = mul(SKEW_MATRIX, landscapeUV * WORLD_SCALE);
@@ -128,7 +113,7 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 // --------------------- SAMPLING FUNCTIONS --------------------- //
 
 // LOD terrain stochastic sampling — 2 SampleBias, fixed blend
-inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD)
+inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD, float2 dx, float2 dy)
 {
 	float2 dir1 = float2(rnd - 0.5, frac(rnd * 1.618) - 0.5);
 	float4 s1 = tex.SampleBias(samp, uv + (offsetsLOD.offset1 + dir1) * 0.01, SharedData::MipBias);
@@ -141,12 +126,13 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 // are constant per terrain cell, so entire wavefronts take the same path.
 // High-weight layers get 2-sample height-blended for quality.
 // Height is derived from alpha when available (displacement maps), luminance otherwise.
-inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, StochasticGradients grad, float layerWeight)
+inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float layerWeight)
 {
-	float4 s1 = tex.SampleGrad(samp, uv + offsets.offset1, grad.uvDx, grad.uvDy);
+	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias;
+	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	if (layerWeight < LOW_WEIGHT_THRESHOLD)
 		return s1;
-	float4 s2 = tex.SampleGrad(samp, uv + offsets.offset2, grad.uvDx, grad.uvDy);
+	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float h1 = s1.a > 0.001 ? s1.a : dot(s1.rgb, LUMINANCE_WEIGHTS);
 	float h2 = s2.a > 0.001 ? s2.a : dot(s2.rgb, LUMINANCE_WEIGHTS);
 	float w1 = offsets.weights.x * offsets.weights.x * (1.0 + HEIGHT_INFLUENCE * h1);
@@ -154,7 +140,7 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
-inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
+inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
 {
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
@@ -164,12 +150,11 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 	return s1 * offsets.weights.x + s2 * offsets.weights.y + s3 * offsets.weights.z;
 }
 
-inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, StochasticGradients grad, float layerWeight)
+inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float layerWeight)
 {
-	float4 result = tex.SampleBias(samp, uv, SharedData::MipBias);
 	[branch] if (enabled)
-		result = StochasticEffect(tex, samp, uv, offsets, grad, layerWeight);
-	return result;
+		return StochasticEffect(tex, samp, uv, offsets, layerWeight);
+	return tex.SampleBias(samp, uv, SharedData::MipBias);
 }
 
 #endif  // TERRAIN_VARIATION_HLSLI
