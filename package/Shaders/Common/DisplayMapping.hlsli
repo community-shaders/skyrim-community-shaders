@@ -81,11 +81,16 @@ namespace DisplayMapping
 			Color *= compressedLuminanceNormalized / sourceLuminanceNormalized;
 		}
 
-		// Hue-preserving channel clamp: if any channel overshoots PeakWhite, scale all
-		// channels down uniformly so the brightest lands exactly on PeakWhite.
-		float peakChannel = max3(Color);
-		if (peakChannel > PeakWhite)
-			Color *= PeakWhite / peakChannel;
+		// Hue-preserving channel clamp: the luminance pass works on average luminance, so highly
+		// saturated colors can still have a dominant channel above PeakWhite. Scale all channels
+		// down uniformly so the brightest lands at PeakWhite, preserving hue. With the shoulder
+		// anchored at paper white, the luminance pass handles all neutral content — this only
+		// fires for genuinely oversaturated HDR highlights.
+		{
+			const float maxChannel = max3(Color);
+			if (maxChannel > PeakWhite)
+				Color *= PeakWhite / maxChannel;
+		}
 
 		return FromColorSpaceToColorSpace(Color, ProcessingColorSpace, InOutColorSpace);
 	}
