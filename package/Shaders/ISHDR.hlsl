@@ -180,9 +180,9 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 hdrGamma = ENABLE_LL ? Color::LinearToGamma(inputColor) : inputColor;
 
 		float hdrGammaLum = Color::RGBToLuminance(hdrGamma);
-		hdrGamma = lerp(hdrGammaLum, hdrGamma, Cinematic.x);       // saturation
-		hdrGamma = lerp(hdrGamma, hdrGammaLum * Tint.xyz, Tint.w); // tint
-		hdrGamma *= Cinematic.w;                                     // brightness
+		hdrGamma = lerp(hdrGammaLum, hdrGamma, Cinematic.x);        // saturation
+		hdrGamma = lerp(hdrGamma, hdrGammaLum * Tint.xyz, Tint.w);  // tint
+		hdrGamma *= Cinematic.w;                                    // brightness
 		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);         // contrast
 
 #		if defined(FADE)
