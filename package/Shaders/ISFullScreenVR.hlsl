@@ -5,7 +5,7 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color : SV_Target0;  // Final color output for the pixel shader.
+	float4 Color: SV_Target0;  // Final color output for the pixel shader.
 };
 
 #if defined(PSHADER)

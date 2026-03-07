@@ -8,14 +8,14 @@ cbuffer MatrixBuffer : register(b0)
 
 struct VS_INPUT
 {
-	float3 pos : POSITION;
-	float2 uv : TEXCOORD0;
+	float3 pos: POSITION;
+	float2 uv: TEXCOORD0;
 };
 
 struct PS_INPUT
 {
-	float4 pos : SV_POSITION;
-	float2 uv : TEXCOORD0;
+	float4 pos: SV_POSITION;
+	float2 uv: TEXCOORD0;
 };
 
 PS_INPUT main(VS_INPUT input)

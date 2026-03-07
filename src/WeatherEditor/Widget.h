@@ -30,11 +30,12 @@ public:
 
 	virtual std::string GetEditorID() const
 	{
-		// If cachedEditorID looks like a fallback ID, try to get the real one
-		if (cachedEditorID.find("VolumetricLighting_") == 0 && form) {
+		// If using a fallback ID, retry getting the real EditorID
+		if (isFallbackEditorID && form) {
 			const char* editorID = form->GetFormEditorID();
 			if (editorID && editorID[0] != '\0') {
-				const_cast<Widget*>(this)->cachedEditorID = editorID;
+				cachedEditorID = editorID;
+				isFallbackEditorID = false;
 				return editorID;
 			}
 		}
@@ -61,6 +62,7 @@ public:
 	{
 		if (!form) {
 			cachedEditorID = "Invalid";
+			isFallbackEditorID = false;
 			return;
 		}
 
@@ -68,6 +70,7 @@ public:
 		const char* editorID = form->GetFormEditorID();
 		if (editorID && editorID[0] != '\0') {
 			cachedEditorID = editorID;
+			isFallbackEditorID = false;
 			return;
 		}
 
@@ -78,33 +81,37 @@ public:
 			for (const auto& [name, f] : *map) {
 				if (f == form) {
 					cachedEditorID = std::string(name.c_str());
+					isFallbackEditorID = false;
 					return;
 				}
 			}
 		}
 
-		// Fallback to FormID-based names
+		// Fallback: use SPID-format filename (0xLocalFormID~PluginName) for load-order independence
+		const auto* file = form->GetFile();
+		const auto spidID = file ? std::format("0x{:X}~{}", form->GetLocalFormID(), file->GetFilename()) : std::format("0x{:X}", form->GetLocalFormID());
 		auto formType = form->GetFormType();
 		switch (formType) {
 		case RE::FormType::ImageSpace:
-			cachedEditorID = std::format("ImageSpace_{:08X}", form->GetFormID());
+			cachedEditorID = std::format("IS_{}", spidID);
 			break;
 		case RE::FormType::VolumetricLighting:
-			cachedEditorID = std::format("VolumetricLighting_{:08X}", form->GetFormID());
+			cachedEditorID = std::format("VL_{}", spidID);
 			break;
 		case RE::FormType::ShaderParticleGeometryData:
-			cachedEditorID = std::format("ShaderParticleGeometry_{:08X}", form->GetFormID());
+			cachedEditorID = std::format("Particle_{}", spidID);
 			break;
 		case RE::FormType::LensFlare:
-			cachedEditorID = std::format("LensFlare_{:08X}", form->GetFormID());
+			cachedEditorID = std::format("LensFlare_{}", spidID);
 			break;
 		case RE::FormType::ReferenceEffect:
-			cachedEditorID = std::format("VisualEffect_{:08X}", form->GetFormID());
+			cachedEditorID = std::format("VisualEffect_{}", spidID);
 			break;
 		default:
-			cachedEditorID = std::format("Form_{:08X}", form->GetFormID());
+			cachedEditorID = std::format("Form_{}", spidID);
 			break;
 		}
+		isFallbackEditorID = true;
 	}
 
 	virtual void DrawWidget() = 0;
@@ -147,7 +154,8 @@ public:
 	json js = json();
 
 protected:
-	std::string cachedEditorID;
+	mutable std::string cachedEditorID;
+	mutable bool isFallbackEditorID = false;
 	virtual void DrawMenu();
 	std::string GetFolderName();
 };

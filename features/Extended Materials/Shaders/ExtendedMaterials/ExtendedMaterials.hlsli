@@ -56,36 +56,36 @@ namespace ExtendedMaterials
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
 
-		#if !defined(PARALLAX) && !defined(TRUE_PBR)
-				textureDims /= 2.0;
-		#endif
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
+		textureDims /= 2.0;
+#endif
 
-		#if defined(VR)
-				textureDims /= 2.0;
-		#endif
+#if defined(VR)
+		textureDims /= 2.0;
+#endif
 
-			float2 texCoordsPerSize = coords * textureDims;
+		float2 texCoordsPerSize = coords * textureDims;
 
-			float2 dxSize = ddx(texCoordsPerSize);
-			float2 dySize = ddy(texCoordsPerSize);
+		float2 dxSize = ddx(texCoordsPerSize);
+		float2 dySize = ddy(texCoordsPerSize);
 
-			// Find min of change in u and v across quad: compute du and dv magnitude across quad
-			//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+		// Find min of change in u and v across quad: compute du and dv magnitude across quad
+		//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
 
-			// Standard mipmapping uses max here
-			float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
+		// Standard mipmapping uses max here
+		float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
 
-			// Compute the current mip level  (* 0.5 is effectively computing a square root before )
-			float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
+		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
-		#if !defined(PARALLAX) && !defined(TRUE_PBR)
-				mipLevel++;
-		#endif
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
+		mipLevel++;
+#endif
 
-		// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
-		#if defined(VR)
-				mipLevel++;
-		#endif
+// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
+#if defined(VR)
+		mipLevel++;
+#endif
 
 		// Compensate for upscaler render scale (DLSS/FSR). At lower internal resolution,
 		// ddx/ddy are proportionally larger, which inflates the computed mip level and blurs

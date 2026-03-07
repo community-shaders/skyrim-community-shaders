@@ -201,8 +201,62 @@ void TruePBR::DrawSettings()
 
 			if (selectedPbrMaterialObject != nullptr) {
 				bool wasEdited = false;
-				if (ImGui::SliderFloat3("Base Color Scale", selectedPbrMaterialObject->baseColorScale.data(), 0.f, 10.f, "%.3f")) {
-					wasEdited = true;
+				if (ImGui::TreeNodeEx("Base Color Scale", ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (ImGui::Button("Reset to 1.0##BaseColorScale")) {
+						selectedPbrMaterialObject->baseColorScale = { 1.f, 1.f, 1.f };
+						wasEdited = true;
+					}
+
+					const float indent = ImGui::GetCursorPosX();
+					const float defaultItemWidth = ImGui::CalcItemWidth();
+					const float letterColWidth = ImGui::CalcTextSize("Green").x + ImGui::GetStyle().ItemSpacing.x;
+					const float sliderStartX = indent + letterColWidth;
+					const float sliderWidth = defaultItemWidth - (sliderStartX - ImGui::GetStyle().ItemSpacing.x);
+					const float colorLabelStartX = sliderStartX - ImGui::GetStyle().ItemSpacing.x - letterColWidth;
+
+					ImGui::AlignTextToFramePadding();
+					ImGui::SetCursorPosX(colorLabelStartX);
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+					ImGui::Text("Red");
+					ImGui::PopStyleColor();
+					ImGui::SameLine(sliderStartX);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.4f, 0.1f, 0.1f, 0.6f));
+					ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+					ImGui::SetNextItemWidth(sliderWidth);
+					if (ImGui::SliderFloat("##BaseColorScaleR", &selectedPbrMaterialObject->baseColorScale[0], 0.f, 10.f, "%.3f")) {
+						wasEdited = true;
+					}
+					ImGui::PopStyleColor(2);
+
+					ImGui::AlignTextToFramePadding();
+					ImGui::SetCursorPosX(colorLabelStartX);
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+					ImGui::Text("Green");
+					ImGui::PopStyleColor();
+					ImGui::SameLine(sliderStartX);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.1f, 0.4f, 0.1f, 0.6f));
+					ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+					ImGui::SetNextItemWidth(sliderWidth);
+					if (ImGui::SliderFloat("##BaseColorScaleG", &selectedPbrMaterialObject->baseColorScale[1], 0.f, 10.f, "%.3f")) {
+						wasEdited = true;
+					}
+					ImGui::PopStyleColor(2);
+
+					ImGui::AlignTextToFramePadding();
+					ImGui::SetCursorPosX(colorLabelStartX);
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.3f, 0.9f, 1.0f));
+					ImGui::Text("Blue");
+					ImGui::PopStyleColor();
+					ImGui::SameLine(sliderStartX);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.1f, 0.1f, 0.4f, 0.6f));
+					ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.3f, 0.3f, 0.9f, 1.0f));
+					ImGui::SetNextItemWidth(sliderWidth);
+					if (ImGui::SliderFloat("##BaseColorScaleB", &selectedPbrMaterialObject->baseColorScale[2], 0.f, 10.f, "%.3f")) {
+						wasEdited = true;
+					}
+					ImGui::PopStyleColor(2);
+
+					ImGui::TreePop();
 				}
 				if (ImGui::SliderFloat("Roughness", &selectedPbrMaterialObject->roughness, 0.f, 1.f, "%.3f")) {
 					wasEdited = true;

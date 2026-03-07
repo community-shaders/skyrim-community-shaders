@@ -10,6 +10,7 @@ void VR::ClearShaderCache()
 	stereoBlendCS = nullptr;
 	stereoBlendDebugBackCheckCS = nullptr;
 	stereoBlendDebugBlendWeightCS = nullptr;
+	stereoBlendDebugEdgeDetectionCS = nullptr;
 }
 
 bool VR::AnyScreenSpaceEffectLoaded()
@@ -65,6 +66,8 @@ void VR::DrawStereoBlend()
 		activeCS = stereoBlendDebugBackCheckCS.get();
 	else if (settings.StereoBlendDebugMode == 2 && stereoBlendDebugBlendWeightCS)
 		activeCS = stereoBlendDebugBlendWeightCS.get();
+	else if (settings.StereoBlendDebugMode == 3 && stereoBlendDebugEdgeDetectionCS)
+		activeCS = stereoBlendDebugEdgeDetectionCS.get();
 
 	context->CSSetConstantBuffers(1, 1, &cbPtr);
 	context->CSSetShaderResources(0, 2, srvs);

@@ -5,8 +5,8 @@
 #include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
-#include "Common/SharedData.hlsli"
 #include "Common/PBRMath.hlsli"
+#include "Common/SharedData.hlsli"
 
 namespace PBR
 {
@@ -156,8 +156,8 @@ namespace PBR
 			float3 F;
 #if defined(GLINT)
 			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
-							material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F) *
-			            detailedLightColor * satNdotL;
+										   material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F) *
+			                           detailedLightColor * satNdotL;
 #else
 			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * detailedLightColor * satNdotL;
 #endif

@@ -47,11 +47,9 @@ namespace ImageBasedLighting
 #endif
 	{
 		float3 color = 0;
-		if (SharedData::InInterior)
-		{
+		if (SharedData::InInterior) {
 			color = GetDiffuseIBL(rayDir);
-		}
-		else
+		} else
 #if defined(SKYLIGHTING)
 		{
 			color = lerp(GetDiffuseIBL(rayDir), GetSkyDiffuseIBL(rayDir), skylighting);
@@ -89,4 +87,4 @@ namespace ImageBasedLighting
 	}
 }
 
-#endif // __IBL_HLSLI__
+#endif  // __IBL_HLSLI__
