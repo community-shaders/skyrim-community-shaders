@@ -85,6 +85,11 @@ namespace ExtendedMaterials
 #	define HEIGHT_POWER 2
 #	define HEIGHT_MULT 8
 
+// Stochastic blending averages multiple offset samples, flattening the height range.
+// These compensate for that energy loss in parallax height and shadow contrast.
+static const float STOCHASTIC_HEIGHT_BOOST = 1.3;
+static const float STOCHASTIC_SHADOW_GAMMA = 0.8;
+
 	void ProcessTerrainHeightWeights(float heightBlend, float4 w1, float2 w2, float heights[6], inout float weights[6], out float totalHeight)
 	{
 		weights[0] = w1.x;
@@ -121,8 +126,10 @@ namespace ExtendedMaterials
 
 	inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
 	{
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
-		return tex.SampleLevel(samp, coords, mipLevel);
+		float4 result = tex.SampleLevel(samp, coords, mipLevel);
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+			result = StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
+		return result;
 	}
 
 	inline uint ComputeActiveMask(float4 w1, float2 w2)
@@ -137,13 +144,13 @@ namespace ExtendedMaterials
 		return mask;
 	}
 
-#	if defined(TRUE_PBR)
 	float GetTerrainHeight(float screenNoise, PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
 		uint activeMask, StochasticOffsets sharedOffset, out float weights[6])
 	{
 		float heightBlend = 1 + blendFactor * HEIGHT_POWER;
 		float heights[6] = { 0, 0, 0, 0, 0, 0 };
 
+#	if defined(TRUE_PBR)
 		[branch] if ((activeMask & 1u) && (PBRFlags & PBR::TerrainFlags::LandTile0HasDisplacement) != 0)
 			heights[0] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, mipLevels[0], sharedOffset).x, params[0]);
 		[branch] if ((activeMask & 2u) && (PBRFlags & PBR::TerrainFlags::LandTile1HasDisplacement) != 0)
@@ -156,32 +163,7 @@ namespace ExtendedMaterials
 			heights[4] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, mipLevels[4], sharedOffset).x, params[4]);
 		[branch] if ((activeMask & 32u) && (PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0)
 			heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).x, params[5]);
-
-		//Single active layer fast path, skips expensive weight processing
-		if (countbits(activeMask) == 1) {
-			uint layerIdx = firstbitlow(activeMask);
-			float layerWeights[6] = { w1.x, w1.y, w1.z, w1.w, w2.x, w2.y };
-			weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0;
-			weights[layerIdx] = 1.0;
-			float total = layerWeights[layerIdx] >= 0.999 ? heights[layerIdx] : heights[layerIdx] * layerWeights[layerIdx];
-			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-				total *= 1.3;
-			return total;
-		}
-
-		float total;
-		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-			total *= 1.3;
-		return total;
-	}
 #	else
-	float GetTerrainHeight(float screenNoise, PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
-		uint activeMask, StochasticOffsets sharedOffset, out float weights[6])
-	{
-		float heightBlend = 1 + blendFactor * HEIGHT_POWER;
-		float heights[6] = { 0, 0, 0, 0, 0, 0 };
-
 		if (activeMask & 1u) {
 			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand0HasDisplacement) != 0)
 				heights[0] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, mipLevels[0], sharedOffset).x, params[0]);
@@ -209,6 +191,7 @@ namespace ExtendedMaterials
 			heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).x, params[5]);
 		else if (activeMask & 32u)
 			heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).w, params[5]);
+#	endif
 
 		//Single active layer fast path, skips expensive weight processing
 		if (countbits(activeMask) == 1) {
@@ -218,17 +201,16 @@ namespace ExtendedMaterials
 			weights[layerIdx] = 1.0;
 			float total = layerWeights[layerIdx] >= 0.999 ? heights[layerIdx] : heights[layerIdx] * layerWeights[layerIdx];
 			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-				total *= 1.3;
+				total *= STOCHASTIC_HEIGHT_BOOST;
 			return total;
 		}
 
-		float total;
+		float total = 0;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-			total *= 1.3;
+			total *= STOCHASTIC_HEIGHT_BOOST;
 		return total;
 	}
-#	endif
 
 #endif
 
@@ -248,20 +230,17 @@ namespace ExtendedMaterials
 
 		float nearBlendToFar = saturate(distance / 2048.0);
 #if defined(LANDSCAPE)
-#	if defined(TRUE_PBR)
 		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? sqrt(saturate(1 - nearBlendToFar)) : 0;
 		float4 w1 = lerp(input.LandBlendWeights1, smoothstep(0, 1, input.LandBlendWeights1), blendFactor);
 		float2 w2 = lerp(input.LandBlendWeights2.xy, smoothstep(0, 1, input.LandBlendWeights2.xy), blendFactor);
+#	if defined(TRUE_PBR)
 		float scale = max(params[0].HeightScale * w1.x, max(params[1].HeightScale * w1.y, max(params[2].HeightScale * w1.z, max(params[3].HeightScale * w1.w, max(params[4].HeightScale * w2.x, params[5].HeightScale * w2.y)))));
 		float scalercp = rcp(scale);
-		float maxHeight = 0.1 * scale;
 #	else
-		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? sqrt(saturate(1 - nearBlendToFar)) : 0;
-		float4 w1 = lerp(input.LandBlendWeights1, smoothstep(0, 1, input.LandBlendWeights1), blendFactor);
-		float2 w2 = lerp(input.LandBlendWeights2.xy, smoothstep(0, 1, input.LandBlendWeights2.xy), blendFactor);
 		float scale = 1;
-		float maxHeight = 0.1 * scale;
+		float scalercp = 1;
 #	endif
+		float maxHeight = 0.1 * scale;
 		uint activeMask = ComputeActiveMask(w1, w2);
 #else
 		float scale = params.HeightScale;
@@ -306,17 +285,10 @@ namespace ExtendedMaterials
 
 				float4 currHeight;
 #if defined(LANDSCAPE)
-#	if defined(TRUE_PBR)
 				currHeight.x = GetTerrainHeight(noise, input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) * scalercp + 0.5;
 				currHeight.y = GetTerrainHeight(noise, input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) * scalercp + 0.5;
 				currHeight.z = GetTerrainHeight(noise, input, currentOffset[1].xy, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) * scalercp + 0.5;
 				currHeight.w = GetTerrainHeight(noise, input, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) * scalercp + 0.5;
-#	else
-				currHeight.x = GetTerrainHeight(noise, input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) + 0.5;
-				currHeight.y = GetTerrainHeight(noise, input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) + 0.5;
-				currHeight.z = GetTerrainHeight(noise, input, currentOffset[1].xy, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) + 0.5;
-				currHeight.w = GetTerrainHeight(noise, input, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) + 0.5;
-#	endif
 #else
 				currHeight.x = tex.SampleLevel(texSampler, currentOffset[0].xy, mipLevel)[channel];
 				currHeight.y = tex.SampleLevel(texSampler, currentOffset[0].zw, mipLevel)[channel];
@@ -419,7 +391,7 @@ namespace ExtendedMaterials
 		{
 			float2 rayDir = L.xy * 0.1 * params.HeightScale;
 			float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
-			float4 sh;
+			float4 sh = 0;
 			sh = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.x, mipLevel)[channel], params);
 			if (quality > 0.25)
 				sh.y = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.y, mipLevel)[channel], params);
@@ -437,7 +409,7 @@ namespace ExtendedMaterials
 	{
 		if (quality > 0.0) {
 			float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
-			float4 sh;
+			float4 sh = 0;
 			float heights[6] = { 0, 0, 0, 0, 0, 0 };
 			float2 rayDir = L.xy * 0.1;
 			uint activeMask = ComputeActiveMask(input.LandBlendWeights1, input.LandBlendWeights2.xy);
@@ -448,23 +420,11 @@ namespace ExtendedMaterials
 			if (scale < 0.01)
 				return 1.0;
 			rayDir *= scale;
-
-			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
-			if (quality > 0.25)
-				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
-			if (quality > 0.5)
-				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
-			if (quality > 0.75)
-				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
-
-			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-			{
-				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
-				shadowIntensity = pow(shadowIntensity, 0.8);
-				return pow(1.0 - shadowIntensity, 2.0);
-			}
-			return pow(1.0 - saturate(dot(max(0, sh - sh0) / scale, 1.0)) * quality, 2.0);
+			float scaleRcp = rcp(scale);
 #	else
+			float scaleRcp = 1;
+#	endif
+
 			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
 			if (quality > 0.25)
 				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
@@ -476,11 +436,10 @@ namespace ExtendedMaterials
 			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
 			{
 				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
-				shadowIntensity = pow(shadowIntensity, 0.8);
+				shadowIntensity = pow(shadowIntensity, STOCHASTIC_SHADOW_GAMMA);
 				return pow(1.0 - shadowIntensity, 2.0);
 			}
-			return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
-#	endif
+			return pow(1.0 - saturate(dot(max(0, sh - sh0) * scaleRcp, 1.0)) * quality, 2.0);
 		}
 		return 1.0;
 	}
