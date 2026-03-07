@@ -170,35 +170,29 @@ PS_OUTPUT main(PS_INPUT input)
 		float paperWhiteNits = SharedData::HDRData.y;
 		float peakNits = SharedData::HDRData.z;
 
-		// === Convert to Linear Space ===
-		// If Linear Lighting is active, input is already linear.
-		float3 hdrLinear = ENABLE_LL ? inputColor : Color::GammaToLinear(inputColor);
+		// === Color Grading in Gamma Space (matching SDR calibration) ===
+		// Skyrim's content and all imagespace settings were calibrated in gamma space.
+		// Applying grading in linear space (as we did before) amplifies chromatic differences
+		// and uses a different contrast neutral point, causing sky colours and SDR-range
+		// content to diverge noticeably from the SDR path.
+		// Apply grading identically to SDR: same gamma domain, same formulas, same ordering.
+		// Only the DICE tonemap (below) differs — it handles highlights above paper white.
+		float3 hdrGamma = ENABLE_LL ? Color::LinearToGamma(inputColor) : inputColor;
 
-		// === Color Grading (Mixed Linear/Gamma, matching vanilla order) ===
-		// Vanilla order: Saturation → Tint → Brightness → Contrast
-		// Physical accuracy: Saturation in linear; Tint & Contrast in gamma for artistic control.
-
-		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
-
-		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
-
-		float hdrLuminanceGamma = Color::RGBToLuminance(hdrGamma);
-		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
-
-		hdrLinear = Color::GammaToLinear(hdrGamma);
-		hdrLinear *= Cinematic.w;
-
-		// Power-curve contrast pivoted around photographic midgrey (0.18 linear).
-		// Cinematic.z maps from [-1, 1] to a [0.5, 1.5] exponent: 1.0 = neutral,
-		// >1.0 deepens blacks and lifts highlights without crushing toward a variable grey pivot.
-		float contrastExp = Cinematic.z * 0.5 + 1.0;
-		hdrLinear = 0.18 * pow(max(0, hdrLinear / 0.18), contrastExp);
+		float hdrGammaLum = Color::RGBToLuminance(hdrGamma);
+		hdrGamma = lerp(hdrGammaLum, hdrGamma, Cinematic.x);       // saturation
+		hdrGamma = lerp(hdrGamma, hdrGammaLum * Tint.xyz, Tint.w); // tint
+		hdrGamma *= Cinematic.w;                                     // brightness
+		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);         // contrast (same formula as SDR)
 
 #		if defined(FADE)
-		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);
+		hdrGamma = lerp(hdrGamma, Fade.xyz, Fade.w);
 #		endif
 
-		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
+		hdrGamma += saturate(Param.x - hdrGamma) * bloomColor;
+
+		// Decode to linear for DICE tonemapping.
+		float3 hdrLinear = Color::GammaToLinear(max(0.0, hdrGamma));
 
 		// DICE tonemapping: compresses highlights from paper-white to peak brightness.
 		// Output remains in linear BT.709, values can exceed 1.0 up to peak/80.
@@ -206,7 +200,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float peak = peakNits / sRGB_WhiteLevelNits;
 		hdrLinear *= pw;
 
-		// Shoulder anchored at paper white.
+		// Shoulder anchored at paper white so SDR-range content (<= pw) is untouched.
 		float shoulderStart = pw / peak;
 		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, shoulderStart, CS_BT709, CS_BT709);
 

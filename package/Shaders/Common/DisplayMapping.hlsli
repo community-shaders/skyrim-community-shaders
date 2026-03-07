@@ -81,15 +81,16 @@ namespace DisplayMapping
 			Color *= compressedLuminanceNormalized / sourceLuminanceNormalized;
 		}
 
-		// Hue-preserving channel clamp: the luminance pass works on average luminance, so highly
-		// saturated colors can still have a dominant channel above PeakWhite. Scale all channels
-		// down uniformly so the brightest lands at PeakWhite, preserving hue. With the shoulder
-		// anchored at paper white, the luminance pass handles all neutral content — this only
-		// fires for genuinely oversaturated HDR highlights.
+		// Soft per-channel compression above peak (Reinhard-style asymptotic curve).
+		// The luminance pass compresses based on average, so saturated highlights (fires, emissives)
+		// can have peak channels far exceeding PeakWhite. The old hard uniform clamp crushed local
+		// contrast because bright/dim regions scaled by different ratios (e.g., 0.6x vs 1.0x).
+		// Reinhard per-channel: x / (1 + x) remapped so peak → peak and higher values asymptote.
+		// This naturally desaturates extreme highlights while preserving detail gradients.
 		{
-			const float maxChannel = max3(Color);
-			if (maxChannel > PeakWhite)
-				Color *= PeakWhite / maxChannel;
+			const float3 excess = max(0.0, Color - PeakWhite);
+			const float3 compressed = excess / (1.0 + excess / PeakWhite);
+			Color = min(Color, PeakWhite) + compressed;
 		}
 
 		return FromColorSpaceToColorSpace(Color, ProcessingColorSpace, InOutColorSpace);
