@@ -133,7 +133,7 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 	float2 dir1 = float2(rnd - 0.5, frac(rnd * 1.618) - 0.5);
 	float4 s1 = tex.SampleBias(samp, uv + (offsetsLOD.offset1 + dir1) * 0.01, SharedData::MipBias);
 	float4 s2 = tex.SampleBias(samp, uv + (offsetsLOD.offset2 + float2(dir1.y, -dir1.x)) * 0.01, SharedData::MipBias);
-	return lerp(s2, s1, 0.65);
+	return lerp(s2, s1, offsetsLOD.weights.x);
 }
 
 // Layer-weight-aware stochastic sampling (Jason Booth technique).
