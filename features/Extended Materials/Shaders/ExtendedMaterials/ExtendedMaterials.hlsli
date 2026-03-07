@@ -157,7 +157,7 @@ namespace ExtendedMaterials
 		[branch] if ((activeMask & 32u) && (PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0)
 			heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).x, params[5]);
 
-		// Phase 2: Single active layer fast path — skip expensive weight processing
+		//Single active layer fast path, skips expensive weight processing
 		if (countbits(activeMask) == 1) {
 			uint layerIdx = firstbitlow(activeMask);
 			float layerWeights[6] = { w1.x, w1.y, w1.z, w1.w, w2.x, w2.y };
@@ -210,7 +210,7 @@ namespace ExtendedMaterials
 		else if (activeMask & 32u)
 			heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).w, params[5]);
 
-		// Phase 2: Single active layer fast path — skip expensive weight processing
+		//Single active layer fast path, skips expensive weight processing
 		if (countbits(activeMask) == 1) {
 			uint layerIdx = firstbitlow(activeMask);
 			float layerWeights[6] = { w1.x, w1.y, w1.z, w1.w, w2.x, w2.y };

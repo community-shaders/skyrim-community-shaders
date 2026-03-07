@@ -12,8 +12,8 @@
 static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
-static const float HEIGHT_INFLUENCE = 0.3;
-static const float LOW_WEIGHT_THRESHOLD = 0.15;
+static const float HEIGHT_INFLUENCE = 0.8;
+static const float LOW_WEIGHT_THRESHOLD = 0.5;
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 
 // --------------------- STRUCTURES --------------------- //
