@@ -83,10 +83,8 @@ namespace DisplayMapping
 
 		// Soft per-channel compression above peak (Reinhard-style asymptotic curve).
 		// The luminance pass compresses based on average, so saturated highlights (fires, emissives)
-		// can have peak channels far exceeding PeakWhite. The old hard uniform clamp crushed local
-		// contrast because bright/dim regions scaled by different ratios (e.g., 0.6x vs 1.0x).
-		// Reinhard per-channel: x / (1 + x) remapped so peak → peak and higher values asymptote.
-		// This naturally desaturates extreme highlights while preserving detail gradients.
+		// can have peak channels far exceeding PeakWhite. Per-channel Reinhard preserves detail
+		// gradients by applying a smooth compression curve independently to each channel.
 		{
 			const float3 excess = max(0.0, Color - PeakWhite);
 			const float3 compressed = excess / (1.0 + excess / PeakWhite);

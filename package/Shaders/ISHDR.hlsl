@@ -183,7 +183,7 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrGamma = lerp(hdrGammaLum, hdrGamma, Cinematic.x);       // saturation
 		hdrGamma = lerp(hdrGamma, hdrGammaLum * Tint.xyz, Tint.w); // tint
 		hdrGamma *= Cinematic.w;                                     // brightness
-		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);         // contrast (same formula as SDR)
+		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);         // contrast
 
 #		if defined(FADE)
 		hdrGamma = lerp(hdrGamma, Fade.xyz, Fade.w);
