@@ -881,7 +881,6 @@ struct StochasticOffsets
 {
 	float2 offset1;
 	float2 offset2;
-	float2 offset3;
 	float3 weights;
 };
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV) { return (StochasticOffsets)0; }
