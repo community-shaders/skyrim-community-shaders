@@ -141,18 +141,15 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
-// 2-sample parallax sampling with cheap height blend to prevent seams.
+// 2-sample parallax sampling with squared barycentric blend for smooth seams.
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
 {
 	float adjustedMip = mipLevel * (1.0 + DISTANCE_MIP_SCALE);
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMip);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMip);
 
-	float h1 = s1.a > 0.001 ? s1.a : dot(s1.rgb, LUMINANCE_WEIGHTS);
-	float h2 = s2.a > 0.001 ? s2.a : dot(s2.rgb, LUMINANCE_WEIGHTS);
-
-	float w1 = offsets.weights.x * offsets.weights.x * (1.0 + HEIGHT_INFLUENCE * h1);
-	float w2 = offsets.weights.y * offsets.weights.y * (1.0 + HEIGHT_INFLUENCE * h2);
+	float w1 = offsets.weights.x * offsets.weights.x;
+	float w2 = offsets.weights.y * offsets.weights.y;
 
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
