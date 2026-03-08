@@ -85,10 +85,10 @@ namespace ExtendedMaterials
 #	define HEIGHT_POWER 2
 #	define HEIGHT_MULT 8
 
-// Stochastic blending averages multiple offset samples, flattening the height range.
-// These compensate for that energy loss in parallax height and shadow contrast.
-static const float STOCHASTIC_HEIGHT_BOOST = 1.3;
-static const float STOCHASTIC_SHADOW_GAMMA = 0.8;
+	// Stochastic blending averages multiple offset samples, flattening the height range.
+	// These compensate for that energy loss in parallax height and shadow contrast.
+	static const float STOCHASTIC_HEIGHT_BOOST = 1.3;
+	static const float STOCHASTIC_SHADOW_GAMMA = 0.8;
 
 	void ProcessTerrainHeightWeights(float heightBlend, float4 w1, float2 w2, float heights[6], inout float weights[6], out float totalHeight)
 	{
