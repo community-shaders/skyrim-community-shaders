@@ -126,8 +126,7 @@ namespace ExtendedMaterials
 
 	inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
 	{
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-			return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets, (float2)0, (float2)0);
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets, (float2)0, (float2)0);
 		return tex.SampleLevel(samp, coords, mipLevel);
 	}
 
