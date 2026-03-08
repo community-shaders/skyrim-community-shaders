@@ -13,8 +13,9 @@ static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 static const float HEIGHT_INFLUENCE = 0.9;
-static const float LOW_WEIGHT_THRESHOLD = 0.5;
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
+// Distance-based mip curve: smoothly increases mip at distance to save bandwidth
+static const float DISTANCE_MIP_SCALE = 0.25;  // Fraction of base mip added at distance
 
 // --------------------- STRUCTURES --------------------- //
 struct StochasticOffsets
@@ -61,38 +62,25 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 		barry = float3(-bz, 1.0 - f.y, 1.0 - f.x);
 	}
 
+	// Sort vertices by weight descending before hashing — only hash top 2.
+	if (barry.y > barry.x) {
+		float2 tV = v0; v0 = v1; v1 = tV;
+		float tW = barry.x; barry.x = barry.y; barry.y = tW;
+	}
+	if (barry.z > barry.x) {
+		float2 tV = v0; v0 = v2; v2 = tV;
+		float tW = barry.x; barry.x = barry.z; barry.z = tW;
+	}
+	if (barry.z > barry.y) {
+		float2 tV = v1; v1 = v2; v2 = tV;
+		float tW = barry.y; barry.y = barry.z; barry.z = tW;
+	}
+
 	StochasticOffsets o;
 	o.offset1 = hash2D2D(v0);
 	o.offset2 = hash2D2D(v1);
-	o.offset3 = hash2D2D(v2);
+	o.offset3 = 0;
 	o.weights = barry;
-
-	// Sort descending by barycentric weight (importance sampling)
-	if (o.weights.y > o.weights.x) {
-		float2 tO = o.offset1;
-		o.offset1 = o.offset2;
-		o.offset2 = tO;
-		float tW = o.weights.x;
-		o.weights.x = o.weights.y;
-		o.weights.y = tW;
-	}
-	if (o.weights.z > o.weights.x) {
-		float2 tO = o.offset1;
-		o.offset1 = o.offset3;
-		o.offset3 = tO;
-		float tW = o.weights.x;
-		o.weights.x = o.weights.z;
-		o.weights.z = tW;
-	}
-	if (o.weights.z > o.weights.y) {
-		float2 tO = o.offset2;
-		o.offset2 = o.offset3;
-		o.offset3 = tO;
-		float tW = o.weights.y;
-		o.weights.y = o.weights.z;
-		o.weights.z = tW;
-	}
-
 	return o;
 }
 
@@ -121,17 +109,13 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 	return lerp(s2, s1, offsetsLOD.weights.x);
 }
 
-// Layer-weight-aware stochastic sampling (Jason Booth technique).
-// Low-weight layers use 1 sample — the branch is coherent because layer weights
-// are constant per terrain cell, so entire wavefronts take the same path.
-// High-weight layers get 2-sample height-blended for quality.
-// Height is derived from alpha when available (displacement maps), luminance otherwise.
-inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float layerWeight)
+// 2-sample height-blended stochastic sampling — branchless, no wavefront divergence.
+// Sorting in ComputeStochasticOffsets guarantees offset1/offset2 are the two
+// highest-weight barycentric vertices, so dropping offset3 loses minimal quality.
+inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
 	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias;
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	if (layerWeight < LOW_WEIGHT_THRESHOLD)
-		return s1;
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 	float h1 = s1.a > 0.001 ? s1.a : dot(s1.rgb, LUMINANCE_WEIGHTS);
 	float h2 = s2.a > 0.001 ? s2.a : dot(s2.rgb, LUMINANCE_WEIGHTS);
@@ -140,20 +124,19 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
+// 2-sample branchless parallax sampling with smooth distance-based mip increase.
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
-	if (offsets.weights.z < 0.1)
-		return (s1 * offsets.weights.x + s2 * offsets.weights.y) * rcp(offsets.weights.x + offsets.weights.y);
-	float4 s3 = tex.SampleLevel(samp, uv + offsets.offset3, mipLevel);
-	return s1 * offsets.weights.x + s2 * offsets.weights.y + s3 * offsets.weights.z;
+	float adjustedMip = mipLevel * (1.0 + DISTANCE_MIP_SCALE);
+	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMip);
+	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMip);
+	return lerp(s2, s1, offsets.weights.x * rcp(offsets.weights.x + offsets.weights.y));
 }
 
-inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float layerWeight)
+inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
 	[branch] if (enabled)
-		return StochasticEffect(tex, samp, uv, offsets, layerWeight);
+		return StochasticEffect(tex, samp, uv, offsets);
 	return tex.SampleBias(samp, uv, SharedData::MipBias);
 }
 
