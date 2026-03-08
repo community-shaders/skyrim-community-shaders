@@ -152,8 +152,7 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 
 inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float layerWeight)
 {
-	[branch] if (enabled)
-		return StochasticEffect(tex, samp, uv, offsets, layerWeight);
+	[branch] if (enabled) return StochasticEffect(tex, samp, uv, offsets, layerWeight);
 	return tex.SampleBias(samp, uv, SharedData::MipBias);
 }
 
