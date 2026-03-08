@@ -3,8 +3,8 @@
 
 namespace Triplanar
 {
-	static const float BLEND_SHARPNESS = 6.0;   // Power for weight computation; higher = sharper axis transitions
-	static const float STRETCH_CUTOFF = 0.4;     // ~cos(66°) — per-axis alignment below this produces visible stretching
+	static const float BLEND_SHARPNESS = 6.0;  // Power for weight computation; higher = sharper axis transitions
+	static const float STRETCH_CUTOFF = 0.4;   // ~cos(66°) — per-axis alignment below this produces visible stretching
 
 	/// Compute triplanar blend weights using face normal mask and smooth vertex normal blend.
 	float3 GetWeights(float3 vertexNormal, float3 faceNormal, float sharpness = BLEND_SHARPNESS)
