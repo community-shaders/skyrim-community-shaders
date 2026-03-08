@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
+#include "Common/SharedData.hlsli"
 
 struct VS_INPUT
 {
@@ -241,6 +242,18 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 	psout.Color.w = input.Color.w * baseColor.w;
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+#		endif
+
+#		if defined(TEX) && !defined(MOONMASK) && !defined(HORIZFADE) && !defined(CLOUDS)
+	// Push the sun disc centre toward the display's peak brightness in HDR.
+	// ISHDR multiplies by paperWhite/80 then DICE tonemaps to peakNits/80,
+	// so we target peak/pw in gamma space. The alpha mask provides a smooth gradient.
+	if (SharedData::HDRData.x > 0.5) {
+		float peakOverPW = SharedData::HDRData.z / max(SharedData::HDRData.y, 1.0);
+		float targetGamma = Color::LinearToGamma(peakOverPW);
+		float sunMask = psout.Color.w * psout.Color.w;
+		psout.Color.xyz = lerp(psout.Color.xyz, max(psout.Color.xyz, targetGamma), sunMask);
+	}
 #		endif
 
 #	else
