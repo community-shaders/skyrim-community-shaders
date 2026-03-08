@@ -503,11 +503,11 @@ void HDRDisplay::LoadSettings(json& o_json)
 
 	settings = o_json;
 
-	// On first launch, auto-configure HDR based on display detection
+	// Defer first-launch auto-detection to SetupResources where the renderer is available.
+	// DetectHDR() needs a valid HWND which doesn't exist during early plugin init.
 	if (isFirstLaunch) {
-		bool hdrMonitor = DetectHDR();
-		settings.enableHDR = hdrMonitor;
-		logger::info("[HDR] First launch detected - auto-configuring HDR based on display: {}", hdrMonitor ? "enabled" : "disabled");
+		pendingAutoDetect = true;
+		logger::info("[HDR] First launch detected - deferring auto-detection to SetupResources");
 	}
 
 	if (settings.enableHDR != oldEnableHDR) {
@@ -557,6 +557,13 @@ void HDRDisplay::SetupResources()
 	}
 
 	DetectHDR();
+
+	if (pendingAutoDetect) {
+		pendingAutoDetect = false;
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		settings.enableHDR = isHDRMonitor;
+		logger::info("[HDR] Auto-configured HDR based on display: {}", isHDRMonitor ? "enabled" : "disabled");
+	}
 
 	// Cache display max luminance for UI display
 	cachedDisplayMaxLuminance = GetDisplayMaxLuminance();

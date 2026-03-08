@@ -108,6 +108,7 @@ struct HDRDisplay : public Feature
 
 	static bool DetectHDR();
 	static bool isHDRMonitor;
+	bool pendingAutoDetect = false;
 
 	float GetDisplayMaxLuminance() const;
 	mutable float cachedDisplayMaxLuminance = 1000.0f;

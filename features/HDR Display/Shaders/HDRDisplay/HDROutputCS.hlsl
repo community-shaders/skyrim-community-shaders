@@ -59,36 +59,14 @@ cbuffer PerFrame : register(b0)
 			// reference white to paperWhite nits on the display.
 			finalColor = Color::pq::Encode(sceneBT2020, sRGB_WhiteLevelNits);
 		} else {
-			// Replicate FidelityFX FG compositing exactly: encode both scene and UI to PQ,
-			// then premultiplied-alpha blend in PQ space.
-			//
-			// FG path: UIBrightnessCS converts UI to PQ, FidelityFX does:
-			//   result = ui_pq_premult + scene_pq * (1 - ui.a)
-			// Matching that here makes FG-on and FG-off visually identical.
+			// Composite in gamma space (matching SDR behavior), then convert to HDR.
+			// The vanilla UI was designed for gamma-space blending; compositing in PQ
+			// over-darkens and compositing in linear over-brightens behind UI overlays.
+			float3 composited = ui.rgb * uiBrightness + scene.rgb * (1.0 - ui.a);
 
-			// Scene: encode to PQ at 80 nits (ISHDR pre-scaled by pw/80, so ref white = pw nits)
-			float3 scenePQ = Color::pq::Encode(sceneBT2020, sRGB_WhiteLevelNits);
-
-			// Convert UI to premultiplied PQ, mirroring UIBrightnessCS.
-			// When alpha > 0: unpremultiply, convert to nits, re-premultiply in PQ space.
-			// When alpha == 0 but rgb != 0 (third-party/Scaleform UI that doesn't write dest alpha),
-			// apply the color transform on premultiplied values directly and composite additively.
-			float3 uiPremultPQ;
-			if (ui.a > 0.001) {
-				float3 uiStraight = ui.rgb / ui.a;
-				float3 uiLinear = Color::GammaToTrueLinear(max(0.0, uiStraight));
-				float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-				float3 uiNits = uiBT2020 * sRGB_WhiteLevelNits * uiBrightness;
-				uiPremultPQ = Color::pq::Encode(uiNits / 10000.0, 10000.0) * ui.a;
-			} else {
-				float3 uiLinear = Color::GammaToTrueLinear(max(0.0, ui.rgb));
-				float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-				float3 uiNits = uiBT2020 * sRGB_WhiteLevelNits * uiBrightness;
-				uiPremultPQ = Color::pq::Encode(uiNits / 10000.0, 10000.0);
-			}
-
-			// Premultiplied alpha blend in PQ space (additive when alpha = 0)
-			finalColor = uiPremultPQ + scenePQ * (1.0 - ui.a);
+			float3 compositedLinear = Color::GammaToLinear(max(0.0, composited));
+			float3 compositedBT2020 = Color::BT709ToBT2020(compositedLinear);
+			finalColor = Color::pq::Encode(max(0.0, compositedBT2020), sRGB_WhiteLevelNits);
 		}
 	} else {
 		float3 sceneGamma = scene.rgb;
