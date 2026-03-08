@@ -198,10 +198,9 @@ namespace ExtendedMaterials
 		//Single active layer fast path, skips expensive weight processing
 		if (countbits(activeMask) == 1) {
 			uint layerIdx = firstbitlow(activeMask);
-			float layerWeights[6] = { w1.x, w1.y, w1.z, w1.w, w2.x, w2.y };
 			weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0;
 			weights[layerIdx] = 1.0;
-			float total = layerWeights[layerIdx] >= 0.999 ? heights[layerIdx] : heights[layerIdx] * layerWeights[layerIdx];
+			float total = heights[layerIdx];
 			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
 				total *= STOCHASTIC_HEIGHT_BOOST;
 			return total;
