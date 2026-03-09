@@ -40,18 +40,31 @@ public:
 
 	float2 jitter = { 0, 0 };
 
-	enum class UpscaleMethod
+	enum UpscaleMethod : uint32_t
 	{
-		kNONE,
-		kTAA,
-		kFSR,
-		kDLSS
+		kNONE = 1 << 0,
+		kTAA = 1 << 1,
+		kFSR = 1 << 2,
+		kDLSS = 1 << 3,
+		kDLSS_RR = 1 << 4
 	};
+
+	constexpr static const char* upscaleModeLabels[] = {
+		"None", 
+		"TAA",
+		"AMD FSR 3.1",
+		"NVIDIA DLSS",
+		"NVIDIA DLSS RR"
+	};
+	
+	static_assert(magic_enum::enum_count<UpscaleMethod>() == _countof(upscaleModeLabels));
+
+	constexpr static const char* dlssModelPresets[] = { "Default", "Preset J", "Preset K", "Preset L", "Preset M" };
+	constexpr static const char* dlssRRModelPresets[] = { "Default", "Preset D", "Preset E" };
 
 	struct Settings
 	{
-		uint upscaleMethod = (uint)UpscaleMethod::kDLSS;
-		uint upscaleMethodNoDLSS = (uint)UpscaleMethod::kFSR;
+		UpscaleMethod upscaleMethod = UpscaleMethod::kDLSS;
 		uint qualityMode = 1;  // Default to Quality (1=Quality, 2=Balanced, 3=Performance, 4=Ultra Performance, 0=Native AA)
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
@@ -60,6 +73,8 @@ public:
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
 		uint presetDLSS = 0;  // 0=Default, 1=J, 2=K, 3=L, 4=M
+		uint presetDLSSRR = 0;  // 0=Default, 1=D, 2=E
+		float depthDisocclusion = 0.1f;
 	};
 
 	Settings settings;
@@ -72,8 +87,9 @@ public:
 
 	struct UpscalingDataCB
 	{
-		float2 trueSamplingDim;  // BufferDim.xy * ResolutionScale
-		float2 pad0;
+		float2 resolutionScale;
+		float depthDisocclusion = 0.1f;
+		float pad0;
 	};
 
 	ConstantBuffer* jitterCB = nullptr;
@@ -117,7 +133,7 @@ public:
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 
-	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5];  // One for each UpscaleMethod
+	eastl::unordered_map<UpscaleMethod, winrt::com_ptr<ID3D11ComputeShader>> encodeTexturesCS;  // One for each UpscaleMethod
 	ID3D11ComputeShader* GetEncodeTexturesCS();
 
 	winrt::com_ptr<ID3D11PixelShader> depthRefractionUpscalePS;
@@ -132,6 +148,9 @@ public:
 	winrt::com_ptr<ID3D11DepthStencilState> upscaleDepthStencilState;
 	winrt::com_ptr<ID3D11BlendState> upscaleBlendState;
 	winrt::com_ptr<ID3D11RasterizerState> upscaleRasterizerState;
+
+	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS;
+	ID3D11ComputeShader* GetCopyDepthCS();
 
 	// Shared VR HMD Mask Clearing
 	winrt::com_ptr<ID3D11ComputeShader> vrClearHMDMaskCS;
@@ -190,10 +209,13 @@ public:
 
 	bool previousUpscalingWasActive = false;
 
+	bool d3d12Mode = false;
+
 	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();
 	void UpscaleDepth();
+	void EncodeTextures();
 
 	/**
 	 * @brief Applies RCAS sharpening to the main render target after DLSS upscaling.
@@ -218,7 +240,8 @@ public:
 	bool IsBackendInitialized() const;
 	void CheckBackendFeatures(IDXGIAdapter* adapter);
 	void UpgradeBackendInterface(void** ppInterface);
-	void SetBackendD3DDevice(ID3D11Device* device);
+	void SetBackendD3D11Device(ID3D11Device* device);
+	void SetBackendD3D12Device(ID3D12Device5* device);
 	void PostBackendDevice();
 
 	// Module availability methods
@@ -273,3 +296,5 @@ private:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 };
+
+DEFINE_ENUM_FLAG_OPERATORS(Upscaling::UpscaleMethod);

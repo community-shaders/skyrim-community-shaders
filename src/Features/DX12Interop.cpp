@@ -88,12 +88,26 @@ void DX12Interop::InitializePIX()
 	DX::ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&ga)));
 }
 
+bool DX12Interop::D3D12Mode()
+{
+	auto& rt = globals::features::raytracing;
+
+	if (rt.loaded)
+		return true;
+
+	auto& up = globals::features::upscaling;
+
+	if (up.loaded && up.settings.frameGenerationMode)
+		return true;
+
+	return false;
+}
+
 void DX12Interop::Init(ID3D11Device* a_d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter)
 {
 	auto& rt = globals::features::raytracing;
-	auto& up = globals::features::upscaling;
 
-	if (!rt.loaded && !(up.loaded && up.IsFrameGenerationActive()))
+	if (!D3D12Mode())
 		return;
 
 	active = true;
@@ -105,13 +119,36 @@ void DX12Interop::Init(ID3D11Device* a_d3d11Device, ID3D11DeviceContext* immedia
 
 	CreateD3D12Device(adapter);
 
+	CreateInterop();
+
 	if (rt.loaded)
-		rt.InitializeCERaytracing(d3d11Device.get(), d3d12Device.get(), commandQueue.get(), nullptr, nullptr);
+		rt.InitializeCERaytracing(d3d11Device.get(), d3d12Device.get(), commandQueue.get(), computeCommandQueue.get(), copyCommandQueue.get());
 }
 
 void DX12Interop::CreateD3D12Device(IDXGIAdapter* a_adapter)
 {
+	if (settings.EnableDebugDevice) {
+		winrt::com_ptr<ID3D12Debug3> debugController;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+			debugController->EnableDebugLayer();
+			debugController->SetEnableGPUBasedValidation(TRUE);
+		} else {
+			logger::critical("[DX12Interop] Debug layer creation failed.");
+		}		
+	}
+
 	DX::ThrowIfFailed(D3D12CreateDevice(a_adapter, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&d3d12Device)));
+
+	if (settings.EnableDebugDevice) {
+		winrt::com_ptr<ID3D12InfoQueue> infoQueue;
+		if (SUCCEEDED(d3d12Device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, FALSE);
+		} else {
+			logger::critical("[DX12Interop] Debug break creation failed.");
+		}
+	}
 
 	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -121,11 +158,15 @@ void DX12Interop::CreateD3D12Device(IDXGIAdapter* a_adapter)
 
 	DX::ThrowIfFailed(d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue)));
 
-	for (int i = 0; i < 2; i++) {
-		DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocators[i])));
-		DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators[i].get(), nullptr, IID_PPV_ARGS(&commandLists[i])));
-		commandLists[i]->Close();
-	}
+	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
+	DX::ThrowIfFailed(d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&computeCommandQueue)));
+
+	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
+	DX::ThrowIfFailed(d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&copyCommandQueue)));
+
+	DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)));
+	DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.get(), nullptr, IID_PPV_ARGS(&commandList)));
+	commandList->Close();
 }
 
 void DX12Interop::CreateInterop()
@@ -147,19 +188,31 @@ void DX12Interop::SetD3D11DeviceContext(ID3D11DeviceContext* a_d3d11Context)
 	DX::ThrowIfFailed(a_d3d11Context->QueryInterface(IID_PPV_ARGS(&d3d11Context)));
 }
 
-void DX12Interop::CreateSharedResources()
+void DX12Interop::SetupResources()
 {
 	auto renderer = globals::game::renderer;
 
-	// Create depth buffer
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	D3D11_TEXTURE2D_DESC texDesc{};
-	main.texture->GetDesc(&texDesc);
+	D3D11_TEXTURE2D_DESC mainDesc{};
+	main.texture->GetDesc(&mainDesc);
+
+	// Create depth buffer
+	auto texDesc = mainDesc;
 	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	depthBufferShared12 = new WrappedResource(texDesc, d3d11Device.get(), d3d12Device.get());
+	sharedResources.depth = new WrappedResource(texDesc, d3d11Device.get(), d3d12Device.get());
 
 	// Create motion vector buffer
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 	motionVector.texture->GetDesc(&texDesc);
-	motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device.get(), d3d12Device.get());
+	mainDesc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
+	sharedResources.motionVector = new WrappedResource(texDesc, d3d11Device.get(), d3d12Device.get());
+
+	// 
+	mainDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS;
+	sharedResources.main = new WrappedResource(mainDesc, d3d11Device.get(), d3d12Device.get());
+
+	// Upscaler reactive mask
+	mainDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+	mainDesc.Format = DXGI_FORMAT_R8_UNORM;
+	sharedResources.reactiveMask = new WrappedResource(mainDesc, d3d11Device.get(), d3d12Device.get());
 }

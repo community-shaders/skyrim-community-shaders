@@ -338,20 +338,3 @@ DX12SwapChain::BlurResources DX12SwapChain::GetBlurResources() const
 	}
 	return res;
 }
-
-void DX12SwapChain::CreateSharedResources()
-{
-	auto renderer = globals::game::renderer;
-
-	// Create depth buffer
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	D3D11_TEXTURE2D_DESC texDesc{};
-	main.texture->GetDesc(&texDesc);
-	texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	depthBufferShared12 = new WrappedResource(texDesc, d3d11Device.get(), d3d12Device.get());
-
-	// Create motion vector buffer
-	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	motionVector.texture->GetDesc(&texDesc);
-	motionVectorBufferShared12 = new WrappedResource(texDesc, d3d11Device.get(), d3d12Device.get());
-}

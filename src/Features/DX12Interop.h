@@ -25,6 +25,9 @@ struct DX12Interop : public Feature
 	virtual void SaveSettings(json& o_json) override;
 	virtual void DrawSettings() override;
 
+	// Resources
+	virtual void SetupResources() override;
+
 	struct Settings
 	{
 		bool EnablePIXCapture = false;
@@ -32,22 +35,29 @@ struct DX12Interop : public Feature
 	} settings;
 
 	winrt::com_ptr<ID3D12Device5> d3d12Device;
+
 	winrt::com_ptr<ID3D12CommandQueue> commandQueue;
-	winrt::com_ptr<ID3D12CommandAllocator> commandAllocators[2];
-	winrt::com_ptr<ID3D12GraphicsCommandList4> commandLists[2];
+	winrt::com_ptr<ID3D12CommandQueue> computeCommandQueue;
+	winrt::com_ptr<ID3D12CommandQueue> copyCommandQueue;
 
-	WrappedResource* swapChainBufferWrapped;
-	WrappedResource* uiBufferWrapped;
+	winrt::com_ptr<ID3D12CommandAllocator> commandAllocator;
+	winrt::com_ptr<ID3D12GraphicsCommandList4> commandList;
 
-	// D3D12 interop resources for frame generation
-	WrappedResource* depthBufferShared12 = nullptr;
-	WrappedResource* motionVectorBufferShared12 = nullptr;
+	struct SharedResources
+	{
+		WrappedResource* main = nullptr;
+		WrappedResource* depth = nullptr;
+		WrappedResource* motionVector = nullptr;
+		WrappedResource* reactiveMask = nullptr;
+	} sharedResources;
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;
 
 	winrt::com_ptr<ID3D11Fence> d3d11Fence;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence;
+
+	UINT64 fenceValue = 0;
 
 	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
 
@@ -61,7 +71,38 @@ struct DX12Interop : public Feature
 
 	void Init(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
 
+	// Executes D3D12 commands mid D3D11 execution, probably huge overhead from wait commands so use sparsely and wisely
+	template <typename Func>
+	void Execute(Func func)
+	{
+		// Wait for D3D11 to finish
+		DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
+		DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
+		fenceValue++;
+
+		// New frame, reset
+		DX::ThrowIfFailed(commandAllocator->Reset());
+		DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
+
+		// Execute
+		func(commandList.get());
+
+		DX::ThrowIfFailed(commandList->Close());
+
+		ID3D12CommandList* commandListsToExecute[] = { commandList.get() };
+		commandQueue->ExecuteCommandLists(1, commandListsToExecute);
+
+		// Wait for D3D12 to finish
+		DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
+		DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
+		fenceValue++;
+	}
+
 	bool Active() const;
+	
+	// Wether DirectX 12 is required or not
+	// True when Raytracing is loaded or Upscaling is loaded in frame generation mode
+	static bool D3D12Mode();
 
 private:
 	void SetD3D11Device(ID3D11Device* a_d3d11Device);

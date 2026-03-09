@@ -10,6 +10,8 @@
 
 #include "DX12Interop.h"
 
+#include "Deferred.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
 	PerfOverlay,
@@ -35,6 +37,91 @@ void Raytracing::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
+static void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f)
+{
+	float floats[2] = { v.x, v.y };
+	if (ImGui::SliderFloat2(label, floats, min, max)) {
+		v = { floats[0], floats[1] };
+		v.Clamp({ min, min }, { max, max });
+	}
+}
+
+template <typename T>
+	requires std::is_enum_v<T>
+static bool DrawEnumRadio(const char* label, T& variable, const char* tooltip = nullptr, const char* const* tooltips = nullptr)
+{
+	ImGui::PushID(label);
+
+	auto variablePrev = variable;
+
+	int denoiser = static_cast<int32_t>(variable);
+	ImGui::TextUnformatted(label);
+
+	if (tooltip != nullptr)
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("%s", tooltip);
+
+	ImGui::SameLine();
+	ImGui::Dummy(ImVec2(25, 0));
+
+	auto i = 0;
+
+	for (auto& [value, name] : magic_enum::enum_entries<T>()) {
+		ImGui::SameLine();
+		ImGui::RadioButton(name.data(), &denoiser, static_cast<int32_t>(value));
+
+		if (tooltips != nullptr)
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", tooltips[i]);
+
+		i++;
+	}
+
+	ImGui::PopID();
+
+	variable = static_cast<T>(denoiser);
+
+	return variable != variablePrev;
+}
+
+template <typename T>
+	requires std::is_enum_v<T>
+static bool DrawEnumCombo(const char* label, T& variable, const char* tooltip = nullptr, const char* const* tooltips = nullptr)
+{
+	ImGui::PushID(label);
+
+	auto variablePrev = variable;
+
+	if (ImGui::BeginCombo(label, magic_enum::enum_name(variable).data())) {
+		auto i = 0;
+
+		for (auto& value : magic_enum::enum_values<T>()) {
+			bool isSelected = (variable == value);
+
+			if (ImGui::Selectable(magic_enum::enum_name(value).data(), isSelected))
+				variable = value;
+
+			if (tooltips != nullptr)
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", tooltips[i]);
+
+			if (isSelected)
+				ImGui::SetItemDefaultFocus();
+
+			i++;
+		}
+
+		ImGui::EndCombo();
+	} else if (tooltip != nullptr) {
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("%s", tooltip);
+	}
+
+	ImGui::PopID();
+
+	return variable != variablePrev;
+}
+
 void Raytracing::DrawSettings()
 {
 	bool forcedDisabledReason = disableReason != DisableReason::None;
@@ -46,7 +133,17 @@ void Raytracing::DrawSettings()
 
 	ImGui::Checkbox("Enabled", &settings.CreationEngineRaytracingSettings.Enabled);
 
-	ImGui::Checkbox("Path Tracing", &settings.CreationEngineRaytracingSettings.PathTracing);
+	DrawEnumRadio("Mode", settings.CreationEngineRaytracingSettings.GeneralSettings.Mode);
+
+	bool ptMode = settings.CreationEngineRaytracingSettings.GeneralSettings.Mode == CreationEngineRaytracing::Mode::PathTracing;
+
+	if (ptMode)
+		ImGui::BeginDisabled();
+
+	ImGui::Checkbox("Raytraced Shadows", &settings.CreationEngineRaytracingSettings.GeneralSettings.RaytracedShadows);
+
+	if (ptMode)
+		ImGui::EndDisabled();
 
 	if (forcedDisabledReason)
 		ImGui::EndDisabled();
@@ -77,15 +174,6 @@ void Raytracing::DrawSettings()
 
 	if (ceRTSettingsBefore != settings.CreationEngineRaytracingSettings)
 		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
-}
-
-static void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f)
-{
-	float floats[2] = { v.x, v.y };
-	if (ImGui::SliderFloat2(label, floats, min, max)) {
-		v = { floats[0], floats[1] };
-		v.Clamp({ min, min }, { max, max });
-	}
 }
 
 void Raytracing::DrawGeneralSettings()
@@ -283,6 +371,9 @@ void Raytracing::CompileShaders()
 	const auto skyHemiSize = std::to_string(SKY_HEMI_SIZE);
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CubeToHemiCS.hlsl", { { "RESOLUTION", skyHemiSize.c_str() } }, "cs_5_0")); rawPtr)
 		cubeToHemiCS.attach(rawPtr);
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\PTCompositeCS.hlsl", {}, "cs_5_0")); rawPtr)
+		ptCompositeCS.attach(rawPtr);
 }
 
 void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue)
@@ -317,8 +408,6 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 			logger::critical("[Raytracing] Debug break creation failed.");
 		}
 	}
-
-
 
 	bool result = creationEngineRaytracing->Initialize(d3d11Device, d3d12Device, commandQueue, computeCommandQueue, copyCommandQueue);
 
@@ -356,6 +445,26 @@ bool Raytracing::UpdateResolution()
 	return true;
 }
 
+void ShareTexture(ID3D11Texture2D* d3d11Texture, ID3D12Resource** d3d12Resource, bool nt = false, uint accessFlags = DXGI_SHARED_RESOURCE_READ) // DXGI_SHARED_RESOURCE_WRITE
+{
+	D3D11_TEXTURE2D_DESC desc;
+	d3d11Texture->GetDesc(&desc);
+
+	IDXGIResource1* dxgiResource;
+	DX::ThrowIfFailed(d3d11Texture->QueryInterface(IID_PPV_ARGS(&dxgiResource)));
+
+	HANDLE sharedHandle = nullptr;
+
+	if (nt)
+		DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, accessFlags, nullptr, &sharedHandle));
+	else
+		DX::ThrowIfFailed(dxgiResource->GetSharedHandle(&sharedHandle));
+
+	DX::ThrowIfFailed(globals::features::dx12Interop.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(d3d12Resource)));
+
+	CloseHandle(sharedHandle);
+}
+
 void Raytracing::SetupResources()
 {
 	auto renderer = globals::game::renderer;
@@ -370,7 +479,17 @@ void Raytracing::SetupResources()
 
 	auto& d3d11Device = globals::features::dx12Interop.d3d11Device;
 
+	// Gbuffer Textures
+	{
+		ShareTexture(renderer->GetRuntimeData().renderTargets[ALBEDO].texture, albedoTexture.put());
+		ShareTexture(renderer->GetRuntimeData().renderTargets[MASKS2].texture, gnmaoTexture.put());
+	}
+
 	featureData = eastl::make_unique<FeatureData>();
+
+	screenCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<ScreenData>());
+
+	screenData = eastl::make_unique<ScreenData>();
 
 	logger::debug("Creating samplers...");
 	{
@@ -500,15 +619,48 @@ void Raytracing::DeferredPasses()
 
 	creationEngineRaytracing->WaitExecution();
 
-	auto renderer = globals::game::renderer;
+	auto screenSize = globals::state->screenSize;
+	auto dynamicScreenSize = Util::ConvertToDynamic(screenSize);
 
+	screenData->Resolution = { static_cast<uint>(screenSize.x), static_cast<uint>(screenSize.y) };
+	screenData->DynamicResolution = { static_cast<uint>(dynamicScreenSize.x), static_cast<uint>(dynamicScreenSize.y) };
+
+	screenCB->Update(screenData.get(), sizeof(ScreenData));
+
+	auto mode = settings.CreationEngineRaytracingSettings.GeneralSettings.Mode;
+
+	auto renderer = globals::game::renderer;
 	auto* context = globals::d3d::context;
 
-	context->CopyResource(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture, mainTexture->resource11);
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	if (settings.CreationEngineRaytracingSettings.PathTracing) {
-		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		context->ClearRenderTargetView(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
+	if (mode == CreationEngineRaytracing::Mode::GlobalIllumination) {
+		context->CopyResource(main.texture, mainTexture->resource11);
+	} 
+	else if (mode == CreationEngineRaytracing::Mode::PathTracing) {
+		// Blend PT and Sky
+		{
+			ID3D11Buffer* cb = screenCB->CB();
+			context->CSSetConstantBuffers(0, 1, &cb);
+			context->CSSetShader(ptCompositeCS.get(), nullptr, 0);
+
+			context->CSSetShaderResources(0, 1, &mainTexture->srv);
+
+			ID3D11UnorderedAccessView* uav = main.UAV;
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+			auto dispatchCount = Util::GetScreenDispatchCount(true);
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+			uav = nullptr;
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		}
+
+		// Clear Specular RT
+		{
+			float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+			context->ClearRenderTargetView(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
+		}
 	}
 
 	if (pixCapture && pixCaptureStarted) {

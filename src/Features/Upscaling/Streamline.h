@@ -13,6 +13,7 @@
 #include <sl.h>
 #include <sl_consts.h>
 #include <sl_dlss.h>
+#include <sl_dlss_d.h>
 #include <sl_matrix_helpers.h>
 #include <sl_version.h>
 #pragma warning(pop)
@@ -30,7 +31,16 @@ public:
 	bool initialized = false;
 	bool triedInitialization = false;
 
-	bool featureDLSS = false;
+	eastl::vector<sl::Feature> features;
+
+	enum Features
+	{
+		kNone = 0,
+		kDLSS = 1 << 0,
+		kDLSS_RR = 1 << 1
+	} loadedFeatures;
+
+	bool d3d12Mode = false;
 
 	sl::ViewportHandle viewport{ 0 };
 	sl::ViewportHandle viewportRight{ 1 };
@@ -61,6 +71,8 @@ public:
 	PFun_slDLSSGetState* slDLSSGetState{};
 	PFun_slDLSSSetOptions* slDLSSSetOptions{};
 
+	SL_FUN_DECL(slDLSSDSetOptions);
+
 	Util::FrameChecker frameChecker;
 	sl::FrameToken* frameToken = nullptr;
 
@@ -72,10 +84,20 @@ public:
 		ID3D11Resource* mvec, ID3D11Resource* reactiveMask, ID3D11Resource* transparencyMask,
 		const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth);
 
+	void EvaluateDLSS(ID3D12GraphicsCommandList4* commandList, sl::ViewportHandle vp,
+		ID3D12Resource* colorIn, ID3D12Resource* colorOut, ID3D12Resource* depth, ID3D12Resource* mvec, ID3D12Resource* reactiveMask,
+		ID3D12Resource* diffuseAlbedo, ID3D12Resource* specularAlbedo, ID3D12Resource* normalRoughness, ID3D12Resource* specHitDistance,
+		const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth);
+
+	void EvaluateDLSSD(ID3D12GraphicsCommandList4* commandList, sl::ViewportHandle vp,
+		ID3D12Resource* colorIn, ID3D12Resource* colorOut, ID3D12Resource* depth, ID3D12Resource* mvec, ID3D12Resource* reactiveMask,
+		ID3D12Resource* diffuseAlbedo, ID3D12Resource* specularAlbedo, ID3D12Resource* normalRoughness, ID3D12Resource* specHitDistance,
+		const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth);
+
 	// Cached DLL version info for Streamline plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
 
-	void LoadInterposer();
+	void LoadInterposer(bool a_d3d12Mode);
 
 	void CheckFeatures(IDXGIAdapter* a_adapter);
 
@@ -87,7 +109,15 @@ public:
 
 	void SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width);
 
+	void SetDLSSDOptions(sl::ViewportHandle p_viewport, uint32_t width);
+
 	void Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors);
+
+	void Upscale(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* a_input, ID3D12Resource* a_output, ID3D12Resource* a_depth, ID3D12Resource* a_motionVectors, ID3D12Resource* a_reactiveMask);
+
+	void DenoiseUpscale(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* a_upscalingTexture, ID3D12Resource* a_depth, ID3D12Resource* a_motionVectors, ID3D12Resource* a_reactiveMask);
 
 	void DestroyDLSSResources();
 };
+
+DEFINE_ENUM_FLAG_OPERATORS(Streamline::Features);

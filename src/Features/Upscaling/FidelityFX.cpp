@@ -6,6 +6,7 @@
 #include "../../Utils/FileSystem.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
+#include "Features/DX12Interop.h"
 
 ffxFunctions ffxModule;
 
@@ -147,8 +148,10 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 
 		dispatchParameters.frameID = frameID;
 
-		dispatchParameters.depth = ffxApiGetResourceDX12(swapChain.depthBufferShared12->resource.get());
-		dispatchParameters.motionVectors = ffxApiGetResourceDX12(swapChain.motionVectorBufferShared12->resource.get());
+		auto& sharedResources = globals::features::dx12Interop.sharedResources;
+
+		dispatchParameters.depth = ffxApiGetResourceDX12(sharedResources.depth->resource.get());
+		dispatchParameters.motionVectors = ffxApiGetResourceDX12(sharedResources.motionVector->resource.get());
 
 		ffx::DispatchDescFrameGenerationPrepareCameraInfo cameraConfig{};
 

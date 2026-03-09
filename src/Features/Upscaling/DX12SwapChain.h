@@ -60,10 +60,6 @@ public:
 	WrappedResource* swapChainBufferWrapped;
 	WrappedResource* uiBufferWrapped;
 
-	// D3D12 interop resources for frame generation
-	WrappedResource* depthBufferShared12 = nullptr;
-	WrappedResource* motionVectorBufferShared12 = nullptr;
-
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;
 
@@ -112,7 +108,4 @@ public:
 
 	// Get all resources needed for background blur in one call
 	BlurResources GetBlurResources() const;
-
-	// D3D12 interop resource management
-	void CreateSharedResources();
 };

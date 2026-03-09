@@ -22,6 +22,22 @@
 
 struct CreationEngineRaytracing
 {
+	enum class Mode
+	{
+		GlobalIllumination,
+		PathTracing
+	};
+
+	struct GeneralSettings
+	{
+		Mode Mode = Mode::GlobalIllumination;
+		bool RaytracedShadows = false;
+
+		bool operator==(const GeneralSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GeneralSettings, Mode, RaytracedShadows)
+	};
+
 	struct RaytracingSettings
 	{
 		int Bounces = 2;
@@ -92,7 +108,7 @@ struct CreationEngineRaytracing
 	struct Settings
 	{
 		bool Enabled = true;
-		bool PathTracing = true;
+		GeneralSettings GeneralSettings;
 		LightSettings LightSettings;
 		LightingSettings LightingSettings;
 		RaytracingSettings RaytracingSettings;
@@ -102,7 +118,7 @@ struct CreationEngineRaytracing
 
 		bool operator==(const Settings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, Enabled, PathTracing, LightSettings, LightingSettings, RaytracingSettings, MaterialSettings, SHaRCSettings, DebugSettings)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, Enabled, GeneralSettings, LightSettings, LightingSettings, RaytracingSettings, MaterialSettings, SHaRCSettings, DebugSettings)
 	};
 
 	HMODULE handle = nullptr;
@@ -117,6 +133,7 @@ struct CreationEngineRaytracing
 	using GetFrameTimeFn = float* (*)();
 	using UpdateSettingsFn = void (*)(Settings);
 	using GetRRInputFn = void(*)(ID3D12Resource*&, ID3D12Resource*&, ID3D12Resource*&, ID3D12Resource*&);
+	using SetRenderTargetsFn = void(*)(ID3D12Resource*, ID3D12Resource*, ID3D12Resource*);
 
 	InitializeFn Initialize = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
@@ -127,6 +144,7 @@ struct CreationEngineRaytracing
 	GetFrameTimeFn GetFrameTime = nullptr;
 	UpdateSettingsFn UpdateSettings = nullptr;
 	GetRRInputFn GetRRInput = nullptr;
+	SetRenderTargetsFn SetRenderTargets = nullptr;
 
 	CreationEngineRaytracing()
 	{
@@ -184,6 +202,11 @@ struct CreationEngineRaytracing
 
 		if (!GetRRInput)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' GetRRInput is nullptr");
+
+		SetRenderTargets = reinterpret_cast<SetRenderTargetsFn>(GetProcAddress(handle, "SetRenderTargets"));
+
+		if (!SetRenderTargets)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetRenderTargets is nullptr");	
 	}
 };
 
@@ -313,12 +336,29 @@ struct Raytracing : public OverlayFeature
 
 	eastl::unique_ptr<WrappedResource> mainTexture = nullptr; 
 
+	winrt::com_ptr<ID3D12Resource> albedoTexture = nullptr;
+	eastl::unique_ptr<WrappedResource> normalRoughnessTexture = nullptr; 
+	winrt::com_ptr<ID3D12Resource> gnmaoTexture = nullptr;
+
 	eastl::unique_ptr<WrappedResource> skyHemisphere = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
 
 	RE::NiPointer<RE::TESWaterReflections> waterReflections = nullptr;
 
 	eastl::unique_ptr<CreationEngineRaytracing> creationEngineRaytracing = nullptr;
+
+	struct alignas(16) ScreenData
+	{
+		uint2 Resolution;
+		uint2 DynamicResolution;
+	};
+	static_assert(sizeof(ScreenData) % 16 == 0);
+
+	eastl::unique_ptr<ConstantBuffer> screenCB = nullptr; 
+
+	eastl::unique_ptr<ScreenData> screenData;
+
+	winrt::com_ptr<ID3D11ComputeShader> ptCompositeCS = nullptr;
 
 	float* frameTime;
 
