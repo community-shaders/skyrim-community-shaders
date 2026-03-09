@@ -323,7 +323,7 @@ void Deferred::StartDeferred()
 		SPECULAR,
 		REFLECTANCE,
 		MASKS,
-		RE::RENDER_TARGET::kNONE
+		MASKS2
 	};
 
 	for (uint i = 2; i < 8; i++) {
