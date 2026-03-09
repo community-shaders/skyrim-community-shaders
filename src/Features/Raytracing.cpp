@@ -264,17 +264,6 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::Checkbox("Performance Overlay", &settings.PerfOverlay);
 
-	ImGui::Checkbox("Enable PIX Capture", &settings.EnablePIXCapture);
-
-	if (settings.EnablePIXCapture) {
-		if (ImGui::Button("Capture")) {
-			pixCapture = true;
-			pixCaptureStarted = false;
-		}
-	}
-
-	ImGui::Checkbox("Enable Debug Device", &settings.EnableDebugDevice);
-
 	ImGui::PopID();
 
 	ImGui::EndTabItem();
@@ -380,34 +369,6 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 {
 	if (initialized)
 		return;
-
-	bool debugDevice = !settings.EnablePIXCapture && settings.EnableDebugDevice;
-
-	// Create debug device
-	if (debugDevice) {
-		winrt::com_ptr<ID3D12Debug3> debugController;
-		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
-			debugController->EnableDebugLayer();
-			debugController->SetEnableGPUBasedValidation(TRUE);
-		} else {
-			logger::critical("[Raytracing] Debug layer creation failed.");
-		}
-
-		winrt::com_ptr<ID3D12DeviceRemovedExtendedDataSettings1> pDredSettings;
-		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&pDredSettings)))) {
-			pDredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-			pDredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-		}
-
-		winrt::com_ptr<ID3D12InfoQueue> infoQueue;
-		if (SUCCEEDED(d3d12Device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
-			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
-			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
-			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, FALSE);
-		} else {
-			logger::critical("[Raytracing] Debug break creation failed.");
-		}
-	}
 
 	bool result = creationEngineRaytracing->Initialize(d3d11Device, d3d12Device, commandQueue, computeCommandQueue, copyCommandQueue);
 

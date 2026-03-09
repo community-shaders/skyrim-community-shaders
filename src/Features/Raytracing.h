@@ -282,8 +282,6 @@ struct Raytracing : public OverlayFeature
 	struct Settings
 	{
 		bool PerfOverlay = true;
-		bool EnablePIXCapture = false;
-		bool EnableDebugDevice = false;
 		CreationEngineRaytracing::Settings CreationEngineRaytracingSettings;
 	} settings;
 
