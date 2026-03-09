@@ -23,6 +23,7 @@ struct StochasticOffsets
 {
 	float2 offset1;
 	float2 offset2;
+	float2 offset3;
 	float3 weights;
 };
 
@@ -64,33 +65,22 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 
 	// Sort vertices by weight descending before hashing — only hash top 2.
 	if (barry.y > barry.x) {
-		float2 tV = v0;
-		v0 = v1;
-		v1 = tV;
-		float tW = barry.x;
-		barry.x = barry.y;
-		barry.y = tW;
+		float2 tV = v0; v0 = v1; v1 = tV;
+		float tW = barry.x; barry.x = barry.y; barry.y = tW;
 	}
 	if (barry.z > barry.x) {
-		float2 tV = v0;
-		v0 = v2;
-		v2 = tV;
-		float tW = barry.x;
-		barry.x = barry.z;
-		barry.z = tW;
+		float2 tV = v0; v0 = v2; v2 = tV;
+		float tW = barry.x; barry.x = barry.z; barry.z = tW;
 	}
 	if (barry.z > barry.y) {
-		float2 tV = v1;
-		v1 = v2;
-		v2 = tV;
-		float tW = barry.y;
-		barry.y = barry.z;
-		barry.z = tW;
+		float2 tV = v1; v1 = v2; v2 = tV;
+		float tW = barry.y; barry.y = barry.z; barry.z = tW;
 	}
 
 	StochasticOffsets o;
 	o.offset1 = hash2D2D(v0);
 	o.offset2 = hash2D2D(v1);
+	o.offset3 = 0;
 	o.weights = barry;
 	return o;
 }
@@ -104,6 +94,7 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 	StochasticOffsets o;
 	o.offset1 = h1 * 0.08;
 	o.offset2 = h2 * 0.08;
+	o.offset3 = 0;
 	o.weights = float3(0.65, 0.35, 0.0);
 	return o;
 }
@@ -141,22 +132,27 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
-// 2-sample parallax sampling with squared barycentric blend for smooth seams.
+// 2-sample parallax sampling — uses heightmap (alpha) only for blend weights.
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
 {
 	float adjustedMip = mipLevel * (1.0 + DISTANCE_MIP_SCALE);
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMip);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMip);
 
-	float w1 = offsets.weights.x * offsets.weights.x;
-	float w2 = offsets.weights.y * offsets.weights.y;
+	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
+	float w1 = pow(saturate(offsets.weights.x), contrastFactor);
+	float w2 = pow(saturate(offsets.weights.y), contrastFactor);
+
+	w1 *= (1.0 + HEIGHT_INFLUENCE * s1.a);
+	w2 *= (1.0 + HEIGHT_INFLUENCE * s2.a);
 
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
 inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
-	[branch] if (enabled) return StochasticEffect(tex, samp, uv, offsets);
+	[branch] if (enabled)
+		return StochasticEffect(tex, samp, uv, offsets);
 	return tex.SampleBias(samp, uv, SharedData::MipBias);
 }
 
