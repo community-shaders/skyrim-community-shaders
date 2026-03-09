@@ -383,8 +383,6 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 
 	initialized = true;
 
-	creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
-
 	UpdateResolution();
 
 	frameTime = creationEngineRaytracing->GetFrameTime();
@@ -434,17 +432,32 @@ void Raytracing::SetupResources()
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	mainTex.texture->GetDesc(&mainDesc);
 
+	// Gbuffer Textures
+	ShareTexture(renderer->GetRuntimeData().renderTargets[ALBEDO].texture, albedoTexture.put());
+	ShareTexture(renderer->GetRuntimeData().renderTargets[MASKS2].texture, gnmaoTexture.put());
+
+	// Normal Roughness Texture
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = mainDesc.Width;
+		texDesc.Height = mainDesc.Height;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		normalRoughnessTexture = eastl::make_unique<WrappedResource>(texDesc);
+	}
+
 	if (initialized) {
 		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
+		creationEngineRaytracing->SetRenderTargets(albedoTexture.get(), normalRoughnessTexture->resource.get(), gnmaoTexture.get());
+		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
 	}
 
 	auto& d3d11Device = globals::features::dx12Interop.d3d11Device;
-
-	// Gbuffer Textures
-	{
-		ShareTexture(renderer->GetRuntimeData().renderTargets[ALBEDO].texture, albedoTexture.put());
-		ShareTexture(renderer->GetRuntimeData().renderTargets[MASKS2].texture, gnmaoTexture.put());
-	}
 
 	featureData = eastl::make_unique<FeatureData>();
 
@@ -578,7 +591,16 @@ void Raytracing::DeferredPasses()
 		creationEngineRaytracing->SetCopyTarget(mainTexture->resource.get());
 	}
 
-	creationEngineRaytracing->WaitExecution();
+	// Executes the render graph for Global Illumination, depends on gbuffer render targets so we call it late
+	if (Mode() == CreationEngineRaytracing::Mode::GlobalIllumination) {
+		// TODO: This is missing the dx11 to dx12 fence hand off
+		creationEngineRaytracing->Execute();
+
+		creationEngineRaytracing->WaitExecution();
+	} else {
+		// Waits for path tracing execution to finish
+		creationEngineRaytracing->WaitExecution();
+	}
 
 	auto screenSize = globals::state->screenSize;
 	auto dynamicScreenSize = Util::ConvertToDynamic(screenSize);

@@ -124,6 +124,8 @@ struct CreationEngineRaytracing
 	HMODULE handle = nullptr;
 
 	using InitializeFn = bool (*)(ID3D11Device5*, ID3D12Device5*, ID3D12CommandQueue*, ID3D12CommandQueue*, ID3D12CommandQueue*);
+	using UpdateFn = void (*)();
+	using ExecuteFn = void (*)();
 	using WaitExecutionFn = void (*)();
 	using GetResolutionFn = void (*)(uint32_t&, uint32_t&);
 	using SetResolutionFn = void (*)(uint32_t, uint32_t);
@@ -136,6 +138,8 @@ struct CreationEngineRaytracing
 	using SetRenderTargetsFn = void(*)(ID3D12Resource*, ID3D12Resource*, ID3D12Resource*);
 
 	InitializeFn Initialize = nullptr;
+	UpdateFn Update = nullptr;
+	ExecuteFn Execute = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
 	SetResolutionFn SetResolution = nullptr;
 	SetCopyTargetFn SetCopyTarget = nullptr;
@@ -162,6 +166,16 @@ struct CreationEngineRaytracing
 
 		if (!Initialize)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Initialize is nullptr");
+
+		Update = reinterpret_cast<UpdateFn>(GetProcAddress(handle, "Update"));
+
+		if (!Update)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Update is nullptr");
+
+		Execute = reinterpret_cast<ExecuteFn>(GetProcAddress(handle, "Execute"));
+
+		if (!Execute)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Execute is nullptr");
 
 		WaitExecution = reinterpret_cast<WaitExecutionFn>(GetProcAddress(handle, "WaitExecution"));
 
@@ -278,6 +292,11 @@ struct Raytracing : public OverlayFeature
 	void SkyCubeToHemi() const;
 	void DeferredPasses();
 
+	inline CreationEngineRaytracing::Mode Mode() const
+	{
+		return settings.CreationEngineRaytracingSettings.GeneralSettings.Mode;
+	}
+
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
@@ -370,6 +389,12 @@ struct Raytracing : public OverlayFeature
 
 				rt.UpdateFeatureData();
 				rt.SkyCubeToHemi();
+
+				rt.creationEngineRaytracing->Update();
+
+				// Executes the render graph for path tracing, no dependecy on any game render target so we start as early as possible
+				if (rt.Mode() == CreationEngineRaytracing::Mode::PathTracing)
+					rt.creationEngineRaytracing->Execute();
 
 				func(a1);
 			};
