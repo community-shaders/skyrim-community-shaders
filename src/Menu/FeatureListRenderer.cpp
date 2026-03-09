@@ -183,12 +183,14 @@ namespace
 			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + 2.0f));
 		}
 
-		// Draw description if provided (single line, truncated)
+		// Draw description if provided (wrapped to content width)
 		if (!description.empty()) {
 			MenuFonts::FontRoleGuard subtextGuard(Menu::FontRole::Subtext);
 			ImVec4 descColor = palette.Text;
 			descColor.w *= 0.7f;  // Slightly dimmed
-			ImGui::TextColored(descColor, "%s", description.c_str());
+			ImGui::PushStyleColor(ImGuiCol_Text, descColor);
+			ImGui::TextWrapped("%s", description.c_str());
+			ImGui::PopStyleColor();
 		}
 
 		// Draw plain separator below
