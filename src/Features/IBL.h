@@ -33,7 +33,6 @@ public:
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
-	virtual void RegisterWeatherVariables() override;
 
 	virtual void ReflectionsPrepass() override;
 	virtual void Prepass() override;

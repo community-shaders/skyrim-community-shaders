@@ -21,7 +21,6 @@
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
-#include "WeatherVariableRegistry.h"
 
 namespace
 {
@@ -710,20 +709,6 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 		ImGui::Text("Enable the feature above to access its configuration options.");
 	} else {
 		if (isLoaded) {
-			auto weatherRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-			if (weatherRegistry->HasWeatherSupport(feat->GetShortName())) {
-				bool paused = weatherRegistry->IsFeaturePaused(feat->GetShortName());
-				if (ImGui::Checkbox("Pause Weather Overrides", &paused)) {
-					weatherRegistry->SetFeaturePaused(feat->GetShortName(), paused);
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"Temporarily disable weather-based setting adjustments for this feature.\n"
-						"This state is not saved.");
-				}
-				ImGui::Separator();
-			}
-
 			// Scene-specific settings toggle (Interior Only / TimeOfDay / Weather-Specific)
 			// Show toggle whenever scene entries exist for this feature, even if feature-paused
 			{

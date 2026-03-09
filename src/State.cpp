@@ -20,7 +20,6 @@
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
 #include "WeatherManager.h"
-#include "WeatherVariableRegistry.h"
 
 void State::Draw()
 {
@@ -327,9 +326,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 					// Load base feature settings from merged config (default + user)
 					feature->Load(settings);
 
-					// Register weather variables (features opt-in by implementing this)
-					feature->RegisterWeatherVariables();
-
 					// Apply feature-specific overrides on top (overrides take priority over user settings)
 					if (overridesDiscovered > 0 && overrideManager->HasFeatureOverrides(featureName)) {
 						json featureJson;
@@ -353,9 +349,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 							logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
 						}
 					}
-
-					// Capture current values as user settings baseline for weather overrides
-					WeatherVariables::GlobalWeatherRegistry::GetSingleton()->CaptureFeatureUserSettings(featureName);
 				} else {
 					logger::info("Feature '{}' is disabled at boot.", featureName);
 				}
