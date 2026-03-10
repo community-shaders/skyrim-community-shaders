@@ -74,7 +74,6 @@ public:
 		float sharpnessDLSS = 0.0f;
 		uint presetDLSS = 0;  // 0=Default, 1=J, 2=K, 3=L, 4=M
 		uint presetDLSSRR = 0;  // 0=Default, 1=D, 2=E
-		float depthDisocclusion = 0.1f;
 	};
 
 	Settings settings;
@@ -88,8 +87,7 @@ public:
 	struct UpscalingDataCB
 	{
 		float2 resolutionScale;
-		float depthDisocclusion = 0.1f;
-		float pad0;
+		float2 pad0;
 	};
 
 	ConstantBuffer* jitterCB = nullptr;

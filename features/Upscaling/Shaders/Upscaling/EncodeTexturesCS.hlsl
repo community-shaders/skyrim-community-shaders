@@ -16,7 +16,6 @@ Texture2D<float2> TAAMask : register(t0);
 Texture2D<float4> NormalsWaterMask : register(t1);
 Texture2D<float2> MotionVectorMask : register(t2);
 Texture2D<float> DepthMask : register(t3);
-Texture2D<float> PrevDepth : register(t4);
 
 RWTexture2D<float> ReactiveMask : register(u0);
 RWTexture2D<float> TransparencyCompositionMask : register(u1);
@@ -39,14 +38,12 @@ float ScreenToViewDepth(const float screenDepth)
 	float2 taaMask = TAAMask[dispatchID.xy];
 	float transparencyCompositionMask = NormalsWaterMask[dispatchID.xy].z;
 
-	const float depth = DepthMask[dispatchID.xy];
-	
-	const float2 motionVector = MotionVectorMask[dispatchID.xy];
-
 #if defined(DLSS) || defined(DLSS_RR)
+	const float depth = DepthMask[dispatchID.xy];	
 	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, SharedData::GetScreenDepth(depth));
 
 	// Find longest motion vector in 5x5 neighborhood
+	const float2 motionVector = MotionVectorMask[dispatchID.xy];		
 	float2 longestMotionVector = motionVector;
 	float maxMotionLengthSq = dot(motionVector, motionVector);
 
@@ -82,18 +79,6 @@ float ScreenToViewDepth(const float screenDepth)
 
 	TransparencyCompositionMask[dispatchID.xy] = transparencyCompositionMask;
 	
-	const float2 curUV = (dispatchID.xy + .5f) / trueSamplingDim;
-	const float2 prevUV = (curUV + motionVector.xy) * ResolutionScale;	
-	
-	const float currDepth = ScreenToViewDepth(depth);
-	const float prevDepth = ScreenToViewDepth(PrevDepth.SampleLevel(PointSampler, prevUV, 0));
-
-	float deptherror = abs(prevDepth - currDepth) / currDepth;
-	
-	float depthTolerance = DepthDisocclusion + 1e1f * length(motionVector.xy);
-	
-	float disocclusionMask = deptherror < depthTolerance ? 0.0f : 1.0f;
-
-	float reactiveMask = max(taaMask.x * 0.25f + taaMask.y, disocclusionMask);
+	float reactiveMask = taaMask.x * 0.01f + taaMask.y;
 	ReactiveMask[dispatchID.xy] = reactiveMask;	
 }

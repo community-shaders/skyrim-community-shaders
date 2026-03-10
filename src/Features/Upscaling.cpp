@@ -241,8 +241,6 @@ void Upscaling::DrawSettings()
 			ImGui::SliderInt("Upscale Preset", (int*)&settings.qualityMode, 0, 4, labelWithScale.c_str());
 		}
 
-		ImGui::SliderFloat("Depth Disocclusion", &settings.depthDisocclusion, 0.0f, 1.0f, "%.2f");
-
 		if (settings.upscaleMethod == UpscaleMethod::kFSR) {
 			ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
 		} else if (settings.upscaleMethod == UpscaleMethod::kDLSS || settings.upscaleMethod == UpscaleMethod::kDLSS_RR) {
@@ -1107,6 +1105,10 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		jitter.y = a_viewport->projectionPosScaleY * screenHeight / 2.0f;
 	}
 
+	auto& rt = globals::features::raytracing;
+	if (rt.Active())
+		rt.UpdateJitter(jitter);
+
 	auto& runtimeData = a_viewport->GetRuntimeData();
 
 	runtimeData.dynamicResolutionPreviousWidthRatio = dynamicResolutionWidthRatio;
@@ -1560,7 +1562,6 @@ void Upscaling::EncodeTextures()
 			// Set up upscaling data constant buffer
 			UpscalingDataCB upscalingData;
 			upscalingData.resolutionScale = Util::GetDynamicResolutionRatio();
-			upscalingData.depthDisocclusion = settings.depthDisocclusion;
 			upscalingDataCB->Update(upscalingData);
 
 			JitterCB jitterData;
@@ -1580,8 +1581,7 @@ void Upscaling::EncodeTextures()
 				temporalAAMask.SRV,
 				normals.SRV,
 				motionVector.SRV,
-				depth.depthSRV,
-				globals::features::dx12Interop.sharedResources.depth->srv
+				depth.depthSRV
 			};
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -1735,21 +1735,26 @@ void Upscaling::Upscale()
 		auto& sharedResources = dx12Interop.sharedResources;
 		auto context = globals::d3d::context;
 
-		dx12Interop.Execute([&](ID3D12GraphicsCommandList4* commandList) {
-			if (upscaleMethod == UpscaleMethod::kDLSS) {
-				streamline.Upscale(commandList,
-					sharedResources.main->resource.get(), sharedResources.main->resource.get(),
-					sharedResources.depth->resource.get(), sharedResources.motionVector->resource.get(), sharedResources.reactiveMask->resource.get()
-				);
-			} else if (upscaleMethod == UpscaleMethod::kDLSS_RR) {
-				streamline.DenoiseUpscale(commandList,
-					sharedResources.main->resource.get(), sharedResources.depth->resource.get(), 
-					sharedResources.motionVector->resource.get(), sharedResources.reactiveMask->resource.get()
-				);
-			}
-		});
+		auto dlss = upscaleMethod == UpscaleMethod::kDLSS;
+		auto dlssrr = upscaleMethod == UpscaleMethod::kDLSS_RR;
 
-		context->CopyResource(main.texture, sharedResources.main->resource11);
+		if (dlss || dlssrr) {
+			dx12Interop.Execute([&](ID3D12GraphicsCommandList4* commandList) {
+				if (dlss) {
+					streamline.Upscale(commandList,
+						sharedResources.main->resource.get(), sharedResources.main->resource.get(),
+						sharedResources.depth->resource.get(), sharedResources.motionVector->resource.get(), sharedResources.reactiveMask->resource.get());
+				} else if (dlssrr) {
+					streamline.DenoiseUpscale(commandList,
+						sharedResources.main->resource.get(), sharedResources.depth->resource.get(),
+						sharedResources.motionVector->resource.get(), sharedResources.reactiveMask->resource.get());
+				}
+			});
+
+			context->CopyResource(main.texture, sharedResources.main->resource11);
+		} else if (upscaleMethod == UpscaleMethod::kFSR) {
+			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);
+		}
 	} else {
 		if (upscaleMethod == UpscaleMethod::kDLSS)
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
