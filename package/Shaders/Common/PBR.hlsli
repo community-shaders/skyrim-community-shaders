@@ -99,7 +99,7 @@ namespace PBR
 		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
 		float luma = Color::RGBToLuminance(material.BaseColor);
-		float3 scatterTint = pow(material.BaseColor / luma, 1 - shadow);
+		float3 scatterTint = pow(material.BaseColor / max(luma, 1e-5), 1 - shadow);
 		S += sqrt(material.BaseColor) * diffuseScatter * scatterTint;
 
 		return S;
@@ -162,15 +162,10 @@ namespace PBR
 			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * detailedLightColor * satNdotL;
 #endif
 
-			float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, satNdotV);
-			lightingOutput.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::Fuzz) != 0)
 			{
-				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(material.Roughness, material.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * detailedLightColor * satNdotL;
-				fuzzSpecular *= 1 + material.FuzzColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-
+				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(material.Roughness, material.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * context.lightColor * satNdotL;
 				lightingOutput.specular = lerp(lightingOutput.specular, fuzzSpecular, material.FuzzWeight);
 			}
 
@@ -216,7 +211,6 @@ namespace PBR
 
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
-		const float3 VN = context.vertexNormal;
 
 		float NdotV = saturate(dot(N, V));
 
@@ -243,19 +237,17 @@ namespace PBR
 				lobeWeights.diffuse += material.FuzzColor * material.FuzzWeight;
 			}
 #endif
-
 			float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
 			lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
 
-			lobeWeights.diffuse *= (1 - lobeWeights.specular);
-			lobeWeights.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+			float3 F = BRDF::F_Schlick(material.F0, NdotV);
+			lobeWeights.diffuse *= 1 - F;
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
 				float2 coatSpecularBRDF = BRDF::EnvBRDF(material.CoatRoughness, NdotV);
 				float3 coatSpecularLobeWeight = material.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
-				coatSpecularLobeWeight *= 1 + material.CoatF0 * (1 / (coatSpecularBRDF.x + coatSpecularBRDF.y) - 1);
 
 				float3 coatF = BRDF::F_Schlick(material.CoatF0, NdotV);
 
@@ -273,21 +265,9 @@ namespace PBR
 #endif
 		}
 
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		lobeWeights.specular *= horizon;
-
-		float3 diffuseAO = material.AO;
-		float3 specularAO = Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness);
-
-		diffuseAO = Color::MultiBounceAO(material.BaseColor, diffuseAO.x).y;
-		specularAO = Color::MultiBounceAO(material.F0, specularAO.x).y;
-
-		lobeWeights.diffuse *= diffuseAO;
-		lobeWeights.specular *= specularAO;
+		// Apply ambient occlusion
+		lobeWeights.diffuse *= material.AO;
+		lobeWeights.specular *= Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness);
 	}
 }
 

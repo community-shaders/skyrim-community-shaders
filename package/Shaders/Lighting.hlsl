@@ -2093,10 +2093,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.Roughness = clamp(rawRMAOS.x, PBR::Constants::MinRoughness, PBR::Constants::MaxRoughness);
 	material.Metallic = saturate(rawRMAOS.y);
 	material.AO = rawRMAOS.z;
+
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		material.F0 = lerp(saturate(rawRMAOS.w), Color::GammaToTrueLinear(baseColor.xyz), material.Metallic);
+		material.F0 = lerp(rawRMAOS.w, Color::GammaToTrueLinear(baseColor.xyz), material.Metallic);
 	} else {
-		material.F0 = lerp(saturate(rawRMAOS.w), baseColor.xyz, material.Metallic);
+		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
 	}
 
 	material.GlintScreenSpaceScale = max(1, glintParameters.x);
@@ -2905,11 +2906,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		specularColor = 0;
 #	endif
 
-#	if !defined(TRUE_PBR)
-	// Vanilla specular needs gamma-to-linear conversion; PBR specular is already in linear space
-	specularColor = Color::IrradianceToLinear(specularColor);
-#	endif
-
 	diffuseColor = reflectionDiffuseColor;
 
 #	if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE))
@@ -2941,31 +2937,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	indirectLobeWeights.diffuse *= Color::PBRLightingScale;
 #	endif
 
-#	if !defined(DEFERRED)
-	if (any(indirectLobeWeights.specular > 0)
-#		if defined(WETNESS_EFFECTS)
-		|| any(wetnessReflectance > 0)
-#		endif
-	)
-#		if defined(DYNAMIC_CUBEMAPS)
-#			if defined(SKYLIGHTING)
-		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, material.Roughness, skylightingSH);
-#				if defined(WETNESS_EFFECTS)
-	if (waterRoughnessSpecular < 1)
-		color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, wetnessNormal, vertexNormal, viewDirection, waterRoughnessSpecular, skylightingSH);
-#				endif
-#			else
-		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, material.Roughness);
-#				if defined(WETNESS_EFFECTS)
-	if (waterRoughnessSpecular < 1)
-		color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, wetnessNormal, vertexNormal, viewDirection, waterRoughnessSpecular);
-#				endif
-#			endif
-#		else
-		color.xyz += indirectLobeWeights.specular * directionalAmbientColor;
-#		endif
-#	endif
-
 	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
 
 #	if defined(IBL) && defined(SKYLIGHTING)
@@ -2983,7 +2954,33 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if !defined(DEFERRED)
-	color.xyz = Color::IrradianceToGamma(Color::IrradianceToLinear(color.xyz) + specularColor);
+	color.xyz = Color::IrradianceToLinear(color.xyz);
+	color.xyz += specularColor;
+
+	if (any(indirectLobeWeights.specular > 0)
+#		if defined(WETNESS_EFFECTS)
+		|| any(wetnessReflectance > 0)
+#		endif
+	)
+#		if defined(DYNAMIC_CUBEMAPS)
+#			if defined(SKYLIGHTING)
+		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(worldNormal, viewDirection, material.Roughness, skylightingSH);
+#				if defined(WETNESS_EFFECTS)
+	if (waterRoughnessSpecular < 1)
+		color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(wetnessNormal, viewDirection, waterRoughnessSpecular, skylightingSH);
+#				endif
+#			else
+		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(worldNormal, viewDirection, material.Roughness);
+#				if defined(WETNESS_EFFECTS)
+	if (waterRoughnessSpecular < 1)
+		color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(wetnessNormal, viewDirection, waterRoughnessSpecular);
+#				endif
+#			endif
+#		else
+		color.xyz += indirectLobeWeights.specular * directionalAmbientColor;
+#		endif
+
+	color.xyz = Color::IrradianceToGamma(color.xyz);
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
 	float fogFactor = Color::FogAlpha(input.FogParam.w);
 #		if defined(IBL)
