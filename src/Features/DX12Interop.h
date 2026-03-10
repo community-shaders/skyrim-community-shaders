@@ -58,6 +58,7 @@ struct DX12Interop : public Feature
 	winrt::com_ptr<ID3D12Fence> d3d12Fence;
 
 	UINT64 fenceValue = 0;
+	HANDLE fenceEvent;
 
 	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
 
@@ -71,10 +72,37 @@ struct DX12Interop : public Feature
 
 	void Init(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
 
+	template <typename Func>
+	void Fence(Func func)
+	{
+		d3d11Context->Flush();
+
+		// Wait for D3D11 to finish
+		DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
+		DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
+		fenceValue++;
+
+		// Execute
+		func();
+
+		// Wait for D3D12 to finish
+		DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
+
+		if (d3d12Fence->GetCompletedValue() < fenceValue) {
+			DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, fenceEvent));
+			WaitForSingleObject(fenceEvent, INFINITE);
+		}
+
+		DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
+		fenceValue++;
+	}
+
 	// Executes D3D12 commands mid D3D11 execution, probably huge overhead from wait commands so use sparsely and wisely
 	template <typename Func>
 	void Execute(Func func)
 	{
+		d3d11Context->Flush();
+
 		// Wait for D3D11 to finish
 		DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
 		DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
@@ -94,6 +122,12 @@ struct DX12Interop : public Feature
 
 		// Wait for D3D12 to finish
 		DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
+
+		if (d3d12Fence->GetCompletedValue() < fenceValue) {
+			DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, fenceEvent));
+			WaitForSingleObject(fenceEvent, INFINITE);
+		}
+
 		DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
 		fenceValue++;
 	}
