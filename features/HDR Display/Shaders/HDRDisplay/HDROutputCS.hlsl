@@ -29,6 +29,7 @@ cbuffer PerFrame : register(b0)
 	float skipUIComposite : packoffset(c0.w);
 	float uiBrightness : packoffset(c1.x);
 	float isSceneLinear : packoffset(c1.y);
+	float isMainOrLoadingMenu : packoffset(c1.z);
 }
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -61,7 +62,8 @@ cbuffer PerFrame : register(b0)
 			// Composite in gamma space (matching SDR behavior), then convert to HDR.
 			// The vanilla UI was designed for gamma-space blending; compositing in PQ
 			// over-darkens and compositing in linear over-brightens behind UI overlays.
-			float3 composited = ui.rgb * uiBrightness + scene.rgb * (1.0 - ui.a);
+			float effectiveUIBrightness = isMainOrLoadingMenu > 0.5 ? 1.0 : uiBrightness;
+			float3 composited = ui.rgb * effectiveUIBrightness + scene.rgb * (1.0 - ui.a);
 
 			float3 compositedLinear = Color::GammaToLinear(max(0.0, composited));
 			float3 compositedBT2020 = Color::BT709ToBT2020(compositedLinear);
