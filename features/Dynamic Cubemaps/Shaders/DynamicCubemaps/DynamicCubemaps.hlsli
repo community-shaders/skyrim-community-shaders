@@ -70,7 +70,7 @@ namespace DynamicCubemaps
 			return finalIrradiance;
 		}
 
-		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, V, roughness);
 
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = saturate(skylightingSpecular);
@@ -188,7 +188,7 @@ namespace DynamicCubemaps
 			return (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
 		}
 
-		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, V, roughness);
 
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = saturate(skylightingSpecular);
