@@ -200,8 +200,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float shoulderStart = pw / peak;
 		float3 diceLinear = DisplayMapping::DICETonemap(hdrLinear * pw, peak, shoulderStart, CS_BT709, CS_BT709);
-		float3 hdrHeadroom = max(0.0, diceLinear - pw);
-		float3 hdrLinearOut = sdrBase + hdrHeadroom;
+		float3 hdrLinearOut = lerp(sdrBase, diceLinear, saturate(sdrReferenceLinear));
 
 		outputColor = Color::LinearToGamma(max(0.0, hdrLinearOut));
 	} else {
