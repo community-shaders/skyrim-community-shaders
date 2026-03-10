@@ -172,8 +172,6 @@ void Raytracing::DrawSettings()
 		ImGui::EndTabBar();
 	}
 
-	ImGui::Image(mainTexture->srv, { 1280, 720 });
-
 	if (ceRTSettingsBefore != settings.CreationEngineRaytracingSettings)
 		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
 }
@@ -265,6 +263,11 @@ void Raytracing::DrawDebugSettings()
 	ImGui::Checkbox("Path Tracing Cull", &settings.CreationEngineRaytracingSettings.DebugSettings.PathTracingCull);
 
 	ImGui::Checkbox("Performance Overlay", &settings.PerfOverlay);
+
+	ImGui::Checkbox("Show Main Texture", &settings.ShowMainTexture);
+
+	if (settings.ShowMainTexture && mainTexture)
+		ImGui::Image(mainTexture->srv, { 1280, 720 });
 
 	ImGui::PopID();
 

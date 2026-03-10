@@ -319,6 +319,7 @@ struct Raytracing : public OverlayFeature
 	struct Settings
 	{
 		bool PerfOverlay = true;
+		bool ShowMainTexture = false;
 		CreationEngineRaytracing::Settings CreationEngineRaytracingSettings;
 	} settings;
 
