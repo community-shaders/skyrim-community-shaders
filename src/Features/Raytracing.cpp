@@ -172,6 +172,8 @@ void Raytracing::DrawSettings()
 		ImGui::EndTabBar();
 	}
 
+	ImGui::Image(mainTexture->srv, { 1280, 720 });
+
 	if (ceRTSettingsBefore != settings.CreationEngineRaytracingSettings)
 		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
 }
@@ -328,6 +330,20 @@ void Raytracing::DrawOverlay()
 	ImGui::End();
 }
 
+bool Raytracing::Active()
+{
+	if (!loaded)
+		return false;
+
+	if (!settings.CreationEngineRaytracingSettings.Enabled)
+		return false;
+
+	if (!initialized)
+		return false;
+
+	return true;
+}
+
 void Raytracing::Load()
 {
 	Hooks::Install();
@@ -363,6 +379,12 @@ void Raytracing::CompileShaders()
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\PTCompositeCS.hlsl", {}, "cs_5_0")); rawPtr)
 		ptCompositeCS.attach(rawPtr);
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", {}, "cs_5_0")); rawPtr)
+		convertTexturesCS.attach(rawPtr);
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\GICompositeCS.hlsl", {}, "cs_5_0")); rawPtr)
+		giCompositeCS.attach(rawPtr);
 }
 
 void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue)
@@ -374,6 +396,7 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 
 	if (!result) {
 		settings.CreationEngineRaytracingSettings.Enabled = false;
+		initialized = false;
 		forcedDisabled = true;
 		disableReason = DisableReason::InitFailed;
 
@@ -402,6 +425,11 @@ bool Raytracing::UpdateResolution()
 	creationEngineRaytracing->SetResolution(m_Resolution.x, m_Resolution.y);
 
 	return true;
+}
+
+void Raytracing::UpdateJitter(float2 jitter)
+{
+	creationEngineRaytracing->UpdateJitter(jitter);
 }
 
 void ShareTexture(ID3D11Texture2D* d3d11Texture, ID3D12Resource** d3d12Resource, bool nt = false, uint accessFlags = DXGI_SHARED_RESOURCE_READ) // DXGI_SHARED_RESOURCE_WRITE
@@ -443,7 +471,7 @@ void Raytracing::SetupResources()
 		texDesc.Height = mainDesc.Height;
 		texDesc.MipLevels = 1;
 		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_SNORM;
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
@@ -550,11 +578,11 @@ void Raytracing::SkyCubeToHemi() const
 	auto reflections = globals::game::renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
 	auto reflectionOcc = globals::features::cloudShadows.loaded ? globals::features::cloudShadows.texCubemapCloudOccCopy->srv.get() : nullptr;
 
-	eastl::array<ID3D11ShaderResourceView*, 2> srvs = {
+	ID3D11ShaderResourceView* srvs[] = {
 		reflections.SRV,
 		reflectionOcc
 	};
-	context->CSSetShaderResources(0, (UINT)srvs.size(), srvs.data());
+	context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
 	auto sampler = samplerState.get();
 	context->CSSetSamplers(0, 1, &sampler);
@@ -569,10 +597,53 @@ void Raytracing::SkyCubeToHemi() const
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 }
 
+void Raytracing::ConvertTextures() const
+{
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+
+	ID3D11Buffer* cb = screenCB->CB();
+	context->CSSetConstantBuffers(0, 1, &cb);
+
+	auto* frameBufferCB = *globals::game::perFrame.get();
+	context->CSSetConstantBuffers(12, 1, &frameBufferCB);
+
+	context->CSSetShader(convertTexturesCS.get(), nullptr, 0);
+
+	auto normalSmoothness = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
+	auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
+	auto gnmao = renderer->GetRuntimeData().renderTargets[MASKS2];
+
+	ID3D11ShaderResourceView* srvs[] = {
+		normalSmoothness.SRV,
+		albedo.SRV,
+		gnmao.SRV
+	};
+
+	context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+
+	auto sampler = samplerState.get();
+	context->CSSetSamplers(0, 1, &sampler);
+
+	ID3D11UnorderedAccessView* uavs[] = {
+		normalRoughnessTexture->uav
+	};
+
+	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+	auto dispatchCount = Util::GetScreenDispatchCount(true);
+	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+	uavs[0] = nullptr;
+	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+}
+
 void Raytracing::DeferredPasses()
 {
 	if (!settings.CreationEngineRaytracingSettings.Enabled)
 		return;
+
+	auto* context = globals::d3d::context;
 
 	bool resolutionChanged = UpdateResolution();
 
@@ -591,12 +662,16 @@ void Raytracing::DeferredPasses()
 		creationEngineRaytracing->SetCopyTarget(mainTexture->resource.get());
 	}
 
-	// Executes the render graph for Global Illumination, depends on gbuffer render targets so we call it late
 	if (Mode() == CreationEngineRaytracing::Mode::GlobalIllumination) {
-		// TODO: This is missing the dx11 to dx12 fence hand off
-		creationEngineRaytracing->Execute();
+		ConvertTextures();
 
-		creationEngineRaytracing->WaitExecution();
+		globals::features::dx12Interop.Fence([&]() {
+			// Executes the render graph for Global Illumination, depends on gbuffer render targets so we call it late
+			creationEngineRaytracing->Execute();
+		});
+
+		// Fence function already has built-in wait, so we just call post execution for metrics and cleanup
+		creationEngineRaytracing->PostExecution();
 	} else {
 		// Waits for path tracing execution to finish
 		creationEngineRaytracing->WaitExecution();
@@ -613,19 +688,36 @@ void Raytracing::DeferredPasses()
 	auto mode = settings.CreationEngineRaytracingSettings.GeneralSettings.Mode;
 
 	auto renderer = globals::game::renderer;
-	auto* context = globals::d3d::context;
 
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	if (mode == CreationEngineRaytracing::Mode::GlobalIllumination) {
-		context->CopyResource(main.texture, mainTexture->resource11);
+		// Add GI result to kMain
+		{
+			context->CSSetShader(giCompositeCS.get(), nullptr, 0);
+
+			ID3D11Buffer* cb = screenCB->CB();
+			context->CSSetConstantBuffers(0, 1, &cb);
+
+			context->CSSetShaderResources(0, 1, &mainTexture->srv);
+
+			ID3D11UnorderedAccessView* uav = main.UAV;
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+			auto dispatchCount = Util::GetScreenDispatchCount(true);
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+			uav = nullptr;
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		}
 	} 
 	else if (mode == CreationEngineRaytracing::Mode::PathTracing) {
 		// Blend PT and Sky
 		{
+			context->CSSetShader(ptCompositeCS.get(), nullptr, 0);
+
 			ID3D11Buffer* cb = screenCB->CB();
 			context->CSSetConstantBuffers(0, 1, &cb);
-			context->CSSetShader(ptCompositeCS.get(), nullptr, 0);
 
 			context->CSSetShaderResources(0, 1, &mainTexture->srv);
 

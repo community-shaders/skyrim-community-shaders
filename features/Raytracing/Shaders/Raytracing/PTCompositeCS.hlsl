@@ -1,11 +1,7 @@
+#include "Raytracing/Includes/Common.hlsli"
+
 Texture2D<float4> PathTracedInput : register(t0);
 RWTexture2D<float4> MainOutput    : register(u0);
-
-cbuffer ScreenData : register(b0)
-{
-    uint2 Resolution;
-    uint2 DynamicResolution;
-};
 
 [numthreads(8, 8, 1)]
 void main(uint2 id : SV_DispatchThreadID)

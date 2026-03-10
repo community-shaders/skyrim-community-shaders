@@ -127,6 +127,7 @@ struct CreationEngineRaytracing
 	using UpdateFn = void (*)();
 	using ExecuteFn = void (*)();
 	using WaitExecutionFn = void (*)();
+	using PostExecutionFn = void (*)();
 	using GetResolutionFn = void (*)(uint32_t&, uint32_t&);
 	using SetResolutionFn = void (*)(uint32_t, uint32_t);
 	using SetCopyTargetFn = void (*)(ID3D12Resource*);
@@ -136,11 +137,13 @@ struct CreationEngineRaytracing
 	using UpdateSettingsFn = void (*)(Settings);
 	using GetRRInputFn = void(*)(ID3D12Resource*&, ID3D12Resource*&, ID3D12Resource*&, ID3D12Resource*&);
 	using SetRenderTargetsFn = void(*)(ID3D12Resource*, ID3D12Resource*, ID3D12Resource*);
+	using UpdateJitterFn = void(*)(float2);
 
 	InitializeFn Initialize = nullptr;
 	UpdateFn Update = nullptr;
 	ExecuteFn Execute = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
+	PostExecutionFn PostExecution = nullptr;
 	SetResolutionFn SetResolution = nullptr;
 	SetCopyTargetFn SetCopyTarget = nullptr;
 	UpdateFeatureDataFn UpdateFeatureData = nullptr;
@@ -149,6 +152,7 @@ struct CreationEngineRaytracing
 	UpdateSettingsFn UpdateSettings = nullptr;
 	GetRRInputFn GetRRInput = nullptr;
 	SetRenderTargetsFn SetRenderTargets = nullptr;
+	UpdateJitterFn UpdateJitter = nullptr;
 
 	CreationEngineRaytracing()
 	{
@@ -181,6 +185,11 @@ struct CreationEngineRaytracing
 
 		if (!WaitExecution)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' WaitExecution is nullptr");
+
+		PostExecution = reinterpret_cast<PostExecutionFn>(GetProcAddress(handle, "PostExecution"));
+
+		if (!PostExecution)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' PostExecution is nullptr");
 
 		SetResolution = reinterpret_cast<SetResolutionFn>(GetProcAddress(handle, "SetResolution"));
 
@@ -220,7 +229,12 @@ struct CreationEngineRaytracing
 		SetRenderTargets = reinterpret_cast<SetRenderTargetsFn>(GetProcAddress(handle, "SetRenderTargets"));
 
 		if (!SetRenderTargets)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetRenderTargets is nullptr");	
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetRenderTargets is nullptr");
+
+		UpdateJitter = reinterpret_cast<UpdateJitterFn>(GetProcAddress(handle, "UpdateJitter"));
+
+		if (!UpdateJitter)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateJitter is nullptr");	
 	}
 };
 
@@ -273,6 +287,8 @@ struct Raytracing : public OverlayFeature
 
 	virtual void DrawOverlay() override;
 
+	bool Active();
+
 	// Resources
 	virtual void SetupResources() override;
 
@@ -288,8 +304,10 @@ struct Raytracing : public OverlayFeature
 
 	void InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue);
 	bool UpdateResolution();
+	void UpdateJitter(float2 jitter);
 	void UpdateFeatureData();
 	void SkyCubeToHemi() const;
+	void ConvertTextures() const;
 	void DeferredPasses();
 
 	inline CreationEngineRaytracing::Mode Mode() const
@@ -376,6 +394,8 @@ struct Raytracing : public OverlayFeature
 	eastl::unique_ptr<ScreenData> screenData;
 
 	winrt::com_ptr<ID3D11ComputeShader> ptCompositeCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> convertTexturesCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> giCompositeCS = nullptr;
 
 	float* frameTime;
 
@@ -393,8 +413,9 @@ struct Raytracing : public OverlayFeature
 				rt.creationEngineRaytracing->Update();
 
 				// Executes the render graph for path tracing, no dependecy on any game render target so we start as early as possible
-				if (rt.Mode() == CreationEngineRaytracing::Mode::PathTracing)
+				if (rt.Mode() == CreationEngineRaytracing::Mode::PathTracing) {
 					rt.creationEngineRaytracing->Execute();
+				}
 
 				func(a1);
 			};
