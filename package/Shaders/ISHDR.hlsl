@@ -182,14 +182,26 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrGamma += saturate(Param.x - hdrGamma) * bloomColor;
 
 		float3 hdrLinear = Color::GammaToLinear(max(0.0, hdrGamma));
-		float maxCol = Color::RGBToLuminance(hdrLinear);
-		float mappedMax = GetTonemapFactorReinhard(maxCol).x;
-		float3 reinhardLinear = maxCol > 1e-6 ? hdrLinear * (mappedMax / maxCol) : hdrLinear;
-		float3 sdrBase = saturate(reinhardLinear) * pw;
+		float3 sdrReferenceLinear;
+
+		[branch] if (Param.z > 0.5)
+		{
+			float3 hejlGamma = DisplayMapping::HuePreservingHejlBurgessDawson(hdrLinear, 0.0.xxx);
+			sdrReferenceLinear = Color::GammaToLinear(max(0.0, hejlGamma));
+		}
+		else
+		{
+			float maxCol = Color::RGBToLuminance(hdrLinear);
+			float mappedMax = GetTonemapFactorReinhard(maxCol).x;
+			sdrReferenceLinear = maxCol > 1e-6 ? hdrLinear * (mappedMax / maxCol) : hdrLinear;
+		}
+
+		float3 sdrBase = saturate(sdrReferenceLinear) * pw;
 
 		float shoulderStart = pw / peak;
 		float3 diceLinear = DisplayMapping::DICETonemap(hdrLinear * pw, peak, shoulderStart, CS_BT709, CS_BT709);
-		float3 hdrLinearOut = lerp(sdrBase, diceLinear, saturate(reinhardLinear));
+		float3 hdrHeadroom = max(0.0, diceLinear - pw);
+		float3 hdrLinearOut = sdrBase + hdrHeadroom;
 
 		outputColor = Color::LinearToGamma(max(0.0, hdrLinearOut));
 	} else {
