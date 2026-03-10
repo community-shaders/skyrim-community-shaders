@@ -168,41 +168,28 @@ PS_OUTPUT main(PS_INPUT input)
 		float pw   = paperWhiteNits / sRGB_WhiteLevelNits;
 		float peak = peakNits       / sRGB_WhiteLevelNits;
 
-		// Color grading in gamma space (matches SDR calibration)
 		float3 hdrGamma = ENABLE_LL ? Color::LinearToGamma(inputColor) : inputColor;
 		float hdrGammaLum = Color::RGBToLuminance(hdrGamma);
-		hdrGamma = lerp(hdrGammaLum, hdrGamma, Cinematic.x);        // saturation
-		hdrGamma = lerp(hdrGamma, hdrGammaLum * Tint.xyz, Tint.w);  // tint
-		hdrGamma *= Cinematic.w;                                    // brightness
-		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);         // contrast
+		hdrGamma = lerp(hdrGammaLum, hdrGamma, Cinematic.x);
+		hdrGamma = lerp(hdrGamma, hdrGammaLum * Tint.xyz, Tint.w);
+		hdrGamma *= Cinematic.w;
+		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);
 
 #		if defined(FADE)
 		hdrGamma = lerp(hdrGamma, Fade.xyz, Fade.w);
 #		endif
 
 		hdrGamma += saturate(Param.x - hdrGamma) * bloomColor;
-		float3 hdrLinear = Color::GammaToLinear(max(0.0, hdrGamma));
 
-		// Reinhard on luminance (hue-preserving) — vanilla-matching SDR base
-		float maxCol    = Color::RGBToLuminance(hdrLinear);
+		float3 hdrLinear = Color::GammaToLinear(max(0.0, hdrGamma));
+		float maxCol = Color::RGBToLuminance(hdrLinear);
 		float mappedMax = GetTonemapFactorReinhard(maxCol).x;
-		float3 reinhardLinear = (maxCol > 1e-6) ? hdrLinear * (mappedMax / maxCol) : hdrLinear;
-		// Scale the SDR base into HDR paper-white space, where 1.0 still represents
-		// 80 nits and paper white is expressed as pw = paperWhite / 80.
+		float3 reinhardLinear = maxCol > 1e-6 ? hdrLinear * (mappedMax / maxCol) : hdrLinear;
 		float3 sdrBase = saturate(reinhardLinear) * pw;
 
-		// DICE input scaled to nit space — no normalization cancellation
-		// because we keep diceOut in nit space until compositing
-		float3 diceNits = DisplayMapping::DICETonemap(
-			hdrLinear * pw,
-			peak,
-			pw / peak,
-			CS_BT709, CS_BT709);
-
-		// Keep the exact SDR baseline up to paper white and add only the DICE headroom
-		// above paper white so fires and emissives can extend into HDR.
-		float3 hdrHeadroom  = max(0.0, diceNits - pw);
-		float3 hdrLinearOut = sdrBase + hdrHeadroom;
+		float shoulderStart = pw / peak;
+		float3 diceLinear = DisplayMapping::DICETonemap(hdrLinear * pw, peak, shoulderStart, CS_BT709, CS_BT709);
+		float3 hdrLinearOut = lerp(sdrBase, diceLinear, saturate(reinhardLinear));
 
 		outputColor = Color::LinearToGamma(max(0.0, hdrLinearOut));
 	} else {
@@ -212,24 +199,16 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float3 blendedColor;
 
-		// === Tonemapping + Bloom Selection ===
-		// Choose between two hue-preserving tonemap algorithms (user preference Param.z).
-
 		[branch] if (Param.z > 0.5)
 		{
-			// Hejl-Burgess-Dawson: Smoother rolloff, better for cinematic look
 			blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor);
 		}
 		else
 		{
-			// Reinhard: Hue-preserving tone compression
-			// Extract luminance and compress with Reinhard curve
 			float maxCol = Color::RGBToLuminance(inputColor);
 			float mappedMax = GetTonemapFactorReinhard(maxCol).x;
-			// Apply compression uniformly to preserve hue
 			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
 			blendedColor = compressedHuePreserving;
-			// Add bloom to tonemapped result
 			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
 		}
 
