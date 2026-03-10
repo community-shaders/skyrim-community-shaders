@@ -47,6 +47,7 @@ cbuffer PerFrame : register(b0)
 
 	if (hdrEnabled) {
 		// Scene arrives gamma-encoded BT.709 from ISHDR (post-DICE tonemapping).
+		// ISHDR already scales the scene into HDR paper-white space using 80-nit-relative units.
 		// Convert to linear, then BT.2020, then PQ for HDR10 output.
 		float3 sceneLinear = Color::GammaToLinear(max(0.0, scene.rgb));
 
@@ -54,9 +55,7 @@ cbuffer PerFrame : register(b0)
 		sceneBT2020 = max(sceneBT2020, 0.0);
 
 		if (skipUI) {
-			// FG handles UI compositing. ISHDR pre-scales the scene by (paperWhite/80) before
-			// DICE tonemapping, so encoding at sRGB_WhiteLevelNits (80) correctly maps
-			// reference white to paperWhite nits on the display.
+			// FG handles UI compositing separately. Scene is already scaled by ISHDR.
 			finalColor = Color::pq::Encode(sceneBT2020, sRGB_WhiteLevelNits);
 		} else {
 			// Composite in gamma space (matching SDR behavior), then convert to HDR.

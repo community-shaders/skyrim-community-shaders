@@ -81,16 +81,6 @@ namespace DisplayMapping
 			Color *= compressedLuminanceNormalized / sourceLuminanceNormalized;
 		}
 
-		// Soft per-channel compression above peak (Reinhard-style asymptotic curve).
-		// The luminance pass compresses based on average, so saturated highlights (fires, emissives)
-		// can have peak channels far exceeding PeakWhite. Per-channel Reinhard preserves detail
-		// gradients by applying a smooth compression curve independently to each channel.
-		{
-			const float3 excess = max(0.0, Color - PeakWhite);
-			const float3 compressed = excess / (1.0 + excess / PeakWhite);
-			Color = min(Color, PeakWhite) + compressed;
-		}
-
 		return FromColorSpaceToColorSpace(Color, ProcessingColorSpace, InOutColorSpace);
 	}
 

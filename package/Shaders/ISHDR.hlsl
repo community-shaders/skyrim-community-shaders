@@ -163,22 +163,13 @@ PS_OUTPUT main(PS_INPUT input)
 	inputColor = max(0, inputColor);
 
 	if (isHDR) {
-		// === HDR Pipeline (Float16 RT) ===
-		// Input: HDR values (can exceed 1.0) - gamma-encoded (vanilla) OR linear (Linear Lighting)
-		// Output: Gamma-encoded BT.709 (values can exceed 1.0) for HDROutputCS to convert
-
 		float paperWhiteNits = SharedData::HDRData.y;
-		float peakNits = SharedData::HDRData.z;
+		float peakNits       = SharedData::HDRData.z;
+		float pw   = paperWhiteNits / sRGB_WhiteLevelNits;
+		float peak = peakNits       / sRGB_WhiteLevelNits;
 
-		// === Color Grading in Gamma Space (matching SDR calibration) ===
-		// Skyrim's content and all imagespace settings were calibrated in gamma space.
-		// Applying grading in linear space (as we did before) amplifies chromatic differences
-		// and uses a different contrast neutral point, causing sky colours and SDR-range
-		// content to diverge noticeably from the SDR path.
-		// Apply grading identically to SDR: same gamma domain, same formulas, same ordering.
-		// Only the DICE tonemap (below) differs — it handles highlights above paper white.
+		// Color grading in gamma space (matches SDR calibration)
 		float3 hdrGamma = ENABLE_LL ? Color::LinearToGamma(inputColor) : inputColor;
-
 		float hdrGammaLum = Color::RGBToLuminance(hdrGamma);
 		hdrGamma = lerp(hdrGammaLum, hdrGamma, Cinematic.x);        // saturation
 		hdrGamma = lerp(hdrGamma, hdrGammaLum * Tint.xyz, Tint.w);  // tint
@@ -190,23 +181,30 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 		hdrGamma += saturate(Param.x - hdrGamma) * bloomColor;
-
-		// Decode to linear for DICE tonemapping.
 		float3 hdrLinear = Color::GammaToLinear(max(0.0, hdrGamma));
 
-		// DICE tonemapping: compresses highlights from paper-white to peak brightness.
-		// Output remains in linear BT.709, values can exceed 1.0 up to peak/80.
-		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
-		float peak = peakNits / sRGB_WhiteLevelNits;
-		hdrLinear *= pw;
+		// Reinhard on luminance (hue-preserving) — vanilla-matching SDR base
+		float maxCol    = Color::RGBToLuminance(hdrLinear);
+		float mappedMax = GetTonemapFactorReinhard(maxCol).x;
+		float3 reinhardLinear = (maxCol > 1e-6) ? hdrLinear * (mappedMax / maxCol) : hdrLinear;
+		// Scale the SDR base into HDR paper-white space, where 1.0 still represents
+		// 80 nits and paper white is expressed as pw = paperWhite / 80.
+		float3 sdrBase = saturate(reinhardLinear) * pw;
 
-		// Shoulder anchored at paper white so SDR-range content (<= pw) is untouched.
-		float shoulderStart = pw / peak;
-		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, shoulderStart, CS_BT709, CS_BT709);
+		// DICE input scaled to nit space — no normalization cancellation
+		// because we keep diceOut in nit space until compositing
+		float3 diceNits = DisplayMapping::DICETonemap(
+			hdrLinear * pw,
+			peak,
+			pw / peak,
+			CS_BT709, CS_BT709);
 
-		// Output gamma-encoded BT.709 to kFRAMEBUFFER (float16).
-		// BT.2020 conversion and PQ encoding happen in HDROutputCS after all post-processing.
-		outputColor = Color::LinearToGamma(max(0.0, hdrLinear));
+		// Keep the exact SDR baseline up to paper white and add only the DICE headroom
+		// above paper white so fires and emissives can extend into HDR.
+		float3 hdrHeadroom  = max(0.0, diceNits - pw);
+		float3 hdrLinearOut = sdrBase + hdrHeadroom;
+
+		outputColor = Color::LinearToGamma(max(0.0, hdrLinearOut));
 	} else {
 		// === SDR Pipeline (LDR RT) ===
 		// Input: Linear HDR values (can exceed 1.0)
