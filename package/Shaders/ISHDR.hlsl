@@ -164,9 +164,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	if (isHDR) {
 		float paperWhiteNits = SharedData::HDRData.y;
-		float peakNits       = SharedData::HDRData.z;
-		float pw   = paperWhiteNits / sRGB_WhiteLevelNits;
-		float peak = peakNits       / sRGB_WhiteLevelNits;
+		float peakNits = SharedData::HDRData.z;
+		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
+		float peak = peakNits / sRGB_WhiteLevelNits;
 
 		float3 hdrGamma = ENABLE_LL ? Color::LinearToGamma(inputColor) : inputColor;
 		float hdrGammaLum = Color::RGBToLuminance(hdrGamma);

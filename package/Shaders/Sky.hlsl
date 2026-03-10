@@ -247,7 +247,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(TEX) && !defined(MOONMASK) && !defined(HORIZFADE) && !defined(CLOUDS)
 	if (SharedData::HDRData.x > 0.5) {
 		float paperWhite = SharedData::HDRData.y / sRGB_WhiteLevelNits;
-		float peakWhite = min(SharedData::HDRData.z, 2000.0) / sRGB_WhiteLevelNits; // prevents the user from setting ridiculous peaknits then having their game explode when the sun is 10k nits.
+		float peakWhite = min(SharedData::HDRData.z, 2000.0) / sRGB_WhiteLevelNits;  // prevents the user from setting ridiculous peaknits then having their game explode when the sun is 10k nits.
 		float3 fogColor = yyy;
 		float3 sunColor = Color::Sky(input.Color.xyz) * baseColor.xyz;
 		float sunCoreMask = pow(saturate(psout.Color.w), 8.0);
@@ -266,7 +266,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float currentOutputLuminance = sourceLuminance;
 		if (sourcePerceptual > shoulderPerceptual) {
 			float compressedPerceptual = shoulderPerceptual +
-				(peakPerceptual - shoulderPerceptual) * (1.0 - exp(-(sourcePerceptual - shoulderPerceptual) / max(peakPerceptual - shoulderPerceptual, 1e-4)));
+			                             (peakPerceptual - shoulderPerceptual) * (1.0 - exp(-(sourcePerceptual - shoulderPerceptual) / max(peakPerceptual - shoulderPerceptual, 1e-4)));
 			currentOutputLuminance = PQ_to_Linear(compressedPerceptual.xxx, GCT_DEFAULT).x * hdr10MaxWhite;
 		}
 
