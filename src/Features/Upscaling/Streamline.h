@@ -86,7 +86,6 @@ public:
 
 	void EvaluateDLSS(ID3D12GraphicsCommandList4* commandList, sl::ViewportHandle vp,
 		ID3D12Resource* colorIn, ID3D12Resource* colorOut, ID3D12Resource* depth, ID3D12Resource* mvec, ID3D12Resource* reactiveMask,
-		ID3D12Resource* diffuseAlbedo, ID3D12Resource* specularAlbedo, ID3D12Resource* normalRoughness, ID3D12Resource* specHitDistance,
 		const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth);
 
 	void EvaluateDLSSD(ID3D12GraphicsCommandList4* commandList, sl::ViewportHandle vp,

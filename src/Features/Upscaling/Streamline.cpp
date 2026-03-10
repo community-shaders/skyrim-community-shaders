@@ -560,7 +560,6 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 
 void Streamline::EvaluateDLSS(ID3D12GraphicsCommandList4* commandList, sl::ViewportHandle vp,
 	ID3D12Resource* colorIn, ID3D12Resource* colorOut, ID3D12Resource* depth, ID3D12Resource* mvec, ID3D12Resource* reactiveMask,
-	ID3D12Resource* diffuseAlbedo, ID3D12Resource* specularAlbedo, ID3D12Resource* normalRoughness, ID3D12Resource* specHitDistance,
 	const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth)
 {
 	sl::Resource colorInRes = { sl::ResourceType::eTex2d, colorIn, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
@@ -569,11 +568,6 @@ void Streamline::EvaluateDLSS(ID3D12GraphicsCommandList4* commandList, sl::Viewp
 	sl::Resource mvecRes = { sl::ResourceType::eTex2d, mvec, 0 };
 	sl::Resource reactiveMaskRes = { sl::ResourceType::eTex2d, reactiveMask, 0 };
 	//sl::Resource transparencyMaskRes = { sl::ResourceType::eTex2d, transparencyMask, 0 };
-
-	sl::Resource diffuseAlbedoRes = { sl::ResourceType::eTex2d, diffuseAlbedo, 0 };
-	sl::Resource specularAlbedoRes = { sl::ResourceType::eTex2d, specularAlbedo, 0 };
-	sl::Resource normalRoughnessRes = { sl::ResourceType::eTex2d, normalRoughness, 0 };
-	sl::Resource specHitDistanceRes = { sl::ResourceType::eTex2d, specHitDistance, 0 };
 
 	CheckFrameConstants(vp, 0);
 	SetDLSSOptions(vp, outputWidth);
@@ -585,10 +579,6 @@ void Streamline::EvaluateDLSS(ID3D12GraphicsCommandList4* commandList, sl::Viewp
 		{ &mvecRes, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
 		{ &reactiveMaskRes, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn }, // kBufferTypeReactiveMaskHint
 		//{ &transparencyMaskRes, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
-		{ &diffuseAlbedoRes, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
-		{ &specularAlbedoRes, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
-		{ &normalRoughnessRes, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
-		{ &specHitDistanceRes, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &extentIn }
 	};
 
 	if (SL_FAILED(result, slSetTag(vp, tags, _countof(tags), commandList))) {
@@ -735,13 +725,6 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 void Streamline::Upscale(ID3D12GraphicsCommandList4* a_commandList, ID3D12Resource* a_input, ID3D12Resource* a_output, ID3D12Resource* a_depth, ID3D12Resource* a_motionVectors, ID3D12Resource* a_reactiveMask)
 {
-	ID3D12Resource* diffuseAlbedo = nullptr;
-	ID3D12Resource* specularAlbedo = nullptr;
-	ID3D12Resource* normalRoughness = nullptr;
-	ID3D12Resource* specHitDistance = nullptr;
-
-	globals::features::raytracing.creationEngineRaytracing->GetRRInput(diffuseAlbedo, specularAlbedo, normalRoughness, specHitDistance);
-
 	auto screenSize = globals::state->screenSize;
 	auto renderSize = Util::ConvertToDynamic(screenSize);
 
@@ -750,7 +733,6 @@ void Streamline::Upscale(ID3D12GraphicsCommandList4* a_commandList, ID3D12Resour
 
 	EvaluateDLSS(a_commandList, viewport,
 		a_input, a_output, a_depth, a_motionVectors, a_reactiveMask,
-		diffuseAlbedo, specularAlbedo, normalRoughness, specHitDistance,
 		extentIn, extentOut, (uint)screenSize.x);
 }
 
