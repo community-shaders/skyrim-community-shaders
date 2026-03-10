@@ -247,10 +247,15 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(TEX) && !defined(MOONMASK) && !defined(HORIZFADE) && !defined(CLOUDS)
 	if (SharedData::HDRData.x > 0.5) {
 		float paperWhite = SharedData::HDRData.y / sRGB_WhiteLevelNits;
-		float sunCoreMask = pow(saturate(psout.Color.w), 8.0);
 		float peakWhite = min(SharedData::HDRData.z, 2000.0) / sRGB_WhiteLevelNits; // prevents the user from setting ridiculous peaknits then having their game explode when the sun is 10k nits.
-		float3 sunLinear = ENABLE_LL ? psout.Color.xyz : Color::GammaToLinear(psout.Color.xyz);
+		float3 fogColor = yyy;
+		float3 sunColor = Color::Sky(input.Color.xyz) * baseColor.xyz;
+		float sunCoreMask = pow(saturate(psout.Color.w), 8.0);
+		float3 sunLinear = ENABLE_LL ? sunColor : Color::GammaToLinear(sunColor);
 		float sunLuminance = max(Color::RGBToLuminance(sunLinear), 1e-4);
+		float3 fogLinear = ENABLE_LL ? fogColor : Color::GammaToLinear(fogColor);
+		float fogLuminance = Color::RGBToLuminance(fogLinear);
+		float sunVisibility = sunLuminance / max(sunLuminance + fogLuminance, 1e-4);
 		float sourceLuminance = sunLuminance * paperWhite;
 
 		static const float hdr10MaxWhite = HDR10_MaxWhiteNits / sRGB_WhiteLevelNits;
@@ -265,7 +270,7 @@ PS_OUTPUT main(PS_INPUT input)
 			currentOutputLuminance = PQ_to_Linear(compressedPerceptual.xxx, GCT_DEFAULT).x * hdr10MaxWhite;
 		}
 
-		float desiredOutputLuminance = lerp(currentOutputLuminance, peakWhite, sunCoreMask);
+		float desiredOutputLuminance = lerp(currentOutputLuminance, peakWhite, sunCoreMask * sunVisibility);
 		float requiredSourceLuminance = desiredOutputLuminance;
 		if (desiredOutputLuminance > paperWhite) {
 			float desiredPerceptual = Linear_to_PQ((desiredOutputLuminance / hdr10MaxWhite).xxx, GCT_DEFAULT).x;
@@ -276,7 +281,7 @@ PS_OUTPUT main(PS_INPUT input)
 		}
 
 		sunLinear *= requiredSourceLuminance / sourceLuminance;
-		psout.Color.xyz = ENABLE_LL ? sunLinear : Color::LinearToGamma(sunLinear);
+		psout.Color.xyz = ENABLE_LL ? sunLinear + fogColor : Color::LinearToGamma(sunLinear) + fogColor;
 	}
 #		endif
 
