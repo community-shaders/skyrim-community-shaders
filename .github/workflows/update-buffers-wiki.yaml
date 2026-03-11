@@ -32,8 +32,9 @@ jobs:
             - name: Prepare shaders
               uses: ./.github/actions/prepare-shaders
 
-            - name: Create wiki content directory
-              run: mkdir -p wiki-content
+            - name: Checkout existing wiki
+              run: |
+                  git clone --depth=1 "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki-content || mkdir -p wiki-content
               shell: bash
 
             - name: Scan buffer usage
