@@ -473,24 +473,31 @@ void Raytracing::SetupResources()
 	ShareTexture(renderer->GetRuntimeData().renderTargets[ALBEDO].texture, albedoTexture.put());
 	ShareTexture(renderer->GetRuntimeData().renderTargets[MASKS2].texture, gnmaoTexture.put());
 
-	// Normal Roughness Texture
+	// Shared Textures
 	{
 		D3D11_TEXTURE2D_DESC texDesc{};
 		texDesc.Width = mainDesc.Width;
 		texDesc.Height = mainDesc.Height;
 		texDesc.MipLevels = 1;
 		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_SNORM;
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
+		// Normal Roughness Texture
+		texDesc.Format = DXGI_FORMAT_R8G8B8A8_SNORM;
 		normalRoughnessTexture = eastl::make_unique<WrappedResource>(texDesc);
+
+		// Diffuse Albedo Texture
+		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+		diffuseAlbedoTexture = eastl::make_unique<WrappedResource>(texDesc);
 	}
 
 	if (initialized) {
+		settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser = GetDenoiser(globals::features::upscaling.GetUpscaleMethod());
+
 		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
-		creationEngineRaytracing->SetRenderTargets(albedoTexture.get(), normalRoughnessTexture->resource.get(), gnmaoTexture.get());
+		creationEngineRaytracing->SetSharedTextures(albedoTexture.get(), normalRoughnessTexture->resource.get(), gnmaoTexture.get(), diffuseAlbedoTexture->resource.get());
 		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
 	}
 
@@ -548,7 +555,7 @@ void Raytracing::SetupResources()
 
 void Raytracing::SetUpscaler(Upscaling::UpscaleMethod method)
 {
-	auto denoiser = method == Upscaling::UpscaleMethod::kDLSS_RR ? CreationEngineRaytracing::Denoiser::DLSS_RR : CreationEngineRaytracing::Denoiser::None;
+	auto denoiser = GetDenoiser(method);
 
 	if (settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser == denoiser)
 		return;
@@ -557,26 +564,6 @@ void Raytracing::SetUpscaler(Upscaling::UpscaleMethod method)
 
 	if (initialized)
 		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
-}
-
-WrappedResource* Raytracing::GetDiffuseAlbedoTexture() {
-	if (!diffuseAlbedoTexture) {
-		float2 resolution = globals::state->screenSize;
-
-		D3D11_TEXTURE2D_DESC texDesc{};
-		texDesc.Width = static_cast<UINT>(resolution.x);
-		texDesc.Height = static_cast<UINT>(resolution.y);
-		texDesc.MipLevels = 1;
-		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-		texDesc.SampleDesc.Count = 1;
-		texDesc.SampleDesc.Quality = 0;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-		diffuseAlbedoTexture = eastl::make_unique<WrappedResource>(texDesc);
-	}
-
-	return diffuseAlbedoTexture.get();
 }
 
 Raytracing::SharedData Raytracing::GetCommonBufferData() const
@@ -676,11 +663,8 @@ void Raytracing::ConvertTextures()
 
 	ID3D11UnorderedAccessView* uavs[] = {
 		normalRoughnessTexture->uav,
-		nullptr
+		diffuseAlbedoTexture->uav
 	};
-
-	if (isRayReconstruction)
-		uavs[1] = GetDiffuseAlbedoTexture()->uav;
 
 	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
@@ -809,12 +793,13 @@ void Raytracing::DeferredPasses()
 
 void Raytracing::GetRayReconstructionInputs(ID3D12Resource*& diffuseAlbedo, ID3D12Resource*& specularAlbedo, ID3D12Resource*& normalRoughness, ID3D12Resource*& specHitDistance)
 {
-	if (Mode() == CreationEngineRaytracing::Mode::GlobalIllumination) {
-		diffuseAlbedo = GetDiffuseAlbedoTexture()->resource.get();
-		normalRoughness = normalRoughnessTexture->resource.get();
-	} else if (Mode() == CreationEngineRaytracing::Mode::PathTracing) {
-		creationEngineRaytracing->GetRRInput(diffuseAlbedo, specularAlbedo, normalRoughness, specHitDistance);
-	}
+	if (Mode() != CreationEngineRaytracing::Mode::GlobalIllumination && Mode() != CreationEngineRaytracing::Mode::PathTracing)
+		return;
+
+	diffuseAlbedo = diffuseAlbedoTexture->resource.get();
+	normalRoughness = normalRoughnessTexture->resource.get();
+
+	creationEngineRaytracing->GetRRInput(specularAlbedo, specHitDistance);
 }
 
 RE::BSEventNotifyControl Raytracing::BGSActorCellEventHandler::ProcessEvent(const RE::BGSActorCellEvent* a_event, RE::BSTEventSource<RE::BGSActorCellEvent>*)
