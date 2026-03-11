@@ -113,6 +113,17 @@ cbuffer PerTechnique : register(b0)
 	float phaseContribution = lerp(1, phaseFactor, PhaseContribution);
 
 	float shadowContribution = noShadow;
+
+#	if defined(TERRAIN_SHADOWS)
+	if (!SharedData::InInterior)
+		shadowContribution *= TerrainShadows::GetTerrainShadow(positionWS.xyz + PosAdjust[eyeIndex], LinearSampler);
+#	endif
+
+#	if defined(CLOUD_SHADOWS)
+	if (!SharedData::InInterior)
+		shadowContribution *= sqrt(CloudShadows::GetCloudShadowMult(positionWS.xyz + PosAdjust[eyeIndex], LinearSampler));
+#	endif
+
 	float vl = shadowContribution * densityContribution * phaseContribution;
 
 	DensityRW[dispatchID.xyz] = vl;
