@@ -947,14 +947,6 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
 	PS_OUTPUT psout;
-#	if defined(RAYTRACING) && !defined(DEFERRED)
-	[branch]
-	if (SharedData::raytracingSettings.PathTracing) {
-		psout.Diffuse = float4(0, 0, 0, 0);
-		return psout;
-	}
-#	endif
-
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.Position, VPOSOffset);
 
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
@@ -969,6 +961,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 #	endif
 	const bool inReflection = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection;
+
+#	if defined(RAYTRACING) && !defined(DEFERRED)
+	[branch]
+	if (SharedData::raytracingSettings.PathTracing && inWorld) {
+		psout.Diffuse = float4(0, 0, 0, 0);
+		return psout;
+	}
+#	endif
 
 	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, viewPosition.z);
 
