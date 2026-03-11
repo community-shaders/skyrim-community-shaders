@@ -30,9 +30,9 @@ struct DirectionalShadowData
 	float2 StartSplitDistances;
 };
 
-StructuredBuffer<DirectionalShadowData> DirectionalShadows : register(t81);
+StructuredBuffer<DirectionalShadowData> DirectionalShadows : register(t98);
 
-Texture2DArray<float> DirectionalShadowCascades : register(t82);
+Texture2DArray<float> DirectionalShadowCascades : register(t99);
 
 struct ShadowData
 {
@@ -42,8 +42,8 @@ struct ShadowData
 	float4 ShadowParam;
 };
 
-StructuredBuffer<ShadowData> Shadows    : register(t83);
-Texture2DArray<float>        ShadowMaps : register(t84);
+StructuredBuffer<ShadowData> Shadows    : register(t100);
+Texture2DArray<float>        ShadowMaps : register(t101);
 
 // Comparison sampler for PCF shadow filtering (less-equal depth test).
 SamplerComparisonState ShadowSamplerCmp : register(s14);
@@ -187,7 +187,7 @@ namespace ShadowSampling
 			float3 lightDirection = normalize(normalize(positionLS.xyz) + float3(0, 0, 1));
 			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 			positionLS.z = saturate(length(positionLS.xyz) / shadow.ShadowParam.y);
-			
+
 			float visibility = dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
 			return visibility;
 		}
