@@ -327,6 +327,12 @@ struct Raytracing : public OverlayFeature
 		return settings.CreationEngineRaytracingSettings.GeneralSettings.Mode;
 	}
 
+	static CreationEngineRaytracing::Denoiser GetDenoiser(Upscaling::UpscaleMethod method)
+	{
+		return (method == Upscaling::UpscaleMethod::kDLSS_RR) ? CreationEngineRaytracing::Denoiser::DLSS_RR : CreationEngineRaytracing::Denoiser::None;
+	}
+
+
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{

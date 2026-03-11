@@ -494,6 +494,8 @@ void Raytracing::SetupResources()
 	}
 
 	if (initialized) {
+		settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser = GetDenoiser(globals::features::upscaling.GetUpscaleMethod());
+
 		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
 		creationEngineRaytracing->SetSharedTextures(albedoTexture.get(), normalRoughnessTexture->resource.get(), gnmaoTexture.get(), diffuseAlbedoTexture->resource.get());
 		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
@@ -553,7 +555,7 @@ void Raytracing::SetupResources()
 
 void Raytracing::SetUpscaler(Upscaling::UpscaleMethod method)
 {
-	auto denoiser = method == Upscaling::UpscaleMethod::kDLSS_RR ? CreationEngineRaytracing::Denoiser::DLSS_RR : CreationEngineRaytracing::Denoiser::None;
+	auto denoiser = GetDenoiser(method);
 
 	if (settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser == denoiser)
 		return;
