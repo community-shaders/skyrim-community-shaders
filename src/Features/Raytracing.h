@@ -144,8 +144,8 @@ struct CreationEngineRaytracing
 	using SetSkyHemisphereFn = void (*)(ID3D12Resource*);
 	using GetFrameTimeFn = float* (*)();
 	using UpdateSettingsFn = void (*)(Settings);
-	using GetRRInputFn = void(*)(ID3D12Resource*&, ID3D12Resource*&, ID3D12Resource*&, ID3D12Resource*&);
-	using SetRenderTargetsFn = void(*)(ID3D12Resource*, ID3D12Resource*, ID3D12Resource*);
+	using GetRRInputFn = void(*)(ID3D12Resource*&, ID3D12Resource*&);
+	using SetSharedTexturesFn = void(*)(ID3D12Resource*, ID3D12Resource*, ID3D12Resource*, ID3D12Resource*);
 	using UpdateJitterFn = void(*)(float2);
 
 	InitializeFn Initialize = nullptr;
@@ -160,7 +160,7 @@ struct CreationEngineRaytracing
 	GetFrameTimeFn GetFrameTime = nullptr;
 	UpdateSettingsFn UpdateSettings = nullptr;
 	GetRRInputFn GetRRInput = nullptr;
-	SetRenderTargetsFn SetRenderTargets = nullptr;
+	SetSharedTexturesFn SetSharedTextures = nullptr;
 	UpdateJitterFn UpdateJitter = nullptr;
 
 	CreationEngineRaytracing()
@@ -235,10 +235,10 @@ struct CreationEngineRaytracing
 		if (!GetRRInput)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' GetRRInput is nullptr");
 
-		SetRenderTargets = reinterpret_cast<SetRenderTargetsFn>(GetProcAddress(handle, "SetRenderTargets"));
+		SetSharedTextures = reinterpret_cast<SetSharedTexturesFn>(GetProcAddress(handle, "SetSharedTextures"));
 
-		if (!SetRenderTargets)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetRenderTargets is nullptr");
+		if (!SetSharedTextures)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetSharedTextures is nullptr");
 
 		UpdateJitter = reinterpret_cast<UpdateJitterFn>(GetProcAddress(handle, "UpdateJitter"));
 
@@ -321,8 +321,6 @@ struct Raytracing : public OverlayFeature
 	void GetRayReconstructionInputs(ID3D12Resource*& diffuseAlbedo, ID3D12Resource*& specularAlbedo, ID3D12Resource*& normalRoughness, ID3D12Resource*& specHitDistance);
 
 	void SetUpscaler(Upscaling::UpscaleMethod method);
-
-	WrappedResource* GetDiffuseAlbedoTexture();
 
 	inline CreationEngineRaytracing::Mode Mode() const
 	{
