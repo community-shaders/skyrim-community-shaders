@@ -743,7 +743,7 @@ void Streamline::DenoiseUpscale(ID3D12GraphicsCommandList4* a_commandList, ID3D1
 	ID3D12Resource* normalRoughness = nullptr;
 	ID3D12Resource* specHitDistance = nullptr;
 
-	globals::features::raytracing.creationEngineRaytracing->GetRRInput(diffuseAlbedo, specularAlbedo, normalRoughness, specHitDistance);
+	globals::features::raytracing.GetRayReconstructionInputs(diffuseAlbedo, specularAlbedo, normalRoughness, specHitDistance);
 
 	auto screenSize = globals::state->screenSize;
 	auto renderSize = Util::ConvertToDynamic(screenSize);

@@ -201,6 +201,9 @@ void Upscaling::DrawSettings()
 
 	settings.upscaleMethod = availableModeVector[availableModeIndex].first;
 
+	// Update upscale method
+	globals::features::raytracing.SetUpscaler(settings.upscaleMethod);
+
 	// Display warning for DLSS resolution limits (non-VR only; VR handles this automatically)
 	if (!globals::game::isVR && settings.upscaleMethod == UpscaleMethod::kDLSS || settings.upscaleMethod == UpscaleMethod::kDLSS_RR) {
 		auto screenSize = globals::state->screenSize;
@@ -464,6 +467,8 @@ void Upscaling::LoadSettings(json& o_json)
 			iniSettingCollection->ReadSetting(setting);
 		}
 	}
+
+	globals::features::raytracing.SetUpscaler(settings.upscaleMethod);
 }
 
 void Upscaling::RestoreDefaultSettings()

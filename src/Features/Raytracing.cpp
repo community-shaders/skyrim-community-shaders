@@ -11,6 +11,7 @@
 #include "DX12Interop.h"
 
 #include "Deferred.h"
+#include "Features/Upscaling.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
@@ -383,8 +384,13 @@ void Raytracing::CompileShaders()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\PTCompositeCS.hlsl", {}, "cs_5_0")); rawPtr)
 		ptCompositeCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", {}, "cs_5_0")); rawPtr)
-		convertTexturesCS.attach(rawPtr);
+	auto compileConvertTexturesCS = [&](bool rayReconstruction) {
+		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", { { "DLSS_RR", rayReconstruction ? "1" : "0" } }, "cs_5_0")); rawPtr)
+			convertTexturesCS[rayReconstruction ? 1 : 0].attach(rawPtr);
+	};
+
+	compileConvertTexturesCS(false);
+	compileConvertTexturesCS(true);
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\GICompositeCS.hlsl", {}, "cs_5_0")); rawPtr)
 		giCompositeCS.attach(rawPtr);
@@ -540,6 +546,39 @@ void Raytracing::SetupResources()
 	CompileShaders();
 }
 
+void Raytracing::SetUpscaler(Upscaling::UpscaleMethod method)
+{
+	auto denoiser = method == Upscaling::UpscaleMethod::kDLSS_RR ? CreationEngineRaytracing::Denoiser::DLSS_RR : CreationEngineRaytracing::Denoiser::None;
+
+	if (settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser == denoiser)
+		return;
+
+	settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser = denoiser;
+
+	if (initialized)
+		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
+}
+
+WrappedResource* Raytracing::GetDiffuseAlbedoTexture() {
+	if (!diffuseAlbedoTexture) {
+		float2 resolution = globals::state->screenSize;
+
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = static_cast<UINT>(resolution.x);
+		texDesc.Height = static_cast<UINT>(resolution.y);
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		diffuseAlbedoTexture = eastl::make_unique<WrappedResource>(texDesc);
+	}
+
+	return diffuseAlbedoTexture.get();
+}
+
 Raytracing::SharedData Raytracing::GetCommonBufferData() const
 {
 	return {
@@ -600,7 +639,7 @@ void Raytracing::SkyCubeToHemi() const
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 }
 
-void Raytracing::ConvertTextures() const
+void Raytracing::ConvertTextures()
 {
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
@@ -611,7 +650,10 @@ void Raytracing::ConvertTextures() const
 	auto* frameBufferCB = *globals::game::perFrame.get();
 	context->CSSetConstantBuffers(12, 1, &frameBufferCB);
 
-	context->CSSetShader(convertTexturesCS.get(), nullptr, 0);
+	bool isRayReconstruction = globals::features::upscaling.GetUpscaleMethod() == Upscaling::UpscaleMethod::kDLSS_RR;
+
+	uint shaderIndex = isRayReconstruction ? 1 : 0;
+	context->CSSetShader(convertTexturesCS[shaderIndex].get(), nullptr, 0);
 
 	auto normalSmoothness = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
 	auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
@@ -629,8 +671,12 @@ void Raytracing::ConvertTextures() const
 	context->CSSetSamplers(0, 1, &sampler);
 
 	ID3D11UnorderedAccessView* uavs[] = {
-		normalRoughnessTexture->uav
+		normalRoughnessTexture->uav,
+		nullptr
 	};
+
+	if (isRayReconstruction)
+		uavs[1] = GetDiffuseAlbedoTexture()->uav;
 
 	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
@@ -638,6 +684,8 @@ void Raytracing::ConvertTextures() const
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 	uavs[0] = nullptr;
+	uavs[1] = nullptr;
+
 	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 }
 
@@ -752,6 +800,16 @@ void Raytracing::DeferredPasses()
 		pixCaptureStarted = true;
 
 		ga->BeginCapture();
+	}
+}
+
+void Raytracing::GetRayReconstructionInputs(ID3D12Resource*& diffuseAlbedo, ID3D12Resource*& specularAlbedo, ID3D12Resource*& normalRoughness, ID3D12Resource*& specHitDistance)
+{
+	if (Mode() == CreationEngineRaytracing::Mode::GlobalIllumination) {
+		diffuseAlbedo = GetDiffuseAlbedoTexture()->resource.get();
+		normalRoughness = normalRoughnessTexture->resource.get();
+	} else if (Mode() == CreationEngineRaytracing::Mode::PathTracing) {
+		creationEngineRaytracing->GetRRInput(diffuseAlbedo, specularAlbedo, normalRoughness, specHitDistance);
 	}
 }
 

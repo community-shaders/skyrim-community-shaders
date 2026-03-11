@@ -8,7 +8,7 @@ Texture2D<unorm half4>      Albedo              : register(t1);
 Texture2D<unorm half4>      GNMAO               : register(t2);
 
 RWTexture2D<snorm half4>    NormalRoughness     : register(u0);
-RWTexture2D<half4>          Diffuse             : register(u1);
+RWTexture2D<half3>          DiffuseAlbedo       : register(u1);
 
 SamplerState                Sampler             : register(s0);
 
@@ -24,10 +24,10 @@ void main(uint2 id : SV_DispatchThreadID)
     const snorm half3 normalWS = normalize(ViewToWorldVector(GBuffer::DecodeNormal(normalSmoothness.xy), FrameBuffer::CameraViewInverse[0]));
     NormalRoughness[id] = half4(normalWS, 1.0f - normalSmoothness.z);
 
-#   if defined(DLSS_RR)    
+#   if DLSS_RR 
     const float4 albedo = Albedo.SampleLevel(Sampler, uv, 0);
     const float metallic = GNMAO.SampleLevel(Sampler, uv, 0).z;
     
-    Diffuse[id] = float4(Color::GammaToTrueLinear(albedo.rgb) * (1.0f - metallic), albedo.a);
+    DiffuseAlbedo[id] = float4(Color::GammaToTrueLinear(albedo.rgb) * (1.0f - metallic), albedo.a);
 #   endif
 }
