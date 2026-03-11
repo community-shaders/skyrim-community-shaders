@@ -417,13 +417,16 @@ void Deferred::DeferredPasses()
 
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& ibl = globals::features::ibl;
+	bool skipDeferredComposite = false;
 
 	if (auto& rt = globals::features::raytracing; rt.loaded) {
 		rt.DeferredPasses();
+		skipDeferredComposite = rt.settings.CreationEngineRaytracingSettings.Enabled &&
+			rt.Mode() == CreationEngineRaytracing::Mode::PathTracing;
 	}
 
 	// Deferred Composite
-	{
+	if (!skipDeferredComposite) {
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
 		ID3D11ShaderResourceView* srvs[16]{
