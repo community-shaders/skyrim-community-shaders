@@ -581,11 +581,15 @@ WrappedResource* Raytracing::GetDiffuseAlbedoTexture() {
 
 Raytracing::SharedData Raytracing::GetCommonBufferData() const
 {
+	const bool pathTracingEnabled = settings.CreationEngineRaytracingSettings.Enabled &&
+		settings.CreationEngineRaytracingSettings.GeneralSettings.Mode == CreationEngineRaytracing::Mode::PathTracing;
+
 	return {
 		.InteriorDirectional = settings.CreationEngineRaytracingSettings.Enabled ? 0.0f : 1.0f,
 		.Ambient = settings.CreationEngineRaytracingSettings.Enabled ? 0.0f : 1.0f,
 		.EnvMap = settings.CreationEngineRaytracingSettings.Enabled ? 0.0f : 1.0f,
-		.Albedo = settings.CreationEngineRaytracingSettings.Enabled
+		.Albedo = settings.CreationEngineRaytracingSettings.Enabled,
+		.PathTracing = pathTracingEnabled ? 1u : 0u,
 	};
 }
 

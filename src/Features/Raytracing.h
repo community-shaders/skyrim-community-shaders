@@ -377,6 +377,10 @@ struct Raytracing : public OverlayFeature
 		float Ambient;
 		float EnvMap;
 		uint Albedo;
+		uint PathTracing;
+		uint _padding0;
+		uint _padding1;
+		uint _padding2;
 	};
 	static_assert(sizeof(SharedData) % 16 == 0);
 
