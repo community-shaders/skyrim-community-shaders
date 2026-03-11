@@ -129,14 +129,14 @@ void Deferred::SetupResources()
 
 		// PCF comparison sampler bound to s14 for ShadowSampling.hlsli.
 		D3D11_SAMPLER_DESC cmpDesc = {};
-		cmpDesc.Filter         = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
-		cmpDesc.AddressU       = D3D11_TEXTURE_ADDRESS_CLAMP;
-		cmpDesc.AddressV       = D3D11_TEXTURE_ADDRESS_CLAMP;
-		cmpDesc.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
-		cmpDesc.MaxAnisotropy  = 1;
+		cmpDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
+		cmpDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+		cmpDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		cmpDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+		cmpDesc.MaxAnisotropy = 1;
 		cmpDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
-		cmpDesc.MinLOD         = 0;
-		cmpDesc.MaxLOD         = D3D11_FLOAT32_MAX;
+		cmpDesc.MinLOD = 0;
+		cmpDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&cmpDesc, &shadowCmpSampler));
 	}
 
@@ -377,7 +377,7 @@ void Deferred::DeferredPasses()
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
-	  
+
 	auto& sss = globals::features::subsurfaceScattering;
 	if (sss.loaded)
 		sss.DrawSSS();
@@ -626,24 +626,23 @@ void Deferred::CopyShadowData()
 		return;
 
 	DirectionalShadowData dd{};
-	ShadowData            sd[16]{};
+	ShadowData sd[16]{};
 
 	auto context = globals::d3d::context;
 
-	auto& dirData          = sunShadowLight->GetShadowDirectionalLightRuntimeData();
-	dd.EndSplitDistances   = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
+	auto& dirData = sunShadowLight->GetShadowDirectionalLightRuntimeData();
+	dd.EndSplitDistances = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
 	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
 	ID3D11ShaderResourceView* cascadeSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS_ESRAM].depthSRV;
-	
+
 	if (globals::game::isVR)
 		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), dd);
 	else
 		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
 
-	uint32_t shadowCount  = 0;
+	uint32_t shadowCount = 0;
 	ID3D11ShaderResourceView* shadowMapsSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
-
 
 	{
 		int bufferIndex = 0;
@@ -672,8 +671,8 @@ void Deferred::CopyShadowData()
 		}
 	}
 
-	context->PSSetShaderResources(82, 1, &cascadeSRV);
-	context->PSSetShaderResources(84, 1, &shadowMapsSRV);
+	context->PSSetShaderResources(99, 1, &cascadeSRV);
+	context->PSSetShaderResources(101, 1, &shadowMapsSRV);
 	context->PSSetSamplers(14, 1, &shadowCmpSampler);
 
 	{
@@ -682,7 +681,7 @@ void Deferred::CopyShadowData()
 		memcpy(mapped.pData, &dd, sizeof(DirectionalShadowData));
 		context->Unmap(perDirectionalShadow->resource.get(), 0);
 		ID3D11ShaderResourceView* srv = perDirectionalShadow->srv.get();
-		context->PSSetShaderResources(81, 1, &srv);
+		context->PSSetShaderResources(98, 1, &srv);
 	}
 
 	{
@@ -691,7 +690,7 @@ void Deferred::CopyShadowData()
 		memcpy(mapped.pData, sd, 16 * sizeof(ShadowData));
 		context->Unmap(perShadows->resource.get(), 0);
 		ID3D11ShaderResourceView* srv = perShadows->srv.get();
-		context->PSSetShaderResources(83, 1, &srv);
+		context->PSSetShaderResources(100, 1, &srv);
 	}
 }
 

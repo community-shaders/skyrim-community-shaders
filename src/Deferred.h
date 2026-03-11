@@ -22,23 +22,22 @@ public:
 		return &singleton;
 	}
 
-
 	struct alignas(16) DirectionalShadowData
 	{
 		DirectX::XMFLOAT4X4 ShadowProj[2];
 		DirectX::XMFLOAT4X4 InvShadowProj[2];
 
-		DirectX::XMFLOAT2   EndSplitDistances;
-		DirectX::XMFLOAT2   StartSplitDistances;
+		DirectX::XMFLOAT2 EndSplitDistances;
+		DirectX::XMFLOAT2 StartSplitDistances;
 	};
 	STATIC_ASSERT_ALIGNAS_16(DirectionalShadowData);
 
 	struct alignas(16) ShadowData
 	{
-		DirectX::XMFLOAT4X4  ShadowProj;
-		DirectX::XMFLOAT4X4  InvShadowProj;
+		DirectX::XMFLOAT4X4 ShadowProj;
+		DirectX::XMFLOAT4X4 InvShadowProj;
 
-		float4				 ShadowParam;
+		float4 ShadowParam;
 	};
 
 	STATIC_ASSERT_ALIGNAS_16(ShadowData);
@@ -57,10 +56,10 @@ public:
 	void ClearShaderCache();
 
 	// Reads shadow parameters from game structs and uploads to structured buffers and texture arrays.
-	//   t81 — DirectionalShadowData  (cascade splits + world-to-shadow projections)
-	//   t82 — DirectionalShadowCascades  (Texture2DArray, game's kSHADOWMAPS_ESRAM depth SRV)
-	//   t83 — ShadowData (unified shadow light data, up to 4 elements)
-	//   t84 — ShadowMaps (Texture2DArray, game's kSHADOWMAPS depth SRV, bound directly)
+	//   t98 — DirectionalShadowData  (cascade splits + world-to-shadow projections)
+	//   t99 — DirectionalShadowCascades  (Texture2DArray, game's kSHADOWMAPS_ESRAM depth SRV)
+	//   t100 — ShadowData (unified shadow light data, up to 4 elements)
+	//   t101 — ShadowMaps (Texture2DArray, game's kSHADOWMAPS depth SRV, bound directly)
 	// Called during EarlyPrepasses immediately after shadow maps have been rendered.
 	void CopyShadowData();
 
@@ -75,15 +74,15 @@ public:
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
-	// Directional shadow structured buffer (t81): cascade splits and projections.
+	// Directional shadow structured buffer (t98): cascade splits and projections.
 	Buffer* perDirectionalShadow = nullptr;
-	// Unified shadow light structured buffer (t83): projection + type for each active light.
+	// Unified shadow light structured buffer (t100): projection + type for each active light.
 	Buffer* perShadows = nullptr;
 
 	bool deferredPass = false;
 
-	ID3D11SamplerState* linearSampler   = nullptr;
-	ID3D11SamplerState* pointSampler    = nullptr;
+	ID3D11SamplerState* linearSampler = nullptr;
+	ID3D11SamplerState* pointSampler = nullptr;
 	ID3D11SamplerState* shadowCmpSampler = nullptr;  // PCF comparison sampler (s14)
 
 private:
