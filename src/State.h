@@ -154,7 +154,8 @@ public:
 		InWorld = 1 << 0,
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
-		GrassSphereNormal = 1 << 3
+		GrassSphereNormal = 1 << 3,
+		IsSun = 1 << 4
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t
@@ -173,6 +174,7 @@ public:
 	bool activeReflections = false;
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
+	void UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass);
 
 	struct PermutationCB
 	{

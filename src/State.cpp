@@ -23,6 +23,20 @@
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
 
+void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
+{
+	permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsSun);
+
+	if (!a_pass || !a_pass->shaderProperty)
+		return;
+
+	auto* skyProperty = static_cast<const RE::BSSkyShaderProperty*>(a_pass->shaderProperty);
+	if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN ||
+		skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN_GLARE) {
+		permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsSun);
+	}
+}
+
 void State::Draw()
 {
 	ZoneScoped;
