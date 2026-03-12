@@ -1104,7 +1104,7 @@ void HDRDisplay::ScaleUIBrightnessForFG()
 	auto& upscaling = globals::features::upscaling;
 	bool isMainOrLoadingMenu = globals::game::ui &&
 	                           (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
-	                            globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+								   globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 
 	// Only run when FG is actively compositing UI this frame
 	bool fgCompositing = upscaling.d3d12SwapChainActive &&
