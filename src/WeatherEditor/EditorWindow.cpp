@@ -819,13 +819,6 @@ void EditorWindow::ShowViewportWindow()
 {
 	ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
 
-	// Top bar
-	if (DrawGameHourSlider("##ViewportSlider", "Time: %.2f")) {
-		ImGui::SameLine();
-		int activePeriod = TOD::GetActivePeriod();
-		ImGui::Text("(%s)", TOD::GetPeriodName(activePeriod));
-	}
-
 	// The size of the image in ImGui																														   // Get the available space in the current window
 	ImVec2 availableSpace = ImGui::GetContentRegionAvail();
 
@@ -1185,9 +1178,22 @@ void EditorWindow::RenderUI()
 			ImGui::PopStyleColor();
 		}
 
+		// Time slider anchored to the right of the menu bar
 		// Close button on the right side
 		float menuBarHeight = ImGui::GetFrameHeight();
 		float closeButtonSize = menuBarHeight * 0.9f;  // 10% smaller than menu bar
+
+		// Time slider anchored to the right of the menu bar
+		{
+			const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - 10.0f - itemSpacing - kMenuBarSliderWidth);
+			ImGui::SetNextItemWidth(kMenuBarSliderWidth);
+			if (DrawGameHourSlider("##MenuBarSlider", "Time: %.2f")) {
+				ImGui::SameLine();
+				ImGui::Text("(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
+			}
+		}
+
 		ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - 10.0f);
 		auto errorColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Error;
 		auto errorHoverColor = errorColor;

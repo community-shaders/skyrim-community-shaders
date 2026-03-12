@@ -53,6 +53,7 @@ public:
 	static constexpr float kGameHourMax = 23.99f;
 	static constexpr float kTimeScaleMin = 0.1f;
 	static constexpr float kTimeScaleMax = 4000.0f;
+	static constexpr float kMenuBarSliderWidth = 200.0f;
 
 	// Vanity camera control
 	bool vanityCameraDisabled = false;
