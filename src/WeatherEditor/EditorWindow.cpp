@@ -878,21 +878,15 @@ void EditorWindow::ShowWidgetWindow()
 
 void EditorWindow::RenderUI()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto& context = globals::d3d::context;
-
-	if (!settings.hideViewport)
-		context->ClearRenderTargetView(framebuffer.RTV, (float*)&ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
-
 	// Apply editor UI scale
 	ImGuiIO& io = ImGui::GetIO();
 	float previousScale = io.FontGlobalScale;
 	io.FontGlobalScale = settings.editorUIScale;
 
-	// Increase background opacity for all editor windows
-	if (!settings.hideViewport)
-		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
+	if (!settings.hideViewport) {
+		// Dim the game scene using the theme's modal dim background color
+		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
+	}
 
 	// Check for Ctrl+Z to undo
 	if ((ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
@@ -1248,10 +1242,6 @@ void EditorWindow::RenderUI()
 
 	// Render notifications on top of everything
 	RenderNotifications();
-
-	// Pop the alpha style var
-	if (!settings.hideViewport)
-		ImGui::PopStyleVar();
 
 	// Restore previous font scale
 	io.FontGlobalScale = previousScale;
