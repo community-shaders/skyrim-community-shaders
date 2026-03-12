@@ -1368,11 +1368,11 @@ void EditorWindow::Draw()
 					texture->GetDesc(&texDesc);
 
 					const bool needsRecreate = !tempTexture || !tempTexture->resource || !tempTexture->srv ||
-						tempTexture->desc.Width != texDesc.Width || tempTexture->desc.Height != texDesc.Height ||
-						tempTexture->desc.MipLevels != texDesc.MipLevels || tempTexture->desc.ArraySize != texDesc.ArraySize ||
-						tempTexture->desc.Format != texDesc.Format ||
-						tempTexture->desc.SampleDesc.Count != texDesc.SampleDesc.Count ||
-						tempTexture->desc.SampleDesc.Quality != texDesc.SampleDesc.Quality;
+					                           tempTexture->desc.Width != texDesc.Width || tempTexture->desc.Height != texDesc.Height ||
+					                           tempTexture->desc.MipLevels != texDesc.MipLevels || tempTexture->desc.ArraySize != texDesc.ArraySize ||
+					                           tempTexture->desc.Format != texDesc.Format ||
+					                           tempTexture->desc.SampleDesc.Count != texDesc.SampleDesc.Count ||
+					                           tempTexture->desc.SampleDesc.Quality != texDesc.SampleDesc.Quality;
 
 					if (needsRecreate) {
 						delete tempTexture;
