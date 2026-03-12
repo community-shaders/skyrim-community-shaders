@@ -676,33 +676,37 @@ void Deferred::CopyShadowData()
 	else
 		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
 
-	uint32_t shadowCount = 0;
 	ID3D11ShaderResourceView* shadowMapsSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
 
 	{
-		int bufferIndex = 0;
 		int mapIndex = 0;
 		while (true) {
 			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
 			if (!light)
 				break;
 
-			if (light->GetIsParabolicLight())
-				sd[shadowCount].ShadowParam.x = float(light->shadowMapCount == 2 ? 2 : 1);
-			else
-				sd[shadowCount].ShadowParam.x = 0;
-
+			// Use shadowmapIndex from the descriptor as the structured-buffer slot so that
+			// Shadows[shadowmapIndex] and ShadowMaps[shadowmapIndex] are always in sync.
+			// The accumulator may leave gaps (culled lights keep their reserved slot), so
+			// the sequential position in the accumulator is NOT a reliable index.
+			uint32_t depthSlot;
 			if (globals::game::isVR)
-				SetShadowParameters(light->GetVRRuntimeData(), sd[shadowCount]);
+				depthSlot = light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
 			else
-				SetShadowParameters(light->GetRuntimeData(), sd[shadowCount]);
+				depthSlot = light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
 
-			sd[shadowCount].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
+			if (depthSlot < 16) {
+				sd[depthSlot].ShadowParam.x = light->GetIsParabolicLight() ? float(light->shadowMapCount == 2 ? 2 : 1) : 0.f;
 
-			shadowCount++;
+				if (globals::game::isVR)
+					SetShadowParameters(light->GetVRRuntimeData(), sd[depthSlot]);
+				else
+					SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
+
+				sd[depthSlot].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
+			}
 
 			mapIndex += light->shadowMapCount;
-			bufferIndex++;
 		}
 	}
 
