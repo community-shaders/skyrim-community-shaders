@@ -37,7 +37,7 @@ Texture2DArray<float> DirectionalShadowCascades : register(t99);
 struct ShadowData
 {
 	column_major float4x4 ShadowProj;
-	column_major float4x4 InvShadowProj[2];
+	column_major float4x4 InvShadowProj;
 
 	float4 ShadowParam;
 };
