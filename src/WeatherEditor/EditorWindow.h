@@ -141,6 +141,7 @@ public:
 		int maxRecentWidgets = 10;
 		bool rememberOpenWidgets = true;
 		std::vector<std::string> lastOpenWidgets;
+		bool hideViewport = false;
 
 		// Palette settings
 		struct PaletteColorEntry

@@ -10,7 +10,7 @@
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets, hideViewport)
 
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
@@ -882,7 +882,8 @@ void EditorWindow::RenderUI()
 	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 	auto& context = globals::d3d::context;
 
-	context->ClearRenderTargetView(framebuffer.RTV, (float*)&ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
+	if (!settings.hideViewport)
+		context->ClearRenderTargetView(framebuffer.RTV, (float*)&ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
 
 	// Apply editor UI scale
 	ImGuiIO& io = ImGui::GetIO();
@@ -890,7 +891,8 @@ void EditorWindow::RenderUI()
 	io.FontGlobalScale = settings.editorUIScale;
 
 	// Increase background opacity for all editor windows
-	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
+	if (!settings.hideViewport)
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
 
 	// Check for Ctrl+Z to undo
 	if ((ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
@@ -1020,6 +1022,10 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
+			if (ImGui::MenuItem("Hide Viewport", nullptr, settings.hideViewport)) {
+				settings.hideViewport = !settings.hideViewport;
+				Save();
+			}
 			if (ImGui::MenuItem("Palette", nullptr, PaletteWindow::GetSingleton()->open)) {
 				PaletteWindow::GetSingleton()->open = !PaletteWindow::GetSingleton()->open;
 			}
@@ -1222,8 +1228,10 @@ void EditorWindow::RenderUI()
 	ImGui::SetNextWindowSize(ImVec2(sideWidth, ImGui::GetIO().DisplaySize.y * 0.75f), ImGuiCond_FirstUseEver);
 	ShowObjectsWindow();
 
-	ImGui::SetNextWindowSize(ImVec2(viewportWidth, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver);
-	ShowViewportWindow();
+	if (!settings.hideViewport) {
+		ImGui::SetNextWindowSize(ImVec2(viewportWidth, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver);
+		ShowViewportWindow();
+	}
 
 	auto settingsWindowHeight = height * 0.25f;
 	auto settingsWindowWidth = width * 0.25f;
@@ -1242,7 +1250,8 @@ void EditorWindow::RenderUI()
 	RenderNotifications();
 
 	// Pop the alpha style var
-	ImGui::PopStyleVar();
+	if (!settings.hideViewport)
+		ImGui::PopStyleVar();
 
 	// Restore previous font scale
 	io.FontGlobalScale = previousScale;
