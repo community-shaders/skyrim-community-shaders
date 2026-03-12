@@ -6,6 +6,7 @@
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/PBRMath.hlsli"
+#include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 
 namespace PBR
@@ -265,9 +266,9 @@ namespace PBR
 #endif
 		}
 
-		// Apply ambient occlusion
-		lobeWeights.diffuse *= material.AO;
-		lobeWeights.specular *= Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness);
+		// Apply ambient occlusion with multi-bounce approximation
+		lobeWeights.diffuse *= MultiBounceAO(material.BaseColor, material.AO);
+		lobeWeights.specular *= SpecularAOLagarde(NdotV, material.AO, material.Roughness);
 	}
 }
 
