@@ -42,36 +42,36 @@ namespace ExtendedMaterials
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
 
-		#if !defined(PARALLAX) && !defined(TRUE_PBR)
-				textureDims /= 2.0;
-		#endif
+#		if !defined(PARALLAX) && !defined(TRUE_PBR)
+		textureDims /= 2.0;
+#		endif
 
-		#if defined(VR)
-				textureDims /= 2.0;
-		#endif
+#		if defined(VR)
+		textureDims /= 2.0;
+#		endif
 
-			float2 texCoordsPerSize = coords * textureDims;
+		float2 texCoordsPerSize = coords * textureDims;
 
-			float2 dxSize = ddx(texCoordsPerSize);
-			float2 dySize = ddy(texCoordsPerSize);
+		float2 dxSize = ddx(texCoordsPerSize);
+		float2 dySize = ddy(texCoordsPerSize);
 
-			// Find min of change in u and v across quad: compute du and dv magnitude across quad
-			//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+		// Find min of change in u and v across quad: compute du and dv magnitude across quad
+		//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
 
-			// Standard mipmapping uses max here
-			float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
+		// Standard mipmapping uses max here
+		float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
 
-			// Compute the current mip level  (* 0.5 is effectively computing a square root before )
-			float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
+		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
-		#if !defined(PARALLAX) && !defined(TRUE_PBR)
-				mipLevel++;
-		#endif
+#		if !defined(PARALLAX) && !defined(TRUE_PBR)
+		mipLevel++;
+#		endif
 
 		// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
-		#if defined(VR)
-				mipLevel++;
-		#endif
+#		if defined(VR)
+		mipLevel++;
+#		endif
 
 		// Stochastic mip selection: use screen noise to select between adjacent mip levels
 		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
@@ -568,11 +568,7 @@ namespace ExtendedMaterials
 			if (quality > 0.75)
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 #		endif
-#		if defined(TERRAIN_VARIATION)
-			return 1.0 - saturate(dot(max(0, sh - sh0), ShadowIntensity)) * quality;
-#		else
 			return 1.0 - saturate(dot(max(0, sh - sh0) / scale, ShadowIntensity)) * quality;
-#		endif
 #	else
 #		if defined(TERRAIN_VARIATION)
 			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, heights);
@@ -591,11 +587,7 @@ namespace ExtendedMaterials
 			if (quality > 0.75)
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
 #		endif
-#		if defined(TERRAIN_VARIATION)
 			return 1.0 - saturate(dot(max(0, sh - sh0), ShadowIntensity)) * quality;
-#		else
-			return 1.0 - saturate(dot(max(0, sh - sh0), ShadowIntensity)) * quality;
-#		endif
 #	endif
 		}
 		return 1.0;
