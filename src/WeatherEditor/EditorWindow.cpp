@@ -817,7 +817,7 @@ void EditorWindow::ShowObjectsWindow()
 
 void EditorWindow::ShowViewportWindow()
 {
-	ImGui::Begin("Viewport");
+	ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
 
 	// Top bar
 	if (DrawGameHourSlider("##ViewportSlider", "Time: %.2f")) {
@@ -1016,12 +1016,9 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
-			if (ImGui::MenuItem("Hide Viewport", nullptr, settings.hideViewport)) {
-				settings.hideViewport = !settings.hideViewport;
+			if (ImGui::Checkbox("Hide Viewport", &settings.hideViewport))
 				Save();
-			}
-			if (ImGui::MenuItem("Palette", nullptr, PaletteWindow::GetSingleton()->open)) {
-				PaletteWindow::GetSingleton()->open = !PaletteWindow::GetSingleton()->open;
+			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
 			}
 
 			ImGui::Separator();
