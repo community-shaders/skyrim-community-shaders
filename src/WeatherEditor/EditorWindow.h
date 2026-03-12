@@ -53,7 +53,7 @@ public:
 	static constexpr float kGameHourMax = 23.99f;
 	static constexpr float kTimeScaleMin = 0.1f;
 	static constexpr float kTimeScaleMax = 4000.0f;
-	static constexpr float kMenuBarSliderWidth = 200.0f;
+	static constexpr float kMenuBarSliderWidth = 400.0f;
 
 	// Vanity camera control
 	bool vanityCameraDisabled = false;
@@ -142,7 +142,7 @@ public:
 		int maxRecentWidgets = 10;
 		bool rememberOpenWidgets = true;
 		std::vector<std::string> lastOpenWidgets;
-		bool hideViewport = false;
+		bool showViewport = true;
 
 		// Palette settings
 		struct PaletteColorEntry

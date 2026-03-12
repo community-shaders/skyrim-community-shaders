@@ -10,7 +10,7 @@
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets, hideViewport)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets, showViewport)
 
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
@@ -876,7 +876,7 @@ void EditorWindow::RenderUI()
 	float previousScale = io.FontGlobalScale;
 	io.FontGlobalScale = settings.editorUIScale;
 
-	if (!settings.hideViewport) {
+	if (settings.showViewport) {
 		// Dim the game scene using the theme's modal dim background color
 		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
 	}
@@ -1009,8 +1009,9 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
-			if (ImGui::Checkbox("Hide Viewport", &settings.hideViewport))
+			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
 				Save();
+			}
 			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
 			}
 
@@ -1186,11 +1187,17 @@ void EditorWindow::RenderUI()
 		// Time slider anchored to the right of the menu bar
 		{
 			const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
-			ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - 10.0f - itemSpacing - kMenuBarSliderWidth);
-			ImGui::SetNextItemWidth(kMenuBarSliderWidth);
-			if (DrawGameHourSlider("##MenuBarSlider", "Time: %.2f")) {
-				ImGui::SameLine();
-				ImGui::Text("(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
+			char periodBuf[64];
+			std::snprintf(periodBuf, sizeof(periodBuf), "(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
+			float periodWidth = ImGui::CalcTextSize(periodBuf).x;
+			const float sliderStartX = ImGui::GetWindowWidth() - closeButtonSize - 10.0f - itemSpacing - kMenuBarSliderWidth;
+			auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+			if (calendar && calendar->gameHour) {
+				ImGui::SameLine(sliderStartX - itemSpacing - periodWidth);
+				ImGui::TextUnformatted(periodBuf);
+				ImGui::SameLine(sliderStartX);
+				ImGui::SetNextItemWidth(kMenuBarSliderWidth);
+				DrawGameHourSlider("##MenuBarSlider", "Time: %.2f");
 			}
 		}
 
@@ -1225,7 +1232,7 @@ void EditorWindow::RenderUI()
 	ImGui::SetNextWindowSize(ImVec2(sideWidth, ImGui::GetIO().DisplaySize.y * 0.75f), ImGuiCond_FirstUseEver);
 	ShowObjectsWindow();
 
-	if (!settings.hideViewport) {
+	if (settings.showViewport) {
 		ImGui::SetNextWindowSize(ImVec2(viewportWidth, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver);
 		ShowViewportWindow();
 	}
