@@ -837,7 +837,11 @@ void EditorWindow::ShowViewportWindow()
 		imageSize.x = availableSpace.y * aspectRatio;
 	}
 
-	ImGui::Image((void*)tempTexture->srv.get(), imageSize);
+	if (tempTexture && tempTexture->srv) {
+		ImGui::Image((void*)tempTexture->srv.get(), imageSize);
+	} else {
+		ImGui::TextDisabled("Viewport unavailable");
+	}
 
 	ImGui::End();
 }
@@ -1347,29 +1351,48 @@ void EditorWindow::Draw()
 		}
 	}
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+	if (!settings.showViewport) {
+		delete tempTexture;
+		tempTexture = nullptr;
+	} else {
+		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+		if (renderer) {
+			auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+			if (framebuffer.SRV) {
+				ID3D11Resource* resource = nullptr;
+				framebuffer.SRV->GetResource(&resource);
 
-	ID3D11Resource* resource = nullptr;
-	framebuffer.SRV->GetResource(&resource);
+				if (resource) {
+					auto texture = static_cast<ID3D11Texture2D*>(resource);
+					D3D11_TEXTURE2D_DESC texDesc{};
+					texture->GetDesc(&texDesc);
 
-	if (!tempTexture) {
-		D3D11_TEXTURE2D_DESC texDesc{};
-		((ID3D11Texture2D*)resource)->GetDesc(&texDesc);
+					const bool needsRecreate = !tempTexture || !tempTexture->resource || !tempTexture->srv ||
+						tempTexture->desc.Width != texDesc.Width || tempTexture->desc.Height != texDesc.Height ||
+						tempTexture->desc.MipLevels != texDesc.MipLevels || tempTexture->desc.ArraySize != texDesc.ArraySize ||
+						tempTexture->desc.Format != texDesc.Format ||
+						tempTexture->desc.SampleDesc.Count != texDesc.SampleDesc.Count ||
+						tempTexture->desc.SampleDesc.Quality != texDesc.SampleDesc.Quality;
 
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		framebuffer.SRV->GetDesc(&srvDesc);
+					if (needsRecreate) {
+						delete tempTexture;
+						tempTexture = nullptr;
 
-		tempTexture = new Texture2D(texDesc);
-		tempTexture->CreateSRV(srvDesc);
-	}
+						D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+						framebuffer.SRV->GetDesc(&srvDesc);
 
-	auto& context = globals::d3d::context;
+						tempTexture = new Texture2D(texDesc);
+						tempTexture->CreateSRV(srvDesc);
+					}
 
-	context->CopyResource(tempTexture->resource.get(), resource);
+					if (tempTexture && tempTexture->resource) {
+						globals::d3d::context->CopyResource(tempTexture->resource.get(), resource);
+					}
 
-	if (resource) {
-		resource->Release();
+					resource->Release();
+				}
+			}
+		}
 	}
 
 	RenderUI();
