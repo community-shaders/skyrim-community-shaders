@@ -218,12 +218,11 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+		float peakRatio = min(SharedData::HDRData.z, 2000.0) / max(SharedData::HDRData.y, 1.0);
 #	if defined(DITHER)
-		baseColor = 0;
+		baseColor.xyz = Color::RGBToLuminance(baseColor.xyz) * (peakRatio * 0.25);
 		yyy = 0.0;
 #	else
-		float peakRatio = min(SharedData::HDRData.z, 2000.0) / max(SharedData::HDRData.y, 1.0);
-
 		static const float kSunSize = 0.8;
 		static const float kEdgeSoftness = 0.3;
 
@@ -233,15 +232,15 @@ PS_OUTPUT main(PS_INPUT input)
 		baseColor = sun * peakRatio;
 		baseColor.w = 1.0;
 		yyy = 0.0;
-#	endif
 
-#	ifndef OCCLUSION
-#		ifndef TEXLERP
-#			ifdef TEXFADE
+#		ifndef OCCLUSION
+#			ifndef TEXLERP
+#				ifdef TEXFADE
 		baseColor.w *= PParams.x;
-#			endif
-#		else
+#				endif
+#			else
 		baseColor *= PParams.x;
+#			endif
 #		endif
 #	endif
 	}
@@ -252,7 +251,11 @@ PS_OUTPUT main(PS_INPUT input)
 		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
-	psout.Color.xyz = (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy) + noiseGrad;
+	float3 sunGlareColor = Color::Sky(input.Color.xyz) * baseColor.xyz;
+	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+		sunGlareColor = baseColor.xyz;
+	}
+	psout.Color.xyz = (sunGlareColor + yyy) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
 	psout.Color.xyz = (yyy + Color::Sky(input.Color.xyz)) + noiseGrad;
