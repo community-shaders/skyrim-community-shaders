@@ -9,6 +9,11 @@ namespace VolumetricShadows
 	static const float VSM_MIN_VARIANCE = 0.00001;
 	static const float VSM_BLEEDING_REDUCTION = 0.2;
 
+	float GetShadowDepth(float3 positionWS, uint eyeIndex=0)
+	{
+		return length(positionWS - FrameBuffer::CameraPosAdjust[0].xyz);
+	}
+
 	// Chebyshev upper bound on P(X >= t)
 	// moments.x = mean(z), moments.y = mean(z^2)
 	float ComputeVSM(float2 moments, float depth)
@@ -83,7 +88,7 @@ namespace VolumetricShadows
 		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
 
 		// Transform ray to light space for primary cascade
-		float4x4 shadowProj = sD.ShadowMapProj[primaryCascade];
+		float4x4 shadowProj = sD.ShadowProj[primaryCascade];
 		float3 startLS = mul(shadowProj, float4(startPosition, 1)).xyz;
 		float3 endLS = mul(shadowProj, float4(endPosition, 1)).xyz;
 		startLS.xy = saturate(startLS.xy);
@@ -99,7 +104,7 @@ namespace VolumetricShadows
 		{
 			uint secondaryCascade = 1 - primaryCascade;
 
-			shadowProj = sD.ShadowMapProj[secondaryCascade];
+			shadowProj = sD.ShadowProj[secondaryCascade];
 			startLS = mul(shadowProj, float4(startPosition, 1)).xyz;
 			endLS = mul(shadowProj, float4(endPosition, 1)).xyz;
 			startLS.xy = saturate(startLS.xy);
@@ -145,7 +150,7 @@ namespace VolumetricShadows
 		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
 
 		// Transform ray to light space for primary cascade
-		float4x4 shadowProj = sD.ShadowMapProj[primaryCascade];
+		float4x4 shadowProj = sD.ShadowProj[primaryCascade];
 		float3 positionLS = mul(transpose(shadowProj), float4(position, 1)).xyz;
 		positionLS.xy = saturate(positionLS.xy);
 
@@ -157,7 +162,7 @@ namespace VolumetricShadows
 		{
 			uint secondaryCascade = 1 - primaryCascade;
 
-			shadowProj = sD.ShadowMapProj[secondaryCascade];
+			shadowProj = sD.ShadowProj[secondaryCascade];
 			positionLS = mul(transpose(shadowProj), float4(position, 1)).xyz;
 			positionLS.xy = saturate(positionLS.xy);
 
