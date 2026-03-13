@@ -18,7 +18,7 @@ float SpecularAOLagarde(float NdotV, float ao, float roughness)
 
 float SpecularOcclusion(float NdotV, float alpha, float occlusion)
 {
-	return saturate(pow(NdotV + occlusion, alpha) - 1.0 + occlusion);
+	return saturate(pow(abs(NdotV + occlusion), alpha) - 1.0 + occlusion);
 }
 
 #endif  // __SHADING_HLSLI__
