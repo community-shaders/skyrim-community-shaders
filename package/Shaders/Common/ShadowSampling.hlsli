@@ -125,7 +125,7 @@ namespace ShadowSampling
 #endif
 	}
 
-	float GetLightingShadow(float3 worldPosition, uint eyeIndex, float2x2 rotationMatrix, out float detailedShadow)
+	float GetLightingShadow(float3 worldPosition, uint eyeIndex, out float detailedShadow)
 	{
 		DirectionalShadowData shadow = DirectionalShadows[0];
 
