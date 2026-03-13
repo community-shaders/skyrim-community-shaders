@@ -268,7 +268,7 @@ namespace PBR
 		// Apply ambient occlusion with multi-bounce approximation
 		lobeWeights.diffuse *= MultiBounceAO(material.BaseColor, material.AO);
 		float alpha = material.Roughness * material.Roughness;
-		lobeWeights.specular *= SpecularOcclusion(NdotV, alpha, material.AO);
+		lobeWeights.specular *= SpecularOcclusionGTSO(NdotV, material.AO);
 	}
 }
 

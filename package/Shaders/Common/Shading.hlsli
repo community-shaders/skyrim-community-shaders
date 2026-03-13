@@ -10,6 +10,13 @@ float3 MultiBounceAO(float3 baseColor, float ao)
 	return max(ao, ((ao * a + b) * ao + c) * ao);
 }
 
+// [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
+float SpecularOcclusionGTSO(float NdotV, float ao)
+{
+    float d = NdotV + ao;
+    return saturate(d * d - 1.0 + ao);
+}
+
 // [Lagarde et al. 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
 float SpecularAOLagarde(float NdotV, float ao, float roughness)
 {
