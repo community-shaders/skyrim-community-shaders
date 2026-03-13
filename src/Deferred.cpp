@@ -681,7 +681,7 @@ void Deferred::CopyShadowData()
 			                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
 			                         light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
 
-			if (depthSlot < shadowMapSlots) {
+			if (lightCount < shadowMapSlots) {
 				sd[depthSlot].ShadowParam.x = light->GetIsParabolicLight() ? float(light->shadowMapCount == 2 ? 2 : 1) : 0.f;
 
 				if (globals::game::isVR)
