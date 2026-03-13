@@ -155,7 +155,7 @@ namespace PBR
 			float3 F;
 #if defined(GLINT)
 			float3 specular = GetSpecularDirectLightMultiplierMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
-										   material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F);
+				material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F);
 #else
 			float3 specular = GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F);
 #endif
