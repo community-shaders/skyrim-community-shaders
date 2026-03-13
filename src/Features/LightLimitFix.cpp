@@ -254,7 +254,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 		auto bsLight = a_pass->sceneLights[i + 1];
 		auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
 		GET_INSTANCE_MEMBER(maskIndex, shadowLight);
-		strictLightDataTemp.ShadowBitMask |= (1 << maskIndex);
+		if (maskIndex < 32)
+			strictLightDataTemp.ShadowBitMask |= (1u << maskIndex);
 	}
 }
 
@@ -430,7 +431,7 @@ void LightLimitFix::UpdateLights()
 
 					if ((light.color.x + light.color.y + light.color.z) * light.fade > 1e-4 && light.radius > 1e-4) {
 						lightsData.push_back(light);
-					}				
+					}
 				}
 			}
 		}
@@ -440,7 +441,7 @@ void LightLimitFix::UpdateLights()
 		addLight(e);
 	}
 
-	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, int ) {
+	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, int) {
 		if (IsValidLight(shadowLight)) {
 			if (auto niLight = shadowLight->light.get()) {
 				auto& runtimeData = niLight->GetLightRuntimeData();
@@ -476,12 +477,12 @@ void LightLimitFix::UpdateLights()
 				else
 					light.shadowMapIndex = shadowLight->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
 				light.lightFlags.set(LightFlags::Shadow);
-					
+
 				SetLightPosition(light, niLight->world.translate);
 
 				if ((light.color.x + light.color.y + light.color.z) * light.fade > 1e-4 && light.radius > 1e-4) {
 					lightsData.push_back(light);
-				}		
+				}
 			}
 		}
 	};

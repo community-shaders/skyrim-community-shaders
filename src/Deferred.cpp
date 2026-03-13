@@ -111,6 +111,21 @@ void Deferred::SetupResources()
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 	}
 
+	// kSHADOWMAPS is created by BSShaderRenderTargets_Create before SetupResources() is called,
+	// so the SRV is available here. Re-runs on resolution change (render targets recreated).
+	if (auto* shadowMapsSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV) {
+		D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+		shadowMapsSRV->GetDesc(&desc);
+		if (desc.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2DARRAY && desc.Texture2DArray.ArraySize > 0) {
+			shadowMapSlots = desc.Texture2DArray.ArraySize;
+			logger::info("[Deferred] kSHADOWMAPS ArraySize = {}, effective shadowMapSlots = {}", desc.Texture2DArray.ArraySize, shadowMapSlots);
+		} else {
+			logger::warn("[Deferred] kSHADOWMAPS SRV not a Texture2DArray or ArraySize=0; keeping shadowMapSlots = {}", shadowMapSlots);
+		}
+	} else {
+		logger::warn("[Deferred] kSHADOWMAPS depthSRV is null at SetupResources; keeping shadowMapSlots = {}", shadowMapSlots);
+	}
+
 	{
 		auto device = globals::d3d::device;
 
@@ -181,20 +196,23 @@ void Deferred::SetupResources()
 		perDirectionalShadow->CreateSRV(srvDesc);
 	}
 
-	{
+	if (shadowMapSlots > 0) {
+		delete perShadows;
+		perShadows = nullptr;
+
 		D3D11_BUFFER_DESC sbDesc{};
 		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
 		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 		sbDesc.StructureByteStride = sizeof(ShadowData);
-		sbDesc.ByteWidth = 16 * sizeof(ShadowData);
+		sbDesc.ByteWidth = shadowMapSlots * sizeof(ShadowData);
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = 16;
+		srvDesc.Buffer.NumElements = shadowMapSlots;
 
 		perShadows = new Buffer(sbDesc);
 		perShadows->CreateSRV(srvDesc);
@@ -617,6 +635,9 @@ void Deferred::CopyShadowData()
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowData");
 
+	if (!perShadows || shadowMapSlots == 0)
+		return;
+
 	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
 	if (!shadowSceneNode)
 		return;
@@ -626,7 +647,7 @@ void Deferred::CopyShadowData()
 		return;
 
 	DirectionalShadowData dd{};
-	ShadowData sd[16]{};
+	std::vector<ShadowData> sd(shadowMapSlots);
 
 	auto context = globals::d3d::context;
 
@@ -644,23 +665,23 @@ void Deferred::CopyShadowData()
 	ID3D11ShaderResourceView* shadowMapsSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
 
 	{
+		// shadowLightsAccum is the CPU-side slot-indexed mirror of kSHADOWMAPS:
+		// shadowLightsAccum[i] holds the light whose shadow was rendered into kSHADOWMAPS[i]
+		// during Main_RenderShadowMaps. Trusting it directly avoids false rejections from
+		// cross-referencing activeShadowLights, which is a culling set and may not match.
+		uint32_t lightCount = 0;
+		uint32_t unshadowedLights = 0;
 		int mapIndex = 0;
 		while (true) {
 			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
 			if (!light)
 				break;
 
-			// Use shadowmapIndex from the descriptor as the structured-buffer slot so that
-			// Shadows[shadowmapIndex] and ShadowMaps[shadowmapIndex] are always in sync.
-			// The accumulator may leave gaps (culled lights keep their reserved slot), so
-			// the sequential position in the accumulator is NOT a reliable index.
-			uint32_t depthSlot;
-			if (globals::game::isVR)
-				depthSlot = light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
-			else
-				depthSlot = light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+			uint32_t depthSlot = globals::game::isVR ?
+			                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
+			                         light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
 
-			if (depthSlot < 16) {
+			if (depthSlot < shadowMapSlots) {
 				sd[depthSlot].ShadowParam.x = light->GetIsParabolicLight() ? float(light->shadowMapCount == 2 ? 2 : 1) : 0.f;
 
 				if (globals::game::isVR)
@@ -669,9 +690,22 @@ void Deferred::CopyShadowData()
 					SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
 
 				sd[depthSlot].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
+			} else {
+				unshadowedLights++;
 			}
 
 			mapIndex += light->shadowMapCount;
+			lightCount++;
+		}
+
+		uint32_t slotCount = static_cast<uint32_t>(mapIndex);
+		if (lightCount != shadowLightCount) {
+			shadowLightCount = lightCount;
+			if (unshadowedLights > 0)
+				logger::warn("[Deferred] {} shadow lights using {} / {} slots; {} lights exceed capacity and will render without shadow",
+					lightCount, slotCount, shadowMapSlots, unshadowedLights);
+			else
+				logger::info("[Deferred] {} shadow lights using {} / {} slots", lightCount, slotCount, shadowMapSlots);
 		}
 	}
 
@@ -691,7 +725,7 @@ void Deferred::CopyShadowData()
 	{
 		D3D11_MAPPED_SUBRESOURCE mapped{};
 		DX::ThrowIfFailed(context->Map(perShadows->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		memcpy(mapped.pData, sd, 16 * sizeof(ShadowData));
+		memcpy(mapped.pData, sd.data(), shadowMapSlots * sizeof(ShadowData));
 		context->Unmap(perShadows->resource.get(), 0);
 		ID3D11ShaderResourceView* srv = perShadows->srv.get();
 		context->PSSetShaderResources(100, 1, &srv);
