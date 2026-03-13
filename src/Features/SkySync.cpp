@@ -358,14 +358,16 @@ void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[3], floa
 			fadePhase = Phase::FadeOut;
 	}
 
-	const auto calendar = RE::Calendar::GetSingleton();
-	const float currentHoursPassed = calendar->GetHoursPassed();
-	const float timeScale = calendar->GetTimescale();
-	const float hoursPassedDiff = abs(currentHoursPassed - previousHoursPassed);
-	previousHoursPassed = currentHoursPassed;
-	if (timeScale <= 0.0f || hoursPassedDiff >= 0.01f) {
-		fadePhase = Phase::None;
-		current = target;
+	float timeScale = 20.0f;
+	if (const auto calendar = globals::game::calendar) {
+		const float currentHoursPassed = calendar->GetHoursPassed();
+		timeScale = calendar->GetTimescale();
+		const float hoursPassedDiff = std::abs(currentHoursPassed - previousHoursPassed);
+		previousHoursPassed = currentHoursPassed;
+		if (timeScale <= 0.0f || hoursPassedDiff >= 0.01f) {
+			fadePhase = Phase::None;
+			current = target;
+		}
 	}
 
 	if (current == Caster::None) {
@@ -413,7 +415,6 @@ void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, flo
 	sun->light->Update(updateData);
 
 	intensity = std::clamp(intensity, 0.0f, 1.0f);
-	sun->light->GetLightRuntimeData().fade = intensity;
 	volumetricLightingIntensityFactor = intensity;
 }
 

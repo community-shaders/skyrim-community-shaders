@@ -19,7 +19,6 @@ public:
 	}
 
 	void SetupResources();
-	void CopyShadowData();
 	void ReflectionsPrepasses();
 	void EarlyPrepasses();
 	void StartDeferred();
@@ -47,28 +46,6 @@ public:
 
 	ID3D11SamplerState* linearSampler = nullptr;
 	ID3D11SamplerState* pointSampler = nullptr;
-
-	struct alignas(16) PerGeometry
-	{
-		float4 VPOSOffset;
-		float4 ShadowSampleParam;    // fPoissonRadiusScale / iShadowMapResolution in z and w
-		float4 EndSplitDistances;    // cascade end distances int xyz, cascade count int z
-		float4 StartSplitDistances;  // cascade start ditances int xyz, 4 int z
-		float4 FocusShadowFadeParam;
-		float4 DebugColor;
-		float4 PropertyColor;
-		float4 AlphaTestRef;
-		float4 ShadowLightParam;  // Falloff in x, ShadowDistance squared in z
-		DirectX::XMFLOAT4X3 FocusShadowMapProj[4];
-		// Since PerGeometry is passed between c++ and hlsl, can't have different defines due to strong typing
-		DirectX::XMFLOAT4X3 ShadowMapProj[2][3];
-		DirectX::XMFLOAT4X3 CameraViewProjInverse[2];
-	};
-	STATIC_ASSERT_ALIGNAS_16(PerGeometry);
-
-	ID3D11ComputeShader* copyShadowCS = nullptr;
-	Buffer* perShadow = nullptr;
-	ID3D11ShaderResourceView* shadowView = nullptr;
 
 	struct Hooks
 	{

@@ -101,7 +101,7 @@ globals::d3d::*       // DirectX 11 device/context access
 ```bash
 # Fast shader deployment (dev iteration - no DLL build)
 # See docs/development/shader-workflow.md and docs/development/vscode-setup.md
-cmake --build ./build/ALL-WITH-AUTO-DEPLOYMENT --target COPY_SHADERS
+cmake --build ./build/ALL --target COPY_SHADERS
 
 # Shader validation (targeted testing recommended during development)
 cmake --build ./build/ALL --target prepare_shaders

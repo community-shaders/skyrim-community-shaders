@@ -54,6 +54,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	InitializeLog();
 	logger::info("Loaded {} {}", Plugin::NAME, Plugin::VERSION.string());
 	SKSE::Init(a_skse);
+	SKSE::AllocTrampoline(1 << 10);
 	return Load();
 }
 
@@ -117,8 +118,14 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 
 				auto shaderCache = globals::shaderCache;
 				shaderCache->menuLoaded = true;
-				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
+
+				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation && !globals::game::quitGame) {
 					std::this_thread::sleep_for(100ms);
+				}
+
+				if (globals::game::quitGame) {
+					logger::info("Game was closed, skipping feature DataLoaded methods");
+					break;
 				}
 
 				if (shaderCache->IsDiskCache()) {
@@ -175,7 +182,8 @@ bool Load()
 		L"Data/SKSE/Plugins/EVLaS.dll",
 		L"Data/SKSE/Plugins/AELAS.dll",
 		L"Data/SKSE/Plugins/SSEReShadeHelper.dll",
-		L"Data/SKSE/Plugins/trainwreck.dll"
+		L"Data/SKSE/Plugins/trainwreck.dll",
+		L"Data/SKSE/Plugins/TAASharpen.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {

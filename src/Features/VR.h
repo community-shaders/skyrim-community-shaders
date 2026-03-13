@@ -1,5 +1,4 @@
 #pragma once
-#include "FeatureConstraints.h"
 #include "Menu.h"
 #include "OverlayFeature.h"
 #include "Utils/Input.h"
@@ -111,6 +110,7 @@ public:
 	}
 
 	virtual void SetupResources() override;
+	virtual void ClearShaderCache() override;
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
 
@@ -118,7 +118,11 @@ public:
 	virtual void DataLoaded() override;
 	virtual void EarlyPrepass() override;
 
-	void UpdateDepthBufferCulling(bool desired, const FeatureConstraints::SettingId& settingId);
+	void UpdateDepthBufferCulling();
+
+	// Stereo bilateral blend pass - called from Deferred::DeferredPasses after composite
+	void DrawStereoBlend();
+	static bool AnyScreenSpaceEffectLoaded();
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
@@ -151,8 +155,15 @@ public:
 	{
 		// Performance optimization settings
 		bool EnableDepthBufferCullingExterior = true;  ///< Enable depth buffer culling for VR performance
-		bool EnableDepthBufferCullingInterior = false;
+		bool EnableDepthBufferCullingInterior = true;
 		float MinOccludeeBoxExtent = 10.0f;  ///< Minimum bounding box size for occlusion culling
+
+		// Stereo consistency blend pass (post-composite safety net)
+		bool EnableStereoBlend = true;            ///< Enable depth-aware bilateral blend between eyes
+		float StereoBlendDepthSigma = 0.01f;      ///< Depth sensitivity for bilateral weight (lower = stricter)
+		float StereoBlendMaxFactor = 0.1f;        ///< Maximum blend factor; keep low to preserve stereo parallax
+		float StereoBlendColorThreshold = 0.02f;  ///< Minimum color difference to trigger blending (luminance)
+		int StereoBlendDebugMode = 0;             ///< 0=off, 1=back-check, 2=blend weight, 3=edge detection
 
 		// VR Menu Overlay positioning settings
 		float VRMenuScale = Config::kDefaultMenuScale;  ///< Scale factor for overlay UI (0.5-2.0)
@@ -246,6 +257,10 @@ public:
 			mouseSpeed = std::clamp(mouseSpeed, 0.1f, 50.0f);
 			comboTimeout = std::clamp(comboTimeout, 1.0f, 10.0f);
 			kAutoHideSeconds = std::clamp(kAutoHideSeconds, 0, Config::kMaxAutoHideSeconds);
+			StereoBlendDepthSigma = std::clamp(StereoBlendDepthSigma, 0.001f, 0.1f);
+			StereoBlendMaxFactor = std::clamp(StereoBlendMaxFactor, 0.0f, 0.5f);
+			StereoBlendColorThreshold = std::clamp(StereoBlendColorThreshold, 0.0f, 0.2f);
+			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 3);
 		}
 	};
 
@@ -337,6 +352,24 @@ public:
 	winrt::com_ptr<ID3D11RenderTargetView> menuRTV;
 	winrt::com_ptr<ID3D11Texture2D> menuControllerTexture;
 	winrt::com_ptr<ID3D11RenderTargetView> menuControllerRTV;
+
+	// Stereo blend compute shader resources
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBackCheckCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBlendWeightCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugEdgeDetectionCS;
+	eastl::unique_ptr<Texture2D> stereoBlendCopyTex;
+	eastl::unique_ptr<ConstantBuffer> stereoBlendCB;
+
+	struct alignas(16) StereoBlendCB
+	{
+		float FrameDim[2];
+		float RcpFrameDim[2];
+		float DepthSigma;
+		float MaxBlendFactor;
+		float ColorDiffThreshold;
+		float pad;
+	};
 
 	// Engine hook integration points
 	bool* gDepthBufferCulling = nullptr;

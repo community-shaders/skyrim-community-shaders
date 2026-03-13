@@ -145,10 +145,10 @@ public:
 	struct Constants
 	{
 		// Font size constants
-		static constexpr float DEFAULT_SCREEN_HEIGHT = 1080.0f;  // Default screen resolution to use for subsequent calculations
-		static constexpr float DEFAULT_FONT_RATIO = 0.025f;      // Default 2.5% of screen height
-		static constexpr float MIN_FONT_SIZE = 16.0f;            // ~1.5% @ 1080px height
-		static constexpr float MAX_FONT_SIZE = 108.0f;           // 5.0% @ 2160px height
+		static constexpr float DEFAULT_SCREEN_HEIGHT = 1080.0f;       // Default screen resolution to use for subsequent calculations
+		static constexpr float DEFAULT_FONT_RATIO = (7.0f / 360.0f);  // 21px @ 1080p, 28px @ 1440p, 42px @ 4K
+		static constexpr float MIN_FONT_SIZE = 16.0f;                 // ~1.5% @ 1080px height
+		static constexpr float MAX_FONT_SIZE = 108.0f;                // 5.0% @ 2160px height
 		static constexpr float DEFAULT_FONT_SIZE = 27.0f;
 
 		// Global scale constants
@@ -196,6 +196,12 @@ public:
 		static constexpr float SCENE_FEATURE_DROPDOWN_RATIO = 0.45f;   // Feature dropdown width ratio
 		static constexpr float SCENE_SETTING_DROPDOWN_RATIO = 0.6f;    // Setting dropdown width ratio
 		static constexpr float SCENE_VALUE_LABEL_OFFSET_RATIO = 0.5f;  // Value label right-alignment ratio
+
+		// Combo search input constants
+		static constexpr float COMBO_SEARCH_ICON_SIZE = 16.0f;     // Icon size for search inside combos
+		static constexpr float COMBO_SEARCH_ICON_ALPHA = 0.5f;     // Icon alpha for subtle appearance
+		static constexpr float COMBO_SEARCH_ICON_OFFSET_X = 5.0f;  // Icon horizontal offset from input edge
+		static constexpr float COMBO_SEARCH_PADDING_LEFT = 24.0f;  // Left padding to make room for icon
 	};
 
 	static ThemeManager* GetSingleton()
@@ -259,6 +265,11 @@ public:
 	 * @brief Checks if themes have been discovered
 	 */
 	bool IsDiscovered() const { return discovered; }
+
+	/**
+	 * @brief Returns true if the theme name is a shipped preset
+	 */
+	bool IsPresetTheme(const std::string& themeName) const;
 
 	/**
 	 * @brief Gets the themes directory path

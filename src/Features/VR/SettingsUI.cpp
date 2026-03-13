@@ -1,9 +1,13 @@
 #include "FeatureConstraints.h"
+#include "Features/DynamicCubemaps.h"
+#include "Features/ScreenSpaceGI.h"
+#include "Features/ScreenSpaceShadows.h"
 #include "Features/VR.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
 #include "RE/B/BSOpenVR.h"
 #include "RE/P/PlayerCharacter.h"
+#include "State.h"
 #include "Utils/PerfUtils.h"
 #include "Utils/UI.h"
 #include "Utils/VRUtils.h"
@@ -259,33 +263,114 @@ namespace
 		}
 	}
 
+	void DrawStereoBlendSettings()
+	{
+		auto& vr = globals::features::vr;
+		VR::Settings& settings = vr.settings;
+
+		bool hasEffects = VR::AnyScreenSpaceEffectLoaded();
+		bool isDev = globals::state && globals::state->IsDeveloperMode();
+
+		if (!hasEffects && !isDev) {
+			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "No screen-space effects active (SSGI, SSR, SS Shadows).");
+			ImGui::TextWrapped("Stereo blend requires at least one screen-space effect to be loaded.");
+			return;
+		}
+
+		if (!hasEffects && isDev) {
+			ImGui::TextColored(ImVec4(0.6f, 0.6f, 1.0f, 1.0f), "Developer mode: no screen-space effects active, but controls are available.");
+		}
+
+		ImGui::Checkbox("Enable Stereo Blend", &settings.EnableStereoBlend);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Post-composite depth-aware bilateral blend between eyes.\n"
+				"Reduces stereo inconsistencies from screen-space effects (SSGI, SSR, etc.).\n"
+				"Each pixel is reprojected to the other eye; blending is applied only where\n"
+				"depth agrees (same surface). Full-screen pass in VR.\n"
+				"Only use to help with stereo consistency artifacts.\n");
+		}
+
+		ImGui::BeginDisabled(!settings.EnableStereoBlend);
+
+		ImGui::SliderFloat("Depth Sigma", &settings.StereoBlendDepthSigma, 0.001f, 0.1f, "%.4f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Depth sensitivity for the bilateral weight.\n"
+				"Lower values are stricter -- only blend when depths match very closely.\n"
+				"Higher values allow blending across slight depth differences.\n"
+				"Default: 0.01");
+		}
+
+		ImGui::SliderFloat("Max Blend Factor", &settings.StereoBlendMaxFactor, 0.0f, 0.5f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Maximum blend strength between the two eyes.\n"
+				"Higher values reduce screen-space effect flicker but destroy stereo depth.\n"
+				"Keep below ~0.15 to preserve 3D parallax. Above ~0.3 causes flat 'cardboard cutout' depth.\n"
+				"Default: 0.1");
+		}
+
+		ImGui::SliderFloat("Color Difference Threshold", &settings.StereoBlendColorThreshold, 0.0f, 0.2f, "%.3f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Minimum luminance difference between eyes to trigger blending.\n"
+				"Pixels where both eyes already agree are left untouched, preserving stereo parallax.\n"
+				"Only areas with visible screen-space effect inconsistencies get corrected.\n"
+				"Set to 0 to blend everywhere. Higher = more selective.\n"
+				"Default: 0.02");
+		}
+
+		ImGui::Separator();
+
+		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection" };
+		ImGui::Combo("Debug View", &settings.StereoBlendDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Off: Normal rendering.\n\n"
+				"Back-Check: Visualize reprojection outcomes.\n"
+				"  Blue   = sky or HMD mask (skipped).\n"
+				"  Yellow = source edge rejected (depth discontinuity at this pixel).\n"
+				"  Orange = destination edge rejected (discontinuity at reprojected pixel).\n"
+				"  Grey   = other eye can't see this point (out of bounds).\n"
+				"  Green  = back-check passed (surfaces match in both eyes).\n"
+				"  Red    = back-check failed (occlusion edge, blend penalized).\n\n"
+				"Blend Weight: Heatmap of stereo blend strength.\n"
+				"  Cool/black = no blending. Hot/white = maximum blending.\n"
+				"  Shows where the two eyes disagree and correction is applied.\n\n"
+				"Edge Detection: Highlights pixels excluded by depth discontinuity checks.\n"
+				"  Yellow = source edge (discontinuity at this pixel).\n"
+				"  Orange = destination edge (discontinuity at reprojected pixel).\n"
+				"  Scene  = all other pixels shown with normal blending.");
+		}
+
+		ImGui::EndDisabled();
+	}
+
 	void DrawGeneralVRSettings()
 	{
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Exteriors",
-				&settings.EnableDepthBufferCullingExterior,
-				{ "VR", "EnableDepthBufferCullingExterior" });
-			auto exteriorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingExterior" });
-			if (!exteriorConstraint.isConstrained) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Improves performance in exteriors, recommended ON.");
-				}
+			bool exteriorChanged = ImGui::Checkbox("Enable Depth Buffer Culling in Exteriors", &settings.EnableDepthBufferCullingExterior);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Improves performance in exteriors, recommended ON.");
 			}
 
-			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Interiors",
-				&settings.EnableDepthBufferCullingInterior,
-				{ "VR", "EnableDepthBufferCullingInterior" });
-			auto interiorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingInterior" });
-			if (!interiorConstraint.isConstrained) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Improves performance in interiors, recommended OFF due to occasional visual glitches.");
-				}
+			bool interiorChanged = ImGui::Checkbox("Enable Depth Buffer Culling in Interiors", &settings.EnableDepthBufferCullingInterior);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Improves performance in interiors, recommended ON.");
 			}
 
-			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f"))
-				*vr.gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+			if (exteriorChanged || interiorChanged) {
+				vr.UpdateDepthBufferCulling();
+			}
+
+			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f")) {
+				if (vr.gMinOccludeeBoxExtent) {
+					*vr.gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+				}
+			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Minimum bounding box dimensions for object occlusion culling. Lower values improve performance but may result in visual artifacts.");
 			}
@@ -876,6 +961,14 @@ void VR::DrawSettings()
 				DrawMenuSettings();
 				DrawMouseSettings();
 				DrawDragSettings();
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
+		}
+
+		if (BeginTabItemWithFont("Stereo", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##VRStereoFrame", { 0, 0 }, true)) {
+				DrawStereoBlendSettings();
 			}
 			ImGui::EndChild();
 			ImGui::EndTabItem();

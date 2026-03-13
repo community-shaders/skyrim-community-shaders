@@ -42,6 +42,9 @@ include(DetectGraphicsTools)
 set(SHADER_SOURCE_DIR ${CMAKE_SOURCE_DIR}/package/Shaders)
 set(SHADER_SOURCE_REL_DIR "Shaders")
 
+# Set feature shader source paths (for Hair Specular, etc.)
+set(FEATURES_DIR ${CMAKE_SOURCE_DIR}/features)
+
 # ============================================================================
 # RUNTIME DISCOVERY: No code generation needed!
 # ============================================================================
@@ -73,6 +76,18 @@ asset_dependency_init(shader_tests)
 
 # Add the shader source directory to be copied relative to the exe
 target_add_asset_directory(shader_tests ${SHADER_SOURCE_DIR} "/${SHADER_SOURCE_REL_DIR}")
+
+# Add feature shader directories (Hair Specular, etc.) to virtual shader paths
+# These are mapped so that #include "/Shaders/Hair/Hair.hlsli" works in tests
+file(GLOB FEATURE_SHADER_DIRS
+    LIST_DIRECTORIES true
+    "${FEATURES_DIR}/*/Shaders"
+)
+foreach(FEATURE_SHADER_DIR ${FEATURE_SHADER_DIRS})
+    if(IS_DIRECTORY ${FEATURE_SHADER_DIR})
+        target_add_asset_directory(shader_tests ${FEATURE_SHADER_DIR} "/${SHADER_SOURCE_REL_DIR}")
+    endif()
+endforeach()
 
 # Optional: Make shader tests depend on HLSL test files for automatic rebuild triggers
 # This ensures that changing HLSL test files triggers a relink (to update copied assets)

@@ -1078,10 +1078,14 @@ void Menu::ProcessInputEventQueue()
 					}
 				}
 
-				// Close menu with ESC if no editor window is open
+				// Handle ESC key for menu and editor window
 				auto* editorWindow = EditorWindow::GetSingleton();
-				if (key == VK_ESCAPE && IsEnabled && editorWindow && !editorWindow->open) {
-					IsEnabled = false;
+				if (key == VK_ESCAPE) {
+					if (editorWindow && editorWindow->open && editorWindow->ShouldHandleEscapeKey()) {
+						editorWindow->open = false;
+					} else if (IsEnabled && (!editorWindow || !editorWindow->open)) {
+						IsEnabled = false;
+					}
 				}
 			}
 

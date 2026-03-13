@@ -7,7 +7,7 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color : SV_Target0;
+	float4 Color: SV_Target0;
 };
 
 #if defined(PSHADER)
@@ -187,7 +187,8 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 #		if defined(EXP_HEIGHT_FOG)
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord.xy);
-	float4 positionWS = float4(2 * float2(input.TexCoord.x, -input.TexCoord.y + 1) - 1, depth, 1);
+	float2 monoUV = Stereo::ConvertFromStereoUV(input.TexCoord.xy, eyeIndex);
+	float4 positionWS = float4(2 * float2(monoUV.x, -monoUV.y + 1) - 1, depth, 1);
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 	if (SharedData::exponentialHeightFogSettings.enabled) {

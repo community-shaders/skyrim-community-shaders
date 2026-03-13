@@ -3,12 +3,14 @@
 
 struct DirectContext
 {
-    float3 worldNormal;
-    float3 vertexNormal;
-    float3 viewDir;
-    float3 lightDir;
-    float3 halfVector;
-    float3 lightColor;
+	float3 worldNormal;
+	float3 vertexNormal;
+	float3 viewDir;
+	float3 lightDir;
+	float3 halfVector;
+	float3 lightColor;
+	float detailedShadow;
+	float softShadow;
 #if defined(TRUE_PBR)
 	float3 coatWorldNormal;
 	float3 coatViewDir;
@@ -62,8 +64,8 @@ struct MaterialProperties
 	float Glossiness;
 	float3 SpecularColor;
 #	if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING) || defined(LOAD_SOFT_LIGHTING))
-    float3 rimSoftLightColor;
-#   endif
+	float3 rimSoftLightColor;
+#	endif
 #	if defined(BACK_LIGHTING)
 	float3 backLightColor;
 #	endif

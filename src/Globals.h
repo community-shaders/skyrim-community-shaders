@@ -1,7 +1,10 @@
 #pragma once
 
+#include <atomic>
+
 struct CloudShadows;
 struct DynamicCubemaps;
+struct VolumetricShadows;
 struct ExtendedMaterials;
 struct GrassCollision;
 struct GrassLighting;
@@ -57,6 +60,7 @@ namespace globals
 	{
 		extern CloudShadows cloudShadows;
 		extern DynamicCubemaps dynamicCubemaps;
+		extern VolumetricShadows volumetricShadows;
 		extern ExtendedMaterials extendedMaterials;
 		extern GrassCollision grassCollision;
 		extern GrassLighting grassLighting;
@@ -220,6 +224,7 @@ namespace globals
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
 		extern RE::Calendar* calendar;
+		extern std::atomic<bool> quitGame;
 
 		extern RE::BSGraphics::PixelShader** currentPixelShader;
 		extern RE::BSGraphics::VertexShader** currentVertexShader;
@@ -256,5 +261,6 @@ namespace globals
 	void OnInit();
 	void ReInit();
 	void OnDataLoaded();
+	void OnGameWindowClose();
 	void InstallD3DHooks(ID3D11DeviceContext* a_context);
 }

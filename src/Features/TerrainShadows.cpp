@@ -281,7 +281,7 @@ void TerrainShadows::Precompute()
 			.Height = texHeightMap->desc.Height,
 			.MipLevels = 1,
 			.ArraySize = 1,
-			.Format = DXGI_FORMAT_R16G16_FLOAT,
+			.Format = DXGI_FORMAT_R16G16_UNORM,
 			.SampleDesc = { .Count = 1 },
 			.Usage = D3D11_USAGE_DEFAULT,
 			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS
@@ -372,7 +372,7 @@ void TerrainShadows::UpdateShadow()
 		// soft shadow angles
 		float lenUV = float2{ dirLightDir.x, dirLightDir.y }.Length();
 		float dirLightAngle = atan2(-dirLightDir.z, lenUV);
-		float shadowSofteningRadiusAngle = 4.f * RE::NI_PI / 180.f;
+		float shadowSofteningRadiusAngle = RE::NI_PI / 180.f;
 		float upperAngle = std::max(0.f, dirLightAngle - shadowSofteningRadiusAngle);
 		float lowerAngle = std::min(RE::NI_HALF_PI - 1e-2f, dirLightAngle + shadowSofteningRadiusAngle);
 

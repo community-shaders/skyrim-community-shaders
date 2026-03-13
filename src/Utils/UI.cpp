@@ -17,6 +17,7 @@
 #include <DirectXTex.h>
 #include <d3d11.h>
 #include <dinput.h>
+#include <dxgi.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <wrl/client.h>
@@ -45,6 +46,47 @@
 
 namespace Util
 {
+	static ImVec2 g_screenScaleRatio = { 1.0f, 1.0f };
+	static ImVec2 g_displaySize = { 0.0f, 0.0f };
+
+	static int g_lastWindowWidth = 0;
+	static int g_lastWindowHeight = 0;
+
+	void RefreshScreenScale(HWND hwnd, float bufferWidth, float bufferHeight)
+	{
+		RECT rect{};
+		if (!GetClientRect(hwnd, &rect) || rect.right <= 0 || rect.bottom <= 0)
+			return;
+
+		if (rect.right == g_lastWindowWidth && rect.bottom == g_lastWindowHeight)
+			return;
+
+		g_displaySize.x = bufferWidth;
+		g_displaySize.y = bufferHeight;
+
+		g_screenScaleRatio.x = bufferWidth / static_cast<float>(rect.right);
+		g_screenScaleRatio.y = bufferHeight / static_cast<float>(rect.bottom);
+
+		g_lastWindowWidth = rect.right;
+		g_lastWindowHeight = rect.bottom;
+	}
+
+	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight)
+	{
+		RefreshScreenScale(hwnd, bufferWidth, bufferHeight);
+
+		auto& io = ImGui::GetIO();
+		io.DisplaySize = g_displaySize;
+
+		POINT cursorPos{};
+		if (GetCursorPos(&cursorPos) &&
+			ScreenToClient(hwnd, &cursorPos)) {
+			io.AddMousePosEvent(
+				static_cast<float>(cursorPos.x) * g_screenScaleRatio.x,
+				static_cast<float>(cursorPos.y) * g_screenScaleRatio.y);
+		}
+	}
+
 	HoverTooltipWrapper::HoverTooltipWrapper() :
 		previousFont(nullptr)
 	{
@@ -83,6 +125,102 @@ namespace Util
 	{
 		if (disable)
 			ImGui::EndDisabled();
+	}
+
+	void TextUnformattedDisabled(const char* a_text, const char* a_textEnd)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+		ImGui::TextUnformatted(a_text, a_textEnd);
+		ImGui::PopStyleColor();
+	}
+
+	bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags)
+	{
+		const ImVec4 kTransparent(0.0f, 0.0f, 0.0f, 0.0f);
+		ImGui::PushStyleColor(ImGuiCol_Header, kTransparent);
+		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kTransparent);
+		ImGui::PushStyleColor(ImGuiCol_HeaderActive, kTransparent);
+
+		bool pressed = ImGui::Selectable(label, selected, flags, ImVec2(0, ImGui::GetFrameHeight()));
+		bool hovered = ImGui::IsItemHovered();
+		bool active = ImGui::IsItemActive();
+		ImGui::PopStyleColor(3);
+
+		if (active || hovered) {
+			const ImGuiCol highlightCol = active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered;
+			const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
+		} else if (selected) {
+			const ImU32 rowColor = ImGui::GetColorU32(ImGuiCol_Header);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
+		}
+
+		return pressed;
+	}
+
+	void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth)
+	{
+		const ImVec2 mousePos = ImGui::GetMousePos();
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		constexpr float kTooltipOffsetX = 16.0f;
+		constexpr float kTooltipOffsetY = 12.0f;
+
+		const float viewportLeft = viewport->WorkPos.x;
+		const float viewportRight = viewport->WorkPos.x + viewport->WorkSize.x;
+		const float viewportTop = viewport->WorkPos.y;
+		const float viewportBottom = viewport->WorkPos.y + viewport->WorkSize.y;
+
+		// Vertical: flip above cursor when it would overflow the bottom.
+		const bool placeAboveCursor = (mousePos.y + kTooltipOffsetY + estimatedHeight) > viewportBottom;
+		float posY;
+		float pivotY;
+		if (placeAboveCursor) {
+			const float tentativeTopY = mousePos.y - kTooltipOffsetY - estimatedHeight;
+			posY = (tentativeTopY < viewportTop) ? (viewportTop + estimatedHeight) : (mousePos.y - kTooltipOffsetY);
+			pivotY = 1.0f;
+		} else {
+			posY = mousePos.y + kTooltipOffsetY;
+			pivotY = 0.0f;
+		}
+
+		// Horizontal: clamp so the tooltip stays within viewport bounds.
+		float posX = mousePos.x + kTooltipOffsetX;
+		if (estimatedWidth > 0.0f) {
+			const float maxX = viewportRight - estimatedWidth;
+			posX = ImMax(viewportLeft, ImMin(posX, maxX));
+		}
+
+		ImGui::SetNextWindowPos(ImVec2(posX, posY), ImGuiCond_Always, ImVec2(0.0f, pivotY));
+	}
+
+	void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags)
+	{
+		if (ImGui::IsItemHovered(a_flags)) {
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 8 });
+			const ImVec2 pad = ImGui::GetStyle().WindowPadding;
+			const float wrapWidth = ImGui::GetFontSize() * 50.0f;
+			const ImVec2 wrappedTextSize = ImGui::CalcTextSize(a_desc, nullptr, false, wrapWidth);
+			const float estimatedTooltipHeight = wrappedTextSize.y + pad.y * 2.0f;
+			const float estimatedTooltipWidth = wrappedTextSize.x + pad.x * 2.0f;
+			SetTooltipPositionNearMouse(estimatedTooltipHeight, estimatedTooltipWidth);
+
+			if (ImGui::BeginTooltip()) {
+				ImGui::PushTextWrapPos(wrapWidth);
+				ImGui::TextUnformatted(a_desc);
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+			ImGui::PopStyleVar();
+		}
+	}
+
+	void HelpMarker(const char* a_desc)
+	{
+		ImGui::AlignTextToFramePadding();
+		TextUnformattedDisabled("(?)");
+		AddTooltip(a_desc, ImGuiHoveredFlags_DelayShort);
 	}
 
 	// Static state for clear shader cache confirmation popup
@@ -868,6 +1006,59 @@ namespace Util
 		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
 		ImVec2 handleEnd = ImVec2(handleStart.x + size * 0.29f, handleStart.y + size * 0.29f);
 		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
+	}
+
+	namespace detail
+	{
+		struct ComboSearchState
+		{
+			char buffer[256] = {};
+			bool needsFocus = true;
+		};
+
+		static std::unordered_map<std::string, ComboSearchState>& GetComboSearchStates()
+		{
+			static std::unordered_map<std::string, ComboSearchState> states;
+			return states;
+		}
+	}
+
+	std::string DrawComboSearchInput(const char* id)
+	{
+		auto& state = detail::GetComboSearchStates()[id];
+
+		if (state.needsFocus) {
+			ImGui::SetKeyboardFocusHere();
+			state.needsFocus = false;
+		}
+
+		constexpr float iconSize = ThemeManager::Constants::COMBO_SEARCH_ICON_SIZE;
+		constexpr float iconAlpha = ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
+		constexpr float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X;
+		constexpr float paddingLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT;
+
+		char widgetId[128];
+		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
+
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(paddingLeft, ImGui::GetStyle().FramePadding.y));
+		ImGui::InputTextWithHint(widgetId, "Search...", state.buffer, IM_ARRAYSIZE(state.buffer));
+		ImGui::PopStyleVar();
+
+		ImVec2 iconPos = ImVec2(
+			ImGui::GetItemRectMin().x + iconOffsetX,
+			ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - iconSize) * 0.5f);
+		DrawSearchIcon(iconPos, iconSize, iconAlpha);
+
+		ImGui::Separator();
+
+		return state.buffer;
+	}
+
+	void ClearComboSearch(const char* id)
+	{
+		auto& state = detail::GetComboSearchStates()[id];
+		state.buffer[0] = '\0';
+		state.needsFocus = true;
 	}
 
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)

@@ -42,13 +42,13 @@ namespace ExtendedMaterials
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
 
-#		if !defined(PARALLAX) && !defined(TRUE_PBR)
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
 		textureDims /= 2.0;
-#		endif
+#endif
 
-#		if defined(VR)
+#if defined(VR)
 		textureDims /= 2.0;
-#		endif
+#endif
 
 		float2 texCoordsPerSize = coords * textureDims;
 
@@ -64,14 +64,14 @@ namespace ExtendedMaterials
 		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
 		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
-#		if !defined(PARALLAX) && !defined(TRUE_PBR)
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
 		mipLevel++;
-#		endif
+#endif
 
-		// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
-#		if defined(VR)
+// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
+#if defined(VR)
 		mipLevel++;
-#		endif
+#endif
 
 		// Stochastic mip selection: use screen noise to select between adjacent mip levels
 		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
@@ -180,11 +180,13 @@ namespace ExtendedMaterials
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 #		if defined(TERRAIN_VARIATION)
 		// Boost height by 30% when terrain variation is enabled to enhance depth perception
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+		{
 			total *= 1.3;
 		}
 #		endif
-		return total;	}
+		return total;
+	}
 #	else
 	float GetTerrainHeight(float screenNoise, PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
 #		if defined(TERRAIN_VARIATION)
@@ -302,7 +304,8 @@ namespace ExtendedMaterials
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 #		if defined(TERRAIN_VARIATION)
 		// Boost height by 30% when terrain variation is enabled to enhance depth perception
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+		{
 			total *= 1.3;
 		}
 #		endif
@@ -594,4 +597,4 @@ namespace ExtendedMaterials
 	}
 
 #endif  // defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
-	}
+}
