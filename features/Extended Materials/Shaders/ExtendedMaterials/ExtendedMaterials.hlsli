@@ -332,8 +332,8 @@ namespace ExtendedMaterials
 		viewDirTS.xy /= viewDirTS.z * 0.7 + 0.3 + params.FlattenAmount;  // Fix for objects at extreme viewing angles
 #endif
 
-	float distSq = dot(distance, distance);
-	float nearBlendToFar = smoothstep(1024.0 * 1024.0, 2048.0 * 2048.0, distSq);
+		float distSq = dot(distance, distance);
+		float nearBlendToFar = smoothstep(1024.0 * 1024.0, 2048.0 * 2048.0, distSq);
 
 #if defined(LANDSCAPE)
 #	if defined(TRUE_PBR)
