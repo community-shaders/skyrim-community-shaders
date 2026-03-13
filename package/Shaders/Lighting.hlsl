@@ -2171,7 +2171,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		material.FuzzWeight = lerp(material.FuzzWeight, 0, projectedMaterialWeight);
 	}
 #		endif
-#	else
+
+	float NdotV = saturate(dot(worldNormal, viewDirection));
+	material.F = BRDF::F_Schlick(material.F0, NdotV);
+	material.kD = lerp(1.0 - material.F, 0.0, material.Metallic);
+
+	float coatNdotV = saturate(dot(coatWorldNormal, viewDirection));
+	material.CoatF = BRDF::F_Schlick(material.CoatF0, coatNdotV);
+	material.CoatAttenuation = 1.0 - material.CoatF * material.CoatStrength;
+	#	else
 	material.BaseColor = baseColor.xyz;
 #		if defined(SPECULAR)
 	material.Shininess = shininess;
