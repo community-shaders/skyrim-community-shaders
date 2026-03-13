@@ -773,17 +773,19 @@ void Raytracing::DeferredPasses()
 		}
 	}
 
-	if (pixCapture && pixCaptureStarted) {
-		ga->EndCapture();
+	auto& dx12Interop = globals::features::dx12Interop;
 
-		pixCapture = false;
-		pixCaptureStarted = false;
+	if (dx12Interop.pixCapture && dx12Interop.pixCaptureStarted) {
+		dx12Interop.ga->EndCapture();
+
+		dx12Interop.pixCapture = false;
+		dx12Interop.pixCaptureStarted = false;
 	}
 
-	if (pixCapture && !pixCaptureStarted) {
-		pixCaptureStarted = true;
+	if (dx12Interop.pixCapture && !dx12Interop.pixCaptureStarted) {
+		dx12Interop.pixCaptureStarted = true;
 
-		ga->BeginCapture();
+		dx12Interop.ga->BeginCapture();
 	}
 }
 

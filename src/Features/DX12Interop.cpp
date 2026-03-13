@@ -40,6 +40,12 @@ void DX12Interop::DrawSettings()
 {
 	ImGui::Checkbox("Enable PIX Capture", &settings.EnablePIXCapture);
 
+	if (settings.EnablePIXCapture)
+		if (ImGui::Button("Capture")) {
+			pixCapture = true;
+			pixCaptureStarted = false;
+		}
+
 	ImGui::Checkbox("Enable Debug Device", &settings.EnableDebugDevice);
 }
 

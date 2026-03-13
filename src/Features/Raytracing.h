@@ -347,11 +347,6 @@ struct Raytracing : public OverlayFeature
 	bool initialized = false;
 	bool forcedDisabled = false;
 
-	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
-
-	bool pixCapture = false;
-	bool pixCaptureStarted = false;
-
 	uint2 m_Resolution;
 
 	enum DisableReason
