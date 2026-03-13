@@ -38,8 +38,9 @@ namespace TestConstants
 	ASSERT(IsTrue, all(bounded <= 1.01f));
 }
 
-/// @tags shading, ao, specular
-[numthreads(1, 1, 1)] void TestSpecularAOLagarde() {
+	/// @tags shading, ao, specular
+	[numthreads(1, 1, 1)] void TestSpecularAOLagarde()
+{
 	float aoZero = SpecularAOLagarde(0.35f, 0.0f, 0.5f);
 	ASSERT(IsTrue, abs(aoZero) < TestConstants::EXACT_TOLERANCE);
 
