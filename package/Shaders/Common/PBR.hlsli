@@ -159,7 +159,7 @@ namespace PBR
 #else
 			float3 specular = GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F);
 #endif
-			float3 kD = 1.0 - F;
+			float3 kD = 1 - F;
 
 			lightingOutput.diffuse += detailedLightColor * satNdotL * BRDF::Diffuse_Lambert() * kD;
 			lightingOutput.specular += specular * detailedLightColor * satNdotL;
