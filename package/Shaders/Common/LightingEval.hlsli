@@ -9,7 +9,7 @@
 #endif
 
 #if defined(TRUE_PBR)
-DirectContext CreateDirectLightingContext(float3 worldNormal, float3 coatWorldNormal, float3 vertexNormal, float3 viewDir, float3 coatViewDir, float3 lightDir, float3 coatLightDir, float3 lightColor, float detailedShadow, float softShadow)
+DirectContext CreateDirectLightingContext(float3 worldNormal, float3 coatWorldNormal, float3 vertexNormal, float3 viewDir, float3 coatViewDir, float3 lightDir, float3 coatLightDir, float3 lightColor, float detailedShadow, float softShadow, MaterialProperties material)
 #else
 DirectContext CreateDirectLightingContext(float3 worldNormal, float3 vertexNormal, float3 viewDir, float3 lightDir, float3 lightColor, float detailedShadow, float softShadow)
 #endif
@@ -36,13 +36,21 @@ DirectContext CreateDirectLightingContext(float3 worldNormal, float3 vertexNorma
 	{
 		context.coatLightColor = context.lightColor * detailedShadow;
 	}
+
+	float VdotH = saturate(dot(context.viewDir, context.halfVector));
+	context.F = BRDF::F_Schlick(material.F0, VdotH);
+	context.kD = lerp(1.0 - context.F, 0.0, material.Metallic);
+
+	float coatVdotH = saturate(dot(context.coatViewDir, context.coatHalfVector));
+	context.CoatF = BRDF::F_Schlick(material.CoatF0, coatVdotH);
+	context.CoatAttenuation = 1.0 - context.CoatF * material.CoatStrength;
 #endif
 	return context;
 }
 
 IndirectContext CreateIndirectLightingContext(float3 worldNormal, float3 vertexNormal, float3 viewDir)
 {
-	IndirectContext context = (IndirectContext)0;
+	IndirectContext context = (DirectContext)0;
 	context.worldNormal = normalize(worldNormal);
 	context.vertexNormal = normalize(vertexNormal);
 	context.viewDir = normalize(viewDir);

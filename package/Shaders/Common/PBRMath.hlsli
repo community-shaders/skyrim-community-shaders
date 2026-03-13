@@ -59,30 +59,36 @@ namespace PBR
 
 	/// @brief Calculate specular reflection using GGX microfacet model
 	/// @param roughness Surface roughness [0,1]
+	/// @param F0 F0 reflectance at normal incidence
 	/// @param NdotL Dot product of normal and light direction
 	/// @param NdotV Dot product of normal and view direction
 	/// @param NdotH Dot product of normal and half vector
-	/// @param F Fresnel term
+	/// @param VdotH Dot product of view and half vector
+	/// @param F Output Fresnel term
 	/// @return Specular BRDF term (D * G * F)
-	float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float NdotL, float NdotV, float NdotH, float3 F)
+	float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
 	{
 		float D = BRDF::D_GGX(roughness, NdotH);
 		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
+		F = BRDF::F_Schlick(F0, VdotH);
 
 		return D * G * F;
 	}
 
 	/// @brief Calculate specular reflection using Charlie microflake model (for sheen/fabric)
 	/// @param roughness Surface roughness [0,1]
+	/// @param F0 F0 reflectance at normal incidence
 	/// @param NdotL Dot product of normal and light direction
 	/// @param NdotV Dot product of normal and view direction
 	/// @param NdotH Dot product of normal and half vector
-	/// @param F Fresnel term
+	/// @param VdotH Dot product of view and half vector
+	/// @param F Output Fresnel term
 	/// @return Specular BRDF term (D * G * F)
-	float3 GetSpecularDirectLightMultiplierMicroflakes(float roughness, float NdotL, float NdotV, float NdotH, float3 F)
+	float3 GetSpecularDirectLightMultiplierMicroflakes(float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
 	{
 		float D = BRDF::D_Charlie(roughness, NdotH);
 		float G = BRDF::Vis_Neubelt(NdotV, NdotL);
+		F = BRDF::F_Schlick(F0, VdotH);
 
 		return D * G * F;
 	}
@@ -136,8 +142,8 @@ namespace PBR
 		float NdotH = saturate(dot(N, H));
 		float VdotH = saturate(dot(V, H));
 
-		float3 wetnessF = BRDF::F_Schlick(wetnessF0, VdotH);
-		float3 wetnessSpecular = GetSpecularDirectLightMultiplierMicrofacet(roughness, NdotL, NdotV, NdotH, wetnessF) * lightColor * NdotL;
+		float3 wetnessF;
+		float3 wetnessSpecular = GetSpecularDirectLightMultiplierMicrofacet(roughness, wetnessF0, NdotL, NdotV, NdotH, VdotH, wetnessF) * lightColor * NdotL;
 
 		return wetnessSpecular * wetnessStrength;
 	}

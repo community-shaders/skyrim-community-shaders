@@ -17,6 +17,10 @@ struct DirectContext
 	float3 coatLightDir;
 	float3 coatHalfVector;
 	float3 coatLightColor;
+	float3 F;
+	float3 kD;
+	float3 CoatF;
+	float3 CoatAttenuation;
 #elif defined(HAIR) && defined(CS_HAIR)
 	float hairShadow;
 #endif
@@ -76,16 +80,12 @@ struct MaterialProperties
 	float Metallic;
 	float AO;
 	float3 F0;
-	float3 F;
-	float3 kD;
 	float3 SubsurfaceColor;
 	float Thickness;
 	float3 CoatColor;
 	float CoatStrength;
 	float CoatRoughness;
 	float3 CoatF0;
-	float3 CoatF;
-	float3 CoatAttenuation;
 	float3 FuzzColor;
 	float FuzzWeight;
 	float GlintScreenSpaceScale;
@@ -95,6 +95,7 @@ struct MaterialProperties
 	Glints::GlintCachedVars GlintCache;
 	float Noise;
 #endif
+};
 
 float ShininessToRoughness(float shininess)
 {
