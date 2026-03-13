@@ -165,14 +165,24 @@ namespace ShadowSampling
 			visibility = lerp(visibility, visibilityBlend, cascadeSelect);
 		}
 
-		float fadeFactor = 1.0 - pow(fade, 8);
 		detailedShadow = lerp(1.0, visibility, 1);
 		return lerp(1.0, visibility, 1);
 	}
 
 	float GetSpotlightShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
 	{
+		// Geometry behind the shadow frustum (w <= 0) would produce a sign-flipped
+		// projection, yielding garbage UVs and a false visibility of 0 which makes
+		// the light appear completely off.  Treat it as unshadowed instead.
+		if (positionLS.w <= 0)
+			return 1.0;
+
 		positionLS.xyz /= positionLS.w;
+
+		// Geometry beyond the shadow near/far planes is outside the depth range [0,1];
+		// treat it as unshadowed rather than fully dark.
+		if (positionLS.z < 0 || positionLS.z > 1)
+			return 1.0;
 
 		float2 sampleUV = positionLS.xy * 0.5 + 0.5;
 		float visibility = dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
@@ -192,7 +202,8 @@ namespace ShadowSampling
 			return visibility;
 		}
 
-		return 0.0;
+		// Geometry outside the paraboloid's coverage hemisphere is unshadowed.
+		return 1.0;
 	}
 
 	float GetOmnidirectionalShadow(ShadowData shadow, uint shadowIndex, float3 positionLS)
@@ -215,6 +226,12 @@ namespace ShadowSampling
 	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix)
 	{
 		ShadowData shadow = Shadows[shadowIndex];
+
+		// ShadowParam.y holds the light radius, always > 0 for valid entries.
+		// A zero radius means the slot was never written (e.g. shadowmapIndex exceeded
+		// the buffer capacity), so treat it as unshadowed rather than fully dark.
+		if (shadow.ShadowParam.y == 0)
+			return 1.0;
 
 		worldPosition.xyz += FrameBuffer::CameraPosAdjust[0].xyz;
 
