@@ -69,3 +69,50 @@ namespace TestConstants
 		ASSERT(IsTrue, samples[i] <= 1.0f);
 	}
 }
+
+/// @tags shading, ao, specular
+[numthreads(1, 1, 1)] void TestSpecularOcclusion() {
+	float occlusionZero = SpecularOcclusion(0.35f, 0.5f, 0.0f);
+	ASSERT(IsTrue, abs(occlusionZero) < TestConstants::EXACT_TOLERANCE);
+
+	float occlusionFull = SpecularOcclusion(0.35f, 0.5f, 1.0f);
+	ASSERT(IsTrue, abs(occlusionFull - 1.0f) < TestConstants::EXACT_TOLERANCE);
+
+	float lowView = SpecularOcclusion(0.2f, 0.5f, 0.4f);
+	float highView = SpecularOcclusion(0.9f, 0.5f, 0.4f);
+	ASSERT(IsTrue, highView >= lowView);
+
+	float lowOcclusion = SpecularOcclusion(0.4f, 0.5f, 0.2f);
+	float highOcclusion = SpecularOcclusion(0.4f, 0.5f, 0.8f);
+	ASSERT(IsTrue, highOcclusion >= lowOcclusion);
+
+	float lowAlpha = 0.1f;
+	float highAlpha = 0.9f;
+	float lowAlphaResult = SpecularOcclusion(0.2f, lowAlpha, 0.5f);
+	float highAlphaResult = SpecularOcclusion(0.2f, highAlpha, 0.5f);
+	ASSERT(IsTrue, lowAlphaResult >= highAlphaResult);
+
+	float roughness = 0.6f;
+	float derivedAlpha = roughness * roughness;
+	float fromDerivedAlpha = SpecularOcclusion(0.45f, derivedAlpha, 0.5f);
+	float fromExpandedAlpha = SpecularOcclusion(0.45f, roughness * roughness, 0.5f);
+	ASSERT(IsTrue, abs(fromDerivedAlpha - fromExpandedAlpha) < TestConstants::EXACT_TOLERANCE);
+
+	float exact = SpecularOcclusion(0.25f, 0.75f, 0.5f);
+	float expected = saturate(pow(0.25f + 0.5f, 0.75f) - 1.0f + 0.5f);
+	ASSERT(IsTrue, abs(exact - expected) < TestConstants::EXACT_TOLERANCE);
+
+	float samples[4] = {
+		SpecularOcclusion(0.0f, 0.2f, 0.3f),
+		SpecularOcclusion(0.4f, 0.6f, 0.5f),
+		SpecularOcclusion(0.8f, 0.9f, 0.2f),
+		SpecularOcclusion(1.0f, 1.0f, 0.9f)
+	};
+
+	for (int i = 0; i < 4; i++) {
+		ASSERT(IsTrue, !isnan(samples[i]));
+		ASSERT(IsTrue, !isinf(samples[i]));
+		ASSERT(IsTrue, samples[i] >= 0.0f);
+		ASSERT(IsTrue, samples[i] <= 1.0f);
+	}
+}
