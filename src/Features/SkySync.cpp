@@ -415,7 +415,6 @@ void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, flo
 	sun->light->Update(updateData);
 
 	intensity = std::clamp(intensity, 0.0f, 1.0f);
-	sun->light->GetLightRuntimeData().fade = intensity;
 	volumetricLightingIntensityFactor = intensity;
 }
 

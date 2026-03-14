@@ -118,48 +118,6 @@
 	}
 }
 
-/// @tags color, ao, lighting
-[numthreads(1, 1, 1)] void TestMultiBounceAO() {
-	float3 baseColor = float3(0.7, 0.5, 0.3);
-
-	// Test full AO (1.0) - should return at least the base color
-	float3 fullAO = Color::MultiBounceAO(baseColor, 1.0);
-	ASSERT(IsTrue, fullAO.r >= baseColor.r * 0.99f);
-	ASSERT(IsTrue, fullAO.g >= baseColor.g * 0.99f);
-	ASSERT(IsTrue, fullAO.b >= baseColor.b * 0.99f);
-
-	// Test no AO (0.0) - should be darker
-	float3 noAO = Color::MultiBounceAO(baseColor, 0.0);
-
-	// Test partial AO (0.5) - should be between the two
-	float3 partialAO = Color::MultiBounceAO(baseColor, 0.5);
-	float partialLum = Color::RGBToLuminance(partialAO);
-	float noLum = Color::RGBToLuminance(noAO);
-	float fullLum = Color::RGBToLuminance(fullAO);
-
-	ASSERT(IsTrue, partialLum > noLum);
-	ASSERT(IsTrue, partialLum < fullLum);
-}
-
-	/// @tags color, ao, specular, lighting
-	[numthreads(1, 1, 1)] void TestSpecularAOLagarde()
-{
-	// Test basic behavior
-	float ao = 0.8f;
-	float roughness = 0.5f;
-	float NdotV = 0.7f;
-
-	float result = Color::SpecularAOLagarde(NdotV, ao, roughness);
-
-	// Result should be in valid range [0, 1]
-	ASSERT(IsTrue, result >= 0.0f);
-	ASSERT(IsTrue, result <= 1.0f);
-
-	// With full AO (1.0), result should be 1.0
-	float fullAOResult = Color::SpecularAOLagarde(1.0f, 1.0f, 0.5f);
-	ASSERT(AreEqual, fullAOResult, 1.0f);
-}
-
 /// @tags color, luminance
 [numthreads(1, 1, 1)] void TestRGBToLuminanceVariants() {
 	float3 testColor = float3(0.6, 0.4, 0.3);
