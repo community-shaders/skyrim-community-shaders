@@ -11,7 +11,7 @@ void PaletteWindow::Draw()
 
 	ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 620, ImGui::GetIO().DisplaySize.y - 420), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Palette", &open)) {
+	if (ImGui::Begin("Palette", &open, ImGuiWindowFlags_NoFocusOnAppearing)) {
 		if (ImGui::BeginTabBar("PaletteTabs")) {
 			if (ImGui::BeginTabItem("Colours")) {
 				DrawColorsTab();

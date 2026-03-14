@@ -10,6 +10,7 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
+#include "Common/Triplanar.hlsli"
 
 #if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
 #	define SKIN
@@ -1977,8 +1978,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float projWeight = 0;
 
 #	if defined(PROJECTED_UV)
-	float2 projNoiseUv = ProjectedUVParams.zz * input.TexCoord0.zw;
-	float projNoise = TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, projNoiseUv).x;
+	float3 projWorldPos = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+	float3 triFaceNormal = normalize(-cross(ddx(input.WorldPosition.xyz), ddy(input.WorldPosition.xyz)));
+	float3 triWeights = Triplanar::GetWeights(tbnTr[2], triFaceNormal);
+	float projNoise = Triplanar::Sample(TexCharacterLightProjNoiseSampler, SampCharacterLightProjNoiseSampler, projWorldPos, triWeights, ProjectedUVParams.z).x;
 	float3 texProj = normalize(input.TexProj);
 #		if defined(TREE_ANIM) || defined(LODOBJECTSHD)
 	float vertexAlpha = 1;
@@ -1993,18 +1996,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (projWeight < 0)
 		discard;
 
+	rawBaseColor = Triplanar::SampleStochasticBias(TexColorSampler, SampColorSampler, projWorldPos, triWeights, ProjectedUVParams2.y, SharedData::MipBias, screenNoise);
+	baseColor = float4(Color::Diffuse(rawBaseColor.rgb), rawBaseColor.a);
 	worldNormal.xyz = projectedNormal;
 #			if defined(SNOW)
 	psout.Parameters.y = 1;
 #			endif  // SNOW
 #		elif !defined(FACEGEN) && !defined(MULTI_LAYER_PARALLAX) && !defined(PARALLAX) && !defined(SPARKLE)
 	if (ProjectedUVParams3.w > 0.5) {
-		float2 projNormalDiffuseUv = ProjectedUVParams3.x * projNoiseUv;
-		float3 projNormal = TransformNormal(TexProjNormalSampler.Sample(SampProjNormalSampler, projNormalDiffuseUv).xyz);
-		float2 projDetailNormalUv = ProjectedUVParams3.y * projNoiseUv;
-		float3 projDetailNormal = TexProjDetail.Sample(SampProjDetailSampler, projDetailNormalUv).xyz;
+		float diffuseNormalScale = ProjectedUVParams3.x * ProjectedUVParams.z;
+		float3 projNormal = TransformNormal(Triplanar::SampleStochastic(TexProjNormalSampler, SampProjNormalSampler, projWorldPos, triWeights, diffuseNormalScale, screenNoise).xyz);
+		float detailNormalScale = ProjectedUVParams3.y * ProjectedUVParams.z;
+		float3 projDetailNormal = Triplanar::SampleStochastic(TexProjDetail, SampProjDetailSampler, projWorldPos, triWeights, detailNormalScale, screenNoise).xyz;
 		float3 finalProjNormal = normalize(TransformNormal(projDetailNormal) * float3(1, 1, projNormal.z) + float3(projNormal.xy, 0));
-		float3 projBaseColor = Color::ColorToLinear(TexProjDiffuseSampler.Sample(SampProjDiffuseSampler, projNormalDiffuseUv).xyz) * Color::ColorToLinear(ProjectedUVParams2.xyz);
+		float3 projBaseColor = Color::ColorToLinear(Triplanar::SampleStochastic(TexProjDiffuseSampler, SampProjDiffuseSampler, projWorldPos, triWeights, diffuseNormalScale, screenNoise).xyz) * Color::ColorToLinear(ProjectedUVParams2.xyz);
 		projectedMaterialWeight = smoothstep(0, 1, 5 * (0.1 + projWeight));
 #			if defined(TRUE_PBR)
 		projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
@@ -2750,14 +2755,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-	float3 directionalAmbientColor = Color::Ambient(max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0))));
+	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(ambientNormal)));
 
 #	if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
+	if (SharedData::iblSettings.EnableIBL) {
 		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(ambientNormal, SampColorSampler);
-		} else if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
-			directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
 		}
 	}
 #	endif
@@ -2775,16 +2778,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(IBL)
-	float3 iblColor = 0;
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if ((!SharedData::InInterior || SharedData::iblSettings.EnableInterior) && !(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {
-#		if defined(SKYLIGHTING)
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#		else
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#		endif
-			iblColor = Color::IrradianceToGamma(iblColor);
-			directionalAmbientColor += iblColor;
+	float3 envIBLColor = 0;
+	if (SharedData::iblSettings.EnableIBL) {
+		if (!(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {
+			if (SharedData::iblSettings.DALCMode == 2) {
+				// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
+				envIBLColor = directionalAmbientColor * SharedData::iblSettings.DALCAmount;
+				directionalAmbientColor = envIBLColor + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-ambientNormal));
+			} else {
+				// Mode 0/1: replace with IBL ratio
+				envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(-ambientNormal));
+				float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-ambientNormal));
+				directionalAmbientColor = envIBLColor + skyIBLColor;
+			}
 		}
 	}
 #	endif
@@ -2940,7 +2946,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
 
 #	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= iblColor;
+	directionalAmbientColor -= envIBLColor;
 #	endif
 
 	directionalAmbientColor *= outputAlbedo;
@@ -2950,7 +2956,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += iblColor * outputAlbedo;
+	directionalAmbientColor += envIBLColor * outputAlbedo;
 #	endif
 
 #	if !defined(DEFERRED)
@@ -2984,7 +2990,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
 	float fogFactor = Color::FogAlpha(input.FogParam.w);
 #		if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+	if (SharedData::iblSettings.EnableIBL) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #		endif

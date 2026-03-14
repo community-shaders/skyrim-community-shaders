@@ -3,6 +3,8 @@
 
 #include <Framework/ShaderTestFixture.h>
 #include <filesystem>
+#include <stdexcept>
+#include <vector>
 
 #ifdef _WIN32
 #	include <windows.h>
@@ -10,6 +12,50 @@
 
 namespace ShaderTest
 {
+	enum class EPreferredDevice
+	{
+		Undecided,
+		Hardware,
+		Software
+	};
+
+	inline EPreferredDevice& GetPreferredDeviceState()
+	{
+		static EPreferredDevice preferredDevice = EPreferredDevice::Undecided;
+		return preferredDevice;
+	}
+
+	inline void SetPreferredDevice(const EPreferredDevice preferredDevice)
+	{
+		GetPreferredDeviceState() = preferredDevice;
+	}
+
+	inline EPreferredDevice GetPreferredDevice()
+	{
+		return GetPreferredDeviceState();
+	}
+
+	inline stf::GPUDevice::EDeviceType ToGPUDeviceType(const EPreferredDevice preferredDevice)
+	{
+		if (preferredDevice == EPreferredDevice::Software) {
+			return stf::GPUDevice::EDeviceType::Software;
+		}
+
+		return stf::GPUDevice::EDeviceType::Hardware;
+	}
+
+	inline stf::GPUDevice::EDeviceType GetPreferredGPUDeviceType()
+	{
+		const EPreferredDevice preferredDevice = GetPreferredDevice();
+		if (preferredDevice == EPreferredDevice::Undecided) {
+			throw std::logic_error(
+				"Preferred GPU device is undecided. Call ShaderTest::SetPreferredDevice(...) "
+				"or use ShaderTest::GetFixtureDesc(deviceType) with an explicit device.");
+		}
+
+		return ToGPUDeviceType(preferredDevice);
+	}
+
 	/// Get the directory containing the test executable
 	/// This is portable across different working directories and drive letters
 	inline std::filesystem::path GetExecutableDirectory()
@@ -52,15 +98,21 @@ namespace ShaderTest
 		};
 	}
 
-	/// Get standard fixture description for hardware testing
-	inline stf::ShaderTestFixture::FixtureDesc GetFixtureDesc()
+	/// Get fixture description for an explicitly selected GPU device type
+	inline stf::ShaderTestFixture::FixtureDesc GetFixtureDesc(const stf::GPUDevice::EDeviceType deviceType)
 	{
 		return stf::ShaderTestFixture::FixtureDesc{
 			.Mappings = GetShaderDirectoryMappings(),
 			.GPUDeviceParams{
-				.DebugLevel = stf::GPUDevice::EDebugLevel::Off,       // Disable debug layer (may conflict with some drivers)
-				.DeviceType = stf::GPUDevice::EDeviceType::Hardware,  // Use real GPU instead of WARP
+				.DebugLevel = stf::GPUDevice::EDebugLevel::Off,  // Disable debug layer (may conflict with some drivers)
+				.DeviceType = deviceType,
 				.EnableGPUCapture = false }
 		};
+	}
+
+	/// Get fixture description using the shared preferred device selection
+	inline stf::ShaderTestFixture::FixtureDesc GetFixtureDesc()
+	{
+		return GetFixtureDesc(GetPreferredGPUDeviceType());
 	}
 }

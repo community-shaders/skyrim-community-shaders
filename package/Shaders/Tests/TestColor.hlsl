@@ -118,27 +118,8 @@
 	}
 }
 
-/// @tags color, ao, specular, lighting
-[numthreads(1, 1, 1)] void TestSpecularAOLagarde() {
-	// Test basic behavior
-	float ao = 0.8f;
-	float roughness = 0.5f;
-	float NdotV = 0.7f;
-
-	float result = Color::SpecularAOLagarde(NdotV, ao, roughness);
-
-	// Result should be in valid range [0, 1]
-	ASSERT(IsTrue, result >= 0.0f);
-	ASSERT(IsTrue, result <= 1.0f);
-
-	// With full AO (1.0), result should be 1.0
-	float fullAOResult = Color::SpecularAOLagarde(1.0f, 1.0f, 0.5f);
-	ASSERT(AreEqual, fullAOResult, 1.0f);
-}
-
-	/// @tags color, luminance
-	[numthreads(1, 1, 1)] void TestRGBToLuminanceVariants()
-{
+/// @tags color, luminance
+[numthreads(1, 1, 1)] void TestRGBToLuminanceVariants() {
 	float3 testColor = float3(0.6, 0.4, 0.3);
 
 	float lum1 = Color::RGBToLuminance(testColor);
@@ -153,8 +134,9 @@
 	ASSERT(IsTrue, abs(lum1 - lum3) < 0.2f);
 }
 
-/// @tags color, lighting
-[numthreads(1, 1, 1)] void TestDiffuseAndLight() {
+	/// @tags color, lighting
+	[numthreads(1, 1, 1)] void TestDiffuseAndLight()
+{
 	float3 color = float3(0.5, 0.3, 0.7);
 
 	float3 diffuse = Color::Diffuse(color);

@@ -211,6 +211,9 @@ public:
 		uint HideSky;
 		float MipBias;
 		float pad0;
+		float4 AmbientSHR;
+		float4 AmbientSHG;
+		float4 AmbientSHB;
 	};
 	STATIC_ASSERT_ALIGNAS_16(SharedDataCB);
 
