@@ -160,6 +160,8 @@ SH2Color SphericalHarmonics::Product(SH2Color shL, SH2Color shR)
 
 SH2 SphericalHarmonics::HanningConvolution(SH2 sh, float w)
 {
+	if (w <= 0)
+		return sh;
 	SH2 result;
 	float invW = 1.0f / w;
 	float factorBand1 = (1.0f + cos(3.14159265358979323846f * invW)) / 2.0f;
