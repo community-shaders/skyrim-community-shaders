@@ -218,7 +218,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-    float peakNits          = max(SharedData::HDRData.z, 1.0);
+	float peakNits          = clamp(SharedData::HDRData.z, 1.0, 700.0); // clamps the "size" of the sun disc to what it is at 700 nits. looks best, brightness still scales up to peaknits though.
     float paperWhiteNits    = max(SharedData::HDRData.y, 1.0);
 	float paperWhite        = paperWhiteNits / sRGB_WhiteLevelNits;
 	float peakWhite         = peakNits / sRGB_WhiteLevelNits;
