@@ -169,6 +169,58 @@ namespace ShadowSampling
 		return lerp(1.0, visibility, 1);
 	}
 
+	// --- PCF helpers ---
+
+	// Single-tap hardware-PCF sample (bilinear blend of 4 depth comparisons).
+	float SampleShadowPCF(uint shadowIndex, float2 uv, float receiverDepth)
+	{
+		return ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(uv, shadowIndex), receiverDepth);
+	}
+
+	// 16-tap Poisson disc PCF on a 2D shadow map slice.
+	float PCFPoisson16(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius, float2x2 rotationMatrix)
+	{
+		float sum = 0.0;
+		[unroll] for (int i = 0; i < 16; i++) {
+			float2 offset = mul(rotationMatrix, Random::PoissonSampleOffsets16[i]) * kernelRadius;
+			sum += SampleShadowPCF(shadowIndex, baseUV + offset, receiverDepth);
+		}
+		return sum * rcp(16.0);
+	}
+
+	// PCSS: blocker search → penumbra estimation → variable-width PCF.
+	float PCSSSpotlight(uint shadowIndex, float2 baseUV, float receiverDepth, float2x2 rotationMatrix)
+	{
+		float lightSize   = SharedData::shadowSamplingSettings.LightSize;
+		float kernelScale = SharedData::shadowSamplingSettings.KernelScale;
+
+		// Step 1: blocker search with a small spiral kernel.
+		float searchRadius = lightSize * PCFKernelShadowLight;
+		float blockerSum   = 0.0;
+		int   blockerCount = 0;
+		[unroll] for (int i = 0; i < 8; i++) {
+			float2 offset        = mul(rotationMatrix, Random::SpiralSampleOffsets8[i]) * searchRadius;
+			float  blockerDepth  = ShadowMaps.SampleLevel(LinearSampler, float3(baseUV + offset, shadowIndex), 0).r;
+			if (blockerDepth < receiverDepth) {
+				blockerSum += blockerDepth;
+				blockerCount++;
+			}
+		}
+
+		if (blockerCount == 0) return 1.0;  // fully lit
+		if (blockerCount == 8) return 0.0;  // deep umbra, skip PCF
+
+		// Step 2: penumbra width from receiver–blocker distance.
+		float avgBlockerDepth = blockerSum / float(blockerCount);
+		float penumbra        = (receiverDepth - avgBlockerDepth) / avgBlockerDepth * lightSize;
+		float kernelRadius    = penumbra * PCFKernelShadowLight * kernelScale;
+
+		// Step 3: PCF with contact-hardened radius.
+		return PCFPoisson16(shadowIndex, baseUV, receiverDepth, kernelRadius, rotationMatrix);
+	}
+
+	// --- Per-light shadow sampling ---
+
 	float GetSpotlightShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
 	{
 		// Geometry behind the shadow frustum (w <= 0) would produce a sign-flipped
@@ -184,10 +236,17 @@ namespace ShadowSampling
 		if (positionLS.z < 0 || positionLS.z > 1)
 			return 1.0;
 
-		float2 sampleUV = positionLS.xy * 0.5 + 0.5;
-		float visibility = dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
+		float2 baseUV = positionLS.xy * 0.5 + 0.5;
+		uint   mode   = SharedData::shadowSamplingSettings.FilterMode;
 
-		return visibility;
+		[branch]
+		if (mode == 2)
+			return PCSSSpotlight(shadowIndex, baseUV, positionLS.z, rotationMatrix);
+		else if (mode == 1)
+			return PCFPoisson16(shadowIndex, baseUV, positionLS.z,
+				PCFKernelShadowLight * SharedData::shadowSamplingSettings.KernelScale, rotationMatrix);
+		else
+			return dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(baseUV, shadowIndex)) > positionLS.z), 0.25);
 	}
 
 	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS)
@@ -198,8 +257,20 @@ namespace ShadowSampling
 			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 			positionLS.z = saturate(length(positionLS.xyz) / shadow.ShadowParam.y);
 
-			float visibility = dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
-			return visibility;
+			uint mode = SharedData::shadowSamplingSettings.FilterMode;
+			[branch]
+			if (mode >= 1) {
+				// PCF: jitter in the paraboloid's natural parameterisation space.
+				float kernelRadius = PCFKernelShadowLight * SharedData::shadowSamplingSettings.KernelScale;
+				float sum = 0.0;
+				[unroll] for (int i = 0; i < 8; i++) {
+					float2 offset = Random::SpiralSampleOffsets8[i] * kernelRadius;
+					sum += SampleShadowPCF(shadowIndex, sampleUV + offset, positionLS.z);
+				}
+				return sum * rcp(8.0);
+			} else {
+				return dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
+			}
 		}
 
 		// Geometry outside the paraboloid's coverage hemisphere is unshadowed.

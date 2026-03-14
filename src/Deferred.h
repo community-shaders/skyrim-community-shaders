@@ -3,7 +3,6 @@
 #include <DirectXMath.h>
 
 #include "Buffer.h"
-
 #include "RE/B/BSShadowLight.h"
 
 #define ALBEDO RE::RENDER_TARGETS::kINDIRECT
@@ -41,6 +40,21 @@ public:
 	};
 
 	STATIC_ASSERT_ALIGNAS_16(ShadowData);
+
+	struct alignas(16) ShadowSamplingSettings
+	{
+		uint32_t FilterMode = 0;   // 0=cheap 2×2, 1=PCF Poisson disc, 2=PCSS
+		float KernelScale = 1.0f;  // scales the base PCF kernel radius
+		float LightSize = 2.0f;    // PCSS virtual light size (UV-space scale)
+		uint32_t pad0 = 0;
+	};
+	STATIC_ASSERT_ALIGNAS_16(ShadowSamplingSettings);
+
+	ShadowSamplingSettings settings;
+
+	void DrawSettings();
+	void LoadSettings(json& o_json);
+	void SaveSettings(json& o_json);
 
 	void SetupResources();
 	void ReflectionsPrepasses();
