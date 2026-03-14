@@ -125,6 +125,43 @@ namespace ShadowSampling
 #endif
 	}
 
+
+	float GetDirectionalShadowVisibility(float3 positionLS, float3 lightPosition, uint cascade, float searchRadius, float kernelScale, float2x2 rotationMatrix, float receiverDepth)
+	{
+		float blockerSum   = 0.0;
+		uint  blockerCount = 0;
+		[unroll] for (uint i = 0; i < 8; i++) {
+			float2 offset = mul(rotationMatrix, Random::SpiralSampleOffsets8[i]) * searchRadius;
+			float2 uv = saturate(positionLS.xy + offset);
+			float4 blockerDepths = DirectionalShadowCascades.GatherRed(LinearSampler, float3(uv, cascade), 0);
+			[unroll] for(uint k = 0; k < 4; k++)
+			{
+				float4 blockedPosition = float4(2 * float2(uv.x, -uv.y + 1) - 1, blockerDepths[k], 1);
+				blockedPosition = mul(shadow.InvShadowProj[eyeIndex], blockedPosition);
+				blockedPosition.xyz = blockedPosition.xyz / blockedPosition.w;		
+				float blockerDepth = distance(blockedPosition, lightPosition);
+				if (blockerDepth < receiverDepth) {
+					blockerSum += blockerDepth;
+					blockerCount++;
+				}
+			}
+		}
+
+		if (blockerCount == 0) return 1.0;  // fully lit — no occluders found
+
+		float avgBlockerDepth = blockerSum / float(blockerCount);
+		float penumbra        = (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
+		float kernelRadius    = penumbra * kernelScale;
+
+		float sum = 0.0;
+		[unroll] for (int i = 0; i < 16; i++) {
+			float2 offset = mul(rotationMatrix, Random::PoissonSampleOffsets16[i]) * kernelRadius;
+			sum += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, cascade)) > positionLS.z), 0.25);
+		}
+
+		return sum / 16.0;
+	}
+
 	float GetLightingShadow(float3 worldPosition, uint eyeIndex, out float detailedShadow)
 	{
 		DirectionalShadowData shadow = DirectionalShadows[0];
@@ -152,7 +189,15 @@ namespace ShadowSampling
 		float3 positionLS = mul(shadow.ShadowProj[primaryCascade], float4(worldPosition, 1)).xyz;
 
 		// Sample primary cascade
-		float visibility = dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, primaryCascade)) > positionLS.z), 0.25);
+		float kernelScale = 0.001;
+
+		// Step 1: blocker search with a small spiral kernel.
+		float3 lightPosition = float3(0, 0, 100000000);
+		float recieverDepth = distance(worldPosition, lightPosition);
+		float searchRadius = 0.001;
+		float kernelScale = 0.01;
+
+		float visibility = GetDirectionalShadowVisibility(positionLS, lightPosition, primaryCascade, searchRadius, kernelScale, rotationMatrix, receiverDepth);
 
 		// Blend with secondary cascade if needed
 		[branch]
@@ -161,7 +206,7 @@ namespace ShadowSampling
 
 			positionLS = mul(shadow.ShadowProj[secondaryCascade], float4(worldPosition, 1)).xyz;
 
-			float visibilityBlend = dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, secondaryCascade)) > positionLS.z), 0.25);
+			float visibilityBlend = GetDirectionalShadowVisibility(positionLS, lightPosition, secondaryCascade, searchRadius, kernelScale, rotationMatrix, receiverDepth);
 			visibility = lerp(visibility, visibilityBlend, cascadeSelect);
 		}
 
