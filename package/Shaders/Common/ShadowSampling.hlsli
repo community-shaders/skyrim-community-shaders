@@ -224,8 +224,7 @@ namespace ShadowSampling
 			}
 		}
 
-		if (blockerCount == 0) return 1.0;  // fully lit
-		if (blockerCount == 8) return 0.0;  // deep umbra, skip PCF
+		if (blockerCount == 0) return 1.0;  // fully lit — no occluders found
 
 		// Step 2: penumbra width from receiver–blocker distance.
 		float avgBlockerDepth = blockerSum / float(blockerCount);
