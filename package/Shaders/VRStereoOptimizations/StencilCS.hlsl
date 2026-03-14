@@ -1,0 +1,151 @@
+// VR Stereo Optimizations - Stencil Classification Compute Shader
+//
+// Classifies BOTH eyes over the full SBS buffer. Each pixel is tagged as:
+//   MODE_DISOCCLUDED    - Must be fully shaded (sky, HMD mask, parallax-occluded)
+//   MODE_EDGE           - Depth edge boundary (dist 1) or inner/foreground band; fully shaded + bilateral blend
+//   MODE_MAIN           - Standard pixel eligible for reprojection / bilateral blend
+//   MODE_FULL_BLEND     - Near-camera geometry: both eyes fully shaded for 2x supersampling
+//
+// Dispatched over full SBS resolution (FrameDim.x x FrameDim.y).
+
+#include "Common/VR.hlsli"
+#include "Common/SharedData.hlsli"
+#include "VRStereoOptimizations/cbuffers.hlsli"
+
+Texture2D<float> DepthTexture : register(t0);
+
+RWTexture2D<uint> ModeTextureRW : register(u0);
+
+static const float kDisocclusionThreshold = 0.015;
+
+[numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
+	if (any(dtid >= uint2(FrameDim)))
+		return;
+
+	// Determine which eye this pixel belongs to
+	float2 uv = (float2(dtid) + 0.5) / FrameDim;
+	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+
+	// Read depth directly in SBS coords
+	float centerDepth = DepthTexture[dtid];
+
+#ifdef DEBUG_DEPTH_MAP
+	// DIAGNOSTIC: Visualize what depth values StencilCS sees.
+	// Green (MODE_EDGE) = depth >= 1.0 (HMD mask threshold)
+	// Magenta (MODE_EDGE_NEIGHBOUR) = depth < 1e-5 (sky threshold)
+	// No tint (MODE_MAIN) = normal geometry with valid depth
+	if (centerDepth >= 1.0) {
+		ModeTextureRW[dtid] = MODE_EDGE;
+		return;
+	}
+	if (centerDepth < 1e-5) {
+		ModeTextureRW[dtid] = MODE_EDGE_NEIGHBOUR;
+		return;
+	}
+	ModeTextureRW[dtid] = MODE_MAIN;
+	return;
+#endif
+
+	// Sky/unrendered pixels (depth >= 1.0 at z-prepass time = depth buffer clear value)
+	// and HMD mask pixels both have depth >= 1.0 here. Treat them the same as sky:
+	// let edge detection run so geometry-vs-sky boundaries get classified.
+	// HMD mask pixels are in lens corners with no nearby geometry, so they'll
+	// fall through to MODE_DISOCCLUDED at the end.
+	bool isSky = (centerDepth < 1e-5) || (centerDepth >= 1.0);
+	float linCenter = isSky ? 999999.0 : SharedData::GetScreenDepth(centerDepth);
+
+	// Near-camera supersampling: geometry closer than FullBlendDistance gets full
+	// shading in both eyes for bilateral blend (2x supersampling in VRPostProcess).
+	if (!isSky && linCenter < FullBlendDistance) {
+		ModeTextureRW[dtid] = MODE_FULL_BLEND;
+		return;
+	}
+
+	// --- Disocclusion detection via reprojection (runs for all non-sky pixels) ---
+	// Early return: disoccluded pixels are always MODE_DISOCCLUDED regardless of edge proximity.
+	// This ensures MinEdgeDistance never affects disocclusion classification.
+	if (!isSky) {
+		Stereo::StereoBilateralResult reproj = Stereo::ReprojectToOtherEye(
+			uv,
+			centerDepth,
+			eyeIndex,
+			FrameDim);
+
+		bool isDisoccluded = false;
+		if (!reproj.valid) {
+			isDisoccluded = true;
+		} else {
+			float otherDepth = DepthTexture[reproj.otherPx];
+			float maxDepth = max(max(centerDepth, otherDepth), 1e-5);
+			float relativeDepthDiff = abs(centerDepth - otherDepth) / maxDepth;
+			isDisoccluded = (relativeDepthDiff > kDisocclusionThreshold);
+		}
+
+		if (isDisoccluded) {
+			ModeTextureRW[dtid] = MODE_DISOCCLUDED;
+			return;
+		}
+	}
+
+	// Depth gate: skip edge detection for nearby geometry (saves perf, distant AA matters more)
+	// Sky pixels always run edge detection — they need to expand the edge band outward.
+	// Disocclusion detection (above) is independent of this gate and always runs.
+	bool skipEdgeDetection = !isSky && (linCenter < MinEdgeDistance);
+
+	// --- Edge detection with two-tier classification ---
+	// MODE_EDGE:           immediate neighbor (distance 1) has depth discontinuity, OR
+	//                      inner/foreground band (distance <= kInnerWidth).
+	static const uint kInnerWidth = 2;
+	int2 offsets[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
+
+	uint nearestEdgeDist = 0xFFFFFFFF;  // nearest distance at which a discontinuity was found
+	bool nearestWeAreOuter = false;     // whether we are on the background side at that nearest hit
+
+	// Use the larger of inner/outer widths for the search
+	uint maxWidth = kInnerWidth;
+
+	if (!skipEdgeDetection) {
+	[loop]
+	for (uint d = 1; d <= maxWidth; d++) {
+		[unroll]
+		for (int i = 0; i < 4; i++) {
+			int2 rawNeighbor = int2(dtid) + offsets[i] * (int)d;
+			uint2 neighborCoord = Stereo::ClampToEyeBounds(rawNeighbor, eyeIndex, FrameDim);
+
+			float neighborDepth = DepthTexture[neighborCoord];
+			bool neighborIsSky = (neighborDepth < 1e-5) || (neighborDepth >= 1.0);
+			float linNeighbor = neighborIsSky ? 999999.0 : SharedData::GetScreenDepth(neighborDepth);
+			float maxLin = max(max(linCenter, linNeighbor), 1e-5);
+			float relDepthDiff = abs(linCenter - linNeighbor) / maxLin;
+
+			if (relDepthDiff > EdgeDepthThreshold && d < nearestEdgeDist) {
+				nearestEdgeDist = d;
+				nearestWeAreOuter = (linNeighbor < linCenter);  // neighbor closer to camera = we are background
+			}
+		}
+	}
+
+	}  // !skipEdgeDetection
+
+	if (nearestEdgeDist != 0xFFFFFFFF) {
+		// Classify based on distance and side
+		if (nearestEdgeDist == 1) {
+			// Immediate neighbor discontinuity: always MODE_EDGE regardless of side
+			ModeTextureRW[dtid] = MODE_EDGE;
+			return;
+		} else if (!nearestWeAreOuter && nearestEdgeDist <= kInnerWidth) {
+			// Inner/foreground band beyond distance 1
+			ModeTextureRW[dtid] = MODE_EDGE;
+			return;
+		}
+	}
+
+	// Sky pixels that aren't near edges -> disoccluded (reprojection is meaningless for sky)
+	if (isSky) {
+		ModeTextureRW[dtid] = MODE_DISOCCLUDED;
+		return;
+	}
+
+	// Standard pixel
+	ModeTextureRW[dtid] = MODE_MAIN;
+}

@@ -14,6 +14,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
+#include "Features/VRStereoOptimizations.h"
 #include "Features/WeatherEditor.h"
 
 #include "Hooks.h"
@@ -275,6 +276,11 @@ void Deferred::StartDeferred()
 	PrepassPasses();
 
 	OverrideBlendStates();
+
+	// VR: Classify Eye 1 pixels and write hardware stencil marks before geometry rendering
+	if (globals::game::isVR) {
+		globals::features::vrStereoOptimizations.DispatchStencil();
+	}
 }
 
 void Deferred::DeferredPasses()
@@ -363,6 +369,14 @@ void Deferred::DeferredPasses()
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
+		// Bind VRStereoOptimizations mode texture for Eye 1 skip
+		auto& vrStereoOpt = globals::features::vrStereoOptimizations;
+		if (REL::Module::IsVR() && vrStereoOpt.loaded && vrStereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off) {
+			ID3D11ShaderResourceView* modeSRV = vrStereoOpt.GetModeTextureSRV();
+			if (modeSRV)
+				context->CSSetShaderResources(16, 1, &modeSRV);
+		}
+
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
@@ -370,13 +384,28 @@ void Deferred::DeferredPasses()
 		context->CSSetShader(shader, nullptr, 0);
 
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+		// Unbind mode texture SRV
+		if (REL::Module::IsVR() && vrStereoOpt.loaded && vrStereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off) {
+			ID3D11ShaderResourceView* nullSRV = nullptr;
+			context->CSSetShaderResources(16, 1, &nullSRV);
+		}
 	}
 
-	// VR stereo consistency blend - depth-aware bilateral blend at the eye seam
-	// Runs after composite as a general safety net for all screen-space effects.
-	// Must run before clearing b12/b13 -- needs FrameBuffer matrices for reprojection.
-	if (globals::game::isVR)
+	// VR: Deactivate stencil culling now that geometry rendering is complete.
+	// Must happen before StereoBlend so the blend pass itself isn't stencil-blocked.
+	if (globals::game::isVR) {
+		auto& stereoOpt = globals::features::vrStereoOptimizations;
+		if (stereoOpt.IsStencilActive()) {
+			stereoOpt.DeactivateStencil();
+		}
+	}
+
+	// VR: Stereo reprojection fills Eye 1 holes here (after DeferredComposite, before SSR/water/sky)
+	// so that ISReflectionsRayTracing sees valid pixels in both eyes.
+	if (globals::game::isVR) {
 		globals::features::vr.DrawStereoBlend();
+	}
 
 	// Clear
 	{
@@ -551,6 +580,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
+		if (REL::Module::IsVR() && globals::features::vrStereoOptimizations.loaded)
+			defines.push_back({ "VR_STEREO_OPT", nullptr });
+
 		mainCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
 	return mainCompositeCS;
@@ -576,6 +608,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
+		if (REL::Module::IsVR() && globals::features::vrStereoOptimizations.loaded)
+			defines.push_back({ "VR_STEREO_OPT", nullptr });
+
 		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
 	return mainCompositeInteriorCS;
@@ -593,6 +628,7 @@ void Deferred::Hooks::Main_RenderWorld::thunk(bool a1)
 	state->permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 	state->inWorld = true;
 	func(a1);
+
 	state->inWorld = false;
 	state->permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::InWorld);
 };

@@ -34,6 +34,7 @@ struct ExtendedTranslucency;
 struct Upscaling;
 struct WeatherEditor;
 struct ExponentialHeightFog;
+struct VRStereoOptimizations;
 
 class State;
 class Deferred;
@@ -91,6 +92,7 @@ namespace globals
 		extern RenderDoc renderDoc;
 		extern WeatherEditor weatherEditor;
 		extern ExponentialHeightFog exponentialHeightFog;
+		extern VRStereoOptimizations vrStereoOptimizations;
 
 		namespace llf
 		{

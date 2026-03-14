@@ -323,7 +323,7 @@ namespace
 
 		ImGui::Separator();
 
-		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection" };
+		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection", "Overwrite", "Overwrite Eye1" };
 		ImGui::Combo("Debug View", &settings.StereoBlendDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(

@@ -59,6 +59,8 @@ public:
 		float sharpnessDLSS = 0.0f;
 		uint presetDLSS = 0;           // 0=Default, 1=J, 2=K, 3=L, 4=M
 		uint useGatherWideKernel = 1;  // 0=Legacy 3x3, 1=Gather wide-kernel
+		float vrDlssViewportScale = 1.0f;  // 0.5 to 1.0, fraction of each eye that DLSS processes (VR only)
+		uint vrPeripheryTAA = 0;            // 0=off, 1=on - enable native TAA on periphery when viewport scaling active (VR only)
 	};
 
 	Settings settings;
@@ -110,6 +112,7 @@ public:
 	virtual void Load() override;
 	virtual void PostPostLoad() override;
 	virtual void SetupResources() override;
+	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
 
 	UpscaleMethod GetUpscaleMethod() const;
 
@@ -138,7 +141,11 @@ public:
 	winrt::com_ptr<ID3D11Buffer> vrClearHMDMaskCB;
 	// Helper to dispatch mask clearing for a single eye region
 	void ClearHMDMask(ID3D11UnorderedAccessView* colorUAV, ID3D11ShaderResourceView* depthSRV,
-		uint32_t eyeWidth, uint32_t eyeHeight, uint32_t depthOffsetX, uint32_t colorOffsetX);
+		uint32_t eyeWidth, uint32_t eyeHeight, uint32_t depthOffsetX, uint32_t colorOffsetX,
+		uint32_t depthOffsetY = 0,
+		uint32_t depthWidth = 0, uint32_t depthHeight = 0,
+		uint32_t colorWidth = 0, uint32_t colorHeight = 0,
+		ID3D11ShaderResourceView* fallbackSRV = nullptr, uint32_t fallbackOffsetX = 0);
 
 	// Shared VR Per-Eye Intermediate Buffers
 	// Owned here so both Streamline (DLSS) and FidelityFX (FSR) can use them.
@@ -148,6 +155,34 @@ public:
 	eastl::unique_ptr<Texture2D> vrIntermediateMotionVectors[2];     // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateReactiveMask[2];      // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateTransparencyMask[2];  // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrFinalOutput[2];                   // per-eye display-res composition target (VR viewport scaling)
+	eastl::unique_ptr<Texture2D> vrCropColorIn[2];                   // crop-sized DLSS color input (VR viewport scaling only)
+
+	// Periphery TAA (conductor approach) — used by two-call func() flow
+	winrt::com_ptr<ID3D11Texture2D> vrPreTAACopy;                    // full stereo kMAIN copy (Phase 1 PP, pre-TAA)
+	eastl::unique_ptr<Texture2D> vrTAAdPerEye[2];                    // per-eye render-res TAA'd content (periphery source)
+
+	// Periphery fill compute shader (bilinear upscale render-res → display-res for VR viewport scaling)
+	winrt::com_ptr<ID3D11ComputeShader> vrPeripheryFillCS;
+	winrt::com_ptr<ID3D11Buffer> vrPeripheryFillCB;
+	winrt::com_ptr<ID3D11SamplerState> vrLinearSampler;
+
+	// DLSS composite pixel shaders (format-converting fullscreen copy for TAAReorder)
+	winrt::com_ptr<ID3D11PixelShader> vrDlssCompositePS;    // point-sample (same-res format conversion)
+	winrt::com_ptr<ID3D11PixelShader> vrDlssUpscalePS;      // bilinear upscale (render-res → display-res)
+	winrt::com_ptr<ID3D11Buffer> vrDlssUpscaleCB;           // constant buffer for upscale params
+	ID3D11PixelShader* GetDlssCompositePS();
+	ID3D11PixelShader* GetDlssUpscalePS();
+
+	struct DlssCompositeCB
+	{
+		float2 DynResScale;  // renderRes / displayRes per-eye
+		float2 EyeOffset;    // (i * eyeWidth, 0)
+		float2 SrcTexSize;   // full texture dimensions
+		float2 pad;
+	};
+	void FillPeriphery(uint32_t eyeIndex, uint32_t srcWidth, uint32_t srcHeight,
+		uint32_t dstWidth, uint32_t dstHeight, ID3D11ShaderResourceView* overrideSRV = nullptr);
 
 	// Helper to create/resize per-eye buffers matching source formats
 	void CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight, uint32_t outWidth, uint32_t outHeight,
@@ -164,7 +199,7 @@ public:
 
 	void ConfigureTAA();
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
-	void Upscale();
+	void Upscale(ID3D11Texture2D* colorSourceOverride = nullptr);
 
 	// D3D11 textures
 	Texture2D* reactiveMaskTexture = nullptr;

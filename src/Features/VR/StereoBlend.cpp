@@ -3,6 +3,7 @@
 #include "Features/DynamicCubemaps.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
+#include "Features/VRStereoOptimizations.h"
 #include "State.h"
 
 void VR::ClearShaderCache()
@@ -11,6 +12,7 @@ void VR::ClearShaderCache()
 	stereoBlendDebugBackCheckCS = nullptr;
 	stereoBlendDebugBlendWeightCS = nullptr;
 	stereoBlendDebugEdgeDetectionCS = nullptr;
+	stereoBlendOverwriteCS = nullptr;
 }
 
 bool VR::AnyScreenSpaceEffectLoaded()
@@ -22,10 +24,20 @@ bool VR::AnyScreenSpaceEffectLoaded()
 
 void VR::DrawStereoBlend()
 {
-	if (!REL::Module::IsVR() || !settings.EnableStereoBlend || !stereoBlendCS || !stereoBlendCopyTex || !stereoBlendCB)
+	bool vrStereoOptActive = globals::features::vrStereoOptimizations.loaded &&
+	                         globals::features::vrStereoOptimizations.settings.stereoMode != VRStereoOptimizations::StereoMode::Off &&
+	                         stereoBlendOverwriteCS;
+
+	if (!REL::Module::IsVR() || !stereoBlendCopyTex || !stereoBlendCB)
 		return;
 
-	if (!AnyScreenSpaceEffectLoaded() && !globals::state->IsDeveloperMode())
+	if (vrStereoOptActive && globals::features::vrStereoOptimizations.settings.debugSkipMerge)
+		return;
+
+	if (!vrStereoOptActive && (!settings.EnableStereoBlend || !stereoBlendCS))
+		return;
+
+	if (!vrStereoOptActive && !AnyScreenSpaceEffectLoaded() && !globals::state->IsDeveloperMode())
 		return;
 
 	ZoneScoped;
@@ -38,9 +50,10 @@ void VR::DrawStereoBlend()
 	auto renderer = globals::game::renderer;
 
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
+	// Use live depth buffer (kMAIN) — at DeferredPasses time this has the correct
+	// opaque geometry depth matching the composited color buffer.
+	auto* depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
 
-	// Copy main color to read-only texture to avoid read/write race between eyes
 	context->CopyResource(stereoBlendCopyTex->resource.get(), main.texture);
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
@@ -55,37 +68,94 @@ void VR::DrawStereoBlend()
 	cbData.MaxBlendFactor = settings.StereoBlendMaxFactor;
 	cbData.ColorDiffThreshold = settings.StereoBlendColorThreshold;
 
+	// Pass debug edge tint from VRStereoOptimizations settings
+	if (vrStereoOptActive && globals::features::vrStereoOptimizations.settings.debugVisualization)
+		cbData.DebugEdgeTint = 0.3f;
+	else
+		cbData.DebugEdgeTint = 0.0f;
+
+	// Debug mode: 0=normal, 1=depth map diagnostic, 2=full blend depth visualizer
+	if (vrStereoOptActive && globals::features::vrStereoOptimizations.settings.debugDepthMap)
+		cbData.DebugMode = 1u;
+	else if (vrStereoOptActive && globals::features::vrStereoOptimizations.settings.debugFullBlendDepth)
+		cbData.DebugMode = 2u;
+	else
+		cbData.DebugMode = 0u;
+
+	cbData.FullBlendDistance = vrStereoOptActive ? globals::features::vrStereoOptimizations.settings.fullBlendDistance : 0.0f;
+
 	stereoBlendCB->Update(cbData);
 	auto cbPtr = stereoBlendCB->CB();
 
-	ID3D11ShaderResourceView* srvs[2]{ stereoBlendCopyTex->srv.get(), depthSRV };
-	ID3D11UnorderedAccessView* uavs[1]{ main.UAV };
+	auto& motionVectors = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+
+	bool isOverwriteMode = vrStereoOptActive;
 
 	ID3D11ComputeShader* activeCS = stereoBlendCS.get();
-	if (settings.StereoBlendDebugMode == 1 && stereoBlendDebugBackCheckCS)
-		activeCS = stereoBlendDebugBackCheckCS.get();
-	else if (settings.StereoBlendDebugMode == 2 && stereoBlendDebugBlendWeightCS)
-		activeCS = stereoBlendDebugBlendWeightCS.get();
-	else if (settings.StereoBlendDebugMode == 3 && stereoBlendDebugEdgeDetectionCS)
-		activeCS = stereoBlendDebugEdgeDetectionCS.get();
+	if (vrStereoOptActive) {
+		activeCS = stereoBlendOverwriteCS.get();
+	} else {
+		int effectiveMode = settings.StereoBlendDebugMode;
+		if (effectiveMode == 1 && stereoBlendDebugBackCheckCS)
+			activeCS = stereoBlendDebugBackCheckCS.get();
+		else if (effectiveMode == 2 && stereoBlendDebugBlendWeightCS)
+			activeCS = stereoBlendDebugBlendWeightCS.get();
+		else if (effectiveMode == 3 && stereoBlendDebugEdgeDetectionCS)
+			activeCS = stereoBlendDebugEdgeDetectionCS.get();
+	}
 
+	// Save and unbind DSV to avoid SRV/DSV conflict on depth buffer in overwrite mode
+	ID3D11RenderTargetView* savedRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+	ID3D11DepthStencilView* savedDSV = nullptr;
+	if (isOverwriteMode) {
+		context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, &savedDSV);
+		context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, nullptr);
+		for (auto& rtv : savedRTVs) {
+			if (rtv)
+				rtv->Release();
+		}
+	}
+
+	ID3D11ShaderResourceView* srvs[2]{ stereoBlendCopyTex->srv.get(), depthSRV };
 	context->CSSetConstantBuffers(1, 1, &cbPtr);
 	context->CSSetShaderResources(0, 2, srvs);
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-	context->CSSetShader(activeCS, nullptr, 0);
 
+	if (isOverwriteMode) {
+		ID3D11ShaderResourceView* modeSRV = globals::features::vrStereoOptimizations.GetModeTextureSRV();
+		if (modeSRV)
+			context->CSSetShaderResources(2, 1, &modeSRV);
+
+		ID3D11UnorderedAccessView* uavs[2]{ main.UAV, motionVectors.UAV };
+		context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
+	} else {
+		ID3D11UnorderedAccessView* uavs[1]{ main.UAV };
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	}
+
+	context->CSSetShader(activeCS, nullptr, 0);
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 	// Cleanup
-	srvs[0] = nullptr;
-	srvs[1] = nullptr;
-	uavs[0] = nullptr;
-	cbPtr = nullptr;
-	context->CSSetShaderResources(0, 2, srvs);
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-	context->CSSetConstantBuffers(1, 1, &cbPtr);
+	ID3D11ShaderResourceView* nullSRVs[3] = {};
+	context->CSSetShaderResources(0, isOverwriteMode ? 3 : 2, nullSRVs);
+	ID3D11UnorderedAccessView* nullUAVs[2] = {};
+	context->CSSetUnorderedAccessViews(0, isOverwriteMode ? 2 : 1, nullUAVs, nullptr);
+	ID3D11Buffer* nullCB = nullptr;
+	context->CSSetConstantBuffers(1, 1, &nullCB);
 	context->CSSetShader(nullptr, nullptr, 0);
+
+	// Restore DSV after CS dispatch in overwrite mode
+	if (isOverwriteMode && savedDSV) {
+		context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, nullptr);
+		context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedRTVs, savedDSV);
+		for (auto& rtv : savedRTVs) {
+			if (rtv)
+				rtv->Release();
+		}
+		savedDSV->Release();
+	}
 
 	if (globals::state->frameAnnotations)
 		globals::state->EndPerfEvent();
+
 }

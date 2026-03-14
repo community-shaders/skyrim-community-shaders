@@ -11,6 +11,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
+#include "Features/VRStereoOptimizations.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WeatherEditor.h"
 #include "Menu.h"
@@ -850,6 +851,22 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			data.MipBias = 0;
 		}
 
+		// VR MIP bias modes: 1 = All (global), 2 = Distant Trees (per-pixel in TREE_ANIM)
+		data.VRMipBias = 0;
+		data.VRMipBiasNearDist = 2000.0f;
+		data.VRMipBiasFarDist = 6000.0f;
+		data.VRMipBiasMode = 0;
+		if (globals::game::isVR) {
+			auto& s = globals::features::vrStereoOptimizations.settings;
+			if (s.mipBiasMode == 1 || s.mipBiasMode == 2) {
+				data.VRMipBias = s.mipLodBias;
+				data.VRMipBiasNearDist = s.mipBiasNearDist;
+				data.VRMipBiasFarDist = s.mipBiasFarDist;
+				data.VRMipBiasMode = static_cast<uint>(s.mipBiasMode);
+			}
+			data.VRAlphaTestThreshold = s.alphaTestThreshold;
+		}
+
 		// DALC to SH
 		const auto& m = dalcTransform.rotate;
 		const auto& t = dalcTransform.translate;
@@ -864,7 +881,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		SphericalHarmonics::SH2Color dalcSH = SphericalHarmonics::DALCToSH(dalcColors);
 		data.AmbientSHR = { dalcSH.r.c0, dalcSH.r.c1[0], dalcSH.r.c1[1], dalcSH.r.c1[2] };
 		data.AmbientSHG = { dalcSH.g.c0, dalcSH.g.c1[0], dalcSH.g.c1[1], dalcSH.g.c1[2] };
-		data.AmbientSHB = { dalcSH.b.c0, dalcSH.b.c1[0], dalcSH.b.c1[1], dalcSH.b.c1[2] };
+		data.AmbientSHB = { dalcSH.b.c0, dalcSH.b.c1[0], dalcSH.b.c1[1], dalcSH.b.c1[2] }
 
 		sharedDataCB->Update(data);
 	}

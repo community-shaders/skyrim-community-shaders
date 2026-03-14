@@ -480,22 +480,37 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	bool complex = abs(complexLength - 1.0) < SharedData::grassLightingSettings.ComplexGrassThreshold;
 #		endif  // !TRUE_PBR
 
+	// VR MIP bias: depth-gated sharpening for distant textures
+	float vrGrassBias = 0;
+	if (SharedData::VRMipBias < 0 && SharedData::VRMipBiasMode == 1) {
+		float linDepth = SharedData::GetScreenDepth(input.HPosition.z);
+		float t = saturate((linDepth - SharedData::VRMipBiasNearDist) / max(SharedData::VRMipBiasFarDist - SharedData::VRMipBiasNearDist, 1.0));
+		vrGrassBias = SharedData::VRMipBias * t;
+	}
+
 	float4 baseColor;
 #		if !defined(TRUE_PBR)
 	if (complex) {
-		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5), SharedData::MipBias);
+		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, input.TexCoord.y * 0.5), SharedData::MipBias + vrGrassBias);
 	} else
 #		endif  // !TRUE_PBR
 	{
-		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
+		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias + vrGrassBias);
 	}
 
 	baseColor.xyz = Color::Diffuse(baseColor.xyz);
 
 #		if defined(RENDER_DEPTH)
 	float diffuseAlpha = input.VertexColor.w * baseColor.w;
-	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
-		discard;
+	{
+		float alphaRef = AlphaTestRefRS;
+#if defined(VR)
+		uint convergenceEyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
+		alphaRef -= convergenceEyeIndex * 0.1;
+#endif
+		if ((diffuseAlpha - alphaRef) < 0) {
+			discard;
+		}
 	}
 #		endif  // RENDER_DEPTH || DO_ALPHA_TEST
 
@@ -505,9 +520,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.PS.w = diffuseAlpha;
 #		else
 #			if !defined(TRUE_PBR)
-	float4 specColor = complex ? TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5), SharedData::MipBias) : 1;
+	float4 specColor = complex ? TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5), SharedData::MipBias + vrGrassBias) : 1;
 #			else
-	float4 specColor = TexNormalSampler.SampleBias(SampNormalSampler, input.TexCoord.xy, SharedData::MipBias);
+	float4 specColor = TexNormalSampler.SampleBias(SampNormalSampler, input.TexCoord.xy, SharedData::MipBias + vrGrassBias);
 #			endif
 
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
@@ -548,7 +563,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif  // !TRUE_PBR
 
 #			if defined(TRUE_PBR)
-	float4 rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, input.TexCoord.xy, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
+	float4 rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, input.TexCoord.xy, SharedData::MipBias + vrGrassBias) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
 
 	PBR::SurfaceProperties pbrSurfaceProperties = PBR::InitSurfaceProperties();
 
@@ -846,13 +861,27 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
+	// VR MIP bias: depth-gated sharpening for distant textures
+	float vrGrassBias = 0;
+	if (SharedData::VRMipBias < 0 && SharedData::VRMipBiasMode == 1) {
+		float linDepth = SharedData::GetScreenDepth(input.HPosition.z);
+		float t = saturate((linDepth - SharedData::VRMipBiasNearDist) / max(SharedData::VRMipBiasFarDist - SharedData::VRMipBiasNearDist, 1.0));
+		vrGrassBias = SharedData::VRMipBias * t;
+	}
+
+	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias + vrGrassBias);
 
 #		if defined(RENDER_DEPTH)
 	float diffuseAlpha = input.VertexColor.w * baseColor.w;
-
-	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
-		discard;
+	{
+		float alphaRef = AlphaTestRefRS;
+#if defined(VR)
+		uint convergenceEyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
+		alphaRef -= convergenceEyeIndex * 0.1;
+#endif
+		if ((diffuseAlpha - alphaRef) < 0) {
+			discard;
+		}
 	}
 #		endif  // RENDER_DEPTH || DO_ALPHA_TEST
 

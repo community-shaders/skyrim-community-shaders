@@ -88,6 +88,12 @@ void VR::SetupResources()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", edgeDetectionDefines, "cs_5_0")))
 		stereoBlendDebugEdgeDetectionCS.attach(rawPtr);
 
+	// Overwrite mode: direct replacement instead of blend (for stencil culling)
+	auto overwriteDefines = defines;
+	overwriteDefines.push_back({ "STEREO_OVERWRITE", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", overwriteDefines, "cs_5_0")))
+		stereoBlendOverwriteCS.attach(rawPtr);
+
 	auto renderer = globals::game::renderer;
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	D3D11_TEXTURE2D_DESC mainDesc;

@@ -210,6 +210,11 @@ public:
 		uint InMapMenu;
 		uint HideSky;
 		float MipBias;
+		float VRMipBias;
+		float VRMipBiasNearDist;
+		float VRMipBiasFarDist;
+		uint VRMipBiasMode;   // 0=Off, 1=All Textures, 2=Distant Trees only
+		float VRAlphaTestThreshold;  // Alpha test threshold for VR TREE_ANIM (0 = use vanilla)
 		float pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;

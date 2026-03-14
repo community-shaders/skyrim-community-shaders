@@ -21,6 +21,7 @@ cbuffer VRValues : register(b13)
 	float2 EyeOffsetScale : packoffset(c0.z);
 	float4 EyeClipEdge[2] : packoffset(c1);
 }
+
 #endif
 
 namespace Stereo
@@ -625,6 +626,14 @@ namespace Stereo
 		vsout.VRPosition.y = clipPos.y;
 		vsout.VRPosition.z = clipPos.z;
 		vsout.VRPosition.w = clipPos.w;
+
+		// Hardcoded ~0.75px diagonal jitter for Eye 1 stereo edge supersampling.
+		// Larger offset increases chance of different alpha test outcomes between eyes
+		// (tree branches vs sky). NDC for 6304x3088 SBS reference; scales with resolution.
+		if (a_eyeIndex == 1) {
+			static const float2 kJitterNDC = float2(1.68e-4, -3.44e-4);
+			vsout.VRPosition.xy += kJitterNDC * vsout.VRPosition.w;
+		}
 
 		vsout.ClipDistance = clipEdges.y;
 		vsout.CullDistance = clipEdges.x;

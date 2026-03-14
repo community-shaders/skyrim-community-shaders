@@ -203,8 +203,14 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float alpha = TexDiffuse.SampleBias(SampDiffuse, input.TexCoord.xy, SharedData::MipBias).w;
 
-	if ((alpha - AlphaTestRefRS) < 0) {
-		discard;
+	{
+		float alphaRef = AlphaTestRefRS;
+#if defined(VR)
+		alphaRef -= eyeIndex * 0.1;
+#endif
+		if ((alpha - alphaRef) < 0) {
+			discard;
+		}
 	}
 
 	psout.Diffuse.xyz = input.Depth.xxx / input.Depth.yyy;
@@ -213,8 +219,14 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 baseColor = TexDiffuse.SampleBias(SampDiffuse, input.TexCoord.xy, SharedData::MipBias);
 	baseColor.xyz = Color::Diffuse(baseColor.xyz);
 
-	if ((baseColor.w - AlphaTestRefRS) < 0) {
-		discard;
+	{
+		float alphaRef = AlphaTestRefRS;
+#if defined(VR)
+		alphaRef -= eyeIndex * 0.1;
+#endif
+		if ((baseColor.w - alphaRef) < 0) {
+			discard;
+		}
 	}
 
 #		if defined(DEFERRED)

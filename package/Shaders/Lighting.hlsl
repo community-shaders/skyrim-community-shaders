@@ -1780,7 +1780,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	rawRMAOS = blendedRMAOS;
 #		endif
 #	else  // Non-landscape code
-	float4 rawBaseColor = TexColorSampler.SampleBias(SampColorSampler, diffuseUv, SharedData::MipBias);
+	// VR MIP bias: depth-gated sharpening for distant textures
+	// Mode 1 = All Textures, Mode 2 = Distant Trees (TREE_ANIM) only
+	float vrFoliageBias = 0;
+#	if defined(TREE_ANIM)
+	if (SharedData::VRMipBias < 0) {
+#	else
+	if (SharedData::VRMipBias < 0 && SharedData::VRMipBiasMode == 1) {
+#	endif
+		float linDepth = SharedData::GetScreenDepth(input.Position.z);
+		float t = saturate((linDepth - SharedData::VRMipBiasNearDist) / max(SharedData::VRMipBiasFarDist - SharedData::VRMipBiasNearDist, 1.0));
+		vrFoliageBias = SharedData::VRMipBias * t;
+	}
+	float4 rawBaseColor = TexColorSampler.SampleBias(SampColorSampler, diffuseUv, SharedData::MipBias + vrFoliageBias);
 	baseColor = float4(Color::Diffuse(rawBaseColor.rgb), rawBaseColor.a);
 	float4 normalColor = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
 	normal = normalColor;
@@ -3021,11 +3033,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float alpha = baseColor.w;
 #		if defined(EMAT) && !defined(LANDSCAPE)
 #			if defined(PARALLAX)
-	alpha = TexColorSampler.SampleBias(SampColorSampler, uvOriginal, SharedData::MipBias).w;
+	alpha = TexColorSampler.SampleBias(SampColorSampler, uvOriginal, SharedData::MipBias + vrFoliageBias).w;
 #			elif defined(TRUE_PBR)
 	[branch] if (PBRParallax)
 	{
-		alpha = TexColorSampler.SampleBias(SampColorSampler, uvOriginal, SharedData::MipBias).w;
+		alpha = TexColorSampler.SampleBias(SampColorSampler, uvOriginal, SharedData::MipBias + vrFoliageBias).w;
 	}
 #			endif
 #		endif
@@ -3074,10 +3086,30 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 	alpha = saturate(1.05 * alpha);
 #			endif  // DEPTH_WRITE_DECALS
+#			if defined(TREE_ANIM)
+	// Fixed alpha floor — catch zombie texels with near-zero alpha
+	if (alpha < 0.1) {
+		discard;
+	}
 	if (alpha - AlphaTestRefRS < 0) {
 		discard;
 	}
+	// Suppress RGB fringe contamination from negative MIP bias.
+	// Low-alpha texels near the foliage boundary have bright padding bleeding into RGB.
+	// Alpha is a direct proxy for contamination — low alpha = more padding contribution.
+	// Scale correction by bias strength so close-range (no bias) textures are untouched.
+	if (vrFoliageBias < 0) {
+		float biasStrength = saturate(vrFoliageBias / min(SharedData::VRMipBias, -0.001));
+		float fringeScale = 5.0;  // higher = more aggressive fringe suppression
+		baseColor.rgb *= saturate(alpha * lerp(1.0, fringeScale, biasStrength));
+	}
+#			else
+	if (alpha - AlphaTestRefRS < 0) {
+		discard;
+	}
+#			endif  // TREE_ANIM
 #		endif      // DO_ALPHA_TEST
+
 
 #		if defined(ANISOTROPIC_ALPHA)
 	// Uniform alpha material settings

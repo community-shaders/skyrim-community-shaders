@@ -30,6 +30,7 @@
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
+#include "Features/VRStereoOptimizations.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
@@ -247,6 +248,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		static auto BuildVRList = []() -> std::vector<Feature*> {
 			auto v = features;
 			v.push_back(&globals::features::vr);
+			v.push_back(&globals::features::vrStereoOptimizations);
 
 			// In developer mode, keep all features for testing
 			// In production mode, filter to VR-compatible only

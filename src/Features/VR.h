@@ -260,7 +260,7 @@ public:
 			StereoBlendDepthSigma = std::clamp(StereoBlendDepthSigma, 0.001f, 0.1f);
 			StereoBlendMaxFactor = std::clamp(StereoBlendMaxFactor, 0.0f, 0.5f);
 			StereoBlendColorThreshold = std::clamp(StereoBlendColorThreshold, 0.0f, 0.2f);
-			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 3);
+			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 5);
 		}
 	};
 
@@ -358,6 +358,7 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBackCheckCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBlendWeightCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugEdgeDetectionCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendOverwriteCS;
 	eastl::unique_ptr<Texture2D> stereoBlendCopyTex;
 	eastl::unique_ptr<ConstantBuffer> stereoBlendCB;
 
@@ -368,7 +369,10 @@ public:
 		float DepthSigma;
 		float MaxBlendFactor;
 		float ColorDiffThreshold;
-		float pad;
+		float DebugEdgeTint;
+		uint32_t DebugMode;
+		float FullBlendDistance;
+		float _pad[2];
 	};
 
 	// Engine hook integration points
