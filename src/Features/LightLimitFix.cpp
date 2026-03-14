@@ -6,17 +6,58 @@
 #include "Shadercache.h"
 #include "State.h"
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	LightLimitFix::Settings,
+	FilterMode,
+	KernelScale,
+	LightSize)
+
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 static constexpr uint MAX_LIGHTS = 1024;
 
 void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
+	auto deferred = globals::deferred;
 
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
+		if (lightCount >= MAX_LIGHTS)
+			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Clustered Lights : %u / %u (overflow!)", lightCount, MAX_LIGHTS);
+		else
+			ImGui::Text("Clustered Lights : %u / %u", lightCount, MAX_LIGHTS);
+
+		uint32_t shadowSlots = deferred->shadowMapSlots;
+		uint32_t shadowLights = deferred->shadowLightCount;
+		if (shadowSlots > 0 && shadowLights > shadowSlots)
+			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u / %u slots (overflow!)", shadowLights, shadowSlots);
+		else
+			ImGui::Text("Shadow Lights    : %u / %u slots", shadowLights, shadowSlots);
 
 		ImGui::TreePop();
+	}
+
+	///////////////////////////////
+	ImGui::SeparatorText("Shadow Sampling");
+
+	{
+		static constexpr const char* filterModeNames[] = { "Fast", "Soft (PCF)", "Contact Hardened (PCSS)" };
+		int mode = static_cast<int>(settings.FilterMode);
+		if (ImGui::Combo("Shadow Filter", &mode, filterModeNames, IM_ARRAYSIZE(filterModeNames)))
+			settings.FilterMode = static_cast<uint32_t>(mode);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Quality of shadow filtering for shadow-casting point lights.\nPCF softens shadow edges; PCSS additionally scales softness by distance from the caster.");
+
+		if (settings.FilterMode >= 1) {
+			ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.1f, 4.0f, "%.2f");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Multiplier on the base PCF filter radius. Higher values give softer shadows.");
+		}
+
+		if (settings.FilterMode == 2) {
+			ImGui::SliderFloat("Light Size", &settings.LightSize, 0.5f, 10.0f, "%.1f");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Virtual light source size for PCSS penumbra estimation. Larger values widen shadows further from the caster.");
+		}
 	}
 
 	///////////////////////////////
@@ -63,9 +104,12 @@ void LightLimitFix::DrawOverlay()
 LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
 {
 	PerFrame perFrame{};
+	perFrame.FilterMode = settings.FilterMode;
+	perFrame.KernelScale = settings.KernelScale;
+	perFrame.LightSize = settings.LightSize;
+	std::copy(clusterSize, clusterSize + 3, perFrame.ClusterSize);
 	perFrame.EnableLightsVisualisation = settings.EnableLightsVisualisation;
 	perFrame.LightsVisualisationMode = settings.LightsVisualisationMode;
-	std::copy(clusterSize, clusterSize + 3, perFrame.ClusterSize);
 	return perFrame;
 }
 
@@ -169,6 +213,16 @@ void LightLimitFix::SetupResources()
 void LightLimitFix::RestoreDefaultSettings()
 {
 	settings = {};
+}
+
+void LightLimitFix::LoadSettings(json& o_json)
+{
+	settings = o_json;
+}
+
+void LightLimitFix::SaveSettings(json& o_json)
+{
+	o_json = settings;
 }
 
 RE::NiNode* GetParentRoomNode(RE::NiAVObject* object)
