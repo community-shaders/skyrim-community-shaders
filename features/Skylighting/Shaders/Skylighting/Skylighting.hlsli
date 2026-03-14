@@ -3,6 +3,7 @@
 
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
+#include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 
@@ -49,7 +50,9 @@ namespace Skylighting
 
 		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
 
-		directionalAmbientColor = Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * skylightingDiffuse);
+		float3 linAmbient = Color::IrradianceToLinear(directionalAmbientColor);
+		float3 multiBounceSkylighting = MultiBounceAO(albedo, skylightingDiffuse);
+		directionalAmbientColor = Color::IrradianceToGamma(linAmbient * multiBounceSkylighting);
 
 		diffuseColor += directionalAmbientColor;
 	}

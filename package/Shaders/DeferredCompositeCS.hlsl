@@ -4,6 +4,7 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/MotionBlur.hlsli"
+#include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #include "Common/VR.hlsli"
@@ -54,7 +55,8 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il, in float3 normal, in float3 view, in float roughness)
 {
 	float NdotV = dot(normal, view);
-	ao = Color::SpecularAOLagarde(saturate(NdotV), ao, roughness);
+	float alpha = roughness * roughness;
+	ao = SpecularOcclusion(saturate(NdotV), alpha, ao);
 
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
@@ -141,11 +143,13 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 	float3 linAlbedo = Color::IrradianceToLinear(albedo / Color::PBRLightingScale);
 
-	linDiffuseColor *= sqrt(ssgiAo);
+	float3 multiBounceSSGIAo = MultiBounceAO(linAlbedo, ssgiAo);
+
+	linDiffuseColor *= sqrt(multiBounceSSGIAo);
 
 	diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
 
-	diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * ssgiAo);
+	diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSSGIAo);
 
 	linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 
