@@ -183,7 +183,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float invParam = rcp(max(Param.x, 1e-4));
 		float lumaHeadroom = saturate((Param.x - hdrGammaLum) * invParam);
-		float lumaGate     = smoothstep(0.04, 5.0, hdrGammaLum * invParam);
+		float lumaGate = smoothstep(0.04, 5.0, hdrGammaLum * invParam);
 		float3 channelHeadroom = saturate((Param.x - hdrGamma) * invParam);
 
 		hdrGamma += channelHeadroom * (bloomColor * (lumaHeadroom * lumaGate) * channelHeadroom);
