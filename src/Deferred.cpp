@@ -690,6 +690,7 @@ void Deferred::CopyShadowData()
 		// cross-referencing activeShadowLights, which is a culling set and may not match.
 		uint32_t lightCount = 0;
 		uint32_t unshadowedLights = 0;
+		uint32_t slotUsage = 0;
 		int mapIndex = 0;
 		while (true) {
 			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
@@ -709,6 +710,7 @@ void Deferred::CopyShadowData()
 					SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
 
 				sd[depthSlot].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
+				slotUsage += light->shadowMapCount;
 			} else {
 				unshadowedLights++;
 			}
@@ -717,14 +719,15 @@ void Deferred::CopyShadowData()
 			lightCount++;
 		}
 
-		uint32_t slotCount = static_cast<uint32_t>(mapIndex);
-		if (lightCount != shadowLightCount) {
+		if (lightCount != shadowLightCount || slotUsage != shadowSlotUsage || unshadowedLights != shadowUnshadowedLightCount) {
 			shadowLightCount = lightCount;
+			shadowSlotUsage = slotUsage;
+			shadowUnshadowedLightCount = unshadowedLights;
 			if (unshadowedLights > 0)
-				logger::warn("[Deferred] {} shadow lights using {} / {} slots; {} lights exceed capacity and will render without shadow",
-					lightCount, slotCount, shadowMapSlots, unshadowedLights);
+				logger::debug("[Deferred] {} shadow lights, {} / {} slots used; {} lights dropped (no shadow)",
+					lightCount, slotUsage, shadowMapSlots, unshadowedLights);
 			else
-				logger::info("[Deferred] {} shadow lights using {} / {} slots", lightCount, slotCount, shadowMapSlots);
+				logger::debug("[Deferred] {} shadow lights, {} / {} slots used", lightCount, slotUsage, shadowMapSlots);
 		}
 	}
 

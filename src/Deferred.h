@@ -74,12 +74,13 @@ public:
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
 	// Slot count derived from the kSHADOWMAPS SRV ArraySize at SetupResources; updated on resolution change.
-	// Zero until SetupResources runs; all shadow writes are gated on depthSlot < shadowMapSlots.
+	// Zero until SetupResources runs; all shadow writes are gated on lightCount < shadowMapSlots.
 	uint32_t shadowMapSlots = 0;
 
-	// Number of distinct shadow lights from shadowLightsAccum each frame; logged when it changes.
-	// Note: total slots consumed (mapIndex) may exceed lightCount for multi-map lights (e.g. omnidirectional).
-	uint32_t shadowLightCount = 0;
+	// Per-frame shadow accounting updated by CopyShadowData().
+	uint32_t shadowLightCount = 0;            // distinct lights processed (including dropped ones)
+	uint32_t shadowSlotUsage = 0;             // texture-array slots consumed by successfully rendered lights
+	uint32_t shadowUnshadowedLightCount = 0;  // lights that exceeded slot capacity and cast no shadow
 
 	// Directional shadow structured buffer (t98): cascade splits and projections.
 	Buffer* perDirectionalShadow = nullptr;
