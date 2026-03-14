@@ -18,6 +18,44 @@
 
 #include "Hooks.h"
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	Deferred::ShadowSamplingSettings,
+	FilterMode,
+	KernelScale,
+	LightSize)
+
+void Deferred::DrawSettings()
+{
+	static constexpr const char* filterModeNames[] = { "Cheap (2×2 GatherRed)", "PCF (Poisson disc, 16 taps)", "PCSS (contact-hardened)" };
+	int mode = static_cast<int>(settings.FilterMode);
+	if (ImGui::Combo("Shadow Filter", &mode, filterModeNames, IM_ARRAYSIZE(filterModeNames)))
+		settings.FilterMode = static_cast<uint32_t>(mode);
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Quality of shadow filtering for shadow-casting point lights.\nPCF softens shadow edges; PCSS additionally scales softness by distance from the caster.");
+
+	if (settings.FilterMode >= 1) {
+		ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.1f, 4.0f, "%.2f");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Multiplier on the base PCF filter radius. Higher values give softer shadows.");
+	}
+
+	if (settings.FilterMode == 2) {
+		ImGui::SliderFloat("Light Size", &settings.LightSize, 0.5f, 10.0f, "%.1f");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Virtual light source size for PCSS penumbra estimation. Larger values widen shadows further from the caster.");
+	}
+}
+
+void Deferred::LoadSettings(json& o_json)
+{
+	settings = o_json;
+}
+
+void Deferred::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
 struct DepthStates
 {
 	ID3D11DepthStencilState* a[6][40];
