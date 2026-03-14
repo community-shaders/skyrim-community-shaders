@@ -186,6 +186,11 @@ PS_OUTPUT main(PS_INPUT input)
 			float mappedMax = GetTonemapFactorReinhard(maxCol).x;
 			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
 			sdrTonemapped = compressedHuePreserving;
+
+			// Standard SDR bloom: add bloom where there is headroom below the ceiling.
+			// The radial HDR sun profile from Sky.hlsl ensures the sun center tonemaps
+			// to ~1.0 (no headroom = no bloom bleed) while soft edges remain near
+			// paperwhite with natural headroom for gentle glow.
 			sdrTonemapped += saturate(Param.x - sdrTonemapped) * bloomColor;
 		}
 
@@ -204,21 +209,6 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 sdrLinear = Color::GammaToLinear(max(0.0, sdrGraded));
 		float3 sdrBase = sdrLinear * pw;
 
-		// --- Step 3: DICE highlight extension above paperwhite ---
-		// Tonemap without bloom to get a clean luminance reference for DICE shoulder blending.
-		float3 sdrRefLinear;
-		[branch] if (Param.z > 0.5)
-		{
-			float3 hejlNoBloom = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, 0.0.xxx);
-			sdrRefLinear = Color::GammaToLinear(max(0.0, hejlNoBloom));
-		}
-		else
-		{
-			float maxCol = Color::RGBToLuminance(inputColor);
-			float mappedMax = GetTonemapFactorReinhard(maxCol).x;
-			sdrRefLinear = maxCol > 1e-6 ? Color::GammaToLinear(inputColor * (mappedMax / maxCol)) : Color::GammaToLinear(inputColor);
-		}
-
 		// DICE compresses the full HDR range above the shoulder start into peak nits.
 		float shoulderStart = pw / peak;
 		float3 hdrInputLinear = ENABLE_LL ? inputColor : Color::GammaToLinear(inputColor);
@@ -226,10 +216,13 @@ PS_OUTPUT main(PS_INPUT input)
 
 		// DICE only extends highlights AT and ABOVE paperwhite.
 		// Below paperwhite the output is pure sdrBase — identical to SDR/vanilla.
-		// sdrRefLinear is the no-bloom SDR tonemap in [0,1]; 1.0 = paperwhite ceiling.
-		// Blend onset at 0.9 so only the brightest highlights transition to DICE.
-		float sdrRefLum = average(saturate(sdrRefLinear));
-		float diceBlend = saturate((sdrRefLum - 0.9) / 0.1);
+		// Use raw pre-tonemap luminance (in pw-relative units) to drive the blend:
+		// at shoulderStart the scene is at the paperwhite boundary; above that DICE
+		// takes over.  This avoids the SDR tonemap compressing away the blend signal
+		// (Reinhard maps very bright values to ~0.95, which after gamma roundtrip
+		// produces a diceBlend of only 0.2-0.5, capping output at ~500 nits).
+		float rawLum = average(hdrInputLinear * pw) / peak;
+		float diceBlend = saturate((rawLum - shoulderStart) / max(1.0 - shoulderStart, 1e-4));
 		float3 hdrLinearOut = lerp(sdrBase, diceLinear, diceBlend);
 
 		outputColor = Color::LinearToGamma(max(0.0, hdrLinearOut));

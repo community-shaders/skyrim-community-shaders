@@ -218,42 +218,63 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-	// HDR sun compensation: boost sun values so they survive DICE tonemapping in ISHDR
-	// and appear brighter than paperwhite, reaching toward peak display brightness.
-	// The actual disc shape is determined by the SDR tonemap in ISHDR (same as vanilla).
-	// This boost just ensures the brightest texels land in the DICE extension range.
+	// HDR sun: luminance-driven radial intensity profile.
+	// Uses the texture's own luminance as a 0-1 shape mask so only the bright
+	// center reaches peak display brightness while edges stay at paperwhite.
+	// This preserves the physical disc size regardless of peak/paperwhite settings
+	// and prevents bloom blowout (edges have natural headroom, center has none).
+
 	float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
 	float peakNits       = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
-	// Cap peak for compensation curve — brightness still scales via DICE in ISHDR.
-	float effectivePeak  = min(peakNits, 700.0);
-	float peakOverPW     = effectivePeak / paperWhiteNits;
-	// Clamp so the boost stays moderate even at low paperwhite.
-	// Without this, low PW inflates the disc because dim texels get boosted
-	// above the DICE blend threshold in ISHDR, expanding the bright region.
-	peakOverPW = min(peakOverPW, 3.0);
+
+	// Working space: 80-nit-relative units (what ISHDR expects).
+	float pw        = paperWhiteNits / sRGB_WhiteLevelNits;
+	float peak      = peakNits / sRGB_WhiteLevelNits;
+	float peakRatio = peak / pw;
+
+	// Controls how tightly brightness concentrates at the disc center.
+	// 2.0 = quadratic falloff (natural, perceptual).
+	static const float kSoftness = 2.0;
 
 #   if defined(DITHER)
-	// Sun glare billboard — scale to HDR brightness, preserving vertex colour tint and sky ambient.
-	float glareSrcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
-	// Weather mods may ship HDR sun glare textures with values > 1.0; normalize first.
-	if (glareSrcLum > 1.0) {
-		baseColor.xyz /= glareSrcLum;
-		glareSrcLum = 1.0;
-	}
-	baseColor.xyz *= peakOverPW;
+	// --- Sun glare billboard ---
+	float glareLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
+
+	// Normalize weather-mod HDR textures that may exceed 1.0
+	float glareNormLum = saturate(glareLum);
+	if (glareLum > 1.0)
+		baseColor.xyz *= rcp(glareLum);
+
+	// Radial profile: center (1.0) -> peak/pw, edges (->0) -> 1.0 (paperwhite)
+	float glareShape     = pow(glareNormLum, kSoftness);
+	float glareIntensity = lerp(1.0, peakRatio, glareShape);
+
+	// Scale color preserving hue. For dim texels intensity ~ 1.0, skip division.
+	baseColor.xyz *= (glareNormLum > 0.01) ? (glareIntensity / glareNormLum) : glareIntensity;
+
+	// Apply vertex colour tint (engine's glare envelope)
 	baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
+
 #   else
-	// Sun disc billboard — boost per-texel so the disc shape is preserved through DICE.
+	// --- Sun disc billboard ---
 	float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
-	// Weather mods can have >1 sun textures. Normalize so all texels get uniform boost.
-	if (srcLum > 1.0) {
-		baseColor.xyz /= srcLum;
-		srcLum = 1.0;
-	}
-	baseColor.xyz *= peakOverPW;
-	// Preserve disc shape: don't apply PParams fade to sun disc
+
+	// Normalize weather-mod HDR textures
+	float normLum = saturate(srcLum);
+	if (srcLum > 1.0)
+		baseColor.xyz *= rcp(srcLum);
+
+	// Radial profile: center (1.0) -> peak/pw, edges (->0) -> 1.0 (paperwhite)
+	float shape     = pow(normLum, kSoftness);
+	float intensity = lerp(1.0, peakRatio, shape);
+
+	// Scale color preserving hue. For dim texels intensity ~ 1.0, skip division.
+	baseColor.xyz *= (normLum > 0.01) ? (intensity / normLum) : intensity;
+
+	// Preserve disc shape: don't apply PParams additive sky blend to sun disc
 	yyy = 0.0;
 #	endif
+
 #	if defined(CLOUD_SHADOWS)
 	// Clouds are alpha-blended and don't write depth, so use the cloud shadow field to
 	// attenuate the sun where clouds are actually along the camera->sun path.
@@ -298,12 +319,7 @@ if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permuta
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #  else  // not DITHER, not MOONMASK, not HORIZFADE
     psout.Color.w   = input.Color.w * baseColor.w;
-    if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-        // Preserve vertex color tint, same as SDR path
-        psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
-    } else {
-        psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
-    }
+    psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
 #  endif
 
 #	else
