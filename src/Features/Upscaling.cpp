@@ -147,7 +147,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		ppImmediateContext);
 
 	if (upscaling.IsBackendInitialized()) {
-		// Skip interface wrapping for VR - it can affect frame pacing with VR compositor
+		// Skip Streamline interface wrapping for VR — slUpgradeInterface wraps the D3D
+		// device and swap chain with Streamline proxy objects, which disrupts VR compositor
+		// frame pacing (causes judder/stuttering). DLSS still functions without wrapped
+		// interfaces; only frame generation requires them (and that's already VR-gated above).
 		if (!globals::game::isVR) {
 			upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
 			upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
