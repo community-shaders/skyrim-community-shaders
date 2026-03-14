@@ -220,19 +220,20 @@ PS_OUTPUT main(PS_INPUT input)
 if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
     float peakNits          = min(SharedData::HDRData.z, 2000.0);
     float paperWhiteNits    = max(SharedData::HDRData.y, 1.0);
-    // Soft-knee scaling: compress brightness above 1000 nits to prevent bloom overgrowth
-    float peakSoft          = min(peakNits, 1000.0) + max(peakNits - 1000.0, 0.0) * 0.25;
+	// Soft-knee scaling: linear to 1000 nits, then compress highlights.
+	float peakSoft          = min(peakNits, 1000.0) + max(peakNits - 1000.0, 0.0) * 0.25;
     float peakRatio         = peakSoft / paperWhiteNits;
+	float glareExcess       = max(peakRatio - 1.0, 0.0);
+	float glareRatio        = 1.0 + glareExcess / (1.0 + 0.5 * glareExcess);
 
 #   if defined(DITHER)
-    // Sun glare billboard — scale existing luminance up to HDR
-    baseColor.xyz = min(Color::RGBToLuminance(baseColor.xyz) * peakRatio * 0.25, peakRatio);
+	// Sun glare billboard — use a compressed HDR response so bloom doesn't outrun the disc core.
+	baseColor.xyz = min(Color::RGBToLuminance(baseColor.xyz) * glareRatio * 0.25, glareRatio);
     yyy = 0.0;
 #   else
     // Sun disc billboard — the texture already has the right shape/falloff.
-    // Scale luminance to match peakNits, preserve chromaticity and existing alpha.
-    float srcLum  = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
-    baseColor.xyz = (baseColor.xyz / srcLum) * peakRatio;
+	// Preserve the texture luminance profile so apparent disc size stays stable.
+	baseColor.xyz *= peakRatio;
     // Preserve disc shape: don't apply PParams fade to sun disc
     yyy = 0.0;
 #	endif
