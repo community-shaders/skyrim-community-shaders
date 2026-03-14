@@ -2,6 +2,7 @@
 #define __SHARED_DATA_DEPENDENCY_HLSL__
 
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #include "Common/VR.hlsli"
 
 namespace SharedData
@@ -24,6 +25,10 @@ namespace SharedData
 		bool HideSky;     // HideSky flag in WorldSpace, e.g. Blackreach
 		float MipBias;    // Offset to mip level for TAA sharpness#
 		float4 HDRData;
+		float pad0;
+		float4 AmbientSHR;
+		float4 AmbientSHG;
+		float4 AmbientSHB;
 	};
 
 	struct GrassLightingSettings
@@ -183,14 +188,17 @@ namespace SharedData
 
 	struct IBLSettings
 	{
-		uint EnableDiffuseIBL;
+		uint EnableIBL;
 		uint PreserveFogLuminance;
 		uint UseStaticIBL;
-		uint EnableInterior;
-		float DiffuseIBLScale;
 		float DALCAmount;
-		float IBLSaturation;
+		float EnvIBLScale;
+		float SkyIBLScale;
+		float EnvIBLSaturation;
+		float SkyIBLSaturation;
 		float FogAmount;
+		uint DALCMode;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky
+		float2 pad0;
 	};
 
 	struct ExtendedTranslucencySettings
@@ -324,6 +332,11 @@ namespace SharedData
 		[flatten] if (cellInt.x < 5 && cellInt.x >= 0 && cellInt.y < 5 && cellInt.y >= 0)
 			waterData = WaterData[waterTile];
 		return waterData;
+	}
+
+	float3 GetAmbient(float3 normal)
+	{
+		return SphericalHarmonics::Unproject(AmbientSHR, AmbientSHG, AmbientSHB, normal);
 	}
 
 #endif  // PSHADER

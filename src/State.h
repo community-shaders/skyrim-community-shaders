@@ -214,6 +214,9 @@ public:
 		float MipBias;
 		float pad0;
 		float4 HDRData;  // x=enableHDR, y=paperWhite, z=peakNits, w=unused
+		float4 AmbientSHR;
+		float4 AmbientSHG;
+		float4 AmbientSHB;
 	};
 	STATIC_ASSERT_ALIGNAS_16(SharedDataCB);
 
