@@ -217,31 +217,24 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
-	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		float peakRatio = min(SharedData::HDRData.z, 2000.0) / max(SharedData::HDRData.y, 1.0);
-#	if defined(DITHER)
-		baseColor.xyz = min(Color::RGBToLuminance(baseColor.xyz) * peakRatio * 0.25, peakRatio);
-		yyy = 0.0;
-#	else
-		static const float kSunSize = 0.8;
-		static const float kEdgeSoftness = 0.3;
+if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+    float peakNits          = min(SharedData::HDRData.z, 2000.0);
+    float paperWhiteNits    = max(SharedData::HDRData.y, 1.0);
+    // Soft-knee scaling: compress brightness above 1000 nits to prevent bloom overgrowth
+    float peakSoft          = min(peakNits, 1000.0) + max(peakNits - 1000.0, 0.0) * 0.25;
+    float peakRatio         = peakSoft / paperWhiteNits;
 
-		float distanceFromCenter = length(input.TexCoord0.xy * 2.0 - 1.0);
-		float sun = smoothstep(kSunSize, kSunSize - kEdgeSoftness * kSunSize, distanceFromCenter * 25.0);
-
-		baseColor.xyz = sun * peakRatio;
-		baseColor.w = sun;
-		yyy = 0.0;
-
-#		ifndef OCCLUSION
-#			ifndef TEXLERP
-#				ifdef TEXFADE
-		baseColor.w *= PParams.x;
-#				endif
-#			else
-		baseColor *= PParams.x;
-#			endif
-#		endif
+#   if defined(DITHER)
+    // Sun glare billboard — scale existing luminance up to HDR
+    baseColor.xyz = min(Color::RGBToLuminance(baseColor.xyz) * peakRatio * 0.25, peakRatio);
+    yyy = 0.0;
+#   else
+    // Sun disc billboard — the texture already has the right shape/falloff.
+    // Scale luminance to match peakNits, preserve chromaticity and existing alpha.
+    float srcLum  = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
+    baseColor.xyz = (baseColor.xyz / srcLum) * peakRatio;
+    // Preserve disc shape: don't apply PParams fade to sun disc
+    yyy = 0.0;
 #	endif
 	}
 
@@ -272,13 +265,15 @@ PS_OUTPUT main(PS_INPUT input)
 #		elif defined(HORIZFADE)
 	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
-#		else
-	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
-	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		psout.Color.xyz = baseColor.xyz + yyy;
-	}
-#		endif
+#  else  // not DITHER, not MOONMASK, not HORIZFADE
+    psout.Color.w   = input.Color.w * baseColor.w;
+    if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+        // Preserve vertex color tint, same as SDR path
+        psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+    } else {
+        psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+    }
+#  endif
 
 #	else
 	psout.Color = float4(0, 0, 0, 1.0);
@@ -296,6 +291,14 @@ PS_OUTPUT main(PS_INPUT input)
 	if (depth < input.Position.z)
 		psout.Color.w = 0;
 
+#	else
+	// Even without cloud shadows enabled, sun disc should be occluded by scene depth (clouds, terrain, etc.)
+	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun))
+	{
+		float depth = TexDepthSampler.Load(int3(input.Position.xy, 0));
+		if (depth < input.Position.z)
+			psout.Color.w = 0;
+	}
 #	endif
 
 	return psout;

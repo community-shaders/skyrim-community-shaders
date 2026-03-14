@@ -37,7 +37,7 @@ struct HDRDisplay : public Feature
 	{
 		bool enableHDR = false;           // false = vanilla SDR, true = HDR output
 		uint hdrPaperWhite = 203;         // Reference white brightness in nits for HDR
-		uint hdrPeakNits = 1000;          // Maximum display brightness in nits for HDR
+		uint hdrPeakNits = 800;          // Maximum display brightness in nits for HDR
 		float hdrUIBrightness = 2.3f;     // UI brightness multiplier for HDR mode
 		bool dontShowHDRWarning = false;  // User preference to suppress HDR warning popup
 		bool hdrAutoDetected = false;     // Has auto-detection run at least once?
