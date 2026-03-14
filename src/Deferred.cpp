@@ -623,7 +623,8 @@ void Deferred::ResetBlendStates()
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 }
 
-void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, DirectionalShadowData& dd)
+template <typename T>
+void Deferred::SetShadowCascadeParameters(T& lightData, DirectionalShadowData& dd)
 {
 	for (uint i = 0; i < lightData.shadowmapDescriptors.size(); i++) {
 		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
@@ -634,28 +635,8 @@ void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& light
 	}
 }
 
-void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, DirectionalShadowData& dd)
-{
-	for (uint i = 0; i < lightData.shadowmapDescriptors.size(); i++) {
-		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
-		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
-
-		DirectX::XMMATRIX invProj = DirectX::XMMatrixTranspose(proj);
-		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], invProj);
-	}
-}
-
-void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, ShadowData& sd)
-{
-	auto& desc = lightData.shadowmapDescriptors[0];
-	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
-	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
-
-	DirectX::XMMATRIX invProj = DirectX::XMMatrixTranspose(proj);
-	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, invProj);
-}
-
-void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, ShadowData& sd)
+template <typename T>
+void Deferred::SetShadowParameters(T& lightData, ShadowData& sd)
 {
 	auto& desc = lightData.shadowmapDescriptors[0];
 	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
