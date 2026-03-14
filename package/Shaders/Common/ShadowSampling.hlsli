@@ -188,14 +188,11 @@ namespace ShadowSampling
 		// Transform ray to light space for primary cascade
 		float3 positionLS = mul(shadow.ShadowProj[primaryCascade], float4(worldPosition, 1)).xyz;
 
-		// Sample primary cascade
-		float kernelScale = 0.001;
-
 		// Step 1: blocker search with a small spiral kernel.
 		float3 lightPosition = float3(0, 0, 100000000);
 		float recieverDepth = distance(worldPosition, lightPosition);
 		float searchRadius = 0.001;
-		float kernelScale = 0.01;
+		float kernelScale = 0.001;
 
 		float visibility = GetDirectionalShadowVisibility(positionLS, lightPosition, primaryCascade, searchRadius, kernelScale, rotationMatrix, receiverDepth);
 
