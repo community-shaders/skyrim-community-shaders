@@ -134,12 +134,13 @@ namespace ShadowSampling
 			float2 offset = mul(rotationMatrix, Random::SpiralSampleOffsets8[i]) * searchRadius;
 			float2 uv = saturate(positionLS.xy + offset);
 			float4 blockerDepths = DirectionalShadowCascades.GatherRed(LinearSampler, float3(uv, cascade), 0);
-			[unroll] for(uint k = 0; k < 4; k++)
-			{
-				float4 blockedPosition = float4(2 * float2(uv.x, -uv.y + 1) - 1, blockerDepths[k], 1);
-				blockedPosition = mul(shadow.InvShadowProj[cascade], blockedPosition);
-				blockedPosition.xyz = blockedPosition.xyz / blockedPosition.w;		
-				float blockerDepth = distance(blockedPosition, lightPosition);
+			[unroll] for(uint k = 0; k < 4; k++){
+				float4 blockerPosition = float4(2 * float2(uv.x, -uv.y + 1) - 1, blockerDepths[k], 1);
+				blockerPosition = mul(shadow.InvShadowProj[cascade], blockerPosition);
+				blockerPosition.xyz = blockerPosition.xyz / blockerPosition.w;		
+				
+				float blockerDepth = distance(blockerPosition, lightPosition);
+				
 				if (blockerDepth < receiverDepth) {
 					blockerSum += blockerDepth;
 					blockerCount++;
