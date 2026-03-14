@@ -294,7 +294,7 @@ namespace ShadowSampling
 		return visibility;
 	}
 
-	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix)
+	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex = 0)
 	{
 		ShadowData shadow = Shadows[shadowIndex];
 
@@ -304,7 +304,7 @@ namespace ShadowSampling
 		if (shadow.ShadowParam.y == 0)
 			return 1.0;
 
-		worldPosition.xyz += FrameBuffer::CameraPosAdjust[0].xyz;
+		worldPosition.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 		float4 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1));
 
