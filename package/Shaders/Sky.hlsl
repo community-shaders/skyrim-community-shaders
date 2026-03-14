@@ -220,7 +220,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
 		float peakRatio = min(SharedData::HDRData.z, 2000.0) / max(SharedData::HDRData.y, 1.0);
 #	if defined(DITHER)
-		baseColor.xyz = Color::RGBToLuminance(baseColor.xyz) * (peakRatio * 0.25);
+		baseColor.xyz = min(Color::RGBToLuminance(baseColor.xyz) * peakRatio * 0.25, peakRatio);
 		yyy = 0.0;
 #	else
 		static const float kSunSize = 0.8;
@@ -229,8 +229,8 @@ PS_OUTPUT main(PS_INPUT input)
 		float distanceFromCenter = length(input.TexCoord0.xy * 2.0 - 1.0);
 		float sun = smoothstep(kSunSize, kSunSize - kEdgeSoftness * kSunSize, distanceFromCenter * 25.0);
 
-		baseColor = sun * peakRatio;
-		baseColor.w = 1.0;
+		baseColor.xyz = sun * peakRatio;
+		baseColor.w = sun;
 		yyy = 0.0;
 
 #		ifndef OCCLUSION
@@ -275,6 +275,9 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 	psout.Color.w = input.Color.w * baseColor.w;
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+		psout.Color.xyz = baseColor.xyz + yyy;
+	}
 #		endif
 
 #	else
