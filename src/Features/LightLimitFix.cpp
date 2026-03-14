@@ -2,6 +2,7 @@
 #include "InverseSquareLighting.h"
 #include "LinearLighting.h"
 
+#include "Deferred.h"
 #include "Menu/ThemeManager.h"
 #include "Shadercache.h"
 #include "State.h"
@@ -446,11 +447,26 @@ void LightLimitFix::UpdateLights()
 		}
 	};
 
-	for (auto& e : shadowSceneNode->GetRuntimeData().activeLights) {
-		addLight(e);
+	// Build a set of all shadow lights so we can skip them in activeLights and avoid
+	// double-contribution if shadow lights appear in both activeLights and shadowLightsAccum.
+	std::unordered_set<RE::BSLight*> shadowLightSet;
+	{
+		int mapIndex = 0;
+		while (true) {
+			RE::BSShadowLight* sl = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
+			if (!sl)
+				break;
+			shadowLightSet.insert(static_cast<RE::BSLight*>(sl));
+			mapIndex += sl->shadowMapCount;
+		}
 	}
 
-	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, int) {
+	for (auto& e : shadowSceneNode->GetRuntimeData().activeLights) {
+		if (!shadowLightSet.count(e.get()))
+			addLight(e);
+	}
+
+	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, bool castsShadow) {
 		if (IsValidLight(shadowLight)) {
 			if (auto niLight = shadowLight->light.get()) {
 				auto& runtimeData = niLight->GetLightRuntimeData();
@@ -481,11 +497,13 @@ void LightLimitFix::UpdateLights()
 					light.lightFlags.set(LightFlags::PortalStrict);
 				}
 
-				if (globals::game::isVR)
-					light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
-				else
-					light.shadowMapIndex = shadowLight->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
-				light.lightFlags.set(LightFlags::Shadow);
+				if (castsShadow) {
+					if (globals::game::isVR)
+						light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+					else
+						light.shadowMapIndex = shadowLight->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+					light.lightFlags.set(LightFlags::Shadow);
+				}
 
 				SetLightPosition(light, niLight->world.translate);
 
@@ -504,7 +522,11 @@ void LightLimitFix::UpdateLights()
 			if (!light)
 				break;
 
-			addShadowLight(light, bufferIndex);
+			// Only set Shadow flag for lights with a valid written slot.
+			// Overflow lights still use addShadowLight for correct color/radius setup,
+			// but without the Shadow flag so the HLSL does not do a shadow map lookup
+			// with a stale or out-of-range shadowMapIndex.
+			addShadowLight(light, bufferIndex < (int)globals::deferred->shadowMapSlots);
 
 			mapIndex += light->shadowMapCount;
 			bufferIndex++;
