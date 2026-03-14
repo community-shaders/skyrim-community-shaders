@@ -2630,7 +2630,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float shadowComponent = 1.0;
 		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
 			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix);
+				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex);
 				lightShadow *= shadowComponent;
 			}
 		}
