@@ -137,7 +137,7 @@ namespace ShadowSampling
 			[unroll] for(uint k = 0; k < 4; k++)
 			{
 				float4 blockedPosition = float4(2 * float2(uv.x, -uv.y + 1) - 1, blockerDepths[k], 1);
-				blockedPosition = mul(shadow.InvShadowProj[eyeIndex], blockedPosition);
+				blockedPosition = mul(shadow.InvShadowProj[cascade], blockedPosition);
 				blockedPosition.xyz = blockedPosition.xyz / blockedPosition.w;		
 				float blockerDepth = distance(blockedPosition, lightPosition);
 				if (blockerDepth < receiverDepth) {
