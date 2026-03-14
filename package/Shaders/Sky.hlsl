@@ -218,44 +218,51 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-    float peakNits          = min(SharedData::HDRData.z, 2000.0);
+    float peakNits          = max(SharedData::HDRData.z, 1.0);
     float paperWhiteNits    = max(SharedData::HDRData.y, 1.0);
-	// Soft-knee scaling: linear to 1000 nits, then compress highlights.
-	float peakSoft          = min(peakNits, 1000.0) + max(peakNits - 1000.0, 0.0) * 0.25;
-    float peakRatio         = peakSoft / paperWhiteNits;
+	float paperWhite        = paperWhiteNits / sRGB_WhiteLevelNits;
+	float peakWhite         = peakNits / sRGB_WhiteLevelNits;
+    float peakRatio         = peakNits / paperWhiteNits;
 	float glareExcess       = max(peakRatio - 1.0, 0.0);
 	float glareRatio        = 1.0 + glareExcess / (1.0 + 0.5 * glareExcess);
 
 #   if defined(DITHER)
-	// Sun glare billboard — use a compressed HDR response so bloom doesn't outrun the disc core.
-	baseColor.xyz = min(Color::RGBToLuminance(baseColor.xyz) * glareRatio * 0.25, glareRatio);
-    yyy = 0.0;
+	// Sun glare billboard — scale to HDR brightness, preserving vertex colour tint and sky ambient.
+	baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz * glareRatio;
 #   else
     // Sun disc billboard — the texture already has the right shape/falloff.
-	// Preserve the texture luminance profile so apparent disc size stays stable.
-	baseColor.xyz *= peakRatio;
+	// Compensate for the DICE shoulder per texel so the disc survives HDR tonemapping.
+	float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
+	float targetDiscLum = min(srcLum * peakRatio * paperWhite, peakWhite - 1e-4);
+	float compensatedDiscLum = targetDiscLum;
+	if (targetDiscLum > paperWhite) {
+		static const float HDR10MaxWhite = HDR10_MaxWhiteNits / sRGB_WhiteLevelNits;
+		float targetDiscPerceptual = Linear_to_PQ((targetDiscLum / HDR10MaxWhite).xxx, GCT_POSITIVE).x;
+		float shoulderPerceptual = Linear_to_PQ((paperWhite / HDR10MaxWhite).xxx, GCT_DEFAULT).x;
+		float peakPerceptual = Linear_to_PQ((peakWhite / HDR10MaxWhite).xxx, GCT_DEFAULT).x;
+		float compressedRange = max(peakPerceptual - shoulderPerceptual, 1e-5);
+		float compressedT = saturate((targetDiscPerceptual - shoulderPerceptual) / compressedRange);
+		float sourcePerceptual = shoulderPerceptual - compressedRange * log(max(1.0 - compressedT, 1e-5));
+		compensatedDiscLum = PQ_to_Linear(sourcePerceptual.xxx, GCT_DEFAULT).x * HDR10MaxWhite;
+	}
+	baseColor.xyz *= compensatedDiscLum / max(srcLum * paperWhite, 1e-5);
     // Preserve disc shape: don't apply PParams fade to sun disc
     yyy = 0.0;
 #	endif
-	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		float peakNits = min(SharedData::HDRData.z, 2000.0);
-		float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
-		// Soft-knee scaling: compress brightness above 1000 nits to prevent bloom overgrowth
-		float peakSoft = min(peakNits, 1000.0) + max(peakNits - 1000.0, 0.0) * 0.25;
-		float peakRatio = peakSoft / paperWhiteNits;
-
-#		if defined(DITHER)
-		// Sun glare billboard — scale existing luminance up to HDR
-		baseColor.xyz = min(Color::RGBToLuminance(baseColor.xyz) * peakRatio * 0.25, peakRatio);
-		yyy = 0.0;
-#		else
-		// Sun disc billboard — the texture already has the right shape/falloff.
-		// Scale luminance to match peakNits, preserve chromaticity and existing alpha.
-		float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
-		baseColor.xyz = (baseColor.xyz / srcLum) * peakRatio;
-		// Preserve disc shape: don't apply PParams fade to sun disc
-		yyy = 0.0;
-#		endif
+#	if defined(CLOUD_SHADOWS)
+	// Clouds are alpha-blended and don't write depth, so use the cloud shadow field to
+	// attenuate the sun where clouds are actually along the camera->sun path.
+	float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(input.WorldPosition.xyz, SharedData::DirLightDirection.xyz);
+	float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 0).x;
+	float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 1).x;
+	float cloudCube = lerp(cloudCube0, cloudCube1, 0.5);
+	float cloudMult = lerp(1.0, 1.0 - cloudCube, SharedData::cloudShadowsSettings.Opacity);
+	// Keep thin cloud transmittance and only strongly block dense cloud cover.
+	float edgeWidth = max(fwidth(cloudMult) * 2.0, 0.02);
+	float cloudTransmit = smoothstep(0.12 - edgeWidth, 0.88 + edgeWidth, saturate(cloudMult));
+	baseColor.xyz *= cloudTransmit;
+	baseColor.w   *= cloudTransmit;
+#	endif
 	}
 
 #		if defined(DITHER)
@@ -285,15 +292,15 @@ if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permuta
 #		elif defined(HORIZFADE)
 	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
-#		else  // not DITHER, not MOONMASK, not HORIZFADE
-	psout.Color.w = input.Color.w * baseColor.w;
-	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		// Preserve vertex color tint, same as SDR path
-		psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
-	} else {
-		psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
-	}
-#		endif
+#  else  // not DITHER, not MOONMASK, not HORIZFADE
+    psout.Color.w   = input.Color.w * baseColor.w;
+    if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+        // Preserve vertex color tint, same as SDR path
+        psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+    } else {
+        psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+    }
+#  endif
 
 #	else
 	psout.Color = float4(0, 0, 0, 1.0);
