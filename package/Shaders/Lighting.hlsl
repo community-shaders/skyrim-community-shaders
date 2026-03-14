@@ -2413,7 +2413,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	// Sample directional shadow directly (VSM when VolumetricShadows loaded, PCF otherwise).
 	if (inWorld && !inReflection && !SharedData::InInterior)
-		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirDetailedShadow);
+		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, rotationMatrix, eyeIndex, dirDetailedShadow);
 
 #	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
 	if (!SharedData::InInterior)

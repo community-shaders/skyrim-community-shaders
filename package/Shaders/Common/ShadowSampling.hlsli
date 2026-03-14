@@ -126,20 +126,20 @@ namespace ShadowSampling
 	}
 
 
-	float GetDirectionalShadowVisibility(float3 positionLS, float3 lightPosition, uint cascade, float searchRadius, float kernelScale, float2x2 rotationMatrix, float receiverDepth)
+	float GetDirectionalShadowVisibility(DirectionalShadowData shadow, float3 positionLS, float3 lightPosition, uint cascade, float searchRadius, float kernelScale, float2x2 rotationMatrix, float receiverDepth)
 	{
 		float blockerSum   = 0.0;
 		uint  blockerCount = 0;
-		[unroll] for (uint i = 0; i < 8; i++) {
+		[loop] for (uint i = 0; i < 8; i++) {
 			float2 offset = mul(rotationMatrix, Random::SpiralSampleOffsets8[i]) * searchRadius;
 			float2 uv = saturate(positionLS.xy + offset);
 			float4 blockerDepths = DirectionalShadowCascades.GatherRed(LinearSampler, float3(uv, cascade), 0);
-			[unroll] for(uint k = 0; k < 4; k++){
+			[loop] for(uint k = 0; k < 4; k++){
 				float4 blockerPosition = float4(2 * float2(uv.x, -uv.y + 1) - 1, blockerDepths[k], 1);
 				blockerPosition = mul(shadow.InvShadowProj[cascade], blockerPosition);
 				blockerPosition.xyz = blockerPosition.xyz / blockerPosition.w;		
 				
-				float blockerDepth = distance(blockerPosition, lightPosition);
+				float blockerDepth = distance(blockerPosition.xyz, lightPosition);
 				
 				if (blockerDepth < receiverDepth) {
 					blockerSum += blockerDepth;
@@ -155,15 +155,15 @@ namespace ShadowSampling
 		float kernelRadius    = penumbra * kernelScale;
 
 		float sum = 0.0;
-		[unroll] for (int i = 0; i < 16; i++) {
-			float2 offset = mul(rotationMatrix, Random::PoissonSampleOffsets16[i]) * kernelRadius;
-			sum += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, cascade)) > positionLS.z), 0.25);
+		[loop] for (int j = 0; j < 16; j++) {
+			float2 offset = mul(rotationMatrix, Random::PoissonSampleOffsets16[j]) * kernelRadius;
+			sum += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(saturate(positionLS.xy + offset), cascade)) > positionLS.z), 0.25);
 		}
 
 		return sum / 16.0;
 	}
 
-	float GetLightingShadow(float3 worldPosition, uint eyeIndex, out float detailedShadow)
+	float GetLightingShadow(float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex, out float detailedShadow)
 	{
 		DirectionalShadowData shadow = DirectionalShadows[0];
 
@@ -191,11 +191,11 @@ namespace ShadowSampling
 
 		// Step 1: blocker search with a small spiral kernel.
 		float3 lightPosition = float3(0, 0, 100000000);
-		float recieverDepth = distance(worldPosition, lightPosition);
-		float searchRadius = 0.001;
-		float kernelScale = 0.001;
+		float receiverDepth = distance(worldPosition, lightPosition);
+		float searchRadius = 0.01;
+		float kernelScale = 1000.01;
 
-		float visibility = GetDirectionalShadowVisibility(positionLS, lightPosition, primaryCascade, searchRadius, kernelScale, rotationMatrix, receiverDepth);
+		float visibility = GetDirectionalShadowVisibility(shadow, positionLS, lightPosition, primaryCascade, searchRadius, kernelScale, rotationMatrix, receiverDepth);
 
 		// Blend with secondary cascade if needed
 		[branch]
@@ -204,7 +204,7 @@ namespace ShadowSampling
 
 			positionLS = mul(shadow.ShadowProj[secondaryCascade], float4(worldPosition, 1)).xyz;
 
-			float visibilityBlend = GetDirectionalShadowVisibility(positionLS, lightPosition, secondaryCascade, searchRadius, kernelScale, rotationMatrix, receiverDepth);
+			float visibilityBlend = GetDirectionalShadowVisibility(shadow, positionLS, lightPosition, secondaryCascade, searchRadius, kernelScale, rotationMatrix, receiverDepth);
 			visibility = lerp(visibility, visibilityBlend, cascadeSelect);
 		}
 
@@ -230,7 +230,7 @@ namespace ShadowSampling
 	float PCFSpiral8(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius)
 	{
 		float sum = 0.0;
-		[unroll] for (int i = 0; i < 8; i++) {
+		[loop] for (int i = 0; i < 8; i++) {
 			float2 offset = Random::SpiralSampleOffsets8[i] * kernelRadius;
 			sum += SampleShadowPCF(shadowIndex, baseUV + offset, receiverDepth);
 		}
@@ -241,7 +241,7 @@ namespace ShadowSampling
 	float PCFPoisson16(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius, float2x2 rotationMatrix)
 	{
 		float sum = 0.0;
-		[unroll] for (int i = 0; i < 16; i++) {
+		[loop] for (int i = 0; i < 16; i++) {
 			float2 offset = mul(rotationMatrix, Random::PoissonSampleOffsets16[i]) * kernelRadius;
 			sum += SampleShadowPCF(shadowIndex, baseUV + offset, receiverDepth);
 		}
@@ -258,7 +258,7 @@ namespace ShadowSampling
 		float searchRadius = lightSize * PCFKernelShadowLight;
 		float blockerSum   = 0.0;
 		int   blockerCount = 0;
-		[unroll] for (int i = 0; i < 8; i++) {
+		[loop] for (int i = 0; i < 8; i++) {
 			float2 offset        = mul(rotationMatrix, Random::SpiralSampleOffsets8[i]) * searchRadius;
 			float  blockerDepth  = ShadowMaps.SampleLevel(LinearSampler, float3(baseUV + offset, shadowIndex), 0).r;
 			if (blockerDepth < receiverDepth) {
