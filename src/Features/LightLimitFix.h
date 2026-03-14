@@ -18,13 +18,13 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Light Limit Fix removes the vanilla game's 4-light limit, allowing unlimited dynamic lights in scenes.\n"
-			"This dramatically improves lighting quality and enables more realistic illumination scenarios.",
+			"Light Limit Fix removes the vanilla game's 4-light limit, allowing unlimited dynamic lights in scenes. "
+			"It also extends shadow support to all point and spot lights, with configurable filtering from fast hard-edged shadows up to contact-hardened soft shadows (PCSS).",
 			{ "Removes 4-light limit",
 				"Unlimited dynamic lights",
-				"Improved lighting quality",
-				"Enhanced visual realism",
-				"Enhanced visual realism" }
+				"Shadow support for point and spot lights",
+				"PCF and PCSS soft shadow filtering",
+				"Improved lighting quality" }
 		};
 	}
 
@@ -97,10 +97,17 @@ public:
 
 	struct alignas(16) PerFrame
 	{
+		// Shadow sampling (configurable)
+		uint32_t FilterMode;
+		float KernelScale;
+		float LightSize;
+		uint32_t pad0;
+		// Cluster config (computed)
+		uint ClusterSize[4];
+		// Debug (last)
 		uint EnableLightsVisualisation;
 		uint LightsVisualisationMode;
-		float pad0[2];
-		uint ClusterSize[4];
+		float pad1[2];
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
@@ -151,6 +158,8 @@ public:
 	virtual void SetupResources() override;
 
 	virtual void RestoreDefaultSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
 
 	virtual void DrawSettings() override;
 	virtual void DrawOverlay() override;
@@ -172,6 +181,11 @@ public:
 
 	struct Settings
 	{
+		// Shadow sampling
+		uint32_t FilterMode = 0;   // 0=cheap 2×2, 1=PCF Poisson disc, 2=PCSS
+		float KernelScale = 1.0f;  // scales the base PCF kernel radius
+		float LightSize = 2.0f;    // PCSS virtual light size (UV-space scale)
+		// Debug (last)
 		bool EnableLightsVisualisation = false;
 		uint LightsVisualisationMode = 0;
 	};

@@ -481,8 +481,6 @@ void State::SaveToJson(nlohmann::json& settings)
 			overrideManager->SaveUserOverride(featureName, currentSettings, overrideSettings);
 		}
 	}
-
-	globals::deferred->SaveSettings(settings["Deferred"]);
 }
 
 void State::LoadFromJson(nlohmann::json& settings)
@@ -543,9 +541,6 @@ void State::LoadFromJson(nlohmann::json& settings)
 			feature->Load(settings);
 		}
 	}
-
-	if (settings.contains("Deferred"))
-		globals::deferred->LoadSettings(settings["Deferred"]);
 }
 
 void State::Save(ConfigMode a_configMode)

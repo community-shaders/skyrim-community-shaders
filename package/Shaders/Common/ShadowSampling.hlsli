@@ -191,8 +191,8 @@ namespace ShadowSampling
 	// PCSS: blocker search → penumbra estimation → variable-width PCF.
 	float PCSSSpotlight(uint shadowIndex, float2 baseUV, float receiverDepth, float2x2 rotationMatrix)
 	{
-		float lightSize   = SharedData::shadowSamplingSettings.LightSize;
-		float kernelScale = SharedData::shadowSamplingSettings.KernelScale;
+		float lightSize   = SharedData::lightLimitFixSettings.LightSize;
+		float kernelScale = SharedData::lightLimitFixSettings.KernelScale;
 
 		// Step 1: blocker search with a small spiral kernel.
 		float searchRadius = lightSize * PCFKernelShadowLight;
@@ -237,14 +237,14 @@ namespace ShadowSampling
 			return 1.0;
 
 		float2 baseUV = positionLS.xy * 0.5 + 0.5;
-		uint   mode   = SharedData::shadowSamplingSettings.FilterMode;
+		uint   mode   = SharedData::lightLimitFixSettings.FilterMode;
 
 		[branch]
 		if (mode == 2)
 			return PCSSSpotlight(shadowIndex, baseUV, positionLS.z, rotationMatrix);
 		else if (mode == 1)
 			return PCFPoisson16(shadowIndex, baseUV, positionLS.z,
-				PCFKernelShadowLight * SharedData::shadowSamplingSettings.KernelScale, rotationMatrix);
+				PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale, rotationMatrix);
 		else
 			return dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(baseUV, shadowIndex)) > positionLS.z), 0.25);
 	}
@@ -257,11 +257,11 @@ namespace ShadowSampling
 			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 			positionLS.z = saturate(length(positionLS.xyz) / shadow.ShadowParam.y);
 
-			uint mode = SharedData::shadowSamplingSettings.FilterMode;
+			uint mode = SharedData::lightLimitFixSettings.FilterMode;
 			[branch]
 			if (mode >= 1) {
 				// PCF: jitter in the paraboloid's natural parameterisation space.
-				float kernelRadius = PCFKernelShadowLight * SharedData::shadowSamplingSettings.KernelScale;
+				float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
 				float sum = 0.0;
 				[unroll] for (int i = 0; i < 8; i++) {
 					float2 offset = Random::SpiralSampleOffsets8[i] * kernelRadius;
