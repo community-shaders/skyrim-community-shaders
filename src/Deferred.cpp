@@ -710,7 +710,7 @@ void Deferred::CopyShadowData()
 					SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
 
 				sd[depthSlot].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
-				slotUsage += light->shadowMapCount;
+				slotUsage += 1;  // each light occupies exactly 1 texture-array slot (DPB packs both hemispheres)
 			} else {
 				unshadowedLights++;
 			}
