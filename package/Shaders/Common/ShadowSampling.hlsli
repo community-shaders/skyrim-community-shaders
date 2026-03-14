@@ -177,6 +177,23 @@ namespace ShadowSampling
 		return ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(uv, shadowIndex), receiverDepth);
 	}
 
+	// Fast 2x2 gather-based sample (4 depth comparisons, averaged).
+	float SampleShadowGather(uint shadowIndex, float2 uv, float receiverDepth)
+	{
+		return dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(uv, shadowIndex)) > receiverDepth), 0.25);
+	}
+
+	// 8-tap spiral PCF on a 2D shadow map slice (paraboloid UV space).
+	float PCFSpiral8(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius)
+	{
+		float sum = 0.0;
+		[unroll] for (int i = 0; i < 8; i++) {
+			float2 offset = Random::SpiralSampleOffsets8[i] * kernelRadius;
+			sum += SampleShadowPCF(shadowIndex, baseUV + offset, receiverDepth);
+		}
+		return sum * rcp(8.0);
+	}
+
 	// 16-tap Poisson disc PCF on a 2D shadow map slice.
 	float PCFPoisson16(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius, float2x2 rotationMatrix)
 	{
@@ -246,7 +263,7 @@ namespace ShadowSampling
 			return PCFPoisson16(shadowIndex, baseUV, positionLS.z,
 				PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale, rotationMatrix);
 		else
-			return dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(baseUV, shadowIndex)) > positionLS.z), 0.25);
+			return SampleShadowGather(shadowIndex, baseUV, positionLS.z);
 	}
 
 	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS)
@@ -258,19 +275,12 @@ namespace ShadowSampling
 			positionLS.z = saturate(length(positionLS.xyz) / shadow.ShadowParam.y);
 
 			uint mode = SharedData::lightLimitFixSettings.FilterMode;
+			float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
 			[branch]
-			if (mode >= 1) {
-				// PCF: jitter in the paraboloid's natural parameterisation space.
-				float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
-				float sum = 0.0;
-				[unroll] for (int i = 0; i < 8; i++) {
-					float2 offset = Random::SpiralSampleOffsets8[i] * kernelRadius;
-					sum += SampleShadowPCF(shadowIndex, sampleUV + offset, positionLS.z);
-				}
-				return sum * rcp(8.0);
-			} else {
-				return dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
-			}
+			if (mode >= 1)
+				return PCFSpiral8(shadowIndex, sampleUV, positionLS.z, kernelRadius);
+			else
+				return SampleShadowGather(shadowIndex, sampleUV, positionLS.z);
 		}
 
 		// Geometry outside the paraboloid's coverage hemisphere is unshadowed.
@@ -290,18 +300,12 @@ namespace ShadowSampling
 		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
+		float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
 		[branch]
-		if (mode >= 1) {
-			float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
-			float sum = 0.0;
-			[unroll] for (int i = 0; i < 8; i++) {
-				float2 offset = Random::SpiralSampleOffsets8[i] * kernelRadius;
-				sum += SampleShadowPCF(shadowIndex, sampleUV + offset, depth);
-			}
-			return sum * rcp(8.0);
-		}
-
-		return dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > depth), 0.25);
+		if (mode >= 1)
+			return PCFSpiral8(shadowIndex, sampleUV, depth, kernelRadius);
+		else
+			return SampleShadowGather(shadowIndex, sampleUV, depth);
 	}
 
 	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex = 0)
