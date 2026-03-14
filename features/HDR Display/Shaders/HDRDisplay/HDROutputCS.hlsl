@@ -62,8 +62,11 @@ cbuffer PerFrame : register(b0)
 			// Composite in gamma space (matching SDR behavior), then convert to HDR.
 			// The vanilla UI was designed for gamma-space blending; compositing in PQ
 			// over-darkens and compositing in linear over-brightens behind UI overlays.
-			float effectiveUIBrightness = isMainOrLoadingMenu > 0.5 ? 1.0 : uiBrightness;
-			float3 composited = ui.rgb * effectiveUIBrightness + scene.rgb * (1.0 - ui.a);
+			// On the main/loading menu the scene is SDR-range (80-nit baseline after PQ), so
+			// both the scene background and UI need the same uiBrightness lift to match the
+			// ~200-250 nit level that Windows applies when remapping SDR content on an HDR display.
+			float effectiveSceneScale = isMainOrLoadingMenu > 0.5 ? uiBrightness : 1.0;
+			float3 composited = ui.rgb * uiBrightness + scene.rgb * (1.0 - ui.a) * effectiveSceneScale;
 
 			float3 compositedLinear = Color::GammaToLinear(max(0.0, composited));
 			float3 compositedBT2020 = Color::BT709ToBT2020(compositedLinear);
