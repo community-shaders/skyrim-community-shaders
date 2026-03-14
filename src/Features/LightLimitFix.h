@@ -183,8 +183,8 @@ public:
 	{
 		// Shadow sampling
 		uint32_t FilterMode = 0;   // 0=cheap 2×2, 1=PCF Poisson disc, 2=PCSS
-		float KernelScale = 1.0f;  // scales the base PCF kernel radius
-		float LightSize = 2.0f;    // PCSS virtual light size (UV-space scale)
+		float KernelScale = 3.0f;  // scales the base PCF kernel radius
+		float LightSize = 10.0f;   // PCSS virtual light size in shadow-map pixels
 		// Debug (last)
 		bool EnableLightsVisualisation = false;
 		uint LightsVisualisationMode = 0;

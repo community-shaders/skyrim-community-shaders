@@ -50,15 +50,15 @@ void LightLimitFix::DrawSettings()
 			ImGui::SetTooltip("Quality of shadow filtering for shadow-casting point lights.\nPCF softens shadow edges; PCSS additionally scales softness by distance from the caster.");
 
 		if (settings.FilterMode >= 1) {
-			ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.1f, 4.0f, "%.2f");
+			ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.1f, 8.0f, "%.2f");
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("Multiplier on the base PCF filter radius. Higher values give softer shadows.");
 		}
 
 		if (settings.FilterMode == 2) {
-			ImGui::SliderFloat("Light Size", &settings.LightSize, 0.5f, 10.0f, "%.1f");
+			ImGui::SliderFloat("Light Size", &settings.LightSize, 1.0f, 50.0f, "%.1f");
 			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Virtual light source size for PCSS penumbra estimation. Larger values widen shadows further from the caster.");
+				ImGui::SetTooltip("Virtual light source size in shadow map pixels for PCSS penumbra estimation. Larger values give wider soft shadows further from the caster.");
 		}
 	}
 
