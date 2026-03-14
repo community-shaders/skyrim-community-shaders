@@ -2755,14 +2755,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-	float3 directionalAmbientColor = Color::Ambient(max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0))));
+	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(ambientNormal)));
 
 #	if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
+	if (SharedData::iblSettings.EnableIBL) {
 		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(ambientNormal, SampColorSampler);
-		} else if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
-			directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
 		}
 	}
 #	endif
@@ -2780,16 +2778,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(IBL)
-	float3 iblColor = 0;
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if ((!SharedData::InInterior || SharedData::iblSettings.EnableInterior) && !(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {
-#		if defined(SKYLIGHTING)
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#		else
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#		endif
-			iblColor = Color::IrradianceToGamma(iblColor);
-			directionalAmbientColor += iblColor;
+	float3 envIBLColor = 0;
+	if (SharedData::iblSettings.EnableIBL) {
+		if (!(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {
+			if (SharedData::iblSettings.DALCMode == 2) {
+				// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
+				envIBLColor = directionalAmbientColor * SharedData::iblSettings.DALCAmount;
+				directionalAmbientColor = envIBLColor + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-ambientNormal));
+			} else {
+				// Mode 0/1: replace with IBL ratio
+				envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(-ambientNormal));
+				float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-ambientNormal));
+				directionalAmbientColor = envIBLColor + skyIBLColor;
+			}
 		}
 	}
 #	endif
@@ -2945,7 +2946,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
 
 #	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= iblColor;
+	directionalAmbientColor -= envIBLColor;
 #	endif
 
 	directionalAmbientColor *= outputAlbedo;
@@ -2955,7 +2956,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += iblColor * outputAlbedo;
+	directionalAmbientColor += envIBLColor * outputAlbedo;
 #	endif
 
 #	if !defined(DEFERRED)
@@ -2989,7 +2990,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
 	float fogFactor = Color::FogAlpha(input.FogParam.w);
 #		if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+	if (SharedData::iblSettings.EnableIBL) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #		endif
