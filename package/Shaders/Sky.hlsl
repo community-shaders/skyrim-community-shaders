@@ -217,77 +217,77 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
-if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-	// HDR sun: luminance-driven radial intensity profile.
-	// Uses the texture's own luminance as a 0-1 shape mask so only the bright
-	// center reaches peak display brightness while edges stay at paperwhite.
-	// This preserves the physical disc size regardless of peak/paperwhite settings
-	// and prevents bloom blowout (edges have natural headroom, center has none).
+	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+		// HDR sun: luminance-driven radial intensity profile.
+		// Uses the texture's own luminance as a 0-1 shape mask so only the bright
+		// center reaches peak display brightness while edges stay at paperwhite.
+		// This preserves the physical disc size regardless of peak/paperwhite settings
+		// and prevents bloom blowout (edges have natural headroom, center has none).
 
-	float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
-	float peakNits       = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
+		float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
+		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
 
-	// Working space: 80-nit-relative units (what ISHDR expects).
-	float pw        = paperWhiteNits / sRGB_WhiteLevelNits;
-	float peak      = peakNits / sRGB_WhiteLevelNits;
-	float peakRatio = peak / pw;
+		// Working space: 80-nit-relative units (what ISHDR expects).
+		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
+		float peak = peakNits / sRGB_WhiteLevelNits;
+		float peakRatio = peak / pw;
 
-	// Controls how tightly brightness concentrates at the disc center.
-	// 2.0 = quadratic falloff (natural, perceptual).
-	static const float kSoftness = 2.0;
+		// Controls how tightly brightness concentrates at the disc center.
+		// 2.0 = quadratic falloff (natural, perceptual).
+		static const float kSoftness = 2.0;
 
-#   if defined(DITHER)
-	// --- Sun glare billboard ---
-	float glareLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
+#		if defined(DITHER)
+		// --- Sun glare billboard ---
+		float glareLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
 
-	// Normalize weather-mod HDR textures that may exceed 1.0
-	float glareNormLum = saturate(glareLum);
-	if (glareLum > 1.0)
-		baseColor.xyz *= rcp(glareLum);
+		// Normalize weather-mod HDR textures that may exceed 1.0
+		float glareNormLum = saturate(glareLum);
+		if (glareLum > 1.0)
+			baseColor.xyz *= rcp(glareLum);
 
-	// Radial profile: center (1.0) -> peak/pw, edges (->0) -> 1.0 (paperwhite)
-	float glareShape     = pow(glareNormLum, kSoftness);
-	float glareIntensity = lerp(1.0, peakRatio, glareShape);
+		// Radial profile: center (1.0) -> peak/pw, edges (->0) -> 1.0 (paperwhite)
+		float glareShape = pow(glareNormLum, kSoftness);
+		float glareIntensity = lerp(1.0, peakRatio, glareShape);
 
-	// Scale color preserving hue. For dim texels intensity ~ 1.0, skip division.
-	baseColor.xyz *= (glareNormLum > 0.01) ? (glareIntensity / glareNormLum) : glareIntensity;
+		// Scale color preserving hue. For dim texels intensity ~ 1.0, skip division.
+		baseColor.xyz *= (glareNormLum > 0.01) ? (glareIntensity / glareNormLum) : glareIntensity;
 
-	// Apply vertex colour tint (engine's glare envelope)
-	baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
+		// Apply vertex colour tint (engine's glare envelope)
+		baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
 
-#   else
-	// --- Sun disc billboard ---
-	float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
+#		else
+		// --- Sun disc billboard ---
+		float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
 
-	// Normalize weather-mod HDR textures
-	float normLum = saturate(srcLum);
-	if (srcLum > 1.0)
-		baseColor.xyz *= rcp(srcLum);
+		// Normalize weather-mod HDR textures
+		float normLum = saturate(srcLum);
+		if (srcLum > 1.0)
+			baseColor.xyz *= rcp(srcLum);
 
-	// Radial profile: center (1.0) -> peak/pw, edges (->0) -> 1.0 (paperwhite)
-	float shape     = pow(normLum, kSoftness);
-	float intensity = lerp(1.0, peakRatio, shape);
+		// Radial profile: center (1.0) -> peak/pw, edges (->0) -> 1.0 (paperwhite)
+		float shape = pow(normLum, kSoftness);
+		float intensity = lerp(1.0, peakRatio, shape);
 
-	// Scale color preserving hue. For dim texels intensity ~ 1.0, skip division.
-	baseColor.xyz *= (normLum > 0.01) ? (intensity / normLum) : intensity;
+		// Scale color preserving hue. For dim texels intensity ~ 1.0, skip division.
+		baseColor.xyz *= (normLum > 0.01) ? (intensity / normLum) : intensity;
 
-	// Preserve disc shape: don't apply PParams additive sky blend to sun disc
-	yyy = 0.0;
-#	endif
+		// Preserve disc shape: don't apply PParams additive sky blend to sun disc
+		yyy = 0.0;
+#		endif
 
-#	if defined(CLOUD_SHADOWS)
-	// Clouds are alpha-blended and don't write depth, so use the cloud shadow field to
-	// attenuate the sun where clouds are actually along the camera->sun path.
-	float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(input.WorldPosition.xyz, SharedData::DirLightDirection.xyz);
-	float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 0).x;
-	float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 1).x;
-	float cloudCube = lerp(cloudCube0, cloudCube1, 0.5);
-	float cloudMult = lerp(1.0, 1.0 - cloudCube, SharedData::cloudShadowsSettings.Opacity);
-	float edgeWidth = max(fwidth(cloudMult) * 2.0, 0.02);
-	float cloudTransmit = smoothstep(0.12 - edgeWidth, 0.88 + edgeWidth, saturate(cloudMult));
-	baseColor.xyz *= cloudTransmit;
-	baseColor.w   *= cloudTransmit;
-#	endif
+#		if defined(CLOUD_SHADOWS)
+		// Clouds are alpha-blended and don't write depth, so use the cloud shadow field to
+		// attenuate the sun where clouds are actually along the camera->sun path.
+		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(input.WorldPosition.xyz, SharedData::DirLightDirection.xyz);
+		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 0).x;
+		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 1).x;
+		float cloudCube = lerp(cloudCube0, cloudCube1, 0.5);
+		float cloudMult = lerp(1.0, 1.0 - cloudCube, SharedData::cloudShadowsSettings.Opacity);
+		float edgeWidth = max(fwidth(cloudMult) * 2.0, 0.02);
+		float cloudTransmit = smoothstep(0.12 - edgeWidth, 0.88 + edgeWidth, saturate(cloudMult));
+		baseColor.xyz *= cloudTransmit;
+		baseColor.w *= cloudTransmit;
+#		endif
 	}
 
 #		if defined(DITHER)
@@ -317,10 +317,10 @@ if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permuta
 #		elif defined(HORIZFADE)
 	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
-#  else  // not DITHER, not MOONMASK, not HORIZFADE
-    psout.Color.w   = input.Color.w * baseColor.w;
-    psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
-#  endif
+#		else  // not DITHER, not MOONMASK, not HORIZFADE
+	psout.Color.w = input.Color.w * baseColor.w;
+	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+#		endif
 
 #	else
 	psout.Color = float4(0, 0, 0, 1.0);
