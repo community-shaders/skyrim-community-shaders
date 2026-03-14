@@ -29,13 +29,10 @@ void LightLimitFix::DrawSettings()
 			ImGui::Text("Clustered Lights : %u / %u", lightCount, MAX_LIGHTS);
 
 		uint32_t shadowSlots = deferred->shadowMapSlots;
-		uint32_t shadowLights = deferred->shadowLightCount;
-		uint32_t shadowSlotUsage = deferred->shadowSlotUsage;
-		uint32_t shadowDropped = deferred->shadowUnshadowedLightCount;
-		if (shadowDropped > 0)
-			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u lights, %u / %u slots (%u dropped)", shadowLights, shadowSlotUsage, shadowSlots, shadowDropped);
+		if (shadowUnshadowedLightCount > 0)
+			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u lights, %u / %u slots (%u dropped)", shadowLightCount, shadowSlotUsage, shadowSlots, shadowUnshadowedLightCount);
 		else
-			ImGui::Text("Shadow Lights    : %u lights, %u / %u slots", shadowLights, shadowSlotUsage, shadowSlots);
+			ImGui::Text("Shadow Lights    : %u lights, %u / %u slots", shadowLightCount, shadowSlotUsage, shadowSlots);
 
 		ImGui::TreePop();
 	}
@@ -236,6 +233,139 @@ void LightLimitFix::SetupResources()
 	{
 		strictLightDataCB = new ConstantBuffer(ConstantBufferDesc<StrictLightDataCB>());
 	}
+
+	{
+		// PCF comparison sampler bound to s14 for point/spot shadow sampling.
+		D3D11_SAMPLER_DESC cmpDesc = {};
+		cmpDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
+		cmpDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+		cmpDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		cmpDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+		cmpDesc.MaxAnisotropy = 1;
+		cmpDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
+		cmpDesc.MinLOD = 0;
+		cmpDesc.MaxLOD = D3D11_FLOAT32_MAX;
+		DX::ThrowIfFailed(globals::d3d::device->CreateSamplerState(&cmpDesc, &shadowCmpSampler));
+	}
+}
+
+// Fills a ShadowData entry from a light's shadowmap descriptor transform.
+// Mirrors the former Deferred::SetShadowParameters private template.
+template <typename T>
+static void SetShadowParameters(T& lightData, Deferred::ShadowData& sd)
+{
+	auto& desc = lightData.shadowmapDescriptors[0];
+	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
+	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
+
+	DirectX::XMMATRIX invProj = DirectX::XMMatrixTranspose(proj);
+	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, invProj);
+}
+
+void LightLimitFix::EarlyPrepass()
+{
+	CopyPointShadowData();
+}
+
+void LightLimitFix::CopyPointShadowData()
+{
+	ZoneScoped;
+
+	auto deferred = globals::deferred;
+	uint32_t slots = deferred->shadowMapSlots;
+	if (slots == 0)
+		return;
+
+	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
+	if (!shadowSceneNode)
+		return;
+
+	// Lazy (re)allocation when slot count changes (e.g. on resolution change).
+	if (!perShadows || perShadowsCapacity != slots) {
+		delete perShadows;
+		perShadows = nullptr;
+
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(Deferred::ShadowData);
+		sbDesc.ByteWidth = slots * sizeof(Deferred::ShadowData);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = slots;
+
+		perShadows = new Buffer(sbDesc);
+		perShadows->CreateSRV(srvDesc);
+		perShadowsCapacity = slots;
+	}
+
+	std::vector<Deferred::ShadowData> sd(slots);
+	auto context = globals::d3d::context;
+
+	ID3D11ShaderResourceView* shadowMapsSRV =
+		globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
+
+	// shadowLightsAccum is the CPU-side slot-indexed mirror of kSHADOWMAPS:
+	// shadowLightsAccum[i] holds the light whose shadow was rendered into kSHADOWMAPS[i]
+	// during Main_RenderShadowMaps.
+	uint32_t plCount = 0;
+	uint32_t unshadowedLights = 0;
+	uint32_t slotUsage = 0;
+	int mapIndex = 0;
+	while (true) {
+		RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
+		if (!light)
+			break;
+
+		uint32_t depthSlot = globals::game::isVR ?
+		                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
+		                         light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+
+		if (plCount < slots) {
+			sd[depthSlot].ShadowParam.x = light->GetIsParabolicLight() ? float(light->shadowMapCount == 2 ? 2 : 1) : 0.f;
+
+			if (globals::game::isVR)
+				SetShadowParameters(light->GetVRRuntimeData(), sd[depthSlot]);
+			else
+				SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
+
+			sd[depthSlot].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
+			slotUsage += 1;  // each light occupies exactly 1 texture-array slot (DPB packs both hemispheres)
+		} else {
+			unshadowedLights++;
+		}
+
+		mapIndex += light->shadowMapCount;
+		plCount++;
+	}
+
+	if (plCount != shadowLightCount || slotUsage != shadowSlotUsage || unshadowedLights != shadowUnshadowedLightCount) {
+		shadowLightCount = plCount;
+		shadowSlotUsage = slotUsage;
+		shadowUnshadowedLightCount = unshadowedLights;
+		if (unshadowedLights > 0)
+			logger::debug("[LLF] {} shadow lights, {} / {} slots used; {} lights dropped (no shadow)",
+				plCount, slotUsage, slots, unshadowedLights);
+		else
+			logger::debug("[LLF] {} shadow lights, {} / {} slots used", plCount, slotUsage, slots);
+	}
+
+	{
+		D3D11_MAPPED_SUBRESOURCE mapped{};
+		DX::ThrowIfFailed(context->Map(perShadows->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+		memcpy(mapped.pData, sd.data(), slots * sizeof(Deferred::ShadowData));
+		context->Unmap(perShadows->resource.get(), 0);
+		ID3D11ShaderResourceView* srv = perShadows->srv.get();
+		context->PSSetShaderResources(100, 1, &srv);
+	}
+
+	context->PSSetShaderResources(101, 1, &shadowMapsSRV);
+	context->PSSetSamplers(14, 1, &shadowCmpSampler);
 }
 
 void LightLimitFix::RestoreDefaultSettings()
