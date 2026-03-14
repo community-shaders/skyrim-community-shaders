@@ -72,14 +72,34 @@ void LightLimitFix::DrawSettings()
 		}
 
 		{
-			static const char* comboOptions[] = { "Light Limit", "Strict Lights Count", "Clustered Lights Count", "Shadow Mask" };
-			ImGui::Combo("Lights Visualisation Mode", (int*)&settings.LightsVisualisationMode, comboOptions, 4);
+			static const char* comboOptions[] = {
+				"Light Limit",
+				"Strict Lights Count",
+				"Clustered Lights Count",
+				"Shadow Mask",
+				"Shadow Light Count",
+				"Point Light Shadow Factor",
+				"Unshadowed Point Lights",
+			};
+			ImGui::Combo("Lights Visualisation Mode", (int*)&settings.LightsVisualisationMode, comboOptions, IM_ARRAYSIZE(comboOptions));
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text(
-					" - Visualise the light limit. Red when the \"strict\" light limit is reached (portal-strict lights).\n"
-					" - Visualise the number of strict lights.\n"
-					" - Visualise the number of clustered lights.\n"
-					" - Visualize the Shadow Mask.\n");
+					"Light Limit: Red when the strict light limit is reached (>=7 portal-strict lights).\n"
+					"\n"
+					"Strict Lights Count: Heatmap of portal-strict lights per pixel (blue=0, red=15).\n"
+					"\n"
+					"Clustered Lights Count: Heatmap of dynamic lights in each screen tile (blue=0, red=128).\n"
+					"\n"
+					"Shadow Mask: R=directional soft shadow, G=directional detailed shadow.\n"
+					"\n"
+					"Shadow Light Count: Heatmap of shadow-casting point/spot lights per pixel (blue=0, red=8+).\n"
+					"Use to gauge shadow density; high counts indicate expensive shadow sampling.\n"
+					"\n"
+					"Point Light Shadow Factor: Brightness shows the darkest shadow value from any point/spot\n"
+					"light. White=fully lit, black=fully shadowed. Shows where PCF/PCSS filtering is active.\n"
+					"\n"
+					"Unshadowed Point Lights: Heatmap of point/spot lights without shadow maps (blue=0, red=8+).\n"
+					"High values where lights are bright indicate where the shadow slot limit is costing quality.");
 			}
 		}
 		currentEnableLightsVisualisation = settings.EnableLightsVisualisation;

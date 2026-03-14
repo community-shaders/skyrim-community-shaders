@@ -2572,6 +2572,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
 	}
 
+#		if defined(LLFDEBUG)
+	uint debugPLShadowCount = 0;
+	float debugMinPLShadow = 1.0;
+	uint debugUnshadowedPLCount = 0;
+#		endif
+
 	[loop] for (uint lightIndex = 0; lightIndex < totalLightCount; lightIndex++)
 	{
 		LightLimitFix::Light light;
@@ -2610,6 +2616,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				lightShadow *= shadowComponent;
 			}
 		}
+
+#		if defined(LLFDEBUG)
+		if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+			debugPLShadowCount++;
+			debugMinPLShadow = min(debugMinPLShadow, shadowComponent);
+		} else {
+			debugUnshadowedPLCount++;
+		}
+#		endif
 
 		float3 normalizedLightDirection = normalize(lightDirection);
 		float lightAngle = dot(worldNormal.xyz, normalizedLightDirection.xyz);
@@ -3112,8 +3127,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			psout.Diffuse.xyz = Color::TurboColormap((float)LightLimitFix::NumStrictLights / 15.0);
 		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 2) {
 			psout.Diffuse.xyz = Color::TurboColormap((float)numClusteredLights / MAX_CLUSTER_LIGHTS);
-		} else {
+		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 3) {
 			psout.Diffuse.xyz = float3(dirSoftShadow, dirDetailedShadow, 0.0);
+		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 4) {
+			// Shadow-casting point/spot light count per pixel (blue=0, red=many)
+			psout.Diffuse.xyz = Color::TurboColormap((float)debugPLShadowCount / 8.0);
+		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 5) {
+			// Point/spot light shadow darkness (white=fully lit, black=fully shadowed)
+			psout.Diffuse.xyz = float3(debugMinPLShadow, debugMinPLShadow, debugMinPLShadow);
+		} else {
+			// Unshadowed point/spot lights per pixel — lights without shadow maps (blue=0, red=many)
+			psout.Diffuse.xyz = Color::TurboColormap((float)debugUnshadowedPLCount / 8.0);
 		}
 		baseColor.xyz = 0.0;
 	} else {
