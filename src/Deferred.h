@@ -54,11 +54,9 @@ public:
 
 	void ClearShaderCache();
 
-	// Reads shadow parameters from game structs and uploads to structured buffers and texture arrays.
+	// Reads directional shadow parameters and uploads to structured buffers.
 	//   t98 — DirectionalShadowData  (cascade splits + world-to-shadow projections)
 	//   t99 — DirectionalShadowCascades  (Texture2DArray, game's kSHADOWMAPS_ESRAM depth SRV)
-	//   t100 — ShadowData (unified shadow light data, up to 4 elements)
-	//   t101 — ShadowMaps (Texture2DArray, game's kSHADOWMAPS depth SRV, bound directly)
 	// Called during EarlyPrepasses immediately after shadow maps have been rendered.
 	void CopyShadowData();
 
@@ -77,28 +75,17 @@ public:
 	// Zero until SetupResources runs; all shadow writes are gated on lightCount < shadowMapSlots.
 	uint32_t shadowMapSlots = 0;
 
-	// Per-frame shadow accounting updated by CopyShadowData().
-	uint32_t shadowLightCount = 0;            // distinct lights processed (including dropped ones)
-	uint32_t shadowSlotUsage = 0;             // texture-array slots consumed by successfully rendered lights
-	uint32_t shadowUnshadowedLightCount = 0;  // lights that exceeded slot capacity and cast no shadow
-
 	// Directional shadow structured buffer (t98): cascade splits and projections.
 	Buffer* perDirectionalShadow = nullptr;
-	// Unified shadow light structured buffer (t100): projection + type for each active light.
-	Buffer* perShadows = nullptr;
 
 	bool deferredPass = false;
 
 	ID3D11SamplerState* linearSampler = nullptr;
 	ID3D11SamplerState* pointSampler = nullptr;
-	ID3D11SamplerState* shadowCmpSampler = nullptr;  // PCF comparison sampler (s14)
 
 private:
 	template <typename T>
 	void SetShadowCascadeParameters(T& lightData, DirectionalShadowData& dd);
-
-	template <typename T>
-	void SetShadowParameters(T& lightData, ShadowData& sd);
 
 public:
 	struct Hooks

@@ -141,18 +141,6 @@ void Deferred::SetupResources()
 
 		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointSampler));
-
-		// PCF comparison sampler bound to s14 for ShadowSampling.hlsli.
-		D3D11_SAMPLER_DESC cmpDesc = {};
-		cmpDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
-		cmpDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-		cmpDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-		cmpDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-		cmpDesc.MaxAnisotropy = 1;
-		cmpDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
-		cmpDesc.MinLOD = 0;
-		cmpDesc.MaxLOD = D3D11_FLOAT32_MAX;
-		DX::ThrowIfFailed(device->CreateSamplerState(&cmpDesc, &shadowCmpSampler));
 	}
 
 	{
@@ -195,29 +183,9 @@ void Deferred::SetupResources()
 		perDirectionalShadow = new Buffer(sbDesc);
 		perDirectionalShadow->CreateSRV(srvDesc);
 	}
-
-	if (shadowMapSlots > 0) {
-		delete perShadows;
-		perShadows = nullptr;
-
-		D3D11_BUFFER_DESC sbDesc{};
-		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
-		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-		sbDesc.StructureByteStride = sizeof(ShadowData);
-		sbDesc.ByteWidth = shadowMapSlots * sizeof(ShadowData);
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = shadowMapSlots;
-
-		perShadows = new Buffer(sbDesc);
-		perShadows->CreateSRV(srvDesc);
-	}
 }
+// Note: perShadows (t100) and shadowCmpSampler (s14) are owned by LightLimitFix and
+// set up via LightLimitFix::EarlyPrepass() after shadow maps are rendered each frame.
 
 void Deferred::ReflectionsPrepasses()
 {
@@ -600,23 +568,12 @@ void Deferred::SetShadowCascadeParameters(T& lightData, DirectionalShadowData& d
 	}
 }
 
-template <typename T>
-void Deferred::SetShadowParameters(T& lightData, ShadowData& sd)
-{
-	auto& desc = lightData.shadowmapDescriptors[0];
-	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
-	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
-
-	DirectX::XMMATRIX invProj = DirectX::XMMatrixTranspose(proj);
-	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, invProj);
-}
-
 void Deferred::CopyShadowData()
 {
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowData");
 
-	if (!perShadows || shadowMapSlots == 0)
+	if (shadowMapSlots == 0)
 		return;
 
 	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
@@ -628,8 +585,6 @@ void Deferred::CopyShadowData()
 		return;
 
 	DirectionalShadowData dd{};
-	std::vector<ShadowData> sd(shadowMapSlots);
-
 	auto context = globals::d3d::context;
 
 	auto& dirData = sunShadowLight->GetShadowDirectionalLightRuntimeData();
@@ -643,59 +598,7 @@ void Deferred::CopyShadowData()
 	else
 		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
 
-	ID3D11ShaderResourceView* shadowMapsSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
-
-	{
-		// shadowLightsAccum is the CPU-side slot-indexed mirror of kSHADOWMAPS:
-		// shadowLightsAccum[i] holds the light whose shadow was rendered into kSHADOWMAPS[i]
-		// during Main_RenderShadowMaps. Trusting it directly avoids false rejections from
-		// cross-referencing activeShadowLights, which is a culling set and may not match.
-		uint32_t lightCount = 0;
-		uint32_t unshadowedLights = 0;
-		uint32_t slotUsage = 0;
-		int mapIndex = 0;
-		while (true) {
-			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
-			if (!light)
-				break;
-
-			uint32_t depthSlot = globals::game::isVR ?
-			                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
-			                         light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
-
-			if (lightCount < shadowMapSlots) {
-				sd[depthSlot].ShadowParam.x = light->GetIsParabolicLight() ? float(light->shadowMapCount == 2 ? 2 : 1) : 0.f;
-
-				if (globals::game::isVR)
-					SetShadowParameters(light->GetVRRuntimeData(), sd[depthSlot]);
-				else
-					SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
-
-				sd[depthSlot].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
-				slotUsage += 1;  // each light occupies exactly 1 texture-array slot (DPB packs both hemispheres)
-			} else {
-				unshadowedLights++;
-			}
-
-			mapIndex += light->shadowMapCount;
-			lightCount++;
-		}
-
-		if (lightCount != shadowLightCount || slotUsage != shadowSlotUsage || unshadowedLights != shadowUnshadowedLightCount) {
-			shadowLightCount = lightCount;
-			shadowSlotUsage = slotUsage;
-			shadowUnshadowedLightCount = unshadowedLights;
-			if (unshadowedLights > 0)
-				logger::debug("[Deferred] {} shadow lights, {} / {} slots used; {} lights dropped (no shadow)",
-					lightCount, slotUsage, shadowMapSlots, unshadowedLights);
-			else
-				logger::debug("[Deferred] {} shadow lights, {} / {} slots used", lightCount, slotUsage, shadowMapSlots);
-		}
-	}
-
 	context->PSSetShaderResources(99, 1, &cascadeSRV);
-	context->PSSetShaderResources(101, 1, &shadowMapsSRV);
-	context->PSSetSamplers(14, 1, &shadowCmpSampler);
 
 	{
 		D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -705,15 +608,7 @@ void Deferred::CopyShadowData()
 		ID3D11ShaderResourceView* srv = perDirectionalShadow->srv.get();
 		context->PSSetShaderResources(98, 1, &srv);
 	}
-
-	{
-		D3D11_MAPPED_SUBRESOURCE mapped{};
-		DX::ThrowIfFailed(context->Map(perShadows->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		memcpy(mapped.pData, sd.data(), shadowMapSlots * sizeof(ShadowData));
-		context->Unmap(perShadows->resource.get(), 0);
-		ID3D11ShaderResourceView* srv = perShadows->srv.get();
-		context->PSSetShaderResources(100, 1, &srv);
-	}
+	// Point/spot shadow data (t100, t101, s14) is uploaded by LightLimitFix::EarlyPrepass().
 }
 
 void Deferred::ClearShaderCache()

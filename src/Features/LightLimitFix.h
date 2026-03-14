@@ -155,6 +155,19 @@ public:
 
 	Util::FrameChecker frameChecker;
 
+	// Point/spot shadow resources (t100, t101, s14) — moved from Deferred.
+	// perShadows is lazily allocated in CopyPointShadowData() since shadowMapSlots
+	// is not known until Deferred::SetupResources() runs (after Feature::SetupResources()).
+	Buffer* perShadows = nullptr;
+	uint32_t perShadowsCapacity = 0;
+
+	// Per-frame shadow accounting (displayed in DrawSettings Statistics tree).
+	uint32_t shadowLightCount = 0;            // distinct lights processed (including dropped)
+	uint32_t shadowSlotUsage = 0;             // texture-array slots consumed by successful lights
+	uint32_t shadowUnshadowedLightCount = 0;  // lights that exceeded slot capacity
+
+	ID3D11SamplerState* shadowCmpSampler = nullptr;  // PCF comparison sampler (s14)
+
 	virtual void SetupResources() override;
 
 	virtual void RestoreDefaultSettings() override;
@@ -173,7 +186,9 @@ public:
 	void SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPoint3 a_initialPosition, bool a_cached = true);
 	void UpdateLights();
 	void UpdateStructure();
+	virtual void EarlyPrepass() override;
 	virtual void Prepass() override;
+	void CopyPointShadowData();
 
 	static inline float3 Saturation(float3 color, float saturation);
 	static inline bool IsValidLight(RE::BSLight* a_light);
