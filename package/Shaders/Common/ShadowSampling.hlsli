@@ -282,16 +282,26 @@ namespace ShadowSampling
 		bool lowerHalf = positionLS.z < 0;
 		float3 normalizedPositionLS = normalize(positionLS);
 
-		positionLS.z = saturate(length(positionLS) / shadow.ShadowParam.y);
+		float depth = saturate(length(positionLS) / shadow.ShadowParam.y);
 
 		float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
 		float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
 		float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-		float visibility = dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
+		uint mode = SharedData::lightLimitFixSettings.FilterMode;
+		[branch]
+		if (mode >= 1) {
+			float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
+			float sum = 0.0;
+			[unroll] for (int i = 0; i < 8; i++) {
+				float2 offset = Random::SpiralSampleOffsets8[i] * kernelRadius;
+				sum += SampleShadowPCF(shadowIndex, sampleUV + offset, depth);
+			}
+			return sum * rcp(8.0);
+		}
 
-		return visibility;
+		return dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > depth), 0.25);
 	}
 
 	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex = 0)
