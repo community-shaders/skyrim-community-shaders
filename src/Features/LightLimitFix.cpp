@@ -30,10 +30,12 @@ void LightLimitFix::DrawSettings()
 
 		uint32_t shadowSlots = deferred->shadowMapSlots;
 		uint32_t shadowLights = deferred->shadowLightCount;
-		if (shadowSlots > 0 && shadowLights > shadowSlots)
-			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u / %u slots (overflow!)", shadowLights, shadowSlots);
+		uint32_t shadowSlotUsage = deferred->shadowSlotUsage;
+		uint32_t shadowDropped = deferred->shadowUnshadowedLightCount;
+		if (shadowDropped > 0)
+			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u lights, %u / %u slots (%u dropped)", shadowLights, shadowSlotUsage, shadowSlots, shadowDropped);
 		else
-			ImGui::Text("Shadow Lights    : %u / %u slots", shadowLights, shadowSlots);
+			ImGui::Text("Shadow Lights    : %u lights, %u / %u slots", shadowLights, shadowSlotUsage, shadowSlots);
 
 		ImGui::TreePop();
 	}
