@@ -19,22 +19,15 @@ namespace DynamicCubemaps
 #if !defined(WATER)
 
 #	if defined(SKYLIGHTING)
-	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 VN, float3 V, float roughness, sh2 skylighting)
+	float3 GetDynamicCubemapSpecularIrradiance(float3 N, float3 V, float roughness, sh2 skylighting)
 #	else
-	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 VN, float3 V, float roughness)
+	float3 GetDynamicCubemapSpecularIrradiance(float3 N, float3 V, float roughness)
 #	endif
 	{
-		float3 R = reflect(-V, N);
-
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon *= horizon * horizon;
-
 #	if defined(DEFERRED)
-		return horizon;
+		return 1.0;
 #	else
-
+		float3 R = reflect(-V, N);
 		float NoV = saturate(dot(N, V));
 
 		float level = roughness * 7.0;
@@ -77,7 +70,7 @@ namespace DynamicCubemaps
 			return finalIrradiance;
 		}
 
-		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, V, roughness);
 
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = saturate(skylightingSpecular);
@@ -145,26 +138,20 @@ namespace DynamicCubemaps
 	}
 
 #	if defined(SKYLIGHTING)
-	float3 GetDynamicCubemap(float3 N, float3 VN, float3 V, float roughness, float3 F0, sh2 skylighting)
+	float3 GetDynamicCubemap(float3 N, float3 V, float roughness, float3 F0, sh2 skylighting)
 #	else
-	float3 GetDynamicCubemap(float3 N, float3 VN, float3 V, float roughness, float3 F0)
+	float3 GetDynamicCubemap(float3 N, float3 V, float roughness, float3 F0)
 #	endif
 	{
+#	if defined(DEFERRED)
+		return 1.0;
+#	else
 		float3 R = reflect(-V, N);
 		float NoV = saturate(dot(N, V));
 
 		float level = roughness * 7.0;
 
 		float2 specularBRDF = BRDF::EnvBRDF(roughness, NoV);
-
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon *= horizon * horizon;
-
-#	if defined(DEFERRED)
-		return horizon * (F0 * specularBRDF.x + specularBRDF.y);
-#	else
 
 		float3 finalIrradiance = 0;
 		float directionalAmbientColorSpecular = Color::RGBToLuminance(Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(R, 1.0))))) * Color::ReflectionNormalisationScale;
@@ -175,7 +162,7 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
 			finalIrradiance += specularIrradiance;
-			return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+			return (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
 		}
 #		endif
 
@@ -198,10 +185,10 @@ namespace DynamicCubemaps
 			specularIrradiance = Color::IrradianceToLinear(specularIrradiance);
 
 			finalIrradiance = specularIrradiance;
-			return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+			return (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
 		}
 
-		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, V, roughness);
 
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = saturate(skylightingSpecular);
@@ -262,7 +249,7 @@ namespace DynamicCubemaps
 
 		finalIrradiance = specularIrradiance;
 #		endif
-		return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+		return (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
 #	endif
 	}
 #endif  // !WATER
