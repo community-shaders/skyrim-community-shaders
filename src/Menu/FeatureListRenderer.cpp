@@ -9,7 +9,6 @@
 #include <system_error>
 #include <unordered_set>
 
-#include "Deferred.h"
 #include "Feature.h"
 #include "FeatureConstraints.h"
 #include "FeatureIssues.h"
@@ -27,7 +26,7 @@
 namespace
 {
 	// Core built-in menu names that always appear first in the menu list
-	constexpr std::array<const char*, 5> CORE_MENU_NAMES = { "Home", "General", "Advanced", "Shadows", "Display" };
+	constexpr std::array<const char*, 4> CORE_MENU_NAMES = { "Home", "General", "Advanced", "Display" };
 
 	bool IsCoreMenu(const std::string& menuName)
 	{
@@ -282,7 +281,6 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 		BuiltInMenu{ "Home", []() { HomePageRenderer::RenderHomePage(); } },
 		BuiltInMenu{ "General", drawGeneralSettings },
 		BuiltInMenu{ "Advanced", drawAdvancedSettings },
-		BuiltInMenu{ "Shadows", []() { globals::deferred->DrawSettings(); } },
 	};  // NOTE: The menu list is rebuilt every frame, so category expansion states
 	// persist correctly. This is acceptable since the list is small and built
 	// infrequently, but could be optimized if performance becomes an issue.
