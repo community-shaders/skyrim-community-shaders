@@ -589,10 +589,7 @@ struct BSLightingShaderProperty_LoadBinary
 			stream.iStr->read(&emissiveColor.green, 1);
 			stream.iStr->read(&emissiveColor.blue, 1);
 
-			if (property->flags.any(kOwnEmit)) {
-				if (property->emissiveColor == nullptr)
-					property->emissiveColor = new RE::NiColor();
-
+			if (property->emissiveColor != nullptr && property->flags.any(kOwnEmit)) {
 				*property->emissiveColor = emissiveColor;
 			}
 		}
