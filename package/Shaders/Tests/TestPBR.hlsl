@@ -459,31 +459,29 @@
 {
 	float3 N = float3(0, 0, 1);
 	float3 V = float3(0.577, 0.577, 0.577);
-	float3 VN = N;
 	float roughness = 0.5f;
 
 	// Basic calculation
-	float3 lobeWeight = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, roughness);
+	float3 lobeWeight = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, roughness);
 	ASSERT(IsTrue, all(!isnan(lobeWeight)));
 	ASSERT(IsTrue, all(!isinf(lobeWeight)));
 	ASSERT(IsTrue, all(lobeWeight >= 0.0f));
 	ASSERT(IsTrue, all(lobeWeight <= 2.0f));
 
 	// Different roughness values
-	float3 lobe_smooth = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, 0.1f);
-	float3 lobe_rough = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, 0.9f);
+	float3 lobe_smooth = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.1f);
+	float3 lobe_rough = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.9f);
 	ASSERT(IsTrue, all(lobe_smooth >= 0.0f));
 	ASSERT(IsTrue, all(lobe_rough >= 0.0f));
 
-	// Horizon occlusion - bent vertex normal should reduce weight
-	float3 VN_bent = float3(0.447, -0.447, 0.775);  // normalized(0.5, -0.5, 1)
-	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_bent, roughness);
+	// Horizon occlusion
+	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, roughness);
 	ASSERT(IsTrue, all(lobe_bent >= 0.0f));
 	ASSERT(IsTrue, lobe_bent.x <= lobeWeight.x + 0.001f);
 
 	// Grazing angle increases Fresnel
 	float3 V_grazing = float3(0.9999, 0, 0.01);
-	float3 lobe_grazing = PBR::GetWetnessIndirectSpecularLobeWeight(N, V_grazing, VN, roughness);
+	float3 lobe_grazing = PBR::GetWetnessIndirectSpecularLobeWeight(N, V_grazing, roughness);
 	ASSERT(IsTrue, all(lobe_grazing >= 0.0f));
 	ASSERT(IsTrue, lobe_grazing.x >= lobeWeight.x);
 }
@@ -512,9 +510,8 @@
 	ASSERT(IsTrue, all(result_hdr >= 0.0f));
 
 	// Indirect with extreme roughness
-	float3 VN = N;
-	float3 lobe_min = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, 0.04f);
-	float3 lobe_max = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, 1.0f);
+	float3 lobe_min = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.04f);
+	float3 lobe_max = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 1.0f);
 	ASSERT(IsTrue, all(!isnan(lobe_min)));
 	ASSERT(IsTrue, all(!isinf(lobe_min)));
 	ASSERT(IsTrue, all(!isnan(lobe_max)));
@@ -537,10 +534,8 @@
 	ASSERT(IsTrue, all(wetness_smooth >= 0.0f));
 
 	// Horizon occlusion reduces specular
-	float3 VN_aligned = N;
-	float3 VN_bent = float3(0.447, 0, 0.895);  // normalized(0.5, 0, 1)
-	float3 lobe_aligned = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_aligned, 0.5f);
-	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_bent, 0.5f);
+	float3 lobe_aligned = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
+	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
 	ASSERT(IsTrue, lobe_bent.x <= lobe_aligned.x + 0.01f);
 
 	// Color preservation
