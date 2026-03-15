@@ -78,6 +78,14 @@ public:
 	};
 	STATIC_ASSERT_ALIGNAS_16(LightGrid);
 
+	/// Per-slot debug metadata recorded during CopyPointShadowData.
+	struct ShadowSlotInfo
+	{
+		uint32_t type = 0;    ///< Shadow type: 0=spot/frustum, 1=hemisphere, 2=omnidirectional
+		float radius = 0.0f;  ///< Light radius (world units)
+		bool valid = false;   ///< true when this slot was written this frame
+	};
+
 	struct alignas(16) LightBuildingCB
 	{
 		float LightsNear;
@@ -101,7 +109,7 @@ public:
 		uint32_t FilterMode;
 		float KernelScale;
 		float LightSize;
-		uint32_t pad0;
+		uint32_t ShadowMapSlots;  // total shadow map texture-array capacity
 		// Cluster config (computed)
 		uint ClusterSize[4];
 		// Debug (last)
@@ -166,7 +174,19 @@ public:
 	uint32_t shadowSlotUsage = 0;             // texture-array slots consumed by successful lights
 	uint32_t shadowUnshadowedLightCount = 0;  // lights that exceeded slot capacity
 
+	/// Per-slot metadata rebuilt every frame in CopyPointShadowData.
+	/// Indexed by shadow-map texture-array slot.  Used for visualization mode 8 legend.
+	std::vector<ShadowSlotInfo> shadowSlotInfos;
+
+	/// Slots in this set have their ShadowParam.y zeroed so the shader returns 1.0
+	/// (fully lit / no shadow) for that caster.  Toggled from the debug overlay.
+	std::unordered_set<uint32_t> suppressedSlots;
+
 	ID3D11SamplerState* shadowCmpSampler = nullptr;  // PCF comparison sampler (s14)
+
+	/// Generate a text legend mapping each shadow-map slot index to its golden-ratio hue
+	/// and light type.  Used for RenderDoc capture comments when mode 8 is active.
+	std::string BuildShadowSlotColorLegend() const;
 
 	virtual void SetupResources() override;
 
@@ -176,7 +196,7 @@ public:
 
 	virtual void DrawSettings() override;
 	virtual void DrawOverlay() override;
-	virtual bool IsOverlayVisible() const override { return settings.EnableLightsVisualisation; }
+	virtual bool IsOverlayVisible() const override { return settings.EnableLightsVisualisation || !suppressedSlots.empty(); }
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
