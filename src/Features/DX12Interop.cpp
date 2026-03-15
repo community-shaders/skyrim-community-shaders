@@ -13,7 +13,10 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	DX12Interop::Settings,
 	EnablePIXCapture,
-	EnableDebugDevice)
+	EnableDebugDevice,
+	DebugBreakCorruption,
+	DebugBreakError,
+	DebugBreakWarning)
 
 bool DX12Interop::Active() const
 {
@@ -47,6 +50,13 @@ void DX12Interop::DrawSettings()
 		}
 
 	ImGui::Checkbox("Enable Debug Device", &settings.EnableDebugDevice);
+
+	if (settings.EnableDebugDevice) {
+		ImGui::Checkbox("Break on corruption", &settings.DebugBreakCorruption);
+		ImGui::Checkbox("Break on error", &settings.DebugBreakError);
+		ImGui::Checkbox("Break on warning", &settings.DebugBreakWarning);
+
+	}
 }
 
 static std::wstring GetLatestWinPixGpuCapturerPath()
@@ -143,14 +153,18 @@ void DX12Interop::CreateD3D12Device(IDXGIAdapter* a_adapter)
 		}		
 	}
 
-	DX::ThrowIfFailed(D3D12CreateDevice(a_adapter, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&d3d12Device)));
+	auto& rt = globals::features::raytracing;
+
+	auto featureLevel = rt.loaded ? D3D_FEATURE_LEVEL_12_1 : D3D_FEATURE_LEVEL_12_0;
+
+	DX::ThrowIfFailed(D3D12CreateDevice(a_adapter, featureLevel, IID_PPV_ARGS(&d3d12Device)));
 
 	if (settings.EnableDebugDevice) {
 		winrt::com_ptr<ID3D12InfoQueue> infoQueue;
 		if (SUCCEEDED(d3d12Device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
-			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
-			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
-			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, FALSE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, settings.DebugBreakCorruption ? TRUE : FALSE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, settings.DebugBreakError ? TRUE : FALSE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, settings.DebugBreakWarning ? TRUE : FALSE);
 		} else {
 			logger::critical("[DX12Interop] Debug break creation failed.");
 		}

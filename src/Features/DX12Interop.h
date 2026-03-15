@@ -31,7 +31,11 @@ struct DX12Interop : public Feature
 	struct Settings
 	{
 		bool EnablePIXCapture = false;
+
 		bool EnableDebugDevice = false;
+		bool DebugBreakCorruption = true;
+		bool DebugBreakError = true;
+		bool DebugBreakWarning = false;
 	} settings;
 
 	winrt::com_ptr<ID3D12Device5> d3d12Device;
