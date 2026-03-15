@@ -211,23 +211,17 @@ namespace ShadowSampling
 		float lightSize   = SharedData::lightLimitFixSettings.LightSize;
 		float kernelScale = SharedData::lightLimitFixSettings.KernelScale;
 
-		// Step 1: blocker search with a small spiral kernel.
-		float searchRadius = lightSize * PCFKernelShadowLight;
-		float blockerSum   = 0.0;
-		int   blockerCount = 0;
-		[unroll] for (int i = 0; i < 8; i++) {
-			float2 offset        = mul(rotationMatrix, Random::SpiralSampleOffsets8[i]) * searchRadius;
-			float  blockerDepth  = ShadowMaps.SampleLevel(LinearSampler, float3(baseUV + offset, shadowIndex), 0).r;
-			if (blockerDepth < receiverDepth) {
-				blockerSum += blockerDepth;
-				blockerCount++;
-			}
-		}
-
-		if (blockerCount == 0) return 1.0;  // fully lit — no occluders found
+		// Step 1: DPCF blocker search — single GatherRed (4 bilinear samples, 1 tex instruction).
+		// Treyarch "Shadows of Cold War": replaces the separate 8-sample spiral pass.
+		// The center-pixel gather naturally reduces acne without a wide search radius.
+		// https://research.activision.com/publications/2021/10/shadows-of-cold-war--a-scalable-approach-to-shadowing
+		float4 gathered      = ShadowMaps.GatherRed(LinearSampler, float3(baseUV, shadowIndex));
+		float4 isBlocker     = float4(gathered < receiverDepth);
+		float  blockerCount  = dot(isBlocker, 1.0);
+		if (blockerCount == 0.0) return 1.0;  // fully lit — no occluders found
 
 		// Step 2: penumbra width from receiver–blocker distance.
-		float avgBlockerDepth = blockerSum / float(blockerCount);
+		float avgBlockerDepth = dot(gathered * isBlocker, 1.0) / blockerCount;
 		float penumbra        = (receiverDepth - avgBlockerDepth) / avgBlockerDepth * lightSize;
 		float kernelRadius    = penumbra * PCFKernelShadowLight * kernelScale;
 
