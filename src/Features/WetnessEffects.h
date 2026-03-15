@@ -32,7 +32,7 @@ public:
 	{
 		uint EnableWetnessEffects = true;
 		float MaxRainWetness = 1.0f;
-		float MaxPuddleWetness = 2.5f;
+		float MaxPuddleWetness = 1.5f;
 		float MaxShoreWetness = 1.0f;
 		uint ShoreRange = 32;
 		float PuddleRadius = 1.0f;
