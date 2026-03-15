@@ -572,8 +572,8 @@ float WetnessEffects::GetRainIntensity(RE::NiPointer<RE::BSGeometry> precipObjec
 		return 0.0f;
 	}
 
-	auto& effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
-	auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
+	auto& effect = precipObject->GetGeometryRuntimeData().shaderProperty;
+	auto shaderProp = effect.get();
 	auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
 
 	if (!particleShaderProperty || !particleShaderProperty->particleEmitter) {
@@ -713,8 +713,8 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 							precipObject = precip->lastPrecip;
 						}
 						if (precipObject) {
-							auto& effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
-							auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
+							auto& effect = precipObject->GetGeometryRuntimeData().shaderProperty;
+							auto shaderProp = effect.get();
 							auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
 							auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
 							data.OcclusionViewProj = rain->occlusionProjection;
