@@ -347,7 +347,7 @@ enum class ShaderTechnique
 
 //////////////////////////////////////////////////////////////
 
-RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPrecipitationOcclusionMapRenderPassesImpl::thunk(
+RE::BSShaderProperty::RenderPassArray* Skylighting::BSLightingShaderProperty_GetPrecipitationOcclusionMapRenderPassesImpl::thunk(
 	RE::BSLightingShaderProperty* property,
 	RE::BSGeometry* geometry,
 	[[maybe_unused]] uint32_t renderMode,
@@ -361,7 +361,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 	using enum RE::BSShaderProperty::EShaderPropertyFlag;
 	using enum RE::BSUtilityShader::Flags;
 
-	auto* precipitationOcclusionMapRenderPassList = &property->unk0C8;
+	auto* precipitationOcclusionMapRenderPassList = &property->occlusionPasses;
 
 	precipitationOcclusionMapRenderPassList->Clear();
 	if (skylighting.inOcclusion) {
@@ -420,7 +420,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 				technique.set(Vc);
 			}
 
-			const auto alphaProperty = static_cast<RE::NiAlphaProperty*>(geometry->GetGeometryRuntimeData().properties[0].get());
+			const auto alphaProperty = static_cast<RE::NiAlphaProperty*>(geometry->GetGeometryRuntimeData().alphaProperty.get());
 			if (alphaProperty && alphaProperty->GetAlphaTesting()) {
 				technique.set(Texture);
 				technique.set(AlphaTest);
@@ -511,8 +511,8 @@ void Skylighting::RenderOcclusion()
 				}
 				if (precipObject) {
 					precip->SetupMask();
-					auto effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
-					auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
+					auto& effect = precipObject->GetGeometryRuntimeData().shaderProperty;
+					auto shaderProp = effect.get();
 					auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
 					auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
 

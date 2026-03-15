@@ -321,7 +321,7 @@ inline float SkySync::CalculateVisibility(const RE::NiPoint3& dir, const float d
 
 inline void SkySync::SetSunBaseVisibility(const RE::Sun* sun, const float visibility)
 {
-	if (const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().properties[1].get()))
+	if (const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().shaderProperty.get()))
 		property->kBlendColor.alpha = visibility;
 }
 
@@ -479,7 +479,7 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled && updateMoonTexture != moon->updateMoonTexture) {
 		// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
 		// Allows for compatability with other mods that don't directly update the in-game phase values
-		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().properties[1].get());
+		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get());
 
 		const auto name = moonShaderProperty->GetBaseTexture()->name.c_str();
 		const size_t len = std::strlen(name);
