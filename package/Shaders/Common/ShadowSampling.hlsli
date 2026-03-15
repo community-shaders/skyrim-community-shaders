@@ -42,8 +42,8 @@ struct ShadowData
 	float4 ShadowParam;
 };
 
-StructuredBuffer<ShadowData> Shadows    : register(t100);
-Texture2DArray<float>        ShadowMaps : register(t101);
+StructuredBuffer<ShadowData> Shadows : register(t100);
+Texture2DArray<float> ShadowMaps : register(t101);
 
 // Comparison sampler for PCF shadow filtering (less-equal depth test).
 SamplerComparisonState ShadowSamplerCmp : register(s14);
@@ -57,7 +57,7 @@ namespace ShadowSampling
 	// PCF filter radii in UV space for Poisson disc samples.
 	static const float PCFKernelDirectional = 1.0 / 2048.0;  // directional cascade maps
 	static const float PCFKernelShadowLight = 1.0 / 1024.0;  // frustum/spot shadow maps
-	static const float PCFParaboloidRadius  = 2.0;            // world-space jitter radius for paraboloid PCF
+	static const float PCFParaboloidRadius = 2.0;            // world-space jitter radius for paraboloid PCF
 
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
 	{
@@ -155,8 +155,8 @@ namespace ShadowSampling
 		float visibility = dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, primaryCascade)) > positionLS.z), 0.25);
 
 		// Blend with secondary cascade if needed
-		[branch]
-		if (needsBlending) {
+		[branch] if (needsBlending)
+		{
 			uint secondaryCascade = 1 - primaryCascade;
 
 			positionLS = mul(shadow.ShadowProj[secondaryCascade], float4(worldPosition, 1)).xyz;
@@ -187,7 +187,8 @@ namespace ShadowSampling
 	float PCFSpiral8(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius)
 	{
 		float sum = 0.0;
-		[unroll] for (int i = 0; i < 8; i++) {
+		[unroll] for (int i = 0; i < 8; i++)
+		{
 			float2 offset = Random::SpiralSampleOffsets8[i] * kernelRadius;
 			sum += SampleShadowPCF(shadowIndex, baseUV + offset, receiverDepth);
 		}
@@ -198,7 +199,8 @@ namespace ShadowSampling
 	float PCFPoisson16(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius, float2x2 rotationMatrix)
 	{
 		float sum = 0.0;
-		[unroll] for (int i = 0; i < 16; i++) {
+		[unroll] for (int i = 0; i < 16; i++)
+		{
 			float2 offset = mul(rotationMatrix, Random::PoissonSampleOffsets16[i]) * kernelRadius;
 			sum += SampleShadowPCF(shadowIndex, baseUV + offset, receiverDepth);
 		}
@@ -208,22 +210,23 @@ namespace ShadowSampling
 	// PCSS: blocker search → penumbra estimation → variable-width PCF.
 	float PCSSSpotlight(uint shadowIndex, float2 baseUV, float receiverDepth, float2x2 rotationMatrix)
 	{
-		float lightSize   = SharedData::lightLimitFixSettings.LightSize;
+		float lightSize = SharedData::lightLimitFixSettings.LightSize;
 		float kernelScale = SharedData::lightLimitFixSettings.KernelScale;
 
 		// Step 1: DPCF blocker search — single GatherRed (4 bilinear samples, 1 tex instruction).
 		// Treyarch "Shadows of Cold War": replaces the separate 8-sample spiral pass.
 		// The center-pixel gather naturally reduces acne without a wide search radius.
 		// https://research.activision.com/publications/2021/10/shadows-of-cold-war--a-scalable-approach-to-shadowing
-		float4 gathered      = ShadowMaps.GatherRed(LinearSampler, float3(baseUV, shadowIndex));
-		float4 isBlocker     = float4(gathered < receiverDepth);
-		float  blockerCount  = dot(isBlocker, 1.0);
-		if (blockerCount == 0.0) return 1.0;  // fully lit — no occluders found
+		float4 gathered = ShadowMaps.GatherRed(LinearSampler, float3(baseUV, shadowIndex));
+		float4 isBlocker = float4(gathered < receiverDepth);
+		float blockerCount = dot(isBlocker, 1.0);
+		if (blockerCount == 0.0)
+			return 1.0;  // fully lit — no occluders found
 
 		// Step 2: penumbra width from receiver–blocker distance.
 		float avgBlockerDepth = dot(gathered * isBlocker, 1.0) / blockerCount;
-		float penumbra        = (receiverDepth - avgBlockerDepth) / avgBlockerDepth * lightSize;
-		float kernelRadius    = penumbra * PCFKernelShadowLight * kernelScale;
+		float penumbra = (receiverDepth - avgBlockerDepth) / avgBlockerDepth * lightSize;
+		float kernelRadius = penumbra * PCFKernelShadowLight * kernelScale;
 
 		// Step 3: PCF with contact-hardened radius.
 		return PCFPoisson16(shadowIndex, baseUV, receiverDepth, kernelRadius, rotationMatrix);
@@ -233,11 +236,8 @@ namespace ShadowSampling
 	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth)
 	{
 		float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
-		[branch]
-		if (SharedData::lightLimitFixSettings.FilterMode >= 1)
-			return PCFSpiral8(shadowIndex, sampleUV, depth, kernelRadius);
-		else
-			return SampleShadowGather(shadowIndex, sampleUV, depth);
+		[branch] if (SharedData::lightLimitFixSettings.FilterMode >= 1) return PCFSpiral8(shadowIndex, sampleUV, depth, kernelRadius);
+		else return SampleShadowGather(shadowIndex, sampleUV, depth);
 	}
 
 	// --- Per-light shadow sampling ---
@@ -258,16 +258,12 @@ namespace ShadowSampling
 			return 1.0;
 
 		float2 baseUV = positionLS.xy * 0.5 + 0.5;
-		uint   mode   = SharedData::lightLimitFixSettings.FilterMode;
+		uint mode = SharedData::lightLimitFixSettings.FilterMode;
 
-		[branch]
-		if (mode == 2)
-			return PCSSSpotlight(shadowIndex, baseUV, positionLS.z, rotationMatrix);
-		else if (mode == 1)
-			return PCFPoisson16(shadowIndex, baseUV, positionLS.z,
-				PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale, rotationMatrix);
-		else
-			return SampleShadowGather(shadowIndex, baseUV, positionLS.z);
+		[branch] if (mode == 2) return PCSSSpotlight(shadowIndex, baseUV, positionLS.z, rotationMatrix);
+		else if (mode == 1) return PCFPoisson16(shadowIndex, baseUV, positionLS.z,
+			PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale, rotationMatrix);
+		else return SampleShadowGather(shadowIndex, baseUV, positionLS.z);
 	}
 
 	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS)
@@ -317,13 +313,9 @@ namespace ShadowSampling
 
 		float4 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1));
 
-		[branch]
-		if (shadow.ShadowParam.x == 0)
-			return GetSpotlightShadow(shadow, shadowIndex, positionLS, rotationMatrix);
-		else if (shadow.ShadowParam.x  == 1)
-			return GetHemisphereShadow(shadow, shadowIndex, positionLS);
-		else if (shadow.ShadowParam.x  == 2)
-			return GetOmnidirectionalShadow(shadow, shadowIndex, positionLS.xyz);
+		[branch] if (shadow.ShadowParam.x == 0) return GetSpotlightShadow(shadow, shadowIndex, positionLS, rotationMatrix);
+		else if (shadow.ShadowParam.x == 1) return GetHemisphereShadow(shadow, shadowIndex, positionLS);
+		else if (shadow.ShadowParam.x == 2) return GetOmnidirectionalShadow(shadow, shadowIndex, positionLS.xyz);
 
 		return 1.0;
 	}

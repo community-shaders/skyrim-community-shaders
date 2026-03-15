@@ -2428,7 +2428,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-	float dirSoftShadow    = 1.0;
+	float dirSoftShadow = 1.0;
 	float dirDetailedShadow = 1.0;
 
 	float2 rotation;
@@ -2596,17 +2596,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
 	}
 
-#		if defined(LLFDEBUG)
-	uint  debugPLShadowCount     = 0;   // shadow-flagged point/spot lights (valid + overflow)
-	float debugMinPLShadow       = 1.0; // darkest shadow value from any shadow light
-	uint  debugUnshadowedPLCount = 0;   // point/spot lights without shadow maps
-	uint  debugOverflowCount     = 0;   // shadow lights whose slot index exceeded ShadowMapSlots
-	uint  debugFirstShadowIndex  = 0;   // shadowMapIndex of first valid shadow light seen
-	bool  debugHasFirstShadow    = false;
-	uint  debugSpotCount         = 0;   // frustum (spot) shadow lights
-	uint  debugHemiCount         = 0;   // hemisphere (paraboloid upper half) shadow lights
-	uint  debugOmniCount         = 0;   // omnidirectional (full paraboloid) shadow lights
-#		endif
+#			if defined(LLFDEBUG)
+	uint debugPLShadowCount = 0;      // shadow-flagged point/spot lights (valid + overflow)
+	float debugMinPLShadow = 1.0;     // darkest shadow value from any shadow light
+	uint debugUnshadowedPLCount = 0;  // point/spot lights without shadow maps
+	uint debugOverflowCount = 0;      // shadow lights whose slot index exceeded ShadowMapSlots
+	uint debugFirstShadowIndex = 0;   // shadowMapIndex of first valid shadow light seen
+	bool debugHasFirstShadow = false;
+	uint debugSpotCount = 0;  // frustum (spot) shadow lights
+	uint debugHemiCount = 0;  // hemisphere (paraboloid upper half) shadow lights
+	uint debugOmniCount = 0;  // omnidirectional (full paraboloid) shadow lights
+#			endif
 
 	[loop] for (uint lightIndex = 0; lightIndex < totalLightCount; lightIndex++)
 	{
@@ -2647,7 +2647,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			}
 		}
 
-#		if defined(LLFDEBUG)
+#			if defined(LLFDEBUG)
 		if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
 			debugPLShadowCount++;
 			debugMinPLShadow = min(debugMinPLShadow, shadowComponent);
@@ -2658,7 +2658,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				// Record first valid shadow light's slot index (for per-slot hue coloring).
 				if (!debugHasFirstShadow) {
 					debugFirstShadowIndex = light.shadowMapIndex;
-					debugHasFirstShadow   = true;
+					debugHasFirstShadow = true;
 				}
 				// Classify by shadow type (ShadowParam.x: 0=spot, 1=hemisphere, 2=omni).
 				uint debugShadowType = (uint)Shadows[light.shadowMapIndex].ShadowParam.x;
@@ -2672,7 +2672,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		} else {
 			debugUnshadowedPLCount++;
 		}
-#		endif
+#			endif
 
 		float3 normalizedLightDirection = normalize(lightDirection);
 		float lightAngle = dot(worldNormal.xyz, normalizedLightDirection.xyz);
@@ -3205,8 +3205,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			if (debugOverflowCount > 0) {
 				psout.Diffuse.xyz = float3(1.0, 0.0, 0.0);
 			} else {
-				uint  debugValidCount = debugPLShadowCount - debugOverflowCount;
-				uint  slots           = SharedData::lightLimitFixSettings.ShadowMapSlots;
+				uint debugValidCount = debugPLShadowCount - debugOverflowCount;
+				uint slots = SharedData::lightLimitFixSettings.ShadowMapSlots;
 				float t;
 				if (debugValidCount == 0) {
 					t = 0.0;
@@ -3256,9 +3256,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			} else {
 				float scale = 1.0 / 4.0;
 				float3 typeColor = float3(
-					saturate(float(debugSpotCount)  * scale),
-					saturate(float(debugHemiCount)  * scale),
-					saturate(float(debugOmniCount)  * scale));
+					saturate(float(debugSpotCount) * scale),
+					saturate(float(debugHemiCount) * scale),
+					saturate(float(debugOmniCount) * scale));
 				bool hasShadowLights = (debugSpotCount + debugHemiCount + debugOmniCount) > 0;
 				if (!hasShadowLights)
 					typeColor = saturate(float(debugUnshadowedPLCount) * scale) * 0.35;

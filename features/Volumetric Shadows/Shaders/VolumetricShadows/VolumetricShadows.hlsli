@@ -9,7 +9,7 @@ namespace VolumetricShadows
 	static const float VSM_MIN_VARIANCE = 0.00001;
 	static const float VSM_BLEEDING_REDUCTION = 0.2;
 
-	float GetShadowDepth(float3 positionWS, uint eyeIndex=0)
+	float GetShadowDepth(float3 positionWS, uint eyeIndex = 0)
 	{
 		return length(positionWS - FrameBuffer::CameraPosAdjust[0].xyz);
 	}
