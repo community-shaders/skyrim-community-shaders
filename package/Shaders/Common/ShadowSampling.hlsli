@@ -304,11 +304,14 @@ namespace ShadowSampling
 	{
 		ShadowData shadow = Shadows[shadowIndex];
 
-		// ShadowParam.y holds the light radius, always > 0 for valid entries.
-		// A zero radius means the slot was never written (e.g. shadowmapIndex exceeded
-		// the buffer capacity), so treat it as unshadowed rather than fully dark.
+		// ShadowParam.y encodes slot state:
+		//   == 0  : slot not written (capacity exceeded) → unshadowed (fully lit)
+		//    < 0  : slot suppressed via debug overlay    → fully dark (light hidden)
+		//    > 0  : valid radius                         → normal shadow test
 		if (shadow.ShadowParam.y == 0)
 			return 1.0;
+		if (shadow.ShadowParam.y < 0)
+			return 0.0;
 
 		worldPosition.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
