@@ -598,7 +598,7 @@ void Deferred::SetShadowCascadeParameters(T& lightData, DirectionalShadowData& d
 		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
 		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
 
-		DirectX::XMMATRIX invProj = DirectX::XMMatrixTranspose(proj);
+		DirectX::XMMATRIX invProj = DirectX::XMMatrixInverse(nullptr, proj);
 		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], invProj);
 	}
 }
