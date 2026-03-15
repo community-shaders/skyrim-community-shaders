@@ -26,8 +26,8 @@ void ExtendedTranslucency::BSLightingShader_SetupGeometry(RE::BSRenderPass* pass
 	// Clear the ExtraFeatureDescriptor to disable this effect on default
 	SetFeatureDescriptor(MaterialModel::DescriptorDisabled);
 
-	auto& property0 = pass->geometry->GetGeometryRuntimeData().properties[0];
-	auto& property1 = pass->geometry->GetGeometryRuntimeData().properties[1];
+	auto& property0 = pass->geometry->GetGeometryRuntimeData().alphaProperty;
+	auto& property1 = pass->geometry->GetGeometryRuntimeData().shaderProperty;
 	auto alphaProperty = property0 && property0->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(property0.get()) : nullptr;
 	auto lightProperty = property1 && property1->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(property1.get()) : nullptr;
 

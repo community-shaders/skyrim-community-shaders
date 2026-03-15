@@ -1500,7 +1500,7 @@ namespace SIE
 			std::unique_ptr<RE::BSGraphics::VertexShader> newShader{ shaderPtr };
 			newShader->byteCodeSize = (uint32_t)shaderData.GetBufferSize();
 			newShader->id = descriptor;
-			newShader->shaderDesc = 0;
+			newShader->vertexDesc = 0;
 
 			winrt::com_ptr<ID3D11ShaderReflection> reflector;
 			const auto reflectionResult = D3DReflect(shaderData.GetBufferPointer(), shaderData.GetBufferSize(),
@@ -1511,7 +1511,7 @@ namespace SIE
 			} else {
 				std::array<size_t, 3> bufferSizes = { 0, 0, 0 };
 				std::fill(newShader->constantTable.begin(), newShader->constantTable.end(), static_cast<uint8_t>(0));
-				ReflectConstantBuffers(*reflector.get(), bufferSizes, newShader->constantTable, newShader->shaderDesc,
+				ReflectConstantBuffers(*reflector.get(), bufferSizes, newShader->constantTable, newShader->vertexDesc,
 					ShaderClass::Vertex, descriptor, shader);
 				if (bufferSizes[0] != 0) {
 					newShader->constantBuffers[0].buffer =

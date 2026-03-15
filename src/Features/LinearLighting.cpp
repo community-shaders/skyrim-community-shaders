@@ -192,7 +192,7 @@ RE::NiColor LinearLighting::ColorToLinear(RE::NiColor inColor, float gamma)
 
 void LinearLighting::BSLightingShader_SetupGeometry(RE::BSRenderPass* a_pass)
 {
-	auto& property1 = a_pass->geometry->GetGeometryRuntimeData().properties[1];
+	auto& property1 = a_pass->geometry->GetGeometryRuntimeData().shaderProperty;
 	auto lightProperty = property1 && property1->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(property1.get()) : nullptr;
 
 	if (lightProperty != nullptr) {
