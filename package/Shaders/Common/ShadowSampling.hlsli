@@ -229,6 +229,17 @@ namespace ShadowSampling
 		return PCFPoisson16(shadowIndex, baseUV, receiverDepth, kernelRadius, rotationMatrix);
 	}
 
+	// Dispatch the active filter mode for a paraboloid shadow map (hemisphere / omni).
+	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth)
+	{
+		float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
+		[branch]
+		if (SharedData::lightLimitFixSettings.FilterMode >= 1)
+			return PCFSpiral8(shadowIndex, sampleUV, depth, kernelRadius);
+		else
+			return SampleShadowGather(shadowIndex, sampleUV, depth);
+	}
+
 	// --- Per-light shadow sampling ---
 
 	float GetSpotlightShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
@@ -267,13 +278,7 @@ namespace ShadowSampling
 			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 			positionLS.z = saturate(length(positionLS.xyz) / shadow.ShadowParam.y);
 
-			uint mode = SharedData::lightLimitFixSettings.FilterMode;
-			float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
-			[branch]
-			if (mode >= 1)
-				return PCFSpiral8(shadowIndex, sampleUV, positionLS.z, kernelRadius);
-			else
-				return SampleShadowGather(shadowIndex, sampleUV, positionLS.z);
+			return SampleParaboloidShadow(shadowIndex, sampleUV, positionLS.z);
 		}
 
 		// Geometry outside the paraboloid's coverage hemisphere is unshadowed.
@@ -292,13 +297,7 @@ namespace ShadowSampling
 		float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-		uint mode = SharedData::lightLimitFixSettings.FilterMode;
-		float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
-		[branch]
-		if (mode >= 1)
-			return PCFSpiral8(shadowIndex, sampleUV, depth, kernelRadius);
-		else
-			return SampleShadowGather(shadowIndex, sampleUV, depth);
+		return SampleParaboloidShadow(shadowIndex, sampleUV, depth);
 	}
 
 	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex = 0)
