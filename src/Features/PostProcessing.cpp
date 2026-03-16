@@ -14,15 +14,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void PostProcessing::DrawSettings()
 {
-	// 0 for list of feats
-	// 1 for feat settings
-	// static int pageNum = 0;
-	// static int featIdx = 0;
 	static int pipelinePageNum = 0;
 	static int pipelineFeatIdx = 0;
 	static int presetIdx = -1;
-	// const float _iconButtonSize = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().FramePadding.x;
-	// const ImVec2 iconButtonSize{ _iconButtonSize, _iconButtonSize };
 
 	ImGui::BeginGroup();
 	std::string currentPreset = (presetIdx >= 0 && presetIdx < presets.size()) ? presets[presetIdx] : "Select a preset";

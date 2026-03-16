@@ -2,8 +2,6 @@
 
 #include "Feature.h"
 
-struct PostProcessFeatureConstructor;
-
 struct PostProcessFeature
 {
 	virtual ~PostProcessFeature() = default;
@@ -34,12 +32,4 @@ struct PostProcessFeature
 	virtual void Draw(TextureInfo& inout_tex) = 0;  // read from last pass, do the thing, and replace it with output texture
 
 	virtual inline void Reset() {};
-};
-
-struct PostProcessFeatureConstructor
-{
-	std::function<PostProcessFeature*()> fn;
-	std::string name;
-	std::string desc;
-	static const ankerl::unordered_dense::map<std::string, PostProcessFeatureConstructor>& GetFeatureConstructors();
 };

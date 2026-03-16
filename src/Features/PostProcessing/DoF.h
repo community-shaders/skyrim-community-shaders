@@ -113,10 +113,7 @@ struct DoF : public PostProcessFeature
 
 	RE::NiPoint3 GetCameraPos();
 	bool GetInDialogue();
-	// float GetDistanceToDialogueTarget();
-	// float targetFocusPercent;
 	bool GetTargetLockEnabled();
-	// float GetDistanceToLockedTarget();
 	float GetDistanceToReference(RE::TESObjectREFR* a_ref);
 	float debugDistance = 0.0f;
 	float debugFocusPlane = 0.0f;

@@ -5,13 +5,11 @@
 #include "PostProcessing/Border.h"
 #include "PostProcessing/CODBloom.h"
 #include "PostProcessing/ColorGrading.h"
-#include "PostProcessing/ColourTransforms.h"
 #include "PostProcessing/DoF.h"
 #include "PostProcessing/HistogramAutoExposure.h"
 #include "PostProcessing/LUT.h"
 #include "PostProcessing/LensFlare.h"
 #include "PostProcessing/MotionBlur.h"
-#include "PostProcessing/VanillaImagespace.h"
 #include "PostProcessing/Vignette.h"
 #include "PostProcessing/pCamera.h"
 
@@ -105,9 +103,6 @@ struct PostProcessing : Feature
 	};
 
 	ImageSpaceManager* imageSpaceManager = new ImageSpaceManager();
-
-	// std::vector<std::unique_ptr<PostProcessFeature>> feats = {};
-	// std::vector<std::unique_ptr<PostProcessFeature>> colorTransformsFeats = {};
 
 	eastl::unique_ptr<Texture2D> texCopyMain = nullptr;
 	eastl::unique_ptr<Texture2D> texCopyMainCopy = nullptr;
