@@ -504,6 +504,10 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 							}
 
+							// RT[5] = REFLECTANCE: enable alpha writes for POM depth data
+							// stored in Reflectance.w, used by StereoBlendCS for depth-aware reprojection
+							blendDesc.RenderTarget[5].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
 							DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &deferredBlendStates[a][b][c][d]));
 						} else {
 							deferredBlendStates[a][b][c][d] = nullptr;

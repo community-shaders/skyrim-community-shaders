@@ -3198,7 +3198,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
-	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
+#		if defined(EMAT) && (defined(PARALLAX) || defined(LANDSCAPE))
+	psout.Reflectance = float4(indirectLobeWeights.specular,
+		(pixelOffset > 0.0) ? saturate(pixelOffset) : 0.0);
+#		else
+	psout.Reflectance = float4(indirectLobeWeights.specular, 0.0);
+#		endif
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
 
 #		if defined(SNOW)

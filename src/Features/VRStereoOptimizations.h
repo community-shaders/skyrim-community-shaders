@@ -83,6 +83,7 @@ struct VRStereoOptimizations : public Feature
 		int edgeWidth = 3;  ///< Half-width of edge band in pixels (total band = 2 * edgeWidth)
 		float minEdgeDistance = 5000.0f;  ///< Minimum linearized depth for edge AA (game units)
 		float fullBlendDistance = 0.0f;  ///< Linearized depth below which both eyes are fully shaded + blended (game units)
+		float pomDepthScale = 22.5f;  ///< Scale factor for POM depth correction in stereo reprojection
 		bool debugFullBlendDepth = false;  ///< Show full blend depth zone as cyan overlay
 		float qualityJitterOffset = 0.125f;
 		float foveatedRegionRadius = 0.3f;
@@ -98,6 +99,7 @@ struct VRStereoOptimizations : public Feature
 		bool debugForceAllStencil = false;
 		bool debugForceAllReprojectCS = false;
 		bool debugDepthMap = false;
+		bool debugPOMDepth = false;  ///< Show POM depth data (Reflectance.w) as heatmap overlay
 
 		// MIP LOD Bias (negative = sharper textures)
 		// 0 = Off, 1 = All textures (global), 2 = Distant trees only (depth-gated TREE_ANIM)
@@ -107,7 +109,7 @@ struct VRStereoOptimizations : public Feature
 		float mipBiasFarDist = 6000.0f;    ///< Game units: full bias beyond this
 
 		// CAS (Contrast Adaptive Sharpening) - post-TAA
-		float casStrength = 0.7f;  ///< 0.0 = disabled, 0.0-1.0 = subtle to strong
+		float casStrength = 0.0f;  ///< 0.0 = disabled, 0.0-1.0 = subtle to strong (hidden for now)
 		float alphaTestThreshold = 0.001f;  ///< Alpha floor for TREE_ANIM zombie texel removal
 	} settings;
 

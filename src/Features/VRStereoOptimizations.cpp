@@ -1,5 +1,6 @@
 #include "VRStereoOptimizations.h"
 
+#include "ExtendedMaterials.h"
 #include "Globals.h"
 #include "State.h"
 #include "Utils/D3D.h"
@@ -79,8 +80,10 @@ void VRStereoOptimizations::LoadSettings(json& o_json)
 		settings.mipBiasNearDist = o_json["MipBiasNearDist"].get<float>();
 	if (o_json.contains("MipBiasFarDist"))
 		settings.mipBiasFarDist = o_json["MipBiasFarDist"].get<float>();
-	if (o_json.contains("CASStrength"))
-		settings.casStrength = o_json["CASStrength"].get<float>();
+	// CAS disabled for now — ignore saved value
+	// if (o_json.contains("CASStrength"))
+	//	settings.casStrength = o_json["CASStrength"].get<float>();
+	settings.casStrength = 0.0f;
 	if (o_json.contains("AlphaTestThreshold"))
 		settings.alphaTestThreshold = o_json["AlphaTestThreshold"].get<float>();
 }
@@ -332,23 +335,29 @@ void VRStereoOptimizations::DrawSettings()
 	ImGui::Separator();
 
 
-	ImGui::SliderFloat("CAS Sharpening", &settings.casStrength, 0.0f, 1.0f, "%.2f");
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Contrast Adaptive Sharpening (intended for use with TAA).\n0 = disabled, higher = sharper.");
-	ImGui::Separator();
+	// CAS slider hidden for now — forced to 0
+	// ImGui::SliderFloat("CAS Sharpening", &settings.casStrength, 0.0f, 1.0f, "%.2f");
+	// if (ImGui::IsItemHovered())
+	//	ImGui::SetTooltip("Contrast Adaptive Sharpening (intended for use with TAA).\n0 = disabled, higher = sharper.");
+	// ImGui::Separator();
 
 	if (settings.stereoMode == StereoMode::Off)
 		return;
 
 	ImGui::SliderFloat("Disocclusion Depth Threshold", &settings.disocclusionDepthThreshold, 0.001f, 0.1f, "%.4f");
-	ImGui::SliderFloat("Full Blend Distance", &settings.fullBlendDistance, 0.0f, 10000.0f, "%.0f");
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Geometry closer than this distance (game units) is fully shaded in both eyes and bilaterally blended for 2x supersampling. 0 = disabled.");
 
 	if (globals::state->IsDeveloperMode()) {
 		if (ImGui::TreeNode("Debug")) {
+			ImGui::SliderFloat("Full Blend Distance", &settings.fullBlendDistance, 0.0f, 10000.0f, "%.0f");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Geometry closer than this distance (game units) is fully shaded in both eyes and bilaterally blended for 2x supersampling. 0 = disabled.");
+
+			ImGui::SliderFloat("POM Depth Scale", &settings.pomDepthScale, 0.0f, 500.0f, "%.1f");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Scale factor for POM depth correction in stereo reprojection.\n1.0 = physical scale. Increase for more visible POM stereo depth.");
 			ImGui::Checkbox("Skip Pixel Reprojection", &settings.debugSkipMerge);
 			ImGui::Checkbox("Full Blend Depth View", &settings.debugFullBlendDepth);
+			ImGui::Checkbox("Debug POM Depth", &settings.debugPOMDepth);
 			if (settings.debugFullBlendDepth)
 				ImGui::TextColored(ImVec4(0, 1, 1, 1), "  Cyan = full blend zone (closer = stronger tint)");
 			ImGui::Text("Stencil swaps this frame: %u", stencilSwapCount);
