@@ -215,7 +215,7 @@ public:
 		float VRMipBiasFarDist;
 		uint VRMipBiasMode;   // 0=Off, 1=All Textures, 2=Distant Trees only
 		float VRAlphaTestThreshold;  // Alpha test threshold for VR TREE_ANIM (0 = use vanilla)
-		float pad0;
+		float4 pad0;  // HLSL: float2 + implicit 8-byte gap before float4 AmbientSHR
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;
