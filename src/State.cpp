@@ -865,8 +865,6 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			data.MipBias = 0;
 		}
 
-		data.HDRData = globals::features::hdrDisplay.GetSharedDataHDR();
-
 		// DALC to SH
 		const auto& m = dalcTransform.rotate;
 		const auto& t = dalcTransform.translate;
@@ -882,6 +880,8 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		data.AmbientSHR = { dalcSH.r.c0, dalcSH.r.c1[0], dalcSH.r.c1[1], dalcSH.r.c1[2] };
 		data.AmbientSHG = { dalcSH.g.c0, dalcSH.g.c1[0], dalcSH.g.c1[1], dalcSH.g.c1[2] };
 		data.AmbientSHB = { dalcSH.b.c0, dalcSH.b.c1[0], dalcSH.b.c1[1], dalcSH.b.c1[2] };
+
+		data.HDRData = globals::features::hdrDisplay.GetSharedDataHDR();
 
 		sharedDataCB->Update(data);
 	}
