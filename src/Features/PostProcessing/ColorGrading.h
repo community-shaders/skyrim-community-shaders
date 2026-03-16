@@ -58,9 +58,12 @@ struct ColorGrading : public PostProcessFeature
 		bool enableTonemap = true;
 		bool enableColorSpaceTransform = true;
 		int processColorSpace = 0;
-		std::array<float3, 3> colorSpaceTransform = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
-		std::array<float3, 3> invColorSpaceTransform = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
 	} settings;
+
+	// Computed matrices (not serialized)
+	std::array<float3, 3> inputToWorkingMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
+	std::array<float3, 3> workingToTonemapMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
+	std::array<float3, 3> tonemapToOutputMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
 
 	int tonemapperType = 11;
 
@@ -88,8 +91,9 @@ struct ColorGrading : public PostProcessFeature
 		float4 shadowsHighlightsRange;  // shadowBegin, shadowEnd, highlightBegin, highlightEnd
 
 		float4 tonemapParams[2];
-		float4 colorSpaceTransform[3];
-		float4 invColorSpaceTransform[3];
+		float4 inputToWorking[3];      // sRGB → working color space
+		float4 workingToTonemap[3];    // working → tonemapper native space
+		float4 tonemapToOutput[3];     // tonemapper native → output space
 
 		// game value
 		float4 cinematic;  // saturation, brightness, contrast

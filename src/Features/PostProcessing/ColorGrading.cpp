@@ -30,9 +30,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	invertLog,
 	enableTonemap,
 	enableColorSpaceTransform,
-	processColorSpace,
-	colorSpaceTransform,
-	invColorSpaceTransform)
+	processColorSpace)
 
 template <int num = 3>
 bool shiftSlider(const char* label, float* v, float v_min, float v_max, const char* format = "%.3f", ImGuiSliderFlags flags = 0)
@@ -84,6 +82,7 @@ struct TonemapperInfo
 	std::string_view name;
 	std::string_view func_name;
 	std::string_view desc;
+	int nativeColorSpace;  // index into getAvailableColourSpaces() — the space this tonemapper was designed for
 
 	using CTP = std::array<float4, 2>;
 	std::function<void(CTP&)> draw_settings_func;
@@ -98,13 +97,13 @@ struct TonemapperInfo
 
 		static std::vector<TonemapperInfo> tonemappers = {
 			{ "Reinhard"sv, "Reinhard"sv,
-				"Mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002."sv,
+				"Mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002."sv, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Reinhard Extended"sv, "ReinhardExt"sv,
 				"Extended mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002. "
-				"An additional user parameter specifies the smallest luminance that is mapped to 1, which allows high luminances to burn out."sv,
+				"An additional user parameter specifies the smallest luminance that is mapped to 1, which allows high luminances to burn out."sv, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("White Point", &params[0].y, 0.f, 10.f, "%.2f"); },
@@ -112,13 +111,13 @@ struct TonemapperInfo
 
 			{ "Hejl Burgess-Dawson Filmic"sv, "HejlBurgessDawsonFilmic"sv,
 				"Variation of the Hejl and Burgess-Dawson filmic curve done by Graham Aldridge. "
-				"See his blog post about \"Approximating Film with Tonemapping\"."sv,
+				"See his blog post about \"Approximating Film with Tonemapping\"."sv, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Aldridge Filmic"sv, "AldridgeFilmic"sv,
 				"Variation of the Hejl and Burgess-Dawson filmic curve done by Graham Aldridge. "
-				"See his blog post about \"Approximating Film with Tonemapping\"."sv,
+				"See his blog post about \"Approximating Film with Tonemapping\"."sv, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Cutoff", &params[0].y, 0.f, .5f, "%.2f"); },
@@ -126,7 +125,7 @@ struct TonemapperInfo
 
 			{ "Lottes Filmic/AMD Curve"sv, "LottesFilmic"sv,
 				"Filmic curve by Timothy Lottes, described in his GDC talk \"Advanced Techniques and Optimization of HDR Color Pipelines\". "
-				"Also known as the \"AMD curve\"."sv,
+				"Also known as the \"AMD curve\"."sv, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Contrast", &params[0].y, 1.f, 2.f, "%.2f");
@@ -138,7 +137,7 @@ struct TonemapperInfo
 
 			{ "Day Filmic/Insomniac Curve"sv, "DayFilmic"sv,
 				"Filmic curve by Mike Day, described in his document \"An efficient and user-friendly tone mapping operator\". "
-				"Also known as the \"Insomniac curve\"."sv,
+				"Also known as the \"Insomniac curve\"."sv, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Black Point", &params[0].y, 0.f, 5.f, "%.2f");
@@ -157,7 +156,7 @@ struct TonemapperInfo
 
 			{ "Uchimura/Grand Turismo Curve"sv, "UchimuraFilmic"sv,
 				"Filmic curve by Hajime Uchimura, described in his CEDEC talk \"HDR Theory and Practice\". Characterised by its middle linear section. "
-				"Also known as the \"Gran Turismo curve\"."sv,
+				"Also known as the \"Gran Turismo curve\"."sv, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Max Brightness", &params[0].y, 0.01f, 2.f, "%.2f");
@@ -169,23 +168,23 @@ struct TonemapperInfo
 				{ f4{ 1.f, 1.f, 1.f, .22f }, f4{ 0.4f, 1.33f, 0.f, 0.f } } },
 
 			{ "ACES (Hill)"sv, "AcesHill"sv,
-				"ACES curve fit by Stephen Hill."sv,
+				"ACES curve fit by Stephen Hill. Internally converts sRGB to ACEScg."sv, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "ACES (Narkowicz)"sv, "AcesNarkowicz"sv,
-				"ACES curve fit by Krzysztof Narkowicz. See his blog post \"ACES Filmic Tone Mapping Curve\"."sv,
+				"ACES curve fit by Krzysztof Narkowicz. See his blog post \"ACES Filmic Tone Mapping Curve\"."sv, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "ACES (Guy)"sv, "AcesGuy"sv,
-				"Curve from Unreal 3 adapted by to close to the ACES curve by Romain Guy."sv,
+				"Curve from Unreal 3 adapted by to close to the ACES curve by Romain Guy."sv, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "AgX Minimal"sv, "AgxMinimal"sv,
 				"Minimal version of Troy Sobotka's AgX using a 6th order polynomial approximation. "
-				"Originally created by bwrensch, and improved by Troy Sobotka."sv,
+				"Originally created by bwrensch, and improved by Troy Sobotka. Internally uses AgX input transform."sv, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Slope", &params[0].y, 0.f, 2.f, "%.2f");
@@ -195,17 +194,17 @@ struct TonemapperInfo
 				{ f4{ 1.f, 1.f, 1.f, 0.f }, f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Melon"sv, "MelonTonemap"sv,
-				"Tonemapper designed by TripleMelon to fix the ACES issue of intense colour being shifted."sv,
+				"Tonemapper designed by TripleMelon to fix the ACES issue of intense colour being shifted."sv, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Kajiya"sv, "KajiyaTonemap"sv,
-				"Tonemapper designed by Tomasz Stachowiak/Embark for their real time ray tracing engine Kajiya."sv,
+				"Tonemapper designed by Tomasz Stachowiak/Embark for their real time ray tracing engine Kajiya."sv, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "GT7"sv, "GT7ToneMapping"sv,
-				"Tonemapper designed for Gran Turismo 7."sv,
+				"Tonemapper designed for Gran Turismo 7."sv, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 				},
@@ -437,23 +436,23 @@ void ColorGrading::UpdateColorSpaceTransforms()
 	auto& spaces = getAvailableColourSpaces();
 	settings.processColorSpace = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
 
+	auto& tonemappers = TonemapperInfo::GetTonemappers();
+
 	constexpr int kInputColorSpace = 0;   // sRGB
-	constexpr int kOutputColorSpace = 0;  // sRGB
+	constexpr int kOutputColorSpace = 0;  // sRGB (HDR override later via hdr-pp-psky)
+	const int tonemapNativeSpace = tonemappers[tonemapperType].nativeColorSpace;
 
-	auto colorSpaceTransformMatrix = getRGBMatrix(spaces[kInputColorSpace], spaces[settings.processColorSpace]);
-	auto invColorSpaceTransformMatrix = getRGBMatrix(spaces[settings.processColorSpace], spaces[kOutputColorSpace]);
-
-	settings.colorSpaceTransform = {
-		float3{ colorSpaceTransformMatrix(0, 0), colorSpaceTransformMatrix(0, 1), colorSpaceTransformMatrix(0, 2) },
-		float3{ colorSpaceTransformMatrix(1, 0), colorSpaceTransformMatrix(1, 1), colorSpaceTransformMatrix(1, 2) },
-		float3{ colorSpaceTransformMatrix(2, 0), colorSpaceTransformMatrix(2, 1), colorSpaceTransformMatrix(2, 2) }
+	auto storeMatrix = [](const DirectX::SimpleMath::Matrix& mat, std::array<float3, 3>& out) {
+		out = {
+			float3{ mat(0, 0), mat(0, 1), mat(0, 2) },
+			float3{ mat(1, 0), mat(1, 1), mat(1, 2) },
+			float3{ mat(2, 0), mat(2, 1), mat(2, 2) }
+		};
 	};
 
-	settings.invColorSpaceTransform = {
-		float3{ invColorSpaceTransformMatrix(0, 0), invColorSpaceTransformMatrix(0, 1), invColorSpaceTransformMatrix(0, 2) },
-		float3{ invColorSpaceTransformMatrix(1, 0), invColorSpaceTransformMatrix(1, 1), invColorSpaceTransformMatrix(1, 2) },
-		float3{ invColorSpaceTransformMatrix(2, 0), invColorSpaceTransformMatrix(2, 1), invColorSpaceTransformMatrix(2, 2) }
-	};
+	storeMatrix(getRGBMatrix(spaces[kInputColorSpace], spaces[settings.processColorSpace]), inputToWorkingMatrix);
+	storeMatrix(getRGBMatrix(spaces[settings.processColorSpace], spaces[tonemapNativeSpace]), workingToTonemapMatrix);
+	storeMatrix(getRGBMatrix(spaces[tonemapNativeSpace], spaces[kOutputColorSpace]), tonemapToOutputMatrix);
 }
 
 void ColorGrading::SetupResources()
@@ -620,8 +619,9 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		.highlights = profile.params[20],
 		.shadowsHighlightsRange = profile.params[21],
 		.tonemapParams = { settings.tonemapParams[0], settings.tonemapParams[1] },
-		.colorSpaceTransform = { float4{ settings.colorSpaceTransform[0].x, settings.colorSpaceTransform[0].y, settings.colorSpaceTransform[0].z, 0.f }, float4{ settings.colorSpaceTransform[1].x, settings.colorSpaceTransform[1].y, settings.colorSpaceTransform[1].z, 0.f }, float4{ settings.colorSpaceTransform[2].x, settings.colorSpaceTransform[2].y, settings.colorSpaceTransform[2].z, 0.f } },
-		.invColorSpaceTransform = { float4{ settings.invColorSpaceTransform[0].x, settings.invColorSpaceTransform[0].y, settings.invColorSpaceTransform[0].z, 0.f }, float4{ settings.invColorSpaceTransform[1].x, settings.invColorSpaceTransform[1].y, settings.invColorSpaceTransform[1].z, 0.f }, float4{ settings.invColorSpaceTransform[2].x, settings.invColorSpaceTransform[2].y, settings.invColorSpaceTransform[2].z, 0.f } },
+		.inputToWorking = { float4{ inputToWorkingMatrix[0].x, inputToWorkingMatrix[0].y, inputToWorkingMatrix[0].z, 0.f }, float4{ inputToWorkingMatrix[1].x, inputToWorkingMatrix[1].y, inputToWorkingMatrix[1].z, 0.f }, float4{ inputToWorkingMatrix[2].x, inputToWorkingMatrix[2].y, inputToWorkingMatrix[2].z, 0.f } },
+		.workingToTonemap = { float4{ workingToTonemapMatrix[0].x, workingToTonemapMatrix[0].y, workingToTonemapMatrix[0].z, 0.f }, float4{ workingToTonemapMatrix[1].x, workingToTonemapMatrix[1].y, workingToTonemapMatrix[1].z, 0.f }, float4{ workingToTonemapMatrix[2].x, workingToTonemapMatrix[2].y, workingToTonemapMatrix[2].z, 0.f } },
+		.tonemapToOutput = { float4{ tonemapToOutputMatrix[0].x, tonemapToOutputMatrix[0].y, tonemapToOutputMatrix[0].z, 0.f }, float4{ tonemapToOutputMatrix[1].x, tonemapToOutputMatrix[1].y, tonemapToOutputMatrix[1].z, 0.f }, float4{ tonemapToOutputMatrix[2].x, tonemapToOutputMatrix[2].y, tonemapToOutputMatrix[2].z, 0.f } },
 		.cinematic = float4{ std::lerp(1.f, imageSpaceData.baseData.cinematic.saturation, settings.gameCinematicBlend.x), std::lerp(1.f, imageSpaceData.baseData.cinematic.brightness, settings.gameCinematicBlend.y), std::lerp(1.f, imageSpaceData.baseData.cinematic.contrast, settings.gameCinematicBlend.z), imageSpaceData.baseAmount },
 		.fade = float4{ imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeR], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeG], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeB], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeAmount] * settings.gameFadeBlend },
 		.tint = float4{ imageSpaceData.baseData.tint.color.red, imageSpaceData.baseData.tint.color.green, imageSpaceData.baseData.tint.color.blue, imageSpaceData.baseData.tint.amount * settings.gameTintBlend },
