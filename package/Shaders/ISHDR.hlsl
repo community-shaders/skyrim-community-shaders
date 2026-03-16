@@ -215,7 +215,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float desatStart = lerp(pw, peak, 0.4);
 		float desatT = saturate((hdrShapedLum - desatStart) / max(peak - desatStart, 1e-6));
 		hdrShaped = lerp(hdrShaped, hdrShapedLum, desatT);
-		
+
 		// sdrGraded is now the exact SDR output (before final gamma encode).
 		// Convert to linear and scale to paperwhite for the HDR base layer.
 		float3 sdrLinear = Color::GammaToLinear(max(0.0, sdrGraded));
@@ -236,7 +236,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float peakLum = Color::RGBToLuminance(hdrLinearOut);
 		float fireHighlight = smoothstep(pw * 0.75, pw * 4.0, peakLum);
 		float warmDominance = saturate((hdrLinearOut.r - hdrLinearOut.b) * 1.25) *
-		                     saturate((hdrLinearOut.g - hdrLinearOut.b) * 2.0);
+		                      saturate((hdrLinearOut.g - hdrLinearOut.b) * 2.0);
 		float fireHueMask = fireHighlight * warmDominance;
 		hdrLinearOut.b *= 1.0 - 0.30 * fireHueMask;
 		hdrLinearOut.g += hdrLinearOut.r * (0.05 * fireHueMask);

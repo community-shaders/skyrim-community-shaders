@@ -40,11 +40,11 @@ namespace DisplayMapping
 			float InMaxValue = FLT_MAX)
 		{
 			const float3 compressableValue = InValue - ShoulderStart;
-			const float  compressableRange = InMaxValue - ShoulderStart;
-			const float  compressedRange   = OutMaxValue - ShoulderStart;
+			const float compressableRange = InMaxValue - ShoulderStart;
+			const float compressedRange = OutMaxValue - ShoulderStart;
 			return ShoulderStart + compressedRange *
-				RangeCompress(compressableValue / compressedRange,
-				              ConsiderMaxValue ? (compressableRange / compressedRange) : FLT_MAX);
+			                           RangeCompress(compressableValue / compressedRange,
+										   ConsiderMaxValue ? (compressableRange / compressedRange) : FLT_MAX);
 		}
 
 		float LuminanceCompress(
