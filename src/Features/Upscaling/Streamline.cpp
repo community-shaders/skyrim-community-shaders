@@ -7,6 +7,7 @@
 #include "../../Hooks.h"
 #include "../../State.h"
 #include "../../Util.h"
+#include "../TAAReorder.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
 
@@ -237,6 +238,20 @@ void Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eye
 
 	slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
 	slConstants.cameraPinholeOffset = { 0.f, 0.f };
+
+	// VR nasal offset: when the crop is shifted, tell DLSS the optical center is offset
+	if (globals::game::isVR) {
+		float nasalFrac = globals::features::upscaling.settings.vrDlssCropOffsetX;
+		float vpScale = globals::features::upscaling.settings.vrDlssViewportScale;
+		if (nasalFrac > 0.0f && vpScale < 1.0f) {
+			// Pinhole offset in NDC: how far the crop center is from the eye's optical axis
+			// Eye 0: shifted right (+X), Eye 1: shifted left (-X)
+			float shiftNDC = nasalFrac / vpScale;  // normalized to crop width
+			float sign = (eyeIndex == 0) ? 1.0f : -1.0f;
+			slConstants.cameraPinholeOffset = { sign * shiftNDC, 0.f };
+		}
+	}
+
 	slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
 	slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
 	slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
@@ -245,6 +260,28 @@ void Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eye
 	slConstants.depthInverted = sl::Boolean::eFalse;
 
 	if (globals::game::isVR) {
+		// When VR viewport scaling is active, DLSS processes a centered sub-region of each eye.
+		// The projection matrix must be adjusted to describe only the crop's FOV, not the full eye.
+		// Without this, DLSS's temporal reprojection maps pixels to wrong world positions,
+		// destroying temporal accumulation (causing aliasing and instability).
+		// Scaling rows 0 and 1 of the projection by 1/vpScale narrows the clip-space X/Y
+		// to match the crop region. clipToPrevClip must also be conjugated (see below).
+		float vpScale = globals::features::upscaling.settings.vrDlssViewportScale;
+		if (vpScale < 1.0f) {
+			float invScale = 1.0f / vpScale;
+			// Row 0 → clip.x, Row 1 → clip.y (Streamline row-major, P * pos convention)
+			slConstants.cameraViewToClip[0].x *= invScale;
+			slConstants.cameraViewToClip[0].y *= invScale;
+			slConstants.cameraViewToClip[0].z *= invScale;
+			slConstants.cameraViewToClip[0].w *= invScale;
+			slConstants.cameraViewToClip[1].x *= invScale;
+			slConstants.cameraViewToClip[1].y *= invScale;
+			slConstants.cameraViewToClip[1].z *= invScale;
+			slConstants.cameraViewToClip[1].w *= invScale;
+			// Narrow the reported FOV to match the crop
+			slConstants.cameraFOV = 2.0f * atanf(vpScale * tanf(slConstants.cameraFOV * 0.5f));
+		}
+
 		// VR: compute clipToCameraView / clipToPrevClip / prevClipToClip from Skyrim's per-eye matrices.
 		// recalculateCameraMatrices() uses a single static prev-frame slot -- unusable for two viewports.
 		sl::matrixFullInvert(slConstants.clipToCameraView, slConstants.cameraViewToClip);
@@ -258,7 +295,62 @@ void Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eye
 		sl::float4x4 invCurrViewProj;
 		sl::matrixFullInvert(invCurrViewProj, currViewProjSL);
 		sl::matrixMul(slConstants.clipToPrevClip, invCurrViewProj, prevViewProjSL);
+
+		// When viewport scaling is active, cameraViewToClip is adjusted (narrower FOV),
+		// changing the clip space. clipToPrevClip (computed from unadjusted VP) maps between
+		// unadjusted clip spaces. We must conjugate it to map between adjusted clip spaces:
+		//   CTP_adj = inv(S) * CTP * S
+		// where S = diag(invScale, invScale, 1, 1), inv(S) = diag(vpScale, vpScale, 1, 1).
+		//
+		// Derivation (row-vector convention: clip = view * P):
+		//   clip_adj = clip_unadj * S  (scaling rows 0,1 of P scales clip x,y by invScale)
+		//   clip_prev_adj = clip_prev_unadj * S
+		//   clip_prev_unadj = clip_curr_unadj * CTP
+		//   clip_prev_adj = (clip_curr_adj * inv(S)) * CTP * S = clip_curr_adj * (inv(S) * CTP * S)
+		//
+		// Element-wise: CTP_adj[i][j] = inv(S)[i] * CTP[i][j] * S[j]
+		//   Rows 0,1, cols 0,1: vpScale * invScale = 1 (unchanged)
+		//   Rows 0,1, cols 2,3: vpScale * 1 = vpScale
+		//   Rows 2,3, cols 0,1: 1 * invScale = invScale
+		//   Rows 2,3, cols 2,3: unchanged
+		//
+		// This ensures clipToPrevClip agrees with per-pixel motion vectors.
+		// Without correct conjugation, DLSS sees disagreement between the camera-predicted
+		// motion and per-pixel motion vectors, causing it to reject temporal accumulation
+		// during camera motion. (When still, CTP ≈ I, and inv(S)*I*S = I → no mismatch.)
+		if (vpScale < 1.0f) {
+			float invScale = 1.0f / vpScale;
+			// Rows 0,1 cols 2,3: multiply by vpScale (from left-multiply by inv(S))
+			slConstants.clipToPrevClip[0].z *= vpScale;
+			slConstants.clipToPrevClip[0].w *= vpScale;
+			slConstants.clipToPrevClip[1].z *= vpScale;
+			slConstants.clipToPrevClip[1].w *= vpScale;
+			// Rows 2,3 cols 0,1: multiply by invScale (from right-multiply by S)
+			slConstants.clipToPrevClip[2].x *= invScale;
+			slConstants.clipToPrevClip[2].y *= invScale;
+			slConstants.clipToPrevClip[3].x *= invScale;
+			slConstants.clipToPrevClip[3].y *= invScale;
+		}
+
 		sl::matrixFullInvert(slConstants.prevClipToClip, slConstants.clipToPrevClip);
+
+		// Per-eye diagnostic logging for temporal quality investigation
+		{
+			static uint32_t ctpDiagCounter = 0;
+			bool ctpDiag = (ctpDiagCounter++ % 300 == 0) || (TAAReorder::g_diagCounter == 0 && vpScale < 1.0f);
+			if (ctpDiag) {
+				auto& ctp = slConstants.clipToPrevClip;
+				logger::info("[DLSS-CTP] Eye {} clipToPrevClip diag=({:.6f},{:.6f},{:.6f},{:.6f})",
+					eyeIndex, ctp[0].x, ctp[1].y, ctp[2].z, ctp[3].w);
+				logger::info("[DLSS-CTP] Eye {} prevVP diag=({:.6f},{:.6f},{:.6f},{:.6f})",
+					eyeIndex, prevViewProjSL[0].x, prevViewProjSL[1].y, prevViewProjSL[2].z, prevViewProjSL[3].w);
+				logger::info("[DLSS-CTP] Eye {} currVP diag=({:.6f},{:.6f},{:.6f},{:.6f})",
+					eyeIndex, currViewProjSL[0].x, currViewProjSL[1].y, currViewProjSL[2].z, currViewProjSL[3].w);
+				logger::info("[DLSS-CTP] Eye {} cameraPos=({:.2f},{:.2f},{:.2f}) fov={:.4f} mvecScale=({:.4f},{:.4f})",
+					eyeIndex, slConstants.cameraPos.x, slConstants.cameraPos.y, slConstants.cameraPos.z,
+					slConstants.cameraFOV, slConstants.mvecScale.x, slConstants.mvecScale.y);
+			}
+		}
 	} else {
 		recalculateCameraMatrices(slConstants);
 	}
@@ -268,7 +360,26 @@ void Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eye
 	slConstants.jitterOffset = { -jitter.x, -jitter.y };
 	slConstants.reset = sl::Boolean::eFalse;
 
-	slConstants.mvecScale = { 1.0f, 1.0f };
+	// mvecScale normalizes motion vectors to [-1,1] range. The Streamline DLSS plugin
+	// then multiplies by the input render dimensions to get pixel displacement:
+	//   MV_Scale = mvecScale * renderWidth
+	// The game's motion vectors are in [-1,1] normalized to the FULL per-eye dimensions.
+	// Without viewport scaling, renderWidth = eyeWidthIn → MV_Scale = eyeWidthIn → correct.
+	// With viewport scaling, renderWidth = cropWidthIn = eyeWidthIn * vpScale, so DLSS
+	// underestimates motion by vpScale. Compensate by scaling mvecScale by 1/vpScale.
+	if (globals::game::isVR && globals::features::upscaling.settings.vrDlssViewportScale < 1.0f) {
+		float invScale = 1.0f / globals::features::upscaling.settings.vrDlssViewportScale;
+		slConstants.mvecScale = { invScale, invScale };
+	} else {
+		slConstants.mvecScale = { 1.0f, 1.0f };
+	}
+	// Log mvecScale after assignment (was previously logged before assignment, showing uninitialized values)
+	if (globals::game::isVR && TAAReorder::g_diagCounter == 0 && globals::features::upscaling.settings.vrDlssViewportScale < 1.0f) {
+		logger::info("[TAAReorder] Eye {} mvecScale=({:.4f},{:.4f}) jitter=({:.4f},{:.4f})",
+			eyeIndex, slConstants.mvecScale.x, slConstants.mvecScale.y,
+			slConstants.jitterOffset.x, slConstants.jitterOffset.y);
+	}
+
 	slConstants.motionVectors3D = sl::Boolean::eFalse;
 	slConstants.motionVectorsInvalidValue = FLT_MIN;
 	slConstants.orthographicProjection = sl::Boolean::eFalse;
@@ -277,6 +388,13 @@ void Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eye
 
 	if (SL_FAILED(res, slSetConstants(slConstants, *frameToken, p_viewport))) {
 		logger::error("[Streamline] Could not set constants for eye {}", eyeIndex);
+	} else {
+		static uint32_t constDiagCounter = 0;
+		if (constDiagCounter++ % 300 == 0) {
+			logger::info("[Streamline] slSetConstants OK eye={} jitter=({:.4f},{:.4f}) fov={:.4f}",
+				eyeIndex, slConstants.jitterOffset.x, slConstants.jitterOffset.y,
+				slConstants.cameraFOV);
+		}
 	}
 }
 
@@ -304,7 +422,7 @@ bool Streamline::IsRTXAndBelow40Series(IDXGIAdapter* a_adapter)
 	return false;
 }
 
-void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
+void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width, uint32_t height)
 {
 	sl::DLSSOptions dlssOptions{};
 
@@ -328,10 +446,8 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 		break;
 	}
 
-	auto state = globals::state;
-
 	dlssOptions.outputWidth = width;
-	dlssOptions.outputHeight = (uint)state->screenSize.y;
+	dlssOptions.outputHeight = height;
 
 	// Detect HDR from kMAIN format at runtime -- VR kMAIN may be 8-bit while SE is FP16
 	{
@@ -394,7 +510,7 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 	ID3D11Resource* colorIn, ID3D11Resource* colorOut, ID3D11Resource* depth,
 	ID3D11Resource* mvec, ID3D11Resource* reactiveMask, ID3D11Resource* transparencyMask,
-	const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth)
+	const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth, uint32_t outputHeight)
 {
 	auto context = globals::d3d::context;
 
@@ -406,7 +522,7 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 	sl::Resource transparencyMaskRes = { sl::ResourceType::eTex2d, transparencyMask, 0 };
 
 	CheckFrameConstants(vp, eyeIndex);
-	SetDLSSOptions(vp, outputWidth);
+	SetDLSSOptions(vp, outputWidth, outputHeight);
 
 	sl::ResourceTag tags[] = {
 		{ &colorInRes, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentIn },
@@ -438,17 +554,24 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 	if (state->frameAnnotations)
 		state->EndPerfEvent();
 
-	if (evalResult != sl::Result::eOk) {
-		static bool evalErrorLogged[2] = { false, false };
+	// Rate-limited diagnostic logging for DLSS evaluation results
+	{
+		static uint32_t evalDiagCounter[2] = { 0, 0 };
 		uint32_t logIdx = globals::game::isVR ? eyeIndex : 0;
-		if (!evalErrorLogged[logIdx]) {
-			evalErrorLogged[logIdx] = true;
-			logger::error("[Streamline] slEvaluateFeature failed{} result={}", globals::game::isVR ? std::format(" for eye {}", eyeIndex) : "", (int)evalResult);
+		bool diagLog = (evalDiagCounter[logIdx]++ % 300 == 0);
+
+		if (evalResult != sl::Result::eOk) {
+			if (diagLog) {
+				logger::error("[Streamline] slEvaluateFeature FAILED eye={} result={} (frame {})",
+					eyeIndex, (int)evalResult, evalDiagCounter[logIdx]);
+			}
+		} else if (diagLog) {
+			logger::info("[Streamline] slEvaluateFeature OK eye={} (frame {})", eyeIndex, evalDiagCounter[logIdx]);
 		}
 	}
 }
 
-void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors)
+void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors, bool eye0Only)
 {
 	auto state = globals::state;
 
@@ -458,9 +581,15 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto screenSize = state->screenSize;
 	auto renderSize = Util::ConvertToDynamic(screenSize);
 
-	// VR: Combined-buffer mode with extent offsets causes temporal ghosting on the right eye
-	// because DLSS's internal history buffers use extent offsets as indices.
-	// Per-eye isolation with extents at {0,0} is required.
+	// VR: Per-eye isolation is required. Each eye uses a separate per-eye texture
+	// with its own viewport handle, avoiding cross-eye history contamination.
+	// When viewport scaling is active (vrDlssViewportScale < 1.0):
+	//   - All DLSS inputs are physically cropped to the center sub-region at {0,0}.
+	//     This eliminates non-zero subrect base offsets which break temporal reprojection.
+	//   - Camera matrices are adjusted in CheckFrameConstants to match the crop's FOV.
+	//   - FillPeriphery bilinear-upscales the full render-res input to vrFinalOutput,
+	//     then FinalizePerEyeOutputs pastes the DLSS crop output into the center.
+	// When viewport scaling is off (scale == 1.0), all textures are full-size at {0,0}.
 	if (globals::game::isVR) {
 		auto& upscaling = globals::features::upscaling;
 		uint32_t eyeWidthOut = (uint32_t)(screenSize.x / 2);
@@ -468,21 +597,50 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		uint32_t eyeWidthIn = (uint32_t)(renderSize.x / 2);
 		uint32_t eyeHeightIn = (uint32_t)renderSize.y;
 
+		float vpScale = upscaling.settings.vrDlssViewportScale;
+		bool viewportScaling = vpScale < 1.0f;
+
+		uint32_t dlssWidthIn = viewportScaling ? (uint32_t)(eyeWidthIn * vpScale) : eyeWidthIn;
+		uint32_t dlssHeightIn = viewportScaling ? (uint32_t)(eyeHeightIn * vpScale) : eyeHeightIn;
+		uint32_t dlssWidthOut = viewportScaling ? (uint32_t)(eyeWidthOut * vpScale) : eyeWidthOut;
+		uint32_t dlssHeightOut = viewportScaling ? (uint32_t)(eyeHeightOut * vpScale) : eyeHeightOut;
+
 		upscaling.PreparePerEyeInputs(a_upscalingTexture, depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask);
 
-		for (uint32_t i = 0; i < 2; ++i) {
-			sl::ViewportHandle vp = (i == 1) ? viewportRight : viewport;
-			sl::Extent extentIn{ 0, 0, eyeWidthIn, eyeHeightIn };
-			sl::Extent extentOut{ 0, 0, eyeWidthOut, eyeHeightOut };
-
-			EvaluateDLSS(vp, i,
-				upscaling.vrIntermediateColorIn[i]->resource.get(), upscaling.vrIntermediateColorOut[i]->resource.get(),
-				upscaling.vrIntermediateDepth[i]->resource.get(), upscaling.vrIntermediateMotionVectors[i]->resource.get(),
-				upscaling.vrIntermediateReactiveMask[i]->resource.get(), upscaling.vrIntermediateTransparencyMask[i]->resource.get(),
-				extentIn, extentOut, eyeWidthOut);
+		// Periphery TAA diagnostic
+		if (TAAReorder::g_diagCounter == 0 && viewportScaling && upscaling.settings.vrPeripheryTAA) {
+			logger::info("[TAAReorder] Periphery TAA: vrTAAdPerEye[0]={}, g_initialized={} (TAA injected at display RT level)",
+				(void*)upscaling.vrTAAdPerEye[0].get(), TAAReorder::g_initialized);
 		}
 
-		upscaling.FinalizePerEyeOutputs(a_upscalingTexture);
+		uint32_t eyeCount = eye0Only ? 1 : 2;
+		for (uint32_t i = 0; i < eyeCount; ++i) {
+			sl::ViewportHandle vp = (i == 1) ? viewportRight : viewport;
+
+			if (viewportScaling) {
+				// Pre-fill composition target with bilinear upscale of full render-res eye.
+				// DLSS output is pasted on top in FinalizePerEyeOutputs.
+				upscaling.FillPeriphery(i, eyeWidthIn, eyeHeightIn, eyeWidthOut, eyeHeightOut);
+			}
+
+			// All extents are {0,0} - inputs are physically crop-sized (or full-sized when not scaling).
+			// No non-zero subrect base offsets, which is critical for DLSS temporal reprojection.
+			sl::Extent extentIn = { 0, 0, dlssWidthIn, dlssHeightIn };
+			sl::Extent extentOut = { 0, 0, dlssWidthOut, dlssHeightOut };
+
+			// When viewport scaling, use crop-sized vrCropColorIn; otherwise use full vrIntermediateColorIn
+			ID3D11Resource* colorInput = viewportScaling ?
+				upscaling.vrCropColorIn[i]->resource.get() :
+				upscaling.vrIntermediateColorIn[i]->resource.get();
+
+			EvaluateDLSS(vp, i,
+				colorInput, upscaling.vrIntermediateColorOut[i]->resource.get(),
+				upscaling.vrIntermediateDepth[i]->resource.get(), upscaling.vrIntermediateMotionVectors[i]->resource.get(),
+				upscaling.vrIntermediateReactiveMask[i]->resource.get(), upscaling.vrIntermediateTransparencyMask[i]->resource.get(),
+				extentIn, extentOut, dlssWidthOut, dlssHeightOut);
+		}
+
+		upscaling.FinalizePerEyeOutputs(a_upscalingTexture, eye0Only);
 	} else {
 		// Non-VR: Simple full-texture upscale
 		sl::Extent extentIn{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
@@ -491,7 +649,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		EvaluateDLSS(viewport, 0,
 			a_upscalingTexture, a_upscalingTexture,
 			depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask,
-			extentIn, extentOut, (uint)screenSize.x);
+			extentIn, extentOut, (uint)screenSize.x, (uint)screenSize.y);
 	}
 }
 /**
