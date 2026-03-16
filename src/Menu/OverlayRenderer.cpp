@@ -3,6 +3,7 @@
 #include "HomePageRenderer.h"
 #include "ThemeManager.h"
 
+#include <dxgi.h>
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
@@ -52,9 +53,15 @@ void OverlayRenderer::RenderOverlay(
 	RenderFirstTimeSetupOverlay();
 
 	// Draw weather editor independently of main menu state
-	if (EditorWindow::GetSingleton()->open) {
+	// Auto-close editor if player leaves valid game space (e.g., loading screen)
+	auto* editorWindow = EditorWindow::GetSingleton();
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (editorWindow->open && !(player && player->parentCell)) {
+		editorWindow->open = false;
+	}
+	if (editorWindow->open) {
 		ImGui::GetIO().MouseDrawCursor = true;
-		EditorWindow::GetSingleton()->Draw();
+		editorWindow->Draw();
 	} else if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		ImGui::GetIO().MouseDrawCursor = true;
 		if (menu.IsEnabled) {
@@ -111,8 +118,16 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	// Start the Dear ImGui frame
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
-	ImGui::NewFrame();
 
+	DXGI_SWAP_CHAIN_DESC desc{};
+	globals::d3d::swapChain->GetDesc(&desc);
+
+	Util::UpdateImGuiInput(
+		desc.OutputWindow,
+		static_cast<float>(desc.BufferDesc.Width),
+		static_cast<float>(desc.BufferDesc.Height));
+
+	ImGui::NewFrame();
 	ThemeManager::SetupImGuiStyle(menu);
 }
 

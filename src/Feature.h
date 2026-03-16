@@ -158,6 +158,21 @@ public:
 
 	static const std::vector<Feature*>& GetFeatureList();
 
+	/**
+	 * @brief Finds a loaded feature by its short name.
+	 *
+	 * @param shortName The short name to search for.
+	 * @return Pointer to the feature if found and loaded, nullptr otherwise.
+	 */
+	static Feature* FindFeatureByShortName(const std::string& shortName);
+
+	/**
+	 * @brief Gets sorted short names of all loaded features that appear in the menu.
+	 *
+	 * @return Sorted vector of short name strings.
+	 */
+	static std::vector<std::string> GetLoadedFeatureNames();
+
 	// Feature utility functions
 	/**
 	 * @brief Gets the minimum required version for a feature.

@@ -15,7 +15,13 @@ BSLightingShaderMaterialPBRLandscape::~BSLightingShaderMaterialPBRLandscape()
 
 BSLightingShaderMaterialPBRLandscape* BSLightingShaderMaterialPBRLandscape::Make()
 {
-	return new BSLightingShaderMaterialPBRLandscape;
+	auto* scrapHeap = globals::game::memoryManager->GetThreadScrapHeap();
+	auto* material = static_cast<BSLightingShaderMaterialPBRLandscape*>(scrapHeap->Allocate(sizeof(BSLightingShaderMaterialPBRLandscape), 8));
+	if (material) {
+		std::memset(material, 0, sizeof(BSLightingShaderMaterialPBRLandscape));
+		std::construct_at(material);
+	}
+	return material;
 }
 
 RE::BSShaderMaterial* BSLightingShaderMaterialPBRLandscape::Create()

@@ -6,67 +6,72 @@ void VolumetricLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-		DrawWidgetHeader("##VolumetricLightingSearch", false, true);
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+		DrawWidgetHeader("##VolumetricLightingSearch", true, true);
+	}
+	bool changed = false;
 
-		bool changed = false;
+	if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
+		if (ImGui::BeginTabItem("Basic")) {
+			BeginScrollableContent("##BasicScroll");
+			ImGui::SeparatorText("Intensity");
+			if (WeatherUtils::DrawSliderFloat("Intensity", settings.intensity, 0.0f, 50.0f))
+				changed = true;
 
-		if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
-			if (ImGui::BeginTabItem("Basic")) {
-				ImGui::SeparatorText("Intensity");
-				if (WeatherUtils::DrawSliderFloat("Intensity", settings.intensity, 0.0f, 50.0f))
-					changed = true;
+			ImGui::SeparatorText("Custom Color");
+			if (WeatherUtils::DrawSliderFloat("Contribution", settings.customColorContribution, 0.0f, 1.0f))
+				changed = true;
 
-				ImGui::SeparatorText("Custom Color");
-				if (WeatherUtils::DrawSliderFloat("Contribution", settings.customColorContribution, 0.0f, 1.0f))
-					changed = true;
-
-				ImGui::SeparatorText("RGB Color");
-				float3 rgbColor{ settings.red, settings.green, settings.blue };
-				if (WeatherUtils::DrawColorEdit("Color", rgbColor)) {
-					settings.red = rgbColor.x;
-					settings.green = rgbColor.y;
-					settings.blue = rgbColor.z;
-					changed = true;
-				}
-
-				ImGui::EndTabItem();
+			ImGui::SeparatorText("RGB Color");
+			float3 rgbColor{ settings.red, settings.green, settings.blue };
+			if (WeatherUtils::DrawColorEdit("Color", rgbColor)) {
+				settings.red = rgbColor.x;
+				settings.green = rgbColor.y;
+				settings.blue = rgbColor.z;
+				changed = true;
 			}
 
-			if (ImGui::BeginTabItem("Density")) {
-				ImGui::SeparatorText("Density Settings");
-				if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, 0.0f, 100.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
-					changed = true;
-
-				ImGui::EndTabItem();
-			}
-
-			if (ImGui::BeginTabItem("Advanced")) {
-				ImGui::SeparatorText("Phase Function");
-				if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
-					changed = true;
-
-				ImGui::SeparatorText("Sampling");
-				if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 160.0f))
-					changed = true;
-
-				ImGui::EndTabItem();
-			}
-
-			ImGui::EndTabBar();
+			EndScrollableContent();
+			ImGui::EndTabItem();
 		}
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
+		if (ImGui::BeginTabItem("Density")) {
+			BeginScrollableContent("##DensityScroll");
+			ImGui::SeparatorText("Density Settings");
+			if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, 0.0f, 100.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
+				changed = true;
+
+			EndScrollableContent();
+			ImGui::EndTabItem();
 		}
+
+		if (ImGui::BeginTabItem("Advanced")) {
+			BeginScrollableContent("##AdvancedScroll");
+			ImGui::SeparatorText("Phase Function");
+			if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
+				changed = true;
+
+			ImGui::SeparatorText("Sampling");
+			if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 160.0f))
+				changed = true;
+
+			EndScrollableContent();
+			ImGui::EndTabItem();
+		}
+
+		ImGui::EndTabBar();
+	}
+
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
 	}
 	ImGui::End();
 }
@@ -77,6 +82,7 @@ void VolumetricLightingWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("intensity"))
 				settings.intensity = js["intensity"];
@@ -104,23 +110,32 @@ void VolumetricLightingWidget::LoadSettings()
 				settings.samplingRangeFactor = js["samplingRangeFactor"];
 		} catch (const std::exception& e) {
 			logger::error("VolumetricLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
-		settings.intensity = volumetricLighting->intensity;
-		settings.customColorContribution = volumetricLighting->customColor.contribution;
-		settings.red = volumetricLighting->red;
-		settings.green = volumetricLighting->green;
-		settings.blue = volumetricLighting->blue;
-		settings.densityContribution = volumetricLighting->density.contribution;
-		settings.densitySize = volumetricLighting->density.size;
-		settings.densityWindSpeed = volumetricLighting->density.windSpeed;
-		settings.densityFallingSpeed = volumetricLighting->density.fallingSpeed;
-		settings.phaseFunctionContribution = volumetricLighting->phaseFunction.contribution;
-		settings.phaseFunctionScattering = volumetricLighting->phaseFunction.scattering;
-		settings.samplingRangeFactor = volumetricLighting->samplingRepartition.rangeFactor;
+		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;
+	ApplyChanges();
+}
+
+void VolumetricLightingWidget::LoadFromGameSettings()
+{
+	if (!volumetricLighting)
+		return;
+	settings.intensity = volumetricLighting->intensity;
+	settings.customColorContribution = volumetricLighting->customColor.contribution;
+	settings.red = volumetricLighting->red;
+	settings.green = volumetricLighting->green;
+	settings.blue = volumetricLighting->blue;
+	settings.densityContribution = volumetricLighting->density.contribution;
+	settings.densitySize = volumetricLighting->density.size;
+	settings.densityWindSpeed = volumetricLighting->density.windSpeed;
+	settings.densityFallingSpeed = volumetricLighting->density.fallingSpeed;
+	settings.phaseFunctionContribution = volumetricLighting->phaseFunction.contribution;
+	settings.phaseFunctionScattering = volumetricLighting->phaseFunction.scattering;
+	settings.samplingRangeFactor = volumetricLighting->samplingRepartition.rangeFactor;
 }
 
 void VolumetricLightingWidget::SaveSettings()
@@ -137,6 +152,7 @@ void VolumetricLightingWidget::SaveSettings()
 	js["phaseFunctionContribution"] = settings.phaseFunctionContribution;
 	js["phaseFunctionScattering"] = settings.phaseFunctionScattering;
 	js["samplingRangeFactor"] = settings.samplingRangeFactor;
+	originalSettings = settings;
 }
 
 void VolumetricLightingWidget::ApplyChanges()
@@ -156,27 +172,15 @@ void VolumetricLightingWidget::ApplyChanges()
 	volumetricLighting->phaseFunction.contribution = settings.phaseFunctionContribution;
 	volumetricLighting->phaseFunction.scattering = settings.phaseFunctionScattering;
 	volumetricLighting->samplingRepartition.rangeFactor = settings.samplingRangeFactor;
-
-	originalSettings = settings;
 }
 
 void VolumetricLightingWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool VolumetricLightingWidget::HasUnsavedChanges() const
 {
-	return settings.intensity != originalSettings.intensity ||
-	       settings.customColorContribution != originalSettings.customColorContribution ||
-	       settings.red != originalSettings.red ||
-	       settings.green != originalSettings.green ||
-	       settings.blue != originalSettings.blue ||
-	       settings.densityContribution != originalSettings.densityContribution ||
-	       settings.densitySize != originalSettings.densitySize ||
-	       settings.densityWindSpeed != originalSettings.densityWindSpeed ||
-	       settings.densityFallingSpeed != originalSettings.densityFallingSpeed ||
-	       settings.phaseFunctionContribution != originalSettings.phaseFunctionContribution ||
-	       settings.phaseFunctionScattering != originalSettings.phaseFunctionScattering ||
-	       settings.samplingRangeFactor != originalSettings.samplingRangeFactor;
+	return !(settings == originalSettings);
 }

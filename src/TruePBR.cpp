@@ -201,8 +201,62 @@ void TruePBR::DrawSettings()
 
 			if (selectedPbrMaterialObject != nullptr) {
 				bool wasEdited = false;
-				if (ImGui::SliderFloat3("Base Color Scale", selectedPbrMaterialObject->baseColorScale.data(), 0.f, 10.f, "%.3f")) {
-					wasEdited = true;
+				if (ImGui::TreeNodeEx("Base Color Scale", ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (ImGui::Button("Reset to 1.0##BaseColorScale")) {
+						selectedPbrMaterialObject->baseColorScale = { 1.f, 1.f, 1.f };
+						wasEdited = true;
+					}
+
+					const float indent = ImGui::GetCursorPosX();
+					const float defaultItemWidth = ImGui::CalcItemWidth();
+					const float letterColWidth = ImGui::CalcTextSize("Green").x + ImGui::GetStyle().ItemSpacing.x;
+					const float sliderStartX = indent + letterColWidth;
+					const float sliderWidth = defaultItemWidth - (sliderStartX - ImGui::GetStyle().ItemSpacing.x);
+					const float colorLabelStartX = sliderStartX - ImGui::GetStyle().ItemSpacing.x - letterColWidth;
+
+					ImGui::AlignTextToFramePadding();
+					ImGui::SetCursorPosX(colorLabelStartX);
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+					ImGui::Text("Red");
+					ImGui::PopStyleColor();
+					ImGui::SameLine(sliderStartX);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.4f, 0.1f, 0.1f, 0.6f));
+					ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+					ImGui::SetNextItemWidth(sliderWidth);
+					if (ImGui::SliderFloat("##BaseColorScaleR", &selectedPbrMaterialObject->baseColorScale[0], 0.f, 10.f, "%.3f")) {
+						wasEdited = true;
+					}
+					ImGui::PopStyleColor(2);
+
+					ImGui::AlignTextToFramePadding();
+					ImGui::SetCursorPosX(colorLabelStartX);
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+					ImGui::Text("Green");
+					ImGui::PopStyleColor();
+					ImGui::SameLine(sliderStartX);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.1f, 0.4f, 0.1f, 0.6f));
+					ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+					ImGui::SetNextItemWidth(sliderWidth);
+					if (ImGui::SliderFloat("##BaseColorScaleG", &selectedPbrMaterialObject->baseColorScale[1], 0.f, 10.f, "%.3f")) {
+						wasEdited = true;
+					}
+					ImGui::PopStyleColor(2);
+
+					ImGui::AlignTextToFramePadding();
+					ImGui::SetCursorPosX(colorLabelStartX);
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.3f, 0.9f, 1.0f));
+					ImGui::Text("Blue");
+					ImGui::PopStyleColor();
+					ImGui::SameLine(sliderStartX);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.1f, 0.1f, 0.4f, 0.6f));
+					ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.3f, 0.3f, 0.9f, 1.0f));
+					ImGui::SetNextItemWidth(sliderWidth);
+					if (ImGui::SliderFloat("##BaseColorScaleB", &selectedPbrMaterialObject->baseColorScale[2], 0.f, 10.f, "%.3f")) {
+						wasEdited = true;
+					}
+					ImGui::PopStyleColor(2);
+
+					ImGui::TreePop();
 				}
 				if (ImGui::SliderFloat("Roughness", &selectedPbrMaterialObject->roughness, 0.f, 1.f, "%.3f")) {
 					wasEdited = true;
@@ -567,7 +621,7 @@ struct BSLightingShaderProperty_LoadBinary
 			} else {
 				material = RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
 			}
-			property->LinkMaterial(nullptr, false);
+			property->SetMaterial(nullptr, false);
 			property->material = material;
 		}
 
@@ -1108,7 +1162,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 
 			{
 				BSLightingShaderMaterialPBRLandscape srcMaterial;
-				shaderProperty->LinkMaterial(&srcMaterial, true);
+				shaderProperty->SetMaterial(&srcMaterial, true);
 			}
 
 			auto material = static_cast<BSLightingShaderMaterialPBRLandscape*>(shaderProperty->material);
@@ -1158,7 +1212,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 			auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
 			shaderProperty->SetupGeometry(geometry);
 			if (geometry != nullptr) {
-				geometry->GetGeometryRuntimeData().properties[1] = RE::NiPointer(shaderProperty);
+				geometry->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
 			}
 
 			globals::game::smState->shadowSceneNode[0]->AttachObject(geometry);
@@ -1201,12 +1255,12 @@ struct BSTempEffectSimpleDecal_SetupGeometry
 	{
 		func(decal, geometry, textureSet, blended);
 		auto* singleton = globals::truePBR;
-		auto unknownProperty = geometry->GetGeometryRuntimeData().properties[1].get();
+		auto unknownProperty = geometry->GetGeometryRuntimeData().shaderProperty.get();
 		if (auto shaderProperty = unknownProperty->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(unknownProperty) : nullptr;
 			shaderProperty != nullptr && singleton->IsPBRTextureSet(textureSet)) {
 			{
 				BSLightingShaderMaterialPBR srcMaterial;
-				shaderProperty->LinkMaterial(&srcMaterial, true);
+				shaderProperty->SetMaterial(&srcMaterial, true);
 			}
 
 			auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
@@ -1245,7 +1299,7 @@ struct BSTempEffectGeometryDecal_Initialize
 
 			{
 				BSLightingShaderMaterialPBR srcMaterial;
-				shaderProperty->LinkMaterial(&srcMaterial, true);
+				shaderProperty->SetMaterial(&srcMaterial, true);
 			}
 
 			auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
@@ -1267,12 +1321,12 @@ struct BSTempEffectGeometryDecal_Initialize
 				shaderProperty->SetFlags(kVertexLighting, true);
 			}
 
-			if (auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(decal->decal->GetGeometryRuntimeData().properties[0].get())) {
+			if (auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(decal->decal->GetGeometryRuntimeData().alphaProperty.get())) {
 				alphaProperty->alphaFlags = (alphaProperty->alphaFlags & ~0x1FE) | 0xED;
 			}
 
 			shaderProperty->SetupGeometry(decal->decal.get());
-			decal->decal->GetGeometryRuntimeData().properties[1] = RE::NiPointer(shaderProperty);
+			decal->decal->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
 		}
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
@@ -1289,7 +1343,7 @@ struct TESBoundObject_Clone3D
 			if (stat->data.materialObj != nullptr && stat->data.materialObj->directionalData.singlePass) {
 				if (auto* pbrData = truePBR->GetPBRMaterialObjectData(stat->data.materialObj)) {
 					RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData](RE::BSGeometry* geometry) {
-						if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get())) {
+						if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
 							if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
 								shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
 								if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {

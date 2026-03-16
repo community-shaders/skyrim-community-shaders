@@ -15,13 +15,16 @@ public:
 		}
 		form = a_lightingTemplate;
 		lightingTemplate = a_lightingTemplate;
-		LoadLightingTemplateValues();
+		LoadFromGameSettings();
+		vanillaSettings = settings;
+		originalSettings = settings;
 	}
 
 	struct DirectionalColor
 	{
 		float3 min;
 		float3 max;
+		bool operator==(const DirectionalColor&) const = default;
 	};
 
 	struct DALC
@@ -29,6 +32,7 @@ public:
 		DirectionalColor directional[3];
 		float3 specular;
 		float fresnelPower;
+		bool operator==(const DALC&) const = default;
 	};
 
 	struct Settings
@@ -48,20 +52,25 @@ public:
 		float lightFadeStart;
 		float lightFadeEnd;
 		DALC dalc;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
+	Settings originalSettings;
 
 	~LightingTemplateWidget();
 
 	virtual void DrawWidget() override;
 	virtual void LoadSettings() override;
 	virtual void SaveSettings() override;
+	virtual bool HasUnsavedChanges() const override;
 
 	void SetLightingTemplateValues();
 	void LoadLightingTemplateValues();
-	void ApplyChanges();
-	void RevertChanges();
+	void LoadFromGameSettings();
+	void ApplyChanges() override;
+	void RevertChanges() override;
 
 private:
 	void DrawDALCSettings();

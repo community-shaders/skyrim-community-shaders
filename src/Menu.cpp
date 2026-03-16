@@ -232,8 +232,6 @@ Menu::~Menu()
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 	dxgiAdapter3 = nullptr;
-
-	globals::features::vr.DestroyOverlay();
 }
 
 void Menu::Load(json& o_json)
@@ -651,10 +649,6 @@ void Menu::Init()
 
 	BuildCategoryCounts();
 
-	if (globals::features::vr.IsOpenVRCompatible()) {
-		globals::features::vr.EnsureOverlayInitialized();
-	}
-
 	initialized = true;
 }
 
@@ -1047,7 +1041,7 @@ void Menu::ProcessInputEventQueue()
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
 						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
-						{ settings.WeatherEditorToggleKey, []() { EditorWindow::GetSingleton()->open = !EditorWindow::GetSingleton()->open; } },
+						{ settings.WeatherEditorToggleKey, []() { auto p = RE::PlayerCharacter::GetSingleton(); if (p && p->parentCell) EditorWindow::GetSingleton()->open = !EditorWindow::GetSingleton()->open; } },
 					};
 					for (const auto& ka : keyActions) {
 						// Check if key matches last key in combo and all modifiers are held (exact match)
@@ -1084,10 +1078,14 @@ void Menu::ProcessInputEventQueue()
 					}
 				}
 
-				// Close menu with ESC if no editor window is open
+				// Handle ESC key for menu and editor window
 				auto* editorWindow = EditorWindow::GetSingleton();
-				if (key == VK_ESCAPE && IsEnabled && editorWindow && !editorWindow->open) {
-					IsEnabled = false;
+				if (key == VK_ESCAPE) {
+					if (editorWindow && editorWindow->open && editorWindow->ShouldHandleEscapeKey()) {
+						editorWindow->open = false;
+					} else if (IsEnabled && (!editorWindow || !editorWindow->open)) {
+						IsEnabled = false;
+					}
 				}
 			}
 
@@ -1158,7 +1156,8 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 
 bool Menu::ShouldSwallowInput()
 {
-	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
+	auto editorWindow = EditorWindow::GetSingleton();
+	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup() || (editorWindow && editorWindow->open);
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)

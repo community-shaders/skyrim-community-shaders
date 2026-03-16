@@ -97,7 +97,7 @@ public:
 	// Hooks
 	struct BSLightingShaderProperty_GetPrecipitationOcclusionMapRenderPassesImpl
 	{
-		static RE::BSLightingShaderProperty::Data* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, uint32_t renderMode, RE::BSGraphics::BSShaderAccumulator* accumulator);
+		static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, uint32_t renderMode, RE::BSGraphics::BSShaderAccumulator* accumulator);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 

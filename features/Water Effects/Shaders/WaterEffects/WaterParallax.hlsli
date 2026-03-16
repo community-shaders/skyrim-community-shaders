@@ -170,22 +170,22 @@ namespace WaterEffects
 
 		float2 textureDims;
 		Normals01Tex.GetDimensions(textureDims.x, textureDims.y);
-#if defined(VR)
+#	if defined(VR)
 		textureDims /= 16.0;
-#else
+#	else
 		textureDims /= 8.0;
-#endif
+#	endif
 		float2 texCoordsPerSize = input.TexCoord1.xy * textureDims;
 		float2 dxSize = ddx(texCoordsPerSize);
 		float2 dySize = ddy(texCoordsPerSize);
 		float2 dTexCoords = dxSize * dxSize + dySize * dySize;
 		float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
 		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
-#if defined(VR)
+#	if defined(VR)
 		mipLevel += 4;
-#else
+#	else
 		mipLevel += 3;
-#endif
+#	endif
 
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;

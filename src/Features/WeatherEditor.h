@@ -39,19 +39,45 @@ public:
 
 	virtual void DataLoaded() override;
 	virtual void DrawSettings() override;
+	virtual void Prepass() override;
 
 	void LerpWeather(RE::TESWeather*, RE::TESWeather*, float);
 
-	// Weather Picker functionality integrated into Weather Editor
+	/**
+	 * Renders the standalone weather details window.
+	 * @param open Pointer to the open/close state owned by the caller.
+	 */
 	void RenderWeatherDetailsWindow(bool* open);
 
 	// Core weather display functions that other features can use
+	/**
+	 * Displays weather info for a given weather record.
+	 * @param weather Weather record to display.
+	 * @param weatherPct Optional blend percentage (0-1), or -1 to hide.
+	 * @param showInteractiveElements Enables interactive controls when true.
+	 */
 	static void DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct = -1.0f, bool showInteractiveElements = true);
+	/**
+	 * Renders the core weather details UI section.
+	 * @param showInteractiveElements Enables interactive controls when true.
+	 */
 	static void RenderCoreWeatherDetails(bool showInteractiveElements = true);
+	/**
+	 * Renders weather analysis sections contributed by other features.
+	 */
 	static void RenderFeatureWeatherAnalysis();
 
 	// --- Refactor helpers for RenderCoreWeatherDetails ---
+	/**
+	 * Renders the weather controls section.
+	 * @param sky Active sky instance.
+	 */
 	static void RenderWeatherControls(RE::Sky* sky);
+	/**
+	 * Renders the weather information display section.
+	 * @param sky Active sky instance.
+	 * @param showInteractiveElements Enables interactive controls when true.
+	 */
 	static void RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements = true);
 
 	struct WeatherDetailsWindowSettings
@@ -93,6 +119,7 @@ public:
 	static ImVec4 GetWeatherFlagColorByName(const std::string& flagName);
 
 private:
+	void DrawTimeControls();
 	void DrawWeatherStatusPanel();
 	void DrawWeatherPickerSection();
 
@@ -111,7 +138,10 @@ private:
 	static inline uint32_t s_weatherFlagFilter = ALL_WEATHER_FLAGS;  // Start with all filters enabled by default (bits 0-6)
 	static inline uint32_t s_lastWeatherFlagFilter = UNCLASSIFIED_FLAG;
 	static inline bool s_accelerateWeatherChange = true;
+	static inline float s_accelerationRate = 5.0f;
 	static inline RE::TESWeather* s_cachedLastWeather = nullptr;
+	static inline bool s_isAcceleratingWeatherChange = false;
+	static inline float s_accelerationTime = 0.0f;
 
 	// Static helper for display name extraction
 	static std::string GetDisplayName(const RE::TESWeather* weather);

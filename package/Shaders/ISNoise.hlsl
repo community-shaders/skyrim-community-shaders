@@ -1,13 +1,13 @@
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
-	float2 TexCoord : TEXCOORD0;
+	float4 Position: POSITION0;
+	float2 TexCoord: TEXCOORD0;
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : POSITION0;
-	float2 TexCoord : TEXCOORD0;
+	float4 Position: POSITION0;
+	float2 TexCoord: TEXCOORD0;
 };
 
 #ifdef VSHADER
@@ -32,7 +32,7 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color : SV_Target0;
+	float4 Color: SV_Target0;
 };
 
 #if defined(PSHADER)

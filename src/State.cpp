@@ -11,12 +11,15 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
+#include "Features/VolumetricShadows.h"
 #include "Features/WeatherEditor.h"
 #include "Menu.h"
+#include "SceneSettingsManager.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
+#include "Utils/SphericalHarmonics.h"
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
 
@@ -25,15 +28,18 @@ void State::Draw()
 	ZoneScoped;
 
 	auto shaderCache = globals::shaderCache;
-	auto deferred = globals::deferred;
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
 	auto& weatherEditor = globals::features::weatherEditor;
 	auto truePBR = globals::truePBR;
 	auto context = globals::d3d::context;
+	auto& volumetricShadows = globals::features::volumetricShadows;
 
 	if (shaderCache->IsEnabled()) {
+		// Process deferred cell transitions (interior detection)
+		SceneSettingsManager::GetSingleton()->Update();
+
 		if (weatherEditor.loaded) {
 			ZoneScopedN("WeatherManager::UpdateFeatures");
 			WeatherManager::GetSingleton()->UpdateFeatures();
@@ -67,7 +73,8 @@ void State::Draw()
 		if (currentShader && updateShader) {
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
-					deferred->CopyShadowData();
+					if (volumetricShadows.loaded)
+						volumetricShadows.CopyShadowData();
 				}
 			}
 		}
@@ -172,6 +179,9 @@ void State::Setup()
 
 	// Load per-weather settings after features are setup
 	WeatherManager::GetSingleton()->LoadPerWeatherSettingsFromDisk();
+
+	// Load scene-specific settings (Interior Only, etc.)
+	SceneSettingsManager::GetSingleton()->LoadAll();
 }
 
 static std::string GetConfigPath(State::ConfigMode a_configMode)
@@ -840,6 +850,22 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			data.MipBias = 0;
 		}
 
+		// DALC to SH
+		const auto& m = dalcTransform.rotate;
+		const auto& t = dalcTransform.translate;
+		float3 dalcColors[6];
+		dalcColors[0] = float3{ m.entry[0][0] + t.x, m.entry[1][0] + t.y, m.entry[2][0] + t.z };     // +X
+		dalcColors[1] = float3{ -m.entry[0][0] + t.x, -m.entry[1][0] + t.y, -m.entry[2][0] + t.z };  // -X
+		dalcColors[2] = float3{ m.entry[0][1] + t.x, m.entry[1][1] + t.y, m.entry[2][1] + t.z };     // +Y
+		dalcColors[3] = float3{ -m.entry[0][1] + t.x, -m.entry[1][1] + t.y, -m.entry[2][1] + t.z };  // -Y
+		dalcColors[4] = float3{ m.entry[0][2] + t.x, m.entry[1][2] + t.y, m.entry[2][2] + t.z };     // +Z
+		dalcColors[5] = float3{ -m.entry[0][2] + t.x, -m.entry[1][2] + t.y, -m.entry[2][2] + t.z };  // -Z
+
+		SphericalHarmonics::SH2Color dalcSH = SphericalHarmonics::DALCToSH(dalcColors);
+		data.AmbientSHR = { dalcSH.r.c0, dalcSH.r.c1[0], dalcSH.r.c1[1], dalcSH.r.c1[2] };
+		data.AmbientSHG = { dalcSH.g.c0, dalcSH.g.c1[0], dalcSH.g.c1[1], dalcSH.g.c1[2] };
+		data.AmbientSHB = { dalcSH.b.c0, dalcSH.b.c1[0], dalcSH.b.c1[1], dalcSH.b.c1[2] };
+
 		sharedDataCB->Update(data);
 	}
 
@@ -851,10 +877,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		delete[] data;
 	}
 
-	const auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-	auto& terrainBlending = globals::features::terrainBlending;
-	auto srv = (terrainBlending.loaded && terrainBlending.settings.Enabled ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV);
-
+	auto* srv = Util::GetCurrentSceneDepthSRV(true);
 	globals::d3d::context->PSSetShaderResources(17, 1, &srv);
 }
 

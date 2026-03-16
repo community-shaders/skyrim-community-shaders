@@ -133,20 +133,25 @@ namespace HLSLTestDiscovery
 
 			// Look for [numthreads(1,1,1)] attribute
 			if (std::regex_search(line, numthreadsPattern)) {
-				std::string nextLine;
-				if (std::getline(file, nextLine)) {
-					std::smatch match;
-					if (std::regex_search(nextLine, match, functionPattern)) {
-						TestFunction test;
-						test.name = match[1].str();
-						test.filePath = "/Shaders/Tests/" + filePath.filename().string();
-						test.displayName = generateDisplayName(test.name, moduleName);
-
-						// Parse tags from doxygen comments
-						test.tags = parseDoxygenTags(precedingComments);
-
-						tests.push_back(test);
+				// Check if function name is on the same line (e.g., after clang-format)
+				// or on the next line
+				std::smatch match;
+				std::string funcLine = line;
+				if (!std::regex_search(funcLine, match, functionPattern)) {
+					if (std::getline(file, funcLine)) {
+						std::regex_search(funcLine, match, functionPattern);
 					}
+				}
+				if (match.ready() && !match.empty()) {
+					TestFunction test;
+					test.name = match[1].str();
+					test.filePath = "/Shaders/Tests/" + filePath.filename().string();
+					test.displayName = generateDisplayName(test.name, moduleName);
+
+					// Parse tags from doxygen comments
+					test.tags = parseDoxygenTags(precedingComments);
+
+					tests.push_back(test);
 				}
 				precedingComments.clear();
 			} else if (!line.empty() && line.find_first_not_of(" \t\r\n") != std::string::npos) {
@@ -189,28 +194,54 @@ namespace HLSLTestDiscovery
 	inline bool runTest(const TestFunction& test, std::string& errorMsg)
 	{
 		try {
-			stf::ShaderTestFixture fixture(ShaderTest::GetFixtureDesc());
-			auto shaderDir = (ShaderTest::GetExecutableDirectory() / "Shaders").wstring();
+			auto runWithDevice = [&test, &errorMsg](const stf::GPUDevice::EDeviceType deviceType) {
+				stf::ShaderTestFixture fixture(ShaderTest::GetFixtureDesc(deviceType));
+				auto shaderDir = (ShaderTest::GetExecutableDirectory() / "Shaders").wstring();
 
-			auto result = fixture.RunTest(stf::ShaderTestFixture::RuntimeTestDesc{
-				.CompilationEnv{ .Source = std::filesystem::path(test.filePath),
-					.CompilationFlags = { L"-I", shaderDir } },
-				.TestName = test.name,
-				.ThreadGroupCount{ 1, 1, 1 } });
+				auto result = fixture.RunTest(stf::ShaderTestFixture::RuntimeTestDesc{
+					.CompilationEnv{ .Source = std::filesystem::path(test.filePath),
+						.CompilationFlags = { L"-I", shaderDir } },
+					.TestName = test.name,
+					.ThreadGroupCount{ 1, 1, 1 } });
 
-			if (!result) {
-				// Extract detailed error information from the result
-				// This includes line numbers, thread IDs, and actual/expected values
-				std::ostringstream oss;
-				oss << result;
-				errorMsg = oss.str();
+				if (!result) {
+					// Extract detailed error information from the result
+					// This includes line numbers, thread IDs, and actual/expected values
+					std::ostringstream oss;
+					oss << result;
+					errorMsg = oss.str();
 
-				// Also print to stdout for immediate visibility during test runs
-				std::cout << "\n"
-						  << errorMsg << "\n";
-				return false;
+					// Also print to stdout for immediate visibility during test runs
+					std::cout << "\n"
+							  << errorMsg << "\n";
+					return false;
+				}
+
+				return true;
+			};
+
+			if (ShaderTest::GetPreferredDevice() == ShaderTest::EPreferredDevice::Hardware) {
+				return runWithDevice(stf::GPUDevice::EDeviceType::Hardware);
 			}
-			return true;
+
+			if (ShaderTest::GetPreferredDevice() == ShaderTest::EPreferredDevice::Software) {
+				return runWithDevice(stf::GPUDevice::EDeviceType::Software);
+			}
+
+			try {
+				const bool hardwareResult = runWithDevice(stf::GPUDevice::EDeviceType::Hardware);
+				ShaderTest::SetPreferredDevice(ShaderTest::EPreferredDevice::Hardware);
+				return hardwareResult;
+			} catch (const stf::HrException& e) {
+				if (e.Error() == E_INVALIDARG) {
+					std::cout << "\n[ShaderTests] Hardware D3D12 path returned E_INVALIDARG; retrying with software WARP device.\n";
+					const bool softwareResult = runWithDevice(stf::GPUDevice::EDeviceType::Software);
+					ShaderTest::SetPreferredDevice(ShaderTest::EPreferredDevice::Software);
+					return softwareResult;
+				} else {
+					throw;
+				}
+			}
 		} catch (const std::exception& e) {
 			errorMsg = e.what();
 			std::cout << "\nException: " << errorMsg << "\n";
