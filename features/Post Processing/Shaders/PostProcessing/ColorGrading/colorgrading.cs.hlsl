@@ -2,6 +2,7 @@
 #include "Common/ColorSpaces.hlsli"
 #include "Common/Math.hlsli"
 
+#include "PostProcessing/ColourTransforms/ACES2.hlsli"
 #include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
 #include "PostProcessing/common.hlsli"
 
@@ -30,9 +31,9 @@ cbuffer ColorCB : register(b1)
 	float4 shadowsHighlightsRange;  // shadowBegin, shadowEnd, highlightBegin, highlightEnd
 
 	float4 tonemapParams[2];
-	float4 inputToWorking[3];      // sRGB → working color space
-	float4 workingToTonemap[3];    // working → tonemapper native space
-	float4 tonemapToOutput[3];     // tonemapper native → output space
+	float4 inputToWorking[3];    // sRGB → working color space
+	float4 workingToTonemap[3];  // working → tonemapper native space
+	float4 tonemapToOutput[3];   // tonemapper native → output space
 
 	// game value
 	float4 cinematic;  // saturation, brightness, contrast
@@ -282,45 +283,6 @@ float3 AldridgeFilmic(float3 val)
 	float tmp = 2.0 * tonemapParams[0].y;
 	val = val + (tmp - val) * clamp(tmp - val, 0.0, 1.0) * (0.25 / tonemapParams[0].y) - tonemapParams[0].y;
 	val = (val * (6.2 * val + 0.5)) / (val * (6.2 * val + 1.7) + 0.06);
-	val = pow(saturate(val), 2.2);
-	return val;
-}
-
-float3 AcesHill(float3 val)
-{
-	// Input is already in ACEScg (converted by workingToTonemap matrix)
-	val *= tonemapParams[0].x;
-
-	float3 a = val * (val + 0.0245786f) - 0.000090537f;
-	float3 b = val * (0.983729f * val + 0.4329510f) + 0.238081f;
-	val = a / b;
-
-	// Output remains in ACEScg (converted to output space by tonemapToOutput matrix)
-	val = saturate(val);
-
-	return val;
-}
-
-float3 AcesNarkowicz(float3 val)
-{
-	val *= tonemapParams[0].x;
-
-	static const float A = 2.51;
-	static const float B = 0.03;
-	static const float C = 2.43;
-	static const float D = 0.59;
-	static const float E = 0.14;
-	val *= 0.6;
-	val = (val * (A * val + B)) / (val * (C * val + D) + E);
-	val = saturate(val);
-	return val;
-}
-
-float3 AcesGuy(float3 val)
-{
-	val *= tonemapParams[0].x;
-	val = val / (val + 0.155f) * 1.019;
-
 	val = pow(saturate(val), 2.2);
 	return val;
 }

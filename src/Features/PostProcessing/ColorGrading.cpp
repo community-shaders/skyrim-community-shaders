@@ -3,6 +3,7 @@
 #include "State.h"
 #include "Util.h"
 
+#include "ACES2.h"
 #include "ColourSpace.h"
 #include "Features/PostProcessing.h"
 
@@ -174,18 +175,11 @@ struct TonemapperInfo
 					ImGui::SliderFloat("Black Tightness Offset", &params[1].z, 0.f, 1.f, "%.2f"); },
 				{ f4{ 1.f, 1.f, 1.f, .22f }, f4{ 0.4f, 1.33f, 0.f, 0.f } } },
 
-			{ "ACES (Hill)"sv, "AcesHill"sv,
-				"ACES curve fit by Stephen Hill. Operates in ACEScg color space."sv, 5, 5,
-				[](CTP& params) { exposureSlider(&params[0].x); },
-				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
-
-			{ "ACES (Narkowicz)"sv, "AcesNarkowicz"sv,
-				"ACES curve fit by Krzysztof Narkowicz. See his blog post \"ACES Filmic Tone Mapping Curve\"."sv, 0, 0,
-				[](CTP& params) { exposureSlider(&params[0].x); },
-				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
-
-			{ "ACES (Guy)"sv, "AcesGuy"sv,
-				"Curve from Unreal 3 adapted by to close to the ACES curve by Romain Guy."sv, 0, 0,
+			{ "ACES 2.0"sv, "ACES2OutputTransform"sv,
+				"Standard ACES 2.0 Output Transform based on the official aces-aswf/aces-core reference. "
+				"Uses CAM16 color appearance model, perceptual tonescale, chroma compression and gamut mapping. "
+				"Output: sRGB SDR (100 nits)."sv,
+				5, 0,  // nativeInput=ACEScg, nativeOutput=sRGB (ACES2 does its own output transform)
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
@@ -417,6 +411,13 @@ void ColorGrading::LoadSettings(json& o_json)
 		auto& spaces = getAvailableColourSpaces();
 		settings.processColorSpace = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
 
+		// Migrate legacy ACES tonemapper names to ACES 2.0
+		if (settings.currentTonemapper == "ACES (Hill)" ||
+			settings.currentTonemapper == "ACES (Narkowicz)" ||
+			settings.currentTonemapper == "ACES (Guy)") {
+			settings.currentTonemapper = "ACES 2.0";
+		}
+
 		auto& tonemappers = TonemapperInfo::GetTonemappers();
 		if (auto it = std::ranges::find_if(tonemappers, [&](TonemapperInfo& x) { return settings.currentTonemapper == x.name; });
 			it != tonemappers.end()) {
@@ -472,6 +473,33 @@ void ColorGrading::SetupResources()
 	logger::debug("Creating buffers...");
 	{
 		colorCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<ColorCB>());
+
+		// ACES 2.0 constant buffer
+		aces2CB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<ACES2::ACES2CB>(false));
+
+		// ACES 2.0 lookup table structured buffers
+		auto makeTableBuffer = [](UINT count) {
+			auto buf = std::make_unique<StructuredBuffer>(StructuredBufferDesc<float>(count), count);
+			buf->CreateSRV();
+			return buf;
+		};
+		aces2GamutCuspJ = makeTableBuffer(ACES2::TABLE_SIZE);
+		aces2GamutCuspM = makeTableBuffer(ACES2::TABLE_SIZE);
+		aces2GamutCuspH = makeTableBuffer(ACES2::TABLE_SIZE);
+		aces2ReachM = makeTableBuffer(ACES2::TABLE_SIZE);
+		aces2UpperHullGamma = makeTableBuffer(ACES2::TABLE_SIZE);
+		aces2LowerHullGamma = makeTableBuffer(ACES2::TABLE_SIZE);
+
+		// Precompute ACES 2.0 tables (SDR 100 nits)
+		auto aces2Data = ACES2::ComputeParams(100.0f);
+		aces2CB->Update(aces2Data);
+		aces2GamutCuspJ->Update(aces2Data.gamutCuspTableJ, sizeof(aces2Data.gamutCuspTableJ));
+		aces2GamutCuspM->Update(aces2Data.gamutCuspTableM, sizeof(aces2Data.gamutCuspTableM));
+		aces2GamutCuspH->Update(aces2Data.gamutCuspTableh, sizeof(aces2Data.gamutCuspTableh));
+		aces2ReachM->Update(aces2Data.reachMTable, sizeof(aces2Data.reachMTable));
+		aces2UpperHullGamma->Update(aces2Data.upperHullGamma, sizeof(aces2Data.upperHullGamma));
+		aces2LowerHullGamma->Update(aces2Data.lowerHullGamma, sizeof(aces2Data.lowerHullGamma));
+		aces2Initialized = true;
 	}
 
 	logger::debug("Creating 2D textures...");
@@ -645,6 +673,24 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	ID3D11Buffer* cb = colorCB->CB();
 	context->CSSetConstantBuffers(1, 1, &cb);
 
+	// Bind ACES 2.0 resources if the current tonemapper is ACES 2.0
+	auto& tonemappers = TonemapperInfo::GetTonemappers();
+	bool isACES2 = (tonemappers[tonemapperType].func_name == "ACES2OutputTransform"sv);
+	if (isACES2 && aces2Initialized) {
+		ID3D11Buffer* aces2cb = aces2CB->CB();
+		context->CSSetConstantBuffers(2, 1, &aces2cb);
+
+		std::array<ID3D11ShaderResourceView*, 6> aces2Srvs = {
+			aces2GamutCuspJ->SRV(),
+			aces2GamutCuspM->SRV(),
+			aces2GamutCuspH->SRV(),
+			aces2ReachM->SRV(),
+			aces2UpperHullGamma->SRV(),
+			aces2LowerHullGamma->SRV()
+		};
+		context->CSSetShaderResources(2, 6, aces2Srvs.data());
+	}
+
 	std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
 	context->CSSetSamplers(0, 1, samplers.data());
 	ID3D11UnorderedAccessView* uav = nullptr;
@@ -677,6 +723,13 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 	context->CSSetShaderResources(0, 2, srvs.data());
 	context->CSSetConstantBuffers(0, 1, &cb);
+	if (isACES2 && aces2Initialized) {
+		ID3D11Buffer* nullCB = nullptr;
+		context->CSSetConstantBuffers(2, 1, &nullCB);
+		std::array<ID3D11ShaderResourceView*, 6> nullSrvs = {};
+		nullSrvs.fill(nullptr);
+		context->CSSetShaderResources(2, 6, nullSrvs.data());
+	}
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	if (saveImagesFlag) {

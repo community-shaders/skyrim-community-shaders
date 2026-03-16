@@ -1,6 +1,7 @@
 #pragma once
 #include "PostProcessFeature.h"
 
+#include "ACES2.h"
 #include "Buffer.h"
 
 struct ColorGrading : public PostProcessFeature
@@ -91,9 +92,9 @@ struct ColorGrading : public PostProcessFeature
 		float4 shadowsHighlightsRange;  // shadowBegin, shadowEnd, highlightBegin, highlightEnd
 
 		float4 tonemapParams[2];
-		float4 inputToWorking[3];      // sRGB → working color space
-		float4 workingToTonemap[3];    // working → tonemapper native space
-		float4 tonemapToOutput[3];     // tonemapper native → output space
+		float4 inputToWorking[3];    // sRGB → working color space
+		float4 workingToTonemap[3];  // working → tonemapper native space
+		float4 tonemapToOutput[3];   // tonemapper native → output space
 
 		// game value
 		float4 cinematic;  // saturation, brightness, contrast
@@ -108,6 +109,16 @@ struct ColorGrading : public PostProcessFeature
 		uint pad[3];
 	};
 	std::unique_ptr<ConstantBuffer> colorCB = nullptr;
+
+	// ACES 2.0 buffers
+	std::unique_ptr<ConstantBuffer> aces2CB = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2GamutCuspJ = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2GamutCuspM = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2GamutCuspH = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2ReachM = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2UpperHullGamma = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2LowerHullGamma = nullptr;
+	bool aces2Initialized = false;
 
 	std::unique_ptr<Texture2D> texColor = nullptr;
 	std::unique_ptr<Texture3D> texLUT = nullptr;
