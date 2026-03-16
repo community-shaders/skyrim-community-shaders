@@ -627,13 +627,17 @@ namespace Stereo
 		vsout.VRPosition.z = clipPos.z;
 		vsout.VRPosition.w = clipPos.w;
 
-		// Hardcoded ~0.75px diagonal jitter for Eye 1 stereo edge supersampling.
-		// Larger offset increases chance of different alpha test outcomes between eyes
-		// (tree branches vs sky). NDC for 6304x3088 SBS reference; scales with resolution.
+		// Sub-pixel diagonal jitter for Eye 1 stereo edge supersampling.
+		// Shifts Eye 1 rasterization by ~0.75px so alpha-tested edges (tree branches,
+		// fences) sample at slightly different positions than Eye 0, giving StereoBlend
+		// reprojection better edge detail to work with.
+		// Hardcoded NDC values: FrameBuffer/SharedData cbuffers are not reliably
+		// available in all vertex shader contexts (VSHADER section only includes
+		// FrameBuffer.hlsli, and BufferDim lives in SharedData). These constants
+		// give ~0.75px offset at the 6304x3088 SBS reference resolution and scale
+		// proportionally at other resolutions since NDC is resolution-relative.
 		if (a_eyeIndex == 1) {
-			// ~0.75px diagonal jitter for Eye 1 stereo edge supersampling.
-			// Scales with resolution: 0.53/halfWidth horizontal, 1.06/height vertical.
-			float2 kJitterNDC = float2(0.53 / (FrameBuffer::BufferDim.x * 0.5), -1.06 / FrameBuffer::BufferDim.y);
+			static const float2 kJitterNDC = float2(1.68e-4, -3.44e-4);
 			vsout.VRPosition.xy += kJitterNDC * vsout.VRPosition.w;
 		}
 
