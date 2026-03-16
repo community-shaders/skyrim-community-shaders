@@ -13,13 +13,13 @@
 
 Texture2D<float4> Source : register(t0);
 
-#ifdef BILINEAR_UPSCALE
+#	ifdef BILINEAR_UPSCALE
 
 cbuffer CompositeCB : register(b0)
 {
 	float2 DynResScale;  // renderRes / displayRes (per-eye)
-	float2 EyeOffset;   // (i * eyeWidth, 0) in texels
-	float2 SrcTexSize;  // full texture dimensions in texels
+	float2 EyeOffset;    // (i * eyeWidth, 0) in texels
+	float2 SrcTexSize;   // full texture dimensions in texels
 	float2 pad;
 };
 
@@ -36,13 +36,13 @@ float4 main(VS_OUTPUT input) : SV_Target
 	return Source.SampleLevel(LinearSampler, srcUV, 0);
 }
 
-#else
+#	else
 
 float4 main(VS_OUTPUT input) : SV_Target
 {
 	return Source.Load(int3(input.Position.xy, 0));
 }
 
-#endif  // BILINEAR_UPSCALE
+#	endif  // BILINEAR_UPSCALE
 
 #endif  // PSHADER

@@ -14,9 +14,7 @@ Texture2D<float4> SrcTexture : register(t0);
 SamplerState LinearSampler : register(s0);
 RWTexture2D<float4> DstTexture : register(u0);
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID
-							: SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	if (dispatchID.x >= DstWidth || dispatchID.y >= DstHeight)
 		return;
 

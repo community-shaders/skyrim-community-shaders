@@ -324,8 +324,10 @@ namespace globals
 						pDepthStencilView->GetResource(&clearRes);
 						mainDepth.views[0]->GetResource(&mainRes);
 						bool isMainDSV = (clearRes == mainRes);
-						if (clearRes) clearRes->Release();
-						if (mainRes) mainRes->Release();
+						if (clearRes)
+							clearRes->Release();
+						if (mainRes)
+							mainRes->Release();
 						if (isMainDSV) {
 							ClearFlags &= ~D3D11_CLEAR_STENCIL;
 							if (ClearFlags == 0)

@@ -630,8 +630,8 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 			// When viewport scaling, use crop-sized vrCropColorIn; otherwise use full vrIntermediateColorIn
 			ID3D11Resource* colorInput = viewportScaling ?
-				upscaling.vrCropColorIn[i]->resource.get() :
-				upscaling.vrIntermediateColorIn[i]->resource.get();
+			                                 upscaling.vrCropColorIn[i]->resource.get() :
+			                                 upscaling.vrIntermediateColorIn[i]->resource.get();
 
 			EvaluateDLSS(vp, i,
 				colorInput, upscaling.vrIntermediateColorOut[i]->resource.get(),

@@ -57,12 +57,12 @@ public:
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
-		uint presetDLSS = 0;           // 0=Default, 1=J, 2=K, 3=L, 4=M
-		uint useGatherWideKernel = 1;  // 0=Legacy 3x3, 1=Gather wide-kernel
+		uint presetDLSS = 0;               // 0=Default, 1=J, 2=K, 3=L, 4=M
+		uint useGatherWideKernel = 1;      // 0=Legacy 3x3, 1=Gather wide-kernel
 		float vrDlssViewportScale = 1.0f;  // 0.5 to 1.0, fraction of each eye that DLSS processes (VR only)
-		uint vrPeripheryTAA = 0;            // 0=off, 1=on - enable native TAA on periphery when viewport scaling active (VR only)
-		float vrDlssCropOffsetX = 0.0f;      // 0.0-0.3, nasal offset fraction for DLSS crop position
-		float vrDlssFeatherWidth = 0.0f;     // 0.0-0.1, feather width fraction at DLSS crop boundary (disabled pending fix)
+		uint vrPeripheryTAA = 0;           // 0=off, 1=on - enable native TAA on periphery when viewport scaling active (VR only)
+		float vrDlssCropOffsetX = 0.0f;    // 0.0-0.3, nasal offset fraction for DLSS crop position
+		float vrDlssFeatherWidth = 0.0f;   // 0.0-0.1, feather width fraction at DLSS crop boundary (disabled pending fix)
 	};
 
 	Settings settings;
@@ -161,8 +161,8 @@ public:
 	eastl::unique_ptr<Texture2D> vrCropColorIn[2];                   // crop-sized DLSS color input (VR viewport scaling only)
 
 	// Periphery TAA (conductor approach) — used by two-call func() flow
-	winrt::com_ptr<ID3D11Texture2D> vrPreTAACopy;                    // full stereo kMAIN copy (Phase 1 PP, pre-TAA)
-	eastl::unique_ptr<Texture2D> vrTAAdPerEye[2];                    // per-eye render-res TAA'd content (periphery source)
+	winrt::com_ptr<ID3D11Texture2D> vrPreTAACopy;  // full stereo kMAIN copy (Phase 1 PP, pre-TAA)
+	eastl::unique_ptr<Texture2D> vrTAAdPerEye[2];  // per-eye render-res TAA'd content (periphery source)
 
 	// Periphery fill compute shader (bilinear upscale render-res → display-res for VR viewport scaling)
 	winrt::com_ptr<ID3D11ComputeShader> vrPeripheryFillCS;
@@ -179,9 +179,9 @@ public:
 	winrt::com_ptr<ID3D11BlendState> vrFeatheredCompositeBlendState;
 
 	// DLSS composite pixel shaders (format-converting fullscreen copy for TAAReorder)
-	winrt::com_ptr<ID3D11PixelShader> vrDlssCompositePS;    // point-sample (same-res format conversion)
-	winrt::com_ptr<ID3D11PixelShader> vrDlssUpscalePS;      // bilinear upscale (render-res → display-res)
-	winrt::com_ptr<ID3D11Buffer> vrDlssUpscaleCB;           // constant buffer for upscale params
+	winrt::com_ptr<ID3D11PixelShader> vrDlssCompositePS;  // point-sample (same-res format conversion)
+	winrt::com_ptr<ID3D11PixelShader> vrDlssUpscalePS;    // bilinear upscale (render-res → display-res)
+	winrt::com_ptr<ID3D11Buffer> vrDlssUpscaleCB;         // constant buffer for upscale params
 	ID3D11PixelShader* GetDlssCompositePS();
 	ID3D11PixelShader* GetDlssUpscalePS();
 

@@ -5,8 +5,7 @@
 
 RWTexture2D<float4> ColorInOut : register(u0);
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	float4 c = ColorInOut[dispatchID.xy];
 	c.a = 1.0;
 	ColorInOut[dispatchID.xy] = c;

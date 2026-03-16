@@ -20,23 +20,23 @@
 #include "Upscaling/UpscaleVS.hlsl"
 
 #if defined(PSHADER)
-#include "Common/FrameBuffer.hlsli"
-#include "Common/SharedData.hlsli"
+#	include "Common/FrameBuffer.hlsli"
+#	include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float Depth : SV_Depth;
+	float Depth: SV_Depth;
 };
 
 Texture2D<float> DepthLowRes : register(t0);
 
 cbuffer DepthUpscaleCB : register(b0)
 {
-	float2 SourceDim;    // Full texture dimensions (texels)
-	float2 InvSourceDim; // 1.0 / SourceDim
-	float2 Scale;        // resolutionScale (render/display ratio)
+	float2 SourceDim;     // Full texture dimensions (texels)
+	float2 InvSourceDim;  // 1.0 / SourceDim
+	float2 Scale;         // resolutionScale (render/display ratio)
 	float2 Pad;
 };
 

@@ -392,12 +392,18 @@ namespace TAAReorder
 					context->PSSetSamplers(0, 1, &oldPSSampler);
 					context->PSSetConstantBuffers(0, 1, &oldPSCB);
 
-					if (oldBlendState) oldBlendState->Release();
-					if (oldVS) oldVS->Release();
-					if (oldPS) oldPS->Release();
-					if (oldPSSRV) oldPSSRV->Release();
-					if (oldPSSampler) oldPSSampler->Release();
-					if (oldPSCB) oldPSCB->Release();
+					if (oldBlendState)
+						oldBlendState->Release();
+					if (oldVS)
+						oldVS->Release();
+					if (oldPS)
+						oldPS->Release();
+					if (oldPSSRV)
+						oldPSSRV->Release();
+					if (oldPSSampler)
+						oldPSSampler->Release();
+					if (oldPSCB)
+						oldPSCB->Release();
 
 					pasteRTV->Release();
 				} else {

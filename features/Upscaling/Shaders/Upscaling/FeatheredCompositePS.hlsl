@@ -15,12 +15,12 @@ SamplerState LinearSampler : register(s0);
 
 cbuffer FeatheredCompositeCB : register(b0)
 {
-	float2 CropOrigin;    // paste position (x, y) in output-eye pixel coords
-	float2 CropSize;      // crop width, height in pixels
-	float FeatherWidth;   // feather distance in pixels (inward from crop edge)
+	float2 CropOrigin;   // paste position (x, y) in output-eye pixel coords
+	float2 CropSize;     // crop width, height in pixels
+	float FeatherWidth;  // feather distance in pixels (inward from crop edge)
 	float _pad0;
-	float2 SrcUVOrigin;   // UV origin in source texture for this crop region
-	float2 SrcUVScale;    // UV scale: maps [0,1] crop-local UV to source texture UV range
+	float2 SrcUVOrigin;  // UV origin in source texture for this crop region
+	float2 SrcUVScale;   // UV scale: maps [0,1] crop-local UV to source texture UV range
 };
 
 float4 main(VS_OUTPUT input) : SV_Target
@@ -28,9 +28,9 @@ float4 main(VS_OUTPUT input) : SV_Target
 	float2 pixelPos = input.Position.xy;
 
 	// Distance from each edge of the crop rect (positive = inside)
-	float distLeft   = pixelPos.x - CropOrigin.x;
-	float distRight  = (CropOrigin.x + CropSize.x) - pixelPos.x;
-	float distTop    = pixelPos.y - CropOrigin.y;
+	float distLeft = pixelPos.x - CropOrigin.x;
+	float distRight = (CropOrigin.x + CropSize.x) - pixelPos.x;
+	float distTop = pixelPos.y - CropOrigin.y;
 	float distBottom = (CropOrigin.y + CropSize.y) - pixelPos.y;
 
 	float minDist = min(min(distLeft, distRight), min(distTop, distBottom));

@@ -20,33 +20,32 @@ cbuffer ClearHMDMaskCB : register(b0)
 	uint DepthOffsetY;     // Y offset into combined stereo depth (non-zero when viewport scaling crops vertically)
 	uint FallbackOffsetX;  // X offset into FallbackIn for stereo (0 when unused or left eye)
 	// Optional coordinate scaling (zero = disabled, for backwards compat)
-	uint DepthWidth;       // render-res eye width; if 0, no scaling (1:1 depth/color coords)
-	uint DepthHeight;      // render-res eye height
-	uint ColorWidth;       // display-res eye width
-	uint ColorHeight;      // display-res eye height
+	uint DepthWidth;   // render-res eye width; if 0, no scaling (1:1 depth/color coords)
+	uint DepthHeight;  // render-res eye height
+	uint ColorWidth;   // display-res eye width
+	uint ColorHeight;  // display-res eye height
 };
 
 Texture2D<float> DepthIn : register(t0);
 Texture2D<float4> FallbackIn : register(t1);
 RWTexture2D<float4> ColorInOut : register(u0);
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	uint2 colorPos = dispatchID.xy + uint2(ColorOffsetX, 0);
 	uint2 depthPos;
 
 	if (DepthWidth > 0) {
 		// Scale from display-res color coordinates to render-res depth coordinates
 		depthPos = uint2(
-			(dispatchID.x * DepthWidth) / ColorWidth,
-			(dispatchID.y * DepthHeight) / ColorHeight
-		) + uint2(DepthOffsetX, DepthOffsetY);
+					   (dispatchID.x * DepthWidth) / ColorWidth,
+					   (dispatchID.y * DepthHeight) / ColorHeight) +
+		           uint2(DepthOffsetX, DepthOffsetY);
 	} else {
 		depthPos = dispatchID.xy + uint2(DepthOffsetX, DepthOffsetY);
 	}
 
 	if (DepthIn[depthPos] == 0.0)
 		ColorInOut[colorPos] = FallbackIn[dispatchID.xy + uint2(FallbackOffsetX, 0)];
-		// When FallbackIn is unbound (existing callers): returns (0,0,0,0) → clears to black
-		// When FallbackIn is bound (TAA mask restore): returns display RT content
+	// When FallbackIn is unbound (existing callers): returns (0,0,0,0) → clears to black
+	// When FallbackIn is bound (TAA mask restore): returns display RT content
 }

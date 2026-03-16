@@ -3,8 +3,8 @@
 #include "Deferred.h"
 #include "Features/VRStereoOptimizations.h"
 #include "Hooks.h"
-#include "TAAReorder.h"
 #include "State.h"
+#include "TAAReorder.h"
 #include "Upscaling/DX12SwapChain.h"
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
@@ -999,16 +999,16 @@ void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 			D3D11_TEXTURE2D_DESC srcDesc;
 			((ID3D11Texture2D*)colorSrc)->GetDesc(&srcDesc);
 			needsRecreate = (vrIntermediateColorIn[0]->desc.Width != eyeWidthIn ||
-			                 vrIntermediateColorIn[0]->desc.Height != eyeHeightIn ||
-			                 vrIntermediateColorIn[0]->desc.Format != srcDesc.Format ||
-			                 vrCropColorIn[0]->desc.Width != cropWidthIn ||
-			                 vrCropColorIn[0]->desc.Height != cropHeightIn ||
-			                 vrIntermediateDepth[0]->desc.Width != cropWidthIn ||
-			                 vrIntermediateDepth[0]->desc.Height != cropHeightIn ||
-			                 vrIntermediateColorOut[0]->desc.Width != cropWidthOut ||
-			                 vrIntermediateColorOut[0]->desc.Height != cropHeightOut ||
-			                 vrFinalOutput[0]->desc.Width != eyeWidthOut ||
-			                 vrFinalOutput[0]->desc.Height != eyeHeightOut);
+							 vrIntermediateColorIn[0]->desc.Height != eyeHeightIn ||
+							 vrIntermediateColorIn[0]->desc.Format != srcDesc.Format ||
+							 vrCropColorIn[0]->desc.Width != cropWidthIn ||
+							 vrCropColorIn[0]->desc.Height != cropHeightIn ||
+							 vrIntermediateDepth[0]->desc.Width != cropWidthIn ||
+							 vrIntermediateDepth[0]->desc.Height != cropHeightIn ||
+							 vrIntermediateColorOut[0]->desc.Width != cropWidthOut ||
+							 vrIntermediateColorOut[0]->desc.Height != cropHeightOut ||
+							 vrFinalOutput[0]->desc.Width != eyeWidthOut ||
+							 vrFinalOutput[0]->desc.Height != eyeHeightOut);
 		}
 
 		if (needsRecreate) {
@@ -1127,7 +1127,7 @@ void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 
 			// Crop depth/mvec/reactive/transparency directly from stereo buffers
 			D3D11_BOX stereoCropBox = { offsetXIn + cropOffsetX, cropOffsetY, 0,
-			                            offsetXIn + cropOffsetX + cropWidthIn, cropOffsetY + cropHeightIn, 1 };
+				offsetXIn + cropOffsetX + cropWidthIn, cropOffsetY + cropHeightIn, 1 };
 			context->CopySubresourceRegion(vrIntermediateDepth[i]->resource.get(), 0, 0, 0, 0,
 				depthSrc, 0, &stereoCropBox);
 			context->CopySubresourceRegion(vrIntermediateMotionVectors[i]->resource.get(), 0, 0, 0, 0,
@@ -1151,10 +1151,10 @@ void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 			D3D11_TEXTURE2D_DESC srcDesc;
 			((ID3D11Texture2D*)colorSrc)->GetDesc(&srcDesc);
 			needsRecreate = (vrIntermediateColorIn[0]->desc.Width != eyeWidthIn ||
-			                 vrIntermediateColorIn[0]->desc.Height != eyeHeightIn ||
-			                 vrIntermediateColorIn[0]->desc.Format != srcDesc.Format ||
-			                 vrIntermediateColorOut[0]->desc.Width != eyeWidthOut ||
-			                 vrIntermediateColorOut[0]->desc.Height != eyeHeightOut);
+							 vrIntermediateColorIn[0]->desc.Height != eyeHeightIn ||
+							 vrIntermediateColorIn[0]->desc.Format != srcDesc.Format ||
+							 vrIntermediateColorOut[0]->desc.Width != eyeWidthOut ||
+							 vrIntermediateColorOut[0]->desc.Height != eyeHeightOut);
 		}
 		if (needsRecreate) {
 			logger::info("[Upscaling] (Re)creating VR intermediates: per-eye in {}x{}, out {}x{}",
@@ -1299,8 +1299,8 @@ void Upscaling::FinalizePerEyeOutputs(ID3D11Resource* colorDst, bool eye0Only)
 						(float)pasteX, (float)pasteY,
 						(float)dlssWidthOut, (float)dlssHeightOut,
 						featherPixels, 0.0f,
-						0.0f, 0.0f,   // SrcUVOrigin: (0,0) for per-eye textures (identity)
-						1.0f, 1.0f,    // SrcUVScale: (1,1) for per-eye textures (identity)
+						0.0f, 0.0f,  // SrcUVOrigin: (0,0) for per-eye textures (identity)
+						1.0f, 1.0f,  // SrcUVScale: (1,1) for per-eye textures (identity)
 						{}
 					};
 					memcpy(mapped.pData, &cbData, sizeof(cbData));
@@ -2037,7 +2037,6 @@ std::vector<FeatureConstraints::Constraint> Upscaling::GetActiveConstraints() co
 	return constraints;
 }
 
-
 /**
  * @brief Retrieves the current frame time for frame generation.
  *
@@ -2211,9 +2210,7 @@ void Upscaling::Upscale(ID3D11Texture2D* colorSourceOverride)
 		state->BeginPerfEvent("Upscaling");
 
 		// Use color source override if provided (e.g., post-PP intermediate for periphery TAA)
-		ID3D11Resource* colorSrc = colorSourceOverride
-			? static_cast<ID3D11Resource*>(colorSourceOverride)
-			: static_cast<ID3D11Resource*>(main.texture);
+		ID3D11Resource* colorSrc = colorSourceOverride ? static_cast<ID3D11Resource*>(colorSourceOverride) : static_cast<ID3D11Resource*>(main.texture);
 
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
 			streamline.Upscale(colorSrc, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
@@ -2575,4 +2572,3 @@ void Upscaling::BSFaceGenManager_UpdatePendingCustomizationTextures::thunk()
 	func();
 	runtimeData.dynamicResolutionLock = 0;
 }
-

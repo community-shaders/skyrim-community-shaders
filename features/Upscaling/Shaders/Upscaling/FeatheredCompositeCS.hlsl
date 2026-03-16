@@ -1,19 +1,17 @@
 cbuffer FeatherCB : register(b0)
 {
-	uint CropX;         // paste position X in output space
-	uint CropY;         // paste position Y in output space
-	uint CropW;         // crop width
-	uint CropH;         // crop height
-	float FeatherWidth; // feather distance in pixels (inward from crop edge)
+	uint CropX;          // paste position X in output space
+	uint CropY;          // paste position Y in output space
+	uint CropW;          // crop width
+	uint CropH;          // crop height
+	float FeatherWidth;  // feather distance in pixels (inward from crop edge)
 	float3 pad;
 };
 
-Texture2D<float4> CropTexture : register(t0);       // DLSS output (crop-sized, at {0,0})
-RWTexture2D<float4> OutputTexture : register(u0);    // vrFinalOutput (already filled with periphery)
+Texture2D<float4> CropTexture : register(t0);      // DLSS output (crop-sized, at {0,0})
+RWTexture2D<float4> OutputTexture : register(u0);  // vrFinalOutput (already filled with periphery)
 
-[numthreads(8, 8, 1)]
-void main(uint3 dispatchID : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	// dispatchID is in crop-local space (0..CropW-1, 0..CropH-1)
 	int2 cropLocal = int2(dispatchID.xy);
 	if (cropLocal.x >= (int)CropW || cropLocal.y >= (int)CropH)
