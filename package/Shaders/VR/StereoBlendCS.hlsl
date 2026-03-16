@@ -22,6 +22,8 @@ RWTexture2D<float4> OutputRW : register(u0);
 #ifdef STEREO_OVERWRITE
 RWTexture2D<float2> MotionRW : register(u1);
 Texture2D<uint> ModeTexture : register(t2);
+Texture2D<float4> ReflectanceTexture : register(t3);  // .w = POM pixelOffset from Lighting pass
+SamplerState LinearSampler : register(s0);
 
 // Mode constants matching VRStereoOptimizations/cbuffers.hlsli
 // (can't include directly — its cbuffer on b1 conflicts with StereoBlendCB)
@@ -30,6 +32,23 @@ Texture2D<uint> ModeTexture : register(t2);
 #define MODE_MAIN            2
 #define MODE_EDGE_NEIGHBOUR  3
 #define MODE_FULL_BLEND      4
+
+// Hardware bilinear color sample from reprojected pixel coordinates.
+// Converts integer pixel coords to proper full-texture UV for SampleLevel,
+// clamped to the active DRS viewport to prevent sampling stale data.
+// Motion vectors stay as integer Load() — filtering them breaks DLSS.
+float4 SampleReprojectedColor(int2 reprojPx, float2 frameDim)
+{
+	uint texW, texH;
+	ColorTexture.GetDimensions(texW, texH);
+	float2 texSize = float2(texW, texH);
+	float2 sampleUV = (float2(reprojPx) + 0.5) / texSize;
+	// Clamp to active DRS viewport bounds (half-texel inset to keep bilinear inside valid region)
+	float2 minUV = 0.5 / texSize;
+	float2 maxUV = (frameDim - 0.5) / texSize;
+	sampleUV = clamp(sampleUV, minUV, maxUV);
+	return ColorTexture.SampleLevel(LinearSampler, sampleUV, 0);
+}
 #endif
 
 cbuffer StereoBlendCB : register(b1)
@@ -40,9 +59,10 @@ cbuffer StereoBlendCB : register(b1)
 	float MaxBlendFactor;
 	float ColorDiffThreshold;
 	float DebugEdgeTint;
-	uint DebugMode;       // 0 = normal, 1 = depth map diagnostic, 2 = full blend depth visualizer
+	uint DebugMode;       // 0 = normal, 1 = depth map diagnostic, 2 = full blend depth visualizer, 3 = POM depth heatmap
 	float FullBlendDistance;
-	float2 _pad;
+	float POMDepthScale;
+	float _pad;
 };
 
 static const float kEdgeDepthThreshold = 0.05;       // NDC depth difference above which a pixel is considered a depth discontinuity and excluded from stereo blend
@@ -109,6 +129,20 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 		return;
 	}
 
+	// Debug mode 3: POM depth data visualizer — show Reflectance.w as color
+	if (DebugMode == 3) {
+		float pomVal = ReflectanceTexture[dtid].w;
+		float4 c = ColorTexture[dtid];
+		if (pomVal > 1e-2) {
+			// POM pixel: red-to-green gradient based on parallaxAmount
+			// Red = peak (high pomVal, closer to camera), Green = valley (low pomVal, farther), Yellow = geometry plane
+			float3 pomColor = float3(pomVal, 1.0 - pomVal, 0);
+			OutputRW[dtid] = float4(lerp(c.rgb, pomColor, 0.7), c.a);
+		}
+		// Non-POM pixels (pomVal ~ 0) left untouched
+		return;
+	}
+
 	// MODE_DISOCCLUDED: fully shaded, leave untouched
 	if (pixelMode == MODE_DISOCCLUDED)
 		return;
@@ -117,8 +151,23 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 	if (pixelMode == MODE_FULL_BLEND) {
 		float4 center = ColorTexture[dtid];
 
+		// Check for POM depth offset at this pixel
+		// pixelOffset = parallaxAmount (0-1) from ExtendedMaterials, 0.5 = geometry plane.
+		// Values > 0.5 are peaks (closer to camera), < 0.5 are valleys (farther from camera).
+		// Correction: high pomVal should push depth closer (smaller linear depth),
+		// so we use (0.5 - pomOffset) to get a negative correction for peaks.
+		// Non-POM pixels store 0.0, so threshold > 1e-2 distinguishes them.
+		float reprojDepthFB = centerDepth;
+		float pomOffsetFB = ReflectanceTexture[dtid].w;
+		if (pomOffsetFB > 1e-2 && POMDepthScale > 0) {
+			float linDepthFB = SharedData::GetScreenDepth(centerDepth);
+			float depthCorrectionFB = (0.5 - pomOffsetFB) * POMDepthScale;
+			float newLinDepthFB = linDepthFB + depthCorrectionFB;
+			reprojDepthFB = (SharedData::CameraData.x - SharedData::CameraData.w / newLinDepthFB) / SharedData::CameraData.z;
+		}
+
 		// Reproject to the other eye
-		Stereo::StereoBilateralResult r = Stereo::ReprojectToOtherEye(uv, centerDepth, eyeIndex, FrameDim);
+		Stereo::StereoBilateralResult r = Stereo::ReprojectToOtherEye(uv, reprojDepthFB, eyeIndex, FrameDim);
 		if (!r.valid) {
 			// Debug tint for failed reprojection
 			if (DebugEdgeTint > 0)
@@ -131,7 +180,7 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 		if (otherMode != MODE_FULL_BLEND && otherMode != MODE_DISOCCLUDED)
 			return;
 
-		float4 otherColor = ColorTexture[r.otherPx];
+		float4 otherColor = SampleReprojectedColor(r.otherPx, FrameDim);
 		float otherDepth = DepthTexture[r.otherPx];
 
 		// Depth-weighted bilateral blend
@@ -160,9 +209,30 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 	// Eye 1: reproject all non-disoccluded, non-full-blend pixels (MAIN, EDGE) from Eye 0.
 	// StencilCS already performed the authoritative disocclusion check with the correct
 	// depth buffer state — no redundant depth agreement check here.
-	Stereo::StereoBilateralResult r = Stereo::ReprojectToOtherEye(uv, centerDepth, eyeIndex, FrameDim);
+	float reprojDepth = centerDepth;
+
+	// First-pass reprojection to find Eye 0 source pixel
+	Stereo::StereoBilateralResult r = Stereo::ReprojectToOtherEye(uv, reprojDepth, eyeIndex, FrameDim);
 	if (!r.valid)
 		return;
+
+	// Read POM offset from Eye 0 source's reflectance.w
+	// pixelOffset = parallaxAmount (0-1) from ExtendedMaterials, 0.5 = geometry plane.
+	// Values > 0.5 are peaks (closer to camera), < 0.5 are valleys (farther from camera).
+	// Correction: high pomVal should push depth closer (smaller linear depth),
+	// so we use (0.5 - pomOffset) to get a negative correction for peaks.
+	// Non-POM pixels store 0.0, so threshold > 1e-2 distinguishes them.
+	float pomOffset = ReflectanceTexture[r.otherPx].w;
+	if (pomOffset > 1e-2) {
+		// Re-reproject with POM-adjusted depth centered at geometry plane
+		float linearDepth = SharedData::GetScreenDepth(centerDepth);
+		float depthCorrection = (0.5 - pomOffset) * POMDepthScale;
+		float newLinearDepth = linearDepth + depthCorrection;
+		reprojDepth = (SharedData::CameraData.x - SharedData::CameraData.w / newLinearDepth) / SharedData::CameraData.z;
+		r = Stereo::ReprojectToOtherEye(uv, reprojDepth, eyeIndex, FrameDim);
+		if (!r.valid)
+			return;
+	}
 
 	// Skip if the Eye 0 source pixel is sky/unrendered (depth at clear value).
 	// At DeferredPasses time, sky hasn't rendered yet — source would have clear color.
@@ -171,7 +241,7 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 	if (sourceDepth >= 1.0 || sourceDepth < 1e-5)
 		return;
 
-	OutputRW[dtid] = ColorTexture[r.otherPx];
+	OutputRW[dtid] = SampleReprojectedColor(r.otherPx, FrameDim);
 	MotionRW[dtid] = MotionRW[r.otherPx];
 
 #else  // Normal bilateral blend path

@@ -5,6 +5,7 @@
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/VRStereoOptimizations.h"
 #include "State.h"
+#include "Deferred.h"
 
 void VR::ClearShaderCache()
 {
@@ -79,10 +80,13 @@ void VR::DrawStereoBlend()
 		cbData.DebugMode = 1u;
 	else if (vrStereoOptActive && globals::features::vrStereoOptimizations.settings.debugFullBlendDepth)
 		cbData.DebugMode = 2u;
+	else if (vrStereoOptActive && globals::features::vrStereoOptimizations.settings.debugPOMDepth)
+		cbData.DebugMode = 3u;
 	else
 		cbData.DebugMode = 0u;
 
 	cbData.FullBlendDistance = vrStereoOptActive ? globals::features::vrStereoOptimizations.settings.fullBlendDistance : 0.0f;
+	cbData.POMDepthScale = vrStereoOptActive ? globals::features::vrStereoOptimizations.settings.pomDepthScale : 1.0f;
 
 	stereoBlendCB->Update(cbData);
 	auto cbPtr = stereoBlendCB->CB();
@@ -125,6 +129,10 @@ void VR::DrawStereoBlend()
 		if (modeSRV)
 			context->CSSetShaderResources(2, 1, &modeSRV);
 
+		// Bind REFLECTANCE SRV for POM depth offset (stored in .w by Lighting pass)
+		auto& reflectanceRT = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
+		context->CSSetShaderResources(3, 1, &reflectanceRT.SRV);
+
 		ID3D11UnorderedAccessView* uavs[2]{ main.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
 	} else {
@@ -132,16 +140,34 @@ void VR::DrawStereoBlend()
 		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 	}
 
+	// Bind linear sampler for hardware bilinear color sampling in overwrite mode
+	if (isOverwriteMode) {
+		if (!stereoBlendLinearSampler) {
+			D3D11_SAMPLER_DESC sampDesc = {};
+			sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+			sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+			sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+			sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+			globals::d3d::device->CreateSamplerState(&sampDesc, stereoBlendLinearSampler.put());
+		}
+		ID3D11SamplerState* samplers[] = { stereoBlendLinearSampler.get() };
+		context->CSSetSamplers(0, 1, samplers);
+	}
+
 	context->CSSetShader(activeCS, nullptr, 0);
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 	// Cleanup
-	ID3D11ShaderResourceView* nullSRVs[3] = {};
-	context->CSSetShaderResources(0, isOverwriteMode ? 3 : 2, nullSRVs);
+	ID3D11ShaderResourceView* nullSRVs[4] = {};
+	context->CSSetShaderResources(0, isOverwriteMode ? 4 : 2, nullSRVs);
 	ID3D11UnorderedAccessView* nullUAVs[2] = {};
 	context->CSSetUnorderedAccessViews(0, isOverwriteMode ? 2 : 1, nullUAVs, nullptr);
 	ID3D11Buffer* nullCB = nullptr;
 	context->CSSetConstantBuffers(1, 1, &nullCB);
+	if (isOverwriteMode) {
+		ID3D11SamplerState* nullSampler[] = { nullptr };
+		context->CSSetSamplers(0, 1, nullSampler);
+	}
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	// Restore DSV after CS dispatch in overwrite mode

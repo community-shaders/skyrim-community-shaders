@@ -361,6 +361,7 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendOverwriteCS;
 	eastl::unique_ptr<Texture2D> stereoBlendCopyTex;
 	eastl::unique_ptr<ConstantBuffer> stereoBlendCB;
+	winrt::com_ptr<ID3D11SamplerState> stereoBlendLinearSampler;
 
 	struct alignas(16) StereoBlendCB
 	{
@@ -372,7 +373,8 @@ public:
 		float DebugEdgeTint;
 		uint32_t DebugMode;
 		float FullBlendDistance;
-		float _pad[2];
+		float POMDepthScale;
+		float _pad;
 	};
 
 	// Engine hook integration points
