@@ -1783,11 +1783,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// VR MIP bias: depth-gated sharpening for distant textures
 	// Mode 1 = All Textures, Mode 2 = Distant Trees (TREE_ANIM) only
 	float vrFoliageBias = 0;
-#	if defined(TREE_ANIM)
+#		if defined(TREE_ANIM)
 	if (SharedData::VRMipBias < 0) {
-#	else
+#		else
 	if (SharedData::VRMipBias < 0 && SharedData::VRMipBiasMode == 1) {
-#	endif
+#		endif
 		float linDepth = SharedData::GetScreenDepth(input.Position.z);
 		float t = saturate((linDepth - SharedData::VRMipBiasNearDist) / max(SharedData::VRMipBiasFarDist - SharedData::VRMipBiasNearDist, 1.0));
 		vrFoliageBias = SharedData::VRMipBias * t;
@@ -3109,7 +3109,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #			endif  // TREE_ANIM
 #		endif      // DO_ALPHA_TEST
-
 
 #		if defined(ANISOTROPIC_ALPHA)
 	// Uniform alpha material settings

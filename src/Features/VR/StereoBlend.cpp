@@ -1,11 +1,11 @@
 #include "Features/VR.h"
 
+#include "Deferred.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/VRStereoOptimizations.h"
 #include "State.h"
-#include "Deferred.h"
 
 void VR::ClearShaderCache()
 {
@@ -183,5 +183,4 @@ void VR::DrawStereoBlend()
 
 	if (globals::state->frameAnnotations)
 		globals::state->EndPerfEvent();
-
 }

@@ -504,10 +504,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float diffuseAlpha = input.VertexColor.w * baseColor.w;
 	{
 		float alphaRef = AlphaTestRefRS;
-#if defined(VR)
+#			if defined(VR)
 		uint convergenceEyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 		alphaRef -= convergenceEyeIndex * 0.1;
-#endif
+#			endif
 		if ((diffuseAlpha - alphaRef) < 0) {
 			discard;
 		}
@@ -875,10 +875,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float diffuseAlpha = input.VertexColor.w * baseColor.w;
 	{
 		float alphaRef = AlphaTestRefRS;
-#if defined(VR)
+#			if defined(VR)
 		uint convergenceEyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 		alphaRef -= convergenceEyeIndex * 0.1;
-#endif
+#			endif
 		if ((diffuseAlpha - alphaRef) < 0) {
 			discard;
 		}

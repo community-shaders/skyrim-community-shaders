@@ -20,15 +20,15 @@ namespace SharedData
 		float Timer;
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
-		bool InInterior;  // If the area lacks a directional shadow light e.g. the sun or moon
-		bool InMapMenu;   // If the world/local map is open (note that the renderer is still deferred here)
-		bool HideSky;     // HideSky flag in WorldSpace, e.g. Blackreach
-		float MipBias;              // Offset to mip level for TAA sharpness
-		float VRMipBias;            // Additional negative MIP bias for VR foliage sharpening (depth-scaled)
-		float VRMipBiasNearDist;    // Game units: no VR MIP bias closer than this
-		float VRMipBiasFarDist;     // Game units: full VR MIP bias beyond this
-		uint VRMipBiasMode;         // 0=Off, 1=All Textures, 2=Distant Trees (TREE_ANIM) only
-		float VRAlphaTestThreshold; // Alpha test threshold for VR TREE_ANIM (0 = disabled)
+		bool InInterior;             // If the area lacks a directional shadow light e.g. the sun or moon
+		bool InMapMenu;              // If the world/local map is open (note that the renderer is still deferred here)
+		bool HideSky;                // HideSky flag in WorldSpace, e.g. Blackreach
+		float MipBias;               // Offset to mip level for TAA sharpness
+		float VRMipBias;             // Additional negative MIP bias for VR foliage sharpening (depth-scaled)
+		float VRMipBiasNearDist;     // Game units: no VR MIP bias closer than this
+		float VRMipBiasFarDist;      // Game units: full VR MIP bias beyond this
+		uint VRMipBiasMode;          // 0=Off, 1=All Textures, 2=Distant Trees (TREE_ANIM) only
+		float VRAlphaTestThreshold;  // Alpha test threshold for VR TREE_ANIM (0 = disabled)
 		float2 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;

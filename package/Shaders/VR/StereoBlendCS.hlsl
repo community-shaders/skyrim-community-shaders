@@ -27,11 +27,11 @@ SamplerState LinearSampler : register(s0);
 
 // Mode constants matching VRStereoOptimizations/cbuffers.hlsli
 // (can't include directly — its cbuffer on b1 conflicts with StereoBlendCB)
-#define MODE_DISOCCLUDED     0
-#define MODE_EDGE            1
-#define MODE_MAIN            2
-#define MODE_EDGE_NEIGHBOUR  3
-#define MODE_FULL_BLEND      4
+#	define MODE_DISOCCLUDED 0
+#	define MODE_EDGE 1
+#	define MODE_MAIN 2
+#	define MODE_EDGE_NEIGHBOUR 3
+#	define MODE_FULL_BLEND 4
 
 // Hardware bilinear color sample from reprojected pixel coordinates.
 // Converts integer pixel coords to proper full-texture UV for SampleLevel,
@@ -59,13 +59,13 @@ cbuffer StereoBlendCB : register(b1)
 	float MaxBlendFactor;
 	float ColorDiffThreshold;
 	float DebugEdgeTint;
-	uint DebugMode;       // 0 = normal, 1 = depth map diagnostic, 2 = full blend depth visualizer, 3 = POM depth heatmap
+	uint DebugMode;  // 0 = normal, 1 = depth map diagnostic, 2 = full blend depth visualizer, 3 = POM depth heatmap
 	float FullBlendDistance;
 	float POMDepthScale;
 	float _pad;
 };
 
-static const float kEdgeDepthThreshold = 0.05;       // NDC depth difference above which a pixel is considered a depth discontinuity and excluded from stereo blend
+static const float kEdgeDepthThreshold = 0.05;        // NDC depth difference above which a pixel is considered a depth discontinuity and excluded from stereo blend
 static const int kEdgeMargin = 2;                     // Neighbor offset (pixels) for destination edge + mask boundary check
 static const float kDepthAgreementThreshold = 0.015;  // Relative depth difference threshold for overwrite mode disocclusion rejection
 
@@ -246,12 +246,12 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 
 #else  // Normal bilateral blend path
 
-#ifdef EYE0_ONLY
+#	ifdef EYE0_ONLY
 	// Only process Eye 0 (left half) - Eye 1 left untouched
 	float2 uvCheck = (dtid + 0.5) * RcpFrameDim;
 	if (Stereo::GetEyeIndexFromTexCoord(uvCheck) == 1)
 		return;
-#endif
+#	endif
 
 	float2 uv = (dtid + 0.5) * RcpFrameDim;
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
@@ -305,7 +305,7 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 		}
 	}
 
-#ifdef DEBUG_BACKCHECK
+#	ifdef DEBUG_BACKCHECK
 	// Debug visualization (6 states):
 	//   Blue   = mask/sky: skipped
 	//   Yellow = source edge: depth discontinuity at this pixel
@@ -322,7 +322,7 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 		float3(0.5, 0.0, 0.0)   // 5: back-check failed - red
 	};
 	OutputRW[dtid] = float4(lerp(centerColor.rgb, debugColors[debugState], 0.7), centerColor.a);
-#elif defined(DEBUG_BLEND_WEIGHT)
+#	elif defined(DEBUG_BLEND_WEIGHT)
 	// Blend weight heatmap: only pixels with actual blend activity are colorized.
 	// Untouched pixels pass through unmodified.
 	float w = saturate(r.blendWeight / max(MaxBlendFactor, 1e-5));
@@ -332,7 +332,7 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 	} else {
 		OutputRW[dtid] = centerColor;
 	}
-#elif defined(DEBUG_EDGE_DETECTION)
+#	elif defined(DEBUG_EDGE_DETECTION)
 	// Edge detection visualizer: highlights pixels excluded by depth discontinuity checks.
 	// Non-edge pixels show the normal blended output for scene context.
 	//   Bright yellow = source edge: discontinuity at this pixel
@@ -344,9 +344,9 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 	} else {
 		OutputRW[dtid] = blendedColor;
 	}
-#else
+#	else
 	OutputRW[dtid] = blendedColor;
-#endif
+#	endif
 
 #endif  // STEREO_OVERWRITE
 }

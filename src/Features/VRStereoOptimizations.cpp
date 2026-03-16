@@ -10,9 +10,9 @@
 
 // JSON enum serialization for StereoMode
 NLOHMANN_JSON_SERIALIZE_ENUM(VRStereoOptimizations::StereoMode, {
-	{ VRStereoOptimizations::StereoMode::Off, "Off" },
-	{ VRStereoOptimizations::StereoMode::Enable, "Enable" },
-})
+																	{ VRStereoOptimizations::StereoMode::Off, "Off" },
+																	{ VRStereoOptimizations::StereoMode::Enable, "Enable" },
+																})
 
 //=============================================================================
 // SETTINGS MANAGEMENT
@@ -333,7 +333,6 @@ void VRStereoOptimizations::DrawSettings()
 			ImGui::SetTooltip("Game units. Full MIP bias beyond this distance.\nSmooth ramp between near and far.");
 	}
 	ImGui::Separator();
-
 
 	// CAS slider hidden for now — forced to 0
 	// ImGui::SliderFloat("CAS Sharpening", &settings.casStrength, 0.0f, 1.0f, "%.2f");

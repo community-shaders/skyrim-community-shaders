@@ -8,8 +8,8 @@
 //
 // Dispatched over full SBS resolution (FrameDim.x x FrameDim.y).
 
-#include "Common/VR.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/VR.hlsli"
 #include "VRStereoOptimizations/cbuffers.hlsli"
 
 Texture2D<float> DepthTexture : register(t0);
@@ -105,25 +105,25 @@ static const float kDisocclusionThreshold = 0.015;
 	uint maxWidth = kInnerWidth;
 
 	if (!skipEdgeDetection) {
-	[loop]
-	for (uint d = 1; d <= maxWidth; d++) {
-		[unroll]
-		for (int i = 0; i < 4; i++) {
-			int2 rawNeighbor = int2(dtid) + offsets[i] * (int)d;
-			uint2 neighborCoord = Stereo::ClampToEyeBounds(rawNeighbor, eyeIndex, FrameDim);
+		[loop] for (uint d = 1; d <= maxWidth; d++)
+		{
+			[unroll] for (int i = 0; i < 4; i++)
+			{
+				int2 rawNeighbor = int2(dtid) + offsets[i] * (int)d;
+				uint2 neighborCoord = Stereo::ClampToEyeBounds(rawNeighbor, eyeIndex, FrameDim);
 
-			float neighborDepth = DepthTexture[neighborCoord];
-			bool neighborIsSky = (neighborDepth < 1e-5) || (neighborDepth >= 1.0);
-			float linNeighbor = neighborIsSky ? 999999.0 : SharedData::GetScreenDepth(neighborDepth);
-			float maxLin = max(max(linCenter, linNeighbor), 1e-5);
-			float relDepthDiff = abs(linCenter - linNeighbor) / maxLin;
+				float neighborDepth = DepthTexture[neighborCoord];
+				bool neighborIsSky = (neighborDepth < 1e-5) || (neighborDepth >= 1.0);
+				float linNeighbor = neighborIsSky ? 999999.0 : SharedData::GetScreenDepth(neighborDepth);
+				float maxLin = max(max(linCenter, linNeighbor), 1e-5);
+				float relDepthDiff = abs(linCenter - linNeighbor) / maxLin;
 
-			if (relDepthDiff > EdgeDepthThreshold && d < nearestEdgeDist) {
-				nearestEdgeDist = d;
-				nearestWeAreOuter = (linNeighbor < linCenter);  // neighbor closer to camera = we are background
+				if (relDepthDiff > EdgeDepthThreshold && d < nearestEdgeDist) {
+					nearestEdgeDist = d;
+					nearestWeAreOuter = (linNeighbor < linCenter);  // neighbor closer to camera = we are background
+				}
 			}
 		}
-	}
 
 	}  // !skipEdgeDetection
 

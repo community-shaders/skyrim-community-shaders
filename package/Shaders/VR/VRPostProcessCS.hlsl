@@ -20,20 +20,19 @@ cbuffer VRPostProcessCB : register(b1)
 {
 	float2 FrameDim;
 	float2 RcpFrameDim;
-	float DebugEdgeTint;  // 0 = off, >0 = debug visualization strength
-	uint DebugMode;       // 0 = normal, 1 = depth map diagnostic, 2 = full blend depth visualizer
+	float DebugEdgeTint;      // 0 = off, >0 = debug visualization strength
+	uint DebugMode;           // 0 = normal, 1 = depth map diagnostic, 2 = full blend depth visualizer
 	float FullBlendDistance;  // Linearized depth threshold for full blend zone visualization
-	float _pad;              // Pad to 16-byte alignment
+	float _pad;               // Pad to 16-byte alignment
 };
 
-#define MODE_DISOCCLUDED    0
-#define MODE_EDGE           1
-#define MODE_MAIN           2
+#define MODE_DISOCCLUDED 0
+#define MODE_EDGE 1
+#define MODE_MAIN 2
 #define MODE_EDGE_NEIGHBOUR 3
-#define MODE_FULL_BLEND     4
+#define MODE_FULL_BLEND 4
 
-[numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	if (any(dtid >= uint2(FrameDim)))
 		return;
 

@@ -28,16 +28,16 @@ struct VRStereoOptimizations : public Feature
 	/// Operating mode for stereo reprojection
 	enum class StereoMode : uint32_t
 	{
-		Off = 0,      ///< Feature disabled
-		Enable = 1    ///< Stereo reprojection enabled
+		Off = 0,    ///< Feature disabled
+		Enable = 1  ///< Stereo reprojection enabled
 	};
 
 	/// Per-pixel classification written by StencilCS
 	enum PixelMode : uint8_t
 	{
-		MODE_DISOCCLUDED = 0,  ///< Fully shaded, no reprojection, no blend
-		MODE_EDGE = 1,         ///< Fully shaded + bilateral blend with other eye
-		MODE_MAIN = 2,         ///< Eye 0: no reproject (Perf) / bilateral (Quality). Eye 1: overwrite (Perf) / bilateral (Quality)
+		MODE_DISOCCLUDED = 0,     ///< Fully shaded, no reprojection, no blend
+		MODE_EDGE = 1,            ///< Fully shaded + bilateral blend with other eye
+		MODE_MAIN = 2,            ///< Eye 0: no reproject (Perf) / bilateral (Quality). Eye 1: overwrite (Perf) / bilateral (Quality)
 		MODE_EDGE_NEIGHBOUR = 3,  ///< Outer band: background pixels near edge, blended in post-process
 	};
 
@@ -80,10 +80,10 @@ struct VRStereoOptimizations : public Feature
 		StereoMode stereoMode = StereoMode::Enable;
 		float disocclusionDepthThreshold = 0.01f;
 		float edgeDepthThreshold = 0.05f;
-		int edgeWidth = 3;  ///< Half-width of edge band in pixels (total band = 2 * edgeWidth)
-		float minEdgeDistance = 5000.0f;  ///< Minimum linearized depth for edge AA (game units)
-		float fullBlendDistance = 0.0f;  ///< Linearized depth below which both eyes are fully shaded + blended (game units)
-		float pomDepthScale = 22.5f;  ///< Scale factor for POM depth correction in stereo reprojection
+		int edgeWidth = 3;                 ///< Half-width of edge band in pixels (total band = 2 * edgeWidth)
+		float minEdgeDistance = 5000.0f;   ///< Minimum linearized depth for edge AA (game units)
+		float fullBlendDistance = 0.0f;    ///< Linearized depth below which both eyes are fully shaded + blended (game units)
+		float pomDepthScale = 22.5f;       ///< Scale factor for POM depth correction in stereo reprojection
 		bool debugFullBlendDepth = false;  ///< Show full blend depth zone as cyan overlay
 		float qualityJitterOffset = 0.125f;
 		float foveatedRegionRadius = 0.3f;
@@ -105,11 +105,11 @@ struct VRStereoOptimizations : public Feature
 		// 0 = Off, 1 = All textures (global), 2 = Distant trees only (depth-gated TREE_ANIM)
 		int mipBiasMode = 0;
 		float mipLodBias = -2.0f;
-		float mipBiasNearDist = 2000.0f;   ///< Game units: no bias closer than this
-		float mipBiasFarDist = 6000.0f;    ///< Game units: full bias beyond this
+		float mipBiasNearDist = 2000.0f;  ///< Game units: no bias closer than this
+		float mipBiasFarDist = 6000.0f;   ///< Game units: full bias beyond this
 
 		// CAS (Contrast Adaptive Sharpening) - post-TAA
-		float casStrength = 0.0f;  ///< 0.0 = disabled, 0.0-1.0 = subtle to strong (hidden for now)
+		float casStrength = 0.0f;           ///< 0.0 = disabled, 0.0-1.0 = subtle to strong (hidden for now)
 		float alphaTestThreshold = 0.001f;  ///< Alpha floor for TREE_ANIM zombie texel removal
 	} settings;
 
@@ -119,21 +119,21 @@ struct VRStereoOptimizations : public Feature
 
 	struct alignas(16) VRStereoOptParams
 	{
-		float FrameDim[2];              // Full stereo buffer dimensions
-		float RcpFrameDim[2];           // 1.0 / FrameDim
+		float FrameDim[2];     // Full stereo buffer dimensions
+		float RcpFrameDim[2];  // 1.0 / FrameDim
 
-		uint32_t StereoModeValue;       // Cast of StereoMode enum (0-3)
+		uint32_t StereoModeValue;  // Cast of StereoMode enum (0-3)
 		float DisocclusionThreshold;
 		float EdgeDepthThreshold;
 		uint32_t EdgeWidth;
 
-		float QualityJitter[2];         // Sub-pixel jitter offset (Quality mode)
+		float QualityJitter[2];  // Sub-pixel jitter offset (Quality mode)
 		float FoveatedRadius;
 		float pad2;
 
-		float FoveatedCenter[2];        // Foveal region center UV
+		float FoveatedCenter[2];  // Foveal region center UV
 		float MinEdgeDistance;
-		float FullBlendDistance;   // Linearized depth for full blend zone
+		float FullBlendDistance;  // Linearized depth for full blend zone
 	};
 	static_assert(sizeof(VRStereoOptParams) % 16 == 0, "VRStereoOptParams must be 16-byte aligned for HLSL cbuffer.");
 
@@ -205,8 +205,8 @@ private:
 	//=============================================================================
 
 	eastl::unique_ptr<ConstantBuffer> paramsCB;
-	eastl::unique_ptr<Texture2D> texPerPixelMode;       ///< R8_UINT classification texture (full SBS resolution)
-	eastl::unique_ptr<Texture2D> reprojectionCopyTex;    ///< Copy of main RT for reprojection read
+	eastl::unique_ptr<Texture2D> texPerPixelMode;      ///< R8_UINT classification texture (full SBS resolution)
+	eastl::unique_ptr<Texture2D> reprojectionCopyTex;  ///< Copy of main RT for reprojection read
 
 	winrt::com_ptr<ID3D11DepthStencilState> stencilWriteDSS;
 	winrt::com_ptr<ID3D11RasterizerState> stencilWriteRS;
@@ -220,8 +220,8 @@ private:
 
 	// CAS sharpening resources
 	winrt::com_ptr<ID3D11ComputeShader> casCS;
-	eastl::unique_ptr<Texture2D> casTex;  ///< UAV-capable texture for CAS output
-	winrt::com_ptr<ID3D11Buffer> casParamsBuf;       ///< Structured buffer for CAS sharpness param
+	eastl::unique_ptr<Texture2D> casTex;                    ///< UAV-capable texture for CAS output
+	winrt::com_ptr<ID3D11Buffer> casParamsBuf;              ///< Structured buffer for CAS sharpness param
 	winrt::com_ptr<ID3D11ShaderResourceView> casParamsSRV;  ///< SRV for CAS sharpness param
 
 	/// Cache of original DSS -> modified DSS with stencil NOT_EQUAL enforcement

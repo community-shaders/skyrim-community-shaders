@@ -205,9 +205,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	{
 		float alphaRef = AlphaTestRefRS;
-#if defined(VR)
+#		if defined(VR)
 		alphaRef -= eyeIndex * 0.1;
-#endif
+#		endif
 		if ((alpha - alphaRef) < 0) {
 			discard;
 		}
@@ -221,9 +221,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	{
 		float alphaRef = AlphaTestRefRS;
-#if defined(VR)
+#		if defined(VR)
 		alphaRef -= eyeIndex * 0.1;
-#endif
+#		endif
 		if ((baseColor.w - alphaRef) < 0) {
 			discard;
 		}

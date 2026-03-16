@@ -29,11 +29,11 @@
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
+#include "Features/VRStereoOptimizations.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
 #include "Features/WeatherEditor.h"
-#include "Features/VRStereoOptimizations.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
 #include "ShaderCache.h"
@@ -293,7 +293,6 @@ namespace globals
 				if (stereoOpt.loaded && stereoOpt.IsStencilActive()) {
 					pDepthStencilState = stereoOpt.GetOrCreateModifiedDSS(pDepthStencilState);
 					StencilRef = 1;  // Must match the ref written by our stencil pass
-
 				}
 			}
 			func(This, pDepthStencilState, StencilRef);
