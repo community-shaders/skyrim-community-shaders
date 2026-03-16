@@ -30,9 +30,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	invertLog,
 	enableTonemap,
 	enableColorSpaceTransform,
-	inputColorSpace,
 	processColorSpace,
-	outputColorSpace,
 	colorSpaceTransform,
 	invColorSpaceTransform)
 
@@ -210,9 +208,6 @@ struct TonemapperInfo
 				"Tonemapper designed for Gran Turismo 7."sv,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
-					ImGui::Checkbox("HDR Output (not working for now)", (bool*)&params[0].y);
-					if (params[0].y)
-						ImGui::InputFloat("HDR Max Brightness", &params[0].z, 0.f, 0.f, "%1.f nits");
 				},
 				{ f4{ 1.f, 0.f, 400.f, 0.f } } }
 		};
@@ -381,27 +376,15 @@ void ColorGrading::DrawSettings()
 	ImGui::SliderFloat("Fade Blend", &settings.gameFadeBlend, 0.f, 1.f, "%.3f");
 	ImGui::SliderFloat("Tint Blend", &settings.gameTintBlend, 0.f, 1.f, "%.3f");
 	ImGui::SeparatorText("Color Space Transform");
-	ImGui::Checkbox("Enable Color Space Transform", &settings.enableColorSpaceTransform);
+	ImGui::Checkbox("Enable Working Color Space Conversion", &settings.enableColorSpaceTransform);
 	if (settings.enableColorSpaceTransform) {
 		auto& spaces = getAvailableColourSpaces();
-		ImGui::Combo("Input Color Space", &settings.inputColorSpace, spaces.data(), (int)spaces.size());
-		ImGui::Combo("Process Color Space", &settings.processColorSpace, spaces.data(), (int)spaces.size());
-		ImGui::Combo("Output Color Space", &settings.outputColorSpace, spaces.data(), (int)spaces.size());
 
-		auto colorSpaceTransformMatrix = getRGBMatrix(spaces[settings.inputColorSpace], spaces[settings.processColorSpace]);
-		auto invColorSpaceTransformMatrix = getRGBMatrix(spaces[settings.processColorSpace], spaces[settings.outputColorSpace]);
+		ImGui::TextDisabled("Input Color Space: %s (fixed)", spaces[0]);
+		ImGui::Combo("Working Color Space", &settings.processColorSpace, spaces.data(), (int)spaces.size());
+		ImGui::TextDisabled("Output Color Space: %s (fixed)", spaces[0]);
 
-		settings.colorSpaceTransform = {
-			float3{ colorSpaceTransformMatrix(0, 0), colorSpaceTransformMatrix(0, 1), colorSpaceTransformMatrix(0, 2) },
-			float3{ colorSpaceTransformMatrix(1, 0), colorSpaceTransformMatrix(1, 1), colorSpaceTransformMatrix(1, 2) },
-			float3{ colorSpaceTransformMatrix(2, 0), colorSpaceTransformMatrix(2, 1), colorSpaceTransformMatrix(2, 2) }
-		};
-
-		settings.invColorSpaceTransform = {
-			float3{ invColorSpaceTransformMatrix(0, 0), invColorSpaceTransformMatrix(0, 1), invColorSpaceTransformMatrix(0, 2) },
-			float3{ invColorSpaceTransformMatrix(1, 0), invColorSpaceTransformMatrix(1, 1), invColorSpaceTransformMatrix(1, 2) },
-			float3{ invColorSpaceTransformMatrix(2, 0), invColorSpaceTransformMatrix(2, 1), invColorSpaceTransformMatrix(2, 2) }
-		};
+		UpdateColorSpaceTransforms();
 	}
 
 	if (ImGui::Button("Save LUT and Output Image")) {
@@ -424,6 +407,8 @@ void ColorGrading::LoadSettings(json& o_json)
 {
 	try {
 		settings = o_json;
+		auto& spaces = getAvailableColourSpaces();
+		settings.processColorSpace = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
 
 		auto& tonemappers = TonemapperInfo::GetTonemappers();
 		if (auto it = std::ranges::find_if(tonemappers, [&](TonemapperInfo& x) { return settings.currentTonemapper == x.name; });
@@ -445,6 +430,30 @@ void ColorGrading::SaveSettings(json& o_json)
 	auto& tonemappers = TonemapperInfo::GetTonemappers();
 	settings.currentTonemapper = tonemappers[tonemapperType].name.data();
 	o_json = settings;
+}
+
+void ColorGrading::UpdateColorSpaceTransforms()
+{
+	auto& spaces = getAvailableColourSpaces();
+	settings.processColorSpace = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
+
+	constexpr int kInputColorSpace = 0;   // sRGB
+	constexpr int kOutputColorSpace = 0;  // sRGB
+
+	auto colorSpaceTransformMatrix = getRGBMatrix(spaces[kInputColorSpace], spaces[settings.processColorSpace]);
+	auto invColorSpaceTransformMatrix = getRGBMatrix(spaces[settings.processColorSpace], spaces[kOutputColorSpace]);
+
+	settings.colorSpaceTransform = {
+		float3{ colorSpaceTransformMatrix(0, 0), colorSpaceTransformMatrix(0, 1), colorSpaceTransformMatrix(0, 2) },
+		float3{ colorSpaceTransformMatrix(1, 0), colorSpaceTransformMatrix(1, 1), colorSpaceTransformMatrix(1, 2) },
+		float3{ colorSpaceTransformMatrix(2, 0), colorSpaceTransformMatrix(2, 1), colorSpaceTransformMatrix(2, 2) }
+	};
+
+	settings.invColorSpaceTransform = {
+		float3{ invColorSpaceTransformMatrix(0, 0), invColorSpaceTransformMatrix(0, 1), invColorSpaceTransformMatrix(0, 2) },
+		float3{ invColorSpaceTransformMatrix(1, 0), invColorSpaceTransformMatrix(1, 1), invColorSpaceTransformMatrix(1, 2) },
+		float3{ invColorSpaceTransformMatrix(2, 0), invColorSpaceTransformMatrix(2, 1), invColorSpaceTransformMatrix(2, 2) }
+	};
 }
 
 void ColorGrading::SetupResources()
@@ -590,6 +599,9 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	RE::ImageSpaceData imageSpaceData = pp.imageSpaceManager->gameISData;
 
 	auto profile = settings.profile;
+
+	if (settings.enableColorSpaceTransform)
+		UpdateColorSpaceTransforms();
 
 	ColorCB colorCBData = {
 		.asccdl = {

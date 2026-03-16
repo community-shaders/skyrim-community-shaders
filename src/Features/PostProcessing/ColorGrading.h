@@ -56,10 +56,8 @@ struct ColorGrading : public PostProcessFeature
 		uint logType = 0;
 		bool invertLog = false;
 		bool enableTonemap = true;
-		bool enableColorSpaceTransform = false;
-		int inputColorSpace = 0;
+		bool enableColorSpaceTransform = true;
 		int processColorSpace = 0;
-		int outputColorSpace = 0;
 		std::array<float3, 3> colorSpaceTransform = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
 		std::array<float3, 3> invColorSpaceTransform = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
 	} settings;
@@ -130,6 +128,7 @@ struct ColorGrading : public PostProcessFeature
 	virtual void DrawSettings() override;
 
 	virtual void Draw(TextureInfo&) override;
+	void UpdateColorSpaceTransforms();
 
 	void OutputTextures();
 };
