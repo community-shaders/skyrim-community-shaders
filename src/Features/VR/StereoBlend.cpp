@@ -6,6 +6,7 @@
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/VRStereoOptimizations.h"
 #include "State.h"
+#include "Utils/D3D.h"
 
 void VR::ClearShaderCache()
 {
@@ -51,9 +52,7 @@ void VR::DrawStereoBlend()
 	auto renderer = globals::game::renderer;
 
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	// Use live depth buffer (kMAIN) — at DeferredPasses time this has the correct
-	// opaque geometry depth matching the composited color buffer.
-	auto* depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
 
 	context->CopyResource(stereoBlendCopyTex->resource.get(), main.texture);
 

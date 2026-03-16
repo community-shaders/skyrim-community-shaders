@@ -57,7 +57,7 @@ RWTexture2D<float4> Dest : register(u0);
 	mxRGB += mxRGB2;
 
 	// Adaptive sharpening amount
-	float3 ampRGB = saturate(min(mnRGB, 2.0 - mxRGB) * rcp(mxRGB));
+	float3 ampRGB = saturate(min(mnRGB, 2.0 - mxRGB) * rcp(max(mxRGB, 1e-4)));
 	ampRGB = rsqrt(ampRGB);
 
 	// Peak controls sharpening strength:

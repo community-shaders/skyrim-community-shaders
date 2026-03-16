@@ -497,7 +497,7 @@ namespace ExtendedMaterials
 #endif
 				nearBlendToFar *= nearBlendToFar;
 			float offset = (1.0 - parallaxAmount) * -maxHeight + minHeight;
-			pixelOffset = lerp(parallaxAmount, 0.5, nearBlendToFar);
+			pixelOffset = saturate(lerp(parallaxAmount, 0.5, nearBlendToFar));
 			return lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
 		}
 

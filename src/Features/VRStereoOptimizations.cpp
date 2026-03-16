@@ -421,6 +421,10 @@ void VRStereoOptimizations::DispatchStencil()
 	// StencilCS can correctly detect sky-vs-geometry edges in the current frame.
 	auto renderer = globals::game::renderer;
 	auto* depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
+	if (!depthSRV) {
+		logger::warn("[VRStereoOptimizations] DispatchStencil: depthSRV is null, skipping");
+		return;
+	}
 
 	// Dispatch classification CS over Eye 1 region
 	// Input: t0 = depth, b1 = params CB
@@ -659,10 +663,14 @@ void VRStereoOptimizations::DispatchReprojection()
 		return;
 	if (settings.stereoMode == StereoMode::Off)
 		return;
-	if (!reprojectionCS || !texPerPixelMode || !paramsCB)
+	if (!reprojectionCS || !texPerPixelMode || !paramsCB) {
+		DeactivateStencil();
 		return;
-	if (settings.debugSkipMerge)
+	}
+	if (settings.debugSkipMerge) {
+		DeactivateStencil();
 		return;
+	}
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "VR Stereo Opt - Reprojection");

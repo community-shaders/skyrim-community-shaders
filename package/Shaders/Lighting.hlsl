@@ -3197,7 +3197,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
-#		if defined(EMAT) && (defined(PARALLAX) || defined(LANDSCAPE))
+#		if (defined(EMAT) || defined(TRUE_PBR)) && (defined(PARALLAX) || defined(LANDSCAPE))
 	psout.Reflectance = float4(indirectLobeWeights.specular,
 		(pixelOffset > 0.0) ? saturate(pixelOffset) : 0.0);
 #		else

@@ -162,7 +162,7 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 		if (pomOffsetFB > 1e-2 && POMDepthScale > 0) {
 			float linDepthFB = SharedData::GetScreenDepth(centerDepth);
 			float depthCorrectionFB = (0.5 - pomOffsetFB) * POMDepthScale;
-			float newLinDepthFB = linDepthFB + depthCorrectionFB;
+			float newLinDepthFB = max(linDepthFB + depthCorrectionFB, 1e-4);
 			reprojDepthFB = (SharedData::CameraData.x - SharedData::CameraData.w / newLinDepthFB) / SharedData::CameraData.z;
 		}
 
@@ -227,7 +227,7 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 		// Re-reproject with POM-adjusted depth centered at geometry plane
 		float linearDepth = SharedData::GetScreenDepth(centerDepth);
 		float depthCorrection = (0.5 - pomOffset) * POMDepthScale;
-		float newLinearDepth = linearDepth + depthCorrection;
+		float newLinearDepth = max(linearDepth + depthCorrection, 1e-4);
 		reprojDepth = (SharedData::CameraData.x - SharedData::CameraData.w / newLinearDepth) / SharedData::CameraData.z;
 		r = Stereo::ReprojectToOtherEye(uv, reprojDepth, eyeIndex, FrameDim);
 		if (!r.valid)

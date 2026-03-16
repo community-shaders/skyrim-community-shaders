@@ -314,10 +314,24 @@ namespace globals
 			if (globals::game::isVR) {
 				auto& stereoOpt = globals::features::vrStereoOptimizations;
 				if (stereoOpt.loaded && stereoOpt.IsStencilActive()) {
-					// Strip stencil clear to preserve our marks; allow depth clear to proceed
-					ClearFlags &= ~D3D11_CLEAR_STENCIL;
-					if (ClearFlags == 0)
-						return;  // Nothing left to clear
+					// Only protect the main scene DSV — allow other DSVs to clear normally
+					auto renderer = globals::game::renderer;
+					auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+					if (mainDepth.views[0]) {
+						// Compare the DSV being cleared against the main scene DSV
+						ID3D11Resource* clearRes = nullptr;
+						ID3D11Resource* mainRes = nullptr;
+						pDepthStencilView->GetResource(&clearRes);
+						mainDepth.views[0]->GetResource(&mainRes);
+						bool isMainDSV = (clearRes == mainRes);
+						if (clearRes) clearRes->Release();
+						if (mainRes) mainRes->Release();
+						if (isMainDSV) {
+							ClearFlags &= ~D3D11_CLEAR_STENCIL;
+							if (ClearFlags == 0)
+								return;
+						}
+					}
 				}
 			}
 			func(This, pDepthStencilView, ClearFlags, Depth, Stencil);

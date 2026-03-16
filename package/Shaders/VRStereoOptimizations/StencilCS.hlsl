@@ -16,8 +16,6 @@ Texture2D<float> DepthTexture : register(t0);
 
 RWTexture2D<uint> ModeTextureRW : register(u0);
 
-static const float kDisocclusionThreshold = 0.015;
-
 [numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	if (any(dtid >= uint2(FrameDim)))
 		return;
@@ -78,7 +76,7 @@ static const float kDisocclusionThreshold = 0.015;
 			float otherDepth = DepthTexture[reproj.otherPx];
 			float maxDepth = max(max(centerDepth, otherDepth), 1e-5);
 			float relativeDepthDiff = abs(centerDepth - otherDepth) / maxDepth;
-			isDisoccluded = (relativeDepthDiff > kDisocclusionThreshold);
+			isDisoccluded = (relativeDepthDiff > DisocclusionThreshold);
 		}
 
 		if (isDisoccluded) {

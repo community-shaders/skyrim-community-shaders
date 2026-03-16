@@ -100,7 +100,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #if defined(VR_STEREO_OPT)
 	if (eyeIndex == 1) {
 		uint mode = StereoOptModeTexture[uint2(dispatchID.xy)];
-		if (mode == 2 || mode == 1) {  // MODE_MAIN or MODE_EDGE — stencil-culled, no valid G-buffer
+		if (mode == 2) {  // MODE_MAIN — stencil-culled, no valid G-buffer
 			return;
 		}
 	}

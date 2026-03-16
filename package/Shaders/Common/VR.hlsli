@@ -631,7 +631,9 @@ namespace Stereo
 		// Larger offset increases chance of different alpha test outcomes between eyes
 		// (tree branches vs sky). NDC for 6304x3088 SBS reference; scales with resolution.
 		if (a_eyeIndex == 1) {
-			static const float2 kJitterNDC = float2(1.68e-4, -3.44e-4);
+			// ~0.75px diagonal jitter for Eye 1 stereo edge supersampling.
+			// Scales with resolution: 0.53/halfWidth horizontal, 1.06/height vertical.
+			float2 kJitterNDC = float2(0.53 / (FrameBuffer::BufferDim.x * 0.5), -1.06 / FrameBuffer::BufferDim.y);
 			vsout.VRPosition.xy += kJitterNDC * vsout.VRPosition.w;
 		}
 
