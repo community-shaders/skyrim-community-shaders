@@ -104,7 +104,8 @@ struct TonemapperInfo
 
 			{ "Reinhard Extended"sv, "ReinhardExt"sv,
 				"Extended mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002. "
-				"An additional user parameter specifies the smallest luminance that is mapped to 1, which allows high luminances to burn out."sv, 0, 0,
+				"An additional user parameter specifies the smallest luminance that is mapped to 1, which allows high luminances to burn out."sv,
+				0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("White Point", &params[0].y, 0.f, 10.f, "%.2f"); },
@@ -112,13 +113,15 @@ struct TonemapperInfo
 
 			{ "Hejl Burgess-Dawson Filmic"sv, "HejlBurgessDawsonFilmic"sv,
 				"Variation of the Hejl and Burgess-Dawson filmic curve done by Graham Aldridge. "
-				"See his blog post about \"Approximating Film with Tonemapping\"."sv, 0, 0,
+				"See his blog post about \"Approximating Film with Tonemapping\"."sv,
+				0, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Aldridge Filmic"sv, "AldridgeFilmic"sv,
 				"Variation of the Hejl and Burgess-Dawson filmic curve done by Graham Aldridge. "
-				"See his blog post about \"Approximating Film with Tonemapping\"."sv, 0, 0,
+				"See his blog post about \"Approximating Film with Tonemapping\"."sv,
+				0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Cutoff", &params[0].y, 0.f, .5f, "%.2f"); },
@@ -126,7 +129,8 @@ struct TonemapperInfo
 
 			{ "Lottes Filmic/AMD Curve"sv, "LottesFilmic"sv,
 				"Filmic curve by Timothy Lottes, described in his GDC talk \"Advanced Techniques and Optimization of HDR Color Pipelines\". "
-				"Also known as the \"AMD curve\"."sv, 0, 0,
+				"Also known as the \"AMD curve\"."sv,
+				0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Contrast", &params[0].y, 1.f, 2.f, "%.2f");
@@ -138,7 +142,8 @@ struct TonemapperInfo
 
 			{ "Day Filmic/Insomniac Curve"sv, "DayFilmic"sv,
 				"Filmic curve by Mike Day, described in his document \"An efficient and user-friendly tone mapping operator\". "
-				"Also known as the \"Insomniac curve\"."sv, 0, 0,
+				"Also known as the \"Insomniac curve\"."sv,
+				0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Black Point", &params[0].y, 0.f, 5.f, "%.2f");
@@ -157,7 +162,8 @@ struct TonemapperInfo
 
 			{ "Uchimura/Grand Turismo Curve"sv, "UchimuraFilmic"sv,
 				"Filmic curve by Hajime Uchimura, described in his CEDEC talk \"HDR Theory and Practice\". Characterised by its middle linear section. "
-				"Also known as the \"Gran Turismo curve\"."sv, 0, 0,
+				"Also known as the \"Gran Turismo curve\"."sv,
+				0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Max Brightness", &params[0].y, 0.01f, 2.f, "%.2f");
@@ -185,7 +191,8 @@ struct TonemapperInfo
 
 			{ "AgX Minimal"sv, "AgxMinimal"sv,
 				"Minimal version of Troy Sobotka's AgX using a 6th order polynomial approximation. "
-				"Originally created by bwrensch, and improved by Troy Sobotka. Internally uses AgX input transform."sv, 0, 0,
+				"Originally created by bwrensch, and improved by Troy Sobotka. Internally uses AgX input transform."sv,
+				0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Slope", &params[0].y, 0.f, 2.f, "%.2f");
@@ -205,7 +212,7 @@ struct TonemapperInfo
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "GT7"sv, "GT7ToneMapping"sv,
-				"Tonemapper designed for Gran Turismo 7."sv, 0, 0,
+				"Tonemapper designed for Gran Turismo 7."sv, 2, 2,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 				},
