@@ -36,7 +36,7 @@ struct ExtendedMaterials : Feature
 		uint ExtendShadows = 1;
 		uint EnableParallaxWarpingFix = 1;
 
-		float pad[1];
+		uint pad0 = 0;
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
