@@ -2,10 +2,6 @@
 #include "Common/ColorSpaces.hlsli"
 #include "Common/Math.hlsli"
 
-#include "PostProcessing/ColourTransforms/ACES2.hlsli"
-#include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
-#include "PostProcessing/common.hlsli"
-
 #define LUT_SIZE 64
 
 RWTexture2D<float4> RWTexOut : register(u0);
@@ -47,6 +43,10 @@ cbuffer ColorCB : register(b1)
 	uint enableColorSpaceTransform;
 	uint3 pad;
 };
+
+#include "PostProcessing/ColourTransforms/ACES2.hlsli"
+#include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
+#include "PostProcessing/common.hlsli"
 
 namespace LogType
 {

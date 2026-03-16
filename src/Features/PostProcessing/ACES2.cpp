@@ -372,7 +372,6 @@ namespace ACES2
 	{
 		float3 refWhite = mul(reachXYZ_to_RGB, D65_WHITE);
 
-		float M_lo = 0.0f, M_hi = 200.0f;
 		// Search across J values for maximum M
 		float maxM = 0.0f;
 		for (int i = 0; i <= 128; i++) {
@@ -464,7 +463,7 @@ namespace ACES2
 	// Build all lookup tables
 	// ================================================
 
-	static void buildTables(ACES2CB& cb, float peakLuminance)
+	static void buildTables(ACES2CB& cb)
 	{
 		// Limiting gamut = sRGB (for SDR output)
 		const Mat3& limitRGB_to_XYZ = sRGB_to_XYZ;
@@ -552,7 +551,7 @@ namespace ACES2
 		storeMat3(cb.reachMtx, AP1_to_XYZ);
 
 		// Build all lookup tables
-		buildTables(cb, peakLuminance);
+		buildTables(cb);
 
 		return cb;
 	}
