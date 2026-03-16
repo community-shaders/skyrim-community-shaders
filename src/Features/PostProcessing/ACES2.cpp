@@ -140,49 +140,54 @@ namespace ACES2
 
 	static TSParams init_TSParams(float peakLuminance)
 	{
+		// Ported from official ACES 2.0: Lib.Academy.Tonescale.ctl
 		TSParams p{};
-		p.n_r = 100.0f;
-		p.n = peakLuminance;
-		p.g = 1.15f;
-		p.t_1 = 0.04f;
+		const float n = peakLuminance;
+		const float n_r = 100.0f;
+		const float g = 1.15f;
+		const float c = 0.18f;          // 18% grey anchor
+		const float c_d = 10.013f;      // output luminance of 18% grey (nits)
+		const float w_g = 0.14f;        // grey shift between peak luminances
+		const float t_1 = 0.04f;        // shadow toe / flare compensation
+		const float r_hit_min = 128.f;  // scene value "hitting the roof" for SDR
+		const float r_hit_max = 896.f;  // scene value "hitting the roof" for 10000 nits
 
-		// Compute crosstalk and derived parameters
-		float n = p.n;
-		float n_r = p.n_r;
-		float g = p.g;
+		// Calculate derived parameters (official ACES 2.0 formula)
+		const float r_hit = r_hit_min + (r_hit_max - r_hit_min) * (std::log(n / n_r) / std::log(10000.f / 100.f));
+		const float m_0 = n / n_r;
+		const float m_1 = 0.5f * (m_0 + std::sqrt(m_0 * (m_0 + 4.f * t_1)));
+		const float u = std::pow((r_hit / m_1) / ((r_hit / m_1) + 1.f), g);
+		const float m = m_1 / u;
+		const float w_i = std::log(n / 100.f) / std::log(2.f);
+		const float c_t = c_d / n_r * (1.f + w_i * w_g);
+		const float g_ip = 0.5f * (c_t + std::sqrt(c_t * (c_t + 4.f * t_1)));
+		const float g_ipp2_base = std::pow(g_ip / m, 1.f / g);
+		const float g_ipp2 = -(m_1 * g_ipp2_base) / (g_ipp2_base - 1.f);
+		const float w_2 = c / g_ipp2;
+		const float s_2 = w_2 * m_1;
+		const float u_2 = std::pow((r_hit / m_1) / ((r_hit / m_1) + w_2), g);
+		const float m_2 = m_1 / u_2;
 
-		// SDR case: peakLuminance <= n_r
-		p.c_t = std::max(0.0f, (0.5f * n / n_r) * (1.0f + n / n_r) - 1.0f);
-
-		// The point at which the tonescale shoulder starts
-		float u = std::pow(n / n_r, g);
-		p.s_2 = std::max(0.001f, u * (1.0f + u) / (u + p.c_t));
-		p.u_2 = u;
-		p.m_2 = u / (u + p.s_2);  // normalized maximum
-
-		// Limits for clamping
-		p.forward_limit = n;
-		p.inverse_limit = n;
+		p.n = n;
+		p.n_r = n_r;
+		p.g = g;
+		p.t_1 = t_1;
+		p.c_t = c_t;
+		p.s_2 = s_2;
+		p.u_2 = u_2;
+		p.m_2 = m_2;
+		p.forward_limit = 8.f * r_hit;
+		p.inverse_limit = n / (u_2 * n_r);
 
 		return p;
 	}
 
 	static float tonescale_fwd(float x, const TSParams& p)
 	{
-		float n_r = p.n_r;
-		float g = p.g;
-		float t_1 = p.t_1;
-		float s_2 = p.s_2;
-		float m_2 = p.m_2;
-
-		// Normalize input
-		float v = x / n_r;
-
-		// Tonescale: modified Michaelis-Menten
-		float f = m_2 * std::pow(maxf(0.0f, v) / (v + s_2), g);
-		float h = maxf(0.0f, f * f / (f + t_1));
-
-		return h * n_r;
+		// Official ACES 2.0: input is scene-referred linear, output is display luminance (nits)
+		float f = p.m_2 * std::pow(maxf(0.0f, x) / (x + p.s_2), p.g);
+		float h = maxf(0.0f, f * f / (f + p.t_1));
+		return h * p.n_r;
 	}
 
 	// ================================================
@@ -549,6 +554,17 @@ namespace ACES2
 
 		// Reach: AP1 → XYZ
 		storeMat3(cb.reachMtx, AP1_to_XYZ);
+
+		// Limit-to-display matrix: converts from limiting gamut to display encoding gamut
+		// HDR: P3-D65 → Rec.2020 (Rec.2020 is the encoding container)
+		// SDR: identity (sRGB → sRGB)
+		if (hdr) {
+			Mat3 P3D65_to_Rec2020 = mul(XYZ_to_Rec2020, P3D65_to_XYZ);
+			storeMat3(cb.limitToDisplayMtx, P3D65_to_Rec2020);
+		} else {
+			Mat3 identity = { { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } } };
+			storeMat3(cb.limitToDisplayMtx, identity);
+		}
 
 		// Build all lookup tables
 		buildTables(cb);

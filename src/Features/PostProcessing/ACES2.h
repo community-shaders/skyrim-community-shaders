@@ -66,6 +66,9 @@ namespace ACES2
 		float boundaryRGB_to_XYZ[12];
 		float boundaryXYZ_to_RGB[12];
 
+		// Limiting gamut → display encoding gamut matrix (P3-D65 → Rec.2020 for HDR, identity for SDR)
+		float limitToDisplayMtx[12];
+
 		// Gamut cusp table: J, M, h for TABLE_SIZE entries
 		float gamutCuspTableJ[TABLE_SIZE];
 		float gamutCuspTableM[TABLE_SIZE];

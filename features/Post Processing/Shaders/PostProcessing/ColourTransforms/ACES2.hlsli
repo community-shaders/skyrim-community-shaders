@@ -40,6 +40,9 @@ cbuffer ACES2Params : register(b2)
 
 	float4 aces2_boundaryRGB_to_XYZ[3];
 	float4 aces2_boundaryXYZ_to_RGB[3];
+
+	// Limiting gamut → display encoding gamut (P3-D65 → Rec.2020 for HDR, identity for SDR)
+	float4 aces2_limitToDisplayMtx[3];
 };
 
 // Lookup tables via StructuredBuffer
@@ -197,21 +200,42 @@ float3 ACES2_lookupCusp(float hue)
 }
 
 // ============================================================
-// Tonescale (Michaelis-Menten based)
+// Tonescale (Michaelis-Menten based, official ACES 2.0)
+// Input: scene-referred linear luminance (Y)
+// Output: display luminance in nits
 // ============================================================
 float ACES2_tonescale_fwd(float x)
 {
-	float n_r = aces2_ts_n_r;
-	float g = aces2_ts_g;
-	float t_1 = aces2_ts_t_1;
-	float s_2 = aces2_ts_s_2;
-	float m_2 = aces2_ts_m_2;
+	float f = aces2_ts_m_2 * pow(max(0, x) / (x + aces2_ts_s_2), aces2_ts_g);
+	float h = max(0, f * f / (f + aces2_ts_t_1));
+	return h * aces2_ts_n_r;
+}
 
-	float v = x / n_r;
-	float f = m_2 * pow(max(0, v) / (v + s_2), g);
-	float h = max(0, f * f / (f + t_1));
+// ============================================================
+// J ↔ Y conversion (luminance ↔ lightness)
+// Uses the simplified CAM16 model consistent with RGB_to_JMh/JMh_to_RGB
+// ============================================================
+static const float ACES2_MODEL_GAMMA = 0.69 * 2.0;              // 1.38
+static const float ACES2_MODEL_GAMMA_INV = 1.0 / (0.69 * 2.0);  // ~0.7246
 
-	return h * n_r;
+float ACES2_J_to_Y(float J)
+{
+	// Inverse of Y_to_J: J → achromatic response → luminance
+	float rw = ACES2_postAdaptCompress_fwd(1.0);
+	float A_w = (2.0 + 1.0 + 0.05) * rw;  // = 3.05 * rw
+	float A = A_w * pow(max(0, J / 100.0), ACES2_MODEL_GAMMA_INV);
+	float r_a = A / (2.0 + 1.0 + 0.05);  // = A / 3.05
+	return ACES2_postAdaptCompress_inv(r_a);
+}
+
+float ACES2_Y_to_J(float Y)
+{
+	// Luminance → achromatic response → lightness J
+	float r_a = ACES2_postAdaptCompress_fwd(Y);
+	float rw = ACES2_postAdaptCompress_fwd(1.0);
+	float A = (2.0 + 1.0 + 0.05) * r_a;
+	float A_w = (2.0 + 1.0 + 0.05) * rw;
+	return 100.0 * pow(max(0, A / A_w), ACES2_MODEL_GAMMA);
 }
 
 // ============================================================
@@ -318,24 +342,35 @@ float3 ACES2OutputTransform(float3 acescg)
 	float M = JMh.y;
 	float h = JMh.z;
 
-	// ---- Tone Mapping (applied to J/lightness) ----
-	// Convert J to scene-referred luminance, apply tonescale, convert back to J
-	// Simplified: apply tonescale to J directly with appropriate scaling
-	float J_ts = ACES2_tonescale_fwd(J);
+	// ---- Tone Mapping (applied to Y/luminance, per official ACES 2.0) ----
+	// Convert J to scene-referred luminance Y, apply tonescale, convert back to J
+	float Y = ACES2_J_to_Y(J);                       // Scene luminance [0, ~1] for standard content
+	float Y_ts = ACES2_tonescale_fwd(Y);             // Display luminance in nits [0, peak]
+	float J_ts = ACES2_Y_to_J(Y_ts / aces2_ts_n_r);  // Convert back to lightness (normalize by 100)
+
+	// ---- Chroma rescaling (official ACES 2.0: match M to tonescale lightness change) ----
+	// Rescale M proportionally to the J change to prevent oversaturation
+	float M_rescaled = (J > 1e-6) ? M * pow(J_ts / J, ACES2_MODEL_GAMMA_INV) : M;
 
 	// ---- Chroma Compression ----
 	// Get cusp and reach data for this hue
 	float3 cusp = ACES2_lookupCusp(h);
 	float reachM = ACES2_lookupTable(ACES2ReachM, h);
-	float M_compressed = ACES2_chromaCompress(M, J_ts, cusp.y, cusp.x, reachM);
+	float M_compressed = ACES2_chromaCompress(M_rescaled, J_ts, cusp.y, cusp.x, reachM);
 
 	// ---- Gamut Compression ----
 	float3 JMh_compressed = ACES2_gamutCompress(float3(J_ts, M_compressed, h));
 
-	// ---- Convert back to RGB (in display/limiting gamut) ----
+	// ---- Convert back to RGB (in limiting gamut: sRGB for SDR, P3-D65 for HDR) ----
 	float3x3 limit_XYZ_to_RGB = ACES2_loadMat3(aces2_boundaryXYZ_to_RGB);
 	float3x3 limit_RGB_to_XYZ = ACES2_loadMat3(aces2_boundaryRGB_to_XYZ);
 	float3 displayRGB = ACES2_JMh_to_RGB(JMh_compressed, limit_XYZ_to_RGB, limit_RGB_to_XYZ);
+
+	// Convert from limiting gamut to display encoding gamut
+	// HDR: P3-D65 → Rec.2020 (P3-D65 is the limiting gamut, Rec.2020 is the encoding container)
+	// SDR: identity (sRGB → sRGB)
+	float3x3 limitToDisplay = ACES2_loadMat3(aces2_limitToDisplayMtx);
+	displayRGB = mul(limitToDisplay, displayRGB);
 
 	// Clamp to [0,1] displayable range
 	displayRGB = saturate(displayRGB);
