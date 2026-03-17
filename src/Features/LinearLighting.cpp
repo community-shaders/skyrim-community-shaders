@@ -1,5 +1,7 @@
 #include "LinearLighting.h"
 
+#include "State.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LinearLighting::Settings,
 	enableLinearLighting,

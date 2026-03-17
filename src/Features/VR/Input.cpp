@@ -1,5 +1,6 @@
 #include "Features/VR.h"
 #include "Menu.h"
+#include "State.h"
 #include "Utils/PerfUtils.h"
 #include "Utils/VRUtils.h"
 

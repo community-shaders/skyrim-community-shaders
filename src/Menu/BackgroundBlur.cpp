@@ -6,6 +6,7 @@
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
 #include "../ShaderCache.h"
+#include "../State.h"
 #include "../Util.h"
 
 #include <algorithm>
