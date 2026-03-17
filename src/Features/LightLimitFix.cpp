@@ -2,10 +2,10 @@
 #include "InverseSquareLighting.h"
 #include "LinearLighting.h"
 
+#include "Menu/ThemeManager.h"
 #include "Shadercache.h"
 #include "State.h"
 #include "Util.h"
-#include "Menu/ThemeManager.h"
 
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 static constexpr uint MAX_LIGHTS = 1024;
