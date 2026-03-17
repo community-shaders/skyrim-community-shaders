@@ -124,7 +124,7 @@ jobs:
              !github.event.pull_request.draft) ||
             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
         name: Build plugin and addons
-        runs-on: windows-2022
+        runs-on: windows-2025
         permissions:
             contents: read
         outputs:
@@ -200,7 +200,7 @@ jobs:
               github.event.inputs.validate-shaders == 'true') ||
              (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
         name: Validate shader compilation
-        runs-on: windows-2022
+        runs-on: windows-2025
         permissions:
             contents: read
         strategy:
@@ -295,7 +295,7 @@ jobs:
              (github.event_name == 'workflow_dispatch' &&
               github.event.inputs.validate-shaders == 'true') ||
              (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
-        runs-on: windows-2022
+        runs-on: windows-2025
         permissions:
             contents: read
         steps:
@@ -346,7 +346,7 @@ jobs:
         name: Post Prerelease from PR
         if: github.event_name == 'pull_request_target'
         needs: [cpp-build, shader-validation, shader-unit-tests]
-        runs-on: windows-2022
+        runs-on: windows-2025
         permissions:
             contents: write
             pull-requests: write
@@ -523,7 +523,7 @@ jobs:
             github.event_name == 'workflow_dispatch' ||
             startsWith(github.ref, 'refs/tags/v') ||
             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
-        runs-on: windows-2022
+        runs-on: windows-2025
         permissions:
             contents: write
         steps:

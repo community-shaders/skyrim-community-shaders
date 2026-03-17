@@ -37,7 +37,7 @@
             "cacheVariables": {
                 "CMAKE_CXX_FLAGS": "/EHsc /MP /W4 /WX $penv{CXXFLAGS}"
             },
-            "generator": "Visual Studio 17 2022",
+            "generator": "Visual Studio 18 2026",
             "vendor": {
                 "microsoft.com/VisualStudioSettings/CMake/1.0": {
                     "intelliSenseMode": "windows-msvc-x64",

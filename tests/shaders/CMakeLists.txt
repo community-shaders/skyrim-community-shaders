@@ -66,6 +66,13 @@ add_executable(shader_tests
 set_property(TARGET shader_tests PROPERTY CXX_STANDARD 23)
 set_property(TARGET shader_tests PROPERTY CXX_STANDARD_REQUIRED ON)
 
+if(MSVC)
+    # Suppress C4864 in tuplet (via ShaderTestFramework) for VS 2026 migration
+    if(TARGET ShaderTestFramework)
+        target_compile_options(ShaderTestFramework PUBLIC /wd4864)
+    endif()
+endif()
+
 # Set VS debugger working directory
 set_target_properties(shader_tests PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:shader_tests>"
