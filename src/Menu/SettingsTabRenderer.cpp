@@ -340,6 +340,13 @@ void SettingsTabRenderer::RenderBehaviorTab()
 			ImGui::Text("Automatically hides the left feature list panel. Move cursor to the left edge to show it.");
 		}
 
+		if (ImGui::Checkbox("Require Shift to Dock", &globals::menu->GetSettings().RequireShiftToDock)) {
+			ImGui::GetIO().ConfigDockingWithShift = globals::menu->GetSettings().RequireShiftToDock;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("When enabled, you must hold Shift while dragging to dock/snap windows. Prevents accidental docking.");
+		}
+
 		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
