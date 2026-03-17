@@ -1029,15 +1029,22 @@ void Upscaling::ConfigureTAA()
 {
 	auto upscaleMethod = GetUpscaleMethod();
 
+	// When no upscaling method is active, leave vanilla TAA state untouched.
+	// The original UpdateJitter (called after this) manages water TAA and jitter
+	// correctly for the non-upscaling case.  Overriding here disables ISWaterBlend,
+	// removing the 95% temporal history blend that stabilizes water reflections.
+	if (upscaleMethod == UpscaleMethod::kNONE)
+		return;
+
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-	// Disable water TAA when upscaling is enabled
+	// CS TAA replaces vanilla TAA entirely, so disable water TAA (CS handles it).
+	// For FSR/DLSS, keep water TAA enabled since the upscaler needs the blend data.
 	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
-	*enableWaterTAA = !(upscaleMethod == UpscaleMethod::kNONE || upscaleMethod == UpscaleMethod::kTAA);
+	*enableWaterTAA = (upscaleMethod != UpscaleMethod::kTAA);
 
-	// Force enable TAA if needed
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
+	BSImagespaceShaderISTemporalAA->taaEnabled = true;
 }
 
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
