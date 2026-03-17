@@ -112,12 +112,11 @@ struct ColorGrading : public PostProcessFeature
 
 	// ACES 2.0 buffers
 	std::unique_ptr<ConstantBuffer> aces2CB = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2GamutCuspJ = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2GamutCuspM = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2GamutCuspH = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2ReachM = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2UpperHullGamma = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2LowerHullGamma = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2TableHues = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2TableCuspsJ = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2TableCuspsM = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2TableUpperHullGamma = nullptr;
+	std::unique_ptr<StructuredBuffer> aces2TableReachM = nullptr;
 	bool aces2Initialized = false;
 
 	std::unique_ptr<Texture2D> texColor = nullptr;

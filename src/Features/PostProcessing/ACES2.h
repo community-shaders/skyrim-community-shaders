@@ -1,87 +1,113 @@
 #pragma once
 
 // ACES 2.0 Output Transform
-// Ported from the official aces-aswf/aces-core CTL reference implementation (Apache-2.0 license)
+// Faithfully ported from the official aces-aswf/aces-core CTL reference (Apache-2.0 license)
 // Reference: https://github.com/ampas/aces-core (dev branch)
+//
+// Key CTL source files:
+//   Lib.Academy.OutputTransform.ctl
+//   Lib.Academy.Tonescale.ctl
 
 #include <array>
 #include <cmath>
 
 namespace ACES2
 {
+	// Table dimensions matching official CTL: tableSize=360, totalTableSize=362 (with wrapping entries)
 	static constexpr int TABLE_SIZE = 360;
+	static constexpr int TOTAL_TABLE_SIZE = TABLE_SIZE + 2;  // +2 for hue wrapping
+	static constexpr int BASE_INDEX = 1;                     // first real entry in padded table
+
+	// ========================================================================
+	// GPU-side structures (must match HLSL declarations exactly)
+	// ========================================================================
+
+	// JMh color appearance model parameters for GPU
+	// Contains precomputed matrices and constants for a single set of primaries
+	struct alignas(16) JMhParamsGPU
+	{
+		float mtxRGBtoCAM16c[12];    // 3x4 row-major (combined RGB->XYZ->CAM16 with chromatic adaptation)
+		float mtxCAM16cToRGB[12];    // 3x4 row-major inverse
+		float mtxConeRespToAab[12];  // 3x4 row-major (cone response -> opponent Aab, prescaled)
+		float mtxAabToConeResp[12];  // 3x4 row-major inverse
+
+		float F_L_n;   // F_L / ref_luminance (luminance adaptation normalized)
+		float cz;      // model_gamma = surround[1] * (1.48 + sqrt(Y_b / ref_luminance))
+		float inv_cz;  // 1 / cz
+		float A_w_J;   // _post_adaptation_cone_response_compression_fwd(F_L) — achromatic adapted white
+
+		float inv_A_w_J;  // 1 / A_w_J
+		float pad0, pad1, pad2;
+	};
 
 	// Tone scale parameters (Michaelis-Menten based curve)
-	struct TSParams
+	struct alignas(16) TSParamsGPU
 	{
-		float n;              // peakLuminance / n_r
-		float n_r;            // reference peak luminance (100.0)
-		float g;              // contrast exponent (1.15)
-		float t_1;            // shadow toe threshold (0.04)
-		float c_t;            // crosstalk parameter
-		float s_2;            // shoulder offset
-		float u_2;            // mid-shadow parameter
-		float m_2;            // max output in normalized space
-		float forward_limit;  // input clamping limit
-		float inverse_limit;  // inverse clamping limit
+		float n;    // peakLuminance
+		float n_r;  // 100.0 (reference peak luminance)
+		float g;    // 1.15 (contrast exponent)
+		float t_1;  // 0.04 (shadow toe)
+
+		float c_t;  // derived crosstalk
+		float s_2;  // derived shoulder
+		float u_2;  // derived mid-shadow
+		float m_2;  // derived max output normalized
+
+		float forward_limit;  // input clamp limit
+		float inverse_limit;  // inverse clamp limit
+		float log_peak;       // log10(peakLuminance / 100)
+		float pad;
 	};
 
-	// JMh color appearance model parameters (CAM16-based)
-	struct JMhParams
-	{
-		float XYZ_to_RGB[9];    // Input primaries XYZ→RGB
-		float RGB_to_XYZ[9];    // Input primaries RGB→XYZ
-		float XYZ_to_CAM16[9];  // CAM16 forward
-		float CAM16_to_XYZ[9];  // CAM16 inverse
-		float refWhiteXYZ[3];   // Reference white in XYZ (D65)
-		float coneResponseMtx[9];
-		float invConeResponseMtx[9];
-	};
-
-	// GPU constant buffer data — all parameters the shader needs
-	// Packed for 16-byte alignment
+	// Complete GPU constant buffer
+	// All data the shader needs for the full ACES 2.0 output transform
 	struct alignas(16) ACES2CB
 	{
-		// Tone scale params (padded to float4s)
-		float ts_n;
-		float ts_n_r;
-		float ts_g;
-		float ts_t_1;
+		// Tonescale parameters
+		TSParamsGPU ts;
 
-		float ts_c_t;
-		float ts_s_2;
-		float ts_u_2;
-		float ts_m_2;
+		// JMh params for input primaries (AP0) — used for RGB<->JMh and J<->Y
+		JMhParamsGPU inputParams;
 
-		float ts_forward_limit;
-		float ts_inverse_limit;
+		// JMh params for limiting primaries (sRGB for SDR, Rec.709 for SDR / P3-D65 for HDR)
+		JMhParamsGPU limitParams;
+
+		// Shared compression parameters
 		float peakLuminance;
-		float chromaCompressScale;
+		float limitJMax;      // Y_to_J(peakLuminance, input_params)
+		float modelGamma;     // surround[1] * (1.48 + sqrt(Y_b / ref_luminance))
+		float modelGammaInv;  // 1 / modelGamma
 
-		// Matrices — stored as 3x float4 (row-major, .w = 0)
-		float inputMtx[12];  // 3×4 AP0 RGB → JMh  input  matrix (with CAM16)
-		float limitMtx[12];  // 3×4 limit gamut RGB → XYZ
-		float reachMtx[12];  // 3×4 reach gamut RGB → XYZ
+		// Chroma compression parameters (peak-luminance dependent)
+		float chromaSat;            // shadow expansion: max(0.2, 1.3 - 1.3*0.69*logPeak)
+		float chromaSatThr;         // expansion threshold: 0.5 / peakLuminance
+		float chromaCompr;          // highlight compression: 2.4 + 2.4*3.3*logPeak
+		float chromaCompressScale;  // pow(0.03379*peak, 0.30596) - 0.45135
 
-		float boundaryRGB_to_XYZ[12];
-		float boundaryXYZ_to_RGB[12];
+		// Gamut compression parameters
+		float midJ;               // Y_to_J(c_t * ref_luminance, input_params)
+		float focusDist;          // focus_distance + focus_distance * focus_distance_scaling * logPeak
+		float lowerHullGamma;     // 1.14 + 0.07 * logPeak
+		float lowerHullGammaInv;  // 1 / lowerHullGamma
 
-		// Limiting gamut → display encoding gamut matrix (P3-D65 → Rec.2020 for HDR, identity for SDR)
-		float limitToDisplayMtx[12];
+		// Hue linearity search range (for fast binary search in non-uniform hue table)
+		int hueSearchLo;
+		int hueSearchHi;
+		float pad0, pad1;
 
-		// Gamut cusp table: J, M, h for TABLE_SIZE entries
-		float gamutCuspTableJ[TABLE_SIZE];
-		float gamutCuspTableM[TABLE_SIZE];
-		float gamutCuspTableh[TABLE_SIZE];
+		// Limiting gamut -> display encoding gamut matrix (P3-D65 -> Rec.2020 for HDR, identity for SDR)
+		float limitToDisplayMtx[12];  // 3x4 row-major
 
-		// Reach M table
-		float reachMTable[TABLE_SIZE];
+		// AP0 -> AP1 and AP1 -> AP0 matrices for clamping
+		float AP0toAP1[12];  // 3x4 row-major
+		float AP1toAP0[12];  // 3x4 row-major
 
-		// Upper hull gamma table
-		float upperHullGamma[TABLE_SIZE];
-
-		// lower hull gamma table
-		float lowerHullGamma[TABLE_SIZE];
+		// Lookup tables (TOTAL_TABLE_SIZE = 362 entries each)
+		float tableHues[TOTAL_TABLE_SIZE];            // non-uniform hue sample positions
+		float tableCuspsJ[TOTAL_TABLE_SIZE];          // cusp J at each hue
+		float tableCuspsM[TOTAL_TABLE_SIZE];          // cusp M at each hue
+		float tableUpperHullGamma[TOTAL_TABLE_SIZE];  // per-hue upper hull gamma (stored as 1/gamma)
+		float tableReachM[TOTAL_TABLE_SIZE];          // reach gamut max M at limitJMax
 	};
 
 	// Initialize all ACES 2.0 parameters for SDR (100 nits, sRGB output)

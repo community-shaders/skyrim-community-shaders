@@ -477,28 +477,26 @@ void ColorGrading::SetupResources()
 		// ACES 2.0 constant buffer
 		aces2CB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<ACES2::ACES2CB>(false));
 
-		// ACES 2.0 lookup table structured buffers
+		// ACES 2.0 lookup table structured buffers (TOTAL_TABLE_SIZE = 362 entries each)
 		auto makeTableBuffer = [](UINT count) {
 			auto buf = std::make_unique<StructuredBuffer>(StructuredBufferDesc<float>(count), count);
 			buf->CreateSRV();
 			return buf;
 		};
-		aces2GamutCuspJ = makeTableBuffer(ACES2::TABLE_SIZE);
-		aces2GamutCuspM = makeTableBuffer(ACES2::TABLE_SIZE);
-		aces2GamutCuspH = makeTableBuffer(ACES2::TABLE_SIZE);
-		aces2ReachM = makeTableBuffer(ACES2::TABLE_SIZE);
-		aces2UpperHullGamma = makeTableBuffer(ACES2::TABLE_SIZE);
-		aces2LowerHullGamma = makeTableBuffer(ACES2::TABLE_SIZE);
+		aces2TableHues = makeTableBuffer(ACES2::TOTAL_TABLE_SIZE);
+		aces2TableCuspsJ = makeTableBuffer(ACES2::TOTAL_TABLE_SIZE);
+		aces2TableCuspsM = makeTableBuffer(ACES2::TOTAL_TABLE_SIZE);
+		aces2TableUpperHullGamma = makeTableBuffer(ACES2::TOTAL_TABLE_SIZE);
+		aces2TableReachM = makeTableBuffer(ACES2::TOTAL_TABLE_SIZE);
 
 		// Precompute ACES 2.0 tables (SDR 100 nits)
 		auto aces2Data = ACES2::ComputeParams(100.0f);
 		aces2CB->Update(aces2Data);
-		aces2GamutCuspJ->Update(aces2Data.gamutCuspTableJ, sizeof(aces2Data.gamutCuspTableJ));
-		aces2GamutCuspM->Update(aces2Data.gamutCuspTableM, sizeof(aces2Data.gamutCuspTableM));
-		aces2GamutCuspH->Update(aces2Data.gamutCuspTableh, sizeof(aces2Data.gamutCuspTableh));
-		aces2ReachM->Update(aces2Data.reachMTable, sizeof(aces2Data.reachMTable));
-		aces2UpperHullGamma->Update(aces2Data.upperHullGamma, sizeof(aces2Data.upperHullGamma));
-		aces2LowerHullGamma->Update(aces2Data.lowerHullGamma, sizeof(aces2Data.lowerHullGamma));
+		aces2TableHues->Update(aces2Data.tableHues, sizeof(aces2Data.tableHues));
+		aces2TableCuspsJ->Update(aces2Data.tableCuspsJ, sizeof(aces2Data.tableCuspsJ));
+		aces2TableCuspsM->Update(aces2Data.tableCuspsM, sizeof(aces2Data.tableCuspsM));
+		aces2TableUpperHullGamma->Update(aces2Data.tableUpperHullGamma, sizeof(aces2Data.tableUpperHullGamma));
+		aces2TableReachM->Update(aces2Data.tableReachM, sizeof(aces2Data.tableReachM));
 		aces2Initialized = true;
 	}
 
@@ -680,15 +678,14 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		ID3D11Buffer* aces2cb = aces2CB->CB();
 		context->CSSetConstantBuffers(2, 1, &aces2cb);
 
-		std::array<ID3D11ShaderResourceView*, 6> aces2Srvs = {
-			aces2GamutCuspJ->SRV(),
-			aces2GamutCuspM->SRV(),
-			aces2GamutCuspH->SRV(),
-			aces2ReachM->SRV(),
-			aces2UpperHullGamma->SRV(),
-			aces2LowerHullGamma->SRV()
+		std::array<ID3D11ShaderResourceView*, 5> aces2Srvs = {
+			aces2TableHues->SRV(),
+			aces2TableCuspsJ->SRV(),
+			aces2TableCuspsM->SRV(),
+			aces2TableUpperHullGamma->SRV(),
+			aces2TableReachM->SRV()
 		};
-		context->CSSetShaderResources(2, 6, aces2Srvs.data());
+		context->CSSetShaderResources(2, 5, aces2Srvs.data());
 	}
 
 	std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
@@ -726,9 +723,9 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	if (isACES2 && aces2Initialized) {
 		ID3D11Buffer* nullCB = nullptr;
 		context->CSSetConstantBuffers(2, 1, &nullCB);
-		std::array<ID3D11ShaderResourceView*, 6> nullSrvs = {};
+		std::array<ID3D11ShaderResourceView*, 5> nullSrvs = {};
 		nullSrvs.fill(nullptr);
-		context->CSSetShaderResources(2, 6, nullSrvs.data());
+		context->CSSetShaderResources(2, 5, nullSrvs.data());
 	}
 	context->CSSetShader(nullptr, nullptr, 0);
 
