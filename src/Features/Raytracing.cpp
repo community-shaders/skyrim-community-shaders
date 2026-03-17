@@ -168,6 +168,7 @@ void Raytracing::DrawSettings()
 
 	if (ImGui::BeginTabBar("Settings")) {
 		DrawGeneralSettings();
+		DrawAdvancedSettings();
 		DrawDebugSettings();
 
 		ImGui::EndTabBar();
@@ -205,21 +206,19 @@ void Raytracing::DrawGeneralSettings()
 	DrawFloat2("Roughness", ceRTSettings.MaterialSettings.Roughness);
 	DrawFloat2("Metalness", ceRTSettings.MaterialSettings.Metalness);
 
-	if (ImGui::CollapsingHeader("Light")) {
-		auto& lightSettings = ceRTSettings.LightSettings;
-
-		if (ImGui::DragFloat("Directional Strength", &lightSettings.Directional, 0.001f))
-			lightSettings.Directional = std::max(0.0f, lightSettings.Directional);
-
-		if (ImGui::DragFloat("Point Strength", &lightSettings.Point, 0.001f))
-			lightSettings.Point = std::max(0.0f, lightSettings.Point);
-
-		ImGui::Checkbox("Lod Dimmer", &lightSettings.LodDimmer);
-
-	}
-
 	if (ImGui::CollapsingHeader("Lighting")) {
 		auto& lightingSettings = ceRTSettings.LightingSettings;
+
+		if (ImGui::DragFloat("Directional Strength", &lightingSettings.Directional, 0.001f))
+			lightingSettings.Directional = std::max(0.0f, lightingSettings.Directional);
+
+		if (ImGui::DragFloat("Point Strength", &lightingSettings.Point, 0.001f))
+			lightingSettings.Point = std::max(0.0f, lightingSettings.Point);
+
+		ImGui::Checkbox("Lod Dimmer", &lightingSettings.LodDimmer);
+
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Vanilla behaviour of dimming lights that are far enough.\n");
 
 		if (ImGui::DragFloat("Emissive Strength", &lightingSettings.Emissive, 0.001f))
 			lightingSettings.Emissive = std::max(0.0f, lightingSettings.Emissive);
@@ -252,6 +251,72 @@ void Raytracing::DrawSHaRCSettings()
 
 		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
 	}
+}
+
+void Raytracing::DrawSSSSettings()
+{
+	auto& sssSettings = settings.CreationEngineRaytracingSettings.AdvancedSettings.SSSSettings;
+
+	ImGui::Checkbox("Enable Subsurface Scattering", &sssSettings.Enabled);
+
+	if (!sssSettings.Enabled)
+		return;
+
+	if (ImGui::CollapsingHeader("Subsurface Scattering")) {
+		if (sssSettings.Enabled) {
+			ImGui::SliderInt("Sample Count", &sssSettings.SampleCount, 1, 16);
+			ImGui::SliderFloat("Max Sample Radius", &sssSettings.MaxSampleRadius, 0.01f, 64.0f, "%.2f");
+			ImGui::Checkbox("Enable Transmission", &sssSettings.EnableTransmission);
+			ImGui::Checkbox("Material Override", &sssSettings.MaterialOverride);
+
+			if (sssSettings.MaterialOverride) {
+				if (ImGui::TreeNodeEx("Subsurface Scattering", ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGui::ColorEdit3("Override Transmission Color", reinterpret_cast<float*>(&sssSettings.OverrideTransmissionColor), ImGuiColorEditFlags_Float);
+					ImGui::ColorEdit3("Override Scattering Color", reinterpret_cast<float*>(&sssSettings.OverrideScatteringColor), ImGuiColorEditFlags_Float);
+					ImGui::SliderFloat("Override Scale", &sssSettings.OverrideScale, 0.01f, 1000.0f, "%.2f");
+					ImGui::SliderFloat("Override Anisotropy", &sssSettings.OverrideAnisotropy, -0.99f, 0.99f);
+
+					ImGui::TreePop();
+				}
+			}
+		}
+	}
+}
+
+void Raytracing::DrawAdvancedSettings()
+{
+	if (!ImGui::BeginTabItem("Advanced"))
+		return;
+
+	ImGui::PushID("AdvancedSettings");
+
+	auto& advSettings = settings.CreationEngineRaytracingSettings.AdvancedSettings;
+
+	ImGui::SliderFloat("Texture LOD Bias", &advSettings.TexLODBias, -4.0f, 4.0f, "%.1f");
+
+	ImGui::Checkbox("Variable Update Rate", &advSettings.VariableUpdateRate);
+
+	ImGui::Checkbox("GGX Energy Conservation", &advSettings.GGXEnergyConservation);
+
+	ImGui::Checkbox("Per Light Top-Level Acceleration Structures", &advSettings.PerLightTLAS);
+
+	ImGui::Checkbox("Resampled Importance Sampling", &advSettings.RIS.Enabled);
+
+	ImGui::SliderInt("RIS Max Candidates", &advSettings.RIS.MaxCandidates, 2, 16);
+
+	DrawEnumCombo("Hair BSDF", advSettings.HairBSDF);
+
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Best with hair specular feature enabled.\n");
+	}
+
+	DrawSSSSettings();
+
+	DrawEnumCombo("Diffuse BRDF", advSettings.DiffuseBRDF);
+
+	ImGui::PopID();
+
+	ImGui::EndTabItem();
 }
 
 void Raytracing::DrawDebugSettings()

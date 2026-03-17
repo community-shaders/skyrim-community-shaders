@@ -21,6 +21,9 @@
 #include "Features/WetnessEffects.h"
 #include "Features/Upscaling.h"
 
+#define STATIC_ASSERT_ENUM_COUNT(EnumType, Array) \
+	static_assert(_countof(Array) == magic_enum::enum_count<EnumType>(), "Array size must match enum count");
+
 struct CreationEngineRaytracing
 {
 	enum class Mode
@@ -52,11 +55,10 @@ struct CreationEngineRaytracing
 		int Bounces = 2;
 		int SamplesPerPixel = 1;
 		bool RussianRoulette = true;
-		float TexLODBias = -1.0f;
 
 		bool operator==(const struct RaytracingSettings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(RaytracingSettings, Bounces, SamplesPerPixel, RussianRoulette, TexLODBias)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(RaytracingSettings, Bounces, SamplesPerPixel, RussianRoulette)
 	};
 
 	struct MaterialSettings
@@ -69,26 +71,18 @@ struct CreationEngineRaytracing
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(MaterialSettings, Roughness, Metalness)
 	};
 
-	struct LightSettings
+	struct LightingSettings
 	{
 		float Directional = 1.0f;
 		float Point = 1.0f;
 		bool LodDimmer = false;
-
-		bool operator==(const LightSettings&) const = default;
-
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(LightSettings, Directional, Point, LodDimmer)
-	};
-
-	struct LightingSettings
-	{
 		float Emissive = 1.0f;
 		float Effect = 1.0f;
 		float Sky = 1.0f;
 
 		bool operator==(const LightingSettings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(LightingSettings, Emissive, Effect, Sky)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(LightingSettings, Directional, Point, LodDimmer, Emissive, Effect, Sky)
 	};
 
 	struct SHaRCSettings
@@ -102,6 +96,86 @@ struct CreationEngineRaytracing
 		bool operator==(const SHaRCSettings&) const = default;
 
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, SceneScale, AccumFrameNum, StaleFrameNum, AntifireflyFilter)
+	};
+
+	// Resampled Importance Sampling
+	struct RISSettings
+	{
+		bool Enabled = true;
+		int MaxCandidates = 4;
+
+		bool operator==(const RISSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(RISSettings, Enabled, MaxCandidates)
+	};
+
+	// TODO: Rename to ReflectanceModel?
+	enum struct DiffuseBRDF : int32_t
+	{
+		Lambert,
+		Burley,
+		OrenNayar,
+		Gotanda,
+		Chan
+	};
+
+	enum struct HairBSDF : int32_t
+	{
+		None,
+		ChiangBSDF,
+		FarFieldBCSDF
+	};
+
+	struct SSSSettings
+	{
+		bool Enabled = true;
+		int SampleCount = 1;
+		float MaxSampleRadius = 1.0f;
+		bool EnableTransmission = true;
+
+		bool MaterialOverride = false;
+		float3 OverrideTransmissionColor = float3(1.0f, 0.735f, 0.612f);
+		float3 OverrideScatteringColor = float3(1.0f, 1.0f, 1.0f);
+		float OverrideScale = 40.0f;
+		float OverrideAnisotropy = -0.5f;
+
+		bool operator==(const SSSSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+			SSSSettings,
+			Enabled,
+			SampleCount,
+			MaxSampleRadius,
+			EnableTransmission,
+			MaterialOverride,
+			OverrideTransmissionColor,
+			OverrideScatteringColor,
+			OverrideScale,
+			OverrideAnisotropy)
+	};
+
+	struct AdvancedSettings
+	{
+		float TexLODBias = -1.0f;
+		bool VariableUpdateRate = true;
+		bool GGXEnergyConservation = true;
+		bool PerLightTLAS = false;
+		RISSettings RIS;
+		HairBSDF HairBSDF = HairBSDF::FarFieldBCSDF;
+		DiffuseBRDF DiffuseBRDF = DiffuseBRDF::Burley;
+		SSSSettings SSSSettings;
+
+		bool operator==(const AdvancedSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+			AdvancedSettings, 
+			VariableUpdateRate, 
+			RIS, 
+			GGXEnergyConservation,
+			TexLODBias,
+			HairBSDF, 
+			DiffuseBRDF, 
+			SSSSettings)
 	};
 
 
@@ -118,16 +192,25 @@ struct CreationEngineRaytracing
 	{
 		bool Enabled = true;
 		GeneralSettings GeneralSettings;
-		LightSettings LightSettings;
 		LightingSettings LightingSettings;
 		RaytracingSettings RaytracingSettings;
 		MaterialSettings MaterialSettings;
 		SHaRCSettings SHaRCSettings;
+		AdvancedSettings AdvancedSettings;
 		DebugSettings DebugSettings;
 
 		bool operator==(const Settings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, Enabled, GeneralSettings, LightSettings, LightingSettings, RaytracingSettings, MaterialSettings, SHaRCSettings, DebugSettings)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+			Settings,
+			Enabled,
+			GeneralSettings,
+			LightingSettings,
+			RaytracingSettings,
+			MaterialSettings,
+			SHaRCSettings,
+			AdvancedSettings,
+			DebugSettings)
 	};
 
 	HMODULE handle = nullptr;
@@ -307,6 +390,8 @@ struct Raytracing : public OverlayFeature
 
 	void DrawGeneralSettings();
 	void DrawSHaRCSettings();
+	void DrawSSSSettings();
+	void DrawAdvancedSettings();
 	void DrawDebugSettings();
 
 	void CompileShaders();
