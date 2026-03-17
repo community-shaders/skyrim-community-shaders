@@ -115,15 +115,7 @@ cbuffer PerTechnique : register(b0)
 	float shadowContribution = noShadow;
 
 #	if defined(TERRAIN_SHADOWS) || defined(CLOUD_SHADOWS)
-	if (!SharedData::InInterior) {
-		float3 worldPos = positionWS.xyz + PosAdjust[eyeIndex];
-#		if defined(TERRAIN_SHADOWS)
-		shadowContribution *= TerrainShadows::GetTerrainShadow(worldPos, LinearSampler);
-#		endif
-#		if defined(CLOUD_SHADOWS)
-		shadowContribution *= sqrt(CloudShadows::GetCloudShadowMult(worldPos, LinearSampler));
-#		endif
-	}
+	shadowContribution *= sqrt(ShadowSampling::GetWorldShadow(positionWS.xyz, PosAdjust[eyeIndex], eyeIndex));
 #	endif
 
 	float vl = shadowContribution * densityContribution * phaseContribution;
