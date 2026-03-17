@@ -622,8 +622,8 @@ float3 ACES2OutputTransform(float3 acescg)
 
 	// ---- Tonemap + Chroma Compress ----
 	// J -> Y (scene luminance) -> tonescale -> Y (display luminance) -> J
-	float linear = ACES2_J_to_Y(J) / ACES2_REF_LUMINANCE;
-	float tonemapped_Y = ACES2_tonescale_fwd(linear);
+	float linearY = ACES2_J_to_Y(J) / ACES2_REF_LUMINANCE;
+	float tonemapped_Y = ACES2_tonescale_fwd(linearY);
 	float J_ts = ACES2_Y_to_J(tonemapped_Y);
 
 	// Chroma compression (rescales M, expands shadows, compresses highlights)
