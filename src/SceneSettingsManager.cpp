@@ -2,6 +2,7 @@
 
 #include "Feature.h"
 #include "Globals.h"
+#include "State.h"
 #include "Utils/FileSystem.h"
 #include "Utils/Game.h"
 
