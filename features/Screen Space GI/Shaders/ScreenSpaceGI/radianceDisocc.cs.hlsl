@@ -1,7 +1,7 @@
-#include "Common/Math.hlsli"
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/VR.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 

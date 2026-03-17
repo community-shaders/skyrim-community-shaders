@@ -5,9 +5,9 @@
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
 
+#include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
-#include "Common/Math.hlsli"
 
 // --------------------- CONSTANTS AND STRUCTURES --------------------- //
 // Height blend operator settings - DO NOT CHANGE THESE VALUES.
