@@ -44,7 +44,7 @@ cbuffer ColorCB : register(b1)
 	uint3 pad;
 };
 
-#include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
+#include "PostProcessing/ColorGrading/GT7ToneMapping.hlsli"
 #include "PostProcessing/common.hlsli"
 
 namespace LogType
