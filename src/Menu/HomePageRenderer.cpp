@@ -382,14 +382,12 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	io.WantCaptureKeyboard = true;
 	io.MouseDrawCursor = true;  // Show ImGui cursor
 
-	// Draw semi-transparent dark overlay behind the dialog for depth
-	Util::DrawModalBackground();
-
 	// Center the window properly with rounded corners and thin border
 	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 	// Set a minimum width for better layout, but allow auto-sizing for height
 	ImGui::SetNextWindowSizeConstraints(ImVec2(500, 0), ImVec2(600, FLT_MAX));
+	ImGui::SetNextWindowFocus();
 
 	// Style for rounded window with thin border
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
@@ -404,6 +402,13 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		ImGui::End();
 		return;
 	}
+
+	// Draw fullscreen fade on the dialog's own draw list (renders at dialog's z-position,
+	// covering all windows beneath, with dialog content drawn on top)
+	auto* drawList = ImGui::GetWindowDrawList();
+	drawList->PushClipRectFullScreen();
+	drawList->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, MODAL_OVERLAY_ALPHA));
+	drawList->PopClipRect();
 
 	// Set absolute font size for better readability in this welcome dialog
 	float targetFontSize = 27.0f;

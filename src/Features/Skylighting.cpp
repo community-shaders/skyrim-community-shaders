@@ -170,9 +170,8 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 	if (!a_inWorld)
 		return Skylighting::SkylightingCB{};
 
-	if (auto ui = globals::game::ui)
-		if (ui->IsMenuOpen(RE::MapMenu::MENU_NAME))
-			return Skylighting::SkylightingCB{};
+	if (globals::state->isMapMenuOpen)
+		return Skylighting::SkylightingCB{};
 
 	static float3 prevCellID = { 0, 0, 0 };
 
@@ -206,9 +205,8 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 
 void Skylighting::Prepass()
 {
-	if (auto ui = globals::game::ui)
-		if (ui->IsMenuOpen(RE::MapMenu::MENU_NAME))
-			return;
+	if (globals::state->isMapMenuOpen)
+		return;
 
 	bool interior = true;
 

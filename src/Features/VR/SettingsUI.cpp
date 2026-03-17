@@ -73,7 +73,7 @@ void VR::DrawOverlay()
 	static LARGE_INTEGER overlayShowStart = { 0 };
 	static LARGE_INTEGER freq = { 0 };
 
-	bool shouldShow = settings.kAutoHideSeconds > 0 && globals::game::ui && globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) && globals::menu && !globals::menu->IsEnabled;
+	bool shouldShow = settings.kAutoHideSeconds > 0 && globals::state->isMainMenuOpen && globals::menu && !globals::menu->IsEnabled;
 
 	if (!shouldShow) {
 		overlayShowStart.QuadPart = 0;
