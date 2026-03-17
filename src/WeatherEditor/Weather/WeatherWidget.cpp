@@ -245,6 +245,7 @@ void WeatherWidget::DrawWidget()
 			WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 			const float todLabelOffset = (hasParent ? 120.0f : 100.0f) * scale;
 			const float formLabelOffset = (hasParent ? 170.0f : 150.0f) * scale;
+			const float pickerWidth = 225.0f * scale;
 
 			// ImageSpace Records (per time of day)
 			if (ImGui::CollapsingHeader("ImageSpace", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -270,7 +271,7 @@ void WeatherWidget::DrawWidget()
 
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
-					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", weather->imageSpaces[i], editorWindow->imageSpaceWidgets, false, true)) {
+					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", weather->imageSpaces[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
 						recordChanged = true;
 					}  // Add "Open" button
 					if (weather->imageSpaces[i]) {
@@ -317,7 +318,7 @@ void WeatherWidget::DrawWidget()
 
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
-					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", weather->volumetricLighting[i], editorWindow->volumetricLightingWidgets, false, true)) {
+					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", weather->volumetricLighting[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
 						recordChanged = true;
 					}  // Add "Open" button
 					if (weather->volumetricLighting[i]) {
@@ -359,7 +360,7 @@ void WeatherWidget::DrawWidget()
 
 				ImGui::Text("Particle Shader:");
 				ImGui::SameLine(formLabelOffset);
-				if (WeatherUtils::DrawFormPickerCached("##Precipitation", weather->precipitationData, editorWindow->precipitationWidgets, false, true)) {
+				if (WeatherUtils::DrawFormPickerCached("##Precipitation", weather->precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
 					recordChanged = true;
 				}  // Add "Open" button
 				if (weather->precipitationData) {
@@ -399,7 +400,7 @@ void WeatherWidget::DrawWidget()
 
 				ImGui::Text("Reference Effect:");
 				ImGui::SameLine(formLabelOffset);
-				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", weather->referenceEffect, editorWindow->referenceEffectWidgets, false, true)) {
+				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", weather->referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
 					recordChanged = true;
 				}  // Add "Open" button
 				if (weather->referenceEffect) {
@@ -1101,7 +1102,7 @@ void WeatherWidget::DrawCloudSettings()
 
 			ImGui::Spacing();
 			ImGui::Spacing();
-			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str())) {
+			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str(), 120.0f * scale)) {
 				TOD::RenderTODHeader();
 				TOD::DrawTODSeparator();
 

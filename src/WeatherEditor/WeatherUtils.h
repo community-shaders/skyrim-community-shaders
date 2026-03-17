@@ -263,7 +263,8 @@ namespace TOD
 
 	// Helper to begin a TOD table (2 columns: Parameter | Values)
 	// Returns true if table was created successfully
-	bool BeginTODTable(const char* tableId);
+	// paramColumnWidth: fixed width for the label column (0 = default 200px)
+	bool BeginTODTable(const char* tableId, float paramColumnWidth = 0.0f);
 
 	// End the TOD table
 	void EndTODTable();

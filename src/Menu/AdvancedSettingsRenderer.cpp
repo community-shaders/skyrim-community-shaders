@@ -237,7 +237,7 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		// Create a visually distinct box for the blocked shader info with rounded corners and border
 		const float scale = Util::GetUIScale();
 		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f * scale);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, ImGui::GetStyle().WindowBorderSize);
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, ImGui::GetStyle().WindowBorderSize);
 		ImVec4 blockedBgColor = Util::Colors::GetError();
 		blockedBgColor.w = 0.15f;  // Semi-transparent background
 		ImGui::PushStyleColor(ImGuiCol_ChildBg, blockedBgColor);

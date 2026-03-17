@@ -65,6 +65,14 @@ void UnifiedWater::DrawOverlay()
 			vOffset = (shaderWin->Pos.y + shaderWin->Size.y) - pos + style.ItemSpacing.y;
 		}
 	}
+	// Also stack below shader blocking overlay if visible
+	if (auto* blockingWin = ImGui::FindWindowByName("ShaderBlockingInfo")) {
+		if (blockingWin->Active) {
+			float blockingBottom = (blockingWin->Pos.y + blockingWin->Size.y) - pos + style.ItemSpacing.y;
+			if (blockingBottom > vOffset)
+				vOffset = blockingBottom;
+		}
+	}
 
 	const auto snapshot = waterCache->GetBuildProgressSnapshot();
 

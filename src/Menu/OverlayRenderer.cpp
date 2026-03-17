@@ -283,6 +283,12 @@ void OverlayRenderer::RenderShaderBlockingStatus()
 			yPos = shaderWin->Pos.y + shaderWin->Size.y + ImGui::GetStyle().ItemSpacing.y;
 		}
 	}
+	// Also stack below water cache overlay if visible
+	if (auto* waterWin = ImGui::FindWindowByName("UWCacheCreationInfo")) {
+		if (waterWin->Active && waterWin->Pos.y + waterWin->Size.y > yPos) {
+			yPos = waterWin->Pos.y + waterWin->Size.y + ImGui::GetStyle().ItemSpacing.y;
+		}
+	}
 	ImGui::SetNextWindowPos(ImVec2(pos, yPos));
 	if (!ImGui::Begin("ShaderBlockingInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
 		ImGui::End();

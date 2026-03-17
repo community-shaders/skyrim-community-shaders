@@ -398,6 +398,16 @@ namespace TOD
 	// Static debounced tracker for TOD slider rows
 	static DebouncedTracker<float> s_todSliderTracker;
 
+	static void DrawCenteredLabel(const char* label)
+	{
+		float colWidth = ImGui::GetColumnWidth();
+		float textWidth = ImGui::CalcTextSize(label).x;
+		float offset = (colWidth - textWidth) * 0.5f;
+		if (offset > 0.0f)
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+		ImGui::Text("%s", label);
+	}
+
 	bool DrawTODSliderRow(const char* label, float values[4], float minValue, float maxValue, const char* format)
 	{
 		const double debounceDelay = 2.0;
@@ -409,7 +419,7 @@ namespace TOD
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("%s", label);
+		DrawCenteredLabel(label);
 		ImGui::TableSetColumnIndex(1);
 
 		float totalWidth = ImGui::GetContentRegionAvail().x;
@@ -468,7 +478,7 @@ namespace TOD
 		if (!anyActive)
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
 
-		ImGui::Text("%s", label);
+		DrawCenteredLabel(label);
 
 		if (!anyActive)
 			ImGui::PopStyleVar();
@@ -591,7 +601,7 @@ namespace TOD
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("%s", label);
+		DrawCenteredLabel(label);
 		ImGui::TableSetColumnIndex(1);
 
 		float totalWidth = ImGui::GetContentRegionAvail().x;
@@ -694,7 +704,7 @@ namespace TOD
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
 
 		// Draw label text
-		ImGui::Text("%s", label);
+		DrawCenteredLabel(label);
 
 		// Draw inherit checkbox right under the label
 		if (parentColors) {
@@ -849,7 +859,7 @@ namespace TOD
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("%s", label);
+		DrawCenteredLabel(label);
 		ImGui::TableSetColumnIndex(1);
 
 		float totalWidth = ImGui::GetContentRegionAvail().x;
@@ -892,7 +902,7 @@ namespace TOD
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 
-		ImGui::Text("%s", label);
+		DrawCenteredLabel(label);
 
 		// Draw inherit checkbox
 		if (parentValues) {
@@ -955,7 +965,7 @@ namespace TOD
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("%s", label);
+		DrawCenteredLabel(label);
 		ImGui::TableSetColumnIndex(1);
 
 		float totalWidth = ImGui::GetContentRegionAvail().x;
@@ -986,10 +996,12 @@ namespace TOD
 		return changed;
 	}
 
-	bool BeginTODTable(const char* tableId)
+	bool BeginTODTable(const char* tableId, float paramColumnWidth)
 	{
+		if (paramColumnWidth <= 0.0f)
+			paramColumnWidth = 200.0f;
 		if (ImGui::BeginTable(tableId, 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, paramColumnWidth);
 			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 			return true;
 		}
