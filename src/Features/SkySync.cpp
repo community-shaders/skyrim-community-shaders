@@ -138,8 +138,10 @@ void SkySync::Update(const RE::Sky* sky)
 	}
 
 	// Exterior worldspaces always run; interior cells require the sunlight-shadows flag.
-	if (cell && cell->IsInteriorCell() && !cell->cellFlags.all(static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows)))
+	if (cell && cell->IsInteriorCell() && !cell->cellFlags.all(static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows))) {
+		volumetricLightingIntensityFactor = 1.0f;
 		return;
+	}
 
 	const float time = sky->currentGameHour;
 	const bool isDayTime = time > timings.sunriseFadeOutMoonEnd && time < timings.sunsetFadeInMoonStart;
