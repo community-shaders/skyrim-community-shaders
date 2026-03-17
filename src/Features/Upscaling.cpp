@@ -1039,10 +1039,8 @@ void Upscaling::ConfigureTAA()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-	// CS TAA replaces vanilla TAA entirely, so disable water TAA (CS handles it).
-	// For FSR/DLSS, keep water TAA enabled since the upscaler needs the blend data.
-	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
-	*enableWaterTAA = (upscaleMethod != UpscaleMethod::kTAA);
+	bool* disableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
+	*disableWaterTAA = (upscaleMethod == UpscaleMethod::kNONE);
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = true;
 }
