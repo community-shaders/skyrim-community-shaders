@@ -604,13 +604,13 @@ float3 ACES2OutputTransform(float3 acescg)
 
 	// AP1 -> AP0
 	float3x3 AP1toAP0 = ACES2_loadMat3(aces2_AP1toAP0);
-	float3 aces = mul(AP1toAP0, acescg);
+	float3 aces = mul(acescg, AP1toAP0);
 
 	// Clamp to AP1 range (official: clamp_AP0_to_AP1 then back)
 	float3x3 AP0toAP1 = ACES2_loadMat3(aces2_AP0toAP1);
-	float3 ap1 = mul(AP0toAP1, aces);
+	float3 ap1 = mul(aces, AP0toAP1);
 	ap1 = clamp(ap1, 0.0, aces2_ts_forward_limit);
-	aces = mul(AP1toAP0, ap1);
+	aces = mul(ap1, AP1toAP0);
 
 	// Convert AP0 -> JMh using input params (AP0 primaries)
 	ACES2_JMhSet inp = ACES2_getInputParams();
@@ -638,27 +638,9 @@ float3 ACES2OutputTransform(float3 acescg)
 
 	// Convert from limiting gamut to display encoding gamut
 	float3x3 limitToDisplay = ACES2_loadMat3(aces2_limitToDisplayMtx);
-	displayRGB = mul(limitToDisplay, displayRGB);
+	displayRGB = mul(displayRGB, limitToDisplay);
 
-<<<<<<< HEAD
-	// Clamp to [0,1] displayable range
 	displayRGB = saturate(displayRGB);
-	== == == =
-				 // Output scaling:
-		// The tonescale outputs nits (Y * n_r). After JMh round-trip through limit params,
-		// displayRGB is in [0, peakLuminance/ref_luminance] range.
-		// For SDR: values are in [0, 1] — just clamp
-		// For HDR: values represent linear light where 1.0 = ref_luminance(100 nits)
-		//          no additional scaling needed, HDR display pipeline handles nit mapping
-		if (enableHDR)
-	{
-		displayRGB = max(0, displayRGB);
-	}
-	else
-	{
-		displayRGB = saturate(displayRGB);
-	}
->>>>>>> e7c5dbaff (try fix aces 2)
 
 	return displayRGB;
 }

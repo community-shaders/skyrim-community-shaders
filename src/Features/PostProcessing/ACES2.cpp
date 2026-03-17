@@ -166,29 +166,31 @@ namespace ACES2
 	} };
 
 	// Build XYZ<->RGB matrices from chromaticities
+	// Row-vector convention: v * M gives XYZ from RGB (matching CTL's RGBtoXYZ_f33)
 	static Mat3 RGBtoXYZ(const Chromaticities& c, float Y = 1.0f)
 	{
-		// Build XYZ primaries from chromaticities
+		// Build XYZ of each primary (normalized to Y=1)
 		float3 r = { c.rx / c.ry, 1.0f, (1.0f - c.rx - c.ry) / c.ry };
 		float3 g = { c.gx / c.gy, 1.0f, (1.0f - c.gx - c.gy) / c.gy };
 		float3 b = { c.bx / c.by, 1.0f, (1.0f - c.bx - c.by) / c.by };
 		float3 w = { c.wx / c.wy * Y, Y, (1.0f - c.wx - c.wy) / c.wy * Y };
 
-		// Build matrix from primaries (columns)
+		// Build matrix with primaries as columns to solve for scale factors
 		Mat3 P = { {
 			{ r.x, g.x, b.x },
 			{ r.y, g.y, b.y },
 			{ r.z, g.z, b.z },
 		} };
 		Mat3 Pinv = inverse(P);
-		float3 S = mul_m_v(Pinv, w);
+		float3 S = mul_m_v(Pinv, w);  // P * S = w
 
-		// Scale columns by S
+		// Build row-vector convention matrix: rows are scaled primaries
+		// Row i = S[i] * XYZ of primary i (transposing P's column layout)
 		Mat3 M;
-		for (int i = 0; i < 3; i++) {
-			M[i][0] = P[i][0] * S.x;
-			M[i][1] = P[i][1] * S.y;
-			M[i][2] = P[i][2] * S.z;
+		for (int j = 0; j < 3; j++) {
+			M[0][j] = S.x * P[j][0];  // Red primary
+			M[1][j] = S.y * P[j][1];  // Green primary
+			M[2][j] = S.z * P[j][2];  // Blue primary
 		}
 		return M;
 	}
