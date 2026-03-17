@@ -670,7 +670,10 @@ void SettingsTabRenderer::RenderThemesTab()
 				ImGui::Text("Human-readable name shown in the dropdown");
 			}
 
-			ImGui::InputTextMultiline("Description", newThemeDescription, sizeof(newThemeDescription), ImVec2(400, 80));
+			{
+				float scale = Util::GetUIScale();
+				ImGui::InputTextMultiline("Description", newThemeDescription, sizeof(newThemeDescription), ImVec2(400 * scale, 80 * scale));
+			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Optional description for the theme");
 			}
@@ -1027,12 +1030,13 @@ void SettingsTabRenderer::RenderColorsTab()
 		float frameHeight = ImGui::GetFrameHeight();
 
 		// Custom style for filter with icon space
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
+		float scale = Util::GetUIScale();
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f * scale));
 		colorFilter.Draw("Filter colors", availableWidth);
 		ImGui::PopStyleVar();
 
 		// Draw search icon
-		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
+		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f * scale, cursorPos.y + (frameHeight - iconSize) * 0.5f);
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
 		float radius = iconSize * 0.3f;

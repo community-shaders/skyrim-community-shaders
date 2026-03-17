@@ -4,6 +4,8 @@
 
 #include "Shadercache.h"
 #include "State.h"
+#include "Util.h"
+#include "Menu/ThemeManager.h"
 
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 static constexpr uint MAX_LIGHTS = 1024;
@@ -53,7 +55,8 @@ void LightLimitFix::DrawOverlay()
 {
 	if (!settings.EnableLightsVisualisation)
 		return;
-	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
+	const float pos = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * Util::GetUIScale();
+	ImGui::SetNextWindowPos(ImVec2(pos, pos), ImGuiCond_Always);
 	ImGui::Begin("##LLFDebug", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
 	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "DEBUG FEATURE - LIGHT LIMIT VISUALISATION ENABLED");
 	ImGui::End();
