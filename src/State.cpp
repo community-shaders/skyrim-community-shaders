@@ -146,6 +146,19 @@ void State::Reset()
 	Feature::ForEachLoadedFeature("Reset", [](Feature* feature) { feature->Reset(); });
 	if (!globals::game::ui->GameIsPaused())
 		timer += RE::GetSecondsSinceLastFrame();
+
+	// Cache menu open states once per frame to avoid repeated IsMenuOpen calls
+	// (each call constructs a BSFixedString, which is expensive at scale).
+	if (auto ui = globals::game::ui) {
+		isMainMenuOpen = ui->IsMenuOpen(RE::MainMenu::MENU_NAME);
+		isLoadingMenuOpen = ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME);
+		isMapMenuOpen = ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
+	} else {
+		isMainMenuOpen = false;
+		isLoadingMenuOpen = false;
+		isMapMenuOpen = false;
+	}
+
 	lastModifiedPixelDescriptor = 0;
 	lastModifiedVertexDescriptor = 0;
 	lastPixelDescriptor = 0;
@@ -831,10 +844,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		else
 			data.HideSky = false;
 
-		if (globals::game::ui)
-			data.InMapMenu = globals::game::ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
-		else
-			data.InMapMenu = false;
+		data.InMapMenu = isMapMenuOpen;
 
 		auto& upscaling = globals::features::upscaling;
 
