@@ -131,8 +131,9 @@ void SkySync::Update(const RE::Sky* sky)
 
 	if (cell != currentCell) {
 		const auto prevCell = currentCell;
-		SetSkyRotation(sky, cell);
-		if (prevCell && (cell->IsInteriorCell() != prevCell->IsInteriorCell() || cell->GetRuntimeData().worldSpace != prevCell->GetRuntimeData().worldSpace))
+		if (cell)
+			SetSkyRotation(sky, cell);
+		if (cell && prevCell && (cell->IsInteriorCell() != prevCell->IsInteriorCell() || cell->GetRuntimeData().worldSpace != prevCell->GetRuntimeData().worldSpace))
 			shadowFader.Reset();
 	}
 
