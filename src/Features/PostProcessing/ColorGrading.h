@@ -1,7 +1,6 @@
 #pragma once
 #include "PostProcessFeature.h"
 
-#include "ACES2.h"
 #include "Buffer.h"
 
 struct ColorGrading : public PostProcessFeature
@@ -66,7 +65,7 @@ struct ColorGrading : public PostProcessFeature
 	std::array<float3, 3> workingToTonemapMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
 	std::array<float3, 3> tonemapToOutputMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
 
-	int tonemapperType = 11;
+	int tonemapperType = 10;
 
 	enum class LogType : uint32_t
 	{
@@ -109,15 +108,6 @@ struct ColorGrading : public PostProcessFeature
 		uint pad[3];
 	};
 	std::unique_ptr<ConstantBuffer> colorCB = nullptr;
-
-	// ACES 2.0 buffers
-	std::unique_ptr<ConstantBuffer> aces2CB = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2TableHues = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2TableCuspsJ = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2TableCuspsM = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2TableUpperHullGamma = nullptr;
-	std::unique_ptr<StructuredBuffer> aces2TableReachM = nullptr;
-	bool aces2Initialized = false;
 
 	std::unique_ptr<Texture2D> texColor = nullptr;
 	std::unique_ptr<Texture3D> texLUT = nullptr;
