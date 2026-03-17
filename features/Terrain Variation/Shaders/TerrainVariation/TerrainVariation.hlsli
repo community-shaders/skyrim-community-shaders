@@ -7,6 +7,7 @@
 
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Math.hlsli"
 
 // --------------------- CONSTANTS AND STRUCTURES --------------------- //
 // Height blend operator settings - DO NOT CHANGE THESE VALUES.
@@ -62,7 +63,7 @@ inline float3 NormalizeWeights(float3 weights)
 	// Skip expensive division if already normalized
 	if (abs(weightSum - 1.0) < 0.01)
 		return weights;
-	float rcpWeightSum = rcp(max(weightSum, 1e-6));
+	float rcpWeightSum = rcp(max(weightSum, EPSILON_DIVISION));
 	return weights * rcpWeightSum;
 }
 
