@@ -389,6 +389,7 @@ public:
 		bool SkipClearCacheConfirmation = false;                                            // Skip confirmation dialog when clearing shader cache
 		bool AutoHideFeatureList = false;                                                   // Auto-hide left feature list panel, show on hover
 		bool SkipConstraintWarning = false;                                                 // Skip popup when a setting change creates new constraints
+		bool RequireShiftToDock = true;                                                     // Require holding Shift to dock windows
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};

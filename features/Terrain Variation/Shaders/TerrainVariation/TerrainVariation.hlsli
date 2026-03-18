@@ -5,6 +5,7 @@
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
 
+#include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
@@ -62,7 +63,7 @@ inline float3 NormalizeWeights(float3 weights)
 	// Skip expensive division if already normalized
 	if (abs(weightSum - 1.0) < 0.01)
 		return weights;
-	float rcpWeightSum = rcp(max(weightSum, 1e-6));
+	float rcpWeightSum = rcp(max(weightSum, EPSILON_DIVISION));
 	return weights * rcpWeightSum;
 }
 
