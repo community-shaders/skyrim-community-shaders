@@ -158,6 +158,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipClearCacheConfirmation,
 	AutoHideFeatureList,
 	SkipConstraintWarning,
+	RequireShiftToDock,
 	Theme,
 	SelectedThemePreset)
 
@@ -614,6 +615,7 @@ void Menu::Init()
 
 	auto& imgui_io = ImGui::GetIO();
 	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
+	imgui_io.ConfigDockingWithShift = settings.RequireShiftToDock;
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;
 
 	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
@@ -1089,28 +1091,20 @@ void Menu::ProcessInputEventQueue()
 				}
 			}
 
-			io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), event.IsPressed());
+			// DirectInput loses key-up events after alt-tab; validate against OS state.
+			bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
+			io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
 
 			if (key == VK_LCONTROL || key == VK_RCONTROL)
-				io.AddKeyEvent(ImGuiMod_Ctrl, event.IsPressed());
+				io.AddKeyEvent(ImGuiMod_Ctrl, pressed);
 			else if (key == VK_LSHIFT || key == VK_RSHIFT)
-				io.AddKeyEvent(ImGuiMod_Shift, event.IsPressed());
+				io.AddKeyEvent(ImGuiMod_Shift, pressed);
 			else if (key == VK_LMENU || key == VK_RMENU)
-				io.AddKeyEvent(ImGuiMod_Alt, event.IsPressed());
+				io.AddKeyEvent(ImGuiMod_Alt, pressed);
 		}
 	}
 
 	_keyEventQueue.clear();
-
-	// Fallback: release stuck Shift and Tab if OS reports them not pressed
-	if ((io.KeysDown[ImGuiKey_LeftShift] && !(GetAsyncKeyState(VK_LSHIFT) & Constants::KEY_PRESSED_MASK)) ||
-		(io.KeysDown[ImGuiKey_RightShift] && !(GetAsyncKeyState(VK_RSHIFT) & Constants::KEY_PRESSED_MASK))) {
-		io.AddKeyEvent(ImGuiKey_LeftShift, false);
-		io.AddKeyEvent(ImGuiKey_RightShift, false);
-	}
-	if (io.KeysDown[ImGuiKey_Tab] && !(GetAsyncKeyState(VK_TAB) & Constants::KEY_PRESSED_MASK)) {
-		io.AddKeyEvent(ImGuiKey_Tab, false);
-	}
 }
 
 void Menu::addToEventQueue(KeyEvent e)
