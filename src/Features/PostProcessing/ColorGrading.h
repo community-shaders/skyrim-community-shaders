@@ -22,39 +22,50 @@ struct ColorGrading : public PostProcessFeature
 
 	const std::string outputPath = "SKSE\\Plugins\\CommunityShaders\\PostProcessing\\ColorGrading";
 
-	struct ColorProfile
-	{
-		// params[0-2]  asccdl (slope, power, offset)
-		// params[3-5]  liftgammagain (lift, gamma, gain)
-		// params[6]    inOutGamma (.z = input gamma, .w = output gamma; .xy reserved)
-		// params[7]    oklchSaturation (.x = saturation, .y = vibrance, .z = hue shift)
-		// params[8-14] oklchColorMixer[7] (per-hue: .x = hue shift, .y = vibrance, .z = brightness)
-		// params[15]   contrast
-		// params[16]   pivot
-		// params[17]   exposureTemperatureTint (.x = exposure, .y = temp, .z = tint)
-		// params[18-20] shadows/midtones/highlights gain
-		// params[21]   shadowsHighlightsRange
-		std::array<float4, 22> params = {
-			float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f },
-			float4{ 0.f, 0.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f }, float4{ 1.f, 1.f, 1.f, 1.f },
-			float4{ 1.f, 1.f, 1.f, 1.f }, float4{ 1.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f },
-			float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f },
-			float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f },
-			float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 0.18f, 0.18f, 0.18f, 0.f }, float4{ 1.f, 65.f, 0.f, 0.f },
-			float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f },
-			float4{ 0.f, 0.3f, 0.55f, 1.f }
-		};
-		// SMH color offsets
-		float4 shadowsOffset = { 0.f, 0.f, 0.f, 0.f };
-		float4 midtonesOffset = { 0.f, 0.f, 0.f, 0.f };
-		float4 highlightsOffset = { 0.f, 0.f, 0.f, 0.f };
-	};
-
 	struct Settings
 	{
 		bool skipLDR = false;
 		bool skipLUT = false;
-		ColorProfile profile = {};
+
+		// ASC CDL
+		float4 slope = { 1.f, 1.f, 1.f, 0.f };
+		float4 power = { 1.f, 1.f, 1.f, 0.f };
+		float4 cdlOffset = { 0.f, 0.f, 0.f, 0.f };
+
+		// Lift Gamma Gain
+		float4 lift = { 0.f, 0.f, 0.f, 0.f };
+		float4 gamma = { 0.f, 0.f, 0.f, 0.f };
+		float4 gain = { 1.f, 1.f, 1.f, 1.f };
+
+		// Input/Output Gamma
+		float4 inOutGamma = { 1.f, 1.f, 1.f, 1.f };
+
+		// OKLCH
+		float4 oklchSaturation = { 1.f, 1.f, 0.f, 0.f };
+		std::array<float4, 7> oklchColorMixer = {
+			float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f },
+			float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f }, float4{ 0.f, 1.f, 0.f, 0.f },
+			float4{ 0.f, 1.f, 0.f, 0.f }
+		};
+
+		// Contrast
+		float4 contrast = { 1.f, 1.f, 1.f, 0.f };
+		float4 pivot = { 0.18f, 0.18f, 0.18f, 0.f };
+
+		// Exposure/Temperature/Tint
+		float4 exposureTemperatureTint = { 1.f, 65.f, 0.f, 0.f };
+
+		// Shadows/Midtones/Highlights
+		float4 shadowsGain = { 1.f, 1.f, 1.f, 0.f };
+		float4 midtonesGain = { 1.f, 1.f, 1.f, 0.f };
+		float4 highlightsGain = { 1.f, 1.f, 1.f, 0.f };
+		float4 shadowsHighlightsRange = { 0.f, 0.3f, 0.55f, 1.f };
+
+		// SMH color offsets
+		float4 shadowsOffset = { 0.f, 0.f, 0.f, 0.f };
+		float4 midtonesOffset = { 0.f, 0.f, 0.f, 0.f };
+		float4 highlightsOffset = { 0.f, 0.f, 0.f, 0.f };
+
 		std::string currentTonemapper = "GT7";
 		std::array<float4, 2> tonemapParams = { float4{ 1.f, 2.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f } };
 		float3 gameCinematicBlend = { 1.0f, 1.0f, 1.0f };
