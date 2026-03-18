@@ -103,7 +103,7 @@ public:
 	void PostDevice();
 
 	bool EnsureFrameToken();
-	void CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eyeIndex = 0);
+	bool CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eyeIndex = 0);
 
 	bool IsRTXAndBelow40Series(IDXGIAdapter* a_adapter);
 
