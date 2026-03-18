@@ -248,7 +248,6 @@ void Upscaling::DrawSettings()
 				ImGui::Text("Changing this setting requires a restart to take effect.");
 			}
 		}
-
 	}
 
 	const bool frameGenerationDx12PathActive = IsFrameGenerationDx12PathActive();
