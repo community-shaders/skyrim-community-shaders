@@ -551,7 +551,14 @@ void Upscaling::LoadSettings(json& o_json)
 		logger::warn("[Upscaling] Loaded useGatherWideKernel {} out of range, clamping to 1", settings.useGatherWideKernel);
 		settings.useGatherWideKernel = 1;
 	}
+	const float originalReflexFPSLimit = settings.reflexFPSLimit;
 	settings.reflexFPSLimit = std::clamp(settings.reflexFPSLimit, 20.0f, 240.0f);
+	if (settings.reflexFPSLimit != originalReflexFPSLimit) {
+		logger::warn(
+			"[Upscaling] Loaded reflexFPSLimit {} out of range, clamping to {}",
+			originalReflexFPSLimit,
+			settings.reflexFPSLimit);
+	}
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
 		auto setting = iniSettingCollection->GetSetting("bUseTAA:Display");
