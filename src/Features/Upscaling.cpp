@@ -9,8 +9,8 @@
 #include "Utils/UI.h"
 #include <Windows.h>
 #include <algorithm>
-#include <cmath>
 #include <cfloat>
+#include <cmath>
 #include <directx/d3dx12.h>
 #include <format>
 
