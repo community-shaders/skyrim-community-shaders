@@ -96,6 +96,7 @@ public:
 	LARGE_INTEGER qpf;
 
 	// FG FPS Measurement for Overlay
+	bool IsFrameGenerationDx12PathActive() const;
 	bool IsFrameGenerationActive() const;
 	float GetFrameGenerationFrameTime() const;
 	bool IsUpscalingActive() const;

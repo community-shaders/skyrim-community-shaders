@@ -259,11 +259,13 @@ void Upscaling::DrawSettings()
 		}
 	}
 
+	const bool frameGenerationDx12PathActive = IsFrameGenerationDx12PathActive();
+
 	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
 			ImGui::Text("Uses AMD FSR Frame Generation technology");
-			if (fidelityFX.featureFSR3FG)
+			if (HasFrameGenModule())
 				ImGui::Text("AMD FSR Frame Generation is available.");
 			ImGui::Text("Requires a D3D11 to D3D12 proxy which can create compatibility issues");
 			ImGui::Text("Toggling this setting requires a restart to work correctly");
@@ -294,13 +296,13 @@ void Upscaling::DrawSettings()
 				onlyRequiresRestart = false;
 			}
 
-			if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12SwapChainActive) {
+			if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive) {
 				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 				ImGui::Text("Warning: Requires restart");
 				ImGui::PopStyleColor();
 			}
 
-			if (!settings.frameGenerationMode && d3d12SwapChainActive) {
+			if (!settings.frameGenerationMode && frameGenerationDx12PathActive) {
 				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 				ImGui::Text("Warning: Requires restart");
 				ImGui::PopStyleColor();
@@ -312,12 +314,12 @@ void Upscaling::DrawSettings()
 
 			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, toggleModesFG[settings.frameGenerationMode]);
 
-			if (!d3d12SwapChainActive)
+			if (!frameGenerationDx12PathActive)
 				ImGui::BeginDisabled();
 
 			ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
 
-			if (!d3d12SwapChainActive)
+			if (!frameGenerationDx12PathActive)
 				ImGui::EndDisabled();
 
 			ImGui::Text("Allows frame generation to function on low refresh rate monitors");
@@ -332,16 +334,22 @@ void Upscaling::DrawSettings()
 		}
 	}
 
-	if (ImGui::TreeNodeEx("NVIDIA Reflex", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (streamline.reflexSupportedOnCurrentAdapter && ImGui::TreeNodeEx("NVIDIA Reflex", ImGuiTreeNodeFlags_DefaultOpen)) {
+		const bool reflexBlockedByFrameGeneration = frameGenerationDx12PathActive;
 		const bool reflexAvailable = streamline.initialized && streamline.featureReflex;
-		const bool markerOptimizationAvailable = reflexAvailable && streamline.featurePCL;
+		const bool reflexControlsAvailable = reflexAvailable && !reflexBlockedByFrameGeneration;
+		const bool markerOptimizationAvailable = reflexControlsAvailable && streamline.featurePCL;
 		const char* toggleModes[] = { "Disabled", "Enabled" };
+
+		if (reflexBlockedByFrameGeneration) {
+			ImGui::TextDisabled("Reflex is unavailable while the DX12 frame-generation swapchain is active.");
+		}
 
 		if (!reflexAvailable) {
 			ImGui::TextDisabled("Reflex is not available. Ensure sl.reflex.dll is present and restart.");
 		}
 
-		if (!reflexAvailable)
+		if (!reflexControlsAvailable)
 			ImGui::BeginDisabled();
 
 		int lowLatencyMode = settings.reflexLowLatencyMode ? 1 : 0;
@@ -405,7 +413,7 @@ void Upscaling::DrawSettings()
 		if (!settings.reflexUseFPSLimit)
 			ImGui::EndDisabled();
 
-		if (!reflexAvailable)
+		if (!reflexControlsAvailable)
 			ImGui::EndDisabled();
 
 		ImGui::TreePop();
@@ -1477,9 +1485,14 @@ double Upscaling::GetRefreshRate(HWND a_window)
 	return 60;
 }
 
+bool Upscaling::IsFrameGenerationDx12PathActive() const
+{
+	return d3d12SwapChainActive && !globals::game::isVR;
+}
+
 bool Upscaling::IsFrameGenerationActive() const
 {
-	return d3d12SwapChainActive && settings.frameGenerationMode && fidelityFX.isFrameGenActive && !globals::game::isVR;
+	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && fidelityFX.isFrameGenActive;
 }
 
 bool Upscaling::IsUpscalingActive() const

@@ -12,6 +12,11 @@
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
 
+namespace
+{
+	constexpr UINT NVIDIA_VENDOR_ID = 0x10DE;
+}
+
 void LoggingCallback(sl::LogType type, const char* msg)
 {
 	// Remove trailing newlines from the raw message
@@ -174,6 +179,7 @@ void Streamline::LoadInterposer()
 		featureDLSS = false;
 		featureReflex = false;
 		featurePCL = false;
+		reflexSupportedOnCurrentAdapter = false;
 		reflexOptionsCache = {};
 		lastReflexSleepFrame = UINT32_MAX;
 		logger::info("[Streamline] Successfully initialized Streamline");
@@ -185,6 +191,7 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	logger::info("[Streamline] Checking features");
 	DXGI_ADAPTER_DESC adapterDesc;
 	a_adapter->GetDesc(&adapterDesc);
+	reflexSupportedOnCurrentAdapter = adapterDesc.VendorId == NVIDIA_VENDOR_ID;
 
 	sl::AdapterInfo adapterInfo;
 	adapterInfo.deviceLUID = (uint8_t*)&adapterDesc.AdapterLuid;
@@ -212,8 +219,13 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	};
 
 	checkFeatureAvailability(sl::kFeatureDLSS, "DLSS", featureDLSS);
-	checkFeatureAvailability(sl::kFeatureReflex, "Reflex", featureReflex);
-	checkFeatureAvailability(sl::kFeaturePCL, "PCL", featurePCL);
+	if (reflexSupportedOnCurrentAdapter) {
+		checkFeatureAvailability(sl::kFeatureReflex, "Reflex", featureReflex);
+		checkFeatureAvailability(sl::kFeaturePCL, "PCL", featurePCL);
+	} else {
+		featureReflex = false;
+		featurePCL = false;
+	}
 
 	if (featureDLSS) {
 		isRTXBelow40series = IsRTXAndBelow40Series(a_adapter);
@@ -225,8 +237,12 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	}
 
 	logger::info("[Streamline] DLSS {} available", featureDLSS ? "is" : "is not");
-	logger::info("[Streamline] Reflex {} available", featureReflex ? "is" : "is not");
-	logger::info("[Streamline] PCL {} available", featurePCL ? "is" : "is not");
+	if (reflexSupportedOnCurrentAdapter) {
+		logger::info("[Streamline] Reflex {} available", featureReflex ? "is" : "is not");
+		logger::info("[Streamline] PCL {} available", featurePCL ? "is" : "is not");
+	} else {
+		logger::info("[Streamline] Reflex/PCL disabled on non-NVIDIA adapter");
+	}
 	reflexOptionsCache = {};
 	lastReflexSleepFrame = UINT32_MAX;
 }
@@ -241,7 +257,14 @@ void Streamline::PostDevice()
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
 	}
 
-	if (slGetFeatureFunction) {
+	slReflexGetState = nullptr;
+	slReflexSleep = nullptr;
+	slReflexSetOptions = nullptr;
+	slPCLSetMarker = nullptr;
+	featureReflex = false;
+	featurePCL = false;
+
+	if (slGetFeatureFunction && reflexSupportedOnCurrentAdapter) {
 		if (slSetFeatureLoaded) {
 			// Reflex/PCL availability can change after device bind; request explicit load here.
 			const auto requestFeatureLoad = [&](sl::Feature feature, const char* featureName) {
@@ -263,9 +286,6 @@ void Streamline::PostDevice()
 		};
 
 		// Keep runtime controls strict: only advertise Reflex/PCL as available when required entry points bind.
-		slReflexGetState = nullptr;
-		slReflexSleep = nullptr;
-		slReflexSetOptions = nullptr;
 		bool reflexFnsBound = true;
 		reflexFnsBound &= bindFeatureFn(sl::kFeatureReflex, "slReflexGetState", (void*&)slReflexGetState);
 		reflexFnsBound &= bindFeatureFn(sl::kFeatureReflex, "slReflexSleep", (void*&)slReflexSleep);
@@ -278,7 +298,6 @@ void Streamline::PostDevice()
 			logger::info("[Streamline] Reflex runtime controls are available");
 		}
 
-		slPCLSetMarker = nullptr;
 		bool pclFnBound = bindFeatureFn(sl::kFeaturePCL, "slPCLSetMarker", (void*&)slPCLSetMarker);
 		featurePCL = pclFnBound && slPCLSetMarker;
 		if (!featurePCL) {
@@ -286,6 +305,8 @@ void Streamline::PostDevice()
 		} else {
 			logger::info("[Streamline] PCL marker interface is available");
 		}
+	} else if (!reflexSupportedOnCurrentAdapter) {
+		logger::info("[Streamline] Skipping Reflex/PCL binding on non-NVIDIA adapter");
 	}
 
 	reflexOptionsCache = {};
@@ -601,8 +622,38 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 void Streamline::UpdateReflex()
 {
-	if (!initialized || !featureReflex || !slReflexSetOptions)
+	if (!initialized || !reflexSupportedOnCurrentAdapter || !featureReflex || !slReflexSetOptions)
 		return;
+
+	const auto applyReflexOptionsIfChanged = [&](const sl::ReflexOptions& options, const char* onFailMessage) {
+		if (reflexOptionsCache.valid &&
+			reflexOptionsCache.mode == options.mode &&
+			reflexOptionsCache.frameLimitUs == options.frameLimitUs &&
+			reflexOptionsCache.useMarkersToOptimize == options.useMarkersToOptimize) {
+			return;
+		}
+
+		if (SL_FAILED(result, slReflexSetOptions(options))) {
+			logger::error("[Streamline] {}: {}", onFailMessage, magic_enum::enum_name(result));
+			return;
+		}
+
+		reflexOptionsCache.valid = true;
+		reflexOptionsCache.mode = options.mode;
+		reflexOptionsCache.frameLimitUs = options.frameLimitUs;
+		reflexOptionsCache.useMarkersToOptimize = options.useMarkersToOptimize;
+	};
+
+	const auto& upscaling = globals::features::upscaling;
+	const bool reflexBlockedByFrameGeneration = upscaling.IsFrameGenerationDx12PathActive();
+	if (reflexBlockedByFrameGeneration) {
+		sl::ReflexOptions disabledOptions{};
+		disabledOptions.mode = sl::ReflexMode::eOff;
+		disabledOptions.frameLimitUs = 0u;
+		disabledOptions.useMarkersToOptimize = false;
+		applyReflexOptionsIfChanged(disabledOptions, "Failed to disable Reflex while frame-generation DX12 path is active");
+		return;
+	}
 
 	auto& settings = globals::features::upscaling.settings;
 
@@ -618,20 +669,7 @@ void Streamline::UpdateReflex()
 	// Marker optimization requires PCL marker API at runtime, not just UI toggle state.
 	options.useMarkersToOptimize = settings.reflexUseMarkersToOptimize && featurePCL && slPCLSetMarker;
 
-	// Avoid redundant backend calls unless an effective Reflex option changed.
-	if (!reflexOptionsCache.valid ||
-		reflexOptionsCache.mode != options.mode ||
-		reflexOptionsCache.frameLimitUs != options.frameLimitUs ||
-		reflexOptionsCache.useMarkersToOptimize != options.useMarkersToOptimize) {
-		if (SL_FAILED(result, slReflexSetOptions(options))) {
-			logger::error("[Streamline] Failed to apply Reflex options: {}", magic_enum::enum_name(result));
-		} else {
-			reflexOptionsCache.valid = true;
-			reflexOptionsCache.mode = options.mode;
-			reflexOptionsCache.frameLimitUs = options.frameLimitUs;
-			reflexOptionsCache.useMarkersToOptimize = options.useMarkersToOptimize;
-		}
-	}
+	applyReflexOptionsIfChanged(options, "Failed to apply Reflex options");
 
 	if (!slReflexSleep)
 		return;

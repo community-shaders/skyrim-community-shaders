@@ -35,6 +35,7 @@ public:
 	bool featureDLSS = false;
 	bool featureReflex = false;
 	bool featurePCL = false;
+	bool reflexSupportedOnCurrentAdapter = false;
 
 	sl::ViewportHandle viewport{ 0 };
 	sl::ViewportHandle viewportRight{ 1 };
