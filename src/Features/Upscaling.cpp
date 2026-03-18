@@ -26,7 +26,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	sharpnessFSR,
 	sharpnessDLSS,
 	presetDLSS,
-	useGatherWideKernel,
 	reflexLowLatencyMode,
 	reflexLowLatencyBoost,
 	reflexUseMarkersToOptimize,
@@ -250,14 +249,6 @@ void Upscaling::DrawSettings()
 			}
 		}
 
-		if (globals::game::isVR) {
-			settings.useGatherWideKernel = std::min(settings.useGatherWideKernel, 1u);
-			const char* wideKernelModes[] = { "Legacy 3x3", "Gather Wide" };
-			ImGui::SliderInt("Wide Kernel Mode", (int*)&settings.useGatherWideKernel, 0, 1, wideKernelModes[settings.useGatherWideKernel]);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Switches wide-kernel depth sampling mode for VR depth upscaling.");
-			}
-		}
 	}
 
 	const bool frameGenerationDx12PathActive = IsFrameGenerationDx12PathActive();
@@ -549,10 +540,6 @@ void Upscaling::LoadSettings(json& o_json)
 	if (settings.presetDLSS > 4) {
 		logger::warn("[Upscaling] Loaded presetDLSS {} out of range, resetting to 0 (Default)", settings.presetDLSS);
 		settings.presetDLSS = 0;
-	}
-	if (settings.useGatherWideKernel > 1) {
-		logger::warn("[Upscaling] Loaded useGatherWideKernel {} out of range, clamping to 1", settings.useGatherWideKernel);
-		settings.useGatherWideKernel = 1;
 	}
 	const float originalReflexFPSLimit = settings.reflexFPSLimit;
 	if (!std::isfinite(settings.reflexFPSLimit)) {
@@ -1822,7 +1809,7 @@ void Upscaling::UpscaleDepth()
 		}
 
 		jitterData.useWideKernel = depthUpscaleUseWideKernel ? 1.0f : 0.0f;
-		jitterData.useGatherWideKernel = settings.useGatherWideKernel ? 1.0f : 0.0f;
+		jitterData.pad0 = 0.0f;
 	}
 
 	jitterCB->Update(jitterData);
