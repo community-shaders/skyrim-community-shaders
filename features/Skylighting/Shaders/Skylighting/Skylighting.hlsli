@@ -111,7 +111,7 @@ namespace Skylighting
 					wsum += w;
 				}
 
-		return SphericalHarmonics::Scale(sum, rcp(wsum + 1e-10));
+		return SphericalHarmonics::Scale(sum, rcp(wsum + EPSILON_WEIGHT_SUM));
 	}
 
 	sh2 sampleNoBias(SharedData::SkylightingSettings params, Texture3D<sh2> probeArray, float3 positionMS)
@@ -157,7 +157,7 @@ namespace Skylighting
 			wsum += w;
 		}
 
-		return SphericalHarmonics::Scale(sum, rcp(wsum + 1e-10));
+		return SphericalHarmonics::Scale(sum, rcp(wsum + EPSILON_WEIGHT_SUM));
 	}
 }
 
