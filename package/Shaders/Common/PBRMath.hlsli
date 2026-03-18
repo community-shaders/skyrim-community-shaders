@@ -119,7 +119,7 @@ namespace PBR
 	inline float HairGaussian(float B, float Theta)
 	{
 		// Guard against division by zero: clamp B to a minimum value
-		float B_safe = max(B, 1e-6);
+		float B_safe = max(B, EPSILON_DIVISION);
 		return exp(-0.5 * Theta * Theta / (B_safe * B_safe)) / (sqrt(Math::TAU) * B_safe);
 	}
 
