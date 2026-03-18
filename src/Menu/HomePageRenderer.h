@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 class HomePageRenderer
@@ -14,6 +15,7 @@ public:
 	static constexpr float HELP_TEXT_SCALE = 1.35f;
 	static constexpr float QUICK_LINKS_BUTTON_WIDTH = 180.0f;
 	static constexpr float LOGO_WATERMARK_HEIGHT = 200.0f;
+	static constexpr uint8_t MODAL_OVERLAY_ALPHA = 160;
 
 	// Discord banner scaling constants
 	static constexpr float DISCORD_BANNER_TARGET_WIDTH_RATIO = 0.85f;  // 25% of window width
