@@ -24,11 +24,16 @@ struct ColorGrading : public PostProcessFeature
 
 	struct ColorProfile
 	{
-		// std::array<float4, 3> asccdl = { float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f } };
-		// std::array<float4, 3> liftgammagain = { float4{ 0.f, 0.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f }, float4{ 1.f, 1.f, 1.f, 1.f } };
-		// float4 saturationHueInOutGamma = float4{ 1.f, 1.f, 1.f, 1.f };
-		// float4 oklchSaturation = float4{ 1.f, 1.f, 0.f, 0.f };
-		// std::array<float4, 7> oklchColorMixer = make_array<7>(float4{ 0.f, 1.f, 0.f, 0.f });
+		// params[0-2]  asccdl (slope, power, offset)
+		// params[3-5]  liftgammagain (lift, gamma, gain)
+		// params[6]    inOutGamma (.z = input gamma, .w = output gamma; .xy reserved)
+		// params[7]    oklchSaturation (.x = saturation, .y = vibrance, .z = hue shift)
+		// params[8-14] oklchColorMixer[7] (per-hue: .x = hue shift, .y = vibrance, .z = brightness)
+		// params[15]   contrast
+		// params[16]   pivot
+		// params[17]   exposureTemperatureTint (.x = exposure, .y = temp, .z = tint)
+		// params[18-20] shadows/midtones/highlights gain
+		// params[21]   shadowsHighlightsRange
 		std::array<float4, 22> params = {
 			float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f },
 			float4{ 0.f, 0.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f }, float4{ 1.f, 1.f, 1.f, 1.f },
@@ -39,11 +44,14 @@ struct ColorGrading : public PostProcessFeature
 			float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f }, float4{ 1.f, 1.f, 1.f, 0.f },
 			float4{ 0.f, 0.3f, 0.55f, 1.f }
 		};
+		// SMH color offsets
+		float4 shadowsOffset = { 0.f, 0.f, 0.f, 0.f };
+		float4 midtonesOffset = { 0.f, 0.f, 0.f, 0.f };
+		float4 highlightsOffset = { 0.f, 0.f, 0.f, 0.f };
 	};
 
 	struct Settings
 	{
-		bool useToDInterior = false;
 		bool skipLDR = false;
 		bool skipLUT = false;
 		ColorProfile profile = {};
@@ -64,6 +72,8 @@ struct ColorGrading : public PostProcessFeature
 	std::array<float3, 3> inputToWorkingMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
 	std::array<float3, 3> workingToTonemapMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
 	std::array<float3, 3> tonemapToOutputMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
+	std::array<float3, 3> workingToXYZMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
+	std::array<float3, 3> xyzToWorkingMatrix = { float3{ 1.0f, 0.0f, 0.0f }, float3{ 0.0f, 1.0f, 0.0f }, float3{ 0.0f, 0.0f, 1.0f } };
 
 	int tonemapperType = 10;
 
@@ -79,7 +89,7 @@ struct ColorGrading : public PostProcessFeature
 	{
 		float4 asccdl[3];
 		float4 liftgammagain[3];  // lift，gamma，gain
-		float4 saturationHueInOutGamma;
+		float4 inOutGamma;        // .z = input gamma, .w = output gamma
 		float4 oklchSaturation;
 		float4 oklchColorMixer[7];
 		float4 contrast;
@@ -94,6 +104,15 @@ struct ColorGrading : public PostProcessFeature
 		float4 inputToWorking[3];    // sRGB → working color space
 		float4 workingToTonemap[3];  // working → tonemapper native space
 		float4 tonemapToOutput[3];   // tonemapper native → output space
+
+		float4 workingToXYZ[3];  // working → CIE XYZ (for white balance)
+		float4 xyzToWorking[3];  // CIE XYZ → working (for white balance)
+
+		float4 workingWhitePoint;  // .xy = native white chromaticity of working space
+
+		float4 shadowsOffset;  // SMH color offsets
+		float4 midtonesOffset;
+		float4 highlightsOffset;
 
 		// game value
 		float4 cinematic;  // saturation, brightness, contrast

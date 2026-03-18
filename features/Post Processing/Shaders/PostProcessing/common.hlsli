@@ -160,9 +160,10 @@ float3 RgbToOklab(float3 c)
 	float m = 0.2118591070f * c.r + 0.6807189584f * c.g + 0.1074065790f * c.b;
 	float s = 0.0883097947f * c.r + 0.2818474174f * c.g + 0.6302613616f * c.b;
 
-	float l_ = pow(l, 1. / 3.);
-	float m_ = pow(m, 1. / 3.);
-	float s_ = pow(s, 1. / 3.);
+	// Sign-preserving cube root: handles negative LMS from wide-gamut/HDR inputs
+	float l_ = sign(l) * pow(abs(l), 1. / 3.);
+	float m_ = sign(m) * pow(abs(m), 1. / 3.);
+	float s_ = sign(s) * pow(abs(s), 1. / 3.);
 
 	float3 labResult;
 	labResult.x = 0.2104542553f * l_ + 0.7936177850f * m_ - 0.0040720468f * s_;

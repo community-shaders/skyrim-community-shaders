@@ -15,7 +15,7 @@ cbuffer ColorCB : register(b1)
 {
 	float4 asccdl[3];
 	float4 liftgammagain[3];  // lift，gamma，gain
-	float4 saturationHueInOutGamma;
+	float4 inOutGamma;        // .z = input gamma, .w = output gamma
 	float4 oklchSaturation;
 	float4 oklchColorMixer[7];
 	float4 contrast;
@@ -30,6 +30,15 @@ cbuffer ColorCB : register(b1)
 	float4 inputToWorking[3];    // sRGB → working color space
 	float4 workingToTonemap[3];  // working → tonemapper native space
 	float4 tonemapToOutput[3];   // tonemapper native → output space
+
+	float4 workingToXYZ[3];  // working → CIE XYZ (for white balance)
+	float4 xyzToWorking[3];  // CIE XYZ → working (for white balance)
+
+	float4 workingWhitePoint;  // .xy = native white chromaticity of working space
+
+	float4 shadowsOffset;  // SMH color offsets
+	float4 midtonesOffset;
+	float4 highlightsOffset;
 
 	// game value
 	float4 cinematic;  // saturation, brightness, contrast
@@ -80,33 +89,31 @@ float3 LiftGammaGain(float3 rgb, float4 lift, float4 gamma, float4 gain)
 	return col;
 }
 
-float3 OklchSaturation(float3 val)
+// Combined Oklch adjustments: global saturation/vibrance/hue + per-hue colour mixer
+// Single Oklab round-trip for efficiency
+float3 OklchAdjustments(float3 val)
 {
-	float3 oklab = RgbToOklab(val);
-
-	float c = length(oklab.yz);
-	float h = atan2(oklab.z, oklab.y);
-
-	c = min(0.37, c * oklchSaturation.x);
-	c = (1 - pow(abs(1 - c / 0.37), oklchSaturation.y)) * 0.37;
-	h += oklchSaturation.z * Math::PI;
-
-	sincos(h, oklab.z, oklab.y);
-	oklab.yz *= c;
-
-	return max(0, OklabToRgb(oklab));
-}
-
-// mimicking lightroom colour mixer
-float3 OklchColourMixer(float3 val)
-{
-	static const float redHue = 0.08120523664;  //0xff0000
-
 	float3 oklab = RgbToOklab(val);
 
 	float l = oklab.x;
 	float c = length(oklab.yz);
 	float h = atan2(oklab.z, oklab.y);
+
+	// === Global adjustments ===
+
+	// Saturation
+	c *= oklchSaturation.x;
+
+	// Vibrance: perceptual boost for low-saturation colors, preserves already-saturated ones
+	float vibranceFactor = 1.0 + (oklchSaturation.y - 1.0) * (1.0 - smoothstep(0.0, 0.5, c));
+	c *= max(0, vibranceFactor);
+
+	// Global hue shift
+	h += oklchSaturation.z * Math::PI;
+
+	// === Per-hue colour mixer (mimicking Lightroom) ===
+
+	static const float redHue = 0.08120523664;  // 0xff0000
 
 	float lerpFactor = (h / (2 * Math::PI) - redHue) * 7;
 	int leftHue = floor(lerpFactor);
@@ -115,35 +122,41 @@ float3 OklchColourMixer(float3 val)
 	int rightHue = (leftHue + 1) % 7;
 	float effect = saturate(c / 0.37);
 
-	// hue shift
-	h = h + lerp(oklchColorMixer[leftHue].x, oklchColorMixer[rightHue].x, lerpFactor) * Math::PI / 4;
-	// vibrance
-	float c1 = (1 - pow(max(0, 1 - c / 0.37), oklchColorMixer[leftHue].y)) * 0.37;
-	float c2 = (1 - pow(max(0, 1 - c / 0.37), oklchColorMixer[rightHue].y)) * 0.37;
-	c = lerp(c1, c2, lerpFactor);
-	// brightness
-	l = l + lerp(oklchColorMixer[leftHue].z, oklchColorMixer[rightHue].z, lerpFactor) * effect;
+	// Per-hue hue shift
+	h += lerp(oklchColorMixer[leftHue].x, oklchColorMixer[rightHue].x, lerpFactor) * Math::PI / 4;
+
+	// Per-hue vibrance
+	float hueVibrance = lerp(oklchColorMixer[leftHue].y, oklchColorMixer[rightHue].y, lerpFactor);
+	float hueVibranceFactor = 1.0 + (hueVibrance - 1.0) * (1.0 - smoothstep(0.0, 0.5, c));
+	c *= max(0, hueVibranceFactor);
+
+	// Per-hue brightness
+	l += lerp(oklchColorMixer[leftHue].z, oklchColorMixer[rightHue].z, lerpFactor) * effect;
+
+	// === Reconstruct ===
 
 	oklab.x = l;
 	sincos(h, oklab.z, oklab.y);
 	oklab.yz *= c;
 
-	return max(0, OklabToRgb(oklab));
+	return OklabToRgb(oklab);
 }
 
-float3 ShadowsMidtonesHighlights(float3 color, float3 shadowsColor, float3 midtonesColor, float3 highlightsColor, float shadowBegin, float shadowEnd, float highlightBegin, float highlightEnd)
+float3 ShadowsMidtonesHighlights(float3 color, float3 shadowsGain, float3 midtonesGain, float3 highlightsGain,
+	float3 shadowsOff, float3 midtonesOff, float3 highlightsOff,
+	float shadowBegin, float shadowEnd, float highlightBegin, float highlightEnd)
 {
 	float luma = Color::RGBToLuminance(color);
 
 	float shadowWeight = 1.0 - smoothstep(shadowBegin, shadowEnd, luma);
-
 	float highlightWeight = smoothstep(highlightBegin, highlightEnd, luma);
-
 	float midtoneWeight = 1.0 - shadowWeight - highlightWeight;
 
-	float3 result = color * shadowsColor * shadowWeight + color * midtonesColor * midtoneWeight + color * highlightsColor * highlightWeight;
+	// Per-zone gain + offset (industry standard: allows both color scaling and color shift)
+	float3 gain = shadowsGain * shadowWeight + midtonesGain * midtoneWeight + highlightsGain * highlightWeight;
+	float3 offset = shadowsOff * shadowWeight + midtonesOff * midtoneWeight + highlightsOff * highlightWeight;
 
-	return result;
+	return color * gain + offset;
 }
 
 float2 IlluminantChromaticity(float temp)
@@ -182,22 +195,27 @@ float2 PlanckianIsothermal(float temp, float tint)
 
 float3 WhiteBalance(float3 linearColor)
 {
-	if (abs(exposureTemperatureTint.y - 65) < 0.1 && abs(exposureTemperatureTint.z) < 0.001)
-		return linearColor;
-
 	float temp = exposureTemperatureTint.y * 100;
 	float tint = exposureTemperatureTint.z;
 	float2 srcWhiteDaylight = IlluminantChromaticity(temp);
 	float2 srcWhitePlankian = PlanckianLocusChromaticity(temp);
 
 	float2 srcWhite = temp < 4000 ? srcWhitePlankian : srcWhiteDaylight;
-	float2 d65White = float2(0.31270, 0.32900);
 
 	float2 isothermal = PlanckianIsothermal(temp, tint) - srcWhitePlankian;
 	srcWhite += isothermal;
 
-	float3x3 whiteBalance = ChromaticAdaptation(srcWhite, d65White);
-	whiteBalance = mul(XYZ_2_sRGB_MAT, mul(whiteBalance, sRGB_2_XYZ_MAT));
+	// Adapt to working space native white (D65 for sRGB, D60 for ACEScg, etc.)
+	float2 dstWhite = workingWhitePoint.xy;
+
+	// Skip if source and destination are approximately equal
+	if (all(abs(srcWhite - dstWhite) < 0.001))
+		return linearColor;
+
+	float3x3 whiteBalance = ChromaticAdaptation(srcWhite, dstWhite);
+	const float3x3 xyzToWorkingMat = float3x3(xyzToWorking[0].xyz, xyzToWorking[1].xyz, xyzToWorking[2].xyz);
+	const float3x3 workingToXYZMat = float3x3(workingToXYZ[0].xyz, workingToXYZ[1].xyz, workingToXYZ[2].xyz);
+	whiteBalance = mul(xyzToWorkingMat, mul(whiteBalance, workingToXYZMat));
 
 	return mul(whiteBalance, linearColor);
 }
@@ -648,10 +666,13 @@ float3 ColorGrading(float3 color)
 		color = mul(inputToWorkingMat, color);
 	}
 
-	// HDR color grading (in working space)
+	// HDR color grading (in working space, linear)
 	// Exposure/White Balance
 	color *= exposureTemperatureTint.x;
 	color = WhiteBalance(color);
+
+	// Oklch adjustments (perceptual, HDR-safe: saturation, vibrance, hue shift, per-hue mixer)
+	color = OklchAdjustments(color);
 
 	// Log
 	if (logType)
@@ -660,12 +681,10 @@ float3 ColorGrading(float3 color)
 	// ASC CDL
 	color = ASC_CDL(color, asccdl[0].xyz, asccdl[1].xyz, asccdl[2].xyz);
 
-	// Saturation and Hue
-	color = Saturation(color, saturationHueInOutGamma.x);
-	color = HueShift(color, saturationHueInOutGamma.y);
-
-	// Shadows Midtones Highlights
-	color = ShadowsMidtonesHighlights(color, shadows.xyz, midtones.xyz, highlights.xyz, shadowsHighlightsRange.x, shadowsHighlightsRange.y, shadowsHighlightsRange.z, shadowsHighlightsRange.w);
+	// Shadows Midtones Highlights (gain + offset per zone)
+	color = ShadowsMidtonesHighlights(color, shadows.xyz, midtones.xyz, highlights.xyz,
+		shadowsOffset.xyz, midtonesOffset.xyz, highlightsOffset.xyz,
+		shadowsHighlightsRange.x, shadowsHighlightsRange.y, shadowsHighlightsRange.z, shadowsHighlightsRange.w);
 
 	// Contrast
 	color = logType ? LogContrast(color, contrast.xyz, pivot.xyz) : LinearContrast(color, contrast.xyz, pivot.xyz);
@@ -695,12 +714,6 @@ float3 ColorGrading(float3 color)
 	if (!skipLDR) {
 		// Lift Gamma Gain
 		color = LiftGammaGain(color, liftgammagain[0].gbar, liftgammagain[1].gbar, liftgammagain[2].gbar);
-
-		// Oklch Saturation
-		color = OklchSaturation(color);
-
-		// Oklch Colour Mixer
-		color = OklchColourMixer(color);
 	}
 
 	return color;
@@ -716,7 +729,7 @@ float3 ApplyLUT(float3 color)
 
 [numthreads(8, 8, 1)] void CSColorGrading(uint2 DTid : SV_DispatchThreadID) {
 	// Game cinematic
-	float3 color = pow(abs(TexColor[DTid].xyz), saturationHueInOutGamma.z) * cinematic.y;
+	float3 color = pow(abs(TexColor[DTid].xyz), inOutGamma.z) * cinematic.y;
 	color = Saturation(color, cinematic.x);
 	color = LinearContrast(color, cinematic.z, 0.18);
 
@@ -726,7 +739,7 @@ float3 ApplyLUT(float3 color)
 	else
 		color = ApplyLUT(color);
 
-	color = pow(abs(color), saturationHueInOutGamma.w);
+	color = pow(abs(color), inOutGamma.w);
 
 	// Game tint
 	float luma = Color::RGBToLuminance(color);

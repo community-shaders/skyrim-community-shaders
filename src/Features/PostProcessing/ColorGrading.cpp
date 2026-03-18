@@ -13,7 +13,10 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ColorGrading::ColorProfile,
-	params)
+	params,
+	shadowsOffset,
+	midtonesOffset,
+	highlightsOffset)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ColorGrading::Settings,
@@ -230,7 +233,7 @@ void ColorGrading::DrawSettings()
 {
 	ImGui::Checkbox("Skip LDR Color Grading", &settings.skipLDR);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("Skip color grading after tonemapping. This includes Lift Gamma Gain and Oklch adjustments.");
+		ImGui::Text("Skip color grading after tonemapping. This includes Lift Gamma Gain.");
 
 	ImGui::Checkbox("Skip LUT (Direct Color Grading)", &settings.skipLUT);
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -260,35 +263,6 @@ void ColorGrading::DrawSettings()
 			shiftSlider("Slope", &profile.params[0].x, 0.f, 2.f, "%.2f");
 			shiftSlider("Power", &profile.params[1].x, 0.f, 2.f, "%.2f");
 			shiftSlider("Offset", &profile.params[2].x, -1.f, 1.f, "%.2f");
-			ImGui::TreePop();
-		}
-
-		if (ImGui::TreeNode("Saturation/Hue")) {
-			ImGui::SliderFloat("Saturation", &profile.params[6].x, 0.f, 3.f, "%.3f");
-			ImGui::SliderFloat("Hue Shift", &profile.params[6].y, -1.f, 1.f, "%.3f");
-			ImGui::TreePop();
-		}
-
-		if (ImGui::TreeNode("Shadows/Midtones/Highlights")) {
-			shiftSlider("Shadows", &profile.params[18].x, 0.f, 2.f, "%.3f");
-			shiftSlider("Midtones", &profile.params[19].x, 0.f, 2.f, "%.3f");
-			shiftSlider("Highlights", &profile.params[20].x, 0.f, 2.f, "%.3f");
-			ImGui::InputFloat2("Shadows Start/End", &profile.params[21].x, "%.3f");
-			ImGui::InputFloat2("Highlights Start/End", &profile.params[21].z, "%.3f");
-			ImGui::TreePop();
-		}
-
-		if (ImGui::TreeNode("Contrast")) {
-			shiftSlider("Contrast", &profile.params[15].x, 0.f, 2.f, "%.3f");
-			shiftSlider("Pivot", &profile.params[16].x, 0.f, 1.f, "%.3f");
-			ImGui::TreePop();
-		}
-
-		ImGui::Text("Post-Tonemapping Settings");
-		if (ImGui::TreeNode("Lift Gamma Gain")) {
-			ImGui::DragFloat4("Lift", &profile.params[3].x, 1e-3f, -1.f, 1.f, "%.3f");
-			ImGui::DragFloat4("Gamma", &profile.params[4].x, 1e-3f, -1.5f, 1.5f, "%.3f");
-			ImGui::DragFloat4("Gain", &profile.params[5].x, 1e-3f, 0.f, 2.f, "%.3f");
 			ImGui::TreePop();
 		}
 
@@ -326,6 +300,32 @@ void ColorGrading::DrawSettings()
 			ImGui::SliderFloat("Hue Shift", &profile.params[8 + hueId].x, -1.f, 1.f, "%.3f");
 			ImGui::SliderFloat("Vibrance", &profile.params[8 + hueId].y, 0.f, 3.f, "%.3f");
 			ImGui::SliderFloat("Brightness", &profile.params[8 + hueId].z, -1.f, 1.f, "%.3f");
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNode("Shadows/Midtones/Highlights")) {
+			shiftSlider("Shadows Gain", &profile.params[18].x, 0.f, 2.f, "%.3f");
+			shiftSlider("Shadows Offset", &profile.shadowsOffset.x, -0.5f, 0.5f, "%.3f");
+			shiftSlider("Midtones Gain", &profile.params[19].x, 0.f, 2.f, "%.3f");
+			shiftSlider("Midtones Offset", &profile.midtonesOffset.x, -0.5f, 0.5f, "%.3f");
+			shiftSlider("Highlights Gain", &profile.params[20].x, 0.f, 2.f, "%.3f");
+			shiftSlider("Highlights Offset", &profile.highlightsOffset.x, -0.5f, 0.5f, "%.3f");
+			ImGui::InputFloat2("Shadows Start/End", &profile.params[21].x, "%.3f");
+			ImGui::InputFloat2("Highlights Start/End", &profile.params[21].z, "%.3f");
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNode("Contrast")) {
+			shiftSlider("Contrast", &profile.params[15].x, 0.f, 2.f, "%.3f");
+			shiftSlider("Pivot", &profile.params[16].x, 0.f, 1.f, "%.3f");
+			ImGui::TreePop();
+		}
+
+		ImGui::Text("Post-Tonemapping Settings");
+		if (ImGui::TreeNode("Lift Gamma Gain")) {
+			ImGui::DragFloat4("Lift", &profile.params[3].x, 1e-3f, -1.f, 1.f, "%.3f");
+			ImGui::DragFloat4("Gamma", &profile.params[4].x, 1e-3f, -1.5f, 1.5f, "%.3f");
+			ImGui::DragFloat4("Gain", &profile.params[5].x, 1e-3f, 0.f, 2.f, "%.3f");
 			ImGui::TreePop();
 		}
 	}
@@ -384,8 +384,6 @@ void ColorGrading::DrawSettings()
 	}
 	ImGui::SameLine();
 	ImGui::Text("Output will be saved to: %s", outputPath.c_str());
-
-	ImGui::PopID();
 }
 
 void ColorGrading::RestoreDefaultSettings()
@@ -596,13 +594,30 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	if (settings.enableColorSpaceTransform)
 		UpdateColorSpaceTransforms();
 
+	// Always compute XYZ matrices for white balance
+	{
+		auto& spaces = getAvailableColourSpaces();
+		int wsIdx = settings.enableColorSpaceTransform ?
+		                std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1) :
+		                0;
+		auto storeMatrix = [](const DirectX::SimpleMath::Matrix& mat, std::array<float3, 3>& out) {
+			out = {
+				float3{ mat(0, 0), mat(0, 1), mat(0, 2) },
+				float3{ mat(1, 0), mat(1, 1), mat(1, 2) },
+				float3{ mat(2, 0), mat(2, 1), mat(2, 2) }
+			};
+		};
+		storeMatrix(getRGBMatrix(spaces[wsIdx], "XYZ"), workingToXYZMatrix);
+		storeMatrix(getRGBMatrix("XYZ", spaces[wsIdx]), xyzToWorkingMatrix);
+	}
+
 	ColorCB colorCBData = {
 		.asccdl = {
 			profile.params[0],
 			profile.params[1],
 			profile.params[2] },
 		.liftgammagain = { profile.params[3], profile.params[4], profile.params[5] },
-		.saturationHueInOutGamma = profile.params[6],
+		.inOutGamma = profile.params[6],
 		.oklchSaturation = profile.params[7],
 		.oklchColorMixer = { profile.params[8], profile.params[9], profile.params[10], profile.params[11], profile.params[12], profile.params[13], profile.params[14] },
 		.contrast = profile.params[15],
@@ -616,6 +631,19 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		.inputToWorking = { float4{ inputToWorkingMatrix[0].x, inputToWorkingMatrix[0].y, inputToWorkingMatrix[0].z, 0.f }, float4{ inputToWorkingMatrix[1].x, inputToWorkingMatrix[1].y, inputToWorkingMatrix[1].z, 0.f }, float4{ inputToWorkingMatrix[2].x, inputToWorkingMatrix[2].y, inputToWorkingMatrix[2].z, 0.f } },
 		.workingToTonemap = { float4{ workingToTonemapMatrix[0].x, workingToTonemapMatrix[0].y, workingToTonemapMatrix[0].z, 0.f }, float4{ workingToTonemapMatrix[1].x, workingToTonemapMatrix[1].y, workingToTonemapMatrix[1].z, 0.f }, float4{ workingToTonemapMatrix[2].x, workingToTonemapMatrix[2].y, workingToTonemapMatrix[2].z, 0.f } },
 		.tonemapToOutput = { float4{ tonemapToOutputMatrix[0].x, tonemapToOutputMatrix[0].y, tonemapToOutputMatrix[0].z, 0.f }, float4{ tonemapToOutputMatrix[1].x, tonemapToOutputMatrix[1].y, tonemapToOutputMatrix[1].z, 0.f }, float4{ tonemapToOutputMatrix[2].x, tonemapToOutputMatrix[2].y, tonemapToOutputMatrix[2].z, 0.f } },
+		.workingToXYZ = { float4{ workingToXYZMatrix[0].x, workingToXYZMatrix[0].y, workingToXYZMatrix[0].z, 0.f }, float4{ workingToXYZMatrix[1].x, workingToXYZMatrix[1].y, workingToXYZMatrix[1].z, 0.f }, float4{ workingToXYZMatrix[2].x, workingToXYZMatrix[2].y, workingToXYZMatrix[2].z, 0.f } },
+		.xyzToWorking = { float4{ xyzToWorkingMatrix[0].x, xyzToWorkingMatrix[0].y, xyzToWorkingMatrix[0].z, 0.f }, float4{ xyzToWorkingMatrix[1].x, xyzToWorkingMatrix[1].y, xyzToWorkingMatrix[1].z, 0.f }, float4{ xyzToWorkingMatrix[2].x, xyzToWorkingMatrix[2].y, xyzToWorkingMatrix[2].z, 0.f } },
+		.workingWhitePoint = [&]() {
+			auto& spaces = getAvailableColourSpaces();
+			int wsIdx = settings.enableColorSpaceTransform ?
+		                    std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1) :
+		                    0;
+			auto wp = getWhitePoint(spaces[wsIdx]);
+			return float4{ wp.x, wp.y, 0.f, 0.f };
+		}(),
+		.shadowsOffset = profile.shadowsOffset,
+		.midtonesOffset = profile.midtonesOffset,
+		.highlightsOffset = profile.highlightsOffset,
 		.cinematic = float4{ std::lerp(1.f, imageSpaceData.baseData.cinematic.saturation, settings.gameCinematicBlend.x), std::lerp(1.f, imageSpaceData.baseData.cinematic.brightness, settings.gameCinematicBlend.y), std::lerp(1.f, imageSpaceData.baseData.cinematic.contrast, settings.gameCinematicBlend.z), imageSpaceData.baseAmount },
 		.fade = float4{ imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeR], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeG], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeB], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeAmount] * settings.gameFadeBlend },
 		.tint = float4{ imageSpaceData.baseData.tint.color.red, imageSpaceData.baseData.tint.color.green, imageSpaceData.baseData.tint.color.blue, imageSpaceData.baseData.tint.amount * settings.gameTintBlend },

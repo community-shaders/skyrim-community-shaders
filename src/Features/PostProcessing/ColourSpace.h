@@ -15,6 +15,17 @@ inline const auto& getAvailableColourSpaces()
 	return spaces;
 }
 
+// Native white point chromaticity (CIE xy) for each color space
+inline DirectX::XMFLOAT2 getWhitePoint(std::string_view space)
+{
+	if (space == "ACEScg")
+		return { 0.32168f, 0.33767f };  // ACES White (≈D60)
+	if (space == "DCI-P3")
+		return { 0.31400f, 0.35100f };  // DCI White
+	// sRGB, BT.709, BT.2020, XYZ: D65
+	return { 0.31270f, 0.32900f };
+}
+
 inline DirectX::SimpleMath::Matrix getRGBMatrix(std::string_view in_space, std::string_view out_space)
 {
 	static ankerl::unordered_dense::map<std::string, DirectX::XMFLOAT3X3> maps = {
