@@ -26,7 +26,7 @@ void HistogramAutoExposure::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Specifies the proportion of the area [width, height] that auto exposure will adapt to.");
 
-	ImGui::SliderFloat2("Adaptation Range", &settings.AdaptationRange.x, -6.f, 21.f, "%.2f EV");
+	ImGui::SliderFloat2("Adaptation Range", &settings.AdaptationRange.x, -10.f, 21.f, "%.2f EV");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text(
 			"[Min, Max] The average scene luminance will be clamped between them when doing auto exposure."
@@ -38,10 +38,10 @@ void HistogramAutoExposure::DrawSettings()
 			"If you don't like the effect, you can set the strength to zero.");
 
 		ImGui::SliderFloat("Max Strength", &settings.PurkinjeStrength, 0.f, 5.f, "%.2f");
-		ImGui::SliderFloat("Fade In EV", &settings.PurkinjeStartEV, -6.f, 21.f, "%.2f EV");
+		ImGui::SliderFloat("Fade In EV", &settings.PurkinjeStartEV, -10.f, 21.f, "%.2f EV");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("The Purkinje effect will start to take place when the average scene luminance falls lower than this.");
-		ImGui::SliderFloat("Max Effect EV", &settings.PurkinjeMaxEV, -6.f, 21.f, "%.2f EV");
+		ImGui::SliderFloat("Max Effect EV", &settings.PurkinjeMaxEV, -10.f, 21.f, "%.2f EV");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("From this point onward, the Purkinje effect remains the greatest.");
 
