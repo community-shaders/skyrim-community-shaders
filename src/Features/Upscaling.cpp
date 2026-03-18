@@ -9,6 +9,7 @@
 #include "Utils/UI.h"
 #include <Windows.h>
 #include <algorithm>
+#include <cmath>
 #include <cfloat>
 #include <directx/d3dx12.h>
 #include <format>
@@ -398,6 +399,8 @@ void Upscaling::DrawSettings()
 		if (!settings.reflexUseFPSLimit)
 			ImGui::BeginDisabled();
 
+		if (!std::isfinite(settings.reflexFPSLimit))
+			settings.reflexFPSLimit = 60.0f;
 		settings.reflexFPSLimit = std::clamp(settings.reflexFPSLimit, 20.0f, 240.0f);
 		ImGui::SliderFloat("FPS Limit", &settings.reflexFPSLimit, 20.0f, 240.0f, "%.0f");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -552,13 +555,21 @@ void Upscaling::LoadSettings(json& o_json)
 		settings.useGatherWideKernel = 1;
 	}
 	const float originalReflexFPSLimit = settings.reflexFPSLimit;
-	settings.reflexFPSLimit = std::clamp(settings.reflexFPSLimit, 20.0f, 240.0f);
-	if (settings.reflexFPSLimit != originalReflexFPSLimit) {
+	if (!std::isfinite(settings.reflexFPSLimit)) {
+		settings.reflexFPSLimit = 60.0f;
 		logger::warn(
-			"[Upscaling] Loaded reflexFPSLimit {} out of range, clamping to {}",
+			"[Upscaling] Loaded reflexFPSLimit {} is not finite, resetting to {}",
 			originalReflexFPSLimit,
 			settings.reflexFPSLimit);
 	}
+	const float clampedReflexFPSLimit = std::clamp(settings.reflexFPSLimit, 20.0f, 240.0f);
+	if (clampedReflexFPSLimit != settings.reflexFPSLimit) {
+		logger::warn(
+			"[Upscaling] Loaded reflexFPSLimit {} out of range, clamping to {}",
+			settings.reflexFPSLimit,
+			clampedReflexFPSLimit);
+	}
+	settings.reflexFPSLimit = clampedReflexFPSLimit;
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
 		auto setting = iniSettingCollection->GetSetting("bUseTAA:Display");

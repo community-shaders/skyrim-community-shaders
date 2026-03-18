@@ -694,8 +694,15 @@ void Streamline::UpdateReflex()
 		options.mode = settings.reflexLowLatencyBoost ? sl::ReflexMode::eLowLatencyWithBoost : sl::ReflexMode::eLowLatency;
 	}
 
-	const float fpsLimit = std::clamp(settings.reflexFPSLimit, 20.0f, 240.0f);
-	options.frameLimitUs = settings.reflexUseFPSLimit ? static_cast<uint32_t>(std::round(1000000.0f / fpsLimit)) : 0u;
+	const float originalReflexFPSLimit = settings.reflexFPSLimit;
+	float reflexFPSLimit = originalReflexFPSLimit;
+	if (!std::isfinite(reflexFPSLimit)) {
+		reflexFPSLimit = 60.0f;
+		settings.reflexFPSLimit = reflexFPSLimit;
+		logger::warn("[Streamline] reflexFPSLimit is not finite ({}), using {}", originalReflexFPSLimit, reflexFPSLimit);
+	}
+	const float fpsLimit = std::clamp(reflexFPSLimit, 20.0f, 240.0f);
+	options.frameLimitUs = settings.reflexUseFPSLimit ? static_cast<uint32_t>(std::lround(1000000.0 / static_cast<double>(fpsLimit))) : 0u;
 	options.useMarkersToOptimize = settings.reflexUseMarkersToOptimize && featurePCL;
 
 	applyReflexOptionsIfChanged(options, "Failed to apply Reflex options");
