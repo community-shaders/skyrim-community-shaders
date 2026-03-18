@@ -107,17 +107,18 @@ namespace ShadowSampling
 	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
 #endif
 	{
-		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
+		float3 ambientColorAmb = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 
 #if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-			ambientColorAmb *= SharedData::iblSettings.DALCAmount;
-#	if defined(SKYLIGHTING) && !defined(INTERIOR)
-			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#	else
-			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#	endif
-			ambientColorAmb += Color::IrradianceToGamma(iblColor);
+		if (SharedData::iblSettings.EnableIBL) {
+			if (SharedData::iblSettings.DALCMode == 2) {
+				// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
+				ambientColorAmb = ambientColorAmb * SharedData::iblSettings.DALCAmount + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));
+			} else {
+				float3 envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(float3(0, 0, -1)));
+				float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));
+				ambientColorAmb = envIBLColor + skyIBLColor;
+			}
 		}
 #endif
 

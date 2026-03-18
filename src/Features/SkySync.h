@@ -69,17 +69,6 @@ public:
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct VolumetricLightingDescriptor
-	{
-		float lightingIntensity;
-	};
-
-	struct ApplyVolumetricLighting_VolumetricLightingDescriptor_Get
-	{
-		static VolumetricLightingDescriptor* thunk();
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 private:
 	enum class MoonLightSource : uint8_t
 	{
@@ -166,8 +155,6 @@ private:
 	inline static float* gSunGlareSize = nullptr;
 	inline static uint32_t* gMasserSize = nullptr;
 	inline static uint32_t* gSecundaSize = nullptr;
-
-	inline static float volumetricLightingIntensityFactor = 1.0f;
 
 	bool moonAndStarsLoaded = false;
 	RE::TESObjectCELL* currentCell = nullptr;

@@ -194,28 +194,54 @@ namespace HLSLTestDiscovery
 	inline bool runTest(const TestFunction& test, std::string& errorMsg)
 	{
 		try {
-			stf::ShaderTestFixture fixture(ShaderTest::GetFixtureDesc());
-			auto shaderDir = (ShaderTest::GetExecutableDirectory() / "Shaders").wstring();
+			auto runWithDevice = [&test, &errorMsg](const stf::GPUDevice::EDeviceType deviceType) {
+				stf::ShaderTestFixture fixture(ShaderTest::GetFixtureDesc(deviceType));
+				auto shaderDir = (ShaderTest::GetExecutableDirectory() / "Shaders").wstring();
 
-			auto result = fixture.RunTest(stf::ShaderTestFixture::RuntimeTestDesc{
-				.CompilationEnv{ .Source = std::filesystem::path(test.filePath),
-					.CompilationFlags = { L"-I", shaderDir } },
-				.TestName = test.name,
-				.ThreadGroupCount{ 1, 1, 1 } });
+				auto result = fixture.RunTest(stf::ShaderTestFixture::RuntimeTestDesc{
+					.CompilationEnv{ .Source = std::filesystem::path(test.filePath),
+						.CompilationFlags = { L"-I", shaderDir } },
+					.TestName = test.name,
+					.ThreadGroupCount{ 1, 1, 1 } });
 
-			if (!result) {
-				// Extract detailed error information from the result
-				// This includes line numbers, thread IDs, and actual/expected values
-				std::ostringstream oss;
-				oss << result;
-				errorMsg = oss.str();
+				if (!result) {
+					// Extract detailed error information from the result
+					// This includes line numbers, thread IDs, and actual/expected values
+					std::ostringstream oss;
+					oss << result;
+					errorMsg = oss.str();
 
-				// Also print to stdout for immediate visibility during test runs
-				std::cout << "\n"
-						  << errorMsg << "\n";
-				return false;
+					// Also print to stdout for immediate visibility during test runs
+					std::cout << "\n"
+							  << errorMsg << "\n";
+					return false;
+				}
+
+				return true;
+			};
+
+			if (ShaderTest::GetPreferredDevice() == ShaderTest::EPreferredDevice::Hardware) {
+				return runWithDevice(stf::GPUDevice::EDeviceType::Hardware);
 			}
-			return true;
+
+			if (ShaderTest::GetPreferredDevice() == ShaderTest::EPreferredDevice::Software) {
+				return runWithDevice(stf::GPUDevice::EDeviceType::Software);
+			}
+
+			try {
+				const bool hardwareResult = runWithDevice(stf::GPUDevice::EDeviceType::Hardware);
+				ShaderTest::SetPreferredDevice(ShaderTest::EPreferredDevice::Hardware);
+				return hardwareResult;
+			} catch (const stf::HrException& e) {
+				if (e.Error() == E_INVALIDARG) {
+					std::cout << "\n[ShaderTests] Hardware D3D12 path returned E_INVALIDARG; retrying with software WARP device.\n";
+					const bool softwareResult = runWithDevice(stf::GPUDevice::EDeviceType::Software);
+					ShaderTest::SetPreferredDevice(ShaderTest::EPreferredDevice::Software);
+					return softwareResult;
+				} else {
+					throw;
+				}
+			}
 		} catch (const std::exception& e) {
 			errorMsg = e.what();
 			std::cout << "\nException: " << errorMsg << "\n";

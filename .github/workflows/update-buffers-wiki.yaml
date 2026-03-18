@@ -32,8 +32,15 @@ jobs:
             - name: Prepare shaders
               uses: ./.github/actions/prepare-shaders
 
-            - name: Create wiki content directory
-              run: mkdir -p wiki-content
+            - name: Checkout existing wiki
+              run: |
+                  WIKI_URL="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git"
+                  if git ls-remote --exit-code "$WIKI_URL" &>/dev/null; then
+                      git clone --depth=1 "$WIKI_URL" wiki-content
+                  else
+                      echo "Wiki does not exist yet; initializing empty wiki-content directory."
+                      mkdir -p wiki-content
+                  fi
               shell: bash
 
             - name: Scan buffer usage

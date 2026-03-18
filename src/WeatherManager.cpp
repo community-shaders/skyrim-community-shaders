@@ -2,6 +2,26 @@
 
 #include "State.h"
 
+namespace
+{
+	void RestoreFeatureUserSettings(WeatherVariables::GlobalWeatherRegistry* registry, const std::string& featureName)
+	{
+		if (!registry) {
+			return;
+		}
+
+		registry->EndFeatureTransition(featureName);
+		auto* featureRegistry = registry->GetFeatureRegistry(featureName);
+		if (!featureRegistry) {
+			return;
+		}
+
+		for (const auto& var : featureRegistry->GetVariables()) {
+			var->SetToUserSettings();
+		}
+	}
+}
+
 WeatherManager::CurrentWeathers WeatherManager::GetCurrentWeathers()
 {
 	CurrentWeathers result;
@@ -100,33 +120,37 @@ void WeatherManager::UpdateFeatures()
 			if (globalRegistry->HasWeatherSupport(featureName)) {
 				json currWeatherSettings;
 				json nextWeatherSettings;
+				bool hasCurrOverride = false;
+				bool hasNextOverride = false;
 
 				// Load settings for last weather (from)
 				if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
-					LoadSettingsFromWeather(currentWeathers.lastWeather, featureName, currWeatherSettings);
+					hasCurrOverride = LoadSettingsFromWeather(currentWeathers.lastWeather, featureName, currWeatherSettings);
 				}
 
 				// Load settings for current weather (to)
 				if (currentWeathers.currentWeather) {
-					LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, nextWeatherSettings);
+					hasNextOverride = LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, nextWeatherSettings);
 				}
 
+				const bool hasAnyWeatherOverride = hasCurrOverride || hasNextOverride;
+
 				// Handle transition lifecycle
-				if (transitionStarting) {
+				if (transitionStarting && hasAnyWeatherOverride) {
 					// Begin new transition - cache the "from" values
 					globalRegistry->BeginFeatureTransition(featureName, currWeatherSettings);
 				}
 
-				// Update feature variables
-				if (currentWeathers.lerpFactor >= 1.0f && nextWeatherSettings.empty()) {
-					// Transition complete, no override on destination - reset to user settings
+				// No weather overrides on either side: keep in-memory settings unchanged
+				if (!hasAnyWeatherOverride) {
 					globalRegistry->EndFeatureTransition(featureName);
-					auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName);
-					if (featureRegistry) {
-						for (const auto& var : featureRegistry->GetVariables()) {
-							var->SetToUserSettings();
-						}
-					}
+					continue;
+				}
+
+				// Update feature variables
+				if (currentWeathers.lerpFactor >= 1.0f && !hasNextOverride) {
+					// Transition complete, no override on destination - reset to user settings
+					RestoreFeatureUserSettings(globalRegistry, featureName);
 				} else {
 					// In transition or has override - interpolate
 					globalRegistry->UpdateFeatureFromWeathers(featureName, currWeatherSettings, nextWeatherSettings, currentWeathers.lerpFactor);

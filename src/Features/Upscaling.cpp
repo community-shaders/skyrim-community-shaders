@@ -323,7 +323,7 @@ void Upscaling::DrawSettings()
 			if (!frameGenerationDx12PathActive)
 				ImGui::EndDisabled();
 
-			ImGui::Text("Allows frame generation to function on low refresh rate monitors");
+			ImGui::TextWrapped("Allows frame generation to function on low refresh rate monitors. Detected: %.2f Hz", refreshRate);
 			ImGui::SliderInt("Force Enable Frame Generation", (int*)&settings.frameGenerationForceEnable, 0, 1, std::format("{}", toggleModes[settings.frameGenerationForceEnable]).c_str());
 
 			ImGui::TreePop();
@@ -1139,15 +1139,22 @@ void Upscaling::ConfigureTAA()
 {
 	auto upscaleMethod = GetUpscaleMethod();
 
+	// When no upscaling method is active, leave vanilla TAA state untouched.
+	// The original UpdateJitter (called after this) manages water TAA and jitter
+	// correctly for the non-upscaling case.  Overriding here disables ISWaterBlend,
+	// removing the 95% temporal history blend that stabilizes water reflections.
+	if (upscaleMethod == UpscaleMethod::kNONE)
+		return;
+
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-	// Disable water TAA when upscaling is enabled
+	// CS TAA replaces vanilla TAA entirely, so disable water TAA (CS handles it).
+	// For FSR/DLSS, keep water TAA enabled since the upscaler needs the blend data.
 	bool* enableWaterTAA = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISTemporalAA) + 0x38LL);
-	*enableWaterTAA = !(upscaleMethod == UpscaleMethod::kNONE || upscaleMethod == UpscaleMethod::kTAA);
+	*enableWaterTAA = (upscaleMethod != UpscaleMethod::kTAA);
 
-	// Force enable TAA if needed
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
+	BSImagespaceShaderISTemporalAA->taaEnabled = true;
 }
 
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
@@ -1480,7 +1487,7 @@ double Upscaling::GetRefreshRate(HWND a_window)
 					sourceName.header.size = sizeof(sourceName);
 					sourceName.header.adapterId = p.sourceInfo.adapterId;
 					sourceName.header.id = p.sourceInfo.id;
-					if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS) {
+					if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS && wcscmp(info.szDevice, sourceName.viewGdiDeviceName) == 0) {
 						// find the matched device which is associated with current device
 						// there may be the possibility that display may be duplicated and windows may be one of them in such scenario
 						// there may be two callback because source is same target will be different

@@ -10,7 +10,7 @@
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets, showViewport)
 
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
@@ -817,14 +817,7 @@ void EditorWindow::ShowObjectsWindow()
 
 void EditorWindow::ShowViewportWindow()
 {
-	ImGui::Begin("Viewport");
-
-	// Top bar
-	if (DrawGameHourSlider("##ViewportSlider", "Time: %.2f")) {
-		ImGui::SameLine();
-		int activePeriod = TOD::GetActivePeriod();
-		ImGui::Text("(%s)", TOD::GetPeriodName(activePeriod));
-	}
+	ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
 
 	// The size of the image in ImGui																														   // Get the available space in the current window
 	ImVec2 availableSpace = ImGui::GetContentRegionAvail();
@@ -844,7 +837,11 @@ void EditorWindow::ShowViewportWindow()
 		imageSize.x = availableSpace.y * aspectRatio;
 	}
 
-	ImGui::Image((void*)tempTexture->srv.get(), imageSize);
+	if (tempTexture && tempTexture->srv) {
+		ImGui::Image((void*)tempTexture->srv.get(), imageSize);
+	} else {
+		ImGui::TextDisabled("Viewport unavailable");
+	}
 
 	ImGui::End();
 }
@@ -878,19 +875,15 @@ void EditorWindow::ShowWidgetWindow()
 
 void EditorWindow::RenderUI()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto& context = globals::d3d::context;
-
-	context->ClearRenderTargetView(framebuffer.RTV, (float*)&ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
-
 	// Apply editor UI scale
 	ImGuiIO& io = ImGui::GetIO();
 	float previousScale = io.FontGlobalScale;
 	io.FontGlobalScale = settings.editorUIScale;
 
-	// Increase background opacity for all editor windows
-	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
+	if (settings.showViewport) {
+		// Dim the game scene using the theme's modal dim background color
+		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
+	}
 
 	// Check for Ctrl+Z to undo
 	if ((ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
@@ -1020,8 +1013,10 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
-			if (ImGui::MenuItem("Palette", nullptr, PaletteWindow::GetSingleton()->open)) {
-				PaletteWindow::GetSingleton()->open = !PaletteWindow::GetSingleton()->open;
+			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
+				Save();
+			}
+			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
 			}
 
 			ImGui::Separator();
@@ -1188,9 +1183,28 @@ void EditorWindow::RenderUI()
 			ImGui::PopStyleColor();
 		}
 
+		// Time slider anchored to the right of the menu bar
 		// Close button on the right side
 		float menuBarHeight = ImGui::GetFrameHeight();
 		float closeButtonSize = menuBarHeight * 0.9f;  // 10% smaller than menu bar
+
+		// Time slider anchored to the right of the menu bar
+		{
+			const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+			char periodBuf[64];
+			std::snprintf(periodBuf, sizeof(periodBuf), "(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
+			float periodWidth = ImGui::CalcTextSize(periodBuf).x;
+			const float sliderStartX = ImGui::GetWindowWidth() - closeButtonSize - 10.0f - itemSpacing - kMenuBarSliderWidth;
+			auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+			if (calendar && calendar->gameHour) {
+				ImGui::SameLine(sliderStartX - itemSpacing - periodWidth);
+				ImGui::TextUnformatted(periodBuf);
+				ImGui::SameLine(sliderStartX);
+				ImGui::SetNextItemWidth(kMenuBarSliderWidth);
+				DrawGameHourSlider("##MenuBarSlider", "Time: %.2f");
+			}
+		}
+
 		ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - 10.0f);
 		auto errorColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Error;
 		auto errorHoverColor = errorColor;
@@ -1222,8 +1236,10 @@ void EditorWindow::RenderUI()
 	ImGui::SetNextWindowSize(ImVec2(sideWidth, ImGui::GetIO().DisplaySize.y * 0.75f), ImGuiCond_FirstUseEver);
 	ShowObjectsWindow();
 
-	ImGui::SetNextWindowSize(ImVec2(viewportWidth, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver);
-	ShowViewportWindow();
+	if (settings.showViewport) {
+		ImGui::SetNextWindowSize(ImVec2(viewportWidth, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver);
+		ShowViewportWindow();
+	}
 
 	auto settingsWindowHeight = height * 0.25f;
 	auto settingsWindowWidth = width * 0.25f;
@@ -1240,9 +1256,6 @@ void EditorWindow::RenderUI()
 
 	// Render notifications on top of everything
 	RenderNotifications();
-
-	// Pop the alpha style var
-	ImGui::PopStyleVar();
 
 	// Restore previous font scale
 	io.FontGlobalScale = previousScale;
@@ -1338,29 +1351,48 @@ void EditorWindow::Draw()
 		}
 	}
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+	if (!settings.showViewport) {
+		delete tempTexture;
+		tempTexture = nullptr;
+	} else {
+		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+		if (renderer) {
+			auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+			if (framebuffer.SRV) {
+				ID3D11Resource* resource = nullptr;
+				framebuffer.SRV->GetResource(&resource);
 
-	ID3D11Resource* resource = nullptr;
-	framebuffer.SRV->GetResource(&resource);
+				if (resource) {
+					auto texture = static_cast<ID3D11Texture2D*>(resource);
+					D3D11_TEXTURE2D_DESC texDesc{};
+					texture->GetDesc(&texDesc);
 
-	if (!tempTexture) {
-		D3D11_TEXTURE2D_DESC texDesc{};
-		((ID3D11Texture2D*)resource)->GetDesc(&texDesc);
+					const bool needsRecreate = !tempTexture || !tempTexture->resource || !tempTexture->srv ||
+					                           tempTexture->desc.Width != texDesc.Width || tempTexture->desc.Height != texDesc.Height ||
+					                           tempTexture->desc.MipLevels != texDesc.MipLevels || tempTexture->desc.ArraySize != texDesc.ArraySize ||
+					                           tempTexture->desc.Format != texDesc.Format ||
+					                           tempTexture->desc.SampleDesc.Count != texDesc.SampleDesc.Count ||
+					                           tempTexture->desc.SampleDesc.Quality != texDesc.SampleDesc.Quality;
 
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		framebuffer.SRV->GetDesc(&srvDesc);
+					if (needsRecreate) {
+						delete tempTexture;
+						tempTexture = nullptr;
 
-		tempTexture = new Texture2D(texDesc);
-		tempTexture->CreateSRV(srvDesc);
-	}
+						D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+						framebuffer.SRV->GetDesc(&srvDesc);
 
-	auto& context = globals::d3d::context;
+						tempTexture = new Texture2D(texDesc);
+						tempTexture->CreateSRV(srvDesc);
+					}
 
-	context->CopyResource(tempTexture->resource.get(), resource);
+					if (tempTexture && tempTexture->resource) {
+						globals::d3d::context->CopyResource(tempTexture->resource.get(), resource);
+					}
 
-	if (resource) {
-		resource->Release();
+					resource->Release();
+				}
+			}
+		}
 	}
 
 	RenderUI();

@@ -50,7 +50,6 @@ void OverlayRenderer::RenderOverlay(
 
 	RenderShaderCompilationStatus(keyIdToString);
 	RenderShaderBlockingStatus();
-	RenderFirstTimeSetupOverlay();
 
 	// Draw weather editor independently of main menu state
 	// Auto-close editor if player leaves valid game space (e.g., loading screen)
@@ -72,6 +71,7 @@ void OverlayRenderer::RenderOverlay(
 	}
 
 	RenderFeatureOverlays();
+	RenderFirstTimeSetupOverlay();
 	HandleABTesting();
 	FinalizeImGuiFrame();
 }
