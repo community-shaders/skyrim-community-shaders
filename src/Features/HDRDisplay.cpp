@@ -1107,10 +1107,15 @@ ID3D11ComputeShader* HDRDisplay::GetUIBrightnessCS()
 void HDRDisplay::ScaleUIBrightnessForFG()
 {
 	auto& upscaling = globals::features::upscaling;
-	// Keep behavior consistent with HDR output path: when FG owns compositing,
-	// apply UI brightness here for all UI states (gameplay + pause/main/loading).
+	bool isMainOrLoadingMenu = globals::game::ui &&
+	                           (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
+								   globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+
+	// Only run when FG is actively compositing UI this frame
 	bool fgCompositing = upscaling.d3d12SwapChainActive &&
 	                     upscaling.settings.frameGenerationMode &&
+	                     !globals::game::ui->GameIsPaused() &&
+	                     !isMainOrLoadingMenu &&
 	                     !globals::game::isVR;
 	if (!fgCompositing)
 		return;
@@ -1201,11 +1206,10 @@ void HDRDisplay::UpdateHDRData() const
 	                           (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
 								   globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 
-	// When FG is active, it should consistently own UI compositing in every
-	// UI state. Mixing FG compositing in gameplay with HDRDisplay compositing in
-	// menus causes brightness mismatches and incorrect UI Brightness response.
 	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
 	                         upscaling.settings.frameGenerationMode &&
+	                         !globals::game::ui->GameIsPaused() &&
+	                         !isMainOrLoadingMenu &&
 	                         !globals::game::isVR;
 	bool skipUIComposite = fgActiveThisFrame;
 
