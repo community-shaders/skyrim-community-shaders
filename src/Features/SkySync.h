@@ -70,6 +70,11 @@ public:
 	};
 
 private:
+	enum class CellFlagExt : uint16_t
+	{
+		kSunlightShadows = 1 << 15,
+	};
+
 	enum class MoonLightSource : uint8_t
 	{
 		Brightest,
