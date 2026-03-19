@@ -52,41 +52,28 @@ void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 void DrawIconCircle(ImVec2 center, float radius, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
-	if (filled) {
+	if (filled)
 		drawList->AddCircleFilled(center, radius, color, 16);
-	} else {
-		drawList->AddCircle(center, radius, color, 16, 1.5f);
-	}
+	else
+		drawList->AddCircle(center, radius, color, 16, 1.5f * Util::GetUIScale());
 }
 
 void DrawIconWave(ImVec2 center, float width, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
+	const float thickness = (filled ? 3.0f : 1.5f) * Util::GetUIScale();
 	const int segments = 8;
 	const float amplitude = width * 0.15f;
 	const float waveWidth = width * 0.8f;
 	const float segmentWidth = waveWidth / segments;
-
 	ImVec2 start(center.x - waveWidth * 0.5f, center.y);
 
-	if (filled) {
-		// Draw filled wave using multiple horizontal lines
-		for (int i = 0; i < segments; i++) {
-			float x1 = start.x + i * segmentWidth;
-			float x2 = start.x + (i + 1) * segmentWidth;
-			float y1 = start.y + sinf(i * 3.14159f / 2.0f) * amplitude;
-			float y2 = start.y + sinf((i + 1) * 3.14159f / 2.0f) * amplitude;
-			drawList->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, 3.0f);
-		}
-	} else {
-		// Draw outline wave
-		for (int i = 0; i < segments; i++) {
-			float x1 = start.x + i * segmentWidth;
-			float x2 = start.x + (i + 1) * segmentWidth;
-			float y1 = start.y + sinf(i * 3.14159f / 2.0f) * amplitude;
-			float y2 = start.y + sinf((i + 1) * 3.14159f / 2.0f) * amplitude;
-			drawList->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, 1.5f);
-		}
+	for (int i = 0; i < segments; i++) {
+		float x1 = start.x + i * segmentWidth;
+		float x2 = start.x + (i + 1) * segmentWidth;
+		float y1 = start.y + sinf(i * 3.14159f / 2.0f) * amplitude;
+		float y2 = start.y + sinf((i + 1) * 3.14159f / 2.0f) * amplitude;
+		drawList->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, thickness);
 	}
 }
 
@@ -268,16 +255,18 @@ void EditorWindow::ShowObjectsWindow()
 			const float comboW = ImGui::CalcTextSize("Editor ID").x + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
 			const float helpW = ImGui::CalcTextSize("(?)").x;
 			const float iconW = ImGui::GetFrameHeight();
+			const float scale = Util::GetUIScale();
+			const float spacerW = 10.0f * scale;
 			// Fixed width is the sum of every item that follows the search bar on the same row.
 			// Each SameLine() contributes style.ItemSpacing.x; widths are listed explicitly
 			// so adding or removing a widget only requires updating its own expression.
 			const float fixedW =
 				style.ItemSpacing.x + comboW +                              // combo
 				style.ItemSpacing.x + helpW +                               // help marker
-				style.ItemSpacing.x + 10.0f +                               // spacer before favorites
+				style.ItemSpacing.x + spacerW +                             // spacer before favorites
 				style.ItemSpacing.x + iconW +                               // fav icon
 				style.ItemSpacing.x + ImGui::CalcTextSize("Favorites").x +  // "Favorites" label
-				style.ItemSpacing.x + 10.0f +                               // spacer before flagged
+				style.ItemSpacing.x + spacerW +                             // spacer before flagged
 				style.ItemSpacing.x + iconW +                               // flag icon
 				style.ItemSpacing.x + ImGui::CalcTextSize("Flagged").x;     // "Flagged" label
 			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
@@ -292,9 +281,10 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::SameLine();
 			Util::HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nStatus: hides items with no status marker when the search box is non-empty.\nCtrl+F: Focus search\nEnter: Open selected");
 
-			// Quick filter buttons on same row
+			// Quick filter buttons
+			const ImVec2 filterSpacer(spacerW, 0.0f);
 			ImGui::SameLine();
-			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
+			ImGui::Dummy(filterSpacer);
 			ImGui::SameLine();
 			if (IconButton("##filterFavorites", m_showOnlyFavorites, "star")) {
 				m_showOnlyFavorites = !m_showOnlyFavorites;
@@ -303,7 +293,7 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::Text("Favorites");
 
 			ImGui::SameLine();
-			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
+			ImGui::Dummy(filterSpacer);
 			ImGui::SameLine();
 			if (IconButton("##filterFlagged", m_showOnlyFlagged, "circle")) {
 				m_showOnlyFlagged = !m_showOnlyFlagged;
@@ -370,12 +360,12 @@ void EditorWindow::ShowObjectsWindow()
 
 			// Create a table for the right column with "Name" and "ID" headers. Different weights to prevent truncation.
 			if (ImGui::BeginTable("DetailsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Sortable)) {
-				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f, ColFav);  // Favorite indicator
-				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f, ColEditorID);                     // Largest - weather/template names
-				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f, ColFormID);                          // Fixed - 8 hex chars
-				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f, ColFile);                              // Medium - plugin names
-				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f, ColStatus);                          // Smaller - status text
-				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f, ColJson);                               // JSON file / delete
+				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f * scale, ColFav);  // Favorite indicator
+				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f, ColEditorID);                             // Largest - weather/template names
+				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f * scale, ColFormID);                          // Fixed - 8 hex chars
+				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f, ColFile);                                      // Medium - plugin names
+				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f, ColStatus);                                  // Smaller - status text
+				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f * scale, ColJson);                               // JSON file / delete
 
 				ImGui::TableHeadersRow();
 
@@ -1183,29 +1173,30 @@ void EditorWindow::RenderUI()
 			ImGui::PopStyleColor();
 		}
 
-		// Time slider anchored to the right of the menu bar
-		// Close button on the right side
+		// Time slider and close button
 		float menuBarHeight = ImGui::GetFrameHeight();
-		float closeButtonSize = menuBarHeight * 0.9f;  // 10% smaller than menu bar
+		float closeButtonSize = menuBarHeight * 0.9f;
+		const float scale = Util::GetUIScale();
+		const float closeButtonMargin = 10.0f * scale;
 
-		// Time slider anchored to the right of the menu bar
+		// Time slider anchored to the right
 		{
 			const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
 			char periodBuf[64];
 			std::snprintf(periodBuf, sizeof(periodBuf), "(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
 			float periodWidth = ImGui::CalcTextSize(periodBuf).x;
-			const float sliderStartX = ImGui::GetWindowWidth() - closeButtonSize - 10.0f - itemSpacing - kMenuBarSliderWidth;
+			const float sliderStartX = ImGui::GetWindowWidth() - closeButtonSize - closeButtonMargin - itemSpacing - kMenuBarSliderWidth * scale;
 			auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
 			if (calendar && calendar->gameHour) {
 				ImGui::SameLine(sliderStartX - itemSpacing - periodWidth);
 				ImGui::TextUnformatted(periodBuf);
 				ImGui::SameLine(sliderStartX);
-				ImGui::SetNextItemWidth(kMenuBarSliderWidth);
+				ImGui::SetNextItemWidth(kMenuBarSliderWidth * scale);
 				DrawGameHourSlider("##MenuBarSlider", "Time: %.2f");
 			}
 		}
 
-		ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - 10.0f);
+		ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - closeButtonMargin);
 		auto errorColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Error;
 		auto errorHoverColor = errorColor;
 		errorHoverColor.x = std::min(1.0f, errorColor.x * 1.2f);
@@ -1499,7 +1490,7 @@ void EditorWindow::ShowSettingsWindow()
 			if (ImGui::BeginTable("FlagsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 				ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Colour", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 60.0f * Util::GetUIScale());
 
 				auto& recordMarkers = settings.recordMarkers;
 
@@ -1784,8 +1775,9 @@ void EditorWindow::DrawTimeControls()
 	if (!calendar || !calendar->gameHour || !calendar->timeScale)
 		return;
 
-	// Row 1: Pause/Resume + Game Time
-	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0)))
+	const float scale = Util::GetUIScale();
+	float buttonWidth = 120.0f * scale;
+	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(buttonWidth, 0)))
 		TogglePause();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Pause or resume game time progression");
@@ -1801,7 +1793,7 @@ void EditorWindow::DrawTimeControls()
 		timeScaleSlider = calendar->timeScale->value;
 
 	// Row 2: Reset Speed + TimeScale slider + speed label
-	if (ImGui::Button("Reset Speed", ImVec2(120, 0)))
+	if (ImGui::Button("Reset Speed", ImVec2(buttonWidth, 0)))
 		ResetTimeScale();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Reset time speed to vanilla (%.1fx)", kVanillaTimeScale);
@@ -1936,7 +1928,8 @@ void EditorWindow::RenderNotifications()
 	}
 
 	float currentTime = static_cast<float>(ImGui::GetTime());
-	float yOffset = 10.0f;
+	const float scale = Util::GetUIScale();
+	float yOffset = 10.0f * scale;
 
 	// Remove expired notifications
 	notifications.erase(
@@ -1956,11 +1949,11 @@ void EditorWindow::RenderNotifications()
 		}
 
 		// Position in top-left corner
-		ImGui::SetNextWindowPos(ImVec2(10.0f, yOffset), ImGuiCond_Always);
+		ImGui::SetNextWindowPos(ImVec2(10.0f * scale, yOffset), ImGuiCond_Always);
 		ImGui::SetNextWindowBgAlpha(0.8f * alpha);
 
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f, 10.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f * scale);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f * scale, 10.0f * scale));
 
 		if (ImGui::Begin(std::format("##Notification{}", (void*)&notif).c_str(),
 				nullptr,
@@ -1971,7 +1964,7 @@ void EditorWindow::RenderNotifications()
 			ImGui::TextUnformatted(notif.message.c_str());
 			ImGui::PopStyleColor();
 
-			yOffset += ImGui::GetWindowSize().y + 5.0f;
+			yOffset += ImGui::GetWindowSize().y + 5.0f * scale;
 		}
 		ImGui::End();
 

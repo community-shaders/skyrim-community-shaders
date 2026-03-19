@@ -707,7 +707,7 @@ void Menu::DrawSettings()
 			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
 		}
 
-		const float uiScale = exp2(globalScale);  // Get current UI scale
+		const float uiScale = exp2(globalScale);  // User's manual GlobalScale for header icons
 		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
 		// For docked mode, always show icons if textures are available
 		bool canShowIcons = settings.Theme.ShowActionIcons &&
@@ -722,7 +722,7 @@ void Menu::DrawSettings()
 		// Main content starts here - no additional separator needed as it's already handled in the conditions above
 
 		float footer_height = settings.Theme.ShowFooter ?
-		                          (ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3 + 3.0f) :
+		                          (ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3) :
 		                          0.0f;
 
 		// Static storage for menu state - must persist across frames

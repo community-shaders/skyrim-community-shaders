@@ -2040,7 +2040,7 @@ namespace Util
 				buttonText = "Recording... (Esc to cancel)";
 			}
 
-			if (ImGui::Button(buttonText.c_str(), ImVec2(240, 0))) {
+			if (ImGui::Button(buttonText.c_str(), ImVec2(0, 0))) {
 				isRecording = false;
 			}
 
@@ -2054,7 +2054,7 @@ namespace Util
 			// Display current binding with unique button ID
 			std::string keyString = Util::Input::KeyIdToString(combo);
 			std::string btnLabel = keyString + "##" + recordingLabel;
-			if (ImGui::Button(btnLabel.c_str(), ImVec2(240, 0))) {
+			if (ImGui::Button(btnLabel.c_str(), ImVec2(0, 0))) {
 				isRecording = true;
 			}
 

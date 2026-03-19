@@ -1,5 +1,6 @@
 #include "PaletteWindow.h"
 #include "EditorWindow.h"
+#include "Utils/UI.h"
 
 // Forward declaration from EditorWindow.cpp
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled);
@@ -9,8 +10,9 @@ void PaletteWindow::Draw()
 	if (!open)
 		return;
 
-	ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 620, ImGui::GetIO().DisplaySize.y - 420), ImGuiCond_FirstUseEver);
+	const float scale = Util::GetUIScale();
+	ImGui::SetNextWindowSize(ImVec2(600 * scale, 400 * scale), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 620 * scale, ImGui::GetIO().DisplaySize.y - 420 * scale), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin("Palette", &open, ImGuiWindowFlags_NoFocusOnAppearing)) {
 		if (ImGui::BeginTabBar("PaletteTabs")) {
 			if (ImGui::BeginTabItem("Colours")) {
@@ -31,8 +33,9 @@ void PaletteWindow::Draw()
 
 void PaletteWindow::DrawColorsTab()
 {
-	const float buttonSize = 32.0f;
-	const float spacing = 8.0f;
+	const float scale = Util::GetUIScale();
+	const float buttonSize = 32.0f * scale;
+	const float spacing = 8.0f * scale;
 
 	// Favorites section at top
 	ImGui::SeparatorText("Favourites");
