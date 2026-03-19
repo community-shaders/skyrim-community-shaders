@@ -1107,9 +1107,7 @@ ID3D11ComputeShader* HDRDisplay::GetUIBrightnessCS()
 void HDRDisplay::ScaleUIBrightnessForFG()
 {
 	auto& upscaling = globals::features::upscaling;
-	bool isMainOrLoadingMenu = globals::game::ui &&
-	                           (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
-								   globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 
 	// Only run when FG is actively compositing UI this frame
 	bool fgCompositing = upscaling.d3d12SwapChainActive &&
@@ -1183,9 +1181,7 @@ float4 HDRDisplay::GetSharedDataHDR() const
 	if (!loaded)
 		return { 0.0f, 0.0f, 0.0f, 0.0f };
 
-	bool isMainOrLoading = globals::game::ui &&
-	                       (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
-							   globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	bool isMainOrLoading = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 	return {
 		settings.enableHDR ? 1.0f : 0.0f,
 		static_cast<float>(settings.hdrPaperWhite),
@@ -1202,9 +1198,7 @@ void HDRDisplay::UpdateHDRData() const
 	auto& upscaling = globals::features::upscaling;
 
 	// Don't skip UI composite in main menu or loading screens - causes ghosting and brightness issues
-	bool isMainOrLoadingMenu = globals::game::ui &&
-	                           (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
-								   globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 
 	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
 	                         upscaling.settings.frameGenerationMode &&
