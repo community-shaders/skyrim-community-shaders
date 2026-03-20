@@ -91,6 +91,7 @@ struct PostProcessing : Feature
 
 	void PreProcess();
 	void DrawBeforeUpscaling();
+	void ClearBorderMotionVectorsForFrameGen();
 
 	/////////////////////////////////////////////////////////////////////////////////
 

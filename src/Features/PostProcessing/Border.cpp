@@ -83,7 +83,8 @@ void Border::SetupResources()
 void Border::ClearShaderCache()
 {
 	const auto shaderPtrs = std::array{
-		&borderCS
+		&borderCS,
+		&borderClearMVCS
 	};
 
 	for (auto shader : shaderPtrs)
@@ -108,6 +109,7 @@ void Border::CompileComputeShaders()
 	std::vector<ShaderCompileInfo>
 		shaderInfos = {
 			{ &borderCS, "border.cs.hlsl" },
+			{ &borderClearMVCS, "border_clear_mv.cs.hlsl" },
 		};
 
 	for (auto& info : shaderInfos) {
@@ -115,6 +117,56 @@ void Border::CompileComputeShaders()
 		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), info.defines, "cs_5_0", info.entry.c_str())))
 			info.programPtr->attach(rawPtr);
 	}
+}
+
+void Border::ClearMotionVectorsForFrameGen()
+{
+	if (!borderClearMVCS || !borderCB)
+		return;
+
+	// Only run when there's an actual border to clear
+	if (settings.Scale.x <= 0.f && settings.Scale.y <= 0.f && settings.Scale.z <= 0.f && settings.Scale.w <= 0.f)
+		return;
+
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+
+	// Compute dynamic resolution dimensions (actual rendered area before upscaling)
+	float2 dynResDim = Util::ConvertToDynamic(globals::state->screenSize);
+
+	BorderCB data = {
+		.BorderColor = float4(settings.BorderColor.x, settings.BorderColor.y, settings.BorderColor.z, settings.DepthThreshold),
+		.Scale = settings.Scale
+	};
+	borderCB->Update(data);
+
+	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+
+	// Bind SharedData (b5) and FrameBuffer (b12) for CS stage — shader needs
+	// BufferDim and DynamicResolutionParams1 to compute dynamic resolution area.
+	auto* sharedDataBuf = globals::state->sharedDataCB->CB();
+	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
+	ID3D11Buffer* perFrameBuf = *globals::game::perFrame.get();
+	context->CSSetConstantBuffers(12, 1, &perFrameBuf);
+
+	ID3D11ShaderResourceView* srvs[1] = { depth.depthSRV };
+	context->CSSetShaderResources(0, 1, srvs);
+	ID3D11UnorderedAccessView* uavs[1] = { motion.UAV };
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	ID3D11Buffer* cb = borderCB->CB();
+	context->CSSetConstantBuffers(1, 1, &cb);
+	context->CSSetShader(borderClearMVCS.get(), nullptr, 0);
+
+	context->Dispatch(((uint)dynResDim.x + 7) >> 3, ((uint)dynResDim.y + 7) >> 3, 1);
+
+	srvs[0] = nullptr;
+	uavs[0] = nullptr;
+	cb = nullptr;
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	context->CSSetShaderResources(0, 1, srvs);
+	context->CSSetConstantBuffers(1, 1, &cb);
+	context->CSSetShader(nullptr, nullptr, 0);
 }
 
 void Border::Draw(TextureInfo& inout_tex)

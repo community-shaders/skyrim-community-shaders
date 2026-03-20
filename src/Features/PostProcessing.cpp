@@ -588,6 +588,19 @@ void PostProcessing::PreProcess()
 	isrefraction = false;
 }
 
+void PostProcessing::ClearBorderMotionVectorsForFrameGen()
+{
+	if (bypass)
+		return;
+
+	auto borderIdx = static_cast<size_t>(FeaturePipelineIndex::Border);
+	auto& pipe = pipeline[borderIdx];
+	if (pipe && pipe->enabled) {
+		auto* border = static_cast<Border*>(pipe.get());
+		border->ClearMotionVectorsForFrameGen();
+	}
+}
+
 void PostProcessing::Prepass()
 {
 	if (!pendingSettings.empty()) {
