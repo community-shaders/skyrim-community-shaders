@@ -12,7 +12,7 @@
 namespace PBR
 {
 #if defined(GLINT)
-	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float noise, float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
+	float3 SpecularMicrofacetWithGlint(float noise, float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
 		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache,
 		out float3 F)
 	{
@@ -23,7 +23,7 @@ namespace PBR
 			D = Glints::SampleGlints2023NDF(noise, logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max).x;
 		}
 		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
-		F = BRDF::F_Schlick(specularColor, VdotH);
+		F = BRDF::F_Schlick(F0, VdotH);
 
 		return D * G * F;
 	}
@@ -57,7 +57,7 @@ namespace PBR
 		};
 
 		float hairIOR = HairIOR();
-		float specularColor = IORToF0(hairIOR);
+		float F0 = IORToF0(hairIOR);
 
 		float3 Tp;
 		float Mp, Np, Fp, a, h, f;
@@ -65,14 +65,14 @@ namespace PBR
 		// R
 		Mp = HairGaussian(B[0], ThetaH - Alpha[0]);
 		Np = 0.25 * cosHalfPhi;
-		Fp = BRDF::F_Schlick(specularColor, sqrt(saturate(0.5 + 0.5 * VdotL))).x;
+		Fp = BRDF::F_Schlick(F0, sqrt(saturate(0.5 + 0.5 * VdotL))).x;
 		S += (Mp * Np) * (Fp * lerp(1, backlit, saturate(-VdotL)));
 
 		// TT
 		Mp = HairGaussian(B[1], ThetaH - Alpha[1]);
 		a = (1.55f / hairIOR) * rcp(n_prime);
 		h = cosHalfPhi * (1 + a * (0.6 - 0.8 * cosPhi));
-		f = BRDF::F_Schlick(specularColor, cosThetaD * sqrt(saturate(1 - h * h))).x;
+		f = BRDF::F_Schlick(F0, cosThetaD * sqrt(saturate(1 - h * h))).x;
 		Fp = (1 - f) * (1 - f);
 		Tp = pow(abs(material.BaseColor), 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
 		Np = exp(-3.65 * cosPhi - 3.98);
@@ -80,7 +80,7 @@ namespace PBR
 
 		// TRT
 		Mp = HairGaussian(B[2], ThetaH - Alpha[2]);
-		f = BRDF::F_Schlick(specularColor, cosThetaD * 0.5f).x;
+		f = BRDF::F_Schlick(F0, cosThetaD * 0.5f).x;
 		Fp = (1 - f) * (1 - f) * f;
 		Tp = pow(abs(material.BaseColor), 0.8 / cosThetaD);
 		Np = exp(17 * cosPhi - 16.78);
@@ -152,22 +152,22 @@ namespace PBR
 		else
 #endif
 		{
-			float3 F;
+			float3 F;  // Fresnel reflectance at current (V,H) angle
 #if defined(GLINT)
-			float3 specular = GetSpecularDirectLightMultiplierMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
+			float3 Fr = SpecularMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
 				material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F);
 #else
-			float3 specular = GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F);
+			float3 Fr = SpecularMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F);
 #endif
 			float3 kD = 1 - F;
 
 			lightingOutput.diffuse += detailedLightColor * satNdotL * BRDF::Diffuse_Lambert() * kD;
-			lightingOutput.specular += specular * detailedLightColor * satNdotL;
+			lightingOutput.specular += Fr * detailedLightColor * satNdotL;
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::Fuzz) != 0)
 			{
-				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(material.Roughness, material.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * detailedLightColor * satNdotL;
+				float3 fuzzSpecular = SpecularMicroflakes(material.Roughness, material.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * detailedLightColor * satNdotL;
 				lightingOutput.specular = lerp(lightingOutput.specular, fuzzSpecular, material.FuzzWeight);
 			}
 
@@ -194,14 +194,14 @@ namespace PBR
 				}
 
 				float3 coatF;
-				float3 coatSpecular = GetSpecularDirectLightMultiplierMicrofacet(material.CoatRoughness, material.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * context.coatLightColor * coatNdotL;
+				float3 coatFr = SpecularMicrofacet(material.CoatRoughness, material.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF);
 
 				float3 layerAttenuation = 1 - coatF * material.CoatStrength;
 				lightingOutput.diffuse *= layerAttenuation;
 				lightingOutput.specular *= layerAttenuation;
 
 				lightingOutput.coatDiffuse += context.coatLightColor * coatNdotL * BRDF::Diffuse_Lambert();
-				lightingOutput.specular += coatSpecular * material.CoatStrength;
+				lightingOutput.specular += coatFr * context.coatLightColor * coatNdotL * material.CoatStrength;
 			}
 #endif
 		}
@@ -242,8 +242,8 @@ namespace PBR
 			float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
 			lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
 
-			float3 kD = 1 - lobeWeights.specular;
-			lobeWeights.diffuse *= kD;
+			// Energy conservation: diffuse receives only what specular does not reflect
+			lobeWeights.diffuse *= 1 - lobeWeights.specular;
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::TwoLayer) != 0)
