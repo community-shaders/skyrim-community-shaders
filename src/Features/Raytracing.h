@@ -1,7 +1,7 @@
 #pragma once
 
-#include <directx/d3d12.h>
 #include <d3d11_4.h>
+#include <directx/d3d12.h>
 
 #include "OverlayFeature.h"
 
@@ -18,8 +18,8 @@
 #include "Features/ExtendedTranslucency.h"
 #include "Features/HairSpecular.h"
 #include "Features/LinearLighting.h"
-#include "Features/WetnessEffects.h"
 #include "Features/Upscaling.h"
+#include "Features/WetnessEffects.h"
 
 #define STATIC_ASSERT_ENUM_COUNT(EnumType, Array) \
 	static_assert(_countof(Array) == magic_enum::enum_count<EnumType>(), "Array size must match enum count");
@@ -168,16 +168,15 @@ struct CreationEngineRaytracing
 		bool operator==(const AdvancedSettings&) const = default;
 
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
-			AdvancedSettings, 
-			VariableUpdateRate, 
-			RIS, 
+			AdvancedSettings,
+			VariableUpdateRate,
+			RIS,
 			GGXEnergyConservation,
 			TexLODBias,
-			HairBSDF, 
-			DiffuseBRDF, 
+			HairBSDF,
+			DiffuseBRDF,
 			SSSSettings)
 	};
-
 
 	struct DebugSettings
 	{
@@ -227,9 +226,9 @@ struct CreationEngineRaytracing
 	using SetSkyHemisphereFn = void (*)(ID3D12Resource*);
 	using GetFrameTimeFn = float* (*)();
 	using UpdateSettingsFn = void (*)(Settings);
-	using GetRRInputFn = void(*)(ID3D12Resource*&, ID3D12Resource*&);
-	using SetSharedTexturesFn = void(*)(ID3D12Resource*, ID3D12Resource*, ID3D12Resource*, ID3D12Resource*);
-	using UpdateJitterFn = void(*)(float2);
+	using GetRRInputFn = void (*)(ID3D12Resource*&, ID3D12Resource*&);
+	using SetSharedTexturesFn = void (*)(ID3D12Resource*, ID3D12Resource*, ID3D12Resource*, ID3D12Resource*);
+	using UpdateJitterFn = void (*)(float2);
 
 	InitializeFn Initialize = nullptr;
 	UpdateFn Update = nullptr;
@@ -326,7 +325,7 @@ struct CreationEngineRaytracing
 		UpdateJitter = reinterpret_cast<UpdateJitterFn>(GetProcAddress(handle, "UpdateJitter"));
 
 		if (!UpdateJitter)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateJitter is nullptr");	
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateJitter is nullptr");
 	}
 };
 
@@ -417,7 +416,6 @@ struct Raytracing : public OverlayFeature
 		return (method == Upscaling::UpscaleMethod::kDLSS_RR) ? CreationEngineRaytracing::Denoiser::DLSS_RR : CreationEngineRaytracing::Denoiser::None;
 	}
 
-
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
@@ -472,13 +470,13 @@ struct Raytracing : public OverlayFeature
 
 	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
 
-	eastl::unique_ptr<WrappedResource> mainTexture = nullptr; 
+	eastl::unique_ptr<WrappedResource> mainTexture = nullptr;
 
 	winrt::com_ptr<ID3D12Resource> albedoTexture = nullptr;
-	eastl::unique_ptr<WrappedResource> normalRoughnessTexture = nullptr; 
+	eastl::unique_ptr<WrappedResource> normalRoughnessTexture = nullptr;
 	winrt::com_ptr<ID3D12Resource> gnmaoTexture = nullptr;
 
-	eastl::unique_ptr<WrappedResource> diffuseAlbedoTexture = nullptr; 
+	eastl::unique_ptr<WrappedResource> diffuseAlbedoTexture = nullptr;
 
 	eastl::unique_ptr<WrappedResource> skyHemisphere = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
@@ -494,7 +492,7 @@ struct Raytracing : public OverlayFeature
 	};
 	static_assert(sizeof(ScreenData) % 16 == 0);
 
-	eastl::unique_ptr<ConstantBuffer> screenCB = nullptr; 
+	eastl::unique_ptr<ConstantBuffer> screenCB = nullptr;
 
 	eastl::unique_ptr<ScreenData> screenData;
 
@@ -544,10 +542,24 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		static void Install() 
+		struct BSImagespaceShaderRefraction_Dispatch
+		{
+			static void thunk(void* imageSpaceShader, uint32_t a1, uint32_t a2, uint32_t a3)
+			{
+				auto& rt = globals::features::raytracing;
+				if (rt.Active() && rt.Mode() == CreationEngineRaytracing::Mode::PathTracing)
+					return;
+
+				func(imageSpaceShader, a1, a2, a3);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		static void Install()
 		{
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
 			stl::detour_thunk<Main_RenderWaterEffects>(REL::RelocationID(35561, 36560));
+			stl::write_vfunc<0xC, BSImagespaceShaderRefraction_Dispatch>(RE::VTABLE_BSImagespaceShaderRefraction[0]);
 		}
 	};
 
