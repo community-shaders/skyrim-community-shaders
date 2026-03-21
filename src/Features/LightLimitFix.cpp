@@ -665,15 +665,17 @@ void LightLimitFix::CopyPointShadowData()
 	uint32_t slotUsage = 0;
 	int mapIndex = 0;
 	while (true) {
-		RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowCasterLights[mapIndex];
+		auto light = shadowSceneNode->GetRuntimeData().shadowCasterLights[mapIndex];
 		if (!light)
 			break;
 
-		uint32_t depthSlot = globals::game::isVR ?
-		                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
-		                         light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+		mapIndex += light->shadowMapCount;
 
 		if (plCount < slots) {
+			uint32_t depthSlot = globals::game::isVR ?
+			                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
+			                         light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+
 			float shadowTypeF = light->GetIsParabolicLight() ? float(light->shadowMapCount == 2 ? 2 : 1) : 0.f;
 			sd[depthSlot].ShadowParam.x = shadowTypeF;
 
@@ -694,7 +696,6 @@ void LightLimitFix::CopyPointShadowData()
 			unshadowedLights++;
 		}
 
-		mapIndex += light->shadowMapCount;
 		plCount++;
 	}
 
