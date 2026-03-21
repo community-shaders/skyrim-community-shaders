@@ -117,7 +117,7 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 
-	if (!selected.isOther && current.data.lighFormId != 0) {
+	if (!selected.isOther && current.data.lighFormId != 0 && selected.hasPosition) {
 		ImGui::Text("X: %.2f, Y: %.2f, Z: %.2f", displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
 		ImGui::Spacing();
 		ImGui::SliderFloat3("Position Offset", &current.pos.x, -500.f, 500.f, "%.0f");
@@ -188,11 +188,11 @@ void LightEditor::GatherLights()
 		}
 
 		current.isRef = ligh != nullptr;
-		current.isSpotlight = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow);
 
 		if (!current.isRef && runtimeData->lighFormId != 0)
 			ligh = RE::TESForm::LookupByID(runtimeData->lighFormId)->As<RE::TESObjectLIGH>();
 
+		current.isSpotlight = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow);
 		const bool isShadow = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow, RE::TES_LIGHT_FLAGS::kSpotShadow);
 
 		totalLightCount++;
@@ -299,16 +299,20 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 			waitFrames = 1;
 		}
 		displayInfo.pos = newPos;
-	} else if (selected.isAttached && niLight->parent) {
-		const auto currentPos = niLight->parent->local.translate;
-		const auto newPos = original.pos + current.pos;
-		if (currentPos != newPos) {
-			niLight->parent->local.translate = newPos;
-			RE::NiUpdateData updateData;
-			niLight->parent->Update(updateData);
-			waitFrames = 1;
+	} else if (selected.isAttached) {
+		if (niLight->parent) {
+			const auto currentPos = niLight->parent->local.translate;
+			const auto newPos = original.pos + current.pos;
+			if (currentPos != newPos) {
+				niLight->parent->local.translate = newPos;
+				RE::NiUpdateData updateData;
+				niLight->parent->Update(updateData);
+				waitFrames = 1;
+			}
+			displayInfo.pos = newPos;
+		} else {
+			displayInfo.pos = {};
 		}
-		displayInfo.pos = newPos;
 	}
 
 	if (!selected.isOther && refr && tesFlags && current.tesFlags.underlying() != tesFlags->underlying()) {
