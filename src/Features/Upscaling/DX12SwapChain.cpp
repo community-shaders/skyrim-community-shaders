@@ -7,28 +7,11 @@
 #include "FidelityFX.h"
 #include "Streamline.h"
 
-void DX12SwapChain::CreateD3D12Device(IDXGIAdapter* a_adapter)
-{
-	DX::ThrowIfFailed(D3D12CreateDevice(a_adapter, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&d3d12Device)));
-
-	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
-	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	queueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-	queueDesc.NodeMask = 0;
-
-	DX::ThrowIfFailed(d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue)));
-
-	for (int i = 0; i < 2; i++) {
-		DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocators[i])));
-		DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators[i].get(), nullptr, IID_PPV_ARGS(&commandLists[i])));
-		commandLists[i]->Close();
-	}
-}
+#include "Features/DX12Interop.h"
 
 void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC a_swapChainDesc)
 {
-	CreateD3D12Device(adapter);
+	auto& dx12Interop = globals::features::dx12Interop;
 
 	IDXGIFactory4* dxgiFactory;
 	DX::ThrowIfFailed(adapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
@@ -48,7 +31,7 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	ffxSwapChainDesc.desc = &swapChainDesc;
 	ffxSwapChainDesc.dxgiFactory = dxgiFactory;
 	ffxSwapChainDesc.fullscreenDesc = nullptr;
-	ffxSwapChainDesc.gameQueue = commandQueue.get();
+	ffxSwapChainDesc.gameQueue = dx12Interop.commandQueue.get();
 	ffxSwapChainDesc.hwnd = a_swapChainDesc.OutputWindow;
 	ffxSwapChainDesc.swapchain = &swapChain;
 
@@ -68,12 +51,6 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 void DX12SwapChain::CreateInterop()
 {
-	HANDLE sharedFenceHandle;
-	DX::ThrowIfFailed(d3d12Device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&d3d12Fence)));
-	DX::ThrowIfFailed(d3d12Device->CreateSharedHandle(d3d12Fence.get(), nullptr, GENERIC_ALL, nullptr, &sharedFenceHandle));
-	DX::ThrowIfFailed(d3d11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fence)));
-	CloseHandle(sharedFenceHandle);
-
 	swapChainProxy = new DXGISwapChainProxy(swapChain);
 
 	D3D11_TEXTURE2D_DESC texDesc11{};
@@ -86,10 +63,10 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.SampleDesc.Quality = 0;
 	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
-	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	swapChainBufferWrapped = new WrappedResource(texDesc11);
 
 	texDesc11.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	uiBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
+	uiBufferWrapped = new WrappedResource(texDesc11);
 }
 
 DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
@@ -99,12 +76,14 @@ DXGISwapChainProxy* DX12SwapChain::GetSwapChainProxy()
 
 void DX12SwapChain::SetD3D11Device(ID3D11Device* a_d3d11Device)
 {
-	DX::ThrowIfFailed(a_d3d11Device->QueryInterface(IID_PPV_ARGS(&d3d11Device)));
+	auto& dx12Interop = globals::features::dx12Interop;
+	DX::ThrowIfFailed(a_d3d11Device->QueryInterface(IID_PPV_ARGS(&dx12Interop.d3d11Device)));
 }
 
 void DX12SwapChain::SetD3D11DeviceContext(ID3D11DeviceContext* a_d3d11Context)
 {
-	DX::ThrowIfFailed(a_d3d11Context->QueryInterface(IID_PPV_ARGS(&d3d11Context)));
+	auto& dx12Interop = globals::features::dx12Interop;
+	DX::ThrowIfFailed(a_d3d11Context->QueryInterface(IID_PPV_ARGS(&dx12Interop.d3d11Context)));
 }
 
 HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
@@ -116,57 +95,41 @@ HRESULT DX12SwapChain::GetBuffer(void** ppSurface)
 HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 {
 	auto& upscaling = globals::features::upscaling;
+	auto& dx12Interop = globals::features::dx12Interop;
 
-	// Wait for D3D11 to finish
-	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
-	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
-	fenceValue++;
-
-	// New frame, reset
-	DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
-	DX::ThrowIfFailed(commandLists[frameIndex]->Reset(commandAllocators[frameIndex].get(), nullptr));
-
-	// Copy shared texture to swap chain buffer
-	{
-		auto fakeSwapChain = swapChainBufferWrapped->resource.get();
-		auto realSwapChain = swapChainBuffers[frameIndex].get();
+	dx12Interop.Execute([&](ID3D12GraphicsCommandList4* commandList) {
+		// Copy shared texture to swap chain buffer
 		{
-			std::vector<D3D12_RESOURCE_BARRIER> barriers;
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
-			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			auto fakeSwapChain = swapChainBufferWrapped->resource.get();
+			auto realSwapChain = swapChainBuffers[frameIndex].get();
+			{
+				std::vector<D3D12_RESOURCE_BARRIER> barriers;
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
+				commandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			}
+
+			commandList->CopyResource(realSwapChain, fakeSwapChain);
+
+			{
+				std::vector<D3D12_RESOURCE_BARRIER> barriers;
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
+				barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+				commandList->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+			}
 		}
 
-		commandLists[frameIndex]->CopyResource(realSwapChain, fakeSwapChain);
-
-		{
-			std::vector<D3D12_RESOURCE_BARRIER> barriers;
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(fakeSwapChain, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON));
-			barriers.push_back(CD3DX12_RESOURCE_BARRIER::Transition(realSwapChain, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
-		}
-	}
-
-	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused());
-
-	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
-
-	ID3D12CommandList* commandListsToExecute[] = { commandLists[frameIndex].get() };
-	commandQueue->ExecuteCommandLists(1, commandListsToExecute);
-
-	// Present the frame
-	DX::ThrowIfFailed(swapChain->Present(SyncInterval, Flags));
-
-	// Wait for D3D12 to finish
-	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
-	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
-	fenceValue++;
+		globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused()); 
+	}, [&]() {
+		// Present the frame
+		DX::ThrowIfFailed(swapChain->Present(SyncInterval, Flags));			
+	});
 
 	// Update the frame index
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
 	float clearColor[4]{ 0, 0, 0, 0 };
-	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
+	dx12Interop.d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 
 	// If VSync is disabled, use frame limiter to prevent tearing and optimise pacing
 	if (SyncInterval == 0)
@@ -177,8 +140,10 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 HRESULT DX12SwapChain::GetDevice(REFIID uuid, void** ppDevice)
 {
+	auto& dx12Interop = globals::features::dx12Interop;
+
 	if (uuid == __uuidof(ID3D11Device) || uuid == __uuidof(ID3D11Device1) || uuid == __uuidof(ID3D11Device2) || uuid == __uuidof(ID3D11Device3) || uuid == __uuidof(ID3D11Device4) || uuid == __uuidof(ID3D11Device5)) {
-		*ppDevice = d3d11Device.get();
+		*ppDevice = dx12Interop.d3d11Device.get();
 		return S_OK;
 	}
 
@@ -320,7 +285,7 @@ void DX12SwapChain::SetUIBuffer()
 	if (!globals::game::ui->GameIsPaused()) {
 		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 		data.RTV = uiBufferWrapped->rtv;
-		d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
+		globals::features::dx12Interop.d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
 	}
 }
 

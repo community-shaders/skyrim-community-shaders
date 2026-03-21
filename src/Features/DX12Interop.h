@@ -44,8 +44,8 @@ struct DX12Interop : public Feature
 	winrt::com_ptr<ID3D12CommandQueue> computeCommandQueue;
 	winrt::com_ptr<ID3D12CommandQueue> copyCommandQueue;
 
-	winrt::com_ptr<ID3D12CommandAllocator> commandAllocator;
-	winrt::com_ptr<ID3D12GraphicsCommandList4> commandList;
+	winrt::com_ptr<ID3D12CommandAllocator> commandAllocators[2];
+	winrt::com_ptr<ID3D12GraphicsCommandList4> commandLists[2];
 
 	struct SharedResources
 	{
@@ -70,6 +70,8 @@ struct DX12Interop : public Feature
 	bool pixCaptureStarted = false;
 
 	bool active = false;
+
+	UINT frameIndex = 0;
 
 	void CreateInterop();
 
@@ -105,8 +107,8 @@ struct DX12Interop : public Feature
 	}
 
 	// Executes D3D12 commands mid D3D11 execution, probably huge overhead from wait commands so use sparsely and wisely
-	template <typename Func>
-	void Execute(Func func)
+	template <typename Func, typename Func2 = std::nullptr_t>
+	void Execute(Func func, Func2 func2 = nullptr)
 	{
 		d3d11Context->Flush();
 
@@ -115,9 +117,11 @@ struct DX12Interop : public Feature
 		DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
 		fenceValue++;
 
+		auto& commandList = commandLists[frameIndex];
+
 		// New frame, reset
-		DX::ThrowIfFailed(commandAllocator->Reset());
-		DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
+		DX::ThrowIfFailed(commandAllocators[frameIndex]->Reset());
+		DX::ThrowIfFailed(commandList->Reset(commandAllocators[frameIndex].get(), nullptr));
 
 		// Execute
 		func(commandList.get());
@@ -126,6 +130,9 @@ struct DX12Interop : public Feature
 
 		ID3D12CommandList* commandListsToExecute[] = { commandList.get() };
 		commandQueue->ExecuteCommandLists(1, commandListsToExecute);
+
+		if constexpr (!std::is_same_v<Func2, std::nullptr_t>)
+			func2();
 
 		// Wait for D3D12 to finish
 		DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));

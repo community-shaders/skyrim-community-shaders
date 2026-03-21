@@ -56,6 +56,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
+	auto& dx12Interop = globals::features::dx12Interop;
+
 	auto& upscaling = globals::features::upscaling;
 	upscaling.LoadUpscalingSDKs();
 
@@ -106,6 +108,9 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 				pFeatureLevel,
 				ppImmediateContext));
 
+			if (dx12Interop.loaded)
+				dx12Interop.Init(*ppDevice, *ppImmediateContext, pAdapter);
+
 			upscaling.SetProxyD3D11Device(*ppDevice);
 			upscaling.SetProxyD3D11DeviceContext(*ppImmediateContext);
 			upscaling.CreateProxySwapChain(pAdapter, *pSwapChainDesc);
@@ -118,7 +123,12 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 			if (upscaling.IsBackendInitialized()) {
 				upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
 				upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
-				upscaling.SetBackendD3D11Device(*ppDevice);
+
+				if (dx12Interop.Active())
+					upscaling.SetBackendD3D12Device(dx12Interop.d3d12Device.get());
+				else
+					upscaling.SetBackendD3D11Device(*ppDevice);
+
 				upscaling.PostBackendDevice();
 			}
 
@@ -142,13 +152,12 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		pFeatureLevel,
 		ppImmediateContext);
 
-	auto& dx12Interop = globals::features::dx12Interop;
 	if (dx12Interop.loaded)
 		dx12Interop.Init(*ppDevice, *ppImmediateContext, pAdapter);
 
 	if (upscaling.IsBackendInitialized()) {
 		if (dx12Interop.Active()) {
-			upscaling.SetBackendD3D12Device(dx12Interop.d3d12Device.get());	
+			upscaling.SetBackendD3D12Device(dx12Interop.d3d12Device.get());
 		} else {
 			upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
 			upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));

@@ -147,7 +147,7 @@ void DX12Interop::CreateD3D12Device(IDXGIAdapter* a_adapter)
 		winrt::com_ptr<ID3D12Debug3> debugController;
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
 			debugController->EnableDebugLayer();
-			debugController->SetEnableGPUBasedValidation(TRUE);
+			debugController->SetEnableGPUBasedValidation(FALSE);
 		} else {
 			logger::critical("[DX12Interop] Debug layer creation failed.");
 		}		
@@ -184,9 +184,11 @@ void DX12Interop::CreateD3D12Device(IDXGIAdapter* a_adapter)
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
 	DX::ThrowIfFailed(d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&copyCommandQueue)));
 
-	DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)));
-	DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.get(), nullptr, IID_PPV_ARGS(&commandList)));
-	commandList->Close();
+	for (size_t i = 0; i < 2; i++) {
+		DX::ThrowIfFailed(d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocators[i])));
+		DX::ThrowIfFailed(d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocators[i].get(), nullptr, IID_PPV_ARGS(&commandLists[i])));
+		commandLists[i]->Close();
+	}
 }
 
 void DX12Interop::CreateInterop()
