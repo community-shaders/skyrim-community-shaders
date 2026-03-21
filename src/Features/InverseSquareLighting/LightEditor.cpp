@@ -87,8 +87,12 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 
+	if (selected.isSpotlight)
+		ImGui::TextDisabled("Spotlight: ISL light type flags not applicable");
+	ImGui::BeginDisabled(selected.isSpotlight);
 	ImGui::CheckboxFlags("Inverse Square Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
 	ImGui::CheckboxFlags("Linear Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
+	ImGui::EndDisabled();
 
 	ImGui::Spacing();
 	ImGui::Spacing();
@@ -187,16 +191,15 @@ void LightEditor::GatherLights()
 		if (!current.isRef && runtimeData->lighFormId != 0)
 			ligh = RE::TESForm::LookupByID(runtimeData->lighFormId)->As<RE::TESObjectLIGH>();
 
-		if (ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow))
-			return;
+		current.isSpotlight = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow);
 
 		if (shadowsOnly) {
 			if (!ligh || !ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow))
 				return;
 		}
 
-		current.isOther = ligh == nullptr;
-		current.isAttached = refr && !current.isRef && !current.isOther;
+		current.isAttached = !current.isRef && refr != nullptr;
+		current.isOther = !current.isRef && !current.isAttached;
 
 		const bool isRefMatch = current.isRef && filterOption == FilterOption::RefLights;
 		const bool isAttachedMatch = current.isAttached && filterOption == FilterOption::AttachedLights;
@@ -207,13 +210,12 @@ void LightEditor::GatherLights()
 
 		if (current.isRef) {
 			current.position = refr->GetPosition();
-		} else if (current.isAttached) {
+		} else if (niLight->parent) {
 			current.position = niLight->parent->world.translate;
 		}
 		if (current.isOther) {
 			current.ptr = reinterpret_cast<void*>(niLight);
 			current.name = niLight->name;
-			current.position = niLight->parent->world.translate;
 			current.index = 0;
 		}
 
