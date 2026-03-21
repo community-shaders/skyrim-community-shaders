@@ -22,8 +22,15 @@ void LightEditor::DrawSettings()
 	ImGui::Checkbox("Disable Inverse Square Falloff Lights", &disableInvSqLights);
 
 	ImGui::Spacing();
+	ImGui::Text("Active Shadow Lights: %u", activeShadowLightCount);
+	ImGui::Spacing();
 	ImGui::Separator();
 	ImGui::Spacing();
+
+	ImGui::Checkbox("Shadows Only", &shadowsOnly);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Only show lights with HemiShadow or OmniShadow flags.");
+	}
 
 	int selectedFilter = static_cast<int>(filterOption);
 	if (ImGui::Combo("Filter By", &selectedFilter, FilterOptionLabels, static_cast<int>(FilterOption::Count))) {
@@ -183,6 +190,11 @@ void LightEditor::GatherLights()
 		if (ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow))
 			return;
 
+		if (shadowsOnly) {
+			if (!ligh || !ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow))
+				return;
+		}
+
 		current.isOther = ligh == nullptr;
 		current.isAttached = refr && !current.isRef && !current.isOther;
 
@@ -229,6 +241,7 @@ void LightEditor::GatherLights()
 	}
 
 	const auto& activeShadowLights = shadowSceneNode->GetRuntimeData().activeShadowLights;
+	activeShadowLightCount = static_cast<uint32_t>(activeShadowLights.size());
 
 	for (auto& light : activeShadowLights) {
 		addLight(light);

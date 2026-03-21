@@ -6,6 +6,7 @@ struct LightEditor
 	bool enabled;
 	bool disableInvSqLights;
 	bool disableRegularLights;
+	bool shadowsOnly = false;
 
 	void DrawSettings();
 	void GatherLights();
@@ -51,6 +52,7 @@ private:
 	bool showAttachedLights = false;
 	bool showEffectLights = false;
 	int32_t waitFrames = 0;
+	uint32_t activeShadowLightCount = 0;
 
 	enum class FilterOption
 	{
