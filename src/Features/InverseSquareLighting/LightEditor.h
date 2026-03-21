@@ -23,6 +23,7 @@ private:
 		bool isAttached;
 		bool isOther;
 		bool isSpotlight;
+		bool hasPosition = false;
 		RE::NiPoint3 position;
 
 		bool operator==(const LightInfo& other) const noexcept
