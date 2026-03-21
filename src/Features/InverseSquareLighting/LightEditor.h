@@ -54,6 +54,7 @@ private:
 	bool showAttachedLights = false;
 	bool showEffectLights = false;
 	int32_t waitFrames = 0;
+	uint32_t totalLightCount = 0;
 	uint32_t activeShadowLightCount = 0;
 
 	enum class FilterOption

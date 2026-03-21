@@ -22,6 +22,7 @@ void LightEditor::DrawSettings()
 	ImGui::Checkbox("Disable Inverse Square Falloff Lights", &disableInvSqLights);
 
 	ImGui::Spacing();
+	ImGui::Text("Total Lights: %u", totalLightCount);
 	ImGui::Text("Active Shadow Lights: %u", activeShadowLightCount);
 	ImGui::Spacing();
 	ImGui::Separator();
@@ -192,10 +193,10 @@ void LightEditor::GatherLights()
 		if (!current.isRef && runtimeData->lighFormId != 0)
 			ligh = RE::TESForm::LookupByID(runtimeData->lighFormId)->As<RE::TESObjectLIGH>();
 
-
-		if (shadowsOnly) {
-			if (!ligh || !ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow, RE::TES_LIGHT_FLAGS::kSpotShadow))
-				return;
+		const bool isShadow = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow, RE::TES_LIGHT_FLAGS::kSpotShadow);
+		
+		if ((shadowsOnly) && (!ligh || !isShadow)) {
+			return;
 		}
 
 
@@ -203,7 +204,11 @@ void LightEditor::GatherLights()
 		current.isOther = (!current.isRef && !current.isAttached) || (current.isSpotlight);
 
 
-		const bool isRefMatch = (current.isRef&& !current.isSpotlight) && filterOption == FilterOption::RefLights;
+		totalLightCount++;
+		if (isShadow)
+			activeShadowLightCount++;
+
+		const bool isRefMatch = (current.isRef && !current.isSpotlight) && filterOption == FilterOption::RefLights;
 		const bool isAttachedMatch = current.isAttached && filterOption == FilterOption::AttachedLights;
 		const bool isOtherMatch = current.isOther && filterOption == FilterOption::OtherLights;
 
@@ -237,7 +242,8 @@ void LightEditor::GatherLights()
 
 	lights.clear();
 	lightsAttached.clear();
-
+	totalLightCount = 0;
+	activeShadowLightCount = 0;
 	const auto smState = globals::game::smState;
 	const auto shadowSceneNode = smState->shadowSceneNode[0];
 
@@ -248,12 +254,11 @@ void LightEditor::GatherLights()
 	}
 
 	const auto& activeShadowLights = shadowSceneNode->GetRuntimeData().activeShadowLights;
-	activeShadowLightCount = static_cast<uint32_t>(activeShadowLights.size());
 
 	for (auto& light : activeShadowLights) {
 		addLight(light);
 	}
-
+	
 	if (!foundSelected) {
 		previous = selected;
 		selected = {};
