@@ -194,15 +194,13 @@ void LightEditor::GatherLights()
 			ligh = RE::TESForm::LookupByID(runtimeData->lighFormId)->As<RE::TESObjectLIGH>();
 
 		const bool isShadow = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow, RE::TES_LIGHT_FLAGS::kSpotShadow);
-		
+
 		if ((shadowsOnly) && (!ligh || !isShadow)) {
 			return;
 		}
 
-
 		current.isAttached = !current.isRef && refr != nullptr;
 		current.isOther = (!current.isRef && !current.isAttached) || (current.isSpotlight);
-
 
 		totalLightCount++;
 		if (isShadow)
@@ -258,7 +256,7 @@ void LightEditor::GatherLights()
 	for (auto& light : activeShadowLights) {
 		addLight(light);
 	}
-	
+
 	if (!foundSelected) {
 		previous = selected;
 		selected = {};
