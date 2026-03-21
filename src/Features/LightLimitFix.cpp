@@ -663,9 +663,11 @@ void LightLimitFix::CopyPointShadowData()
 	uint32_t plCount = 0;
 	uint32_t unshadowedLights = 0;
 	uint32_t slotUsage = 0;
-	for (auto* light : shadowSceneNode->GetRuntimeData().shadowCasterLights) {
+	int mapIndex = 0;
+	while (true) {
+		RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowCasterLights[mapIndex];
 		if (!light)
-			continue;
+			break;
 
 		uint32_t depthSlot = globals::game::isVR ?
 		                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
@@ -692,6 +694,7 @@ void LightLimitFix::CopyPointShadowData()
 			unshadowedLights++;
 		}
 
+		mapIndex += light->shadowMapCount;
 		plCount++;
 	}
 
@@ -1007,9 +1010,15 @@ void LightLimitFix::UpdateLights()
 	// Build a set of all shadow lights so we can skip them in activeLights and avoid
 	// double-contribution if shadow lights appear in both activeLights and shadowLightsAccum.
 	std::unordered_set<RE::BSLight*> shadowLightSet;
-	for (auto* sl : shadowSceneNode->GetRuntimeData().shadowCasterLights) {
-		if (sl)
+	{
+		int mapIndex = 0;
+		while (true) {
+			RE::BSShadowLight* sl = shadowSceneNode->GetRuntimeData().shadowCasterLights[mapIndex];
+			if (!sl)
+				break;
 			shadowLightSet.insert(static_cast<RE::BSLight*>(sl));
+			mapIndex += sl->shadowMapCount;
+		}
 	}
 
 	for (auto& e : shadowSceneNode->GetRuntimeData().activeLights) {
@@ -1067,12 +1076,19 @@ void LightLimitFix::UpdateLights()
 
 	{
 		int bufferIndex = 0;
-		for (auto* light : shadowSceneNode->GetRuntimeData().shadowCasterLights) {
+		int mapIndex = 0;
+		while (true) {
+			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowCasterLights[mapIndex];
+			if (!light)
+				break;
+
 			// Only set Shadow flag for lights with a valid written slot.
 			// Overflow lights still use addShadowLight for correct color/radius setup,
 			// but without the Shadow flag so the HLSL does not do a shadow map lookup
 			// with a stale or out-of-range shadowMapIndex.
 			addShadowLight(light, bufferIndex < (int)globals::deferred->shadowMapSlots);
+
+			mapIndex += light->shadowMapCount;
 			bufferIndex++;
 		}
 	}
