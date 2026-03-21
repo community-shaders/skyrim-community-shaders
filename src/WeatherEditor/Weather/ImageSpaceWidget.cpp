@@ -40,8 +40,7 @@ void ImageSpaceWidget::DrawWidget()
 	}
 	BeginScrollableContent("##ISScroll");
 	{
-		// Draw all settings in a unified table
-		if (PropertyDrawer::BeginTable("ImageSpaceSettings", 200.0f)) {
+		if (PropertyDrawer::BeginTable("ImageSpaceSettings")) {
 			bool changed = false;
 			const char* search = searchBuffer[0] ? searchBuffer : nullptr;
 

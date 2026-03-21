@@ -4,6 +4,7 @@
 #include "../Menu.h"
 #include "../Menu/ThemeManager.h"
 #include "../SceneSettingsManager.h"
+#include "../Utils/UI.h"
 #include "EditorWindow.h"
 
 namespace InteriorOnlyPanel
@@ -144,6 +145,8 @@ namespace InteriorOnlyPanel
 		if (readOnly)
 			ImGui::BeginDisabled();
 
+		const float scale = Util::GetUIScale();
+
 		switch (type) {
 		case SceneSettingsManager::SettingType::Boolean:
 			{
@@ -160,7 +163,7 @@ namespace InteriorOnlyPanel
 		case SceneSettingsManager::SettingType::Float:
 			{
 				float val = entry.value.get<float>();
-				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH);
+				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH * scale);
 				if (ImGui::InputFloat("##val", &val, 0.01f, 0.1f, "%.3f"))
 					manager->UpdateEntryValue(kSceneType, index, val, true);
 				if (ImGui::IsItemDeactivatedAfterEdit())
@@ -170,7 +173,7 @@ namespace InteriorOnlyPanel
 		case SceneSettingsManager::SettingType::Integer:
 			{
 				int val = entry.value.get<int>();
-				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH);
+				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH * scale);
 				if (ImGui::InputInt("##val", &val))
 					manager->UpdateEntryValue(kSceneType, index, val, true);
 				if (ImGui::IsItemDeactivatedAfterEdit())
@@ -197,7 +200,7 @@ namespace InteriorOnlyPanel
 		ImGui::SameLine();
 		{
 			auto styledButton = Util::ErrorButtonStyle();
-			if (ImGui::Button("X", ImVec2(C::SCENE_DELETE_BUTTON_WIDTH, 0))) {
+			if (ImGui::Button("X", ImVec2(C::SCENE_DELETE_BUTTON_WIDTH * scale, 0))) {
 				if (entry.source == EntrySource::Overwrite) {
 					pendingDeleteIndex = index;
 					deleteSingleOverwritePopup.message = std::format(

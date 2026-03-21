@@ -85,7 +85,6 @@ void SkySync::PostPostLoad()
 	stl::detour_thunk<Moon_Update>(REL::RelocationID(25626, 26169));
 	stl::detour_thunk<Sky_Update>(REL::RelocationID(25682, 26229));
 	stl::detour_thunk<Sky_OnNewClimate>(REL::RelocationID(25695, 26242));
-	stl::write_thunk_call<ApplyVolumetricLighting_VolumetricLightingDescriptor_Get>(REL::RelocationID(100475, 107193).address() + 0x354);
 
 	gSunPosition = reinterpret_cast<RE::NiPoint3*>(REL::RelocationID(527924, 414871).address());
 	gSunGlareSize = reinterpret_cast<float*>(REL::RelocationID(502611, 370235).address());
@@ -127,10 +126,19 @@ void SkySync::Update(const RE::Sky* sky)
 	if (!sun || !climate || !player)
 		return;
 
-	if (const auto cell = player->GetParentCell(); cell != currentCell) {
-		SetSkyRotation(sky, cell);
-		if (currentCell && (cell->IsInteriorCell() != currentCell->IsInteriorCell() || cell->GetRuntimeData().worldSpace != currentCell->GetRuntimeData().worldSpace))
+	const auto cell = player->GetParentCell();
+
+	if (cell != currentCell) {
+		const auto prevCell = currentCell;
+		if (cell)
+			SetSkyRotation(sky, cell);
+		if (cell && prevCell && (cell->IsInteriorCell() != prevCell->IsInteriorCell() || cell->GetRuntimeData().worldSpace != prevCell->GetRuntimeData().worldSpace))
 			shadowFader.Reset();
+	}
+
+	// Exterior worldspaces always run; interior cells require the sunlight-shadows flag.
+	if (cell && cell->IsInteriorCell() && !cell->cellFlags.all(static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows))) {
+		return;
 	}
 
 	const float time = sky->currentGameHour;
@@ -415,7 +423,6 @@ void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, flo
 	sun->light->Update(updateData);
 
 	intensity = std::clamp(intensity, 0.0f, 1.0f);
-	volumetricLightingIntensityFactor = intensity;
 }
 
 inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
@@ -434,14 +441,6 @@ inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 	dir.x = cosElev * cosHeading;
 	dir.y = cosElev * sinHeading;
 	dir.z = sinElev;
-}
-
-SkySync::VolumetricLightingDescriptor* SkySync::ApplyVolumetricLighting_VolumetricLightingDescriptor_Get::thunk()
-{
-	const auto volumetricLightingDescriptor = func();
-	if (globals::features::skySync.settings.Enabled)
-		volumetricLightingDescriptor->lightingIntensity *= volumetricLightingIntensityFactor;
-	return volumetricLightingDescriptor;
 }
 
 void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)

@@ -55,6 +55,7 @@ WeatherWidget::~WeatherWidget()
 void WeatherWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
+	const float scale = Util::GetUIScale();
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		// Draw header with search and all buttons
@@ -69,7 +70,7 @@ void WeatherWidget::DrawWidget()
 		if (searchBuffer[0] != '\0' && !searchResults.empty()) {
 			// Find the search input position for dropdown placement
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y));
-			ImGui::SetNextWindowSize(ImVec2(200.0f * 1.5f, 0));
+			ImGui::SetNextWindowSize(ImVec2(300.0f * Util::GetUIScale(), 0));
 			ImGui::SetNextWindowFocus();
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
 			ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
@@ -242,6 +243,9 @@ void WeatherWidget::DrawWidget()
 			bool recordChanged = false;
 			bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
 			WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
+			const float todLabelOffset = (hasParent ? 120.0f : 100.0f) * scale;
+			const float formLabelOffset = (hasParent ? 170.0f : 150.0f) * scale;
+			const float pickerWidth = 225.0f * scale;
 
 			// ImageSpace Records (per time of day)
 			if (ImGui::CollapsingHeader("ImageSpace", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -266,8 +270,8 @@ void WeatherWidget::DrawWidget()
 					}
 
 					ImGui::Text("%s:", label.c_str());
-					ImGui::SameLine(hasParent ? 120.0f : 100.0f);
-					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", weather->imageSpaces[i], editorWindow->imageSpaceWidgets, false, true)) {
+					ImGui::SameLine(todLabelOffset);
+					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", weather->imageSpaces[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
 						recordChanged = true;
 					}  // Add "Open" button
 					if (weather->imageSpaces[i]) {
@@ -313,8 +317,8 @@ void WeatherWidget::DrawWidget()
 					}
 
 					ImGui::Text("%s:", label.c_str());
-					ImGui::SameLine(hasParent ? 120.0f : 100.0f);
-					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", weather->volumetricLighting[i], editorWindow->volumetricLightingWidgets, false, true)) {
+					ImGui::SameLine(todLabelOffset);
+					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", weather->volumetricLighting[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
 						recordChanged = true;
 					}  // Add "Open" button
 					if (weather->volumetricLighting[i]) {
@@ -355,8 +359,8 @@ void WeatherWidget::DrawWidget()
 				}
 
 				ImGui::Text("Particle Shader:");
-				ImGui::SameLine(hasParent ? 170.0f : 150.0f);
-				if (WeatherUtils::DrawFormPickerCached("##Precipitation", weather->precipitationData, editorWindow->precipitationWidgets, false, true)) {
+				ImGui::SameLine(formLabelOffset);
+				if (WeatherUtils::DrawFormPickerCached("##Precipitation", weather->precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
 					recordChanged = true;
 				}  // Add "Open" button
 				if (weather->precipitationData) {
@@ -395,8 +399,8 @@ void WeatherWidget::DrawWidget()
 				}
 
 				ImGui::Text("Reference Effect:");
-				ImGui::SameLine(hasParent ? 170.0f : 150.0f);
-				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", weather->referenceEffect, editorWindow->referenceEffectWidgets, false, true)) {
+				ImGui::SameLine(formLabelOffset);
+				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", weather->referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
 					recordChanged = true;
 				}  // Add "Open" button
 				if (weather->referenceEffect) {
@@ -1040,15 +1044,17 @@ void WeatherWidget::DrawCloudSettings()
 		if (layerEnabled) {
 			const ImVec2 badgeSize = ImGui::CalcTextSize(kEnabledBadge);
 			const float headerHeight = ImGui::GetFrameHeight();
+			const float badgePadding = ImGui::GetStyle().FramePadding.x;
 			const ImVec2 badgePos = {
-				ImGui::GetWindowPos().x + ImGui::GetContentRegionMax().x - badgeSize.x,
+				ImGui::GetWindowPos().x + ImGui::GetContentRegionMax().x - badgeSize.x - badgePadding,
 				headerScreenY + (headerHeight - badgeSize.y) * 0.5f
 			};
 			ImGui::GetWindowDrawList()->AddText(badgePos, ImGui::GetColorU32(ImGuiCol_CheckMark), kEnabledBadge);
 		}
 
 		if (layerOpen) {
-			ImGui::Indent(10.0f);
+			const float scale = Util::GetUIScale();
+			ImGui::Indent(10.0f * scale);
 			ImGui::Spacing();
 
 			// Begin horizontal layout for enable checkbox and sliders on left, texture on right
@@ -1074,15 +1080,17 @@ void WeatherWidget::DrawCloudSettings()
 
 			ImGui::EndGroup();
 
-			// Draw texture in upper right if available
+			// Draw texture centered in remaining space to the right of the controls
 			if (!settings.clouds[i].texturePath.empty()) {
 				auto* texture = GetCloudTexture(i);
 				if (texture) {
-					ImGui::SameLine(0.0f, 20.0f);
+					float textureSize = 128.0f * scale;
+					float groupEndX = ImGui::GetItemRectMax().x;
+					float availRight = ImGui::GetContentRegionMax().x + ImGui::GetWindowPos().x - groupEndX;
+					float offset = std::max(20.0f * scale, (availRight - textureSize) * 0.5f);
+					ImGui::SameLine(0.0f, offset);
 					ImGui::BeginGroup();
-					float textureSize = 128.0f;
 					ImGui::Image((void*)texture, ImVec2(textureSize, textureSize));
-					// Small grey subtext below image, clamped to texture width
 					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 					ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textureSize);
 					ImGui::TextWrapped("%s", settings.clouds[i].texturePath.c_str());
@@ -1094,7 +1102,7 @@ void WeatherWidget::DrawCloudSettings()
 
 			ImGui::Spacing();
 			ImGui::Spacing();
-			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str())) {
+			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str(), 120.0f * scale)) {
 				TOD::RenderTODHeader();
 				TOD::DrawTODSeparator();
 
@@ -1130,7 +1138,7 @@ void WeatherWidget::DrawCloudSettings()
 			}
 
 			ImGui::Spacing();
-			ImGui::Unindent(10.0f);
+			ImGui::Unindent(10.0f * scale);
 		}
 	}
 	if (enableChanged) {
@@ -1156,10 +1164,11 @@ void WeatherWidget::DrawFogSettings()
 
 	bool changed = false;
 
+	const float scale = Util::GetUIScale();
 	if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit)) {
-		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-		ImGui::TableSetupColumn("Day", ImGuiTableColumnFlags_WidthFixed, 250.0f);
-		ImGui::TableSetupColumn("Night", ImGuiTableColumnFlags_WidthFixed, 250.0f);
+		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 200.0f * scale);
+		ImGui::TableSetupColumn("Day", ImGuiTableColumnFlags_WidthFixed, 250.0f * scale);
+		ImGui::TableSetupColumn("Night", ImGuiTableColumnFlags_WidthFixed, 250.0f * scale);
 
 		// Header row
 		ImGui::TableNextRow();
@@ -1183,7 +1192,7 @@ void WeatherWidget::DrawFogSettings()
 		if (hasParent) {
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 			ImGui::Checkbox("##FogNear", &settings.inheritFlags["Fog_Near"]);
 			if (settings.inheritFlags["Fog_Near"]) {
 				settings.fogProperties["Day Near"] = parentWidget->settings.fogProperties["Day Near"];
@@ -1210,7 +1219,7 @@ void WeatherWidget::DrawFogSettings()
 		if (hasParent) {
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 			ImGui::Checkbox("##FogFar", &settings.inheritFlags["Fog_Far"]);
 			if (settings.inheritFlags["Fog_Far"]) {
 				settings.fogProperties["Day Far"] = parentWidget->settings.fogProperties["Day Far"];
@@ -1237,7 +1246,7 @@ void WeatherWidget::DrawFogSettings()
 		if (hasParent) {
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 			ImGui::Checkbox("##FogPower", &settings.inheritFlags["Fog_Power"]);
 			if (settings.inheritFlags["Fog_Power"]) {
 				settings.fogProperties["Day Power"] = parentWidget->settings.fogProperties["Day Power"];
@@ -1264,7 +1273,7 @@ void WeatherWidget::DrawFogSettings()
 		if (hasParent) {
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 			ImGui::Checkbox("##FogMax", &settings.inheritFlags["Fog_Max"]);
 			if (settings.inheritFlags["Fog_Max"]) {
 				settings.fogProperties["Day Max"] = parentWidget->settings.fogProperties["Day Max"];

@@ -95,7 +95,31 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 		globalScale = Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
 	}
 
-	styleCopy.ScaleAllSizes(exp2(globalScale));
+	// Scale style sizes by GlobalScale and font-size ratio (theme values target 1080p baseline)
+	float fontScale = 1.0f;
+	auto& io = ImGui::GetIO();
+	if (io.FontDefault) {
+		constexpr float kBaselineFontSize = Constants::DEFAULT_SCREEN_HEIGHT * Constants::DEFAULT_FONT_RATIO;
+		fontScale = io.FontDefault->FontSize / kBaselineFontSize;
+	}
+	const float scaleFactor = fontScale * exp2(globalScale);
+	styleCopy.ScaleAllSizes(scaleFactor);
+
+	// ScaleAllSizes skips border and separator sizes — scale them manually, flooring non-zero values at 1px
+	auto scaleSize = [scaleFactor](float value) -> float {
+		if (value <= 0.0f)
+			return 0.0f;
+		return ImMax(1.0f, ImTrunc(value * scaleFactor));
+	};
+	styleCopy.WindowBorderSize = scaleSize(themeSettings.Style.WindowBorderSize);
+	styleCopy.ChildBorderSize = scaleSize(themeSettings.Style.ChildBorderSize);
+	styleCopy.PopupBorderSize = scaleSize(themeSettings.Style.PopupBorderSize);
+	styleCopy.FrameBorderSize = scaleSize(themeSettings.Style.FrameBorderSize);
+	styleCopy.TabBorderSize = scaleSize(themeSettings.Style.TabBorderSize);
+	styleCopy.TabBarBorderSize = scaleSize(themeSettings.Style.TabBarBorderSize);
+	styleCopy.SeparatorTextBorderSize = scaleSize(themeSettings.Style.SeparatorTextBorderSize);
+	styleCopy.DockingSeparatorSize = scaleSize(themeSettings.Style.DockingSeparatorSize);
+
 	styleCopy.MouseCursorScale = 1.f;
 	style = styleCopy;
 	style.HoverDelayNormal = themeSettings.TooltipHoverDelay;
