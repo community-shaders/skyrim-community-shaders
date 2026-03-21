@@ -959,6 +959,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 	const bool inReflection = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection;
 
+#	if defined(RAYTRACING) && !defined(DEFERRED)
+	[branch]
+	if (SharedData::raytracingSettings.PathTracing && inWorld) {
+		psout.Diffuse = float4(0, 0, 0, 0);
+		return psout;
+	}
+#	endif
+
 	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, viewPosition.z);
 
 #	if defined(SKINNED) || !defined(MODELSPACENORMALS)

@@ -267,6 +267,8 @@ namespace SharedData
         float Ambient;
         float Reflection;
         uint Albedo;
+		uint PathTracing;
+		uint3 _padding;
     };
 	
 	cbuffer FeatureData : register(b6)
