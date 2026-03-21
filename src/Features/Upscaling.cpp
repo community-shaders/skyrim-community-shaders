@@ -1377,15 +1377,6 @@ bool Upscaling::IsFrameGenerationActive() const
 
 bool Upscaling::IsUpscalingActive() const
 {
-	auto method = GetUpscaleMethod();
-
-	// Only consider vendor upscalers (FSR/DLSS) as "active" when the
-	// selected method actually produces a downscale. If the renderer is
-	// currently running at 1:1 (no downscale), treat upscaling as inactive.
-	if (!(method == UpscaleMethod::kFSR || method == UpscaleMethod::kDLSS)) {
-		return false;
-	}
-
 	// resolutionScale.x represents renderWidth / displayWidth.
 	return resolutionScale.x < .99f;
 }
