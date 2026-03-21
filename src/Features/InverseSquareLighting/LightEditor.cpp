@@ -195,16 +195,16 @@ void LightEditor::GatherLights()
 
 		const bool isShadow = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow, RE::TES_LIGHT_FLAGS::kSpotShadow);
 
+		totalLightCount++;
+		if (isShadow)
+			activeShadowLightCount++;
+
 		if ((shadowsOnly) && (!ligh || !isShadow)) {
 			return;
 		}
 
 		current.isAttached = !current.isRef && refr != nullptr;
 		current.isOther = (!current.isRef && !current.isAttached) || (current.isSpotlight);
-
-		totalLightCount++;
-		if (isShadow)
-			activeShadowLightCount++;
 
 		const bool isRefMatch = (current.isRef && !current.isSpotlight) && filterOption == FilterOption::RefLights;
 		const bool isAttachedMatch = current.isAttached && filterOption == FilterOption::AttachedLights;
@@ -299,7 +299,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 			waitFrames = 1;
 		}
 		displayInfo.pos = newPos;
-	} else if (selected.isAttached) {
+	} else if (selected.isAttached && niLight->parent) {
 		const auto currentPos = niLight->parent->local.translate;
 		const auto newPos = original.pos + current.pos;
 		if (currentPos != newPos) {

@@ -22,7 +22,7 @@ private:
 		bool isRef;
 		bool isAttached;
 		bool isOther;
-		bool isSpotlight;
+		bool isSpotlight = false;
 		bool hasPosition = false;
 		RE::NiPoint3 position;
 
