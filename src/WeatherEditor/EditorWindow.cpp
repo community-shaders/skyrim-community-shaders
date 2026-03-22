@@ -1233,7 +1233,7 @@ void EditorWindow::RenderUI()
 	const float scale = Util::GetUIScale();
 	const float pad = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
 	const float menuBarHeight = ImGui::GetFrameHeight();
-	const float availableWidth = width - pad * 3.0f;   // left pad + gap + right pad
+	const float availableWidth = width - pad * 3.0f;  // left pad + gap + right pad
 	const float availableHeight = (height - menuBarHeight - pad * 2.0f) * 0.85f;
 	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
 	// Browser gets up to half the available width, capped so ultrawide gives extra to viewport

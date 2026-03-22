@@ -117,8 +117,8 @@ namespace WidgetDefaults
 	constexpr float kMinHeight = 150.0f;
 	constexpr float kInitialWidth = 580.0f;
 	constexpr float kInitialHeight = 580.0f;
-	constexpr float kSliderWidthRatio = 0.6f;       ///< Fraction of available width for slider/input controls
-	constexpr float kTODLabelWidth = 150.0f;          ///< Default label column width for time-of-day tables
+	constexpr float kSliderWidthRatio = 0.6f;  ///< Fraction of available width for slider/input controls
+	constexpr float kTODLabelWidth = 150.0f;   ///< Default label column width for time-of-day tables
 }
 
 /// Apply standard DPI-scaled size constraints and initial size for widget windows. Call before ImGui::Begin().
