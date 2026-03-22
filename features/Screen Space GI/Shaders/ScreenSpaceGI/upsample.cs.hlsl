@@ -1,6 +1,7 @@
 // depth-aware upsampling: https://gist.github.com/pixelmager/a4364ea18305ed5ca707d89ddc5f8743
 
 #include "Common/FastMath.hlsli"
+#include "Common/VR.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
 Texture2D<half> srcDepth : register(t0);
@@ -8,6 +9,10 @@ Texture2D<half> srcAo : register(t1);           // half-res
 Texture2D<half4> srcIlY : register(t2);         // half-res
 Texture2D<half2> srcIlCoCg : register(t3);      // half-res
 Texture2D<half4> srcGiSpecular : register(t4);  // half-res
+
+#if defined(VR_STEREO_OPT)
+Texture2D<uint> StereoOptModeTexture : register(t16);
+#endif
 
 RWTexture2D<half> outAo : register(u0);
 RWTexture2D<half4> outIlY : register(u1);
@@ -23,6 +28,19 @@ RWTexture2D<half4> outGiSpecular : register(u3);
 	// Early exit if dispatch thread is outside frame bounds
 	if (any(dtid >= uint2(FrameDim)))
 		return;
+
+#if defined(VR_STEREO_OPT)
+	{
+		float2 uv = (dtid + .5) * RcpFrameDim;
+		uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+		if (eyeIndex == 1) {
+			uint mode = StereoOptModeTexture[dtid];
+			if (mode == 1 || mode == 2)
+				return;
+		}
+	}
+#endif
+
 #ifdef HALF_RES
 	int2 px00 = (dtid >> 1) + (dtid & 1) - 1;
 #else  // QUARTER_RES

@@ -46,6 +46,10 @@ Texture2D<float4> srcPrevY : register(t6);             // maybe half-res
 Texture2D<float2> srcPrevCoCg : register(t7);          // maybe half-res
 Texture2D<float4> srcPrevGISpecular : register(t8);    // maybe half-res
 
+#if defined(VR_STEREO_OPT)
+Texture2D<uint> StereoOptModeTexture : register(t16);
+#endif
+
 RWTexture2D<unorm float> outAo : register(u0);
 RWTexture2D<float4> outY : register(u1);
 RWTexture2D<float2> outCoCg : register(u2);
@@ -342,6 +346,15 @@ void CalculateGI(
 
 	float2 uv = (pxCoord + .5) * RCP_OUT_FRAME_DIM;
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+
+#if defined(VR_STEREO_OPT)
+	if (eyeIndex == 1) {
+		uint2 fullResPx = uint2(uv * FrameDim);
+		uint mode = StereoOptModeTexture[fullResPx];
+		if (mode == 1 || mode == 2)
+			return;
+	}
+#endif
 
 	float viewspaceZ = READ_DEPTH(srcWorkingDepth, pxCoord);
 
