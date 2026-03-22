@@ -188,8 +188,10 @@ namespace WidgetFactory
 	template <typename Container>
 	void DrawOpenWidgets(Container& widgets, Widget*& lastFocusedWidget)
 	{
+		const float scale = Util::GetUIScale();
 		for (auto& widget : widgets) {
 			if (widget->IsOpen()) {
+				ImGui::SetNextWindowSize(ImVec2(600.0f * scale, 600.0f * scale), ImGuiCond_FirstUseEver);
 				widget->DrawWidget();
 				if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
 					lastFocusedWidget = widget.get();

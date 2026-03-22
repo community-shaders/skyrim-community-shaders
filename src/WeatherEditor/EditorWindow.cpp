@@ -857,6 +857,8 @@ void EditorWindow::ShowWidgetWindow()
 
 	// Draw current cell lighting widget if open
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
+		const float scale = Util::GetUIScale();
+		ImGui::SetNextWindowSize(ImVec2(600.0f * scale, 600.0f * scale), ImGuiCond_FirstUseEver);
 		currentCellLightingWidget->DrawWidget();
 		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
 			lastFocusedWidget = currentCellLightingWidget.get();
