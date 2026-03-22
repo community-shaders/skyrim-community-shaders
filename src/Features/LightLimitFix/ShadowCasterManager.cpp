@@ -109,7 +109,7 @@ namespace ShadowCasterManager
 	static FormulaHelper* s_formulaRedrawInterval = nullptr;
 	static FormulaHelper* s_formulaRedrawBudget = nullptr;
 
-	// Phase 4: lights converted to normal (non-shadow) lights
+	// Lights converted to normal (non-shadow) lights for diffuse-only rendering
 	struct ConvertedLight
 	{
 		RE::BSShadowLight* light;
@@ -123,8 +123,6 @@ namespace ShadowCasterManager
 
 	// =========================================================================
 	// Context-hook infrastructure
-	// Adapts Intellightent's CONTEXT-capture hook pattern to use SKSE's
-	// trampoline allocator instead of a private VirtualAlloc pool.
 	//
 	// Each installed context hook writes a JMP5 from the patch address to a
 	// generated stub that:
@@ -209,8 +207,7 @@ namespace ShadowCasterManager
 			//   [absolute jump back to resumeAddr]
 			// ------------------------------------------------------------------
 
-			// We use a simple flat byte array approach matching Intellightent's
-			// mcode pattern, patching in the three absolute addresses at known offsets.
+			// Flat byte array stub; absolute addresses patched in at known offsets.
 			uint8_t stub[] = {
 				// push rsp          (offset 0)
 				0x54,
@@ -413,7 +410,7 @@ namespace ShadowCasterManager
 	// =========================================================================
 
 	// -------------------------------------------------------------------------
-	// Phase 1a: Expanded accumulated-lights array
+	// Expanded accumulated-lights array
 	// The game allocates a local array sized for 8 lights (with +1 sentinel).
 	// When using more than 8 shadow casters we extend RDI (SE) / RBX (AE/VR)
 	// which is the loop-end counter, and RDX (SE) which is the copy-end counter.
@@ -432,7 +429,7 @@ namespace ShadowCasterManager
 	}
 
 	// -------------------------------------------------------------------------
-	// Phase 1b: Redirect depth-stencil-view creation to our extended arrays
+	// Redirect depth-stencil-view creation to our extended arrays
 	// The game loops 0..7 creating depth stencil views and stores each pointer
 	// in a game-managed struct at R9.  We redirect R9 to our own arrays so
 	// views >= 8 land in g_normalDepthBuffer / g_readOnlyDepthBuffer.
@@ -456,7 +453,7 @@ namespace ShadowCasterManager
 	}
 
 	// -------------------------------------------------------------------------
-	// Phase 1c: Copy first 8 views into the game's own DepthStencilData array
+	// Copy first 8 views into the game's own DepthStencilData array
 	// Called after the creation loop finishes; syncs the game struct so existing
 	// code reading depthStencils[4].views[0..7] still works correctly.
 	// -------------------------------------------------------------------------
@@ -472,10 +469,10 @@ namespace ShadowCasterManager
 	}
 
 	// -------------------------------------------------------------------------
-	// Phase 1d: Redirect depth-buffer selection at draw time
+	// Redirect depth-buffer selection at draw time
 	// When the active depth target is type 4 (shadow maps), route sub-index
 	// lookups through our extended arrays instead of the game struct.
-	// Hook #1: renderer in R8, result → RBX.
+	// Hook #1: renderer in R8, result -> RBX.
 	// -------------------------------------------------------------------------
 	static void Hook_SelectDepthBuffer1(CONTEXT& ctx)
 	{
@@ -490,7 +487,7 @@ namespace ShadowCasterManager
 		}
 	}
 
-	// Hook #2: VR: renderer in R14, result → RBP; SE/AE: renderer in RBP, result → R14.
+	// Hook #2: VR: renderer in R14, result -> RBP; SE/AE: renderer in RBP, result -> R14.
 	static void Hook_SelectDepthBuffer2(CONTEXT& ctx)
 	{
 		bool isVR = REL::Module::IsVR();
@@ -513,7 +510,7 @@ namespace ShadowCasterManager
 	}
 
 	// -------------------------------------------------------------------------
-	// Phase 1e: Release extended depth buffers at renderer shutdown
+	// Release extended depth buffers at renderer shutdown
 	// -------------------------------------------------------------------------
 	static void ReleaseExtendedDepthBuffers(int shadowCount)
 	{
@@ -543,7 +540,7 @@ namespace ShadowCasterManager
 	}
 
 	// -------------------------------------------------------------------------
-	// Phase 1f: Force each light to use its assigned shadow map slot
+	// Force each light to use its assigned shadow map slot
 	// RenderCascade would otherwise recalculate a slot index from a global
 	// counter, causing lights that weren't re-rendered this frame to corrupt
 	// each other's shadow maps.
@@ -564,7 +561,7 @@ namespace ShadowCasterManager
 	}
 
 	// -------------------------------------------------------------------------
-	// Phase 1g: Color-mask pass skip and overflow fix
+	// Color-mask pass skip and overflow fix
 	// -------------------------------------------------------------------------
 
 	// ContextHook delegate — replaces the DrawColorMask call in 107140.
@@ -733,7 +730,7 @@ namespace ShadowCasterManager
 	}
 
 	// =========================================================================
-	// Phase 2 — Game accessor helpers
+	// Game accessor helpers
 	//
 	// Thin wrappers around game globals and engine functions.
 	// All REL::RelocationID pairs are (SE_id, AE_id).
@@ -750,7 +747,7 @@ namespace ShadowCasterManager
 
 	static RE::NiCamera* GetWorldCamera()
 	{
-		// world scene graph → camera
+		// world scene graph -> camera
 		static REL::RelocationID uid(528087, 415032);
 		auto* sg = *reinterpret_cast<RE::BSSceneGraph**>(uid.address());
 		return sg ? sg->GetRuntimeData().camera.get() : nullptr;
@@ -963,7 +960,7 @@ namespace ShadowCasterManager
 	}
 
 	// =========================================================================
-	// Phase 2 — Formula helpers
+	// Formula helpers
 	//
 	// SetupSceneFormula: called once per frame, sets camera/scene params.
 	// SetupLightFormula: called per candidate light, sets all light params.
@@ -1070,7 +1067,7 @@ namespace ShadowCasterManager
 	}
 
 	// =========================================================================
-	// Phase 2 — Light enable / disable helpers
+	// Light enable / disable helpers
 	// =========================================================================
 
 	static void DisableLight(RE::BSShadowLight* light)
@@ -1083,7 +1080,6 @@ namespace ShadowCasterManager
 				break;
 			}
 		}
-		// Use light->cullingProcess directly — matches Intellightent's OnDecidedToDisable.
 		auto* cull = light->cullingProcess;
 		if (cull && cull->portalGraphEntry)
 			GameClearPortalVisibility(reinterpret_cast<RE::BSPortalGraphEntry*>(cull->portalGraphEntry));
@@ -1092,7 +1088,6 @@ namespace ShadowCasterManager
 
 	// Activates a light as a normal (non-shadow) light by inserting it into
 	// the scene's active-light list without allocating a shadow slot.
-	// Mirrors Intellightent's addFrameConvert + OnDecidedToConvert pair.
 	static void ConvertLight(RE::BSShadowLight* light, RE::ShadowSceneNode* ssn, bool isNS)
 	{
 		// Already converted: just re-enable so geometry picks it up this frame.
@@ -1124,7 +1119,6 @@ namespace ShadowCasterManager
 	}
 
 	// Activates a non-sun shadow light into slot `slotIndex`.
-	// Mirrors Intellightent's OnDecidedToEnable with isForCs=true, isSun=false, shadow=true.
 	static void EnableLight(RE::BSShadowLight* light, RE::NiCamera* camera,
 		RE::ShadowSceneNode* ssn, int slotIndex)
 	{
@@ -1233,17 +1227,15 @@ namespace ShadowCasterManager
 			}
 		}
 
-		// Only apply lens flare if the light has lens flare data — mirrors Intellightent's
-		// `if (light->lensFlareData && !IsVR())` guard in OnDecidedToEnable.
-		// Calling it unconditionally on parabolic lights (null lensFlareData) registers them
-		// into the lens flare system; Main::Draw then crashes in FUN_1414ce790 (AE 107148)
-		// when the lens flare pass tries to dereference the null sprite data.
+		// Only apply lens flare when lensFlareData is non-null; calling it on parabolic lights
+		// (null lensFlareData) registers them into the lens flare system, causing a crash
+		// in the lens flare pass when it tries to dereference the null sprite data.
 		if (light->lensFlareData)
 			GameApplyLensFlare(light);
 	}
 
 	// =========================================================================
-	// Phase 2 — Main shadow caster scheduler
+	// Main shadow caster scheduler
 	//
 	// Replaces the game's CalculateActiveShadowCasterLights entirely.
 	// Runs via stl::detour_thunk; obtains all inputs from game globals.
@@ -1261,7 +1253,6 @@ namespace ShadowCasterManager
 	static void ScheduleShadowCasters()
 	{
 		// VR display guard: skip scheduling when the HMD display is not active.
-		// Matches Intellightent: if (!REL::Module::IsVR() || GetVRDrawShadowsDisplay())
 		if (REL::Module::IsVR() && !GetVRDrawShadows())
 			return;
 
@@ -1327,7 +1318,10 @@ namespace ShadowCasterManager
 			*reinterpret_cast<uintptr_t**>(
 				REL::RelocationID(528077, 415022).address()));
 
-		int wantCount = sunLight ? 1 : 0;
+		// Slot 0 is reserved for the sun; point lights fill slots 1..ShadowLightCount.
+		// Do not count the sun against ShadowLightCount — it uses focus cascade DSV slots,
+		// not parabolic point-light slots.
+		int wantCount = 0;
 
 		for (auto& c : candidates) {
 			auto* l = c.light;
@@ -1391,7 +1385,7 @@ namespace ShadowCasterManager
 			s_lights.Lights[idx].Light = c.light;
 		}
 
-		// Update sun slot (slot 0) -- mirrors Intellightent explicit slot-0 update.
+		// Update sun slot (slot 0).
 		if (sunLight) {
 			if (s_lights.Lights[0].Light != sunLight) {
 				s_lights.Lights[0].Clear();
@@ -1520,15 +1514,12 @@ namespace ShadowCasterManager
 				}
 			}
 		}
-		// NOTE: ConvertDistantToNormal processing removed for 1:1 Intellightent port.
-		// Phase 4 light conversion (ConvertLight) is not in base Intellightent.
-
 		ssn->GetRuntimeData().firstPersonShadowMask = *GetShadowMask();
 		*GetFrameLightCount() = static_cast<uint32_t>(doneLightCount);
 	}
 
 	// =========================================================================
-	// Phase 2 — Render hook: replaces RenderActiveShadowCasterLights
+	// Render hook: replaces RenderActiveShadowCasterLights
 	// Iterates s_lights and calls Render() on lights flagged RedrawFrame.
 	// Uses ContextHook at a specific call site in the render loop (see Install()).
 	// =========================================================================
@@ -1537,7 +1528,7 @@ namespace ShadowCasterManager
 	{
 		// VR: RenderActiveShadowCasterLights normally saves+clears g_drawStereo before
 		// iterating shadow casters, then restores it. Without this, each hemisphere
-		// render is doubled for both eyes → 4-quadrant shadow map texture.
+		// render is doubled for both eyes -> 4-quadrant shadow map texture.
 		bool savedStereo = false;
 		if (REL::Module::IsVR()) {
 			savedStereo = GetDrawStereo();
@@ -1562,15 +1553,13 @@ namespace ShadowCasterManager
 			GetDrawStereo() = savedStereo;
 	}
 
-	// ContextHook delegate for Hook_RenderShadowLights — replaces the call to
-	// RenderActiveShadowCasterLights.  Using ContextHook (RtlRestoreContext) instead of
-	// write_thunk_call is required so that all volatile registers (r8, etc.) are restored
-	// to their pre-hook values before the game continues past the patched call site.
-	// Intellightent uses the same WriteHook approach for this reason.
+	// ContextHook delegate — replaces the call to RenderActiveShadowCasterLights.
+	// ContextHook (RtlRestoreContext) is required so all volatile registers (r8, etc.)
+	// are restored before the game continues past the patched call site.
 	//
 	// Non-VR (SE/AE): set ctx.Rax = 0 so the conditional between 107133+0x192 and
 	// +0x1AE skips "call [r8+0x50]" — r8 is loaded from rax there; if rax != 0,
-	// r8 gets a stale pointer whose [+0x50] slot is null → crash at execute 0x0.
+	// r8 gets a stale pointer whose [+0x50] slot is null -> crash at execute 0x0.
 	static void Hook_RenderShadowLights(CONTEXT& ctx)
 	{
 		if (!REL::Module::IsVR())
@@ -1586,7 +1575,7 @@ namespace ShadowCasterManager
 	};
 
 	// =========================================================================
-	// Phase 2 — Surface lights hook
+	// Surface lights hook
 	// Replaces CalculateActiveNonShadowCasterLights (ID 100997/107784).
 	// Uses ContextHook::Install because the function has 10 args (11 in VR)
 	// with VR-specific stack layout — CONTEXT is the simplest cross-runtime approach.
@@ -1687,7 +1676,7 @@ namespace ShadowCasterManager
 	}
 
 	// =========================================================================
-	// Phase 4 — Light conversion hooks
+	// Light conversion hooks
 	//
 	// BSShadowLight::IsShadowLight (VFT slot 3): returns false for lights in
 	// s_normalConvert so the engine treats them as normal (non-shadow) lights
@@ -1765,7 +1754,7 @@ namespace ShadowCasterManager
 	}
 
 	// =========================================================================
-	// Phase 4 partial — Stealth detection fix
+	// Stealth detection fix
 	//
 	// GetLightLevel (AIProcess::CalculateLightValue, ID 38900/39946) uses the
 	// engine shadow-light iteration internally. When we replace shadow caster
@@ -1794,7 +1783,7 @@ namespace ShadowCasterManager
 	}
 
 	// Replaces the vanilla shadow-light-affect-player loop.
-	// RBP-33 holds the player's position (NiPoint3*); Intellightent offset confirmed.
+	// RBP-33 holds the player's position (NiPoint3*).
 	static void Hook_UpdateLightLevelPlayer(CONTEXT& ctx)
 	{
 		auto* pos = reinterpret_cast<RE::NiPoint3*>(ctx.Rbp - 33);
@@ -1879,11 +1868,11 @@ namespace ShadowCasterManager
 		bool extended = settings.ShadowLightCount > 4;
 		bool needExtraBuffers = settings.ShadowLightCount > 8;
 
-		// ---- Phase 1: extended depth buffer infrastructure ------------------
+		// ---- Extended depth buffer infrastructure -------------------------
 
 		if (needExtraBuffers) {
-			g_normalDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount, sizeof(void*)));
-			g_readOnlyDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount, sizeof(void*)));
+			g_normalDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount + 1, sizeof(void*)));
+			g_readOnlyDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount + 1, sizeof(void*)));
 
 			// Patch the creation-loop count from 8 to ShadowLightCount.
 			// SE/VR: pattern "C7 44 24 68 08 00 00 00" (+4 = the immediate 0x08)
@@ -1983,8 +1972,7 @@ namespace ShadowCasterManager
 		// Required whenever our temporal scheduler is active (ShadowLightCount >= 4):
 		// RenderCascade recalculates the slot from a global counter each call; without
 		// this hook, a light not redrawn this frame gets a different slot than last
-		// frame and corrupts another light's shadow map.  Intellightent installs this
-		// unconditionally.
+		// frame and corrupts another light's shadow map.
 		{
 			// SE: RenderCascade+0xBE; VR: RenderCascade+0xE0
 			static REL::RelocationID uid(100820, 107604);
@@ -1998,7 +1986,7 @@ namespace ShadowCasterManager
 		if (extended) {
 			// Patch two "get selected focus shadows" thunks to always return 0.
 			// IDs 10209/10247 and 10207/10245 (SE/AE).  VR shares the same IDs.
-			// Pattern "8B 05 xx xx xx xx" (MOV EAX, [rip+N]) → "48 31 C0 90 90 90" (XOR RAX,RAX + NOPs)
+			// Pattern "8B 05 xx xx xx xx" (MOV EAX, [rip+N]) -> "48 31 C0 90 90 90" (XOR RAX,RAX + NOPs)
 			const uint8_t xorRax[6] = { 0x48, 0x31, 0xC0, 0x90, 0x90, 0x90 };
 
 			static REL::RelocationID uid1(10209, 10247);
@@ -2014,10 +2002,8 @@ namespace ShadowCasterManager
 		}
 
 		// ---- Color mask pass: skip it and fix out-of-bounds array access -----
-		// Both hooks are installed unconditionally (not just when extended) because
-		// our shadow scheduler changes the light/slot state in a way that makes the
-		// vanilla color-mask pass crash even at ShadowLightCount=4.
-		// Intellightent also installs these regardless of light count.
+		// Installed unconditionally: our scheduler changes light/slot state in a way
+		// that makes the vanilla color-mask pass crash even at ShadowLightCount=4.
 		{
 			// Replace the call to DrawColorMask with our thunk that calls
 			// ReturnShadowmaps on each light instead.
@@ -2029,7 +2015,7 @@ namespace ShadowCasterManager
 			}
 		}
 
-		// ---- Phase 2: shadow caster selection ----------------------------------
+		// ---- Shadow caster selection -----------------------------------------
 
 		// Replace CalculateActiveShadowCasterLights entirely (ID 100419/107137).
 		// VR confirmed: 0x1413226e0
@@ -2060,7 +2046,7 @@ namespace ShadowCasterManager
 			REL::safe_write(uid.address() + 5, &ret, 1);
 		}
 
-		// ---- Phase 4 partial: stealth detection fix -------------------------
+		// ---- Stealth detection fix -------------------------------------------
 		// GetLightLevel (ID 38900/39946) iterates shadow lights to check which
 		// affect the player. We replace that iteration with our own.
 		// VR: 38900 confirmed (0x1406892e0); offsets assumed same as SE for VR.
@@ -2087,13 +2073,11 @@ namespace ShadowCasterManager
 				logger::error("[SCM] Failed to install Hook_CheckLightLevelPlayer");
 		}
 
-		// ---- Phase 4: light conversion ----------------------------------------
-		// Matches Intellightent Hook_ConvertLights():
-		//   - IsShadowLight vtable slot 3: when bTryNormalLight=true (our ConvertDistantToNormal)
-		//   - RemoveLight hook: when bTryNormalLight || bTryShadowLight
-		//   - AddLight hook: when bTryShadowLight || bForcePortalStrict (our ForcePortalStrict)
-		//   - SetLight hook: when bTryShadowLight (our PromoteNormalToShadow)
-		// Hook_ConvertLights is called in BOTH simple and extended mode in Intellightent.
+		// ---- Light conversion ------------------------------------------------
+		//   - IsShadowLight vtable slot 3: when ConvertDistantToNormal
+		//   - RemoveLight hook: when ConvertDistantToNormal || PromoteNormalToShadow
+		//   - AddLight hook: always (portal-strict is unconditional; also handles PromoteNormalToShadow)
+		//   - SetLight hook: when PromoteNormalToShadow
 
 		if (settings.ConvertDistantToNormal || settings.PromoteNormalToShadow) {
 			// BSShadowLight vtable slot 3 = IsShadowLight; replace on all 4 shadow light types.
