@@ -19,6 +19,10 @@ RWTexture2D<unorm float> outAccumFrames : register(u0);
 RWTexture2D<float4> outIlY : register(u1);
 RWTexture2D<float2> outIlCoCg : register(u2);
 
+#if defined(VR_STEREO_OPT)
+Texture2D<uint> StereoOptModeTexture : register(t16);
+#endif
+
 // samples = 8, min distance = 0.5, average samples on radius = 2
 static const float3 g_Poisson8[8] = {
 	float3(-0.4706069, -0.4427112, +0.6461146),
@@ -88,6 +92,20 @@ float2x2 getRotationMatrix(float noise)
 	// Early exit if dispatch thread is outside frame bounds
 	if (any(dtid >= uint2(OUT_FRAME_DIM)))
 		return;
+
+#if defined(VR_STEREO_OPT)
+	{
+		float2 uv = (dtid + .5) * RCP_OUT_FRAME_DIM;
+		uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+		if (eyeIndex == 1) {
+			uint2 fullResPx = uint2(uv * FrameDim);
+			uint mode = StereoOptModeTexture[fullResPx];
+			if (mode == 1 || mode == 2)
+				return;
+		}
+	}
+#endif
+
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	float radius = BlurRadius;

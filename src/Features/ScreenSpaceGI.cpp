@@ -5,6 +5,7 @@
 #include "Deferred.h"
 #include "State.h"
 #include "Util.h"
+#include "VRStereoOptimizations.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ScreenSpaceGI::Settings,
@@ -593,6 +594,8 @@ void ScreenSpaceGI::CompileComputeShaders()
 	for (auto& info : shaderInfos) {
 		if (REL::Module::IsVR())
 			info.defines.push_back({ "VR", "" });
+		if (REL::Module::IsVR() && globals::features::vrStereoOptimizations.loaded)
+			info.defines.push_back({ "VR_STEREO_OPT", "" });
 		if (settings.ResolutionMode == 1)
 			info.defines.push_back({ "HALF_RES", "" });
 		if (settings.ResolutionMode == 2)
@@ -743,6 +746,15 @@ void ScreenSpaceGI::DrawSSGI()
 	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 
+	// Bind VRStereoOptimizations mode texture for Eye 1 compute culling
+	auto& vrStereoOpt = globals::features::vrStereoOptimizations;
+	bool stereoOptActive = REL::Module::IsVR() && vrStereoOpt.loaded && vrStereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
+	if (stereoOptActive) {
+		ID3D11ShaderResourceView* modeSRV = vrStereoOpt.GetModeTextureSRV();
+		if (modeSRV)
+			context->CSSetShaderResources(16, 1, &modeSRV);
+	}
+
 	// prefilter depths
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Depths");
@@ -873,7 +885,11 @@ void ScreenSpaceGI::DrawSSGI()
 
 	// VR stereo sync: bilateral blend of SSGI buffers between eyes
 	// Shi, Billeter, Eisemann 2022, "Stereo-consistent screen-space ambient occlusion"
-	if (REL::Module::IsVR() && stereoSyncCompute) {
+	bool useStereoOpt = REL::Module::IsVR() &&
+		globals::features::vrStereoOptimizations.loaded &&
+		globals::features::vrStereoOptimizations.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
+
+	if (REL::Module::IsVR() && stereoSyncCompute && !useStereoOpt) {
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Stereo Sync");
 
 		if (globals::state->frameAnnotations)
@@ -929,6 +945,12 @@ void ScreenSpaceGI::DrawSSGI()
 
 	// cleanup
 	resetViews();
+
+	// Unbind VRStereoOptimizations mode texture SRV
+	if (stereoOptActive) {
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		context->CSSetShaderResources(16, 1, &nullSRV);
+	}
 
 	samplers.fill(nullptr);
 	cb = nullptr;

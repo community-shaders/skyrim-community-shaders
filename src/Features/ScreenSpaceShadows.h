@@ -35,7 +35,7 @@ public:
 		float BilinearThreshold = 0.02f;
 		float ShadowContrast = !globals::game::isVR ? 1.0f : 4.0f;
 		uint Enable = 1;
-		uint SampleCount = 1;
+		uint SampleCount = !globals::game::isVR ? 1u : 2u;
 		uint pad0[3];
 	};
 
@@ -62,7 +62,7 @@ public:
 	};
 	STATIC_ASSERT_ALIGNAS_16(RaymarchCB);
 
-	bool enableStereoSync = true;
+	bool enableStereoSync = false;
 
 	struct alignas(16) StereoSyncCB
 	{
@@ -71,11 +71,15 @@ public:
 	};
 	STATIC_ASSERT_ALIGNAS_16(StereoSyncCB);
 
+	int stereoOptRightEyeReduction = 0;  // 0 = Half, 1 = Quarter sample count
+
 	ID3D11SamplerState* pointBorderSampler = nullptr;
 
 	ConstantBuffer* raymarchCB = nullptr;
 	ID3D11ComputeShader* raymarchCS = nullptr;
 	ID3D11ComputeShader* raymarchRightCS = nullptr;
+	ID3D11ComputeShader* raymarchRightReducedCS = nullptr;
+	uint lastCompiledReducedSampleCount = 0;
 
 	Texture2D* screenSpaceShadowsTexture = nullptr;
 
@@ -94,6 +98,7 @@ public:
 	uint lastCompiledSampleCount = 0;
 	ID3D11ComputeShader* GetComputeRaymarch();
 	ID3D11ComputeShader* GetComputeRaymarchRight();
+	ID3D11ComputeShader* GetComputeRaymarchRightReduced();
 
 	virtual void Prepass() override;
 
