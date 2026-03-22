@@ -299,7 +299,6 @@ void PerformanceOverlay::DrawOverlay()
 		windowFlags |= ImGuiWindowFlags_NoBackground;
 	} else {
 		windowFlags &= ~ImGuiWindowFlags_NoDecoration;
-		windowFlags &= ~ImGuiWindowFlags_AlwaysAutoResize;
 		windowFlags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse;
 	}
 

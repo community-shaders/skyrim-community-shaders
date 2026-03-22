@@ -172,10 +172,10 @@ void EditorWindow::ShowObjectsWindow()
 	}
 
 	// Create a table with two columns
-	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_NoHostExtendX)) {
-		// Set up column widths
-		ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthStretch, 0.3f);  // 30% width
-		ImGui::TableSetupColumn("Objects", ImGuiTableColumnFlags_WidthStretch, 0.7f);     // 70% width
+	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner)) {
+		// Fixed categories column, objects column fills remaining width
+		ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthFixed, 180.0f * Util::GetUIScale());
+		ImGui::TableSetupColumn("Objects", ImGuiTableColumnFlags_WidthStretch);
 
 		ImGui::TableNextRow();
 
@@ -538,14 +538,18 @@ void EditorWindow::ShowObjectsWindow()
 							// Show message that cell lighting is only for interior cells
 							ImGui::TableNextRow();
 							ImGui::TableSetColumnIndex(1);
+							ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
 							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Warning, "Cell Lighting is only available for interior cells.");
 							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Disable, "You are currently in an exterior cell.");
+							ImGui::PopTextWrapPos();
 						}
 					} else {
 						// No player or cell
 						ImGui::TableNextRow();
 						ImGui::TableSetColumnIndex(1);
+						ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
 						ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Error, "Player cell not available.");
+						ImGui::PopTextWrapPos();
 					}
 				}
 
@@ -1009,6 +1013,10 @@ void EditorWindow::RenderUI()
 			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
 			}
 
+			if (ImGui::MenuItem("Reset Window Layout")) {
+				resetLayout = true;
+			}
+
 			ImGui::Separator();
 			ImGui::Text("Open Widgets:");
 			ImGui::Separator();
@@ -1222,14 +1230,32 @@ void EditorWindow::RenderUI()
 
 	auto width = ImGui::GetIO().DisplaySize.x;
 	auto height = ImGui::GetIO().DisplaySize.y;
-	auto viewportWidth = width * 0.5f;                // Make the viewport take up 50% of the width
-	auto sideWidth = (width - viewportWidth) / 2.0f;  // Divide the remaining width equally between the side windows
-	ImGui::SetNextWindowSize(ImVec2(sideWidth, ImGui::GetIO().DisplaySize.y * 0.75f), ImGuiCond_FirstUseEver);
+	const float scale = Util::GetUIScale();
+	const float pad = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
+	const float menuBarHeight = ImGui::GetFrameHeight();
+	const float availableWidth = width - pad * 3.0f;   // left pad + gap + right pad
+	const float availableHeight = (height - menuBarHeight - pad * 2.0f) * 0.85f;
+	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	// Browser gets up to half the available width, capped so ultrawide gives extra to viewport
+	const float maxBrowserWidth = 960.0f * scale;
+	const float browserWidth = std::min(availableWidth * 0.5f, maxBrowserWidth);
+	const float viewportWidth = availableWidth - browserWidth;
+	ImGui::SetNextWindowSize(ImVec2(browserWidth, availableHeight), layoutCond);
+	ImGui::SetNextWindowPos(ImVec2(pad, menuBarHeight + pad), layoutCond);
 	ShowObjectsWindow();
 
 	if (settings.showViewport) {
-		ImGui::SetNextWindowSize(ImVec2(viewportWidth, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver);
+		// Size viewport height to match game aspect ratio so the preview fits snugly
+		const float aspectRatio = width / height;
+		const float imageHeight = viewportWidth / aspectRatio;
+		const float chromeHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
+		const float viewportHeight = imageHeight + chromeHeight;
+		ImGui::SetNextWindowSize(ImVec2(viewportWidth, viewportHeight), layoutCond);
+		ImGui::SetNextWindowPos(ImVec2(pad + browserWidth + pad, menuBarHeight + pad), layoutCond);
+		viewportBottomY = menuBarHeight + pad + viewportHeight;
 		ShowViewportWindow();
+	} else {
+		viewportBottomY = menuBarHeight + pad;
 	}
 
 	auto settingsWindowHeight = height * 0.25f;
@@ -1244,6 +1270,8 @@ void EditorWindow::RenderUI()
 
 	// Show palette window
 	PaletteWindow::GetSingleton()->Draw();
+
+	resetLayout = false;
 
 	// Render notifications on top of everything
 	RenderNotifications();

@@ -1,5 +1,6 @@
 #include "PaletteWindow.h"
 #include "EditorWindow.h"
+#include "Menu/ThemeManager.h"
 #include "Utils/UI.h"
 
 // Forward declaration from EditorWindow.cpp
@@ -10,9 +11,20 @@ void PaletteWindow::Draw()
 	if (!open)
 		return;
 
+	const auto* editor = EditorWindow::GetSingleton();
 	const float scale = Util::GetUIScale();
-	ImGui::SetNextWindowSize(ImVec2(600 * scale, 400 * scale), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 620 * scale, ImGui::GetIO().DisplaySize.y - 420 * scale), ImGuiCond_FirstUseEver);
+	const float pad = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
+	const auto& displaySize = ImGui::GetIO().DisplaySize;
+	const float paletteWidth = std::min(600.0f * scale, displaySize.x - pad * 2.0f);
+	const float bottomY = displaySize.y - pad;
+	const float spaceBelow = bottomY - editor->viewportBottomY - pad;  // room between viewport bottom and screen bottom
+	const float paletteHeight = std::min(400.0f * scale, spaceBelow);
+	const auto layoutCond = editor->resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	ImGui::SetNextWindowSizeConstraints(ImVec2(200.0f * scale, 150.0f * scale), ImVec2(FLT_MAX, FLT_MAX));
+	ImGui::SetNextWindowSize(ImVec2(paletteWidth, paletteHeight), layoutCond);
+	ImGui::SetNextWindowPos(
+		ImVec2(displaySize.x - paletteWidth - pad, bottomY - paletteHeight),
+		layoutCond);
 	if (ImGui::Begin("Palette", &open, ImGuiWindowFlags_NoFocusOnAppearing)) {
 		if (ImGui::BeginTabBar("PaletteTabs")) {
 			if (ImGui::BeginTabItem("Colours")) {
