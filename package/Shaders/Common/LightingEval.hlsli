@@ -180,16 +180,17 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 	float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
 	float3 F = BRDF::F_Schlick(wetnessF0, VdotH);
 
-	F *= wetnessStrength;
+	// Separate physical Fresnel from effective contribution weighted by strength
+	float3 wetnessF = F * wetnessStrength;
 
-	float3 wetnessSpecular = D * G * F * NdotL * lightColor;
+	float3 wetnessSpecular = D * G * wetnessF * NdotL * lightColor;
 
 #	if !defined(TRUE_PBR)
 	wetnessSpecular *= Color::PBRLightingCompensation * Color::PBRLightingScale;  // Compensate for GGX on traditional specular
 #	endif
 
-	lightingOutput.diffuse *= 1 - F;
-	lightingOutput.specular *= 1 - F;
+	lightingOutput.diffuse *= 1 - wetnessF;
+	lightingOutput.specular *= 1 - wetnessF;
 	lightingOutput.specular += wetnessSpecular;
 }
 

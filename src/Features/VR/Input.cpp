@@ -1,5 +1,6 @@
 #include "Features/VR.h"
 #include "Menu.h"
+#include "State.h"
 #include "Utils/PerfUtils.h"
 #include "Utils/VRUtils.h"
 
@@ -28,8 +29,8 @@ void VR::UpdateOverlayMenuStateFromInput()
 		return;
 	}
 
-	bool uiMenusOpen = globals::game::ui &&
-	                   (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME));
+	bool uiMenusOpen = globals::state->isMainMenuOpen ||
+	                   (globals::game::ui && globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME));
 
 	bool inValidMenuState = uiMenusOpen || (globals::game::ui && (isEnabled || overlayEnabled));
 

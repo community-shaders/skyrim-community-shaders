@@ -8,6 +8,7 @@
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
+#include "Features/Raytracing.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -15,7 +16,6 @@
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/WeatherEditor.h"
-#include "Features/Raytracing.h"
 
 #include "Hooks.h"
 
@@ -114,6 +114,10 @@ void Deferred::SetupResources()
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+
+		// TAA Water Buffers
+		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_1, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 
 		if (rt.loaded)
 			SetupRenderTarget(MASKS2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, miscFlags);
@@ -347,7 +351,7 @@ void Deferred::DeferredPasses()
 	if (auto& rt = globals::features::raytracing; rt.loaded) {
 		rt.DeferredPasses();
 		skipDeferredComposite = rt.settings.CreationEngineRaytracingSettings.Enabled &&
-			rt.Mode() == CreationEngineRaytracing::Mode::PathTracing;
+		                        rt.Mode() == CreationEngineRaytracing::Mode::PathTracing;
 	}
 
 	// Deferred Composite
@@ -566,7 +570,7 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		auto& rt = globals::features::raytracing;
 		if (rt.loaded)
 			defines.push_back({ rt.GetShaderDefineName().data(), nullptr });
-		
+
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 

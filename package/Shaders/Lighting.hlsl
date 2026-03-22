@@ -960,8 +960,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	const bool inReflection = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection;
 
 #	if defined(RAYTRACING) && !defined(DEFERRED)
-	[branch]
-	if (SharedData::raytracingSettings.PathTracing && inWorld) {
+	[branch] if (SharedData::raytracingSettings.PathTracing && inWorld)
+	{
 		psout.Diffuse = float4(0, 0, 0, 0);
 		return psout;
 	}
@@ -1324,7 +1324,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) == 0)
 		{
-			landColorRGB1 = Color::GammaToTrueLinear(landColorRGB1 / Color::PBRLightingScale);
+			landColorRGB1 = Color::SrgbToLinear(landColorRGB1 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha1 = landColor1.a;
@@ -1405,7 +1405,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1PBR) == 0)
 		{
-			landColorRGB2 = Color::GammaToTrueLinear(landColorRGB2 / Color::PBRLightingScale);
+			landColorRGB2 = Color::SrgbToLinear(landColorRGB2 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha2 = landColor2.a;
@@ -1485,7 +1485,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2PBR) == 0)
 		{
-			landColorRGB3 = Color::GammaToTrueLinear(landColorRGB3 / Color::PBRLightingScale);
+			landColorRGB3 = Color::SrgbToLinear(landColorRGB3 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha3 = landColor3.a;
@@ -1565,7 +1565,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3PBR) == 0)
 		{
-			landColorRGB4 = Color::GammaToTrueLinear(landColorRGB4 / Color::PBRLightingScale);
+			landColorRGB4 = Color::SrgbToLinear(landColorRGB4 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha4 = landColor4.a;
@@ -1645,7 +1645,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4PBR) == 0)
 		{
-			landColorRGB5 = Color::GammaToTrueLinear(landColorRGB5 / Color::PBRLightingScale);
+			landColorRGB5 = Color::SrgbToLinear(landColorRGB5 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha5 = landColor5.a;
@@ -1726,7 +1726,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) == 0)
 		{
-			landColorRGB6 = Color::GammaToTrueLinear(landColorRGB6 / Color::PBRLightingScale);
+			landColorRGB6 = Color::SrgbToLinear(landColorRGB6 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha6 = landColor6.a;
@@ -1876,13 +1876,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColor.xyz = GetFacegenBaseColor(baseColor.xyz, uv);
 	} else {
-		baseColor.xyz = Color::GammaToLinear(GetFacegenBaseColor(Color::LinearToGamma(baseColor.xyz), uv));
+		baseColor.xyz = Color::SkyrimGammaToLinear(GetFacegenBaseColor(Color::LinearToSkyrimGamma(baseColor.xyz), uv));
 	}
 #	elif defined(FACEGEN_RGB_TINT)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
 	} else {
-		baseColor.xyz = Color::GammaToLinear(GetFacegenRGBTintBaseColor(Color::LinearToGamma(baseColor.xyz), uv));
+		baseColor.xyz = Color::SkyrimGammaToLinear(GetFacegenRGBTintBaseColor(Color::LinearToSkyrimGamma(baseColor.xyz), uv));
 	}
 #	endif  // FACEGEN
 
@@ -2112,7 +2112,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.AO = rawRMAOS.z;
 
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		material.F0 = lerp(rawRMAOS.w, Color::GammaToTrueLinear(baseColor.xyz), material.Metallic);
+		material.F0 = lerp(rawRMAOS.w, Color::SrgbToLinear(baseColor.xyz), material.Metallic);
 	} else {
 		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
 	}
@@ -2127,9 +2127,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), material.GlintScreenSpaceScale, material.GlintCache);
 #		endif
 
-#	if defined(RAYTRACING)
+#		if defined(RAYTRACING)
 	float3 trueBaseColor = baseColor.xyz;
-#	endif
+#		endif
 
 	baseColor.xyz *= 1 - material.Metallic;
 
@@ -2187,7 +2187,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		material.FuzzWeight = lerp(material.FuzzWeight, 0, projectedMaterialWeight);
 	}
 #		endif
-#	else	// TRUE_PBR
+#	else  // TRUE_PBR
 	material.BaseColor = baseColor.xyz;
 #		if defined(SPECULAR) || defined(LANDSCAPE)
 	material.Shininess = shininess;
@@ -2196,7 +2196,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.SpecularColor = 1;
 #			else
 	material.SpecularColor = SpecularColor.xyz;
-#			endif // LANDSCAPE
+#			endif  // LANDSCAPE
 #		else
 	material.Shininess = 0;
 	material.Glossiness = 0;
@@ -2208,7 +2208,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(BACK_LIGHTING)
 	material.backLightColor = backLightColor.xyz;
 #		endif
-#	endif	// TRUE_PBR
+#	endif  // TRUE_PBR
 
 #	if defined(CS_HAIR) && defined(HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
@@ -2227,9 +2227,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	float envMask = EnvmapData.x * MaterialData.x;
 
-#	if defined(RAYTRACING)
+#		if defined(RAYTRACING)
 	envMask *= SharedData::raytracingSettings.Reflection;
-#	endif
+#		endif
 
 	float viewNormalAngle = dot(worldNormal.xyz, viewDirection);
 	float3 envSamplingPoint = (viewNormalAngle * 2) * worldNormal.xyz - viewDirection;
@@ -2276,7 +2276,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float4 envColorBase = TexEnvSampler.SampleLevel(SampEnvSampler, float3(1.0, 0.0, 0.0), 15);
 
 				if (envColorBase.a < 1.0) {
-					material.F0 = Color::GammaToLinear(envColorBase.rgb);
+					material.F0 = Color::SkyrimGammaToLinear(envColorBase.rgb);
 					material.Roughness = envColorBase.a;
 				} else {
 					material.F0 = 1.0;
@@ -2300,7 +2300,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 		if (!dynamicCubemap) {
-			float3 envColorBase = Color::GammaToLinear(TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint).xyz);
+			float3 envColorBase = Color::SkyrimGammaToLinear(TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint).xyz);
 			envColor = envColorBase.xyz * envMask;
 		}
 	}
@@ -3201,15 +3201,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
 
-#	if defined(TRUE_PBR)
+#		if defined(TRUE_PBR)
 	const float roughness = material.Roughness;
 	const float metallic = material.Metallic;
-#	else
+#		else
 	const float specularity = CalcSpecularity(material.SpecularColor, glossiness);
 	const float roughnessFromShininess = ShininessToRoughness(material.Shininess);
 	const float roughness = CalcRoughness(roughnessFromShininess, specularity);
 	const float metallic = CalcMetallic(outputAlbedo, specularity, roughnessFromShininess);
-#	endif
+#		endif
 
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - roughness), psout.Diffuse.w);
 
@@ -3238,10 +3238,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 worldGeomNormal;
 
 #				if defined(MODELSPACENORMALS)
-    float3 dd_x = ddx(input.WorldPosition.xyz);
-    float3 dd_y = ddy(input.WorldPosition.xyz);
+	float3 dd_x = ddx(input.WorldPosition.xyz);
+	float3 dd_y = ddy(input.WorldPosition.xyz);
 
-    worldGeomNormal = -normalize(cross(dd_x, dd_y));
+	worldGeomNormal = -normalize(cross(dd_x, dd_y));
 #				else
 	worldGeomNormal = vertexNormal;
 #				endif
@@ -3249,12 +3249,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 screenGeomNormal = normalize(FrameBuffer::WorldToView(worldGeomNormal, false, eyeIndex));
 
 	psout.GeomNormalMetalnessAO = float4(GBuffer::EncodeNormal(screenGeomNormal), metallic, psout.Diffuse.w);
-#			endif // !defined(SNOW)
-#		endif // !defined(RAYTRACING)
-#	endif // DEFERRED
+#			endif  // !defined(SNOW)
+#		endif      // !defined(RAYTRACING)
+#	endif          // DEFERRED
 
 	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {
-		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
+		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
 
 	return psout;

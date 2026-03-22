@@ -6,6 +6,7 @@
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
 #include "../ShaderCache.h"
+#include "../State.h"
 #include "../Util.h"
 
 #include <algorithm>
@@ -505,8 +506,7 @@ namespace BackgroundBlur
 
 		// Back buffer is black on main/loading menu during shader compilation without upscaling
 		if (!useUpscalingBackbuffer && !(upscaling.loaded && upscaling.IsUpscalingActive())) {
-			auto ui = globals::game::ui;
-			bool isMainOrLoading = ui && (ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+			bool isMainOrLoading = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 			auto shaderCache = globals::shaderCache;
 			if (isMainOrLoading && shaderCache && shaderCache->IsCompiling()) {
 				return;
