@@ -172,7 +172,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float peakNits = SharedData::HDRData.z;
 		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
 		float peak = peakNits / sRGB_WhiteLevelNits;
-		float3 hdrInputLinear = ENABLE_LL ? inputColor : Color::GammaToLinear(inputColor);
+		float3 hdrInputLinear = ENABLE_LL ? inputColor : Color::SkyrimGammaToLinear(inputColor);
 		float3 hdrScene = hdrInputLinear * pw;
 
 		// --- Step 1: Identical SDR tonemap + bloom ---
@@ -218,7 +218,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		// sdrGraded is now the exact SDR output (before final gamma encode).
 		// Convert to linear and scale to paperwhite for the HDR base layer.
-		float3 sdrLinear = Color::GammaToLinear(max(0.0, sdrGraded));
+		float3 sdrLinear = Color::SkyrimGammaToLinear(max(0.0, sdrGraded));
 		float3 sdrBase = sdrLinear * pw;
 
 		// DICE compresses the full HDR range above the shoulder start into peak nits.
@@ -242,7 +242,7 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrLinearOut.g += hdrLinearOut.r * (0.05 * fireHueMask);
 		hdrLinearOut *= 10.0 + (0.18 * fireHueMask * diceBlend);
 
-		outputColor = Color::LinearToGamma(max(0.0, hdrLinearOut));
+		outputColor = Color::LinearToSkyrimGamma(max(0.0, hdrLinearOut));
 	} else {
 		// === SDR Pipeline (LDR RT) ===
 		// Input: Linear HDR values (can exceed 1.0)
@@ -276,7 +276,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 		if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
-			outputColor = Color::TrueLinearToGamma(outputColor);
+			outputColor = Color::LinearToSrgb(outputColor);
 		}
 		outputColor = FrameBuffer::ToSRGBColor(outputColor);
 	}

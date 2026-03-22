@@ -2,7 +2,9 @@
 
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
-#include "ShaderCache.h"
+#include "Util.h"
+
+#include <imgui_internal.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
@@ -52,8 +54,25 @@ void UnifiedWater::DrawOverlay()
 	if (!waterCache || !waterCache->IsBuildRunning() && !waterCache->HasBuildFailed())
 		return;
 
-	const auto shaderCache = globals::shaderCache;
-	const float vOffset = shaderCache->IsCompiling() || shaderCache->GetFailedTasks() > 0 && !shaderCache->IsHideErrors() ? 120.0f : 0.0f;
+	const float scale = Util::GetUIScale();
+	const float pos = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
+	const auto& style = ImGui::GetStyle();
+
+	// Stack below shader compilation window if it's visible this frame
+	float vOffset = 0.0f;
+	if (auto* shaderWin = ImGui::FindWindowByName("ShaderCompilationInfo")) {
+		if (shaderWin->Active) {
+			vOffset = (shaderWin->Pos.y + shaderWin->Size.y) - pos + style.ItemSpacing.y;
+		}
+	}
+	// Also stack below shader blocking overlay if visible
+	if (auto* blockingWin = ImGui::FindWindowByName("ShaderBlockingInfo")) {
+		if (blockingWin->Active) {
+			float blockingBottom = (blockingWin->Pos.y + blockingWin->Size.y) - pos + style.ItemSpacing.y;
+			if (blockingBottom > vOffset)
+				vOffset = blockingBottom;
+		}
+	}
 
 	const auto snapshot = waterCache->GetBuildProgressSnapshot();
 
@@ -64,7 +83,7 @@ void UnifiedWater::DrawOverlay()
 		auto percent = static_cast<float>(snapshot.completed) / static_cast<float>(snapshot.total);
 		auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", snapshot.completed, snapshot.total, 100 * percent);
 
-		ImGui::SetNextWindowPos(ImVec2(ThemeManager::Constants::OVERLAY_WINDOW_POSITION, ThemeManager::Constants::OVERLAY_WINDOW_POSITION + vOffset));
+		ImGui::SetNextWindowPos(ImVec2(pos, pos + vOffset));
 		if (!ImGui::Begin("UWCacheCreationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
 			ImGui::End();
 			return;
@@ -74,7 +93,7 @@ void UnifiedWater::DrawOverlay()
 
 		ImGui::End();
 	} else if (waterCache->HasBuildFailed()) {
-		ImGui::SetNextWindowPos(ImVec2(ThemeManager::Constants::OVERLAY_WINDOW_POSITION, ThemeManager::Constants::OVERLAY_WINDOW_POSITION + vOffset));
+		ImGui::SetNextWindowPos(ImVec2(pos, pos + vOffset));
 		if (!ImGui::Begin("UWCacheCreationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
 			ImGui::End();
 			return;

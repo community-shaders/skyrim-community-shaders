@@ -57,7 +57,7 @@ static const float UI_REFERENCE_NITS = 80.0;
 		if (ui.a > 0.001) {
 			// Recover straight (non-premultiplied) color, convert to PQ, re-premultiply.
 			float3 uiStraight = ui.rgb / ui.a;
-			float3 uiLinear = Color::GammaToTrueLinear(max(0, uiStraight));
+			float3 uiLinear = Color::SrgbToLinear(max(0, uiStraight));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
 			float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
 			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0) * ui.a;
@@ -65,7 +65,7 @@ static const float UI_REFERENCE_NITS = 80.0;
 			// Broken-alpha path: rgb is premultiplied but alpha was not written to texture.
 			// Apply color transform on premultiplied values; alpha stays 0 so FidelityFX
 			// adds the contribution additively without occluding the scene.
-			float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
+			float3 uiLinear = Color::SrgbToLinear(max(0, ui.rgb));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
 			float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
 			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0);

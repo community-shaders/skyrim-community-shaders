@@ -50,7 +50,7 @@ cbuffer PerFrame : register(b0)
 		// Scene arrives gamma-encoded BT.709 from ISHDR (post-DICE tonemapping).
 		// ISHDR already scales the scene into HDR paper-white space using 80-nit-relative units.
 		// Convert to linear, then BT.2020, then PQ for HDR10 output.
-		float3 sceneLinear = Color::GammaToLinear(max(0.0, scene.rgb));
+		float3 sceneLinear = Color::SkyrimGammaToLinear(max(0.0, scene.rgb));
 
 		float3 sceneBT2020 = Color::BT709ToBT2020(sceneLinear);
 		sceneBT2020 = max(sceneBT2020, 0.0);
@@ -68,7 +68,7 @@ cbuffer PerFrame : register(b0)
 			float effectiveSceneScale = isMainOrLoadingMenu > 0.5 ? uiBrightness : 1.0;
 			float3 composited = ui.rgb * uiBrightness + scene.rgb * (1.0 - ui.a) * effectiveSceneScale;
 
-			float3 compositedLinear = Color::GammaToLinear(max(0.0, composited));
+			float3 compositedLinear = Color::SkyrimGammaToLinear(max(0.0, composited));
 			float3 compositedBT2020 = Color::BT709ToBT2020(compositedLinear);
 			finalColor = Color::pq::Encode(max(0.0, compositedBT2020), sRGB_WhiteLevelNits);
 		}

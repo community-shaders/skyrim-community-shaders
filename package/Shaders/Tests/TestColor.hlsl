@@ -101,16 +101,16 @@
 		float3 original = testColors[i];
 
 		// Test Gamma -> Linear -> Gamma
-		float3 linearColor = Color::GammaToLinear(original);
-		float3 backToGamma = Color::LinearToGamma(linearColor);
+		float3 linearColor = Color::SkyrimGammaToLinear(original);
+		float3 backToGamma = Color::LinearToSkyrimGamma(linearColor);
 
 		ASSERT(IsTrue, abs(backToGamma.r - original.r) < 0.01f);
 		ASSERT(IsTrue, abs(backToGamma.g - original.g) < 0.01f);
 		ASSERT(IsTrue, abs(backToGamma.b - original.b) < 0.01f);
 
 		// Test TrueLinear roundtrip
-		float3 trueLinearColor = Color::GammaToTrueLinear(original);
-		float3 backToGamma2 = Color::TrueLinearToGamma(trueLinearColor);
+		float3 trueLinearColor = Color::SrgbToLinear(original);
+		float3 backToGamma2 = Color::LinearToSrgb(trueLinearColor);
 
 		ASSERT(IsTrue, abs(backToGamma2.r - original.r) < 0.01f);
 		ASSERT(IsTrue, abs(backToGamma2.g - original.g) < 0.01f);

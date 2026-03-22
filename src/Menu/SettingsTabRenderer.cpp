@@ -340,6 +340,13 @@ void SettingsTabRenderer::RenderBehaviorTab()
 			ImGui::Text("Automatically hides the left feature list panel. Move cursor to the left edge to show it.");
 		}
 
+		if (ImGui::Checkbox("Require Shift to Dock", &globals::menu->GetSettings().RequireShiftToDock)) {
+			ImGui::GetIO().ConfigDockingWithShift = globals::menu->GetSettings().RequireShiftToDock;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("When enabled, you must hold Shift while dragging to dock/snap windows. Prevents accidental docking.");
+		}
+
 		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
@@ -670,7 +677,10 @@ void SettingsTabRenderer::RenderThemesTab()
 				ImGui::Text("Human-readable name shown in the dropdown");
 			}
 
-			ImGui::InputTextMultiline("Description", newThemeDescription, sizeof(newThemeDescription), ImVec2(400, 80));
+			{
+				float scale = Util::GetUIScale();
+				ImGui::InputTextMultiline("Description", newThemeDescription, sizeof(newThemeDescription), ImVec2(400 * scale, 80 * scale));
+			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Optional description for the theme");
 			}
@@ -1027,12 +1037,13 @@ void SettingsTabRenderer::RenderColorsTab()
 		float frameHeight = ImGui::GetFrameHeight();
 
 		// Custom style for filter with icon space
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
+		float scale = Util::GetUIScale();
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f * scale));
 		colorFilter.Draw("Filter colors", availableWidth);
 		ImGui::PopStyleVar();
 
 		// Draw search icon
-		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
+		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f * scale, cursorPos.y + (frameHeight - iconSize) * 0.5f);
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
 		float radius = iconSize * 0.3f;
