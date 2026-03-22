@@ -71,6 +71,7 @@ find_package(pystring CONFIG REQUIRED)
 find_package(cppwinrt CONFIG REQUIRED)
 find_package(unordered_dense CONFIG REQUIRED)
 find_package(efsw CONFIG REQUIRED)
+find_path(EXPRTK_INCLUDE_DIRS "exprtk.hpp")
 find_package(Tracy CONFIG REQUIRED)
 find_package(directx-headers CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
@@ -104,6 +105,7 @@ target_include_directories(
         ${CLIB_UTIL_INCLUDE_DIRS}
         "${CMAKE_SOURCE_DIR}/package/Shaders"
         ${DETOURS_INCLUDE_DIRS}
+        ${EXPRTK_INCLUDE_DIRS}
 )
 
 target_link_libraries(

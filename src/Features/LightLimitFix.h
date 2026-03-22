@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Buffer.h"
+#include "LightLimitFix/ShadowCasterManager.h"
 #include "OverlayFeature.h"
 
 struct LightLimitFix : OverlayFeature
@@ -223,6 +224,9 @@ public:
 		// Debug (last)
 		bool EnableLightsVisualisation = false;
 		uint LightsVisualisationMode = 0;
+
+		// Shadow caster scheduling (ShadowCasterManager)
+		ShadowCasterManager::Settings ShadowSettings;
 	};
 
 	uint clusterSize[3] = { 16 };

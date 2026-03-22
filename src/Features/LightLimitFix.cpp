@@ -3,16 +3,36 @@
 #include "LinearLighting.h"
 
 #include "Deferred.h"
-#include "Menu/ThemeManager.h"
 #include "Shadercache.h"
 #include "State.h"
-#include "Util.h"
+
+namespace ShadowCasterManager
+{
+	NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+		Settings,
+		ShadowLightCount,
+		ConvertedShadowSlots,
+		ForcePortalStrict,
+		AllowDrawNewLight,
+		MaxRedrawPerFrame,
+		RedrawBudgetMs,
+		ConvertDistantToNormal,
+		PromoteNormalToShadow,
+		MaxConvertCount,
+		MaxConvertCountShadow,
+		ScoreFormula,
+		AllowConvertFormula,
+		AllowConvertShadowFormula,
+		RedrawIntervalFormula,
+		RedrawBudgetFormula)
+}
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LightLimitFix::Settings,
 	FilterMode,
 	KernelScale,
-	LightSize)
+	LightSize,
+	ShadowSettings)
 
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 static constexpr uint MAX_LIGHTS = 1024;
@@ -77,6 +97,9 @@ void LightLimitFix::DrawSettings()
 				ImGui::SetTooltip("Virtual light source size in shadow map pixels for PCSS penumbra estimation. Larger values give wider soft shadows further from the caster.");
 		}
 	}
+
+	///////////////////////////////
+	ShadowCasterManager::DrawSettings(settings.ShadowSettings);
 
 	///////////////////////////////
 	ImGui::SeparatorText("Debug");
@@ -486,11 +509,8 @@ void LightLimitFix::SetupResources()
 	uint clusterCount = clusterSize[0] * clusterSize[1] * clusterSize[2];
 
 	{
-		std::vector<std::pair<const char*, const char*>> clusterDefines;
-		if (REL::Module::IsVR())
-			clusterDefines = { { "VR", "" } };
-		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", clusterDefines, "cs_5_0");
-		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
+		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", {}, "cs_5_0");
+		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", {}, "cs_5_0");
 
 		lightBuildingCB = new ConstantBuffer(ConstantBufferDesc<LightBuildingCB>());
 		lightCullingCB = new ConstantBuffer(ConstantBufferDesc<LightCullingCB>());
@@ -884,6 +904,7 @@ void LightLimitFix::Prepass()
 	auto state = globals::state;
 
 	state->BeginPerfEvent("LightLimitFix Prepass");
+	ShadowCasterManager::Update(settings.ShadowSettings, globals::game::smState->shadowSceneNode[0], nullptr);
 	UpdateLights();
 
 	ID3D11ShaderResourceView* views[3]{};
@@ -908,6 +929,8 @@ bool LightLimitFix::IsGlobalLight(RE::BSLight* a_light)
 void LightLimitFix::PostPostLoad()
 {
 	Hooks::Install();
+	ShadowCasterManager::Init(settings.ShadowSettings);
+	ShadowCasterManager::Install(settings.ShadowSettings);
 }
 
 void LightLimitFix::DataLoaded()
@@ -927,11 +950,8 @@ void LightLimitFix::ClearShaderCache()
 		clusterCullingCS->Release();
 		clusterCullingCS = nullptr;
 	}
-	std::vector<std::pair<const char*, const char*>> clusterDefines;
-	if (REL::Module::IsVR())
-		clusterDefines = { { "VR", "" } };
-	clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", clusterDefines, "cs_5_0");
-	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
+	clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", {}, "cs_5_0");
+	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", {}, "cs_5_0");
 }
 
 void LightLimitFix::UpdateLights()
