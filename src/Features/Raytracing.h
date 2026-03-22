@@ -215,7 +215,7 @@ struct CreationEngineRaytracing
 	HMODULE handle = nullptr;
 
 	using InitializeFn = bool (*)(ID3D11Device5*, ID3D12Device5*, ID3D12CommandQueue*, ID3D12CommandQueue*, ID3D12CommandQueue*);
-	using UpdateFn = void (*)();
+	using UpdateCameraFn = void (*)();
 	using ExecuteFn = void (*)();
 	using WaitExecutionFn = void (*)();
 	using PostExecutionFn = void (*)();
@@ -231,7 +231,7 @@ struct CreationEngineRaytracing
 	using UpdateJitterFn = void (*)(float2);
 
 	InitializeFn Initialize = nullptr;
-	UpdateFn Update = nullptr;
+	UpdateCameraFn UpdateCamera = nullptr;
 	ExecuteFn Execute = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
 	PostExecutionFn PostExecution = nullptr;
@@ -262,10 +262,10 @@ struct CreationEngineRaytracing
 		if (!Initialize)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Initialize is nullptr");
 
-		Update = reinterpret_cast<UpdateFn>(GetProcAddress(handle, "Update"));
+		UpdateCamera = reinterpret_cast<UpdateCameraFn>(GetProcAddress(handle, "UpdateCamera"));
 
-		if (!Update)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Update is nullptr");
+		if (!UpdateCamera)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateCamera is nullptr");
 
 		Execute = reinterpret_cast<ExecuteFn>(GetProcAddress(handle, "Execute"));
 
@@ -513,7 +513,7 @@ struct Raytracing : public OverlayFeature
 				rt.UpdateFeatureData();
 				rt.SkyCubeToHemi();
 
-				rt.creationEngineRaytracing->Update();
+				rt.creationEngineRaytracing->UpdateCamera();
 
 				// Executes the render graph for path tracing, no dependecy on any game render target so we start as early as possible
 				if (rt.Mode() == CreationEngineRaytracing::Mode::PathTracing) {
