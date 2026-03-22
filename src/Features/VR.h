@@ -1,6 +1,7 @@
 #pragma once
 #include "Menu.h"
 #include "OverlayFeature.h"
+#include "VRStereoOptimizations.h"
 #include "Utils/Input.h"
 #include "VR/OpenVRDetection.h"  // In Features/VR/
 #include <algorithm>
@@ -109,6 +110,9 @@ public:
 		};
 	}
 
+	virtual inline std::string_view GetShaderDefineName() override { return "VR_STEREO_OPT"; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return stereoOpt.loaded && t == RE::BSShader::Type::Utility; }
+	virtual void Reset() override;
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 	virtual bool SupportsVR() override { return true; }
@@ -260,7 +264,7 @@ public:
 			StereoBlendDepthSigma = std::clamp(StereoBlendDepthSigma, 0.001f, 0.1f);
 			StereoBlendMaxFactor = std::clamp(StereoBlendMaxFactor, 0.0f, 0.5f);
 			StereoBlendColorThreshold = std::clamp(StereoBlendColorThreshold, 0.0f, 0.2f);
-			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 3);
+			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 5);
 		}
 	};
 
@@ -358,8 +362,12 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBackCheckCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBlendWeightCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugEdgeDetectionCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendOverwriteCS;
 	eastl::unique_ptr<Texture2D> stereoBlendCopyTex;
 	eastl::unique_ptr<ConstantBuffer> stereoBlendCB;
+	winrt::com_ptr<ID3D11SamplerState> stereoBlendLinearSampler;
+
+	VRStereoOptimizations stereoOpt;
 
 	struct alignas(16) StereoBlendCB
 	{
@@ -368,7 +376,11 @@ public:
 		float DepthSigma;
 		float MaxBlendFactor;
 		float ColorDiffThreshold;
-		float pad;
+		float DebugEdgeTint;
+		uint32_t DebugMode;
+		float FullBlendDistance;
+		float POMDepthScale;
+		float _pad;
 	};
 
 	// Engine hook integration points
