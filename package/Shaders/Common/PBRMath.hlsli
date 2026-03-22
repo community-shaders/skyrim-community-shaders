@@ -1,8 +1,8 @@
 #ifndef __PBR_MATH_HLSL__
 #define __PBR_MATH_HLSL__
 
-#include "Common/Math.hlsli"
 #include "Common/BRDF.hlsli"
+#include "Common/Math.hlsli"
 
 namespace PBR
 {
@@ -57,37 +57,37 @@ namespace PBR
 		static const uint LandTile5HasGlint = (1 << 17);
 	}
 
-	/// @brief Calculate specular reflection using GGX microfacet model
-	/// @param roughness Surface roughness [0,1]
-	/// @param specularColor F0 reflectance at normal incidence
+	/// @brief Evaluate GGX microfacet specular BRDF (D * Vis * F)
+	/// @param roughness Perceptual roughness [0,1]
+	/// @param F0 Reflectance at normal incidence
 	/// @param NdotL Dot product of normal and light direction
 	/// @param NdotV Dot product of normal and view direction
 	/// @param NdotH Dot product of normal and half vector
 	/// @param VdotH Dot product of view and half vector
-	/// @param F Output Fresnel term
-	/// @return Specular BRDF term (D * G * F)
-	float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
+	/// @param F Output Fresnel reflectance at current angle
+	/// @return Specular BRDF value (D * Vis * F)
+	float3 SpecularMicrofacet(float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
 	{
 		float D = BRDF::D_GGX(roughness, NdotH);
 		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
-		F = BRDF::F_Schlick(specularColor, VdotH);
+		F = BRDF::F_Schlick(F0, VdotH);
 
 		return D * G * F;
 	}
 
-	/// @brief Calculate specular reflection using Charlie microflake model (for sheen/fabric)
-	/// @param roughness Surface roughness [0,1]
-	/// @param specularColor F0 reflectance at normal incidence
+	/// @brief Evaluate Charlie microflake specular BRDF for sheen/fabric (D * Vis * F)
+	/// @param roughness Perceptual roughness [0,1]
+	/// @param F0 Reflectance at normal incidence
 	/// @param NdotL Dot product of normal and light direction
 	/// @param NdotV Dot product of normal and view direction
 	/// @param NdotH Dot product of normal and half vector
 	/// @param VdotH Dot product of view and half vector
-	/// @return Specular BRDF term (D * G * F)
-	float3 GetSpecularDirectLightMultiplierMicroflakes(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH)
+	/// @return Specular BRDF value (D * Vis * F)
+	float3 SpecularMicroflakes(float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH)
 	{
 		float D = BRDF::D_Charlie(roughness, NdotH);
 		float G = BRDF::Vis_Neubelt(NdotV, NdotL);
-		float3 F = BRDF::F_Schlick(specularColor, VdotH);
+		float3 F = BRDF::F_Schlick(F0, VdotH);
 
 		return D * G * F;
 	}
@@ -119,7 +119,7 @@ namespace PBR
 	inline float HairGaussian(float B, float Theta)
 	{
 		// Guard against division by zero: clamp B to a minimum value
-		float B_safe = max(B, 1e-6);
+		float B_safe = max(B, EPSILON_DIVISION);
 		return exp(-0.5 * Theta * Theta / (B_safe * B_safe)) / (sqrt(Math::TAU) * B_safe);
 	}
 
@@ -132,7 +132,6 @@ namespace PBR
 	/// @return Wetness specular color contribution
 	float3 GetWetnessDirectLightSpecularInput(float3 N, float3 V, float3 L, float3 lightColor, float roughness)
 	{
-		const float wetnessStrength = 1;
 		const float wetnessF0 = 0.02;
 
 		float3 H = normalize(V + L);
@@ -141,35 +140,26 @@ namespace PBR
 		float NdotH = saturate(dot(N, H));
 		float VdotH = saturate(dot(V, H));
 
-		float3 wetnessF;
-		float3 wetnessSpecular = GetSpecularDirectLightMultiplierMicrofacet(roughness, wetnessF0, NdotL, NdotV, NdotH, VdotH, wetnessF) * lightColor * NdotL;
+		float3 F;
+		float3 Fr = SpecularMicrofacet(roughness, wetnessF0, NdotL, NdotV, NdotH, VdotH, F);
 
-		return wetnessSpecular * wetnessStrength;
+		return Fr * lightColor * NdotL;
 	}
 
 	/// @brief Calculate wetness specular lobe weight for indirect lighting
 	/// @param N Surface normal
 	/// @param V View direction
-	/// @param VN Vertex normal (for horizon occlusion)
 	/// @param roughness Surface roughness
 	/// @return Wetness specular lobe weight
-	float3 GetWetnessIndirectSpecularLobeWeight(float3 N, float3 V, float3 VN, float roughness)
+	float3 GetWetnessIndirectSpecularLobeWeight(float3 N, float3 V, float roughness)
 	{
-		const float wetnessStrength = 1;
 		const float wetnessF0 = 0.02;
 
 		float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
 		float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
 		float3 specularLobeWeight = wetnessF0 * specularBRDF.x + specularBRDF.y;
 
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		specularLobeWeight *= horizon;
-
-		return specularLobeWeight * wetnessStrength;
+		return specularLobeWeight;
 	}
 }
 

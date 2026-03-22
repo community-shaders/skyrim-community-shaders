@@ -149,6 +149,47 @@ namespace Util
 	}
 
 	/**
+	 * @brief Sets the value of a game setting, transparently handling INI-based and offset-based settings.
+	 *
+	 * For INI-based settings (offset == 0), tries INISettingCollection, INIPrefSettingCollection,
+	 * then GameSettingCollection. For offset-based settings (e.g., VR where INI entries don't exist),
+	 * writes directly to the memory address.
+	 *
+	 * @tparam T The value type (bool, float, std::int32_t, or std::uint32_t).
+	 * @param settingName The setting name (e.g., "iNumFocusShadow:Display").
+	 * @param settingData The GameSetting metadata containing the offset.
+	 * @param a_value The value to set.
+	 */
+	template <typename T>
+	void SetGameSettingValue(const std::string& settingName, const GameSetting& settingData, T a_value)
+	{
+		if (settingData.offset == 0) {
+			auto* setting = RE::GetINISetting(settingName.c_str());
+			if (!setting) {
+				if (auto* collection = globals::game::gameSettingCollection)
+					setting = collection->GetSetting(settingName.data());
+			}
+			if (setting) {
+				if constexpr (std::is_same_v<T, bool>)
+					setting->data.b = a_value;
+				else if constexpr (std::is_same_v<T, float>)
+					setting->data.f = a_value;
+				else if constexpr (std::is_same_v<T, std::int32_t>)
+					setting->data.i = a_value;
+				else if constexpr (std::is_same_v<T, std::uint32_t>)
+					setting->data.u = a_value;
+				logger::debug("SetGameSettingValue: '{}' = {} (from INI)", settingName, a_value);
+			} else {
+				logger::warn("SetGameSettingValue: '{}' not found in INI or GameSettingCollection", settingName);
+			}
+		} else {
+			auto address = REL::Offset{ settingData.offset }.address();
+			*reinterpret_cast<T*>(address) = a_value;
+			logger::debug("SetGameSettingValue: '{}' = {} (from offset 0x{:X})", settingName, a_value, settingData.offset);
+		}
+	}
+
+	/**
 	 * @brief Saves the provided game settings to the INI file.
 	 *
 	 * This function iterates through the settings map and saves settings that are managed via

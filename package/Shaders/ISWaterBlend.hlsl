@@ -6,8 +6,8 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float3 Color : SV_Target0;
-	float4 Color1 : SV_Target1;
+	float3 Color: SV_Target0;
+	float3 Color1: SV_Target1;
 };
 
 #if defined(PSHADER)
@@ -28,22 +28,6 @@ cbuffer PerGeometry : register(b2)
 	float4 NearFar_Menu_DistanceFactor : packoffset(c0);
 };
 
-float3 LogToLinear(float3 logColor)
-{
-    const float linearRange = 14.0f;
-    const float linearGrey = 0.18f;
-    const float exposureGrey = 444.0f;
-    return exp2((logColor - exposureGrey / 1023.0) * linearRange) * linearGrey;
-}
-
-float3 LinearToLog(float3 linearColor)
-{
-    const float linearRange = 14.0f;
-    const float linearGrey = 0.18f;
-    const float exposureGrey = 444.0f;
-    return saturate(log2(linearColor) / linearRange - log2(linearGrey) / linearRange + exposureGrey / 1023.0f);
-}
-
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -59,16 +43,15 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 motionScreenPosition = Stereo::ConvertToStereoUV(Stereo::ConvertFromStereoUV(input.TexCoord, eyeIndex) + motion, eyeIndex);
 	float2 motionAdjustedScreenPosition =
 		FrameBuffer::GetPreviousDynamicResolutionAdjustedScreenPosition(motionScreenPosition);
-	float4 waterHistory =
-		waterHistoryTex.Sample(waterHistorySampler, motionAdjustedScreenPosition).xyzw;
-	waterHistory.xyz = LogToLinear(waterHistory.xyz) - LogToLinear(0);
+	float3 waterHistory =
+		waterHistoryTex.Sample(waterHistorySampler, motionAdjustedScreenPosition).xyz;
 
 	float3 finalColor = sourceColor;
 	if (
 #	ifndef VR
 		motionScreenPosition.x >= 0 && motionScreenPosition.y >= 0 && motionScreenPosition.x <= 1 &&
 #	endif
-		motionScreenPosition.y <= 1 && waterHistory.w == 1) {
+		motionScreenPosition.y <= 1 && any(waterHistory)) {
 		float historyFactor = 0.95;
 		if (NearFar_Menu_DistanceFactor.z == 0) {
 			float depth = depthBufferTex.Sample(depthBufferSampler, adjustedScreenPosition).x;
@@ -84,7 +67,7 @@ PS_OUTPUT main(PS_INPUT input)
 		finalColor = lerp(sourceColor, waterHistory.xyz, historyFactor);
 	}
 
-	psout.Color1 = float4(LinearToLog(finalColor + LogToLinear(0)), 1);
+	psout.Color1 = finalColor;
 	psout.Color = finalColor;
 
 	return psout;

@@ -94,6 +94,20 @@ private:
 };
 
 // ============================================================================
+// Sticky Header Utilities - Keep widget headers fixed while content scrolls
+// ============================================================================
+
+/// Window flags to disable scrolling on the parent window when using a sticky header.
+/// Add to ImGui::Begin() or ImGui::BeginChild() window_flags parameter.
+constexpr ImGuiWindowFlags kStickyHeaderFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+
+/// Begin a scrollable content region below a sticky header. Fills remaining space.
+inline bool BeginScrollableContent(const char* id = "##ScrollContent") { return ImGui::BeginChild(id, ImVec2(0, 0)); }
+
+/// End the scrollable content region.
+inline void EndScrollableContent() { ImGui::EndChild(); }
+
+// ============================================================================
 // PropertyDrawer - Unified table-based property drawing with search support
 // ============================================================================
 namespace PropertyDrawer
@@ -249,7 +263,8 @@ namespace TOD
 
 	// Helper to begin a TOD table (2 columns: Parameter | Values)
 	// Returns true if table was created successfully
-	bool BeginTODTable(const char* tableId);
+	// paramColumnWidth: fixed width for the label column (0 = default 200px)
+	bool BeginTODTable(const char* tableId, float paramColumnWidth = 0.0f);
 
 	// End the TOD table
 	void EndTODTable();

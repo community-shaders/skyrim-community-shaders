@@ -47,9 +47,7 @@ float DepthMIPFilter(float depth0, float depth1, float depth2, float depth3)
 }
 
 groupshared float g_scratchDepths[8][8];
-[numthreads(8, 8, 1)] void main(uint2 dispatchThreadID
-								: SV_DispatchThreadID, uint2 groupThreadID
-								: SV_GroupThreadID) {
+[numthreads(8, 8, 1)] void main(uint2 dispatchThreadID : SV_DispatchThreadID, uint2 groupThreadID : SV_GroupThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	// MIP 0

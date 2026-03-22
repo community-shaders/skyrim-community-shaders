@@ -89,8 +89,8 @@ namespace WetnessEffects
 						float2 vec2Centre = int2(i, j) + floatHash.xy - gridUV;
 						float distSqr = dot(vec2Centre, vec2Centre);
 						float dropRadius = lerp(SharedData::wetnessEffectsSettings.SplashesMinRadius,
-						                      SharedData::wetnessEffectsSettings.SplashesMaxRadius,
-						                      float(Random::iqint3(hash.yz)) * uintToFloat);
+							SharedData::wetnessEffectsSettings.SplashesMaxRadius,
+							float(Random::iqint3(hash.yz)) * uintToFloat);
 						if (distSqr < dropRadius * dropRadius) {
 							wetness = max(wetness, RainFade(residual));
 						}

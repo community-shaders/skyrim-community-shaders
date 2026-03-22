@@ -7,7 +7,7 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float3 Color : SV_Target0;
+	float3 Color: SV_Target0;
 };
 
 #if defined(PSHADER)
@@ -37,7 +37,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(LENS_FLARE)
 	float3 lensFlareColor = LFSourceTex.Sample(LFSourceSampler, input.TexCoord).xyz;
 	if (SharedData::linearLightingSettings.enableLinearLighting) {
-		color += Color::GammaToLinear(lensFlareColor);
+		color += Color::SkyrimGammaToLinear(lensFlareColor);
 	} else {
 		color += lensFlareColor;
 	}

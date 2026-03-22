@@ -57,9 +57,8 @@ namespace Hair
 
 	// [Scheuermann 2004, "Hair Rendering and Shading"]
 	// https://web.engr.oregonstate.edu/~mjb/cs557/Projects/Papers/HairRendering.pdf
-	void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, float3 lightColor, float shininess, float selfShadow, float2 uv, float3 baseColor)
+	void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, DirectContext context, float shininess, float2 uv, float3 baseColor)
 	{
-		lightColor *= selfShadow;
 		const float3 H = normalize(L + V);
 		const float oNdotL = dot(N, L);
 		const float NdotL = saturate(oNdotL);
@@ -70,6 +69,9 @@ namespace Hair
 		const float HdotV = saturate(dot(H, V));
 		const float HdotL = saturate(dot(H, L));
 		const float wrapped = 0.5;
+
+		float3 lightColor = context.lightColor * context.detailedShadow;
+		float3 softColor = context.lightColor * context.softShadow * context.hairShadow;
 
 		// [Yibing Jiang 2016, "The Process of Creating Volumetric-based Materials in Uncharted 4"]
 		// https://advances.realtimerendering.com/s2016
@@ -97,7 +99,7 @@ namespace Hair
 		float scatterFresnel2 = saturate(pow(abs(1 - VNdotV), 20));
 		float3 specT = (scatterFresnel1 + scatterFresnel2 * scatterColor) * SharedData::hairSpecularSettings.Transmission;
 		dirSpecular = specR * lightColor * SharedData::hairSpecularSettings.SpecularMult;
-		dirTransmission = specT * lightColor * SharedData::hairSpecularSettings.SpecularMult;
+		dirTransmission = specT * softColor * SharedData::hairSpecularSettings.SpecularMult;
 	}
 
 	float Hair_g(float B, float Theta)
@@ -138,7 +140,7 @@ namespace Hair
 		};
 
 		float hairIOR = 1.55;
-		float3 specularColor = HairF0();
+		float3 F0 = HairF0();
 
 		float3 Tp;
 		float Mp, Np, Fp, a, h, f;
@@ -149,14 +151,14 @@ namespace Hair
 		// R
 		Mp = Hair_g(B[0], ThetaH - Alpha[0]);
 		Np = 0.25 * cosHalfPhi;
-		Fp = BRDF::F_Schlick(specularColor, sqrt(saturate(0.5 + 0.5 * VdotL))).x;
+		Fp = BRDF::F_Schlick(F0, sqrt(saturate(0.5 + 0.5 * VdotL))).x;
 		R = (Mp * Np) * (Fp * lerp(1, backlit, saturate(-VdotL)));
 
 		// TT
 		Mp = Hair_g(B[1], ThetaH - Alpha[1]);
 		a = (1.55f / hairIOR) * rcp(n_prime);
 		h = cosHalfPhi * (1 + a * (0.6 - 0.8 * cosPhi));
-		f = BRDF::F_Schlick(specularColor, cosThetaD * sqrt(saturate(1 - h * h))).x;
+		f = BRDF::F_Schlick(F0, cosThetaD * sqrt(saturate(1 - h * h))).x;
 		Fp = (1 - f) * (1 - f);
 		Tp = pow(abs(baseColor), 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
 		Np = exp(-3.65 * cosPhi - 3.98);
@@ -164,7 +166,7 @@ namespace Hair
 
 		// TRT
 		Mp = Hair_g(B[2], ThetaH - Alpha[2]);
-		f = BRDF::F_Schlick(specularColor, cosThetaD * 0.5f).x;
+		f = BRDF::F_Schlick(F0, cosThetaD * 0.5f).x;
 		Fp = (1 - f) * (1 - f) * f;
 		Tp = pow(abs(baseColor), 0.8 / cosThetaD);
 		Np = exp(17 * cosPhi - 16.78);
@@ -192,9 +194,9 @@ namespace Hair
 		return max(S, 0);
 	}
 
-	void GetHairDirectLightMarschner(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, float3 lightColor, float shininess, float selfShadow, float2 uv, float3 baseColor)
+	void GetHairDirectLightMarschner(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, DirectContext context, float shininess, float2 uv, float3 baseColor)
 	{
-		lightColor *= Color::PBRLightingCompensation * selfShadow;
+		float3 lightColor = context.lightColor * Color::PBRLightingCompensation;
 		dirDiffuse = 0;
 		dirSpecular = 0;
 		dirTransmission = 0;
@@ -205,10 +207,10 @@ namespace Hair
 			T = ShiftTangent(T, N, shift);
 		}
 
-		float backlit = SharedData::hairSpecularSettings.Transmission;
+		float shadow = context.hairShadow * context.detailedShadow;
 
-		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, backlit) * lightColor * SharedData::hairSpecularSettings.SpecularMult;
-		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, selfShadow, baseColor) * lightColor * SharedData::hairSpecularSettings.DiffuseMult;
+		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, SharedData::hairSpecularSettings.Transmission) * lightColor * shadow * SharedData::hairSpecularSettings.SpecularMult;
+		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, shadow, baseColor) * lightColor * shadow * SharedData::hairSpecularSettings.DiffuseMult;
 	}
 
 	void GetHairDirectLight(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
@@ -220,9 +222,9 @@ namespace Hair
 		const float3 L = normalize(context.lightDir);
 
 		if (SharedData::hairSpecularSettings.HairMode == 0) {
-			GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context.lightColor, material.Shininess, context.hairShadow, uv, material.BaseColor);
+			GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context, material.Shininess, uv, material.BaseColor);
 		} else {
-			GetHairDirectLightMarschner(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context.lightColor, material.Shininess, context.hairShadow, uv, material.BaseColor);
+			GetHairDirectLightMarschner(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context, material.Shininess, uv, material.BaseColor);
 		}
 	}
 
@@ -277,8 +279,8 @@ namespace Hair
 		float shadow = 1.0;
 		int hitCount = 0;
 
-		[unroll(stepCount)]
-		for(int i = 0; i < stepCount; ++i) {
+		[unroll(stepCount)] for (int i = 0; i < stepCount; ++i)
+		{
 			ray += lightDirVS * stepSize;
 			float2 rayUV = FrameBuffer::ViewToUV(ray, true, eyeIndex);
 			if (FrameBuffer::IsOutsideFrame(rayUV))

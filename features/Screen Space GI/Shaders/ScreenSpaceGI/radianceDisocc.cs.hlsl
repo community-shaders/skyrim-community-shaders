@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/VR.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
@@ -13,7 +14,7 @@ Texture2D<unorm float> srcAccumFrames : register(t5);  // maybe half-res
 Texture2D<half> srcPrevAo : register(t6);              // maybe half-res
 Texture2D<half4> srcPrevIlY : register(t7);            // maybe half-res
 Texture2D<half2> srcPrevIlCoCg : register(t8);         // maybe half-res
-Texture2D<half4> srcPrevGISpecular : register(t9);    // maybe half-res
+Texture2D<half4> srcPrevGISpecular : register(t9);     // maybe half-res
 
 RWTexture2D<float3> outRadianceDisocc : register(u0);
 RWTexture2D<unorm float> outAccumFrames : register(u1);
@@ -38,6 +39,14 @@ void readHistory(
 	const half3 prev_geo = srcPrevGeo[pixCoord];
 	const float prev_depth = prev_geo.x;
 	// const float3 prev_normal = GBuffer::DecodeNormal(prev_geo.yz);  // prev normal is already world
+
+	// Early reject: skip bilinear taps on a different surface before the
+	// expensive world-space reconstruction.  Use a wider threshold than the
+	// world-space check to avoid rejecting valid taps displaced by parallax
+	// (e.g. VR head rotation).
+	if (abs(curr_depth - prev_depth) > curr_depth * DepthDisocclusion * 3)
+		return;
+
 	float3 prev_pos = ScreenToViewPosition(screen_pos, prev_depth, eyeIndex);
 	prev_pos = ViewToWorldPosition(prev_pos, PrevInvViewMat[eyeIndex]) + FrameBuffer::CameraPreviousPosAdjust[eyeIndex].xyz;
 
@@ -62,8 +71,7 @@ void readHistory(
 	}
 };
 
-[numthreads(8, 8, 1)] void main(const uint2 pixCoord
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(const uint2 pixCoord : SV_DispatchThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	const float2 uv = (pixCoord + .5) * RCP_OUT_FRAME_DIM;
@@ -119,7 +127,7 @@ void readHistory(
 			prev_ao, prev_y, prev_co_cg, prev_ambient, accum_frames, prev_gi_specular, wsum);
 
 		if (wsum > 1e-2) {
-			float rcpWsum = rcp(wsum + 1e-10);
+			float rcpWsum = rcp(wsum + EPSILON_WEIGHT_SUM);
 #	ifdef TEMPORAL_DENOISER
 			prev_ao *= rcpWsum;
 			prev_y *= rcpWsum;
@@ -142,7 +150,20 @@ void readHistory(
 #endif
 
 #ifdef TEMPORAL_DENOISER
-	accum_frames = max(1, min(accum_frames * 255 + 1, MaxAccumFrames));
+	// On disocclusion (wsum near zero), halve the accumulation instead of
+	// resetting to 1.  This softens the flash from a sudden 100% new-frame
+	// blend while still adapting quickly to disoccluded regions.
+	float prevAccum = accum_frames * 255;
+	if (wsum < 1e-2)
+		prevAccum = prevAccum * 0.5;
+
+	// Reduce max accumulation proportionally to motion vector length.
+	// Fast camera/head movement means history is less trustworthy.
+	float2 motionVec = prev_screen_pos - screen_pos;
+	float motionLen = length(motionVec);
+	float motionMaxAccum = lerp(MaxAccumFrames, max(MaxAccumFrames * 0.25, 4), saturate(motionLen * 20));
+
+	accum_frames = max(1, min(prevAccum + 1, motionMaxAccum));
 	outAccumFrames[pixCoord] = accum_frames / 255.0;
 	outRemappedAo[pixCoord] = prev_ao;
 	outRemappedIlY[pixCoord] = prev_y;

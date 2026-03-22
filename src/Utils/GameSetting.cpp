@@ -99,114 +99,12 @@ namespace Util
 
 	void ResetGameSettingsToDefaults(std::map<std::string, GameSetting>& settingsMap)
 	{
-		std::vector<std::pair<RE::INISettingCollection*, std::string>> iniCollections = {
-			{ globals::game::iniSettingCollection, "INISettingCollection" },
-			{ globals::game::iniPrefSettingCollection, "INIPrefSettingCollection" }
-		};
-		auto gameSettingCollection = globals::game::gameSettingCollection;
-
 		for (auto& [settingName, settingData] : settingsMap) {
-			char inputTypeChar = settingName[0];
-
-			if (settingData.offset == 0) {  // INI-based settings
-				bool processed = false;
-				for (const auto& [collection, collectionName] : iniCollections) {
-					if (auto setting = collection->GetSetting(settingName); setting) {
-						switch (inputTypeChar) {
-						case 'b':
-							{
-								bool currentValue = setting->data.b;
-								bool defaultValue = std::get<bool>(settingData.defaultValue);
-								if (currentValue != defaultValue) {
-									setting->data.b = defaultValue;
-									logger::debug("{} Setting {}: changed from {} to default boolean value {}.", collectionName, settingName, currentValue, defaultValue);
-								}
-							}
-							break;
-						case 'f':
-							{
-								float currentValue = setting->data.f;
-								float defaultValue = std::get<float>(settingData.defaultValue);
-								if (currentValue != defaultValue) {
-									setting->data.f = defaultValue;
-									logger::debug("{} Setting {}: changed from {} to default float value {}.", collectionName, settingName, currentValue, defaultValue);
-								}
-							}
-							break;
-						case 'i':
-						case 'u':
-							{
-								int32_t currentValue = setting->data.i;
-								int32_t defaultValue = std::get<int32_t>(settingData.defaultValue);
-								if (currentValue != defaultValue) {
-									setting->data.i = defaultValue;
-									logger::debug("{} Setting {}: changed from {} to default integer value {}.", collectionName, settingName, currentValue, defaultValue);
-								}
-							}
-							break;
-						default:
-							logger::debug("Unknown type for {} setting {}.", collectionName, settingName);
-							break;
-						}
-						processed = true;
-						break;  // Exit once the setting is found and processed
-					}
-				}
-
-				// Handle game settings if not processed by INI collections
-				if (!processed) {
-					if (auto setting = gameSettingCollection->GetSetting(settingName.data()); setting) {
-						bool currentValue = setting->data.b;
-						bool defaultValue = std::get<bool>(settingData.defaultValue);
-						if (currentValue != defaultValue) {
-							setting->data.b = defaultValue;
-							logger::debug("GameSetting {}: changed from {} to default boolean value {}.", settingName, currentValue, defaultValue);
-						}
-					}
-				}
-			} else {
-				// Handle settings with memory offsets
-				auto address = REL::Offset{ settingData.offset }.address();
-				switch (inputTypeChar) {
-				case 'b':
-					{
-						bool* ptr = reinterpret_cast<bool*>(address);
-						bool currentValue = *ptr;
-						bool defaultValue = std::get<bool>(settingData.defaultValue);
-						if (currentValue != defaultValue) {
-							*ptr = defaultValue;
-							logger::debug("Setting {}: changed from {} to default boolean value {}.", settingName, currentValue, defaultValue);
-						}
-					}
-					break;
-				case 'f':
-					{
-						float* ptr = reinterpret_cast<float*>(address);
-						float currentValue = *ptr;
-						float defaultValue = std::get<float>(settingData.defaultValue);
-						if (currentValue != defaultValue) {
-							*ptr = defaultValue;
-							logger::debug("Setting {}: changed from {} to default float value {}.", settingName, currentValue, defaultValue);
-						}
-					}
-					break;
-				case 'i':
-				case 'u':
-					{
-						int32_t* ptr = reinterpret_cast<int32_t*>(address);
-						int32_t currentValue = *ptr;
-						int32_t defaultValue = std::get<int32_t>(settingData.defaultValue);
-						if (currentValue != defaultValue) {
-							*ptr = defaultValue;
-							logger::debug("Setting {}: changed from {} to default integer value {}.", settingName, currentValue, defaultValue);
-						}
-					}
-					break;
-				default:
-					logger::debug("Unknown type for setting {}.", settingName);
-					break;
-				}
-			}
+			std::visit([&](auto&& defaultValue) {
+				using T = std::decay_t<decltype(defaultValue)>;
+				SetGameSettingValue<T>(settingName, settingData, defaultValue);
+			},
+				settingData.defaultValue);
 		}
 	}
 
@@ -342,13 +240,14 @@ namespace Util
 		case RE::Setting::Type::kFloat:
 			RenderImGuiElement(settingName, settingData, &setting->data.f, collectionName);
 			break;
-		case RE::Setting::Type::kSignedInteger:
+		case RE::Setting::Type::kInteger:
 			RenderImGuiElement(settingName, settingData, &setting->data.i, collectionName);
 			break;
 		case RE::Setting::Type::kUnsignedInteger:
 			RenderImGuiElement(settingName, settingData, &setting->data.u, collectionName);
 			break;
-		case RE::Setting::Type::kColor:
+		case RE::Setting::Type::kColorRGB:
+		case RE::Setting::Type::kColorRGBA:
 		case RE::Setting::Type::kString:
 		case RE::Setting::Type::kUnknown:
 		default:

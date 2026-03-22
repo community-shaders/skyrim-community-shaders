@@ -6,13 +6,14 @@ void PrecipitationWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		DrawWidgetHeader("##PrecipitationSearch", true, true);
 
 		bool changed = false;
 
 		if (ImGui::BeginTabBar("PrecipitationTabs")) {
 			if (ImGui::BeginTabItem("Particle")) {
+				BeginScrollableContent("##ParticleScroll");
 				ImGui::SeparatorText("Particle Type");
 				const char* types[] = { "Rain", "Snow" };
 				int currentType = static_cast<int>(settings.particleType);
@@ -33,10 +34,12 @@ void PrecipitationWidget::DrawWidget()
 				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, -360.0f, 360.0f))
 					changed = true;
 
+				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Position")) {
+				BeginScrollableContent("##PositionScroll");
 				ImGui::SeparatorText("Offset");
 				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, -1000.0f, 1000.0f))
 					changed = true;
@@ -51,10 +54,12 @@ void PrecipitationWidget::DrawWidget()
 				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 10.0f))
 					changed = true;
 
+				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Texture")) {
+				BeginScrollableContent("##TextureScroll");
 				ImGui::SeparatorText("Subtextures");
 				int numX = static_cast<int>(settings.numSubtexturesX);
 				int numY = static_cast<int>(settings.numSubtexturesY);
@@ -68,13 +73,12 @@ void PrecipitationWidget::DrawWidget()
 				}
 
 				ImGui::SeparatorText("Texture Path");
-				char textureBuffer[256];
-				strncpy_s(textureBuffer, settings.particleTexture.c_str(), sizeof(textureBuffer) - 1);
 				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
 					settings.particleTexture = textureBuffer;
 					changed = true;
 				}
 
+				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
@@ -131,6 +135,7 @@ void PrecipitationWidget::LoadSettings()
 	}
 
 	originalSettings = settings;
+	strncpy_s(textureBuffer, sizeof(textureBuffer), settings.particleTexture.c_str(), _TRUNCATE);
 	ApplyChanges();
 }
 
@@ -199,6 +204,7 @@ void PrecipitationWidget::ApplyChanges()
 void PrecipitationWidget::RevertChanges()
 {
 	settings = vanillaSettings;
+	strncpy_s(textureBuffer, sizeof(textureBuffer), settings.particleTexture.c_str(), _TRUNCATE);
 	ApplyChanges();
 }
 

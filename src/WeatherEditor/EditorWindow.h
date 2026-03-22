@@ -53,6 +53,7 @@ public:
 	static constexpr float kGameHourMax = 23.99f;
 	static constexpr float kTimeScaleMin = 0.1f;
 	static constexpr float kTimeScaleMax = 4000.0f;
+	static constexpr float kMenuBarSliderWidth = 400.0f;
 
 	// Vanity camera control
 	bool vanityCameraDisabled = false;
@@ -141,6 +142,7 @@ public:
 		int maxRecentWidgets = 10;
 		bool rememberOpenWidgets = true;
 		std::vector<std::string> lastOpenWidgets;
+		bool showViewport = true;
 
 		// Palette settings
 		struct PaletteColorEntry
@@ -226,4 +228,23 @@ private:
 	void RefreshJsonAttachmentCache(const std::vector<Widget*>& widgets);
 	bool HasCachedJsonAttachment(Widget* widget) const;
 	void InvalidateJsonAttachmentCache(Widget* widget = nullptr);
+
+	// Objects window filter state
+	enum class FilterColumn : int
+	{
+		All = 0,
+		EditorID,
+		FormID,
+		File,
+		Status,
+		Count_  // Sentinel – must equal IM_ARRAYSIZE(kFilterColumnNames)
+	};
+	std::string m_selectedCategory = "Weather";
+	std::string m_previousSelectedCategory = "Weather";
+	char m_filterBuffer[256] = {};
+	bool m_showOnlyFlagged = false;
+	bool m_showOnlyFavorites = false;
+	FilterColumn m_currentFilterColumn = FilterColumn::All;
+	void ResetObjectsFilter();
+	bool MatchesObjectFilter(Widget* w) const;
 };

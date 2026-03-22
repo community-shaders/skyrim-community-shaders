@@ -54,6 +54,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	InitializeLog();
 	logger::info("Loaded {} {}", Plugin::NAME, Plugin::VERSION.string());
 	SKSE::Init(a_skse);
+	SKSE::AllocTrampoline(1 << 10);
 	return Load();
 }
 
@@ -148,7 +149,7 @@ bool Load()
 	}
 
 	if (REL::Module::IsVR()) {
-		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.200.0", true);
+		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.207.0", true);
 	}
 
 	auto privateProfileRedirectorVersion = Util::GetDllVersion(L"Data/SKSE/Plugins/PrivateProfileRedirector.dll");
@@ -181,7 +182,8 @@ bool Load()
 		L"Data/SKSE/Plugins/EVLaS.dll",
 		L"Data/SKSE/Plugins/AELAS.dll",
 		L"Data/SKSE/Plugins/SSEReShadeHelper.dll",
-		L"Data/SKSE/Plugins/trainwreck.dll"
+		L"Data/SKSE/Plugins/trainwreck.dll",
+		L"Data/SKSE/Plugins/TAASharpen.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {

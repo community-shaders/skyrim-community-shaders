@@ -5,13 +5,14 @@
 #include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
-#include "Common/SharedData.hlsli"
 #include "Common/PBRMath.hlsli"
+#include "Common/Shading.hlsli"
+#include "Common/SharedData.hlsli"
 
 namespace PBR
 {
 #if defined(GLINT)
-	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float noise, float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
+	float3 SpecularMicrofacetWithGlint(float noise, float roughness, float3 F0, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
 		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache,
 		out float3 F)
 	{
@@ -22,7 +23,7 @@ namespace PBR
 			D = Glints::SampleGlints2023NDF(noise, logDensity, microfacetRoughness, densityRandomization, glintCache, glintH, D, D_max).x;
 		}
 		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
-		F = BRDF::F_Schlick(specularColor, VdotH);
+		F = BRDF::F_Schlick(F0, VdotH);
 
 		return D * G * F;
 	}
@@ -56,7 +57,7 @@ namespace PBR
 		};
 
 		float hairIOR = HairIOR();
-		float specularColor = IORToF0(hairIOR);
+		float F0 = IORToF0(hairIOR);
 
 		float3 Tp;
 		float Mp, Np, Fp, a, h, f;
@@ -64,14 +65,14 @@ namespace PBR
 		// R
 		Mp = HairGaussian(B[0], ThetaH - Alpha[0]);
 		Np = 0.25 * cosHalfPhi;
-		Fp = BRDF::F_Schlick(specularColor, sqrt(saturate(0.5 + 0.5 * VdotL))).x;
+		Fp = BRDF::F_Schlick(F0, sqrt(saturate(0.5 + 0.5 * VdotL))).x;
 		S += (Mp * Np) * (Fp * lerp(1, backlit, saturate(-VdotL)));
 
 		// TT
 		Mp = HairGaussian(B[1], ThetaH - Alpha[1]);
 		a = (1.55f / hairIOR) * rcp(n_prime);
 		h = cosHalfPhi * (1 + a * (0.6 - 0.8 * cosPhi));
-		f = BRDF::F_Schlick(specularColor, cosThetaD * sqrt(saturate(1 - h * h))).x;
+		f = BRDF::F_Schlick(F0, cosThetaD * sqrt(saturate(1 - h * h))).x;
 		Fp = (1 - f) * (1 - f);
 		Tp = pow(abs(material.BaseColor), 0.5 * sqrt(1 - (h * a) * (h * a)) / cosThetaD);
 		Np = exp(-3.65 * cosPhi - 3.98);
@@ -79,7 +80,7 @@ namespace PBR
 
 		// TRT
 		Mp = HairGaussian(B[2], ThetaH - Alpha[2]);
-		f = BRDF::F_Schlick(specularColor, cosThetaD * 0.5f).x;
+		f = BRDF::F_Schlick(F0, cosThetaD * 0.5f).x;
 		Fp = (1 - f) * (1 - f) * f;
 		Tp = pow(abs(material.BaseColor), 0.8 / cosThetaD);
 		Np = exp(17 * cosPhi - 16.78);
@@ -99,7 +100,7 @@ namespace PBR
 		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
 		float luma = Color::RGBToLuminance(material.BaseColor);
-		float3 scatterTint = pow(material.BaseColor / luma, 1 - shadow);
+		float3 scatterTint = pow(material.BaseColor / max(luma, 1e-5), 1 - shadow);
 		S += sqrt(material.BaseColor) * diffuseScatter * scatterTint;
 
 		return S;
@@ -118,6 +119,8 @@ namespace PBR
 	void GetDirectLightInput(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
 	{
 		lightingOutput = (DirectLightingOutput)0;
+		const float3 detailedLightColor = context.lightColor * context.detailedShadow;
+		const float3 softLightColor = context.lightColor * context.softShadow;
 
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
@@ -144,31 +147,27 @@ namespace PBR
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 		[branch] if ((PBRFlags & Flags::HairMarschner) != 0)
 		{
-			lightingOutput.transmission += context.lightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material);
+			lightingOutput.transmission += softLightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material);
 		}
 		else
 #endif
 		{
-			lightingOutput.diffuse += context.lightColor * satNdotL * BRDF::Diffuse_Lambert();
-
-			float3 F;
+			float3 F;  // Fresnel reflectance at current (V,H) angle
 #if defined(GLINT)
-			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
-							material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F) *
-			            context.lightColor * satNdotL;
+			float3 Fr = SpecularMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
+				material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F);
 #else
-			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * context.lightColor * satNdotL;
+			float3 Fr = SpecularMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F);
 #endif
+			float3 kD = 1 - F;
 
-			float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, satNdotV);
-			lightingOutput.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+			lightingOutput.diffuse += detailedLightColor * satNdotL * BRDF::Diffuse_Lambert() * kD;
+			lightingOutput.specular += Fr * detailedLightColor * satNdotL;
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::Fuzz) != 0)
 			{
-				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(material.Roughness, material.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * context.lightColor * satNdotL;
-				fuzzSpecular *= 1 + material.FuzzColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-
+				float3 fuzzSpecular = SpecularMicroflakes(material.Roughness, material.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * detailedLightColor * satNdotL;
 				lightingOutput.specular = lerp(lightingOutput.specular, fuzzSpecular, material.FuzzWeight);
 			}
 
@@ -178,7 +177,7 @@ namespace PBR
 				float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
 				float backScatter = saturate(satNdotL * material.Thickness + (1.0 - material.Thickness)) * 0.5;
 				float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - material.Thickness);
-				lightingOutput.transmission += material.SubsurfaceColor * subsurface * context.lightColor * BRDF::Diffuse_Lambert();
+				lightingOutput.transmission += material.SubsurfaceColor * subsurface * softLightColor * BRDF::Diffuse_Lambert() * kD;
 			}
 			else if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
@@ -195,14 +194,14 @@ namespace PBR
 				}
 
 				float3 coatF;
-				float3 coatSpecular = GetSpecularDirectLightMultiplierMicrofacet(material.CoatRoughness, material.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * context.coatLightColor * coatNdotL;
+				float3 coatFr = SpecularMicrofacet(material.CoatRoughness, material.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF);
 
 				float3 layerAttenuation = 1 - coatF * material.CoatStrength;
 				lightingOutput.diffuse *= layerAttenuation;
 				lightingOutput.specular *= layerAttenuation;
 
 				lightingOutput.coatDiffuse += context.coatLightColor * coatNdotL * BRDF::Diffuse_Lambert();
-				lightingOutput.specular += coatSpecular * material.CoatStrength;
+				lightingOutput.specular += coatFr * context.coatLightColor * coatNdotL * material.CoatStrength;
 			}
 #endif
 		}
@@ -214,7 +213,6 @@ namespace PBR
 
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
-		const float3 VN = context.vertexNormal;
 
 		float NdotV = saturate(dot(N, V));
 
@@ -241,51 +239,36 @@ namespace PBR
 				lobeWeights.diffuse += material.FuzzColor * material.FuzzWeight;
 			}
 #endif
-
 			float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
 			lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
 
-			lobeWeights.diffuse *= (1 - lobeWeights.specular);
-			lobeWeights.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+			// Energy conservation: diffuse receives only what specular does not reflect
+			lobeWeights.diffuse *= 1 - lobeWeights.specular;
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
 				float2 coatSpecularBRDF = BRDF::EnvBRDF(material.CoatRoughness, NdotV);
-				float3 coatSpecularLobeWeight = material.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
-				coatSpecularLobeWeight *= 1 + material.CoatF0 * (1 / (coatSpecularBRDF.x + coatSpecularBRDF.y) - 1);
+				float3 coatSpecularLobeSpecular = material.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
 
-				float3 coatF = BRDF::F_Schlick(material.CoatF0, NdotV);
-
-				float3 layerAttenuation = 1 - coatF * material.CoatStrength;
+				float3 layerAttenuation = 1 - coatSpecularLobeSpecular * material.CoatStrength;
 				lobeWeights.diffuse *= layerAttenuation;
 				lobeWeights.specular *= layerAttenuation;
 
 				[branch] if ((PBRFlags & Flags::ColoredCoat) != 0)
 				{
-					float3 coatDiffuseLobeWeight = material.CoatColor * (1 - coatSpecularLobeWeight);
+					float3 coatDiffuseLobeWeight = material.CoatColor * (1 - coatSpecularLobeSpecular);
 					lobeWeights.diffuse += coatDiffuseLobeWeight * material.CoatStrength;
 				}
-				lobeWeights.specular += coatSpecularLobeWeight * material.CoatStrength;
+				lobeWeights.specular += coatSpecularLobeSpecular * material.CoatStrength;
 			}
 #endif
 		}
 
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		lobeWeights.specular *= horizon;
-
-		float3 diffuseAO = material.AO;
-		float3 specularAO = Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness);
-
-		diffuseAO = Color::MultiBounceAO(material.BaseColor, diffuseAO.x).y;
-		specularAO = Color::MultiBounceAO(material.F0, specularAO.x).y;
-
-		lobeWeights.diffuse *= diffuseAO;
-		lobeWeights.specular *= specularAO;
+		// Apply ambient occlusion with multi-bounce approximation
+		lobeWeights.diffuse *= MultiBounceAO(material.BaseColor, material.AO);
+		float alpha = material.Roughness * material.Roughness;
+		lobeWeights.specular *= SpecularOcclusion(NdotV, alpha, material.AO);
 	}
 }
 

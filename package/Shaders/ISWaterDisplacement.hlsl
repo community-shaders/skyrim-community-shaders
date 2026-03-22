@@ -4,19 +4,19 @@
 
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
-	float2 TexCoord : TEXCOORD0;
+	float4 Position: POSITION0;
+	float2 TexCoord: TEXCOORD0;
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION0;
-	float2 TexCoord : TEXCOORD0;
+	float4 Position: SV_POSITION0;
+	float2 TexCoord: TEXCOORD0;
 #if defined(HEIGHTMAP)
-	float2 TexCoord1 : TEXCOORD1;
-	float2 TexCoord2 : TEXCOORD2;
-	float2 TexCoord3 : TEXCOORD3;
-	float2 TexCoord4 : TEXCOORD4;
+	float2 TexCoord1: TEXCOORD1;
+	float2 TexCoord2: TEXCOORD2;
+	float2 TexCoord3: TEXCOORD3;
+	float2 TexCoord4: TEXCOORD4;
 #endif
 };
 
@@ -42,7 +42,7 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color : SV_Target0;
+	float4 Color: SV_Target0;
 };
 
 #if defined(PSHADER)
