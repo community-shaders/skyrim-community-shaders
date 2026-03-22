@@ -677,15 +677,13 @@ void LightLimitFix::CopyPointShadowData()
 	ID3D11ShaderResourceView* shadowMapsSRV =
 		globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
 
-	// shadowLightsAccum is the CPU-side slot-indexed mirror of kSHADOWMAPS:
-	// shadowLightsAccum[i] holds the light whose shadow was rendered into kSHADOWMAPS[i]
-	// during Main_RenderShadowMaps.
+	auto& shadowAccum = shadowSceneNode->GetRuntimeData().shadowLightsAccum;
 	uint32_t plCount = 0;
 	uint32_t unshadowedLights = 0;
 	uint32_t slotUsage = 0;
 	int mapIndex = 0;
 	while (true) {
-		auto light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
+		auto light = shadowAccum[mapIndex];
 		if (!light)
 			break;
 
@@ -1028,23 +1026,8 @@ void LightLimitFix::UpdateLights()
 		}
 	};
 
-	// Build a set of all shadow lights so we can skip them in activeLights and avoid
-	// double-contribution if shadow lights appear in both activeLights and shadowLightsAccum.
-	std::unordered_set<RE::BSLight*> shadowLightSet;
-	{
-		int mapIndex = 0;
-		while (true) {
-			RE::BSShadowLight* sl = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
-			if (!sl)
-				break;
-			shadowLightSet.insert(static_cast<RE::BSLight*>(sl));
-			mapIndex += sl->shadowMapCount;
-		}
-	}
-
 	for (auto& e : shadowSceneNode->GetRuntimeData().activeLights) {
-		if (!shadowLightSet.count(e.get()))
-			addLight(e);
+		addLight(e);
 	}
 
 	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, bool castsShadow) {
