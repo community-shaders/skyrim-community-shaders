@@ -29,6 +29,41 @@ namespace ShadowCasterManager
 	static exprtk::symbol_table<double> s_symbolTable;
 	static bool s_formulaInited = false;
 
+	struct FormulaVarInfo
+	{
+		const char* name;
+		const char* description;
+		int32_t index;
+	};
+
+	// Single authoritative list of formula variables.
+	// Drives both symbol table registration and the formula editor help text.
+	static constexpr FormulaVarInfo kFormulaVars[] = {
+		{ "lightindex", "sequential index of this candidate light", kFormulaParam_LightIndex },
+		{ "lightintensity", "NiLight fade/intensity", kFormulaParam_LightIntensity },
+		{ "lightdistance", "camera-to-light distance (units)", kFormulaParam_LightDistance },
+		{ "lightradius", "light radius (units)", kFormulaParam_LightRadius },
+		{ "lightx", "light world X", kFormulaParam_LightX },
+		{ "lighty", "light world Y", kFormulaParam_LightY },
+		{ "lightz", "light world Z", kFormulaParam_LightZ },
+		{ "lightr", "diffuse red", kFormulaParam_LightR },
+		{ "lightg", "diffuse green", kFormulaParam_LightG },
+		{ "lightb", "diffuse blue", kFormulaParam_LightB },
+		{ "lightambientr", "ambient red", kFormulaParam_LightAmbientR },
+		{ "lightambientg", "ambient green", kFormulaParam_LightAmbientG },
+		{ "lightambientb", "ambient blue", kFormulaParam_LightAmbientB },
+		{ "lightchosenlastframe", "1 if this light held a slot last frame", kFormulaParam_LightChosenLastFrame },
+		{ "lightneverfades", "1 if lodFade disabled (permanent light)", kFormulaParam_LightNeverFades },
+		{ "lightportalstrict", "1 if portal-strict (always 1 for shadow casters)", kFormulaParam_LightPortalStrict },
+		{ "lightns", "1 if promoted from normal light (PromoteNormalToShadow)", kFormulaParam_LightNS },
+		{ "lightconverted", "1 if light is in the converted (non-shadow) slot range", kFormulaParam_LightConverted },
+		{ "camerax", "camera world X", kFormulaParam_CameraX },
+		{ "cameray", "camera world Y", kFormulaParam_CameraY },
+		{ "cameraz", "camera world Z", kFormulaParam_CameraZ },
+		{ "isinterior", "1 in interior cells, 0 outdoors", kFormulaParam_IsInterior },
+		{ "timeofday", "in-game hour (0.0–24.0)", kFormulaParam_TimeOfDay },
+	};
+
 	static void InitFormulaSystem()
 	{
 		if (s_formulaInited)
@@ -37,30 +72,8 @@ namespace ShadowCasterManager
 
 		memset(s_formulaParams, 0, sizeof(double) * kFormulaParam_Max);
 
-		double* p = s_formulaParams;
-		s_symbolTable.add_variable("lightindex", p[kFormulaParam_LightIndex]);
-		s_symbolTable.add_variable("lightdistance", p[kFormulaParam_LightDistance]);
-		s_symbolTable.add_variable("lightintensity", p[kFormulaParam_LightIntensity]);
-		s_symbolTable.add_variable("lightradius", p[kFormulaParam_LightRadius]);
-		s_symbolTable.add_variable("lightx", p[kFormulaParam_LightX]);
-		s_symbolTable.add_variable("lighty", p[kFormulaParam_LightY]);
-		s_symbolTable.add_variable("lightz", p[kFormulaParam_LightZ]);
-		s_symbolTable.add_variable("lightr", p[kFormulaParam_LightR]);
-		s_symbolTable.add_variable("lightg", p[kFormulaParam_LightG]);
-		s_symbolTable.add_variable("lightb", p[kFormulaParam_LightB]);
-		s_symbolTable.add_variable("lightambientr", p[kFormulaParam_LightAmbientR]);
-		s_symbolTable.add_variable("lightambientg", p[kFormulaParam_LightAmbientG]);
-		s_symbolTable.add_variable("lightambientb", p[kFormulaParam_LightAmbientB]);
-		s_symbolTable.add_variable("lightchosenlastframe", p[kFormulaParam_LightChosenLastFrame]);
-		s_symbolTable.add_variable("lightneverfades", p[kFormulaParam_LightNeverFades]);
-		s_symbolTable.add_variable("lightportalstrict", p[kFormulaParam_LightPortalStrict]);
-		s_symbolTable.add_variable("lightns", p[kFormulaParam_LightNS]);
-		s_symbolTable.add_variable("lightconverted", p[kFormulaParam_LightConverted]);
-		s_symbolTable.add_variable("camerax", p[kFormulaParam_CameraX]);
-		s_symbolTable.add_variable("cameray", p[kFormulaParam_CameraY]);
-		s_symbolTable.add_variable("cameraz", p[kFormulaParam_CameraZ]);
-		s_symbolTable.add_variable("isinterior", p[kFormulaParam_IsInterior]);
-		s_symbolTable.add_variable("timeofday", p[kFormulaParam_TimeOfDay]);
+		for (const auto& v : kFormulaVars)
+			s_symbolTable.add_variable(v.name, s_formulaParams[v.index]);
 	}
 
 	FormulaHelper::FormulaHelper() :
@@ -88,6 +101,31 @@ namespace ShadowCasterManager
 		return w ? w->expression.value() : 0.0;
 	}
 
+	bool FormulaHelper::Reparse(const std::string& input)
+	{
+		std::string err;
+		if (!Validate(input, err))
+			return false;
+		if (_ptr)
+			delete static_cast<FormulaWrapper*>(_ptr);
+		_ptr = nullptr;
+		return Parse(input);
+	}
+
+	bool FormulaHelper::Validate(const std::string& input, std::string& errorOut)
+	{
+		InitFormulaSystem();
+		FormulaWrapper tmp;
+		tmp.expression.register_symbol_table(s_symbolTable);
+		if (tmp.parser.compile(input, tmp.expression))
+			return true;
+		if (tmp.parser.error_count() > 0)
+			errorOut = tmp.parser.get_error(0).diagnostic;
+		else
+			errorOut = "Unknown parse error";
+		return false;
+	}
+
 	void FormulaHelper::SetParam(int32_t index, double value) { s_formulaParams[index] = value; }
 	double FormulaHelper::GetParam(int32_t index) { return s_formulaParams[index]; }
 
@@ -98,14 +136,24 @@ namespace ShadowCasterManager
 	static Settings s_settings;
 	static LightContainer s_lights;
 	static BudgetTracker s_budget;
+
+	// Rolling redraw history (128-frame window) for DrawSettings statistics.
+	static constexpr int kRedrawHistorySize = 128;
+	static int32_t s_redrawHistory[kRedrawHistorySize] = {};
+	static int32_t s_redrawHistoryPos = 0;
+	static int32_t s_redrawSum = 0;
+
+	// Rolling budget-consumed history (same window) for DrawSettings statistics.
+	static int32_t s_budgetHistory[kRedrawHistorySize] = {};
+	static int32_t s_budgetHistoryPos = 0;
+	static int64_t s_budgetSum = 0;
+
 	// Maximum ShadowLightCount the installed infrastructure supports.
 	// Set once by Install(); Update() clamps to this.
 	static int32_t s_installedShadowLightCount;
 
 	// Formula instances (allocated at Init if formula strings are non-empty)
 	static FormulaHelper* s_formulaScore = nullptr;
-	static FormulaHelper* s_formulaAllowConvert = nullptr;
-	static FormulaHelper* s_formulaAllowConvertShadow = nullptr;
 	static FormulaHelper* s_formulaRedrawInterval = nullptr;
 	static FormulaHelper* s_formulaRedrawBudget = nullptr;
 
@@ -729,6 +777,20 @@ namespace ShadowCasterManager
 		}
 	}
 
+	int32_t BudgetTracker::GetAverageCostUs() const
+	{
+		int64_t sum = 0;
+		int32_t count = 0;
+		for (auto& [k, entry] : _map) {
+			int32_t n = std::min(kBudgetWindowSize, entry->TrackedCount);
+			if (n == 0)
+				continue;
+			sum += entry->Current / std::max(1, n);
+			count++;
+		}
+		return count > 0 ? static_cast<int32_t>(sum / count) : 0;
+	}
+
 	// =========================================================================
 	// Game accessor helpers
 	//
@@ -1098,16 +1160,6 @@ namespace ShadowCasterManager
 			}
 		}
 
-		// Enforce MaxConvertCount for non-isNS lights.
-		if (!isNS) {
-			int count = 0;
-			for (auto& x : s_normalConvert)
-				if (!x.isNS)
-					count++;
-			if (count >= s_settings.MaxConvertCount)
-				return;
-		}
-
 		// Prepass: release shadow resources.
 		auto* cull = GetLightCullingProcess(light);
 		if (cull && cull->portalGraphEntry)
@@ -1400,7 +1452,7 @@ namespace ShadowCasterManager
 		// ---- Temporal budget: decide which lights redraw this frame ----
 		{
 			int maxRedraw = s_settings.MaxRedrawPerFrame;
-			double budget = 2.0;
+			double budget = s_settings.RedrawBudgetMs;
 			int32_t budgetRemain = static_cast<int32_t>(budget * 1000.0);
 			bool isFirst = true;
 			int32_t now = GetFrameCounter();
@@ -1514,6 +1566,29 @@ namespace ShadowCasterManager
 				}
 			}
 		}
+		// Update rolling redraw and budget statistics.
+		{
+			int redrawing = 0;
+			int32_t consumed = 0;
+			for (int i = 0; i < s_lights.Size; i++) {
+				auto& e = s_lights.Lights[i];
+				if (e.Light && e.RedrawFrame) {
+					if (i != 0 || !s_lights.Sun)
+						consumed += s_budget.GetCost(e.Light);
+					redrawing++;
+				}
+			}
+			s_redrawSum -= s_redrawHistory[s_redrawHistoryPos];
+			s_redrawHistory[s_redrawHistoryPos] = redrawing;
+			s_redrawSum += redrawing;
+			s_redrawHistoryPos = (s_redrawHistoryPos + 1) % kRedrawHistorySize;
+
+			s_budgetSum -= s_budgetHistory[s_budgetHistoryPos];
+			s_budgetHistory[s_budgetHistoryPos] = consumed;
+			s_budgetSum += consumed;
+			s_budgetHistoryPos = (s_budgetHistoryPos + 1) % kRedrawHistorySize;
+		}
+
 		ssn->GetRuntimeData().firstPersonShadowMask = *GetShadowMask();
 		*GetFrameLightCount() = static_cast<uint32_t>(doneLightCount);
 	}
@@ -1714,7 +1789,7 @@ namespace ShadowCasterManager
 	}
 
 	// Fires at start of ShadowSceneNode::AddLight (ID 99692/106326).
-	// Optionally promotes normal light to shadow light, or sets portal-strict.
+	// Optionally promotes normal light to shadow light; always forces portal-strict.
 	static void Hook_ConvertLights_Add(CONTEXT& ctx)
 	{
 		auto* ssn = reinterpret_cast<RE::ShadowSceneNode*>(ctx.Rcx);
@@ -1733,8 +1808,7 @@ namespace ShadowCasterManager
 			p->nearDistance = (light->GetLightRuntimeData().radius.x / 512.0f) * 219.6356f;
 			s_shadowConvert.insert(light);
 		}
-		if (s_settings.ForcePortalStrict)
-			p->portalStrict = true;
+		p->portalStrict = true;
 	}
 
 	// Fires at start of BSLight::SetLight (ID 101302/108289).
@@ -1837,16 +1911,6 @@ namespace ShadowCasterManager
 			s_formulaScore = new FormulaHelper();
 			if (!s_formulaScore->Parse(settings.ScoreFormula))
 				logger::error("[SCM] Failed to parse ScoreFormula");
-		}
-		if (!settings.AllowConvertFormula.empty()) {
-			s_formulaAllowConvert = new FormulaHelper();
-			if (!s_formulaAllowConvert->Parse(settings.AllowConvertFormula))
-				logger::error("[SCM] Failed to parse AllowConvertFormula");
-		}
-		if (!settings.AllowConvertShadowFormula.empty()) {
-			s_formulaAllowConvertShadow = new FormulaHelper();
-			if (!s_formulaAllowConvertShadow->Parse(settings.AllowConvertShadowFormula))
-				logger::error("[SCM] Failed to parse AllowConvertShadowFormula");
 		}
 		if (!settings.RedrawIntervalFormula.empty()) {
 			s_formulaRedrawInterval = new FormulaHelper();
@@ -2099,7 +2163,7 @@ namespace ShadowCasterManager
 				logger::error("[SCM] Failed to install Hook_ConvertLights_Remove");
 		}
 
-		if (settings.ForcePortalStrict || settings.PromoteNormalToShadow) {
+		{
 			// ShadowSceneNode::AddLight — at function start (5 bytes)
 			static REL::RelocationID uid(99692, 106326);
 			if (!ContextHook::Install(uid.address(), 5, Hook_ConvertLights_Add, 5))
@@ -2147,13 +2211,14 @@ namespace ShadowCasterManager
 	{
 		ImGui::SeparatorText("Shadow Caster Scheduling");
 
-		ImGui::SliderInt("Shadow Light Count", &settings.ShadowLightCount, 0, 32);
+		// ---- Shadow Light Count (requires restart) -------------------------
+		ImGui::SliderInt("Shadow Light Count", &settings.ShadowLightCount, 0, 64);
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(
-				"Maximum simultaneous shadow-casting point/spot lights.\n"
-				"  4  = vanilla (intelligent selection still active).\n"
-				"  >4 = extended mode; depth buffer is expanded beyond the game's 8-slot limit when >8.\n"
-				"  0  = scheduling disabled.\n"
+				"Maximum simultaneous shadow-casting point/spot lights (directional sun not counted).\n"
+				"  0  = scheduler runs but selects no point lights (sun/directional unaffected).\n"
+				"  4  = vanilla point light count with intelligent selection.\n"
+				"  >4 = extended mode; depth buffer expanded when >8. Max 64.\n"
 				"Requires a game restart to take effect.");
 		if (settings.ShadowLightCount != s_installedShadowLightCount) {
 			const auto& theme = Menu::GetSingleton()->GetTheme();
@@ -2161,7 +2226,8 @@ namespace ShadowCasterManager
 				"Restart required — current session uses %d lights.", s_installedShadowLightCount);
 		}
 
-		ImGui::SliderInt("Max Redraws Per Frame", &settings.MaxRedrawPerFrame, 1, 16);
+		// ---- Temporal budget (dynamic) ------------------------------------
+		ImGui::SliderInt("Max Redraws Per Frame", &settings.MaxRedrawPerFrame, 1, 32);
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(
 				"Hard cap on how many shadow lights may re-render their shadow maps in one frame.\n"
@@ -2174,96 +2240,119 @@ namespace ShadowCasterManager
 				"Per-frame GPU time budget for shadow re-renders (milliseconds).\n"
 				"Lights whose estimated render cost exceeds the remaining budget are deferred.\n"
 				"The first eligible light always renders regardless of budget (starvation prevention).\n"
+				"Overridden per-frame by the Redraw Budget formula if set.\n"
 				"Typical values: 1.0 ms exterior, 2.0 ms interior.");
 
-		ImGui::Checkbox("Convert Distant Lights to Normal", &settings.ConvertDistantToNormal);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip(
-				"When enabled, shadow lights that fail portal/frustum culling are demoted to\n"
-				"normal (unshadowed) lights instead of being dropped entirely.\n"
-				"They still contribute diffuse and specular lighting at no shadow-map cost.");
-
-		if (ImGui::TreeNode("Advanced##ShadowScheduling")) {
-			ImGui::SliderInt("Converted Shadow Slots", &settings.ConvertedShadowSlots, 0, 16);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Extra pool slots reserved for shadow\xe2\x86\x92normal converted lights (Phase 4).");
-
-			ImGui::Checkbox("Allow Immediate Draw for New Lights", &settings.AllowDrawNewLight);
+		// ---- Light conversion (requires restart for hooks) -----------------
+		if (ImGui::TreeNode("Light Conversion##LightConv")) {
+			ImGui::Checkbox("Convert Distant Lights to Normal", &settings.ConvertDistantToNormal);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
-					"Allow a light that was just added to the active pool to render its shadow map\n"
-					"this frame even if it hasn't been seen before.\n"
-					"Prevents a one-frame shadow-map gap when new lights enter view.");
+					"Shadow lights that fail portal/frustum culling are demoted to normal\n"
+					"(unshadowed) lights instead of being dropped entirely.\n"
+					"They still contribute diffuse and specular lighting at no shadow-map cost.\n"
+					"Requires a game restart to change.");
 
-			ImGui::Checkbox("Force Portal Strict", &settings.ForcePortalStrict);
+			ImGui::SliderInt("Converted Shadow Slots", &settings.ConvertedShadowSlots, 0, 64);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
-					"Apply portal-strict culling to all managed shadow lights.\n"
-					"Prevents lights from shadowing geometry across room boundaries.");
+					"Extra pool slots for lights converted to normal (unshadowed) mode.\n"
+					"Increase if Convert Distant Lights drops lights you expect to see.");
 
 			ImGui::Checkbox("Promote Normal Lights to Shadow Casters", &settings.PromoteNormalToShadow);
 			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Experimental: elevate high-scoring unshadowed lights to shadow casters\nwhen shadow slots are available.");
+				ImGui::SetTooltip(
+					"Experimental: elevate high-scoring unshadowed lights to shadow casters\n"
+					"when shadow slots are available.\n"
+					"Requires a game restart to change.");
 
-			ImGui::SliderInt("Max Shadow\xe2\x86\x92Normal Conversions", &settings.MaxConvertCount, 0, 64);
+			ImGui::TreePop();
+		}
+
+		// ---- Advanced (dynamic) -------------------------------------------
+		if (ImGui::TreeNode("Advanced##ShadowScheduling")) {
+			ImGui::Checkbox("Allow Immediate Draw for New Lights", &settings.AllowDrawNewLight);
 			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Maximum shadow\xe2\x86\x92normal conversions per frame.");
+				ImGui::SetTooltip(
+					"Allow a light just added to the active pool to render its shadow map this frame.\n"
+					"Prevents a one-frame shadow-map gap when new lights enter view.");
 
-			ImGui::SliderInt("Max Normal\xe2\x86\x92Shadow Promotions", &settings.MaxConvertCountShadow, 0, 16);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Maximum normal\xe2\x86\x92shadow promotions per frame (requires Promote Normal Lights).");
-
+			// ---- Formula editor ------------------------------------------
 			if (ImGui::TreeNode("Formula Editor##Formulas")) {
-				ImGui::TextWrapped(
-					"Formulas use exprtk syntax.  Available variables:\n"
-					"lightindex, lightintensity, lightdistance, lightradius, lightx/y/z,\n"
-					"lightr/g/b, lightambientr/g/b, lightchosenlastframe, lightneverfades,\n"
-					"lightportalstrict, lightns, lightconverted, camerax/y/z, isinterior, timeofday");
+				// Build variable reference from the DRY table.
+				if (ImGui::TreeNode("Available Variables##FormulaVars")) {
+					if (ImGui::BeginTable("##FormulaVarTable", 2,
+							ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+								ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY,
+							ImVec2(0, std::min(static_cast<float>(IM_ARRAYSIZE(kFormulaVars)) * 20.0f + 28.0f, 320.0f)))) {
+						ImGui::TableSetupColumn("Variable");
+						ImGui::TableSetupColumn("Description");
+						ImGui::TableHeadersRow();
+						for (const auto& v : kFormulaVars) {
+							ImGui::TableNextRow();
+							ImGui::TableSetColumnIndex(0);
+							ImGui::TextUnformatted(v.name);
+							ImGui::TableSetColumnIndex(1);
+							ImGui::TextUnformatted(v.description);
+						}
+						ImGui::EndTable();
+					}
+					ImGui::TreePop();
+				}
 
 				static char scoreBuf[512];
-				static char allowConvertBuf[512];
-				static char allowConvertShadowBuf[512];
+				static char scoreErr[256] = {};
 				static char redrawIntervalBuf[512];
+				static char redrawIntervalErr[256] = {};
 				static char redrawBudgetBuf[512];
+				static char redrawBudgetErr[256] = {};
 				static bool formulaBufsInited = false;
 				if (!formulaBufsInited) {
 					snprintf(scoreBuf, sizeof(scoreBuf), "%s", settings.ScoreFormula.c_str());
-					snprintf(allowConvertBuf, sizeof(allowConvertBuf), "%s", settings.AllowConvertFormula.c_str());
-					snprintf(allowConvertShadowBuf, sizeof(allowConvertShadowBuf), "%s", settings.AllowConvertShadowFormula.c_str());
 					snprintf(redrawIntervalBuf, sizeof(redrawIntervalBuf), "%s", settings.RedrawIntervalFormula.c_str());
 					snprintf(redrawBudgetBuf, sizeof(redrawBudgetBuf), "%s", settings.RedrawBudgetFormula.c_str());
 					formulaBufsInited = true;
 				}
 
-				ImGui::InputText("Score", scoreBuf, sizeof(scoreBuf));
+				// Helper lambda: validate, apply live, revert buffer on error.
+				auto applyFormula = [](const char* label, char* buf, size_t bufSize,
+										std::string& settingStr, char* errBuf, size_t errBufSize,
+										FormulaHelper*& helper) {
+					ImGui::InputText(label, buf, bufSize);
+					if (ImGui::IsItemDeactivatedAfterEdit()) {
+						std::string err;
+						if (FormulaHelper::Validate(buf, err)) {
+							settingStr = buf;
+							errBuf[0] = '\0';
+							if (helper)
+								helper->Reparse(settingStr);
+							else {
+								helper = new FormulaHelper();
+								helper->Parse(settingStr);
+							}
+						} else {
+							snprintf(errBuf, errBufSize, "Parse error: %s", err.c_str());
+							snprintf(buf, bufSize, "%s", settingStr.c_str());
+						}
+					}
+					if (errBuf[0])
+						ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", errBuf);
+				};
+
+				applyFormula("Score", scoreBuf, sizeof(scoreBuf),
+					settings.ScoreFormula, scoreErr, sizeof(scoreErr), s_formulaScore);
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("Light priority scoring formula. Higher score = more likely to get a shadow slot.");
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					settings.ScoreFormula = scoreBuf;
 
-				ImGui::InputText("Allow Convert", allowConvertBuf, sizeof(allowConvertBuf));
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Per-light filter for shadow-to-normal conversion. Return >= 0.5 to allow. Empty = always allow.");
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					settings.AllowConvertFormula = allowConvertBuf;
-
-				ImGui::InputText("Allow Convert Shadow", allowConvertShadowBuf, sizeof(allowConvertShadowBuf));
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Per-light filter for normal-to-shadow promotion. Return >= 0.5 to allow. Empty = always allow.");
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					settings.AllowConvertShadowFormula = allowConvertShadowBuf;
-
-				ImGui::InputText("Redraw Interval", redrawIntervalBuf, sizeof(redrawIntervalBuf));
+				applyFormula("Redraw Interval", redrawIntervalBuf, sizeof(redrawIntervalBuf),
+					settings.RedrawIntervalFormula, redrawIntervalErr, sizeof(redrawIntervalErr), s_formulaRedrawInterval);
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("Per-light redraw interval formula. Higher = less frequent shadow map updates.");
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					settings.RedrawIntervalFormula = redrawIntervalBuf;
 
-				ImGui::InputText("Redraw Budget", redrawBudgetBuf, sizeof(redrawBudgetBuf));
+				applyFormula("Redraw Budget", redrawBudgetBuf, sizeof(redrawBudgetBuf),
+					settings.RedrawBudgetFormula, redrawBudgetErr, sizeof(redrawBudgetErr), s_formulaRedrawBudget);
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Per-frame redraw budget formula (ms). Overrides the slider value above.");
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					settings.RedrawBudgetFormula = redrawBudgetBuf;
+					ImGui::SetTooltip("Per-frame redraw budget formula (ms). Overrides the Redraw Budget slider when set.");
 
 				ImGui::TreePop();
 			}
@@ -2271,17 +2360,31 @@ namespace ShadowCasterManager
 			ImGui::TreePop();
 		}
 
-		if (ImGui::TreeNode("Scheduling Statistics")) {
-			int active = 0, redrawing = 0;
-			for (int i = 0; i < s_lights.Size; i++) {
-				if (s_lights.Lights[i].Light) {
-					active++;
-					if (s_lights.Lights[i].RedrawFrame)
-						redrawing++;
-				}
+		// ---- Statistics panel --------------------------------------------
+		if (ImGui::TreeNode("Shadow Scheduling Statistics")) {
+			// Budget consumption bar (rolling average over last 128 frames).
+			{
+				float avgConsumedUs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize);
+				float budgetUs = s_settings.RedrawBudgetMs * 1000.0f;
+				float fraction = budgetUs > 0.0f ? avgConsumedUs / budgetUs : 0.0f;
+				char overlay[64];
+				snprintf(overlay, sizeof(overlay), "%.2f / %.2f ms (avg)", avgConsumedUs / 1000.0f, s_settings.RedrawBudgetMs);
+				ImGui::ProgressBar(std::min(fraction, 1.0f), ImVec2(-1.0f, 0.0f), overlay);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Estimated GPU shadow budget consumed, averaged over the last %d frames.", kRedrawHistorySize);
 			}
-			ImGui::Text("Tracked lights : %d / %d slots", active, s_lights.Size);
-			ImGui::Text("Redrawing      : %d this frame", redrawing);
+
+			// Rolling average redraws per frame.
+			float avgRedraws = static_cast<float>(s_redrawSum) / static_cast<float>(kRedrawHistorySize);
+			ImGui::Text("Avg redraws/frame : %.1f  (cap: %d)", avgRedraws, s_settings.MaxRedrawPerFrame);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Rolling average over the last %d frames.", kRedrawHistorySize);
+
+			// Average light GPU cost.
+			int32_t avgCost = s_budget.GetAverageCostUs();
+			if (avgCost > 0)
+				ImGui::Text("Avg light cost    : %.2f ms", avgCost / 1000.0f);
+
 			ImGui::TreePop();
 		}
 	}
