@@ -412,7 +412,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 	for (auto& [shape, instruction] : built) {
 		waterSystem->AddWater(shape, instruction->form.ptr, instruction->waterHeight, nullptr, true, false);
 
-		if (const auto prop = shape->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+		if (const auto prop = shape->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
 			REX::EnumSet waterFlags = static_cast<RE::BSWaterShaderProperty::WaterFlag>(0b10000100);
 			waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kUseCubemapReflections;
@@ -461,16 +461,23 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 	// The plane feeds ReflectPlane in the PerGeometry cbuffer. When corrupted (e.g., plane.constant = 0
 	// or garbage), the shader's refractionPlaneMul calculation produces extreme values causing flickering.
 	// This primarily affects flowmapped water because it uses more complex refraction depth calculations.
-	if (const auto prop = pass->geometry->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+	if (const auto prop = pass->geometry->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 		const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
 		const float waterHeight = pass->geometry->world.translate.z;
 
 		// Validate and fix the plane if it's corrupted.
 		// A valid water plane has normal pointing up (0,0,1) and constant = water height.
 		// After interior->exterior transitions, plane.constant can be 0 or stale values.
-		const bool planeNormalBad = std::abs(waterShaderProp->plane.normal.z - 1.0f) > 0.01f;
+		const bool planeNonFinite =
+			!std::isfinite(waterShaderProp->plane.normal.x) ||
+			!std::isfinite(waterShaderProp->plane.normal.y) ||
+			!std::isfinite(waterShaderProp->plane.normal.z) ||
+			!std::isfinite(waterShaderProp->plane.constant);
+		const bool planeNormalBad = std::abs(waterShaderProp->plane.normal.x)        > 0.01f
+		                         || std::abs(waterShaderProp->plane.normal.y)        > 0.01f
+		                         || std::abs(waterShaderProp->plane.normal.z - 1.0f) > 0.01f;
 		const bool planeConstantBad = std::abs(waterShaderProp->plane.constant - waterHeight) > 1.0f;
-		if (planeNormalBad || planeConstantBad) {
+		if (planeNonFinite || planeNormalBad || planeConstantBad) {
 			waterShaderProp->plane.normal = { 0.0f, 0.0f, 1.0f };
 			waterShaderProp->plane.constant = waterHeight;
 		}
@@ -483,7 +490,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		singleton.gDisplacementMeshFlowCellOffset->x = static_cast<float>(singleton.flowmap->GetHeight());  // ObjectUV.y
 		singleton.gDisplacementMeshFlowCellOffset->y = 1.0f - pass->geometry->local.scale;                  // ObjectUV.z (counters 1 - x in SetupGeometry)
 
-		if (const auto prop = pass->geometry->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+		if (const auto prop = pass->geometry->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
 			int32_t x, y;
 			Util::WorldToCell(pass->geometry->world.translate, x, y);
