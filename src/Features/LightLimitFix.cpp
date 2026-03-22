@@ -665,7 +665,7 @@ void LightLimitFix::CopyPointShadowData()
 	uint32_t slotUsage = 0;
 	int mapIndex = 0;
 	while (true) {
-		auto light = shadowSceneNode->GetRuntimeData().shadowCasterLights[mapIndex];
+		auto light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
 		if (!light)
 			break;
 
@@ -1014,7 +1014,7 @@ void LightLimitFix::UpdateLights()
 	{
 		int mapIndex = 0;
 		while (true) {
-			RE::BSShadowLight* sl = shadowSceneNode->GetRuntimeData().shadowCasterLights[mapIndex];
+			RE::BSShadowLight* sl = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
 			if (!sl)
 				break;
 			shadowLightSet.insert(static_cast<RE::BSLight*>(sl));
@@ -1079,7 +1079,7 @@ void LightLimitFix::UpdateLights()
 		int bufferIndex = 0;
 		int mapIndex = 0;
 		while (true) {
-			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowCasterLights[mapIndex];
+			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
 			if (!light)
 				break;
 
