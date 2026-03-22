@@ -492,9 +492,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			!std::isfinite(waterShaderProp->plane.normal.y) ||
 			!std::isfinite(waterShaderProp->plane.normal.z) ||
 			!std::isfinite(waterShaderProp->plane.constant);
-		const bool planeNormalBad = std::abs(waterShaderProp->plane.normal.x)        > 0.01f
-		                         || std::abs(waterShaderProp->plane.normal.y)        > 0.01f
-		                         || std::abs(waterShaderProp->plane.normal.z - 1.0f) > 0.01f;
+		const bool planeNormalBad = std::abs(waterShaderProp->plane.normal.x) > 0.01f || std::abs(waterShaderProp->plane.normal.y) > 0.01f || std::abs(waterShaderProp->plane.normal.z - 1.0f) > 0.01f;
 		const bool planeConstantBad = std::abs(waterShaderProp->plane.constant - waterHeight) > 1.0f;
 		if (planeNonFinite || planeNormalBad || planeConstantBad) {
 			waterShaderProp->plane.normal = { 0.0f, 0.0f, 1.0f };
