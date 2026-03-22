@@ -466,10 +466,10 @@ void Streamline::SetDLSSDOptions(sl::ViewportHandle p_viewport, uint32_t width)
 	std::optional<sl::DLSSDPreset> customPreset;
 	switch (globals::features::upscaling.settings.presetDLSSRR) {
 	case 1:
-		customPreset = sl::DLSSDPreset::ePresetE;
+		customPreset = sl::DLSSDPreset::ePresetD;
 		break;
 	case 2:
-		customPreset = sl::DLSSDPreset::ePresetD;
+		customPreset = sl::DLSSDPreset::ePresetE;
 		break;
 	}
 
