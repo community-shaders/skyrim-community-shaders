@@ -225,17 +225,15 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		// We sample depth twice per pixel per sample, and interpolate with an edge detect filter
 		// Interpolation should only occur on the minor axis of the ray - major axis coordinates should be at pixel centers
 		half2 read_xy = floor(pixel_xy);
-
-		read_xy *= inParameters.DynamicRes;
-
-#if defined(VR)
-		read_xy *= half2(0.5, 1.0);
-#endif
+		// VR fix: do NOT pre-scale read_xy here. DynamicRes and VR 0.5x must be
+		// applied AFTER offset_xy addition so the bilinear neighbor is exactly
+		// 1 texel away. Pre-scaling causes the offset to sample ~3px away,
+		// breaking edge detection and causing shadow instability on camera movement.
+		// See: docs/development/Old code/bend_sss_gpu.hlsli for the correct ordering.
 
 		half minor_axis = x_axis_major ? pixel_xy.y : pixel_xy.x;
 
-		// If a pixel has been detected as an edge, then optionally (inParameters.IgnoreEdgePixels) don't include it in the shadow
-		const half edge_skip = 1e20;  // if edge skipping is enabled, apply an extreme value/blend on edge samples to push the value out of range
+		const half edge_skip = 1e20;
 
 		half2 depths;
 		half bilinear = frac(minor_axis) - 0.5;
@@ -247,34 +245,47 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		half bias = bilinear > 0 ? 1 : -1;
 		half2 offset_xy = half2(x_axis_major ? 0 : bias, x_axis_major ? bias : 0);
 
-		// HLSL enforces that a pixel offset is a compile-time constant, which isn't strictly required (and can sometimes be a bit faster)
-		// So this fallback will use a manual uv offset instead
-		half2 coord = read_xy * inParameters.InvDepthTextureSize;
-		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize;
+		// VR fix: scale by DynamicRes AFTER offset_xy is incorporated, so the
+		// offset represents exactly 1 texel in the final UV space.
+		half2 coord = read_xy * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
+		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
 
 #if defined(VR)
+		// VR side-by-side: halve x to map stereo pixel coords to texture UV
+		coord *= half2(0.5, 1.0);
+		coord_with_offset *= half2(0.5, 1.0);
+
 #	if defined(RIGHT)
-		// Right eye: valid UV range is [0.5, 1.0]
+		// Right eye: valid UV range is [0.5*DynRes.x, DynRes.x]
 		bool coord_out_of_eye = coord.x < 0.5 * inParameters.DynamicRes.x;
 		bool coord_offset_out_of_eye = coord_with_offset.x < 0.5 * inParameters.DynamicRes.x;
 #	else
-		// Left eye: valid UV range is [0.0, 0.5)
+		// Left eye: valid UV range is [0.0, 0.5*DynRes.x)
 		bool coord_out_of_eye = coord.x >= 0.5 * inParameters.DynamicRes.x;
 		bool coord_offset_out_of_eye = coord_with_offset.x >= 0.5 * inParameters.DynamicRes.x;
 #	endif
 
+		// Clamp cross-eye depth reads to FarDepthValue (1.0) so rays near the SBS
+		// center seam don't sample the other eye's depth. At distance, stereo parallax
+		// makes cross-eye depth noticeably different, causing shadow patterns to shift
+		// with camera movement. Clamping to 1.0 means the ray sees “no occluder” at
+		// the boundary — shadow weakens by ~1 pixel but stays temporally stable.
+		// The WRITE guard is intentionally removed (see below GroupMemoryBarrier section)
+		// so both dispatches write to the seam overlap, preventing a visible gap/line.
 		depths.x = coord_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
 		depths.y = coord_offset_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0);
 
-		depths.x = lerp(depths.x, 1.0, (float)(depths.x == 0));  // Stencil area
-		depths.y = lerp(depths.y, 1.0, (float)(depths.y == 0));  // Stencil area
+		// VR HMD mask: depth==0 is outside the visible lens area. Remap to
+		// FarDepthValue (1.0) so mask pixels don't cast false shadows.
+		depths.x = lerp(depths.x, 1.0, (float)(depths.x == 0));
+		depths.y = lerp(depths.y, 1.0, (float)(depths.y == 0));
 #else
 		depths.x = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
 		depths.y = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0);
 #endif
 
 		// Depth thresholds (bilinear/shadow thickness) are based on a fractional ratio of the difference between sampled depth and the far clip depth
-		depth_thickness_scale[i] = abs(inParameters.FarDepthValue - depths.x);
+		depth_thickness_scale[i] = max(abs(inParameters.FarDepthValue - depths.x), 1e-4);
 
 		// If depth variance is more than a specific threshold, then just use point filtering
 		bool use_point_filter = abs(depths.x - depths.y) > depth_thickness_scale[i] * inParameters.BilinearThreshold;
@@ -321,18 +332,6 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	// Sync wavefronts now groupshared DepthData is written
 	GroupMemoryBarrierWithGroupSync();
 
-#if defined(VR)
-	// Check if the pixel we're writing to is on the correct eye side
-	half writeX = write_xy.x * inParameters.InvDepthTextureSize.x;
-
-#	if defined(RIGHT)
-	if (writeX < 0.0)
-		return;
-#	else
-	if (writeX > 1.0)
-		return;
-#	endif
-#endif
 
 	half start_depth = sampling_depth[0];
 
@@ -381,5 +380,6 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 	// Asking the GPU to write scattered single-byte pixels isn't great,
 	// But thankfully the latency is hidden by all the work we're doing...
+
 	inParameters.OutputTexture[(int2)write_xy] = result;
 }
