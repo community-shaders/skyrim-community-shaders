@@ -260,8 +260,8 @@ void ScreenSpaceShadows::DrawShadows()
 		auto lightProjectionRightF = CalculateLightProjection(1);
 
 		bool useStereoOpt = REL::Module::IsVR() &&
-			globals::features::vrStereoOptimizations.loaded &&
-			globals::features::vrStereoOptimizations.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
+		                    globals::features::vrStereoOptimizations.loaded &&
+		                    globals::features::vrStereoOptimizations.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
 
 		if (useStereoOpt) {
 			// Reduced sample count for right eye — StereoBlend overwrites most of it
@@ -448,5 +448,4 @@ void ScreenSpaceShadows::SetupResources()
 			stereoSyncCopyTex->CreateSRV(srvDesc);
 		}
 	}
-
 }

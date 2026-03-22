@@ -886,8 +886,8 @@ void ScreenSpaceGI::DrawSSGI()
 	// VR stereo sync: bilateral blend of SSGI buffers between eyes
 	// Shi, Billeter, Eisemann 2022, "Stereo-consistent screen-space ambient occlusion"
 	bool useStereoOpt = REL::Module::IsVR() &&
-		globals::features::vrStereoOptimizations.loaded &&
-		globals::features::vrStereoOptimizations.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
+	                    globals::features::vrStereoOptimizations.loaded &&
+	                    globals::features::vrStereoOptimizations.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
 
 	if (REL::Module::IsVR() && stereoSyncCompute && !useStereoOpt) {
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Stereo Sync");
