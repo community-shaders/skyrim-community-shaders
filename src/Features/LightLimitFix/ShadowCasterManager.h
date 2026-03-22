@@ -62,6 +62,16 @@ namespace ShadowCasterManager
 
 		bool Parse(const std::string& input);
 		double Calculate();
+
+		/// Re-parse with a new expression, replacing any previously compiled formula.
+		/// Returns true on success. On failure the old formula remains active.
+		bool Reparse(const std::string& input);
+
+		/// Compile `input` into a temporary expression and return true if it succeeds.
+		/// On failure, `errorOut` receives the first parser error message.
+		/// Does NOT affect the active formula.
+		static bool Validate(const std::string& input, std::string& errorOut);
+
 		static void SetParam(int32_t index, double value);
 		static double GetParam(int32_t index);
 
@@ -75,40 +85,28 @@ namespace ShadowCasterManager
 	// -------------------------------------------------------------------------
 	struct Settings
 	{
-		// --- Phase 1: extended shadow slots ---
-
-		/// Number of simultaneous shadow-casting point/spot lights.
-		/// 0 = disabled (vanilla 4-light limit applies).
-		/// 4 = default vanilla behaviour with selection intelligence.
-		/// 5-32 = extended mode; depth buffer array is expanded beyond game's 8-slot limit
+		/// Number of simultaneous shadow-casting point/spot lights (NOT counting the directional sun).
+		/// 0 = scheduler active but selects no point lights (sun/directional unaffected).
+		/// 4 = vanilla point light count with intelligent selection replacing the game's default.
+		/// 5-64 = extended mode; depth buffer array is expanded beyond game's 8-slot limit
 		///   when this exceeds 8.
-		int32_t ShadowLightCount = 4;
+		int32_t ShadowLightCount = 16;
 
 		/// Number of additional converted-light slots (lights treated as normal lights
-		/// for geometry but tracked alongside shadow casters).  Used in Phase 4.
-		int32_t ConvertedShadowSlots = 0;
-
-		// --- Phase 2: shadow caster selection ---
-
-		/// Force portalStrict on all shadow lights so they obey portal culling.
-		bool ForcePortalStrict = true;
+		/// for geometry but tracked alongside shadow casters when ConvertDistantToNormal is enabled).
+		int32_t ConvertedShadowSlots = 32;
 
 		/// Allow a newly-chosen light to draw even if it was not chosen last frame.
 		bool AllowDrawNewLight = true;
 
-		// --- Phase 3: temporal shadow updates & budget ---
-
 		/// Hard cap on how many lights may re-render their shadow maps in one frame.
-		int32_t MaxRedrawPerFrame = 4;
+		int32_t MaxRedrawPerFrame = 16;
 
 		/// Per-frame time budget for shadow re-renders (milliseconds).
 		/// Lights whose estimated GPU cost would exceed this are deferred to a later frame.
 		/// Default varies by scene type; the formula "1 + isinterior" gives 1 ms exterior,
-		/// 2 ms interior.  A framerate-proportional formula ("frametime * 0.15") is recommended
-		/// for adaptive quality.
+		/// 2 ms interior.
 		float RedrawBudgetMs = 2.0f;
-
-		// --- Phase 4: light conversion ---
 
 		/// Convert shadow lights that fail portal/culling tests to normal (non-shadow) lights
 		/// so they still contribute diffuse lighting without a shadow-map cost.
@@ -118,12 +116,6 @@ namespace ShadowCasterManager
 		/// Disabled by default; experimental.
 		bool PromoteNormalToShadow = false;
 
-		/// Maximum shadow→normal conversions per frame.
-		int32_t MaxConvertCount = 32;
-
-		/// Maximum normal→shadow promotions per frame.
-		int32_t MaxConvertCountShadow = 4;
-
 		// --- Formula strings (exprtk expressions) ---
 
 		/// Light priority scoring formula.  Available variables:
@@ -131,14 +123,6 @@ namespace ShadowCasterManager
 		/// lightr/g/b, lightambientr/g/b, lightchosenlastframe, lightneverfades,
 		/// lightportalstrict, lightns, lightconverted, camerax/y/z, isinterior, timeofday
 		std::string ScoreFormula = "lightradius * lightintensity / (1 + ((1 - lightneverfades) * lightdistance) / 1000) * (1 + lightchosenlastframe * 0.3)";
-
-		/// If non-empty, evaluated per-light to decide if shadow→normal conversion is allowed.
-		/// Return >= 0.5 to allow.
-		std::string AllowConvertFormula;
-
-		/// If non-empty, evaluated per-light for promoted (isNS) lights to decide
-		/// if normal→shadow conversion is allowed. Return >= 0.5 to allow.
-		std::string AllowConvertShadowFormula;
 
 		/// Redraw interval formula (per light).  Higher = less frequent redraws.
 		std::string RedrawIntervalFormula = "min(10, (max(0, lightdistance - lightradius * 0.5) / 500) / max(0.5, lightintensity)) * (lightconverted * 5 + 1)";
@@ -229,6 +213,9 @@ namespace ShadowCasterManager
 		/// Returns estimated render cost (µs) for a light.
 		/// Falls back to the mean of all tracked lights for unseen lights.
 		int32_t GetCost(RE::BSShadowLight* light) const;
+
+		/// Returns the mean GPU cost (µs) averaged over all currently tracked lights.
+		int32_t GetAverageCostUs() const;
 
 	private:
 		int32_t _counter{ 0 };

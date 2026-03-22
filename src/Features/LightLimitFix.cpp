@@ -12,17 +12,12 @@ namespace ShadowCasterManager
 		Settings,
 		ShadowLightCount,
 		ConvertedShadowSlots,
-		ForcePortalStrict,
 		AllowDrawNewLight,
 		MaxRedrawPerFrame,
 		RedrawBudgetMs,
 		ConvertDistantToNormal,
 		PromoteNormalToShadow,
-		MaxConvertCount,
-		MaxConvertCountShadow,
 		ScoreFormula,
-		AllowConvertFormula,
-		AllowConvertShadowFormula,
 		RedrawIntervalFormula,
 		RedrawBudgetFormula)
 }
@@ -245,9 +240,17 @@ void LightLimitFix::DrawOverlay()
 				ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
 	}
 
-	if (vizOn)
-		ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "LLF DEBUG - Mode %u", settings.LightsVisualisationMode);
-	else
+	if (vizOn) {
+		static const char* kVizNames[] = {
+			"Light Limit", "Strict Lights Count", "Clustered Lights Count",
+			"Shadow Mask", "Shadow Light Count", "Point Light Shadow Factor",
+			"Unshadowed Point Lights", "Shadow Caster Density",
+			"Shadow Slot Index Color", "Light Type Visualization"
+		};
+		uint32_t m = settings.LightsVisualisationMode;
+		const char* vizName = (m < IM_ARRAYSIZE(kVizNames)) ? kVizNames[m] : "Unknown";
+		ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "LLF DEBUG - %s", vizName);
+	} else
 		ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "LLF - Shadow Suppression");
 	ImGui::Separator();
 
