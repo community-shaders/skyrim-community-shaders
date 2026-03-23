@@ -1288,7 +1288,7 @@ namespace ShadowCasterManager
 	}
 
 	// =========================================================================
-	// Main shadow caster scheduler
+	// Main shadow caster manager
 	//
 	// Replaces the game's CalculateActiveShadowCasterLights entirely.
 	// Runs via stl::detour_thunk; obtains all inputs from game globals.
@@ -1930,6 +1930,11 @@ namespace ShadowCasterManager
 		s_settings = settings;
 		s_installedShadowLightCount = settings.ShadowLightCount;
 
+		if (!settings.Enabled) {
+			logger::info("[SCM] Shadow caster manager disabled — skipping hook installation.");
+			return;
+		}
+
 		bool extended = settings.ShadowLightCount > 4;
 		bool needExtraBuffers = settings.ShadowLightCount > 8;
 
@@ -2481,7 +2486,26 @@ namespace ShadowCasterManager
 
 	void DrawSettings(Settings& settings)
 	{
-		ImGui::SeparatorText("Shadow Caster Scheduling");
+		ImGui::SeparatorText("More Shadow Casters");
+
+		// ---- Enable toggle (requires restart) ------------------------------
+		ImGui::Checkbox("Enable More Shadow Casters", &settings.Enabled);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip(
+				"Extends Skyrim's hard limit of 4 simultaneous shadow-casting lights.\n"
+				"Intelligently selects which lights cast shadows each frame based on\n"
+				"distance, intensity, and a configurable priority formula.\n\n"
+				"Based on Intellightent by meh321.\n"
+				"https://www.nexusmods.com/skyrimspecialedition/mods/172423\n\n"
+				"Requires a game restart to take effect.");
+		if (settings.Enabled != s_settings.Enabled) {
+			const auto& theme = Menu::GetSingleton()->GetTheme();
+			ImGui::TextColored(theme.StatusPalette.RestartNeeded,
+				"Restart required — currently %s.", s_settings.Enabled ? "enabled" : "disabled");
+		}
+
+		if (!settings.Enabled)
+			ImGui::BeginDisabled();
 
 		// ---- Shadow Light Count (requires restart) -------------------------
 		ImGui::SliderInt("Shadow Light Count", &settings.ShadowLightCount, 0, 64);
@@ -2663,5 +2687,8 @@ namespace ShadowCasterManager
 
 			ImGui::TreePop();
 		}
+
+		if (!settings.Enabled)
+			ImGui::EndDisabled();
 	}
 }

@@ -85,6 +85,9 @@ namespace ShadowCasterManager
 	// -------------------------------------------------------------------------
 	struct Settings
 	{
+		/// Enable the shadow caster scheduler entirely.  Requires a game restart to take effect.
+		bool Enabled = true;
+
 		/// Number of simultaneous shadow-casting point/spot lights (NOT counting the directional sun).
 		/// 0 = scheduler active but selects no point lights (sun/directional unaffected).
 		/// 4 = vanilla point light count with intelligent selection replacing the game's default.
