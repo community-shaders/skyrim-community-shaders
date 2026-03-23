@@ -17,7 +17,7 @@ namespace ShadowCasterManager
 		AllowDrawNewLight,
 		MaxRedrawPerFrame,
 		RedrawBudgetMs,
-		ConvertDistantToNormal,
+		ConvertExcessToNormal,
 		PromoteNormalToShadow,
 		ScoreFormula,
 		RedrawIntervalFormula,

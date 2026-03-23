@@ -96,7 +96,7 @@ namespace ShadowCasterManager
 		int32_t ShadowLightCount = 16;
 
 		/// Number of additional converted-light slots (lights treated as normal lights
-		/// for geometry but tracked alongside shadow casters when ConvertDistantToNormal is enabled).
+		/// for geometry but tracked alongside shadow casters when ConvertExcessToNormal is enabled).
 		int32_t ConvertedShadowSlots = 32;
 
 		/// Allow a newly-chosen light to draw even if it was not chosen last frame.
@@ -111,9 +111,9 @@ namespace ShadowCasterManager
 		/// 2 ms interior.
 		float RedrawBudgetMs = 2.0f;
 
-		/// Convert shadow lights that fail portal/culling tests to normal (non-shadow) lights
+		/// Demote shadow lights that exceed the active caster limit to normal (non-shadow) lights
 		/// so they still contribute diffuse lighting without a shadow-map cost.
-		bool ConvertDistantToNormal = true;
+		bool ConvertExcessToNormal = true;
 
 		/// Promote normal (non-shadow) lights to shadow casters when there is budget.
 		/// Disabled by default; experimental.
