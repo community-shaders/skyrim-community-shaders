@@ -2537,10 +2537,10 @@ namespace ShadowCasterManager
 
 	void DrawSettings(Settings& settings)
 	{
-		ImGui::SeparatorText("More Shadow Casters");
+		ImGui::SeparatorText("Shadow Limit Fix");
 
 		// ---- Enable toggle (requires restart) ------------------------------
-		ImGui::Checkbox("Enable More Shadow Casters", &settings.Enabled);
+		ImGui::Checkbox("Enable Shadow Limit Fix", &settings.Enabled);
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(
 				"Extends Skyrim's hard limit of 4 simultaneous shadow-casting lights.\n"
@@ -2708,7 +2708,7 @@ namespace ShadowCasterManager
 		}
 
 		// ---- Active shadow casters table --------------------------------
-		ImGui::SeparatorText("Active Shadow Casters");
+		ImGui::SeparatorText("Shadow Limit Fix — Active Casters");
 		DrawShadowLightTable(true, false);
 
 		// ---- Statistics panel --------------------------------------------
