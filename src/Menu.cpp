@@ -1050,15 +1050,15 @@ void Menu::ProcessInputEventQueue()
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
 						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
 						{ settings.WeatherEditorToggleKey, []() {
-							auto* ew = EditorWindow::GetSingleton();
-							if (ew->IsInPreviewMode()) {
-								ew->ExitPreviewMode();
-							} else {
-								auto p = RE::PlayerCharacter::GetSingleton();
-								if (p && p->parentCell)
-									ew->open = !ew->open;
-							}
-						} },
+							 auto* ew = EditorWindow::GetSingleton();
+							 if (ew->IsInPreviewMode()) {
+								 ew->ExitPreviewMode();
+							 } else {
+								 auto p = RE::PlayerCharacter::GetSingleton();
+								 if (p && p->parentCell)
+									 ew->open = !ew->open;
+							 }
+						 } },
 					};
 					for (const auto& ka : keyActions) {
 						// Check if key matches last key in combo and all modifiers are held (exact match)
