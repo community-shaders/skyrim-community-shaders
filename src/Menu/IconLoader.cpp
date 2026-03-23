@@ -196,19 +196,17 @@ namespace Util::IconLoader
 
 		auto iconDefs = GetIconDefinitions(menu);
 
-		for (auto* texturePtr : { &menu->uiIcons.saveSettings.texture, &menu->uiIcons.loadSettings.texture,
-				 &menu->uiIcons.clearCache.texture, &menu->uiIcons.deleteSettings.texture, &menu->uiIcons.logo.texture,
-				 &menu->uiIcons.featureSettingRevert.texture, &menu->uiIcons.applyToGame.texture, &menu->uiIcons.pauseTime.texture,
-				 &menu->uiIcons.undo.texture, &menu->uiIcons.search.texture, &menu->uiIcons.discord.texture,
-				 &menu->uiIcons.characters.texture, &menu->uiIcons.display.texture,
-				 &menu->uiIcons.grass.texture, &menu->uiIcons.lighting.texture,
-				 &menu->uiIcons.sky.texture, &menu->uiIcons.landscape.texture,
-				 &menu->uiIcons.water.texture, &menu->uiIcons.debug.texture,
-				 &menu->uiIcons.materials.texture, &menu->uiIcons.postProcessing.texture }) {
-			if (*texturePtr) {
-				(*texturePtr)->Release();
-				*texturePtr = nullptr;
+		// Release all existing textures using the same definitions list (avoids stale hardcoded list)
+		for (const auto& iconDef : iconDefs) {
+			if (*iconDef.texture) {
+				(*iconDef.texture)->Release();
+				*iconDef.texture = nullptr;
 			}
+		}
+		// Also release search icon (not in iconDefs)
+		if (menu->uiIcons.search.texture) {
+			menu->uiIcons.search.texture->Release();
+			menu->uiIcons.search.texture = nullptr;
 		}
 
 		bool anyIconLoaded = false;

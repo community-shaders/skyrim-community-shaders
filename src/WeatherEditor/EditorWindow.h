@@ -27,9 +27,10 @@ public:
 	// Preview modes for exploring the scene without the full editor UI
 	enum class PreviewMode
 	{
-		None,        // Full editor UI visible
-		FreeCamera,  // Free camera (tfc) with scroll-wheel speed control
-		PlayMode     // Normal gameplay, no scroll interception
+		None,              // Full editor UI visible
+		FreeCamera,        // Flying free camera (tfc), input to game
+		FreeCameraLocked,  // Camera locked in place, editor interactive
+		PlayMode           // Normal gameplay, no scroll interception
 	};
 
 	bool open = false;
@@ -86,6 +87,9 @@ public:
 	void EnterPreviewMode(PreviewMode mode);
 	void ExitPreviewMode();
 	bool IsInPreviewMode() const { return previewMode != PreviewMode::None; }
+	bool IsPreviewFlying() const { return previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::PlayMode; }
+	PreviewMode GetPreviewMode() const { return previewMode; }
+	void ToggleFreeCameraLock();
 	void AdjustFlySpeed(float scrollDelta);
 
 	// Vanity camera control

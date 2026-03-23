@@ -1175,6 +1175,8 @@ void EditorWindow::RenderUI()
 			std::string hotkey = Util::Input::KeyIdToString(menu->GetSettings().WeatherEditorToggleKey);
 			if (previewMode == PreviewMode::FreeCamera)
 				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] FREE CAMERA (Speed: %.0f)", hotkey.c_str(), flySpeed);
+			else if (previewMode == PreviewMode::FreeCameraLocked)
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] FREE CAMERA LOCKED", hotkey.c_str());
 			else
 				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] PLAY MODE", hotkey.c_str());
 			rightCursor -= itemSpacing + ImGui::CalcTextSize(previewStatusBuf).x;
@@ -1249,7 +1251,7 @@ void EditorWindow::RenderUI()
 
 		// Preview mode buttons
 		if (hasFreeCam) {
-			bool isActive = previewMode == PreviewMode::FreeCamera;
+			bool isActive = previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked;
 			if (DrawToggleIconButton("##FreeCamera", menu->uiIcons.freeCamera.texture, isActive, freeCameraX))
 				EnterPreviewMode(PreviewMode::FreeCamera);
 			if (ImGui::IsItemHovered())
@@ -1942,9 +1944,14 @@ void EditorWindow::EnterPreviewMode(PreviewMode mode)
 	if (mode == PreviewMode::None)
 		return;
 
-	// Toggle off if already in the requested mode
-	if (previewMode == mode) {
-		ExitPreviewMode();
+	// Already in free camera flying — ignore duplicate click
+	if (mode == previewMode)
+		return;
+
+	// Re-enter flying from locked state via button click
+	if (mode == PreviewMode::FreeCamera && previewMode == PreviewMode::FreeCameraLocked) {
+		previewMode = PreviewMode::FreeCamera;
+		logger::info("Free camera unlocked (re-entered flying)");
 		return;
 	}
 
@@ -1966,15 +1973,33 @@ void EditorWindow::EnterPreviewMode(PreviewMode mode)
 
 void EditorWindow::ExitPreviewMode()
 {
-	if (previewMode == PreviewMode::FreeCamera)
+	bool wasFlying = IsPreviewFlying();
+
+	if (previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked)
 		RE::Console::ExecuteCommand("tfc");
 
 	logger::info("Exited preview mode");
 	previewMode = PreviewMode::None;
 
-	// Restore cursor to where it was before entering preview
-	ImGui::GetIO().MousePos = savedMousePos;
-	ImGui::GetIO().WantSetMousePos = true;
+	// Only restore cursor if exiting from a flying state; FreeCameraLocked already has the cursor active
+	if (wasFlying) {
+		ImGui::GetIO().MousePos = savedMousePos;
+		ImGui::GetIO().WantSetMousePos = true;
+	}
+}
+
+void EditorWindow::ToggleFreeCameraLock()
+{
+	if (previewMode == PreviewMode::FreeCamera) {
+		previewMode = PreviewMode::FreeCameraLocked;
+		ImGui::GetIO().MousePos = savedMousePos;
+		ImGui::GetIO().WantSetMousePos = true;
+		logger::info("Free camera locked");
+	} else if (previewMode == PreviewMode::FreeCameraLocked) {
+		savedMousePos = ImGui::GetIO().MousePos;
+		previewMode = PreviewMode::FreeCamera;
+		logger::info("Free camera unlocked");
+	}
 }
 
 void EditorWindow::AdjustFlySpeed(float scrollDelta)

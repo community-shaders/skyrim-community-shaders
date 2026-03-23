@@ -391,6 +391,11 @@ struct BSInputDeviceManager_PollInputDevices
 		}
 
 		if (blockedDevice && menu->ShouldSwallowInput()) {  //the menu is open, eat all keypresses
+			// During active flying preview, let input reach the game for movement/camera
+			if (menu->IsPreviewFlying()) {
+				func(a_dispatcher, a_events);
+				return;
+			}
 			constexpr RE::InputEvent* const dummy[] = { nullptr };
 			func(a_dispatcher, dummy);
 			return;

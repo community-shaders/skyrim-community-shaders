@@ -129,6 +129,7 @@ public:
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
+	bool IsPreviewFlying();
 	std::string BuildFontSignature(float baseFontSize) const;
 
 public:

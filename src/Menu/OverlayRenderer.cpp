@@ -62,11 +62,11 @@ void OverlayRenderer::RenderOverlay(
 			editorWindow->ExitPreviewMode();
 	}
 	if (editorWindow->open) {
-		bool inPreview = editorWindow->IsInPreviewMode();
+		bool flying = editorWindow->IsPreviewFlying();
 		auto& io = ImGui::GetIO();
-		io.MouseDrawCursor = !inPreview;
-		if (inPreview)
-			io.MousePos = { -FLT_MAX, -FLT_MAX };  // prevent hover/tooltips during preview
+		io.MouseDrawCursor = !flying;
+		if (flying)
+			io.MousePos = { -FLT_MAX, -FLT_MAX };  // prevent hover/tooltips during active flying
 		editorWindow->Draw();
 	} else if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		ImGui::GetIO().MouseDrawCursor = true;

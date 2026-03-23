@@ -950,14 +950,14 @@ void Menu::ProcessInputEventQueue()
 		if (event.device == RE::INPUT_DEVICE::kMouse) {
 			logger::trace("Detect mouse scan code {} value {} pressed: {}", event.keyCode, event.value, event.IsPressed());
 			auto* ew = EditorWindow::GetSingleton();
-			bool inPreview = ew && ew->IsInPreviewMode();
+			bool flying = ew && ew->IsPreviewFlying();
 			if (event.keyCode > 7) {  // middle scroll
 				if (ew && ew->previewMode == EditorWindow::PreviewMode::FreeCamera) {
 					ew->AdjustFlySpeed(event.keyCode == 8 ? 1.0f : -1.0f);
 				} else {
 					io.AddMouseWheelEvent(0, event.value * (event.keyCode == 8 ? 1 : -1));
 				}
-			} else if (!inPreview) {
+			} else if (!flying) {
 				if (event.keyCode > 5)
 					event.keyCode = 5;
 				io.AddMouseButtonEvent(event.keyCode, event.IsPressed());
@@ -1051,7 +1051,11 @@ void Menu::ProcessInputEventQueue()
 						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
 						{ settings.WeatherEditorToggleKey, []() {
 							 auto* ew = EditorWindow::GetSingleton();
-							 if (ew->IsInPreviewMode()) {
+							 if (ew->GetPreviewMode() == EditorWindow::PreviewMode::FreeCamera) {
+								 // Flying → lock camera position for editing
+								 ew->ToggleFreeCameraLock();
+							 } else if (ew->IsInPreviewMode()) {
+								 // Locked or PlayMode → fully exit preview
 								 ew->ExitPreviewMode();
 							 } else {
 								 auto p = RE::PlayerCharacter::GetSingleton();
@@ -1168,9 +1172,13 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 bool Menu::ShouldSwallowInput()
 {
 	auto editorWindow = EditorWindow::GetSingleton();
-	if (editorWindow && editorWindow->IsInPreviewMode())
-		return false;  // let game handle movement/camera input during preview
 	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup() || (editorWindow && editorWindow->open);
+}
+
+bool Menu::IsPreviewFlying()
+{
+	auto editorWindow = EditorWindow::GetSingleton();
+	return editorWindow && editorWindow->IsPreviewFlying();
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)
