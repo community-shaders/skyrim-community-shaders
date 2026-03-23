@@ -108,6 +108,24 @@ inline bool BeginScrollableContent(const char* id = "##ScrollContent") { return 
 inline void EndScrollableContent() { ImGui::EndChild(); }
 
 // ============================================================================
+// Widget Window Defaults - DPI-aware sizing for all editor widget windows
+// ============================================================================
+
+namespace WidgetDefaults
+{
+	constexpr float kMinWidth = 200.0f;
+	constexpr float kMinHeight = 150.0f;
+	constexpr float kInitialWidth = 580.0f;
+	constexpr float kInitialHeight = 580.0f;
+	constexpr float kSliderWidthRatio = 0.6f;  ///< Fraction of available width for slider/input controls
+	constexpr float kTODLabelWidth = 150.0f;   ///< Default label column width for time-of-day tables
+}
+
+/// Apply standard DPI-scaled size constraints and initial size for widget windows. Call before ImGui::Begin().
+/// Respects EditorWindow::resetLayout to re-apply defaults on demand.
+void SetupWidgetWindowDefaults();
+
+// ============================================================================
 // PropertyDrawer - Unified table-based property drawing with search support
 // ============================================================================
 namespace PropertyDrawer
@@ -118,6 +136,9 @@ namespace PropertyDrawer
 
 	// Draw a table separator row
 	void DrawSeparator();
+
+	// Draw a vertically-centered label in the first table column. Call between TableNextRow and drawing the value.
+	void DrawLabel(const char* label);
 
 	// Draw properties with optional search filtering.
 	// searchBuffer can be nullptr to skip search filtering.
