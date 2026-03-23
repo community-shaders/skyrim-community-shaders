@@ -14,7 +14,7 @@ public:
 	virtual inline std::string GetShortName() override { return "LightLimitFix"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "LIGHT_LIMIT_FIX"; }
-	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
+	virtual std::string_view GetCategory() const override { return "Lighting"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -78,14 +78,6 @@ public:
 		uint pad0[2];
 	};
 	STATIC_ASSERT_ALIGNAS_16(LightGrid);
-
-	/// Per-slot debug metadata recorded during CopyPointShadowData.
-	struct ShadowSlotInfo
-	{
-		uint32_t type = 0;    ///< Shadow type: 0=spot/frustum, 1=hemisphere, 2=omnidirectional
-		float radius = 0.0f;  ///< Light radius (world units)
-		bool valid = false;   ///< true when this slot was written this frame
-	};
 
 	struct alignas(16) LightBuildingCB
 	{
@@ -172,16 +164,7 @@ public:
 
 	// Per-frame shadow accounting (displayed in DrawSettings Statistics tree).
 	uint32_t shadowLightCount = 0;            // distinct lights processed (including dropped)
-	uint32_t shadowSlotUsage = 0;             // texture-array slots consumed by successful lights
 	uint32_t shadowUnshadowedLightCount = 0;  // lights that exceeded slot capacity
-
-	/// Per-slot metadata rebuilt every frame in CopyPointShadowData.
-	/// Indexed by shadow-map texture-array slot.  Used for visualization mode 8 legend.
-	std::vector<ShadowSlotInfo> shadowSlotInfos;
-
-	/// Slots in this set have their ShadowParam.y zeroed so the shader returns 1.0
-	/// (fully lit / no shadow) for that caster.  Toggled from the debug overlay.
-	std::unordered_set<uint32_t> suppressedSlots;
 
 	ID3D11SamplerState* shadowCmpSampler = nullptr;  // PCF comparison sampler (s14)
 
@@ -197,7 +180,7 @@ public:
 
 	virtual void DrawSettings() override;
 	virtual void DrawOverlay() override;
-	virtual bool IsOverlayVisible() const override { return settings.EnableLightsVisualisation || !suppressedSlots.empty(); }
+	virtual bool IsOverlayVisible() const override { return settings.EnableLightsVisualisation; }
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;

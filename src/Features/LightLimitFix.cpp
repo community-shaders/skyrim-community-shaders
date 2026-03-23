@@ -1,6 +1,7 @@
 #include "LightLimitFix.h"
 #include "InverseSquareLighting.h"
 #include "LinearLighting.h"
+#include "Utils/UI.h"
 
 #include "Deferred.h"
 #include "Shadercache.h"
@@ -34,21 +35,6 @@ static constexpr uint MAX_LIGHTS = 1024;
 
 // --- Debug visualization helpers (used in DrawSettings and DrawOverlay) ---
 
-// Computes the golden-ratio hue color for a shadow-map slot, matching mode 8 shader logic.
-static ImVec4 ShadowSlotHueColor(uint32_t slotIdx)
-{
-	auto chan = [](float h, float shift) {
-		float v = fmodf(h + shift, 1.0f);
-		if (v < 0.0f)
-			v += 1.0f;
-		return std::clamp(fabsf(v * 6.0f - 3.0f) - 1.0f, 0.0f, 1.0f);
-	};
-	float hue = fmodf(float(slotIdx) * 0.618033988f, 1.0f);
-	return ImVec4(chan(hue, 0.0f), chan(hue, 2.0f / 3.0f), chan(hue, 1.0f / 3.0f), 1.0f);
-}
-
-static constexpr const char* kShadowTypeNames[] = { "Spot", "Hemisphere", "Omni" };
-
 void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
@@ -62,9 +48,9 @@ void LightLimitFix::DrawSettings()
 
 		uint32_t shadowSlots = deferred->shadowMapSlots;
 		if (shadowUnshadowedLightCount > 0)
-			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u lights, %u / %u slots (%u dropped)", shadowLightCount, shadowSlotUsage, shadowSlots, shadowUnshadowedLightCount);
+			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u lights, %u / %u slots (%u dropped)", shadowLightCount, ShadowCasterManager::GetSlotUsage(), shadowSlots, shadowUnshadowedLightCount);
 		else
-			ImGui::Text("Shadow Lights    : %u lights, %u / %u slots", shadowLightCount, shadowSlotUsage, shadowSlots);
+			ImGui::Text("Shadow Lights    : %u lights, %u / %u slots", shadowLightCount, ShadowCasterManager::GetSlotUsage(), shadowSlots);
 
 		ImGui::TreePop();
 	}
@@ -156,52 +142,6 @@ void LightLimitFix::DrawSettings()
 					"Intensity scales with count (up to 4); channels blend for mixed-type pixels.");
 			}
 		}
-		// Shadow Slot Color Map — shows which slot owns which golden-ratio hue (matches mode 8).
-		if (settings.LightsVisualisationMode == 8 && ImGui::TreeNode("Shadow Slot Color Map")) {
-			uint32_t slots = static_cast<uint32_t>(shadowSlotInfos.size());
-			if (slots == 0) {
-				ImGui::TextDisabled("No shadow slots active this frame.");
-			} else {
-				if (ImGui::BeginTable("##SlotMapTable", 4,
-						ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY,
-						ImVec2(0, std::min(slots * 22.0f + 28.0f, 300.0f)))) {
-					ImGui::TableSetupColumn("Slot");
-					ImGui::TableSetupColumn("Color");
-					ImGui::TableSetupColumn("Type");
-					ImGui::TableSetupColumn("Radius");
-					ImGui::TableHeadersRow();
-
-					for (uint32_t i = 0; i < slots; ++i) {
-						const auto& info = shadowSlotInfos[i];
-						if (!info.valid)
-							continue;
-
-						ImGui::TableNextRow();
-						ImGui::TableSetColumnIndex(0);
-						ImGui::Text("%u", i);
-
-						ImGui::TableSetColumnIndex(1);
-						ImVec4 col = ShadowSlotHueColor(i);
-						// Show hex in tooltip for easy identification in RenderDoc markers.
-						auto ri = static_cast<uint8_t>(col.x * 255.0f);
-						auto gi = static_cast<uint8_t>(col.y * 255.0f);
-						auto bi = static_cast<uint8_t>(col.z * 255.0f);
-						ImGui::ColorButton("##c", col,
-							ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder, ImVec2(16, 16));
-						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip("#%02X%02X%02X", ri, gi, bi);
-
-						ImGui::TableSetColumnIndex(2);
-						ImGui::TextUnformatted(kShadowTypeNames[std::min(info.type, 2u)]);
-
-						ImGui::TableSetColumnIndex(3);
-						ImGui::Text("%.0f", info.radius);
-					}
-					ImGui::EndTable();
-				}
-			}
-			ImGui::TreePop();
-		}
 
 		currentEnableLightsVisualisation = settings.EnableLightsVisualisation;
 		if (previousEnableLightsVisualisation != currentEnableLightsVisualisation) {
@@ -219,7 +159,7 @@ void LightLimitFix::DrawOverlay()
 	// Overlay shows when visualization is active OR when slots are suppressed
 	// (so the suppression list stays visible without the debug visualizer running).
 	bool vizOn = settings.EnableLightsVisualisation;
-	bool hasSuppressed = !suppressedSlots.empty();
+	bool hasSuppressed = ShadowCasterManager::HasSuppressedLights();
 	if (!vizOn && !hasSuppressed)
 		return;
 
@@ -260,7 +200,7 @@ void LightLimitFix::DrawOverlay()
 	if (vizOn) {
 		if (mode <= 1) {
 			ImGui::Text("Clustered lights : %u / %u", lightCount, MAX_LIGHTS);
-			ImGui::Text("Shadow lights    : %u / %u slots", shadowSlotUsage, globals::deferred->shadowMapSlots);
+			ImGui::Text("Shadow lights    : %u / %u slots", ShadowCasterManager::GetSlotUsage(), globals::deferred->shadowMapSlots);
 			if (shadowUnshadowedLightCount > 0)
 				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Dropped (overflow): %u", shadowUnshadowedLightCount);
 		} else if (mode == 2) {
@@ -276,9 +216,9 @@ void LightLimitFix::DrawOverlay()
 			ImGui::Text("G channel  = directional detailed shadow");
 			ImGui::TextDisabled("(B = unused)");
 			ImGui::Spacing();
-			ImGui::Text("Shadow slots     : %u / %u", shadowSlotUsage, globals::deferred->shadowMapSlots);
+			ImGui::Text("Shadow slots     : %u / %u", ShadowCasterManager::GetSlotUsage(), globals::deferred->shadowMapSlots);
 		} else if (mode >= 4 && mode <= 6) {
-			ImGui::Text("Shadow lights    : %u valid,  %u dropped", shadowSlotUsage, shadowUnshadowedLightCount);
+			ImGui::Text("Shadow lights    : %u valid,  %u dropped", ShadowCasterManager::GetSlotUsage(), shadowUnshadowedLightCount);
 			ImGui::Text("Total clustered  : %u", lightCount);
 			if (mode == 4)
 				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red");
@@ -288,7 +228,7 @@ void LightLimitFix::DrawOverlay()
 				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red (lights without shadow maps)");
 		} else if (mode == 7) {
 			uint32_t slots = globals::deferred->shadowMapSlots;
-			ImGui::Text("Slots used / total : %u / %u", shadowSlotUsage, slots);
+			ImGui::Text("Slots used / total : %u / %u", ShadowCasterManager::GetSlotUsage(), slots);
 			if (shadowUnshadowedLightCount > 0)
 				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Overflow (red)     : %u lights", shadowUnshadowedLightCount);
 			ImGui::TextDisabled("Cool  Turbo[0.0-0.3] = 1-4 shadows");
@@ -296,7 +236,7 @@ void LightLimitFix::DrawOverlay()
 			ImGui::TextDisabled("Red                  = overflow");
 		} else if (mode == 9) {
 			uint32_t spotC = 0, hemiC = 0, omniC = 0;
-			for (auto& info : shadowSlotInfos) {
+			for (const auto& info : ShadowCasterManager::GetSlotInfos()) {
 				if (!info.valid)
 					continue;
 				if (info.type == 0)
@@ -315,145 +255,13 @@ void LightLimitFix::DrawOverlay()
 		}
 	}
 
-	// ── Shadow slot toggle table ─────────────────────────────────────────────
-	// Show the slot table when:
-	//   (a) any slots are suppressed — user needs to re-enable them, or
-	//   (b) the active mode is shadow-related (modes 4–9), where per-slot
-	//       identity is directly relevant to what is shown on screen.
-	// Modes 0–3 are general light-count visualizations; the slot table adds
-	// noise there unless the user has suppressed something.
+	// ── Shadow slot toggle table ─────────────────────────────────────
+	// Show when in a shadow-related viz mode, or when lights are suppressed.
 	bool shadowRelatedMode = !vizOn || (mode >= 4);
-	bool showSlotTable = hasSuppressed || shadowRelatedMode;
-
-	// Build a flat list of valid slots for sorting.
-	struct SlotRow
-	{
-		uint32_t idx;
-		ShadowSlotInfo info;
-	};
-	std::vector<SlotRow> rows;
-	if (showSlotTable) {
-		rows.reserve(shadowSlotInfos.size());
-		for (uint32_t i = 0; i < static_cast<uint32_t>(shadowSlotInfos.size()); ++i) {
-			if (shadowSlotInfos[i].valid)
-				rows.push_back({ i, shadowSlotInfos[i] });
-		}
-	}
-
-	if (showSlotTable) {
-		if (rows.empty() && !hasSuppressed) {
-			ImGui::TextDisabled("No shadow slots this frame.");
-		} else {
-			if (vizOn)
-				ImGui::Separator();
-
-			ImGui::Text("Shadow slots: %u active", shadowSlotUsage);
-			if (hasSuppressed) {
-				ImGui::SameLine();
-				ImGui::TextColored(ImVec4(1, 0.6f, 0.2f, 1), "  %zu suppressed", suppressedSlots.size());
-				ImGui::SameLine();
-				if (ImGui::SmallButton("Clear##sup"))
-					suppressedSlots.clear();
-			}
-
-			if (!rows.empty()) {
-				// Columns: Toggle | Slot | [Color — mode 8 only] | Type | Radius
-				// Column indices are computed once and shared by sorting and row rendering.
-				bool showColor = vizOn && (mode == 8);
-				int typeCol = showColor ? 3 : 2;
-				int radCol = showColor ? 4 : 3;
-				int numCols = showColor ? 5 : 4;
-
-				// Fill available height when resizable (menu open), cap otherwise.
-				float tableH = menuOpen ? ImGui::GetContentRegionAvail().y : std::min(static_cast<float>(rows.size()) * 22.0f + 28.0f, 380.0f);
-
-				ImGuiTableFlags tflags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-				                         ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY |
-				                         ImGuiTableFlags_Sortable;
-				if (ImGui::BeginTable("##SlotOverlay", numCols, tflags, ImVec2(0, tableH))) {
-					ImGui::TableSetupScrollFreeze(0, 1);
-					ImGui::TableSetupColumn("##on", ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed, 20);
-					ImGui::TableSetupColumn("Slot", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed, 32);
-					if (showColor)
-						ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed, 40);
-					ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 72);
-					ImGui::TableSetupColumn("Radius", ImGuiTableColumnFlags_WidthFixed, 52);
-					ImGui::TableHeadersRow();
-
-					// Apply sort specs each frame (small list, cheap).
-					if (ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs()) {
-						if (specs->SpecsCount > 0) {
-							const ImGuiTableColumnSortSpecs& s = specs->Specs[0];
-							bool asc = (s.SortDirection == ImGuiSortDirection_Ascending);
-							if (s.ColumnIndex == 1)
-								std::stable_sort(rows.begin(), rows.end(), [asc](const SlotRow& a, const SlotRow& b) {
-									return asc ? a.idx < b.idx : a.idx > b.idx;
-								});
-							else if (s.ColumnIndex == typeCol)
-								std::stable_sort(rows.begin(), rows.end(), [asc](const SlotRow& a, const SlotRow& b) {
-									return asc ? a.info.type < b.info.type : a.info.type > b.info.type;
-								});
-							else if (s.ColumnIndex == radCol)
-								std::stable_sort(rows.begin(), rows.end(), [asc](const SlotRow& a, const SlotRow& b) {
-									return asc ? a.info.radius < b.info.radius : a.info.radius > b.info.radius;
-								});
-						}
-					}
-
-					for (const SlotRow& row : rows) {
-						bool suppressed = suppressedSlots.count(row.idx) > 0;
-						ImGui::TableNextRow();
-
-						// Toggle button — green when active, grey when suppressed.
-						ImGui::TableSetColumnIndex(0);
-						ImGui::PushID(static_cast<int>(row.idx));
-						if (suppressed) {
-							ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.35f, 0.35f, 1));
-							ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.5f, 1));
-							if (ImGui::SmallButton("o"))
-								suppressedSlots.erase(row.idx);
-						} else {
-							ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.6f, 0.15f, 1));
-							ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.75f, 0.2f, 1));
-							if (ImGui::SmallButton("*"))
-								suppressedSlots.insert(row.idx);
-						}
-						ImGui::PopStyleColor(2);
-						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip(suppressed ? "Re-enable (light hidden when suppressed)" : "Suppress (hides the light entirely)");
-						ImGui::PopID();
-
-						if (suppressed)
-							ImGui::BeginDisabled();
-
-						ImGui::TableSetColumnIndex(1);
-						ImGui::Text("%u", row.idx);
-
-						if (showColor) {
-							ImGui::TableSetColumnIndex(2);
-							ImVec4 col = ShadowSlotHueColor(row.idx);
-							auto ri = static_cast<uint8_t>(col.x * 255.0f);
-							auto gi = static_cast<uint8_t>(col.y * 255.0f);
-							auto bi = static_cast<uint8_t>(col.z * 255.0f);
-							ImGui::ColorButton("##col", col,
-								ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder, ImVec2(22, 16));
-							if (ImGui::IsItemHovered())
-								ImGui::SetTooltip("#%02X%02X%02X", ri, gi, bi);
-						}
-
-						ImGui::TableSetColumnIndex(typeCol);
-						ImGui::TextUnformatted(kShadowTypeNames[std::min(row.info.type, 2u)]);
-
-						ImGui::TableSetColumnIndex(radCol);
-						ImGui::Text("%.0f", row.info.radius);
-
-						if (suppressed)
-							ImGui::EndDisabled();
-					}
-					ImGui::EndTable();
-				}
-			}
-		}
+	if (hasSuppressed || shadowRelatedMode) {
+		if (vizOn)
+			ImGui::Separator();
+		ShadowCasterManager::DrawShadowLightTable(!menuOpen, vizOn && (mode == 8));
 	}
 
 	ImGui::End();
@@ -461,6 +269,7 @@ void LightLimitFix::DrawOverlay()
 
 std::string LightLimitFix::BuildShadowSlotColorLegend() const
 {
+	const auto& shadowSlotInfos = ShadowCasterManager::GetSlotInfos();
 	if (shadowSlotInfos.empty())
 		return {};
 
@@ -483,7 +292,7 @@ std::string LightLimitFix::BuildShadowSlotColorLegend() const
 		auto bi = static_cast<uint8_t>(chan(hue, 1.0f / 3.0f) * 255.0f);
 
 		out += std::format("  Slot {:2d} | hue {:5.3f} | #{:02X}{:02X}{:02X} | {:11s} | r={:.0f}\n",
-			i, hue, ri, gi, bi, kShadowTypeNames[std::min(info.type, 2u)], info.radius);
+			i, hue, ri, gi, bi, ShadowCasterManager::GetShadowTypeName(info.type), info.radius);
 	}
 	return out;
 }
@@ -674,7 +483,8 @@ void LightLimitFix::CopyPointShadowData()
 	}
 
 	std::vector<Deferred::ShadowData> sd(slots);
-	shadowSlotInfos.assign(slots, ShadowSlotInfo{});
+	uint32_t prevSlotUsage = ShadowCasterManager::GetSlotUsage();
+	ShadowCasterManager::BeginSlotFrame(slots);
 	auto context = globals::d3d::context;
 
 	ID3D11ShaderResourceView* shadowMapsSRV =
@@ -683,7 +493,6 @@ void LightLimitFix::CopyPointShadowData()
 	auto& shadowAccum = shadowSceneNode->GetRuntimeData().shadowLightsAccum;
 	uint32_t plCount = 0;
 	uint32_t unshadowedLights = 0;
-	uint32_t slotUsage = 0;
 	int mapIndex = 0;
 	while (true) {
 		auto light = shadowAccum[mapIndex];
@@ -708,11 +517,10 @@ void LightLimitFix::CopyPointShadowData()
 			float radius = light->light->GetLightRuntimeData().radius.x;
 			// -1.0 sentinel: shader returns 0.0 (fully dark) → light invisible.
 			// 0.0 means unwritten slot → shader returns 1.0 (fully lit, no shadow).
-			sd[depthSlot].ShadowParam.y = suppressedSlots.count(depthSlot) ? -1.0f : radius;
-			slotUsage += 1;  // each light occupies exactly 1 texture-array slot (DPB packs both hemispheres)
-
-			// Record debug metadata for the visualization legend.
-			shadowSlotInfos[depthSlot] = { static_cast<uint32_t>(shadowTypeF), radius, true };
+			uintptr_t lightKey = reinterpret_cast<uintptr_t>(light);
+			sd[depthSlot].ShadowParam.y = ShadowCasterManager::IsSuppressed(lightKey) ? -1.0f : radius;
+			ShadowCasterManager::RecordSlot(depthSlot,
+				{ static_cast<uint32_t>(shadowTypeF), radius, true, lightKey });
 		} else {
 			unshadowedLights++;
 		}
@@ -720,15 +528,14 @@ void LightLimitFix::CopyPointShadowData()
 		plCount++;
 	}
 
-	if (plCount != shadowLightCount || slotUsage != shadowSlotUsage || unshadowedLights != shadowUnshadowedLightCount) {
+	if (plCount != shadowLightCount || ShadowCasterManager::GetSlotUsage() != prevSlotUsage || unshadowedLights != shadowUnshadowedLightCount) {
 		shadowLightCount = plCount;
-		shadowSlotUsage = slotUsage;
 		shadowUnshadowedLightCount = unshadowedLights;
 		if (unshadowedLights > 0)
 			logger::debug("[LLF] {} shadow lights, {} / {} slots used; {} lights dropped (no shadow)",
-				plCount, slotUsage, slots, unshadowedLights);
+				plCount, ShadowCasterManager::GetSlotUsage(), slots, unshadowedLights);
 		else
-			logger::debug("[LLF] {} shadow lights, {} / {} slots used", plCount, slotUsage, slots);
+			logger::debug("[LLF] {} shadow lights, {} / {} slots used", plCount, ShadowCasterManager::GetSlotUsage(), slots);
 	}
 
 	{

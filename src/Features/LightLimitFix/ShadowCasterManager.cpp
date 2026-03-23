@@ -7,6 +7,7 @@
 // Ported and adapted for Community Shaders by the Community Shaders team with permission.
 
 #include "ShadowCasterManager.h"
+#include "../../Utils/UI.h"
 
 #include <exprtk.hpp>
 
@@ -636,11 +637,11 @@ namespace ShadowCasterManager
 	int32_t LightContainer::FindFreeIndex(bool shadowSlot, int32_t shadowCount, int32_t convertCount) const
 	{
 		if (shadowSlot) {
-			for (int i = 0; i < shadowCount; i++)
+			for (int i = 1; i <= shadowCount; i++)  // i=1: slot 0 is always the sun
 				if (!Lights[i].Light)
 					return i;
 		} else {
-			for (int i = shadowCount; i < shadowCount + convertCount; i++)
+			for (int i = shadowCount + 1; i <= shadowCount + convertCount; i++)
 				if (!Lights[i].Light)
 					return i;
 		}
@@ -1899,7 +1900,7 @@ namespace ShadowCasterManager
 	{
 		s_settings = settings;
 
-		int total = std::max(4, settings.ShadowLightCount) + settings.ConvertedShadowSlots;
+		int total = std::max(4, settings.ShadowLightCount) + 1 + settings.ConvertedShadowSlots;  // +1 for sun at slot 0
 		s_lights.Size = total;
 		s_lights.Sun = false;
 		s_lights.Lights = static_cast<LightEntry*>(calloc(total, sizeof(LightEntry)));
@@ -2207,6 +2208,277 @@ namespace ShadowCasterManager
 		return s_lights;
 	}
 
+	// =========================================================================
+	// Per-slot visualization state (owned by ShadowCasterManager)
+	// =========================================================================
+
+	static constexpr const char* kShadowTypeNames[] = { "Spot", "Hemisphere", "Omni" };
+
+	static std::vector<ShadowSlotInfo> s_shadowSlotInfos;
+	static uint32_t s_shadowSlotUsage = 0;
+	static std::unordered_set<uintptr_t> s_suppressedLights;
+
+	/// Computes the golden-ratio hue color for a shadow-map slot (matches mode-8 shader).
+	static ImVec4 ShadowSlotHueColor(uint32_t slotIdx)
+	{
+		auto chan = [](float h, float shift) {
+			float v = fmodf(h + shift, 1.0f);
+			if (v < 0.0f)
+				v += 1.0f;
+			return std::clamp(fabsf(v * 6.0f - 3.0f) - 1.0f, 0.0f, 1.0f);
+		};
+		float hue = fmodf(float(slotIdx) * 0.618033988f, 1.0f);
+		return ImVec4(chan(hue, 0.0f), chan(hue, 2.0f / 3.0f), chan(hue, 1.0f / 3.0f), 1.0f);
+	}
+
+	// =========================================================================
+	// Slot frame API implementations
+	// =========================================================================
+
+	void BeginSlotFrame(uint32_t slotCount)
+	{
+		s_shadowSlotInfos.assign(slotCount, ShadowSlotInfo{});
+		s_shadowSlotUsage = 0;
+	}
+
+	void RecordSlot(uint32_t depthSlot, const ShadowSlotInfo& info)
+	{
+		if (depthSlot < static_cast<uint32_t>(s_shadowSlotInfos.size()))
+			s_shadowSlotInfos[depthSlot] = info;
+		s_shadowSlotUsage++;
+	}
+
+	bool IsSuppressed(uintptr_t lightKey)
+	{
+		return s_suppressedLights.count(lightKey) > 0;
+	}
+
+	bool HasSuppressedLights()
+	{
+		return !s_suppressedLights.empty();
+	}
+
+	uint32_t GetSlotUsage()
+	{
+		return s_shadowSlotUsage;
+	}
+
+	const std::vector<ShadowSlotInfo>& GetSlotInfos()
+	{
+		return s_shadowSlotInfos;
+	}
+
+	const char* GetShadowTypeName(uint32_t type)
+	{
+		return kShadowTypeNames[std::min(type, 2u)];
+	}
+
+	// =========================================================================
+	// DrawShadowLightTable
+	// =========================================================================
+	// Interactive shadow caster table: suppress/re-enable per light or by type,
+	// filter by type name/radius/address, sort by any column.
+	// Rows are keyed by lightKey (light object pointer) so suppression persists
+	// across slot reassignments as the player moves around.
+	//
+	// compact=true  -> auto-sizes height (up to 15 rows visible)
+	// compact=false -> fills available window height (resizable overlay window)
+	// showColor     -> adds a golden-ratio hue swatch column (visualization mode 8)
+	// =========================================================================
+
+	void DrawShadowLightTable(bool compact, bool showColor)
+	{
+		struct SlotRow
+		{
+			uint32_t idx;
+			ShadowSlotInfo info;
+		};
+
+		// Build flat list of valid slots.
+		std::vector<SlotRow> rows;
+		rows.reserve(s_shadowSlotInfos.size());
+		for (uint32_t i = 0; i < static_cast<uint32_t>(s_shadowSlotInfos.size()); ++i)
+			if (s_shadowSlotInfos[i].valid)
+				rows.push_back({ i, s_shadowSlotInfos[i] });
+
+		if (rows.empty() && s_suppressedLights.empty()) {
+			ImGui::TextDisabled("No shadow slots this frame.");
+			return;
+		}
+
+		// -- Header: active count + suppression badge ----------------------
+		ImGui::Text("Shadow slots: %u active", s_shadowSlotUsage);
+		if (!s_suppressedLights.empty()) {
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(1, 0.6f, 0.2f, 1), "  %zu suppressed", s_suppressedLights.size());
+		}
+
+		// -- Group toggle buttons ------------------------------------------
+		// Each button toggles all lights of that type:
+		//   green = at least one is active -> click disables all of that type
+		//   grey  = all suppressed         -> click re-enables all of that type
+		if (!rows.empty()) {
+			auto allSuppressedOfType = [&](int type) {
+				for (auto& r : rows) {
+					if (type >= 0 && static_cast<int>(r.info.type) != type)
+						continue;
+					if (!s_suppressedLights.count(r.info.lightKey))
+						return false;
+				}
+				return true;
+			};
+			auto toggleType = [&](int type) {
+				if (allSuppressedOfType(type)) {
+					for (auto& r : rows)
+						if (type < 0 || static_cast<int>(r.info.type) == type)
+							s_suppressedLights.erase(r.info.lightKey);
+				} else {
+					for (auto& r : rows)
+						if (type < 0 || static_cast<int>(r.info.type) == type)
+							s_suppressedLights.insert(r.info.lightKey);
+				}
+			};
+			auto typeButton = [&](const char* label, int type, const char* tooltip) {
+				bool allOff = allSuppressedOfType(type);
+				ImGui::PushStyleColor(ImGuiCol_Button,
+					allOff ? ImVec4(0.35f, 0.35f, 0.35f, 1) : ImVec4(0.15f, 0.5f, 0.15f, 1));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+					allOff ? ImVec4(0.5f, 0.5f, 0.5f, 1) : ImVec4(0.2f, 0.7f, 0.2f, 1));
+				if (ImGui::SmallButton(label))
+					toggleType(type);
+				ImGui::PopStyleColor(2);
+				if (tooltip && ImGui::IsItemHovered())
+					ImGui::SetTooltip("%s", tooltip);
+			};
+			typeButton("All", -1, nullptr);
+			ImGui::SameLine();
+			typeButton("Spot", 0, "Toggle all spot/frustum shadow lights");
+			ImGui::SameLine();
+			typeButton("Hemi", 1, "Toggle all hemisphere shadow lights");
+			ImGui::SameLine();
+			typeButton("Omni", 2, "Toggle all omni (paraboloid) shadow lights");
+		}
+
+		if (rows.empty())
+			return;
+
+		// -- Filter input --------------------------------------------------
+		static std::string s_filterText;
+		{
+			char buf[128] = {};
+			strncpy_s(buf, s_filterText.c_str(), sizeof(buf) - 1);
+			ImGui::SetNextItemWidth(120.0f);
+			if (ImGui::InputText("##slotfilter", buf, sizeof(buf)))
+				s_filterText = buf;
+			ImGui::SameLine();
+			ImGui::TextDisabled("filter (type/radius/addr)");
+		}
+
+		// Apply filter.
+		std::vector<SlotRow> filteredRows;
+		if (s_filterText.empty()) {
+			filteredRows = rows;
+		} else {
+			std::string lower = s_filterText;
+			std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+			char addrBuf[16];
+			for (auto& r : rows) {
+				std::string typeName = kShadowTypeNames[std::min(r.info.type, 2u)];
+				std::transform(typeName.begin(), typeName.end(), typeName.begin(), ::tolower);
+				std::string radStr = std::to_string(static_cast<int>(r.info.radius));
+				snprintf(addrBuf, sizeof(addrBuf), "%08x", static_cast<uint32_t>(r.info.lightKey & 0xFFFFFFFF));
+				if (typeName.find(lower) != std::string::npos ||
+					radStr.find(lower) != std::string::npos ||
+					std::string(addrBuf).find(lower) != std::string::npos)
+					filteredRows.push_back(r);
+			}
+		}
+
+		// -- Sortable table via Util helper --------------------------------
+		// Column layout: [toggle] [Slot] [Addr] [Color?] [Type] [Radius]
+		int addrColIdx = 2;
+		int typeColIdx = showColor ? 4 : 3;
+		int radColIdx = showColor ? 5 : 4;
+
+		std::vector<std::string> headers = { "", "Slot", "Addr" };
+		if (showColor)
+			headers.push_back("Color");
+		headers.push_back("Type");
+		headers.push_back("Radius");
+
+		using SortFn = std::function<bool(const SlotRow&, const SlotRow&, bool)>;
+		std::vector<SortFn> sorts(headers.size(), nullptr);
+		sorts[1] = [](const SlotRow& a, const SlotRow& b, bool asc) {
+			return asc ? a.idx < b.idx : a.idx > b.idx;
+		};
+		sorts[addrColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
+			return asc ? a.info.lightKey < b.info.lightKey : a.info.lightKey > b.info.lightKey;
+		};
+		sorts[typeColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
+			return asc ? a.info.type < b.info.type : a.info.type > b.info.type;
+		};
+		sorts[radColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
+			return asc ? a.info.radius < b.info.radius : a.info.radius > b.info.radius;
+		};
+
+		ImVec2 outerSize = compact ? ImVec2(0, 0) : ImVec2(0, ImGui::GetContentRegionAvail().y);
+
+		Util::ShowSortedStringTableCustom<SlotRow>(
+			"##ShadowLightTbl",
+			headers,
+			filteredRows,
+			1,     // default sort: Slot
+			true,  // ascending
+			sorts,
+			[&](int /*rowIdx*/, int col, const SlotRow& row) {
+				bool suppressed = s_suppressedLights.count(row.info.lightKey) > 0;
+				if (col == 0) {
+					ImGui::PushID(static_cast<int>(row.idx));
+					ImGui::PushStyleColor(ImGuiCol_Button,
+						suppressed ? ImVec4(0.35f, 0.35f, 0.35f, 1) : ImVec4(0.15f, 0.6f, 0.15f, 1));
+					ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+						suppressed ? ImVec4(0.5f, 0.5f, 0.5f, 1) : ImVec4(0.2f, 0.75f, 0.2f, 1));
+					if (ImGui::SmallButton(suppressed ? "o" : "*"))
+						suppressed ? (void)s_suppressedLights.erase(row.info.lightKey) : (void)s_suppressedLights.insert(row.info.lightKey);
+					ImGui::PopStyleColor(2);
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip(suppressed ? "Re-enable" : "Suppress (hides this light's shadows)");
+					ImGui::PopID();
+					return;
+				}
+				if (suppressed)
+					ImGui::BeginDisabled();
+				if (col == 1) {
+					ImGui::Text("%u", row.idx);
+				} else if (col == addrColIdx) {
+					char addrFull[20];
+					snprintf(addrFull, sizeof(addrFull), "0x%016llX", static_cast<unsigned long long>(row.info.lightKey));
+					ImGui::Selectable(addrFull + 10, false, ImGuiSelectableFlags_None);
+					if (ImGui::IsItemClicked())
+						ImGui::SetClipboardText(addrFull);
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("Click to copy: %s", addrFull);
+				} else if (showColor && col == addrColIdx + 1) {
+					ImVec4 c = ShadowSlotHueColor(row.idx);
+					auto ri = static_cast<uint8_t>(c.x * 255.0f);
+					auto gi = static_cast<uint8_t>(c.y * 255.0f);
+					auto bi = static_cast<uint8_t>(c.z * 255.0f);
+					ImGui::ColorButton("##col", c,
+						ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder, ImVec2(22, 16));
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("#%02X%02X%02X", ri, gi, bi);
+				} else if (col == typeColIdx) {
+					ImGui::TextUnformatted(kShadowTypeNames[std::min(row.info.type, 2u)]);
+				} else if (col == radColIdx) {
+					ImGui::Text("%.0f", row.info.radius);
+				}
+				if (suppressed)
+					ImGui::EndDisabled();
+			},
+			{},
+			outerSize);
+	}
+
 	void DrawSettings(Settings& settings)
 	{
 		ImGui::SeparatorText("Shadow Caster Scheduling");
@@ -2359,6 +2631,10 @@ namespace ShadowCasterManager
 
 			ImGui::TreePop();
 		}
+
+		// ---- Active shadow casters table --------------------------------
+		ImGui::SeparatorText("Active Shadow Casters");
+		DrawShadowLightTable(true, false);
 
 		// ---- Statistics panel --------------------------------------------
 		if (ImGui::TreeNode("Shadow Scheduling Statistics")) {

@@ -225,6 +225,42 @@ namespace ShadowCasterManager
 	};
 
 	// -------------------------------------------------------------------------
+	// Per-slot visualization metadata (filled by LLF::CopyPointShadowData)
+	// -------------------------------------------------------------------------
+	struct ShadowSlotInfo
+	{
+		uint32_t type = 0;       ///< Shadow type: 0=spot/frustum, 1=hemisphere, 2=omnidirectional
+		float radius = 0.0f;     ///< Light radius (world units)
+		bool valid = false;      ///< true when this slot was written this frame
+		uintptr_t lightKey = 0;  ///< Light object pointer (stable key for suppression)
+	};
+
+	/// Resets slot metadata for a new frame.  Call at the start of CopyPointShadowData.
+	void BeginSlotFrame(uint32_t slotCount);
+
+	/// Records metadata for one filled shadow slot.
+	void RecordSlot(uint32_t depthSlot, const ShadowSlotInfo& info);
+
+	/// Returns true if the light with this pointer key has been suppressed by the user.
+	bool IsSuppressed(uintptr_t lightKey);
+
+	/// Returns true if any lights are currently suppressed.
+	bool HasSuppressedLights();
+
+	/// Returns the number of shadow slots consumed this frame.
+	uint32_t GetSlotUsage();
+
+	/// Read-only view of the per-slot metadata for the current frame.
+	const std::vector<ShadowSlotInfo>& GetSlotInfos();
+
+	/// Returns the display name for a shadow type index (0=Spot, 1=Hemi, 2=Omni).
+	const char* GetShadowTypeName(uint32_t type);
+
+	/// Draw the interactive shadow caster table (suppress/filter/sort).
+	/// compact=true caps height; showColor adds a hue swatch column (viz mode 8).
+	void DrawShadowLightTable(bool compact, bool showColor);
+
+	// -------------------------------------------------------------------------
 	// Public API
 	// -------------------------------------------------------------------------
 
