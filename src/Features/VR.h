@@ -130,7 +130,7 @@ public:
 
 	virtual void DrawSettings() override;
 
-	virtual std::string_view GetCategory() const override { return "Utility"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 
 	//=============================================================================
 	// OVERLAY FEATURE OVERRIDES
