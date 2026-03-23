@@ -957,7 +957,7 @@ void Menu::ProcessInputEventQueue()
 			if (event.keyCode > 7) {  // middle scroll
 				if (ew && ew->previewMode == EditorWindow::PreviewMode::FreeCamera) {
 					ew->AdjustFlySpeed(event.keyCode == 8 ? 1.0f : -1.0f);
-				} else {
+				} else if (!flying) {
 					io.AddMouseWheelEvent(0, event.value * (event.keyCode == 8 ? 1 : -1));
 				}
 			} else if (!flying) {
@@ -1054,6 +1054,8 @@ void Menu::ProcessInputEventQueue()
 						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
 						{ settings.WeatherEditorToggleKey, []() {
 							 auto* ew = EditorWindow::GetSingleton();
+							 if (!ew)
+								 return;
 							 if (ew->GetPreviewMode() == EditorWindow::PreviewMode::FreeCamera) {
 								 // Flying → lock camera position for editing
 								 ew->ToggleFreeCameraLock();
