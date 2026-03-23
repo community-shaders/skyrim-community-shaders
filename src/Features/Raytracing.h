@@ -181,10 +181,11 @@ struct CreationEngineRaytracing
 	struct DebugSettings
 	{
 		bool PathTracingCull = false;
+		bool EnableWater = false;
 
 		bool operator==(const DebugSettings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DebugSettings, PathTracingCull)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DebugSettings, PathTracingCull, EnableWater)
 	};
 
 	struct Settings

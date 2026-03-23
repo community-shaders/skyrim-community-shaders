@@ -326,9 +326,11 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::PushID("DebugSettings");
 
+	ImGui::Checkbox("Performance Overlay", &settings.PerfOverlay);
+
 	ImGui::Checkbox("Path Tracing Cull", &settings.CreationEngineRaytracingSettings.DebugSettings.PathTracingCull);
 
-	ImGui::Checkbox("Performance Overlay", &settings.PerfOverlay);
+	ImGui::Checkbox("Enable Water", &settings.CreationEngineRaytracingSettings.DebugSettings.EnableWater);
 
 	ImGui::Checkbox("Show Main Texture", &settings.ShowMainTexture);
 
