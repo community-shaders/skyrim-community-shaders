@@ -10,9 +10,6 @@ void SetupWidgetWindowDefaults()
 {
 	const float scale = Util::GetUIScale();
 	const auto cond = EditorWindow::GetSingleton()->resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
-	ImGui::SetNextWindowSizeConstraints(
-		ImVec2(WidgetDefaults::kMinWidth * scale, WidgetDefaults::kMinHeight * scale),
-		ImVec2(FLT_MAX, FLT_MAX));
 	ImGui::SetNextWindowSize(
 		ImVec2(WidgetDefaults::kInitialWidth * scale, WidgetDefaults::kInitialHeight * scale),
 		cond);

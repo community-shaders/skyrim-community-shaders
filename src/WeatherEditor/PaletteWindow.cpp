@@ -20,7 +20,6 @@ void PaletteWindow::Draw()
 	const float spaceBelow = bottomY - editor->viewportBottomY - pad;  // room between viewport bottom and screen bottom
 	const float paletteHeight = std::min(400.0f * scale, spaceBelow);
 	const auto layoutCond = editor->resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
-	ImGui::SetNextWindowSizeConstraints(ImVec2(200.0f * scale, 150.0f * scale), ImVec2(FLT_MAX, FLT_MAX));
 	ImGui::SetNextWindowSize(ImVec2(paletteWidth, paletteHeight), layoutCond);
 	ImGui::SetNextWindowPos(
 		ImVec2(displaySize.x - paletteWidth - pad, bottomY - paletteHeight),
