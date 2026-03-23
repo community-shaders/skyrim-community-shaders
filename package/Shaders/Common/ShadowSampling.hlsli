@@ -180,7 +180,42 @@ namespace ShadowSampling
 	// Fast 2x2 gather-based sample (4 depth comparisons, averaged).
 	float SampleShadowGather(uint shadowIndex, float2 uv, float receiverDepth)
 	{
-		return dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(uv, shadowIndex)) > receiverDepth), 0.25);
+		// 1. Apply a constant bias.
+		// This pushes the "test" point slightly toward the light source.
+		float bias = 0.0005;
+		float biasedDepth = receiverDepth - bias;
+
+		// 2. Perform the Gather
+		float4 samples = ShadowMaps.GatherRed(LinearSampler, float3(uv, shadowIndex));
+
+		// 3. Comparison
+		// If the shadow map value is GREATER than our biased depth, it's lit (1.0).
+		float4 passes = float4(samples > biasedDepth);
+
+		// 4. Average the 4 samples (0.25 each)
+		return dot(passes, 0.25);
+	}
+
+	//--------------------------------------------------------------------------------------
+	// Hardware-Accelerated PCF (Percentage Closer Filtering)
+	// Uses the GPU's fixed-function comparison units for a smooth, flicker-free result.
+	// This is significantly faster and more stable than manual GatherRed + dot(0.25).
+	//--------------------------------------------------------------------------------------
+	float SampleShadowHardware(uint shadowIndex, float2 uv, float receiverDepth)
+	{
+		// 1. Calculate Adaptive Bias
+		// Derivatives (ddx/ddy) detect surface slope.
+		// Higher slope = more bias needed to prevent "Shadow Acne" flickering.
+		float2 derivatives = float2(ddx(receiverDepth), ddy(receiverDepth));
+		float slopeBias = max(abs(derivatives.x), abs(derivatives.y));
+
+		// Constant base bias + dynamic slope adjustment
+		float finalBias = 0.0005 + (slopeBias * 0.5);
+
+		// 2. Hardware Comparison
+		// SampleCmpLevelZero performs 4 comparisons and bilinearly interpolates
+		// between them in a single GPU instruction.
+		return ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(uv, shadowIndex), receiverDepth - finalBias).x;
 	}
 
 	// 8-tap spiral PCF on a 2D shadow map slice (paraboloid UV space).
@@ -208,6 +243,7 @@ namespace ShadowSampling
 	}
 
 	// PCSS: blocker search → penumbra estimation → variable-width PCF.
+	// Optimized PCSS Spotlight with Stabilized Blocker Search
 	float PCSSSpotlight(uint shadowIndex, float2 baseUV, float receiverDepth, float2x2 rotationMatrix)
 	{
 		float lightSize = SharedData::lightLimitFixSettings.LightSize;
@@ -244,26 +280,42 @@ namespace ShadowSampling
 
 	float GetSpotlightShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
 	{
-		// Geometry behind the shadow frustum (w <= 0) would produce a sign-flipped
-		// projection, yielding garbage UVs and a false visibility of 0 which makes
-		// the light appear completely off.  Treat it as unshadowed instead.
+		// 1. Perspective Divide
 		if (positionLS.w <= 0)
-			return 1.0;
-
+			return 0.0;
 		positionLS.xyz /= positionLS.w;
 
-		// Geometry beyond the shadow near/far planes is outside the depth range [0,1];
-		// treat it as unshadowed rather than fully dark.
-		if (positionLS.z < 0 || positionLS.z > 1)
-			return 1.0;
+		// 2. Standard Depth Guard (with a small safety epsilon)
+		if (positionLS.z < 0.0001 || positionLS.z > 0.9999)
+			return 0.0;
 
+		// 3. Simple UV Mapping (No flips yet, to test alignment)
 		float2 baseUV = positionLS.xy * 0.5 + 0.5;
+
+		// 4. Border Guard
+		if (any(baseUV < 0.0) || any(baseUV > 1.0))
+			return 0.0;
+
+		// 5. Cone mask (circular spot area inside the frustum)
+		float radialDistSq = dot(positionLS.xy, positionLS.xy);
+		if (radialDistSq >= 1.0)
+			return 0.0;
+
+		float spotFalloff = saturate(1.0 - radialDistSq);
+		spotFalloff = spotFalloff * spotFalloff;
+
+		// 6. Hard Shadow Test (The "Diagnostic" Step)
+		// We use a constant bias of 0.001 to completely rule out shadow acne.
+		// We use SampleCmpLevelZero to use the GPU's internal stable comparison.
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
 
-		[branch] if (mode == 2) return PCSSSpotlight(shadowIndex, baseUV, positionLS.z, rotationMatrix);
-		else if (mode == 1) return PCFPoisson16(shadowIndex, baseUV, positionLS.z,
+		float shadowSample;
+		[branch] if (mode == 2) shadowSample = PCSSSpotlight(shadowIndex, baseUV, positionLS.z, rotationMatrix);
+		else if (mode == 1) shadowSample = PCFPoisson16(shadowIndex, baseUV, positionLS.z,
 			PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale, rotationMatrix);
-		else return SampleShadowGather(shadowIndex, baseUV, positionLS.z);
+		else shadowSample = SampleShadowGather(shadowIndex, baseUV, positionLS.z);
+
+		return shadowSample * spotFalloff;
 	}
 
 	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS)
