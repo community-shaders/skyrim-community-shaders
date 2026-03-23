@@ -480,7 +480,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 	// The plane feeds ReflectPlane in the PerGeometry cbuffer. When corrupted (e.g., plane.constant = 0
 	// or garbage), the shader's refractionPlaneMul calculation produces extreme values causing flickering.
 	// This primarily affects flowmapped water because it uses more complex refraction depth calculations.
-	if (const auto prop = pass->geometry->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+	if (const auto prop = pass->geometry->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 		const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
 		const float waterHeight = pass->geometry->world.translate.z;
 
