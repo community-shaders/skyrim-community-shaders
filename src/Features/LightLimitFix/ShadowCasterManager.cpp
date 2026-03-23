@@ -1849,12 +1849,12 @@ namespace ShadowCasterManager
 		}
 
 		// ---- Light conversion ------------------------------------------------
-		//   - IsShadowLight vtable slot 3: when ConvertDistantToNormal
-		//   - RemoveLight hook: when ConvertDistantToNormal || PromoteNormalToShadow
+		//   - IsShadowLight vtable slot 3: when ConvertExcessToNormal
+		//   - RemoveLight hook: when ConvertExcessToNormal || PromoteNormalToShadow
 		//   - AddLight hook: always (portal-strict is unconditional; also handles PromoteNormalToShadow)
 		//   - SetLight hook: when PromoteNormalToShadow
 
-		if (settings.ConvertDistantToNormal || settings.PromoteNormalToShadow) {
+		if (settings.ConvertExcessToNormal || settings.PromoteNormalToShadow) {
 			// BSShadowLight vtable slot 3 = IsShadowLight; replace on all 4 shadow light types.
 			REL::Relocation<uintptr_t> vtbl1{ RE::BSShadowLight::VTABLE[0] };
 			vtbl1.write_vfunc(3, Hook_IsShadowLight);
@@ -1866,7 +1866,7 @@ namespace ShadowCasterManager
 			vtbl4.write_vfunc(3, Hook_IsShadowLight);
 		}
 
-		if (settings.ConvertDistantToNormal || settings.PromoteNormalToShadow) {
+		if (settings.ConvertExcessToNormal || settings.PromoteNormalToShadow) {
 			// ShadowSceneNode::RemoveLight — fires at +0x9 (SE: 6 bytes, AE: 5 bytes)
 			static REL::RelocationID uid(99697, 106331);
 			int sz = REL::Relocate(6, 5, 6);
@@ -2297,19 +2297,19 @@ namespace ShadowCasterManager
 
 		// ---- Light conversion (requires restart for hooks) -----------------
 		if (ImGui::TreeNode("Light Conversion##LightConv")) {
-			ImGui::Checkbox("Convert Distant Lights to Normal", &settings.ConvertDistantToNormal);
+			ImGui::Checkbox("Convert Excess Lights to Normal", &settings.ConvertExcessToNormal);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
-					"Shadow lights that fail portal/frustum culling are demoted to normal\n"
-					"(unshadowed) lights instead of being dropped entirely.\n"
-					"They still contribute diffuse and specular lighting at no shadow-map cost.\n"
+					"Shadow lights that exceed the active shadow caster limit are demoted to\n"
+					"normal (unshadowed) lights so they still contribute diffuse and specular\n"
+					"lighting at no shadow-map cost. Lights that fail culling are dropped entirely.\n"
 					"Requires a game restart to change.");
 
 			ImGui::SliderInt("Converted Shadow Slots", &settings.ConvertedShadowSlots, 0, 64);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
 					"Extra pool slots for lights converted to normal (unshadowed) mode.\n"
-					"Increase if Convert Distant Lights drops lights you expect to see.");
+					"Increase if Convert Excess Lights drops lights you expect to see.");
 
 			ImGui::Checkbox("Promote Normal Lights to Shadow Casters", &settings.PromoteNormalToShadow);
 			if (ImGui::IsItemHovered())
