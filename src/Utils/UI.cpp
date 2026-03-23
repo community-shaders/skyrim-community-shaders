@@ -520,6 +520,20 @@ namespace Util
 		return StyledButtonWrapper(color, hover, active);
 	}
 
+	StyledButtonWrapper TransparentIconButtonStyle()
+	{
+		constexpr float kHoverAlpha = 0.25f;
+		auto hoverColor = Menu::GetSingleton()->GetTheme().Palette.Text;
+		hoverColor.w = kHoverAlpha;
+		return StyledButtonWrapper(ImVec4(0, 0, 0, 0), hoverColor, hoverColor);
+	}
+
+	ImVec4 GetIconTint()
+	{
+		const auto& theme = Menu::GetSingleton()->GetTheme();
+		return theme.UseMonochromeIcons ? theme.Palette.Text : ImVec4(1, 1, 1, 1);
+	}
+
 	// SectionWrapper implementation
 	SectionWrapper::SectionWrapper(const char* title, const char* description, const ImVec4& titleColor, bool isVisible) :
 		m_shouldDraw(isVisible),

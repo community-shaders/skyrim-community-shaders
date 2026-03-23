@@ -58,9 +58,15 @@ void OverlayRenderer::RenderOverlay(
 	auto player = RE::PlayerCharacter::GetSingleton();
 	if (editorWindow->open && !(player && player->parentCell)) {
 		editorWindow->open = false;
+		if (editorWindow->IsInPreviewMode())
+			editorWindow->ExitPreviewMode();
 	}
 	if (editorWindow->open) {
-		ImGui::GetIO().MouseDrawCursor = true;
+		bool inPreview = editorWindow->IsInPreviewMode();
+		auto& io = ImGui::GetIO();
+		io.MouseDrawCursor = !inPreview;
+		if (inPreview)
+			io.MousePos = { -FLT_MAX, -FLT_MAX };  // prevent hover/tooltips during preview
 		editorWindow->Draw();
 	} else if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		ImGui::GetIO().MouseDrawCursor = true;

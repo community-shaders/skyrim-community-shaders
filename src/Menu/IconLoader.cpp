@@ -105,6 +105,8 @@ namespace Util::IconLoader
 			{ std::string(iconFolder) + "\\apply-to-game.png", &menu->uiIcons.applyToGame.texture, &menu->uiIcons.applyToGame.size },
 			{ std::string(iconFolder) + "\\pause.png", &menu->uiIcons.pauseTime.texture, &menu->uiIcons.pauseTime.size },
 			{ std::string(iconFolder) + "\\undo.png", &menu->uiIcons.undo.texture, &menu->uiIcons.undo.size },
+			{ std::string(iconFolder) + "\\free-camera.png", &menu->uiIcons.freeCamera.texture, &menu->uiIcons.freeCamera.size },
+			{ std::string(iconFolder) + "\\play-mode.png", &menu->uiIcons.playMode.texture, &menu->uiIcons.playMode.size },
 
 			{ "Categories\\characters.png", &menu->uiIcons.characters.texture, &menu->uiIcons.characters.size },
 			{ "Categories\\display.png", &menu->uiIcons.display.texture, &menu->uiIcons.display.size },
@@ -219,24 +221,17 @@ namespace Util::IconLoader
 				anyIconLoaded = true;
 			} else {
 				// If monochrome icon failed to load, try fallback to colored version
-				if (basePath.find("Monochrome") != std::string::npos) {
-					std::string fallbackPath = basePath;
+				if (fullPath.find("Monochrome") != std::string::npos) {
+					std::string fallbackPath = fullPath;
 					size_t pos = fallbackPath.find("\\Monochrome");
 					if (pos != std::string::npos) {
 						fallbackPath.erase(pos, 11);  // Remove "\Monochrome"
-					}
-					fallbackPath += iconDef.filename;
-					// Try to extract just the filename from iconDef.filename if it has path
-					size_t lastSlash = iconDef.filename.find_last_of("\\/");
-					if (lastSlash != std::string::npos) {
-						std::string justFilename = iconDef.filename.substr(lastSlash + 1);
-						fallbackPath = fallbackPath.substr(0, fallbackPath.find_last_of("\\/") + 1) + justFilename;
 					}
 					if (LoadTextureFromFile(device, fallbackPath.c_str(), iconDef.texture, *iconDef.size)) {
 						iconsLoaded++;
 						anyIconLoaded = true;
 					} else {
-						logger::warn("InitializeMenuIcons: Failed to load icon from: {} (and fallback)", fullPath);
+						logger::warn("InitializeMenuIcons: Failed to load icon from: {} (and fallback: {})", fullPath, fallbackPath);
 					}
 				} else {
 					logger::warn("InitializeMenuIcons: Failed to load icon from: {}", fullPath);
