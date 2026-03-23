@@ -54,10 +54,27 @@ SamplerComparisonState ShadowSamplerCmp : register(s14);
 
 namespace ShadowSampling
 {
-	// PCF filter radii in UV space for Poisson disc samples.
+	// -----------------------------------------------------------------------
+	// Constants
+	// -----------------------------------------------------------------------
+
+	// PCF filter radii in UV space (base, before user KernelScale).
 	static const float PCFKernelDirectional = 1.0 / 2048.0;  // directional cascade maps
 	static const float PCFKernelShadowLight = 1.0 / 1024.0;  // frustum/spot shadow maps
-	static const float PCFParaboloidRadius = 2.0;            // world-space jitter radius for paraboloid PCF
+
+	// Shadow depth bias — applied before depth comparisons to prevent self-shadowing acne.
+	static const float ShadowBiasConst = 0.0005;    // constant component
+	static const float ShadowBiasSlopeScale = 0.5;  // multiplier on ddx/ddy slope bias
+
+	// Depth guard epsilons used to reject spotlight fragments at the near/far frustum planes.
+	static const float ShadowDepthNearEps = 0.0001;
+	static const float ShadowDepthFarEps = 0.9999;
+
+	// Volumetric / 3D shadow ray-march parameters (world units).
+	static const float ShadowRayLength = 128.0;   // default ray extent
+	static const float ShadowRayStepSize = 32.0;  // fixed step size
+
+	// -----------------------------------------------------------------------
 
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
 	{
@@ -83,18 +100,18 @@ namespace ShadowSampling
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #elif defined(UNDERWATER)
-		float viewRayLength = 128.0;
+		float viewRayLength = ShadowRayLength;
 		float3 startPosition = positionWS;
 		float3 endPosition = positionWS - viewDirection * viewRayLength;
 #else
-		float viewRayLength = 128.0;
+		float viewRayLength = ShadowRayLength;
 		float3 startPosition = positionWS;
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #endif
 
 		float totalRayLength = distance(endPosition, startPosition);
 
-		const float stepSize = 32.0;  // Fixed step size in world units
+		const float stepSize = ShadowRayStepSize;
 
 		uint sampleCount = clamp(uint(totalRayLength / stepSize + 0.5), 1, 4);
 		float rcpSampleCount = rcp(sampleCount);
@@ -138,7 +155,7 @@ namespace ShadowSampling
 
 		worldPosition.xyz += FrameBuffer::CameraPosAdjust[0].xyz;
 
-		// Reduce over distance
+		// Fade shadows out toward the cascade boundary so they dissolve cleanly.
 		float fade = saturate(shadowMapDepth / shadow.EndSplitDistances.y);
 
 		// Compute cascade blend factor
@@ -165,66 +182,55 @@ namespace ShadowSampling
 			visibility = lerp(visibility, visibilityBlend, cascadeSelect);
 		}
 
-		detailedShadow = lerp(1.0, visibility, 1);
-		return lerp(1.0, visibility, 1);
+		// detailedShadow exposes raw visibility for callers that need the un-faded value.
+		detailedShadow = visibility;
+		return lerp(visibility, 1.0, fade);
 	}
 
 	// --- PCF helpers ---
 
 	// Single-tap hardware-PCF sample (bilinear blend of 4 depth comparisons).
+	// receiverDepth should be pre-biased by the caller.
 	float SampleShadowPCF(uint shadowIndex, float2 uv, float receiverDepth)
 	{
 		return ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(uv, shadowIndex), receiverDepth);
 	}
 
-	// Fast 2x2 gather-based sample (4 depth comparisons, averaged).
+	// Raw 2×2 gather — no hardware PCF, constant bias.
+	// Harsh, unfiltered shadow edges. Use for debugging: acne is obvious and shadows
+	// never smooth away, making self-shadowing errors immediately visible.
+	// Mode 3 (debug only); not used in production shadow paths.
 	float SampleShadowGather(uint shadowIndex, float2 uv, float receiverDepth)
 	{
-		// 1. Apply a constant bias.
-		// This pushes the "test" point slightly toward the light source.
-		float bias = 0.0005;
-		float biasedDepth = receiverDepth - bias;
-
-		// 2. Perform the Gather
 		float4 samples = ShadowMaps.GatherRed(LinearSampler, float3(uv, shadowIndex));
-
-		// 3. Comparison
-		// If the shadow map value is GREATER than our biased depth, it's lit (1.0).
-		float4 passes = float4(samples > biasedDepth);
-
-		// 4. Average the 4 samples (0.25 each)
-		return dot(passes, 0.25);
+		return dot(float4(samples > receiverDepth), 0.25);
 	}
 
-	//--------------------------------------------------------------------------------------
-	// Hardware-Accelerated PCF (Percentage Closer Filtering)
-	// Uses the GPU's fixed-function comparison units for a smooth, flicker-free result.
-	// This is significantly faster and more stable than manual GatherRed + dot(0.25).
-	//--------------------------------------------------------------------------------------
+	// Compute adaptive slope-scale bias from screen-space depth derivatives.
+	// Call once per pixel; subtract the result from receiverDepth before any
+	// shadow comparison to prevent self-shadowing acne on angled surfaces.
+	// (pixel-shader only — uses ddx/ddy)
+	float ComputeSlopeBias(float receiverDepth)
+	{
+		float2 deriv = float2(ddx(receiverDepth), ddy(receiverDepth));
+		return ShadowBiasConst + max(abs(deriv.x), abs(deriv.y)) * ShadowBiasSlopeScale;
+	}
+
+	// Convenience: hardware-PCF single tap with adaptive bias computed internally.
+	// Used by SampleParaboloidShadow (mode 0) where the caller does not pre-bias.
 	float SampleShadowHardware(uint shadowIndex, float2 uv, float receiverDepth)
 	{
-		// 1. Calculate Adaptive Bias
-		// Derivatives (ddx/ddy) detect surface slope.
-		// Higher slope = more bias needed to prevent "Shadow Acne" flickering.
-		float2 derivatives = float2(ddx(receiverDepth), ddy(receiverDepth));
-		float slopeBias = max(abs(derivatives.x), abs(derivatives.y));
-
-		// Constant base bias + dynamic slope adjustment
-		float finalBias = 0.0005 + (slopeBias * 0.5);
-
-		// 2. Hardware Comparison
-		// SampleCmpLevelZero performs 4 comparisons and bilinearly interpolates
-		// between them in a single GPU instruction.
-		return ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(uv, shadowIndex), receiverDepth - finalBias).x;
+		return SampleShadowPCF(shadowIndex, uv, receiverDepth - ComputeSlopeBias(receiverDepth));
 	}
 
 	// 8-tap spiral PCF on a 2D shadow map slice (paraboloid UV space).
-	float PCFSpiral8(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius)
+	// receiverDepth must be pre-biased by the caller.
+	float PCFSpiral8(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius, float2x2 rotationMatrix)
 	{
 		float sum = 0.0;
 		[unroll] for (int i = 0; i < 8; i++)
 		{
-			float2 offset = Random::SpiralSampleOffsets8[i] * kernelRadius;
+			float2 offset = mul(rotationMatrix, Random::SpiralSampleOffsets8[i]) * kernelRadius;
 			sum += SampleShadowPCF(shadowIndex, baseUV + offset, receiverDepth);
 		}
 		return sum * rcp(8.0);
@@ -260,8 +266,10 @@ namespace ShadowSampling
 			return 1.0;  // fully lit — no occluders found
 
 		// Step 2: penumbra width from receiver–blocker distance.
+		// Guard avgBlockerDepth against zero (can occur when the shadow map stores 0 at the near plane).
+		// Saturate penumbra to [0,1] so kernelRadius stays bounded regardless of lightSize/depth ratio.
 		float avgBlockerDepth = dot(gathered * isBlocker, 1.0) / blockerCount;
-		float penumbra = (receiverDepth - avgBlockerDepth) / avgBlockerDepth * lightSize;
+		float penumbra = saturate((receiverDepth - avgBlockerDepth) / max(avgBlockerDepth, 1e-5) * lightSize);
 		float kernelRadius = penumbra * PCFKernelShadowLight * kernelScale;
 
 		// Step 3: PCF with contact-hardened radius.
@@ -269,11 +277,21 @@ namespace ShadowSampling
 	}
 
 	// Dispatch the active filter mode for a paraboloid shadow map (hemisphere / omni).
-	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth)
+	// Mode 0: single-tap HW-PCF (bias computed internally)
+	// Mode 1/2: 8-tap spiral PCF with temporal rotation (bias computed once here)
+	// Mode 3: raw 2×2 gather — debug only
+	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth, float2x2 rotationMatrix)
 	{
+		uint mode = SharedData::lightLimitFixSettings.FilterMode;
 		float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
-		[branch] if (SharedData::lightLimitFixSettings.FilterMode >= 1) return PCFSpiral8(shadowIndex, sampleUV, depth, kernelRadius);
-		else return SampleShadowGather(shadowIndex, sampleUV, depth);
+
+		[branch] if (mode == 3) return SampleShadowGather(shadowIndex, sampleUV, depth - ShadowBiasConst);
+		else if (mode >= 1)
+		{
+			float biasedDepth = depth - ComputeSlopeBias(depth);
+			return PCFSpiral8(shadowIndex, sampleUV, biasedDepth, kernelRadius, rotationMatrix);
+		}
+		return SampleShadowHardware(shadowIndex, sampleUV, depth);  // mode 0: bias applied internally
 	}
 
 	// --- Per-light shadow sampling ---
@@ -286,7 +304,7 @@ namespace ShadowSampling
 		positionLS.xyz /= positionLS.w;
 
 		// 2. Standard Depth Guard (with a small safety epsilon)
-		if (positionLS.z < 0.0001 || positionLS.z > 0.9999)
+		if (positionLS.z < ShadowDepthNearEps || positionLS.z > ShadowDepthFarEps)
 			return 0.0;
 
 		// 3. Simple UV Mapping (No flips yet, to test alignment)
@@ -304,36 +322,38 @@ namespace ShadowSampling
 		float spotFalloff = saturate(1.0 - radialDistSq);
 		spotFalloff = spotFalloff * spotFalloff;
 
-		// 6. Hard Shadow Test (The "Diagnostic" Step)
-		// We use a constant bias of 0.001 to completely rule out shadow acne.
-		// We use SampleCmpLevelZero to use the GPU's internal stable comparison.
+		// Compute slope bias once for all modes.
+		// Mode 0/1/2 all benefit; mode 3 (debug gather) uses constant bias only.
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
+		float biasedDepth = positionLS.z - ComputeSlopeBias(positionLS.z);
 
 		float shadowSample;
-		[branch] if (mode == 2) shadowSample = PCSSSpotlight(shadowIndex, baseUV, positionLS.z, rotationMatrix);
-		else if (mode == 1) shadowSample = PCFPoisson16(shadowIndex, baseUV, positionLS.z,
+		[branch] if (mode == 2) shadowSample = PCSSSpotlight(shadowIndex, baseUV, biasedDepth, rotationMatrix);
+		else if (mode == 1) shadowSample = PCFPoisson16(shadowIndex, baseUV, biasedDepth,
 			PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale, rotationMatrix);
-		else shadowSample = SampleShadowGather(shadowIndex, baseUV, positionLS.z);
+		else if (mode == 3) shadowSample = SampleShadowGather(shadowIndex, baseUV, positionLS.z - ShadowBiasConst);
+		else shadowSample = SampleShadowPCF(shadowIndex, baseUV, biasedDepth);  // mode 0
 
 		return shadowSample * spotFalloff;
 	}
 
-	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS)
+	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
 	{
-		if (positionLS.z * 0.5 + 0.5 >= 0) {
+		// positionLS.z > 0 means the point is in the forward hemisphere the paraboloid covers.
+		if (positionLS.z > 0) {
 			positionLS.xyz /= positionLS.w;
 			float3 lightDirection = normalize(normalize(positionLS.xyz) + float3(0, 0, 1));
 			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 			positionLS.z = saturate(length(positionLS.xyz) / shadow.ShadowParam.y);
 
-			return SampleParaboloidShadow(shadowIndex, sampleUV, positionLS.z);
+			return SampleParaboloidShadow(shadowIndex, sampleUV, positionLS.z, rotationMatrix);
 		}
 
 		// Geometry outside the paraboloid's coverage hemisphere is unshadowed.
 		return 1.0;
 	}
 
-	float GetOmnidirectionalShadow(ShadowData shadow, uint shadowIndex, float3 positionLS)
+	float GetOmnidirectionalShadow(ShadowData shadow, uint shadowIndex, float3 positionLS, float2x2 rotationMatrix)
 	{
 		bool lowerHalf = positionLS.z < 0;
 		float3 normalizedPositionLS = normalize(positionLS);
@@ -345,7 +365,7 @@ namespace ShadowSampling
 		float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-		return SampleParaboloidShadow(shadowIndex, sampleUV, depth);
+		return SampleParaboloidShadow(shadowIndex, sampleUV, depth, rotationMatrix);
 	}
 
 	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex = 0)
@@ -366,8 +386,8 @@ namespace ShadowSampling
 		float4 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1));
 
 		[branch] if (shadow.ShadowParam.x == 0) return GetSpotlightShadow(shadow, shadowIndex, positionLS, rotationMatrix);
-		else if (shadow.ShadowParam.x == 1) return GetHemisphereShadow(shadow, shadowIndex, positionLS);
-		else if (shadow.ShadowParam.x == 2) return GetOmnidirectionalShadow(shadow, shadowIndex, positionLS.xyz);
+		else if (shadow.ShadowParam.x == 1) return GetHemisphereShadow(shadow, shadowIndex, positionLS, rotationMatrix);
+		else if (shadow.ShadowParam.x == 2) return GetOmnidirectionalShadow(shadow, shadowIndex, positionLS.xyz, rotationMatrix);
 
 		return 1.0;
 	}
