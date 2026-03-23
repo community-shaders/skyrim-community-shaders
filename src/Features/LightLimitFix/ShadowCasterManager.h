@@ -286,9 +286,4 @@ namespace ShadowCasterManager
 	/// Call from LightLimitFix::DrawSettings().
 	void DrawSettings(Settings& settings);
 
-	/// Extended depth buffer arrays (indexed by shadow slot).
-	/// The game's built-in DepthStencilData only has 8 slots; these arrays are
-	/// used for indices 0..ShadowLightCount-1 when ShadowLightCount > 8.
-	extern void** g_normalDepthBuffer;
-	extern void** g_readOnlyDepthBuffer;
 }

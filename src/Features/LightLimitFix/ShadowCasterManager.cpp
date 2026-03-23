@@ -7,12 +7,10 @@
 // Ported and adapted for Community Shaders by the Community Shaders team with permission.
 
 #include "ShadowCasterManager.h"
+#include "../../Globals.h"
 #include "../../Utils/UI.h"
 
 #include <exprtk.hpp>
-
-// Convenience: cast an address to a writable byte pointer.
-static void* ToPtr(uintptr_t a) { return reinterpret_cast<void*>(a); }
 
 namespace ShadowCasterManager
 {
@@ -167,277 +165,6 @@ namespace ShadowCasterManager
 	static std::vector<ConvertedLight> s_normalConvert;
 	static std::set<RE::NiLight*> s_shadowConvert;
 
-	void** g_normalDepthBuffer = nullptr;
-	void** g_readOnlyDepthBuffer = nullptr;
-
-	// =========================================================================
-	// Context-hook infrastructure
-	//
-	// Each installed context hook writes a JMP5 from the patch address to a
-	// generated stub that:
-	//   1. Calls RtlCaptureContext to snapshot all registers.
-	//   2. Calls the user's hook(CONTEXT&) function.
-	//   3. Uses RtlRestoreContext to reload (potentially modified) registers
-	//      and resumes execution after the patched bytes.
-	// =========================================================================
-	namespace ContextHook
-	{
-		// Signature for a context hook callback.
-		using Delegate = void (*)(CONTEXT&);
-
-		// Called by the generated stub.  Invokes the user delegate then
-		// restores registers via RtlRestoreContext so execution continues at
-		// `resumeAddr`.
-		static void Execute(CONTEXT* ctx, Delegate func, void* resumeAddr)
-		{
-			// Fix up Rsp, Rcx, Rax, EFlags from the pushed values above the CONTEXT.
-			// The stub pushes (in order): rsp, rax, rcx, rflags, then a sentinel.
-			// Sentinel is 0 (aligned) or [1,0] (not aligned), then the saved values.
-			auto* after = reinterpret_cast<DWORD64*>(reinterpret_cast<uint8_t*>(ctx) + sizeof(CONTEXT));
-			if (after[0] == 0)
-				after += 1;  // skip type-0 sentinel
-			else             // == 1
-				after += 2;  // skip type-1 and 0 sentinels
-			ctx->EFlags = static_cast<DWORD>(after[0]);
-			ctx->Rcx = after[1];
-			ctx->Rax = after[2];
-			ctx->Rsp = after[3];
-			ctx->Rip = reinterpret_cast<DWORD64>(resumeAddr);
-			func(*ctx);
-			RtlRestoreContext(ctx, nullptr);
-		}
-
-		// Writes a context-capture stub into trampoline memory, then installs
-		// a JMP5 (or NOPs over `patchSize` bytes) from `patchAddr` to it.
-		//
-		//  patchAddr   - address of the instructions to replace
-		//  patchSize   - bytes to overwrite (must be >= 5)
-		//  func        - callback that receives and may modify the CONTEXT
-		//  includeSize - if > 0: copy `includeSize` original bytes BEFORE the
-		//                context stub so they run first (original prologue kept).
-		//                if < 0: copy after (original epilogue kept).
-		//                0: replace entirely.
-		static bool Install(uintptr_t patchAddr, int patchSize, Delegate func, int includeSize = 0)
-		{
-			if (patchSize < 5) {
-				logger::error("[SCM] ContextHook::Install: patchSize {} < 5", patchSize);
-				return false;
-			}
-
-			void* resumeAddr = ToPtr(patchAddr + patchSize);
-
-			// Include bytes that need to run alongside our stub.
-			std::vector<uint8_t> includedBytes;
-			if (includeSize != 0) {
-				includedBytes.resize(std::abs(includeSize));
-				memcpy(includedBytes.data(), ToPtr(patchAddr), std::abs(includeSize));
-			}
-
-			// ------------------------------------------------------------------
-			// Build the context-capture stub:
-			//
-			//   [optional included bytes if includeSize > 0]
-			//   push rsp              ; save original RSP before alignment
-			//   push rax              ; scratch
-			//   push rcx              ; scratch
-			//   pushfq                ; flags
-			//   sub rsp, sizeof(CONTEXT)
-			//   mov rcx, rsp          ; arg1 = CONTEXT*
-			//   mov rax, RtlCaptureContext
-			//   call rax
-			//   mov rcx, rsp          ; arg1 = CONTEXT* (again after call)
-			//   mov rdx, func         ; arg2 = user delegate
-			//   mov r8,  resumeAddr   ; arg3 = resume address
-			//   sub rsp, 0x20         ; shadow space
-			//   mov rax, Execute
-			//   call rax
-			//   ; Execute calls RtlRestoreContext which never returns here.
-			//   [optional included bytes if includeSize < 0]
-			//   [absolute jump back to resumeAddr]
-			// ------------------------------------------------------------------
-
-			// Flat byte array stub; absolute addresses patched in at known offsets.
-			uint8_t stub[] = {
-				// push rsp          (offset 0)
-				0x54,
-				// push rax          (offset 1)
-				0x50,
-				// push rcx          (offset 2)
-				0x51,
-				// pushfq            (offset 3)
-				0x9C,
-				// -- stack alignment sentinel (24 bytes, offsets 4-27) --
-				// xor rax, rax      (offset 4)
-				0x48,
-				0x31,
-				0xC0,
-				// push rax          (offset 7)  ; push 0 (type-0 sentinel)
-				0x50,
-				// mov rax, rsp      (offset 8)
-				0x48,
-				0x89,
-				0xE0,
-				// and rax, ~0xF     (offset 11)
-				0x48,
-				0x83,
-				0xE0,
-				0xF0,
-				// cmp rax, rsp      (offset 15)
-				0x48,
-				0x39,
-				0xE0,
-				// je +8             (offset 18)  ; jump to offset 28 (sub rsp)
-				0x74,
-				0x08,
-				// mov rax, 1        (offset 20)
-				0x48,
-				0xC7,
-				0xC0,
-				0x01,
-				0x00,
-				0x00,
-				0x00,
-				// push rax          (offset 27)  ; push 1 (type-1 sentinel, not aligned)
-				0x50,
-				// -- continue (offset 28) --
-				// sub rsp, sizeof(CONTEXT)  (0x4D0 = 1232)  (offset 28)
-				0x48,
-				0x81,
-				0xEC,
-				0xD0,
-				0x04,
-				0x00,
-				0x00,
-				// mov rcx, rsp      (offset 35)
-				0x48,
-				0x89,
-				0xE1,
-				// movabs rax, RtlCaptureContext  (offset 38, imm64 at +2 = offset 40)
-				0x48,
-				0xB8,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				// call rax          (offset 48)
-				0xFF,
-				0xD0,
-				// mov rcx, rsp      (offset 50)
-				0x48,
-				0x89,
-				0xE1,
-				// sub rsp, 0x20     (offset 53)
-				0x48,
-				0x83,
-				0xEC,
-				0x20,
-				// movabs rdx, func  (offset 57, imm64 at +2 = offset 59)
-				0x48,
-				0xBA,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				// movabs r8, resumeAddr  (offset 67, imm64 at +2 = offset 69)
-				0x49,
-				0xB8,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				// movabs rax, Execute    (offset 77, imm64 at +2 = offset 79)
-				0x48,
-				0xB8,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				0x00,
-				// call rax          (offset 87)
-				0xFF,
-				0xD0,
-			};
-
-			// Fill in absolute addresses at known offsets within the stub.
-			auto write64 = [&](int off, uint64_t val) {
-				memcpy(stub + off, &val, 8);
-			};
-
-			// &RtlCaptureContext under MSVC x64 dllimport gives the IAT slot address
-			// (non-executable .idata data), not the callable function.  Use
-			// GetProcAddress to obtain the actual ntdll entry point.
-			static const auto s_rtlCaptureContext = reinterpret_cast<uint64_t>(
-				GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlCaptureContext"));
-			write64(40, s_rtlCaptureContext);
-			write64(59, reinterpret_cast<uint64_t>(func));
-			write64(79, reinterpret_cast<uint64_t>(&Execute));
-
-			// Allocate space in SKSE's trampoline.
-			int totalSize = (int)std::abs(includeSize) + (int)sizeof(stub);
-			if (includeSize < 0) {
-				totalSize += 14;  // space for absolute jump back
-			}
-			auto& trampoline = SKSE::GetTrampoline();
-			auto cave = static_cast<uint8_t*>(trampoline.allocate(totalSize));
-			if (!cave) {
-				logger::error("[SCM] ContextHook::Install: trampoline out of space");
-				return false;
-			}
-
-			// If includeSize < 0, the resume address passed to Execute is the
-			// start of the copied original bytes, which will execute and then jump back.
-			void* afterStub = cave + sizeof(stub);
-			if (includeSize < 0) {
-				write64(69, reinterpret_cast<uint64_t>(afterStub));
-			} else {
-				write64(69, reinterpret_cast<uint64_t>(resumeAddr));
-			}
-
-			// Write included bytes before or after the stub.
-			uint8_t* writePtr = cave;
-			if (includeSize > 0) {
-				memcpy(writePtr, includedBytes.data(), includeSize);
-				writePtr += includeSize;
-			}
-			memcpy(writePtr, stub, sizeof(stub));
-			if (includeSize < 0) {
-				writePtr += sizeof(stub);
-				memcpy(writePtr, includedBytes.data(), -includeSize);
-				writePtr += -includeSize;
-
-				// Write an absolute JMP to resumeAddr
-				uint8_t jmp[14] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-				auto resumeAddr64 = reinterpret_cast<uint64_t>(resumeAddr);
-				memcpy(jmp + 6, &resumeAddr64, 8);
-				memcpy(writePtr, jmp, 14);
-			}
-
-			// Write JMP5 from patchAddr to cave, NOP remaining bytes.
-			SKSE::GetTrampoline().write_branch<5>(patchAddr, reinterpret_cast<uintptr_t>(cave));
-			if (patchSize > 5) {
-				std::vector<uint8_t> nops(patchSize - 5, 0x90);
-				REL::safe_write(patchAddr + 5, nops.data(), nops.size());
-			}
-
-			return true;
-		}
-	}
-
 	// =========================================================================
 	// Helpers for depth-target index globals
 	// SE: 14304EEE8 / AE: n/a (adjacent) / VR: 143180df0
@@ -481,7 +208,7 @@ namespace ShadowCasterManager
 	// Redirect depth-stencil-view creation to our extended arrays
 	// The game loops 0..7 creating depth stencil views and stores each pointer
 	// in a game-managed struct at R9.  We redirect R9 to our own arrays so
-	// views >= 8 land in g_normalDepthBuffer / g_readOnlyDepthBuffer.
+	// views >= 8 land in globals::features::llf::normalDepthBuffer / globals::features::llf::readOnlyDepthBuffer.
 	// -------------------------------------------------------------------------
 	static void Hook_CreateNormalDepthBuffer(CONTEXT& ctx)
 	{
@@ -490,7 +217,7 @@ namespace ShadowCasterManager
 		if (REL::Relocate(ctx.R12, ctx.R12, ctx.R13) != 4 * 19)
 			return;
 		int idx = (int)REL::Relocate(ctx.Rdi, ctx.Rbx, ctx.Rbx);
-		ctx.R9 = reinterpret_cast<DWORD64>(&g_normalDepthBuffer[idx]);
+		ctx.R9 = reinterpret_cast<DWORD64>(&globals::features::llf::normalDepthBuffer[idx]);
 	}
 
 	static void Hook_CreateReadOnlyDepthBuffer(CONTEXT& ctx)
@@ -498,7 +225,7 @@ namespace ShadowCasterManager
 		if (REL::Relocate(ctx.R12, ctx.R12, ctx.R13) != 4 * 19)
 			return;
 		int idx = (int)REL::Relocate(ctx.Rdi, ctx.Rbx, ctx.Rbx);
-		ctx.R9 = reinterpret_cast<DWORD64>(&g_readOnlyDepthBuffer[idx]);
+		ctx.R9 = reinterpret_cast<DWORD64>(&globals::features::llf::readOnlyDepthBuffer[idx]);
 	}
 
 	// -------------------------------------------------------------------------
@@ -512,8 +239,8 @@ namespace ShadowCasterManager
 			return;
 		auto* renderer = reinterpret_cast<RE::BSGraphics::Renderer*>(ctx.R15);
 		for (int i = 0; i < 8; i++) {
-			renderer->GetDepthStencilData().depthStencils[4].views[i] = reinterpret_cast<ID3D11DepthStencilView*>(g_normalDepthBuffer[i]);
-			renderer->GetDepthStencilData().depthStencils[4].readOnlyViews[i] = reinterpret_cast<ID3D11DepthStencilView*>(g_readOnlyDepthBuffer[i]);
+			renderer->GetDepthStencilData().depthStencils[4].views[i] = reinterpret_cast<ID3D11DepthStencilView*>(globals::features::llf::normalDepthBuffer[i]);
+			renderer->GetDepthStencilData().depthStencils[4].readOnlyViews[i] = reinterpret_cast<ID3D11DepthStencilView*>(globals::features::llf::readOnlyDepthBuffer[i]);
 		}
 	}
 
@@ -530,7 +257,7 @@ namespace ShadowCasterManager
 		int sub = GetDepthTargetSubIndex();
 
 		if (type == 4) {
-			ctx.Rbx = data->readOnlyDepth ? reinterpret_cast<DWORD64>(g_readOnlyDepthBuffer[sub]) : reinterpret_cast<DWORD64>(g_normalDepthBuffer[sub]);
+			ctx.Rbx = data->readOnlyDepth ? reinterpret_cast<DWORD64>(globals::features::llf::readOnlyDepthBuffer[sub]) : reinterpret_cast<DWORD64>(globals::features::llf::normalDepthBuffer[sub]);
 		} else {
 			ctx.Rbx = data->readOnlyDepth ? reinterpret_cast<DWORD64>(RE::BSGraphics::Renderer::GetSingleton()->GetDepthStencilData().depthStencils[type].readOnlyViews[sub]) : reinterpret_cast<DWORD64>(RE::BSGraphics::Renderer::GetSingleton()->GetDepthStencilData().depthStencils[type].views[sub]);
 		}
@@ -547,7 +274,7 @@ namespace ShadowCasterManager
 
 		DWORD64 result;
 		if (type == 4) {
-			result = readOnly ? reinterpret_cast<DWORD64>(g_readOnlyDepthBuffer[sub]) : reinterpret_cast<DWORD64>(g_normalDepthBuffer[sub]);
+			result = readOnly ? reinterpret_cast<DWORD64>(globals::features::llf::readOnlyDepthBuffer[sub]) : reinterpret_cast<DWORD64>(globals::features::llf::normalDepthBuffer[sub]);
 		} else {
 			result = readOnly ? reinterpret_cast<DWORD64>(RE::BSGraphics::Renderer::GetSingleton()->GetDepthStencilData().depthStencils[type].readOnlyViews[sub]) : reinterpret_cast<DWORD64>(RE::BSGraphics::Renderer::GetSingleton()->GetDepthStencilData().depthStencils[type].views[sub]);
 		}
@@ -564,13 +291,13 @@ namespace ShadowCasterManager
 	static void ReleaseExtendedDepthBuffers(int shadowCount)
 	{
 		for (int i = 8; i < shadowCount; i++) {
-			if (g_normalDepthBuffer[i]) {
-				reinterpret_cast<ID3D11DepthStencilView*>(g_normalDepthBuffer[i])->Release();
-				g_normalDepthBuffer[i] = nullptr;
+			if (globals::features::llf::normalDepthBuffer[i]) {
+				reinterpret_cast<ID3D11DepthStencilView*>(globals::features::llf::normalDepthBuffer[i])->Release();
+				globals::features::llf::normalDepthBuffer[i] = nullptr;
 			}
-			if (g_readOnlyDepthBuffer[i]) {
-				reinterpret_cast<ID3D11DepthStencilView*>(g_readOnlyDepthBuffer[i])->Release();
-				g_readOnlyDepthBuffer[i] = nullptr;
+			if (globals::features::llf::readOnlyDepthBuffer[i]) {
+				reinterpret_cast<ID3D11DepthStencilView*>(globals::features::llf::readOnlyDepthBuffer[i])->Release();
+				globals::features::llf::readOnlyDepthBuffer[i] = nullptr;
 			}
 		}
 	}
@@ -613,8 +340,8 @@ namespace ShadowCasterManager
 	// Color-mask pass skip and overflow fix
 	// -------------------------------------------------------------------------
 
-	// ContextHook delegate — replaces the DrawColorMask call in 107140.
-	// Must use ContextHook (not write_thunk_call) so RtlRestoreContext preserves
+	// Replaces the DrawColorMask call in 107140.
+	// Must use install_context_hook (not write_thunk_call) so RtlRestoreContext preserves
 	// all volatile registers (rdx, r8, etc.) for the call at 107140+0x83 that
 	// immediately follows and passes them directly into 107141.
 	static void Hook_DisableColorMask(CONTEXT& /*ctx*/)
@@ -868,22 +595,6 @@ namespace ShadowCasterManager
 		return reinterpret_cast<uint32_t*>(uid.address());
 	}
 
-	static int32_t GetFrameCounter()
-	{
-		static REL::RelocationID uid(525008, 411489);
-		return *reinterpret_cast<int32_t*>(uid.address());
-	}
-	static int GetViewWidth()
-	{
-		static REL::RelocationID uid(524978, 411459);
-		return *reinterpret_cast<int*>(uid.address());
-	}
-	static int GetViewHeight()
-	{
-		static REL::RelocationID uid(524979, 411460);
-		return *reinterpret_cast<int*>(uid.address());
-	}
-
 	// VR-only globals
 	static bool GetVRDrawShadows()
 	{
@@ -894,12 +605,6 @@ namespace ShadowCasterManager
 	{
 		static REL::Offset uid{ 0x1ed4118 };
 		return *reinterpret_cast<bool*>(uid.address());
-	}
-	static bool& GetDrawStereo()
-	{
-		// g_drawStereo is BSRenderManager singleton pointer + 8 bytes
-		static REL::RelocationID uid(524907, 411393);
-		return *reinterpret_cast<bool*>(uid.address() + sizeof(void*));
 	}
 	static float GetVRDRSWidthRatio()
 	{
@@ -1233,8 +938,8 @@ namespace ShadowCasterManager
 				float r1[2], r2[2];
 				GameFrustumOverlap(camera, coord, r1, r2, 0.00001f);
 
-				float vw = (float)GetViewWidth();
-				float vh = (float)GetViewHeight();
+				float vw = (float)*globals::game::viewWidth;
+				float vh = (float)*globals::game::viewHeight;
 				if (REL::Module::IsVR()) {
 					vw *= GetVRDRSWidthRatio();
 					vh *= GetVRDRSHeightRatio();
@@ -1456,7 +1161,7 @@ namespace ShadowCasterManager
 			double budget = s_settings.RedrawBudgetMs;
 			int32_t budgetRemain = static_cast<int32_t>(budget * 1000.0);
 			bool isFirst = true;
-			int32_t now = GetFrameCounter();
+			int32_t now = *globals::game::frameCounter;
 
 			for (int i = s_settings.ShadowLightCount; i < s_lights.Size; i++)
 				s_lights.Lights[i].RedrawFrame = false;
@@ -1597,7 +1302,7 @@ namespace ShadowCasterManager
 	// =========================================================================
 	// Render hook: replaces RenderActiveShadowCasterLights
 	// Iterates s_lights and calls Render() on lights flagged RedrawFrame.
-	// Uses ContextHook at a specific call site in the render loop (see Install()).
+	// Uses install_context_hook at a specific call site in the render loop (see Install()).
 	// =========================================================================
 
 	static void RenderScheduledShadowLights()
@@ -1607,8 +1312,8 @@ namespace ShadowCasterManager
 		// render is doubled for both eyes -> 4-quadrant shadow map texture.
 		bool savedStereo = false;
 		if (REL::Module::IsVR()) {
-			savedStereo = GetDrawStereo();
-			GetDrawStereo() = false;
+			savedStereo = *globals::game::drawStereo;
+			*globals::game::drawStereo = false;
 		}
 
 		s_budget.Begin(1);
@@ -1626,11 +1331,11 @@ namespace ShadowCasterManager
 		s_budget.Begin(1);  // cleanup tick for step 1
 
 		if (REL::Module::IsVR())
-			GetDrawStereo() = savedStereo;
+			*globals::game::drawStereo = savedStereo;
 	}
 
-	// ContextHook delegate — replaces the call to RenderActiveShadowCasterLights.
-	// ContextHook (RtlRestoreContext) is required so all volatile registers (r8, etc.)
+	// Replaces the call to RenderActiveShadowCasterLights.
+	// install_context_hook (RtlRestoreContext) is required so all volatile registers (r8, etc.)
 	// are restored before the game continues past the patched call site.
 	//
 	// Non-VR (SE/AE): set ctx.Rax = 0 so the conditional between 107133+0x192 and
@@ -1653,7 +1358,7 @@ namespace ShadowCasterManager
 	// =========================================================================
 	// Surface lights hook
 	// Replaces CalculateActiveNonShadowCasterLights (ID 100997/107784).
-	// Uses ContextHook::Install because the function has 10 args (11 in VR)
+	// Uses install_context_hook because the function has 10 args (11 in VR)
 	// with VR-specific stack layout — CONTEXT is the simplest cross-runtime approach.
 	// =========================================================================
 
@@ -1941,8 +1646,8 @@ namespace ShadowCasterManager
 		// ---- Extended depth buffer infrastructure -------------------------
 
 		if (needExtraBuffers) {
-			g_normalDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount + 1, sizeof(void*)));
-			g_readOnlyDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount + 1, sizeof(void*)));
+			globals::features::llf::normalDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount + 1, sizeof(void*)));
+			globals::features::llf::readOnlyDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount + 1, sizeof(void*)));
 
 			// Patch the creation-loop count from 8 to ShadowLightCount.
 			// SE/VR: pattern "C7 44 24 68 08 00 00 00" (+4 = the immediate 0x08)
@@ -1962,7 +1667,7 @@ namespace ShadowCasterManager
 				uintptr_t base = uid.address();
 				uintptr_t off = REL::Relocate(0xB52 - 0x9E0, 0x2EB - 0x180, 0x1a0);
 				int sz = REL::Relocate(7, 7, 8);
-				if (!ContextHook::Install(base + off, sz, Hook_CreateNormalDepthBuffer, sz))
+				if (!SKSE::stl::install_context_hook(base + off, sz, Hook_CreateNormalDepthBuffer, sz))
 					logger::error("[SCM] Failed to install Hook_CreateNormalDepthBuffer");
 			}
 			{
@@ -1971,7 +1676,7 @@ namespace ShadowCasterManager
 				uintptr_t base = uid.address();
 				uintptr_t off = REL::Relocate(0xB71 - 0x9E0, 0x2FC - 0x180, 0x1c4);
 				int sz = REL::Relocate(8, 7, 7);
-				if (!ContextHook::Install(base + off, sz, Hook_CreateReadOnlyDepthBuffer, sz))
+				if (!SKSE::stl::install_context_hook(base + off, sz, Hook_CreateReadOnlyDepthBuffer, sz))
 					logger::error("[SCM] Failed to install Hook_CreateReadOnlyDepthBuffer");
 			}
 
@@ -1981,7 +1686,7 @@ namespace ShadowCasterManager
 				static REL::RelocationID uid(75469, 77255);
 				uintptr_t base = uid.address();
 				uintptr_t off = REL::Relocate(0xC00 - 0x9E0, 0x384 - 0x180, 0x250);
-				if (!ContextHook::Install(base + off, 8, Hook_SetupGameArray, 8))
+				if (!SKSE::stl::install_context_hook(base + off, 8, Hook_SetupGameArray, 8))
 					logger::error("[SCM] Failed to install Hook_SetupGameArray");
 			}
 
@@ -1991,7 +1696,7 @@ namespace ShadowCasterManager
 				static REL::RelocationID uid(75580, 77386);
 				uintptr_t base = uid.address();
 				uintptr_t off = REL::Relocate(0x444 - 0x2F0, 0x704 - 0x5B0, 0x1c3);
-				if (!ContextHook::Install(base + off, 21, Hook_SelectDepthBuffer1))
+				if (!SKSE::stl::install_context_hook(base + off, 21, Hook_SelectDepthBuffer1))
 					logger::error("[SCM] Failed to install Hook_SelectDepthBuffer1");
 			}
 			{
@@ -2000,7 +1705,7 @@ namespace ShadowCasterManager
 				uintptr_t base = uid.address();
 				uintptr_t off = REL::Relocate(0x1A5 - 0x070, 0x985 - 0x850, 0x19c);
 				int sz = REL::Relocate(10, 10, 0x2e);
-				if (!ContextHook::Install(base + off, sz, Hook_SelectDepthBuffer2))
+				if (!SKSE::stl::install_context_hook(base + off, sz, Hook_SelectDepthBuffer2))
 					logger::error("[SCM] Failed to install Hook_SelectDepthBuffer2");
 			}
 
@@ -2010,20 +1715,20 @@ namespace ShadowCasterManager
 				// SE + VR share the same pattern.
 				static REL::RelocationID uid(75628, 0 /*AE unused*/);
 				uintptr_t addr = uid.address() + (0xE27 - 0xDD0);
-				if (!ContextHook::Install(addr, 9, Hook_DeleteDepthBuffers_SE, -9))
+				if (!SKSE::stl::install_context_hook(addr, 9, Hook_DeleteDepthBuffers_SE, -9))
 					logger::error("[SCM] Failed to install Hook_DeleteDepthBuffers_SE");
 			} else {
 				// AE has three separate shutdown paths.
 				static REL::RelocationID uid1(0, 77228);
-				if (!ContextHook::Install(uid1.address() + (0x3195 - 0x2E10), 7, Hook_DeleteDepthBuffers_AE, 7))
+				if (!SKSE::stl::install_context_hook(uid1.address() + (0x3195 - 0x2E10), 7, Hook_DeleteDepthBuffers_AE, 7))
 					logger::error("[SCM] Failed to install Hook_DeleteDepthBuffers_AE (path 1)");
 
 				static REL::RelocationID uid2(0, 77237);
-				if (!ContextHook::Install(uid2.address() + (0x3B8C - 0x34A0), 7, Hook_DeleteDepthBuffers_AE, 7))
+				if (!SKSE::stl::install_context_hook(uid2.address() + (0x3B8C - 0x34A0), 7, Hook_DeleteDepthBuffers_AE, 7))
 					logger::error("[SCM] Failed to install Hook_DeleteDepthBuffers_AE (path 2)");
 
 				static REL::RelocationID uid3(0, 77238);
-				if (!ContextHook::Install(uid3.address() + (0x3E79 - 0x3BC0), 6, Hook_DeleteDepthBuffers_AE, -6))
+				if (!SKSE::stl::install_context_hook(uid3.address() + (0x3E79 - 0x3BC0), 6, Hook_DeleteDepthBuffers_AE, -6))
 					logger::error("[SCM] Failed to install Hook_DeleteDepthBuffers_AE (path 3)");
 			}
 		}
@@ -2034,7 +1739,7 @@ namespace ShadowCasterManager
 			static REL::RelocationID uid(99686, 106320);
 			uintptr_t base = uid.address();
 			uintptr_t off = REL::Relocate(0xFCA4 - 0xF950, 0xF05 - 0xBB0, 0x387);
-			if (!ContextHook::Install(base + off, 5, Hook_AccumulatedLightsArray, 5))
+			if (!SKSE::stl::install_context_hook(base + off, 5, Hook_AccumulatedLightsArray, 5))
 				logger::error("[SCM] Failed to install Hook_AccumulatedLightsArray");
 		}
 
@@ -2048,7 +1753,7 @@ namespace ShadowCasterManager
 			static REL::RelocationID uid(100820, 107604);
 			uintptr_t base = uid.address();
 			uintptr_t off = REL::Relocate(0xA9E - 0x9E0, 0xDB0 - 0xCF0, 0xe0);
-			if (!ContextHook::Install(base + off, 0x25, Hook_OverwriteShadowMapIndex))
+			if (!SKSE::stl::install_context_hook(base + off, 0x25, Hook_OverwriteShadowMapIndex))
 				logger::error("[SCM] Failed to install Hook_OverwriteShadowMapIndex");
 		}
 
@@ -2080,7 +1785,7 @@ namespace ShadowCasterManager
 			{
 				static REL::RelocationID uid(100422, 107140);
 				uintptr_t addr = uid.address() + REL::Relocate(0xF20 - 0xE90, 0x67E - 0x600, 0x9e);
-				if (!ContextHook::Install(addr, 5, Hook_DisableColorMask))
+				if (!SKSE::stl::install_context_hook(addr, 5, Hook_DisableColorMask))
 					logger::error("[SCM] Failed to install Hook_DisableColorMask");
 			}
 		}
@@ -2094,23 +1799,23 @@ namespace ShadowCasterManager
 		// Replace the CALL to RenderActiveShadowCasterLights inside the render loop.
 		// ID 100415/107133; VR confirmed: 0x141322130
 		// Offsets: SE = 0xF76-0xE30 (0x146), AE = 0xC17D-0xBFF0 (0x18D), VR = 0x1CA
-		// Must use ContextHook (not write_thunk_call) so RtlRestoreContext restores
+		// Must use install_context_hook (not write_thunk_call) so RtlRestoreContext restores
 		// volatile registers (r8, etc.) before the game continues past the call site.
 		{
 			static REL::RelocationID uid(100415, 107133);
 			uintptr_t addr = uid.address() + REL::Relocate(0xF76 - 0xE30, 0xC17D - 0xBFF0, 0x1CA);
-			if (!ContextHook::Install(addr, 5, Hook_RenderShadowLights))
+			if (!SKSE::stl::install_context_hook(addr, 5, Hook_RenderShadowLights))
 				logger::error("[SCM] Failed to install Hook_RenderShadowLights");
 		}
 
 		// Replace CalculateActiveNonShadowCasterLights (surface light injection).
 		// ID 100997/107784; VR confirmed: 0x141354d20
-		// Uses ContextHook because the function has 10 args (11 in VR) with
+		// Uses install_context_hook because the function has 10 args (11 in VR) with
 		// platform-specific stack layout. We write a RET at func+5 so
 		// RtlRestoreContext lands on ret and the function returns cleanly.
 		{
 			static REL::RelocationID uid(100997, 107784);
-			if (!ContextHook::Install(uid.address(), 5, Hook_CalculateActiveLightsForSurface))
+			if (!SKSE::stl::install_context_hook(uid.address(), 5, Hook_CalculateActiveLightsForSurface))
 				logger::error("[SCM] Failed to install Hook_CalculateActiveLightsForSurface");
 			const uint8_t ret = 0xC3;
 			REL::safe_write(uid.address() + 5, &ret, 1);
@@ -2126,7 +1831,7 @@ namespace ShadowCasterManager
 			// Hook at the start of the affect-player loop.
 			// Original bytes: "41 83 CE FF 33 C0" (6 bytes) — keep them running first.
 			uintptr_t off1 = REL::Relocate(0x185 - 0x050, 0x847 - 0x710, 0x185 - 0x050);
-			if (!ContextHook::Install(uid.address() + off1, 6, Hook_UpdateLightLevelPlayer, 6))
+			if (!SKSE::stl::install_context_hook(uid.address() + off1, 6, Hook_UpdateLightLevelPlayer, 6))
 				logger::error("[SCM] Failed to install Hook_UpdateLightLevelPlayer");
 
 			// Byte patch: change JA (0x73) to JMP (0xEB) to skip the vanilla iteration.
@@ -2139,7 +1844,7 @@ namespace ShadowCasterManager
 		if (!REL::Module::IsVR()) {
 			static REL::RelocationID uid(99725, 106362);
 			uintptr_t off = REL::Relocate(0x648 - 0x560, 0xB49 - 0xA60, 0x648 - 0x560);
-			if (!ContextHook::Install(uid.address() + off, 5, Hook_CheckLightLevelPlayer))
+			if (!SKSE::stl::install_context_hook(uid.address() + off, 5, Hook_CheckLightLevelPlayer))
 				logger::error("[SCM] Failed to install Hook_CheckLightLevelPlayer");
 		}
 
@@ -2165,21 +1870,21 @@ namespace ShadowCasterManager
 			// ShadowSceneNode::RemoveLight — fires at +0x9 (SE: 6 bytes, AE: 5 bytes)
 			static REL::RelocationID uid(99697, 106331);
 			int sz = REL::Relocate(6, 5, 6);
-			if (!ContextHook::Install(uid.address() + REL::Relocate(0x9, 0x9, 0x9), sz, Hook_ConvertLights_Remove, sz))
+			if (!SKSE::stl::install_context_hook(uid.address() + REL::Relocate(0x9, 0x9, 0x9), sz, Hook_ConvertLights_Remove, sz))
 				logger::error("[SCM] Failed to install Hook_ConvertLights_Remove");
 		}
 
 		{
 			// ShadowSceneNode::AddLight — at function start (5 bytes)
 			static REL::RelocationID uid(99692, 106326);
-			if (!ContextHook::Install(uid.address(), 5, Hook_ConvertLights_Add, 5))
+			if (!SKSE::stl::install_context_hook(uid.address(), 5, Hook_ConvertLights_Add, 5))
 				logger::error("[SCM] Failed to install Hook_ConvertLights_Add");
 		}
 
 		if (settings.PromoteNormalToShadow) {
 			// BSLight::SetLight — at function start (5 bytes)
 			static REL::RelocationID uid(101302, 108289);
-			if (!ContextHook::Install(uid.address(), 5, Hook_ConvertLights_SetLight, 5))
+			if (!SKSE::stl::install_context_hook(uid.address(), 5, Hook_ConvertLights_SetLight, 5))
 				logger::error("[SCM] Failed to install Hook_ConvertLights_SetLight");
 		}
 

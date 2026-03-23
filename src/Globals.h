@@ -94,6 +94,8 @@ namespace globals
 
 		namespace llf
 		{
+			extern void** normalDepthBuffer;
+			extern void** readOnlyDepthBuffer;
 		}
 	}
 
@@ -239,6 +241,11 @@ namespace globals
 
 		extern D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer;
 		extern FrameBufferCache frameBufferCached;
+
+		extern int32_t* frameCounter;
+		extern int* viewWidth;
+		extern int* viewHeight;
+		extern bool* drawStereo;
 	}
 
 	namespace rtti
