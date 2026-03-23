@@ -156,7 +156,7 @@ public:
 
 	Util::FrameChecker frameChecker;
 
-	// Point/spot shadow resources (t100, t101, s14) — moved from Deferred.
+	// Point/spot shadow resources (t100, t101, s14)
 	// perShadows is lazily allocated in CopyPointShadowData() since shadowMapSlots
 	// is not known until Deferred::SetupResources() runs (after Feature::SetupResources()).
 	Buffer* perShadows = nullptr;

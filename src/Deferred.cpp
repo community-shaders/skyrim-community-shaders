@@ -643,7 +643,6 @@ void Deferred::CopyShadowData()
 		ID3D11ShaderResourceView* srv = perDirectionalShadow->srv.get();
 		context->PSSetShaderResources(98, 1, &srv);
 	}
-	// Point/spot shadow data (t100, t101, s14) is uploaded by LightLimitFix::EarlyPrepass().
 }
 
 void Deferred::ClearShaderCache()
