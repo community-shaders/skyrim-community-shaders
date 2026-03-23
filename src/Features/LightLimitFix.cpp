@@ -262,7 +262,7 @@ void LightLimitFix::DrawOverlay()
 	if (hasSuppressed || shadowRelatedMode) {
 		if (vizOn)
 			ImGui::Separator();
-		ShadowCasterManager::DrawShadowLightTable(!menuOpen, vizOn && (mode == 8));
+		ShadowCasterManager::DrawShadowLightTable(!menuOpen, vizOn && (mode == 8), true);
 	}
 
 	ImGui::End();

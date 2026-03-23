@@ -261,7 +261,8 @@ namespace ShadowCasterManager
 
 	/// Draw the interactive shadow caster table (suppress/filter/sort).
 	/// compact=true caps height; showColor adds a hue swatch column (viz mode 8).
-	void DrawShadowLightTable(bool compact, bool showColor);
+	/// sceneOnly=true shows only lights currently in the scene (overlay); false shows all known lights including disabled ones (settings).
+	void DrawShadowLightTable(bool compact, bool showColor, bool sceneOnly = false);
 
 	// -------------------------------------------------------------------------
 	// Public API
