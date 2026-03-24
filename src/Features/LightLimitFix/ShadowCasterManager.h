@@ -118,6 +118,11 @@ namespace ShadowCasterManager
 		///   2 = Formula: user-editable exprtk expression (RedrawBudgetFormula).
 		int32_t BudgetMode = 0;
 
+		/// Target FPS for the auto-budget controller.
+		/// 0 = auto-detect from monitor refresh rate.
+		/// Any positive value overrides the auto-detected target.
+		float AutoTargetFPS = 0.0f;
+
 		/// Per-frame time budget for shadow re-renders (milliseconds).
 		/// Used in Manual mode.  Lights whose estimated GPU cost would exceed this
 		/// are deferred to a later frame.
