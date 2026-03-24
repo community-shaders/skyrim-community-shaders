@@ -1230,7 +1230,7 @@ namespace ShadowCasterManager
 			//   Mode 1 (Manual):  fixed slider value (RedrawBudgetMs).
 			//   Mode 2 (Formula): user-editable exprtk expression.
 			double budget = s_settings.RedrawBudgetMs;
-			if (s_settings.BudgetMode == 0) {
+			if (s_settings.BudgetMode == BudgetModeEnum::Auto) {
 				// ---- DRS-style auto budget ----
 				// Derive target frame time: user override > monitor refresh rate > fallback.
 				if (s_settings.AutoTargetFPS > 0.0f) {
@@ -1266,7 +1266,7 @@ namespace ShadowCasterManager
 
 				s_adaptiveBudgetMs = std::clamp(s_adaptiveBudgetMs, kAutoMinBudget, kAutoMaxBudget);
 				budget = s_adaptiveBudgetMs;
-			} else if (s_settings.BudgetMode == 2 && s_formulaRedrawBudget) {
+			} else if (s_settings.BudgetMode == BudgetModeEnum::Formula && s_formulaRedrawBudget) {
 				// --- Formula mode ---
 				budget = s_formulaRedrawBudget->Calculate();
 			}
@@ -2444,9 +2444,9 @@ namespace ShadowCasterManager
 		// Budget mode selector.
 		static constexpr int32_t kAutoRecommendedShadowCount = 32;
 		static const char* budgetModeNames[] = { "Auto", "Manual", "Formula" };
-		int budgetMode = std::clamp(settings.BudgetMode, 0, 2);
+		int budgetMode = magic_enum::enum_integer(settings.BudgetMode);
 		ImGui::Combo("Budget Mode", &budgetMode, budgetModeNames, 3);
-		settings.BudgetMode = budgetMode;
+		settings.BudgetMode = magic_enum::enum_cast<BudgetModeEnum>(budgetMode).value_or(BudgetModeEnum::Auto);
 		if (ImGui::IsItemHovered()) {
 			if (budgetMode == 0)
 				ImGui::SetTooltip(

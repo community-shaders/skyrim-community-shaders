@@ -83,6 +83,17 @@ namespace ShadowCasterManager
 		void* _ptr;
 	};
 	// -------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Budget mode enum
+	// -------------------------------------------------------------------------
+	enum class BudgetModeEnum : int32_t
+	{
+		Auto = 0,     ///< DRS-style adaptive controller
+		Manual = 1,   ///< Fixed slider value
+		Formula = 2,  ///< User-editable exprtk expression
+	};
+
+	// -------------------------------------------------------------------------
 	// Settings
 	// All shadow-scheduling knobs.  Held inside LightLimitFix::Settings and
 	// serialised as part of that JSON blob.  Pass a const-ref to Init().
@@ -112,11 +123,8 @@ namespace ShadowCasterManager
 		/// Hard cap on how many lights may re-render their shadow maps in one frame.
 		int32_t MaxRedrawPerFrame = 16;
 
-		/// Budget mode: how the per-frame shadow redraw budget is determined.
-		///   0 = Auto:    adaptive algorithm grows quality when FPS is healthy, throttles when it drops.
-		///   1 = Manual:  fixed slider value (RedrawBudgetMs).
-		///   2 = Formula: user-editable exprtk expression (RedrawBudgetFormula).
-		int32_t BudgetMode = 0;
+		/// How the per-frame shadow redraw budget is determined.
+		BudgetModeEnum BudgetMode = BudgetModeEnum::Auto;
 
 		/// Target FPS for the auto-budget controller.
 		/// 0 = auto-detect from monitor refresh rate.

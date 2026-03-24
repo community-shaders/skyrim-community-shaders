@@ -198,10 +198,17 @@ public:
 	static inline bool IsValidLight(RE::BSLight* a_light);
 	static inline bool IsGlobalLight(RE::BSLight* a_light);
 
+	enum class ShadowFilterMode : uint32_t
+	{
+		Gather = 0,  ///< Single-tap gather comparison
+		PCF = 1,     ///< 8-tap Poisson disc PCF
+		PCSS = 2,    ///< Contact-hardened soft shadows
+	};
+
 	struct Settings
 	{
 		// Shadow sampling
-		uint32_t FilterMode = 1;   // 0=Gather single-tap, 1=PCF Poisson disc, 2=PCSS
+		ShadowFilterMode FilterMode = ShadowFilterMode::PCF;
 		float KernelScale = 3.0f;  // scales the base PCF kernel radius
 		float LightSize = 10.0f;   // PCSS virtual light size in shadow-map pixels
 		// Debug (last)

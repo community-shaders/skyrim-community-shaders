@@ -7,8 +7,20 @@
 #include "Shadercache.h"
 #include "State.h"
 
+NLOHMANN_JSON_SERIALIZE_ENUM(LightLimitFix::ShadowFilterMode, {
+																  { LightLimitFix::ShadowFilterMode::Gather, 0 },
+																  { LightLimitFix::ShadowFilterMode::PCF, 1 },
+																  { LightLimitFix::ShadowFilterMode::PCSS, 2 },
+															  })
+
 namespace ShadowCasterManager
 {
+	NLOHMANN_JSON_SERIALIZE_ENUM(BudgetModeEnum, {
+													 { BudgetModeEnum::Auto, 0 },
+													 { BudgetModeEnum::Manual, 1 },
+													 { BudgetModeEnum::Formula, 2 },
+												 })
+
 	NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 		Settings,
 		Enabled,
@@ -62,10 +74,10 @@ void LightLimitFix::DrawSettings()
 	ImGui::SeparatorText("Shadow Sampling");
 
 	{
-		static constexpr const char* filterModeNames[] = { "Fast (Single-tap)", "Soft (PCF)", "Contact Hardened (PCSS)" };
-		int mode = static_cast<int>(settings.FilterMode);
+		static constexpr const char* filterModeNames[] = { "Gather (Single-tap)", "PCF (Poisson disc)", "PCSS (Contact Hardened)" };
+		int mode = magic_enum::enum_integer(settings.FilterMode);
 		if (ImGui::Combo("Shadow Filter", &mode, filterModeNames, IM_ARRAYSIZE(filterModeNames)))
-			settings.FilterMode = static_cast<uint32_t>(mode);
+			settings.FilterMode = magic_enum::enum_cast<ShadowFilterMode>(mode).value_or(ShadowFilterMode::PCF);
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(
 				"Shadow filtering quality for shadow-casting point/spot lights.\n\n"
@@ -76,13 +88,13 @@ void LightLimitFix::DrawSettings()
 				"Contact Hardened (PCSS): Penumbra width scales with distance from\n"
 				"  the occluder. Shadows are sharp at contact, soft in open air.");
 
-		if (settings.FilterMode >= 1) {
+		if (magic_enum::enum_integer(settings.FilterMode) >= magic_enum::enum_integer(ShadowFilterMode::PCF)) {
 			ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.1f, 8.0f, "%.2f");
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("Multiplier on the base PCF filter radius. Higher values give softer shadows.");
 		}
 
-		if (settings.FilterMode == 2) {
+		if (settings.FilterMode == ShadowFilterMode::PCSS) {
 			ImGui::SliderFloat("Light Size", &settings.LightSize, 1.0f, 50.0f, "%.1f");
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("Virtual light source size in shadow map pixels for PCSS penumbra estimation. Larger values give wider soft shadows further from the caster.");
@@ -310,7 +322,7 @@ std::string LightLimitFix::BuildShadowSlotColorLegend() const
 LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
 {
 	PerFrame perFrame{};
-	perFrame.FilterMode = settings.FilterMode;
+	perFrame.FilterMode = magic_enum::enum_integer(settings.FilterMode);
 	perFrame.KernelScale = settings.KernelScale;
 	perFrame.LightSize = settings.LightSize;
 	perFrame.ShadowMapSlots = globals::deferred->shadowMapSlots;
