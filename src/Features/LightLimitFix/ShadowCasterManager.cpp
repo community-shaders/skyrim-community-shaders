@@ -139,6 +139,10 @@ namespace ShadowCasterManager
 	static LightContainer s_lights;
 	static BudgetTracker s_budget;
 
+	// External conflict detection -- set during Install(), checked by Update() and DrawSettings().
+	static bool s_externalConflict = false;
+	static std::string s_conflictMessage;
+
 	// Rolling redraw history (128-frame window) for DrawSettings statistics.
 	static constexpr int kRedrawHistorySize = 128;
 	static int32_t s_redrawHistory[kRedrawHistorySize] = {};
@@ -1656,6 +1660,16 @@ namespace ShadowCasterManager
 	{
 		s_settings = settings;
 
+		// Check for external shadow management plugins that conflict with our hooks.
+		if (GetModuleHandleW(L"intellightent-ng.dll")) {
+			s_externalConflict = true;
+			s_conflictMessage =
+				"Disabled: intellightent-ng.dll detected. Both mods manage shadow caster "
+				"selection and cannot run simultaneously. Remove one to use the other.";
+			logger::warn("[SCM] {}", s_conflictMessage);
+			return;
+		}
+
 		int total = std::max(4, settings.ShadowLightCount) + 1 + settings.ConvertedShadowSlots;  // +1 for sun at slot 0
 		s_lights.Size = total;
 		s_lights.Sun = false;
@@ -1685,6 +1699,9 @@ namespace ShadowCasterManager
 	{
 		s_settings = settings;
 		s_installedShadowLightCount = settings.ShadowLightCount;
+
+		if (s_externalConflict)
+			return;
 
 		if (!settings.Enabled) {
 			logger::info("[SCM] Shadow caster manager disabled -- skipping hook installation.");
@@ -1945,6 +1962,9 @@ namespace ShadowCasterManager
 	void Update(const Settings& settings, RE::ShadowSceneNode* /*shadowSceneNode*/,
 		RE::NiCamera* /*worldCamera*/)
 	{
+		if (s_externalConflict)
+			return;
+
 		Settings capped = settings;
 		if (s_installedShadowLightCount > 0)
 			capped.ShadowLightCount = std::min(settings.ShadowLightCount, s_installedShadowLightCount);
@@ -2295,6 +2315,13 @@ namespace ShadowCasterManager
 	{
 		ImGui::SeparatorText("Shadow Limit Fix");
 
+		// ---- External conflict banner --------------------------------------
+		if (s_externalConflict) {
+			const auto& theme = Menu::GetSingleton()->GetTheme();
+			ImGui::TextColored(theme.StatusPalette.Error, "%s", s_conflictMessage.c_str());
+			ImGui::BeginDisabled();
+		}
+
 		// ---- Enable toggle (requires restart) ------------------------------
 		ImGui::Checkbox("Enable Shadow Limit Fix", &settings.Enabled);
 		if (ImGui::IsItemHovered())
@@ -2516,6 +2543,9 @@ namespace ShadowCasterManager
 		}
 
 		if (!settings.Enabled)
+			ImGui::EndDisabled();
+
+		if (s_externalConflict)
 			ImGui::EndDisabled();
 	}
 }
