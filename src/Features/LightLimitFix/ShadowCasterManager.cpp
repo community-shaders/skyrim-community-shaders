@@ -60,9 +60,9 @@ namespace ShadowCasterManager
 		{ "cameray", "camera world Y", kFormulaParam_CameraY },
 		{ "cameraz", "camera world Z", kFormulaParam_CameraZ },
 		{ "isinterior", "1 in interior cells, 0 outdoors", kFormulaParam_IsInterior },
-		{ "timeofday", "in-game hour (0.0–24.0)", kFormulaParam_TimeOfDay },
+		{ "timeofday", "in-game hour (0.0-24.0)", kFormulaParam_TimeOfDay },
 		{ "frametime", "EMA-smoothed frame time (ms)", kFormulaParam_FrameTime },
-		{ "frametarget", "90th-percentile recent frame time (ms) — headroom ceiling", kFormulaParam_FrameTarget },
+		{ "frametarget", "90th-percentile recent frame time (ms) -- headroom ceiling", kFormulaParam_FrameTarget },
 		{ "stableframes", "consecutive frames EMA has been below frametarget", kFormulaParam_StableFrames },
 	};
 
@@ -705,7 +705,7 @@ namespace ShadowCasterManager
 
 	static void GameApplyLensFlare(RE::BSLight* light)
 	{
-		// SE/AE only — no VR equivalent (ID 100440)
+		// SE/AE only -- no VR equivalent (ID 100440)
 		if (REL::Module::IsVR())
 			return;
 		using F = void (*)(RE::BSLight*);
@@ -731,7 +731,7 @@ namespace ShadowCasterManager
 	static void GameFrustumOverlap(RE::NiCamera* cam, float* coord, float* r1, float* r2, float eps)
 	{
 		// Non-VR: (cam, coord, r1, r2, eps)
-		// VR:     (cam, coord, r1, r2, eyeIndex, eps)  — pass 0xffffffff for combined frustum
+		// VR:     (cam, coord, r1, r2, eyeIndex, eps)  -- pass 0xffffffff for combined frustum
 		static REL::Relocation<uintptr_t> addr{ REL::RelocationID(69265, 70632) };
 		auto ptr = addr.address();
 		if (REL::Module::IsVR()) {
@@ -1104,7 +1104,7 @@ namespace ShadowCasterManager
 				REL::RelocationID(528077, 415022).address()));
 
 		// Slot 0 is reserved for the sun; point lights fill slots 1..ShadowLightCount.
-		// Do not count the sun against ShadowLightCount — it uses focus cascade DSV slots,
+		// Do not count the sun against ShadowLightCount -- it uses focus cascade DSV slots,
 		// not parabolic point-light slots.
 		int wantCount = 0;
 
@@ -1390,7 +1390,7 @@ namespace ShadowCasterManager
 	// are restored before the game continues past the patched call site.
 	//
 	// Non-VR (SE/AE): set ctx.Rax = 0 so the conditional between 107133+0x192 and
-	// +0x1AE skips "call [r8+0x50]" — r8 is loaded from rax there; if rax != 0,
+	// +0x1AE skips "call [r8+0x50]" -- r8 is loaded from rax there; if rax != 0,
 	// r8 gets a stale pointer whose [+0x50] slot is null -> crash at execute 0x0.
 	static void Hook_RenderShadowLights(CONTEXT& ctx)
 	{
@@ -1410,7 +1410,7 @@ namespace ShadowCasterManager
 	// Surface lights hook
 	// Replaces CalculateActiveNonShadowCasterLights (ID 100997/107784).
 	// Uses install_context_hook because the function has 10 args (11 in VR)
-	// with VR-specific stack layout — CONTEXT is the simplest cross-runtime approach.
+	// with VR-specific stack layout -- CONTEXT is the simplest cross-runtime approach.
 	// =========================================================================
 
 	static void Hook_CalculateActiveLightsForSurface(CONTEXT& ctx)
@@ -1594,13 +1594,13 @@ namespace ShadowCasterManager
 	// activeShadowLights and calls IsLightAffectingActor() directly.
 	// =========================================================================
 
-	// Temporary set of lights that affect the player — populated each frame
+	// Temporary set of lights that affect the player -- populated each frame
 	// in Hook_UpdateLightLevelPlayer, consumed in Hook_CheckLightLevelPlayer.
 	static std::set<uint64_t> s_stealthDetectionTmp;
 
 	static void* GetUnkDetectionGlobal()
 	{
-		// SE: 142F6DB98 — a ~80-byte detection struct; GetSingleton equivalent
+		// SE: 142F6DB98 -- a ~80-byte detection struct; GetSingleton equivalent
 		static REL::RelocationID uid(518074, 404596);
 		return *reinterpret_cast<void**>(uid.address());
 	}
@@ -1640,7 +1640,7 @@ namespace ShadowCasterManager
 	// Per-light check inside the vanilla affect-player path.
 	// If the light is not in our set, skip the branch (ctx.Rip += 0x16).
 	// Note: Execute() sets ctx.Rip = resumeAddr BEFORE calling this, so
-	// ctx.Rip += 0x16 skips 0x16 bytes past the hook site — correct.
+	// ctx.Rip += 0x16 skips 0x16 bytes past the hook site -- correct.
 	static void Hook_CheckLightLevelPlayer(CONTEXT& ctx)
 	{
 		auto* light = reinterpret_cast<RE::BSShadowLight*>(ctx.Rcx);
@@ -1687,7 +1687,7 @@ namespace ShadowCasterManager
 		s_installedShadowLightCount = settings.ShadowLightCount;
 
 		if (!settings.Enabled) {
-			logger::info("[SCM] Shadow caster manager disabled — skipping hook installation.");
+			logger::info("[SCM] Shadow caster manager disabled -- skipping hook installation.");
 			return;
 		}
 
@@ -1880,7 +1880,7 @@ namespace ShadowCasterManager
 			static REL::RelocationID uid(38900, 39946);
 
 			// Hook at the start of the affect-player loop.
-			// Original bytes: "41 83 CE FF 33 C0" (6 bytes) — keep them running first.
+			// Original bytes: "41 83 CE FF 33 C0" (6 bytes) -- keep them running first.
 			uintptr_t off1 = REL::Relocate(0x185 - 0x050, 0x847 - 0x710, 0x185 - 0x050);
 			if (!SKSE::stl::install_context_hook(uid.address() + off1, 6, Hook_UpdateLightLevelPlayer, 6))
 				logger::error("[SCM] Failed to install Hook_UpdateLightLevelPlayer");
@@ -1918,7 +1918,7 @@ namespace ShadowCasterManager
 		}
 
 		if (settings.ConvertExcessToNormal || settings.PromoteNormalToShadow) {
-			// ShadowSceneNode::RemoveLight — fires at +0x9 (SE: 6 bytes, AE: 5 bytes)
+			// ShadowSceneNode::RemoveLight -- fires at +0x9 (SE: 6 bytes, AE: 5 bytes)
 			static REL::RelocationID uid(99697, 106331);
 			int sz = REL::Relocate(6, 5, 6);
 			if (!SKSE::stl::install_context_hook(uid.address() + REL::Relocate(0x9, 0x9, 0x9), sz, Hook_ConvertLights_Remove, sz))
@@ -1926,14 +1926,14 @@ namespace ShadowCasterManager
 		}
 
 		{
-			// ShadowSceneNode::AddLight — at function start (5 bytes)
+			// ShadowSceneNode::AddLight -- at function start (5 bytes)
 			static REL::RelocationID uid(99692, 106326);
 			if (!SKSE::stl::install_context_hook(uid.address(), 5, Hook_ConvertLights_Add, 5))
 				logger::error("[SCM] Failed to install Hook_ConvertLights_Add");
 		}
 
 		if (settings.PromoteNormalToShadow) {
-			// BSLight::SetLight — at function start (5 bytes)
+			// BSLight::SetLight -- at function start (5 bytes)
 			static REL::RelocationID uid(101302, 108289);
 			if (!SKSE::stl::install_context_hook(uid.address(), 5, Hook_ConvertLights_SetLight, 5))
 				logger::error("[SCM] Failed to install Hook_ConvertLights_SetLight");
@@ -2060,7 +2060,7 @@ namespace ShadowCasterManager
 			ShadowSlotInfo info;
 		};
 
-		// Build index of lights currently in scene (slot → info).
+		// Build index of lights currently in scene (slot -> info).
 		std::unordered_map<uintptr_t, uint32_t> sceneSlot;
 		for (uint32_t i = 0; i < static_cast<uint32_t>(s_shadowSlotInfos.size()); ++i)
 			if (s_shadowSlotInfos[i].valid)
@@ -2308,7 +2308,7 @@ namespace ShadowCasterManager
 		if (settings.Enabled != s_settings.Enabled) {
 			const auto& theme = Menu::GetSingleton()->GetTheme();
 			ImGui::TextColored(theme.StatusPalette.RestartNeeded,
-				"Restart required — currently %s.", s_settings.Enabled ? "enabled" : "disabled");
+				"Restart required -- currently %s.", s_settings.Enabled ? "enabled" : "disabled");
 		}
 
 		if (!settings.Enabled)
@@ -2326,7 +2326,7 @@ namespace ShadowCasterManager
 		if (settings.ShadowLightCount != s_installedShadowLightCount) {
 			const auto& theme = Menu::GetSingleton()->GetTheme();
 			ImGui::TextColored(theme.StatusPalette.RestartNeeded,
-				"Restart required — current session uses %d lights.", s_installedShadowLightCount);
+				"Restart required -- current session uses %d lights.", s_installedShadowLightCount);
 		}
 
 		// ---- Temporal budget (dynamic) ------------------------------------
@@ -2352,7 +2352,7 @@ namespace ShadowCasterManager
 					kAutoRecommendedShadowCount);
 		}
 
-		// Budget progress bar — always visible.
+		// Budget progress bar -- always visible.
 		{
 			const float effectiveBudgetMs = s_autoBudgetMs;
 			const float avgConsumedUs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize);
@@ -2380,7 +2380,7 @@ namespace ShadowCasterManager
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(
 				"Hard cap on how many shadow lights may re-render their shadow maps in one frame.\n"
-				"Acts as a safety valve regardless of budget — the budget controls time spent,\n"
+				"Acts as a safety valve regardless of budget -- the budget controls time spent,\n"
 				"this controls count. The sun directional light always counts as one redraw.");
 
 		// ---- Light conversion (requires restart for hooks) -----------------
@@ -2500,10 +2500,10 @@ namespace ShadowCasterManager
 		}
 
 		// ---- Active shadow casters table --------------------------------
-		ImGui::SeparatorText("Shadow Limit Fix — Active Casters");
+		ImGui::SeparatorText("Shadow Limit Fix -- Active Casters");
 		DrawShadowLightTable(true, false);
 
-		// Redraws/frame and per-light cost — always visible alongside the budget bar above.
+		// Redraws/frame and per-light cost -- always visible alongside the budget bar above.
 		{
 			float avgRedraws = static_cast<float>(s_redrawSum) / static_cast<float>(kRedrawHistorySize);
 			ImGui::Text("Avg redraws/frame : %.1f  (cap: %d)", avgRedraws, s_settings.MaxRedrawPerFrame);
