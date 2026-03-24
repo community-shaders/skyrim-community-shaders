@@ -17,6 +17,8 @@
 
 #include <d3d11.h>
 
+struct ImVec4;
+
 namespace ShadowCasterManager
 {
 	// -------------------------------------------------------------------------
@@ -282,6 +284,10 @@ namespace ShadowCasterManager
 
 	/// Returns the display name for a shadow type index (0=Spot, 1=Hemi, 2=Omni).
 	const char* GetShadowTypeName(uint32_t type);
+
+	/// Returns the golden-ratio hue colour for shadow-map slot slotIdx as an ImVec4.
+	/// Matches the mode-8 shader visualisation colour.
+	ImVec4 ShadowSlotHueColor(uint32_t slotIdx);
 
 	/// Draw the interactive shadow caster table (suppress/filter/sort).
 	/// compact=true caps height; showColor adds a hue swatch column (viz mode 8).

@@ -162,13 +162,6 @@ std::string LightLimitFix::BuildShadowSlotColorLegend() const
 	if (shadowSlotInfos.empty())
 		return {};
 
-	auto chan = [](float h, float shift) {
-		float v = fmodf(h + shift, 1.0f);
-		if (v < 0.0f)
-			v += 1.0f;
-		return std::clamp(fabsf(v * 6.0f - 3.0f) - 1.0f, 0.0f, 1.0f);
-	};
-
 	std::string out = "Shadow Slot Color Map (Mode 8):\n";
 	for (uint32_t i = 0; i < static_cast<uint32_t>(shadowSlotInfos.size()); ++i) {
 		const auto& info = shadowSlotInfos[i];
@@ -176,9 +169,10 @@ std::string LightLimitFix::BuildShadowSlotColorLegend() const
 			continue;
 
 		float hue = fmodf(float(i) * 0.618033988f, 1.0f);
-		auto ri = static_cast<uint8_t>(chan(hue, 0.0f) * 255.0f);
-		auto gi = static_cast<uint8_t>(chan(hue, 2.0f / 3.0f) * 255.0f);
-		auto bi = static_cast<uint8_t>(chan(hue, 1.0f / 3.0f) * 255.0f);
+		ImVec4 c = ShadowCasterManager::ShadowSlotHueColor(i);
+		auto ri = static_cast<uint8_t>(c.x * 255.0f);
+		auto gi = static_cast<uint8_t>(c.y * 255.0f);
+		auto bi = static_cast<uint8_t>(c.z * 255.0f);
 
 		out += std::format("  Slot {:2d} | hue {:5.3f} | #{:02X}{:02X}{:02X} | {:11s} | r={:.0f}\n",
 			i, hue, ri, gi, bi, ShadowCasterManager::GetShadowTypeName(info.type), info.range);
@@ -266,12 +260,13 @@ void LightLimitFix::DrawOverlay()
 	ImGui::Separator();
 
 	uint32_t mode = vizOn ? settings.LightsVisualisationMode : UINT32_MAX;
+	const uint32_t slotUsage = ShadowCasterManager::GetSlotUsage();
 
 	// ── Per-mode informational panels (visualization only) ──────────────────
 	if (vizOn) {
 		if (mode <= 1) {
 			ImGui::Text("Clustered lights : %u / %u", lightCount, MAX_LIGHTS);
-			ImGui::Text("Shadow lights    : %u / %u slots", ShadowCasterManager::GetSlotUsage(), globals::deferred->shadowMapSlots);
+			ImGui::Text("Shadow lights    : %u / %u slots", slotUsage, globals::deferred->shadowMapSlots);
 			if (shadowUnshadowedLightCount > 0)
 				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Dropped (overflow): %u", shadowUnshadowedLightCount);
 		} else if (mode == 2) {
@@ -287,9 +282,9 @@ void LightLimitFix::DrawOverlay()
 			ImGui::Text("G channel  = directional detailed shadow");
 			ImGui::TextDisabled("(B = unused)");
 			ImGui::Spacing();
-			ImGui::Text("Shadow slots     : %u / %u", ShadowCasterManager::GetSlotUsage(), globals::deferred->shadowMapSlots);
+			ImGui::Text("Shadow slots     : %u / %u", slotUsage, globals::deferred->shadowMapSlots);
 		} else if (mode >= 4 && mode <= 6) {
-			ImGui::Text("Shadow lights    : %u valid,  %u dropped", ShadowCasterManager::GetSlotUsage(), shadowUnshadowedLightCount);
+			ImGui::Text("Shadow lights    : %u valid,  %u dropped", slotUsage, shadowUnshadowedLightCount);
 			ImGui::Text("Total clustered  : %u", lightCount);
 			if (mode == 4)
 				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red");
@@ -299,7 +294,7 @@ void LightLimitFix::DrawOverlay()
 				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red (lights without shadow maps)");
 		} else if (mode == 7) {
 			uint32_t slots = globals::deferred->shadowMapSlots;
-			ImGui::Text("Slots used / total : %u / %u", ShadowCasterManager::GetSlotUsage(), slots);
+			ImGui::Text("Slots used / total : %u / %u", slotUsage, slots);
 			if (shadowUnshadowedLightCount > 0)
 				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Overflow (red)     : %u lights", shadowUnshadowedLightCount);
 			ImGui::TextDisabled("Cool  Turbo[0.0-0.3] = 1-4 shadows");

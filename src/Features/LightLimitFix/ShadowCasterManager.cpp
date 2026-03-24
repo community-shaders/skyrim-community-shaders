@@ -137,6 +137,12 @@ namespace ShadowCasterManager
 	// Module-level state
 	// =========================================================================
 
+	/// Total LightEntry slots: sun (1) + shadow casters (≥4) + converted pool.
+	static int32_t LightContainerSize(const Settings& s)
+	{
+		return std::max(4, s.ShadowLightCount) + 1 + s.ConvertedShadowSlots;
+	}
+
 	static Settings s_settings;
 	static LightContainer s_lights;
 	static BudgetTracker s_budget;
@@ -518,29 +524,10 @@ namespace ShadowCasterManager
 	{
 		uint64_t key = reinterpret_cast<uint64_t>(light);
 		auto it = _map.find(key);
-		if (it == _map.end() || it->second->TrackedCount == 0) {
-			// Unknown light: return average cost across all tracked lights.
-			int64_t sum = 0;
-			int32_t count = 0;
-			for (auto& [k, entry] : _map) {
-				int32_t n = std::min(kBudgetWindowSize, entry->TrackedCount);
-				if (n == 0)
-					continue;
-				int32_t avg = entry->Current;
-				if (n > 1)
-					avg /= n;
-				sum += avg;
-				count++;
-			}
-			if (count > 1)
-				sum /= count;
-			return static_cast<int32_t>(sum);
-		}
+		if (it == _map.end() || it->second->TrackedCount == 0)
+			return GetAverageCostUs();  // unknown light: fall back to fleet average
 		int32_t n = std::min(kBudgetWindowSize, it->second->TrackedCount);
-		int32_t avg = it->second->Current;
-		if (n > 1)
-			avg /= n;
-		return avg;
+		return it->second->Current / std::max(1, n);
 	}
 
 	void BudgetTracker::CleanupExpired()
@@ -886,16 +873,22 @@ namespace ShadowCasterManager
 	// Light enable / disable helpers
 	// =========================================================================
 
-	static void DisableLight(RE::BSShadowLight* light)
+	/// Removes `light` from s_normalConvert and clears its geometry list.
+	/// No-op if the light is not in the list.
+	static void EraseFromConvertList(RE::BSShadowLight* light)
 	{
-		// Remove from conversion list if present.
 		for (auto it = s_normalConvert.begin(); it != s_normalConvert.end(); ++it) {
 			if (it->light == light) {
 				GameClearGeometryList(light);
 				s_normalConvert.erase(it);
-				break;
+				return;
 			}
 		}
+	}
+
+	static void DisableLight(RE::BSShadowLight* light)
+	{
+		EraseFromConvertList(light);
 		auto* cull = light->cullingProcess;
 		if (cull && cull->portalGraphEntry)
 			GameClearPortalVisibility(reinterpret_cast<RE::BSPortalGraphEntry*>(cull->portalGraphEntry));
@@ -929,13 +922,7 @@ namespace ShadowCasterManager
 		RE::ShadowSceneNode* ssn, int slotIndex)
 	{
 		// Remove from conversion list if it was previously converted to normal.
-		for (auto it = s_normalConvert.begin(); it != s_normalConvert.end(); ++it) {
-			if (it->light == light) {
-				GameClearGeometryList(light);
-				s_normalConvert.erase(it);
-				break;
-			}
-		}
+		EraseFromConvertList(light);
 
 		// Focus shadow handling (only when not in extended mode).
 		if (s_settings.ShadowLightCount <= 4) {
@@ -969,8 +956,9 @@ namespace ShadowCasterManager
 		if (nilight) {
 			auto lpos = nilight->world.translate;
 			auto cpos = camera->world.translate;
-			float dx = lpos.x - cpos.x, dy = lpos.y - cpos.y, dz = lpos.z - cpos.z;
-			float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+			auto delta = lpos - cpos;
+			float dx = delta.x, dy = delta.y, dz = delta.z;
+			float dist = lpos.GetDistance(cpos);
 			float radius = nilight->GetLightRuntimeData().radius.x;
 
 			float left, right, top, bottom;
@@ -1460,8 +1448,6 @@ namespace ShadowCasterManager
 			s_budget.EndLight(e.Light, 1);
 		}
 
-		s_budget.Begin(1);  // cleanup tick for step 1
-
 		if (REL::Module::IsVR())
 			*globals::game::drawStereo = savedStereo;
 	}
@@ -1747,10 +1733,10 @@ namespace ShadowCasterManager
 			return;
 		}
 
-		int total = std::max(4, settings.ShadowLightCount) + 1 + settings.ConvertedShadowSlots;  // +1 for sun at slot 0
+		int total = LightContainerSize(settings);
 		s_lights.Size = total;
 		s_lights.Sun = false;
-		s_lights.Lights = new LightEntry[total]();  // value-init zeros all members
+		s_lights.Lights = new LightEntry[total]();
 		for (int i = 0; i < total; i++)
 			s_lights.Lights[i].Index = i;
 
@@ -2050,15 +2036,15 @@ namespace ShadowCasterManager
 		if (s_installedShadowLightCount > 0)
 			capped.ShadowLightCount = std::min(settings.ShadowLightCount, s_installedShadowLightCount);
 
-		int newTotal = std::max(4, capped.ShadowLightCount) + capped.ConvertedShadowSlots;
+		int newTotal = LightContainerSize(capped);
 		if (newTotal != s_lights.Size) {
-			auto* newLights = static_cast<LightEntry*>(calloc(newTotal, sizeof(LightEntry)));
+			auto* newLights = new LightEntry[newTotal]();
 			int copyCount = std::min(s_lights.Size, newTotal);
 			for (int i = 0; i < copyCount; i++)
 				newLights[i] = s_lights.Lights[i];
 			for (int i = copyCount; i < newTotal; i++)
 				newLights[i].Index = i;
-			free(s_lights.Lights);
+			delete[] s_lights.Lights;
 			s_lights.Lights = newLights;
 			s_lights.Size = newTotal;
 		}
@@ -2084,7 +2070,7 @@ namespace ShadowCasterManager
 	static std::unordered_map<uintptr_t, ShadowSlotInfo> s_knownLights;
 
 	/// Computes the golden-ratio hue color for a shadow-map slot (matches mode-8 shader).
-	static ImVec4 ShadowSlotHueColor(uint32_t slotIdx)
+	ImVec4 ShadowSlotHueColor(uint32_t slotIdx)
 	{
 		auto chan = [](float h, float shift) {
 			float v = fmodf(h + shift, 1.0f);
