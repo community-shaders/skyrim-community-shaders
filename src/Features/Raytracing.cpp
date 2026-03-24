@@ -230,6 +230,13 @@ void Raytracing::DrawGeneralSettings()
 			lightingSettings.Sky = std::max(0.0f, lightingSettings.Sky);
 	}
 
+	if (ImGui::CollapsingHeader("Water")) {
+		auto& waterSettings = ceRTSettings.WaterSettings;
+
+		if (ImGui::DragFloat("Absorption Scale", &waterSettings.AbsorptionScale, 0.01f, 0.01f, 10.0f, "%.2f"))
+			waterSettings.AbsorptionScale = std::clamp(waterSettings.AbsorptionScale, 0.01f, 10.0f);
+	}
+
 	ImGui::PopID();
 
 	ImGui::EndTabItem();
@@ -332,6 +339,8 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::Checkbox("Enable Water", &settings.CreationEngineRaytracingSettings.DebugSettings.EnableWater);
 
+	ImGui::Checkbox("Stable Planes", &settings.CreationEngineRaytracingSettings.DebugSettings.StablePlanes);
+
 	ImGui::Checkbox("Show Main Texture", &settings.ShowMainTexture);
 
 	if (settings.ShowMainTexture && mainTexture)
@@ -361,7 +370,7 @@ void Raytracing::DrawOverlay()
 
 	if (!PositionSet) {
 		Position = ImVec2(10, 10);
-		ImGui::SetNextWindowPos(Position);	
+		ImGui::SetNextWindowPos(Position);
 		PositionSet = true;
 	} else {
 		ImGui::SetNextWindowPos(Position, ImGuiCond_FirstUseEver);
@@ -508,7 +517,7 @@ void Raytracing::UpdateJitter(float2 jitter)
 	creationEngineRaytracing->UpdateJitter(jitter);
 }
 
-void ShareTexture(ID3D11Texture2D* d3d11Texture, ID3D12Resource** d3d12Resource, bool nt = false, uint accessFlags = DXGI_SHARED_RESOURCE_READ) // DXGI_SHARED_RESOURCE_WRITE
+void ShareTexture(ID3D11Texture2D* d3d11Texture, ID3D12Resource** d3d12Resource, bool nt = false, uint accessFlags = DXGI_SHARED_RESOURCE_READ)  // DXGI_SHARED_RESOURCE_WRITE
 {
 	D3D11_TEXTURE2D_DESC desc;
 	d3d11Texture->GetDesc(&desc);
@@ -613,7 +622,7 @@ void Raytracing::SetupResources()
 		for (uint i = 0; i < 6; i++) {
 			waterReflections->cubeMapSides[i] = RE::TESWaterReflections::CubeMapSide(i, 0.0f);
 		}
-	
+
 		creationEngineRaytracing->SetSkyHemisphere(skyHemisphere->resource.get());
 	}
 
@@ -636,7 +645,7 @@ void Raytracing::SetUpscaler(Upscaling::UpscaleMethod method)
 Raytracing::SharedData Raytracing::GetCommonBufferData() const
 {
 	const bool pathTracingEnabled = settings.CreationEngineRaytracingSettings.Enabled &&
-		settings.CreationEngineRaytracingSettings.GeneralSettings.Mode == CreationEngineRaytracing::Mode::PathTracing;
+	                                settings.CreationEngineRaytracingSettings.GeneralSettings.Mode == CreationEngineRaytracing::Mode::PathTracing;
 
 	return {
 		.InteriorDirectional = settings.CreationEngineRaytracingSettings.Enabled ? 0.0f : 1.0f,
@@ -816,8 +825,7 @@ void Raytracing::DeferredPasses()
 			uav = nullptr;
 			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 		}
-	} 
-	else if (mode == CreationEngineRaytracing::Mode::PathTracing) {
+	} else if (mode == CreationEngineRaytracing::Mode::PathTracing) {
 		// Blend PT and Sky
 		{
 			context->CSSetShader(ptCompositeCS.get(), nullptr, 0);
