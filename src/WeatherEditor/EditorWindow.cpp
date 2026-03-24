@@ -1,8 +1,10 @@
 #include "EditorWindow.h"
 
+#include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
 #include "InteriorOnlyPanel.h"
 #include "Menu.h"
+#include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
 #include "State.h"
 #include "Utils/UI.h"
@@ -877,7 +879,6 @@ void EditorWindow::RenderUI()
 	io.FontGlobalScale = settings.editorUIScale;
 
 	if (settings.showViewport) {
-		// Dim the game scene using the theme's modal dim background color
 		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
 	}
 
@@ -1010,6 +1011,7 @@ void EditorWindow::RenderUI()
 		}
 		if (ImGui::BeginMenu("Window")) {
 			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
+				BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
 				Save();
 			}
 			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
@@ -1315,6 +1317,7 @@ void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std:
 
 EditorWindow::~EditorWindow()
 {
+	ShowGameMenus();
 	delete tempTexture;
 	weatherWidgets.clear();
 	lightingTemplateWidgets.clear();
@@ -1347,23 +1350,27 @@ void EditorWindow::SetupResources()
 	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets);
 }
 
-void EditorWindow::Draw()
+void EditorWindow::UpdateOpenState()
 {
-	// Track editor open state for vanity camera management
 	static bool wasOpen = false;
 
 	if (open && !wasOpen) {
-		// Editor just opened - disable vanity camera and restore session
 		DisableVanityCamera();
+		HideGameMenus();
+		BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
 		RestoreSessionWidgets();
 	} else if (!open && wasOpen) {
-		// Editor just closed - restore vanity camera and save session
 		RestoreVanityCamera();
+		ShowGameMenus();
+		BackgroundBlur::SetWeatherEditorActive(false);
 		SaveSessionWidgets();
 	}
 
 	wasOpen = open;
+}
 
+void EditorWindow::Draw()
+{
 	// Re-enforce weather lock if active (handles time changes)
 	if (weatherLockActive && lockedWeather) {
 		auto sky = RE::Sky::GetSingleton();
@@ -1841,6 +1848,13 @@ void EditorWindow::DrawTimeControls()
 		ImGui::Text("Adjust how fast time passes (vanilla: %.1fx)", kVanillaTimeScale);
 }
 
+bool EditorWindow::CanBeOpen()
+{
+	auto player = RE::PlayerCharacter::GetSingleton();
+	auto* state = globals::state;
+	return player && player->parentCell && !state->isLoadingMenuOpen && !state->isMainMenuOpen;
+}
+
 void EditorWindow::DisableVanityCamera()
 {
 	if (vanityCameraDisabled)
@@ -1865,6 +1879,35 @@ void EditorWindow::RestoreVanityCamera()
 		setting->data.f = savedVanityCameraDelay;
 		vanityCameraDisabled = false;
 		logger::info("Vanity camera restored (delay: {})", savedVanityCameraDelay);
+	}
+}
+
+void EditorWindow::HideGameMenus()
+{
+	if (gameMenusHidden)
+		return;
+
+	// ShowMenus(false) stops the game from rendering to the back buffer.
+	// Without d3d12SwapChain, blur reads directly from that buffer and would freeze.
+	if (!globals::features::upscaling.d3d12SwapChainActive)
+		return;
+
+	if (auto ui = RE::UI::GetSingleton()) {
+		ui->ShowMenus(false);
+		gameMenusHidden = true;
+		logger::info("Game menus hidden for weather editor");
+	}
+}
+
+void EditorWindow::ShowGameMenus()
+{
+	if (!gameMenusHidden)
+		return;
+
+	if (auto ui = RE::UI::GetSingleton()) {
+		ui->ShowMenus(true);
+		gameMenusHidden = false;
+		logger::info("Game menus restored after weather editor");
 	}
 }
 
