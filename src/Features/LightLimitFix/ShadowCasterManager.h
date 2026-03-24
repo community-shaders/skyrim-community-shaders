@@ -202,13 +202,11 @@ namespace ShadowCasterManager
 
 	struct BudgetEntry
 	{
-		BudgetEntry() { memset(Tracked, 0, sizeof(Tracked)); }
-
 		uint64_t Key{ 0 };
-		uint16_t Tracked[kBudgetWindowSize]{};  ///< Ring buffer of per-frame µs costs.
+		uint32_t Tracked[kBudgetWindowSize]{};  ///< Ring buffer of per-frame µs costs.
 		int32_t TrackedCount{ 0 };
 		int32_t LastTrackedHelper{ -1 };
-		uint16_t Progress{ 0 };  ///< Accumulated step-0 cost awaiting step-1.
+		uint32_t Progress{ 0 };  ///< Accumulated step-0 cost awaiting step-1.
 		int32_t Current{ 0 };    ///< Rolling sum of Tracked[].
 
 		void BeginStep(int32_t step);
@@ -236,7 +234,7 @@ namespace ShadowCasterManager
 
 	private:
 		int32_t _counter{ 0 };
-		std::unordered_map<uint64_t, BudgetEntry*> _map;
+		std::unordered_map<uint64_t, std::unique_ptr<BudgetEntry>> _map;
 
 		void CleanupExpired();
 	};
@@ -247,7 +245,7 @@ namespace ShadowCasterManager
 	struct ShadowSlotInfo
 	{
 		uint32_t type = 0;       ///< Shadow type: 0=spot/frustum, 1=hemisphere, 2=omnidirectional
-		float radius = 0.0f;     ///< Light radius (world units)
+		float range = 0.0f;      ///< Light range (world units) -- radius for point lights, cone distance for spots
 		bool valid = false;      ///< true when this slot was written this frame
 		uintptr_t lightKey = 0;  ///< Light object pointer (stable key for suppression)
 	};
