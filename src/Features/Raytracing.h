@@ -178,14 +178,24 @@ struct CreationEngineRaytracing
 			SSSSettings)
 	};
 
+	struct WaterSettings
+	{
+		float AbsorptionScale = 1.0f;
+
+		bool operator==(const WaterSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(WaterSettings, AbsorptionScale)
+	};
+
 	struct DebugSettings
 	{
 		bool PathTracingCull = false;
 		bool EnableWater = false;
+		bool StablePlanes = true;
 
 		bool operator==(const DebugSettings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DebugSettings, PathTracingCull, EnableWater)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DebugSettings, PathTracingCull, EnableWater, StablePlanes)
 	};
 
 	struct Settings
@@ -197,6 +207,7 @@ struct CreationEngineRaytracing
 		MaterialSettings MaterialSettings;
 		SHaRCSettings SHaRCSettings;
 		AdvancedSettings AdvancedSettings;
+		WaterSettings WaterSettings;
 		DebugSettings DebugSettings;
 
 		bool operator==(const Settings&) const = default;
@@ -210,6 +221,7 @@ struct CreationEngineRaytracing
 			MaterialSettings,
 			SHaRCSettings,
 			AdvancedSettings,
+			WaterSettings,
 			DebugSettings)
 	};
 
