@@ -303,7 +303,7 @@ std::string LightLimitFix::BuildShadowSlotColorLegend() const
 		auto bi = static_cast<uint8_t>(chan(hue, 1.0f / 3.0f) * 255.0f);
 
 		out += std::format("  Slot {:2d} | hue {:5.3f} | #{:02X}{:02X}{:02X} | {:11s} | r={:.0f}\n",
-			i, hue, ri, gi, bi, ShadowCasterManager::GetShadowTypeName(info.type), info.radius);
+			i, hue, ri, gi, bi, ShadowCasterManager::GetShadowTypeName(info.type), info.range);
 	}
 	return out;
 }
@@ -525,13 +525,13 @@ void LightLimitFix::CopyPointShadowData()
 			else
 				SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
 
-			float radius = light->light->GetLightRuntimeData().radius.x;
+			float range = light->light->GetLightRuntimeData().radius.x;
 			// -1.0 sentinel: shader returns 0.0 (fully dark) → light invisible.
 			// 0.0 means unwritten slot → shader returns 1.0 (fully lit, no shadow).
 			uintptr_t lightKey = reinterpret_cast<uintptr_t>(light);
-			sd[depthSlot].ShadowParam.y = ShadowCasterManager::IsSuppressed(lightKey) ? -1.0f : radius;
+			sd[depthSlot].ShadowParam.y = ShadowCasterManager::IsSuppressed(lightKey) ? -1.0f : range;
 			ShadowCasterManager::RecordSlot(depthSlot,
-				{ static_cast<uint32_t>(shadowTypeF), radius, true, lightKey });
+				{ static_cast<uint32_t>(shadowTypeF), range, true, lightKey });
 		} else {
 			unshadowedLights++;
 		}

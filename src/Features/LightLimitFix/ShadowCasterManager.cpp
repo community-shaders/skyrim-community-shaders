@@ -8,6 +8,7 @@
 
 #include "ShadowCasterManager.h"
 #include "../../Globals.h"
+#include "../../Utils/Game.h"
 #include "../../Utils/UI.h"
 
 #include <exprtk.hpp>
@@ -40,8 +41,8 @@ namespace ShadowCasterManager
 	static constexpr FormulaVarInfo kFormulaVars[] = {
 		{ "lightindex", "sequential index of this candidate light", kFormulaParam_LightIndex },
 		{ "lightintensity", "NiLight fade/intensity", kFormulaParam_LightIntensity },
-		{ "lightdistance", "camera-to-light distance (units)", kFormulaParam_LightDistance },
-		{ "lightradius", "light radius (units)", kFormulaParam_LightRadius },
+		{ "lightdistance", "camera-to-light distance (game units; 1 unit ~= 1.428 cm)", kFormulaParam_LightDistance },
+		{ "lightradius", "light radius/range (game units; 1 unit ~= 1.428 cm)", kFormulaParam_LightRadius },
 		{ "lightx", "light world X", kFormulaParam_LightX },
 		{ "lighty", "light world Y", kFormulaParam_LightY },
 		{ "lightz", "light world Z", kFormulaParam_LightZ },
@@ -183,9 +184,9 @@ namespace ShadowCasterManager
 	static int32_t s_installedShadowLightCount;
 
 	// Formula instances (allocated at Init if formula strings are non-empty)
-	static FormulaHelper* s_formulaScore = nullptr;
-	static FormulaHelper* s_formulaRedrawInterval = nullptr;
-	static FormulaHelper* s_formulaRedrawBudget = nullptr;
+	static std::unique_ptr<FormulaHelper> s_formulaScore;
+	static std::unique_ptr<FormulaHelper> s_formulaRedrawInterval;
+	static std::unique_ptr<FormulaHelper> s_formulaRedrawBudget;
 
 	// Lights converted to normal (non-shadow) lights for diffuse-only rendering
 	struct ConvertedLight
@@ -445,12 +446,12 @@ namespace ShadowCasterManager
 		int64_t diff = GetPerfCounter() - _startTime;
 
 		if (step == 0) {
-			Progress = static_cast<uint16_t>(std::min(diff, (int64_t)0xFFFF));
+			Progress = static_cast<uint32_t>(std::min(diff, (int64_t)0xFFFFFFFF));
 		} else if (step == 1) {
 			diff += Progress;
 			int32_t ix = TrackedCount % kBudgetWindowSize;
 			Current -= Tracked[ix];
-			Tracked[ix] = static_cast<uint16_t>(std::min(diff, (int64_t)0xFFFF));
+			Tracked[ix] = static_cast<uint32_t>(std::min(diff, (int64_t)0xFFFFFFFF));
 			Current += Tracked[ix];
 			TrackedCount++;
 			LastTrackedHelper = helperCounter;
@@ -474,14 +475,10 @@ namespace ShadowCasterManager
 	void BudgetTracker::BeginLight(RE::BSShadowLight* light, int32_t step)
 	{
 		uint64_t key = reinterpret_cast<uint64_t>(light);
-		auto it = _map.find(key);
-		BudgetEntry* e;
-		if (it == _map.end()) {
-			e = new BudgetEntry();
+		auto& e = _map[key];
+		if (!e) {
+			e = std::make_unique<BudgetEntry>();
 			e->Key = key;
-			_map[key] = e;
-		} else {
-			e = it->second;
 		}
 		e->BeginStep(step);
 	}
@@ -527,12 +524,10 @@ namespace ShadowCasterManager
 	void BudgetTracker::CleanupExpired()
 	{
 		for (auto it = _map.begin(); it != _map.end();) {
-			if (it->second->IsExpired(_counter)) {
-				delete it->second;
+			if (it->second->IsExpired(_counter))
 				it = _map.erase(it);
-			} else {
+			else
 				++it;
-			}
 		}
 	}
 
@@ -1673,23 +1668,27 @@ namespace ShadowCasterManager
 		int total = std::max(4, settings.ShadowLightCount) + 1 + settings.ConvertedShadowSlots;  // +1 for sun at slot 0
 		s_lights.Size = total;
 		s_lights.Sun = false;
-		s_lights.Lights = static_cast<LightEntry*>(calloc(total, sizeof(LightEntry)));
+		s_lights.Lights = new LightEntry[total]();  // value-init zeros all members
 		for (int i = 0; i < total; i++)
 			s_lights.Lights[i].Index = i;
 
+		// Seed auto-budget ring buffer to 60 fps so the first few frames have sane values.
+		std::fill(std::begin(s_ftRing), std::end(s_ftRing), 16.67f);
+		s_ftEMA = 16.67f;
+
 		// Parse formula strings
 		if (!settings.ScoreFormula.empty()) {
-			s_formulaScore = new FormulaHelper();
+			s_formulaScore = std::make_unique<FormulaHelper>();
 			if (!s_formulaScore->Parse(settings.ScoreFormula))
 				logger::error("[SCM] Failed to parse ScoreFormula");
 		}
 		if (!settings.RedrawIntervalFormula.empty()) {
-			s_formulaRedrawInterval = new FormulaHelper();
+			s_formulaRedrawInterval = std::make_unique<FormulaHelper>();
 			if (!s_formulaRedrawInterval->Parse(settings.RedrawIntervalFormula))
 				logger::error("[SCM] Failed to parse RedrawIntervalFormula");
 		}
 		if (!settings.RedrawBudgetFormula.empty()) {
-			s_formulaRedrawBudget = new FormulaHelper();
+			s_formulaRedrawBudget = std::make_unique<FormulaHelper>();
 			if (!s_formulaRedrawBudget->Parse(settings.RedrawBudgetFormula))
 				logger::error("[SCM] Failed to parse RedrawBudgetFormula");
 		}
@@ -1714,8 +1713,8 @@ namespace ShadowCasterManager
 		// ---- Extended depth buffer infrastructure -------------------------
 
 		if (needExtraBuffers) {
-			globals::features::llf::normalDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount + 1, sizeof(void*)));
-			globals::features::llf::readOnlyDepthBuffer = static_cast<void**>(calloc(settings.ShadowLightCount + 1, sizeof(void*)));
+			globals::features::llf::normalDepthBuffer = new void*[settings.ShadowLightCount + 1]();
+			globals::features::llf::readOnlyDepthBuffer = new void*[settings.ShadowLightCount + 1]();
 
 			// Patch the creation-loop count from 8 to ShadowLightCount.
 			// SE/VR: pattern "C7 44 24 68 08 00 00 00" (+4 = the immediate 0x08)
@@ -2062,7 +2061,7 @@ namespace ShadowCasterManager
 	// DrawShadowLightTable
 	// =========================================================================
 	// Interactive shadow caster table: suppress/re-enable per light or by type,
-	// filter by type name/radius/address, sort by any column.
+	// filter by type name/range/address, sort by any column.
 	// Rows are keyed by lightKey (light object pointer) so suppression persists
 	// across slot reassignments as the player moves around.
 	//
@@ -2081,13 +2080,16 @@ namespace ShadowCasterManager
 		};
 
 		// Build index of lights currently in scene (slot -> info).
-		std::unordered_map<uintptr_t, uint32_t> sceneSlot;
+		// Static containers avoid per-frame heap allocation.
+		static std::unordered_map<uintptr_t, uint32_t> sceneSlot;
+		sceneSlot.clear();
 		for (uint32_t i = 0; i < static_cast<uint32_t>(s_shadowSlotInfos.size()); ++i)
 			if (s_shadowSlotInfos[i].valid)
 				sceneSlot[s_shadowSlotInfos[i].lightKey] = i;
 
 		// Build row list.
-		std::vector<SlotRow> rows;
+		static std::vector<SlotRow> rows;
+		rows.clear();
 		if (sceneOnly) {
 			rows.reserve(sceneSlot.size());
 			for (auto& [key, idx] : sceneSlot)
@@ -2171,11 +2173,12 @@ namespace ShadowCasterManager
 			if (ImGui::InputText("##slotfilter", buf, sizeof(buf)))
 				s_filterText = buf;
 			ImGui::SameLine();
-			ImGui::TextDisabled(sceneOnly ? "filter (type/radius/addr)" : "filter (yes/no/type/radius/addr)");
+			ImGui::TextDisabled(sceneOnly ? "filter (type/range/addr)" : "filter (yes/no/type/range/addr)");
 		}
 
 		// Apply filter.
-		std::vector<SlotRow> filteredRows;
+		static std::vector<SlotRow> filteredRows;
+		filteredRows.clear();
 		if (s_filterText.empty()) {
 			filteredRows = rows;
 		} else {
@@ -2185,12 +2188,14 @@ namespace ShadowCasterManager
 			for (auto& r : rows) {
 				std::string typeName = kShadowTypeNames[std::min(r.info.type, 2u)];
 				std::transform(typeName.begin(), typeName.end(), typeName.begin(), ::tolower);
-				std::string radStr = std::to_string(static_cast<int>(r.info.radius));
+				// Range filter matches both raw units and rounded meters.
+				char rangeBuf[32];
+				snprintf(rangeBuf, sizeof(rangeBuf), "%.0f %.0f",
+					r.info.range, Util::Units::GameUnitsToMeters(r.info.range));
 				snprintf(addrBuf, sizeof(addrBuf), "%08x", static_cast<uint32_t>(r.info.lightKey & 0xFFFFFFFF));
-				// Scene filter: "t" matches in-scene, "f" matches not in scene.
 				const char* statusStr = r.inScene ? "yes" : "no";
 				if (typeName.find(lower) != std::string::npos ||
-					radStr.find(lower) != std::string::npos ||
+					std::string(rangeBuf).find(lower) != std::string::npos ||
 					std::string(addrBuf).find(lower) != std::string::npos ||
 					(!sceneOnly && lower == statusStr))
 					filteredRows.push_back(r);
@@ -2198,8 +2203,8 @@ namespace ShadowCasterManager
 		}
 
 		// -- Column layout -------------------------------------------------
-		// Settings (sceneOnly=false): [toggle] [Status] [Slot] [Addr] [Color?] [Type] [Radius]
-		// Overlay  (sceneOnly=true):  [toggle]          [Slot] [Addr] [Color?] [Type] [Radius]
+		// Settings (sceneOnly=false): [toggle] [Status] [Slot] [Addr] [Color?] [Type] [Range]
+		// Overlay  (sceneOnly=true):  [toggle]          [Slot] [Addr] [Color?] [Type] [Range]
 		const bool showStatus = !sceneOnly;
 		const int slotColIdx = showStatus ? 2 : 1;
 		const int addrColIdx = slotColIdx + 1;
@@ -2214,7 +2219,7 @@ namespace ShadowCasterManager
 		if (showColor)
 			headers.push_back("Color");
 		headers.push_back("Type");
-		headers.push_back("Radius");
+		headers.push_back("Range");
 
 		using SortFn = std::function<bool(const SlotRow&, const SlotRow&, bool)>;
 		std::vector<SortFn> sorts(headers.size(), nullptr);
@@ -2239,7 +2244,7 @@ namespace ShadowCasterManager
 			return asc ? a.info.type < b.info.type : a.info.type > b.info.type;
 		};
 		sorts[radColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
-			return asc ? a.info.radius < b.info.radius : a.info.radius > b.info.radius;
+			return asc ? a.info.range < b.info.range : a.info.range > b.info.range;
 		};
 
 		ImVec2 outerSize = compact ? ImVec2(0, 0) : ImVec2(0, ImGui::GetContentRegionAvail().y);
@@ -2302,7 +2307,9 @@ namespace ShadowCasterManager
 				} else if (col == typeColIdx) {
 					ImGui::TextUnformatted(kShadowTypeNames[std::min(row.info.type, 2u)]);
 				} else if (col == radColIdx) {
-					ImGui::Text("%.0f", row.info.radius);
+					ImGui::Text("%.0f u", row.info.range);
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("%s", Util::Units::FormatDistance(row.info.range).c_str());
 				}
 				if (suppressed)
 					ImGui::EndDisabled();
@@ -2484,7 +2491,7 @@ namespace ShadowCasterManager
 				// Helper lambda: validate, apply live, revert buffer on error.
 				auto applyFormula = [](const char* label, char* buf, size_t bufSize,
 										std::string& settingStr, char* errBuf, size_t errBufSize,
-										FormulaHelper*& helper) {
+										std::unique_ptr<FormulaHelper>& helper) {
 					ImGui::InputText(label, buf, bufSize);
 					if (ImGui::IsItemDeactivatedAfterEdit()) {
 						std::string err;
@@ -2494,7 +2501,7 @@ namespace ShadowCasterManager
 							if (helper)
 								helper->Reparse(settingStr);
 							else {
-								helper = new FormulaHelper();
+								helper = std::make_unique<FormulaHelper>();
 								helper->Parse(settingStr);
 							}
 						} else {
