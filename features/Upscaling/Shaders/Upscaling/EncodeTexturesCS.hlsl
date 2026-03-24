@@ -17,6 +17,12 @@ Texture2D<float4> NormalsWaterMask : register(t1);
 Texture2D<float2> MotionVectorMask : register(t2);
 Texture2D<float> DepthMask : register(t3);
 
+#ifdef PATH_TRACING
+Texture2D<float4> PTMotionVectors : register(t4);
+Texture2D<float4> PTColor : register(t5);
+Texture2D<float> PTDepth : register(t6);
+#endif
+
 RWTexture2D<float> ReactiveMask : register(u0);
 RWTexture2D<float> TransparencyCompositionMask : register(u1);
 RWTexture2D<float2> MotionVectorOutput : register(u2);
@@ -30,8 +36,8 @@ float ScreenToViewDepth(const float screenDepth)
 
 [numthreads(8, 8, 1)] void main(uint2 dispatchID : SV_DispatchThreadID) {
 	const float2 trueSamplingDim = SharedData::BufferDim.xy * ResolutionScale;
-	
-	// Early exit if dispatch thread is outside true sampling dimensions	
+
+	// Early exit if dispatch thread is outside true sampling dimensions
 	if (any(dispatchID.xy >= uint2(trueSamplingDim)))
 		return;
 
@@ -39,11 +45,15 @@ float ScreenToViewDepth(const float screenDepth)
 	float transparencyCompositionMask = NormalsWaterMask[dispatchID.xy].z;
 
 #if defined(DLSS) || defined(DLSS_RR)
-	const float depth = DepthMask[dispatchID.xy];	
+#	ifdef PATH_TRACING
+	float ptAlpha = PTColor[dispatchID.xy].a;
+	float depth = ptAlpha > 0.5 ? PTDepth[dispatchID.xy] : DepthMask[dispatchID.xy];
+	float2 motionVector = ptAlpha > 0.5 ? PTMotionVectors[dispatchID.xy].xy : MotionVectorMask[dispatchID.xy];
+#	else
+	const float depth = DepthMask[dispatchID.xy];
+	const float2 motionVector = MotionVectorMask[dispatchID.xy];
+#	endif
 	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, SharedData::GetScreenDepth(depth));
-
-	// Find longest motion vector in 5x5 neighborhood
-	const float2 motionVector = MotionVectorMask[dispatchID.xy];		
 	float2 longestMotionVector = motionVector;
 	float maxMotionLengthSq = dot(motionVector, motionVector);
 
@@ -75,10 +85,14 @@ float ScreenToViewDepth(const float screenDepth)
 	}
 
 	MotionVectorOutput[dispatchID.xy] = lerp(longestMotionVector, motionVector, nearFactor);
+#elif defined(PATH_TRACING)
+	float ptAlpha = PTColor[dispatchID.xy].a;
+	float2 motionVector = ptAlpha > 0.5 ? PTMotionVectors[dispatchID.xy].xy : MotionVectorMask[dispatchID.xy];
+	MotionVectorOutput[dispatchID.xy] = motionVector;
 #endif
 
 	TransparencyCompositionMask[dispatchID.xy] = transparencyCompositionMask;
-	
+
 	float reactiveMask = taaMask.x * 0.01f + taaMask.y;
-	ReactiveMask[dispatchID.xy] = reactiveMask;	
+	ReactiveMask[dispatchID.xy] = reactiveMask;
 }
