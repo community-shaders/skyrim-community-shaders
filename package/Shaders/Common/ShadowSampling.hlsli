@@ -285,11 +285,13 @@ namespace ShadowSampling
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
 		float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
 
+		// Compute slope bias before branching to maintain quad coherence for gradient operations.
+		float slopeBias = ComputeSlopeBias(depth);
+
 		[branch] if (mode == 3) return SampleShadowGather(shadowIndex, sampleUV, depth - ShadowBiasConst);
 		else if (mode >= 1)
 		{
-			float biasedDepth = depth - ComputeSlopeBias(depth);
-			return PCFSpiral8(shadowIndex, sampleUV, biasedDepth, kernelRadius, rotationMatrix);
+			return PCFSpiral8(shadowIndex, sampleUV, depth - slopeBias, kernelRadius, rotationMatrix);
 		}
 		return SampleShadowHardware(shadowIndex, sampleUV, depth);  // mode 0: bias applied internally
 	}
