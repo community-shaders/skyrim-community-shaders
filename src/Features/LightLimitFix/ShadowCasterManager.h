@@ -112,14 +112,15 @@ namespace ShadowCasterManager
 		/// Hard cap on how many lights may re-render their shadow maps in one frame.
 		int32_t MaxRedrawPerFrame = 16;
 
-		/// Use the adaptive formula-based budget instead of the fixed RedrawBudgetMs value.
-		/// When enabled, spare frame time is measured each frame and used as the shadow
-		/// redraw budget; see RedrawBudgetFormula for the exact expression.
-		bool AutoBudget = false;
+		/// Budget mode: how the per-frame shadow redraw budget is determined.
+		///   0 = Auto:    adaptive algorithm grows quality when FPS is healthy, throttles when it drops.
+		///   1 = Manual:  fixed slider value (RedrawBudgetMs).
+		///   2 = Formula: user-editable exprtk expression (RedrawBudgetFormula).
+		int32_t BudgetMode = 0;
 
 		/// Per-frame time budget for shadow re-renders (milliseconds).
-		/// Used when AutoBudget is disabled or RedrawBudgetFormula is empty.
-		/// Lights whose estimated GPU cost would exceed this are deferred to a later frame.
+		/// Used in Manual mode.  Lights whose estimated GPU cost would exceed this
+		/// are deferred to a later frame.
 		float RedrawBudgetMs = 2.0f;
 
 		/// Demote shadow lights that exceed the active caster limit to normal (non-shadow) lights
@@ -141,9 +142,7 @@ namespace ShadowCasterManager
 		/// Redraw interval formula (per light).  Higher = less frequent redraws.
 		std::string RedrawIntervalFormula = "min(10, (max(0, lightdistance - lightradius * 0.5) / 500) / max(0.5, lightintensity)) * (lightconverted * 5 + 1)";
 
-		/// Redraw budget formula (per frame, in ms).
-		/// Default: adaptive — uses spare frame time, ramping up over 45 stable frames.
-		/// Set to empty to use the fixed RedrawBudgetMs fallback instead.
+		/// Redraw budget formula (per frame, in ms).  Used in Formula mode.
 		/// Key variables: frametime (smoothed ms), frametarget (90th-pct ms), stableframes.
 		std::string RedrawBudgetFormula = "max(0, frametarget - frametime - 0.5) * min(stableframes, 45) / 45";
 	};
