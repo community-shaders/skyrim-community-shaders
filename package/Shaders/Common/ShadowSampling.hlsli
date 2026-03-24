@@ -262,6 +262,19 @@ namespace ShadowSampling
 		return PCFPoisson16(shadowIndex, baseUV, receiverDepth, kernelRadius, rotationMatrix);
 	}
 
+	// Build a 2D rotation matrix for PCF kernel randomization.
+	// Uses world-space XZ position so both VR eyes compute an identical rotation
+	// for the same surface point — screen position differs between eyes (IPD).
+	// World-space noise is also more temporally stable than screen-space IGN on
+	// camera pan, and integrates equally well with TAA via the FrameCount term.
+	float2x2 GetPCFRotationMatrix(float3 worldPosition)
+	{
+		float noise = Random::InterleavedGradientNoise(worldPosition.xz, SharedData::FrameCount);
+		float2 r;
+		sincos(Math::TAU * noise, r.y, r.x);
+		return float2x2(r.x, r.y, -r.y, r.x);
+	}
+
 	// Dispatch the active filter mode for omnidirectional/paraboloid shadow maps.
 	// Mode 0: single-tap gather-based PCF with slope bias
 	// Mode 1: 8-tap spiral PCF with temporal rotation
