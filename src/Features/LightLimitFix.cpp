@@ -61,21 +61,19 @@ void LightLimitFix::DrawSettings()
 	ImGui::SeparatorText("Shadow Sampling");
 
 	{
-		static constexpr const char* filterModeNames[] = { "Fast (HW-PCF)", "Soft (PCF)", "Contact Hardened (PCSS)", "Debug (Raw Gather)" };
+		static constexpr const char* filterModeNames[] = { "Fast (Single-tap)", "Soft (PCF)", "Contact Hardened (PCSS)" };
 		int mode = static_cast<int>(settings.FilterMode);
 		if (ImGui::Combo("Shadow Filter", &mode, filterModeNames, IM_ARRAYSIZE(filterModeNames)))
 			settings.FilterMode = static_cast<uint32_t>(mode);
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(
 				"Shadow filtering quality for shadow-casting point/spot lights.\n\n"
-				"Fast (HW-PCF): Single hardware PCF tap with adaptive slope bias.\n"
-				"  Smooth 2x2 bilinear filter; fastest option. Good default.\n\n"
-				"Soft (PCF): 16-tap rotated Poisson disc. Softer, uniform penumbra.\n"
+				"Fast (Single-tap): Single gather tap with adaptive slope bias.\n"
+				"  Smooth 2x2 comparison; fastest option. Good default.\n\n"
+				"Soft (PCF): 8-tap rotated Poisson disc. Softer, more uniform penumbra.\n"
 				"  Use Kernel Scale to adjust softness.\n\n"
 				"Contact Hardened (PCSS): Penumbra width scales with distance from\n"
-				"  the occluder. Shadows are sharp at contact, soft in open air.\n\n"
-				"Debug (Raw Gather): Unfiltered 2x2 gather. No smoothing, obvious\n"
-				"  self-shadowing acne. Use to diagnose shadow issues.");
+				"  the occluder. Shadows are sharp at contact, soft in open air.");
 
 		if (settings.FilterMode >= 1) {
 			ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.1f, 8.0f, "%.2f");

@@ -64,7 +64,7 @@ namespace ShadowSampling
 
 	// Shadow depth bias — applied before depth comparisons to prevent self-shadowing acne.
 	static const float ShadowBiasConst = 0.0005;    // constant component
-	static const float ShadowBiasSlopeScale = 0.5;  // multiplier on ddx/ddy slope bias
+	static const float ShadowBiasSlopeScale = 0.1;  // multiplier on ddx/ddy slope bias
 
 	// Depth guard epsilons used to reject spotlight fragments at the near/far frustum planes.
 	static const float ShadowDepthNearEps = 0.0001;
@@ -189,17 +189,10 @@ namespace ShadowSampling
 
 	// --- PCF helpers ---
 
-	// Single-tap hardware-PCF sample (bilinear blend of 4 depth comparisons).
-	// receiverDepth should be pre-biased by the caller.
-	float SampleShadowPCF(uint shadowIndex, float2 uv, float receiverDepth)
-	{
-		return ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(uv, shadowIndex), receiverDepth);
-	}
-
-	// Raw 2×2 gather — no hardware PCF, constant bias.
-	// Harsh, unfiltered shadow edges. Use for debugging: acne is obvious and shadows
-	// never smooth away, making self-shadowing errors immediately visible.
-	// Mode 3 (debug only); not used in production shadow paths.
+	// Gather-based shadow sample: fetches 4 texels and compares to receiver depth.
+	// Used for all shadow filtering modes (single-tap and multi-tap PCF).
+	// Avoids hardware PCF filtering artifacts while maintaining efficiency.
+	// receiverDepth should be pre-biased by the caller (except for debug/constant-bias mode).
 	float SampleShadowGather(uint shadowIndex, float2 uv, float receiverDepth)
 	{
 		float4 samples = ShadowMaps.GatherRed(LinearSampler, float3(uv, shadowIndex));
@@ -216,13 +209,6 @@ namespace ShadowSampling
 		return ShadowBiasConst + max(abs(deriv.x), abs(deriv.y)) * ShadowBiasSlopeScale;
 	}
 
-	// Convenience: hardware-PCF single tap with adaptive bias computed internally.
-	// Used by SampleParaboloidShadow (mode 0) where the caller does not pre-bias.
-	float SampleShadowHardware(uint shadowIndex, float2 uv, float receiverDepth)
-	{
-		return SampleShadowPCF(shadowIndex, uv, receiverDepth - ComputeSlopeBias(receiverDepth));
-	}
-
 	// 8-tap spiral PCF on a 2D shadow map slice (paraboloid UV space).
 	// receiverDepth must be pre-biased by the caller.
 	float PCFSpiral8(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius, float2x2 rotationMatrix)
@@ -231,7 +217,7 @@ namespace ShadowSampling
 		[unroll] for (int i = 0; i < 8; i++)
 		{
 			float2 offset = mul(rotationMatrix, Random::SpiralSampleOffsets8[i]) * kernelRadius;
-			sum += SampleShadowPCF(shadowIndex, baseUV + offset, receiverDepth);
+			sum += SampleShadowGather(shadowIndex, baseUV + offset, receiverDepth);
 		}
 		return sum * rcp(8.0);
 	}
@@ -243,7 +229,7 @@ namespace ShadowSampling
 		[unroll] for (int i = 0; i < 16; i++)
 		{
 			float2 offset = mul(rotationMatrix, Random::PoissonSampleOffsets16[i]) * kernelRadius;
-			sum += SampleShadowPCF(shadowIndex, baseUV + offset, receiverDepth);
+			sum += SampleShadowGather(shadowIndex, baseUV + offset, receiverDepth);
 		}
 		return sum * rcp(16.0);
 	}
@@ -276,10 +262,10 @@ namespace ShadowSampling
 		return PCFPoisson16(shadowIndex, baseUV, receiverDepth, kernelRadius, rotationMatrix);
 	}
 
-	// Dispatch the active filter mode for a paraboloid shadow map (hemisphere / omni).
-	// Mode 0: single-tap HW-PCF (bias computed internally)
-	// Mode 1/2: 8-tap spiral PCF with temporal rotation (bias computed once here)
-	// Mode 3: raw 2×2 gather — debug only
+	// Dispatch the active filter mode for omnidirectional/paraboloid shadow maps.
+	// Mode 0: single-tap gather-based PCF with slope bias
+	// Mode 1: 8-tap spiral PCF with temporal rotation
+	// Mode 2: PCSS contact-hardened soft shadows
 	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth, float2x2 rotationMatrix)
 	{
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
@@ -288,12 +274,12 @@ namespace ShadowSampling
 		// Compute slope bias before branching to maintain quad coherence for gradient operations.
 		float slopeBias = ComputeSlopeBias(depth);
 
-		[branch] if (mode == 3) return SampleShadowGather(shadowIndex, sampleUV, depth - ShadowBiasConst);
-		else if (mode >= 1)
+		[branch] if (mode >= 1)
 		{
 			return PCFSpiral8(shadowIndex, sampleUV, depth - slopeBias, kernelRadius, rotationMatrix);
 		}
-		return SampleShadowHardware(shadowIndex, sampleUV, depth);  // mode 0: bias applied internally
+		// Mode 0: single-tap with pre-computed bias
+		return SampleShadowGather(shadowIndex, sampleUV, depth - slopeBias);
 	}
 
 	// --- Per-light shadow sampling ---
@@ -325,7 +311,6 @@ namespace ShadowSampling
 		spotFalloff = spotFalloff * spotFalloff;
 
 		// Compute slope bias once for all modes.
-		// Mode 0/1/2 all benefit; mode 3 (debug gather) uses constant bias only.
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
 		float biasedDepth = positionLS.z - ComputeSlopeBias(positionLS.z);
 
@@ -333,8 +318,7 @@ namespace ShadowSampling
 		[branch] if (mode == 2) shadowSample = PCSSSpotlight(shadowIndex, baseUV, biasedDepth, rotationMatrix);
 		else if (mode == 1) shadowSample = PCFPoisson16(shadowIndex, baseUV, biasedDepth,
 			PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale, rotationMatrix);
-		else if (mode == 3) shadowSample = SampleShadowGather(shadowIndex, baseUV, positionLS.z - ShadowBiasConst);
-		else shadowSample = SampleShadowPCF(shadowIndex, baseUV, biasedDepth);  // mode 0
+		else shadowSample = SampleShadowGather(shadowIndex, baseUV, biasedDepth);  // mode 0
 
 		return shadowSample * spotFalloff;
 	}
