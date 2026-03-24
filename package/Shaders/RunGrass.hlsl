@@ -595,9 +595,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float dirSoftShadow = 1.0;
 	float dirVSMDetailedShadow = 1.0;
 
-	float2 rotation;
-	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
-	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+	float2x2 rotationMatrix = ShadowSampling::GetPCFRotationMatrix(input.WorldPosition.xyz);
 
 #			if defined(VOLUMETRIC_SHADOWS)
 	if (!SharedData::InInterior)
@@ -871,9 +869,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 
-	float2 rotation2;
-	sincos(Math::TAU * screenNoise, rotation2.y, rotation2.x);
-	float2x2 rotationMatrix = float2x2(rotation2.x, rotation2.y, -rotation2.y, rotation2.x);
+	float2x2 rotationMatrix = ShadowSampling::GetPCFRotationMatrix(input.WorldPosition.xyz);
 
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
