@@ -8,6 +8,8 @@ struct LightLimitFix : OverlayFeature
 {
 private:
 	static constexpr std::string_view MOD_ID = "99548";
+	static constexpr uint32_t MAX_LIGHTS = 1024;
+	static constexpr uint32_t CLUSTER_MAX_LIGHTS = 128;
 
 public:
 	virtual inline std::string GetName() override { return "Light Limit Fix"; }
@@ -193,6 +195,10 @@ public:
 	virtual void EarlyPrepass() override;
 	virtual void Prepass() override;
 	void CopyPointShadowData();
+
+	// Shadow rendering helpers (implemented in LightLimitFix/ShadowRenderer.cpp)
+	void SetupShadowResources();
+	void DrawShadowSamplingSettings();
 
 	static inline float3 Saturation(float3 color, float saturation);
 	static inline bool IsValidLight(RE::BSLight* a_light);
