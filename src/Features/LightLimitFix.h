@@ -201,7 +201,7 @@ public:
 	struct Settings
 	{
 		// Shadow sampling
-		uint32_t FilterMode = 0;   // 0=HW-PCF single-tap, 1=PCF Poisson disc, 2=PCSS, 3=debug raw gather
+		uint32_t FilterMode = 0;   // 0=Gather single-tap, 1=PCF Poisson disc, 2=PCSS
 		float KernelScale = 3.0f;  // scales the base PCF kernel radius
 		float LightSize = 10.0f;   // PCSS virtual light size in shadow-map pixels
 		// Debug (last)
