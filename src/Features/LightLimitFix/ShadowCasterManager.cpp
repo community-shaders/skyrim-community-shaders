@@ -1233,9 +1233,11 @@ namespace ShadowCasterManager
 			if (s_settings.BudgetMode == BudgetModeEnum::Auto) {
 				// ---- DRS-style auto budget ----
 				// Derive target frame time: user override > monitor refresh rate > fallback.
+				// Always re-derive in auto mode so changes to refresh rate are picked up
+				// immediately and the slider stays consistent with the active target.
 				if (s_settings.AutoTargetFPS > 0.0f) {
 					s_autoTargetMs = 1000.0f / s_settings.AutoTargetFPS;
-				} else if (s_autoTargetMs <= 0.0f) {
+				} else {
 					double hz = globals::features::upscaling.refreshRate;
 					s_autoTargetMs = (hz > 1.0) ? static_cast<float>(1000.0 / hz) : kAutoTargetFallbackMs;
 				}
@@ -1248,18 +1250,22 @@ namespace ShadowCasterManager
 				const float rawUtil = s_adaptiveBudgetMs > 0.01f ? s_actualShadowCostMs / s_adaptiveBudgetMs : 0.0f;
 				s_utilizationRatio = 0.9f * s_utilizationRatio + 0.1f * rawUtil;
 
-				// Proportional error: positive = headroom, negative = over target.
-				const float headroomMs = s_autoTargetMs - s_ftEMA - kAutoSafetyMs;
+				// Asymmetric DRS controller:
+				//   Grow:   raw headroom must exceed safety margin + dead zone.
+				//   Shrink: raw headroom is actually negative past dead zone.
+				// This prevents a permanent throttle state when actual FPS == target FPS,
+				// which would otherwise cause headroom = -kAutoSafetyMs < -kAutoDeadZoneMs.
+				const float rawHeadroom = s_autoTargetMs - s_ftEMA;
 
-				if (headroomMs > kAutoDeadZoneMs) {
-					// Under target: grow budget proportionally to headroom.
+				if (rawHeadroom > kAutoSafetyMs + kAutoDeadZoneMs) {
+					// Under target with safety margin to spare: grow budget.
 					// Scale by utilization -- grow fast only if we're using what we have.
 					float utilFactor = std::clamp(s_utilizationRatio, 0.2f, 1.0f);
-					float delta = kAutoIncreaseRate * (headroomMs / s_autoTargetMs) * utilFactor;
+					float delta = kAutoIncreaseRate * ((rawHeadroom - kAutoSafetyMs) / s_autoTargetMs) * utilFactor;
 					s_adaptiveBudgetMs += delta;
-				} else if (headroomMs < -kAutoDeadZoneMs) {
+				} else if (rawHeadroom < -kAutoDeadZoneMs) {
 					// Over target: shrink budget proportionally to overshoot (fast).
-					float delta = kAutoDecreaseRate * (-headroomMs / s_autoTargetMs);
+					float delta = kAutoDecreaseRate * (-rawHeadroom / s_autoTargetMs);
 					s_adaptiveBudgetMs -= delta;
 				}
 				// Inside dead zone: hold steady (hysteresis).
@@ -2496,7 +2502,6 @@ namespace ShadowCasterManager
 				ImGui::SameLine();
 				if (ImGui::Button("Auto")) {
 					settings.AutoTargetFPS = 0.0f;
-					s_autoTargetMs = 0.0f;  // force re-detect next frame
 				}
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("Reset to auto-detect from monitor refresh rate (%.0f Hz).", detectedFPS);
@@ -2523,7 +2528,8 @@ namespace ShadowCasterManager
 			float currentFrameMs = *globals::game::deltaTime * 1000.0f;
 			float currentFPS = 1000.0f / std::max(currentFrameMs, 1.0f);
 			float utilPct = std::min(s_utilizationRatio * 100.0f, 999.0f);
-			float headroomMs = s_autoTargetMs - s_ftEMA - kAutoSafetyMs;
+			float rawHeadroom = s_autoTargetMs - s_ftEMA;
+			float headroomMs = rawHeadroom - kAutoSafetyMs;  // net headroom above safety floor
 			float targetFPS = s_autoTargetMs > 0.0f ? 1000.0f / s_autoTargetMs : 0.0f;
 			float freeMs = std::max(0.0f, s_autoBudgetMs - s_actualShadowCostMs);
 			int32_t avgCostUs = s_budget.GetAverageCostUs();
@@ -2535,9 +2541,9 @@ namespace ShadowCasterManager
 				ImGui::Text("Budget: %.2f ms (%.0f%% used) | all %d rendered", s_autoBudgetMs, utilPct, renderedDisplay);
 
 			const char* state = "steady";
-			if (headroomMs > kAutoDeadZoneMs)
+			if (rawHeadroom > kAutoSafetyMs + kAutoDeadZoneMs)
 				state = "growing";
-			else if (headroomMs < -kAutoDeadZoneMs)
+			else if (rawHeadroom < -kAutoDeadZoneMs)
 				state = "throttling";
 			ImGui::Text("Target: %.0f FPS (%.1f ms) | headroom: %.1f ms | %s", targetFPS, s_autoTargetMs, headroomMs, state);
 			ImGui::Text("Current: %.1f FPS (%.1f ms)", currentFPS, currentFrameMs);
