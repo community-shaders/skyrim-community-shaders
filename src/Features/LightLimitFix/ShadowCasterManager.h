@@ -49,6 +49,10 @@ namespace ShadowCasterManager
 		kFormulaParam_IsInterior,
 		kFormulaParam_TimeOfDay,
 
+		kFormulaParam_FrameTime,     ///< EMA-smoothed frame time (ms)
+		kFormulaParam_FrameTarget,   ///< 90th-percentile frame time (ms) — target budget ceiling
+		kFormulaParam_StableFrames,  ///< consecutive frames the EMA has been below FrameTarget
+
 		kFormulaParam_Max
 	};
 
@@ -93,6 +97,9 @@ namespace ShadowCasterManager
 		/// 4 = vanilla point light count with intelligent selection replacing the game's default.
 		/// 5-64 = extended mode; depth buffer array is expanded beyond game's 8-slot limit
 		///   when this exceeds 8.
+		/// Higher values allow more lights to hold stale shadow maps between redraws at
+		/// the cost of startup memory. The redraw budget and interval formula control
+		/// per-frame GPU cost independently.
 		int32_t ShadowLightCount = 16;
 
 		/// Number of additional converted-light slots (lights treated as normal lights
@@ -105,10 +112,14 @@ namespace ShadowCasterManager
 		/// Hard cap on how many lights may re-render their shadow maps in one frame.
 		int32_t MaxRedrawPerFrame = 16;
 
+		/// Use the adaptive formula-based budget instead of the fixed RedrawBudgetMs value.
+		/// When enabled, spare frame time is measured each frame and used as the shadow
+		/// redraw budget; see RedrawBudgetFormula for the exact expression.
+		bool AutoBudget = false;
+
 		/// Per-frame time budget for shadow re-renders (milliseconds).
+		/// Used when AutoBudget is disabled or RedrawBudgetFormula is empty.
 		/// Lights whose estimated GPU cost would exceed this are deferred to a later frame.
-		/// Default varies by scene type; the formula "1 + isinterior" gives 1 ms exterior,
-		/// 2 ms interior.
 		float RedrawBudgetMs = 2.0f;
 
 		/// Demote shadow lights that exceed the active caster limit to normal (non-shadow) lights
@@ -131,7 +142,10 @@ namespace ShadowCasterManager
 		std::string RedrawIntervalFormula = "min(10, (max(0, lightdistance - lightradius * 0.5) / 500) / max(0.5, lightintensity)) * (lightconverted * 5 + 1)";
 
 		/// Redraw budget formula (per frame, in ms).
-		std::string RedrawBudgetFormula = "1 + isinterior";
+		/// Default: adaptive — uses spare frame time, ramping up over 45 stable frames.
+		/// Set to empty to use the fixed RedrawBudgetMs fallback instead.
+		/// Key variables: frametime (smoothed ms), frametarget (90th-pct ms), stableframes.
+		std::string RedrawBudgetFormula = "max(0, frametarget - frametime - 0.5) * min(stableframes, 45) / 45";
 	};
 
 	// -------------------------------------------------------------------------

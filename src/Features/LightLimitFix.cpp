@@ -16,6 +16,7 @@ namespace ShadowCasterManager
 		ConvertedShadowSlots,
 		AllowDrawNewLight,
 		MaxRedrawPerFrame,
+		AutoBudget,
 		RedrawBudgetMs,
 		ConvertExcessToNormal,
 		PromoteNormalToShadow,

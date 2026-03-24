@@ -61,6 +61,9 @@ namespace ShadowCasterManager
 		{ "cameraz", "camera world Z", kFormulaParam_CameraZ },
 		{ "isinterior", "1 in interior cells, 0 outdoors", kFormulaParam_IsInterior },
 		{ "timeofday", "in-game hour (0.0–24.0)", kFormulaParam_TimeOfDay },
+		{ "frametime", "EMA-smoothed frame time (ms)", kFormulaParam_FrameTime },
+		{ "frametarget", "90th-percentile recent frame time (ms) — headroom ceiling", kFormulaParam_FrameTarget },
+		{ "stableframes", "consecutive frames EMA has been below frametarget", kFormulaParam_StableFrames },
 	};
 
 	static void InitFormulaSystem()
@@ -146,6 +149,30 @@ namespace ShadowCasterManager
 	static int32_t s_budgetHistory[kRedrawHistorySize] = {};
 	static int32_t s_budgetHistoryPos = 0;
 	static int64_t s_budgetSum = 0;
+
+	// Auto-budget: sliding window of recent frame times for 90th-percentile targeting.
+	static constexpr int kAutoFrameWindow = 120;  // ~2 s at 60 fps
+	static constexpr float kAutoSafetyMs = 0.5f;  // headroom reserved for the rest of the frame
+	static constexpr int kAutoRampFrames = 45;    // consecutive stable frames before fully opening budget
+
+	static float s_ftRing[kAutoFrameWindow]{};
+	static int s_ftHead = 0;
+	static int s_ftCount = 0;
+	static float s_ftEMA = 0.0f;
+	static int s_stableFrames = 0;
+	static float s_autoBudgetMs = 0.0f;  // last computed value; used by UI and stats
+
+	static float ComputeFrameTimePercentile90()
+	{
+		if (s_ftCount == 0)
+			return 16.67f;  // fallback: 60 fps target
+		const int n = std::min(s_ftCount, kAutoFrameWindow);
+		float tmp[kAutoFrameWindow];
+		std::copy(s_ftRing, s_ftRing + n, tmp);
+		const int idx = static_cast<int>(n * 0.9f);
+		std::nth_element(tmp, tmp + idx, tmp + n);
+		return tmp[idx];
+	}
 
 	// Maximum ShadowLightCount the installed infrastructure supports.
 	// Set once by Install(); Update() clamps to this.
@@ -1157,8 +1184,35 @@ namespace ShadowCasterManager
 
 		// ---- Temporal budget: decide which lights redraw this frame ----
 		{
-			int maxRedraw = s_settings.MaxRedrawPerFrame;
+			// Update frame-time ring buffer and derive formula params.
+			// Always runs so frametime/frametarget/stableframes are current for any formula.
+			{
+				const float dtMs = *globals::game::deltaTime * 1000.0f;
+				s_ftRing[s_ftHead] = dtMs;
+				s_ftHead = (s_ftHead + 1) % kAutoFrameWindow;
+				if (s_ftCount < kAutoFrameWindow)
+					++s_ftCount;
+				s_ftEMA = (s_ftCount == 1) ? dtMs : 0.1f * dtMs + 0.9f * s_ftEMA;
+
+				const float target_ms = ComputeFrameTimePercentile90();
+				if (s_ftEMA < target_ms)
+					s_stableFrames = std::min(s_stableFrames + 1, kAutoRampFrames);
+				else
+					s_stableFrames = 0;
+
+				FormulaHelper::SetParam(kFormulaParam_FrameTime, static_cast<double>(s_ftEMA));
+				FormulaHelper::SetParam(kFormulaParam_FrameTarget, static_cast<double>(target_ms));
+				FormulaHelper::SetParam(kFormulaParam_StableFrames, static_cast<double>(s_stableFrames));
+			}
+
+			// Evaluate the budget formula once for the whole frame.
+			// Falls back to RedrawBudgetMs when AutoBudget is disabled or formula is unset.
 			double budget = s_settings.RedrawBudgetMs;
+			if (s_settings.AutoBudget && s_formulaRedrawBudget)
+				budget = s_formulaRedrawBudget->Calculate();
+			s_autoBudgetMs = static_cast<float>(budget);
+
+			int maxRedraw = s_settings.MaxRedrawPerFrame;
 			int32_t budgetRemain = static_cast<int32_t>(budget * 1000.0);
 			bool isFirst = true;
 			int32_t now = *globals::game::frameCounter;
@@ -1192,9 +1246,6 @@ namespace ShadowCasterManager
 						continue;
 					pending.push_back(&e);
 				}
-
-				if (s_formulaRedrawBudget)
-					budget = s_formulaRedrawBudget->Calculate();
 
 				for (auto* e : pending) {
 					double interval = 0.0;
@@ -2279,21 +2330,58 @@ namespace ShadowCasterManager
 		}
 
 		// ---- Temporal budget (dynamic) ------------------------------------
-		ImGui::SliderInt("Max Redraws Per Frame", &settings.MaxRedrawPerFrame, 1, 32);
+
+		// Auto Budget checkbox + Apply Recommendations button on the same line.
+		static constexpr int32_t kAutoRecommendedShadowCount = 32;
+		ImGui::Checkbox("Auto Budget", &settings.AutoBudget);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip(
+				"Use the adaptive formula to derive the per-frame shadow redraw budget from spare\n"
+				"frame time instead of a fixed value.\n"
+				"Recommendation: increase Shadow Light Count to 32+ for best results (requires restart).");
+		if (settings.AutoBudget && settings.ShadowLightCount < kAutoRecommendedShadowCount) {
+			ImGui::SameLine();
+			if (ImGui::Button("Apply Recommendations")) {
+				settings.ShadowLightCount = kAutoRecommendedShadowCount;
+				settings.MaxRedrawPerFrame = 32;
+			}
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"Sets Shadow Light Count to %d and Max Redraws Per Frame to 32.\n"
+					"Shadow Light Count change requires a game restart.",
+					kAutoRecommendedShadowCount);
+		}
+
+		// Budget progress bar — always visible.
+		{
+			const float effectiveBudgetMs = s_autoBudgetMs;
+			const float avgConsumedUs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize);
+			const float budgetUs = effectiveBudgetMs * 1000.0f;
+			const float fraction = budgetUs > 0.0f ? avgConsumedUs / budgetUs : 0.0f;
+			char overlay[64];
+			snprintf(overlay, sizeof(overlay), "%.2f / %.2f ms", avgConsumedUs / 1000.0f, effectiveBudgetMs);
+			ImGui::ProgressBar(std::min(fraction, 1.0f), ImVec2(-1.0f, 0.0f), overlay);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Estimated GPU shadow budget consumed this frame vs. effective budget.");
+		}
+
+		if (settings.AutoBudget) {
+			ImGui::TextDisabled("Auto budget this frame: %.2f ms -- disable Auto Budget to set manually", s_autoBudgetMs);
+		} else {
+			ImGui::SliderFloat("Redraw Budget (ms)", &settings.RedrawBudgetMs, 0.1f, 8.0f, "%.2f ms");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"Per-frame GPU time budget for shadow re-renders (milliseconds).\n"
+					"Lights whose estimated render cost exceeds the remaining budget are deferred.\n"
+					"The first eligible light always renders regardless of budget (starvation prevention).\n"
+					"Typical values: 1.0 ms exterior, 2.0 ms interior.");
+		}
+		ImGui::SliderInt("Max Redraws Per Frame", &settings.MaxRedrawPerFrame, 1, 64);
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(
 				"Hard cap on how many shadow lights may re-render their shadow maps in one frame.\n"
-				"Lower values save GPU time; higher values keep shadows more up-to-date.\n"
-				"The sun directional light always counts as one redraw.");
-
-		ImGui::SliderFloat("Redraw Budget (ms)", &settings.RedrawBudgetMs, 0.1f, 8.0f, "%.2f ms");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip(
-				"Per-frame GPU time budget for shadow re-renders (milliseconds).\n"
-				"Lights whose estimated render cost exceeds the remaining budget are deferred.\n"
-				"The first eligible light always renders regardless of budget (starvation prevention).\n"
-				"Overridden per-frame by the Redraw Budget formula if set.\n"
-				"Typical values: 1.0 ms exterior, 2.0 ms interior.");
+				"Acts as a safety valve regardless of budget — the budget controls time spent,\n"
+				"this controls count. The sun directional light always counts as one redraw.");
 
 		// ---- Light conversion (requires restart for hooks) -----------------
 		if (ImGui::TreeNode("Light Conversion##LightConv")) {
@@ -2400,11 +2488,10 @@ namespace ShadowCasterManager
 					settings.RedrawIntervalFormula, redrawIntervalErr, sizeof(redrawIntervalErr), s_formulaRedrawInterval);
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("Per-light redraw interval formula. Higher = less frequent shadow map updates.");
-
 				applyFormula("Redraw Budget", redrawBudgetBuf, sizeof(redrawBudgetBuf),
 					settings.RedrawBudgetFormula, redrawBudgetErr, sizeof(redrawBudgetErr), s_formulaRedrawBudget);
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Per-frame redraw budget formula (ms). Overrides the Redraw Budget slider when set.");
+					ImGui::SetTooltip("Per-frame redraw budget formula (ms). Empty = use the Redraw Budget (ms) slider value.");
 
 				ImGui::TreePop();
 			}
@@ -2416,32 +2503,16 @@ namespace ShadowCasterManager
 		ImGui::SeparatorText("Shadow Limit Fix — Active Casters");
 		DrawShadowLightTable(true, false);
 
-		// ---- Statistics panel --------------------------------------------
-		if (ImGui::TreeNode("Shadow Scheduling Statistics")) {
-			// Budget consumption bar (rolling average over last 128 frames).
-			{
-				float avgConsumedUs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize);
-				float budgetUs = s_settings.RedrawBudgetMs * 1000.0f;
-				float fraction = budgetUs > 0.0f ? avgConsumedUs / budgetUs : 0.0f;
-				char overlay[64];
-				snprintf(overlay, sizeof(overlay), "%.2f / %.2f ms (avg)", avgConsumedUs / 1000.0f, s_settings.RedrawBudgetMs);
-				ImGui::ProgressBar(std::min(fraction, 1.0f), ImVec2(-1.0f, 0.0f), overlay);
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Estimated GPU shadow budget consumed, averaged over the last %d frames.", kRedrawHistorySize);
-			}
-
-			// Rolling average redraws per frame.
+		// Redraws/frame and per-light cost — always visible alongside the budget bar above.
+		{
 			float avgRedraws = static_cast<float>(s_redrawSum) / static_cast<float>(kRedrawHistorySize);
 			ImGui::Text("Avg redraws/frame : %.1f  (cap: %d)", avgRedraws, s_settings.MaxRedrawPerFrame);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("Rolling average over the last %d frames.", kRedrawHistorySize);
 
-			// Average light GPU cost.
 			int32_t avgCost = s_budget.GetAverageCostUs();
 			if (avgCost > 0)
 				ImGui::Text("Avg light cost    : %.2f ms", avgCost / 1000.0f);
-
-			ImGui::TreePop();
 		}
 
 		if (!settings.Enabled)
