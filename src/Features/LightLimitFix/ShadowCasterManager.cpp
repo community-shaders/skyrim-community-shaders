@@ -1232,8 +1232,10 @@ namespace ShadowCasterManager
 			double budget = s_settings.RedrawBudgetMs;
 			if (s_settings.BudgetMode == 0) {
 				// ---- DRS-style auto budget ----
-				// Initialise target from monitor refresh rate on first use.
-				if (s_autoTargetMs <= 0.0f) {
+				// Derive target frame time: user override > monitor refresh rate > fallback.
+				if (s_settings.AutoTargetFPS > 0.0f) {
+					s_autoTargetMs = 1000.0f / s_settings.AutoTargetFPS;
+				} else if (s_autoTargetMs <= 0.0f) {
 					double hz = globals::features::upscaling.refreshRate;
 					s_autoTargetMs = (hz > 1.0) ? static_cast<float>(1000.0 / hz) : kAutoTargetFallbackMs;
 				}
@@ -2448,8 +2450,8 @@ namespace ShadowCasterManager
 		if (ImGui::IsItemHovered()) {
 			if (budgetMode == 0)
 				ImGui::SetTooltip(
-					"Auto: grows shadow quality when FPS is healthy, throttles when it drops.\n"
-					"Uses 90th-percentile frame time as the ceiling.\n"
+					"Auto: grows shadow quality when FPS is above the target, throttles when it drops.\n"
+					"Target is auto-detected from monitor refresh rate or set manually below.\n"
 					"Recommendation: increase Shadow Light Count to 32+ for best results (requires restart).");
 			else if (budgetMode == 1)
 				ImGui::SetTooltip(
@@ -2471,6 +2473,34 @@ namespace ShadowCasterManager
 					"Sets Shadow Light Count to %d and Max Redraws Per Frame to 32.\n"
 					"Shadow Light Count change requires a game restart.",
 					kAutoRecommendedShadowCount);
+		}
+
+		// Auto mode: FPS target slider.
+		if (budgetMode == 0) {
+			float detectedHz = static_cast<float>(globals::features::upscaling.refreshRate);
+			float detectedFPS = detectedHz > 1.0f ? detectedHz : 60.0f;
+			float displayFPS = settings.AutoTargetFPS > 0.0f ? settings.AutoTargetFPS : detectedFPS;
+
+			if (ImGui::SliderFloat("Target FPS", &displayFPS, 15.0f, 300.0f, "%.0f FPS")) {
+				settings.AutoTargetFPS = displayFPS;
+			}
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"FPS target for the auto budget controller.\n"
+					"Shadows grow to fill spare frame time below this target.\n"
+					"Detected refresh rate: %.0f Hz",
+					detectedFPS);
+
+			// Reset button to return to auto-detect.
+			if (settings.AutoTargetFPS > 0.0f) {
+				ImGui::SameLine();
+				if (ImGui::Button("Auto")) {
+					settings.AutoTargetFPS = 0.0f;
+					s_autoTargetMs = 0.0f;  // force re-detect next frame
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Reset to auto-detect from monitor refresh rate (%.0f Hz).", detectedFPS);
+			}
 		}
 
 		// Budget progress bar -- always visible.
