@@ -225,6 +225,9 @@ Menu::~Menu()
 	uiIcons.debug.Release();
 	uiIcons.materials.Release();
 	uiIcons.postProcessing.Release();
+	uiIcons.freeCamera.Release();
+	uiIcons.playMode.Release();
+	uiIcons.search.Release();
 
 	// Clean up blur resources
 	BackgroundBlur::Cleanup();
@@ -949,9 +952,15 @@ void Menu::ProcessInputEventQueue()
 		}
 		if (event.device == RE::INPUT_DEVICE::kMouse) {
 			logger::trace("Detect mouse scan code {} value {} pressed: {}", event.keyCode, event.value, event.IsPressed());
+			auto* ew = EditorWindow::GetSingleton();
+			bool flying = ew && ew->IsPreviewFlying();
 			if (event.keyCode > 7) {  // middle scroll
-				io.AddMouseWheelEvent(0, event.value * (event.keyCode == 8 ? 1 : -1));
-			} else {
+				if (ew && ew->previewMode == EditorWindow::PreviewMode::FreeCamera) {
+					ew->AdjustFlySpeed(event.keyCode == 8 ? 1.0f : -1.0f);
+				} else if (!flying) {
+					io.AddMouseWheelEvent(0, event.value * (event.keyCode == 8 ? 1 : -1));
+				}
+			} else if (!flying) {
 				if (event.keyCode > 5)
 					event.keyCode = 5;
 				io.AddMouseButtonEvent(event.keyCode, event.IsPressed());
@@ -1043,7 +1052,22 @@ void Menu::ProcessInputEventQueue()
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
 						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
-						{ settings.WeatherEditorToggleKey, []() { auto p = RE::PlayerCharacter::GetSingleton(); if (p && p->parentCell) EditorWindow::GetSingleton()->open = !EditorWindow::GetSingleton()->open; } },
+						{ settings.WeatherEditorToggleKey, []() {
+							 auto* ew = EditorWindow::GetSingleton();
+							 if (!ew)
+								 return;
+							 if (ew->GetPreviewMode() == EditorWindow::PreviewMode::FreeCamera) {
+								 // Flying → lock camera position for editing
+								 ew->ToggleFreeCameraLock();
+							 } else if (ew->IsInPreviewMode()) {
+								 // Locked or PlayMode → fully exit preview
+								 ew->ExitPreviewMode();
+							 } else {
+								 auto p = RE::PlayerCharacter::GetSingleton();
+								 if (p && p->parentCell)
+									 ew->open = !ew->open;
+							 }
+						 } },
 					};
 					for (const auto& ka : keyActions) {
 						// Check if key matches last key in combo and all modifiers are held (exact match)
@@ -1083,7 +1107,9 @@ void Menu::ProcessInputEventQueue()
 				// Handle ESC key for menu and editor window
 				auto* editorWindow = EditorWindow::GetSingleton();
 				if (key == VK_ESCAPE) {
-					if (editorWindow && editorWindow->open && editorWindow->ShouldHandleEscapeKey()) {
+					if (editorWindow && editorWindow->IsInPreviewMode()) {
+						editorWindow->ExitPreviewMode();
+					} else if (editorWindow && editorWindow->open && editorWindow->ShouldHandleEscapeKey()) {
 						editorWindow->open = false;
 					} else if (IsEnabled && (!editorWindow || !editorWindow->open)) {
 						IsEnabled = false;
@@ -1152,6 +1178,12 @@ bool Menu::ShouldSwallowInput()
 {
 	auto editorWindow = EditorWindow::GetSingleton();
 	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup() || (editorWindow && editorWindow->open);
+}
+
+bool Menu::IsPreviewFlying()
+{
+	auto editorWindow = EditorWindow::GetSingleton();
+	return editorWindow && editorWindow->IsPreviewFlying();
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)

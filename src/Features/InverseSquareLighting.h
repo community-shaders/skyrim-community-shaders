@@ -14,7 +14,7 @@ public:
 
 	virtual inline std::string_view GetShaderDefineName() override { return "ISL"; }
 
-	virtual std::string_view GetCategory() const override { return "Lighting"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

@@ -6,6 +6,15 @@
 // Global widget context for undo tracking
 static Widget* g_currentWidget = nullptr;
 
+void SetupWidgetWindowDefaults()
+{
+	const float scale = Util::GetUIScale();
+	const auto cond = EditorWindow::GetSingleton()->resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	ImGui::SetNextWindowSize(
+		ImVec2(WidgetDefaults::kInitialWidth * scale, WidgetDefaults::kInitialHeight * scale),
+		cond);
+}
+
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring)
 {
 	if (a_substring.empty())
@@ -400,6 +409,7 @@ namespace TOD
 
 	static void DrawCenteredLabel(const char* label)
 	{
+		ImGui::AlignTextToFramePadding();
 		float colWidth = ImGui::GetColumnWidth();
 		float textWidth = ImGui::CalcTextSize(label).x;
 		float offset = (colWidth - textWidth) * 0.5f;
@@ -999,9 +1009,9 @@ namespace TOD
 	bool BeginTODTable(const char* tableId, float paramColumnWidth)
 	{
 		if (paramColumnWidth <= 0.0f)
-			paramColumnWidth = 200.0f;
+			paramColumnWidth = WidgetDefaults::kTODLabelWidth;
 		if (ImGui::BeginTable(tableId, 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, paramColumnWidth);
+			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, paramColumnWidth * Util::GetUIScale());
 			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 			return true;
 		}
@@ -1090,6 +1100,16 @@ namespace PropertyDrawer
 		ImGui::Separator();
 	}
 
+	void DrawLabel(const char* label)
+	{
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("%s", label);
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-1);
+	}
+
 	bool MatchesSearch(const char* label, const char* searchBuffer)
 	{
 		if (!searchBuffer || searchBuffer[0] == '\0')
@@ -1103,11 +1123,7 @@ namespace PropertyDrawer
 		if (!MatchesSearch(label, searchBuffer))
 			return false;
 
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("%s", label);
-		ImGui::TableSetColumnIndex(1);
-		ImGui::SetNextItemWidth(-1);
+		DrawLabel(label);
 
 		std::string id = std::string("##") + label;
 		return ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
@@ -1118,11 +1134,7 @@ namespace PropertyDrawer
 		if (!MatchesSearch(label, searchBuffer))
 			return false;
 
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("%s", label);
-		ImGui::TableSetColumnIndex(1);
-		ImGui::SetNextItemWidth(-1);
+		DrawLabel(label);
 
 		std::string id = std::string("##") + label;
 		return ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
@@ -1133,11 +1145,7 @@ namespace PropertyDrawer
 		if (!MatchesSearch(label, searchBuffer))
 			return false;
 
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("%s", label);
-		ImGui::TableSetColumnIndex(1);
-		ImGui::SetNextItemWidth(-1);
+		DrawLabel(label);
 
 		return WeatherUtils::DrawColorEdit(label, value);
 	}
@@ -1147,10 +1155,7 @@ namespace PropertyDrawer
 		if (!MatchesSearch(label, searchBuffer))
 			return false;
 
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Text("%s", label);
-		ImGui::TableSetColumnIndex(1);
+		DrawLabel(label);
 
 		std::string id = std::string("##") + label;
 		return ImGui::Checkbox(id.c_str(), &value);

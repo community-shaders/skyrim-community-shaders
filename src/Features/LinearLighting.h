@@ -10,7 +10,7 @@ struct LinearLighting : Feature
 
 	virtual inline std::string GetName() override { return "Linear Lighting"; }
 	virtual inline std::string GetShortName() override { return "LinearLighting"; }
-	virtual std::string_view GetCategory() const override { return "Lighting"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
