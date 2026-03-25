@@ -40,7 +40,7 @@ RE_COMMIT_FIX = re.compile(r"^fix(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_REFACTOR = re.compile(r"^refactor(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_PERF = re.compile(r"^perf(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_BREAKING = re.compile(r"!\s*:|BREAKING CHANGE:", re.IGNORECASE)
-RE_COMMIT_NONFUNCTIONAL = re.compile(r"^(chore|docs|style|ci|test|build)(\(|:|\s)", re.IGNORECASE)
+RE_COMMIT_NONFUNCTIONAL = re.compile(r"^(chore|docs|style|ci|test|build|refactor|perf)(\(|:|\s)", re.IGNORECASE)
 
 # =====================
 # End Configuration
@@ -128,7 +128,7 @@ def get_bump_commit(file_path, base_ref):
             if len(parts) < 2:
                 continue
             commit_hash, msg = parts
-            if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_REFACTOR.match(msg) or RE_COMMIT_PERF.match(msg) or RE_COMMIT_BREAKING.search(msg):
+            if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_BREAKING.search(msg):
                 return commit_hash
     except Exception:
         pass
@@ -272,7 +272,7 @@ def propose_new_version(prior_version, commits):
         return None
 
     is_minor = any(RE_COMMIT_FEAT.match(c) or RE_COMMIT_BREAKING.search(c) for c in commits)
-    is_patch = any(RE_COMMIT_FIX.match(c) or RE_COMMIT_REFACTOR.match(c) or RE_COMMIT_PERF.match(c) for c in commits)
+    is_patch = any(RE_COMMIT_FIX.match(c) for c in commits)
     is_nonfunctional_only = all(RE_COMMIT_NONFUNCTIONAL.match(c) for c in commits)
 
     if is_minor:
