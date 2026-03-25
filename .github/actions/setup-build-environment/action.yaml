@@ -23,7 +23,7 @@ runs:
         - name: Install Visual Studio 2026 Build Tools
           shell: pwsh
           run: |
-              $installerUrl = "https://aka.ms/vs/18/release/vs_buildtools.exe"
+              $installerUrl = "https://aka.ms/vs/stable/vs_BuildTools.exe"
               $installerPath = "$env:TEMP\vs_buildtools.exe"
               Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
               Start-Process -FilePath $installerPath -ArgumentList `
