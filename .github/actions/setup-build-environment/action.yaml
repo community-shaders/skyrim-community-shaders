@@ -4,6 +4,10 @@ inputs:
     cache-key-suffix:
         description: "A suffix to make the cache key unique (e.g., validation, tests)"
         required: true
+    vs-version:
+        description: "Visual Studio version to use ('2022' or '2026'). Defaults to '2026'."
+        required: false
+        default: "2026"
 outputs:
     msvc-version:
         description: "The detected MSVC compiler version"
@@ -21,6 +25,7 @@ runs:
               cmakeVersion: "~4.2.0"
 
         - name: Install Visual Studio 2026 Build Tools
+          if: inputs.vs-version == '2026'
           shell: pwsh
           run: |
               $installerUrl = "https://aka.ms/vs/stable/vs_BuildTools.exe"
@@ -38,7 +43,7 @@ runs:
           uses: ilammy/msvc-dev-cmd@v1
           with:
               arch: x64
-              vsversion: "18.0"
+              vsversion: ${{ inputs.vs-version == '2026' && '18.0' || '17.0' }}
 
         - name: Get MSVC version
           id: msvc_version
