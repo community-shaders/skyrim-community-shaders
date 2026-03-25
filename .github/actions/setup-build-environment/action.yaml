@@ -20,10 +20,25 @@ runs:
           with:
               cmakeVersion: "~4.2.0"
 
+        - name: Install Visual Studio 2026 Build Tools
+          shell: pwsh
+          run: |
+              $installerUrl = "https://aka.ms/vs/18/release/vs_buildtools.exe"
+              $installerPath = "$env:TEMP\vs_buildtools.exe"
+              Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
+              Start-Process -FilePath $installerPath -ArgumentList `
+                  "--quiet", "--wait", "--norestart", "--nocache", `
+                  "--add", "Microsoft.VisualStudio.Workload.VCTools", `
+                  "--add", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", `
+                  "--add", "Microsoft.VisualStudio.Component.Windows11SDK.26100" `
+                  -Wait -NoNewWindow
+              Remove-Item $installerPath -ErrorAction SilentlyContinue
+
         - name: Setup MSVC environment
           uses: ilammy/msvc-dev-cmd@v1
           with:
               arch: x64
+              vsversion: "18.0"
 
         - name: Get MSVC version
           id: msvc_version
