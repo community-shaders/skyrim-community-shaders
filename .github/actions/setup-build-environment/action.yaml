@@ -15,6 +15,11 @@ runs:
           run: git config --system core.longpaths true
           shell: bash
 
+        - name: Install CMake 4.x
+          uses: lukka/get-cmake@latest
+          with:
+              cmakeVersion: "~4.2.0"
+
         - name: Setup MSVC environment
           uses: ilammy/msvc-dev-cmd@v1
           with:
