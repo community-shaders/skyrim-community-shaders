@@ -23,7 +23,7 @@ public:
 	virtual inline std::string GetShortName() override { return "Upscaling"; }
 	virtual inline bool SupportsVR() override { return true; }
 	virtual inline bool IsCore() const override { return false; }
-	virtual inline std::string_view GetCategory() const override { return "Display"; }
+	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kDisplay; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

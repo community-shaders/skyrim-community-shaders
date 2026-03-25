@@ -22,8 +22,16 @@ void LightEditor::DrawSettings()
 	ImGui::Checkbox("Disable Inverse Square Falloff Lights", &disableInvSqLights);
 
 	ImGui::Spacing();
+	ImGui::Text("Total Lights: %u", totalLightCount);
+	ImGui::Text("Active Shadow Lights: %u", activeShadowLightCount);
+	ImGui::Spacing();
 	ImGui::Separator();
 	ImGui::Spacing();
+
+	ImGui::Checkbox("Shadows Only", &shadowsOnly);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Only show lights with HemiShadow or OmniShadow flags.");
+	}
 
 	int selectedFilter = static_cast<int>(filterOption);
 	if (ImGui::Combo("Filter By", &selectedFilter, FilterOptionLabels, static_cast<int>(FilterOption::Count))) {
@@ -80,7 +88,11 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 
+	if (selected.isSpotlight)
+		ImGui::TextDisabled("Spotlight: ISL light type flags not applicable");
+	ImGui::BeginDisabled(selected.isSpotlight);
 	ImGui::CheckboxFlags("Inverse Square Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
+	ImGui::EndDisabled();
 	ImGui::CheckboxFlags("Linear Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
 
 	ImGui::Spacing();
@@ -105,7 +117,7 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 
-	if (!selected.isOther && current.data.lighFormId != 0) {
+	if (!selected.isOther && current.data.lighFormId != 0 && selected.hasPosition) {
 		ImGui::Text("X: %.2f, Y: %.2f, Z: %.2f", displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
 		ImGui::Spacing();
 		ImGui::SliderFloat3("Position Offset", &current.pos.x, -500.f, 500.f, "%.0f");
@@ -180,13 +192,21 @@ void LightEditor::GatherLights()
 		if (!current.isRef && runtimeData->lighFormId != 0)
 			ligh = RE::TESForm::LookupByID(runtimeData->lighFormId)->As<RE::TESObjectLIGH>();
 
-		if (ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow))
+		current.isSpotlight = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow);
+		const bool isShadow = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow, RE::TES_LIGHT_FLAGS::kSpotShadow);
+
+		totalLightCount++;
+		if (isShadow)
+			activeShadowLightCount++;
+
+		if ((shadowsOnly) && (!ligh || !isShadow)) {
 			return;
+		}
 
-		current.isOther = ligh == nullptr;
-		current.isAttached = refr && !current.isRef && !current.isOther;
+		current.isAttached = !current.isRef && refr != nullptr;
+		current.isOther = (!current.isRef && !current.isAttached) || (current.isSpotlight);
 
-		const bool isRefMatch = current.isRef && filterOption == FilterOption::RefLights;
+		const bool isRefMatch = (current.isRef && !current.isSpotlight) && filterOption == FilterOption::RefLights;
 		const bool isAttachedMatch = current.isAttached && filterOption == FilterOption::AttachedLights;
 		const bool isOtherMatch = current.isOther && filterOption == FilterOption::OtherLights;
 
@@ -195,13 +215,15 @@ void LightEditor::GatherLights()
 
 		if (current.isRef) {
 			current.position = refr->GetPosition();
-		} else if (current.isAttached) {
+			current.hasPosition = true;
+		} else if (niLight->parent) {
 			current.position = niLight->parent->world.translate;
+			current.hasPosition = true;
 		}
 		if (current.isOther) {
 			current.ptr = reinterpret_cast<void*>(niLight);
-			current.name = niLight->name;
-			current.position = niLight->parent->world.translate;
+			if (current.name.empty())
+				current.name = niLight->name.c_str();
 			current.index = 0;
 		}
 
@@ -218,7 +240,8 @@ void LightEditor::GatherLights()
 
 	lights.clear();
 	lightsAttached.clear();
-
+	totalLightCount = 0;
+	activeShadowLightCount = 0;
 	const auto smState = globals::game::smState;
 	const auto shadowSceneNode = smState->shadowSceneNode[0];
 
@@ -250,7 +273,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 	if (previous != selected) {
 		original.tesFlags = tesFlags ? static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(tesFlags->underlying()) : static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(0);
 		original.data = *runtimeData;
-		original.pos = selected.isRef ? refr->GetPosition() : niLight->parent->local.translate;
+		original.pos = selected.isRef ? refr->GetPosition() : (niLight->parent ? niLight->parent->local.translate : RE::NiPoint3{});
 		current = original;
 		current.pos = { 0, 0, 0 };
 		previous = selected;
@@ -277,15 +300,19 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		}
 		displayInfo.pos = newPos;
 	} else if (selected.isAttached) {
-		const auto currentPos = niLight->parent->local.translate;
-		const auto newPos = original.pos + current.pos;
-		if (currentPos != newPos) {
-			niLight->parent->local.translate = newPos;
-			RE::NiUpdateData updateData;
-			niLight->parent->Update(updateData);
-			waitFrames = 1;
+		if (niLight->parent) {
+			const auto currentPos = niLight->parent->local.translate;
+			const auto newPos = original.pos + current.pos;
+			if (currentPos != newPos) {
+				niLight->parent->local.translate = newPos;
+				RE::NiUpdateData updateData;
+				niLight->parent->Update(updateData);
+				waitFrames = 1;
+			}
+			displayInfo.pos = newPos;
+		} else {
+			displayInfo.pos = {};
 		}
-		displayInfo.pos = newPos;
 	}
 
 	if (!selected.isOther && refr && tesFlags && current.tesFlags.underlying() != tesFlags->underlying()) {
@@ -324,6 +351,8 @@ void LightEditor::SortLights()
 		{
 			const auto playerPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
 			std::ranges::sort(lights, [&](const LightInfo& a, const LightInfo& b) {
+				if (a.hasPosition != b.hasPosition)
+					return a.hasPosition;
 				return a.position.GetSquaredDistance(playerPos) < b.position.GetSquaredDistance(playerPos);
 			});
 			break;

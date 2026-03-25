@@ -40,7 +40,7 @@ RE_COMMIT_FIX = re.compile(r"^fix(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_REFACTOR = re.compile(r"^refactor(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_PERF = re.compile(r"^perf(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_BREAKING = re.compile(r"!\s*:|BREAKING CHANGE:", re.IGNORECASE)
-RE_COMMIT_NONFUNCTIONAL = re.compile(r"^(chore|docs|style|ci|test|build)(\(|:|\s)", re.IGNORECASE)
+RE_COMMIT_NONFUNCTIONAL = re.compile(r"^(chore|docs|style|ci|test|build|refactor|perf)(\(|:|\s)", re.IGNORECASE)
 
 # =====================
 # End Configuration
@@ -110,26 +110,39 @@ def get_changed_files(feature_path, base_ref, file_types=None):
 def get_commits_for_file(file_path, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "--pretty=%s", "--", file_path],
+            ["git", "log", f"{base_ref}..HEAD", "--pretty=%B%x1e", "--", file_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
-        return [line.strip() for line in output.splitlines() if line.strip()]
+        return [msg.strip() for msg in output.split("\x1e") if msg.strip()]
     except Exception:
         return []
 
 def get_bump_commit(file_path, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "--pretty=%H %s", "--", file_path],
+            ["git", "log", f"{base_ref}..HEAD", "--pretty=%H%x1f%B%x1e", "--", file_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
-        for line in output.splitlines():
-            parts = line.split(" ", 1)
+        for entry in output.split("\x1e"):
+            if not entry.strip():
+                continue
+            parts = entry.strip().split("\x1f", 1)
             if len(parts) < 2:
                 continue
             commit_hash, msg = parts
-            if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_REFACTOR.match(msg) or RE_COMMIT_PERF.match(msg) or RE_COMMIT_BREAKING.search(msg):
-                return commit_hash
+            if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_BREAKING.search(msg):
+                return commit_hash.strip()
+    except Exception:
+        pass
+    return None
+
+def get_latest_commit(file_paths, base_ref):
+    try:
+        output = subprocess.check_output(
+            ["git", "log", f"{base_ref}..HEAD", "-1", "--pretty=%H", "--", *sorted(file_paths)],
+            stderr=subprocess.DEVNULL,
+        ).decode("utf-8").strip()
+        return output or None
     except Exception:
         pass
     return None
@@ -272,7 +285,7 @@ def propose_new_version(prior_version, commits):
         return None
 
     is_minor = any(RE_COMMIT_FEAT.match(c) or RE_COMMIT_BREAKING.search(c) for c in commits)
-    is_patch = any(RE_COMMIT_FIX.match(c) or RE_COMMIT_REFACTOR.match(c) or RE_COMMIT_PERF.match(c) for c in commits)
+    is_patch = any(RE_COMMIT_FIX.match(c) for c in commits)
     is_nonfunctional_only = all(RE_COMMIT_NONFUNCTIONAL.match(c) for c in commits)
 
     if is_minor:
@@ -376,12 +389,16 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         bump_commit = None
         bump_author = None
         for status, f in changes:
-            commits = get_commits_for_file(f, base_ref)
-            all_commits.extend(commits)
+            all_commits.extend(get_commits_for_file(f, base_ref))
             if not bump_commit:
                 bump_commit = get_bump_commit(f, base_ref)
                 if bump_commit:
                     bump_author = get_commit_author(bump_commit)
+        if not bump_commit and changes:
+            any_commit = get_latest_commit([f for _, f in changes], base_ref)
+            if any_commit:
+                bump_commit = any_commit
+                bump_author = get_commit_author(any_commit)
 
         proposed_ver = propose_new_version(prior_ver, all_commits) if ini_path else None
         needs_bump = (proposed_ver is not None and new_ver is not None and proposed_ver > new_ver)

@@ -63,6 +63,14 @@ namespace Util
 	// Text rendering constants
 	constexpr float DefaultHeaderTextScale = 1.5f;  // Larger scale for header text to improve readability
 
+	// Baseline font size for UI layout scaling (1080p dynamic font: DEFAULT_SCREEN_HEIGHT * DEFAULT_FONT_RATIO).
+	// Theme style values and pixel constants are designed for this size.
+	constexpr float kBaselineFontSize = 21.0f;
+
+	/// Returns a scale factor relative to the baseline font size, accounting for resolution and GlobalScale.
+	/// Use to scale hardcoded pixel sizes so layouts adapt to any font size.
+	inline float GetUIScale() { return ImGui::GetFontSize() / kBaselineFontSize; }
+
 	/**
 	 * Usage:
 	 * if (auto _tt = Util::HoverTooltipWrapper()){
@@ -211,6 +219,14 @@ namespace Util
 	 * Creates a StyledButtonWrapper using the theme's error color with auto-derived hover/active variants.
 	 */
 	StyledButtonWrapper ErrorButtonStyle();
+
+	/**
+	 * Creates a transparent button with theme text color hover. Caller must push/pop FrameBorderSize=0 separately.
+	 */
+	StyledButtonWrapper TransparentIconButtonStyle();
+
+	/** Returns theme text color if monochrome icons enabled, otherwise white. */
+	ImVec4 GetIconTint();
 
 	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)
