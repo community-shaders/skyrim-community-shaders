@@ -123,13 +123,17 @@ def get_bump_commit(file_path, base_ref):
             ["git", "log", f"{base_ref}..HEAD", "--pretty=%H %s", "--", file_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
+        fallback_commit = None
         for line in output.splitlines():
             parts = line.split(" ", 1)
             if len(parts) < 2:
                 continue
             commit_hash, msg = parts
+            if fallback_commit is None:
+                fallback_commit = commit_hash
             if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_BREAKING.search(msg):
                 return commit_hash
+        return fallback_commit
     except Exception:
         pass
     return None
