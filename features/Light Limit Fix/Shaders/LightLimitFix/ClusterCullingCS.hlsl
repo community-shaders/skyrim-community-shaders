@@ -57,7 +57,7 @@ bool LightIntersectsCluster(float3 position, float radiusSquared, ClusterAABB cl
 
 #if defined(VR)
 		float3 positionVSLeft = FrameBuffer::WorldToView(light.positionWS[0].xyz, true, 0);
-		float3 positionVSRight = FrameBuffer::WorldToView(light.positionWS[1].xyz, true, 0);
+		float3 positionVSRight = FrameBuffer::WorldToView(light.positionWS[1].xyz, true, 1);
 
 		[branch] if (LightIntersectsCluster(positionVSLeft, radiusSquared, cluster) || LightIntersectsCluster(positionVSRight, radiusSquared, cluster))
 		{
