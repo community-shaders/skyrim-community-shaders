@@ -20,10 +20,10 @@ namespace SharedData
 		float Timer;
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
-		bool InInterior;             // If the area lacks a directional shadow light e.g. the sun or moon
-		bool InMapMenu;              // If the world/local map is open (note that the renderer is still deferred here)
-		bool HideSky;                // HideSky flag in WorldSpace, e.g. Blackreach
-		float MipBias;               // Offset to mip level for TAA sharpness
+		bool InInterior;  // If the area lacks a directional shadow light e.g. the sun or moon
+		bool InMapMenu;   // If the world/local map is open (note that the renderer is still deferred here)
+		bool HideSky;     // HideSky flag in WorldSpace, e.g. Blackreach
+		float MipBias;    // Offset to mip level for TAA sharpness
 		float pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
