@@ -123,12 +123,20 @@ jobs:
             (github.event_name == 'pull_request_target' &&
              !github.event.pull_request.draft) ||
             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
-        name: Build plugin and addons
-        runs-on: windows-2022
+        name: Build plugin and addons (${{ matrix.compiler.name }})
+        runs-on: windows-2025
         permissions:
             contents: read
         outputs:
             version: ${{ steps.get_version.outputs.version }}
+        strategy:
+            matrix:
+                compiler:
+                    - name: vs2026
+                      vs-version: "2026"
+                    - name: vs2022
+                      vs-version: "2022"
+            fail-fast: false
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -141,7 +149,8 @@ jobs:
               id: setup
               uses: ./.github/actions/setup-build-environment
               with:
-                  cache-key-suffix: "cpp"
+                  cache-key-suffix: "cpp-${{ matrix.compiler.name }}"
+                  vs-version: ${{ matrix.compiler.vs-version }}
 
             - name: Build using run-cmake
               uses: lukka/run-cmake@v10
@@ -183,7 +192,7 @@ jobs:
                   }
 
             - name: Upload dist artifacts
-              if: success()
+              if: success() && matrix.compiler.name == 'vs2026'
               uses: actions/upload-artifact@v4
               with:
                   name: dist-artifacts
@@ -199,18 +208,23 @@ jobs:
              (github.event_name == 'workflow_dispatch' &&
               github.event.inputs.validate-shaders == 'true') ||
              (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
-        name: Validate shader compilation
-        runs-on: windows-2022
+        name: Validate shader compilation (${{ matrix.compiler.name }}, ${{ matrix.config.name }})
+        runs-on: windows-2025
         permissions:
             contents: read
         strategy:
             matrix:
+                compiler:
+                    - name: vs2026
+                      vs-version: "2026"
+                    - name: vs2022
+                      vs-version: "2022"
                 config:
                     - name: "Flatrim"
                       file: ".github/configs/shader-validation.yaml"
                     - name: "VR"
                       file: ".github/configs/shader-validation-vr.yaml"
-            fail-fast: false # Let both configs run to completion for full output
+            fail-fast: false # Let all configs run to completion for full output
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -229,7 +243,8 @@ jobs:
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: ./.github/actions/setup-build-environment
               with:
-                  cache-key-suffix: "validation-${{ matrix.config.name }}"
+                  cache-key-suffix: "validation-${{ matrix.compiler.name }}-${{ matrix.config.name }}"
+                  vs-version: ${{ matrix.compiler.vs-version }}
             - name: Prepare shaders
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: ./.github/actions/prepare-shaders
@@ -278,7 +293,7 @@ jobs:
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
               uses: actions/upload-artifact@v4
               with:
-                  name: shader-validation-logs-${{ matrix.config.name }}
+                  name: shader-validation-logs-${{ matrix.compiler.name }}-${{ matrix.config.name }}
                   path: |
                       build/ShaderCache/new_issues.log
                       build/ShaderCache/*.log
@@ -286,7 +301,7 @@ jobs:
                   if-no-files-found: ignore
 
     shader-unit-tests:
-        name: Run Shader Unit Tests
+        name: Run Shader Unit Tests (${{ matrix.compiler.name }})
         needs: [check-changes]
         if: >
             always() && !cancelled() &&
@@ -295,9 +310,17 @@ jobs:
              (github.event_name == 'workflow_dispatch' &&
               github.event.inputs.validate-shaders == 'true') ||
              (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
-        runs-on: windows-2022
+        runs-on: windows-2025
         permissions:
             contents: read
+        strategy:
+            matrix:
+                compiler:
+                    - name: vs2026
+                      vs-version: "2026"
+                    - name: vs2022
+                      vs-version: "2022"
+            fail-fast: false
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -316,7 +339,8 @@ jobs:
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: ./.github/actions/setup-build-environment
               with:
-                  cache-key-suffix: "tests"
+                  cache-key-suffix: "tests-${{ matrix.compiler.name }}"
+                  vs-version: ${{ matrix.compiler.vs-version }}
 
             - name: Build shader tests
               if: steps.check-hlsl.outputs.skip != 'true'
@@ -336,7 +360,7 @@ jobs:
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
               uses: actions/upload-artifact@v4
               with:
-                  name: shader-test-results
+                  name: shader-test-results-${{ matrix.compiler.name }}
                   path: |
                       build/ALL/Testing/**
                   retention-days: 7
@@ -346,7 +370,7 @@ jobs:
         name: Post Prerelease from PR
         if: github.event_name == 'pull_request_target'
         needs: [cpp-build, shader-validation, shader-unit-tests]
-        runs-on: windows-2022
+        runs-on: windows-2025
         permissions:
             contents: write
             pull-requests: write
@@ -523,7 +547,7 @@ jobs:
             github.event_name == 'workflow_dispatch' ||
             startsWith(github.ref, 'refs/tags/v') ||
             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
-        runs-on: windows-2022
+        runs-on: windows-2025
         permissions:
             contents: write
         steps:
