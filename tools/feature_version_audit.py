@@ -110,34 +110,36 @@ def get_changed_files(feature_path, base_ref, file_types=None):
 def get_commits_for_file(file_path, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "--pretty=%s", "--", file_path],
+            ["git", "log", f"{base_ref}..HEAD", "--pretty=%B%x1e", "--", file_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
-        return [line.strip() for line in output.splitlines() if line.strip()]
+        return [msg.strip() for msg in output.split("\x1e") if msg.strip()]
     except Exception:
         return []
 
 def get_bump_commit(file_path, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "--pretty=%H %s", "--", file_path],
+            ["git", "log", f"{base_ref}..HEAD", "--pretty=%H%x1f%B%x1e", "--", file_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
-        for line in output.splitlines():
-            parts = line.split(" ", 1)
+        for entry in output.split("\x1e"):
+            if not entry.strip():
+                continue
+            parts = entry.strip().split("\x1f", 1)
             if len(parts) < 2:
                 continue
             commit_hash, msg = parts
             if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_BREAKING.search(msg):
-                return commit_hash
+                return commit_hash.strip()
     except Exception:
         pass
     return None
 
-def get_latest_commit(file_path, base_ref):
+def get_latest_commit(file_paths, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "-1", "--pretty=%H", "--", file_path],
+            ["git", "log", f"{base_ref}..HEAD", "-1", "--pretty=%H", "--", *sorted(file_paths)],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8").strip()
         return output or None
@@ -386,19 +388,17 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         all_commits = []
         bump_commit = None
         bump_author = None
-        any_commit = None
         for status, f in changes:
-            commits = get_commits_for_file(f, base_ref)
-            all_commits.extend(commits)
+            all_commits.extend(get_commits_for_file(f, base_ref))
             if not bump_commit:
                 bump_commit = get_bump_commit(f, base_ref)
                 if bump_commit:
                     bump_author = get_commit_author(bump_commit)
-            if not any_commit:
-                any_commit = get_latest_commit(f, base_ref)
-        if not bump_commit and any_commit:
-            bump_commit = any_commit
-            bump_author = get_commit_author(any_commit)
+        if not bump_commit and changes:
+            any_commit = get_latest_commit([f for _, f in changes], base_ref)
+            if any_commit:
+                bump_commit = any_commit
+                bump_author = get_commit_author(any_commit)
 
         proposed_ver = propose_new_version(prior_ver, all_commits) if ini_path else None
         needs_bump = (proposed_ver is not None and new_ver is not None and proposed_ver > new_ver)
