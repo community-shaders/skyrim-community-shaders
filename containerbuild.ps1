@@ -5,7 +5,7 @@ param (
 Write-Host "Starting build..."
 
 # Setup
-& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" amd64
+& "C:\Program Files (x86)\Microsoft Visual Studio\2026\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" amd64
 
 if (-Not (Test-Path -Path "CMakeUserPresets.json")) {
     Copy-Item -Path "CMakeUserPresets.json.template" -Destination "CMakeUserPresets.json"

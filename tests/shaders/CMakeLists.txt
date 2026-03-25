@@ -1,5 +1,5 @@
 # Shader Tests using ShaderTestFramework
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 4.2)
 
 # Option to enable/disable shader tests
 option(BUILD_SHADER_TESTS "Build shader unit tests (runs automatically before packaging)" ON)
@@ -18,7 +18,7 @@ FetchContent_Declare(
     ShaderTestFramework
     GIT_REPOSITORY https://github.com/KStocky/ShaderTestFramework.git
     # Pinned to specific commit for build reproducibility (Dec 14, 2025)
-    GIT_TAG 447807eaabcedb55635d763623f6263ca8e23aec
+    GIT_TAG dcbe56c46d474948c27134f570c50ff7110648f6
     GIT_CONFIG core.longpaths=true  # Enable long path support for Windows
 )
 
@@ -65,6 +65,13 @@ add_executable(shader_tests
 # Set C++23 standard (required by ShaderTestFramework)
 set_property(TARGET shader_tests PROPERTY CXX_STANDARD 23)
 set_property(TARGET shader_tests PROPERTY CXX_STANDARD_REQUIRED ON)
+
+if(MSVC)
+    # Suppress C4864 in tuplet (via ShaderTestFramework) for VS 2026 migration
+    if(TARGET ShaderTestFramework)
+        target_compile_options(ShaderTestFramework PUBLIC /wd4864)
+    endif()
+endif()
 
 # Set VS debugger working directory
 set_target_properties(shader_tests PROPERTIES
