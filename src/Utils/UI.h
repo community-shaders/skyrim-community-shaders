@@ -221,6 +221,14 @@ namespace Util
 	StyledButtonWrapper ErrorButtonStyle();
 
 	/**
+	 * Creates a transparent button with theme text color hover. Caller must push/pop FrameBorderSize=0 separately.
+	 */
+	StyledButtonWrapper TransparentIconButtonStyle();
+
+	/** Returns theme text color if monochrome icons enabled, otherwise white. */
+	ImVec4 GetIconTint();
+
+	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)
 	 * @param label Button text
 	 * @param size Button size (optional)

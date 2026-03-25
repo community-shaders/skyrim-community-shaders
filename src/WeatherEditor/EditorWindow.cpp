@@ -1092,140 +1092,213 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 
-		// Pause Time button
+		// Clip buttons above the bottom border so highlights don't overlap it
+		const auto clipMin = ImGui::GetWindowDrawList()->GetClipRectMin();
+		const auto clipMax = ImGui::GetWindowDrawList()->GetClipRectMax();
+		ImGui::PushClipRect(clipMin, ImVec2(clipMax.x, clipMax.y - ImGui::GetStyle().WindowBorderSize), true);
+
 		auto menu = globals::menu;
-		if (menu && menu->uiIcons.pauseTime.texture) {
-			bool isPaused = IsTimePaused();
+		constexpr float kIconButtonPadding = 1.0f;  // minimal padding so icons render larger and smoother
+		const float iconButtonDim = ImGui::GetFrameHeight() - kIconButtonPadding * 2;
+		const ImVec2 iconButtonSize(iconButtonDim, iconButtonDim);
+		const auto iconTint = Util::GetIconTint();
 
+		// Undo button (stays on left side)
+		if (menu && menu->uiIcons.undo.texture) {
+			bool canUndo = CanUndo();
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			if (isPaused) {
-				auto pausedColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-				pausedColor.w = 0.6f;
-				auto pausedHoverColor = pausedColor;
-				pausedHoverColor.w = 0.8f;
-				ImGui::PushStyleColor(ImGuiCol_Button, pausedColor);
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, pausedHoverColor);
-			} else {
-				auto transparentColor = ImVec4(0, 0, 0, 0);
-				ImGui::PushStyleColor(ImGuiCol_Button, transparentColor);
-				auto hoverColor = Menu::GetSingleton()->GetSettings().Theme.Palette.Text;
-				hoverColor.w = 0.25f;
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kIconButtonPadding, kIconButtonPadding));
+			{
+				auto _style = Util::TransparentIconButtonStyle();
+				auto textColor = canUndo ? menu->GetTheme().Palette.Text : menu->GetTheme().StatusPalette.Disable;
+				if (!canUndo)
+					textColor.w = 0.5f;
+				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+				if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint) && canUndo)
+					PerformUndo();
+				ImGui::PopStyleColor();
 			}
+			ImGui::PopStyleVar(2);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(canUndo ? "Undo (Ctrl+Z) - %d states" : "Undo (Ctrl+Z) - No changes to undo", (int)undoStack.size());
+		}
 
-			const float menuBarHeight = ImGui::GetFrameHeight();
-			const float buttonDim = menuBarHeight * 0.85f;
-			const ImVec2 buttonSize(buttonDim, buttonDim);
+		// Right-aligned items — use SetCursorScreenPos to bypass menu bar GroupOffset
+		const float scale = Util::GetUIScale();
+		const float clipRight = ImGui::GetWindowDrawList()->GetClipRectMax().x;
+		const float cursorY = ImGui::GetCursorScreenPos().y;
+		const float closeButtonSize = ImGui::GetFrameHeight();
+		const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+		const float sliderWidth = kMenuBarSliderWidth * scale;
 
-			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize))
-				TogglePause();
+		// Measure right-side elements to compute positions right-to-left
+		float rightCursor = clipRight;
 
+		// X button
+		rightCursor -= closeButtonSize;
+		const float xButtonX = rightCursor;
+
+		// Time slider
+		rightCursor -= itemSpacing + sliderWidth;
+		const float sliderX = rightCursor;
+
+		// Period text
+		char periodBuf[64];
+		std::snprintf(periodBuf, sizeof(periodBuf), "(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
+		float periodWidth = ImGui::CalcTextSize(periodBuf).x;
+		rightCursor -= itemSpacing + periodWidth;
+		const float periodX = rightCursor;
+
+		// Pause Time button
+		float pauseButtonX = 0;
+		bool hasPauseButton = menu && menu->uiIcons.pauseTime.texture;
+		if (hasPauseButton) {
+			rightCursor -= itemSpacing + iconButtonDim + kIconButtonPadding * 2;
+			pauseButtonX = rightCursor;
+		}
+
+		// Preview mode buttons (free camera / play mode)
+		const float previewButtonWidth = iconButtonDim + kIconButtonPadding * 2;
+		float freeCameraX = 0, playModeX = 0;
+		bool hasFreeCam = menu && menu->uiIcons.freeCamera.texture;
+		bool hasPlayMode = menu && menu->uiIcons.playMode.texture;
+		if (hasPlayMode) {
+			rightCursor -= itemSpacing + previewButtonWidth;
+			playModeX = rightCursor;
+		}
+		if (hasFreeCam) {
+			rightCursor -= itemSpacing + previewButtonWidth;
+			freeCameraX = rightCursor;
+		}
+
+		// Preview mode status text (mirrors TIME PAUSED pattern, with hotkey + pulsating color)
+		float previewStatusX = 0;
+		char previewStatusBuf[128] = {};
+		bool showPreviewStatus = previewMode != PreviewMode::None;
+		if (showPreviewStatus) {
+			std::string hotkey = Util::Input::KeyIdToString(menu->GetSettings().WeatherEditorToggleKey);
+			if (previewMode == PreviewMode::FreeCamera)
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] FREE CAMERA (Speed: %.0f)", hotkey.c_str(), flySpeed);
+			else if (previewMode == PreviewMode::FreeCameraLocked)
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] FREE CAMERA LOCKED", hotkey.c_str());
+			else
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] PLAY MODE", hotkey.c_str());
+			rightCursor -= itemSpacing + ImGui::CalcTextSize(previewStatusBuf).x;
+			previewStatusX = rightCursor;
+		}
+
+		// Time paused text
+		float timePausedX = 0;
+		bool showTimePaused = IsTimePaused();
+		const char* timePausedText = " [TIME PAUSED]";
+		if (showTimePaused) {
+			rightCursor -= itemSpacing + ImGui::CalcTextSize(timePausedText).x;
+			timePausedX = rightCursor;
+		}
+
+		// Weather lock text
+		float weatherLockX = 0;
+		char weatherLockBuf[128] = {};
+		bool showWeatherLock = weatherLockActive && lockedWeather;
+		if (showWeatherLock) {
+			const char* weatherName = lockedWeather->GetFormEditorID();
+			std::snprintf(weatherLockBuf, sizeof(weatherLockBuf), " [LOCKED: %s]", weatherName ? weatherName : "Unknown");
+			rightCursor -= itemSpacing + ImGui::CalcTextSize(weatherLockBuf).x;
+			weatherLockX = rightCursor;
+		}
+
+		// Render right-aligned items left to right
+		const auto& statusPalette = menu->GetTheme().StatusPalette;
+
+		if (showWeatherLock) {
+			ImGui::SetCursorScreenPos(ImVec2(weatherLockX, cursorY));
+			ImGui::PushStyleColor(ImGuiCol_Text, statusPalette.SuccessColor);
+			ImGui::TextUnformatted(weatherLockBuf);
+			ImGui::PopStyleColor();
+		}
+
+		if (showTimePaused) {
+			ImGui::SetCursorScreenPos(ImVec2(timePausedX, cursorY));
+			ImGui::PushStyleColor(ImGuiCol_Text, statusPalette.CurrentHotkey);
+			ImGui::TextUnformatted(timePausedText);
+			ImGui::PopStyleColor();
+		}
+
+		if (showPreviewStatus) {
+			ImGui::SetCursorScreenPos(ImVec2(previewStatusX, cursorY));
+			ImGui::TextColored(Util::GetPulsingColor(statusPalette.CurrentHotkey), "%s", previewStatusBuf);
+		}
+
+		// Toggle-style icon button helper (active: SuccessColor bg, inactive: transparent)
+		auto DrawToggleIconButton = [&](const char* id, ImTextureID texture, bool isActive, float posX) -> bool {
+			ImGui::SetCursorScreenPos(ImVec2(posX, cursorY));
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kIconButtonPadding, kIconButtonPadding));
+			if (isActive) {
+				auto color = statusPalette.SuccessColor;
+				color.w = kToggleActiveAlpha;
+				auto hover = color;
+				hover.w = kToggleHoverAlpha;
+				ImGui::PushStyleColor(ImGuiCol_Button, color);
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
+			} else {
+				auto hover = menu->GetTheme().Palette.Text;
+				hover.w = kInactiveHoverAlpha;
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
+			}
+			bool clicked = ImGui::ImageButton(id, texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
 			ImGui::PopStyleColor(2);
-			ImGui::PopStyleVar();
+			ImGui::PopStyleVar(2);
+			return clicked;
+		};
 
+		// Preview mode buttons
+		if (hasFreeCam) {
+			bool isActive = previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked;
+			if (DrawToggleIconButton("##FreeCamera", menu->uiIcons.freeCamera.texture, isActive, freeCameraX))
+				EnterPreviewMode(PreviewMode::FreeCamera);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(isActive ? "Exit Free Camera" : "Free Camera (scroll to adjust speed)");
+		}
+		if (hasPlayMode) {
+			bool isActive = previewMode == PreviewMode::PlayMode;
+			if (DrawToggleIconButton("##PlayMode", menu->uiIcons.playMode.texture, isActive, playModeX))
+				EnterPreviewMode(PreviewMode::PlayMode);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(isActive ? "Exit Play Mode" : "Play Mode - Walk around normally");
+		}
+
+		if (hasPauseButton) {
+			bool isPaused = IsTimePaused();
+			if (DrawToggleIconButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, isPaused, pauseButtonX))
+				TogglePause();
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
 		}
 
-		// Undo button
-		if (menu && menu->uiIcons.undo.texture) {
-			bool canUndo = CanUndo();
-
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			if (!canUndo) {
-				auto transparentColor = ImVec4(0, 0, 0, 0);
-				ImGui::PushStyleColor(ImGuiCol_Button, transparentColor);
-				auto disabledColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Disable;
-				disabledColor.w = 0.25f;
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, disabledColor);
-				auto disabledTextColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Disable;
-				disabledTextColor.w = 0.5f;
-				ImGui::PushStyleColor(ImGuiCol_Text, disabledTextColor);
-			} else {
-				auto transparentColor = ImVec4(0, 0, 0, 0);
-				ImGui::PushStyleColor(ImGuiCol_Button, transparentColor);
-				auto hoverColor = Menu::GetSingleton()->GetSettings().Theme.Palette.Text;
-				hoverColor.w = 0.25f;
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
-				ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.Palette.Text);
-			}
-
-			const float menuBarHeight = ImGui::GetFrameHeight();
-			const float buttonDim = menuBarHeight * 0.85f;
-			const ImVec2 buttonSize(buttonDim, buttonDim);
-
-			if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, buttonSize) && canUndo) {
-				PerformUndo();
-			}
-
-			ImGui::PopStyleColor(3);
-			ImGui::PopStyleVar();
-
-			if (ImGui::IsItemHovered()) {
-				if (canUndo) {
-					ImGui::SetTooltip("Undo (Ctrl+Z) - %d states", (int)undoStack.size());
-				} else {
-					ImGui::SetTooltip("Undo (Ctrl+Z) - No changes to undo");
-				}
-			}
-		}  // Weather lock indicator
-		if (weatherLockActive && lockedWeather) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.SuccessColor);
-			const char* weatherName = lockedWeather->GetFormEditorID();
-			ImGui::Text(" [LOCKED: %s]", weatherName ? weatherName : "Unknown");
-			ImGui::PopStyleColor();
+		// Period text and time slider
+		auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+		if (calendar && calendar->gameHour) {
+			ImGui::SetCursorScreenPos(ImVec2(periodX, cursorY));
+			ImGui::TextUnformatted(periodBuf);
+			ImGui::SetCursorScreenPos(ImVec2(sliderX, cursorY));
+			ImGui::SetNextItemWidth(sliderWidth);
+			DrawGameHourSlider("##MenuBarSlider", "Time: %.2f");
 		}
 
-		// Time pause indicator
-		if (IsTimePaused()) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.CurrentHotkey);
-			ImGui::Text(" [TIME PAUSED]");
-			ImGui::PopStyleColor();
-		}
-
-		// Time slider and close button
-		float menuBarHeight = ImGui::GetFrameHeight();
-		float closeButtonSize = menuBarHeight * 0.9f;
-		const float scale = Util::GetUIScale();
-		const float closeButtonMargin = 10.0f * scale;
-
-		// Time slider anchored to the right
+		// Close button
+		ImGui::SetCursorScreenPos(ImVec2(xButtonX, cursorY));
 		{
-			const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
-			char periodBuf[64];
-			std::snprintf(periodBuf, sizeof(periodBuf), "(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
-			float periodWidth = ImGui::CalcTextSize(periodBuf).x;
-			const float sliderStartX = ImGui::GetWindowWidth() - closeButtonSize - closeButtonMargin - itemSpacing - kMenuBarSliderWidth * scale;
-			auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
-			if (calendar && calendar->gameHour) {
-				ImGui::SameLine(sliderStartX - itemSpacing - periodWidth);
-				ImGui::TextUnformatted(periodBuf);
-				ImGui::SameLine(sliderStartX);
-				ImGui::SetNextItemWidth(kMenuBarSliderWidth * scale);
-				DrawGameHourSlider("##MenuBarSlider", "Time: %.2f");
+			auto _style = Util::ErrorButtonStyle();
+			if (ImGui::Button("X", ImVec2(closeButtonSize, closeButtonSize))) {
+				open = false;
 			}
 		}
-
-		ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - closeButtonMargin);
-		auto errorColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Error;
-		auto errorHoverColor = errorColor;
-		errorHoverColor.x = std::min(1.0f, errorColor.x * 1.2f);
-		errorHoverColor.y = std::min(1.0f, errorColor.y * 0.75f);
-		auto errorActiveColor = errorColor;
-		errorActiveColor.x = std::max(0.0f, errorColor.x * 0.875f);
-		errorActiveColor.y = std::max(0.0f, errorColor.y * 0.25f);
-		ImGui::PushStyleColor(ImGuiCol_Button, errorColor);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, errorHoverColor);
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, errorActiveColor);
-		if (ImGui::Button("X", ImVec2(closeButtonSize, closeButtonSize))) {
-			open = false;
-		}
-		ImGui::PopStyleColor(3);
 		if (ImGui::IsItemHovered()) {
 			ImGui::SetTooltip("Close Weather Editor (Esc)");
 		}
+		ImGui::PopClipRect();
 		ImGui::EndMainMenuBar();
 	}
 
@@ -1909,6 +1982,78 @@ void EditorWindow::ShowGameMenus()
 		gameMenusHidden = false;
 		logger::info("Game menus restored after weather editor");
 	}
+}
+
+void EditorWindow::EnterPreviewMode(PreviewMode mode)
+{
+	if (mode == PreviewMode::None)
+		return;
+
+	// Already in free camera flying — ignore duplicate click
+	if (mode == previewMode)
+		return;
+
+	// Re-enter flying from locked state via button click
+	if (mode == PreviewMode::FreeCamera && previewMode == PreviewMode::FreeCameraLocked) {
+		previewMode = PreviewMode::FreeCamera;
+		logger::info("Free camera unlocked (re-entered flying)");
+		return;
+	}
+
+	// Switch from a different active mode first
+	if (previewMode != PreviewMode::None)
+		ExitPreviewMode();
+
+	previewMode = mode;
+	savedMousePos = ImGui::GetIO().MousePos;
+
+	if (mode == PreviewMode::FreeCamera) {
+		flySpeed = kDefaultFlySpeed;
+		RE::Console::ExecuteCommand("tfc");
+		RE::Console::ExecuteCommand(std::format("sucsm {:.0f}", flySpeed).c_str());
+	}
+
+	logger::info("Entered preview mode: {}", mode == PreviewMode::FreeCamera ? "FreeCamera" : "PlayMode");
+}
+
+void EditorWindow::ExitPreviewMode()
+{
+	bool wasFlying = IsPreviewFlying();
+
+	if (previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked)
+		RE::Console::ExecuteCommand("tfc");
+
+	logger::info("Exited preview mode");
+	previewMode = PreviewMode::None;
+
+	// Only restore cursor if exiting from a flying state; FreeCameraLocked already has the cursor active
+	if (wasFlying) {
+		ImGui::GetIO().MousePos = savedMousePos;
+		ImGui::GetIO().WantSetMousePos = true;
+	}
+}
+
+void EditorWindow::ToggleFreeCameraLock()
+{
+	if (previewMode == PreviewMode::FreeCamera) {
+		previewMode = PreviewMode::FreeCameraLocked;
+		ImGui::GetIO().MousePos = savedMousePos;
+		ImGui::GetIO().WantSetMousePos = true;
+		logger::info("Free camera locked");
+	} else if (previewMode == PreviewMode::FreeCameraLocked) {
+		savedMousePos = ImGui::GetIO().MousePos;
+		previewMode = PreviewMode::FreeCamera;
+		logger::info("Free camera unlocked");
+	}
+}
+
+void EditorWindow::AdjustFlySpeed(float scrollDelta)
+{
+	if (previewMode != PreviewMode::FreeCamera)
+		return;
+
+	flySpeed = std::clamp(flySpeed + scrollDelta * kFlySpeedScrollStep, kMinFlySpeed, kMaxFlySpeed);
+	RE::Console::ExecuteCommand(std::format("sucsm {:.0f}", flySpeed).c_str());
 }
 
 bool EditorWindow::ShouldHandleEscapeKey() const
