@@ -305,7 +305,8 @@ namespace TAAReorder
 
 						D3D11_MAPPED_SUBRESOURCE mapped{};
 						context->Map(upscaling.vrFeatheredCompositeCB.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-						struct {
+						struct
+						{
 							float originX, originY;
 							float sizeX, sizeY;
 							float featherWidth;
@@ -347,16 +348,26 @@ namespace TAAReorder
 					context->PSSetConstantBuffers(0, 1, &oldPSCB);
 					context->OMSetRenderTargets(1, &oldRTV, oldDSV);
 
-					if (oldBlendState) oldBlendState->Release();
-					if (oldRTV) oldRTV->Release();
-					if (oldDSV) oldDSV->Release();
-					if (oldVS) oldVS->Release();
-					if (oldPS) oldPS->Release();
-					if (oldIL) oldIL->Release();
-					if (oldRS) oldRS->Release();
-					if (oldPSSRV) oldPSSRV->Release();
-					if (oldPSSampler) oldPSSampler->Release();
-					if (oldPSCB) oldPSCB->Release();
+					if (oldBlendState)
+						oldBlendState->Release();
+					if (oldRTV)
+						oldRTV->Release();
+					if (oldDSV)
+						oldDSV->Release();
+					if (oldVS)
+						oldVS->Release();
+					if (oldPS)
+						oldPS->Release();
+					if (oldIL)
+						oldIL->Release();
+					if (oldRS)
+						oldRS->Release();
+					if (oldPSSRV)
+						oldPSSRV->Release();
+					if (oldPSSampler)
+						oldPSSampler->Release();
+					if (oldPSCB)
+						oldPSCB->Release();
 
 					pasteRTV->Release();
 				} else {
