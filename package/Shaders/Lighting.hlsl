@@ -1312,7 +1312,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) == 0)
 		{
-			landColorRGB1 = Color::GammaToTrueLinear(landColorRGB1 / Color::PBRLightingScale);
+			landColorRGB1 = Color::SrgbToLinear(landColorRGB1 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha1 = landColor1.a;
@@ -1393,7 +1393,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1PBR) == 0)
 		{
-			landColorRGB2 = Color::GammaToTrueLinear(landColorRGB2 / Color::PBRLightingScale);
+			landColorRGB2 = Color::SrgbToLinear(landColorRGB2 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha2 = landColor2.a;
@@ -1473,7 +1473,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2PBR) == 0)
 		{
-			landColorRGB3 = Color::GammaToTrueLinear(landColorRGB3 / Color::PBRLightingScale);
+			landColorRGB3 = Color::SrgbToLinear(landColorRGB3 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha3 = landColor3.a;
@@ -1553,7 +1553,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3PBR) == 0)
 		{
-			landColorRGB4 = Color::GammaToTrueLinear(landColorRGB4 / Color::PBRLightingScale);
+			landColorRGB4 = Color::SrgbToLinear(landColorRGB4 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha4 = landColor4.a;
@@ -1633,7 +1633,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4PBR) == 0)
 		{
-			landColorRGB5 = Color::GammaToTrueLinear(landColorRGB5 / Color::PBRLightingScale);
+			landColorRGB5 = Color::SrgbToLinear(landColorRGB5 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha5 = landColor5.a;
@@ -1714,7 +1714,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) == 0)
 		{
-			landColorRGB6 = Color::GammaToTrueLinear(landColorRGB6 / Color::PBRLightingScale);
+			landColorRGB6 = Color::SrgbToLinear(landColorRGB6 / Color::PBRLightingScale);
 		}
 #		endif
 		float landAlpha6 = landColor6.a;
@@ -1864,13 +1864,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColor.xyz = GetFacegenBaseColor(baseColor.xyz, uv);
 	} else {
-		baseColor.xyz = Color::GammaToLinear(GetFacegenBaseColor(Color::LinearToGamma(baseColor.xyz), uv));
+		baseColor.xyz = Color::SkyrimGammaToLinear(GetFacegenBaseColor(Color::LinearToSkyrimGamma(baseColor.xyz), uv));
 	}
 #	elif defined(FACEGEN_RGB_TINT)
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
 	} else {
-		baseColor.xyz = Color::GammaToLinear(GetFacegenRGBTintBaseColor(Color::LinearToGamma(baseColor.xyz), uv));
+		baseColor.xyz = Color::SkyrimGammaToLinear(GetFacegenRGBTintBaseColor(Color::LinearToSkyrimGamma(baseColor.xyz), uv));
 	}
 #	endif  // FACEGEN
 
@@ -2100,7 +2100,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.AO = rawRMAOS.z;
 
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		material.F0 = lerp(rawRMAOS.w, Color::GammaToTrueLinear(baseColor.xyz), material.Metallic);
+		material.F0 = lerp(rawRMAOS.w, Color::SrgbToLinear(baseColor.xyz), material.Metallic);
 	} else {
 		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
 	}
@@ -2252,7 +2252,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float4 envColorBase = TexEnvSampler.SampleLevel(SampEnvSampler, float3(1.0, 0.0, 0.0), 15);
 
 				if (envColorBase.a < 1.0) {
-					material.F0 = Color::GammaToLinear(envColorBase.rgb);
+					material.F0 = Color::SkyrimGammaToLinear(envColorBase.rgb);
 					material.Roughness = envColorBase.a;
 				} else {
 					material.F0 = 1.0;
@@ -2276,7 +2276,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 		if (!dynamicCubemap) {
-			float3 envColorBase = Color::GammaToLinear(TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint).xyz);
+			float3 envColorBase = Color::SkyrimGammaToLinear(TexEnvSampler.Sample(SampEnvSampler, envSamplingPoint).xyz);
 			envColor = envColorBase.xyz * envMask;
 		}
 	}
@@ -3190,7 +3190,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {
-		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
+		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
 
 	return psout;

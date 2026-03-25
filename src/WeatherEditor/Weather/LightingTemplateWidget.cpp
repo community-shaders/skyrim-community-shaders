@@ -29,7 +29,7 @@ LightingTemplateWidget::~LightingTemplateWidget()
 void LightingTemplateWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
+	SetupWidgetWindowDefaults();
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		// Draw header with search and Save/Load/Delete buttons
 		DrawWidgetHeader("##LightingTemplateSearch", false, true);

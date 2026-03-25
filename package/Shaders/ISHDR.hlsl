@@ -137,7 +137,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
-		srgbColor = Color::TrueLinearToGamma(srgbColor);
+		srgbColor = Color::LinearToSrgb(srgbColor);
 	}
 	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
 
