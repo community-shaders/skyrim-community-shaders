@@ -1,9 +1,9 @@
 #pragma once
 #include "Menu.h"
 #include "OverlayFeature.h"
-#include "VRStereoOptimizations.h"
 #include "Utils/Input.h"
 #include "VR/OpenVRDetection.h"  // In Features/VR/
+#include "VRStereoOptimizations.h"
 #include <algorithm>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>

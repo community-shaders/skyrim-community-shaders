@@ -42,7 +42,7 @@ struct VRStereoOptimizations
 		MODE_EDGE = 1,            ///< Fully shaded + bilateral blend with other eye
 		MODE_MAIN = 2,            ///< Eye 0: no reproject (Perf) / bilateral (Quality). Eye 1: overwrite (Perf) / bilateral (Quality)
 		MODE_EDGE_NEIGHBOUR = 3,  ///< Outer band: background pixels near edge, blended in post-process
-		MODE_FULL_BLEND = 4,  ///< Near-camera pixels: fully shaded in both eyes + bilateral blended
+		MODE_FULL_BLEND = 4,      ///< Near-camera pixels: fully shaded in both eyes + bilateral blended
 	};
 
 	//=============================================================================

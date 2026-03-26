@@ -332,7 +332,6 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	// Sync wavefronts now groupshared DepthData is written
 	GroupMemoryBarrierWithGroupSync();
 
-
 	half start_depth = sampling_depth[0];
 
 	if (start_depth == 0.0 || start_depth == 1.0)
