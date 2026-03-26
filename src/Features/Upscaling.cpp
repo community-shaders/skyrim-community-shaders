@@ -740,16 +740,17 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 	}
 }
 
-ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
+ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS(bool pathTracing)
 {
 	auto upscaleMethod = GetUpscaleMethod();
 
-	auto it = encodeTexturesCS.find(upscaleMethod);
+	auto& cache = pathTracing ? encodeTexturesPTCS : encodeTexturesCS;
+	auto it = cache.find(upscaleMethod);
 
-	if (it != encodeTexturesCS.end())
+	if (it != cache.end())
 		return it->second.get();
 
-	logger::debug("Compiling EncodeTexturesCS.hlsl for upscale method {}", magic_enum::enum_name(upscaleMethod));
+	logger::debug("Compiling EncodeTexturesCS.hlsl for upscale method {} (PT={})", magic_enum::enum_name(upscaleMethod), pathTracing);
 
 	std::vector<std::pair<const char*, const char*>> defines;
 
@@ -769,7 +770,10 @@ ID3D11ComputeShader* Upscaling::GetEncodeTexturesCS()
 		break;
 	}
 
-	auto [emplacedIt, emplaced] = encodeTexturesCS.emplace(upscaleMethod, nullptr);
+	if (pathTracing)
+		defines.push_back({ "PATH_TRACING", "" });
+
+	auto [emplacedIt, emplaced] = cache.emplace(upscaleMethod, nullptr);
 	emplacedIt->second.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/EncodeTexturesCS.hlsl", defines, "cs_5_0"));
 	return emplacedIt->second.get();
 }
@@ -806,14 +810,18 @@ ID3D11VertexShader* Upscaling::GetUpscaleVS()
 	return upscaleVS.get();
 }
 
-ID3D11ComputeShader* Upscaling::GetCopyDepthCS()
+ID3D11ComputeShader* Upscaling::GetCopyDepthCS(bool pathTracing)
 {
-	if (!copyDepthCS) {
-		logger::debug("Compiling CopyDepthCS.hlsl");
-		copyDepthCS.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/CopyDepthCS.hlsl", {}, "cs_5_0"));
+	auto& shader = pathTracing ? copyDepthPTCS : copyDepthCS;
+	if (!shader) {
+		logger::debug("Compiling CopyDepthCS.hlsl (PT={})", pathTracing);
+		std::vector<std::pair<const char*, const char*>> defines;
+		if (pathTracing)
+			defines.push_back({ "PATH_TRACING", "" });
+		shader.attach((ID3D11ComputeShader*)Util::CompileShader(L"Data/Shaders/Upscaling/CopyDepthCS.hlsl", defines, "cs_5_0"));
 	}
 
-	return copyDepthCS.get();
+	return shader.get();
 }
 
 eastl::unique_ptr<Texture2D> Upscaling::CreateTextureFromSource(ID3D11Resource* src, uint32_t width, uint32_t height,
@@ -1234,10 +1242,13 @@ void Upscaling::SetupResources()
 void Upscaling::ClearShaderCache()
 {
 	encodeTexturesCS.clear();
+	encodeTexturesPTCS.clear();
 
 	depthRefractionUpscalePS = nullptr;  // com_ptr automatically releases
 	underwaterMaskUpscalePS = nullptr;   // com_ptr automatically releases
 	upscaleVS = nullptr;                 // com_ptr automatically releases
+
+	copyDepthPTCS = nullptr;
 }
 
 void UpdateCameraData()
@@ -1556,6 +1567,17 @@ void Upscaling::EncodeTextures()
 			};
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
+			bool ptMode = globals::features::raytracing.ptDepthTexture != nullptr;
+
+			if (ptMode) {
+				ID3D11ShaderResourceView* ptViews[] = {
+					globals::features::raytracing.ptMotionVectorsTexture->srv,
+					globals::features::raytracing.mainTexture->srv,
+					globals::features::raytracing.ptDepthTexture->srv
+				};
+				context->CSSetShaderResources(4, ARRAYSIZE(ptViews), ptViews);
+			}
+
 			ID3D11UnorderedAccessView* uavs[] = {
 				reactiveMaskTexture->uav.get(),
 				upscaleMethod == UpscaleMethod::kDLSS || upscaleMethod == UpscaleMethod::kFSR ? transparencyCompositionMaskTexture->uav.get() : nullptr,
@@ -1566,15 +1588,17 @@ void Upscaling::EncodeTextures()
 				uavs[2] = motionVectorCopyTexture->uav.get();
 			else if (upscaleMethod == UpscaleMethod::kDLSS_RR)
 				uavs[2] = globals::features::dx12Interop.sharedResources.motionVector->uav;
+			else if (upscaleMethod == UpscaleMethod::kFSR && ptMode)
+				uavs[2] = motionVectorCopyTexture->uav.get();
 
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			context->CSSetShader(GetEncodeTexturesCS(), nullptr, 0);
+			context->CSSetShader(GetEncodeTexturesCS(ptMode), nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
 
-		ID3D11ShaderResourceView* views[4] = { nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[7] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		ID3D11UnorderedAccessView* uavs[3] = { nullptr, nullptr, nullptr };
@@ -1609,7 +1633,11 @@ void Upscaling::CopySharedD3D12Resources()
 	if (upscaleMethod == UpscaleMethod::kDLSS) {
 		context->CopyResource(sharedResources.motionVector->resource11, motionVectorCopyTexture->resource.get());
 	} else if (upscaleMethod == UpscaleMethod::kFSR) {
-		context->CopyResource(sharedResources.motionVector->resource11, renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture);
+		bool ptMode = globals::features::raytracing.ptDepthTexture != nullptr;
+		if (ptMode)
+			context->CopyResource(sharedResources.motionVector->resource11, motionVectorCopyTexture->resource.get());
+		else
+			context->CopyResource(sharedResources.motionVector->resource11, renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture);
 	}
 
 	// Copy Reactive Mask
@@ -1622,19 +1650,35 @@ void Upscaling::CopySharedD3D12Resources()
 		auto cb = upscalingDataCB->CB();
 		context->CSSetConstantBuffers(0, 1, &cb);
 
-		context->CSSetShaderResources(0, 1, &depth.depthSRV);
+		bool ptMode = globals::features::raytracing.ptDepthTexture != nullptr;
+
+		if (ptMode) {
+			ID3D11ShaderResourceView* views[] = {
+				depth.depthSRV,
+				globals::features::raytracing.ptDepthTexture->srv,
+				globals::features::raytracing.mainTexture->srv
+			};
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+		} else {
+			context->CSSetShaderResources(0, 1, &depth.depthSRV);
+		}
 
 		ID3D11UnorderedAccessView* uav = sharedResources.depth->uav;
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-		context->CSSetShader(GetCopyDepthCS(), nullptr, 0);
+		context->CSSetShader(GetCopyDepthCS(ptMode), nullptr, 0);
 
 		auto dispatchCount = Util::GetScreenDispatchCount(true);
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-		// Reset UAV
+		// Reset
 		uav = nullptr;
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+		if (ptMode) {
+			ID3D11ShaderResourceView* nullViews[3] = { nullptr, nullptr, nullptr };
+			context->CSSetShaderResources(0, 3, nullViews);
+		}
 	}
 
 	/*{

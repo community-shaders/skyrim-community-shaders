@@ -48,13 +48,13 @@ public:
 	};
 
 	constexpr static const char* upscaleModeLabels[] = {
-		"None", 
+		"None",
 		"TAA",
 		"AMD FSR 3.1",
 		"NVIDIA DLSS",
 		"NVIDIA DLSS RR"
 	};
-	
+
 	static_assert(magic_enum::enum_count<UpscaleMethod>() == _countof(upscaleModeLabels));
 
 	constexpr static const char* dlssModelPresets[] = { "Default", "Preset J", "Preset K", "Preset L", "Preset M" };
@@ -72,7 +72,7 @@ public:
 		float sharpnessDLSS = 0.0f;
 		uint presetDLSS = 0;           // 0=Default, 1=J, 2=K, 3=L, 4=M
 		uint useGatherWideKernel = 1;  // 0=Legacy 3x3, 1=Gather wide-kernel
-		uint presetDLSSRR = 0;  // 0=Default, 1=D, 2=E
+		uint presetDLSSRR = 0;         // 0=Default, 1=D, 2=E
 	};
 
 	Settings settings;
@@ -131,8 +131,9 @@ public:
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 
-	eastl::unordered_map<UpscaleMethod, winrt::com_ptr<ID3D11ComputeShader>> encodeTexturesCS;  // One for each UpscaleMethod
-	ID3D11ComputeShader* GetEncodeTexturesCS();
+	eastl::unordered_map<UpscaleMethod, winrt::com_ptr<ID3D11ComputeShader>> encodeTexturesCS;    // One for each UpscaleMethod
+	eastl::unordered_map<UpscaleMethod, winrt::com_ptr<ID3D11ComputeShader>> encodeTexturesPTCS;  // PATH_TRACING variants
+	ID3D11ComputeShader* GetEncodeTexturesCS(bool pathTracing = false);
 
 	winrt::com_ptr<ID3D11PixelShader> depthRefractionUpscalePS;
 	ID3D11PixelShader* GetDepthRefractionUpscalePS();
@@ -148,7 +149,8 @@ public:
 	winrt::com_ptr<ID3D11RasterizerState> upscaleRasterizerState;
 
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS;
-	ID3D11ComputeShader* GetCopyDepthCS();
+	winrt::com_ptr<ID3D11ComputeShader> copyDepthPTCS;
+	ID3D11ComputeShader* GetCopyDepthCS(bool pathTracing = false);
 
 	// Shared VR HMD Mask Clearing
 	winrt::com_ptr<ID3D11ComputeShader> vrClearHMDMaskCS;
