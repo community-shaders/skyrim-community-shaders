@@ -8,6 +8,14 @@ inputs:
         description: "Visual Studio version to use ('2022' or '2026'). Defaults to '2026'."
         required: false
         default: "2026"
+    cmake-preset:
+        description: "The CMake configure preset name (e.g. ALL, ALL-VS2022). Used to resolve the expected generator for cache validation."
+        required: false
+        default: "ALL"
+    build-dir:
+        description: "The CMake binary directory to cache (e.g. build/ALL, build/ALL-VS2022)."
+        required: false
+        default: "build/ALL"
 outputs:
     msvc-version:
         description: "The detected MSVC compiler version"
@@ -86,7 +94,7 @@ runs:
         - name: Cache CMake build output
           uses: actions/cache@v4
           with:
-              path: build/ALL
+              path: ${{ inputs.build-dir }}
               key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
               restore-keys: |
                   ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
@@ -95,7 +103,8 @@ runs:
         - name: Remove stale CMake cache if configuration changed
           shell: pwsh
           run: |
-              $cacheFile = "build/ALL/CMakeCache.txt"
+              $buildDir = "${{ inputs.build-dir }}"
+              $cacheFile = "$buildDir/CMakeCache.txt"
               if (Test-Path $cacheFile) {
                 $content = Get-Content $cacheFile -Raw
                 $stale = $false
@@ -109,20 +118,33 @@ runs:
                   }
                 }
 
-                # Check generator mismatch
+                # Check generator mismatch — resolve the expected generator from the
+                # configure preset, following the inherits chain, so VS2022 and VS2026
+                # presets each validate against their own generator string.
                 if ($content -match 'CMAKE_GENERATOR:INTERNAL=(.+)') {
                   $cachedGenerator = $Matches[1].Trim()
-                  # Read expected generator from CMakePresets.json
-                  $presets = Get-Content "CMakePresets.json" -Raw | ConvertFrom-Json
-                  $msvcPreset = $presets.configurePresets | Where-Object { $_.generator } | Select-Object -First 1
-                  if ($msvcPreset -and $msvcPreset.generator -ne $cachedGenerator) {
-                    Write-Host "❌ Generator mismatch: cached='$cachedGenerator', expected='$($msvcPreset.generator)'"
+                  $allPresets = (Get-Content "CMakePresets.json" -Raw | ConvertFrom-Json).configurePresets
+                  function Resolve-PresetGenerator([string]$name, [int]$depth = 0) {
+                    if ($depth -gt 10) { return $null }
+                    $p = $allPresets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+                    if (-not $p) { return $null }
+                    if ($p.generator) { return $p.generator }
+                    $parents = if ($p.inherits -is [array]) { $p.inherits } else { @($p.inherits) }
+                    foreach ($parent in $parents) {
+                      $gen = Resolve-PresetGenerator $parent ($depth + 1)
+                      if ($gen) { return $gen }
+                    }
+                    return $null
+                  }
+                  $expectedGenerator = Resolve-PresetGenerator "${{ inputs.cmake-preset }}"
+                  if ($expectedGenerator -and $expectedGenerator -ne $cachedGenerator) {
+                    Write-Host "❌ Generator mismatch: cached='$cachedGenerator', expected='$expectedGenerator'"
                     $stale = $true
                   }
                 }
 
                 if ($stale) {
-                  Write-Host "Removing stale build/ALL directory."
-                  Remove-Item -Recurse -Force "build/ALL"
+                  Write-Host "Removing stale $buildDir directory."
+                  Remove-Item -Recurse -Force $buildDir
                 }
               }

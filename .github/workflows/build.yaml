@@ -134,8 +134,12 @@ jobs:
                 compiler:
                     - name: vs2026
                       vs-version: "2026"
+                      cmake-preset: ALL
+                      build-dir: build/ALL
                     - name: vs2022
                       vs-version: "2022"
+                      cmake-preset: ALL-VS2022
+                      build-dir: build/ALL-VS2022
             fail-fast: false
         steps:
             - name: Checkout code
@@ -151,19 +155,21 @@ jobs:
               with:
                   cache-key-suffix: "cpp-${{ matrix.compiler.name }}"
                   vs-version: ${{ matrix.compiler.vs-version }}
+                  cmake-preset: ${{ matrix.compiler.cmake-preset }}
+                  build-dir: ${{ matrix.compiler.build-dir }}
 
             - name: Build using run-cmake
               uses: lukka/run-cmake@v10
               with:
-                  configurePreset: ALL
+                  configurePreset: ${{ matrix.compiler.cmake-preset }}
                   configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=OFF']"
-                  buildPreset: ALL
+                  buildPreset: ${{ matrix.compiler.cmake-preset }}
 
             - name: Extract version from CMake
               id: get_version
               shell: pwsh
               run: |
-                  $content = Get-Content build/ALL/CMakeCache.txt
+                  $content = Get-Content ${{ matrix.compiler.build-dir }}/CMakeCache.txt
                   $versionLine = $content | Select-String -Pattern 'CMAKE_PROJECT_VERSION:STATIC'
                   if ($versionLine) {
                       $version = ($versionLine -replace '.*=([0-9]+\.[0-9]+\.[0-9]+).*', '$1').ToString()
@@ -217,8 +223,12 @@ jobs:
                 compiler:
                     - name: vs2026
                       vs-version: "2026"
+                      cmake-preset: ALL
+                      build-dir: build/ALL
                     - name: vs2022
                       vs-version: "2022"
+                      cmake-preset: ALL-VS2022
+                      build-dir: build/ALL-VS2022
                 config:
                     - name: "Flatrim"
                       file: ".github/configs/shader-validation.yaml"
@@ -245,6 +255,8 @@ jobs:
               with:
                   cache-key-suffix: "validation-${{ matrix.compiler.name }}-${{ matrix.config.name }}"
                   vs-version: ${{ matrix.compiler.vs-version }}
+                  cmake-preset: ${{ matrix.compiler.cmake-preset }}
+                  build-dir: ${{ matrix.compiler.build-dir }}
             - name: Prepare shaders
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: ./.github/actions/prepare-shaders
@@ -286,7 +298,7 @@ jobs:
                     echo "fxc.exe not found - shader validation requires fxc.exe. Set --fxc to a valid path or ensure fxc.exe is in PATH." >&2
                     exit 1
                   fi
-                  hlslkit-compile --fxc "${{ steps.find_fxc.outputs.fxc_path }}" --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
+                  hlslkit-compile --fxc "${{ steps.find_fxc.outputs.fxc_path }}" --shader-dir ${{ matrix.compiler.build-dir }}/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
               shell: bash
 
             - name: Upload shader validation logs
@@ -318,8 +330,12 @@ jobs:
                 compiler:
                     - name: vs2026
                       vs-version: "2026"
+                      cmake-preset: ALL
+                      build-dir: build/ALL
                     - name: vs2022
                       vs-version: "2022"
+                      cmake-preset: ALL-VS2022
+                      build-dir: build/ALL-VS2022
             fail-fast: false
         steps:
             - name: Checkout code
@@ -341,20 +357,22 @@ jobs:
               with:
                   cache-key-suffix: "tests-${{ matrix.compiler.name }}"
                   vs-version: ${{ matrix.compiler.vs-version }}
+                  cmake-preset: ${{ matrix.compiler.cmake-preset }}
+                  build-dir: ${{ matrix.compiler.build-dir }}
 
             - name: Build shader tests
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: lukka/run-cmake@v10
               with:
-                  configurePreset: ALL
+                  configurePreset: ${{ matrix.compiler.cmake-preset }}
                   configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=ON']"
-                  buildPreset: ALL
+                  buildPreset: ${{ matrix.compiler.cmake-preset }}
                   buildPresetAdditionalArgs: "['--target shader_tests']"
 
             - name: Run shader unit tests
               if: steps.check-hlsl.outputs.skip != 'true'
               run: |
-                  ctest --test-dir build/ALL -C Release --output-on-failure -R ShaderTests --timeout 300
+                  ctest --test-dir ${{ matrix.compiler.build-dir }} -C Release --output-on-failure -R ShaderTests --timeout 300
 
             - name: Upload test results on failure
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
@@ -362,7 +380,7 @@ jobs:
               with:
                   name: shader-test-results-${{ matrix.compiler.name }}
                   path: |
-                      build/ALL/Testing/**
+                      ${{ matrix.compiler.build-dir }}/Testing/**
                   retention-days: 7
                   if-no-files-found: ignore
 
