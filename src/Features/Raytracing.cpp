@@ -777,6 +777,21 @@ void Raytracing::DeferredPasses()
 		creationEngineRaytracing->SetCopyTarget(mainTexture->resource.get());
 	}
 
+	if (Mode() == CreationEngineRaytracing::Mode::PathTracing && creationEngineRaytracing->SetPTOutputTargets) {
+		if (!ptDepthTexture || resolutionChanged) {
+			desc.Format = DXGI_FORMAT_R32_FLOAT;
+			ptDepthTexture = eastl::make_unique<WrappedResource>(desc);
+		}
+		if (!ptMotionVectorsTexture || resolutionChanged) {
+			desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+			ptMotionVectorsTexture = eastl::make_unique<WrappedResource>(desc);
+		}
+		creationEngineRaytracing->SetPTOutputTargets(ptDepthTexture->resource.get(), ptMotionVectorsTexture->resource.get());
+	} else {
+		ptDepthTexture.reset();
+		ptMotionVectorsTexture.reset();
+	}
+
 	if (Mode() == CreationEngineRaytracing::Mode::GlobalIllumination) {
 		ConvertTextures();
 
