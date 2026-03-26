@@ -206,7 +206,6 @@ void VRStereoOptimizations::CompileShaders()
 		reprojectionCS.attach(reinterpret_cast<ID3D11ComputeShader*>(ptr));
 	else
 		logger::error("[VRStereoOptimizations] Failed to compile ReprojectionCS");
-
 }
 
 void VRStereoOptimizations::ClearShaderCache()
@@ -648,4 +647,3 @@ void VRStereoOptimizations::DeactivateStencil()
 	logger::trace("[VRStereoOptimizations] Frame: stencilSwapCount={}", stencilSwapCount);
 	stencilActive = false;
 }
-
