@@ -11,6 +11,7 @@
 #include <Windows.h>
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <directx/d3dx12.h>
 #include <format>
 
@@ -26,7 +27,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	sharpnessFSR,
 	sharpnessDLSS,
 	presetDLSS,
-	useGatherWideKernel);
+	reflexLowLatencyMode,
+	reflexLowLatencyBoost,
+	reflexUseMarkersToOptimize,
+	reflexUseFPSLimit,
+	reflexFPSLimit);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -123,6 +128,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 				upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
 				upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
 				upscaling.SetBackendD3DDevice(*ppDevice);
+				// Some features (notably Reflex/PCL) may report availability only after device bind.
+				upscaling.CheckBackendFeatures(pAdapter);
 				upscaling.PostBackendDevice();
 			}
 
@@ -150,6 +157,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
 		upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
 		upscaling.SetBackendD3DDevice(*ppDevice);
+		// Re-check after device bind to ensure feature availability is accurate.
+		upscaling.CheckBackendFeatures(pAdapter);
 		upscaling.PostBackendDevice();
 	}
 
@@ -245,22 +254,15 @@ void Upscaling::DrawSettings()
 				ImGui::Text("Changing this setting requires a restart to take effect.");
 			}
 		}
-
-		if (globals::game::isVR) {
-			settings.useGatherWideKernel = std::min(settings.useGatherWideKernel, 1u);
-			const char* wideKernelModes[] = { "Legacy 3x3", "Gather Wide" };
-			ImGui::SliderInt("Wide Kernel Mode", (int*)&settings.useGatherWideKernel, 0, 1, wideKernelModes[settings.useGatherWideKernel]);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Switches wide-kernel depth sampling mode for VR depth upscaling.");
-			}
-		}
 	}
+
+	const bool frameGenerationDx12PathActive = IsFrameGenerationDx12PathActive();
 
 	if (!globals::game::isVR) {
 		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text("Frame Generation interpolates real frames with generated ones for a smoother experience");
 			ImGui::Text("Uses AMD FSR Frame Generation technology");
-			if (fidelityFX.featureFSR3FG)
+			if (HasFrameGenModule())
 				ImGui::Text("AMD FSR Frame Generation is available.");
 			ImGui::Text("Requires a D3D11 to D3D12 proxy which can create compatibility issues");
 			ImGui::Text("Toggling this setting requires a restart to work correctly");
@@ -291,13 +293,13 @@ void Upscaling::DrawSettings()
 				onlyRequiresRestart = false;
 			}
 
-			if (onlyRequiresRestart && settings.frameGenerationMode && !d3d12SwapChainActive) {
+			if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive) {
 				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 				ImGui::Text("Warning: Requires restart");
 				ImGui::PopStyleColor();
 			}
 
-			if (!settings.frameGenerationMode && d3d12SwapChainActive) {
+			if (!settings.frameGenerationMode && frameGenerationDx12PathActive) {
 				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 				ImGui::Text("Warning: Requires restart");
 				ImGui::PopStyleColor();
@@ -309,12 +311,12 @@ void Upscaling::DrawSettings()
 
 			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, toggleModesFG[settings.frameGenerationMode]);
 
-			if (!d3d12SwapChainActive)
+			if (!frameGenerationDx12PathActive)
 				ImGui::BeginDisabled();
 
 			ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
 
-			if (!d3d12SwapChainActive)
+			if (!frameGenerationDx12PathActive)
 				ImGui::EndDisabled();
 
 			ImGui::TextWrapped("Allows frame generation to function on low refresh rate monitors. Detected: %.2f Hz", refreshRate);
@@ -322,11 +324,93 @@ void Upscaling::DrawSettings()
 
 			ImGui::TreePop();
 		}
-	} else {
-		if (ImGui::TreeNodeEx("Frame Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text("Frame Generation is not available on your system.\nThis requires either NVIDIA DLSS-G or AMD FSR 3.1 Frame Generation support and D3D12 interop.");
-			ImGui::TreePop();
+	}
+
+	if (streamline.reflexSupportedOnCurrentAdapter && ImGui::TreeNodeEx("NVIDIA Reflex", ImGuiTreeNodeFlags_DefaultOpen)) {
+		const bool reflexBlockedByFrameGeneration = frameGenerationDx12PathActive;
+		const bool reflexAvailable = streamline.initialized && streamline.featureReflex;
+		const bool reflexControlsAvailable = reflexAvailable && !reflexBlockedByFrameGeneration;
+		const bool markerOptimizationAvailable = reflexControlsAvailable && streamline.featurePCL;
+		const char* toggleModes[] = { "Disabled", "Enabled" };
+
+		if (reflexBlockedByFrameGeneration) {
+			ImGui::TextDisabled("Reflex is unavailable while the DX12 frame-generation swapchain is active.");
 		}
+
+		if (!reflexAvailable) {
+			ImGui::TextDisabled("Reflex is not available. Ensure sl.reflex.dll is present and restart.");
+		}
+
+		if (!reflexControlsAvailable)
+			ImGui::BeginDisabled();
+
+		int lowLatencyMode = settings.reflexLowLatencyMode ? 1 : 0;
+		ImGui::SliderInt("Low Latency Mode", &lowLatencyMode, 0, 1, toggleModes[lowLatencyMode]);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Cuts input delay by syncing CPU work closer to the GPU.");
+			ImGui::TextUnformatted("Can reduce max FPS a little, but usually feels more responsive.");
+		}
+		settings.reflexLowLatencyMode = lowLatencyMode > 0;
+
+		if (!settings.reflexLowLatencyMode)
+			ImGui::BeginDisabled();
+
+		int lowLatencyBoost = settings.reflexLowLatencyBoost ? 1 : 0;
+		ImGui::SliderInt("Low Latency Boost", &lowLatencyBoost, 0, 1, toggleModes[lowLatencyBoost]);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Keeps GPU clocks higher to avoid latency spikes at low GPU load.");
+			ImGui::TextUnformatted("Useful if frametime jumps; costs extra power and heat.");
+		}
+		settings.reflexLowLatencyBoost = lowLatencyBoost > 0;
+
+		if (!settings.reflexLowLatencyMode)
+			ImGui::EndDisabled();
+
+		if (!markerOptimizationAvailable)
+			ImGui::BeginDisabled();
+
+		int markersToOptimize = settings.reflexUseMarkersToOptimize ? 1 : 0;
+		ImGui::SliderInt("Use Markers To Optimize", &markersToOptimize, 0, 1, toggleModes[markersToOptimize]);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Uses frame markers for tighter Reflex timing.");
+			ImGui::TextUnformatted("Try On first; turn Off if it causes stutter on your setup.");
+		}
+		settings.reflexUseMarkersToOptimize = markersToOptimize > 0;
+
+		if (!markerOptimizationAvailable)
+			ImGui::EndDisabled();
+
+		if (!markerOptimizationAvailable) {
+			ImGui::TextDisabled("Marker optimization unavailable (PCL not loaded).");
+		}
+
+		int useFPSLimit = settings.reflexUseFPSLimit ? 1 : 0;
+		ImGui::SliderInt("Use FPS Limit", &useFPSLimit, 0, 1, toggleModes[useFPSLimit]);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Uses Reflex's internal FPS cap for steadier frametimes.");
+			ImGui::TextUnformatted("Can lower latency versus uncapped rendering.");
+		}
+		settings.reflexUseFPSLimit = useFPSLimit > 0;
+
+		if (!settings.reflexUseFPSLimit)
+			ImGui::BeginDisabled();
+
+		if (!std::isfinite(settings.reflexFPSLimit))
+			settings.reflexFPSLimit = 60.0f;
+		settings.reflexFPSLimit = std::clamp(settings.reflexFPSLimit, 20.0f, 240.0f);
+		ImGui::SliderFloat("FPS Limit", &settings.reflexFPSLimit, 20.0f, 240.0f, "%.0f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Set your frame cap target.");
+			ImGui::TextUnformatted("Start about 2-3 FPS below refresh rate (e.g. 117 for 120 Hz).");
+		}
+
+		if (!settings.reflexUseFPSLimit)
+			ImGui::EndDisabled();
+
+		if (!reflexControlsAvailable)
+			ImGui::EndDisabled();
+
+		ImGui::TreePop();
 	}
 
 	if (ImGui::TreeNodeEx("Backend Diagnostics")) {
@@ -462,10 +546,22 @@ void Upscaling::LoadSettings(json& o_json)
 		logger::warn("[Upscaling] Loaded presetDLSS {} out of range, resetting to 0 (Default)", settings.presetDLSS);
 		settings.presetDLSS = 0;
 	}
-	if (settings.useGatherWideKernel > 1) {
-		logger::warn("[Upscaling] Loaded useGatherWideKernel {} out of range, clamping to 1", settings.useGatherWideKernel);
-		settings.useGatherWideKernel = 1;
+	const float originalReflexFPSLimit = settings.reflexFPSLimit;
+	if (!std::isfinite(settings.reflexFPSLimit)) {
+		settings.reflexFPSLimit = 60.0f;
+		logger::warn(
+			"[Upscaling] Loaded reflexFPSLimit {} is not finite, resetting to {}",
+			originalReflexFPSLimit,
+			settings.reflexFPSLimit);
 	}
+	const float clampedReflexFPSLimit = std::clamp(settings.reflexFPSLimit, 20.0f, 240.0f);
+	if (clampedReflexFPSLimit != settings.reflexFPSLimit) {
+		logger::warn(
+			"[Upscaling] Loaded reflexFPSLimit {} out of range, clamping to {}",
+			settings.reflexFPSLimit,
+			clampedReflexFPSLimit);
+	}
+	settings.reflexFPSLimit = clampedReflexFPSLimit;
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
 		auto setting = iniSettingCollection->GetSetting("bUseTAA:Display");
@@ -1397,9 +1493,14 @@ double Upscaling::GetRefreshRate(HWND a_window)
 	return 60;
 }
 
+bool Upscaling::IsFrameGenerationDx12PathActive() const
+{
+	return d3d12SwapChainActive && !globals::game::isVR;
+}
+
 bool Upscaling::IsFrameGenerationActive() const
 {
-	return d3d12SwapChainActive && settings.frameGenerationMode && fidelityFX.isFrameGenActive && !globals::game::isVR;
+	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && fidelityFX.isFrameGenActive;
 }
 
 bool Upscaling::IsUpscalingActive() const
@@ -1704,7 +1805,7 @@ void Upscaling::UpscaleDepth()
 		}
 
 		jitterData.useWideKernel = depthUpscaleUseWideKernel ? 1.0f : 0.0f;
-		jitterData.useGatherWideKernel = settings.useGatherWideKernel ? 1.0f : 0.0f;
+		jitterData.pad0 = 0.0f;
 	}
 
 	jitterCB->Update(jitterData);
