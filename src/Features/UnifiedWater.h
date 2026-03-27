@@ -111,6 +111,9 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
+	RE::TESWorldSpace* currentPlayerWorldSpace = nullptr;
+	bool pendingChildWsCull = false;
+
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();
 };
