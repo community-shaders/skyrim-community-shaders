@@ -219,11 +219,10 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 diceLinear = DisplayMapping::DICETonemap(hdrScene, peak, shoulderStart, CS_BT709, CS_BT709);
 
 		// Blend weight from linear scene luminance in peak-normalized units.
-		// Sky.hlsl scales the sun by peakNits/paperWhiteNits; lum(hdrInputLinear*pw)/peak
-		// cancels that scale, so the footprint of diceBlend matches SDR angular falloff
-		// and does not grow when peak nits increase (only brightness does).
-		// sdrGraded luminance must not be used here: Reinhard + brighter HDR input
-		// changes the tonemapped shape vs peak, which reads as a larger sun.
+		// Sky.hlsl scales the sun by pow(peakRatio, 1/gamma) in gamma space (non-LL)
+		// so after gamma decode: hdrInputLinear = s_linear * peakRatio. Then
+		// lum(s_linear * peakRatio * pw) / peak = lum(s_linear), making diceBlend
+		// peak-invariant — only brightness changes, not the sun's angular footprint.
 		float diceBlend = saturate(Color::RGBToLuminance(hdrInputLinear * pw) / max(peak, 1e-6));
 		float3 hdrLinearOut = lerp(sdrBase, diceLinear, diceBlend);
 
