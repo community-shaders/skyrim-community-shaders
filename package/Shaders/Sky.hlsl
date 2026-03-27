@@ -237,7 +237,7 @@ PS_OUTPUT main(PS_INPUT input)
 		// Scaling by peakRatio^(1/1.6) instead ensures the decoded linear result is
 		// s^1.6 * peakRatio — correct linear energy, peak-invariant blend footprint.
 		float hdrScale = ENABLE_LL ? peakRatio : pow(peakRatio, rcp(1.6));
-		const float glareScaleMax = 2.0; // limit glare/bloom blowout at high peak nits
+		const float glareScaleMax = 2.0;  // limit glare/bloom blowout at high peak nits
 
 #		if defined(DITHER)
 		// --- Sun glare billboard ---
