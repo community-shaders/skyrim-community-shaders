@@ -3,7 +3,9 @@
 
 #include "../LightLimitFix.h"
 #include "Deferred.h"
+#include "Menu/ThemeManager.h"
 #include "State.h"
+#include "Util.h"
 
 // Fills a ShadowData entry from a light's shadowmap descriptor transform.
 // Mirrors the former Deferred::SetShadowParameters private template.
@@ -232,13 +234,14 @@ void LightLimitFix::DrawOverlay()
 	// move it out of the way and expand the table.  When the menu is closed, keep
 	// it as a compact pinned overlay (no title bar, no chrome).
 	bool menuOpen = globals::menu->IsEnabled;
+	const float pos = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * Util::GetUIScale();
 	if (menuOpen) {
-		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Appearing);
+		ImGui::SetNextWindowPos(ImVec2(pos, pos), ImGuiCond_Appearing);
 		ImGui::SetNextWindowSize(ImVec2(320, 500), ImGuiCond_Appearing);
 		ImGui::SetNextWindowSizeConstraints(ImVec2(240, 150), ImVec2(800, 1200));
 		ImGui::Begin("LLF Shadow Slots", nullptr, ImGuiWindowFlags_NoSavedSettings);
 	} else {
-		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
+		ImGui::SetNextWindowPos(ImVec2(pos, pos), ImGuiCond_Always);
 		ImGui::SetNextWindowSizeConstraints(ImVec2(280, 0), ImVec2(540, 640));
 		ImGui::Begin("##LLFDebug", nullptr,
 			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize |

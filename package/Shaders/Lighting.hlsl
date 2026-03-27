@@ -3327,7 +3327,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(inWorld && !inReflection)) {
-		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
+		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
 
 	return psout;
