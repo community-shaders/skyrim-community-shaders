@@ -71,7 +71,7 @@ cbuffer PerFrame : register(b0)
 
 			float3 compositedLinear = Color::SkyrimGammaToLinear(max(0.0, composited));
 			if (isMainOrLoadingMenu > 0.5) {
-				const float menuSaturation = 1.25f; // this is just to get more correct looking colours, the multiplication by UI Brightness desaturates a bit.
+				const float menuSaturation = 1.25f;  // this is just to get more correct looking colours, the multiplication by UI Brightness desaturates a bit.
 				float luma = Color::RGBToLuminance(compositedLinear);
 				compositedLinear = max(0.0, lerp(luma.xxx, compositedLinear, menuSaturation));
 			}
