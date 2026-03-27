@@ -1923,7 +1923,7 @@ void EditorWindow::DrawTimeControls()
 
 bool EditorWindow::CanBeOpen()
 {
-	auto player = RE::PlayerCharacter::GetSingleton();
+	auto* player = globals::game::player;
 	auto* state = globals::state;
 	return player && player->parentCell && !state->isLoadingMenuOpen && !state->isMainMenuOpen;
 }

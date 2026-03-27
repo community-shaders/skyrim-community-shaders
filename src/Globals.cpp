@@ -106,6 +106,7 @@ namespace globals
 		float* cameraFar = nullptr;
 		float* deltaTime = nullptr;
 		RE::BSUtilityShader* utilityShader = nullptr;
+		RE::PlayerCharacter* player = nullptr;
 		RE::Sky* sky = nullptr;
 		RE::UI* ui = nullptr;
 		RE::Calendar* calendar = nullptr;
@@ -202,6 +203,7 @@ namespace globals
 	void OnDataLoaded()
 	{
 		using namespace game;
+		player = RE::PlayerCharacter::GetSingleton();
 		sky = RE::Sky::GetSingleton();
 		utilityShader = RE::BSUtilityShader::GetSingleton();
 
