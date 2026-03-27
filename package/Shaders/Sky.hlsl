@@ -237,6 +237,7 @@ PS_OUTPUT main(PS_INPUT input)
 		// Scaling by peakRatio^(1/1.6) instead ensures the decoded linear result is
 		// s^1.6 * peakRatio — correct linear energy, peak-invariant blend footprint.
 		float hdrScale = ENABLE_LL ? peakRatio : pow(peakRatio, rcp(1.6));
+		const float glareScaleMax = 2.0; // limit glare/bloom blowout at high peak nits
 
 #		if defined(DITHER)
 		// --- Sun glare billboard ---
@@ -246,7 +247,7 @@ PS_OUTPUT main(PS_INPUT input)
 		if (glareLum > 1.0)
 			baseColor.xyz *= rcp(glareLum);
 
-		baseColor.xyz *= hdrScale;
+		baseColor.xyz *= min(hdrScale, glareScaleMax);
 
 		// Apply vertex colour tint (engine's glare envelope)
 		baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
@@ -269,12 +270,16 @@ PS_OUTPUT main(PS_INPUT input)
 		if (srcLum > 1.0)
 			baseColor.xyz *= rcp(srcLum);
 
-		baseColor.xyz *= hdrScale;
+		// Core-only brightness boost: 4x on the hottest disc texels, ~1x on halo.
+		const float sunCoreBoost = 5.0;
+		float sunCoreMask = smoothstep(0.9, 1.0, saturate(srcLum));
+		float discScale = hdrScale * lerp(1.0, sunCoreBoost, sunCoreMask);
+		baseColor.xyz *= discScale;
 
 		// Dithering: break up 8-bit texture quantization banding in HDR glow falloff.
 		// Interleaved Gradient Noise (Jimenez 2014) — +/-0.5 texel step in HDR range.
 		float ign = frac(52.9829189 * frac(dot(floor(input.Position.xy), float2(0.06711056, 0.00583715))));
-		baseColor.xyz += (ign - 0.5) * (hdrScale / 255.0);
+		baseColor.xyz += (ign - 0.5) * (discScale / 255.0);
 
 		// Preserve disc shape: don't apply PParams additive sky blend to sun disc
 		yyy = 0.0;
