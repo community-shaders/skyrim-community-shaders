@@ -376,6 +376,7 @@ void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* wor
 	// sees the correct worldspace when it fires during cell attachment inside func.
 	auto& uw = globals::features::unifiedWater;
 	uw.currentPlayerWorldSpace = worldSpace;
+	uw.cachedTes = tes;  // globals::game::tes is null on the render thread; cache here for later use
 	if (!enteringChild)
 		uw.pendingChildWsCull = false;  // leaving child WS: discard any stale pending cull
 
@@ -600,17 +601,12 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 {
 	const auto& singleton = globals::features::unifiedWater;
 
-	// Deferred child-WS cull: cells are not kAttached immediately after TES_SetWorldSpace, so we
-	// retry here (render thread) until globals::game::tes->gridCells has attached cells.
-	// One-shot diagnostic on first invocation so we can see tes/gridCells state.
+	// Deferred child-WS cull: cells are not kAttached immediately after TES_SetWorldSpace.
+	// Use cachedTes (saved on the game thread where it's valid) instead of globals::game::tes
+	// which is null on the render thread due to initialization ordering.
+	// Keep retrying (pendingChildWsCull stays true) until gridCells is populated with kAttached cells.
 	if (singleton.pendingChildWsCull && IsChildWorldSpace(singleton.currentPlayerWorldSpace) && singleton.gWaterLOD && *singleton.gWaterLOD) {
-		const auto tes = globals::game::tes;
-		static bool diagLogged = false;
-		if (!diagLogged) {
-			logger::info("[Unified Water] [Cull] BSWaterShader_SetupGeometry deferred: tes={}, gridCells={}",
-				(void*)tes, tes ? (void*)tes->gridCells : nullptr);
-			diagLogged = true;
-		}
+		const auto tes = singleton.cachedTes;
 		if (tes && tes->gridCells) {
 			auto& uw = globals::features::unifiedWater;
 			uw.pendingChildWsCull = false;
@@ -619,7 +615,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 				if (!waterParentPtr)
 					continue;
 				const auto waterParent = static_cast<RE::BSMultiBoundNode*>(waterParentPtr.get());
-				auto [c, t] = CullWaterParentByGridCells(waterParent);
+				auto [c, t] = CullWaterParentByGridCells(waterParent, tes);
 				culled += c;
 				total += t;
 			}

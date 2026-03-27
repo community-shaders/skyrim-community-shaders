@@ -113,6 +113,9 @@ private:
 
 	RE::TESWorldSpace* currentPlayerWorldSpace = nullptr;
 	bool pendingChildWsCull = false;
+	// Cached from TES_SetWorldSpace::thunk (game thread) for use on the render thread.
+	// globals::game::tes is null on the render thread (cached before TES singleton existed).
+	RE::TES* cachedTes = nullptr;
 
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();
