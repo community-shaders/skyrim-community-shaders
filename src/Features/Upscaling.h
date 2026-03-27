@@ -23,7 +23,7 @@ public:
 	virtual inline std::string GetShortName() override { return "Upscaling"; }
 	virtual inline bool SupportsVR() override { return true; }
 	virtual inline bool IsCore() const override { return false; }
-	virtual inline std::string_view GetCategory() const override { return "Display"; }
+	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kDisplay; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -35,8 +35,6 @@ public:
 				"Frame generation for supported systems" }
 		};
 	}
-
-	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
 
 	float2 jitter = { 0, 0 };
 
@@ -60,6 +58,11 @@ public:
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
 		uint presetDLSS = 0;  // 0=Default, 1=J, 2=K, 3=L, 4=M
+		bool reflexLowLatencyMode = false;
+		bool reflexLowLatencyBoost = false;
+		bool reflexUseMarkersToOptimize = false;
+		bool reflexUseFPSLimit = false;
+		float reflexFPSLimit = 60.0f;
 	};
 
 	Settings settings;
@@ -67,7 +70,8 @@ public:
 	struct JitterCB
 	{
 		float2 jitter;
-		float2 pad0;
+		float useWideKernel;
+		float pad0;
 	};
 
 	struct UpscalingDataCB
@@ -91,6 +95,7 @@ public:
 	LARGE_INTEGER qpf;
 
 	// FG FPS Measurement for Overlay
+	bool IsFrameGenerationDx12PathActive() const;
 	bool IsFrameGenerationActive() const;
 	float GetFrameGenerationFrameTime() const;
 	bool IsUpscalingActive() const;
@@ -189,6 +194,7 @@ public:
 	float dynamicResolutionHeightRatio = 1.0f;
 
 	bool previousUpscalingWasActive = false;
+	bool depthUpscaleUseWideKernel = false;
 
 	void CopySharedD3D12Resources();
 	void PostDisplay();

@@ -137,10 +137,22 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 			"The more threads the faster compilation will finish but may make the system unresponsive. ");
 	}
 
+	ImGui::Columns(2, nullptr, false);
+
 	// Dump Ini Settings button
 	if (ImGui::Button("Dump Ini Settings", { -1, 0 })) {
 		Util::DumpSettingsOptions();
 	}
+
+	ImGui::NextColumn();
+
+	// Open Logs button
+	std::filesystem::path logPath = Util::PathHelpers::GetLogPath();
+	if (!logPath.empty() && ImGui::Button("Open Logs", { -1, 0 })) {
+		ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+	}
+
+	ImGui::Columns(1);
 }
 
 void AdvancedSettingsRenderer::RenderShaderDebugSection()
@@ -223,8 +235,9 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 	// Show blocked shader status as a regular section
 	if (!shaderCache->blockedKey.empty()) {
 		// Create a visually distinct box for the blocked shader info with rounded corners and border
-		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0f);
+		const float scale = Util::GetUIScale();
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f * scale);
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, ImGui::GetStyle().WindowBorderSize);
 		ImVec4 blockedBgColor = Util::Colors::GetError();
 		blockedBgColor.w = 0.15f;  // Semi-transparent background
 		ImGui::PushStyleColor(ImGuiCol_ChildBg, blockedBgColor);

@@ -2,8 +2,10 @@
 #include "InverseSquareLighting.h"
 #include "LinearLighting.h"
 
+#include "Menu/ThemeManager.h"
 #include "Shadercache.h"
 #include "State.h"
+#include "Util.h"
 
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 static constexpr uint MAX_LIGHTS = 1024;
@@ -53,7 +55,8 @@ void LightLimitFix::DrawOverlay()
 {
 	if (!settings.EnableLightsVisualisation)
 		return;
-	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
+	const float pos = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * Util::GetUIScale();
+	ImGui::SetNextWindowPos(ImVec2(pos, pos), ImGuiCond_Always);
 	ImGui::Begin("##LLFDebug", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
 	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "DEBUG FEATURE - LIGHT LIMIT VISUALISATION ENABLED");
 	ImGui::End();
@@ -79,8 +82,11 @@ void LightLimitFix::SetupResources()
 	uint clusterCount = clusterSize[0] * clusterSize[1] * clusterSize[2];
 
 	{
-		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", {}, "cs_5_0");
-		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", {}, "cs_5_0");
+		std::vector<std::pair<const char*, const char*>> clusterDefines;
+		if (REL::Module::IsVR())
+			clusterDefines = { { "VR", "" } };
+		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", clusterDefines, "cs_5_0");
+		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
 
 		lightBuildingCB = new ConstantBuffer(ConstantBufferDesc<LightBuildingCB>());
 		lightCullingCB = new ConstantBuffer(ConstantBufferDesc<LightCullingCB>());
@@ -356,8 +362,11 @@ void LightLimitFix::ClearShaderCache()
 		clusterCullingCS->Release();
 		clusterCullingCS = nullptr;
 	}
-	clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", {}, "cs_5_0");
-	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", {}, "cs_5_0");
+	std::vector<std::pair<const char*, const char*>> clusterDefines;
+	if (REL::Module::IsVR())
+		clusterDefines = { { "VR", "" } };
+	clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", clusterDefines, "cs_5_0");
+	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
 }
 
 void LightLimitFix::UpdateLights()

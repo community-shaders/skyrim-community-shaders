@@ -17,80 +17,80 @@
 
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
+	float4 Position: POSITION0;
 #if defined(TEXCOORD)
 #	if defined(STRIP_PARTICLES)
 	float3
 #	else
 	float2
 #	endif
-		TexCoord0 : TEXCOORD0;
+		TexCoord0: TEXCOORD0;
 #endif
 #if defined(NORMALS) || defined(MOTIONVECTORS_NORMALS)
-	float4 Normal : NORMAL0;
+	float4 Normal: NORMAL0;
 #endif
 #if defined(BINORMAL_TANGENT)
-	float4 Bitangent : BINORMAL0;
+	float4 Bitangent: BINORMAL0;
 #endif
 #if defined(VC)
-	float4 Color : COLOR0;
+	float4 Color: COLOR0;
 #endif
 #if defined(SKINNED)
-	float4 BoneWeights : BLENDWEIGHT0;
-	float4 BoneIndices : BLENDINDICES0;
+	float4 BoneWeights: BLENDWEIGHT0;
+	float4 BoneIndices: BLENDINDICES0;
 #endif
 #if defined(VR)
-	uint InstanceID : SV_INSTANCEID;
+	uint InstanceID: SV_INSTANCEID;
 #endif  // VR
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION0;
-	float4 TexCoord0 : TEXCOORD0;
-	float4 WorldPosition : POSITION1;
+	float4 Position: SV_POSITION0;
+	float4 TexCoord0: TEXCOORD0;
+	float4 WorldPosition: POSITION1;
 #if defined(VC)
-	float4 Color : COLOR0;
+	float4 Color: COLOR0;
 #endif
 #if !defined(MOTIONVECTORS_NORMALS)
-	float4 FogParam : COLOR1;
+	float4 FogParam: COLOR1;
 #endif
 #if defined(MOTIONVECTORS_NORMALS) && defined(MEMBRANE) && !defined(SKINNED) && defined(NORMALS)
-	float3 ScreenSpaceNormal : TEXCOORD1;
+	float3 ScreenSpaceNormal: TEXCOORD1;
 #elif (defined(MEMBRANE) && (defined(SKINNED) || defined(NORMALS))) || (defined(PROJECTED_UV) && defined(NORMALS))
-	float3 TBN0 : TEXCOORD1;
+	float3 TBN0: TEXCOORD1;
 #endif
 #if defined(MEMBRANE) && (defined(SKINNED) || defined(NORMALS))
-	float FogAlpha : TEXCOORD5;
+	float FogAlpha: TEXCOORD5;
 #endif
 #if (defined(MEMBRANE) && defined(SKINNED) && !defined(NORMALS)) || (defined(PROJECTED_UV) && defined(NORMALS) && !defined(MEMBRANE))
-	float3 TBN1 : TEXCOORD2;
+	float3 TBN1: TEXCOORD2;
 #endif
 #if (defined(MEMBRANE) && defined(SKINNED) && !defined(NORMALS))
-	float3 TBN2 : TEXCOORD3;
+	float3 TBN2: TEXCOORD3;
 #endif
 #if defined(MEMBRANE)
-	float4 ViewVector : TEXCOORD4;
+	float4 ViewVector: TEXCOORD4;
 #endif
 #if defined(LIGHTING)
-	float3 MSPosition : TEXCOORD6;
+	float3 MSPosition: TEXCOORD6;
 #endif
 #if !(defined(MEMBRANE) && (defined(SKINNED) || defined(NORMALS)))
-	float FogAlpha : TEXCOORD5;
+	float FogAlpha: TEXCOORD5;
 #endif
 #if defined(MOTIONVECTORS_NORMALS)
 #	if !defined(LIGHTING) && !(defined(MEMBRANE) && defined(SKINNED)) && !(defined(MEMBRANE) && !defined(SKINNED) && defined(NORMALS))
-	float3 ScreenSpaceNormal : TEXCOORD7;
+	float3 ScreenSpaceNormal: TEXCOORD7;
 #	endif
-	float4 PreviousWorldPosition : POSITION2;
+	float4 PreviousWorldPosition: POSITION2;
 #	if (defined(LIGHTING) || (defined(MEMBRANE) && defined(SKINNED))) && !(defined(MEMBRANE) && defined(NORMALS))
-	float3 ScreenSpaceNormal : TEXCOORD7;
+	float3 ScreenSpaceNormal: TEXCOORD7;
 #	endif
 #endif
 #if defined(VR)
-	float ClipDistance : SV_ClipDistance0;  // o11
-	float CullDistance : SV_CullDistance0;  // p11
-	uint EyeIndex : EYEIDX0;
+	float ClipDistance: SV_ClipDistance0;  // o11
+	float CullDistance: SV_CullDistance0;  // p11
+	uint EyeIndex: EYEIDX0;
 #endif  // VR
 };
 
@@ -424,28 +424,28 @@ Texture2D<float4> TexGrayscaleSampler : register(t4);
 #if defined(DEFERRED)
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_Target0;
+	float4 Diffuse: SV_Target0;
 #	if defined(MOTIONVECTORS_NORMALS)
-	float4 MotionVectors : SV_Target1;
-	float4 NormalGlossiness : SV_Target2;
+	float4 MotionVectors: SV_Target1;
+	float4 NormalGlossiness: SV_Target2;
 #	elif defined(NORMALS)
-	float4 NormalGlossiness : SV_Target2;
+	float4 NormalGlossiness: SV_Target2;
 #	endif
-	float4 Albedo : SV_Target3;
-	float4 Specular : SV_Target4;
-	float4 Reflectance : SV_Target5;
-	float4 Masks : SV_Target6;
+	float4 Albedo: SV_Target3;
+	float4 Specular: SV_Target4;
+	float4 Reflectance: SV_Target5;
+	float4 Masks: SV_Target6;
 };
 #else
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_Target0;
+	float4 Diffuse: SV_Target0;
 #	if defined(MOTIONVECTORS_NORMALS)
-	float2 MotionVectors : SV_Target1;
-	float4 ScreenSpaceNormals : SV_Target2;
+	float2 MotionVectors: SV_Target1;
+	float4 ScreenSpaceNormals: SV_Target2;
 #	else
-	float4 Normal : SV_Target1;
-	float4 Color2 : SV_Target2;
+	float4 Normal: SV_Target1;
+	float4 Color2: SV_Target2;
 #	endif
 };
 #endif
@@ -547,7 +547,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	skylightingDiffuse = saturate(skylightingDiffuse);
 	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
 	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-#	endif
+#		endif
 
 	float3 dirColor;
 	float3 ambientColor;
@@ -599,8 +599,8 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 		float4 lightDistanceSquared = (PLightPositionX[eyeIndex] - msPosition.xxxx) * (PLightPositionX[eyeIndex] - msPosition.xxxx) + (PLightPositionY[eyeIndex] - msPosition.yyyy) * (PLightPositionY[eyeIndex] - msPosition.yyyy) + (PLightPositionZ[eyeIndex] - msPosition.zzzz) * (PLightPositionZ[eyeIndex] - msPosition.zzzz);
 		float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
 		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
-        color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
-        color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
+		color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
+		color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
 	}
 
 	return color;
@@ -638,9 +638,9 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 	const bool isInteriorSun = SharedData::interiorSunSettings.IsInteriorWithSun;
 
-	if (inWorld && !SharedData::InInterior){
+	if (inWorld && !SharedData::InInterior) {
 		shadow = 0.0;
-		for(uint i = 0; i < sampleCount; i++){
+		for (uint i = 0; i < sampleCount; i++) {
 			float t = (float(i) + noise) * rcpSampleCount;
 			float3 samplePositionWS = lerp(startPosition, endPosition, t);
 			shadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
@@ -671,7 +671,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 
 	return color;
 }
-#endif
+#	endif
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -858,10 +858,10 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
-#if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
-	if(Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
+#	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
+	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
 		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, eyeIndex, shadowVariance);
-#endif
+#	endif
 
 	lightColor = Color::EffectMult(lightColor);
 
@@ -869,7 +869,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float fogFactor = Color::FogAlpha(input.FogParam.w);
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
 #		if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+	if (SharedData::iblSettings.EnableIBL) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #		endif
@@ -930,17 +930,17 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.MotionVectors = float4(screenMotionVector, 0.0, psout.Diffuse.w);
 #		endif
 
-#if defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+#		if defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 	psout.Specular = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Albedo = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
-#else
+#		else
 	psout.Albedo = float4(0, 0, 0, finalColor.w);
 	psout.Specular = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);
-#endif
+#		endif
 
 #	elif defined(MOTIONVECTORS_NORMALS)
 	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
@@ -962,7 +962,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) && SharedData::linearLightingSettings.enableLinearLighting) {
-		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
+		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
 	return psout;
 }

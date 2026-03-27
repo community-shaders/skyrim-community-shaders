@@ -585,9 +585,11 @@ void ScreenSpaceGI::CompileComputeShaders()
 			{ &radianceDisoccCompute, "radianceDisocc.cs.hlsl", {} },
 			{ &giCompute, "gi.cs.hlsl", {} },
 			{ &blurCompute, "blur.cs.hlsl", {} },
-			{ &stereoSyncCompute, "stereoSync.cs.hlsl", { { "FRAMEBUFFER", "" } } },
 			{ &upsampleCompute, "upsample.cs.hlsl", {} },
 		};
+
+	if (REL::Module::IsVR())
+		shaderInfos.push_back({ &stereoSyncCompute, "stereoSync.cs.hlsl", { { "FRAMEBUFFER", "" } } });
 	for (auto& info : shaderInfos) {
 		if (REL::Module::IsVR())
 			info.defines.push_back({ "VR", "" });
@@ -745,7 +747,7 @@ void ScreenSpaceGI::DrawSSGI()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Depths");
 
-		srvs.at(0) = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].depthSRV;
+		srvs.at(0) = Util::GetCurrentSceneDepthSRV();
 		for (int i = 0; i < 5; ++i)
 			uavs.at(i) = uavWorkingDepth[i].get();
 

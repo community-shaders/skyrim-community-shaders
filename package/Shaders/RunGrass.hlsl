@@ -3,9 +3,9 @@
 #include "Common/GBuffer.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/MotionBlur.hlsli"
+#include "Common/Permutation.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
-#include "Common/Permutation.hlsli"
 
 #define DEFERRED
 
@@ -19,65 +19,65 @@
 
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
-	float2 TexCoord : TEXCOORD0;
-	float4 Normal : NORMAL0;
-	float4 Color : COLOR0;
-	float4 InstanceData1 : TEXCOORD4;
-	float4 InstanceData2 : TEXCOORD5;
-	float4 InstanceData3 : TEXCOORD6;
-	float4 InstanceData4 : TEXCOORD7;
+	float4 Position: POSITION0;
+	float2 TexCoord: TEXCOORD0;
+	float4 Normal: NORMAL0;
+	float4 Color: COLOR0;
+	float4 InstanceData1: TEXCOORD4;
+	float4 InstanceData2: TEXCOORD5;
+	float4 InstanceData3: TEXCOORD6;
+	float4 InstanceData4: TEXCOORD7;
 #ifdef VR
-	uint InstanceID : SV_INSTANCEID;
+	uint InstanceID: SV_INSTANCEID;
 #endif  // VR
 };
 
 #ifdef GRASS_LIGHTING
 struct VS_OUTPUT
 {
-	float4 HPosition : SV_POSITION0;
-	float4 VertexColor : COLOR0;
-	float VertexMult : COLOR1;
-	float3 TexCoord : TEXCOORD0;
-	float3 ViewSpacePosition :
+	float4 HPosition: SV_POSITION0;
+	float4 VertexColor: COLOR0;
+	float VertexMult: COLOR1;
+	float3 TexCoord: TEXCOORD0;
+	float3 ViewSpacePosition:
 #	if !defined(VR)
 		TEXCOORD1;
 #	else
 		TEXCOORD2;
 #	endif
 #	if defined(RENDER_DEPTH)
-	float2 Depth :
+	float2 Depth:
 #		if !defined(VR)
 		TEXCOORD2;
 #		else
 		TEXCOORD3;
 #		endif
 #	endif  // RENDER_DEPTH
-	float4 WorldPosition : POSITION1;
-	float4 PreviousWorldPosition : POSITION2;
-	float4 VertexNormal : POSITION4;
+	float4 WorldPosition: POSITION1;
+	float4 PreviousWorldPosition: POSITION2;
+	float4 VertexNormal: POSITION4;
 #	ifdef VR
-	float ClipDistance : SV_ClipDistance0;
-	float CullDistance : SV_CullDistance0;
+	float ClipDistance: SV_ClipDistance0;
+	float CullDistance: SV_CullDistance0;
 #	endif  // VR
 };
 #else
 struct VS_OUTPUT
 {
-	float4 HPosition : SV_POSITION0;
-	float4 VertexColor : COLOR0;
-	float VertexMult : COLOR1;
-	float3 TexCoord : TEXCOORD0;
-	float4 AmbientColor : TEXCOORD1;
-	float3 ViewSpacePosition : TEXCOORD2;
+	float4 HPosition: SV_POSITION0;
+	float4 VertexColor: COLOR0;
+	float VertexMult: COLOR1;
+	float3 TexCoord: TEXCOORD0;
+	float4 AmbientColor: TEXCOORD1;
+	float3 ViewSpacePosition: TEXCOORD2;
 #	if defined(RENDER_DEPTH)
-	float2 Depth : TEXCOORD3;
+	float2 Depth: TEXCOORD3;
 #	endif  // RENDER_DEPTH
-	float4 WorldPosition : POSITION1;
-	float4 PreviousWorldPosition : POSITION2;
+	float4 WorldPosition: POSITION1;
+	float4 PreviousWorldPosition: POSITION2;
 #	ifdef VR
-	float ClipDistance : SV_ClipDistance0;
-	float CullDistance : SV_CullDistance0;
+	float ClipDistance: SV_ClipDistance0;
+	float CullDistance: SV_CullDistance0;
 #	endif  // VR
 };
 #endif
@@ -158,19 +158,19 @@ float3 CalculateWindDisplacement(VS_INPUT input, float windTimer)
 	return float3(WindVector.xy, 0) * windPower;
 }
 
-#ifdef GRASS_LIGHTING
+#	ifdef GRASS_LIGHTING
 float4 GetMSPosition(VS_INPUT input, float3x3 world3x3)
-#else
+#	else
 float4 GetMSPosition(VS_INPUT input)
-#endif
+#	endif
 {
 	float3 inputPosition = input.Position.xyz * (input.InstanceData4.yyy * ScaleMask.xyz + float3(1, 1, 1));
 
-#ifdef GRASS_LIGHTING
+#	ifdef GRASS_LIGHTING
 	float3 transformedPosition = mul(world3x3, inputPosition);
 	float4 msPosition;
 	msPosition.xyz = input.InstanceData1.xyz + transformedPosition;
-#else
+#	else
 	float3 instancePosition;
 	instancePosition.z = dot(
 		float3(input.InstanceData4.x, input.InstanceData2.w, input.InstanceData3.w), inputPosition);
@@ -179,7 +179,7 @@ float4 GetMSPosition(VS_INPUT input)
 
 	float4 msPosition;
 	msPosition.xyz = input.InstanceData1.xyz + instancePosition;
-#endif
+#	endif
 	msPosition.w = 1;
 
 	return msPosition;
@@ -347,19 +347,19 @@ typedef VS_OUTPUT PS_INPUT;
 struct PS_OUTPUT
 {
 #	if defined(RENDER_DEPTH)
-	float4 PS : SV_Target0;
+	float4 PS: SV_Target0;
 #	else
-	float4 Diffuse : SV_Target0;
-	float2 MotionVectors : SV_Target1;
-	float4 NormalGlossiness : SV_Target2;
-	float4 Albedo : SV_Target3;
-	float4 Specular : SV_Target4;
+	float4 Diffuse: SV_Target0;
+	float2 MotionVectors: SV_Target1;
+	float4 NormalGlossiness: SV_Target2;
+	float4 Albedo: SV_Target3;
+	float4 Specular: SV_Target4;
 #		if defined(TRUE_PBR)
-	float4 Reflectance : SV_Target5;
+	float4 Reflectance: SV_Target5;
 #		endif  // TRUE_PBR
-	float4 Masks : SV_Target6;
+	float4 Masks: SV_Target6;
 #		if defined(TRUE_PBR)
-	float4 Parameters : SV_Target7;
+	float4 Parameters: SV_Target7;
 #		endif  // TRUE_PBR
 #	endif      // RENDER_DEPTH
 };
@@ -367,13 +367,13 @@ struct PS_OUTPUT
 struct PS_OUTPUT
 {
 #	if defined(RENDER_DEPTH)
-	float4 PS : SV_Target0;
+	float4 PS: SV_Target0;
 #	else
-	float4 Diffuse : SV_Target0;
-	float2 MotionVectors : SV_Target1;
-	float4 Normal : SV_Target2;
-	float4 Albedo : SV_Target3;
-	float4 Masks : SV_Target6;
+	float4 Diffuse: SV_Target0;
+	float2 MotionVectors: SV_Target1;
+	float4 Normal: SV_Target2;
+	float4 Albedo: SV_Target3;
+	float4 Masks: SV_Target6;
 #	endif
 };
 #endif
@@ -635,23 +635,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 	dirLightColor *= dirLightColorMultiplier;
 
-    float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
+	float wrapAmount = saturate(input.VertexNormal.w * 10.0) * 0.5 * (!complex);
 
-		if (SharedData::grassLightingSettings.EnableWrappedLighting)
-    {
-        // Old Wrapped Model
-        float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
-        lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(wrappedDirLight) * Color::VanillaNormalization();
-    }
-			else
-    {
-        // Original Standard Model
-        lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(dirLightAngle) * Color::VanillaNormalization();
-    }
+	if (SharedData::grassLightingSettings.EnableWrappedLighting) {
+		// Old Wrapped Model
+		float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
+		lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(wrappedDirLight) * Color::VanillaNormalization();
+	} else {
+		// Original Standard Model
+		lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(dirLightAngle) * Color::VanillaNormalization();
+	}
 
 	float3 vertexColor = input.VertexColor.xyz;
 
-#if defined(SKYLIGHTING)
+#				if defined(SKYLIGHTING)
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
 		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
@@ -724,15 +721,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float lightNoL = dot(normalizedLightDirection.xyz, viewDirection);
 				float3 lightDiffuseColor;
 
-				if (SharedData::grassLightingSettings.EnableWrappedLighting)
-				{
-                    float wrappedLight = saturate(lightAngle + wrapAmount) / (1.0 + wrapAmount);
+				if (SharedData::grassLightingSettings.EnableWrappedLighting) {
+					float wrappedLight = saturate(lightAngle + wrapAmount) / (1.0 + wrapAmount);
 					lightDiffuseColor = lightColor * wrappedLight;
+				} else {
+					lightDiffuseColor = lightColor * saturate(lightAngle);
 				}
-                else
-                {
-                    lightDiffuseColor = lightColor * saturate(lightAngle);
-                }
 
 				sss += lightColor * saturate(-lightAngle);
 
@@ -740,7 +734,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				if (complex)
 					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
-#endif
+#				endif
 			}
 		}
 	}
@@ -758,13 +752,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor.xyz = Color::IrradianceToGamma(diffuseColor.xyz);
 #			else
 
-	float3 directionalAmbientColor = Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0))));
-
-#				if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-	}
-#				endif  // IBL
+	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
 
 #				if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1.0;
@@ -783,17 +771,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif  // SKYLIGHTING
 
 #				if defined(IBL)
-	float3 iblColor = 0;
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-		{
-#					if defined(SKYLIGHTING)
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-			iblColor = Color::IrradianceToGamma(iblColor);
-			directionalAmbientColor += iblColor;
+	float3 envIBLColor = 0;
+	if (SharedData::iblSettings.EnableIBL) {
+		if (SharedData::iblSettings.DALCMode == 2) {
+			// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
+			envIBLColor = directionalAmbientColor * SharedData::iblSettings.DALCAmount;
+			directionalAmbientColor = envIBLColor + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-normal));
+		} else {
+			envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(-normal));
+			float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-normal));
+			directionalAmbientColor = envIBLColor + skyIBLColor;
 		}
 	}
 #				endif
@@ -801,7 +788,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor += directionalAmbientColor;
 
 #				if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= iblColor;
+	directionalAmbientColor -= envIBLColor;
 #				endif
 	diffuseColor *= albedo;
 	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
@@ -813,12 +800,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif
 
 #				if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += iblColor * albedo;
+	directionalAmbientColor += envIBLColor * albedo;
 #				endif
 
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
-	specularColor = Color::IrradianceToLinear(specularColor);
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
@@ -964,13 +950,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #			endif
 
-	float3 directionalAmbientColor = Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0))));
-
-#			if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-	}
-#			endif  // IBL
+	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
 
 #			if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1.0;
@@ -989,17 +969,16 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif  // SKYLIGHTING
 
 #			if defined(IBL)
-	float3 iblColor = 0;
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-		{
-#					if defined(SKYLIGHTING)
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-			iblColor = Color::IrradianceToGamma(iblColor);
-			directionalAmbientColor += iblColor;
+	float3 envIBLColor = 0;
+	if (SharedData::iblSettings.EnableIBL) {
+		if (SharedData::iblSettings.DALCMode == 2) {
+			// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
+			envIBLColor = directionalAmbientColor * SharedData::iblSettings.DALCAmount;
+			directionalAmbientColor = envIBLColor + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-normal));
+		} else {
+			envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(-normal));
+			float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-normal));
+			directionalAmbientColor = envIBLColor + skyIBLColor;
 		}
 	}
 #			endif
@@ -1010,7 +989,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	diffuseColor *= albedo;
 #			if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= iblColor;
+	directionalAmbientColor -= envIBLColor;
 #			endif
 	directionalAmbientColor *= albedo;
 
@@ -1019,7 +998,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 
 #			if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += iblColor * albedo;
+	directionalAmbientColor += envIBLColor * albedo;
 #			endif
 
 	psout.Diffuse.xyz = diffuseColor;

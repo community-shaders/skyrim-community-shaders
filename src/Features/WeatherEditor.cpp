@@ -278,15 +278,17 @@ void WeatherEditor::RenderWeatherDetailsWindow(bool* open)
 		return;
 
 	// Set initial position if not already set
+	const float scale = Util::GetUIScale();
 	if (!WeatherDetailsWindow.PositionSet) {
-		ImGui::SetNextWindowPos(ImVec2(50.0f, 50.0f));
-		WeatherDetailsWindow.Position = ImVec2(50.0f, 50.0f);
+		const float pos = 50.0f * scale;
+		ImGui::SetNextWindowPos(ImVec2(pos, pos));
+		WeatherDetailsWindow.Position = ImVec2(pos, pos);
 		WeatherDetailsWindow.PositionSet = true;
 	} else {
 		ImGui::SetNextWindowPos(WeatherDetailsWindow.Position, ImGuiCond_FirstUseEver);
 	}
 
-	ImGui::SetNextWindowSize(ImVec2(600, 800), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(600 * scale, 800 * scale), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin("Weather Details##Popup", open, ImGuiWindowFlags_None)) {
 		// Remember window position for next frame
 		ImVec2 currentPos = ImGui::GetWindowPos();

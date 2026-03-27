@@ -1,38 +1,38 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
-#include "Common/VR.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/VR.hlsli"
 
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
+	float4 Position: POSITION0;
 #if !defined(ENVCUBE)
-	float4 Normal : NORMAL0;
+	float4 Normal: NORMAL0;
 #endif
-	float4 TexCoord0 : TEXCOORD0;
+	float4 TexCoord0: TEXCOORD0;
 #if defined(ENVCUBE)
 	float4
 #else
 	int4
 #endif
-		TexCoord1 : TEXCOORD1;
+		TexCoord1: TEXCOORD1;
 #if defined(VR)
-	uint InstanceID : SV_INSTANCEID;
+	uint InstanceID: SV_INSTANCEID;
 #endif  // VR
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION0;
-	float4 Color : COLOR0;
-	float2 TexCoord0 : TEXCOORD0;
+	float4 Position: SV_POSITION0;
+	float4 Color: COLOR0;
+	float2 TexCoord0: TEXCOORD0;
 #if defined(ENVCUBE)
-	float4 PrecipitationOcclusionTexCoord : TEXCOORD1;
+	float4 PrecipitationOcclusionTexCoord: TEXCOORD1;
 #endif
 #if defined(VR)
-	float ClipDistance : SV_ClipDistance0;  // o11
-	float CullDistance : SV_CullDistance0;  // p11
-	uint EyeIndex : EYEIDX0;
+	float ClipDistance: SV_ClipDistance0;  // o11
+	float CullDistance: SV_CullDistance0;  // p11
+	uint EyeIndex: EYEIDX0;
 #endif  // VR
 };
 
@@ -209,8 +209,8 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color : SV_Target0;
-	float4 Normal : SV_Target1;
+	float4 Color: SV_Target0;
+	float4 Normal: SV_Target1;
 };
 
 #ifdef PSHADER
@@ -297,7 +297,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float unusedDetailedShadow;
 	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetLightingShadow(positionWS.xyz, eyeIndex, unusedDetailedShadow);
-	float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)).xyz);
+	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 
 	propertyColor += dirLightColor;
 	propertyColor += ambientColor;
@@ -322,12 +322,12 @@ PS_OUTPUT main(PS_INPUT input)
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - positionWS.xyz;
 				float lightDist = length(lightDirection);
 
-#			if defined(ISL)
+#		if defined(ISL)
 				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
-#			else
+#		else
 				float intensityFactor = saturate(lightDist / light.radius);
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-#			endif
+#		endif
 
 				float3 lightColor = light.color.xyz * intensityMultiplier;
 				propertyColor += lightColor;

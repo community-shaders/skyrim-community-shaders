@@ -7,7 +7,7 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color : SV_Target0;
+	float4 Color: SV_Target0;
 };
 
 #if defined(PSHADER)
@@ -137,7 +137,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
-		srgbColor = Color::TrueLinearToGamma(srgbColor);
+		srgbColor = Color::LinearToSrgb(srgbColor);
 	}
 	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
 

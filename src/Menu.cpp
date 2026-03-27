@@ -158,6 +158,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipClearCacheConfirmation,
 	AutoHideFeatureList,
 	SkipConstraintWarning,
+	RequireShiftToDock,
 	Theme,
 	SelectedThemePreset)
 
@@ -224,6 +225,9 @@ Menu::~Menu()
 	uiIcons.debug.Release();
 	uiIcons.materials.Release();
 	uiIcons.postProcessing.Release();
+	uiIcons.freeCamera.Release();
+	uiIcons.playMode.Release();
+	uiIcons.search.Release();
 
 	// Clean up blur resources
 	BackgroundBlur::Cleanup();
@@ -614,6 +618,7 @@ void Menu::Init()
 
 	auto& imgui_io = ImGui::GetIO();
 	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
+	imgui_io.ConfigDockingWithShift = settings.RequireShiftToDock;
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;
 
 	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
@@ -705,7 +710,7 @@ void Menu::DrawSettings()
 			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
 		}
 
-		const float uiScale = exp2(globalScale);  // Get current UI scale
+		const float uiScale = exp2(globalScale);  // User's manual GlobalScale for header icons
 		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
 		// For docked mode, always show icons if textures are available
 		bool canShowIcons = settings.Theme.ShowActionIcons &&
@@ -720,7 +725,7 @@ void Menu::DrawSettings()
 		// Main content starts here - no additional separator needed as it's already handled in the conditions above
 
 		float footer_height = settings.Theme.ShowFooter ?
-		                          (ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3 + 3.0f) :
+		                          (ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3) :
 		                          0.0f;
 
 		// Static storage for menu state - must persist across frames
@@ -947,9 +952,15 @@ void Menu::ProcessInputEventQueue()
 		}
 		if (event.device == RE::INPUT_DEVICE::kMouse) {
 			logger::trace("Detect mouse scan code {} value {} pressed: {}", event.keyCode, event.value, event.IsPressed());
+			auto* ew = EditorWindow::GetSingleton();
+			bool flying = ew && ew->IsPreviewFlying();
 			if (event.keyCode > 7) {  // middle scroll
-				io.AddMouseWheelEvent(0, event.value * (event.keyCode == 8 ? 1 : -1));
-			} else {
+				if (ew && ew->previewMode == EditorWindow::PreviewMode::FreeCamera) {
+					ew->AdjustFlySpeed(event.keyCode == 8 ? 1.0f : -1.0f);
+				} else if (!flying) {
+					io.AddMouseWheelEvent(0, event.value * (event.keyCode == 8 ? 1 : -1));
+				}
+			} else if (!flying) {
 				if (event.keyCode > 5)
 					event.keyCode = 5;
 				io.AddMouseButtonEvent(event.keyCode, event.IsPressed());
@@ -1041,7 +1052,22 @@ void Menu::ProcessInputEventQueue()
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
 						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
-						{ settings.WeatherEditorToggleKey, []() { auto p = RE::PlayerCharacter::GetSingleton(); if (p && p->parentCell) EditorWindow::GetSingleton()->open = !EditorWindow::GetSingleton()->open; } },
+						{ settings.WeatherEditorToggleKey, []() {
+							 auto* ew = EditorWindow::GetSingleton();
+							 if (!ew)
+								 return;
+							 if (ew->GetPreviewMode() == EditorWindow::PreviewMode::FreeCamera) {
+								 // Flying → lock camera position for editing
+								 ew->ToggleFreeCameraLock();
+							 } else if (ew->IsInPreviewMode()) {
+								 // Locked or PlayMode → fully exit preview
+								 ew->ExitPreviewMode();
+							 } else {
+								 auto p = RE::PlayerCharacter::GetSingleton();
+								 if (p && p->parentCell)
+									 ew->open = !ew->open;
+							 }
+						 } },
 					};
 					for (const auto& ka : keyActions) {
 						// Check if key matches last key in combo and all modifiers are held (exact match)
@@ -1081,7 +1107,9 @@ void Menu::ProcessInputEventQueue()
 				// Handle ESC key for menu and editor window
 				auto* editorWindow = EditorWindow::GetSingleton();
 				if (key == VK_ESCAPE) {
-					if (editorWindow && editorWindow->open && editorWindow->ShouldHandleEscapeKey()) {
+					if (editorWindow && editorWindow->IsInPreviewMode()) {
+						editorWindow->ExitPreviewMode();
+					} else if (editorWindow && editorWindow->open && editorWindow->ShouldHandleEscapeKey()) {
 						editorWindow->open = false;
 					} else if (IsEnabled && (!editorWindow || !editorWindow->open)) {
 						IsEnabled = false;
@@ -1089,28 +1117,20 @@ void Menu::ProcessInputEventQueue()
 				}
 			}
 
-			io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), event.IsPressed());
+			// DirectInput loses key-up events after alt-tab; validate against OS state.
+			bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
+			io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
 
 			if (key == VK_LCONTROL || key == VK_RCONTROL)
-				io.AddKeyEvent(ImGuiMod_Ctrl, event.IsPressed());
+				io.AddKeyEvent(ImGuiMod_Ctrl, pressed);
 			else if (key == VK_LSHIFT || key == VK_RSHIFT)
-				io.AddKeyEvent(ImGuiMod_Shift, event.IsPressed());
+				io.AddKeyEvent(ImGuiMod_Shift, pressed);
 			else if (key == VK_LMENU || key == VK_RMENU)
-				io.AddKeyEvent(ImGuiMod_Alt, event.IsPressed());
+				io.AddKeyEvent(ImGuiMod_Alt, pressed);
 		}
 	}
 
 	_keyEventQueue.clear();
-
-	// Fallback: release stuck Shift and Tab if OS reports them not pressed
-	if ((io.KeysDown[ImGuiKey_LeftShift] && !(GetAsyncKeyState(VK_LSHIFT) & Constants::KEY_PRESSED_MASK)) ||
-		(io.KeysDown[ImGuiKey_RightShift] && !(GetAsyncKeyState(VK_RSHIFT) & Constants::KEY_PRESSED_MASK))) {
-		io.AddKeyEvent(ImGuiKey_LeftShift, false);
-		io.AddKeyEvent(ImGuiKey_RightShift, false);
-	}
-	if (io.KeysDown[ImGuiKey_Tab] && !(GetAsyncKeyState(VK_TAB) & Constants::KEY_PRESSED_MASK)) {
-		io.AddKeyEvent(ImGuiKey_Tab, false);
-	}
 }
 
 void Menu::addToEventQueue(KeyEvent e)
@@ -1158,6 +1178,12 @@ bool Menu::ShouldSwallowInput()
 {
 	auto editorWindow = EditorWindow::GetSingleton();
 	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup() || (editorWindow && editorWindow->open);
+}
+
+bool Menu::IsPreviewFlying()
+{
+	auto editorWindow = EditorWindow::GetSingleton();
+	return editorWindow && editorWindow->IsPreviewFlying();
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)

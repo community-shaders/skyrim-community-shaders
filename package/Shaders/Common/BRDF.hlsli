@@ -31,23 +31,23 @@
 namespace BRDF
 {
 
-    // Diffuse BRDFs
-    float Diffuse_Lambert()
-    {
-        return 1.0 / Math::PI;
-    }
+	// Diffuse BRDFs
+	float Diffuse_Lambert()
+	{
+		return 1.0 / Math::PI;
+	}
 
-    // [Burley 2012, "Physically-Based Shading at Disney"]
-    float3 Diffuse_Burley(float roughness, float NdotV, float NdotL, float VdotH)
-    {
-        float FD90 = 0.5 + 2.0 * VdotH * VdotH * roughness;
-        float FdV = 1.0 + (FD90 - 1.0) * pow(1.0 - NdotV, 5.0);
-        float FdL = 1.0 + (FD90 - 1.0) * pow(1.0 - NdotL, 5.0);
-        return (1.0 / Math::PI) * (FdV * FdL);
-    }
+	// [Burley 2012, "Physically-Based Shading at Disney"]
+	float3 Diffuse_Burley(float roughness, float NdotV, float NdotL, float VdotH)
+	{
+		float FD90 = 0.5 + 2.0 * VdotH * VdotH * roughness;
+		float FdV = 1.0 + (FD90 - 1.0) * pow(1.0 - NdotV, 5.0);
+		float FdL = 1.0 + (FD90 - 1.0) * pow(1.0 - NdotL, 5.0);
+		return (1.0 / Math::PI) * (FdV * FdL);
+	}
 
-    // [Gotanda 2012, "Beyond a Simple Physically Based Blinn-Phong Model in Real-Time"]
-    float3 Diffuse_OrenNayar(float roughness, float3 N, float3 V, float3 L, float NdotV, float NdotL)
+	// [Gotanda 2012, "Beyond a Simple Physically Based Blinn-Phong Model in Real-Time"]
+	float3 Diffuse_OrenNayar(float roughness, float3 N, float3 V, float3 L, float NdotV, float NdotL)
 	{
 		float a = roughness * roughness * 0.25;
 		float A = 1.0 - 0.5 * (a / (a + 0.33));
@@ -62,8 +62,8 @@ namespace BRDF
 		return (1 / Math::PI) * (A + B * max(0.0, gamma) * C);
 	}
 
-    // [Gotanda 2014, "Designing Reflectance Models for New Consoles"]
-    float3 Diffuse_Gotanda(float roughness, float NdotV, float NdotL, float VdotL)
+	// [Gotanda 2014, "Designing Reflectance Models for New Consoles"]
+	float3 Diffuse_Gotanda(float roughness, float NdotV, float NdotL, float VdotL)
 	{
 		float a = roughness * roughness;
 		float a2 = a * a;
@@ -77,8 +77,8 @@ namespace BRDF
 		return (1 / Math::PI) * Lr;
 	}
 
-    // [ Chan 2018, "Material Advances in Call of Duty: WWII" ]
-    float3 Diffuse_Chan(float roughness, float NdotV, float NdotL, float VdotH, float NdotH)
+	// [ Chan 2018, "Material Advances in Call of Duty: WWII" ]
+	float3 Diffuse_Chan(float roughness, float NdotV, float NdotL, float VdotH, float NdotH)
 	{
 		float a = roughness * roughness;
 		float a2 = a * a;
@@ -95,57 +95,57 @@ namespace BRDF
 		return (1 / Math::PI) * (Fd + Fb);
 	}
 
-    // Specular BRDFs
-    // [Schlick 1994, "An Inexpensive BRDF Model for Physically-Based Rendering"]
-    float3 F_Schlick(float3 specularColor, float VdotH)
+	// Specular BRDFs
+	// [Schlick 1994, "An Inexpensive BRDF Model for Physically-Based Rendering"]
+	float3 F_Schlick(float3 F0, float VdotH)
 	{
 		float Fc = pow(1 - VdotH, 5);
-		return Fc + (1 - Fc) * specularColor;
+		return Fc + (1 - Fc) * F0;
 	}
 
-    float3 F_Schlick(float3 F0, float3 F90, float VdotH)
-    {
-        float Fc = pow(1 - VdotH, 5);
-        return F0 + (F90 - F0) * Fc;
-    }
+	float3 F_Schlick(float3 F0, float3 F90, float VdotH)
+	{
+		float Fc = pow(1 - VdotH, 5);
+		return F0 + (F90 - F0) * Fc;
+	}
 
-    // [Kutz et al. 2021, "Novel aspects of the Adobe Standard Material" ]
-    float3 F_AdobeF82(float3 F0, float3 F82, float VdotH)
-    {
-        const float Fc = pow(1 - VdotH, 5);
-        const float K = 49.0 / 46656.0;
-        float3 b = (K - K * F82) * (7776.0 + 9031.0 * F0);
-        return saturate(F0 + Fc * ((1 - F0) - b * (VdotH - VdotH * VdotH)));
-    }
+	// [Kutz et al. 2021, "Novel aspects of the Adobe Standard Material" ]
+	float3 F_AdobeF82(float3 F0, float3 F82, float VdotH)
+	{
+		const float Fc = pow(1 - VdotH, 5);
+		const float K = 49.0 / 46656.0;
+		float3 b = (K - K * F82) * (7776.0 + 9031.0 * F0);
+		return saturate(F0 + Fc * ((1 - F0) - b * (VdotH - VdotH * VdotH)));
+	}
 
-    // [Beckmann 1963, "The scattering of electromagnetic waves from rough surfaces"]
-    float D_Beckmann(float roughness, float NdotH)
-    {
-        float NdotH2 = NdotH * NdotH;
-        float a = roughness * roughness;
-        float a2 = a * a;
-        return exp((NdotH2 - 1.0) / (a2 * NdotH2)) / (Math::PI * a2 * NdotH2 * NdotH2);
-    }
+	// [Beckmann 1963, "The scattering of electromagnetic waves from rough surfaces"]
+	float D_Beckmann(float roughness, float NdotH)
+	{
+		float NdotH2 = NdotH * NdotH;
+		float a = roughness * roughness;
+		float a2 = a * a;
+		return exp((NdotH2 - 1.0) / (a2 * NdotH2)) / (Math::PI * a2 * NdotH2 * NdotH2);
+	}
 
-    // [Walter et al. 2007, "Microfacet models for refraction through rough surfaces"]
-    float D_GGX(float roughness, float NdotH)
-    {
-        float NdotH2 = NdotH * NdotH;
-        float a = roughness * roughness;
-        float a2 = a * a;
-        float d = NdotH2 * (a2 - 1.0) + 1.0;
-        return (a2 / (Math::PI * d * d));
-    }
+	// [Walter et al. 2007, "Microfacet models for refraction through rough surfaces"]
+	float D_GGX(float roughness, float NdotH)
+	{
+		float NdotH2 = NdotH * NdotH;
+		float a = roughness * roughness;
+		float a2 = a * a;
+		float d = NdotH2 * (a2 - 1.0) + 1.0;
+		return (a2 / (Math::PI * d * d));
+	}
 
-    // [Burley 2012, "Physically-Based Shading at Disney"]
-    float D_AnisoGGX(float alphaX, float alphaY, float NdotH, float XdotH, float YdotH)
-    {
-        float d = XdotH * XdotH / (alphaX * alphaX) + YdotH * YdotH / (alphaY * alphaY) + NdotH * NdotH;
-        return rcp(Math::PI * alphaX * alphaY * d * d);
-    }
+	// [Burley 2012, "Physically-Based Shading at Disney"]
+	float D_AnisoGGX(float alphaX, float alphaY, float NdotH, float XdotH, float YdotH)
+	{
+		float d = XdotH * XdotH / (alphaX * alphaX) + YdotH * YdotH / (alphaY * alphaY) + NdotH * NdotH;
+		return rcp(Math::PI * alphaX * alphaY * d * d);
+	}
 
-    // [Estevez et al. 2017, "Production Friendly Microfacet Sheen BRDF"]
-    float D_Charlie(float roughness, float NdotH)
+	// [Estevez et al. 2017, "Production Friendly Microfacet Sheen BRDF"]
+	float D_Charlie(float roughness, float NdotH)
 	{
 		float invAlpha = pow(abs(roughness), -4);
 		float cos2h = NdotH * NdotH;
@@ -153,71 +153,71 @@ namespace BRDF
 		return (2.0 + invAlpha) * pow(abs(sin2h), invAlpha * 0.5) / Math::TAU;
 	}
 
-    // Smith term for GGX
-    // [Smith 1967, "Geometrical shadowing of a random rough surface"]
-    float Vis_Smith(float roughness, float NdotV, float NdotL)
-    {
-        float a = roughness * roughness;
-        float a2 = a * a;
-        float Vis_SmithV = NdotV + sqrt(a2 + (1.0 - a2) * NdotV * NdotV);
-        float Vis_SmithL = NdotL + sqrt(a2 + (1.0 - a2) * NdotL * NdotL);
-        return rcp(max(Vis_SmithV * Vis_SmithL, EPSILON_DIVISION));
-    }
+	// Smith term for GGX
+	// [Smith 1967, "Geometrical shadowing of a random rough surface"]
+	float Vis_Smith(float roughness, float NdotV, float NdotL)
+	{
+		float a = roughness * roughness;
+		float a2 = a * a;
+		float Vis_SmithV = NdotV + sqrt(a2 + (1.0 - a2) * NdotV * NdotV);
+		float Vis_SmithL = NdotL + sqrt(a2 + (1.0 - a2) * NdotL * NdotL);
+		return rcp(max(Vis_SmithV * Vis_SmithL, EPSILON_DIVISION));
+	}
 
-    // Appoximation of joint Smith term for GGX
-    // [Heitz 2014, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"]
-    float Vis_SmithJointApprox(float roughness, float NdotV, float NdotL)
-    {
-        float a = roughness * roughness;
-        float Vis_SmithV = NdotL * (NdotV * (1.0 + a) + a);
-        float Vis_SmithL = NdotV * (NdotL * (1.0 + a) + a);
-        return rcp(max(Vis_SmithV + Vis_SmithL, EPSILON_DIVISION)) * 0.5;
-    }
+	// Appoximation of joint Smith term for GGX
+	// [Heitz 2014, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"]
+	float Vis_SmithJointApprox(float roughness, float NdotV, float NdotL)
+	{
+		float a = roughness * roughness;
+		float Vis_SmithV = NdotL * (NdotV * (1.0 + a) + a);
+		float Vis_SmithL = NdotV * (NdotL * (1.0 + a) + a);
+		return rcp(max(Vis_SmithV + Vis_SmithL, EPSILON_DIVISION)) * 0.5;
+	}
 
-    float Vis_SmithJoint(float roughness, float NdotV, float NdotL)
-    {
-        float a = roughness * roughness;
-        float a2 = a * a;
-        float Vis_SmithV = NdotL * sqrt(a2 + (1.0 - a2) * NdotV * NdotV);
-        float Vis_SmithL = NdotV * sqrt(a2 + (1.0 - a2) * NdotL * NdotL);
-        return rcp(max(Vis_SmithV + Vis_SmithL, EPSILON_DIVISION)) * 0.5;
-    }
+	float Vis_SmithJoint(float roughness, float NdotV, float NdotL)
+	{
+		float a = roughness * roughness;
+		float a2 = a * a;
+		float Vis_SmithV = NdotL * sqrt(a2 + (1.0 - a2) * NdotV * NdotV);
+		float Vis_SmithL = NdotV * sqrt(a2 + (1.0 - a2) * NdotL * NdotL);
+		return rcp(max(Vis_SmithV + Vis_SmithL, EPSILON_DIVISION)) * 0.5;
+	}
 
-    float Vis_SmithJointAniso(float alphaX, float alphaY, float NdotL, float NdotV, float XdotL, float YdotL, float XdotV, float YdotV)
-    {
-        float Vis_SmithV = NdotL * length(float3(alphaX * XdotV, alphaY * YdotV, NdotV));
-        float Vis_SmithL = NdotV * length(float3(alphaX * XdotL, alphaY * YdotL, NdotL));
-        return rcp(max(Vis_SmithV + Vis_SmithL, EPSILON_DIVISION)) * 0.5;
-    }
+	float Vis_SmithJointAniso(float alphaX, float alphaY, float NdotL, float NdotV, float XdotL, float YdotL, float XdotV, float YdotV)
+	{
+		float Vis_SmithV = NdotL * length(float3(alphaX * XdotV, alphaY * YdotV, NdotV));
+		float Vis_SmithL = NdotV * length(float3(alphaX * XdotL, alphaY * YdotL, NdotL));
+		return rcp(max(Vis_SmithV + Vis_SmithL, EPSILON_DIVISION)) * 0.5;
+	}
 
-    // [Estevez and Kulla 2017, "Production Friendly Microfacet Sheen BRDF"]
-    float Vis_Charlie_L(float x, float r)
-    {
-        r = saturate(r);
-        r = 1.0 - (1.0 - r) * (1.0 - r);
-        float a = lerp(25.3245 , 21.5473 , r);
-        float b = lerp( 3.32435,  3.82987, r);
-        float c = lerp( 0.16801,  0.19823, r);
-        float d = lerp(-1.27393, -1.97760, r);
-        float e = lerp(-4.85967, -4.32054, r);
+	// [Estevez and Kulla 2017, "Production Friendly Microfacet Sheen BRDF"]
+	float Vis_Charlie_L(float x, float r)
+	{
+		r = saturate(r);
+		r = 1.0 - (1.0 - r) * (1.0 - r);
+		float a = lerp(25.3245, 21.5473, r);
+		float b = lerp(3.32435, 3.82987, r);
+		float c = lerp(0.16801, 0.19823, r);
+		float d = lerp(-1.27393, -1.97760, r);
+		float e = lerp(-4.85967, -4.32054, r);
 
-        return a * rcp((1 + b * pow(x, c)) + d * x + e);
-    }
+		return a * rcp((1 + b * pow(x, c)) + d * x + e);
+	}
 
-    float Vis_Charlie(float roughness, float NdotV, float NdotL)
-    {
-        float visV = NdotV < 0.5 ? exp(Vis_Charlie_L(NdotV, roughness)) : exp(2.0 * Vis_Charlie_L(0.5, roughness) - Vis_Charlie_L(1.0 - NdotV, roughness));
-        float visL = NdotL < 0.5 ? exp(Vis_Charlie_L(NdotL, roughness)) : exp(2.0 * Vis_Charlie_L(0.5, roughness) - Vis_Charlie_L(1.0 - NdotL, roughness));
-        return rcp(((1.0 + visV + visL) * max(4.0 * NdotL * NdotV, EPSILON_DIVISION)));
-    }
+	float Vis_Charlie(float roughness, float NdotV, float NdotL)
+	{
+		float visV = NdotV < 0.5 ? exp(Vis_Charlie_L(NdotV, roughness)) : exp(2.0 * Vis_Charlie_L(0.5, roughness) - Vis_Charlie_L(1.0 - NdotV, roughness));
+		float visL = NdotL < 0.5 ? exp(Vis_Charlie_L(NdotL, roughness)) : exp(2.0 * Vis_Charlie_L(0.5, roughness) - Vis_Charlie_L(1.0 - NdotL, roughness));
+		return rcp(((1.0 + visV + visL) * max(4.0 * NdotL * NdotV, EPSILON_DIVISION)));
+	}
 
-    // [Neubelt et al. 2013, "Crafting a Next-gen Material Pipeline for The Order: 1886"]
-    float Vis_Neubelt(float NdotV, float NdotL)
-    {
-        return rcp(4.0 * max(NdotL + NdotV - NdotL * NdotV, EPSILON_DIVISION));
-    }
+	// [Neubelt et al. 2013, "Crafting a Next-gen Material Pipeline for The Order: 1886"]
+	float Vis_Neubelt(float NdotV, float NdotL)
+	{
+		return rcp(4.0 * max(NdotL + NdotV - NdotL * NdotV, EPSILON_DIVISION));
+	}
 
-    // [Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II"]
+	// [Lazarov 2013, "Getting More Physical in Call of Duty: Black Ops II"]
 	float2 EnvBRDFApproxLazarov(float roughness, float NdotV)
 	{
 		const float4 c0 = { -1, -0.0275, -0.572, 0.022 };
@@ -228,36 +228,36 @@ namespace BRDF
 		return AB;
 	}
 
-    // [Hirvonen et al. 2019 "Accurate Real-Time Specular Reflections with Radiance Caching"]
-    float2 EnvBRDFApproxHirvonen(float roughness, float NdotV)
+	// [Hirvonen et al. 2019 "Accurate Real-Time Specular Reflections with Radiance Caching"]
+	float2 EnvBRDFApproxHirvonen(float roughness, float NdotV)
 	{
 		const float2x2 m0 = float2x2(0.99044, -1.28514, 1.29678, -0.755907);
-        const float3x3 m1 = float3x3(1, 2.92338, 59.4188, 20.3225, -27.0302, 222.592, 121.563, 626.13, 316.627);
-        const float2x2 m2 = float2x2(0.0365463, 3.32707, 9.0632, -9.04756);
-        const float3x3 m3 = float3x3(1, 3.59685, -1.36772, 9.04401, -16.3174, 9.22949, 5.56589, 19.7886, -20.2123);
+		const float3x3 m1 = float3x3(1, 2.92338, 59.4188, 20.3225, -27.0302, 222.592, 121.563, 626.13, 316.627);
+		const float2x2 m2 = float2x2(0.0365463, 3.32707, 9.0632, -9.04756);
+		const float3x3 m3 = float3x3(1, 3.59685, -1.36772, 9.04401, -16.3174, 9.22949, 5.56589, 19.7886, -20.2123);
 
-        float a = roughness * roughness;
-        float a2 = a * a;
-        float a3 = a * a2;
-        float c = NdotV;
-        float c2 = c * c;
-        float c3 = c * c2;
+		float a = roughness * roughness;
+		float a2 = a * a;
+		float a3 = a * a2;
+		float c = NdotV;
+		float c2 = c * c;
+		float c3 = c * c2;
 
-        float k0 = dot(float2(1.0, a), mul(m0, float2(1.0, c)));
-        k0 /= dot(float3(1.0, a, a3), mul(m1, float3(1.0, c, c3)));
-        float k1 = dot(float2(1.0, a), mul(m2, float2(1.0, c)));
-        k1 /= dot(float3(1.0, a, a3), mul(m3, float3(1.0, c2, c3)));
+		float k0 = dot(float2(1.0, a), mul(m0, float2(1.0, c)));
+		k0 /= dot(float3(1.0, a, a3), mul(m1, float3(1.0, c, c3)));
+		float k1 = dot(float2(1.0, a), mul(m2, float2(1.0, c)));
+		k1 /= dot(float3(1.0, a, a3), mul(m3, float3(1.0, c2, c3)));
 
-        return float2(k1, k0);
+		return float2(k1, k0);
 	}
 
-    float2 EnvBRDF(float roughness, float NdotV)
+	float2 EnvBRDF(float roughness, float NdotV)
 	{
-#   if defined(ENV_BRDF_HIRVONEN)
+#if defined(ENV_BRDF_HIRVONEN)
 		return EnvBRDFApproxHirvonen(roughness, NdotV);
-#   else
-        return EnvBRDFApproxLazarov(roughness, NdotV);
-#   endif
+#else
+		return EnvBRDFApproxLazarov(roughness, NdotV);
+#endif
 	}
 }
 

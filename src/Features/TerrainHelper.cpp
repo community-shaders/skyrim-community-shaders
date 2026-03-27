@@ -42,7 +42,7 @@ bool TerrainHelper::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 		const auto& children = land->loadedData->mesh[quadI]->GetChildren();
 		auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
 		if (geometry != nullptr) {
-			const auto shaderProp = static_cast<RE::BSLightingShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get());
+			const auto shaderProp = static_cast<RE::BSLightingShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get());
 			if (shaderProp != nullptr) {
 				hashKey = shaderProp->GetBaseMaterial()->hashKey;
 			}

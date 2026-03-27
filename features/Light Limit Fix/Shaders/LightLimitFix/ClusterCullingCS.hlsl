@@ -29,11 +29,7 @@ bool LightIntersectsCluster(float3 position, float radiusSquared, ClusterAABB cl
 }
 
 [numthreads(NUMTHREAD_X, NUMTHREAD_Y, NUMTHREAD_Z)] void main(
-	uint3 groupId
-	: SV_GroupID, uint3 dispatchThreadId
-	: SV_DispatchThreadID, uint3 groupThreadId
-	: SV_GroupThreadID, uint groupIndex
-	: SV_GroupIndex) {
+	uint3 groupId : SV_GroupID, uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV_GroupThreadID, uint groupIndex : SV_GroupIndex) {
 	if (any(dispatchThreadId >= uint3(ClusterSize.x, ClusterSize.y, ClusterSize.z)))
 		return;
 
@@ -61,7 +57,7 @@ bool LightIntersectsCluster(float3 position, float radiusSquared, ClusterAABB cl
 
 #if defined(VR)
 		float3 positionVSLeft = FrameBuffer::WorldToView(light.positionWS[0].xyz, true, 0);
-		float3 positionVSRight = FrameBuffer::WorldToView(light.positionWS[1].xyz, true, 0);
+		float3 positionVSRight = FrameBuffer::WorldToView(light.positionWS[1].xyz, true, 1);
 
 		[branch] if (LightIntersectsCluster(positionVSLeft, radiusSquared, cluster) || LightIntersectsCluster(positionVSRight, radiusSquared, cluster))
 		{

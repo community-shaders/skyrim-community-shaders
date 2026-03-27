@@ -88,7 +88,8 @@ cbuffer PerTechnique : register(b0)
 
 	bool noShadow = !SharedData::InInterior || SharedData::interiorSunSettings.IsInteriorWithSun;
 	if (EndSplitDistances.z >= shadowMapDepth) {
-		uint cascadeIndex = ShadowMapCount >= 3.0f && shadowMapDepth > EndSplitDistances.y ? 2 : shadowMapDepth > EndSplitDistances.x ? 1 : 0;
+		uint cascadeIndex = ShadowMapCount >= 3.0f && shadowMapDepth > EndSplitDistances.y ? 2 : shadowMapDepth > EndSplitDistances.x ? 1 :
+		                                                                                                                                0;
 		float shadowMapThreshold = cascadeIndex == 0 ? 0.01f : 0.0f;
 		float4x3 lightProjectionMatrix = ShadowMapProj[eyeIndex][cascadeIndex];
 
@@ -112,6 +113,11 @@ cbuffer PerTechnique : register(b0)
 	float phaseContribution = lerp(1, phaseFactor, PhaseContribution);
 
 	float shadowContribution = noShadow;
+
+#	if defined(TERRAIN_SHADOWS) || defined(CLOUD_SHADOWS)
+	shadowContribution *= sqrt(ShadowSampling::GetWorldShadow(positionWS.xyz, PosAdjust[eyeIndex], eyeIndex));
+#	endif
+
 	float vl = shadowContribution * densityContribution * phaseContribution;
 
 	DensityRW[dispatchID.xyz] = vl;

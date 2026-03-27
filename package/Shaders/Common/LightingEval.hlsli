@@ -14,15 +14,15 @@ DirectContext CreateDirectLightingContext(float3 worldNormal, float3 coatWorldNo
 DirectContext CreateDirectLightingContext(float3 worldNormal, float3 vertexNormal, float3 viewDir, float3 lightDir, float3 lightColor, float detailedShadow, float softShadow)
 #endif
 {
-    DirectContext context = (DirectContext)0;
-    context.worldNormal = normalize(worldNormal);
-    context.vertexNormal = normalize(vertexNormal);
-    context.viewDir = normalize(viewDir);
-    context.lightDir = normalize(lightDir);
-    context.halfVector = normalize(context.viewDir + context.lightDir);
-    context.lightColor = lightColor;
-    context.detailedShadow = detailedShadow;
-    context.softShadow = softShadow;
+	DirectContext context = (DirectContext)0;
+	context.worldNormal = normalize(worldNormal);
+	context.vertexNormal = normalize(vertexNormal);
+	context.viewDir = normalize(viewDir);
+	context.lightDir = normalize(lightDir);
+	context.halfVector = normalize(context.viewDir + context.lightDir);
+	context.lightColor = lightColor;
+	context.detailedShadow = detailedShadow;
+	context.softShadow = softShadow;
 #if defined(TRUE_PBR)
 	context.coatWorldNormal = normalize(coatWorldNormal);
 	context.coatViewDir = normalize(coatViewDir);
@@ -37,7 +37,7 @@ DirectContext CreateDirectLightingContext(float3 worldNormal, float3 vertexNorma
 		context.coatLightColor = context.lightColor * detailedShadow;
 	}
 #endif
-    return context;
+	return context;
 }
 
 IndirectContext CreateIndirectLightingContext(float3 worldNormal, float3 vertexNormal, float3 viewDir)
@@ -51,35 +51,35 @@ IndirectContext CreateIndirectLightingContext(float3 worldNormal, float3 vertexN
 
 float3 VanillaSpecular(DirectContext context, float shininess, float2 uv)
 {
-    const float3 N = context.worldNormal;
-    const float3 G = context.vertexNormal;
-    float3 V = context.viewDir;
-    const float3 L = context.lightDir;
-    const float3 H = context.halfVector;
-    float HdotN;
-#	if defined(ANISO_LIGHTING)
+	const float3 N = context.worldNormal;
+	const float3 G = context.vertexNormal;
+	float3 V = context.viewDir;
+	const float3 L = context.lightDir;
+	const float3 H = context.halfVector;
+	float HdotN;
+#if defined(ANISO_LIGHTING)
 	const float3 AN = normalize(N * 0.5 + G);
 	float LdotAN = dot(AN, L);
 	float HdotAN = dot(AN, H);
 	HdotN = 1 - min(1, abs(LdotAN - HdotAN));
-#	else
+#else
 	HdotN = saturate(dot(H, N));
-#	endif
+#endif
 
-#	if defined(SPECULAR)
+#if defined(SPECULAR)
 	float lightColorMultiplier = exp2(shininess * log2(HdotN));
 
-#	elif defined(SPARKLE)
+#elif defined(SPARKLE)
 	float lightColorMultiplier = 0;
-#	else
+#else
 	float lightColorMultiplier = HdotN;
-#	endif
+#endif
 
-#	if defined(ANISO_LIGHTING)
+#if defined(ANISO_LIGHTING)
 	lightColorMultiplier *= 0.7 * max(0, L.z);
-#	endif
+#endif
 
-#	if defined(SPARKLE) && !defined(SNOW)
+#if defined(SPARKLE) && !defined(SNOW)
 	float3 sparkleUvScale = exp2(float3(1.3, 1.6, 1.9) * log2(abs(SparkleParams.x)).xxx);
 
 	float sparkleColor1 = TexProjDetail.Sample(SampProjDetailSampler, uv * sparkleUvScale.xx).z;
@@ -91,7 +91,7 @@ float3 VanillaSpecular(DirectContext context, float shininess, float2 uv)
 	float sparkleMultiplier = exp2(SparkleParams.w * log2(saturate(dot(V, -L)))) * (SparkleParams.z * sparkleColor);
 	sparkleMultiplier = sparkleMultiplier >= 0.5 ? 1 : 0;
 	lightColorMultiplier += sparkleMultiplier * HdotN;
-#	endif
+#endif
 	return lightColorMultiplier;
 }
 
@@ -102,8 +102,7 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	PBR::GetDirectLightInput(lightingOutput, context, material, tbnTr, uv);
 #else
 #	if defined(HAIR) && defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled)
-	{
+	if (SharedData::hairSpecularSettings.Enabled) {
 		Hair::GetHairDirectLight(lightingOutput, context, material, tbnTr, uv);
 		return;
 	}
@@ -111,18 +110,18 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	const float NdotL = dot(context.worldNormal, context.lightDir);
 	float3 diffuseLightColor = context.lightColor * context.detailedShadow;
 	float3 softLightColor = context.lightColor * context.softShadow;
-    lightingOutput.diffuse = saturate(NdotL) * diffuseLightColor * Color::VanillaNormalization();
-#		if defined(SOFT_LIGHTING)
+	lightingOutput.diffuse = saturate(NdotL) * diffuseLightColor * Color::VanillaNormalization();
+#	if defined(SOFT_LIGHTING)
 	lightingOutput.diffuse += softLightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor * Color::VanillaNormalization();
-#		endif
+#	endif
 
-#		if defined(RIM_LIGHTING)
+#	if defined(RIM_LIGHTING)
 	lightingOutput.diffuse += softLightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * material.rimSoftLightColor * Color::VanillaNormalization();
-#		endif
+#	endif
 
-#		if defined(BACK_LIGHTING)
+#	if defined(BACK_LIGHTING)
 	lightingOutput.diffuse += softLightColor * saturate(-NdotL) * material.backLightColor * Color::VanillaNormalization();
-#		endif
+#	endif
 	lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * diffuseLightColor * Color::VanillaNormalization();
 #endif
 }
@@ -134,15 +133,14 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 	PBR::GetIndirectLobeWeights(lobeWeights, context, material);
 #else
 #	if defined(HAIR) && defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled)
-	{
+	if (SharedData::hairSpecularSettings.Enabled) {
 		Hair::GetHairIndirectLobeWeights(lobeWeights, context, material, uv);
 		return;
 	}
 #	endif
 	lobeWeights.diffuse = material.BaseColor;
 #	if defined(DYNAMIC_CUBEMAPS)
-	if (any(material.F0 > 0)) {
+	if (any(material.F0 > 0.0)) {
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
 		const float3 VN = context.vertexNormal;
@@ -151,14 +149,6 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 
 		float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
 		lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
-		lobeWeights.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		lobeWeights.specular *= horizon;
 	}
 #	endif
 #endif
@@ -190,16 +180,17 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 	float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
 	float3 F = BRDF::F_Schlick(wetnessF0, VdotH);
 
-	F *= wetnessStrength;
+	// Separate physical Fresnel from effective contribution weighted by strength
+	float3 wetnessF = F * wetnessStrength;
 
-	float3 wetnessSpecular = D * G * F * NdotL * lightColor;
+	float3 wetnessSpecular = D * G * wetnessF * NdotL * lightColor;
 
-#if !defined(TRUE_PBR)
+#	if !defined(TRUE_PBR)
 	wetnessSpecular *= Color::PBRLightingCompensation * Color::PBRLightingScale;  // Compensate for GGX on traditional specular
-#endif
+#	endif
 
-	lightingOutput.diffuse *= 1 - F;
-	lightingOutput.specular *= 1 - F;
+	lightingOutput.diffuse *= 1 - wetnessF;
+	lightingOutput.specular *= 1 - wetnessF;
 	lightingOutput.specular += wetnessSpecular;
 }
 
@@ -210,7 +201,6 @@ float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, floa
 
 	const float3 N = wetnessNormal;
 	const float3 V = context.viewDir;
-	const float3 VN = context.vertexNormal;
 
 	float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
 	float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
@@ -220,13 +210,6 @@ float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, floa
 
 	lobeWeights.diffuse *= 1 - specularLobeWeight;
 	lobeWeights.specular *= 1 - specularLobeWeight;
-
-	// Horizon specular occlusion
-	// https://marmosetco.tumblr.com/post/81245981087
-	float3 R = reflect(-V, N);
-	float horizon = min(1.0 + dot(R, VN), 1.0);
-	horizon = horizon * horizon;
-	specularLobeWeight *= horizon;
 
 	return specularLobeWeight;
 }

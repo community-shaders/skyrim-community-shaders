@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/VR.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
@@ -13,7 +14,7 @@ Texture2D<unorm float> srcAccumFrames : register(t5);  // maybe half-res
 Texture2D<half> srcPrevAo : register(t6);              // maybe half-res
 Texture2D<half4> srcPrevIlY : register(t7);            // maybe half-res
 Texture2D<half2> srcPrevIlCoCg : register(t8);         // maybe half-res
-Texture2D<half4> srcPrevGISpecular : register(t9);    // maybe half-res
+Texture2D<half4> srcPrevGISpecular : register(t9);     // maybe half-res
 
 RWTexture2D<float3> outRadianceDisocc : register(u0);
 RWTexture2D<unorm float> outAccumFrames : register(u1);
@@ -70,8 +71,7 @@ void readHistory(
 	}
 };
 
-[numthreads(8, 8, 1)] void main(const uint2 pixCoord
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(const uint2 pixCoord : SV_DispatchThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	const float2 uv = (pixCoord + .5) * RCP_OUT_FRAME_DIM;
@@ -127,7 +127,7 @@ void readHistory(
 			prev_ao, prev_y, prev_co_cg, prev_ambient, accum_frames, prev_gi_specular, wsum);
 
 		if (wsum > 1e-2) {
-			float rcpWsum = rcp(wsum + 1e-10);
+			float rcpWsum = rcp(wsum + EPSILON_WEIGHT_SUM);
 #	ifdef TEMPORAL_DENOISER
 			prev_ao *= rcpWsum;
 			prev_y *= rcpWsum;

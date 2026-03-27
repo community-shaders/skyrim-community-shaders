@@ -1,9 +1,11 @@
 #ifndef __MATH_DEPENDENCY_HLSL__
 #define __MATH_DEPENDENCY_HLSL__
 
-#define EPSILON_SSS_ALBEDO 1e-3f  // For albedo clamping in SSS calculations
-#define EPSILON_DOT_CLAMP 1e-5f  // For dot product clamping
-#define EPSILON_DIVISION  1e-6f	 // For division to avoid division by zero
+#define EPSILON_SSS_ALBEDO 1e-3f   // For albedo clamping in SSS calculations
+#define EPSILON_DOT_CLAMP 1e-5f    // For dot product clamping
+#define EPSILON_DIVISION 1e-6f     // For division to avoid division by zero
+#define EPSILON_GLINTS 1e-8f       // For glints calculations
+#define EPSILON_WEIGHT_SUM 1e-10f  // For weight normalization
 
 namespace Math
 {

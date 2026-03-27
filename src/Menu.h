@@ -129,6 +129,7 @@ public:
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
+	bool IsPreviewFlying();
 	std::string BuildFontSignature(float baseFontSize) const;
 
 public:
@@ -200,6 +201,8 @@ public:
 		UIIcon applyToGame;           // Apply changes to game icon (weather editor)
 		UIIcon pauseTime;             // Pause time icon (weather editor)
 		UIIcon undo;                  // Undo icon (weather editor)
+		UIIcon freeCamera;            // Free camera preview icon (weather editor)
+		UIIcon playMode;              // Play mode preview icon (weather editor)
 
 		// Social media/external link icons
 		UIIcon discord;
@@ -389,6 +392,7 @@ public:
 		bool SkipClearCacheConfirmation = false;                                            // Skip confirmation dialog when clearing shader cache
 		bool AutoHideFeatureList = false;                                                   // Auto-hide left feature list panel, show on hover
 		bool SkipConstraintWarning = false;                                                 // Skip popup when a setting change creates new constraints
+		bool RequireShiftToDock = true;                                                     // Require holding Shift to dock windows
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};

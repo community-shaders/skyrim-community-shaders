@@ -12,71 +12,71 @@
 
 struct VS_INPUT
 {
-	float4 PositionMS : POSITION0;
+	float4 PositionMS: POSITION0;
 
 #if defined(TEXTURE)
-	float2 TexCoord : TEXCOORD0;
+	float2 TexCoord: TEXCOORD0;
 #endif
 
 #if defined(NORMALS)
-	float4 Normal : NORMAL0;
-	float4 Bitangent : BINORMAL0;
+	float4 Normal: NORMAL0;
+	float4 Bitangent: BINORMAL0;
 #endif
 #if defined(VC)
-	float4 Color : COLOR0;
+	float4 Color: COLOR0;
 #endif
 #if defined(SKINNED)
-	float4 BoneWeights : BLENDWEIGHT0;
-	float4 BoneIndices : BLENDINDICES0;
+	float4 BoneWeights: BLENDWEIGHT0;
+	float4 BoneIndices: BLENDINDICES0;
 #endif
 #if defined(VR)
-	uint InstanceID : SV_INSTANCEID;
+	uint InstanceID: SV_INSTANCEID;
 #endif  // VR
 };
 
 struct VS_OUTPUT
 {
-	float4 PositionCS : SV_POSITION0;
+	float4 PositionCS: SV_POSITION0;
 
 #if !(defined(RENDER_DEPTH) && defined(RENDER_SHADOWMASK_ANY)) && SHADOWFILTER != 2
 #	if (defined(ALPHA_TEST) && ((!defined(RENDER_DEPTH) && !defined(RENDER_SHADOWMAP)) || defined(RENDER_SHADOWMAP_PB))) || defined(RENDER_NORMAL) || defined(DEBUG_SHADOWSPLIT) || defined(RENDER_BASE_TEXTURE)
-	float4 TexCoord0 : TEXCOORD0;
+	float4 TexCoord0: TEXCOORD0;
 #	endif
 
 #	if defined(RENDER_NORMAL)
-	float4 Normal : TEXCOORD1;
+	float4 Normal: TEXCOORD1;
 #	endif
 
 #	if defined(RENDER_SHADOWMAP_PB)
-	float3 TexCoord1 : TEXCOORD2;
+	float3 TexCoord1: TEXCOORD2;
 #	elif defined(ALPHA_TEST) && (defined(RENDER_DEPTH) || defined(RENDER_SHADOWMAP))
-	float4 TexCoord1 : TEXCOORD2;
+	float4 TexCoord1: TEXCOORD2;
 #	elif defined(ADDITIONAL_ALPHA_MASK)
-	float2 TexCoord1 : TEXCOORD2;
+	float2 TexCoord1: TEXCOORD2;
 #	endif
 
 #	if defined(LOCALMAP_FOGOFWAR)
-	float Alpha : TEXCOORD3;
+	float Alpha: TEXCOORD3;
 #	endif
 
 #	if defined(RENDER_SHADOWMASK_ANY)
-	float4 PositionMS : TEXCOORD5;
+	float4 PositionMS: TEXCOORD5;
 #	endif
 
 #	if defined(ALPHA_TEST) && defined(VC) && defined(RENDER_SHADOWMASK_ANY)
-	float2 Alpha : TEXCOORD4;
+	float2 Alpha: TEXCOORD4;
 #	elif (defined(ALPHA_TEST) && defined(VC) && !defined(TREE_ANIM)) || defined(RENDER_SHADOWMASK_ANY)
-	float Alpha : TEXCOORD4;
+	float Alpha: TEXCOORD4;
 #	endif
 
 #	if defined(DEBUG_SHADOWSPLIT)
-	float Depth : TEXCOORD2;
+	float Depth: TEXCOORD2;
 #	endif
 #endif
 #if defined(VR)
-	float ClipDistance : SV_ClipDistance0;  // o11
-	float CullDistance : SV_CullDistance0;  // p11
-	uint EyeIndex : EYEIDX0;
+	float ClipDistance: SV_ClipDistance0;  // o11
+	float CullDistance: SV_CullDistance0;  // p11
+	uint EyeIndex: EYEIDX0;
 #endif  // VR
 };
 
@@ -288,7 +288,7 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color : SV_Target0;
+	float4 Color: SV_Target0;
 };
 
 #ifdef PSHADER
@@ -367,14 +367,14 @@ cbuffer AlphaTestRefCB : register(b11)
 #	if defined(RENDER_SHADOWMASKDPB)
 float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> tex, SamplerComparisonState samp, float3 positionMS, float layerIndex, uint eyeIndex)
 {
-	const int sampleCount = 12; // reduced from 16
+	const int sampleCount = 12;  // reduced from 16
 
 	// Pre-compute expensive operations outside the loop
 	float4x4 shadowTransform = transpose(ShadowMapProj[eyeIndex][0]);
 	float rcpShadowLightParam = rcp(ShadowLightParam.x);
 	float alphaTestOffset = -AlphaTestRef.y;
 	float sampleRadius = ShadowSampleParam.z * 2048.0;
-	float seedNormalized = seed.x * (1.0 / 4294967295.0); // Use only x component for efficiency
+	float seedNormalized = seed.x * (1.0 / 4294967295.0);  // Use only x component for efficiency
 	uint frameOffset = SharedData::FrameCount * sampleCount;
 
 	// Pre-compute constants
@@ -385,8 +385,8 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 	float visibility = 0;
 
 	// Unroll first few samples for better instruction scheduling
-	[unroll(4)]
-	for (int unrollSampleIndex = 0; unrollSampleIndex < 4; ++unrollSampleIndex) {
+	[unroll(4)] for (int unrollSampleIndex = 0; unrollSampleIndex < 4; ++unrollSampleIndex)
+	{
 		// Optimized random generation using simplified hash
 		uint hashInput = unrollSampleIndex + frameOffset;
 		float3 randomVec = Random::R3Modified(hashInput, seedNormalized);
@@ -402,7 +402,7 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 
 		// Optimized hemisphere calculation
 		bool lowerHalf = positionLS.z < 0;
-		float3 normalizedPos = positionLS * rcp(positionLength); // Avoid second normalize
+		float3 normalizedPos = positionLS * rcp(positionLength);  // Avoid second normalize
 
 		float3 positionOffset = lowerHalf ? positionOffsetDown : positionOffsetUp;
 		float3 lightDirection = normalizedPos + positionOffset;
@@ -627,8 +627,8 @@ PS_OUTPUT main(PS_INPUT input)
 	uint3 seed = Random::pcg3d(uint3(input.PositionCS.xy, input.PositionCS.x * Math::PI));
 
 #		if defined(RENDER_SHADOWMASK)
-	if(SharedData::InInterior)
-		shadowColor = float4(0,0,0,0);
+	if (SharedData::InInterior)
+		shadowColor = float4(0, 0, 0, 0);
 
 	if (EndSplitDistances.z >= shadowMapDepth) {
 		float4x3 lightProjectionMatrix = ShadowMapProj[eyeIndex][0];
