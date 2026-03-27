@@ -210,19 +210,21 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 sdrBase = sdrLinear * pw;
 
 		// DICE compresses the full HDR range above the shoulder start into peak nits.
+		// Bloom is included in hdrScene so that diceLinear carries the same energy as
+		// sdrBase, preventing a bloom-shaped discontinuity at the shoulder boundary.
 		float shoulderStart = pw / peak;
 		float3 hdrInputLinear = ENABLE_LL ? inputColor : Color::SkyrimGammaToLinear(inputColor);
-		float3 diceLinear = DisplayMapping::DICETonemap(hdrInputLinear * pw, peak, shoulderStart, CS_BT709, CS_BT709);
+		float3 bloomLinear = ENABLE_LL ? bloomColor : Color::SkyrimGammaToLinear(bloomColor);
+		float3 hdrScene = (hdrInputLinear + bloomLinear) * pw;
+		float3 diceLinear = DisplayMapping::DICETonemap(hdrScene, peak, shoulderStart, CS_BT709, CS_BT709);
 
-		// DICE only extends highlights AT and ABOVE paperwhite.
-		// Below paperwhite the output is pure sdrBase — identical to SDR/vanilla.
-		// Use raw pre-tonemap luminance (in pw-relative units) to drive the blend:
-		// at shoulderStart the scene is at the paperwhite boundary; above that DICE
-		// takes over.  This avoids the SDR tonemap compressing away the blend signal
-		// (Reinhard maps very bright values to ~0.95, which after gamma roundtrip
-		// produces a diceBlend of only 0.2-0.5, capping output at ~500 nits).
-		float rawLum = average(hdrInputLinear * pw) / peak;
-		float diceBlend = saturate((rawLum - shoulderStart) / max(1.0 - shoulderStart, 1e-4));
+		// Blend weight from linear scene luminance in peak-normalized units.
+		// Sky.hlsl scales the sun by peakNits/paperWhiteNits; lum(hdrInputLinear*pw)/peak
+		// cancels that scale, so the footprint of diceBlend matches SDR angular falloff
+		// and does not grow when peak nits increase (only brightness does).
+		// sdrGraded luminance must not be used here: Reinhard + brighter HDR input
+		// changes the tonemapped shape vs peak, which reads as a larger sun.
+		float diceBlend = saturate(Color::RGBToLuminance(hdrInputLinear * pw) / max(peak, 1e-6));
 		float3 hdrLinearOut = lerp(sdrBase, diceLinear, diceBlend);
 
 		outputColor = Color::LinearToSkyrimGamma(max(0.0, hdrLinearOut));

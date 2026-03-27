@@ -218,58 +218,49 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		// HDR sun: luminance-driven radial intensity profile.
-		// Uses the texture's own luminance as a 0-1 shape mask so only the bright
-		// center reaches peak display brightness while edges stay at paperwhite.
-		// This preserves the physical disc size regardless of peak/paperwhite settings
-		// and prevents bloom blowout (edges have natural headroom, center has none).
+		// HDR sun: uniform brightness scale vs paperwhite. peakRatio = peakNits / paperWhiteNits
+		// in 80-nit-relative space (matches ISHDR / DICE). Same multiplier on every texel
+		// keeps the texture luminance ratios identical to SDR — apparent physical size of
+		// the disc and glare does not grow when peak nits go up, only overall intensity.
 
 		float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
 		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
 
-		// Working space: 80-nit-relative units (what ISHDR expects).
-		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
-		float peak = peakNits / sRGB_WhiteLevelNits;
-		float peakRatio = peak / pw;
-
-		// Controls how tightly brightness concentrates at the disc center.
-		// 2.0 = quadratic falloff (natural, perceptual).
-		static const float kSoftness = 2.0;
+		// Same ratio as peak/pw in 80-nit-relative ISHDR space.
+		float peakRatio = peakNits / paperWhiteNits;
 
 #		if defined(DITHER)
 		// --- Sun glare billboard ---
 		float glareLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
 
 		// Normalize weather-mod HDR textures that may exceed 1.0
-		float glareNormLum = saturate(glareLum);
 		if (glareLum > 1.0)
 			baseColor.xyz *= rcp(glareLum);
 
-		// Radial profile: center (1.0) -> peak/pw, edges (->0) -> 1.0 (paperwhite)
-		float glareShape = pow(glareNormLum, kSoftness);
-		float glareIntensity = lerp(1.0, peakRatio, glareShape);
-
-		// Scale color preserving hue. For dim texels intensity ~ 1.0, skip division.
-		baseColor.xyz *= (glareNormLum > 0.01) ? (glareIntensity / glareNormLum) : glareIntensity;
+		baseColor.xyz *= peakRatio;
 
 		// Apply vertex colour tint (engine's glare envelope)
 		baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
+
+#			ifdef TEX
+		// HDR boost reveals the lens-flare sprite quad; fade UV corners so the atlas
+		// boundary and hard alpha edges are not visible (SDR margins mask this).
+		float2 glareUv = saturate(input.TexCoord0.xy);
+		float glareEdge = min(min(glareUv.x, glareUv.y), min(1.0 - glareUv.x, 1.0 - glareUv.y));
+		float glareEdgeFade = smoothstep(0.0, 0.08, glareEdge);
+		baseColor.xyz *= glareEdgeFade;
+		baseColor.w *= glareEdgeFade;
+#			endif
 
 #		else
 		// --- Sun disc billboard ---
 		float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
 
 		// Normalize weather-mod HDR textures
-		float normLum = saturate(srcLum);
 		if (srcLum > 1.0)
 			baseColor.xyz *= rcp(srcLum);
 
-		// Radial profile: center (1.0) -> peak/pw, edges (->0) -> 1.0 (paperwhite)
-		float shape = pow(normLum, kSoftness);
-		float intensity = lerp(1.0, peakRatio, shape);
-
-		// Scale color preserving hue. For dim texels intensity ~ 1.0, skip division.
-		baseColor.xyz *= (normLum > 0.01) ? (intensity / normLum) : intensity;
+		baseColor.xyz *= peakRatio;
 
 		// Preserve disc shape: don't apply PParams additive sky blend to sun disc
 		yyy = 0.0;
