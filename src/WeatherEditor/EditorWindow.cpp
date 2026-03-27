@@ -12,7 +12,9 @@
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteColorEntry, r, g, b, useCount, lastUsedTime, isFavorite)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteFavoriteColor, hasValue, r, g, b)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets, showViewport, paletteColors, paletteFavorites)
 
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
@@ -54,41 +56,28 @@ void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 void DrawIconCircle(ImVec2 center, float radius, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
-	if (filled) {
+	if (filled)
 		drawList->AddCircleFilled(center, radius, color, 16);
-	} else {
-		drawList->AddCircle(center, radius, color, 16, 1.5f);
-	}
+	else
+		drawList->AddCircle(center, radius, color, 16, 1.5f * Util::GetUIScale());
 }
 
 void DrawIconWave(ImVec2 center, float width, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
+	const float thickness = (filled ? 3.0f : 1.5f) * Util::GetUIScale();
 	const int segments = 8;
 	const float amplitude = width * 0.15f;
 	const float waveWidth = width * 0.8f;
 	const float segmentWidth = waveWidth / segments;
-
 	ImVec2 start(center.x - waveWidth * 0.5f, center.y);
 
-	if (filled) {
-		// Draw filled wave using multiple horizontal lines
-		for (int i = 0; i < segments; i++) {
-			float x1 = start.x + i * segmentWidth;
-			float x2 = start.x + (i + 1) * segmentWidth;
-			float y1 = start.y + sinf(i * 3.14159f / 2.0f) * amplitude;
-			float y2 = start.y + sinf((i + 1) * 3.14159f / 2.0f) * amplitude;
-			drawList->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, 3.0f);
-		}
-	} else {
-		// Draw outline wave
-		for (int i = 0; i < segments; i++) {
-			float x1 = start.x + i * segmentWidth;
-			float x2 = start.x + (i + 1) * segmentWidth;
-			float y1 = start.y + sinf(i * 3.14159f / 2.0f) * amplitude;
-			float y2 = start.y + sinf((i + 1) * 3.14159f / 2.0f) * amplitude;
-			drawList->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, 1.5f);
-		}
+	for (int i = 0; i < segments; i++) {
+		float x1 = start.x + i * segmentWidth;
+		float x2 = start.x + (i + 1) * segmentWidth;
+		float y1 = start.y + sinf(i * 3.14159f / 2.0f) * amplitude;
+		float y2 = start.y + sinf((i + 1) * 3.14159f / 2.0f) * amplitude;
+		drawList->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, thickness);
 	}
 }
 
@@ -187,10 +176,10 @@ void EditorWindow::ShowObjectsWindow()
 	}
 
 	// Create a table with two columns
-	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_NoHostExtendX)) {
-		// Set up column widths
-		ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthStretch, 0.3f);  // 30% width
-		ImGui::TableSetupColumn("Objects", ImGuiTableColumnFlags_WidthStretch, 0.7f);     // 70% width
+	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner)) {
+		// Fixed categories column, objects column fills remaining width
+		ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthFixed, 180.0f * Util::GetUIScale());
+		ImGui::TableSetupColumn("Objects", ImGuiTableColumnFlags_WidthStretch);
 
 		ImGui::TableNextRow();
 
@@ -266,16 +255,18 @@ void EditorWindow::ShowObjectsWindow()
 			const float comboW = ImGui::CalcTextSize("Editor ID").x + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
 			const float helpW = ImGui::CalcTextSize("(?)").x;
 			const float iconW = ImGui::GetFrameHeight();
+			const float scale = Util::GetUIScale();
+			const float spacerW = 10.0f * scale;
 			// Fixed width is the sum of every item that follows the search bar on the same row.
 			// Each SameLine() contributes style.ItemSpacing.x; widths are listed explicitly
 			// so adding or removing a widget only requires updating its own expression.
 			const float fixedW =
 				style.ItemSpacing.x + comboW +                              // combo
 				style.ItemSpacing.x + helpW +                               // help marker
-				style.ItemSpacing.x + 10.0f +                               // spacer before favorites
+				style.ItemSpacing.x + spacerW +                             // spacer before favorites
 				style.ItemSpacing.x + iconW +                               // fav icon
 				style.ItemSpacing.x + ImGui::CalcTextSize("Favorites").x +  // "Favorites" label
-				style.ItemSpacing.x + 10.0f +                               // spacer before flagged
+				style.ItemSpacing.x + spacerW +                             // spacer before flagged
 				style.ItemSpacing.x + iconW +                               // flag icon
 				style.ItemSpacing.x + ImGui::CalcTextSize("Flagged").x;     // "Flagged" label
 			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
@@ -290,9 +281,10 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::SameLine();
 			Util::HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nStatus: hides items with no status marker when the search box is non-empty.\nCtrl+F: Focus search\nEnter: Open selected");
 
-			// Quick filter buttons on same row
+			// Quick filter buttons
+			const ImVec2 filterSpacer(spacerW, 0.0f);
 			ImGui::SameLine();
-			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
+			ImGui::Dummy(filterSpacer);
 			ImGui::SameLine();
 			if (IconButton("##filterFavorites", m_showOnlyFavorites, "star")) {
 				m_showOnlyFavorites = !m_showOnlyFavorites;
@@ -301,7 +293,7 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::Text("Favorites");
 
 			ImGui::SameLine();
-			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
+			ImGui::Dummy(filterSpacer);
 			ImGui::SameLine();
 			if (IconButton("##filterFlagged", m_showOnlyFlagged, "circle")) {
 				m_showOnlyFlagged = !m_showOnlyFlagged;
@@ -368,12 +360,12 @@ void EditorWindow::ShowObjectsWindow()
 
 			// Create a table for the right column with "Name" and "ID" headers. Different weights to prevent truncation.
 			if (ImGui::BeginTable("DetailsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Sortable)) {
-				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f, ColFav);  // Favorite indicator
-				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f, ColEditorID);                     // Largest - weather/template names
-				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f, ColFormID);                          // Fixed - 8 hex chars
-				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f, ColFile);                              // Medium - plugin names
-				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f, ColStatus);                          // Smaller - status text
-				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f, ColJson);                               // JSON file / delete
+				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f * scale, ColFav);  // Favorite indicator
+				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f, ColEditorID);                             // Largest - weather/template names
+				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f * scale, ColFormID);                          // Fixed - 8 hex chars
+				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f, ColFile);                                      // Medium - plugin names
+				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f, ColStatus);                                  // Smaller - status text
+				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f * scale, ColJson);                               // JSON file / delete
 
 				ImGui::TableHeadersRow();
 
@@ -546,14 +538,18 @@ void EditorWindow::ShowObjectsWindow()
 							// Show message that cell lighting is only for interior cells
 							ImGui::TableNextRow();
 							ImGui::TableSetColumnIndex(1);
+							ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
 							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Warning, "Cell Lighting is only available for interior cells.");
 							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Disable, "You are currently in an exterior cell.");
+							ImGui::PopTextWrapPos();
 						}
 					} else {
 						// No player or cell
 						ImGui::TableNextRow();
 						ImGui::TableSetColumnIndex(1);
+						ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
 						ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Error, "Player cell not available.");
+						ImGui::PopTextWrapPos();
 					}
 				}
 
@@ -815,14 +811,7 @@ void EditorWindow::ShowObjectsWindow()
 
 void EditorWindow::ShowViewportWindow()
 {
-	ImGui::Begin("Viewport");
-
-	// Top bar
-	if (DrawGameHourSlider("##ViewportSlider", "Time: %.2f")) {
-		ImGui::SameLine();
-		int activePeriod = TOD::GetActivePeriod();
-		ImGui::Text("(%s)", TOD::GetPeriodName(activePeriod));
-	}
+	ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
 
 	// The size of the image in ImGui																														   // Get the available space in the current window
 	ImVec2 availableSpace = ImGui::GetContentRegionAvail();
@@ -842,7 +831,11 @@ void EditorWindow::ShowViewportWindow()
 		imageSize.x = availableSpace.y * aspectRatio;
 	}
 
-	ImGui::Image((void*)tempTexture->srv.get(), imageSize);
+	if (tempTexture && tempTexture->srv) {
+		ImGui::Image((void*)tempTexture->srv.get(), imageSize);
+	} else {
+		ImGui::TextDisabled("Viewport unavailable");
+	}
 
 	ImGui::End();
 }
@@ -876,19 +869,15 @@ void EditorWindow::ShowWidgetWindow()
 
 void EditorWindow::RenderUI()
 {
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto& context = globals::d3d::context;
-
-	context->ClearRenderTargetView(framebuffer.RTV, (float*)&ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
-
 	// Apply editor UI scale
 	ImGuiIO& io = ImGui::GetIO();
 	float previousScale = io.FontGlobalScale;
 	io.FontGlobalScale = settings.editorUIScale;
 
-	// Increase background opacity for all editor windows
-	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
+	if (settings.showViewport) {
+		// Dim the game scene using the theme's modal dim background color
+		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
+	}
 
 	// Check for Ctrl+Z to undo
 	if ((ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
@@ -1018,8 +1007,14 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
-			if (ImGui::MenuItem("Palette", nullptr, PaletteWindow::GetSingleton()->open)) {
-				PaletteWindow::GetSingleton()->open = !PaletteWindow::GetSingleton()->open;
+			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
+				Save();
+			}
+			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
+			}
+
+			if (ImGui::MenuItem("Reset Window Layout")) {
+				resetLayout = true;
 			}
 
 			ImGui::Separator();
@@ -1093,120 +1088,213 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 
-		// Pause Time button
+		// Clip buttons above the bottom border so highlights don't overlap it
+		const auto clipMin = ImGui::GetWindowDrawList()->GetClipRectMin();
+		const auto clipMax = ImGui::GetWindowDrawList()->GetClipRectMax();
+		ImGui::PushClipRect(clipMin, ImVec2(clipMax.x, clipMax.y - ImGui::GetStyle().WindowBorderSize), true);
+
 		auto menu = globals::menu;
-		if (menu && menu->uiIcons.pauseTime.texture) {
-			bool isPaused = IsTimePaused();
+		constexpr float kIconButtonPadding = 1.0f;  // minimal padding so icons render larger and smoother
+		const float iconButtonDim = ImGui::GetFrameHeight() - kIconButtonPadding * 2;
+		const ImVec2 iconButtonSize(iconButtonDim, iconButtonDim);
+		const auto iconTint = Util::GetIconTint();
 
+		// Undo button (stays on left side)
+		if (menu && menu->uiIcons.undo.texture) {
+			bool canUndo = CanUndo();
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			if (isPaused) {
-				auto pausedColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-				pausedColor.w = 0.6f;
-				auto pausedHoverColor = pausedColor;
-				pausedHoverColor.w = 0.8f;
-				ImGui::PushStyleColor(ImGuiCol_Button, pausedColor);
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, pausedHoverColor);
-			} else {
-				auto transparentColor = ImVec4(0, 0, 0, 0);
-				ImGui::PushStyleColor(ImGuiCol_Button, transparentColor);
-				auto hoverColor = Menu::GetSingleton()->GetSettings().Theme.Palette.Text;
-				hoverColor.w = 0.25f;
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kIconButtonPadding, kIconButtonPadding));
+			{
+				auto _style = Util::TransparentIconButtonStyle();
+				auto textColor = canUndo ? menu->GetTheme().Palette.Text : menu->GetTheme().StatusPalette.Disable;
+				if (!canUndo)
+					textColor.w = 0.5f;
+				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+				if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint) && canUndo)
+					PerformUndo();
+				ImGui::PopStyleColor();
 			}
+			ImGui::PopStyleVar(2);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(canUndo ? "Undo (Ctrl+Z) - %d states" : "Undo (Ctrl+Z) - No changes to undo", (int)undoStack.size());
+		}
 
-			const float menuBarHeight = ImGui::GetFrameHeight();
-			const float buttonDim = menuBarHeight * 0.85f;
-			const ImVec2 buttonSize(buttonDim, buttonDim);
+		// Right-aligned items — use SetCursorScreenPos to bypass menu bar GroupOffset
+		const float scale = Util::GetUIScale();
+		const float clipRight = ImGui::GetWindowDrawList()->GetClipRectMax().x;
+		const float cursorY = ImGui::GetCursorScreenPos().y;
+		const float closeButtonSize = ImGui::GetFrameHeight();
+		const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+		const float sliderWidth = kMenuBarSliderWidth * scale;
 
-			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize))
-				TogglePause();
+		// Measure right-side elements to compute positions right-to-left
+		float rightCursor = clipRight;
 
+		// X button
+		rightCursor -= closeButtonSize;
+		const float xButtonX = rightCursor;
+
+		// Time slider
+		rightCursor -= itemSpacing + sliderWidth;
+		const float sliderX = rightCursor;
+
+		// Period text
+		char periodBuf[64];
+		std::snprintf(periodBuf, sizeof(periodBuf), "(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
+		float periodWidth = ImGui::CalcTextSize(periodBuf).x;
+		rightCursor -= itemSpacing + periodWidth;
+		const float periodX = rightCursor;
+
+		// Pause Time button
+		float pauseButtonX = 0;
+		bool hasPauseButton = menu && menu->uiIcons.pauseTime.texture;
+		if (hasPauseButton) {
+			rightCursor -= itemSpacing + iconButtonDim + kIconButtonPadding * 2;
+			pauseButtonX = rightCursor;
+		}
+
+		// Preview mode buttons (free camera / play mode)
+		const float previewButtonWidth = iconButtonDim + kIconButtonPadding * 2;
+		float freeCameraX = 0, playModeX = 0;
+		bool hasFreeCam = menu && menu->uiIcons.freeCamera.texture;
+		bool hasPlayMode = menu && menu->uiIcons.playMode.texture;
+		if (hasPlayMode) {
+			rightCursor -= itemSpacing + previewButtonWidth;
+			playModeX = rightCursor;
+		}
+		if (hasFreeCam) {
+			rightCursor -= itemSpacing + previewButtonWidth;
+			freeCameraX = rightCursor;
+		}
+
+		// Preview mode status text (mirrors TIME PAUSED pattern, with hotkey + pulsating color)
+		float previewStatusX = 0;
+		char previewStatusBuf[128] = {};
+		bool showPreviewStatus = previewMode != PreviewMode::None;
+		if (showPreviewStatus) {
+			std::string hotkey = Util::Input::KeyIdToString(menu->GetSettings().WeatherEditorToggleKey);
+			if (previewMode == PreviewMode::FreeCamera)
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] FREE CAMERA (Speed: %.0f)", hotkey.c_str(), flySpeed);
+			else if (previewMode == PreviewMode::FreeCameraLocked)
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] FREE CAMERA LOCKED", hotkey.c_str());
+			else
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] PLAY MODE", hotkey.c_str());
+			rightCursor -= itemSpacing + ImGui::CalcTextSize(previewStatusBuf).x;
+			previewStatusX = rightCursor;
+		}
+
+		// Time paused text
+		float timePausedX = 0;
+		bool showTimePaused = IsTimePaused();
+		const char* timePausedText = " [TIME PAUSED]";
+		if (showTimePaused) {
+			rightCursor -= itemSpacing + ImGui::CalcTextSize(timePausedText).x;
+			timePausedX = rightCursor;
+		}
+
+		// Weather lock text
+		float weatherLockX = 0;
+		char weatherLockBuf[128] = {};
+		bool showWeatherLock = weatherLockActive && lockedWeather;
+		if (showWeatherLock) {
+			const char* weatherName = lockedWeather->GetFormEditorID();
+			std::snprintf(weatherLockBuf, sizeof(weatherLockBuf), " [LOCKED: %s]", weatherName ? weatherName : "Unknown");
+			rightCursor -= itemSpacing + ImGui::CalcTextSize(weatherLockBuf).x;
+			weatherLockX = rightCursor;
+		}
+
+		// Render right-aligned items left to right
+		const auto& statusPalette = menu->GetTheme().StatusPalette;
+
+		if (showWeatherLock) {
+			ImGui::SetCursorScreenPos(ImVec2(weatherLockX, cursorY));
+			ImGui::PushStyleColor(ImGuiCol_Text, statusPalette.SuccessColor);
+			ImGui::TextUnformatted(weatherLockBuf);
+			ImGui::PopStyleColor();
+		}
+
+		if (showTimePaused) {
+			ImGui::SetCursorScreenPos(ImVec2(timePausedX, cursorY));
+			ImGui::PushStyleColor(ImGuiCol_Text, statusPalette.CurrentHotkey);
+			ImGui::TextUnformatted(timePausedText);
+			ImGui::PopStyleColor();
+		}
+
+		if (showPreviewStatus) {
+			ImGui::SetCursorScreenPos(ImVec2(previewStatusX, cursorY));
+			ImGui::TextColored(Util::GetPulsingColor(statusPalette.CurrentHotkey), "%s", previewStatusBuf);
+		}
+
+		// Toggle-style icon button helper (active: SuccessColor bg, inactive: transparent)
+		auto DrawToggleIconButton = [&](const char* id, ImTextureID texture, bool isActive, float posX) -> bool {
+			ImGui::SetCursorScreenPos(ImVec2(posX, cursorY));
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kIconButtonPadding, kIconButtonPadding));
+			if (isActive) {
+				auto color = statusPalette.SuccessColor;
+				color.w = kToggleActiveAlpha;
+				auto hover = color;
+				hover.w = kToggleHoverAlpha;
+				ImGui::PushStyleColor(ImGuiCol_Button, color);
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
+			} else {
+				auto hover = menu->GetTheme().Palette.Text;
+				hover.w = kInactiveHoverAlpha;
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
+			}
+			bool clicked = ImGui::ImageButton(id, texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
 			ImGui::PopStyleColor(2);
-			ImGui::PopStyleVar();
+			ImGui::PopStyleVar(2);
+			return clicked;
+		};
 
+		// Preview mode buttons
+		if (hasFreeCam) {
+			bool isActive = previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked;
+			if (DrawToggleIconButton("##FreeCamera", menu->uiIcons.freeCamera.texture, isActive, freeCameraX))
+				EnterPreviewMode(PreviewMode::FreeCamera);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(isActive ? "Exit Free Camera" : "Free Camera (scroll to adjust speed)");
+		}
+		if (hasPlayMode) {
+			bool isActive = previewMode == PreviewMode::PlayMode;
+			if (DrawToggleIconButton("##PlayMode", menu->uiIcons.playMode.texture, isActive, playModeX))
+				EnterPreviewMode(PreviewMode::PlayMode);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(isActive ? "Exit Play Mode" : "Play Mode - Walk around normally");
+		}
+
+		if (hasPauseButton) {
+			bool isPaused = IsTimePaused();
+			if (DrawToggleIconButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, isPaused, pauseButtonX))
+				TogglePause();
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
 		}
 
-		// Undo button
-		if (menu && menu->uiIcons.undo.texture) {
-			bool canUndo = CanUndo();
-
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			if (!canUndo) {
-				auto transparentColor = ImVec4(0, 0, 0, 0);
-				ImGui::PushStyleColor(ImGuiCol_Button, transparentColor);
-				auto disabledColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Disable;
-				disabledColor.w = 0.25f;
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, disabledColor);
-				auto disabledTextColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Disable;
-				disabledTextColor.w = 0.5f;
-				ImGui::PushStyleColor(ImGuiCol_Text, disabledTextColor);
-			} else {
-				auto transparentColor = ImVec4(0, 0, 0, 0);
-				ImGui::PushStyleColor(ImGuiCol_Button, transparentColor);
-				auto hoverColor = Menu::GetSingleton()->GetSettings().Theme.Palette.Text;
-				hoverColor.w = 0.25f;
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
-				ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.Palette.Text);
-			}
-
-			const float menuBarHeight = ImGui::GetFrameHeight();
-			const float buttonDim = menuBarHeight * 0.85f;
-			const ImVec2 buttonSize(buttonDim, buttonDim);
-
-			if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, buttonSize) && canUndo) {
-				PerformUndo();
-			}
-
-			ImGui::PopStyleColor(3);
-			ImGui::PopStyleVar();
-
-			if (ImGui::IsItemHovered()) {
-				if (canUndo) {
-					ImGui::SetTooltip("Undo (Ctrl+Z) - %d states", (int)undoStack.size());
-				} else {
-					ImGui::SetTooltip("Undo (Ctrl+Z) - No changes to undo");
-				}
-			}
-		}  // Weather lock indicator
-		if (weatherLockActive && lockedWeather) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.SuccessColor);
-			const char* weatherName = lockedWeather->GetFormEditorID();
-			ImGui::Text(" [LOCKED: %s]", weatherName ? weatherName : "Unknown");
-			ImGui::PopStyleColor();
+		// Period text and time slider
+		auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+		if (calendar && calendar->gameHour) {
+			ImGui::SetCursorScreenPos(ImVec2(periodX, cursorY));
+			ImGui::TextUnformatted(periodBuf);
+			ImGui::SetCursorScreenPos(ImVec2(sliderX, cursorY));
+			ImGui::SetNextItemWidth(sliderWidth);
+			DrawGameHourSlider("##MenuBarSlider", "Time: %.2f");
 		}
 
-		// Time pause indicator
-		if (IsTimePaused()) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.CurrentHotkey);
-			ImGui::Text(" [TIME PAUSED]");
-			ImGui::PopStyleColor();
+		// Close button
+		ImGui::SetCursorScreenPos(ImVec2(xButtonX, cursorY));
+		{
+			auto _style = Util::ErrorButtonStyle();
+			if (ImGui::Button("X", ImVec2(closeButtonSize, closeButtonSize))) {
+				open = false;
+			}
 		}
-
-		// Close button on the right side
-		float menuBarHeight = ImGui::GetFrameHeight();
-		float closeButtonSize = menuBarHeight * 0.9f;  // 10% smaller than menu bar
-		ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - 10.0f);
-		auto errorColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Error;
-		auto errorHoverColor = errorColor;
-		errorHoverColor.x = std::min(1.0f, errorColor.x * 1.2f);
-		errorHoverColor.y = std::min(1.0f, errorColor.y * 0.75f);
-		auto errorActiveColor = errorColor;
-		errorActiveColor.x = std::max(0.0f, errorColor.x * 0.875f);
-		errorActiveColor.y = std::max(0.0f, errorColor.y * 0.25f);
-		ImGui::PushStyleColor(ImGuiCol_Button, errorColor);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, errorHoverColor);
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, errorActiveColor);
-		if (ImGui::Button("X", ImVec2(closeButtonSize, closeButtonSize))) {
-			open = false;
-		}
-		ImGui::PopStyleColor(3);
 		if (ImGui::IsItemHovered()) {
 			ImGui::SetTooltip("Close Weather Editor (Esc)");
 		}
+		ImGui::PopClipRect();
 		ImGui::EndMainMenuBar();
 	}
 
@@ -1215,19 +1303,39 @@ void EditorWindow::RenderUI()
 
 	auto width = ImGui::GetIO().DisplaySize.x;
 	auto height = ImGui::GetIO().DisplaySize.y;
-	auto viewportWidth = width * 0.5f;                // Make the viewport take up 50% of the width
-	auto sideWidth = (width - viewportWidth) / 2.0f;  // Divide the remaining width equally between the side windows
-	ImGui::SetNextWindowSize(ImVec2(sideWidth, ImGui::GetIO().DisplaySize.y * 0.75f), ImGuiCond_FirstUseEver);
+	const float scale = Util::GetUIScale();
+	const float pad = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
+	const float menuBarHeight = ImGui::GetFrameHeight();
+	const float availableWidth = width - pad * 3.0f;  // left pad + gap + right pad
+	const float availableHeight = (height - menuBarHeight - pad * 2.0f) * 0.85f;
+	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	// Browser gets up to half the available width, capped so ultrawide gives extra to viewport
+	const float maxBrowserWidth = 960.0f * scale;
+	const float browserWidth = std::min(availableWidth * 0.5f, maxBrowserWidth);
+	const float viewportWidth = availableWidth - browserWidth;
+	ImGui::SetNextWindowSize(ImVec2(browserWidth, availableHeight), layoutCond);
+	ImGui::SetNextWindowPos(ImVec2(pad, menuBarHeight + pad), layoutCond);
 	ShowObjectsWindow();
 
-	ImGui::SetNextWindowSize(ImVec2(viewportWidth, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver);
-	ShowViewportWindow();
+	if (settings.showViewport) {
+		// Size viewport height to match game aspect ratio so the preview fits snugly
+		const float aspectRatio = width / height;
+		const float imageHeight = viewportWidth / aspectRatio;
+		const float chromeHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
+		const float viewportHeight = imageHeight + chromeHeight;
+		ImGui::SetNextWindowSize(ImVec2(viewportWidth, viewportHeight), layoutCond);
+		ImGui::SetNextWindowPos(ImVec2(pad + browserWidth + pad, menuBarHeight + pad), layoutCond);
+		viewportBottomY = menuBarHeight + pad + viewportHeight;
+		ShowViewportWindow();
+	} else {
+		viewportBottomY = menuBarHeight + pad;
+	}
 
 	auto settingsWindowHeight = height * 0.25f;
 	auto settingsWindowWidth = width * 0.25f;
-	ImGui::SetNextWindowSizeConstraints(ImVec2(settingsWindowWidth, settingsWindowHeight), ImVec2(FLT_MAX, FLT_MAX));
-	ImGui::SetNextWindowPos({ (width / 2.0f) - (settingsWindowWidth / 2.0f), (height / 2.0f) - (settingsWindowHeight / 2.0f) }, ImGuiCond_Appearing);
 	if (showSettingsWindow) {
+		ImGui::SetNextWindowSize(ImVec2(settingsWindowWidth, settingsWindowHeight), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowPos({ (width / 2.0f) - (settingsWindowWidth / 2.0f), (height / 2.0f) - (settingsWindowHeight / 2.0f) }, ImGuiCond_Appearing);
 		ShowSettingsWindow();
 	}
 
@@ -1236,11 +1344,10 @@ void EditorWindow::RenderUI()
 	// Show palette window
 	PaletteWindow::GetSingleton()->Draw();
 
+	resetLayout = false;
+
 	// Render notifications on top of everything
 	RenderNotifications();
-
-	// Pop the alpha style var
-	ImGui::PopStyleVar();
 
 	// Restore previous font scale
 	io.FontGlobalScale = previousScale;
@@ -1336,29 +1443,48 @@ void EditorWindow::Draw()
 		}
 	}
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
-	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+	if (!settings.showViewport) {
+		delete tempTexture;
+		tempTexture = nullptr;
+	} else {
+		auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+		if (renderer) {
+			auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+			if (framebuffer.SRV) {
+				ID3D11Resource* resource = nullptr;
+				framebuffer.SRV->GetResource(&resource);
 
-	ID3D11Resource* resource = nullptr;
-	framebuffer.SRV->GetResource(&resource);
+				if (resource) {
+					auto texture = static_cast<ID3D11Texture2D*>(resource);
+					D3D11_TEXTURE2D_DESC texDesc{};
+					texture->GetDesc(&texDesc);
 
-	if (!tempTexture) {
-		D3D11_TEXTURE2D_DESC texDesc{};
-		((ID3D11Texture2D*)resource)->GetDesc(&texDesc);
+					const bool needsRecreate = !tempTexture || !tempTexture->resource || !tempTexture->srv ||
+					                           tempTexture->desc.Width != texDesc.Width || tempTexture->desc.Height != texDesc.Height ||
+					                           tempTexture->desc.MipLevels != texDesc.MipLevels || tempTexture->desc.ArraySize != texDesc.ArraySize ||
+					                           tempTexture->desc.Format != texDesc.Format ||
+					                           tempTexture->desc.SampleDesc.Count != texDesc.SampleDesc.Count ||
+					                           tempTexture->desc.SampleDesc.Quality != texDesc.SampleDesc.Quality;
 
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		framebuffer.SRV->GetDesc(&srvDesc);
+					if (needsRecreate) {
+						delete tempTexture;
+						tempTexture = nullptr;
 
-		tempTexture = new Texture2D(texDesc);
-		tempTexture->CreateSRV(srvDesc);
-	}
+						D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+						framebuffer.SRV->GetDesc(&srvDesc);
 
-	auto& context = globals::d3d::context;
+						tempTexture = new Texture2D(texDesc);
+						tempTexture->CreateSRV(srvDesc);
+					}
 
-	context->CopyResource(tempTexture->resource.get(), resource);
+					if (tempTexture && tempTexture->resource) {
+						globals::d3d::context->CopyResource(tempTexture->resource.get(), resource);
+					}
 
-	if (resource) {
-		resource->Release();
+					resource->Release();
+				}
+			}
+		}
 	}
 
 	RenderUI();
@@ -1465,7 +1591,7 @@ void EditorWindow::ShowSettingsWindow()
 			if (ImGui::BeginTable("FlagsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 				ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Colour", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 60.0f * Util::GetUIScale());
 
 				auto& recordMarkers = settings.recordMarkers;
 
@@ -1750,8 +1876,9 @@ void EditorWindow::DrawTimeControls()
 	if (!calendar || !calendar->gameHour || !calendar->timeScale)
 		return;
 
-	// Row 1: Pause/Resume + Game Time
-	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0)))
+	const float scale = Util::GetUIScale();
+	float buttonWidth = 120.0f * scale;
+	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(buttonWidth, 0)))
 		TogglePause();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Pause or resume game time progression");
@@ -1767,7 +1894,7 @@ void EditorWindow::DrawTimeControls()
 		timeScaleSlider = calendar->timeScale->value;
 
 	// Row 2: Reset Speed + TimeScale slider + speed label
-	if (ImGui::Button("Reset Speed", ImVec2(120, 0)))
+	if (ImGui::Button("Reset Speed", ImVec2(buttonWidth, 0)))
 		ResetTimeScale();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Reset time speed to vanilla (%.1fx)", kVanillaTimeScale);
@@ -1810,6 +1937,78 @@ void EditorWindow::RestoreVanityCamera()
 		vanityCameraDisabled = false;
 		logger::info("Vanity camera restored (delay: {})", savedVanityCameraDelay);
 	}
+}
+
+void EditorWindow::EnterPreviewMode(PreviewMode mode)
+{
+	if (mode == PreviewMode::None)
+		return;
+
+	// Already in free camera flying — ignore duplicate click
+	if (mode == previewMode)
+		return;
+
+	// Re-enter flying from locked state via button click
+	if (mode == PreviewMode::FreeCamera && previewMode == PreviewMode::FreeCameraLocked) {
+		previewMode = PreviewMode::FreeCamera;
+		logger::info("Free camera unlocked (re-entered flying)");
+		return;
+	}
+
+	// Switch from a different active mode first
+	if (previewMode != PreviewMode::None)
+		ExitPreviewMode();
+
+	previewMode = mode;
+	savedMousePos = ImGui::GetIO().MousePos;
+
+	if (mode == PreviewMode::FreeCamera) {
+		flySpeed = kDefaultFlySpeed;
+		RE::Console::ExecuteCommand("tfc");
+		RE::Console::ExecuteCommand(std::format("sucsm {:.0f}", flySpeed).c_str());
+	}
+
+	logger::info("Entered preview mode: {}", mode == PreviewMode::FreeCamera ? "FreeCamera" : "PlayMode");
+}
+
+void EditorWindow::ExitPreviewMode()
+{
+	bool wasFlying = IsPreviewFlying();
+
+	if (previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked)
+		RE::Console::ExecuteCommand("tfc");
+
+	logger::info("Exited preview mode");
+	previewMode = PreviewMode::None;
+
+	// Only restore cursor if exiting from a flying state; FreeCameraLocked already has the cursor active
+	if (wasFlying) {
+		ImGui::GetIO().MousePos = savedMousePos;
+		ImGui::GetIO().WantSetMousePos = true;
+	}
+}
+
+void EditorWindow::ToggleFreeCameraLock()
+{
+	if (previewMode == PreviewMode::FreeCamera) {
+		previewMode = PreviewMode::FreeCameraLocked;
+		ImGui::GetIO().MousePos = savedMousePos;
+		ImGui::GetIO().WantSetMousePos = true;
+		logger::info("Free camera locked");
+	} else if (previewMode == PreviewMode::FreeCameraLocked) {
+		savedMousePos = ImGui::GetIO().MousePos;
+		previewMode = PreviewMode::FreeCamera;
+		logger::info("Free camera unlocked");
+	}
+}
+
+void EditorWindow::AdjustFlySpeed(float scrollDelta)
+{
+	if (previewMode != PreviewMode::FreeCamera)
+		return;
+
+	flySpeed = std::clamp(flySpeed + scrollDelta * kFlySpeedScrollStep, kMinFlySpeed, kMaxFlySpeed);
+	RE::Console::ExecuteCommand(std::format("sucsm {:.0f}", flySpeed).c_str());
 }
 
 bool EditorWindow::ShouldHandleEscapeKey() const
@@ -1902,7 +2101,8 @@ void EditorWindow::RenderNotifications()
 	}
 
 	float currentTime = static_cast<float>(ImGui::GetTime());
-	float yOffset = 10.0f;
+	const float scale = Util::GetUIScale();
+	float yOffset = 10.0f * scale;
 
 	// Remove expired notifications
 	notifications.erase(
@@ -1922,11 +2122,11 @@ void EditorWindow::RenderNotifications()
 		}
 
 		// Position in top-left corner
-		ImGui::SetNextWindowPos(ImVec2(10.0f, yOffset), ImGuiCond_Always);
+		ImGui::SetNextWindowPos(ImVec2(10.0f * scale, yOffset), ImGuiCond_Always);
 		ImGui::SetNextWindowBgAlpha(0.8f * alpha);
 
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f, 10.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f * scale);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f * scale, 10.0f * scale));
 
 		if (ImGui::Begin(std::format("##Notification{}", (void*)&notif).c_str(),
 				nullptr,
@@ -1937,7 +2137,7 @@ void EditorWindow::RenderNotifications()
 			ImGui::TextUnformatted(notif.message.c_str());
 			ImGui::PopStyleColor();
 
-			yOffset += ImGui::GetWindowSize().y + 5.0f;
+			yOffset += ImGui::GetWindowSize().y + 5.0f * scale;
 		}
 		ImGui::End();
 

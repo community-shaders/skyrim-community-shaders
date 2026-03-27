@@ -2,6 +2,7 @@
 
 #include "Feature.h"
 #include "Globals.h"
+#include "State.h"
 #include "Utils/FileSystem.h"
 #include "Utils/Game.h"
 
@@ -544,12 +545,10 @@ RE::BSEventNotifyControl SceneSettingsManager::MenuOpenCloseEventHandler::Proces
 
 void SceneSettingsManager::Update()
 {
-	// Revert overrides on main/loading menu (same check as LinearLighting)
-	bool isMainOrLoading = globals::game::ui &&
-	                       (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
-
-	if (isMainOrLoading) {
-		if (isCurrentlyApplied) {
+	// Revert interior overrides on main/loading menu (same check as LinearLighting)
+	if (isCurrentlyApplied) {
+		bool isMainOrLoading = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
+		if (isMainOrLoading) {
 			RevertToExteriorSettings();
 			isCurrentlyApplied = false;
 		}

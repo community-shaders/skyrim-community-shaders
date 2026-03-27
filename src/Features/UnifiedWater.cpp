@@ -2,7 +2,9 @@
 
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
-#include "ShaderCache.h"
+#include "Util.h"
+
+#include <imgui_internal.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
@@ -52,8 +54,25 @@ void UnifiedWater::DrawOverlay()
 	if (!waterCache || !waterCache->IsBuildRunning() && !waterCache->HasBuildFailed())
 		return;
 
-	const auto shaderCache = globals::shaderCache;
-	const float vOffset = shaderCache->IsCompiling() || shaderCache->GetFailedTasks() > 0 && !shaderCache->IsHideErrors() ? 120.0f : 0.0f;
+	const float scale = Util::GetUIScale();
+	const float pos = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
+	const auto& style = ImGui::GetStyle();
+
+	// Stack below shader compilation window if it's visible this frame
+	float vOffset = 0.0f;
+	if (auto* shaderWin = ImGui::FindWindowByName("ShaderCompilationInfo")) {
+		if (shaderWin->Active) {
+			vOffset = (shaderWin->Pos.y + shaderWin->Size.y) - pos + style.ItemSpacing.y;
+		}
+	}
+	// Also stack below shader blocking overlay if visible
+	if (auto* blockingWin = ImGui::FindWindowByName("ShaderBlockingInfo")) {
+		if (blockingWin->Active) {
+			float blockingBottom = (blockingWin->Pos.y + blockingWin->Size.y) - pos + style.ItemSpacing.y;
+			if (blockingBottom > vOffset)
+				vOffset = blockingBottom;
+		}
+	}
 
 	const auto snapshot = waterCache->GetBuildProgressSnapshot();
 
@@ -64,7 +83,7 @@ void UnifiedWater::DrawOverlay()
 		auto percent = static_cast<float>(snapshot.completed) / static_cast<float>(snapshot.total);
 		auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", snapshot.completed, snapshot.total, 100 * percent);
 
-		ImGui::SetNextWindowPos(ImVec2(ThemeManager::Constants::OVERLAY_WINDOW_POSITION, ThemeManager::Constants::OVERLAY_WINDOW_POSITION + vOffset));
+		ImGui::SetNextWindowPos(ImVec2(pos, pos + vOffset));
 		if (!ImGui::Begin("UWCacheCreationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
 			ImGui::End();
 			return;
@@ -74,7 +93,7 @@ void UnifiedWater::DrawOverlay()
 
 		ImGui::End();
 	} else if (waterCache->HasBuildFailed()) {
-		ImGui::SetNextWindowPos(ImVec2(ThemeManager::Constants::OVERLAY_WINDOW_POSITION, ThemeManager::Constants::OVERLAY_WINDOW_POSITION + vOffset));
+		ImGui::SetNextWindowPos(ImVec2(pos, pos + vOffset));
 		if (!ImGui::Begin("UWCacheCreationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
 			ImGui::End();
 			return;
@@ -412,7 +431,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 	for (auto& [shape, instruction] : built) {
 		waterSystem->AddWater(shape, instruction->form.ptr, instruction->waterHeight, nullptr, true, false);
 
-		if (const auto prop = shape->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+		if (const auto prop = shape->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
 			REX::EnumSet waterFlags = static_cast<RE::BSWaterShaderProperty::WaterFlag>(0b10000100);
 			waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kUseCubemapReflections;
@@ -457,6 +476,30 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
 	const auto& singleton = globals::features::unifiedWater;
+	// Fix BSWaterShaderProperty.plane after interior->exterior transitions.
+	// The plane feeds ReflectPlane in the PerGeometry cbuffer. When corrupted (e.g., plane.constant = 0
+	// or garbage), the shader's refractionPlaneMul calculation produces extreme values causing flickering.
+	// This primarily affects flowmapped water because it uses more complex refraction depth calculations.
+	if (const auto prop = pass->geometry->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+		const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
+		const float waterHeight = pass->geometry->world.translate.z;
+
+		// Validate and fix the plane if it's corrupted.
+		// A valid water plane has normal pointing up (0,0,1) and constant = water height.
+		// After interior->exterior transitions, plane.constant can be 0 or stale values.
+		const bool planeNonFinite =
+			!std::isfinite(waterShaderProp->plane.normal.x) ||
+			!std::isfinite(waterShaderProp->plane.normal.y) ||
+			!std::isfinite(waterShaderProp->plane.normal.z) ||
+			!std::isfinite(waterShaderProp->plane.constant);
+		const bool planeNormalBad = std::abs(waterShaderProp->plane.normal.x) > 0.01f || std::abs(waterShaderProp->plane.normal.y) > 0.01f || std::abs(waterShaderProp->plane.normal.z - 1.0f) > 0.01f;
+		const bool planeConstantBad = std::abs(waterShaderProp->plane.constant - waterHeight) > 1.0f;
+		if (planeNonFinite || planeNormalBad || planeConstantBad) {
+			waterShaderProp->plane.normal = { 0.0f, 0.0f, 1.0f };
+			waterShaderProp->plane.constant = waterHeight;
+		}
+	}
+
 	if (singleton.flowmap) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
@@ -464,7 +507,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		singleton.gDisplacementMeshFlowCellOffset->x = static_cast<float>(singleton.flowmap->GetHeight());  // ObjectUV.y
 		singleton.gDisplacementMeshFlowCellOffset->y = 1.0f - pass->geometry->local.scale;                  // ObjectUV.z (counters 1 - x in SetupGeometry)
 
-		if (const auto prop = pass->geometry->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+		if (const auto prop = pass->geometry->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
 			int32_t x, y;
 			Util::WorldToCell(pass->geometry->world.translate, x, y);

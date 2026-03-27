@@ -28,7 +28,8 @@
 #define SHADER_TEST(test_name, tags, shader_path, hlsl_function, x, y, z)              \
 	TEST_CASE(test_name, tags)                                                         \
 	{                                                                                  \
-		stf::ShaderTestFixture fixture(ShaderTest::GetFixtureDesc());                  \
+		stf::ShaderTestFixture fixture(                                                \
+			ShaderTest::GetFixtureDesc(stf::GPUDevice::EDeviceType::Hardware));        \
 		auto shaderDir = (ShaderTest::GetExecutableDirectory() / "Shaders").wstring(); \
 		auto result = fixture.RunTest(stf::ShaderTestFixture::RuntimeTestDesc{         \
 			.CompilationEnv{ .Source = std::filesystem::path(shader_path),             \
@@ -87,7 +88,7 @@ inline void GenerateShaderTests(const char* shaderPath, const ShaderTestEntry (&
 	for (const auto& entry : entries) {
 		DYNAMIC_SECTION(entry.testName)
 		{
-			stf::ShaderTestFixture fixture(ShaderTest::GetFixtureDesc());
+			stf::ShaderTestFixture fixture(ShaderTest::GetFixtureDesc(stf::GPUDevice::EDeviceType::Hardware));
 			auto result = fixture.RunTest(stf::ShaderTestFixture::RuntimeTestDesc{
 				.CompilationEnv{ .Source = std::filesystem::path(shaderPath),
 					.CompilationFlags = { L"-I", shaderDir } },

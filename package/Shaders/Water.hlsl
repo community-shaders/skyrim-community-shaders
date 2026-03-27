@@ -1267,7 +1267,7 @@ PS_OUTPUT main(PS_INPUT input)
 	fogDistanceFactor = Color::FogAlpha(fogDistanceFactor);
 
 #						if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+	if (SharedData::iblSettings.EnableIBL) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #						endif
@@ -1305,7 +1305,7 @@ PS_OUTPUT main(PS_INPUT input)
 	fogDistanceFactor = Color::FogAlpha(fogDistanceFactor);
 
 #						if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+	if (SharedData::iblSettings.EnableIBL) {
 		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor);
 	}
 #						endif
@@ -1330,7 +1330,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #						endif
 #						if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+	if (SharedData::iblSettings.EnableIBL) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #						endif

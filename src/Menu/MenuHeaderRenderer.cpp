@@ -92,7 +92,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 				if (showLogo) {
 					float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
-					contentWidth = (logoSize * logoAspectRatio) + 8.0f;  // Logo width + spacing
+					contentWidth = (logoSize * logoAspectRatio) + ImGui::GetStyle().ItemSpacing.x;
 				}
 
 				// Calculate text width

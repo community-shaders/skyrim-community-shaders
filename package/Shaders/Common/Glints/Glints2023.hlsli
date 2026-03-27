@@ -439,7 +439,7 @@ namespace Glints
 		// ACCURATE PIXEL FOOTPRINT ELLIPSE
 		float2 ellipseMajor, ellipseMinor;
 		GetGradientEllipse(duvdx, duvdy, ellipseMajor, ellipseMinor);
-		float ellipseRatio = length(ellipseMajor) / (length(ellipseMinor) + 1e-8);
+		float ellipseRatio = length(ellipseMajor) / (length(ellipseMinor) + EPSILON_GLINTS);
 
 		// SHARED GLINT NDF VALUES
 		float halfScreenSpaceScaler = screenSpaceScale * 0.5;

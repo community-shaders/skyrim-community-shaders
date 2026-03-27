@@ -178,8 +178,8 @@ namespace
 				ImGui::SetWindowFontScale(1.0f);
 			}
 
-			// Reset cursor to after the title block (reduced spacing for tighter layout)
-			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + 2.0f));
+			// Reset cursor to after the title block
+			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y * 0.25f));
 		}
 
 		// Draw description if provided (wrapped to content width)
@@ -823,19 +823,17 @@ void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* 
 		return;
 	}
 
-	// Position button in screen coordinates so it stays fixed in viewport when scrolling
+	// Position button in bottom-right corner, accounting for full button frame size
+	const auto& style = ImGui::GetStyle();
 	ImVec2 windowPos = ImGui::GetWindowPos();
 	ImVec2 windowSize = ImGui::GetWindowSize();
-	float scrollbarWidth = ImGui::GetScrollMaxY() > 0 ? ImGui::GetStyle().ScrollbarSize : 0.0f;
-
+	float scrollbarWidth = ImGui::GetScrollMaxY() > 0 ? style.ScrollbarSize : 0.0f;
 	float iconDimension = ImGui::GetFrameHeight() * 1.2f;
-	ImVec2 iconSize = ImVec2(iconDimension, iconDimension);
-
-	float padding = ThemeManager::Constants::OVERLAY_WINDOW_POSITION;
-	ImVec2 buttonPos = ImVec2(
-		windowPos.x + windowSize.x - iconSize.x - padding - scrollbarWidth,
-		windowPos.y + windowSize.y - iconSize.y - padding);
-	ImGui::SetCursorScreenPos(buttonPos);
+	ImVec2 iconSize(iconDimension, iconDimension);
+	ImVec2 frameSize(iconSize.x + style.FramePadding.x * 2, iconSize.y + style.FramePadding.y * 2);
+	ImGui::SetCursorScreenPos(ImVec2(
+		windowPos.x + windowSize.x - frameSize.x - style.WindowPadding.x - scrollbarWidth,
+		windowPos.y + windowSize.y - frameSize.y - style.WindowPadding.y));
 
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.3f));

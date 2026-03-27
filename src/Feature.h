@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FeatureCategories.h"
 #include "FeatureConstraints.h"
 #include "FeatureVersions.h"
 #ifdef TRACY_ENABLE
@@ -63,7 +64,7 @@ public:
 	 * Get the category for UI grouping (e.g., "Terrain", "Lighting", "Characters", etc.)
 	 * Core features will be distributed to their respective categories
 	 */
-	virtual std::string_view GetCategory() const { return "Other"; }
+	virtual std::string_view GetCategory() const { return FeatureCategories::kOther; }
 
 	/**
 	 * Whether the feature will show up in the GUI menu

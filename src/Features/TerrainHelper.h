@@ -9,7 +9,7 @@ public:
 	virtual inline std::string GetName() override { return "Terrain Helper"; }
 	virtual inline std::string GetShortName() override { return "TerrainHelper"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_HELPER"; }
-	virtual std::string_view GetCategory() const override { return "Landscape & Textures"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

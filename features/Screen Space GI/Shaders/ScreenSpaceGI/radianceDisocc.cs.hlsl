@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/VR.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
@@ -126,7 +127,7 @@ void readHistory(
 			prev_ao, prev_y, prev_co_cg, prev_ambient, accum_frames, prev_gi_specular, wsum);
 
 		if (wsum > 1e-2) {
-			float rcpWsum = rcp(wsum + 1e-10);
+			float rcpWsum = rcp(wsum + EPSILON_WEIGHT_SUM);
 #	ifdef TEMPORAL_DENOISER
 			prev_ao *= rcpWsum;
 			prev_y *= rcpWsum;
