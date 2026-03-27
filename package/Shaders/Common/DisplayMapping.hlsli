@@ -42,9 +42,7 @@ namespace DisplayMapping
 			const float3 compressableValue = InValue - ShoulderStart;
 			const float compressableRange = InMaxValue - ShoulderStart;
 			const float compressedRange = OutMaxValue - ShoulderStart;
-			return ShoulderStart + compressedRange *
-			                           RangeCompress(compressableValue / compressedRange,
-										   ConsiderMaxValue ? (compressableRange / compressedRange) : FLT_MAX);
+			return ShoulderStart + compressedRange * RangeCompress(compressableValue / compressedRange, ConsiderMaxValue ? (compressableRange / compressedRange) : FLT_MAX);
 		}
 
 		float LuminanceCompress(
@@ -58,38 +56,32 @@ namespace DisplayMapping
 		}
 	}
 
-	// ==========================================================================
-	// DICETonemap
-	// Hue-preserving luminance tonemap in PQ space.
-	// Adapted from Luma Framework (MIT License — Copyright (c) 2024+ Filippo Tarpini)
-	// ==========================================================================
-	float3 DICETonemap(float3 Color, float PeakWhite, float ShoulderStart)
+	// Tonemapper inspired from DICE. Works by luminance to maintain hue.
+	// Takes BT.709 colors with a white level of 80 nits (sRGB).
+	// Paper white is expected to have already been multiplied in the color.
+	// ShoulderStart: 0.0-1.0 ratio of PeakWhite where compression starts (e.g., 0.5 = start at 50% of peak)
+	float3 DICETonemap(float3 Color, float PeakWhite, float ShoulderStart, uint InOutColorSpace, uint ProcessingColorSpace)
 	{
+		const float sourceLuminance = average(FromColorSpaceToColorSpace(Color, InOutColorSpace, ProcessingColorSpace));
+		const float shoulderStart = ShoulderStart * PeakWhite;
+
 		static const float HDR10_MaxWhite = HDR10_MaxWhiteNits / sRGB_WhiteLevelNits;
 
-		const float sourceLuminance = Color::RGBToLuminance(Color);
+		const float shoulderStartPerceptual = Linear_to_PQ((shoulderStart / HDR10_MaxWhite).xxx, GCT_DEFAULT).x;
+		const float peakWhitePerceptual = Linear_to_PQ((PeakWhite / HDR10_MaxWhite).xxx, GCT_DEFAULT).x;
 
-		const float shoulderStartPerceptual =
-			Linear_to_PQ((ShoulderStart / HDR10_MaxWhite).xxx, GCT_DEFAULT).x;
-		const float peakWhitePerceptual =
-			Linear_to_PQ((PeakWhite / HDR10_MaxWhite).xxx, GCT_DEFAULT).x;
+		Color = FromColorSpaceToColorSpace(Color, InOutColorSpace, ProcessingColorSpace);
 
 		const float sourceLuminanceNormalized = sourceLuminance / HDR10_MaxWhite;
-		const float sourceLuminancePerceptual =
-			Linear_to_PQ(sourceLuminanceNormalized.xxx, GCT_POSITIVE).x;
+		const float sourceLuminancePerceptual = Linear_to_PQ(sourceLuminanceNormalized.xxx, GCT_POSITIVE).x;
 
-		[branch] if (sourceLuminancePerceptual > shoulderStartPerceptual)
-		{
-			const float compressedLumPerceptual = DICE::LuminanceCompress(
-				sourceLuminancePerceptual, peakWhitePerceptual,
-				shoulderStartPerceptual, false, FLT_MAX);
-			const float compressedLumNormalized =
-				PQ_to_Linear(compressedLumPerceptual.xxx, GCT_DEFAULT).x;
-
-			Color *= compressedLumNormalized / sourceLuminanceNormalized;
+		if (sourceLuminancePerceptual > shoulderStartPerceptual) {
+			const float compressedLuminancePerceptual = DICE::LuminanceCompress(sourceLuminancePerceptual, peakWhitePerceptual, shoulderStartPerceptual, false, FLT_MAX);
+			const float compressedLuminanceNormalized = PQ_to_Linear(compressedLuminancePerceptual.xxx, GCT_DEFAULT).x;
+			Color *= compressedLuminanceNormalized / sourceLuminanceNormalized;
 		}
 
-		return Color;
+		return FromColorSpaceToColorSpace(Color, ProcessingColorSpace, InOutColorSpace);
 	}
 
 	// =============================================================================

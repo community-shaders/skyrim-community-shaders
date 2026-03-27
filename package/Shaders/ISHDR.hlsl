@@ -172,8 +172,6 @@ PS_OUTPUT main(PS_INPUT input)
 		float peakNits = SharedData::HDRData.z;
 		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
 		float peak = peakNits / sRGB_WhiteLevelNits;
-		float3 hdrInputLinear = ENABLE_LL ? inputColor : Color::SkyrimGammaToLinear(inputColor);
-		float3 hdrScene = hdrInputLinear * pw;
 
 		// --- Step 1: Identical SDR tonemap + bloom ---
 		float3 sdrTonemapped;
@@ -190,6 +188,9 @@ PS_OUTPUT main(PS_INPUT input)
 			sdrTonemapped = compressedHuePreserving;
 
 			// Standard SDR bloom: add bloom where there is headroom below the ceiling.
+			// The radial HDR sun profile from Sky.hlsl ensures the sun center tonemaps
+			// to ~1.0 (no headroom = no bloom bleed) while soft edges remain near
+			// paperwhite with natural headroom for gentle glow.
 			sdrTonemapped += saturate(Param.x - sdrTonemapped) * bloomColor;
 		}
 
@@ -203,19 +204,6 @@ PS_OUTPUT main(PS_INPUT input)
 		sdrGraded = lerp(sdrGraded, Fade.xyz, Fade.w);
 #		endif
 
-		// Secondary HDR tonemap path used for highlight shaping.
-		float3 hdrShaped = DisplayMapping::DICETonemap(hdrScene, peak, /*ShoulderStart=*/pw);
-
-		// Bloom
-		hdrShaped += saturate(Param.x - hdrShaped) * bloomColor;
-
-		// Desaturate toward luminance as brightness approaches peak.
-		// 0 at paperwhite, 1 at peak.
-		float hdrShapedLum = Color::RGBToLuminance(hdrShaped);
-		float desatStart = lerp(pw, peak, 0.4);
-		float desatT = saturate((hdrShapedLum - desatStart) / max(peak - desatStart, 1e-6));
-		hdrShaped = lerp(hdrShaped, hdrShapedLum, desatT);
-
 		// sdrGraded is now the exact SDR output (before final gamma encode).
 		// Convert to linear and scale to paperwhite for the HDR base layer.
 		float3 sdrLinear = Color::SkyrimGammaToLinear(max(0.0, sdrGraded));
@@ -223,24 +211,19 @@ PS_OUTPUT main(PS_INPUT input)
 
 		// DICE compresses the full HDR range above the shoulder start into peak nits.
 		float shoulderStart = pw / peak;
-		float3 diceLinear = DisplayMapping::DICETonemap(hdrScene, peak, shoulderStart);
+		float3 hdrInputLinear = ENABLE_LL ? inputColor : Color::SkyrimGammaToLinear(inputColor);
+		float3 diceLinear = DisplayMapping::DICETonemap(hdrInputLinear * pw, peak, shoulderStart, CS_BT709, CS_BT709);
 
-		// DICE only extends highlights at and above paperwhite.
-		float rawLum = Color::RGBToLuminance(hdrScene) / peak;
+		// DICE only extends highlights AT and ABOVE paperwhite.
+		// Below paperwhite the output is pure sdrBase — identical to SDR/vanilla.
+		// Use raw pre-tonemap luminance (in pw-relative units) to drive the blend:
+		// at shoulderStart the scene is at the paperwhite boundary; above that DICE
+		// takes over.  This avoids the SDR tonemap compressing away the blend signal
+		// (Reinhard maps very bright values to ~0.95, which after gamma roundtrip
+		// produces a diceBlend of only 0.2-0.5, capping output at ~500 nits).
+		float rawLum = average(hdrInputLinear * pw) / peak;
 		float diceBlend = saturate((rawLum - shoulderStart) / max(1.0 - shoulderStart, 1e-4));
 		float3 hdrLinearOut = lerp(sdrBase, diceLinear, diceBlend);
-		hdrLinearOut = lerp(hdrLinearOut, hdrShaped, 0.35 * diceBlend);
-
-		// Cheap fire hue fix: when bright highlights are warm (R/G dominant over B),
-		// push them slightly toward orange/yellow to avoid pink cores.
-		float peakLum = Color::RGBToLuminance(hdrLinearOut);
-		float fireHighlight = smoothstep(pw * 0.75, pw * 4.0, peakLum);
-		float warmDominance = saturate((hdrLinearOut.r - hdrLinearOut.b) * 1.25) *
-		                      saturate((hdrLinearOut.g - hdrLinearOut.b) * 2.0);
-		float fireHueMask = fireHighlight * warmDominance;
-		hdrLinearOut.b *= 1.0 - 0.30 * fireHueMask;
-		hdrLinearOut.g += hdrLinearOut.r * (0.05 * fireHueMask);
-		hdrLinearOut *= 10.0 + (0.18 * fireHueMask * diceBlend);
 
 		outputColor = Color::LinearToSkyrimGamma(max(0.0, hdrLinearOut));
 	} else {
