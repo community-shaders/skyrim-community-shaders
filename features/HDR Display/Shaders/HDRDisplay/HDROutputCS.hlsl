@@ -62,13 +62,19 @@ cbuffer PerFrame : register(b0)
 			// Composite in gamma space (matching SDR behavior), then convert to HDR.
 			// The vanilla UI was designed for gamma-space blending; compositing in PQ
 			// over-darkens and compositing in linear over-brightens behind UI overlays.
-			// On the main/loading menu the scene is SDR-range (80-nit baseline after PQ), so
-			// both the scene background and UI need the same uiBrightness lift to match the
-			// ~200-250 nit level that Windows applies when remapping SDR content on an HDR display.
-			float effectiveSceneScale = isMainOrLoadingMenu > 0.5 ? uiBrightness : 1.0;
-			float3 composited = ui.rgb * uiBrightness + scene.rgb * (1.0 - ui.a) * effectiveSceneScale;
+			// Menu/loading UI tends to be authored brighter than in-game HUD. Apply a
+			// small compensation so the default HDR UI Brightness (2.3x) still matches
+			// gameplay while keeping menus from looking slightly overdriven.
+			const float menuUIBrightnessScale = 0.695652f;  // ~1.6 / 2.3
+			float effectiveUIBrightness = (isMainOrLoadingMenu > 0.5) ? (uiBrightness * menuUIBrightnessScale) : uiBrightness;
+			float3 composited = ui.rgb * effectiveUIBrightness + scene.rgb * (1.0 - ui.a);
 
 			float3 compositedLinear = Color::SkyrimGammaToLinear(max(0.0, composited));
+			if (isMainOrLoadingMenu > 0.5) {
+				const float menuSaturation = 1.25f; // this is just to get more correct looking colours, the multiplication by UI Brightness desaturates a bit.
+				float luma = Color::RGBToLuminance(compositedLinear);
+				compositedLinear = max(0.0, lerp(luma.xxx, compositedLinear, menuSaturation));
+			}
 			float3 compositedBT2020 = Color::BT709ToBT2020(compositedLinear);
 			finalColor = Color::pq::Encode(max(0.0, compositedBT2020), sRGB_WhiteLevelNits);
 		}
