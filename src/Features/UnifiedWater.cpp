@@ -450,7 +450,7 @@ void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* wor
 	if (enteringChild) {
 		// BGSTerrainBlock_Attach calls Enable() on block attach.
 		// Child-worldspace transitions can keep old LOD blocks attached, so re-enable here.
-		if (const auto waterSystem = RE::TESWaterSystem::GetSingleton())
+		if (const auto waterSystem = globals::game::waterSystem)
 			waterSystem->Enable();
 
 		// Try an immediate cull with tes (globals::game::tes may still be null).
@@ -490,16 +490,16 @@ void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::
 
 void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 {
-	const auto waterSystem = RE::TESWaterSystem::GetSingleton();
-	auto& singleton = globals::features::unifiedWater;
+	const auto waterSystem = globals::game::waterSystem;
+	auto& uw = globals::features::unifiedWater;
 
-	if (!waterSystem || !singleton.waterCache || !singleton.gWaterLOD || !*singleton.gWaterLOD) {
+	if (!waterSystem || !uw.waterCache || !uw.gWaterLOD || !*uw.gWaterLOD) {
 		func(block);
 		return;
 	}
 
 	// Additional game-thread retry path for deferred child-WS cull completion.
-	singleton.TryCompleteDeferredChildWorldspaceCull();
+	uw.TryCompleteDeferredChildWorldspaceCull();
 
 	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
 	bool attaching = false;
@@ -525,7 +525,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		const auto lodLevel = node->GetLODLevel();
 		const auto worldSpace = block->node->manager->worldSpace;
 
-		const auto instructions = singleton.waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
+		const auto instructions = uw.waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
 		if (!instructions) {
 			logger::warn("[Unified Water] No instructions found for {} chunk at {}, {}", worldSpace->GetFormEditorID(), node->baseCellX, node->baseCellY);
 			func(block);
@@ -538,7 +538,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 
 			RE::NiCloningProcess cloningProcess;
 
-			const auto targetShape = lodLevel > 4 || singleton.settings.UseOptimisedMeshes ? singleton.optimisedWaterMesh : singleton.waterMesh;
+			const auto targetShape = lodLevel > 4 || uw.settings.UseOptimisedMeshes ? uw.optimisedWaterMesh : uw.waterMesh;
 			RE::BSTriShape* shape = targetShape->CreateClone(cloningProcess)->AsTriShape();
 
 			const auto posX = (instruction.x - node->baseCellX) * 4096.0f + instruction.size * 2048.0f;
@@ -579,13 +579,13 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		}
 	}
 
-	(*singleton.gWaterLOD)->AttachChild(block->water, true);
+	(*uw.gWaterLOD)->AttachChild(block->water, true);
 	waterSystem->Enable();
 
 	// BGSTerrainNode_UpdateWaterMeshSubVisibility never fires in child worldspaces.
 	// Cull newly built tiles here; full deferred retries are handled by
 	// TryCompleteDeferredChildWorldspaceCull().
-	if (IsChildWorldSpace(singleton.currentPlayerWorldSpace.load(std::memory_order_acquire))) {
+	if (IsChildWorldSpace(uw.currentPlayerWorldSpace.load(std::memory_order_acquire))) {
 		const auto tes = globals::game::tes;
 		if (tes && tes->gridCells) {
 			for (const auto& [shape, instruction] : built) {
@@ -598,6 +598,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 
 void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 {
+	auto& uw = globals::features::unifiedWater;
 	const auto water = block->water;
 	block->water = nullptr;
 
@@ -611,22 +612,19 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 			water->DetachChildAt(--count);
 		}
 
-		(*globals::features::unifiedWater.gWaterLOD)->DetachChild(water);
+		(*uw.gWaterLOD)->DetachChild(water);
 		block->waterAttached = false;
 	}
 }
 
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
-	const auto& singleton = globals::features::unifiedWater;
+	auto& uw = globals::features::unifiedWater;
 
 	// Render-thread fallback for deferred child-worldspace cull completion.
 	// cachedTes/grid state can be stale while the game thread mutates terrain state.
 	// pendingChildWsCull keeps retrying, so stale reads only delay culling for a frame.
-	{
-		auto& uw = globals::features::unifiedWater;
-		uw.TryCompleteDeferredChildWorldspaceCull(singleton.cachedTes.load(std::memory_order_acquire));
-	}
+	uw.TryCompleteDeferredChildWorldspaceCull(uw.cachedTes.load(std::memory_order_acquire));
 
 	// Fix BSWaterShaderProperty.plane after interior->exterior transitions.
 	// The plane feeds ReflectPlane in the PerGeometry cbuffer. When corrupted (e.g., plane.constant = 0
@@ -652,12 +650,12 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		}
 	}
 
-	if (singleton.flowmap) {
+	if (uw.flowmap) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
-		*singleton.gFlowMapSize = singleton.flowmap->GetWidth();                                            // ObjectUV.x
-		singleton.gDisplacementMeshFlowCellOffset->x = static_cast<float>(singleton.flowmap->GetHeight());  // ObjectUV.y
-		singleton.gDisplacementMeshFlowCellOffset->y = 1.0f - pass->geometry->local.scale;                  // ObjectUV.z (counters 1 - x in SetupGeometry)
+		*uw.gFlowMapSize = uw.flowmap->GetWidth();                                            // ObjectUV.x
+		uw.gDisplacementMeshFlowCellOffset->x = static_cast<float>(uw.flowmap->GetHeight());  // ObjectUV.y
+		uw.gDisplacementMeshFlowCellOffset->y = 1.0f - pass->geometry->local.scale;                  // ObjectUV.z (counters 1 - x in SetupGeometry)
 
 		if (const auto prop = pass->geometry->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
@@ -667,8 +665,8 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			// xy is world cell flowmap based (0,0 is corner of flow map), zw is world cell
 			// Funky maths here to counter what's being done in SetupGeometry
 			// Previously these values were relative to the 5x5 flow grid centered on the player
-			waterShaderProp->flowX = x + singleton.flowmap->GetOffsetX();                                                                   // CellTexCoordOffset.x
-			waterShaderProp->flowY = y + singleton.flowmap->GetOffsetY() + singleton.flowmap->GetWidth() - singleton.flowmap->GetHeight();  // CellTexCoordOffset.y
+			waterShaderProp->flowX = x + uw.flowmap->GetOffsetX();                                                                   // CellTexCoordOffset.x
+			waterShaderProp->flowY = y + uw.flowmap->GetOffsetY() + uw.flowmap->GetWidth() - uw.flowmap->GetHeight();  // CellTexCoordOffset.y
 			waterShaderProp->cellX = x;                                                                                                     // CellTexCoordOffset.z
 			waterShaderProp->cellY = y;                                                                                                     // CellTexCoordOffset.w
 		}

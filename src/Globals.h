@@ -211,6 +211,7 @@ namespace globals
 		extern RE::BSGraphics::Renderer* renderer;
 		extern RE::BSShaderManager::State* smState;
 		extern RE::TES* tes;
+		extern RE::TESWaterSystem* waterSystem;
 		extern bool isVR;
 		extern RE::MemoryManager* memoryManager;
 		extern RE::INISettingCollection* iniSettingCollection;
