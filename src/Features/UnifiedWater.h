@@ -115,6 +115,10 @@ private:
 
 	std::atomic<RE::TESWorldSpace*> currentPlayerWorldSpace{ nullptr };
 	std::atomic<bool> pendingChildWsCull{ false };
+	// Cached from TES_SetWorldSpace::thunk (game thread) for deferred cull fallback.
+	std::atomic<RE::TES*> cachedTes{ nullptr };
+
+	void TryCompleteDeferredChildWorldspaceCull(RE::TES* tes = nullptr);
 
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();

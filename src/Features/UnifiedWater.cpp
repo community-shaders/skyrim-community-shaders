@@ -89,6 +89,22 @@ static bool CullAllWaterLODParents(RE::NiNode* waterLOD, RE::TES* tes = nullptr)
 	return aggregate.IsComplete();
 }
 
+void UnifiedWater::TryCompleteDeferredChildWorldspaceCull(RE::TES* tes)
+{
+	if (!pendingChildWsCull.load(std::memory_order_acquire) ||
+		!IsChildWorldSpace(currentPlayerWorldSpace.load(std::memory_order_acquire)) ||
+		!gWaterLOD || !*gWaterLOD)
+		return;
+
+	if (!tes)
+		tes = globals::game::tes;
+	if (!tes || !tes->gridCells)
+		return;
+
+	if (CullAllWaterLODParents(*gWaterLOD, tes))
+		pendingChildWsCull.store(false, std::memory_order_release);
+}
+
 void UnifiedWater::LoadSettings(json& o_json)
 {
 	settings = o_json;
@@ -401,6 +417,7 @@ void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* wor
 	// sees the correct worldspace when it fires during cell attachment inside func.
 	auto& uw = globals::features::unifiedWater;
 	uw.currentPlayerWorldSpace.store(worldSpace, std::memory_order_release);
+	uw.cachedTes.store(tes, std::memory_order_release);
 	if (!enteringChild)
 		uw.pendingChildWsCull.store(false, std::memory_order_release);  // leaving child WS: discard any stale pending cull
 
@@ -439,6 +456,7 @@ void UnifiedWater::TES_DestroySkyCell::thunk(RE::TES* tes)
 	auto& uw = globals::features::unifiedWater;
 	uw.currentPlayerWorldSpace.store(nullptr, std::memory_order_release);
 	uw.pendingChildWsCull.store(false, std::memory_order_release);
+	uw.cachedTes.store(nullptr, std::memory_order_release);
 	if (!uw.waterCache)
 		return;
 
@@ -459,12 +477,15 @@ void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::
 void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 {
 	const auto waterSystem = RE::TESWaterSystem::GetSingleton();
-	const auto& singleton = globals::features::unifiedWater;
+	auto& singleton = globals::features::unifiedWater;
 
 	if (!waterSystem || !singleton.waterCache || !singleton.gWaterLOD || !*singleton.gWaterLOD) {
 		func(block);
 		return;
 	}
+
+	// Additional game-thread retry path for deferred child-WS cull completion.
+	singleton.TryCompleteDeferredChildWorldspaceCull();
 
 	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
 	bool attaching = false;
@@ -599,6 +620,12 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 {
 	const auto& singleton = globals::features::unifiedWater;
 
+	// Fallback deferred cull path for frames where game-thread retry points are not reached in time.
+	{
+		auto& uw = globals::features::unifiedWater;
+		uw.TryCompleteDeferredChildWorldspaceCull(singleton.cachedTes.load(std::memory_order_acquire));
+	}
+
 	// Fix BSWaterShaderProperty.plane after interior->exterior transitions.
 	// The plane feeds ReflectPlane in the PerGeometry cbuffer. When corrupted (e.g., plane.constant = 0
 	// or garbage), the shader's refractionPlaneMul calculation produces extreme values causing flickering.
@@ -657,15 +684,7 @@ void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESW
 	// BGSTerrainBlock_Attach doesn't fire for already-attached LOD blocks when entering a child
 	// worldspace, and BGSTerrainNode_UpdateWaterMeshSubVisibility never fires in child worldspaces.
 	// This hook runs on the game thread with valid tes/gridCells, so consume the pending cull here.
-	if (uw.pendingChildWsCull.load(std::memory_order_acquire) &&
-		IsChildWorldSpace(uw.currentPlayerWorldSpace.load(std::memory_order_acquire)) &&
-		uw.gWaterLOD && *uw.gWaterLOD) {
-		const auto tes = globals::game::tes;
-		if (tes && tes->gridCells) {
-			if (CullAllWaterLODParents(*uw.gWaterLOD))
-				uw.pendingChildWsCull.store(false, std::memory_order_release);
-		}
-	}
+	uw.TryCompleteDeferredChildWorldspaceCull();
 
 	if (!uw.flowmap)
 		return;
