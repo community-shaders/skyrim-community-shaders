@@ -76,21 +76,29 @@ void IBL::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("When Fog Mix is active, rescales the IBL-tinted fog to keep the original fog brightness.\nPrevents fog from becoming too bright or too dark.");
 	}
+	ImGui::Checkbox("Disable in Interiors", &disableInInteriors);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Disables IBL in interior cells.");
+	}
 }
 
 void IBL::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	if (o_json.contains("DisableInInteriors"))
+		disableInInteriors = o_json["DisableInInteriors"];
 }
 
 void IBL::SaveSettings(json& o_json)
 {
 	o_json = settings;
+	o_json["DisableInInteriors"] = disableInInteriors;
 }
 
 void IBL::RestoreDefaultSettings()
 {
 	settings = {};
+	disableInInteriors = false;
 }
 
 void IBL::RegisterWeatherVariables()
@@ -163,9 +171,17 @@ void IBL::RegisterWeatherVariables()
 		0.0f, 1.0f));
 }
 
+IBL::Settings IBL::GetCommonBufferData() const
+{
+	Settings data = settings;
+	if (disableInInteriors && Util::IsInterior())
+		data.EnableIBL = 0;
+	return data;
+}
+
 void IBL::ReflectionsPrepass()
 {
-	if (loaded) {
+	if (loaded && !(disableInInteriors && Util::IsInterior())) {
 		auto context = globals::d3d::context;
 
 		// Set PS shader resource
@@ -183,6 +199,9 @@ void IBL::ReflectionsPrepass()
 
 void IBL::Prepass()
 {
+	if (disableInInteriors && Util::IsInterior())
+		return;
+
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 
