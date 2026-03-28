@@ -60,7 +60,7 @@ void HomePageRenderer::RenderWelcomeSection()
 
 	// Only push font if we have a valid one, otherwise use default scaled
 	if (titleFont) {
-		ImGui::PushFont(titleFont);
+		ImGui::PushFont(titleFont, 0.0f);
 	}
 
 	ImVec2 windowSize = ImGui::GetWindowSize();

@@ -948,8 +948,7 @@ void SettingsTabRenderer::RenderStylingTab()
 		if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
 			float trueScale = exp2(themeSettings.GlobalScale);
 
-			auto& io = ImGui::GetIO();
-			io.FontGlobalScale = trueScale;
+			ImGui::GetStyle().FontScaleMain = trueScale;
 		}
 
 		SeparatorTextWithFont("Layout", Menu::FontRole::Subheading);
