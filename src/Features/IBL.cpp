@@ -76,7 +76,7 @@ void IBL::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("When Fog Mix is active, rescales the IBL-tinted fog to keep the original fog brightness.\nPrevents fog from becoming too bright or too dark.");
 	}
-	ImGui::Checkbox("Disable in Interiors", &disableInInteriors);
+	ImGui::Checkbox("Disable in interiors", &disableInInteriors);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Disables IBL in interior cells.");
 	}
