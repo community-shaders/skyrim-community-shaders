@@ -111,8 +111,8 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 		globals::state->SetDefines(shaderDefines);
 	}
 	if (ImGui::IsItemDeactivatedAfterEdit() || (ImGui::IsItemActive() &&
-												   (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) ||
-													   ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))))) {
+												   (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+													   ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)))) {
 		globals::state->SetDefines(shaderDefines);
 		shaderCache->Clear();
 	}
