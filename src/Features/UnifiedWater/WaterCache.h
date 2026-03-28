@@ -100,7 +100,7 @@ private:
 
 	struct AsyncBuild
 	{
-		std::unique_ptr<BS::thread_pool> pool;
+		std::unique_ptr<BS::thread_pool<>> pool;
 		std::jthread monitor;
 		std::atomic<bool> running{ false };
 		std::atomic<bool> failed{ false };

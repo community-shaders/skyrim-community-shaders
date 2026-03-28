@@ -208,7 +208,7 @@ void EditorWindow::ShowObjectsWindow()
 		// Right column: Objects
 		ImGui::TableSetColumnIndex(1);
 
-		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border, kStickyHeaderFlags)) {
+		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Borders, kStickyHeaderFlags)) {
 			// Interior Only category has its own panel
 			if (m_selectedCategory == "Interior Only") {
 				InteriorOnlyPanel::Draw();
@@ -873,8 +873,8 @@ void EditorWindow::RenderUI()
 {
 	// Apply editor UI scale
 	ImGuiIO& io = ImGui::GetIO();
-	float previousScale = io.FontGlobalScale;
-	io.FontGlobalScale = settings.editorUIScale;
+	float previousScale = ImGui::GetStyle().FontScaleMain;
+	ImGui::GetStyle().FontScaleMain = settings.editorUIScale;
 
 	if (settings.showViewport) {
 		// Dim the game scene using the theme's modal dim background color
@@ -1228,7 +1228,7 @@ void EditorWindow::RenderUI()
 		}
 
 		// Toggle-style icon button helper (active: SuccessColor bg, inactive: transparent)
-		auto DrawToggleIconButton = [&](const char* id, ImTextureID texture, bool isActive, float posX) -> bool {
+		auto DrawToggleIconButton = [&](const char* id, ImTextureRef texture, bool isActive, float posX) -> bool {
 			ImGui::SetCursorScreenPos(ImVec2(posX, cursorY));
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kIconButtonPadding, kIconButtonPadding));
@@ -1301,7 +1301,7 @@ void EditorWindow::RenderUI()
 	}
 
 	// Establish a viewport-wide DockSpace so all editor windows are snappable and dockable
-	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+	ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	auto width = ImGui::GetIO().DisplaySize.x;
 	auto height = ImGui::GetIO().DisplaySize.y;
@@ -1352,7 +1352,7 @@ void EditorWindow::RenderUI()
 	RenderNotifications();
 
 	// Restore previous font scale
-	io.FontGlobalScale = previousScale;
+	ImGui::GetStyle().FontScaleMain = previousScale;
 }
 
 void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName)
