@@ -650,7 +650,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
 		*uw.gFlowMapSize = uw.flowmap->GetWidth();                                            // ObjectUV.x
 		uw.gDisplacementMeshFlowCellOffset->x = static_cast<float>(uw.flowmap->GetHeight());  // ObjectUV.y
-		uw.gDisplacementMeshFlowCellOffset->y = 1.0f - pass->geometry->local.scale;                  // ObjectUV.z (counters 1 - x in SetupGeometry)
+		uw.gDisplacementMeshFlowCellOffset->y = 1.0f - pass->geometry->local.scale;           // ObjectUV.z (counters 1 - x in SetupGeometry)
 
 		if (const auto prop = pass->geometry->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
@@ -660,10 +660,10 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			// xy is world cell flowmap based (0,0 is corner of flow map), zw is world cell
 			// Funky maths here to counter what's being done in SetupGeometry
 			// Previously these values were relative to the 5x5 flow grid centered on the player
-			waterShaderProp->flowX = x + uw.flowmap->GetOffsetX();                                                                   // CellTexCoordOffset.x
+			waterShaderProp->flowX = x + uw.flowmap->GetOffsetX();                                                     // CellTexCoordOffset.x
 			waterShaderProp->flowY = y + uw.flowmap->GetOffsetY() + uw.flowmap->GetWidth() - uw.flowmap->GetHeight();  // CellTexCoordOffset.y
-			waterShaderProp->cellX = x;                                                                                                     // CellTexCoordOffset.z
-			waterShaderProp->cellY = y;                                                                                                     // CellTexCoordOffset.w
+			waterShaderProp->cellX = x;                                                                                // CellTexCoordOffset.z
+			waterShaderProp->cellY = y;                                                                                // CellTexCoordOffset.w
 		}
 	}
 
