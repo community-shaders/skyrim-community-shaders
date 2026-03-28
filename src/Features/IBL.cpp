@@ -85,8 +85,7 @@ void IBL::DrawSettings()
 void IBL::LoadSettings(json& o_json)
 {
 	settings = o_json;
-	if (o_json.contains("DisableInInteriors"))
-		disableInInteriors = o_json["DisableInInteriors"];
+	disableInInteriors = o_json.value("DisableInInteriors", false);
 }
 
 void IBL::SaveSettings(json& o_json)
@@ -181,14 +180,16 @@ IBL::Settings IBL::GetCommonBufferData() const
 
 void IBL::ReflectionsPrepass()
 {
-	if (loaded && !(disableInInteriors && Util::IsInterior())) {
+	if (loaded) {
 		auto context = globals::d3d::context;
+
+		bool interiorDisabled = disableInInteriors && Util::IsInterior();
 
 		// Set PS shader resource
 		{
 			std::array<ID3D11ShaderResourceView*, 4> srvs = {
-				envIBLTexture->srv.get(),
-				skyIBLTexture->srv.get(),
+				interiorDisabled ? nullptr : envIBLTexture->srv.get(),
+				interiorDisabled ? nullptr : skyIBLTexture->srv.get(),
 				staticDiffuseIBLTexture->srv.get(),
 				staticSpecularIBLTexture->srv.get()
 			};
