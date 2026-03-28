@@ -79,6 +79,14 @@ namespace DisplayMapping
 			const float compressedLuminancePerceptual = DICE::LuminanceCompress(sourceLuminancePerceptual, peakWhitePerceptual, shoulderStartPerceptual, false, FLT_MAX);
 			const float compressedLuminanceNormalized = PQ_to_Linear(compressedLuminancePerceptual.xxx, GCT_DEFAULT).x;
 			Color *= compressedLuminanceNormalized / sourceLuminanceNormalized;
+
+			// Slight desaturation in compressed highlights (PQ-distance–weighted toward white).
+			const float highlightT =
+				saturate((sourceLuminancePerceptual - shoulderStartPerceptual) / max(peakWhitePerceptual - shoulderStartPerceptual, 1e-6));
+			const float maxHighlightDesat = 0.5;
+			float desat = highlightT * highlightT * maxHighlightDesat;
+			float luma = Color::RGBToLuminance(max(Color, 0.0));
+			Color = lerp(Color, luma.xxx, desat);
 		}
 
 		return FromColorSpaceToColorSpace(Color, ProcessingColorSpace, InOutColorSpace);
