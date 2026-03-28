@@ -16,7 +16,7 @@ static bool IsChildWorldSpace(const RE::TESWorldSpace* ws)
 	       ws->parentUseFlags.all(RE::TESWorldSpace::ParentUseFlag::kUseLODData);
 }
 
-// Engine transition state treated as attached for culling.
+// Engine behavior: CellState value 6 is the transition/attached state.
 static constexpr auto kTransitionAttachedCellState = static_cast<RE::TESObjectCELL::CellState>(6);
 
 static bool ShouldCullAtCell(const RE::TES* tes, int32_t cellX, int32_t cellY, bool* isInGrid = nullptr)

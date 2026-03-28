@@ -217,7 +217,6 @@ namespace globals
 		extern RE::INISettingCollection* iniSettingCollection;
 		extern RE::INIPrefSettingCollection* iniPrefSettingCollection;
 		extern RE::GameSettingCollection* gameSettingCollection;
-		extern RE::TES* tes;
 		extern float* cameraNear;
 		extern float* cameraFar;
 		extern float* deltaTime;
