@@ -43,8 +43,8 @@ static std::pair<int32_t, int32_t> CullWaterParentByGridCells(RE::BSMultiBoundNo
 		bool cull = false;
 		if (x >= 0 && y >= 0 && x < length && y < length) {
 			if (const auto cell = gridCells->GetCell(x, y); cell && cell->cellState.any(
-				    RE::TESObjectCELL::CellState::kAttached,
-				    static_cast<RE::TESObjectCELL::CellState>(6)))
+																		RE::TESObjectCELL::CellState::kAttached,
+																		static_cast<RE::TESObjectCELL::CellState>(6)))
 				cull = true;
 		}
 		child->SetAppCulled(cull);
@@ -567,8 +567,8 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 				bool cull = false;
 				if (ix >= 0 && iy >= 0 && ix < length && iy < length) {
 					if (const auto cell = gridCells->GetCell(ix, iy); cell && cell->cellState.any(
-						    RE::TESObjectCELL::CellState::kAttached,
-						    static_cast<RE::TESObjectCELL::CellState>(6)))
+																				  RE::TESObjectCELL::CellState::kAttached,
+																				  static_cast<RE::TESObjectCELL::CellState>(6)))
 						cull = true;
 				}
 				shape->SetAppCulled(cull);
