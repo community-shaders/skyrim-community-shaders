@@ -42,7 +42,7 @@ static bool CullWaterParentByGridCells(RE::NiNode* waterParent, RE::TES* tes = n
 		if (x >= 0 && y >= 0 && x < length && y < length) {
 			if (const auto cell = gridCells->GetCell(x, y); cell && cell->cellState.any(
 																		RE::TESObjectCELL::CellState::kAttached,
-																				static_cast<RE::TESObjectCELL::CellState>(6))) {
+																		static_cast<RE::TESObjectCELL::CellState>(6))) {
 				cull = true;
 				foundAttachedCell = true;
 			}
