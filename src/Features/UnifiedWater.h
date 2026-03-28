@@ -3,6 +3,8 @@
 #include "UnifiedWater/Flowmap.h"
 #include "UnifiedWater/WaterCache.h"
 
+#include <atomic>
+
 struct UnifiedWater : OverlayFeature
 {
 	virtual inline std::string GetName() override { return "Unified Water"; }
@@ -111,11 +113,11 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
-	RE::TESWorldSpace* currentPlayerWorldSpace = nullptr;
-	bool pendingChildWsCull = false;
+	std::atomic<RE::TESWorldSpace*> currentPlayerWorldSpace{ nullptr };
+	std::atomic<bool> pendingChildWsCull{ false };
 	// Cached from TES_SetWorldSpace::thunk (game thread) for use on the render thread.
 	// globals::game::tes is null on the render thread (cached before TES singleton existed).
-	RE::TES* cachedTes = nullptr;
+	std::atomic<RE::TES*> cachedTes{ nullptr };
 
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();
