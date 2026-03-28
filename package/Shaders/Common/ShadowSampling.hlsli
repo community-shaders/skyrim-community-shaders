@@ -151,7 +151,7 @@ namespace ShadowSampling
 			return 1.0;
 		}
 
-		worldPosition.xyz += FrameBuffer::CameraPosAdjust[0].xyz;
+		worldPosition.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 		// Fade shadows out toward the cascade boundary so they dissolve cleanly.
 		float fade = saturate(shadowMapDepth / shadow.EndSplitDistances.y);
