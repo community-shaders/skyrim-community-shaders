@@ -127,11 +127,21 @@ PS_OUTPUT main(PS_INPUT input)
 		float pw = HDR_TONEMAP_REF_WHITE_NITS / sRGB_WhiteLevelNits;
 		float peak = peakNits / sRGB_WhiteLevelNits;
 
+		// Bloom "mask" so that dark pixels (things occluding the sun) don't get bloom applied to them.
+		float3 hdrInputLinear = ENABLE_LL ? inputColor : Color::SkyrimGammaToLinear(inputColor);
+		float3 bloomLinear = ENABLE_LL ? bloomColor : Color::SkyrimGammaToLinear(bloomColor);
+		float sceneL = Color::RGBToLuminance(hdrInputLinear);
+		float bloomL = Color::RGBToLuminance(bloomLinear);
+		const float bloomOccDenom = 0.54;
+		float bloomKeep = saturate(sceneL / (bloomL * bloomOccDenom + 1e-6));
+		float3 bloomForDice = bloomLinear * bloomKeep;
+		float3 bloomColorMod = bloomColor * bloomKeep;
+
 		float3 sdrTonemapped;
 
 		[branch] if (Param.z > 0.5)
 		{
-			sdrTonemapped = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor);
+			sdrTonemapped = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColorMod);
 		}
 		else
 		{
@@ -140,7 +150,7 @@ PS_OUTPUT main(PS_INPUT input)
 			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
 			sdrTonemapped = compressedHuePreserving;
 
-			sdrTonemapped += saturate(Param.x - sdrTonemapped) * bloomColor;
+			sdrTonemapped += saturate(Param.x - sdrTonemapped) * bloomColorMod;
 		}
 
 		float sdrLuminance = Color::RGBToLuminance(sdrTonemapped);
@@ -156,9 +166,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 sdrBase = sdrLinear * pw;
 
 		float shoulderStart = pw / peak;
-		float3 hdrInputLinear = ENABLE_LL ? inputColor : Color::SkyrimGammaToLinear(inputColor);
-		float3 bloomLinear = ENABLE_LL ? bloomColor : Color::SkyrimGammaToLinear(bloomColor);
-		float3 hdrScene = (hdrInputLinear + bloomLinear) * pw;
+		float3 hdrScene = (hdrInputLinear + bloomForDice) * pw;
 		float3 diceLinear = DisplayMapping::DICETonemap(hdrScene, peak, shoulderStart, CS_BT709, CS_BT709);
 
 		float diceBlend = saturate(Color::RGBToLuminance(hdrInputLinear * pw) / max(peak, 1e-6));
