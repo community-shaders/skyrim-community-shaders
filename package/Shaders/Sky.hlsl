@@ -218,43 +218,26 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		// HDR sun: uniform brightness scale vs paperwhite. peakRatio = peakNits / paperWhiteNits
-		// in 80-nit-relative space (matches ISHDR / DICE). Same multiplier on every texel
-		// keeps the texture luminance ratios identical to SDR — apparent physical size of
-		// the disc and glare does not grow when peak nits go up, only overall intensity.
-
+		const float SUN_REF_PAPER_WHITE_NITS = 203.0;
 		float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
 		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
 
-		// Same ratio as peak/pw in 80-nit-relative ISHDR space.
-		float peakRatio = peakNits / paperWhiteNits;
+		float peakRatio = peakNits / SUN_REF_PAPER_WHITE_NITS;
 
-		// Gamma-correct scaling: in non-LL mode the engine works in gamma 1.6 space.
-		// ISHDR will gamma-decode the output with pow(x, 1.6). Multiplying by peakRatio
-		// directly in gamma space causes (s * peakRatio)^1.6 = s^1.6 * peakRatio^1.6,
-		// amplifying the HDR boost by an extra peakRatio^0.6. This makes the DICE blend
-		// weight grow with peak nits, expanding the angular size of the sun.
-		// Scaling by peakRatio^(1/1.6) instead ensures the decoded linear result is
-		// s^1.6 * peakRatio — correct linear energy, peak-invariant blend footprint.
+		// Non-LL: scale in gamma with pow(PR,1/1.6) so linear matches peak/203 after decode.
 		float hdrScale = ENABLE_LL ? peakRatio : pow(peakRatio, rcp(1.6));
-		const float glareScaleMax = 2.0;  // limit glare/bloom blowout at high peak nits
 
 #		if defined(DITHER)
-		// --- Sun glare billboard ---
 		float glareLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
 
-		// Normalize weather-mod HDR textures that may exceed 1.0
 		if (glareLum > 1.0)
 			baseColor.xyz *= rcp(glareLum);
 
-		baseColor.xyz *= min(hdrScale, glareScaleMax);
+		baseColor.xyz *= hdrScale;
 
-		// Apply vertex colour tint (engine's glare envelope)
 		baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
 
 #			ifdef TEX
-		// HDR boost reveals the lens-flare sprite quad; fade UV corners so the atlas
-		// boundary and hard alpha edges are not visible (SDR margins mask this).
 		float2 glareUv = saturate(input.TexCoord0.xy);
 		float glareEdge = min(min(glareUv.x, glareUv.y), min(1.0 - glareUv.x, 1.0 - glareUv.y));
 		float glareEdgeFade = smoothstep(0.0, 0.08, glareEdge);
@@ -263,31 +246,23 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 
 #		else
-		// --- Sun disc billboard ---
 		float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
 
-		// Normalize weather-mod HDR textures
 		if (srcLum > 1.0)
 			baseColor.xyz *= rcp(srcLum);
 
-		// Core-only brightness boost: 4x on the hottest disc texels, ~1x on halo.
-		const float sunCoreBoost = 5.0;
+		float sunCoreBoost = peakRatio;
 		float sunCoreMask = smoothstep(0.9, 1.0, saturate(srcLum));
 		float discScale = hdrScale * lerp(1.0, sunCoreBoost, sunCoreMask);
 		baseColor.xyz *= discScale;
 
-		// Dithering: break up 8-bit texture quantization banding in HDR glow falloff.
-		// Interleaved Gradient Noise (Jimenez 2014) — +/-0.5 texel step in HDR range.
 		float ign = frac(52.9829189 * frac(dot(floor(input.Position.xy), float2(0.06711056, 0.00583715))));
 		baseColor.xyz += (ign - 0.5) * (discScale / 255.0);
 
-		// Preserve disc shape: don't apply PParams additive sky blend to sun disc
 		yyy = 0.0;
 #		endif
 
 #		if defined(CLOUD_SHADOWS)
-		// Clouds are alpha-blended and don't write depth, so use the cloud shadow field to
-		// attenuate the sun where clouds are actually along the camera->sun path.
 		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(input.WorldPosition.xyz, SharedData::DirLightDirection.xyz);
 		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 0).x;
 		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 1).x;

@@ -1,17 +1,6 @@
 /**
  * @file HDROutputCS.hlsl
- * @brief Final output compute shader - colorspace conversion and UI compositing.
- *
- * @details ISHDR outputs gamma-encoded BT.709 values after DICE tonemapping.
- *   Post-processing (TAA, ISDownsample, DOF) runs in that standard color space.
- *   This shader performs the final HDR colorspace conversion and UI compositing.
- *
- * Pipeline:
- *   - SDR: Passthrough + UI composite
- *   - HDR: Gamma decode -> BT.709->BT.2020 -> PQ encode + UI composite
- *
- * @see ISHDR.hlsl for bloom, DICE tonemapping, and color grading
- * @see HDR.cpp ApplyHDR() for the dispatch logic
+ * @brief HDR: gamma decode, paper-white × (nits/203), BT.2020, PQ. SDR: passthrough + UI.
  */
 
 #include "Common/Color.hlsli"
@@ -47,31 +36,27 @@ cbuffer PerFrame : register(b0)
 	float3 finalColor;
 
 	if (hdrEnabled) {
-		// Scene arrives gamma-encoded BT.709 from ISHDR (post-DICE tonemapping).
-		// ISHDR already scales the scene into HDR paper-white space using 80-nit-relative units.
-		// Convert to linear, then BT.2020, then PQ for HDR10 output.
+		static const float HDR_TONEMAP_REF_WHITE_NITS = 203.0;
+		float paperWhiteNits = max(paperWhite, 1.0);
+		float paperWhiteDisplayScale = paperWhiteNits / HDR_TONEMAP_REF_WHITE_NITS;
+
 		float3 sceneLinear = Color::SkyrimGammaToLinear(max(0.0, scene.rgb));
+		sceneLinear *= paperWhiteDisplayScale;
 
 		float3 sceneBT2020 = Color::BT709ToBT2020(sceneLinear);
 		sceneBT2020 = max(sceneBT2020, 0.0);
 
 		if (skipUI) {
-			// FG handles UI compositing separately. Scene is already scaled by ISHDR.
 			finalColor = Color::pq::Encode(sceneBT2020, sRGB_WhiteLevelNits);
 		} else {
-			// Composite in gamma space (matching SDR behavior), then convert to HDR.
-			// The vanilla UI was designed for gamma-space blending; compositing in PQ
-			// over-darkens and compositing in linear over-brightens behind UI overlays.
-			// Menu/loading UI tends to be authored brighter than in-game HUD. Apply a
-			// small compensation so the default HDR UI Brightness (2.3x) still matches
-			// gameplay while keeping menus from looking slightly overdriven.
-			const float menuUIBrightnessScale = 0.695652f;  // ~1.6 / 2.3
+			const float menuUIBrightnessScale = 0.695652f;
 			float effectiveUIBrightness = (isMainOrLoadingMenu > 0.5) ? (uiBrightness * menuUIBrightnessScale) : uiBrightness;
 			float3 composited = ui.rgb * effectiveUIBrightness + scene.rgb * (1.0 - ui.a);
 
 			float3 compositedLinear = Color::SkyrimGammaToLinear(max(0.0, composited));
+			compositedLinear *= paperWhiteDisplayScale;
 			if (isMainOrLoadingMenu > 0.5) {
-				const float menuSaturation = 1.25f;  // this is just to get more correct looking colours, the multiplication by UI Brightness desaturates a bit.
+				const float menuSaturation = 1.25f;
 				float luma = Color::RGBToLuminance(compositedLinear);
 				compositedLinear = max(0.0, lerp(luma.xxx, compositedLinear, menuSaturation));
 			}
