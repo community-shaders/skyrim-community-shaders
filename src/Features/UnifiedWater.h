@@ -115,7 +115,7 @@ private:
 
 	std::atomic<RE::TESWorldSpace*> currentPlayerWorldSpace{ nullptr };
 	std::atomic<bool> pendingChildWsCull{ false };
-	// Cached from TES_SetWorldSpace::thunk (game thread) for deferred cull fallback.
+	// Game-thread TES snapshot used by deferred child-worldspace cull fallbacks.
 	std::atomic<RE::TES*> cachedTes{ nullptr };
 
 	void TryCompleteDeferredChildWorldspaceCull(RE::TES* tes = nullptr);

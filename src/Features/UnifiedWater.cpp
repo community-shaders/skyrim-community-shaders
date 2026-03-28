@@ -16,6 +16,36 @@ static bool IsChildWorldSpace(const RE::TESWorldSpace* ws)
 	       ws->parentUseFlags.all(RE::TESWorldSpace::ParentUseFlag::kUseLODData);
 }
 
+// Engine transition state treated as attached for culling.
+static constexpr auto kTransitionAttachedCellState = static_cast<RE::TESObjectCELL::CellState>(6);
+
+static bool ShouldCullAtCell(const RE::TES* tes, int32_t cellX, int32_t cellY, bool* isInGrid = nullptr)
+{
+	if (isInGrid)
+		*isInGrid = false;
+	if (!tes || !tes->gridCells)
+		return false;
+
+	const auto& gridCells = tes->gridCells;
+	const int32_t offsetX = tes->currentGridX - static_cast<int32_t>(gridCells->length >> 1);
+	const int32_t offsetY = tes->currentGridY - static_cast<int32_t>(gridCells->length >> 1);
+	const int32_t length = static_cast<int32_t>(gridCells->length);
+
+	const int32_t x = cellX - offsetX;
+	const int32_t y = cellY - offsetY;
+	if (x < 0 || y < 0 || x >= length || y >= length)
+		return false;
+
+	if (isInGrid)
+		*isInGrid = true;
+
+	if (const auto cell = gridCells->GetCell(x, y)) {
+		return cell->cellState.any(RE::TESObjectCELL::CellState::kAttached, kTransitionAttachedCellState);
+	}
+
+	return false;
+}
+
 struct CullCompletionState
 {
 	bool foundAttachedCell = false;
@@ -27,19 +57,15 @@ struct CullCompletionState
 	}
 };
 
-// Cull all tile children of waterParent based on tes->gridCells.
-// Pass an explicit tes when globals::game::tes is not yet populated (e.g., during TES_SetWorldSpace).
+// Cull waterParent children using tes->gridCells attachment state.
+// Pass tes explicitly when globals::game::tes is not ready (e.g., TES_SetWorldSpace).
 static CullCompletionState CullWaterParentByGridCells(RE::NiNode* waterParent, RE::TES* tes = nullptr)
 {
 	if (!tes)
 		tes = globals::game::tes;
-	if (!tes || !tes->gridCells || !waterParent)
+	if (!tes || !waterParent)
 		return {};
 
-	const auto& gridCells = tes->gridCells;
-	const int32_t offsetX = tes->currentGridX - static_cast<int32_t>(gridCells->length >> 1);
-	const int32_t offsetY = tes->currentGridY - static_cast<int32_t>(gridCells->length >> 1);
-	const int32_t length = static_cast<int32_t>(gridCells->length);
 	CullCompletionState state;
 
 	for (const auto& child : waterParent->GetChildren()) {
@@ -47,27 +73,19 @@ static CullCompletionState CullWaterParentByGridCells(RE::NiNode* waterParent, R
 			continue;
 		int32_t x, y;
 		Util::WorldToCell(child->world.translate, x, y);
-		x -= offsetX;
-		y -= offsetY;
-		bool cull = false;
-		if (x >= 0 && y >= 0 && x < length && y < length) {
-			const auto cell = gridCells->GetCell(x, y);
-			if (cell && cell->cellState.any(
-							RE::TESObjectCELL::CellState::kAttached,
-							static_cast<RE::TESObjectCELL::CellState>(6))) {
-				cull = true;
-				state.foundAttachedCell = true;
-			} else {
-				state.hasPotentiallyAttachableChild = true;
-			}
-		}
+		bool isInGrid = false;
+		const bool cull = ShouldCullAtCell(tes, x, y, &isInGrid);
+		if (cull)
+			state.foundAttachedCell = true;
+		else if (isInGrid)
+			state.hasPotentiallyAttachableChild = true;
 		child->SetAppCulled(cull);
 	}
 
 	return state;
 }
 
-// Cull every tile under all water LOD parent nodes.
+// Cull all tiles under every water LOD parent.
 static bool CullAllWaterLODParents(RE::NiNode* waterLOD, RE::TES* tes = nullptr)
 {
 	if (!waterLOD)
@@ -413,8 +431,7 @@ void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* wor
 {
 	const bool enteringChild = IsChildWorldSpace(worldSpace);
 
-	// Set currentPlayerWorldSpace BEFORE func so BGSTerrainNode_UpdateWaterMeshSubVisibility
-	// sees the correct worldspace when it fires during cell attachment inside func.
+	// Set before func so attachment hooks fired inside func see the new worldspace.
 	auto& uw = globals::features::unifiedWater;
 	uw.currentPlayerWorldSpace.store(worldSpace, std::memory_order_release);
 	uw.cachedTes.store(tes, std::memory_order_release);
@@ -431,20 +448,17 @@ void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* wor
 	uw.waterCache->SetCurrentWorldSpace(worldSpace);
 
 	if (enteringChild) {
-		// BGSTerrainBlock_Attach calls waterSystem->Enable() when blocks attach.
-		// In child worldspaces, already-attached LOD blocks don't re-attach, so Enable()
-		// is never called after the transition — leaving LOD water tiles unanimated.
+		// BGSTerrainBlock_Attach calls Enable() on block attach.
+		// Child-worldspace transitions can keep old LOD blocks attached, so re-enable here.
 		if (const auto waterSystem = RE::TESWaterSystem::GetSingleton())
 			waterSystem->Enable();
 
-		// Try an immediate cull using the tes parameter (globals::game::tes may be null here).
-		// Cells just transitioned: they're likely not kAttached yet, so this usually culls 0 tiles.
-		// pendingChildWsCull is always set so deferred hooks can retry once cells load.
+		// Try an immediate cull with tes (globals::game::tes may still be null).
+		// Newly transitioned cells are often not attached yet, so deferred retries are still needed.
 		if (uw.gWaterLOD && *uw.gWaterLOD && tes && tes->gridCells)
 			CullAllWaterLODParents(*uw.gWaterLOD, tes);
 
-		// Always set the deferred flag: cells may not be kAttached until several frames later,
-		// and deferred cull hooks will retry until the cull actually takes effect.
+		// Keep deferred retries enabled until attached cells are observed and culled.
 		uw.pendingChildWsCull.store(true, std::memory_order_release);
 	}
 }
@@ -569,27 +583,13 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 	waterSystem->Enable();
 
 	// BGSTerrainNode_UpdateWaterMeshSubVisibility never fires in child worldspaces.
-	// Cull new tiles immediately, and if a full cull pass is pending (transition case
-	// where pre-existing LOD blocks weren't re-attached), do it now that tes/gridCells
-	// are valid.
+	// Cull newly built tiles here; full deferred retries are handled by
+	// TryCompleteDeferredChildWorldspaceCull().
 	if (IsChildWorldSpace(singleton.currentPlayerWorldSpace.load(std::memory_order_acquire))) {
 		const auto tes = globals::game::tes;
 		if (tes && tes->gridCells) {
-			// Cull the new tiles for this block
-			const auto& gridCells = tes->gridCells;
-			const int32_t offsetX = tes->currentGridX - static_cast<int32_t>(gridCells->length >> 1);
-			const int32_t offsetY = tes->currentGridY - static_cast<int32_t>(gridCells->length >> 1);
-			const int32_t length = static_cast<int32_t>(gridCells->length);
 			for (const auto& [shape, instruction] : built) {
-				const int32_t ix = instruction->x - offsetX;
-				const int32_t iy = instruction->y - offsetY;
-				bool cull = false;
-				if (ix >= 0 && iy >= 0 && ix < length && iy < length) {
-					if (const auto cell = gridCells->GetCell(ix, iy); cell && cell->cellState.any(
-																				  RE::TESObjectCELL::CellState::kAttached,
-																				  static_cast<RE::TESObjectCELL::CellState>(6)))
-						cull = true;
-				}
+				const bool cull = ShouldCullAtCell(tes, instruction->x, instruction->y);
 				shape->SetAppCulled(cull);
 			}
 		}
@@ -620,7 +620,9 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 {
 	const auto& singleton = globals::features::unifiedWater;
 
-	// Fallback deferred cull path for frames where game-thread retry points are not reached in time.
+	// Render-thread fallback for deferred child-worldspace cull completion.
+	// cachedTes/grid state can be stale while the game thread mutates terrain state.
+	// pendingChildWsCull keeps retrying, so stale reads only delay culling for a frame.
 	{
 		auto& uw = globals::features::unifiedWater;
 		uw.TryCompleteDeferredChildWorldspaceCull(singleton.cachedTes.load(std::memory_order_acquire));
@@ -681,9 +683,9 @@ void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESW
 
 	auto& uw = globals::features::unifiedWater;
 
-	// BGSTerrainBlock_Attach doesn't fire for already-attached LOD blocks when entering a child
-	// worldspace, and BGSTerrainNode_UpdateWaterMeshSubVisibility never fires in child worldspaces.
-	// This hook runs on the game thread with valid tes/gridCells, so consume the pending cull here.
+	// Game-thread fallback for deferred child-worldspace cull completion.
+	// Needed when entering child worldspaces with already-attached LOD blocks,
+	// where BGSTerrainBlock_Attach/UpdateWaterMeshSubVisibility may not run.
 	uw.TryCompleteDeferredChildWorldspaceCull();
 
 	if (!uw.flowmap)
