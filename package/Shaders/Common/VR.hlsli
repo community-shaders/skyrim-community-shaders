@@ -21,7 +21,6 @@ cbuffer VRValues : register(b13)
 	float2 EyeOffsetScale : packoffset(c0.z);
 	float4 EyeClipEdge[2] : packoffset(c1);
 }
-
 #endif
 
 namespace Stereo

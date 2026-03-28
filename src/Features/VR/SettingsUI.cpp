@@ -108,7 +108,7 @@ void VR::DrawOverlay()
 
 	ImGui::Begin("HowToUseOverlay", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
 
-	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f);
+	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f * scale);
 	ImGui::TextWrapped("How to Use VR Community Shaders Menu:");
 	ImGui::Separator();
 	ImGui::TextWrapped("You must open the Main Menu or Tween Menu before VR controls work.");
@@ -124,7 +124,7 @@ void VR::DrawOverlay()
 	Util::DrawButtonCombo(settings.VRMenuCloseKeys, true);
 
 	ImGui::Spacing();
-	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f);
+	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f * scale);
 	ImGui::TextWrapped("Grip + Thumbstick: Adjust overlay depth (closer/farther)");
 	ImGui::Spacing();
 	ImGui::TextWrapped("Tip: Disable this VR overlay by setting Attach Mode to 'None' in VR settings.");
