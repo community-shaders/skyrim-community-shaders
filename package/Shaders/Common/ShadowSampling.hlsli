@@ -63,9 +63,7 @@ namespace ShadowSampling
 	static const float PCFKernelShadowLight = 1.0 / 1024.0;  // frustum/spot shadow maps
 
 	// Shadow depth bias — applied before depth comparisons to prevent self-shadowing acne.
-	static const float ShadowBiasConst = 0.0005;    // constant component
-	static const float ShadowBiasSlopeScale = 0.1;  // multiplier on ddx/ddy slope bias
-
+	static const float ShadowBiasConst = 0.0005;  // constant component
 	// Depth guard epsilons used to reject spotlight fragments at the near/far frustum planes.
 	static const float ShadowDepthNearEps = 0.0001;
 	static const float ShadowDepthFarEps = 0.9999;
@@ -199,16 +197,6 @@ namespace ShadowSampling
 		return dot(float4(samples > receiverDepth), 0.25);
 	}
 
-	// Compute adaptive slope-scale bias from screen-space depth derivatives.
-	// Call once per pixel; subtract the result from receiverDepth before any
-	// shadow comparison to prevent self-shadowing acne on angled surfaces.
-	// (pixel-shader only — uses ddx/ddy)
-	float ComputeSlopeBias(float receiverDepth)
-	{
-		float2 deriv = float2(ddx(receiverDepth), ddy(receiverDepth));
-		return ShadowBiasConst + max(abs(deriv.x), abs(deriv.y)) * ShadowBiasSlopeScale;
-	}
-
 	// 8-tap spiral PCF on a 2D shadow map slice (paraboloid UV space).
 	// receiverDepth must be pre-biased by the caller.
 	float PCFSpiral8(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius, float2x2 rotationMatrix)
@@ -284,15 +272,14 @@ namespace ShadowSampling
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
 		float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
 
-		// Compute slope bias before branching to maintain quad coherence for gradient operations.
-		float slopeBias = ComputeSlopeBias(depth);
-
+		// Constant bias only — slope bias (ddx/ddy) is undefined inside a non-uniform loop
+		// where adjacent quad pixels may be at different iterations.
 		[branch] if (mode >= 1)
 		{
-			return PCFSpiral8(shadowIndex, sampleUV, depth - slopeBias, kernelRadius, rotationMatrix);
+			return PCFSpiral8(shadowIndex, sampleUV, depth - ShadowBiasConst, kernelRadius, rotationMatrix);
 		}
-		// Mode 0: single-tap with pre-computed bias
-		return SampleShadowGather(shadowIndex, sampleUV, depth - slopeBias);
+		// Mode 0: single-tap with constant bias
+		return SampleShadowGather(shadowIndex, sampleUV, depth - ShadowBiasConst);
 	}
 
 	// --- Per-light shadow sampling ---
@@ -323,9 +310,10 @@ namespace ShadowSampling
 		float spotFalloff = saturate(1.0 - radialDistSq);
 		spotFalloff = spotFalloff * spotFalloff;
 
-		// Compute slope bias once for all modes.
+		// Constant bias only — slope bias (ddx/ddy) is undefined inside a non-uniform loop
+		// where adjacent quad pixels may be at different iterations.
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
-		float biasedDepth = positionLS.z - ComputeSlopeBias(positionLS.z);
+		float biasedDepth = positionLS.z - ShadowBiasConst;
 
 		float shadowSample;
 		[branch] if (mode == 2) shadowSample = PCSSSpotlight(shadowIndex, baseUV, biasedDepth, rotationMatrix);
