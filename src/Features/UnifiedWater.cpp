@@ -18,24 +18,21 @@ static bool IsChildWorldSpace(const RE::TESWorldSpace* ws)
 
 // Cull all tile children of waterParent based on tes->gridCells.
 // Pass an explicit tes when globals::game::tes is not yet populated (e.g., during TES_SetWorldSpace).
-// Returns {culled, total} for diagnostic purposes.
-static std::pair<int32_t, int32_t> CullWaterParentByGridCells(RE::BSMultiBoundNode* waterParent, RE::TES* tes = nullptr)
+static void CullWaterParentByGridCells(RE::BSMultiBoundNode* waterParent, RE::TES* tes = nullptr)
 {
 	if (!tes)
 		tes = globals::game::tes;
 	if (!tes || !tes->gridCells || !waterParent)
-		return { 0, 0 };
+		return;
 
 	const auto& gridCells = tes->gridCells;
 	const int32_t offsetX = tes->currentGridX - static_cast<int32_t>(gridCells->length >> 1);
 	const int32_t offsetY = tes->currentGridY - static_cast<int32_t>(gridCells->length >> 1);
 	const int32_t length = static_cast<int32_t>(gridCells->length);
 
-	int32_t culled = 0, total = 0;
 	for (const auto& child : waterParent->GetChildren()) {
 		if (!child)
 			continue;
-		total++;
 		int32_t x, y;
 		Util::WorldToCell(child->world.translate, x, y);
 		x -= offsetX;
@@ -48,10 +45,21 @@ static std::pair<int32_t, int32_t> CullWaterParentByGridCells(RE::BSMultiBoundNo
 				cull = true;
 		}
 		child->SetAppCulled(cull);
-		if (cull)
-			culled++;
 	}
-	return { culled, total };
+}
+
+// Cull every tile under all water LOD parent nodes.
+static void CullAllWaterLODParents(RE::NiNode* waterLOD, RE::TES* tes = nullptr)
+{
+	if (!waterLOD)
+		return;
+
+	for (const auto& waterParentPtr : waterLOD->GetChildren()) {
+		if (!waterParentPtr)
+			continue;
+		const auto waterParent = static_cast<RE::BSMultiBoundNode*>(waterParentPtr.get());
+		CullWaterParentByGridCells(waterParent, tes);
+	}
 }
 
 void UnifiedWater::LoadSettings(json& o_json)
@@ -360,16 +368,6 @@ int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShade
 
 void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior)
 {
-	// Unconditional diagnostic: log every worldspace transition to identify what fires on child entry
-	{
-		const char* wsName = worldSpace ? worldSpace->GetFormEditorID() : "(null)";
-		const bool hasParent = worldSpace && worldSpace->parentWorld;
-		const bool hasLODFlag = hasParent && worldSpace->parentUseFlags.all(RE::TESWorldSpace::ParentUseFlag::kUseLODData);
-		const char* parentName = hasParent ? worldSpace->parentWorld->GetFormEditorID() : "(none)";
-		logger::info("[Unified Water] [Anim] TES_SetWorldSpace: ws='{}' isExterior={} hasParent={} kUseLODData={} parent='{}'",
-			wsName, isExterior, hasParent, hasLODFlag, parentName);
-	}
-
 	const bool enteringChild = IsChildWorldSpace(worldSpace);
 
 	// Set currentPlayerWorldSpace BEFORE func so BGSTerrainNode_UpdateWaterMeshSubVisibility
@@ -382,11 +380,6 @@ void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* wor
 
 	func(tes, worldSpace, isExterior);
 
-	if (enteringChild && uw.gWaterLOD && *uw.gWaterLOD) {
-		logger::info("[Unified Water] [Anim] After func, *gWaterLOD child count: {}",
-			(*uw.gWaterLOD)->GetChildren().size());
-	}
-
 	uw.waterCache->SetCurrentWorldSpace(worldSpace);
 
 	if (enteringChild) {
@@ -398,24 +391,13 @@ void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* wor
 
 		// Try an immediate cull using the tes parameter (globals::game::tes may be null here).
 		// Cells just transitioned: they're likely not kAttached yet, so this usually culls 0 tiles.
-		// pendingChildWsCull is always set so BSWaterShader_SetupGeometry can retry once cells load.
-		if (uw.gWaterLOD && *uw.gWaterLOD && tes && tes->gridCells) {
-			int32_t culled = 0, total = 0;
-			for (const auto& waterParentPtr : (*uw.gWaterLOD)->GetChildren()) {
-				if (!waterParentPtr)
-					continue;
-				const auto waterParent = static_cast<RE::BSMultiBoundNode*>(waterParentPtr.get());
-				auto [c, t] = CullWaterParentByGridCells(waterParent, tes);
-				culled += c;
-				total += t;
-			}
-			logger::info("[Unified Water] [Cull] Early cull on child WS entry: {}/{} tiles culled", culled, total);
-		}
+		// pendingChildWsCull is always set so deferred hooks can retry once cells load.
+		if (uw.gWaterLOD && *uw.gWaterLOD && tes && tes->gridCells)
+			CullAllWaterLODParents(*uw.gWaterLOD, tes);
+
 		// Always set the deferred flag: cells may not be kAttached until several frames later,
-		// and BSWaterShader_SetupGeometry will retry until the cull actually takes effect.
+		// and deferred cull hooks will retry until the cull actually takes effect.
 		uw.pendingChildWsCull = true;
-		logger::info("[Unified Water] [Cull] pendingChildWsCull set (LOD blocks={})",
-			(uw.gWaterLOD && *uw.gWaterLOD) ? (*uw.gWaterLOD)->GetChildren().size() : 0);
 	}
 }
 
@@ -454,16 +436,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			const auto tes = globals::game::tes;
 			if (tes && tes->gridCells) {
 				uw.pendingChildWsCull = false;
-				int32_t culled = 0, total = 0;
-				for (const auto& waterParentPtr : (*uw.gWaterLOD)->GetChildren()) {
-					if (!waterParentPtr)
-						continue;
-					const auto waterParent = static_cast<RE::BSMultiBoundNode*>(waterParentPtr.get());
-					auto [c, t] = CullWaterParentByGridCells(waterParent);
-					culled += c;
-					total += t;
-				}
-				logger::info("[Unified Water] [Cull] Deferred full cull on child WS entry: {}/{} tiles culled", culled, total);
+				CullAllWaterLODParents(*uw.gWaterLOD);
 			}
 		}
 	}
@@ -610,16 +583,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		if (tes && tes->gridCells) {
 			auto& uw = globals::features::unifiedWater;
 			uw.pendingChildWsCull = false;
-			int32_t culled = 0, total = 0;
-			for (const auto& waterParentPtr : (*uw.gWaterLOD)->GetChildren()) {
-				if (!waterParentPtr)
-					continue;
-				const auto waterParent = static_cast<RE::BSMultiBoundNode*>(waterParentPtr.get());
-				auto [c, t] = CullWaterParentByGridCells(waterParent, tes);
-				culled += c;
-				total += t;
-			}
-			logger::info("[Unified Water] [Cull] Deferred cull (BSWaterShader): {}/{} tiles culled", culled, total);
+			CullAllWaterLODParents(*uw.gWaterLOD, tes);
 		}
 	}
 
@@ -685,16 +649,7 @@ void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESW
 		const auto tes = globals::game::tes;
 		if (tes && tes->gridCells) {
 			uw.pendingChildWsCull = false;
-			int32_t culled = 0, total = 0;
-			for (const auto& waterParentPtr : (*uw.gWaterLOD)->GetChildren()) {
-				if (!waterParentPtr)
-					continue;
-				const auto waterParent = static_cast<RE::BSMultiBoundNode*>(waterParentPtr.get());
-				auto [c, t] = CullWaterParentByGridCells(waterParent);
-				culled += c;
-				total += t;
-			}
-			logger::info("[Unified Water] [Cull] Deferred full cull on child WS entry: {}/{} tiles culled", culled, total);
+			CullAllWaterLODParents(*uw.gWaterLOD);
 		}
 	}
 
