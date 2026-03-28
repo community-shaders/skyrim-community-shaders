@@ -25,7 +25,7 @@ namespace
 
 			font_ = menuInstance->GetFont(role);
 			if (font_) {
-				ImGui::PushFont(font_);
+				ImGui::PushFont(font_, 0.0f);
 				fontPushed_ = true;
 			} else {
 				logger::warn("RoleFontGuard: Failed to retrieve font for role {}", static_cast<int>(role));

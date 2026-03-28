@@ -1926,7 +1926,7 @@ namespace SIE
 	{
 		Clear();
 		StopFileWatcher();
-		if (!compilationPool.wait_for_tasks_duration(std::chrono::milliseconds(1000))) {
+		if (!compilationPool.wait_for(std::chrono::milliseconds(1000))) {
 			logger::info("Tasks still running despite request to stop; killing thread {}!", GetThreadId(managementThread));
 			WaitForSingleObject(managementThread, 1000);
 			TerminateThread(managementThread, 0);
@@ -2312,7 +2312,7 @@ namespace SIE
 	{
 		dependencyTracker = std::make_unique<ShaderFileDependencyTracker>();
 		logger::debug("ShaderCache initialized with {} compiler threads", (int)compilationThreadCount);
-		compilationPool.push_task(&ShaderCache::ManageCompilationSet, this, ssource.get_token());
+		compilationPool.detach_task([this, token = ssource.get_token()] { ManageCompilationSet(token); });
 	}
 
 	bool ShaderCache::UseFileWatcher() const
@@ -2346,7 +2346,7 @@ namespace SIE
 				pathStr += std::format("{}; ", path);
 			}
 			logger::debug("ShaderCache watching for changes in {}", pathStr);
-			compilationPool.push_task(&SIE::UpdateListener::processQueue, listener);
+			compilationPool.detach_task([this] { listener->processQueue(); });
 		} else {
 			logger::debug("ShaderCache already enabled");
 		}
@@ -2720,7 +2720,7 @@ namespace SIE
 			const auto& task = compilationSet.WaitTake(stoken);
 			if (!task.has_value())
 				break;  // exit because thread told to end
-			compilationPool.push_task(&ShaderCache::ProcessCompilationSet, this, stoken, task.value());
+			compilationPool.detach_task([this, stoken, t = task.value()] { ProcessCompilationSet(stoken, t); });
 		}
 	}
 

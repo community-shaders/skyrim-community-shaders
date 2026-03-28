@@ -98,7 +98,7 @@ namespace Util
 			if (auto* menu = globals::menu) {
 				if (auto* subtextFont = menu->GetFont(Menu::FontRole::Subtext)) {
 					previousFont = ImGui::GetFont();
-					ImGui::PushFont(subtextFont);
+					ImGui::PushFont(subtextFont, 0.0f);
 				}
 			}
 		}
