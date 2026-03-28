@@ -115,7 +115,7 @@ void UnifiedWater::TryCompleteDeferredChildWorldspaceCull(RE::TES* tes)
 		return;
 
 	if (!tes)
-		tes = globals::game::tes;
+		tes = cachedTes.load(std::memory_order_acquire);
 	if (!tes || !tes->gridCells)
 		return;
 
@@ -499,7 +499,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 	}
 
 	// Additional game-thread retry path for deferred child-WS cull completion.
-	uw.TryCompleteDeferredChildWorldspaceCull();
+	uw.TryCompleteDeferredChildWorldspaceCull(uw.cachedTes.load(std::memory_order_acquire));
 
 	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
 	bool attaching = false;
@@ -586,7 +586,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 	// Cull newly built tiles here; full deferred retries are handled by
 	// TryCompleteDeferredChildWorldspaceCull().
 	if (IsChildWorldSpace(uw.currentPlayerWorldSpace.load(std::memory_order_acquire))) {
-		const auto tes = globals::game::tes;
+		const auto tes = uw.cachedTes.load(std::memory_order_acquire);
 		if (tes && tes->gridCells) {
 			for (const auto& [shape, instruction] : built) {
 				const bool cull = ShouldCullAtCell(tes, instruction->x, instruction->y);
@@ -620,11 +620,6 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
 	auto& uw = globals::features::unifiedWater;
-
-	// Render-thread fallback for deferred child-worldspace cull completion.
-	// cachedTes/grid state can be stale while the game thread mutates terrain state.
-	// pendingChildWsCull keeps retrying, so stale reads only delay culling for a frame.
-	uw.TryCompleteDeferredChildWorldspaceCull(uw.cachedTes.load(std::memory_order_acquire));
 
 	// Fix BSWaterShaderProperty.plane after interior->exterior transitions.
 	// The plane feeds ReflectPlane in the PerGeometry cbuffer. When corrupted (e.g., plane.constant = 0
@@ -684,7 +679,7 @@ void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESW
 	// Game-thread fallback for deferred child-worldspace cull completion.
 	// Needed when entering child worldspaces with already-attached LOD blocks,
 	// where BGSTerrainBlock_Attach/UpdateWaterMeshSubVisibility may not run.
-	uw.TryCompleteDeferredChildWorldspaceCull();
+	uw.TryCompleteDeferredChildWorldspaceCull(uw.cachedTes.load(std::memory_order_acquire));
 
 	if (!uw.flowmap)
 		return;
