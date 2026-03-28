@@ -97,7 +97,9 @@ RWTexture2D<uint> ModeTextureRW : register(u0);
 	// --- Edge detection with two-tier classification ---
 	// MODE_EDGE:           immediate neighbor (distance 1) has depth discontinuity, OR
 	//                      inner/foreground band (distance <= kInnerWidth).
-	static const uint kInnerWidth = 2;
+	// kInnerWidth=4 provides enough margin at high VR resolutions (~8k wide) to catch
+	// disocclusion boundary pixels that are just outside the immediate-neighbor band.
+	static const uint kInnerWidth = 4;
 	int2 offsets[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
 
 	uint nearestEdgeDist = 0xFFFFFFFF;  // nearest distance at which a discontinuity was found

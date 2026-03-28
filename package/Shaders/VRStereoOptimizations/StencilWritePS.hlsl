@@ -1,14 +1,12 @@
 // VR Stereo Optimizations - Stencil Write Pixel Shader
 //
-// Reads from the per-pixel mode classification texture and depth texture.
-// Discards pixels that should NOT be stencil-culled:
-//   - MODE_DISOCCLUDED (0) = fully shaded in Eye 1, no reprojection needed
-//   - MODE_FULL_BLEND (4) = near-camera pixels fully shaded in both eyes for supersampling
-//   - Sky/HMD-mask pixels (depth >= 1.0 or depth < 1e-5) = need normal rendering
-//     in the sky pass; they keep their MODE_EDGE tag in
-//     the mode texture for VRPostProcess but must not be stencil-culled.
+// Reads from the per-pixel mode classification texture.
+// Only MODE_MAIN pixels write stencil ref=1 — these are reprojected by ReprojectionCS
+// and must be skipped by the geometry pass (NOT_EQUAL stencil test, ref=1).
 //
-// Only geometry MODE_MAIN/MODE_EDGE pixels survive and get stencil ref=1 written.
+// All other modes (DISOCCLUDED, EDGE, EDGE_NEIGHBOUR, FULL_BLEND) discard so
+// geometry renders those pixels normally. ReprojectionCS only fills MODE_MAIN, so
+// stencil must not be written for any other mode.
 //
 // Mode texture is full SBS resolution (same as render target).
 // The DSS is configured with StencilFunc=ALWAYS, StencilPassOp=REPLACE, ref=1.
@@ -17,7 +15,6 @@
 #include "VRStereoOptimizations/cbuffers.hlsli"
 
 Texture2D<uint> ModeTexture : register(t0);
-Texture2D<float> DepthTexture : register(t1);
 
 struct PS_INPUT
 {
@@ -33,20 +30,9 @@ void main(PS_INPUT input)
 
 	uint mode = ModeTexture[modeCoord];
 
-	// MODE_MAIN and MODE_EDGE in Eye 1 write stencil ref=1 (reprojectable).
-	// These are reprojected from Eye 0; MODE_DISOCCLUDED and MODE_FULL_BLEND are fully shaded in Eye 1.
-	if (mode == MODE_DISOCCLUDED)
-		discard;
-
-	// Sky/HMD-mask pixels must not be stencil-culled regardless of edge classification.
-	// They keep their MODE_EDGE tag in the mode texture for VRPostProcess,
-	// but must render normally in the sky pass (which runs after stencil culling).
-	float depth = DepthTexture[modeCoord];
-	if (depth >= 1.0 || depth < 1e-5)
-		discard;
-
-	// MODE_FULL_BLEND: near-camera pixels fully shaded in both eyes for supersampling
-	if (mode == MODE_FULL_BLEND)
+	// Only MODE_MAIN pixels are filled by ReprojectionCS and should be stencil-culled.
+	// EDGE/EDGE_NEIGHBOUR/FULL_BLEND must render normally; DISOCCLUDED is also fully shaded.
+	if (mode != MODE_MAIN)
 		discard;
 
 	// Pixel survives: DSS writes stencil ref=1

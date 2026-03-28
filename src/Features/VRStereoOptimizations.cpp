@@ -120,7 +120,8 @@ void VRStereoOptimizations::SetupResources()
 	}
 
 	// Depth-stencil state for stencil write pass:
-	// Depth test OFF (not rendering geometry), stencil ALWAYS + REPLACE with ref=1
+	// Depth test OFF (not rendering geometry), depth writes OFF, stencil ALWAYS + REPLACE with ref=1.
+	// We use the normal (writable) kMAIN DSV — no simultaneous SRV binding needed.
 	{
 		D3D11_DEPTH_STENCIL_DESC dssDesc{};
 		dssDesc.DepthEnable = FALSE;
@@ -145,21 +146,6 @@ void VRStereoOptimizations::SetupResources()
 		rsDesc.DepthClipEnable = FALSE;
 
 		DX::ThrowIfFailed(device->CreateRasterizerState(&rsDesc, stencilWriteRS.put()));
-	}
-
-	// Read-only depth DSV for stencil write pass: allows simultaneous depth SRV binding.
-	// We write stencil but never write depth, so D3D11_DSV_READ_ONLY_DEPTH is safe.
-	{
-		auto& depthData = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-		if (depthData.views[0] && depthData.texture) {
-			D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-			depthData.views[0]->GetDesc(&dsvDesc);
-			dsvDesc.Flags = D3D11_DSV_READ_ONLY_DEPTH;
-
-			DX::ThrowIfFailed(device->CreateDepthStencilView(depthData.texture, &dsvDesc, stencilWriteReadOnlyDSV.put()));
-		} else {
-			logger::warn("[VRStereoOptimizations] Could not create read-only DSV: depth stencil data not available");
-		}
 	}
 
 	CompileShaders();
@@ -299,7 +285,7 @@ void VRStereoOptimizations::DispatchStencil()
 	if (settings.stereoMode == StereoMode::Off)
 		return;
 	if (!stencilCS || !stencilWriteVS || !stencilWritePS || !texPerPixelMode || !paramsCB ||
-		!stencilWriteReadOnlyDSV || !stencilWriteDSS || !stencilWriteRS)
+		!stencilWriteDSS || !stencilWriteRS)
 		return;
 
 	ZoneScoped;
@@ -403,29 +389,28 @@ void VRStereoOptimizations::ExecuteStencilWritePass()
 	D3D11_PRIMITIVE_TOPOLOGY savedTopology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
 	context->IAGetPrimitiveTopology(&savedTopology);
 
-	ID3D11ShaderResourceView* savedPSSRVs[2] = {};
-	context->PSGetShaderResources(0, 2, savedPSSRVs);
+	ID3D11ShaderResourceView* savedPSSRV = nullptr;
+	context->PSGetShaderResources(0, 1, &savedPSSRV);
 
 	ID3D11Buffer* savedPSCB = nullptr;
 	context->PSGetConstantBuffers(1, 1, &savedPSCB);
 
 	// ===== SET UP STENCIL WRITE PASS =====
 
-	// Use our custom read-only-depth DSV to allow simultaneous depth SRV binding (t1).
-	// D3D11_DSV_READ_ONLY_DEPTH permits depth SRV + stencil write simultaneously.
-	// Using views[0] would cause D3D11 to silently NULL the depth SRV.
-	// depthData.readOnlyViews[0] has BOTH read-only flags and doesn't allow stencil writes.
 	// Clear stencil buffer to 0 before writing classification.
-	// The engine's z-prepass may have written stencil values (e.g., stencil=1) for rendered geometry.
-	// Without this clear, StencilWritePS discards for MODE_DISOCCLUDED pixels leave the engine's
-	// stencil value intact, which can match our NOT_EQUAL ref=1 culling test and incorrectly
-	// skip those pixels during the Lighting pass.
+	// The engine's z-prepass may have written stencil values for rendered geometry.
+	// Without this clear, non-discarded pixels in StencilWritePS could inherit engine stencil
+	// values that match our NOT_EQUAL ref=1 culling test and incorrectly skip geometry pixels.
+	// StencilWritePS no longer binds a depth SRV, so we can use the normal writable DSV here.
 	{
 		auto& depthData = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 		context->ClearDepthStencilView(depthData.views[0], D3D11_CLEAR_STENCIL, 1.0f, 0);
 	}
 
-	context->OMSetRenderTargets(0, nullptr, stencilWriteReadOnlyDSV.get());
+	// Use the normal DSV for stencil writes — no depth SRV is bound simultaneously,
+	// so there is no D3D11 resource hazard and stencil writes are not suppressed.
+	auto& depthData = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	context->OMSetRenderTargets(0, nullptr, depthData.views[0]);
 	context->OMSetDepthStencilState(stencilWriteDSS.get(), 1);
 	context->RSSetState(stencilWriteRS.get());
 
@@ -452,9 +437,6 @@ void VRStereoOptimizations::ExecuteStencilWritePass()
 	ID3D11ShaderResourceView* modeSRV = texPerPixelMode->srv.get();
 	context->PSSetShaderResources(0, 1, &modeSRV);
 
-	auto* depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
-	context->PSSetShaderResources(1, 1, &depthSRV);
-
 	// Bind params CB to pixel shader (CS and PS have separate CB bindings)
 	auto cbPtr = paramsCB->CB();
 	context->PSSetConstantBuffers(1, 1, &cbPtr);
@@ -467,8 +449,8 @@ void VRStereoOptimizations::ExecuteStencilWritePass()
 
 	// ===== RESTORE FULL D3D11 PIPELINE STATE =====
 
-	ID3D11ShaderResourceView* nullSRVs[2] = {};
-	context->PSSetShaderResources(0, 2, nullSRVs);
+	ID3D11ShaderResourceView* nullSRV = nullptr;
+	context->PSSetShaderResources(0, 1, &nullSRV);
 
 	context->PSSetConstantBuffers(1, 1, &savedPSCB);
 
@@ -482,7 +464,7 @@ void VRStereoOptimizations::ExecuteStencilWritePass()
 	context->GSSetShader(savedGS, nullptr, 0);
 	context->IASetInputLayout(savedInputLayout);
 	context->IASetPrimitiveTopology(savedTopology);
-	context->PSSetShaderResources(0, 2, savedPSSRVs);
+	context->PSSetShaderResources(0, 1, &savedPSSRV);
 
 	// Release COM references acquired by Get* calls
 	for (auto& rtv : savedRTVs) {
@@ -505,10 +487,8 @@ void VRStereoOptimizations::ExecuteStencilWritePass()
 		savedGS->Release();
 	if (savedInputLayout)
 		savedInputLayout->Release();
-	if (savedPSSRVs[0])
-		savedPSSRVs[0]->Release();
-	if (savedPSSRVs[1])
-		savedPSSRVs[1]->Release();
+	if (savedPSSRV)
+		savedPSSRV->Release();
 	if (savedPSCB)
 		savedPSCB->Release();
 }

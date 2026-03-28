@@ -182,7 +182,6 @@ private:
 
 	winrt::com_ptr<ID3D11DepthStencilState> stencilWriteDSS;
 	winrt::com_ptr<ID3D11RasterizerState> stencilWriteRS;
-	winrt::com_ptr<ID3D11DepthStencilView> stencilWriteReadOnlyDSV;  ///< Read-only-depth DSV for stencil write pass (allows simultaneous depth SRV)
 
 	winrt::com_ptr<ID3D11ComputeShader> stencilCS;
 	winrt::com_ptr<ID3D11ComputeShader> stencilDebugDepthMapCS;
