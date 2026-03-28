@@ -115,9 +115,6 @@ private:
 
 	std::atomic<RE::TESWorldSpace*> currentPlayerWorldSpace{ nullptr };
 	std::atomic<bool> pendingChildWsCull{ false };
-	// Cached from TES_SetWorldSpace::thunk (game thread) for use on the render thread.
-	// globals::game::tes is null on the render thread (cached before TES singleton existed).
-	std::atomic<RE::TES*> cachedTes{ nullptr };
 
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();
