@@ -31,19 +31,35 @@ float4 GetImageColor(float2 texCoord, float blurScale)
 }
 
 #	if defined(BRIGHTPASS)
-static const float kMinFireflyLuminanceLimit = 4.0;
-static const float kFireflyAvgLuminanceMultiplier = 12.0;
 static const float kBrightPassSoftKneeRatio = 0.5;
 
-float3 ApplyBrightPassPrefilter(float3 hdrColor, float avgLum)
+// Karis average: weight each pixel inversely by its luminance so isolated bright outliers
+// (fireflies) are automatically suppressed relative to their local 2x2 neighborhood.
+// Technique: Brian Karis, "Real Shading in Unreal Engine 4", SIGGRAPH 2013, p.10
+// https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf
+float3 KarisWeightedAverage(float3 a, float3 b, float3 c, float3 d)
+{
+	float wa = rcp(1.0 + Color::RGBToLuminance(a));
+	float wb = rcp(1.0 + Color::RGBToLuminance(b));
+	float wc = rcp(1.0 + Color::RGBToLuminance(c));
+	float wd = rcp(1.0 + Color::RGBToLuminance(d));
+	return (a * wa + b * wb + c * wc + d * wd) / (wa + wb + wc + wd);
+}
+
+// Sample a 2x2 neighborhood and Karis-average to suppress isolated HDR outliers.
+float3 SampleKarisFireflySuppress(float2 uv, float2 texelSize)
+{
+	float3 s0 = ImageTex.SampleLevel(ImageSampler, uv + float2(-0.5, -0.5) * texelSize, 0).rgb;
+	float3 s1 = ImageTex.SampleLevel(ImageSampler, uv + float2(0.5, -0.5) * texelSize, 0).rgb;
+	float3 s2 = ImageTex.SampleLevel(ImageSampler, uv + float2(-0.5, 0.5) * texelSize, 0).rgb;
+	float3 s3 = ImageTex.SampleLevel(ImageSampler, uv + float2(0.5, 0.5) * texelSize, 0).rgb;
+	return KarisWeightedAverage(s0, s1, s2, s3);
+}
+
+float3 ApplyBrightPass(float3 hdrColor)
 {
 	float threshold = max(BlurBrightPass.x, 0.0);
 	float scale = max(BlurBrightPass.y, 0.0);
-
-	// Clamp isolated HDR outliers before thresholding to suppress firefly-induced bloom flashes.
-	float luminance = max(Color::RGBToLuminance(hdrColor), EPSILON_DIVISION);
-	float luminanceLimit = max(kMinFireflyLuminanceLimit, avgLum * kFireflyAvgLuminanceMultiplier);
-	hdrColor *= min(1.0, luminanceLimit / luminance);
 
 	// Soft-knee threshold avoids binary bloom popping when highlights hover near threshold.
 	float knee = max(threshold * kBrightPassSoftKneeRatio, EPSILON_DIVISION);
@@ -75,11 +91,20 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if defined(BRIGHTPASS)
 	float avgLum = Color::RGBToLuminance(AvgLumTex.Sample(AvgLumSampler, input.TexCoord.xy).xyz);
+	uint imgWidth, imgHeight;
+	ImageTex.GetDimensions(imgWidth, imgHeight);
+	float2 texelSize = rcp(float2(imgWidth, imgHeight));
 #	endif
 
 	for (int blurIndex = 0; blurIndex < blurRadius; ++blurIndex) {
 		float2 screenPosition = BlurOffsets[blurIndex].xy + input.TexCoord.xy;
 		float4 imageColor = 0;
+#	if defined(BRIGHTPASS)
+		{
+			float2 sampleUV = (BlurScale.x < 0.5) ? FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(screenPosition) : screenPosition;
+			imageColor.rgb = ApplyBrightPass(SampleKarisFireflySuppress(sampleUV, texelSize));
+		}
+#	else
 		[branch] if (BlurScale.x < 0.5)
 		{
 			imageColor = GetImageColor(FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(screenPosition), blurScale.y);
@@ -88,8 +113,6 @@ PS_OUTPUT main(PS_INPUT input)
 		{
 			imageColor = GetImageColor(screenPosition, blurScale.y);
 		}
-#	if defined(BRIGHTPASS)
-		imageColor.rgb = ApplyBrightPassPrefilter(imageColor.rgb, avgLum);
 #	endif
 		color += imageColor * BlurOffsets[blurIndex].z;
 	}
