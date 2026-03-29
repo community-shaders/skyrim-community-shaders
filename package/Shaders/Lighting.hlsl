@@ -1146,7 +1146,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
 #			endif  // !FACEGEN
-#		endif  // TRUE_PBR
+#		endif      // TRUE_PBR
 
 #	endif  // EMAT
 
