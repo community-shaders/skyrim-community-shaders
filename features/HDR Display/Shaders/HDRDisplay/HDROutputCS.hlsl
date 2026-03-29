@@ -19,6 +19,7 @@ cbuffer PerFrame : register(b0)
 	float uiBrightness : packoffset(c1.x);
 	float isSceneLinear : packoffset(c1.y);
 	float isMainOrLoadingMenu : packoffset(c1.z);
+	float fgTweenMenuMidAlphaBoost : packoffset(c1.w);  ///< TweenMenu: soften AA band when compositing here (UIBrightnessCS skips while paused)
 }
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -51,10 +52,19 @@ cbuffer PerFrame : register(b0)
 		} else {
 			const float menuUIBrightnessScale = 0.695652f;
 			float effectiveUIBrightness = (isMainOrLoadingMenu > 0.5) ? (uiBrightness * menuUIBrightnessScale) : uiBrightness;
-			float3 composited = ui.rgb * effectiveUIBrightness + scene.rgb * (1.0 - ui.a);
-
-			float3 compositedLinear = Color::SkyrimGammaToLinear(max(0.0, composited));
-			compositedLinear *= paperWhiteDisplayScale;
+			// Match UIBrightnessCS: pause menu (TweenMenu) soft-AA band — FG PQ pass skips while paused, so boost runs here.
+			float aIn = ui.a;
+			float aOut = aIn;
+			if (fgTweenMenuMidAlphaBoost > 0.5 && aIn > 1e-3) {
+				float midBand = smoothstep(0.3, 0.35, aIn) * (1.0 - smoothstep(0.55, 0.6, aIn));
+				const float fgMidAlphaBoost = 0.12;
+				aOut = saturate(aIn + midBand * fgMidAlphaBoost);
+			}
+			float3 uiPremul = ui.rgb * (aOut / aIn);
+			float3 uiLinear = Color::SkyrimGammaToLinear(max(0.0, uiPremul * effectiveUIBrightness));
+			uiLinear *= paperWhiteDisplayScale;
+			float a = aOut;
+			float3 compositedLinear = uiLinear * a + sceneLinear * (1.0 - a);
 			if (isMainOrLoadingMenu > 0.5) {
 				const float menuSaturation = 1.25f;
 				float luma = Color::RGBToLuminance(compositedLinear);

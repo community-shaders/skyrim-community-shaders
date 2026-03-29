@@ -1109,10 +1109,11 @@ void HDRDisplay::ScaleUIBrightnessForFG()
 	auto& upscaling = globals::features::upscaling;
 	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 
-	// Only run when FG is actively compositing UI this frame
+	auto* ui = globals::game::ui;
+	// FG merges PQ UI from this pass; when paused, UI stays gamma — HDROutput must composite (skipUIComposite stays 0).
 	bool fgCompositing = upscaling.d3d12SwapChainActive &&
 	                     upscaling.settings.frameGenerationMode &&
-	                     !globals::game::ui->GameIsPaused() &&
+	                     ui && !ui->GameIsPaused() &&
 	                     !isMainOrLoadingMenu &&
 	                     !globals::game::isVR;
 	if (!fgCompositing)
@@ -1181,12 +1182,24 @@ float4 HDRDisplay::GetSharedDataHDR() const
 	if (!loaded)
 		return { 0.0f, 0.0f, 0.0f, 0.0f };
 
-	bool isMainOrLoading = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
+	auto* state = globals::state;
+	const bool isMainOrLoading = state->isMainMenuOpen || state->isLoadingMenuOpen;
+	auto* ui = globals::game::ui;
+	const bool inMenuOrPause =
+		ui && (ui->GameIsPaused() || state->isMainMenuOpen || state->isLoadingMenuOpen || state->isMapMenuOpen);
+
+	float menuSceneEncoding = kHdrMenuSceneGameplay;
+	if (isMainOrLoading) {
+		menuSceneEncoding = kHdrMenuSceneMainOrLoading;
+	} else if (inMenuOrPause) {
+		menuSceneEncoding = kHdrMenuScenePauseOrMap;
+	}
+
 	return {
 		settings.enableHDR ? 1.0f : 0.0f,
 		static_cast<float>(settings.hdrPaperWhite),
 		static_cast<float>(settings.hdrPeakNits),
-		isMainOrLoading ? 1.0f : 0.0f
+		menuSceneEncoding
 	};
 }
 
@@ -1200,9 +1213,10 @@ void HDRDisplay::UpdateHDRData() const
 	// Don't skip UI composite in main menu or loading screens - causes ghosting and brightness issues
 	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 
+	auto* ui = globals::game::ui;
 	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
 	                         upscaling.settings.frameGenerationMode &&
-	                         !globals::game::ui->GameIsPaused() &&
+	                         ui && !ui->GameIsPaused() &&
 	                         !isMainOrLoadingMenu &&
 	                         !globals::game::isVR;
 	bool skipUIComposite = fgActiveThisFrame;
@@ -1222,7 +1236,8 @@ void HDRDisplay::UpdateHDRData() const
 	data.uiBrightness = settings.hdrUIBrightness;
 	data.isSceneLinear = isSceneLinear ? 1.f : 0.f;
 	data.pad0 = isMainOrLoadingMenu ? 1.f : 0.f;
-	data.pad1 = 0.f;
+	// TweenMenu = pause UI. ScaleUIBrightnessForFG skips while GameIsPaused(), so HDROutputCS applies the same mid-alpha boost when compositing gamma UI.
+	data.fgTweenMenuMidAlphaBoost = (ui && ui->IsMenuOpen(RE::TweenMenu::MENU_NAME)) ? 1.f : 0.f;
 	hdrDataCB->Update(data);
 }
 

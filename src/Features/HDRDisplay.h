@@ -43,6 +43,11 @@ struct HDRDisplay : public Feature
 		bool hdrAutoDetected = false;     // Has auto-detection run at least once?
 	};
 
+	// SharedData::HDRData fourth component: menu/scene path for ISHDR + sun scale (HLSL must match).
+	static constexpr float kHdrMenuSceneGameplay = 0.f;
+	static constexpr float kHdrMenuScenePauseOrMap = 0.58f;
+	static constexpr float kHdrMenuSceneMainOrLoading = 1.f;
+
 	Settings settings;
 	std::mutex settingsMutex;
 
@@ -89,8 +94,8 @@ struct HDRDisplay : public Feature
 		float skipUIComposite;  ///< 1.0 = FG handles UI, skip our compositing
 		float uiBrightness;     ///< UI brightness multiplier (Frame Gen compositing)
 		float isSceneLinear;    ///< 1.0 = Linear Lighting active, scene already linear
-		float pad0;             ///< 1.0 = main menu/loading screen active
-		float pad1;             ///< Padding
+		float pad0;                      ///< 1.0 = main menu/loading screen active
+		float fgTweenMenuMidAlphaBoost;  ///< 1.0 = TweenMenu (pause) open — FG UIBrightnessCS mid-alpha boost only
 	};
 
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");

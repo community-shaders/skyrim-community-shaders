@@ -24,6 +24,8 @@ cbuffer PerFrame : register(b0)
 	float skipUIComposite : packoffset(c0.w);  ///< Unused in this shader
 	float uiBrightness : packoffset(c1.x);     ///< UI brightness multiplier
 	float isSceneLinear : packoffset(c1.y);    ///< Unused in this shader
+	float isMainOrLoadingMenu : packoffset(c1.z);  ///< Unused; layout matches HDRDataCB
+	float fgTweenMenuMidAlphaBoost : packoffset(c1.w);  ///< 1 = TweenMenu open: apply mid-alpha AA boost only for pause UI
 }
 
 // UI reference brightness in nits — matches typical SDR monitor brightness.
@@ -55,12 +57,22 @@ static const float UI_REFERENCE_NITS = 80.0;
 		//   result = ui.rgb + scene * 1.0
 
 		if (ui.a > 0.001) {
-			// Recover straight (non-premultiplied) color, convert to PQ, re-premultiply.
-			float3 uiStraight = ui.rgb / ui.a;
+			// Pause menu (TweenMenu) only: raise coverage in the soft-AA band so PQ/FG composite doesn't wash out.
+			// HUD/compass and other UIs must not use this — they share the same buffer when not paused.
+			float aIn = ui.a;
+			float aOut = aIn;
+			if (fgTweenMenuMidAlphaBoost > 0.5) {
+				float midBand = smoothstep(0.3, 0.35, aIn) * (1.0 - smoothstep(0.55, 0.6, aIn));
+				const float fgMidAlphaBoost = 0.12;
+				aOut = saturate(aIn + midBand * fgMidAlphaBoost);
+			}
+
+			float3 uiStraight = ui.rgb / aIn;
 			float3 uiLinear = Color::SrgbToLinear(max(0, uiStraight));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
 			float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
-			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0) * ui.a;
+			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0) * aOut;
+			ui.a = aOut;
 		} else {
 			// Broken-alpha path: rgb is premultiplied but alpha was not written to texture.
 			// Apply color transform on premultiplied values; alpha stays 0 so FidelityFX

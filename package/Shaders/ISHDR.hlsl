@@ -109,9 +109,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
 
-	bool isHDR = SharedData::HDRData.x > 0.5;
-
-	if (SharedData::HDRData.w > 0.5)
+	float4 hdrShared = SharedData::HDRData;
+	bool isHDR = hdrShared.x > 0.5;
+	float menuSceneEncoding = hdrShared.w;
+	static const float MENU_SCENE_ISHDR_BYPASS_THRESHOLD = 0.9;  // encoding 1.0 == main/loading
+	if (menuSceneEncoding > MENU_SCENE_ISHDR_BYPASS_THRESHOLD)
 		isHDR = false;
 
 	float3 outputColor = 0.0;
@@ -123,7 +125,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (isHDR) {
 		// pw = 203 nits here; user paper white in HDROutputCS.
 		static const float HDR_TONEMAP_REF_WHITE_NITS = 203.0;
-		float peakNits = SharedData::HDRData.z;
+		float peakNits = hdrShared.z;
 		float pw = HDR_TONEMAP_REF_WHITE_NITS / sRGB_WhiteLevelNits;
 		float peak = peakNits / sRGB_WhiteLevelNits;
 
