@@ -16,6 +16,9 @@ Texture2D<float> DepthTexture : register(t0);
 
 RWTexture2D<uint> ModeTextureRW : register(u0);
 
+// Sentinel for the edge-detection search: means "no discontinuity found yet".
+static const uint kEdgeDistNone = 0xFFFFFFFFu;
+
 [numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	if (any(dtid >= uint2(FrameDim)))
 		return;
@@ -30,13 +33,13 @@ RWTexture2D<uint> ModeTextureRW : register(u0);
 #ifdef DEBUG_DEPTH_MAP
 	// DIAGNOSTIC: Visualize what depth values StencilCS sees.
 	// Green (MODE_EDGE) = depth >= 1.0 (HMD mask threshold)
-	// Magenta (MODE_EDGE_NEIGHBOUR) = depth < 1e-5 (sky threshold)
+	// Magenta (MODE_EDGE_NEIGHBOUR) = depth < EPSILON_DEPTH_SKY (sky threshold)
 	// No tint (MODE_MAIN) = normal geometry with valid depth
 	if (centerDepth >= 1.0) {
 		ModeTextureRW[dtid] = MODE_EDGE;
 		return;
 	}
-	if (centerDepth < 1e-5) {
+	if (centerDepth < EPSILON_DEPTH_SKY) {
 		ModeTextureRW[dtid] = MODE_EDGE_NEIGHBOUR;
 		return;
 	}
@@ -49,8 +52,8 @@ RWTexture2D<uint> ModeTextureRW : register(u0);
 	// let edge detection run so geometry-vs-sky boundaries get classified.
 	// HMD mask pixels are in lens corners with no nearby geometry, so they'll
 	// fall through to MODE_DISOCCLUDED at the end.
-	bool isSky = (centerDepth < 1e-5) || (centerDepth >= 1.0);
-	float linCenter = isSky ? 999999.0 : SharedData::GetScreenDepth(centerDepth);
+	bool isSky = (centerDepth < EPSILON_DEPTH_SKY) || (centerDepth >= 1.0);
+	float linCenter = isSky ? DEPTH_SKY_SENTINEL : SharedData::GetScreenDepth(centerDepth);
 
 	// Near-camera supersampling: geometry closer than FullBlendDistance gets full
 	// shading in both eyes for bilateral blend (2x supersampling in VRPostProcess).
@@ -78,7 +81,7 @@ RWTexture2D<uint> ModeTextureRW : register(u0);
 			// Using raw depth avoids concentric semicircle artifacts that occur
 			// with linearized depth due to precision band boundaries in the
 			// hyperbolic depth-to-linear conversion.
-			float maxRaw = max(max(centerDepth, otherDepth), 1e-7);
+			float maxRaw = max(max(centerDepth, otherDepth), EPSILON_DIVISION);
 			float rawRelDiff = abs(centerDepth - otherDepth) / maxRaw;
 			isDisoccluded = (rawRelDiff > DisocclusionThreshold);
 
@@ -89,7 +92,7 @@ RWTexture2D<uint> ModeTextureRW : register(u0);
 			// renders natively.  ForwardOcclusionScale=0.5 triggers when Eye 0 is less than 2x Eye 1's
 			// linearized depth; lower values are more aggressive, 0 = disabled.
 			if (!isDisoccluded && eyeIndex == 1 && ForwardOcclusionScale > 0.0) {
-				bool otherIsSky = (otherDepth < 1e-5) || (otherDepth >= 1.0);
+				bool otherIsSky = (otherDepth < EPSILON_DEPTH_SKY) || (otherDepth >= 1.0);
 				if (!otherIsSky) {
 					float linOther = SharedData::GetScreenDepth(otherDepth);
 					isDisoccluded = (linOther * ForwardOcclusionScale < linCenter);
@@ -116,8 +119,8 @@ RWTexture2D<uint> ModeTextureRW : register(u0);
 	static const uint kInnerWidth = 4;
 	int2 offsets[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
 
-	uint nearestEdgeDist = 0xFFFFFFFF;  // nearest distance at which a discontinuity was found
-	bool nearestWeAreOuter = false;     // whether we are on the background side at that nearest hit
+	uint nearestEdgeDist = kEdgeDistNone;  // nearest distance at which a discontinuity was found
+	bool nearestWeAreOuter = false;        // whether we are on the background side at that nearest hit
 
 	// Use the larger of inner/outer widths for the search
 	uint maxWidth = kInnerWidth;
@@ -131,9 +134,9 @@ RWTexture2D<uint> ModeTextureRW : register(u0);
 				uint2 neighborCoord = Stereo::ClampToEyeBounds(rawNeighbor, eyeIndex, FrameDim);
 
 				float neighborDepth = DepthTexture[neighborCoord];
-				bool neighborIsSky = (neighborDepth < 1e-5) || (neighborDepth >= 1.0);
-				float linNeighbor = neighborIsSky ? 999999.0 : SharedData::GetScreenDepth(neighborDepth);
-				float maxLin = max(max(linCenter, linNeighbor), 1e-5);
+				bool neighborIsSky = (neighborDepth < EPSILON_DEPTH_SKY) || (neighborDepth >= 1.0);
+				float linNeighbor = neighborIsSky ? DEPTH_SKY_SENTINEL : SharedData::GetScreenDepth(neighborDepth);
+				float maxLin = max(max(linCenter, linNeighbor), EPSILON_DEPTH_SKY);
 				float relDepthDiff = abs(linCenter - linNeighbor) / maxLin;
 
 				if (relDepthDiff > EdgeDepthThreshold && d < nearestEdgeDist) {
@@ -145,7 +148,7 @@ RWTexture2D<uint> ModeTextureRW : register(u0);
 
 	}  // !skipEdgeDetection
 
-	if (nearestEdgeDist != 0xFFFFFFFF) {
+	if (nearestEdgeDist != kEdgeDistNone) {
 		// Classify based on distance and side
 		if (nearestEdgeDist == 1) {
 			// Immediate neighbor discontinuity: always MODE_EDGE regardless of side
