@@ -101,7 +101,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #if defined(VR_STEREO_OPT)
 	if (eyeIndex == 1) {
 		uint mode = StereoOptModeTexture[uint2(dispatchID.xy)] & 0x0F;
-		if (mode == MODE_MAIN || mode == MODE_EDGE) {  // stencil-culled in Eye 1, filled by StereoBlend
+		if (mode == MODE_MAIN) {  // stencil-culled in Eye 1, filled by ReprojectionCS
 			return;
 		}
 	}

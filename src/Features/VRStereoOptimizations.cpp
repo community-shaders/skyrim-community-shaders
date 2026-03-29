@@ -298,11 +298,11 @@ void VRStereoOptimizations::DispatchStencil()
 
 	UpdateConstantBuffer();
 	auto cbPtr = paramsCB->CB();
-	// Use live depth buffer (kMAIN) instead of kPOST_ZPREPASS_COPY — at StartDeferred time,
-	// kPOST_ZPREPASS_COPY is stale (previous frame). kMAIN has fresh z-prepass depth so
-	// StencilCS can correctly detect sky-vs-geometry edges in the current frame.
-	auto renderer = globals::game::renderer;
-	auto* depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
+	// Use the same depth source as the rest of the deferred pipeline.
+	// kMAIN.depthSRV is unpopulated at StartDeferred time (z-prepass has not written to it yet).
+	// GetCurrentSceneDepthSRV() returns TerrainBlending's blended depth when active, or
+	// kPOST_ZPREPASS_COPY otherwise — both have valid z-prepass data by this point.
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
 	if (!depthSRV) {
 		logger::warn("[VRStereoOptimizations] DispatchStencil: depthSRV is null, skipping");
 		if (globals::state->frameAnnotations)
