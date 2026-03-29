@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Math.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -29,6 +30,33 @@ float4 GetImageColor(float2 texCoord, float blurScale)
 	return ImageTex.Sample(ImageSampler, texCoord) * float4(blurScale.xxx, 1);
 }
 
+#	if defined(BRIGHTPASS)
+static const float kMinFireflyLuminanceLimit = 4.0;
+static const float kFireflyAvgLuminanceMultiplier = 12.0;
+static const float kBrightPassSoftKneeRatio = 0.5;
+
+float3 ApplyBrightPassPrefilter(float3 hdrColor, float avgLum)
+{
+	float threshold = max(BlurBrightPass.x, 0.0);
+	float scale = max(BlurBrightPass.y, 0.0);
+
+	// Clamp isolated HDR outliers before thresholding to suppress firefly-induced bloom flashes.
+	float luminance = max(Color::RGBToLuminance(hdrColor), EPSILON_DIVISION);
+	float luminanceLimit = max(kMinFireflyLuminanceLimit, avgLum * kFireflyAvgLuminanceMultiplier);
+	hdrColor *= min(1.0, luminanceLimit / luminance);
+
+	// Soft-knee threshold avoids binary bloom popping when highlights hover near threshold.
+	float knee = max(threshold * kBrightPassSoftKneeRatio, EPSILON_DIVISION);
+	float brightness = max(Color::RGBToLuminance(hdrColor), EPSILON_DIVISION);
+	float soft = saturate((brightness - threshold + knee) / max(2.0 * knee, EPSILON_DIVISION));
+	soft = soft * soft * (3.0 - 2.0 * soft);
+	float contribution = max(brightness - threshold, 0.0) + soft * knee;
+	float weight = contribution / brightness;
+
+	return hdrColor * weight * scale;
+}
+#	endif
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -45,6 +73,10 @@ PS_OUTPUT main(PS_INPUT input)
 	blurScale = 1;
 #	endif
 
+#	if defined(BRIGHTPASS)
+	float avgLum = Color::RGBToLuminance(AvgLumTex.Sample(AvgLumSampler, input.TexCoord.xy).xyz);
+#	endif
+
 	for (int blurIndex = 0; blurIndex < blurRadius; ++blurIndex) {
 		float2 screenPosition = BlurOffsets[blurIndex].xy + input.TexCoord.xy;
 		float4 imageColor = 0;
@@ -57,13 +89,12 @@ PS_OUTPUT main(PS_INPUT input)
 			imageColor = GetImageColor(screenPosition, blurScale.y);
 		}
 #	if defined(BRIGHTPASS)
-		imageColor = BlurBrightPass.y * max(0, -BlurBrightPass.x + imageColor);
+		imageColor.rgb = ApplyBrightPassPrefilter(imageColor.rgb, avgLum);
 #	endif
 		color += imageColor * BlurOffsets[blurIndex].z;
 	}
 
 #	if defined(BRIGHTPASS)
-	float avgLum = Color::RGBToLuminance(AvgLumTex.Sample(AvgLumSampler, input.TexCoord.xy).xyz);
 	color.w = avgLum;
 #	endif
 
