@@ -34,6 +34,7 @@ void VRStereoOptimizations::SaveSettings(json& o_json)
 	o_json["DebugForceAllReprojectCS"] = settings.debugForceAllReprojectCS;
 	o_json["DebugDepthMap"] = settings.debugDepthMap;
 	o_json["POMDepthScale"] = settings.pomDepthScale;
+	o_json["ForwardOcclusionScale"] = settings.forwardOcclusionScale;
 }
 
 void VRStereoOptimizations::LoadSettings(json& o_json)
@@ -66,6 +67,8 @@ void VRStereoOptimizations::LoadSettings(json& o_json)
 		settings.fullBlendDistance = std::clamp(it->get<float>(), 0.0f, 50000.0f);
 	if (auto it = o_json.find("POMDepthScale"); it != o_json.end() && it->is_number())
 		settings.pomDepthScale = std::clamp(it->get<float>(), 0.0f, 500.0f);
+	if (auto it = o_json.find("ForwardOcclusionScale"); it != o_json.end() && it->is_number())
+		settings.forwardOcclusionScale = std::clamp(it->get<float>(), 0.0f, 10.0f);
 }
 
 void VRStereoOptimizations::RestoreDefaultSettings()
@@ -226,6 +229,10 @@ void VRStereoOptimizations::DrawSettings()
 
 	ImGui::SliderFloat("Disocclusion Depth Threshold", &settings.disocclusionDepthThreshold, 0.001f, 0.1f, "%.4f");
 
+	ImGui::SliderFloat("Forward Occlusion Scale", &settings.forwardOcclusionScale, 0.0f, 1.0f, "%.2f");
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Prevents Eye 0 silhouette edges from bleeding onto Eye 1 backgrounds.\nFires when Eye 0 depth is within this fraction of Eye 1 depth (e.g. 0.5 = Eye 0 less than 2x Eye 1 depth).\nLower = more aggressive. 0 = disabled.");
+
 	if (globals::state->IsDeveloperMode()) {
 		if (ImGui::TreeNode("Debug")) {
 			ImGui::SliderFloat("Full Blend Distance", &settings.fullBlendDistance, 0.0f, 10000.0f, "%.0f");
@@ -270,6 +277,7 @@ void VRStereoOptimizations::UpdateConstantBuffer()
 	params.FoveatedCenter[1] = settings.foveatedRegionCenterY;
 	params.MinEdgeDistance = settings.minEdgeDistance;
 	params.FullBlendDistance = settings.fullBlendDistance;
+	params.ForwardOcclusionScale = settings.forwardOcclusionScale;
 
 	paramsCB->Update(params);
 }

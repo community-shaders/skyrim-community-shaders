@@ -14,9 +14,9 @@ cbuffer VRStereoOptParams : register(b1)
 	float EdgeDepthThreshold;     // Relative depth difference threshold for edge detection
 	uint EdgeWidth;               // Half-width of edge detection band in pixels
 
-	float2 QualityJitter;  // Sub-pixel jitter offset (Quality mode)
-	float FoveatedRadius;  // Radius of foveal region in UV space
-	float pad2;
+	float2 QualityJitter;         // Sub-pixel jitter offset (Quality mode)
+	float FoveatedRadius;         // Radius of foveal region in UV space
+	float ForwardOcclusionScale;  // Eye 0 depth multiplier for directional disocclusion (0 = disabled)
 
 	float2 FoveatedCenter;  // Center of foveal region in UV space
 	float MinEdgeDistance;

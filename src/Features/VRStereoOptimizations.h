@@ -66,10 +66,11 @@ struct VRStereoOptimizations
 		StereoMode stereoMode = StereoMode::Enable;
 		float disocclusionDepthThreshold = 0.01f;
 		float edgeDepthThreshold = 0.05f;
-		float minEdgeDistance = 5000.0f;   ///< Minimum linearized depth for edge AA (game units)
-		float fullBlendDistance = 0.0f;    ///< Linearized depth below which both eyes are fully shaded + blended (game units)
-		float pomDepthScale = 22.5f;       ///< Scale factor for POM depth correction in stereo reprojection
-		bool debugFullBlendDepth = false;  ///< Show full blend depth zone as cyan overlay
+		float minEdgeDistance = 5000.0f;     ///< Minimum linearized depth for edge AA (game units)
+		float fullBlendDistance = 0.0f;      ///< Linearized depth below which both eyes are fully shaded + blended (game units)
+		float pomDepthScale = 22.5f;         ///< Scale factor for POM depth correction in stereo reprojection
+		float forwardOcclusionScale = 0.5f;  ///< Eye 0 depth multiplier for directional disocclusion; 0 = disabled
+		bool debugFullBlendDepth = false;    ///< Show full blend depth zone as cyan overlay
 		float qualityJitterOffset = 0.125f;
 		float foveatedRegionRadius = 0.3f;
 		float foveatedRegionCenterX = 0.5f;
@@ -104,7 +105,7 @@ struct VRStereoOptimizations
 
 		float QualityJitter[2];  // Sub-pixel jitter offset (Quality mode)
 		float FoveatedRadius;
-		float pad2;
+		float ForwardOcclusionScale;  ///< Eye 0 depth multiplier for directional disocclusion (0 = disabled)
 
 		float FoveatedCenter[2];  // Foveal region center UV
 		float MinEdgeDistance;
