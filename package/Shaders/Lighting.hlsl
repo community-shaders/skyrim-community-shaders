@@ -3166,7 +3166,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
-#		if defined(VR) && (defined(EMAT) || defined(TRUE_PBR)) && (defined(PARALLAX) || defined(LANDSCAPE) || defined(TRUE_PBR))
+#		if defined(VR) && (defined(EMAT) || defined(TRUE_PBR)) && (defined(PARALLAX) || defined(LANDSCAPE) || defined(EMAT_ENVMAP) || defined(TRUE_PBR))
 	// VR: store POM parallax amount for stereo reprojection depth correction.
 	// Read by StereoBlendCS to adjust Eye 1 (right eye) reprojection depth
 	// at POM-displaced surfaces. Not consumed on flat (SE/AE).
