@@ -88,12 +88,12 @@ struct HDRDisplay : public Feature
 	XM_ALIGNED_STRUCT(16)
 	HDRDataCB
 	{
-		float enableHDR;        ///< 1.0 = HDR output with PQ, 0.0 = SDR output with gamma
-		float paperWhite;       ///< Reference white brightness in nits for HDR
-		float peakNits;         ///< Maximum display brightness in nits for HDR
-		float skipUIComposite;  ///< 1.0 = FG handles UI, skip our compositing
-		float uiBrightness;     ///< UI brightness multiplier (Frame Gen compositing)
-		float isSceneLinear;    ///< 1.0 = Linear Lighting active, scene already linear
+		float enableHDR;                 ///< 1.0 = HDR output with PQ, 0.0 = SDR output with gamma
+		float paperWhite;                ///< Reference white brightness in nits for HDR
+		float peakNits;                  ///< Maximum display brightness in nits for HDR
+		float skipUIComposite;           ///< 1.0 = FG handles UI, skip our compositing
+		float uiBrightness;              ///< UI brightness multiplier (Frame Gen compositing)
+		float isSceneLinear;             ///< 1.0 = Linear Lighting active, scene already linear
 		float pad0;                      ///< 1.0 = main menu/loading screen active
 		float fgTweenMenuMidAlphaBoost;  ///< 1.0 = TweenMenu (pause) open — FG UIBrightnessCS mid-alpha boost only
 	};
