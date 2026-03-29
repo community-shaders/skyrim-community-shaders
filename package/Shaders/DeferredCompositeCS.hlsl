@@ -20,6 +20,7 @@ RWTexture2D<float2> MotionVectorsRW : register(u2);
 Texture2D<float> DepthTexture : register(t4);
 
 #if defined(VR_STEREO_OPT)
+#	include "VRStereoOptimizations/modes.hlsli"
 Texture2D<uint> StereoOptModeTexture : register(t16);
 #endif
 
@@ -100,7 +101,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #if defined(VR_STEREO_OPT)
 	if (eyeIndex == 1) {
 		uint mode = StereoOptModeTexture[uint2(dispatchID.xy)] & 0x0F;
-		if (mode == 2 || mode == 1) {  // MODE_MAIN or MODE_EDGE — stencil-culled, reprojected by StereoBlend
+		if (mode == MODE_MAIN || mode == MODE_EDGE) {  // stencil-culled in Eye 1, filled by StereoBlend
 			return;
 		}
 	}

@@ -493,11 +493,6 @@ void VRStereoOptimizations::ExecuteStencilWritePass()
 		savedPSCB->Release();
 }
 
-void VRStereoOptimizations::PerformLateStencilWrite()
-{
-	// Placeholder for future multi-pass stencil strategies
-}
-
 //=============================================================================
 // DSS CACHE: CLONE + STENCIL NOT_EQUAL ENFORCEMENT
 //=============================================================================

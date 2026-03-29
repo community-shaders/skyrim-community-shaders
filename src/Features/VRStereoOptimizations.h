@@ -163,9 +163,6 @@ private:
 	/// Fullscreen triangle pass: reads mode texture, writes stencil ref=1 for MODE_MAIN pixels
 	void ExecuteStencilWritePass();
 
-	/// Late stencil write callback (placeholder for future multi-pass strategies)
-	void PerformLateStencilWrite();
-
 	/// Compiles all shaders used by this feature
 	void CompileShaders();
 
