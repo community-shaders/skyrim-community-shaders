@@ -69,7 +69,7 @@ struct VRStereoOptimizations
 		float minEdgeDistance = 5000.0f;     ///< Minimum linearized depth for edge AA (game units)
 		float fullBlendDistance = 0.0f;      ///< Linearized depth below which both eyes are fully shaded + blended (game units)
 		float pomDepthScale = 22.5f;         ///< Scale factor for POM depth correction in stereo reprojection
-		float forwardOcclusionScale = 0.5f;  ///< Eye 0 depth multiplier for directional disocclusion; 0 = disabled
+		float forwardOcclusionScale = 0.2f;  ///< Eye 0 depth multiplier for directional disocclusion; 0 = disabled
 		bool debugFullBlendDepth = false;    ///< Show full blend depth zone as cyan overlay
 		float qualityJitterOffset = 0.125f;
 		float foveatedRegionRadius = 0.3f;
