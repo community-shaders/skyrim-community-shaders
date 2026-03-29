@@ -169,6 +169,7 @@ void Raytracing::DrawSettings()
 	if (ImGui::BeginTabBar("Settings")) {
 		DrawGeneralSettings();
 		DrawAdvancedSettings();
+		DrawReSTIRGISettings();
 		DrawDebugSettings();
 
 		ImGui::EndTabBar();
@@ -320,6 +321,90 @@ void Raytracing::DrawAdvancedSettings()
 	DrawSSSSettings();
 
 	DrawEnumCombo("Diffuse BRDF", advSettings.DiffuseBRDF);
+
+	ImGui::PopID();
+
+	ImGui::EndTabItem();
+}
+
+void Raytracing::DrawReSTIRGISettings()
+{
+	if (!ImGui::BeginTabItem("ReSTIR GI"))
+		return;
+
+	ImGui::PushID("ReSTIRGISettings");
+
+	auto& giSettings = settings.CreationEngineRaytracingSettings.ReSTIRGI;
+
+	ImGui::Checkbox("Enabled", &giSettings.Enabled);
+
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Enable ReSTIR GI indirect lighting resampling.");
+
+	DrawEnumCombo("Resampling Mode", giSettings.ResamplingMode);
+
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("None: Disabled\nTemporal: Reuse from previous frames\nSpatial: Reuse from nearby pixels\nTemporalAndSpatial: Both (recommended)\nFusedSpatiotemporal: Combined pass");
+
+	ImGui::Separator();
+	ImGui::Text("Temporal Resampling");
+
+	if (ImGui::SliderFloat("Temporal Depth Threshold", &giSettings.TemporalDepthThreshold, 0.0f, 1.0f, "%.2f"))
+		giSettings.TemporalDepthThreshold = std::clamp(giSettings.TemporalDepthThreshold, 0.0f, 1.0f);
+
+	if (ImGui::SliderFloat("Temporal Normal Threshold", &giSettings.TemporalNormalThreshold, 0.0f, 1.0f, "%.2f"))
+		giSettings.TemporalNormalThreshold = std::clamp(giSettings.TemporalNormalThreshold, 0.0f, 1.0f);
+
+	if (ImGui::SliderInt("Max History Length", &giSettings.MaxHistoryLength, 1, 50))
+		giSettings.MaxHistoryLength = std::clamp(giSettings.MaxHistoryLength, 1, 50);
+
+	if (ImGui::SliderInt("Max Reservoir Age", &giSettings.MaxReservoirAge, 1, 200))
+		giSettings.MaxReservoirAge = std::clamp(giSettings.MaxReservoirAge, 1, 200);
+
+	ImGui::Checkbox("Permutation Sampling", &giSettings.EnablePermutationSampling);
+	ImGui::Checkbox("Fallback Sampling", &giSettings.EnableFallbackSampling);
+
+	DrawEnumCombo("Temporal Bias Correction", giSettings.TemporalBiasCorrection);
+
+	ImGui::Separator();
+	ImGui::Text("Spatial Resampling");
+
+	if (ImGui::SliderFloat("Spatial Depth Threshold", &giSettings.SpatialDepthThreshold, 0.0f, 1.0f, "%.2f"))
+		giSettings.SpatialDepthThreshold = std::clamp(giSettings.SpatialDepthThreshold, 0.0f, 1.0f);
+
+	if (ImGui::SliderFloat("Spatial Normal Threshold", &giSettings.SpatialNormalThreshold, 0.0f, 1.0f, "%.2f"))
+		giSettings.SpatialNormalThreshold = std::clamp(giSettings.SpatialNormalThreshold, 0.0f, 1.0f);
+
+	if (ImGui::SliderInt("Spatial Samples", &giSettings.SpatialNumSamples, 0, 8))
+		giSettings.SpatialNumSamples = std::clamp(giSettings.SpatialNumSamples, 0, 8);
+
+	if (ImGui::SliderFloat("Spatial Sampling Radius", &giSettings.SpatialSamplingRadius, 1.0f, 64.0f, "%.1f"))
+		giSettings.SpatialSamplingRadius = std::clamp(giSettings.SpatialSamplingRadius, 1.0f, 64.0f);
+
+	DrawEnumCombo("Spatial Bias Correction", giSettings.SpatialBiasCorrection);
+
+	ImGui::Separator();
+	ImGui::Text("Boiling Filter");
+
+	ImGui::Checkbox("Enable Boiling Filter", &giSettings.EnableBoilingFilter);
+
+	if (giSettings.EnableBoilingFilter) {
+		if (ImGui::SliderFloat("Boiling Filter Strength", &giSettings.BoilingFilterStrength, 0.0f, 1.0f, "%.2f"))
+			giSettings.BoilingFilterStrength = std::clamp(giSettings.BoilingFilterStrength, 0.0f, 1.0f);
+	}
+
+	ImGui::Separator();
+	ImGui::Text("Final Shading");
+
+	ImGui::Checkbox("Final Visibility", &giSettings.EnableFinalVisibility);
+
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Trace a visibility ray for the final GI sample to remove shadows.");
+
+	ImGui::Checkbox("Final MIS", &giSettings.EnableFinalMIS);
+
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Apply multiple importance sampling with the initial sample.");
 
 	ImGui::PopID();
 
