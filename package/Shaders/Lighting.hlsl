@@ -404,8 +404,10 @@ SamplerState SampEnvSampler : register(s4);
 SamplerState SampEnvMaskSampler : register(s5);
 #		endif
 
-#		if defined(TRUE_PBR)
+#		if defined(TRUE_PBR) && !defined(FACEGEN)
 SamplerState SampParallaxSampler : register(s4);
+#		endif
+#		if defined(TRUE_PBR)
 SamplerState SampRMAOSSampler : register(s5);
 #		endif
 
@@ -503,8 +505,10 @@ TextureCube<float4> TexEnvSampler : register(t4);
 Texture2D<float4> TexEnvMaskSampler : register(t5);
 #		endif
 
-#		if defined(TRUE_PBR)
+#		if defined(TRUE_PBR) && !defined(FACEGEN)
 Texture2D<float4> TexParallaxSampler : register(t4);
+#		endif
+#		if defined(TRUE_PBR)
 Texture2D<float4> TexRMAOSSampler : register(t5);
 #		endif
 
@@ -1110,6 +1114,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		sampledCoatColor.rgb *= Color::Diffuse(sampledCoatProperties.rgb);
 		sampledCoatColor.a *= sampledCoatProperties.a;
 	}
+#			if !defined(FACEGEN)
 	[branch] if (SharedData::extendedMaterialSettings.EnableParallax && (PBRFlags & PBR::Flags::HasDisplacement) != 0)
 	{
 		PBRParallax = true;
@@ -1140,6 +1145,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
+#			endif  // !FACEGEN
 #		endif  // TRUE_PBR
 
 #	endif  // EMAT
@@ -2470,7 +2476,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		elif defined(EMAT_ENVMAP)
 		[branch] if (complexMaterialParallax)
 			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, lerp(parallaxShadowQuality, 1.0, SharedData::extendedMaterialSettings.ExtendShadows), screenNoise, displacementParams);
-#		elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
+#		elif defined(TRUE_PBR) && !defined(LODLANDSCAPE) && !defined(FACEGEN)
 		[branch] if (PBRParallax)
 			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, lerp(parallaxShadowQuality, 1.0, SharedData::extendedMaterialSettings.ExtendShadows), screenNoise, displacementParams);
 #		endif  // LANDSCAPE
@@ -2672,7 +2678,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				elif defined(EMAT_ENVMAP)
 			[branch] if (complexMaterialParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, screenNoise, displacementParams);
-#				elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
+#				elif defined(TRUE_PBR) && !defined(LODLANDSCAPE) && !defined(FACEGEN)
 			[branch] if (PBRParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #				endif
