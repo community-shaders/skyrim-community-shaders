@@ -372,10 +372,13 @@ void Deferred::DeferredPasses()
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
-		// Bind VRStereoOptimizations mode texture for Eye 1 skip
+		// Bind VRStereoOptimizations mode texture for Eye 1 skip.
+		// Bind null when disabled so stale mode data doesn't cause incorrect early-exits
+		// in DeferredCompositeCS (null SRV reads return 0 = MODE_DISOCCLUDED, all pixels composite normally).
 		auto& vrStereoOpt = globals::features::vr.stereoOpt;
 		if (vrStereoOpt.loaded) {
-			ID3D11ShaderResourceView* modeSRV = vrStereoOpt.GetModeTextureSRV();
+			bool stereoActive = vrStereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
+			ID3D11ShaderResourceView* modeSRV = stereoActive ? vrStereoOpt.GetModeTextureSRV() : nullptr;
 			context->CSSetShaderResources(16, 1, &modeSRV);
 		}
 
