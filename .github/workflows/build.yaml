@@ -332,20 +332,23 @@ jobs:
               uses: ./.github/actions/setup-build-environment
               with:
                   cache-key-suffix: "tests"
+                  vs-version: "2022"
+                  cmake-preset: "ALL-VS2022"
+                  build-dir: "build/ALL-VS2022"
 
             - name: Build shader tests
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: lukka/run-cmake@v10
               with:
-                  configurePreset: ALL
+                  configurePreset: ALL-VS2022
                   configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=ON']"
-                  buildPreset: ALL
+                  buildPreset: ALL-VS2022
                   buildPresetAdditionalArgs: "['--target shader_tests']"
 
             - name: Run shader unit tests
               if: steps.check-hlsl.outputs.skip != 'true'
               run: |
-                  ctest --test-dir build/ALL -C Release --output-on-failure -R ShaderTests --timeout 300
+                  ctest --test-dir build/ALL-VS2022 -C Release --output-on-failure -R ShaderTests --timeout 300
 
             - name: Upload test results on failure
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
@@ -353,7 +356,7 @@ jobs:
               with:
                   name: shader-test-results
                   path: |
-                      build/ALL/Testing/**
+                      build/ALL-VS2022/Testing/**
                   retention-days: 7
                   if-no-files-found: ignore
 
