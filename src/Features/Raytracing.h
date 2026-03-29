@@ -87,6 +87,7 @@ struct CreationEngineRaytracing
 
 	struct SHaRCSettings
 	{
+		bool Enabled = true;
 		float SceneScale = 1.0f;
 		int AccumFrameNum = 10;
 		int StaleFrameNum = 64;
@@ -95,7 +96,7 @@ struct CreationEngineRaytracing
 
 		bool operator==(const SHaRCSettings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, SceneScale, AccumFrameNum, StaleFrameNum, AntifireflyFilter)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, Enabled, SceneScale, AccumFrameNum, StaleFrameNum, AntifireflyFilter)
 	};
 
 	// Resampled Importance Sampling
