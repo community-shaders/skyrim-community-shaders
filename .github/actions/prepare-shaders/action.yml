@@ -14,6 +14,7 @@ runs:
           uses: lukka/run-cmake@v10
           with:
               configurePreset: ${{ inputs.cmake-preset }}
+              configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=OFF']"
               buildPreset: ${{ inputs.cmake-preset }}
               buildPresetAdditionalArgs: "['--target prepare_shaders']"
 
