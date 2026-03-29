@@ -77,8 +77,6 @@ struct VRStereoOptimizations
 		float foveatedRegionCenterY = 0.5f;
 		bool useEyeTracking = false;
 
-		int reprojectionMode = 5;  // 0=Blend, 4=Overwrite, 5=Overwrite Eye1 Only
-
 		// Debug controls
 		bool debugVisualization = false;
 		bool debugSkipMerge = false;

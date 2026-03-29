@@ -33,6 +33,8 @@ void VRStereoOptimizations::SaveSettings(json& o_json)
 	o_json["DebugForceAllStencil"] = settings.debugForceAllStencil;
 	o_json["DebugForceAllReprojectCS"] = settings.debugForceAllReprojectCS;
 	o_json["DebugDepthMap"] = settings.debugDepthMap;
+	o_json["DebugFullBlendDepth"] = settings.debugFullBlendDepth;
+	o_json["DebugPOMDepth"] = settings.debugPOMDepth;
 	o_json["POMDepthScale"] = settings.pomDepthScale;
 	o_json["ForwardOcclusionScale"] = settings.forwardOcclusionScale;
 }
@@ -63,6 +65,10 @@ void VRStereoOptimizations::LoadSettings(json& o_json)
 		settings.debugForceAllReprojectCS = it->get<bool>();
 	if (auto it = o_json.find("DebugDepthMap"); it != o_json.end() && it->is_boolean())
 		settings.debugDepthMap = it->get<bool>();
+	if (auto it = o_json.find("DebugFullBlendDepth"); it != o_json.end() && it->is_boolean())
+		settings.debugFullBlendDepth = it->get<bool>();
+	if (auto it = o_json.find("DebugPOMDepth"); it != o_json.end() && it->is_boolean())
+		settings.debugPOMDepth = it->get<bool>();
 	if (auto it = o_json.find("FullBlendDistance"); it != o_json.end() && it->is_number())
 		settings.fullBlendDistance = std::clamp(it->get<float>(), 0.0f, 50000.0f);
 	if (auto it = o_json.find("POMDepthScale"); it != o_json.end() && it->is_number())
