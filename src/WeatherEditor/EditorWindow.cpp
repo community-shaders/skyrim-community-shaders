@@ -720,7 +720,8 @@ void EditorWindow::ShowObjectsWindow()
 							if (ImGui::BeginTooltip()) {
 								// Resolve ImageSpace editor ID via widget cache (GetFormEditorID() returns null at runtime)
 								auto resolveViaWidgets = [this](RE::TESForm* f, const std::vector<std::unique_ptr<Widget>>& widgets) -> std::string {
-									if (!f) return "None";
+									if (!f)
+										return "None";
 									for (const auto& w : widgets) {
 										if (w->form == f)
 											return w->GetEditorID();

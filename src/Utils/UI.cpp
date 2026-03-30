@@ -535,9 +535,9 @@ namespace Util
 	}
 
 	// Shared constants for title-bar button overlays
-	static constexpr float kButtonPad = 2.0f;             // extra padding around hit/highlight area
-	static constexpr float kCrossDiag = 0.5f * 0.7071f;   // half-size * 1/sqrt(2) for cross line endpoints
-	static constexpr float kCrossInset = 1.0f;             // inward inset so cross doesn't touch edges
+	static constexpr float kButtonPad = 2.0f;            // extra padding around hit/highlight area
+	static constexpr float kCrossDiag = 0.5f * 0.7071f;  // half-size * 1/sqrt(2) for cross line endpoints
+	static constexpr float kCrossInset = 1.0f;           // inward inset so cross doesn't touch edges
 
 	// Compute the bounding rect for a title-bar button of font-sized square + padding.
 	static ImRect ButtonBB(const ImVec2& origin, float fontSize)
