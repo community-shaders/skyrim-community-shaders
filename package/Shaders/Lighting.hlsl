@@ -1085,7 +1085,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(EMAT_ENVMAP)
 
-		if (SharedData::extendedMaterialSettings.EnableComplexMaterial)
+	if (SharedData::extendedMaterialSettings.EnableComplexMaterial)
 	{
 		const float kMaskEpsilon = (4.0 / 255.0);
 
@@ -1114,7 +1114,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			envMaskBase = envMaskSample.x;
 		}
 	}
-
+#		elif defined(ENVMAP)
+	envMaskBase = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
 #		endif  // ENVMAP
 
 #		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
