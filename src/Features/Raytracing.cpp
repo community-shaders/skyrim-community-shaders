@@ -416,7 +416,7 @@ void Raytracing::DrawOverlay()
 	ImGui::End();
 }
 
-bool Raytracing::Active()
+bool Raytracing::Active() const
 {
 	if (!loaded)
 		return false;

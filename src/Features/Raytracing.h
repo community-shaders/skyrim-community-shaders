@@ -28,6 +28,7 @@ struct CreationEngineRaytracing
 {
 	enum class Mode
 	{
+		None,
 		GlobalIllumination,
 		PathTracing
 	};
@@ -246,10 +247,11 @@ struct CreationEngineRaytracing
 
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 			AdvancedSettings,
-			VariableUpdateRate,
-			RIS,
-			GGXEnergyConservation,
 			TexLODBias,
+			VariableUpdateRate,
+			GGXEnergyConservation,
+			PerLightTLAS,
+			RIS,
 			HairBSDF,
 			DiffuseBRDF,
 			SSSSettings)
@@ -475,7 +477,7 @@ struct Raytracing : public OverlayFeature
 
 	virtual void DrawOverlay() override;
 
-	bool Active();
+	bool Active() const;
 
 	// Resources
 	virtual void SetupResources() override;
@@ -505,7 +507,12 @@ struct Raytracing : public OverlayFeature
 
 	inline CreationEngineRaytracing::Mode Mode() const
 	{
-		return settings.CreationEngineRaytracingSettings.GeneralSettings.Mode;
+		return Active() ? settings.CreationEngineRaytracingSettings.GeneralSettings.Mode : CreationEngineRaytracing::Mode::None;
+	}
+
+	inline bool IsPathTracing() const
+	{
+		return Mode() == CreationEngineRaytracing::Mode::PathTracing;
 	}
 
 	CreationEngineRaytracing::Denoiser GetDenoiser(Upscaling::UpscaleMethod method)
