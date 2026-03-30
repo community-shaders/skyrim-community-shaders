@@ -1083,12 +1083,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float4 complexMaterialColor = 1.0;
 
 #		if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
-	float envMaskBase = 1.0;
+	float4 envMaskSample = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+	float envMaskBase = envMaskSample.x;
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial)
 	{
 		const float kMaskEpsilon = (4.0 / 255.0);
 
-		float4 envMaskSample = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
 		complexMaterial = envMaskSample.w < (1.0 - kMaskEpsilon);
 
 		// Detect texture saved in the wrong format
@@ -1109,8 +1109,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				complexMaterialColor = envMaskSample;
 			}
 			envMaskBase = complexMaterialColor.x;
-		} else {
-			envMaskBase = envMaskSample.x; 
 		}
 	}
 #		endif  // ENVMAP
