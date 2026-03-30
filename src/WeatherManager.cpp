@@ -2,26 +2,6 @@
 
 #include "State.h"
 
-namespace
-{
-	void RestoreFeatureUserSettings(WeatherVariables::GlobalWeatherRegistry* registry, const std::string& featureName)
-	{
-		if (!registry) {
-			return;
-		}
-
-		registry->EndFeatureTransition(featureName);
-		auto* featureRegistry = registry->GetFeatureRegistry(featureName);
-		if (!featureRegistry) {
-			return;
-		}
-
-		for (const auto& var : featureRegistry->GetVariables()) {
-			var->SetToUserSettings();
-		}
-	}
-}
-
 WeatherManager::CurrentWeathers WeatherManager::GetCurrentWeathers()
 {
 	CurrentWeathers result;

@@ -569,10 +569,8 @@ void SceneSettingsManager::Update()
 
 void SceneSettingsManager::OnCellTransition()
 {
-	// Match Skylighting's interior detection: sky mode != kFull
-	bool interior = true;
-	if (auto sky = globals::game::sky)
-		interior = sky->mode.get() != RE::Sky::Mode::kFull;
+	// Use cell-based check; sky mode is unreliable for mods (DIAL, DWS) that enable kUseSkyLighting in interiors
+	bool interior = Util::IsInterior();
 
 	if (interior) {
 		// Entering interior: deactivate TOD first, then apply interior overrides
