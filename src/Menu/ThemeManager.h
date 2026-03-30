@@ -84,7 +84,9 @@ using json = nlohmann::json;
  *       // ... see ImGuiStyle for all available fields
  *     },
  *
- *     // Full ImGui color palette (55 colors, overrides simple palette)
+ *     // Named color map (resilient to ImGui enum changes)
+ *     "Colors": { "Text": [r,g,b,a], "WindowBg": [r,g,b,a], ... }
+ *     // Legacy: positional array (auto-migrated on load)
  *     "FullPalette": [ [r,g,b,a], [r,g,b,a], ... ]
  *   }
  * }

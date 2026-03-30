@@ -90,16 +90,22 @@ namespace
 			return "Resize Grip (Hovered)";
 		case ImGuiCol_ResizeGripActive:
 			return "Resize Grip (Active)";
+		case ImGuiCol_InputTextCursor:
+			return "Input Text Cursor";
 		case ImGuiCol_Tab:
 			return "Tab";
 		case ImGuiCol_TabHovered:
 			return "Tab (Hovered)";
-		case ImGuiCol_TabActive:
-			return "Tab (Active)";
-		case ImGuiCol_TabUnfocused:
-			return "Tab (Unfocused)";
-		case ImGuiCol_TabUnfocusedActive:
-			return "Tab (Unfocused Active)";
+		case ImGuiCol_TabSelected:
+			return "Tab (Selected)";
+		case ImGuiCol_TabSelectedOverline:
+			return "Tab Selected Overline";
+		case ImGuiCol_TabDimmed:
+			return "Tab (Dimmed)";
+		case ImGuiCol_TabDimmedSelected:
+			return "Tab (Dimmed Selected)";
+		case ImGuiCol_TabDimmedSelectedOverline:
+			return "Tab Dimmed Selected Overline";
 		case ImGuiCol_DockingPreview:
 			return "Docking Preview";
 		case ImGuiCol_DockingEmptyBg:
@@ -122,12 +128,20 @@ namespace
 			return "Table Row Background";
 		case ImGuiCol_TableRowBgAlt:
 			return "Table Row Background (Alternate)";
+		case ImGuiCol_TextLink:
+			return "Text Link";
 		case ImGuiCol_TextSelectedBg:
 			return "Text Selection Background";
+		case ImGuiCol_TreeLines:
+			return "Tree Lines";
 		case ImGuiCol_DragDropTarget:
 			return "Drag & Drop Target";
-		case ImGuiCol_NavHighlight:
-			return "Navigation Highlight";
+		case ImGuiCol_DragDropTargetBg:
+			return "Drag & Drop Target Background";
+		case ImGuiCol_UnsavedMarker:
+			return "Unsaved Marker";
+		case ImGuiCol_NavCursor:
+			return "Navigation Cursor";
 		case ImGuiCol_NavWindowingHighlight:
 			return "Window Navigation Highlight";
 		case ImGuiCol_NavWindowingDimBg:
