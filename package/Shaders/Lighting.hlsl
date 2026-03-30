@@ -1110,7 +1110,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			}
 			envMaskBase = complexMaterialColor.x;
 		} else {
-			envMaskBase = envMaskSample.x;
+			envMaskBase = envMaskSample.x; 
 		}
 	}
 #		endif  // ENVMAP
