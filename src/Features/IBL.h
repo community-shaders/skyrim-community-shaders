@@ -41,8 +41,6 @@ public:
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
-	bool disableInInteriors = false;
-
 	struct Settings
 	{
 		uint EnableIBL = 0;
@@ -55,7 +53,7 @@ public:
 		float SkyIBLSaturation = 1.0f;
 		float FogAmount = 0.0f;
 		uint DALCMode = 2;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky
-		float pad0 = 0.0f;
+		uint DisableInInteriors = 1;
 		float pad1 = 0.0f;
 	} settings;
 
