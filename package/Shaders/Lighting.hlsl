@@ -1084,15 +1084,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(EMAT_ENVMAP)
 
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial) {
-		float4 envMaskTest = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, 15);
-		complexMaterial = envMaskTest.w < (1.0 - (4.0 / 255.0));
-		
-		// Detect textures which have been saved in the wrong format
-		if (abs(envMaskTest.x - envMaskTest.y) < (4.0 / 255.0) && abs(envMaskTest.x - envMaskTest.z) < (4.0 / 255.0) && abs(envMaskTest.y - envMaskTest.z) < (4.0 / 255.0))
+		const float kMaskEpsilon = (4.0 / 255.0);
+
+		float4 envMask = TexEnvMaskSampler.SampleBias(SampEnvMaskSampler, uv, SharedData:MipBias);
+		complexMaterial = envMask.w < (1.0 - kMaskEpsilon);
+
+		// Detect texture saved in the wrong format
+		if ((abs(envMask.x - envMask.y) < kMaskEpsilon) &&
+			(abs(envMask.x - envMask.z) < kMaskEpsilon) &&
+			(abs(envMask.y - envMask.z) < kMaskEpsilon))
 			complexMaterial = false;
 
 		if (complexMaterial) {
-			if (envMaskTest.w > (4.0 / 255.0)) {
+    		if (envMask.w > kMaskEpsilon) {
 				complexMaterialParallax = true;
 				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, screenNoise);
 				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset);
