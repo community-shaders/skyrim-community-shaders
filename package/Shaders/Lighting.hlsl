@@ -1081,30 +1081,37 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	bool complexMaterialParallax = false;
 	float4 complexMaterialColor = 1.0;
 
+	float envMaskBase = 1.0;
+
+	float envMask
 #		if defined(EMAT_ENVMAP)
 
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial) {
 		const float kMaskEpsilon = (4.0 / 255.0);
 
-		float4 envMask = TexEnvMaskSampler.SampleBias(SampEnvMaskSampler, uv, SharedData:MipBias);
-		complexMaterial = envMask.w < (1.0 - kMaskEpsilon);
+		float4 envMaskSample = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+		complexMaterial = envMaskSample.w < (1.0 - kMaskEpsilon);
 
 		// Detect texture saved in the wrong format
-		if ((abs(envMask.x - envMask.y) < kMaskEpsilon) &&
-			(abs(envMask.x - envMask.z) < kMaskEpsilon) &&
-			(abs(envMask.y - envMask.z) < kMaskEpsilon))
+		if ((abs(envMaskSample.x - envMaskSample.y) < kMaskEpsilon) &&
+			(abs(envMaskSample.x - envMaskSample.z) < kMaskEpsilon) &&
+			(abs(envMaskSample.y - envMaskSample.z) < kMaskEpsilon))
 			complexMaterial = false;
 
 		if (complexMaterial) {
-    		if (envMask.w > kMaskEpsilon) {
+    		if (envMaskSample.w > kMaskEpsilon) {
 				complexMaterialParallax = true;
 				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, screenNoise);
 				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset);
 				if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 					sh0 = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, mipLevel).w;
+				complexMaterialColor = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+			} else {
+				complexMaterialColor = envMaskSample;
 			}
-
-			complexMaterialColor = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+			envMaskBase = complexMaterialColor.x;
+		} else {
+			envMaskBase = envMaskSample.x;
 		}
 	}
 
@@ -2220,7 +2227,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	if (envMask > 0.0) {
 		if (EnvmapData.y) {
-			envMask *= TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
+			envMask *= envMaskBase;
 		} else {
 			envMask *= glossiness;
 		}
