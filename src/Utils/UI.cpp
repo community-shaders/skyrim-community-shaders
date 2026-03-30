@@ -582,8 +582,15 @@ namespace Util
 		window->DrawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
 		window->DrawList->PopClipRect();
 
-		if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-			*p_open = false;
+		// Gate close on press starting within the button rect to prevent drag-across triggers
+		const ImGuiID id = window->GetID("##RoundedClose");
+		if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			ImGui::SetActiveID(id, window);
+		if (ImGui::GetActiveID() == id && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+			if (hovered)
+				*p_open = false;
+			ImGui::ClearActiveID();
+		}
 	}
 
 	// Draws a rounded highlight for the collapse/triangle button in the title bar.
