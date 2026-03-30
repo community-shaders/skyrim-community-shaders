@@ -1340,15 +1340,43 @@ struct TESBoundObject_Clone3D
 		auto* result = func(object, ref, arg3);
 		if (result != nullptr && ref != nullptr && ref->data.objectReference != nullptr && ref->data.objectReference->formType == RE::FormType::Static) {
 			auto* stat = static_cast<RE::TESObjectSTAT*>(ref->data.objectReference);
-			if (stat->data.materialObj != nullptr && stat->data.materialObj->directionalData.singlePass) {
-				if (auto* pbrData = truePBR->GetPBRMaterialObjectData(stat->data.materialObj)) {
-					RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData](RE::BSGeometry* geometry) {
+			RE::BGSMaterialObject* currentMato = stat->data.materialObj;
+
+			if (currentMato != nullptr && currentMato->directionalData.singlePass) {
+				auto* pbrData = truePBR->GetPBRMaterialObjectData(currentMato);
+				if (pbrData != nullptr) {
+					RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData, ref](RE::BSGeometry* geometry) {
 						if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
 							if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
 								shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
 								if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
-									material->ApplyMaterialObjectData(*pbrData);
-									BSLightingShaderMaterialPBR::All[material].materialObjectData = pbrData;
+									auto& ext = BSLightingShaderMaterialPBR::All[material];
+									const auto prevOwnerRefID = ext.lastOwnerRefFormID;
+									const auto prevColorScale = material->GetProjectedMaterialBaseColorScale();
+
+									// Fork-before-write: if this material instance is already owned
+									// by a different ref with a different MATO, clone it so we don't
+									// contaminate the previous owner's geometry.
+									const bool wouldContaminate =
+										(prevOwnerRefID != 0) &&
+										(prevOwnerRefID != ref->GetFormID()) &&
+										(prevColorScale != pbrData->baseColorScale);
+
+									BSLightingShaderMaterialPBR* targetMat = material;
+
+									if (wouldContaminate) {
+										auto* freshMat = BSLightingShaderMaterialPBR::Make();
+										if (freshMat) {
+											freshMat->CopyMembers(material);
+											shaderProperty->material = freshMat;
+											targetMat = freshMat;
+										}
+									}
+
+									targetMat->ApplyMaterialObjectData(*pbrData);
+									auto& targetExt              = BSLightingShaderMaterialPBR::All[targetMat];
+									targetExt.materialObjectData = pbrData;
+									targetExt.lastOwnerRefFormID = ref->GetFormID();
 								}
 							}
 						}
