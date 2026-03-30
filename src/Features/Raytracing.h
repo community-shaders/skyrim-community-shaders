@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include <d3d11_4.h>
 #include <directx/d3d12.h>
 
@@ -113,14 +115,10 @@ struct CreationEngineRaytracing
 		float planeDistanceSensitivity = 0.02f;
 
 		// "IN_MV = lerp(IN_MV, specularMotion, smoothstep(this[0], this[1], specularProbability))"
-		float specularProbabilityThresholdsForMvModification[2] = { 0.5f, 0.9f };
+		std::array<float, 2> specularProbabilityThresholdsForMvModification = { 0.5f, 0.9f };
 
 		// [1; 3] - undesired sporadic outliers suppression to keep output stable (smaller values maximize suppression in exchange of bias)
 		float fireflySuppressorMinRelativeScale = 2.0f;
-
-		// (Optional) material ID comparison: max(m0, minMaterial) == max(m1, minMaterial) (requires "NormalEncoding::R10_G10_B10_A2_UNORM")
-		float minMaterialForDiffuse = 4.0f;
-		float minMaterialForSpecular = 4.0f;
 
 		// Helps to mitigate fireflies emphasized by DLSS. Very cheap and unbiased in most of the cases, better keep in enabled to maximize quality
 		bool enableAntiFirefly = true;
@@ -137,6 +135,31 @@ struct CreationEngineRaytracing
 		// Diffuse history length shows disocclusions, specular history length is more complex and includes accelerations of various kinds caused by specular tracking.
 		// History length is measured in frames, it can be in "[0; maxAccumulatedFrameNum]" range
 		bool returnHistoryLengthInsteadOfOcclusion = false;
+
+		bool operator==(const ReblurSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+			ReblurSettings,
+			maxAccumulatedFrameNum,
+			maxFastAccumulatedFrameNum,
+			maxStabilizedFrameNum,
+			historyFixFrameNum,
+			historyFixBasePixelStride,
+			historyFixAlternatePixelStride,
+			fastHistoryClampingSigmaScale,
+			diffusePrepassBlurRadius,
+			specularPrepassBlurRadius,
+			minHitDistanceWeight,
+			minBlurRadius,
+			maxBlurRadius,
+			lobeAngleFraction,
+			roughnessFraction,
+			planeDistanceSensitivity,
+			specularProbabilityThresholdsForMvModification,
+			fireflySuppressorMinRelativeScale,
+			enableAntiFirefly,
+			usePrepassOnlyForSpecularMotionEstimation,
+			returnHistoryLengthInsteadOfOcclusion)
 	};
 
 	struct MaterialSettings
@@ -283,6 +306,7 @@ struct CreationEngineRaytracing
 		GeneralSettings GeneralSettings;
 		LightingSettings LightingSettings;
 		RaytracingSettings RaytracingSettings;
+		ReblurSettings ReblurSettings;
 		MaterialSettings MaterialSettings;
 		SHaRCSettings SHaRCSettings;
 		AdvancedSettings AdvancedSettings;
@@ -297,6 +321,7 @@ struct CreationEngineRaytracing
 			GeneralSettings,
 			LightingSettings,
 			RaytracingSettings,
+			ReblurSettings,
 			MaterialSettings,
 			SHaRCSettings,
 			AdvancedSettings,
@@ -487,6 +512,7 @@ struct Raytracing : public OverlayFeature
 	void DataLoaded() override;
 
 	void DrawGeneralSettings();
+	void DrawReblurSettings();
 	void DrawSHaRCSettings();
 	void DrawSSSSettings();
 	void DrawAdvancedSettings();
