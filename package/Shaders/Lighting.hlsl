@@ -1084,8 +1084,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	float envMaskBase = 1.0;
-	if (SharedData::extendedMaterialSettings.EnableComplexMaterial)
-	{
+	if (SharedData::extendedMaterialSettings.EnableComplexMaterial) {
 		const float kMaskEpsilon = (4.0 / 255.0);
 
 		float4 envMaskSample = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
@@ -1110,7 +1109,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			}
 			envMaskBase = complexMaterialColor.x;
 		} else {
-			envMaskBase = envMaskSample.x; 
+			envMaskBase = envMaskSample.x;
 		}
 	}
 #		endif  // ENVMAP
