@@ -136,6 +136,12 @@ void Raytracing::DrawSettings()
 
 	DrawEnumRadio("Mode", settings.CreationEngineRaytracingSettings.GeneralSettings.Mode);
 
+	// Enforce DLSS RR in settings if it is enabled in upscaling
+	if (globals::features::upscaling.GetUpscaleMethod() == Upscaling::UpscaleMethod::kDLSS_RR)
+		settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser = CreationEngineRaytracing::Denoiser::DLSS_RR;
+
+	DrawEnumRadio("Denoiser", settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser);
+
 	bool ptMode = settings.CreationEngineRaytracingSettings.GeneralSettings.Mode == CreationEngineRaytracing::Mode::PathTracing;
 
 	if (ptMode)
@@ -206,7 +212,7 @@ void Raytracing::DrawGeneralSettings()
 	DrawFloat2("Roughness", ceRTSettings.MaterialSettings.Roughness);
 	DrawFloat2("Metalness", ceRTSettings.MaterialSettings.Metalness);
 
-	if (ImGui::CollapsingHeader("Lighting")) {
+	if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
 		auto& lightingSettings = ceRTSettings.LightingSettings;
 
 		if (ImGui::DragFloat("Directional Strength", &lightingSettings.Directional, 0.001f))
