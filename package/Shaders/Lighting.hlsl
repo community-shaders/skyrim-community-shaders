@@ -1067,6 +1067,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 refractedViewDirection = viewDirection;
 	float4 sampledCoatColor = PBRParams2;
 	float3 complexSpecular = 1.0;  // Declare complexSpecular at a higher scope so it's available throughout the shader (NEEDED FOR STOCH. FIX)
+
 #	if defined(EMAT)
 #		if defined(PARALLAX)
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
@@ -1081,8 +1082,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	bool complexMaterialParallax = false;
 	float4 complexMaterialColor = 1.0;
 
+#		if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	float envMaskBase = 1.0;
-#		if defined(EMAT_ENVMAP)
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial)
 	{
 		const float kMaskEpsilon = (4.0 / 255.0);
@@ -1112,8 +1113,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			envMaskBase = envMaskSample.x;
 		}
 	}
-#		elif defined(ENVMAP)
-	envMaskBase = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
 #		endif  // ENVMAP
 
 #		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
@@ -1156,6 +1155,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif  // TRUE_PBR
 
+#	elif defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
+	float envMaskBase = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
 #	endif  // EMAT
 
 #	if defined(SNOW)
