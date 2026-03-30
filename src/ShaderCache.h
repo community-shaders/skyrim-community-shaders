@@ -501,7 +501,7 @@ namespace SIE
 
 		ShaderFileDependencyTracker* GetDependencyTracker() { return dependencyTracker.get(); }
 
-		// Reserve 1 logical core for OS headroom at startup (E-cores included).
+		// Use all logical cores minus one at startup for OS headroom (E-cores included).
 		// Management and file watcher run on dedicated jthreads, not pool slots.
 		// Background (in-game): half of P-cores only, to avoid starving the render thread.
 		int32_t compilationThreadCount = std::max(static_cast<int32_t>(std::thread::hardware_concurrency()) - 1, 1);

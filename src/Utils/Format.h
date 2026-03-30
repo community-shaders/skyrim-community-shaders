@@ -70,8 +70,10 @@ namespace Util
 	 * Formats a duration given in milliseconds as HH:MM:SS.
 	 * Suitable for displaying long-running operation times (e.g. shader compilation).
 	 *
-	 * @param ms Duration in milliseconds
-	 * @return Formatted string like "00:02:35"
+	 * @param ms Duration in milliseconds. Fractional milliseconds are truncated.
+	 *           Non-finite (NaN/inf) or negative values are clamped to "00:00:00".
+	 *           Durations >= 24 hours display hours without limit (e.g., "125:34:56").
+	 * @return Formatted string like "00:02:35" or "00:00:00" for invalid inputs
 	 */
 	std::string FormatDuration(double ms);
 

@@ -240,8 +240,9 @@ void SettingsTabRenderer::RenderShadersTab()
 				uint64_t cacheHits = shaderCache->GetCachedHitTasks();
 				uint64_t slow = shaderCache->GetSlowTasks();
 				uint64_t verySlow = shaderCache->GetVerySlowTasks();
-				// Fast = compiled successfully in <2s (excluding cache hits)
-				uint64_t compiled = completed > cacheHits ? completed - cacheHits : 0;
+				// Compiled = tasks that actually went through compilation.
+				// Cache hits are separate (returned early without queueing).
+				uint64_t compiled = completed;
 				uint64_t fast = compiled > slow ? compiled - slow : 0;
 				uint64_t medium = slow > verySlow ? slow - verySlow : 0;  // 2-8s
 

@@ -160,10 +160,16 @@ namespace Util
 
 	std::string FormatDuration(double ms)
 	{
-		int total_s = static_cast<int>(ms) / 1000;
-		int hours = total_s / 3600;
-		int minutes = (total_s % 3600) / 60;
-		int seconds = total_s % 60;
+		// Validate input: handle negative, NaN, and infinite values
+		if (!std::isfinite(ms) || ms < 0.0) {
+			return "00:00:00";
+		}
+
+		// Use int64_t to avoid overflow on long durations (>596 hours with int)
+		int64_t total_s = static_cast<int64_t>(ms) / 1000;
+		int64_t hours = total_s / 3600;
+		int64_t minutes = (total_s % 3600) / 60;
+		int64_t seconds = total_s % 60;
 		return fmt::format("{:02}:{:02}:{:02}", hours, minutes, seconds);
 	}
 
