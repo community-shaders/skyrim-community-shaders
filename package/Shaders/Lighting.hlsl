@@ -1082,9 +1082,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float4 complexMaterialColor = 1.0;
 
 	float envMaskBase = 1.0;
-
 #		if defined(EMAT_ENVMAP)
-
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial)
 	{
 		const float kMaskEpsilon = (4.0 / 255.0);
