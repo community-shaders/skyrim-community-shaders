@@ -1086,7 +1086,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial) {
 		float4 envMaskTest = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, 15);
 		complexMaterial = envMaskTest.w < (1.0 - (4.0 / 255.0));
-		
+
 		// Detect textures which have been saved in the wrong format
 		if (abs(envMaskTest.x - envMaskTest.y) < (4.0 / 255.0) && abs(envMaskTest.x - envMaskTest.z) < (4.0 / 255.0) && abs(envMaskTest.y - envMaskTest.z) < (4.0 / 255.0))
 			complexMaterial = false;
