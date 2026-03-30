@@ -21,8 +21,8 @@
                 "Style": "Light"
             },
             {
-                "Family": "Roboto",
-                "File": "Roboto/Roboto-Regular.ttf",
+                "Family": "RobotoSlab",
+                "File": "RobotoSlab/RobotoSlab-Regular.ttf",
                 "SizeScale": 1.0,
                 "Style": "Regular"
             },

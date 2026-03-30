@@ -24,7 +24,7 @@ void PaletteWindow::Draw()
 	ImGui::SetNextWindowPos(
 		ImVec2(displaySize.x - paletteWidth - pad, bottomY - paletteHeight),
 		layoutCond);
-	if (ImGui::Begin("Palette", &open, ImGuiWindowFlags_NoFocusOnAppearing)) {
+	if (Util::BeginWithRoundedClose("Palette", &open, ImGuiWindowFlags_NoFocusOnAppearing)) {
 		if (ImGui::BeginTabBar("PaletteTabs")) {
 			if (ImGui::BeginTabItem("Colours")) {
 				DrawColorsTab();

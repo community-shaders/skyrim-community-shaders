@@ -388,6 +388,10 @@ public:
 
 	static const ThemeSettings::FontRoleSettings& GetDefaultFontRole(FontRole role);
 
+	// Named-map palette serialization (resilient to ImGui enum changes)
+	static void PaletteToJson(json& themeJson, const std::array<ImVec4, ImGuiCol_COUNT>& palette);
+	static void PaletteFromJson(const json& themeJson, std::array<ImVec4, ImGuiCol_COUNT>& palette);
+
 	struct Settings
 	{
 		std::vector<InputCombo> ToggleKey = { InputCombo::Keyboard(VK_END) };
