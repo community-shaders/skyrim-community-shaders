@@ -129,7 +129,7 @@ namespace MenuFonts
 		if (menuInstance) {
 			font_ = menuInstance->GetFont(role);
 			if (font_) {
-				ImGui::PushFont(font_, 0.0f);
+				ImGui::PushFont(font_, font_->LegacySize);
 			}
 		}
 	}
