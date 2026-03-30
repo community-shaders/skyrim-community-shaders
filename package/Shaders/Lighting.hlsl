@@ -1084,11 +1084,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(EMAT_ENVMAP)
 
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial) {
-		float envMaskTest = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, 15).w;
-		complexMaterial = envMaskTest < (1.0 - (4.0 / 255.0));
+		float4 envMaskTest = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, 15);
+		complexMaterial = envMaskTest.w < (1.0 - (4.0 / 255.0));
+		
+		// Detect textures which have been saved in the wrong format
+		if (abs(envMaskTest.x - envMaskTest.y) < (4.0 / 255.0) && abs(envMaskTest.x - envMaskTest.z) < (4.0 / 255.0) && abs(envMaskTest.y - envMaskTest.z) < (4.0 / 255.0))
+			complexMaterial = false;
 
 		if (complexMaterial) {
-			if (envMaskTest > (4.0 / 255.0)) {
+			if (envMaskTest.w > (4.0 / 255.0)) {
 				complexMaterialParallax = true;
 				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, screenNoise);
 				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset);
