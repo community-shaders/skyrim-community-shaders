@@ -12,7 +12,7 @@ public:
 	virtual inline std::string GetShortName() override { return "GrassCollision"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "GRASS_COLLISION"; }
-	virtual std::string_view GetCategory() const override { return "Grass"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kGrass; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

@@ -3,6 +3,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include "Fonts.h"
 #include "Globals.h"
 #include "Plugin.h"
 #include "ShaderCache.h"
@@ -12,42 +13,7 @@
 
 namespace
 {
-	class RoleFontGuard
-	{
-	public:
-		explicit RoleFontGuard(Menu::FontRole role)
-		{
-			Menu* menuInstance = globals::menu;
-			if (!menuInstance) {
-				logger::error("RoleFontGuard: globals::menu is null, cannot retrieve font for role");
-				return;
-			}
-
-			font_ = menuInstance->GetFont(role);
-			if (font_) {
-				ImGui::PushFont(font_);
-				fontPushed_ = true;
-			} else {
-				logger::warn("RoleFontGuard: Failed to retrieve font for role {}", static_cast<int>(role));
-			}
-		}
-
-		~RoleFontGuard()
-		{
-			if (fontPushed_) {
-				ImGui::PopFont();
-			}
-		}
-
-		RoleFontGuard(const RoleFontGuard&) = delete;
-		RoleFontGuard& operator=(const RoleFontGuard&) = delete;
-
-		[[nodiscard]] ImFont* Get() const { return font_; }
-
-	private:
-		ImFont* font_ = nullptr;
-		bool fontPushed_ = false;
-	};
+	using RoleFontGuard = MenuFonts::FontRoleGuard;
 }
 
 void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Menu::UIIcons& uiIcons)
@@ -92,7 +58,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 				if (showLogo) {
 					float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
-					contentWidth = (logoSize * logoAspectRatio) + 8.0f;  // Logo width + spacing
+					contentWidth = (logoSize * logoAspectRatio) + ImGui::GetStyle().ItemSpacing.x;
 				}
 
 				// Calculate text width

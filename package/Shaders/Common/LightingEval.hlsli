@@ -140,7 +140,7 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 #	endif
 	lobeWeights.diffuse = material.BaseColor;
 #	if defined(DYNAMIC_CUBEMAPS)
-	if (any(material.F0 > 0)) {
+	if (any(material.F0 > 0.0)) {
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
 		const float3 VN = context.vertexNormal;
@@ -149,14 +149,6 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 
 		float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
 		lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
-		lobeWeights.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		lobeWeights.specular *= horizon;
 	}
 #	endif
 #endif
@@ -188,16 +180,17 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 	float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
 	float3 F = BRDF::F_Schlick(wetnessF0, VdotH);
 
-	F *= wetnessStrength;
+	// Separate physical Fresnel from effective contribution weighted by strength
+	float3 wetnessF = F * wetnessStrength;
 
-	float3 wetnessSpecular = D * G * F * NdotL * lightColor;
+	float3 wetnessSpecular = D * G * wetnessF * NdotL * lightColor;
 
 #	if !defined(TRUE_PBR)
 	wetnessSpecular *= Color::PBRLightingCompensation * Color::PBRLightingScale;  // Compensate for GGX on traditional specular
 #	endif
 
-	lightingOutput.diffuse *= 1 - F;
-	lightingOutput.specular *= 1 - F;
+	lightingOutput.diffuse *= 1 - wetnessF;
+	lightingOutput.specular *= 1 - wetnessF;
 	lightingOutput.specular += wetnessSpecular;
 }
 
@@ -208,7 +201,6 @@ float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, floa
 
 	const float3 N = wetnessNormal;
 	const float3 V = context.viewDir;
-	const float3 VN = context.vertexNormal;
 
 	float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
 	float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
@@ -218,13 +210,6 @@ float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, floa
 
 	lobeWeights.diffuse *= 1 - specularLobeWeight;
 	lobeWeights.specular *= 1 - specularLobeWeight;
-
-	// Horizon specular occlusion
-	// https://marmosetco.tumblr.com/post/81245981087
-	float3 R = reflect(-V, N);
-	float horizon = min(1.0 + dot(R, VN), 1.0);
-	horizon = horizon * horizon;
-	specularLobeWeight *= horizon;
 
 	return specularLobeWeight;
 }

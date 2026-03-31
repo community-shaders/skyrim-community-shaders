@@ -6,6 +6,7 @@
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
 #include "../ShaderCache.h"
+#include "../State.h"
 #include "../Util.h"
 
 #include <algorithm>
@@ -45,6 +46,7 @@ namespace BackgroundBlur
 	{
 		std::mutex resourceMutex;
 		bool enabled = false;
+		bool weatherEditorActive = false;
 
 		// DirectX resources (RAII managed)
 		winrt::com_ptr<ID3D11VertexShader> vertexShader;
@@ -410,7 +412,7 @@ namespace BackgroundBlur
 			windowConstants.windowParams[0] = cornerRadius;
 			windowConstants.windowParams[1] = static_cast<float>(sourceDesc.Width);
 			windowConstants.windowParams[2] = static_cast<float>(sourceDesc.Height);
-			windowConstants.windowParams[3] = 0.0f;
+			windowConstants.windowParams[3] = weatherEditorActive ? 1.0f : 0.0f;
 			context->UpdateSubresource(windowConstantBuffer.get(), 0, nullptr, &windowConstants, 0, 0);
 			auto windowConstantBufferPtr = windowConstantBuffer.get();
 			context->PSSetConstantBuffers(1, 1, &windowConstantBufferPtr);
@@ -483,6 +485,16 @@ namespace BackgroundBlur
 		enabled = enable;
 	}
 
+	void SetWeatherEditorActive(bool active)
+	{
+		weatherEditorActive = active;
+	}
+
+	bool IsWeatherEditorActive()
+	{
+		return weatherEditorActive;
+	}
+
 	void RenderBackgroundBlur()
 	{
 		if (!enabled) {
@@ -505,8 +517,7 @@ namespace BackgroundBlur
 
 		// Back buffer is black on main/loading menu during shader compilation without upscaling
 		if (!useUpscalingBackbuffer && !(upscaling.loaded && upscaling.IsUpscalingActive())) {
-			auto ui = globals::game::ui;
-			bool isMainOrLoading = ui && (ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+			bool isMainOrLoading = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 			auto shaderCache = globals::shaderCache;
 			if (isMainOrLoading && shaderCache && shaderCache->IsCompiling()) {
 				return;
@@ -575,6 +586,14 @@ namespace BackgroundBlur
 			CreateBlurTextures(texDesc.Width, texDesc.Height, texDesc.Format);
 		}
 
+		// Weather editor mode: single fullscreen blur pass (better perf than per-window)
+		if (weatherEditorActive) {
+			ImVec2 screenMin = { 0, 0 };
+			ImVec2 screenMax = { static_cast<float>(texDesc.Width), static_cast<float>(texDesc.Height) };
+			PerformBlur(currentTexture.get(), sourceSRV, currentRTV.get(), screenMin, screenMax, 0.0f, uiBufferSRV, uiBufferRTV);
+			return;
+		}
+
 		// Find ImGui windows that need blur
 		ImGuiContext* ctx = ImGui::GetCurrentContext();
 		if (!ctx || ctx->Windows.Size == 0) {
@@ -584,8 +603,8 @@ namespace BackgroundBlur
 		// Apply blur behind each visible ImGui window
 		for (int i = 0; i < ctx->Windows.Size; i++) {
 			ImGuiWindow* window = ctx->Windows[i];
-			// Don't check Hidden - it causes a 1-frame blur delay when windows reappear
-			if (!window || !window->WasActive || window->SkipItems) {
+			// Use Active (still true after Render) instead of WasActive (stale until next NewFrame)
+			if (!window || !window->Active || window->SkipItems) {
 				continue;
 			}
 

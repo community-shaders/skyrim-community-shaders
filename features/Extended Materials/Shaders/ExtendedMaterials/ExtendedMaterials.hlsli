@@ -15,6 +15,7 @@ struct DisplacementParams
 
 namespace ExtendedMaterials
 {
+	static const float ShadowIntensity = 2.0;
 
 	float ScaleDisplacement(float displacement, DisplacementParams params)
 	{
@@ -228,7 +229,9 @@ namespace ExtendedMaterials
 		viewDirTS.xy /= viewDirTS.z * 0.7 + 0.3 + params.FlattenAmount;  // Fix for objects at extreme viewing angles
 #endif
 
-		float nearBlendToFar = saturate(distance / 2048.0);
+		float distSq = dot(distance, distance);
+		float nearBlendToFar = smoothstep(1024.0 * 1024.0, 2048.0 * 2048.0, distSq);
+
 #if defined(LANDSCAPE)
 		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? sqrt(saturate(1 - nearBlendToFar)) : 0;
 		float4 w1 = lerp(input.LandBlendWeights1, smoothstep(0, 1, input.LandBlendWeights1), blendFactor);
@@ -258,9 +261,10 @@ namespace ExtendedMaterials
 #	endif
 		{
 #endif
-			float maxSteps = SharedData::InInterior ? 8 : 16;
+			const float maxSteps = 16;
 			uint numSteps = uint((maxSteps * (1.0 - nearBlendToFar)) + 0.5);
-			numSteps = clamp(numSteps, 1, max(6, scale * maxSteps));
+			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxSteps)));
+			numSteps = (numSteps + 2) & ~3;
 
 			float stepSize = rcp(numSteps);
 
@@ -399,7 +403,7 @@ namespace ExtendedMaterials
 				sh.z = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.z, mipLevel)[channel], params);
 			if (quality > 0.75)
 				sh.w = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.w, mipLevel)[channel], params);
-			return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
+			return 1.0 - saturate(dot(max(0, sh - sh0), ShadowIntensity)) * quality;
 		}
 		return 1.0;
 	}

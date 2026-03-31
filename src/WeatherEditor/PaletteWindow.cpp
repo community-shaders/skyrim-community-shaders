@@ -1,5 +1,7 @@
 #include "PaletteWindow.h"
 #include "EditorWindow.h"
+#include "Menu/ThemeManager.h"
+#include "Utils/UI.h"
 
 // Forward declaration from EditorWindow.cpp
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled);
@@ -9,9 +11,20 @@ void PaletteWindow::Draw()
 	if (!open)
 		return;
 
-	ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 620, ImGui::GetIO().DisplaySize.y - 420), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Palette", &open)) {
+	const auto* editor = EditorWindow::GetSingleton();
+	const float scale = Util::GetUIScale();
+	const float pad = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
+	const auto& displaySize = ImGui::GetIO().DisplaySize;
+	const float paletteWidth = std::min(600.0f * scale, displaySize.x - pad * 2.0f);
+	const float bottomY = displaySize.y - pad;
+	const float spaceBelow = bottomY - editor->viewportBottomY - pad;  // room between viewport bottom and screen bottom
+	const float paletteHeight = std::min(400.0f * scale, spaceBelow);
+	const auto layoutCond = editor->resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	ImGui::SetNextWindowSize(ImVec2(paletteWidth, paletteHeight), layoutCond);
+	ImGui::SetNextWindowPos(
+		ImVec2(displaySize.x - paletteWidth - pad, bottomY - paletteHeight),
+		layoutCond);
+	if (Util::BeginWithRoundedClose("Palette", &open, ImGuiWindowFlags_NoFocusOnAppearing)) {
 		if (ImGui::BeginTabBar("PaletteTabs")) {
 			if (ImGui::BeginTabItem("Colours")) {
 				DrawColorsTab();
@@ -31,8 +44,9 @@ void PaletteWindow::Draw()
 
 void PaletteWindow::DrawColorsTab()
 {
-	const float buttonSize = 32.0f;
-	const float spacing = 8.0f;
+	const float scale = Util::GetUIScale();
+	const float buttonSize = 32.0f * scale;
+	const float spacing = 8.0f * scale;
 
 	// Favorites section at top
 	ImGui::SeparatorText("Favourites");
