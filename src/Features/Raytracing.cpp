@@ -329,6 +329,11 @@ void Raytracing::DrawSHaRCSettings()
 	if (ImGui::CollapsingHeader("SHaRC")) {
 		auto& sharcSettings = settings.CreationEngineRaytracingSettings.SHaRCSettings;
 
+		ImGui::Checkbox("Enabled", &sharcSettings.Enabled);
+
+		if (!sharcSettings.Enabled)
+			ImGui::BeginDisabled();
+
 		ImGui::DragFloat("Scale", &sharcSettings.SceneScale, 0.001f, 0.1f, 10.0f);
 		sharcSettings.SceneScale = std::clamp(sharcSettings.SceneScale, 0.1f, 10.0f);
 
@@ -339,6 +344,9 @@ void Raytracing::DrawSHaRCSettings()
 		sharcSettings.StaleFrameNum = std::clamp(sharcSettings.StaleFrameNum, 8, 128);
 
 		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
+
+		if (!sharcSettings.Enabled)
+			ImGui::EndDisabled();
 	}
 }
 
