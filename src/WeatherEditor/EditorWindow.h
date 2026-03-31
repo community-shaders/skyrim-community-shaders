@@ -24,7 +24,17 @@ public:
 		return &singleton;
 	}
 
+	// Preview modes for exploring the scene without the full editor UI
+	enum class PreviewMode
+	{
+		None,              // Full editor UI visible
+		FreeCamera,        // Flying free camera (tfc), input to game
+		FreeCameraLocked,  // Camera locked in place, editor interactive
+		PlayMode           // Normal gameplay, no scroll interception
+	};
+
 	bool open = false;
+	PreviewMode previewMode = PreviewMode::None;
 	const static int maxRecordMarkers = 10;
 
 	// Owned by EditorWindow, created in Draw(), released in destructor
@@ -48,15 +58,46 @@ public:
 	RE::TESWeather* lockedWeather = nullptr;
 	bool weatherLockActive = false;
 
+	/// When true, resets all window positions/sizes on next frame (auto-cleared).
+	bool resetLayout = false;
+
+	/// Bottom Y of the viewport window, set during layout for palette positioning.
+	float viewportBottomY = 0.0f;
+
 	// Time control constants
 	static constexpr float kVanillaTimeScale = 20.0f;
 	static constexpr float kGameHourMax = 23.99f;
 	static constexpr float kTimeScaleMin = 0.1f;
 	static constexpr float kTimeScaleMax = 4000.0f;
+	static constexpr float kMenuBarSliderWidth = 400.0f;
+
+	// Preview mode constants
+	static constexpr float kDefaultFlySpeed = 10.0f;
+	static constexpr float kMinFlySpeed = 1.0f;
+	static constexpr float kMaxFlySpeed = 100.0f;
+	static constexpr float kFlySpeedScrollStep = 2.0f;
+	static constexpr float kToggleActiveAlpha = 0.6f;
+	static constexpr float kToggleHoverAlpha = 0.8f;
+	static constexpr float kInactiveHoverAlpha = 0.25f;
+
+	// Preview mode state
+	float flySpeed = kDefaultFlySpeed;
+	ImVec2 savedMousePos = { -FLT_MAX, -FLT_MAX };
+
+	void EnterPreviewMode(PreviewMode mode);
+	void ExitPreviewMode();
+	bool IsInPreviewMode() const { return previewMode != PreviewMode::None; }
+	bool IsPreviewFlying() const { return previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::PlayMode; }
+	PreviewMode GetPreviewMode() const { return previewMode; }
+	void ToggleFreeCameraLock();
+	void AdjustFlySpeed(float scrollDelta);
 
 	// Vanity camera control
 	bool vanityCameraDisabled = false;
 	float savedVanityCameraDelay = 180.0f;
+
+	// Game HUD hiding (tm equivalent)
+	bool gameMenusHidden = false;
 
 	void ShowObjectsWindow();
 
@@ -94,8 +135,14 @@ public:
 	// Check if ESC key should close the editor (no popups open)
 	bool ShouldHandleEscapeKey() const;
 
+	static bool CanBeOpen();
 	void DisableVanityCamera();
 	void RestoreVanityCamera();
+	void HideGameMenus();
+	void ShowGameMenus();
+
+	/// Call every frame from the overlay renderer to track open/close transitions.
+	void UpdateOpenState();
 
 	// Undo system
 	struct UndoState
@@ -141,6 +188,7 @@ public:
 		int maxRecentWidgets = 10;
 		bool rememberOpenWidgets = true;
 		std::vector<std::string> lastOpenWidgets;
+		bool showViewport = true;
 
 		// Palette settings
 		struct PaletteColorEntry

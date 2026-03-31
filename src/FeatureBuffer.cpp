@@ -40,21 +40,21 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 {
 	return _GetFeatureBufferData(
 		globals::features::cloudShadows.settings,
+		globals::features::extendedMaterials.settings,
 		globals::features::dynamicCubemaps.settings,
 		globals::features::exponentialHeightFog.settings,
-		globals::features::extendedMaterials.settings,
 		globals::features::extendedTranslucency.GetCommonBufferData(),
 		globals::features::grassLighting.settings,
 		globals::features::hairSpecular.settings,
-		globals::features::ibl.settings,
+		globals::features::ibl.GetCommonBufferData(),
 		globals::features::lightLimitFix.GetCommonBufferData(),
 		globals::features::linearLighting.GetCommonBufferData(),
 		globals::features::lodBlending.settings,
 		globals::features::skylighting.GetCommonBufferData(a_inWorld),
 		globals::features::snowCover.GetCommonBufferData(),
 		globals::features::terrainBlending.settings,
-		globals::features::terrainShadows.GetCommonBufferData(),
 		globals::features::terrainVariation.settings,
+		globals::features::terrainShadows.GetCommonBufferData(),
 		globals::features::wetnessEffects.GetCommonBufferData()
 	);
 }

@@ -65,7 +65,7 @@ PS_OUTPUT main(PS_INPUT input)
 		{
 			texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		}
-		float3 imageColor = max(0.0, ImageTex.Sample(ImageSampler, texCoord).xyz);
+		float3 imageColor = clamp(ImageTex.Sample(ImageSampler, texCoord).xyz, 0.0, 50.0);  // Clamp to reasonable HDR bounds
 #		if defined(RGB2LUM)
 		imageColor = Color::RGBToLuminance(imageColor);
 #		elif (defined(LUM) || defined(LUMCLAMP)) && !defined(DOWNADAPT)
@@ -137,7 +137,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
-		srgbColor = Color::TrueLinearToGamma(srgbColor);
+		srgbColor = Color::LinearToSrgb(srgbColor);
 	}
 	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
 

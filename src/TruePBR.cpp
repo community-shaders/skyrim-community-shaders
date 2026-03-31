@@ -621,7 +621,7 @@ struct BSLightingShaderProperty_LoadBinary
 			} else {
 				material = RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
 			}
-			property->LinkMaterial(nullptr, false);
+			property->SetMaterial(nullptr, false);
 			property->material = material;
 		}
 
@@ -1162,7 +1162,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 
 			{
 				BSLightingShaderMaterialPBRLandscape srcMaterial;
-				shaderProperty->LinkMaterial(&srcMaterial, true);
+				shaderProperty->SetMaterial(&srcMaterial, true);
 			}
 
 			auto material = static_cast<BSLightingShaderMaterialPBRLandscape*>(shaderProperty->material);
@@ -1212,7 +1212,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 			auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
 			shaderProperty->SetupGeometry(geometry);
 			if (geometry != nullptr) {
-				geometry->GetGeometryRuntimeData().properties[1] = RE::NiPointer(shaderProperty);
+				geometry->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
 			}
 
 			globals::game::smState->shadowSceneNode[0]->AttachObject(geometry);
@@ -1255,12 +1255,12 @@ struct BSTempEffectSimpleDecal_SetupGeometry
 	{
 		func(decal, geometry, textureSet, blended);
 		auto* singleton = globals::truePBR;
-		auto unknownProperty = geometry->GetGeometryRuntimeData().properties[1].get();
+		auto unknownProperty = geometry->GetGeometryRuntimeData().shaderProperty.get();
 		if (auto shaderProperty = unknownProperty->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(unknownProperty) : nullptr;
 			shaderProperty != nullptr && singleton->IsPBRTextureSet(textureSet)) {
 			{
 				BSLightingShaderMaterialPBR srcMaterial;
-				shaderProperty->LinkMaterial(&srcMaterial, true);
+				shaderProperty->SetMaterial(&srcMaterial, true);
 			}
 
 			auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
@@ -1299,7 +1299,7 @@ struct BSTempEffectGeometryDecal_Initialize
 
 			{
 				BSLightingShaderMaterialPBR srcMaterial;
-				shaderProperty->LinkMaterial(&srcMaterial, true);
+				shaderProperty->SetMaterial(&srcMaterial, true);
 			}
 
 			auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
@@ -1321,12 +1321,12 @@ struct BSTempEffectGeometryDecal_Initialize
 				shaderProperty->SetFlags(kVertexLighting, true);
 			}
 
-			if (auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(decal->decal->GetGeometryRuntimeData().properties[0].get())) {
+			if (auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(decal->decal->GetGeometryRuntimeData().alphaProperty.get())) {
 				alphaProperty->alphaFlags = (alphaProperty->alphaFlags & ~0x1FE) | 0xED;
 			}
 
 			shaderProperty->SetupGeometry(decal->decal.get());
-			decal->decal->GetGeometryRuntimeData().properties[1] = RE::NiPointer(shaderProperty);
+			decal->decal->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
 		}
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
@@ -1343,7 +1343,7 @@ struct TESBoundObject_Clone3D
 			if (stat->data.materialObj != nullptr && stat->data.materialObj->directionalData.singlePass) {
 				if (auto* pbrData = truePBR->GetPBRMaterialObjectData(stat->data.materialObj)) {
 					RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData](RE::BSGeometry* geometry) {
-						if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get())) {
+						if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
 							if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
 								shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
 								if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {

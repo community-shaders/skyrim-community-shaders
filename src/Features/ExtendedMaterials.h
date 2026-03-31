@@ -7,7 +7,7 @@ struct ExtendedMaterials : Feature
 	virtual inline std::string GetName() override { return "Extended Materials"; }
 	virtual inline std::string GetShortName() override { return "ExtendedMaterials"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_MATERIALS"; }
-	virtual std::string_view GetCategory() const override { return "Materials"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -33,7 +33,7 @@ struct ExtendedMaterials : Feature
 		uint EnableHeightBlending = 1;
 
 		uint EnableShadows = 1;
-		uint ExtendShadows = 0;
+		uint ExtendShadows = 1;
 		uint EnableParallaxWarpingFix = 1;
 
 		float pad[1];

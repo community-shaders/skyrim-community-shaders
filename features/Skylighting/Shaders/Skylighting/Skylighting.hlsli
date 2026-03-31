@@ -3,6 +3,7 @@
 
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
+#include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 
@@ -49,7 +50,9 @@ namespace Skylighting
 
 		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
 
-		directionalAmbientColor = Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * Color::MultiBounceAO(Color::IrradianceToLinear(albedo / Color::PBRLightingScale), skylightingDiffuse));
+		float3 linAmbient = Color::IrradianceToLinear(directionalAmbientColor);
+		float3 multiBounceSkylighting = MultiBounceAO(albedo, skylightingDiffuse);
+		directionalAmbientColor = Color::IrradianceToGamma(linAmbient * multiBounceSkylighting);
 
 		diffuseColor += directionalAmbientColor;
 	}
@@ -108,7 +111,7 @@ namespace Skylighting
 					wsum += w;
 				}
 
-		return SphericalHarmonics::Scale(sum, rcp(wsum + 1e-10));
+		return SphericalHarmonics::Scale(sum, rcp(wsum + EPSILON_WEIGHT_SUM));
 	}
 
 	sh2 sampleNoBias(SharedData::SkylightingSettings params, Texture3D<sh2> probeArray, float3 positionMS)
@@ -154,7 +157,7 @@ namespace Skylighting
 			wsum += w;
 		}
 
-		return SphericalHarmonics::Scale(sum, rcp(wsum + 1e-10));
+		return SphericalHarmonics::Scale(sum, rcp(wsum + EPSILON_WEIGHT_SUM));
 	}
 }
 

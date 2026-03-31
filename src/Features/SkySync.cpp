@@ -85,7 +85,6 @@ void SkySync::PostPostLoad()
 	stl::detour_thunk<Moon_Update>(REL::RelocationID(25626, 26169));
 	stl::detour_thunk<Sky_Update>(REL::RelocationID(25682, 26229));
 	stl::detour_thunk<Sky_OnNewClimate>(REL::RelocationID(25695, 26242));
-	stl::write_thunk_call<ApplyVolumetricLighting_VolumetricLightingDescriptor_Get>(REL::RelocationID(100475, 107193).address() + 0x354);
 
 	gSunPosition = reinterpret_cast<RE::NiPoint3*>(REL::RelocationID(527924, 414871).address());
 	gSunGlareSize = reinterpret_cast<float*>(REL::RelocationID(502611, 370235).address());
@@ -127,10 +126,19 @@ void SkySync::Update(const RE::Sky* sky)
 	if (!sun || !climate || !player)
 		return;
 
-	if (const auto cell = player->GetParentCell(); cell != currentCell) {
-		SetSkyRotation(sky, cell);
-		if (currentCell && (cell->IsInteriorCell() != currentCell->IsInteriorCell() || cell->GetRuntimeData().worldSpace != currentCell->GetRuntimeData().worldSpace))
+	const auto cell = player->GetParentCell();
+
+	if (cell != currentCell) {
+		const auto prevCell = currentCell;
+		if (cell)
+			SetSkyRotation(sky, cell);
+		if (cell && prevCell && (cell->IsInteriorCell() != prevCell->IsInteriorCell() || cell->GetRuntimeData().worldSpace != prevCell->GetRuntimeData().worldSpace))
 			shadowFader.Reset();
+	}
+
+	// Exterior worldspaces always run; interior cells require the sunlight-shadows flag.
+	if (cell && cell->IsInteriorCell() && !cell->cellFlags.all(static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows))) {
+		return;
 	}
 
 	const float time = sky->currentGameHour;
@@ -322,7 +330,7 @@ inline float SkySync::CalculateVisibility(const RE::NiPoint3& dir, const float d
 
 inline void SkySync::SetSunBaseVisibility(const RE::Sun* sun, const float visibility)
 {
-	if (const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().properties[1].get()))
+	if (const auto property = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().shaderProperty.get()))
 		property->kBlendColor.alpha = visibility;
 }
 
@@ -415,8 +423,6 @@ void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, flo
 	sun->light->Update(updateData);
 
 	intensity = std::clamp(intensity, 0.0f, 1.0f);
-	sun->light->GetLightRuntimeData().fade = intensity;
-	volumetricLightingIntensityFactor = intensity;
 }
 
 inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
@@ -435,14 +441,6 @@ inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 	dir.x = cosElev * cosHeading;
 	dir.y = cosElev * sinHeading;
 	dir.z = sinElev;
-}
-
-SkySync::VolumetricLightingDescriptor* SkySync::ApplyVolumetricLighting_VolumetricLightingDescriptor_Get::thunk()
-{
-	const auto volumetricLightingDescriptor = func();
-	if (globals::features::skySync.settings.Enabled)
-		volumetricLightingDescriptor->lightingIntensity *= volumetricLightingIntensityFactor;
-	return volumetricLightingDescriptor;
 }
 
 void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
@@ -490,7 +488,7 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled && updateMoonTexture != moon->updateMoonTexture) {
 		// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
 		// Allows for compatability with other mods that don't directly update the in-game phase values
-		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().properties[1].get());
+		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get());
 
 		const auto name = moonShaderProperty->GetBaseTexture()->name.c_str();
 		const size_t len = std::strlen(name);

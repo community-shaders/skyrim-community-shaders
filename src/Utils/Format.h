@@ -67,6 +67,17 @@ namespace Util
 	std::string FormatTimeAgo(std::filesystem::file_time_type fileTime);
 
 	/**
+	 * Formats a duration given in milliseconds as HH:MM:SS.
+	 * Suitable for displaying long-running operation times (e.g. shader compilation).
+	 *
+	 * @param ms Duration in milliseconds. Fractional milliseconds are truncated.
+	 *           Non-finite (NaN/inf) or negative values are clamped to "00:00:00".
+	 *           Durations >= 24 hours display hours without limit (e.g., "125:34:56").
+	 * @return Formatted string like "00:02:35" or "00:00:00" for invalid inputs
+	 */
+	std::string FormatDuration(double ms);
+
+	/**
 	 * Formats a delta value with percentage difference for A/B test comparisons.
 	 * Returns a string like "+0.45 ms (+12.3%)" or "-0.23 ms (-8.1%)".
 	 *

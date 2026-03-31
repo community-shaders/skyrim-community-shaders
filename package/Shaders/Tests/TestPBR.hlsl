@@ -98,15 +98,15 @@
 {
 	// Test 1: Basic calculation with typical values
 	float roughness = 0.5f;
-	float3 specularColor = float3(0.04, 0.04, 0.04);  // Dielectric F0
+	float3 F0 = float3(0.04, 0.04, 0.04);  // Dielectric F0
 	float NdotL = 0.8f;
 	float NdotV = 0.7f;
 	float NdotH = 0.9f;
 	float VdotH = 0.85f;
 
 	float3 F;
-	float3 result = PBR::GetSpecularDirectLightMultiplierMicrofacet(
-		roughness, specularColor, NdotL, NdotV, NdotH, VdotH, F);
+	float3 result = PBR::SpecularMicrofacet(
+		roughness, F0, NdotL, NdotV, NdotH, VdotH, F);
 
 	// Test 2: Result should be non-negative (physical constraint)
 	ASSERT(IsTrue, result.x >= 0.0f);
@@ -114,9 +114,9 @@
 	ASSERT(IsTrue, result.z >= 0.0f);
 
 	// Test 3: Fresnel should be >= F0 (increases toward grazing)
-	ASSERT(IsTrue, F.x >= specularColor.x);
-	ASSERT(IsTrue, F.y >= specularColor.y);
-	ASSERT(IsTrue, F.z >= specularColor.z);
+	ASSERT(IsTrue, F.x >= F0.x);
+	ASSERT(IsTrue, F.y >= F0.y);
+	ASSERT(IsTrue, F.z >= F0.z);
 
 	// Test 4: Fresnel should be <= 1.0
 	ASSERT(IsTrue, F.x <= 1.0f);
@@ -125,30 +125,30 @@
 
 	// Test 5: Grazing angle increases Fresnel (lower VdotH)
 	float3 F_grazing;
-	PBR::GetSpecularDirectLightMultiplierMicrofacet(
-		roughness, specularColor, 0.1f, 0.1f, 0.5f, 0.1f, F_grazing);
+	PBR::SpecularMicrofacet(
+		roughness, F0, 0.1f, 0.1f, 0.5f, 0.1f, F_grazing);
 	ASSERT(IsTrue, F_grazing.x > F.x);
 
 	// Test 6: Roughness variation affects result
 	float3 F2;
-	float3 resultSmooth = PBR::GetSpecularDirectLightMultiplierMicrofacet(
-		0.1f, specularColor, NdotL, NdotV, NdotH, VdotH, F2);
-	float3 resultRough = PBR::GetSpecularDirectLightMultiplierMicrofacet(
-		0.9f, specularColor, NdotL, NdotV, NdotH, VdotH, F2);
+	float3 resultSmooth = PBR::SpecularMicrofacet(
+		0.1f, F0, NdotL, NdotV, NdotH, VdotH, F2);
+	float3 resultRough = PBR::SpecularMicrofacet(
+		0.9f, F0, NdotL, NdotV, NdotH, VdotH, F2);
 
 	// Roughness affects specular (smooth should generally be brighter at peak)
 	ASSERT(IsTrue, resultSmooth.x >= 0.0f && resultRough.x >= 0.0f);
 
 	// Test 7: Perfect alignment (NdotH=1) should give peak specular
 	float3 F_aligned;
-	float3 result_aligned = PBR::GetSpecularDirectLightMultiplierMicrofacet(
-		roughness, specularColor, 1.0f, 1.0f, 1.0f, 1.0f, F_aligned);
+	float3 result_aligned = PBR::SpecularMicrofacet(
+		roughness, F0, 1.0f, 1.0f, 1.0f, 1.0f, F_aligned);
 	ASSERT(IsTrue, result_aligned.x >= result.x);
 
 	// Test 8: Metallic materials (higher F0)
 	float3 metalF0 = float3(0.9f, 0.8f, 0.7f);
 	float3 F_metal;
-	float3 result_metal = PBR::GetSpecularDirectLightMultiplierMicrofacet(
+	float3 result_metal = PBR::SpecularMicrofacet(
 		roughness, metalF0, NdotL, NdotV, NdotH, VdotH, F_metal);
 
 	ASSERT(IsTrue, result_metal.x >= 0.0f);
@@ -159,14 +159,14 @@
 [numthreads(1, 1, 1)] void TestGetSpecularMicroflakes() {
 	// Test 1: Basic calculation (for fabric/sheen materials)
 	float roughness = 0.3f;
-	float3 specularColor = float3(0.04, 0.04, 0.04);
+	float3 F0 = float3(0.04, 0.04, 0.04);
 	float NdotL = 0.8f;
 	float NdotV = 0.7f;
 	float NdotH = 0.9f;
 	float VdotH = 0.85f;
 
-	float3 result = PBR::GetSpecularDirectLightMultiplierMicroflakes(
-		roughness, specularColor, NdotL, NdotV, NdotH, VdotH);
+	float3 result = PBR::SpecularMicroflakes(
+		roughness, F0, NdotL, NdotV, NdotH, VdotH);
 
 	// Test 2: Result should be non-negative
 	ASSERT(IsTrue, result.x >= 0.0f);
@@ -174,10 +174,10 @@
 	ASSERT(IsTrue, result.z >= 0.0f);
 
 	// Test 3: Roughness variation should affect result
-	float3 resultSmooth = PBR::GetSpecularDirectLightMultiplierMicroflakes(
-		0.1f, specularColor, NdotL, NdotV, NdotH, VdotH);
-	float3 resultRough = PBR::GetSpecularDirectLightMultiplierMicroflakes(
-		0.9f, specularColor, NdotL, NdotV, NdotH, VdotH);
+	float3 resultSmooth = PBR::SpecularMicroflakes(
+		0.1f, F0, NdotL, NdotV, NdotH, VdotH);
+	float3 resultRough = PBR::SpecularMicroflakes(
+		0.9f, F0, NdotL, NdotV, NdotH, VdotH);
 
 	// All results should be valid (Charlie has unique distribution)
 	ASSERT(IsTrue, resultSmooth.x >= 0.0f && resultRough.x >= 0.0f);
@@ -185,22 +185,22 @@
 
 	// Test 4: Charlie distribution has different behavior than GGX
 	// Charlie peaks at grazing, so lower NdotH can give higher values
-	float3 result_peak = PBR::GetSpecularDirectLightMultiplierMicroflakes(
-		roughness, specularColor, NdotL, NdotV, 0.1f, VdotH);
+	float3 result_peak = PBR::SpecularMicroflakes(
+		roughness, F0, NdotL, NdotV, 0.1f, VdotH);
 
 	ASSERT(IsTrue, result_peak.x >= 0.0f);
 
 	// Test 5: Both microfacet models should produce valid results
 	float3 F_ggx;
-	float3 result_ggx = PBR::GetSpecularDirectLightMultiplierMicrofacet(
-		roughness, specularColor, NdotL, NdotV, NdotH, VdotH, F_ggx);
+	float3 result_ggx = PBR::SpecularMicrofacet(
+		roughness, F0, NdotL, NdotV, NdotH, VdotH, F_ggx);
 
 	// Both models should give valid positive results
 	ASSERT(IsTrue, result_ggx.x >= 0.0f);
 
 	// Test 6: Colored specular (tinted sheen/fabric)
 	float3 coloredSpec = float3(0.1, 0.05, 0.02);
-	float3 result_colored = PBR::GetSpecularDirectLightMultiplierMicroflakes(
+	float3 result_colored = PBR::SpecularMicroflakes(
 		roughness, coloredSpec, NdotL, NdotV, NdotH, VdotH);
 
 	ASSERT(IsTrue, result_colored.x >= 0.0f);
@@ -387,7 +387,7 @@
 	float3 F;
 
 	// Test with typical dielectric material (production-safe ranges)
-	float3 result = PBR::GetSpecularDirectLightMultiplierMicrofacet(
+	float3 result = PBR::SpecularMicrofacet(
 		0.5f, float3(0.04, 0.04, 0.04), 0.8f, 0.7f, 0.9f, 0.85f, F);
 	ASSERT(IsTrue, all(!isnan(result)));
 	ASSERT(IsTrue, all(!isinf(result)));
@@ -398,26 +398,26 @@
 	[numthreads(1, 1, 1)] void TestSpecularMicroflakesEdgeCases()
 {
 	// Test with typical parameters
-	float3 result = PBR::GetSpecularDirectLightMultiplierMicroflakes(
+	float3 result = PBR::SpecularMicroflakes(
 		0.5f, float3(0.04, 0.04, 0.04), 0.8f, 0.7f, 0.9f, 0.85f);
 	ASSERT(IsTrue, all(!isnan(result)));
 	ASSERT(IsTrue, all(!isinf(result)));
 	ASSERT(IsTrue, all(result >= 0.0f));
 
 	// Test with zero specular color
-	float3 result_black = PBR::GetSpecularDirectLightMultiplierMicroflakes(
+	float3 result_black = PBR::SpecularMicroflakes(
 		0.5f, float3(0.0, 0.0, 0.0), 0.8f, 0.7f, 0.9f, 0.85f);
 	ASSERT(IsTrue, all(!isnan(result_black)));
 	ASSERT(IsTrue, all(result_black >= 0.0f));
 
 	// Test with HDR specular color (colored sheen)
-	float3 result_hdr = PBR::GetSpecularDirectLightMultiplierMicroflakes(
+	float3 result_hdr = PBR::SpecularMicroflakes(
 		0.5f, float3(2.0, 1.5, 1.0), 0.8f, 0.7f, 0.9f, 0.85f);
 	ASSERT(IsTrue, all(!isnan(result_hdr)));
 	ASSERT(IsTrue, all(result_hdr >= 0.0f));
 
 	// Test with grazing angles (Charlie distribution favors grazing)
-	float3 result_grazing = PBR::GetSpecularDirectLightMultiplierMicroflakes(
+	float3 result_grazing = PBR::SpecularMicroflakes(
 		0.3f, float3(0.1, 0.1, 0.1), 0.1f, 0.1f, 0.1f, 0.05f);
 	ASSERT(IsTrue, all(!isnan(result_grazing)));
 	ASSERT(IsTrue, all(result_grazing >= 0.0f));
@@ -459,31 +459,29 @@
 {
 	float3 N = float3(0, 0, 1);
 	float3 V = float3(0.577, 0.577, 0.577);
-	float3 VN = N;
 	float roughness = 0.5f;
 
 	// Basic calculation
-	float3 lobeWeight = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, roughness);
+	float3 lobeWeight = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, roughness);
 	ASSERT(IsTrue, all(!isnan(lobeWeight)));
 	ASSERT(IsTrue, all(!isinf(lobeWeight)));
 	ASSERT(IsTrue, all(lobeWeight >= 0.0f));
 	ASSERT(IsTrue, all(lobeWeight <= 2.0f));
 
 	// Different roughness values
-	float3 lobe_smooth = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, 0.1f);
-	float3 lobe_rough = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, 0.9f);
+	float3 lobe_smooth = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.1f);
+	float3 lobe_rough = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.9f);
 	ASSERT(IsTrue, all(lobe_smooth >= 0.0f));
 	ASSERT(IsTrue, all(lobe_rough >= 0.0f));
 
-	// Horizon occlusion - bent vertex normal should reduce weight
-	float3 VN_bent = float3(0.447, -0.447, 0.775);  // normalized(0.5, -0.5, 1)
-	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_bent, roughness);
+	// Horizon occlusion
+	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, roughness);
 	ASSERT(IsTrue, all(lobe_bent >= 0.0f));
 	ASSERT(IsTrue, lobe_bent.x <= lobeWeight.x + 0.001f);
 
 	// Grazing angle increases Fresnel
 	float3 V_grazing = float3(0.9999, 0, 0.01);
-	float3 lobe_grazing = PBR::GetWetnessIndirectSpecularLobeWeight(N, V_grazing, VN, roughness);
+	float3 lobe_grazing = PBR::GetWetnessIndirectSpecularLobeWeight(N, V_grazing, roughness);
 	ASSERT(IsTrue, all(lobe_grazing >= 0.0f));
 	ASSERT(IsTrue, lobe_grazing.x >= lobeWeight.x);
 }
@@ -512,9 +510,8 @@
 	ASSERT(IsTrue, all(result_hdr >= 0.0f));
 
 	// Indirect with extreme roughness
-	float3 VN = N;
-	float3 lobe_min = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, 0.04f);
-	float3 lobe_max = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN, 1.0f);
+	float3 lobe_min = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.04f);
+	float3 lobe_max = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 1.0f);
 	ASSERT(IsTrue, all(!isnan(lobe_min)));
 	ASSERT(IsTrue, all(!isinf(lobe_min)));
 	ASSERT(IsTrue, all(!isnan(lobe_max)));
@@ -537,10 +534,8 @@
 	ASSERT(IsTrue, all(wetness_smooth >= 0.0f));
 
 	// Horizon occlusion reduces specular
-	float3 VN_aligned = N;
-	float3 VN_bent = float3(0.447, 0, 0.895);  // normalized(0.5, 0, 1)
-	float3 lobe_aligned = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_aligned, 0.5f);
-	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_bent, 0.5f);
+	float3 lobe_aligned = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
+	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
 	ASSERT(IsTrue, lobe_bent.x <= lobe_aligned.x + 0.01f);
 
 	// Color preservation

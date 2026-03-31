@@ -97,10 +97,10 @@ namespace BRDF
 
 	// Specular BRDFs
 	// [Schlick 1994, "An Inexpensive BRDF Model for Physically-Based Rendering"]
-	float3 F_Schlick(float3 specularColor, float VdotH)
+	float3 F_Schlick(float3 F0, float VdotH)
 	{
 		float Fc = pow(1 - VdotH, 5);
-		return Fc + (1 - Fc) * specularColor;
+		return Fc + (1 - Fc) * F0;
 	}
 
 	float3 F_Schlick(float3 F0, float3 F90, float VdotH)

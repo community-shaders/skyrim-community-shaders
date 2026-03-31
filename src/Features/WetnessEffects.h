@@ -12,7 +12,7 @@ public:
 	virtual inline std::string GetShortName() override { return "WetnessEffects"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "WETNESS_EFFECTS"; }
-	virtual std::string_view GetCategory() const override { return "Water"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kWater; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -32,7 +32,7 @@ public:
 	{
 		uint EnableWetnessEffects = true;
 		float MaxRainWetness = 1.0f;
-		float MaxPuddleWetness = 2.5f;
+		float MaxPuddleWetness = 1.5f;
 		float MaxShoreWetness = 1.0f;
 		uint ShoreRange = 32;
 		float PuddleRadius = 1.0f;

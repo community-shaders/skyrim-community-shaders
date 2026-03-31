@@ -4,6 +4,18 @@ inputs:
     cache-key-suffix:
         description: "A suffix to make the cache key unique (e.g., validation, tests)"
         required: true
+    vs-version:
+        description: "Visual Studio version to use ('2022' or '2026'). Defaults to '2026'."
+        required: false
+        default: "2026"
+    cmake-preset:
+        description: "The CMake configure preset name (e.g. ALL, ALL-VS2022). Used to resolve the expected generator for cache validation."
+        required: false
+        default: "ALL"
+    build-dir:
+        description: "The CMake binary directory to cache (e.g. build/ALL, build/ALL-VS2022)."
+        required: false
+        default: "build/ALL"
 outputs:
     msvc-version:
         description: "The detected MSVC compiler version"
@@ -15,10 +27,31 @@ runs:
           run: git config --system core.longpaths true
           shell: bash
 
+        - name: Install CMake 4.x
+          uses: lukka/get-cmake@latest
+          with:
+              cmakeVersion: "~4.2.0"
+
+        - name: Install Visual Studio 2026 Build Tools
+          if: inputs.vs-version == '2026'
+          shell: pwsh
+          run: |
+              $installerUrl = "https://aka.ms/vs/stable/vs_BuildTools.exe"
+              $installerPath = "$env:TEMP\vs_buildtools.exe"
+              Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
+              Start-Process -FilePath $installerPath -ArgumentList `
+                  "--quiet", "--wait", "--norestart", "--nocache", `
+                  "--add", "Microsoft.VisualStudio.Workload.VCTools", `
+                  "--add", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", `
+                  "--add", "Microsoft.VisualStudio.Component.Windows11SDK.26100" `
+                  -Wait -NoNewWindow
+              Remove-Item $installerPath -ErrorAction SilentlyContinue
+
         - name: Setup MSVC environment
           uses: ilammy/msvc-dev-cmd@v1
           with:
               arch: x64
+              vsversion: ${{ inputs.vs-version == '2026' && '18.0' || '17.0' }}
 
         - name: Get MSVC version
           id: msvc_version
@@ -61,24 +94,57 @@ runs:
         - name: Cache CMake build output
           uses: actions/cache@v4
           with:
-              path: build/ALL
+              path: ${{ inputs.build-dir }}
               key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
               restore-keys: |
                   ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
                   ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-
 
-        - name: Remove stale CMake cache if drive letter changed
+        - name: Remove stale CMake cache if configuration changed
           shell: pwsh
           run: |
-              $cacheFile = "build/ALL/CMakeCache.txt"
+              $buildDir = "${{ inputs.build-dir }}"
+              $cacheFile = "$buildDir/CMakeCache.txt"
               if (Test-Path $cacheFile) {
-                $expected = (Resolve-Path .).Path.Substring(0,1)
                 $content = Get-Content $cacheFile -Raw
+                $stale = $false
+
+                # Check drive letter mismatch
+                $expected = (Resolve-Path .).Path.Substring(0,1)
                 if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
-                  $actual = $Matches[1]
-                  if ($actual -ne $expected) {
-                    Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
-                    Remove-Item -Recurse -Force "build/ALL"
+                  if ($Matches[1] -ne $expected) {
+                    Write-Host "❌ Cache drive mismatch."
+                    $stale = $true
                   }
+                }
+
+                # Check generator mismatch — resolve the expected generator from the
+                # configure preset, following the inherits chain, so VS2022 and VS2026
+                # presets each validate against their own generator string.
+                if ($content -match 'CMAKE_GENERATOR:INTERNAL=(.+)') {
+                  $cachedGenerator = $Matches[1].Trim()
+                  $allPresets = (Get-Content "CMakePresets.json" -Raw | ConvertFrom-Json).configurePresets
+                  function Resolve-PresetGenerator([string]$name, [int]$depth = 0) {
+                    if ($depth -gt 10) { return $null }
+                    $p = $allPresets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+                    if (-not $p) { return $null }
+                    if ($p.generator) { return $p.generator }
+                    $parents = if ($p.inherits -is [array]) { $p.inherits } else { @($p.inherits) }
+                    foreach ($parent in $parents) {
+                      $gen = Resolve-PresetGenerator $parent ($depth + 1)
+                      if ($gen) { return $gen }
+                    }
+                    return $null
+                  }
+                  $expectedGenerator = Resolve-PresetGenerator "${{ inputs.cmake-preset }}"
+                  if ($expectedGenerator -and $expectedGenerator -ne $cachedGenerator) {
+                    Write-Host "❌ Generator mismatch: cached='$cachedGenerator', expected='$expectedGenerator'"
+                    $stale = $true
+                  }
+                }
+
+                if ($stale) {
+                  Write-Host "Removing stale $buildDir directory."
+                  Remove-Item -Recurse -Force $buildDir
                 }
               }
