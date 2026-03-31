@@ -151,12 +151,16 @@ private:
 	static constexpr float NorthernSunAngle = 90.0f + 35.0f;
 	static constexpr float VanillaSunAngle = 90.0f + 5.0f;
 
+	static constexpr float SecundaIntensityFactor = 0.67f;
+	static constexpr float NewMoonIntensityFactor = 0.05f;
+	static constexpr float CrescentMoonIntensityFactor = 0.25f;
+	static constexpr float FullMoonIntensityFactor = 1.0f;
+
 	inline static RE::NiPoint3* gSunPosition = nullptr;
 	inline static float* gSunGlareSize = nullptr;
 	inline static uint32_t* gMasserSize = nullptr;
 	inline static uint32_t* gSecundaSize = nullptr;
 
-	inline static float volumetricLightingIntensityFactor = 1.0f;
 	bool moonAndStarsLoaded = false;
 	RE::TESObjectCELL* currentCell = nullptr;
 	float sunAngle = 90.0f;

@@ -1,7 +1,5 @@
 #include "SkySync.h"
 
-#include "State.h"
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkySync::Settings,
 	Enabled,
@@ -17,23 +15,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void SkySync::DrawSettings()
 {
-	if (ImGui::Checkbox("Enabled", &settings.Enabled)) {
-		shadowFader.Reset();
-
-		if (!settings.Enabled) {
-			auto sky = RE::Sky::GetSingleton();
-			if (sky && sky->sun && sky->sun->light) {
-				auto dir = sky->sun->light->local.rotate.GetVectorX();
-				if (dir.Unitize() < FLT_EPSILON)
-					dir = { 0.0f, 0.0f, 1.0f };
-
-				ShadowFader::SetLighting(sky->sun, dir, 1.0f);
-				SetSunBaseVisibility(sky->sun, 1.0f);
-			}
-
-			volumetricLightingIntensityFactor = 1.0f;
-		}
-	}
+	ImGui::Checkbox("Enabled", &settings.Enabled);
 
 	ImGui::Checkbox("Use alternate sun path", &settings.UseAlternateSunPath);
 
@@ -91,6 +73,10 @@ void SkySync::RestoreDefaultSettings()
 
 void SkySync::PostPostLoad()
 {
+	moonAndStarsLoaded = GetModuleHandle(L"po3_MoonMod.dll");
+	if (moonAndStarsLoaded)
+		logger::info("[Sky Sync] Moon and Stars detected, compatibility enabled");
+
 	if (GetModuleHandle(L"EVLaS.dll")) {
 		DisableOnConflict("EVLaS");
 		return;
@@ -234,15 +220,16 @@ void SkySync::ProcessMoon(const RE::Moon* moon, const float time, const Caster t
 	if (!moon)
 		return;
 
-	const auto dir = Util::Moon::GetDirection(moon);
+	const auto dir = moon->root->local.rotate.GetVectorY();
 
 	rawDirections[static_cast<int>(type)] = dir;
 
 	auto apparentDir = GetApparentDirection(dir, altitude);
 	SetMoonDirection(moon, apparentDir);
 
-	// Apply Moon and Stars compatibility adjustment if needed
-	if (globals::state->moonAndStarsLoaded)
+	// Moon and Stars adjusts some intermediary rotation matrices for the moon
+	// Directly changing the directions here avoids 3 matrix multiplications and a vector rotation
+	if (moonAndStarsLoaded)
 		apparentDir = { apparentDir.y, -apparentDir.x, apparentDir.z };
 
 	directions[static_cast<int>(type)] = apparentDir;
@@ -258,13 +245,10 @@ void SkySync::ProcessMoon(const RE::Moon* moon, const float time, const Caster t
 	const float moonRadius = type == Caster::Masser ? static_cast<float>(*gMasserSize) : static_cast<float>(*gSecundaSize);
 	float intensity = CalculateVisibility(dir, moon->moonMesh->local.translate.y, moonRadius);
 
-	if (type == Caster::Masser) {
-		const float factor = masserPhaseIntensityFactor > 0.0f ? masserPhaseIntensityFactor : 1.0f;
-		intensity *= factor;
-	} else if (type == Caster::Secunda) {
-		const float factor = secundaPhaseIntensityFactor > 0.0f ? secundaPhaseIntensityFactor : 1.0f;
-		intensity *= factor * Util::Moon::SecundaIntensityFactor;
-	}
+	if (type == Caster::Masser)
+		intensity *= masserPhaseIntensityFactor;
+	else if (type == Caster::Secunda)
+		intensity *= secundaPhaseIntensityFactor * SecundaIntensityFactor;
 
 	if (time >= timings.sunriseFadeOutMoonStart && time <= timings.sunriseFadeOutMoonEnd)
 		intensity *= SmoothStep(timings.sunriseFadeOutMoonEnd, timings.sunriseFadeOutMoonStart, time);
@@ -501,23 +485,44 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 
 	func(moon, sky);
 
-	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled) {
-		float* target = moon == sky->masser ? &singleton.masserPhaseIntensityFactor : &singleton.secundaPhaseIntensityFactor;
-		if (updateMoonTexture != moon->updateMoonTexture || *target <= 0.0f) {
-			// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
-			// Allows for compatibility with other mods that don't directly update the in-game phase values
-			const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get());
-			if (!moonShaderProperty)
-				return;
+	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled && updateMoonTexture != moon->updateMoonTexture) {
+		// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
+		// Allows for compatability with other mods that don't directly update the in-game phase values
+		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get());
 
-			const auto texture = moonShaderProperty->GetBaseTexture();
-			if (!texture)
-				return;
+		const auto name = moonShaderProperty->GetBaseTexture()->name.c_str();
+		const size_t len = std::strlen(name);
+		std::string lower;
+		lower.reserve(len);
+		for (size_t i = 0; i < len; ++i) {
+			lower.push_back(static_cast<char>(std::tolower(name[i])));
+		}
 
-			const auto phase = Util::Moon::GetPhaseFromTexture(texture->name.c_str());
-			const float intensityFactor = Util::Moon::GetPhaseIntensityFactor(phase);
+		static constexpr std::array<std::pair<std::string_view, RE::Moon::Phases::Phase>, 8> Lookup{
+			{ { "full", RE::Moon::Phases::Phase::kFull },
+				{ "three_wan", RE::Moon::Phases::Phase::kWaningGibbous },
+				{ "half_wan", RE::Moon::Phases::Phase::kWaningQuarter },
+				{ "one_wan", RE::Moon::Phases::Phase::kWaningCrescent },
+				{ "new", RE::Moon::Phases::Phase::kNewMoon },
+				{ "one_wax", RE::Moon::Phases::Phase::kWaxingCrescent },
+				{ "half_wax", RE::Moon::Phases::Phase::kWaxingQuarter },
+				{ "three_wax", RE::Moon::Phases::Phase::kWaxingGibbous } }
+		};
 
-			*target = intensityFactor;
+		RE::Moon::Phases::Phase phase = RE::Moon::Phases::Phase::kFull;
+		for (auto& [suffix, id] : Lookup) {
+			if (lower.find(suffix) != std::string::npos) {
+				phase = id;
+				break;
+			}
+		}
+
+		float* intensityFactor = moon == sky->masser ? &singleton.masserPhaseIntensityFactor : &singleton.secundaPhaseIntensityFactor;
+		if (phase == RE::Moon::Phases::Phase::kNewMoon) {
+			*intensityFactor = NewMoonIntensityFactor;
+		} else {
+			const float t = (abs(static_cast<float>(phase) - static_cast<float>(RE::Moon::Phases::Phase::kNewMoon)) - 1.0f) / 3.0f;
+			*intensityFactor = std::lerp(CrescentMoonIntensityFactor, FullMoonIntensityFactor, t);
 		}
 	}
 }

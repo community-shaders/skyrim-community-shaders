@@ -219,9 +219,6 @@ void IBL::Prepass()
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { envIBLTexture->uav.get() };
 	std::array<ID3D11SamplerState*, 1> samplers = { Deferred::GetSingleton()->linearSampler };
 
-	auto renderer = globals::game::renderer;
-	auto& cubemap = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS];
-
 	// IBL
 	{
 		samplers[0] = Deferred::GetSingleton()->linearSampler;
@@ -235,7 +232,9 @@ void IBL::Prepass()
 
 	// IBL with sky (use game's native reflections cubemap directly)
 	{
-		srvs.at(0) = cubemap.SRV;
+		auto renderer = globals::game::renderer;
+		auto& reflections = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS];
+		srvs.at(0) = reflections.SRV;
 		uavs.at(0) = skyIBLTexture->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
