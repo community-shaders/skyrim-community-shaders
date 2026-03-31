@@ -2096,7 +2096,8 @@ namespace ShadowCasterManager
 	{
 		if (depthSlot < static_cast<uint32_t>(s_shadowSlotInfos.size()))
 			s_shadowSlotInfos[depthSlot] = info;
-		s_shadowSlotUsage++;
+		// Omni lights (type 2) occupy 2 depth-texture slices; all others use 1.
+		s_shadowSlotUsage += (info.type == 2) ? 2 : 1;
 		s_knownLights[info.lightKey] = info;
 	}
 
