@@ -299,7 +299,6 @@ void PerformanceOverlay::DrawOverlay()
 		windowFlags |= ImGuiWindowFlags_NoBackground;
 	} else {
 		windowFlags &= ~ImGuiWindowFlags_NoDecoration;
-		windowFlags &= ~ImGuiWindowFlags_AlwaysAutoResize;
 		windowFlags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse;
 	}
 
@@ -310,12 +309,15 @@ void PerformanceOverlay::DrawOverlay()
 			ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).z,
 			this->settings.BackgroundOpacity));
 
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, this->settings.ShowBorder ? 1.0f : 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, this->settings.ShowBorder ? ImGui::GetStyle().WindowBorderSize : 0.0f);
+
+	const float scale = Util::GetUIScale();
 
 	// Set initial position if not already set
 	if (!this->settings.PositionSet) {
-		ImGui::SetNextWindowPos(ImVec2(PerformanceOverlay::Settings::kDefaultWindowPadding, PerformanceOverlay::Settings::kDefaultWindowPadding));
-		this->settings.Position = ImVec2(PerformanceOverlay::Settings::kDefaultWindowPadding, PerformanceOverlay::Settings::kDefaultWindowPadding);
+		const float defaultPad = Settings::kDefaultWindowPadding * scale;
+		ImGui::SetNextWindowPos(ImVec2(defaultPad, defaultPad));
+		this->settings.Position = ImVec2(defaultPad, defaultPad);
 		this->settings.PositionSet = true;
 	} else {
 		ImGui::SetNextWindowPos(this->settings.Position, ImGuiCond_FirstUseEver);
@@ -336,19 +338,16 @@ void PerformanceOverlay::DrawOverlay()
 				fpsText = std::format("Raw FPS: {:.1f} ({:.2f} ms)", this->state.smoothFps, this->state.smoothFrameTimeMs);
 			}
 			float fpsWidth = ImGui::CalcTextSize(fpsText.c_str()).x;
-			minWidth = std::max(minWidth, fpsWidth + PerformanceOverlay::Settings::kLabelPadding);  // Add padding for labels
+			minWidth = std::max(minWidth, fpsWidth + Settings::kLabelPadding * scale);
 		}
 		if (this->settings.ShowDrawCalls) {
-			// Draw calls table needs significant width for all columns
-			minWidth = std::max(minWidth, PerformanceOverlay::Settings::kDrawCallsTableWidth * this->settings.TextSize);
+			minWidth = std::max(minWidth, Settings::kDrawCallsTableWidth * scale * this->settings.TextSize);
 		}
 		if (this->settings.ShowVRAM && menu->GetDXGIAdapter3()) {
-			// VRAM section needs width for the progress bar and text
-			minWidth = std::max(minWidth, PerformanceOverlay::Settings::kVRAMSectionWidth * this->settings.TextSize);
+			minWidth = std::max(minWidth, Settings::kVRAMSectionWidth * scale * this->settings.TextSize);
 		}
 
-		// Add some padding for window borders and spacing
-		minWidth += PerformanceOverlay::Settings::kWindowBorderPadding;
+		minWidth += Settings::kWindowBorderPadding * scale;
 
 		// Set minimum width, but allow auto-resize for larger content
 		ImGui::SetNextWindowSize(ImVec2(minWidth, 0), ImGuiCond_FirstUseEver);
@@ -368,7 +367,7 @@ void PerformanceOverlay::DrawOverlay()
 		this->settings.Position = currentPos;
 	}
 
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));  // Tighter spacing
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, 1.0f * scale));
 	ImGui::SetWindowFontScale(this->settings.TextSize);
 
 	// Update graph values
@@ -456,7 +455,7 @@ void PerformanceOverlay::DrawFPS()
 			static_cast<int>(this->state.frameTimeHistory.GetHeadIdx()),
 			overlay_text,
 			this->state.smoothedMinFrameTime, this->state.smoothedMaxFrameTime,
-			ImVec2(graphWidth, 50.0f * this->settings.TextSize));
+			ImVec2(graphWidth, 50.0f * Util::GetUIScale() * this->settings.TextSize));
 
 		ImGui::PopStyleColor();
 
@@ -553,7 +552,7 @@ void PerformanceOverlay::DrawPostFGFrameTimeGraph()
 		static_cast<int>(state.postFGFrameTimeHistory.GetHeadIdx()),
 		overlay_text,
 		state.smoothedMinFrameTime, state.smoothedMaxFrameTime,
-		ImVec2(graphWidth, 50.0f * settings.TextSize));
+		ImVec2(graphWidth, 50.0f * Util::GetUIScale() * settings.TextSize));
 
 	ImGui::PopStyleColor();
 

@@ -5,8 +5,8 @@
 void CellLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	SetupWidgetWindowDefaults();
+	if (Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		DrawWidgetHeader("##CellLightingSearch", true, true);
 	}
 

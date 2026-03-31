@@ -1,14 +1,21 @@
 name: "Prepare Shaders"
 description: "Prepare shaders for validation or analysis (requires setup-build-environment to be called first)"
 
+inputs:
+    cmake-preset:
+        description: "The CMake configure/build preset to use (e.g. ALL, ALL-VS2022)."
+        required: false
+        default: "ALL"
+
 runs:
     using: "composite"
     steps:
         - name: Prepare shaders
           uses: lukka/run-cmake@v10
           with:
-              configurePreset: ALL
-              buildPreset: ALL
+              configurePreset: ${{ inputs.cmake-preset }}
+              configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=OFF']"
+              buildPreset: ${{ inputs.cmake-preset }}
               buildPresetAdditionalArgs: "['--target prepare_shaders']"
 
         - name: Setup Python

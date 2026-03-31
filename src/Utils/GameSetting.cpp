@@ -240,13 +240,14 @@ namespace Util
 		case RE::Setting::Type::kFloat:
 			RenderImGuiElement(settingName, settingData, &setting->data.f, collectionName);
 			break;
-		case RE::Setting::Type::kSignedInteger:
+		case RE::Setting::Type::kInteger:
 			RenderImGuiElement(settingName, settingData, &setting->data.i, collectionName);
 			break;
 		case RE::Setting::Type::kUnsignedInteger:
 			RenderImGuiElement(settingName, settingData, &setting->data.u, collectionName);
 			break;
-		case RE::Setting::Type::kColor:
+		case RE::Setting::Type::kColorRGB:
+		case RE::Setting::Type::kColorRGBA:
 		case RE::Setting::Type::kString:
 		case RE::Setting::Type::kUnknown:
 		default:
