@@ -38,7 +38,7 @@ Install them manually only if you want them in everywhere.
 
 -   [CMake](https://cmake.org/)
     -   No need to install manually if you have Visual Studio CMake Tools installed
-    -   CMake 4.0+ is **not** supported right now
+    -   CMake 4.2+ is **required** now
     -   Edit the `PATH` environment variable and add the cmake.exe install path as a new value
     -   Instructions for finding and editing the `PATH` environment variable can be found [here](https://www.java.com/en/download/help/path.html)
 -   [Vcpkg](https://github.com/microsoft/vcpkg)

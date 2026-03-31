@@ -603,8 +603,8 @@ namespace BackgroundBlur
 		// Apply blur behind each visible ImGui window
 		for (int i = 0; i < ctx->Windows.Size; i++) {
 			ImGuiWindow* window = ctx->Windows[i];
-			// Don't check Hidden - it causes a 1-frame blur delay when windows reappear
-			if (!window || !window->WasActive || window->SkipItems) {
+			// Use Active (still true after Render) instead of WasActive (stale until next NewFrame)
+			if (!window || !window->Active || window->SkipItems) {
 				continue;
 			}
 

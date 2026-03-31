@@ -126,15 +126,16 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 	ImGui::SliderInt("Compiler Threads", &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Number of threads to use to compile shaders. "
-			"The more threads the faster compilation will finish but may make the system unresponsive. ");
+			"Number of threads used to compile shaders at startup. "
+			"Defaults to all logical cores minus one for OS headroom (E-cores included). "
+			"Higher values finish compilation faster but may make the system less responsive.");
 	}
 	ImGui::SliderInt("Background Compiler Threads", &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Number of threads to use to compile shaders while playing game. "
-			"This is activated if the startup compilation is skipped. "
-			"The more threads the faster compilation will finish but may make the system unresponsive. ");
+			"Number of threads used to compile shaders during gameplay. "
+			"Defaults to half of performance cores to avoid impacting the render thread. "
+			"Higher values finish compilation faster but may cause stuttering.");
 	}
 
 	ImGui::Columns(2, nullptr, false);
@@ -552,6 +553,103 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	// Statistics section (moved from Advanced/Logging)
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Shader Compiler : {}", shaderCache->GetShaderStatsString()).c_str());
+
+		// Derived parallelism metrics are computed lazily on demand and only shown
+		// once compilation has completed to avoid per-frame analysis while compiling.
+		if (!shaderCache->IsCompiling()) {
+			auto parallelism = shaderCache->GetParallelismStats();
+			if (parallelism.has_value()) {
+				const auto& p = parallelism.value();
+				ImGui::Spacing();
+				ImGui::TextDisabled("Parallelism (derived from %zu compiled tasks)", p.sampleCount);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Computed lazily from the last completed build.");
+					ImGui::Text("Only evaluated when this Statistics section is open.");
+				}
+				ImGui::Text("Work (W, sum of task wall times): %s", Util::FormatDuration(p.workMs).c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Total compile work: sum of all per-shader wall-clock compile times.");
+					ImGui::Text("This is not CPU time; it is accumulated task elapsed time.");
+					ImGui::Text("Equivalent serial time on one worker if overhead stayed the same.");
+				}
+				ImGui::Text("Span (S, longest): %s", Util::FormatDuration(p.spanMs).c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Critical-path lower bound, approximated by the single slowest shader.");
+					ImGui::Text("Even infinite cores cannot finish faster than this.");
+				}
+				ImGui::Text("Makespan (T_p): %s", Util::FormatDuration(p.makespanMs).c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Observed wall-clock duration for the full shader build.");
+				}
+				ImGui::Text("Queue wait (avg/max): %s / %s",
+					Util::FormatDuration(p.avgQueueWaitMs).c_str(),
+					Util::FormatDuration(p.maxQueueWaitMs).c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Time spent waiting in the ready queue before a worker started compilation.");
+					ImGui::Text("Useful for identifying scheduler-induced delay separate from compile cost.");
+				}
+				ImGui::Text("Average parallelism (W/S): %.2fx", p.avgParallelism);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Average useful concurrency in this workload.");
+					ImGui::Text("Roughly the worker count where adding more cores gives diminishing returns.");
+				}
+				ImGui::Text("Infinite-core efficiency (S/T_p): %.1f%%", 100.0 * p.infiniteCoreEfficiency);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("How close runtime is to the infinite-core lower bound.");
+					ImGui::Text("100%% means T_p == S.");
+				}
+				ImGui::Text("Infinite-core gap: %.1f%%", p.infiniteCoreGapPercent);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Distance from ideal infinite-core time.");
+					ImGui::Text("Defined as 100 * (1 - S / T_p). Lower is better.");
+				}
+
+				ImGui::Spacing();
+				ImGui::TextDisabled("Infinite-core efficiency");
+				float efficiency = static_cast<float>(std::clamp(p.infiniteCoreEfficiency, 0.0, 1.0));
+				ImGui::ProgressBar(efficiency, ImVec2(-1.0f, 0.0f), std::format("{:.1f}% efficient / {:.1f}% gap", 100.0 * p.infiniteCoreEfficiency, p.infiniteCoreGapPercent).c_str());
+
+				ImGui::Spacing();
+				ImGui::TextDisabled("Relative durations (normalized)");
+				double maxMs = std::max({ p.workMs, p.spanMs, p.makespanMs, 1.0 });
+				auto drawRelativeBar = [maxMs](const char* label, double value) {
+					float ratio = static_cast<float>(std::clamp(value / maxMs, 0.0, 1.0));
+					ImGui::TextUnformatted(label);
+					ImGui::SameLine();
+					ImGui::ProgressBar(ratio, ImVec2(-1.0f, 0.0f), std::format("{} ({:.1f}%)", Util::FormatDuration(value), 100.0 * ratio).c_str());
+				};
+				drawRelativeBar("Span (S)", p.spanMs);
+				drawRelativeBar("Makespan (T_p)", p.makespanMs);
+				drawRelativeBar("Work (W)", p.workMs);
+			}
+		}
+
+		// Top-3 slowest shaders from the last build
+		auto topSlow = shaderCache->GetTopSlowTasks(3);
+		if (!topSlow.empty()) {
+			ImGui::Spacing();
+			ImGui::TextDisabled("Top %zu Slowest Shaders (last build)", topSlow.size());
+			for (size_t i = 0; i < topSlow.size(); ++i) {
+				const auto& rec = topSlow[i];
+				ImGui::Text("#%zu  %s  (weight %d)", i + 1,
+					Util::FormatDuration(rec.elapsedMs).c_str(), rec.priority);
+				ImGui::SameLine();
+				ImGui::TextDisabled("%s", rec.key.c_str());
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("%s", rec.key.c_str());
+					}
+				}
+				// Allow copying the full key with a right-click
+				if (ImGui::BeginPopupContextItem(std::format("##slowcopy{}", i).c_str())) {
+					if (ImGui::MenuItem("Copy key")) {
+						ImGui::SetClipboardText(rec.key.c_str());
+					}
+					ImGui::EndPopup();
+				}
+			}
+		}
+
 		ImGui::TreePop();
 	}
 
