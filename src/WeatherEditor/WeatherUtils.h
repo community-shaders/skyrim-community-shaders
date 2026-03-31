@@ -261,11 +261,13 @@ namespace WidgetFactory
 		return hasOpen;
 	}
 
-	// Draw "Close All <Type>" menu item for a widget container.
+	// Draw "Close All <Type> Widgets" menu item for a widget container.
 	template <typename Container>
-	void DrawCloseAllMenuItem(const char* label, Container& widgets)
+	void DrawCloseAllMenuItem(Container& widgets)
 	{
-		if (ImGui::MenuItem(label)) {
+		if (widgets.empty())
+			return;
+		if (ImGui::MenuItem(std::format("Close All {} Widgets", widgets[0]->GetWidgetTypeName()).c_str())) {
 			for (auto& widget : widgets)
 				widget->SetOpen(false);
 		}

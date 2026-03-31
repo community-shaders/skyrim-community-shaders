@@ -870,13 +870,8 @@ void EditorWindow::ShowWidgetWindow()
 	}
 
 	// Draw all open widgets using WidgetFactory template
-	WidgetFactory::DrawOpenWidgets(weatherWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(lightingTemplateWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(imageSpaceWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(volumetricLightingWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(precipitationWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(lensFlareWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(referenceEffectWidgets, lastFocusedWidget);
+	for (auto* collection : GetWidgetCollections())
+		WidgetFactory::DrawOpenWidgets(*collection, lastFocusedWidget);
 
 	// Draw current cell lighting widget if open
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
@@ -921,13 +916,8 @@ void EditorWindow::RenderUI()
 			// Save individual widgets submenu
 			if (ImGui::BeginMenu("Save")) {
 				bool hasOpen = false;
-				hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(weatherWidgets, hasOpen);
-				hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(lightingTemplateWidgets, hasOpen);
-				hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(imageSpaceWidgets, hasOpen);
-				hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(volumetricLightingWidgets, hasOpen);
-				hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(precipitationWidgets, hasOpen);
-				hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(lensFlareWidgets, hasOpen);
-				hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(referenceEffectWidgets, hasOpen);
+				for (auto* collection : GetWidgetCollections())
+					hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(*collection, hasOpen);
 
 				if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
 					hasOpen = true;
@@ -942,13 +932,8 @@ void EditorWindow::RenderUI()
 			}
 
 			ImGui::Separator();
-			WidgetFactory::DrawCloseAllMenuItem("Close All Weather Widgets", weatherWidgets);
-			WidgetFactory::DrawCloseAllMenuItem("Close All Lighting Widgets", lightingTemplateWidgets);
-			WidgetFactory::DrawCloseAllMenuItem("Close All ImageSpace Widgets", imageSpaceWidgets);
-			WidgetFactory::DrawCloseAllMenuItem("Close All Volumetric Lighting Widgets", volumetricLightingWidgets);
-			WidgetFactory::DrawCloseAllMenuItem("Close All Precipitation Widgets", precipitationWidgets);
-			WidgetFactory::DrawCloseAllMenuItem("Close All Lens Flare Widgets", lensFlareWidgets);
-			WidgetFactory::DrawCloseAllMenuItem("Close All Visual Effect Widgets", referenceEffectWidgets);
+			for (auto* collection : GetWidgetCollections())
+				WidgetFactory::DrawCloseAllMenuItem(*collection);
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Settings")) {
@@ -1023,13 +1008,8 @@ void EditorWindow::RenderUI()
 			ImGui::Text("Open Widgets:");
 
 			int openCount = 0;
-			openCount = WidgetFactory::DrawOpenWidgetMenuItems(weatherWidgets, openCount);
-			openCount = WidgetFactory::DrawOpenWidgetMenuItems(lightingTemplateWidgets, openCount);
-			openCount = WidgetFactory::DrawOpenWidgetMenuItems(imageSpaceWidgets, openCount);
-			openCount = WidgetFactory::DrawOpenWidgetMenuItems(volumetricLightingWidgets, openCount);
-			openCount = WidgetFactory::DrawOpenWidgetMenuItems(precipitationWidgets, openCount);
-			openCount = WidgetFactory::DrawOpenWidgetMenuItems(lensFlareWidgets, openCount);
-			openCount = WidgetFactory::DrawOpenWidgetMenuItems(referenceEffectWidgets, openCount);
+			for (auto* collection : GetWidgetCollections())
+				openCount = WidgetFactory::DrawOpenWidgetMenuItems(*collection, openCount);
 
 			if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
 				++openCount;
@@ -1386,12 +1366,8 @@ EditorWindow::~EditorWindow()
 {
 	ShowGameMenus();
 	delete tempTexture;
-	weatherWidgets.clear();
-	lightingTemplateWidgets.clear();
-	imageSpaceWidgets.clear();
-	volumetricLightingWidgets.clear();
-	precipitationWidgets.clear();
-	referenceEffectWidgets.clear();
+	for (auto* collection : GetWidgetCollections())
+		collection->clear();
 	artObjectWidgets.clear();
 	effectShaderWidgets.clear();
 	currentCellLightingWidget.reset();
@@ -1499,13 +1475,8 @@ void EditorWindow::SaveAll()
 			if (w->IsOpen())
 				w->Save();
 	};
-	saveOpen(weatherWidgets);
-	saveOpen(lightingTemplateWidgets);
-	saveOpen(imageSpaceWidgets);
-	saveOpen(volumetricLightingWidgets);
-	saveOpen(precipitationWidgets);
-	saveOpen(lensFlareWidgets);
-	saveOpen(referenceEffectWidgets);
+	for (auto* collection : GetWidgetCollections())
+		saveOpen(*collection);
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen())
 		currentCellLightingWidget->Save();
 
@@ -2079,27 +2050,15 @@ void EditorWindow::PerformUndo()
 	undoStack.pop_back();
 
 	if (!state.widget) {
-		for (auto& w : weatherWidgets) {
-			if (w->GetEditorID() == state.widgetId) {
-				state.widget = w.get();
+		for (auto* collection : GetWidgetCollections()) {
+			for (auto& w : *collection) {
+				if (w->GetEditorID() == state.widgetId) {
+					state.widget = w.get();
+					break;
+				}
+			}
+			if (state.widget)
 				break;
-			}
-		}
-		if (!state.widget) {
-			for (auto& w : imageSpaceWidgets) {
-				if (w->GetEditorID() == state.widgetId) {
-					state.widget = w.get();
-					break;
-				}
-			}
-		}
-		if (!state.widget) {
-			for (auto& w : lightingTemplateWidgets) {
-				if (w->GetEditorID() == state.widgetId) {
-					state.widget = w.get();
-					break;
-				}
-			}
 		}
 	}
 
