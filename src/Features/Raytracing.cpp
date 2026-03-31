@@ -123,6 +123,12 @@ static bool DrawEnumCombo(const char* label, T& variable, const char* tooltip = 
 	return variable != variablePrev;
 }
 
+template <class T>
+static void ClampSetting(T& value, T min, T max)
+{
+	value = std::clamp(value, min, max);
+}
+
 void Raytracing::DrawSettings()
 {
 	bool forcedDisabledReason = disableReason != DisableReason::None;
@@ -135,6 +141,12 @@ void Raytracing::DrawSettings()
 	ImGui::Checkbox("Enabled", &settings.CreationEngineRaytracingSettings.Enabled);
 
 	DrawEnumRadio("Mode", settings.CreationEngineRaytracingSettings.GeneralSettings.Mode);
+
+	// Enforce DLSS RR in settings if it is enabled in upscaling
+	if (globals::features::upscaling.GetUpscaleMethod() == Upscaling::UpscaleMethod::kDLSS_RR)
+		settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser = CreationEngineRaytracing::Denoiser::DLSS_RR;
+
+	DrawEnumRadio("Denoiser", settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser);
 
 	bool ptMode = settings.CreationEngineRaytracingSettings.GeneralSettings.Mode == CreationEngineRaytracing::Mode::PathTracing;
 
@@ -201,13 +213,16 @@ void Raytracing::DrawGeneralSettings()
 			rtSettings.SamplesPerPixel = std::clamp(rtSettings.SamplesPerPixel, 1, 32);
 	}
 
+	if (ceRTSettings.GeneralSettings.Denoiser == CreationEngineRaytracing::Denoiser::NRD_REBLUR)
+		DrawReblurSettings();
+
 	DrawSHaRCSettings();
 
 	// Material
 	DrawFloat2("Roughness", ceRTSettings.MaterialSettings.Roughness);
 	DrawFloat2("Metalness", ceRTSettings.MaterialSettings.Metalness);
 
-	if (ImGui::CollapsingHeader("Lighting")) {
+	if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
 		auto& lightingSettings = ceRTSettings.LightingSettings;
 
 		if (ImGui::DragFloat("Directional Strength", &lightingSettings.Directional, 0.001f))
@@ -243,10 +258,82 @@ void Raytracing::DrawGeneralSettings()
 	ImGui::EndTabItem();
 }
 
+void Raytracing::DrawReblurSettings()
+{
+	if (!ImGui::CollapsingHeader("Reblur")) {
+		return;
+	}
+
+	auto& reblurSettings = settings.CreationEngineRaytracingSettings.ReblurSettings;
+
+	if (ImGui::InputScalar("Max Accumulated Frames", ImGuiDataType_U32, &reblurSettings.maxAccumulatedFrameNum))
+		ClampSetting(reblurSettings.maxAccumulatedFrameNum, 0u, 63u);
+
+	if (ImGui::InputScalar("Max Fast Accumulated Frames", ImGuiDataType_U32, &reblurSettings.maxFastAccumulatedFrameNum))
+		ClampSetting(reblurSettings.maxFastAccumulatedFrameNum, 0u, reblurSettings.maxAccumulatedFrameNum);
+
+	if (ImGui::InputScalar("Max Stabilized Frames", ImGuiDataType_U32, &reblurSettings.maxStabilizedFrameNum))
+		ClampSetting(reblurSettings.maxStabilizedFrameNum, 0u, reblurSettings.maxAccumulatedFrameNum);
+
+	if (ImGui::InputScalar("History Fix Frames", ImGuiDataType_U32, &reblurSettings.historyFixFrameNum))
+		ClampSetting(reblurSettings.historyFixFrameNum, 0u, reblurSettings.maxFastAccumulatedFrameNum);
+
+	if (ImGui::InputScalar("History Fix Base Pixel Stride", ImGuiDataType_U32, &reblurSettings.historyFixBasePixelStride))
+		ClampSetting(reblurSettings.historyFixBasePixelStride, 1u, 64u);
+
+	if (ImGui::InputScalar("History Fix Alternate Pixel Stride", ImGuiDataType_U32, &reblurSettings.historyFixAlternatePixelStride))
+		ClampSetting(reblurSettings.historyFixAlternatePixelStride, 1u, 64u);
+
+	if (ImGui::SliderFloat("Fast History Clamping Sigma Scale", &reblurSettings.fastHistoryClampingSigmaScale, 1.0f, 3.0f, "%.2f"))
+		ClampSetting(reblurSettings.fastHistoryClampingSigmaScale, 1.0f, 3.0f);
+
+	if (ImGui::SliderFloat("Diffuse Prepass Blur Radius", &reblurSettings.diffusePrepassBlurRadius, 0.0f, 100.0f, "%.1f"))
+		ClampSetting(reblurSettings.diffusePrepassBlurRadius, 0.0f, 100.0f);
+
+	if (ImGui::SliderFloat("Specular Prepass Blur Radius", &reblurSettings.specularPrepassBlurRadius, 0.0f, 100.0f, "%.1f"))
+		ClampSetting(reblurSettings.specularPrepassBlurRadius, 0.0f, 100.0f);
+
+	if (ImGui::SliderFloat("Min Hit Distance Weight", &reblurSettings.minHitDistanceWeight, 0.001f, 0.2f, "%.3f"))
+		ClampSetting(reblurSettings.minHitDistanceWeight, 0.001f, 0.2f);
+
+	if (ImGui::SliderFloat("Min Blur Radius", &reblurSettings.minBlurRadius, 0.0f, 10.0f, "%.2f"))
+		ClampSetting(reblurSettings.minBlurRadius, 0.0f, 10.0f);
+
+	if (ImGui::SliderFloat("Max Blur Radius", &reblurSettings.maxBlurRadius, 0.0f, 100.0f, "%.1f"))
+		ClampSetting(reblurSettings.maxBlurRadius, 0.0f, 100.0f);
+
+	if (ImGui::SliderFloat("Lobe Angle Fraction", &reblurSettings.lobeAngleFraction, 0.0f, 1.0f, "%.3f"))
+		ClampSetting(reblurSettings.lobeAngleFraction, 0.0f, 1.0f);
+
+	if (ImGui::SliderFloat("Roughness Fraction", &reblurSettings.roughnessFraction, 0.0f, 1.0f, "%.3f"))
+		ClampSetting(reblurSettings.roughnessFraction, 0.0f, 1.0f);
+
+	if (ImGui::SliderFloat("Plane Distance Sensitivity", &reblurSettings.planeDistanceSensitivity, 0.0f, 1.0f, "%.3f"))
+		ClampSetting(reblurSettings.planeDistanceSensitivity, 0.0f, 1.0f);
+
+	if (ImGui::SliderFloat2("Specular Probability Thresholds For MV Modification", reblurSettings.specularProbabilityThresholdsForMvModification.data(), 0.0f, 1.0f, "%.2f"))
+	{
+		ClampSetting(reblurSettings.specularProbabilityThresholdsForMvModification[0], 0.0f, 1.0f);
+		ClampSetting(reblurSettings.specularProbabilityThresholdsForMvModification[1], reblurSettings.specularProbabilityThresholdsForMvModification[0], 1.0f);
+	}
+
+	if (ImGui::SliderFloat("Firefly Suppressor Min Relative Scale", &reblurSettings.fireflySuppressorMinRelativeScale, 1.0f, 3.0f, "%.2f"))
+		ClampSetting(reblurSettings.fireflySuppressorMinRelativeScale, 1.0f, 3.0f);
+
+	ImGui::Checkbox("Enable Anti Firefly", &reblurSettings.enableAntiFirefly);
+	ImGui::Checkbox("Use Prepass Only For Specular Motion Estimation", &reblurSettings.usePrepassOnlyForSpecularMotionEstimation);
+	ImGui::Checkbox("Return History Length Instead Of Occlusion", &reblurSettings.returnHistoryLengthInsteadOfOcclusion);
+}
+
 void Raytracing::DrawSHaRCSettings()
 {
 	if (ImGui::CollapsingHeader("SHaRC")) {
 		auto& sharcSettings = settings.CreationEngineRaytracingSettings.SHaRCSettings;
+
+		ImGui::Checkbox("Enabled", &sharcSettings.Enabled);
+
+		if (!sharcSettings.Enabled)
+			ImGui::BeginDisabled();
 
 		ImGui::DragFloat("Scale", &sharcSettings.SceneScale, 0.001f, 0.1f, 10.0f);
 		sharcSettings.SceneScale = std::clamp(sharcSettings.SceneScale, 0.1f, 10.0f);
@@ -258,6 +345,9 @@ void Raytracing::DrawSHaRCSettings()
 		sharcSettings.StaleFrameNum = std::clamp(sharcSettings.StaleFrameNum, 8, 128);
 
 		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
+
+		if (!sharcSettings.Enabled)
+			ImGui::EndDisabled();
 	}
 }
 
@@ -495,7 +585,7 @@ void Raytracing::DrawOverlay()
 	ImGui::End();
 }
 
-bool Raytracing::Active()
+bool Raytracing::Active() const
 {
 	if (!loaded)
 		return false;
@@ -646,7 +736,7 @@ void Raytracing::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 		// Normal Roughness Texture
-		texDesc.Format = DXGI_FORMAT_R8G8B8A8_SNORM;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_SNORM;
 		normalRoughnessTexture = eastl::make_unique<WrappedResource>(texDesc);
 
 		// Diffuse Albedo Texture

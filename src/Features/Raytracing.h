@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include <d3d11_4.h>
 #include <directx/d3d12.h>
 
@@ -28,6 +30,7 @@ struct CreationEngineRaytracing
 {
 	enum class Mode
 	{
+		None,
 		GlobalIllumination,
 		PathTracing
 	};
@@ -35,8 +38,8 @@ struct CreationEngineRaytracing
 	enum class Denoiser
 	{
 		None,
-		DLSS_RR,
-		Other
+		NRD_REBLUR,
+		DLSS_RR
 	};
 
 	struct GeneralSettings
@@ -47,7 +50,7 @@ struct CreationEngineRaytracing
 
 		bool operator==(const GeneralSettings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GeneralSettings, Mode, RaytracedShadows)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(GeneralSettings, Denoiser, Mode, RaytracedShadows)
 	};
 
 	struct RaytracingSettings
@@ -59,6 +62,104 @@ struct CreationEngineRaytracing
 		bool operator==(const struct RaytracingSettings&) const = default;
 
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(RaytracingSettings, Bounces, SamplesPerPixel, RussianRoulette)
+	};
+
+	struct ReblurSettings
+	{
+		// [0; REBLUR_MAX_HISTORY_FRAME_NUM] - maximum number of linearly accumulated frames
+		// Always accumulate in "seconds" not in "frames", use "GetMaxAccumulatedFrameNum" for conversion
+		uint32_t maxAccumulatedFrameNum = 30;
+
+		// [0; maxAccumulatedFrameNum] - maximum number of linearly accumulated frames for fast history
+		// Values ">= maxAccumulatedFrameNum" disable fast history
+		// Usually 5x-7x times shorter than the main history (casting more rays, using SHARC or other signal improving techniques help to accumulate less)
+		uint32_t maxFastAccumulatedFrameNum = 6;
+
+		// [0; maxAccumulatedFrameNum] - maximum number of linearly accumulated frames for stabilized radiance
+		// "0" disables the stabilization pass
+		// Values ">= maxAccumulatedFrameNum" get clamped to "maxAccumulatedFrameNum"
+		uint32_t maxStabilizedFrameNum = 63;
+
+		// [0; maxFastAccumulatedFrameNum) - number of reconstructed frames after history reset
+		uint32_t historyFixFrameNum = 3;
+
+		// (> 0) - base stride between pixels in 5x5 history reconstruction kernel
+		uint32_t historyFixBasePixelStride = 14;
+		uint32_t historyFixAlternatePixelStride = 14;  // see "historyFixAlternatePixelStrideMaterialID"
+
+		// [1; 3] - standard deviation scale of the color box for clamping slow "main" history to responsive "fast" history
+		// REBLUR clamps the spatially processed "main" history to the spatially unprocessed "fast" history. It implies using smaller variance scaling than in RELAX.
+		// A bit smaller values (> 1) may be used with clean signals. The implementation will adjust this under the hood if spatial sampling is disabled
+		float fastHistoryClampingSigmaScale = 2.0f;  // 2 is old default, 1.5 works well even for dirty signals, 1.1 is a safe value for occlusion denoising
+
+		// (pixels) - pre-accumulation spatial reuse pass blur radius (0 = disabled, must be used in case of badly defined signals and probabilistic sampling)
+		float diffusePrepassBlurRadius = 30.0f;
+		float specularPrepassBlurRadius = 50.0f;
+
+		// (0; 0.2] - bigger values reduce sensitivity to shadows in spatial passes, smaller values are recommended for signals with relatively clean hit distance (like RTXDI/RESTIR)
+		float minHitDistanceWeight = 0.1f;
+
+		// (pixels) - min denoising radius (for converged state)
+		float minBlurRadius = 1.0f;
+
+		// (pixels) - base (max) denoising radius (gets reduced over time)
+		float maxBlurRadius = 30.0f;
+
+		// (normalized %) - base fraction of diffuse or specular lobe angle used to drive normal based rejection
+		float lobeAngleFraction = 0.15f;
+
+		// (normalized %) - base fraction of center roughness used to drive roughness based rejection
+		float roughnessFraction = 0.15f;
+
+		// (normalized %) - represents maximum allowed deviation from the local tangent plane
+		float planeDistanceSensitivity = 0.02f;
+
+		// "IN_MV = lerp(IN_MV, specularMotion, smoothstep(this[0], this[1], specularProbability))"
+		std::array<float, 2> specularProbabilityThresholdsForMvModification = { 0.5f, 0.9f };
+
+		// [1; 3] - undesired sporadic outliers suppression to keep output stable (smaller values maximize suppression in exchange of bias)
+		float fireflySuppressorMinRelativeScale = 2.0f;
+
+		// Helps to mitigate fireflies emphasized by DLSS. Very cheap and unbiased in most of the cases, better keep in enabled to maximize quality
+		bool enableAntiFirefly = true;
+
+		// In rare cases, when bright samples are so sparse that any other bright neighbor can't
+		// be reached, pre-pass transforms a standalone bright pixel into a standalone bright blob,
+		// worsening the situation. Despite that it's a problem of sampling, the denoiser needs to
+		// handle it somehow on its side too. Diffuse pre-pass can be just disabled, but for specular
+		// it's still needed to find optimal hit distance for tracking. This boolean allow to use
+		// specular pre-pass for tracking purposes only (use with care)
+		bool usePrepassOnlyForSpecularMotionEstimation = false;
+
+		// Allows to get diffuse or specular history length in ".w" channel of the output instead of denoised ambient/specular occlusion (normalized hit distance).
+		// Diffuse history length shows disocclusions, specular history length is more complex and includes accelerations of various kinds caused by specular tracking.
+		// History length is measured in frames, it can be in "[0; maxAccumulatedFrameNum]" range
+		bool returnHistoryLengthInsteadOfOcclusion = false;
+
+		bool operator==(const ReblurSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+			ReblurSettings,
+			maxAccumulatedFrameNum,
+			maxFastAccumulatedFrameNum,
+			maxStabilizedFrameNum,
+			historyFixFrameNum,
+			historyFixBasePixelStride,
+			historyFixAlternatePixelStride,
+			fastHistoryClampingSigmaScale,
+			diffusePrepassBlurRadius,
+			specularPrepassBlurRadius,
+			minHitDistanceWeight,
+			minBlurRadius,
+			maxBlurRadius,
+			lobeAngleFraction,
+			roughnessFraction,
+			planeDistanceSensitivity,
+			specularProbabilityThresholdsForMvModification,
+			fireflySuppressorMinRelativeScale,
+			enableAntiFirefly,
+			usePrepassOnlyForSpecularMotionEstimation,
+			returnHistoryLengthInsteadOfOcclusion)
 	};
 
 	struct MaterialSettings
@@ -87,6 +188,7 @@ struct CreationEngineRaytracing
 
 	struct SHaRCSettings
 	{
+		bool Enabled = true;
 		float SceneScale = 1.0f;
 		int AccumFrameNum = 10;
 		int StaleFrameNum = 64;
@@ -95,7 +197,7 @@ struct CreationEngineRaytracing
 
 		bool operator==(const SHaRCSettings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, SceneScale, AccumFrameNum, StaleFrameNum, AntifireflyFilter)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, Enabled, SceneScale, AccumFrameNum, StaleFrameNum, AntifireflyFilter)
 	};
 
 	// Resampled Importance Sampling
@@ -169,10 +271,11 @@ struct CreationEngineRaytracing
 
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
 			AdvancedSettings,
-			VariableUpdateRate,
-			RIS,
-			GGXEnergyConservation,
 			TexLODBias,
+			VariableUpdateRate,
+			GGXEnergyConservation,
+			PerLightTLAS,
+			RIS,
 			HairBSDF,
 			DiffuseBRDF,
 			SSSSettings)
@@ -255,6 +358,7 @@ struct CreationEngineRaytracing
 		GeneralSettings GeneralSettings;
 		LightingSettings LightingSettings;
 		RaytracingSettings RaytracingSettings;
+		ReblurSettings ReblurSettings;
 		MaterialSettings MaterialSettings;
 		SHaRCSettings SHaRCSettings;
 		AdvancedSettings AdvancedSettings;
@@ -270,6 +374,7 @@ struct CreationEngineRaytracing
 			GeneralSettings,
 			LightingSettings,
 			RaytracingSettings,
+			ReblurSettings,
 			MaterialSettings,
 			SHaRCSettings,
 			AdvancedSettings,
@@ -451,7 +556,7 @@ struct Raytracing : public OverlayFeature
 
 	virtual void DrawOverlay() override;
 
-	bool Active();
+	bool Active() const;
 
 	// Resources
 	virtual void SetupResources() override;
@@ -461,6 +566,7 @@ struct Raytracing : public OverlayFeature
 	void DataLoaded() override;
 
 	void DrawGeneralSettings();
+	void DrawReblurSettings();
 	void DrawSHaRCSettings();
 	void DrawSSSSettings();
 	void DrawAdvancedSettings();
@@ -482,12 +588,17 @@ struct Raytracing : public OverlayFeature
 
 	inline CreationEngineRaytracing::Mode Mode() const
 	{
-		return settings.CreationEngineRaytracingSettings.GeneralSettings.Mode;
+		return Active() ? settings.CreationEngineRaytracingSettings.GeneralSettings.Mode : CreationEngineRaytracing::Mode::None;
 	}
 
-	static CreationEngineRaytracing::Denoiser GetDenoiser(Upscaling::UpscaleMethod method)
+	inline bool IsPathTracing() const
 	{
-		return (method == Upscaling::UpscaleMethod::kDLSS_RR) ? CreationEngineRaytracing::Denoiser::DLSS_RR : CreationEngineRaytracing::Denoiser::None;
+		return Mode() == CreationEngineRaytracing::Mode::PathTracing;
+	}
+
+	CreationEngineRaytracing::Denoiser GetDenoiser(Upscaling::UpscaleMethod method)
+	{
+		return (method == Upscaling::UpscaleMethod::kDLSS_RR) ? CreationEngineRaytracing::Denoiser::DLSS_RR : settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser;
 	}
 
 	////////////////////////////////////////////////// Feature Specific Data
