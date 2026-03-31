@@ -225,7 +225,6 @@ public:
 	void ToggleFavorite(const std::string& widgetId);
 	bool IsFavorite(const std::string& widgetId) const;
 
-
 	// Navigation helpers for weather-controlled settings
 	void OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName);
 

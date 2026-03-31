@@ -1424,7 +1424,6 @@ void EditorWindow::UpdateOpenState()
 		RestoreVanityCamera();
 		ShowGameMenus();
 		BackgroundBlur::SetWeatherEditorActive(false);
-
 	}
 
 	wasOpen = open;
@@ -2248,5 +2247,3 @@ bool EditorWindow::IsFavorite(const std::string& widgetId) const
 {
 	return std::find(settings.favoriteWidgets.begin(), settings.favoriteWidgets.end(), widgetId) != settings.favoriteWidgets.end();
 }
-
-
