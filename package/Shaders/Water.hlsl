@@ -679,7 +679,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float3 normalScalesRcp = rcp(input.NormalsScale.xyz);
 
 	float4 normalsAmplitude = NormalsAmplitude;
-	if (SharedData::enbSettings.Enable){
+	if (SharedData::enbSettings.Enable) {
 		normalsAmplitude *= SharedData::enbSettings.WaterWavesAmplitude;
 	}
 
@@ -927,7 +927,7 @@ float GetFresnelValue(float3 normal, float3 viewDirection)
 #			endif
 	float viewAngle = 1 - saturate(dot(-viewDirection, actualNormal));
 
-	if (SharedData::enbSettings.Enable){
+	if (SharedData::enbSettings.Enable) {
 		float fresnelRI = pow(FresnelRI.x, SharedData::enbSettings.WaterFresnelMultiplier);
 		float fresnel = (1 - fresnelRI) * pow(viewAngle, 5) + fresnelRI;
 		fresnel = lerp(SharedData::enbSettings.WaterFresnelMin, SharedData::enbSettings.WaterFresnelMax, fresnel);
@@ -996,13 +996,12 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 
 	float3 refractionDiffuseColor;
 
-	if (SharedData::enbSettings.Enable){
+	if (SharedData::enbSettings.Enable) {
 		float3 shallowColor = lerp(normalize(Color::Water(ShallowColor.xyz) + 0.001) * refractionColor, Color::Water(ShallowColor.xyz), SharedData::enbSettings.WaterMuddiness);
 		refractionDiffuseColor = lerp(Color::Water(ShallowColor.xyz), Color::Water(DeepColor.xyz), distanceMul.y);
 	} else {
 		refractionDiffuseColor = lerp(Color::Water(ShallowColor.xyz), Color::Water(DeepColor.xyz), distanceMul.y);
 	}
-
 
 #				if defined(UNDERWATER)
 	float refractionMul = 0;
@@ -1344,7 +1343,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
 
-
 	float3 refractionColor = diffuseOutput.refractionColor;
 
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
@@ -1361,7 +1359,6 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #						endif
 	refractionColor = lerp(refractionColor, fogColor, Color::FogAlpha(fogFactor));
-
 
 	float3 finalColor = lerp(refractionColor, finalColorPreFog, diffuseOutput.refractionMul);
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)

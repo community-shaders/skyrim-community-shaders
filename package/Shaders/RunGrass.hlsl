@@ -756,7 +756,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
 
-
 #				if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1.0;
 	if (!SharedData::InInterior) {

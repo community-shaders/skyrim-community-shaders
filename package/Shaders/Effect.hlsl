@@ -572,19 +572,19 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 	dirColor *= dirShadow;
 
-#	if defined(EXP_HEIGHT_FOG)
+#		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
 	}
-#	endif
+#		endif
 
-#	if defined(SKYLIGHTING)
+#		if defined(SKYLIGHTING)
 	if (!effectShadows) {
 		ambientColor = Color::IrradianceToLinear(ambientColor);
 		ambientColor *= skylightingDiffuse;
 		ambientColor = Color::IrradianceToGamma(ambientColor);
 	}
-#	endif
+#		endif
 
 	color = dirColor + ambientColor;
 
@@ -852,30 +852,30 @@ PS_OUTPUT main(PS_INPUT input)
 #	if !defined(MOTIONVECTORS_NORMALS)
 	float fogFactor = Color::FogAlpha(input.FogParam.w);
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
-#	if defined(IBL)
+#		if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL && !SharedData::enbSettings.EnableImageBasedLighting) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
-#	endif
-#	if defined(EXP_HEIGHT_FOG)
+#		endif
+#		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
-#		if defined(ADDBLEND) || defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+#			if defined(ADDBLEND) || defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
-#		else
+#			else
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
-#		endif
+#			endif
 	}
-#	endif
-#	if defined(ADDBLEND)
+#		endif
+#		if defined(ADDBLEND)
 	float3 blendedColor = lightColor * (1 - fogFactor);
-#	elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+#		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * fogFactor).xxx);
-#	else
+#		else
 	float3 blendedColor = lerp(lightColor, fogColor, fogFactor.xxx);
-#	endif
+#		endif
 #	else
 	float3 blendedColor = lightColor.xyz;
 #	endif
