@@ -33,7 +33,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 volumetricLightingColor = VolumetricLightingColor.xyz;
 	float volumetricLightingPower = VLSourceTex.Sample(VLSourceSampler, screenPosition).x;
 
-	if (SharedData::enbSettings.Enable){
+	if (SharedData::enbSettings.Enable) {
 		volumetricLightingColor = lerp(volumetricLightingColor, dot(volumetricLightingColor, 1.0 / 3.0), SharedData::enbSettings.VolumetricRaysDesaturation);
 		volumetricLightingColor *= SharedData::enbSettings.VolumetricRaysColorFilter;
 		volumetricLightingColor *= SharedData::enbSettings.VolumetricRaysIntensity;

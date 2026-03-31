@@ -243,9 +243,9 @@ namespace SharedData
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-};
+	};
 
-struct ENBSettings
+	struct ENBSettings
 	{
 		uint Enable;
 		uint EnableProceduralSun;

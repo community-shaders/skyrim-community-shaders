@@ -1,9 +1,9 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
-#include "Common/VR.hlsli"
 #include "Common/Math.hlsli"
-#include "Common/SharedData.hlsli"
 #include "Common/Permutation.hlsli"
+#include "Common/SharedData.hlsli"
+#include "Common/VR.hlsli"
 
 struct VS_INPUT
 {
@@ -135,7 +135,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Color.xyz = VParams * skyColor;
 	vsout.Color.w = BlendColor[0].w * input.Color.w;
 
-	if (SharedData::enbSettings.Enable){
+	if (SharedData::enbSettings.Enable) {
 		vsout.Color.w = saturate(vsout.Color.w + vsout.Color.w * SharedData::enbSettings.CloudsVertexAlphaBoost);
 	}
 #		elif defined(TEX)
@@ -149,7 +149,7 @@ VS_OUTPUT main(VS_INPUT input)
 	float3 lowerColor = BlendColor[1].xyz;
 	float3 upperColor = BlendColor[2].xyz;
 
-	if (SharedData::enbSettings.Enable){
+	if (SharedData::enbSettings.Enable) {
 		horizonColor = pow(horizonColor, SharedData::enbSettings.GradientHorizonCurve);
 		horizonColor *= SharedData::enbSettings.GradientHorizonColorFilter;
 		horizonColor *= SharedData::enbSettings.GradientHorizonIntensity;
@@ -167,7 +167,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.Color.xyz = VParams * skyColor;
 
-	if (SharedData::enbSettings.Enable){
+	if (SharedData::enbSettings.Enable) {
 		vsout.Color.xyz = lerp(vsout.Color.xyz, dot(vsout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.GradientDesaturation);
 		vsout.Color.xyz *= SharedData::enbSettings.GradientIntensity;
 	}
@@ -246,7 +246,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float skyBoost = PParams.y;
 
-	if (SharedData::enbSettings.Enable){
+	if (SharedData::enbSettings.Enable) {
 		skyBoost *= SharedData::enbSettings.GradientIntensity;
 	}
 
@@ -269,8 +269,8 @@ PS_OUTPUT main(PS_INPUT input)
 		float distanceFromCenter = length(input.TexCoord0.xy * 2.0 - 1.0);
 
 		float sun = smoothstep(SharedData::enbSettings.ProceduralSunSize,
-                               SharedData::enbSettings.ProceduralSunSize - SharedData::enbSettings.ProceduralSunEdgeSoftness * SharedData::enbSettings.ProceduralSunSize,
-                               distanceFromCenter * 25.0);
+			SharedData::enbSettings.ProceduralSunSize - SharedData::enbSettings.ProceduralSunEdgeSoftness * SharedData::enbSettings.ProceduralSunSize,
+			distanceFromCenter * 25.0);
 
 		float sunGlow = SharedData::enbSettings.ProceduralSunGlowCurve > 0.0 ? pow(pow(saturate(1.0 - distanceFromCenter), rcp(SharedData::enbSettings.ProceduralSunGlowCurve)), 3.0) * SharedData::enbSettings.ProceduralSunGlowIntensity : 0.0;
 
@@ -278,14 +278,14 @@ PS_OUTPUT main(PS_INPUT input)
 		baseColor.w = 1.0;
 		skyBoost *= 0.0;
 
-#	ifndef OCCLUSION
-#		ifndef TEXLERP
-#			ifdef TEXFADE
-	baseColor.w *= PParams.x;
+#		ifndef OCCLUSION
+#			ifndef TEXLERP
+#				ifdef TEXFADE
+		baseColor.w *= PParams.x;
+#				endif
+#			else
+		baseColor *= PParams.x;
 #			endif
-#		else
-	baseColor *= PParams.x;
-#		endif
 #		endif
 	}
 
@@ -329,7 +329,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Normal = float4(0.5, 0.5, 0, psout.Color.w);
 
 #	if defined(CLOUDS)
-	if (SharedData::enbSettings.Enable){
+	if (SharedData::enbSettings.Enable) {
 		psout.Color.w = saturate(psout.Color.w * SharedData::enbSettings.CloudsOpacity);
 		psout.Color.xyz = pow(psout.Color.xyz, SharedData::enbSettings.CloudsCurve);
 		psout.Color.xyz = lerp(psout.Color.xyz, dot(psout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
