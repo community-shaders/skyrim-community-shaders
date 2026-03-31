@@ -41,8 +41,11 @@ void SetWidgetTypeSizesFromJson(const json& j)
 {
 	s_widgetTypeSizes.clear();
 	for (auto& [key, val] : j.items()) {
-		if (val.is_array() && val.size() == 2)
-			s_widgetTypeSizes[key] = ImVec2(val[0].get<float>(), val[1].get<float>());
+		if (val.is_array() && val.size() == 2 && val[0].is_number() && val[1].is_number()) {
+			float w = std::max(val[0].get<float>(), WidgetDefaults::kMinWidth);
+			float h = std::max(val[1].get<float>(), WidgetDefaults::kMinHeight);
+			s_widgetTypeSizes[key] = ImVec2(w, h);
+		}
 	}
 }
 

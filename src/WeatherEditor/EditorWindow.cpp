@@ -929,6 +929,12 @@ void EditorWindow::RenderUI()
 				hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(lensFlareWidgets, hasOpen);
 				hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(referenceEffectWidgets, hasOpen);
 
+				if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
+					hasOpen = true;
+					if (ImGui::MenuItem(currentCellLightingWidget->GetEditorID().c_str()))
+						currentCellLightingWidget->Save();
+				}
+
 				if (!hasOpen)
 					ImGui::TextDisabled("No open widgets");
 
@@ -1500,6 +1506,8 @@ void EditorWindow::SaveAll()
 	saveOpen(precipitationWidgets);
 	saveOpen(lensFlareWidgets);
 	saveOpen(referenceEffectWidgets);
+	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen())
+		currentCellLightingWidget->Save();
 
 	Save();
 }
