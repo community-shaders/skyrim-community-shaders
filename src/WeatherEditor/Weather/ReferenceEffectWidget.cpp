@@ -4,8 +4,7 @@
 
 void ReferenceEffectWidget::DrawWidget()
 {
-	SetupWidgetWindowDefaults();
-	if (Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##ReferenceEffectSearch", true, true);
 		BeginScrollableContent("##REScroll");
 		{

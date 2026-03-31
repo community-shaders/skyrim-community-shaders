@@ -186,9 +186,11 @@ public:
 		std::vector<std::string> favoriteWidgets;
 		std::map<std::string, std::vector<std::string>> recentWidgets;
 		int maxRecentWidgets = 10;
-		bool rememberOpenWidgets = true;
-		std::vector<std::string> lastOpenWidgets;
+
 		bool showViewport = true;
+
+		// Per-widget-type window sizes (serialized as JSON for persistence)
+		json widgetTypeSizes;
 
 		// Palette settings
 		struct PaletteColorEntry
@@ -222,8 +224,7 @@ public:
 	void AddToRecent(const std::string& widgetId, const std::string& category);
 	void ToggleFavorite(const std::string& widgetId);
 	bool IsFavorite(const std::string& widgetId) const;
-	void SaveSessionWidgets();
-	void RestoreSessionWidgets();
+
 
 	// Navigation helpers for weather-controlled settings
 	void OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName);

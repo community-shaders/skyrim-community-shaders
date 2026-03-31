@@ -53,10 +53,11 @@ public:
 
 	~ImageSpaceWidget();
 
-	virtual void DrawWidget() override;
-	virtual void LoadSettings() override;
-	virtual void SaveSettings() override;
-	virtual bool HasUnsavedChanges() const override;
+	void DrawWidget() override;
+	const char* GetWidgetTypeName() const override { return "ImageSpace"; }
+	void LoadSettings() override;
+	void SaveSettings() override;
+	bool HasUnsavedChanges() const override;
 
 	void SetImageSpaceValues();
 	void LoadImageSpaceValues();
