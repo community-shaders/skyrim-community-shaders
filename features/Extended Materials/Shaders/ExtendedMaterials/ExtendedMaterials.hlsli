@@ -127,11 +127,11 @@ namespace ExtendedMaterials
 
 	inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
 	{
-#if defined(TERRAIN_VARIATION)
+#	if defined(TERRAIN_VARIATION)
 		return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets, (float2)0, (float2)0);
-#else
+#	else
 		return tex.SampleLevel(samp, coords, mipLevel);
-#endif
+#	endif
 	}
 
 	inline uint ComputeActiveMask(float4 w1, float2 w2)
