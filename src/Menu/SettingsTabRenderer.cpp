@@ -11,7 +11,6 @@
 #include "IconLoader.h"
 #include "Menu.h"
 #include "ShaderCache.h"
-#include "State.h"
 #include "ThemeManager.h"
 #include "Util.h"
 
@@ -245,77 +244,6 @@ void SettingsTabRenderer::RenderShadersTab()
 		if (shaderCache->GetTotalTasks() > 0) {
 			ImGui::Text("Last shader cache build duration: %s",
 				shaderCache->GetShaderStatsString(true, true).c_str());
-
-			// Stacked bar showing compilation breakdown
-			{
-				uint64_t total = shaderCache->GetTotalTasks();
-				uint64_t completed = shaderCache->GetCompletedTasks();
-				uint64_t failed = shaderCache->GetFailedTasks();
-				uint64_t cacheHits = shaderCache->GetCachedHitTasks();
-				uint64_t slow = shaderCache->GetSlowTasks();
-				uint64_t verySlow = shaderCache->GetVerySlowTasks();
-				// Compiled = tasks that actually went through compilation.
-				// Cache hits are separate (returned early without queueing).
-				uint64_t compiled = completed;
-				uint64_t fast = compiled > slow ? compiled - slow : 0;
-				uint64_t medium = slow > verySlow ? slow - verySlow : 0;  // 2-8s
-
-				struct Segment
-				{
-					uint64_t count;
-					ImU32 color;
-					const char* label;
-				};
-				Segment segments[] = {
-					{ cacheHits, IM_COL32(120, 120, 120, 255), "Deduplicated" },
-					{ fast, IM_COL32(80, 180, 80, 255), "Fast (<2s)" },
-					{ medium, IM_COL32(220, 180, 50, 255), "Slow (2-8s)" },
-					{ verySlow, IM_COL32(220, 60, 60, 255), "Very slow (>=8s)" },
-					{ failed, IM_COL32(160, 30, 30, 255), "Failed" },
-				};
-
-				float barHeight = 14.0f * Util::GetUIScale();
-				float barWidth = ImGui::GetContentRegionAvail().x;
-				ImVec2 cursor = ImGui::GetCursorScreenPos();
-				ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-				// Background
-				drawList->AddRectFilled(cursor, ImVec2(cursor.x + barWidth, cursor.y + barHeight), IM_COL32(40, 40, 40, 255));
-
-				// Draw segments
-				float x = cursor.x;
-				for (auto& seg : segments) {
-					if (seg.count == 0 || total == 0)
-						continue;
-					float segWidth = (static_cast<float>(seg.count) / static_cast<float>(total)) * barWidth;
-					if (segWidth < 1.0f)
-						segWidth = 1.0f;
-					drawList->AddRectFilled(ImVec2(x, cursor.y), ImVec2(x + segWidth, cursor.y + barHeight), seg.color);
-					x += segWidth;
-				}
-
-				// Reserve space and handle tooltip
-				ImGui::Dummy(ImVec2(barWidth, barHeight));
-				if (ImGui::IsItemHovered()) {
-					ImGui::BeginTooltip();
-					for (auto& seg : segments) {
-						if (seg.count == 0)
-							continue;
-						float pct = total > 0 ? 100.0f * static_cast<float>(seg.count) / static_cast<float>(total) : 0.0f;
-						ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(seg.color), "%s: %llu (%.1f%%)", seg.label, seg.count, pct);
-					}
-					ImGui::EndTooltip();
-				}
-			}
-
-			auto state = globals::state;
-			if (state->IsDeveloperMode()) {
-				ImGui::Text("Threads: %d compile, %d background, %d pool | P-cores: %d",
-					(int)shaderCache->compilationThreadCount,
-					(int)shaderCache->backgroundCompilationThreadCount,
-					(int)shaderCache->compilationPool.get_thread_count(),
-					(int)Util::GetPerformanceCoreCount());
-			}
 		}
 
 		ImGui::EndTabItem();

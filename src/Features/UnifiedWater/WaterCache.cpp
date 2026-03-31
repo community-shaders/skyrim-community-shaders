@@ -2,8 +2,6 @@
 
 #include <BS_thread_pool.hpp>
 
-#include "Utils/WinApi.h"
-
 bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 {
 	if (!worldSpace)
@@ -216,8 +214,7 @@ bool WaterCache::GenerateCaches()
 		}
 	}
 
-	// Use P-core logical count on Intel hybrid CPUs; falls back to hardware_concurrency() on non-hybrid.
-	const unsigned hw = Util::GetPerformanceCoreCount();
+	const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
 	const unsigned threads = std::max(1u, hw > 4 ? hw - 4 : (hw * 3) / 4);
 	async.pool = std::make_unique<BS::thread_pool<>>(threads);
 
