@@ -184,6 +184,7 @@ void Deferred::SetupResources()
 		srvDesc.Buffer.FirstElement = 0;
 		srvDesc.Buffer.NumElements = 1;
 
+		delete perDirectionalShadow;
 		perDirectionalShadow = new Buffer(sbDesc);
 		perDirectionalShadow->CreateSRV(srvDesc);
 	}

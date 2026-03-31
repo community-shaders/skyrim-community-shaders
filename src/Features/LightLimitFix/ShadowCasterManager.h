@@ -66,6 +66,9 @@ namespace ShadowCasterManager
 		FormulaHelper();
 		~FormulaHelper();
 
+		FormulaHelper(const FormulaHelper&) = delete;
+		FormulaHelper& operator=(const FormulaHelper&) = delete;
+
 		bool Parse(const std::string& input);
 		double Calculate();
 

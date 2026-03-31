@@ -153,8 +153,10 @@ namespace ShadowSampling
 
 		worldPosition.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
-		// Fade shadows out toward the cascade boundary so they dissolve cleanly.
-		float fade = saturate(shadowMapDepth / shadow.EndSplitDistances.y);
+		// Fade only in the final 10% of the far cascade to dissolve the hard cutoff.
+		static const float FadeWindow = 0.1;
+		float fadeStart = shadow.EndSplitDistances.y * (1.0 - FadeWindow);
+		float fade = saturate((shadowMapDepth - fadeStart) / (shadow.EndSplitDistances.y - fadeStart));
 
 		// Compute cascade blend factor
 		float cascadeSelect = smoothstep(shadow.StartSplitDistances.y, shadow.EndSplitDistances.x, shadowMapDepth);
@@ -264,9 +266,11 @@ namespace ShadowSampling
 	}
 
 	// Dispatch the active filter mode for omnidirectional/paraboloid shadow maps.
-	// Mode 0: single-tap gather-based PCF with slope bias
-	// Mode 1: 8-tap spiral PCF with temporal rotation
-	// Mode 2: PCSS contact-hardened soft shadows
+	// Mode 0: single-tap gather-based PCF
+	// Mode 1+: 8-tap spiral PCF with temporal rotation
+	// Note: PCSS (mode 2) is only implemented for spotlight frustum maps; paraboloid
+	// maps fall back to spiral PCF since the paraboloid projection doesn't admit a
+	// straightforward blocker-search pass.
 	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth, float2x2 rotationMatrix)
 	{
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;

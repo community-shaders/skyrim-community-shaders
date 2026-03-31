@@ -11,7 +11,7 @@ namespace VolumetricShadows
 
 	float GetShadowDepth(float3 positionWS, uint eyeIndex = 0)
 	{
-		return length(positionWS - FrameBuffer::CameraPosAdjust[0].xyz);
+		return length(positionWS - FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
 	}
 
 	// Chebyshev upper bound on P(X >= t)
@@ -62,11 +62,11 @@ namespace VolumetricShadows
 
 	float GetVSMShadow3D(DirectionalShadowData sD, float3 startPosition, float3 endPosition, float noise, uint baseSampleCount, uint eyeIndex, out float surfaceShadow)
 	{
-		startPosition += FrameBuffer::CameraPosAdjust[0].xyz;
-		endPosition += FrameBuffer::CameraPosAdjust[0].xyz;
+		startPosition += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+		endPosition += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 		float3 midPosition = (startPosition + endPosition) * 0.5;
-		float shadowMapDepth = length(midPosition - FrameBuffer::CameraPosAdjust[0].xyz);
+		float shadowMapDepth = length(midPosition - FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
 
 		// Early out beyond cascade range
 		if (shadowMapDepth >= sD.EndSplitDistances.y) {
