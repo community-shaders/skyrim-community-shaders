@@ -66,16 +66,28 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 
 	// Sort vertices by weight descending before hashing — only hash top 2.
 	if (barry.y > barry.x) {
-		float2 tV = v0; v0 = v1; v1 = tV;
-		float tW = barry.x; barry.x = barry.y; barry.y = tW;
+		float2 tV = v0;
+		v0 = v1;
+		v1 = tV;
+		float tW = barry.x;
+		barry.x = barry.y;
+		barry.y = tW;
 	}
 	if (barry.z > barry.x) {
-		float2 tV = v0; v0 = v2; v2 = tV;
-		float tW = barry.x; barry.x = barry.z; barry.z = tW;
+		float2 tV = v0;
+		v0 = v2;
+		v2 = tV;
+		float tW = barry.x;
+		barry.x = barry.z;
+		barry.z = tW;
 	}
 	if (barry.z > barry.y) {
-		float2 tV = v1; v1 = v2; v2 = tV;
-		float tW = barry.y; barry.y = barry.z; barry.z = tW;
+		float2 tV = v1;
+		v1 = v2;
+		v2 = tV;
+		float tW = barry.y;
+		barry.y = barry.z;
+		barry.z = tW;
 	}
 
 	StochasticOffsets o;
@@ -152,8 +164,7 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 
 inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
-	[branch] if (enabled)
-		return StochasticEffect(tex, samp, uv, offsets);
+	[branch] if (enabled) return StochasticEffect(tex, samp, uv, offsets);
 	return tex.SampleBias(samp, uv, SharedData::MipBias);
 }
 
