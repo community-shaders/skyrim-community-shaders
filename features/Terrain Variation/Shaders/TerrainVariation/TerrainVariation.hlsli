@@ -16,8 +16,8 @@ static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 static const float HEIGHT_BLEND_CONTRAST = 12.0;
 static const float HEIGHT_INFLUENCE = 0.3;
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
-// Distance-based mip curve: smoothly increases mip at distance to save bandwidth
-static const float DISTANCE_MIP_SCALE = 0.25;  // Fraction of base mip added at distance
+// Terrain variation can look over-sharp at distance vs. non-stochastic terrain, especially without TAA.
+static const float TERRAIN_VARIATION_MIP_BIAS = 1.0;
 
 // --------------------- STRUCTURES --------------------- //
 struct StochasticOffsets
@@ -128,7 +128,7 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 // highest-weight barycentric vertices, so dropping offset3 loses minimal quality.
 inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
-	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias;
+	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias + TERRAIN_VARIATION_MIP_BIAS;
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 
@@ -148,7 +148,7 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 // 2-sample parallax sampling — uses heightmap (alpha) only for blend weights.
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	float adjustedMip = mipLevel * (1.0 + DISTANCE_MIP_SCALE);
+	float adjustedMip = mipLevel + TERRAIN_VARIATION_MIP_BIAS;
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMip);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMip);
 
