@@ -25,6 +25,10 @@ static void SetShadowParameters(T& lightData, Deferred::ShadowData& sd)
 void LightLimitFix::SetupShadowResources()
 {
 	// PCF comparison sampler bound to s14 for point/spot shadow sampling.
+	if (shadowCmpSampler) {
+		shadowCmpSampler->Release();
+		shadowCmpSampler = nullptr;
+	}
 	D3D11_SAMPLER_DESC cmpDesc = {};
 	cmpDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
 	cmpDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;

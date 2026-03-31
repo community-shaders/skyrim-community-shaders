@@ -607,7 +607,11 @@ void LightLimitFix::UpdateLights()
 			// Overflow lights still use addShadowLight for correct color/radius setup,
 			// but without the Shadow flag so the HLSL does not do a shadow map lookup
 			// with a stale or out-of-range shadowMapIndex.
-			addShadowLight(light, bufferIndex < (int)globals::deferred->shadowMapSlots);
+			uint32_t depthSlot = globals::game::isVR ?
+			                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
+			                         light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+
+			addShadowLight(light, depthSlot < globals::deferred->shadowMapSlots);
 
 			mapIndex += light->shadowMapCount;
 			bufferIndex++;
