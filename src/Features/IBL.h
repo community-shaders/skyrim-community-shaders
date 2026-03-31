@@ -41,9 +41,7 @@ public:
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
-	bool disableInInteriors = false;
-
-	struct Settings
+	struct PerFrame
 	{
 		uint EnableIBL = 0;
 		uint PreserveFogLuminance = 0;
@@ -57,11 +55,16 @@ public:
 		uint DALCMode = 2;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky
 		float pad0 = 0.0f;
 		float pad1 = 0.0f;
+	};
+
+	struct Settings : PerFrame
+	{
+		bool EnableInteriorIBL = false;
 	} settings;
 
 	eastl::unique_ptr<Texture2D> staticDiffuseIBLTexture = nullptr;
 	eastl::unique_ptr<Texture2D> staticSpecularIBLTexture = nullptr;
 
-	Settings GetCommonBufferData() const;
+	PerFrame GetCommonBufferData() const;
 	ID3D11ComputeShader* GetDiffuseIBLCS();
 };
