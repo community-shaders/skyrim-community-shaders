@@ -21,7 +21,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkyIBLSaturation,
 	FogAmount,
 	DALCMode,
-	EnableInteriorIBL)
+	DisableInInteriors)
 
 void IBL::DrawSettings()
 {
@@ -29,13 +29,6 @@ void IBL::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Toggle IBL. When enabled, ambient lighting is derived from cubemap spherical harmonics instead of the vanilla system.");
 	}
-	ImGui::SameLine();
-	ImGui::BeginDisabled(!settings.EnableIBL);
-	ImGui::Checkbox("Interior IBL", &settings.EnableInteriorIBL);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("When enabled, IBL is also active in interior cells.");
-	}
-	ImGui::EndDisabled();
 	Util::WeatherUI::SliderFloat("Env IBL Scale", this, "EnvIBLScale", &settings.EnvIBLScale, 0.0f, 10.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Intensity multiplier for the environment IBL (from Dynamic Cubemaps).\nControls how strongly the surrounding environment contributes to ambient lighting.");
@@ -83,6 +76,10 @@ void IBL::DrawSettings()
 	ImGui::Checkbox("Preserve Fog Luminance", (bool*)&settings.PreserveFogLuminance);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("When Fog Mix is active, rescales the IBL-tinted fog to keep the original fog brightness.\nPrevents fog from becoming too bright or too dark.");
+	}
+	ImGui::Checkbox("Disable in interiors", (bool*)&settings.DisableInInteriors);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Disables IBL in interior cells.");
 	}
 }
 
@@ -171,10 +168,10 @@ void IBL::RegisterWeatherVariables()
 		0.0f, 1.0f));
 }
 
-IBL::PerFrame IBL::GetCommonBufferData() const
+IBL::Settings IBL::GetCommonBufferData() const
 {
-	PerFrame data = settings;
-	if (!settings.EnableInteriorIBL && Util::IsInterior())
+	Settings data = settings;
+	if (settings.DisableInInteriors && Util::IsInterior())
 		data.EnableIBL = 0;
 	return data;
 }
@@ -184,7 +181,7 @@ void IBL::ReflectionsPrepass()
 	if (loaded) {
 		auto context = globals::d3d::context;
 
-		bool interiorDisabled = !settings.EnableInteriorIBL && Util::IsInterior();
+		bool interiorDisabled = settings.DisableInInteriors && Util::IsInterior();
 
 		// Set PS shader resource
 		{
@@ -201,7 +198,7 @@ void IBL::ReflectionsPrepass()
 
 void IBL::Prepass()
 {
-	if (!settings.EnableInteriorIBL && Util::IsInterior())
+	if (settings.DisableInInteriors && Util::IsInterior())
 		return;
 
 	auto context = globals::d3d::context;
