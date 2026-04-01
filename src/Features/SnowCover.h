@@ -15,9 +15,9 @@ private:
 	static constexpr float DEFAULT_PEAK_ALT_ANGLE = 1.0f;     // material is strongest at this angle
 	static constexpr float DEFAULT_MIN_ANGLE = 0.223f;        // lowest angle snow appears at
 	static constexpr float DEFAULT_MAX_ANGLE = 0.813f;        // angle for full opacity snow
-	static constexpr float DEFAULT_MAIN_SPEC = 0.02;        // specular for main material
-	static constexpr float DEFAULT_ALT_SPEC = 0.02;         // specular for alt material
-	static constexpr float DEFAULT_MAP_ZSCALE = 75000.0f;   // vertical scale of the map of 'altitude offsets'
+	static constexpr float DEFAULT_MAIN_SPEC = 0.02;          // specular for main material
+	static constexpr float DEFAULT_ALT_SPEC = 0.02;           // specular for alt material
+	static constexpr float DEFAULT_MAP_ZSCALE = 75000.0f;     // vertical scale of the map of 'altitude offsets'
 	static constexpr float DEFAULT_GLINT_SCREEN_SPACE_SCALE = 1.2f;
 	static constexpr float DEFAULT_GLINT_LOG_MICROFACET_DENSITY = 33.f;
 	static constexpr float DEFAULT_GLINT_MICROFACET_ROUGHNESS = .15f;

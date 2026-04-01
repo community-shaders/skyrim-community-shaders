@@ -142,6 +142,5 @@ void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 
 	diffuseColor = diffuseColor + directionalAmbientColor * albedo;
 
-
 	MainRW[dispatchID.xy] = float4(diffuseColor, 1);
 };

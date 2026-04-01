@@ -55,6 +55,5 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::terrainBlending.settings,
 		globals::features::terrainVariation.settings,
 		globals::features::terrainShadows.GetCommonBufferData(),
-		globals::features::wetnessEffects.GetCommonBufferData()
-	);
+		globals::features::wetnessEffects.GetCommonBufferData());
 }

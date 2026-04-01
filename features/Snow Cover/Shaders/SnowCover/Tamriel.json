@@ -3,32 +3,16 @@
     "AffectTreeTint": 0,
     "AltSpec": 0.019999999552965164,
     "AltTexture": "textures/pbr/landscape/snow02",
-    "AltTint": [
-        1.0,
-        1.0,
-        1.0,
-        0.9843137264251709
-    ],
+    "AltTint": [1.0, 1.0, 1.0, 0.9843137264251709],
     "BlendSmoothness": 2082.132080078125,
     "DensityRandomization": 2.700000047683716,
     "FoliageHeightOffset": -4000.0,
     "LogMicrofacetDensity": 4.627999782562256,
     "MainSpec": 0.019999999552965164,
     "MainTexture": "textures/pbr/landscape/snow01",
-    "MainTint": [
-        1.0,
-        1.0,
-        1.0,
-        1.0
-    ],
-    "MapMax": [
-        253952.0,
-        -176128.0
-    ],
-    "MapMin": [
-        -233472.0,
-        208896.0
-    ],
+    "MainTint": [1.0, 1.0, 1.0, 1.0],
+    "MapMax": [253952.0, -176128.0],
+    "MapMin": [-233472.0, 208896.0],
     "MapTexture": "Shaders\\SnowCover\\Skyrim",
     "MapZscale": 75000.0,
     "MaxAngle": 0.9300000071525574,
