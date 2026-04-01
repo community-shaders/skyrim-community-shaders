@@ -32,7 +32,7 @@ namespace WaterEffects
 
 		// Offset mip level to sample as if texture were 512x512
 		float mipOffset = log2(actualTextureDims.x / 512.0);
-		
+
 		mipLevel += mipOffset;
 
 		// Stochastic mip selection: use screen noise to select between adjacent mip levels
