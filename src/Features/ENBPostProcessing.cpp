@@ -88,6 +88,17 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.WaterFresnelMultiplier = settingManager.GetValue<float>("FresnelMultiplier", "WATER");
 	data.WaterReflectionAmount = settingManager.GetValue<float>("ReflectionAmount", "WATER");
 
+	if (!data.EnableWater) {
+		data.WaterWavesAmplitude = 1.0f;
+		data.WaterMuddiness = 0.0f;
+		data.WaterSunLightingMultiplier = 1.0f;
+		data.WaterSunSpecularMultiplier = 1.0f;
+		data.WaterFresnelMin = 0.02f;
+		data.WaterFresnelMax = 1.0f;
+		data.WaterFresnelMultiplier = 1.0f;
+		data.WaterReflectionAmount = 1.0f;
+	}
+
 	return data;
 }
 
@@ -283,11 +294,13 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 	{
 		auto& waterColor = colors[(uint)RE::TESWeather::ColorTypes::kWaterMultiplier];
 
-		float3 waterColorF3 = NiToF3(waterColor);
+		if (settingManager.GetValue<bool>("EnableWater", "EFFECT")) {
+			float3 waterColorF3 = NiToF3(waterColor);
 
-		waterColorF3 = Intensity(waterColorF3, settingManager.GetInterpolatedTimeOfDayValue("Brightness", "WATER"));
+			waterColorF3 = Intensity(waterColorF3, settingManager.GetInterpolatedTimeOfDayValue("Brightness", "WATER"));
 
-		waterColor = F3ToNi(waterColorF3);
+			waterColor = F3ToNi(waterColorF3);
+		}
 	}
 }
 

@@ -679,7 +679,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float3 normalScalesRcp = rcp(input.NormalsScale.xyz);
 
 	float4 normalsAmplitude = NormalsAmplitude;
-	if (SharedData::enbSettings.Enable) {
+	if (SharedData::enbSettings.EnableWater) {
 		normalsAmplitude *= SharedData::enbSettings.WaterWavesAmplitude;
 	}
 
@@ -927,7 +927,7 @@ float GetFresnelValue(float3 normal, float3 viewDirection)
 #			endif
 	float viewAngle = 1 - saturate(dot(-viewDirection, actualNormal));
 
-	if (SharedData::enbSettings.Enable) {
+	if (SharedData::enbSettings.EnableWater) {
 		float fresnelRI = pow(FresnelRI.x, SharedData::enbSettings.WaterFresnelMultiplier);
 		float fresnel = (1 - fresnelRI) * pow(viewAngle, 5) + fresnelRI;
 		fresnel = lerp(SharedData::enbSettings.WaterFresnelMin, SharedData::enbSettings.WaterFresnelMax, fresnel);
@@ -1280,7 +1280,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 sunColor = GetSunColor(normal, viewDirection, input.WPosition.xyz, eyeIndex) * surfaceShadow;
 
-	if (SharedData::enbSettings.Enable) {
+	if (SharedData::enbSettings.EnableWater) {
 		float3 dirScatter = saturate(dot(normal.xyz, SharedData::DirLightDirection.xyz) * 0.5 + 0.5) * saturate(dot(viewDirection.xyz, SharedData::DirLightDirection.xyz) * 0.5 + 0.5) * SharedData::DirLightColor.xyz;
 		diffuseOutput.refractionDiffuseColor += DeepColor.xyz * dirScatter * surfaceShadow * SharedData::enbSettings.WaterSunLightingMultiplier;
 		sunColor *= SharedData::enbSettings.WaterSunSpecularMultiplier;
