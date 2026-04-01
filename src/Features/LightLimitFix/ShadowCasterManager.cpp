@@ -416,10 +416,8 @@ namespace ShadowCasterManager
 		auto* ssn = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 		if (!ssn)
 			return;
-		for (auto* l : ssn->GetRuntimeData().shadowLightsAccum) {
-			if (l)
-				l->ReturnShadowmaps();
-		}
+		ForEachShadowLight(ssn->GetRuntimeData().shadowLightsAccum,
+			[](RE::BSShadowLight* l) { l->ReturnShadowmaps(); });
 	};
 
 	// =========================================================================
@@ -1493,12 +1491,15 @@ namespace ShadowCasterManager
 
 					// GameSetShadowCasterSlot (via Accumulate) overwrites shadowmapIndex
 					// with the sequential endIdx counter, diverging from the stable
-					// container-slot index that CopyPointShadowData expects.
-					// Hemi lights (non-omni parabolic, shadowMapCount==1) are the
-					// confirmed affected type; restore their index to i so they sample
-					// the correct depth-atlas slice.
-					if (s_settings.ShadowLightCount > 4 && i < s_settings.ShadowLightCount &&
-						e.Light->GetIsParabolicLight() && !e.Light->GetIsOmniLight()) {
+					// container-slot index that CopyPointShadowData and Prepass expect.
+					// All shadow-slot light types are affected:
+					//   Spot (!IsParabolicLight): 1 descriptor, 1 atlas slice.
+					//   Hemi (IsParabolicLight && !IsOmniLight): 1 descriptor, 1 atlas slice.
+					//   Omni (IsParabolicLight && IsOmniLight): both paraboloids packed into
+					//     a single atlas slice via UV splitting in GetOmnidirectionalShadow,
+					//     so all descriptors should also point to i.
+					// Restore shadowmapIndex = i for every non-redrawn shadow-slot light.
+					if (s_settings.ShadowLightCount > 4 && i < s_settings.ShadowLightCount) {
 						if (REL::Module::IsVR()) {
 							for (auto& desc : e.Light->GetVRRuntimeData().shadowmapDescriptors)
 								desc.shadowmapIndex = static_cast<uint32_t>(i);
@@ -2172,6 +2173,11 @@ namespace ShadowCasterManager
 	const LightContainer& GetLights()
 	{
 		return s_lights;
+	}
+
+	int32_t GetShadowSlot(RE::BSShadowLight* light)
+	{
+		return s_lights.FindLight(light, s_settings.ShadowLightCount);
 	}
 
 	// =========================================================================

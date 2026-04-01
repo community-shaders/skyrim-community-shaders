@@ -486,11 +486,7 @@ void LightLimitFix::UpdateLights()
 		}
 	};
 
-	for (auto& e : shadowSceneNode->GetRuntimeData().activeLights) {
-		addLight(e);
-	}
-
-	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, bool castsShadow) {
+	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, bool castsShadow, uint32_t shadowSlot = 0) {
 		if (IsValidLight(shadowLight)) {
 			if (auto niLight = shadowLight->light.get()) {
 				auto& runtimeData = niLight->GetLightRuntimeData();
@@ -522,10 +518,11 @@ void LightLimitFix::UpdateLights()
 				}
 
 				if (castsShadow) {
-					if (globals::game::isVR)
-						light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
-					else
-						light.shadowMapIndex = shadowLight->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+					// Use the caller-provided stable slot index from s_lights rather than
+					// shadowmapDescriptors[0].shadowmapIndex, which may be corrupted by
+					// ReturnShadowmaps() called via Hook_DisableColorMask after
+					// ScheduleShadowCasters was run this frame.
+					light.shadowMapIndex = shadowSlot;
 					light.lightFlags.set(LightFlags::Shadow);
 				}
 
@@ -538,27 +535,28 @@ void LightLimitFix::UpdateLights()
 		}
 	};
 
-	{
-		int bufferIndex = 0;
-		int mapIndex = 0;
-		while (true) {
-			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
-			if (!light)
-				break;
+	// Single pass over shadowLightsAccum:
+	//   - Builds shadowLightPtrs so activeLights below skips lights already added here.
+	//   - Calls addShadowLight for each logical light.
+	// EnableLight calls both GameEnableLight (→ activeLights) and
+	// GameSetShadowCasterSlot (→ shadowLightsAccum) for redrawn lights, so without
+	// the skip below each redrawn shadow light would be added twice.
+	std::unordered_set<RE::BSLight*> shadowLightPtrs;
+	ShadowCasterManager::ForEachShadowLight(shadowSceneNode->GetRuntimeData().shadowLightsAccum,
+		[&](RE::BSShadowLight* light) {
+			shadowLightPtrs.insert(light);
+			// Use stable slot from s_lights pool — avoids reading the descriptor field
+			// which may be corrupted by ReturnShadowmaps() before UpdateLights() runs.
+			// Only set Shadow flag for lights with a valid slot index.
+			int32_t stableSlot = ShadowCasterManager::GetShadowSlot(light);
+			bool castsShadow = stableSlot >= 0 && static_cast<uint32_t>(stableSlot) < globals::deferred->shadowMapSlots;
+			addShadowLight(light, castsShadow, castsShadow ? static_cast<uint32_t>(stableSlot) : 0u);
+		});
 
-			// Only set Shadow flag for lights with a valid written slot.
-			// Overflow lights still use addShadowLight for correct color/radius setup,
-			// but without the Shadow flag so the HLSL does not do a shadow map lookup
-			// with a stale or out-of-range shadowMapIndex.
-			uint32_t depthSlot = globals::game::isVR ?
-			                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
-			                         light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
-
-			addShadowLight(light, depthSlot < globals::deferred->shadowMapSlots);
-
-			mapIndex += light->shadowMapCount;
-			bufferIndex++;
-		}
+	for (auto& e : shadowSceneNode->GetRuntimeData().activeLights) {
+		if (auto bsLight = e.get(); bsLight && shadowLightPtrs.count(bsLight))
+			continue;  // shadow light: already added above with correct Shadow flag
+		addLight(e);
 	}
 
 	auto context = globals::d3d::context;
