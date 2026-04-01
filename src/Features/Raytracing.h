@@ -290,6 +290,57 @@ struct CreationEngineRaytracing
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(WaterSettings, AbsorptionScale)
 	};
 
+	enum struct ReSTIRGIResamplingMode : int32_t
+	{
+		None = 0,
+		Temporal = 1,
+		Spatial = 2,
+		TemporalAndSpatial = 3,
+		FusedSpatiotemporal = 4,
+	};
+
+	enum struct ReSTIRGIBiasCorrection : int32_t
+	{
+		Off = 0,
+		Basic = 1,
+		Raytraced = 3
+	};
+
+	struct ReSTIRGISettings
+	{
+		bool Enabled = true;
+		ReSTIRGIResamplingMode ResamplingMode = ReSTIRGIResamplingMode::TemporalAndSpatial;
+
+		float TemporalDepthThreshold = 0.1f;
+		float TemporalNormalThreshold = 0.5f;
+		int MaxHistoryLength = 20;
+		int MaxReservoirAge = 100;
+		bool EnablePermutationSampling = true;
+		bool EnableFallbackSampling = true;
+		ReSTIRGIBiasCorrection TemporalBiasCorrection = ReSTIRGIBiasCorrection::Basic;
+
+		float SpatialDepthThreshold = 0.1f;
+		float SpatialNormalThreshold = 0.5f;
+		int SpatialNumSamples = 2;
+		float SpatialSamplingRadius = 32.0f;
+		ReSTIRGIBiasCorrection SpatialBiasCorrection = ReSTIRGIBiasCorrection::Basic;
+
+		bool EnableBoilingFilter = true;
+		float BoilingFilterStrength = 0.4f;
+
+		bool EnableFinalVisibility = true;
+		bool EnableFinalMIS = false;
+
+		bool operator==(const ReSTIRGISettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(ReSTIRGISettings, Enabled, ResamplingMode,
+			TemporalDepthThreshold, TemporalNormalThreshold, MaxHistoryLength, MaxReservoirAge,
+			EnablePermutationSampling, EnableFallbackSampling, TemporalBiasCorrection,
+			SpatialDepthThreshold, SpatialNormalThreshold, SpatialNumSamples, SpatialSamplingRadius,
+			SpatialBiasCorrection, EnableBoilingFilter, BoilingFilterStrength,
+			EnableFinalVisibility, EnableFinalMIS)
+	};
+
 	struct DebugSettings
 	{
 		bool PathTracingCull = false;
@@ -313,6 +364,7 @@ struct CreationEngineRaytracing
 		AdvancedSettings AdvancedSettings;
 		WaterSettings WaterSettings;
 		DebugSettings DebugSettings;
+		ReSTIRGISettings ReSTIRGI;
 
 		bool operator==(const Settings&) const = default;
 
@@ -327,7 +379,8 @@ struct CreationEngineRaytracing
 			SHaRCSettings,
 			AdvancedSettings,
 			WaterSettings,
-			DebugSettings)
+			DebugSettings,
+			ReSTIRGI)
 	};
 
 	HMODULE handle = nullptr;
@@ -517,6 +570,7 @@ struct Raytracing : public OverlayFeature
 	void DrawSHaRCSettings();
 	void DrawSSSSettings();
 	void DrawAdvancedSettings();
+	void DrawReSTIRGISettings();
 	void DrawDebugSettings();
 
 	void CompileShaders();
