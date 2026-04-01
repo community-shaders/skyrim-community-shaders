@@ -705,7 +705,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float viewDotUp = -viewDirection.z;
 	parallaxDir *= 0.008 * saturate(viewDotUp * 2.0);
 	flowmapInput.TexCoord3.xy = input.TexCoord3.xy + parallaxAmount * parallaxDir;
-	flowmapParallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, flowmapDimensions, viewDirection, normalsAmplitude.x, normalScalesRcp);
+	flowmapParallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, flowmapDimensions, viewDirection, normalsAmplitude, normalScalesRcp);
 #				endif
 
 	// Calculate cell blend weights using parallaxed input
@@ -980,7 +980,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	if (refractionPlaneMul < 0.0) {
 		refractionUvRaw = FrameBuffer::DynamicResolutionParams2.xy * input.HPosition.xy * VPOSOffset.xy + VPOSOffset.zw;  // This value is already stereo converted for VR
 	} else {
-		distanceMul = saturate(float4(1, SharedData::enbSettings.Enable ? SharedData::enbSettings.WaterMuddiness : 1, 1, 1) * refractionPlaneMul * float4(length(refractionDepthAdjustedViewDirection).xx, abs(refractionViewSurfaceAngle).xx) / FogParam.z);
+		distanceMul = saturate(float4(1, SharedData::enbSettings.WaterMuddiness, 1, 1) * refractionPlaneMul * float4(length(refractionDepthAdjustedViewDirection).xx, abs(refractionViewSurfaceAngle).xx) / FogParam.z);
 
 #					if defined(VR)
 		refractionWorldPosition = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], float4((refractionUvRawNoStereo * 2 - 1), DepthTex.Load(float3(refractionScreenPosition, 0)).x, 1));
@@ -997,8 +997,15 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	float3 refractionDiffuseColor;
 
 	if (SharedData::enbSettings.Enable) {
-		float3 shallowColor = lerp(normalize(Color::Water(ShallowColor.xyz) + 0.001) * refractionColor, Color::Water(ShallowColor.xyz), SharedData::enbSettings.WaterMuddiness);
-		refractionDiffuseColor = lerp(Color::Water(ShallowColor.xyz), Color::Water(DeepColor.xyz), distanceMul.y);
+		float3 shallowColor = ShallowColor.xyz;
+		float maxValue = max(shallowColor.x, max(shallowColor.y, shallowColor.z));
+		if (maxValue > 0.0)
+			shallowColor /= maxValue;
+		else
+			shallowColor = 1.0;
+
+		shallowColor = lerp(shallowColor.xyz * refractionColor, ShallowColor.xyz, SharedData::enbSettings.WaterMuddiness);
+		refractionDiffuseColor = lerp(Color::Water(shallowColor.xyz), Color::Water(DeepColor.xyz), distanceMul.y);
 	} else {
 		refractionDiffuseColor = lerp(Color::Water(ShallowColor.xyz), Color::Water(DeepColor.xyz), distanceMul.y);
 	}
