@@ -109,9 +109,6 @@ void ENBPostProcessing::DrawSettings()
 
 void ENBPostProcessing::SetupResources()
 {
-	auto& settingManager = SettingManager::GetSingleton();
-	settingManager.RegisterBoolSetting("UseEffect", "GLOBAL", true, false);
-
 	// Create shared texture resources
 	TextureManager::GetSingleton().Initialize();
 
@@ -119,7 +116,7 @@ void ENBPostProcessing::SetupResources()
 	EffectManager::GetSingleton().Initialize();
 
 	// Load registered settings
-	settingManager.Load();
+	SettingManager::GetSingleton().Load();
 }
 
 void ENBPostProcessing::Reset()
