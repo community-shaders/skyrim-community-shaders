@@ -1348,20 +1348,6 @@ namespace ShadowCasterManager
 					}
 					interval += 1.0;
 
-					// Shadow projection score — the physically motivated priority signal.
-					//
-					// A shadow from an occluder between light L and receiver R projects in
-					// direction normalize(R − L).  The shadow is most visible when this
-					// direction aligns with the camera forward vector.  Using the player
-					// character as the shadow receiver proxy gives the correct result for
-					// the flicker case (third-person player shadow) and is a reasonable
-					// approximation for general scene shadows.
-					//
-					//   shadowScore = dot(camFwd, normalize(playerPos − lightPos))
-					//     +1 = shadow projects directly at camera  (very visible, high priority)
-					//      0 = shadow projects sideways            (partially visible)
-					//     -1 = shadow projects away from camera    (unlikely to be seen)
-					//
 					// Contribution-weighted importance scheduling
 					// ══════════════════════════════════════════════
 					// importance = luminance(diffuse × fade) × max(att_cam, att_plr)
@@ -1378,8 +1364,6 @@ namespace ShadowCasterManager
 					//   importance = 0.5 → ×0.32 (~3× faster)
 					//   importance = 1.0 → ×0.05 (~40× faster, near-forced redraw)
 					//
-					// This replaces the old shadow-projection dot product (which ignored
-					// brightness) and the binary inside-radius boost (hard threshold).
 					// A reference for this technique: Wimmer & Scherzer 2006,
 					// "Instant Shadow Maps", Sec. 3 (importance-based priority);
 					// Valient 2014, "Practical Shadow Maps" (luminance × coverage).
