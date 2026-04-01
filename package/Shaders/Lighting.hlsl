@@ -2341,36 +2341,36 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float snowOcclusion = inWorld;
 #		endif
 
-#	if defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING) // should only match object lod trees (ultra trees), they have no define
+#		if defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING)  // should only match object lod trees (ultra trees), they have no define
 	float rx;
 	float ry;
 	TexColorSampler.GetDimensions(rx, ry);
 	float hasAlpha = 1 - TexColorSampler.SampleLevel(SampColorSampler, uv, 6).a;
-	if(hasAlpha > 0.001){
+	if (hasAlpha > 0.001) {
 		snowOcclusion = 1 - TexColorSampler.Sample(SampColorSampler, uv - float2(0, 2. / ry)).a;
 	}
-#	endif
+#		endif
 
 	float3 adjustedWorldPos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
-#	if defined(LOD_BLENDING) && (defined(LODLANDSCAPE) || defined(LODLANDNOISE) || defined(LODOBJECTS) || defined(LODOBJECTSHD))
+#		if defined(LOD_BLENDING) && (defined(LODLANDSCAPE) || defined(LODLANDNOISE) || defined(LODOBJECTS) || defined(LODOBJECTSHD))
 	float3 preSnowBaseColor = material.BaseColor;
-#	endif
+#		endif
 	if (SharedData::snowCoverSettings.EnableSnowCover
 #		if !defined(TREE_ANIM)
 		&& !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::NoSnow) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)
 #		endif
 	) {
 #		if defined(TRUE_PBR)
-		if(glintParameters.y < 0.01)
-			material.GlintLogMicrofacetDensity = 1; // this will disable glint in case there shouldn't be any
+		if (glintParameters.y < 0.01)
+			material.GlintLogMicrofacetDensity = 1;  // this will disable glint in case there shouldn't be any
 #			if defined(LANDSCAPE)
 		float disp = sh0;
 #			elif defined(EMAT)
 		float disp = (sh0 - 0.5) * displacementParams.HeightScale;
 #			else
-		float disp = (sh0 - 0.5);
+	float disp = (sh0 - 0.5);
 #			endif
 #		elif defined(LANDSCAPE) && defined(EMAT)
 		float disp = sh0;
@@ -2381,8 +2381,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		float3 snowNormal = worldNormal;
 #		if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
-			snowNormal.z = max(snowNormal.z, 0.75);
-			snowNormal = normalize(snowNormal);
+		snowNormal.z = max(snowNormal.z, 0.75);
+		snowNormal = normalize(snowNormal);
 #		endif
 #		if defined(TREE_ANIM)
 		if (SharedData::snowCoverSettings.AffectTreeTint)
@@ -2398,9 +2398,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
 			worldNormal = normalize(lerp(worldNormal, float3(0, 0, 1), snowFactor) + sd);
 #		elif defined(MODELSPACENORMALS) && !defined(SKINNED)
-			worldNormal = normalize(lerp(worldNormal, snowNormal, snowFactor*0.75) + sd);
+			worldNormal = normalize(lerp(worldNormal, snowNormal, snowFactor * 0.75) + sd);
 #		else
-			worldNormal = normalize(lerp(worldNormal, normalize(mul(tbn, snowNormal)), snowFactor*0.75) + sd);
+			worldNormal = normalize(lerp(worldNormal, normalize(mul(tbn, snowNormal)), snowFactor * 0.75) + sd);
 #		endif
 		}
 #		if defined(LODLANDNOISE)

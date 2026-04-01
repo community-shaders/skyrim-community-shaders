@@ -134,7 +134,7 @@ void SnowCover::DrawSettings()
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-			"Reloads the config for current worldspace from file. "
+				"Reloads the config for current worldspace from file. "
 				"Reload is required to load new texture paths.");
 		}
 		ImGui::SameLine();
