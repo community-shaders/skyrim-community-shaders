@@ -822,35 +822,39 @@ void Effect::LoadUIVariables()
 			uiVar.name, widgetStr, static_cast<int>(uiVar.widgetType));
 
 		// Parse UI properties based on type
-		if (uiVar.type == UIVariableType::Float) {
-			std::string minStr = GetUIAnnotation(variable, "UIMin");
-			std::string maxStr = GetUIAnnotation(variable, "UIMax");
-			std::string stepStr = GetUIAnnotation(variable, "UIStep");
+		try {
+			if (uiVar.type == UIVariableType::Float) {
+				std::string minStr = GetUIAnnotation(variable, "UIMin");
+				std::string maxStr = GetUIAnnotation(variable, "UIMax");
+				std::string stepStr = GetUIAnnotation(variable, "UIStep");
 
-			if (!minStr.empty())
-				uiVar.floatMin = std::stof(minStr);
-			if (!maxStr.empty())
-				uiVar.floatMax = std::stof(maxStr);
-			if (!stepStr.empty())
-				uiVar.floatStep = std::stof(stepStr);
-		} else if (uiVar.type == UIVariableType::Int) {
-			std::string minStr = GetUIAnnotation(variable, "UIMin");
-			std::string maxStr = GetUIAnnotation(variable, "UIMax");
+				if (!minStr.empty())
+					uiVar.floatMin = std::stof(minStr);
+				if (!maxStr.empty())
+					uiVar.floatMax = std::stof(maxStr);
+				if (!stepStr.empty())
+					uiVar.floatStep = std::stof(stepStr);
+			} else if (uiVar.type == UIVariableType::Int) {
+				std::string minStr = GetUIAnnotation(variable, "UIMin");
+				std::string maxStr = GetUIAnnotation(variable, "UIMax");
 
-			if (!minStr.empty())
-				uiVar.intMin = std::stoi(minStr);
-			if (!maxStr.empty())
-				uiVar.intMax = std::stoi(maxStr);
+				if (!minStr.empty())
+					uiVar.intMin = std::stoi(minStr);
+				if (!maxStr.empty())
+					uiVar.intMax = std::stoi(maxStr);
 
-			// Parse dropdown list if it's a dropdown widget
-			if (uiVar.widgetType == UIWidgetType::Dropdown) {
-				std::string listStr = GetUIAnnotation(variable, "UIList");
-				logger::debug("[ENBPP] Variable '{}': UIList='{}'", uiVar.name, listStr);
-				if (!listStr.empty()) {
-					uiVar.dropdownItems = ParseDropdownList(listStr);
-					logger::debug("[ENBPP] Parsed {} dropdown items", uiVar.dropdownItems.size());
+				// Parse dropdown list if it's a dropdown widget
+				if (uiVar.widgetType == UIWidgetType::Dropdown) {
+					std::string listStr = GetUIAnnotation(variable, "UIList");
+					logger::debug("[ENBPP] Variable '{}': UIList='{}'", uiVar.name, listStr);
+					if (!listStr.empty()) {
+						uiVar.dropdownItems = ParseDropdownList(listStr);
+						logger::debug("[ENBPP] Parsed {} dropdown items", uiVar.dropdownItems.size());
+					}
 				}
 			}
+		} catch (const std::exception& e) {
+			logger::warn("[ENBPP] Failed to parse UI annotations for variable '{}': {}", uiVar.name, e.what());
 		}
 
 		// Load current value
