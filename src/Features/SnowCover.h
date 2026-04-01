@@ -9,12 +9,12 @@
 struct SnowCover : Feature
 {
 private:
-	static constexpr float DEFAULT_FOLIAGE_EFFECT_OFFSET = -2048.0;  // color foliage earlier/later than snow appears
-	static constexpr float DEFAULT_UV_SCALE = 0.5;
-	static constexpr float DEFAULT_PEAK_MAIN_ANGLE = 0.45;  // material is strongest at this angle
-	static constexpr float DEFAULT_PEAK_ALT_ANGLE = 0.9;    // material is strongest at this angle
-	static constexpr float DEFAULT_MIN_ANGLE = 0.3;         // lowest angle snow appears at
-	static constexpr float DEFAULT_MAX_ANGLE = 0.9;         // angle for full opacity snow
+	static constexpr float DEFAULT_FOLIAGE_EFFECT_OFFSET = -3000.0f;  // color foliage earlier/later than snow appears
+	static constexpr float DEFAULT_UV_SCALE = 1.0f;
+	static constexpr float DEFAULT_PEAK_MAIN_ANGLE = 0.734f;  // material is strongest at this angle
+	static constexpr float DEFAULT_PEAK_ALT_ANGLE = 1.0f;     // material is strongest at this angle
+	static constexpr float DEFAULT_MIN_ANGLE = 0.223f;        // lowest angle snow appears at
+	static constexpr float DEFAULT_MAX_ANGLE = 0.813f;        // angle for full opacity snow
 	static constexpr float DEFAULT_MAIN_SPEC = 0.02;        // specular for main material
 	static constexpr float DEFAULT_ALT_SPEC = 0.02;         // specular for alt material
 	static constexpr float DEFAULT_MAP_ZSCALE = 75000.0f;   // vertical scale of the map of 'altitude offsets'
