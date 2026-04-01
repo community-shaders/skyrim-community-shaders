@@ -1374,7 +1374,7 @@ struct TESBoundObject_Clone3D
 									}
 
 									targetMat->ApplyMaterialObjectData(*pbrData);
-									auto& targetExt              = BSLightingShaderMaterialPBR::All[targetMat];
+									auto& targetExt = BSLightingShaderMaterialPBR::All[targetMat];
 									targetExt.materialObjectData = pbrData;
 									targetExt.lastOwnerRefFormID = ref->GetFormID();
 								}

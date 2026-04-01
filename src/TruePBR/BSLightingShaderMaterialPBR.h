@@ -35,12 +35,12 @@ class BSLightingShaderMaterialPBR : public RE::BSLightingShaderMaterialBase
 public:
 	struct MaterialExtensions
 	{
-		TruePBR::PBRTextureSetData*     textureSetData     = nullptr;
+		TruePBR::PBRTextureSetData* textureSetData = nullptr;
 		TruePBR::PBRMaterialObjectData* materialObjectData = nullptr;
 		/// FormID of the TESObjectREFR whose Clone3D call last wrote MATO data to this
 		/// material.  Used by the fork-before-write check to detect when a pooled material
 		/// instance would be overwritten by a different ref, triggering a clone instead.
-		RE::FormID                      lastOwnerRefFormID = 0;
+		RE::FormID lastOwnerRefFormID = 0;
 	};
 
 	inline static constexpr auto FEATURE = static_cast<RE::BSShaderMaterial::Feature>(32);
