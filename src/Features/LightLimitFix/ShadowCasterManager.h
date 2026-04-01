@@ -165,6 +165,25 @@ namespace ShadowCasterManager
 		std::string RedrawBudgetFormula = "max(0, frametarget - frametime - 0.5) * min(stableframes, 45) / 45";
 	};
 
+	NLOHMANN_JSON_SERIALIZE_ENUM(BudgetModeEnum,
+		{ { BudgetModeEnum::Auto, 0 }, { BudgetModeEnum::Manual, 1 }, { BudgetModeEnum::Formula, 2 } })
+
+	NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+		Settings,
+		Enabled,
+		ShadowLightCount,
+		ConvertedShadowSlots,
+		AllowDrawNewLight,
+		MaxRedrawPerFrame,
+		BudgetMode,
+		AutoTargetFPS,
+		RedrawBudgetMs,
+		ConvertExcessToNormal,
+		PromoteNormalToShadow,
+		ScoreFormula,
+		RedrawIntervalFormula,
+		RedrawBudgetFormula)
+
 	// -------------------------------------------------------------------------
 	// Per-light schedule entry
 	// -------------------------------------------------------------------------
@@ -314,6 +333,21 @@ namespace ShadowCasterManager
 
 	/// Returns a read-only view of the active light pool for UI/visualization.
 	const LightContainer& GetLights();
+
+	/// Draw shadow-specific statistics lines (slot usage, dropped count).
+	/// Call from LightLimitFix::DrawSettings() inside its Statistics tree node.
+	/// shadowLightCount / shadowUnshadowedLightCount are owned by LightLimitFix.
+	void DrawShadowStats(uint32_t shadowLightCount, uint32_t shadowUnshadowedLightCount);
+
+	/// Draw per-mode overlay info for shadow-related visualisation modes (3-9).
+	/// Call from LightLimitFix::DrawOverlay() inside the vizOn block for modes >= 3.
+	/// totalLightCount is the current clustered light count owned by LightLimitFix.
+	void DrawOverlayShadowModeInfo(uint32_t mode, uint32_t shadowUnshadowedLightCount, uint32_t totalLightCount);
+
+	/// Appends tooltip text for visualisation modes 3-9 (all shadow-specific).
+	/// Call from LightLimitFix::DrawSettings() inside the LightsVisualisationMode hover tooltip,
+	/// immediately after the LLF-owned entries for modes 0-2.
+	void DrawVisualisationTooltipShadowModes();
 
 	/// Draw the ImGui settings panel for the shadow caster scheduler.
 	/// Call from LightLimitFix::DrawSettings().
