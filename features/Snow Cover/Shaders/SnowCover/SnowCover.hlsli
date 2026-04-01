@@ -15,16 +15,6 @@ namespace SnowCover
 	Texture2D<float4> IceRmaos : register(t43);
 	Texture2D<float> SnowMap : register(t44);
 
-	// https://blog.selfshadow.com/publications/blending-in-detail/
-	// for when s = (0,0,1)
-	float3 MyReorientNormal(float3 n1, float3 n2)
-	{
-		n1 += float3(0, 0, 1);
-		n2 *= float3(-1, -1, 1);
-
-		return n1 * dot(n1, n2) / n1.z - n2;
-	}
-
 	float GetHeightMult(float3 p)
 	{
 		float2 scale = SharedData::snowCoverSettings.mapScale;

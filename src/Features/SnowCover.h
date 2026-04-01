@@ -18,10 +18,10 @@ private:
 	static constexpr float DEFAULT_MAIN_SPEC = 0.02;        // specular for main material
 	static constexpr float DEFAULT_ALT_SPEC = 0.02;         // specular for alt material
 	static constexpr float DEFAULT_MAP_ZSCALE = 75000.0f;   // vertical scale of the map of 'altitude offsets'
-	static constexpr float DEFAULT_GLINT_1 = 1.2f;          // glint values based on Faultier's snow
-	static constexpr float DEFAULT_GLINT_2 = 33.f;
-	static constexpr float DEFAULT_GLINT_3 = .15f;
-	static constexpr float DEFAULT_GLINT_4 = 2.f;
+	static constexpr float DEFAULT_GLINT_SCREEN_SPACE_SCALE = 1.2f;
+	static constexpr float DEFAULT_GLINT_LOG_MICROFACET_DENSITY = 33.f;
+	static constexpr float DEFAULT_GLINT_MICROFACET_ROUGHNESS = .15f;
+	static constexpr float DEFAULT_GLINT_DENSITY_RANDOMIZATION = 2.f;
 	static constexpr float DEFAULT_BLEND_SMOOTHNESS = 5000.0f;              // range in game units in which the snow transition gradually happens
 	static constexpr float2 DEFAULT_MAP_MIN = float2(-233472.0, 208896.0);  // one corner of skyrim map (where cells end)
 	static constexpr float2 DEFAULT_MAP_MAX = float2(253952.0, -176128.0);  // other corner of skyrim map
@@ -33,14 +33,8 @@ private:
 	static constexpr float HEIGHT_OFFSET_SLIDER_MAX = 20000.0f;
 
 public:
-	static SnowCover* GetSingleton()
-	{
-		static SnowCover singleton;
-		return &singleton;
-	}
-
-	virtual inline std::string GetName() { return "Snow Cover"; }
-	virtual inline std::string GetShortName() { return "SnowCover"; }
+	virtual inline std::string GetName() override { return "Snow Cover"; }
+	virtual inline std::string GetShortName() override { return "SnowCover"; }
 	inline std::string_view GetShaderDefineName() override { return "SNOW_COVER"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 
@@ -76,10 +70,10 @@ public:
 		float2 mapOffset;
 
 		//glint
-		float ScreenSpaceScale = DEFAULT_GLINT_1;
-		float LogMicrofacetDensity = DEFAULT_GLINT_2;
-		float MicrofacetRoughness = DEFAULT_GLINT_3;
-		float DensityRandomization = DEFAULT_GLINT_4;
+		float ScreenSpaceScale = DEFAULT_GLINT_SCREEN_SPACE_SCALE;
+		float LogMicrofacetDensity = DEFAULT_GLINT_LOG_MICROFACET_DENSITY;
+		float MicrofacetRoughness = DEFAULT_GLINT_MICROFACET_ROUGHNESS;
+		float DensityRandomization = DEFAULT_GLINT_DENSITY_RANDOMIZATION;
 
 		float4 MainTint = float4(1.0f, 1.0f, 1.0f, 1.0f);
 		float4 AltTint = float4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -114,10 +108,10 @@ public:
 		std::string MapTexture;
 		float MapZscale = DEFAULT_MAP_ZSCALE;
 		float BlendSmoothness = DEFAULT_BLEND_SMOOTHNESS;
-		float ScreenSpaceScale = DEFAULT_GLINT_1;
-		float LogMicrofacetDensity = DEFAULT_GLINT_2;
-		float MicrofacetRoughness = DEFAULT_GLINT_3;
-		float DensityRandomization = DEFAULT_GLINT_4;
+		float ScreenSpaceScale = DEFAULT_GLINT_SCREEN_SPACE_SCALE;
+		float LogMicrofacetDensity = DEFAULT_GLINT_LOG_MICROFACET_DENSITY;
+		float MicrofacetRoughness = DEFAULT_GLINT_MICROFACET_ROUGHNESS;
+		float DensityRandomization = DEFAULT_GLINT_DENSITY_RANDOMIZATION;
 		float2 MapMin = DEFAULT_MAP_MIN;
 		float2 MapMax = DEFAULT_MAP_MAX;
 		std::string MainTexture;
@@ -146,7 +140,7 @@ public:
 	std::array<ID3D11ShaderResourceView*, 7> views;
 
 	std::string status;
-	const char* last_worldspace = nullptr;
+	std::string last_worldspace;
 	std::filesystem::path map_tex;
 	std::filesystem::path main_tex;
 	std::filesystem::path alt_tex;
@@ -166,22 +160,21 @@ public:
 	float lastHour = 12;
 	float timeSnowing = 0.0f;
 	float snowingDensity = 0.0f;
-	const char* debug_text = nullptr;
 	std::unordered_set<std::uint64_t> whitelist;
 	std::unordered_set<std::uint64_t> blacklist;
 
 	float GetSeasonalAltitude();
 
-	virtual void SetupResources();
-	virtual void Reset();
+	virtual void SetupResources() override;
+	virtual void Reset() override;
 	virtual void Prepass() override;
 
-	virtual void DrawSettings();
+	virtual void DrawSettings() override;
 
-	virtual void Load(json& o_json);
-	virtual void Save(json& o_json);
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
 
-	virtual void RestoreDefaultSettings();
+	virtual void RestoreDefaultSettings() override;
 	void Reload();
 	void SaveConfig();
 

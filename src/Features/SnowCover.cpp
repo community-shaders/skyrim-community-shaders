@@ -125,7 +125,7 @@ void SnowCover::DrawSettings()
 	ImGui::Text("Saved config will be applied when you enter the worldspace.");
 
 	if (ImGui::TreeNodeEx("Worldspace Config", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text("Current worldspace/cell: %s", last_worldspace);
+		ImGui::Text("Current worldspace/cell: %s", last_worldspace.c_str());
 		ImGui::Text("Config status: %s", status.c_str());
 
 		ImGui::SameLine();
@@ -134,7 +134,7 @@ void SnowCover::DrawSettings()
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Reloads the config for current worldspace from file."
+			"Reloads the config for current worldspace from file. "
 				"Reload is required to load new texture paths.");
 		}
 		ImGui::SameLine();
@@ -284,8 +284,6 @@ void SnowCover::DrawSettings()
 		ImGui::Text("Month: %f", perFrame.Month);
 		ImGui::Text("TimeSnowing: %f", perFrame.TimeSnowing);
 		ImGui::Text("SnowingDensity: %f", perFrame.SnowingDensity);
-		if (debug_text != nullptr)
-			ImGui::Text("Debug text: %s", debug_text);
 
 		ImGui::TreePop();
 	}
@@ -328,9 +326,6 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 {
 	Reload();
 
-	static float delta = 0;
-	if (!RE::UI::GetSingleton()->GameIsPaused())  // from lightlimitfix
-		delta = RE::GetSecondsSinceLastFrame();   // BSTimer::delta is always 0 for some reason
 	bool snowing = false;
 	bool raining = false;
 	snowingDensity = 0;
@@ -408,7 +403,7 @@ namespace
 
 void SnowCover::SaveConfig()
 {
-	if (last_worldspace == nullptr)
+	if (last_worldspace.empty())
 		return;
 	json config = ToWorldConfig();
 
@@ -447,6 +442,7 @@ void SnowCover::Reload()
 		}
 	} catch (const std::system_error& e) {
 		logger::error("[Snow Cover] Error opening file: {}", e.what());
+		return;
 	}
 
 	auto whitelist_path = Util::PathHelpers::GetShadersPath() / "SnowCover" / "whitelist.txt";
@@ -472,17 +468,32 @@ void SnowCover::Reload()
 		HRESULT hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / main_tex).replace_extension(".dds").native().c_str(), nullptr, &views.at(0));
 		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}.dds texture: {}", main_tex.generic_string(), hr);
-			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover" / "default" / "main.dds").native().c_str(), nullptr, &views.at(0));
+			hr = DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover" / "default" / "main.dds").native().c_str(), nullptr, &views.at(0));
+			if (FAILED(hr)) {
+				logger::error("Snow Cover: Fallback main texture also failed, disabling snow cover");
+				wsettings.EnableSnowCover = false;
+				return;
+			}
 		}
 		hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / main_tex).concat("_n.dds").native().c_str(), nullptr, &views.at(1));
 		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", main_tex.generic_string(), hr);
-			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover" / "default" / "main_n.dds").native().c_str(), nullptr, &views.at(1));
+			hr = DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover" / "default" / "main_n.dds").native().c_str(), nullptr, &views.at(1));
+			if (FAILED(hr)) {
+				logger::error("Snow Cover: Fallback normal texture also failed, disabling snow cover");
+				wsettings.EnableSnowCover = false;
+				return;
+			}
 		}
 		hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / main_tex).concat("_rmaos.dds").native().c_str(), nullptr, &views.at(2));
 		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}_rmaos.dds texture: {}", main_tex.generic_string(), hr);
-			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover"  / "default" / "main_rmaos.dds").native().c_str(), nullptr, &views.at(2));
+			hr = DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover" / "default" / "main_rmaos.dds").native().c_str(), nullptr, &views.at(2));
+			if (FAILED(hr)) {
+				logger::error("Snow Cover: Fallback rmaos texture also failed, disabling snow cover");
+				wsettings.EnableSnowCover = false;
+				return;
+			}
 		}
 		if (!wc.AltTexture.empty()) {
 			if (views[3])
@@ -511,6 +522,12 @@ void SnowCover::Reload()
 			}
 
 		} else {
+			if (views[3])
+				views[3]->Release();
+			if (views[4])
+				views[4]->Release();
+			if (views[5])
+				views[5]->Release();
 			views[0]->AddRef();
 			views[3] = views[0];
 			views[1]->AddRef();
@@ -559,12 +576,12 @@ void SnowCover::Reset()
 {
 }
 
-void SnowCover::Load(json& o_json)
+void SnowCover::LoadSettings(json& o_json)
 {
 	settings = o_json;
 }
 
-void SnowCover::Save(json& o_json)
+void SnowCover::SaveSettings(json& o_json)
 {
 	o_json = settings;
 }

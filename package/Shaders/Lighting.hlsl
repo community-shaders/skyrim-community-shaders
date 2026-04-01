@@ -2383,7 +2383,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
 			snowNormal.z = max(snowNormal.z, 0.75);
 			snowNormal = normalize(snowNormal);
-		float3 treeSnowNormal = snowNormal;
 #		endif
 #		if defined(TREE_ANIM)
 		if (SharedData::snowCoverSettings.AffectTreeTint)
@@ -2394,16 +2393,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 		snowFactor = SnowCover::ApplySnow(material, snowNormal, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
 #		endif
-	if (snowFactor > 0){
-		float3 sd = FrameBuffer::ViewToWorld(-float3(ddx_fine(snowFactor), ddy_fine(snowFactor), 0), false, eyeIndex);
-#	if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
-		worldNormal = normalize(lerp(worldNormal, float3(0, 0, 1), snowFactor) + sd);
-#	elif defined(MODELSPACENORMALS) && !defined(SKINNED)
-		worldNormal = normalize(lerp(worldNormal, snowNormal, snowFactor*0.75) + sd);
-#	else
-		worldNormal = normalize(lerp(worldNormal, normalize(mul(tbn, snowNormal)), snowFactor*0.75) + sd);
-#	endif
-	}
+		if (snowFactor > 0) {
+			float3 sd = FrameBuffer::ViewToWorld(-float3(ddx_fine(snowFactor), ddy_fine(snowFactor), 0), false, eyeIndex);
+#		if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
+			worldNormal = normalize(lerp(worldNormal, float3(0, 0, 1), snowFactor) + sd);
+#		elif defined(MODELSPACENORMALS) && !defined(SKINNED)
+			worldNormal = normalize(lerp(worldNormal, snowNormal, snowFactor*0.75) + sd);
+#		else
+			worldNormal = normalize(lerp(worldNormal, normalize(mul(tbn, snowNormal)), snowFactor*0.75) + sd);
+#		endif
+		}
 #		if defined(LODLANDNOISE)
 		material.BaseColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
 #		endif
