@@ -72,7 +72,7 @@ namespace SnowCover
 		if (mult < 0.01)
 			return;
 		float2 uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy + worldNormal.xy) / 100);
-		float3 diffuse = Color::TrueLinearToGamma(SnowAlbedo.Sample(SampColorSampler, uv).rgb) * SharedData::snowCoverSettings.MainTint.rgb * Color::PBRLightingScale;
+		float3 diffuse = Color::Diffuse(SnowAlbedo.Sample(SampColorSampler, uv).rgb) * SharedData::snowCoverSettings.MainTint.rgb * Color::PBRLightingScale;
 
 		color = lerp(color, diffuse, mult);
 	}
@@ -156,7 +156,7 @@ namespace SnowCover
 		float4 rmaos;
 		if(alt){
 			float3 albedo = IceAlbedo.Sample(SampColorSampler, uv).rgb;
-			albedo = Color::TrueLinearToGamma(albedo) * SharedData::snowCoverSettings.AltTint.rgb * Color::PBRLightingScale;
+			albedo = Color::Diffuse(albedo) * SharedData::snowCoverSettings.AltTint.rgb * Color::PBRLightingScale;
 			rmaos = IceRmaos.Sample(SampColorSampler, uv);
 			material.Roughness = lerp(material.Roughness, rmaos.x, mult);
 			material.Shininess = lerp(material.Shininess, 25 * 500 * SharedData::snowCoverSettings.altSpec * rmaos.w, mult);
@@ -167,7 +167,7 @@ namespace SnowCover
 		}
 		else{
 			float3 albedo = SnowAlbedo.Sample(SampColorSampler, uv).rgb;
-			albedo = Color::TrueLinearToGamma(albedo) * SharedData::snowCoverSettings.MainTint.rgb * Color::PBRLightingScale;
+			albedo = Color::Diffuse(albedo) * SharedData::snowCoverSettings.MainTint.rgb * Color::PBRLightingScale;
 			rmaos = SnowRmaos.Sample(SampColorSampler, uv);
 			material.Roughness = lerp(material.Roughness, rmaos.x, mult);
 			material.Shininess = lerp(material.Shininess, 25 * 500 *  SharedData::snowCoverSettings.mainSpec * rmaos.w, mult);
