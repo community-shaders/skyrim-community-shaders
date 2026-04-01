@@ -2,6 +2,7 @@
 
 #include "../SettingManager.h"
 #include "../TextureManager.h"
+#include "Utils/Game.h"
 
 void ENBEffect::Execute()
 {
@@ -31,11 +32,15 @@ void ENBEffect::UpdateEffectVariables()
 	float4 params01[7]{};
 
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-	auto& runtimeData = imageSpaceManager->GetRuntimeData();
-	auto& baseData = runtimeData.data.baseData;
+	if (!imageSpaceManager) {
+		return;
+	}
 
-	auto& modAmount = runtimeData.data.modAmount;
-	auto& modData = runtimeData.data.modData;
+	GET_INSTANCE_MEMBER(data, imageSpaceManager);
+	auto& baseData = data.baseData;
+
+	auto& modAmount = data.modAmount;
+	auto& modData = data.modData;
 
 	params01[2].x = baseData.hdr.receiveBloomThreshold;
 	params01[2].y = baseData.hdr.white * RE::GetINISetting("fReinhardWhiteScale:Display")->GetFloat();
