@@ -36,8 +36,6 @@ groupshared sh2 sharedB[TOTAL_SAMPLES];
 	// Sample cubemap with optimized direction
 	float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 
-	color = Color::Saturation(color, 2.0);
-
 	// Compute spherical harmonics basis for this direction
 	sh2 sh = SphericalHarmonics::Evaluate(rayDir);
 
