@@ -2385,7 +2385,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		snowNormal = normalize(snowNormal);
 #		endif
 #		if defined(TREE_ANIM)
-		if (SharedData::snowCoverSettings.AffectTreeTint)
+		snowOcclusion *= SharedData::snowCoverSettings.TreeSnowAmount;
+		if (SharedData::snowCoverSettings.AffectTreeTint && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::NoTint))
 			SnowCover::ApplyFoliageColor(material.BaseColor, SnowCover::GetEnvironmentalMultiplier(adjustedWorldPos));
 #		endif
 #		if defined(TRUE_PBR)
@@ -2395,7 +2396,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		if (snowFactor > 0) {
 			float3 sd = FrameBuffer::ViewToWorld(-float3(ddx_fine(snowFactor), ddy_fine(snowFactor), 0), false, eyeIndex);
-#		if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
+#		if defined(TREE_ANIM)
+			worldNormal = normalize(lerp(worldNormal, float3(0, 0, 1), snowFactor * 0.5) + sd);
+#		elif defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING)
 			worldNormal = normalize(lerp(worldNormal, float3(0, 0, 1), snowFactor) + sd);
 #		elif defined(MODELSPACENORMALS) && !defined(SKINNED)
 			worldNormal = normalize(lerp(worldNormal, snowNormal, snowFactor * 0.75) + sd);
@@ -2970,7 +2973,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // defined (HAIR)
 
 #	if defined(SNOW_COVER) && !defined(MODELSPACENORMALS)
+#		if defined(TREE_ANIM)
+	vertexColor.rgb = snowFactor * 0.75 + (1 - snowFactor * 0.75) * vertexColor.rgb;
+#		else
 	vertexColor.rgb = snowFactor + (1 - snowFactor) * vertexColor.rgb;
+#		endif
 #	endif
 
 	float4 color = 0;

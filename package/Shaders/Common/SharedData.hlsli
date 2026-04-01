@@ -153,7 +153,8 @@ namespace SharedData
 
 		uint EnableExpensiveFoliage;
 		float SnowHeightOffset;
-		uint2 pad;
+		uint pad_havok;
+		float TreeSnowAmount;
 
 		uint EnableSnowCover;
 		uint AffectGrassTint;

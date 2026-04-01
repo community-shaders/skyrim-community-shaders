@@ -120,6 +120,10 @@ void SnowCover::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Moves the altitude that snow appears at. For testing purposes.");
 	}
+	ImGui::SliderFloat("Tree Snow Amount", &settings.TreeSnowAmount, 0.0f, 1.0f);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Controls how much snow appears on trees. Lower values reduce tree snow brightness.");
+	}
 	ImGui::Separator();
 	ImGui::Text("Each config applies to one worldspace or interior cell.");
 	ImGui::Text("Saved config will be applied when you enter the worldspace.");
@@ -448,9 +452,11 @@ void SnowCover::Reload()
 
 	auto whitelist_path = Util::PathHelpers::GetShadersPath() / "SnowCover" / "whitelist.txt";
 	auto blacklist_path = Util::PathHelpers::GetShadersPath() / "SnowCover" / "blacklist.txt";
+	auto tint_blacklist_path = Util::PathHelpers::GetShadersPath() / "SnowCover" / "tint_blacklist.txt";
 
 	whitelist = FormIdParser::parseTriNameFile(whitelist_path);
 	blacklist = FormIdParser::parseTriNameFile(blacklist_path);
+	tint_blacklist = FormIdParser::parseTriNameFile(tint_blacklist_path);
 
 	json config;
 	try {
@@ -608,7 +614,14 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 	if (blacklist.contains(FormIdParser::fnv_hash(name))) {
 		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoSnow;
 	} else if ((a_pass->geometry->HasAnimation() || (userData && ((userData->GetObjectReference() && userData->GetObjectReference()->IsBoundAnimObject()) || userData->CanBeMoved()))) && !whitelist.contains(FormIdParser::fnv_hash(name))) {
-		if (settings.AffectHavok && userData && userData->CanBeMoved()) {
+		bool isStaticForm = false;
+		if (userData && userData->GetObjectReference()) {
+			auto formType = userData->GetObjectReference()->GetFormType();
+			isStaticForm = formType == RE::FormType::Static || formType == RE::FormType::Tree || formType == RE::FormType::Flora;
+		}
+		if (isStaticForm) {
+			state->permutationData.ExtraShaderDescriptor &= ~(uint)State::ExtraShaderDescriptors::NoSnow;
+		} else if (settings.AffectHavok && userData && userData->CanBeMoved()) {
 			RE::NiPoint3 vel;
 			userData->GetLinearVelocity(vel);
 			if (vel.SqrLength() < 10000.0f)
@@ -620,4 +633,9 @@ void SnowCover::BSLightingShader_Setup(RE::BSRenderPass* a_pass)
 	} else {
 		state->permutationData.ExtraShaderDescriptor &= ~(uint)State::ExtraShaderDescriptors::NoSnow;
 	}
+
+	if (tint_blacklist.contains(FormIdParser::fnv_hash(name)))
+		state->permutationData.ExtraShaderDescriptor |= (uint)State::ExtraShaderDescriptors::NoTint;
+	else
+		state->permutationData.ExtraShaderDescriptor &= ~(uint)State::ExtraShaderDescriptors::NoTint;
 }

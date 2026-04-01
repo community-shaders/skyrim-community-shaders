@@ -1,0 +1,2 @@
+# Mesh names listed here will not receive foliage color tinting but will still get snow
+# One name per line, lines starting with # are comments

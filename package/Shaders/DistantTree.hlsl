@@ -230,7 +230,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(SNOW_COVER)
 	if (SharedData::snowCoverSettings.EnableSnowCover) {
-		float skylight = 0.15;
+		float skylight = 0.15 * SharedData::snowCoverSettings.TreeSnowAmount;
 		if (SharedData::snowCoverSettings.EnableExpensiveFoliage) {
 			float rx;
 			float ry;

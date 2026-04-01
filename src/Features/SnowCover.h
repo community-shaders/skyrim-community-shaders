@@ -50,7 +50,7 @@ public:
 		uint EnableExpensiveFoliage = 1;
 		float SnowHeightOffset = 0.0f;
 		uint AffectHavok = 0;
-		uint pad;
+		float TreeSnowAmount = 1.0f;
 	};
 	static_assert(sizeof(UserSettings) % 16 == 0);
 
@@ -167,6 +167,7 @@ public:
 	float snowingDensity = 0.0f;
 	std::unordered_set<std::uint64_t> whitelist;
 	std::unordered_set<std::uint64_t> blacklist;
+	std::unordered_set<std::uint64_t> tint_blacklist;
 
 	float GetSeasonalAltitude();
 

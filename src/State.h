@@ -155,6 +155,7 @@ public:
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
 		GrassSphereNormal = 1 << 3,
+		NoTint = 1 << 4,
 		NoSnow = 1 << 6
 
 	};
