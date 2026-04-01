@@ -7,6 +7,7 @@
 // Ported and adapted for Community Shaders by the Community Shaders team with permission.
 
 #include "ShadowCasterManager.h"
+#include "../../Deferred.h"
 #include "../../Globals.h"
 #include "../../Utils/Game.h"
 #include "../../Utils/UI.h"
@@ -2385,6 +2386,95 @@ namespace ShadowCasterManager
 			},
 			{},
 			outerSize);
+	}
+
+	void DrawShadowStats(uint32_t shadowLightCount, uint32_t shadowUnshadowedLightCount)
+	{
+		uint32_t shadowSlots = globals::deferred->shadowMapSlots;
+		if (shadowUnshadowedLightCount > 0)
+			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u lights, %u / %u slots (%u dropped)", shadowLightCount, s_shadowSlotUsage, shadowSlots, shadowUnshadowedLightCount);
+		else
+			ImGui::Text("Shadow Lights    : %u lights, %u / %u slots", shadowLightCount, s_shadowSlotUsage, shadowSlots);
+	}
+
+	void DrawOverlayShadowModeInfo(uint32_t mode, uint32_t shadowUnshadowedLightCount, uint32_t totalLightCount)
+	{
+		const uint32_t slotUsage = s_shadowSlotUsage;
+		const uint32_t slots = globals::deferred->shadowMapSlots;
+		if (mode == 3) {
+			ImGui::Text("R channel  = directional soft shadow");
+			ImGui::Text("G channel  = directional detailed shadow");
+			ImGui::TextDisabled("(B = unused)");
+			ImGui::Spacing();
+			ImGui::Text("Shadow slots     : %u / %u", slotUsage, slots);
+		} else if (mode >= 4 && mode <= 6) {
+			ImGui::Text("Shadow lights    : %u valid,  %u dropped", slotUsage, shadowUnshadowedLightCount);
+			ImGui::Text("Total clustered  : %u", totalLightCount);
+			if (mode == 4)
+				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red");
+			else if (mode == 5)
+				ImGui::TextDisabled("White = fully lit,  black = fully in shadow");
+			else
+				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red (lights without shadow maps)");
+		} else if (mode == 7) {
+			ImGui::Text("Slots used / total : %u / %u", slotUsage, slots);
+			if (shadowUnshadowedLightCount > 0)
+				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Overflow (red)     : %u lights", shadowUnshadowedLightCount);
+			ImGui::TextDisabled("Cool  Turbo[0.0-0.3] = 1-4 shadows");
+			ImGui::TextDisabled("Warm  Turbo[0.3-0.8] = 5-%u shadows", slots);
+			ImGui::TextDisabled("Red                  = overflow");
+		} else if (mode == 9) {
+			uint32_t spotC = 0, hemiC = 0, omniC = 0;
+			for (const auto& info : GetSlotInfos()) {
+				if (!info.valid)
+					continue;
+				if (info.type == 0)
+					spotC++;
+				else if (info.type == 1)
+					hemiC++;
+				else
+					omniC++;
+			}
+			ImGui::Text("R  Spot (frustum)   : %u", spotC);
+			ImGui::Text("G  Hemisphere       : %u", hemiC);
+			ImGui::Text("B  Omni (paraboloid): %u", omniC);
+			ImGui::Text("   Unshadowed        : %u", shadowUnshadowedLightCount);
+			if (shadowUnshadowedLightCount > 0)
+				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "   Overflow (red)    : %u", shadowUnshadowedLightCount);
+		}
+	}
+
+	void DrawVisualisationTooltipShadowModes()
+	{
+		ImGui::Text(
+			"\n"
+			"Shadow Mask: R=directional soft shadow, G=directional detailed shadow.\n"
+			"\n"
+			"Shadow Light Count: Heatmap of shadow-casting point/spot lights per pixel (blue=0, red=8+).\n"
+			"Use to gauge shadow density; high counts indicate expensive shadow sampling.\n"
+			"\n"
+			"Point Light Shadow Factor: Brightness shows the darkest shadow value from any point/spot\n"
+			"light. White=fully lit, black=fully shadowed. Shows where PCF/PCSS filtering is active.\n"
+			"\n"
+			"Unshadowed Point Lights: Heatmap of point/spot lights without shadow maps (blue=0, red=8+).\n"
+			"High values where lights are bright indicate where the shadow slot limit is costing quality.\n"
+			"\n"
+			"Shadow Caster Density: Custom Turbo ranges show how heavily shadow slots are used.\n"
+			"  Cool (Turbo 0.0-0.3): 1-4 shadow lights per pixel.\n"
+			"  Warm (Turbo 0.3-0.8): 5 to ShadowMapSlots lights (dynamic range).\n"
+			"  Bright red: overflow - a light wanted a shadow slot but none was available.\n"
+			"\n"
+			"Shadow Slot Index Color: Assigns each shadow-map slot a unique high-contrast hue\n"
+			"(golden-ratio sequence) so you can identify which slot is casting the primary shadow.\n"
+			"First valid shadow light index per pixel is shown. Bright red = slot overflow.\n"
+			"\n"
+			"Light Type Visualization: RGB channels encode shadow light types per pixel.\n"
+			"  R = spot/frustum lights (ShadowParam.x == 0).\n"
+			"  G = hemisphere/paraboloid lights (ShadowParam.x == 1).\n"
+			"  B = omnidirectional/full-paraboloid lights (ShadowParam.x == 2).\n"
+			"  Dark grey = unshadowed lights only (no shadow maps assigned).\n"
+			"  Bright red = overflow (slot capacity exceeded).\n"
+			"Intensity scales with count (up to 4); channels blend for mixed-type pixels.");
 	}
 
 	void DrawSettings(Settings& settings)

@@ -284,48 +284,8 @@ void LightLimitFix::DrawOverlay()
 			uint32_t cx = clusterSize[0], cy = clusterSize[1], cz = clusterSize[2];
 			ImGui::Text("Cluster grid     : %ux%ux%u  (%u total)", cx, cy, cz, cx * cy * cz);
 			ImGui::Text("Max lights/cluster: %u", CLUSTER_MAX_LIGHTS);
-		} else if (mode == 3) {
-			ImGui::Text("R channel  = directional soft shadow");
-			ImGui::Text("G channel  = directional detailed shadow");
-			ImGui::TextDisabled("(B = unused)");
-			ImGui::Spacing();
-			ImGui::Text("Shadow slots     : %u / %u", slotUsage, globals::deferred->shadowMapSlots);
-		} else if (mode >= 4 && mode <= 6) {
-			ImGui::Text("Shadow lights    : %u valid,  %u dropped", slotUsage, shadowUnshadowedLightCount);
-			ImGui::Text("Total clustered  : %u", lightCount);
-			if (mode == 4)
-				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red");
-			else if (mode == 5)
-				ImGui::TextDisabled("White = fully lit,  black = fully in shadow");
-			else
-				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red (lights without shadow maps)");
-		} else if (mode == 7) {
-			uint32_t slots = globals::deferred->shadowMapSlots;
-			ImGui::Text("Slots used / total : %u / %u", slotUsage, slots);
-			if (shadowUnshadowedLightCount > 0)
-				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Overflow (red)     : %u lights", shadowUnshadowedLightCount);
-			ImGui::TextDisabled("Cool  Turbo[0.0-0.3] = 1-4 shadows");
-			ImGui::TextDisabled("Warm  Turbo[0.3-0.8] = 5-%u shadows", slots);
-			ImGui::TextDisabled("Red                  = overflow");
-		} else if (mode == 9) {
-			uint32_t spotC = 0, hemiC = 0, omniC = 0;
-			for (const auto& info : ShadowCasterManager::GetSlotInfos()) {
-				if (!info.valid)
-					continue;
-				if (info.type == 0)
-					spotC++;
-				else if (info.type == 1)
-					hemiC++;
-				else
-					omniC++;
-			}
-			ImGui::Text("R  Spot (frustum)   : %u", spotC);
-			ImGui::Text("G  Hemisphere       : %u", hemiC);
-			ImGui::Text("B  Omni (paraboloid): %u", omniC);
-			ImGui::Text("   Unshadowed        : %u", shadowUnshadowedLightCount);
-			if (shadowUnshadowedLightCount > 0)
-				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "   Overflow (red)    : %u", shadowUnshadowedLightCount);
-		}
+		} else
+			ShadowCasterManager::DrawOverlayShadowModeInfo(mode, shadowUnshadowedLightCount, lightCount);
 	}
 
 	// ── Shadow slot toggle table ─────────────────────────────────────

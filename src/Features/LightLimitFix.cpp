@@ -13,31 +13,6 @@ NLOHMANN_JSON_SERIALIZE_ENUM(LightLimitFix::ShadowFilterMode, {
 																  { LightLimitFix::ShadowFilterMode::PCSS, 2 },
 															  })
 
-namespace ShadowCasterManager
-{
-	NLOHMANN_JSON_SERIALIZE_ENUM(BudgetModeEnum, {
-													 { BudgetModeEnum::Auto, 0 },
-													 { BudgetModeEnum::Manual, 1 },
-													 { BudgetModeEnum::Formula, 2 },
-												 })
-
-	NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-		Settings,
-		Enabled,
-		ShadowLightCount,
-		ConvertedShadowSlots,
-		AllowDrawNewLight,
-		MaxRedrawPerFrame,
-		BudgetMode,
-		AutoTargetFPS,
-		RedrawBudgetMs,
-		ConvertExcessToNormal,
-		PromoteNormalToShadow,
-		ScoreFormula,
-		RedrawIntervalFormula,
-		RedrawBudgetFormula)
-}
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LightLimitFix::Settings,
 	FilterMode,
@@ -48,7 +23,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
-	auto deferred = globals::deferred;
 
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
 		if (lightCount >= MAX_LIGHTS)
@@ -56,11 +30,7 @@ void LightLimitFix::DrawSettings()
 		else
 			ImGui::Text("Clustered Lights : %u / %u", lightCount, MAX_LIGHTS);
 
-		uint32_t shadowSlots = deferred->shadowMapSlots;
-		if (shadowUnshadowedLightCount > 0)
-			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u lights, %u / %u slots (%u dropped)", shadowLightCount, ShadowCasterManager::GetSlotUsage(), shadowSlots, shadowUnshadowedLightCount);
-		else
-			ImGui::Text("Shadow Lights    : %u lights, %u / %u slots", shadowLightCount, ShadowCasterManager::GetSlotUsage(), shadowSlots);
+		ShadowCasterManager::DrawShadowStats(shadowLightCount, shadowUnshadowedLightCount);
 
 		ImGui::TreePop();
 	}
@@ -97,35 +67,8 @@ void LightLimitFix::DrawSettings()
 					"\n"
 					"Strict Lights Count: Heatmap of portal-strict lights per pixel (blue=0, red=15).\n"
 					"\n"
-					"Clustered Lights Count: Heatmap of dynamic lights in each screen tile (blue=0, red=128).\n"
-					"\n"
-					"Shadow Mask: R=directional soft shadow, G=directional detailed shadow.\n"
-					"\n"
-					"Shadow Light Count: Heatmap of shadow-casting point/spot lights per pixel (blue=0, red=8+).\n"
-					"Use to gauge shadow density; high counts indicate expensive shadow sampling.\n"
-					"\n"
-					"Point Light Shadow Factor: Brightness shows the darkest shadow value from any point/spot\n"
-					"light. White=fully lit, black=fully shadowed. Shows where PCF/PCSS filtering is active.\n"
-					"\n"
-					"Unshadowed Point Lights: Heatmap of point/spot lights without shadow maps (blue=0, red=8+).\n"
-					"High values where lights are bright indicate where the shadow slot limit is costing quality.\n"
-					"\n"
-					"Shadow Caster Density: Custom Turbo ranges show how heavily shadow slots are used.\n"
-					"  Cool (Turbo 0.0-0.3): 1-4 shadow lights per pixel.\n"
-					"  Warm (Turbo 0.3-0.8): 5 to ShadowMapSlots lights (dynamic range).\n"
-					"  Bright red: overflow - a light wanted a shadow slot but none was available.\n"
-					"\n"
-					"Shadow Slot Index Color: Assigns each shadow-map slot a unique high-contrast hue\n"
-					"(golden-ratio sequence) so you can identify which slot is casting the primary shadow.\n"
-					"First valid shadow light index per pixel is shown. Bright red = slot overflow.\n"
-					"\n"
-					"Light Type Visualization: RGB channels encode shadow light types per pixel.\n"
-					"  R = spot/frustum lights (ShadowParam.x == 0).\n"
-					"  G = hemisphere/paraboloid lights (ShadowParam.x == 1).\n"
-					"  B = omnidirectional/full-paraboloid lights (ShadowParam.x == 2).\n"
-					"  Dark grey = unshadowed lights only (no shadow maps assigned).\n"
-					"  Bright red = overflow (slot capacity exceeded).\n"
-					"Intensity scales with count (up to 4); channels blend for mixed-type pixels.");
+					"Clustered Lights Count: Heatmap of dynamic lights in each screen tile (blue=0, red=128).");
+				ShadowCasterManager::DrawVisualisationTooltipShadowModes();
 			}
 		}
 
