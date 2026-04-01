@@ -63,12 +63,10 @@ void LerpDirectional(RE::BGSDirectionalAmbientLightingColors::Directional& oldCo
 
 void WeatherEditor::DrawSettings()
 {
-	auto player = RE::PlayerCharacter::GetSingleton();
-	bool hasCell = player && player->parentCell;
-	ImGui::BeginDisabled(!hasCell);
-	if (ImGui::Button(hasCell ? "Open Editor" : "Open Editor (no active cell)", { -1, 0 })) {
+	bool canOpen = EditorWindow::CanBeOpen();
+	ImGui::BeginDisabled(!canOpen);
+	if (ImGui::Button("Open Editor", { -1, 0 }))
 		EditorWindow::GetSingleton()->open = true;
-	}
 	ImGui::EndDisabled();
 
 	// Time controls

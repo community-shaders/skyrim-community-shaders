@@ -124,6 +124,19 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 target_link_libraries(shader_tests PRIVATE Catch2::Catch2)
 
+# Workaround: MSVC 14.50+ (VS 2026) has an Internal Compiler Error (ICE C1001)
+# in c2.dll when compiling Catch2 v3.11.0 with default optimizations.
+# Disabling optimizations for Catch2 avoids the ICE; Catch2 is a test harness
+# so the performance impact does not matter.
+if(MSVC AND MSVC_VERSION GREATER_EQUAL 1950)
+    if(TARGET Catch2)
+        target_compile_options(Catch2 PRIVATE /Od)
+    endif()
+    if(TARGET Catch2WithMain)
+        target_compile_options(Catch2WithMain PRIVATE /Od)
+    endif()
+endif()
+
 # Define USE_PIX for PIX capture support
 target_compile_definitions(shader_tests PRIVATE USE_PIX)
 

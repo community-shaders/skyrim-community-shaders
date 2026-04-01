@@ -21,9 +21,9 @@
                 "SizeScale": 1.0
             },
             {
-                "Family": "IBMPlex Sans",
-                "Style": "Regular",
-                "File": "IBMPlexSans/IBMPlexSans-Regular.ttf",
+                "Family": "IBMPlex Serif",
+                "Style": "Light",
+                "File": "IBMPlexSerif/IBMPlexSerif-Light.ttf",
                 "SizeScale": 1.0
             },
             {

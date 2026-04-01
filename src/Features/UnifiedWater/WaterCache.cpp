@@ -2,6 +2,8 @@
 
 #include <BS_thread_pool.hpp>
 
+#include "Utils/WinApi.h"
+
 bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 {
 	if (!worldSpace)
@@ -214,9 +216,10 @@ bool WaterCache::GenerateCaches()
 		}
 	}
 
-	const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+	// Use P-core logical count on Intel hybrid CPUs; falls back to hardware_concurrency() on non-hybrid.
+	const unsigned hw = Util::GetPerformanceCoreCount();
 	const unsigned threads = std::max(1u, hw > 4 ? hw - 4 : (hw * 3) / 4);
-	async.pool = std::make_unique<BS::thread_pool>(threads);
+	async.pool = std::make_unique<BS::thread_pool<>>(threads);
 
 	async.failed.store(false);
 	buildProgress.Start(static_cast<uint32_t>(worldSpaces.size()));
@@ -232,7 +235,7 @@ bool WaterCache::GenerateCaches()
 			continue;
 		}
 
-		async.pool->push_task([this, worldSpace, editorID] {
+		async.pool->detach_task([this, worldSpace, editorID] {
 			DiskCache cache = {};
 			const auto name = std::format("{}_cache.wc", editorID);
 			const auto success = BuildDiskCache(worldSpace, cache) && TryWriteCacheToFile(name, cache.header, cache.instructions);
@@ -257,7 +260,7 @@ bool WaterCache::GenerateCaches()
 		}
 
 		if (async.pool)
-			async.pool->wait_for_tasks();
+			async.pool->wait();
 
 		buildProgress.Stop();
 		async.running.store(false);

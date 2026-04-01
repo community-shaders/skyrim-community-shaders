@@ -52,15 +52,13 @@ void OverlayRenderer::RenderOverlay(
 	RenderShaderCompilationStatus(keyIdToString);
 	RenderShaderBlockingStatus();
 
-	// Draw weather editor independently of main menu state
-	// Auto-close editor if player leaves valid game space (e.g., loading screen)
 	auto* editorWindow = EditorWindow::GetSingleton();
-	auto player = RE::PlayerCharacter::GetSingleton();
-	if (editorWindow->open && !(player && player->parentCell)) {
+	if (editorWindow->open && !EditorWindow::CanBeOpen()) {
 		editorWindow->open = false;
 		if (editorWindow->IsInPreviewMode())
 			editorWindow->ExitPreviewMode();
 	}
+	editorWindow->UpdateOpenState();
 	if (editorWindow->open) {
 		bool flying = editorWindow->IsPreviewFlying();
 		auto& io = ImGui::GetIO();
@@ -170,6 +168,23 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 		}
 		ImGui::TextUnformatted(progressTitle.c_str());
 		ImGui::ProgressBar(percent, ImVec2(0.0f, 0.0f), progressOverlay.c_str());
+		if (state->IsDeveloperMode()) {
+			int32_t threadLimit = shaderCache->backgroundCompilation ? shaderCache->backgroundCompilationThreadCount : shaderCache->compilationThreadCount;
+			int compilationRunning = (int)shaderCache->compilationPool.get_tasks_running();
+			int heavyInFlight = shaderCache->GetHeavyTasksInFlight();
+			int heavyLimit = static_cast<int>(Util::GetPerformanceCoreCount());
+			uint64_t slow = shaderCache->GetSlowTasks();
+			uint64_t verySlow = shaderCache->GetVerySlowTasks();
+			ImGui::Text("Threads: %d / %d limit | Heavy: %d / %d P-cores | %d workers",
+				compilationRunning,
+				threadLimit,
+				heavyInFlight,
+				heavyLimit,
+				(int)shaderCache->compilationPool.get_thread_count());
+			if (slow > 0) {
+				ImGui::Text("Slow shaders: %llu (very slow: %llu)", slow, verySlow);
+			}
+		}
 		if (!shaderCache->backgroundCompilation && shaderCache->menuLoaded) {
 			auto skipShadersText = fmt::format(
 				"Press {} to proceed without completing shader compilation. ",
@@ -182,7 +197,9 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
 
 		ImGui::End();
-	} else if (failed) {
+	}
+
+	if (failed) {
 		if (!hide) {
 			ImGui::SetNextWindowPos(ImVec2(pos, pos));
 			if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
