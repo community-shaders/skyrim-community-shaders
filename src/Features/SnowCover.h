@@ -38,7 +38,12 @@ public:
 	inline std::string_view GetShaderDefineName() override { return "SNOW_COVER"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 
-	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
+	bool HasShaderDefine(RE::BSShader::Type shaderType) override
+	{
+		return shaderType == RE::BSShader::Type::Lighting ||
+		       shaderType == RE::BSShader::Type::Grass ||
+		       shaderType == RE::BSShader::Type::DistantTree;
+	}
 
 	struct UserSettings
 	{

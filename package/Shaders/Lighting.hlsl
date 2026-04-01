@@ -28,7 +28,7 @@
 #	define LOD
 #endif
 
-#if defined(SKINNED) || defined(SKIN) || defined(EYE) || defined(HAIR) || !defined(EXTENDED_MATERIALS)
+#if defined(SKINNED) || defined(SKIN) || defined(EYE) || defined(HAIR)
 #	undef SNOW_COVER
 #endif
 

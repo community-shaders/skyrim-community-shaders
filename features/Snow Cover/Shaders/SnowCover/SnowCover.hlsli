@@ -26,7 +26,7 @@ namespace SnowCover
 
 	float GetEnvironmentalMultiplier(float3 p)
 	{
-		return (GetHeightMult(p) + SharedData::snowCoverSettings.SeasonalAltitude) / SharedData::snowCoverSettings.BlendSmoothness;
+		return (GetHeightMult(p) + SharedData::snowCoverSettings.SeasonalAltitude) / max(SharedData::snowCoverSettings.BlendSmoothness, EPSILON_DIVISION);
 	}
 
 	void ApplyFoliageColor(inout float3 color, float env_mult)
