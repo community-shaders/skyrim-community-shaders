@@ -237,18 +237,15 @@ Texture2D<float> TexDepthSampler : register(t17);
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	float3 yyy = Color::Sky(PParams.yyy);
+	float skyBoost = Color::Sky(PParams.yyy).x;
 #	if !defined(VR)
 	uint eyeIndex = 0;
 #	else
 	uint eyeIndex = input.EyeIndex;
 #	endif  // !VR
 
-	float skyBoost = PParams.y;
-
-	if (SharedData::enbSettings.Enable) {
+	if (SharedData::enbSettings.Enable)
 		skyBoost *= SharedData::enbSettings.GradientIntensity;
-	}
 
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
@@ -295,10 +292,10 @@ PS_OUTPUT main(PS_INPUT input)
 		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
-	psout.Color.xyz = (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy) + noiseGrad;
+	psout.Color.xyz = (Color::Sky(input.Color.xyz) * baseColor.xyz + skyBoost) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	psout.Color.xyz = (yyy + Color::Sky(input.Color.xyz)) + noiseGrad;
+	psout.Color.xyz = (skyBoost + Color::Sky(input.Color.xyz)) + noiseGrad;
 
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
