@@ -40,6 +40,7 @@ void LinearLighting::DrawSettings()
 		auto& enb = globals::features::enbPostProcessing;
 		if (enb.enableEffect) {
 			ImGui::TextColored(ImVec4(1, 1, 0, 1), "Gamma settings are currently overwritten by ENB.");
+			return;
 		}
 	}
 
@@ -183,18 +184,18 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 		auto& enb = globals::features::enbPostProcessing;
 		if (enb.enableEffect) {
 			float colorPow = SettingManager::GetSingleton().GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
-			data.lightGamma = 1;
+			data.lightGamma = 1.0f;
 			data.colorGamma = colorPow;
-			data.emitColorGamma = 1;
-			data.glowmapGamma = 1;
-			data.ambientGamma = 1;
-			data.fogGamma = 1;
-			data.fogAlphaGamma = 1;
-			data.effectGamma = 1;
-			data.effectAlphaGamma = 1;
-			data.skyGamma = 1;
-			data.waterGamma = 1;
-			data.vlGamma = 1;
+			data.emitColorGamma = 1.0f;
+			data.glowmapGamma = 1.0f;
+			data.ambientGamma = 1.0f;
+			data.fogGamma = 1.0f;
+			data.fogAlphaGamma = 1.0f;
+			data.effectGamma = 1.0f;
+			data.effectAlphaGamma = 1.0f;
+			data.skyGamma = 1.0f;
+			data.waterGamma = 1.0f;
+			data.vlGamma = 1.0f;
 		}
 	}
 
