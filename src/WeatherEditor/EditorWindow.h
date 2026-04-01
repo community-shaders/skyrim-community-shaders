@@ -96,6 +96,9 @@ public:
 	bool vanityCameraDisabled = false;
 	float savedVanityCameraDelay = 180.0f;
 
+	// Game HUD hiding (tm equivalent)
+	bool gameMenusHidden = false;
+
 	void ShowObjectsWindow();
 
 	void ShowViewportWindow();
@@ -132,8 +135,14 @@ public:
 	// Check if ESC key should close the editor (no popups open)
 	bool ShouldHandleEscapeKey() const;
 
+	static bool CanBeOpen();
 	void DisableVanityCamera();
 	void RestoreVanityCamera();
+	void HideGameMenus();
+	void ShowGameMenus();
+
+	/// Call every frame from the overlay renderer to track open/close transitions.
+	void UpdateOpenState();
 
 	// Undo system
 	struct UndoState

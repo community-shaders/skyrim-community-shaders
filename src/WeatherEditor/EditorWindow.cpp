@@ -1,8 +1,10 @@
 #include "EditorWindow.h"
 
+#include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
 #include "InteriorOnlyPanel.h"
 #include "Menu.h"
+#include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
 #include "State.h"
 #include "Utils/UI.h"
@@ -164,7 +166,7 @@ bool EditorWindow::MatchesObjectFilter(Widget* w) const
 
 void EditorWindow::ShowObjectsWindow()
 {
-	ImGui::Begin("Weather and Lighting Browser");
+	Util::BeginWithRoundedClose("Weather and Lighting Browser", nullptr);
 
 	// Reset filter state when the user switches categories so stale column
 	// selections (e.g. Status) don't hide all items in the new category.
@@ -588,6 +590,7 @@ void EditorWindow::ShowObjectsWindow()
 
 						auto editorLabel = std::format("[CURRENT] {}", sortedWidgets[i]->GetEditorID());
 						auto markedRecord = settings.markedRecords.find(sortedWidgets[i]->GetEditorID());
+						ImGui::PushID(sortedWidgets[i]->GetFormID().c_str());
 						ImGui::TableNextRow();
 
 						// Highlight current cell's lighting template
@@ -655,6 +658,8 @@ void EditorWindow::ShowObjectsWindow()
 
 						// json / delete column
 						drawJsonDeleteButton(sortedWidgets[i]);
+
+						ImGui::PopID();
 					}
 				}
 
@@ -672,6 +677,7 @@ void EditorWindow::ShowObjectsWindow()
 
 					auto editorLabel = sortedWidgets[i]->GetEditorID();
 					auto markedRecord = settings.markedRecords.find(editorLabel);
+					ImGui::PushID(sortedWidgets[i]->GetFormID().c_str());
 					ImGui::TableNextRow();
 
 					// Set background colour
@@ -712,26 +718,31 @@ void EditorWindow::ShowObjectsWindow()
 							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + pad.y * 2.0f;
 							Util::SetTooltipPositionNearMouse(estimatedTooltipHeight);
 							if (ImGui::BeginTooltip()) {
-								// ImageSpace info
+								// Resolve ImageSpace editor ID via widget cache (GetFormEditorID() returns null at runtime)
+								auto resolveViaWidgets = [this](RE::TESForm* f, const std::vector<std::unique_ptr<Widget>>& widgets) -> std::string {
+									if (!f)
+										return "None";
+									for (const auto& w : widgets) {
+										if (w->form == f)
+											return w->GetEditorID();
+									}
+									return std::format("0x{:X}", f->GetLocalFormID());
+								};
+
+								// ImageSpace info - use widget cache for proper editor IDs
 								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
 								for (int tod = 0; tod < 4; tod++) {
-									auto imgSpace = weatherWidget->weather->imageSpaces[tod];
-									ImGui::Text("  %s: %s",
-										TOD::GetPeriodName(tod),
-										imgSpace ? imgSpace->GetFormEditorID() : "None");
+									ImGui::Text("  %s: %s", TOD::GetPeriodName(tod), resolveViaWidgets(weatherWidget->weather->imageSpaces[tod], imageSpaceWidgets).c_str());
 								}
 
 								ImGui::Spacing();
 
-								// VolumetricLighting info
+								// VolumetricLighting info - show short local FormID only
 								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Volumetric Lighting:");
 								for (int tod = 0; tod < 4; tod++) {
-									auto volLight = weatherWidget->weather->volumetricLighting[tod];
-									ImGui::Text("  %s: %s",
-										TOD::GetPeriodName(tod),
-										volLight ? volLight->GetFormEditorID() : "None");
+									auto* f = weatherWidget->weather->volumetricLighting[tod];
+									ImGui::Text("  %s: %s", TOD::GetPeriodName(tod), f ? std::format("0x{:X}", f->GetLocalFormID()).c_str() : "None");
 								}
-
 								ImGui::EndTooltip();
 							}
 							weatherTooltipShownThisFrame = true;
@@ -782,6 +793,8 @@ void EditorWindow::ShowObjectsWindow()
 
 					// json / delete column
 					drawJsonDeleteButton(sortedWidgets[i]);
+
+					ImGui::PopID();
 				}
 
 				ImGui::EndTable();  // End DetailsTable
@@ -813,7 +826,7 @@ void EditorWindow::ShowObjectsWindow()
 
 void EditorWindow::ShowViewportWindow()
 {
-	ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
+	Util::BeginWithRoundedClose("Viewport", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
 
 	// The size of the image in ImGui																														   // Get the available space in the current window
 	ImVec2 availableSpace = ImGui::GetContentRegionAvail();
@@ -877,7 +890,6 @@ void EditorWindow::RenderUI()
 	ImGui::GetStyle().FontScaleMain = settings.editorUIScale;
 
 	if (settings.showViewport) {
-		// Dim the game scene using the theme's modal dim background color
 		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
 	}
 
@@ -889,6 +901,14 @@ void EditorWindow::RenderUI()
 	}
 
 	if (ImGui::BeginMainMenuBar()) {
+		// Tighten bottom clip rect to prevent content bleeding over the bottom border
+		{
+			auto* window = ImGui::GetCurrentWindowRead();
+			float borderInset = std::ceil(window->WindowBorderSize * 0.5f);
+			ImGui::PushClipRect(window->ClipRect.Min,
+				ImVec2(window->ClipRect.Max.x, window->ClipRect.Max.y - borderInset), true);
+		}
+
 		if (ImGui::BeginMenu("File")) {
 			if (ImGui::MenuItem("Save All Open Widgets", "Ctrl+S")) {
 				SaveAll();
@@ -1010,6 +1030,7 @@ void EditorWindow::RenderUI()
 		}
 		if (ImGui::BeginMenu("Window")) {
 			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
+				BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
 				Save();
 			}
 			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
@@ -1090,11 +1111,6 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 
-		// Clip buttons above the bottom border so highlights don't overlap it
-		const auto clipMin = ImGui::GetWindowDrawList()->GetClipRectMin();
-		const auto clipMax = ImGui::GetWindowDrawList()->GetClipRectMax();
-		ImGui::PushClipRect(clipMin, ImVec2(clipMax.x, clipMax.y - ImGui::GetStyle().WindowBorderSize), true);
-
 		auto menu = globals::menu;
 		constexpr float kIconButtonPadding = 1.0f;  // minimal padding so icons render larger and smoother
 		const float iconButtonDim = ImGui::GetFrameHeight() - kIconButtonPadding * 2;
@@ -1130,7 +1146,8 @@ void EditorWindow::RenderUI()
 		const float sliderWidth = kMenuBarSliderWidth * scale;
 
 		// Measure right-side elements to compute positions right-to-left
-		float rightCursor = clipRight;
+		constexpr float kCloseButtonInset = 3.0f;
+		float rightCursor = clipRight - kCloseButtonInset * scale;
 
 		// X button
 		rightCursor -= closeButtonSize;
@@ -1296,7 +1313,19 @@ void EditorWindow::RenderUI()
 		if (ImGui::IsItemHovered()) {
 			ImGui::SetTooltip("Close Weather Editor (Esc)");
 		}
-		ImGui::PopClipRect();
+
+		ImGui::PopClipRect();  // End bottom-border clip rect
+
+		// Redraw the menu bar border on top of all content so elements appear behind it
+		{
+			auto* window = ImGui::GetCurrentWindowRead();
+			const float border = ImGui::GetStyle().WindowBorderSize;
+			if (window && border > 0.0f) {
+				ImU32 borderCol = ImGui::GetColorU32(ImGuiCol_Border);
+				window->DrawList->AddRect(window->Pos, ImVec2(window->Pos.x + window->Size.x, window->Pos.y + window->Size.y), borderCol, 0.0f, 0, border);
+			}
+		}
+
 		ImGui::EndMainMenuBar();
 	}
 
@@ -1379,8 +1408,7 @@ void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std:
 			weatherWidget->NavigateToFeatureSetting(featureName, settingName);
 
 			// Focus the widget window
-			std::string windowName = std::format("{}###widget_{}", weatherWidget->GetEditorID(), (void*)weatherWidget);
-			ImGui::SetWindowFocus(windowName.c_str());
+			ImGui::SetWindowFocus(weatherWidget->GetWindowTitle().c_str());
 			break;
 		}
 	}
@@ -1388,6 +1416,7 @@ void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std:
 
 EditorWindow::~EditorWindow()
 {
+	ShowGameMenus();
 	delete tempTexture;
 	weatherWidgets.clear();
 	lightingTemplateWidgets.clear();
@@ -1420,23 +1449,27 @@ void EditorWindow::SetupResources()
 	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets);
 }
 
-void EditorWindow::Draw()
+void EditorWindow::UpdateOpenState()
 {
-	// Track editor open state for vanity camera management
 	static bool wasOpen = false;
 
 	if (open && !wasOpen) {
-		// Editor just opened - disable vanity camera and restore session
 		DisableVanityCamera();
+		HideGameMenus();
+		BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
 		RestoreSessionWidgets();
 	} else if (!open && wasOpen) {
-		// Editor just closed - restore vanity camera and save session
 		RestoreVanityCamera();
+		ShowGameMenus();
+		BackgroundBlur::SetWeatherEditorActive(false);
 		SaveSessionWidgets();
 	}
 
 	wasOpen = open;
+}
 
+void EditorWindow::Draw()
+{
 	// Re-enforce weather lock if active (handles time changes)
 	if (weatherLockActive && lockedWeather) {
 		auto sky = RE::Sky::GetSingleton();
@@ -1525,7 +1558,7 @@ void EditorWindow::LoadSettings()
 
 void EditorWindow::ShowSettingsWindow()
 {
-	ImGui::Begin("Settings", &showSettingsWindow);
+	Util::BeginWithRoundedClose("Settings", &showSettingsWindow);
 
 	if (ImGui::BeginTable("SettingsTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_NoHostExtendX)) {
 		ImGui::TableSetupColumn("Options", ImGuiTableColumnFlags_WidthStretch, 0.3f);
@@ -1914,6 +1947,13 @@ void EditorWindow::DrawTimeControls()
 		ImGui::Text("Adjust how fast time passes (vanilla: %.1fx)", kVanillaTimeScale);
 }
 
+bool EditorWindow::CanBeOpen()
+{
+	auto* player = globals::game::player;
+	auto* state = globals::state;
+	return player && player->parentCell && !state->isLoadingMenuOpen && !state->isMainMenuOpen;
+}
+
 void EditorWindow::DisableVanityCamera()
 {
 	if (vanityCameraDisabled)
@@ -1938,6 +1978,35 @@ void EditorWindow::RestoreVanityCamera()
 		setting->data.f = savedVanityCameraDelay;
 		vanityCameraDisabled = false;
 		logger::info("Vanity camera restored (delay: {})", savedVanityCameraDelay);
+	}
+}
+
+void EditorWindow::HideGameMenus()
+{
+	if (gameMenusHidden)
+		return;
+
+	// ShowMenus(false) stops the game from rendering to the back buffer.
+	// Without d3d12SwapChain, blur reads directly from that buffer and would freeze.
+	if (!globals::features::upscaling.d3d12SwapChainActive)
+		return;
+
+	if (auto ui = RE::UI::GetSingleton()) {
+		ui->ShowMenus(false);
+		gameMenusHidden = true;
+		logger::info("Game menus hidden for weather editor");
+	}
+}
+
+void EditorWindow::ShowGameMenus()
+{
+	if (!gameMenusHidden)
+		return;
+
+	if (auto ui = RE::UI::GetSingleton()) {
+		ui->ShowMenus(true);
+		gameMenusHidden = false;
+		logger::info("Game menus restored after weather editor");
 	}
 }
 

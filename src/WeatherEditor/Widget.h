@@ -128,6 +128,12 @@ public:
 		open = state;
 	}
 
+	/// Returns a window title with unique ImGui ID: "EditorID###FormID"
+	std::string GetWindowTitle() const
+	{
+		return std::format("{}###{}", GetEditorID(), GetFormID());
+	}
+
 	void Save();
 	void Load();
 	bool HasSavedFile() const;

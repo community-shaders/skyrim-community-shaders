@@ -10,6 +10,119 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
 	UseOptimisedMeshes)
 
+static bool IsChildWorldSpace(const RE::TESWorldSpace* ws)
+{
+	return ws && ws->parentWorld &&
+	       ws->parentUseFlags.all(RE::TESWorldSpace::ParentUseFlag::kUseLODData);
+}
+
+// Engine behavior: CellState value 6 is the transition/attached state.
+static constexpr auto kTransitionAttachedCellState = static_cast<RE::TESObjectCELL::CellState>(6);
+
+static bool ShouldCullAtCell(const RE::TES* tes, int32_t cellX, int32_t cellY, bool* isInGrid = nullptr)
+{
+	if (isInGrid)
+		*isInGrid = false;
+	if (!tes || !tes->gridCells)
+		return false;
+
+	const auto& gridCells = tes->gridCells;
+	const int32_t offsetX = tes->currentGridX - static_cast<int32_t>(gridCells->length >> 1);
+	const int32_t offsetY = tes->currentGridY - static_cast<int32_t>(gridCells->length >> 1);
+	const int32_t length = static_cast<int32_t>(gridCells->length);
+
+	const int32_t x = cellX - offsetX;
+	const int32_t y = cellY - offsetY;
+	if (x < 0 || y < 0 || x >= length || y >= length)
+		return false;
+
+	if (isInGrid)
+		*isInGrid = true;
+
+	if (const auto cell = gridCells->GetCell(x, y)) {
+		return cell->cellState.any(RE::TESObjectCELL::CellState::kAttached, kTransitionAttachedCellState);
+	}
+
+	return false;
+}
+
+struct CullCompletionState
+{
+	bool foundAttachedCell = false;
+	bool hasPotentiallyAttachableChild = false;
+
+	bool IsComplete() const
+	{
+		return foundAttachedCell && !hasPotentiallyAttachableChild;
+	}
+};
+
+// Cull waterParent children using tes->gridCells attachment state.
+// Pass tes explicitly when globals::game::tes is not ready (e.g., TES_SetWorldSpace).
+static CullCompletionState CullWaterParentByGridCells(RE::NiNode* waterParent, RE::TES* tes = nullptr)
+{
+	if (!tes)
+		tes = globals::game::tes;
+	if (!tes || !waterParent)
+		return {};
+
+	CullCompletionState state;
+
+	for (const auto& child : waterParent->GetChildren()) {
+		if (!child)
+			continue;
+		int32_t x, y;
+		Util::WorldToCell(child->world.translate, x, y);
+		bool isInGrid = false;
+		const bool cull = ShouldCullAtCell(tes, x, y, &isInGrid);
+		if (cull)
+			state.foundAttachedCell = true;
+		else if (isInGrid)
+			state.hasPotentiallyAttachableChild = true;
+		child->SetAppCulled(cull);
+	}
+
+	return state;
+}
+
+// Cull all tiles under every water LOD parent.
+static bool CullAllWaterLODParents(RE::NiNode* waterLOD, RE::TES* tes = nullptr)
+{
+	if (!waterLOD)
+		return false;
+
+	CullCompletionState aggregate;
+
+	for (const auto& waterParentPtr : waterLOD->GetChildren()) {
+		if (!waterParentPtr)
+			continue;
+		const auto waterParent = waterParentPtr->AsNode();
+		if (!waterParent)
+			continue;
+		const auto state = CullWaterParentByGridCells(waterParent, tes);
+		aggregate.foundAttachedCell = aggregate.foundAttachedCell || state.foundAttachedCell;
+		aggregate.hasPotentiallyAttachableChild = aggregate.hasPotentiallyAttachableChild || state.hasPotentiallyAttachableChild;
+	}
+
+	return aggregate.IsComplete();
+}
+
+void UnifiedWater::TryCompleteDeferredChildWorldspaceCull(RE::TES* tes)
+{
+	if (!pendingChildWsCull.load(std::memory_order_acquire) ||
+		!IsChildWorldSpace(currentPlayerWorldSpace.load(std::memory_order_acquire)) ||
+		!gWaterLOD || !*gWaterLOD)
+		return;
+
+	if (!tes)
+		tes = cachedTes.load(std::memory_order_acquire);
+	if (!tes || !tes->gridCells)
+		return;
+
+	if (CullAllWaterLODParents(*gWaterLOD, tes))
+		pendingChildWsCull.store(false, std::memory_order_release);
+}
+
 void UnifiedWater::LoadSettings(json& o_json)
 {
 	settings = o_json;
@@ -316,16 +429,52 @@ int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShade
 
 void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior)
 {
+	const bool enteringChild = IsChildWorldSpace(worldSpace);
+
+	// Set before func so attachment hooks fired inside func see the new worldspace.
+	auto& uw = globals::features::unifiedWater;
+	uw.currentPlayerWorldSpace.store(worldSpace, std::memory_order_release);
+	uw.cachedTes.store(tes, std::memory_order_release);
+	if (!enteringChild)
+		uw.pendingChildWsCull.store(false, std::memory_order_release);  // leaving child WS: discard any stale pending cull
+
 	func(tes, worldSpace, isExterior);
 
-	globals::features::unifiedWater.waterCache->SetCurrentWorldSpace(worldSpace);
+	if (!uw.waterCache) {
+		uw.pendingChildWsCull.store(false, std::memory_order_release);
+		return;
+	}
+
+	uw.waterCache->SetCurrentWorldSpace(worldSpace);
+
+	if (enteringChild) {
+		// BGSTerrainBlock_Attach calls Enable() on block attach.
+		// Child-worldspace transitions can keep old LOD blocks attached, so re-enable here.
+		if (const auto waterSystem = globals::game::waterSystem)
+			waterSystem->Enable();
+
+		// Try an immediate cull with tes (globals::game::tes may still be null).
+		// Newly transitioned cells are often not attached yet, so deferred retries are still needed.
+		if (uw.gWaterLOD && *uw.gWaterLOD && tes && tes->gridCells)
+			CullAllWaterLODParents(*uw.gWaterLOD, tes);
+
+		// Keep deferred retries enabled until attached cells are observed and culled.
+		uw.pendingChildWsCull.store(true, std::memory_order_release);
+	}
 }
 
 void UnifiedWater::TES_DestroySkyCell::thunk(RE::TES* tes)
 {
 	func(tes);
 
-	globals::features::unifiedWater.waterCache->SetCurrentWorldSpace(nullptr);
+	auto& uw = globals::features::unifiedWater;
+	uw.currentPlayerWorldSpace.store(nullptr, std::memory_order_release);
+	uw.pendingChildWsCull.store(false, std::memory_order_release);
+	uw.cachedTes.store(nullptr, std::memory_order_release);
+	if (!uw.waterCache)
+		return;
+
+	uw.waterCache->SetCurrentWorldSpace(nullptr);
 }
 
 void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::BGSTerrainNode* node, RE::BSMultiBoundNode* waterParent)
@@ -336,40 +485,21 @@ void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::
 	if (node->GetLODLevel() != 4)
 		return;
 
-	const auto tes = globals::game::tes;
-	if (!tes || !tes->gridCells)
-		return;
-
-	const auto& gridCells = tes->gridCells;
-
-	const int32_t offsetX = tes->currentGridX - static_cast<int32_t>(gridCells->length >> 1);
-	const int32_t offsetY = tes->currentGridY - static_cast<int32_t>(gridCells->length >> 1);
-	const int32_t length = static_cast<int32_t>(gridCells->length);
-
-	for (const auto& child : waterParent->GetChildren()) {
-		if (!child)
-			continue;
-
-		int32_t x, y;
-		Util::WorldToCell(child->world.translate, x, y);
-
-		x -= offsetX;
-		y -= offsetY;
-
-		bool cull = false;
-		if (x >= 0 && y >= 0 && x < length && y < length) {
-			if (const auto cell = gridCells->GetCell(x, y); cell && cell->cellState.any(RE::TESObjectCELL::CellState::kAttached, static_cast<RE::TESObjectCELL::CellState>(6)))
-				cull = true;
-		}
-
-		child->SetAppCulled(cull);
-	}
+	CullWaterParentByGridCells(waterParent);
 }
 
 void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 {
-	const auto waterSystem = RE::TESWaterSystem::GetSingleton();
-	const auto& singleton = globals::features::unifiedWater;
+	const auto waterSystem = globals::game::waterSystem;
+	auto& uw = globals::features::unifiedWater;
+
+	if (!waterSystem || !uw.waterCache || !uw.gWaterLOD || !*uw.gWaterLOD) {
+		func(block);
+		return;
+	}
+
+	// Additional game-thread retry path for deferred child-WS cull completion.
+	uw.TryCompleteDeferredChildWorldspaceCull(uw.cachedTes.load(std::memory_order_acquire));
 
 	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
 	bool attaching = false;
@@ -395,7 +525,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		const auto lodLevel = node->GetLODLevel();
 		const auto worldSpace = block->node->manager->worldSpace;
 
-		const auto instructions = singleton.waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
+		const auto instructions = uw.waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
 		if (!instructions) {
 			logger::warn("[Unified Water] No instructions found for {} chunk at {}, {}", worldSpace->GetFormEditorID(), node->baseCellX, node->baseCellY);
 			func(block);
@@ -408,7 +538,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 
 			RE::NiCloningProcess cloningProcess;
 
-			const auto targetShape = lodLevel > 4 || singleton.settings.UseOptimisedMeshes ? singleton.optimisedWaterMesh : singleton.waterMesh;
+			const auto targetShape = lodLevel > 4 || uw.settings.UseOptimisedMeshes ? uw.optimisedWaterMesh : uw.waterMesh;
 			RE::BSTriShape* shape = targetShape->CreateClone(cloningProcess)->AsTriShape();
 
 			const auto posX = (instruction.x - node->baseCellX) * 4096.0f + instruction.size * 2048.0f;
@@ -449,12 +579,26 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		}
 	}
 
-	(*singleton.gWaterLOD)->AttachChild(block->water, true);
+	(*uw.gWaterLOD)->AttachChild(block->water, true);
 	waterSystem->Enable();
+
+	// BGSTerrainNode_UpdateWaterMeshSubVisibility never fires in child worldspaces.
+	// Cull newly built tiles here; full deferred retries are handled by
+	// TryCompleteDeferredChildWorldspaceCull().
+	if (IsChildWorldSpace(uw.currentPlayerWorldSpace.load(std::memory_order_acquire))) {
+		const auto tes = uw.cachedTes.load(std::memory_order_acquire);
+		if (tes && tes->gridCells) {
+			for (const auto& [shape, instruction] : built) {
+				const bool cull = ShouldCullAtCell(tes, instruction->x, instruction->y);
+				shape->SetAppCulled(cull);
+			}
+		}
+	}
 }
 
 void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 {
+	auto& uw = globals::features::unifiedWater;
 	const auto water = block->water;
 	block->water = nullptr;
 
@@ -468,14 +612,15 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 			water->DetachChildAt(--count);
 		}
 
-		(*globals::features::unifiedWater.gWaterLOD)->DetachChild(water);
+		(*uw.gWaterLOD)->DetachChild(water);
 		block->waterAttached = false;
 	}
 }
 
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
-	const auto& singleton = globals::features::unifiedWater;
+	auto& uw = globals::features::unifiedWater;
+
 	// Fix BSWaterShaderProperty.plane after interior->exterior transitions.
 	// The plane feeds ReflectPlane in the PerGeometry cbuffer. When corrupted (e.g., plane.constant = 0
 	// or garbage), the shader's refractionPlaneMul calculation produces extreme values causing flickering.
@@ -500,12 +645,12 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		}
 	}
 
-	if (singleton.flowmap) {
+	if (uw.flowmap) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
-		*singleton.gFlowMapSize = singleton.flowmap->GetWidth();                                            // ObjectUV.x
-		singleton.gDisplacementMeshFlowCellOffset->x = static_cast<float>(singleton.flowmap->GetHeight());  // ObjectUV.y
-		singleton.gDisplacementMeshFlowCellOffset->y = 1.0f - pass->geometry->local.scale;                  // ObjectUV.z (counters 1 - x in SetupGeometry)
+		*uw.gFlowMapSize = uw.flowmap->GetWidth();                                            // ObjectUV.x
+		uw.gDisplacementMeshFlowCellOffset->x = static_cast<float>(uw.flowmap->GetHeight());  // ObjectUV.y
+		uw.gDisplacementMeshFlowCellOffset->y = 1.0f - pass->geometry->local.scale;           // ObjectUV.z (counters 1 - x in SetupGeometry)
 
 		if (const auto prop = pass->geometry->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
@@ -515,10 +660,10 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			// xy is world cell flowmap based (0,0 is corner of flow map), zw is world cell
 			// Funky maths here to counter what's being done in SetupGeometry
 			// Previously these values were relative to the 5x5 flow grid centered on the player
-			waterShaderProp->flowX = x + singleton.flowmap->GetOffsetX();                                                                   // CellTexCoordOffset.x
-			waterShaderProp->flowY = y + singleton.flowmap->GetOffsetY() + singleton.flowmap->GetWidth() - singleton.flowmap->GetHeight();  // CellTexCoordOffset.y
-			waterShaderProp->cellX = x;                                                                                                     // CellTexCoordOffset.z
-			waterShaderProp->cellY = y;                                                                                                     // CellTexCoordOffset.w
+			waterShaderProp->flowX = x + uw.flowmap->GetOffsetX();                                                     // CellTexCoordOffset.x
+			waterShaderProp->flowY = y + uw.flowmap->GetOffsetY() + uw.flowmap->GetWidth() - uw.flowmap->GetHeight();  // CellTexCoordOffset.y
+			waterShaderProp->cellX = x;                                                                                // CellTexCoordOffset.z
+			waterShaderProp->cellY = y;                                                                                // CellTexCoordOffset.w
 		}
 	}
 
@@ -529,17 +674,23 @@ void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESW
 {
 	func(waterSystem);
 
-	const auto& singleton = globals::features::unifiedWater;
-	if (!singleton.flowmap)
+	auto& uw = globals::features::unifiedWater;
+
+	// Game-thread fallback for deferred child-worldspace cull completion.
+	// Needed when entering child worldspaces with already-attached LOD blocks,
+	// where BGSTerrainBlock_Attach/UpdateWaterMeshSubVisibility may not run.
+	uw.TryCompleteDeferredChildWorldspaceCull(uw.cachedTes.load(std::memory_order_acquire));
+
+	if (!uw.flowmap)
 		return;
 
-	const float posX = singleton.gDisplacementMeshPos->x / 4096.0f;
-	const float posY = singleton.gDisplacementMeshPos->y / 4096.0f;
-	const float offsetX = static_cast<float>(singleton.flowmap->GetOffsetX());
-	const float offsetY = static_cast<float>(singleton.flowmap->GetOffsetY());
-	const float height = static_cast<float>(singleton.flowmap->GetHeight());
+	const float posX = uw.gDisplacementMeshPos->x / 4096.0f;
+	const float posY = uw.gDisplacementMeshPos->y / 4096.0f;
+	const float offsetX = static_cast<float>(uw.flowmap->GetOffsetX());
+	const float offsetY = static_cast<float>(uw.flowmap->GetOffsetY());
+	const float height = static_cast<float>(uw.flowmap->GetHeight());
 
 	// CellTexCoordOffset.xyzw below - applies to displacement water only
 	// Previously the values were calculated relative to the 5x5 flow grid
-	*singleton.gDisplacementCellTexCoordOffset = float4(posX + offsetX, height - (posY + offsetY), posX, 1 - posY);
+	*uw.gDisplacementCellTexCoordOffset = float4(posX + offsetX, height - (posY + offsetY), posX, 1 - posY);
 }
