@@ -17,10 +17,39 @@
 
 #include <d3d11.h>
 
+#include "RE/B/BSShadowLight.h"
+#include "RE/S/ShadowSceneNode.h"
+
 struct ImVec4;
 
 namespace ShadowCasterManager
 {
+	// -------------------------------------------------------------------------
+	// shadowLightsAccum iterator
+	//
+	// shadowLightsAccum is a flat slot array where a dual-paraboloid (DP) light
+	// occupies shadowMapCount==2 consecutive physical slots (the second is null).
+	// A plain range-for visits every physical slot and will see the null padding.
+	// ForEachShadowLight advances by shadowMapCount so each logical light is
+	// visited exactly once, matching the game's own iteration contract.
+	//
+	// Usage:
+	//   ShadowCasterManager::ForEachShadowLight(ssn->GetRuntimeData().shadowLightsAccum,
+	//       [](RE::BSShadowLight* light) { ... });
+	// -------------------------------------------------------------------------
+	template <typename Fn>
+	inline void ForEachShadowLight(const RE::BSTArray<RE::BSShadowLight*>& accum, Fn&& fn)
+	{
+		int idx = 0;
+		while (true) {
+			RE::BSShadowLight* light = accum[idx];
+			if (!light)
+				break;
+			fn(light);
+			idx += light->shadowMapCount;
+		}
+	}
+
 	// -------------------------------------------------------------------------
 	// Formula parameter indices
 	// -------------------------------------------------------------------------
@@ -370,6 +399,11 @@ namespace ShadowCasterManager
 
 	/// Returns a read-only view of the active light pool for UI/visualization.
 	const LightContainer& GetLights();
+
+	/// Returns the stable container-slot index i for a shadow light (0 = sun, 1+ = point lights).
+	/// Uses the internal s_lights pool — does not read the descriptor's shadowmapIndex field,
+	/// which may be corrupted by ReturnShadowmaps().  Returns -1 if the light is not active.
+	int32_t GetShadowSlot(RE::BSShadowLight* light);
 
 	/// Draw shadow-specific statistics lines (slot usage, importance count).
 	/// Call from LightLimitFix::DrawSettings() inside its Statistics tree node.

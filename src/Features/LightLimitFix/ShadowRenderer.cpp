@@ -99,43 +99,42 @@ void LightLimitFix::CopyPointShadowData()
 	ID3D11ShaderResourceView* shadowMapsSRV =
 		globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
 
-	auto& shadowAccum = shadowSceneNode->GetRuntimeData().shadowLightsAccum;
 	uint32_t plCount = 0;
 	uint32_t unshadowedLights = 0;
-	int mapIndex = 0;
-	while (true) {
-		auto light = shadowAccum[mapIndex];
-		if (!light)
-			break;
+	ShadowCasterManager::ForEachShadowLight(shadowSceneNode->GetRuntimeData().shadowLightsAccum,
+		[&](RE::BSShadowLight* light) {
+			// Use the stable container-slot index from s_lights rather than reading
+			// shadowmapDescriptors[0].shadowmapIndex, which may have been corrupted by
+			// ReturnShadowmaps() (called via Hook_DisableColorMask) after ScheduleShadowCasters
+			// fixed it but before this function runs.
+			int32_t stableSlot = ShadowCasterManager::GetShadowSlot(light);
+			if (stableSlot < 0 || static_cast<uint32_t>(stableSlot) >= slots) {
+				unshadowedLights++;
+				plCount++;
+				return;
+			}
+			uint32_t depthSlot = static_cast<uint32_t>(stableSlot);
 
-		mapIndex += light->shadowMapCount;
+			{
+				float shadowTypeF = light->GetIsParabolicLight() ? float(light->shadowMapCount == 2 ? 2 : 1) : 0.f;
+				sd[depthSlot].ShadowParam.x = shadowTypeF;
 
-		if (plCount < slots) {
-			uint32_t depthSlot = globals::game::isVR ?
-			                         light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
-			                         light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+				if (globals::game::isVR)
+					SetShadowParameters(light->GetVRRuntimeData(), sd[depthSlot]);
+				else
+					SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
 
-			float shadowTypeF = light->GetIsParabolicLight() ? float(light->shadowMapCount == 2 ? 2 : 1) : 0.f;
-			sd[depthSlot].ShadowParam.x = shadowTypeF;
+				float range = light->light->GetLightRuntimeData().radius.x;
+				// -1.0 sentinel: shader returns 0.0 (fully dark) → light invisible.
+				// 0.0 means unwritten slot → shader returns 1.0 (fully lit, no shadow).
+				uintptr_t lightKey = reinterpret_cast<uintptr_t>(light);
+				sd[depthSlot].ShadowParam.y = ShadowCasterManager::IsSuppressed(lightKey) ? -1.0f : range;
+				ShadowCasterManager::RecordSlot(depthSlot,
+					{ static_cast<uint32_t>(shadowTypeF), range, true, lightKey });
+			}
 
-			if (globals::game::isVR)
-				SetShadowParameters(light->GetVRRuntimeData(), sd[depthSlot]);
-			else
-				SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
-
-			float range = light->light->GetLightRuntimeData().radius.x;
-			// -1.0 sentinel: shader returns 0.0 (fully dark) → light invisible.
-			// 0.0 means unwritten slot → shader returns 1.0 (fully lit, no shadow).
-			uintptr_t lightKey = reinterpret_cast<uintptr_t>(light);
-			sd[depthSlot].ShadowParam.y = ShadowCasterManager::IsSuppressed(lightKey) ? -1.0f : range;
-			ShadowCasterManager::RecordSlot(depthSlot,
-				{ static_cast<uint32_t>(shadowTypeF), range, true, lightKey });
-		} else {
-			unshadowedLights++;
-		}
-
-		plCount++;
-	}
+			plCount++;
+		});
 
 	if (plCount != shadowLightCount || ShadowCasterManager::GetSlotUsage() != prevSlotUsage || unshadowedLights != shadowUnshadowedLightCount) {
 		shadowLightCount = plCount;
