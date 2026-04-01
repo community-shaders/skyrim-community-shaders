@@ -42,6 +42,7 @@ public:
 	virtual inline std::string GetName() { return "Snow Cover"; }
 	virtual inline std::string GetShortName() { return "SnowCover"; }
 	inline std::string_view GetShaderDefineName() override { return "SNOW_COVER"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 

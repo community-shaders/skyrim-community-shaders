@@ -2381,7 +2381,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		float3 snowNormal = worldNormal;
 #		if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
-			snowNormal.z = max(snowNormal.z, 0.5);
+			snowNormal.z = max(snowNormal.z, 0.75);
 			snowNormal = normalize(snowNormal);
 		float3 treeSnowNormal = snowNormal;
 #		endif
@@ -2397,7 +2397,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (snowFactor > 0){
 		float3 sd = FrameBuffer::ViewToWorld(-float3(ddx_fine(snowFactor), ddy_fine(snowFactor), 0), false, eyeIndex);
 #	if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
-		worldNormal = normalize(lerp(worldNormal, treeSnowNormal, snowFactor) + sd);
+		worldNormal = normalize(lerp(worldNormal, float3(0, 0, 1), snowFactor) + sd);
 #	elif defined(MODELSPACENORMALS) && !defined(SKINNED)
 		worldNormal = normalize(lerp(worldNormal, snowNormal, snowFactor*0.75) + sd);
 #	else
