@@ -44,6 +44,9 @@ namespace ShadowCasterManager
 		kFormulaParam_LightPortalStrict,
 		kFormulaParam_LightNS,
 		kFormulaParam_LightConverted,
+		kFormulaParam_LightDisplacement,    ///< distance moved since last shadow map render (game units)
+		kFormulaParam_PlayerLightDistance,  ///< distance from the player character to the light (game units)
+		kFormulaParam_LightImportance,      ///< contribution importance: lum(diffuse*fade) * max(att_cam, att_plr); set in interval loop only
 
 		kFormulaParam_CameraX,
 		kFormulaParam_CameraY,
@@ -152,17 +155,32 @@ namespace ShadowCasterManager
 		// --- Formula strings (exprtk expressions) ---
 
 		/// Light priority scoring formula.  Available variables:
-		/// lightindex, lightintensity, lightdistance, lightradius, lightx/y/z,
+		/// lightindex, lightintensity, lightdistance, playerlightdistance, lightradius, lightx/y/z,
 		/// lightr/g/b, lightambientr/g/b, lightchosenlastframe, lightneverfades,
 		/// lightportalstrict, lightns, lightconverted, camerax/y/z, isinterior, timeofday
 		std::string ScoreFormula = "lightradius * lightintensity / (1 + ((1 - lightneverfades) * lightdistance) / 1000) * (1 + lightchosenlastframe * 0.3)";
 
 		/// Redraw interval formula (per light).  Higher = less frequent redraws.
-		std::string RedrawIntervalFormula = "min(10, (max(0, lightdistance - lightradius * 0.5) / 500) / max(0.5, lightintensity)) * (lightconverted * 5 + 1)";
+		/// Uses min(lightdistance, playerlightdistance) so that a light near the player
+		/// character is always treated as close even in third-person (camera is further away).
+		/// `lightdisplacement` further reduces the interval for lights that have moved.
+		std::string RedrawIntervalFormula = "min(10, (max(0, min(lightdistance, playerlightdistance) - lightradius * 0.5) / 500) / max(0.5, lightintensity)) * (lightconverted * 5 + 1) - min(lightdisplacement / 5, 10)";
 
 		/// Redraw budget formula (per frame, in ms).  Used in Formula mode.
 		/// Key variables: frametime (smoothed ms), frametarget (90th-pct ms), stableframes.
 		std::string RedrawBudgetFormula = "max(0, frametarget - frametime - 0.5) * min(stableframes, 45) / 45";
+
+		// --- Importance scheduling curve ---
+
+		/// Interval multiplier applied to high-importance lights (importance >= 1).
+		/// Lower values make frequently-contributing lights update shadows more aggressively.
+		/// Default: 0.05 (updates 40x more frequently than unimportant lights).
+		float ImportanceMinScale = 0.05f;
+
+		/// Interval multiplier applied to unimportant lights (importance == 0).
+		/// Higher values defer dim or distant lights more aggressively.
+		/// Default: 2.0.
+		float ImportanceMaxScale = 2.0f;
 	};
 
 	NLOHMANN_JSON_SERIALIZE_ENUM(BudgetModeEnum,
@@ -182,7 +200,9 @@ namespace ShadowCasterManager
 		PromoteNormalToShadow,
 		ScoreFormula,
 		RedrawIntervalFormula,
-		RedrawBudgetFormula)
+		RedrawBudgetFormula,
+		ImportanceMinScale,
+		ImportanceMaxScale)
 
 	// -------------------------------------------------------------------------
 	// Per-light schedule entry
@@ -203,11 +223,24 @@ namespace ShadowCasterManager
 		/// Slot index in the LightContainer array.
 		int32_t Index{ -1 };
 
+		/// World position of the light at its last rendered shadow map frame.
+		/// Used to prioritise redraws for lights that have moved significantly.
+		RE::NiPoint3 lastRenderedPos{ 0.0f, 0.0f, 0.0f };
+
+		/// Contribution-weighted importance score from the last scheduling frame.
+		/// importance = luminance(diffuse × fade) × attenuation²(viewer, radius)
+		/// where attenuation = max(1 − (dist/radius)², 0)  (Skyrim's quadratic falloff).
+		/// Typically in [0, 1]; can exceed 1 for very bright lights at close range.
+		/// Higher = light strongly illuminates the area around the viewer.
+		float lastImportance{ 0.0f };
+
 		void Clear()
 		{
 			Light = nullptr;
 			LastDrawnFrame = -1;
 			RedrawFrame = false;
+			lastRenderedPos = { 0.0f, 0.0f, 0.0f };
+			lastImportance = 0.0f;
 		}
 	};
 
@@ -301,6 +334,10 @@ namespace ShadowCasterManager
 	/// Returns the number of shadow slots consumed this frame.
 	uint32_t GetSlotUsage();
 
+	/// Returns the number of active shadow-casting lights whose importance score
+	/// exceeds 0.1 (lights meaningfully illuminating the camera or player area).
+	uint32_t GetHighImportanceCount();
+
 	/// Read-only view of the per-slot metadata for the current frame.
 	const std::vector<ShadowSlotInfo>& GetSlotInfos();
 
@@ -334,7 +371,7 @@ namespace ShadowCasterManager
 	/// Returns a read-only view of the active light pool for UI/visualization.
 	const LightContainer& GetLights();
 
-	/// Draw shadow-specific statistics lines (slot usage, dropped count).
+	/// Draw shadow-specific statistics lines (slot usage, importance count).
 	/// Call from LightLimitFix::DrawSettings() inside its Statistics tree node.
 	/// shadowLightCount / shadowUnshadowedLightCount are owned by LightLimitFix.
 	void DrawShadowStats(uint32_t shadowLightCount, uint32_t shadowUnshadowedLightCount);

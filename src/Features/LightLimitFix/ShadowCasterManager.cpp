@@ -59,6 +59,9 @@ namespace ShadowCasterManager
 		{ "lightportalstrict", "1 if portal-strict (always 1 for shadow casters)", kFormulaParam_LightPortalStrict },
 		{ "lightns", "1 if promoted from normal light (PromoteNormalToShadow)", kFormulaParam_LightNS },
 		{ "lightconverted", "1 if light is in the converted (non-shadow) slot range", kFormulaParam_LightConverted },
+		{ "lightdisplacement", "distance this light moved since its last shadow map render (game units; 0 when not yet tracked or in score formula)", kFormulaParam_LightDisplacement },
+		{ "playerlightdistance", "distance from the player character to the light (game units; falls back to lightdistance when player unavailable)", kFormulaParam_PlayerLightDistance },
+		{ "lightimportance", "contribution score: lum(diffuse*fade) * max(att_cam,att_plr) where att=(1-(dist/radius)^2)^2; 0 in score formula", kFormulaParam_LightImportance },
 		{ "camerax", "camera world X", kFormulaParam_CameraX },
 		{ "cameray", "camera world Y", kFormulaParam_CameraY },
 		{ "cameraz", "camera world Z", kFormulaParam_CameraZ },
@@ -194,6 +197,7 @@ namespace ShadowCasterManager
 	// Budget tracking for UI display
 	static int32_t s_redrawnLightsThisFrame = 0;
 	static int32_t s_totalShadowLightsThisFrame = 0;
+	static uint32_t s_highImportanceLightCount = 0;
 	static float s_redrawnLightsSmoothed = 0.0f;  // EMA-smoothed for stable UI display
 
 	static float ComputeFrameTimePercentile90()
@@ -801,6 +805,9 @@ namespace ShadowCasterManager
 	{
 		FormulaHelper::SetParam(kFormulaParam_LightConverted, 0.0);
 		FormulaHelper::SetParam(kFormulaParam_LightIndex, index);
+		FormulaHelper::SetParam(kFormulaParam_LightDisplacement, 0.0);    // overridden per-entry in redraw interval loop
+		FormulaHelper::SetParam(kFormulaParam_PlayerLightDistance, 0.0);  // overridden below after light position is known
+		FormulaHelper::SetParam(kFormulaParam_LightImportance, 0.0);      // overridden per-entry in redraw interval loop; 0 in score formula
 
 		// Chosen-last-frame bonus
 		double chosenLastFrame = 0.0;
@@ -858,6 +865,17 @@ namespace ShadowCasterManager
 
 		float dx = x - camx, dy = y - camy, dz = z - camz;
 		FormulaHelper::SetParam(kFormulaParam_LightDistance, sqrtf(dx * dx + dy * dy + dz * dz));
+
+		// Player-to-light distance: ensures third-person shadow maps redraw when the
+		// player character is inside a light's radius even if the camera is outside.
+		double playerLightDist = FormulaHelper::GetParam(kFormulaParam_LightDistance);
+		auto* plr = RE::PlayerCharacter::GetSingleton();
+		if (plr) {
+			auto pp = plr->GetPosition();
+			float pdx = x - pp.x, pdy = y - pp.y, pdz = z - pp.z;
+			playerLightDist = static_cast<double>(sqrtf(pdx * pdx + pdy * pdy + pdz * pdz));
+		}
+		FormulaHelper::SetParam(kFormulaParam_PlayerLightDistance, playerLightDist);
 	}
 
 	static double CalculateLightScore(const RE::BSShadowLight* light, const RE::NiCamera* camera, int32_t index)
@@ -1313,11 +1331,105 @@ namespace ShadowCasterManager
 						SetupLightFormula(e->Light, camera, 0);
 						if (e->Index >= s_settings.ShadowLightCount)
 							FormulaHelper::SetParam(kFormulaParam_LightConverted, 1.0);
+
+						// Compute how far the light has moved since its last shadow map render.
+						// Exposed as `lightdisplacement` so the formula can prioritise fast-moving
+						// lights (e.g. player torches) without relying on distance-to-camera alone.
+						if (auto* nilight = e->Light->light.get()) {
+							auto& curr = nilight->world.translate;
+							float dx = curr.x - e->lastRenderedPos.x;
+							float dy = curr.y - e->lastRenderedPos.y;
+							float dz = curr.z - e->lastRenderedPos.z;
+							FormulaHelper::SetParam(kFormulaParam_LightDisplacement,
+								static_cast<double>(sqrtf(dx * dx + dy * dy + dz * dz)));
+						}
+
 						interval = s_formulaRedrawInterval->Calculate();
 					}
 					interval += 1.0;
+
+					// Shadow projection score — the physically motivated priority signal.
+					//
+					// A shadow from an occluder between light L and receiver R projects in
+					// direction normalize(R − L).  The shadow is most visible when this
+					// direction aligns with the camera forward vector.  Using the player
+					// character as the shadow receiver proxy gives the correct result for
+					// the flicker case (third-person player shadow) and is a reasonable
+					// approximation for general scene shadows.
+					//
+					//   shadowScore = dot(camFwd, normalize(playerPos − lightPos))
+					//     +1 = shadow projects directly at camera  (very visible, high priority)
+					//      0 = shadow projects sideways            (partially visible)
+					//     -1 = shadow projects away from camera    (unlikely to be seen)
+					//
+					// Contribution-weighted importance scheduling
+					// ══════════════════════════════════════════════
+					// importance = luminance(diffuse × fade) × max(att_cam, att_plr)
+					//
+					// att(pos) = max(1 − (dist/radius)², 0)²   [Skyrim's quadratic falloff]
+					//
+					// Physically: this is proportional to how much illumination this
+					// light delivers at the camera or player position.  Dim or distant
+					// lights score near zero; bright lights with the viewer inside the
+					// radius score near 1 (or above for very intense lights).
+					//
+					// Interval multiplier:  2.0 × (0.025/2.0)^importance
+					//   importance = 0 → ×2.0  (deprioritise background lights)
+					//   importance = 0.5 → ×0.32 (~3× faster)
+					//   importance = 1.0 → ×0.05 (~40× faster, near-forced redraw)
+					//
+					// This replaces the old shadow-projection dot product (which ignored
+					// brightness) and the binary inside-radius boost (hard threshold).
+					// A reference for this technique: Wimmer & Scherzer 2006,
+					// "Instant Shadow Maps", Sec. 3 (importance-based priority);
+					// Valient 2014, "Practical Shadow Maps" (luminance × coverage).
+
+					float importance = 0.0f;
+
+					if (auto* ni = e->Light->light.get()) {
+						auto& rtd = ni->GetLightRuntimeData();
+						float lightRadius = rtd.radius.x;
+						auto lp = ni->world.translate;
+
+						// Perceptual luminance (Rec.709) × engine fade factor.
+						float lum = 0.2126f * rtd.diffuse.red +
+						            0.7152f * rtd.diffuse.green +
+						            0.0722f * rtd.diffuse.blue;
+						float effectiveLum = lum * rtd.fade;
+
+						// Quadratic attenuation matching Skyrim's point-light falloff.
+						auto computeAtt = [&](const RE::NiPoint3& pos) -> float {
+							float dx = pos.x - lp.x, dy = pos.y - lp.y, dz = pos.z - lp.z;
+							float dist2 = dx * dx + dy * dy + dz * dz;
+							float r2 = lightRadius * lightRadius;
+							if (dist2 >= r2)
+								return 0.0f;
+							float t = dist2 / r2;
+							float a = 1.0f - t;
+							return a * a;  // squared: matches (1-(d/r)^2)^2 falloff
+						};
+
+						auto* plr = RE::PlayerCharacter::GetSingleton();
+						float attCam = camera ? computeAtt(camera->world.translate) : 0.0f;
+						float attPlr = plr ? computeAtt(plr->GetPosition()) : attCam;
+						importance = effectiveLum * std::max(attCam, attPlr);
+					}
+
+					// Exponential interval scaling: maxScale*(minScale/maxScale)^clamp(importance,0,1)
+					float kMaxMult = s_settings.ImportanceMaxScale;
+					float kMinMult = std::min(s_settings.ImportanceMinScale, kMaxMult);
+					float clampedImp = std::min(importance, 1.0f);
+					interval *= static_cast<double>(kMaxMult * powf(kMinMult / kMaxMult, clampedImp));
+
+					FormulaHelper::SetParam(kFormulaParam_LightImportance, static_cast<double>(importance));
 					e->RedrawScore = e->LastDrawnFrame + interval;
+					e->lastImportance = importance;
 				}
+
+				// Count lights meaningfully illuminating the viewer area.
+				s_highImportanceLightCount = static_cast<uint32_t>(
+					std::count_if(pending.begin(), pending.end(),
+						[](const LightEntry* e) { return e->lastImportance > 0.1f; }));
 
 				std::sort(pending.begin(), pending.end(),
 					[](const LightEntry* a, const LightEntry* b) { return a->RedrawScore < b->RedrawScore; });
@@ -1371,6 +1483,10 @@ namespace ShadowCasterManager
 					s_budget.BeginLight(e.Light, 0);
 					EnableLight(e.Light, camera, ssn, i);
 					s_budget.EndLight(e.Light, 0);
+
+					// Record position so displacement-based redraw priority is correct next cycle.
+					if (auto* nilight = e.Light->light.get())
+						e.lastRenderedPos = nilight->world.translate;
 				}
 				ShadowField(e.Light, maskIndex) = static_cast<uint32_t>(i);
 				doneLightCount++;
@@ -1390,6 +1506,23 @@ namespace ShadowCasterManager
 					GameSetShadowCasterSlot(ssn, e.Light, endIdx, 1);
 					endIdx += e.Light->shadowMapCount;
 					ShadowField(e.Light, maskIndex) = static_cast<uint32_t>(i);
+
+					// GameSetShadowCasterSlot (via Accumulate) overwrites shadowmapIndex
+					// with the sequential endIdx counter, diverging from the stable
+					// container-slot index that CopyPointShadowData expects.
+					// Hemi lights (non-omni parabolic, shadowMapCount==1) are the
+					// confirmed affected type; restore their index to i so they sample
+					// the correct depth-atlas slice.
+					if (s_settings.ShadowLightCount > 4 && i < s_settings.ShadowLightCount &&
+						e.Light->GetIsParabolicLight() && !e.Light->GetIsOmniLight()) {
+						if (REL::Module::IsVR()) {
+							for (auto& desc : e.Light->GetVRRuntimeData().shadowmapDescriptors)
+								desc.shadowmapIndex = static_cast<uint32_t>(i);
+						} else {
+							for (auto& desc : e.Light->GetRuntimeData().shadowmapDescriptors)
+								desc.shadowmapIndex = static_cast<uint32_t>(i);
+						}
+					}
 				}
 			}
 		}
@@ -2117,6 +2250,11 @@ namespace ShadowCasterManager
 		return s_shadowSlotUsage;
 	}
 
+	uint32_t GetHighImportanceCount()
+	{
+		return s_highImportanceLightCount;
+	}
+
 	const std::vector<ShadowSlotInfo>& GetSlotInfos()
 	{
 		return s_shadowSlotInfos;
@@ -2147,6 +2285,8 @@ namespace ShadowCasterManager
 			uint32_t idx;  // shadow slot index; only meaningful when inScene=true
 			bool inScene;  // currently occupies a shadow slot this frame
 			ShadowSlotInfo info;
+			float importance{ 0.0f };  // contribution-weighted importance (luminance × fade × attenuation²)
+			bool highImp{ false };     // importance > 0.1 — light meaningfully illuminates the viewer area
 		};
 
 		// Build index of lights currently in scene (slot -> info).
@@ -2157,24 +2297,50 @@ namespace ShadowCasterManager
 			if (s_shadowSlotInfos[i].valid)
 				sceneSlot[s_shadowSlotInfos[i].lightKey] = i;
 
+		// Build lightKey -> LightEntry* lookup for debug columns.
+		static std::unordered_map<uintptr_t, const LightEntry*> lightEntryByKey;
+		lightEntryByKey.clear();
+		for (int li = 0; li < s_lights.Size; ++li) {
+			const auto& e = s_lights.Lights[li];
+			if (e.Light)
+				lightEntryByKey[reinterpret_cast<uintptr_t>(e.Light)] = &e;
+		}
+
+		auto applyEntryDebug = [&](SlotRow& row) {
+			auto it = lightEntryByKey.find(row.info.lightKey);
+			if (it != lightEntryByKey.end()) {
+				row.importance = it->second->lastImportance;
+				row.highImp = row.importance > 0.1f;
+			}
+		};
+
 		// Build row list.
 		static std::vector<SlotRow> rows;
 		rows.clear();
 		if (sceneOnly) {
 			rows.reserve(sceneSlot.size());
-			for (auto& [key, idx] : sceneSlot)
-				rows.push_back({ idx, true, s_shadowSlotInfos[idx] });
+			for (auto& [key, idx] : sceneSlot) {
+				SlotRow r{ idx, true, s_shadowSlotInfos[idx] };
+				applyEntryDebug(r);
+				rows.push_back(r);
+			}
 		} else {
 			// All scene lights first, then suppressed lights not currently in scene.
 			rows.reserve(sceneSlot.size() + s_suppressedLights.size());
-			for (auto& [key, idx] : sceneSlot)
-				rows.push_back({ idx, true, s_shadowSlotInfos[idx] });
+			for (auto& [key, idx] : sceneSlot) {
+				SlotRow r{ idx, true, s_shadowSlotInfos[idx] };
+				applyEntryDebug(r);
+				rows.push_back(r);
+			}
 			for (uintptr_t key : s_suppressedLights) {
 				if (sceneSlot.count(key))
 					continue;
 				auto it = s_knownLights.find(key);
-				if (it != s_knownLights.end())
-					rows.push_back({ 0, false, it->second });
+				if (it != s_knownLights.end()) {
+					SlotRow r{ 0, false, it->second };
+					applyEntryDebug(r);
+					rows.push_back(r);
+				}
 			}
 		}
 
@@ -2273,13 +2439,15 @@ namespace ShadowCasterManager
 		}
 
 		// -- Column layout -------------------------------------------------
-		// Settings (sceneOnly=false): [toggle] [Status] [Slot] [Addr] [Color?] [Type] [Range]
-		// Overlay  (sceneOnly=true):  [toggle]          [Slot] [Addr] [Color?] [Type] [Range]
+		// Settings (sceneOnly=false): [toggle] [Status] [Slot] [Addr] [Color?] [Type] [Range] [Centr.] [Pri]
+		// Overlay  (sceneOnly=true):  [toggle]          [Slot] [Addr] [Color?] [Type] [Range] [Centr.] [Pri]
 		const bool showStatus = !sceneOnly;
 		const int slotColIdx = showStatus ? 2 : 1;
 		const int addrColIdx = slotColIdx + 1;
 		const int typeColIdx = addrColIdx + (showColor ? 2 : 1);
 		const int radColIdx = typeColIdx + 1;
+		const int centrColIdx = radColIdx + 1;
+		const int priColIdx = centrColIdx + 1;
 
 		std::vector<std::string> headers = { "" };
 		if (showStatus)
@@ -2290,6 +2458,8 @@ namespace ShadowCasterManager
 			headers.push_back("Color");
 		headers.push_back("Type");
 		headers.push_back("Range");
+		headers.push_back("Imp");
+		headers.push_back("Hi");
 
 		using SortFn = std::function<bool(const SlotRow&, const SlotRow&, bool)>;
 		std::vector<SortFn> sorts(headers.size(), nullptr);
@@ -2315,6 +2485,13 @@ namespace ShadowCasterManager
 		};
 		sorts[radColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
 			return asc ? a.info.range < b.info.range : a.info.range > b.info.range;
+		};
+		sorts[centrColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
+			return asc ? a.importance < b.importance : a.importance > b.importance;
+		};
+		sorts[priColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
+			// high-importance lights sort first when ascending
+			return asc ? (int)a.highImp > (int)b.highImp : (int)a.highImp < (int)b.highImp;
 		};
 
 		ImVec2 outerSize = compact ? ImVec2(0, 0) : ImVec2(0, ImGui::GetContentRegionAvail().y);
@@ -2353,9 +2530,23 @@ namespace ShadowCasterManager
 					if (ImGui::IsItemHovered())
 						ImGui::SetTooltip(row.inScene ? "In scene this frame" : "Not in scene");
 				} else if (col == slotColIdx) {
-					if (row.inScene)
+					if (row.inScene) {
+						auto* light = reinterpret_cast<RE::BSShadowLight*>(row.info.lightKey);
+						uint32_t liveIdx = globals::game::isVR ?
+					                           light->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex :
+					                           light->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+						bool mismatch = liveIdx != row.idx;
+						if (mismatch)
+							ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
 						ImGui::Text("%u", row.idx);
-					else
+						if (mismatch)
+							ImGui::PopStyleColor();
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip(
+								"Slot (CopyPointShadow): %u\n"
+								"Live desc[0].shadowmapIndex: %u%s",
+								row.idx, liveIdx, mismatch ? "  <- MISMATCH" : "");
+					} else
 						ImGui::TextDisabled("--");
 				} else if (col == addrColIdx) {
 					char addrFull[20];
@@ -2380,6 +2571,34 @@ namespace ShadowCasterManager
 					ImGui::Text("%.0f u", row.info.range);
 					if (ImGui::IsItemHovered())
 						ImGui::SetTooltip("%s", Util::Units::FormatDistance(row.info.range).c_str());
+				} else if (col == centrColIdx) {
+					// Importance score: luminance × fade × attenuation² at viewer.
+					// White (0) → bright green (1+) as contribution increases.
+					float imp = row.importance;
+					float t = std::min(imp, 1.0f);
+					ImVec4 colour = ImVec4(1.0f - t * 0.7f, 1.0f, 1.0f - t * 0.7f, 1.0f);  // white → green
+					ImGui::TextColored(colour, "%.2f", imp);
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip(
+							"Contribution importance score:\n"
+							"  luminance(diffuse * fade)\n"
+							"  * max(att_camera, att_player)\n"
+							"  where att = (1 - (dist/radius)^2)^2\n\n"
+							"Higher = light strongly illuminates the viewer area.\n"
+							"Drives interval multiplier (configurable in Advanced settings).\n"
+							"Default: 0 => x2.0, 0.5 => x0.32, 1 => x0.05");
+				} else if (col == priColIdx) {
+					if (row.highImp) {
+						ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "*");
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip(
+								"High-importance light (importance > 0.1).\n"
+								"This light delivers meaningful illumination at the\n"
+								"camera or player position and gets accelerated\n"
+								"shadow redraw scheduling.");
+					} else {
+						ImGui::TextDisabled("-");
+					}
 				}
 				if (suppressed)
 					ImGui::EndDisabled();
@@ -2395,6 +2614,11 @@ namespace ShadowCasterManager
 			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u lights, %u / %u slots (%u dropped)", shadowLightCount, s_shadowSlotUsage, shadowSlots, shadowUnshadowedLightCount);
 		else
 			ImGui::Text("Shadow Lights    : %u lights, %u / %u slots", shadowLightCount, s_shadowSlotUsage, shadowSlots);
+
+		if (s_highImportanceLightCount > 0)
+			ImGui::Text("  Important       : %u / %u (near camera or player)", s_highImportanceLightCount, shadowLightCount);
+		else
+			ImGui::Text("  Important       : none");
 	}
 
 	void DrawOverlayShadowModeInfo(uint32_t mode, uint32_t shadowUnshadowedLightCount, uint32_t totalLightCount)
@@ -2656,12 +2880,18 @@ namespace ShadowCasterManager
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("Edit the Redraw Budget formula in the Advanced section below.");
 		}
-		ImGui::SliderInt("Max Redraws Per Frame", &settings.MaxRedrawPerFrame, 1, 64);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip(
-				"Hard cap on how many shadow lights may re-render their shadow maps in one frame.\n"
-				"Acts as a safety valve regardless of budget -- the budget controls time spent,\n"
-				"this controls count. The sun directional light always counts as one redraw.");
+		{
+			int maxRedraws = std::max(1, std::min(s_totalShadowLightsThisFrame, 64));
+			settings.MaxRedrawPerFrame = std::min(settings.MaxRedrawPerFrame, maxRedraws);
+			ImGui::SliderInt("Max Redraws Per Frame", &settings.MaxRedrawPerFrame, 1, maxRedraws);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"Hard cap on how many shadow lights may re-render their shadow maps in one frame.\n"
+					"Acts as a safety valve regardless of budget -- the budget controls time spent,\n"
+					"this controls count. The sun directional light always counts as one redraw.\n"
+					"Upper bound tracks the number of active shadow lights this frame (%d).",
+					maxRedraws);
+		}
 
 		// ---- Light conversion (requires restart for hooks) -----------------
 		if (ImGui::TreeNode("Light Conversion##LightConv")) {
@@ -2696,6 +2926,35 @@ namespace ShadowCasterManager
 				ImGui::SetTooltip(
 					"Allow a light just added to the active pool to render its shadow map this frame.\n"
 					"Prevents a one-frame shadow-map gap when new lights enter view.");
+
+			// ---- Importance scheduling curve ------------------------------
+			ImGui::SeparatorText("Importance Scheduling");
+			ImGui::SliderFloat("Max Interval Scale", &settings.ImportanceMaxScale, 0.5f, 5.0f, "%.2f");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"Interval multiplier applied to unimportant lights (importance = 0).\n"
+					"Higher values defer dim or distant lights more aggressively.\n"
+					"Default: 2.0");
+			settings.ImportanceMaxScale = std::max(settings.ImportanceMaxScale, settings.ImportanceMinScale);
+
+			ImGui::SliderFloat("Min Interval Scale", &settings.ImportanceMinScale, 0.01f, 1.0f, "%.3f");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"Interval multiplier applied to high-importance lights (importance >= 1).\n"
+					"Lower values make bright/close lights update shadows more frequently.\n"
+					"The ratio Max/Min defines the scheduling dynamic range.\n"
+					"Default: 0.05  (40x range at default Max=2.0)");
+			settings.ImportanceMinScale = std::min(settings.ImportanceMinScale, settings.ImportanceMaxScale);
+
+			{
+				float ratio = settings.ImportanceMaxScale / std::max(settings.ImportanceMinScale, 0.001f);
+				ImGui::Text("Dynamic range: %.0fx  (unimportant lights wait %.0fx longer)", ratio, ratio);
+			}
+
+			if (ImGui::Button("Reset Importance Defaults")) {
+				settings.ImportanceMinScale = 0.05f;
+				settings.ImportanceMaxScale = 2.0f;
+			}
 
 			// ---- Formula editor ------------------------------------------
 			if (ImGui::TreeNode("Formula Editor##Formulas")) {
