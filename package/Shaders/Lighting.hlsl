@@ -2354,6 +2354,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 adjustedWorldPos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
 	float snowFactor = 0;
+#	if defined(LOD_BLENDING) && (defined(LODLANDSCAPE) || defined(LODLANDNOISE) || defined(LODOBJECTS) || defined(LODOBJECTSHD))
+	float3 preSnowBaseColor = material.BaseColor;
+#	endif
 	if (SharedData::snowCoverSettings.EnableSnowCover
 #		if !defined(TREE_ANIM)
 		&& !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::NoSnow) && !(Permutation::VertexShaderDescriptor & Permutation::LightingFlags::Skinned)
@@ -2377,8 +2380,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float disp = 0;
 #		endif
 		float3 snowNormal = worldNormal;
+#		if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
+			snowNormal.z = max(snowNormal.z, 0.5);
+			snowNormal = normalize(snowNormal);
+		float3 treeSnowNormal = snowNormal;
+#		endif
 #		if defined(TREE_ANIM)
-			snowNormal = normalize(snowNormal + float3(0, 0, 0.5));
 		if (SharedData::snowCoverSettings.AffectTreeTint)
 			SnowCover::ApplyFoliageColor(material.BaseColor, SnowCover::GetEnvironmentalMultiplier(adjustedWorldPos));
 #		endif
@@ -2389,12 +2396,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	if (snowFactor > 0){
 		float3 sd = FrameBuffer::ViewToWorld(-float3(ddx_fine(snowFactor), ddy_fine(snowFactor), 0), false, eyeIndex);
-//#	if defined(MODELSPACENORMALS) && !defined(SKINNED)
-//		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, snowNormal), snowFactor));
-//#	else
-//		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, normalize(mul(tbn, snowNormal))), snowFactor));
-//#	endif
-#	if defined(MODELSPACENORMALS) && !defined(SKINNED)
+#	if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
+		worldNormal = normalize(lerp(worldNormal, treeSnowNormal, snowFactor) + sd);
+#	elif defined(MODELSPACENORMALS) && !defined(SKINNED)
 		worldNormal = normalize(lerp(worldNormal, snowNormal, snowFactor*0.75) + sd);
 #	else
 		worldNormal = normalize(lerp(worldNormal, normalize(mul(tbn, snowNormal)), snowFactor*0.75) + sd);
@@ -2408,6 +2412,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
 		lodLandFadeFactor = snowFactor + (1 - snowFactor) * lodLandFadeFactor;
 		lodLandColor.rgb = lerp(lodLandColor, material.BaseColor * Color::PBRLightingScale, snowFactor);
+#		endif
+#		if defined(LOD_BLENDING)
+#			if defined(LODLANDSCAPE) || defined(LODLANDNOISE)
+		// Apply terrain LOD brightness/gamma to the snow contribution
+		float3 lodSnowAdjusted = pow(abs(material.BaseColor), SharedData::lodBlendingSettings.LODTerrainGamma) * SharedData::lodBlendingSettings.LODTerrainBrightness;
+		material.BaseColor = lerp(preSnowBaseColor, lodSnowAdjusted, snowFactor);
+#			elif defined(LODOBJECTS) || defined(LODOBJECTSHD)
+		// Apply object snow LOD brightness/gamma to the snow contribution
+		float3 lodSnowAdjusted = pow(abs(material.BaseColor), SharedData::lodBlendingSettings.LODObjectSnowGamma) * SharedData::lodBlendingSettings.LODObjectSnowBrightness;
+		material.BaseColor = lerp(preSnowBaseColor, lodSnowAdjusted, snowFactor);
+#			endif
 #		endif
 	}
 

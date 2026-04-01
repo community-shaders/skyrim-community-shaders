@@ -5,7 +5,7 @@
     "AltTexture": "textures/pbr/landscape/frozenmarshice01",
     "AltTint": [1.0, 1.0, 1.0, 0.6078431606292725],
     "DensityRandomization": 2.0,
-    "MapZscale": 75000,
+    "MapZscale": 0,
     "BlendSmoothness": 5000,
     "MapMax": [253952.0, -176128.0],
     "MapMin": [-233472.0, 208896.0],
