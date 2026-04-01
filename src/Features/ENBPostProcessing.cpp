@@ -234,6 +234,7 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 	{
 		auto fogAmountMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogAmountMultiplier", "ENVIRONMENT");
+		fogAmountMultiplier = std::max(fogAmountMultiplier, FLT_MIN);
 
 		a_sky->fogNear /= fogAmountMultiplier;
 		a_sky->fogFar /= fogAmountMultiplier;
