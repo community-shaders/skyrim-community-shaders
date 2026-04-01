@@ -1567,13 +1567,13 @@ void Upscaling::EncodeTextures()
 			};
 			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-			bool ptMode = globals::features::raytracing.ptDepthTexture != nullptr;
+			auto& rt = globals::features::raytracing;
 
-			if (ptMode) {
+			if (rt.IsPathTracing()) {
 				ID3D11ShaderResourceView* ptViews[] = {
-					globals::features::raytracing.ptMotionVectorsTexture->srv,
-					globals::features::raytracing.mainTexture->srv,
-					globals::features::raytracing.ptDepthTexture->srv
+					rt.ptMotionVectorsTexture->srv,
+					rt.mainTexture->srv,
+					rt.ptDepthTexture->srv
 				};
 				context->CSSetShaderResources(4, ARRAYSIZE(ptViews), ptViews);
 			}
@@ -1588,12 +1588,12 @@ void Upscaling::EncodeTextures()
 				uavs[2] = motionVectorCopyTexture->uav.get();
 			else if (upscaleMethod == UpscaleMethod::kDLSS_RR)
 				uavs[2] = globals::features::dx12Interop.sharedResources.motionVector->uav;
-			else if (upscaleMethod == UpscaleMethod::kFSR && ptMode)
+			else if (upscaleMethod == UpscaleMethod::kFSR && rt.IsPathTracing())
 				uavs[2] = motionVectorCopyTexture->uav.get();
 
 			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-			context->CSSetShader(GetEncodeTexturesCS(ptMode), nullptr, 0);
+			context->CSSetShader(GetEncodeTexturesCS(rt.IsPathTracing()), nullptr, 0);
 
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 		}
@@ -1633,8 +1633,7 @@ void Upscaling::CopySharedD3D12Resources()
 	if (upscaleMethod == UpscaleMethod::kDLSS) {
 		context->CopyResource(sharedResources.motionVector->resource11, motionVectorCopyTexture->resource.get());
 	} else if (upscaleMethod == UpscaleMethod::kFSR) {
-		bool ptMode = globals::features::raytracing.ptDepthTexture != nullptr;
-		if (ptMode)
+		if (globals::features::raytracing.IsPathTracing())
 			context->CopyResource(sharedResources.motionVector->resource11, motionVectorCopyTexture->resource.get());
 		else
 			context->CopyResource(sharedResources.motionVector->resource11, renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture);
@@ -1650,23 +1649,22 @@ void Upscaling::CopySharedD3D12Resources()
 		auto cb = upscalingDataCB->CB();
 		context->CSSetConstantBuffers(0, 1, &cb);
 
-		bool ptMode = globals::features::raytracing.ptDepthTexture != nullptr;
+		context->CSSetShaderResources(0, 1, &depth.depthSRV);
 
-		if (ptMode) {
+		auto& rt = globals::features::raytracing;
+
+		if (rt.IsPathTracing()) {
 			ID3D11ShaderResourceView* views[] = {
-				depth.depthSRV,
-				globals::features::raytracing.ptDepthTexture->srv,
-				globals::features::raytracing.mainTexture->srv
+				rt.ptDepthTexture->srv,
+				rt.mainTexture->srv
 			};
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-		} else {
-			context->CSSetShaderResources(0, 1, &depth.depthSRV);
+			context->CSSetShaderResources(1, ARRAYSIZE(views), views);
 		}
 
 		ID3D11UnorderedAccessView* uav = sharedResources.depth->uav;
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-		context->CSSetShader(GetCopyDepthCS(ptMode), nullptr, 0);
+		context->CSSetShader(GetCopyDepthCS(rt.IsPathTracing()), nullptr, 0);
 
 		auto dispatchCount = Util::GetScreenDispatchCount(true);
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
@@ -1675,9 +1673,9 @@ void Upscaling::CopySharedD3D12Resources()
 		uav = nullptr;
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-		if (ptMode) {
-			ID3D11ShaderResourceView* nullViews[3] = { nullptr, nullptr, nullptr };
-			context->CSSetShaderResources(0, 3, nullViews);
+		if (rt.IsPathTracing()) {
+			ID3D11ShaderResourceView* nullViews[] = { nullptr, nullptr, nullptr };
+			context->CSSetShaderResources(1, ARRAYSIZE(nullViews), nullViews);
 		}
 	}
 
