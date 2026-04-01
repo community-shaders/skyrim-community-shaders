@@ -127,10 +127,15 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
-	Util::UpdateImGuiInput(
-		desc.OutputWindow,
-		static_cast<float>(desc.BufferDesc.Width),
-		static_cast<float>(desc.BufferDesc.Height));
+	const ImVec2 resolution{ static_cast<float>(desc.BufferDesc.Width), static_cast<float>(desc.BufferDesc.Height) };
+
+	// Reset window positions when resolution changes
+	static ImVec2 lastResolution{ 0.f, 0.f };
+	if (lastResolution.x > 0.f && (lastResolution.x != resolution.x || lastResolution.y != resolution.y))
+		ImGui::ClearIniSettings();
+	lastResolution = resolution;
+
+	Util::UpdateImGuiInput(desc.OutputWindow, resolution.x, resolution.y);
 
 	ImGui::NewFrame();
 	ThemeManager::SetupImGuiStyle(menu);
