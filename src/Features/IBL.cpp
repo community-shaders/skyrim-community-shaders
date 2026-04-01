@@ -6,6 +6,9 @@
 #include "State.h"
 #include "WeatherVariableRegistry.h"
 
+#include "ENBPostProcessing.h"
+#include "ENBPostProcessing/SettingManager.h"
+
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 
@@ -171,6 +174,20 @@ void IBL::RegisterWeatherVariables()
 IBL::Settings IBL::GetCommonBufferData() const
 {
 	Settings data = settings;
+
+	if (globals::features::enbPostProcessing.loaded) {
+		auto& enb = globals::features::enbPostProcessing;
+		if (enb.enableEffect) {
+			auto& settingManager = SettingManager::GetSingleton();
+			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
+				data.EnableIBL = 1;
+				data.EnvIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
+				data.SkyIBLScale = data.EnvIBLScale;
+				data.DALCAmount = 0.0f;
+			}
+		}
+	}
+
 	if (settings.DisableInInteriors && Util::IsInterior())
 		data.EnableIBL = 0;
 	return data;

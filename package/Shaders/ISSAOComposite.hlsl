@@ -182,7 +182,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 fogColor = Color::Fog(lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor));
 #		if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL && !SharedData::enbSettings.EnableImageBasedLighting) {
+	if (SharedData::iblSettings.EnableIBL) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #		endif

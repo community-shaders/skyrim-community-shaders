@@ -76,11 +76,6 @@ public:
 		float ColorPow;
 		float3 pad8;
 
-		float IBLAdditiveAmount;
-		float IBLMultiplicativeAmount;
-		float IBLReflectiveAmount;
-		float pad9;
-
 		float VolumetricRaysIntensity;
 		float VolumetricRaysRangeFactor;
 		float VolumetricRaysDesaturation;
