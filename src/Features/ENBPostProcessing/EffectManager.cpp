@@ -277,15 +277,23 @@ void EffectManager::ExecuteEffects()
 
 	textureManager.IncrementTextureSwap();
 
+	// Determine final source for framebuffer copy
+	ID3D11ShaderResourceView* finalSourceSRV = textureOriginal.SRV;
+	if (enbEffect.IsCompiled() || (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>("EnablePostPassShader", "EFFECT"))) {
+		auto textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
+		if (textureSDRTemp) {
+			finalSourceSRV = textureSDRTemp->srv.get();
+		}
+	}
+
 	// Copy final render target to framebuffers
-	auto textureSDRTemp = TextureManager::GetSingleton().GetCommonTexture("TextureSDRTemp");
 	auto textureFramebuffer1 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 	auto textureFramebuffer2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 	auto textureFramebuffer3 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
 
-	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer1.RTV);
-	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer2.RTV);
-	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer3.RTV);
+	CopyTexture(finalSourceSRV, textureFramebuffer1.RTV);
+	CopyTexture(finalSourceSRV, textureFramebuffer2.RTV);
+	CopyTexture(finalSourceSRV, textureFramebuffer3.RTV);
 }
 
 void EffectManager::CreateCommonResources()
