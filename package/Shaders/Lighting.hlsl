@@ -2403,9 +2403,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	else
 		worldNormal = normalize(lerp(worldNormal, normalize(mul(tbn, snowNormal)), snowFactor*0.75) + sd);
 #	endif
-		//material.BaseColor = worldNormal*0.5 + 0.5;
 	}
-		//material.BaseColor = disp;
 #		if defined(LODLANDNOISE)
 		material.BaseColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
 #		endif

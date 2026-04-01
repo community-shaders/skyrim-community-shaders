@@ -207,26 +207,14 @@ void SnowCover::DrawSettings()
 					ImGui::Text("Path to the map texture relative to Data folder. Interpreted as grayscale.");
 				}
 				ImGui::InputFloat("Min X", &mapMin.x, 0.0f, 10.0f);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("");
-				}
 				ImGui::InputFloat("Min Y", &mapMin.y, 0.0f, 10.0f);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("");
-				}
 				ImGui::InputFloat("Max X", &mapMax.x, 0.0f, 10.0f);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("");
-				}
 				ImGui::InputFloat("Max Y", &mapMax.y, 0.0f, 10.0f);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("");
-				}
 
 				map_tex = mapbuf;
 				ImGui::SliderFloat("Snow Map Z Scale", &wsettings.mapZscale, 0.1f, 10000.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("");
+					ImGui::Text("Vertical scale of the height map offset.");
 				}
 				ImGui::TreePop();
 			}
@@ -306,11 +294,41 @@ void SnowCover::DrawSettings()
 	ImGui::Spacing();
 }
 
+float SnowCover::GetSeasonalAltitude()
+{
+	if (MaxSummerMonth == MaxWinterMonth)
+		return -(SummerHeightOffset + WinterHeightOffset) * 0.5f;
+
+	float maxMonth = static_cast<float>(std::max(MaxSummerMonth, MaxWinterMonth));
+	float minMonth = static_cast<float>(std::min(MaxSummerMonth, MaxWinterMonth));
+	float summerToWinter;
+	auto month = (maxMonth + minMonth) / 2.0f;  // fallback value if calendar doesn't exist
+	if (auto calendar = RE::Calendar::GetSingleton()) {
+		auto time = calendar->GetTime();
+		month = static_cast<float>(time.tm_mon + (time.tm_mday + (time.tm_hour + (time.tm_min + time.tm_sec / 60.0) / 60.0) / 24.0) / 32.0);
+	}
+	if (month > maxMonth) {
+		summerToWinter = (month - maxMonth) / (minMonth + 12.0f - maxMonth);
+		if (MaxWinterMonth > MaxSummerMonth)
+			summerToWinter = 1.0f - summerToWinter;
+	} else if (month < minMonth) {
+		summerToWinter = (12.0f - maxMonth + month) / (minMonth + 12.0f - maxMonth);
+		if (MaxSummerMonth > MaxWinterMonth)
+			summerToWinter = 1.0f - summerToWinter;
+	} else {
+		summerToWinter = (month - minMonth) / (maxMonth - minMonth);
+		if (MaxSummerMonth > MaxWinterMonth)
+			summerToWinter = 1.0f - summerToWinter;
+	}
+
+	return -std::lerp(SummerHeightOffset, WinterHeightOffset, summerToWinter);
+}
+
 SnowCover::PerFrame SnowCover::GetCommonBufferData()
 {
 	Reload();
 
-	static float delta = 0;                       // size_t for precision
+	static float delta = 0;
 	if (!RE::UI::GetSingleton()->GameIsPaused())  // from lightlimitfix
 		delta = RE::GetSecondsSinceLastFrame();   // BSTimer::delta is always 0 for some reason
 	bool snowing = false;
@@ -370,19 +388,22 @@ void SnowCover::SetupResources()
 		lastHour = calendar->GetHour();
 }
 
-const char* GetWorldspace()
+namespace
 {
-	auto curr_worldspace = "none";
-	auto tes = RE::TES::GetSingleton();
-	if (tes) {
-		auto worldspace = tes->GetRuntimeData2().worldSpace;
-		if (tes->interiorCell) {
-			curr_worldspace = tes->interiorCell->GetFormEditorID();
-		} else if (worldspace) {
-			curr_worldspace = worldspace->GetFormEditorID();
+	const char* GetWorldspace()
+	{
+		auto curr_worldspace = "none";
+		auto tes = RE::TES::GetSingleton();
+		if (tes) {
+			auto worldspace = tes->GetRuntimeData2().worldSpace;
+			if (tes->interiorCell) {
+				curr_worldspace = tes->interiorCell->GetFormEditorID();
+			} else if (worldspace) {
+				curr_worldspace = worldspace->GetFormEditorID();
+			}
 		}
+		return curr_worldspace;
 	}
-	return curr_worldspace;
 }
 
 void SnowCover::SaveConfig()

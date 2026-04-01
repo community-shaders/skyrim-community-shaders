@@ -25,10 +25,6 @@ namespace SnowCover
 		return n1 * dot(n1, n2) / n1.z - n2;
 	}
 
-
-
-
-
 	float GetHeightMult(float3 p)
 	{
 		float2 scale = SharedData::snowCoverSettings.mapScale;

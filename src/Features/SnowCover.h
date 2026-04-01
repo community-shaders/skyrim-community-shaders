@@ -170,35 +170,7 @@ public:
 	std::unordered_set<std::uint64_t> whitelist;
 	std::unordered_set<std::uint64_t> blacklist;
 
-	float GetSeasonalAltitude()
-	{
-		if (MaxSummerMonth == MaxWinterMonth)
-			return -(SummerHeightOffset + WinterHeightOffset) * 0.5f;
-
-		float maxMonth = static_cast<float>(std::max(MaxSummerMonth, MaxWinterMonth));
-		float minMonth = static_cast<float>(std::min(MaxSummerMonth, MaxWinterMonth));
-		float summerToWinter;
-		auto month = (maxMonth + minMonth) / 2.0f;  // fallback value if calendar not exist
-		if (auto calendar = RE::Calendar::GetSingleton()) {
-			auto time = calendar->GetTime();
-			month = static_cast<float>(time.tm_mon + (time.tm_mday + (time.tm_hour + (time.tm_min + time.tm_sec / 60.0) / 60.0) / 24.0) / 32.0);
-		}
-		if (month > maxMonth) {
-			summerToWinter = (month - maxMonth) / (minMonth + 12.0f - maxMonth);
-			if (MaxWinterMonth > MaxSummerMonth)
-				summerToWinter = 1.0f - summerToWinter;
-		} else if (month < minMonth) {
-			summerToWinter = (12.0f - maxMonth + month) / (minMonth + 12.0f - maxMonth);
-			if (MaxSummerMonth > MaxWinterMonth)
-				summerToWinter = 1.0f - summerToWinter;
-		} else {
-			summerToWinter = (month - minMonth) / (maxMonth - minMonth);
-			if (MaxSummerMonth > MaxWinterMonth)
-				summerToWinter = 1.0f - summerToWinter;
-		}
-
-		return -std::lerp(SummerHeightOffset, WinterHeightOffset, summerToWinter);
-	}
+	float GetSeasonalAltitude();
 
 	virtual void SetupResources();
 	virtual void Reset();
