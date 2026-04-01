@@ -29,6 +29,8 @@ private:
 	static constexpr float DEFAULT_WINTER_HEIGHT_OFFSET = -20000.0f;        // how high snow is in winter (in game units)
 	static constexpr uint DEFAULT_PEAK_SUMMER_MONTH = 6;
 	static constexpr uint DEFAULT_PEAK_WINTER_MONTH = 0;
+	static constexpr float HEIGHT_OFFSET_SLIDER_MIN = -20000.0f;
+	static constexpr float HEIGHT_OFFSET_SLIDER_MAX = 20000.0f;
 
 public:
 	static SnowCover* GetSingleton()
@@ -98,6 +100,42 @@ public:
 	};
 	static_assert(sizeof(PerFrame) % 16 == 0);
 
+	struct WorldConfig
+	{
+		uint AffectGrassTint = true;
+		uint AffectTreeTint = true;
+		float FoliageHeightOffset = DEFAULT_FOLIAGE_EFFECT_OFFSET;
+		float UVScale = DEFAULT_UV_SCALE;
+		uint MaxSummerMonth = DEFAULT_PEAK_SUMMER_MONTH;
+		uint MaxWinterMonth = DEFAULT_PEAK_WINTER_MONTH;
+		float SummerHeightOffset = DEFAULT_SUMMER_HEIGHT_OFFSET;
+		float WinterHeightOffset = DEFAULT_WINTER_HEIGHT_OFFSET;
+		std::string MapTexture;
+		float MapZscale = DEFAULT_MAP_ZSCALE;
+		float BlendSmoothness = DEFAULT_BLEND_SMOOTHNESS;
+		float ScreenSpaceScale = DEFAULT_GLINT_1;
+		float LogMicrofacetDensity = DEFAULT_GLINT_2;
+		float MicrofacetRoughness = DEFAULT_GLINT_3;
+		float DensityRandomization = DEFAULT_GLINT_4;
+		float2 MapMin = DEFAULT_MAP_MIN;
+		float2 MapMax = DEFAULT_MAP_MAX;
+		std::string MainTexture;
+		std::string AltTexture;
+		float4 MainTint = float4(1.0f, 1.0f, 1.0f, 1.0f);
+		float4 AltTint = float4(1.0f, 1.0f, 1.0f, 1.0f);
+		float SnowingSpeed = 0.0f;
+		float MeltingSpeed = 0.0f;
+		float PeakMainAngle = DEFAULT_PEAK_MAIN_ANGLE;
+		float PeakAltAngle = DEFAULT_PEAK_ALT_ANGLE;
+		float MinAngle = DEFAULT_MIN_ANGLE;
+		float MaxAngle = DEFAULT_MAX_ANGLE;
+		float MainSpec = DEFAULT_MAIN_SPEC;
+		float AltSpec = DEFAULT_ALT_SPEC;
+	};
+
+	WorldConfig ToWorldConfig() const;
+	void ApplyWorldConfig(const WorldConfig& wc);
+
 	UserSettings settings;
 	WorldSettings wsettings;
 	PerFrame perFrame;
@@ -111,9 +149,9 @@ public:
 	std::filesystem::path map_tex;
 	std::filesystem::path main_tex;
 	std::filesystem::path alt_tex;
-	char mapbuf[256] = "";
-	char tbuf[256] = "";
-	char altbuf[256] = "";
+	std::string mapbuf;
+	std::string tbuf;
+	std::string altbuf;
 
 	float snowing_speed = 0.0f;
 	float melting_speed = 0.0f;
@@ -133,6 +171,9 @@ public:
 
 	float GetSeasonalAltitude()
 	{
+		if (MaxSummerMonth == MaxWinterMonth)
+			return -(SummerHeightOffset + WinterHeightOffset) * 0.5f;
+
 		float maxMonth = static_cast<float>(std::max(MaxSummerMonth, MaxWinterMonth));
 		float minMonth = static_cast<float>(std::min(MaxSummerMonth, MaxWinterMonth));
 		float summerToWinter;
@@ -163,8 +204,6 @@ public:
 	virtual void Prepass() override;
 
 	virtual void DrawSettings();
-
-	//virtual void Draw(const RE::BSShader* shader, const uint32_t descriptor);
 
 	virtual void Load(json& o_json);
 	virtual void Save(json& o_json);

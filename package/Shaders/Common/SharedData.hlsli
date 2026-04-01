@@ -43,7 +43,7 @@ namespace SharedData
 		float1 pad0;
 	};
 
-	struct CPMSettings
+	struct ExtendedMaterialSettings
 	{
 		bool EnableComplexMaterial;
 		bool EnableParallax;
@@ -302,7 +302,7 @@ namespace SharedData
 	cbuffer FeatureData : register(b6)
 	{
 		CloudShadowsSettings cloudShadowsSettings;
-		CPMSettings extendedMaterialSettings;
+		ExtendedMaterialSettings extendedMaterialSettings;
 		CubemapCreatorSettings cubemapCreatorSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;

@@ -2,10 +2,9 @@
 
 #include "Util.h"
 #include "Utils/FileSystem.h"
+#include "Utils/Serialize.h"
 #include <DDSTextureLoader.h>
-#include <cstdlib>
-#include <cstring>
-#include <string.h>
+#include <imgui_stdlib.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SnowCover::UserSettings,
@@ -13,10 +12,98 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	AffectHavok,
 	SnowHeightOffset)
 
-void copyString(const std::string& input, char* dst, size_t dst_size)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	SnowCover::WorldConfig,
+	AffectGrassTint, AffectTreeTint, FoliageHeightOffset, UVScale,
+	MaxSummerMonth, MaxWinterMonth, SummerHeightOffset, WinterHeightOffset,
+	MapTexture, MapZscale, BlendSmoothness,
+	ScreenSpaceScale, LogMicrofacetDensity, MicrofacetRoughness, DensityRandomization,
+	MapMin, MapMax, MainTexture, AltTexture,
+	MainTint, AltTint, SnowingSpeed, MeltingSpeed,
+	PeakMainAngle, PeakAltAngle, MinAngle, MaxAngle,
+	MainSpec, AltSpec)
+
+SnowCover::WorldConfig SnowCover::ToWorldConfig() const
 {
-	strncpy(dst, input.c_str(), dst_size - 1);
-	dst[dst_size - 1] = '\0';
+	WorldConfig wc;
+	wc.AffectGrassTint = wsettings.AffectGrassTint;
+	wc.AffectTreeTint = wsettings.AffectTreeTint;
+	wc.FoliageHeightOffset = wsettings.FoliageHeightOffset;
+	wc.UVScale = wsettings.UVScale;
+	wc.MaxSummerMonth = MaxSummerMonth;
+	wc.MaxWinterMonth = MaxWinterMonth;
+	wc.SummerHeightOffset = SummerHeightOffset;
+	wc.WinterHeightOffset = WinterHeightOffset;
+	wc.MapTexture = map_tex.generic_string();
+	wc.MapZscale = wsettings.mapZscale;
+	wc.BlendSmoothness = wsettings.BlendSmoothness;
+	wc.ScreenSpaceScale = wsettings.ScreenSpaceScale;
+	wc.LogMicrofacetDensity = wsettings.LogMicrofacetDensity;
+	wc.MicrofacetRoughness = wsettings.MicrofacetRoughness;
+	wc.DensityRandomization = wsettings.DensityRandomization;
+	wc.MapMin = mapMin;
+	wc.MapMax = mapMax;
+	wc.MainTexture = main_tex.generic_string();
+	wc.AltTexture = alt_tex.generic_string();
+	wc.MainTint = wsettings.MainTint;
+	wc.AltTint = wsettings.AltTint;
+	wc.SnowingSpeed = snowing_speed;
+	wc.MeltingSpeed = melting_speed;
+	wc.PeakMainAngle = wsettings.PeakMainAngle;
+	wc.PeakAltAngle = wsettings.PeakAltAngle;
+	wc.MinAngle = wsettings.MinAngle;
+	wc.MaxAngle = wsettings.MaxAngle;
+	wc.MainSpec = wsettings.MainSpec;
+	wc.AltSpec = wsettings.AltSpec;
+	return wc;
+}
+
+void SnowCover::ApplyWorldConfig(const WorldConfig& wc)
+{
+	wsettings.AffectGrassTint = wc.AffectGrassTint;
+	wsettings.AffectTreeTint = wc.AffectTreeTint;
+	wsettings.FoliageHeightOffset = wc.FoliageHeightOffset;
+	wsettings.UVScale = wc.UVScale;
+	MaxSummerMonth = wc.MaxSummerMonth;
+	MaxWinterMonth = wc.MaxWinterMonth;
+	SummerHeightOffset = wc.SummerHeightOffset;
+	WinterHeightOffset = wc.WinterHeightOffset;
+	mapMin = wc.MapMin;
+	mapMax = wc.MapMax;
+	float2 delta = mapMax - mapMin;
+	constexpr float epsilon = 1e-6f;
+	if (std::abs(delta.x) < epsilon) {
+		logger::error("[Snow Cover] MapMin.x and MapMax.x are nearly equal ({}, {}), using fallback delta 1.0", mapMin.x, mapMax.x);
+		delta.x = 1.0f;
+	}
+	if (std::abs(delta.y) < epsilon) {
+		logger::error("[Snow Cover] MapMin.y and MapMax.y are nearly equal ({}, {}), using fallback delta 1.0", mapMin.y, mapMax.y);
+		delta.y = 1.0f;
+	}
+	wsettings.mapScale = float2(1.0f) / delta;
+	wsettings.mapOffset = -mapMin * wsettings.mapScale;
+	wsettings.mapZscale = wc.MapZscale;
+	wsettings.BlendSmoothness = wc.BlendSmoothness;
+	wsettings.ScreenSpaceScale = wc.ScreenSpaceScale;
+	wsettings.LogMicrofacetDensity = wc.LogMicrofacetDensity;
+	wsettings.MicrofacetRoughness = wc.MicrofacetRoughness;
+	wsettings.DensityRandomization = wc.DensityRandomization;
+	wsettings.MainTint = wc.MainTint;
+	wsettings.AltTint = wc.AltTint;
+	snowing_speed = wc.SnowingSpeed;
+	melting_speed = wc.MeltingSpeed;
+	wsettings.PeakMainAngle = wc.PeakMainAngle;
+	wsettings.PeakAltAngle = wc.PeakAltAngle;
+	wsettings.MinAngle = wc.MinAngle;
+	wsettings.MaxAngle = wc.MaxAngle;
+	wsettings.MainSpec = wc.MainSpec;
+	wsettings.AltSpec = wc.AltSpec;
+	main_tex = wc.MainTexture;
+	tbuf = main_tex.generic_string();
+	alt_tex = wc.AltTexture;
+	altbuf = alt_tex.generic_string();
+	map_tex = wc.MapTexture;
+	mapbuf = map_tex.generic_string();
 }
 
 void SnowCover::DrawSettings()
@@ -29,7 +116,7 @@ void SnowCover::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Moving objects (Havok rigidbodies), such as clutter, will receive snow when they are not moving. Snow appears and disappears instantly.");
 	}
-	ImGui::SliderFloat("Snow Offset", &settings.SnowHeightOffset, -20000.0f, 20000.0f);
+	ImGui::SliderFloat("Snow Offset", &settings.SnowHeightOffset, HEIGHT_OFFSET_SLIDER_MIN, HEIGHT_OFFSET_SLIDER_MAX);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Moves the altitude that snow appears at. For testing purposes.");
 	}
@@ -38,8 +125,8 @@ void SnowCover::DrawSettings()
 	ImGui::Text("Saved config will be applied when you enter the worldspace.");
 
 	if (ImGui::TreeNodeEx("Worldspace Config", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text(fmt::format("Current worldspace/cell: {}", last_worldspace).c_str());
-		ImGui::Text(fmt::format("Config status: {}", status).c_str());
+		ImGui::Text("Current worldspace/cell: %s", last_worldspace);
+		ImGui::Text("Config status: %s", status.c_str());
 
 		ImGui::SameLine();
 		if (ImGui::Button("Reload")) {
@@ -95,11 +182,11 @@ void SnowCover::DrawSettings()
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("In which month is the snow line lowest?");
 				}
-				ImGui::SliderFloat("Summer Height Offset", &SummerHeightOffset, -20000.0f, 20000.0f);
+				ImGui::SliderFloat("Summer Height Offset", &SummerHeightOffset, HEIGHT_OFFSET_SLIDER_MIN, HEIGHT_OFFSET_SLIDER_MAX);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("What is the snow line altitude in summer?");
 				}
-				ImGui::SliderFloat("Winter Height Offset", &WinterHeightOffset, -20000.0f, 20000.0f);
+				ImGui::SliderFloat("Winter Height Offset", &WinterHeightOffset, HEIGHT_OFFSET_SLIDER_MIN, HEIGHT_OFFSET_SLIDER_MAX);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("What is the snow line altitude in winter?");
 				}
@@ -115,7 +202,7 @@ void SnowCover::DrawSettings()
 			}
 
 			if (ImGui::TreeNodeEx("Snow Map")) {
-				ImGui::InputText("Map texture", mapbuf, 128);
+				ImGui::InputText("Map texture", &mapbuf);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Path to the map texture relative to Data folder. Interpreted as grayscale.");
 				}
@@ -136,7 +223,7 @@ void SnowCover::DrawSettings()
 					ImGui::Text("");
 				}
 
-				map_tex = std::filesystem::path(mapbuf);
+				map_tex = mapbuf;
 				ImGui::SliderFloat("Snow Map Z Scale", &wsettings.mapZscale, 0.1f, 10000.0f);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("");
@@ -156,16 +243,16 @@ void SnowCover::DrawSettings()
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("The angle snow is fully visible at. 0 = horizontal, 1 = vertical.");
 				}
-				ImGui::InputText("Main texture", tbuf, 128);
+				ImGui::InputText("Main texture", &tbuf);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Path to the main texture relative to Data folder, without '.dds'. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
 				}
-				main_tex = std::string(tbuf);
-				ImGui::InputText("Alt texture", altbuf, 128);
+				main_tex = tbuf;
+				ImGui::InputText("Alt texture", &altbuf);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Optional path to the alternative texture relative to Data folder, without '.dds'. Needs to be a PBR texture with a diffuse, _n, and _rmaos.");
 				}
-				alt_tex = std::string(altbuf);
+				alt_tex = altbuf;
 				ImGui::ColorEdit4("Main Tint", &wsettings.MainTint.x);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Tint for the main texture. Alpha only affects the color but not roughness etc.");
@@ -206,11 +293,11 @@ void SnowCover::DrawSettings()
 	}
 
 	if (ImGui::TreeNodeEx("Debug Info")) {
-		ImGui::Text(fmt::format("Month: {}", perFrame.Month).c_str());
-		ImGui::Text(fmt::format("TimeSnowing: {}", perFrame.TimeSnowing).c_str());
-		ImGui::Text(fmt::format("SnowingDensity: {}", perFrame.SnowingDensity).c_str());
+		ImGui::Text("Month: %f", perFrame.Month);
+		ImGui::Text("TimeSnowing: %f", perFrame.TimeSnowing);
+		ImGui::Text("SnowingDensity: %f", perFrame.SnowingDensity);
 		if (debug_text != nullptr)
-			ImGui::Text(fmt::format("Debug text: {}", debug_text).c_str());
+			ImGui::Text("Debug text: %s", debug_text);
 
 		ImGui::TreePop();
 	}
@@ -218,8 +305,6 @@ void SnowCover::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 }
-
-//void SnowCover::Draw(const RE::BSShader*, const uint32_t){}
 
 SnowCover::PerFrame SnowCover::GetCommonBufferData()
 {
@@ -230,8 +315,8 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 		delta = RE::GetSecondsSinceLastFrame();   // BSTimer::delta is always 0 for some reason
 	bool snowing = false;
 	bool raining = false;
+	snowingDensity = 0;
 	if (wsettings.EnableSnowCover) {
-		snowingDensity = 0;
 		if (auto sky = RE::Sky::GetSingleton()) {
 			if (auto currentWeather = sky->currentWeather) {
 				if (currentWeather->precipitationData) {
@@ -246,8 +331,6 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 				}
 			}
 		}
-	} else {
-		snowingDensity = 0;
 	}
 	if (auto calendar = RE::Calendar::GetSingleton()) {
 		auto h = calendar->GetHour();
@@ -275,6 +358,7 @@ SnowCover::PerFrame SnowCover::GetCommonBufferData()
 	perFrame.SeasonalAltitude = GetSeasonalAltitude();
 	perFrame.settings = settings;
 	perFrame.wsettings = wsettings;
+	perFrame.wsettings.BlendSmoothness = std::max(1.0f, perFrame.wsettings.BlendSmoothness);
 
 	return perFrame;
 }
@@ -305,46 +389,7 @@ void SnowCover::SaveConfig()
 {
 	if (last_worldspace == nullptr)
 		return;
-	json config = {
-		{ "AffectGrassTint", wsettings.AffectGrassTint },
-		{ "AffectTreeTint", wsettings.AffectTreeTint },
-		{ "FoliageHeightOffset", wsettings.FoliageHeightOffset },
-		{ "UVScale", wsettings.UVScale },
-		{ "MaxSummerMonth", MaxSummerMonth },
-		{ "MaxWinterMonth", MaxWinterMonth },
-		{ "SummerHeightOffset", SummerHeightOffset },
-		{ "WinterHeightOffset", WinterHeightOffset },
-		{ "MapTexture", map_tex.c_str() },
-		{ "MapZscale", wsettings.mapZscale },
-		{ "BlendSmoothness", wsettings.BlendSmoothness },
-		{ "ScreenSpaceScale", wsettings.ScreenSpaceScale },
-		{ "LogMicrofacetDensity", wsettings.LogMicrofacetDensity },
-		{ "MicrofacetRoughness", wsettings.MicrofacetRoughness },
-		{ "DensityRandomization", wsettings.DensityRandomization },
-		{ "MapMin", json::array({ mapMin.x, mapMin.y }) },
-		{ "MapMax", json::array({ mapMax.x, mapMax.y }) },
-		{ "MainTexture", main_tex.c_str() },
-		{ "AltTexture", alt_tex.c_str() },
-		{ "MainTint", json::array({ wsettings.MainTint.x,
-						  wsettings.MainTint.y,
-						  wsettings.MainTint.z,
-						  wsettings.MainTint.w }) },
-		{ "AltTint", json::array({ wsettings.AltTint.x,
-						 wsettings.AltTint.y,
-						 wsettings.AltTint.z,
-						 wsettings.AltTint.w }) },
-		{ "SnowingSpeed", snowing_speed },
-		{ "MeltingSpeed", melting_speed },
-		{ "PeakMainAngle", wsettings.PeakMainAngle },
-		{ "PeakAltAngle", wsettings.PeakAltAngle },
-		{ "MinAngle", wsettings.MinAngle },
-		{ "MaxAngle", wsettings.MaxAngle },
-		{ "MainSpec", wsettings.MainSpec },
-		{ "AltSpec", wsettings.AltSpec },
-	};
-
-	if (!alt_tex.empty())
-		config["AltTexture"] = alt_tex;
+	json config = ToWorldConfig();
 
 	try {
 		auto curr_worldspace = GetWorldspace();
@@ -392,37 +437,8 @@ void SnowCover::Reload()
 	json config;
 	try {
 		fileStream >> config;
-		wsettings.AffectGrassTint = config["AffectGrassTint"];
-		wsettings.AffectTreeTint = config["AffectTreeTint"];
-		wsettings.FoliageHeightOffset = config["FoliageHeightOffset"];
-		wsettings.UVScale = config["UVScale"];
-		MaxSummerMonth = config["MaxSummerMonth"];
-		MaxWinterMonth = config["MaxWinterMonth"];
-		SummerHeightOffset = config["SummerHeightOffset"];
-		WinterHeightOffset = config["WinterHeightOffset"];
-		mapMin = float2(config["MapMin"][0], config["MapMin"][1]);
-		mapMax = float2(config["MapMax"][0], config["MapMax"][1]);
-		wsettings.mapScale = float2(1.0) / (mapMax - mapMin);
-		wsettings.mapOffset = -mapMin * wsettings.mapScale;
-		wsettings.mapZscale = config["MapZscale"];
-		wsettings.BlendSmoothness = config["BlendSmoothness"];
-		wsettings.ScreenSpaceScale = config["ScreenSpaceScale"];
-		wsettings.LogMicrofacetDensity = config["LogMicrofacetDensity"];
-		wsettings.MicrofacetRoughness = config["MicrofacetRoughness"];
-		wsettings.DensityRandomization = config["DensityRandomization"];
-		wsettings.MainTint = float4(config["MainTint"][0], config["MainTint"][1], config["MainTint"][2], config["MainTint"][3]);
-		wsettings.AltTint = float4(config["AltTint"][0], config["AltTint"][1], config["AltTint"][2], config["AltTint"][3]);
-		snowing_speed = config["SnowingSpeed"];
-		melting_speed = config["MeltingSpeed"];
-		wsettings.PeakMainAngle = config["PeakMainAngle"];
-		wsettings.PeakAltAngle = config["PeakAltAngle"];
-		wsettings.MinAngle = config["MinAngle"];
-		wsettings.MaxAngle = config["MaxAngle"];
-		wsettings.MainSpec = config["MainSpec"];
-		wsettings.AltSpec = config["AltSpec"];
-		main_tex = std::filesystem::path(config["MainTexture"].get<std::string>());
-		//std::wstring tname = strtowstr(main_tex);
-		copyString(main_tex.generic_string().c_str(), tbuf, 256);
+		WorldConfig wc = config.get<WorldConfig>();
+		ApplyWorldConfig(wc);
 		auto device = globals::d3d::device;
 		auto context = globals::d3d::context;
 		if (views[0])
@@ -447,28 +463,29 @@ void SnowCover::Reload()
 			logger::warn("Snow Cover: Error loading {}_rmaos.dds texture: {}", main_tex.generic_string(), hr);
 			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover"  / "default" / "main_rmaos.dds").native().c_str(), nullptr, &views.at(2));
 		}
-		if (config.contains("AltTexture") && config["AltTexture"] != "") {
+		if (!wc.AltTexture.empty()) {
 			if (views[3])
 				views[3]->Release();
 			if (views[4])
 				views[4]->Release();
 			if (views[5])
 				views[5]->Release();
-			alt_tex = std::filesystem::path(config["AltTexture"].get<std::string>());
-			copyString(alt_tex.generic_string().c_str(), altbuf, 256);
 			hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / alt_tex).replace_extension(".dds").native().c_str(), nullptr, &views.at(3));
 			if (hr != S_OK) {
 				logger::warn("Snow Cover: Error loading {}.dds texture: {}", alt_tex.generic_string(), hr);
+				views[0]->AddRef();
 				views[3] = views[0];
 			}
 			hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / alt_tex).concat("_n.dds").native().c_str(), nullptr, &views.at(4));
 			if (hr != S_OK) {
 				logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", alt_tex.generic_string(), hr);
+				views[1]->AddRef();
 				views[4] = views[1];
 			}
 			hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / alt_tex).concat("_rmaos.dds").native().c_str(), nullptr, &views.at(5));
 			if (hr != S_OK) {
 				logger::warn("Snow Cover: Error loading {}_rmaos.dds texture: {}", alt_tex.generic_string(), hr);
+				views[2]->AddRef();
 				views[5] = views[2];
 			}
 
@@ -483,9 +500,6 @@ void SnowCover::Reload()
 
 		if (views[6])
 			views[6]->Release();
-		map_tex = std::filesystem::path(config["MapTexture"].get<std::string>());
-		//std::wstring mname = strtowstr(map_tex);
-		copyString(map_tex.generic_string().c_str(), mapbuf, 256);
 		hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / map_tex).concat(".dds").native().c_str(), nullptr, &views.at(6));
 		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}.dds texture: {}", map_tex.generic_string(), hr);

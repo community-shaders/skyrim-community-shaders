@@ -85,7 +85,9 @@ namespace SnowCover
 		// distance from the camera in which weather has effect, this extends far beyond where lod starts
 		float weatherRange = 1 - smoothstep(20000, 40000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
 		// the amount of snow based on weather, TimeSnowing transitions smoothly between -1 in rain and 1 when snowing
-		float weatherMult = weatherRange * pow(SharedData::snowCoverSettings.TimeSnowing, 3) * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
+		// Use multiplication instead of pow() to avoid undefined behaviour with a negative base (HLSL pow(x,y) requires x >= 0)
+		float ts = SharedData::snowCoverSettings.TimeSnowing;
+		float weatherMult = weatherRange * ts * ts * ts * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
 		weatherMult = clamp((weatherMult) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z), -1, 1);
 		// the amount of snow based on season and weather
 		float env_mult = saturate(max((GetEnvironmentalMultiplier(p) + disp*5), weatherMult)) - waterDist;

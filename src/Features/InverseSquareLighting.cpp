@@ -55,6 +55,13 @@ void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BS
 		runtimeData->flags.set(LightLimitFix::LightFlags::Initialised);
 	}
 
+	editor.ApplyOverrides(niLight, runtimeData);
+
+	// Re-read after ApplyOverrides; LLF snapshots these before ProcessLight,
+	// so without this the editor's color/flag changes would be stale this pass.
+	light.lightFlags = runtimeData->flags;
+	light.color = { runtimeData->diffuse.red, runtimeData->diffuse.green, runtimeData->diffuse.blue };
+
 	const bool isInvSq = light.lightFlags.any(LightLimitFix::LightFlags::InverseSquare);
 	if (bsLight->pointLight && editor.enabled && ((isInvSq && editor.disableInvSqLights) || (!isInvSq && editor.disableRegularLights)))
 		light.lightFlags.set(LightLimitFix::LightFlags::Disabled);
