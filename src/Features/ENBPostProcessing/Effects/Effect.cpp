@@ -611,6 +611,9 @@ void Effect::LoadUITechniques()
 		return;
 	}
 
+	std::string currentSequenceBaseName;
+	int currentSequenceIndex = 0;
+
 	// Load all techniques that have UIName annotations
 	for (UINT i = 0; i < effectDesc.Techniques; ++i) {
 		auto technique = effect->GetTechniqueByIndex(i);
@@ -624,16 +627,48 @@ void Effect::LoadUITechniques()
 		}
 
 		std::string techniqueName = techDesc.Name;
+
+		// Determine the base technique name using same logic as LoadTechniques
+		std::string baseName;
+		if (!currentSequenceBaseName.empty()) {
+			std::string expectedName = currentSequenceBaseName + std::to_string(currentSequenceIndex + 1);
+			if (techniqueName == expectedName) {
+				// Continue current sequence
+				baseName = currentSequenceBaseName;
+				currentSequenceIndex++;
+			} else {
+				// Start new sequence with this technique
+				baseName = techniqueName;
+				currentSequenceBaseName = techniqueName;
+				currentSequenceIndex = 0;
+			}
+		} else {
+			// First technique or start new sequence
+			baseName = techniqueName;
+			currentSequenceBaseName = techniqueName;
+			currentSequenceIndex = 0;
+		}
+
 		std::string uiName = GetUINameFromTechnique(technique);
 
-		// Only include techniques with UIName annotations
+		// Only include techniques with UIName annotations, and dedupe by base sequence name
 		if (!uiName.empty()) {
-			UITechnique uiTech;
-			uiTech.techniqueName = techniqueName;
-			uiTech.displayName = uiName;
-			uiTechniques.push_back(uiTech);
+			bool alreadyAdded = false;
+			for (const auto& existing : uiTechniques) {
+				if (existing.techniqueName == baseName) {
+					alreadyAdded = true;
+					break;
+				}
+			}
 
-			logger::debug("[ENBPP] Added UI technique '{}' with display name '{}'", techniqueName, uiName);
+			if (!alreadyAdded) {
+				UITechnique uiTech;
+				uiTech.techniqueName = baseName;
+				uiTech.displayName = uiName;
+				uiTechniques.push_back(uiTech);
+
+				logger::debug("[ENBPP] Added UI technique '{}' (base of '{}') with display name '{}'", baseName, techniqueName, uiName);
+			}
 		}
 	}
 
