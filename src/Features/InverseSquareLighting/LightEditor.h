@@ -10,6 +10,7 @@ struct LightEditor
 
 	void DrawSettings();
 	void GatherLights();
+	void ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const;
 
 private:
 	struct LightInfo
@@ -96,6 +97,7 @@ private:
 	LightInfo selected = {};
 	LightInfo previous = {};
 
+	RE::NiLight* selectedNiLight = nullptr;
 	LightDisplayInfo displayInfo = {};
 	LightSettings original = {};
 	LightSettings current = {};
