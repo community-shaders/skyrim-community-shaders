@@ -2,6 +2,9 @@
 
 #include "State.h"
 
+#include "ENBPostProcessing.h"
+#include "ENBPostProcessing/SettingManager.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LinearLighting::Settings,
 	enableLinearLighting,
@@ -33,6 +36,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void LinearLighting::DrawSettings()
 {
+	if (globals::features::enbPostProcessing.loaded) {
+		auto& enb = globals::features::enbPostProcessing;
+		if (enb.enableEffect) {
+			ImGui::TextColored(ImVec4(1, 1, 0, 1), "Gamma settings are currently overwritten by ENB.");
+		}
+	}
+
 	ImGui::Checkbox("Enable Linear Lighting", (bool*)&settings.enableLinearLighting);
 	ImGui::Checkbox("Enable Gamma Correction", (bool*)&settings.enableGammaCorrection);
 
@@ -168,6 +178,26 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.skyGamma = settings.skyGamma;
 	data.waterGamma = settings.waterGamma;
 	data.vlGamma = settings.vlGamma;
+
+	if (globals::features::enbPostProcessing.loaded) {
+		auto& enb = globals::features::enbPostProcessing;
+		if (enb.enableEffect) {
+			float colorPow = SettingManager::GetSingleton().GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
+			data.lightGamma = 1;
+			data.colorGamma = colorPow;
+			data.emitColorGamma = 1;
+			data.glowmapGamma = 1;
+			data.ambientGamma = 1;
+			data.fogGamma = 1;
+			data.fogAlphaGamma = 1;
+			data.effectGamma = 1;
+			data.effectAlphaGamma = 1;
+			data.skyGamma = 1;
+			data.waterGamma = 1;
+			data.vlGamma = 1;
+		}
+	}
+
 	data.vanillaDiffuseColorMult = settings.vanillaDiffuseColorMult;
 	data.directionalLightMult = settings.directionalLightMult;
 	data.pointLightMult = settings.pointLightMult;
