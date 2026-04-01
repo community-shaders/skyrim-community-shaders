@@ -260,42 +260,13 @@ void LightEditor::GatherLights()
 	if (!foundSelected) {
 		previous = selected;
 		selected = {};
-		selectedNiLight = nullptr;
 	}
 
 	SortLights();
 }
 
-void LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const
-{
-	if (!enabled || niLight != selectedNiLight)
-		return;
-
-	runtimeData->diffuse = current.data.diffuse;
-	runtimeData->fade = current.data.fade;
-
-	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare)) {
-		runtimeData->cutoffOverride = std::clamp(current.data.cutoffOverride, 0.01f, 1.0f);
-		runtimeData->size = std::clamp(current.data.size, 0.1f, 50.0f);
-	} else {
-		runtimeData->radius = current.data.radius;
-		runtimeData->cutoffOverride = current.data.cutoffOverride;
-	}
-
-	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare))
-		runtimeData->flags.set(LightLimitFix::LightFlags::InverseSquare);
-	else
-		runtimeData->flags.reset(LightLimitFix::LightFlags::InverseSquare);
-
-	if (current.data.flags.any(LightLimitFix::LightFlags::Linear))
-		runtimeData->flags.set(LightLimitFix::LightFlags::Linear);
-	else
-		runtimeData->flags.reset(LightLimitFix::LightFlags::Linear);
-}
-
 void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight)
 {
-	selectedNiLight = niLight;
 	const auto runtimeData = ISLCommon::RuntimeLightDataExt::Get(niLight);
 	auto tesFlags = ligh ? &ligh->data.flags : nullptr;
 
