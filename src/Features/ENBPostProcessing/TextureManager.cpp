@@ -285,14 +285,24 @@ TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_F
 
 void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, DownsampleTexture& texture)
 {
+	if (!source || !texture.rtv || !downsampleVS || !downsamplePS || !linearSampler || !texture.srvChain) {
+		return;
+	}
+
 	auto context = globals::d3d::context;
 
 	// Get source texture description for calculating texel size
 	winrt::com_ptr<ID3D11Resource> sourceResource;
 	source->GetResource(sourceResource.put());
+	if (!sourceResource) {
+		return;
+	}
 
 	winrt::com_ptr<ID3D11Texture2D> sourceTexture;
-	sourceResource.as(sourceTexture);
+	sourceResource.try_as(sourceTexture);
+	if (!sourceTexture) {
+		return;
+	}
 
 	D3D11_TEXTURE2D_DESC sourceDesc;
 	sourceTexture->GetDesc(&sourceDesc);
