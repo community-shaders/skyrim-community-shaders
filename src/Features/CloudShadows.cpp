@@ -2,14 +2,19 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CloudShadows::Settings,
-	Opacity)
+	Opacity,
+	InnerCloudShadowOpacity)
 
 void CloudShadows::DrawSettings()
 {
-	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.1f");
+	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Higher values make cloud shadows darker.");
+		ImGui::Text("Controls how dark cloud shadows appear on terrain and objects.");
+	}
+
+	ImGui::SliderFloat("Inner Cloud Shadow Opacity", &settings.InnerCloudShadowOpacity, 0.0f, 1.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Controls shadowing applied within the clouds themselves. Higher values make the underside of clouds darker.");
 	}
 }
 
@@ -118,6 +123,8 @@ void CloudShadows::ReflectionsPrepass()
 		ID3D11ShaderResourceView* srv = texCubemapCloudOccCopy->srv.get();
 		context->PSSetShaderResources(25, 1, &srv);
 		context->CSSetShaderResources(25, 1, &srv);
+		context->PSSetShaderResources(26, 1, &srv);
+		context->CSSetShaderResources(26, 1, &srv);
 	}
 }
 
@@ -129,9 +136,15 @@ void CloudShadows::EarlyPrepass()
 
 	auto context = globals::d3d::context;
 
+	// t25 = VolumetricCloudShadowsTexture: use previous-frame copy so there is no D3D11 hazard
+	ID3D11ShaderResourceView* copySrv = texCubemapCloudOccCopy->srv.get();
+	context->PSSetShaderResources(25, 1, &copySrv);
+	context->CSSetShaderResources(25, 1, &copySrv);
+
+	// t26 = CloudShadowsTexture: live cubemap for terrain ground shadows.
 	ID3D11ShaderResourceView* srv = texCubemapCloudOcc->srv.get();
-	context->PSSetShaderResources(25, 1, &srv);
-	context->CSSetShaderResources(25, 1, &srv);
+	context->PSSetShaderResources(26, 1, &srv);
+	context->CSSetShaderResources(26, 1, &srv);
 }
 
 void CloudShadows::SetupResources()

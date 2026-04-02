@@ -141,7 +141,8 @@ namespace SharedData
 	struct CloudShadowsSettings
 	{
 		float Opacity;
-		float3 pad0;
+		float InnerCloudShadowOpacity;
+		float2 pad0;
 	};
 
 	struct LODBlendingSettings
