@@ -41,6 +41,23 @@ static bool TryParseFloat(const std::string& a_value, float& a_out)
 	}
 }
 
+static bool TryParseWeatherID(const std::string& a_key, uint32_t& a_out)
+{
+	const std::string prefix = "weather_";
+	if (a_key.size() <= prefix.size() || a_key.compare(0, prefix.size(), prefix) != 0) {
+		return false;
+	}
+
+	try {
+		std::string idStr = a_key.substr(prefix.size());
+		size_t pos;
+		a_out = std::stoul(idStr, &pos);
+		return pos == idStr.size();
+	} catch (...) {
+		return false;
+	}
+}
+
 SettingManager& SettingManager::GetSingleton()
 {
 	static SettingManager instance;
@@ -302,8 +319,11 @@ void SettingManager::LoadWeatherSettings(const std::string& weatherKey, const st
 		return;
 	}
 
-	std::string weatherIDStr = weatherKey.substr(8);  // Remove "weather_" prefix
-	uint32_t weatherID = std::stoul(weatherIDStr);
+	uint32_t weatherID;
+	if (!TryParseWeatherID(weatherKey, weatherID)) {
+		logger::error("[SettingManager] Invalid weather key: {}", weatherKey);
+		return;
+	}
 
 	for (const auto& [category, categoryData] : categories) {
 		for (const auto& [key, setting] : categoryData.settings) {
@@ -319,8 +339,11 @@ void SettingManager::LoadWeatherSettings(const std::string& weatherKey, const st
 
 void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath)
 {
-	std::string weatherIDStr = weatherKey.substr(8);
-	uint32_t weatherID = std::stoul(weatherIDStr);
+	uint32_t weatherID;
+	if (!TryParseWeatherID(weatherKey, weatherID)) {
+		logger::error("[SettingManager] Invalid weather key: {}", weatherKey);
+		return;
+	}
 
 	auto weatherIt = weatherData.find(weatherID);
 	if (weatherIt == weatherData.end()) {
