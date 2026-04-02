@@ -3,14 +3,6 @@
 struct ENBPostProcessing : Feature
 {
 public:
-	struct Settings
-	{
-		bool Enabled = false;
-		std::string EffectPath = "";
-	};
-
-	Settings settings;
-
 	virtual inline std::string GetName() override { return "ENB Post Processing"; }
 	virtual inline std::string GetShortName() override { return "ENBPostProcessing"; }
 	virtual std::string_view GetCategory() const override { return "Post-Processing"; }
@@ -104,9 +96,6 @@ public:
 
 	PerFrame GetCommonBufferData();
 
-	virtual void SaveSettings(json&) override;
-	virtual void LoadSettings(json&) override;
-	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;
 	virtual void SetupResources() override;
 	virtual void Reset() override;

@@ -8,18 +8,6 @@
 
 #include "State.h"
 
-void ENBPostProcessing::SaveSettings(json&)
-{
-}
-
-void ENBPostProcessing::LoadSettings(json&)
-{
-}
-
-void ENBPostProcessing::RestoreDefaultSettings()
-{
-}
-
 ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 {
 	CheckCommonData();
