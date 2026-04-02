@@ -230,17 +230,14 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(SNOW_COVER)
 	if (SharedData::snowCoverSettings.EnableSnowCover) {
-		float skylight = 0.15 * SharedData::snowCoverSettings.TreeSnowAmount;
+		float skylight = 0.15;
 		if (SharedData::snowCoverSettings.EnableExpensiveFoliage) {
 			float rx;
 			float ry;
 			TexDiffuse.GetDimensions(rx, ry);
 			skylight = 1 - TexDiffuse.Sample(SampDiffuse, input.TexCoord.xy - float2(0, 2. / ry)).a;
 		}
-		float3 snowNormal = normal;
-		snowNormal.z = max(snowNormal.z, 0.5);  // lower threshold than close trees (0.75) since distant LODs need less aggressive correction
-		snowNormal = normalize(snowNormal);
-		SnowCover::ApplySnowFoliage(baseColor.xyz, snowNormal, input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, skylight, mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).z);
+		SnowCover::ApplySnowFoliage(baseColor.xyz, normal, input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, skylight, mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).z);
 	}
 #		endif
 

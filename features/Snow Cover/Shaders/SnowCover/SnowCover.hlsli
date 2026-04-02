@@ -104,17 +104,37 @@ namespace SnowCover
 		if (mult <= 0)
 			return mult;
 		float4 rmaos;
+		float3 albedo;
+
+#		if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+			float2 snowUV = SharedData::snowCoverSettings.UVScale * (p.xy / 100 + worldNormal.xy * disp);
+			StochasticOffsets so = ComputeStochasticOffsets(snowUV);
+			if (alt) {
+				rmaos = StochasticEffect(IceRmaos, SampColorSampler, uv, so, 0, 0);
+				albedo = StochasticEffect(IceAlbedo, SampColorSampler, uv, so, 0, 0).rgb;
+			} else {
+				rmaos = StochasticEffect(SnowRmaos, SampColorSampler, uv, so, 0, 0);
+				albedo = StochasticEffect(SnowAlbedo, SampColorSampler, uv, so, 0, 0).rgb;
+			}
+		} else
+#		endif
+		{
+			if (alt) {
+				rmaos = IceRmaos.Sample(SampColorSampler, uv);
+				albedo = IceAlbedo.Sample(SampColorSampler, uv).rgb;
+			} else {
+				rmaos = SnowRmaos.Sample(SampColorSampler, uv);
+				albedo = SnowAlbedo.Sample(SampColorSampler, uv).rgb;
+			}
+		}
+
 		if (alt) {
-			rmaos = IceRmaos.Sample(SampColorSampler, uv);
-			float3 albedo = IceAlbedo.Sample(SampColorSampler, uv).rgb;
 			albedo = Color::Diffuse(albedo) * SharedData::snowCoverSettings.AltTint.rgb;
 			material.BaseColor = lerp(material.BaseColor, albedo, mult * SharedData::snowCoverSettings.AltTint.w);
 			worldNormal = TransformNormal(IceNormal.Sample(SampNormalSampler, uv).rgb);
 			material.F0 = lerp(material.F0, rmaos.w * SharedData::snowCoverSettings.altSpec, mult);
-
 		} else {
-			rmaos = SnowRmaos.Sample(SampColorSampler, uv);
-			float3 albedo = SnowAlbedo.Sample(SampColorSampler, uv).rgb;
 			albedo = Color::Diffuse(albedo) * SharedData::snowCoverSettings.MainTint.rgb;
 			material.BaseColor = lerp(material.BaseColor, albedo, mult * SharedData::snowCoverSettings.MainTint.w);
 			worldNormal = TransformNormal(SnowNormal.Sample(SampNormalSampler, uv).rgb);
@@ -138,10 +158,33 @@ namespace SnowCover
 		if (mult <= 0.0)
 			return 0;
 		float4 rmaos;
+		float3 albedo;
+
+#		if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+			float2 snowUV = SharedData::snowCoverSettings.UVScale * (p.xy / 100 + worldNormal.xy * disp);
+			StochasticOffsets so = ComputeStochasticOffsets(snowUV);
+			if (alt) {
+				albedo = StochasticEffect(IceAlbedo, SampColorSampler, uv, so, 0, 0).rgb;
+				rmaos = StochasticEffect(IceRmaos, SampColorSampler, uv, so, 0, 0);
+			} else {
+				albedo = StochasticEffect(SnowAlbedo, SampColorSampler, uv, so, 0, 0).rgb;
+				rmaos = StochasticEffect(SnowRmaos, SampColorSampler, uv, so, 0, 0);
+			}
+		} else
+#		endif
+		{
+			if (alt) {
+				albedo = IceAlbedo.Sample(SampColorSampler, uv).rgb;
+				rmaos = IceRmaos.Sample(SampColorSampler, uv);
+			} else {
+				albedo = SnowAlbedo.Sample(SampColorSampler, uv).rgb;
+				rmaos = SnowRmaos.Sample(SampColorSampler, uv);
+			}
+		}
+
 		if (alt) {
-			float3 albedo = IceAlbedo.Sample(SampColorSampler, uv).rgb;
 			albedo = Color::Diffuse(albedo) * SharedData::snowCoverSettings.AltTint.rgb * Color::PBRLightingScale;
-			rmaos = IceRmaos.Sample(SampColorSampler, uv);
 			material.Roughness = lerp(material.Roughness, rmaos.x, mult);
 			material.Shininess = lerp(material.Shininess, 25 * 500 * SharedData::snowCoverSettings.altSpec * rmaos.w, mult);
 			worldNormal = TransformNormal(IceNormal.Sample(SampNormalSampler, uv).rgb);
@@ -149,9 +192,7 @@ namespace SnowCover
 			material.SpecularColor = lerp(material.SpecularColor, rmaos.y * albedo + float3(1, 1, 1) * (1 - rmaos.y), mult);
 			material.F0 = lerp(material.F0, rmaos.w * SharedData::snowCoverSettings.altSpec, mult);
 		} else {
-			float3 albedo = SnowAlbedo.Sample(SampColorSampler, uv).rgb;
 			albedo = Color::Diffuse(albedo) * SharedData::snowCoverSettings.MainTint.rgb * Color::PBRLightingScale;
-			rmaos = SnowRmaos.Sample(SampColorSampler, uv);
 			material.Roughness = lerp(material.Roughness, rmaos.x, mult);
 			material.Shininess = lerp(material.Shininess, 25 * 500 * SharedData::snowCoverSettings.mainSpec * rmaos.w, mult);
 			worldNormal = TransformNormal(SnowNormal.Sample(SampNormalSampler, uv).rgb);

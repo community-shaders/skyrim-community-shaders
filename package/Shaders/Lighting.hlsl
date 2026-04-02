@@ -924,6 +924,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "Skylighting/Skylighting.hlsli"
 #	endif
 
+#	if defined(TERRAIN_VARIATION)
+#		include "TerrainVariation/TerrainVariation.hlsli"
+#	endif
+
 #	if defined(SNOW_COVER)
 #		undef SNOW
 #		include "SnowCover/SnowCover.hlsli"
@@ -931,10 +935,6 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	if defined(HAIR) && defined(CS_HAIR)
 #		include "Hair/Hair.hlsli"
-#	endif
-
-#	if defined(TERRAIN_VARIATION)
-#		include "TerrainVariation/TerrainVariation.hlsli"
 #	endif
 
 #	if defined(EXTENDED_TRANSLUCENCY) && !(defined(LOD) || defined(SKIN) || defined(HAIR) || defined(EYE) || defined(TREE_ANIM) || defined(LODOBJECTSHD) || defined(LODOBJECTS) || defined(DEPTH_WRITE_DECALS))
@@ -2341,15 +2341,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float snowOcclusion = inWorld;
 #		endif
 
-#		if defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING)  // should only match object lod trees (ultra trees), they have no define
+#	if defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING) // should only match object lod trees (ultra trees), they have no define
 	float rx;
 	float ry;
 	TexColorSampler.GetDimensions(rx, ry);
 	float hasAlpha = 1 - TexColorSampler.SampleLevel(SampColorSampler, uv, 6).a;
-	if (hasAlpha > 0.001) {
+	if(hasAlpha > 0.001){
 		snowOcclusion = 1 - TexColorSampler.Sample(SampColorSampler, uv - float2(0, 2. / ry)).a;
 	}
-#		endif
+#	endif
 
 	float3 adjustedWorldPos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 
@@ -2380,7 +2380,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float disp = 0;
 #		endif
 		float3 snowNormal = worldNormal;
-#		if defined(TREE_ANIM) || (defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING))
+#		if defined(TREE_ANIM)
 		snowNormal.z = max(snowNormal.z, 0.75);
 		snowNormal = normalize(snowNormal);
 #		endif
@@ -2388,6 +2388,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		snowOcclusion *= SharedData::snowCoverSettings.TreeSnowAmount;
 		if (SharedData::snowCoverSettings.AffectTreeTint && !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::NoTint))
 			SnowCover::ApplyFoliageColor(material.BaseColor, SnowCover::GetEnvironmentalMultiplier(adjustedWorldPos));
+
 #		endif
 #		if defined(TRUE_PBR)
 		snowFactor = SnowCover::ApplySnowPBR(material, snowNormal, snowFactor, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
@@ -2398,8 +2399,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			float3 sd = FrameBuffer::ViewToWorld(-float3(ddx_fine(snowFactor), ddy_fine(snowFactor), 0), false, eyeIndex);
 #		if defined(TREE_ANIM)
 			worldNormal = normalize(lerp(worldNormal, float3(0, 0, 1), snowFactor * 0.5) + sd);
-#		elif defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING)
-			worldNormal = normalize(lerp(worldNormal, float3(0, 0, 1), snowFactor) + sd);
 #		elif defined(MODELSPACENORMALS) && !defined(SKINNED)
 			worldNormal = normalize(lerp(worldNormal, snowNormal, snowFactor * 0.75) + sd);
 #		else

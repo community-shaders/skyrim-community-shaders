@@ -10,7 +10,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SnowCover::UserSettings,
 	EnableExpensiveFoliage,
 	AffectHavok,
-	SnowHeightOffset)
+	SnowHeightOffset,
+	TreeSnowAmount)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SnowCover::WorldConfig,
