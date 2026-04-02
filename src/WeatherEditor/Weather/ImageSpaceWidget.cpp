@@ -33,8 +33,7 @@ void ImageSpaceWidget::DrawWidget()
 	WeatherUtils::SetCurrentWidget(this);
 	auto editorWindow = EditorWindow::GetSingleton();
 
-	SetupWidgetWindowDefaults();
-	if (Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##ImageSpaceSearch", false, true);
 	}
 	BeginScrollableContent("##ISScroll");
