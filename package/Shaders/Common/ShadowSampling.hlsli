@@ -18,7 +18,11 @@
 #	include "IBL/IBL.hlsli"
 #endif
 
+// Only declared when volumetric shadows are active; avoids register(t80) conflict with
+// TRUE_PBR LANDSCAPE TexLandDisplacement0Sampler in Lighting.hlsl.
+#if defined(VOLUMETRIC_SHADOWS)
 Texture2D<float2> SharedShadowMap : register(t80);
+#endif
 
 // Directional (sun) shadow data: cascade split distances, projection matrices,
 struct DirectionalShadowData
@@ -277,13 +281,14 @@ namespace ShadowSampling
 
 		// Constant bias only — slope bias (ddx/ddy) is undefined inside a non-uniform loop
 		// where adjacent quad pixels may be at different iterations.
+		// Initialize to mode-0 path so FXC can prove the variable is set on all paths (avoids X4000).
+		float result = SampleShadowGather(shadowIndex, sampleUV, depth - ShadowBiasConst);
 		[branch] if (mode >= 1)
 		{
 			float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
-			return PCFSpiral8(shadowIndex, sampleUV, depth - ShadowBiasConst, kernelRadius, rotationMatrix);
+			result = PCFSpiral8(shadowIndex, sampleUV, depth - ShadowBiasConst, kernelRadius, rotationMatrix);
 		}
-		// Mode 0: single-tap with constant bias
-		return SampleShadowGather(shadowIndex, sampleUV, depth - ShadowBiasConst);
+		return result;
 	}
 
 	// --- Per-light shadow sampling ---
@@ -338,6 +343,10 @@ namespace ShadowSampling
 
 	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
 	{
+		// Initialize to unshadowed; geometry outside the paraboloid's coverage hemisphere is unshadowed.
+		// Explicit initialization avoids X4000 "potentially uninitialized variable" from FXC.
+		float result = 1.0;
+
 		// positionLS.z > 0 means the point is in the forward hemisphere the paraboloid covers.
 		if (positionLS.z > 0) {
 			positionLS.xyz /= positionLS.w;
@@ -345,11 +354,10 @@ namespace ShadowSampling
 			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 			positionLS.z = saturate(length(positionLS.xyz) / shadow.ShadowParam.y);
 
-			return SampleParaboloidShadow(shadowIndex, sampleUV, positionLS.z, rotationMatrix);
+			result = SampleParaboloidShadow(shadowIndex, sampleUV, positionLS.z, rotationMatrix);
 		}
 
-		// Geometry outside the paraboloid's coverage hemisphere is unshadowed.
-		return 1.0;
+		return result;
 	}
 
 	float GetOmnidirectionalShadow(ShadowData shadow, uint shadowIndex, float3 positionLS, float2x2 rotationMatrix)
