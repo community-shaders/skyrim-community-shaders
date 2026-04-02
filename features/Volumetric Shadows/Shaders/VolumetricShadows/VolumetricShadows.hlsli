@@ -151,7 +151,7 @@ namespace VolumetricShadows
 
 		// Transform ray to light space for primary cascade
 		float4x4 shadowProj = sD.ShadowProj[primaryCascade];
-		float3 positionLS = mul(transpose(shadowProj), float4(position, 1)).xyz;
+		float3 positionLS = mul(shadowProj, float4(position, 1)).xyz;
 		positionLS.xy = saturate(positionLS.xy);
 
 		// Sample primary cascade

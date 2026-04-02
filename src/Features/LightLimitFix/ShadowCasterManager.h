@@ -41,7 +41,8 @@ namespace ShadowCasterManager
 	inline void ForEachShadowLight(const RE::BSTArray<RE::BSShadowLight*>& accum, Fn&& fn)
 	{
 		int idx = 0;
-		while (true) {
+		const int size = static_cast<int>(accum.size());
+		while (idx < size) {
 			RE::BSShadowLight* light = accum[idx];
 			if (!light)
 				break;
