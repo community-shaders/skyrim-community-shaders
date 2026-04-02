@@ -1141,15 +1141,19 @@ namespace ShadowCasterManager
 				continue;
 			}
 			auto* cull = GetLightCullingProcess(l);
-			auto* portal = cull ? reinterpret_cast<RE::BSPortalGraphEntry*>(cull->portalGraphEntry) : nullptr;
-			if (!cull || !portal) {
+			if (!cull) {
 				DisableLight(l);
 				continue;
 			}
-			auto* gPortal = globalCull ? reinterpret_cast<RE::BSPortalGraphEntry*>(globalCull->portalGraphEntry) : nullptr;
-			if (!gPortal || !GamePortalHasSharedVisibility(gPortal, portal)) {
-				DisableLight(l);
-				continue;
+			// Portal culling only applies in interior cells where a portal graph exists.
+			// Exterior lights (portal == nullptr) are unconditionally visible; skip the check.
+			auto* portal = reinterpret_cast<RE::BSPortalGraphEntry*>(cull->portalGraphEntry);
+			if (portal) {
+				auto* gPortal = globalCull ? reinterpret_cast<RE::BSPortalGraphEntry*>(globalCull->portalGraphEntry) : nullptr;
+				if (gPortal && !GamePortalHasSharedVisibility(gPortal, portal)) {
+					DisableLight(l);
+					continue;
+				}
 			}
 
 			if (wantCount < s_settings.ShadowLightCount) {
