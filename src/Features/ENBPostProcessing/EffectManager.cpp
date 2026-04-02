@@ -189,7 +189,6 @@ void EffectManager::RegisterSettings()
 
 	// WATER
 	settingManager.RegisterTimeOfDaySetting("Brightness", "WATER", 1, true);
-	settingManager.RegisterTimeOfDaySetting("WavesAmplitude", "WATER", 1, true);
 
 	settingManager.RegisterFloatSetting("Muddiness", "WATER", 1.0f, 0.0f, 1.0f, false);
 	settingManager.RegisterFloatSetting("SunLightingMultiplier", "WATER", 1.0f, 0.0f, 1.0f, false);

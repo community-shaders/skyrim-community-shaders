@@ -678,13 +678,8 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 
 	float3 normalScalesRcp = rcp(input.NormalsScale.xyz);
 
-	float4 normalsAmplitude = NormalsAmplitude;
-	if (SharedData::enbSettings.EnableWater) {
-		normalsAmplitude *= SharedData::enbSettings.WaterWavesAmplitude;
-	}
-
 #			if defined(WATER_PARALLAX)
-	float2 parallaxOffset = WaterEffects::GetParallaxOffset(input, normalsAmplitude, normalScalesRcp);
+	float2 parallaxOffset = WaterEffects::GetParallaxOffset(input, normalScalesRcp);
 #			endif
 
 #			if defined(FLOWMAP)
@@ -705,7 +700,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float viewDotUp = -viewDirection.z;
 	parallaxDir *= 0.008 * saturate(viewDotUp * 2.0);
 	flowmapInput.TexCoord3.xy = input.TexCoord3.xy + parallaxAmount * parallaxDir;
-	flowmapParallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, flowmapDimensions, viewDirection, normalsAmplitude, normalScalesRcp);
+	flowmapParallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, flowmapDimensions, viewDirection, normalScalesRcp);
 #				endif
 
 	// Calculate cell blend weights using parallaxed input

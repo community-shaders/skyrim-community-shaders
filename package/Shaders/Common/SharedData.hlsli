@@ -306,7 +306,6 @@ namespace SharedData
 		float ProceduralSunGlowIntensity;
 		float ProceduralSunGlowCurve;
 
-		float WaterWavesAmplitude;
 		float WaterMuddiness;
 		float WaterSunLightingMultiplier;
 		float WaterSunSpecularMultiplier;
