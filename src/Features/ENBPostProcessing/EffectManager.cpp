@@ -22,7 +22,47 @@ void EffectManager::Initialize()
 	SettingManager::GetSingleton().Load();
 	CreateCommonResources();
 	Apply();
-	initialized.store(true, std::memory_order_release);
+
+	// Verify all critical common resources are initialized correctly
+	bool resourcesValid = true;
+	if (!quadVertexBuffer) {
+		logger::error("[EffectManager] quadVertexBuffer failed to initialize");
+		resourcesValid = false;
+	}
+	if (!inputLayout) {
+		logger::error("[EffectManager] inputLayout failed to initialize");
+		resourcesValid = false;
+	}
+	if (!rasterizerState) {
+		logger::error("[EffectManager] rasterizerState failed to initialize");
+		resourcesValid = false;
+	}
+	if (!blendState) {
+		logger::error("[EffectManager] blendState failed to initialize");
+		resourcesValid = false;
+	}
+	if (!copyVertexShader) {
+		logger::error("[EffectManager] copyVertexShader failed to initialize");
+		resourcesValid = false;
+	}
+	if (!copyPixelShader) {
+		logger::error("[EffectManager] copyPixelShader failed to initialize");
+		resourcesValid = false;
+	}
+	if (!colorCorrectionComputeShader) {
+		logger::error("[EffectManager] colorCorrectionComputeShader failed to initialize");
+		resourcesValid = false;
+	}
+	if (!colorCorrectionConstantBuffer) {
+		logger::error("[EffectManager] colorCorrectionConstantBuffer failed to initialize");
+		resourcesValid = false;
+	}
+
+	if (resourcesValid) {
+		initialized.store(true, std::memory_order_release);
+	} else {
+		logger::error("[EffectManager] Initialization failed due to missing resources");
+	}
 }
 
 void EffectManager::Apply()
