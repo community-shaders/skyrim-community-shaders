@@ -2,6 +2,44 @@
 
 #include "WeatherManager.h"
 #include <Windows.h>
+#include <algorithm>
+#include <cctype>
+#include <string>
+
+static bool TryParseBool(const std::string& a_value, bool& a_out)
+{
+	std::string s = a_value;
+	s.erase(0, s.find_first_not_of(" \t\r\n"));
+	s.erase(s.find_last_not_of(" \t\r\n") + 1);
+	std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+	if (s == "true" || s == "1") {
+		a_out = true;
+		return true;
+	}
+	if (s == "false" || s == "0") {
+		a_out = false;
+		return true;
+	}
+	return false;
+}
+
+static bool TryParseFloat(const std::string& a_value, float& a_out)
+{
+	if (a_value.empty())
+		return false;
+	try {
+		size_t pos;
+		a_out = std::stof(a_value, &pos);
+		for (size_t i = pos; i < a_value.size(); ++i) {
+			if (!std::isspace(static_cast<unsigned char>(a_value[i]))) {
+				return false;
+			}
+		}
+		return true;
+	} catch (...) {
+		return false;
+	}
+}
 
 SettingManager& SettingManager::GetSingleton()
 {
@@ -454,9 +492,12 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 			bool defaultVal = std::get<bool>(setting.defaultValue);
 			char buffer[256];
 			GetPrivateProfileStringA(section.c_str(), key.c_str(), defaultVal ? "true" : "false", buffer, sizeof(buffer), filePath.c_str());
-			std::string valueStr = buffer;
-			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
-			setting.currentValue = (valueStr == "true" || valueStr == "1");
+			bool parsed;
+			if (TryParseBool(buffer, parsed)) {
+				setting.currentValue = parsed;
+			} else {
+				setting.currentValue = defaultVal;
+			}
 			break;
 		}
 	case SettingType::Float:
@@ -464,8 +505,12 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 			float defaultVal = std::get<float>(setting.defaultValue);
 			char buffer[256];
 			GetPrivateProfileStringA(section.c_str(), key.c_str(), std::to_string(defaultVal).c_str(), buffer, sizeof(buffer), filePath.c_str());
-			std::string valueStr = buffer;
-			setting.currentValue = static_cast<float>(atof(valueStr.c_str()));
+			float parsed;
+			if (TryParseFloat(buffer, parsed)) {
+				setting.currentValue = std::clamp(parsed, setting.minValue, setting.maxValue);
+			} else {
+				setting.currentValue = defaultVal;
+			}
 			break;
 		}
 	case SettingType::TimeOfDay:
@@ -478,8 +523,10 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 				char buffer[256];
 				std::string defaultStr = std::to_string(timeOfDayValue.values[i]);
 				GetPrivateProfileStringA(section.c_str(), fullKey.c_str(), defaultStr.c_str(), buffer, sizeof(buffer), filePath.c_str());
-				std::string valueStr = buffer;
-				timeOfDayValue.values[i] = static_cast<float>(atof(valueStr.c_str()));
+				float parsed;
+				if (TryParseFloat(buffer, parsed)) {
+					timeOfDayValue.values[i] = std::clamp(parsed, setting.minValue, setting.maxValue);
+				}
 			}
 
 			setting.currentValue = timeOfDayValue;
@@ -493,9 +540,10 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
 				char buffer[256];
-				std::string defaultStr = std::to_string(colorTimeOfDayValue.values[i].x) + ", " +
-				                         std::to_string(colorTimeOfDayValue.values[i].y) + ", " +
-				                         std::to_string(colorTimeOfDayValue.values[i].z);
+				float3 defaultColor = colorTimeOfDayValue.values[i];
+				std::string defaultStr = std::to_string(defaultColor.x) + ", " +
+				                         std::to_string(defaultColor.y) + ", " +
+				                         std::to_string(defaultColor.z);
 
 				GetPrivateProfileStringA(section.c_str(), fullKey.c_str(), defaultStr.c_str(), buffer, sizeof(buffer), filePath.c_str());
 				std::string valueStr = buffer;
@@ -504,23 +552,23 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 				std::stringstream ss(valueStr);
 				std::string item;
 				std::vector<float> components;
+				bool success = true;
 
 				while (std::getline(ss, item, ',')) {
-					// Trim whitespace
-					item.erase(0, item.find_first_not_of(" \t"));
-					item.erase(item.find_last_not_of(" \t") + 1);
-					components.push_back(static_cast<float>(atof(item.c_str())));
+					float parsed;
+					if (TryParseFloat(item, parsed)) {
+						components.push_back(std::clamp(parsed, setting.minValue, setting.maxValue));
+					} else {
+						success = false;
+						break;
+					}
 				}
 
-				// Ensure we have exactly 3 components
-				if (components.size() >= 3) {
+				// Ensure we have exactly 3 components and parsing was successful
+				if (success && components.size() == 3) {
 					colorTimeOfDayValue.values[i].x = components[0];
 					colorTimeOfDayValue.values[i].y = components[1];
 					colorTimeOfDayValue.values[i].z = components[2];
-				} else {
-					// Use original default from defaultValue if parsing fails
-					float3 defaultColor = std::get<ColorTimeOfDayValue>(setting.defaultValue).values[i];
-					colorTimeOfDayValue.values[i] = defaultColor;
 				}
 			}
 
@@ -606,15 +654,16 @@ void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 		if (hasWeatherSupport) {
 			char buffer1[256];
 			GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem", "false", buffer1, sizeof(buffer1), filePath.c_str());
-			std::string valueStr = buffer1;
-			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
-			categoryData.ignoreWeatherSystem = (valueStr == "true" || valueStr == "1");
+			bool parsed;
+			if (TryParseBool(buffer1, parsed)) {
+				categoryData.ignoreWeatherSystem = parsed;
+			}
 
 			char buffer2[256];
 			GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior", "true", buffer2, sizeof(buffer2), filePath.c_str());
-			valueStr = buffer2;
-			std::transform(valueStr.begin(), valueStr.end(), valueStr.begin(), ::tolower);
-			categoryData.ignoreWeatherSystemInterior = (valueStr == "true" || valueStr == "1");
+			if (TryParseBool(buffer2, parsed)) {
+				categoryData.ignoreWeatherSystemInterior = parsed;
+			}
 		}
 	}
 }
