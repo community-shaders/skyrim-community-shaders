@@ -164,6 +164,10 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		float3 dirLightColorF3 = NiToF3(dirLightColor);
 
 		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+		if (!imageSpaceManager) {
+			return;
+		}
+
 		GET_INSTANCE_MEMBER(data, imageSpaceManager);
 		float sunlightScale = std::max(data.baseData.hdr.sunlightScale, 1e-6f);
 		dirLightColorF3 *= sunlightScale;
