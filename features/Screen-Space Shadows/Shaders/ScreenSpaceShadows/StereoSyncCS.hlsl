@@ -15,6 +15,10 @@
 Texture2D<float> SrcDepthTexture : register(t0);
 Texture2D<unorm half> SrcShadowTexture : register(t1);
 
+#	if defined(VR_STEREO_OPT)
+Texture2D<uint> StereoOptModeTexture : register(t16);
+#	endif
+
 RWTexture2D<unorm half> OutShadowTexture : register(u0);
 
 cbuffer StereoSyncCB : register(b1)
@@ -89,6 +93,18 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 	float2 uv = (dtid + 0.5) * RcpFrameDim;
 
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+
+#	if defined(VR_STEREO_OPT)
+	// Eye 1 pixels with mode 1 (edge) or 2 (main) will be overwritten by StereoBlend
+	// reprojection, so skip the expensive stereo sync work and write neutral (unshadowed).
+	if (eyeIndex == 1) {
+		uint mode = StereoOptModeTexture[uint2(dtid.xy)] & 0x0F;
+		if (mode == 1 || mode == 2) {
+			OutShadowTexture[dtid] = 1.0;  // 1.0 = no shadow (neutral)
+			return;
+		}
+	}
+#	endif
 
 	float depth = SrcDepthTexture[dtid];
 

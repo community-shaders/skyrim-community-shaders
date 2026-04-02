@@ -1,6 +1,7 @@
 #include "ScreenSpaceShadows.h"
 
 #include "State.h"
+#include "VR.h"
 
 #pragma warning(push)
 #pragma warning(disable: 4838 4244)
@@ -40,13 +41,13 @@ void ScreenSpaceShadows::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Contrast boost for the shadow transition. Higher values produce harder shadow edges.");
 
-		if (globals::game::isVR && globals::state->IsDeveloperMode()) {
+		if (globals::game::isVR) {
 			ImGui::Checkbox("VR Stereo Sync", &enableStereoSync);
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text(
 					"Synchronizes shadow data between left and right eyes via bilateral reprojection "
 					"and applies a depth-weighted blur to reduce per-eye noise. "
-					"Uses min-blend so if either eye detects an occluder, the shadow is preserved. ");
+					"Uses min-blend so if either eye detects an occluder, the shadow is preserved.");
 		}
 
 		ImGui::Spacing();
@@ -65,6 +66,10 @@ void ScreenSpaceShadows::InvalidateRaymarchShaders()
 		raymarchRightCS->Release();
 		raymarchRightCS = nullptr;
 	}
+	if (raymarchRightReducedCS) {
+		raymarchRightReducedCS->Release();
+		raymarchRightReducedCS = nullptr;
+	}
 }
 
 void ScreenSpaceShadows::ClearShaderCache()
@@ -78,23 +83,13 @@ void ScreenSpaceShadows::ClearShaderCache()
 
 uint ScreenSpaceShadows::GetScaledSampleCount()
 {
-	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
-
-	// In VR, renderSize covers both eyes side-by-side; raymarch dispatches per-eye
-	if (globals::game::isVR)
-		renderSize.x /= 2.0f;
-
-	// Scale sample count based on both dimensions relative to 1920x1080 reference
-	float2 referenceRes = { 1920.0f, 1080.0f };
-	float referenceArea = referenceRes.x * referenceRes.y;
-	float currentArea = renderSize.x * renderSize.y;
-	float areaScale = std::sqrt(currentArea / referenceArea);
-	uint scaledSampleCount = static_cast<uint>(std::round(bendSettings.SampleCount * 60 * areaScale));
-
-	// Quantize to steps of 8 to prevent frequent recompilation from small DRS oscillations
-	scaledSampleCount = ((scaledSampleCount + 7u) / 8u) * 8u;
-	scaledSampleCount = std::max(scaledSampleCount, 8u);
-
+	// Shadow reach in pixels is resolution-independent: a tree branch casts
+	// the same pixel-length shadow at 1080p and 3000p. Sample count controls
+	// reach, not quality-per-pixel. The old formula (multiplier * 64) was
+	// correct; the area-based scaling produced 2-8x more samples at VR
+	// resolution with no quality benefit, only GPU cost.
+	// Always produces WAVE_SIZE-aligned counts for correct Bend READ_COUNT.
+	uint scaledSampleCount = bendSettings.SampleCount * 64;
 	return scaledSampleCount;
 }
 
@@ -117,9 +112,42 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 {
 	if (!raymarchRightCS) {
 		uint scaledSampleCount = GetScaledSampleCount();
-		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() }, { "RIGHT", "" } }, "cs_5_0");
+		auto sampleCountStr = std::format("{}", scaledSampleCount);
+		std::vector<std::pair<const char*, const char*>> defines = {
+			{ "SAMPLE_COUNT", sampleCountStr.c_str() },
+			{ "RIGHT", "" }
+		};
+		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", defines, "cs_5_0");
 	}
 	return raymarchRightCS;
+}
+
+ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRightReduced()
+{
+	uint fullCount = GetScaledSampleCount();
+	uint divisor = (stereoOptRightEyeReduction == 1) ? 4 : 2;
+	uint reducedCount = std::max(fullCount / divisor, 64u);
+	// Quantize to WAVE_SIZE (64) for clean READ_COUNT in Bend's algorithm
+	reducedCount = ((reducedCount + 63u) / 64u) * 64u;
+
+	if (reducedCount != lastCompiledReducedSampleCount) {
+		lastCompiledReducedSampleCount = reducedCount;
+		if (raymarchRightReducedCS) {
+			raymarchRightReducedCS->Release();
+			raymarchRightReducedCS = nullptr;
+		}
+	}
+
+	if (!raymarchRightReducedCS) {
+		auto sampleCountStr = std::format("{}", reducedCount);
+		std::vector<std::pair<const char*, const char*>> defines = {
+			{ "SAMPLE_COUNT", sampleCountStr.c_str() },
+			{ "RIGHT", "" }
+		};
+		raymarchRightReducedCS = (ID3D11ComputeShader*)Util::CompileShader(
+			L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", defines, "cs_5_0");
+	}
+	return raymarchRightReducedCS;
 }
 
 void ScreenSpaceShadows::DrawShadows()
@@ -148,6 +176,7 @@ void ScreenSpaceShadows::DrawShadows()
 	auto lightProjectionF = CalculateLightProjection(0);
 
 	float2 renderSize = Util::ConvertToDynamic(state->screenSize);
+
 	int viewportSize[2] = { (int)renderSize.x, (int)renderSize.y };
 
 	if (globals::game::isVR)
@@ -156,12 +185,11 @@ void ScreenSpaceShadows::DrawShadows()
 	int minRenderBounds[2] = { 0, 0 };
 	int maxRenderBounds[2] = { viewportSize[0], viewportSize[1] };
 
-	// Setup common render state
 	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
-	context->CSSetShaderResources(0, 1, &depthSRV);
+	auto* shadowUAV = screenSpaceShadowsTexture->uav.get();
 
-	auto uav = screenSpaceShadowsTexture->uav.get();
-	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	context->CSSetShaderResources(0, 1, &depthSRV);
+	context->CSSetUnorderedAccessViews(0, 1, &shadowUAV, nullptr);
 
 	context->CSSetSamplers(0, 1, &pointBorderSampler);
 
@@ -170,7 +198,8 @@ void ScreenSpaceShadows::DrawShadows()
 
 	auto viewport = globals::game::graphicsState;
 
-	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
+	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio,
+		viewport->GetRuntimeData().dynamicResolutionHeightRatio };
 
 	// Shared dispatch logic for both VR and non-VR
 	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
@@ -228,9 +257,21 @@ void ScreenSpaceShadows::DrawShadows()
 	} else {
 		DispatchEye("Left Eye", GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
 
-		// Calculate light projection for right eye
 		auto lightProjectionRightF = CalculateLightProjection(1);
-		DispatchEye("Right Eye", GetComputeRaymarchRight(), lightProjectionRightF.data(), InvTexSizeX, InvTexSizeY);
+
+		bool useStereoOpt = REL::Module::IsVR() &&
+		                    globals::features::vr.stereoOpt.loaded &&
+		                    globals::features::vr.stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
+
+		if (useStereoOpt) {
+			// Reduced sample count for right eye — StereoBlend overwrites most of it
+			DispatchEye("Right Eye (Reduced)", GetComputeRaymarchRightReduced(),
+				lightProjectionRightF.data(), InvTexSizeX, InvTexSizeY);
+		} else {
+			// Full sample count
+			DispatchEye("Right Eye", GetComputeRaymarchRight(),
+				lightProjectionRightF.data(), InvTexSizeX, InvTexSizeY);
+		}
 	}
 
 	ID3D11ShaderResourceView* views[1]{ nullptr };
@@ -326,16 +367,26 @@ void ScreenSpaceShadows::Prepass()
 void ScreenSpaceShadows::LoadSettings(json& o_json)
 {
 	bendSettings = o_json;
+	if (o_json.contains("StereoOptRightEyeReduction"))
+		stereoOptRightEyeReduction = o_json["StereoOptRightEyeReduction"];
+	if (o_json.contains("EnableStereoSync"))
+		enableStereoSync = o_json["EnableStereoSync"].get<bool>();
 }
 
 void ScreenSpaceShadows::SaveSettings(json& o_json)
 {
 	o_json = bendSettings;
+	o_json["StereoOptRightEyeReduction"] = stereoOptRightEyeReduction;
+	o_json["EnableStereoSync"] = enableStereoSync;
 }
 
 void ScreenSpaceShadows::RestoreDefaultSettings()
 {
 	bendSettings = {};
+	stereoOptRightEyeReduction = 0;
+	enableStereoSync = false;
+	if (globals::game::isVR)
+		bendSettings.SampleCount = 2;
 }
 
 bool ScreenSpaceShadows::HasShaderDefine(RE::BSShader::Type)
@@ -346,7 +397,6 @@ bool ScreenSpaceShadows::HasShaderDefine(RE::BSShader::Type)
 void ScreenSpaceShadows::SetupResources()
 {
 	raymarchCB = new ConstantBuffer(ConstantBufferDesc<RaymarchCB>());
-
 	if (globals::game::isVR) {
 		stereoSyncCB = new ConstantBuffer(ConstantBufferDesc<StereoSyncCB>());
 	}

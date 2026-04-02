@@ -50,7 +50,10 @@ cbuffer PerFrame : register(b1)
 
 	parameters.DynamicRes = DynamicRes;
 
-	parameters.UsePrecisionOffset = true;
+	// VR note: precision offset adds a depth bias that can cause subtle shadow
+	// shifting. Disabled to match the old (stable) SSS implementation.
+	// See: docs/development/Old code/RaymarchCS.hlsl
+	parameters.UsePrecisionOffset = false;
 
 	WriteScreenSpaceShadow(parameters, groupID, groupThreadID);
 }
