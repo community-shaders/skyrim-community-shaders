@@ -1,0 +1,10 @@
+#ifndef __VR_STEREO_OPT_MODES_HLSLI__
+#define __VR_STEREO_OPT_MODES_HLSLI__
+
+#define MODE_DISOCCLUDED 0
+#define MODE_EDGE 1
+#define MODE_MAIN 2
+#define MODE_EDGE_NEIGHBOUR 3
+#define MODE_FULL_BLEND 4
+
+#endif

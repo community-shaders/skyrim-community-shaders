@@ -17,6 +17,10 @@ Texture2D<float> srcAo : register(t1);
 Texture2D<float4> srcIlY : register(t2);
 Texture2D<float2> srcIlCoCg : register(t3);
 
+#	if defined(VR_STEREO_OPT)
+Texture2D<uint> StereoOptModeTexture : register(t16);
+#	endif
+
 RWTexture2D<float> outAo : register(u0);
 RWTexture2D<float4> outIlY : register(u1);
 RWTexture2D<float2> outIlCoCg : register(u2);
@@ -58,6 +62,17 @@ float4 SampleCrossDepths(float2 centerUV, float2 step, float2 texScale, uint eye
 	float2 uv = (dtid + 0.5) / outFrameDim;
 
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+
+#	if defined(VR_STEREO_OPT)
+	if (eyeIndex == 1) {
+		uint2 fullResPx = uint2(uv * FrameDim);
+		uint mode = StereoOptModeTexture[fullResPx];
+		if (mode == 1 || mode == 2) {
+			Passthrough(dtid);
+			return;
+		}
+	}
+#	endif
 
 	// SSGI working depth is linear view-space Z.
 	// 0.0 = mask (outside lens area). FP_Z = first-person hands threshold (~18.0).
