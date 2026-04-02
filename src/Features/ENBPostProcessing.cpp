@@ -318,20 +318,17 @@ void ENBPostProcessing::CheckCommonData()
 		bool isMenuOpen = ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
 		enableEffect = !isMenuOpen && settingManager.GetValue<bool>("UseEffect", "GLOBAL");
 
-		// Skip expensive updates if using original post processing
-		if (!settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
-			auto& effectManager = EffectManager::GetSingleton();
-			auto& weatherManager = WeatherManager::GetSingleton();
+		auto& effectManager = EffectManager::GetSingleton();
+		auto& weatherManager = WeatherManager::GetSingleton();
 
-			effectManager.UpdateCommonData();
+		effectManager.UpdateCommonData();
 
-			const auto& commonData = effectManager.GetCommonData();
-			settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
+		const auto& commonData = effectManager.GetCommonData();
+		settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
 
-			uint32_t currentWeatherID = weatherManager.GetEffectiveWeatherID(static_cast<uint32_t>(commonData.weather[0]));
-			uint32_t lastWeatherID = weatherManager.GetEffectiveWeatherID(static_cast<uint32_t>(commonData.weather[1]));
-			settingManager.SetWeatherBlendFactors(currentWeatherID, lastWeatherID, commonData.weather[2]);
-		}
+		uint32_t currentWeatherID = weatherManager.GetEffectiveWeatherID(static_cast<uint32_t>(commonData.weather[0]));
+		uint32_t lastWeatherID = weatherManager.GetEffectiveWeatherID(static_cast<uint32_t>(commonData.weather[1]));
+		settingManager.SetWeatherBlendFactors(currentWeatherID, lastWeatherID, commonData.weather[2]);
 	}
 }
 
