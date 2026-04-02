@@ -67,6 +67,7 @@ SettingManager& SettingManager::GetSingleton()
 void SettingManager::RegisterBoolSetting(const std::string& key, const std::string& category,
 	bool defaultValue, bool hasWeatherSupport)
 {
+	std::unique_lock lock(mutex);
 	Setting setting;
 	setting.key = key;
 	setting.category = category;
@@ -81,6 +82,7 @@ void SettingManager::RegisterBoolSetting(const std::string& key, const std::stri
 void SettingManager::RegisterFloatSetting(const std::string& key, const std::string& category,
 	float defaultValue, float minValue, float maxValue, bool hasWeatherSupport)
 {
+	std::unique_lock lock(mutex);
 	Setting setting;
 	setting.key = key;
 	setting.category = category;
@@ -97,6 +99,7 @@ void SettingManager::RegisterFloatSetting(const std::string& key, const std::str
 void SettingManager::RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
 	float defaultValue, bool hasWeatherSupport)
 {
+	std::unique_lock lock(mutex);
 	TimeOfDayValue timeOfDayDefault;
 	for (int i = 0; i < TimeOfDayValue::Total; ++i) {
 		timeOfDayDefault.values[i] = defaultValue;
@@ -116,6 +119,7 @@ void SettingManager::RegisterTimeOfDaySetting(const std::string& key, const std:
 void SettingManager::RegisterColorTimeOfDaySetting(const std::string& key, const std::string& category,
 	float3 defaultValue, bool hasWeatherSupport)
 {
+	std::unique_lock lock(mutex);
 	ColorTimeOfDayValue colorTimeOfDayDefault;
 	for (int i = 0; i < ColorTimeOfDayValue::Total; ++i) {
 		colorTimeOfDayDefault.values[i] = defaultValue;
@@ -135,6 +139,7 @@ void SettingManager::RegisterColorTimeOfDaySetting(const std::string& key, const
 template <typename T>
 T SettingManager::GetValue(const std::string& key, const std::string& category, bool rawValue)
 {
+	std::shared_lock lock(mutex);
 	auto categoryIt = categories.find(category);
 	if (categoryIt == categories.end()) {
 		logger::error("[SettingManager] Category '{}' not found", category);
@@ -201,6 +206,7 @@ T SettingManager::GetValue(const std::string& key, const std::string& category, 
 template <typename T>
 void SettingManager::SetValue(const std::string& key, const std::string& category, const T& value)
 {
+	std::unique_lock lock(mutex);
 	auto categoryIt = categories.find(category);
 	if (categoryIt == categories.end()) {
 		logger::error("[SettingManager] Category '{}' not found", category);
@@ -256,12 +262,14 @@ float3 SettingManager::GetInterpolatedColorTimeOfDayValue(const std::string& key
 
 bool SettingManager::HasSetting(const std::string& key, const std::string& category) const
 {
+	std::shared_lock lock(mutex);
 	auto categoryIt = categories.find(category);
 	return categoryIt != categories.end() && categoryIt->second.settings.find(key) != categoryIt->second.settings.end();
 }
 
 const Setting* SettingManager::GetSettingInfo(const std::string& key, const std::string& category) const
 {
+	std::shared_lock lock(mutex);
 	auto categoryIt = categories.find(category);
 	if (categoryIt == categories.end())
 		return nullptr;
@@ -271,6 +279,7 @@ const Setting* SettingManager::GetSettingInfo(const std::string& key, const std:
 
 std::vector<std::string> SettingManager::GetSettingsByCategory(const std::string& category) const
 {
+	std::shared_lock lock(mutex);
 	std::vector<std::string> result;
 	auto categoryIt = categories.find(category);
 	if (categoryIt != categories.end()) {
@@ -284,6 +293,7 @@ std::vector<std::string> SettingManager::GetSettingsByCategory(const std::string
 
 std::vector<std::string> SettingManager::GetAllCategories() const
 {
+	std::shared_lock lock(mutex);
 	std::vector<std::string> result;
 	for (const auto& [category, _] : categories) {
 		result.push_back(category);
@@ -294,6 +304,7 @@ std::vector<std::string> SettingManager::GetAllCategories() const
 
 bool SettingManager::CategoryHasWeatherSupport(const std::string& category) const
 {
+	std::shared_lock lock(mutex);
 	auto categoryIt = categories.find(category);
 	if (categoryIt == categories.end())
 		return false;
@@ -307,6 +318,7 @@ bool SettingManager::CategoryHasWeatherSupport(const std::string& category) cons
 
 void SettingManager::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32_t newLastWeatherID, float blendFactor)
 {
+	std::unique_lock lock(mutex);
 	this->currentWeatherID = newCurrentWeatherID;
 	this->lastWeatherID = newLastWeatherID;
 	this->weatherBlendFactor = blendFactor;
@@ -325,6 +337,7 @@ void SettingManager::LoadWeatherSettings(const std::string& weatherKey, const st
 		return;
 	}
 
+	std::unique_lock lock(mutex);
 	for (const auto& [category, categoryData] : categories) {
 		for (const auto& [key, setting] : categoryData.settings) {
 			if (setting.hasWeatherSupport) {
@@ -345,6 +358,7 @@ void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const st
 		return;
 	}
 
+	std::shared_lock lock(mutex);
 	auto weatherIt = weatherData.find(weatherID);
 	if (weatherIt == weatherData.end()) {
 		return;
@@ -377,13 +391,17 @@ void SettingManager::SaveAllWeatherSettings()
 
 void SettingManager::ReloadAllWeatherSettings()
 {
-	weatherData.clear();
+	{
+		std::unique_lock lock(mutex);
+		weatherData.clear();
+	}
 	auto& weatherManager = WeatherManager::GetSingleton();
 	weatherManager.Initialize();
 }
 
 void SettingManager::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor)
 {
+	std::unique_lock lock(mutex);
 	memcpy(this->timeOfDay1, newTimeOfDay1, sizeof(this->timeOfDay1));
 	memcpy(this->timeOfDay2, newTimeOfDay2, sizeof(this->timeOfDay2));
 	this->interiorFactor = newInteriorFactor;
@@ -398,6 +416,7 @@ void SettingManager::LoadFromFile(const std::string& filePath)
 		return;
 	}
 
+	std::unique_lock lock(mutex);
 	for (auto& [category, categoryData] : categories) {
 		for (auto& [key, setting] : categoryData.settings) {
 			if (!setting.hasWeatherSupport) {
@@ -411,6 +430,7 @@ void SettingManager::LoadFromFile(const std::string& filePath)
 
 void SettingManager::SaveToFile(const std::string& filePath)
 {
+	std::shared_lock lock(mutex);
 	for (const auto& [category, categoryData] : categories) {
 		for (const auto& [key, setting] : categoryData.settings) {
 			if (!setting.hasWeatherSupport) {
@@ -665,6 +685,7 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 
 void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 {
+	// Internal helper, called from methods already holding a unique lock
 	for (auto& [category, categoryData] : categories) {
 		bool hasWeatherSupport = false;
 		for (const auto& [key, setting] : categoryData.settings) {
@@ -693,23 +714,27 @@ void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 
 bool SettingManager::GetIgnoreWeatherSystem(const std::string& category) const
 {
+	std::shared_lock lock(mutex);
 	auto categoryIt = categories.find(category);
 	return categoryIt != categories.end() ? categoryIt->second.ignoreWeatherSystem : false;
 }
 
 bool SettingManager::GetIgnoreWeatherSystemInterior(const std::string& category) const
 {
+	std::shared_lock lock(mutex);
 	auto categoryIt = categories.find(category);
 	return categoryIt != categories.end() ? categoryIt->second.ignoreWeatherSystemInterior : true;
 }
 
 void SettingManager::SetIgnoreWeatherSystem(const std::string& category, bool ignore)
 {
+	std::unique_lock lock(mutex);
 	categories[category].ignoreWeatherSystem = ignore;
 }
 
 void SettingManager::SetIgnoreWeatherSystemInterior(const std::string& category, bool ignore)
 {
+	std::unique_lock lock(mutex);
 	categories[category].ignoreWeatherSystemInterior = ignore;
 }
 

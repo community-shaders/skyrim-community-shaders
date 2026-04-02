@@ -1,5 +1,7 @@
 #pragma once
 
+#include <shared_mutex>
+
 enum class SettingType
 {
 	Bool,
@@ -182,6 +184,8 @@ private:
 	float timeOfDay1[4] = { 0, 0, 0, 0 };
 	float timeOfDay2[4] = { 0, 0, 0, 0 };
 	float interiorFactor = 0.0f;
+
+	mutable std::shared_mutex mutex;
 
 	SettingValue InterpolateValues(const SettingValue& a, const SettingValue& b, float t);
 	float ComputeTimeOfDayInterpolation(const TimeOfDayValue& value);
