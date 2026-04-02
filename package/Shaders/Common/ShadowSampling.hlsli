@@ -288,28 +288,36 @@ namespace ShadowSampling
 
 	// --- Per-light shadow sampling ---
 
-	float GetSpotlightShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
+	// hasCoverage: set to true when a PCF/shadow sample was actually taken; false on
+	// early-exit boundary guards (behind frustum, outside cone, etc.).  Used by the
+	// debug visualizer (LLFDEBUG) to distinguish "no coverage → dark" from
+	// "in shadow → dark" so mode-5 doesn't show black everywhere under spot lights.
+	float GetSpotlightShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix, out bool hasCoverage)
 	{
-		// 1. Perspective Divide
+		hasCoverage = false;
+
+		// 1. Perspective Divide.
 		if (positionLS.w <= 0)
 			return 0.0;
 		positionLS.xyz /= positionLS.w;
 
-		// 2. Standard Depth Guard (with a small safety epsilon)
+		// 2. Standard Depth Guard (with a small safety epsilon).
 		if (positionLS.z < ShadowDepthNearEps || positionLS.z > ShadowDepthFarEps)
 			return 0.0;
 
-		// 3. Simple UV Mapping (No flips yet, to test alignment)
+		// 3. Simple UV Mapping.
 		float2 baseUV = positionLS.xy * 0.5 + 0.5;
 
-		// 4. Border Guard
+		// 4. Border Guard.
 		if (any(baseUV < 0.0) || any(baseUV > 1.0))
 			return 0.0;
 
-		// 5. Cone mask (circular spot area inside the frustum)
+		// 5. Cone mask (circular spot area inside the frustum).
 		float radialDistSq = dot(positionLS.xy, positionLS.xy);
 		if (radialDistSq >= 1.0)
 			return 0.0;
+
+		hasCoverage = true;
 
 		float spotFalloff = saturate(1.0 - radialDistSq);
 		spotFalloff = spotFalloff * spotFalloff;
@@ -359,8 +367,14 @@ namespace ShadowSampling
 		return SampleParaboloidShadow(shadowIndex, sampleUV, depth, rotationMatrix);
 	}
 
-	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex = 0)
+	// Returns the shadow factor for a point-light shadow slot.
+	// hasCoverage is set to false when the pixel falls outside the spotlight frustum /
+	// cone (early-exit with 0.0 return) so the debug visualizer can skip those pixels
+	// in its min-shadow accumulation.  For hemi / omni lights hasCoverage is always true.
+	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex, out bool hasCoverage)
 	{
+		hasCoverage = true;  // default: paraboloid lights always sample
+
 		ShadowData shadow = Shadows[shadowIndex];
 
 		// ShadowParam.y encodes slot state:
@@ -376,7 +390,7 @@ namespace ShadowSampling
 
 		float4 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1));
 
-		[branch] if (shadow.ShadowParam.x == 0) return GetSpotlightShadow(shadow, shadowIndex, positionLS, rotationMatrix);
+		[branch] if (shadow.ShadowParam.x == 0) return GetSpotlightShadow(shadow, shadowIndex, positionLS, rotationMatrix, hasCoverage);
 		else if (shadow.ShadowParam.x == 1) return GetHemisphereShadow(shadow, shadowIndex, positionLS, rotationMatrix);
 		else if (shadow.ShadowParam.x == 2) return GetOmnidirectionalShadow(shadow, shadowIndex, positionLS.xyz, rotationMatrix);
 
