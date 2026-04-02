@@ -735,8 +735,6 @@ void EffectManager::UpdateCommonData()
 
 		commonData.timeOfDay2[static_cast<int>(TimeOfDay2Index::InteriorDay)] = commonData.eInteriorFactor * commonData.eNightDayFactor;
 		commonData.timeOfDay2[static_cast<int>(TimeOfDay2Index::InteriorNight)] = commonData.eInteriorFactor * (1.0f - commonData.eNightDayFactor);
-
-		commonData.eColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
 	}
 }
 
@@ -786,7 +784,6 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	Effect::SetVectorVariable(effect, "TimeOfDay2", commonData.timeOfDay2, sizeof(commonData.timeOfDay2));
 	Effect::SetVectorVariable(effect, "ENightDayFactor", &commonData.eNightDayFactor, sizeof(commonData.eNightDayFactor));
 	Effect::SetVectorVariable(effect, "EInteriorFactor", &commonData.eInteriorFactor, sizeof(commonData.eInteriorFactor));
-	Effect::SetVectorVariable(effect, "EColorPow", &commonData.eColorPow, sizeof(commonData.eColorPow));
 }
 
 void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest)
