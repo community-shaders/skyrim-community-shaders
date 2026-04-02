@@ -669,6 +669,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		lightsSpecularColor += dirDetailedShadow * GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
 #			endif
 
+#			if defined(LLFDEBUG)
+	LightLimitFix::LLFDebugInfo llfDebug = LightLimitFix::LLFDebugInfoInit();
+#			endif
+
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;
 	uint lightCount = 0;
@@ -702,10 +706,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float lightShadow = 1.0;
 
 				float shadowComponent = 1.0;
+				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex);
+					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
+
+#				if defined(LLFDEBUG)
+				uint llfShadowType = (light.lightFlags & LightLimitFix::LightFlags::Shadow &&
+										 light.shadowMapIndex < SharedData::lightLimitFixSettings.ShadowMapSlots) ?
+				                         (uint)Shadows[light.shadowMapIndex].ShadowParam.x :
+				                         0;
+				LightLimitFix::LLFDebugAccumulate(llfDebug, light, shadowComponent, shadowCoverage, llfShadowType);
+#				endif
 
 				float3 normalizedLightDirection = normalize(lightDirection);
 
@@ -813,13 +826,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
-		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
-			diffuseColor.xyz = Color::TurboColormap(0);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 1) {
-			diffuseColor.xyz = Color::TurboColormap(0);
-		} else {
-			diffuseColor.xyz = Color::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
-		}
+		psout.Diffuse.xyz = LightLimitFix::LLFDebugGetVizColor(
+			llfDebug,
+			Color::TurboColormap(0), Color::TurboColormap(0),
+			Color::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS),
+			float3(dirSoftShadow, dirDetailedShadow, 0.0),
+			diffuseColor);
+		psout.Diffuse.w = 1;
 	} else {
 		psout.Diffuse = float4(diffuseColor, 1);
 	}
@@ -892,6 +905,10 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 diffuseColor = dirLightColor * dirDetailedShadow;
 
+#			if defined(LLFDEBUG)
+	LightLimitFix::LLFDebugInfo llfDebug = LightLimitFix::LLFDebugInfoInit();
+#			endif
+
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;
 	uint lightCount = 0;
@@ -927,10 +944,19 @@ PS_OUTPUT main(PS_INPUT input)
 				float lightShadow = 1.0;
 
 				float shadowComponent = 1.0;
+				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex);
+					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
+
+#				if defined(LLFDEBUG)
+				uint llfShadowType = (light.lightFlags & LightLimitFix::LightFlags::Shadow &&
+										 light.shadowMapIndex < SharedData::lightLimitFixSettings.ShadowMapSlots) ?
+				                         (uint)Shadows[light.shadowMapIndex].ShadowParam.x :
+				                         0;
+				LightLimitFix::LLFDebugAccumulate(llfDebug, light, shadowComponent, shadowCoverage, llfShadowType);
+#				endif
 
 				lightColor *= lightShadow;
 
@@ -1007,9 +1033,23 @@ PS_OUTPUT main(PS_INPUT input)
 	directionalAmbientColor += envIBLColor * albedo;
 #			endif
 
+#			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
+	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
+		psout.Diffuse.xyz = LightLimitFix::LLFDebugGetVizColor(
+			llfDebug,
+			Color::TurboColormap(0), Color::TurboColormap(0),
+			Color::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS),
+			float3(dirDetailedShadow, dirDetailedShadow, 0.0),
+			diffuseColor);
+		psout.Diffuse.w = 1;
+	} else {
+		psout.Diffuse.xyz = diffuseColor;
+		psout.Diffuse.w = 1;
+	}
+#			else
 	psout.Diffuse.xyz = diffuseColor;
-
 	psout.Diffuse.w = 1;
+#			endif
 
 	psout.MotionVectors = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 	psout.Normal.xy = GBuffer::EncodeNormal(FrameBuffer::WorldToView(normal, false, eyeIndex));

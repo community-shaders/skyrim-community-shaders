@@ -2595,15 +2595,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 
 #			if defined(LLFDEBUG)
-	uint debugPLShadowCount = 0;      // shadow-flagged point/spot lights (valid + overflow)
-	float debugMinPLShadow = 1.0;     // darkest shadow value from any shadow light
-	uint debugUnshadowedPLCount = 0;  // point/spot lights without shadow maps
-	uint debugOverflowCount = 0;      // shadow lights whose slot index exceeded ShadowMapSlots
-	uint debugFirstShadowIndex = 0;   // shadowMapIndex of first valid shadow light seen
-	bool debugHasFirstShadow = false;
-	uint debugSpotCount = 0;  // frustum (spot) shadow lights
-	uint debugHemiCount = 0;  // hemisphere (paraboloid upper half) shadow lights
-	uint debugOmniCount = 0;  // omnidirectional (full paraboloid) shadow lights
+	LightLimitFix::LLFDebugInfo llfDebug = LightLimitFix::LLFDebugInfoInit();
 #			endif
 
 	[loop] for (uint lightIndex = 0; lightIndex < totalLightCount; lightIndex++)
@@ -2638,38 +2630,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float lightShadow = 1.0;
 
 		float shadowComponent = 1.0;
+		bool shadowCoverage = false;
 		if (inWorld && !inReflection) {
 			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex);
+				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex, shadowCoverage);
 				lightShadow *= shadowComponent;
 			}
 		}
 
 #			if defined(LLFDEBUG)
-		if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-			debugPLShadowCount++;
-			debugMinPLShadow = min(debugMinPLShadow, shadowComponent);
-			// Detect overflow: slot index beyond the shadow map array capacity.
-			if (light.shadowMapIndex >= SharedData::lightLimitFixSettings.ShadowMapSlots) {
-				debugOverflowCount++;
-			} else {
-				// Record first valid shadow light's slot index (for per-slot hue coloring).
-				if (!debugHasFirstShadow) {
-					debugFirstShadowIndex = light.shadowMapIndex;
-					debugHasFirstShadow = true;
-				}
-				// Classify by shadow type (ShadowParam.x: 0=spot, 1=hemisphere, 2=omni).
-				uint debugShadowType = (uint)Shadows[light.shadowMapIndex].ShadowParam.x;
-				if (debugShadowType == 0)
-					debugSpotCount++;
-				else if (debugShadowType == 1)
-					debugHemiCount++;
-				else
-					debugOmniCount++;
-			}
-		} else {
-			debugUnshadowedPLCount++;
-		}
+		uint llfShadowType = (light.lightFlags & LightLimitFix::LightFlags::Shadow &&
+								 light.shadowMapIndex < SharedData::lightLimitFixSettings.ShadowMapSlots) ?
+		                         (uint)Shadows[light.shadowMapIndex].ShadowParam.x :
+		                         0;
+		LightLimitFix::LLFDebugAccumulate(llfDebug, light, shadowComponent, shadowCoverage, llfShadowType);
 #			endif
 
 		float3 normalizedLightDirection = normalize(lightDirection);
@@ -3177,92 +3151,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
-		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
-			psout.Diffuse.xyz = Color::TurboColormap(LightLimitFix::NumStrictLights >= 7.0);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 1) {
-			psout.Diffuse.xyz = Color::TurboColormap((float)LightLimitFix::NumStrictLights / 15.0);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 2) {
-			psout.Diffuse.xyz = Color::TurboColormap((float)numClusteredLights / MAX_CLUSTER_LIGHTS);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 3) {
-			psout.Diffuse.xyz = float3(dirSoftShadow, dirDetailedShadow, 0.0);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 4) {
-			// Shadow-casting point/spot light count per pixel (blue=0, red=many)
-			psout.Diffuse.xyz = Color::TurboColormap((float)debugPLShadowCount / 8.0);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 5) {
-			// Point/spot light shadow darkness (white=fully lit, black=fully shadowed)
-			psout.Diffuse.xyz = float3(debugMinPLShadow, debugMinPLShadow, debugMinPLShadow);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 6) {
-			// Unshadowed point/spot lights per pixel — lights without shadow maps (blue=0, red=many)
-			psout.Diffuse.xyz = Color::TurboColormap((float)debugUnshadowedPLCount / 8.0);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 7) {
-			// Shadow Caster Density with custom Turbo sub-ranges:
-			//   Any overflow (slot index > ShadowMapSlots) → bright red.
-			//   0 valid shadow lights → cool Turbo(0.0).
-			//   1–4 shadow lights    → Turbo [0.0, 0.3] (cool end).
-			//   5–ShadowMapSlots     → Turbo [0.3, 0.8] (warm end, dynamic range).
-			if (debugOverflowCount > 0) {
-				psout.Diffuse.xyz = float3(1.0, 0.0, 0.0);
-			} else {
-				uint debugValidCount = debugPLShadowCount - debugOverflowCount;
-				uint slots = SharedData::lightLimitFixSettings.ShadowMapSlots;
-				float t;
-				if (debugValidCount == 0) {
-					t = 0.0;
-				} else if (debugValidCount <= 4) {
-					// cool range: 1-4 → Turbo 0.0-0.3
-					t = float(debugValidCount - 1) / 3.0 * 0.3;
-				} else {
-					// warm range: 5-slots → Turbo 0.3-0.8
-					uint extSlots = max(slots, 6u) - 5u;  // slots available above 4; avoid /0
-					t = 0.3 + saturate(float(debugValidCount - 5) / float(extSlots)) * 0.5;
-				}
-				psout.Diffuse.xyz = Color::TurboColormap(t);
-			}
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 8) {
-			// Shadow Slot Index Color: tints the normally-lit output with the slot's
-			// golden-ratio hue so shadows, falloff and ambient remain visible.
-			// Overflow slots (index >= ShadowMapSlots) → red.
-			// No shadow light on this pixel → greyscale (normal luma, desaturated)
-			//   so you can see unshadowed areas and still orient yourself in the scene.
-			// NOTE: use color.xyz (accumulated lighting) not psout.Diffuse.xyz —
-			// psout.Diffuse.xyz is only assigned AFTER this visualization block.
-			float luma = dot(color.xyz, float3(0.2126, 0.7152, 0.0722));
-			if (debugOverflowCount > 0) {
-				psout.Diffuse.xyz = float3(1.0, 0.0, 0.0);
-			} else if (!debugHasFirstShadow) {
-				psout.Diffuse.xyz = luma.xxx;
-			} else {
-				// Golden-ratio hue: frac(index * phi) gives maximally-separated hues.
-				float hue = frac(float(debugFirstShadowIndex) * 0.618033988);
-				// Inline HSV-to-RGB at S=V=1 (pure saturated hue).
-				float3 rgb = saturate(abs(frac(hue + float3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0);
-				// Recolor the pixel: keep luminance, apply slot hue.
-				// Shadows darken luma → hue dims in shadow regions.
-				psout.Diffuse.xyz = rgb * luma;
-			}
-		} else {
-			// Mode 9 — Light Type Visualization.
-			// Each shadow type is assigned a dedicated channel:
-			//   R = spot (frustum projection, ShadowParam.x == 0)
-			//   G = hemisphere (upper paraboloid, ShadowParam.x == 1)
-			//   B = omnidirectional (full paraboloid, ShadowParam.x == 2)
-			//   Dark grey = unshadowed lights only (no shadow maps assigned)
-			//   Bright red = overflow (slot capacity exceeded)
-			// Intensity scales with count up to 4 lights; channels add for mixed types.
-			if (debugOverflowCount > 0) {
-				psout.Diffuse.xyz = float3(1.0, 0.0, 0.0);
-			} else {
-				float scale = 1.0 / 4.0;
-				float3 typeColor = float3(
-					saturate(float(debugSpotCount) * scale),
-					saturate(float(debugHemiCount) * scale),
-					saturate(float(debugOmniCount) * scale));
-				bool hasShadowLights = (debugSpotCount + debugHemiCount + debugOmniCount) > 0;
-				if (!hasShadowLights)
-					typeColor = saturate(float(debugUnshadowedPLCount) * scale) * 0.35;
-				psout.Diffuse.xyz = typeColor;
-			}
-		}
+		psout.Diffuse.xyz = LightLimitFix::LLFDebugGetVizColor(
+			llfDebug,
+			Color::TurboColormap(LightLimitFix::NumStrictLights >= 7.0),
+			Color::TurboColormap((float)LightLimitFix::NumStrictLights / 15.0),
+			Color::TurboColormap((float)numClusteredLights / MAX_CLUSTER_LIGHTS),
+			float3(dirSoftShadow, dirDetailedShadow, 0.0),
+			color.xyz);
 		baseColor.xyz = 0.0;
 	} else {
 		psout.Diffuse.xyz = color.xyz;
