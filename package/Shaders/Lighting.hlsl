@@ -2341,15 +2341,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float snowOcclusion = inWorld;
 #		endif
 
-#	if defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING) // should only match object lod trees (ultra trees), they have no define
+#		if defined(DO_ALPHA_TEST) && defined(LOD_BLENDING) && defined(SOFT_LIGHTING)  // should only match object lod trees (ultra trees), they have no define
 	float rx;
 	float ry;
 	TexColorSampler.GetDimensions(rx, ry);
 	float hasAlpha = 1 - TexColorSampler.SampleLevel(SampColorSampler, uv, 6).a;
-	if(hasAlpha > 0.001){
+	if (hasAlpha > 0.001) {
 		snowOcclusion = 1 - TexColorSampler.Sample(SampColorSampler, uv - float2(0, 2. / ry)).a;
 	}
-#	endif
+#		endif
 
 	float3 adjustedWorldPos = (input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex]).xyz;
 

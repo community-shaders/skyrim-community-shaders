@@ -106,8 +106,9 @@ namespace SnowCover
 		float4 rmaos;
 		float3 albedo;
 
-#		if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+#			if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+		{
 			float2 snowUV = SharedData::snowCoverSettings.UVScale * (p.xy / 100 + worldNormal.xy * disp);
 			StochasticOffsets so = ComputeStochasticOffsets(snowUV);
 			if (alt) {
@@ -117,8 +118,9 @@ namespace SnowCover
 				rmaos = StochasticEffect(SnowRmaos, SampColorSampler, uv, so, 0, 0);
 				albedo = StochasticEffect(SnowAlbedo, SampColorSampler, uv, so, 0, 0).rgb;
 			}
-		} else
-#		endif
+		}
+		else
+#			endif
 		{
 			if (alt) {
 				rmaos = IceRmaos.Sample(SampColorSampler, uv);
@@ -160,8 +162,9 @@ namespace SnowCover
 		float4 rmaos;
 		float3 albedo;
 
-#		if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+#			if defined(TERRAIN_VARIATION) && defined(LANDSCAPE)
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+		{
 			float2 snowUV = SharedData::snowCoverSettings.UVScale * (p.xy / 100 + worldNormal.xy * disp);
 			StochasticOffsets so = ComputeStochasticOffsets(snowUV);
 			if (alt) {
@@ -171,8 +174,9 @@ namespace SnowCover
 				albedo = StochasticEffect(SnowAlbedo, SampColorSampler, uv, so, 0, 0).rgb;
 				rmaos = StochasticEffect(SnowRmaos, SampColorSampler, uv, so, 0, 0);
 			}
-		} else
-#		endif
+		}
+		else
+#			endif
 		{
 			if (alt) {
 				albedo = IceAlbedo.Sample(SampColorSampler, uv).rgb;
