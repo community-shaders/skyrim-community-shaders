@@ -89,7 +89,7 @@ public:
 		float WaterFresnelMax;
 		float WaterFresnelMultiplier;
 		float WaterReflectionAmount;
-		
+
 		float pad14;
 	};
 
