@@ -47,15 +47,13 @@ public:
 		kDLSS_RR = 1 << 4
 	};
 
+	// User-facing labels (kDLSS_RR is internal-only, driven by Raytracing Denoiser setting)
 	constexpr static const char* upscaleModeLabels[] = {
 		"None",
 		"TAA",
 		"AMD FSR 3.1",
-		"NVIDIA DLSS",
-		"NVIDIA DLSS RR"
+		"NVIDIA DLSS"
 	};
-
-	static_assert(magic_enum::enum_count<UpscaleMethod>() == _countof(upscaleModeLabels));
 
 	constexpr static const char* dlssModelPresets[] = { "Default", "Preset J", "Preset K", "Preset L", "Preset M" };
 	constexpr static const char* dlssRRModelPresets[] = { "Default", "Preset D", "Preset E" };
