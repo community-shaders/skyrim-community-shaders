@@ -95,9 +95,6 @@ void ENBPostProcessing::DrawSettings()
 
 void ENBPostProcessing::SetupResources()
 {
-	// Load registered settings
-	SettingManager::GetSingleton().Load();
-
 	// Initialize the effects system
 	EffectManager::GetSingleton().Initialize();
 }

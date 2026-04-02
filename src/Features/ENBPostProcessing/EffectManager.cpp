@@ -19,6 +19,7 @@ void EffectManager::Initialize()
 {
 	TextureManager::GetSingleton().Initialize();
 	RegisterSettings();
+	SettingManager::GetSingleton().Load();
 	CreateCommonResources();
 	Apply();
 	initialized.store(true, std::memory_order_release);
