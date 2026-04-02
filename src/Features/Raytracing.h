@@ -193,11 +193,10 @@ struct CreationEngineRaytracing
 		int AccumFrameNum = 10;
 		int StaleFrameNum = 64;
 		float RadianceScale = 1e3f;
-		bool AntifireflyFilter = true;
 
 		bool operator==(const SHaRCSettings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, Enabled, SceneScale, AccumFrameNum, StaleFrameNum, AntifireflyFilter)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, Enabled, SceneScale, AccumFrameNum, StaleFrameNum)
 	};
 
 	// Resampled Importance Sampling

@@ -348,8 +348,6 @@ void Raytracing::DrawSHaRCSettings()
 		ImGui::InputInt("Stale Frames", &sharcSettings.StaleFrameNum);
 		sharcSettings.StaleFrameNum = std::clamp(sharcSettings.StaleFrameNum, 8, 128);
 
-		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
-
 		if (!sharcSettings.Enabled)
 			ImGui::EndDisabled();
 	}
