@@ -805,20 +805,6 @@ warnings:
                     - Water:Pixel:4802
                     - Water:Pixel:6D9
                     - Water:Pixel:6DA
-    x4000:use of potentially uninitialized variable (shadowsampling::sampleparaboloidshadow):
-        code: X4000
-        message: use of potentially uninitialized variable (ShadowSampling::SampleParaboloidShadow)
-        instances:
-            common/shadowsampling.hlsli:280,3:
-                entries:
-                    - Grass:Pixel:10002
-    x4000:use of potentially uninitialized variable (shadowsampling::gethemisphereshadow):
-        code: X4000
-        message: use of potentially uninitialized variable (ShadowSampling::GetHemisphereShadow)
-        instances:
-            common/shadowsampling.hlsli:337,3:
-                entries:
-                    - Grass:Pixel:10002
     x4000:use of potentially uninitialized variable (shadowsampling::geteffectshadow):
         code: X4000
         message: use of potentially uninitialized variable (ShadowSampling::GetEffectShadow)
