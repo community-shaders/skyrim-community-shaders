@@ -274,12 +274,12 @@ namespace ShadowSampling
 	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth, float2x2 rotationMatrix)
 	{
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
-		float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
 
 		// Constant bias only — slope bias (ddx/ddy) is undefined inside a non-uniform loop
 		// where adjacent quad pixels may be at different iterations.
 		[branch] if (mode >= 1)
 		{
+			float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
 			return PCFSpiral8(shadowIndex, sampleUV, depth - ShadowBiasConst, kernelRadius, rotationMatrix);
 		}
 		// Mode 0: single-tap with constant bias
