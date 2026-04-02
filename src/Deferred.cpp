@@ -124,10 +124,12 @@ void Deferred::SetupResources()
 			shadowMapSlots = desc.Texture2DArray.ArraySize;
 			logger::info("[Deferred] kSHADOWMAPS ArraySize = {}, effective shadowMapSlots = {}", desc.Texture2DArray.ArraySize, shadowMapSlots);
 		} else {
-			logger::warn("[Deferred] kSHADOWMAPS SRV not a Texture2DArray or ArraySize=0; keeping shadowMapSlots = {}", shadowMapSlots);
+			shadowMapSlots = 0;
+			logger::warn("[Deferred] kSHADOWMAPS SRV not a Texture2DArray or ArraySize=0; resetting shadowMapSlots to 0");
 		}
 	} else {
-		logger::warn("[Deferred] kSHADOWMAPS depthSRV is null at SetupResources; keeping shadowMapSlots = {}", shadowMapSlots);
+		shadowMapSlots = 0;
+		logger::warn("[Deferred] kSHADOWMAPS depthSRV is null at SetupResources; resetting shadowMapSlots to 0");
 	}
 
 	{
