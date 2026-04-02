@@ -223,8 +223,8 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "GAMEVOLUMETRICRAYS", { 1.0f, 1.0f, 1.0f }, true);
 
 	// PROCEDURALSUN
-	settingManager.RegisterFloatSetting("Size", "PROCEDURALSUN", 0, 10);
-	settingManager.RegisterFloatSetting("EdgeSoftness", "PROCEDURALSUN", 0, 10);
+	settingManager.RegisterFloatSetting("Size", "PROCEDURALSUN", 1.0f, 0.0f, 10.0f);
+	settingManager.RegisterFloatSetting("EdgeSoftness", "PROCEDURALSUN", 1.0f, 0.0f, 10.0f);
 	settingManager.RegisterTimeOfDaySetting("GlowIntensity", "PROCEDURALSUN", 1, true);
 	settingManager.RegisterTimeOfDaySetting("GlowCurve", "PROCEDURALSUN", 1, true);
 
