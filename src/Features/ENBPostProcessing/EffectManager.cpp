@@ -201,7 +201,6 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("FogColorCurve", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("FogAmountMultiplier", "ENVIRONMENT", 1, true);
 	settingManager.RegisterTimeOfDaySetting("FogCurveMultiplier", "ENVIRONMENT", 1, true);
-	settingManager.RegisterTimeOfDaySetting("FogColorMultiplier", "ENVIRONMENT", 1, true);
 	settingManager.RegisterColorTimeOfDaySetting("FogColorFilter", "ENVIRONMENT", { 1.0f, 1.0f, 1.0f }, true);
 	settingManager.RegisterTimeOfDaySetting("FogColorFilterAmount", "ENVIRONMENT", 0, true);
 
@@ -239,8 +238,29 @@ void EffectManager::ExecuteEffects()
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 
-	if (!rasterizerState || !blendState || !quadVertexBuffer || !inputLayout)
+	if (!rasterizerState || !blendState || !quadVertexBuffer || !inputLayout || !renderer)
 		return;
+
+	// Save State
+	ID3D11RenderTargetView* oldRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = { nullptr };
+	ID3D11DepthStencilView* oldDSV = nullptr;
+	context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, &oldDSV);
+
+	D3D11_VIEWPORT oldViewports[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE];
+	UINT numViewports = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
+	context->RSGetViewports(&numViewports, oldViewports);
+
+	ID3D11RasterizerState* oldRS = nullptr;
+	context->RSGetState(&oldRS);
+
+	ID3D11BlendState* oldBlend = nullptr;
+	FLOAT oldBlendFactor[4];
+	UINT oldSampleMask;
+	context->OMGetBlendState(&oldBlend, oldBlendFactor, &oldSampleMask);
+
+	ID3D11DepthStencilState* oldDepth = nullptr;
+	UINT oldStencilRef;
+	context->OMGetDepthStencilState(&oldDepth, &oldStencilRef);
 
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -326,6 +346,26 @@ void EffectManager::ExecuteEffects()
 	CopyTexture(finalSourceSRV, textureFramebuffer1.RTV);
 	CopyTexture(finalSourceSRV, textureFramebuffer2.RTV);
 	CopyTexture(finalSourceSRV, textureFramebuffer3.RTV);
+
+	// Restore State
+	context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, oldDSV);
+	context->RSSetViewports(numViewports, oldViewports);
+	context->OMSetBlendState(oldBlend, oldBlendFactor, oldSampleMask);
+	context->OMSetDepthStencilState(oldDepth, oldStencilRef);
+
+	if (oldRS) {
+		context->RSSetState(oldRS);
+		oldRS->Release();
+	}
+	if (oldBlend)
+		oldBlend->Release();
+	if (oldDepth)
+		oldDepth->Release();
+	for (int i = 0; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
+		if (oldRTVs[i])
+			oldRTVs[i]->Release();
+	if (oldDSV)
+		oldDSV->Release();
 }
 
 void EffectManager::CreateCommonResources()
