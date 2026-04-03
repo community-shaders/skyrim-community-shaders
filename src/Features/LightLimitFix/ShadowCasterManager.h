@@ -33,6 +33,10 @@ namespace ShadowCasterManager
 	// ForEachShadowLight advances by shadowMapCount so each logical light is
 	// visited exactly once, matching the game's own iteration contract.
 	//
+	// WARNING: This is no longer a proper BSTArray and cannot be treated as such.
+	// We do not push_back or set_size, so _size is never updated and iterators
+	// will not work correctly.
+	//
 	// Usage:
 	//   ShadowCasterManager::ForEachShadowLight(ssn->GetRuntimeData().shadowLightsAccum,
 	//       [](RE::BSShadowLight* light) { ... });
@@ -41,8 +45,7 @@ namespace ShadowCasterManager
 	inline void ForEachShadowLight(const RE::BSTArray<RE::BSShadowLight*>& accum, Fn&& fn)
 	{
 		int idx = 0;
-		const int size = static_cast<int>(accum.size());
-		while (idx < size) {
+		while (true) {
 			RE::BSShadowLight* light = accum[idx];
 			if (!light)
 				break;
