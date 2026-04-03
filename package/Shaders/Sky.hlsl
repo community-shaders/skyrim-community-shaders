@@ -244,7 +244,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 #		if defined(CLOUD_SHADOWS) && defined(CLOUDS)
-	if (baseColor.w > 0.0) {
+	if (baseColor.w > 0.0 && SharedData::cloudShadowsSettings.InnerCloudShadowOpacity > 0.0) {
 		float3 viewDir = normalize(input.WorldPosition.xyz);
 		float rayStep = 1.0 / 32.0;
 		float rayPos = rayStep * 0.5;

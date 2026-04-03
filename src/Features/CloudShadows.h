@@ -12,6 +12,7 @@ public:
 		float InnerCloudShadowOpacity = 0.5f;
 		float pad[2];
 	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;
 

@@ -181,6 +181,12 @@ void CloudShadows::SetupResources()
 			rtvDesc.Format = texDesc.Format;
 			DX::ThrowIfFailed(device->CreateRenderTargetView(texCubemapCloudOccCopy->resource.get(), &rtvDesc, cubemapCloudOccCopyRTVs + i));
 		}
+
+		// Clear copy cubemap so EarlyPrepass doesn't bind uninitialized data on the first frame.
+		auto context = globals::d3d::context;
+		float black[4] = { 0, 0, 0, 0 };
+		for (int i = 0; i < 6; ++i)
+			context->ClearRenderTargetView(cubemapCloudOccCopyRTVs[i], black);
 	}
 	{
 		D3D11_BLEND_DESC blendDesc = {};
