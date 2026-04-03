@@ -1348,9 +1348,7 @@ struct TESBoundObject_Clone3D
 			// This covers all negative cases (currentMato == nullptr, singlePass ==
 			// false, or no matching PBR entry) with one branch so the clear path is
 			// never silently skipped.
-			auto* pbrData = (currentMato != nullptr && currentMato->directionalData.singlePass)
-			                    ? truePBR->GetPBRMaterialObjectData(currentMato)
-			                    : nullptr;
+			auto* pbrData = (currentMato != nullptr && currentMato->directionalData.singlePass) ? truePBR->GetPBRMaterialObjectData(currentMato) : nullptr;
 
 			if (pbrData != nullptr) {
 				RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData, ref](RE::BSGeometry* geometry) {
