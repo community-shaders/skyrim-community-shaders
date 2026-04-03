@@ -1342,72 +1342,79 @@ struct TESBoundObject_Clone3D
 			auto* stat = static_cast<RE::TESObjectSTAT*>(ref->data.objectReference);
 			RE::BGSMaterialObject* currentMato = stat->data.materialObj;
 
-			if (currentMato != nullptr && currentMato->directionalData.singlePass) {
-				auto* pbrData = truePBR->GetPBRMaterialObjectData(currentMato);
-				if (pbrData != nullptr) {
-					RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData, ref](RE::BSGeometry* geometry) {
-						if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
-							if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
-								shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
-								if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
-									auto& ext = BSLightingShaderMaterialPBR::All[material];
-									const auto prevOwnerRefID = ext.lastOwnerRefFormID;
+			// Resolve PBR MATO data for the three-way condition as a single pointer:
+			//   non-null  -> apply MATO to geometries
+			//   null      -> clear any previously applied MATO from geometries
+			// This covers all negative cases (currentMato == nullptr, singlePass ==
+			// false, or no matching PBR entry) with one branch so the clear path is
+			// never silently skipped.
+			auto* pbrData = (currentMato != nullptr && currentMato->directionalData.singlePass)
+			                    ? truePBR->GetPBRMaterialObjectData(currentMato)
+			                    : nullptr;
 
-									// Fork-before-write: if this material instance is already owned
-									// by a different ref whose MATO payload differs from the incoming
-									// one, clone it so we don't contaminate the previous owner's
-									// geometry.  Use pointer identity: GetPBRMaterialObjectData
-									// returns stable addresses into pbrMaterialObjects, so two
-									// different MATOs always produce different pointers regardless of
-									// whether their individual fields (baseColorScale, roughness,
-									// specularLevel, glint) happen to match.
-									const bool wouldContaminate =
-										(prevOwnerRefID != 0) &&
-										(prevOwnerRefID != ref->GetFormID()) &&
-										(ext.materialObjectData != pbrData);
+			if (pbrData != nullptr) {
+				RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData, ref](RE::BSGeometry* geometry) {
+					if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
+						if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
+							shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
+							if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
+								auto& ext = BSLightingShaderMaterialPBR::All[material];
+								const auto prevOwnerRefID = ext.lastOwnerRefFormID;
 
-									BSLightingShaderMaterialPBR* targetMat = material;
+								// Fork-before-write: if this material instance is already owned
+								// by a different ref whose MATO payload differs from the incoming
+								// one, clone it so we don't contaminate the previous owner's
+								// geometry.  Use pointer identity: GetPBRMaterialObjectData
+								// returns stable addresses into pbrMaterialObjects, so two
+								// different MATOs always produce different pointers regardless of
+								// whether their individual fields (baseColorScale, roughness,
+								// specularLevel, glint) happen to match.
+								const bool wouldContaminate =
+									(prevOwnerRefID != 0) &&
+									(prevOwnerRefID != ref->GetFormID()) &&
+									(ext.materialObjectData != pbrData);
 
-									if (wouldContaminate) {
-										auto* freshMat = BSLightingShaderMaterialPBR::Make();
-										if (freshMat) {
-											freshMat->CopyMembers(material);
-											shaderProperty->material = freshMat;
-											targetMat = freshMat;
-										} else {
-											logger::warn("[TruePBR] failed to clone PBR material for ref {:08X}; skipping to avoid contamination", ref->GetFormID());
-											return RE::BSVisit::BSVisitControl::kContinue;
-										}
+								BSLightingShaderMaterialPBR* targetMat = material;
+
+								if (wouldContaminate) {
+									auto* freshMat = BSLightingShaderMaterialPBR::Make();
+									if (freshMat) {
+										freshMat->CopyMembers(material);
+										shaderProperty->material = freshMat;
+										targetMat = freshMat;
+									} else {
+										logger::warn("[TruePBR] failed to clone PBR material for ref {:08X}; skipping to avoid contamination", ref->GetFormID());
+										return RE::BSVisit::BSVisitControl::kContinue;
 									}
+								}
 
-									targetMat->ApplyMaterialObjectData(*pbrData);
-									auto& targetExt = BSLightingShaderMaterialPBR::All[targetMat];
-									targetExt.materialObjectData = pbrData;
-									targetExt.lastOwnerRefFormID = ref->GetFormID();
+								targetMat->ApplyMaterialObjectData(*pbrData);
+								auto& targetExt = BSLightingShaderMaterialPBR::All[targetMat];
+								targetExt.materialObjectData = pbrData;
+								targetExt.lastOwnerRefFormID = ref->GetFormID();
+							}
+						}
+					}
+
+					return RE::BSVisit::BSVisitControl::kContinue;
+				});
+			} else {
+				RE::BSVisit::TraverseScenegraphGeometries(result, [](RE::BSGeometry* geometry) {
+					if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
+						if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
+							shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
+							if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
+								auto& ext = BSLightingShaderMaterialPBR::All[material];
+								if (ext.materialObjectData != nullptr) {
+									material->ClearMaterialObjectData();
+									ext.materialObjectData = nullptr;
+									ext.lastOwnerRefFormID = 0;
 								}
 							}
 						}
-
-						return RE::BSVisit::BSVisitControl::kContinue;
-					});
-				} else {
-					RE::BSVisit::TraverseScenegraphGeometries(result, [](RE::BSGeometry* geometry) {
-						if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
-							if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
-								shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
-								if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
-									auto& ext = BSLightingShaderMaterialPBR::All[material];
-									if (ext.materialObjectData != nullptr) {
-										material->ClearMaterialObjectData();
-										ext.materialObjectData = nullptr;
-										ext.lastOwnerRefFormID = 0;
-									}
-								}
-							}
-						}
-						return RE::BSVisit::BSVisitControl::kContinue;
-					});
-				}
+					}
+					return RE::BSVisit::BSVisitControl::kContinue;
+				});
 			}
 		}
 		return result;
