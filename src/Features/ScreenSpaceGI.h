@@ -13,7 +13,7 @@ public:
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
-	virtual std::string_view GetCategory() const override { return "Lighting"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{

@@ -1,8 +1,10 @@
 #include "EditorWindow.h"
 
+#include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
 #include "InteriorOnlyPanel.h"
 #include "Menu.h"
+#include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
 #include "State.h"
 #include "Utils/UI.h"
@@ -10,7 +12,9 @@
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets, showViewport)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteColorEntry, r, g, b, useCount, lastUsedTime, isFavorite)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteFavoriteColor, hasValue, r, g, b)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, showViewport, widgetTypeSizes, paletteColors, paletteFavorites)
 
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
@@ -52,41 +56,28 @@ void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 void DrawIconCircle(ImVec2 center, float radius, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
-	if (filled) {
+	if (filled)
 		drawList->AddCircleFilled(center, radius, color, 16);
-	} else {
-		drawList->AddCircle(center, radius, color, 16, 1.5f);
-	}
+	else
+		drawList->AddCircle(center, radius, color, 16, 1.5f * Util::GetUIScale());
 }
 
 void DrawIconWave(ImVec2 center, float width, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
+	const float thickness = (filled ? 3.0f : 1.5f) * Util::GetUIScale();
 	const int segments = 8;
 	const float amplitude = width * 0.15f;
 	const float waveWidth = width * 0.8f;
 	const float segmentWidth = waveWidth / segments;
-
 	ImVec2 start(center.x - waveWidth * 0.5f, center.y);
 
-	if (filled) {
-		// Draw filled wave using multiple horizontal lines
-		for (int i = 0; i < segments; i++) {
-			float x1 = start.x + i * segmentWidth;
-			float x2 = start.x + (i + 1) * segmentWidth;
-			float y1 = start.y + sinf(i * 3.14159f / 2.0f) * amplitude;
-			float y2 = start.y + sinf((i + 1) * 3.14159f / 2.0f) * amplitude;
-			drawList->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, 3.0f);
-		}
-	} else {
-		// Draw outline wave
-		for (int i = 0; i < segments; i++) {
-			float x1 = start.x + i * segmentWidth;
-			float x2 = start.x + (i + 1) * segmentWidth;
-			float y1 = start.y + sinf(i * 3.14159f / 2.0f) * amplitude;
-			float y2 = start.y + sinf((i + 1) * 3.14159f / 2.0f) * amplitude;
-			drawList->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, 1.5f);
-		}
+	for (int i = 0; i < segments; i++) {
+		float x1 = start.x + i * segmentWidth;
+		float x2 = start.x + (i + 1) * segmentWidth;
+		float y1 = start.y + sinf(i * 3.14159f / 2.0f) * amplitude;
+		float y2 = start.y + sinf((i + 1) * 3.14159f / 2.0f) * amplitude;
+		drawList->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), color, thickness);
 	}
 }
 
@@ -175,7 +166,7 @@ bool EditorWindow::MatchesObjectFilter(Widget* w) const
 
 void EditorWindow::ShowObjectsWindow()
 {
-	ImGui::Begin("Weather and Lighting Browser");
+	Util::BeginWithRoundedClose("Weather and Lighting Browser", nullptr);
 
 	// Reset filter state when the user switches categories so stale column
 	// selections (e.g. Status) don't hide all items in the new category.
@@ -185,12 +176,16 @@ void EditorWindow::ShowObjectsWindow()
 	}
 
 	// Create a table with two columns
-	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_NoHostExtendX)) {
-		// Set up column widths
-		ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthStretch, 0.3f);  // 30% width
-		ImGui::TableSetupColumn("Objects", ImGuiTableColumnFlags_WidthStretch, 0.7f);     // 70% width
+	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner)) {
+		// Fixed categories column, objects column fills remaining width
+		const float categoriesWidth = 180.0f * Util::GetUIScale();
+		ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthFixed, categoriesWidth);
+		ImGui::TableSetupColumn("Objects", ImGuiTableColumnFlags_WidthStretch);
 
 		ImGui::TableNextRow();
+
+		if (resetLayout)
+			ImGui::TableSetColumnWidth(0, categoriesWidth);
 
 		// Left column: Categories
 		ImGui::TableSetColumnIndex(0);
@@ -219,7 +214,7 @@ void EditorWindow::ShowObjectsWindow()
 		// Right column: Objects
 		ImGui::TableSetColumnIndex(1);
 
-		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border, kStickyHeaderFlags)) {
+		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Borders, kStickyHeaderFlags)) {
 			// Interior Only category has its own panel
 			if (m_selectedCategory == "Interior Only") {
 				InteriorOnlyPanel::Draw();
@@ -268,16 +263,18 @@ void EditorWindow::ShowObjectsWindow()
 			const float comboW = ImGui::CalcTextSize("Editor ID").x + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
 			const float helpW = ImGui::CalcTextSize("(?)").x;
 			const float iconW = ImGui::GetFrameHeight();
+			const float scale = Util::GetUIScale();
+			const float spacerW = 10.0f * scale;
 			// Fixed width is the sum of every item that follows the search bar on the same row.
 			// Each SameLine() contributes style.ItemSpacing.x; widths are listed explicitly
 			// so adding or removing a widget only requires updating its own expression.
 			const float fixedW =
 				style.ItemSpacing.x + comboW +                              // combo
 				style.ItemSpacing.x + helpW +                               // help marker
-				style.ItemSpacing.x + 10.0f +                               // spacer before favorites
+				style.ItemSpacing.x + spacerW +                             // spacer before favorites
 				style.ItemSpacing.x + iconW +                               // fav icon
 				style.ItemSpacing.x + ImGui::CalcTextSize("Favorites").x +  // "Favorites" label
-				style.ItemSpacing.x + 10.0f +                               // spacer before flagged
+				style.ItemSpacing.x + spacerW +                             // spacer before flagged
 				style.ItemSpacing.x + iconW +                               // flag icon
 				style.ItemSpacing.x + ImGui::CalcTextSize("Flagged").x;     // "Flagged" label
 			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
@@ -292,9 +289,10 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::SameLine();
 			Util::HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nStatus: hides items with no status marker when the search box is non-empty.\nCtrl+F: Focus search\nEnter: Open selected");
 
-			// Quick filter buttons on same row
+			// Quick filter buttons
+			const ImVec2 filterSpacer(spacerW, 0.0f);
 			ImGui::SameLine();
-			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
+			ImGui::Dummy(filterSpacer);
 			ImGui::SameLine();
 			if (IconButton("##filterFavorites", m_showOnlyFavorites, "star")) {
 				m_showOnlyFavorites = !m_showOnlyFavorites;
@@ -303,7 +301,7 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::Text("Favorites");
 
 			ImGui::SameLine();
-			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
+			ImGui::Dummy(filterSpacer);
 			ImGui::SameLine();
 			if (IconButton("##filterFlagged", m_showOnlyFlagged, "circle")) {
 				m_showOnlyFlagged = !m_showOnlyFlagged;
@@ -370,12 +368,12 @@ void EditorWindow::ShowObjectsWindow()
 
 			// Create a table for the right column with "Name" and "ID" headers. Different weights to prevent truncation.
 			if (ImGui::BeginTable("DetailsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Sortable)) {
-				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f, ColFav);  // Favorite indicator
-				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f, ColEditorID);                     // Largest - weather/template names
-				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f, ColFormID);                          // Fixed - 8 hex chars
-				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f, ColFile);                              // Medium - plugin names
-				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f, ColStatus);                          // Smaller - status text
-				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f, ColJson);                               // JSON file / delete
+				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f * scale, ColFav);  // Favorite indicator
+				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f, ColEditorID);                             // Largest - weather/template names
+				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f * scale, ColFormID);                          // Fixed - 8 hex chars
+				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f, ColFile);                                      // Medium - plugin names
+				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f, ColStatus);                                  // Smaller - status text
+				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f * scale, ColJson);                               // JSON file / delete
 
 				ImGui::TableHeadersRow();
 
@@ -548,14 +546,18 @@ void EditorWindow::ShowObjectsWindow()
 							// Show message that cell lighting is only for interior cells
 							ImGui::TableNextRow();
 							ImGui::TableSetColumnIndex(1);
+							ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
 							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Warning, "Cell Lighting is only available for interior cells.");
 							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Disable, "You are currently in an exterior cell.");
+							ImGui::PopTextWrapPos();
 						}
 					} else {
 						// No player or cell
 						ImGui::TableNextRow();
 						ImGui::TableSetColumnIndex(1);
+						ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
 						ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Error, "Player cell not available.");
+						ImGui::PopTextWrapPos();
 					}
 				}
 
@@ -592,6 +594,7 @@ void EditorWindow::ShowObjectsWindow()
 
 						auto editorLabel = std::format("[CURRENT] {}", sortedWidgets[i]->GetEditorID());
 						auto markedRecord = settings.markedRecords.find(sortedWidgets[i]->GetEditorID());
+						ImGui::PushID(sortedWidgets[i]->GetFormID().c_str());
 						ImGui::TableNextRow();
 
 						// Highlight current cell's lighting template
@@ -659,6 +662,8 @@ void EditorWindow::ShowObjectsWindow()
 
 						// json / delete column
 						drawJsonDeleteButton(sortedWidgets[i]);
+
+						ImGui::PopID();
 					}
 				}
 
@@ -676,6 +681,7 @@ void EditorWindow::ShowObjectsWindow()
 
 					auto editorLabel = sortedWidgets[i]->GetEditorID();
 					auto markedRecord = settings.markedRecords.find(editorLabel);
+					ImGui::PushID(sortedWidgets[i]->GetFormID().c_str());
 					ImGui::TableNextRow();
 
 					// Set background colour
@@ -716,26 +722,31 @@ void EditorWindow::ShowObjectsWindow()
 							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + pad.y * 2.0f;
 							Util::SetTooltipPositionNearMouse(estimatedTooltipHeight);
 							if (ImGui::BeginTooltip()) {
-								// ImageSpace info
+								// Resolve ImageSpace editor ID via widget cache (GetFormEditorID() returns null at runtime)
+								auto resolveViaWidgets = [this](RE::TESForm* f, const std::vector<std::unique_ptr<Widget>>& widgets) -> std::string {
+									if (!f)
+										return "None";
+									for (const auto& w : widgets) {
+										if (w->form == f)
+											return w->GetEditorID();
+									}
+									return std::format("0x{:X}", f->GetLocalFormID());
+								};
+
+								// ImageSpace info - use widget cache for proper editor IDs
 								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
 								for (int tod = 0; tod < 4; tod++) {
-									auto imgSpace = weatherWidget->weather->imageSpaces[tod];
-									ImGui::Text("  %s: %s",
-										TOD::GetPeriodName(tod),
-										imgSpace ? imgSpace->GetFormEditorID() : "None");
+									ImGui::Text("  %s: %s", TOD::GetPeriodName(tod), resolveViaWidgets(weatherWidget->weather->imageSpaces[tod], imageSpaceWidgets).c_str());
 								}
 
 								ImGui::Spacing();
 
-								// VolumetricLighting info
+								// VolumetricLighting info - show short local FormID only
 								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Volumetric Lighting:");
 								for (int tod = 0; tod < 4; tod++) {
-									auto volLight = weatherWidget->weather->volumetricLighting[tod];
-									ImGui::Text("  %s: %s",
-										TOD::GetPeriodName(tod),
-										volLight ? volLight->GetFormEditorID() : "None");
+									auto* f = weatherWidget->weather->volumetricLighting[tod];
+									ImGui::Text("  %s: %s", TOD::GetPeriodName(tod), f ? std::format("0x{:X}", f->GetLocalFormID()).c_str() : "None");
 								}
-
 								ImGui::EndTooltip();
 							}
 							weatherTooltipShownThisFrame = true;
@@ -786,6 +797,8 @@ void EditorWindow::ShowObjectsWindow()
 
 					// json / delete column
 					drawJsonDeleteButton(sortedWidgets[i]);
+
+					ImGui::PopID();
 				}
 
 				ImGui::EndTable();  // End DetailsTable
@@ -817,7 +830,7 @@ void EditorWindow::ShowObjectsWindow()
 
 void EditorWindow::ShowViewportWindow()
 {
-	ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
+	Util::BeginWithRoundedClose("Viewport", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
 
 	// The size of the image in ImGui																														   // Get the available space in the current window
 	ImVec2 availableSpace = ImGui::GetContentRegionAvail();
@@ -857,13 +870,8 @@ void EditorWindow::ShowWidgetWindow()
 	}
 
 	// Draw all open widgets using WidgetFactory template
-	WidgetFactory::DrawOpenWidgets(weatherWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(lightingTemplateWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(imageSpaceWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(volumetricLightingWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(precipitationWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(lensFlareWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(referenceEffectWidgets, lastFocusedWidget);
+	for (auto* collection : GetWidgetCollections())
+		WidgetFactory::DrawOpenWidgets(*collection, lastFocusedWidget);
 
 	// Draw current cell lighting widget if open
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
@@ -877,11 +885,10 @@ void EditorWindow::RenderUI()
 {
 	// Apply editor UI scale
 	ImGuiIO& io = ImGui::GetIO();
-	float previousScale = io.FontGlobalScale;
-	io.FontGlobalScale = settings.editorUIScale;
+	float previousScale = ImGui::GetStyle().FontScaleMain;
+	ImGui::GetStyle().FontScaleMain = settings.editorUIScale;
 
 	if (settings.showViewport) {
-		// Dim the game scene using the theme's modal dim background color
 		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
 	}
 
@@ -893,6 +900,14 @@ void EditorWindow::RenderUI()
 	}
 
 	if (ImGui::BeginMainMenuBar()) {
+		// Tighten bottom clip rect to prevent content bleeding over the bottom border
+		{
+			auto* window = ImGui::GetCurrentWindowRead();
+			float borderInset = std::ceil(window->WindowBorderSize * 0.5f);
+			ImGui::PushClipRect(window->ClipRect.Min,
+				ImVec2(window->ClipRect.Max.x, window->ClipRect.Max.y - borderInset), true);
+		}
+
 		if (ImGui::BeginMenu("File")) {
 			if (ImGui::MenuItem("Save All Open Widgets", "Ctrl+S")) {
 				SaveAll();
@@ -900,55 +915,25 @@ void EditorWindow::RenderUI()
 
 			// Save individual widgets submenu
 			if (ImGui::BeginMenu("Save")) {
-				bool hasOpenWidgets = false;
+				bool hasOpen = false;
+				for (auto* collection : GetWidgetCollections())
+					hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(*collection, hasOpen);
 
-				// Weather widgets
-				for (auto& widget : weatherWidgets) {
-					if (widget->IsOpen()) {
-						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
-							widget->Save();
-						}
-					}
+				if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
+					hasOpen = true;
+					if (ImGui::MenuItem(currentCellLightingWidget->GetEditorID().c_str()))
+						currentCellLightingWidget->Save();
 				}
 
-				// Lighting Template widgets
-				for (auto& widget : lightingTemplateWidgets) {
-					if (widget->IsOpen()) {
-						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
-							widget->Save();
-						}
-					}
-				}
-
-				// ImageSpace widgets
-				for (auto& widget : imageSpaceWidgets) {
-					if (widget->IsOpen()) {
-						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
-							widget->Save();
-						}
-					}
-				}
-
-				if (!hasOpenWidgets) {
+				if (!hasOpen)
 					ImGui::TextDisabled("No open widgets");
-				}
 
 				ImGui::EndMenu();
 			}
 
 			ImGui::Separator();
-			if (ImGui::MenuItem("Close All Weather Widgets")) {
-				for (auto& widget : weatherWidgets) widget->SetOpen(false);
-			}
-			if (ImGui::MenuItem("Close All Lighting Widgets")) {
-				for (auto& widget : lightingTemplateWidgets) widget->SetOpen(false);
-			}
-			if (ImGui::MenuItem("Close All ImageSpace Widgets")) {
-				for (auto& widget : imageSpaceWidgets) widget->SetOpen(false);
-			}
+			for (auto* collection : GetWidgetCollections())
+				WidgetFactory::DrawCloseAllMenuItem(*collection);
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Settings")) {
@@ -998,12 +983,7 @@ void EditorWindow::RenderUI()
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Automatically apply weather changes to the game as you edit");
 			}
-			if (ImGui::Checkbox("Remember Open Widgets", &settings.rememberOpenWidgets)) {
-				Save();
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Restore previously open widgets when editor reopens");
-			}
+
 			if (ImGui::Checkbox("Enable Inherit From Parent", &settings.enableInheritFromParent)) {
 				Save();
 			}
@@ -1014,44 +994,31 @@ void EditorWindow::RenderUI()
 		}
 		if (ImGui::BeginMenu("Window")) {
 			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
+				BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
 				Save();
 			}
 			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
 			}
 
+			if (ImGui::MenuItem("Reset Window Layout")) {
+				resetLayout = true;
+			}
+
 			ImGui::Separator();
 			ImGui::Text("Open Widgets:");
-			ImGui::Separator();
 
 			int openCount = 0;
-			for (auto& widget : weatherWidgets) {
-				if (widget->IsOpen()) {
-					openCount++;
-					if (ImGui::MenuItem(std::format("Weather: {}", widget->GetEditorID()).c_str())) {
-						// Focus window (ImGui will bring to front when clicked)
-					}
-				}
-			}
-			for (auto& widget : lightingTemplateWidgets) {
-				if (widget->IsOpen()) {
-					openCount++;
-					if (ImGui::MenuItem(std::format("Lighting: {}", widget->GetEditorID()).c_str())) {
-						// Focus window
-					}
-				}
-			}
-			for (auto& widget : imageSpaceWidgets) {
-				if (widget->IsOpen()) {
-					openCount++;
-					if (ImGui::MenuItem(std::format("ImageSpace: {}", widget->GetEditorID()).c_str())) {
-						// Focus window
-					}
-				}
+			for (auto* collection : GetWidgetCollections())
+				openCount = WidgetFactory::DrawOpenWidgetMenuItems(*collection, openCount);
+
+			if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
+				++openCount;
+				if (ImGui::MenuItem(std::format("{}: {}", currentCellLightingWidget->GetWidgetTypeName(), currentCellLightingWidget->GetEditorID()).c_str()))
+					ImGui::SetWindowFocus(currentCellLightingWidget->GetWindowTitle().c_str());
 			}
 
-			if (openCount == 0) {
+			if (openCount == 0)
 				ImGui::TextDisabled("No widgets open");
-			}
 
 			ImGui::EndMenu();
 		}
@@ -1090,162 +1057,262 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 
-		// Pause Time button
 		auto menu = globals::menu;
-		if (menu && menu->uiIcons.pauseTime.texture) {
-			bool isPaused = IsTimePaused();
+		constexpr float kIconButtonPadding = 1.0f;  // minimal padding so icons render larger and smoother
+		const float iconButtonDim = ImGui::GetFrameHeight() - kIconButtonPadding * 2;
+		const ImVec2 iconButtonSize(iconButtonDim, iconButtonDim);
+		const auto iconTint = Util::GetIconTint();
 
+		// Undo button (stays on left side)
+		if (menu && menu->uiIcons.undo.texture) {
+			bool canUndo = CanUndo();
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			if (isPaused) {
-				auto pausedColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-				pausedColor.w = 0.6f;
-				auto pausedHoverColor = pausedColor;
-				pausedHoverColor.w = 0.8f;
-				ImGui::PushStyleColor(ImGuiCol_Button, pausedColor);
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, pausedHoverColor);
-			} else {
-				auto transparentColor = ImVec4(0, 0, 0, 0);
-				ImGui::PushStyleColor(ImGuiCol_Button, transparentColor);
-				auto hoverColor = Menu::GetSingleton()->GetSettings().Theme.Palette.Text;
-				hoverColor.w = 0.25f;
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kIconButtonPadding, kIconButtonPadding));
+			{
+				auto _style = Util::TransparentIconButtonStyle();
+				auto textColor = canUndo ? menu->GetTheme().Palette.Text : menu->GetTheme().StatusPalette.Disable;
+				if (!canUndo)
+					textColor.w = 0.5f;
+				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+				if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint) && canUndo)
+					PerformUndo();
+				ImGui::PopStyleColor();
 			}
+			ImGui::PopStyleVar(2);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(canUndo ? "Undo (Ctrl+Z) - %d states" : "Undo (Ctrl+Z) - No changes to undo", (int)undoStack.size());
+		}
 
-			const float menuBarHeight = ImGui::GetFrameHeight();
-			const float buttonDim = menuBarHeight * 0.85f;
-			const ImVec2 buttonSize(buttonDim, buttonDim);
+		// Right-aligned items — use SetCursorScreenPos to bypass menu bar GroupOffset
+		const float scale = Util::GetUIScale();
+		const float clipRight = ImGui::GetWindowDrawList()->GetClipRectMax().x;
+		const float cursorY = ImGui::GetCursorScreenPos().y;
+		const float closeButtonSize = ImGui::GetFrameHeight();
+		const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
+		const float sliderWidth = kMenuBarSliderWidth * scale;
 
-			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize))
-				TogglePause();
+		// Measure right-side elements to compute positions right-to-left
+		constexpr float kCloseButtonInset = 3.0f;
+		float rightCursor = clipRight - kCloseButtonInset * scale;
 
+		// X button
+		rightCursor -= closeButtonSize;
+		const float xButtonX = rightCursor;
+
+		// Time slider
+		rightCursor -= itemSpacing + sliderWidth;
+		const float sliderX = rightCursor;
+
+		// Period text
+		char periodBuf[64];
+		std::snprintf(periodBuf, sizeof(periodBuf), "(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
+		float periodWidth = ImGui::CalcTextSize(periodBuf).x;
+		rightCursor -= itemSpacing + periodWidth;
+		const float periodX = rightCursor;
+
+		// Pause Time button
+		float pauseButtonX = 0;
+		bool hasPauseButton = menu && menu->uiIcons.pauseTime.texture;
+		if (hasPauseButton) {
+			rightCursor -= itemSpacing + iconButtonDim + kIconButtonPadding * 2;
+			pauseButtonX = rightCursor;
+		}
+
+		// Preview mode buttons (free camera / play mode)
+		const float previewButtonWidth = iconButtonDim + kIconButtonPadding * 2;
+		float freeCameraX = 0, playModeX = 0;
+		bool hasFreeCam = menu && menu->uiIcons.freeCamera.texture;
+		bool hasPlayMode = menu && menu->uiIcons.playMode.texture;
+		if (hasPlayMode) {
+			rightCursor -= itemSpacing + previewButtonWidth;
+			playModeX = rightCursor;
+		}
+		if (hasFreeCam) {
+			rightCursor -= itemSpacing + previewButtonWidth;
+			freeCameraX = rightCursor;
+		}
+
+		// Preview mode status text (mirrors TIME PAUSED pattern, with hotkey + pulsating color)
+		float previewStatusX = 0;
+		char previewStatusBuf[128] = {};
+		bool showPreviewStatus = previewMode != PreviewMode::None;
+		if (showPreviewStatus) {
+			std::string hotkey = Util::Input::KeyIdToString(menu->GetSettings().WeatherEditorToggleKey);
+			if (previewMode == PreviewMode::FreeCamera)
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] FREE CAMERA (Speed: %.0f)", hotkey.c_str(), flySpeed);
+			else if (previewMode == PreviewMode::FreeCameraLocked)
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] FREE CAMERA LOCKED", hotkey.c_str());
+			else
+				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] PLAY MODE", hotkey.c_str());
+			rightCursor -= itemSpacing + ImGui::CalcTextSize(previewStatusBuf).x;
+			previewStatusX = rightCursor;
+		}
+
+		// Time paused text
+		float timePausedX = 0;
+		bool showTimePaused = IsTimePaused();
+		const char* timePausedText = " [TIME PAUSED]";
+		if (showTimePaused) {
+			rightCursor -= itemSpacing + ImGui::CalcTextSize(timePausedText).x;
+			timePausedX = rightCursor;
+		}
+
+		// Weather lock text
+		float weatherLockX = 0;
+		char weatherLockBuf[128] = {};
+		bool showWeatherLock = weatherLockActive && lockedWeather;
+		if (showWeatherLock) {
+			const char* weatherName = lockedWeather->GetFormEditorID();
+			std::snprintf(weatherLockBuf, sizeof(weatherLockBuf), " [LOCKED: %s]", weatherName ? weatherName : "Unknown");
+			rightCursor -= itemSpacing + ImGui::CalcTextSize(weatherLockBuf).x;
+			weatherLockX = rightCursor;
+		}
+
+		// Render right-aligned items left to right
+		const auto& statusPalette = menu->GetTheme().StatusPalette;
+
+		if (showWeatherLock) {
+			ImGui::SetCursorScreenPos(ImVec2(weatherLockX, cursorY));
+			ImGui::PushStyleColor(ImGuiCol_Text, statusPalette.SuccessColor);
+			ImGui::TextUnformatted(weatherLockBuf);
+			ImGui::PopStyleColor();
+		}
+
+		if (showTimePaused) {
+			ImGui::SetCursorScreenPos(ImVec2(timePausedX, cursorY));
+			ImGui::PushStyleColor(ImGuiCol_Text, statusPalette.CurrentHotkey);
+			ImGui::TextUnformatted(timePausedText);
+			ImGui::PopStyleColor();
+		}
+
+		if (showPreviewStatus) {
+			ImGui::SetCursorScreenPos(ImVec2(previewStatusX, cursorY));
+			ImGui::TextColored(Util::GetPulsingColor(statusPalette.CurrentHotkey), "%s", previewStatusBuf);
+		}
+
+		// Toggle-style icon button helper (active: SuccessColor bg, inactive: transparent)
+		auto DrawToggleIconButton = [&](const char* id, ImTextureRef texture, bool isActive, float posX) -> bool {
+			ImGui::SetCursorScreenPos(ImVec2(posX, cursorY));
+			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kIconButtonPadding, kIconButtonPadding));
+			if (isActive) {
+				auto color = statusPalette.SuccessColor;
+				color.w = kToggleActiveAlpha;
+				auto hover = color;
+				hover.w = kToggleHoverAlpha;
+				ImGui::PushStyleColor(ImGuiCol_Button, color);
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
+			} else {
+				auto hover = menu->GetTheme().Palette.Text;
+				hover.w = kInactiveHoverAlpha;
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
+			}
+			bool clicked = ImGui::ImageButton(id, texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
 			ImGui::PopStyleColor(2);
-			ImGui::PopStyleVar();
+			ImGui::PopStyleVar(2);
+			return clicked;
+		};
 
+		// Preview mode buttons
+		if (hasFreeCam) {
+			bool isActive = previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked;
+			if (DrawToggleIconButton("##FreeCamera", menu->uiIcons.freeCamera.texture, isActive, freeCameraX))
+				EnterPreviewMode(PreviewMode::FreeCamera);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(isActive ? "Exit Free Camera" : "Free Camera (scroll to adjust speed)");
+		}
+		if (hasPlayMode) {
+			bool isActive = previewMode == PreviewMode::PlayMode;
+			if (DrawToggleIconButton("##PlayMode", menu->uiIcons.playMode.texture, isActive, playModeX))
+				EnterPreviewMode(PreviewMode::PlayMode);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(isActive ? "Exit Play Mode" : "Play Mode - Walk around normally");
+		}
+
+		if (hasPauseButton) {
+			bool isPaused = IsTimePaused();
+			if (DrawToggleIconButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, isPaused, pauseButtonX))
+				TogglePause();
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
 		}
 
-		// Undo button
-		if (menu && menu->uiIcons.undo.texture) {
-			bool canUndo = CanUndo();
-
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			if (!canUndo) {
-				auto transparentColor = ImVec4(0, 0, 0, 0);
-				ImGui::PushStyleColor(ImGuiCol_Button, transparentColor);
-				auto disabledColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Disable;
-				disabledColor.w = 0.25f;
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, disabledColor);
-				auto disabledTextColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Disable;
-				disabledTextColor.w = 0.5f;
-				ImGui::PushStyleColor(ImGuiCol_Text, disabledTextColor);
-			} else {
-				auto transparentColor = ImVec4(0, 0, 0, 0);
-				ImGui::PushStyleColor(ImGuiCol_Button, transparentColor);
-				auto hoverColor = Menu::GetSingleton()->GetSettings().Theme.Palette.Text;
-				hoverColor.w = 0.25f;
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
-				ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.Palette.Text);
-			}
-
-			const float menuBarHeight = ImGui::GetFrameHeight();
-			const float buttonDim = menuBarHeight * 0.85f;
-			const ImVec2 buttonSize(buttonDim, buttonDim);
-
-			if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, buttonSize) && canUndo) {
-				PerformUndo();
-			}
-
-			ImGui::PopStyleColor(3);
-			ImGui::PopStyleVar();
-
-			if (ImGui::IsItemHovered()) {
-				if (canUndo) {
-					ImGui::SetTooltip("Undo (Ctrl+Z) - %d states", (int)undoStack.size());
-				} else {
-					ImGui::SetTooltip("Undo (Ctrl+Z) - No changes to undo");
-				}
-			}
-		}  // Weather lock indicator
-		if (weatherLockActive && lockedWeather) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.SuccessColor);
-			const char* weatherName = lockedWeather->GetFormEditorID();
-			ImGui::Text(" [LOCKED: %s]", weatherName ? weatherName : "Unknown");
-			ImGui::PopStyleColor();
+		// Period text and time slider
+		auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+		if (calendar && calendar->gameHour) {
+			ImGui::SetCursorScreenPos(ImVec2(periodX, cursorY));
+			ImGui::TextUnformatted(periodBuf);
+			ImGui::SetCursorScreenPos(ImVec2(sliderX, cursorY));
+			ImGui::SetNextItemWidth(sliderWidth);
+			DrawGameHourSlider("##MenuBarSlider", "Time: %.2f");
 		}
 
-		// Time pause indicator
-		if (IsTimePaused()) {
-			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.CurrentHotkey);
-			ImGui::Text(" [TIME PAUSED]");
-			ImGui::PopStyleColor();
-		}
-
-		// Time slider anchored to the right of the menu bar
-		// Close button on the right side
-		float menuBarHeight = ImGui::GetFrameHeight();
-		float closeButtonSize = menuBarHeight * 0.9f;  // 10% smaller than menu bar
-
-		// Time slider anchored to the right of the menu bar
+		// Close button
+		ImGui::SetCursorScreenPos(ImVec2(xButtonX, cursorY));
 		{
-			const float& itemSpacing = ImGui::GetStyle().ItemSpacing.x;
-			char periodBuf[64];
-			std::snprintf(periodBuf, sizeof(periodBuf), "(%s)", TOD::GetPeriodName(TOD::GetActivePeriod()));
-			float periodWidth = ImGui::CalcTextSize(periodBuf).x;
-			const float sliderStartX = ImGui::GetWindowWidth() - closeButtonSize - 10.0f - itemSpacing - kMenuBarSliderWidth;
-			auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
-			if (calendar && calendar->gameHour) {
-				ImGui::SameLine(sliderStartX - itemSpacing - periodWidth);
-				ImGui::TextUnformatted(periodBuf);
-				ImGui::SameLine(sliderStartX);
-				ImGui::SetNextItemWidth(kMenuBarSliderWidth);
-				DrawGameHourSlider("##MenuBarSlider", "Time: %.2f");
+			auto _style = Util::ErrorButtonStyle();
+			if (ImGui::Button("X", ImVec2(closeButtonSize, closeButtonSize))) {
+				open = false;
 			}
 		}
-
-		ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - 10.0f);
-		auto errorColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Error;
-		auto errorHoverColor = errorColor;
-		errorHoverColor.x = std::min(1.0f, errorColor.x * 1.2f);
-		errorHoverColor.y = std::min(1.0f, errorColor.y * 0.75f);
-		auto errorActiveColor = errorColor;
-		errorActiveColor.x = std::max(0.0f, errorColor.x * 0.875f);
-		errorActiveColor.y = std::max(0.0f, errorColor.y * 0.25f);
-		ImGui::PushStyleColor(ImGuiCol_Button, errorColor);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, errorHoverColor);
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, errorActiveColor);
-		if (ImGui::Button("X", ImVec2(closeButtonSize, closeButtonSize))) {
-			open = false;
-		}
-		ImGui::PopStyleColor(3);
 		if (ImGui::IsItemHovered()) {
 			ImGui::SetTooltip("Close Weather Editor (Esc)");
 		}
+
+		ImGui::PopClipRect();  // End bottom-border clip rect
+
+		// Redraw the menu bar border on top of all content so elements appear behind it
+		{
+			auto* window = ImGui::GetCurrentWindowRead();
+			const float border = ImGui::GetStyle().WindowBorderSize;
+			if (window && border > 0.0f) {
+				ImU32 borderCol = ImGui::GetColorU32(ImGuiCol_Border);
+				window->DrawList->AddRect(window->Pos, ImVec2(window->Pos.x + window->Size.x, window->Pos.y + window->Size.y), borderCol, 0.0f, 0, border);
+			}
+		}
+
 		ImGui::EndMainMenuBar();
 	}
 
 	// Establish a viewport-wide DockSpace so all editor windows are snappable and dockable
-	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+	ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	auto width = ImGui::GetIO().DisplaySize.x;
 	auto height = ImGui::GetIO().DisplaySize.y;
-	auto viewportWidth = width * 0.5f;                // Make the viewport take up 50% of the width
-	auto sideWidth = (width - viewportWidth) / 2.0f;  // Divide the remaining width equally between the side windows
-	ImGui::SetNextWindowSize(ImVec2(sideWidth, ImGui::GetIO().DisplaySize.y * 0.75f), ImGuiCond_FirstUseEver);
+	const float scale = Util::GetUIScale();
+	const float pad = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
+	const float menuBarHeight = ImGui::GetFrameHeight();
+	const float availableWidth = width - pad * 3.0f;  // left pad + gap + right pad
+	const float availableHeight = (height - menuBarHeight - pad * 2.0f) * 0.85f;
+	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	// Browser gets up to half the available width, capped so ultrawide gives extra to viewport
+	const float maxBrowserWidth = 960.0f * scale;
+	const float browserWidth = std::min(availableWidth * 0.5f, maxBrowserWidth);
+	const float viewportWidth = availableWidth - browserWidth;
+	ImGui::SetNextWindowSize(ImVec2(browserWidth, availableHeight), layoutCond);
+	ImGui::SetNextWindowPos(ImVec2(pad, menuBarHeight + pad), layoutCond);
 	ShowObjectsWindow();
 
 	if (settings.showViewport) {
-		ImGui::SetNextWindowSize(ImVec2(viewportWidth, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_FirstUseEver);
+		// Size viewport height to match game aspect ratio so the preview fits snugly
+		const float aspectRatio = width / height;
+		const float imageHeight = viewportWidth / aspectRatio;
+		const float chromeHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
+		const float viewportHeight = imageHeight + chromeHeight;
+		ImGui::SetNextWindowSize(ImVec2(viewportWidth, viewportHeight), layoutCond);
+		ImGui::SetNextWindowPos(ImVec2(pad + browserWidth + pad, menuBarHeight + pad), layoutCond);
+		viewportBottomY = menuBarHeight + pad + viewportHeight;
 		ShowViewportWindow();
+	} else {
+		viewportBottomY = menuBarHeight + pad;
 	}
 
 	auto settingsWindowHeight = height * 0.25f;
 	auto settingsWindowWidth = width * 0.25f;
-	ImGui::SetNextWindowSizeConstraints(ImVec2(settingsWindowWidth, settingsWindowHeight), ImVec2(FLT_MAX, FLT_MAX));
-	ImGui::SetNextWindowPos({ (width / 2.0f) - (settingsWindowWidth / 2.0f), (height / 2.0f) - (settingsWindowHeight / 2.0f) }, ImGuiCond_Appearing);
 	if (showSettingsWindow) {
+		ImGui::SetNextWindowSize(ImVec2(settingsWindowWidth, settingsWindowHeight), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowPos({ (width / 2.0f) - (settingsWindowWidth / 2.0f), (height / 2.0f) - (settingsWindowHeight / 2.0f) }, ImGuiCond_Appearing);
 		ShowSettingsWindow();
 	}
 
@@ -1254,11 +1321,15 @@ void EditorWindow::RenderUI()
 	// Show palette window
 	PaletteWindow::GetSingleton()->Draw();
 
+	if (resetLayout)
+		ResetWidgetTypeSizes();
+	resetLayout = false;
+
 	// Render notifications on top of everything
 	RenderNotifications();
 
 	// Restore previous font scale
-	io.FontGlobalScale = previousScale;
+	ImGui::GetStyle().FontScaleMain = previousScale;
 }
 
 void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName)
@@ -1285,8 +1356,7 @@ void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std:
 			weatherWidget->NavigateToFeatureSetting(featureName, settingName);
 
 			// Focus the widget window
-			std::string windowName = std::format("{}###widget_{}", weatherWidget->GetEditorID(), (void*)weatherWidget);
-			ImGui::SetWindowFocus(windowName.c_str());
+			ImGui::SetWindowFocus(weatherWidget->GetWindowTitle().c_str());
 			break;
 		}
 	}
@@ -1294,13 +1364,10 @@ void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std:
 
 EditorWindow::~EditorWindow()
 {
+	ShowGameMenus();
 	delete tempTexture;
-	weatherWidgets.clear();
-	lightingTemplateWidgets.clear();
-	imageSpaceWidgets.clear();
-	volumetricLightingWidgets.clear();
-	precipitationWidgets.clear();
-	referenceEffectWidgets.clear();
+	for (auto* collection : GetWidgetCollections())
+		collection->clear();
 	artObjectWidgets.clear();
 	effectShaderWidgets.clear();
 	currentCellLightingWidget.reset();
@@ -1326,23 +1393,26 @@ void EditorWindow::SetupResources()
 	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets);
 }
 
-void EditorWindow::Draw()
+void EditorWindow::UpdateOpenState()
 {
-	// Track editor open state for vanity camera management
 	static bool wasOpen = false;
 
 	if (open && !wasOpen) {
-		// Editor just opened - disable vanity camera and restore session
 		DisableVanityCamera();
-		RestoreSessionWidgets();
+		HideGameMenus();
+		BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
+
 	} else if (!open && wasOpen) {
-		// Editor just closed - restore vanity camera and save session
 		RestoreVanityCamera();
-		SaveSessionWidgets();
+		ShowGameMenus();
+		BackgroundBlur::SetWeatherEditorActive(false);
 	}
 
 	wasOpen = open;
+}
 
+void EditorWindow::Draw()
+{
 	// Re-enforce weather lock if active (handles time changes)
 	if (weatherLockActive && lockedWeather) {
 		auto sky = RE::Sky::GetSingleton();
@@ -1400,26 +1470,22 @@ void EditorWindow::Draw()
 
 void EditorWindow::SaveAll()
 {
-	for (auto& weather : weatherWidgets) {
-		if (weather->IsOpen())
-			weather->Save();
-	}
-
-	for (auto& lightingTemplate : lightingTemplateWidgets) {
-		if (lightingTemplate->IsOpen())
-			lightingTemplate->Save();
-	}
-
-	for (auto& imageSpace : imageSpaceWidgets) {
-		if (imageSpace->IsOpen())
-			imageSpace->Save();
-	}
+	auto saveOpen = [](auto& widgets) {
+		for (auto& w : widgets)
+			if (w->IsOpen())
+				w->Save();
+	};
+	for (auto* collection : GetWidgetCollections())
+		saveOpen(*collection);
+	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen())
+		currentCellLightingWidget->Save();
 
 	Save();
 }
 
 void EditorWindow::SaveSettings()
 {
+	settings.widgetTypeSizes = GetWidgetTypeSizesJson();
 	j = settings;
 }
 
@@ -1427,11 +1493,12 @@ void EditorWindow::LoadSettings()
 {
 	if (!j.empty())
 		settings = j;
+	SetWidgetTypeSizesFromJson(settings.widgetTypeSizes);
 }
 
 void EditorWindow::ShowSettingsWindow()
 {
-	ImGui::Begin("Settings", &showSettingsWindow);
+	Util::BeginWithRoundedClose("Settings", &showSettingsWindow);
 
 	if (ImGui::BeginTable("SettingsTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_NoHostExtendX)) {
 		ImGui::TableSetupColumn("Options", ImGuiTableColumnFlags_WidthStretch, 0.3f);
@@ -1479,9 +1546,6 @@ void EditorWindow::ShowSettingsWindow()
 			ImGui::TextUnformatted("Session & History");
 			ImGui::Spacing();
 
-			ImGui::Checkbox("Remember open widgets", &settings.rememberOpenWidgets);
-			Util::AddTooltip("Automatically reopen widgets that were open when you last closed the editor");
-
 			ImGui::SliderInt("Max recent widgets", &settings.maxRecentWidgets, 5, 20);
 			Util::AddTooltip("Maximum number of recent widgets to remember");
 
@@ -1499,7 +1563,7 @@ void EditorWindow::ShowSettingsWindow()
 			if (ImGui::BeginTable("FlagsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 				ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Colour", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 60.0f * Util::GetUIScale());
 
 				auto& recordMarkers = settings.recordMarkers;
 
@@ -1784,8 +1848,9 @@ void EditorWindow::DrawTimeControls()
 	if (!calendar || !calendar->gameHour || !calendar->timeScale)
 		return;
 
-	// Row 1: Pause/Resume + Game Time
-	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0)))
+	const float scale = Util::GetUIScale();
+	float buttonWidth = 120.0f * scale;
+	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(buttonWidth, 0)))
 		TogglePause();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Pause or resume game time progression");
@@ -1801,7 +1866,7 @@ void EditorWindow::DrawTimeControls()
 		timeScaleSlider = calendar->timeScale->value;
 
 	// Row 2: Reset Speed + TimeScale slider + speed label
-	if (ImGui::Button("Reset Speed", ImVec2(120, 0)))
+	if (ImGui::Button("Reset Speed", ImVec2(buttonWidth, 0)))
 		ResetTimeScale();
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Reset time speed to vanilla (%.1fx)", kVanillaTimeScale);
@@ -1817,6 +1882,13 @@ void EditorWindow::DrawTimeControls()
 	ImGui::Text("%.1fx", calendar->timeScale->value);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Adjust how fast time passes (vanilla: %.1fx)", kVanillaTimeScale);
+}
+
+bool EditorWindow::CanBeOpen()
+{
+	auto* player = globals::game::player;
+	auto* state = globals::state;
+	return player && player->parentCell && !state->isLoadingMenuOpen && !state->isMainMenuOpen;
 }
 
 void EditorWindow::DisableVanityCamera()
@@ -1844,6 +1916,107 @@ void EditorWindow::RestoreVanityCamera()
 		vanityCameraDisabled = false;
 		logger::info("Vanity camera restored (delay: {})", savedVanityCameraDelay);
 	}
+}
+
+void EditorWindow::HideGameMenus()
+{
+	if (gameMenusHidden)
+		return;
+
+	// ShowMenus(false) stops the game from rendering to the back buffer.
+	// Without d3d12SwapChain, blur reads directly from that buffer and would freeze.
+	if (!globals::features::upscaling.d3d12SwapChainActive)
+		return;
+
+	if (auto ui = RE::UI::GetSingleton()) {
+		ui->ShowMenus(false);
+		gameMenusHidden = true;
+		logger::info("Game menus hidden for weather editor");
+	}
+}
+
+void EditorWindow::ShowGameMenus()
+{
+	if (!gameMenusHidden)
+		return;
+
+	if (auto ui = RE::UI::GetSingleton()) {
+		ui->ShowMenus(true);
+		gameMenusHidden = false;
+		logger::info("Game menus restored after weather editor");
+	}
+}
+
+void EditorWindow::EnterPreviewMode(PreviewMode mode)
+{
+	if (mode == PreviewMode::None)
+		return;
+
+	// Already in free camera flying — ignore duplicate click
+	if (mode == previewMode)
+		return;
+
+	// Re-enter flying from locked state via button click
+	if (mode == PreviewMode::FreeCamera && previewMode == PreviewMode::FreeCameraLocked) {
+		previewMode = PreviewMode::FreeCamera;
+		logger::info("Free camera unlocked (re-entered flying)");
+		return;
+	}
+
+	// Switch from a different active mode first
+	if (previewMode != PreviewMode::None)
+		ExitPreviewMode();
+
+	previewMode = mode;
+	savedMousePos = ImGui::GetIO().MousePos;
+
+	if (mode == PreviewMode::FreeCamera) {
+		flySpeed = kDefaultFlySpeed;
+		RE::Console::ExecuteCommand("tfc");
+		RE::Console::ExecuteCommand(std::format("sucsm {:.0f}", flySpeed).c_str());
+	}
+
+	logger::info("Entered preview mode: {}", mode == PreviewMode::FreeCamera ? "FreeCamera" : "PlayMode");
+}
+
+void EditorWindow::ExitPreviewMode()
+{
+	bool wasFlying = IsPreviewFlying();
+
+	if (previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked)
+		RE::Console::ExecuteCommand("tfc");
+
+	logger::info("Exited preview mode");
+	previewMode = PreviewMode::None;
+
+	// Only restore cursor if exiting from a flying state; FreeCameraLocked already has the cursor active
+	if (wasFlying) {
+		ImGui::GetIO().MousePos = savedMousePos;
+		ImGui::GetIO().WantSetMousePos = true;
+	}
+}
+
+void EditorWindow::ToggleFreeCameraLock()
+{
+	if (previewMode == PreviewMode::FreeCamera) {
+		previewMode = PreviewMode::FreeCameraLocked;
+		ImGui::GetIO().MousePos = savedMousePos;
+		ImGui::GetIO().WantSetMousePos = true;
+		logger::info("Free camera locked");
+	} else if (previewMode == PreviewMode::FreeCameraLocked) {
+		savedMousePos = ImGui::GetIO().MousePos;
+		previewMode = PreviewMode::FreeCamera;
+		logger::info("Free camera unlocked");
+	}
+}
+
+void EditorWindow::AdjustFlySpeed(float scrollDelta)
+{
+	if (previewMode != PreviewMode::FreeCamera)
+		return;
+
+	flySpeed = std::clamp(flySpeed + scrollDelta * kFlySpeedScrollStep, kMinFlySpeed, kMaxFlySpeed);
+	RE::Console::ExecuteCommand(std::format("sucsm {:.0f}", flySpeed).c_str());
 }
 
 bool EditorWindow::ShouldHandleEscapeKey() const
@@ -1877,27 +2050,15 @@ void EditorWindow::PerformUndo()
 	undoStack.pop_back();
 
 	if (!state.widget) {
-		for (auto& w : weatherWidgets) {
-			if (w->GetEditorID() == state.widgetId) {
-				state.widget = w.get();
+		for (auto* collection : GetWidgetCollections()) {
+			for (auto& w : *collection) {
+				if (w->GetEditorID() == state.widgetId) {
+					state.widget = w.get();
+					break;
+				}
+			}
+			if (state.widget)
 				break;
-			}
-		}
-		if (!state.widget) {
-			for (auto& w : imageSpaceWidgets) {
-				if (w->GetEditorID() == state.widgetId) {
-					state.widget = w.get();
-					break;
-				}
-			}
-		}
-		if (!state.widget) {
-			for (auto& w : lightingTemplateWidgets) {
-				if (w->GetEditorID() == state.widgetId) {
-					state.widget = w.get();
-					break;
-				}
-			}
 		}
 	}
 
@@ -1936,7 +2097,8 @@ void EditorWindow::RenderNotifications()
 	}
 
 	float currentTime = static_cast<float>(ImGui::GetTime());
-	float yOffset = 10.0f;
+	const float scale = Util::GetUIScale();
+	float yOffset = 10.0f * scale;
 
 	// Remove expired notifications
 	notifications.erase(
@@ -1956,11 +2118,11 @@ void EditorWindow::RenderNotifications()
 		}
 
 		// Position in top-left corner
-		ImGui::SetNextWindowPos(ImVec2(10.0f, yOffset), ImGuiCond_Always);
+		ImGui::SetNextWindowPos(ImVec2(10.0f * scale, yOffset), ImGuiCond_Always);
 		ImGui::SetNextWindowBgAlpha(0.8f * alpha);
 
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f, 10.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f * scale);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f * scale, 10.0f * scale));
 
 		if (ImGui::Begin(std::format("##Notification{}", (void*)&notif).c_str(),
 				nullptr,
@@ -1971,7 +2133,7 @@ void EditorWindow::RenderNotifications()
 			ImGui::TextUnformatted(notif.message.c_str());
 			ImGui::PopStyleColor();
 
-			yOffset += ImGui::GetWindowSize().y + 5.0f;
+			yOffset += ImGui::GetWindowSize().y + 5.0f * scale;
 		}
 		ImGui::End();
 
@@ -2051,47 +2213,4 @@ void EditorWindow::ToggleFavorite(const std::string& widgetId)
 bool EditorWindow::IsFavorite(const std::string& widgetId) const
 {
 	return std::find(settings.favoriteWidgets.begin(), settings.favoriteWidgets.end(), widgetId) != settings.favoriteWidgets.end();
-}
-
-void EditorWindow::SaveSessionWidgets()
-{
-	settings.lastOpenWidgets.clear();
-
-	// Save all currently open widgets
-	for (auto& widget : weatherWidgets) {
-		if (widget->IsOpen()) {
-			settings.lastOpenWidgets.push_back(widget->GetEditorID());
-		}
-	}
-	for (auto& widget : lightingTemplateWidgets) {
-		if (widget->IsOpen()) {
-			settings.lastOpenWidgets.push_back(widget->GetEditorID());
-		}
-	}
-
-	Save();
-}
-
-void EditorWindow::RestoreSessionWidgets()
-{
-	if (!settings.rememberOpenWidgets || settings.lastOpenWidgets.empty()) {
-		return;
-	}
-
-	// Open widgets that were open in last session
-	for (const auto& widgetId : settings.lastOpenWidgets) {
-		// Search in all widget collections
-		for (auto& widget : weatherWidgets) {
-			if (widget->GetEditorID() == widgetId) {
-				widget->SetOpen(true);
-				break;
-			}
-		}
-		for (auto& widget : lightingTemplateWidgets) {
-			if (widget->GetEditorID() == widgetId) {
-				widget->SetOpen(true);
-				break;
-			}
-		}
-	}
 }

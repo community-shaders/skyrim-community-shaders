@@ -108,6 +108,38 @@ inline bool BeginScrollableContent(const char* id = "##ScrollContent") { return 
 inline void EndScrollableContent() { ImGui::EndChild(); }
 
 // ============================================================================
+// Widget Window Defaults - DPI-aware sizing for all editor widget windows
+// ============================================================================
+
+namespace WidgetDefaults
+{
+	constexpr float kMinWidth = 200.0f;
+	constexpr float kMinHeight = 150.0f;
+	constexpr float kInitialWidth = 580.0f;
+	constexpr float kInitialHeight = 580.0f;
+	constexpr float kSliderWidthRatio = 0.6f;  ///< Fraction of available width for slider/input controls
+	constexpr float kTODLabelWidth = 150.0f;   ///< Default label column width for time-of-day tables
+}
+
+/// Apply standard DPI-scaled size constraints and initial size for widget windows. Call before ImGui::Begin().
+/// Uses per-widget-type size tracking so all instances of a widget type share window dimensions.
+/// Respects EditorWindow::resetLayout to re-apply defaults on demand.
+void SetupWidgetWindowDefaults(const char* widgetType);
+
+/// Update stored per-widget-type size from the current ImGui window. Call after ImGui::Begin().
+/// Only updates when the window is focused so resize applies to future windows of the same type.
+void UpdateWidgetTypeSize(const char* widgetType);
+
+/// Reset all per-widget-type sizes to defaults. Called when resetLayout is triggered.
+void ResetWidgetTypeSizes();
+
+/// Serialize per-widget-type sizes into a JSON object for persistence.
+json GetWidgetTypeSizesJson();
+
+/// Restore per-widget-type sizes from a previously serialized JSON object.
+void SetWidgetTypeSizesFromJson(const json& j);
+
+// ============================================================================
 // PropertyDrawer - Unified table-based property drawing with search support
 // ============================================================================
 namespace PropertyDrawer
@@ -118,6 +150,9 @@ namespace PropertyDrawer
 
 	// Draw a table separator row
 	void DrawSeparator();
+
+	// Draw a vertically-centered label in the first table column. Call between TableNextRow and drawing the value.
+	void DrawLabel(const char* label);
 
 	// Draw properties with optional search filtering.
 	// searchBuffer can be nullptr to skip search filtering.
@@ -197,6 +232,46 @@ namespace WidgetFactory
 			}
 		}
 	}
+
+	// Draw menu items for open widgets in a container using widget type name. Returns updated open count.
+	template <typename Container>
+	int DrawOpenWidgetMenuItems(const Container& widgets, int count)
+	{
+		for (auto& widget : widgets) {
+			if (widget->IsOpen()) {
+				++count;
+				if (ImGui::MenuItem(std::format("{}: {}", widget->GetWidgetTypeName(), widget->GetEditorID()).c_str()))
+					ImGui::SetWindowFocus(widget->GetWindowTitle().c_str());
+			}
+		}
+		return count;
+	}
+
+	// Draw save menu items for open widgets in a container. Returns true if any open widget exists.
+	template <typename Container>
+	bool DrawSaveWidgetMenuItems(Container& widgets, bool hasOpen = false)
+	{
+		for (auto& widget : widgets) {
+			if (widget->IsOpen()) {
+				hasOpen = true;
+				if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str()))
+					widget->Save();
+			}
+		}
+		return hasOpen;
+	}
+
+	// Draw "Close All <Type> Widgets" menu item for a widget container.
+	template <typename Container>
+	void DrawCloseAllMenuItem(Container& widgets)
+	{
+		if (widgets.empty())
+			return;
+		if (ImGui::MenuItem(std::format("Close All {} Widgets", widgets[0]->GetWidgetTypeName()).c_str())) {
+			for (auto& widget : widgets)
+				widget->SetOpen(false);
+		}
+	}
 }  // namespace WidgetFactory
 
 void Float3ToColor(const float3& newColor, RE::Color& color);
@@ -263,7 +338,8 @@ namespace TOD
 
 	// Helper to begin a TOD table (2 columns: Parameter | Values)
 	// Returns true if table was created successfully
-	bool BeginTODTable(const char* tableId);
+	// paramColumnWidth: fixed width for the label column (0 = default 200px)
+	bool BeginTODTable(const char* tableId, float paramColumnWidth = 0.0f);
 
 	// End the TOD table
 	void EndTODTable();

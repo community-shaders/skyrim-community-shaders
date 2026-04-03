@@ -6,9 +6,12 @@ struct LightEditor
 	bool enabled;
 	bool disableInvSqLights;
 	bool disableRegularLights;
+	bool shadowsOnly = false;
 
 	void DrawSettings();
 	void GatherLights();
+
+	bool ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const;
 
 private:
 	struct LightInfo
@@ -21,6 +24,8 @@ private:
 		bool isRef;
 		bool isAttached;
 		bool isOther;
+		bool isSpotlight = false;
+		bool hasPosition = false;
 		RE::NiPoint3 position;
 
 		bool operator==(const LightInfo& other) const noexcept
@@ -51,6 +56,8 @@ private:
 	bool showAttachedLights = false;
 	bool showEffectLights = false;
 	int32_t waitFrames = 0;
+	uint32_t totalLightCount = 0;
+	uint32_t activeShadowLightCount = 0;
 
 	enum class FilterOption
 	{
@@ -95,9 +102,30 @@ private:
 	LightSettings original = {};
 	LightSettings current = {};
 
+	struct LPLightInfo
+	{
+		std::string configPath;
+		std::string lightEDID;
+		std::string ownerModelPath;
+		std::string ownerEditorId;
+		bool isLPLight = false;
+	};
+
+	LPLightInfo lpInfo;
+	RE::NiPointer<RE::NiLight> activeNiLight;
+	RE::TESObjectREFR* activeRefr = nullptr;
+	RE::TESObjectLIGH* activeLigh = nullptr;
+	bool activeIsRef = false;
+
 	void SortLights();
+	void RestoreOriginal();
 
 	static std::string GetLightName(LightInfo& lightInfo);
+	static LPLightInfo ParseLPLightName(const std::string& name);
+	static std::string UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear);
+	static bool MatchesLPFilters(const json& lightEntry, RE::TESObjectREFR* refr);
+	static std::array<float, 3> GetJsonVec3(const json& data, const char* key);
+	bool SaveToLightPlacer();
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight);
 };

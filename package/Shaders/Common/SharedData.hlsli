@@ -197,7 +197,8 @@ namespace SharedData
 		float SkyIBLSaturation;
 		float FogAmount;
 		uint DALCMode;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky
-		float2 pad0;
+		uint DisableInInteriors;
+		float pad0;
 	};
 
 	struct ExtendedTranslucencySettings

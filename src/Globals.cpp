@@ -99,6 +99,7 @@ namespace globals
 		RE::BSGraphics::Renderer* renderer = nullptr;
 		RE::BSShaderManager::State* smState = nullptr;
 		RE::TES* tes = nullptr;
+		RE::TESWaterSystem* waterSystem = nullptr;
 		bool isVR = false;
 		RE::MemoryManager* memoryManager = nullptr;
 		RE::INISettingCollection* iniSettingCollection = nullptr;
@@ -108,6 +109,7 @@ namespace globals
 		float* cameraFar = nullptr;
 		float* deltaTime = nullptr;
 		RE::BSUtilityShader* utilityShader = nullptr;
+		RE::PlayerCharacter* player = nullptr;
 		RE::Sky* sky = nullptr;
 		RE::UI* ui = nullptr;
 		RE::Calendar* calendar = nullptr;
@@ -169,6 +171,7 @@ namespace globals
 			iniPrefSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
 			gameSettingCollection = RE::GameSettingCollection::GetSingleton();
 			tes = RE::TES::GetSingleton();
+			waterSystem = RE::TESWaterSystem::GetSingleton();
 			cameraNear = (float*)(REL::RelocationID(517032, 403540).address() + 0x40);
 			cameraFar = (float*)(REL::RelocationID(517032, 403540).address() + 0x44);
 			deltaTime = (float*)REL::RelocationID(523660, 410199).address();
@@ -204,8 +207,10 @@ namespace globals
 	void OnDataLoaded()
 	{
 		using namespace game;
+		player = RE::PlayerCharacter::GetSingleton();
 		sky = RE::Sky::GetSingleton();
 		utilityShader = RE::BSUtilityShader::GetSingleton();
+		waterSystem = RE::TESWaterSystem::GetSingleton();
 
 		bEnableLandFade = iniSettingCollection->GetSetting("bEnableLandFade:Display");
 

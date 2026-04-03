@@ -99,7 +99,8 @@ void VR::DrawOverlay()
 	int secondsLeft = int(std::ceil(autoHideSeconds - elapsed));
 
 	ImGuiIO& io = ImGui::GetIO();
-	ImVec2 overlaySize(520, 0);
+	const float scale = Util::GetUIScale();
+	ImVec2 overlaySize(520 * scale, 0);
 	ImVec2 overlayPos = ImVec2((io.DisplaySize.x - overlaySize.x) * 0.5f, (io.DisplaySize.y * 0.35f));
 	ImGui::SetNextWindowPos(overlayPos, ImGuiCond_Always);
 	ImGui::SetNextWindowSize(overlaySize, ImGuiCond_Always);
@@ -107,7 +108,7 @@ void VR::DrawOverlay()
 
 	ImGui::Begin("HowToUseOverlay", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
 
-	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f);
+	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f * scale);
 	ImGui::TextWrapped("How to Use VR Community Shaders Menu:");
 	ImGui::Separator();
 	ImGui::TextWrapped("You must open the Main Menu or Tween Menu before VR controls work.");
@@ -123,7 +124,7 @@ void VR::DrawOverlay()
 	Util::DrawButtonCombo(settings.VRMenuCloseKeys, true);
 
 	ImGui::Spacing();
-	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f);
+	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f * scale);
 	ImGui::TextWrapped("Grip + Thumbstick: Adjust overlay depth (closer/farther)");
 	ImGui::Spacing();
 	ImGui::TextWrapped("Tip: Disable this VR overlay by setting Attach Mode to 'None' in VR settings.");
@@ -580,7 +581,7 @@ namespace
 				char selectableId[64];
 				snprintf(selectableId, sizeof(selectableId), "##combo_row_%zu", row);
 				bool rowSelected = (row == static_cast<size_t>(selectedComboIndex));
-				if (ImGui::Selectable(selectableId, rowSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap, ImVec2(0, 0))) {
+				if (ImGui::Selectable(selectableId, rowSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap, ImVec2(0, 0))) {
 					selectedComboIndex = static_cast<int>(row);
 				}
 				ImGui::SameLine(0, 0);
@@ -998,7 +999,7 @@ void VR::DrawSettings()
 	// Combo recording popup
 	if (this->isCapturingCombo) {
 		ImGui::OpenPopup("Record Combo");
-		ImGui::SetNextWindowSize(ImVec2(400, 200), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(400 * Util::GetUIScale(), 200 * Util::GetUIScale()), ImGuiCond_FirstUseEver);
 		if (ImGui::BeginPopupModal("Record Combo", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 			auto GetButtonName = [](uint32_t key) -> const char* {
 				switch (key) {
@@ -1096,13 +1097,13 @@ void VR::DrawSettings()
 				}
 			}
 
-			if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) || ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))) {
+			if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
 				ApplyRecordedCombo();
 				ResetComboRecording();
 				ImGui::CloseCurrentPopup();
 			}
 
-			if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape))) {
+			if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 				ResetComboRecording();
 				ImGui::CloseCurrentPopup();
 			}
