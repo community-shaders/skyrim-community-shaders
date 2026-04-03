@@ -12,6 +12,7 @@
 #include "../../Utils/Game.h"
 #include "../../Utils/UI.h"
 #include "../Upscaling.h"
+#include "../VR.h"
 
 #include <exprtk.hpp>
 
@@ -1251,7 +1252,7 @@ namespace ShadowCasterManager
 				if (s_settings.AutoTargetFPS > 0.0f) {
 					s_autoTargetMs = 1000.0f / s_settings.AutoTargetFPS;
 				} else {
-					double hz = globals::features::upscaling.refreshRate;
+					double hz = globals::game::isVR ? globals::features::vr.GetHMDRefreshRate() : globals::features::upscaling.refreshRate;
 					s_autoTargetMs = (hz > 1.0) ? static_cast<float>(1000.0 / hz) : kAutoTargetFallbackMs;
 				}
 
@@ -1308,7 +1309,7 @@ namespace ShadowCasterManager
 			s_redrawnLightsThisFrame = 0;
 			s_totalShadowLightsThisFrame = s_settings.ShadowLightCount;
 
-			int maxRedraw = s_settings.MaxRedrawPerFrame;
+			int maxRedraw = std::min(s_settings.MaxRedrawPerFrame, s_lights.Size);
 			int32_t budgetRemain = static_cast<int32_t>(budget * 1000.0);
 			bool isFirst = true;
 			int32_t now = *globals::game::frameCounter;
@@ -2797,7 +2798,7 @@ namespace ShadowCasterManager
 
 		// Auto mode: FPS target slider.
 		if (budgetMode == 0) {
-			float detectedHz = static_cast<float>(globals::features::upscaling.refreshRate);
+			float detectedHz = static_cast<float>(globals::game::isVR ? globals::features::vr.GetHMDRefreshRate() : globals::features::upscaling.refreshRate);
 			float detectedFPS = detectedHz > 1.0f ? detectedHz : 60.0f;
 			float displayFPS = settings.AutoTargetFPS > 0.0f ? settings.AutoTargetFPS : detectedFPS;
 
