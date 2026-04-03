@@ -74,7 +74,6 @@ void VolumetricShadows::CopyShadowData()
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "VolumetricShadows::CopyShadowData");
 
-	// The structured buffer (t19) is populated and bound by Deferred::CopyShadowData().
 	// This function handles VSM shadow texture downsampling and binds it to slot 18.
 
 	auto context = globals::d3d::context;
@@ -274,7 +273,6 @@ void VolumetricShadows::CopyShadowData()
 		}
 
 		// Bind the VSM shadow texture to PS slot 18.
-		// The shadow data structured buffer (slot 19) is already bound by Deferred::CopyShadowData().
 		ID3D11ShaderResourceView* srv = shadowCopySRV ? shadowCopySRV : shadowView;
 		context->PSSetShaderResources(18, 1, &srv);
 
