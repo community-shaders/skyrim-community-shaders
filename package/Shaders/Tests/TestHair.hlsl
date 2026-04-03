@@ -6,6 +6,7 @@
 // 3. Testing Hair namespace functions directly
 #define CS_HAIR
 #define HAIR
+#define UNIT_TEST
 
 // ============================================================================
 // STUBS FOR EXTERNAL DEPENDENCIES (must be defined BEFORE including Hair.hlsli)
@@ -73,9 +74,6 @@ namespace SharedData
 // Hair.hlsli includes: Common/BRDF.hlsli, Common/Color.hlsli, Common/Game.hlsli, Common/Math.hlsli
 // These are all real files from the codebase that will be included automatically
 #include "/Shaders/Hair/Hair.hlsli"
-
-// Include common dependencies needed for tests (LightingCommon provides struct definitions)
-#include "/Shaders/Common/LightingCommon.hlsli"
 
 #include "/Test/STF/ShaderTestFramework.hlsli"
 

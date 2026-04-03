@@ -2,7 +2,9 @@
 #define __COLOR_DEPENDENCY_HLSL__
 
 #include "Common/Math.hlsli"
-#include "Common/SharedData.hlsli"
+#ifndef UNIT_TEST
+#	include "Common/SharedData.hlsli"
+#endif
 
 #define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
 #define ENABLE_ENB_PP SharedData::enbSettings.Enable
