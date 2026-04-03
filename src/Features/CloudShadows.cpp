@@ -2,19 +2,13 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CloudShadows::Settings,
-	Opacity,
-	InnerCloudShadowOpacity)
+	Opacity)
 
 void CloudShadows::DrawSettings()
 {
-	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls how dark cloud shadows appear on terrain and objects.");
-	}
-
-	ImGui::SliderFloat("Inner Cloud Shadow Opacity", &settings.InnerCloudShadowOpacity, 0.0f, 1.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls shadowing applied within the clouds themselves. Higher values make the underside of clouds darker.");
+		ImGui::Text("Higher values make cloud shadows darker.");
 	}
 }
 
