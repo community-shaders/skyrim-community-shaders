@@ -213,7 +213,6 @@ void EffectManager::RegisterSettings()
 	// VOLUMETRICFOG
 	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICFOG", 1, true);
 	settingManager.RegisterTimeOfDaySetting("Curve", "VOLUMETRICFOG", 1, true);
-	settingManager.RegisterTimeOfDaySetting("Opacity", "VOLUMETRICFOG", 1, true);
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "VOLUMETRICFOG", { 1.0f, 1.0f, 1.0f }, true);
 
 	// GAMEVOLUMETRICRAYS
