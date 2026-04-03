@@ -261,6 +261,7 @@ namespace Hair
 		return saturate(lerp(float3(luminance, luminance, luminance), color, saturation));
 	}
 
+#if defined(PSHADER)
 	float HairSelfShadow(float3 positionWS, float3 lightDirWS, float noise, uint eyeIndex)
 	{
 		if (!SharedData::hairSpecularSettings.EnableSelfShadow) {
@@ -297,5 +298,6 @@ namespace Hair
 		}
 		return lerp(1.0, shadow, SharedData::hairSpecularSettings.SelfShadowStrength);
 	}
+#endif
 }
 #endif  //__HAIR_DEPENDENCY_HLSL__

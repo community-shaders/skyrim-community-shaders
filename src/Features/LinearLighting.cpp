@@ -212,6 +212,25 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.projectedEffectMult = settings.projectedEffectMult;
 	data.deferredEffectMult = settings.deferredEffectMult;
 	data.otherEffectMult = settings.otherEffectMult;
+
+	// Override multipliers to neutral values when ENB PP is active
+	if (globals::features::enbPostProcessing.loaded) {
+		auto& enb = globals::features::enbPostProcessing;
+		if (enb.enableEffect) {
+			data.vanillaDiffuseColorMult = 1.0f;
+			data.directionalLightMult = 1.0f;
+			data.pointLightMult = 1.0f;
+			data.ambientMult = 1.0f;
+			data.emitColorMult = 1.0f;
+			data.glowmapMult = 1.0f;
+			data.effectLightingMult = 1.0f;
+			data.membraneEffectMult = 1.0f;
+			data.bloodEffectMult = 1.0f;
+			data.projectedEffectMult = 1.0f;
+			data.deferredEffectMult = 1.0f;
+			data.otherEffectMult = 1.0f;
+		}
+	}
 	return data;
 }
 

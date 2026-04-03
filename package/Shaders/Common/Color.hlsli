@@ -2,9 +2,12 @@
 #define __COLOR_DEPENDENCY_HLSL__
 
 #include "Common/Math.hlsli"
-#include "Common/SharedData.hlsli"
+#ifndef UNIT_TEST
+#	include "Common/SharedData.hlsli"
+#endif
 
 #define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
+#define ENABLE_ENB_PP SharedData::enbSettings.Enable
 
 #if defined(PSHADER) && defined(LIGHTING)
 cbuffer LLPerGeometry : register(b8)
@@ -156,12 +159,14 @@ namespace Color
 
 	float3 DirectionalLight(float3 color, bool isLinear = false)
 	{
-		return Light(color, isLinear) * ((ENABLE_LL && !isLinear) ? SharedData::linearLightingSettings.directionalLightMult : 1.0f);
+		float3 result = Light(color, isLinear) * ((ENABLE_LL && !isLinear) ? SharedData::linearLightingSettings.directionalLightMult : 1.0f);
+		return (ENABLE_LL && ENABLE_ENB_PP && !isLinear) ? result * Math::PI : result;
 	}
 
 	float3 PointLight(float3 color, bool isLinear = false)
 	{
-		return Light(color, isLinear) * ((ENABLE_LL && !isLinear) ? SharedData::linearLightingSettings.pointLightMult : 1.0f);
+		float3 result = Light(color, isLinear) * ((ENABLE_LL && !isLinear) ? SharedData::linearLightingSettings.pointLightMult : 1.0f);
+		return (ENABLE_LL && ENABLE_ENB_PP && !isLinear) ? result * Math::PI : result;
 	}
 #	if defined(LIGHTING)
 	float3 EmitColor(float3 color)
