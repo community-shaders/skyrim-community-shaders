@@ -142,11 +142,16 @@ void Raytracing::DrawSettings()
 
 	DrawEnumRadio("Mode", settings.CreationEngineRaytracingSettings.GeneralSettings.Mode);
 
-	// Enforce DLSS RR in settings if it is enabled in upscaling
-	if (globals::features::upscaling.GetUpscaleMethod() == Upscaling::UpscaleMethod::kDLSS_RR)
-		settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser = CreationEngineRaytracing::Denoiser::DLSS_RR;
-
 	DrawEnumRadio("Denoiser", settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser);
+
+	// Show DLSS RR availability status
+	if (settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser == CreationEngineRaytracing::Denoiser::DLSS_RR) {
+		if (!(Upscaling::streamline.loadedFeatures & Streamline::Features::kDLSS_RR)) {
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "DLSS Ray Reconstruction is not available on this system.");
+		} else if (globals::features::upscaling.settings.upscaleMethod != Upscaling::UpscaleMethod::kDLSS) {
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Set Upscaling method to DLSS to enable Ray Reconstruction.");
+		}
+	}
 
 	bool ptMode = settings.CreationEngineRaytracingSettings.GeneralSettings.Mode == CreationEngineRaytracing::Mode::PathTracing;
 
@@ -311,8 +316,7 @@ void Raytracing::DrawReblurSettings()
 	if (ImGui::SliderFloat("Plane Distance Sensitivity", &reblurSettings.planeDistanceSensitivity, 0.0f, 1.0f, "%.3f"))
 		ClampSetting(reblurSettings.planeDistanceSensitivity, 0.0f, 1.0f);
 
-	if (ImGui::SliderFloat2("Specular Probability Thresholds For MV Modification", reblurSettings.specularProbabilityThresholdsForMvModification.data(), 0.0f, 1.0f, "%.2f"))
-	{
+	if (ImGui::SliderFloat2("Specular Probability Thresholds For MV Modification", reblurSettings.specularProbabilityThresholdsForMvModification.data(), 0.0f, 1.0f, "%.2f")) {
 		ClampSetting(reblurSettings.specularProbabilityThresholdsForMvModification[0], 0.0f, 1.0f);
 		ClampSetting(reblurSettings.specularProbabilityThresholdsForMvModification[1], reblurSettings.specularProbabilityThresholdsForMvModification[0], 1.0f);
 	}
@@ -343,8 +347,6 @@ void Raytracing::DrawSHaRCSettings()
 
 		ImGui::InputInt("Stale Frames", &sharcSettings.StaleFrameNum);
 		sharcSettings.StaleFrameNum = std::clamp(sharcSettings.StaleFrameNum, 8, 128);
-
-		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
 
 		if (!sharcSettings.Enabled)
 			ImGui::EndDisabled();
@@ -745,8 +747,6 @@ void Raytracing::SetupResources()
 	}
 
 	if (initialized) {
-		settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser = GetDenoiser(globals::features::upscaling.GetUpscaleMethod());
-
 		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
 		creationEngineRaytracing->SetSharedTextures(albedoTexture.get(), normalRoughnessTexture->resource.get(), gnmaoTexture.get(), diffuseAlbedoTexture->resource.get());
 		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
@@ -802,19 +802,6 @@ void Raytracing::SetupResources()
 	}
 
 	CompileShaders();
-}
-
-void Raytracing::SetUpscaler(Upscaling::UpscaleMethod method)
-{
-	auto denoiser = GetDenoiser(method);
-
-	if (settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser == denoiser)
-		return;
-
-	settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser = denoiser;
-
-	if (initialized)
-		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
 }
 
 Raytracing::SharedData Raytracing::GetCommonBufferData() const

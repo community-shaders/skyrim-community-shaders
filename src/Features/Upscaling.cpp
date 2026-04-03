@@ -172,14 +172,11 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 void Upscaling::DrawSettings()
 {
-	// TAA and FSR are always available
+	// TAA and FSR are always available; DLSS RR is not user-selectable (driven by Raytracing Denoiser)
 	UpscaleMethod availableMethods = UpscaleMethod::kNONE | UpscaleMethod::kTAA | UpscaleMethod::kFSR;
 
 	if (streamline.loadedFeatures & Streamline::Features::kDLSS)
 		availableMethods |= UpscaleMethod::kDLSS;
-
-	if (streamline.loadedFeatures & Streamline::Features::kDLSS_RR)
-		availableMethods |= UpscaleMethod::kDLSS_RR;
 
 	// Mode not available, default to FSR
 	if (!(availableMethods & settings.upscaleMethod))
@@ -211,11 +208,13 @@ void Upscaling::DrawSettings()
 
 	settings.upscaleMethod = availableModeVector[availableModeIndex].first;
 
-	// Update upscale method
-	globals::features::raytracing.SetUpscaler(settings.upscaleMethod);
+	// Show effective method when DLSS is auto-upgraded to DLSS RR by Raytracing Denoiser
+	if (settings.upscaleMethod == UpscaleMethod::kDLSS && GetUpscaleMethod() == UpscaleMethod::kDLSS_RR) {
+		ImGui::Text("DLSS Ray Reconstruction is active (controlled by Raytracing Denoiser).");
+	}
 
 	// Display warning for DLSS resolution limits (non-VR only; VR handles this automatically)
-	if (!globals::game::isVR && settings.upscaleMethod == UpscaleMethod::kDLSS || settings.upscaleMethod == UpscaleMethod::kDLSS_RR) {
+	if (!globals::game::isVR && settings.upscaleMethod == UpscaleMethod::kDLSS) {
 		auto screenSize = globals::state->screenSize;
 		if (screenSize.x > streamline.MAX_RESOLUTION || screenSize.y > streamline.MAX_RESOLUTION) {
 			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
@@ -243,7 +242,7 @@ void Upscaling::DrawSettings()
 
 		if (settings.upscaleMethod == UpscaleMethod::kFSR) {
 			baseLabel = upscalePresets[presetIndex];
-		} else if (settings.upscaleMethod == UpscaleMethod::kDLSS || settings.upscaleMethod == UpscaleMethod::kDLSS_RR) {
+		} else if (settings.upscaleMethod == UpscaleMethod::kDLSS) {
 			baseLabel = upscalePresetsDLSS[presetIndex];
 		}
 
@@ -256,10 +255,11 @@ void Upscaling::DrawSettings()
 
 		if (settings.upscaleMethod == UpscaleMethod::kFSR) {
 			ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
-		} else if (settings.upscaleMethod == UpscaleMethod::kDLSS || settings.upscaleMethod == UpscaleMethod::kDLSS_RR) {
+		} else if (settings.upscaleMethod == UpscaleMethod::kDLSS) {
 			ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
 
-			if (settings.upscaleMethod == UpscaleMethod::kDLSS)
+			auto effectiveMethod = GetUpscaleMethod();
+			if (effectiveMethod == UpscaleMethod::kDLSS)
 				ImGui::Combo("DLSS Model Preset", (int*)&settings.presetDLSS, dlssModelPresets, _countof(dlssModelPresets));
 			else
 				ImGui::Combo("DLSS RR Model Preset", (int*)&settings.presetDLSSRR, dlssRRModelPresets, _countof(dlssRRModelPresets));
@@ -483,6 +483,11 @@ void Upscaling::LoadSettings(json& o_json)
 		logger::warn("[Upscaling] Loaded useGatherWideKernel {} out of range, clamping to 1", settings.useGatherWideKernel);
 		settings.useGatherWideKernel = 1;
 	}
+	// DLSS RR is no longer user-selectable; migrate saved setting to standard DLSS
+	if (settings.upscaleMethod == UpscaleMethod::kDLSS_RR) {
+		logger::info("[Upscaling] Migrating saved DLSS_RR setting to DLSS (now auto-managed by Raytracing Denoiser)");
+		settings.upscaleMethod = UpscaleMethod::kDLSS;
+	}
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
 		auto setting = iniSettingCollection->GetSetting("bUseTAA:Display");
@@ -490,8 +495,6 @@ void Upscaling::LoadSettings(json& o_json)
 			iniSettingCollection->ReadSetting(setting);
 		}
 	}
-
-	globals::features::raytracing.SetUpscaler(settings.upscaleMethod);
 }
 
 void Upscaling::RestoreDefaultSettings()
@@ -559,6 +562,17 @@ void Upscaling::PostPostLoad()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod() const
 {
+	// DLSS Ray Reconstruction is not user-selectable; it is automatically activated
+	// when the user selects DLSS and the Raytracing Denoiser is set to DLSS_RR.
+	if (settings.upscaleMethod == UpscaleMethod::kDLSS) {
+		auto& rt = globals::features::raytracing;
+		if (rt.Active() &&
+			rt.settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser == CreationEngineRaytracing::Denoiser::DLSS_RR &&
+			(streamline.loadedFeatures & Streamline::Features::kDLSS_RR)) {
+			return UpscaleMethod::kDLSS_RR;
+		}
+	}
+
 	return settings.upscaleMethod;
 }
 
