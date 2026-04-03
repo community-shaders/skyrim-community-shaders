@@ -180,14 +180,18 @@ namespace ShadowCasterManager
 	// Uses a fixed target frame time derived from monitor refresh rate,
 	// proportional error-driven adjustment, asymmetric rates, and a
 	// hysteresis dead zone to prevent oscillation.
+	// A hard floor ensures the budget never falls below the cost of
+	// kVanillaMinLights redraws (matching Skyrim's original 4-caster behaviour)
+	// even when the game is running below the FPS target.
 	static float s_autoTargetMs = 0.0f;        // target frame time (ms); 0 = not yet initialised
 	static float s_adaptiveBudgetMs = 0.5f;    // current adaptive budget (ms)
 	static float s_actualShadowCostMs = 0.0f;  // EMA-smoothed actual shadow GPU cost (ms)
 	static float s_utilizationRatio = 0.0f;    // EMA-smoothed budget utilization (0..1+)
 
 	// Controller tuning constants.
-	static constexpr float kAutoMinBudget = 0.1f;           // floor (ms)
+	static constexpr float kAutoMinBudget = 0.1f;           // floor (ms) — overridden by vanilla guarantee below
 	static constexpr float kAutoMaxBudget = 16.0f;          // ceiling (ms)
+	static constexpr int kVanillaMinLights = 4;             // Skyrim's original simultaneous shadow caster count
 	static constexpr float kAutoIncreaseRate = 0.08f;       // proportional gain for increasing budget (slow)
 	static constexpr float kAutoDecreaseRate = 0.3f;        // proportional gain for decreasing budget (fast, ~4x increase)
 	static constexpr float kAutoDeadZoneMs = 0.3f;          // hysteresis: don't adjust if |error| < this
@@ -1280,6 +1284,18 @@ namespace ShadowCasterManager
 				// Inside dead zone: hold steady (hysteresis).
 
 				s_adaptiveBudgetMs = std::clamp(s_adaptiveBudgetMs, kAutoMinBudget, kAutoMaxBudget);
+
+				// Raise the floor to cover at least kVanillaMinLights redraws so the
+				// adaptive controller can never throttle below Skyrim's original behaviour.
+				// Uses the observed average per-light cost so the floor tracks real GPU cost
+				// rather than a hard-coded guess.  Falls back to kAutoMinBudget on cold start
+				// (GetAverageCostUs == 0) until enough measurements are available.
+				int32_t avgCostUs = s_budget.GetAverageCostUs();
+				if (avgCostUs > 0) {
+					float vanillaFloorMs = static_cast<float>(avgCostUs * kVanillaMinLights) / 1000.0f;
+					s_adaptiveBudgetMs = std::max(s_adaptiveBudgetMs, vanillaFloorMs);
+				}
+
 				budget = s_adaptiveBudgetMs;
 			} else if (s_settings.BudgetMode == BudgetModeEnum::Formula && s_formulaRedrawBudget) {
 				// --- Formula mode ---
@@ -2752,8 +2768,11 @@ namespace ShadowCasterManager
 			if (budgetMode == 0)
 				ImGui::SetTooltip(
 					"Auto: grows shadow quality when FPS is above the target, throttles when it drops.\n"
+					"A minimum floor ensures at least %d lights always redraw per frame (vanilla parity),\n"
+					"even when FPS is below the target — preventing a regression from base game behaviour.\n"
 					"Target is auto-detected from monitor refresh rate or set manually below.\n"
-					"Recommendation: increase Shadow Light Count to 32+ for best results (requires restart).");
+					"Recommendation: increase Shadow Light Count to 32+ for best results (requires restart).",
+					kVanillaMinLights);
 			else if (budgetMode == 1)
 				ImGui::SetTooltip(
 					"Manual: fixed per-frame GPU time budget for shadow re-renders.\n"
@@ -2813,7 +2832,11 @@ namespace ShadowCasterManager
 			snprintf(overlay, sizeof(overlay), "%.2f / %.2f ms", avgConsumedUs / 1000.0f, effectiveBudgetMs);
 			ImGui::ProgressBar(std::min(fraction, 1.0f), ImVec2(-1.0f, 0.0f), overlay);
 			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Estimated GPU shadow budget consumed this frame vs. effective budget.");
+				ImGui::SetTooltip(
+					"Estimated GPU shadow budget consumed this frame vs. effective budget.\n"
+					"In Auto mode the budget floor is raised to cover at least %d lights (vanilla parity),\n"
+					"so this value may exceed what the FPS controller alone would allocate.",
+					kVanillaMinLights);
 		}
 
 		if (budgetMode == 0) {
@@ -2830,13 +2853,19 @@ namespace ShadowCasterManager
 			int32_t avgCostUs = s_budget.GetAverageCostUs();
 			int32_t couldFitMore = avgCostUs > 0 ? static_cast<int32_t>(freeMs * 1000.0f / avgCostUs) : 0;
 
+			// Detect when the vanilla floor is the active constraint.
+			float vanillaFloorMs = avgCostUs > 0 ? static_cast<float>(avgCostUs * kVanillaMinLights) / 1000.0f : 0.0f;
+			bool atVanillaFloor = vanillaFloorMs > 0.0f && (s_autoBudgetMs <= vanillaFloorMs + 0.01f);
+
 			if (droppedLights > 0)
 				ImGui::Text("Budget: %.2f ms (%.0f%% used) | %d rendered, %d deferred", s_autoBudgetMs, utilPct, renderedDisplay, droppedLights);
 			else
 				ImGui::Text("Budget: %.2f ms (%.0f%% used) | all %d rendered", s_autoBudgetMs, utilPct, renderedDisplay);
 
 			const char* state = "steady";
-			if (rawHeadroom > kAutoSafetyMs + kAutoDeadZoneMs)
+			if (atVanillaFloor)
+				state = "vanilla floor";
+			else if (rawHeadroom > kAutoSafetyMs + kAutoDeadZoneMs)
 				state = "growing";
 			else if (rawHeadroom < -kAutoDeadZoneMs)
 				state = "throttling";
