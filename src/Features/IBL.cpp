@@ -198,8 +198,8 @@ IBL::Settings IBL::GetCommonBufferData() const
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
 				data.EnableIBL = 1;
-				data.EnvIBLScale = 0.0f;
-				data.SkyIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
+				data.EnvIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
+				data.SkyIBLScale = data.EnvIBLScale;
 				data.DALCAmount = 1.0f;
 				data.EnvIBLSaturation = 1.0f;
 				data.SkyIBLSaturation = 1.0f;
