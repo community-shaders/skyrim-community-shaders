@@ -3,6 +3,7 @@
 #include "OverlayFeature.h"
 #include "Utils/Input.h"
 #include "VR/OpenVRDetection.h"  // In Features/VR/
+#include "VRStereoOptimizations.h"
 #include <algorithm>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
@@ -109,6 +110,9 @@ public:
 		};
 	}
 
+	virtual inline std::string_view GetShaderDefineName() override { return "VR_STEREO_OPT"; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return stereoOpt.loaded && t == RE::BSShader::Type::Utility; }
+	virtual void Reset() override;
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 	virtual bool SupportsVR() override { return true; }
@@ -163,7 +167,7 @@ public:
 		float StereoBlendDepthSigma = 0.01f;      ///< Depth sensitivity for bilateral weight (lower = stricter)
 		float StereoBlendMaxFactor = 0.1f;        ///< Maximum blend factor; keep low to preserve stereo parallax
 		float StereoBlendColorThreshold = 0.02f;  ///< Minimum color difference to trigger blending (luminance)
-		int StereoBlendDebugMode = 0;             ///< 0=off, 1=back-check, 2=blend weight, 3=edge detection
+		int StereoBlendDebugMode = 0;             ///< 0=off, 1=back-check, 2=blend weight, 3=edge detection, 4=overwrite, 5=overwrite Eye1
 
 		// VR Menu Overlay positioning settings
 		float VRMenuScale = Config::kDefaultMenuScale;  ///< Scale factor for overlay UI (0.5-2.0)
@@ -260,7 +264,7 @@ public:
 			StereoBlendDepthSigma = std::clamp(StereoBlendDepthSigma, 0.001f, 0.1f);
 			StereoBlendMaxFactor = std::clamp(StereoBlendMaxFactor, 0.0f, 0.5f);
 			StereoBlendColorThreshold = std::clamp(StereoBlendColorThreshold, 0.0f, 0.2f);
-			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 3);
+			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 5);
 		}
 	};
 
@@ -358,8 +362,12 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBackCheckCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBlendWeightCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugEdgeDetectionCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendOverwriteCS;
 	eastl::unique_ptr<Texture2D> stereoBlendCopyTex;
 	eastl::unique_ptr<ConstantBuffer> stereoBlendCB;
+	winrt::com_ptr<ID3D11SamplerState> stereoBlendLinearSampler;
+
+	VRStereoOptimizations stereoOpt;
 
 	struct alignas(16) StereoBlendCB
 	{
@@ -368,7 +376,11 @@ public:
 		float DepthSigma;
 		float MaxBlendFactor;
 		float ColorDiffThreshold;
-		float pad;
+		float DebugEdgeTint;
+		uint32_t DebugMode;
+		float FullBlendDistance;
+		float POMDepthScale;
+		float _pad;
 	};
 
 	// Engine hook integration points

@@ -1370,6 +1370,9 @@ struct TESBoundObject_Clone3D
 											freshMat->CopyMembers(material);
 											shaderProperty->material = freshMat;
 											targetMat = freshMat;
+										} else {
+											logger::warn("[TruePBR] failed to clone PBR material for ref {:08X}; skipping to avoid contamination", ref->GetFormID());
+											return RE::BSVisit::BSVisitControl::kContinue;
 										}
 									}
 
@@ -1381,6 +1384,23 @@ struct TESBoundObject_Clone3D
 							}
 						}
 
+						return RE::BSVisit::BSVisitControl::kContinue;
+					});
+				} else {
+					RE::BSVisit::TraverseScenegraphGeometries(result, [](RE::BSGeometry* geometry) {
+						if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
+							if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
+								shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
+								if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
+									auto& ext = BSLightingShaderMaterialPBR::All[material];
+									if (ext.materialObjectData != nullptr) {
+										material->ClearMaterialObjectData();
+										ext.materialObjectData = nullptr;
+										ext.lastOwnerRefFormID = 0;
+									}
+								}
+							}
+						}
 						return RE::BSVisit::BSVisitControl::kContinue;
 					});
 				}
