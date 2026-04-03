@@ -1352,15 +1352,19 @@ struct TESBoundObject_Clone3D
 								if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
 									auto& ext = BSLightingShaderMaterialPBR::All[material];
 									const auto prevOwnerRefID = ext.lastOwnerRefFormID;
-									const auto prevColorScale = material->GetProjectedMaterialBaseColorScale();
 
 									// Fork-before-write: if this material instance is already owned
-									// by a different ref with a different MATO, clone it so we don't
-									// contaminate the previous owner's geometry.
+									// by a different ref whose MATO payload differs from the incoming
+									// one, clone it so we don't contaminate the previous owner's
+									// geometry.  Use pointer identity: GetPBRMaterialObjectData
+									// returns stable addresses into pbrMaterialObjects, so two
+									// different MATOs always produce different pointers regardless of
+									// whether their individual fields (baseColorScale, roughness,
+									// specularLevel, glint) happen to match.
 									const bool wouldContaminate =
 										(prevOwnerRefID != 0) &&
 										(prevOwnerRefID != ref->GetFormID()) &&
-										(prevColorScale != pbrData->baseColorScale);
+										(ext.materialObjectData != pbrData);
 
 									BSLightingShaderMaterialPBR* targetMat = material;
 
