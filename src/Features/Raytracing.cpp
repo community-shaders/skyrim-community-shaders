@@ -654,8 +654,7 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 	if (initialized)
 		return;
 
-	// This function is called by a very early hook, so settings aren't ready yet...
-	bool result = creationEngineRaytracing->Initialize(d3d11Device, d3d12Device, commandQueue, computeCommandQueue, copyCommandQueue, settings.CreationEngineRaytracingSettings);
+	bool result = creationEngineRaytracing->Initialize(d3d11Device, d3d12Device, commandQueue, computeCommandQueue, copyCommandQueue);
 
 	if (!result) {
 		settings.CreationEngineRaytracingSettings.Enabled = false;
