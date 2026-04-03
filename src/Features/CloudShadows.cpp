@@ -1,11 +1,28 @@
 #include "CloudShadows.h"
 
+#include "ENBPostProcessing.h"
+#include "ENBPostProcessing/SettingManager.h"
+#include "State.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CloudShadows::Settings,
 	Opacity)
 
 void CloudShadows::DrawSettings()
 {
+	bool enbActive = false;
+	if (globals::features::enbPostProcessing.loaded) {
+		auto& enb = globals::features::enbPostProcessing;
+		if (enb.enableEffect) {
+			enbActive = true;
+			ImGui::TextColored(ImVec4(1, 1, 0, 1), "Opacity settings are currently managed by ENB.");
+		}
+	}
+
+	if (enbActive) {
+		return;
+	}
+
 	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
@@ -26,6 +43,23 @@ void CloudShadows::SaveSettings(json& o_json)
 void CloudShadows::RestoreDefaultSettings()
 {
 	settings = {};
+}
+
+CloudShadows::Settings CloudShadows::GetCommonBufferData()
+{
+	if (!loaded)
+		return settings;
+
+	auto data = settings;
+
+	if (globals::features::enbPostProcessing.loaded) {
+		auto& enb = globals::features::enbPostProcessing;
+		if (enb.enableEffect) {
+			data.Opacity = SettingManager::GetSingleton().GetInterpolatedTimeOfDayValue("Amount", "CLOUDSHADOWS");
+		}
+	}
+
+	return data;
 }
 
 void CloudShadows::CheckResourcesSide(int side)

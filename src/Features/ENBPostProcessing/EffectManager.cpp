@@ -137,6 +137,9 @@ void EffectManager::RegisterSettings()
 	// LENS
 	settingManager.RegisterTimeOfDaySetting("Amount", "LENS", 1, true);
 
+	// CLOUDSHADOWS
+	settingManager.RegisterTimeOfDaySetting("Amount", "CLOUDSHADOWS", 1, true);
+
 	// SKY
 	settingManager.RegisterBoolSetting("Enable", "SKY", true, false);
 

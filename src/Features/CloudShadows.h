@@ -52,6 +52,8 @@ public:
 
 	virtual void RestoreDefaultSettings() override;
 
+	Settings GetCommonBufferData();
+
 	void CheckResourcesSide(int side);
 	void ModifySky(RE::BSRenderPass* Pass);
 
