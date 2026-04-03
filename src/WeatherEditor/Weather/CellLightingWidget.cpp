@@ -5,8 +5,7 @@
 void CellLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	SetupWidgetWindowDefaults();
-	if (Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##CellLightingSearch", true, true);
 	}
 

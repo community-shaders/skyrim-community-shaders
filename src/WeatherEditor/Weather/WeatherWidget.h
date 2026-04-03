@@ -125,9 +125,10 @@ public:
 
 	~WeatherWidget();
 
-	virtual void DrawWidget() override;
-	virtual void LoadSettings() override;
-	virtual void SaveSettings() override;
+	void DrawWidget() override;
+	const char* GetWidgetTypeName() const override { return "Weather"; }
+	void LoadSettings() override;
+	void SaveSettings() override;
 
 	WeatherWidget* GetParent();
 	bool HasParent() const;

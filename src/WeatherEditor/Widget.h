@@ -116,6 +116,12 @@ public:
 
 	virtual void DrawWidget() = 0;
 
+	/// Type name for widget-type-level state sharing (window size, etc.).
+	virtual const char* GetWidgetTypeName() const = 0;
+
+	/// Call instead of SetupWidgetWindowDefaults + ImGui::Begin. Tracks per-type window size.
+	bool BeginWidgetWindow();
+
 	bool open = false;
 
 	bool IsOpen() const
@@ -171,6 +177,7 @@ class SimpleFormWidget : public Widget
 {
 public:
 	void DrawWidget() override {}
+	const char* GetWidgetTypeName() const override { return ""; }
 	void LoadSettings() override {}
 	void SaveSettings() override {}
 	void ApplyChanges() override {}
