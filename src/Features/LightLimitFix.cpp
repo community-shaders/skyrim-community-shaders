@@ -283,11 +283,16 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		if (i < a_pass->numShadowLights) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
+			auto checkDescs = [&](auto& runtimeData) {
+				if (!runtimeData.shadowmapDescriptors.empty()) {
+					light.shadowMapIndex = runtimeData.shadowmapDescriptors[0].shadowmapIndex;
+					light.lightFlags.set(LightFlags::Shadow);
+				}
+			};
 			if (globals::game::isVR)
-				light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+				checkDescs(shadowLight->GetVRRuntimeData());
 			else
-				light.shadowMapIndex = shadowLight->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
-			light.lightFlags.set(LightFlags::Shadow);
+				checkDescs(shadowLight->GetRuntimeData());
 		}
 
 		strictLightDataTemp.StrictLights[i] = light;
