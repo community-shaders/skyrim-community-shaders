@@ -551,7 +551,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	float3 dirColor;
 	float3 ambientColor;
 #		if defined(SKYLIGHTING)
-	ShadowSampling::ExtractLighting(color, dirColor, ambientColor, skylightingDiffuse);
+	ShadowSampling::ExtractLighting(color, dirColor, ambientColor, skylightingDiffuse, skylightingSH);
 #		else
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 #		endif
@@ -604,7 +604,9 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	float3 ambientColor;
 	float skylightingDiffuse = 1.0;
 #		if defined(SKYLIGHTING)
-	ShadowSampling::ExtractLighting(color, dirColor, ambientColor, skylightingDiffuse);
+	// No skylightingSH available in this path; use unitSH (fully visible)
+	const sh2 unitSH_eff = float4(sqrt(4.0 * Math::PI), 0, 0, 0);
+	ShadowSampling::ExtractLighting(color, dirColor, ambientColor, skylightingDiffuse, unitSH_eff);
 #		else
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 #		endif

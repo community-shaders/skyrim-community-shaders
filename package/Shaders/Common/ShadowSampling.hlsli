@@ -16,6 +16,9 @@
 
 #if defined(IBL)
 #	include "IBL/IBL.hlsli"
+#elif defined(SKYLIGHTING)
+// sh2 type is needed for the ExtractLighting overload that accepts a visibility SH
+#	include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #endif
 
 #if defined(VOLUMETRIC_SHADOWS)
@@ -102,7 +105,7 @@ namespace ShadowSampling
 	}
 
 #if defined(SKYLIGHTING) && !defined(INTERIOR)
-	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse)
+	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse, sh2 skylightingSH)
 #else
 	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
 #endif
@@ -111,14 +114,11 @@ namespace ShadowSampling
 
 #if defined(IBL)
 		if (SharedData::iblSettings.EnableIBL) {
-			if (SharedData::iblSettings.DALCMode == 2) {
-				// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
-				ambientColorAmb = ambientColorAmb * SharedData::iblSettings.DALCAmount + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));
-			} else {
-				float3 envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(float3(0, 0, -1)));
-				float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));
-				ambientColorAmb = envIBLColor + skyIBLColor;
-			}
+#	if defined(SKYLIGHTING) && !defined(INTERIOR)
+			ambientColorAmb = ImageBasedLighting::GetDiffuseIBLOccluded(ambientColorAmb, float3(0, 0, -1), skylightingSH);
+#	else
+			ambientColorAmb = ImageBasedLighting::GetDiffuseIBL(ambientColorAmb, float3(0, 0, -1));
+#	endif
 		}
 #endif
 

@@ -135,38 +135,60 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float3 ssgiIl;
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
 
-	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normalWS)));
-	directionalAmbientColor *= albedo;
-
-	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-	directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
-	directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
-	directionalAmbientColor = max(0, directionalAmbientColor);
-
-	float maxScale = 1.0;
-	if (directionalAmbientColor.x > 0.0)
-		maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
-	if (directionalAmbientColor.y > 0.0)
-		maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
-	if (directionalAmbientColor.z > 0.0)
-		maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
-	directionalAmbientColor *= maxScale;
-
-	diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
-
-	linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
-
 	float3 linAlbedo = Color::IrradianceToLinear(albedo / Color::PBRLightingScale);
-
 	float3 multiBounceSSGIAo = MultiBounceAO(linAlbedo, ssgiAo);
 
-	linDiffuseColor *= sqrt(multiBounceSSGIAo);
+	float3 directionalAmbientColor = 0;
 
-	diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
+#	if defined(IBL)
+	if (SharedData::iblSettings.EnableIBL) {
+		float3 vanillaDALC = Color::Ambient(max(0, SharedData::GetAmbient(normalWS)));
 
-	diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSSGIAo);
+#		if defined(SKYLIGHTING)
+#			if defined(VR)
+		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#			else
+		float3 positionMS = positionWS.xyz;
+#			endif
+		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, normalWS);
+		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(vanillaDALC, -normalWS, skylightingSH) * albedo;
+#		else
+		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(vanillaDALC, -normalWS) * albedo;
+#		endif
 
-	linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
+		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+		linDiffuseColor *= sqrt(multiBounceSSGIAo);
+		diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
+		diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSSGIAo);
+		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+	} else
+#	endif
+	{
+		directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normalWS)));
+		directionalAmbientColor *= albedo;
+
+		directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
+		directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
+		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
+		directionalAmbientColor = max(0, directionalAmbientColor);
+
+		float maxScale = 1.0;
+		if (directionalAmbientColor.x > 0.0)
+			maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
+		if (directionalAmbientColor.y > 0.0)
+			maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
+		if (directionalAmbientColor.z > 0.0)
+			maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
+		directionalAmbientColor *= maxScale;
+
+		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
+		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+		linDiffuseColor *= sqrt(multiBounceSSGIAo);
+		diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
+		diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSSGIAo);
+		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+	}
 
 	linDiffuseColor += ssgiIl * linAlbedo;
 #endif
