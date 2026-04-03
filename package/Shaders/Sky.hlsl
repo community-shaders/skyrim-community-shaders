@@ -243,7 +243,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
 #		endif
 
-#	if defined(CLOUD_SHADOWS) && defined(CLOUDS)
+#		if defined(CLOUD_SHADOWS) && defined(CLOUDS)
 	if (baseColor.w > 0.0) {
 		float3 viewDir = normalize(input.WorldPosition.xyz);
 		float rayStep = 1.0 / 32.0;
@@ -257,8 +257,8 @@ PS_OUTPUT main(PS_INPUT input)
 			float3(0.90051f, 0.157048f, 0.623493f)
 		};
 
-		[unroll]
-		for (int i = 0; i < 4; i++) {
+		[unroll] for (int i = 0; i < 4; i++)
+		{
 			float3 raySample = normalize(lerp(viewDir, SharedData::DirLightDirection.xyz, rayPos) + (PoissonDisc[i] * 2.0 - 1.0) * 0.01);
 
 			if (raySample.z < 0.0)
@@ -271,7 +271,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		psout.Color.xyz *= (1.0 - saturate(dot(rayShadow, 0.25)) * SharedData::cloudShadowsSettings.InnerCloudShadowOpacity);
 	}
-#	endif
+#		endif
 
 #	else
 	psout.Color = float4(0, 0, 0, 1.0);
