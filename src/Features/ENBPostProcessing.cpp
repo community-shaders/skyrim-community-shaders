@@ -66,25 +66,6 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.ProceduralSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN");
 	data.ProceduralSunGlowCurve = settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN");
 
-	data.WaterMuddiness = settingManager.GetValue<float>("Muddiness", "WATER");
-	data.WaterSunLightingMultiplier = settingManager.GetValue<float>("SunLightingMultiplier", "WATER");
-	data.WaterSunSpecularMultiplier = settingManager.GetValue<float>("SunSpecularMultiplier", "WATER");
-
-	data.WaterFresnelMin = settingManager.GetValue<float>("FresnelMin", "WATER");
-	data.WaterFresnelMax = settingManager.GetValue<float>("FresnelMax", "WATER");
-	data.WaterFresnelMultiplier = settingManager.GetValue<float>("FresnelMultiplier", "WATER");
-	data.WaterReflectionAmount = settingManager.GetValue<float>("ReflectionAmount", "WATER");
-
-	if (!data.EnableWater) {
-		data.WaterMuddiness = 0.0f;
-		data.WaterSunLightingMultiplier = 1.0f;
-		data.WaterSunSpecularMultiplier = 1.0f;
-		data.WaterFresnelMin = 0.02f;
-		data.WaterFresnelMax = 1.0f;
-		data.WaterFresnelMultiplier = 1.0f;
-		data.WaterReflectionAmount = 1.0f;
-	}
-
 	return data;
 }
 

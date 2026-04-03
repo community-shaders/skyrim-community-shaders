@@ -305,17 +305,6 @@ namespace SharedData
 		float ProceduralSunEdgeSoftness;
 		float ProceduralSunGlowIntensity;
 		float ProceduralSunGlowCurve;
-
-		float WaterMuddiness;
-		float WaterSunLightingMultiplier;
-		float WaterSunSpecularMultiplier;
-
-		float WaterFresnelMin;
-		float WaterFresnelMax;
-		float WaterFresnelMultiplier;
-		float WaterReflectionAmount;
-
-		float pad14;
 	};
 
 	struct TerrainBlendingSettings
