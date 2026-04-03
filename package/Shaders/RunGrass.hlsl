@@ -789,9 +789,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	diffuseColor += directionalAmbientColor;
 
-#				if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= envIBLColor;
-#				endif
+// #				if defined(IBL) && defined(SKYLIGHTING)
+// 	directionalAmbientColor -= envIBLColor;
+// #				endif
 	diffuseColor *= albedo;
 	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
 
@@ -801,9 +801,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
 #				endif
 
-#				if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += envIBLColor * albedo;
-#				endif
+// #				if defined(IBL) && defined(SKYLIGHTING)
+// 	directionalAmbientColor += envIBLColor * albedo;
+// #				endif
 
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
@@ -990,18 +990,18 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 albedo = baseColor.xyz * vertexColor;
 
 	diffuseColor *= albedo;
-#			if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= envIBLColor;
-#			endif
+// #			if defined(IBL) && defined(SKYLIGHTING)
+// 	directionalAmbientColor -= envIBLColor;
+// #			endif
 	directionalAmbientColor *= albedo;
 
 #			if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
 #			endif
 
-#			if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += envIBLColor * albedo;
-#			endif
+// #			if defined(IBL) && defined(SKYLIGHTING)
+// 	directionalAmbientColor += envIBLColor * albedo;
+// #			endif
 
 	psout.Diffuse.xyz = diffuseColor;
 

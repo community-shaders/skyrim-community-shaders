@@ -2963,9 +2963,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
 
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= envIBLColor;
-#	endif
+// #	if defined(IBL) && defined(SKYLIGHTING)
+// 	directionalAmbientColor -= envIBLColor;
+// #	endif
 
 	directionalAmbientColor *= outputAlbedo;
 
@@ -2973,9 +2973,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
 #	endif
 
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += envIBLColor * outputAlbedo;
-#	endif
+// #	if defined(IBL) && defined(SKYLIGHTING)
+// 	directionalAmbientColor += envIBLColor * outputAlbedo;
+// #	endif
 
 #	if !defined(DEFERRED)
 	color.xyz = Color::IrradianceToLinear(color.xyz);

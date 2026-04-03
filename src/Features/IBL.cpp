@@ -28,12 +28,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void IBL::DrawSettings()
 {
+	bool enbActive = false;
 	if (globals::features::enbPostProcessing.loaded) {
 		auto& enb = globals::features::enbPostProcessing;
 		if (enb.enableEffect) {
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
-				ImGui::TextColored(ImVec4(1, 1, 0, 1), "Settings are currently overwritten by ENB.");
+				enbActive = true;
+				ImGui::TextColored(ImVec4(1, 1, 0, 1), "IBL settings are currently managed by ENB.");
 			}
 		}
 	}
@@ -42,6 +44,11 @@ void IBL::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Toggle IBL. When enabled, ambient lighting is derived from cubemap spherical harmonics instead of the vanilla system.");
 	}
+
+	if (enbActive) {
+		return;
+	}
+
 	Util::WeatherUI::SliderFloat("Env IBL Scale", this, "EnvIBLScale", &settings.EnvIBLScale, 0.0f, 10.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Intensity multiplier for the environment IBL (from Dynamic Cubemaps).\nControls how strongly the surrounding environment contributes to ambient lighting.");
@@ -194,8 +201,9 @@ IBL::Settings IBL::GetCommonBufferData() const
 				data.EnvIBLScale = 0.0f;
 				data.SkyIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
 				data.DALCAmount = 1.0f;
-				data.EnvIBLSaturation = 2.0f;
-				data.SkyIBLSaturation = 2.0f;
+				data.EnvIBLSaturation = 1.0f;
+				data.SkyIBLSaturation = 1.0f;
+				data.DALCMode = 2;
 			}
 		}
 	}
