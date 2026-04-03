@@ -12,6 +12,8 @@
 template <typename T>
 static void SetShadowParameters(T& lightData, Deferred::ShadowData& sd)
 {
+	if (lightData.shadowmapDescriptors.empty())
+		return;
 	auto& desc = lightData.shadowmapDescriptors[0];
 	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
 	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
