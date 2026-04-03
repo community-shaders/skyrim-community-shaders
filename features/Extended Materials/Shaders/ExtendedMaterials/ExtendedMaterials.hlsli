@@ -325,6 +325,7 @@ namespace ExtendedMaterials
 	float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, out float pixelOffset)
 #endif
 	{
+		pixelOffset = 0.5;
 		float3 viewDirTS = normalize(mul(tbn, viewDir));
 #if defined(LANDSCAPE)
 		viewDirTS.xy /= viewDirTS.z * 0.7 + 0.3 + params[0].FlattenAmount;  // Fix for objects at extreme viewing angles
@@ -496,7 +497,7 @@ namespace ExtendedMaterials
 #endif
 				nearBlendToFar *= nearBlendToFar;
 			float offset = (1.0 - parallaxAmount) * -maxHeight + minHeight;
-			pixelOffset = lerp(parallaxAmount * scale, 0, nearBlendToFar);
+			pixelOffset = saturate(lerp(parallaxAmount, 0.5, nearBlendToFar));
 			return lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
 		}
 
@@ -509,7 +510,7 @@ namespace ExtendedMaterials
 		weights[5] = input.LandBlendWeights2.y;
 #endif
 
-		pixelOffset = 0;
+		pixelOffset = 0.5;
 		return coords;
 	}
 

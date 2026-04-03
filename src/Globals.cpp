@@ -271,9 +271,75 @@ namespace globals
 	{
 		static void thunk(ID3D11DeviceContext* This, ID3D11Resource* pResource, UINT Subresource)
 		{
-			if (*globals::game::perFrame.get() == pResource && globals::game::mappedFrameBuffer)
+			if (*globals::game::perFrame.get() == pResource && globals::game::mappedFrameBuffer) {
 				CacheFramebuffer();
+			}
 			func(This, pResource, Subresource);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	/**
+	 * @brief Hooked OMSetDepthStencilState — replaces DSS with stencil-enforcing version when VR stereo opt is active.
+	 *
+	 * vtable index 36 for ID3D11DeviceContext::OMSetDepthStencilState.
+	 * When VRStereoOptimizations has written stencil marks, this hook transparently swaps
+	 * the game's DSS for a modified version that adds a stencil NOT_EQUAL test, causing
+	 * marked Eye 1 pixels to be skipped during normal rendering.
+	 */
+	struct ID3D11DeviceContext_OMSetDepthStencilState
+	{
+		static void thunk(ID3D11DeviceContext* This, ID3D11DepthStencilState* pDepthStencilState, UINT StencilRef)
+		{
+			if (globals::game::isVR) {
+				auto& stereoOpt = globals::features::vr.stereoOpt;
+				if (stereoOpt.loaded && stereoOpt.IsStencilActive()) {
+					pDepthStencilState = stereoOpt.GetOrCreateModifiedDSS(pDepthStencilState);
+					StencilRef = 1;  // Must match the ref written by our stencil pass
+				}
+			}
+			func(This, pDepthStencilState, StencilRef);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	/**
+	 * @brief Hooked ClearDepthStencilView — blocks stencil clears when VR stereo opt stencil is active.
+	 *
+	 * vtable index 53 for ID3D11DeviceContext::ClearDepthStencilView.
+	 * Prevents the game from clearing our stencil marks between the stencil write and
+	 * the reprojection pass by stripping the D3D11_CLEAR_STENCIL flag.
+	 */
+	struct ID3D11DeviceContext_ClearDepthStencilView
+	{
+		static void thunk(ID3D11DeviceContext* This, ID3D11DepthStencilView* pDepthStencilView, UINT ClearFlags, FLOAT Depth, UINT8 Stencil)
+		{
+			if (globals::game::isVR) {
+				auto& stereoOpt = globals::features::vr.stereoOpt;
+				if (stereoOpt.loaded && stereoOpt.IsStencilActive()) {
+					// Only protect the main scene DSV — allow other DSVs to clear normally
+					auto renderer = globals::game::renderer;
+					auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+					if (mainDepth.views[0]) {
+						// Compare the DSV being cleared against the main scene DSV
+						ID3D11Resource* clearRes = nullptr;
+						ID3D11Resource* mainRes = nullptr;
+						pDepthStencilView->GetResource(&clearRes);
+						mainDepth.views[0]->GetResource(&mainRes);
+						bool isMainDSV = (clearRes == mainRes);
+						if (clearRes)
+							clearRes->Release();
+						if (mainRes)
+							mainRes->Release();
+						if (isMainDSV) {
+							ClearFlags &= ~D3D11_CLEAR_STENCIL;
+							if (ClearFlags == 0)
+								return;
+						}
+					}
+				}
+			}
+			func(This, pDepthStencilView, ClearFlags, Depth, Stencil);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -287,5 +353,11 @@ namespace globals
 	{
 		stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
 		stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
+
+		// VR stereo optimization hooks: intercept DSS and stencil clear
+		if (globals::game::isVR) {
+			stl::detour_vfunc<36, ID3D11DeviceContext_OMSetDepthStencilState>(a_context);
+			stl::detour_vfunc<53, ID3D11DeviceContext_ClearDepthStencilView>(a_context);
+		}
 	}
 }
