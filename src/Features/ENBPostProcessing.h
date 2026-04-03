@@ -68,10 +68,9 @@ public:
 		float ColorPow;
 		float3 pad8;
 
-		float VolumetricRaysIntensity;
 		float VolumetricRaysRangeFactor;
 		float VolumetricRaysDesaturation;
-		float pad12;
+		float2 pad12;
 
 		float3 VolumetricRaysColorFilter;
 		float pad13;
