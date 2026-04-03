@@ -171,13 +171,11 @@ T SettingManager::GetValue(const std::string& key, const std::string& category, 
 			SettingValue currentValue = setting.currentValue;
 			SettingValue lastValue = setting.currentValue;
 			std::string settingKey = category + "::" + key;
-			bool foundWeatherData = false;
 
 			if (currentIt != weatherData.end()) {
 				auto valueIt = currentIt->second.find(settingKey);
 				if (valueIt != currentIt->second.end()) {
 					currentValue = valueIt->second;
-					foundWeatherData = true;
 				}
 			}
 
@@ -185,18 +183,15 @@ T SettingManager::GetValue(const std::string& key, const std::string& category, 
 				auto valueIt = lastIt->second.find(settingKey);
 				if (valueIt != lastIt->second.end()) {
 					lastValue = valueIt->second;
-					foundWeatherData = true;
 				}
 			}
 
-			if (foundWeatherData) {
-				if (rawValue) {
-					return std::get<T>(weatherBlendFactor > 0.5f ? currentValue : lastValue);
-				}
-
-				SettingValue blendedValue = InterpolateValues(lastValue, currentValue, weatherBlendFactor);
-				return std::get<T>(blendedValue);
+			if (rawValue) {
+				return std::get<T>(weatherBlendFactor > 0.5f ? currentValue : lastValue);
 			}
+
+			SettingValue blendedValue = InterpolateValues(lastValue, currentValue, weatherBlendFactor);
+			return std::get<T>(blendedValue);
 		}
 	}
 
@@ -419,9 +414,7 @@ void SettingManager::LoadFromFile(const std::string& filePath)
 	std::unique_lock lock(mutex);
 	for (auto& [category, categoryData] : categories) {
 		for (auto& [key, setting] : categoryData.settings) {
-			if (!setting.hasWeatherSupport) {
-				LoadSettingFromFile(absPath.string(), category, key, setting);
-			}
+			LoadSettingFromFile(absPath.string(), category, key, setting);
 		}
 	}
 
@@ -433,9 +426,7 @@ void SettingManager::SaveToFile(const std::string& filePath)
 	std::shared_lock lock(mutex);
 	for (const auto& [category, categoryData] : categories) {
 		for (const auto& [key, setting] : categoryData.settings) {
-			if (!setting.hasWeatherSupport) {
-				SaveSettingToFile(filePath, category, key, setting);
-			}
+			SaveSettingToFile(filePath, category, key, setting);
 		}
 
 		bool hasWeatherSupport = false;
