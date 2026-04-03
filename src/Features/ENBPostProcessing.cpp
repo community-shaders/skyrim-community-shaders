@@ -360,7 +360,7 @@ struct Main_HDRTonemapBlendCinematic_Render
 		auto& settingManager = SettingManager::GetSingleton();
 		auto& effectManager = EffectManager::GetSingleton();
 
-		if (globals::features::enbPostProcessing.enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT") && effectManager.IsReady()) {
+		if (globals::features::enbPostProcessing.enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
 			effectManager.ExecuteEffects();
 		} else {
 			func(a1, a2, a3, a4, a5);

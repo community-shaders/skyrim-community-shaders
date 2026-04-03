@@ -59,7 +59,7 @@ void EffectManager::Initialize()
 	}
 
 	if (resourcesValid) {
-		initialized.store(true, std::memory_order_release);
+		// Initialization successful
 	} else {
 		logger::error("[EffectManager] Initialization failed due to missing resources");
 	}
