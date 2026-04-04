@@ -166,12 +166,17 @@ void HomePageRenderer::RenderQuickLinksSection()
 	}
 
 	ImGui::SameLine();
-	if (ImGui::Button("GitHub Repository", ImVec2(buttonWidth, 0))) {
+	if (ImGui::Button("GitHub", ImVec2(buttonWidth, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders", NULL, NULL, SW_SHOWNORMAL);
 	}
 
 	ImGui::SameLine();
-	if (ImGui::Button("GitHub Wiki", ImVec2(buttonWidth, 0))) {
+	if (ImGui::Button("Wiki", ImVec2(buttonWidth, 0))) {
+		ShellExecuteA(NULL, "open", "https://modding.wiki/en/skyrim/developers/community-shaders", NULL, NULL, SW_SHOWNORMAL);
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Developer Wiki", ImVec2(buttonWidth, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders/wiki", NULL, NULL, SW_SHOWNORMAL);
 	}
 }
@@ -210,18 +215,8 @@ void HomePageRenderer::RenderFAQSection()
 	if (ImGui::CollapsingHeader("I have \"Failed Shaders\" when compiling?")) {
 		ImGui::TextWrapped(
 			"Failed shaders are usually caused by mixed file versions. Ensure all features are up to date "
-			"and avoid mixing files from test builds or outdated versions.");
-		ImGui::Spacing();
-		ImGui::Text("Remove these outdated pre-1.0 CS features:");
-		ImGui::BulletText("Vanilla HDR");
-		ImGui::BulletText("Tree LOD Lighting");
-		ImGui::BulletText("Complex Parallax Materials");
-		ImGui::BulletText("Water Blending");
-		ImGui::BulletText("Water Caustics");
-		ImGui::BulletText("Water Parallax");
-		ImGui::BulletText("Dynamic Cubemaps");
-		ImGui::Spacing();
-		ImGui::TextWrapped("Note: All of these features are now included in the base Community Shaders install.");
+			"and avoid mixing files from test builds or outdated versions. Please review the 'Feature Issues' tab "
+			"and/or Wiki for more information. Update your features and remove any obsolete features.");
 	}
 
 	if (ImGui::CollapsingHeader("How do I improve performance?")) {
