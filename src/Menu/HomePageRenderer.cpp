@@ -134,7 +134,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		}
 	} else {
 		// Fallback button when Discord icon is not available
-		float buttonWidth = QUICK_LINKS_BUTTON_WIDTH * scale;
+		float buttonWidth = DISCORD_BANNER_MIN_WIDTH * scale;
 		ImGui::SetCursorPosX((windowSize.x - buttonWidth) * 0.5f);
 		if (ImGui::Button("Join Discord Server", ImVec2(buttonWidth, 0))) {
 			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
@@ -155,30 +155,29 @@ void HomePageRenderer::RenderQuickLinksSection()
 	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
 	ImGui::Text("Quick Links");
 
-	// Center the button layout
-	float buttonWidth = QUICK_LINKS_BUTTON_WIDTH * Util::GetUIScale();
-	float totalWidth = buttonWidth * 3 + ImGui::GetStyle().ItemSpacing.x * 2;  // 3 buttons with spacing
-	ImGui::SetCursorPosX((windowSize.x - totalWidth) * 0.5f);
+	ImGui::Columns(4, nullptr, false);
 
 	// External links in a row
-	if (ImGui::Button("Nexus Mods", ImVec2(buttonWidth, 0))) {
+	if (ImGui::Button("Nexus Mods", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://www.nexusmods.com/skyrimspecialedition/mods/86492", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("GitHub", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("GitHub", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("Wiki", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("Wiki", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://modding.wiki/en/skyrim/developers/community-shaders", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("Developer Wiki", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("Developer Wiki", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders/wiki", NULL, NULL, SW_SHOWNORMAL);
 	}
+
+	ImGui::Columns(1);
 }
 
 void HomePageRenderer::RenderFAQSection()
