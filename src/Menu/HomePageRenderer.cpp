@@ -134,7 +134,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		}
 	} else {
 		// Fallback button when Discord icon is not available
-		float buttonWidth = QUICK_LINKS_BUTTON_WIDTH * scale;
+		float buttonWidth = DISCORD_BANNER_MIN_WIDTH * scale;
 		ImGui::SetCursorPosX((windowSize.x - buttonWidth) * 0.5f);
 		if (ImGui::Button("Join Discord Server", ImVec2(buttonWidth, 0))) {
 			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
