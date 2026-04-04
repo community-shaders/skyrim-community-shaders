@@ -2755,6 +2755,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
 		emitColor *= glowColor;
+		// Tint emission color by vertex color
+		// Without this, metals colored by vertex color would emit white/gray
 		emitColor *= input.Color.xyz;
 	}
 #	endif
