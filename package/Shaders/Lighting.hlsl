@@ -2117,6 +2117,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.Metallic = saturate(rawRMAOS.y);
 	material.AO = rawRMAOS.z;
 
+	// Apply vertex color to base color so PBR metals use it
+	baseColor.xyz *= input.Color.xyz;
+
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		material.F0 = lerp(rawRMAOS.w, Color::SrgbToLinear(baseColor.xyz), material.Metallic);
 	} else {
@@ -2752,6 +2755,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
 		emitColor *= glowColor;
+		emitColor *= input.Color.xyz;
 	}
 #	endif
 
@@ -2853,8 +2857,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
 	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+#		if defined(TRUE_PBR)
+	vertexColor = 1;
+#		endif
 #	else
+#		if defined(TRUE_PBR)
+	float3 vertexColor = 1;
+#		else
 	float3 vertexColor = input.Color.xyz;
+#		endif
 #	endif  // defined (HAIR)
 
 	float4 color = 0;
