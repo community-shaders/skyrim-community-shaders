@@ -1373,14 +1373,18 @@ namespace SIE
 					// No file watcher: compare disk-cache mtime directly against the .hlsl source file mtime.
 					std::error_code ec;
 					const auto diskCacheTime = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(diskPath, ec));
-					if (!ec) {
+					if (ec) {
+						logger::debug("Failed to read disk cache mtime for {}: {}", Util::WStringToString(diskPath), ec.message());
+					} else {
 						const std::wstring shaderSourcePath = GetShaderPath(
 							shader.shaderType == RE::BSShader::Type::ImageSpace ?
 								static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName :
 								shader.fxpFilename);
 						if (std::filesystem::exists(shaderSourcePath)) {
 							const auto sourceTime = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(shaderSourcePath, ec));
-							if (!ec && sourceTime > diskCacheTime) {
+							if (ec) {
+								logger::debug("Failed to read source mtime for {}: {}", Util::WStringToString(shaderSourcePath), ec.message());
+							} else if (sourceTime > diskCacheTime) {
 								diskCacheOutdated = true;
 								logger::debug("Disk-cached shader {} outdated: source is newer than cache", SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true));
 							}
@@ -3293,6 +3297,14 @@ namespace SIE
 		QueryPerformanceCounter(&now);
 		const int64_t endQpc = (completionTime.load(std::memory_order_relaxed) != 0) ? completionTime.load(std::memory_order_relaxed) : now.QuadPart;
 
+		// Helper: given elapsed time and done/total priority weights, return remaining ms (or 0).
+		auto weightedEta = [](double elapsedMs, double doneW, double totalW) -> double {
+			if (elapsedMs <= 0.0 || doneW <= 0.0 || totalW <= 0.0)
+				return 0.0;
+			double fraction = doneW / totalW;
+			return std::max(elapsedMs / fraction - elapsedMs, 0.0);
+		};
+
 		const uint64_t diskWeight = diskHitPriorityWeight.load(std::memory_order_relaxed);
 		const uint64_t totalWeight = totalPriorityWeight.load(std::memory_order_relaxed);
 		const uint64_t doneWeight = completedPriorityWeight.load(std::memory_order_relaxed);
@@ -3311,36 +3323,18 @@ namespace SIE
 			// the apparent progress rate and produce an underestimated ETA.
 			const int64_t phaseStart = compilationPhaseStart.QuadPart;  // visible due to acquire above
 			double compilationElapsedMs = static_cast<double>(endQpc - phaseStart) * 1000.0 / frequency.QuadPart;
-			if (compilationElapsedMs <= 0.0)
-				return 0.0;
 
 			// Exclude disk-hit weight from both numerator and denominator so the
 			// rate reflects only the actual compilation speed.
-			double compiledDoneWeight = static_cast<double>(doneWeight > diskWeight ? doneWeight - diskWeight : 0);
-			double compiledTotalWeight = static_cast<double>(totalWeight > diskWeight ? totalWeight - diskWeight : 0);
-
-			if (compiledDoneWeight <= 0.0 || compiledTotalWeight <= 0.0)
-				return 0.0;
-
-			double fractionDone = compiledDoneWeight / compiledTotalWeight;
-			double estimatedTotalMs = compilationElapsedMs / fractionDone;
-			return std::max(estimatedTotalMs - compilationElapsedMs, 0.0);
+			double compiledDone = static_cast<double>(doneWeight > diskWeight ? doneWeight - diskWeight : 0);
+			double compiledTotal = static_cast<double>(totalWeight > diskWeight ? totalWeight - diskWeight : 0);
+			return weightedEta(compilationElapsedMs, compiledDone, compiledTotal);
 		}
 
 		// No disk hits: fall back to the original whole-session ETA.
+		// Priority-weighted so heavy tasks completing early don't inflate the estimate.
 		double elapsedMs = static_cast<double>(endQpc - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
-		if (elapsedMs <= 0.0)
-			return 0.0;
-
-		// Priority-weighted ETA: heavy tasks completing early should not inflate
-		// the estimate. We measure progress as a fraction of total priority weight
-		// completed, which accounts for the decreasing cost of remaining tasks.
-		if (doneWeight <= 0 || totalWeight <= 0)
-			return 0.0;
-
-		double fractionDone = static_cast<double>(doneWeight) / static_cast<double>(totalWeight);
-		double estimatedTotalMs = elapsedMs / fractionDone;
-		return std::max(estimatedTotalMs - elapsedMs, 0.0);
+		return weightedEta(elapsedMs, static_cast<double>(doneWeight), static_cast<double>(totalWeight));
 	}
 
 	std::string CompilationSet::GetStatsString(bool a_timeOnly, bool a_elapsedOnly)
