@@ -1361,10 +1361,35 @@ namespace SIE
 			ID3DBlob* shaderBlob = nullptr;
 
 			if (useDiskCache && std::filesystem::exists(diskPath)) {
-				// check build time of cache
-				auto diskCacheTime = cache.UseFileWatcher() ? std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(diskPath)) : system_clock::now();
-				if (cache.ShaderModifiedSince(shader.fxpFilename, diskCacheTime)) {
-					logger::debug("Diskcached shader {} older than {}", SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true), std::format("{:%Y%m%d%H%M}", diskCacheTime));
+				// Determine whether the disk-cached shader is still valid.
+				bool diskCacheOutdated = false;
+				if (cache.UseFileWatcher()) {
+					// File watcher tracks runtime changes in memory: compare disk-cache mtime against tracked source mtime.
+					auto diskCacheTime = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(diskPath));
+					diskCacheOutdated = cache.ShaderModifiedSince(shader.fxpFilename, diskCacheTime);
+					if (diskCacheOutdated)
+						logger::debug("Diskcached shader {} older than {}", SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true), std::format("{:%Y%m%d%H%M}", diskCacheTime));
+				} else if (cache.IsSkipUnchangedShaders()) {
+					// No file watcher: compare disk-cache mtime directly against the .hlsl source file mtime.
+					std::error_code ec;
+					const auto diskCacheTime = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(diskPath, ec));
+					if (!ec) {
+						const std::wstring shaderSourcePath = GetShaderPath(
+							shader.shaderType == RE::BSShader::Type::ImageSpace ?
+								static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName :
+								shader.fxpFilename);
+						if (std::filesystem::exists(shaderSourcePath)) {
+							const auto sourceTime = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(shaderSourcePath, ec));
+							if (!ec && sourceTime > diskCacheTime) {
+								diskCacheOutdated = true;
+								logger::debug("Disk-cached shader {} outdated: source is newer than cache", SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true));
+							}
+						}
+					}
+				}
+
+				if (diskCacheOutdated) {
+					// Fall through to recompile from source.
 				} else if (FAILED(D3DReadFileToBlob(diskPath.c_str(), &shaderBlob))) {
 					logger::error("Failed to load {} shader {}::{:X}", magic_enum::enum_name(shaderClass), magic_enum::enum_name(type), descriptor);
 
@@ -1373,7 +1398,7 @@ namespace SIE
 					}
 				} else {
 					logger::debug("Loaded shader from {}", Util::WStringToString(diskPath));
-					cache.AddCompletedShader(shaderClass, shader, descriptor, shaderBlob);
+					cache.AddCompletedShader(shaderClass, shader, descriptor, shaderBlob, /*fromDisk=*/true);
 					return shaderBlob;
 				}
 			}
@@ -2102,7 +2127,7 @@ namespace SIE
 		compilationSet.Clear();
 	}
 
-	bool ShaderCache::AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, ID3DBlob* a_blob)
+	bool ShaderCache::AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, ID3DBlob* a_blob, bool fromDisk)
 	{
 		auto key = SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true);
 		auto keyWithDescriptor = SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, false);
@@ -2110,7 +2135,7 @@ namespace SIE
 		logger::debug("Adding {} shader to map: {}", magic_enum ::enum_name(status), keyWithDescriptor);
 		{
 			std::unique_lock lockM{ mapMutex };
-			shaderMap.insert_or_assign(key, ShaderCacheResult{ a_blob, status, system_clock::now() });
+			shaderMap.insert_or_assign(key, ShaderCacheResult{ a_blob, status, system_clock::now(), fromDisk });
 		}
 		mapCV.notify_all();  // wake threads waiting on a Pending→Completed/Failed transition
 		const std::wstring path = SIE::SShaderCache::GetShaderPath(
@@ -2229,6 +2254,15 @@ namespace SIE
 		return GetCompletedShader(key);
 	}
 
+	bool ShaderCache::IsShaderLoadedFromDisk(const std::string& a_key)
+	{
+		std::scoped_lock lockM{ mapMutex };
+		auto it = shaderMap.find(a_key);
+		if (it != shaderMap.end())
+			return it->second.loadedFromDisk;
+		return false;
+	}
+
 	ShaderCompilationTask::Status ShaderCache::GetShaderStatus(const std::string& a_key)
 	{
 		std::scoped_lock lockM{ mapMutex };
@@ -2312,6 +2346,16 @@ namespace SIE
 	void ShaderCache::SetDiskCache(bool value)
 	{
 		isDiskCache = value;
+	}
+
+	bool ShaderCache::IsSkipUnchangedShaders() const
+	{
+		return isSkipUnchangedShaders;
+	}
+
+	void ShaderCache::SetSkipUnchangedShaders(bool value)
+	{
+		isSkipUnchangedShaders = value;
 	}
 
 	void ShaderCache::DeleteDiskCache()
@@ -2609,6 +2653,10 @@ namespace SIE
 	uint64_t ShaderCache::GetTotalTasks()
 	{
 		return compilationSet.totalTasks;
+	}
+	uint64_t ShaderCache::GetDiskHitTasks()
+	{
+		return compilationSet.diskHitTasks;
 	}
 	void ShaderCache::IncCacheHitTasks()
 	{
@@ -3141,6 +3189,9 @@ namespace SIE
 		bool shouldLogCompletion = false;
 		double completionTimeMs = 0.0;
 
+		// Determine whether this task was resolved from the disk cache or actually compiled.
+		bool wasDiskHit = cache.IsShaderLoadedFromDisk(key);
+
 		// Perform all completion operations under one mutex acquisition
 		{
 			std::scoped_lock lock(compilationMutex);
@@ -3154,6 +3205,17 @@ namespace SIE
 				failedTasks++;
 			}
 			completedPriorityWeight += static_cast<uint64_t>(task.GetPriority()) + 1;
+
+			// Track disk-cache hits separately so ETA can use compilation-only timing.
+			if (wasDiskHit) {
+				diskHitTasks++;
+				diskHitPriorityWeight += static_cast<uint64_t>(task.GetPriority()) + 1;
+			} else if (!compilationPhaseStarted.load(std::memory_order_relaxed)) {
+				// First actual compilation: start the compilation-phase clock.
+				// Write the start time before the release-store so readers see it.
+				QueryPerformanceCounter(&compilationPhaseStart);
+				compilationPhaseStarted.store(true, std::memory_order_release);
+			}
 
 			// Track heavy task completion for P-core concurrency limiting
 			if (task.GetPriority() >= kHeavyPriorityThreshold) {
@@ -3201,6 +3263,10 @@ namespace SIE
 		completedTasks = 0;
 		failedTasks = 0;
 		cacheHitTasks = 0;
+		diskHitTasks = 0;
+		diskHitPriorityWeight = 0;
+		compilationPhaseStarted = false;
+		compilationPhaseStart = { 0 };
 		slowTasks = 0;
 		verySlowTasks = 0;
 		totalPriorityWeight = 0;
@@ -3223,25 +3289,56 @@ namespace SIE
 
 	double CompilationSet::GetEta()
 	{
-		// Use wall-clock elapsed time since compilation started
 		LARGE_INTEGER now;
 		QueryPerformanceCounter(&now);
-		int64_t endTime = (completionTime.load(std::memory_order_relaxed) != 0) ? completionTime.load(std::memory_order_relaxed) : now.QuadPart;
-		double elapsedMs = static_cast<double>(endTime - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
+		const int64_t endQpc = (completionTime.load(std::memory_order_relaxed) != 0) ? completionTime.load(std::memory_order_relaxed) : now.QuadPart;
 
+		const uint64_t diskWeight = diskHitPriorityWeight.load(std::memory_order_relaxed);
+		const uint64_t totalWeight = totalPriorityWeight.load(std::memory_order_relaxed);
+		const uint64_t doneWeight = completedPriorityWeight.load(std::memory_order_relaxed);
+
+		if (diskWeight > 0) {
+			// There are disk-cache hits in this session.
+			if (!compilationPhaseStarted.load(std::memory_order_acquire)) {
+				// Compilations haven't started yet (still loading from disk cache).
+				// We have no compilation rate to extrapolate from, so return 0 to
+				// avoid a wildly wrong ETA based purely on the fast disk-hit rate.
+				return 0.0;
+			}
+
+			// At least one actual compilation has completed.  Use compilation-phase
+			// timing so that fast disk loads at the start of the session don't inflate
+			// the apparent progress rate and produce an underestimated ETA.
+			const int64_t phaseStart = compilationPhaseStart.QuadPart;  // visible due to acquire above
+			double compilationElapsedMs = static_cast<double>(endQpc - phaseStart) * 1000.0 / frequency.QuadPart;
+			if (compilationElapsedMs <= 0.0)
+				return 0.0;
+
+			// Exclude disk-hit weight from both numerator and denominator so the
+			// rate reflects only the actual compilation speed.
+			double compiledDoneWeight = static_cast<double>(doneWeight > diskWeight ? doneWeight - diskWeight : 0);
+			double compiledTotalWeight = static_cast<double>(totalWeight > diskWeight ? totalWeight - diskWeight : 0);
+
+			if (compiledDoneWeight <= 0.0 || compiledTotalWeight <= 0.0)
+				return 0.0;
+
+			double fractionDone = compiledDoneWeight / compiledTotalWeight;
+			double estimatedTotalMs = compilationElapsedMs / fractionDone;
+			return std::max(estimatedTotalMs - compilationElapsedMs, 0.0);
+		}
+
+		// No disk hits: fall back to the original whole-session ETA.
+		double elapsedMs = static_cast<double>(endQpc - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
 		if (elapsedMs <= 0.0)
 			return 0.0;
 
 		// Priority-weighted ETA: heavy tasks completing early should not inflate
 		// the estimate. We measure progress as a fraction of total priority weight
 		// completed, which accounts for the decreasing cost of remaining tasks.
-		double doneWeight = static_cast<double>(completedPriorityWeight.load(std::memory_order_relaxed));
-		double totalWeight = static_cast<double>(totalPriorityWeight.load(std::memory_order_relaxed));
-
-		if (doneWeight <= 0.0 || totalWeight <= 0.0)
+		if (doneWeight <= 0 || totalWeight <= 0)
 			return 0.0;
 
-		double fractionDone = doneWeight / totalWeight;
+		double fractionDone = static_cast<double>(doneWeight) / static_cast<double>(totalWeight);
 		double estimatedTotalMs = elapsedMs / fractionDone;
 		return std::max(estimatedTotalMs - elapsedMs, 0.0);
 	}
@@ -3268,11 +3365,12 @@ namespace SIE
 			}
 		}
 
-		return fmt::format("{}/{} (successful/total)\tfailed: {}\tdeduplicated: {}\nElapsed/Estimated Time: {}/{}",
+		return fmt::format("{}/{} (successful/total)\tfailed: {}\tdeduplicated: {}\tdisk cache: {}\nElapsed/Estimated Time: {}/{}",
 			(std::uint64_t)completedTasks,
 			(std::uint64_t)totalTasks,
 			(std::uint64_t)failedTasks,
 			(std::uint64_t)cacheHitTasks,
+			(std::uint64_t)diskHitTasks,
 			GetHumanTime(totalMs),
 			GetHumanTime(GetEta() + totalMs));
 	}
