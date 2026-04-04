@@ -126,6 +126,14 @@ public:
 
 	// Stereo bilateral blend pass - called from Deferred::DeferredPasses after composite
 	void DrawStereoBlend();
+	bool IsStereoOptimizationCullingReady() const
+	{
+		return REL::Module::IsVR() &&
+		       stereoOpt.loaded &&
+		       stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off &&
+		       !stereoOpt.settings.debugSkipMerge &&
+		       stereoBlendOverwriteCS;
+	}
 	static bool AnyScreenSpaceEffectLoaded();
 
 	virtual void LoadSettings(json& o_json) override;
