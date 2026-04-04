@@ -3205,11 +3205,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	const float roughness = material.Roughness;
 	const float metallic = material.Metallic;
 #		else
-	const float specularity = CalcSpecularity(material.SpecularColor, glossiness);
-	const float roughnessFromShininess = ShininessToRoughness(material.Shininess);
-	const float roughness = CalcRoughness(roughnessFromShininess, specularity);
-	const float metallic = CalcMetallic(outputAlbedo, specularity, roughnessFromShininess);
-#		endif
+	const float specularity = VanillaToPBR::CalcSpecularity(material.SpecularColor, glossiness);
+	const float roughness = VanillaToPBR::ShininessToRoughness(material.Shininess) * (1.0f - specularity);
+
+#			if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX)
+	const float metallic = envMask;
+#			else
+	const float metallic = 0.0f;
+#			endif
+
+#endif // !TRUE_PBR
 
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - roughness), psout.Diffuse.w);
 
