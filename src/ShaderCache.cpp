@@ -3136,7 +3136,10 @@ namespace SIE
 			/*Woke up because of a stop request. */
 			return std::nullopt;
 		}
-		if (!shaderCache->IsCompiling()) {  // we just got woken up because there's a task, start clock
+		// Session clock is now managed by CompilationSet::Add(); this branch is kept
+		// as a safety net but will not trigger because totalTasks is incremented
+		// before the conditionVariable notification.
+		if (!shaderCache->IsCompiling()) {
 			QueryPerformanceCounter(&lastReset);
 			lastCalculation = lastReset;
 		}
@@ -3175,11 +3178,40 @@ namespace SIE
 			auto queuedTask = task;
 			queuedTask.SetEnqueuedQpc(now.QuadPart);
 			auto [_, wasAdded] = availableTasks.insert(queuedTask);
+			if (wasAdded) {
+				// Increment counters inside the lock so that WaitTake, which reads
+				// IsCompiling() after waking up, sees the updated totalTasks and
+				// does NOT incorrectly treat the new work as a "fresh start" and
+				// reset the session clock via its !IsCompiling() branch.
+				const uint64_t doneTasks = completedTasks.load(std::memory_order_relaxed) +
+				                           failedTasks.load(std::memory_order_relaxed);
+				const uint64_t prevTotal = totalTasks.load(std::memory_order_relaxed);
+
+				// If every previously-known task is done (either a fresh session after
+				// Clear(), or a burst of disk-cache hits drained the queue before all
+				// shader requests had been submitted), restart the session clock so that
+				// elapsed-time and ETA figures are accurate for the new batch of work.
+				if (doneTasks >= prevTotal) {
+					QueryPerformanceCounter(&lastReset);
+					lastCalculation = lastReset;
+				}
+
+				// If compilation was previously marked complete (prematurely, because a
+				// disk-cache burst completed all known tasks before further shaders were
+				// submitted), clear the completion timestamp.  This lets the timer keep
+				// running and allows the true final completion to be recorded later.
+				if (completionTime.load(std::memory_order_relaxed) != 0) {
+					completionTime.store(0, std::memory_order_relaxed);
+					compilationPhaseStarted.store(false, std::memory_order_relaxed);
+					compilationPhaseStart = { 0 };
+				}
+
+				totalTasks++;
+				totalPriorityWeight += static_cast<uint64_t>(task.GetPriority()) + 1;
+			}
 			lock.unlock();
 			if (wasAdded) {
 				conditionVariable.notify_one();
-				totalTasks++;
-				totalPriorityWeight += static_cast<uint64_t>(task.GetPriority()) + 1;
 			}
 		}
 	}
