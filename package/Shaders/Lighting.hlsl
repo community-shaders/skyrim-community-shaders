@@ -2755,9 +2755,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
 		emitColor *= glowColor;
-		// Tint emission color by vertex color
-		// Without this, metals colored by vertex color would emit white/gray
+#		if defined(TRUE_PBR)
+		// TRUE_PBR sets vertexColor=1 and adds emitColor directly to color (see below),
+		// so vertex tint must be applied here. Non-PBR folds emitColor into diffuseColor
+		// and the global color.xyz *= vertexColor (line 2918) already covers it.
 		emitColor *= input.Color.xyz;
+#		endif
 	}
 #	endif
 
