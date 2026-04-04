@@ -71,10 +71,27 @@ PS_OUTPUT main(PS_INPUT input)
 			// Geometry pixel: reconstruct world position from depth.
 			// CameraViewProjInverse[eyeIndex] maps clip-space back to the per-eye
 			// camera-relative world space.  waterHeight has been adjusted to the same
-			// frame, so the comparison is exact for both eyes.
+			// frame, so the comparison is correct for both eyes.
 			float4 worldPos = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], float4(ndc, depth, 1.0));
 			worldPos /= worldPos.w;
-			psout.UnderwaterMask = (worldPos.z < waterHeight) ? 1.0 : 0.0;
+			// kSurfaceBias (Skyrim world units, ~1 unit ≈ 1.4 cm) anchors the mask
+			// threshold relative to the flat waterHeight plane to absorb wave-vertex
+			// displacement (measured max trough ≈ 2.92 units; 3.5 gives margin).
+			//
+			// The threshold direction depends on view orientation:
+			//   Looking UP   (worldPos.z > 0, pixel above camera in world space):
+			//     Camera is below the surface viewing it from underneath.
+			//     Expand threshold upward by +kSurfaceBias so the entire wave surface
+			//     (crests and troughs alike) is included in the masked region.
+			//   Looking DOWN (worldPos.z <= 0, pixel below or level with camera):
+			//     The surface is seen from above or the camera is above water.
+			//     Shrink threshold downward by -kSurfaceBias so the surface itself
+			//     is excluded from the mask (no fog on the surface seen from above).
+			static const float kSurfaceBias = 3.5;
+			bool lookingUp = worldPos.z > 0.0;
+			bool cameraUnderwater = waterHeight > 0.0;
+			float threshold = (cameraUnderwater && lookingUp) ? waterHeight + kSurfaceBias : waterHeight - kSurfaceBias;
+			psout.UnderwaterMask = (worldPos.z < threshold) ? 1.0 : 0.0;
 		} else {
 			// depth == 0: sky / unrendered pixels (reversed-Z depth clear value).
 			// Unproject to obtain the per-pixel ray direction and decide based on that.

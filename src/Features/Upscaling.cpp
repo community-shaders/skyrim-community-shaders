@@ -1837,10 +1837,12 @@ void Upscaling::UpscaleDepth()
 		context->PSSetShader(depthUpscalePS, nullptr, 0);
 		context->Draw(3, 0);
 
-		// Depth copy is also used on VR.
-		if (globals::game::isVR) {
-			copyIfNonAliased(depthCopy.texture, depth.texture);
-		}
+		// kMAIN now has the min-filtered upscaled depth; kMAIN_COPY still holds the
+		// original (pre-upscale) depth.  The underwater mask needs the original depth:
+		// the min-filter spreads depth=0 (sky/far-plane in reversed-Z) into water-surface
+		// pixels at the water-sky boundary.  Those pixels would incorrectly fall into the
+		// depth=0 / sky path and get marked as underwater.
+		// Defer the VR re-copy until AFTER the underwater mask draw.
 	}
 
 	{
@@ -1852,7 +1854,8 @@ void Upscaling::UpscaleDepth()
 
 		context->OMSetDepthStencilState(nullptr, 0x00);
 
-		// t0: vanilla mask copy, t1: depth buffer (for VR per-eye analytical mask)
+		// t0: vanilla mask copy, t1: original depth (for VR per-eye analytical mask).
+		// depthCopy still holds the original pre-upscale depth here (VR re-copy deferred).
 		ID3D11ShaderResourceView* srvs[] = { underwaterMask.SRVCopy, depthCopy.depthSRV };
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
@@ -1861,6 +1864,11 @@ void Upscaling::UpscaleDepth()
 
 		context->PSSetShader(underwaterMaskPS, nullptr, 0);
 		context->Draw(3, 0);
+	}
+
+	// Now propagate the upscaled depth to kMAIN_COPY so downstream VR passes see it.
+	if (globals::game::isVR) {
+		copyIfNonAliased(depthCopy.texture, depth.texture);
 	}
 
 	ID3D11ShaderResourceView* nullPSResources[3] = { nullptr, nullptr, nullptr };
