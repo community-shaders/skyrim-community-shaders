@@ -343,19 +343,47 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 
 		context->OMSetRenderTargets(1, &outputRTV, nullptr);
 
-		// Set viewport based on render target description
-		winrt::com_ptr<ID3D11Resource> resource;
-		outputRTV->GetResource(resource.put());
-		winrt::com_ptr<ID3D11Texture2D> texture;
-		resource.as(texture);
-		D3D11_TEXTURE2D_DESC texDesc;
-		texture->GetDesc(&texDesc);
+		// Get input and output dimensions for Size variables
+		uint32_t inputWidth = 0, inputHeight = 0;
+		uint32_t outputWidth = 0, outputHeight = 0;
 
+		// Get input dimensions from SRV
+		winrt::com_ptr<ID3D11Resource> inputResource;
+		inputSRV->GetResource(inputResource.put());
+		winrt::com_ptr<ID3D11Texture2D> inputTexture;
+		if (inputResource) {
+			inputResource.as(inputTexture);
+			if (inputTexture) {
+				D3D11_TEXTURE2D_DESC inputDesc;
+				inputTexture->GetDesc(&inputDesc);
+				inputWidth = inputDesc.Width;
+				inputHeight = inputDesc.Height;
+			}
+		}
+
+		// Get output dimensions from RTV
+		winrt::com_ptr<ID3D11Resource> outputResource;
+		outputRTV->GetResource(outputResource.put());
+		winrt::com_ptr<ID3D11Texture2D> outputTexture;
+		if (outputResource) {
+			outputResource.as(outputTexture);
+			if (outputTexture) {
+				D3D11_TEXTURE2D_DESC outputDesc;
+				outputTexture->GetDesc(&outputDesc);
+				outputWidth = outputDesc.Width;
+				outputHeight = outputDesc.Height;
+			}
+		}
+
+		// Update ScreenSize in shader
+		UpdateSizeVariables(effect.get(), outputWidth, outputHeight);
+
+		// Set viewport based on render target description
 		D3D11_VIEWPORT viewport = {};
 		viewport.TopLeftX = 0.0f;
 		viewport.TopLeftY = 0.0f;
-		viewport.Width = static_cast<float>(texDesc.Width);
-		viewport.Height = static_cast<float>(texDesc.Height);
+		viewport.Width = static_cast<float>(outputWidth);
+		viewport.Height = static_cast<float>(outputHeight);
 		viewport.MinDepth = 0.0f;
 		viewport.MaxDepth = 1.0f;
 		context->RSSetViewports(1, &viewport);
@@ -1309,4 +1337,21 @@ std::string Effect::GetSelectedTechnique() const
 		return uiTechniques[selectedTechniqueIndex].techniqueName;
 	}
 	return "";
+}
+
+void Effect::UpdateSizeVariables(ID3DX11Effect* effect, uint32_t outputWidth, uint32_t outputHeight)
+{
+	if (!effect)
+		return;
+
+	// Update ScreenSize (output)
+	if (outputWidth > 0 && outputHeight > 0) {
+		float screenSize[4];
+		float aspect = static_cast<float>(outputWidth) / static_cast<float>(outputHeight);
+		screenSize[0] = static_cast<float>(outputWidth);
+		screenSize[1] = 1.0f / screenSize[0];
+		screenSize[2] = aspect;
+		screenSize[3] = 1.0f / aspect;
+		SetVectorVariable(effect, "ScreenSize", screenSize, sizeof(screenSize));
+	}
 }

@@ -138,6 +138,8 @@ public:
 	// Helper function for safe vector variable access
 	bool SetVectorVariable(const std::string& variableName, const void* data, uint32_t size);
 
+	static void UpdateSizeVariables(ID3DX11Effect* effect, uint32_t outputWidth, uint32_t outputHeight);
+
 private:
 	bool LoadFXFile();
 

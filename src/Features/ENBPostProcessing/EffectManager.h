@@ -90,7 +90,6 @@ public:
 	struct CommonVariableData
 	{
 		float timer[4];
-		float screenSize[4];
 		float weather[4];
 		float timeOfDay1[4];
 		float timeOfDay2[4];

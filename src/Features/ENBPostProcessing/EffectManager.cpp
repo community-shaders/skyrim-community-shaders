@@ -592,7 +592,6 @@ void EffectManager::UpdateCommonData()
 {
 	commonData = {};
 
-	auto state = globals::state;
 	auto sky = globals::game::sky;
 
 	// Update timer
@@ -613,16 +612,6 @@ void EffectManager::UpdateCommonData()
 		commonData.timer[3] = delta;
 
 		frameCount++;
-	}
-
-	// Update screen size
-	{
-		float aspect = state->screenSize.x / state->screenSize.y;
-
-		commonData.screenSize[0] = state->screenSize.x;
-		commonData.screenSize[1] = 1.0f / state->screenSize.x;
-		commonData.screenSize[2] = aspect;
-		commonData.screenSize[3] = 1.0f / aspect;
 	}
 
 	// Update weather
@@ -810,7 +799,6 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 
 	// Set vector variables
 	Effect::SetVectorVariable(effect, "Timer", commonData.timer, sizeof(commonData.timer));
-	Effect::SetVectorVariable(effect, "ScreenSize", commonData.screenSize, sizeof(commonData.screenSize));
 	Effect::SetVectorVariable(effect, "Weather", commonData.weather, sizeof(commonData.weather));
 	Effect::SetVectorVariable(effect, "TimeOfDay1", commonData.timeOfDay1, sizeof(commonData.timeOfDay1));
 	Effect::SetVectorVariable(effect, "TimeOfDay2", commonData.timeOfDay2, sizeof(commonData.timeOfDay2));
