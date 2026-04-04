@@ -9,13 +9,13 @@ param(
     [switch]$ForcePresetCopy
 )
 
-$repoRoot = (git rev-parse --show-toplevel 2>$null).Trim()
+$repoRoot = ([string](git rev-parse --show-toplevel 2>$null)).Trim()
 if (-not $repoRoot) {
     Write-Error "Run this script from within a git checkout or worktree for this repository."
     exit 1
 }
 
-$commonDir = (git rev-parse --path-format=absolute --git-common-dir 2>$null).Trim()
+$commonDir = ([string](git rev-parse --path-format=absolute --git-common-dir 2>$null)).Trim()
 if (-not $commonDir) {
     Write-Error "Failed to resolve the repository common git directory."
     exit 1
@@ -70,8 +70,14 @@ $targetPreset = Join-Path $Path "CMakeUserPresets.json"
 
 if (Test-Path $sourcePreset) {
     if ((-not (Test-Path $targetPreset)) -or $ForcePresetCopy) {
-        Copy-Item $sourcePreset $targetPreset -Force
-        Write-Host "Copied CMakeUserPresets.json into the new worktree"
+        try {
+            Copy-Item $sourcePreset $targetPreset -Force -ErrorAction Stop
+            Write-Host "Copied CMakeUserPresets.json into the new worktree"
+        }
+        catch {
+            Write-Error "Failed to copy CMakeUserPresets.json: $($_.Exception.Message)"
+            exit 1
+        }
     }
     else {
         Write-Host "Skipped preset copy because the worktree already has CMakeUserPresets.json"

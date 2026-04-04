@@ -2,7 +2,7 @@ param(
     [switch]$Global
 )
 
-$repoRoot = (git rev-parse --show-toplevel 2>$null).Trim()
+$repoRoot = ([string](git rev-parse --show-toplevel 2>$null)).Trim()
 if (-not $repoRoot) {
     Write-Error "Run this script from within a git checkout or worktree for this repository."
     exit 1
