@@ -328,7 +328,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(CLOUDS)
 	if (SharedData::enbSettings.Enable) {
 		psout.Color.w = saturate(psout.Color.w * SharedData::enbSettings.CloudsOpacity);
-		psout.Color.xyz = pow(psout.Color.xyz, SharedData::enbSettings.CloudsCurve);
+		psout.Color.xyz = pow(psout.Color.xyz, pow(SharedData::enbSettings.CloudsCurve, 0.1));
 		psout.Color.xyz = lerp(psout.Color.xyz, dot(psout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
 		psout.Color.xyz *= SharedData::enbSettings.CloudsColorFilter;
 		psout.Color.xyz *= SharedData::enbSettings.CloudsIntensity;
