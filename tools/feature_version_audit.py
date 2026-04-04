@@ -40,7 +40,7 @@ RE_COMMIT_FIX = re.compile(r"^fix(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_REFACTOR = re.compile(r"^refactor(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_PERF = re.compile(r"^perf(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_BREAKING = re.compile(r"!\s*:|BREAKING CHANGE:", re.IGNORECASE)
-RE_COMMIT_NONFUNCTIONAL = re.compile(r"^(chore|docs|style|ci|test|build)(\(|:|\s)", re.IGNORECASE)
+RE_COMMIT_NONFUNCTIONAL = re.compile(r"^(chore|docs|style|ci|test|build|refactor|perf)(\(|:|\s)", re.IGNORECASE)
 
 # =====================
 # End Configuration
@@ -50,6 +50,7 @@ RE_COMMIT_NONFUNCTIONAL = re.compile(r"^(chore|docs|style|ci|test|build)(\(|:|\s
 RELEASE_TAG = None
 FEATURES_DIR = DEFAULT_FEATURES_DIR
 SHADER_TYPES = DEFAULT_SHADER_TYPES
+HEAD_REF = "HEAD"
 
 def extract_regex(pattern, content, group=1):
     m = pattern.search(content)
@@ -67,11 +68,20 @@ def get_feature_ini(feature_path):
 
 def get_version_from_ini(ini_path, content=None):
     if content is None:
-        try:
-            with open(ini_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except Exception:
-            return None
+        if HEAD_REF != "HEAD":
+            rel_path = os.path.relpath(ini_path, PROJECT_ROOT).replace("\\", "/")
+            try:
+                content = subprocess.check_output(
+                    ["git", "show", f"{HEAD_REF}:{rel_path}"], stderr=subprocess.DEVNULL
+                ).decode("utf-8")
+            except Exception:
+                return None
+        else:
+            try:
+                with open(ini_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception:
+                return None
     m = RE_VERSION.search(content)
     if m:
         return tuple(map(int, m.groups()))
@@ -94,7 +104,7 @@ def get_changed_files(feature_path, base_ref, file_types=None):
     rel_path = str(feature_path).replace("\\", "/")
     try:
         output = subprocess.check_output(
-            ["git", "diff", "--name-status", f"{base_ref}...HEAD", "--", rel_path],
+            ["git", "diff", "--name-status", f"{base_ref}...{HEAD_REF}", "--", rel_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
         changes = []
@@ -110,26 +120,39 @@ def get_changed_files(feature_path, base_ref, file_types=None):
 def get_commits_for_file(file_path, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "--pretty=%s", "--", file_path],
+            ["git", "log", f"{base_ref}..{HEAD_REF}", "--pretty=%B%x1e", "--", file_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
-        return [line.strip() for line in output.splitlines() if line.strip()]
+        return [msg.strip() for msg in output.split("\x1e") if msg.strip()]
     except Exception:
         return []
 
 def get_bump_commit(file_path, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "--pretty=%H %s", "--", file_path],
+            ["git", "log", f"{base_ref}..{HEAD_REF}", "--pretty=%H%x1f%B%x1e", "--", file_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
-        for line in output.splitlines():
-            parts = line.split(" ", 1)
+        for entry in output.split("\x1e"):
+            if not entry.strip():
+                continue
+            parts = entry.strip().split("\x1f", 1)
             if len(parts) < 2:
                 continue
             commit_hash, msg = parts
-            if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_REFACTOR.match(msg) or RE_COMMIT_PERF.match(msg) or RE_COMMIT_BREAKING.search(msg):
-                return commit_hash
+            if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_BREAKING.search(msg):
+                return commit_hash.strip()
+    except Exception:
+        pass
+    return None
+
+def get_latest_commit(file_paths, base_ref):
+    try:
+        output = subprocess.check_output(
+            ["git", "log", f"{base_ref}..{HEAD_REF}", "-1", "--pretty=%H", "--", *sorted(file_paths)],
+            stderr=subprocess.DEVNULL,
+        ).decode("utf-8").strip()
+        return output or None
     except Exception:
         pass
     return None
@@ -272,7 +295,7 @@ def propose_new_version(prior_version, commits):
         return None
 
     is_minor = any(RE_COMMIT_FEAT.match(c) or RE_COMMIT_BREAKING.search(c) for c in commits)
-    is_patch = any(RE_COMMIT_FIX.match(c) or RE_COMMIT_REFACTOR.match(c) or RE_COMMIT_PERF.match(c) for c in commits)
+    is_patch = any(RE_COMMIT_FIX.match(c) for c in commits)
     is_nonfunctional_only = all(RE_COMMIT_NONFUNCTIONAL.match(c) for c in commits)
 
     if is_minor:
@@ -295,7 +318,7 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
     if only_changed:
         # Gather all changed files from the diff in both features regions
         target_dirs = [str(FEATURES_DIR), str(DEFAULT_FEATURE_HEADERS_DIR)]
-        cmd = ["git", "diff", "--name-status", f"{base_ref}...HEAD", "--"] + target_dirs
+        cmd = ["git", "diff", "--name-status", f"{base_ref}...{HEAD_REF}", "--"] + target_dirs
         try:
             all_changes = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").splitlines()
         except Exception as e:
@@ -376,12 +399,16 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         bump_commit = None
         bump_author = None
         for status, f in changes:
-            commits = get_commits_for_file(f, base_ref)
-            all_commits.extend(commits)
+            all_commits.extend(get_commits_for_file(f, base_ref))
             if not bump_commit:
                 bump_commit = get_bump_commit(f, base_ref)
                 if bump_commit:
                     bump_author = get_commit_author(bump_commit)
+        if not bump_commit and changes:
+            any_commit = get_latest_commit([f for _, f in changes], base_ref)
+            if any_commit:
+                bump_commit = any_commit
+                bump_author = get_commit_author(any_commit)
 
         proposed_ver = propose_new_version(prior_ver, all_commits) if ini_path else None
         needs_bump = (proposed_ver is not None and new_ver is not None and proposed_ver > new_ver)
@@ -618,10 +645,15 @@ def main():
     parser.add_argument('--output', type=str, help='Output markdown filename')
     parser.add_argument('--ci', action='store_true', help='Exit 1 if actionable items found (alias for --fail-on-actionable)')
     parser.add_argument('--base', type=str, default=None, help='Base tag/branch/commit to compare against')
+    parser.add_argument('--head', type=str, default=None, help='Head commit/SHA to compare against (defaults to HEAD). Use to compare against a specific revision without checking it out.')
     parser.add_argument('--fail-on-actionable', action='store_true', help='Exit 1 if actionable items found (alias for --ci)')
     parser.add_argument('--pr-check', action='store_true', help='Only show actionable items for changes since base')
     parser.add_argument('--apply-bumps', action='store_true', help='Automatically apply suggested version bumps')
     args = parser.parse_args()
+
+    global HEAD_REF
+    if args.head:
+        HEAD_REF = args.head
 
     if args.base:
         base_ref = args.base

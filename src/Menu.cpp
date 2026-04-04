@@ -109,11 +109,22 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GrabMinSize,
 	GrabRounding,
 	LogSliderDeadzone,
+	ImageRounding,
+	ImageBorderSize,
 	TabRounding,
 	TabBorderSize,
-	TabMinWidthForCloseButton,
+	TabCloseButtonMinWidthSelected,
+	TabCloseButtonMinWidthUnselected,
 	TabBarBorderSize,
+	TabBarOverlineSize,
 	TableAngledHeadersAngle,
+	TableAngledHeadersTextAlign,
+	TreeLinesSize,
+	TreeLinesRounding,
+	DragDropTargetRounding,
+	DragDropTargetBorderSize,
+	DragDropTargetPadding,
+	ColorMarkerSize,
 	ColorButtonPosition,
 	ButtonTextAlign,
 	SelectableTextAlign,
@@ -141,8 +152,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Palette,
 	StatusPalette,
 	FeatureHeading,
-	Style,
-	FullPalette)
+	Style)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::Settings,
@@ -179,6 +189,71 @@ static void SanitizeFontRolesJson(json& themeJson)
 		auto defaults = Menu::ThemeSettings{}.FontRoles;
 		for (size_t i = fontRoles.size(); i < expected; ++i) {
 			fontRoles.push_back(defaults[i]);
+		}
+	}
+}
+
+// Serialize palette as named color map. Resilient to ImGui enum reordering.
+void Menu::PaletteToJson(json& themeJson, const std::array<ImVec4, ImGuiCol_COUNT>& palette)
+{
+	json colors = json::object();
+	for (int i = 0; i < ImGuiCol_COUNT; i++)
+		colors[ImGui::GetStyleColorName(i)] = palette[i];
+	themeJson["Colors"] = colors;
+}
+
+// Deserialize palette from named color map (preferred) or legacy positional array.
+void Menu::PaletteFromJson(const json& themeJson, std::array<ImVec4, ImGuiCol_COUNT>& palette)
+{
+	ThemeSettings defaults;
+	palette = defaults.FullPalette;
+
+	auto loadVec4 = [](const json& c) -> ImVec4 {
+		if (c.is_array() && c.size() >= 4)
+			return c.get<ImVec4>();
+		return ImVec4(0, 0, 0, 0);
+	};
+
+	if (themeJson.contains("Colors") && themeJson["Colors"].is_object()) {
+		// Named color map: look up each color by ImGui's style color name
+		const auto& colors = themeJson["Colors"];
+		for (int i = 0; i < ImGuiCol_COUNT; i++) {
+			const char* name = ImGui::GetStyleColorName(i);
+			if (colors.contains(name) && colors[name].is_array())
+				palette[i] = loadVec4(colors[name]);
+		}
+	} else if (themeJson.contains("FullPalette") && themeJson["FullPalette"].is_array()) {
+		// Legacy positional array
+		const auto& arr = themeJson["FullPalette"];
+
+		if (arr.size() == 55) {
+			// Migrate from ImGui 1.90 (55 entries) to 1.92+ (62 entries).
+			// Tab/TabHovered swapped, 7 new slots inserted mid-enum.
+			for (int i = 0; i <= 32; i++)
+				palette[i] = loadVec4(arr[i]);
+			// [33] InputTextCursor: stays default
+			palette[34] = loadVec4(arr[34]);  // old TabHovered → TabHovered
+			palette[35] = loadVec4(arr[33]);  // old Tab → Tab (swapped)
+			palette[36] = loadVec4(arr[35]);  // old TabActive → TabSelected
+			// [37] TabSelectedOverline: stays default
+			palette[38] = loadVec4(arr[36]);  // old TabUnfocused → TabDimmed
+			palette[39] = loadVec4(arr[37]);  // old TabUnfocusedActive → TabDimmedSelected
+			// [40] TabDimmedSelectedOverline: stays default
+			for (int i = 38; i <= 48; i++)
+				palette[i + 3] = loadVec4(arr[i]);
+			// [52] TextLink: stays default
+			palette[53] = loadVec4(arr[49]);  // TextSelectedBg
+			// [54] TreeLines: stays default
+			palette[55] = loadVec4(arr[50]);  // DragDropTarget
+			// [56] DragDropTargetBg: stays default
+			// [57] UnsavedMarker: stays default
+			for (int i = 51; i <= 54; i++)
+				palette[i + 7] = loadVec4(arr[i]);
+		} else {
+			// Direct positional load (matching or close size)
+			size_t count = std::min(arr.size(), static_cast<size_t>(ImGuiCol_COUNT));
+			for (size_t i = 0; i < count; i++)
+				palette[i] = loadVec4(arr[i]);
 		}
 	}
 }
@@ -225,6 +300,9 @@ Menu::~Menu()
 	uiIcons.debug.Release();
 	uiIcons.materials.Release();
 	uiIcons.postProcessing.Release();
+	uiIcons.freeCamera.Release();
+	uiIcons.playMode.Release();
+	uiIcons.search.Release();
 
 	// Clean up blur resources
 	BackgroundBlur::Cleanup();
@@ -289,6 +367,7 @@ void Menu::Load(json& o_json)
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
 		SanitizeFontRolesJson(o_json["Theme"]);
 		settings.Theme = o_json["Theme"];
+		PaletteFromJson(o_json["Theme"], settings.Theme.FullPalette);
 		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 
 		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
@@ -354,6 +433,7 @@ void Menu::LoadTheme(json& o_json)
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
 		SanitizeFontRolesJson(o_json["Theme"]);
 		settings.Theme = o_json["Theme"];
+		PaletteFromJson(o_json["Theme"], settings.Theme.FullPalette);
 		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 
 		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
@@ -382,6 +462,7 @@ void Menu::SaveTheme(json& o_json)
 	}
 
 	o_json["Theme"] = settings.Theme;
+	PaletteToJson(o_json["Theme"], settings.Theme.FullPalette);
 }
 
 std::vector<std::string> Menu::DiscoverThemes()
@@ -408,131 +489,13 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
 		// Create a backup of current theme in case loading fails
 		ThemeSettings backupTheme = settings.Theme;
-		ThemeSettings defaultTheme;  // For fallback values
 		bool hasFontRoles = themeSettings.contains("FontRoles");
 
+		SanitizeFontRolesJson(themeSettings);
+
 		try {
-			// Attempt to load theme with protection against malformed data
-			try {
-				settings.Theme = themeSettings;
-			} catch (const json::out_of_range& e) {
-				// Most likely FullPalette array size mismatch
-				logger::warn("Theme '{}' has incomplete data ({}). Loading with defaults for missing fields.", themeName, e.what());
-
-				// Manually load fields that exist, use defaults for missing ones
-				if (themeSettings.contains("FontSize")) {
-					try {
-						settings.Theme.FontSize = themeSettings["FontSize"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("FontName")) {
-					try {
-						settings.Theme.FontName = themeSettings["FontName"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("GlobalScale")) {
-					try {
-						settings.Theme.GlobalScale = themeSettings["GlobalScale"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("FontRoles")) {
-					try {
-						SanitizeFontRolesJson(themeSettings);
-						settings.Theme.FontRoles = themeSettings["FontRoles"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("ShowActionIcons")) {
-					try {
-						settings.Theme.ShowActionIcons = themeSettings["ShowActionIcons"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("UseMonochromeIcons")) {
-					try {
-						settings.Theme.UseMonochromeIcons = themeSettings["UseMonochromeIcons"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("UseMonochromeLogo")) {
-					try {
-						settings.Theme.UseMonochromeLogo = themeSettings["UseMonochromeLogo"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("TooltipHoverDelay")) {
-					try {
-						settings.Theme.TooltipHoverDelay = themeSettings["TooltipHoverDelay"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("BackgroundBlurEnabled")) {
-					try {
-						settings.Theme.BackgroundBlurEnabled = themeSettings["BackgroundBlurEnabled"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("ScrollbarOpacity")) {
-					try {
-						settings.Theme.ScrollbarOpacity = themeSettings["ScrollbarOpacity"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("Palette")) {
-					try {
-						settings.Theme.Palette = themeSettings["Palette"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("StatusPalette")) {
-					try {
-						settings.Theme.StatusPalette = themeSettings["StatusPalette"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("FeatureHeading")) {
-					try {
-						settings.Theme.FeatureHeading = themeSettings["FeatureHeading"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("Style")) {
-					try {
-						settings.Theme.Style = themeSettings["Style"];
-					} catch (...) {}
-				}
-
-				// Handle FullPalette with extra care
-				if (themeSettings.contains("FullPalette") && themeSettings["FullPalette"].is_array()) {
-					const auto& paletteJson = themeSettings["FullPalette"];
-					size_t jsonSize = paletteJson.size();
-					size_t requiredSize = settings.Theme.FullPalette.size();  // Should be ImGuiCol_COUNT (55)
-
-					if (jsonSize < requiredSize) {
-						logger::warn("Theme '{}' FullPalette has {} elements, expected {}. Using defaults for missing colors.",
-							themeName, jsonSize, requiredSize);
-					}
-
-					// Load colors that exist, use defaults for the rest
-					for (size_t i = 0; i < requiredSize; ++i) {
-						if (i < jsonSize) {
-							try {
-								if (paletteJson[i].is_array() && paletteJson[i].size() >= 4) {
-									settings.Theme.FullPalette[i] = ImVec4(
-										paletteJson[i][0].get<float>(),
-										paletteJson[i][1].get<float>(),
-										paletteJson[i][2].get<float>(),
-										paletteJson[i][3].get<float>());
-								} else {
-									settings.Theme.FullPalette[i] = defaultTheme.FullPalette[i];
-								}
-							} catch (...) {
-								settings.Theme.FullPalette[i] = defaultTheme.FullPalette[i];
-							}
-						} else {
-							settings.Theme.FullPalette[i] = defaultTheme.FullPalette[i];
-						}
-					}
-				} else {
-					// FullPalette missing, use all defaults
-					logger::warn("Theme '{}' missing FullPalette array, using defaults", themeName);
-					settings.Theme.FullPalette = defaultTheme.FullPalette;
-				}
-			} catch (const std::exception& e) {
-				logger::error("Error loading theme '{}': {}. Using previous theme.", themeName, e.what());
-				settings.Theme = backupTheme;
-				return false;
-			}
+			settings.Theme = themeSettings;
+			PaletteFromJson(themeSettings, settings.Theme.FullPalette);
 
 			MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 			auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
@@ -561,7 +524,6 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 			return true;
 		} catch (const std::exception& e) {
 			logger::warn("Error loading theme '{}': {}", themeName, e.what());
-			// Restore backup to maintain UI consistency
 			settings.Theme = backupTheme;
 			return false;
 		}
@@ -677,7 +639,7 @@ void Menu::DrawSettings()
 	// Apply theme styling with universal contrast enhancement
 	ThemeManager::SetupImGuiStyle(*this);
 
-	ImGui::DockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode);
+	ImGui::DockSpaceOverViewport(0, NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
@@ -867,7 +829,7 @@ void Menu::DrawOverlay()
 {
 	// Only process reloads when ImGui is NOT in an active frame
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
-	bool canReload = ctx && !ctx->WithinFrameScope && !ctx->WithinEndChild;
+	bool canReload = ctx && !ctx->WithinFrameScope && ctx->WithinEndChildID == 0;
 
 	// Process deferred font reload BEFORE any ImGui operations
 	// This is the safest place to do font atlas modifications
@@ -949,9 +911,15 @@ void Menu::ProcessInputEventQueue()
 		}
 		if (event.device == RE::INPUT_DEVICE::kMouse) {
 			logger::trace("Detect mouse scan code {} value {} pressed: {}", event.keyCode, event.value, event.IsPressed());
+			auto* ew = EditorWindow::GetSingleton();
+			bool flying = ew && ew->IsPreviewFlying();
 			if (event.keyCode > 7) {  // middle scroll
-				io.AddMouseWheelEvent(0, event.value * (event.keyCode == 8 ? 1 : -1));
-			} else {
+				if (ew && ew->previewMode == EditorWindow::PreviewMode::FreeCamera) {
+					ew->AdjustFlySpeed(event.keyCode == 8 ? 1.0f : -1.0f);
+				} else if (!flying) {
+					io.AddMouseWheelEvent(0, event.value * (event.keyCode == 8 ? 1 : -1));
+				}
+			} else if (!flying) {
 				if (event.keyCode > 5)
 					event.keyCode = 5;
 				io.AddMouseButtonEvent(event.keyCode, event.IsPressed());
@@ -1043,7 +1011,20 @@ void Menu::ProcessInputEventQueue()
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
 						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
-						{ settings.WeatherEditorToggleKey, []() { auto p = RE::PlayerCharacter::GetSingleton(); if (p && p->parentCell) EditorWindow::GetSingleton()->open = !EditorWindow::GetSingleton()->open; } },
+						{ settings.WeatherEditorToggleKey, []() {
+							 auto* ew = EditorWindow::GetSingleton();
+							 if (!ew)
+								 return;
+							 if (ew->GetPreviewMode() == EditorWindow::PreviewMode::FreeCamera) {
+								 // Flying → lock camera position for editing
+								 ew->ToggleFreeCameraLock();
+							 } else if (ew->IsInPreviewMode()) {
+								 // Locked or PlayMode → fully exit preview
+								 ew->ExitPreviewMode();
+							 } else if (EditorWindow::CanBeOpen()) {
+								 ew->open = !ew->open;
+							 }
+						 } },
 					};
 					for (const auto& ka : keyActions) {
 						// Check if key matches last key in combo and all modifiers are held (exact match)
@@ -1083,7 +1064,9 @@ void Menu::ProcessInputEventQueue()
 				// Handle ESC key for menu and editor window
 				auto* editorWindow = EditorWindow::GetSingleton();
 				if (key == VK_ESCAPE) {
-					if (editorWindow && editorWindow->open && editorWindow->ShouldHandleEscapeKey()) {
+					if (editorWindow && editorWindow->IsInPreviewMode()) {
+						editorWindow->ExitPreviewMode();
+					} else if (editorWindow && editorWindow->open && editorWindow->ShouldHandleEscapeKey()) {
 						editorWindow->open = false;
 					} else if (IsEnabled && (!editorWindow || !editorWindow->open)) {
 						IsEnabled = false;
@@ -1152,6 +1135,12 @@ bool Menu::ShouldSwallowInput()
 {
 	auto editorWindow = EditorWindow::GetSingleton();
 	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup() || (editorWindow && editorWindow->open);
+}
+
+bool Menu::IsPreviewFlying()
+{
+	auto editorWindow = EditorWindow::GetSingleton();
+	return editorWindow && editorWindow->IsPreviewFlying();
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)

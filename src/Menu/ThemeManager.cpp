@@ -100,7 +100,7 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	auto& io = ImGui::GetIO();
 	if (io.FontDefault) {
 		constexpr float kBaselineFontSize = Constants::DEFAULT_SCREEN_HEIGHT * Constants::DEFAULT_FONT_RATIO;
-		fontScale = io.FontDefault->FontSize / kBaselineFontSize;
+		fontScale = io.FontDefault->LegacySize / kBaselineFontSize;
 	}
 	const float scaleFactor = fontScale * exp2(globalScale);
 	styleCopy.ScaleAllSizes(scaleFactor);
@@ -123,6 +123,7 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	styleCopy.MouseCursorScale = 1.f;
 	style = styleCopy;
 	style.HoverDelayNormal = themeSettings.TooltipHoverDelay;
+	style.FontScaleMain = exp2(globalScale);
 
 	// Always use the unified FullPalette system instead of switching between simple/full
 	// This ensures consistent behavior regardless of UI presentation mode
@@ -177,36 +178,12 @@ void ThemeManager::ForceApplyDefaultTheme()
 	auto& style = ImGui::GetStyle();
 	auto& colors = style.Colors;
 
-	// Apply the Default.json theme's FullPalette directly to ImGui colors
-	if (defaultThemeSettings.contains("FullPalette") && defaultThemeSettings["FullPalette"].is_array()) {
-		auto& palette = defaultThemeSettings["FullPalette"];
-
-		for (size_t i = 0; i < std::min(palette.size(), static_cast<size_t>(ImGuiCol_COUNT)); ++i) {
-			if (palette[i].is_array() && palette[i].size() >= 4) {
-				colors[i] = ImVec4(
-					palette[i][0].get<float>(),
-					palette[i][1].get<float>(),
-					palette[i][2].get<float>(),
-					palette[i][3].get<float>());
-			}
-		}
-		logger::info("ForceApplyDefaultTheme: Applied Default.json colors directly to ImGui");
-	} else {
-		logger::warn("ForceApplyDefaultTheme: Default.json missing FullPalette - applying basic dark theme");
-
-		// Fallback: Apply a basic dark theme that matches Default.json style
-		colors[ImGuiCol_WindowBg] = ImVec4(0.05f, 0.05f, 0.05f, 1.0f);    // Dark background
-		colors[ImGuiCol_Text] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);           // White text
-		colors[ImGuiCol_Border] = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);         // Gray border
-		colors[ImGuiCol_ChildBg] = ImVec4(0.03f, 0.03f, 0.03f, 1.0f);     // Slightly darker child background
-		colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 1.0f);     // Popup background
-		colors[ImGuiCol_Header] = ImVec4(0.2f, 0.2f, 0.2f, 1.0f);         // Header background
-		colors[ImGuiCol_HeaderHovered] = ImVec4(0.3f, 0.3f, 0.3f, 1.0f);  // Header hover
-		colors[ImGuiCol_HeaderActive] = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);   // Header active
-		colors[ImGuiCol_Button] = ImVec4(0.2f, 0.2f, 0.2f, 1.0f);         // Button background
-		colors[ImGuiCol_ButtonHovered] = ImVec4(0.3f, 0.3f, 0.3f, 1.0f);  // Button hover
-		colors[ImGuiCol_ButtonActive] = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);   // Button active
-	}
+	// Load palette using named-map or legacy-array deserialization
+	std::array<ImVec4, ImGuiCol_COUNT> palette;
+	Menu::PaletteFromJson(defaultThemeSettings, palette);
+	for (int i = 0; i < ImGuiCol_COUNT; i++)
+		colors[i] = palette[i];
+	logger::info("ForceApplyDefaultTheme: Applied Default.json colors directly to ImGui");
 }
 
 bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
@@ -241,12 +218,6 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	// Ensure we're not in the middle of a frame
 	if (ctx->WithinFrameScope) {
 		logger::error("ReloadFont: Cannot reload font within frame scope");
-		return false;
-	}
-
-	// Additional rendering state checks
-	if (ctx->CurrentWindow || ctx->CurrentTable) {
-		logger::error("ReloadFont: ImGui has active window/table state");
 		return false;
 	}
 
@@ -449,7 +420,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	}
 
 	// Verify font texture was created successfully
-	if (!io.Fonts->TexID) {
+	if (!io.Fonts->TexIsBuilt) {
 		logger::error("ReloadFont: Font texture not created");
 		return false;
 	}
@@ -461,7 +432,8 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		globalScale = Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
 	}
 
-	io.FontGlobalScale = exp2(globalScale);
+	ImGui::GetStyle().FontScaleMain = exp2(globalScale);
+	ImGui::GetStyle().FontSizeBase = 0.0f;  // Force UpdateFontsNewFrame to re-detect from font->LegacySize
 
 	cachedFontSize = fontSize;
 	// Also update cached font name in the menu instance

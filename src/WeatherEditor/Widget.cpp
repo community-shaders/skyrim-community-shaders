@@ -264,6 +264,14 @@ std::string Widget::GetFolderName()
 	}
 }
 
+bool Widget::BeginWidgetWindow()
+{
+	SetupWidgetWindowDefaults(GetWidgetTypeName());
+	bool result = Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags);
+	UpdateWidgetTypeSize(GetWidgetTypeName());
+	return result;
+}
+
 void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather)
 {
 	auto editorWindow = EditorWindow::GetSingleton();
@@ -279,21 +287,18 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			ImGui::SetKeyboardFocusHere(-1);
 	};
 
-	auto drawForceWeatherButton = [&](float height) {
+	auto drawForceWeatherButton = [&]() {
 		if (!showForceWeather || !weather)
 			return;
 		ImGui::SameLine();
 		bool isLocked = editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather;
 		const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
-		ImVec2 lockSize = ImGui::CalcTextSize(lockLabel);
-		lockSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-		lockSize.y = height;
 
 		if (isLocked) {
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
 		}
-		if (ImGui::Button(lockLabel, lockSize)) {
+		if (ImGui::Button(lockLabel)) {
 			if (isLocked)
 				editorWindow->UnlockWeather();
 			else
@@ -321,7 +326,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, ImGui::GetStyle().ItemSpacing.y));
 
 		drawSearchBar();
-		drawForceWeatherButton(iconSize);
+		drawForceWeatherButton();
 
 		// Transparent icon button style
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
@@ -367,14 +372,14 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		const float buttonHeight = ImGui::GetFrameHeight();
 		if (!menu) {
 			drawSearchBar();
-			drawForceWeatherButton(buttonHeight);
+			drawForceWeatherButton();
 			ImGui::Separator();
 			return;
 		}
 		const auto& palette = menu->GetTheme().StatusPalette;
 
 		drawSearchBar();
-		drawForceWeatherButton(buttonHeight);
+		drawForceWeatherButton();
 
 		auto styledTextButton = [&](const char* label, const ImVec4& color, const char* tooltip, auto callback) {
 			ImGui::SameLine();

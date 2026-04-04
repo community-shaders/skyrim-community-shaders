@@ -181,7 +181,7 @@ cmake --preset ALL
 **Linker errors:**
 
 -   Ensure you're building on Windows with D3D12 support
--   Verify Visual Studio 2022 is installed with C++ development tools
+-   Verify Visual Studio 2026 is installed with C++ development tools
 
 **CMake 4.0 Compatibility:**
 

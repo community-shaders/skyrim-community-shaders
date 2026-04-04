@@ -23,7 +23,7 @@ public:
 	virtual inline std::string GetShortName() override { return "Upscaling"; }
 	virtual inline bool SupportsVR() override { return true; }
 	virtual inline bool IsCore() const override { return false; }
-	virtual inline std::string_view GetCategory() const override { return "Display"; }
+	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kDisplay; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -68,9 +68,13 @@ public:
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
-		uint presetDLSS = 0;           // 0=Default, 1=J, 2=K, 3=L, 4=M
-		uint useGatherWideKernel = 1;  // 0=Legacy 3x3, 1=Gather wide-kernel
-		uint presetDLSSRR = 0;         // 0=Default, 1=D, 2=E
+		uint presetDLSS = 0;    // 0=Default, 1=J, 2=K, 3=L, 4=M
+		uint presetDLSSRR = 0;  // 0=Default, 1=D, 2=E
+		bool reflexLowLatencyMode = false;
+		bool reflexLowLatencyBoost = false;
+		bool reflexUseMarkersToOptimize = false;
+		bool reflexUseFPSLimit = false;
+		float reflexFPSLimit = 60.0f;
 	};
 
 	Settings settings;
@@ -79,7 +83,7 @@ public:
 	{
 		float2 jitter;
 		float useWideKernel;
-		float useGatherWideKernel;
+		float pad0;
 	};
 
 	struct UpscalingDataCB
@@ -103,6 +107,7 @@ public:
 	LARGE_INTEGER qpf;
 
 	// FG FPS Measurement for Overlay
+	bool IsFrameGenerationDx12PathActive() const;
 	bool IsFrameGenerationActive() const;
 	float GetFrameGenerationFrameTime() const;
 	bool IsUpscalingActive() const;

@@ -1,5 +1,5 @@
 # Shader Tests using ShaderTestFramework
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 4.2)
 
 # Option to enable/disable shader tests
 option(BUILD_SHADER_TESTS "Build shader unit tests (runs automatically before packaging)" ON)
@@ -18,7 +18,7 @@ FetchContent_Declare(
     ShaderTestFramework
     GIT_REPOSITORY https://github.com/KStocky/ShaderTestFramework.git
     # Pinned to specific commit for build reproducibility (Dec 14, 2025)
-    GIT_TAG 447807eaabcedb55635d763623f6263ca8e23aec
+    GIT_TAG dcbe56c46d474948c27134f570c50ff7110648f6
     GIT_CONFIG core.longpaths=true  # Enable long path support for Windows
 )
 
@@ -65,6 +65,13 @@ add_executable(shader_tests
 # Set C++23 standard (required by ShaderTestFramework)
 set_property(TARGET shader_tests PROPERTY CXX_STANDARD 23)
 set_property(TARGET shader_tests PROPERTY CXX_STANDARD_REQUIRED ON)
+
+if(MSVC)
+    # Suppress C4864 in tuplet (via ShaderTestFramework) for VS 2026 migration
+    if(TARGET ShaderTestFramework)
+        target_compile_options(ShaderTestFramework PUBLIC /wd4864)
+    endif()
+endif()
 
 # Set VS debugger working directory
 set_target_properties(shader_tests PROPERTIES
@@ -116,6 +123,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 target_link_libraries(shader_tests PRIVATE Catch2::Catch2)
+
+# Workaround: MSVC 14.50+ (VS 2026) has an Internal Compiler Error (ICE C1001)
+# in c2.dll when compiling Catch2 v3.11.0 with default optimizations.
+# Disabling optimizations for Catch2 avoids the ICE; Catch2 is a test harness
+# so the performance impact does not matter.
+if(MSVC AND MSVC_VERSION GREATER_EQUAL 1950)
+    if(TARGET Catch2)
+        target_compile_options(Catch2 PRIVATE /Od)
+    endif()
+    if(TARGET Catch2WithMain)
+        target_compile_options(Catch2WithMain PRIVATE /Od)
+    endif()
+endif()
 
 # Define USE_PIX for PIX capture support
 target_compile_definitions(shader_tests PRIVATE USE_PIX)

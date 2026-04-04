@@ -32,5 +32,5 @@ struct OverlayFeature : Feature
      *
      * Subclasses may override this to provide a different category.
      */
-	virtual std::string_view GetCategory() const override { return "Utility"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 };

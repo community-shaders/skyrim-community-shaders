@@ -56,8 +56,7 @@ void WeatherWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	const float scale = Util::GetUIScale();
-	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		// Draw header with search and all buttons
 		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
 
@@ -81,7 +80,7 @@ void WeatherWidget::DrawWidget()
 					const auto& result = searchResults[i];
 					std::string label = std::format("{} ({})", result.displayName, result.tabName);
 
-					if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_DontClosePopups)) {
+					if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
 						NavigateToSetting(result);
 						searchBuffer[0] = '\0';
 						searchResults.clear();
@@ -1046,7 +1045,7 @@ void WeatherWidget::DrawCloudSettings()
 			const float headerHeight = ImGui::GetFrameHeight();
 			const float badgePadding = ImGui::GetStyle().FramePadding.x;
 			const ImVec2 badgePos = {
-				ImGui::GetWindowPos().x + ImGui::GetContentRegionMax().x - badgeSize.x - badgePadding,
+				ImGui::GetWindowPos().x + ImGui::GetWindowSize().x - ImGui::GetStyle().WindowPadding.x - badgeSize.x - badgePadding,
 				headerScreenY + (headerHeight - badgeSize.y) * 0.5f
 			};
 			ImGui::GetWindowDrawList()->AddText(badgePos, ImGui::GetColorU32(ImGuiCol_CheckMark), kEnabledBadge);
@@ -1069,8 +1068,7 @@ void WeatherWidget::DrawCloudSettings()
 			ImGui::Spacing();
 			ImGui::Spacing();
 
-			// Make sliders 1/3 width
-			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.4f);
+			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.3f);
 			if (WeatherUtils::DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY))
 				changed = true;
 			ImGui::Spacing();
@@ -1086,7 +1084,7 @@ void WeatherWidget::DrawCloudSettings()
 				if (texture) {
 					float textureSize = 128.0f * scale;
 					float groupEndX = ImGui::GetItemRectMax().x;
-					float availRight = ImGui::GetContentRegionMax().x + ImGui::GetWindowPos().x - groupEndX;
+					float availRight = ImGui::GetWindowPos().x + ImGui::GetWindowSize().x - ImGui::GetStyle().WindowPadding.x - groupEndX;
 					float offset = std::max(20.0f * scale, (availRight - textureSize) * 0.5f);
 					ImGui::SameLine(0.0f, offset);
 					ImGui::BeginGroup();
@@ -1102,7 +1100,7 @@ void WeatherWidget::DrawCloudSettings()
 
 			ImGui::Spacing();
 			ImGui::Spacing();
-			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str(), 120.0f * scale)) {
+			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str(), 120.0f)) {
 				TOD::RenderTODHeader();
 				TOD::DrawTODSeparator();
 
@@ -1165,17 +1163,19 @@ void WeatherWidget::DrawFogSettings()
 	bool changed = false;
 
 	const float scale = Util::GetUIScale();
-	if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit)) {
-		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 200.0f * scale);
-		ImGui::TableSetupColumn("Day", ImGuiTableColumnFlags_WidthFixed, 250.0f * scale);
-		ImGui::TableSetupColumn("Night", ImGuiTableColumnFlags_WidthFixed, 250.0f * scale);
+	if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
+		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 80.0f * scale);
+		ImGui::TableSetupColumn("Day", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+		ImGui::TableSetupColumn("Night", ImGuiTableColumnFlags_WidthStretch, 1.0f);
 
 		// Header row
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 		ImGui::TableSetColumnIndex(1);
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Day");
 		ImGui::TableSetColumnIndex(2);
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Night");
 
 		ImGui::TableNextRow();
@@ -1203,6 +1203,7 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine();
 		}
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Near");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
@@ -1230,6 +1231,7 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine();
 		}
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Far");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
@@ -1257,6 +1259,7 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine();
 		}
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Power");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
@@ -1284,6 +1287,7 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine();
 		}
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Max");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
@@ -1327,6 +1331,8 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	bool changed = false;
 	auto* editorWindow = EditorWindow::GetSingleton();
 	bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
+
+	ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * WidgetDefaults::kSliderWidthRatio);
 
 	for (auto& p : properties) {
 		// Filter individual properties based on search
@@ -1382,6 +1388,8 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 			ImGui::PopStyleColor(2);
 		}
 	}
+
+	ImGui::PopItemWidth();
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();

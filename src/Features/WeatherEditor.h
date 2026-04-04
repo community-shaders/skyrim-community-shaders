@@ -17,7 +17,7 @@ public:
 	virtual inline std::string GetName() override { return "Weather Editor"; }
 	virtual inline std::string GetShortName() override { return "WeatherEditor"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "WEATHER"; }
-	virtual inline std::string_view GetCategory() const override { return "Utility"; }
+	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
 	virtual bool IsInMenu() const override { return true; }
