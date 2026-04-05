@@ -311,7 +311,29 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + skyBoost);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
+
 	psout.Color.w = input.Color.w * baseColor.w;
+
+#	if defined(CLOUDS)
+	if (SharedData::enbSettings.Enable) {
+		psout.Color.w = saturate(input.Color.w * baseColor.w * SharedData::enbSettings.CloudsOpacity);
+		
+		baseColor.xyz = pow(baseColor.xyz, SharedData::enbSettings.CloudsCurve);
+		baseColor.xyz = lerp(baseColor.xyz, dot(baseColor.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
+		baseColor.xyz *= SharedData::enbSettings.CloudsColorFilter;
+		baseColor.xyz *= SharedData::enbSettings.CloudsIntensity;
+
+		float cloudsEdgeAlpha = saturate(1.0 - (baseColor.w + SharedData::enbSettings.CloudsEdgeClamp));
+		float3 sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 12.0) * SharedData::SunColor.xyz;
+		float3 masserPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::MasserDirection.xyz)), 12.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+		float3 secundaPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SecundaDirection.xyz)), 12.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+
+		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity;
+
+		baseColor.xyz = baseColor.xyz + baseColor.xyz * cloudsScatter;
+	}
+#	endif
+
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyBoost;
 
 #		endif
@@ -324,25 +346,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	psout.MotionVectors = float4(screenMotionVector, 0, psout.Color.w);
 	psout.Normal = float4(0.5, 0.5, 0, psout.Color.w);
-
-#	if defined(CLOUDS)
-	if (SharedData::enbSettings.Enable) {
-		psout.Color.w = saturate(psout.Color.w * SharedData::enbSettings.CloudsOpacity);
-		psout.Color.xyz = pow(psout.Color.xyz, pow(SharedData::enbSettings.CloudsCurve, 0.1));
-		psout.Color.xyz = lerp(psout.Color.xyz, dot(psout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
-		psout.Color.xyz *= SharedData::enbSettings.CloudsColorFilter;
-		psout.Color.xyz *= SharedData::enbSettings.CloudsIntensity;
-
-		float cloudsEdgeAlpha = saturate(1.0 - (baseColor.w + SharedData::enbSettings.CloudsEdgeClamp));
-		float3 sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 12.0) * SharedData::SunColor.xyz;
-		float3 masserPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::MasserDirection.xyz)), 12.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
-		float3 secundaPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SecundaDirection.xyz)), 12.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
-
-		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity;
-
-		psout.Color.xyz = psout.Color.xyz + psout.Color.xyz * cloudsScatter;
-	}
-#	endif
 
 #	if defined(CLOUD_SHADOWS) && defined(CLOUDS) && !defined(DEFERRED)
 	psout.CloudShadows = float4(1, 1, 1, psout.Color.w);
