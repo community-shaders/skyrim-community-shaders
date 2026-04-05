@@ -314,10 +314,10 @@ PS_OUTPUT main(PS_INPUT input)
 
 	psout.Color.w = input.Color.w * baseColor.w;
 
-#	if defined(CLOUDS)
+#			if defined(CLOUDS)
 	if (SharedData::enbSettings.Enable) {
 		psout.Color.w = saturate(input.Color.w * baseColor.w * SharedData::enbSettings.CloudsOpacity);
-		
+
 		baseColor.xyz = pow(baseColor.xyz, SharedData::enbSettings.CloudsCurve);
 		baseColor.xyz = lerp(baseColor.xyz, dot(baseColor.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
 		baseColor.xyz *= SharedData::enbSettings.CloudsColorFilter;
@@ -332,7 +332,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		baseColor.xyz = baseColor.xyz + baseColor.xyz * cloudsScatter;
 	}
-#	endif
+#			endif
 
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyBoost;
 
