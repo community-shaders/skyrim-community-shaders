@@ -2,6 +2,7 @@
 
 #if defined(PSHADER)
 #	include "Common/FrameBuffer.hlsli"
+#	include "Common/Math.hlsli"
 #	include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
@@ -29,6 +30,14 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
+	float2 originalUV = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
+
+	// Remove jitter offset to get the correct sampling coordinates
+	float2 uv = originalUV - (jitter * SharedData::BufferDim.zw);
+
+	// Clamp within bounds
+	uv = clamp(uv, 0.0, FrameBuffer::DynamicResolutionParams1.xy);
+
 #	if defined(VR)
 	// In VR the vanilla waterline draw (DrawIndexedInstanced, 2 instances) emits
 	// identical left-eye clip positions for both instances.  The internal-res mask
@@ -54,20 +63,19 @@ PS_OUTPUT main(PS_INPUT input)
 	// itself, which always maps to the center tile (12).
 	float waterHeight = SharedData::GetWaterData(float3(0, 0, 0), eyeIndex).w;
 
-	// Sentinel: -FLT_MAX means no water body is present in this tile.
-	if (waterHeight > -1e9) {
+	// GetWaterData returns INT_MIN (~-2.147e9) when the tile is outside the 5x5 grid.
+	if (waterHeight > WATER_HEIGHT_NO_TILE_SENTINEL) {
 		// Unpack from side-by-side stereo layout to per-eye UV [0, 1]
 		float2 eyeUV = float2(input.TexCoord.x * 2.0 - (float)eyeIndex, input.TexCoord.y);
 
 		// Convert to NDC [-1, 1].  UV y=0 is the top of the screen; NDC y=+1 is the top.
 		float2 ndc = float2(eyeUV.x * 2.0 - 1.0, 1.0 - eyeUV.y * 2.0);
 
-		// Sample the scene depth.  SceneDepth is depthCopy (t1), explicitly bound
-		// by the C++ pass.  ConvertUVToSampleCoord handles stereo layout and dynamic
-		// resolution.
-		float depth = SceneDepth.Load(SharedData::ConvertUVToSampleCoord(eyeUV, eyeIndex)).x;
+		// Sample depth using the shared de-jittered stereo UV (already DR-adjusted above).
+		// uv is in stereo space so no ConvertUVToSampleCoord round-trip is needed.
+		float depth = SceneDepth.Load(int3(uv * SharedData::BufferDim.xy, 0)).x;
 
-		if (depth > 0.0) {
+		if (depth > EPSILON_DEPTH_SKY) {
 			// Geometry pixel: reconstruct world position from depth.
 			// CameraViewProjInverse[eyeIndex] maps clip-space back to the per-eye
 			// camera-relative world space.  waterHeight has been adjusted to the same
@@ -93,7 +101,7 @@ PS_OUTPUT main(PS_INPUT input)
 			float threshold = (cameraUnderwater && lookingUp) ? waterHeight + kSurfaceBias : waterHeight - kSurfaceBias;
 			psout.UnderwaterMask = (worldPos.z < threshold) ? 1.0 : 0.0;
 		} else {
-			// depth == 0: sky / unrendered pixels (reversed-Z depth clear value).
+			// depth <= EPSILON_DEPTH_SKY: sky / unrendered pixels (reversed-Z depth clear value).
 			// Unproject to obtain the per-pixel ray direction and decide based on that.
 			float4 worldFarPos = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], float4(ndc, 0.0, 1.0));
 			worldFarPos /= worldFarPos.w;
@@ -108,14 +116,6 @@ PS_OUTPUT main(PS_INPUT input)
 	// The left-eye result from the vanilla mask is still accurate here; the right-eye
 	// will be approximate, but in the absence of nearby water the visual impact is nil.
 #	endif
-
-	float2 originalUV = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
-
-	// Remove jitter offset to get the correct sampling coordinates
-	float2 uv = originalUV - (jitter * SharedData::BufferDim.zw);
-
-	// Clamp within bounds
-	uv = clamp(uv, 0.0, FrameBuffer::DynamicResolutionParams1.xy);
 
 	// Upscale using linear sampling with jitter-corrected coordinates
 	psout.UnderwaterMask = UnderwaterMask.SampleLevel(LinearSampler, uv, 0);
