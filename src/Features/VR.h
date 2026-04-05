@@ -129,10 +129,10 @@ public:
 	bool IsStereoOptimizationCullingReady() const
 	{
 		return REL::Module::IsVR() &&
-		       stereoOpt.loaded &&
-		       stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off &&
-		       !stereoOpt.settings.debugSkipMerge &&
-		       stereoBlendOverwriteCS;
+		       stereoOpt.CanDispatchStencil() &&
+		       stereoBlendOverwriteCS &&
+		       stereoBlendCopyTex &&
+		       stereoBlendCB;
 	}
 	static bool AnyScreenSpaceEffectLoaded();
 

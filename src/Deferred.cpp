@@ -377,11 +377,9 @@ void Deferred::DeferredPasses()
 		// Bind null when disabled so stale mode data doesn't cause incorrect early-exits
 		// in DeferredCompositeCS (null SRV reads return 0 = MODE_DISOCCLUDED, all pixels composite normally).
 		auto& vrStereoOpt = globals::features::vr.stereoOpt;
-		if (vrStereoOpt.loaded) {
-			bool stereoActive = vrStereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
-			ID3D11ShaderResourceView* modeSRV = stereoActive ? vrStereoOpt.GetModeTextureSRV() : nullptr;
-			context->CSSetShaderResources(16, 1, &modeSRV);
-		}
+		bool stereoCullingReady = globals::features::vr.IsStereoOptimizationCullingReady();
+		ID3D11ShaderResourceView* modeSRV = stereoCullingReady ? vrStereoOpt.GetModeTextureSRV() : nullptr;
+		context->CSSetShaderResources(16, 1, &modeSRV);
 
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -392,10 +390,8 @@ void Deferred::DeferredPasses()
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 		// Unbind mode texture SRV
-		if (vrStereoOpt.loaded) {
-			ID3D11ShaderResourceView* nullSRV = nullptr;
-			context->CSSetShaderResources(16, 1, &nullSRV);
-		}
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		context->CSSetShaderResources(16, 1, &nullSRV);
 	}
 
 	// VR: Deactivate stencil culling now that geometry rendering is complete.

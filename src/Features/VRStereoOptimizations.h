@@ -125,6 +125,26 @@ struct VRStereoOptimizations
 	void DispatchStencil();
 
 	/**
+	 * @brief Returns true when stencil classification/write resources are ready.
+	 *
+	 * This mirrors DispatchStencil prerequisites except transient per-frame inputs
+	 * like depth SRV availability.
+	 */
+	bool CanDispatchStencil() const
+	{
+		return loaded &&
+		       settings.stereoMode != StereoMode::Off &&
+		       !settings.debugSkipMerge &&
+		       stencilCS &&
+		       stencilWriteVS &&
+		       stencilWritePS &&
+		       texPerPixelMode &&
+		       paramsCB &&
+		       stencilWriteDSS &&
+		       stencilWriteRS;
+	}
+
+	/**
 	 * @brief Creates or retrieves a modified DSS with stencil NOT_EQUAL test.
 	 *
 	 * Clones the given DSS with read-only stencil (WriteMask=0x00, Func=NOT_EQUAL, ref=1)
