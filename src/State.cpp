@@ -423,6 +423,7 @@ void State::SaveToJson(nlohmann::json& settings)
 	json general;
 	general["Enable Shaders"] = shaderCache->IsEnabled();
 	general["Enable Disk Cache"] = shaderCache->IsDiskCache();
+	general["Skip Unchanged Shaders"] = shaderCache->IsSkipUnchangedShaders();
 	general["Enable Async"] = shaderCache->IsAsync();
 
 	settings["General"] = general;
@@ -499,6 +500,8 @@ void State::LoadFromJson(nlohmann::json& settings)
 			shaderCache->SetEnabled(general["Enable Shaders"]);
 		if (general.contains("Enable Disk Cache") && general["Enable Disk Cache"].is_boolean())
 			shaderCache->SetDiskCache(general["Enable Disk Cache"]);
+		if (general.contains("Skip Unchanged Shaders") && general["Skip Unchanged Shaders"].is_boolean())
+			shaderCache->SetSkipUnchangedShaders(general["Skip Unchanged Shaders"]);
 		if (general.contains("Enable Async") && general["Enable Async"].is_boolean())
 			shaderCache->SetAsync(general["Enable Async"]);
 	}

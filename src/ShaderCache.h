@@ -296,6 +296,10 @@ namespace SIE
 		std::atomic<uint64_t> totalTasks = 0;
 		std::atomic<uint64_t> failedTasks = 0;
 		std::atomic<uint64_t> cacheHitTasks = 0;            // number of compiles of a previously seen shader combo
+		std::atomic<uint64_t> diskHitTasks = 0;             // tasks resolved from disk cache rather than compiled
+		std::atomic<uint64_t> diskHitPriorityWeight = 0;    // cumulative priority weight of disk-hit tasks
+		LARGE_INTEGER compilationPhaseStart = { 0 };        // time of first non-disk-hit task dispatch
+		std::atomic<bool> compilationPhaseStarted = false;  // set when first actual compilation begins
 		std::atomic<uint64_t> slowTasks = 0;                // shaders taking >= 2s
 		std::atomic<uint64_t> verySlowTasks = 0;            // shaders taking >= 8s
 		std::atomic<uint64_t> totalPriorityWeight = 0;      // sum of (GetPriority()+1) for all queued tasks
@@ -352,6 +356,7 @@ namespace SIE
 		ID3DBlob* blob;
 		ShaderCompilationTask::Status status;
 		system_clock::time_point compileTime = system_clock::now();
+		bool loadedFromDisk = false;  ///< true when the shader blob was read from the disk cache rather than compiled
 	};
 
 	class UpdateListener;
@@ -411,6 +416,8 @@ namespace SIE
 		void DeleteDiskCache();
 		void ValidateDiskCache();
 		void WriteDiskCacheInfo();
+		bool IsSkipUnchangedShaders() const;
+		void SetSkipUnchangedShaders(bool value);
 		bool UseFileWatcher() const;
 		void SetFileWatcher(bool value);
 
@@ -465,7 +472,7 @@ namespace SIE
 		*/
 		bool Clear(const std::string& a_path);
 
-		bool AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, ID3DBlob* a_blob);
+		bool AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, ID3DBlob* a_blob, bool fromDisk = false);
 
 		enum class ClaimResult
 		{
@@ -478,6 +485,7 @@ namespace SIE
 		ID3DBlob* GetCompletedShader(const std::string& a_key);
 		ID3DBlob* GetCompletedShader(const SIE::ShaderCompilationTask& a_task);
 		ID3DBlob* GetCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
+		bool IsShaderLoadedFromDisk(const std::string& a_key);
 		ShaderCompilationTask::Status GetShaderStatus(const std::string& a_key);
 		std::string GetShaderStatsString(bool a_timeOnly = false, bool a_elapsedOnly = false);
 
@@ -507,6 +515,7 @@ namespace SIE
 		 */
 		uint64_t GetCurrentFailedCount();
 		uint64_t GetTotalTasks();
+		uint64_t GetDiskHitTasks();
 		void IncCacheHitTasks();
 		void ToggleErrorMessages();
 		void DisableShaderBlocking();
@@ -799,6 +808,7 @@ namespace SIE
 
 		bool isEnabled = true;
 		bool isDiskCache = true;
+		bool isSkipUnchangedShaders = true;  ///< when true, recompile a disk-cached shader only if its source is newer
 		bool isAsync = true;
 		bool isDump = false;
 		bool hideError = false;
