@@ -98,7 +98,7 @@ namespace Util
 			if (auto* menu = globals::menu) {
 				if (auto* subtextFont = menu->GetFont(Menu::FontRole::Subtext)) {
 					previousFont = ImGui::GetFont();
-					ImGui::PushFont(subtextFont);
+					ImGui::PushFont(subtextFont, subtextFont->LegacySize);
 				}
 			}
 		}
@@ -520,6 +520,113 @@ namespace Util
 		return StyledButtonWrapper(color, hover, active);
 	}
 
+	StyledButtonWrapper TransparentIconButtonStyle()
+	{
+		constexpr float kHoverAlpha = 0.25f;
+		auto hoverColor = Menu::GetSingleton()->GetTheme().Palette.Text;
+		hoverColor.w = kHoverAlpha;
+		return StyledButtonWrapper(ImVec4(0, 0, 0, 0), hoverColor, hoverColor);
+	}
+
+	ImVec4 GetIconTint()
+	{
+		const auto& theme = Menu::GetSingleton()->GetTheme();
+		return theme.UseMonochromeIcons ? theme.Palette.Text : ImVec4(1, 1, 1, 1);
+	}
+
+	// Shared constants for title-bar button overlays
+	static constexpr float kButtonPad = 2.0f;            // extra padding around hit/highlight area
+	static constexpr float kCrossDiag = 0.5f * 0.7071f;  // half-size * 1/sqrt(2) for cross line endpoints
+	static constexpr float kCrossInset = 1.0f;           // inward inset so cross doesn't touch edges
+
+	// Compute the bounding rect for a title-bar button of font-sized square + padding.
+	static ImRect ButtonBB(const ImVec2& origin, float fontSize)
+	{
+		const float full = fontSize + kButtonPad * 2.0f;
+		return ImRect(origin, ImVec2(origin.x + full, origin.y + full));
+	}
+
+	// Draws a rounded highlight overlay for a title bar button.
+	static void DrawRoundedButtonHighlight(ImGuiWindow* window, const ImRect& bb, float rounding)
+	{
+		ImGuiContext& g = *ImGui::GetCurrentContext();
+		bool isTop = (g.HoveredWindow == window);
+		bool hovered = isTop && ImGui::IsMouseHoveringRect(bb.Min, bb.Max, false);
+		bool held = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
+		if (hovered || held)
+			window->DrawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered), rounding);
+	}
+
+	// Draws a rounded close button overlay, matching native ImGui CloseButton position.
+	static void DrawRoundedCloseButton(ImGuiWindow* window, bool* p_open)
+	{
+		const auto& style = ImGui::GetStyle();
+		const float sz = ImGui::GetFontSize();
+		const ImVec2 pos(window->Rect().Max.x - window->WindowBorderSize - style.FramePadding.x - sz - kButtonPad,
+			window->Rect().Min.y + style.FramePadding.y - kButtonPad);
+		const ImRect bb = ButtonBB(pos, sz);
+		const float rounding = (sz + kButtonPad * 2.0f) * 0.5f;
+
+		ImGuiContext& g = *ImGui::GetCurrentContext();
+		bool isTop = (g.HoveredWindow == window);
+		bool hovered = isTop && ImGui::IsMouseHoveringRect(bb.Min, bb.Max, false);
+
+		window->DrawList->PushClipRect(window->Rect().Min, window->Rect().Max);
+		DrawRoundedButtonHighlight(window, bb, rounding);
+
+		// Cross lines — matches ImGui's internal RenderCloseButton geometry
+		const ImVec2 c = bb.GetCenter();
+		const float d = sz * kCrossDiag - kCrossInset;
+		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+		window->DrawList->AddLine({ c.x - d, c.y - d }, { c.x + d, c.y + d }, col);
+		window->DrawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
+		window->DrawList->PopClipRect();
+
+		if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+			*p_open = false;
+	}
+
+	// Draws a rounded highlight for the collapse/triangle button in the title bar.
+	static void DrawRoundedCollapseHighlight(ImGuiWindow* window)
+	{
+		if (window->Flags & ImGuiWindowFlags_NoCollapse)
+			return;
+		if (ImGui::GetStyle().WindowMenuButtonPosition == ImGuiDir_None)
+			return;
+
+		const auto& style = ImGui::GetStyle();
+		const float sz = ImGui::GetFontSize();
+		const ImVec2 pos(window->Pos.x + window->WindowBorderSize + style.FramePadding.x - kButtonPad,
+			window->Pos.y + style.FramePadding.y - kButtonPad);
+		const ImRect bb = ButtonBB(pos, sz);
+		const float rounding = (sz + kButtonPad * 2.0f) * 0.5f;
+
+		window->DrawList->PushClipRect(window->Rect().Min, window->Rect().Max);
+		DrawRoundedButtonHighlight(window, bb, rounding);
+
+		// Redraw the triangle arrow on top of the highlight so it stays visible
+		const ImVec2 arrowPos(pos.x + kButtonPad, pos.y + kButtonPad);
+		const ImGuiDir dir = window->Collapsed ? ImGuiDir_Right : ImGuiDir_Down;
+		ImGui::RenderArrow(window->DrawList, arrowPos, ImGui::GetColorU32(ImGuiCol_Text), dir, 1.0f);
+
+		window->DrawList->PopClipRect();
+	}
+
+	bool BeginWithRoundedClose(const char* name, bool* p_open, ImGuiWindowFlags flags)
+	{
+		// Hide native sharp-cornered highlights; we draw rounded ones after Begin()
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0, 0, 0, 0));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0, 0, 0, 0));
+		bool visible = ImGui::Begin(name, p_open, flags);
+		ImGui::PopStyleColor(2);
+		if (auto* window = ImGui::GetCurrentWindowRead()) {
+			DrawRoundedCollapseHighlight(window);
+			if (p_open)
+				DrawRoundedCloseButton(window, p_open);
+		}
+		return visible;
+	}
+
 	// SectionWrapper implementation
 	SectionWrapper::SectionWrapper(const char* title, const char* description, const ImVec4& titleColor, bool isVisible) :
 		m_shouldDraw(isVisible),
@@ -671,6 +778,7 @@ namespace Util
 
 		// Move cursor to next line
 		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + 8.0f));
+		ImGui::Dummy(ImVec2(availableWidth, 0.0f));
 		return clicked;
 	}
 
@@ -734,6 +842,7 @@ namespace Util
 
 			// Move cursor to next line
 			ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + textSize.y + 8.0f));
+			ImGui::Dummy(ImVec2(availableWidth, 0.0f));
 		}
 
 		return stateChanged;

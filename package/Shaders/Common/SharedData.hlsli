@@ -23,7 +23,7 @@ namespace SharedData
 		bool InInterior;  // If the area lacks a directional shadow light e.g. the sun or moon
 		bool InMapMenu;   // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;     // HideSky flag in WorldSpace, e.g. Blackreach
-		float MipBias;    // Offset to mip level for TAA sharpness#
+		float MipBias;    // Offset to mip level for TAA sharpness
 		float pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
@@ -52,7 +52,7 @@ namespace SharedData
 		bool EnableShadows;
 		bool ExtendShadows;
 		bool EnableParallaxWarpingFix;
-		float1 pad0;
+		bool pad0;
 	};
 
 	struct CubemapCreatorSettings
@@ -197,7 +197,8 @@ namespace SharedData
 		float SkyIBLSaturation;
 		float FogAmount;
 		uint DALCMode;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky
-		float2 pad0;
+		uint DisableInInteriors;
+		float pad0;
 	};
 
 	struct ExtendedTranslucencySettings
@@ -262,15 +263,15 @@ namespace SharedData
 	};
 
 	struct RaytracingSettings
-    {
-        float InteriorDirectional;
-        float Ambient;
-        float Reflection;
-        uint Albedo;
+	{
+		float InteriorDirectional;
+		float Ambient;
+		float Reflection;
+		uint Albedo;
 		uint PathTracing;
 		uint3 _padding;
-    };
-	
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;

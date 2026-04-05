@@ -10,14 +10,14 @@
 #include "TruePBR.h"
 #include "Util.h"
 
+#include "Features/DX12Interop.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
+#include "Features/Raytracing.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
-#include "Features/DX12Interop.h"
-#include "Features/Raytracing.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 
@@ -356,6 +356,10 @@ struct BSInputDeviceManager_PollInputDevices
 {
 	static void thunk(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::InputEvent* const* a_events)
 	{
+		// Reflex sleep/cap runs here by design: this executes before rendering work for the frame.
+		// UpdateReflex() enforces "once per frame" internally in case this hook is hit multiple times.
+		globals::features::upscaling.streamline.UpdateReflex();
+
 		bool blockedDevice = true;
 
 		auto menu = globals::menu;
@@ -397,6 +401,11 @@ struct BSInputDeviceManager_PollInputDevices
 		}
 
 		if (blockedDevice && menu->ShouldSwallowInput()) {  //the menu is open, eat all keypresses
+			// During active flying preview, let input reach the game for movement/camera
+			if (menu->IsPreviewFlying()) {
+				func(a_dispatcher, a_events);
+				return;
+			}
 			constexpr RE::InputEvent* const dummy[] = { nullptr };
 			func(a_dispatcher, dummy);
 			return;
@@ -826,7 +835,7 @@ namespace Hooks
 	/**
 	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
 	 *
-	 * Sets up function hooks and virtual method overrides for shader management, input polling, rendering pipeline stages, compute shader dispatch, material setup, batch rendering, and window procedure handling. Applies memory patches to adjust render pass cache sizes and offsets. Installs additional update hooks for frame timing and Reflex marker integration when not in VR mode.
+	 * Sets up function hooks and virtual method overrides for shader management, input polling, rendering pipeline stages, compute shader dispatch, material setup, batch rendering, and window procedure handling. Applies memory patches to adjust render pass cache sizes and offsets. Installs additional update hooks for frame timing and Reflex frame pacing where applicable.
 	 */
 	void Install()
 	{
@@ -835,6 +844,7 @@ namespace Hooks
 			stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
 		}
 
+		// This input hook also drives per-frame Reflex update (see BSInputDeviceManager_PollInputDevices::thunk).
 		logger::info("Hooking BSInputDeviceManager::PollInputDevices");
 		stl::write_thunk_call<BSInputDeviceManager_PollInputDevices>(REL::RelocationID(67315, 68617).address() + REL::Relocate(0x7B, 0x7B, 0x81));
 

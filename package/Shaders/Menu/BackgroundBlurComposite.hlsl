@@ -4,7 +4,7 @@
 cbuffer WindowBuffer : register(b1)
 {
 	float4 WindowRect;    // x = minX, y = minY, z = maxX, w = maxY (in pixels)
-	float4 WindowParams;  // x = cornerRadius, y = screenWidth, z = screenHeight, w = unused
+	float4 WindowParams;  // x = cornerRadius, y = screenWidth, z = screenHeight, w = fullscreen (1.0 = skip SDF)
 };
 
 SamplerState LinearSampler : register(s0);
@@ -102,17 +102,20 @@ float4 PS_Main(VS_OUTPUT input) :
 	float2 rectMax = WindowRect.zw;
 	float cornerRadius = WindowParams.x;
 
-	// Calculate signed distance to rounded rectangle
-	float sdf = RoundedRectSDF(pixelPos, rectMin, rectMax, cornerRadius);
+	float alpha = 1.0f;
+	if (WindowParams.w < 0.5f) {
+		// Calculate signed distance to rounded rectangle
+		float sdf = RoundedRectSDF(pixelPos, rectMin, rectMax, cornerRadius);
 
-	// Create smooth edge (anti-aliased)
-	// Negative = inside, positive outside
-	// Use 1.0 pixel transition for smooth edge
-	float alpha = saturate(-sdf);
+		// Create smooth edge (anti-aliased)
+		// Negative = inside, positive outside
+		// Use 1.0 pixel transition for smooth edge
+		alpha = saturate(-sdf);
 
-	// Early out if completely outside
-	if (alpha <= 0.0f) {
-		discard;
+		// Early out if completely outside
+		if (alpha <= 0.0f) {
+			discard;
+		}
 	}
 
 	float2 blurTexelSize = DOWNSAMPLE_FACTOR / float2(WindowParams.y, WindowParams.z);

@@ -3,6 +3,7 @@
 #include "../../Buffer.h"
 #include "../../State.h"
 
+#include <cstdint>
 #include <d3d11_4.h>
 #include <d3d12.h>
 
@@ -15,6 +16,7 @@
 #include <sl_dlss.h>
 #include <sl_dlss_d.h>
 #include <sl_matrix_helpers.h>
+#include <sl_reflex.h>
 #include <sl_version.h>
 #pragma warning(pop)
 
@@ -30,6 +32,10 @@ public:
 	bool enabledAtBoot = false;
 	bool initialized = false;
 	bool triedInitialization = false;
+
+	bool featureReflex = false;
+	bool featurePCL = false;
+	bool reflexSupportedOnCurrentAdapter = false;
 
 	eastl::vector<sl::Feature> features;
 
@@ -73,10 +79,26 @@ public:
 
 	SL_FUN_DECL(slDLSSDSetOptions);
 
+	// Reflex specific functions
+	PFun_slReflexGetState* slReflexGetState{};
+	PFun_slReflexSleep* slReflexSleep{};
+	PFun_slReflexSetOptions* slReflexSetOptions{};
+	PFun_slPCLSetMarker* slPCLSetMarker{};
+
 	Util::FrameChecker frameChecker;
 	sl::FrameToken* frameToken = nullptr;
 
 	bool isRTXBelow40series = false;
+
+	struct ReflexOptionsCache
+	{
+		bool valid = false;
+		sl::ReflexMode mode = sl::ReflexMode::eOff;
+		uint32_t frameLimitUs = 0;
+		bool useMarkersToOptimize = false;
+	};
+	ReflexOptionsCache reflexOptionsCache{};
+	uint32_t lastReflexSleepFrame = UINT32_MAX;
 
 	// Helper: Execute DLSS for a single viewport with given resources
 	void EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
@@ -102,7 +124,8 @@ public:
 
 	void PostDevice();
 
-	void CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eyeIndex = 0);
+	bool EnsureFrameToken();
+	bool CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eyeIndex = 0);
 
 	bool IsRTXAndBelow40Series(IDXGIAdapter* a_adapter);
 
@@ -115,6 +138,8 @@ public:
 	void Upscale(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* a_input, ID3D12Resource* a_output, ID3D12Resource* a_depth, ID3D12Resource* a_motionVectors, ID3D12Resource* a_reactiveMask);
 
 	void DenoiseUpscale(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* a_upscalingTexture, ID3D12Resource* a_depth, ID3D12Resource* a_motionVectors, ID3D12Resource* a_reactiveMask);
+
+	void UpdateReflex();
 
 	void DestroyDLSSResources();
 };

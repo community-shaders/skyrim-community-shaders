@@ -19,6 +19,7 @@ public:
 	~LensFlareWidget() override = default;
 
 	void DrawWidget() override;
+	const char* GetWidgetTypeName() const override { return "Lens Flare"; }
 	void LoadSettings() override;
 	void SaveSettings() override;
 	void ApplyChanges() override;
