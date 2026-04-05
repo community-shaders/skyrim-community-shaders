@@ -249,8 +249,7 @@ namespace SharedData
 	{
 		uint Enable;
 		uint EnableProceduralSun;
-		uint EnableImageBasedLighting;
-		uint EnableWater;
+		uint2 pad000;
 
 		uint EnableSky;
 		float3 pad00;

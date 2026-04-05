@@ -17,9 +17,7 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 
 	data.Enable = enableEffect;
 
-	data.EnableProceduralSun = settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT");
-	data.EnableImageBasedLighting = settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT");
-	data.EnableWater = settingManager.GetValue<bool>("EnableWater", "EFFECT");
+	data.EnableProceduralSun = enableEffect && settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT");
 
 	data.EnableSky = settingManager.GetValue<bool>("Enable", "SKY");
 
