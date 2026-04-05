@@ -30,11 +30,11 @@ public:
 
 	struct alignas(16) Settings
 	{
-		float Glossiness = 20.0f;
-		float SpecularStrength = 0.5f;
-		float SubsurfaceScatteringAmount = 0.5f;
+		float Glossiness = 2.0f;
+		float SpecularStrength = 0.1f;
+		float SubsurfaceScatteringAmount = 0.2f;
 		uint OverrideComplexGrassSettings = false;
-		float BasicGrassBrightness = 1.0f;  // Match brightness of ENB
+		float BasicGrassBrightness = 1.0f;
 		uint EnableWrappedLighting = false;
 		float ComplexGrassThreshold = 0.03f;
 		uint pad1;
