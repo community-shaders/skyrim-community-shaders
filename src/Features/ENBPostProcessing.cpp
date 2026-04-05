@@ -20,8 +20,8 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.EnableProceduralSun = enableEffect && settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT");
 
 	data.EnableSky = settingManager.GetValue<bool>("Enable", "SKY");
-
 	data.GradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
+	data.SkyBoostIntensity = settingManager.GetValue<bool>("DisableWrongSkyMath", "SKY") ? 0.0f : data.GradientIntensity;
 	data.GradientDesaturation = settingManager.GetInterpolatedTimeOfDayValue("GradientDesaturation", "SKY");
 	data.GradientTopIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientTopIntensity", "SKY");
 	data.GradientTopCurve = settingManager.GetInterpolatedTimeOfDayValue("GradientTopCurve", "SKY");

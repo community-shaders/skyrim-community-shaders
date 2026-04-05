@@ -27,7 +27,8 @@ public:
 		float2 pad000;
 
 		uint32_t EnableSky;
-		float3 pad00;
+		float SkyBoostIntensity;
+		float2 pad00;
 
 		float GradientIntensity;
 		float GradientDesaturation;

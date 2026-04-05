@@ -142,6 +142,7 @@ void EffectManager::RegisterSettings()
 
 	// SKY
 	settingManager.RegisterBoolSetting("Enable", "SKY", true, false);
+	settingManager.RegisterBoolSetting("DisableWrongSkyMath", "SKY", false, false);
 
 	settingManager.RegisterTimeOfDaySetting("GradientIntensity", "SKY", 1, true);
 	settingManager.RegisterTimeOfDaySetting("GradientDesaturation", "SKY", 0, true);

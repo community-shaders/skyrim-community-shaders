@@ -252,7 +252,8 @@ namespace SharedData
 		uint2 pad000;
 
 		uint EnableSky;
-		float3 pad00;
+		float SkyBoostIntensity;
+		float2 pad00;
 
 		float GradientIntensity;
 		float GradientDesaturation;

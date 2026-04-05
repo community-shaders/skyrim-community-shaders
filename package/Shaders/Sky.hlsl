@@ -245,7 +245,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif  // !VR
 
 	if (SharedData::enbSettings.Enable)
-		skyBoost *= SharedData::enbSettings.GradientIntensity;
+		skyBoost *= SharedData::enbSettings.SkyBoostIntensity;
 
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
