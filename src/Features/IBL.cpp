@@ -197,7 +197,7 @@ IBL::Settings IBL::GetCommonBufferData() const
 		if (enb.enableEffect) {
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
-				data.EnableIBL = 1;
+				data.EnableIBL = !Util::IsInterior();
 				data.EnvIBLScale = 0.0f;
 				data.SkyIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
 				data.DALCAmount = 1.0f;
