@@ -55,15 +55,18 @@ Texture2DArray<float> ShadowMaps : register(t101);
 
 namespace ShadowSampling
 {
-	// Shadow depth bias — applied before depth comparisons to prevent self-shadowing acne.
-	static const float ShadowBiasConst = 0.0005;  // constant component
-	// Depth guard epsilons used to reject spotlight fragments at the near/far frustum planes.
-	static const float ShadowDepthNearEps = 0.0001;
-	static const float ShadowDepthFarEps = 0.9999;
+	namespace Constants
+	{
+		// Shadow depth bias — applied before depth comparisons to prevent self-shadowing acne.
+		static const float ShadowBiasConst = 0.0005;  // constant component
+		// Depth guard epsilons used to reject spotlight fragments at the near/far frustum planes.
+		static const float ShadowDepthNearEps = 0.0001;
+		static const float ShadowDepthFarEps = 0.9999;
 
-	// Volumetric / 3D shadow ray-march parameters (world units).
-	static const float ShadowRayLength = 128.0;   // default ray extent
-	static const float ShadowRayStepSize = 32.0;  // fixed step size
+		// Volumetric / 3D shadow ray-march parameters (world units).
+		static const float ShadowRayLength = 128.0;   // default ray extent
+		static const float ShadowRayStepSize = 32.0;  // fixed step size
+	}
 
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
 	{
@@ -89,18 +92,18 @@ namespace ShadowSampling
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #elif defined(UNDERWATER)
-		float viewRayLength = ShadowRayLength;
+		float viewRayLength = Constants::ShadowRayLength;
 		float3 startPosition = positionWS;
 		float3 endPosition = positionWS - viewDirection * viewRayLength;
 #else
-		float viewRayLength = ShadowRayLength;
+		float viewRayLength = Constants::ShadowRayLength;
 		float3 startPosition = positionWS;
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #endif
 
 		float totalRayLength = distance(endPosition, startPosition);
 
-		const float stepSize = ShadowRayStepSize;
+		const float stepSize = Constants::ShadowRayStepSize;
 
 		uint sampleCount = clamp(uint(totalRayLength / stepSize + 0.5), 1, 4);
 		float rcpSampleCount = rcp(sampleCount);
@@ -190,7 +193,7 @@ namespace ShadowSampling
 
 	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth)
 	{
-		return SampleShadowGather(shadowIndex, sampleUV, depth - ShadowBiasConst);
+		return SampleShadowGather(shadowIndex, sampleUV, depth - Constants::ShadowBiasConst);
 	}
 
 	// --- Per-light shadow sampling ---
@@ -209,7 +212,7 @@ namespace ShadowSampling
 		positionLS.xyz /= positionLS.w;
 
 		// 2. Standard Depth Guard (with a small safety epsilon).
-		if (positionLS.z < ShadowDepthNearEps || positionLS.z > ShadowDepthFarEps)
+		if (positionLS.z < Constants::ShadowDepthNearEps || positionLS.z > Constants::ShadowDepthFarEps)
 			return 0.0;
 
 		// 3. Simple UV Mapping.
@@ -226,7 +229,7 @@ namespace ShadowSampling
 
 		hasCoverage = true;
 
-		return SampleShadowGather(shadowIndex, baseUV, positionLS.z - ShadowBiasConst);
+		return SampleShadowGather(shadowIndex, baseUV, positionLS.z - Constants::ShadowBiasConst);
 	}
 
 	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS)

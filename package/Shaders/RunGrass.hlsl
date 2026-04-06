@@ -1028,6 +1028,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #			else
 	psout.Diffuse.xyz = diffuseColor;
+
 	psout.Diffuse.w = 1;
 #			endif
 
