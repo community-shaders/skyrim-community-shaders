@@ -178,13 +178,6 @@ namespace SharedData
 		uint3 pad;
 	};
 
-	struct TerrainVariationSettings
-	{
-		uint enableTilingFix;
-		uint enableLODTerrainTilingFix;
-		float2 pad0;
-	};
-
 	struct IBLSettings
 	{
 		uint EnableIBL;
@@ -273,7 +266,6 @@ namespace SharedData
 		CloudShadowsSettings cloudShadowsSettings;
 		LODBlendingSettings lodBlendingSettings;
 		HairSpecularSettings hairSpecularSettings;
-		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		LinearLightingSettings linearLightingSettings;

@@ -12,7 +12,7 @@ public:
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_VARIATION"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override
 	{
-		return (shaderType == RE::BSShader::Type::Lighting);
+		return shaderType == RE::BSShader::Type::Lighting && (settings.enableTilingFix || settings.enableLODTerrainTilingFix);
 	}
 	virtual bool IsCore() const override { return false; };
 	virtual bool SupportsVR() override { return true; }
@@ -32,9 +32,8 @@ public:
 
 	struct Settings
 	{
-		uint enableTilingFix = true;
-		uint enableLODTerrainTilingFix = true;
-		float pad0[2];
+		bool enableTilingFix = true;
+		bool enableLODTerrainTilingFix = true;
 	} settings;
 
 	virtual void DrawSettings() override;

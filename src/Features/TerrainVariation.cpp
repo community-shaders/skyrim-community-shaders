@@ -1,6 +1,7 @@
 #include "TerrainVariation.h"
 #include "../FeatureBuffer.h"
 #include "../Globals.h"
+#include "../ShaderCache.h"
 #include "../State.h"
 #include "../Util.h"
 
@@ -11,9 +12,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void TerrainVariation::DrawSettings()
 {
-	bool oldEnabled = settings.enableTilingFix;
-	ImGui::Checkbox("Enable Terrain Tiling Fix", (bool*)&settings.enableTilingFix);
-	if (oldEnabled != (bool)settings.enableTilingFix) {
+	if (ImGui::Checkbox("Enable Terrain Tiling Fix", &settings.enableTilingFix)) {
 		// Update the shader settings when the checkbox is toggled
 		UpdateShaderSettings();
 		logger::info("TerrainVariation setting changed to: {}", settings.enableTilingFix);
@@ -26,9 +25,7 @@ void TerrainVariation::DrawSettings()
 
 	ImGui::Separator();
 
-	bool oldLODEnabled = settings.enableLODTerrainTilingFix;
-	ImGui::Checkbox("Apply to LOD Terrain", (bool*)&settings.enableLODTerrainTilingFix);
-	if (oldLODEnabled != (bool)settings.enableLODTerrainTilingFix) {
+	if (ImGui::Checkbox("Apply to LOD Terrain", &settings.enableLODTerrainTilingFix)) {
 		UpdateShaderSettings();
 		logger::info("TerrainVariation LOD setting changed to: {}", settings.enableLODTerrainTilingFix);
 	}
@@ -41,11 +38,10 @@ void TerrainVariation::DrawSettings()
 
 void TerrainVariation::UpdateShaderSettings()
 {
-	if (!globals::state) {
-		return;
+	if (globals::shaderCache) {
+		// Force lighting permutation refresh immediately after toggle changes.
+		globals::shaderCache->Clear(RE::BSShader::Type::Lighting);
 	}
-
-	// Mark the vertex descriptor as dirty to trigger an update
 	if (globals::game::stateUpdateFlags) {
 		globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
 	}

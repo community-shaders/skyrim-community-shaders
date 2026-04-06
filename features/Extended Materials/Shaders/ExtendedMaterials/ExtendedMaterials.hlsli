@@ -133,6 +133,17 @@ namespace ExtendedMaterials
 		return tex.SampleLevel(samp, coords, mipLevel);
 #	endif
 	}
+	#if defined(TERRAIN_VARIATION)
+		inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
+		{
+			return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
+		}
+	#else
+		inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
+		{
+			return tex.SampleLevel(samp, coords, mipLevel);
+		}
+	#endif
 
 	inline uint ComputeActiveMask(float4 w1, float2 w2)
 	{
@@ -204,15 +215,17 @@ namespace ExtendedMaterials
 			weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0;
 			weights[layerIdx] = 1.0;
 			float total = heights[layerIdx];
-			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-				total *= STOCHASTIC_HEIGHT_BOOST;
+#	if defined(TERRAIN_VARIATION)
+			total *= STOCHASTIC_HEIGHT_BOOST;
+#	endif
 			return total;
 		}
 
 		float total = 0;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-			total *= STOCHASTIC_HEIGHT_BOOST;
+#	if defined(TERRAIN_VARIATION)
+		total *= STOCHASTIC_HEIGHT_BOOST;
+#	endif
 		return total;
 	}
 
@@ -440,13 +453,13 @@ namespace ExtendedMaterials
 			if (quality > 0.75)
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
 
-			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-			{
-				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
-				shadowIntensity = pow(shadowIntensity, STOCHASTIC_SHADOW_GAMMA);
-				return pow(1.0 - shadowIntensity, 2.0);
-			}
+#	if defined(TERRAIN_VARIATION)
+			float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
+			shadowIntensity = pow(shadowIntensity, STOCHASTIC_SHADOW_GAMMA);
+			return pow(1.0 - shadowIntensity, 2.0);
+#	else
 			return pow(1.0 - saturate(dot(max(0, sh - sh0) * scaleRcp, 1.0)) * quality, 2.0);
+#	endif
 		}
 		return 1.0;
 	}

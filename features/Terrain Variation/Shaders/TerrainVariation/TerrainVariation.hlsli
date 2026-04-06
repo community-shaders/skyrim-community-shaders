@@ -115,7 +115,7 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 // --------------------- SAMPLING FUNCTIONS --------------------- //
 
 // LOD terrain stochastic sampling — 2 SampleBias, fixed blend
-inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD, float2 dx, float2 dy)
+inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD)
 {
 	float2 dir1 = float2(rnd - 0.5, frac(rnd * 1.618) - 0.5);
 	float4 s1 = tex.SampleBias(samp, uv + (offsetsLOD.offset1 + dir1) * 0.01, SharedData::MipBias);
@@ -146,7 +146,7 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 }
 
 // 2-sample parallax sampling — uses heightmap (alpha) only for blend weights.
-inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
+inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
 {
 	float adjustedMip = mipLevel + TERRAIN_VARIATION_MIP_BIAS;
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMip);
@@ -162,10 +162,9 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
-inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
+inline float4 SampleTerrain(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
-	[branch] if (enabled) return StochasticEffect(tex, samp, uv, offsets);
-	return tex.SampleBias(samp, uv, SharedData::MipBias);
+	return StochasticEffect(tex, samp, uv, offsets);
 }
 
 #endif  // TERRAIN_VARIATION_HLSLI
