@@ -74,8 +74,6 @@ void VolumetricShadows::CopyShadowData()
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "VolumetricShadows::CopyShadowData");
 
-	// This function handles VSM shadow texture downsampling and binds it to slot 18.
-
 	auto context = globals::d3d::context;
 
 	{
@@ -272,11 +270,9 @@ void VolumetricShadows::CopyShadowData()
 			}
 		}
 
-		// Bind the VSM shadow texture to PS slot 18.
 		ID3D11ShaderResourceView* srv = shadowCopySRV ? shadowCopySRV : shadowView;
 		context->PSSetShaderResources(18, 1, &srv);
 
-		// Release COM object to prevent memory leak
 		if (shadowView)
 			shadowView->Release();
 		shadowView = nullptr;
