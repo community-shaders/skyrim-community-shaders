@@ -213,17 +213,23 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 #	if defined(IBL)
 		if (SharedData::iblSettings.EnableIBL) {
-			float3 envSample = EnvTexture.SampleLevel(LinearSampler, R, level);
-			float3 fullSample = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level);
+			float3 envSample = Color::IrradianceToLinear(
+				EnvTexture.SampleLevel(LinearSampler, R, level)
+			);
+			float3 fullSample = Color::IrradianceToLinear(
+				EnvReflectionsTexture.SampleLevel(LinearSampler, R, level)
+			);
 			float3 envSpecular, skySpecular;
 
 			if (SharedData::iblSettings.DALCMode == 2) {
 				// Mode 2: DALC-normalized env scaled by DALCAmount + sky overlay
 				float envLum = Color::RGBToLuminance(
-					Color::IrradianceToLinear(EnvTexture.SampleLevel(LinearSampler, R, 15))
+					Color::IrradianceToLinear(
+						EnvTexture.SampleLevel(LinearSampler, R, 15)
+					)
 				);
-				envSpecular = Color::IrradianceToLinear((envSample / max(envLum, 0.001)) * directionalAmbientColorSpecular) * SharedData::iblSettings.DALCAmount;
-				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
+				envSpecular = envSample / max(envLum, 0.001) * directionalAmbientColorSpecular * SharedData::iblSettings.DALCAmount;
+				skySpecular = max(0, fullSample - envSample) * SharedData::iblSettings.SkyIBLScale;
 #		if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
 #		elif defined(INTERIOR)
@@ -232,8 +238,8 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 			} else {
 				// Mode 0/1: IBL ratio-based
 				float3 ratio = ImageBasedLighting::GetIBLRatio();
-				envSpecular = Color::IrradianceToLinear(envSample * ratio) * SharedData::iblSettings.EnvIBLScale;
-				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
+				envSpecular = envSample * ratio * SharedData::iblSettings.EnvIBLScale;
+				skySpecular = max(0, fullSample - envSample) * SharedData::iblSettings.SkyIBLScale;
 #		if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
 #		elif defined(INTERIOR)
@@ -248,10 +254,14 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 			// Fallback without IBL: normalize-by-luminance with DALC
 #	if defined(INTERIOR)
 			float3 specularIrradiance = Color::IrradianceToLinear(
-				EnvTexture.SampleLevel(LinearSampler, R, level));
+				EnvTexture.SampleLevel(LinearSampler, R, level)
+			);
 			float specularIrradianceLuminance = Color::RGBToLuminance(
-				Color::IrradianceToLinear(EnvTexture.SampleLevel(LinearSampler, R, 15)));
-			finalIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
+				Color::IrradianceToLinear(
+					EnvTexture.SampleLevel(LinearSampler, R, 15)
+				)
+			);
+			finalIrradiance = specularIrradiance / max(specularIrradianceLuminance, 0.001) * directionalAmbientColorSpecular;
 #	elif defined(SKYLIGHTING)
 			float3 specularIrradianceReflections = 0.0;
 			if (skylightingSpecular > 0.0) {
@@ -263,7 +273,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 						EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15)
 					)
 				);
-				specularIrradianceReflections = (specularIrradianceReflections / max(lum, 0.001)) * directionalAmbientColorSpecular;
+				specularIrradianceReflections = specularIrradianceReflections / max(lum, 0.001) * directionalAmbientColorSpecular;
 			}
 			float3 specularIrradiance = 0.0;
 			if (skylightingSpecular < 1.0) {
@@ -276,7 +286,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 					)
 				);
 				float dalcScaled = directionalAmbientColorSpecular * skylightingSpecular;
-				specularIrradiance = (specularIrradiance / max(lum, 0.001)) * dalcScaled;
+				specularIrradiance = specularIrradiance / max(lum, 0.001) * dalcScaled;
 			}
 			finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #	else
@@ -288,7 +298,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 					EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15)
 				)
 			);
-			finalIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
+			finalIrradiance = specularIrradiance / max(specularIrradianceLuminance, 0.001) * directionalAmbientColorSpecular;
 #	endif
 		}
 
