@@ -542,8 +542,6 @@ Texture2D<float4> TexLandLodBlend2Sampler : register(t15);
 Texture2D<float4> TexLandLodNoiseSampler : register(t15);
 #	endif
 
-// TexShadowMaskSampler (t14) removed — shadows are now sampled directly from depth maps.
-
 cbuffer PerTechnique : register(b0)
 {
 	float4 FogColor : packoffset(c0);           // Color in xyz, invFrameBufferRange in w
@@ -2539,10 +2537,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 		float3 lightColor = Color::PointLight(PointLightColor[lightIndex].xyz) * intensityMultiplier;
 		float lightShadow = 1.f;
-		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
-			if (lightIndex < numShadowLights) {
-			}
-		}
 
 		float3 normalizedLightDirection = normalize(lightDirection);
 

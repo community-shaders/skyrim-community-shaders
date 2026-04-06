@@ -122,59 +122,6 @@ namespace VolumetricShadows
 		return lerp(1.0, shadow, fadeFactor);
 	}
 
-	// Sample a single cascade for VSM shadow (2D point sample)
-	float SampleVSMCascade2D(uint cascadeIndex, float3 positionLS)
-	{
-		float2 moments = SharedShadowMap.SampleLevel(LinearSampler, positionLS.xy, 1u - cascadeIndex);
-		return ComputeVSM(moments, positionLS.z);
-	}
-
-	float GetVSMShadow2D(DirectionalShadowData sD, float3 position, uint eyeIndex, out float detailedShadow)
-	{
-		float shadowMapDepth = GetShadowDepth(position, eyeIndex);
-
-		// Early out beyond cascade range
-		if (shadowMapDepth >= sD.EndSplitDistances.y) {
-			detailedShadow = 1.0;
-			return 1.0;
-		}
-
-		// Reduce over distance
-		float fade = saturate(shadowMapDepth / sD.EndSplitDistances.y);
-
-		// Compute cascade blend factor with smoothstep
-		float cascadeSelect = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-
-		// Determine which cascade(s) to sample
-		uint primaryCascade = uint(cascadeSelect);
-		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
-
-		// Transform ray to light space for primary cascade
-		float4x4 shadowProj = sD.ShadowProj[primaryCascade];
-		float3 positionLS = mul(shadowProj, float4(position, 1)).xyz;
-		positionLS.xy = saturate(positionLS.xy);
-
-		// Sample primary cascade
-		float shadow = SampleVSMCascade2D(primaryCascade, positionLS);
-
-		// Blend with secondary cascade if needed
-		[branch] if (needsBlending)
-		{
-			uint secondaryCascade = 1 - primaryCascade;
-
-			shadowProj = sD.ShadowProj[secondaryCascade];
-			positionLS = mul(transpose(shadowProj), float4(position, 1)).xyz;
-			positionLS.xy = saturate(positionLS.xy);
-
-			float shadowBlend = SampleVSMCascade2D(secondaryCascade, positionLS);
-			shadow = lerp(shadow, shadowBlend, cascadeSelect);
-		}
-
-		// Apply distance fade
-		float fadeFactor = 1.0 - pow(fade, 8);
-		detailedShadow = lerp(1.0, ReduceBleeding(shadow, VSM_BLEEDING_REDUCTION), fadeFactor);
-		return lerp(1.0, shadow, fadeFactor);
-	}
 }
 
 #endif  // __VOLUMETRIC_SHADOWS_HLSLI__

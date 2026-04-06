@@ -191,8 +191,6 @@ void Deferred::SetupResources()
 		perDirectionalShadow->CreateSRV(srvDesc);
 	}
 }
-// Note: perShadows (t100) and shadowCmpSampler (s14) are owned by LightLimitFix and
-// set up via LightLimitFix::EarlyPrepass() after shadow maps are rendered each frame.
 
 void Deferred::ReflectionsPrepasses()
 {

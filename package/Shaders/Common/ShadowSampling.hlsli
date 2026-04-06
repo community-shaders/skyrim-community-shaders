@@ -24,7 +24,7 @@
 Texture2D<float2> SharedShadowMap : register(t80);
 #endif
 
-// Directional (sun) shadow data: cascade split distances, projection matrices,
+// Directional (sun) shadow data: cascade split distances and projection matrices.
 struct DirectionalShadowData
 {
 	column_major float4x4 ShadowProj[2];
@@ -49,19 +49,12 @@ struct ShadowData
 StructuredBuffer<ShadowData> Shadows : register(t100);
 Texture2DArray<float> ShadowMaps : register(t101);
 
-// Comparison sampler for PCF shadow filtering (less-equal depth test).
-SamplerComparisonState ShadowSamplerCmp : register(s14);
-
 #if defined(VOLUMETRIC_SHADOWS)
 #	include "VolumetricShadows/VolumetricShadows.hlsli"
 #endif
 
 namespace ShadowSampling
 {
-	// -----------------------------------------------------------------------
-	// Constants
-	// -----------------------------------------------------------------------
-
 	// PCF filter radii in UV space (base, before user KernelScale).
 	static const float PCFKernelDirectional = 1.0 / 2048.0;  // directional cascade maps
 	static const float PCFKernelShadowLight = 1.0 / 1024.0;  // frustum/spot shadow maps
@@ -75,8 +68,6 @@ namespace ShadowSampling
 	// Volumetric / 3D shadow ray-march parameters (world units).
 	static const float ShadowRayLength = 128.0;   // default ray extent
 	static const float ShadowRayStepSize = 32.0;  // fixed step size
-
-	// -----------------------------------------------------------------------
 
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
 	{
@@ -195,7 +186,6 @@ namespace ShadowSampling
 
 	// Gather-based shadow sample: fetches 4 texels and compares to receiver depth.
 	// Used for all shadow filtering modes (single-tap and multi-tap PCF).
-	// Avoids hardware PCF filtering artifacts while maintaining efficiency.
 	// receiverDepth should be pre-biased by the caller (except for debug/constant-bias mode).
 	float SampleShadowGather(uint shadowIndex, float2 uv, float receiverDepth)
 	{
@@ -235,10 +225,8 @@ namespace ShadowSampling
 		float lightSize = SharedData::lightLimitFixSettings.LightSize;
 		float kernelScale = SharedData::lightLimitFixSettings.KernelScale;
 
-		// Step 1: DPCF blocker search — single GatherRed (4 bilinear samples, 1 tex instruction).
-		// Treyarch "Shadows of Cold War": replaces the separate 8-sample spiral pass.
-		// The center-pixel gather naturally reduces acne without a wide search radius.
-		// https://research.activision.com/publications/2021/10/shadows-of-cold-war--a-scalable-approach-to-shadowing
+		// Step 1: Blocker search — single GatherRed (4 samples, 1 tex instruction).
+		// The center-pixel gather gives a coarse but fast occluder depth estimate.
 		float4 gathered = ShadowMaps.GatherRed(LinearSampler, float3(baseUV, shadowIndex));
 		float4 isBlocker = float4(gathered < receiverDepth);
 		float blockerCount = dot(isBlocker, 1.0);
@@ -324,21 +312,15 @@ namespace ShadowSampling
 
 		hasCoverage = true;
 
-		float spotFalloff = saturate(1.0 - radialDistSq);
-		spotFalloff = spotFalloff * spotFalloff;
-
 		// Constant bias only — slope bias (ddx/ddy) is undefined inside a non-uniform loop
 		// where adjacent quad pixels may be at different iterations.
 		uint mode = SharedData::lightLimitFixSettings.FilterMode;
 		float biasedDepth = positionLS.z - ShadowBiasConst;
 
-		float shadowSample;
-		[branch] if (mode == 2) shadowSample = PCSSSpotlight(shadowIndex, baseUV, biasedDepth, rotationMatrix);
-		else if (mode == 1) shadowSample = PCFPoisson16(shadowIndex, baseUV, biasedDepth,
+		[branch] if (mode == 2) return PCSSSpotlight(shadowIndex, baseUV, biasedDepth, rotationMatrix);
+		else if (mode == 1) return PCFPoisson16(shadowIndex, baseUV, biasedDepth,
 			PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale, rotationMatrix);
-		else shadowSample = SampleShadowGather(shadowIndex, baseUV, biasedDepth);  // mode 0
-
-		return shadowSample * spotFalloff;
+		else return SampleShadowGather(shadowIndex, baseUV, biasedDepth);  // mode 0
 	}
 
 	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
