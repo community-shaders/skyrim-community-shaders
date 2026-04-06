@@ -2429,8 +2429,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float dirSoftShadow = 1.0;
 	float dirDetailedShadow = 1.0;
 
-	float2x2 rotationMatrix = ShadowSampling::GetPCFRotationMatrix(input.WorldPosition.xyz);
-
 	// Sample directional shadow directly (VSM when VolumetricShadows loaded, PCF otherwise).
 	if (inWorld && !inReflection && !SharedData::InInterior)
 		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirDetailedShadow);
@@ -2627,7 +2625,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		bool shadowCoverage = false;
 		if (inWorld && !inReflection) {
 			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex, shadowCoverage);
+				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, eyeIndex, shadowCoverage);
 				lightShadow *= shadowComponent;
 			}
 		}

@@ -595,8 +595,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float dirSoftShadow = 1.0;
 	float dirDetailedShadow = 1.0;
 
-	float2x2 rotationMatrix = ShadowSampling::GetPCFRotationMatrix(input.WorldPosition.xyz);
-
 	if (!SharedData::InInterior)
 		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirDetailedShadow);
 
@@ -692,7 +690,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float shadowComponent = 1.0;
 				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex, shadowCoverage);
+					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, eyeIndex, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
 
@@ -866,8 +864,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 
-	float2x2 rotationMatrix = ShadowSampling::GetPCFRotationMatrix(input.WorldPosition.xyz);
-
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
 	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
@@ -930,7 +926,7 @@ PS_OUTPUT main(PS_INPUT input)
 				float shadowComponent = 1.0;
 				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, eyeIndex, shadowCoverage);
+					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, eyeIndex, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
 
