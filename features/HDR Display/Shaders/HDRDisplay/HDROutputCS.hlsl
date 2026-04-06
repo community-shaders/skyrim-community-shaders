@@ -37,43 +37,37 @@ cbuffer PerFrame : register(b0)
 	float3 finalColor;
 
 	if (hdrEnabled) {
-		static const float HDR_TONEMAP_REF_WHITE_NITS = 203.0;
-		float paperWhiteNits = max(paperWhite, 1.0);
-		float paperWhiteDisplayScale = paperWhiteNits / HDR_TONEMAP_REF_WHITE_NITS;
+        float3 sceneGamma = scene.rgb;
 
-		float3 sceneLinear = Color::SkyrimGammaToLinear(max(0.0, scene.rgb));
-		sceneLinear *= paperWhiteDisplayScale;
-
-		float3 sceneBT2020 = Color::BT709ToBT2020(sceneLinear);
-		sceneBT2020 = max(sceneBT2020, 0.0);
-
-		if (skipUI) {
-			finalColor = Color::pq::Encode(sceneBT2020, sRGB_WhiteLevelNits);
-		} else {
-			const float menuUIBrightnessScale = 0.695652f;
-			float effectiveUIBrightness = (isMainOrLoadingMenu > 0.5) ? (uiBrightness * menuUIBrightnessScale) : uiBrightness;
-			// Match UIBrightnessCS: pause menu (TweenMenu) soft-AA band — FG PQ pass skips while paused, so boost runs here.
-			float aIn = ui.a;
-			float aOut = aIn;
-			if (fgTweenMenuMidAlphaBoost > 0.5 && aIn > 1e-3) {
-				float midBand = smoothstep(0.3, 0.35, aIn) * (1.0 - smoothstep(0.55, 0.6, aIn));
-				const float fgMidAlphaBoost = 0.12;
-				aOut = saturate(aIn + midBand * fgMidAlphaBoost);
+        float3 compositedColorGamma;
+        if (skipUI) {
+            compositedColorGamma = sceneGamma;
+        } else {
+			float3 uiGamma = ui.rgb;
+            if (!(isMainOrLoadingMenu > 0.5)) { // UI and scene can't be separated in main menu or loading screen
+				// scale UI brightness (multiplier based on paperWhite)
+				float3 uiLinear = Color::SrgbToLinear(max(0, uiGamma));
+				uiLinear *= uiBrightness;
+				uiGamma = Color::LinearToSrgb(uiLinear);
 			}
-			float3 uiPremul = ui.rgb * (aOut / aIn);
-			float3 uiLinear = Color::SkyrimGammaToLinear(max(0.0, uiPremul * effectiveUIBrightness));
-			uiLinear *= paperWhiteDisplayScale;
-			float a = aOut;
-			float3 compositedLinear = uiLinear * a + sceneLinear * (1.0 - a);
-			if (isMainOrLoadingMenu > 0.5) {
-				const float menuSaturation = 1.25f;
-				float luma = Color::RGBToLuminance(compositedLinear);
-				compositedLinear = max(0.0, lerp(luma.xxx, compositedLinear, menuSaturation));
-			}
-			float3 compositedBT2020 = Color::BT709ToBT2020(compositedLinear);
-			finalColor = Color::pq::Encode(max(0.0, compositedBT2020), sRGB_WhiteLevelNits);
-		}
-	} else {
+#if 0
+            if (fgTweenMenuMidAlphaBoost > 0.5 && ui.a > 1e-3) {
+                float midBand = smoothstep(0.3, 0.35, ui.a) * (1.0 - smoothstep(0.55, 0.6, ui.a));
+                const float fgMidAlphaBoost = 0.12;
+                ui.a = saturate(ui.a + midBand * fgMidAlphaBoost);
+            }
+#endif
+
+            compositedColorGamma = uiGamma + sceneGamma * (1.0 - ui.a);
+        }
+
+        // ISHDR HDR path outputs sRGB gamma at this stage.
+        float3 compositedColorLinear = sign(compositedColorGamma) * Color::SrgbToLinear(compositedColorGamma);
+        compositedColorLinear = Color::BT709ToBT2020(compositedColorLinear);
+        finalColor = Color::pq::Encode(max(0.0, compositedColorLinear), paperWhite);
+
+        finalColor = saturate(finalColor);
+    } else {
 		float3 sceneGamma = scene.rgb;
 
 		if (skipUI) {

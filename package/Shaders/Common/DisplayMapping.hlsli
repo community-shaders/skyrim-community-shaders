@@ -104,6 +104,17 @@ namespace DisplayMapping
 		return 1.0 - exp(-x);
 	}
 
+    float RangeCompress(float val, float threshold, float maxValue)
+    {
+        if (val < threshold)
+            return val;
+        if (maxValue <= threshold)
+            return threshold;
+
+        float range = maxValue - threshold;
+        return threshold + range * RangeCompress((val - threshold) / range);
+    }
+
 	float RangeCompress(float val, float threshold)
 	{
 		float v1 = val;
@@ -119,7 +130,15 @@ namespace DisplayMapping
 			RangeCompress(val.z, threshold));
 	}
 
-	static const float PQ_constant_N = (2610.0 / 4096.0 / 4.0);
+    float3 RangeCompress(float3 val, float threshold, float maxValue)
+    {
+        return float3(
+            RangeCompress(val.x, threshold, maxValue),
+            RangeCompress(val.y, threshold, maxValue),
+            RangeCompress(val.z, threshold, maxValue));
+    }
+
+    static const float PQ_constant_N = (2610.0 / 4096.0 / 4.0);
 	static const float PQ_constant_M = (2523.0 / 4096.0 * 128.0);
 	static const float PQ_constant_C1 = (3424.0 / 4096.0);
 	static const float PQ_constant_C2 = (2413.0 / 4096.0 * 32.0);
@@ -221,7 +240,7 @@ namespace DisplayMapping
 	}
 
 #if defined(PSHADER) && defined(BLEND)
-	float3 HuePreservingHejlBurgessDawson(float3 col, float3 bloomCol)
+	float3 HuePreservingHejlBurgessDawson(float3 col, float3 bloomCol, bool isHDR = false)
 	{
 		float3 ictcp = RGBToICtCp(col);
 
@@ -230,7 +249,7 @@ namespace DisplayMapping
 		col = ICtCpToRGB(ictcp * float3(1, saturationAmount.xx));
 
 		// Non-hue preserving mapping
-		float3 perChannelCompressed = GetTonemapFactorHejlBurgessDawson(col);
+		float3 perChannelCompressed = GetTonemapFactorHejlBurgessDawson(col, isHDR);
 		perChannelCompressed += saturate(Param.x - perChannelCompressed) * bloomCol;
 
 		col = perChannelCompressed;
@@ -249,8 +268,9 @@ namespace DisplayMapping
 
 		return col;
 	}
+
 #endif
 
-}
+} // namespace DisplayMapping
 
 #endif  // __DISPLAY_MAPPING_DEPENDENCY_HLSL__

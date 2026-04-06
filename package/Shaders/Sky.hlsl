@@ -224,11 +224,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float peakRatio = peakNits / SUN_REF_PAPER_WHITE_NITS;
 
-		// Non-LL: scale in gamma with pow(PR,1/1.6) so linear matches peak/203 after decode.
+		// Non-LL: scale in gamma with pow(PR,1/2.2) so linear matches peak/203 after decode.
 		float menuSceneEncoding = SharedData::HDRData.w;
 		static const float SUN_DIM_IN_MENU_SCENES = 0.58;  // HDRDisplay::kHdrMenuScenePauseOrMap
 		float hdrSunMenuMul = (menuSceneEncoding > 1e-3) ? SUN_DIM_IN_MENU_SCENES : 1.0;
-		float hdrScale = (ENABLE_LL ? peakRatio : pow(peakRatio, rcp(1.6))) * hdrSunMenuMul;
+		float hdrScale = (ENABLE_LL ? peakRatio : pow(peakRatio, rcp(2.2))) * hdrSunMenuMul;
 
 #		if defined(DITHER)
 		float glareLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);

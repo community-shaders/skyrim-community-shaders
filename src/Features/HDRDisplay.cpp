@@ -479,7 +479,7 @@ void HDRDisplay::DrawSettings()
 			float oldUIBrightness = settings.hdrUIBrightness;
 			float currentUIBrightness = settings.hdrUIBrightness;
 
-			ImGui::SliderFloat("HDR UI Brightness", &currentUIBrightness, 0.5f, 5.0f, "%.1fx");
+			ImGui::SliderFloat("HDR UI Brightness", &currentUIBrightness, 0.5f, 5.0f, "%.2fx");
 			if (oldUIBrightness != currentUIBrightness) {
 				settings.hdrUIBrightness = currentUIBrightness;
 				UpdateHDRData();
@@ -528,7 +528,7 @@ void HDRDisplay::RestoreDefaultSettings()
 	settings.enableHDR = hdrMonitor;
 	settings.hdrPaperWhite = 203;
 	settings.hdrPeakNits = 1000;
-	settings.hdrUIBrightness = 2.3f;
+	settings.hdrUIBrightness = 1.0f;
 	settings.dontShowHDRWarning = false;
 }
 
