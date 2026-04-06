@@ -1300,13 +1300,24 @@ namespace SIE
 
 		std::wstring GetDiskPath(const std::string_view& name, uint32_t descriptor, ShaderClass shaderClass)
 		{
+			// If extra defines are active (e.g. LLFDEBUG), fold them into the filename
+			// via a hash suffix so the disk cache is keyed per-defines-set.  Without
+			// this, toggling extra defines would silently reload a stale cached blob.
+			const auto& definesStr = globals::state->shaderDefinesString;
+			std::wstring suffix;
+			if (!definesStr.empty()) {
+				const std::size_t h = std::hash<std::string>{}(definesStr);
+				suffix = std::format(L"_{:08X}", static_cast<uint32_t>(h));
+			}
+
+			const auto wname = std::wstring(name.begin(), name.end());
 			switch (shaderClass) {
 			case ShaderClass::Pixel:
-				return std::format(L"Data/ShaderCache/{}/{:X}.pso", std::wstring(name.begin(), name.end()), descriptor);
+				return std::format(L"Data/ShaderCache/{}/{:X}{}.pso", wname, descriptor, suffix);
 			case ShaderClass::Vertex:
-				return std::format(L"Data/ShaderCache/{}/{:X}.vso", std::wstring(name.begin(), name.end()), descriptor);
+				return std::format(L"Data/ShaderCache/{}/{:X}{}.vso", wname, descriptor, suffix);
 			case ShaderClass::Compute:
-				return std::format(L"Data/ShaderCache/{}/{:X}.cso", std::wstring(name.begin(), name.end()), descriptor);
+				return std::format(L"Data/ShaderCache/{}/{:X}{}.cso", wname, descriptor, suffix);
 			}
 			return {};
 		}
