@@ -264,4 +264,12 @@ namespace Util
 											   return std::tolower(static_cast<unsigned char>(ca)) == std::tolower(static_cast<unsigned char>(cb));
 										   });
 	}
+
+	std::string GetShaderDefinesSuffix(const std::string& definesStr)
+	{
+		if (definesStr.empty())
+			return {};
+		const std::size_t h = std::hash<std::string>{}(definesStr);
+		return std::format("_{:08X}", static_cast<uint32_t>(h));
+	}
 }  // namespace Util

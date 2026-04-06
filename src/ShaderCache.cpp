@@ -1,6 +1,7 @@
 #include "ShaderCache.h"
 #include "Globals.h"
 #include "ShaderFileWatcher.h"
+#include "Util.h"
 
 #include <d3dcompiler.h>
 
@@ -1300,15 +1301,8 @@ namespace SIE
 
 		std::wstring GetDiskPath(const std::string_view& name, uint32_t descriptor, ShaderClass shaderClass)
 		{
-			// If extra defines are active (e.g. LLFDEBUG), fold them into the filename
-			// via a hash suffix so the disk cache is keyed per-defines-set.  Without
-			// this, toggling extra defines would silently reload a stale cached blob.
-			const auto& definesStr = globals::state->shaderDefinesString;
-			std::wstring suffix;
-			if (!definesStr.empty()) {
-				const std::size_t h = std::hash<std::string>{}(definesStr);
-				suffix = std::format(L"_{:08X}", static_cast<uint32_t>(h));
-			}
+			const auto suffixNarrow = Util::GetShaderDefinesSuffix(globals::state->shaderDefinesString);
+			const std::wstring suffix(suffixNarrow.begin(), suffixNarrow.end());
 
 			const auto wname = std::wstring(name.begin(), name.end());
 			switch (shaderClass) {
