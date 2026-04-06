@@ -124,7 +124,7 @@ namespace Util
 	/**
 	 * Returns the defines-based shader cache filename suffix for the given shader
 	 * defines string, or an empty string when definesStr is empty.  The suffix
-	 * has the form "_{08X}" where the hex value is a 32-bit hash of the string.
+	 * has the form "_{:08X}" where the hex value is a 32-bit FNV-1a hash of the string.
 	 *
 	 * This matches the suffix logic used by SIE::SShaderCache::GetDiskPath so
 	 * that any code building a cache path by hand stays in sync.

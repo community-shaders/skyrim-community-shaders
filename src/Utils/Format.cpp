@@ -269,7 +269,11 @@ namespace Util
 	{
 		if (definesStr.empty())
 			return {};
-		const std::size_t h = std::hash<std::string>{}(definesStr);
-		return std::format("_{:08X}", static_cast<uint32_t>(h));
+		uint32_t h = 2166136261u;  // FNV-1a 32-bit offset basis
+		for (unsigned char c : definesStr) {
+			h ^= c;
+			h *= 16777619u;  // FNV prime
+		}
+		return std::format("_{:08X}", h);
 	}
 }  // namespace Util
