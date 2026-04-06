@@ -583,6 +583,23 @@ void Menu::Init()
 	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
 	imgui_io.IniFilename = cachedIniPath.c_str();
 
+	// Register settings handler to persist display size for cross-session resolution change detection
+	ImGuiSettingsHandler handler;
+	handler.TypeName = "CommunityShaders";
+	handler.TypeHash = ImHashStr("CommunityShaders");
+	handler.UserData = &lastDisplaySize;
+	handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler*, const char*) -> void* { return (void*)1; };
+	handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler* h, void*, const char* line) {
+		float w, ht;
+		if (sscanf(line, "DisplaySize=%f,%f", &w, &ht) == 2)
+			*static_cast<float2*>(h->UserData) = { w, ht };
+	};
+	handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* h, ImGuiTextBuffer* buf) {
+		auto& ds = ImGui::GetIO().DisplaySize;
+		buf->appendf("[%s][Data]\nDisplaySize=%g,%g\n\n", h->TypeName, ds.x, ds.y);
+	};
+	ImGui::GetCurrentContext()->SettingsHandlers.push_back(handler);
+
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
@@ -641,8 +658,10 @@ void Menu::DrawSettings()
 
 	ImGui::DockSpaceOverViewport(0, NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
-	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
+	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), layoutCond, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), layoutCond);
+	resetLayout = false;
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
 
 	// Determine window flags based on docking state
