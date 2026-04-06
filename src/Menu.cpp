@@ -584,7 +584,7 @@ void Menu::Init()
 	imgui_io.IniFilename = cachedIniPath.c_str();
 
 	// Register settings handler to persist display size for cross-session resolution change detection
-	ImGuiSettingsHandler handler;
+	ImGuiSettingsHandler handler{};
 	handler.TypeName = "CommunityShaders";
 	handler.TypeHash = ImHashStr("CommunityShaders");
 	handler.UserData = &lastDisplaySize;
