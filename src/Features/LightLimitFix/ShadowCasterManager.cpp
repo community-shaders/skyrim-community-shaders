@@ -2542,35 +2542,7 @@ namespace ShadowCasterManager
 						ImGui::SetTooltip(row.inScene ? "In scene this frame" : "Not in scene");
 				} else if (col == slotColIdx) {
 					if (row.inScene) {
-						auto* light = reinterpret_cast<RE::BSShadowLight*>(row.info.lightKey);
-						bool mismatch = false;
-						uint32_t liveIdx = row.idx;
-						bool hasDescs = false;
-						auto checkDescs = [&](auto& descs) {
-							if (!descs.empty()) {
-								hasDescs = true;
-								liveIdx = descs[0].shadowmapIndex;
-								mismatch = liveIdx != row.idx;
-							}
-						};
-						if (globals::game::isVR)
-							checkDescs(light->GetVRRuntimeData().shadowmapDescriptors);
-						else
-							checkDescs(light->GetRuntimeData().shadowmapDescriptors);
-						if (mismatch)
-							ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
 						ImGui::Text("%u", row.idx);
-						if (mismatch)
-							ImGui::PopStyleColor();
-						if (ImGui::IsItemHovered()) {
-							if (!hasDescs)
-								ImGui::SetTooltip("Slot (CopyPointShadow): %u\nNo shadow descriptors", row.idx);
-							else
-								ImGui::SetTooltip(
-									"Slot (CopyPointShadow): %u\n"
-									"Live desc[0].shadowmapIndex: %u%s",
-									row.idx, liveIdx, mismatch ? "  <- MISMATCH" : "");
-						}
 					} else
 						ImGui::TextDisabled("--");
 				} else if (col == addrColIdx) {
