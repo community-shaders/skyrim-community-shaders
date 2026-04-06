@@ -55,10 +55,6 @@ Texture2DArray<float> ShadowMaps : register(t101);
 
 namespace ShadowSampling
 {
-	// PCF filter radii in UV space (base, before user KernelScale).
-	static const float PCFKernelDirectional = 1.0 / 2048.0;  // directional cascade maps
-	static const float PCFKernelShadowLight = 1.0 / 1024.0;  // frustum/spot shadow maps
-
 	// Shadow depth bias — applied before depth comparisons to prevent self-shadowing acne.
 	static const float ShadowBiasConst = 0.0005;  // constant component
 	// Depth guard epsilons used to reject spotlight fragments at the near/far frustum planes.
@@ -182,101 +178,19 @@ namespace ShadowSampling
 		return lerp(visibility, 1.0, fade);
 	}
 
-	// --- PCF helpers ---
+	// --- Shadow helpers ---
 
 	// Gather-based shadow sample: fetches 4 texels and compares to receiver depth.
-	// Used for all shadow filtering modes (single-tap and multi-tap PCF).
-	// receiverDepth should be pre-biased by the caller (except for debug/constant-bias mode).
+	// receiverDepth should be pre-biased by the caller.
 	float SampleShadowGather(uint shadowIndex, float2 uv, float receiverDepth)
 	{
 		float4 samples = ShadowMaps.GatherRed(LinearSampler, float3(uv, shadowIndex));
 		return dot(float4(samples > receiverDepth), 0.25);
 	}
 
-	// 8-tap spiral PCF on a 2D shadow map slice (paraboloid UV space).
-	// receiverDepth must be pre-biased by the caller.
-	float PCFSpiral8(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius, float2x2 rotationMatrix)
+	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth)
 	{
-		float sum = 0.0;
-		[unroll] for (int i = 0; i < 8; i++)
-		{
-			float2 offset = mul(rotationMatrix, Random::SpiralSampleOffsets8[i]) * kernelRadius;
-			sum += SampleShadowGather(shadowIndex, baseUV + offset, receiverDepth);
-		}
-		return sum * rcp(8.0);
-	}
-
-	// 16-tap Poisson disc PCF on a 2D shadow map slice.
-	float PCFPoisson16(uint shadowIndex, float2 baseUV, float receiverDepth, float kernelRadius, float2x2 rotationMatrix)
-	{
-		float sum = 0.0;
-		[unroll] for (int i = 0; i < 16; i++)
-		{
-			float2 offset = mul(rotationMatrix, Random::PoissonSampleOffsets16[i]) * kernelRadius;
-			sum += SampleShadowGather(shadowIndex, baseUV + offset, receiverDepth);
-		}
-		return sum * rcp(16.0);
-	}
-
-	// PCSS: blocker search → penumbra estimation → variable-width PCF.
-	// Optimized PCSS Spotlight with Stabilized Blocker Search
-	float PCSSSpotlight(uint shadowIndex, float2 baseUV, float receiverDepth, float2x2 rotationMatrix)
-	{
-		float lightSize = SharedData::lightLimitFixSettings.LightSize;
-		float kernelScale = SharedData::lightLimitFixSettings.KernelScale;
-
-		// Step 1: Blocker search — single GatherRed (4 samples, 1 tex instruction).
-		// The center-pixel gather gives a coarse but fast occluder depth estimate.
-		float4 gathered = ShadowMaps.GatherRed(LinearSampler, float3(baseUV, shadowIndex));
-		float4 isBlocker = float4(gathered < receiverDepth);
-		float blockerCount = dot(isBlocker, 1.0);
-		if (blockerCount == 0.0)
-			return 1.0;  // fully lit — no occluders found
-
-		// Step 2: penumbra width from receiver–blocker distance.
-		// Guard avgBlockerDepth against zero (can occur when the shadow map stores 0 at the near plane).
-		// Saturate penumbra to [0,1] so kernelRadius stays bounded regardless of lightSize/depth ratio.
-		float avgBlockerDepth = dot(gathered * isBlocker, 1.0) / blockerCount;
-		float penumbra = saturate((receiverDepth - avgBlockerDepth) / max(avgBlockerDepth, 1e-5) * lightSize);
-		float kernelRadius = penumbra * PCFKernelShadowLight * kernelScale;
-
-		// Step 3: PCF with contact-hardened radius.
-		return PCFPoisson16(shadowIndex, baseUV, receiverDepth, kernelRadius, rotationMatrix);
-	}
-
-	// Build a 2D rotation matrix for PCF kernel randomization.
-	// Uses world-space XZ position so both VR eyes compute an identical rotation
-	// for the same surface point — screen position differs between eyes (IPD).
-	// World-space noise is also more temporally stable than screen-space IGN on
-	// camera pan, and integrates equally well with TAA via the FrameCount term.
-	float2x2 GetPCFRotationMatrix(float3 worldPosition)
-	{
-		float noise = Random::InterleavedGradientNoise(worldPosition.xz, SharedData::FrameCount);
-		float2 r;
-		sincos(Math::TAU * noise, r.y, r.x);
-		return float2x2(r.x, r.y, -r.y, r.x);
-	}
-
-	// Dispatch the active filter mode for omnidirectional/paraboloid shadow maps.
-	// Mode 0: single-tap gather-based PCF
-	// Mode 1+: 8-tap spiral PCF with temporal rotation
-	// Note: PCSS (mode 2) is only implemented for spotlight frustum maps; paraboloid
-	// maps fall back to spiral PCF since the paraboloid projection doesn't admit a
-	// straightforward blocker-search pass.
-	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth, float2x2 rotationMatrix)
-	{
-		uint mode = SharedData::lightLimitFixSettings.FilterMode;
-
-		// Constant bias only — slope bias (ddx/ddy) is undefined inside a non-uniform loop
-		// where adjacent quad pixels may be at different iterations.
-		// Initialize to mode-0 path so FXC can prove the variable is set on all paths (avoids X4000).
-		float result = SampleShadowGather(shadowIndex, sampleUV, depth - ShadowBiasConst);
-		[branch] if (mode >= 1)
-		{
-			float kernelRadius = PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale;
-			result = PCFSpiral8(shadowIndex, sampleUV, depth - ShadowBiasConst, kernelRadius, rotationMatrix);
-		}
-		return result;
+		return SampleShadowGather(shadowIndex, sampleUV, depth - ShadowBiasConst);
 	}
 
 	// --- Per-light shadow sampling ---
@@ -285,7 +199,7 @@ namespace ShadowSampling
 	// early-exit boundary guards (behind frustum, outside cone, etc.).  Used by the
 	// debug visualizer (LLFDEBUG) to distinguish "no coverage → dark" from
 	// "in shadow → dark" so mode-5 doesn't show black everywhere under spot lights.
-	float GetSpotlightShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix, out bool hasCoverage)
+	float GetSpotlightShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, out bool hasCoverage)
 	{
 		hasCoverage = false;
 
@@ -312,18 +226,10 @@ namespace ShadowSampling
 
 		hasCoverage = true;
 
-		// Constant bias only — slope bias (ddx/ddy) is undefined inside a non-uniform loop
-		// where adjacent quad pixels may be at different iterations.
-		uint mode = SharedData::lightLimitFixSettings.FilterMode;
-		float biasedDepth = positionLS.z - ShadowBiasConst;
-
-		[branch] if (mode == 2) return PCSSSpotlight(shadowIndex, baseUV, biasedDepth, rotationMatrix);
-		else if (mode == 1) return PCFPoisson16(shadowIndex, baseUV, biasedDepth,
-			PCFKernelShadowLight * SharedData::lightLimitFixSettings.KernelScale, rotationMatrix);
-		else return SampleShadowGather(shadowIndex, baseUV, biasedDepth);  // mode 0
+		return SampleShadowGather(shadowIndex, baseUV, positionLS.z - ShadowBiasConst);
 	}
 
-	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
+	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS)
 	{
 		// Initialize to unshadowed; geometry outside the paraboloid's coverage hemisphere is unshadowed.
 		// Explicit initialization avoids X4000 "potentially uninitialized variable" from FXC.
@@ -336,13 +242,13 @@ namespace ShadowSampling
 			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 			positionLS.z = saturate(length(positionLS.xyz) / shadow.ShadowParam.y);
 
-			result = SampleParaboloidShadow(shadowIndex, sampleUV, positionLS.z, rotationMatrix);
+			result = SampleParaboloidShadow(shadowIndex, sampleUV, positionLS.z);
 		}
 
 		return result;
 	}
 
-	float GetOmnidirectionalShadow(ShadowData shadow, uint shadowIndex, float3 positionLS, float2x2 rotationMatrix)
+	float GetOmnidirectionalShadow(ShadowData shadow, uint shadowIndex, float3 positionLS)
 	{
 		bool lowerHalf = positionLS.z < 0;
 		float3 normalizedPositionLS = normalize(positionLS);
@@ -354,14 +260,14 @@ namespace ShadowSampling
 		float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-		return SampleParaboloidShadow(shadowIndex, sampleUV, depth, rotationMatrix);
+		return SampleParaboloidShadow(shadowIndex, sampleUV, depth);
 	}
 
 	// Returns the shadow factor for a point-light shadow slot.
 	// hasCoverage is set to false when the pixel falls outside the spotlight frustum /
 	// cone (early-exit with 0.0 return) so the debug visualizer can skip those pixels
 	// in its min-shadow accumulation.  For hemi / omni lights hasCoverage is always true.
-	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex, out bool hasCoverage)
+	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, uint eyeIndex, out bool hasCoverage)
 	{
 		hasCoverage = true;  // default: paraboloid lights always sample
 
@@ -380,9 +286,9 @@ namespace ShadowSampling
 
 		float4 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1));
 
-		[branch] if (shadow.ShadowParam.x == 0) return GetSpotlightShadow(shadow, shadowIndex, positionLS, rotationMatrix, hasCoverage);
-		else if (shadow.ShadowParam.x == 1) return GetHemisphereShadow(shadow, shadowIndex, positionLS, rotationMatrix);
-		else if (shadow.ShadowParam.x == 2) return GetOmnidirectionalShadow(shadow, shadowIndex, positionLS.xyz, rotationMatrix);
+		[branch] if (shadow.ShadowParam.x == 0) return GetSpotlightShadow(shadow, shadowIndex, positionLS, hasCoverage);
+		else if (shadow.ShadowParam.x == 1) return GetHemisphereShadow(shadow, shadowIndex, positionLS);
+		else if (shadow.ShadowParam.x == 2) return GetOmnidirectionalShadow(shadow, shadowIndex, positionLS.xyz);
 
 		return 1.0;
 	}

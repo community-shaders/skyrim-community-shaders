@@ -7,17 +7,8 @@
 #include "Shadercache.h"
 #include "State.h"
 
-NLOHMANN_JSON_SERIALIZE_ENUM(LightLimitFix::ShadowFilterMode, {
-																  { LightLimitFix::ShadowFilterMode::Gather, 0 },
-																  { LightLimitFix::ShadowFilterMode::PCF, 1 },
-																  { LightLimitFix::ShadowFilterMode::PCSS, 2 },
-															  })
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LightLimitFix::Settings,
-	FilterMode,
-	KernelScale,
-	LightSize,
 	ShadowSettings)
 
 void LightLimitFix::DrawSettings()
@@ -35,10 +26,8 @@ void LightLimitFix::DrawSettings()
 		ImGui::TreePop();
 	}
 
-	///////////////////////////////
-	DrawShadowSamplingSettings();
+	ShadowCasterManager::DrawSettings(settings.ShadowSettings);
 
-	///////////////////////////////
 	ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Light Limit Visualization")) {
@@ -86,9 +75,6 @@ void LightLimitFix::DrawSettings()
 LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
 {
 	PerFrame perFrame{};
-	perFrame.FilterMode = magic_enum::enum_integer(settings.FilterMode);
-	perFrame.KernelScale = settings.KernelScale;
-	perFrame.LightSize = settings.LightSize;
 	perFrame.ShadowMapSlots = globals::deferred->shadowMapSlots;
 	std::copy(clusterSize, clusterSize + 3, perFrame.ClusterSize);
 	perFrame.EnableLightsVisualisation = settings.EnableLightsVisualisation;
@@ -194,8 +180,6 @@ void LightLimitFix::SetupResources()
 	{
 		strictLightDataCB = new ConstantBuffer(ConstantBufferDesc<StrictLightDataCB>());
 	}
-
-	SetupShadowResources();
 }
 
 void LightLimitFix::RestoreDefaultSettings()

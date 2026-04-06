@@ -22,27 +22,6 @@ static void SetShadowParameters(T& lightData, Deferred::ShadowData& sd)
 	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, invProj);
 }
 
-// ─── Resource setup ───────────────────────────────────────────────────────────
-
-void LightLimitFix::SetupShadowResources()
-{
-	// PCF comparison sampler bound to s14 for point/spot shadow sampling.
-	if (shadowCmpSampler) {
-		shadowCmpSampler->Release();
-		shadowCmpSampler = nullptr;
-	}
-	D3D11_SAMPLER_DESC cmpDesc = {};
-	cmpDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
-	cmpDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-	cmpDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-	cmpDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-	cmpDesc.MaxAnisotropy = 1;
-	cmpDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
-	cmpDesc.MinLOD = 0;
-	cmpDesc.MaxLOD = D3D11_FLOAT32_MAX;
-	DX::ThrowIfFailed(globals::d3d::device->CreateSamplerState(&cmpDesc, &shadowCmpSampler));
-}
-
 // ─── Per-frame shadow data copy ───────────────────────────────────────────────
 
 void LightLimitFix::EarlyPrepass()
@@ -158,7 +137,6 @@ void LightLimitFix::CopyPointShadowData()
 	}
 
 	context->PSSetShaderResources(101, 1, &shadowMapsSRV);
-	context->PSSetSamplers(14, 1, &shadowCmpSampler);
 }
 
 // ─── Debug helpers ────────────────────────────────────────────────────────────
@@ -185,43 +163,6 @@ std::string LightLimitFix::BuildShadowSlotColorLegend() const
 			i, hue, ri, gi, bi, ShadowCasterManager::GetShadowTypeName(info.type), info.range);
 	}
 	return out;
-}
-
-// ─── Shadow-specific settings UI ─────────────────────────────────────────────
-
-void LightLimitFix::DrawShadowSamplingSettings()
-{
-	ImGui::SeparatorText("Shadow Sampling");
-
-	{
-		static constexpr const char* filterModeNames[] = { "Gather (Single-tap)", "PCF (Poisson disc)", "PCSS (Contact Hardened)" };
-		int mode = magic_enum::enum_integer(settings.FilterMode);
-		if (ImGui::Combo("Shadow Filter", &mode, filterModeNames, IM_ARRAYSIZE(filterModeNames)))
-			settings.FilterMode = magic_enum::enum_cast<ShadowFilterMode>(mode).value_or(ShadowFilterMode::PCF);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip(
-				"Shadow filtering quality for shadow-casting point/spot lights.\n\n"
-				"Fast (Single-tap): Single gather tap with adaptive slope bias.\n"
-				"  Smooth 2x2 comparison; fastest option. Good default.\n\n"
-				"Soft (PCF): 8-tap rotated Poisson disc. Softer, more uniform penumbra.\n"
-				"  Use Kernel Scale to adjust softness.\n\n"
-				"Contact Hardened (PCSS): Penumbra width scales with distance from\n"
-				"  the occluder. Shadows are sharp at contact, soft in open air.");
-
-		if (magic_enum::enum_integer(settings.FilterMode) >= magic_enum::enum_integer(ShadowFilterMode::PCF)) {
-			ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.1f, 8.0f, "%.2f");
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Multiplier on the base PCF filter radius. Higher values give softer shadows.");
-		}
-
-		if (settings.FilterMode == ShadowFilterMode::PCSS) {
-			ImGui::SliderFloat("Light Size", &settings.LightSize, 1.0f, 50.0f, "%.1f");
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Virtual light source size in shadow map pixels for PCSS penumbra estimation. Larger values give wider soft shadows further from the caster.");
-		}
-	}
-
-	ShadowCasterManager::DrawSettings(settings.ShadowSettings);
 }
 
 // ─── Overlay ─────────────────────────────────────────────────────────────────

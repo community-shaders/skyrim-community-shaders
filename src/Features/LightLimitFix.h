@@ -22,11 +22,10 @@ public:
 	{
 		return {
 			"Light Limit Fix removes the vanilla game's 4-light limit, allowing unlimited dynamic lights in scenes. "
-			"It also extends shadow support to all point and spot lights, with configurable filtering from fast hard-edged shadows up to contact-hardened soft shadows (PCSS).",
+			"It also extends shadow support to all point and spot lights.",
 			{ "Removes 4-light limit",
 				"Unlimited dynamic lights",
 				"Shadow support for point and spot lights",
-				"PCF and PCSS soft shadow filtering",
 				"Improved lighting quality" }
 		};
 	}
@@ -100,10 +99,7 @@ public:
 
 	struct alignas(16) PerFrame
 	{
-		// Shadow sampling (configurable)
-		uint32_t FilterMode;
-		float KernelScale;
-		float LightSize;
+		uint pad0[3];             // aligns ShadowMapSlots to offset 12 (mirrors removed FilterMode/KernelScale/LightSize)
 		uint32_t ShadowMapSlots;  // total shadow map texture-array capacity
 		// Cluster config (computed)
 		uint ClusterSize[4];
@@ -158,7 +154,7 @@ public:
 
 	Util::FrameChecker frameChecker;
 
-	// Point/spot shadow resources (t100, t101, s14)
+	// Point/spot shadow resources (t100, t101)
 	// perShadows is lazily allocated in CopyPointShadowData() since shadowMapSlots
 	// is not known until Deferred::SetupResources() runs (after Feature::SetupResources()).
 	Buffer* perShadows = nullptr;
@@ -167,8 +163,6 @@ public:
 	// Per-frame shadow accounting (displayed in DrawSettings Statistics tree).
 	uint32_t shadowLightCount = 0;            // distinct lights processed (including dropped)
 	uint32_t shadowUnshadowedLightCount = 0;  // lights that exceeded slot capacity
-
-	ID3D11SamplerState* shadowCmpSampler = nullptr;  // PCF comparison sampler (s14)
 
 	/// Generate a text legend mapping each shadow-map slot index to its golden-ratio hue
 	/// and light type.  Used for RenderDoc capture comments when mode 8 is active.
@@ -197,26 +191,13 @@ public:
 	void CopyPointShadowData();
 
 	// Shadow rendering helpers (implemented in LightLimitFix/ShadowRenderer.cpp)
-	void SetupShadowResources();
-	void DrawShadowSamplingSettings();
 
 	static inline float3 Saturation(float3 color, float saturation);
 	static inline bool IsValidLight(RE::BSLight* a_light);
 	static inline bool IsGlobalLight(RE::BSLight* a_light);
 
-	enum class ShadowFilterMode : uint32_t
-	{
-		Gather = 0,  ///< Single-tap gather comparison
-		PCF = 1,     ///< 8-tap Poisson disc PCF
-		PCSS = 2,    ///< Contact-hardened soft shadows
-	};
-
 	struct Settings
 	{
-		// Shadow sampling
-		ShadowFilterMode FilterMode = ShadowFilterMode::PCF;
-		float KernelScale = 3.0f;  // scales the base PCF kernel radius
-		float LightSize = 10.0f;   // PCSS virtual light size in shadow-map pixels
 		// Debug (last)
 		bool EnableLightsVisualisation = false;
 		uint LightsVisualisationMode = 0;

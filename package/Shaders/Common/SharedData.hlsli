@@ -74,10 +74,7 @@ namespace SharedData
 
 	struct LightLimitFixSettings
 	{
-		// Shadow sampling (configurable)
-		uint FilterMode;      // 0=HW-PCF single-tap, 1=PCF Poisson disc, 2=PCSS, 3=debug raw gather
-		float KernelScale;    // multiplier on the base PCF kernel radius
-		float LightSize;      // virtual light size for PCSS (UV scale)
+		uint3 pad0;           // aligns ShadowMapSlots to offset 12 (mirrors removed FilterMode/KernelScale/LightSize)
 		uint ShadowMapSlots;  // total shadow map texture-array capacity
 		// Cluster config (computed)
 		uint4 ClusterSize;
