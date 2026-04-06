@@ -23,7 +23,7 @@ public:
 	struct alignas(16) PerFrame
 	{
 		uint32_t Enable;
-		uint32_t EnableProceduralSun;
+		uint32_t pad000_0;
 		float2 pad000;
 
 		uint32_t EnableSky;
@@ -74,11 +74,6 @@ public:
 
 		float3 VolumetricRaysColorFilter;
 		float pad13;
-
-		float ProceduralSunSize;
-		float ProceduralSunEdgeSoftness;
-		float ProceduralSunGlowIntensity;
-		float ProceduralSunGlowCurve;
 	};
 
 	bool enableEffect = false;

@@ -262,30 +262,6 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
-	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun) && SharedData::enbSettings.EnableProceduralSun) {
-		float distanceFromCenter = length(input.TexCoord0.xy * 2.0 - 1.0);
-
-		float sun = smoothstep(SharedData::enbSettings.ProceduralSunSize,
-			SharedData::enbSettings.ProceduralSunSize - SharedData::enbSettings.ProceduralSunEdgeSoftness * SharedData::enbSettings.ProceduralSunSize,
-			distanceFromCenter * 25.0);
-
-		float sunGlow = SharedData::enbSettings.ProceduralSunGlowCurve > 0.0 ? pow(pow(saturate(1.0 - distanceFromCenter), rcp(SharedData::enbSettings.ProceduralSunGlowCurve)), 3.0) * SharedData::enbSettings.ProceduralSunGlowIntensity : 0.0;
-
-		baseColor = sun + sunGlow;
-		baseColor.w = 1.0;
-		skyBoost *= 0.0;
-
-#		ifndef OCCLUSION
-#			ifndef TEXLERP
-#				ifdef TEXFADE
-		baseColor.w *= PParams.x;
-#				endif
-#			else
-		baseColor *= PParams.x;
-#			endif
-#		endif
-	}
-
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
 	float noiseGrad =

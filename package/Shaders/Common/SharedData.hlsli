@@ -248,7 +248,7 @@ namespace SharedData
 	struct ENBSettings
 	{
 		uint Enable;
-		uint EnableProceduralSun;
+		uint pad000_0;
 		uint2 pad000;
 
 		uint EnableSky;
@@ -299,11 +299,6 @@ namespace SharedData
 
 		float3 VolumetricRaysColorFilter;
 		float pad13;
-
-		float ProceduralSunSize;
-		float ProceduralSunEdgeSoftness;
-		float ProceduralSunGlowIntensity;
-		float ProceduralSunGlowCurve;
 	};
 
 	struct TerrainBlendingSettings

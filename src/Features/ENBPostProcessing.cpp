@@ -17,8 +17,6 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 
 	data.Enable = enableEffect;
 
-	data.EnableProceduralSun = enableEffect && settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT");
-
 	data.EnableSky = settingManager.GetValue<bool>("Enable", "SKY");
 	data.GradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
 	data.SkyBoostIntensity = settingManager.GetValue<bool>("DisableWrongSkyMath", "SKY") ? 0.0f : data.GradientIntensity;
@@ -58,11 +56,6 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.VolumetricRaysDesaturation = settingManager.GetInterpolatedTimeOfDayValue("Desaturation", "GAMEVOLUMETRICRAYS");
 
 	data.VolumetricRaysColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "GAMEVOLUMETRICRAYS") * volumetricRaysIntensity;
-
-	data.ProceduralSunSize = settingManager.GetValue<float>("Size", "PROCEDURALSUN");
-	data.ProceduralSunEdgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
-	data.ProceduralSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN");
-	data.ProceduralSunGlowCurve = settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN");
 
 	return data;
 }
@@ -256,18 +249,6 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		skyStaticsColorF3 = Intensity(skyStaticsColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICFOG"));
 
 		skyStaticsColor = F3ToNi(skyStaticsColorF3);
-	}
-
-	{
-		auto& waterColor = colors[(uint)RE::TESWeather::ColorTypes::kWaterMultiplier];
-
-		if (settingManager.GetValue<bool>("EnableWater", "EFFECT")) {
-			float3 waterColorF3 = NiToF3(waterColor);
-
-			waterColorF3 = Intensity(waterColorF3, settingManager.GetInterpolatedTimeOfDayValue("Brightness", "WATER"));
-
-			waterColor = F3ToNi(waterColorF3);
-		}
 	}
 }
 

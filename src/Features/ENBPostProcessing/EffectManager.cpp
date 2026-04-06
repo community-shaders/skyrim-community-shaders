@@ -115,10 +115,8 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterBoolSetting("EnableBloom", "EFFECT", true, false);
 	settingManager.RegisterBoolSetting("EnableLens", "EFFECT", false, false);
 
-	settingManager.RegisterBoolSetting("EnableProceduralSun", "EFFECT", true, false);
 	settingManager.RegisterBoolSetting("EnableCloudShadows", "EFFECT", true, false);
 	settingManager.RegisterBoolSetting("EnableImageBasedLighting", "EFFECT", true, false);
-	settingManager.RegisterBoolSetting("EnableWater", "EFFECT", true, false);
 
 	// COLORCORRECTION
 	settingManager.RegisterFloatSetting("Brightness", "COLORCORRECTION", 1.0f, 0.0f, 3.0f, false);
@@ -223,15 +221,6 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("RangeFactor", "GAMEVOLUMETRICRAYS", 1, true);
 	settingManager.RegisterTimeOfDaySetting("Desaturation", "GAMEVOLUMETRICRAYS", 0, true);
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "GAMEVOLUMETRICRAYS", { 1.0f, 1.0f, 1.0f }, true);
-
-	// PROCEDURALSUN
-	settingManager.RegisterFloatSetting("Size", "PROCEDURALSUN", 1.0f, 0.0f, 10.0f);
-	settingManager.RegisterFloatSetting("EdgeSoftness", "PROCEDURALSUN", 1.0f, 0.0f, 10.0f);
-	settingManager.RegisterTimeOfDaySetting("GlowIntensity", "PROCEDURALSUN", 1, true);
-	settingManager.RegisterTimeOfDaySetting("GlowCurve", "PROCEDURALSUN", 1, true);
-
-	// WATER
-	settingManager.RegisterTimeOfDaySetting("Brightness", "WATER", 1, true);
 }
 
 void EffectManager::ExecuteEffects()
