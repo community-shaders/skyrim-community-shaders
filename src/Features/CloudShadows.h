@@ -6,6 +6,7 @@ private:
 	static constexpr std::string_view MOD_ID = "139185";
 
 public:
+	static constexpr int kCubemapArraySize = 32;
 	struct alignas(16) Settings
 	{
 		float Opacity = 0.8f;
@@ -35,11 +36,12 @@ public:
 	bool overrideSky = false;
 	void SkyShaderHacks();
 
-	Texture2D* texCubemapCloudOcc = nullptr;
-	Texture2D* texCubemapCloudOccCopy = nullptr;
+	Texture2D* texCubemapCloudOcc[kCubemapArraySize] = {};
 
-	ID3D11RenderTargetView* cubemapCloudOccRTVs[6] = { nullptr };
-	ID3D11RenderTargetView* cubemapCloudOccCopyRTVs[6] = { nullptr };
+	ID3D11RenderTargetView* cubemapCloudOccRTVs[kCubemapArraySize][6] = {};
+
+	int currentArrayIndex = 0;
+	int readCubemapIndex = 0;
 
 	ID3D11BlendState* cloudShadowBlendState = nullptr;
 
