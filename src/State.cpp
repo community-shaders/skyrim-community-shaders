@@ -74,8 +74,6 @@ void State::Draw()
 		if (currentShader && updateShader) {
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
-					// VolumetricShadows downsamples the shadow texture into a VSM (t18).
-					// The shadow data buffer (t19) was already uploaded in Deferred::EarlyPrepasses().
 					if (volumetricShadows.loaded)
 						volumetricShadows.CopyShadowData();
 				}

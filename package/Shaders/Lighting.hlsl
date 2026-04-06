@@ -441,8 +441,6 @@ SamplerState SampLandLodBlend2Sampler : register(s15);
 SamplerState SampLandLodNoiseSampler : register(s15);
 #	endif
 
-// SampShadowMaskSampler (s14) removed — shadows are now sampled directly from depth maps.
-
 #	if defined(LANDSCAPE)
 
 Texture2D<float4> TexColorSampler : register(t0);
