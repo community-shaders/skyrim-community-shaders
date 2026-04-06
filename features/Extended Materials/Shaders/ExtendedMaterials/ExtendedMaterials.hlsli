@@ -133,17 +133,17 @@ namespace ExtendedMaterials
 		return tex.SampleLevel(samp, coords, mipLevel);
 #	endif
 	}
-	#if defined(TERRAIN_VARIATION)
-		inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
-		{
-			return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
-		}
-	#else
-		inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
-		{
-			return tex.SampleLevel(samp, coords, mipLevel);
-		}
-	#endif
+#	if defined(TERRAIN_VARIATION)
+	inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
+	{
+		return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
+	}
+#	else
+	inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
+	{
+		return tex.SampleLevel(samp, coords, mipLevel);
+	}
+#	endif
 
 	inline uint ComputeActiveMask(float4 w1, float2 w2)
 	{
