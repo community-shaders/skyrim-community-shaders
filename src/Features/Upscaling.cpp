@@ -1836,13 +1836,6 @@ void Upscaling::UpscaleDepth()
 
 		context->PSSetShader(depthUpscalePS, nullptr, 0);
 		context->Draw(3, 0);
-
-		// kMAIN now has the min-filtered upscaled depth; kMAIN_COPY still holds the
-		// original (pre-upscale) depth.  The underwater mask needs the original depth:
-		// the min-filter spreads depth=0 (sky/far-plane in reversed-Z) into water-surface
-		// pixels at the water-sky boundary.  Those pixels would incorrectly fall into the
-		// depth=0 / sky path and get marked as underwater.
-		// Defer the VR re-copy until AFTER the underwater mask draw.
 	}
 
 	{
