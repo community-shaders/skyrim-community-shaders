@@ -26,14 +26,9 @@ bool VR::AnyScreenSpaceEffectLoaded()
 
 void VR::DrawStereoBlend()
 {
-	bool vrStereoOptActive = globals::features::vr.stereoOpt.loaded &&
-	                         globals::features::vr.stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off &&
-	                         stereoBlendOverwriteCS;
+	bool vrStereoOptActive = IsStereoOptimizationCullingReady();
 
 	if (!REL::Module::IsVR() || !stereoBlendCopyTex || !stereoBlendCB)
-		return;
-
-	if (vrStereoOptActive && globals::features::vr.stereoOpt.settings.debugSkipMerge)
 		return;
 
 	if (!vrStereoOptActive && (!settings.EnableStereoBlend || !stereoBlendCS))

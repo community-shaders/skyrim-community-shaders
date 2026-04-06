@@ -196,11 +196,6 @@ void VRStereoOptimizations::CompileShaders()
 		stencilWritePS.attach(reinterpret_cast<ID3D11PixelShader*>(ptr));
 	else
 		logger::error("[VRStereoOptimizations] Failed to compile StencilWritePS");
-
-	if (auto* ptr = Util::CompileShader(L"Data\\Shaders\\VRStereoOptimizations\\ReprojectionCS.hlsl", csDefines, "cs_5_0"))
-		reprojectionCS.attach(reinterpret_cast<ID3D11ComputeShader*>(ptr));
-	else
-		logger::error("[VRStereoOptimizations] Failed to compile ReprojectionCS");
 }
 
 void VRStereoOptimizations::ClearShaderCache()
@@ -209,7 +204,6 @@ void VRStereoOptimizations::ClearShaderCache()
 	stencilDebugDepthMapCS = nullptr;
 	stencilWriteVS = nullptr;
 	stencilWritePS = nullptr;
-	reprojectionCS = nullptr;
 	dssCache.clear();
 }
 
@@ -227,8 +221,10 @@ void VRStereoOptimizations::DrawSettings()
 {
 	const char* modeNames[] = { "Off", "Enable" };
 	int currentMode = static_cast<int>(settings.stereoMode);
-	if (ImGui::Combo("Feature Enable", &currentMode, modeNames, IM_ARRAYSIZE(modeNames)))
+	if (ImGui::Combo("Enable Stereo Reprojection", &currentMode, modeNames, IM_ARRAYSIZE(modeNames)))
 		settings.stereoMode = static_cast<StereoMode>(currentMode);
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Reprojects Eye 0 (left) pixels into Eye 1 (right) using depth and motion data,\nskipping redundant full shading where the views overlap.\nReduces GPU cost in VR by shading each pixel fewer times per frame.");
 
 	if (settings.stereoMode == StereoMode::Off)
 		return;
@@ -561,74 +557,6 @@ ID3D11DepthStencilState* VRStereoOptimizations::GetOrCreateModifiedDSS(ID3D11Dep
 
 	return result;
 }
-
-//=============================================================================
-// PHASE 3: REPROJECTION COMPUTE SHADER
-//=============================================================================
-
-void VRStereoOptimizations::DispatchReprojection()
-{
-	if (!REL::Module::IsVR())
-		return;
-	if (settings.stereoMode == StereoMode::Off)
-		return;
-	if (!reprojectionCS || !texPerPixelMode || !paramsCB) {
-		DeactivateStencil();
-		return;
-	}
-	if (settings.debugSkipMerge) {
-		DeactivateStencil();
-		return;
-	}
-
-	ZoneScoped;
-	TracyD3D11Zone(globals::state->tracyCtx, "VR Stereo Opt - Reprojection");
-
-	if (globals::state->frameAnnotations)
-		globals::state->BeginPerfEvent("VR Stereo Opt - Reprojection");
-
-	auto context = globals::d3d::context;
-	auto renderer = globals::game::renderer;
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-	UpdateConstantBuffer();
-	auto cbPtr = paramsCB->CB();
-	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
-
-	// Bind: t0 = depth, t1 = mode texture, u0 = main UAV, b1 = params
-	ID3D11ShaderResourceView* srvs[2]{
-		depthSRV,
-		texPerPixelMode->srv.get()
-	};
-	ID3D11UnorderedAccessView* uavs[1]{ main.UAV };
-
-	context->CSSetConstantBuffers(1, 1, &cbPtr);
-	context->CSSetShaderResources(0, 2, srvs);
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-	context->CSSetShader(reprojectionCS.get(), nullptr, 0);
-
-	// Dispatch over Eye 1 only (shader treats dtid as Eye 1 local coords)
-	uint32_t eyeWidth = texPerPixelMode->desc.Width / 2;
-	uint32_t eyeHeight = texPerPixelMode->desc.Height;
-	context->Dispatch((eyeWidth + 7) / 8, (eyeHeight + 7) / 8, 1);
-
-	// Cleanup
-	ID3D11ShaderResourceView* nullSRVs[2] = {};
-	ID3D11UnorderedAccessView* nullUAV = nullptr;
-	ID3D11Buffer* nullCB = nullptr;
-	context->CSSetShaderResources(0, 2, nullSRVs);
-	context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
-	context->CSSetConstantBuffers(1, 1, &nullCB);
-	context->CSSetShader(nullptr, nullptr, 0);
-
-	// Stencil culling is done for this frame
-	logger::trace("[VRStereoOptimizations] Frame: stencilSwapCount={}", stencilSwapCount);
-	stencilActive = false;
-
-	if (globals::state->frameAnnotations)
-		globals::state->EndPerfEvent();
-}
-
 void VRStereoOptimizations::DeactivateStencil()
 {
 	if (!stencilActive)

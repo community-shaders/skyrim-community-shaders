@@ -1,6 +1,7 @@
 #include "ShaderCache.h"
 #include "Globals.h"
 #include "ShaderFileWatcher.h"
+#include "Util.h"
 
 #include <d3dcompiler.h>
 
@@ -1300,13 +1301,17 @@ namespace SIE
 
 		std::wstring GetDiskPath(const std::string_view& name, uint32_t descriptor, ShaderClass shaderClass)
 		{
+			const auto suffixNarrow = Util::GetShaderDefinesSuffix(globals::state->shaderDefinesString);
+			const std::wstring suffix(suffixNarrow.begin(), suffixNarrow.end());
+
+			const auto wname = std::wstring(name.begin(), name.end());
 			switch (shaderClass) {
 			case ShaderClass::Pixel:
-				return std::format(L"Data/ShaderCache/{}/{:X}.pso", std::wstring(name.begin(), name.end()), descriptor);
+				return std::format(L"Data/ShaderCache/{}/{:X}{}.pso", wname, descriptor, suffix);
 			case ShaderClass::Vertex:
-				return std::format(L"Data/ShaderCache/{}/{:X}.vso", std::wstring(name.begin(), name.end()), descriptor);
+				return std::format(L"Data/ShaderCache/{}/{:X}{}.vso", wname, descriptor, suffix);
 			case ShaderClass::Compute:
-				return std::format(L"Data/ShaderCache/{}/{:X}.cso", std::wstring(name.begin(), name.end()), descriptor);
+				return std::format(L"Data/ShaderCache/{}/{:X}{}.cso", wname, descriptor, suffix);
 			}
 			return {};
 		}
