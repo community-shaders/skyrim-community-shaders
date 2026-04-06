@@ -114,6 +114,31 @@ public:
 		return IsValidDevice(GetDevice()) && GetKey() != 0;
 	}
 
+	/// Checks if a VK key code with current modifier state exactly matches a keyboard combo.
+	static bool MatchesKeyboardCombo(const std::vector<InputCombo>& combo, uint32_t vkKey)
+	{
+		if (combo.empty() || combo.back().GetKey() != vkKey || combo.back().GetDevice() != InputDeviceType::Keyboard)
+			return false;
+
+		bool requiresCtrl = false, requiresShift = false, requiresAlt = false;
+		for (size_t i = 0; i < combo.size() - 1; ++i) {
+			uint32_t modKey = combo[i].GetKey();
+			if (modKey == VK_CONTROL || modKey == VK_LCONTROL || modKey == VK_RCONTROL)
+				requiresCtrl = true;
+			else if (modKey == VK_SHIFT || modKey == VK_LSHIFT || modKey == VK_RSHIFT)
+				requiresShift = true;
+			else if (modKey == VK_MENU || modKey == VK_LMENU || modKey == VK_RMENU)
+				requiresAlt = true;
+		}
+
+		constexpr uint16_t KEY_PRESSED = 0x8000;
+		bool ctrlHeld = (GetAsyncKeyState(VK_CONTROL) & KEY_PRESSED) != 0;
+		bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & KEY_PRESSED) != 0;
+		bool altHeld = (GetAsyncKeyState(VK_MENU) & KEY_PRESSED) != 0;
+
+		return (requiresCtrl == ctrlHeld) && (requiresShift == shiftHeld) && (requiresAlt == altHeld);
+	}
+
 	/**
 	 * @brief Equality comparison operator for container usage
 	 * @param other The InputCombo to compare with
