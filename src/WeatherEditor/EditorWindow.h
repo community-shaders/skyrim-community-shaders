@@ -41,13 +41,22 @@ public:
 	Texture2D* tempTexture = nullptr;
 
 	// Widget collections owned by EditorWindow, created in SetupResources(), released in destructor
-	std::vector<std::unique_ptr<Widget>> weatherWidgets;
-	std::vector<std::unique_ptr<Widget>> lightingTemplateWidgets;
-	std::vector<std::unique_ptr<Widget>> imageSpaceWidgets;
-	std::vector<std::unique_ptr<Widget>> volumetricLightingWidgets;
-	std::vector<std::unique_ptr<Widget>> precipitationWidgets;
-	std::vector<std::unique_ptr<Widget>> lensFlareWidgets;
-	std::vector<std::unique_ptr<Widget>> referenceEffectWidgets;
+	using WidgetVec = std::vector<std::unique_ptr<Widget>>;
+	WidgetVec weatherWidgets;
+	WidgetVec lightingTemplateWidgets;
+	WidgetVec imageSpaceWidgets;
+	WidgetVec volumetricLightingWidgets;
+	WidgetVec precipitationWidgets;
+	WidgetVec lensFlareWidgets;
+	WidgetVec referenceEffectWidgets;
+
+	/// Returns references to all editable widget collections for centralized iteration.
+	std::array<WidgetVec*, 7> GetWidgetCollections()
+	{
+		return { &weatherWidgets, &lightingTemplateWidgets, &imageSpaceWidgets,
+			&volumetricLightingWidgets, &precipitationWidgets, &lensFlareWidgets,
+			&referenceEffectWidgets };
+	}
 	std::vector<std::unique_ptr<Widget>> artObjectWidgets;
 	std::vector<std::unique_ptr<Widget>> effectShaderWidgets;
 
@@ -186,9 +195,11 @@ public:
 		std::vector<std::string> favoriteWidgets;
 		std::map<std::string, std::vector<std::string>> recentWidgets;
 		int maxRecentWidgets = 10;
-		bool rememberOpenWidgets = true;
-		std::vector<std::string> lastOpenWidgets;
+
 		bool showViewport = true;
+
+		// Per-widget-type window sizes (serialized as JSON for persistence)
+		json widgetTypeSizes;
 
 		// Palette settings
 		struct PaletteColorEntry
@@ -222,8 +233,6 @@ public:
 	void AddToRecent(const std::string& widgetId, const std::string& category);
 	void ToggleFavorite(const std::string& widgetId);
 	bool IsFavorite(const std::string& widgetId) const;
-	void SaveSessionWidgets();
-	void RestoreSessionWidgets();
 
 	// Navigation helpers for weather-controlled settings
 	void OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName);

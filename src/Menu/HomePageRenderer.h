@@ -13,7 +13,6 @@ public:
 	static constexpr float HOTKEY_TEXT_SCALE_CAPTURING = 2.0f;
 	static constexpr float HOTKEY_HOVER_DIM_FACTOR = 0.7f;
 	static constexpr float HELP_TEXT_SCALE = 1.35f;
-	static constexpr float QUICK_LINKS_BUTTON_WIDTH = 180.0f;
 	static constexpr float LOGO_WATERMARK_HEIGHT = 156.0f;
 	static constexpr uint8_t MODAL_OVERLAY_ALPHA = 160;
 

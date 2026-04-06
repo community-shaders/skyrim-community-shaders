@@ -134,7 +134,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		}
 	} else {
 		// Fallback button when Discord icon is not available
-		float buttonWidth = QUICK_LINKS_BUTTON_WIDTH * scale;
+		float buttonWidth = DISCORD_BANNER_MIN_WIDTH * scale;
 		ImGui::SetCursorPosX((windowSize.x - buttonWidth) * 0.5f);
 		if (ImGui::Button("Join Discord Server", ImVec2(buttonWidth, 0))) {
 			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
@@ -155,25 +155,29 @@ void HomePageRenderer::RenderQuickLinksSection()
 	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
 	ImGui::Text("Quick Links");
 
-	// Center the button layout
-	float buttonWidth = QUICK_LINKS_BUTTON_WIDTH * Util::GetUIScale();
-	float totalWidth = buttonWidth * 3 + ImGui::GetStyle().ItemSpacing.x * 2;  // 3 buttons with spacing
-	ImGui::SetCursorPosX((windowSize.x - totalWidth) * 0.5f);
+	ImGui::Columns(4, nullptr, false);
 
 	// External links in a row
-	if (ImGui::Button("Nexus Mods", ImVec2(buttonWidth, 0))) {
+	if (ImGui::Button("Nexus Mods", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://www.nexusmods.com/skyrimspecialedition/mods/86492", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("GitHub Repository", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("GitHub", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("GitHub Wiki", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("Wiki", ImVec2(-1, 0))) {
+		ShellExecuteA(NULL, "open", "https://modding.wiki/en/skyrim/developers/community-shaders", NULL, NULL, SW_SHOWNORMAL);
+	}
+
+	ImGui::NextColumn();
+	if (ImGui::Button("Developer Wiki", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders/wiki", NULL, NULL, SW_SHOWNORMAL);
 	}
+
+	ImGui::Columns(1);
 }
 
 void HomePageRenderer::RenderFAQSection()
@@ -210,18 +214,8 @@ void HomePageRenderer::RenderFAQSection()
 	if (ImGui::CollapsingHeader("I have \"Failed Shaders\" when compiling?")) {
 		ImGui::TextWrapped(
 			"Failed shaders are usually caused by mixed file versions. Ensure all features are up to date "
-			"and avoid mixing files from test builds or outdated versions.");
-		ImGui::Spacing();
-		ImGui::Text("Remove these outdated pre-1.0 CS features:");
-		ImGui::BulletText("Vanilla HDR");
-		ImGui::BulletText("Tree LOD Lighting");
-		ImGui::BulletText("Complex Parallax Materials");
-		ImGui::BulletText("Water Blending");
-		ImGui::BulletText("Water Caustics");
-		ImGui::BulletText("Water Parallax");
-		ImGui::BulletText("Dynamic Cubemaps");
-		ImGui::Spacing();
-		ImGui::TextWrapped("Note: All of these features are now included in the base Community Shaders install.");
+			"and avoid mixing files from test builds or outdated versions. Please review the 'Feature Issues' tab "
+			"and/or Wiki for more information. Update your features and remove any obsolete features.");
 	}
 
 	if (ImGui::CollapsingHeader("How do I improve performance?")) {
