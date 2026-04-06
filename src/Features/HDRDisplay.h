@@ -27,8 +27,8 @@ struct HDRDisplay : public Feature
 			"Real High Dynamic Range output for HDR displays.",
 			{
 				"HDR10 output support (10-bit) with upgraded HDR buffers (16-Bit), and fully unclamped rendering pipeline for true HDR values.",
-				"Upgraded DICE tonemapper for HDR, keeping Skyrim's distinct look while improving highlight handling and color vibrancy.",
-				"Configurable paper white and peak brightness",
+				"HDR-aware tonemapping based on Skyrim's ISHDR path (Reinhard/Hejl-Burgess-Dawson), preserving the vanilla look while improving highlight handling on HDR displays.",
+				"Configurable paper white and peak brightness.",
 			}
 		};
 	}
