@@ -151,6 +151,14 @@ void BSLightingShaderMaterialPBR::ApplyMaterialObjectData(const TruePBR::PBRMate
 	projectedMaterialGlintParameters = materialObjectData.glintParameters;
 }
 
+void BSLightingShaderMaterialPBR::ClearMaterialObjectData()
+{
+	projectedMaterialBaseColorScale = { 1.f, 1.f, 1.f };
+	projectedMaterialRoughness = 1.f;
+	projectedMaterialSpecularLevel = 0.04f;
+	projectedMaterialGlintParameters = GlintParameters{};
+}
+
 void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTextureSet* inTextureSet)
 {
 	const auto& stateData = globals::game::graphicsState->GetRuntimeData();

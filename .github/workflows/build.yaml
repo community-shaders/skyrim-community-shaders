@@ -30,6 +30,7 @@ on:
             - "**.c"
             - "**.hlsl"
             - "**.hlsli"
+            - "**.ini"
             - "CMakeLists.txt"
             - "CMakePresets.json"
             - "vcpkg.json"
@@ -37,6 +38,8 @@ on:
             - ".gitmodules"
             - "extern/**"
             - "cmake/**"
+            - "features/**"
+            - "src/Features/**"
             - ".github/workflows/**"
             - ".github/configs/**"
 
@@ -482,7 +485,8 @@ jobs:
         name: Feature Version Audit (PR)
         if: github.event_name == 'pull_request_target'
         runs-on: ubuntu-latest
-        continue-on-error: true
+        permissions:
+            contents: read
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -495,11 +499,16 @@ jobs:
               with:
                   python-version: "3.11"
 
+            - name: Fetch PR head and base
+              run: |
+                  git fetch origin refs/pull/${{ github.event.pull_request.number }}/head:refs/pr_head
+                  git fetch origin ${{ github.event.pull_request.base.sha }}
+
             - name: Run feature version audit (PR check)
               id: audit
               run: |
                   set +e
-                  python tools/feature_version_audit.py --pr-check --ci --base ${{ github.event.pull_request.base.sha }} > pr-feature-audit.md
+                  python tools/feature_version_audit.py --pr-check --ci --base ${{ github.event.pull_request.base.sha }} --head refs/pr_head > pr-feature-audit.md
                   EXIT_CODE=$?
                   set -e
                   cat pr-feature-audit.md

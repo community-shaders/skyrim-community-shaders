@@ -4,8 +4,7 @@
 
 void LensFlareWidget::DrawWidget()
 {
-	SetupWidgetWindowDefaults();
-	if (Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##LensFlareSearch", true, true);
 	}
 	BeginScrollableContent("##LFScroll");
