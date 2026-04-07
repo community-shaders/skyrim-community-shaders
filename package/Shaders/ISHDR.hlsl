@@ -66,7 +66,7 @@ float3 GetTonemapFactorReinhard(float3 luminance, bool isHDR = false)
 		float x0 = ReinhardFindBranchingPoint(p);
 		float y0 = (x0 * (x0 * p + 1.0)) / (x0 + 1.0);
 
-        float m = ReinhardDerivative(x0, p);
+		float m = ReinhardDerivative(x0, p);
 		float b = y0 - m * x0;
 
 		float3 extended = m * luminance + b;
@@ -183,26 +183,27 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float blendedLuminance = Color::RGBToLuminance(blendedColor);
-    float3 tintedColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
-    float3 contrastedColor = lerp(avgValue.x, tintedColor, Cinematic.z);
+	float3 tintedColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
+	float3 contrastedColor = lerp(avgValue.x, tintedColor, Cinematic.z);
 
-#if 1 // Contrast modified to fix crushed shadows
-    float3 contrastedColorModified = pow(abs(tintedColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(tintedColor);
+#		if 1  // Contrast modified to fix crushed shadows
+	float3 contrastedColorModified = pow(abs(tintedColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(tintedColor);
 	contrastedColor = lerp(contrastedColorModified, contrastedColor, saturate(contrastedColorModified / 0.1f));  // blend in modified contrast for shadows
-#endif
+#		endif
 
-    outputColor = contrastedColor;
+	outputColor = contrastedColor;
 
 #		if defined(FADE)
 	outputColor = lerp(outputColor, Fade.xyz, Fade.w);
 #		endif
 
-    if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
-        outputColor = Color::SrgbToLinearSigned(outputColor);
+	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
+		outputColor = Color::SrgbToLinearSigned(outputColor);
 	}
 
-    if (isHDR) {
-        if (!ENABLE_LL) outputColor = Color::SrgbToLinearSigned(outputColor);
+	if (isHDR) {
+		if (!ENABLE_LL)
+			outputColor = Color::SrgbToLinearSigned(outputColor);
 		float paperWhiteNits = max(hdrShared.y, 1e-6);
 		float peakWhiteRatio = max(hdrShared.z / paperWhiteNits, 1.0);  // peakNits / paperWhite
 
@@ -215,14 +216,15 @@ PS_OUTPUT main(PS_INPUT input)
 		float scale = (y_in > 0.0) ? (y_out / y_in) : 0.0;
 		outputColor *= scale;
 
-        // force stronger hue shift
-        outputColor = Color::Correct::Hue(outputColor, DisplayMapping::RangeCompress(outputColor, 1.f, 6.f), 0.25f);
+		// force stronger hue shift
+		outputColor = Color::Correct::Hue(outputColor, DisplayMapping::RangeCompress(outputColor, 1.f, 6.f), 0.25f);
 
 		// map to display peak
 		outputColor = Color::BT709ToBT2020(outputColor);
 		outputColor = exp2(DisplayMapping::RangeCompress(log2(max(0, outputColor)), log2(0.4 * peakWhiteRatio), log2(peakWhiteRatio), log2(100.f)));
-        outputColor = Color::BT2020ToBT709(outputColor);
-        if (!ENABLE_LL) outputColor = Color::LinearToSrgbSigned(outputColor);
+		outputColor = Color::BT2020ToBT709(outputColor);
+		if (!ENABLE_LL)
+			outputColor = Color::LinearToSrgbSigned(outputColor);
 	} else {
 		outputColor = max(0, outputColor);
 		outputColor = FrameBuffer::ToSRGBColor(outputColor);

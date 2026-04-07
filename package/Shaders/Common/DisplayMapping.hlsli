@@ -38,37 +38,37 @@ namespace DisplayMapping
 	}
 
 	float RangeCompress(float val, float threshold, float maxValue)
-		{
-			if (val < threshold)
-				return val;
-			if (maxValue <= threshold)
-				return threshold;
+	{
+		if (val < threshold)
+			return val;
+		if (maxValue <= threshold)
+			return threshold;
 
-			float range = maxValue - threshold;
-			return threshold + range * RangeCompress((val - threshold) / range);
-		}
+		float range = maxValue - threshold;
+		return threshold + range * RangeCompress((val - threshold) / range);
+	}
 
-		float RangeCompress(float val, float threshold, float maxValue, float clip)
-		{
-			if (val < threshold)
-				return val;
-			if (maxValue <= threshold)
-				return threshold;
+	float RangeCompress(float val, float threshold, float maxValue, float clip)
+	{
+		if (val < threshold)
+			return val;
+		if (maxValue <= threshold)
+			return threshold;
 
-			float range = maxValue - threshold;
-			float clipValue = 1.0 - exp((threshold - clip) / range);
-			float rolloffValue = 1.0 - exp(-(val - threshold) / range);
+		float range = maxValue - threshold;
+		float clipValue = 1.0 - exp((threshold - clip) / range);
+		float rolloffValue = 1.0 - exp(-(val - threshold) / range);
 
-			return threshold + range * (rolloffValue / clipValue);
-		}
+		return threshold + range * (rolloffValue / clipValue);
+	}
 
 	float3 RangeCompress(float3 val, float threshold, float maxValue, float clip)
-    {
-        return float3(
-            RangeCompress(val.x, threshold, maxValue, clip),
-            RangeCompress(val.y, threshold, maxValue, clip),
-            RangeCompress(val.z, threshold, maxValue, clip));
-    }
+	{
+		return float3(
+			RangeCompress(val.x, threshold, maxValue, clip),
+			RangeCompress(val.y, threshold, maxValue, clip),
+			RangeCompress(val.z, threshold, maxValue, clip));
+	}
 
 	static const float PQ_constant_N = (2610.0 / 4096.0 / 4.0);
 	static const float PQ_constant_M = (2523.0 / 4096.0 * 128.0);
