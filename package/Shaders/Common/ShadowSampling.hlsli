@@ -134,23 +134,18 @@ namespace ShadowSampling
 #endif
 	}
 
-	float GetLightingShadow(float3 worldPosition, uint eyeIndex, out float detailedShadow)
+	float GetDirectionalShadow(float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex)
 	{
 		DirectionalShadowData shadow = DirectionalShadows[0];
 
 		float shadowMapDepth = length(worldPosition);
 
-		if (shadowMapDepth > shadow.EndSplitDistances.y) {
-			detailedShadow = 1.0;
+		if (shadowMapDepth > shadow.EndSplitDistances.y)
 			return 1.0;
-		}
+
+		float fadeFactor = 1.0 - pow(saturate(dot(worldPosition.xyz, worldPosition.xyz) / shadow.EndSplitDistances.y), 8);
 
 		worldPosition.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-
-		// Fade only in the final 10% of the far cascade to dissolve the hard cutoff.
-		static const float FadeWindow = 0.1;
-		float fadeStart = shadow.EndSplitDistances.y * (1.0 - FadeWindow);
-		float fade = saturate((shadowMapDepth - fadeStart) / (shadow.EndSplitDistances.y - fadeStart));
 
 		// Compute cascade blend factor
 		float cascadeSelect = smoothstep(shadow.StartSplitDistances.y, shadow.EndSplitDistances.x, shadowMapDepth);
@@ -161,24 +156,49 @@ namespace ShadowSampling
 
 		// Transform ray to light space for primary cascade
 		float3 positionLS = mul(shadow.ShadowProj[primaryCascade], float4(worldPosition, 1)).xyz;
+		positionLS.z -= Constants::ShadowBiasConst;
 
 		// Sample primary cascade
-		float visibility = dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, primaryCascade)) > positionLS.z), 0.25);
+		uint onePlusLayerIndex = 1.0 + primaryCascade;
+		float layerIndexRcp = rcp(onePlusLayerIndex);
 
+		float ShadowSampleParamZ = 0.001; // // fPoissonRadiusScale / iShadowMapResolution in z and w
+
+		float visibility = 0;
+
+		for (int i = 0; i < 16; i++) {
+			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
+			float2 sampleUV = positionLS.xy + layerIndexRcp * sampleOffset * ShadowSampleParamZ;
+			visibility += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(saturate(sampleUV), primaryCascade)) > positionLS.z), 0.25);
+		}
+
+		visibility /= 16.0;
+	
 		// Blend with secondary cascade if needed
 		[branch] if (needsBlending)
 		{
 			uint secondaryCascade = 1 - primaryCascade;
 
-			positionLS = mul(shadow.ShadowProj[secondaryCascade], float4(worldPosition, 1)).xyz;
+			onePlusLayerIndex = 1.0 + secondaryCascade;
+			layerIndexRcp = rcp(onePlusLayerIndex);
 
-			float visibilityBlend = dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, secondaryCascade)) > positionLS.z), 0.25);
+			positionLS = mul(shadow.ShadowProj[secondaryCascade], float4(worldPosition, 1)).xyz;
+			positionLS.z -= Constants::ShadowBiasConst;
+
+			float visibilityBlend = 0.0;
+			
+			for (int i = 0; i < 16; i++) {
+				float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
+				float2 sampleUV = positionLS.xy + layerIndexRcp * sampleOffset * ShadowSampleParamZ;
+				visibilityBlend += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(saturate(sampleUV), secondaryCascade)) > positionLS.z), 0.25);
+			}
+
+			visibilityBlend /= 16.0;
+
 			visibility = lerp(visibility, visibilityBlend, cascadeSelect);
 		}
 
-		// detailedShadow exposes raw visibility for callers that need the un-faded value.
-		detailedShadow = visibility;
-		return lerp(visibility, 1.0, fade);
+		return lerp(visibility, 1.0, fadeFactor);
 	}
 
 	// --- Shadow helpers ---

@@ -2424,12 +2424,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-	float dirSoftShadow = 1.0;
 	float dirDetailedShadow = 1.0;
+	float dirSoftShadow = dirDetailedShadow;
+
+	float2 rotation;
+	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
 	// Sample directional shadow directly (VSM when VolumetricShadows loaded, PCF otherwise).
 	if (inWorld && !inReflection && !SharedData::InInterior)
-		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirDetailedShadow);
+	{
+		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, rotationMatrix, eyeIndex);
+		dirSoftShadow = dirDetailedShadow;
+	}
 
 #	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
 	if (!SharedData::InInterior)

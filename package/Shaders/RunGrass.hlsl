@@ -592,11 +592,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float dirSoftShadow = 1.0;
 	float dirDetailedShadow = 1.0;
+	float dirSoftShadow = dirDetailedShadow;
 
-	if (!SharedData::InInterior)
-		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirDetailedShadow);
+	float2 rotation;
+	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+
+	if (!SharedData::InInterior){
+		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, rotationMatrix, eyeIndex);
+		dirSoftShadow = dirDetailedShadow;
+	}
 
 #			if defined(SCREEN_SPACE_SHADOWS)
 	if (!SharedData::InInterior)
@@ -874,9 +880,16 @@ PS_OUTPUT main(PS_INPUT input)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
 	float dirDetailedShadow = 1.0;
+	float dirSoftShadow = dirDetailedShadow;
 
-	if (!SharedData::InInterior)
-		dirDetailedShadow = shadowColor.x;
+	float2 rotation;
+	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+
+	if (!SharedData::InInterior){
+		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, rotationMatrix, eyeIndex);
+		dirSoftShadow = dirDetailedShadow;
+	}
 
 #			if defined(SCREEN_SPACE_SHADOWS)
 	if (!SharedData::InInterior)
