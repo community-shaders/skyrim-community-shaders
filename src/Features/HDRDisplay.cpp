@@ -479,14 +479,15 @@ void HDRDisplay::DrawSettings()
 			float oldUIBrightness = settings.hdrUIBrightness;
 			float currentUIBrightness = settings.hdrUIBrightness;
 
-			ImGui::SliderFloat("HDR UI Brightness", &currentUIBrightness, 0.5f, 5.0f, "%.2fx");
+			ImGui::SliderFloat("UI Brightness Multiplier", &currentUIBrightness, 0.5f, 5.0f, "%.2fx");
 			if (oldUIBrightness != currentUIBrightness) {
 				settings.hdrUIBrightness = currentUIBrightness;
 				UpdateHDRData();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Adjusts UI brightness in HDR mode. UI renders at 80 nits baseline,");
-				ImGui::Text("independent of Paper White setting. 1.0x = 80 nits.");
+				ImGui::Text("UI brightness = Paper White × this multiplier in HDR mode.");
+				ImGui::Text("1.00x = UI renders at Paper White brightness. Higher values make UI brighter relative to scene content.");
+				ImGui::Text("Note: Main menu and loading screens always render at Paper White brightness.");
 			}
 		}
 	}
