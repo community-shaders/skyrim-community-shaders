@@ -29,14 +29,6 @@ namespace DisplayMapping
 			RangeCompress(val.z, threshold));
 	}
 
-	float3 RangeCompress(float3 val, float threshold, float maxValue)
-	{
-		return float3(
-			RangeCompress(val.x, threshold, maxValue),
-			RangeCompress(val.y, threshold, maxValue),
-			RangeCompress(val.z, threshold, maxValue));
-	}
-
 	float RangeCompress(float val, float threshold, float maxValue)
 	{
 		if (val < threshold)
@@ -46,6 +38,14 @@ namespace DisplayMapping
 
 		float range = maxValue - threshold;
 		return threshold + range * RangeCompress((val - threshold) / range);
+	}
+
+	float3 RangeCompress(float3 val, float threshold, float maxValue)
+	{
+		return float3(
+			RangeCompress(val.x, threshold, maxValue),
+			RangeCompress(val.y, threshold, maxValue),
+			RangeCompress(val.z, threshold, maxValue));
 	}
 
 	float RangeCompress(float val, float threshold, float maxValue, float clip)
