@@ -62,7 +62,7 @@ cbuffer PerFrame : register(b0)
         }
 
         // ISHDR HDR path outputs sRGB gamma at this stage.
-        float3 compositedColorLinear = sign(compositedColorGamma) * Color::SrgbToLinear(compositedColorGamma);
+        float3 compositedColorLinear = Color::GammaToLinearSafe(compositedColorGamma);
         compositedColorLinear = Color::BT709ToBT2020(compositedColorLinear);
         finalColor = Color::pq::Encode(max(0.0, compositedColorLinear), paperWhite);
 
