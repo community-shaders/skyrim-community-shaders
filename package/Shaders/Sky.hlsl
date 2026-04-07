@@ -217,22 +217,28 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
+	// HDR-only sun path: scale glare/disc brightness using user HDR settings.
 	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+		// 203 nits is the HDR reference paper white used by the rest of the HDR pipeline.
 		const float SUN_REF_PAPER_WHITE_NITS = 203.0;
 		float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
 		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
 
+		// Peak ratio drives how much brighter the sun can get vs reference HDR white.
 		float peakRatio = peakNits / SUN_REF_PAPER_WHITE_NITS;
 
-		// Non-LL: scale in gamma with pow(PR,1/2.2) so linear matches peak/203 after decode.
+		// In LL we are already linear; non-LL needs gamma-domain scaling compensation.
 		float menuSceneEncoding = SharedData::HDRData.w;
 		static const float SUN_DIM_IN_MENU_SCENES = 0.58;  // HDRDisplay::kHdrMenuScenePauseOrMap
+		// Dim sun for pause/map/main-menu scenes to avoid UI-facing blowout.
 		float hdrSunMenuMul = (menuSceneEncoding > 1e-3) ? SUN_DIM_IN_MENU_SCENES : 1.0;
 		float hdrScale = (ENABLE_LL ? peakRatio : pow(peakRatio, rcp(2.2))) * hdrSunMenuMul;
 
 #		if defined(DITHER)
+		// DITHER path is the glare sprite-style variant.
 		float glareLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
 
+		// Keep glare energy bounded before applying HDR scale.
 		if (glareLum > 1.0)
 			baseColor.xyz *= rcp(glareLum);
 
@@ -241,6 +247,7 @@ PS_OUTPUT main(PS_INPUT input)
 		baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
 
 #			ifdef TEX
+		// Fade toward quad edges so the glare sprite blends smoothly.
 		float2 glareUv = saturate(input.TexCoord0.xy);
 		float glareEdge = min(min(glareUv.x, glareUv.y), min(1.0 - glareUv.x, 1.0 - glareUv.y));
 		float glareEdgeFade = smoothstep(0.0, 0.08, glareEdge);
@@ -249,16 +256,20 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 
 #		else
+		// Non-DITHER path is the sun disc/core variant.
 		float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
 
+		// Clamp source before boosting the bright disc core.
 		if (srcLum > 1.0)
 			baseColor.xyz *= rcp(srcLum);
 
+		// Boost the highest-luminance region more strongly than the outer disc.
 		float sunCoreBoost = peakRatio;
 		float sunCoreMask = smoothstep(0.9, 1.0, saturate(srcLum));
 		float discScale = hdrScale * lerp(1.0, sunCoreBoost, sunCoreMask);
 		baseColor.xyz *= discScale;
 
+		// Tiny dither to reduce visible banding on bright gradients.
 		float ign = frac(52.9829189 * frac(dot(floor(input.Position.xy), float2(0.06711056, 0.00583715))));
 		baseColor.xyz += (ign - 0.5) * (discScale / 255.0);
 
@@ -266,6 +277,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 #		if defined(CLOUD_SHADOWS)
+		// Apply cloud transmittance in this same HDR-scaled branch so occlusion remains coherent.
 		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(input.WorldPosition.xyz, SharedData::DirLightDirection.xyz);
 		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 0).x;
 		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 1).x;
@@ -286,8 +298,10 @@ PS_OUTPUT main(PS_INPUT input)
 #			ifdef TEX
 	float3 sunGlareColor = Color::Sky(input.Color.xyz) * baseColor.xyz;
 	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+		// HDR sun block already applied tint/scale; avoid multiplying by tint again.
 		sunGlareColor = baseColor.xyz;
 	}
+	// Dither/noise term is the legacy sky path contribution for gradient smoothing.
 	psout.Color.xyz = (sunGlareColor + yyy) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
@@ -322,6 +336,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(CLOUD_SHADOWS) && defined(CLOUDS) && !defined(DEFERRED)
 	psout.CloudShadows = float4(1, 1, 1, psout.Color.w);
 
+	// Keep sun behind scene depth to prevent halo leaks through geometry.
 	float depth = TexDepthSampler.Load(int3(input.Position.xy, 0));
 	if (depth < input.Position.z)
 		psout.Color.w = 0;

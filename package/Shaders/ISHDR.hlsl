@@ -39,12 +39,6 @@ cbuffer PerGeometry : register(b2)
 	float4 BlurOffsets[16] : packoffset(c7);
 };
 
-float ReinhardDerivative(float x)
-{
-    float p = Param.y;
-    return (p * x * x + 2.0 * p * x + 1.0) / ((x + 1.0) * (x + 1.0));
-}
-
 // finds f'(x) = x for the Reinhard operator, which can be used as a branching point for piecewise tonemapping to preserve highlights
 float ReinhardFindBranchingPoint()
 {

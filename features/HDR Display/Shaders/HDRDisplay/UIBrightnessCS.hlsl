@@ -1,16 +1,6 @@
-/**
- * @file UIBrightnessCS.hlsl
- * @brief Pre-processing compute shader for UI brightness scaling.
- *
- * @details Prepares vanilla UI for different display modes:
- *   - SDR: Apply brightness multiplier in gamma space
- *   - HDR: Convert gamma UI to PQ-encoded BT.2020 for seamless FidelityFX compositing
- *
- * Input: Vanilla UI at 8-bit gamma with premultiplied alpha
- * Output: HDR-ready PQ or SDR-adjusted gamma, premultiplied alpha
- *
- * @see HDROutputCS.hlsl for final compositing onto the scene
- */
+// Preprocess vanilla UI for Frame Gen compositing.
+// HDR path converts UI to PQ/BT.2020 using configured paper white.
+// SDR path keeps gamma UI and only clamps negatives.
 
 #include "Common/Color.hlsli"
 
@@ -19,7 +9,7 @@ RWTexture2D<float4> UITex : register(u0);
 cbuffer PerFrame : register(b0)
 {
 	float enableHDR : packoffset(c0.x);                 ///< 1.0 = HDR output with PQ, 0.0 = SDR output with gamma
-	float paperWhite : packoffset(c0.y);                ///< Reference white brightness in nits for HDR (unused here)
+	float paperWhite : packoffset(c0.y);                ///< Reference white in nits (used by HDR UI conversion)
 	float peakNits : packoffset(c0.z);                  ///< Maximum display brightness in nits for HDR (unused here)
 	float skipUIComposite : packoffset(c0.w);           ///< Unused in this shader
 	float uiBrightness : packoffset(c1.x);              ///< UI brightness multiplier
@@ -27,10 +17,6 @@ cbuffer PerFrame : register(b0)
 	float isMainOrLoadingMenu : packoffset(c1.z);       ///< Unused; layout matches HDRDataCB
 	float fgTweenMenuMidAlphaBoost : packoffset(c1.w);  ///< 1 = TweenMenu open: apply mid-alpha AA boost only for pause UI
 }
-
-// UI reference brightness in nits — matches typical SDR monitor brightness.
-// Ensures UI appears consistently bright in both SDR and HDR without being washed out or blown out.
-static const float UI_REFERENCE_NITS = 80.0;
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	// Bounds check to prevent UAV out-of-bounds reads/writes
@@ -44,21 +30,11 @@ static const float UI_REFERENCE_NITS = 80.0;
 	bool hdrEnabled = enableHDR > 0.5;
 
 	if (hdrEnabled) {
-		// === HDR Pipeline ===
-		// Input: Vanilla gamma UI (sRGB, BT.709) with premultiplied alpha
-		// Output: PQ-encoded UI in BT.2020 colorspace, premultiplied alpha
-		//
-		// FidelityFX FrameGeneration blends in PQ space, so UI must be PQ-encoded.
-		// Un-premultiply before nonlinear conversion to preserve antialiased edges.
-		//
-		// When alpha == 0 but rgb != 0 (third-party/Scaleform UI that uses a blend state
-		// which doesn't write dest alpha), apply the color transform on premultiplied values
-		// directly and leave alpha at zero so FidelityFX composites additively:
-		//   result = ui.rgb + scene * 1.0
+		// FidelityFX FG blends in PQ space, so UI must be PQ/BT.2020.
+		const float uiReferenceNits = max(paperWhite, 1.0);
 
 		if (ui.a > 0.001) {
-			// Pause menu (TweenMenu) only: raise coverage in the soft-AA band so PQ/FG composite doesn't wash out.
-			// HUD/compass and other UIs must not use this — they share the same buffer when not paused.
+			// Pause menu only: raise coverage in the soft AA band to avoid washout.
 			float aIn = ui.a;
 			float aOut = aIn;
 			if (fgTweenMenuMidAlphaBoost > 0.5) {
@@ -70,25 +46,18 @@ static const float UI_REFERENCE_NITS = 80.0;
 			float3 uiStraight = ui.rgb / aIn;
 			float3 uiLinear = Color::SrgbToLinear(max(0, uiStraight));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-			float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
+			float3 uiNits = uiBT2020 * uiReferenceNits * uiBrightness;
 			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0) * aOut;
 			ui.a = aOut;
 		} else {
-			// Broken-alpha path: rgb is premultiplied but alpha was not written to texture.
-			// Apply color transform on premultiplied values; alpha stays 0 so FidelityFX
-			// adds the contribution additively without occluding the scene.
+			// Broken-alpha path: transform premultiplied color and keep alpha at 0.
 			float3 uiLinear = Color::SrgbToLinear(max(0, ui.rgb));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-			float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
+			float3 uiNits = uiBT2020 * uiReferenceNits * uiBrightness;
 			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0);
 		}
 	} else {
-		// === SDR Pipeline ===
-		// Input: Vanilla gamma UI (sRGB, BT.709) with premultiplied alpha
-		// Output: Adjusted gamma UI suitable for SDR displays
-		//
-		// Already premultiplied from render blend state — just clamp.
-		// No alpha multiply needed; skip to write.
+		// SDR path: keep premultiplied gamma UI, clamp negatives only.
 		ui.rgb = max(0, ui.rgb);
 		UITex[dispatchID.xy] = ui;
 		return;
