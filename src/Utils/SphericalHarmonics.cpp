@@ -234,7 +234,7 @@ SH2 SphericalHarmonics::FauxSpecularLobe(float3 N, float3 V, float roughness)
 	float halfAngle = std::clamp(4.1679f * roughness2 * roughness2 - 9.0127f * roughness2 * roughness + 4.6161f * roughness2 + 1.7048f * roughness + 0.1f, 0.0f, 3.14159265358979323846f / 2.0f);
 	float lerpFactor = halfAngle / (3.14159265358979323846f / 2.0f);
 	SH2 directional = Evaluate(dominantDir);
-	SH2 cosineLobe = Scale(EvaluateCosineLobe(dominantDir), 1.0 / 3.14159265358979323846f);
+	SH2 cosineLobe = Scale(EvaluateCosineLobe(dominantDir), 1.0f / 3.14159265358979323846f);
 	return Add(Scale(directional, lerpFactor), Scale(cosineLobe, 1.0f - lerpFactor));
 }
 
