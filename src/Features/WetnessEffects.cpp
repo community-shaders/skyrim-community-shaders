@@ -742,13 +742,19 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 					float currentWeight = 0.0f;
 					if (sky->currentWeather && sky->currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
 						float fadeInThreshold = sky->currentWeather->data.precipitationBeginFadeIn * (1.0f / 255.0f);
-						currentWeight = linearstep(fadeInThreshold, 1.0f, sky->currentWeatherPct);
+						if (fadeInThreshold >= 1.0f)
+							currentWeight = 0.0f;  // fade-in at end of transition, never rains
+						else
+							currentWeight = linearstep(fadeInThreshold, 1.0f, sky->currentWeatherPct);
 					}
 
 					float lastWeight = 0.0f;
 					if (sky->lastWeather && sky->lastWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
 						float fadeOutThreshold = sky->lastWeather->data.precipitationEndFadeOut * (1.0f / 255.0f);
-						lastWeight = 1.0f - linearstep(0.0f, fadeOutThreshold, sky->currentWeatherPct);
+						if (fadeOutThreshold <= 0.0f)
+							lastWeight = 0.0f;  // immediate cutoff, no fade-out period
+						else
+							lastWeight = 1.0f - linearstep(0.0f, fadeOutThreshold, sky->currentWeatherPct);
 					}
 
 					data.Raining = (currentRaining * currentWeight) + (lastRaining * lastWeight);
