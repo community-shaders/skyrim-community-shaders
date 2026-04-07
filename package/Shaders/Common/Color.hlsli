@@ -5,8 +5,10 @@
 #include "Common/Math.hlsli"
 #include "Common/SharedData.hlsli"
 
-#define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
-#define ENABLE_ACEScg SharedData::linearLightingSettings.enableACEScg
+#ifndef VSHADER
+#	define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
+#	define ENABLE_ACEScg SharedData::linearLightingSettings.enableACEScg
+#endif
 
 #if defined(PSHADER) && defined(LIGHTING)
 cbuffer LLPerGeometry : register(b8)
@@ -44,6 +46,7 @@ namespace Color
 			dot(v4, kBlueVec4) + dot(v2, kBlueVec2));
 	}
 
+#ifndef VSHADER
 	float RGBToLuminance(float3 color)
 	{
 		// AP1 (ACEScg) luminance coefficients from AP1_2_XYZ_MAT Y row
@@ -61,6 +64,22 @@ namespace Color
 		// For ACEScg, fall back to the accurate AP1 luminance
 		return ENABLE_ACEScg ? dot(color, float3(0.2722287168, 0.6740817658, 0.0536895174)) : dot(color, float3(0.299, 0.587, 0.114));
 	}
+#else
+	float RGBToLuminance(float3 color)
+	{
+		return dot(color, float3(0.2125, 0.7154, 0.0721));
+	}
+
+	float RGBToLuminanceAlternative(float3 color)
+	{
+		return dot(color, float3(0.3, 0.59, 0.11));
+	}
+
+	float RGBToLuminance2(float3 color)
+	{
+		return dot(color, float3(0.299, 0.587, 0.114));
+	}
+#endif
 
 	float3 RGBToYCoCg(float3 color)
 	{
