@@ -1,13 +1,9 @@
 #ifndef CLOUD_SHADOWS_HLSLI
 #define CLOUD_SHADOWS_HLSLI
 
-#ifndef CLOUD_SHADOW_REGISTER
-#	define CLOUD_SHADOW_REGISTER t25
-#endif
-
 namespace CloudShadows
 {
-	TextureCube<float> CloudShadowsTexture : register(CLOUD_SHADOW_REGISTER);
+	TextureCube<float> CloudShadowsTexture : register(t25);
 
 	const static float CloudHeight = (2e3f / 1.428e-2) * 0.25;
 	const static float PlanetRadius = (6371e3f / 1.428e-2);

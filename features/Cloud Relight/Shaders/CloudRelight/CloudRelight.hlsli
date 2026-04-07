@@ -96,10 +96,9 @@ namespace CloudRelight
 				0.25 * RCP_PI) *
 			Math::TAU * data.cloudRelightMix;
 
-		// Compensate vanilla mix at night so clouds don't over-darken
-		static const float kNightBoostFactor = 0.7;
-		float nightFactor = 1.0 - saturate(dirLightDir.z * 4.0);
-		float vanillaMix = lerp(data.cloudOriginalMix, 1.0, nightFactor * kNightBoostFactor);
+		// Compensate vanilla mix when directional light is weak (night/dusk/dawn)
+		float sunIntensity = saturate(dot(dirLightColor, float3(0.2126, 0.7152, 0.0722)));
+		float vanillaMix = lerp(1.0, data.cloudOriginalMix, sunIntensity);
 
 		float3 cloudColor = baseColor.rgb * vanillaMix;
 

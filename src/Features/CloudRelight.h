@@ -35,7 +35,6 @@ struct CloudRelight : Feature
 		float cloudRelightMix = 1.f;
 		float cloudOriginalMix = 0.75f;
 		float silverLiningMix = 1.f;
-		//
 		float silverLiningSpread = 0.f;
 		float3 pad0;
 	};

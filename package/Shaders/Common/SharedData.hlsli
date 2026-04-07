@@ -268,7 +268,6 @@ namespace SharedData
 		float cloudRelightMix;
 		float cloudOriginalMix;
 		float silverLiningMix;
-		//
 		float silverLiningSpread;
 		float3 pad;
 	};
