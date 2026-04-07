@@ -17,42 +17,44 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 
 	data.Enable = enableEffect;
 	data.EnableSky = settingManager.GetValue<bool>("Enable", "SKY");
-	data.GradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
-	data.SkyBoostIntensity = settingManager.GetValue<bool>("DisableWrongSkyMath", "SKY") ? 0.0f : data.GradientIntensity;
+	float gradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
+	data.SkyBoostIntensity = settingManager.GetValue<bool>("DisableWrongSkyMath", "SKY") ? 0.0f : gradientIntensity;
+	data.GradientIntensity = gradientIntensity;
 
 	data.GradientDesaturation = settingManager.GetInterpolatedTimeOfDayValue("GradientDesaturation", "SKY");
-	data.GradientTopIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientTopIntensity", "SKY");
 	data.GradientTopCurve = settingManager.GetInterpolatedTimeOfDayValue("GradientTopCurve", "SKY");
-
-	data.GradientTopColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("GradientTopColorFilter", "SKY");
-	data.GradientMiddleIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientMiddleIntensity", "SKY");
-
 	data.GradientMiddleCurve = settingManager.GetInterpolatedTimeOfDayValue("GradientMiddleCurve", "SKY");
-	data.GradientMiddleColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("GradientMiddleColorFilter", "SKY");
-
-	data.GradientHorizonIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientHorizonIntensity", "SKY");
 	data.GradientHorizonCurve = settingManager.GetInterpolatedTimeOfDayValue("GradientHorizonCurve", "SKY");
 
-	data.GradientHorizonColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("GradientHorizonColorFilter", "SKY");
-	data.CloudsIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsIntensity", "SKY");
+	data.GradientTopColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("GradientTopColorFilter", "SKY");
+	data.GradientTopColorFilter *= settingManager.GetInterpolatedTimeOfDayValue("GradientTopIntensity", "SKY") * gradientIntensity;
 
+	data.GradientMiddleColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("GradientMiddleColorFilter", "SKY");
+	data.GradientMiddleColorFilter *= settingManager.GetInterpolatedTimeOfDayValue("GradientMiddleIntensity", "SKY") * gradientIntensity;
+
+	data.GradientHorizonColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("GradientHorizonColorFilter", "SKY");
+	data.GradientHorizonColorFilter *= settingManager.GetInterpolatedTimeOfDayValue("GradientHorizonIntensity", "SKY") * gradientIntensity;
+
+	data.CloudsIntensity = 1.0f; // Baked into ColorFilter
 	data.CloudsCurve = settingManager.GetInterpolatedTimeOfDayValue("CloudsCurve", "SKY");
 	data.CloudsDesaturation = settingManager.GetInterpolatedTimeOfDayValue("CloudsDesaturation", "SKY");
 	data.CloudsOpacity = settingManager.GetInterpolatedTimeOfDayValue("CloudsOpacity", "SKY");
+	data.ColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
 
 	data.CloudsColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("CloudsColorFilter", "SKY");
-	data.CloudsEdgeIntensity = settingManager.GetValue<float>("CloudsEdgeIntensity", "SKY");
+	data.CloudsColorFilter *= settingManager.GetInterpolatedTimeOfDayValue("CloudsIntensity", "SKY");
 
-	data.CloudsEdgeMoonMultiplier = settingManager.GetValue<float>("CloudsEdgeMoonMultiplier", "SKY");
-	data.ColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
 	data.VolumetricRaysRangeFactor = settingManager.GetInterpolatedTimeOfDayValue("RangeFactor", "GAMEVOLUMETRICRAYS");
+
+	float cloudsEdgeIntensity = settingManager.GetValue<float>("CloudsEdgeIntensity", "SKY");
+	float cloudsEdgeMoonMultiplier = settingManager.GetValue<float>("CloudsEdgeMoonMultiplier", "SKY");
+	data.CloudsEdgeScatterColor = { cloudsEdgeIntensity, cloudsEdgeMoonMultiplier, 0.0f };
+
 	data.VolumetricRaysDesaturation = settingManager.GetInterpolatedTimeOfDayValue("Desaturation", "GAMEVOLUMETRICRAYS");
 
 	data.VolumetricRaysColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "GAMEVOLUMETRICRAYS");
 	float volumetricRaysIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "GAMEVOLUMETRICRAYS");
-	data.VolumetricRaysColorFilter.x *= volumetricRaysIntensity;
-	data.VolumetricRaysColorFilter.y *= volumetricRaysIntensity;
-	data.VolumetricRaysColorFilter.z *= volumetricRaysIntensity;
+	data.VolumetricRaysColorFilter *= volumetricRaysIntensity;
 
 	return data;
 }

@@ -247,57 +247,39 @@ namespace SharedData
 
 	struct ENBSettings
 	{
-		uint Enable;
-		uint pad000_0;
-		uint2 pad000;
-
-		uint EnableSky;
-		float SkyBoostIntensity;
-		float2 pad00;
-
-		float GradientIntensity;
-		float GradientDesaturation;
-		float GradientTopIntensity;
-		float GradientTopCurve;
-
 		float3 GradientTopColorFilter;
-		float pad0;
-
-		float GradientMiddleIntensity;
-		float GradientMiddleCurve;
-		float2 pad1;
+		uint Enable;
 
 		float3 GradientMiddleColorFilter;
-		float pad2;
-
-		float GradientHorizonIntensity;
-		float GradientHorizonCurve;
-		float2 pad3;
+		uint EnableSky;
 
 		float3 GradientHorizonColorFilter;
-		float pad4;
-
-		float CloudsIntensity;
-		float CloudsCurve;
-		float CloudsDesaturation;
-		float CloudsOpacity;
+		float SkyBoostIntensity;
 
 		float3 CloudsColorFilter;
+		float GradientIntensity;
 
-		float CloudsEdgeIntensity;
-		float CloudsEdgeMoonMultiplier;
-
-		float ColorPow;
-		float3 pad8;
-
-		float VolumetricRaysRangeFactor;
-		float VolumetricRaysDesaturation;
-		float2 pad12;
+		float3 CloudsEdgeScatterColor;
+		float GradientDesaturation;
 
 		float3 VolumetricRaysColorFilter;
-		float pad13;
-	};
+		float GradientTopCurve;
 
+		float GradientMiddleCurve;
+		float GradientHorizonCurve;
+		float CloudsIntensity;
+		float CloudsCurve;
+
+		float CloudsDesaturation;
+		float CloudsOpacity;
+		float ColorPow;
+		float VolumetricRaysRangeFactor;
+
+		float VolumetricRaysDesaturation;
+		float pad0;
+		float pad1;
+		float pad2;
+	};
 	struct TerrainBlendingSettings
 	{
 		uint Enabled;

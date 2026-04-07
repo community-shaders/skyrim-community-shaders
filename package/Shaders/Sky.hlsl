@@ -148,15 +148,12 @@ VS_OUTPUT main(VS_INPUT input)
 	if (SharedData::enbSettings.Enable) {
 		horizonColor = pow(horizonColor, SharedData::enbSettings.GradientHorizonCurve);
 		horizonColor *= SharedData::enbSettings.GradientHorizonColorFilter;
-		horizonColor *= SharedData::enbSettings.GradientHorizonIntensity;
 
 		lowerColor = pow(lowerColor, SharedData::enbSettings.GradientMiddleCurve);
 		lowerColor *= SharedData::enbSettings.GradientMiddleColorFilter;
-		lowerColor *= SharedData::enbSettings.GradientMiddleIntensity;
 
 		upperColor = pow(upperColor, SharedData::enbSettings.GradientTopCurve);
 		upperColor *= SharedData::enbSettings.GradientTopColorFilter;
-		upperColor *= SharedData::enbSettings.GradientTopIntensity;
 	}
 
 	float3 skyColor = horizonColor * input.Color.x + lowerColor * input.Color.y + upperColor * input.Color.z;
@@ -165,7 +162,6 @@ VS_OUTPUT main(VS_INPUT input)
 
 	if (SharedData::enbSettings.Enable) {
 		vsout.Color.xyz = lerp(vsout.Color.xyz, dot(vsout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.GradientDesaturation);
-		vsout.Color.xyz *= SharedData::enbSettings.GradientIntensity;
 	}
 
 	vsout.Color.w = BlendColor[0].w * input.Color.w;
@@ -293,14 +289,13 @@ PS_OUTPUT main(PS_INPUT input)
 		baseColor.xyz = pow(baseColor.xyz, SharedData::enbSettings.CloudsCurve);
 		baseColor.xyz = lerp(baseColor.xyz, dot(baseColor.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
 		baseColor.xyz *= SharedData::enbSettings.CloudsColorFilter;
-		baseColor.xyz *= SharedData::enbSettings.CloudsIntensity;
 
 		float cloudsEdgeAlpha = saturate(1.0 - baseColor.w);
 		float3 sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 12.0) * SharedData::SunColor.xyz;
-		float3 masserPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::MasserDirection.xyz)), 12.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
-		float3 secundaPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SecundaDirection.xyz)), 12.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+		float3 masserPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::MasserDirection.xyz)), 12.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeScatterColor.y;
+		float3 secundaPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SecundaDirection.xyz)), 12.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeScatterColor.y;
 
-		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity;
+		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeScatterColor.x;
 
 		baseColor.xyz = baseColor.xyz + baseColor.xyz * cloudsScatter;
 	}
