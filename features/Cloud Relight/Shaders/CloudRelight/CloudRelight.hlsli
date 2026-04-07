@@ -32,11 +32,7 @@ namespace CloudRelight
 			float x = acos(cos_theta);
 			float x2 = max(0., x - 2.45) / (Math::PI - 2.15);
 			float x3 = max(0., x - 2.95) / (Math::PI - 2.95);
-			float y = (exp(-max(x * 1.5 + 0.0, 0.0) * 30.0) + smoothstep(1.7,
-				0., x) * 0.45 * 0.8 + smoothbump(0.4, 0.5, cos_theta) * 0.02 - smoothstep(1.,
-				0.2, x) * 0.06 + smoothbump(2.18, 0.20, x) * 0.06 + smoothstep(2.28, 2.45, x) *
-				0.18 - powerful_scurve(x2 * 4.0, 3.5, 8.) * 0.04 + x2 * -0.085 + x3 * x3 *
-				0.1);
+			float y = (exp(-max(x * 1.5 + 0.0, 0.0) * 30.0) + smoothstep(1.7, 0., x) * 0.45 * 0.8 + smoothbump(0.4, 0.5, cos_theta) * 0.02 - smoothstep(1., 0.2, x) * 0.06 + smoothbump(2.18, 0.20, x) * 0.06 + smoothstep(2.28, 2.45, x) * 0.18 - powerful_scurve(x2 * 4.0, 3.5, 8.) * 0.04 + x2 * -0.085 + x3 * x3 * 0.1);
 
 			float3 ret = y;
 			// Spectralize slightly for rainbow fringes / glories
@@ -116,8 +112,8 @@ namespace CloudRelight
 				float3(0.90051f, 0.157048f, 0.623493f)
 			};
 
-			[unroll]
-			for (int i = 0; i < 4; i++) {
+			[unroll] for (int i = 0; i < 4; i++)
+			{
 				float3 raySample = normalize(lerp(viewDir, dirLightDir, rayPos));
 				raySample += (kPoissonDisc[i] * 2.0 - 1.0) * 0.01;
 
