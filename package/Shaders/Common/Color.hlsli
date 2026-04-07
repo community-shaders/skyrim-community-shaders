@@ -1,10 +1,12 @@
 #ifndef __COLOR_DEPENDENCY_HLSL__
 #define __COLOR_DEPENDENCY_HLSL__
 
+#include "Common/ColorSpaces.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/SharedData.hlsli"
 
 #define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
+#define ENABLE_ACEScg SharedData::linearLightingSettings.enableACEScg
 
 #if defined(PSHADER) && defined(LIGHTING)
 cbuffer LLPerGeometry : register(b8)
@@ -125,6 +127,12 @@ namespace Color
 	const static float PBRLightingCompensation = ENABLE_LL ? 1.0 : Math::PI;
 
 	// Linear Lighting Functions
+	// Gamut transform: converts linear sRGB-gamut color to ACEScg when enabled
+	float3 GamutTransform(float3 linearColor)
+	{
+		return ENABLE_ACEScg ? sRGBToAP1(linearColor) : linearColor;
+	}
+
 	float3 LLGammaToLinear(float3 color)
 	{
 		return ENABLE_LL ? SkyrimGammaToLinear(color) : color;
@@ -138,15 +146,18 @@ namespace Color
 	float3 Diffuse(float3 color)
 	{
 #	if defined(TRUE_PBR)
-		return ENABLE_LL ? color : LinearToSrgb(color);
+		// TRUE_PBR: input is already linear sRGB; gamut-convert only
+		return ENABLE_LL ? GamutTransform(color) : LinearToSrgb(color);
 #	else
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.colorGamma) * SharedData::linearLightingSettings.vanillaDiffuseColorMult : color;
+		// Vanilla: linearize then gamut-convert
+		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.colorGamma)) * SharedData::linearLightingSettings.vanillaDiffuseColorMult : color;
 #	endif
 	}
 
 	float3 Light(float3 color, bool isLinear = false)
 	{
-		color = (ENABLE_LL && !isLinear) ? pow(abs(color), SharedData::linearLightingSettings.lightGamma) : color;
+		color = (ENABLE_LL && !isLinear) ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.lightGamma)) : (ENABLE_LL && isLinear) ? GamutTransform(color) :
+		                                                                                                                                              color;
 #	if defined(TRUE_PBR)
 		return color * PBRLightingCompensation;  // Compensate for traditional Lambertian diffuse
 #	else
@@ -166,27 +177,27 @@ namespace Color
 #	if defined(LIGHTING)
 	float3 EmitColor(float3 color)
 	{
-		return ENABLE_LL ? (pow(abs(color / max(emissiveMult, 1e-5)), SharedData::linearLightingSettings.emitColorGamma) * emissiveMult * SharedData::linearLightingSettings.emitColorMult) : color;
+		return ENABLE_LL ? GamutTransform(pow(abs(color / max(emissiveMult, 1e-5)), SharedData::linearLightingSettings.emitColorGamma)) * emissiveMult * SharedData::linearLightingSettings.emitColorMult : color;
 	}
 #	endif
 
 	float3 Glowmap(float3 color)
 	{
 #	if defined(TRUE_PBR)
-		return ENABLE_LL ? color * SharedData::linearLightingSettings.glowmapMult : LinearToSrgb(color);
+		return ENABLE_LL ? GamutTransform(color) * SharedData::linearLightingSettings.glowmapMult : LinearToSrgb(color);
 #	else
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.glowmapGamma) * SharedData::linearLightingSettings.glowmapMult : color;
+		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.glowmapGamma)) * SharedData::linearLightingSettings.glowmapMult : color;
 #	endif
 	}
 
 	float3 Ambient(float3 color)
 	{
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.ambientGamma) * SharedData::linearLightingSettings.ambientMult : color;
+		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.ambientGamma)) * SharedData::linearLightingSettings.ambientMult : color;
 	}
 
 	float3 Fog(float3 color)
 	{
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.fogGamma) : color;
+		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.fogGamma)) : color;
 	}
 
 	float FogAlpha(float alpha)
@@ -196,7 +207,7 @@ namespace Color
 
 	float3 Effect(float3 color)
 	{
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.effectGamma) : color;
+		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.effectGamma)) : color;
 	}
 
 	float3 EffectMult(float3 color)
@@ -229,22 +240,22 @@ namespace Color
 
 	float3 Sky(float3 color)
 	{
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.skyGamma) : color;
+		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.skyGamma)) : color;
 	}
 
 	float3 Water(float3 color)
 	{
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.waterGamma) : color;
+		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.waterGamma)) : color;
 	}
 
 	float3 VolumetricLighting(float3 color)
 	{
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.vlGamma) : color;
+		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.vlGamma)) : color;
 	}
 
 	float3 ColorToLinear(float3 color)
 	{
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.colorGamma) : color;
+		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.colorGamma)) : color;
 	}
 
 	float3 RadianceToLinear(float3 color)
