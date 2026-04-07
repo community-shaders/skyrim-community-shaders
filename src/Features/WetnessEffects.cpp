@@ -566,6 +566,13 @@ static void DrawRainTypeLabel(const char* prefix, float rate)
 // Weather/Precipitation Analysis Helpers
 // =====================
 
+static float linearstep(float edge0, float edge1, float x)
+{
+	if (edge0 >= edge1)
+		return x >= edge1 ? 1.0f : 0.0f;
+	return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+}
+
 float WetnessEffects::GetRainIntensity(RE::NiPointer<RE::BSGeometry> precipObject, RE::TESWeather* weather)
 {
 	if (!precipObject || !weather || !weather->precipitationData) {
@@ -598,10 +605,6 @@ WetnessEffects::WeatherWetnessResult WetnessEffects::CalculateWeatherWetness(RE:
 	if (!weather || !weather->precipitationData || !weather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
 		return result;
 	}
-
-	auto linearstep = [](float edge0, float edge1, float x) {
-		return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-	};
 
 	if (isCurrentWeather) {
 		// Current weather uses fade-in logic
@@ -737,12 +740,6 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 					// Sky::IsRaining() to prevent CS effects appearing before the
 					// game's own rain particles become visible, with a smooth ramp
 					// from the threshold to full intensity.
-					auto linearstep = [](float edge0, float edge1, float x) {
-						if (edge0 >= edge1)
-							return x >= edge1 ? 1.0f : 0.0f;
-						return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-					};
-
 					float currentWeight = 0.0f;
 					if (sky->currentWeather && sky->currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
 						float fadeInThreshold = sky->currentWeather->data.precipitationBeginFadeIn * (1.0f / 255.0f);
