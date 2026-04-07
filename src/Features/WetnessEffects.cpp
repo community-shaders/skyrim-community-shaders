@@ -585,7 +585,9 @@ float WetnessEffects::GetRainIntensity(RE::NiPointer<RE::BSGeometry> precipObjec
 		return 0.0f;
 	}
 
-	auto maxDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
+	auto maxDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;  // Use weather particle density as authoritative source for rain intensity
+	// This provides consistent intensity scaling based on weather type (1-3 scale)
+	// Note: rain->density equals maxDensity when fully active
 	return (maxDensity > 0.0f) ? (maxDensity / MAX_RAIN_PARTICLE_DENSITY) : 0.0f;
 }
 
