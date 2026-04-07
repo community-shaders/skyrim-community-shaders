@@ -224,7 +224,7 @@ PS_OUTPUT main(PS_INPUT input)
 		outputColor = exp2(DisplayMapping::RangeCompress(log2(max(0, outputColor)), log2(0.4 * peakWhiteRatio), log2(peakWhiteRatio), log2(100.f)));
 		outputColor = Color::BT2020ToBT709(outputColor);
 		if (!ENABLE_LL)
-			outputColor = Color::LinearToSrgbSigned(outputColor);
+			outputColor = Color::LinearToGammaSafe(outputColor);
 	} else {
 		outputColor = max(0, outputColor);
 		outputColor = FrameBuffer::ToSRGBColor(outputColor);
