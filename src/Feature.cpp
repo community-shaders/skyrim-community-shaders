@@ -2,6 +2,7 @@
 
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Features/CloudRelight.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExponentialHeightFog.h"
@@ -216,6 +217,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::wetnessEffects,
 		&globals::features::lightLimitFix,
 		&globals::features::dynamicCubemaps,
+		&globals::features::cloudRelight,
 		&globals::features::cloudShadows,
 		&globals::features::waterEffects,
 		&globals::features::performanceOverlay,

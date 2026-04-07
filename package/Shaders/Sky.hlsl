@@ -188,6 +188,11 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	if defined(CLOUD_RELIGHT) && defined(CLOUD_SHADOWS) && defined(TEX) && defined(CLOUDS)
+#		define CR_CLOUDS
+#		include "CloudRelight/CloudRelight.hlsli"
+#	endif
+
 Texture2D<float> TexDepthSampler : register(t17);
 
 PS_OUTPUT main(PS_INPUT input)
@@ -213,6 +218,15 @@ PS_OUTPUT main(PS_INPUT input)
 	blendColor.xyz = Color::Sky(blendColor.xyz);
 	baseColor.xyz = Color::Sky(baseColor.xyz);
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
+#		endif
+
+#		if defined(CR_CLOUDS)
+	if (SharedData::cloudRelightSettings.enabled) {
+		float3 crViewDir = normalize(input.WorldPosition.xyz);
+		float crCloudDist = CloudShadows::IntersectCloudDist(float3(0, 0, 0), crViewDir);
+		if (crCloudDist >= 0)
+			baseColor.rgb = CloudRelight::RelightCloud(baseColor, crViewDir, crViewDir * crCloudDist, SampBaseSampler);
+	}
 #		endif
 
 #		if defined(DITHER)
@@ -242,43 +256,6 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.w = input.Color.w * baseColor.w;
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
 #		endif
-
-#if defined(CLOUDS)
-	float3 dirLightDir = SharedData::DirLightDirection.xyz;
-	float3 dirLightColor = SharedData::DirLightColor;
-	float3 viewDir = normalize(input.WorldPosition.xyz);
-
-	if (baseColor.w > 0.0)
-	{
-		float rayStep = 1.0 / 32.0;
-		float rayPos = rayStep * 0.5; 
-		float4 rayShadow = 0.0;
-
-		float3 PoissonDisc[] = {
-			float3(0.460921f, 0.615192f, 0.887539f),
-			float3(0.757347f, 0.911008f, 0.189581f),
-			float3(0.548753f, 0.145482f, 0.0548723f),
-			float3(0.90051f, 0.157048f, 0.623493f)
-		};
-
-		[unroll]
-		for(int i = 0; i < 4; i++)
-		{		
-			float3 raySample = normalize(lerp(viewDir, SharedData::DirLightDirection.xyz, rayPos));
-
-			raySample += (PoissonDisc[i] * 2.0 - 1.0) * 0.01;
-
-			if (raySample.z < 0.0)
-				rayShadow[i % 4] += -raySample.z; // World shadow
-			else
-				rayShadow[i % 4] = max(rayShadow[i % 4], CloudShadows::VolumetricCloudShadowsTexture.SampleLevel(SampBaseSampler, raySample, 0).x);
-
-			rayPos += rayStep;
-		}
-			
-		psout.Color.xyz = psout.Color.xyz * baseColor.xyz * (1.0 - saturate(dot(rayShadow, 0.25)));
-	}
-#endif
 
 #	else
 	psout.Color = float4(0, 0, 0, 1.0);
