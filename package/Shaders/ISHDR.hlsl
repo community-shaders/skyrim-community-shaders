@@ -198,12 +198,12 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
-		outputColor = Color::SrgbToLinearSigned(outputColor);
+		outputColor = Color::GammaToLinearSafe(outputColor);
 	}
 
 	if (isHDR) {
 		if (!ENABLE_LL)
-			outputColor = Color::SrgbToLinearSigned(outputColor);
+			outputColor = Color::GammaToLinearSafe(outputColor);
 		float paperWhiteNits = max(hdrShared.y, 1e-6);
 		float peakWhiteRatio = max(hdrShared.z / paperWhiteNits, 1.0);  // peakNits / paperWhite
 
