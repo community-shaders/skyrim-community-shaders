@@ -585,9 +585,7 @@ float WetnessEffects::GetRainIntensity(RE::NiPointer<RE::BSGeometry> precipObjec
 		return 0.0f;
 	}
 
-	auto maxDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;  // Use weather particle density as authoritative source for rain intensity
-	// This provides consistent intensity scaling based on weather type (1-3 scale)
-	// Note: rain->density equals maxDensity when fully active
+	auto maxDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
 	return (maxDensity > 0.0f) ? (maxDensity / MAX_RAIN_PARTICLE_DENSITY) : 0.0f;
 }
 
@@ -733,10 +731,26 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 						lastRaining = GetRainIntensity(precip->lastPrecip, sky->lastWeather);
 					}
 
-					// Use weighted average based on weather transition percentage instead of additive
-					// This prevents unrealistic rain intensity spikes during transitions
-					float currentWeight = sky->currentWeatherPct;
-					float lastWeight = 1.0f - sky->currentWeatherPct;
+					// Apply the same fade-in/fade-out thresholds the game uses in
+					// Sky::IsRaining() to prevent CS effects appearing before the
+					// game's own rain particles become visible, with a smooth ramp
+					// from the threshold to full intensity.
+					auto linearstep = [](float edge0, float edge1, float x) {
+						return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+					};
+
+					float currentWeight = 0.0f;
+					if (sky->currentWeather && sky->currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
+						float fadeInThreshold = sky->currentWeather->data.precipitationBeginFadeIn * (1.0f / 255.0f);
+						currentWeight = linearstep(fadeInThreshold, 1.0f, sky->currentWeatherPct);
+					}
+
+					float lastWeight = 0.0f;
+					if (sky->lastWeather && sky->lastWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
+						float fadeOutThreshold = sky->lastWeather->data.precipitationEndFadeOut * (1.0f / 255.0f);
+						lastWeight = 1.0f - linearstep(0.0f, fadeOutThreshold, sky->currentWeatherPct);
+					}
+
 					data.Raining = (currentRaining * currentWeight) + (lastRaining * lastWeight);
 				}
 
