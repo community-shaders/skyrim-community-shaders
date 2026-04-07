@@ -190,6 +190,25 @@ float3 OklabToRgb(float3 c)
 	return rgbResult;
 }
 
+// Luma-Framework - Filippo Tarpini
+// This does basic gamut mapping.
+// The color is expected to be in the specified color space and in linear.
+// This works best when called after grading or tonemapping (by channel) in a wider color space than the current one.
+float3 CorrectOutOfRangeColor(float3 Color, float3 LuminanceVec)
+{
+	float minChannel = min(Color.r, min(Color.g, Color.b));
+	if (minChannel < 0.0)  // Optional "optimization" branch
+	{
+		float colorLuminance = dot(Color, LuminanceVec);
+		// Desaturate (move towards luminance/grayscale) until we are not out of gamut anymore (until no channel is below 0)
+		if (colorLuminance >= 0.0) {
+			float desaturateAlpha = (minChannel - colorLuminance) != 0.0 ? (minChannel / (minChannel - colorLuminance)) : 0.0;  // Both division elements are meant to be negative so the ratio resolves to a positive value
+			Color = lerp(Color, colorLuminance, desaturateAlpha);
+		}
+	}
+	return Color;
+}
+
 ////////////////////////////////////////////////////////////////////////
 //
 // Functions from PotatoFX

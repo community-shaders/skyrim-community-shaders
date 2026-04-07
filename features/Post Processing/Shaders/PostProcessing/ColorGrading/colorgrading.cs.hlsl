@@ -716,6 +716,9 @@ float3 ColorGrading(float3 color)
 		color = LiftGammaGain(color, liftgammagain[0].gbar, liftgammagain[1].gbar, liftgammagain[2].gbar);
 	}
 
+	float3 luminanceVectorOutSpace = float3(0.2126, 0.7152, 0.0722);  // Rec.709 Luma vector
+	color = CorrectOutOfRangeColor(color, luminanceVectorOutSpace);
+
 	return color;
 }
 
