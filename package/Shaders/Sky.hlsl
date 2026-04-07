@@ -148,22 +148,20 @@ VS_OUTPUT main(VS_INPUT input)
 	if (SharedData::enbSettings.Enable) {
 		horizonColor = pow(horizonColor, SharedData::enbSettings.GradientHorizonCurve);
 		horizonColor *= SharedData::enbSettings.GradientHorizonColorFilter;
+		horizonColor = lerp(horizonColor, dot(horizonColor, 1.0 / 3.0), SharedData::enbSettings.GradientDesaturation);
 
 		lowerColor = pow(lowerColor, SharedData::enbSettings.GradientMiddleCurve);
 		lowerColor *= SharedData::enbSettings.GradientMiddleColorFilter;
+		lowerColor = lerp(lowerColor, dot(lowerColor, 1.0 / 3.0), SharedData::enbSettings.GradientDesaturation);
 
 		upperColor = pow(upperColor, SharedData::enbSettings.GradientTopCurve);
 		upperColor *= SharedData::enbSettings.GradientTopColorFilter;
+		upperColor = lerp(upperColor, dot(upperColor, 1.0 / 3.0), SharedData::enbSettings.GradientDesaturation);
 	}
 
 	float3 skyColor = horizonColor * input.Color.x + lowerColor * input.Color.y + upperColor * input.Color.z;
 
 	vsout.Color.xyz = VParams * skyColor;
-
-	if (SharedData::enbSettings.Enable) {
-		vsout.Color.xyz = lerp(vsout.Color.xyz, dot(vsout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.GradientDesaturation);
-	}
-
 	vsout.Color.w = BlendColor[0].w * input.Color.w;
 #		endif
 
