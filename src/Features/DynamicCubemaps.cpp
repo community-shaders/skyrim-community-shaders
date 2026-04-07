@@ -87,12 +87,12 @@ void DynamicCubemaps::DrawSettings()
 					subresourceData[i].SysMemSlicePitch = sizeof(PixelData);
 				}
 
-				ID3D11Texture2D* tempTexture;
+				winrt::com_ptr<ID3D11Texture2D> tempTexture;
 				DirectX::ScratchImage image;
 
 				try {
-					DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, subresourceData, &tempTexture));
-					DX::ThrowIfFailed(CaptureTexture(device, context, tempTexture, image));
+					DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, subresourceData, tempTexture.put()));
+					DX::ThrowIfFailed(CaptureTexture(device, context, tempTexture.get(), image));
 
 					if (std::filesystem::create_directories(defaultDynamicCubeMapSavePath)) {
 						logger::info("Missing DynamicCubeMap Creator directory created: {}", defaultDynamicCubeMapSavePath);
@@ -114,7 +114,6 @@ void DynamicCubemaps::DrawSettings()
 				}
 
 				image.Release();
-				tempTexture->Release();
 			}
 		}
 		ImGui::TreePop();

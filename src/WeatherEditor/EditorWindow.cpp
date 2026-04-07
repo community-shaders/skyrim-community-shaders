@@ -14,7 +14,7 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteColorEntry, r, g, b, useCount, lastUsedTime, isFavorite)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings::PaletteFavoriteColor, hasValue, r, g, b)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets, showViewport, paletteColors, paletteFavorites)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, showViewport, widgetTypeSizes, paletteColors, paletteFavorites)
 
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
@@ -178,10 +178,14 @@ void EditorWindow::ShowObjectsWindow()
 	// Create a table with two columns
 	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner)) {
 		// Fixed categories column, objects column fills remaining width
-		ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthFixed, 180.0f * Util::GetUIScale());
+		const float categoriesWidth = 180.0f * Util::GetUIScale();
+		ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthFixed, categoriesWidth);
 		ImGui::TableSetupColumn("Objects", ImGuiTableColumnFlags_WidthStretch);
 
 		ImGui::TableNextRow();
+
+		if (resetLayout)
+			ImGui::TableSetColumnWidth(0, categoriesWidth);
 
 		// Left column: Categories
 		ImGui::TableSetColumnIndex(0);
@@ -866,13 +870,8 @@ void EditorWindow::ShowWidgetWindow()
 	}
 
 	// Draw all open widgets using WidgetFactory template
-	WidgetFactory::DrawOpenWidgets(weatherWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(lightingTemplateWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(imageSpaceWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(volumetricLightingWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(precipitationWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(lensFlareWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(referenceEffectWidgets, lastFocusedWidget);
+	for (auto* collection : GetWidgetCollections())
+		WidgetFactory::DrawOpenWidgets(*collection, lastFocusedWidget);
 
 	// Draw current cell lighting widget if open
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
@@ -916,55 +915,25 @@ void EditorWindow::RenderUI()
 
 			// Save individual widgets submenu
 			if (ImGui::BeginMenu("Save")) {
-				bool hasOpenWidgets = false;
+				bool hasOpen = false;
+				for (auto* collection : GetWidgetCollections())
+					hasOpen = WidgetFactory::DrawSaveWidgetMenuItems(*collection, hasOpen);
 
-				// Weather widgets
-				for (auto& widget : weatherWidgets) {
-					if (widget->IsOpen()) {
-						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
-							widget->Save();
-						}
-					}
+				if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
+					hasOpen = true;
+					if (ImGui::MenuItem(currentCellLightingWidget->GetEditorID().c_str()))
+						currentCellLightingWidget->Save();
 				}
 
-				// Lighting Template widgets
-				for (auto& widget : lightingTemplateWidgets) {
-					if (widget->IsOpen()) {
-						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
-							widget->Save();
-						}
-					}
-				}
-
-				// ImageSpace widgets
-				for (auto& widget : imageSpaceWidgets) {
-					if (widget->IsOpen()) {
-						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
-							widget->Save();
-						}
-					}
-				}
-
-				if (!hasOpenWidgets) {
+				if (!hasOpen)
 					ImGui::TextDisabled("No open widgets");
-				}
 
 				ImGui::EndMenu();
 			}
 
 			ImGui::Separator();
-			if (ImGui::MenuItem("Close All Weather Widgets")) {
-				for (auto& widget : weatherWidgets) widget->SetOpen(false);
-			}
-			if (ImGui::MenuItem("Close All Lighting Widgets")) {
-				for (auto& widget : lightingTemplateWidgets) widget->SetOpen(false);
-			}
-			if (ImGui::MenuItem("Close All ImageSpace Widgets")) {
-				for (auto& widget : imageSpaceWidgets) widget->SetOpen(false);
-			}
+			for (auto* collection : GetWidgetCollections())
+				WidgetFactory::DrawCloseAllMenuItem(*collection);
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Settings")) {
@@ -1014,12 +983,7 @@ void EditorWindow::RenderUI()
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Automatically apply weather changes to the game as you edit");
 			}
-			if (ImGui::Checkbox("Remember Open Widgets", &settings.rememberOpenWidgets)) {
-				Save();
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Restore previously open widgets when editor reopens");
-			}
+
 			if (ImGui::Checkbox("Enable Inherit From Parent", &settings.enableInheritFromParent)) {
 				Save();
 			}
@@ -1042,37 +1006,19 @@ void EditorWindow::RenderUI()
 
 			ImGui::Separator();
 			ImGui::Text("Open Widgets:");
-			ImGui::Separator();
 
 			int openCount = 0;
-			for (auto& widget : weatherWidgets) {
-				if (widget->IsOpen()) {
-					openCount++;
-					if (ImGui::MenuItem(std::format("Weather: {}", widget->GetEditorID()).c_str())) {
-						// Focus window (ImGui will bring to front when clicked)
-					}
-				}
-			}
-			for (auto& widget : lightingTemplateWidgets) {
-				if (widget->IsOpen()) {
-					openCount++;
-					if (ImGui::MenuItem(std::format("Lighting: {}", widget->GetEditorID()).c_str())) {
-						// Focus window
-					}
-				}
-			}
-			for (auto& widget : imageSpaceWidgets) {
-				if (widget->IsOpen()) {
-					openCount++;
-					if (ImGui::MenuItem(std::format("ImageSpace: {}", widget->GetEditorID()).c_str())) {
-						// Focus window
-					}
-				}
+			for (auto* collection : GetWidgetCollections())
+				openCount = WidgetFactory::DrawOpenWidgetMenuItems(*collection, openCount);
+
+			if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
+				++openCount;
+				if (ImGui::MenuItem(std::format("{}: {}", currentCellLightingWidget->GetWidgetTypeName(), currentCellLightingWidget->GetEditorID()).c_str()))
+					ImGui::SetWindowFocus(currentCellLightingWidget->GetWindowTitle().c_str());
 			}
 
-			if (openCount == 0) {
+			if (openCount == 0)
 				ImGui::TextDisabled("No widgets open");
-			}
 
 			ImGui::EndMenu();
 		}
@@ -1375,6 +1321,8 @@ void EditorWindow::RenderUI()
 	// Show palette window
 	PaletteWindow::GetSingleton()->Draw();
 
+	if (resetLayout)
+		ResetWidgetTypeSizes();
 	resetLayout = false;
 
 	// Render notifications on top of everything
@@ -1418,12 +1366,8 @@ EditorWindow::~EditorWindow()
 {
 	ShowGameMenus();
 	delete tempTexture;
-	weatherWidgets.clear();
-	lightingTemplateWidgets.clear();
-	imageSpaceWidgets.clear();
-	volumetricLightingWidgets.clear();
-	precipitationWidgets.clear();
-	referenceEffectWidgets.clear();
+	for (auto* collection : GetWidgetCollections())
+		collection->clear();
 	artObjectWidgets.clear();
 	effectShaderWidgets.clear();
 	currentCellLightingWidget.reset();
@@ -1457,12 +1401,11 @@ void EditorWindow::UpdateOpenState()
 		DisableVanityCamera();
 		HideGameMenus();
 		BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
-		RestoreSessionWidgets();
+
 	} else if (!open && wasOpen) {
 		RestoreVanityCamera();
 		ShowGameMenus();
 		BackgroundBlur::SetWeatherEditorActive(false);
-		SaveSessionWidgets();
 	}
 
 	wasOpen = open;
@@ -1527,26 +1470,22 @@ void EditorWindow::Draw()
 
 void EditorWindow::SaveAll()
 {
-	for (auto& weather : weatherWidgets) {
-		if (weather->IsOpen())
-			weather->Save();
-	}
-
-	for (auto& lightingTemplate : lightingTemplateWidgets) {
-		if (lightingTemplate->IsOpen())
-			lightingTemplate->Save();
-	}
-
-	for (auto& imageSpace : imageSpaceWidgets) {
-		if (imageSpace->IsOpen())
-			imageSpace->Save();
-	}
+	auto saveOpen = [](auto& widgets) {
+		for (auto& w : widgets)
+			if (w->IsOpen())
+				w->Save();
+	};
+	for (auto* collection : GetWidgetCollections())
+		saveOpen(*collection);
+	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen())
+		currentCellLightingWidget->Save();
 
 	Save();
 }
 
 void EditorWindow::SaveSettings()
 {
+	settings.widgetTypeSizes = GetWidgetTypeSizesJson();
 	j = settings;
 }
 
@@ -1554,6 +1493,7 @@ void EditorWindow::LoadSettings()
 {
 	if (!j.empty())
 		settings = j;
+	SetWidgetTypeSizesFromJson(settings.widgetTypeSizes);
 }
 
 void EditorWindow::ShowSettingsWindow()
@@ -1605,9 +1545,6 @@ void EditorWindow::ShowSettingsWindow()
 			ImGui::Separator();
 			ImGui::TextUnformatted("Session & History");
 			ImGui::Spacing();
-
-			ImGui::Checkbox("Remember open widgets", &settings.rememberOpenWidgets);
-			Util::AddTooltip("Automatically reopen widgets that were open when you last closed the editor");
 
 			ImGui::SliderInt("Max recent widgets", &settings.maxRecentWidgets, 5, 20);
 			Util::AddTooltip("Maximum number of recent widgets to remember");
@@ -2113,27 +2050,15 @@ void EditorWindow::PerformUndo()
 	undoStack.pop_back();
 
 	if (!state.widget) {
-		for (auto& w : weatherWidgets) {
-			if (w->GetEditorID() == state.widgetId) {
-				state.widget = w.get();
+		for (auto* collection : GetWidgetCollections()) {
+			for (auto& w : *collection) {
+				if (w->GetEditorID() == state.widgetId) {
+					state.widget = w.get();
+					break;
+				}
+			}
+			if (state.widget)
 				break;
-			}
-		}
-		if (!state.widget) {
-			for (auto& w : imageSpaceWidgets) {
-				if (w->GetEditorID() == state.widgetId) {
-					state.widget = w.get();
-					break;
-				}
-			}
-		}
-		if (!state.widget) {
-			for (auto& w : lightingTemplateWidgets) {
-				if (w->GetEditorID() == state.widgetId) {
-					state.widget = w.get();
-					break;
-				}
-			}
 		}
 	}
 
@@ -2288,47 +2213,4 @@ void EditorWindow::ToggleFavorite(const std::string& widgetId)
 bool EditorWindow::IsFavorite(const std::string& widgetId) const
 {
 	return std::find(settings.favoriteWidgets.begin(), settings.favoriteWidgets.end(), widgetId) != settings.favoriteWidgets.end();
-}
-
-void EditorWindow::SaveSessionWidgets()
-{
-	settings.lastOpenWidgets.clear();
-
-	// Save all currently open widgets
-	for (auto& widget : weatherWidgets) {
-		if (widget->IsOpen()) {
-			settings.lastOpenWidgets.push_back(widget->GetEditorID());
-		}
-	}
-	for (auto& widget : lightingTemplateWidgets) {
-		if (widget->IsOpen()) {
-			settings.lastOpenWidgets.push_back(widget->GetEditorID());
-		}
-	}
-
-	Save();
-}
-
-void EditorWindow::RestoreSessionWidgets()
-{
-	if (!settings.rememberOpenWidgets || settings.lastOpenWidgets.empty()) {
-		return;
-	}
-
-	// Open widgets that were open in last session
-	for (const auto& widgetId : settings.lastOpenWidgets) {
-		// Search in all widget collections
-		for (auto& widget : weatherWidgets) {
-			if (widget->GetEditorID() == widgetId) {
-				widget->SetOpen(true);
-				break;
-			}
-		}
-		for (auto& widget : lightingTemplateWidgets) {
-			if (widget->GetEditorID() == widgetId) {
-				widget->SetOpen(true);
-				break;
-			}
-		}
-	}
 }

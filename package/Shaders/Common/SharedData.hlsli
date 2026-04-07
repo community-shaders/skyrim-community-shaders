@@ -23,7 +23,7 @@ namespace SharedData
 		bool InInterior;  // If the area lacks a directional shadow light e.g. the sun or moon
 		bool InMapMenu;   // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;     // HideSky flag in WorldSpace, e.g. Blackreach
-		float MipBias;    // Offset to mip level for TAA sharpness#
+		float MipBias;    // Offset to mip level for TAA sharpness
 		float pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
@@ -53,7 +53,7 @@ namespace SharedData
 		bool EnableShadows;
 		bool ExtendShadows;
 		bool EnableParallaxWarpingFix;
-		float1 pad0;
+		bool pad0;
 	};
 
 	struct CubemapCreatorSettings
@@ -315,7 +315,11 @@ namespace SharedData
 		return GetScreenDepth(depth);
 	}
 
-	float4 GetWaterData(float3 worldPosition)
+	// Returns water data for the tile containing worldPosition (camera-relative XY).
+	// The .w component (water surface height) is stored in C++ as camera-relative Z of
+	// eye 0 (left eye).  Pass eyeIndex to have .w corrected into the current eye's
+	// camera-relative frame; defaults to 0 (no correction, backwards-compatible).
+	float4 GetWaterData(float3 worldPosition, uint eyeIndex = 0)
 	{
 		float2 cellF = (((worldPosition.xy + FrameBuffer::CameraPosAdjust[0].xy)) / 4096.0) + 64.0;  // always positive
 		int2 cellInt;
@@ -332,6 +336,13 @@ namespace SharedData
 
 		[flatten] if (cellInt.x < 5 && cellInt.x >= 0 && cellInt.y < 5 && cellInt.y >= 0)
 			waterData = WaterData[waterTile];
+
+#	if defined(VR)
+		// Correct .w from eye-0 camera-relative Z to the current eye's camera-relative Z.
+		// No-op when eyeIndex == 0 (both terms are identical).
+		waterData.w += FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPosAdjust[eyeIndex].z;
+#	endif
+
 		return waterData;
 	}
 

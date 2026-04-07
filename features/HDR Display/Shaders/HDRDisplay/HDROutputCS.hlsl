@@ -37,14 +37,14 @@ cbuffer PerFrame : register(b0)
 	float3 finalColor;
 
 	if (hdrEnabled) {
-        float3 sceneGamma = scene.rgb;
+		float3 sceneGamma = scene.rgb;
 
-        float3 compositedColorGamma;
-        if (skipUI) {
-            compositedColorGamma = sceneGamma;
-        } else {
+		float3 compositedColorGamma;
+		if (skipUI) {
+			compositedColorGamma = sceneGamma;
+		} else {
 			float3 uiGamma = ui.rgb;
-            if (!(isMainOrLoadingMenu > 0.5)) { // UI and scene can't be separated in main menu or loading screen
+			if (!(isMainOrLoadingMenu > 0.5)) {  // UI and scene can't be separated in main menu or loading screen
 				// scale UI brightness (multiplier based on paperWhite)
 				float3 uiLinear = Color::SrgbToLinear(max(0, uiGamma));
 				uiLinear *= uiBrightness;
@@ -58,16 +58,16 @@ cbuffer PerFrame : register(b0)
             }
 #endif
 
-            compositedColorGamma = uiGamma + sceneGamma * (1.0 - ui.a);
-        }
+			compositedColorGamma = uiGamma + sceneGamma * (1.0 - ui.a);
+		}
 
         // ISHDR HDR path outputs sRGB gamma at this stage.
         float3 compositedColorLinear = Color::GammaToLinearSafe(compositedColorGamma);
         compositedColorLinear = Color::BT709ToBT2020(compositedColorLinear);
         finalColor = Color::pq::Encode(max(0.0, compositedColorLinear), paperWhite);
 
-        finalColor = saturate(finalColor);
-    } else {
+		finalColor = saturate(finalColor);
+	} else {
 		float3 sceneGamma = scene.rgb;
 
 		if (skipUI) {

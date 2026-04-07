@@ -1,6 +1,12 @@
 ﻿#include "Features/InverseSquareLighting/LightEditor.h"
+#include "Features/InverseSquareLighting.h"
 #include "Features/LightLimitFix.h"
 #include "Menu.h"
+
+#include <array>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
 void LightEditor::DrawSettings()
 {
@@ -8,7 +14,8 @@ void LightEditor::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Allows for modifying lights in real-time to preview changes. "
-			"Changes cannot be saved directly and it is not intended for gameplay use.");
+			"Light Placer lights can be saved back to their JSON configs. "
+			"Not intended for gameplay use.");
 	}
 
 	if (!enabled)
@@ -85,6 +92,16 @@ void LightEditor::DrawSettings()
 		waitFrames = 1;
 	}
 
+	if (lpInfo.isLPLight) {
+		ImGui::SameLine();
+		if (ImGui::Button("Save to Light Placer")) {
+			SaveToLightPlacer();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Save current settings to the Light Placer JSON.");
+		}
+	}
+
 	ImGui::Spacing();
 	ImGui::Spacing();
 
@@ -151,8 +168,12 @@ std::string LightEditor::GetLightName(LightInfo& lightInfo)
 
 void LightEditor::GatherLights()
 {
-	if (!enabled || !Menu::GetSingleton()->ShouldSwallowInput())
+	if (!enabled || !Menu::GetSingleton()->ShouldSwallowInput()) {
+		RestoreOriginal();
+		selected = {};
+		previous = {};
 		return;
+	}
 
 	if (waitFrames > 0) {
 		waitFrames--;
@@ -258,7 +279,8 @@ void LightEditor::GatherLights()
 	}
 
 	if (!foundSelected) {
-		previous = selected;
+		RestoreOriginal();
+		previous = {};
 		selected = {};
 	}
 
@@ -271,24 +293,41 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 	auto tesFlags = ligh ? &ligh->data.flags : nullptr;
 
 	if (previous != selected) {
+		RestoreOriginal();
+
 		original.tesFlags = tesFlags ? static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(tesFlags->underlying()) : static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(0);
 		original.data = *runtimeData;
 		original.pos = selected.isRef ? refr->GetPosition() : (niLight->parent ? niLight->parent->local.translate : RE::NiPoint3{});
+
 		current = original;
 		current.pos = { 0, 0, 0 };
+
+		lpInfo = selected.isAttached ? ParseLPLightName(niLight->name.c_str()) : LPLightInfo{};
+		if (lpInfo.isLPLight && refr) {
+			if (auto* baseObj = refr->GetObjectReference()) {
+				lpInfo.ownerEditorId = clib_util::editorID::get_editorID(baseObj);
+				if (auto* model = baseObj->As<RE::TESModel>()) {
+					if (const char* path = model->GetModel())
+						lpInfo.ownerModelPath = path;
+				}
+			}
+		}
+
+		activeIsRef = selected.isRef;
+		activeRefr = refr;
+		activeLigh = ligh;
+
 		previous = selected;
 	}
 
-	runtimeData->diffuse = current.data.diffuse;
-	runtimeData->fade = current.data.fade;
+	activeNiLight.reset(niLight);
 
 	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare)) {
-		current.data.radius = runtimeData->radius;
-		runtimeData->cutoffOverride = std::clamp(current.data.cutoffOverride, 0.01f, 1.0f);
-		runtimeData->size = std::clamp(current.data.size, 0.1f, 50.0f);
-	} else {
-		runtimeData->radius = current.data.radius;
-		runtimeData->cutoffOverride = current.data.cutoffOverride;
+		const bool isShadow = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow);
+		current.data.radius = InverseSquareLighting::CalculateRadius(
+			current.data.fade * 4.f, isShadow,
+			std::clamp(current.data.cutoffOverride, 0.01f, 1.0f),
+			std::clamp(current.data.size, 0.1f, 50.0f));
 	}
 
 	if (selected.isRef) {
@@ -322,6 +361,25 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		waitFrames = 1;
 	}
 
+	displayInfo.ownerFormId = refr ? refr->GetFormID() : 0;
+	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";
+	displayInfo.baseObjectFormId = refr && refr->GetBaseObject() ? refr->GetBaseObject()->formID : 0;
+	displayInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : "Unknown";
+	displayInfo.cellEditorId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormEditorID() : "Unknown";
+	displayInfo.lighFormId = ligh ? ligh->GetFormID() : 0;
+	displayInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : "Unknown";
+}
+
+bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const
+{
+	if (!enabled || niLight != activeNiLight.get())
+		return false;
+
+	runtimeData->diffuse = current.data.diffuse;
+	runtimeData->fade = current.data.fade;
+	runtimeData->cutoffOverride = current.data.cutoffOverride;
+	runtimeData->size = current.data.size;
+
 	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare))
 		runtimeData->flags.set(LightLimitFix::LightFlags::InverseSquare);
 	else
@@ -332,13 +390,291 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 	else
 		runtimeData->flags.reset(LightLimitFix::LightFlags::Linear);
 
-	displayInfo.ownerFormId = refr ? refr->GetFormID() : 0;
-	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";
-	displayInfo.baseObjectFormId = refr && refr->GetBaseObject() ? refr->GetBaseObject()->formID : 0;
-	displayInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : "Unknown";
-	displayInfo.cellEditorId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormEditorID() : "Unknown";
-	displayInfo.lighFormId = ligh ? ligh->GetFormID() : 0;
-	displayInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : "Unknown";
+	return true;
+}
+
+void LightEditor::RestoreOriginal()
+{
+	if (!activeNiLight)
+		return;
+
+	auto* runtimeData = ISLCommon::RuntimeLightDataExt::Get(activeNiLight.get());
+	*runtimeData = original.data;
+
+	if (activeIsRef && activeRefr) {
+		activeRefr->SetPosition(original.pos);
+	} else if (activeNiLight->parent) {
+		activeNiLight->parent->local.translate = original.pos;
+		RE::NiUpdateData updateData;
+		activeNiLight->parent->Update(updateData);
+	}
+
+	if (activeLigh && activeRefr && current.tesFlags.underlying() != original.tesFlags.underlying()) {
+		activeLigh->data.flags = static_cast<RE::TES_LIGHT_FLAGS>(original.tesFlags.underlying());
+		activeRefr->Disable();
+		activeRefr->Enable(false);
+	}
+
+	activeNiLight.reset();
+	activeRefr = nullptr;
+	activeLigh = nullptr;
+	activeIsRef = false;
+}
+
+LightEditor::LPLightInfo LightEditor::ParseLPLightName(const std::string& name)
+{
+	LPLightInfo info;
+
+	constexpr std::string_view prefix = "LP_Light[";
+	if (!name.starts_with(prefix))
+		return info;
+
+	auto bracketEnd = name.find(']');
+	if (bracketEnd == std::string::npos)
+		return info;
+
+	auto inner = name.substr(prefix.size(), bracketEnd - prefix.size());
+	auto pipePos = inner.find('|');
+	if (pipePos == std::string::npos)
+		return info;
+
+	info.configPath = inner.substr(0, pipePos);
+	info.lightEDID = inner.substr(pipePos + 1);
+
+	if (info.configPath.find("..") != std::string::npos) {
+		logger::warn("[LightEditor] Rejected LP light name with path traversal: {}", name);
+		return info;
+	}
+
+	info.isLPLight = true;
+	return info;
+}
+
+std::string LightEditor::UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear)
+{
+	std::vector<std::string> flags;
+	if (!existingFlags.empty()) {
+		std::istringstream ss(existingFlags);
+		std::string flag;
+		while (std::getline(ss, flag, '|')) {
+			if (flag != "InverseSquare" && flag != "Linear")
+				flags.push_back(flag);
+		}
+	}
+	if (inverseSquare)
+		flags.push_back("InverseSquare");
+	if (linear)
+		flags.push_back("Linear");
+
+	std::string result;
+	for (size_t i = 0; i < flags.size(); ++i) {
+		if (i > 0)
+			result += "|";
+		result += flags[i];
+	}
+	return result;
+}
+
+bool LightEditor::MatchesLPFilters(const json& lightEntry, RE::TESObjectREFR* refr)
+{
+	if (!refr)
+		return true;
+
+	auto resolveFilterEntry = [](const std::string& entry) -> RE::FormID {
+		auto tildePos = entry.find('~');
+		if (tildePos == std::string::npos || !entry.starts_with("0x"))
+			return 0;
+		RE::FormID relativeID;
+		try {
+			relativeID = static_cast<RE::FormID>(std::stoul(entry.substr(2, tildePos - 2), nullptr, 16));
+		} catch (...) {
+			return 0;
+		}
+		std::string plugin = entry.substr(tildePos + 1);
+		auto* dataHandler = RE::TESDataHandler::GetSingleton();
+		if (!dataHandler)
+			return 0;
+		auto* form = dataHandler->LookupForm(relativeID, plugin);
+		return form ? form->GetFormID() : 0;
+	};
+
+	auto matchesEntry = [&](const std::string& entry) -> bool {
+		if (entry.find('~') != std::string::npos) {
+			RE::FormID resolvedId = resolveFilterEntry(entry);
+			return resolvedId != 0 && resolvedId == refr->GetFormID();
+		}
+		if (auto* cell = refr->GetParentCell())
+			if (entry == cell->GetFormEditorID())
+				return true;
+		if (auto* worldspace = refr->GetWorldspace()) {
+			auto wsEdid = clib_util::editorID::get_editorID(worldspace);
+			if (entry == wsEdid)
+				return true;
+		}
+		return false;
+	};
+
+	auto getArray = [&](const char* key) -> const json* {
+		auto it = lightEntry.find(key);
+		return (it != lightEntry.end() && it->is_array()) ? &*it : nullptr;
+	};
+
+	auto anyMatches = [&](const json& list) {
+		for (const auto& item : list)
+			if (item.is_string() && matchesEntry(item.get<std::string>()))
+				return true;
+		return false;
+	};
+
+	if (auto* wl = getArray("whiteList"); wl && !anyMatches(*wl))
+		return false;
+	if (auto* bl = getArray("blackList"); bl && anyMatches(*bl))
+		return false;
+
+	return true;
+}
+
+std::array<float, 3> LightEditor::GetJsonVec3(const json& data, const char* key)
+{
+	auto it = data.find(key);
+	if (it != data.end() && it->is_array() && it->size() >= 3 && (*it)[0].is_number() && (*it)[1].is_number() && (*it)[2].is_number())
+		return { (*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>() };
+	return { 0.f, 0.f, 0.f };
+}
+
+bool LightEditor::SaveToLightPlacer()
+{
+	if (!lpInfo.isLPLight)
+		return false;
+
+	std::filesystem::path filePath = std::filesystem::path("Data\\LightPlacer") / (lpInfo.configPath + ".json");
+	if (!std::filesystem::exists(filePath)) {
+		logger::warn("[LightEditor] Light Placer config not found: {}", filePath.string());
+		return false;
+	}
+
+	json configArray;
+	{
+		std::ifstream inFile(filePath);
+		if (!inFile.is_open()) {
+			logger::warn("[LightEditor] Failed to open Light Placer config: {}", filePath.string());
+			return false;
+		}
+		try {
+			inFile >> configArray;
+		} catch (const json::parse_error& e) {
+			logger::warn("[LightEditor] Failed to parse Light Placer config: {} - {}", filePath.string(), e.what());
+			return false;
+		}
+	}
+
+	if (!configArray.is_array())
+		return false;
+
+	bool found = false;
+
+	auto normalizePath = [](std::string path) -> std::string {
+		std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		std::replace(path.begin(), path.end(), '\\', '/');
+		return path;
+	};
+
+	auto arrayContainsString = [](const json& arr, const std::function<bool(const std::string&)>& pred) -> bool {
+		for (const auto& elem : arr)
+			if (elem.is_string() && pred(elem.get<std::string>()))
+				return true;
+		return false;
+	};
+
+	std::string normalizedOwner = normalizePath(lpInfo.ownerModelPath);
+
+	for (auto& entry : configArray) {
+		auto lightsIt = entry.find("lights");
+		if (lightsIt == entry.end() || !lightsIt->is_array())
+			continue;
+
+		auto getArray = [&](const char* key) -> const json* {
+			auto it = entry.find(key);
+			return (it != entry.end() && it->is_array()) ? &*it : nullptr;
+		};
+
+		bool entryMatches = false;
+		if (auto* models = getArray("models"); !normalizedOwner.empty() && models)
+			entryMatches = arrayContainsString(*models, [&](const std::string& s) { return normalizePath(s) == normalizedOwner; });
+		if (!entryMatches)
+			if (auto* formIDs = getArray("formIDs"); !lpInfo.ownerEditorId.empty() && formIDs)
+				entryMatches = arrayContainsString(*formIDs, [&](const std::string& s) { return s == lpInfo.ownerEditorId; });
+
+		if (!entryMatches)
+			continue;
+
+		for (auto& lightEntry : entry["lights"]) {
+			if (!lightEntry.contains("data"))
+				continue;
+			auto& data = lightEntry["data"];
+			if (!data.contains("light") || !data["light"].is_string())
+				continue;
+
+			std::string edid = data["light"].get<std::string>();
+			if (edid != lpInfo.lightEDID)
+				continue;
+
+			if (!MatchesLPFilters(lightEntry, activeRefr))
+				continue;
+
+			data["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
+			data["fade"] = current.data.fade;
+			data["radius"] = current.data.radius;
+			data["cutoff"] = current.data.cutoffOverride;
+			data["size"] = current.data.size;
+
+			auto offset = GetJsonVec3(data, "offset");
+			data["offset"] = {
+				offset[0] + current.pos.x,
+				offset[1] + current.pos.y,
+				offset[2] + current.pos.z
+			};
+
+			std::string existingFlags = data.value("flags", std::string{});
+			bool isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
+			bool isLinear = current.data.flags.any(LightLimitFix::LightFlags::Linear);
+			std::string newFlags = UpdateLPFlags(existingFlags, isInvSq, isLinear);
+			if (!newFlags.empty())
+				data["flags"] = newFlags;
+			else
+				data.erase("flags");
+
+			found = true;
+			break;
+		}
+		if (found)
+			break;
+	}
+
+	if (!found) {
+		logger::warn("[LightEditor] No matching entry found for model '{}' with light EDID '{}' in {}", lpInfo.ownerModelPath, lpInfo.lightEDID, filePath.string());
+		return false;
+	}
+
+	{
+		std::ofstream outFile(filePath);
+		if (!outFile.is_open()) {
+			logger::warn("[LightEditor] Failed to write Light Placer config: {}", filePath.string());
+			return false;
+		}
+		outFile << configArray.dump(1, '\t');
+		outFile.flush();
+		if (outFile.fail()) {
+			logger::warn("[LightEditor] Failed to write Light Placer config to {}: stream error", filePath.string());
+			return false;
+		}
+	}
+
+	original.pos = original.pos + current.pos;
+	current.pos = { 0, 0, 0 };
+
+	logger::info("[LightEditor] Saved light settings to {}", filePath.string());
+	return true;
 }
 
 void LightEditor::SortLights()
