@@ -46,17 +46,20 @@ namespace Color
 
 	float RGBToLuminance(float3 color)
 	{
-		return dot(color, float3(0.2125, 0.7154, 0.0721));
+		// AP1 (ACEScg) luminance coefficients from AP1_2_XYZ_MAT Y row
+		return ENABLE_ACEScg ? dot(color, float3(0.2722287168, 0.6740817658, 0.0536895174)) : dot(color, float3(0.2125, 0.7154, 0.0721));
 	}
 
 	float RGBToLuminanceAlternative(float3 color)
 	{
-		return dot(color, float3(0.3, 0.59, 0.11));
+		// For ACEScg, fall back to the accurate AP1 luminance
+		return ENABLE_ACEScg ? dot(color, float3(0.2722287168, 0.6740817658, 0.0536895174)) : dot(color, float3(0.3, 0.59, 0.11));
 	}
 
 	float RGBToLuminance2(float3 color)
 	{
-		return dot(color, float3(0.299, 0.587, 0.114));
+		// For ACEScg, fall back to the accurate AP1 luminance
+		return ENABLE_ACEScg ? dot(color, float3(0.2722287168, 0.6740817658, 0.0536895174)) : dot(color, float3(0.299, 0.587, 0.114));
 	}
 
 	float3 RGBToYCoCg(float3 color)

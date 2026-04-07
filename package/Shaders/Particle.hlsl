@@ -296,8 +296,8 @@ PS_OUTPUT main(PS_INPUT input)
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
 	float unusedDetailedShadow;
-	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetLightingShadow(positionWS.xyz, eyeIndex, unusedDetailedShadow);
-	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
+	float3 dirLightColor = Color::GamutTransform(SharedData::DirLightColor.xyz) * ShadowSampling::GetLightingShadow(positionWS.xyz, eyeIndex, unusedDetailedShadow);
+	float3 ambientColor = Color::GamutTransform(max(0, SharedData::GetAmbient(float3(0, 0, 1))));
 
 	propertyColor += dirLightColor;
 	propertyColor += ambientColor;
@@ -329,7 +329,7 @@ PS_OUTPUT main(PS_INPUT input)
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #		endif
 
-				float3 lightColor = light.color.xyz * intensityMultiplier;
+				float3 lightColor = Color::GamutTransform(light.color.xyz) * intensityMultiplier;
 				propertyColor += lightColor;
 			}
 		}

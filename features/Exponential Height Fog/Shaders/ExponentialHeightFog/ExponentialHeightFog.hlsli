@@ -1,6 +1,7 @@
 #ifndef __EXPONENTIAL_HEIGHT_FOG_HLSLI__
 #define __EXPONENTIAL_HEIGHT_FOG_HLSLI__
 
+#include "Common/Color.hlsli"
 #include "Common/SharedData.hlsli"
 
 #if defined(DYNAMIC_CUBEMAPS)
@@ -44,7 +45,7 @@ namespace ExponentialHeightFog
 
 #if defined(DYNAMIC_CUBEMAPS)
 		if (SharedData::exponentialHeightFogSettings.useDynamicCubemaps > 0) {
-			float3 tintColor = lerp(fogColor, SharedData::exponentialHeightFogSettings.inscatteringTint.xyz, SharedData::exponentialHeightFogSettings.inscatteringTint.w);
+			float3 tintColor = lerp(fogColor, Color::GamutTransform(SharedData::exponentialHeightFogSettings.inscatteringTint.xyz), SharedData::exponentialHeightFogSettings.inscatteringTint.w);
 			float3 cubemapColor = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampColorSampler, normalize(lerp(positionWS, float3(0, 0, 1), saturate((SharedData::exponentialHeightFogSettings.cubemapMipLevel + 1) / 8))), SharedData::exponentialHeightFogSettings.cubemapMipLevel).xyz;
 			fogColor = tintColor * cubemapColor * (1.0f - expFogFactor);
 		}
@@ -54,7 +55,7 @@ namespace ExponentialHeightFog
 
 		// Calculate directional light inscattering
 		if (SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier > 0) {
-			float3 directionalLightInscattering = SharedData::DirLightColor.xyz * pow(saturate(dot(normalize(positionWS), SharedData::DirLightDirection.xyz)), SharedData::exponentialHeightFogSettings.directionalInscatteringExponent) / (2 * Math::TAU);
+			float3 directionalLightInscattering = Color::GamutTransform(SharedData::DirLightColor.xyz) * pow(saturate(dot(normalize(positionWS), SharedData::DirLightDirection.xyz)), SharedData::exponentialHeightFogSettings.directionalInscatteringExponent) / (2 * Math::TAU);
 			float dirExponentialHeightLineIntegral = exponentialHeightLineIntegralCalc * max(rayLength - SharedData::exponentialHeightFogSettings.startDistance, 0);
 			float dirExpFogFactor = saturate(exp2(-dirExponentialHeightLineIntegral));
 			directionalInscattering = directionalLightInscattering * (1 - dirExpFogFactor) * SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier;
