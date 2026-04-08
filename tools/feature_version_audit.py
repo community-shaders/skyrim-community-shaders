@@ -307,12 +307,14 @@ def propose_new_version(prior_version, commits):
     else:
         return (major, minor, patch + 1)
 
-def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=False):
+def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=False, release_ref=None):
     bump_suggestions = []
     new_features = []
     actionable = False
     feature_actions = {}
     feature_analysis = []
+    # version_ref: base for version comparison (last release tag in PR mode; otherwise same as base_ref)
+    version_ref = release_ref if release_ref else base_ref
     # If only_changed, build a set of changed feature names
     changed_features = set()
     if only_changed:
@@ -376,16 +378,19 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
 
         meta = feature_meta_map.get(feature_key)
         ini_path = get_feature_ini(feature_dir)
-        prior_ver = get_prior_version(ini_path, base_ref) if ini_path else None
+        # Use last release tag (version_ref) as the baseline for version proposals so that
+        # multiple PRs between releases don't accumulate spurious bumps.
+        prior_ver = get_prior_version(ini_path, version_ref) if ini_path else None
         new_ver = get_version_from_ini(ini_path) if ini_path else None
 
+        # PR-scoped changes: used for change-type display and new-feature detection
         changes = get_changed_files(feature_dir, base_ref)
         # Also check src/Features
+        cpp_types = (".h", ".hpp", ".cpp", ".c")
         if meta:
             header_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".h")
             cpp_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".cpp")
             feature_src_dir = DEFAULT_FEATURE_HEADERS_DIR / meta['name']
-            cpp_types = (".h", ".hpp", ".cpp", ".c")
             if header_path.exists():
                 changes.extend(get_changed_files(header_path, base_ref, file_types=cpp_types))
             if cpp_path.exists():
@@ -394,12 +399,28 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 changes.extend(get_changed_files(feature_src_dir, base_ref, file_types=cpp_types))
         changes = list(set(changes))
 
+        # Release-scoped changes: all changes since last release, used to propose the correct
+        # version so that a bump already applied by a prior PR satisfies this check.
+        release_changes = get_changed_files(feature_dir, version_ref)
+        if meta:
+            header_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".h")
+            cpp_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".cpp")
+            feature_src_dir = DEFAULT_FEATURE_HEADERS_DIR / meta['name']
+            if header_path.exists():
+                release_changes.extend(get_changed_files(header_path, version_ref, file_types=cpp_types))
+            if cpp_path.exists():
+                release_changes.extend(get_changed_files(cpp_path, version_ref, file_types=cpp_types))
+            if feature_src_dir.exists() and feature_src_dir.is_dir():
+                release_changes.extend(get_changed_files(feature_src_dir, version_ref, file_types=cpp_types))
+        release_changes = list(set(release_changes))
+
         change_types = set(os.path.splitext(f)[1].lower() for _, f in changes)
         all_commits = []
         bump_commit = None
         bump_author = None
+        for status, f in release_changes:
+            all_commits.extend(get_commits_for_file(f, version_ref))
         for status, f in changes:
-            all_commits.extend(get_commits_for_file(f, base_ref))
             if not bump_commit:
                 bump_commit = get_bump_commit(f, base_ref)
                 if bump_commit:
@@ -665,6 +686,17 @@ def main():
             print("No valid base ref found.", file=sys.stderr)
             sys.exit(1)
 
+    # In PR check mode, determine the last release tag so version proposals are anchored
+    # to the release baseline rather than to the tip of the target branch.  This prevents
+    # multiple PRs between releases from each requiring an additional version bump.
+    release_ref = None
+    if args.pr_check:
+        release_ref = get_latest_release_tag()
+        if release_ref:
+            print(f"Using release tag for version baseline: {release_ref}", file=sys.stderr)
+        else:
+            print("No release tag found; falling back to base_ref for version baseline.", file=sys.stderr)
+
     base_date_iso = None
     base_date_human = None
     try:
@@ -684,7 +716,7 @@ def main():
     feature_meta_map = {normalize_name(f['name']): f for f in feature_metadata}
 
     feature_analysis, bump_suggestions, new_features, actionable, feature_actions = analyze_features(
-        FEATURES_DIR, feature_meta_map, base_ref, only_changed=args.pr_check)
+        FEATURES_DIR, feature_meta_map, base_ref, only_changed=args.pr_check, release_ref=release_ref)
 
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     date_tag = datetime.datetime.now().strftime('%Y-%m-%d')

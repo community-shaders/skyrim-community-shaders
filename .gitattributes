@@ -1,2 +1,5 @@
+# Normalize all text files to LF
+* text=auto eol=lf
+
 # Ensure patch files always use LF line endings
 *.patch text eol=lf
