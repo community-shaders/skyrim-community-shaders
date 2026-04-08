@@ -3,6 +3,7 @@
 // License: MIT License
 
 #include "BackgroundBlur.h"
+#include "../Features/HDRDisplay.h"
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
 #include "../ShaderCache.h"
@@ -84,6 +85,7 @@ namespace BackgroundBlur
 		UINT textureHeight = 0;
 		UINT downsampledWidth = 0;
 		UINT downsampledHeight = 0;
+		DXGI_FORMAT textureFormat = DXGI_FORMAT_UNKNOWN;
 
 		bool initialized = false;
 		bool initializationFailed = false;
@@ -118,6 +120,7 @@ namespace BackgroundBlur
 			textureHeight = 0;
 			downsampledWidth = 0;
 			downsampledHeight = 0;
+			textureFormat = DXGI_FORMAT_UNKNOWN;
 		}
 
 		// Create a Texture2D with associated RTV and SRV
@@ -247,7 +250,7 @@ namespace BackgroundBlur
 	{
 		std::lock_guard<std::mutex> lock(resourceMutex);
 
-		if (width == textureWidth && height == textureHeight && blurTexture1 && blurTexture2) {
+		if (width == textureWidth && height == textureHeight && format == textureFormat && blurTexture1 && blurTexture2) {
 			return;
 		}
 
@@ -282,6 +285,7 @@ namespace BackgroundBlur
 		textureHeight = height;
 		downsampledWidth = dsWidth;
 		downsampledHeight = dsHeight;
+		textureFormat = format;
 	}
 
 	void PerformBlur(ID3D11Texture2D* sourceTexture, ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax, float cornerRadius, ID3D11ShaderResourceView* uiBufferSRV = nullptr, ID3D11RenderTargetView* uiBufferRTV = nullptr)
@@ -515,6 +519,11 @@ namespace BackgroundBlur
 		auto& upscaling = globals::features::upscaling;
 		bool useUpscalingBackbuffer = upscaling.d3d12SwapChainActive;
 
+		auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
+		bool hdrActive = hdr &&
+		                 hdr->settings.enableHDR && hdr->hdrDataCB && hdr->outputTexture &&
+		                 hdr->hdrTexture && hdr->hdrTexture->resource && hdr->hdrTexture->srv && hdr->hdrTexture->rtv;
+
 		// Back buffer is black on main/loading menu during shader compilation without upscaling
 		if (!useUpscalingBackbuffer && !(upscaling.loaded && upscaling.IsUpscalingActive())) {
 			bool isMainOrLoading = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
@@ -530,7 +539,22 @@ namespace BackgroundBlur
 		ID3D11ShaderResourceView* uiBufferSRV = nullptr;
 		ID3D11RenderTargetView* uiBufferRTV = nullptr;
 
-		if (useUpscalingBackbuffer) {
+		if (hdrActive) {
+			// HDR (any FG state): blur hdrTexture in-place before ApplyHDR composites UI.
+			// No color space conversion needed - blur operates directly in PQ BT.2020 space.
+			// ApplyHDR will then composite vanilla UI + ImGui on top of the blurred scene.
+			currentTexture = hdr->hdrTexture->resource;
+			sourceSRV = hdr->hdrTexture->srv.get();
+			currentRTV = hdr->hdrTexture->rtv;
+
+			// Vanilla UI is in a separate texture in HDR mode (SetUIBuffer redirect).
+			// Composite it into the blur so HUD elements appear blurred behind the menu,
+			// and clear the blur region from uiTexture to prevent double-compositing.
+			if (hdr->uiTexture && hdr->uiTexture->srv && hdr->uiTexture->rtv) {
+				uiBufferSRV = hdr->uiTexture->srv.get();
+				uiBufferRTV = hdr->uiTexture->rtv.get();
+			}
+		} else if (useUpscalingBackbuffer) {
 			// When D3D12 swap chain is active, get all resources in one call
 			auto res = upscaling.GetBlurResources();
 			if (!res.backbufferTex || !res.backbufferRTV || !res.backbufferSRV) {
@@ -581,8 +605,8 @@ namespace BackgroundBlur
 		D3D11_TEXTURE2D_DESC texDesc;
 		currentTexture->GetDesc(&texDesc);
 
-		// Create blur textures if needed
-		if (textureWidth != texDesc.Width || textureHeight != texDesc.Height) {
+		// Create blur textures if needed (check format too for HDR toggle)
+		if (textureWidth != texDesc.Width || textureHeight != texDesc.Height || textureFormat != texDesc.Format) {
 			CreateBlurTextures(texDesc.Width, texDesc.Height, texDesc.Format);
 		}
 

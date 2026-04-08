@@ -28,6 +28,7 @@ namespace SharedData
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;
+		float4 HDRData;
 	};
 
 	struct GrassLightingSettings
