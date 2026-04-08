@@ -2,6 +2,8 @@
 #ifndef __DISPLAY_MAPPING_DEPENDENCY_HLSL__
 #define __DISPLAY_MAPPING_DEPENDENCY_HLSL__
 
+#include "Common/Color.hlsli"
+
 namespace DisplayMapping
 {
 	// https://www.ea.com/frostbite/news/high-dynamic-range-color-grading-and-display-in-frostbite
@@ -25,6 +27,47 @@ namespace DisplayMapping
 			RangeCompress(val.x, threshold),
 			RangeCompress(val.y, threshold),
 			RangeCompress(val.z, threshold));
+	}
+
+	float RangeCompress(float val, float threshold, float maxValue)
+	{
+		if (val < threshold)
+			return val;
+		if (maxValue <= threshold)
+			return threshold;
+
+		float range = maxValue - threshold;
+		return threshold + range * RangeCompress((val - threshold) / range);
+	}
+
+	float3 RangeCompress(float3 val, float threshold, float maxValue)
+	{
+		return float3(
+			RangeCompress(val.x, threshold, maxValue),
+			RangeCompress(val.y, threshold, maxValue),
+			RangeCompress(val.z, threshold, maxValue));
+	}
+
+	float RangeCompress(float val, float threshold, float maxValue, float clip)
+	{
+		if (val < threshold)
+			return val;
+		if (maxValue <= threshold)
+			return threshold;
+
+		float range = maxValue - threshold;
+		float clipValue = 1.0 - exp((threshold - clip) / range);
+		float rolloffValue = 1.0 - exp(-(val - threshold) / range);
+
+		return threshold + range * (rolloffValue / clipValue);
+	}
+
+	float3 RangeCompress(float3 val, float threshold, float maxValue, float clip)
+	{
+		return float3(
+			RangeCompress(val.x, threshold, maxValue, clip),
+			RangeCompress(val.y, threshold, maxValue, clip),
+			RangeCompress(val.z, threshold, maxValue, clip));
 	}
 
 	static const float PQ_constant_N = (2610.0 / 4096.0 / 4.0);
@@ -128,7 +171,8 @@ namespace DisplayMapping
 		return XYZToRGB(col);
 	}
 
-	float3 HuePreservingHejlBurgessDawson(float3 col, float3 bloomCol)
+#if defined(PSHADER) && defined(BLEND)
+	float3 HuePreservingHejlBurgessDawson(float3 col, float3 bloomCol, bool isHDR = false)
 	{
 		float3 ictcp = RGBToICtCp(col);
 
@@ -137,7 +181,7 @@ namespace DisplayMapping
 		col = ICtCpToRGB(ictcp * float3(1, saturationAmount.xx));
 
 		// Non-hue preserving mapping
-		float3 perChannelCompressed = GetTonemapFactorHejlBurgessDawson(col);
+		float3 perChannelCompressed = GetTonemapFactorHejlBurgessDawson(col, isHDR);
 		perChannelCompressed += saturate(Param.x - perChannelCompressed) * bloomCol;
 
 		col = perChannelCompressed;
@@ -156,6 +200,9 @@ namespace DisplayMapping
 
 		return col;
 	}
-}
+
+#endif
+
+}  // namespace DisplayMapping
 
 #endif  // __DISPLAY_MAPPING_DEPENDENCY_HLSL__

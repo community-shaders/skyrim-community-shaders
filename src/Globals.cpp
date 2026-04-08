@@ -8,6 +8,7 @@
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/HDRDisplay.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
 #include "Features/InteriorSun.h"
@@ -82,6 +83,7 @@ namespace globals
 		WetnessEffects wetnessEffects{};
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
+		HDRDisplay hdrDisplay{};
 		RenderDoc renderDoc{};
 		WeatherEditor weatherEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
@@ -297,6 +299,7 @@ namespace globals
 				auto& stereoOpt = globals::features::vr.stereoOpt;
 				if (stereoOpt.loaded && stereoOpt.IsStencilActive()) {
 					pDepthStencilState = stereoOpt.GetOrCreateModifiedDSS(pDepthStencilState);
+					stereoOpt.NoteStencilSwap();
 					StencilRef = 1;  // Must match the ref written by our stencil pass
 				}
 			}
@@ -310,7 +313,7 @@ namespace globals
 	 *
 	 * vtable index 53 for ID3D11DeviceContext::ClearDepthStencilView.
 	 * Prevents the game from clearing our stencil marks between the stencil write and
-	 * the reprojection pass by stripping the D3D11_CLEAR_STENCIL flag.
+	 * the stereo overwrite blend pass by stripping the D3D11_CLEAR_STENCIL flag.
 	 */
 	struct ID3D11DeviceContext_ClearDepthStencilView
 	{
