@@ -599,7 +599,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
-	if (!SharedData::InInterior){
+	if (!SharedData::InInterior) {
 		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, rotationMatrix, eyeIndex);
 		dirSoftShadow = dirDetailedShadow;
 	}
@@ -886,7 +886,7 @@ PS_OUTPUT main(PS_INPUT input)
 	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
-	if (!SharedData::InInterior){
+	if (!SharedData::InInterior) {
 		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, rotationMatrix, eyeIndex);
 		dirSoftShadow = dirDetailedShadow;
 	}
