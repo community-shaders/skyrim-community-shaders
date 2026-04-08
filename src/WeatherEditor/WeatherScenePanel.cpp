@@ -24,7 +24,15 @@ namespace WeatherScenePanel
 		SceneSettingsUI::AddSettingState addState;
 		SceneSettingsUI::AddSettingState periodAddStates[SceneSettingsManager::kPeriodCount];
 		SceneSettingsUI::AddSettingState allPeriodsAddState;
-		Util::FlyoutState flyoutState;
+		Util::FlyoutState flyoutState;      // Per-cell flyout
+		Util::FlyoutState rowFlyoutState;   // Row-level flyout (setting name)
+		Util::FlyoutState colFlyoutState;   // Column-level flyout (period headers)
+		Util::ConfirmationPopup todConfirm{
+			"Switch Time of Day Mode?",
+			"This will clear all existing entries for this weather.\nAre you sure?",
+			"Switch"
+		};
+		bool pendingTodValue = false;  // The value to set if confirmed
 	};
 	static std::map<RE::FormID, PanelState> panelStates;
 
@@ -90,25 +98,14 @@ namespace WeatherScenePanel
 		// Flyout on hover
 		ImGuiID cellId = ImGui::GetItemID();
 		if (Util::BeginFlyout(state.flyoutState, cellId)) {
-			bool active = !entry.paused;
-			if (Util::SmallFeatureToggle("##active", &active))
+			auto result = SceneSettingsUI::DrawFlyoutControls(entry.paused);
+
+			if (result.toggled)
 				manager->TogglePauseWeatherEntry(weatherId, entryIndex);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(entry.paused ? "Paused" : "Active");
-
-			ImGui::SameLine();
-			auto* menu = globals::menu;
-			float iconH = ImGui::GetFrameHeight() * 0.7f;
-			if (menu && Util::IconButton("##revert", menu->uiIcons.undo.texture, ImVec2(iconH, iconH)))
+			if (result.reverted)
 				manager->RevertWeatherEntryToDefault(weatherId, entryIndex);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Revert to default");
-
-			ImGui::SameLine();
-			if (Util::ThemedDeleteButton("X"))
+			if (result.deleted)
 				manager->RemoveWeatherSetting(weatherId, entryIndex);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Remove this setting");
 
 			Util::EndFlyout(state.flyoutState);
 		}
@@ -172,7 +169,7 @@ namespace WeatherScenePanel
 		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 		ImGui::SetNextWindowSize(ImVec2(C::Em(C::SCENE_ADD_DIALOG_WIDTH_EM), 0));
 
-		if (!ImGui::Begin("Add Weather Setting", &addState.dialogOpen,
+		if (!Util::BeginWithRoundedClose("Add Weather Setting", &addState.dialogOpen,
 				ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::End();
 			return;
@@ -324,25 +321,14 @@ namespace WeatherScenePanel
 
 		ImGuiID cellId = ImGui::GetItemID();
 		if (Util::BeginFlyout(state.flyoutState, cellId)) {
-			bool active = !entry.paused;
-			if (Util::SmallFeatureToggle("##active", &active))
+			auto result = SceneSettingsUI::DrawFlyoutControls(entry.paused);
+
+			if (result.toggled)
 				manager->TogglePauseWeatherEntry(weatherId, entryIndex);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(entry.paused ? "Paused" : "Active");
-
-			ImGui::SameLine();
-			auto* menu = globals::menu;
-			float iconH = ImGui::GetFrameHeight() * 0.7f;
-			if (menu && Util::IconButton("##revert", menu->uiIcons.undo.texture, ImVec2(iconH, iconH)))
+			if (result.reverted)
 				manager->RevertWeatherEntryToDefault(weatherId, entryIndex);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Revert to default");
-
-			ImGui::SameLine();
-			if (Util::ThemedDeleteButton("X"))
+			if (result.deleted)
 				manager->RemoveWeatherSetting(weatherId, entryIndex);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Remove this setting");
 
 			Util::EndFlyout(state.flyoutState);
 		}
@@ -357,9 +343,6 @@ namespace WeatherScenePanel
 		const auto& entries = config.entries;
 		auto& theme = globals::menu->GetSettings().Theme;
 
-		float factors[kPeriodCount];
-		manager->GetTimeOfDayFactors(factors);
-
 		auto group = BuildSourceGroup(entries);
 		if (group.order.empty())
 			return;
@@ -367,7 +350,8 @@ namespace WeatherScenePanel
 		constexpr int kTotalCols = 1 + kPeriodCount;
 
 		if (!ImGui::BeginTable("##WeatherTOD", kTotalCols,
-				ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
+				ImGuiTableFlags_Borders |
+					ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
 			return;
 
 		ImGui::TableSetupColumn("Setting", ImGuiTableColumnFlags_WidthFixed, C::Em(C::SCENE_TOD_PARAM_COL_EM));
@@ -376,18 +360,54 @@ namespace WeatherScenePanel
 				ImGuiTableColumnFlags_WidthFixed, C::Em(C::SCENE_TOD_PERIOD_COL_EM));
 		ImGui::TableSetupScrollFreeze(0, 1);
 
-		// Header row
+		// Collect per-period indices for column flyout controls
+		std::array<std::vector<size_t>, kPeriodCount> perPeriod{};
+		for (size_t idx = 0; idx < entries.size(); ++idx) {
+			int p = static_cast<int>(entries[idx].period);
+			if (p >= 0 && p < kPeriodCount)
+				perPeriod[p].push_back(idx);
+		}
+
+		// Header row with period names + integrated per-column controls
 		ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
 		ImGui::TableSetColumnIndex(0);
 		ImGui::TableHeader("Setting");
 		for (int i = 0; i < kPeriodCount; ++i) {
 			ImGui::TableSetColumnIndex(1 + i);
-			bool isActive = factors[i] > C::SCENE_TOD_ACTIVE_THRESHOLD;
-			if (!isActive)
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, C::SCENE_TOD_INACTIVE_ALPHA);
 			ImGui::Text("%s", SceneSettingsManager::kPeriodNames[i]);
-			if (!isActive)
-				ImGui::PopStyleVar();
+
+			const auto& indices = perPeriod[i];
+			if (!indices.empty()) {
+				ImGui::PushID(i);
+
+				ImGuiID colId = ImGui::GetID("##colFlyout");
+				if (Util::BeginFlyout(state.colFlyoutState, colId)) {
+					bool allPaused = std::all_of(indices.begin(), indices.end(),
+						[&](size_t idx) { return idx < entries.size() && entries[idx].paused; });
+					auto result = SceneSettingsUI::DrawGroupFlyoutControls(allPaused);
+
+					if (result.toggled)
+						for (auto idx : indices)
+							if (idx < entries.size() && entries[idx].paused == !allPaused)
+								manager->TogglePauseWeatherEntry(weatherId, idx);
+					if (result.reverted)
+						for (auto idx : indices)
+							manager->RevertWeatherEntryToDefault(weatherId, idx);
+					if (result.deleted) {
+						auto sorted = indices;
+						std::sort(sorted.begin(), sorted.end(), std::greater<>());
+						for (auto idx : sorted)
+							manager->RemoveWeatherSetting(weatherId, idx);
+					}
+					if (result.deleted) {
+						state.colFlyoutState.isOpen = false;
+						state.colFlyoutState.activeId = 0;
+					}
+					Util::EndFlyout(state.colFlyoutState);
+				}
+
+				ImGui::PopID();
+			}
 		}
 
 		// Data rows
@@ -420,6 +440,9 @@ namespace WeatherScenePanel
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
+			ImVec2 cellStart = ImGui::GetCursorScreenPos();
+			float cellWidth = ImGui::GetContentRegionAvail().x;
+
 			ImGui::PushID(sid.key.c_str());
 			ImGui::PushID(sid.feature.c_str());
 
@@ -428,26 +451,35 @@ namespace WeatherScenePanel
 			ImGui::Text("%s", sid.key.c_str());
 			ImGui::SetWindowFontScale(1.0f);
 
-			// Row-level toggle + delete
-			{
+			// Row-level flyout on hover over full first-column cell
+			ImGuiID rowId = ImGui::GetID("##rowFlyout");
+			ImVec2 cellMin = cellStart;
+			float rowH = std::max(ImGui::GetTextLineHeightWithSpacing(), ImGui::GetItemRectMax().y - cellStart.y);
+			ImVec2 cellMax(cellStart.x + cellWidth, cellStart.y + rowH);
+			if (Util::BeginFlyout(state.rowFlyoutState, rowId, cellMin, cellMax)) {
 				bool allPaused = std::all_of(rowIndices.begin(), rowIndices.end(),
 					[&](size_t i) { return i < entries.size() && entries[i].paused; });
-				bool active = !allPaused;
-				if (Util::FeatureToggle("##rowActive", &active))
-					for (auto idx : rowIndices)
-						if (idx < entries.size() && entries[idx].paused == active)
-							manager->TogglePauseWeatherEntry(weatherId, idx);
+				auto result = SceneSettingsUI::DrawGroupFlyoutControls(allPaused);
 
-				ImGui::SameLine();
-				{
-					auto styledButton = Util::ErrorButtonStyle();
-					if (ImGui::Button("X", ImVec2(C::Em(C::SCENE_DELETE_BUTTON_EM), 0))) {
-						auto sorted = rowIndices;
-						std::sort(sorted.begin(), sorted.end(), std::greater<>());
-						for (auto idx : sorted)
-							manager->RemoveWeatherSetting(weatherId, idx);
-					}
+				if (result.toggled)
+					for (auto idx : rowIndices)
+						if (idx < entries.size() && entries[idx].paused == !allPaused)
+							manager->TogglePauseWeatherEntry(weatherId, idx);
+				if (result.reverted)
+					for (auto idx : rowIndices)
+						manager->RevertWeatherEntryToDefault(weatherId, idx);
+				if (result.deleted) {
+					auto sorted = rowIndices;
+					std::sort(sorted.begin(), sorted.end(), std::greater<>());
+					for (auto idx : sorted)
+						manager->RemoveWeatherSetting(weatherId, idx);
 				}
+				// Close flyout after any delete action
+				if (result.deleted) {
+					state.rowFlyoutState.isOpen = false;
+					state.rowFlyoutState.activeId = 0;
+				}
+				Util::EndFlyout(state.rowFlyoutState);
 			}
 
 			ImGui::Unindent(C::Em(C::SCENE_ENTRY_INDENT_EM));
@@ -457,12 +489,7 @@ namespace WeatherScenePanel
 			// Period columns
 			for (int p = 0; p < kPeriodCount; ++p) {
 				ImGui::TableSetColumnIndex(1 + p);
-				bool isActive = factors[p] > C::SCENE_TOD_ACTIVE_THRESHOLD;
-				if (!isActive)
-					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, C::SCENE_TOD_INACTIVE_ALPHA);
 				DrawTodValueCell(weatherId, perKey[p], state);
-				if (!isActive)
-					ImGui::PopStyleVar();
 			}
 		}
 
@@ -501,12 +528,22 @@ namespace WeatherScenePanel
 				ImGui::Text("Add feature settings");
 		}
 
-		// Time of Day checkbox
+		// Time of Day checkbox — confirm if entries would be lost
 		bool useTod = isTod;
-		if (ImGui::Checkbox("Time of Day", &useTod))
-			manager->SetWeatherTimeOfDay(weatherId, useTod);
+		if (ImGui::Checkbox("Time of Day", &useTod)) {
+			if (!config.entries.empty()) {
+				state.pendingTodValue = useTod;
+				state.todConfirm.Request();
+			} else {
+				manager->SetWeatherTimeOfDay(weatherId, useTod);
+			}
+		}
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Enable per-period overrides for this weather");
+
+		// Draw confirmation popup
+		if (state.todConfirm.Draw())
+			manager->SetWeatherTimeOfDay(weatherId, state.pendingTodValue);
 
 		ImGui::Separator();
 

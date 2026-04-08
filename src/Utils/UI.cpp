@@ -1835,8 +1835,8 @@ namespace Util
 		// Create unique ID for the toggle
 		ImGui::PushID(label);
 
-		// Draw the toggle button
-		bool clicked = ImGui::Button("", toggleSize);
+		// Draw the toggle button (##t avoids ID collision with PushID parent)
+		bool clicked = ImGui::Button("##t", toggleSize);
 
 		// Draw the toggle knob
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -2086,43 +2086,74 @@ namespace Util
 
 	// --- Flyout Menu ---
 
-	static constexpr float kFlyoutCloseDelay = 0.15f;
+	static constexpr float kFlyoutCloseDelay = 0.25f;
 	static constexpr float kFlyoutRounding = 4.0f;
 	static constexpr float kSmallToggleScale = 0.7f;
+	static constexpr float kFlyoutSlideOpenSpeed = 10.0f;  // progress/sec (0→1 in 0.1s)
+	static constexpr float kFlyoutSlideCloseSpeed = 14.0f; // progress/sec (1→0 in ~0.07s)
+	static constexpr float kFlyoutSlideDistance = 6.0f;    // unscaled px of vertical slide
+	static constexpr float kFlyoutLeftOffset = 8.0f;       // shift flyout left by this many unscaled px
+	static constexpr float kIconShrink = 0.15f;            // shrink icon within button by this fraction
 
 	bool BeginFlyout(FlyoutState& state, ImGuiID itemId)
 	{
-		bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup);
+		return BeginFlyout(state, itemId, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+	}
 
-		// Open on hover
-		if (hovered && !state.isOpen) {
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax)
+	{
+		float dt = ImGui::GetIO().DeltaTime;
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		bool hovered = mousePos.x >= hoverMin.x && mousePos.x <= hoverMax.x &&
+		               mousePos.y >= hoverMin.y && mousePos.y <= hoverMax.y;
+
+		// Open on hover, or switch to new item if different item hovered
+		if (hovered && (!state.isOpen || state.activeId != itemId)) {
 			state.activeId = itemId;
 			state.isOpen = true;
 			state.closeTimer = 0.f;
+			state.openProgress = 0.f;
 		}
 
 		if (!state.isOpen || state.activeId != itemId)
 			return false;
 
-		// Position below the hovered item
-		ImVec2 itemMin = ImGui::GetItemRectMin();
-		ImVec2 itemMax = ImGui::GetItemRectMax();
-		ImVec2 flyoutPos(itemMin.x, itemMax.y + 2.0f * GetUIScale());
+		// Animate slide open
+		state.openProgress = std::min(state.openProgress + kFlyoutSlideOpenSpeed * dt, 1.0f);
+
+		// Track source item rect for hover checking in EndFlyout
+		state.sourceMin = hoverMin;
+		state.sourceMax = hoverMax;
+
+		// Slide animation: ease-out quadratic
+		float scale = GetUIScale();
+		float gap = 2.0f * scale;
+		float p = state.openProgress;
+		float eased = 1.0f - (1.0f - p) * (1.0f - p);
+		float slideOffset = (1.0f - eased) * kFlyoutSlideDistance * scale;
+		float alpha = std::min(p * 4.0f, 1.0f);  // quick opacity ramp in first 25%
+
+		ImVec2 flyoutPos(hoverMin.x - kFlyoutLeftOffset * scale, hoverMax.y + gap - slideOffset);
 
 		ImGui::SetNextWindowPos(flyoutPos, ImGuiCond_Always);
-		ImGui::SetNextWindowBgAlpha(0.95f);
+		ImGui::SetNextWindowBgAlpha(0.95f * alpha);
 
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
 		                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-		                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
-		                         ImGuiWindowFlags_NoFocusOnAppearing;
+		                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
 
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kFlyoutRounding * GetUIScale());
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * GetUIScale(), 4.0f * GetUIScale()));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kFlyoutRounding * scale);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale, 2.0f * scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
 
 		auto flyoutLabel = std::format("##flyout_{}", itemId);
 		bool visible = ImGui::Begin(flyoutLabel.c_str(), nullptr, flags);
-		ImGui::PopStyleVar(2);
+
+		// Bring flyout to front so it renders above other windows
+		if (visible)
+			ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+
+		ImGui::PopStyleVar(3);
 
 		return visible;
 	}
@@ -2132,19 +2163,30 @@ namespace Util
 		bool flyoutHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem | ImGuiHoveredFlags_RootAndChildWindows);
 		ImGui::End();
 
-		// Also check if the original value cell is hovered
-		bool itemHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup);
+		// Check if mouse is over the source item or the gap between source and flyout
+		float dt = ImGui::GetIO().DeltaTime;
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		float scale = GetUIScale();
+		float gap = 2.0f * scale;
+		float leftOffset = kFlyoutLeftOffset * scale;
+		bool itemHovered = mousePos.x >= (state.sourceMin.x - leftOffset) && mousePos.x <= state.sourceMax.x &&
+		                   mousePos.y >= state.sourceMin.y && mousePos.y <= (state.sourceMax.y + gap);
 
 		if (flyoutHovered || itemHovered) {
 			state.closeTimer = 0.f;
 		} else {
-			state.closeTimer += ImGui::GetIO().DeltaTime;
+			state.closeTimer += dt;
+			// Slide back up during close delay
+			state.openProgress = std::max(state.openProgress - kFlyoutSlideCloseSpeed * dt, 0.0f);
 			if (state.closeTimer >= kFlyoutCloseDelay) {
 				state.isOpen = false;
 				state.activeId = 0;
+				state.openProgress = 0.f;
 			}
 		}
 	}
+
+
 
 	bool SmallFeatureToggle(const char* label, bool* enabled)
 	{
@@ -2159,8 +2201,14 @@ namespace Util
 		ImGui::PushStyleColor(ImGuiCol_Button, colors[ImGuiCol_FrameBg]);
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors[ImGuiCol_FrameBgHovered]);
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, colors[ImGuiCol_FrameBgActive]);
-		float h = ImGui::GetFrameHeight() * kSmallToggleScale;
+		float h = ImGui::GetFrameHeight() * 0.8f;
+		// Center text within the small button
+		float fontSize = ImGui::GetFontSize();
+		float padY = std::max(0.f, (h - fontSize) * 0.5f);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, h * 0.3f);
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padY, padY));
 		bool clicked = ImGui::Button(label, ImVec2(h, h));
+		ImGui::PopStyleVar(2);
 		ImGui::PopStyleColor(3);
 		return clicked;
 	}
@@ -2169,9 +2217,14 @@ namespace Util
 	{
 		if (!texture)
 			return false;
+		// Shrink icon within button area so it visually matches text buttons
+		float pad = size.x * kIconShrink;
+		ImVec2 iconSize(size.x - pad * 2.0f, size.y - pad * 2.0f);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
-		bool clicked = ImGui::ImageButton(id, texture, size);
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(pad, pad));
+		bool clicked = ImGui::ImageButton(id, texture, iconSize);
+		ImGui::PopStyleVar();
 		ImGui::PopStyleColor(2);
 		return clicked;
 	}

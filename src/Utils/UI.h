@@ -1380,6 +1380,9 @@ namespace Util
 		ImGuiID activeId = 0;    // ID of the item the flyout is open for
 		bool isOpen = false;
 		float closeTimer = 0.f;  // Countdown before closing on mouse-leave
+		float openProgress = 0.f;  // Slide animation progress (0..1)
+		ImVec2 sourceMin{};      // Source item rect min (for hover tracking)
+		ImVec2 sourceMax{};      // Source item rect max (for hover tracking)
 	};
 
 	/// Begin a flyout below the last item. Returns true if the flyout is visible.
@@ -1388,10 +1391,14 @@ namespace Util
 	/// @param itemId Unique ID for this flyout instance (use ImGui::GetItemID() after the value widget).
 	bool BeginFlyout(FlyoutState& state, ImGuiID itemId);
 
+	/// Begin a flyout with an explicit hover source rect.
+	/// Use when the hover target should be larger than the last item (e.g. full table cell).
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax);
+
 	/// End the flyout region. Must be called if BeginFlyout returned true.
 	void EndFlyout(FlyoutState& state);
 
-	/// Draw a small toggle switch (30% smaller than FeatureToggle).
+	/// Draw a small toggle switch (20% smaller than FeatureToggle).
 	bool SmallFeatureToggle(const char* label, bool* enabled);
 
 	/// Draw a themed delete button (follows theme color instead of red).

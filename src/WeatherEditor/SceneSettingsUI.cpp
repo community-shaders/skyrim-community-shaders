@@ -63,7 +63,7 @@ namespace SceneSettingsUI
 		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 		ImGui::SetNextWindowSize(ImVec2(C::Em(C::SCENE_ADD_DIALOG_WIDTH_EM), 0));
 
-		if (!ImGui::Begin("Add Feature Settings", &state.dialogOpen, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (!Util::BeginWithRoundedClose("Add Feature Settings", &state.dialogOpen, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::End();
 			return;
 		}
@@ -162,6 +162,82 @@ namespace SceneSettingsUI
 		ImGui::End();
 	}
 
+	FlyoutResult DrawFlyoutControls(bool paused)
+	{
+		FlyoutResult result;
+
+		// Single row: Toggle | Revert | Delete — vertically centered
+		constexpr float kToggleScale = 0.7f;
+		float frameH = ImGui::GetFrameHeight();
+		float toggleH = frameH * 0.8f * kToggleScale;
+		float buttonH = frameH * 0.8f;
+		float toggleOffsetY = (buttonH - toggleH) * 0.5f;
+
+		ImVec2 cursor = ImGui::GetCursorScreenPos();
+		ImGui::SetCursorScreenPos(ImVec2(cursor.x, cursor.y + toggleOffsetY));
+		bool active = !paused;
+		if (Util::SmallFeatureToggle("##active", &active))
+			result.toggled = true;
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(paused ? "Paused" : "Active");
+
+		ImGui::SameLine();
+		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, cursor.y));
+		auto* menu = globals::menu;
+		float iconH = ImGui::GetFrameHeight() * 0.8f;
+		if (menu && Util::IconButton("##revert", menu->uiIcons.undo.texture, ImVec2(iconH, iconH)))
+			result.reverted = true;
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Revert to default");
+
+		ImGui::SameLine();
+		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, cursor.y));
+		if (Util::ThemedDeleteButton("X"))
+			result.deleted = true;
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Remove");
+
+		return result;
+	}
+
+	FlyoutResult DrawGroupFlyoutControls(bool allPaused)
+	{
+		FlyoutResult result;
+
+		// Single row: Toggle | Revert | Delete — vertically centered
+		constexpr float kToggleScale = 0.7f;
+		float frameH = ImGui::GetFrameHeight();
+		float toggleH = frameH * 0.8f * kToggleScale;
+		float buttonH = frameH * 0.8f;
+		float toggleOffsetY = (buttonH - toggleH) * 0.5f;
+
+		ImVec2 cursor = ImGui::GetCursorScreenPos();
+		ImGui::SetCursorScreenPos(ImVec2(cursor.x, cursor.y + toggleOffsetY));
+		bool active = !allPaused;
+		if (Util::SmallFeatureToggle("##groupActive", &active))
+			result.toggled = true;
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(allPaused ? "Unpause all" : "Pause all");
+
+		ImGui::SameLine();
+		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, cursor.y));
+		auto* menu = globals::menu;
+		float iconH = ImGui::GetFrameHeight() * 0.8f;
+		if (menu && Util::IconButton("##revertAll", menu->uiIcons.undo.texture, ImVec2(iconH, iconH)))
+			result.reverted = true;
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Revert all to default");
+
+		ImGui::SameLine();
+		ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, cursor.y));
+		if (Util::ThemedDeleteButton("X"))
+			result.deleted = true;
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Remove all");
+
+		return result;
+	}
+
 	void DrawValueEditor(SceneType type, size_t index, float inputWidth)
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
@@ -205,6 +281,9 @@ namespace SceneSettingsUI
 		}
 	}
 
+	// Shared flyout state for DrawSettingEntry (one flyout visible at a time across all entries)
+	static Util::FlyoutState entryFlyoutState;
+
 	bool DrawSettingEntry(SceneType type, size_t index, PopupState& popups)
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
@@ -237,19 +316,17 @@ namespace SceneSettingsUI
 		if (readOnly)
 			ImGui::EndDisabled();
 
-		// Active/Pause toggle
-		ImGui::SameLine();
-		bool active = !entry.paused;
-		if (Util::FeatureToggle("##active", &active))
-			manager->TogglePauseEntry(type, index);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(entry.paused ? "Paused - click to resume" : "Active - click to pause");
+		// Flyout on hover with toggle / revert / delete
+		ImGuiID cellId = ImGui::GetItemID();
+		bool wasDeleted = false;
+		if (Util::BeginFlyout(entryFlyoutState, cellId)) {
+			auto result = DrawFlyoutControls(entry.paused);
 
-		// Delete button
-		ImGui::SameLine();
-		{
-			auto styledButton = Util::ErrorButtonStyle();
-			if (ImGui::Button("X", ImVec2(C::Em(C::SCENE_DELETE_BUTTON_EM), 0))) {
+			if (result.toggled)
+				manager->TogglePauseEntry(type, index);
+			if (result.reverted)
+				manager->RevertEntryToDefault(type, index);
+			if (result.deleted) {
 				if (isOverwrite) {
 					popups.pendingDeleteIndex = index;
 					popups.deleteSingleOverwrite.message = std::format(
@@ -258,16 +335,15 @@ namespace SceneSettingsUI
 					popups.deleteSingleOverwrite.Request();
 				} else {
 					manager->RemoveSetting(type, index);
-					ImGui::PopID();
-					return true;
+					wasDeleted = true;
 				}
 			}
+
+			Util::EndFlyout(entryFlyoutState);
 		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(isOverwrite ? "Delete overwrite file from disk" : "Remove this setting");
 
 		ImGui::PopID();
-		return false;
+		return wasDeleted;
 	}
 
 	void DrawPopups(SceneType type, PopupState& popups)

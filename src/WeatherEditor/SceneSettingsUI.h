@@ -65,6 +65,24 @@ namespace SceneSettingsUI
 	void DrawAddSettingDialog(SceneType type, AddSettingState& state,
 		Period period = Period::Count, bool addToAllPeriods = false);
 
+	/// Result from DrawFlyoutControls indicating which action the user triggered.
+	struct FlyoutResult
+	{
+		bool toggled = false;
+		bool reverted = false;
+		bool deleted = false;
+	};
+
+	/// Draw the standard 2-row flyout controls (toggle on row 1, revert + delete on row 2).
+	/// @param paused Whether the entry is currently paused.
+	/// @return Which action buttons were clicked.
+	FlyoutResult DrawFlyoutControls(bool paused);
+
+	/// Draw row/column flyout controls for a group of entries (toggle all + delete all).
+	/// @param allPaused Whether all entries in the group are currently paused.
+	/// @return Which action buttons were clicked.
+	FlyoutResult DrawGroupFlyoutControls(bool allPaused);
+
 	/// Draw the value editor widget (checkbox/float input/int input) for a setting entry.
 	/// @param type         Scene type being edited.
 	/// @param index        Index into the entries vector.

@@ -193,11 +193,11 @@ public:
 		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;       // Ratio of window width for panel (2/10)
 
 		// Scene settings panel constants (multipliers of ImGui::GetFontSize())
-		static constexpr float SCENE_VALUE_INPUT_EM = 5.7f;            // Width for float/int value inputs
+		static constexpr float SCENE_VALUE_INPUT_EM = 3.4f;            // Width for float/int value inputs
 		static constexpr float SCENE_DELETE_BUTTON_EM = 1.0f;          // Width for delete (X) buttons
 		static constexpr float SCENE_VALUE_LABEL_OFFSET_RATIO = 0.5f;  // Value label right-alignment ratio
-		static constexpr float SCENE_TOD_PARAM_COL_EM = 6.0f;          // Parameter column width (TOD table)
-		static constexpr float SCENE_TOD_PERIOD_COL_EM = 4.3f;         // Per-period column width (TOD table)
+		static constexpr float SCENE_TOD_PARAM_COL_EM = 3.6f;          // Parameter column width (TOD table)
+		static constexpr float SCENE_TOD_PERIOD_COL_EM = 2.6f;         // Per-period column width (TOD table)
 		static constexpr float SCENE_TOD_INACTIVE_ALPHA = 0.5f;        // Alpha for inactive TOD periods
 		static constexpr float SCENE_TOD_ACTIVE_THRESHOLD = 0.01f;     // Factor threshold to consider a period active
 		static constexpr float SCENE_ENTRY_INDENT_EM = 0.4f;           // Indent for setting entries under feature headers
