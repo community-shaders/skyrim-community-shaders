@@ -50,7 +50,9 @@ cbuffer ColorCB : register(b1)
 	uint skipLUT;
 	uint enableTonemap;
 	uint enableColorSpaceTransform;
-	uint3 pad;
+	uint enableHDR;     // HDR display is enabled (auto-set from HDR feature)
+	float hdrPeakNits;  // Maximum display brightness in nits for HDR
+	uint pad;
 };
 
 #include "PostProcessing/ColorGrading/GT7ToneMapping.hlsli"
@@ -308,14 +310,22 @@ float3 LottesFilmic(float3 val)
 {
 	val *= tonemapParams[0].x;
 	float a = tonemapParams[0].y,
-		  d = tonemapParams[0].z,
-		  b = (-pow(tonemapParams[1].x, a) + pow(tonemapParams[0].w, a) * tonemapParams[1].y) /
-	          ((pow(tonemapParams[0].w, a * d) - pow(tonemapParams[1].x, a * d)) * tonemapParams[1].y),
-		  c = (pow(tonemapParams[0].w, a * d) * pow(tonemapParams[1].x, a) - pow(tonemapParams[0].w, a) * pow(tonemapParams[1].x, a * d) * tonemapParams[1].y) /
-	          ((pow(tonemapParams[0].w, a * d) - pow(tonemapParams[1].x, a * d)) * tonemapParams[1].y);
+		  d = tonemapParams[0].z;
+	float maxHDR = tonemapParams[0].w;
+	float midIn = tonemapParams[1].x;
+	float midOut = tonemapParams[1].y;
+
+	// In HDR mode, re-derive curve constants so f(maxHDR) = peakOutput
+	// while keeping f(midIn) = midOut (SDR midtones unchanged)
+	float peakOutput = enableHDR ? (hdrPeakNits / REFERENCE_LUMINANCE) : 1.0;
+
+	float b = (pow(maxHDR, a) * midOut - pow(midIn, a) * peakOutput) /
+	          ((pow(maxHDR, a * d) - pow(midIn, a * d)) * midOut * peakOutput),
+		  c = (pow(maxHDR, a * d) * pow(midIn, a) * peakOutput - pow(maxHDR, a) * pow(midIn, a * d) * midOut) /
+	          ((pow(maxHDR, a * d) - pow(midIn, a * d)) * midOut * peakOutput);
 
 	val = pow(val, a) / (pow(val, a * d) * b + c);
-	val = saturate(val);
+	val = enableHDR ? clamp(val, 0.0, peakOutput) : saturate(val);
 	return val;
 }
 
@@ -352,7 +362,7 @@ float3 DayFilmic(float3 val)
 
 float3 UchimuraFilmic(float3 val)
 {
-	const float P = tonemapParams[0].y;
+	float P = tonemapParams[0].y;
 	const float a = tonemapParams[0].z;
 	const float m = tonemapParams[0].w;
 	const float l = tonemapParams[1].x;
@@ -360,6 +370,10 @@ float3 UchimuraFilmic(float3 val)
 	const float b = tonemapParams[1].z;
 
 	val *= tonemapParams[0].x;
+
+	// In HDR mode, extend the peak brightness proportionally to the display's capability
+	if (enableHDR)
+		P *= hdrPeakNits / REFERENCE_LUMINANCE;
 
 	float l0 = ((P - m) * l) / a,
 		  S0 = m + l0,
@@ -377,7 +391,7 @@ float3 UchimuraFilmic(float3 val)
 
 	val = T * w0 + L * w1 + S * w2;
 
-	val = saturate(val);
+	val = enableHDR ? clamp(val, 0.0, P) : saturate(val);
 	return val;
 }
 
@@ -554,10 +568,12 @@ float3 KajiyaTonemap(float3 col)
 float3 GT7ToneMapping(float3 color)
 {
 	color *= tonemapParams[0].x;
-	if (tonemapParams[0].y == 0)
-		color = GT7ToneMappingSDR(color);
+	// Use global enableHDR and hdrPeakNits from CBuffer instead of tonemapParams
+	// This allows seamless HDR when HDR Display feature is enabled
+	if (enableHDR)
+		color = GT7ToneMappingHDR(color, hdrPeakNits);
 	else
-		color = GT7ToneMappingHDR(color, tonemapParams[0].z);
+		color = GT7ToneMappingSDR(color);
 	return color;
 }
 
@@ -711,12 +727,13 @@ float3 ColorGrading(float3 color)
 	}
 
 	// LDR post-tonemap adjustments (in output space)
-	if (!skipLDR) {
+	// Skip when HDR is enabled, as LDR color grading is designed for SDR output
+	if (!skipLDR && !enableHDR) {
 		// Lift Gamma Gain
 		color = LiftGammaGain(color, liftgammagain[0].gbar, liftgammagain[1].gbar, liftgammagain[2].gbar);
 	}
 
-	float3 luminanceVectorOutSpace = float3(0.2126, 0.7152, 0.0722);  // Rec.709 Luma vector
+	float3 luminanceVectorOutSpace = enableHDR ? float3(0.2627, 0.6780, 0.0593) : float3(0.2126, 0.7152, 0.0722);
 	color = CorrectOutOfRangeColor(color, luminanceVectorOutSpace);
 
 	return color;

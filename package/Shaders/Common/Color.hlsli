@@ -249,7 +249,14 @@ namespace Color
 
 	float3 DirectionalLight(float3 color, bool isLinear = false)
 	{
-		return Light(color, isLinear) * ((ENABLE_LL && !isLinear) ? SharedData::linearLightingSettings.directionalLightMult : 1.0f);
+		if (isLinear) {
+#	if defined(TRUE_PBR)
+			return color * PBRLightingCompensation;
+#	else
+			return color;
+#	endif
+		}
+		return Light(color) * ((ENABLE_LL) ? SharedData::linearLightingSettings.directionalLightMult : 1.0f);
 	}
 
 	float3 PointLight(float3 color, bool isLinear = false)

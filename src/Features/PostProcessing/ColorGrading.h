@@ -135,7 +135,9 @@ struct ColorGrading : public PostProcessFeature
 		uint skipLUT;
 		uint enableTonemap;
 		uint enableColorSpaceTransform;
-		uint pad[3];
+		uint enableHDR;     // HDR display is enabled (auto-set from HDR feature)
+		float hdrPeakNits;  // Maximum display brightness in nits for HDR
+		uint pad;
 	};
 	std::unique_ptr<ConstantBuffer> colorCB = nullptr;
 
@@ -162,7 +164,7 @@ struct ColorGrading : public PostProcessFeature
 	virtual void DrawSettings() override;
 
 	virtual void Draw(TextureInfo&) override;
-	void UpdateColorSpaceTransforms();
+	void UpdateColorSpaceTransforms(bool hdrEnabled = false);
 
 	void OutputTextures();
 };

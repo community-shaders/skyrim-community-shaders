@@ -4,6 +4,7 @@
 #include "Util.h"
 
 #include "ColourSpace.h"
+#include "Features/HDRDisplay.h"
 #include "Features/LinearLighting.h"
 #include "Features/PostProcessing.h"
 
@@ -91,14 +92,27 @@ bool exposureSlider(float* val)
 	return retval;
 }
 
+void drawHDRStatus()
+{
+	auto& hdr = globals::features::hdrDisplay;
+	if (hdr.loaded && hdr.settings.enableHDR) {
+		ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), ICON_FA_CHECK " HDR Output Active");
+		ImGui::Text("Peak Brightness: %.0f nits (from HDR settings)", static_cast<float>(hdr.settings.hdrPeakNits));
+	} else {
+		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "SDR Output (HDR Display not enabled)");
+	}
+}
+
 // Profjack Design
 struct TonemapperInfo
 {
 	std::string_view name;
 	std::string_view func_name;
 	std::string_view desc;
-	int nativeInputSpace;   // color space the tonemapper expects as input
-	int nativeOutputSpace;  // color space the tonemapper produces as output
+	int nativeInputSpace;      // color space the tonemapper expects as input
+	int nativeOutputSpace;     // color space the tonemapper produces as output
+	bool supportsHDR;          // whether this tonemapper supports HDR output
+	int nativeOutputSpaceHDR;  // output color space index when HDR is active
 
 	using CTP = std::array<float4, 2>;
 	std::function<void(CTP&)> draw_settings_func;
@@ -113,14 +127,14 @@ struct TonemapperInfo
 
 		static std::vector<TonemapperInfo> tonemappers = {
 			{ "Reinhard"sv, "Reinhard"sv,
-				"Mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002."sv, 0, 0,
+				"Mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002."sv, 0, 0, false, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Reinhard Extended"sv, "ReinhardExt"sv,
 				"Extended mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002. "
 				"An additional user parameter specifies the smallest luminance that is mapped to 1, which allows high luminances to burn out."sv,
-				0, 0,
+				0, 0, false, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("White Point", &params[0].y, 0.f, 10.f, "%.2f"); },
@@ -129,14 +143,14 @@ struct TonemapperInfo
 			{ "Hejl Burgess-Dawson Filmic"sv, "HejlBurgessDawsonFilmic"sv,
 				"Variation of the Hejl and Burgess-Dawson filmic curve done by Graham Aldridge. "
 				"See his blog post about \"Approximating Film with Tonemapping\"."sv,
-				0, 0,
+				0, 0, false, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Aldridge Filmic"sv, "AldridgeFilmic"sv,
 				"Variation of the Hejl and Burgess-Dawson filmic curve done by Graham Aldridge. "
 				"See his blog post about \"Approximating Film with Tonemapping\"."sv,
-				0, 0,
+				0, 0, false, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Cutoff", &params[0].y, 0.f, .5f, "%.2f"); },
@@ -144,21 +158,22 @@ struct TonemapperInfo
 
 			{ "Lottes Filmic/AMD Curve"sv, "LottesFilmic"sv,
 				"Filmic curve by Timothy Lottes, described in his GDC talk \"Advanced Techniques and Optimization of HDR Color Pipelines\". "
-				"Also known as the \"AMD curve\"."sv,
-				0, 0,
+				"Also known as the \"AMD curve\". HDR output is automatically enabled when HDR Display feature is active."sv,
+				0, 0, true, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Contrast", &params[0].y, 1.f, 2.f, "%.2f");
 					ImGui::SliderFloat("Shoulder", &params[0].z, 0.01f, 2.f, "%.2f");
 					ImGui::SliderFloat("Maximum HDR Value", &params[0].w, 1.f, 10.f, "%.2f");
 					ImGui::SliderFloat("Input Mid-Level", &params[1].x, 0.f, 1.f, "%.2f");
-					ImGui::SliderFloat("Output Mid-Level", &params[1].y, 0.f, 1.f, "%.2f"); },
+					ImGui::SliderFloat("Output Mid-Level", &params[1].y, 0.f, 1.f, "%.2f");
+					drawHDRStatus(); },
 				{ f4{ 1.f, 1.6f, 0.977f, 8.f }, f4{ 0.18f, 0.267f, 0.f, 0.f } } },
 
 			{ "Day Filmic/Insomniac Curve"sv, "DayFilmic"sv,
 				"Filmic curve by Mike Day, described in his document \"An efficient and user-friendly tone mapping operator\". "
 				"Also known as the \"Insomniac curve\"."sv,
-				0, 0,
+				0, 0, false, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Black Point", &params[0].y, 0.f, 5.f, "%.2f");
@@ -177,8 +192,8 @@ struct TonemapperInfo
 
 			{ "Uchimura/Grand Turismo Curve"sv, "UchimuraFilmic"sv,
 				"Filmic curve by Hajime Uchimura, described in his CEDEC talk \"HDR Theory and Practice\". Characterised by its middle linear section. "
-				"Also known as the \"Gran Turismo curve\"."sv,
-				0, 0,
+				"Also known as the \"Gran Turismo curve\". HDR output is automatically enabled when HDR Display feature is active."sv,
+				0, 0, true, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Max Brightness", &params[0].y, 0.01f, 2.f, "%.2f");
@@ -186,13 +201,14 @@ struct TonemapperInfo
 					ImGui::SliderFloat("Linear Section Start", &params[0].w, 0.f, 1.f, "%.2f");
 					ImGui::SliderFloat("Linear Section Length", &params[1].x, .01f, .99f, "%.2f");
 					ImGui::SliderFloat("Black Tightness Shape", &params[1].y, 1.f, 3.f, "%.2f");
-					ImGui::SliderFloat("Black Tightness Offset", &params[1].z, 0.f, 1.f, "%.2f"); },
+					ImGui::SliderFloat("Black Tightness Offset", &params[1].z, 0.f, 1.f, "%.2f");
+					drawHDRStatus(); },
 				{ f4{ 1.f, 1.f, 1.f, .22f }, f4{ 0.4f, 1.33f, 0.f, 0.f } } },
 
 			{ "AgX Minimal"sv, "AgxMinimal"sv,
 				"Minimal version of Troy Sobotka's AgX using a 6th order polynomial approximation. "
 				"Originally created by bwrensch, and improved by Troy Sobotka. Internally uses AgX input transform."sv,
-				0, 0,
+				0, 0, false, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Slope", &params[0].y, 0.f, 2.f, "%.2f");
@@ -202,21 +218,22 @@ struct TonemapperInfo
 				{ f4{ 1.f, 1.f, 1.f, 0.f }, f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Melon"sv, "MelonTonemap"sv,
-				"Tonemapper designed by TripleMelon to fix the ACES issue of intense colour being shifted."sv, 0, 0,
+				"Tonemapper designed by TripleMelon to fix the ACES issue of intense colour being shifted."sv, 0, 0, false, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Kajiya"sv, "KajiyaTonemap"sv,
-				"Tonemapper designed by Tomasz Stachowiak/Embark for their real time ray tracing engine Kajiya."sv, 0, 0,
+				"Tonemapper designed by Tomasz Stachowiak/Embark for their real time ray tracing engine Kajiya."sv, 0, 0, false, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "GT7"sv, "GT7ToneMapping"sv,
-				"Tonemapper designed for Gran Turismo 7."sv, 2, 2,
+				"Tonemapper designed for Gran Turismo 7. HDR output is automatically enabled when HDR Display feature is active."sv, 2, 2, true, 2,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
+					drawHDRStatus();
 				},
-				{ f4{ 1.f, 0.f, 400.f, 0.f } } }
+				{ f4{ 1.f, 0.f, 1000.f, 0.f } } }
 		};
 
 		static std::once_flag flag;
@@ -245,7 +262,7 @@ void ColorGrading::DrawSettings()
 {
 	ImGui::Checkbox("Skip LDR Color Grading", &settings.skipLDR);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("Skip color grading after tonemapping. This includes Lift Gamma Gain.");
+		ImGui::Text("Skip color grading after tonemapping. This includes Lift Gamma Gain. Will be automatically skipped with HDR on.");
 
 	ImGui::Checkbox("Skip LUT (Direct Color Grading)", &settings.skipLUT);
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -346,8 +363,28 @@ void ColorGrading::DrawSettings()
 	if (settings.enableTonemap) {
 		auto& tonemappers = TonemapperInfo::GetTonemappers();
 
+		auto& hdrRef = globals::features::hdrDisplay;
+		const bool hdrActive = hdrRef.loaded && hdrRef.settings.enableHDR;
+
+		// Auto-switch to an HDR-capable tonemapper if current one doesn't support HDR
+		if (hdrActive && !tonemappers[tonemapperType].supportsHDR) {
+			for (int i = 0; i < (int)tonemappers.size(); ++i) {
+				if (tonemappers[i].supportsHDR) {
+					tonemappers[tonemapperType].cached_settings = settings.tonemapParams;
+					settings.tonemapParams = tonemappers[i].cached_settings;
+					tonemapperType = i;
+					recompileFlag = true;
+					break;
+				}
+			}
+		}
+
 		if (ImGui::BeginCombo("Tonemapper", tonemappers[tonemapperType].name.data(), ImGuiComboFlags_HeightLargest)) {
-			for (int i = 0; i < tonemappers.size(); ++i) {
+			for (int i = 0; i < (int)tonemappers.size(); ++i) {
+				// Hide non-HDR tonemappers when HDR is active
+				if (hdrActive && !tonemappers[i].supportsHDR)
+					continue;
+
 				if (ImGui::Selectable(tonemappers[i].name.data(), i == tonemapperType)) {
 					tonemappers[tonemapperType].cached_settings = settings.tonemapParams;
 					settings.tonemapParams = tonemappers[i].cached_settings;
@@ -382,15 +419,23 @@ void ColorGrading::DrawSettings()
 	ImGui::Checkbox("Enable Working Color Space Conversion", &settings.enableColorSpaceTransform);
 	if (settings.enableColorSpaceTransform) {
 		auto& spaces = getAvailableColourSpaces();
+		auto& hdr = globals::features::hdrDisplay;
+		const bool hdrEnabled = hdr.loaded && hdr.settings.enableHDR;
+
+		constexpr int kHDRColorSpace = 2;  // BT2020
+		constexpr int kSDRColorSpace = 0;  // sRGB / BT709 gamut
+		const int outputColorSpace = hdrEnabled ? kHDRColorSpace : kSDRColorSpace;
 
 		auto& llSettings = globals::features::linearLighting.settings;
 		const bool wideGamutActive = llSettings.enableACEScg && llSettings.enableLinearLighting;
 		const char* inputSpaceName = wideGamutActive ? spaces[5] : spaces[0];
 		ImGui::TextDisabled("Input Color Space: %s (%s)", inputSpaceName, wideGamutActive ? "auto-detected from Linear Lighting ACEScg" : "fixed");
 		ImGui::Combo("Working Color Space", &settings.processColorSpace, spaces.data(), (int)spaces.size());
-		ImGui::TextDisabled("Output Color Space: %s (fixed)", spaces[0]);
+		ImGui::TextDisabled("Output Color Space: %s (auto from HDR Display)", spaces[outputColorSpace]);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Output switches automatically: SDR -> sRGB, HDR -> BT2020.");
 
-		UpdateColorSpaceTransforms();
+		UpdateColorSpaceTransforms(hdrEnabled);
 	}
 
 	if (ImGui::Button("Save LUT and Output Image")) {
@@ -436,7 +481,7 @@ void ColorGrading::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
-void ColorGrading::UpdateColorSpaceTransforms()
+void ColorGrading::UpdateColorSpaceTransforms(bool hdrEnabled)
 {
 	auto& spaces = getAvailableColourSpaces();
 	settings.processColorSpace = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
@@ -447,9 +492,11 @@ void ColorGrading::UpdateColorSpaceTransforms()
 	auto& llSettings = globals::features::linearLighting.settings;
 	const bool wideGamutActive = llSettings.enableACEScg && llSettings.enableLinearLighting;
 	const int kInputColorSpace = wideGamutActive ? 5 : 0;  // 5 = ACEScg, 0 = sRGB
-	constexpr int kOutputColorSpace = 0;                   // sRGB (HDR override later via hdr-pp-psky)
+	constexpr int kHDRColorSpace = 2;                      // BT2020
+	constexpr int kSDRColorSpace = 0;                      // sRGB / BT709 gamut
+	const int outputColorSpace = hdrEnabled ? kHDRColorSpace : kSDRColorSpace;
 	const int tonemapInputSpace = tonemappers[tonemapperType].nativeInputSpace;
-	const int tonemapOutputSpace = tonemappers[tonemapperType].nativeOutputSpace;
+	const int tonemapOutputSpace = (hdrEnabled && tonemappers[tonemapperType].supportsHDR) ? tonemappers[tonemapperType].nativeOutputSpaceHDR : tonemappers[tonemapperType].nativeOutputSpace;
 
 	auto storeMatrix = [](const DirectX::SimpleMath::Matrix& mat, std::array<float3, 3>& out) {
 		out = {
@@ -461,7 +508,7 @@ void ColorGrading::UpdateColorSpaceTransforms()
 
 	storeMatrix(getRGBMatrix(spaces[kInputColorSpace], spaces[settings.processColorSpace]), inputToWorkingMatrix);
 	storeMatrix(getRGBMatrix(spaces[settings.processColorSpace], spaces[tonemapInputSpace]), workingToTonemapMatrix);
-	storeMatrix(getRGBMatrix(spaces[tonemapOutputSpace], spaces[kOutputColorSpace]), tonemapToOutputMatrix);
+	storeMatrix(getRGBMatrix(spaces[tonemapOutputSpace], spaces[outputColorSpace]), tonemapToOutputMatrix);
 }
 
 void ColorGrading::SetupResources()
@@ -605,9 +652,10 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	auto& pp = globals::features::postProcessing;
 
 	RE::ImageSpaceData imageSpaceData = pp.imageSpaceManager->gameISData;
-
+	auto& hdr = globals::features::hdrDisplay;
+	const bool hdrEnabled = hdr.loaded && hdr.settings.enableHDR;
 	if (settings.enableColorSpaceTransform)
-		UpdateColorSpaceTransforms();
+		UpdateColorSpaceTransforms(hdrEnabled);
 
 	// Always compute XYZ matrices for white balance
 	{
@@ -654,8 +702,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		                    std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1) :
 		                    0;
 			auto wp = getWhitePoint(spaces[wsIdx]);
-			return float4{ wp.x, wp.y, 0.f, 0.f };
-		}(),
+			return float4{ wp.x, wp.y, 0.f, 0.f }; }(),
 		.shadowsOffset = settings.shadowsOffset,
 		.midtonesOffset = settings.midtonesOffset,
 		.highlightsOffset = settings.highlightsOffset,
@@ -666,7 +713,14 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		.skipLDR = settings.skipLDR,
 		.skipLUT = settings.skipLUT,
 		.enableTonemap = settings.enableTonemap,
-		.enableColorSpaceTransform = settings.enableColorSpaceTransform
+		.enableColorSpaceTransform = settings.enableColorSpaceTransform,
+		// Auto-populate HDR settings from HDR feature
+		.enableHDR = [&]() -> uint {
+			return hdrEnabled ? 1u : 0u;
+		}(),
+		.hdrPeakNits = [&]() -> float {
+			return hdrEnabled ? static_cast<float>(hdr.settings.hdrPeakNits) : 1000.f;
+		}()
 	};
 	colorCB->Update(colorCBData);
 
