@@ -5,6 +5,7 @@
 
 #include "Common/Color.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/DisplayMapping.hlsli"
 
 Texture2D<float4> SceneTex : register(t0);
 Texture2D<float4> UITex : register(t1);
@@ -20,6 +21,32 @@ cbuffer PerFrame : register(b0)
 	float isSceneLinear : packoffset(c1.y);
 	float isMainOrLoadingMenu : packoffset(c1.z);
 	float fgTweenMenuMidAlphaBoost : packoffset(c1.w);  ///< TweenMenu: soften AA band when compositing here (UIBrightnessCS skips while paused)
+}
+
+// AdvancedAutoHDR pass to generate some HDR brightess out of an SDR signal.
+// This is hue conserving and only really affects highlights.
+// "SDRColor" is meant to be in "SDR range" (linear), as in, a value of 1 matching SDR white (something between 80, 100, 203, 300 nits, or whatever else)
+// This function already knows your Luma peak white nits setting, so actually pass in the max value for paper white 80 (e.g. 400-750, beyond that it looks bad)
+// https://github.com/Filoppi/PumboAutoHDR
+float3 PumboAutoHDR(float3 SDRColor, float MaxPeakWhiteNits, float _PaperWhiteNits, float ShoulderPow = 2.75f, float SaturationExpansionIntensity = 0.2f)
+{
+    float SDRRatio = average(SDRColor);
+
+    // Limit AutoHDR brightness, it won't look good beyond a certain level.
+    // The paper white multiplier is applied later so we account for that.
+    float AutoHDRMaxWhite = max(min(MaxPeakWhiteNits / sRGB_WhiteLevelNits, 500 / _PaperWhiteNits), 1.f);
+
+    float AutoHDRExtraRatio = pow(saturate(SDRRatio), ShoulderPow) * (AutoHDRMaxWhite - 1.f);
+    float AutoHDRTotalRatio = SDRRatio + AutoHDRExtraRatio;
+    float SingleColorScale = safeDivision(AutoHDRTotalRatio, SDRRatio, 1);
+  
+    // Calculate it again but with "per channel", which would expand gamut (not hue conservative)
+    float3 SDRRatio3 = SDRColor;
+    float3 AutoHDRExtraRatio3 = pow(saturate(SDRRatio3), ShoulderPow) * (AutoHDRMaxWhite - 1.f);
+    float3 AutoHDRTotalRatio3 = SDRRatio3 + AutoHDRExtraRatio3;
+    float3 PerChannelColorScale = safeDivision(AutoHDRTotalRatio3, SDRRatio3, 1);
+
+    return SDRColor * lerp(SingleColorScale, PerChannelColorScale, SaturationExpansionIntensity);
 }
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -38,6 +65,11 @@ cbuffer PerFrame : register(b0)
 
 	if (hdrEnabled) {
 		bool sceneIsLinear = isSceneLinear > 0.5;
+
+		float3 outputColor = sceneIsLinear ? scene.xyz : Color::GammaToLinearSafe(scene.xyz);
+		outputColor = PumboAutoHDR(outputColor, SharedData::HDRData.z, SharedData::HDRData.y, 2.75, 1.0);
+		scene.xyz = sceneIsLinear ? outputColor : Color::LinearToGammaSafe(outputColor);
+
 		float3 compositedColorLinear;
 
 		if (sceneIsLinear) {
