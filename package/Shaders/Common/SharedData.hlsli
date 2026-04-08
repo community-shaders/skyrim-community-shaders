@@ -29,6 +29,8 @@ namespace SharedData
 		float4 AmbientSHG;
 		float4 AmbientSHB;
 		float4 HDRData;
+		float WaterSystemHeight;  // TES::GetWaterHeight at eye-0 in camera-relative Z; -FLT_MAX when no water body found
+		float3 pad_SharedData;
 	};
 
 	struct GrassLightingSettings

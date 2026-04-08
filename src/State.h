@@ -223,6 +223,8 @@ public:
 		float4 AmbientSHG;
 		float4 AmbientSHB;
 		float4 HDRData;  // xyz + menu scene encoding in w — see HDRDisplay::GetSharedDataHDR
+		float WaterSystemHeight;  // TES::GetWaterHeight at eye-0 in camera-relative Z; -NI_INFINITY when no water body found (VR only)
+		float pad1[3];
 	};
 	STATIC_ASSERT_ALIGNAS_16(SharedDataCB);
 

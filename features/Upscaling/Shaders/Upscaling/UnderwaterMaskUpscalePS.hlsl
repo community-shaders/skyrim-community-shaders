@@ -63,6 +63,15 @@ PS_OUTPUT main(PS_INPUT input)
 	// itself, which always maps to the center tile (12).
 	float waterHeight = SharedData::GetWaterData(float3(0, 0, 0), eyeIndex).w;
 
+	// Tile sentinel: try TESWaterSystem fallback. WaterSystemHeight is valid only when
+	// playerUnderwater == true (fully submerged); it is stored eye-0 camera-relative so
+	// the same per-eye correction as GetWaterData applies.
+	if (waterHeight <= WATER_HEIGHT_NO_TILE_SENTINEL) {
+		float sysHeight = SharedData::WaterSystemHeight;
+		if (sysHeight > WATER_HEIGHT_NO_TILE_SENTINEL)
+			waterHeight = sysHeight + FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPosAdjust[eyeIndex].z;
+	}
+
 	// GetWaterData returns INT_MIN (~-2.147e9) when the tile is outside the 5x5 grid.
 	if (waterHeight > WATER_HEIGHT_NO_TILE_SENTINEL) {
 		// Unpack from side-by-side stereo layout to per-eye UV [0, 1]
@@ -112,9 +121,10 @@ PS_OUTPUT main(PS_INPUT input)
 		}
 		return psout;
 	}
-	// No water tile in range: fall through to the standard sampler path.
+	// No water tile or system height available: fall through to the standard sampler path.
 	// The left-eye result from the vanilla mask is still accurate here; the right-eye
-	// will be approximate, but in the absence of nearby water the visual impact is nil.
+	// will be approximate, but both sources failing implies no nearby water so the
+	// visual impact is nil.
 #	endif
 
 	// Upscale using linear sampling with jitter-corrected coordinates

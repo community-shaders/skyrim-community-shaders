@@ -84,7 +84,9 @@ namespace Util
 						data.z *= color.blue;
 					}
 
-					data.w = cell->GetExteriorWaterHeight() - position.z;
+					float cellWaterHeight;
+					if (cell->GetWaterHeight(position, cellWaterHeight))
+						data.w = cellWaterHeight - position.z;
 
 					return data;
 				}
