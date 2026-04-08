@@ -4,6 +4,7 @@
 
 #include "../../State.h"
 #include "../../Utils/FileSystem.h"
+#include "../HDRDisplay.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
 
@@ -68,10 +69,32 @@ void FidelityFX::SetupFrameGeneration()
  *
  * @param a_useFrameGeneration If true, enables frame generation and dispatches the necessary workloads; otherwise, presents without frame generation.
  */
-void FidelityFX::Present(bool a_useFrameGeneration)
+void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 {
 	auto& upscaling = globals::features::upscaling;
 	auto& swapChain = globals::features::upscaling.dx12SwapChain;
+
+	// Cache peak nits first since we need HDR feature access
+	auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
+	float peakNits = hdr ? static_cast<float>(hdr->settings.hdrPeakNits) : 1000.0f;
+
+	// Clamp peak nits to safe range [1.0f, 10000.0f] to prevent invalid values
+	peakNits = std::clamp(peakNits, 1.0f, 10000.0f);
+
+	// Detect if HDR parameters changed - if so, we need to reset FG history
+	// because frames in the history were encoded with different parameters
+	bool hdrParamsChanged = (a_isHDR != prevHDRActive) ||
+	                        (a_isHDR && std::abs(peakNits - prevPeakNits) > 1.0f);
+
+	// Update tracking for next frame
+	prevHDRActive = a_isHDR;
+	prevPeakNits = peakNits;
+
+	// Store HDR state atomically for the callback to access (may be read from async thread)
+	// Use seq_cst for both to ensure the callback sees both values consistently
+	hdrPeakNits.store(peakNits, std::memory_order_seq_cst);
+	isHDRActive.store(a_isHDR, std::memory_order_seq_cst);
+	needsReset.store(hdrParamsChanged, std::memory_order_seq_cst);
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
@@ -79,6 +102,22 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		configParameters.frameGenerationEnabled = true;
 
 		configParameters.frameGenerationCallback = [](ffxDispatchDescFrameGeneration* params, void* pUserCtx) -> ffxReturnCode_t {
+			// Tell FidelityFX the color space so it can properly interpolate. Fixes pixel smearing that occured with HDR on.
+			// PQ requires decoding to linear for correct motion interpolation
+			// Read atomically with seq_cst since this callback may run on async thread
+			bool hdrActive = FidelityFX::isHDRActive.load(std::memory_order_seq_cst);
+			if (hdrActive) {
+				params->backbufferTransferFunction = FFX_API_BACKBUFFER_TRANSFER_FUNCTION_PQ;
+				// Set luminance range for PQ decoding (0 to peak nits)
+				params->minMaxLuminance[0] = 0.0f;
+				params->minMaxLuminance[1] = FidelityFX::hdrPeakNits.load(std::memory_order_seq_cst);
+			} else {
+				params->backbufferTransferFunction = FFX_API_BACKBUFFER_TRANSFER_FUNCTION_SRGB;
+			}
+			// Force reset when HDR parameters changed to clear internal buffers
+			if (FidelityFX::needsReset.exchange(false, std::memory_order_seq_cst)) {
+				params->reset = true;
+			}
 			return ffxModule.Dispatch(reinterpret_cast<ffxContext*>(pUserCtx), &params->header);
 		};
 
@@ -97,6 +136,14 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 	configParameters.presentCallbackUserContext = nullptr;
 
 	static uint64_t frameID = 0;
+
+	// If HDR parameters changed, skip a frame ID to force FidelityFX to reset its history
+	// This prevents interpolation artifacts when frames were encoded with different parameters
+	// Per FidelityFX docs: "Any non-exactly-one difference will reset the frame generation logic"
+	if (hdrParamsChanged && a_useFrameGeneration) {
+		frameID += 2;  // Skip one ID to trigger reset
+	}
+
 	configParameters.frameID = frameID;
 	configParameters.swapChain = swapChain.swapChain;
 	configParameters.onlyPresentGenerated = false;
@@ -116,9 +163,19 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
+	// Register UI buffer with FidelityFX only when FG is active
+	// When paused, UI is composited in HDROutputCS to avoid flickering from inconsistent FidelityFX compositing
 	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
-	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
-	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
+	if (a_useFrameGeneration) {
+		uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
+		// Use both premultiplied alpha and double buffering for consistent blending
+		uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA |
+		                 FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
+	} else {
+		// No UI resource when FG is disabled - backbuffer already has UI composited
+		uiConfig.uiResource = FfxApiResource({});
+		uiConfig.flags = 0;
+	}
 
 	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to configure UI composition!");
@@ -227,7 +284,13 @@ void FidelityFX::CreateFSRResources()
 		contextDescription.maxUpscaleSize.height = displayHeight;
 		contextDescription.displaySize.width = displayWidth;
 		contextDescription.displaySize.height = displayHeight;
-		contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
+		contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE;
+		if (globals::features::hdrDisplay.loaded) {
+			contextDescription.flags |= FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
+			contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R10G10B10A2_UNORM;
+		} else {
+			contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R8G8B8A8_UNORM;
+		}
 		contextDescription.backendInterfaceUpscaling = fsrInterface;
 
 		if (ffxFsr3ContextCreate(&fsrContext[i], &contextDescription) != FFX_OK) {

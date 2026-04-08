@@ -8,6 +8,7 @@
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/HDRDisplay.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
 #include "Features/InteriorSun.h"
@@ -81,6 +82,7 @@ namespace globals
 		WetnessEffects wetnessEffects{};
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
+		HDRDisplay hdrDisplay{};
 		RenderDoc renderDoc{};
 		WeatherEditor weatherEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
