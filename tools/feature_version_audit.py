@@ -382,6 +382,9 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         # Use last release tag (version_ref) as the baseline for version proposals so that
         # multiple PRs between releases don't accumulate spurious bumps.
         prior_ver = get_prior_version(ini_path, version_ref) if ini_path else None
+        # PR-scoped prior version: used for new-feature detection and as the effective
+        # current version when the PR branch is behind base_ref (non-rebased PRs).
+        pr_prior_ver = get_prior_version(ini_path, base_ref) if (ini_path and version_ref != base_ref) else prior_ver
         new_ver = get_version_from_ini(ini_path) if ini_path else None
 
         # PR-scoped changes: used for change-type display and new-feature detection
@@ -433,7 +436,11 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 bump_author = get_commit_author(any_commit)
 
         proposed_ver = propose_new_version(prior_ver, all_commits) if ini_path else None
-        needs_bump = (proposed_ver is not None and new_ver is not None and proposed_ver > new_ver)
+        # Use max(new_ver, pr_prior_ver) as the effective current version so that a version
+        # bump already on base_ref (e.g. from a parallel PR) satisfies the check even when
+        # the PR branch has not been rebased.
+        effective_new_ver = max(new_ver, pr_prior_ver) if (new_ver and pr_prior_ver) else (new_ver or pr_prior_ver)
+        needs_bump = (proposed_ver is not None and effective_new_ver is not None and proposed_ver > effective_new_ver)
         proposed_ver_str = "-".join(map(str, proposed_ver)) if proposed_ver else "-"
         prior_ver_str = "-".join(map(str, prior_ver)) if prior_ver else "-"
         new_ver_str = "-".join(map(str, new_ver)) if new_ver else "-"
@@ -450,8 +457,9 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 note = "New feature (missing ini!)"
                 new_features.append((feature_dir.name, "-", bump_commit))
                 is_attention = True
-        # Detect new ini added
-        if ini_path and prior_ver is None and new_ver is not None:
+        # Detect new ini added — use pr_prior_ver (base_ref baseline) so features added
+        # earlier in the release cycle are not re-reported as new in subsequent PRs.
+        if ini_path and pr_prior_ver is None and new_ver is not None:
             note = f"New ini added (v{new_ver_str})"
             new_features.append((feature_dir.name, new_ver_str, bump_commit))
             is_attention = True
