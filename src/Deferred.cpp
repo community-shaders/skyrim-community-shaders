@@ -104,7 +104,7 @@ void Deferred::SetupResources()
 		// Specular
 		SetupRenderTarget(SPECULAR, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Reflectance
-		SetupRenderTarget(REFLECTANCE, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		SetupRenderTarget(REFLECTANCE, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Normal + Roughness
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
@@ -280,8 +280,9 @@ void Deferred::StartDeferred()
 
 	OverrideBlendStates();
 
-	// VR: Classify Eye 1 pixels and write hardware stencil marks before geometry rendering
-	if (globals::game::isVR) {
+	// VR: Classify Eye 1 pixels and write hardware stencil marks before geometry rendering.
+	// Only enable stencil culling when overwrite reprojection is available for this frame.
+	if (globals::game::isVR && globals::features::vr.IsStereoOptimizationCullingReady()) {
 		globals::features::vr.stereoOpt.DispatchStencil();
 	}
 }
@@ -376,11 +377,9 @@ void Deferred::DeferredPasses()
 		// Bind null when disabled so stale mode data doesn't cause incorrect early-exits
 		// in DeferredCompositeCS (null SRV reads return 0 = MODE_DISOCCLUDED, all pixels composite normally).
 		auto& vrStereoOpt = globals::features::vr.stereoOpt;
-		if (vrStereoOpt.loaded) {
-			bool stereoActive = vrStereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
-			ID3D11ShaderResourceView* modeSRV = stereoActive ? vrStereoOpt.GetModeTextureSRV() : nullptr;
-			context->CSSetShaderResources(16, 1, &modeSRV);
-		}
+		bool stereoCullingReady = globals::features::vr.IsStereoOptimizationCullingReady();
+		ID3D11ShaderResourceView* modeSRV = stereoCullingReady ? vrStereoOpt.GetModeTextureSRV() : nullptr;
+		context->CSSetShaderResources(16, 1, &modeSRV);
 
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -391,10 +390,8 @@ void Deferred::DeferredPasses()
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 		// Unbind mode texture SRV
-		if (vrStereoOpt.loaded) {
-			ID3D11ShaderResourceView* nullSRV = nullptr;
-			context->CSSetShaderResources(16, 1, &nullSRV);
-		}
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		context->CSSetShaderResources(16, 1, &nullSRV);
 	}
 
 	// VR: Deactivate stencil culling now that geometry rendering is complete.

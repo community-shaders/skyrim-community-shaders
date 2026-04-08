@@ -1,6 +1,7 @@
 #include "Upscaling.h"
 
 #include "Deferred.h"
+#include "HDRDisplay.h"
 #include "Hooks.h"
 #include "State.h"
 #include "Upscaling/DX12SwapChain.h"
@@ -67,6 +68,11 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 	// Use better swap effect to prevent tearing and improve performance
 	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+
+	if (globals::features::hdrDisplay.loaded) {
+		logger::info("[Upscaling] Upgrading swap chain format from {} to R10G10B10A2_UNORM for HDR", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
+		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	}
 
 	bool shouldProxy = !globals::game::isVR;
 	if (shouldProxy)
@@ -851,6 +857,8 @@ ID3D11PixelShader* Upscaling::GetUnderwaterMaskUpscalePS()
 	if (!underwaterMaskUpscalePS) {
 		logger::debug("Compiling UnderwaterMaskPS.hlsl");
 		std::vector<std::pair<const char*, const char*>> defines = { { "PSHADER", "" } };
+		if (globals::game::isVR)
+			defines.push_back({ "VR", "" });
 		underwaterMaskUpscalePS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data/Shaders/Upscaling/UnderwaterMaskUpscalePS.hlsl", defines, "ps_5_0"));
 	}
 
@@ -1279,6 +1287,11 @@ void Upscaling::SetupResources()
 		dx12SwapChain.CreateSharedResources();
 
 	copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
+
+	// Setup HDR resources only when the HDR Display feature is loaded
+	if (globals::features::hdrDisplay.loaded) {
+		globals::features::hdrDisplay.SetupResources();
+	}
 }
 
 void Upscaling::ClearShaderCache()
@@ -1379,8 +1392,10 @@ void Upscaling::PostDisplay()
 	globals::game::renderer->UpdateViewPort(0, 0, 1);
 	UpdateCameraData();
 
-	if (d3d12SwapChainActive)
-		SetUIBuffer();
+	if (d3d12SwapChainActive) {
+		if (globals::features::hdrDisplay.loaded)
+			globals::features::hdrDisplay.SetUIBuffer();
+	}
 
 	globals::state->UpdateSharedData(false, false);
 }
@@ -1533,11 +1548,6 @@ void Upscaling::LoadUpscalingSDKs()
 	// This ensures all SDKs are available before any D3D device creation
 	streamline.LoadInterposer();
 	fidelityFX.LoadFFX();  // Only for frame generation now
-}
-
-void Upscaling::SetUIBuffer()
-{
-	dx12SwapChain.SetUIBuffer();
 }
 
 HANDLE Upscaling::GetFrameLatencyWaitableObject() const
@@ -1834,11 +1844,6 @@ void Upscaling::UpscaleDepth()
 
 		context->PSSetShader(depthUpscalePS, nullptr, 0);
 		context->Draw(3, 0);
-
-		// Depth copy is also used on VR.
-		if (globals::game::isVR) {
-			copyIfNonAliased(depthCopy.texture, depth.texture);
-		}
 	}
 
 	{
@@ -1850,7 +1855,9 @@ void Upscaling::UpscaleDepth()
 
 		context->OMSetDepthStencilState(nullptr, 0x00);
 
-		ID3D11ShaderResourceView* srvs[] = { underwaterMask.SRVCopy };
+		// t0: vanilla mask copy, t1: original depth (for VR per-eye analytical mask).
+		// depthCopy still holds the original pre-upscale depth here (VR re-copy deferred).
+		ID3D11ShaderResourceView* srvs[] = { underwaterMask.SRVCopy, depthCopy.depthSRV };
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
 		ID3D11RenderTargetView* rtvs[] = { underwaterMask.RTV };
@@ -1858,6 +1865,11 @@ void Upscaling::UpscaleDepth()
 
 		context->PSSetShader(underwaterMaskPS, nullptr, 0);
 		context->Draw(3, 0);
+	}
+
+	// Now propagate the upscaled depth to kMAIN_COPY so downstream VR passes see it.
+	if (globals::game::isVR) {
+		copyIfNonAliased(depthCopy.texture, depth.texture);
 	}
 
 	ID3D11ShaderResourceView* nullPSResources[3] = { nullptr, nullptr, nullptr };
@@ -1907,6 +1919,15 @@ void Upscaling::Main_UpdateJitter::thunk(RE::BSGraphics::State* a_state)
 void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 {
 	globals::features::upscaling.PostDisplay();
+
+	// For non-Frame Gen HDR: redirect kFRAMEBUFFER.RTV to UI texture before vanilla UI renders
+	// When FG is active, its SetUIBuffer redirects to uiBufferWrapped instead
+	// When HDR Display is not loaded, skip entirely so vanilla UI renders to kFRAMEBUFFER
+	auto& upscaling = globals::features::upscaling;
+	if (!upscaling.d3d12SwapChainActive && globals::features::hdrDisplay.loaded) {
+		globals::features::hdrDisplay.SetUIBuffer();
+	}
+
 	func(a1);
 }
 
@@ -1929,7 +1950,17 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
+	// Redirect kFRAMEBUFFER to float texture before ISHDR runs so HDR values >1.0 survive
+	// When HDR Display is not loaded, ISHDR writes to vanilla kFRAMEBUFFER (SDR path)
+	bool hdrLoaded = globals::features::hdrDisplay.loaded;
+	if (hdrLoaded)
+		globals::features::hdrDisplay.RedirectFramebuffer();
+
 	func(a_this, a3, a_target, a_4, a_5);
+
+	// Restore kFRAMEBUFFER after ISHDR — hdrTexture now has the HDR scene
+	if (hdrLoaded)
+		globals::features::hdrDisplay.RestoreFramebuffer();
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = false;
 }

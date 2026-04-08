@@ -216,7 +216,6 @@ public:
 
 	// Unified interface methods - external code should use these instead of direct access
 	void LoadUpscalingSDKs();  // Loads all SDKs at once
-	void SetUIBuffer();
 	HANDLE GetFrameLatencyWaitableObject() const;
 	float GetFrameTime() const;
 

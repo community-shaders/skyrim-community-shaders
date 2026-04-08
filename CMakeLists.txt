@@ -131,6 +131,17 @@ target_link_libraries(
         windowsapp
 )
 
+# Some third-party libs (e.g. FFX backend) are built with /GL.
+# In RelWithDebInfo, align linker options to avoid LNK4075/LNK1218 when warnings are treated as errors.
+if(MSVC)
+    target_link_options(
+        ${PROJECT_NAME}
+        PRIVATE
+            "$<$<CONFIG:RelWithDebInfo>:/LTCG>"
+            "$<$<CONFIG:RelWithDebInfo>:/INCREMENTAL:NO>"
+    )
+endif()
+
 # https://gitlab.kitware.com/cmake/cmake/-/issues/24922#note_1371990
 if(MSVC_VERSION GREATER_EQUAL 1936 AND MSVC_IDE) # 17.6+
     # When using /std:c++latest, "Build ISO C++23 Standard Library Modules" defaults to "Yes".

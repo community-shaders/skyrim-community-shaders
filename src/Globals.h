@@ -35,6 +35,7 @@ struct Upscaling;
 struct WeatherEditor;
 struct ENBPostProcessing;
 struct ExponentialHeightFog;
+struct HDRDisplay;
 
 class State;
 class Deferred;
@@ -89,6 +90,7 @@ namespace globals
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
+		extern HDRDisplay hdrDisplay;
 		extern ENBPostProcessing enbPostProcessing;
 		extern RenderDoc renderDoc;
 		extern WeatherEditor weatherEditor;

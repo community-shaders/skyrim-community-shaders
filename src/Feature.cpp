@@ -10,6 +10,7 @@
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/HDRDisplay.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
 #include "Features/InteriorSun.h"
@@ -243,6 +244,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::enbPostProcessing,
 		&globals::features::unifiedWater,
 		&globals::features::exponentialHeightFog,
+		&globals::features::hdrDisplay
 	};
 
 	if (REL::Module::IsVR()) {

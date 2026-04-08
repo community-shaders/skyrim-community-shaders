@@ -180,6 +180,7 @@ public:
 	bool isMapMenuOpen = false;
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
+	void UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass);
 
 	struct PermutationCB
 	{
@@ -223,10 +224,11 @@ public:
 		uint InMapMenu;
 		uint HideSky;
 		float MipBias;
-		float pad0;
+		float pad0;  // unused; must match SharedData.hlsli cbuffer (AmbientSHR 16-byte alignment)
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;
+		float4 HDRData;  // xyz + menu scene encoding in w — see HDRDisplay::GetSharedDataHDR
 	};
 	STATIC_ASSERT_ALIGNAS_16(SharedDataCB);
 

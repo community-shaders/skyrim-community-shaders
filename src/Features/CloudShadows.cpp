@@ -223,6 +223,7 @@ void CloudShadows::SetupResources()
 
 void CloudShadows::Hooks::BSSkyShader_SetupMaterial::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
+	globals::state->UpdateSkyShaderPermutation(Pass);
 	globals::features::cloudShadows.ModifySky(Pass);
 	func(This, Pass, RenderFlags);
 }

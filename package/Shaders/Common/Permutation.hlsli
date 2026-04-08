@@ -4,6 +4,19 @@
 namespace Permutation
 {
 
+	namespace SkyTechnique
+	{
+		static const uint SunOcclude = 0;
+		static const uint SunGlare = 1;
+		static const uint MoonAndStarsMask = 2;
+		static const uint Stars = 3;
+		static const uint Clouds = 4;
+		static const uint CloudsLerp = 5;
+		static const uint CloudsFade = 6;
+		static const uint Texture = 7;
+		static const uint Sky = 8;
+	}
+
 	namespace LightingTechnique
 	{
 		static const uint Glowmap = 2;
