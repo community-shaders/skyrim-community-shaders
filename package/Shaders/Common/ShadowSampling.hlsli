@@ -18,10 +18,11 @@
 #	include "IBL/IBL.hlsli"
 #endif
 
-// Only declared when volumetric shadows are active; avoids register(t80) conflict with
-// TRUE_PBR LANDSCAPE TexLandDisplacement0Sampler in Lighting.hlsl.
+// Only declared when volumetric shadows are active; the #if guard already prevents
+// any conflict with TRUE_PBR LANDSCAPE shaders since VOLUMETRIC_SHADOWS is never
+// defined in Lighting.hlsl permutations.
 #if defined(VOLUMETRIC_SHADOWS)
-Texture2D<float2> SharedShadowMap : register(t80);
+Texture2D<float2> SharedShadowMap : register(t18);
 #endif
 
 // Directional (sun) shadow data: cascade split distances and projection matrices.
