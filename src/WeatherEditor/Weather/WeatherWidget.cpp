@@ -55,8 +55,7 @@ void WeatherWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	const float scale = Util::GetUIScale();
-	SetupWidgetWindowDefaults();
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		// Draw header with search and all buttons
 		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
 
@@ -80,7 +79,7 @@ void WeatherWidget::DrawWidget()
 					const auto& result = searchResults[i];
 					std::string label = std::format("{} ({})", result.displayName, result.tabName);
 
-					if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_DontClosePopups)) {
+					if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
 						NavigateToSetting(result);
 						searchBuffer[0] = '\0';
 						searchResults.clear();
@@ -1042,7 +1041,7 @@ void WeatherWidget::DrawCloudSettings()
 			const float headerHeight = ImGui::GetFrameHeight();
 			const float badgePadding = ImGui::GetStyle().FramePadding.x;
 			const ImVec2 badgePos = {
-				ImGui::GetWindowPos().x + ImGui::GetContentRegionMax().x - badgeSize.x - badgePadding,
+				ImGui::GetWindowPos().x + ImGui::GetWindowSize().x - ImGui::GetStyle().WindowPadding.x - badgeSize.x - badgePadding,
 				headerScreenY + (headerHeight - badgeSize.y) * 0.5f
 			};
 			ImGui::GetWindowDrawList()->AddText(badgePos, ImGui::GetColorU32(ImGuiCol_CheckMark), kEnabledBadge);
@@ -1081,7 +1080,7 @@ void WeatherWidget::DrawCloudSettings()
 				if (texture) {
 					float textureSize = 128.0f * scale;
 					float groupEndX = ImGui::GetItemRectMax().x;
-					float availRight = ImGui::GetContentRegionMax().x + ImGui::GetWindowPos().x - groupEndX;
+					float availRight = ImGui::GetWindowPos().x + ImGui::GetWindowSize().x - ImGui::GetStyle().WindowPadding.x - groupEndX;
 					float offset = std::max(20.0f * scale, (availRight - textureSize) * 0.5f);
 					ImGui::SameLine(0.0f, offset);
 					ImGui::BeginGroup();

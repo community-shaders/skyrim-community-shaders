@@ -19,7 +19,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnvIBLSaturation,
 	SkyIBLSaturation,
 	FogAmount,
-	DALCMode)
+	DALCMode,
+	DisableInInteriors)
 
 void IBL::DrawSettings()
 {
@@ -75,6 +76,10 @@ void IBL::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("When Fog Mix is active, rescales the IBL-tinted fog to keep the original fog brightness.\nPrevents fog from becoming too bright or too dark.");
 	}
+	ImGui::Checkbox("Disable in interiors", (bool*)&settings.DisableInInteriors);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Disables IBL in interior cells.");
+	}
 }
 
 void IBL::LoadSettings(json& o_json)
@@ -92,16 +97,25 @@ void IBL::RestoreDefaultSettings()
 	settings = {};
 }
 
+IBL::Settings IBL::GetCommonBufferData() const
+{
+	Settings data = settings;
+	if (settings.DisableInInteriors && Util::IsInterior())
+		data.EnableIBL = 0;
+	return data;
+}
 void IBL::ReflectionsPrepass()
 {
 	if (loaded) {
 		auto context = globals::d3d::context;
 
+		bool interiorDisabled = settings.DisableInInteriors && Util::IsInterior();
+
 		// Set PS shader resource
 		{
 			std::array<ID3D11ShaderResourceView*, 4> srvs = {
-				envIBLTexture->srv.get(),
-				skyIBLTexture->srv.get(),
+				interiorDisabled ? nullptr : envIBLTexture->srv.get(),
+				interiorDisabled ? nullptr : skyIBLTexture->srv.get(),
 				staticDiffuseIBLTexture->srv.get(),
 				staticSpecularIBLTexture->srv.get()
 			};
@@ -112,6 +126,9 @@ void IBL::ReflectionsPrepass()
 
 void IBL::Prepass()
 {
+	if (settings.DisableInInteriors && Util::IsInterior())
+		return;
+
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 

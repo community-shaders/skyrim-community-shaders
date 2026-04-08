@@ -158,6 +158,21 @@ namespace Util
 		}
 	}
 
+	std::string FormatDuration(double ms)
+	{
+		// Validate input: handle negative, NaN, and infinite values
+		if (!std::isfinite(ms) || ms < 0.0) {
+			return "00:00:00";
+		}
+
+		// Use int64_t to avoid overflow on long durations (>596 hours with int)
+		int64_t total_s = static_cast<int64_t>(ms) / 1000;
+		int64_t hours = total_s / 3600;
+		int64_t minutes = (total_s % 3600) / 60;
+		int64_t seconds = total_s % 60;
+		return fmt::format("{:02}:{:02}:{:02}", hours, minutes, seconds);
+	}
+
 	std::string TimeAgoString(std::chrono::steady_clock::time_point last)
 	{
 		using namespace std::chrono;
@@ -248,5 +263,17 @@ namespace Util
 										   [](char ca, char cb) {
 											   return std::tolower(static_cast<unsigned char>(ca)) == std::tolower(static_cast<unsigned char>(cb));
 										   });
+	}
+
+	std::string GetShaderDefinesSuffix(const std::string& definesStr)
+	{
+		if (definesStr.empty())
+			return {};
+		uint32_t h = 2166136261u;  // FNV-1a 32-bit offset basis
+		for (unsigned char c : definesStr) {
+			h ^= c;
+			h *= 16777619u;  // FNV prime
+		}
+		return std::format("_{:08X}", h);
 	}
 }  // namespace Util

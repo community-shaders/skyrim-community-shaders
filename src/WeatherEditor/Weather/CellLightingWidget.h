@@ -19,6 +19,7 @@ public:
 	~CellLightingWidget() override = default;
 
 	void DrawWidget() override;
+	const char* GetWidgetTypeName() const override { return "Cell Lighting"; }
 	void LoadSettings() override;
 	void SaveSettings() override;
 	void ApplyChanges() override;

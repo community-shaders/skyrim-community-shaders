@@ -109,7 +109,7 @@ namespace SceneSettingsUI
 
 			// Scrollable checkbox list
 			auto& featureName = state.cachedFeatureNames[state.selectedFeatureIdx];
-			if (ImGui::BeginChild("##SettingList", ImVec2(-FLT_MIN, C::Em(C::SCENE_ADD_LIST_HEIGHT_EM)), ImGuiChildFlags_Border)) {
+			if (ImGui::BeginChild("##SettingList", ImVec2(-FLT_MIN, C::Em(C::SCENE_ADD_LIST_HEIGHT_EM)), ImGuiChildFlags_Borders)) {
 				for (int i = 0; i < static_cast<int>(state.cachedSettingKeys.size()); ++i) {
 					auto& key = state.cachedSettingKeys[i];
 					bool alreadyAdded = addToAllPeriods ? [&] { for (int p = 0; p < kPeriodCount; ++p) if (!IsAlreadyAdded(type, featureName, key, static_cast<Period>(p))) return false; return true; }() : IsAlreadyAdded(type, featureName, key, period);

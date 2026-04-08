@@ -73,7 +73,7 @@ void VR::DrawOverlay()
 	static LARGE_INTEGER overlayShowStart = { 0 };
 	static LARGE_INTEGER freq = { 0 };
 
-	bool shouldShow = settings.kAutoHideSeconds > 0 && globals::state->isMainMenuOpen && globals::menu && !globals::menu->IsEnabled;
+	bool shouldShow = settings.kAutoHideSeconds > 0 && globals::game::ui && globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) && globals::menu && !globals::menu->IsEnabled;
 
 	if (!shouldShow) {
 		overlayShowStart.QuadPart = 0;
@@ -324,25 +324,16 @@ namespace
 
 		ImGui::Separator();
 
-		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection" };
+		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection", "Overwrite", "Overwrite Eye1" };
 		ImGui::Combo("Debug View", &settings.StereoBlendDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Off: Normal rendering.\n\n"
-				"Back-Check: Visualize reprojection outcomes.\n"
-				"  Blue   = sky or HMD mask (skipped).\n"
-				"  Yellow = source edge rejected (depth discontinuity at this pixel).\n"
-				"  Orange = destination edge rejected (discontinuity at reprojected pixel).\n"
-				"  Grey   = other eye can't see this point (out of bounds).\n"
-				"  Green  = back-check passed (surfaces match in both eyes).\n"
-				"  Red    = back-check failed (occlusion edge, blend penalized).\n\n"
-				"Blend Weight: Heatmap of stereo blend strength.\n"
-				"  Cool/black = no blending. Hot/white = maximum blending.\n"
-				"  Shows where the two eyes disagree and correction is applied.\n\n"
-				"Edge Detection: Highlights pixels excluded by depth discontinuity checks.\n"
-				"  Yellow = source edge (discontinuity at this pixel).\n"
-				"  Orange = destination edge (discontinuity at reprojected pixel).\n"
-				"  Scene  = all other pixels shown with normal blending.");
+			ImGui::Text("Stereo blend debug visualization modes:");
+			ImGui::Text("  Off: Normal rendering");
+			ImGui::Text("  Back-Check: Shows round-trip reprojection validation");
+			ImGui::Text("  Blend Weight: Heatmap of bilateral blend intensity");
+			ImGui::Text("  Edge Detection: Highlights depth discontinuities");
+			ImGui::Text("  Overwrite: Shows stereo reprojection mode classification");
+			ImGui::Text("    (Eye 0 = left eye, fully shaded; Eye 1 = right eye, reprojected)");
 		}
 
 		ImGui::EndDisabled();
@@ -581,7 +572,7 @@ namespace
 				char selectableId[64];
 				snprintf(selectableId, sizeof(selectableId), "##combo_row_%zu", row);
 				bool rowSelected = (row == static_cast<size_t>(selectedComboIndex));
-				if (ImGui::Selectable(selectableId, rowSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap, ImVec2(0, 0))) {
+				if (ImGui::Selectable(selectableId, rowSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap, ImVec2(0, 0))) {
 					selectedComboIndex = static_cast<int>(row);
 				}
 				ImGui::SameLine(0, 0);
@@ -970,6 +961,9 @@ void VR::DrawSettings()
 		if (BeginTabItemWithFont("Stereo", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##VRStereoFrame", { 0, 0 }, true)) {
 				DrawStereoBlendSettings();
+				if (ImGui::CollapsingHeader("Stereo Optimizations", ImGuiTreeNodeFlags_DefaultOpen)) {
+					stereoOpt.DrawSettings();
+				}
 			}
 			ImGui::EndChild();
 			ImGui::EndTabItem();
@@ -1097,13 +1091,13 @@ void VR::DrawSettings()
 				}
 			}
 
-			if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) || ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))) {
+			if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
 				ApplyRecordedCombo();
 				ResetComboRecording();
 				ImGui::CloseCurrentPopup();
 			}
 
-			if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape))) {
+			if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 				ResetComboRecording();
 				ImGui::CloseCurrentPopup();
 			}

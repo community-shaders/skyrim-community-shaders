@@ -444,7 +444,6 @@ struct PS_OUTPUT
 	float2 MotionVectors: SV_Target1;
 	float4 ScreenSpaceNormals: SV_Target2;
 #	else
-	float4 Normal: SV_Target1;
 	float4 Color2: SV_Target2;
 #	endif
 };
@@ -938,7 +937,6 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.ScreenSpaceNormals.xy = screenSpaceNormal.xy + 0.5.xx;
 	psout.ScreenSpaceNormals.zw = 0.0.xx;
 #	else
-	psout.Normal = float4(shadowVariance, 0, 0, finalColor.w);
 	psout.Color2 = finalColor;
 #	endif
 

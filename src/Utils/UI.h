@@ -228,6 +228,9 @@ namespace Util
 	/** Returns theme text color if monochrome icons enabled, otherwise white. */
 	ImVec4 GetIconTint();
 
+	/// ImGui::Begin() wrapper that replaces the native close button with a rounded one.
+	bool BeginWithRoundedClose(const char* name, bool* p_open, ImGuiWindowFlags flags = 0);
+
 	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)
 	 * @param label Button text

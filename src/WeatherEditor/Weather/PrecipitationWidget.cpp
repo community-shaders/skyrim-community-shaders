@@ -5,8 +5,7 @@
 void PrecipitationWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	SetupWidgetWindowDefaults();
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##PrecipitationSearch", true, true);
 
 		bool changed = false;

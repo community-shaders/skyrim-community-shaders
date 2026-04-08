@@ -6,13 +6,47 @@
 // Global widget context for undo tracking
 static Widget* g_currentWidget = nullptr;
 
-void SetupWidgetWindowDefaults()
+// Per-widget-type window sizes — shared across all instances of the same widget type
+static std::unordered_map<std::string, ImVec2> s_widgetTypeSizes;
+
+void SetupWidgetWindowDefaults(const char* widgetType)
 {
-	const float scale = Util::GetUIScale();
-	const auto cond = EditorWindow::GetSingleton()->resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
-	ImGui::SetNextWindowSize(
-		ImVec2(WidgetDefaults::kInitialWidth * scale, WidgetDefaults::kInitialHeight * scale),
-		cond);
+	const bool resetting = EditorWindow::GetSingleton()->resetLayout;
+	const auto cond = resetting ? ImGuiCond_Always : ImGuiCond_Appearing;
+	const ImVec2 defaultSize(WidgetDefaults::kInitialWidth * Util::GetUIScale(), WidgetDefaults::kInitialHeight * Util::GetUIScale());
+	auto it = s_widgetTypeSizes.find(widgetType);
+	ImGui::SetNextWindowSize(resetting || it == s_widgetTypeSizes.end() ? defaultSize : it->second, cond);
+}
+
+void UpdateWidgetTypeSize(const char* widgetType)
+{
+	if (!EditorWindow::GetSingleton()->resetLayout && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+		s_widgetTypeSizes[widgetType] = ImGui::GetWindowSize();
+}
+
+void ResetWidgetTypeSizes()
+{
+	s_widgetTypeSizes.clear();
+}
+
+json GetWidgetTypeSizesJson()
+{
+	json j;
+	for (const auto& [type, size] : s_widgetTypeSizes)
+		j[type] = { size.x, size.y };
+	return j;
+}
+
+void SetWidgetTypeSizesFromJson(const json& j)
+{
+	s_widgetTypeSizes.clear();
+	for (auto& [key, val] : j.items()) {
+		if (val.is_array() && val.size() == 2 && val[0].is_number() && val[1].is_number()) {
+			float w = std::max(val[0].get<float>(), WidgetDefaults::kMinWidth);
+			float h = std::max(val[1].get<float>(), WidgetDefaults::kMinHeight);
+			s_widgetTypeSizes[key] = ImVec2(w, h);
+		}
+	}
 }
 
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring)

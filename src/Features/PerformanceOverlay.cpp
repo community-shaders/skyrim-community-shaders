@@ -288,7 +288,7 @@ void PerformanceOverlay::DrawOverlay()
 	allRows.insert(allRows.end(), summaryRows.begin(), summaryRows.end());
 
 	// Set window flags - no decoration and only movable when ShowBorder is true
-	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
+	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration;
 
 	// Only allow mouse interaction when the main menu is open
 	if (!menu->IsEnabled) {

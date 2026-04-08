@@ -404,8 +404,10 @@ SamplerState SampEnvSampler : register(s4);
 SamplerState SampEnvMaskSampler : register(s5);
 #		endif
 
-#		if defined(TRUE_PBR)
+#		if defined(TRUE_PBR) && !defined(FACEGEN)
 SamplerState SampParallaxSampler : register(s4);
+#		endif
+#		if defined(TRUE_PBR)
 SamplerState SampRMAOSSampler : register(s5);
 #		endif
 
@@ -503,8 +505,10 @@ TextureCube<float4> TexEnvSampler : register(t4);
 Texture2D<float4> TexEnvMaskSampler : register(t5);
 #		endif
 
-#		if defined(TRUE_PBR)
+#		if defined(TRUE_PBR) && !defined(FACEGEN)
 Texture2D<float4> TexParallaxSampler : register(t4);
+#		endif
+#		if defined(TRUE_PBR)
 Texture2D<float4> TexRMAOSSampler : register(t5);
 #		endif
 
@@ -1067,6 +1071,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 refractedViewDirection = viewDirection;
 	float4 sampledCoatColor = PBRParams2;
 	float3 complexSpecular = 1.0;  // Declare complexSpecular at a higher scope so it's available throughout the shader (NEEDED FOR STOCH. FIX)
+
 #	if defined(EMAT)
 #		if defined(PARALLAX)
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
@@ -1081,25 +1086,34 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	bool complexMaterialParallax = false;
 	float4 complexMaterialColor = 1.0;
 
-#		if defined(EMAT_ENVMAP)
-
+#		if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
+	float4 envMaskSample = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+	float envMaskBase = envMaskSample.x;
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial) {
-		float envMaskTest = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, 15).w;
-		complexMaterial = envMaskTest < (1.0 - (4.0 / 255.0));
+		const float kMaskEpsilon = (4.0 / 255.0);
+
+		complexMaterial = envMaskSample.w < (1.0 - kMaskEpsilon);
+
+		// Detect texture saved in the wrong format
+		if ((abs(envMaskSample.x - envMaskSample.y) < kMaskEpsilon) &&
+			(abs(envMaskSample.x - envMaskSample.z) < kMaskEpsilon) &&
+			(abs(envMaskSample.y - envMaskSample.z) < kMaskEpsilon))
+			complexMaterial = false;
 
 		if (complexMaterial) {
-			if (envMaskTest > (4.0 / 255.0)) {
+			if (envMaskSample.w > kMaskEpsilon) {
 				complexMaterialParallax = true;
 				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, screenNoise);
 				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset);
 				if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 					sh0 = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, mipLevel).w;
+				complexMaterialColor = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+			} else {
+				complexMaterialColor = envMaskSample;
 			}
-
-			complexMaterialColor = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+			envMaskBase = complexMaterialColor.x;
 		}
 	}
-
 #		endif  // ENVMAP
 
 #		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
@@ -1110,6 +1124,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		sampledCoatColor.rgb *= Color::Diffuse(sampledCoatProperties.rgb);
 		sampledCoatColor.a *= sampledCoatProperties.a;
 	}
+#			if !defined(FACEGEN)
 	[branch] if (SharedData::extendedMaterialSettings.EnableParallax && (PBRFlags & PBR::Flags::HasDisplacement) != 0)
 	{
 		PBRParallax = true;
@@ -1140,8 +1155,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
-#		endif  // TRUE_PBR
+#			endif  // !FACEGEN
+#		endif      // TRUE_PBR
 
+#	elif defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
+	float envMaskBase = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
 #	endif  // EMAT
 
 #	if defined(SNOW)
@@ -2099,6 +2117,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.Metallic = saturate(rawRMAOS.y);
 	material.AO = rawRMAOS.z;
 
+	// Apply vertex color to base color so PBR metals use it
+	baseColor.xyz *= input.Color.xyz;
+
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		material.F0 = lerp(rawRMAOS.w, Color::SrgbToLinear(baseColor.xyz), material.Metallic);
 	} else {
@@ -2212,7 +2233,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	if (envMask > 0.0) {
 		if (EnvmapData.y) {
-			envMask *= TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
+			envMask *= envMaskBase;
 		} else {
 			envMask *= glossiness;
 		}
@@ -2299,7 +2320,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	endif
 
-	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
+	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz, eyeIndex);
 	float waterHeight = waterData.w;
 
 	float waterRoughnessSpecular = 1;
@@ -2470,7 +2491,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		elif defined(EMAT_ENVMAP)
 		[branch] if (complexMaterialParallax)
 			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, lerp(parallaxShadowQuality, 1.0, SharedData::extendedMaterialSettings.ExtendShadows), screenNoise, displacementParams);
-#		elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
+#		elif defined(TRUE_PBR) && !defined(LODLANDSCAPE) && !defined(FACEGEN)
 		[branch] if (PBRParallax)
 			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, lerp(parallaxShadowQuality, 1.0, SharedData::extendedMaterialSettings.ExtendShadows), screenNoise, displacementParams);
 #		endif  // LANDSCAPE
@@ -2672,7 +2693,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				elif defined(EMAT_ENVMAP)
 			[branch] if (complexMaterialParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, screenNoise, displacementParams);
-#				elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
+#				elif defined(TRUE_PBR) && !defined(LODLANDSCAPE) && !defined(FACEGEN)
 			[branch] if (PBRParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #				endif
@@ -2734,6 +2755,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
 		emitColor *= glowColor;
+#		if defined(TRUE_PBR)
+		// TRUE_PBR sets vertexColor=1 and adds emitColor directly to color (see below),
+		// so vertex tint must be applied here. Non-PBR folds emitColor into diffuseColor
+		// and the global color.xyz *= vertexColor (line 2918) already covers it.
+		emitColor *= input.Color.xyz;
+#		endif
 	}
 #	endif
 
@@ -2835,8 +2862,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
 	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+#		if defined(TRUE_PBR)
+	vertexColor = 1;
+#		endif
 #	else
+#		if defined(TRUE_PBR)
+	float3 vertexColor = 1;
+#		else
 	float3 vertexColor = input.Color.xyz;
+#		endif
 #	endif  // defined (HAIR)
 
 	float4 color = 0;
@@ -3166,7 +3200,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
-	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
+#		if defined(VR) && (defined(EMAT) || defined(TRUE_PBR)) && (defined(PARALLAX) || defined(LANDSCAPE) || defined(EMAT_ENVMAP) || defined(TRUE_PBR))
+	// VR: store POM parallax amount for stereo reprojection depth correction.
+	// Read by StereoBlendCS to adjust Eye 1 (right eye) reprojection depth
+	// at POM-displaced surfaces. Not consumed on flat (SE/AE).
+	psout.Reflectance = float4(indirectLobeWeights.specular,
+		(pixelOffset > 0.0) ? saturate(pixelOffset) : 0.0);
+#		else
+	psout.Reflectance = float4(indirectLobeWeights.specular, 0.0);
+#		endif
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
 
 #		if defined(SNOW)

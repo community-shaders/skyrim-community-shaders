@@ -67,6 +67,17 @@ namespace Util
 	std::string FormatTimeAgo(std::filesystem::file_time_type fileTime);
 
 	/**
+	 * Formats a duration given in milliseconds as HH:MM:SS.
+	 * Suitable for displaying long-running operation times (e.g. shader compilation).
+	 *
+	 * @param ms Duration in milliseconds. Fractional milliseconds are truncated.
+	 *           Non-finite (NaN/inf) or negative values are clamped to "00:00:00".
+	 *           Durations >= 24 hours display hours without limit (e.g., "125:34:56").
+	 * @return Formatted string like "00:02:35" or "00:00:00" for invalid inputs
+	 */
+	std::string FormatDuration(double ms);
+
+	/**
 	 * Formats a delta value with percentage difference for A/B test comparisons.
 	 * Returns a string like "+0.45 ms (+12.3%)" or "-0.23 ms (-8.1%)".
 	 *
@@ -109,4 +120,14 @@ namespace Util
 
 	/** Case-insensitive equality for two strings. */
 	bool IEquals(std::string_view a, std::string_view b);
+
+	/**
+	 * Returns the defines-based shader cache filename suffix for the given shader
+	 * defines string, or an empty string when definesStr is empty.  The suffix
+	 * has the form "_{:08X}" where the hex value is a 32-bit FNV-1a hash of the string.
+	 *
+	 * This matches the suffix logic used by SIE::SShaderCache::GetDiskPath so
+	 * that any code building a cache path by hand stays in sync.
+	 */
+	std::string GetShaderDefinesSuffix(const std::string& definesStr);
 }  // namespace Util
