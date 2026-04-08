@@ -2083,4 +2083,97 @@ namespace Util
 			return ImGui::SliderInt(label, value, min, max, format);
 		}
 	}
+
+	// --- Flyout Menu ---
+
+	static constexpr float kFlyoutCloseDelay = 0.15f;
+	static constexpr float kFlyoutRounding = 4.0f;
+	static constexpr float kSmallToggleScale = 0.7f;
+
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId)
+	{
+		bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup);
+
+		// Open on hover
+		if (hovered && !state.isOpen) {
+			state.activeId = itemId;
+			state.isOpen = true;
+			state.closeTimer = 0.f;
+		}
+
+		if (!state.isOpen || state.activeId != itemId)
+			return false;
+
+		// Position below the hovered item
+		ImVec2 itemMin = ImGui::GetItemRectMin();
+		ImVec2 itemMax = ImGui::GetItemRectMax();
+		ImVec2 flyoutPos(itemMin.x, itemMax.y + 2.0f * GetUIScale());
+
+		ImGui::SetNextWindowPos(flyoutPos, ImGuiCond_Always);
+		ImGui::SetNextWindowBgAlpha(0.95f);
+
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+		                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+		                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
+		                         ImGuiWindowFlags_NoFocusOnAppearing;
+
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kFlyoutRounding * GetUIScale());
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * GetUIScale(), 4.0f * GetUIScale()));
+
+		auto flyoutLabel = std::format("##flyout_{}", itemId);
+		bool visible = ImGui::Begin(flyoutLabel.c_str(), nullptr, flags);
+		ImGui::PopStyleVar(2);
+
+		return visible;
+	}
+
+	void EndFlyout(FlyoutState& state)
+	{
+		bool flyoutHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem | ImGuiHoveredFlags_RootAndChildWindows);
+		ImGui::End();
+
+		// Also check if the original value cell is hovered
+		bool itemHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup);
+
+		if (flyoutHovered || itemHovered) {
+			state.closeTimer = 0.f;
+		} else {
+			state.closeTimer += ImGui::GetIO().DeltaTime;
+			if (state.closeTimer >= kFlyoutCloseDelay) {
+				state.isOpen = false;
+				state.activeId = 0;
+			}
+		}
+	}
+
+	bool SmallFeatureToggle(const char* label, bool* enabled)
+	{
+		float scale = kSmallToggleScale;
+		ImVec2 size(ImGui::GetFrameHeight() * 1.6f * scale, ImGui::GetFrameHeight() * 0.8f * scale);
+		return FeatureToggle(label, enabled, size);
+	}
+
+	bool ThemedDeleteButton(const char* label)
+	{
+		auto& colors = ImGui::GetStyle().Colors;
+		ImGui::PushStyleColor(ImGuiCol_Button, colors[ImGuiCol_FrameBg]);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors[ImGuiCol_FrameBgHovered]);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, colors[ImGuiCol_FrameBgActive]);
+		float h = ImGui::GetFrameHeight() * kSmallToggleScale;
+		bool clicked = ImGui::Button(label, ImVec2(h, h));
+		ImGui::PopStyleColor(3);
+		return clicked;
+	}
+
+	bool IconButton(const char* id, void* texture, const ImVec2& size)
+	{
+		if (!texture)
+			return false;
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
+		bool clicked = ImGui::ImageButton(id, texture, size);
+		ImGui::PopStyleColor(2);
+		return clicked;
+	}
+
 }  // namespace Util

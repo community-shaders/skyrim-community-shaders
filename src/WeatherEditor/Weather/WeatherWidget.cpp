@@ -3,6 +3,7 @@
 #include <format>
 
 #include "../EditorWindow.h"
+#include "../WeatherScenePanel.h"
 #include "FeatureIssues.h"
 #include "State.h"
 #include "Utils/UI.h"
@@ -178,6 +179,7 @@ void WeatherWidget::DrawWidget()
 		ImGuiTabItemFlags fogFlags = (activeTabOverride == "Fog") ? ImGuiTabItemFlags_SetSelected : 0;
 		ImGuiTabItemFlags featuresFlags = (activeTabOverride == "Features") ? ImGuiTabItemFlags_SetSelected : 0;
 		ImGuiTabItemFlags recordsFlags = (activeTabOverride == "Records") ? ImGuiTabItemFlags_SetSelected : 0;
+		ImGuiTabItemFlags sceneFlags = (activeTabOverride == "Scene Settings") ? ImGuiTabItemFlags_SetSelected : 0;
 		if (!activeTabOverride.empty()) {
 			activeTabOverride = "";  // Clear after use
 		}
@@ -423,6 +425,13 @@ void WeatherWidget::DrawWidget()
 				ApplyChanges();
 			}
 
+			EndScrollableContent();
+			ImGui::EndTabItem();
+		}
+
+		if (ImGui::BeginTabItem("Scene Settings", nullptr, sceneFlags)) {
+			BeginScrollableContent("##SceneScroll");
+			WeatherScenePanel::Draw(weather->GetFormID());
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}

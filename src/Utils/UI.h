@@ -1371,4 +1371,32 @@ namespace Util
 		std::vector<InputCombo>& combo,
 		bool& isRecording,
 		const char* recordingLabel);
+
+	// --- Flyout Menu ---
+
+	/// Persistent state for a flyout menu attached to a value cell.
+	struct FlyoutState
+	{
+		ImGuiID activeId = 0;    // ID of the item the flyout is open for
+		bool isOpen = false;
+		float closeTimer = 0.f;  // Countdown before closing on mouse-leave
+	};
+
+	/// Begin a flyout below the last item. Returns true if the flyout is visible.
+	/// Call between the value widget and EndFlyout().
+	/// @param state  Shared flyout state (one per panel).
+	/// @param itemId Unique ID for this flyout instance (use ImGui::GetItemID() after the value widget).
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId);
+
+	/// End the flyout region. Must be called if BeginFlyout returned true.
+	void EndFlyout(FlyoutState& state);
+
+	/// Draw a small toggle switch (30% smaller than FeatureToggle).
+	bool SmallFeatureToggle(const char* label, bool* enabled);
+
+	/// Draw a themed delete button (follows theme color instead of red).
+	bool ThemedDeleteButton(const char* label);
+
+	/// Draw an icon button using a texture (e.g. undo icon).
+	bool IconButton(const char* id, void* texture, const ImVec2& size);
 }  // namespace Util

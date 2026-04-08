@@ -110,6 +110,7 @@ public:
 		std::string featureShortName;  // Feature's GetShortName()
 		std::string settingKey;        // JSON key within the feature's settings
 		json value;                    // Override value (bool, float, int, etc.)
+		json originalValue;            // Value at time of creation, for revert
 		bool paused = false;           // Temporarily disabled
 		EntrySource source = EntrySource::User;
 		std::string sourceFilename;                       // For overwrites: the filename it came from
@@ -128,6 +129,9 @@ public:
 	void RemoveSetting(SceneType type, size_t index);
 	void TogglePauseEntry(SceneType type, size_t index);
 	void UpdateEntryValue(SceneType type, size_t index, const json& newValue, bool deferSave = false);
+
+	/// Revert an entry's value to its originalValue (captured at creation).
+	void RevertEntryToDefault(SceneType type, size_t index);
 
 	/// Check if an entry already exists for a specific period (TimeOfDay)
 	bool HasEntryForPeriod(const std::string& featureShortName, const std::string& settingKey,
@@ -217,6 +221,42 @@ public:
 	};
 	static SettingType DetectSettingType(const json& value);
 
+	// --- Per-Weather Scene Settings ---
+
+	/// Per-weather configuration: flat overrides or per-period (TOD) overrides.
+	struct WeatherSceneConfig
+	{
+		bool useTimeOfDay = false;
+		std::vector<SettingEntry> entries;
+	};
+
+	const WeatherSceneConfig& GetWeatherConfig(RE::FormID weatherId) const;
+	bool HasWeatherConfig(RE::FormID weatherId) const;
+	bool IsWeatherTimeOfDay(RE::FormID weatherId) const;
+	void SetWeatherTimeOfDay(RE::FormID weatherId, bool useTod);
+
+	void AddWeatherSetting(RE::FormID weatherId, const std::string& featureShortName,
+		const std::string& settingKey, const json& value,
+		TimeOfDayPeriod period = TimeOfDayPeriod::Count);
+	void RemoveWeatherSetting(RE::FormID weatherId, size_t index);
+	void TogglePauseWeatherEntry(RE::FormID weatherId, size_t index);
+	void UpdateWeatherEntryValue(RE::FormID weatherId, size_t index, const json& newValue, bool deferSave = false);
+	void RevertWeatherEntryToDefault(RE::FormID weatherId, size_t index);
+	void DeleteAllWeatherSettings(RE::FormID weatherId);
+
+	bool HasWeatherEntry(RE::FormID weatherId, const std::string& featureShortName,
+		const std::string& settingKey) const;
+	bool HasWeatherEntryForPeriod(RE::FormID weatherId, const std::string& featureShortName,
+		const std::string& settingKey, TimeOfDayPeriod period) const;
+
+	void SaveWeatherSceneSettings(RE::FormID weatherId);
+	void LoadWeatherSceneSettings(RE::FormID weatherId);
+	void DiscoverAllWeatherSceneSettings();
+
+	static std::filesystem::path GetWeatherSceneDir();
+	static std::filesystem::path GetWeatherScenePath(RE::FormID weatherId);
+	static std::string GetWeatherFormKey(RE::FormID weatherId);
+
 private:
 	SceneSettingsManager() = default;
 	~SceneSettingsManager() = default;
@@ -265,6 +305,36 @@ private:
 	std::map<std::string, bool> featurePauseStates;
 
 	static constexpr size_t MAX_OVERWRITE_FILE_SIZE = 1024 * 1024;
+
+	// --- Per-Weather Scene storage ---
+	std::map<RE::FormID, WeatherSceneConfig> weatherSceneConfigs;
+	static const WeatherSceneConfig kEmptyWeatherConfig;
+
+	/// Baseline settings saved before weather scene activation, for reverting.
+	std::map<std::string, json> savedWeatherBaseline;
+
+	/// Cache of last-applied weather blend values per feature+key.
+	std::map<std::string, std::map<std::string, float>> lastAppliedWeatherFloats;
+
+	/// Last weather FormIDs used for blending — detect weather changes.
+	RE::FormID lastCurrentWeatherId = 0;
+	RE::FormID lastLastWeatherId = 0;
+	float lastWeatherLerp = -1.0f;
+	bool isWeatherSceneActive = false;
+
+	// --- Per-Weather helpers ---
+	WeatherSceneConfig& GetWeatherConfigMut(RE::FormID weatherId);
+	void UpdateWeatherScene();
+	void ActivateWeatherScene();
+	void DeactivateWeatherScene();
+	void SaveWeatherBaseline();
+	void RevertWeatherBaseline();
+
+	/// Compute a single float override for a feature+key across two transitioning weathers.
+	/// Returns true if an override was computed, with the result in outValue.
+	bool ComputeWeatherBlendedFloat(const std::string& shortName, const std::string& key,
+		RE::FormID currentId, RE::FormID lastId, float weatherLerp,
+		float gameHour, float& outValue);
 
 	// --- Helpers ---
 	std::vector<SettingEntry>& GetEntriesMut(SceneType type);

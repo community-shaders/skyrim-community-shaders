@@ -49,6 +49,9 @@ namespace TimeOfDayPanel
 		}
 	};
 
+	// Shared flyout state (one per panel)
+	static Util::FlyoutState flyoutState;
+
 	/// Draw a single value cell for a given entry index (or empty if no entry for this period).
 	static void DrawValueCell(size_t entryIndex)
 	{
@@ -74,17 +77,25 @@ namespace TimeOfDayPanel
 		if (readOnly)
 			ImGui::EndDisabled();
 
-		// Toggle + X on a second line
-		bool active = !entry.paused;
-		if (Util::FeatureToggle("##active", &active))
-			manager->TogglePauseEntry(kSceneType, entryIndex);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(entry.paused ? "Paused" : "Active");
+		// Flyout on hover with toggle / revert / delete
+		ImGuiID cellId = ImGui::GetItemID();
+		if (Util::BeginFlyout(flyoutState, cellId)) {
+			bool active = !entry.paused;
+			if (Util::SmallFeatureToggle("##active", &active))
+				manager->TogglePauseEntry(kSceneType, entryIndex);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text(entry.paused ? "Paused" : "Active");
 
-		ImGui::SameLine();
-		{
-			auto styledButton = Util::ErrorButtonStyle();
-			if (ImGui::Button("X", ImVec2(C::Em(C::SCENE_DELETE_BUTTON_EM), 0))) {
+			ImGui::SameLine();
+			auto* menu = globals::menu;
+			float iconH = ImGui::GetFrameHeight() * 0.7f;
+			if (menu && Util::IconButton("##revert", menu->uiIcons.undo.texture, ImVec2(iconH, iconH)))
+				manager->RevertEntryToDefault(kSceneType, entryIndex);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Revert to default");
+
+			ImGui::SameLine();
+			if (Util::ThemedDeleteButton("X")) {
 				if (isOverwrite) {
 					popups.pendingDeleteIndex = entryIndex;
 					popups.deleteSingleOverwrite.message = std::format(
@@ -95,9 +106,11 @@ namespace TimeOfDayPanel
 					manager->RemoveSetting(kSceneType, entryIndex);
 				}
 			}
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text(isOverwrite ? "Delete overwrite file" : "Remove this setting");
+
+			Util::EndFlyout(flyoutState);
 		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(isOverwrite ? "Delete overwrite file" : "Remove this setting");
 
 		ImGui::PopID();
 	}
