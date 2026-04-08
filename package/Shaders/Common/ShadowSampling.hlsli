@@ -163,7 +163,7 @@ namespace ShadowSampling
 		uint onePlusLayerIndex = 1.0 + primaryCascade;
 		float layerIndexRcp = rcp(onePlusLayerIndex);
 
-		float ShadowSampleParamZ = 0.001; // // fPoissonRadiusScale / iShadowMapResolution in z and w
+		float ShadowSampleParamZ = 0.001;  // // fPoissonRadiusScale / iShadowMapResolution in z and w
 
 		float visibility = 0;
 
@@ -174,7 +174,7 @@ namespace ShadowSampling
 		}
 
 		visibility /= 16.0;
-	
+
 		// Blend with secondary cascade if needed
 		[branch] if (needsBlending)
 		{
@@ -187,7 +187,7 @@ namespace ShadowSampling
 			positionLS.z -= Constants::ShadowBiasConst;
 
 			float visibilityBlend = 0.0;
-			
+
 			for (int i = 0; i < 16; i++) {
 				float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
 				float2 sampleUV = positionLS.xy + layerIndexRcp * sampleOffset * ShadowSampleParamZ;
