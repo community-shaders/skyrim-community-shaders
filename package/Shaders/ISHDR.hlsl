@@ -109,7 +109,7 @@ PS_OUTPUT main(PS_INPUT input)
 			texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		}
 
-		float3 imageColor = clamp(ImageTex.Sample(ImageSampler, texCoord).xyz, 0.0, 10.0);  // Clamp to reasonable HDR bounds
+		float3 imageColor = clamp(ImageTex.Sample(ImageSampler, texCoord).xyz, 0.0, 50.0);  // Clamp to reasonable HDR bounds
 
 #		if defined(RGB2LUM)
 		imageColor = Color::RGBToLuminance(imageColor);
@@ -155,23 +155,11 @@ PS_OUTPUT main(PS_INPUT input)
 		inputColor *= avgValue.y / avgValue.x;
 	inputColor = max(0, inputColor);
 
-	// Bloom/glare occlusion mask so dark pixels (sun occluders) don't keep bloom.
-	float3 hdrInputLinear = ENABLE_LL ? inputColor : Color::SkyrimGammaToLinear(inputColor);
-	float3 bloomLinear = ENABLE_LL ? bloomColor : Color::SkyrimGammaToLinear(bloomColor);
-	float sceneL = Color::RGBToLuminance(hdrInputLinear);
-	float bloomL = Color::RGBToLuminance(bloomLinear);
-	const float bloomOccDenom = 0.54;
-	float bloomKeep = saturate(sceneL / (bloomL * bloomOccDenom + 1e-6));
-	float3 bloomColorMasked = bloomColor * bloomKeep;
-	if (isHDR) {
-		bloomColorMasked = min(bloomColorMasked, 1.0);
-	}
-
 	float3 blendedColor;
 
 	[branch] if (Param.z > 0.5)
 	{
-		blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColorMasked, isHDR);
+		blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor, isHDR);
 	}
 	else
 	{
@@ -179,17 +167,16 @@ PS_OUTPUT main(PS_INPUT input)
 		float mappedMax = GetTonemapFactorReinhard(maxCol, isHDR).x;
 		float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
 		blendedColor = compressedHuePreserving;
-		blendedColor += saturate(Param.x - blendedColor) * bloomColorMasked;
+		blendedColor += saturate(Param.x - (1.0 - exp2(-blendedColor))) * bloomColor;
 	}
 
 	float blendedLuminance = Color::RGBToLuminance(blendedColor);
 	float3 tintedColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
 	float3 contrastedColor = lerp(avgValue.x, tintedColor, Cinematic.z);
 
-#		if 1  // Contrast modified to fix crushed shadows
+	// Contrast modified to fix crushed shadows
 	float3 contrastedColorModified = pow(abs(tintedColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(tintedColor);
 	contrastedColor = lerp(contrastedColorModified, contrastedColor, saturate(contrastedColorModified / 0.1f));  // blend in modified contrast for shadows
-#		endif
 
 	outputColor = contrastedColor;
 
