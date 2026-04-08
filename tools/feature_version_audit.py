@@ -261,11 +261,12 @@ def extract_feature_metadata(feature_headers_dir):
         })
     return feature_info
 
-def get_latest_release_tag():
+def get_latest_release_tag(ref="HEAD"):
     try:
-        output = subprocess.check_output([
-            "git", "tag", "--list", "v*.*.*"
-        ], stderr=subprocess.DEVNULL).decode("utf-8")
+        output = subprocess.check_output(
+            ["git", "tag", "--merged", ref, "--list", "v*.*.*"],
+            stderr=subprocess.DEVNULL,
+        ).decode("utf-8")
         tags = [t.strip() for t in output.splitlines() if re.match(r"^v\d+\.\d+\.\d+$", t.strip())]
         if not tags:
             return None
@@ -679,7 +680,7 @@ def main():
     if args.base:
         base_ref = args.base
     else:
-        detected_base = detect_pr_base() if args.pr_check else get_latest_release_tag()
+        detected_base = detect_pr_base() if args.pr_check else get_latest_release_tag(HEAD_REF)
         if detected_base:
             base_ref = detected_base
         else:
@@ -689,9 +690,11 @@ def main():
     # In PR check mode, determine the last release tag so version proposals are anchored
     # to the release baseline rather than to the tip of the target branch.  This prevents
     # multiple PRs between releases from each requiring an additional version bump.
+    # Use --merged base_ref so only tags reachable from the target branch are considered;
+    # hotfix tags on unrelated branches cannot skew the baseline.
     release_ref = None
     if args.pr_check:
-        release_ref = get_latest_release_tag()
+        release_ref = get_latest_release_tag(base_ref)
         if release_ref:
             print(f"Using release tag for version baseline: {release_ref}", file=sys.stderr)
         else:
