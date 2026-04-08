@@ -19,6 +19,7 @@
 #include "Features/PerformanceOverlay.h"
 #include "Features/Raytracing.h"
 #include "Features/RenderDoc.h"
+#include "Features/SceneGraphExplorer.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
@@ -88,6 +89,7 @@ namespace globals
 		ExponentialHeightFog exponentialHeightFog{};
 		DX12Interop dx12Interop{};
 		Raytracing raytracing{};
+		SceneGraphExplorer sceneGraphExplorer{};
 
 		namespace llf
 		{

@@ -35,6 +35,7 @@ struct ExtendedTranslucency;
 struct Upscaling;
 struct WeatherEditor;
 struct Raytracing;
+struct SceneGraphExplorer;
 struct ExponentialHeightFog;
 
 class State;
@@ -95,6 +96,7 @@ namespace globals
 		extern WeatherEditor weatherEditor;
 		extern ExponentialHeightFog exponentialHeightFog;
 		extern Raytracing raytracing;
+		extern SceneGraphExplorer sceneGraphExplorer;
 
 		namespace llf
 		{

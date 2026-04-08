@@ -384,7 +384,8 @@ struct CreationEngineRaytracing
 
 	HMODULE handle = nullptr;
 
-	using InitializeFn = bool (*)(ID3D11Device5*, ID3D12Device5*, ID3D12CommandQueue*, ID3D12CommandQueue*, ID3D12CommandQueue*);
+	using InitializeRendererFn = bool (*)(ID3D11Device5*, ID3D12Device5*, ID3D12CommandQueue*, ID3D12CommandQueue*, ID3D12CommandQueue*);
+	using InitializeFn = void (*)(Settings);
 	using UpdateCameraFn = void (*)();
 	using ExecuteFn = void (*)();
 	using WaitExecutionFn = void (*)();
@@ -401,6 +402,7 @@ struct CreationEngineRaytracing
 	using UpdateJitterFn = void (*)(float2);
 	using SetPTOutputTargetsFn = void (*)(ID3D12Resource*, ID3D12Resource*);
 
+	InitializeRendererFn InitializeRenderer = nullptr;
 	InitializeFn Initialize = nullptr;
 	UpdateCameraFn UpdateCamera = nullptr;
 	ExecuteFn Execute = nullptr;
@@ -428,6 +430,11 @@ struct CreationEngineRaytracing
 			logger::critical("[Raytracing] 'CreationEngineRaytracing.dll' not found, make sure Creation Engine Raytracing is enabled in your mod manager.");
 			return;
 		}
+
+		InitializeRenderer = reinterpret_cast<InitializeRendererFn>(GetProcAddress(handle, "InitializeRenderer"));
+
+		if (!InitializeRenderer)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' InitializeRenderer is nullptr");
 
 		Initialize = reinterpret_cast<InitializeFn>(GetProcAddress(handle, "Initialize"));
 

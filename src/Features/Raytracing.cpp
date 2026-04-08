@@ -530,6 +530,9 @@ void Raytracing::DrawDebugSettings()
 
 void Raytracing::DrawOverlay()
 {
+	if (!settings.PerfOverlay)
+		return;
+
 	auto* menu = Menu::GetSingleton();
 
 	if (!globals::state || !menu)
@@ -654,7 +657,7 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 	if (initialized)
 		return;
 
-	bool result = creationEngineRaytracing->Initialize(d3d11Device, d3d12Device, commandQueue, computeCommandQueue, copyCommandQueue);
+	bool result = creationEngineRaytracing->InitializeRenderer(d3d11Device, d3d12Device, commandQueue, computeCommandQueue, copyCommandQueue);
 
 	if (!result) {
 		settings.CreationEngineRaytracingSettings.Enabled = false;
@@ -747,9 +750,10 @@ void Raytracing::SetupResources()
 	}
 
 	if (initialized) {
+		creationEngineRaytracing->Initialize(settings.CreationEngineRaytracingSettings);
+
 		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
 		creationEngineRaytracing->SetSharedTextures(albedoTexture.get(), normalRoughnessTexture->resource.get(), gnmaoTexture.get(), diffuseAlbedoTexture->resource.get());
-		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
 	}
 
 	auto& d3d11Device = globals::features::dx12Interop.d3d11Device;
