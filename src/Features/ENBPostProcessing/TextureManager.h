@@ -13,6 +13,7 @@ public:
 		winrt::com_ptr<ID3D11Texture2D> texture;
 		winrt::com_ptr<ID3D11RenderTargetView> rtv;
 		winrt::com_ptr<ID3D11ShaderResourceView> srv;
+		winrt::com_ptr<ID3D11UnorderedAccessView> uav;
 	};
 
 	struct DownsampleTexture
@@ -34,6 +35,8 @@ public:
 	void UpdateDownsampledTexture(ID3D11ShaderResourceView* source);
 	ID3D11ShaderResourceView* GetDownsampleTexture() const;
 	ID3D11ShaderResourceView* GetDownsampleTextureBlurry() const;
+
+	ID3D11SamplerState* GetLinearSampler() const { return linearSampler.get(); }
 
 	// Frame-based state access
 	uint32_t GetTextureSwap() const { return textureSwap; }

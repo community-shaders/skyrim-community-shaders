@@ -5,6 +5,7 @@
 #include "Effects/ENBEffect.h"
 #include "Effects/ENBEffectPostPass.h"
 #include "Effects/ENBLens.h"
+#include "Effects/ENBLocalTonemapping.h"
 
 #include <atomic>
 
@@ -61,6 +62,7 @@ public:
 	ENBAdaptation enbAdaptation;
 	ENBEffect enbEffect;
 	ENBEffectPostPass enbEffectPostPass;
+	ENBLocalTonemapping enbLocalTonemapping;
 
 	// Common resources shared across effects
 	void CreateCommonResources();

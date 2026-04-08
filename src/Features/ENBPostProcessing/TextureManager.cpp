@@ -81,7 +81,7 @@ TextureManager::Texture TextureManager::CreateTexture(uint32_t width, uint32_t h
 	texDesc.SampleDesc.Count = 1;
 	texDesc.SampleDesc.Quality = 0;
 	texDesc.Usage = D3D11_USAGE_DEFAULT;
-	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 	texDesc.CPUAccessFlags = 0;
 	texDesc.MiscFlags = 0;
 
@@ -105,6 +105,13 @@ TextureManager::Texture TextureManager::CreateTexture(uint32_t width, uint32_t h
 	srvDesc.Texture2D.MipLevels = 1;
 
 	DX::ThrowIfFailed(globals::d3d::device->CreateShaderResourceView(result.texture.get(), &srvDesc, result.srv.put()));
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	uavDesc.Format = format;
+	uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+	uavDesc.Texture2D.MipSlice = 0;
+
+	DX::ThrowIfFailed(globals::d3d::device->CreateUnorderedAccessView(result.texture.get(), &uavDesc, result.uav.put()));
 
 	return result;
 }

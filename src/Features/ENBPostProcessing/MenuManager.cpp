@@ -195,7 +195,8 @@ std::map<std::string, std::vector<std::string>> MenuManager::GetCategorizedSetti
 		"TIMEOFDAY",
 		"COLORCORRECTION",
 		"EFFECT",
-		"ADAPTATION"
+		"ADAPTATION",
+		"LOCALTONEMAPPING"
 	};
 
 	// Weather-Based Settings - Categories that change with weather/time

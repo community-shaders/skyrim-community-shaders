@@ -19,8 +19,8 @@ public:
 	};
 
 	// Settings methods
-	bool Load();
-	void Save();
+	virtual bool Load();
+	virtual void Save();
 
 	// Effect lifecycle
 	virtual bool Apply();   // Clear resources, load settings, recompile, create resources

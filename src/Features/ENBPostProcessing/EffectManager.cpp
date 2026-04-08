@@ -20,6 +20,7 @@ void EffectManager::Initialize()
 	TextureManager::GetSingleton().Initialize();
 	RegisterSettings();
 	SettingManager::GetSingleton().Load();
+	enbLocalTonemapping.Initialize();
 	CreateCommonResources();
 	Apply();
 
@@ -72,6 +73,7 @@ void EffectManager::Apply()
 	enbAdaptation.Apply();
 	enbEffect.Apply();
 	enbEffectPostPass.Apply();
+	enbLocalTonemapping.Apply();
 }
 
 void EffectManager::Load()
@@ -81,6 +83,7 @@ void EffectManager::Load()
 	enbAdaptation.Load();
 	enbEffect.Load();
 	enbEffectPostPass.Load();
+	enbLocalTonemapping.Load();
 }
 
 void EffectManager::Save()
@@ -90,6 +93,7 @@ void EffectManager::Save()
 	enbAdaptation.Save();
 	enbEffect.Save();
 	enbEffectPostPass.Save();
+	enbLocalTonemapping.Save();
 }
 
 void EffectManager::RegisterSettings()
@@ -217,6 +221,17 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterTimeOfDaySetting("RangeFactor", "GAMEVOLUMETRICRAYS", 1, true);
 	settingManager.RegisterTimeOfDaySetting("Desaturation", "GAMEVOLUMETRICRAYS", 0, true);
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "GAMEVOLUMETRICRAYS", { 1.0f, 1.0f, 1.0f }, true);
+
+	// LOCALTONEMAPPING
+	settingManager.RegisterBoolSetting("EnableLocalTonemapping", "EFFECT", false, false);
+	settingManager.RegisterTimeOfDaySetting("Exposure", "LOCALTONEMAPPING", 0.75f, true);
+	settingManager.RegisterTimeOfDaySetting("Shadows", "LOCALTONEMAPPING", 2.0f, true);
+	settingManager.RegisterTimeOfDaySetting("Highlights", "LOCALTONEMAPPING", 4.0f, true);
+	settingManager.RegisterFloatSetting("Mip", "LOCALTONEMAPPING", 3.0f, 0.0f, 16.0f, false);
+	settingManager.RegisterFloatSetting("DisplayMip", "LOCALTONEMAPPING", 0.0f, 0.0f, 16.0f, false);
+	settingManager.RegisterBoolSetting("BoostLocalContrast", "LOCALTONEMAPPING", false, false);
+	settingManager.RegisterFloatSetting("ExposurePreferenceSigma", "LOCALTONEMAPPING", 4.0f, 0.0f, 100.0f, false);
+	settingManager.RegisterFloatSetting("ExposurePreferenceOffset", "LOCALTONEMAPPING", 0.0f, -1.0f, 1.0f, false);
 }
 
 void EffectManager::ExecuteEffects()
@@ -266,7 +281,6 @@ void EffectManager::ExecuteEffects()
 	ApplyColorCorrection(textureOriginal.UAV);
 
 	auto state = globals::state;
-
 	auto& settingManager = SettingManager::GetSingleton();
 	auto& textureManager = TextureManager::GetSingleton();
 
@@ -302,6 +316,13 @@ void EffectManager::ExecuteEffects()
 		UpdateCommonVariablesForEffect(enbEffect.GetEffect());
 		enbEffect.UpdateEffectVariables();
 		enbEffect.Execute();
+		state->EndPerfEvent();
+	}
+
+	if (settingManager.GetValue<bool>("EnableLocalTonemapping", "EFFECT")) {
+		state->BeginPerfEvent("LocalTonemapping");
+		enbLocalTonemapping.UpdateEffectVariables();
+		enbLocalTonemapping.Execute();
 		state->EndPerfEvent();
 	}
 
@@ -908,4 +929,5 @@ void EffectManager::RenderEffectsList()
 	enbAdaptation.RenderImGui();
 	enbEffect.RenderImGui();
 	enbEffectPostPass.RenderImGui();
+	enbLocalTonemapping.RenderImGui();
 }
