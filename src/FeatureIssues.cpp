@@ -91,7 +91,20 @@ namespace FeatureIssues
 									 .userMessage = "This functionality is now built into Community Shaders. Remove the old feature as it's no longer needed.",
 									 .removedInVersion = { 0, 8, 0 },
 									 .modifiedShaderDirectory = true,
-									 .issueType = FeatureIssueInfo::IssueType::OBSOLETE } }
+									 .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
+		{ "VanillaHDR", { .shortName = "VanillaHDR",
+							.displayName = "Vanilla HDR",
+							.rejectionReason = "Replaced by Community Shaders",
+							.replacementFeature = "",
+							.userMessage = "Vanilla HDR conflicts with Community Shaders. Uninstall it with your mod manager.",
+							.removedInVersion = { 1, 0, 0 },
+							.modifiedShaderDirectory = false,
+							.issueType = FeatureIssueInfo::IssueType::OBSOLETE } }
+	};
+
+	// Obsolete mods with shader files that do not have a corresponding feature INI, value is the path to trigger the issue
+	static const std::map<std::string, const char*> s_obsoleteShaderModTriggerPaths = {
+		{ "VanillaHDR", "ISHDR/VanillaHDRSettings.fxh" },
 	};
 
 	const std::vector<FeatureIssueInfo>& GetFeatureIssues()
@@ -644,7 +657,9 @@ namespace FeatureIssues
 		// Show delete button for:
 		// 1. Features that don't modify shader directories (safe to delete)
 		// 2. Obsolete features with replacements (user can install replacement after deletion)
-		bool canSafelyDelete = (!issue.ModifiedShaderDirectory() || (issue.IsObsolete() && !issue.replacementFeature.empty())) && !IsVersionMismatchForCoreFeature(issue);
+		bool canSafelyDelete = (!issue.ModifiedShaderDirectory() || (issue.IsObsolete() && !issue.replacementFeature.empty())) &&
+		                       !IsVersionMismatchForCoreFeature(issue) &&
+		                       (issue.fileInfo.hasINI || issue.fileInfo.hasDeployedFolder);
 		if (canSafelyDelete) {
 			ImGui::SameLine();
 			std::string deleteButtonId = "Delete##" + issue.shortName;
@@ -826,6 +841,40 @@ namespace FeatureIssues
 			logger::warn("Error scanning Features directory: {}", e.what());
 		}
 	}
+
+	void ScanForObsoleteShaderMods()
+	{
+		const std::filesystem::path shadersRoot = Util::PathHelpers::GetShadersPath();
+		if (!std::filesystem::exists(shadersRoot)) {
+			return;
+		}
+
+		try {
+			for (const auto& [shortName, triggerPath] : s_obsoleteShaderModTriggerPaths) {
+				const std::filesystem::path pathToCheck = shadersRoot / triggerPath;
+				if (!std::filesystem::exists(pathToCheck)) {
+					continue;
+				}
+				logger::warn("Found incompatible shader mod: {}", shortName);
+
+				// Fallback if a developer did not add the feature to the obsolete features map
+				if (!IsObsoleteFeature(shortName)) {
+					FeatureFileInfo fileInfo = GetFeatureFileInfo(shortName);
+					AddFeatureIssue(shortName, "Unknown",
+						std::format("{} is incompatible with this CS version", shortName),
+						FeatureIssueInfo::IssueType::UNKNOWN, fileInfo);
+					continue;
+				}
+
+				const auto& obsoleteMeta = s_obsoleteFeatureData.find(shortName)->second;
+				AddFeatureIssue(shortName, "Unknown", obsoleteMeta.rejectionReason,
+					FeatureIssueInfo::IssueType::OBSOLETE, {});
+			}
+		} catch (const std::filesystem::filesystem_error& e) {
+			logger::warn("Error scanning Shaders directory: {}", e.what());
+		}
+	}
+
 	// Developer mode test INI functionality
 	namespace Test
 	{
@@ -1446,6 +1495,7 @@ namespace FeatureIssues
 			// Use checkLoadedFeatures=true to detect all issues including from loaded features
 			ClearFeatureIssues();
 			ScanForOrphanedFeatureINIs(true);
+			ScanForObsoleteShaderMods();
 
 			if (success) {
 				logger::info("Successfully restored original state. Feature issues updated.");

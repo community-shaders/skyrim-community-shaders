@@ -403,6 +403,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 
 		FeatureIssues::ScanForOrphanedFeatureINIs();
+		FeatureIssues::ScanForObsoleteShaderMods();
 
 		logger::info("Loading Settings Complete");
 	} catch (const json::exception& e) {

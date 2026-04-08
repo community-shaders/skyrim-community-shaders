@@ -179,6 +179,11 @@ namespace FeatureIssues
 	void ScanForOrphanedFeatureINIs(bool checkLoadedFeatures = false);
 
 	/**
+	 * Detect obsolete mods with shader files that do not have a corresponding feature INI.
+	 */
+	void ScanForObsoleteShaderMods();
+
+	/**
 	 * Developer mode functionality for testing feature issues.
 	 * These functions are only available when IsDeveloperMode() returns true.
 	 */
