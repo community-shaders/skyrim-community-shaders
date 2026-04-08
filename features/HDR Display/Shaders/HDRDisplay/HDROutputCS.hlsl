@@ -37,19 +37,34 @@ cbuffer PerFrame : register(b0)
 	float3 finalColor;
 
 	if (hdrEnabled) {
-		float3 sceneGamma = scene.rgb;
+		bool sceneIsLinear = isSceneLinear > 0.5;
+		float3 compositedColorLinear;
 
-		float3 compositedColorGamma;
-		if (skipUI) {
-			compositedColorGamma = sceneGamma;
-		} else {
-			float3 uiGamma = ui.rgb;
-			if (!(isMainOrLoadingMenu > 0.5)) {  // UI and scene can't be separated in main menu or loading screen
-				// scale UI brightness (multiplier based on paperWhite)
-				float3 uiLinear = Color::SrgbToLinear(max(0, uiGamma));
-				uiLinear *= uiBrightness;
-				uiGamma = Color::LinearToSrgb(uiLinear);
+		if (sceneIsLinear) {
+			float3 sceneLinear = max(0.0, scene.rgb);
+			if (skipUI) {
+				compositedColorLinear = sceneLinear;
+			} else {
+				float3 uiLinear = Color::SrgbToLinear(max(0.0, ui.rgb));
+				if (!(isMainOrLoadingMenu > 0.5)) {  // UI and scene can't be separated in main menu or loading screen
+					// scale UI brightness (multiplier based on paperWhite)
+					uiLinear *= uiBrightness;
+				}
+				compositedColorLinear = uiLinear + sceneLinear * (1.0 - ui.a);
 			}
+		} else {
+			float3 sceneGamma = scene.rgb;
+			float3 compositedColorGamma;
+			if (skipUI) {
+				compositedColorGamma = sceneGamma;
+			} else {
+				float3 uiGamma = ui.rgb;
+				if (!(isMainOrLoadingMenu > 0.5)) {  // UI and scene can't be separated in main menu or loading screen
+					// scale UI brightness (multiplier based on paperWhite)
+					float3 uiLinear = Color::SrgbToLinear(max(0, uiGamma));
+					uiLinear *= uiBrightness;
+					uiGamma = Color::LinearToSrgb(uiLinear);
+				}
 #if 0
             if (fgTweenMenuMidAlphaBoost > 0.5 && ui.a > 1e-3) {
                 float midBand = smoothstep(0.3, 0.35, ui.a) * (1.0 - smoothstep(0.55, 0.6, ui.a));
@@ -58,11 +73,13 @@ cbuffer PerFrame : register(b0)
             }
 #endif
 
-			compositedColorGamma = uiGamma + sceneGamma * (1.0 - ui.a);
+				compositedColorGamma = uiGamma + sceneGamma * (1.0 - ui.a);
+			}
+
+			// Non-LL path: ISHDR output is gamma-encoded at this stage.
+			compositedColorLinear = Color::GammaToLinearSafe(compositedColorGamma);
 		}
 
-		// ISHDR HDR path outputs sRGB gamma at this stage.
-		float3 compositedColorLinear = Color::GammaToLinearSafe(compositedColorGamma);
 		compositedColorLinear = Color::BT709ToBT2020(compositedColorLinear);
 		finalColor = Color::pq::Encode(max(0.0, compositedColorLinear), paperWhite);
 
