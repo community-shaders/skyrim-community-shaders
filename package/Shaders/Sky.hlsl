@@ -308,7 +308,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float ign = frac(52.9829189 * frac(dot(floor(input.Position.xy), float2(0.06711056, 0.00583715))));
 		baseColor.xyz += (ign - 0.5) * (discScale / 255.0);
 
-		yyy = 0.0;
+		skyBoost = 0.0;
 #		endif
 
 #		if defined(CLOUD_SHADOWS)
