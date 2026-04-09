@@ -415,7 +415,7 @@ void MenuManager::RenderAllSettings()
 								case SettingType::Float:
 									{
 										float v = settingManager.GetValue<float>(settingKey, category, true);
-										if (ImGui::InputFloat(("##" + settingKey).c_str(), &v, settingInfo->step, settingInfo->step * 2.0f, "%.2f")) {
+										if (ImGui::InputFloat(("##" + settingKey).c_str(), &v, settingInfo->step, settingInfo->step * 10.0f, "%.2f")) {
 											// Clamp value between min and max after input
 											v = std::clamp(v, settingInfo->minValue, settingInfo->maxValue);
 											settingManager.SetValue<float>(settingKey, category, v);
@@ -445,7 +445,7 @@ void MenuManager::RenderAllSettings()
 											}
 
 											std::string label = timeOfDayNames[i] + "##" + settingKey + std::to_string(i);
-											if (ImGui::InputFloat(label.c_str(), &v.values[i], settingInfo->step, settingInfo->step * 2.0f, "%.2f")) {
+											if (ImGui::InputFloat(label.c_str(), &v.values[i], settingInfo->step, settingInfo->step * 10.0f, "%.2f")) {
 												// Clamp value between min and max after input
 												v.values[i] = std::clamp(v.values[i], settingInfo->minValue, settingInfo->maxValue);
 												changed = true;

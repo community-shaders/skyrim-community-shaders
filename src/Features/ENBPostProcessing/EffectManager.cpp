@@ -172,7 +172,6 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterColorTimeOfDaySetting("MoonColorFilter", "SKY", { 1.0f, 1.0f, 1.0f }, true);
 
 	settingManager.RegisterTimeOfDaySetting("StarsIntensity", "SKY", 1.0f, 0.0f, 30000.0f, 0.01f, true);
-	settingManager.RegisterTimeOfDaySetting("StarsCurve", "SKY", 1.0f, 1.0f, 4.0f, 0.01f, true);
 
 	settingManager.RegisterFloatSetting("CloudsEdgeIntensity", "SKY", 0.0f, 0.0f, 10.0f, 0.01f, false);
 	settingManager.RegisterFloatSetting("CloudsEdgeMoonMultiplier", "SKY", 0.0f, 0.0f, 10.0f, 0.01f, false);
@@ -209,7 +208,6 @@ void EffectManager::RegisterSettings()
 
 	// VOLUMETRICFOG
 	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICFOG", 1.0f, 0.0f, 30000.0f, 0.01f, true);
-	settingManager.RegisterTimeOfDaySetting("Curve", "VOLUMETRICFOG", 1.0f, 1.0f, 2.5f, 0.01f, true);
 	settingManager.RegisterColorTimeOfDaySetting("ColorFilter", "VOLUMETRICFOG", { 1.0f, 1.0f, 1.0f }, true);
 
 	// PARTICLE

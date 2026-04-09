@@ -267,7 +267,6 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 			float3 starsColorF3 = NiToF3(starsColor);
 
-			starsColorF3 = Curve(starsColorF3, settingManager.GetInterpolatedTimeOfDayValue("StarsCurve", "SKY"));
 			starsColorF3 = Intensity(starsColorF3, settingManager.GetInterpolatedTimeOfDayValue("StarsIntensity", "SKY"));
 
 			starsColor = F3ToNi(starsColorF3);
@@ -289,7 +288,6 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 		float3 skyStaticsColorF3 = NiToF3(skyStaticsColor);
 
-		skyStaticsColorF3 = Curve(skyStaticsColorF3, settingManager.GetInterpolatedTimeOfDayValue("Curve", "VOLUMETRICFOG"));
 		skyStaticsColorF3 = ColorFilter(skyStaticsColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "VOLUMETRICFOG"), 0.0f);
 		skyStaticsColorF3 = Intensity(skyStaticsColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICFOG"));
 
