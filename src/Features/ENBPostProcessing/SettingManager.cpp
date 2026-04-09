@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <tuple>
+#include <set>
 
 static bool TryParseBool(const std::string& a_value, bool& a_out)
 {
@@ -235,12 +237,25 @@ void SettingManager::SetValue(const std::string& key, const std::string& categor
 		uint32_t targetWeatherID = (weatherBlendFactor > 0.5f) ? currentWeatherID : lastWeatherID;
 		std::string settingKey = category + "::" + key;
 
-		// Only write to weather data if the weather already has loaded settings
-		auto weatherIt = weatherData.find(targetWeatherID);
-		if (weatherIt != weatherData.end()) {
-			weatherIt->second[settingKey] = value;
+		// Update all weather IDs sharing the same file
+		auto& weatherManager = WeatherManager::GetSingleton();
+		auto* entry = weatherManager.FindWeatherEntry(targetWeatherID);
+
+		if (entry) {
+			for (uint32_t linkedID : entry->weatherIDs) {
+				auto it = weatherData.find(linkedID);
+				if (it != weatherData.end()) {
+					it->second[settingKey] = value;
+				}
+			}
 		} else {
-			setting.currentValue = value;
+			// Fallback: update target ID only
+			auto weatherIt = weatherData.find(targetWeatherID);
+			if (weatherIt != weatherData.end()) {
+				weatherIt->second[settingKey] = value;
+			} else {
+				setting.currentValue = value;
+			}
 		}
 		return;
 	}
@@ -324,28 +339,40 @@ void SettingManager::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32
 	this->weatherBlendFactor = blendFactor;
 }
 
-void SettingManager::LoadWeatherSettings(const std::string& weatherKey, const std::string& filePath)
+void SettingManager::LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs, const std::string& filePath)
 {
 	if (!std::filesystem::exists(filePath)) {
 		logger::warn("[SettingManager] Weather file not found: {}", filePath);
 		return;
 	}
 
-	uint32_t weatherID;
-	if (!TryParseWeatherID(weatherKey, weatherID)) {
-		logger::error("[SettingManager] Invalid weather key: {}", weatherKey);
+	if (weatherIDs.empty()) {
 		return;
 	}
 
-	std::unique_lock lock(mutex);
-	for (const auto& [category, categoryData] : categories) {
-		for (const auto& [key, setting] : categoryData.settings) {
-			if (setting.hasWeatherSupport) {
-				Setting tempSetting = setting;
-				LoadSettingFromFile(filePath, category, key, tempSetting);
-				std::string settingKey = category + "::" + key;
-				weatherData[weatherID][settingKey] = tempSetting.currentValue;
+	std::unordered_map<std::string, SettingValue> loadedValues;
+
+	// Load settings from file once
+	{
+		// We use a shared lock for reading categories/settings
+		std::shared_lock lock(mutex);
+		for (const auto& [category, categoryData] : categories) {
+			for (const auto& [key, setting] : categoryData.settings) {
+				if (setting.hasWeatherSupport) {
+					Setting tempSetting = setting;
+					LoadSettingFromFile(filePath, category, key, tempSetting);
+					std::string settingKey = category + "::" + key;
+					loadedValues[settingKey] = tempSetting.currentValue;
+				}
 			}
+		}
+	}
+
+	// Store loaded values for all provided weather IDs
+	{
+		std::unique_lock lock(mutex);
+		for (uint32_t weatherID : weatherIDs) {
+			weatherData[weatherID] = loadedValues;
 		}
 	}
 }
@@ -358,25 +385,37 @@ void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const st
 		return;
 	}
 
-	std::shared_lock lock(mutex);
-	auto weatherIt = weatherData.find(weatherID);
-	if (weatherIt == weatherData.end()) {
-		return;
-	}
+	std::vector<std::tuple<std::string, std::string, Setting>> settingsToWrite;
 
-	for (const auto& [category, categoryData] : categories) {
-		for (const auto& [key, setting] : categoryData.settings) {
-			if (setting.hasWeatherSupport) {
-				std::string settingKey = category + "::" + key;
-				auto valueIt = weatherIt->second.find(settingKey);
-				if (valueIt != weatherIt->second.end()) {
-					Setting tempSetting = setting;
-					tempSetting.currentValue = valueIt->second;
-					SaveSettingToFile(filePath, category, key, tempSetting);
+	{
+		std::shared_lock lock(mutex);
+		auto weatherIt = weatherData.find(weatherID);
+		if (weatherIt == weatherData.end()) {
+			return;
+		}
+
+		for (const auto& [category, categoryData] : categories) {
+			for (const auto& [key, setting] : categoryData.settings) {
+				if (setting.hasWeatherSupport) {
+					std::string settingKey = category + "::" + key;
+					auto valueIt = weatherIt->second.find(settingKey);
+					if (valueIt != weatherIt->second.end()) {
+						Setting tempSetting = setting;
+						tempSetting.currentValue = valueIt->second;
+						settingsToWrite.emplace_back(category, key, tempSetting);
+					}
 				}
 			}
 		}
 	}
+
+	// Perform IO outside of lock to prevent deadlocks
+	for (const auto& [category, key, setting] : settingsToWrite) {
+		SaveSettingToFile(filePath, category, key, setting);
+	}
+
+	// Flush Windows .ini cache to disk
+	WritePrivateProfileStringA(NULL, NULL, NULL, filePath.c_str());
 }
 
 void SettingManager::SaveAllWeatherSettings()
@@ -384,7 +423,15 @@ void SettingManager::SaveAllWeatherSettings()
 	auto& weatherManager = WeatherManager::GetSingleton();
 	const auto& weatherFiles = weatherManager.GetWeatherFiles();
 
+	// Deduplicate by file path to avoid redundant IO and overwrite bugs
+	std::unordered_map<std::string, std::string> uniqueFiles;
 	for (const auto& [weatherKey, filePath] : weatherFiles) {
+		if (uniqueFiles.find(filePath) == uniqueFiles.end()) {
+			uniqueFiles[filePath] = weatherKey;
+		}
+	}
+
+	for (const auto& [filePath, weatherKey] : uniqueFiles) {
 		SaveWeatherSettings(weatherKey, filePath);
 	}
 }
@@ -428,27 +475,44 @@ void SettingManager::LoadFromFile(const std::string& filePath)
 
 void SettingManager::SaveToFile(const std::string& filePath)
 {
-	std::shared_lock lock(mutex);
-	for (const auto& [category, categoryData] : categories) {
-		for (const auto& [key, setting] : categoryData.settings) {
-			SaveSettingToFile(filePath, category, key, setting);
-		}
+	std::vector<std::tuple<std::string, std::string, Setting>> settingsToWrite;
+	std::vector<std::tuple<std::string, bool, bool>> weatherSupportFlags;
 
-		bool hasWeatherSupport = false;
-		for (const auto& [key, setting] : categoryData.settings) {
-			if (setting.hasWeatherSupport) {
-				hasWeatherSupport = true;
-				break;
+	{
+		std::shared_lock lock(mutex);
+		for (const auto& [category, categoryData] : categories) {
+			for (const auto& [key, setting] : categoryData.settings) {
+				settingsToWrite.emplace_back(category, key, setting);
+			}
+
+			bool hasWeatherSupport = false;
+			for (const auto& [key, setting] : categoryData.settings) {
+				if (setting.hasWeatherSupport) {
+					hasWeatherSupport = true;
+					break;
+				}
+			}
+
+			if (hasWeatherSupport) {
+				weatherSupportFlags.emplace_back(category, categoryData.ignoreWeatherSystem, categoryData.ignoreWeatherSystemInterior);
 			}
 		}
-
-		if (hasWeatherSupport) {
-			WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem",
-				categoryData.ignoreWeatherSystem ? "true" : "false", filePath.c_str());
-			WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior",
-				categoryData.ignoreWeatherSystemInterior ? "true" : "false", filePath.c_str());
-		}
 	}
+
+	// Perform IO outside of lock
+	for (const auto& [category, key, setting] : settingsToWrite) {
+		SaveSettingToFile(filePath, category, key, setting);
+	}
+
+	for (const auto& [category, ignoreOut, ignoreIn] : weatherSupportFlags) {
+		WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem",
+			ignoreOut ? "true" : "false", filePath.c_str());
+		WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior",
+			ignoreIn ? "true" : "false", filePath.c_str());
+	}
+
+	// Flush cache
+	WritePrivateProfileStringA(NULL, NULL, NULL, filePath.c_str());
 }
 
 SettingValue SettingManager::InterpolateValues(const SettingValue& a, const SettingValue& b, float t)

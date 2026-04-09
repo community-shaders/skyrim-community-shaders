@@ -72,16 +72,10 @@ void WeatherManager::LoadWeatherList()
 		entry.fileName = fileName;
 		ParseWeatherIDs(weatherIDsStr, entry.weatherIDs);
 
-		// Load the weather file through SettingManager
+		// Load the weather file through SettingManager once for all associated IDs
 		std::filesystem::path weatherFilePath = "enbseries/" + entry.fileName;
 		if (std::filesystem::exists(weatherFilePath)) {
-			// Create weather key for each weather ID
-			for (uint32_t weatherID : entry.weatherIDs) {
-				std::ostringstream oss;
-				oss << "weather_" << weatherID;
-				std::string weatherKey = oss.str();
-				SettingManager::GetSingleton().LoadWeatherSettings(weatherKey, weatherFilePath.string());
-			}
+			SettingManager::GetSingleton().LoadWeatherSettings(entry.weatherIDs, weatherFilePath.string());
 		} else {
 			logger::warn("[WeatherManager] Weather file not found: {}", weatherFilePath.string());
 		}
