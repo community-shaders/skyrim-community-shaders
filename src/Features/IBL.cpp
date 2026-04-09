@@ -33,7 +33,7 @@ void IBL::DrawSettings()
 		if (enb.enableEffect) {
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
-				ImGui::TextColored(ImVec4(1, 1, 0, 1), "IBL settings are currently managed by ENB.");
+				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Settings are currently managed by ENB.");
 				return;
 			}
 		}

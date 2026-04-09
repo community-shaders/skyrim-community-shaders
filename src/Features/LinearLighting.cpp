@@ -40,7 +40,7 @@ void LinearLighting::DrawSettings()
 	if (globals::features::enbPostProcessing.loaded) {
 		auto& enb = globals::features::enbPostProcessing;
 		if (enb.enableEffect) {
-			ImGui::TextColored(ImVec4(1, 1, 0, 1), "Linear Lighting settings are currently managed by ENB.");
+			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Settings are currently managed by ENB.");
 			return;
 		}
 	}
