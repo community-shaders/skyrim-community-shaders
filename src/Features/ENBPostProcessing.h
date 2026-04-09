@@ -44,14 +44,14 @@ public:
 		float pad1;
 	};
 
-		bool enableEffect = false;
+	bool enableEffect = false;
 
-		PerFrame GetCommonBufferData();
+	PerFrame GetCommonBufferData();
 
-		virtual void DrawSettings() override;
-		virtual void SetupResources() override;
-		virtual void Reset() override;
-		virtual void Prepass() override;
+	virtual void DrawSettings() override;
+	virtual void SetupResources() override;
+	virtual void Reset() override;
+	virtual void Prepass() override;
 	void OverrideWeather(RE::Sky* a_sky);
 	void CheckCommonData();
 	void OverridePointLightColor(float3& a_color);
