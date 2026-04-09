@@ -1120,7 +1120,7 @@ void Effect::UpdateUIVariables()
 
 void Effect::RenderImGui()
 {
-	if (ImGui::CollapsingHeader(GetName().c_str())) {
+	if (ImGui::CollapsingHeader(GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 		bool valuesChanged = false;
 
 		// Use table

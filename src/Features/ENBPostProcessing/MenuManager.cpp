@@ -78,33 +78,22 @@ void MenuManager::RenderSettingsPanel()
 void MenuManager::RenderWeatherControl()
 {
 	auto& effectManager = EffectManager::GetSingleton();
-	auto& weatherManager = WeatherManager::GetSingleton();
 
 	// Current weather status
 	uint32_t currentWeatherID = static_cast<uint32_t>(effectManager.commonData.weather[0]);
 	uint32_t lastWeatherID = static_cast<uint32_t>(effectManager.commonData.weather[1]);
 	float blendFactor = effectManager.commonData.weather[2];
 
-	ImGui::Text("Current: 0x%X, Last: 0x%X", currentWeatherID, lastWeatherID);
-	ImGui::Text("Blend Factor: %.2f", blendFactor);
+	ImGui::Text("Current Weather: 0x%X, Outgoing Weather: 0x%X", currentWeatherID, lastWeatherID);
+	ImGui::Text("Weather Blend Factor: %.2f", blendFactor);
+}
 
-	// Time of day status
-	const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
-	auto activeIndices = GetActiveTimeOfDayIndices();
-
-	if (!activeIndices.empty()) {
-		std::string activeTimesText = "Active Times";
-		for (size_t i = 0; i < activeIndices.size(); ++i) {
-			if (i > 0)
-				activeTimesText += ", ";
-			activeTimesText += timeOfDayNames[activeIndices[i]];
-		}
-		ImGui::Text("%s", activeTimesText.c_str());
-	}
+void MenuManager::RenderDebugControl()
+{
+	auto& effectManager = EffectManager::GetSingleton();
+	auto& weatherManager = WeatherManager::GetSingleton();
 
 	// Current time of day values
-	ImGui::Separator();
-	ImGui::Text("Time of Day Values:");
 	if (ImGui::BeginTable("TimeOfDayValues", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
 		ImGui::TableSetupColumn("Period", ImGuiTableColumnFlags_WidthFixed);
 		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed);
@@ -138,12 +127,14 @@ void MenuManager::RenderWeatherControl()
 		ImGui::EndTable();
 	}
 
+	ImGui::Separator();
+
 	// Weather file list
-	if (ImGui::TreeNodeEx("Weather Files", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("Loaded Weather Files", ImGuiTreeNodeFlags_DefaultOpen)) {
 		const auto& weatherEntries = weatherManager.GetWeatherEntries();
 
 		if (!weatherEntries.empty()) {
-			if (ImGui::BeginChild("WeatherList", ImVec2(0, 200), true)) {
+			if (ImGui::BeginChild("WeatherList", ImVec2(0, 300), true)) {
 				// Sort weather entries by name for consistent display
 				std::vector<std::pair<std::string, const WeatherManager::WeatherEntry*>> sortedWeathers;
 				for (const auto& [key, entry] : weatherEntries) {
@@ -200,6 +191,9 @@ std::map<std::string, std::vector<std::string>> MenuManager::GetCategorizedSetti
 
 	// Weather-Based Settings - Categories that change with weather/time
 	categorizedSettings["Weather"] = { "BLOOM", "LENS", "SKY", "CLOUDSHADOWS", "ENVIRONMENT", "IMAGEBASEDLIGHTING", "VOLUMETRICFOG", "GAMEVOLUMETRICRAYS", "SUNGLARE" };
+
+	// Debug Information
+	categorizedSettings["Debug"] = {};
 
 	return categorizedSettings;
 }
@@ -271,8 +265,16 @@ void MenuManager::RenderAllSettings()
 	auto& settingManager = SettingManager::GetSingleton();
 	auto categorizedSettings = GetCategorizedSettings();
 
+	// Define explicit order for tabs
+	const std::vector<std::string> tabOrder = { "Main", "Weather", "Debug" };
+
 	if (ImGui::BeginTabBar("SettingsTabBar", ImGuiTabBarFlags_None)) {
-		for (const auto& [tabName, categories] : categorizedSettings) {
+		for (const auto& tabName : tabOrder) {
+			if (categorizedSettings.find(tabName) == categorizedSettings.end())
+				continue;
+
+			const auto& categories = categorizedSettings[tabName];
+
 			if (ImGui::BeginTabItem(tabName.c_str())) {
 				// Add weather control to the Weather tab
 				if (tabName == "Weather") {
@@ -338,8 +340,12 @@ void MenuManager::RenderAllSettings()
 					}
 				}
 
+				if (tabName == "Debug") {
+					RenderDebugControl();
+				}
+
 				for (const auto& category : categories) {
-					if (ImGui::CollapsingHeader(category.c_str())) {
+					if (ImGui::CollapsingHeader(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 						auto settings = settingManager.GetSettingsByCategory(category);
 
 						if (ImGui::BeginTable((category + "_table").c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
