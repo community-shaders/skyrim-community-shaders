@@ -27,17 +27,18 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 
 	data.CloudsColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("CloudsColorFilter", "SKY");
 
-	data.VolumetricRaysRangeFactor = settingManager.GetInterpolatedTimeOfDayValue("RangeFactor", "GAMEVOLUMETRICRAYS");
+	float volumetricRaysRangeFactor = settingManager.GetInterpolatedTimeOfDayValue("RangeFactor", "GAMEVOLUMETRICRAYS");
 
 	float cloudsEdgeIntensity = settingManager.GetValue<float>("CloudsEdgeIntensity", "SKY");
 	float cloudsEdgeMoonMultiplier = settingManager.GetValue<float>("CloudsEdgeMoonMultiplier", "SKY");
-	data.CloudsEdgeScatterColor = { cloudsEdgeIntensity, cloudsEdgeMoonMultiplier, 0.0f };
+	data.CloudsEdgeIntensity = cloudsEdgeIntensity;
+	data.CloudsEdgeMoonMultiplier = cloudsEdgeMoonMultiplier;
 
 	data.VolumetricRaysDesaturation = settingManager.GetInterpolatedTimeOfDayValue("Desaturation", "GAMEVOLUMETRICRAYS");
 
 	data.VolumetricRaysColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "GAMEVOLUMETRICRAYS");
 	float volumetricRaysIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "GAMEVOLUMETRICRAYS");
-	data.VolumetricRaysColorFilter *= volumetricRaysIntensity;
+	data.VolumetricRaysColorFilter *= volumetricRaysIntensity * volumetricRaysRangeFactor;
 
 	return data;
 }

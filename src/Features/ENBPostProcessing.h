@@ -25,7 +25,9 @@ public:
 		float3 CloudsColorFilter;
 		uint32_t Enable;
 
-		float3 CloudsEdgeScatterColor;
+		float CloudsEdgeIntensity;
+		float CloudsEdgeMoonMultiplier;
+		float pad_edge;
 		float SkyBoostIntensity;
 
 		float3 VolumetricRaysColorFilter;
@@ -36,10 +38,10 @@ public:
 		float CloudsOpacity;
 		float ColorPow;
 
-		float VolumetricRaysRangeFactor;
 		float VolumetricRaysDesaturation;
 		float pad0;
 		float pad1;
+		float pad2;
 	};
 
 	bool enableEffect = false;
