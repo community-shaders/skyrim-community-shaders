@@ -254,7 +254,7 @@ namespace SharedData
 		float CloudsEdgeIntensity;
 		float CloudsEdgeMoonMultiplier;
 		float pad_edge;
-		float SkyBoostIntensity;
+		float SkyScaleIntensity;
 
 		float3 VolumetricRaysColorFilter;
 		float CloudsIntensity;

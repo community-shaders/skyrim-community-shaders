@@ -203,7 +203,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif  // !VR
 
 	if (SharedData::enbSettings.Enable)
-		skyScale *= SharedData::enbSettings.skyScaleIntensity;
+		skyScale *= SharedData::enbSettings.SkyScaleIntensity;
 
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
