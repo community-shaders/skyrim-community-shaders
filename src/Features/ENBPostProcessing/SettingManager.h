@@ -109,6 +109,7 @@ struct Setting
 	SettingValue currentValue;
 	float minValue = 0.0f;
 	float maxValue = 10.0f;
+	float step = 0.01f;
 };
 
 class SettingManager
@@ -120,9 +121,9 @@ public:
 	void RegisterBoolSetting(const std::string& key, const std::string& category,
 		bool defaultValue, bool hasWeatherSupport = false);
 	void RegisterFloatSetting(const std::string& key, const std::string& category,
-		float defaultValue, float minValue = 0.0f, float maxValue = 10.0f, bool hasWeatherSupport = false);
+		float defaultValue, float minValue = 0.0f, float maxValue = 10.0f, float step = 0.01f, bool hasWeatherSupport = false);
 	void RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
-		float defaultValue, float minValue = 0.0f, float maxValue = 10.0f, bool hasWeatherSupport = false);
+		float defaultValue, float minValue = 0.0f, float maxValue = 10.0f, float step = 0.01f, bool hasWeatherSupport = false);
 	void RegisterColorTimeOfDaySetting(const std::string& key, const std::string& category,
 		float3 defaultValue, bool hasWeatherSupport = false);
 

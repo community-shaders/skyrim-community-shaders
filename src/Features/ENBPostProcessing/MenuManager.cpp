@@ -415,7 +415,9 @@ void MenuManager::RenderAllSettings()
 								case SettingType::Float:
 									{
 										float v = settingManager.GetValue<float>(settingKey, category, true);
-										if (ImGui::SliderFloat(("##" + settingKey).c_str(), &v, settingInfo->minValue, settingInfo->maxValue, "%.2f")) {
+										if (ImGui::InputFloat(("##" + settingKey).c_str(), &v, settingInfo->step, settingInfo->step * 2.0f, "%.2f")) {
+											// Clamp value between min and max after input
+											v = std::clamp(v, settingInfo->minValue, settingInfo->maxValue);
 											settingManager.SetValue<float>(settingKey, category, v);
 										}
 										break;
@@ -433,17 +435,19 @@ void MenuManager::RenderAllSettings()
 												ImGui::TableSetColumnIndex(1);
 											}
 
-											// Style the slider based on activity
+											// Style the input based on activity
 											float blendFactor = GetTimeOfDayBlendFactor(i);
 											bool isActive = blendFactor > 0.0f;
 
 											if (!isActive) {
-												// Inactive sliders: dim the appearance
+												// Inactive inputs: dim the appearance
 												ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
 											}
 
 											std::string label = timeOfDayNames[i] + "##" + settingKey + std::to_string(i);
-											if (ImGui::SliderFloat(label.c_str(), &v.values[i], settingInfo->minValue, settingInfo->maxValue, "%.2f")) {
+											if (ImGui::InputFloat(label.c_str(), &v.values[i], settingInfo->step, settingInfo->step * 2.0f, "%.2f")) {
+												// Clamp value between min and max after input
+												v.values[i] = std::clamp(v.values[i], settingInfo->minValue, settingInfo->maxValue);
 												changed = true;
 											}
 

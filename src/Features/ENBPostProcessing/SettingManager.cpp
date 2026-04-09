@@ -80,9 +80,10 @@ void SettingManager::RegisterBoolSetting(const std::string& key, const std::stri
 }
 
 void SettingManager::RegisterFloatSetting(const std::string& key, const std::string& category,
-	float defaultValue, float minValue, float maxValue, bool hasWeatherSupport)
+	float defaultValue, float minValue, float maxValue, float step, bool hasWeatherSupport)
 {
 	std::unique_lock lock(mutex);
+
 	Setting setting;
 	setting.key = key;
 	setting.category = category;
@@ -92,12 +93,13 @@ void SettingManager::RegisterFloatSetting(const std::string& key, const std::str
 	setting.currentValue = defaultValue;
 	setting.minValue = minValue;
 	setting.maxValue = maxValue;
+	setting.step = step;
 
 	categories[category].settings[key] = setting;
 }
 
 void SettingManager::RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
-	float defaultValue, float minValue, float maxValue, bool hasWeatherSupport)
+	float defaultValue, float minValue, float maxValue, float step, bool hasWeatherSupport)
 {
 	std::unique_lock lock(mutex);
 	TimeOfDayValue timeOfDayDefault;
@@ -114,6 +116,7 @@ void SettingManager::RegisterTimeOfDaySetting(const std::string& key, const std:
 	setting.currentValue = timeOfDayDefault;
 	setting.minValue = minValue;
 	setting.maxValue = maxValue;
+	setting.step = step;
 
 	categories[category].settings[key] = setting;
 }
