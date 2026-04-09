@@ -2,11 +2,14 @@
 
 #include "Feature.h"
 
+struct PostProcessing;
+
 struct PostProcessFeature
 {
 	virtual ~PostProcessFeature() = default;
 
 	bool enabled = true;
+	PostProcessing* owner = nullptr;
 
 	virtual std::string GetType() const = 0;
 	std::string name;
@@ -15,6 +18,19 @@ struct PostProcessFeature
 	virtual bool DrawBeforeUpscaling() const { return false; }
 	virtual bool DrawAfterColorGrading() const { return false; }
 	virtual bool DisableInMainLoadingMenu() const { return false; }
+
+	/// Whether this feature is visible in the menu. Hidden features (e.g. composite passes) return false.
+	virtual bool IsVisible() const { return true; }
+
+	/// Whether this feature's enabled state is automatically managed based on other features.
+	virtual bool IsAutoEnabled() const { return false; }
+
+	/// Called each frame for auto-enabled features to update their enabled state.
+	virtual void UpdateAutoEnabled() {}
+
+	/// Whether this feature writes its result back to the main pipeline texture.
+	/// If false, the feature performs internal work but does not replace inout_tex.
+	virtual bool WritesToMainTexture() const { return true; }
 
 	virtual inline void SetupResources() = 0;
 	virtual void ClearShaderCache() = 0;

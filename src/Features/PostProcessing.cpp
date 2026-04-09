@@ -64,7 +64,7 @@ void PostProcessing::DrawSettings()
 	if (pipelinePageNum == 0) {
 		for (int i = 0; i < pipeline.size(); ++i) {
 			auto& feat = pipeline[i];
-			if (feat) {
+			if (feat && feat->IsVisible()) {
 				ImGui::PushID(feat->GetType().c_str());
 				ImGui::Checkbox("##Enabled", &feat->enabled);
 				ImGui::SameLine();
@@ -196,7 +196,8 @@ void PostProcessing::ProcessSettings(json& o_json)
 
 	for (auto& feat : pipeline) {
 		if (feat && o_json.contains(feat->GetType())) {
-			feat->enabled = o_json.value(feat->GetType(), json::object()).value("enabled", true);
+			if (!feat->IsAutoEnabled())
+				feat->enabled = o_json.value(feat->GetType(), json::object()).value("enabled", true);
 			json featSettings = o_json.value(feat->GetType(), json::object()).value("settings", json::object());
 			feat->LoadSettings(featSettings);
 			if (loaded)
@@ -410,6 +411,8 @@ void PostProcessing::SetupResources()
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)].get()->enabled = true;
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)] = std::make_unique<LensFlare>();
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)].get()->enabled = false;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::BloomFlareComposite)] = std::make_unique<BloomFlareComposite>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::BloomFlareComposite)].get()->enabled = true;
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)] = std::make_unique<Vignette>();
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)].get()->enabled = true;
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)] = std::make_unique<Camera>();
@@ -420,6 +423,7 @@ void PostProcessing::SetupResources()
 
 	for (auto& pipe : pipeline) {
 		if (pipe) {
+			pipe->owner = this;
 			pipe->SetupResources();
 		}
 	}
@@ -455,10 +459,21 @@ void PostProcessing::DrawBeforeUpscaling()
 
 	state->BeginPerfEvent("[Post Processing] Pre-Upscale");
 
+	// update auto-enabled features
+	for (auto& pipe : pipeline) {
+		if (pipe && pipe->IsAutoEnabled())
+			pipe->UpdateAutoEnabled();
+	}
+
 	// go through each fx
 	for (auto& pipe : pipeline) {
 		if (pipe && pipe->enabled && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && pipe->DrawBeforeUpscaling()) {
-			pipe->Draw(lastTexColor);
+			if (pipe->WritesToMainTexture()) {
+				pipe->Draw(lastTexColor);
+			} else {
+				PostProcessFeature::TextureInfo inTex = lastTexColor;
+				pipe->Draw(inTex);
+			}
 		}
 	}
 
@@ -534,16 +549,32 @@ void PostProcessing::PreProcess()
 	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };
 	auto gameTexMainAlt = useMainCopy ? gameTexMainRT : gameTexMainCopyRT;
 
+	// update auto-enabled features
+	for (auto& pipe : pipeline) {
+		if (pipe && pipe->IsAutoEnabled())
+			pipe->UpdateAutoEnabled();
+	}
+
 	// go through each fx
 	for (auto& pipe : pipeline) {
 		if (pipe && pipe->enabled && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
-			pipe->Draw(lastTexColor);
+			if (pipe->WritesToMainTexture()) {
+				pipe->Draw(lastTexColor);
+			} else {
+				PostProcessFeature::TextureInfo inTex = lastTexColor;
+				pipe->Draw(inTex);
+			}
 		}
 	}
 
 	for (auto& pipe : pipeline) {
 		if (pipe && pipe->enabled && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
-			pipe->Draw(lastTexColor);
+			if (pipe->WritesToMainTexture()) {
+				pipe->Draw(lastTexColor);
+			} else {
+				PostProcessFeature::TextureInfo inTex = lastTexColor;
+				pipe->Draw(inTex);
+			}
 		}
 	}
 

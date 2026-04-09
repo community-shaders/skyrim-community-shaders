@@ -2,6 +2,7 @@
 
 #include "PostProcessing/PostProcessFeature.h"
 
+#include "PostProcessing/BloomFlareComposite.h"
 #include "PostProcessing/Border.h"
 #include "PostProcessing/CODBloom.h"
 #include "PostProcessing/ColorGrading.h"
@@ -71,6 +72,7 @@ struct PostProcessing : Feature
 		DoF,
 		CODBloom,
 		LensFlare,
+		BloomFlareComposite,
 		ColorGrading,
 		LUT,
 		Vignette,
@@ -80,6 +82,12 @@ struct PostProcessing : Feature
 	};
 
 	std::array<std::unique_ptr<PostProcessFeature>, static_cast<size_t>(FeaturePipelineIndex::COUNT)> pipeline;
+
+	template <typename T>
+	T* GetPipelineFeature(FeaturePipelineIndex idx)
+	{
+		return static_cast<T*>(pipeline[static_cast<size_t>(idx)].get());
+	}
 
 	virtual void ClearShaderCache() override;
 

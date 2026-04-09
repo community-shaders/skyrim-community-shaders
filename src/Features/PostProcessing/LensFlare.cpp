@@ -333,17 +333,6 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 		context->Flush();
 	}
 
-	// Final composite
-	cb = lensFlareCB->CB();
-	srvs.at(0) = inout_tex.srv;
-	srvs.at(1) = texFlare->srv.get();
-	uavs.at(0) = texOutput->uav.get();
-	context->CSSetConstantBuffers(1, 1, &cb);
-	context->CSSetShader(compositeCS.get(), nullptr, 0);
-	context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-	context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-	context->Dispatch(dispatchX, dispatchY, 1);
-
 	// Cleanup
 	resetViews();
 	cb = nullptr;
@@ -353,6 +342,7 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 	context->CSSetShader(nullptr, nullptr, 0);
 
-	inout_tex = { texOutput->resource.get(), texOutput->srv.get() };
+	// Flare result is in texFlare, available via GetFlareOutput()
+	inout_tex = { texFlare->resource.get(), texFlare->srv.get() };
 	state->EndPerfEvent();
 }

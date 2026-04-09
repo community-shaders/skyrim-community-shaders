@@ -7,6 +7,9 @@ struct LensFlare : public PostProcessFeature
 {
 	virtual inline std::string GetType() const override { return "PotatoFX Lens Flare"; }
 	virtual inline std::string GetDesc() const override { return "Lens Flare from PotatoFX, originally by Gimle Larpes."; }
+	virtual bool WritesToMainTexture() const override { return false; }
+
+	TextureInfo GetFlareOutput() const { return { texFlare->resource.get(), texFlare->srv.get() }; }
 
 	struct Settings
 	{

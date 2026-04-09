@@ -258,20 +258,20 @@ void CODBloom::Draw(TextureInfo& inout_tex)
 		context->Dispatch(((mipWidth - 1) >> 5) + 1, ((mipHeight - 1) >> 5) + 1, 1);
 	}
 
-	// composite
+	// upsample final mip to mip 0 with blend factor applied (CurrentMipMult=0 to discard threshold data in mip 0)
 	{
 		resetViews();
 
 		cbData.UpsampleMult = settings.BlendFactor;
+		cbData.CurrentMipMult = 0.f;
 		bloomCB->Update(cbData);
 
-		context->CSSetShader(compositeCS.get(), nullptr, 0);
-		srvs.at(0) = inout_tex.srv;
 		srvs.at(1) = texBloomMipSRVs[1].get();
 		uavs.at(0) = texBloomMipUAVs[0].get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+
 		context->Dispatch(((texBloom->desc.Width - 1) >> 5) + 1, ((texBloom->desc.Height - 1) >> 5) + 1, 1);
 	}
 
