@@ -295,8 +295,16 @@ PS_OUTPUT main(PS_INPUT input)
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
-	float unusedDetailedShadow;
-	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetLightingShadow(positionWS.xyz, eyeIndex, unusedDetailedShadow);
+	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
+	float2 rotation;
+	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+
+	float dirDetailedShadow = 1.0;
+	if (!SharedData::InInterior)
+		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(positionWS.xyz, rotationMatrix, eyeIndex);
+
+	float3 dirLightColor = SharedData::DirLightColor.xyz * dirDetailedShadow;
 	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 
 	propertyColor += dirLightColor;
