@@ -15,7 +15,7 @@ struct LensFlare : public PostProcessFeature
 
 	struct GhostSettings
 	{
-		float Color[4] = { 1.f, 1.f, 1.f, 1.f };
+		std::array<float, 4> Color = { 1.f, 1.f, 1.f, 1.f };
 		float Scale = 1.f;
 	};
 
@@ -33,77 +33,80 @@ struct LensFlare : public PostProcessFeature
 		float HaloChromaShift = 0.015f;
 		float GlareIntensity = 0.02f;
 		float GlareDivider = 60.0f;
-		float GlareScale[3] = { 1.f, 1.f, 1.f };
-		float Tint[3] = { 1.0f, 0.85f, 0.7f };
+		std::array<float, 3> GlareScale = { 1.f, 1.f, 1.f };
+		std::array<float, 3> Tint = { 1.0f, 0.85f, 0.7f };
 		bool GLocalMask = true;
 		uint8_t pad[3]{};
-		GhostSettings Ghosts[NUM_GHOSTS] = {
-			{ { 1.0f, 0.8f, 0.4f, 1.0f }, -1.5f },
-			{ { 1.0f, 1.0f, 0.6f, 1.0f }, 2.5f },
-			{ { 0.8f, 0.8f, 1.0f, 1.0f }, -5.0f },
-			{ { 0.5f, 1.0f, 0.4f, 1.0f }, 10.0f },
-			{ { 0.5f, 0.8f, 1.0f, 1.0f }, 0.7f },
-			{ { 0.9f, 1.0f, 0.8f, 1.0f }, -0.4f },
-			{ { 1.0f, 0.8f, 0.4f, 1.0f }, -0.2f },
-			{ { 0.9f, 0.7f, 0.7f, 1.0f }, -0.1f },
-		};
+		std::array<GhostSettings, NUM_GHOSTS> Ghosts = { {
+			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f },
+			{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f },
+			{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f },
+			{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f },
+			{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f },
+			{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f },
+			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f },
+			{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f },
+		} };
 	} settings;
 
 	struct alignas(16) LensFlareCB
 	{
+		// Per-pass dimensions (set before each dispatch)
+		float OutputWidth;
+		float OutputHeight;
+		float InputWidth;
+		float InputHeight;
+
 		// Threshold params
 		float ThresholdLevel;
 		float ThresholdRange;
-		float ScreenWidth;
-		float ScreenHeight;
-
-		// Ghost params
 		float GhostStrength;
 		float GhostChromaShift;
+
+		// Halo params
 		float HaloStrength;
 		float HaloRadius;
-
 		float HaloWidth;
 		float HaloCompression;
+
 		float HaloChromaShift;
 		float Intensity;
-
-		// Glare params
 		float GlareIntensity;
 		float GlareDivider;
+
+		// Glare params
 		float GlareDirection[2];
+		float pad0[2]{};
 
 		float GlareScale[3];
-		int DownsizeScale;
-
-		float Tint[3];
 		int GLocalMask;
 
-		// Ghost colors (RGBA) and scales packed: float4 color + float scale per ghost
-		// GhostData[i] = { R, G, B, A(intensity) }
+		float Tint[3];
+		float pad1{};
+
+		// Ghost colors as float4[8] = 128 bytes, matches HLSL float4 array
 		float GhostColors[NUM_GHOSTS * 4];
-		float GhostScales[NUM_GHOSTS];
-		uint8_t pad[32]{};
+		// Ghost scales packed as 2 × float4 = 32 bytes, matches HLSL float4[2]
+		float GhostScalesPacked[8];
 	};
 
 	struct DebugSettings
 	{
-		int downsampleTimes = 2;
-		int upsampleTimes = 6;
+		int blurIterations = 1;
 		bool disableThreshold = false;
 		bool disableGhosts = false;
 		bool disableGlare = false;
 		bool disableBlur = false;
-		uint8_t pad[2]{};
+		uint8_t pad[3]{};
 	} debugsettings;
 
 	eastl::unique_ptr<ConstantBuffer> lensFlareCB = nullptr;
 
-	eastl::unique_ptr<Texture2D> texFlare = nullptr;
-	eastl::unique_ptr<Texture2D> texThreshold = nullptr;
-	eastl::unique_ptr<Texture2D> texGlare = nullptr;
-	eastl::unique_ptr<Texture2D> texGlareScratch = nullptr;
-	eastl::unique_ptr<Texture2D> texBlurScratch = nullptr;
+	eastl::unique_ptr<Texture2D> texFlare = nullptr;      // full resolution (final output)
+	eastl::unique_ptr<Texture2D> texThreshold = nullptr;  // half resolution
+	eastl::unique_ptr<Texture2D> texGhostHalo = nullptr;  // half resolution
+	eastl::unique_ptr<Texture2D> texGlare = nullptr;      // half resolution
+	eastl::unique_ptr<Texture2D> texBlurTemp = nullptr;   // quarter resolution
 
 	winrt::com_ptr<ID3D11SamplerState> colorSampler = nullptr;
 	winrt::com_ptr<ID3D11SamplerState> borderSampler = nullptr;
@@ -128,4 +131,4 @@ struct LensFlare : public PostProcessFeature
 	virtual void Draw(TextureInfo&) override;
 };
 
-inline TextureInfo LensFlare::GetFlareOutput() const { return { texFlare->resource.get(), texFlare->srv.get() }; }
+inline PostProcessFeature::TextureInfo LensFlare::GetFlareOutput() const { return { texFlare->resource.get(), texFlare->srv.get() }; }

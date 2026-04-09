@@ -1,30 +1,4 @@
-// Lens Flare compute shader pipeline
-// Ghost/Halo core based on PotatoFX by Gimle Larpes (MIT License, see below).
-// Threshold, glare, fisheye halo, mix passes inspired by Froyok's UE4 lens flare article.
-// Adapted for Community Shaders by Jiaye.
-/*
-MIT License - applies to SampleCA, ghost loop, and halo sampling patterns derived from PotatoFX
-
-Copyright (c) 2023 Gimle Larpes
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+#include "Common/Random.hlsli"
 #include "PostProcessing/common.hlsli"
 
 static const float PI = 3.14159265359;
@@ -40,42 +14,52 @@ RWTexture2D<float4> OutputTexture : register(u0);
 
 cbuffer LensFlareConstants : register(b1)
 {
+	// Per-pass dimensions (updated before each dispatch)
+	float OutputWidth;
+	float OutputHeight;
+	float InputWidth;
+	float InputHeight;
+
 	// Threshold
 	float ThresholdLevel;
 	float ThresholdRange;
-	float ScreenWidth;
-	float ScreenHeight;
-
-	// Ghost
 	float GhostStrength;
 	float GhostChromaShift;
+
+	// Halo
 	float HaloStrength;
 	float HaloRadius;
-
 	float HaloWidth;
 	float HaloCompression;
+
 	float HaloChromaShift;
 	float Intensity;
-
-	// Glare
 	float GlareIntensity;
 	float GlareDivider;
+
+	// Glare
 	float2 GlareDirection;
+	float2 _pad0;
 
 	float3 GlareScale_packed;
-	int DownsizeScale;
-
-	float3 Tint;
 	int GLocalMask;
 
+	float3 Tint;
+	float _pad1;
+
+	// Ghost data
 	float4 GhostColors[NUM_GHOSTS];
-	float GhostScales[NUM_GHOSTS];
-	// padding to 16-byte boundary handled by CB struct
+	float4 GhostScalesPacked[2];  // 8 scales packed into 2 float4s
 }
 
 // ============================================================
 // Utilities
 // ============================================================
+
+float GetGhostScale(int i)
+{
+	return GhostScalesPacked[i / 4][i % 4];
+}
 
 // Fisheye UV distortion (based on Shadertoy by Crucifer)
 float2 FisheyeUV(float2 uv, float compression, float zoom)
@@ -97,14 +81,16 @@ float DiscMask(float2 screenPos)
 
 // ============================================================
 // Pass 1: CSThreshold — 13-tap CoD-style downsample + threshold
-// Input: scene color (t0), Output: thresholded buffer (u0)
+// Input: full-res scene (t0), Output: half-res thresholded buffer (u0)
 // ============================================================
 [numthreads(8, 8, 1)] void CSThreshold(uint3 DTid : SV_DispatchThreadID) {
-	if (DTid.x >= (uint)ScreenWidth || DTid.y >= (uint)ScreenHeight)
+	if (DTid.x >= (uint)OutputWidth || DTid.y >= (uint)OutputHeight)
 		return;
 
-	float2 uv = (DTid.xy + 0.5f) / float2(ScreenWidth, ScreenHeight);
-	float2 pixelSize = 1.0f / float2(ScreenWidth, ScreenHeight);
+	// UV maps output pixel to normalized [0,1] — bilinear sampling downscales from full-res input
+	float2 uv = (DTid.xy + 0.5f) / float2(OutputWidth, OutputHeight);
+	// Pixel size in input (full-res) space for sampling offsets
+	float2 pixelSize = 1.0f / float2(InputWidth, InputHeight);
 
 	float3 color = 0;
 
@@ -136,14 +122,14 @@ float DiscMask(float2 screenPos)
 
 	// ============================================================
 	// Pass 2: CSGhostHalo — ghosts + fisheye halo from threshold buffer
-	// Input: threshold buffer (t0), Output: ghost+halo buffer (u0)
+	// Input: half-res threshold (t0), Output: half-res ghost+halo (u0)
 	// ============================================================
 	[numthreads(8, 8, 1)] void CSGhostHalo(uint3 DTid : SV_DispatchThreadID)
 {
-	if (DTid.x >= (uint)ScreenWidth || DTid.y >= (uint)ScreenHeight)
+	if (DTid.x >= (uint)OutputWidth || DTid.y >= (uint)OutputHeight)
 		return;
 
-	float2 uv = (DTid.xy + 0.5f) / float2(ScreenWidth, ScreenHeight);
+	float2 uv = (DTid.xy + 0.5f) / float2(OutputWidth, OutputHeight);
 	float3 color = 0;
 	float2 radiantVector = uv - 0.5f;
 
@@ -153,7 +139,7 @@ float DiscMask(float2 screenPos)
 		// Chromatic aberration on input for ghosts
 		for (int i = 0; i < NUM_GHOSTS; i++) {
 			float4 ghostColor = GhostColors[i];
-			float ghostScale = GhostScales[i];
+			float ghostScale = GetGhostScale(i);
 
 			if (abs(ghostColor.a * ghostScale) < 0.00001f)
 				continue;
@@ -213,15 +199,50 @@ float DiscMask(float2 screenPos)
 }
 
 // ============================================================
-// Pass 3a/3b: Kawase blur down/up — smooth ghost+halo artifacts
+// Pass 3a: Kawase blur downsample — half res → quarter res
+// Proper UV-based sampling between actual different-resolution textures
 // ============================================================
 [numthreads(8, 8, 1)] void CSFlareDown(uint3 DTid : SV_DispatchThreadID) {
-	OutputTexture[DTid.xy] = KawaseBlurDownSample(FlareTexture, ColorSampler, DTid.xy, DownsizeScale, ScreenWidth, ScreenHeight);
+	if (DTid.x >= (uint)OutputWidth || DTid.y >= (uint)OutputHeight)
+		return;
+
+	float2 uv = (DTid.xy + 0.5f) / float2(OutputWidth, OutputHeight);
+	float2 halfPixel = 0.5f / float2(InputWidth, InputHeight);
+
+	// 5-tap Kawase downsample: center (weight 4) + 4 diagonals
+	float4 color = InputTexture.SampleLevel(ColorSampler, uv, 0) * 4.0f;
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(-halfPixel.x, halfPixel.y), 0);
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(halfPixel.x, halfPixel.y), 0);
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(halfPixel.x, -halfPixel.y), 0);
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(-halfPixel.x, -halfPixel.y), 0);
+
+	OutputTexture[DTid.xy] = color * 0.125f;
 }
 
+	// ============================================================
+	// Pass 3b: Kawase blur upsample — quarter res → half res
+	// ============================================================
 	[numthreads(8, 8, 1)] void CSFlareUp(uint3 DTid : SV_DispatchThreadID)
 {
-	OutputTexture[DTid.xy] = KawaseBlurUpSample(FlareTexture, ColorSampler, DTid.xy, DownsizeScale, ScreenWidth, ScreenHeight);
+	if (DTid.x >= (uint)OutputWidth || DTid.y >= (uint)OutputHeight)
+		return;
+
+	float2 uv = (DTid.xy + 0.5f) / float2(OutputWidth, OutputHeight);
+	float2 halfPixel = 0.5f / float2(InputWidth, InputHeight);
+
+	// 12-tap Kawase upsample: 4 diagonals (weight 1) + 4 axis (weight 2)
+	float4 color = 0;
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(-halfPixel.x, halfPixel.y), 0);
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(halfPixel.x, halfPixel.y), 0);
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(halfPixel.x, -halfPixel.y), 0);
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(-halfPixel.x, -halfPixel.y), 0);
+
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(-halfPixel.x, 0), 0) * 2.0f;
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(halfPixel.x, 0), 0) * 2.0f;
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(0, halfPixel.y), 0) * 2.0f;
+	color += InputTexture.SampleLevel(ColorSampler, uv + float2(0, -halfPixel.y), 0) * 2.0f;
+
+	OutputTexture[DTid.xy] = color / 12.0f;
 }
 
 // ============================================================
@@ -231,21 +252,51 @@ float DiscMask(float2 screenPos)
 // GlareDirection is set per-dispatch from CPU
 // ============================================================
 [numthreads(8, 8, 1)] void CSGlareStreak(uint3 DTid : SV_DispatchThreadID) {
-	if (DTid.x >= (uint)ScreenWidth || DTid.y >= (uint)ScreenHeight || GlareIntensity < EPSILON)
+	if (DTid.x >= (uint)OutputWidth || DTid.y >= (uint)OutputHeight || GlareIntensity < EPSILON)
 		return;
 
-	float2 uv = (DTid.xy + 0.5f) / float2(ScreenWidth, ScreenHeight);
-	float2 pixelSize = 1.0f / float2(ScreenWidth, ScreenHeight);
+	float2 uv = (DTid.xy + 0.5f) / float2(OutputWidth, OutputHeight);
+	float2 pixelSize = 1.0f / float2(OutputWidth, OutputHeight);
+
+	// Smooth 2D value noise — breaks up uniform streaks without looking screen-fixed.
+	// Project pixel into streak-local coordinate system (perpendicular & parallel to streak),
+	// then use smooth bilinear-interpolated hash noise. Center brightness offsets the coordinate
+	// so the pattern drifts naturally as the camera pans across bright sources.
+	float2 toCenter = uv - 0.5f;
+	float2 streakDir = normalize(GlareDirection);
+	float2 streakPerp = float2(-streakDir.y, streakDir.x);
+
+	// Sample center brightness as a camera-dependent offset
+	float centerLum = dot(InputTexture.SampleLevel(ColorSampler, float2(0.5f, 0.5f), 0).rgb, float3(0.299f, 0.587f, 0.114f));
+	float driftOffset = centerLum * 50.0f;
+
+	// Streak-space coordinates: perpendicular (tight period → distinct rays), parallel (loose period → subtle length variation)
+	float perpCoord = dot(toCenter, streakPerp) * OutputWidth / 12.0f + driftOffset;
+	float paraCoord = dot(toCenter, streakDir) * OutputWidth / 80.0f + driftOffset * 0.3f;
+
+	// Bilinear value noise — smooth blobs instead of sharp bands
+	int2 cell = int2(floor(perpCoord), floor(paraCoord));
+	float2 f = float2(perpCoord, paraCoord) - float2(cell);
+	f = f * f * (3.0f - 2.0f * f);  // smoothstep
+
+	float n00 = (float)(Random::iqint3(uint2((uint)abs(cell.x), (uint)abs(cell.y))) & 0xFFFFu) / 65535.0f;
+	float n10 = (float)(Random::iqint3(uint2((uint)abs(cell.x + 1), (uint)abs(cell.y))) & 0xFFFFu) / 65535.0f;
+	float n01 = (float)(Random::iqint3(uint2((uint)abs(cell.x), (uint)abs(cell.y + 1))) & 0xFFFFu) / 65535.0f;
+	float n11 = (float)(Random::iqint3(uint2((uint)abs(cell.x + 1), (uint)abs(cell.y + 1))) & 0xFFFFu) / 65535.0f;
+
+	float noiseVal = lerp(lerp(n00, n10, f.x), lerp(n01, n11, f.x), f.y);
+	// 0.6 base + 0.4 noise → visible but not harsh brightness variation
+	float noiseModulation = 0.6f + 0.4f * noiseVal;
 
 	// Directional streak: sample along direction with exponential falloff
-	static const int NUM_SAMPLES = 8;
-	static const float ATTENUATION = 0.95f;
+	static const int NUM_SAMPLES = 16;
+	static const float ATTENUATION = 0.92f;
 
 	float3 color = InputTexture.SampleLevel(ColorSampler, uv, 0).rgb;
 	float falloff = 1.0f;
 	float totalWeight = 1.0f;
 
-	float2 stepDir = GlareDirection * pixelSize * 2.0f;
+	float2 stepDir = GlareDirection * pixelSize * 4.0f;
 
 	[unroll] for (int i = 1; i <= NUM_SAMPLES; i++)
 	{
@@ -270,7 +321,7 @@ float DiscMask(float2 screenPos)
 	float edgeMask = 1.0f - saturate(distance(uv, 0.5f) * 2.0f);
 	edgeMask = edgeMask * 0.6f + 0.4f;
 
-	color *= luminanceScale * edgeMask * GlareIntensity;
+	color *= luminanceScale * edgeMask * GlareIntensity * noiseModulation;
 
 	// Read existing glare and add (additive accumulation across 3 dispatches)
 	float3 existing = OutputTexture[DTid.xy].rgb;
@@ -279,15 +330,16 @@ float DiscMask(float2 screenPos)
 
 	// ============================================================
 	// Pass 5: CSMix — combine ghost+halo + glare, apply tint & gradient
-	// Input: ghost+halo (t0), glare (t1), Output: final flare (u0)
+	// Input: ghost+halo (t0), glare (t1), Output: full-res final flare (u0)
+	// Uses InputWidth/InputHeight for sampling half-res inputs
 	// ============================================================
 	[numthreads(8, 8, 1)] void CSMix(uint3 DTid : SV_DispatchThreadID)
 {
-	if (DTid.x >= (uint)ScreenWidth || DTid.y >= (uint)ScreenHeight)
+	if (DTid.x >= (uint)OutputWidth || DTid.y >= (uint)OutputHeight)
 		return;
 
-	float2 uv = (DTid.xy + 0.5f) / float2(ScreenWidth, ScreenHeight);
-	float2 pixelSize = 1.0f / float2(ScreenWidth, ScreenHeight);
+	float2 uv = (DTid.xy + 0.5f) / float2(OutputWidth, OutputHeight);
+	float2 pixelSize = 1.0f / float2(InputWidth, InputHeight);
 
 	float3 flares = InputTexture.SampleLevel(ColorSampler, uv, 0).rgb;
 

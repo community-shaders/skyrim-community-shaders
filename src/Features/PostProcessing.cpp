@@ -95,6 +95,11 @@ void PostProcessing::DrawSettings()
 				ImGui::TextWrapped(feat->GetDesc().c_str());
 
 				ImGui::Spacing();
+				if (ImGui::Button(ICON_FA_SYNC " Recompile Shaders")) {
+					feat->ClearShaderCache();
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("Recompile shaders for this sub-feature only.");
 				ImGui::Separator();
 				ImGui::Spacing();
 				ImGui::Checkbox("Enabled", &feat->enabled);

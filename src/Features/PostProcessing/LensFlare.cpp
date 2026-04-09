@@ -29,8 +29,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensFlare::DebugSettings,
-	downsampleTimes,
-	upsampleTimes,
+	blurIterations,
 	disableThreshold,
 	disableGhosts,
 	disableGlare,
@@ -69,7 +68,7 @@ void LensFlare::DrawSettings()
 			char label[32];
 			snprintf(label, sizeof(label), "Ghost %d", i + 1);
 			if (ImGui::TreeNode(label)) {
-				ImGui::ColorEdit4("Color", settings.Ghosts[i].Color);
+				ImGui::ColorEdit4("Color", settings.Ghosts[i].Color.data());
 				ImGui::SliderFloat("Scale", &settings.Ghosts[i].Scale, -15.0f, 15.0f, "%.2f");
 				ImGui::TreePop();
 			}
@@ -77,16 +76,16 @@ void LensFlare::DrawSettings()
 		}
 		if (ImGui::Button("Reset Ghosts to Default")) {
 			GhostSettings defaults[NUM_GHOSTS] = {
-				{ { 1.0f, 0.8f, 0.4f, 1.0f }, -1.5f },
-				{ { 1.0f, 1.0f, 0.6f, 1.0f }, 2.5f },
-				{ { 0.8f, 0.8f, 1.0f, 1.0f }, -5.0f },
-				{ { 0.5f, 1.0f, 0.4f, 1.0f }, 10.0f },
-				{ { 0.5f, 0.8f, 1.0f, 1.0f }, 0.7f },
-				{ { 0.9f, 1.0f, 0.8f, 1.0f }, -0.4f },
-				{ { 1.0f, 0.8f, 0.4f, 1.0f }, -0.2f },
-				{ { 0.9f, 0.7f, 0.7f, 1.0f }, -0.1f },
+				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f },
+				{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f },
+				{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f },
+				{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f },
+				{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f },
+				{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f },
+				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f },
+				{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f },
 			};
-			std::memcpy(settings.Ghosts, defaults, sizeof(settings.Ghosts));
+			std::memcpy(settings.Ghosts.data(), defaults, sizeof(settings.Ghosts));
 		}
 		ImGui::TreePop();
 	}
@@ -111,13 +110,13 @@ void LensFlare::DrawSettings()
 	ImGui::SliderFloat("Glare Divider", &settings.GlareDivider, 0.01f, 200.0f, "%.1f");
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("Higher values normalize brighter lights; controls glare size scaling");
-	ImGui::SliderFloat3("Glare Scale (per branch)", settings.GlareScale, 0.0f, 5.0f, "%.2f");
+	ImGui::SliderFloat3("Glare Scale (per branch)", settings.GlareScale.data(), 0.0f, 5.0f, "%.2f");
 
 	// Tint
 	ImGui::Spacing();
 	ImGui::Text("Color Tint");
 	ImGui::Separator();
-	ImGui::ColorEdit3("Tint", settings.Tint);
+	ImGui::ColorEdit3("Tint", settings.Tint.data());
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("Radial color gradient applied to the flare effect");
 
@@ -131,8 +130,9 @@ void LensFlare::DrawSettings()
 		ImGui::Checkbox("Disable Ghosts", &debugsettings.disableGhosts);
 		ImGui::Checkbox("Disable Glare", &debugsettings.disableGlare);
 		ImGui::Checkbox("Disable Blur", &debugsettings.disableBlur);
-		ImGui::SliderInt("Downsample Times", &debugsettings.downsampleTimes, 1, 8);
-		ImGui::SliderInt("Upsample Times", &debugsettings.upsampleTimes, 1, 8);
+		ImGui::SliderInt("Blur Iterations", &debugsettings.blurIterations, 1, 4);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Kawase blur cycles (down+up). 1 = sharp, 2+ = smoother");
 	}
 }
 
@@ -165,36 +165,48 @@ void LensFlare::SetupResources()
 	{
 		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
 
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		texDesc.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-		texDesc.MiscFlags = 0;
+		D3D11_TEXTURE2D_DESC baseDesc;
+		gameTexMainCopy.texture->GetDesc(&baseDesc);
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
+			.Format = DXGI_FORMAT_R16G16B16A16_FLOAT,
 			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
 			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
 		};
 
 		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-			.Format = texDesc.Format,
+			.Format = DXGI_FORMAT_R16G16B16A16_FLOAT,
 			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
 			.Texture2D = { .MipSlice = 0 }
 		};
 
-		auto createTex = [&](eastl::unique_ptr<Texture2D>& tex) {
+		auto createTex = [&](eastl::unique_ptr<Texture2D>& tex, uint width, uint height) {
+			D3D11_TEXTURE2D_DESC texDesc = baseDesc;
+			texDesc.Width = width;
+			texDesc.Height = height;
+			texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+			texDesc.MipLevels = 1;
+			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+			texDesc.MiscFlags = 0;
 			tex = eastl::make_unique<Texture2D>(texDesc);
 			tex->CreateSRV(srvDesc);
 			tex->CreateUAV(uavDesc);
 		};
 
-		createTex(texFlare);
-		createTex(texThreshold);
-		createTex(texGlare);
-		createTex(texGlareScratch);
-		createTex(texBlurScratch);
+		uint fullW = baseDesc.Width;
+		uint fullH = baseDesc.Height;
+		uint halfW = std::max(fullW / 2, 1u);
+		uint halfH = std::max(fullH / 2, 1u);
+		uint quarterW = std::max(fullW / 4, 1u);
+		uint quarterH = std::max(fullH / 4, 1u);
+
+		createTex(texFlare, fullW, fullH);           // full resolution (final output)
+		createTex(texThreshold, halfW, halfH);       // half resolution
+		createTex(texGhostHalo, halfW, halfH);       // half resolution
+		createTex(texGlare, halfW, halfH);           // half resolution
+		createTex(texBlurTemp, quarterW, quarterH);  // quarter resolution
+
+		logger::debug("LensFlare: textures created - full {}x{}, half {}x{}, quarter {}x{}", fullW, fullH, halfW, halfH, quarterW, quarterH);
 	}
 
 	logger::debug("LensFlare: Creating samplers...");
@@ -277,17 +289,17 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 
 	state->BeginPerfEvent("Lens Flare");
 
-	uint width = texFlare->desc.Width;
-	uint height = texFlare->desc.Height;
-	uint dispatchX = (width + 7) >> 3;
-	uint dispatchY = (height + 7) >> 3;
+	uint fullW = texFlare->desc.Width;
+	uint fullH = texFlare->desc.Height;
+	uint halfW = texThreshold->desc.Width;
+	uint halfH = texThreshold->desc.Height;
+	uint quarterW = texBlurTemp->desc.Width;
+	uint quarterH = texBlurTemp->desc.Height;
 
-	// Build constant buffer
+	// Build base constant buffer data (settings that don't change per-pass)
 	LensFlareCB data = {};
 	data.ThresholdLevel = settings.ThresholdLevel;
 	data.ThresholdRange = settings.ThresholdRange;
-	data.ScreenWidth = (float)width;
-	data.ScreenHeight = (float)height;
 	data.GhostStrength = settings.GhostStrength;
 	data.GhostChromaShift = settings.GhostChromaShift;
 	data.HaloStrength = settings.HaloStrength;
@@ -300,22 +312,18 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	data.GlareDivider = settings.GlareDivider;
 	data.GlareDirection[0] = 0.f;
 	data.GlareDirection[1] = 0.f;
-	std::memcpy(data.GlareScale, settings.GlareScale, sizeof(float) * 3);
-	data.DownsizeScale = 1;
-	std::memcpy(data.Tint, settings.Tint, sizeof(float) * 3);
+	std::memcpy(data.GlareScale, settings.GlareScale.data(), sizeof(float) * 3);
+	std::memcpy(data.Tint, settings.Tint.data(), sizeof(float) * 3);
 	data.GLocalMask = settings.GLocalMask ? 1 : 0;
 
 	for (int i = 0; i < NUM_GHOSTS; i++) {
-		std::memcpy(&data.GhostColors[i * 4], settings.Ghosts[i].Color, sizeof(float) * 4);
-		data.GhostScales[i] = settings.Ghosts[i].Scale;
+		std::memcpy(&data.GhostColors[i * 4], settings.Ghosts[i].Color.data(), sizeof(float) * 4);
+		data.GhostScalesPacked[i] = settings.Ghosts[i].Scale;
 	}
-
-	lensFlareCB->Update(data);
 
 	std::array<ID3D11ShaderResourceView*, 2> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
 	std::array<ID3D11SamplerState*, 2> samplers = { colorSampler.get(), borderSampler.get() };
-	auto cb = lensFlareCB->CB();
 
 	auto resetViews = [&]() {
 		srvs.fill(nullptr);
@@ -324,89 +332,99 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 	};
 
-	context->CSSetConstantBuffers(1, 1, &cb);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 
-	// === Pass 1: Threshold ===
+	// === Pass 1: Threshold — full res input → half res output ===
 	if (!debugsettings.disableThreshold && thresholdCS) {
+		data.OutputWidth = (float)halfW;
+		data.OutputHeight = (float)halfH;
+		data.InputWidth = (float)fullW;
+		data.InputHeight = (float)fullH;
+		lensFlareCB->Update(data);
+		auto cb = lensFlareCB->CB();
+		context->CSSetConstantBuffers(1, 1, &cb);
+
 		srvs.at(0) = inout_tex.srv;
 		uavs.at(0) = texThreshold->uav.get();
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 		context->CSSetShader(thresholdCS.get(), nullptr, 0);
-		context->Dispatch(dispatchX, dispatchY, 1);
+		context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
 		resetViews();
-	} else {
-		// Copy input directly as threshold
-		context->CopyResource(texThreshold->resource.get(), inout_tex.tex);
 	}
 
-	// === Pass 2: Ghost + Halo ===
+	// === Pass 2: Ghost + Halo — half res → half res ===
 	if (!debugsettings.disableGhosts && ghostHaloCS) {
+		data.OutputWidth = (float)halfW;
+		data.OutputHeight = (float)halfH;
+		data.InputWidth = (float)halfW;
+		data.InputHeight = (float)halfH;
+		lensFlareCB->Update(data);
+		auto cb = lensFlareCB->CB();
+		context->CSSetConstantBuffers(1, 1, &cb);
+
 		srvs.at(0) = texThreshold->srv.get();
-		uavs.at(0) = texFlare->uav.get();
+		uavs.at(0) = texGhostHalo->uav.get();
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 		context->CSSetShader(ghostHaloCS.get(), nullptr, 0);
-		context->Dispatch(dispatchX, dispatchY, 1);
+		context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
 		resetViews();
 	}
 
-	// === Pass 3: Blur ghost+halo (Kawase down/up) ===
+	// === Pass 3: Kawase blur on ghost+halo (half → quarter → half per iteration) ===
 	if (!debugsettings.disableBlur && blurDownCS && blurUpCS) {
-		context->CopyResource(texBlurScratch->resource.get(), texFlare->resource.get());
+		for (int iter = 0; iter < debugsettings.blurIterations; iter++) {
+			// Down: half → quarter
+			data.OutputWidth = (float)quarterW;
+			data.OutputHeight = (float)quarterH;
+			data.InputWidth = (float)halfW;
+			data.InputHeight = (float)halfH;
+			lensFlareCB->Update(data);
+			auto cb = lensFlareCB->CB();
+			context->CSSetConstantBuffers(1, 1, &cb);
 
-		// Downsample passes
-		context->CSSetShader(blurDownCS.get(), nullptr, 0);
-		for (int i = 0; i < debugsettings.downsampleTimes; i++) {
-			data.DownsizeScale = 1 << (i + 1);
+			srvs.at(0) = texGhostHalo->srv.get();
+			uavs.at(0) = texBlurTemp->uav.get();
+			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+			context->CSSetShader(blurDownCS.get(), nullptr, 0);
+			context->Dispatch((quarterW + 7) >> 3, (quarterH + 7) >> 3, 1);
+			resetViews();
+
+			// Up: quarter → half
+			data.OutputWidth = (float)halfW;
+			data.OutputHeight = (float)halfH;
+			data.InputWidth = (float)quarterW;
+			data.InputHeight = (float)quarterH;
 			lensFlareCB->Update(data);
 			cb = lensFlareCB->CB();
 			context->CSSetConstantBuffers(1, 1, &cb);
 
-			srvs.at(1) = texBlurScratch->srv.get();
-			uavs.at(0) = texFlare->uav.get();
+			srvs.at(0) = texBlurTemp->srv.get();
+			uavs.at(0) = texGhostHalo->uav.get();
 			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-			context->Dispatch(dispatchX, dispatchY, 1);
+			context->CSSetShader(blurUpCS.get(), nullptr, 0);
+			context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
 			resetViews();
-			context->CopyResource(texBlurScratch->resource.get(), texFlare->resource.get());
 		}
-
-		// Upsample passes
-		context->CSSetShader(blurUpCS.get(), nullptr, 0);
-		for (int i = debugsettings.upsampleTimes - 1; i >= 0; i--) {
-			data.DownsizeScale = 1 << (i + 1);
-			lensFlareCB->Update(data);
-			cb = lensFlareCB->CB();
-			context->CSSetConstantBuffers(1, 1, &cb);
-
-			srvs.at(1) = texBlurScratch->srv.get();
-			uavs.at(0) = texFlare->uav.get();
-			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-			context->Dispatch(dispatchX, dispatchY, 1);
-			resetViews();
-			context->CopyResource(texBlurScratch->resource.get(), texFlare->resource.get());
-		}
-
-		// Restore DownsizeScale
-		data.DownsizeScale = 1;
-		lensFlareCB->Update(data);
-		cb = lensFlareCB->CB();
-		context->CSSetConstantBuffers(1, 1, &cb);
 	}
 
-	// === Pass 4: Glare streaks (3 directions for 6-point star) ===
+	// === Pass 4: Glare streaks (3 directions for 6-point star) — half res ===
 	if (!debugsettings.disableGlare && glareStreakCS && settings.GlareIntensity > 0.0001f) {
-		// Clear glare buffer
 		float clearColor[4] = { 0, 0, 0, 0 };
 		context->ClearUnorderedAccessViewFloat(texGlare->uav.get(), clearColor);
 
+		data.OutputWidth = (float)halfW;
+		data.OutputHeight = (float)halfH;
+		data.InputWidth = (float)halfW;
+		data.InputHeight = (float)halfH;
+
 		static const float angles[3] = {
 			1.5707963f,  // 90 deg
-			0.5235988f,  // 30 deg (90 - 60)
-			2.6179938f   // 150 deg (90 + 60)
+			0.5235988f,  // 30 deg
+			2.6179938f   // 150 deg
 		};
 
 		context->CSSetShader(glareStreakCS.get(), nullptr, 0);
@@ -419,42 +437,46 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 			data.GlareDirection[0] = cosf(angles[dir]) * glareScaleForDir;
 			data.GlareDirection[1] = sinf(angles[dir]) * glareScaleForDir;
 			lensFlareCB->Update(data);
-			cb = lensFlareCB->CB();
+			auto cb = lensFlareCB->CB();
 			context->CSSetConstantBuffers(1, 1, &cb);
 
 			srvs.at(0) = texThreshold->srv.get();
 			uavs.at(0) = texGlare->uav.get();
 			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-			context->Dispatch(dispatchX, dispatchY, 1);
+			context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
 			resetViews();
 		}
 	}
 
-	// === Pass 5: Mix ghost+halo + glare → final output ===
+	// === Pass 5: Mix ghost+halo + glare → full res output ===
 	if (mixCS) {
-		srvs.at(0) = texFlare->srv.get();
+		data.OutputWidth = (float)fullW;
+		data.OutputHeight = (float)fullH;
+		data.InputWidth = (float)halfW;
+		data.InputHeight = (float)halfH;
+		lensFlareCB->Update(data);
+		auto cb = lensFlareCB->CB();
+		context->CSSetConstantBuffers(1, 1, &cb);
+
+		srvs.at(0) = texGhostHalo->srv.get();
 		srvs.at(1) = texGlare->srv.get();
-		uavs.at(0) = texThreshold->uav.get();  // reuse threshold buffer as output
+		uavs.at(0) = texFlare->uav.get();
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 		context->CSSetShader(mixCS.get(), nullptr, 0);
-		context->Dispatch(dispatchX, dispatchY, 1);
+		context->Dispatch((fullW + 7) >> 3, (fullH + 7) >> 3, 1);
 		resetViews();
-
-		// Copy mix result to texFlare for output
-		context->CopyResource(texFlare->resource.get(), texThreshold->resource.get());
 	}
 
 	// Cleanup
 	resetViews();
-	cb = nullptr;
+	auto nullCB = (ID3D11Buffer*)nullptr;
 	samplers.fill(nullptr);
-	context->CSSetConstantBuffers(0, 1, &cb);
+	context->CSSetConstantBuffers(1, 1, &nullCB);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 	context->CSSetShader(nullptr, nullptr, 0);
 
-	// Flare result is in texFlare, available via GetFlareOutput()
 	inout_tex = { texFlare->resource.get(), texFlare->srv.get() };
 	state->EndPerfEvent();
 }
