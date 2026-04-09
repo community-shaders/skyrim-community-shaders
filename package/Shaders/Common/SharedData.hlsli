@@ -264,10 +264,10 @@ namespace SharedData
 		float CloudsOpacity;
 		float ColorPow;
 
+		float VolumetricRaysRangeFactor;
 		float VolumetricRaysDesaturation;
 		float pad0;
 		float pad1;
-		float pad2;
 	};
 	struct TerrainBlendingSettings
 	{

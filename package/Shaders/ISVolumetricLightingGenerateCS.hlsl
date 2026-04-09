@@ -109,8 +109,9 @@ cbuffer PerTechnique : register(b0)
 	float densityContribution = lerp(1, densityFactor, DensityContribution);
 
 	float LdotN = dot(normalize(-positionWS.xyz), DirLightDirection);
+
 	float phaseFactor = (1 - PhaseScattering * PhaseScattering) * rcp(4 * Math::PI * (1 - LdotN * PhaseScattering));
-	float phaseContribution = lerp(1, phaseFactor, PhaseContribution);
+	float phaseContribution = lerp(1, phaseFactor, PhaseContribution * (SharedData::enbSettings.Enable ? SharedData::enbSettings.VolumetricRaysRangeFactor : 1.0));
 
 	float shadowContribution = noShadow;
 

@@ -28,6 +28,7 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.CloudsColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("CloudsColorFilter", "SKY");
 
 	float volumetricRaysRangeFactor = settingManager.GetInterpolatedTimeOfDayValue("RangeFactor", "GAMEVOLUMETRICRAYS");
+	data.VolumetricRaysRangeFactor = 1.0f / std::max(FLT_MIN, volumetricRaysRangeFactor);
 
 	float cloudsEdgeIntensity = settingManager.GetValue<float>("CloudsEdgeIntensity", "SKY");
 	float cloudsEdgeMoonMultiplier = settingManager.GetValue<float>("CloudsEdgeMoonMultiplier", "SKY");
@@ -38,7 +39,7 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 
 	data.VolumetricRaysColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "GAMEVOLUMETRICRAYS");
 	float volumetricRaysIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "GAMEVOLUMETRICRAYS");
-	data.VolumetricRaysColorFilter *= volumetricRaysIntensity * volumetricRaysRangeFactor;
+	data.VolumetricRaysColorFilter *= volumetricRaysIntensity;
 
 	return data;
 }
@@ -57,6 +58,26 @@ void ENBPostProcessing::SetupResources()
 void ENBPostProcessing::Reset()
 {
 	// Reset effect state if needed
+}
+
+void ENBPostProcessing::Prepass()
+{
+	if (!enableEffect) {
+		return;
+	}
+
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	if (!imageSpaceManager) {
+		return;
+	}
+
+	GET_INSTANCE_MEMBER(data, imageSpaceManager);
+
+	auto& settingManager = SettingManager::GetSingleton();
+	float gradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
+	float skyScaleIntensity = settingManager.GetValue<bool>("DisableWrongSkyMath", "SKY") ? 0.0f : gradientIntensity;
+
+	data.baseData.hdr.skyScale *= skyScaleIntensity;
 }
 
 float3 Curve(float3 color, float power)

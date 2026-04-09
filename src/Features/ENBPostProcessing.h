@@ -38,19 +38,20 @@ public:
 		float CloudsOpacity;
 		float ColorPow;
 
+		float VolumetricRaysRangeFactor;
 		float VolumetricRaysDesaturation;
 		float pad0;
 		float pad1;
-		float pad2;
 	};
 
-	bool enableEffect = false;
+		bool enableEffect = false;
 
-	PerFrame GetCommonBufferData();
+		PerFrame GetCommonBufferData();
 
-	virtual void DrawSettings() override;
-	virtual void SetupResources() override;
-	virtual void Reset() override;
+		virtual void DrawSettings() override;
+		virtual void SetupResources() override;
+		virtual void Reset() override;
+		virtual void Prepass() override;
 	void OverrideWeather(RE::Sky* a_sky);
 	void CheckCommonData();
 	void OverridePointLightColor(float3& a_color);

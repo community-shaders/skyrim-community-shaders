@@ -202,9 +202,6 @@ PS_OUTPUT main(PS_INPUT input)
 	uint eyeIndex = input.EyeIndex;
 #	endif  // !VR
 
-	if (SharedData::enbSettings.Enable)
-		skyScale *= SharedData::enbSettings.SkyScaleIntensity;
-
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
