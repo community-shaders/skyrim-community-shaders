@@ -301,10 +301,12 @@ namespace Util
 
 	bool IsInterior()
 	{
-		if (tes && !tes->interiorCell) {
-			if (auto worldSpace = tes->GetRuntimeData2().worldSpace) {
-				if (!worldSpace->flags.any(RE::TESWorldSpace::Flag::kNoSky, RE::TESWorldSpace::Flag::kFixedDimensions)) {
-					return false;
+		if (auto tes = RE::TES::GetSingleton()) {
+			if (!tes->interiorCell) {
+				if (auto worldSpace = tes->GetRuntimeData2().worldSpace) {
+					if (!worldSpace->flags.any(RE::TESWorldSpace::Flag::kNoSky, RE::TESWorldSpace::Flag::kFixedDimensions)) {
+						return false;
+					}
 				}
 			}
 		}
