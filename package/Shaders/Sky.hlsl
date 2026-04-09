@@ -133,7 +133,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.Color.xyz = VParams * skyColor;
 	vsout.Color.w = BlendColor[0].w * input.Color.w;
-#	endif  // OCCLUSION MOONMASK HORIZFADE
+#	endif      // OCCLUSION MOONMASK HORIZFADE
 
 	vsout.Position = mul(WorldViewProj[eyeIndex], inputPosition).xyww;
 	vsout.WorldPosition = mul(World[eyeIndex], inputPosition);
