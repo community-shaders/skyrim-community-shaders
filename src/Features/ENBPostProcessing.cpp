@@ -228,6 +228,13 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		a_sky->fogFar /= fogAmountMultiplier;
 	}
 
+	{
+		auto& effectLightingColor = colors[(uint)RE::TESWeather::ColorTypes::kEffectLighting];
+		float3 effectLightingColorF3 = NiToF3(effectLightingColor);
+		effectLightingColorF3 = Intensity(effectLightingColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "PARTICLE"));
+		effectLightingColor = F3ToNi(effectLightingColorF3);
+	}
+
 	const bool enableSky = settingManager.GetValue<bool>("Enable", "SKY");
 
 	if (enableSky) {
