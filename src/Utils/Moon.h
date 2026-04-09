@@ -1,8 +1,6 @@
 // Shared moon processing utilities
 #pragma once
 
-#include "RE/M/Moon.h"
-
 namespace Util::Moon
 {
 	// Moon phase intensity constants
