@@ -328,15 +328,15 @@ PS_OUTPUT main(PS_INPUT input)
 	if (SharedData::enbSettings.Enable && SharedData::enbSettings.EnableSky) {
 		baseColor.w = saturate(baseColor.w * SharedData::enbSettings.CloudsOpacity);
 
-		baseColor.xyz = pow(baseColor.xyz, SharedData::enbSettings.CloudsCurve);
-		baseColor.xyz = lerp(baseColor.xyz, dot(baseColor.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
+		baseColor.xyz = pow(abs(baseColor.xyz), SharedData::enbSettings.CloudsCurve);
+		baseColor.xyz = lerp(abs(baseColor.xyz), dot(baseColor.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
 		baseColor.xyz *= SharedData::enbSettings.CloudsColorFilter;
 
 		float3 viewDirection = normalize(input.WorldPosition.xyz);
 		float cloudsEdgeAlpha = saturate(1.0 - baseColor.w);
-		float3 sunPhase = pow(saturate(dot(viewDirection, SharedData::SunDirection.xyz)), 12.0) * SharedData::SunColor.xyz;
-		float3 masserPhase = pow(saturate(dot(viewDirection, SharedData::MasserDirection.xyz)), 12.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
-		float3 secundaPhase = pow(saturate(dot(viewDirection, SharedData::SecundaDirection.xyz)), 12.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+		float3 sunPhase = pow(abs(saturate(dot(viewDirection, SharedData::SunDirection.xyz))), 12.0) * SharedData::SunColor.xyz;
+		float3 masserPhase = pow(abs(saturate(dot(viewDirection, SharedData::MasserDirection.xyz))), 12.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+		float3 secundaPhase = pow(abs(saturate(dot(viewDirection, SharedData::SecundaDirection.xyz))), 12.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
 
 		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity;
 
