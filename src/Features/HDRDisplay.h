@@ -94,8 +94,10 @@ struct HDRDisplay : public Feature
 		float skipUIComposite;           ///< 1.0 = FG handles UI, skip our compositing
 		float uiBrightness;              ///< UI brightness multiplier (Frame Gen compositing)
 		float isSceneLinear;             ///< 1.0 = Linear Lighting active, scene already linear
-		float pad0;                      ///< 1.0 = main menu/loading screen active
+		float isMainOrLoadingMenu;       ///< 1.0 = main menu/loading screen active
 		float fgTweenMenuMidAlphaBoost;  ///< 1.0 = TweenMenu (pause) open — FG UIBrightnessCS mid-alpha boost only
+		float enbEnabled;                ///< 1.0 = ENB is enabled
+		float pad[3];
 	};
 
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");

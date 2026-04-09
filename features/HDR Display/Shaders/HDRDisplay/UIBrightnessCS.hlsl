@@ -16,6 +16,7 @@ cbuffer PerFrame : register(b0)
 	float isSceneLinear : packoffset(c1.y);             ///< Unused in this shader
 	float isMainOrLoadingMenu : packoffset(c1.z);       ///< Unused; layout matches HDRDataCB
 	float fgTweenMenuMidAlphaBoost : packoffset(c1.w);  ///< 1 = TweenMenu open: apply mid-alpha AA boost only for pause UI
+	float enbEnabled : packoffset(c2.x);
 }
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {

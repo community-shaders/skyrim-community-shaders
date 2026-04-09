@@ -21,6 +21,7 @@ cbuffer PerFrame : register(b0)
 	float isSceneLinear : packoffset(c1.y);
 	float isMainOrLoadingMenu : packoffset(c1.z);
 	float fgTweenMenuMidAlphaBoost : packoffset(c1.w);  ///< TweenMenu: soften AA band when compositing here (UIBrightnessCS skips while paused)
+	float enbEnabled : packoffset(c2.x);
 }
 
 // AdvancedAutoHDR pass to generate some HDR brightess out of an SDR signal.
@@ -67,7 +68,9 @@ float3 PumboAutoHDR(float3 SDRColor, float MaxPeakWhiteNits, float _PaperWhiteNi
 		bool sceneIsLinear = isSceneLinear > 0.5;
 
 		float3 outputColor = sceneIsLinear ? scene.xyz : Color::GammaToLinearSafe(scene.xyz);
-		outputColor = PumboAutoHDR(outputColor, SharedData::HDRData.z, SharedData::HDRData.y, 2.75, 1.0);
+		if (enbEnabled > 0.5) {
+			outputColor = PumboAutoHDR(outputColor, SharedData::HDRData.z, SharedData::HDRData.y, 2.75, 1.0);
+		}
 		scene.xyz = sceneIsLinear ? outputColor : Color::LinearToGammaSafe(outputColor);
 
 		float3 compositedColorLinear;
