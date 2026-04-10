@@ -667,7 +667,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		skylightingDiffuse = saturate(skylightingDiffuse);
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-		
+
 		float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 		// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
 		skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
@@ -794,7 +794,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// 	directionalAmbientColor -= envIBLColor;
 	// #				endif
 	diffuseColor *= albedo;
-	diffuseColor += max(0, subsurfaceColor * subsurfaceAlbedo* SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
+	diffuseColor += max(0, subsurfaceColor * subsurfaceAlbedo * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
 
 	directionalAmbientColor *= albedo;
 
