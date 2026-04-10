@@ -69,5 +69,4 @@ groupshared sh2 sharedB[TOTAL_SAMPLES];
 		IBLTexture[int2(1, 0)] = sharedG[0];
 		IBLTexture[int2(2, 0)] = sharedB[0];
 	}
-	
 }
