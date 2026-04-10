@@ -338,7 +338,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity;
 
 		baseColor.xyz = baseColor.xyz + baseColor.xyz * cloudsScatter;
-		
+
 		input.Color.w = saturate(input.Color.w);
 	}
 #			endif
