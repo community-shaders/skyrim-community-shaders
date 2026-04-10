@@ -380,9 +380,9 @@ void ENBPostProcessing::OverrideAmbientLighting(DirectionalAmbientColors& Direct
 			float3 ambientLightingColorF3 = NiToF3(ambientLightingColor);
 
 			int currentSide = i * 2 + j;
-			if (currentSide == 3) {
+			if (currentSide == 3)
 				ambientLightingColorF3 = Desaturation(ambientLightingColorF3, settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT"));
-			}
+			
 			ambientLightingColorF3 = Intensity(ambientLightingColorF3, settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT"));
 
 			ambientLightingColor = F3ToNi(ambientLightingColorF3);
