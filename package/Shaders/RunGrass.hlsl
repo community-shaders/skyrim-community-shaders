@@ -939,33 +939,33 @@ PS_OUTPUT main(PS_INPUT input)
 
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
-	float3 vertexColor = input.VertexColor.xyz;
+	float3 vertexColor = Color::ColorToLinear(iinput.VertexColor.xyz);
 
-#			if defined(SKYLIGHTING)
+#				if defined(SKYLIGHTING)
+	float skylightingDiffuse = 1.0;
 	float skylightingFadeOutFactor = 1.0;
+
 	if (!SharedData::InInterior) {
 		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
-		vertexColor = lerp(input.VertexColor.xyz * input.VertexMult, vertexColor, skylightingFadeOutFactor);
-	}
-#			endif
 
-	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
-
-#			if defined(SKYLIGHTING)
-	float skylightingDiffuse = 1.0;
-	if (!SharedData::InInterior) {
-#				if defined(VR)
+#					if defined(VR)
 		float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#				else
+#					else
 		float3 positionMSSkylight = input.WorldPosition.xyz;
-#				endif
+#					endif
 		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
 		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
+		float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
+		// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
+		skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
 	}
-#			endif  // SKYLIGHTING
+#				endif  // SKYLIGHTING
+
+	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
 
 #			if defined(IBL)
 	float3 envIBLColor = 0;
