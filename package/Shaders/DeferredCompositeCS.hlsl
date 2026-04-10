@@ -217,6 +217,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
 #		if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
+				envSpecular *= skylightingSpecular;
 #		elif defined(INTERIOR)
 				skySpecular = 0;
 #		endif
@@ -227,6 +228,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
 #		if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
+				envSpecular *= skylightingSpecular;
 #		elif defined(INTERIOR)
 				skySpecular = 0;
 #		endif

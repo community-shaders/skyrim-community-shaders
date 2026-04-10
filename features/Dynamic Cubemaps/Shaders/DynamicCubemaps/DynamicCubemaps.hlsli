@@ -73,6 +73,7 @@ namespace DynamicCubemaps
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
 #			if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
+				envSpecular *= skylightingSpecular;
 #			endif
 			} else {
 				// Mode 0/1: IBL ratio-based
@@ -81,6 +82,7 @@ namespace DynamicCubemaps
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
 #			if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
+				envSpecular *= skylightingSpecular;
 #			endif
 			}
 
@@ -179,6 +181,7 @@ namespace DynamicCubemaps
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
 #			if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
+				envSpecular *= skylightingSpecular;
 #			endif
 			} else {
 				// Mode 0/1: IBL ratio-based
@@ -187,6 +190,7 @@ namespace DynamicCubemaps
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
 #			if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
+				envSpecular *= skylightingSpecular;
 #			endif
 			}
 
