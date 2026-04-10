@@ -371,14 +371,9 @@ void EffectManager::ExecuteEffects()
 		}
 	}
 
-	// Copy final render target to framebuffers
-	auto textureFramebuffer1 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto textureFramebuffer2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-	auto textureFramebuffer3 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
-
-	CopyTexture(finalSourceSRV, textureFramebuffer1.RTV);
-	CopyTexture(finalSourceSRV, textureFramebuffer2.RTV);
-	CopyTexture(finalSourceSRV, textureFramebuffer3.RTV);
+	// Copy final render target to framebuffer
+	auto textureFramebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
+	CopyTexture(finalSourceSRV, textureFramebuffer.RTV);
 
 	// Restore State
 	context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, oldDSV);
