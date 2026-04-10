@@ -3205,9 +3205,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Read by StereoBlendCS to adjust Eye 1 (right eye) reprojection depth
 	// at POM-displaced surfaces. Not consumed on flat (SE/AE).
 	psout.Reflectance = float4(indirectLobeWeights.specular,
-		(pixelOffset > 0.0) ? saturate(pixelOffset) : 0.0);
+		(pixelOffset > 0.0) ? saturate(pixelOffset) : psout.Diffuse.w);
 #		else
-	psout.Reflectance = float4(indirectLobeWeights.specular, 0.0);
+	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
 #		endif
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
 
