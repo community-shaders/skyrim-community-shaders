@@ -1,36 +1,54 @@
 // PhysicalGlare - Composite shader
-// Extracts glare from IFFT results, applies temporal smoothing, and composites onto the scene.
-// Runs at full screen resolution.
+//
+// Reference:
+//   Delavennat, J. (2021). Physically-based Real-time Glare.
+//   Master's thesis (LIU-ITN-TEK-A--21/068-SE), Linköping University.
+//   https://www.diva-portal.org/smash/record.jsf?pid=diva2:1629565
+//
+// Extracts glare from IFFT results, bilinearly upsamples from FFT resolution,
+// and additively composites onto the scene.  Runs at full screen resolution.
+// Reads only from the center [N/4, 3N/4) region where the zero-padded scene was placed.
 
-Texture2D<float4> TexScene : register(t0);      // Original scene (full resolution)
-Texture2D<float2> TexIFFT_R : register(t1);     // IFFT result, R channel (FFT resolution)
-Texture2D<float2> TexIFFT_G : register(t2);     // IFFT result, G channel (FFT resolution)
-Texture2D<float2> TexIFFT_B : register(t3);     // IFFT result, B channel (FFT resolution)
-Texture2D<float4> TexGlarePrev : register(t4);  // Previous frame glare (FFT resolution)
+Texture2D<float4> TexScene : register(t0);   // Original scene (full resolution)
+Texture2D<float2> TexIFFT_R : register(t1);  // IFFT result, R channel (FFT resolution)
+Texture2D<float2> TexIFFT_G : register(t2);  // IFFT result, G channel (FFT resolution)
+Texture2D<float2> TexIFFT_B : register(t3);  // IFFT result, B channel (FFT resolution)
 
 RWTexture2D<float4> RWTexOutput : register(u0);  // Final composited output (full resolution)
-RWTexture2D<float4> RWTexGlare : register(u1);   // Current frame glare for temporal history (FFT resolution)
 
 SamplerState LinearSampler : register(s0);
 
 cbuffer GlareCB : register(b1)
 {
-	float Threshold : packoffset(c0.x);
-	float Intensity : packoffset(c0.y);
-	float ScatterStrength : packoffset(c0.z);
-	float ChromaticDispersion : packoffset(c0.w);
+	float Threshold;
+	float Intensity;
+	float ScatterStrength;
+	uint ApertureMode;
 
-	int ApertureBlades : packoffset(c1.x);
-	float ApertureRotation : packoffset(c1.y);
-	float AdaptSpeed : packoffset(c1.z);
-	float DeltaTime : packoffset(c1.w);
+	int ApertureBlades;
+	float ApertureRotation;
+	float AdaptSpeed;
+	float DeltaTime;
 
-	uint FFTResolution : packoffset(c2.x);
-	float RcpFFTResolution : packoffset(c2.y);
-	float ScreenWidth : packoffset(c2.z);
-	float ScreenHeight : packoffset(c2.w);
+	uint FFTResolution;
+	float RcpFFTResolution;
+	float ScreenWidth;
+	float ScreenHeight;
 
-	uint ChannelIndex : packoffset(c3.x);
+	uint ChannelIndex;
+	uint EnableEyelashes;
+	uint EyelashCount;
+	float EyelashLength;
+
+	float EyelashCurvature;
+	float FresnelExponent;
+	float ChromaticSpread;
+	float ApertureSize;
+
+	uint ParticleCount;
+	float ParticleSize;
+	uint GratingCount;
+	float GratingStrength;
 };
 
 [numthreads(8, 8, 1)] void CS_Composite(uint2 tid : SV_DispatchThreadID) {
@@ -39,38 +57,26 @@ cbuffer GlareCB : register(b1)
 
 	float3 scene = TexScene[tid].rgb;
 
-	// Map screen position to FFT UV for bilinear sampling
+	// Map screen UV [0,1] → IFFT UV [0.25, 0.75] to read only the center
+	// region where the zero-padded scene was placed (paper section 2.5).
+	// The surrounding border absorbed convolution overflow.
 	float2 uv = (float2(tid) + 0.5) / float2(ScreenWidth, ScreenHeight);
+	float2 ifftUV = uv * 0.5 + 0.25;
 
-	// Sample IFFT results (take real part only, clamp negative artifacts)
-	// FFT textures are at FFT resolution, sample with bilinear filtering
-	float2 fftUV = uv;
-	uint2 fftPos = uint2(fftUV * float(FFTResolution));
-	fftPos = min(fftPos, uint2(FFTResolution - 1, FFTResolution - 1));
+	// Bilinear upsample IFFT results (real part only, clamp negative artifacts)
+	float glareR = max(0, TexIFFT_R.SampleLevel(LinearSampler, ifftUV, 0).x);
+	float glareG = max(0, TexIFFT_G.SampleLevel(LinearSampler, ifftUV, 0).x);
+	float glareB = max(0, TexIFFT_B.SampleLevel(LinearSampler, ifftUV, 0).x);
+	float3 glare = float3(glareR, glareG, glareB);
 
-	float glareR = max(0, TexIFFT_R[fftPos].x);
-	float glareG = max(0, TexIFFT_G[fftPos].x);
-	float glareB = max(0, TexIFFT_B[fftPos].x);
-	float3 currentGlare = float3(glareR, glareG, glareB);
+	// Sanitize extreme values
+	glare = min(glare, 65000.0);
+	if (any(isnan(glare)) || any(isinf(glare)))
+		glare = 0;
 
-	// Temporal smoothing at FFT resolution
-	// Only write temporal history for pixels within FFT resolution
-	if (tid.x < FFTResolution && tid.y < FFTResolution) {
-		float3 prevGlare = TexGlarePrev[tid].rgb;
-		float blendFactor = saturate(AdaptSpeed * DeltaTime);
-		float3 smoothedGlare = lerp(prevGlare, currentGlare, blendFactor);
-
-		RWTexGlare[tid] = float4(smoothedGlare, 1.0);
-	}
-
-	// For the composite, sample the temporally smoothed glare at screen resolution
-	// Use the previous frame's glare (which was temporally smoothed) for stability
-	float2 glareSamplePos = uv * float(FFTResolution);
-	uint2 glarePos = uint2(glareSamplePos);
-	glarePos = min(glarePos, uint2(FFTResolution - 1, FFTResolution - 1));
-	float3 glare = TexGlarePrev[glarePos].rgb;
-
-	// Additive composite
+	// Additive composite with user-controlled Intensity.
+	// Paper's empirical ×10 factor omitted — our HDR pipeline has a
+	// proper tonemapper downstream, so Intensity alone controls strength.
 	float3 output = scene + glare * Intensity;
 
 	RWTexOutput[tid] = float4(output, 1.0);
