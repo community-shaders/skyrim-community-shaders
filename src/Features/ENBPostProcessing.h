@@ -34,11 +34,6 @@ public:
 		float VolumetricRaysRangeFactor;
 		float VolumetricRaysDesaturation;
 		float ColorPow;
-
-		float pad0;
-		float pad1;
-		float pad2;
-		float pad3;
 	};
 
 	bool enableEffect = false;
