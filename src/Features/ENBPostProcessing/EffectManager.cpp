@@ -238,186 +238,199 @@ void EffectManager::RegisterSettings()
 
 void EffectManager::ExecuteEffects()
 {
-    auto context = globals::d3d::context;
-    auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+	auto renderer = globals::game::renderer;
 
-    if (!rasterizerState || !blendState || !quadVertexBuffer || !inputLayout || !renderer)
-        return;
+	if (!rasterizerState || !blendState || !quadVertexBuffer || !inputLayout || !renderer)
+		return;
 
-    // Save State
-    ID3D11RenderTargetView* oldRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = { nullptr };
-    ID3D11DepthStencilView* oldDSV = nullptr;
-    context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, &oldDSV);
+	// Save State
+	ID3D11RenderTargetView* oldRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = { nullptr };
+	ID3D11DepthStencilView* oldDSV = nullptr;
+	context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, &oldDSV);
 
-    D3D11_VIEWPORT oldViewports[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE];
-    UINT numViewports = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
-    context->RSGetViewports(&numViewports, oldViewports);
+	D3D11_VIEWPORT oldViewports[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE];
+	UINT numViewports = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
+	context->RSGetViewports(&numViewports, oldViewports);
 
-    ID3D11RasterizerState* oldRS = nullptr;
-    context->RSGetState(&oldRS);
+	ID3D11RasterizerState* oldRS = nullptr;
+	context->RSGetState(&oldRS);
 
-    ID3D11BlendState* oldBlend = nullptr;
-    FLOAT oldBlendFactor[4];
-    UINT oldSampleMask;
-    context->OMGetBlendState(&oldBlend, oldBlendFactor, &oldSampleMask);
+	ID3D11BlendState* oldBlend = nullptr;
+	FLOAT oldBlendFactor[4];
+	UINT oldSampleMask;
+	context->OMGetBlendState(&oldBlend, oldBlendFactor, &oldSampleMask);
 
-    ID3D11DepthStencilState* oldDepth = nullptr;
-    UINT oldStencilRef;
-    context->OMGetDepthStencilState(&oldDepth, &oldStencilRef);
+	ID3D11DepthStencilState* oldDepth = nullptr;
+	UINT oldStencilRef;
+	context->OMGetDepthStencilState(&oldDepth, &oldStencilRef);
 
-    ID3D11InputLayout* oldInputLayout = nullptr;
-    context->IAGetInputLayout(&oldInputLayout);
+	ID3D11InputLayout* oldInputLayout = nullptr;
+	context->IAGetInputLayout(&oldInputLayout);
 
-    D3D11_PRIMITIVE_TOPOLOGY oldTopology;
-    context->IAGetPrimitiveTopology(&oldTopology);
+	D3D11_PRIMITIVE_TOPOLOGY oldTopology;
+	context->IAGetPrimitiveTopology(&oldTopology);
 
-    ID3D11Buffer* oldVBs[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = { nullptr };
-    UINT oldStrides[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = { 0 };
-    UINT oldOffsets[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = { 0 };
-    context->IAGetVertexBuffers(0, D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT, oldVBs, oldStrides, oldOffsets);
+	ID3D11Buffer* oldVBs[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = { nullptr };
+	UINT oldStrides[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = { 0 };
+	UINT oldOffsets[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = { 0 };
+	context->IAGetVertexBuffers(0, D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT, oldVBs, oldStrides, oldOffsets);
 
-    ID3D11Buffer* oldIB = nullptr;
-    DXGI_FORMAT oldIBFormat;
-    UINT oldIBOffset;
-    context->IAGetIndexBuffer(&oldIB, &oldIBFormat, &oldIBOffset);
+	ID3D11Buffer* oldIB = nullptr;
+	DXGI_FORMAT oldIBFormat;
+	UINT oldIBOffset;
+	context->IAGetIndexBuffer(&oldIB, &oldIBFormat, &oldIBOffset);
 
-    ID3D11VertexShader* oldVS = nullptr;
-    context->VSGetShader(&oldVS, nullptr, nullptr);
+	ID3D11VertexShader* oldVS = nullptr;
+	context->VSGetShader(&oldVS, nullptr, nullptr);
 
-    ID3D11PixelShader* oldPS = nullptr;
-    context->PSGetShader(&oldPS, nullptr, nullptr);
+	ID3D11PixelShader* oldPS = nullptr;
+	context->PSGetShader(&oldPS, nullptr, nullptr);
 
-    ID3D11GeometryShader* oldGS = nullptr;
-    context->GSGetShader(&oldGS, nullptr, nullptr);
+	ID3D11GeometryShader* oldGS = nullptr;
+	context->GSGetShader(&oldGS, nullptr, nullptr);
 
-    ID3D11HullShader* oldHS = nullptr;
-    context->HSGetShader(&oldHS, nullptr, nullptr);
+	ID3D11HullShader* oldHS = nullptr;
+	context->HSGetShader(&oldHS, nullptr, nullptr);
 
-    ID3D11DomainShader* oldDS = nullptr;
-    context->DSGetShader(&oldDS, nullptr, nullptr);
+	ID3D11DomainShader* oldDS = nullptr;
+	context->DSGetShader(&oldDS, nullptr, nullptr);
 
-    auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-    // Set our render state
-    context->RSSetState(rasterizerState.get());
-    context->OMSetBlendState(blendState.get(), nullptr, 0xFFFFFFFF);
-    context->OMSetDepthStencilState(nullptr, 0);
+	// Set our render state
+	context->RSSetState(rasterizerState.get());
+	context->OMSetBlendState(blendState.get(), nullptr, 0xFFFFFFFF);
+	context->OMSetDepthStencilState(nullptr, 0);
 
-    UINT stride = sizeof(float) * 5;
-    UINT offset = 0;
-    ID3D11Buffer* vertexBuffers[] = { quadVertexBuffer.get() };
-    context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-    context->IASetInputLayout(inputLayout.get());
-    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	UINT stride = sizeof(float) * 5;
+	UINT offset = 0;
+	ID3D11Buffer* vertexBuffers[] = { quadVertexBuffer.get() };
+	context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+	context->IASetInputLayout(inputLayout.get());
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-    // Apply brightness and gamma curve
-    ApplyColorCorrection(textureOriginal.UAV);
+	// Apply brightness and gamma curve
+	ApplyColorCorrection(textureOriginal.UAV);
 
-    auto state = globals::state;
-    auto& settingManager = SettingManager::GetSingleton();
-    auto& textureManager = TextureManager::GetSingleton();
+	auto state = globals::state;
+	auto& settingManager = SettingManager::GetSingleton();
+	auto& textureManager = TextureManager::GetSingleton();
 
-    // Downsampled texture shared between bloom, lens and adaptation
-    textureManager.UpdateDownsampledTexture(textureOriginal.SRV);
+	// Downsampled texture shared between bloom, lens and adaptation
+	textureManager.UpdateDownsampledTexture(textureOriginal.SRV);
 
-    if (enbBloom.IsCompiled() && settingManager.GetValue<bool>(ids.useBloom)) {
-        state->BeginPerfEvent(enbBloom.GetName());
-        UpdateCommonVariablesForEffect(enbBloom.GetEffect());
-        enbBloom.UpdateEffectVariables();
-        enbBloom.Execute();
-        state->EndPerfEvent();
-    }
+	if (enbBloom.IsCompiled() && settingManager.GetValue<bool>(ids.useBloom)) {
+		state->BeginPerfEvent(enbBloom.GetName());
+		UpdateCommonVariablesForEffect(enbBloom.GetEffect());
+		enbBloom.UpdateEffectVariables();
+		enbBloom.Execute();
+		state->EndPerfEvent();
+	}
 
-    if (enbLens.IsCompiled() && settingManager.GetValue<bool>(ids.useLens)) {
-        state->BeginPerfEvent(enbLens.GetName());
-        UpdateCommonVariablesForEffect(enbLens.GetEffect());
-        enbLens.UpdateEffectVariables();
-        enbLens.Execute();
-        state->EndPerfEvent();
-    }
+	if (enbLens.IsCompiled() && settingManager.GetValue<bool>(ids.useLens)) {
+		state->BeginPerfEvent(enbLens.GetName());
+		UpdateCommonVariablesForEffect(enbLens.GetEffect());
+		enbLens.UpdateEffectVariables();
+		enbLens.Execute();
+		state->EndPerfEvent();
+	}
 
-    if (enbAdaptation.IsCompiled() && settingManager.GetValue<bool>(ids.useAdaptation)) {
-        state->BeginPerfEvent(enbAdaptation.GetName());
-        UpdateCommonVariablesForEffect(enbAdaptation.GetEffect());
-        enbAdaptation.UpdateEffectVariables();
-        enbAdaptation.Execute();
-        state->EndPerfEvent();
-    }
+	if (enbAdaptation.IsCompiled() && settingManager.GetValue<bool>(ids.useAdaptation)) {
+		state->BeginPerfEvent(enbAdaptation.GetName());
+		UpdateCommonVariablesForEffect(enbAdaptation.GetEffect());
+		enbAdaptation.UpdateEffectVariables();
+		enbAdaptation.Execute();
+		state->EndPerfEvent();
+	}
 
-    if (enbEffect.IsCompiled()) {
-        state->BeginPerfEvent(enbEffect.GetName());
-        UpdateCommonVariablesForEffect(enbEffect.GetEffect());
-        enbEffect.UpdateEffectVariables();
-        enbEffect.Execute();
-        state->EndPerfEvent();
-    }
+	if (enbEffect.IsCompiled()) {
+		state->BeginPerfEvent(enbEffect.GetName());
+		UpdateCommonVariablesForEffect(enbEffect.GetEffect());
+		enbEffect.UpdateEffectVariables();
+		enbEffect.Execute();
+		state->EndPerfEvent();
+	}
 
-    if (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>(ids.usePostPass)) {
-        state->BeginPerfEvent(enbEffectPostPass.GetName());
-        UpdateCommonVariablesForEffect(enbEffectPostPass.GetEffect());
-        enbEffectPostPass.UpdateEffectVariables();
-        enbEffectPostPass.Execute();
-        state->EndPerfEvent();
-    }
+	if (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>(ids.usePostPass)) {
+		state->BeginPerfEvent(enbEffectPostPass.GetName());
+		UpdateCommonVariablesForEffect(enbEffectPostPass.GetEffect());
+		enbEffectPostPass.UpdateEffectVariables();
+		enbEffectPostPass.Execute();
+		state->EndPerfEvent();
+	}
 
-    textureManager.IncrementTextureSwap();
+	textureManager.IncrementTextureSwap();
 
-    // Determine final source for framebuffer copy
-    ID3D11ShaderResourceView* finalSourceSRV = textureOriginal.SRV;
-    if (enbEffect.IsCompiled() || (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>(ids.usePostPass))) {
-        auto textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
-        if (textureSDRTemp) {
-            finalSourceSRV = textureSDRTemp->srv.get();
-        }
-    }
+	// Determine final source for framebuffer copy
+	ID3D11ShaderResourceView* finalSourceSRV = textureOriginal.SRV;
+	if (enbEffect.IsCompiled() || (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>(ids.usePostPass))) {
+		auto textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
+		if (textureSDRTemp) {
+			finalSourceSRV = textureSDRTemp->srv.get();
+		}
+	}
 
-    // Copy final render target to framebuffers
-    auto textureFramebuffer1 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-    auto textureFramebuffer2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-    auto textureFramebuffer3 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
+	// Copy final render target to framebuffers
+	auto textureFramebuffer1 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+	auto textureFramebuffer2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
+	auto textureFramebuffer3 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
 
-    CopyTexture(finalSourceSRV, textureFramebuffer1.RTV);
-    CopyTexture(finalSourceSRV, textureFramebuffer2.RTV);
-    CopyTexture(finalSourceSRV, textureFramebuffer3.RTV);
+	CopyTexture(finalSourceSRV, textureFramebuffer1.RTV);
+	CopyTexture(finalSourceSRV, textureFramebuffer2.RTV);
+	CopyTexture(finalSourceSRV, textureFramebuffer3.RTV);
 
-    // Restore State
-    context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, oldDSV);
-    context->RSSetViewports(numViewports, oldViewports);
-    context->RSSetState(oldRS);
-    context->OMSetBlendState(oldBlend, oldBlendFactor, oldSampleMask);
-    context->OMSetDepthStencilState(oldDepth, oldStencilRef);
+	// Restore State
+	context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, oldDSV);
+	context->RSSetViewports(numViewports, oldViewports);
+	context->RSSetState(oldRS);
+	context->OMSetBlendState(oldBlend, oldBlendFactor, oldSampleMask);
+	context->OMSetDepthStencilState(oldDepth, oldStencilRef);
 
-    context->IASetInputLayout(oldInputLayout);
-    context->IASetPrimitiveTopology(oldTopology);
-    context->IASetVertexBuffers(0, D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT, oldVBs, oldStrides, oldOffsets);
-    context->IASetIndexBuffer(oldIB, oldIBFormat, oldIBOffset);
+	context->IASetInputLayout(oldInputLayout);
+	context->IASetPrimitiveTopology(oldTopology);
+	context->IASetVertexBuffers(0, D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT, oldVBs, oldStrides, oldOffsets);
+	context->IASetIndexBuffer(oldIB, oldIBFormat, oldIBOffset);
 
-    context->VSSetShader(oldVS, nullptr, 0);
-    context->PSSetShader(oldPS, nullptr, 0);
-    context->GSSetShader(oldGS, nullptr, 0);
-    context->HSSetShader(oldHS, nullptr, 0);
-    context->DSSetShader(oldDS, nullptr, 0);
+	context->VSSetShader(oldVS, nullptr, 0);
+	context->PSSetShader(oldPS, nullptr, 0);
+	context->GSSetShader(oldGS, nullptr, 0);
+	context->HSSetShader(oldHS, nullptr, 0);
+	context->DSSetShader(oldDS, nullptr, 0);
 
-    // Release acquired COM interfaces to prevent memory leaks
-    if (oldRS) oldRS->Release();
-    if (oldBlend) oldBlend->Release();
-    if (oldDepth) oldDepth->Release();
-    if (oldInputLayout) oldInputLayout->Release();
-    if (oldIB) oldIB->Release();
-    if (oldVS) oldVS->Release();
-    if (oldPS) oldPS->Release();
-    if (oldGS) oldGS->Release();
-    if (oldHS) oldHS->Release();
-    if (oldDS) oldDS->Release();
-    if (oldDSV) oldDSV->Release();
+	// Release acquired COM interfaces to prevent memory leaks
+	if (oldRS)
+		oldRS->Release();
+	if (oldBlend)
+		oldBlend->Release();
+	if (oldDepth)
+		oldDepth->Release();
+	if (oldInputLayout)
+		oldInputLayout->Release();
+	if (oldIB)
+		oldIB->Release();
+	if (oldVS)
+		oldVS->Release();
+	if (oldPS)
+		oldPS->Release();
+	if (oldGS)
+		oldGS->Release();
+	if (oldHS)
+		oldHS->Release();
+	if (oldDS)
+		oldDS->Release();
+	if (oldDSV)
+		oldDSV->Release();
 
-    // Release arrays
-    for (int i = 0; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) {
-        if (oldRTVs[i]) oldRTVs[i]->Release();
-    }
-    for (int i = 0; i < D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT; ++i) {
-        if (oldVBs[i]) oldVBs[i]->Release();
-    }
+	// Release arrays
+	for (int i = 0; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) {
+		if (oldRTVs[i])
+			oldRTVs[i]->Release();
+	}
+	for (int i = 0; i < D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT; ++i) {
+		if (oldVBs[i])
+			oldVBs[i]->Release();
+	}
 }
 
 void EffectManager::CreateCommonResources()
