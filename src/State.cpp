@@ -862,7 +862,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		// Covers both interior water (where TES::GetWaterHeight returns -NI_INFINITY) and exterior
 		// partial submersion.  Stored as eye-0 camera-relative Z to match WaterData[].w.
 		data.WaterSystemHeight = -RE::NI_INFINITY;
-		if (REL::Module::IsVR()) {
+		if (globals::game::isVR) {
 			if (auto player = globals::game::player) {
 				if (player->loadedData && player->loadedData->underwaterCount > 0) {
 					float worldHeight = player->GetWaterHeight();
