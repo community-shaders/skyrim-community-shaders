@@ -86,8 +86,6 @@ namespace ImageBasedLighting
 	float3 GetSkyIBLColor(float3 rayDir)
 	{
 		float3 ibl = Color::Saturation(GetSkyIBL(rayDir), SharedData::iblSettings.SkyIBLSaturation) * SharedData::iblSettings.SkyIBLScale;
-		if (SharedData::enbSettings.Enable)
-			ibl *= saturate(-rayDir.z * 0.65 + 0.35) * 2.0;
 		return ibl;
 	}
 
