@@ -23,7 +23,7 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.ColorPow = settingManager.GetInterpolatedTimeOfDayValue("ColorPow", "ENVIRONMENT");
 
 	float volumetricRaysRangeFactor = settingManager.GetInterpolatedTimeOfDayValue("RangeFactor", "GAMEVOLUMETRICRAYS");
-	data.VolumetricRaysRangeFactor = 1.0f / std::max(FLT_MIN, volumetricRaysRangeFactor);
+	data.VolumetricRaysRangeFactor = 1.0f / std::max(volumetricRaysRangeFactor, FLT_MIN);
 
 	float cloudsEdgeIntensity = settingManager.GetValue<float>("CloudsEdgeIntensity", "SKY");
 	float cloudsEdgeMoonMultiplier = settingManager.GetValue<float>("CloudsEdgeMoonMultiplier", "SKY");
@@ -169,7 +169,7 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		}
 
 		GET_INSTANCE_MEMBER(data, imageSpaceManager);
-		float sunlightScale = std::max(data.baseData.hdr.sunlightScale, 1e-6f);
+		float sunlightScale = std::max(data.baseData.hdr.sunlightScale, FLT_MIN);
 		dirLightColorF3 *= sunlightScale;
 
 		dirLightColorF3 = Curve(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT"));
