@@ -30,6 +30,8 @@ public:
 	Texture* GetCommonTexture(const std::string& name);
 	const std::unordered_map<std::string, Texture>& GetAllCommonTextures() const { return commonTextureCache; }
 
+	void SwapTextures(const std::string& name1, const std::string& name2);
+
 	// Downsampled texture methods
 	void UpdateDownsampledTexture(ID3D11ShaderResourceView* source);
 	ID3D11ShaderResourceView* GetDownsampleTexture() const;

@@ -260,10 +260,10 @@ bool Effect::LoadFXFile()
 	return true;
 }
 
-void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp)
+bool Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp)
 {
 	if (!IsCompiled() || !effect) {
-		return;  // Skip execution if not compiled
+		return false;  // Skip execution if not compiled
 	}
 
 	auto context = globals::d3d::context;
@@ -272,14 +272,14 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 	auto sequenceIt = techniques.find(a_baseTechniqueName);
 	if (sequenceIt == techniques.end()) {
 		logger::debug("[ENBPP] Technique sequence '{}' not found", a_baseTechniqueName);
-		return;
+		return false;
 	}
 
 	const auto& sequence = sequenceIt->second;
 
 	if (sequence.empty()) {
 		logger::debug("[ENBPP] Technique sequence '{}' is empty", a_baseTechniqueName);
-		return;
+		return false;
 	}
 
 	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
@@ -386,9 +386,7 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 		}
 	}
 
-	if (!targetInOutput) {
-		context->CopyResource(a_output.texture.get(), a_temp.texture.get());
-	}
+	return targetInOutput;
 }
 
 void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output)

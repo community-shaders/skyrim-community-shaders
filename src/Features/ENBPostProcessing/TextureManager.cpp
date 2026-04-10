@@ -25,6 +25,15 @@ TextureManager::Texture* TextureManager::GetCommonTexture(const std::string& nam
 	return nullptr;
 }
 
+void TextureManager::SwapTextures(const std::string& name1, const std::string& name2)
+{
+	auto it1 = commonTextureCache.find(name1);
+	auto it2 = commonTextureCache.find(name2);
+	if (it1 != commonTextureCache.end() && it2 != commonTextureCache.end()) {
+		std::swap(it1->second, it2->second);
+	}
+}
+
 void TextureManager::CreateCommonTextures()
 {
 	auto state = globals::state;

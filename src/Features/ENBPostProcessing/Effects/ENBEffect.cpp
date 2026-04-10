@@ -24,7 +24,11 @@ void ENBEffect::Execute()
 	}
 
 	// Execute with: input (16bit HDR), output (10bit SDR), temp (10bit SDR)
-	ExecuteTechniqueSequence(GetSelectedTechnique(), textureOriginal.SRV, *textureSDRTemp, *textureSDRTemp2);
+	bool inOutput = ExecuteTechniqueSequence(GetSelectedTechnique(), textureOriginal.SRV, *textureSDRTemp, *textureSDRTemp2);
+
+	if (!inOutput) {
+		textureManager.SwapTextures("TextureSDRTemp", "TextureSDRTemp2");
+	}
 }
 
 void ENBEffect::UpdateEffectVariables()

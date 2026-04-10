@@ -13,9 +13,11 @@ void ENBEffectPostPass::Execute()
 		return;
 	}
 
-	ExecuteTechniqueSequence(GetSelectedTechnique(), textureSDRTemp->srv.get(), *textureSDRTemp2, *textureSDRTemp);
+	bool inOutput = ExecuteTechniqueSequence(GetSelectedTechnique(), textureSDRTemp->srv.get(), *textureSDRTemp2, *textureSDRTemp);
 
-	globals::d3d::context->CopyResource(textureSDRTemp->texture.get(), textureSDRTemp2->texture.get());
+	if (inOutput) {
+		textureManager.SwapTextures("TextureSDRTemp", "TextureSDRTemp2");
+	}
 }
 
 void ENBEffectPostPass::UpdateEffectVariables()

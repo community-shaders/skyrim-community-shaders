@@ -117,7 +117,7 @@ public:
 	std::vector<std::string> errors;
 
 	// Execute a technique sequence with ping-pong rendering
-	void ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp);
+	bool ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp);
 
 	// Execute a single technique
 	void ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output);
