@@ -11,6 +11,7 @@
 #include "PostProcessing/LUT.h"
 #include "PostProcessing/LensFlare.h"
 #include "PostProcessing/MotionBlur.h"
+#include "PostProcessing/PhysicalGlare.h"
 #include "PostProcessing/Vignette.h"
 #include "PostProcessing/pCamera.h"
 
@@ -70,6 +71,7 @@ struct PostProcessing : Feature
 		AutoExposure,
 		MotionBlur,
 		DoF,
+		PhysicalGlare,
 		CODBloom,
 		LensFlare,
 		BloomFlareComposite,
