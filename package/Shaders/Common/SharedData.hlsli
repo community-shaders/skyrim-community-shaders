@@ -252,7 +252,7 @@ namespace SharedData
 		uint EnableSky;
 		float ColorPow;
 		float pad0;
-		
+
 		float CloudsCurve;
 		float CloudsDesaturation;
 		float CloudsEdgeIntensity;
