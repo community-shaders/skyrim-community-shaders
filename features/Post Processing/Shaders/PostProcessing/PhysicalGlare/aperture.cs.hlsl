@@ -156,46 +156,36 @@ float2 ParticlePosition(uint index, float diskRadius)
 	float aspect = ScreenWidth / max(ScreenHeight, 1.0);
 	float radius = float(FFTResolution) * ApertureSize;
 
-// ----- Supersampled aperture shape + Fresnel phase -----
-// Paper p.17: "Ritschel et al. recommend modeling the images using
-// supersampling to smooth out some aliasing before feeding them to
-// the FFT, since aliasing can cause unwanted artifacts in the
-// frequency domain."
-// A circle discretised on a square grid produces staircase boundary
-// aliasing that the FFT amplifies into horizontal/vertical cross
-// artifacts.  4×4 sub-pixel sampling suppresses this.
+	// ----- Supersampled aperture shape + Fresnel phase -----
+// 4×4 sub-pixel supersampling (paper p.17: Ritschel recommendation).
+// Uniform smoothstep edge in distorted space.  The ±3px transition
+// suppresses grid aliasing while keeping the aperture rotationally
+// symmetric — any angular modulation of edge width would itself
+// introduce directional FFT artifacts.
 #define APERTURE_SS 4
 	float rcpSS = 1.0 / float(APERTURE_SS);
+	float edgeW = 3.0;  // smoothstep half-width in pixels
 
 	float2 complexSum = float2(0.0, 0.0);
 
 	for (int sy = 0; sy < APERTURE_SS; sy++) {
 		for (int sx = 0; sx < APERTURE_SS; sx++) {
-			// Sub-pixel position within the texel [tid, tid+1)
 			float2 subPos = float2(tid) + (float2(float(sx), float(sy)) + 0.5) * rcpSS - center;
-
-			// Aspect ratio anti-stretch (paper p.27): squeeze Y so the
-			// aperture is wider in X → PSF narrower in X → circular after
-			// composite stretches the IFFT result back to 16:9.
 			subPos.y *= aspect;
 
 			float subR = length(subPos);
 			float subValue = 0.0;
 
 			if (ApertureMode == 1 || ApertureBlades <= 2) {
-				// Pupil mode: circular aperture
-				subValue = 1.0 - smoothstep(radius - 1.0, radius + 1.0, subR);
+				subValue = 1.0 - smoothstep(radius - edgeW, radius + edgeW, subR);
 			} else {
-				// Lens mode: regular N-polygon
 				float sectorAngle = 2.0 * PI / float(ApertureBlades);
 				float rawAngle = atan2(subPos.y, subPos.x) - ApertureRotation;
 				float localAngle = frac(rawAngle / sectorAngle) * sectorAngle - sectorAngle * 0.5;
 				float apothem = radius * cos(sectorAngle * 0.5);
 				float projDist = subR * cos(localAngle);
-				subValue = 1.0 - smoothstep(apothem - 1.0, apothem + 1.0, projDist);
+				subValue = 1.0 - smoothstep(apothem - edgeW, apothem + edgeW, projDist);
 			}
-
-			// Fresnel phase at sub-pixel position (paper eq 2.12)
 			float subR2 = dot(subPos, subPos);
 			float R2 = radius * radius;
 			float phase = FresnelExponent * subR2 / max(R2, 1.0);

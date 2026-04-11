@@ -64,16 +64,28 @@ static const float PI = 3.14159265358979323846;
 // ---------------------------------------------------------------------------
 float3 WavelengthToXYZ(float lambda)
 {
+	// Use intermediate variables to prevent fxc from constant-folding
+	// the entire expression in double precision (X4122 warnings).
+	float dx1 = (lambda - 599.8f) / 37.9f;
+	float dx2 = (lambda - 442.0f) / 16.0f;
+	float dx3 = (lambda - 501.1f) / 20.4f;
 	float x =
-		1.056 * exp(-0.5 * pow((lambda - 599.8) / 37.9, 2.0)) +
-		0.362 * exp(-0.5 * pow((lambda - 442.0) / 16.0, 2.0)) -
-		0.065 * exp(-0.5 * pow((lambda - 501.1) / 20.4, 2.0));
+		1.056f * exp(-0.5f * dx1 * dx1) +
+		0.362f * exp(-0.5f * dx2 * dx2) -
+		0.065f * exp(-0.5f * dx3 * dx3);
+
+	float dy1 = (lambda - 568.8f) / 46.9f;
+	float dy2 = (lambda - 530.9f) / 16.3f;
 	float y =
-		0.821 * exp(-0.5 * pow((lambda - 568.8) / 46.9, 2.0)) +
-		0.286 * exp(-0.5 * pow((lambda - 530.9) / 16.3, 2.0));
+		0.821f * exp(-0.5f * dy1 * dy1) +
+		0.286f * exp(-0.5f * dy2 * dy2);
+
+	float dz1 = (lambda - 437.0f) / 11.8f;
+	float dz2 = (lambda - 459.0f) / 26.0f;
 	float z =
-		1.217 * exp(-0.5 * pow((lambda - 437.0) / 11.8, 2.0)) +
-		0.681 * exp(-0.5 * pow((lambda - 459.0) / 26.0, 2.0));
+		1.217f * exp(-0.5f * dz1 * dz1) +
+		0.681f * exp(-0.5f * dz2 * dz2);
+
 	return float3(x, y, z);
 }
 
@@ -81,9 +93,9 @@ float3 WavelengthToXYZ(float lambda)
 float3 XYZToLinearSRGB(float3 xyz)
 {
 	return float3(
-		3.2406 * xyz.x - 1.5372 * xyz.y - 0.4986 * xyz.z,
-		-0.9689 * xyz.x + 1.8758 * xyz.y + 0.0415 * xyz.z,
-		0.0557 * xyz.x - 0.2040 * xyz.y + 1.0570 * xyz.z);
+		3.2406f * xyz.x - 1.5372f * xyz.y - 0.4986f * xyz.z,
+		-0.9689f * xyz.x + 1.8758f * xyz.y + 0.0415f * xyz.z,
+		0.0557f * xyz.x - 0.2040f * xyz.y + 1.0570f * xyz.z);
 }
 
 // ---------------------------------------------------------------------------
