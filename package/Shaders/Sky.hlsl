@@ -279,8 +279,7 @@ PS_OUTPUT main(PS_INPUT input)
 			baseColor.xyz *= rcp(srcLum);
 		srcLum = min(srcLum, 1.0);
 
-		float lumEdge = max(fwidth(srcLum) * 2.5, 0.01);
-		float sunCoreMaskTex = smoothstep(0.88 - 0.35 * lumEdge, 1.0, saturate(srcLum));
+		float sunCoreMaskTex = smoothstep(0.88, 1.0, saturate(srcLum));
 		float discScale;
 #			if defined(TEX)
 		discScale = hdrScale * lerp(0.32, 1.0, sunRadialHdr) *
@@ -288,13 +287,12 @@ PS_OUTPUT main(PS_INPUT input)
 #			else
 		discScale = hdrScale * lerp(1.0, peakRatio, sunCoreMaskTex);
 #			endif
-		float alphaEdge = max(fwidth(baseColor.w) * 2.5, 0.004);
-		float discOpaqueGate = smoothstep(0.94 - 0.4 * alphaEdge, 1.0, saturate(baseColor.w));
+		float discOpaqueGate = smoothstep(0.93, 1.0, saturate(baseColor.w));
 		discScale = lerp(1.0, discScale, discOpaqueGate);
 		baseColor.xyz *= discScale;
 
 		// Tiny dither to reduce visible banding on bright gradients.
-		float ign = frac(52.9829189 * frac(dot(floor(input.Position.xy), float2(0.06711056, 0.00583715))));
+		float ign = frac(52.9829189 * frac(dot(input.Position.xy, float2(0.06711056, 0.00583715))));
 		baseColor.xyz += (ign - 0.5) * (discScale / 255.0);
 
 		yyy = 0.0;
