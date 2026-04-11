@@ -128,6 +128,8 @@ namespace ExtendedMaterials
 	inline float4 SampleHeightUnified(Texture2D tex, SamplerState samp, float2 coords, float mipLevel, StochasticOffsets offsets)
 	{
 #	if defined(TERRAIN_VARIATION)
+		if (!SharedData::terrainVariationSettings.enableTilingFix)
+			return tex.SampleLevel(samp, coords, mipLevel);
 		return StochasticEffectParallax(tex, samp, coords, mipLevel, offsets);
 #	else
 		return tex.SampleLevel(samp, coords, mipLevel);
@@ -205,7 +207,8 @@ namespace ExtendedMaterials
 			weights[layerIdx] = 1.0;
 			float total = heights[layerIdx];
 #	if defined(TERRAIN_VARIATION)
-			total *= STOCHASTIC_HEIGHT_BOOST;
+			if (SharedData::terrainVariationSettings.enableTilingFix)
+				total *= STOCHASTIC_HEIGHT_BOOST;
 #	endif
 			return total;
 		}
@@ -213,7 +216,8 @@ namespace ExtendedMaterials
 		float total = 0;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 #	if defined(TERRAIN_VARIATION)
-		total *= STOCHASTIC_HEIGHT_BOOST;
+		if (SharedData::terrainVariationSettings.enableTilingFix)
+			total *= STOCHASTIC_HEIGHT_BOOST;
 #	endif
 		return total;
 	}
@@ -444,12 +448,13 @@ namespace ExtendedMaterials
 				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, heights);
 
 #	if defined(TERRAIN_VARIATION)
-			float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
-			shadowIntensity = pow(shadowIntensity, STOCHASTIC_SHADOW_GAMMA);
-			return pow(1.0 - shadowIntensity, 2.0);
-#	else
-			return pow(1.0 - saturate(dot(max(0, sh - sh0) * scaleRcp, 1.0)) * quality, 2.0);
+			if (SharedData::terrainVariationSettings.enableTilingFix) {
+				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
+				shadowIntensity = pow(shadowIntensity, STOCHASTIC_SHADOW_GAMMA);
+				return pow(1.0 - shadowIntensity, 2.0);
+			}
 #	endif
+			return pow(1.0 - saturate(dot(max(0, sh - sh0) * scaleRcp, 1.0)) * quality, 2.0);
 		}
 		return 1.0;
 	}

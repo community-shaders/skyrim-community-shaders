@@ -9,7 +9,6 @@
 #include "State.h"
 
 #include "Features/DynamicCubemaps.h"
-#include "Features/TerrainVariation.h"
 
 #include "Plugin.h"
 

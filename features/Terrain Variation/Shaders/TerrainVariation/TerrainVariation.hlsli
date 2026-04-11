@@ -5,8 +5,6 @@
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
 
-#include "Common/Math.hlsli"
-#include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
 // --------------------- CONSTANTS --------------------- //
@@ -15,9 +13,10 @@ static const float WORLD_SCALE = 332.54;
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 static const float HEIGHT_BLEND_CONTRAST = 12.0;
 static const float HEIGHT_INFLUENCE = 0.3;
+static const float CONTRAST_FACTOR = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
-// Terrain variation can look over-sharp at distance vs. non-stochastic terrain, especially without TAA.
-static const float TERRAIN_VARIATION_MIP_BIAS = 1.0;
+// Golden ratio for frac(rnd * φ) low-discrepancy jitter; precompute once per pixel at callsite when possible.
+static const float STOCHASTIC_LOD_PHI = 1.618;
 
 // --------------------- STRUCTURES --------------------- //
 struct StochasticOffsets
@@ -26,6 +25,13 @@ struct StochasticOffsets
 	float2 offset2;
 	float2 offset3;
 	float3 weights;
+};
+
+// Triangle corner for barycentric sort: pack cell id + weight so each swap updates both.
+struct StochasticCorner
+{
+	float2 cell;
+	float w;
 };
 
 // --------------------- HASH FUNCTIONS --------------------- //
@@ -39,67 +45,67 @@ inline float2 hash2D2D(float2 s)
 inline float2 hashLOD(float2 p)
 {
 	p = frac(p * 0.318);
-	return frac(p.x + p.y * float2(17.0, 23.0));
+	return frac(float2(dot(p, float2(1.0, 17.0)), dot(p, float2(1.0, 23.0))));
 }
 
 // --------------------- COMPUTE FUNCTIONS --------------------- //
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 {
+	if (!SharedData::terrainVariationSettings.enableTilingFix)
+		return (StochasticOffsets)0;
+
 	float2 skewUV = mul(SKEW_MATRIX, landscapeUV * WORLD_SCALE);
 	float2 vxID = floor(skewUV);
 	float2 f = frac(skewUV);
 	float bz = 1.0 - f.x - f.y;
 
-	float2 v0, v1, v2;
-	float3 barry;
+	StochasticCorner c0, c1, c2;
 	if (bz > 0) {
-		v0 = vxID;
-		v1 = vxID + float2(0, 1);
-		v2 = vxID + float2(1, 0);
-		barry = float3(bz, f.y, f.x);
+		c0.cell = vxID;
+		c0.w = bz;
+		c1.cell = vxID + float2(0, 1);
+		c1.w = f.y;
+		c2.cell = vxID + float2(1, 0);
+		c2.w = f.x;
 	} else {
-		v0 = vxID + 1.0;
-		v1 = vxID + float2(1, 0);
-		v2 = vxID + float2(0, 1);
-		barry = float3(-bz, 1.0 - f.y, 1.0 - f.x);
+		c0.cell = vxID + 1.0;
+		c0.w = -bz;
+		c1.cell = vxID + float2(1, 0);
+		c1.w = 1.0 - f.y;
+		c2.cell = vxID + float2(0, 1);
+		c2.w = 1.0 - f.x;
 	}
 
-	// Sort vertices by weight descending before hashing — only hash top 2.
-	if (barry.y > barry.x) {
-		float2 tV = v0;
-		v0 = v1;
-		v1 = tV;
-		float tW = barry.x;
-		barry.x = barry.y;
-		barry.y = tW;
+	// Sort by weight descending (3-comparator network). Only c0/c1 are hashed; weights.xy must be the two largest.
+	if (c1.w > c0.w) {
+		StochasticCorner t = c0;
+		c0 = c1;
+		c1 = t;
 	}
-	if (barry.z > barry.x) {
-		float2 tV = v0;
-		v0 = v2;
-		v2 = tV;
-		float tW = barry.x;
-		barry.x = barry.z;
-		barry.z = tW;
+	if (c2.w > c0.w) {
+		StochasticCorner t = c0;
+		c0 = c2;
+		c2 = t;
 	}
-	if (barry.z > barry.y) {
-		float2 tV = v1;
-		v1 = v2;
-		v2 = tV;
-		float tW = barry.y;
-		barry.y = barry.z;
-		barry.z = tW;
+	if (c2.w > c1.w) {
+		StochasticCorner t = c1;
+		c1 = c2;
+		c2 = t;
 	}
 
 	StochasticOffsets o;
-	o.offset1 = hash2D2D(v0);
-	o.offset2 = hash2D2D(v1);
+	o.offset1 = hash2D2D(c0.cell);
+	o.offset2 = hash2D2D(c1.cell);
 	o.offset3 = 0;
-	o.weights = barry;
+	o.weights = float3(c0.w, c1.w, c2.w);
 	return o;
 }
 
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 {
+	if (!SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
+		return (StochasticOffsets)0;
+
 	float2 cellID = floor(landscapeUV * 255437.0);
 	float2 h1 = hashLOD(cellID);
 	float2 h2 = hashLOD(cellID + 127.0);
@@ -114,12 +120,19 @@ inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 
 // --------------------- SAMPLING FUNCTIONS --------------------- //
 
-// LOD terrain stochastic sampling — 2 SampleBias, fixed blend
-inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD)
+inline float2 StochasticSampleLODJitter(float rnd)
 {
-	float2 dir1 = float2(rnd - 0.5, frac(rnd * 1.618) - 0.5);
-	float4 s1 = tex.SampleBias(samp, uv + (offsetsLOD.offset1 + dir1) * 0.01, SharedData::MipBias);
-	float4 s2 = tex.SampleBias(samp, uv + (offsetsLOD.offset2 + float2(dir1.y, -dir1.x)) * 0.01, SharedData::MipBias);
+	return float2(rnd - 0.5, frac(rnd * STOCHASTIC_LOD_PHI) - 0.5);
+}
+
+// LOD terrain stochastic sampling — 2 SampleBias, fixed blend (pass jitter from StochasticSampleLODJitter(screenNoise)).
+inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD)
+{
+	if (!SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
+		return tex.SampleBias(samp, uv, SharedData::MipBias);
+
+	float4 s1 = tex.SampleBias(samp, uv + (offsetsLOD.offset1 + jitter) * 0.01, SharedData::MipBias);
+	float4 s2 = tex.SampleBias(samp, uv + (offsetsLOD.offset2 + float2(jitter.y, -jitter.x)) * 0.01, SharedData::MipBias);
 	return lerp(s2, s1, offsetsLOD.weights.x);
 }
 
@@ -128,16 +141,18 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 // highest-weight barycentric vertices, so dropping offset3 loses minimal quality.
 inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
-	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias + TERRAIN_VARIATION_MIP_BIAS;
+	if (!SharedData::terrainVariationSettings.enableTilingFix)
+		return tex.SampleBias(samp, uv, SharedData::MipBias);
+
+	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias;
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 
-	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
-	float w1 = pow(saturate(offsets.weights.x), contrastFactor);
-	float w2 = pow(saturate(offsets.weights.y), contrastFactor);
+	float w1 = exp2(log2(saturate(offsets.weights.x)) * CONTRAST_FACTOR);
+	float w2 = exp2(log2(saturate(offsets.weights.y)) * CONTRAST_FACTOR);
 
-	float h1 = s1.a > 0.001 ? s1.a : dot(s1.rgb, LUMINANCE_WEIGHTS);
-	float h2 = s2.a > 0.001 ? s2.a : dot(s2.rgb, LUMINANCE_WEIGHTS);
+	float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
+	float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
 
 	w1 *= (1.0 + HEIGHT_INFLUENCE * h1);
 	w2 *= (1.0 + HEIGHT_INFLUENCE * h2);
@@ -148,13 +163,14 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 // 2-sample parallax sampling — uses heightmap (alpha) only for blend weights.
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
 {
-	float adjustedMip = mipLevel + TERRAIN_VARIATION_MIP_BIAS;
-	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMip);
-	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMip);
+	if (!SharedData::terrainVariationSettings.enableTilingFix)
+		return tex.SampleLevel(samp, uv, mipLevel);
 
-	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
-	float w1 = pow(saturate(offsets.weights.x), contrastFactor);
-	float w2 = pow(saturate(offsets.weights.y), contrastFactor);
+	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+
+	float w1 = exp2(log2(saturate(offsets.weights.x)) * CONTRAST_FACTOR);
+	float w2 = exp2(log2(saturate(offsets.weights.y)) * CONTRAST_FACTOR);
 
 	w1 *= (1.0 + HEIGHT_INFLUENCE * s1.a);
 	w2 *= (1.0 + HEIGHT_INFLUENCE * s2.a);

@@ -890,7 +890,7 @@ struct StochasticOffsets
 };
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV) { return (StochasticOffsets)0; }
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV) { return (StochasticOffsets)0; }
-inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets) { return tex.SampleBias(samp, uv, SharedData::MipBias); }
+inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets) { return tex.SampleBias(samp, uv, SharedData::MipBias); }
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets) { return tex.SampleLevel(samp, uv, mipLevel); }
 inline float4 SampleTerrain(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
 {
@@ -968,6 +968,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
+
+#	if defined(LOD_BLENDING) || defined(LOD_LAND_BLEND)
+#		if defined(TERRAIN_VARIATION) && (defined(LANDSCAPE) || defined(LODLANDSCAPE) || defined(LOD_LAND_BLEND))
+	float2 lodStochasticJitter = StochasticSampleLODJitter(screenNoise);
+#		else
+	float2 lodStochasticJitter = (float2)0;
+#		endif
+#	endif
 
 #	if defined(DEFERRED)
 	const bool inWorld = true;
@@ -1570,7 +1578,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	baseColor.xyz = pow(abs(baseColor.xyz), SharedData::lodBlendingSettings.LODObjectGamma) * SharedData::lodBlendingSettings.LODObjectBrightness;
 #		elif defined(LODLANDSCAPE)
 	StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
-	float4 lodStochasticColor = StochasticSampleLOD(screenNoise, TexColorSampler, SampColorSampler, uv, lodOffset);
+	float4 lodStochasticColor = StochasticSampleLOD(lodStochasticJitter, TexColorSampler, SampColorSampler, uv, lodOffset);
 	baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
 	baseColor.xyz = pow(abs(baseColor.xyz), SharedData::lodBlendingSettings.LODTerrainGamma) * SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif
@@ -1667,7 +1675,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float2 blendColorUV = input.TexCoord0.zw;
 	StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
-	lodLandColor = StochasticSampleLOD(screenNoise, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset);
+	lodLandColor = StochasticSampleLOD(lodStochasticJitter, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset);
 
 	lodLandColor.xyz = Color::ColorToLinear(lodLandColor.xyz) * Color::VanillaDiffuseColorMult();
 #		if defined(LOD_BLENDING)

@@ -256,6 +256,13 @@ namespace SharedData
 		float3 pad;
 	};
 
+	struct TerrainVariationSettings
+	{
+		uint enableTilingFix;
+		uint enableLODTerrainTilingFix;
+		uint2 pad;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -273,6 +280,7 @@ namespace SharedData
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
+		TerrainVariationSettings terrainVariationSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
