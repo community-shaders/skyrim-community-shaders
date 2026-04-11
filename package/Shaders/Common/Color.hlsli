@@ -50,7 +50,7 @@ namespace Color
 			dot(v4, kBlueVec4) + dot(v2, kBlueVec2));
 	}
 
-#ifndef VSHADER
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	float RGBToLuminance(float3 color)
 	{
 		// AP1 (ACEScg) luminance coefficients from AP1_2_XYZ_MAT Y row
