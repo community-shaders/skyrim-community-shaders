@@ -284,7 +284,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float discScale;
 #			if defined(TEX)
 		discScale = hdrScale * lerp(0.32, 1.0, sunRadialHdr) *
-			lerp(1.0, peakRatio, sunCoreMaskTex * sunRadialHdr);
+		            lerp(1.0, peakRatio, sunCoreMaskTex * sunRadialHdr);
 #			else
 		discScale = hdrScale * lerp(1.0, peakRatio, sunCoreMaskTex);
 #			endif
