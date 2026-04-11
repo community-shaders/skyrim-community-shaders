@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <d3d12.h>
 #include <winrt/base.h>
 
@@ -33,12 +34,22 @@ public:
 	// Track if FidelityFX is currently being used for frame generation
 	bool isFrameGenActive = false;
 
+	// Track HDR state for frame generation callback (needs to be accessible from static callback)
+	// Using atomic for thread safety since async workloads may read this from different threads
+	static inline std::atomic<bool> isHDRActive = false;
+	static inline std::atomic<float> hdrPeakNits = 1000.0f;
+	static inline std::atomic<bool> needsReset = false;
+
+	// Track previous HDR parameters to detect changes that require FG reset
+	bool prevHDRActive = false;
+	float prevPeakNits = 1000.0f;
+
 	// Cached DLL version info for FidelityFX plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
 
 	void LoadFFX();
 	void SetupFrameGeneration();
-	void Present(bool a_useFrameGeneration);
+	void Present(bool a_useFrameGeneration, bool a_isHDR = false);
 
 	void CreateFSRResources();
 

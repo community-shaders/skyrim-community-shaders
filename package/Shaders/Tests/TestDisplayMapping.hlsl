@@ -1,7 +1,7 @@
 // HLSL Unit Tests for Common/DisplayMapping.hlsli
 
 // Stubs for dependencies from ISHDR.hlsl (not tested here)
-float3 GetTonemapFactorHejlBurgessDawson(float3 x) { return x; }
+float3 GetTonemapFactorHejlBurgessDawson(float3 x, bool isHDR) { return x; }
 static const float4 Param = { 0, 0, 0, 0 };
 
 #include "/Shaders/Common/DisplayMapping.hlsli"

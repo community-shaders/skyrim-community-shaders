@@ -264,6 +264,14 @@ std::string Widget::GetFolderName()
 	}
 }
 
+bool Widget::BeginWidgetWindow()
+{
+	SetupWidgetWindowDefaults(GetWidgetTypeName());
+	bool result = Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags);
+	UpdateWidgetTypeSize(GetWidgetTypeName());
+	return result;
+}
+
 void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather)
 {
 	auto editorWindow = EditorWindow::GetSingleton();

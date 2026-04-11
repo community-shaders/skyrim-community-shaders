@@ -583,6 +583,23 @@ void Menu::Init()
 	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
 	imgui_io.IniFilename = cachedIniPath.c_str();
 
+	// Register settings handler to persist display size for cross-session resolution change detection
+	ImGuiSettingsHandler handler{};
+	handler.TypeName = "CommunityShaders";
+	handler.TypeHash = ImHashStr("CommunityShaders");
+	handler.UserData = &lastDisplaySize;
+	handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler*, const char*) -> void* { return (void*)1; };
+	handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler* h, void*, const char* line) {
+		float w, ht;
+		if (sscanf(line, "DisplaySize=%f,%f", &w, &ht) == 2)
+			*static_cast<float2*>(h->UserData) = { w, ht };
+	};
+	handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* h, ImGuiTextBuffer* buf) {
+		auto& ds = ImGui::GetIO().DisplaySize;
+		buf->appendf("[%s][Data]\nDisplaySize=%g,%g\n\n", h->TypeName, ds.x, ds.y);
+	};
+	ImGui::GetCurrentContext()->SettingsHandlers.push_back(handler);
+
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
@@ -641,8 +658,10 @@ void Menu::DrawSettings()
 
 	ImGui::DockSpaceOverViewport(0, NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
-	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
+	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), layoutCond, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), layoutCond);
+	resetLayout = false;
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
 
 	// Determine window flags based on docking state
@@ -1006,7 +1025,7 @@ void Menu::ProcessInputEventQueue()
 					};
 					KeyAction keyActions[] = {
 						{ settings.ToggleKey, [this]() { if (!HomePageRenderer::ShouldShowFirstTimeSetup()) IsEnabled = !IsEnabled; } },
-						{ settings.SkipCompilationKey, [shaderCache]() { shaderCache->backgroundCompilation = true; } },
+						{ settings.SkipCompilationKey, [this, shaderCache]() { if (!ShouldSwallowInput() && shaderCache->IsCompiling()) shaderCache->backgroundCompilation = true; } },
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
@@ -1027,36 +1046,9 @@ void Menu::ProcessInputEventQueue()
 						 } },
 					};
 					for (const auto& ka : keyActions) {
-						// Check if key matches last key in combo and all modifiers are held (exact match)
-						if (!ka.settingKey.empty() &&
-							ka.settingKey.back().GetKey() == key &&
-							ka.settingKey.back().GetDevice() == InputDeviceType::Keyboard) {
-							// Build set of required modifiers from combo
-							bool requiresCtrl = false, requiresShift = false, requiresAlt = false;
-							for (size_t i = 0; i < ka.settingKey.size() - 1; ++i) {
-								uint32_t modKey = ka.settingKey[i].GetKey();
-								if (modKey == VK_CONTROL || modKey == VK_LCONTROL || modKey == VK_RCONTROL)
-									requiresCtrl = true;
-								else if (modKey == VK_SHIFT || modKey == VK_LSHIFT || modKey == VK_RSHIFT)
-									requiresShift = true;
-								else if (modKey == VK_MENU || modKey == VK_LMENU || modKey == VK_RMENU)
-									requiresAlt = true;
-							}
-
-							// Check current modifier state
-							bool ctrlHeld = (GetAsyncKeyState(VK_CONTROL) & Constants::KEY_PRESSED_MASK) != 0;
-							bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & Constants::KEY_PRESSED_MASK) != 0;
-							bool altHeld = (GetAsyncKeyState(VK_MENU) & Constants::KEY_PRESSED_MASK) != 0;
-
-							// Exact match: required modifiers must be held, and no extra modifiers
-							bool exactMatch = (requiresCtrl == ctrlHeld) &&
-							                  (requiresShift == shiftHeld) &&
-							                  (requiresAlt == altHeld);
-
-							if (exactMatch) {
-								ka.action();
-								break;
-							}
+						if (InputCombo::MatchesKeyboardCombo(ka.settingKey, key)) {
+							ka.action();
+							break;
 						}
 					}
 				}
@@ -1074,16 +1066,28 @@ void Menu::ProcessInputEventQueue()
 				}
 			}
 
-			// DirectInput loses key-up events after alt-tab; validate against OS state.
-			bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
-			io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
+			// Don't forward hotkey events to ImGui when input is captured (prevents e.g. End key scrolling the feature list)
+			// SkipCompilationKey (ESC) is excluded — ESC must reach ImGui for menu/dialog close.
+			const std::vector<InputCombo>* hotkeys[] = {
+				&settings.ToggleKey, &settings.EffectToggleKey,
+				&settings.OverlayToggleKey, &settings.ShaderBlockPrevKey, &settings.ShaderBlockNextKey,
+				&settings.WeatherEditorToggleKey
+			};
+			bool isHotkey = ShouldSwallowInput() && std::any_of(std::begin(hotkeys), std::end(hotkeys),
+														[key](const auto* combo) { return InputCombo::MatchesKeyboardCombo(*combo, key); });
 
-			if (key == VK_LCONTROL || key == VK_RCONTROL)
-				io.AddKeyEvent(ImGuiMod_Ctrl, pressed);
-			else if (key == VK_LSHIFT || key == VK_RSHIFT)
-				io.AddKeyEvent(ImGuiMod_Shift, pressed);
-			else if (key == VK_LMENU || key == VK_RMENU)
-				io.AddKeyEvent(ImGuiMod_Alt, pressed);
+			if (!isHotkey) {
+				// DirectInput loses key-up events after alt-tab; validate against OS state.
+				bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
+				io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
+
+				if (key == VK_LCONTROL || key == VK_RCONTROL)
+					io.AddKeyEvent(ImGuiMod_Ctrl, pressed);
+				else if (key == VK_LSHIFT || key == VK_RSHIFT)
+					io.AddKeyEvent(ImGuiMod_Shift, pressed);
+				else if (key == VK_LMENU || key == VK_RMENU)
+					io.AddKeyEvent(ImGuiMod_Alt, pressed);
+			}
 		}
 	}
 

@@ -38,12 +38,12 @@ cbuffer PerGeometry : register(b2)
 float4 GetSampleColor(float2 texCoord)
 {
 	float4 color = DownScaledBlurredHDRTex.Sample(DownScaledBlurredHDRSampler, texCoord);
-	if (saturate(color.x - lightsRangeDownshift) + saturate(color.y - lightsRangeDownshift) +
-			saturate(color.z - lightsRangeDownshift) <=
+	if (max(0, color.x - lightsRangeDownshift) + max(0, color.y - lightsRangeDownshift) +
+			max(0, color.z - lightsRangeDownshift) <=
 		0) {
 		return 0;
 	}
-	return saturate(color);
+	return max(0, color);
 }
 
 PS_OUTPUT main(PS_INPUT input)

@@ -50,6 +50,7 @@ RE_COMMIT_NONFUNCTIONAL = re.compile(r"^(chore|docs|style|ci|test|build|refactor
 RELEASE_TAG = None
 FEATURES_DIR = DEFAULT_FEATURES_DIR
 SHADER_TYPES = DEFAULT_SHADER_TYPES
+HEAD_REF = "HEAD"
 
 def extract_regex(pattern, content, group=1):
     m = pattern.search(content)
@@ -67,11 +68,20 @@ def get_feature_ini(feature_path):
 
 def get_version_from_ini(ini_path, content=None):
     if content is None:
-        try:
-            with open(ini_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except Exception:
-            return None
+        if HEAD_REF != "HEAD":
+            rel_path = os.path.relpath(ini_path, PROJECT_ROOT).replace("\\", "/")
+            try:
+                content = subprocess.check_output(
+                    ["git", "show", f"{HEAD_REF}:{rel_path}"], stderr=subprocess.DEVNULL
+                ).decode("utf-8")
+            except Exception:
+                return None
+        else:
+            try:
+                with open(ini_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception:
+                return None
     m = RE_VERSION.search(content)
     if m:
         return tuple(map(int, m.groups()))
@@ -94,7 +104,7 @@ def get_changed_files(feature_path, base_ref, file_types=None):
     rel_path = str(feature_path).replace("\\", "/")
     try:
         output = subprocess.check_output(
-            ["git", "diff", "--name-status", f"{base_ref}...HEAD", "--", rel_path],
+            ["git", "diff", "--name-status", f"{base_ref}...{HEAD_REF}", "--", rel_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
         changes = []
@@ -110,7 +120,7 @@ def get_changed_files(feature_path, base_ref, file_types=None):
 def get_commits_for_file(file_path, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "--pretty=%B%x1e", "--", file_path],
+            ["git", "log", f"{base_ref}..{HEAD_REF}", "--pretty=%B%x1e", "--", file_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
         return [msg.strip() for msg in output.split("\x1e") if msg.strip()]
@@ -120,7 +130,7 @@ def get_commits_for_file(file_path, base_ref):
 def get_bump_commit(file_path, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "--pretty=%H%x1f%B%x1e", "--", file_path],
+            ["git", "log", f"{base_ref}..{HEAD_REF}", "--pretty=%H%x1f%B%x1e", "--", file_path],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8")
         for entry in output.split("\x1e"):
@@ -139,7 +149,7 @@ def get_bump_commit(file_path, base_ref):
 def get_latest_commit(file_paths, base_ref):
     try:
         output = subprocess.check_output(
-            ["git", "log", f"{base_ref}..HEAD", "-1", "--pretty=%H", "--", *sorted(file_paths)],
+            ["git", "log", f"{base_ref}..{HEAD_REF}", "-1", "--pretty=%H", "--", *sorted(file_paths)],
             stderr=subprocess.DEVNULL,
         ).decode("utf-8").strip()
         return output or None
@@ -251,11 +261,12 @@ def extract_feature_metadata(feature_headers_dir):
         })
     return feature_info
 
-def get_latest_release_tag():
+def get_latest_release_tag(ref="HEAD"):
     try:
-        output = subprocess.check_output([
-            "git", "tag", "--list", "v*.*.*"
-        ], stderr=subprocess.DEVNULL).decode("utf-8")
+        output = subprocess.check_output(
+            ["git", "tag", "--merged", ref, "--list", "v*.*.*"],
+            stderr=subprocess.DEVNULL,
+        ).decode("utf-8")
         tags = [t.strip() for t in output.splitlines() if re.match(r"^v\d+\.\d+\.\d+$", t.strip())]
         if not tags:
             return None
@@ -297,18 +308,20 @@ def propose_new_version(prior_version, commits):
     else:
         return (major, minor, patch + 1)
 
-def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=False):
+def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=False, release_ref=None):
     bump_suggestions = []
     new_features = []
     actionable = False
     feature_actions = {}
     feature_analysis = []
+    # version_ref: base for version comparison (last release tag in PR mode; otherwise same as base_ref)
+    version_ref = release_ref if release_ref else base_ref
     # If only_changed, build a set of changed feature names
     changed_features = set()
     if only_changed:
         # Gather all changed files from the diff in both features regions
         target_dirs = [str(FEATURES_DIR), str(DEFAULT_FEATURE_HEADERS_DIR)]
-        cmd = ["git", "diff", "--name-status", f"{base_ref}...HEAD", "--"] + target_dirs
+        cmd = ["git", "diff", "--name-status", f"{base_ref}...{HEAD_REF}", "--"] + target_dirs
         try:
             all_changes = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").splitlines()
         except Exception as e:
@@ -366,16 +379,22 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
 
         meta = feature_meta_map.get(feature_key)
         ini_path = get_feature_ini(feature_dir)
-        prior_ver = get_prior_version(ini_path, base_ref) if ini_path else None
+        # Use last release tag (version_ref) as the baseline for version proposals so that
+        # multiple PRs between releases don't accumulate spurious bumps.
+        prior_ver = get_prior_version(ini_path, version_ref) if ini_path else None
+        # PR-scoped prior version: used for new-feature detection and as the effective
+        # current version when the PR branch is behind base_ref (non-rebased PRs).
+        pr_prior_ver = get_prior_version(ini_path, base_ref) if (ini_path and version_ref != base_ref) else prior_ver
         new_ver = get_version_from_ini(ini_path) if ini_path else None
 
+        # PR-scoped changes: used for change-type display and new-feature detection
         changes = get_changed_files(feature_dir, base_ref)
         # Also check src/Features
+        cpp_types = (".h", ".hpp", ".cpp", ".c")
         if meta:
             header_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".h")
             cpp_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".cpp")
             feature_src_dir = DEFAULT_FEATURE_HEADERS_DIR / meta['name']
-            cpp_types = (".h", ".hpp", ".cpp", ".c")
             if header_path.exists():
                 changes.extend(get_changed_files(header_path, base_ref, file_types=cpp_types))
             if cpp_path.exists():
@@ -384,12 +403,28 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 changes.extend(get_changed_files(feature_src_dir, base_ref, file_types=cpp_types))
         changes = list(set(changes))
 
+        # Release-scoped changes: all changes since last release, used to propose the correct
+        # version so that a bump already applied by a prior PR satisfies this check.
+        release_changes = get_changed_files(feature_dir, version_ref)
+        if meta:
+            header_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".h")
+            cpp_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".cpp")
+            feature_src_dir = DEFAULT_FEATURE_HEADERS_DIR / meta['name']
+            if header_path.exists():
+                release_changes.extend(get_changed_files(header_path, version_ref, file_types=cpp_types))
+            if cpp_path.exists():
+                release_changes.extend(get_changed_files(cpp_path, version_ref, file_types=cpp_types))
+            if feature_src_dir.exists() and feature_src_dir.is_dir():
+                release_changes.extend(get_changed_files(feature_src_dir, version_ref, file_types=cpp_types))
+        release_changes = list(set(release_changes))
+
         change_types = set(os.path.splitext(f)[1].lower() for _, f in changes)
         all_commits = []
         bump_commit = None
         bump_author = None
+        for status, f in release_changes:
+            all_commits.extend(get_commits_for_file(f, version_ref))
         for status, f in changes:
-            all_commits.extend(get_commits_for_file(f, base_ref))
             if not bump_commit:
                 bump_commit = get_bump_commit(f, base_ref)
                 if bump_commit:
@@ -401,7 +436,11 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 bump_author = get_commit_author(any_commit)
 
         proposed_ver = propose_new_version(prior_ver, all_commits) if ini_path else None
-        needs_bump = (proposed_ver is not None and new_ver is not None and proposed_ver > new_ver)
+        # Use max(new_ver, pr_prior_ver) as the effective current version so that a version
+        # bump already on base_ref (e.g. from a parallel PR) satisfies the check even when
+        # the PR branch has not been rebased.
+        effective_new_ver = max(new_ver, pr_prior_ver) if (new_ver and pr_prior_ver) else (new_ver or pr_prior_ver)
+        needs_bump = (proposed_ver is not None and effective_new_ver is not None and proposed_ver > effective_new_ver)
         proposed_ver_str = "-".join(map(str, proposed_ver)) if proposed_ver else "-"
         prior_ver_str = "-".join(map(str, prior_ver)) if prior_ver else "-"
         new_ver_str = "-".join(map(str, new_ver)) if new_ver else "-"
@@ -418,8 +457,9 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 note = "New feature (missing ini!)"
                 new_features.append((feature_dir.name, "-", bump_commit))
                 is_attention = True
-        # Detect new ini added
-        if ini_path and prior_ver is None and new_ver is not None:
+        # Detect new ini added — use pr_prior_ver (base_ref baseline) so features added
+        # earlier in the release cycle are not re-reported as new in subsequent PRs.
+        if ini_path and pr_prior_ver is None and new_ver is not None:
             note = f"New ini added (v{new_ver_str})"
             new_features.append((feature_dir.name, new_ver_str, bump_commit))
             is_attention = True
@@ -635,20 +675,38 @@ def main():
     parser.add_argument('--output', type=str, help='Output markdown filename')
     parser.add_argument('--ci', action='store_true', help='Exit 1 if actionable items found (alias for --fail-on-actionable)')
     parser.add_argument('--base', type=str, default=None, help='Base tag/branch/commit to compare against')
+    parser.add_argument('--head', type=str, default=None, help='Head commit/SHA to compare against (defaults to HEAD). Use to compare against a specific revision without checking it out.')
     parser.add_argument('--fail-on-actionable', action='store_true', help='Exit 1 if actionable items found (alias for --ci)')
     parser.add_argument('--pr-check', action='store_true', help='Only show actionable items for changes since base')
     parser.add_argument('--apply-bumps', action='store_true', help='Automatically apply suggested version bumps')
     args = parser.parse_args()
 
+    global HEAD_REF
+    if args.head:
+        HEAD_REF = args.head
+
     if args.base:
         base_ref = args.base
     else:
-        detected_base = detect_pr_base() if args.pr_check else get_latest_release_tag()
+        detected_base = detect_pr_base() if args.pr_check else get_latest_release_tag(HEAD_REF)
         if detected_base:
             base_ref = detected_base
         else:
             print("No valid base ref found.", file=sys.stderr)
             sys.exit(1)
+
+    # In PR check mode, determine the last release tag so version proposals are anchored
+    # to the release baseline rather than to the tip of the target branch.  This prevents
+    # multiple PRs between releases from each requiring an additional version bump.
+    # Use --merged base_ref so only tags reachable from the target branch are considered;
+    # hotfix tags on unrelated branches cannot skew the baseline.
+    release_ref = None
+    if args.pr_check:
+        release_ref = get_latest_release_tag(base_ref)
+        if release_ref:
+            print(f"Using release tag for version baseline: {release_ref}", file=sys.stderr)
+        else:
+            print("No release tag found; falling back to base_ref for version baseline.", file=sys.stderr)
 
     base_date_iso = None
     base_date_human = None
@@ -669,7 +727,7 @@ def main():
     feature_meta_map = {normalize_name(f['name']): f for f in feature_metadata}
 
     feature_analysis, bump_suggestions, new_features, actionable, feature_actions = analyze_features(
-        FEATURES_DIR, feature_meta_map, base_ref, only_changed=args.pr_check)
+        FEATURES_DIR, feature_meta_map, base_ref, only_changed=args.pr_check, release_ref=release_ref)
 
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     date_tag = datetime.datetime.now().strftime('%Y-%m-%d')

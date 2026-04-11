@@ -44,7 +44,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableStereoBlend,
 	StereoBlendDepthSigma,
 	StereoBlendMaxFactor,
-	StereoBlendColorThreshold)
+	StereoBlendColorThreshold,
+	StereoBlendDebugMode)
 
 //=============================================================================
 // FEATURE BASE CLASS OVERRIDES
@@ -54,16 +55,26 @@ void VR::LoadSettings(json& o_json)
 {
 	settings = o_json.get<Settings>();
 	settings.ClampToValidRanges();
+	if (o_json.contains("StereoOptimizations")) {
+		json stereoOptJson = o_json["StereoOptimizations"];
+		stereoOpt.LoadSettings(stereoOptJson);
+	}
 }
 
 void VR::SaveSettings(json& o_json)
 {
 	o_json = settings;
+	{
+		json stereoOptJson;
+		stereoOpt.SaveSettings(stereoOptJson);
+		o_json["StereoOptimizations"] = stereoOptJson;
+	}
 }
 
 void VR::RestoreDefaultSettings()
 {
 	settings = {};
+	stereoOpt.RestoreDefaultSettings();
 }
 
 void VR::SetupResources()
@@ -88,6 +99,12 @@ void VR::SetupResources()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", edgeDetectionDefines, "cs_5_0")))
 		stereoBlendDebugEdgeDetectionCS.attach(rawPtr);
 
+	// Overwrite mode: direct replacement instead of blend (for stencil culling)
+	auto overwriteDefines = defines;
+	overwriteDefines.push_back({ "STEREO_OVERWRITE", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", overwriteDefines, "cs_5_0")))
+		stereoBlendOverwriteCS.attach(rawPtr);
+
 	auto renderer = globals::game::renderer;
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	D3D11_TEXTURE2D_DESC mainDesc;
@@ -102,6 +119,11 @@ void VR::SetupResources()
 	};
 	stereoBlendCopyTex->CreateSRV(srvDesc);
 	stereoBlendCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<StereoBlendCB>());
+
+	if (REL::Module::IsVR()) {
+		stereoOpt.SetupResources();
+		stereoOpt.loaded = stereoOpt.GetModeTextureSRV() != nullptr;
+	}
 
 	DetectOpenVRInfo();
 
@@ -273,4 +295,9 @@ void VR::DetectOpenVRInfo()
 bool VR::IsOpenVRCompatible() const
 {
 	return globals::game::isVR && openVRInfo.isCompatible;
+}
+
+void VR::Reset()
+{
+	stereoOpt.Reset();
 }

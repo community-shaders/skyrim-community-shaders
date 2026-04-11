@@ -1765,7 +1765,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float3 projBaseColor = Color::ColorToLinear(Triplanar::SampleStochastic(TexProjDiffuseSampler, SampProjDiffuseSampler, projWorldPos, triWeights, diffuseNormalScale, screenNoise).xyz) * Color::ColorToLinear(ProjectedUVParams2.xyz);
 		projectedMaterialWeight = smoothstep(0, 1, 5 * (0.1 + projWeight));
 #			if defined(TRUE_PBR)
-		projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
+		projBaseColor = max(0, EnvmapData.x * projBaseColor);
 		rawRMAOS.xyw = lerp(rawRMAOS.xyw, float3(ParallaxOccData.x, 0, ParallaxOccData.y), projectedMaterialWeight);
 		float4 projectedGlintParameters = 0;
 		if ((PBRFlags & PBR::Flags::ProjectedGlint) != 0) {
@@ -1851,6 +1851,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.Roughness = clamp(rawRMAOS.x, PBR::Constants::MinRoughness, PBR::Constants::MaxRoughness);
 	material.Metallic = saturate(rawRMAOS.y);
 	material.AO = rawRMAOS.z;
+
+	// Apply vertex color to base color so PBR metals use it
+	baseColor.xyz *= input.Color.xyz;
 
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		material.F0 = lerp(rawRMAOS.w, Color::SrgbToLinear(baseColor.xyz), material.Metallic);
@@ -2052,7 +2055,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	endif
 
-	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
+	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz, eyeIndex);
 	float waterHeight = waterData.w;
 
 	float waterRoughnessSpecular = 1;
@@ -2472,6 +2475,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
 		emitColor *= glowColor;
+#		if defined(TRUE_PBR)
+		// TRUE_PBR sets vertexColor=1 and adds emitColor directly to color (see below),
+		// so vertex tint must be applied here. Non-PBR folds emitColor into diffuseColor
+		// and the global color.xyz *= vertexColor (line 2918) already covers it.
+		emitColor *= input.Color.xyz;
+#		endif
 	}
 #	endif
 
@@ -2573,8 +2582,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
 	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+#		if defined(TRUE_PBR)
+	vertexColor = 1;
+#		endif
 #	else
+#		if defined(TRUE_PBR)
+	float3 vertexColor = 1;
+#		else
 	float3 vertexColor = input.Color.xyz;
+#		endif
 #	endif  // defined (HAIR)
 
 	float4 color = 0;
@@ -2904,7 +2920,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 
+#		if defined(VR) && (defined(EMAT) || defined(TRUE_PBR)) && (defined(PARALLAX) || defined(LANDSCAPE) || defined(EMAT_ENVMAP) || defined(TRUE_PBR))
+	// VR: store POM parallax amount for stereo reprojection depth correction.
+	// Read by StereoBlendCS to adjust Eye 1 (right eye) reprojection depth
+	// at POM-displaced surfaces. Not consumed on flat (SE/AE).
+	psout.Reflectance = float4(indirectLobeWeights.specular,
+		(pixelOffset > 0.0) ? saturate(pixelOffset) : psout.Diffuse.w);
+#		else
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
+#		endif
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
 
 #		if defined(SNOW)
@@ -2927,9 +2951,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.NormalGlossiness.w = stochasticBlend;
 #	endif
 
+#	if !defined(HDR_OUTPUT)  // Do not apply gamma correction before we pass to ISHDR.
 	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {
 		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
+#	endif
 
 	return psout;
 }
