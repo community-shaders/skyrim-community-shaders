@@ -30,6 +30,7 @@
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
+#include "Features/VRS.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
@@ -83,6 +84,7 @@ namespace globals
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
 		HDRDisplay hdrDisplay{};
+		VRS vrs{};
 		RenderDoc renderDoc{};
 		WeatherEditor weatherEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
