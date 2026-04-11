@@ -218,7 +218,7 @@ public:
 		uint InMapMenu;
 		uint HideSky;
 		float MipBias;
-		float pad0;  // unused; must match SharedData.hlsli cbuffer (AmbientSHR 16-byte alignment)
+		float WaterSystemHeight;  // TES::GetWaterHeight at eye-0 in camera-relative Z; -NI_INFINITY when no water body found (VR only)
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;

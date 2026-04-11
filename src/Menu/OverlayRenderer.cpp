@@ -217,12 +217,22 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
-	Util::UpdateImGuiInput(
-		desc.OutputWindow,
-		static_cast<float>(desc.BufferDesc.Width),
-		static_cast<float>(desc.BufferDesc.Height));
+	const float displayW = static_cast<float>(desc.BufferDesc.Width);
+	const float displayH = static_cast<float>(desc.BufferDesc.Height);
+	Util::UpdateImGuiInput(desc.OutputWindow, displayW, displayH);
 
 	ImGui::NewFrame();
+
+	// Detect display size change (cross-session via ini handler, mid-session via member)
+	const float2 currentDisplaySize{ displayW, displayH };
+	if (menu.lastDisplaySize.x > 0.f && menu.lastDisplaySize != currentDisplaySize) {
+		logger::info("Display size changed: {}x{} -> {}x{}, resetting window layout",
+			menu.lastDisplaySize.x, menu.lastDisplaySize.y, currentDisplaySize.x, currentDisplaySize.y);
+		menu.resetLayout = true;
+		EditorWindow::GetSingleton()->resetLayout = true;
+	}
+	menu.lastDisplaySize = currentDisplaySize;
+
 	ThemeManager::SetupImGuiStyle(menu);
 }
 
