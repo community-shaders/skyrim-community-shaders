@@ -31,18 +31,18 @@ option(
 option(
     ZIP_TO_DIST
     "Zip the base mod and addons to their own 7z file in dist."
-    ON
+    OFF
 )
 option(
     AIO_ZIP_TO_DIST
     "Zip the base mod and addons to a AIO 7z file in dist."
-    ON
+    OFF
 )
 option(TRACY_SUPPORT "Enable support for tracy profiler" OFF)
 option(
     BUILD_SHADER_TESTS
     "Build shader unit tests (runs automatically before packaging)"
-    ON
+    OFF
 )
 message("\tAuto plugin deployment: ${AUTO_PLUGIN_DEPLOYMENT}")
 message("\tZip to dist: ${ZIP_TO_DIST}")
