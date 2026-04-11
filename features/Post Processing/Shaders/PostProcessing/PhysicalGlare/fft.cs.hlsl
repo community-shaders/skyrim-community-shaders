@@ -1,14 +1,14 @@
-// PhysicalGlare - Stockham Radix-2 FFT
+// Physical Glare — Stockham radix-2 FFT (row/column pass)
+// Community Shaders / Post Processing — Author: Jiaye, 2026
 //
-// Reference:
-//   Delavennat, J. (2021). Physically-based Real-time Glare.
-//   Master's thesis (LIU-ITN-TEK-A--21/068-SE), Linköping University.
-//   https://www.diva-portal.org/smash/record.jsf?pid=diva2:1629565
+// One-dimensional DFT via the Stockham auto-sort algorithm using
+// groupshared memory.  Compiled with defines:
+//   ROW_PASS / COL_PASS — selects transform axis.
+//   FORWARD / INVERSE   — selects twiddle factor sign.
+// Each thread group processes one row or column; dispatch (N, 1, 1).
 //
-// Performs a 1D FFT along rows or columns using groupshared memory.
-// Compiled with defines: ROW_PASS or COL_PASS, FORWARD or INVERSE
-// Each thread group processes one row/column of the FFT.
-// Dispatch: (FFTResolution, 1, 1) - one group per row/column
+// References:
+//   [1] Delavennat (2021), Physically-based Real-time Glare, LiU.
 
 // Input complex texture (RG32F: R=real, G=imaginary)
 Texture2D<float2> TexInput : register(t0);
@@ -29,24 +29,19 @@ cbuffer GlareCB : register(b1)
 	float DeltaTime;
 
 	uint FFTResolution;
-	float RcpFFTResolution;
+	float PaddingRatio;
 	float ScreenWidth;
 	float ScreenHeight;
 
 	uint ChannelIndex;
-	uint EnableEyelashes;
-	uint EyelashCount;
-	float EyelashLength;
-
-	float EyelashCurvature;
 	float FresnelExponent;
 	float ChromaticSpread;
 	float ApertureSize;
 
-	uint ParticleCount;
-	float ParticleSize;
-	uint GratingCount;
-	float GratingStrength;
+	float PSFSharpness;
+	float PSFNoiseFloor;
+	uint EnableEyelashes;
+	float EyelashCurvature;
 };
 
 static const float PI = 3.14159265358979323846;

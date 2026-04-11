@@ -1,5 +1,6 @@
 #include "PhysicalGlare.h"
 
+#include "Features/LinearLighting.h"
 #include "Globals.h"
 #include "State.h"
 #include "Util.h"
@@ -14,17 +15,38 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ScatterStrength,
 	AdaptSpeed,
 	FFTResolution,
+	FresnelExponent,
+	ChromaticSpread,
+	ApertureSize,
+	SphericalAberration,
+	PSFSharpness,
+	PSFNoiseFloor,
+	PaddingRatio,
 	EnableEyelashes,
 	EyelashCount,
 	EyelashLength,
 	EyelashCurvature,
-	FresnelExponent,
-	ChromaticSpread,
-	ApertureSize,
 	ParticleCount,
 	ParticleSize,
 	GratingCount,
-	GratingStrength)
+	GratingStrength,
+	TearFilmStrength,
+	TearFilmSpeed,
+	TearFilmComplexity,
+	SutureBranches,
+	SutureStrength,
+	SutureWidth,
+	StarburstCount,
+	StarburstStrength,
+	StarburstIrregularity,
+	DustCount,
+	DustSize,
+	BladeRoughnessFreq,
+	BladeRoughnessAmp,
+	ScratchCount,
+	ScratchOpacity,
+	ScratchLength,
+	ScratchWidth)
 
 void PhysicalGlare::DrawSettings()
 {
@@ -51,6 +73,52 @@ void PhysicalGlare::DrawSettings()
 		ImGui::SliderFloat("Aperture Size", &settings.ApertureSize, 0.1f, 0.5f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Aperture radius as fraction of FFT extent. Smaller = wider diffraction spikes.");
+
+		ImGui::SliderFloat("Spherical Aberration", &settings.SphericalAberration, 0.f, 100.f, "%.1f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
+				"Seidel spherical aberration (r^4 wavefront error).\n"
+				"Models lens curvature: outer rays focus at a different point\n"
+				"than central rays, producing concentric ring structure in the\n"
+				"PSF and softer glare edges. Physical range: 0-50.");
+
+		ImGui::SliderInt("Dust Count", &settings.DustCount, 0, 500);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Dust particles on lens element surfaces.\nProduces scattered haze via Babinet's principle.");
+
+		if (settings.DustCount > 0) {
+			ImGui::SliderFloat("Dust Size", &settings.DustSize, 0.5f, 5.f, "%.1f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Radius of each dust particle in pixels.");
+		}
+
+		ImGui::SliderFloat("Blade Roughness", &settings.BladeRoughnessAmp, 0.f, 2.f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Micro-serrations on aperture blade edges (manufacturing imperfections).\nMakes star spikes slightly fuzzy/irregular. 0 = perfect edges.");
+
+		if (settings.BladeRoughnessAmp > 0.f) {
+			ImGui::SliderInt("Roughness Frequency", &settings.BladeRoughnessFreq, 5, 100);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Number of bumps per blade edge. Higher = finer serrations.");
+		}
+
+		ImGui::SliderInt("Scratch Count", &settings.ScratchCount, 0, 20);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Linear scratches on lens element surfaces.\nEach scratch produces a perpendicular streak in the glare.");
+
+		if (settings.ScratchCount > 0) {
+			ImGui::SliderFloat("Scratch Opacity", &settings.ScratchOpacity, 0.f, 1.f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("How opaque each scratch is. Higher = more visible streaks.");
+
+			ImGui::SliderFloat("Scratch Length", &settings.ScratchLength, 0.2f, 1.5f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Length of scratches relative to aperture size.");
+
+			ImGui::SliderFloat("Scratch Width", &settings.ScratchWidth, 0.5f, 4.f, "%.1f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Pixel width of each scratch.");
+		}
 	}
 
 	ImGui::SliderFloat("Aperture Rotation", &settings.ApertureRotation, -180.f, 180.f, "%.1f deg");
@@ -79,6 +147,76 @@ void PhysicalGlare::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("Opacity of lens gratings. Higher = stronger lenticular halo.");
 		}
+
+		ImGui::SliderFloat("Tear Film Strength", &settings.TearFilmStrength, 0.f, 1.f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Simulates tear film irregularities on the cornea surface.\nProduces flickering, sharp, irregular star spikes.\n0 = disabled (static PSF).");
+
+		if (settings.TearFilmStrength > 0.f) {
+			ImGui::SliderFloat("Tear Film Speed", &settings.TearFilmSpeed, 0.1f, 8.f, "%.1f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("How fast the tear film fluctuates (blink refresh rate ~0.3Hz, breakup ~2-5Hz).");
+
+			ImGui::SliderInt("Tear Film Complexity", &settings.TearFilmComplexity, 3, 16);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Number of angular harmonics. More = more spikes, finer detail.");
+		}
+
+		ImGui::SliderInt("Suture Branches", &settings.SutureBranches, 0, 8);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
+				"Lens suture lines: Y-shaped junctions where lens fiber cells meet.\n"
+				"3 = young eye (anterior Y + posterior inverted Y = 6 spikes).\n"
+				"More branches = older/more complex lens. 0 = disabled.");
+
+		if (settings.SutureBranches > 0) {
+			ImGui::SliderFloat("Suture Strength", &settings.SutureStrength, 0.f, 1.f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Opacity of suture lines. Higher = stronger star spikes.");
+
+			ImGui::SliderFloat("Suture Width", &settings.SutureWidth, 0.5f, 5.f, "%.1f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Pixel width of each suture line. Thinner = sharper spikes.");
+		}
+
+		ImGui::SliderInt("Starburst Spikes", &settings.StarburstCount, 0, 128);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
+				"Lens fiber radial phase grating.\nCreates many thin, sharp radial star spikes.\n"
+				"Higher count = more spikes (typical human eye: 20-80). 0 = disabled.");
+
+		if (settings.StarburstCount > 0) {
+			ImGui::SliderFloat("Starburst Strength", &settings.StarburstStrength, 0.f, 2.f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Phase shift strength per fiber. Higher = brighter spikes.");
+
+			ImGui::SliderFloat("Starburst Irregularity", &settings.StarburstIrregularity, 0.f, 1.f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text(
+					"Random variation in fiber spacing and strength.\n"
+					"0 = perfectly regular (even spikes).\n"
+					"1 = maximally irregular (natural look).");
+		}
+
+		if (ImGui::CollapsingHeader("Eyelashes")) {
+			ImGui::Checkbox("Enable Eyelashes", &settings.EnableEyelashes);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Simulate eyelash occlusion for streak effects (paper section 3.1).");
+
+			if (settings.EnableEyelashes) {
+				ImGui::SliderInt("Eyelash Count", &settings.EyelashCount, 5, 80);
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("Total number of eyelash hairs (upper + lower).");
+
+				ImGui::SliderFloat("Eyelash Length", &settings.EyelashLength, 0.1f, 0.8f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("Length of eyelashes relative to aperture radius.");
+
+				ImGui::SliderFloat("Eyelash Curvature", &settings.EyelashCurvature, 0.f, 1.f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("Streak curvature via UV bending (paper fig 3.7: sin(x) vertical offset).");
+			}
+		}
 	}
 
 	ImGui::SliderFloat("Adapt Speed", &settings.AdaptSpeed, 0.5f, 10.f, "%.1f");
@@ -100,25 +238,14 @@ void PhysicalGlare::DrawSettings()
 			ImGui::Text("Resolution of the FFT convolution. Higher = sharper starburst but more expensive.");
 	}
 
-	if (ImGui::CollapsingHeader("Eyelashes")) {
-		ImGui::Checkbox("Enable Eyelashes", &settings.EnableEyelashes);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Simulate eyelash occlusion for streak effects (paper section 3.1).");
-
-		if (settings.EnableEyelashes) {
-			ImGui::SliderInt("Eyelash Count", &settings.EyelashCount, 5, 80);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Total number of eyelash hairs (upper + lower).");
-
-			ImGui::SliderFloat("Eyelash Length", &settings.EyelashLength, 0.1f, 0.8f, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Length of eyelashes relative to aperture radius.");
-
-			ImGui::SliderFloat("Eyelash Curvature", &settings.EyelashCurvature, 0.f, 1.f, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Streak curvature via UV bending (paper fig 3.7: sin(x) vertical offset).");
-		}
-	}
+	ImGui::SliderFloat("Padding Ratio", &settings.PaddingRatio, 0.f, 0.25f, "%.3f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			"Zero-padding per side to prevent FFT wrap-around.\n"
+			"0.25 = paper default (50%% effective resolution).\n"
+			"0.1  = 80%% effective (recommended for high-res).\n"
+			"0.0  = 100%% (maximum sharpness, may wrap at edges).\n"
+			"Lower = sharper glare on high-res screens.");
 
 	ImGui::SliderFloat("Fresnel Exponent", &settings.FresnelExponent, 0.f, 80.f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -127,6 +254,21 @@ void PhysicalGlare::DrawSettings()
 	ImGui::SliderFloat("Chromatic Spread", &settings.ChromaticSpread, 0.f, 3.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Multiplier on wavelength-dependent UV scaling (paper section 2.3: lambda/575nm).\n1.0 = physically correct. Higher = more rainbow spread. 0 = monochrome.");
+
+	if (ImGui::CollapsingHeader("PSF Shaping")) {
+		ImGui::SliderFloat("PSF Sharpness", &settings.PSFSharpness, 0.2f, 1.f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
+				"Dynamic range compression exponent (paper Table 3.9: 0.45).\n"
+				"Lower = wider/softer glare, higher = concentrated near light source.\n"
+				"Increase if glare looks too blurry/spreads too far.");
+
+		ImGui::SliderFloat("PSF Noise Floor", &settings.PSFNoiseFloor, 0.f, 0.01f, "%.4f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
+				"Threshold to remove low-level FFT noise from the PSF.\n"
+				"Paper default: 0.001. Higher = cleaner glare wings.");
+	}
 
 	if (ImGui::CollapsingHeader("Debug")) {
 		if (texGlareResult)
@@ -347,10 +489,32 @@ bool PhysicalGlare::NeedsPSFRegeneration() const
 	       cachedPSFParams.FresnelExponent != settings.FresnelExponent ||
 	       cachedPSFParams.ChromaticSpread != settings.ChromaticSpread ||
 	       cachedPSFParams.ApertureSize != settings.ApertureSize ||
+	       cachedPSFParams.PSFSharpness != settings.PSFSharpness ||
+	       cachedPSFParams.PSFNoiseFloor != settings.PSFNoiseFloor ||
 	       cachedPSFParams.ParticleCount != settings.ParticleCount ||
 	       cachedPSFParams.ParticleSize != settings.ParticleSize ||
 	       cachedPSFParams.GratingCount != settings.GratingCount ||
-	       cachedPSFParams.GratingStrength != settings.GratingStrength;
+	       cachedPSFParams.GratingStrength != settings.GratingStrength ||
+	       cachedPSFParams.TearFilmStrength != settings.TearFilmStrength ||
+	       cachedPSFParams.TearFilmSpeed != settings.TearFilmSpeed ||
+	       cachedPSFParams.TearFilmComplexity != settings.TearFilmComplexity ||
+	       cachedPSFParams.SutureBranches != settings.SutureBranches ||
+	       cachedPSFParams.SutureStrength != settings.SutureStrength ||
+	       cachedPSFParams.SutureWidth != settings.SutureWidth ||
+	       cachedPSFParams.StarburstCount != settings.StarburstCount ||
+	       cachedPSFParams.StarburstStrength != settings.StarburstStrength ||
+	       cachedPSFParams.StarburstIrregularity != settings.StarburstIrregularity ||
+	       cachedPSFParams.DustCount != settings.DustCount ||
+	       cachedPSFParams.DustSize != settings.DustSize ||
+	       cachedPSFParams.BladeRoughnessFreq != settings.BladeRoughnessFreq ||
+	       cachedPSFParams.BladeRoughnessAmp != settings.BladeRoughnessAmp ||
+	       cachedPSFParams.ScratchCount != settings.ScratchCount ||
+	       cachedPSFParams.ScratchOpacity != settings.ScratchOpacity ||
+	       cachedPSFParams.ScratchLength != settings.ScratchLength ||
+	       cachedPSFParams.ScratchWidth != settings.ScratchWidth ||
+	       cachedPSFParams.SphericalAberration != settings.SphericalAberration ||
+	       cachedPSFParams.UseAP1 != (globals::features::linearLighting.settings.enableACEScg && globals::features::linearLighting.settings.enableLinearLighting) ||
+	       settings.TearFilmStrength > 0.f;  // force per-frame regen when active
 }
 
 void PhysicalGlare::GeneratePSF()
@@ -368,21 +532,45 @@ void PhysicalGlare::GeneratePSF()
 		.AdaptSpeed = settings.AdaptSpeed,
 		.DeltaTime = 0.f,
 		.FFTResolution = currentFFTResolution,
-		.RcpFFTResolution = 1.f / (float)currentFFTResolution,
+		.PaddingRatio = settings.PaddingRatio,
 		.ScreenWidth = texOutput ? (float)texOutput->desc.Width : 1920.f,
 		.ScreenHeight = texOutput ? (float)texOutput->desc.Height : 1080.f,
 		.ChannelIndex = 0,
-		.EnableEyelashes = settings.EnableEyelashes ? 1u : 0u,
-		.EyelashCount = (uint)settings.EyelashCount,
-		.EyelashLength = settings.EyelashLength,
-		.EyelashCurvature = settings.EyelashCurvature,
 		.FresnelExponent = settings.FresnelExponent,
 		.ChromaticSpread = settings.ChromaticSpread,
 		.ApertureSize = settings.ApertureSize,
+		.PSFSharpness = settings.PSFSharpness,
+		.PSFNoiseFloor = settings.PSFNoiseFloor,
+		.EnableEyelashes = settings.EnableEyelashes ? 1u : 0u,
+		.EyelashCurvature = settings.EyelashCurvature,
+		// Eye mode
+		.EyelashCount = (uint)settings.EyelashCount,
+		.EyelashLength = settings.EyelashLength,
 		.ParticleCount = (uint)settings.ParticleCount,
 		.ParticleSize = settings.ParticleSize,
 		.GratingCount = (uint)settings.GratingCount,
 		.GratingStrength = settings.GratingStrength,
+		.TearFilmStrength = settings.TearFilmStrength,
+		.TearFilmSpeed = settings.TearFilmSpeed,
+		.TearFilmComplexity = (uint)settings.TearFilmComplexity,
+		.TearFilmTime = tearFilmTimeAccum,
+		.SutureBranches = (uint)settings.SutureBranches,
+		.SutureStrength = settings.SutureStrength,
+		.SutureWidth = settings.SutureWidth,
+		.StarburstCount = (uint)settings.StarburstCount,
+		.StarburstStrength = settings.StarburstStrength,
+		.StarburstIrregularity = settings.StarburstIrregularity,
+		// Lens mode
+		.DustCount = (uint)settings.DustCount,
+		.DustSize = settings.DustSize,
+		.BladeRoughnessFreq = (uint)settings.BladeRoughnessFreq,
+		.BladeRoughnessAmp = settings.BladeRoughnessAmp,
+		.ScratchCount = (uint)settings.ScratchCount,
+		.ScratchOpacity = settings.ScratchOpacity,
+		.ScratchLength = settings.ScratchLength,
+		.ScratchWidth = settings.ScratchWidth,
+		.SphericalAberration = settings.SphericalAberration,
+		.UseAP1 = (globals::features::linearLighting.settings.enableACEScg && globals::features::linearLighting.settings.enableLinearLighting) ? 1u : 0u,
 	};
 
 	glareCB->Update(cbData);
@@ -462,6 +650,27 @@ void PhysicalGlare::GeneratePSF()
 	cachedPSFParams.ParticleSize = settings.ParticleSize;
 	cachedPSFParams.GratingCount = settings.GratingCount;
 	cachedPSFParams.GratingStrength = settings.GratingStrength;
+	cachedPSFParams.TearFilmStrength = settings.TearFilmStrength;
+	cachedPSFParams.TearFilmSpeed = settings.TearFilmSpeed;
+	cachedPSFParams.TearFilmComplexity = settings.TearFilmComplexity;
+	cachedPSFParams.SutureBranches = settings.SutureBranches;
+	cachedPSFParams.SutureStrength = settings.SutureStrength;
+	cachedPSFParams.SutureWidth = settings.SutureWidth;
+	cachedPSFParams.StarburstCount = settings.StarburstCount;
+	cachedPSFParams.StarburstStrength = settings.StarburstStrength;
+	cachedPSFParams.StarburstIrregularity = settings.StarburstIrregularity;
+	cachedPSFParams.DustCount = settings.DustCount;
+	cachedPSFParams.DustSize = settings.DustSize;
+	cachedPSFParams.PSFSharpness = settings.PSFSharpness;
+	cachedPSFParams.PSFNoiseFloor = settings.PSFNoiseFloor;
+	cachedPSFParams.BladeRoughnessAmp = settings.BladeRoughnessAmp;
+	cachedPSFParams.BladeRoughnessFreq = settings.BladeRoughnessFreq;
+	cachedPSFParams.ScratchCount = settings.ScratchCount;
+	cachedPSFParams.ScratchOpacity = settings.ScratchOpacity;
+	cachedPSFParams.ScratchLength = settings.ScratchLength;
+	cachedPSFParams.ScratchWidth = settings.ScratchWidth;
+	cachedPSFParams.SphericalAberration = settings.SphericalAberration;
+	cachedPSFParams.UseAP1 = globals::features::linearLighting.settings.enableACEScg && globals::features::linearLighting.settings.enableLinearLighting;
 	psfDirty = false;
 }
 
@@ -496,6 +705,11 @@ void PhysicalGlare::Draw(TextureInfo& inout_tex)
 		CreateFFTTextures(targetRes);
 	}
 
+	// Accumulate tear film time
+	if (settings.TearFilmStrength > 0.f) {
+		tearFilmTimeAccum += *globals::game::deltaTime;
+	}
+
 	// Update constant buffer
 	GlareCB cbData = {
 		.Threshold = settings.Threshold,
@@ -507,21 +721,45 @@ void PhysicalGlare::Draw(TextureInfo& inout_tex)
 		.AdaptSpeed = settings.AdaptSpeed,
 		.DeltaTime = *globals::game::deltaTime,
 		.FFTResolution = currentFFTResolution,
-		.RcpFFTResolution = 1.f / (float)currentFFTResolution,
+		.PaddingRatio = settings.PaddingRatio,
 		.ScreenWidth = (float)texOutput->desc.Width,
 		.ScreenHeight = (float)texOutput->desc.Height,
 		.ChannelIndex = 0,
-		.EnableEyelashes = settings.EnableEyelashes ? 1u : 0u,
-		.EyelashCount = (uint)settings.EyelashCount,
-		.EyelashLength = settings.EyelashLength,
-		.EyelashCurvature = settings.EyelashCurvature,
 		.FresnelExponent = settings.FresnelExponent,
 		.ChromaticSpread = settings.ChromaticSpread,
 		.ApertureSize = settings.ApertureSize,
+		.PSFSharpness = settings.PSFSharpness,
+		.PSFNoiseFloor = settings.PSFNoiseFloor,
+		.EnableEyelashes = settings.EnableEyelashes ? 1u : 0u,
+		.EyelashCurvature = settings.EyelashCurvature,
+		// Eye mode
+		.EyelashCount = (uint)settings.EyelashCount,
+		.EyelashLength = settings.EyelashLength,
 		.ParticleCount = (uint)settings.ParticleCount,
 		.ParticleSize = settings.ParticleSize,
 		.GratingCount = (uint)settings.GratingCount,
 		.GratingStrength = settings.GratingStrength,
+		.TearFilmStrength = settings.TearFilmStrength,
+		.TearFilmSpeed = settings.TearFilmSpeed,
+		.TearFilmComplexity = (uint)settings.TearFilmComplexity,
+		.TearFilmTime = tearFilmTimeAccum,
+		.SutureBranches = (uint)settings.SutureBranches,
+		.SutureStrength = settings.SutureStrength,
+		.SutureWidth = settings.SutureWidth,
+		.StarburstCount = (uint)settings.StarburstCount,
+		.StarburstStrength = settings.StarburstStrength,
+		.StarburstIrregularity = settings.StarburstIrregularity,
+		// Lens mode
+		.DustCount = (uint)settings.DustCount,
+		.DustSize = settings.DustSize,
+		.BladeRoughnessFreq = (uint)settings.BladeRoughnessFreq,
+		.BladeRoughnessAmp = settings.BladeRoughnessAmp,
+		.ScratchCount = (uint)settings.ScratchCount,
+		.ScratchOpacity = settings.ScratchOpacity,
+		.ScratchLength = settings.ScratchLength,
+		.ScratchWidth = settings.ScratchWidth,
+		.SphericalAberration = settings.SphericalAberration,
+		.UseAP1 = (globals::features::linearLighting.settings.enableACEScg && globals::features::linearLighting.settings.enableLinearLighting) ? 1u : 0u,
 	};
 	glareCB->Update(cbData);
 

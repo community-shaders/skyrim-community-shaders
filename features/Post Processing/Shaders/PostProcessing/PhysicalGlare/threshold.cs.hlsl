@@ -1,14 +1,14 @@
-// PhysicalGlare - Threshold extraction & downsample to FFT resolution
+// Physical Glare — Threshold extraction and zero-padded downsampling
+// Community Shaders / Post Processing — Author: Jiaye, 2026
 //
-// Reference:
-//   Delavennat, J. (2021). Physically-based Real-time Glare.
-//   Master's thesis (LIU-ITN-TEK-A--21/068-SE), Linköping University.
-//   https://www.diva-portal.org/smash/record.jsf?pid=diva2:1629565
+// Per-channel luminance thresholding: pixels below the threshold are
+// discarded; the remainder is placed into the center [P, 1−P) region of
+// the N×N FFT texture.  The surrounding border remains zero, providing
+// spatial padding to suppress FFT circular convolution wrap-around
+// artefacts [1, section 2.5].  P is controlled by PaddingRatio.
 //
-// Per-channel thresholding (paper section 3.2).
-// Zero-padding to eliminate FFT circular convolution wrap-around (paper section 2.5):
-//   Scene is placed in center quarter [N/4, 3N/4) of the N×N FFT texture;
-//   the surrounding border remains zero, absorbing convolution overflow.
+// References:
+//   [1] Delavennat (2021), Physically-based Real-time Glare, LiU.
 
 RWTexture2D<float2> RWTexFFT_R : register(u0);
 RWTexture2D<float2> RWTexFFT_G : register(u1);
@@ -29,36 +29,31 @@ cbuffer GlareCB : register(b1)
 	float DeltaTime;
 
 	uint FFTResolution;
-	float RcpFFTResolution;
+	float PaddingRatio;
 	float ScreenWidth;
 	float ScreenHeight;
 
 	uint ChannelIndex;
-	uint EnableEyelashes;
-	uint EyelashCount;
-	float EyelashLength;
-
-	float EyelashCurvature;
 	float FresnelExponent;
 	float ChromaticSpread;
 	float ApertureSize;
 
-	uint ParticleCount;
-	float ParticleSize;
-	uint GratingCount;
-	float GratingStrength;
+	float PSFSharpness;
+	float PSFNoiseFloor;
+	uint EnableEyelashes;
+	float EyelashCurvature;
 };
 
 [numthreads(8, 8, 1)] void CS_Threshold(uint2 tid : SV_DispatchThreadID) {
 	if (tid.x >= FFTResolution || tid.y >= FFTResolution)
 		return;
 
-	// Zero-padding (paper section 2.5):
-	// Place the scene in the center quarter [N/4, 3N/4) of the N×N FFT texture.
-	// The surrounding border stays zero, absorbing convolution overflow and
-	// eliminating circular wrap-around artifacts.
-	uint padding = FFTResolution / 4;
-	uint sceneSize = FFTResolution / 2;
+	// Zero-padding [1, section 2.5]:
+	// Scene is placed in the centre region of the N×N FFT texture.
+	// PaddingRatio controls border width per side that absorbs convolution
+	// overflow:  0.25 = 50% effective (default in [1]), 0.1 = 80%, 0 = none.
+	uint padding = uint(float(FFTResolution) * PaddingRatio);
+	uint sceneSize = FFTResolution - 2 * padding;
 
 	if (tid.x >= padding && tid.x < padding + sceneSize &&
 		tid.y >= padding && tid.y < padding + sceneSize) {
@@ -72,10 +67,10 @@ cbuffer GlareCB : register(b1)
 
 		float3 color = TexColor[screenPos].rgb;
 
-		// Per-channel threshold (paper section 3.2, adapted for HDR pipeline):
-		// Subtract threshold per channel; values above threshold pass in original
-		// HDR magnitude.  The DC-normalised convolution preserves this energy,
-		// so no empirical ×10000 scaling is needed.
+		// Per-channel thresholding [1, section 3.2], adapted for HDR:
+		// Values exceeding Threshold pass through at original HDR magnitude.
+		// DC-normalised convolution preserves energy, so the empirical
+		// scaling factor from [1] is unnecessary.
 		float3 extracted = max(0, color.rgb - Threshold);
 
 		RWTexFFT_R[tid] = float2(extracted.r, 0);

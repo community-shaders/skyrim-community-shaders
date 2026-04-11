@@ -1,12 +1,12 @@
-// PhysicalGlare - Frequency domain complex multiplication
+// Physical Glare — Frequency-domain complex multiplication
+// Community Shaders / Post Processing — Author: Jiaye, 2026
 //
-// Reference:
-//   Delavennat, J. (2021). Physically-based Real-time Glare.
-//   Master's thesis (LIU-ITN-TEK-A--21/068-SE), Linköping University.
-//   https://www.diva-portal.org/smash/record.jsf?pid=diva2:1629565
+// Element-wise complex multiplication of the scene FFT with the PSF FFT
+// for one colour channel: (a+bi)(c+di) = (ac−bd) + (ad+bc)i.
+// Implements the convolution theorem: IFFT(F·G) = f∗g [1, section 2.1].
 //
-// Multiplies the FFT of the scene with the FFT of the PSF per channel.
-// Complex multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+// References:
+//   [1] Delavennat (2021), Physically-based Real-time Glare, LiU.
 
 Texture2D<float2> TexSceneFFT : register(t0);  // Scene FFT (one channel)
 Texture2D<float2> TexPSF_FFT : register(t1);   // PSF FFT (one channel)
@@ -26,24 +26,19 @@ cbuffer GlareCB : register(b1)
 	float DeltaTime;
 
 	uint FFTResolution;
-	float RcpFFTResolution;
+	float PaddingRatio;
 	float ScreenWidth;
 	float ScreenHeight;
 
 	uint ChannelIndex;
-	uint EnableEyelashes;
-	uint EyelashCount;
-	float EyelashLength;
-
-	float EyelashCurvature;
 	float FresnelExponent;
 	float ChromaticSpread;
 	float ApertureSize;
 
-	uint ParticleCount;
-	float ParticleSize;
-	uint GratingCount;
-	float GratingStrength;
+	float PSFSharpness;
+	float PSFNoiseFloor;
+	uint EnableEyelashes;
+	float EyelashCurvature;
 };
 
 [numthreads(8, 8, 1)] void CS_Multiply(uint2 tid : SV_DispatchThreadID) {

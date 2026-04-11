@@ -1,19 +1,23 @@
-// PhysicalGlare - Chromatic Blur PSF generation
+// Physical Glare — Chromatic PSF generation
+// Community Shaders / Post Processing — Author: Jiaye, 2026
 //
-// Reference:
-//   Delavennat, J. (2021). Physically-based Real-time Glare.
-//   Master's thesis (LIU-ITN-TEK-A--21/068-SE), Linköping University.
-//   https://www.diva-portal.org/smash/record.jsf?pid=diva2:1629565
+// Computes per-channel point spread function via multi-wavelength diffraction
+// intensity sampling.  For each of 32 spectral samples across 380–770 nm,
+// the monochromatic diffraction pattern |F(u,v)|² is sampled at a
+// wavelength-scaled UV offset and weighted by CIE 1931 colour matching
+// functions [3].  Spectral weights are converted to the working colour
+// space (Rec. 709 or ACEScg/AP1) depending on pipeline configuration.
 //
-// Reads the complex FFT of the aperture (diffraction amplitude), computes |F|² intensity,
-// and performs multi-wavelength UV-scaled layering (chromatic blur) to produce a
-// per-channel PSF with physically-correct color dispersion.
+// In eye (pupil) mode, eyelash streak curvature is applied via sinusoidal
+// UV bending [1, section 3.1, fig. 3.7].
 //
-// Pipeline: aperture → FFT → *this shader* → FFT → frequency-domain convolution
+// Pipeline position: aperture → FFT → [this shader] → FFT → convolution
 //
-// The chromatic blur layers copies of the monochromatic diffraction pattern at
-// wavelength-dependent UV scales, weighted by CIE spectral→RGB conversion,
-// producing the characteristic rainbow fringes of real eye glare.
+// References:
+//   [1] Delavennat (2021), Physically-based Real-time Glare, LiU.
+//   [2] Ritschel et al. (2009), Temporal Glare, CGF 28(2).
+//   [3] Wyman, Sloan, Shirley (2013), Simple Analytic Approximations
+//       to the CIE XYZ Color Matching Functions, JCGT 2(2).
 
 Texture2D<float2> TexDiffraction : register(t0);  // Complex FFT of aperture (RG32F)
 SamplerState WrapSampler : register(s0);          // Wrap-mode bilinear sampler
@@ -33,24 +37,32 @@ cbuffer GlareCB : register(b1)
 	float DeltaTime;
 
 	uint FFTResolution;
-	float RcpFFTResolution;
+	float PaddingRatio;
 	float ScreenWidth;
 	float ScreenHeight;
 
 	uint ChannelIndex;  // 0=R, 1=G, 2=B
-	uint EnableEyelashes;
-	uint EyelashCount;
-	float EyelashLength;
-
-	float EyelashCurvature;
 	float FresnelExponent;
 	float ChromaticSpread;
 	float ApertureSize;
 
-	uint ParticleCount;
-	float ParticleSize;
-	uint GratingCount;
-	float GratingStrength;
+	float PSFSharpness;
+	float PSFNoiseFloor;
+	uint EnableEyelashes;
+	float EyelashCurvature;
+
+	// Rows 5-10 (used by aperture shader, not this shader)
+	float4 _cbpad5;
+	float4 _cbpad6;
+	float4 _cbpad7;
+	float4 _cbpad8;
+	float4 _cbpad9;
+	float4 _cbpad10;
+
+	// Row 11: Additional optics
+	float SphericalAberration;
+	uint UseAP1;
+	float2 _pad11;
 };
 
 static const float PI = 3.14159265358979323846;
@@ -98,26 +110,36 @@ float3 XYZToLinearSRGB(float3 xyz)
 		0.0557f * xyz.x - 0.2040f * xyz.y + 1.0570f * xyz.z);
 }
 
+// XYZ → ACEScg / AP1 (ACES D60 white point, AP1 primaries)
+// Matrix from colour-science.org via ColourSpace.h
+float3 XYZToAP1(float3 xyz)
+{
+	return float3(
+		1.64102338f * xyz.x - 0.32480329f * xyz.y - 0.2364247f * xyz.z,
+		-0.66366286f * xyz.x + 1.61533159f * xyz.y + 0.01675635f * xyz.z,
+		0.01172189f * xyz.x - 0.00828444f * xyz.y + 0.98839486f * xyz.z);
+}
+
 // ---------------------------------------------------------------------------
 [numthreads(8, 8, 1)] void CS_ChromaticBlur(uint2 tid : SV_DispatchThreadID) {
 	if (tid.x >= FFTResolution || tid.y >= FFTResolution)
 		return;
 
 	float N = float(FFTResolution);
-	float rcpN = RcpFFTResolution;
+	float rcpN = 1.0 / N;
 
 	// ------------------------------------------------------------------
-	// Chromatic blur: for each wavelength, sample the monochromatic
-	// diffraction pattern (|F|²) at UV scaled by λ/λ_ref, weighted by
-	// the CIE spectral→RGB conversion for the current channel.
-	// Reference wavelength: 575 nm (middle of visible spectrum, scale = 1)
-	// Longer λ (red) → larger diffraction pattern → divide UV by scale > 1
-	// Shorter λ (blue) → smaller pattern → divide UV by scale < 1
+	// Multi-wavelength chromatic blur [1, section 3.1]:
+	// For each spectral sample, the monochromatic diffraction pattern
+	// |F(u,v)|² is sampled at UV scaled by λ/λ_ref, weighted by
+	// CIE 1931 spectral → RGB conversion for the current channel.
+	// Reference wavelength: 575 nm (scale = 1).
+	// Longer λ → larger diffraction pattern; shorter λ → smaller.
 	// ------------------------------------------------------------------
 	float result = 0.0;
 
-	// Convert pixel to centred frequency (DC at origin).
-	// Bins 0..N/2-1 are positive frequencies; N/2..N-1 are negative.
+	// Centred frequency coordinates (DC at origin).
+	// Bins [0, N/2) = positive frequencies; [N/2, N) = negative.
 	float2 freq = float2(tid);
 	if (freq.x >= N * 0.5)
 		freq.x -= N;
@@ -127,24 +149,20 @@ float3 XYZToLinearSRGB(float3 xyz)
 	for (int w = 0; w < NUM_WAVELENGTHS; w++) {
 		float lambda = 380.0 + float(w) * (770.0 - 380.0) / float(NUM_WAVELENGTHS - 1);
 
-		// UV scale: longer wavelength → larger diffraction pattern
-		// Physical scaling per paper section 2.3: λ/575nm
-		// ChromaticSpread multiplies the deviation from unity:
-		//   1.0 = physical, >1 = more rainbow, 0 = monochrome
+		// UV scale: physical scaling λ/575nm [1, section 2.3].
+		// ChromaticSpread controls deviation from unity:
+		//   1.0 = physically correct, >1 = exaggerated, 0 = monochrome.
 		float uvScale = 1.0 + (lambda / 575.0 - 1.0) * ChromaticSpread;
 
-		// Scale frequency around DC, then convert back to UV.
-		// WRAP sampler handles the resulting negative UVs correctly.
+		// Scale frequency around DC, convert to UV.
+		// Wrap-mode sampler handles out-of-range coordinates.
 		float2 sampleUV = (freq / uvScale + 0.5) * rcpN;
 
-		// UV bending for eyelash streak curvature (paper step 4, fig 3.7):
-		// "use y = sin(x) for x in [-1;1], and then add that value as a
-		//  vertical offset to the UVs based on how far from the center
-		//  we are in the x coordinate."
-		// sin(PI*x) maps [-1,1] to a full sine period; multiplied by |x|
-		// (distance from center) gives a symmetric arch (even function)
-		// that curves both sides of the streak the same way.
-		if (EnableEyelashes != 0) {
+		// Eyelash streak curvature via sinusoidal UV bending
+		// [1, section 3.1, fig. 3.7]:  sin(π·x) · |x| produces a
+		// symmetric arch that curves both sides of the streak.
+		// Eye mode only.
+		if (ApertureMode == 1 && EnableEyelashes != 0) {
 			float x_norm = freq.x / (N * 0.5);                          // [-1, 1]
 			float bend = sin(PI * x_norm) * x_norm * EyelashCurvature;  // symmetric arch
 			sampleUV.y -= bend * 0.5;
@@ -157,7 +175,7 @@ float3 XYZToLinearSRGB(float3 xyz)
 
 		// Spectral weight for this RGB channel
 		float3 xyz = WavelengthToXYZ(lambda);
-		float3 rgb = max(XYZToLinearSRGB(xyz), 0.0);
+		float3 rgb = UseAP1 ? max(XYZToAP1(xyz), 0.0) : max(XYZToLinearSRGB(xyz), 0.0);
 
 		float channelWeight;
 		if (ChannelIndex == 0)
@@ -167,21 +185,20 @@ float3 XYZToLinearSRGB(float3 xyz)
 		else
 			channelWeight = rgb.b;
 
-		// Paper: divide each layer by NUM_WAVELENGTHS to keep output in dynamic range
+		// Normalise by NUM_WAVELENGTHS to preserve dynamic range [1, section 3.1].
 		result += intensity * channelWeight / float(NUM_WAVELENGTHS);
 	}
 
 	// ------------------------------------------------------------------
-	// PSF shape compression (paper Table 3.9):
-	//   pow(0.45) compresses extreme FFT dynamic range so diffraction
-	//   spikes are visible relative to the DC peak.  Without this the
-	//   convolution produces only featureless bloom.
-	//   threshold(0.0001) removes low-level FFT numerical noise.
-	//   Paper's factor(2000) and composite ×10 are LDR-tuned empirical
-	//   scalars — omitted here; brightness controlled by Intensity.
+	// PSF dynamic range compression [1, Table 3.9]:
+	//   pow(PSFSharpness) compresses the extreme FFT dynamic range so
+	//   diffraction spikes remain visible relative to the DC peak.
+	//   threshold(PSFNoiseFloor) suppresses low-level numerical noise.
+	//   The LDR-tuned empirical factors from [1] (×2000, ×10) are omitted;
+	//   brightness is governed by the Intensity parameter instead.
 	// ------------------------------------------------------------------
-	result = pow(max(result, 0.0), 0.45);
-	result = max(result - 0.0001, 0.0);
+	result = pow(max(result, 0.0), PSFSharpness);
+	result = max(result - PSFNoiseFloor, 0.0);
 
 	RWTexPSF[tid] = float2(max(result, 0.0), 0.0);
 }
