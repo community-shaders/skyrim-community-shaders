@@ -331,9 +331,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float3 viewDirection = normalize(input.WorldPosition.xyz);
 		float cloudsEdgeAlpha = saturate(1.0 - baseColor.w);
-		float3 sunPhase = pow(abs(saturate(dot(viewDirection, SharedData::SunDirection.xyz))), 12.0) * SharedData::SunColor.xyz;
-		float3 masserPhase = pow(abs(saturate(dot(viewDirection, SharedData::MasserDirection.xyz))), 12.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
-		float3 secundaPhase = pow(abs(saturate(dot(viewDirection, SharedData::SecundaDirection.xyz))), 12.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+		float3 sunPhase = pow(abs(saturate(dot(viewDirection, SharedData::SunDirection.xyz))), 10.0) * SharedData::SunColor.xyz;
+		float3 masserPhase = pow(abs(saturate(dot(viewDirection, SharedData::MasserDirection.xyz))), 10.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+		float3 secundaPhase = pow(abs(saturate(dot(viewDirection, SharedData::SecundaDirection.xyz))), 10.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
 
 		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity;
 
