@@ -219,20 +219,21 @@ PS_OUTPUT main(PS_INPUT input)
 
 	// HDR-only sun path: scale glare/disc brightness using user HDR settings.
 	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		// 203 nits is the HDR reference paper white used by the rest of the HDR pipeline.
-		const float SUN_REF_PAPER_WHITE_NITS = 203.0;
+		const float SUN_REF_PAPER_WHITE_NITS = 203.0;  // HDR pipeline reference white (nits)
 		float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
 		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
-
-		// Peak ratio drives how much brighter the sun can get vs reference HDR white.
 		float peakRatio = peakNits / SUN_REF_PAPER_WHITE_NITS;
 
-		// In LL we are already linear; non-LL needs gamma-domain scaling compensation.
-		float menuSceneEncoding = SharedData::HDRData.w;
 		static const float SUN_DIM_IN_MENU_SCENES = 0.58;  // HDRDisplay::kHdrMenuScenePauseOrMap
-		// Dim sun for pause/map/main-menu scenes to avoid UI-facing blowout.
-		float hdrSunMenuMul = (menuSceneEncoding > 1e-3) ? SUN_DIM_IN_MENU_SCENES : 1.0;
+		float hdrSunMenuMul = (SharedData::HDRData.w > 1e-3) ? SUN_DIM_IN_MENU_SCENES : 1.0;
 		float hdrScale = (ENABLE_LL ? peakRatio : pow(peakRatio, rcp(2.2))) * hdrSunMenuMul;
+
+		// Textured sun: radial gate so flat bright quads don’t get full peak everywhere (see HDRDisplay).
+#		if defined(TEX)
+		float2 sunUvRadial = saturate(input.TexCoord0.xy);
+		float sunRadialR = saturate(length(sunUvRadial - 0.5) * 1.41421356);
+		float sunRadialHdr = pow(saturate(1.0 - sunRadialR), 1.85);
+#		endif
 
 #		if defined(DITHER)
 		// DITHER path is the glare sprite-style variant.
@@ -241,15 +242,29 @@ PS_OUTPUT main(PS_INPUT input)
 		// Keep glare energy bounded before applying HDR scale.
 		if (glareLum > 1.0)
 			baseColor.xyz *= rcp(glareLum);
+		glareLum = min(glareLum, 1.0);
 
-		baseColor.xyz *= hdrScale;
+		// Texture taper: soft halos / low-alpha fringes should not get full linear HDR gain.
+		float glareAlpha = saturate(baseColor.w);
+		float lumBand = smoothstep(0.5, 1.0, glareLum);
+		float glareTaper = pow(glareAlpha * lumBand, 0.62);
+		float glareCoreMask = smoothstep(0.9, 1.0, glareLum) * pow(glareAlpha, 0.22);
+
+		float glareScale;
+#			if defined(TEX)
+		float glareHdrBlend = saturate(glareTaper * sunRadialHdr);
+		float glareCoreRadial = glareCoreMask * sunRadialHdr;
+		glareScale = lerp(1.0, hdrScale, glareHdrBlend) * lerp(1.0, peakRatio, glareCoreRadial);
+#			else
+		glareScale = lerp(1.0, hdrScale, glareTaper) * lerp(1.0, peakRatio, glareCoreMask);
+#			endif
+
+		baseColor.xyz *= glareScale;
 
 		baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
 
 #			ifdef TEX
-		// Fade toward quad edges so the glare sprite blends smoothly.
-		float2 glareUv = saturate(input.TexCoord0.xy);
-		float glareEdge = min(min(glareUv.x, glareUv.y), min(1.0 - glareUv.x, 1.0 - glareUv.y));
+		float glareEdge = min(min(sunUvRadial.x, sunUvRadial.y), min(1.0 - sunUvRadial.x, 1.0 - sunUvRadial.y));
 		float glareEdgeFade = smoothstep(0.0, 0.08, glareEdge);
 		baseColor.xyz *= glareEdgeFade;
 		baseColor.w *= glareEdgeFade;
@@ -262,11 +277,20 @@ PS_OUTPUT main(PS_INPUT input)
 		// Clamp source before boosting the bright disc core.
 		if (srcLum > 1.0)
 			baseColor.xyz *= rcp(srcLum);
+		srcLum = min(srcLum, 1.0);
 
-		// Boost the highest-luminance region more strongly than the outer disc.
-		float sunCoreBoost = peakRatio;
-		float sunCoreMask = smoothstep(0.9, 1.0, saturate(srcLum));
-		float discScale = hdrScale * lerp(1.0, sunCoreBoost, sunCoreMask);
+		float lumEdge = max(fwidth(srcLum) * 2.5, 0.01);
+		float sunCoreMaskTex = smoothstep(0.88 - 0.35 * lumEdge, 1.0, saturate(srcLum));
+		float discScale;
+#			if defined(TEX)
+		discScale = hdrScale * lerp(0.32, 1.0, sunRadialHdr) *
+			lerp(1.0, peakRatio, sunCoreMaskTex * sunRadialHdr);
+#			else
+		discScale = hdrScale * lerp(1.0, peakRatio, sunCoreMaskTex);
+#			endif
+		float alphaEdge = max(fwidth(baseColor.w) * 2.5, 0.004);
+		float discOpaqueGate = smoothstep(0.94 - 0.4 * alphaEdge, 1.0, saturate(baseColor.w));
+		discScale = lerp(1.0, discScale, discOpaqueGate);
 		baseColor.xyz *= discScale;
 
 		// Tiny dither to reduce visible banding on bright gradients.

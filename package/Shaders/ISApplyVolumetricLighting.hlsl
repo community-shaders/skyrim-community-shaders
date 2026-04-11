@@ -45,11 +45,12 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 	float repartition = clamp(RepartitionTex.SampleLevel(RepartitionSampler, depth, 0).x, 0, 0.9999);
-	float vl = g_IntensityX_TemporalY.x * VLTex.SampleLevel(VLSampler, float3(input.TexCoord, repartition), 0).x;
+	float vlSample = min(VLTex.SampleLevel(VLSampler, float3(input.TexCoord, repartition), 0).x, 1.0);
+	float vl = min(g_IntensityX_TemporalY.x * vlSample, 1.0);
 
 	float noiseGrad = 0.03125 * NoiseGradSamplerTex.Sample(NoiseGradSamplerSampler, 0.125 * input.Position.xy).x;
 
-	float adjustedVl = max(0, noiseGrad + vl - 0.0078125);
+	float adjustedVl = min(max(0, noiseGrad + vl - 0.0078125), 1.0);
 
 	if (0.001 < g_IntensityX_TemporalY.y) {
 		float2 motionVector = MotionVectorsTex.Sample(MotionVectorsSampler, screenPosition).xy;
@@ -82,9 +83,9 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 		float temporalContribution = g_IntensityX_TemporalY.y * (1 - smoothstep(0, 1, min(1, 100 * abs(depth - previousDepth))));
-		psout.VL = lerp(adjustedVl, previousVl, temporalContribution * isValid);
+		psout.VL = min(lerp(adjustedVl, previousVl, temporalContribution * isValid), 1.0);
 	} else {
-		psout.VL = adjustedVl;
+		psout.VL = min(adjustedVl, 1.0);
 	}
 
 	return psout;
