@@ -43,7 +43,7 @@ struct HDRDisplay : public Feature
 		bool hdrAutoDetected = false;     // Has auto-detection run at least once?
 	};
 
-	// SharedData::HDRData fourth component: menu/scene path for ISHDR + sun scale (HLSL must match).
+	// SharedData::HDRData fourth component: menu/scene path for ISHDR; Sky.hlsl uses w>0 to scale sun by 100/peakNits.
 	static constexpr float kHdrMenuSceneGameplay = 0.f;
 	static constexpr float kHdrMenuScenePauseOrMap = 0.58f;
 	static constexpr float kHdrMenuSceneMainOrLoading = 1.f;

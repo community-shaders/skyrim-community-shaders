@@ -224,11 +224,12 @@ PS_OUTPUT main(PS_INPUT input)
 		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
 		float peakRatio = peakNits / SUN_REF_PAPER_WHITE_NITS;
 
-		static const float SUN_DIM_IN_MENU_SCENES = 0.58;  // HDRDisplay::kHdrMenuScenePauseOrMap
-		float hdrSunMenuMul = (SharedData::HDRData.w > 1e-3) ? SUN_DIM_IN_MENU_SCENES : 1.0;
+		// Non-gameplay (HDRData.w > 0): cap sun drive ~100 display nits.
+		static const float SUN_HDR_MENU_TARGET_NITS = 100.0;
+		float hdrSunMenuMul = (SharedData::HDRData.w > 1e-3) ? (SUN_HDR_MENU_TARGET_NITS / peakNits) : 1.0;
 		float hdrScale = (ENABLE_LL ? peakRatio : pow(peakRatio, rcp(2.2))) * hdrSunMenuMul;
 
-		// Textured sun: radial gate so flat bright quads don’t get full peak everywhere (see HDRDisplay).
+		// Textured sun: radial gate so flat bright quads don't get full peak everywhere (see HDRDisplay).
 #		if defined(TEX)
 		float2 sunUvRadial = saturate(input.TexCoord0.xy);
 		float sunRadialR = saturate(length(sunUvRadial - 0.5) * 1.41421356);
