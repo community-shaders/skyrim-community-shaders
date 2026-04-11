@@ -81,7 +81,7 @@ namespace DisplayMapping
 	{
 		linearCol /= maxPqValue;
 
-		float3 colToPow = pow(linearCol, PQ_constant_N);
+		float3 colToPow = pow(abs(linearCol), PQ_constant_N);
 		float3 numerator = PQ_constant_C1 + PQ_constant_C2 * colToPow;
 		float3 denominator = 1.0 + PQ_constant_C3 * colToPow;
 		float3 pq = pow(numerator / denominator, PQ_constant_M);
