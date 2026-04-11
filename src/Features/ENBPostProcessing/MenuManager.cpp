@@ -345,7 +345,9 @@ void MenuManager::RenderAllSettings()
 				}
 
 				for (const auto& category : categories) {
-					if (ImGui::CollapsingHeader(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+					ImGuiTreeNodeFlags flags = (tabName == "Weather") ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_DefaultOpen;
+
+					if (ImGui::CollapsingHeader(category.c_str(), flags)) {
 						auto settings = settingManager.GetSettingsByCategory(category);
 
 						if (ImGui::BeginTable((category + "_table").c_str(), 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
