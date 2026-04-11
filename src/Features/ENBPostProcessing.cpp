@@ -144,23 +144,10 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 			if (ambientLuma > 0.0f)
 				ambientPart *= inputLuma / totalLuma;
 
-			auto dirPartTemp = inputColor - ambientPart;
-			dirPartTemp.x = std::max(dirPartTemp.x, 0.0f);
-			dirPartTemp.y = std::max(dirPartTemp.y, 0.0f);
-			dirPartTemp.z = std::max(dirPartTemp.z, 0.0f);
-
-			auto ambientPartTemp = inputColor - dirPart;
-			ambientPartTemp.x = std::max(ambientPartTemp.x, 0.0f);
-			ambientPartTemp.y = std::max(ambientPartTemp.y, 0.0f);
-			ambientPartTemp.z = std::max(ambientPartTemp.z, 0.0f);
-
-			dirPart.x = std::lerp(dirPart.x, dirPartTemp.x, 0.5f);
-			dirPart.y = std::lerp(dirPart.y, dirPartTemp.y, 0.5f);
-			dirPart.z = std::lerp(dirPart.z, dirPartTemp.z, 0.5f);
-
-			ambientPart.x = std::lerp(ambientPart.x, ambientPartTemp.x, 0.5f);
-			ambientPart.y = std::lerp(ambientPart.y, ambientPartTemp.y, 0.5f);
-			ambientPart.z = std::lerp(ambientPart.z, ambientPartTemp.z, 0.5f);
+			dirPart = inputColor - ambientPart;
+			dirPart.x = std::max(dirPart.x, 0.0f);
+			dirPart.y = std::max(dirPart.y, 0.0f);
+			dirPart.z = std::max(dirPart.z, 0.0f);
 
 			// Apply ENB changes
 			dirPart = Curve(dirPart, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT"));
