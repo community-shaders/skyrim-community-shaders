@@ -1265,7 +1265,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows)) {
 			uint activeMask = ExtendedMaterials::ComputeActiveMask(input.LandBlendWeights1, input.LandBlendWeights2.xy);
-			sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset, weights);
+			// Same scalar as GetTerrainHeight return; skips ProcessTerrainHeightWeights (out-weights unused here; shadow taps use shadow path too).
+			sh0 = ExtendedMaterials::GetTerrainHeightShadowTap(uv, mipLevels, displacementParams, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset);
 		}
 	}
 
