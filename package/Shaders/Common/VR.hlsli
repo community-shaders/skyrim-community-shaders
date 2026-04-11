@@ -94,6 +94,44 @@ namespace Stereo
 	}
 
 	/**
+	Gets the eyeIndex for Compute Shaders
+	@param texCoord Texcoord on the screen [0,1]
+	@returns eyeIndex (0 left, 1 right)
+	*/
+	uint GetEyeIndexFromTexCoord(float2 texCoord)
+	{
+#ifdef VR
+		return (texCoord.x >= 0.5) ? 1 : 0;
+#endif  // VR
+		return 0;
+	}
+
+	/**
+	* @brief Applies motion velocity to UV coordinates and determines if the resulting mono UV is out of screen bounds.
+	* @param uv Screen UV coordinates (stereo in VR, mono in SE)
+	* @param velocity Delta motion mapping
+	* @param isOutOfBounds Output flag indicating if the motion went out of bounds
+	* @return Newly displaced UV coordinate mapped back to correct space (stereo in VR, mono in SE). Clamped if necessary.
+	*/
+	float2 ApplyVelocityToUV(float2 uv, float2 velocity, out bool isOutOfBounds)
+	{
+		uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+		float2 prevUVmono = Stereo::ConvertFromStereoUV(uv, eyeIndex) + velocity;
+		float2 clampedMono = prevUVmono;
+
+#ifdef VR
+		// VR logic: mono.x < 0 is clamped to 0, not rejected. OOB fires for mono.x >= 1 or mono.y outside [0, 1] inclusive.
+		isOutOfBounds = (prevUVmono.x >= 1.0) || (prevUVmono.y <= 0.0) || (prevUVmono.y >= 1.0);
+		clampedMono.x = saturate(prevUVmono.x);
+#else
+		// SE logic: inclusive boundaries on both sides.
+		isOutOfBounds = any(prevUVmono >= 1.0) || any(prevUVmono <= 0.0);
+#endif
+
+		return Stereo::ConvertToStereoUV(clampedMono, eyeIndex);
+	}
+
+	/**
 	Converts to the eye specific screenposition [0,Resolution].
 	In VR, texture buffers include the left and right eye in the same buffer. Flat only has a single camera for the entire width.
 	This means the x value [0, resx/2] represents the left eye, and the x value (resx/2, x] are the right eye.
@@ -122,19 +160,6 @@ namespace Stereo
 		float2 xy = screenPosition.xy / a_resolution;
 		xy = ConvertToStereoUV(xy, a_eyeIndex);
 		return float4(xy * a_resolution, screenPosition.zw);
-	}
-
-	/**
-	Gets the eyeIndex for Compute Shaders
-	@param texCoord Texcoord on the screen [0,1]
-	@returns eyeIndex (0 left, 1 right)
-	*/
-	uint GetEyeIndexFromTexCoord(float2 texCoord)
-	{
-#ifdef VR
-		return (texCoord.x >= 0.5) ? 1 : 0;
-#endif  // VR
-		return 0;
 	}
 
 	/**

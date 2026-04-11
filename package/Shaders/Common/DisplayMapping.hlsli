@@ -101,6 +101,20 @@ namespace DisplayMapping
 		return linearColor;
 	}
 
+	float3 ConvertGameToPQ(float3 gammaColor)
+	{
+		float3 linearColor = Color::GammaToLinearSafe(gammaColor);
+		linearColor = Color::BT709ToBT2020(linearColor);
+		return LinearToPQ(linearColor, 10000.0);
+	}
+
+	float3 ConvertPQToGame(float3 pqColor)
+	{
+		float3 linearColor = PQtoLinear(pqColor, 10000.0);
+		linearColor = Color::BT2020ToBT709(linearColor);
+		return Color::LinearToGammaSafe(linearColor);
+	}
+
 	// RGB with sRGB/Rec.709 primaries to CIE XYZ
 	float3 RGBToXYZ(float3 c)
 	{
