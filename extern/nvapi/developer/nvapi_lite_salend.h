@@ -808,9 +808,9 @@
     #undef __nvapi__Post_writable_byte_size_
     #undef _Post_writable_byte_size_
 #endif
-#ifdef __nvapi_Outptr_ 
-    #undef __nvapi_Outptr_ 
-    #undef _Outptr_ 
+#ifdef __nvapi_Outptr_
+    #undef __nvapi_Outptr_
+    #undef _Outptr_
 #endif
 
 #endif // __NVAPI_EMPTY_SAL

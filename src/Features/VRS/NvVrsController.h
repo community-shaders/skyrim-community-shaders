@@ -38,8 +38,8 @@ public:
 	struct Settings
 	{
 		bool enable = false;
-		uint32_t srsPreset = 0;   // 0=Default, 1=Faster, 2=Extreme
-		uint32_t lutPreset = 0;   // 0=Default, 1=Full 1×1, 2=Full 4×4
+		uint32_t srsPreset = 0;  // 0=Default, 1=Faster, 2=Extreme
+		uint32_t lutPreset = 0;  // 0=Default, 1=Full 1×1, 2=Full 4×4
 		VrsSrsBuilder::EyeSubrectUV leftSubrectUV{};
 		VrsSrsBuilder::EyeSubrectUV rightSubrectUV{};
 		float ringGrowthRate = 0.25f;

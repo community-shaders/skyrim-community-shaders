@@ -6,14 +6,14 @@
 /// Higher value = coarser shading rate.  Stored per-tile in the SRS R8_UINT texture.
 namespace SrsLevel
 {
-	constexpr uint8_t k1x1  = 0;   // 1x1: native rate
-	constexpr uint8_t k2x1  = 1;   // 2x1: half rate, preserve horizontal resolution
-	constexpr uint8_t k1x2  = 2;   // 1x2: half rate, preserve vertical resolution
-	constexpr uint8_t k2x2  = 3;   // 2x2: quarter rate
-	constexpr uint8_t k4x2  = 4;   // 4x2: eighth rate, preserve horizontal resolution
-	constexpr uint8_t k2x4  = 5;   // 2x4: eighth rate, preserve vertical resolution
-	constexpr uint8_t k4x4  = 6;   // 4x4: sixteenth rate
-	constexpr uint8_t kCull = 7;   // CULL: skip pixel shading entirely
+	constexpr uint8_t k1x1 = 0;   // 1x1: native rate
+	constexpr uint8_t k2x1 = 1;   // 2x1: half rate, preserve horizontal resolution
+	constexpr uint8_t k1x2 = 2;   // 1x2: half rate, preserve vertical resolution
+	constexpr uint8_t k2x2 = 3;   // 2x2: quarter rate
+	constexpr uint8_t k4x2 = 4;   // 4x2: eighth rate, preserve horizontal resolution
+	constexpr uint8_t k2x4 = 5;   // 2x4: eighth rate, preserve vertical resolution
+	constexpr uint8_t k4x4 = 6;   // 4x4: sixteenth rate
+	constexpr uint8_t kCull = 7;  // CULL: skip pixel shading entirely
 	constexpr uint8_t kCount = 8;
 }
 
@@ -49,10 +49,10 @@ public:
 
 	struct Params
 	{
-		uint32_t srsPreset = 0;  ///< 0=Default (6-step), 1=Faster (4-step), 2=Extreme (3-step)
-		EyeSubrectUV leftSubrectUV{};   ///< Foveal center UV for left eye
-		EyeSubrectUV rightSubrectUV{};  ///< Foveal center UV for right eye
-		float ringGrowthRate = 0.25f;    ///< Ring boundary step as fraction of base ellipse
+		uint32_t srsPreset = 0;              ///< 0=Default (6-step), 1=Faster (4-step), 2=Extreme (3-step)
+		EyeSubrectUV leftSubrectUV{};        ///< Foveal center UV for left eye
+		EyeSubrectUV rightSubrectUV{};       ///< Foveal center UV for right eye
+		float ringGrowthRate = 0.25f;        ///< Ring boundary step as fraction of base ellipse
 		bool enableDirectionalRates = true;  ///< Asymmetric 2×1/1×2 based on tile angle
 		bool enableBoundaryDither = true;    ///< Checkerboard dither at ring boundaries
 	};

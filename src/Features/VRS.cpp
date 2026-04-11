@@ -143,15 +143,24 @@ void VRS::DrawSettings()
 		auto vrsState = nvVrs.GetDebugState();
 		auto activeRateLabel = [](uint32_t level) -> const char* {
 			switch (level) {
-			case 0: return "1x1";
-			case 1: return "2x1";
-			case 2: return "1x2";
-			case 3: return "2x2";
-			case 4: return "4x2";
-			case 5: return "2x4";
-			case 6: return "4x4";
-			case 7: return "Cull";
-			default: return "Unknown";
+			case 0:
+				return "1x1";
+			case 1:
+				return "2x1";
+			case 2:
+				return "1x2";
+			case 3:
+				return "2x2";
+			case 4:
+				return "4x2";
+			case 5:
+				return "2x4";
+			case 6:
+				return "4x4";
+			case 7:
+				return "Cull";
+			default:
+				return "Unknown";
 			}
 		};
 		auto drawLegendRow = [](const char* label, const char* rate, ImVec4 color) {

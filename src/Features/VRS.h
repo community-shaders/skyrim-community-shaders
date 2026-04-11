@@ -80,7 +80,7 @@ public:
 	void UpdateVRShadingRateState();
 	void DisableVRShadingRateState();
 
-	NvVrsController nvVrs;        ///< NVAPI surface + rate table lifecycle
+	NvVrsController nvVrs;            ///< NVAPI surface + rate table lifecycle
 	Subrect::Controller subrectCtrl;  ///< Per-eye crop region (foveal center)
 
 private:

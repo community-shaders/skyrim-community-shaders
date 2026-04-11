@@ -54,9 +54,9 @@ extern "C" {
 //! \since Release: 180
 //!
 //! \retval ::NVAPI_OK                      Stereo is now enabled.
-//! \retval ::NVAPI_API_NOT_INTIALIZED 
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED  Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR 
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -76,11 +76,11 @@ NVAPI_INTERFACE NvAPI_Stereo_Enable(void);
 //! \since Release: 180
 //!
 //! \retval ::NVAPI_OK                     Stereo is now disabled.
-//! \retval ::NVAPI_API_NOT_INTIALIZED  
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR 
+//! \retval ::NVAPI_ERROR
 //!
-//! \ingroup stereoapi 
+//! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
 NVAPI_INTERFACE NvAPI_Stereo_Disable(void);
 ///////////////////////////////////////////////////////////////////////////////
@@ -97,9 +97,9 @@ NVAPI_INTERFACE NvAPI_Stereo_Disable(void);
 //! \param [out]     pIsStereoEnabled   Address where the result of the inquiry will be placed.
 //!
 //! \retval ::NVAPI_OK                       Check was sucessfully completed and result reflects current state of stereo availability.
-//! \retval ::NVAPI_API_NOT_INTIALIZED 
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED   Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR 
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -112,13 +112,13 @@ NVAPI_INTERFACE NvAPI_Stereo_IsEnabled(NvU8 *pIsStereoEnabled);
 //
 //! DESCRIPTION:   This API creates a stereo handle that is used in subsequent calls related to a given device interface.
 //!                This must be called before any other NvAPI_Stereo_ function for that handle.
-//!                Multiple devices can be used at one time using multiple calls to this function (one per each device). 
+//!                Multiple devices can be used at one time using multiple calls to this function (one per each device).
 //!
 //! HOW TO USE:    After the Direct3D device is created, create the stereo handle.
 //!                On call success:
 //!                -# Use all other NvAPI_Stereo_ functions that have stereo handle as first parameter.
 //!                -# After the device interface that corresponds to the the stereo handle is destroyed,
-//!                the application should call NvAPI_DestroyStereoHandle() for that stereo handle. 
+//!                the application should call NvAPI_DestroyStereoHandle() for that stereo handle.
 //!
 //! WHEN TO USE:   After the stereo handle for the device interface is created via successfull call to the appropriate NvAPI_Stereo_CreateHandleFrom() function.
 //!
@@ -132,9 +132,9 @@ NVAPI_INTERFACE NvAPI_Stereo_IsEnabled(NvU8 *pIsStereoEnabled);
 //!
 //! \retval ::NVAPI_OK                       Stereo handle is created for given device interface.
 //! \retval ::NVAPI_INVALID_ARGUMENT         Provided device interface is invalid.
-//! \retval ::NVAPI_API_NOT_INTIALIZED  
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED   Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR 
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -156,9 +156,9 @@ NVAPI_INTERFACE NvAPI_Stereo_CreateHandleFromIUnknown(IUnknown *pDevice, StereoH
 //! \param [in]     stereoHandle  Stereo handle that is to be destroyed.
 //!
 //! \retval ::NVAPI_OK                      Stereo handle is destroyed.
-//! \retval ::NVAPI_API_NOT_INTIALIZED      
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED  Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR                   
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -170,7 +170,7 @@ NVAPI_INTERFACE NvAPI_Stereo_DestroyHandle(StereoHandle stereoHandle);
 //! DESCRIPTION:   This API activates stereo for the device interface corresponding to the given stereo handle.
 //!                Activating stereo is possible only if stereo was enabled previously in the registry.
 //!                If stereo is not activated, then calls to functions that require that stereo is activated have no effect,
-//!                and will return the appropriate error code. 
+//!                and will return the appropriate error code.
 //!
 //! WHEN TO USE:   After the stereo handle for the device interface is created via successfull call to the appropriate NvAPI_Stereo_CreateHandleFrom() function.
 //!
@@ -183,9 +183,9 @@ NVAPI_INTERFACE NvAPI_Stereo_DestroyHandle(StereoHandle stereoHandle);
 //!
 //! \retval ::NVAPI_OK                                Stereo is turned on.
 //! \retval ::NVAPI_STEREO_INVALID_DEVICE_INTERFACE   Device interface is not valid. Create again, then attach again.
-//! \retval ::NVAPI_API_NOT_INTIALIZED 
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED            Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR 
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -196,7 +196,7 @@ NVAPI_INTERFACE NvAPI_Stereo_Activate(StereoHandle stereoHandle);
 //
 //! DESCRIPTION:   This API deactivates stereo for the given device interface.
 //!                If stereo is not activated, then calls to functions that require that stereo is activated have no effect,
-//!                and will return the appropriate error code. 
+//!                and will return the appropriate error code.
 //!
 //! WHEN TO USE:   After the stereo handle for the device interface is created via successfull call to the appropriate NvAPI_Stereo_CreateHandleFrom() function.
 //!
@@ -209,9 +209,9 @@ NVAPI_INTERFACE NvAPI_Stereo_Activate(StereoHandle stereoHandle);
 //!
 //! \retval ::NVAPI_OK                               Stereo is turned off.
 //! \retval ::NVAPI_STEREO_INVALID_DEVICE_INTERFACE  Device interface is not valid. Create again, then attach again.
-//! \retval ::NVAPI_API_NOT_INTIALIZED 
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED           Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR 
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -220,7 +220,7 @@ NVAPI_INTERFACE NvAPI_Stereo_Deactivate(StereoHandle stereoHandle);
 //
 // FUNCTION NAME: NvAPI_Stereo_IsActivated
 //
-//! DESCRIPTION:   This API checks if stereo is activated for the given device interface. 
+//! DESCRIPTION:   This API checks if stereo is activated for the given device interface.
 //!
 //! WHEN TO USE:   After the stereo handle for the device interface is created via successfull call to the appropriate NvAPI_Stereo_CreateHandleFrom() function.
 //!
@@ -231,7 +231,7 @@ NVAPI_INTERFACE NvAPI_Stereo_Deactivate(StereoHandle stereoHandle);
 //!
 //! \param [in]    stereoHandle  Stereo handle that corresponds to the device interface.
 //! \param [in]    pIsStereoOn   Address where result of the inquiry will be placed.
-//! 
+//!
 //! \retval ::NVAPI_OK - Check was sucessfully completed and result reflects current state of stereo (on/off).
 //! \retval ::NVAPI_STEREO_INVALID_DEVICE_INTERFACE - Device interface is not valid. Create again, then attach again.
 //! \retval ::NVAPI_API_NOT_INTIALIZED - NVAPI not initialized.
@@ -245,7 +245,7 @@ NVAPI_INTERFACE NvAPI_Stereo_IsActivated(StereoHandle stereoHandle, NvU8 *pIsSte
 //
 // FUNCTION NAME: NvAPI_Stereo_GetSeparation
 //
-//! DESCRIPTION:   This API gets current separation value (in percents). 
+//! DESCRIPTION:   This API gets current separation value (in percents).
 //!
 //! WHEN TO USE:   After the stereo handle for the device interface is created via successfull call to the appropriate NvAPI_Stereo_CreateHandleFrom() function.
 //!
@@ -259,9 +259,9 @@ NVAPI_INTERFACE NvAPI_Stereo_IsActivated(StereoHandle stereoHandle, NvU8 *pIsSte
 //!
 //! \retval ::NVAPI_OK                                Retrieval of separation percentage was successfull.
 //! \retval ::NVAPI_STEREO_INVALID_DEVICE_INTERFACE   Device interface is not valid. Create again, then attach again.
-//! \retval ::NVAPI_API_NOT_INTIALIZED  
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED            Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR  
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -270,7 +270,7 @@ NVAPI_INTERFACE NvAPI_Stereo_GetSeparation(StereoHandle stereoHandle, float *pSe
 //
 // FUNCTION NAME: NvAPI_Stereo_SetSeparation
 //
-//! DESCRIPTION:   This API sets separation to given percentage. 
+//! DESCRIPTION:   This API sets separation to given percentage.
 //!
 //! WHEN TO USE:   After the stereo handle for the device interface is created via successfull call to appropriate NvAPI_Stereo_CreateHandleFrom() function.
 //!
@@ -287,7 +287,7 @@ NVAPI_INTERFACE NvAPI_Stereo_GetSeparation(StereoHandle stereoHandle, float *pSe
 //! \retval ::NVAPI_API_NOT_INTIALIZED               NVAPI not initialized.
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED           Stereo part of NVAPI not initialized.
 //! \retval ::NVAPI_STEREO_PARAMETER_OUT_OF_RANGE    Given separation percentage is out of [0..100] range.
-//! \retval ::NVAPI_ERROR 
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -310,9 +310,9 @@ NVAPI_INTERFACE NvAPI_Stereo_SetSeparation(StereoHandle stereoHandle, float newS
 //!
 //! \retval ::NVAPI_OK                               Retrieval of convergence value was successfull.
 //! \retval ::NVAPI_STEREO_INVALID_DEVICE_INTERFACE  Device interface is not valid. Create again, then attach again.
-//! \retval ::NVAPI_API_NOT_INTIALIZED  
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED           Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR 
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -332,12 +332,12 @@ NVAPI_INTERFACE NvAPI_Stereo_GetConvergence(StereoHandle stereoHandle, float *pC
 //!
 //! \param [in]     stereoHandle              Stereo handle that corresponds to the device interface.
 //! \param [in]     newConvergence            New value for convergence.
-//! 
+//!
 //! \retval ::NVAPI_OK                                Setting of convergence value was successfull.
 //! \retval ::NVAPI_STEREO_INVALID_DEVICE_INTERFACE   Device interface is not valid. Create again, then attach again.
-//! \retval ::NVAPI_API_NOT_INTIALIZED  
+//! \retval ::NVAPI_API_NOT_INTIALIZED
 //! \retval ::NVAPI_STEREO_NOT_INITIALIZED            Stereo part of NVAPI not initialized.
-//! \retval ::NVAPI_ERROR 
+//! \retval ::NVAPI_ERROR
 //!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
@@ -348,8 +348,8 @@ NVAPI_INTERFACE NvAPI_Stereo_SetConvergence(StereoHandle stereoHandle, float new
 //
 //! \fn NvAPI_Stereo_SetActiveEye(StereoHandle hStereoHandle, NV_STEREO_ACTIVE_EYE StereoEye);
 //! DESCRIPTION:   This API sets the back buffer to left or right in Direct stereo mode.
-//!                  
-//! HOW TO USE:    After the stereo handle for device interface is created via successfull call to appropriate 
+//!
+//! HOW TO USE:    After the stereo handle for device interface is created via successfull call to appropriate
 //!                NvAPI_Stereo_CreateHandleFrom function.
 //!
 //! \since Release: 285
@@ -386,7 +386,7 @@ NVAPI_INTERFACE NvAPI_Stereo_SetActiveEye(StereoHandle hStereoHandle, NV_STEREO_
 //
 //! \fn NvAPI_Stereo_SetDriverMode( NV_STEREO_DRIVER_MODE mode );
 //! DESCRIPTION:   This API sets the 3D stereo driver mode: Direct or Automatic
-//!                  
+//!
 //! HOW TO USE:    This API must be called before the device is created.
 //!                Applies to DirectX 9 and higher.
 //!
@@ -394,7 +394,7 @@ NVAPI_INTERFACE NvAPI_Stereo_SetActiveEye(StereoHandle hStereoHandle, NV_STEREO_
 //!
 //! SUPPORTED OS:  Windows 7 and higher
 //!
-//!      
+//!
 //! \param [in]    mode       Defines the 3D stereo driver mode: Direct or Automatic
 //!
 //! \retval ::NVAPI_OK                      Active eye is set.
@@ -420,7 +420,7 @@ NVAPI_INTERFACE NvAPI_Stereo_SetDriverMode( NV_STEREO_DRIVER_MODE mode );
 // FUNCTION NAME: NvAPI_Stereo_GetEyeSeparation
 //
 //! DESCRIPTION:   This API returns eye separation as a ratio of <between eye distance>/<physical screen width>.
-//! 
+//!
 //! HOW TO USE:    After the stereo handle for device interface is created via successfull call to appropriate API. Applies only to DirectX 9 and up.
 //!
 //! SUPPORTED OS:  Windows 7 and higher
@@ -448,7 +448,7 @@ NVAPI_INTERFACE NvAPI_Stereo_GetEyeSeparation(StereoHandle hStereoHandle,  float
 //!
 //!
 //! \param [out] bSupported(OUT)    != 0  - supported,  \n
-//!                                 == 0  - is not supported 
+//!                                 == 0  - is not supported
 //!
 //!
 //! \retval ::NVAPI_OK                      Retrieval of frustum adjust mode was successfull.
@@ -476,18 +476,18 @@ NVAPI_INTERFACE NvAPI_Stereo_IsWindowedModeSupported(NvU8* bSupported);
 //!
 //! WHEN TO USE: After the stereo handle for device interface is created via successful call to appropriate NvAPI_Stereo_CreateHandleFrom function.
 //!
-//! \return      This API can return any of the error codes enumerated in #NvAPI_Status. 
+//! \return      This API can return any of the error codes enumerated in #NvAPI_Status.
 //!              There are no return error codes with specific meaning for this API.
 //!
 ///////////////////////////////////////////////////////////////////////////////
 
 //! \ingroup stereoapi
-typedef enum _NVAPI_STEREO_SURFACECREATEMODE 
+typedef enum _NVAPI_STEREO_SURFACECREATEMODE
 {
-    NVAPI_STEREO_SURFACECREATEMODE_AUTO,        //!< Use driver registry profile settings for surface creation mode. 
-    NVAPI_STEREO_SURFACECREATEMODE_FORCESTEREO, //!< Always create stereo surfaces. 
-    NVAPI_STEREO_SURFACECREATEMODE_FORCEMONO    //!< Always create mono surfaces. 
-} NVAPI_STEREO_SURFACECREATEMODE; 
+    NVAPI_STEREO_SURFACECREATEMODE_AUTO,        //!< Use driver registry profile settings for surface creation mode.
+    NVAPI_STEREO_SURFACECREATEMODE_FORCESTEREO, //!< Always create stereo surfaces.
+    NVAPI_STEREO_SURFACECREATEMODE_FORCEMONO    //!< Always create mono surfaces.
+} NVAPI_STEREO_SURFACECREATEMODE;
 
 //! \ingroup stereoapi
 NVAPI_INTERFACE NvAPI_Stereo_SetSurfaceCreationMode(__in StereoHandle hStereoHandle, __in NVAPI_STEREO_SURFACECREATEMODE creationMode);
@@ -508,7 +508,7 @@ NVAPI_INTERFACE NvAPI_Stereo_SetSurfaceCreationMode(__in StereoHandle hStereoHan
 //!
 //! WHEN TO USE: After the stereo handle for device interface is created via successful call to appropriate NvAPI_Stereo_CreateHandleFrom function.
 //!
-//! \return      This API can return any of the error codes enumerated in #NvAPI_Status. 
+//! \return      This API can return any of the error codes enumerated in #NvAPI_Status.
 //!              There are no return error codes with specific meaning for this API.
 //!
 ///////////////////////////////////////////////////////////////////////////////
@@ -529,7 +529,7 @@ NVAPI_INTERFACE NvAPI_Stereo_GetSurfaceCreationMode(__in StereoHandle hStereoHan
 //!
 //! WHEN TO USE: After the stereo handle for device interface is created via successful call to appropriate NvAPI_Stereo_CreateHandleFrom function.
 //!
-//! \return      This API can return any of the error codes enumerated in #NvAPI_Status. 
+//! \return      This API can return any of the error codes enumerated in #NvAPI_Status.
 //!              There are no return error codes with specific meaning for this API.
 //!
 //! \ingroup stereoapi
@@ -547,11 +547,11 @@ NVAPI_INTERFACE NvAPI_Stereo_Debug_WasLastDrawStereoized(__in StereoHandle hSter
 //!
 //! WHEN TO USE: To take effect, this API must be called before D3D device is created. Calling once a device has been created will not affect the current device.
 //!
-//! \param [in]  szProfileName        Default profile name. 
-//!                                 
-//! \return      This API can return any of the error codes enumerated in #NvAPI_Status. 
+//! \param [in]  szProfileName        Default profile name.
+//!
+//! \return      This API can return any of the error codes enumerated in #NvAPI_Status.
 //!              Error codes specific to this API are described below.
-//!              
+//!
 //! \retval      NVAPI_SUCCESS                               - Default stereo profile name has been copied into szProfileName.
 //! \retval      NVAPI_INVALID_ARGUMENT                      - szProfileName == NULL.
 //! \retval      NVAPI_DEFAULT_STEREO_PROFILE_DOES_NOT_EXIST - Default stereo profile does not exist
@@ -567,28 +567,28 @@ NVAPI_INTERFACE NvAPI_Stereo_SetDefaultProfile(__in const char* szProfileName);
 //!
 //!
 //! DESCRIPTION: This API retrieves the current default stereo profile.
-//!              
+//!
 //!              After call cbSizeOut contain 0 if default profile is not set required buffer size cbSizeOut.
-//!              To get needed buffer size this function can be called with szProfileName==0 and cbSizeIn == 0. 
+//!              To get needed buffer size this function can be called with szProfileName==0 and cbSizeIn == 0.
 //!
 //! WHEN TO USE: This API can be called at any time.
-//!              
 //!
-//! \param [in]   cbSizeIn             Size of buffer allocated for default stereo profile name.                  
-//! \param [out]  szProfileName        Default stereo profile name. 
+//!
+//! \param [in]   cbSizeIn             Size of buffer allocated for default stereo profile name.
+//! \param [out]  szProfileName        Default stereo profile name.
 //! \param [out]  pcbSizeOut           Required buffer size.
 //!                     # ==0 - there is no default stereo profile name currently set
 //!                     # !=0 - size of buffer required for currently set default stereo profile name including trailing '0'.
 //!
 //!
-//! \return      This API can return any of the error codes enumerated in #NvAPI_Status. 
+//! \return      This API can return any of the error codes enumerated in #NvAPI_Status.
 //!              Error codes specific to this API are described below.
-//! 
+//!
 //! \retval      NVAPI_SUCCESS                                - Default stereo profile name has been copied into szProfileName.
 //! \retval      NVAPI_DEFAULT_STEREO_PROFILE_IS_NOT_DEFINED  - There is no default stereo profile set at this time.
 //! \retval      NVAPI_INVALID_ARGUMENT                       - pcbSizeOut == 0 or cbSizeIn >= *pcbSizeOut && szProfileName == 0
 //! \retval      NVAPI_INSUFFICIENT_BUFFER                    - cbSizeIn < *pcbSizeOut
-//!  
+//!
 //! \ingroup stereoapi
 ///////////////////////////////////////////////////////////////////////////////
 NVAPI_INTERFACE NvAPI_Stereo_GetDefaultProfile( __in NvU32 cbSizeIn, __out_bcount_part_opt(cbSizeIn, *pcbSizeOut) char* szProfileName,  __out NvU32 *pcbSizeOut);

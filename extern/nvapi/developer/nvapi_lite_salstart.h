@@ -812,9 +812,9 @@
     #define __nvapi__Post_writable_byte_size_
     #define _Post_writable_byte_size_(n)
 #endif
-#ifndef _Outptr_ 
-    #define __nvapi_Outptr_ 
-    #define _Outptr_ 
+#ifndef _Outptr_
+    #define __nvapi_Outptr_
+    #define _Outptr_
 #endif
 
 
