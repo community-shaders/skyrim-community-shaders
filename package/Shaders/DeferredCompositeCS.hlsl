@@ -40,42 +40,14 @@ Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t9);
 
 #endif
 
-#if defined(SSGI)
-Texture2D<float4> SsgiAoTexture : register(t10);
-Texture2D<float4> SsgiYTexture : register(t11);
-Texture2D<float4> SsgiCoCgTexture : register(t12);
-Texture2D<float4> SsgiSpecularTexture : register(t13);
+#if defined(SSRT)
+Texture2D<float4> SsrtTexture : register(t10);
 
-void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
+void SampleSSRT(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
-	ao = 1 - SsgiAoTexture[pixCoord];
-	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	// without ZH hallucination
-	// float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS));
-	float ssgiIlY = SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
-	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
-}
-
-void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il, in float3 normal, in float3 view, in float roughness)
-{
-	float NdotV = dot(normal, view);
-	float alpha = roughness * roughness;
-	ao = SpecularOcclusion(saturate(NdotV), alpha, ao);
-
-	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
-
-	// pi to compensate for the /pi in specularLobe
-	// i don't think there really should be a 1/PI but without it the specular is too strong
-	// reflectance being ambient reflectance doesn't help either
-	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg / Math::PI)));
-
-	// HQ spec
-	float4 hq_spec = SsgiSpecularTexture[pixCoord];
-	ao *= 1 - hq_spec.a;
-	il += hq_spec.rgb;
+	float4 ssrt = SsrtTexture[pixCoord];
+	ao = ssrt.a;  // SSRT3: 1 = no occlusion, 0 = full occlusion
+	il = ssrt.rgb;
 }
 #endif
 
@@ -129,11 +101,11 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
-#if defined(SSGI)
+#if defined(SSRT)
 
-	float ssgiAo;
-	float3 ssgiIl;
-	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
+	float ssrtAo;
+	float3 ssrtIl;
+	SampleSSRT(dispatchID.xy, normalWS, ssrtAo, ssrtIl);
 
 	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normalWS)));
 	directionalAmbientColor *= albedo;
@@ -158,17 +130,17 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 	float3 linAlbedo = Color::IrradianceToLinear(albedo / Color::PBRLightingScale);
 
-	float3 multiBounceSSGIAo = MultiBounceAO(linAlbedo, ssgiAo);
+	float3 multiBounceSsrtAo = MultiBounceAO(linAlbedo, ssrtAo);
 
-	linDiffuseColor *= sqrt(multiBounceSSGIAo);
+	linDiffuseColor *= sqrt(multiBounceSsrtAo);
 
 	diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
 
-	diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSSGIAo);
+	diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSsrtAo);
 
 	linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 
-	linDiffuseColor += ssgiIl * linAlbedo;
+	linDiffuseColor += ssrtIl * linAlbedo;
 #endif
 
 	float3 color = linDiffuseColor + specularColor;
@@ -267,16 +239,8 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #	endif
 		}
 
-#	if defined(SSGI)
-		float3 ssgiIlSpecular;
-		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
-
-		finalIrradiance = (finalIrradiance * ssgiAo);
-
-		ssgiIlSpecular = Color::RGBToYCoCg(ssgiIlSpecular);
-		ssgiIlSpecular = max(0, Color::YCoCgToRGB(float3(ssgiIlSpecular.x, lerp(ssgiIlSpecular.yz, Color::RGBToYCoCg(finalIrradiance).yz, 0.5))));
-
-		finalIrradiance += ssgiIlSpecular;
+#	if defined(SSRT)
+		finalIrradiance *= ssrtAo;
 #	endif
 
 		color += reflectance * finalIrradiance;
