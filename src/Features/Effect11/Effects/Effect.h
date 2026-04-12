@@ -81,7 +81,7 @@ public:
 	{
 		UIVariableType type;
 		UIWidgetType widgetType;
-		LPCSTR name;
+		std::string name;
 		std::string displayName;
 		winrt::com_ptr<ID3DX11EffectVariable> effectVariable;
 
