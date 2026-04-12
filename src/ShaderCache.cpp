@@ -2948,13 +2948,8 @@ namespace SIE
 
 		const auto taskKey = task.GetString();
 
-		// Thread priority serves as a signal to Intel Thread Director and
-		// the Windows scheduler for P-core vs E-core placement on hybrid CPUs.
-		// Heavy shaders compile at normal priority (favouring P-cores); light
-		// shaders stay below-normal (allowing E-core placement).  On non-hybrid
-		// CPUs this still gives heavy compiles slightly more scheduler attention.
-		SetThreadPriority(GetCurrentThread(),
-			task.GetPriority() >= SIE::kHeavyPriorityThreshold ? THREAD_PRIORITY_NORMAL : THREAD_PRIORITY_BELOW_NORMAL);
+		// Run all shader compilation work at below-normal priority.
+		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 
 		LARGE_INTEGER start, end, freq;
 		QueryPerformanceFrequency(&freq);
