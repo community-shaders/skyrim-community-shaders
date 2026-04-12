@@ -1643,11 +1643,6 @@ namespace SIE
 		{
 			using enum RE::ImageSpaceManager::ImageSpaceEffectEnum;
 
-			if (!REL::Module::IsVR() && strcmp(imagespaceShader.name, "BSImagespaceShaderISTemporalAA") == 0) {
-				descriptor = RE::ImageSpaceManager::GetCurrentIndex(ISTemporalAA);
-				return true;
-			}
-
 			static const ankerl::unordered_dense::map<std::string_view, uint32_t> descriptors{
 				// { "BSImagespaceShaderISBlur", RE::ImageSpaceManager::GetCurrentIndex(ISBlur) },
 				// { "BSImagespaceShaderBlur3", RE::ImageSpaceManager::GetCurrentIndex(ISBlur3) },
@@ -1781,6 +1776,7 @@ namespace SIE
 				{ "BSImagespaceShaderISApplyVolumetricLighting", RE::ImageSpaceManager::GetCurrentIndex(ISApplyVolumetricLighting) },
 				{ "BSImagespaceShaderReflectionsRayTracing", RE::ImageSpaceManager::GetCurrentIndex(ISReflectionsRayTracing) },
 				//{ "BSImagespaceShaderReflectionsDebugSpecMask", RE::ImageSpaceManager::GetCurrentIndex(ISReflectionsDebugSpecMask) },
+				{ "BSImagespaceShaderISTemporalAA", RE::ImageSpaceManager::GetCurrentIndex(ISTemporalAA) },
 				{ "BSImagespaceShaderVolumetricLightingRaymarchCS", 256 },
 				{ "BSImagespaceShaderVolumetricLightingGenerateCS", 257 },
 				{ "BSImagespaceShaderVolumetricLightingBlurHCS", RE::ImageSpaceManager::GetCurrentIndex(ISVolumetricLightingBlurHCS) },

@@ -81,7 +81,7 @@ namespace DisplayMapping
 	{
 		linearCol /= maxPqValue;
 
-		float3 colToPow = pow(linearCol, PQ_constant_N);
+		float3 colToPow = pow(abs(linearCol), PQ_constant_N);
 		float3 numerator = PQ_constant_C1 + PQ_constant_C2 * colToPow;
 		float3 denominator = 1.0 + PQ_constant_C3 * colToPow;
 		float3 pq = pow(numerator / denominator, PQ_constant_M);
@@ -99,6 +99,20 @@ namespace DisplayMapping
 		linearColor *= maxPqValue;
 
 		return linearColor;
+	}
+
+	float3 ConvertGameToPQ(float3 gammaColor)
+	{
+		float3 linearColor = Color::GammaToLinearSafe(gammaColor);
+		linearColor = Color::BT709ToBT2020(linearColor);
+		return LinearToPQ(linearColor, 10000.0);
+	}
+
+	float3 ConvertPQToGame(float3 pqColor)
+	{
+		float3 linearColor = PQtoLinear(pqColor, 10000.0);
+		linearColor = Color::BT2020ToBT709(linearColor);
+		return Color::LinearToGammaSafe(linearColor);
 	}
 
 	// RGB with sRGB/Rec.709 primaries to CIE XYZ

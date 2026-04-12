@@ -254,15 +254,19 @@ struct IDXGISwapChain_Present
 		UINT viewportCount = 1;
 		globals::d3d::context->RSGetViewports(&viewportCount, &savedViewport);
 
-		// When FG is NOT active + HDR loaded: ImGui renders to hdr->uiTexture (we composite in ApplyHDR)
-		// When HDR is NOT loaded: ImGui renders directly to kFRAMEBUFFER (vanilla path)
+		// ImGui render target selection:
+		// - FG: kFRAMEBUFFER (FidelityFX composites afterwards)
+		// - VR: kFRAMEBUFFER — SetUIBuffer skips VR, so vanilla UI is already baked into
+		//       kFRAMEBUFFER. Rendering ImGui here too means kFRAMEBUFFER.SRV has
+		//       scene + vanilla UI + ImGui when ApplyHDR reads it at the end of this hook.
+		// - Non-VR HDR: uiTexture (ApplyHDR composites separately for precise UI brightness)
+		// - Vanilla/no-HDR: kFRAMEBUFFER directly (is the swap chain back buffer pre-upgrade)
 		if (frameGenActive) {
-			// FG path: render ImGui to the same buffer as vanilla UI (uiBufferWrapped)
-			// FidelityFX will composite this after frame interpolation
+			// FG path: render ImGui alongside vanilla UI in uiBufferWrapped
 			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
-		} else if (hdrReady) {
-			// Non-FG HDR path: render ImGui to hdr->uiTexture
+		} else if (hdrReady && !globals::game::isVR) {
+			// Non-VR HDR path: render ImGui to uiTexture for compositing in ApplyHDR
 			ID3D11RenderTargetView* uiRTV = nullptr;
 			D3D11_TEXTURE2D_DESC texDesc = {};
 

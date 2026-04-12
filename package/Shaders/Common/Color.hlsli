@@ -121,26 +121,6 @@ namespace Color
 		return pow(abs(color), 1.0 / 2.2);
 	}
 
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
-	// Attempt to match vanilla materials that are darker than PBR
-	const static float PBRLightingScale = ENABLE_LL ? 1.0 : 0.65;
-
-	// Attempt to normalise reflection brightness against DALC
-	const static float ReflectionNormalisationScale = ENABLE_LL ? 1.0 : 0.65;
-
-	const static float PBRLightingCompensation = ENABLE_LL ? 1.0 : Math::PI;
-
-	// Linear Lighting Functions
-	float3 LLGammaToLinear(float3 color)
-	{
-		return ENABLE_LL ? SkyrimGammaToLinear(color) : color;
-	}
-
-	float3 LLLinearToGamma(float3 color)
-	{
-		return ENABLE_LL ? LinearToSkyrimGamma(color) : color;
-	}
-
 	float3 GammaToLinearSafe(float3 color)
 	{
 		return sign(color) * pow(abs(color), 2.2);
@@ -196,6 +176,26 @@ namespace Color
 		}
 
 	}  // namespace pq
+
+#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
+	// Attempt to match vanilla materials that are darker than PBR
+	const static float PBRLightingScale = ENABLE_LL ? 1.0 : 0.65;
+
+	// Attempt to normalise reflection brightness against DALC
+	const static float ReflectionNormalisationScale = ENABLE_LL ? 1.0 : 0.65;
+
+	const static float PBRLightingCompensation = ENABLE_LL ? 1.0 : Math::PI;
+
+	// Linear Lighting Functions
+	float3 LLGammaToLinear(float3 color)
+	{
+		return ENABLE_LL ? SkyrimGammaToLinear(color) : color;
+	}
+
+	float3 LLLinearToGamma(float3 color)
+	{
+		return ENABLE_LL ? LinearToSkyrimGamma(color) : color;
+	}
 
 	float3 Diffuse(float3 color)
 	{
