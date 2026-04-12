@@ -4,7 +4,9 @@
 
 namespace HDRSun
 {
+	// 203 nits ref for sun math only (not the paper-white UI slider).
 	static const float kReferencePaperWhiteNits = 203.0f;
+	// Menu / pause / map: HDRData.w > 0 — scale sun toward this nit level vs peak.
 	static const float kMenuSunNits = 100.0f;
 
 	inline bool IsHdrSunActive()
@@ -12,6 +14,9 @@ namespace HDRSun
 		return SharedData::HDRData.x > 0.5f && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun);
 	}
 
+	// Sky PS already sampled sunTex and ran Color::Sky on rgb. We only adjust when HDR+IsSun.
+	// Pipeline: peak → maxBoost → per-pixel weight → rgb *= pow(maxBoost, weight)
+	//           → DITHER: vertex tint | else: IGN dither + clear yyy → optional cloud shadow on rgba.
 	void ApplyHdrSunToBaseColor(
 		float4 position,
 		float2 texCoord0_xy,
@@ -26,25 +31,18 @@ namespace HDRSun
 		if (!IsHdrSunActive())
 			return;
 
-		// TEST: skip HDR boost on sun glare (DITHER path). Remove this guard when done.
-#if !defined(DITHER)
+		// --- max linear multiplier for this display (menu scales it down when HDRData.w > 0) ---
 		float peakNits = max(SharedData::HDRData.z, kReferencePaperWhiteNits + 1.0f);
 		float peakRatio = peakNits / kReferencePaperWhiteNits;
-
-		// HDRData.w encodes menu-ish scenes; scale sun vs real peak so it lands near kMenuSunNits.
 		float menuSunMul = (SharedData::HDRData.w > 1e-3f) ? (kMenuSunNits / peakNits) : 1.0f;
-		// Squared vs 203: enough headroom at low peak nits; old vanilla gamma leg was starving it.
 		float maxBoost = pow(peakRatio, 2.0f) * menuSunMul;
 
+		// --- weight 0..1: local brightness / alpha / UV rim, then damp if fine ≈ blurred mip (wide soft sun) ---
 		float L = max(Color::RGBToLuminance(baseColor.xyz), 0.0f);
-		// Soft shoulder + don't strand pixels just under 1.0.
 		float highlight = max(1.0f - exp(-L), saturate(L));
-
 		float a = saturate(baseColor.w);
-		// Low alpha shouldn't get the full HDR shove (wide glow mods were a mess without this).
 		float alphaWeight = a * a;
 
-		// Billboard is a square; UV falloff keeps the corners from blowing out.
 		float radialWeight = 1.0f;
 #	if defined(TEX)
 		float2 uv = saturate(texCoord0_xy);
@@ -59,7 +57,7 @@ namespace HDRSun
 		float4 coarseS = sunTex.SampleLevel(samp, texCoord0_xy, coarseMip);
 		float3 coarseRgb = Color::Sky(coarseS.rgb);
 		float Lc = max(Color::RGBToLuminance(coarseRgb), 1e-4f);
-		float lac = Lc * saturate(coarseS.w * alphaPostScale);
+		float lac = Lc * saturate(coarseS.w * alphaPostScale);  // alphaPostScale = TEXFADE factor from Sky, else 1
 		float laf = L * a;
 
 		float mipQuell = 1.0f;
@@ -71,16 +69,14 @@ namespace HDRSun
 		}
 		weight *= max(mipQuell, saturate(L));
 
+		// --- apply boost (pow keeps mid-ring from exploding when peak is high) ---
 		float boost = pow(max(maxBoost, 1e-6f), weight);
-
 		baseColor.xyz *= boost;
-#endif
 
+		// --- finish: Sky PS output path differs for glare vs disc ---
 #if defined(DITHER)
-		// Glare path — vertex tint after the boost.
 		baseColor.xyz = Color::Sky(vertexColor.xyz) * baseColor.xyz;
 #else
-		// Disc path: tiny IGN, scales with how much we boosted.
 		baseColor.xyz += (Random::InterleavedGradientNoise(position.xy) - 0.5f) * (saturate(boost - 1.0f) / 255.0f);
 		yyy = 0.0f;
 #endif
