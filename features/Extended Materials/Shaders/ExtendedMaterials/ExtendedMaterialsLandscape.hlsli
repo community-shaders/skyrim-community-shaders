@@ -242,7 +242,7 @@ float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords, floa
 		}
 #endif
 		float shadowParallaxTerm = 1.0 - saturate(dot(max(0, sh - sh0) * scaleRcp, 1.0)) * quality;
-			return shadowParallaxTerm * shadowParallaxTerm;
+		return shadowParallaxTerm * shadowParallaxTerm;
 	}
 	return 1.0;
 }

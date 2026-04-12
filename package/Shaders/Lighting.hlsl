@@ -1278,9 +1278,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 		if (SharedData::extendedMaterialSettings.EnableShadows) {
 			// Reuse POM layer mask unless height blending rewrote weights (then mask must match new weights).
-			uint sh0ActiveMask = SharedData::extendedMaterialSettings.EnableHeightBlending
-				? ExtendedMaterials::ComputeActiveMask(input.LandBlendWeights1, input.LandBlendWeights2.xy)
-				: landParallaxActiveMask;
+			uint sh0ActiveMask = SharedData::extendedMaterialSettings.EnableHeightBlending ? ExtendedMaterials::ComputeActiveMask(input.LandBlendWeights1, input.LandBlendWeights2.xy) : landParallaxActiveMask;
 			sh0 = ExtendedMaterials::GetTerrainHeightShadowTap(uv, mipLevels, displacementParams, input.LandBlendWeights1, input.LandBlendWeights2.xy, sh0ActiveMask, sharedOffset);
 		}
 	}

@@ -63,32 +63,36 @@ namespace LandscapeLayers
 // blendedNormalRGB, blendedNormalAlpha, glintParameters, Color::*, GetLandSnowMaskValue (legacy).
 // ---------------------------------------------------------------------------
 #	if defined(TRUE_PBR)
-#		define LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TILE, COLOR_TEX, COLOR_SAMP, NORM_TEX, NORM_SAMP, RMAOS_TEX, RMAOS_SAMP, PBR_PARAMS3, GLINT_PARAMS, WEIGHT) \
-			if (WEIGHT > 0.01) { \
-				float weight = WEIGHT; \
-				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias); \
-				float3 landColorRGB = landColor.rgb; \
-				[branch] if (!LandscapeLayers::PbrTileUsesFullPBR(TILE)) { \
-					landColorRGB = Color::SrgbToLinear(landColorRGB / Color::PBRLightingScale); \
-				} \
-				float landAlpha = landColor.a; \
-				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset, landDistanceTexMipBias); \
-				float3 landNormalRGB = landNormal.rgb; \
-				float landNormalAlpha = landNormal.a; \
-				float4 landRMAOS; \
-				[branch] if (LandscapeLayers::PbrTileUsesFullPBR(TILE)) { \
+#		define LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TILE, COLOR_TEX, COLOR_SAMP, NORM_TEX, NORM_SAMP, RMAOS_TEX, RMAOS_SAMP, PBR_PARAMS3, GLINT_PARAMS, WEIGHT)   \
+			if (WEIGHT > 0.01) {                                                                                                                                 \
+				float weight = WEIGHT;                                                                                                                           \
+				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias);                                               \
+				float3 landColorRGB = landColor.rgb;                                                                                                             \
+				[branch] if (!LandscapeLayers::PbrTileUsesFullPBR(TILE))                                                                                         \
+				{                                                                                                                                                \
+					landColorRGB = Color::SrgbToLinear(landColorRGB / Color::PBRLightingScale);                                                                  \
+				}                                                                                                                                                \
+				float landAlpha = landColor.a;                                                                                                                   \
+				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset, landDistanceTexMipBias);                                                \
+				float3 landNormalRGB = landNormal.rgb;                                                                                                           \
+				float landNormalAlpha = landNormal.a;                                                                                                            \
+				float4 landRMAOS;                                                                                                                                \
+				[branch] if (LandscapeLayers::PbrTileUsesFullPBR(TILE))                                                                                          \
+				{                                                                                                                                                \
 					landRMAOS = SampleTerrain(RMAOS_TEX, RMAOS_SAMP, uv, sharedOffset, landDistanceTexMipBias) * float4((PBR_PARAMS3).x, 1, 1, (PBR_PARAMS3).z); \
-					if (LandscapeLayers::PbrTileHasGlint(TILE)) { \
-						glintParameters += weight * (GLINT_PARAMS); \
-					} \
-				} else { \
-					landRMAOS = weight * float4(1 - glossiness.x, 0, 1, 0); \
-				} \
-				blendedRMAOS += landRMAOS * weight; \
-				blendedRGB += landColorRGB * weight; \
-				blendedAlpha += landAlpha * weight; \
-				blendedNormalRGB += landNormalRGB * weight; \
-				blendedNormalAlpha += landNormalAlpha * weight; \
+					if (LandscapeLayers::PbrTileHasGlint(TILE)) {                                                                                                \
+						glintParameters += weight * (GLINT_PARAMS);                                                                                              \
+					}                                                                                                                                            \
+				}                                                                                                                                                \
+				else                                                                                                                                             \
+				{                                                                                                                                                \
+					landRMAOS = weight * float4(1 - glossiness.x, 0, 1, 0);                                                                                      \
+				}                                                                                                                                                \
+				blendedRMAOS += landRMAOS * weight;                                                                                                              \
+				blendedRGB += landColorRGB * weight;                                                                                                             \
+				blendedAlpha += landAlpha * weight;                                                                                                              \
+				blendedNormalRGB += landNormalRGB * weight;                                                                                                      \
+				blendedNormalAlpha += landNormalAlpha * weight;                                                                                                  \
 			}
 #	else
 #		if defined(SNOW)
@@ -98,19 +102,19 @@ namespace LandscapeLayers
 #			define LIGHTING_LAND_LEGACY_SNOW_ACCUM(SNOW_COMPONENT)
 #		endif
 #		define LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(COLOR_TEX, COLOR_SAMP, NORM_TEX, NORM_SAMP, WEIGHT, SNOW_COMPONENT) \
-			if (WEIGHT > 0.01) { \
-				float weight = WEIGHT; \
-				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias); \
-				float3 landColorRGB = landColor.rgb; \
-				float landAlpha = landColor.a; \
-				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset, landDistanceTexMipBias); \
-				float3 landNormalRGB = landNormal.rgb; \
-				float landNormalAlpha = landNormal.a; \
-				blendedRGB += landColorRGB * weight; \
-				blendedAlpha += landAlpha * weight; \
-				blendedNormalRGB += landNormalRGB * weight; \
-				blendedNormalAlpha += landNormalAlpha * weight; \
-				LIGHTING_LAND_LEGACY_SNOW_ACCUM(SNOW_COMPONENT) \
+			if (WEIGHT > 0.01) {                                                                                              \
+				float weight = WEIGHT;                                                                                        \
+				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias);            \
+				float3 landColorRGB = landColor.rgb;                                                                          \
+				float landAlpha = landColor.a;                                                                                \
+				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset, landDistanceTexMipBias);             \
+				float3 landNormalRGB = landNormal.rgb;                                                                        \
+				float landNormalAlpha = landNormal.a;                                                                         \
+				blendedRGB += landColorRGB * weight;                                                                          \
+				blendedAlpha += landAlpha * weight;                                                                           \
+				blendedNormalRGB += landNormalRGB * weight;                                                                   \
+				blendedNormalAlpha += landNormalAlpha * weight;                                                               \
+				LIGHTING_LAND_LEGACY_SNOW_ACCUM(SNOW_COMPONENT)                                                               \
 			}
 #	endif
 
