@@ -326,7 +326,8 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			if defined(CLOUDS)
 	if (SharedData::enbSettings.EnableSky) {
-		baseColor.xyz = pow(abs(baseColor.xyz), SharedData::enbSettings.CloudsCurve);
+		float cloudsCurve = max(SharedData::enbSettings.CloudsCurve, 1e-3);
+		baseColor.xyz = pow(max(abs(baseColor.xyz), 1e-4), cloudsCurve);
 		baseColor.xyz = lerp(abs(baseColor.xyz), dot(baseColor.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
 
 		float3 viewDirection = normalize(input.WorldPosition.xyz);
