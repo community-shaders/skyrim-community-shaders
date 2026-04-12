@@ -461,7 +461,7 @@ void EffectManager::CreateQuadGeometry()
 		}
 		return;
 	}
-	
+
 	hr = globals::d3d::device->CreateInputLayout(inputElementDescs, ARRAYSIZE(inputElementDescs),
 		vertexShaderBlob->GetBufferPointer(),
 		vertexShaderBlob->GetBufferSize(),
@@ -469,7 +469,6 @@ void EffectManager::CreateQuadGeometry()
 	if (FAILED(hr)) {
 		logger::error("[ENBPP] Failed to create shared input layout for ENB effects");
 	}
-	
 }
 
 void EffectManager::CreateRenderStates()
