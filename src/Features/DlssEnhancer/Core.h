@@ -10,10 +10,10 @@
 //
 // ============================================================================
 
-#include <d3d11_4.h>
-#include <winrt/base.h>
 #include "Buffer.h"
 #include "Params.h"
+#include <d3d11_4.h>
+#include <winrt/base.h>
 
 class Streamline;
 
@@ -94,8 +94,8 @@ namespace DlssEnhancer
 		static inline winrt::com_ptr<ID3D11SamplerState> vrSubrectStretchSampler;
 
 		// Periphery temporal smooth (ping-pong history at render-res SBS)
-		static inline eastl::unique_ptr<Texture2D> vrTemporalHistory[2];  // SRV+UAV
-		static inline winrt::com_ptr<ID3D11ShaderResourceView> vrMvecSRV; // cached SRV on game's mvec resource
+		static inline eastl::unique_ptr<Texture2D> vrTemporalHistory[2];   // SRV+UAV
+		static inline winrt::com_ptr<ID3D11ShaderResourceView> vrMvecSRV;  // cached SRV on game's mvec resource
 		static inline ID3D11Resource* vrMvecSRVOwner = nullptr;            // track which resource the SRV was created from
 		static inline uint32_t vrTemporalHistoryW = 0, vrTemporalHistoryH = 0;
 		static inline uint32_t vrTemporalFrameIdx = 0;

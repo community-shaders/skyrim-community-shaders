@@ -766,4 +766,3 @@ void Streamline::DestroyDLSSResources()
 		slFreeResources(sl::kFeatureDLSS, viewportRight);
 	}
 }
-

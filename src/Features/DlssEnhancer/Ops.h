@@ -2,8 +2,8 @@
 
 #include "Core.h"
 
-#include <d3d11_4.h>
 #include <EASTL/unique_ptr.h>
+#include <d3d11_4.h>
 
 class Texture2D;
 

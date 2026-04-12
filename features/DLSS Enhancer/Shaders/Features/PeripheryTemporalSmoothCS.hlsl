@@ -6,21 +6,19 @@
 
 cbuffer TemporalSmoothCB : register(b0)
 {
-	uint TexWidth;      // SBS width (render-res)
-	uint TexHeight;     // SBS height (render-res)
-	float BlendAlpha;   // Current-frame weight (0.05 = very smooth, 0.5 = less smooth)
+	uint TexWidth;     // SBS width (render-res)
+	uint TexHeight;    // SBS height (render-res)
+	float BlendAlpha;  // Current-frame weight (0.05 = very smooth, 0.5 = less smooth)
 	uint _pad;
 };
 
-Texture2D<float4> CurrentTex : register(t0);    // vrRenderSBS snapshot (current frame)
-Texture2D<float4> HistoryTex : register(t1);    // Previous frame smoothed (ping-pong read)
-Texture2D<float4> MvecTex : register(t2);       // Motion vectors (per-eye UV delta, current→previous)
-SamplerState BilinearSampler : register(s0);     // For history reprojection
-RWTexture2D<float4> OutputTex : register(u0);    // New history (ping-pong write)
+Texture2D<float4> CurrentTex : register(t0);   // vrRenderSBS snapshot (current frame)
+Texture2D<float4> HistoryTex : register(t1);   // Previous frame smoothed (ping-pong read)
+Texture2D<float4> MvecTex : register(t2);      // Motion vectors (per-eye UV delta, current→previous)
+SamplerState BilinearSampler : register(s0);   // For history reprojection
+RWTexture2D<float4> OutputTex : register(u0);  // New history (ping-pong write)
 
-[numthreads(8, 8, 1)]
-void main(uint3 tid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 tid : SV_DispatchThreadID) {
 	if (tid.x >= TexWidth || tid.y >= TexHeight)
 		return;
 

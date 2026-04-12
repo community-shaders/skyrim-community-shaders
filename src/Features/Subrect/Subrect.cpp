@@ -66,15 +66,23 @@ namespace Subrect
 {
 	void Controller::LoadSettings(const json& a_json)
 	{
-		if (a_json.contains("CropX")) currentLeftEyeUV.x = a_json["CropX"];
-		if (a_json.contains("CropY")) currentLeftEyeUV.y = a_json["CropY"];
-		if (a_json.contains("CropW")) currentLeftEyeUV.w = a_json["CropW"];
-		if (a_json.contains("CropH")) currentLeftEyeUV.h = a_json["CropH"];
+		if (a_json.contains("CropX"))
+			currentLeftEyeUV.x = a_json["CropX"];
+		if (a_json.contains("CropY"))
+			currentLeftEyeUV.y = a_json["CropY"];
+		if (a_json.contains("CropW"))
+			currentLeftEyeUV.w = a_json["CropW"];
+		if (a_json.contains("CropH"))
+			currentLeftEyeUV.h = a_json["CropH"];
 
-		if (a_json.contains("CropRightX")) currentRightEyeUV.x = a_json["CropRightX"];
-		if (a_json.contains("CropRightY")) currentRightEyeUV.y = a_json["CropRightY"];
-		if (a_json.contains("CropRightW")) currentRightEyeUV.w = a_json["CropRightW"];
-		if (a_json.contains("CropRightH")) currentRightEyeUV.h = a_json["CropRightH"];
+		if (a_json.contains("CropRightX"))
+			currentRightEyeUV.x = a_json["CropRightX"];
+		if (a_json.contains("CropRightY"))
+			currentRightEyeUV.y = a_json["CropRightY"];
+		if (a_json.contains("CropRightW"))
+			currentRightEyeUV.w = a_json["CropRightW"];
+		if (a_json.contains("CropRightH"))
+			currentRightEyeUV.h = a_json["CropRightH"];
 
 		if (a_json.contains("CropPresets") && a_json["CropPresets"].is_array()) {
 			presets.clear();
@@ -142,9 +150,7 @@ namespace Subrect
 		ImGui::Text("=== VR Capture Cropping (Left Eye Relative) ===");
 
 		std::string currentPreview =
-			(selectedPresetIndex >= 0 && selectedPresetIndex < static_cast<int>(presets.size()))
-				? presets[selectedPresetIndex].name
-				: "(Custom)";
+			(selectedPresetIndex >= 0 && selectedPresetIndex < static_cast<int>(presets.size())) ? presets[selectedPresetIndex].name : "(Custom)";
 
 		if (ImGui::BeginCombo("Crop Preset", currentPreview.c_str())) {
 			for (int i = 0; i < static_cast<int>(presets.size()); ++i) {

@@ -10,6 +10,8 @@
 #include "TruePBR.h"
 #include "Util.h"
 
+#include "Features/DLSSperf.h"
+#include "Features/DlssEnhancer/Bridge.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
@@ -17,8 +19,6 @@
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
-#include "Features/DLSSperf.h"
-#include "Features/DlssEnhancer/Bridge.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 
@@ -494,7 +494,7 @@ struct BSShaderRenderTargets_Create
 		REL::Relocate<uintptr_t>(0, 0, 0x1ed6368), 4, 0, 4 };
 
 	// Phase 4: engine's CreateRenderTarget function pointer (set in Install())
-	using CreateRTFn = void(*)(RE::BSGraphics::Renderer*, RE::RENDER_TARGETS::RENDER_TARGET, RE::BSGraphics::RenderTargetProperties*);
+	using CreateRTFn = void (*)(RE::BSGraphics::Renderer*, RE::RENDER_TARGETS::RENDER_TARGET, RE::BSGraphics::RenderTargetProperties*);
 	static inline CreateRTFn engineCreateRT = nullptr;
 
 	// Pre-creation Color RT enlargement state (flag-based, size-matching rule)
@@ -534,7 +534,6 @@ struct BSShaderRenderTargets_Create
 	static void thunk()
 	{
 		DlssEnhancer::Bridge::BootSequence();
-
 
 		Util::SetGameSettingValue<std::int32_t>("iNumFocusShadow:Display", iNumFocusShadow, 0);
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <d3d11.h>
 #include "../DlssEnhancerFeature.h"
+#include <d3d11.h>
 
 namespace DlssEnhancer
 {
@@ -19,8 +19,8 @@ namespace DlssEnhancer
 		uint32_t eyeHeightOut;  // per-eye output (display) height
 
 		// ── Textures ──
-		ID3D11Resource* colorSrc;          // input color  (always kMAIN)
-		ID3D11Resource* colorDst;          // output color (kMAIN or testTexture)
+		ID3D11Resource* colorSrc;                // input color  (always kMAIN)
+		ID3D11Resource* colorDst;                // output color (kMAIN or testTexture)
 		ID3D11UnorderedAccessView* colorDstUAV;  // UAV for stretch output target
 		ID3D11Resource* depthTexture;
 		ID3D11Resource* reactiveMask;

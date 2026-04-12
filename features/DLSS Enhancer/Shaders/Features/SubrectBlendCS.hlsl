@@ -6,18 +6,18 @@
 
 cbuffer BlendCB : register(b0)
 {
-	uint DstOffsetX;    // SBS destination X for this eye (0 or eyeWidthOut)
-	uint DstOffsetY;    // SBS destination Y (usually 0, non-zero if subrect offset)
-	uint SubWidth;      // DLSS output width  (subrect)
-	uint SubHeight;     // DLSS output height (subrect)
-	uint BlendMode;     // 0 = Feather, 1 = Dither
-	float FeatherWidth; // Feather band in pixels (default ~8)
-	uint FrameIndex;    // For dither noise animation
-	uint SrcOffsetX;    // Source X offset (0 for most modes, non-zero for Extreme strip)
-	float DitherStrength; // 0 = pure smooth gradient, 1 = natural noise, 2 = aggressive dither
+	uint DstOffsetX;       // SBS destination X for this eye (0 or eyeWidthOut)
+	uint DstOffsetY;       // SBS destination Y (usually 0, non-zero if subrect offset)
+	uint SubWidth;         // DLSS output width  (subrect)
+	uint SubHeight;        // DLSS output height (subrect)
+	uint BlendMode;        // 0 = Feather, 1 = Dither
+	float FeatherWidth;    // Feather band in pixels (default ~8)
+	uint FrameIndex;       // For dither noise animation
+	uint SrcOffsetX;       // Source X offset (0 for most modes, non-zero for Extreme strip)
+	float DitherStrength;  // 0 = pure smooth gradient, 1 = natural noise, 2 = aggressive dither
 };
 
-Texture2D<float4> SrcTex  : register(t0);  // DLSS subrect output
+Texture2D<float4> SrcTex : register(t0);    // DLSS subrect output
 RWTexture2D<float4> DstTex : register(u0);  // kMAIN (already has stretched background)
 
 // Simple hash-based blue noise (no texture needed, near zero cost)
@@ -29,9 +29,7 @@ float BlueNoise(uint2 pos, uint frame)
 	return frac(52.9829189 * frac(0.06711056 * x + 0.00583715 * y));
 }
 
-[numthreads(8, 8, 1)]
-void main(uint3 tid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 tid : SV_DispatchThreadID) {
 	if (tid.x >= SubWidth || tid.y >= SubHeight)
 		return;
 
@@ -42,7 +40,7 @@ void main(uint3 tid : SV_DispatchThreadID)
 
 	// Distance from nearest edge of the subrect (in pixels)
 	float distL = (float)srcPos.x;
-	float distR = (float)(SubWidth  - 1 - srcPos.x);
+	float distR = (float)(SubWidth - 1 - srcPos.x);
 	float distT = (float)srcPos.y;
 	float distB = (float)(SubHeight - 1 - srcPos.y);
 	float edgeDist = min(min(distL, distR), min(distT, distB));

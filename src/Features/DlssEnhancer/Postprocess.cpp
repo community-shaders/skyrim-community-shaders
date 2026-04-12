@@ -1,10 +1,10 @@
 #include "Postprocess.h"
 
-#include "../../State.h"
 #include "../../Globals.h"
+#include "../../State.h"
+#include "../DLSSperf.h"
 #include "../DlssEnhancerFeature.h"
 #include "../Upscaling.h"
-#include "../DLSSperf.h"
 
 #include <cmath>
 

@@ -37,32 +37,32 @@ public:
 	// DLSS execution mode for VR
 	enum class DlssMode : uint
 	{
-		kDefault = 0,   // Per-eye isolation: 2 extra resource sets, 2 evaluates. Supports F/J/K/L/M.
-		kFaster = 1,    // SBS viewport: tell SL to read subrect from SBS directly, no extra resources, 2 evaluates. J/K incompatible, only L/M/F.
-		kExtreme = 2,   // Combined strip: both eyes' subrect merged into one long texture, 1 extra resource set, 1 evaluate. Supports F/J/K/L/M. (Not recommended)
+		kDefault = 0,  // Per-eye isolation: 2 extra resource sets, 2 evaluates. Supports F/J/K/L/M.
+		kFaster = 1,   // SBS viewport: tell SL to read subrect from SBS directly, no extra resources, 2 evaluates. J/K incompatible, only L/M/F.
+		kExtreme = 2,  // Combined strip: both eyes' subrect merged into one long texture, 1 extra resource set, 1 evaluate. Supports F/J/K/L/M. (Not recommended)
 	};
 
 	// Stretch algorithm for DRS → full-eye background
 	enum class StretchMode : uint
 	{
-		kBilinear = 0,  // Default bilinear sampling (clean upscale)
-		kPoint = 1,     // Nearest-neighbor / point (cheapest, VRS-like broadcast)
+		kBilinear = 0,      // Default bilinear sampling (clean upscale)
+		kPoint = 1,         // Nearest-neighbor / point (cheapest, VRS-like broadcast)
 		kGaussianBlur = 2,  // 3x3 Gaussian blur (soft periphery)
 	};
 
 	// Sharpening algorithm selection (extensible)
 	enum class SharpenMode : uint
 	{
-		kRCAS = 0,   // AMD FidelityFX RCAS (current default)
-		kNone = 1,   // No post-DLSS sharpening
+		kRCAS = 0,  // AMD FidelityFX RCAS (current default)
+		kNone = 1,  // No post-DLSS sharpening
 	};
 
 	// Subrect blend mode when writing DLSS output back over stretched background
 	enum class SubrectBlendMode : uint
 	{
-		kHardCopy = 0,    // CopySubresourceRegion (no blending — sharp edge)
-		kFeather = 1,     // smoothstep alpha ramp over N pixels
-		kDither = 2,      // Blue-noise binary threshold in feather band
+		kHardCopy = 0,  // CopySubresourceRegion (no blending — sharp edge)
+		kFeather = 1,   // smoothstep alpha ramp over N pixels
+		kDither = 2,    // Blue-noise binary threshold in feather band
 	};
 
 	// Periphery AA algorithm applied after background stretch
@@ -75,7 +75,7 @@ public:
 	struct Settings
 	{
 		uint enabled = 1;
-		uint qualityMode = 4;            // Ultra Performance (maximum VRAM saving)
+		uint qualityMode = 4;  // Ultra Performance (maximum VRAM saving)
 		uint streamlineLogLevel = 0;
 		float sharpnessDLSS = 1.0f;
 		uint presetDLSS = 0;
@@ -107,12 +107,10 @@ public:
 	{
 		return {
 			"VR DLSS enhancer path with independent control surface.",
-			{
-				"Own DLSS quality/preset/sharpness settings",
+			{ "Own DLSS quality/preset/sharpness settings",
 				"3 DLSS modes: Default / Faster / Extreme",
 				"Visual subrect cropping via drag editor",
-				"Direct settings source for Streamline"
-			}
+				"Direct settings source for Streamline" }
 		};
 	}
 

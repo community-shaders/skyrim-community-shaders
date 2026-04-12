@@ -24,9 +24,7 @@ Texture2D<float4> SrcTex : register(t0);
 SamplerState BilinearSampler : register(s0);
 RWTexture2D<float4> DstTex : register(u0);
 
-[numthreads(8, 8, 1)]
-void main(uint3 tid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 tid : SV_DispatchThreadID) {
 	if (tid.x >= DstWidth || tid.y >= DstHeight)
 		return;
 
@@ -57,13 +55,13 @@ void main(uint3 tid : SV_DispatchThreadID)
 		// Center=4, Edge=2, Corner=1, sum=16
 		float4 sum = SrcTex.SampleLevel(BilinearSampler, center, 0) * 4.0;
 		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(-step.x, 0), 0) * 2.0;
-		sum += SrcTex.SampleLevel(BilinearSampler, center + float2( step.x, 0), 0) * 2.0;
+		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(step.x, 0), 0) * 2.0;
 		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(0, -step.y), 0) * 2.0;
-		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(0,  step.y), 0) * 2.0;
+		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(0, step.y), 0) * 2.0;
 		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(-step.x, -step.y), 0);
-		sum += SrcTex.SampleLevel(BilinearSampler, center + float2( step.x, -step.y), 0);
-		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(-step.x,  step.y), 0);
-		sum += SrcTex.SampleLevel(BilinearSampler, center + float2( step.x,  step.y), 0);
+		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(step.x, -step.y), 0);
+		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(-step.x, step.y), 0);
+		sum += SrcTex.SampleLevel(BilinearSampler, center + float2(step.x, step.y), 0);
 		color = sum * (1.0 / 16.0);
 	} else {
 		// Bilinear (default): single hardware-filtered sample

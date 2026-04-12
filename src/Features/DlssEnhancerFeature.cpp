@@ -42,11 +42,16 @@ bool DlssEnhancerFeature::IsRuntimeSupported() const
 float DlssEnhancerFeature::GetRenderScaleForQuality(uint qualityMode)
 {
 	switch (qualityMode) {
-	case 1: return 1.5f;   // Quality
-	case 2: return 1.7f;   // Balanced
-	case 3: return 2.0f;   // Performance
-	case 4: return 3.0f;   // Ultra Performance
-	default: return 3.0f;  // fallback to safest (smallest render)
+	case 1:
+		return 1.5f;  // Quality
+	case 2:
+		return 1.7f;  // Balanced
+	case 3:
+		return 2.0f;  // Performance
+	case 4:
+		return 3.0f;  // Ultra Performance
+	default:
+		return 3.0f;  // fallback to safest (smallest render)
 	}
 }
 
@@ -334,7 +339,8 @@ void DlssEnhancerFeature::DrawSettings()
 		// ── Subrect Region ──
 		ImGui::Separator();
 		ImGui::Text("Subrect Region");
-		ImGui::TextWrapped("Drag in the preview below to select the region that gets full DLSS upscaling. "
+		ImGui::TextWrapped(
+			"Drag in the preview below to select the region that gets full DLSS upscaling. "
 			"The rest is cheaply stretched — saves significant DLSS cost.");
 		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
 		ImGui::TextWrapped("If you also use VRS or Screenshot, set them to the same subrect preset for consistent results.");
@@ -348,7 +354,6 @@ void DlssEnhancerFeature::DrawSettings()
 		} else {
 			subrectController.DrawEditor(nullptr, nullptr, 0.5f);
 		}
-
 	}
 }
 

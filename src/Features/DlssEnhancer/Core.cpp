@@ -64,14 +64,14 @@ namespace DlssEnhancer::Ops
 		bool needsRecreate = !Core::vrIntermediateColorIn[0] || !Core::vrIntermediateColorOut[0];
 		if (!needsRecreate) {
 			needsRecreate = (Core::vrIntermediateColorIn[0]->desc.Width != inWidth ||
-				Core::vrIntermediateColorIn[0]->desc.Height != inHeight ||
-				Core::vrIntermediateColorOut[0]->desc.Width != outWidth ||
-				Core::vrIntermediateColorOut[0]->desc.Height != outHeight);
+							 Core::vrIntermediateColorIn[0]->desc.Height != inHeight ||
+							 Core::vrIntermediateColorOut[0]->desc.Width != outWidth ||
+							 Core::vrIntermediateColorOut[0]->desc.Height != outHeight);
 		}
 		// Recreate if reactive/transparency source appeared but intermediate is missing
 		if (!needsRecreate) {
 			needsRecreate = (reactiveSrc && !Core::vrIntermediateReactiveMask[0]) ||
-				(transparencySrc && !Core::vrIntermediateTransparencyMask[0]);
+			                (transparencySrc && !Core::vrIntermediateTransparencyMask[0]);
 		}
 
 		if (!needsRecreate) {
@@ -125,12 +125,12 @@ namespace DlssEnhancer::Ops
 		ID3D11Resource* transparencySrc)
 	{
 		bool needsRecreate = !Core::vrSubrectColorIn[0] ||
-			Core::vrSubrectInW != subInW || Core::vrSubrectInH != subInH ||
-			Core::vrSubrectOutW != subOutW || Core::vrSubrectOutH != subOutH;
+		                     Core::vrSubrectInW != subInW || Core::vrSubrectInH != subInH ||
+		                     Core::vrSubrectOutW != subOutW || Core::vrSubrectOutH != subOutH;
 		// Recreate if reactive/transparency source appeared but intermediate is missing
 		if (!needsRecreate) {
 			needsRecreate = (reactiveSrc && !Core::vrSubrectReactiveMask[0]) ||
-				(transparencySrc && !Core::vrSubrectTransparencyMask[0]);
+			                (transparencySrc && !Core::vrSubrectTransparencyMask[0]);
 		}
 
 		if (needsRecreate) {
@@ -292,7 +292,8 @@ namespace DlssEnhancer::Ops
 		D3D11_MAPPED_SUBRESOURCE mapped{};
 		if (SUCCEEDED(context->Map(Core::vrSubrectStretchCB.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
 			auto& enhSettings = globals::features::dlssEnhancer.settings;
-			struct {
+			struct
+			{
 				uint32_t data[8];
 				uint32_t stretchMode;
 				float blurRadius;
@@ -347,7 +348,7 @@ namespace DlssEnhancer::Ops
 	void EnsureFasterOutputTextures(uint32_t subOutW, uint32_t subOutH, ID3D11Resource* colorSrc)
 	{
 		bool needsRecreate = !Core::vrFasterColorOut[0] ||
-			Core::vrFasterOutW != subOutW || Core::vrFasterOutH != subOutH;
+		                     Core::vrFasterOutW != subOutW || Core::vrFasterOutH != subOutH;
 		if (!needsRecreate)
 			return;
 		for (int i = 0; i < 2; i++) {
@@ -365,12 +366,12 @@ namespace DlssEnhancer::Ops
 		ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc)
 	{
 		bool needsRecreate = !Core::vrExtremeStripColorIn ||
-			Core::vrExtremeStripW != stripInW || Core::vrExtremeStripH != stripInH ||
-			Core::vrExtremeStripOutW != stripOutW || Core::vrExtremeStripOutH != stripOutH;
+		                     Core::vrExtremeStripW != stripInW || Core::vrExtremeStripH != stripInH ||
+		                     Core::vrExtremeStripOutW != stripOutW || Core::vrExtremeStripOutH != stripOutH;
 		// Recreate if reactive/transparency source appeared but intermediate is missing
 		if (!needsRecreate) {
 			needsRecreate = (reactiveSrc && !Core::vrExtremeStripReactiveMask) ||
-				(transparencySrc && !Core::vrExtremeStripTransparencyMask);
+			                (transparencySrc && !Core::vrExtremeStripTransparencyMask);
 		}
 
 		if (!needsRecreate)
@@ -531,7 +532,8 @@ namespace DlssEnhancer::Ops
 		// Map constant buffer
 		D3D11_MAPPED_SUBRESOURCE mapped{};
 		if (SUCCEEDED(context->Map(Core::vrTemporalSmoothCB.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
-			struct {
+			struct
+			{
 				uint32_t w;
 				uint32_t h;
 				float alpha;

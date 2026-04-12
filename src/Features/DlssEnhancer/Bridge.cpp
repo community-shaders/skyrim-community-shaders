@@ -1,8 +1,8 @@
 #include "Bridge.h"
 
-#include "../DlssEnhancerFeature.h"
-#include "../DLSSperf.h"
 #include "../../Globals.h"
+#include "../DLSSperf.h"
+#include "../DlssEnhancerFeature.h"
 
 // ── Route decision ───────────────────────────────────────────────
 

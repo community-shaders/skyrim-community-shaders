@@ -2,8 +2,8 @@
 
 #include "../../State.h"
 #include "../../Util.h"
-#include "../DlssEnhancerFeature.h"
 #include "../DLSSperf.h"
+#include "../DlssEnhancerFeature.h"
 #include "../Upscaling.h"
 
 namespace DlssEnhancer
@@ -23,16 +23,14 @@ namespace DlssEnhancer
 		// When DLSSperf hook is active, screenSize is polluted (= RenderRes).
 		// DLSS output dimensions must use real HMD DisplayRes.
 		auto& dlssPerf = globals::features::dlssPerf;
-		auto displaySize = dlssPerf.IsHookActive()
-			                   ? dlssPerf.GetDisplayScreenSize()
-			                   : screenSize;
+		auto displaySize = dlssPerf.IsHookActive() ? dlssPerf.GetDisplayScreenSize() : screenSize;
 
 		auto renderSize = Util::ConvertToDynamic(screenSize);
-		p.renderW      = (uint32_t)renderSize.x;
-		p.renderH      = (uint32_t)renderSize.y;
-		p.eyeWidthIn   = (uint32_t)(renderSize.x / 2);
-		p.eyeHeightIn  = (uint32_t)renderSize.y;
-		p.eyeWidthOut  = (uint32_t)(displaySize.x / 2);
+		p.renderW = (uint32_t)renderSize.x;
+		p.renderH = (uint32_t)renderSize.y;
+		p.eyeWidthIn = (uint32_t)(renderSize.x / 2);
+		p.eyeHeightIn = (uint32_t)renderSize.y;
+		p.eyeWidthOut = (uint32_t)(displaySize.x / 2);
 		p.eyeHeightOut = (uint32_t)displaySize.y;
 
 		// ── Textures ──
@@ -48,16 +46,16 @@ namespace DlssEnhancer
 			}
 		}
 
-		p.depthTexture    = depth;
-		p.reactiveMask    = reactive;
+		p.depthTexture = depth;
+		p.reactiveMask = reactive;
 		p.transparencyMask = transparency;
-		p.motionVectors   = mvec;
+		p.motionVectors = mvec;
 
 		// ── Mode & subrect ──
 		auto& enhancer = globals::features::dlssEnhancer;
-		p.mode     = enhancer.GetDlssMode();
-		p.leftUV   = enhancer.subrectController.GetLeftEyeUV();
-		p.rightUV  = enhancer.subrectController.GetRightEyeUV();
+		p.mode = enhancer.GetDlssMode();
+		p.leftUV = enhancer.subrectController.GetLeftEyeUV();
+		p.rightUV = enhancer.subrectController.GetRightEyeUV();
 		p.isFullEye = (p.leftUV.w >= 0.999f && p.leftUV.h >= 0.999f);
 
 		// ── Jitter ──

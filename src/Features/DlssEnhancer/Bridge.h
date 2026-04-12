@@ -14,7 +14,11 @@
 
 #include <cstdint>
 
-struct sl_float2 { float x; float y; };  // forward-compatible with sl::float2
+struct sl_float2
+{
+	float x;
+	float y;
+};  // forward-compatible with sl::float2
 
 namespace DlssEnhancer::Bridge
 {
@@ -25,7 +29,7 @@ namespace DlssEnhancer::Bridge
 	// ── Settings forwarding (live values from DlssEnhancer GUI) ──
 	uint32_t GetQualityMode();
 	uint32_t GetPresetDLSS();
-	float    GetSharpnessDLSS();
+	float GetSharpnessDLSS();
 
 	// ── Boot-time latches ─────────────────────────────────────────
 	/// Run once during BSShaderRenderTargets::Create.

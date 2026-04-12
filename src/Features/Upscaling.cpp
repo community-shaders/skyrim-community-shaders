@@ -1268,7 +1268,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 			// screenSize is polluted (= RenderRes). Use real HMD display resolution
 			// to compute proper DLSS jitter with enough phase count.
 			auto& dlssPerf = globals::features::dlssPerf;
-			auto renderWidth  = static_cast<int>(dlssPerf.GetRenderEyeWidth());
+			auto renderWidth = static_cast<int>(dlssPerf.GetRenderEyeWidth());
 			auto displayWidth = static_cast<int>(dlssPerf.GetDisplayEyeWidth());
 
 			auto phaseCount = GetJitterPhaseCount(renderWidth, displayWidth);
@@ -1786,15 +1786,9 @@ void Upscaling::Upscale()
 		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
-		ID3D11Resource* mvec = enhancer.IsEncodeMVDilation()
-			? motionVectorCopyTexture->resource.get()
-			: motionVector.texture;
-		ID3D11Resource* reactive = enhancer.IsEncodeReactiveMask()
-			? reactiveMaskTexture->resource.get()
-			: nullptr;
-		ID3D11Resource* transparency = enhancer.IsEncodeTransparencyMask()
-			? transparencyCompositionMaskTexture->resource.get()
-			: nullptr;
+		ID3D11Resource* mvec = enhancer.IsEncodeMVDilation() ? motionVectorCopyTexture->resource.get() : motionVector.texture;
+		ID3D11Resource* reactive = enhancer.IsEncodeReactiveMask() ? reactiveMaskTexture->resource.get() : nullptr;
+		ID3D11Resource* transparency = enhancer.IsEncodeTransparencyMask() ? transparencyCompositionMaskTexture->resource.get() : nullptr;
 
 		state->BeginPerfEvent("Upscaling (DLSS Enhancer)");
 		DlssEnhancer::Core::ExecuteVRDlssCore(streamline,

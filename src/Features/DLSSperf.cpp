@@ -368,9 +368,12 @@ void DLSSperf::RefractionRender_Hook::thunk(void* imageSpaceShader, RE::BSTriSha
 	context->PSSetShaderResources(0, 1, &savedSRV0);
 
 	// Release COM refs from Get calls
-	if (savedRTV) savedRTV->Release();
-	if (savedDSV) savedDSV->Release();
-	if (savedSRV0) savedSRV0->Release();
+	if (savedRTV)
+		savedRTV->Release();
+	if (savedDSV)
+		savedDSV->Release();
+	if (savedSRV0)
+		savedSRV0->Release();
 }
 
 // ============================================================================
@@ -618,14 +621,22 @@ void DLSSperf::DownscaleToKMain()
 	context->HSSetShader(savedHS, nullptr, 0);
 	context->DSSetShader(savedDS, nullptr, 0);
 	context->RSSetState(savedRS);
-	if (savedRTV) savedRTV->Release();
-	if (savedDSV) savedDSV->Release();
-	if (savedBlend) savedBlend->Release();
-	if (savedDSState) savedDSState->Release();
-	if (savedGS) savedGS->Release();
-	if (savedHS) savedHS->Release();
-	if (savedDS) savedDS->Release();
-	if (savedRS) savedRS->Release();
+	if (savedRTV)
+		savedRTV->Release();
+	if (savedDSV)
+		savedDSV->Release();
+	if (savedBlend)
+		savedBlend->Release();
+	if (savedDSState)
+		savedDSState->Release();
+	if (savedGS)
+		savedGS->Release();
+	if (savedHS)
+		savedHS->Release();
+	if (savedDS)
+		savedDS->Release();
+	if (savedRS)
+		savedRS->Release();
 }
 
 void DLSSperf::HandlePostProcessing(const std::function<void()>& enginePost)
@@ -654,4 +665,3 @@ void DLSSperf::DrawSettings()
 	// Diagnostic info is now displayed in DlssEnhancerFeature::DrawSettings.
 	// DLSSperf is a sub-feature of DlssEnhancer and no longer appears in the feature list.
 }
-
