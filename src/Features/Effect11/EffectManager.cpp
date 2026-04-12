@@ -449,15 +449,21 @@ void EffectManager::CreateQuadGeometry()
 	HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr,
 		"VS_Draw", "vs_4_0", 0, 0, vertexShaderBlob.put(), errorBlob.put());
 
-	if (SUCCEEDED(hr)) {
-		hr = globals::d3d::device->CreateInputLayout(inputElementDescs, ARRAYSIZE(inputElementDescs),
-			vertexShaderBlob->GetBufferPointer(),
-			vertexShaderBlob->GetBufferSize(),
-			inputLayout.put());
-		if (FAILED(hr)) {
-			logger::error("[ENBPP] Failed to create shared input layout for ENB effects");
+	if (FAILED(hr)) {
+		if (errorBlob) {
+			logger::error("[ENBPP] Failed to compile input layout vertex shader: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
 		}
+		return;
 	}
+	
+	hr = globals::d3d::device->CreateInputLayout(inputElementDescs, ARRAYSIZE(inputElementDescs),
+		vertexShaderBlob->GetBufferPointer(),
+		vertexShaderBlob->GetBufferSize(),
+		inputLayout.put());
+	if (FAILED(hr)) {
+		logger::error("[ENBPP] Failed to create shared input layout for ENB effects");
+	}
+	
 }
 
 void EffectManager::CreateRenderStates()
