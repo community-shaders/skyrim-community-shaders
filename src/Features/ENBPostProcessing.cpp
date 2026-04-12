@@ -122,83 +122,6 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 	auto& colors = a_sky->skyColor;
 
-	float3 ambientColorAvg = float3(0.0f, 0.0f, 0.0f);
-	for (int i = 0; i < 3; i++)
-		for (int j = 0; j < 2; j++)
-			ambientColorAvg += NiToF3(a_sky->directionalAmbientColors[i][j]);
-	ambientColorAvg /= 6.0f;
-	ambientColorAvg.x = std::max(ambientColorAvg.x, 0.0f);
-	ambientColorAvg.y = std::max(ambientColorAvg.y, 0.0f);
-	ambientColorAvg.z = std::max(ambientColorAvg.z, 0.0f);
-
-	float3 dirLightColorAvg = NiToF3(colors[(uint)RE::TESWeather::ColorTypes::kSunlight]);
-
-	// Cache ENVIRONMENT lighting values used multiple times below
-	float dirLightCurve = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT");
-	float dirLightDesaturation = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingDesaturation", "ENVIRONMENT");
-	float3 dirLightColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("DirectLightingColorFilter", "ENVIRONMENT");
-	float dirLightColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingColorFilterAmount", "ENVIRONMENT");
-	float dirLightIntensity = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingIntensity", "ENVIRONMENT");
-	float ambientDesaturation = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT");
-	float ambientIntensity = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT");
-
-	auto applyLightingExtraction = [&](float3 inputColor, float3 ambientPart, float3 dirPart) -> float3 {
-		float inputLuma = (inputColor.x + inputColor.y + inputColor.z) / 3.0f;
-		float ambientLuma = (ambientPart.x + ambientPart.y + ambientPart.z) / 3.0f;
-		float dirLightLuma = (dirPart.x + dirPart.y + dirPart.z) / 3.0f;
-
-		float totalLuma = ambientLuma + dirLightLuma;
-
-		if (totalLuma > 0.0f) {
-			if (ambientLuma > 0.0f)
-				ambientPart *= inputLuma / totalLuma;
-
-			dirPart = inputColor - ambientPart;
-			dirPart.x = std::max(dirPart.x, 0.0f);
-			dirPart.y = std::max(dirPart.y, 0.0f);
-			dirPart.z = std::max(dirPart.z, 0.0f);
-
-			// Apply ENB changes using cached values
-			dirPart = Curve(dirPart, dirLightCurve);
-			dirPart = Desaturation(dirPart, dirLightDesaturation);
-			dirPart = ColorFilter(dirPart, dirLightColorFilter, dirLightColorFilterAmount);
-			dirPart = Intensity(dirPart, dirLightIntensity);
-
-			ambientPart = Desaturation(ambientPart, ambientDesaturation);
-			ambientPart = Intensity(ambientPart, ambientIntensity);
-
-			auto outputColor = dirPart + ambientPart;
-			outputColor.x = std::max(outputColor.x, 0.0f);
-			outputColor.y = std::max(outputColor.y, 0.0f);
-			outputColor.z = std::max(outputColor.z, 0.0f);
-
-			return outputColor;
-		}
-		return inputColor;
-	};
-
-	{
-		auto& effectLightingColor = colors[(uint)RE::TESWeather::ColorTypes::kEffectLighting];
-		float3 effectLightingColorF3 = NiToF3(effectLightingColor);
-		effectLightingColorF3 = applyLightingExtraction(effectLightingColorF3, ambientColorAvg, dirLightColorAvg);
-		effectLightingColor = F3ToNi(effectLightingColorF3);
-	}
-
-	{
-		auto& skyStaticsColor = colors[(uint)RE::TESWeather::ColorTypes::kSkyStatics];
-		float3 skyStaticsColorF3 = NiToF3(skyStaticsColor);
-		skyStaticsColorF3 = applyLightingExtraction(skyStaticsColorF3, ambientColorAvg, dirLightColorAvg);
-		skyStaticsColor = F3ToNi(skyStaticsColorF3);
-	}
-
-	{
-		auto& ambientColor = colors[(uint)RE::TESWeather::ColorTypes::kAmbient];
-		float3 ambientColorF3 = NiToF3(ambientColor);
-		ambientColorF3 = Desaturation(ambientColorF3, ambientDesaturation);
-		ambientColorF3 = Intensity(ambientColorF3, ambientIntensity);
-		ambientColor = F3ToNi(ambientColorF3);
-	}
-
 	{
 		auto& dirLightColor = colors[(uint)RE::TESWeather::ColorTypes::kSunlight];
 
@@ -213,10 +136,10 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		float sunlightScale = std::max(data.baseData.hdr.sunlightScale, FLT_MIN);
 		dirLightColorF3 *= sunlightScale;
 
-		dirLightColorF3 = Curve(dirLightColorF3, dirLightCurve);
-		dirLightColorF3 = Desaturation(dirLightColorF3, dirLightDesaturation);
-		dirLightColorF3 = ColorFilter(dirLightColorF3, dirLightColorFilter, dirLightColorFilterAmount);
-		dirLightColorF3 = Intensity(dirLightColorF3, dirLightIntensity);
+		dirLightColorF3 = Curve(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT"));
+		dirLightColorF3 = Desaturation(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingDesaturation", "ENVIRONMENT"));
+		dirLightColorF3 = ColorFilter(dirLightColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("DirectLightingColorFilter", "ENVIRONMENT"), settingManager.GetInterpolatedTimeOfDayValue("DirectLightingColorFilterAmount", "ENVIRONMENT"));
+		dirLightColorF3 = Intensity(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingIntensity", "ENVIRONMENT"));
 
 		dirLightColorF3 /= sunlightScale;
 
@@ -261,6 +184,13 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 		a_sky->fogNear /= fogAmountMultiplier;
 		a_sky->fogFar /= fogAmountMultiplier;
+	}
+
+	{
+		auto& effectLightingColor = colors[(uint)RE::TESWeather::ColorTypes::kEffectLighting];
+		auto effectLightingColorF3 = NiToF3(effectLightingColor);
+		effectLightingColorF3 = Intensity(effectLightingColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "PARTICLE"));
+		effectLightingColor = F3ToNi(effectLightingColorF3);
 	}
 
 	const bool enableSky = enableEffect && settingManager.GetValue<bool>("Enable", "SKY");
@@ -308,6 +238,17 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 			sunGlareColorF3 = Intensity(sunGlareColorF3, settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "SUNGLARE"));
 
 			sunGlareColor = F3ToNi(sunGlareColorF3);
+		}
+
+		{
+			auto& skyStaticsColor = colors[(uint)RE::TESWeather::ColorTypes::kSkyStatics];
+
+			auto skyStaticsColorF3 = NiToF3(skyStaticsColor);
+
+			skyStaticsColorF3 = ColorFilter(skyStaticsColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "VOLUMETRICFOG"), 0.0f);
+			skyStaticsColorF3 = Intensity(skyStaticsColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICFOG"));
+
+			skyStaticsColor = F3ToNi(skyStaticsColorF3);
 		}
 
 		float gradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
