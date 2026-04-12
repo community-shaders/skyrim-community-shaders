@@ -368,6 +368,29 @@ install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
 if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     message("Preparing AIO package in ${AIO_DIR}")
 
+    function(append_copy_if_different _cmds _srcs _src_base _dst_base)
+        foreach(_src IN LISTS ${_srcs})
+            file(RELATIVE_PATH _rel "${_src_base}" "${_src}")
+            set(_dst "${_dst_base}/${_rel}")
+            get_filename_component(_dst_dir "${_dst}" DIRECTORY)
+            list(
+                APPEND ${_cmds}
+                COMMAND
+                ${CMAKE_COMMAND}
+                -E
+                make_directory
+                "${_dst_dir}"
+                COMMAND
+                ${CMAKE_COMMAND}
+                -E
+                copy_if_different
+                "${_src}"
+                "${_dst}"
+            )
+        endforeach()
+        set(${_cmds} ${${_cmds}} PARENT_SCOPE)
+    endfunction()
+
     # Prepare AIO only when sources change. Gather package + feature files as
     # inputs so the prepare step runs only when something actually changed.
     file(
@@ -385,6 +408,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     # timestamps for unchanged files and prevents downstream incremental
     # deploys from copying everything every build.
     set(_prepare_aio_cmds)
+    string(REPLACE ";" "\\;" _feature_paths_arg "${FEATURE_PATHS}")
 
     # Ensure SKSE/Plugins dir exists
     # Note: DLL and PDB are copied via POST_BUILD command to avoid race conditions
@@ -396,6 +420,17 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         make_directory
         "${AIO_DIR}/SKSE/Plugins"
     )
+    list(
+        APPEND _prepare_aio_cmds
+        COMMAND
+        ${CMAKE_COMMAND}
+        -DMODE=AIO
+        -DAIO_DIR="${AIO_DIR}"
+        -DSOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        -DFEATURE_PATHS="${_feature_paths_arg}"
+        -P
+        "${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake"
+    )
 
     # Copy package files (exclude test files from production packages)
     file(
@@ -404,25 +439,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         "${CMAKE_SOURCE_DIR}/package/*"
     )
     list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Tests/")
-    foreach(_src IN LISTS _AIO_PACKAGE_SOURCE_FILES)
-        file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}/package" "${_src}")
-        set(_dst "${AIO_DIR}/${_rel}")
-        get_filename_component(_dst_dir "${_dst}" DIRECTORY)
-        list(
-            APPEND _prepare_aio_cmds
-            COMMAND
-            ${CMAKE_COMMAND}
-            -E
-            make_directory
-            "${_dst_dir}"
-            COMMAND
-            ${CMAKE_COMMAND}
-            -E
-            copy_if_different
-            "${_src}"
-            "${_dst}"
-        )
-    endforeach()
+    append_copy_if_different(_prepare_aio_cmds _AIO_PACKAGE_SOURCE_FILES "${CMAKE_SOURCE_DIR}/package" "${AIO_DIR}")
 
     # Copy feature folders (only files, preserve existing files in AIO)
     foreach(_fpath IN LISTS FEATURE_PATHS)
@@ -432,25 +449,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 LIST_DIRECTORIES FALSE
                 "${_fpath}/*"
             )
-            foreach(_src IN LISTS _feature_files)
-                file(RELATIVE_PATH _rel "${_fpath}" "${_src}")
-                set(_dst "${AIO_DIR}/${_rel}")
-                get_filename_component(_dst_dir "${_dst}" DIRECTORY)
-                list(
-                    APPEND _prepare_aio_cmds
-                    COMMAND
-                    ${CMAKE_COMMAND}
-                    -E
-                    make_directory
-                    "${_dst_dir}"
-                    COMMAND
-                    ${CMAKE_COMMAND}
-                    -E
-                    copy_if_different
-                    "${_src}"
-                    "${_dst}"
-                )
-            endforeach()
+            append_copy_if_different(_prepare_aio_cmds _feature_files "${_fpath}" "${AIO_DIR}")
         endif()
     endforeach()
 
@@ -476,7 +475,10 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         OUTPUT
             ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
             ${_prepare_aio_cmds}
-        DEPENDS ${_AIO_PACKAGE_FILES} ${PROJECT_NAME}
+        DEPENDS
+            ${_AIO_PACKAGE_FILES}
+            ${PROJECT_NAME}
+            ${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake
     )
 
     add_custom_target(
@@ -513,25 +515,34 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     # Exclude test files from production packages
     list(FILTER _package_shaders EXCLUDE REGEX "/Tests/")
     set(_shader_copy_cmds)
-    foreach(_src IN LISTS _package_shaders)
-        file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}/package/Shaders" "${_src}")
-        set(_dst "${AIO_DIR}/Shaders/${_rel}")
-        get_filename_component(_dst_dir "${_dst}" DIRECTORY)
-        list(
-            APPEND _shader_copy_cmds
-            COMMAND
-            ${CMAKE_COMMAND}
-            -E
-            make_directory
-            "${_dst_dir}"
-            COMMAND
-            ${CMAKE_COMMAND}
-            -E
-            copy_if_different
-            "${_src}"
-            "${_dst}"
-        )
+
+    set(_feature_shader_paths)
+    foreach(_fpath IN LISTS FEATURE_PATHS)
+        if(EXISTS "${_fpath}/Shaders")
+            list(APPEND _feature_shader_paths "${_fpath}/Shaders")
+        endif()
     endforeach()
+    string(
+        REPLACE ";"
+        "\\;"
+        _feature_shader_paths_arg
+        "${_feature_shader_paths}"
+    )
+
+    list(
+        APPEND _shader_copy_cmds
+        COMMAND
+        ${CMAKE_COMMAND}
+        -DMODE=SHADERS
+        -DAIO_DIR="${AIO_DIR}"
+        -DSOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        -DFEATURE_SHADER_PATHS="${_feature_shader_paths_arg}"
+        -P
+        "${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake"
+    )
+
+    append_copy_if_different(_shader_copy_cmds _package_shaders "${CMAKE_SOURCE_DIR}/package/Shaders" "${AIO_DIR}/Shaders")
+
     # feature shader folders
     foreach(_fpath IN LISTS FEATURE_PATHS)
         if(EXISTS "${_fpath}/Shaders")
@@ -541,28 +552,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 "${_fpath}/Shaders/*"
             )
             list(FILTER _feat_shaders EXCLUDE REGEX "/Tests/")
-            get_filename_component(_feat_name "${_fpath}" NAME)
-            foreach(_src IN LISTS _feat_shaders)
-                file(RELATIVE_PATH _rel "${_fpath}/Shaders" "${_src}")
-                # Place feature shader files directly under AIO_DIR/Shaders to preserve expected include paths
-                # This matches the package shader layout and ensures includes like "TerrainShadows/..." resolve correctly
-                set(_dst "${AIO_DIR}/Shaders/${_rel}")
-                get_filename_component(_dst_dir "${_dst}" DIRECTORY)
-                list(
-                    APPEND _shader_copy_cmds
-                    COMMAND
-                    ${CMAKE_COMMAND}
-                    -E
-                    make_directory
-                    "${_dst_dir}"
-                    COMMAND
-                    ${CMAKE_COMMAND}
-                    -E
-                    copy_if_different
-                    "${_src}"
-                    "${_dst}"
-                )
-            endforeach()
+            append_copy_if_different(_shader_copy_cmds _feat_shaders "${_fpath}/Shaders" "${AIO_DIR}/Shaders")
         endif()
     endforeach()
 
@@ -572,7 +562,9 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             ${CMAKE_COMMAND} -E make_directory "${AIO_DIR}/Shaders"
             ${_shader_copy_cmds}
         COMMAND ${CMAKE_COMMAND} -E touch copy_shaders.stamp
-        DEPENDS ${HLSL_FILES}
+        DEPENDS
+            ${HLSL_FILES}
+            ${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake
         COMMENT "Copying changed shaders into AIO/Shaders"
     )
 
