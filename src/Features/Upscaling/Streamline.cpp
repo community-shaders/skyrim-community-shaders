@@ -9,6 +9,7 @@
 #include "../../Hooks.h"
 #include "../../State.h"
 #include "../../Util.h"
+#include "../DlssEnhancer/Bridge.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
 
@@ -392,7 +393,19 @@ bool Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eye
 	slConstants.jitterOffset = { -jitter.x, -jitter.y };
 	slConstants.reset = sl::Boolean::eFalse;
 
-	slConstants.mvecScale = { 1.0f, 1.0f };
+	// MV values are per-eye NDC [-1,1].  SL plugin computes:
+	//   MV_Scale_X = mvecScale.x * colorInExtent.width   (== renderWidth)
+	//   pixel_disp = MV * MV_Scale_X
+	// For correct results, MV_Scale_X must equal eyeWidthIn.
+	//
+	// Standard full-eye:  renderWidth = eyeWidthIn       → {1, 1}
+	// Subrect (Default/Faster): renderWidth = subWidthIn  → {1/UV.w, 1/UV.h}
+	// Extreme strip:      renderWidth = 2*subWidthIn      → {1/(2*UV.w), 1/UV.h}
+	{
+		float mvX, mvY;
+		DlssEnhancer::Bridge::ComputeMvecScale(mvX, mvY);
+		slConstants.mvecScale = { mvX, mvY };
+	}
 	slConstants.motionVectors3D = sl::Boolean::eFalse;
 	slConstants.motionVectorsInvalidValue = FLT_MIN;
 	slConstants.orthographicProjection = sl::Boolean::eFalse;
@@ -431,12 +444,12 @@ bool Streamline::IsRTXAndBelow40Series(IDXGIAdapter* a_adapter)
 	return false;
 }
 
-void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
+void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width, uint32_t height)
 {
 	sl::DLSSOptions dlssOptions{};
 
 	// Map quality mode to DLSS mode
-	uint32_t qualityMode = globals::features::upscaling.settings.qualityMode;
+	uint32_t qualityMode = globals::features::upscaling.GetActiveQualityMode();
 	switch (qualityMode) {
 	case 1:
 		dlssOptions.mode = sl::DLSSMode::eMaxQuality;
@@ -458,7 +471,7 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 	auto state = globals::state;
 
 	dlssOptions.outputWidth = width;
-	dlssOptions.outputHeight = (uint)state->screenSize.y;
+	dlssOptions.outputHeight = height ? height : (uint)state->screenSize.y;
 
 	// Detect HDR from kMAIN format at runtime -- VR kMAIN may be 8-bit while SE is FP16
 	{
@@ -472,7 +485,7 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 	dlssOptions.useAutoExposure = sl::Boolean::eTrue;
 
 	std::optional<sl::DLSSPreset> customPreset;
-	switch (globals::features::upscaling.settings.presetDLSS) {
+	switch (globals::features::upscaling.GetActivePresetDLSS()) {
 	case 1:
 		customPreset = sl::DLSSPreset::ePresetJ;
 		break;
@@ -484,6 +497,9 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 		break;
 	case 4:
 		customPreset = sl::DLSSPreset::ePresetM;
+		break;
+	case 5:
+		customPreset = sl::DLSSPreset::ePresetF;
 		break;
 	}
 
@@ -521,7 +537,7 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 	ID3D11Resource* colorIn, ID3D11Resource* colorOut, ID3D11Resource* depth,
 	ID3D11Resource* mvec, ID3D11Resource* reactiveMask, ID3D11Resource* transparencyMask,
-	const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth)
+	const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth, uint32_t outputHeight)
 {
 	auto context = globals::d3d::context;
 
@@ -529,8 +545,6 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 	sl::Resource colorOutRes = { sl::ResourceType::eTex2d, colorOut, 0 };
 	sl::Resource depthRes = { sl::ResourceType::eTex2d, depth, 0 };
 	sl::Resource mvecRes = { sl::ResourceType::eTex2d, mvec, 0 };
-	sl::Resource reactiveMaskRes = { sl::ResourceType::eTex2d, reactiveMask, 0 };
-	sl::Resource transparencyMaskRes = { sl::ResourceType::eTex2d, transparencyMask, 0 };
 
 	if (!CheckFrameConstants(vp, eyeIndex))
 		return;
@@ -558,18 +572,29 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 		}
 	};
 
-	SetDLSSOptions(vp, outputWidth);
+	SetDLSSOptions(vp, outputWidth, outputHeight);
 
-	sl::ResourceTag tags[] = {
-		{ &colorInRes, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentIn },
-		{ &colorOutRes, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentOut },
-		{ &depthRes, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
-		{ &mvecRes, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
-		{ &reactiveMaskRes, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
-		{ &transparencyMaskRes, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn }
-	};
+	// Build tag array dynamically — reactive and transparency masks are optional hints
+	sl::ResourceTag tags[6];
+	uint32_t tagCount = 0;
+	tags[tagCount++] = { &colorInRes, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentIn };
+	tags[tagCount++] = { &colorOutRes, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentOut };
+	tags[tagCount++] = { &depthRes, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &extentIn };
+	tags[tagCount++] = { &mvecRes, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &extentIn };
 
-	slSetTag(vp, tags, _countof(tags), context);
+	sl::Resource reactiveMaskRes;
+	if (reactiveMask) {
+		reactiveMaskRes = { sl::ResourceType::eTex2d, reactiveMask, 0 };
+		tags[tagCount++] = { &reactiveMaskRes, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn };
+	}
+
+	sl::Resource transparencyMaskRes;
+	if (transparencyMask) {
+		transparencyMaskRes = { sl::ResourceType::eTex2d, transparencyMask, 0 };
+		tags[tagCount++] = { &transparencyMaskRes, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn };
+	}
+
+	slSetTag(vp, tags, tagCount, context);
 
 	sl::ViewportHandle view(vp);
 	const sl::BaseStructure* inputs[] = { &view };
@@ -612,9 +637,6 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto screenSize = state->screenSize;
 	auto renderSize = Util::ConvertToDynamic(screenSize);
 
-	// VR: Combined-buffer mode with extent offsets causes temporal ghosting on the right eye
-	// because DLSS's internal history buffers use extent offsets as indices.
-	// Per-eye isolation with extents at {0,0} is required.
 	if (globals::game::isVR) {
 		auto& upscaling = globals::features::upscaling;
 		uint32_t eyeWidthOut = (uint32_t)(screenSize.x / 2);
@@ -633,7 +655,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 				upscaling.vrIntermediateColorIn[i]->resource.get(), upscaling.vrIntermediateColorOut[i]->resource.get(),
 				upscaling.vrIntermediateDepth[i]->resource.get(), upscaling.vrIntermediateMotionVectors[i]->resource.get(),
 				upscaling.vrIntermediateReactiveMask[i]->resource.get(), upscaling.vrIntermediateTransparencyMask[i]->resource.get(),
-				extentIn, extentOut, eyeWidthOut);
+				extentIn, extentOut, eyeWidthOut, eyeHeightOut);
 		}
 
 		upscaling.FinalizePerEyeOutputs(a_upscalingTexture);
@@ -645,7 +667,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		EvaluateDLSS(viewport, 0,
 			a_upscalingTexture, a_upscalingTexture,
 			depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask,
-			extentIn, extentOut, (uint)screenSize.x);
+			extentIn, extentOut, (uint)screenSize.x, (uint)screenSize.y);
 	}
 }
 
@@ -744,3 +766,4 @@ void Streamline::DestroyDLSSResources()
 		slFreeResources(sl::kFeatureDLSS, viewportRight);
 	}
 }
+

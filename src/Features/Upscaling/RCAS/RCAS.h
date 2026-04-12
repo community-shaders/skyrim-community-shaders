@@ -33,6 +33,7 @@ public:
 	 * @param sharpness Sharpening strength (0.0 = no sharpening, higher = more sharp).
 	 */
 	void ApplySharpen(ID3D11ShaderResourceView* inputTexture, ID3D11UnorderedAccessView* outputUAV, float sharpness);
+	void ApplySharpen(ID3D11ShaderResourceView* inputTexture, ID3D11UnorderedAccessView* outputUAV, float sharpness, uint32_t width, uint32_t height);
 
 private:
 	void CreateComputeShader();

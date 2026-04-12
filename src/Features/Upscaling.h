@@ -119,6 +119,11 @@ public:
 
 	UpscaleMethod GetUpscaleMethod() const;
 
+	bool IsDlssEnhancerRouteActive() const;
+	uint32_t GetActiveQualityMode() const;
+	uint32_t GetActivePresetDLSS() const;
+	float GetActiveSharpnessDLSS() const;
+
 	void CheckResources(UpscaleMethod a_upscalemethod);
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);

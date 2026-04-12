@@ -1,6 +1,13 @@
 #include "Upscaling.h"
 
+#include "DLSSperf.h"
 #include "Deferred.h"
+#include "DlssEnhancer/Bridge.h"
+#include "DlssEnhancer/Core.h"
+#include "DlssEnhancer/Postprocess.h"
+#include "DlssEnhancer/Preprocess.h"
+#include "DlssEnhancerFeature.h"
+#include "Globals.h"
 #include "HDRDisplay.h"
 #include "Hooks.h"
 #include "State.h"
@@ -636,9 +643,37 @@ void Upscaling::PostPostLoad()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod() const
 {
+	if (IsDlssEnhancerRouteActive())
+		return UpscaleMethod::kDLSS;
 	if (streamline.featureDLSS)
 		return (UpscaleMethod)settings.upscaleMethod;
 	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
+}
+
+bool Upscaling::IsDlssEnhancerRouteActive() const
+{
+	return DlssEnhancer::Bridge::IsRouteActive();
+}
+
+uint32_t Upscaling::GetActiveQualityMode() const
+{
+	if (IsDlssEnhancerRouteActive())
+		return DlssEnhancer::Bridge::GetQualityMode();
+	return settings.qualityMode;
+}
+
+uint32_t Upscaling::GetActivePresetDLSS() const
+{
+	if (IsDlssEnhancerRouteActive())
+		return DlssEnhancer::Bridge::GetPresetDLSS();
+	return settings.presetDLSS;
+}
+
+float Upscaling::GetActiveSharpnessDLSS() const
+{
+	if (IsDlssEnhancerRouteActive())
+		return DlssEnhancer::Bridge::GetSharpnessDLSS();
+	return settings.sharpnessDLSS;
 }
 
 void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
@@ -796,6 +831,7 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 						vrIntermediateReactiveMask[i].reset();
 						vrIntermediateTransparencyMask[i].reset();
 					}
+					DlssEnhancer::Core::ClearResources();
 				}
 			}
 			if (a_upscalemethod == UpscaleMethod::kFSR)
@@ -1225,24 +1261,46 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	auto screenHeight = static_cast<int>(screenSize.y);
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-		float resolutionScaleBase = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.qualityMode);
+		// Phase 2: DLSSperf forces ratio=1 — RTs are already at RenderRes, no DRS scaling needed
+		if (globals::features::dlssPerf.IsHookActive()) {
+			resolutionScale = { 1.0f, 1.0f };
 
-		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
-		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
+			// screenSize is polluted (= RenderRes). Use real HMD display resolution
+			// to compute proper DLSS jitter with enough phase count.
+			auto& dlssPerf = globals::features::dlssPerf;
+			auto renderWidth  = static_cast<int>(dlssPerf.GetRenderEyeWidth());
+			auto displayWidth = static_cast<int>(dlssPerf.GetDisplayEyeWidth());
 
-		resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
-		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
+			auto phaseCount = GetJitterPhaseCount(renderWidth, displayWidth);
+			GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
 
-		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
+			// Write jitter back to viewport so the engine renders with correct sub-pixel offsets
+			if (globals::game::isVR)
+				a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
+			else
+				a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
 
-		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+			a_viewport->projectionPosScaleY = 2.0f * jitter.y / static_cast<int>(dlssPerf.GetRenderEyeHeight());
+		} else {
+			float resolutionScaleBase = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)GetActiveQualityMode());
 
-		if (globals::game::isVR)
-			a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
-		else
-			a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
+			auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
+			auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
 
-		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
+			resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
+			resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
+
+			auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
+
+			GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+
+			if (globals::game::isVR)
+				a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
+			else
+				a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
+
+			a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
+		}
 	} else {
 		resolutionScale = { 1.0f, 1.0f };
 
@@ -1370,6 +1428,8 @@ void Upscaling::ClearShaderCache()
 	depthRefractionUpscalePS = nullptr;  // com_ptr automatically releases
 	underwaterMaskUpscalePS = nullptr;   // com_ptr automatically releases
 	upscaleVS = nullptr;                 // com_ptr automatically releases
+	vrClearHMDMaskCS = nullptr;
+	vrClearHMDMaskCB = nullptr;
 }
 
 void Upscaling::CopySharedD3D12Resources()
@@ -1706,6 +1766,45 @@ void Upscaling::Upscale()
 
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
+	// --- DLSS Enhancer route (VR-only) ---
+	if (IsDlssEnhancerRouteActive()) {
+		if (upscaleMethod != UpscaleMethod::kDLSS) {
+			logger::error("[DLSSENHANCER] Enhancer route active but method is {}, skipping frame", (int)upscaleMethod);
+			return;
+		}
+
+		auto& enhancer = globals::features::dlssEnhancer;
+
+		if (enhancer.IsAnyEncodeEnabled()) {
+			if (!DlssEnhancer::Preprocess::EncodeUpscalingTextures(*this)) {
+				logger::error("[DLSSENHANCER] Encode preprocess failed; skipping frame");
+				return;
+			}
+		}
+
+		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+		auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+
+		ID3D11Resource* mvec = enhancer.IsEncodeMVDilation()
+			? motionVectorCopyTexture->resource.get()
+			: motionVector.texture;
+		ID3D11Resource* reactive = enhancer.IsEncodeReactiveMask()
+			? reactiveMaskTexture->resource.get()
+			: nullptr;
+		ID3D11Resource* transparency = enhancer.IsEncodeTransparencyMask()
+			? transparencyCompositionMaskTexture->resource.get()
+			: nullptr;
+
+		state->BeginPerfEvent("Upscaling (DLSS Enhancer)");
+		DlssEnhancer::Core::ExecuteVRDlssCore(streamline,
+			main.texture, depth.texture,
+			reactive, transparency, mvec);
+		state->EndPerfEvent();
+		return;
+	}
+
+	// --- Legacy upscaling path (upstream) ---
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	auto& motionVector = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
@@ -2037,8 +2136,13 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
 		upscaling.PerformUpscaling();
 
-	if (upscaleMethod == UpscaleMethod::kDLSS)
-		upscaling.ApplySharpening();
+	if (upscaleMethod == UpscaleMethod::kDLSS) {
+		if (upscaling.IsDlssEnhancerRouteActive()) {
+			DlssEnhancer::Postprocess::ApplyDlssSharpening(upscaling);
+		} else {
+			upscaling.ApplySharpening();
+		}
+	}
 
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
@@ -2051,7 +2155,21 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	if (hdrLoaded)
 		globals::features::hdrDisplay.RedirectFramebuffer();
 
-	func(a_this, a3, a_target, a_4, a_5);
+	// DLSSperf: hybrid Post — engine runs steps 1-8 (1k pyramid/bloom/exposure),
+	// Two-layer struct swap: BeginPostIntercept swaps kMAIN_COPY DS → fakeDS (for copy step),
+	// IS shader hook swaps kMAIN SRV + kMAIN DS (for tonemap step) inside func().
+	if (globals::features::dlssPerf.ShouldHandlePost()) {
+		static bool loggedOnce = false;
+		if (!loggedOnce) {
+			loggedOnce = true;
+			logger::info("[DLSSperf] Main_PostProcessing: entering HOOK path");
+		}
+		globals::features::dlssPerf.HandlePostProcessing([&]() {
+			func(a_this, a3, a_target, a_4, a_5);
+		});
+	} else {
+		func(a_this, a3, a_target, a_4, a_5);
+	}
 
 	// Restore kFRAMEBUFFER after ISHDR — hdrTexture now has the HDR scene
 	if (hdrLoaded)

@@ -54,7 +54,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	InitializeLog();
 	logger::info("Loaded {} {}", Plugin::NAME, Plugin::VERSION.string());
 	SKSE::Init(a_skse);
-	SKSE::AllocTrampoline(1 << 10);
+	SKSE::AllocTrampoline(1 << 13);  // 8KB: E8 scanners patch ~17 DS + ~100 RT call sites
 	return Load();
 }
 

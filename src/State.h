@@ -304,6 +304,7 @@ public:
 
 	// Features that are more special then others
 	std::unordered_map<std::string, bool> specialFeatures = {
+		{ "DLSSENHANCER", false },
 		{ "TruePBR", false }
 	};
 	std::unordered_map<std::string, bool> disabledFeatures;
