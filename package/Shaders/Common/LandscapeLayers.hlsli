@@ -59,25 +59,25 @@ namespace LandscapeLayers
 
 // ---------------------------------------------------------------------------
 // Lighting.hlsl: six-way landscape diffuse / normal / RMAOS blend.
-// Requires: SampleTerrain, input, uv, sharedOffset, glossiness, blendedRGB, blendedAlpha,
+// Requires: SampleTerrain, input, uv, sharedOffset, landDistanceTexMipBias, glossiness, blendedRGB, blendedAlpha,
 // blendedNormalRGB, blendedNormalAlpha, glintParameters, Color::*, GetLandSnowMaskValue (legacy).
 // ---------------------------------------------------------------------------
 #	if defined(TRUE_PBR)
 #		define LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TILE, COLOR_TEX, COLOR_SAMP, NORM_TEX, NORM_SAMP, RMAOS_TEX, RMAOS_SAMP, PBR_PARAMS3, GLINT_PARAMS, WEIGHT) \
 			if (WEIGHT > 0.01) { \
 				float weight = WEIGHT; \
-				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset); \
+				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias); \
 				float3 landColorRGB = landColor.rgb; \
 				[branch] if (!LandscapeLayers::PbrTileUsesFullPBR(TILE)) { \
 					landColorRGB = Color::SrgbToLinear(landColorRGB / Color::PBRLightingScale); \
 				} \
 				float landAlpha = landColor.a; \
-				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset); \
+				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset, landDistanceTexMipBias); \
 				float3 landNormalRGB = landNormal.rgb; \
 				float landNormalAlpha = landNormal.a; \
 				float4 landRMAOS; \
 				[branch] if (LandscapeLayers::PbrTileUsesFullPBR(TILE)) { \
-					landRMAOS = SampleTerrain(RMAOS_TEX, RMAOS_SAMP, uv, sharedOffset) * float4((PBR_PARAMS3).x, 1, 1, (PBR_PARAMS3).z); \
+					landRMAOS = SampleTerrain(RMAOS_TEX, RMAOS_SAMP, uv, sharedOffset, landDistanceTexMipBias) * float4((PBR_PARAMS3).x, 1, 1, (PBR_PARAMS3).z); \
 					if (LandscapeLayers::PbrTileHasGlint(TILE)) { \
 						glintParameters += weight * (GLINT_PARAMS); \
 					} \
@@ -100,10 +100,10 @@ namespace LandscapeLayers
 #		define LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(COLOR_TEX, COLOR_SAMP, NORM_TEX, NORM_SAMP, WEIGHT, SNOW_COMPONENT) \
 			if (WEIGHT > 0.01) { \
 				float weight = WEIGHT; \
-				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset); \
+				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias); \
 				float3 landColorRGB = landColor.rgb; \
 				float landAlpha = landColor.a; \
-				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset); \
+				float4 landNormal = SampleTerrain(NORM_TEX, NORM_SAMP, uv, sharedOffset, landDistanceTexMipBias); \
 				float3 landNormalRGB = landNormal.rgb; \
 				float landNormalAlpha = landNormal.a; \
 				blendedRGB += landColorRGB * weight; \

@@ -85,7 +85,7 @@ namespace ExtendedMaterials
 
 #if defined(LANDSCAPE)
 	float2 GetParallaxCoords(PS_INPUT input, float distance, float2 coords, float mipLevels[6], float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6],
-		StochasticOffsets sharedOffset, out float pixelOffset, out float weights[6])
+		StochasticOffsets sharedOffset, out float pixelOffset, out uint activeMask, out float weights[6])
 #else
 	float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, out float pixelOffset)
 #endif
@@ -110,7 +110,7 @@ namespace ExtendedMaterials
 		float scalercp = 1;
 #	endif
 		float maxHeight = 0.1 * scale;
-		uint activeMask = ComputeActiveMask(w1, w2);
+		activeMask = ComputeActiveMask(w1, w2);
 		// Highest parallax mip among contributing layers: large footprint (typically distance / grazing) → fewer POM steps.
 		float aggParallaxMip = 0.0;
 		[unroll] for (int emMipLi = 0; emMipLi < 6; ++emMipLi) {
@@ -118,13 +118,16 @@ namespace ExtendedMaterials
 				aggParallaxMip = max(aggParallaxMip, mipLevels[emMipLi]);
 		}
 		float maxStepsF = 16.0;
-		if (aggParallaxMip >= 1.75)
-			maxStepsF = 8.0;
-		if (aggParallaxMip >= 3.0)
-			maxStepsF = 4.0;
-		// View-space Z magnitude (camera-relative): cheap extra taper when mips stay low on huge tiles.
+		if (aggParallaxMip >= 1.45)
+			maxStepsF = min(maxStepsF, 8.0);
+		if (aggParallaxMip >= 2.55)
+			maxStepsF = min(maxStepsF, 4.0);
 		float distSq = distance * distance;
-		maxStepsF = lerp(maxStepsF, 4.0, saturate((distSq - (2048.0 * 2048.0)) / ((6144.0 * 6144.0) - (2048.0 * 2048.0))));
+		float distLin = sqrt(distSq);
+		// Distance POM: push toward minimum step count from ~0.65k (full) to several km (mostly 4-step march).
+		float pomFar = saturate((distLin - 650.0) / 5200.0);
+		maxStepsF = lerp(maxStepsF, 4.0, pomFar);
+		maxStepsF = max(maxStepsF, 4.0);
 #else
 		float scale = params.HeightScale;
 		float maxHeight = 0.1 * scale;
@@ -173,7 +176,7 @@ namespace ExtendedMaterials
 				bool useParallaxCoarseGate = true;
 #	endif
 				// When already minified, the 4× upper-bound prepass (many SampleLevels) often costs more than four shadow taps.
-				useParallaxCoarseGate = useParallaxCoarseGate && (aggParallaxMip < 2.75);
+				useParallaxCoarseGate = useParallaxCoarseGate && (aggParallaxMip < 2.45);
 				[branch] if (useParallaxCoarseGate) {
 					float4 heightUpper = float4(
 						GetTerrainHeightUpperBoundNonStochastic(currentOffset[0].xy, mipLevels, params, activeMask),

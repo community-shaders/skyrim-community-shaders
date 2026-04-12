@@ -139,12 +139,12 @@ inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState sam
 // 2-sample height-blended stochastic sampling — branchless, no wavefront divergence.
 // Sorting in ComputeStochasticOffsets guarantees offset1/offset2 are the two
 // highest-weight barycentric vertices, so dropping offset3 loses minimal quality.
-inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
+inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float extraLandMipBias)
 {
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return tex.SampleBias(samp, uv, SharedData::MipBias);
+		return tex.SampleBias(samp, uv, SharedData::MipBias + extraLandMipBias);
 
-	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias;
+	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias + extraLandMipBias;
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 
@@ -178,9 +178,9 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
-inline float4 SampleTerrain(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
+inline float4 SampleTerrain(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float extraLandMipBias)
 {
-	return StochasticEffect(tex, samp, uv, offsets);
+	return StochasticEffect(tex, samp, uv, offsets, extraLandMipBias);
 }
 
 #endif  // TERRAIN_VARIATION_HLSLI

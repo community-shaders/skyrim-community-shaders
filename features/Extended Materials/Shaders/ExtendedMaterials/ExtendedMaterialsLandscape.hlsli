@@ -93,6 +93,15 @@
 #	endif
 	}
 
+	// Extra mip for parallax height (and coarse gate) at view distance — cheaper taps, less shimmer than diffuse-only bias.
+	void ApplyLandscapeParallaxDistanceMipBias(inout float mipLevels[6], float viewZ)
+	{
+		float t = saturate((abs(viewZ) - 450.0) / 3800.0);
+		float bias = t * 1.05;
+		[unroll] for (int li = 0; li < 6; ++li)
+			mipLevels[li] = min(mipLevels[li] + bias, 11.0);
+	}
+
 	// Single SampleLevel per active layer (no stochastic). max(layer) upper-bounds linear blend height.
 	void SampleTerrainLayerHeightsNonStochastic(float2 coords, float mipLevels[6], DisplacementParams params[6], uint activeMask, out float heights[6])
 	{
@@ -242,7 +251,8 @@
 				return invShadow * invShadow;
 			}
 #		endif
-			return pow(1.0 - saturate(dot(max(0, sh - sh0) * scaleRcp, 1.0)) * quality, 2.0);
+			float shadowParallaxTerm = 1.0 - saturate(dot(max(0, sh - sh0) * scaleRcp, 1.0)) * quality;
+			return shadowParallaxTerm * shadowParallaxTerm;
 		}
 		return 1.0;
 	}

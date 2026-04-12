@@ -892,9 +892,9 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV) { return (
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV) { return (StochasticOffsets)0; }
 inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets) { return tex.SampleBias(samp, uv, SharedData::MipBias); }
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets) { return tex.SampleLevel(samp, uv, mipLevel); }
-inline float4 SampleTerrain(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets)
+inline float4 SampleTerrain(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float extraLandMipBias)
 {
-	return tex.SampleBias(samp, uv, SharedData::MipBias);
+	return tex.SampleBias(samp, uv, SharedData::MipBias + extraLandMipBias);
 }
 #		endif
 #	endif
@@ -905,6 +905,14 @@ inline float4 SampleTerrain(Texture2D tex, SamplerState samp, float2 uv, Stochas
 
 #	if defined(EMAT)
 #		include "ExtendedMaterials/ExtendedMaterials.hlsli"
+#	endif
+
+#	if defined(LANDSCAPE) && defined(EMAT)
+#		if defined(TRUE_PBR)
+#			define LAND_EMAT_PARALLAX_ACTIVE (SharedData::extendedMaterialSettings.EnableParallax)
+#		else
+#			define LAND_EMAT_PARALLAX_ACTIVE (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)))
+#		endif
 #	endif
 
 #	if defined(SCREEN_SPACE_SHADOWS)
@@ -969,6 +977,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
 	float3 viewDirection = -normalize(input.WorldPosition.xyz);
+
+#	if defined(LANDSCAPE)
+	// Softer landscape albedo/normals at distance (SampleBias); parallax mips get a separate bump in EMAT path.
+	float landDistanceTexMipBias = saturate((abs(viewPosition.z) - 380.0) / 3400.0) * 0.72;
+#	endif
 
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
@@ -1040,6 +1053,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(LANDSCAPE)
 	float mipLevels[6];
+#		if defined(EMAT)
+	float landParallaxShadowQuality = 1.0;
+#		endif
 #	else
 	float mipLevel = 0;
 #	endif  // LANDSCAPE
@@ -1227,12 +1243,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	StochasticOffsets sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
 
 #		if defined(EMAT)
-#			if defined(TRUE_PBR)
-	if (SharedData::extendedMaterialSettings.EnableParallax) {
-#			else
-	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
-#			endif
+	if (LAND_EMAT_PARALLAX_ACTIVE) {
 		ExtendedMaterials::ComputeLandscapeParallaxMipLevels(uv, screenNoise, mipLevels);
+		ExtendedMaterials::ApplyLandscapeParallaxDistanceMipBias(mipLevels, viewPosition.z);
+		float landParallaxMipAgg = max(max(max(max(max(mipLevels[0], mipLevels[1]), mipLevels[2]), mipLevels[3]), mipLevels[4]), mipLevels[5]);
+		float vzdParallax = abs(viewPosition.z);
+		landParallaxShadowQuality = saturate((1.0 - saturate((vzdParallax - 850.0) / 4600.0) * 0.94) * saturate(1.58 - 0.41 * landParallaxMipAgg));
 
 		displacementParams[1] = displacementParams[0];
 		displacementParams[2] = displacementParams[0];
@@ -1250,7 +1266,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		float weights[6];
 		weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
-		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, pixelOffset, weights);
+		uint landParallaxActiveMask;
+		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, pixelOffset, landParallaxActiveMask, weights);
 		if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
 			input.LandBlendWeights1.x = weights[0];
 			input.LandBlendWeights1.y = weights[1];
@@ -1260,9 +1277,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			input.LandBlendWeights2.y = weights[5];
 		}
 		if (SharedData::extendedMaterialSettings.EnableShadows) {
-			uint activeMask = ExtendedMaterials::ComputeActiveMask(input.LandBlendWeights1, input.LandBlendWeights2.xy);
-			// Same scalar as GetTerrainHeight return; skips ProcessTerrainHeightWeights (out-weights unused here; shadow taps use shadow path too).
-			sh0 = ExtendedMaterials::GetTerrainHeightShadowTap(uv, mipLevels, displacementParams, input.LandBlendWeights1, input.LandBlendWeights2.xy, activeMask, sharedOffset);
+			// Reuse POM layer mask unless height blending rewrote weights (then mask must match new weights).
+			uint sh0ActiveMask = SharedData::extendedMaterialSettings.EnableHeightBlending
+				? ExtendedMaterials::ComputeActiveMask(input.LandBlendWeights1, input.LandBlendWeights2.xy)
+				: landParallaxActiveMask;
+			sh0 = ExtendedMaterials::GetTerrainHeightShadowTap(uv, mipLevels, displacementParams, input.LandBlendWeights1, input.LandBlendWeights2.xy, sh0ActiveMask, sharedOffset);
 		}
 	}
 
@@ -1968,12 +1987,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		float3 dirLightDirectionTS = mul(refractedDirLightDirection, tbn).xyz;
 #		if defined(LANDSCAPE)
-#			if defined(TRUE_PBR)
-		if (SharedData::extendedMaterialSettings.EnableParallax) {
-#			else
-		if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
-#			endif
-			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, 1.0, screenNoise, displacementParams, sharedOffset);
+		if (LAND_EMAT_PARALLAX_ACTIVE) {
+			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, SharedData::extendedMaterialSettings.ExtendShadows ? 1.0 : landParallaxShadowQuality, screenNoise, displacementParams, sharedOffset);
 		}
 #		elif defined(PARALLAX)
 		[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
@@ -2170,12 +2185,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, 1.0, screenNoise, displacementParams);
 #				elif defined(LANDSCAPE)
-#					if defined(TRUE_PBR)
-			if (SharedData::extendedMaterialSettings.EnableParallax)
-#					else
-			if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement))
-#					endif
-				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, 1.0, screenNoise, displacementParams, sharedOffset);
+			if (LAND_EMAT_PARALLAX_ACTIVE)
+				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, SharedData::extendedMaterialSettings.ExtendShadows ? 1.0 : landParallaxShadowQuality, screenNoise, displacementParams, sharedOffset);
 #				elif defined(EMAT_ENVMAP)
 			[branch] if (complexMaterialParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, 1.0, screenNoise, displacementParams);
