@@ -3,6 +3,8 @@
 #include "EffectManager.h"
 #include "SettingManager.h"
 
+static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 MenuManager& MenuManager::GetSingleton()
 {
 	static MenuManager instance;
@@ -283,7 +285,7 @@ void MenuManager::RenderAllSettings()
 					ImGui::Separator();
 
 					// Show TimeOfDay header for Weather tab only
-					const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 					auto activeIndices = GetActiveTimeOfDayIndices();
 
 					if (!activeIndices.empty()) {
@@ -309,7 +311,7 @@ void MenuManager::RenderAllSettings()
 								// Use a child region to control the exact width and center the text
 								ImGui::BeginChild(("##weatherheader_" + std::to_string(i)).c_str(), ImVec2(sliderWidth, ImGui::GetTextLineHeight()), false, ImGuiWindowFlags_NoScrollbar);
 
-								float labelWidth = ImGui::CalcTextSize(timeOfDayNames[i].c_str()).x;
+								float labelWidth = ImGui::CalcTextSize(timeOfDayNames[i]).x;
 								float centerOffset = (sliderWidth - labelWidth) * 0.5f;
 								if (centerOffset > 0) {
 									ImGui::SetCursorPosX(centerOffset);
@@ -325,7 +327,7 @@ void MenuManager::RenderAllSettings()
 								}
 								// Active periods: use default theme color (no style override)
 
-								ImGui::Text("%s", timeOfDayNames[i].c_str());
+								ImGui::Text("%s", timeOfDayNames[i]);
 
 								if (!isActive) {
 									ImGui::PopStyleColor();
@@ -430,7 +432,7 @@ void MenuManager::RenderAllSettings()
 								case SettingType::TimeOfDay:
 									{
 										auto v = settingManager.GetValue<TimeOfDayValue>(settingID, true);
-										const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 										bool changed = false;
 
 										for (int i = 0; i < 8; ++i) {
@@ -449,7 +451,7 @@ void MenuManager::RenderAllSettings()
 												ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
 											}
 
-											std::string label = timeOfDayNames[i] + "##" + settingKey + std::to_string(i);
+											std::string label = std::string(timeOfDayNames[i]) + "##" + settingKey + std::to_string(i);
 											if (ImGui::InputFloat(label.c_str(), &v.values[i], settingInfo->step, settingInfo->step * 10.0f, "%.2f")) {
 												// Clamp value between min and max after input
 												v.values[i] = std::clamp(v.values[i], settingInfo->minValue, settingInfo->maxValue);
@@ -473,7 +475,7 @@ void MenuManager::RenderAllSettings()
 								case SettingType::ColorTimeOfDay:
 									{
 										auto v = settingManager.GetValue<ColorTimeOfDayValue>(settingID, true);
-										const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 										bool changed = false;
 
 										for (int i = 0; i < 8; ++i) {
@@ -492,7 +494,7 @@ void MenuManager::RenderAllSettings()
 												ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
 											}
 
-											std::string label = timeOfDayNames[i] + "##" + settingKey + std::to_string(i);
+											std::string label = std::string(timeOfDayNames[i]) + "##" + settingKey + std::to_string(i);
 											float color[3] = { v.values[i].x, v.values[i].y, v.values[i].z };
 
 											if (ImGui::ColorEdit3(label.c_str(), color, ImGuiColorEditFlags_NoInputs)) {

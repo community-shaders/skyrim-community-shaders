@@ -24,6 +24,14 @@ bool Effect::Load()
 		return true;  // Not an error, just use defaults
 	}
 
+	// Skip reload if the file has not changed since last load
+	auto writeTime = std::filesystem::last_write_time(iniPath);
+	if (writeTime == lastIniWriteTime) {
+		logger::debug("[ENBPP] Skipping unchanged ini file '{}' for effect '{}'", iniPath.string(), GetName());
+		return true;
+	}
+	lastIniWriteTime = writeTime;
+
 	// Prepare section name
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
@@ -152,6 +160,9 @@ void Effect::Unload()
 	ClearVariableCache();
 
 	errors.clear();
+
+	// Reset write time so the next Load() after Apply() always reads fresh values
+	lastIniWriteTime = {};
 
 	logger::debug("[ENBPP] Unloaded effect '{}'", GetName());
 }
@@ -496,109 +507,69 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 
 std::string Effect::GetResourceNameFromVariable(ID3DX11EffectVariable* variable)
 {
-	if (!variable) {
-		return "";
-	}
-
-	// Get the variable's annotation count
-	D3DX11_EFFECT_VARIABLE_DESC varDesc;
-	if (FAILED(variable->GetDesc(&varDesc))) {
-		return "";
-	}
-
-	// Look for ResourceName annotation
-	for (UINT i = 0; i < varDesc.Annotations; ++i) {
-		auto annotation = variable->GetAnnotationByIndex(i);
-		if (!annotation || !annotation->IsValid()) {
-			continue;
-		}
-
-		D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
-		if (FAILED(annotation->GetDesc(&annotationDesc))) {
-			continue;
-		}
-
-		// Check if this is the ResourceName annotation
-		if (std::string(annotationDesc.Name) == "ResourceName") {
-			// Get the string value
-			auto stringVar = annotation->AsString();
-			if (stringVar && stringVar->IsValid()) {
-				LPCSTR resourceName = nullptr;
-				if (SUCCEEDED(stringVar->GetString(&resourceName)) && resourceName) {
-					return std::string(resourceName);
-				}
-			}
-		}
-	}
-
-	return "";
+	return GetUIAnnotation(variable, "ResourceName");
 }
 
-void Effect::LoadTechniques()
+template <typename Callback>
+static void ForEachTechniqueSequence(ID3DX11Effect* effect, Callback&& callback)
 {
 	D3DX11_EFFECT_DESC effectDesc;
-	DX::ThrowIfFailed(effect->GetDesc(&effectDesc));
+	if (FAILED(effect->GetDesc(&effectDesc)))
+		return;
 
 	std::string currentSequenceBaseName;
 	int currentSequenceIndex = 0;
 
-	// Load all techniques and organize them into sequences
 	for (UINT i = 0; i < effectDesc.Techniques; ++i) {
 		auto technique = effect->GetTechniqueByIndex(i);
-		if (!technique->IsValid()) {
+		if (!technique->IsValid())
 			continue;
-		}
 
 		D3DX11_TECHNIQUE_DESC techDesc;
-		DX::ThrowIfFailed(technique->GetDesc(&techDesc));
+		if (FAILED(technique->GetDesc(&techDesc)))
+			continue;
 
 		std::string techniqueName = techDesc.Name;
-
-		// Determine the base technique name and sequence number
 		std::string baseName;
 		int sequenceNumber = 0;
 
-		// Check if this continues the current sequence
 		if (!currentSequenceBaseName.empty()) {
 			std::string expectedName = currentSequenceBaseName + std::to_string(currentSequenceIndex + 1);
 			if (techniqueName == expectedName) {
-				// Continue current sequence
 				baseName = currentSequenceBaseName;
 				sequenceNumber = currentSequenceIndex + 1;
 				currentSequenceIndex++;
 			} else {
-				// Start new sequence with this technique
 				baseName = techniqueName;
-				sequenceNumber = 0;
 				currentSequenceBaseName = techniqueName;
 				currentSequenceIndex = 0;
 			}
 		} else {
-			// First technique or start new sequence
 			baseName = techniqueName;
-			sequenceNumber = 0;
 			currentSequenceBaseName = techniqueName;
 			currentSequenceIndex = 0;
 		}
 
-		// Get RenderTarget annotation
+		callback(technique, baseName, techniqueName, sequenceNumber);
+	}
+}
+
+void Effect::LoadTechniques()
+{
+	ForEachTechniqueSequence(effect.get(), [this](ID3DX11EffectTechnique* technique, const std::string& baseName, const std::string& techniqueName, int sequenceNumber) {
 		std::string renderTargetName = GetRenderTargetFromTechnique(technique);
 
-		// Ensure the technique sequence vector exists and is large enough
-		if (techniques[baseName].size() <= sequenceNumber) {
+		if (techniques[baseName].size() <= static_cast<size_t>(sequenceNumber))
 			techniques[baseName].resize(sequenceNumber + 1);
-		}
 
-		// Store the technique info in the correct sequence position
 		TechniqueInfo techInfo;
 		techInfo.technique.copy_from(technique);
 		techInfo.renderTargetName = renderTargetName;
 		techniques[baseName][sequenceNumber] = std::move(techInfo);
 
 		logger::debug("[ENBPP] Loaded technique '{}' as base '{}' sequence {}", techniqueName, baseName, sequenceNumber);
-	}
+	});
 
-	// Log the technique sequences found
 	for (const auto& [baseName, sequence] : techniques) {
 		logger::debug("[ENBPP] Technique sequence '{}' has {} techniques", baseName, sequence.size());
 	}
@@ -610,7 +581,6 @@ std::vector<std::string> Effect::GetBaseTechniqueNames()
 	baseNames.reserve(techniques.size());
 
 	for (const auto& [baseName, sequence] : techniques) {
-		// Only include sequences that have at least the base technique (index 0)
 		if (!sequence.empty() && sequence[0].technique) {
 			baseNames.push_back(baseName);
 		}
@@ -624,153 +594,65 @@ void Effect::LoadUITechniques()
 	uiTechniques.clear();
 	selectedTechniqueIndex = 0;
 
-	D3DX11_EFFECT_DESC effectDesc;
-	if (FAILED(effect->GetDesc(&effectDesc))) {
-		return;
-	}
-
-	std::string currentSequenceBaseName;
-	int currentSequenceIndex = 0;
-
-	// Load all techniques that have UIName annotations
-	for (UINT i = 0; i < effectDesc.Techniques; ++i) {
-		auto technique = effect->GetTechniqueByIndex(i);
-		if (!technique->IsValid()) {
-			continue;
-		}
-
-		D3DX11_TECHNIQUE_DESC techDesc;
-		if (FAILED(technique->GetDesc(&techDesc))) {
-			continue;
-		}
-
-		std::string techniqueName = techDesc.Name;
-
-		// Determine the base technique name using same logic as LoadTechniques
-		std::string baseName;
-		if (!currentSequenceBaseName.empty()) {
-			std::string expectedName = currentSequenceBaseName + std::to_string(currentSequenceIndex + 1);
-			if (techniqueName == expectedName) {
-				// Continue current sequence
-				baseName = currentSequenceBaseName;
-				currentSequenceIndex++;
-			} else {
-				// Start new sequence with this technique
-				baseName = techniqueName;
-				currentSequenceBaseName = techniqueName;
-				currentSequenceIndex = 0;
-			}
-		} else {
-			// First technique or start new sequence
-			baseName = techniqueName;
-			currentSequenceBaseName = techniqueName;
-			currentSequenceIndex = 0;
-		}
-
+	ForEachTechniqueSequence(effect.get(), [this](ID3DX11EffectTechnique* technique, const std::string& baseName, [[maybe_unused]] const std::string& techniqueName, [[maybe_unused]] int sequenceNumber) {
 		std::string uiName = GetUINameFromTechnique(technique);
+		if (uiName.empty())
+			return;
 
-		// Only include techniques with UIName annotations, and dedupe by base sequence name
-		if (!uiName.empty()) {
-			bool alreadyAdded = false;
-			for (const auto& existing : uiTechniques) {
-				if (existing.techniqueName == baseName) {
-					alreadyAdded = true;
-					break;
-				}
-			}
-
-			if (!alreadyAdded) {
-				UITechnique uiTech;
-				uiTech.techniqueName = baseName;
-				uiTech.displayName = uiName;
-				uiTechniques.push_back(uiTech);
-
-				logger::debug("[ENBPP] Added UI technique '{}' (base of '{}') with display name '{}'", baseName, techniqueName, uiName);
-			}
+		for (const auto& existing : uiTechniques) {
+			if (existing.techniqueName == baseName)
+				return;
 		}
-	}
+
+		UITechnique uiTech;
+		uiTech.techniqueName = baseName;
+		uiTech.displayName = uiName;
+		uiTechniques.push_back(uiTech);
+
+		logger::debug("[ENBPP] Added UI technique '{}' with display name '{}'", baseName, uiName);
+	});
 
 	logger::debug("[ENBPP] Loaded {} UI techniques", uiTechniques.size());
 }
 
-std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
+static std::string GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, const char* annotationName)
 {
-	if (!technique) {
+	if (!technique)
 		return "";
-	}
 
-	// Get the technique's annotation count
 	D3DX11_TECHNIQUE_DESC techDesc;
-	if (FAILED(technique->GetDesc(&techDesc))) {
+	if (FAILED(technique->GetDesc(&techDesc)))
 		return "";
-	}
 
-	// Look for RenderTarget annotation
 	for (UINT i = 0; i < techDesc.Annotations; ++i) {
 		auto annotation = technique->GetAnnotationByIndex(i);
-		if (!annotation || !annotation->IsValid()) {
+		if (!annotation || !annotation->IsValid())
 			continue;
-		}
 
 		D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
-		if (FAILED(annotation->GetDesc(&annotationDesc))) {
+		if (FAILED(annotation->GetDesc(&annotationDesc)))
 			continue;
-		}
 
-		// Check if this is the RenderTarget annotation
-		if (std::string(annotationDesc.Name) == "RenderTarget") {
-			// Get the string value
+		if (std::string(annotationDesc.Name) == annotationName) {
 			auto stringVar = annotation->AsString();
 			if (stringVar && stringVar->IsValid()) {
-				LPCSTR renderTargetName = nullptr;
-				if (SUCCEEDED(stringVar->GetString(&renderTargetName)) && renderTargetName) {
-					return std::string(renderTargetName);
-				}
+				LPCSTR value = nullptr;
+				if (SUCCEEDED(stringVar->GetString(&value)) && value)
+					return std::string(value);
 			}
 		}
 	}
-
 	return "";
+}
+
+std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
+{
+	return GetTechniqueAnnotation(technique, "RenderTarget");
 }
 
 std::string Effect::GetUINameFromTechnique(ID3DX11EffectTechnique* technique)
 {
-	if (!technique) {
-		return "";
-	}
-
-	// Get the technique's annotation count
-	D3DX11_TECHNIQUE_DESC techDesc;
-	if (FAILED(technique->GetDesc(&techDesc))) {
-		return "";
-	}
-
-	// Look for UIName annotation
-	for (UINT i = 0; i < techDesc.Annotations; ++i) {
-		auto annotation = technique->GetAnnotationByIndex(i);
-		if (!annotation || !annotation->IsValid()) {
-			continue;
-		}
-
-		D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
-		if (FAILED(annotation->GetDesc(&annotationDesc))) {
-			continue;
-		}
-
-		// Check if this is the UIName annotation
-		if (std::string(annotationDesc.Name) == "UIName") {
-			// Get the string value
-			auto stringVar = annotation->AsString();
-			if (stringVar && stringVar->IsValid()) {
-				LPCSTR uiName = nullptr;
-				if (SUCCEEDED(stringVar->GetString(&uiName)) && uiName) {
-					return std::string(uiName);
-				}
-			}
-		}
-	}
-
-	return "";
+	return GetTechniqueAnnotation(technique, "UIName");
 }
 
 TextureManager::Texture* Effect::GetEffectTexture(const std::string& name)

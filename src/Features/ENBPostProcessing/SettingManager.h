@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <shared_mutex>
 
 enum class SettingType
@@ -9,6 +10,20 @@ enum class SettingType
 	TimeOfDay,
 	ColorTimeOfDay
 };
+
+// Shared time-of-day index lookup used by both TimeOfDayValue and ColorTimeOfDayValue
+inline int TimeOfDayIndexFromName(const std::string& name)
+{
+	static const std::pair<const char*, int> lookup[] = {
+		{ "Dawn", 0 }, { "Sunrise", 1 }, { "Day", 2 }, { "Sunset", 3 },
+		{ "Dusk", 4 }, { "Night", 5 }, { "InteriorDay", 6 }, { "InteriorNight", 7 }
+	};
+	for (const auto& [n, idx] : lookup) {
+		if (name == n)
+			return idx;
+	}
+	return 0;  // Default to Dawn
+}
 
 struct TimeOfDayValue
 {
@@ -35,26 +50,7 @@ struct TimeOfDayValue
 		return std::equal(std::begin(values), std::end(values), std::begin(other.values));
 	}
 
-	float& GetByName(const std::string& name)
-	{
-		if (name == "Dawn")
-			return values[Dawn];
-		if (name == "Sunrise")
-			return values[Sunrise];
-		if (name == "Day")
-			return values[Day];
-		if (name == "Sunset")
-			return values[Sunset];
-		if (name == "Dusk")
-			return values[Dusk];
-		if (name == "Night")
-			return values[Night];
-		if (name == "InteriorDay")
-			return values[InteriorDay];
-		if (name == "InteriorNight")
-			return values[InteriorNight];
-		return values[Dawn];
-	}
+	float& GetByName(const std::string& name) { return values[TimeOfDayIndexFromName(name)]; }
 };
 
 struct ColorTimeOfDayValue
@@ -90,26 +86,7 @@ struct ColorTimeOfDayValue
 		return true;
 	}
 
-	float3& GetByName(const std::string& name)
-	{
-		if (name == "Dawn")
-			return values[Dawn];
-		if (name == "Sunrise")
-			return values[Sunrise];
-		if (name == "Day")
-			return values[Day];
-		if (name == "Sunset")
-			return values[Sunset];
-		if (name == "Dusk")
-			return values[Dusk];
-		if (name == "Night")
-			return values[Night];
-		if (name == "InteriorDay")
-			return values[InteriorDay];
-		if (name == "InteriorNight")
-			return values[InteriorNight];
-		return values[Dawn];
-	}
+	float3& GetByName(const std::string& name) { return values[TimeOfDayIndexFromName(name)]; }
 };
 
 using SettingValue = std::variant<bool, float, TimeOfDayValue, ColorTimeOfDayValue>;
@@ -219,6 +196,10 @@ private:
 	float timeOfDay1[4] = { 0, 0, 0, 0 };
 	float timeOfDay2[4] = { 0, 0, 0, 0 };
 	float interiorFactor = 0.0f;
+
+	// INI file modification time tracking to skip redundant reloads
+	std::filesystem::file_time_type lastMainIniWriteTime{};
+	std::unordered_map<std::string, std::filesystem::file_time_type> weatherFileWriteTimes;
 
 	mutable std::shared_mutex mutex;
 

@@ -215,7 +215,7 @@ void WeatherManager::LoadLocationWeather()
 uint32_t WeatherManager::GetEffectiveWeatherID(uint32_t actualWeatherID)
 {
 	auto& effectManager = EffectManager::GetSingleton();
-	if (!SettingManager::GetSingleton().GetValueInternal<bool>(effectManager.ids.enableLocationWeather)) {
+	if (!SettingManager::GetSingleton().GetValue<bool>(effectManager.ids.enableLocationWeather)) {
 		return actualWeatherID;
 	}
 
@@ -276,12 +276,9 @@ std::unordered_map<std::string, std::string> WeatherManager::GetWeatherFiles() c
 	std::unordered_map<std::string, std::string> result;
 
 	for (const auto& [sectionName, entry] : weatherEntries) {
+		std::string weatherFilePath = "enbseries/" + entry.fileName;
 		for (uint32_t weatherID : entry.weatherIDs) {
-			std::ostringstream oss;
-			oss << "weather_" << weatherID;
-			std::string weatherKey = oss.str();
-			std::filesystem::path weatherFilePath = "enbseries/" + entry.fileName;
-			result[weatherKey] = weatherFilePath.string();
+			result["weather_" + std::to_string(weatherID)] = weatherFilePath;
 		}
 	}
 

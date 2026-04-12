@@ -24,43 +24,32 @@ void EffectManager::Initialize()
 	Apply();
 
 	// Verify all critical common resources are initialized correctly
+	struct ResourceCheck
+	{
+		const void* resource;
+		const char* name;
+	};
+
+	const ResourceCheck checks[] = {
+		{ quadVertexBuffer.get(), "quadVertexBuffer" },
+		{ inputLayout.get(), "inputLayout" },
+		{ rasterizerState.get(), "rasterizerState" },
+		{ blendState.get(), "blendState" },
+		{ copyVertexShader.get(), "copyVertexShader" },
+		{ copyPixelShader.get(), "copyPixelShader" },
+		{ colorCorrectionComputeShader.get(), "colorCorrectionComputeShader" },
+		{ colorCorrectionConstantBuffer.get(), "colorCorrectionConstantBuffer" },
+	};
+
 	bool resourcesValid = true;
-	if (!quadVertexBuffer) {
-		logger::error("[EffectManager] quadVertexBuffer failed to initialize");
-		resourcesValid = false;
-	}
-	if (!inputLayout) {
-		logger::error("[EffectManager] inputLayout failed to initialize");
-		resourcesValid = false;
-	}
-	if (!rasterizerState) {
-		logger::error("[EffectManager] rasterizerState failed to initialize");
-		resourcesValid = false;
-	}
-	if (!blendState) {
-		logger::error("[EffectManager] blendState failed to initialize");
-		resourcesValid = false;
-	}
-	if (!copyVertexShader) {
-		logger::error("[EffectManager] copyVertexShader failed to initialize");
-		resourcesValid = false;
-	}
-	if (!copyPixelShader) {
-		logger::error("[EffectManager] copyPixelShader failed to initialize");
-		resourcesValid = false;
-	}
-	if (!colorCorrectionComputeShader) {
-		logger::error("[EffectManager] colorCorrectionComputeShader failed to initialize");
-		resourcesValid = false;
-	}
-	if (!colorCorrectionConstantBuffer) {
-		logger::error("[EffectManager] colorCorrectionConstantBuffer failed to initialize");
-		resourcesValid = false;
+	for (const auto& [resource, name] : checks) {
+		if (!resource) {
+			logger::error("[EffectManager] {} failed to initialize", name);
+			resourcesValid = false;
+		}
 	}
 
-	if (resourcesValid) {
-		// Initialization successful
-	} else {
+	if (!resourcesValid) {
 		logger::error("[EffectManager] Initialization failed due to missing resources");
 	}
 }
@@ -236,6 +225,22 @@ void EffectManager::RegisterSettings()
 	ids.gammaCurve = settingManager.GetSettingID("GammaCurve", "COLORCORRECTION");
 }
 
+void EffectManager::ExecuteEffect(Effect& a_effect, uint32_t enableSettingID)
+{
+	if (!a_effect.IsCompiled())
+		return;
+
+	if (enableSettingID != 0xFFFFFFFF && !SettingManager::GetSingleton().GetValue<bool>(enableSettingID))
+		return;
+
+	auto state = globals::state;
+	state->BeginPerfEvent(a_effect.GetName());
+	UpdateCommonVariablesForEffect(a_effect.GetEffect());
+	a_effect.UpdateEffectVariables();
+	a_effect.Execute();
+	state->EndPerfEvent();
+}
+
 void EffectManager::ExecuteEffects()
 {
 	auto context = globals::d3d::context;
@@ -313,67 +318,25 @@ void EffectManager::ExecuteEffects()
 	// Apply brightness and gamma curve
 	ApplyColorCorrection(textureOriginal.UAV);
 
-	auto state = globals::state;
-	auto& settingManager = SettingManager::GetSingleton();
 	auto& textureManager = TextureManager::GetSingleton();
 
 	// Downsampled texture shared between bloom, lens and adaptation
 	textureManager.UpdateDownsampledTexture(textureOriginal.SRV);
 
-	if (enbBloom.IsCompiled() && settingManager.GetValue<bool>(ids.useBloom)) {
-		state->BeginPerfEvent(enbBloom.GetName());
-		UpdateCommonVariablesForEffect(enbBloom.GetEffect());
-		enbBloom.UpdateEffectVariables();
-		enbBloom.Execute();
-		state->EndPerfEvent();
-	}
-
-	if (enbLens.IsCompiled() && settingManager.GetValue<bool>(ids.useLens)) {
-		state->BeginPerfEvent(enbLens.GetName());
-		UpdateCommonVariablesForEffect(enbLens.GetEffect());
-		enbLens.UpdateEffectVariables();
-		enbLens.Execute();
-		state->EndPerfEvent();
-	}
-
-	if (enbAdaptation.IsCompiled() && settingManager.GetValue<bool>(ids.useAdaptation)) {
-		state->BeginPerfEvent(enbAdaptation.GetName());
-		UpdateCommonVariablesForEffect(enbAdaptation.GetEffect());
-		enbAdaptation.UpdateEffectVariables();
-		enbAdaptation.Execute();
-		state->EndPerfEvent();
-	}
-
-	if (enbEffect.IsCompiled()) {
-		state->BeginPerfEvent(enbEffect.GetName());
-		UpdateCommonVariablesForEffect(enbEffect.GetEffect());
-		enbEffect.UpdateEffectVariables();
-		enbEffect.Execute();
-		state->EndPerfEvent();
-	}
-
-	if (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>(ids.usePostPass)) {
-		state->BeginPerfEvent(enbEffectPostPass.GetName());
-		UpdateCommonVariablesForEffect(enbEffectPostPass.GetEffect());
-		enbEffectPostPass.UpdateEffectVariables();
-		enbEffectPostPass.Execute();
-		state->EndPerfEvent();
-	}
+	ExecuteEffect(enbBloom, ids.useBloom);
+	ExecuteEffect(enbLens, ids.useLens);
+	ExecuteEffect(enbAdaptation, ids.useAdaptation);
+	ExecuteEffect(enbEffect);
+	ExecuteEffect(enbEffectPostPass, ids.usePostPass);
 
 	textureManager.IncrementTextureSwap();
 
-	// Determine final source for framebuffer copy
-	ID3D11ShaderResourceView* finalSourceSRV = textureManager.GetCommonTexture("TextureSDRTemp")->srv.get();
-	if (enbEffect.IsCompiled() || (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>(ids.usePostPass))) {
-		auto textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
-		if (textureSDRTemp) {
-			finalSourceSRV = textureSDRTemp->srv.get();
-		}
-	}
-
 	// Copy final render target to framebuffer
-	auto textureFramebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-	CopyTexture(textureManager.GetCommonTexture("TextureSDRTemp")->srv.get(), textureFramebuffer.RTV);
+	auto* textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
+	if (textureSDRTemp) {
+		auto textureFramebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
+		CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer.RTV);
+	}
 
 	// Restore State
 	context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, oldDSV);
@@ -835,7 +798,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 		renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV);
 
 	// Set format-specific render targets
-	const std::vector<std::string> formatTargets = {
+	static const char* const formatTargets[] = {
 		"RenderTargetRGBA32", "RenderTargetRGBA64", "RenderTargetRGBA64F",
 		"RenderTargetR16F", "RenderTargetR32F", "RenderTargetRGB32F"
 	};
@@ -849,7 +812,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	}
 
 	// Set fixed-size render targets
-	const std::vector<std::string> fixedSizeTargets = {
+	static const char* const fixedSizeTargets[] = {
 		"RenderTarget1024", "RenderTarget512", "RenderTarget256", "RenderTarget128",
 		"RenderTarget64", "RenderTarget32", "RenderTarget16"
 	};

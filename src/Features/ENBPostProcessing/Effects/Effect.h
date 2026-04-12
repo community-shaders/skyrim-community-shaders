@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Effects11/d3dx11effect.h>
+#include <filesystem>
 #include <winrt/base.h>
 
 #include "../TextureManager.h"
@@ -115,6 +116,9 @@ public:
 
 	// Error tracking
 	std::vector<std::string> errors;
+
+	// INI file modification time tracking to skip redundant reloads
+	std::filesystem::file_time_type lastIniWriteTime{};
 
 	// Execute a technique sequence with ping-pong rendering
 	bool ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp);

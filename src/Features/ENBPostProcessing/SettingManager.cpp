@@ -4,9 +4,10 @@
 #include <Windows.h>
 #include <algorithm>
 #include <cctype>
-#include <set>
 #include <string>
 #include <tuple>
+
+static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
 static bool TryParseBool(const std::string& a_value, bool& a_out)
 {
@@ -323,13 +324,21 @@ uint32_t SettingManager::GetSettingIDInternal(const std::string& key, const std:
 
 float SettingManager::GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category)
 {
-	TimeOfDayValue timeOfDayValue = GetValue<TimeOfDayValue>(key, category);
+	std::shared_lock lock(mutex);
+	uint32_t id = GetSettingIDInternal(key, category);
+	if (id == 0xFFFFFFFF)
+		return 0.0f;
+	TimeOfDayValue timeOfDayValue = GetValueInternal<TimeOfDayValue>(id);
 	return ComputeTimeOfDayInterpolation(timeOfDayValue);
 }
 
 float3 SettingManager::GetInterpolatedColorTimeOfDayValue(const std::string& key, const std::string& category)
 {
-	ColorTimeOfDayValue colorTimeOfDayValue = GetValue<ColorTimeOfDayValue>(key, category);
+	std::shared_lock lock(mutex);
+	uint32_t id = GetSettingIDInternal(key, category);
+	if (id == 0xFFFFFFFF)
+		return {};
+	ColorTimeOfDayValue colorTimeOfDayValue = GetValueInternal<ColorTimeOfDayValue>(id);
 	return ComputeColorTimeOfDayInterpolation(colorTimeOfDayValue);
 }
 
@@ -342,8 +351,11 @@ bool SettingManager::HasSetting(const std::string& key, const std::string& categ
 
 const Setting* SettingManager::GetSettingInfo(const std::string& key, const std::string& category) const
 {
-	uint32_t id = GetSettingID(key, category);
-	return GetSettingInfo(id);
+	std::shared_lock lock(mutex);
+	uint32_t id = GetSettingIDInternal(key, category);
+	if (id < allSettings.size())
+		return &allSettings[id];
+	return nullptr;
 }
 
 const Setting* SettingManager::GetSettingInfo(uint32_t id) const
@@ -378,7 +390,7 @@ bool SettingManager::CategoryHasWeatherSupport(const std::string& category) cons
 	if (categoryIt == categories.end())
 		return false;
 
-	for (uint32_t id : categoryIt->second.settingOrder | std::views::transform([&](const auto& key) { return categoryIt->second.settings.at(key); })) {
+	for (const auto& [key, id] : categoryIt->second.settings) {
 		if (allSettings[id].hasWeatherSupport) {
 			return true;
 		}
@@ -389,9 +401,9 @@ bool SettingManager::CategoryHasWeatherSupport(const std::string& category) cons
 void SettingManager::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32_t newLastWeatherID, float blendFactor)
 {
 	std::unique_lock lock(mutex);
-	this->currentWeatherID = newCurrentWeatherID;
-	this->lastWeatherID = newLastWeatherID;
-	this->weatherBlendFactor = blendFactor;
+	currentWeatherID = newCurrentWeatherID;
+	lastWeatherID = newLastWeatherID;
+	weatherBlendFactor = blendFactor;
 }
 
 void SettingManager::LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs, const std::string& filePath)
@@ -405,29 +417,35 @@ void SettingManager::LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs
 		return;
 	}
 
-	std::vector<SettingValue> loadedValues;
+	auto writeTime = std::filesystem::last_write_time(filePath);
 
-	// Load settings from file once
+	// Snapshot allSettings and check for changes under a short shared lock
+	std::vector<Setting> settingsCopy;
 	{
 		std::shared_lock lock(mutex);
-		loadedValues.resize(allSettings.size());
-		// Initialize with defaults first
-		for (size_t i = 0; i < allSettings.size(); ++i) {
-			loadedValues[i] = allSettings[i].currentValue;
+		auto it = weatherFileWriteTimes.find(filePath);
+		if (it != weatherFileWriteTimes.end() && it->second == writeTime) {
+			return;  // File unchanged since last load
 		}
+		settingsCopy = allSettings;
+	}
 
-		for (const auto& setting : allSettings) {
-			if (setting.hasWeatherSupport) {
-				Setting tempSetting = setting;
-				LoadSettingFromFile(filePath, setting.category, setting.key, tempSetting);
-				loadedValues[setting.id] = tempSetting.currentValue;
-			}
+	// Do all file I/O without holding any lock
+	std::vector<SettingValue> loadedValues(settingsCopy.size());
+	for (size_t i = 0; i < settingsCopy.size(); ++i) {
+		loadedValues[i] = settingsCopy[i].currentValue;
+	}
+	for (auto& setting : settingsCopy) {
+		if (setting.hasWeatherSupport) {
+			LoadSettingFromFile(filePath, setting.category, setting.key, setting);
+			loadedValues[setting.id] = setting.currentValue;
 		}
 	}
 
-	// Store loaded values for all provided weather IDs
+	// Store loaded values for all provided weather IDs under write lock
 	{
 		std::unique_lock lock(mutex);
+		weatherFileWriteTimes[filePath] = writeTime;
 		for (uint32_t weatherID : weatherIDs) {
 			weatherData[weatherID] = loadedValues;
 			lastSavedWeatherData[weatherID] = loadedValues;
@@ -512,6 +530,7 @@ void SettingManager::ReloadAllWeatherSettings()
 	{
 		std::unique_lock lock(mutex);
 		weatherData.clear();
+		weatherFileWriteTimes.clear();  // Force re-read of all weather files
 	}
 	auto& weatherManager = WeatherManager::GetSingleton();
 	weatherManager.Initialize();
@@ -520,9 +539,9 @@ void SettingManager::ReloadAllWeatherSettings()
 void SettingManager::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor)
 {
 	std::unique_lock lock(mutex);
-	memcpy(this->timeOfDay1, newTimeOfDay1, sizeof(this->timeOfDay1));
-	memcpy(this->timeOfDay2, newTimeOfDay2, sizeof(this->timeOfDay2));
-	this->interiorFactor = newInteriorFactor;
+	memcpy(timeOfDay1, newTimeOfDay1, sizeof(timeOfDay1));
+	memcpy(timeOfDay2, newTimeOfDay2, sizeof(timeOfDay2));
+	interiorFactor = newInteriorFactor;
 }
 
 void SettingManager::LoadFromFile(const std::string& filePath)
@@ -534,16 +553,84 @@ void SettingManager::LoadFromFile(const std::string& filePath)
 		return;
 	}
 
-	std::unique_lock lock(mutex);
-	for (auto& setting : allSettings) {
-		LoadSettingFromFile(absPath.string(), setting.category, setting.key, setting);
+	auto writeTime = std::filesystem::last_write_time(absPath);
+
+	// Snapshot settings and identify weather categories under brief shared lock
+	std::vector<Setting> settingsCopy;
+	std::vector<std::string> weatherCategories;
+	{
+		std::shared_lock lock(mutex);
+		if (writeTime == lastMainIniWriteTime) {
+			return;  // File unchanged since last load
+		}
+		settingsCopy = allSettings;
+		for (const auto& [catName, catData] : categories) {
+			for (const auto& [key, settingID] : catData.settings) {
+				if (allSettings[settingID].hasWeatherSupport) {
+					weatherCategories.push_back(catName);
+					break;
+				}
+			}
+		}
+	}
+
+	// Do all file I/O without holding any lock
+	std::string absPathStr = absPath.string();
+	for (auto& setting : settingsCopy) {
+		LoadSettingFromFile(absPathStr, setting.category, setting.key, setting);
 		setting.lastSavedValue = setting.currentValue;
 	}
 
-	LoadWeatherIgnoreSettings(absPath.string());
+	// Load weather ignore settings (I/O without lock)
+	struct WeatherIgnoreData
+	{
+		std::string category;
+		bool ignoreWeatherSystem = false;
+		bool ignoreWeatherSystemInterior = true;
+	};
+	std::vector<WeatherIgnoreData> weatherIgnoreResults;
+	for (const auto& category : weatherCategories) {
+		WeatherIgnoreData data;
+		data.category = category;
 
-	// Update lastSavedWeatherData after loading main file
-	lastSavedWeatherData = weatherData;
+		char buffer[256];
+		GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem", "false", buffer, sizeof(buffer), absPathStr.c_str());
+		bool parsed;
+		if (TryParseBool(buffer, parsed)) {
+			data.ignoreWeatherSystem = parsed;
+		}
+
+		GetPrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior", "true", buffer, sizeof(buffer), absPathStr.c_str());
+		if (TryParseBool(buffer, parsed)) {
+			data.ignoreWeatherSystemInterior = parsed;
+		}
+
+		weatherIgnoreResults.push_back(std::move(data));
+	}
+
+	// Store results under unique lock
+	{
+		std::unique_lock lock(mutex);
+		lastMainIniWriteTime = writeTime;
+		allSettings = std::move(settingsCopy);
+
+		// Apply weather ignore settings
+		for (const auto& data : weatherIgnoreResults) {
+			auto catIt = categories.find(data.category);
+			if (catIt != categories.end()) {
+				catIt->second.ignoreWeatherSystem = data.ignoreWeatherSystem;
+				catIt->second.ignoreWeatherSystemInterior = data.ignoreWeatherSystemInterior;
+			}
+		}
+
+		// Sync lastSaved state for all categories
+		for (auto& [catName, catData] : categories) {
+			catData.lastSavedIgnoreWeatherSystem = catData.ignoreWeatherSystem;
+			catData.lastSavedIgnoreWeatherSystemInterior = catData.ignoreWeatherSystemInterior;
+		}
+
+		lastSavedWeatherData = weatherData;
+	}
 }
 
 void SettingManager::SaveToFile(const std::string& filePath)
@@ -698,7 +785,6 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 	case SettingType::TimeOfDay:
 		{
 			TimeOfDayValue timeOfDayValue = std::get<TimeOfDayValue>(setting.defaultValue);
-			const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
@@ -717,7 +803,6 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 	case SettingType::ColorTimeOfDay:
 		{
 			ColorTimeOfDayValue colorTimeOfDayValue = std::get<ColorTimeOfDayValue>(setting.defaultValue);
-			const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
@@ -797,7 +882,6 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 	case SettingType::TimeOfDay:
 		{
 			const TimeOfDayValue& timeOfDayValue = std::get<TimeOfDayValue>(setting.currentValue);
-			const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
@@ -809,7 +893,6 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 	case SettingType::ColorTimeOfDay:
 		{
 			const ColorTimeOfDayValue& colorTimeOfDayValue = std::get<ColorTimeOfDayValue>(setting.currentValue);
-			const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
