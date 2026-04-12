@@ -8,7 +8,7 @@ private:
 	static constexpr std::string_view MOD_ID = "130375";
 
 public:
-	bool inline SupportsVR() override { return true; }
+	bool inline SupportsVR() override { return false; }
 
 	virtual inline std::string GetName() override { return "SSRT"; }
 	virtual inline std::string GetShortName() override { return "SSRT"; }
@@ -17,18 +17,11 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		std::string desc =
-			"Screen Space Ray Tracing (SSRT3) adds realistic indirect lighting and "
-			"ambient occlusion using horizon-based sampling with bitfield visibility "
-			"tracking. Ported from SSRT3 by CDRIN (Olivier Therrien).";
-		if (REL::Module::IsVR()) {
-			desc +=
-				"\n\nWarning: In VR, this feature may have visual artifacts and "
-				"can have a significant performance impact due to the nature of "
-				"screen space effects.";
-		}
 		return std::make_pair(
-			desc,
+			std::string(
+				"Screen Space Ray Tracing (SSRT3) adds realistic indirect lighting and "
+				"ambient occlusion using horizon-based sampling with bitfield visibility "
+				"tracking. Ported from SSRT3 by CDRIN (Olivier Therrien)."),
 			std::vector<std::string>{
 				"Realistic indirect lighting",
 				"Enhanced ambient occlusion",
@@ -69,16 +62,10 @@ public:
 		// GI
 		float GIIntensity = 10.f;
 		bool NormalApproximation = false;
-		float BackfaceLighting = 0.f;
 		// Occlusion
 		float AOIntensity = 1.f;
 		float Thickness = 1.f;
 		bool LinearThickness = false;
-		// Fallback
-		bool EnableFallback = true;
-		uint FallbackSampleCount = 4;
-		float FallbackIntensity = 1.f;
-		float FallbackPower = 1.f;
 	} settings;
 
 	struct alignas(16) SSRTCB
@@ -103,15 +90,10 @@ public:
 
 		uint MipOptimization;
 		float GIIntensity;
-		float BackfaceLighting;
 		float AOIntensity;
-
 		float Thickness;
-		uint LinearThickness;
-		uint FallbackSampleCount;
-		float FallbackIntensity;
 
-		float FallbackPower;
+		uint LinearThickness;
 		float TemporalOffsets;
 		float TemporalDirections;
 		float pad0;
@@ -119,7 +101,6 @@ public:
 	STATIC_ASSERT_ALIGNAS_16(SSRTCB);
 	eastl::unique_ptr<ConstantBuffer> ssrtCB;
 
-	eastl::unique_ptr<Texture2D> texRadiance = nullptr;
 	eastl::unique_ptr<Texture2D> texGIOcclusion = nullptr;
 
 	inline ID3D11ShaderResourceView* GetOutputTexture()

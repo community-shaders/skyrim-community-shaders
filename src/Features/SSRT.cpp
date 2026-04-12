@@ -1,8 +1,6 @@
 #include "SSRT.h"
 
 #include "Deferred.h"
-#include "IBL.h"
-#include "Skylighting.h"
 #include "State.h"
 #include "Util.h"
 
@@ -19,14 +17,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	MipOptimization,
 	GIIntensity,
 	NormalApproximation,
-	BackfaceLighting,
 	AOIntensity,
 	Thickness,
-	LinearThickness,
-	EnableFallback,
-	FallbackSampleCount,
-	FallbackIntensity,
-	FallbackPower)
+	LinearThickness)
 
 ////////////////////////////////////////////////////////////////////////////////////
 
@@ -56,15 +49,9 @@ void SSRT::DrawSettings()
 		}
 
 		ImGui::TableNextColumn();
-		{
-			auto vanillaSSAOGuard = Util::DisableGuard(globals::game::isVR);
-			ImGui::Checkbox("Vanilla SSAO", &settings.EnableVanillaSSAO);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				if (globals::game::isVR)
-					ImGui::Text("Vanilla SSAO is not supported in VR.");
-				else
-					ImGui::Text("Enable Skyrim's built-in SSAO. Usually disabled when using SSRT to avoid double-darkening.");
-			}
+		ImGui::Checkbox("Vanilla SSAO", &settings.EnableVanillaSSAO);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Enable Skyrim's built-in SSAO. Usually disabled when using SSRT to avoid double-darkening.");
 		}
 
 		ImGui::EndTable();
@@ -144,10 +131,6 @@ void SSRT::DrawSettings()
 			recompileFlag |= ImGui::Checkbox("Normal Approximation", &settings.NormalApproximation);
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("Derive normals from sample positions instead of reading from GBuffer.\nFaster but less accurate.");
-
-			ImGui::SliderFloat("Backface Lighting", &settings.BackfaceLighting, 0.f, 1.f, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Controls how much light backfacing surfaces contribute.");
 		}
 	}
 
@@ -180,38 +163,12 @@ void SSRT::DrawSettings()
 	}
 
 	///////////////////////////////
-	ImGui::SeparatorText("Fallback");
-
-	{
-		auto fallbackGuard = Util::DisableGuard(!settings.Enabled);
-
-		recompileFlag |= ImGui::Checkbox("Enable Fallback", &settings.EnableFallback);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(
-				"Fill unoccluded angular sectors with ambient lighting.\n"
-				"Uses DALC, IBL and Skylighting to approximate off-screen indirect light.");
-
-		if (showAdvanced) {
-			auto enableGuard = Util::DisableGuard(!settings.EnableFallback);
-			ImGui::SliderInt("Fallback Samples", (int*)&settings.FallbackSampleCount, 1, 8);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Number of directional ambient samples per rotation slice.");
-
-			ImGui::SliderFloat("Fallback Intensity", &settings.FallbackIntensity, 0.f, 5.f, "%.2f");
-			ImGui::SliderFloat("Fallback Power", &settings.FallbackPower, 0.1f, 3.f, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Power curve applied to fallback color. Higher values increase contrast.");
-		}
-	}
-
-	///////////////////////////////
 	ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
 		static float debugRescale = .3f;
 		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
 
-		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
 		BUFFER_VIEWER_NODE(texGIOcclusion, debugRescale)
 
 		ImGui::TreePop();
@@ -272,13 +229,6 @@ void SSRT::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MiscFlags = 0;
 
-		// Radiance copy (single mip copy of main RT)
-		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-		{
-			texRadiance = eastl::make_unique<Texture2D>(texDesc);
-			texRadiance->CreateSRV(srvDesc);
-		}
-
 		// GI+Occlusion output (RGBA16F, single combined output matching SSRT3)
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		{
@@ -335,20 +285,8 @@ void SSRT::CompileComputeShaders()
 		};
 
 	for (auto& info : shaderInfos) {
-		if (REL::Module::IsVR())
-			info.defines.push_back({ "VR", "" });
 		if (settings.NormalApproximation)
 			info.defines.push_back({ "NORMAL_APPROXIMATION", "" });
-	}
-
-	// SSRTCS-specific defines for fallback ambient sampling
-	if (settings.EnableFallback) {
-		auto& ssrtDefines = shaderInfos[0].defines;
-		ssrtDefines.push_back({ "FALLBACK", "" });
-		if (globals::features::skylighting.loaded)
-			ssrtDefines.push_back({ "SKYLIGHTING", "" });
-		if (globals::features::ibl.loaded)
-			ssrtDefines.push_back({ "IBL", "" });
 	}
 
 	for (auto& info : shaderInfos) {
@@ -367,31 +305,22 @@ bool SSRT::ShadersOK()
 
 void SSRT::UpdateCB()
 {
-	float2 res = { (float)texRadiance->desc.Width, (float)texRadiance->desc.Height };
+	float2 res = globals::state->screenSize;
 	float2 dynres = Util::ConvertToDynamic(res);
 	dynres = { floor(dynres.x), floor(dynres.y) };
 
 	SSRTCB data = {};
 	{
-		for (int eyeIndex = 0; eyeIndex < (1 + REL::Module::IsVR()); ++eyeIndex) {
-			auto eye = Util::GetCameraData(eyeIndex);
+		{
+			auto eye = Util::GetCameraData(0);
 
 			float2 mul = { 2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1) };
 			float2 add = { -1.0f / eye.projMat(0, 0), 1.0f / eye.projMat(1, 1) };
-			if (REL::Module::IsVR())
-				mul.x *= 2;
 
-			if (eyeIndex == 0) {
-				data.NDCToViewMul.x = mul.x;
-				data.NDCToViewMul.y = mul.y;
-				data.NDCToViewAdd.x = add.x;
-				data.NDCToViewAdd.y = add.y;
-			} else {
-				data.NDCToViewMul.z = mul.x;
-				data.NDCToViewMul.w = mul.y;
-				data.NDCToViewAdd.z = add.x;
-				data.NDCToViewAdd.w = add.y;
-			}
+			data.NDCToViewMul.x = mul.x;
+			data.NDCToViewMul.y = mul.y;
+			data.NDCToViewAdd.x = add.x;
+			data.NDCToViewAdd.y = add.y;
 		}
 
 		data.TexDim = res;
@@ -416,15 +345,9 @@ void SSRT::UpdateCB()
 		data.MipOptimization = settings.MipOptimization ? 1u : 0u;
 
 		data.GIIntensity = settings.GIIntensity;
-		data.BackfaceLighting = settings.BackfaceLighting;
 		data.AOIntensity = settings.AOIntensity;
-
 		data.Thickness = settings.Thickness;
 		data.LinearThickness = settings.LinearThickness ? 1u : 0u;
-
-		data.FallbackSampleCount = settings.EnableFallback ? settings.FallbackSampleCount : 0u;
-		data.FallbackIntensity = settings.FallbackIntensity;
-		data.FallbackPower = settings.FallbackPower;
 
 		// SSRT3 temporal noise pattern
 		// temporalRotations = { 60, 300, 180, 240, 120, 0 }
@@ -477,7 +400,7 @@ void SSRT::DrawSSRT()
 	float2 size = Util::ConvertToDynamic(globals::state->screenSize);
 	auto resolution = std::array{ (uint)size.x, (uint)size.y };
 
-	std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
+	std::array<ID3D11ShaderResourceView*, 3> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
 	std::array<ID3D11SamplerState*, 2> samplers = { pointClampSampler.get(), linearClampSampler.get() };
 	auto cb = ssrtCB->CB();
@@ -497,33 +420,13 @@ void SSRT::DrawSSRT()
 	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 
-	// 1. Copy radiance from main render target
-	{
-		context->CopySubresourceRegion(
-			texRadiance->resource.get(), 0, 0, 0, 0,
-			rts[deferred->forwardRenderTargets[0]].texture, 0, nullptr);
-	}
-
-	// 2. SSRT main pass
+	// SSRT main pass
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSRT - Main");
 
 		srvs.at(0) = Util::GetCurrentSceneDepthSRV();
 		srvs.at(1) = rts[NORMALROUGHNESS].SRV;
-		srvs.at(2) = texRadiance->srv.get();
-
-		auto& skylighting = globals::features::skylighting;
-		auto& ibl = globals::features::ibl;
-		if (settings.EnableFallback) {
-			if (skylighting.loaded) {
-				srvs.at(3) = skylighting.texProbeArray->srv.get();
-				srvs.at(4) = skylighting.stbn_vec3_2Dx1D_128x128x64.get();
-			}
-			if (ibl.loaded) {
-				srvs.at(5) = ibl.envIBLTexture->srv.get();
-				srvs.at(6) = ibl.skyIBLTexture->srv.get();
-			}
-		}
+		srvs.at(2) = rts[deferred->forwardRenderTargets[0]].SRV;
 
 		uavs.at(0) = texGIOcclusion->uav.get();
 
