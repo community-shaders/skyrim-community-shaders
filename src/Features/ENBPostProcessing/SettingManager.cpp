@@ -7,6 +7,8 @@
 #include <string>
 #include <tuple>
 
+static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 static bool TryParseBool(const std::string& a_value, bool& a_out)
 {
 	std::string s = a_value;
@@ -783,7 +785,7 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 	case SettingType::TimeOfDay:
 		{
 			TimeOfDayValue timeOfDayValue = std::get<TimeOfDayValue>(setting.defaultValue);
-			static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
@@ -802,7 +804,7 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 	case SettingType::ColorTimeOfDay:
 		{
 			ColorTimeOfDayValue colorTimeOfDayValue = std::get<ColorTimeOfDayValue>(setting.defaultValue);
-			static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
@@ -882,7 +884,7 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 	case SettingType::TimeOfDay:
 		{
 			const TimeOfDayValue& timeOfDayValue = std::get<TimeOfDayValue>(setting.currentValue);
-			static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
@@ -894,7 +896,7 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 	case SettingType::ColorTimeOfDay:
 		{
 			const ColorTimeOfDayValue& colorTimeOfDayValue = std::get<ColorTimeOfDayValue>(setting.currentValue);
-			static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];

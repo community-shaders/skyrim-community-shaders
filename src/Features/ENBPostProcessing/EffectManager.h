@@ -120,6 +120,9 @@ public:
 
 	const CommonVariableData& GetCommonData() const { return commonData; }
 
+	// Execute a single effect with perf events and common variable setup
+	void ExecuteEffect(Effect& effect, uint32_t enableSettingID = 0xFFFFFFFF);
+
 	// Texture copy using pixel shader
 	void CopyTexture(ID3D11ShaderResourceView* source, ID3D11RenderTargetView* destination);
 
