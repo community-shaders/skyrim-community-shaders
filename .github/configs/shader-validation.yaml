@@ -45,7 +45,7 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - SSGI
+            - SSRT
             - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
@@ -59,7 +59,7 @@ file_common_defines:
             - TERRAIN_SHADOWS
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - SSGI
+            - SSRT
             - ISL
             - CLOUD_SHADOWS
             - WATER_EFFECTS
@@ -77,7 +77,7 @@ file_common_defines:
             - GRASS_LIGHTING
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - SSGI
+            - SSRT
             - ISL
             - CLOUD_SHADOWS
             - GRASS_COLLISION
@@ -184,7 +184,7 @@ file_common_defines:
             - IBL
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - SSGI
+            - SSRT
             - ISL
             - EXTENDED_MATERIALS
             - EXTENDED_TRANSLUCENCY
@@ -202,7 +202,7 @@ file_common_defines:
             - IBL
             - WETNESS_EFFECTS
             - LOD_BLENDING
-            - SSGI
+            - SSRT
             - ISL
             - EXTENDED_MATERIALS
             - EXTENDED_TRANSLUCENCY
@@ -2101,7 +2101,7 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - SSGI
+                  - SSRT
                   - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
@@ -2139,7 +2139,7 @@ shaders:
                   - TERRAIN_SHADOWS
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - SSGI
+                  - SSRT
                   - ISL
                   - CLOUD_SHADOWS
                   - WATER_EFFECTS
@@ -2171,7 +2171,7 @@ shaders:
                   - GRASS_LIGHTING
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - SSGI
+                  - SSRT
                   - ISL
                   - CLOUD_SHADOWS
                   - GRASS_COLLISION
@@ -14209,7 +14209,7 @@ shaders:
                   - IBL
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - SSGI
+                  - SSRT
                   - ISL
                   - EXTENDED_MATERIALS
                   - EXTENDED_TRANSLUCENCY
@@ -17064,7 +17064,7 @@ shaders:
                   - IBL
                   - WETNESS_EFFECTS
                   - LOD_BLENDING
-                  - SSGI
+                  - SSRT
                   - ISL
                   - EXTENDED_MATERIALS
                   - EXTENDED_TRANSLUCENCY

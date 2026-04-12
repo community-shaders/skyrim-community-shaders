@@ -8,7 +8,7 @@
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
-#include "Features/ScreenSpaceGI.h"
+#include "Features/SSRT.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
@@ -356,11 +356,10 @@ void Deferred::DeferredPasses()
 
 	auto& skylighting = globals::features::skylighting;
 
-	auto& ssgi = globals::features::screenSpaceGI;
-	if (ssgi.loaded)
-		ssgi.DrawSSGI();
-	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
-	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
+	auto& ssrt = globals::features::ssrt;
+	if (ssrt.loaded)
+		ssrt.DrawSSRT();
+	auto ssrt_output = ssrt.GetOutputTexture();
 
 	auto& sss = globals::features::subsurfaceScattering;
 	if (sss.loaded)
@@ -402,22 +401,22 @@ void Deferred::DeferredPasses()
 
 		// SRVs
 		ID3D11ShaderResourceView* srvs[16]{
-			mainCopy.SRV,                                                                                   // t0  MainInputTexture
-			specular.SRV,                                                                                   // t1  SpecularTexture
-			normalRoughnessCopy.SRV,                                                                        // t2  NormalRoughnessTexture
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,  // t3  DepthTexture
-			albedo.SRV,                                                                                     // t4  AlbedoTexture
-			masks.SRV,                                                                                      // t5  MasksTexture
-			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                             // t6  ReflectanceTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                       // t7  EnvTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,            // t8  EnvReflectionsTexture
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,  // t9  SkylightingProbeArray
-			ssgi_ao,                                                                                        // t10 SsgiAoTexture
-			ssgi_hq_spec ? nullptr : ssgi_y,                                                                // t11 SsgiYTexture
-			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                             // t12 SsgiCoCgTexture
-			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                          // t13 SsgiSpecularTexture
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                            // t14 EnvIBLTexture
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                            // t15 SkyIBLTexture
+			specular.SRV,
+			albedo.SRV,
+			normalRoughness.SRV,
+			masks.SRV,
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
+			ssrt_output,
+			nullptr,
+			nullptr,
+			nullptr,
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
@@ -685,8 +684,8 @@ ID3D11PixelShader* Deferred::GetCompositePS(bool interior)
 		if (!interior && globals::features::skylighting.loaded)
 			defines.push_back({ "SKYLIGHTING", nullptr });
 
-		if (globals::features::screenSpaceGI.loaded)
-			defines.push_back({ "SSGI", nullptr });
+		if (globals::features::ssrt.loaded)
+			defines.push_back({ "SSRT", nullptr });
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
@@ -696,7 +695,35 @@ ID3D11PixelShader* Deferred::GetCompositePS(bool interior)
 
 		cached = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositePS.hlsl", defines, "ps_5_0"));
 	}
-	return cached;
+	return mainCompositeCS;
+}
+
+ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
+{
+	if (!mainCompositeInteriorCS) {
+		logger::debug("Compiling DeferredCompositeCS INTERIOR");
+
+		std::vector<std::pair<const char*, const char*>> defines;
+		defines.push_back({ "INTERIOR", nullptr });
+
+		if (globals::features::dynamicCubemaps.loaded)
+			defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
+
+		if (globals::features::ssrt.loaded)
+			defines.push_back({ "SSRT", nullptr });
+
+		if (globals::features::ibl.loaded)
+			defines.push_back({ "IBL", nullptr });
+
+		if (REL::Module::IsVR())
+			defines.push_back({ "FRAMEBUFFER", nullptr });
+
+		if (REL::Module::IsVR() && globals::features::vr.stereoOpt.loaded)
+			defines.push_back({ "VR_STEREO_OPT", nullptr });
+
+		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
+	}
+	return mainCompositeInteriorCS;
 }
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()

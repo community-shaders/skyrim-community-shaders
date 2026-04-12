@@ -46,7 +46,7 @@ file_common_defines:
             - DYNAMIC_CUBEMAPS
             - WATER_EFFECTS
             - SSS
-            - SSGI
+            - SSRT
             - SKYLIGHTING
             - IBL
             - ISL
@@ -59,7 +59,7 @@ file_common_defines:
             - DYNAMIC_CUBEMAPS
             - WATER_EFFECTS
             - SSS
-            - SSGI
+            - SSRT
             - SKYLIGHTING
             - IBL
             - ISL
@@ -72,7 +72,7 @@ file_common_defines:
             - WETNESS_EFFECTS
             - GRASS_COLLISION
             - WATER_EFFECTS
-            - SSGI
+            - SSRT
             - IBL
             - SKYLIGHTING
             - LIGHT_LIMIT_FIX
@@ -89,7 +89,7 @@ file_common_defines:
             - WETNESS_EFFECTS
             - GRASS_COLLISION
             - WATER_EFFECTS
-            - SSGI
+            - SSRT
             - IBL
             - SKYLIGHTING
             - LIGHT_LIMIT_FIX
@@ -197,7 +197,7 @@ file_common_defines:
             - SSS
             - CS_HAIR
             - WATER_EFFECTS
-            - SSGI
+            - SSRT
             - IBL
             - SKYLIGHTING
             - EXTENDED_MATERIALS
@@ -217,7 +217,7 @@ file_common_defines:
             - SSS
             - CS_HAIR
             - WATER_EFFECTS
-            - SSGI
+            - SSRT
             - IBL
             - SKYLIGHTING
             - EXTENDED_MATERIALS
@@ -1907,7 +1907,7 @@ shaders:
                   - DYNAMIC_CUBEMAPS
                   - WATER_EFFECTS
                   - SSS
-                  - SSGI
+                  - SSRT
                   - SKYLIGHTING
                   - IBL
                   - ISL
@@ -1952,7 +1952,7 @@ shaders:
                   - DYNAMIC_CUBEMAPS
                   - WATER_EFFECTS
                   - SSS
-                  - SSGI
+                  - SSRT
                   - SKYLIGHTING
                   - IBL
                   - ISL
@@ -1983,7 +1983,7 @@ shaders:
                   - WETNESS_EFFECTS
                   - GRASS_COLLISION
                   - WATER_EFFECTS
-                  - SSGI
+                  - SSRT
                   - IBL
                   - SKYLIGHTING
                   - LIGHT_LIMIT_FIX
@@ -2008,7 +2008,7 @@ shaders:
                   - WETNESS_EFFECTS
                   - GRASS_COLLISION
                   - WATER_EFFECTS
-                  - SSGI
+                  - SSRT
                   - IBL
                   - SKYLIGHTING
                   - LIGHT_LIMIT_FIX
@@ -13218,7 +13218,7 @@ shaders:
                   - SSS
                   - CS_HAIR
                   - WATER_EFFECTS
-                  - SSGI
+                  - SSRT
                   - IBL
                   - SKYLIGHTING
                   - EXTENDED_MATERIALS
@@ -16627,7 +16627,7 @@ shaders:
                   - SSS
                   - CS_HAIR
                   - WATER_EFFECTS
-                  - SSGI
+                  - SSRT
                   - IBL
                   - SKYLIGHTING
                   - EXTENDED_MATERIALS
