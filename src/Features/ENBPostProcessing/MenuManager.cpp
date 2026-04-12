@@ -432,7 +432,7 @@ void MenuManager::RenderAllSettings()
 								case SettingType::TimeOfDay:
 									{
 										auto v = settingManager.GetValue<TimeOfDayValue>(settingID, true);
-					
+
 										bool changed = false;
 
 										for (int i = 0; i < 8; ++i) {
@@ -475,7 +475,7 @@ void MenuManager::RenderAllSettings()
 								case SettingType::ColorTimeOfDay:
 									{
 										auto v = settingManager.GetValue<ColorTimeOfDayValue>(settingID, true);
-					
+
 										bool changed = false;
 
 										for (int i = 0; i < 8; ++i) {

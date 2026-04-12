@@ -786,7 +786,6 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 		{
 			TimeOfDayValue timeOfDayValue = std::get<TimeOfDayValue>(setting.defaultValue);
 
-
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
 				char buffer[256];
@@ -804,7 +803,6 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 	case SettingType::ColorTimeOfDay:
 		{
 			ColorTimeOfDayValue colorTimeOfDayValue = std::get<ColorTimeOfDayValue>(setting.defaultValue);
-
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
@@ -885,7 +883,6 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 		{
 			const TimeOfDayValue& timeOfDayValue = std::get<TimeOfDayValue>(setting.currentValue);
 
-
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
 				std::string formatted = formatFloat(timeOfDayValue.values[i]);
@@ -896,7 +893,6 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 	case SettingType::ColorTimeOfDay:
 		{
 			const ColorTimeOfDayValue& colorTimeOfDayValue = std::get<ColorTimeOfDayValue>(setting.currentValue);
-
 
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
