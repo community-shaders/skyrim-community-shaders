@@ -24,6 +24,14 @@ bool Effect::Load()
 		return true;  // Not an error, just use defaults
 	}
 
+	// Skip reload if the file has not changed since last load
+	auto writeTime = std::filesystem::last_write_time(iniPath);
+	if (writeTime == lastIniWriteTime) {
+		logger::debug("[ENBPP] Skipping unchanged ini file '{}' for effect '{}'", iniPath.string(), GetName());
+		return true;
+	}
+	lastIniWriteTime = writeTime;
+
 	// Prepare section name
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
@@ -152,6 +160,9 @@ void Effect::Unload()
 	ClearVariableCache();
 
 	errors.clear();
+
+	// Reset write time so the next Load() after Apply() always reads fresh values
+	lastIniWriteTime = {};
 
 	logger::debug("[ENBPP] Unloaded effect '{}'", GetName());
 }

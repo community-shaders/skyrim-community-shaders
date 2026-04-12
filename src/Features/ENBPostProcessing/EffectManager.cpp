@@ -58,9 +58,7 @@ void EffectManager::Initialize()
 		resourcesValid = false;
 	}
 
-	if (resourcesValid) {
-		// Initialization successful
-	} else {
+	if (!resourcesValid) {
 		logger::error("[EffectManager] Initialization failed due to missing resources");
 	}
 }
@@ -362,18 +360,12 @@ void EffectManager::ExecuteEffects()
 
 	textureManager.IncrementTextureSwap();
 
-	// Determine final source for framebuffer copy
-	ID3D11ShaderResourceView* finalSourceSRV = textureManager.GetCommonTexture("TextureSDRTemp")->srv.get();
-	if (enbEffect.IsCompiled() || (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>(ids.usePostPass))) {
-		auto textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
-		if (textureSDRTemp) {
-			finalSourceSRV = textureSDRTemp->srv.get();
-		}
-	}
-
 	// Copy final render target to framebuffer
-	auto textureFramebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-	CopyTexture(textureManager.GetCommonTexture("TextureSDRTemp")->srv.get(), textureFramebuffer.RTV);
+	auto* textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
+	if (textureSDRTemp) {
+		auto textureFramebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
+		CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer.RTV);
+	}
 
 	// Restore State
 	context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, oldDSV);
@@ -835,7 +827,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 		renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV);
 
 	// Set format-specific render targets
-	const std::vector<std::string> formatTargets = {
+	static const char* const formatTargets[] = {
 		"RenderTargetRGBA32", "RenderTargetRGBA64", "RenderTargetRGBA64F",
 		"RenderTargetR16F", "RenderTargetR32F", "RenderTargetRGB32F"
 	};
@@ -849,7 +841,7 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	}
 
 	// Set fixed-size render targets
-	const std::vector<std::string> fixedSizeTargets = {
+	static const char* const fixedSizeTargets[] = {
 		"RenderTarget1024", "RenderTarget512", "RenderTarget256", "RenderTarget128",
 		"RenderTarget64", "RenderTarget32", "RenderTarget16"
 	};

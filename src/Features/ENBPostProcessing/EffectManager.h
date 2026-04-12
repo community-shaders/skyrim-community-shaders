@@ -6,8 +6,6 @@
 #include "Effects/ENBEffectPostPass.h"
 #include "Effects/ENBLens.h"
 
-#include <atomic>
-
 enum class TimeOfDay1Index : int
 {
 	Dawn,

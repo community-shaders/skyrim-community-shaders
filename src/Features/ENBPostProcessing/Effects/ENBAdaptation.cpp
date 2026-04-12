@@ -24,8 +24,8 @@ void ENBAdaptation::Execute()
 	SetShaderResourceVariable("TextureCurrent", it->second.srv.get());
 
 	// Use swap mechanism to determine input/output
-	const std::string texturePreviousName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
-	const std::string textureAdaptationName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
+	const char* texturePreviousName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptationSwap" : "TextureAdaptation";
+	const char* textureAdaptationName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 
 	// Set input texture (previous frame's adaptation value)
 	auto* texturePrevious = textureManager.GetCommonTexture(texturePreviousName);

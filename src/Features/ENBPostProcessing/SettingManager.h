@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <shared_mutex>
 
 enum class SettingType
@@ -219,6 +220,10 @@ private:
 	float timeOfDay1[4] = { 0, 0, 0, 0 };
 	float timeOfDay2[4] = { 0, 0, 0, 0 };
 	float interiorFactor = 0.0f;
+
+	// INI file modification time tracking to skip redundant reloads
+	std::filesystem::file_time_type lastMainIniWriteTime{};
+	std::unordered_map<std::string, std::filesystem::file_time_type> weatherFileWriteTimes;
 
 	mutable std::shared_mutex mutex;
 

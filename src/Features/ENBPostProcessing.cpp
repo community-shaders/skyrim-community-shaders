@@ -133,6 +133,15 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 	float3 dirLightColorAvg = NiToF3(colors[(uint)RE::TESWeather::ColorTypes::kSunlight]);
 
+	// Cache ENVIRONMENT lighting values used multiple times below
+	float dirLightCurve = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT");
+	float dirLightDesaturation = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingDesaturation", "ENVIRONMENT");
+	float3 dirLightColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("DirectLightingColorFilter", "ENVIRONMENT");
+	float dirLightColorFilterAmount = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingColorFilterAmount", "ENVIRONMENT");
+	float dirLightIntensity = settingManager.GetInterpolatedTimeOfDayValue("DirectLightingIntensity", "ENVIRONMENT");
+	float ambientDesaturation = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT");
+	float ambientIntensity = settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT");
+
 	auto applyLightingExtraction = [&](float3 inputColor, float3 ambientPart, float3 dirPart) -> float3 {
 		float inputLuma = (inputColor.x + inputColor.y + inputColor.z) / 3.0f;
 		float ambientLuma = (ambientPart.x + ambientPart.y + ambientPart.z) / 3.0f;
@@ -162,14 +171,14 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 			ambientPart.y = std::lerp(ambientPart.y, ambientPartTemp.y, 0.5f);
 			ambientPart.z = std::lerp(ambientPart.z, ambientPartTemp.z, 0.5f);
 
-			// Apply ENB changes
-			dirPart = Curve(dirPart, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT"));
-			dirPart = Desaturation(dirPart, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingDesaturation", "ENVIRONMENT"));
-			dirPart = ColorFilter(dirPart, settingManager.GetInterpolatedColorTimeOfDayValue("DirectLightingColorFilter", "ENVIRONMENT"), settingManager.GetInterpolatedTimeOfDayValue("DirectLightingColorFilterAmount", "ENVIRONMENT"));
-			dirPart = Intensity(dirPart, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingIntensity", "ENVIRONMENT"));
+			// Apply ENB changes using cached values
+			dirPart = Curve(dirPart, dirLightCurve);
+			dirPart = Desaturation(dirPart, dirLightDesaturation);
+			dirPart = ColorFilter(dirPart, dirLightColorFilter, dirLightColorFilterAmount);
+			dirPart = Intensity(dirPart, dirLightIntensity);
 
-			ambientPart = Desaturation(ambientPart, settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT"));
-			ambientPart = Intensity(ambientPart, settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT"));
+			ambientPart = Desaturation(ambientPart, ambientDesaturation);
+			ambientPart = Intensity(ambientPart, ambientIntensity);
 
 			auto outputColor = dirPart + ambientPart;
 			outputColor.x = std::max(outputColor.x, 0.0f);
@@ -198,8 +207,8 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 	{
 		auto& ambientColor = colors[(uint)RE::TESWeather::ColorTypes::kAmbient];
 		float3 ambientColorF3 = NiToF3(ambientColor);
-		ambientColorF3 = Desaturation(ambientColorF3, settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingDesaturation", "ENVIRONMENT"));
-		ambientColorF3 = Intensity(ambientColorF3, settingManager.GetInterpolatedTimeOfDayValue("AmbientLightingIntensity", "ENVIRONMENT"));
+		ambientColorF3 = Desaturation(ambientColorF3, ambientDesaturation);
+		ambientColorF3 = Intensity(ambientColorF3, ambientIntensity);
 		ambientColor = F3ToNi(ambientColorF3);
 	}
 
@@ -217,10 +226,10 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		float sunlightScale = std::max(data.baseData.hdr.sunlightScale, FLT_MIN);
 		dirLightColorF3 *= sunlightScale;
 
-		dirLightColorF3 = Curve(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT"));
-		dirLightColorF3 = Desaturation(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingDesaturation", "ENVIRONMENT"));
-		dirLightColorF3 = ColorFilter(dirLightColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("DirectLightingColorFilter", "ENVIRONMENT"), settingManager.GetInterpolatedTimeOfDayValue("DirectLightingColorFilterAmount", "ENVIRONMENT"));
-		dirLightColorF3 = Intensity(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingIntensity", "ENVIRONMENT"));
+		dirLightColorF3 = Curve(dirLightColorF3, dirLightCurve);
+		dirLightColorF3 = Desaturation(dirLightColorF3, dirLightDesaturation);
+		dirLightColorF3 = ColorFilter(dirLightColorF3, dirLightColorFilter, dirLightColorFilterAmount);
+		dirLightColorF3 = Intensity(dirLightColorF3, dirLightIntensity);
 
 		dirLightColorF3 /= sunlightScale;
 

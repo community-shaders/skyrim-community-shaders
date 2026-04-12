@@ -91,7 +91,7 @@ void ENBEffect::UpdateEffectVariables()
 	}
 
 	if (settingManager.GetValue<bool>("EnableAdaptation", "EFFECT")) {
-		const std::string textureAdaptationName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
+		const char* textureAdaptationName = (textureManager.GetTextureSwap() & 1) ? "TextureAdaptation" : "TextureAdaptationSwap";
 		auto texture = textureManager.GetCommonTexture(textureAdaptationName);
 		SetShaderResourceVariable("TextureAdaptation", texture ? texture->srv.get() : nullptr);
 	} else {

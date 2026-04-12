@@ -283,7 +283,7 @@ void MenuManager::RenderAllSettings()
 					ImGui::Separator();
 
 					// Show TimeOfDay header for Weather tab only
-					const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+					static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 					auto activeIndices = GetActiveTimeOfDayIndices();
 
 					if (!activeIndices.empty()) {
@@ -430,7 +430,7 @@ void MenuManager::RenderAllSettings()
 								case SettingType::TimeOfDay:
 									{
 										auto v = settingManager.GetValue<TimeOfDayValue>(settingID, true);
-										const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+										static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 										bool changed = false;
 
 										for (int i = 0; i < 8; ++i) {
@@ -473,7 +473,7 @@ void MenuManager::RenderAllSettings()
 								case SettingType::ColorTimeOfDay:
 									{
 										auto v = settingManager.GetValue<ColorTimeOfDayValue>(settingID, true);
-										const std::vector<std::string> timeOfDayNames = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
+										static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 										bool changed = false;
 
 										for (int i = 0; i < 8; ++i) {
