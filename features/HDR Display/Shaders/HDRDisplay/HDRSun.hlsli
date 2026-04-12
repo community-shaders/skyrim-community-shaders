@@ -74,14 +74,15 @@ namespace HDRSun
 		baseColor.xyz *= boost;
 
 		// --- finish: Sky PS output path differs for glare vs disc ---
-#if defined(DITHER)
+#	if defined(DITHER)
 		baseColor.xyz = Color::Sky(vertexColor.xyz) * baseColor.xyz;
-#else
+#	else
+		// Dither bright output to reduce banding.
 		baseColor.xyz += (Random::InterleavedGradientNoise(position.xy) - 0.5f) * (saturate(boost - 1.0f) / 255.0f);
 		yyy = 0.0f;
-#endif
+#	endif
 
-#if defined(CLOUD_SHADOWS)
+#	if defined(CLOUD_SHADOWS)
 		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(worldPosition.xyz, SharedData::DirLightDirection.xyz);
 		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(samp, cloudSampleDir, 0).x;
 		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(samp, cloudSampleDir, 1).x;
@@ -89,7 +90,7 @@ namespace HDRSun
 		float cloudMult = lerp(1.0f, 1.0f - cloudCube, SharedData::cloudShadowsSettings.Opacity);
 		baseColor.xyz *= cloudMult;
 		baseColor.w *= cloudMult;
-#endif
+#	endif
 	}
 }
 
