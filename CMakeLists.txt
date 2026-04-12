@@ -91,16 +91,7 @@ find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 find_package(directx-headers CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
-
-# Inject NVAPI dependency for VRS
-target_include_directories(
-    ${PROJECT_NAME}
-    PRIVATE "${CMAKE_SOURCE_DIR}/extern/nvapi/developer"
-)
-target_link_libraries(
-    ${PROJECT_NAME}
-    PRIVATE "${CMAKE_SOURCE_DIR}/extern/nvapi/developer/amd64/nvapi64.lib"
-)
+add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/NVAPI)
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
@@ -149,6 +140,7 @@ target_link_libraries(
         efsw::efsw
         Tracy::TracyClient
         Streamline
+        NVAPI
         d3d12.lib
         Microsoft::DirectX-Headers
         ${DETOURS_LIBRARY}
