@@ -111,6 +111,20 @@ namespace ExtendedMaterials
 #	endif
 		float maxHeight = 0.1 * scale;
 		uint activeMask = ComputeActiveMask(w1, w2);
+		// Highest parallax mip among contributing layers: large footprint (typically distance / grazing) → fewer POM steps.
+		float aggParallaxMip = 0.0;
+		[unroll] for (int emMipLi = 0; emMipLi < 6; ++emMipLi) {
+			if (activeMask & (1u << emMipLi))
+				aggParallaxMip = max(aggParallaxMip, mipLevels[emMipLi]);
+		}
+		float maxStepsF = 16.0;
+		if (aggParallaxMip >= 1.75)
+			maxStepsF = 8.0;
+		if (aggParallaxMip >= 3.0)
+			maxStepsF = 4.0;
+		// View-space Z magnitude (camera-relative): cheap extra taper when mips stay low on huge tiles.
+		float distSq = distance * distance;
+		maxStepsF = lerp(maxStepsF, 4.0, saturate((distSq - (2048.0 * 2048.0)) / ((6144.0 * 6144.0) - (2048.0 * 2048.0))));
 #else
 		float scale = params.HeightScale;
 		float maxHeight = 0.1 * scale;
@@ -118,9 +132,14 @@ namespace ExtendedMaterials
 		float minHeight = maxHeight * 0.5;
 
 		{
+#			if defined(LANDSCAPE)
+			uint numSteps = uint(maxStepsF + 0.5);
+			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxStepsF + 0.5)));
+#			else
 			const float maxSteps = 16;
 			uint numSteps = uint(maxSteps + 0.5);
 			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxSteps)));
+#			endif
 			numSteps = (numSteps + 2) & ~3;
 
 			float stepSize = rcp(numSteps);
@@ -153,6 +172,8 @@ namespace ExtendedMaterials
 #	else
 				bool useParallaxCoarseGate = true;
 #	endif
+				// When already minified, the 4× upper-bound prepass (many SampleLevels) often costs more than four shadow taps.
+				useParallaxCoarseGate = useParallaxCoarseGate && (aggParallaxMip < 2.75);
 				[branch] if (useParallaxCoarseGate) {
 					float4 heightUpper = float4(
 						GetTerrainHeightUpperBoundNonStochastic(currentOffset[0].xy, mipLevels, params, activeMask),
@@ -211,6 +232,10 @@ namespace ExtendedMaterials
 						pt1 = float2(currentBound.x, currHeight.x);
 						pt2 = float2(prevBound, prevHeight);
 					}
+#					if defined(LANDSCAPE)
+					// Skip second-phase refinement: terrain pays 4× multi-layer height taps per step; first crossing is enough at low step counts.
+					break;
+#					else
 					if (contactRefinement) {
 						break;
 					} else {
@@ -222,6 +247,7 @@ namespace ExtendedMaterials
 						offsetPerStep /= (float)numSteps;
 						continue;
 					}
+#					endif
 				}
 
 				prevOffset = currentOffset[1].zw;
