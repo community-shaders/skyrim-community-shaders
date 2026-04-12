@@ -190,6 +190,10 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	ifdef HDR_OUTPUT
+#		include "HDRDisplay/HDRSun.hlsli"
+#	endif
+
 Texture2D<float> TexDepthSampler : register(t17);
 
 PS_OUTPUT main(PS_INPUT input)
@@ -217,101 +221,22 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
-	// HDR-only sun path: scale glare/disc brightness using user HDR settings.
-	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		const float SUN_REF_PAPER_WHITE_NITS = 203.0;  // HDR pipeline reference white (nits)
-		float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
-		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
-		float peakRatio = peakNits / SUN_REF_PAPER_WHITE_NITS;
-
-		// Non-gameplay (HDRData.w > 0): cap sun drive ~100 display nits.
-		static const float SUN_HDR_MENU_TARGET_NITS = 100.0;
-		float hdrSunMenuMul = (SharedData::HDRData.w > 1e-3) ? (SUN_HDR_MENU_TARGET_NITS / peakNits) : 1.0;
-		float hdrScale = (ENABLE_LL ? peakRatio : pow(peakRatio, rcp(2.2))) * hdrSunMenuMul;
-
-		// Textured sun: radial gate so flat bright quads don't get full peak everywhere (see HDRDisplay).
-#		if defined(TEX)
-		float2 sunUvRadial = saturate(input.TexCoord0.xy);
-		float sunRadialR = saturate(length(sunUvRadial - 0.5) * 1.41421356);
-		float sunRadialHdr = pow(saturate(1.0 - sunRadialR), 1.85);
-#		endif
-
-#		if defined(DITHER)
-		// DITHER path is the glare sprite-style variant.
-		float glareLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
-
-		// Keep glare energy bounded before applying HDR scale.
-		if (glareLum > 1.0)
-			baseColor.xyz *= rcp(glareLum);
-		glareLum = min(glareLum, 1.0);
-
-		// Texture taper: soft halos / low-alpha fringes should not get full linear HDR gain.
-		float glareAlpha = saturate(baseColor.w);
-		float lumBand = smoothstep(0.5, 1.0, glareLum);
-		float glareTaper = pow(glareAlpha * lumBand, 0.62);
-		float glareCoreMask = smoothstep(0.9, 1.0, glareLum) * pow(glareAlpha, 0.22);
-
-		float glareScale;
-#			if defined(TEX)
-		float glareHdrBlend = saturate(glareTaper * sunRadialHdr);
-		float glareCoreRadial = glareCoreMask * sunRadialHdr;
-		glareScale = lerp(1.0, hdrScale, glareHdrBlend) * lerp(1.0, peakRatio, glareCoreRadial);
+#		ifdef HDR_OUTPUT
+	HDRSun::ApplyHdrSunToBaseColor(
+		input.Position,
+		input.TexCoord0.xy,
+		input.Color,
+		input.WorldPosition.xyz,
+		TexBaseSampler,
+		SampBaseSampler,
+#			if !defined(TEXLERP) && defined(TEXFADE)
+		PParams.x,
 #			else
-		glareScale = lerp(1.0, hdrScale, glareTaper) * lerp(1.0, peakRatio, glareCoreMask);
+		1.0,
 #			endif
-
-		baseColor.xyz *= glareScale;
-
-		baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
-
-#			ifdef TEX
-		float glareEdge = min(min(sunUvRadial.x, sunUvRadial.y), min(1.0 - sunUvRadial.x, 1.0 - sunUvRadial.y));
-		float glareEdgeFade = smoothstep(0.0, 0.08, glareEdge);
-		baseColor.xyz *= glareEdgeFade;
-		baseColor.w *= glareEdgeFade;
-#			endif
-
-#		else
-		// Non-DITHER path is the sun disc/core variant.
-		float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
-
-		// Clamp source before boosting the bright disc core.
-		if (srcLum > 1.0)
-			baseColor.xyz *= rcp(srcLum);
-		srcLum = min(srcLum, 1.0);
-
-		float sunCoreMaskTex = smoothstep(0.88, 1.0, saturate(srcLum));
-		float discScale;
-#			if defined(TEX)
-		discScale = hdrScale * lerp(0.32, 1.0, sunRadialHdr) *
-		            lerp(1.0, peakRatio, sunCoreMaskTex * sunRadialHdr);
-#			else
-		discScale = hdrScale * lerp(1.0, peakRatio, sunCoreMaskTex);
-#			endif
-		float discOpaqueGate = smoothstep(0.93, 1.0, saturate(baseColor.w));
-		discScale = lerp(1.0, discScale, discOpaqueGate);
-		baseColor.xyz *= discScale;
-
-		// Tiny dither to reduce visible banding on bright gradients.
-		float ign = frac(52.9829189 * frac(dot(input.Position.xy, float2(0.06711056, 0.00583715))));
-		baseColor.xyz += (ign - 0.5) * (discScale / 255.0);
-
-		yyy = 0.0;
+		baseColor,
+		yyy);
 #		endif
-
-#		if defined(CLOUD_SHADOWS)
-		// Apply cloud transmittance in this same HDR-scaled branch so occlusion remains coherent.
-		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(input.WorldPosition.xyz, SharedData::DirLightDirection.xyz);
-		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 0).x;
-		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 1).x;
-		float cloudCube = lerp(cloudCube0, cloudCube1, 0.5);
-		float cloudMult = lerp(1.0, 1.0 - cloudCube, SharedData::cloudShadowsSettings.Opacity);
-		float edgeWidth = max(fwidth(cloudMult) * 2.0, 0.02);
-		float cloudTransmit = smoothstep(0.12 - edgeWidth, 0.88 + edgeWidth, saturate(cloudMult));
-		baseColor.xyz *= cloudTransmit;
-		baseColor.w *= cloudTransmit;
-#		endif
-	}
 
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
@@ -320,10 +245,10 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			ifdef TEX
 	float3 sunGlareColor = Color::Sky(input.Color.xyz) * baseColor.xyz;
-	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		// HDR sun block already applied tint/scale; avoid multiplying by tint again.
+#				ifdef HDR_OUTPUT
+	if (HDRSun::IsHdrSunActive())
 		sunGlareColor = baseColor.xyz;
-	}
+#				endif
 	// Dither/noise term is the legacy sky path contribution for gradient smoothing.
 	psout.Color.xyz = (sunGlareColor + yyy) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
