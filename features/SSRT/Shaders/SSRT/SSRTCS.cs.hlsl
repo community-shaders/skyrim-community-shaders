@@ -61,8 +61,7 @@ float3 HorizonSampling(
 		[branch] if (sampleScreenPos.x <= 0 || sampleScreenPos.y <= 0 || sampleScreenPos.x >= 1 || sampleScreenPos.y >= 1)
 			break;
 
-		float SZ = ScreenToViewDepth(srcDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, 0));
-		float3 samplePosVS = ScreenToViewPosition(sampleScreenPos, SZ, eyeIndex);
+		float3 samplePosVS = ScreenToViewPosition(sampleUV * frameScale, srcDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, 0), eyeIndex);
 
 		float3 pixelToSample = normalize(samplePosVS - posVS);
 		float linearThicknessMultiplier = LinearThickness ? saturate(samplePosVS.z / 100000.0) * 100 : 1;
@@ -124,9 +123,9 @@ float3 HorizonSampling(
 	}
 
 	float2 normalSample = srcNormalRoughness.SampleLevel(samplerPointClamp, uv * frameScale, 0).xy;
-	float3 viewspaceNormal = -GBuffer::DecodeNormal(normalSample);
+	float3 viewspaceNormal = GBuffer::DecodeNormal(normalSample);
 
-	float3 posVS = ScreenToViewPosition(normalizedScreenPos, viewspaceZ, eyeIndex);
+	float3 posVS = ScreenToViewPosition(uv * frameScale, rawDepth, eyeIndex);
 	float3 viewDir = normalize(-posVS);
 
 	float noiseOffset = SpatialOffsets(pxCoord);
