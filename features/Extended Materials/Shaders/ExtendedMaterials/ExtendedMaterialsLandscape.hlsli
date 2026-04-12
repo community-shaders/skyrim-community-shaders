@@ -60,59 +60,100 @@
 		return mask;
 	}
 
+	// Parallax height mips: per-layer GetDimensions (displacement vs diffuse sizes can differ per tile).
+	// Shared mip from tile 0 only was faster but broke soft shadows when layer mips did not match.
+	void ComputeLandscapeParallaxMipLevels(float2 uv, float screenNoise, out float mipLevels[6])
+	{
+		float2 duvx = ddx(uv);
+		float2 duvy = ddy(uv);
+		float2 dims;
+
+#	if defined(TRUE_PBR)
+#		define EMAT_LAND_PBR_MIPDIMS_FOREACH(i, DISPTEX, COLTEX) \
+			if (LandscapeLayers::PbrTileHasDisplacement(i)) { \
+				DISPTEX.GetDimensions(dims.x, dims.y); \
+				mipLevels[i] = GetMipLevelForTextureDims(dims, duvx, duvy, screenNoise); \
+			} else { \
+				COLTEX.GetDimensions(dims.x, dims.y); \
+				mipLevels[i] = GetMipLevelForTextureDims(dims, duvx, duvy, screenNoise); \
+			}
+		LANDSCAPE_PBR_LAYER_FOREACH(EMAT_LAND_PBR_MIPDIMS_FOREACH)
+#		undef EMAT_LAND_PBR_MIPDIMS_FOREACH
+#	else
+#		define EMAT_LAND_TH_MIPDIMS_FOREACH(i, THDISP, COLTEX) \
+			if (LandscapeLayers::ThTileHasDisplacement(i)) { \
+				THDISP.GetDimensions(dims.x, dims.y); \
+				mipLevels[i] = GetMipLevelForTextureDims(dims, duvx, duvy, screenNoise); \
+			} else { \
+				COLTEX.GetDimensions(dims.x, dims.y); \
+				mipLevels[i] = GetMipLevelForTextureDims(dims, duvx, duvy, screenNoise); \
+			}
+		LANDSCAPE_TH_LAYER_FOREACH(EMAT_LAND_TH_MIPDIMS_FOREACH)
+#		undef EMAT_LAND_TH_MIPDIMS_FOREACH
+#	endif
+	}
+
+	// Single SampleLevel per active layer (no stochastic). max(layer) upper-bounds linear blend height.
+	void SampleTerrainLayerHeightsNonStochastic(float2 coords, float mipLevels[6], DisplacementParams params[6], uint activeMask, out float heights[6])
+	{
+		heights[0] = heights[1] = heights[2] = heights[3] = heights[4] = heights[5] = 0;
+
+#	if defined(TRUE_PBR)
+#		define EMAT_LAND_PBR_HEIGHT_NS_FOREACH(i, DISPTEX, COLTEX) \
+			[branch] if ((activeMask & (1u << i)) && LandscapeLayers::PbrTileHasDisplacement(i)) \
+				heights[i] = ScaleDisplacement(DISPTEX.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[i]).x, params[i]);
+		LANDSCAPE_PBR_LAYER_FOREACH(EMAT_LAND_PBR_HEIGHT_NS_FOREACH)
+#		undef EMAT_LAND_PBR_HEIGHT_NS_FOREACH
+#	else
+#		define EMAT_LAND_TH_HEIGHT_NS_FOREACH(i, THDISP, COLTEX) \
+			if (activeMask & (1u << i)) { \
+				[branch] if (LandscapeLayers::ThTileHasDisplacement(i)) \
+					heights[i] = ScaleDisplacement(THDISP.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[i]).x, params[i]); \
+				else \
+					heights[i] = ScaleDisplacement(COLTEX.SampleLevel(SampTerrainParallaxSampler, coords, mipLevels[i]).w, params[i]); \
+			}
+		LANDSCAPE_TH_LAYER_FOREACH(EMAT_LAND_TH_HEIGHT_NS_FOREACH)
+#		undef EMAT_LAND_TH_HEIGHT_NS_FOREACH
+#	endif
+	}
+
+	inline float GetTerrainHeightUpperBoundNonStochastic(float2 coords, float mipLevels[6], DisplacementParams params[6], uint activeMask)
+	{
+		float heights[6];
+		SampleTerrainLayerHeightsNonStochastic(coords, mipLevels, params, activeMask, heights);
+		float m = 0;
+		[unroll] for (int li = 0; li < 6; ++li) {
+			if (activeMask & (1u << li))
+				m = max(m, heights[li]);
+		}
+		return m;
+	}
+
 	void SampleTerrainLayerHeights(float2 coords, float mipLevels[6], DisplacementParams params[6], uint activeMask, StochasticOffsets sharedOffset, out float heights[6])
 	{
 		heights[0] = heights[1] = heights[2] = heights[3] = heights[4] = heights[5] = 0;
 
 #	if defined(TRUE_PBR)
-		[branch] if ((activeMask & 1u) && (PBRFlags & PBR::TerrainFlags::LandTile0HasDisplacement) != 0)
-			heights[0] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement0Sampler, SampTerrainParallaxSampler, coords, mipLevels[0], sharedOffset).x, params[0]);
-		[branch] if ((activeMask & 2u) && (PBRFlags & PBR::TerrainFlags::LandTile1HasDisplacement) != 0)
-			heights[1] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement1Sampler, SampTerrainParallaxSampler, coords, mipLevels[1], sharedOffset).x, params[1]);
-		[branch] if ((activeMask & 4u) && (PBRFlags & PBR::TerrainFlags::LandTile2HasDisplacement) != 0)
-			heights[2] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement2Sampler, SampTerrainParallaxSampler, coords, mipLevels[2], sharedOffset).x, params[2]);
-		[branch] if ((activeMask & 8u) && (PBRFlags & PBR::TerrainFlags::LandTile3HasDisplacement) != 0)
-			heights[3] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement3Sampler, SampTerrainParallaxSampler, coords, mipLevels[3], sharedOffset).x, params[3]);
-		[branch] if ((activeMask & 16u) && (PBRFlags & PBR::TerrainFlags::LandTile4HasDisplacement) != 0)
-			heights[4] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement4Sampler, SampTerrainParallaxSampler, coords, mipLevels[4], sharedOffset).x, params[4]);
-		[branch] if ((activeMask & 32u) && (PBRFlags & PBR::TerrainFlags::LandTile5HasDisplacement) != 0)
-			heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandDisplacement5Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).x, params[5]);
+#		define EMAT_LAND_PBR_HEIGHT_S_FOREACH(i, DISPTEX, COLTEX) \
+			[branch] if ((activeMask & (1u << i)) && LandscapeLayers::PbrTileHasDisplacement(i)) \
+				heights[i] = ScaleDisplacement(SampleHeightUnified(DISPTEX, SampTerrainParallaxSampler, coords, mipLevels[i], sharedOffset).x, params[i]);
+		LANDSCAPE_PBR_LAYER_FOREACH(EMAT_LAND_PBR_HEIGHT_S_FOREACH)
+#		undef EMAT_LAND_PBR_HEIGHT_S_FOREACH
 #	else
-		if (activeMask & 1u) {
-			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand0HasDisplacement) != 0)
-				heights[0] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp0Sampler, SampTerrainParallaxSampler, coords, mipLevels[0], sharedOffset).x, params[0]);
-			else heights[0] = ScaleDisplacement(SampleHeightUnified(TexColorSampler, SampTerrainParallaxSampler, coords, mipLevels[0], sharedOffset).w, params[0]);
-		}
-		if (activeMask & 2u) {
-			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand1HasDisplacement) != 0)
-				heights[1] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp1Sampler, SampTerrainParallaxSampler, coords, mipLevels[1], sharedOffset).x, params[1]);
-			else heights[1] = ScaleDisplacement(SampleHeightUnified(TexLandColor2Sampler, SampTerrainParallaxSampler, coords, mipLevels[1], sharedOffset).w, params[1]);
-		}
-		if (activeMask & 4u) {
-			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand2HasDisplacement) != 0)
-				heights[2] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp2Sampler, SampTerrainParallaxSampler, coords, mipLevels[2], sharedOffset).x, params[2]);
-			else heights[2] = ScaleDisplacement(SampleHeightUnified(TexLandColor3Sampler, SampTerrainParallaxSampler, coords, mipLevels[2], sharedOffset).w, params[2]);
-		}
-		if (activeMask & 8u) {
-			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand3HasDisplacement) != 0)
-				heights[3] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp3Sampler, SampTerrainParallaxSampler, coords, mipLevels[3], sharedOffset).x, params[3]);
-			else heights[3] = ScaleDisplacement(SampleHeightUnified(TexLandColor4Sampler, SampTerrainParallaxSampler, coords, mipLevels[3], sharedOffset).w, params[3]);
-		}
-		if (activeMask & 16u) {
-			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand4HasDisplacement) != 0)
-				heights[4] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp4Sampler, SampTerrainParallaxSampler, coords, mipLevels[4], sharedOffset).x, params[4]);
-			else heights[4] = ScaleDisplacement(SampleHeightUnified(TexLandColor5Sampler, SampTerrainParallaxSampler, coords, mipLevels[4], sharedOffset).w, params[4]);
-		}
-		if (activeMask & 32u) {
-			[branch] if ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLand5HasDisplacement) != 0)
-				heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandTHDisp5Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).x, params[5]);
-			else heights[5] = ScaleDisplacement(SampleHeightUnified(TexLandColor6Sampler, SampTerrainParallaxSampler, coords, mipLevels[5], sharedOffset).w, params[5]);
-		}
+#		define EMAT_LAND_TH_HEIGHT_S_FOREACH(i, THDISP, COLTEX) \
+			if (activeMask & (1u << i)) { \
+				[branch] if (LandscapeLayers::ThTileHasDisplacement(i)) \
+					heights[i] = ScaleDisplacement(SampleHeightUnified(THDISP, SampTerrainParallaxSampler, coords, mipLevels[i], sharedOffset).x, params[i]); \
+				else \
+					heights[i] = ScaleDisplacement(SampleHeightUnified(COLTEX, SampTerrainParallaxSampler, coords, mipLevels[i], sharedOffset).w, params[i]); \
+			}
+		LANDSCAPE_TH_LAYER_FOREACH(EMAT_LAND_TH_HEIGHT_S_FOREACH)
+#		undef EMAT_LAND_TH_HEIGHT_S_FOREACH
 #	endif
 	}
 
-	// Scalar used by parallax soft shadow: same as GetTerrainHeight return (linear blend of layer heights × boost).
-	// Skips ProcessTerrainHeightWeights — that pipeline only affects the out-weights; totalHeight there is sum_i h_i * w1/w2_i before nonlinear remap.
+	// Linear blend of layer heights × boost (same scalar GetTerrainHeight returns before nonlinear weight remap).
+	// Used for soft shadows and POM ray height; ProcessTerrainHeightWeights only affects out-weights, not this total.
 	float GetTerrainHeightShadowTap(float2 coords, float mipLevels[6], DisplacementParams params[6], float4 w1, float2 w2, uint activeMask, StochasticOffsets sharedOffset)
 	{
 		float heights[6];

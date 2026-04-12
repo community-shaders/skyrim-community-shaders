@@ -13,6 +13,10 @@ struct DisplacementParams
 	float FlattenAmount;
 };
 
+#if defined(LANDSCAPE)
+#	include "Common/LandscapeLayers.hlsli"
+#endif
+
 namespace ExtendedMaterials
 {
 	static const float ShadowIntensity = 2.0;
@@ -32,54 +36,47 @@ namespace ExtendedMaterials
 		return float4(AdjustDisplacementNormalized(displacement.x, params), AdjustDisplacementNormalized(displacement.y, params), AdjustDisplacementNormalized(displacement.z, params), AdjustDisplacementNormalized(displacement.w, params));
 	}
 
-	float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
+	// Shared by GetMipLevel and landscape parallax: one ddx/ddy(uv) per pixel when all mips are computed together.
+	// (ddx/ddy of uv × dims matches ddx/ddy of uv*dims when dims are uniform per draw.)
+	inline float GetMipLevelForTextureDims(float2 textureDims, float2 duvx, float2 duvy, float screenNoise)
 	{
-		// Compute the current gradients:
-		float2 textureDims;
-		tex.GetDimensions(textureDims.x, textureDims.y);
+		float2 dims = textureDims;
 
 #if !defined(PARALLAX) && !defined(TRUE_PBR)
-		textureDims /= 2.0;
+		dims /= 2.0;
 #endif
 
 #if defined(VR)
-		textureDims /= 2.0;
+		dims /= 2.0;
 #endif
 
-		float2 texCoordsPerSize = coords * textureDims;
+		float2 dxSize = duvx * dims;
+		float2 dySize = duvy * dims;
 
-		float2 dxSize = ddx(texCoordsPerSize);
-		float2 dySize = ddy(texCoordsPerSize);
-
-		// Find min of change in u and v across quad: compute du and dv magnitude across quad
-		//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
-
-		// Standard mipmapping uses max here
 		float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
 
-		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
 		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
 #if !defined(PARALLAX) && !defined(TRUE_PBR)
 		mipLevel++;
 #endif
 
-// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
 #if defined(VR)
 		mipLevel++;
 #endif
 
-		// Compensate for upscaler render scale (DLSS/FSR). At lower internal resolution,
-		// ddx/ddy are proportionally larger, which inflates the computed mip level and blurs
-		// the height map — weakening the apparent parallax depth. MipBias is negative for
-		// upscalers (set by the game to re-sharpen at their render scale), so subtracting
-		// it here restores the same height detail and parallax strength as native resolution.
 		mipLevel = max(mipLevel + SharedData::MipBias, 0.0);
 
-		// Stochastic mip selection: use screen noise to select between adjacent mip levels
 		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
 
 		return mipLevel;
+	}
+
+	inline float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
+	{
+		float2 textureDims;
+		tex.GetDimensions(textureDims.x, textureDims.y);
+		return GetMipLevelForTextureDims(textureDims, ddx(coords), ddy(coords), screenNoise);
 	}
 
 #if defined(LANDSCAPE)
@@ -101,11 +98,8 @@ namespace ExtendedMaterials
 		viewDirTS.xy /= viewDirTS.z * 0.7 + 0.3 + params.FlattenAmount;  // Fix for objects at extreme viewing angles
 #endif
 
-		float distSq = dot(distance, distance);
-		float nearBlendToFar = smoothstep(1024.0 * 1024.0, 2048.0 * 2048.0, distSq);
-
 #if defined(LANDSCAPE)
-		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? sqrt(saturate(1 - nearBlendToFar)) : 0;
+		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? 1.0 : 0.0;
 		float4 w1 = lerp(input.LandBlendWeights1, smoothstep(0, 1, input.LandBlendWeights1), blendFactor);
 		float2 w2 = lerp(input.LandBlendWeights2.xy, smoothstep(0, 1, input.LandBlendWeights2.xy), blendFactor);
 #	if defined(TRUE_PBR)
@@ -123,18 +117,9 @@ namespace ExtendedMaterials
 #endif
 		float minHeight = maxHeight * 0.5;
 
-#if defined(LANDSCAPE)
-		if (nearBlendToFar < 1.0)
-#else
-#	if defined(TRUE_PBR)
-		if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0 || nearBlendToFar < 1.0)
-#	else
-		if (nearBlendToFar < 1.0)
-#	endif
-#endif
 		{
 			const float maxSteps = 16;
-			uint numSteps = uint((maxSteps * (1.0 - nearBlendToFar)) + 0.5);
+			uint numSteps = uint(maxSteps + 0.5);
 			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxSteps)));
 			numSteps = (numSteps + 2) & ~3;
 
@@ -161,10 +146,34 @@ namespace ExtendedMaterials
 
 				float4 currHeight;
 #if defined(LANDSCAPE)
-				currHeight.x = GetTerrainHeight(noise, input, currentOffset[0].xy, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) * scalercp + 0.5;
-				currHeight.y = GetTerrainHeight(noise, input, currentOffset[0].zw, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) * scalercp + 0.5;
-				currHeight.z = GetTerrainHeight(noise, input, currentOffset[1].xy, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) * scalercp + 0.5;
-				currHeight.w = GetTerrainHeight(noise, input, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights) * scalercp + 0.5;
+				// max(layer SampleLevel) >= linear blended height (same scalar as GetTerrainHeightShadowTap / GetTerrainHeight total).
+				// With TV tiling fix on, stochastic parallax can exceed SampleLevel — coarse gate disabled (useParallaxCoarseGate).
+#	if defined(TERRAIN_VARIATION)
+				bool useParallaxCoarseGate = !SharedData::terrainVariationSettings.enableTilingFix;
+#	else
+				bool useParallaxCoarseGate = true;
+#	endif
+				[branch] if (useParallaxCoarseGate) {
+					float4 heightUpper = float4(
+						GetTerrainHeightUpperBoundNonStochastic(currentOffset[0].xy, mipLevels, params, activeMask),
+						GetTerrainHeightUpperBoundNonStochastic(currentOffset[0].zw, mipLevels, params, activeMask),
+						GetTerrainHeightUpperBoundNonStochastic(currentOffset[1].xy, mipLevels, params, activeMask),
+						GetTerrainHeightUpperBoundNonStochastic(currentOffset[1].zw, mipLevels, params, activeMask));
+					float4 upperScaled = heightUpper * scalercp + 0.5;
+					bool4 coarseMayHit = upperScaled >= currentBound;
+					[branch] if (!any(coarseMayHit)) {
+						currHeight.w = GetTerrainHeightShadowTap(currentOffset[1].zw, mipLevels, params, w1, w2, activeMask, sharedOffset) * scalercp + 0.5;
+						prevOffset = currentOffset[1].zw;
+						prevBound = currentBound.w;
+						prevHeight = currHeight.w;
+						numSteps -= 4;
+						continue;
+					}
+				}
+				currHeight.x = GetTerrainHeightShadowTap(currentOffset[0].xy, mipLevels, params, w1, w2, activeMask, sharedOffset) * scalercp + 0.5;
+				currHeight.y = GetTerrainHeightShadowTap(currentOffset[0].zw, mipLevels, params, w1, w2, activeMask, sharedOffset) * scalercp + 0.5;
+				currHeight.z = GetTerrainHeightShadowTap(currentOffset[1].xy, mipLevels, params, w1, w2, activeMask, sharedOffset) * scalercp + 0.5;
+				currHeight.w = GetTerrainHeightShadowTap(currentOffset[1].zw, mipLevels, params, w1, w2, activeMask, sharedOffset) * scalercp + 0.5;
 #else
 				currHeight.x = tex.SampleLevel(texSampler, currentOffset[0].xy, mipLevel)[channel];
 				currHeight.y = tex.SampleLevel(texSampler, currentOffset[0].zw, mipLevel)[channel];
@@ -235,28 +244,15 @@ namespace ExtendedMaterials
 				parallaxAmount = (pt1.x * delta2 - pt2.x * delta1) / denominator;
 			}
 
-#if defined(TRUE_PBR)
-			if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0)
-				nearBlendToFar = 0;
-			else
-#endif
-				nearBlendToFar *= nearBlendToFar;
 			float offset = (1.0 - parallaxAmount) * -maxHeight + minHeight;
-			pixelOffset = saturate(lerp(parallaxAmount, 0.5, nearBlendToFar));
-			return lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
+			pixelOffset = saturate(parallaxAmount);
+			float2 outCoords = viewDirTS.xy * offset + coords.xy;
+#			if defined(LANDSCAPE)
+			// ProcessTerrainHeightWeights once for final blend weights (loop only used linear height via GetTerrainHeightShadowTap).
+			GetTerrainHeight(noise, input, outCoords, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights);
+#			endif
+			return outCoords;
 		}
-
-#if defined(LANDSCAPE)
-		weights[0] = input.LandBlendWeights1.x;
-		weights[1] = input.LandBlendWeights1.y;
-		weights[2] = input.LandBlendWeights1.z;
-		weights[3] = input.LandBlendWeights1.w;
-		weights[4] = input.LandBlendWeights2.x;
-		weights[5] = input.LandBlendWeights2.y;
-#endif
-
-		pixelOffset = 0.5;
-		return coords;
 	}
 
 	// https://advances.realtimerendering.com/s2006/Tatarchuk-POM.pdf
