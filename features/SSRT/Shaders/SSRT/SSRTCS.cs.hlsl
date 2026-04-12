@@ -8,26 +8,10 @@
 // Horizon-based sampling with 32-bit bitfield visibility tracking
 
 #include "Common/FastMath.hlsli"
-#include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/VR.hlsli"
 #include "SSRT/common.hlsli"
-
-#if defined(FALLBACK)
-#	if defined(SKYLIGHTING)
-#		include "Skylighting/Skylighting.hlsli"
-Texture3D<sh2> SkylightingProbeArray : register(t3);
-Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t4);
-#	endif
-
-#	if defined(IBL)
-#		include "Common/Color.hlsli"
-#		include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
-Texture2D<sh2> EnvIBLTexture : register(t5);
-Texture2D<sh2> SkyIBLTexture : register(t6);
-#	endif
-#endif
 
 Texture2D<float> srcDepth : register(t0);
 Texture2D<float4> srcNormalRoughness : register(t1);
@@ -73,24 +57,12 @@ float3 HorizonSampling(
 		float2 uvOffset = slideDir_TexelSize * max(offset, 1 + j);
 		float2 sampleUV = uv + uvOffset * samplingDirection;
 
-		uint sampleEyeIndex = eyeIndex;
-#ifdef VR
-		sampleEyeIndex = Stereo::GetEyeIndexFromTexCoord(sampleUV);
-#endif
-		float2 sampleScreenPos = Stereo::ConvertFromStereoUV(sampleUV, sampleEyeIndex);
+		float2 sampleScreenPos = Stereo::ConvertFromStereoUV(sampleUV, eyeIndex);
 		[branch] if (sampleScreenPos.x <= 0 || sampleScreenPos.y <= 0 || sampleScreenPos.x >= 1 || sampleScreenPos.y >= 1)
 			break;
 
 		float SZ = ScreenToViewDepth(srcDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, 0));
-		float3 samplePosVS = ScreenToViewPosition(sampleScreenPos, SZ, sampleEyeIndex);
-
-#ifdef VR
-		if (sampleEyeIndex != eyeIndex) {
-			if (abs(SZ - posVS.z) > posVS.z * 0.1)
-				continue;
-			samplePosVS = FrameBuffer::WorldToView(FrameBuffer::ViewToWorld(samplePosVS, true, sampleEyeIndex), true, eyeIndex);
-		}
-#endif
+		float3 samplePosVS = ScreenToViewPosition(sampleScreenPos, SZ, eyeIndex);
 
 		float3 pixelToSample = normalize(samplePosVS - posVS);
 		float linearThicknessMultiplier = LinearThickness ? saturate(samplePosVS.z / 100000.0) * 100 : 1;
@@ -121,14 +93,7 @@ float3 HorizonSampling(
 					lightNormalVS = GBuffer::DecodeNormal(srcNormalRoughness.SampleLevel(samplerPointClamp, sampleUV * frameScale, 0).xy);
 #	endif
 
-					float lightNormalDotLightDirection = dot(lightNormalVS, -lightDirectionVS);
-					if (BackfaceLighting > 0 && dot(lightNormalVS, viewDir) > 0) {
-						lightNormalDotLightDirection = sign(lightNormalDotLightDirection) < 0 ?
-						                                  abs(lightNormalDotLightDirection) * BackfaceLighting :
-						                                  abs(lightNormalDotLightDirection);
-					} else {
-						lightNormalDotLightDirection = saturate(lightNormalDotLightDirection);
-					}
+					float lightNormalDotLightDirection = saturate(dot(lightNormalVS, -lightDirectionVS));
 
 					col.xyz += (float(numOccludedZones) / float(MAX_RAY)) * lightColor * normalDotLightDirection * lightNormalDotLightDirection;
 				}
@@ -140,69 +105,6 @@ float3 HorizonSampling(
 
 	return col;
 }
-
-#if defined(FALLBACK)
-// Sample ambient/indirect light for a given world-space direction
-// Replaces SSRT3's TraceReflectionProbes + sky reflection with CS's DALC/IBL/Skylighting
-float3 SampleFallbackAmbient(float3 rayDirWS, float3 positionWS, float3 normalWS, float2 screenPosition, uint eyeIndex)
-{
-	float3 ambientColor = 0;
-
-#	if defined(IBL)
-	// Sample IBL spherical harmonics for this direction
-	{
-		sh2 shR = EnvIBLTexture.Load(int3(0, 0, 0));
-		sh2 shG = EnvIBLTexture.Load(int3(1, 0, 0));
-		sh2 shB = EnvIBLTexture.Load(int3(2, 0, 0));
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDirWS);
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDirWS);
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDirWS);
-		float3 envIBL = max(0, float3(colorR, colorG, colorB) / Math::PI);
-
-		sh2 skyR = SkyIBLTexture.Load(int3(0, 0, 0));
-		sh2 skyG = SkyIBLTexture.Load(int3(1, 0, 0));
-		sh2 skyB = SkyIBLTexture.Load(int3(2, 0, 0));
-		float skyColorR = SphericalHarmonics::SHHallucinateZH3Irradiance(skyR, rayDirWS);
-		float skyColorG = SphericalHarmonics::SHHallucinateZH3Irradiance(skyG, rayDirWS);
-		float skyColorB = SphericalHarmonics::SHHallucinateZH3Irradiance(skyB, rayDirWS);
-		float3 skyIBL = max(0, float3(skyColorR, skyColorG, skyColorB) / Math::PI);
-
-		ambientColor = envIBL + skyIBL;
-	}
-#	else
-	// Fallback to DALC (directional ambient lighting coefficients)
-	ambientColor = SharedData::GetAmbient(rayDirWS);
-#	endif
-
-#	if defined(SKYLIGHTING)
-	// Modulate by skylighting visibility
-	{
-		float3 positionMS = positionWS - FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-		float fadeOut = Skylighting::getFadeOutFactor(positionMS);
-
-		if (fadeOut > 0) {
-			sh2 skylightingSH = Skylighting::sample(
-				SharedData::skylightingSettings,
-				SkylightingProbeArray,
-				stbn_vec3_2Dx1D_128x128x64,
-				screenPosition,
-				positionMS,
-				normalWS);
-
-			sh2 rayLobe = SphericalHarmonics::EvaluateCosineLobe(rayDirWS);
-			float skylightingVisibility = SphericalHarmonics::FuncProductIntegral(skylightingSH, rayLobe) / Math::PI;
-			skylightingVisibility = saturate(skylightingVisibility);
-			skylightingVisibility = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingVisibility);
-			skylightingVisibility = lerp(1.0, skylightingVisibility, fadeOut);
-
-			ambientColor *= skylightingVisibility;
-		}
-	}
-#	endif
-
-	return ambientColor;
-}
-#endif
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)] void main(const uint2 dtid : SV_DispatchThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
@@ -222,7 +124,7 @@ float3 SampleFallbackAmbient(float3 rayDirWS, float3 positionWS, float3 normalWS
 	}
 
 	float2 normalSample = srcNormalRoughness.SampleLevel(samplerPointClamp, uv * frameScale, 0).xy;
-	float3 viewspaceNormal = GBuffer::DecodeNormal(normalSample);
+	float3 viewspaceNormal = -GBuffer::DecodeNormal(normalSample);
 
 	float3 posVS = ScreenToViewPosition(normalizedScreenPos, viewspaceZ, eyeIndex);
 	float3 viewDir = normalize(-posVS);
@@ -233,14 +135,7 @@ float3 SampleFallbackAmbient(float3 rayDirWS, float3 positionWS, float3 normalWS
 
 	float ao = 0;
 	float3 col = 0;
-	float3 fallbackColor = 0;
 	float2 rcpOutDim = RcpFrameDim;
-
-#if defined(FALLBACK)
-	// Precompute world-space data for fallback sampling
-	float3 normalWS = ViewToWorldVector(viewspaceNormal, FrameBuffer::CameraViewInverse[eyeIndex]);
-	float3 posWS = ViewToWorldPosition(posVS, FrameBuffer::CameraViewInverse[eyeIndex]) + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-#endif
 
 	[loop] for (uint i = 0; i < RotationCount; i++)
 	{
@@ -263,56 +158,15 @@ float3 SampleFallbackAmbient(float3 rayDirWS, float3 positionWS, float3 normalWS
 			uv, viewDir, viewspaceNormal, n, globalOccludedBitfield, planeNormal, eyeIndex);
 
 		ao += float(countbits(globalOccludedBitfield)) / float(MAX_RAY);
-
-#if defined(FALLBACK)
-		// SSRT3: Fallback ambient sampling for unoccluded angular sectors
-		if (FallbackSampleCount > 0) {
-			float3 realTangent = cross(projectedNormalNormalized, planeNormal);
-			uint globalOccludedBitfieldCopy = globalOccludedBitfield;
-
-			[loop] for (uint j = 0; j < FallbackSampleCount; j++)
-			{
-				uint maskSize = MAX_RAY / FallbackSampleCount;
-				uint mask = 0xFFFFFFFF >> (MAX_RAY - maskSize);
-				uint hitCount = countbits(globalOccludedBitfieldCopy & mask);
-
-				float cosine = (1.0 - ((float(j) + 0.5) / FallbackSampleCount)) * 2.0 - 1.0;
-				float angleCosine = GTAOFastAcos(cosine);
-				float3 rayDir = normalize(realTangent * cos(angleCosine) + viewspaceNormal * sin(angleCosine));
-				rayDir = normalize(rayDir - planeNormal * dot(rayDir, planeNormal));
-
-				// Convert view-space ray to world-space
-				float3 rayDirWS = ViewToWorldVector(rayDir, FrameBuffer::CameraViewInverse[eyeIndex]);
-
-				float3 ambientColor = SampleFallbackAmbient(rayDirWS, posWS, normalWS, pxCoord, eyeIndex);
-
-				fallbackColor += ambientColor * saturate(float(maskSize - hitCount) / float(MAX_RAY));
-
-				globalOccludedBitfieldCopy >>= maskSize;
-			}
-		}
-#endif
 	}
 
 	// Finalize AO
 	ao /= RotationCount;
 	ao = saturate(pow(1.0 - saturate(ao), AOIntensity));
 
-#if defined(FALLBACK)
-	// Finalize fallback
-	fallbackColor /= RotationCount;
-	fallbackColor = saturate(pow(abs(fallbackColor), FallbackPower) * FallbackIntensity);
-#endif
-
 	// Finalize GI
 	col /= RotationCount;
-
-	// SSRT3: final color = fallback + screen-space GI * intensity
-#if defined(FALLBACK)
-	col = fallbackColor + col * GIIntensity;
-#else
 	col = col * GIIntensity;
-#endif
 
 	// HSV-space value clamping to prevent fireflies
 	col = RgbToHsv(col);

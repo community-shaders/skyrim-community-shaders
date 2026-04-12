@@ -35,15 +35,10 @@ cbuffer SSRTCB : register(b1)
 
 	uint MipOptimization;
 	float GIIntensity;
-	float BackfaceLighting;
 	float AOIntensity;
-
 	float Thickness;
-	uint LinearThickness;
-	uint FallbackSampleCount;
-	float FallbackIntensity;
 
-	float FallbackPower;
+	uint LinearThickness;
 	float TemporalOffsets;
 	float TemporalDirections;
 	float pad0;
@@ -88,17 +83,6 @@ float3 ScreenToViewPosition(const float2 screenPos, const float viewspaceDepth, 
 float ScreenToViewDepth(const float screenDepth)
 {
 	return (SharedData::CameraData.w / (-screenDepth * SharedData::CameraData.z + SharedData::CameraData.x));
-}
-
-float3 ViewToWorldPosition(const float3 pos, const float4x4 invView)
-{
-	float4 worldpos = mul(invView, float4(pos, 1));
-	return worldpos.xyz / worldpos.w;
-}
-
-float3 ViewToWorldVector(const float3 vec, const float4x4 invView)
-{
-	return mul((float3x3)invView, vec);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
