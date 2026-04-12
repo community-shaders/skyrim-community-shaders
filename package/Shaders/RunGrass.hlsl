@@ -939,7 +939,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
-	float3 vertexColor = Color::ColorToLinear(iinput.VertexColor.xyz);
+	float3 vertexColor = Color::ColorToLinear(input.VertexColor.xyz);
 
 #			if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1.0;
