@@ -4,16 +4,13 @@
 
 namespace HDRSun
 {
-	// HDR on and this pass is sun / glare, not moon or clouds.
+	static const float kReferencePaperWhiteNits = 203.0f;
+	static const float kMenuSunNits = 100.0f;
+
 	inline bool IsHdrSunActive()
 	{
 		return SharedData::HDRData.x > 0.5f && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun);
 	}
-
-	// Fixed 203 for sun math only (paper white slider doesn't touch this).
-	static const float kReferencePaperWhiteNits = 203.0f;
-	// Pause / map / main menu: pull sun back so it isn't fighting the UI.
-	static const float kMenuSunNits = 100.0f;
 
 	void ApplyHdrSunToBaseColor(
 		float4 position,
@@ -29,6 +26,8 @@ namespace HDRSun
 		if (!IsHdrSunActive())
 			return;
 
+		// TEST: skip HDR boost on sun glare (DITHER path). Remove this guard when done.
+#if !defined(DITHER)
 		float peakNits = max(SharedData::HDRData.z, kReferencePaperWhiteNits + 1.0f);
 		float peakRatio = peakNits / kReferencePaperWhiteNits;
 
@@ -47,37 +46,35 @@ namespace HDRSun
 
 		// Billboard is a square; UV falloff keeps the corners from blowing out.
 		float radialWeight = 1.0f;
-#if defined(TEX)
+#	if defined(TEX)
 		float2 uv = saturate(texCoord0_xy);
 		float r = saturate(length(uv - 0.5f) * 1.41421356f);
-		radialWeight = pow(saturate(1.0f - r), 1.85f);
-#endif
+		radialWeight = saturate(1.0f - r);
+#	endif
 
-		// 0 = no boost, 1 = full maxBoost. Everything else is fringe.
 		float weight = saturate(highlight * alphaWeight * radialWeight);
 
-		// Second sample, blurred mip: if fine ≈ coarse over a big area it's probably a fat soft sun, ease off.
-		float4 coarseS = sunTex.SampleLevel(samp, texCoord0_xy, 2.0);
+		float fineLod = sunTex.CalculateLevelOfDetail(samp, texCoord0_xy);
+		float coarseMip = max(fineLod + 2.0f, 0.0f);
+		float4 coarseS = sunTex.SampleLevel(samp, texCoord0_xy, coarseMip);
 		float3 coarseRgb = Color::Sky(coarseS.rgb);
-		float Lc = max(Color::RGBToLuminance(coarseRgb), 1e-4);
-		// TEXFADE: Sky passes PParams.x so coarse alpha matches fine after the fade.
+		float Lc = max(Color::RGBToLuminance(coarseRgb), 1e-4f);
 		float lac = Lc * saturate(coarseS.w * alphaPostScale);
 		float laf = L * a;
-		float mipQuell = 1.0f;
-		// L < Lc: fine darker than the mip average — usually a slope, leave mipQuell at 1.
-		if (L >= Lc) {
-			float relDelta = (L - Lc) / max(Lc, 0.015);
-			float relDeltaA = (laf - lac) / max(lac, 1e-4);
-			mipQuell = saturate(max(relDelta * 3.0f, relDeltaA * 2.0f));
-		}
-		// Hot core: mip compare lies a bit on a tiny bright dot, let it through anyway.
-		float hotBypass = saturate((L - 0.96f) * 100.0f);
-		weight *= saturate(max(mipQuell, hotBypass));
 
-		// pow beats linear 1→maxBoost here: stops the whole disc fattening when you crank peak nits.
+		float mipQuell = 1.0f;
+		if (L >= Lc) {
+			float relL = (L - Lc) / max(Lc, 1e-4f);
+			float relA = (laf - lac) / max(lac, 1e-4f);
+			float spike = relL + relA;
+			mipQuell = saturate(1.0f - exp(-spike));
+		}
+		weight *= max(mipQuell, saturate(L));
+
 		float boost = pow(max(maxBoost, 1e-6f), weight);
 
 		baseColor.xyz *= boost;
+#endif
 
 #if defined(DITHER)
 		// Glare path — vertex tint after the boost.
@@ -89,7 +86,6 @@ namespace HDRSun
 #endif
 
 #if defined(CLOUD_SHADOWS)
-		// Same factor on rgb and a so the edge doesn't look wrong.
 		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(worldPosition.xyz, SharedData::DirLightDirection.xyz);
 		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(samp, cloudSampleDir, 0).x;
 		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(samp, cloudSampleDir, 1).x;
