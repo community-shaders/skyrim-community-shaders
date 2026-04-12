@@ -10,8 +10,46 @@
 #include "Common/FastMath.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
-#include "SSRT/common.hlsli"
+
+///////////////////////////////////////////////////////////////////////////////
+
+cbuffer SSRTCB : register(b1)
+{
+	float4 NDCToViewMul;
+	float4 NDCToViewAdd;
+
+	float2 TexDim;
+	float2 RcpTexDim;
+	float2 FrameDim;
+	float2 RcpFrameDim;
+
+	uint FrameIndex;
+	uint RotationCount;
+	uint StepCount;
+	float Radius;
+
+	float ExpFactor;
+	float HalfProjScale;
+	uint JitterSamples;
+	uint ScreenSpaceSampling;
+
+	uint MipOptimization;
+	float GIIntensity;
+	float AOIntensity;
+	float Thickness;
+
+	uint LinearThickness;
+	float TemporalOffsets;
+	float TemporalDirections;
+	float pad0;
+};
+
+SamplerState samplerPointClamp : register(s0);
+SamplerState samplerLinearClamp : register(s1);
+
+///////////////////////////////////////////////////////////////////////////////
 
 Texture2D<float> srcDepth : register(t0);
 Texture2D<float4> srcNormalRoughness : register(t1);
@@ -21,8 +59,113 @@ RWTexture2D<float4> outGIOcclusion : register(u0);
 
 #define TILE_SIZE 8
 
-// SSRT3: ComputeOccludedBitfield
-uint ComputeOccludedBitfield(float minHorizon, float maxHorizon, inout uint globalOccludedBitfield, out uint numOccludedZones)
+// 32-bit bitmask for horizon tracking
+#define MAX_RAY 32
+
+///////////////////////////////////////////////////////////////////////////////
+// Utility functions matching SSRT3's API with CS-specific implementations
+///////////////////////////////////////////////////////////////////////////////
+
+// SSRT3: GetLinearDepth - converts device depth to linear eye depth
+// Original samples _DepthPyramidTexture with LOD; CS has no depth pyramid so lod is unused
+inline float GetLinearDepth(float2 uv, float lod)
+{
+	float deviceDepth = srcDepth.SampleLevel(samplerPointClamp, uv, 0);
+	return SharedData::CameraData.w / (-deviceDepth * SharedData::CameraData.z + SharedData::CameraData.x);
+}
+
+// SSRT3: PositionSSToVS - converts screen UV + depth to view-space position
+// Original uses _InverseProjectionMatrix; CS uses NDCToViewMul/Add
+inline float3 PositionSSToVS(float2 uv, float lod)
+{
+	float linearDepth = GetLinearDepth(uv, lod);
+
+	const float2 _mul = NDCToViewMul.xy;
+	const float2 _add = NDCToViewAdd.xy;
+
+	float3 posVS;
+	posVS.xy = (_mul * uv + _add) * linearDepth;
+	posVS.z = linearDepth;
+	return posVS;
+}
+
+// SSRT3: GetNormalVS - reads view-space normal at screen pixel coordinate
+// Original decodes from _NormalBufferTexture then transforms WS->VS;
+// CS GBuffer already stores view-space normals
+inline float3 GetNormalVS(uint2 positionSS)
+{
+	return GBuffer::DecodeNormal(srcNormalRoughness.Load(int3(positionSS, 0)).xy);
+}
+
+// SSRT3: GetNormalPyramidVS - reads view-space normal at UV with LOD
+// Original decodes spheremap from _NormalPyramidTexture; CS has no normal pyramid,
+// samples the flat normal buffer instead (lod unused)
+inline float3 GetNormalPyramidVS(float2 uv, float lod)
+{
+	return GBuffer::DecodeNormal(srcNormalRoughness.SampleLevel(samplerPointClamp, uv, 0).xy);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Noise and math utilities (unchanged from SSRT3)
+///////////////////////////////////////////////////////////////////////////////
+
+// From Activision GTAO paper: https://www.activision.com/cdn/research/s2016_pbs_activision_occlusion.pptx
+float SpatialOffsets(int2 position)
+{
+	return 0.25 * (float)((position.y - position.x) & 3);
+}
+
+// Interleaved gradient noise from Jimenez 2014 http://goo.gl/eomGso
+float GradientNoise(float2 position)
+{
+	return frac(52.9829189 * frac(dot(position, float2(0.06711056, 0.00583715))));
+}
+
+// From http://byteblacksmith.com/improvements-to-the-canonical-one-liner-glsl-rand-for-opengl-es-2-0/
+float rand(float2 co)
+{
+	float dt = dot(co.xy, float2(12.9898, 78.233));
+	float sn = fmod(dt, 3.14);
+	return frac(sin(sn) * 43758.5453);
+}
+
+// Fast acos approximation from GTAO
+float2 GTAOFastAcos(float2 x)
+{
+	float2 outVal = -0.156583 * abs(x) + Math::HALF_PI;
+	outVal *= sqrt(1.0 - abs(x));
+	return x >= 0 ? outVal : Math::PI - outVal;
+}
+
+float GTAOFastAcos(float x)
+{
+	float outVal = -0.156583 * abs(x) + Math::HALF_PI;
+	outVal *= sqrt(1.0 - abs(x));
+	return x >= 0 ? outVal : Math::PI - outVal;
+}
+
+// RGB to HSV conversion (matching SSRT3's RgbToHsv)
+float3 RgbToHsv(float3 c)
+{
+	float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+	float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+	float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+	float d = q.x - min(q.w, q.y);
+	float e = 1.0e-10;
+	return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+// HSV to RGB conversion (matching SSRT3's HsvToRgb)
+float3 HsvToRgb(float3 c)
+{
+	float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+	float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+	return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+inline uint ComputeOccludedBitfield(float minHorizon, float maxHorizon, inout uint globalOccludedBitfield, out uint numOccludedZones)
 {
 	uint startHorizonInt = minHorizon * MAX_RAY;
 	uint angleHorizonInt = ceil(saturate(maxHorizon - minHorizon) * MAX_RAY);
@@ -34,11 +177,10 @@ uint ComputeOccludedBitfield(float minHorizon, float maxHorizon, inout uint glob
 	return currentOccludedBitfield;
 }
 
-// SSRT3: HorizonSampling
-float3 HorizonSampling(
+inline float3 HorizonSampling(
 	bool directionIsRight, float3 posVS, float2 slideDir_TexelSize, float initialRayStep,
 	float2 uv, float3 viewDir, float3 normalVS, float n, inout uint globalOccludedBitfield,
-	float3 planeNormal, uint eyeIndex)
+	float3 planeNormal)
 {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
@@ -57,11 +199,11 @@ float3 HorizonSampling(
 		float2 uvOffset = slideDir_TexelSize * max(offset, 1 + j);
 		float2 sampleUV = uv + uvOffset * samplingDirection;
 
-		float2 sampleScreenPos = Stereo::ConvertFromStereoUV(sampleUV, eyeIndex);
-		[branch] if (sampleScreenPos.x <= 0 || sampleScreenPos.y <= 0 || sampleScreenPos.x >= 1 || sampleScreenPos.y >= 1)
+		if (sampleUV.x <= 0 || sampleUV.y <= 0 || sampleUV.x >= 1 || sampleUV.y >= 1)
 			break;
 
-		float3 samplePosVS = ScreenToViewPosition(sampleUV * frameScale, srcDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, 0), eyeIndex);
+		int mipLevelOffset = MipOptimization ? min((j + 1) / 2, 4) : 0;
+		float3 samplePosVS = PositionSSToVS(sampleUV * frameScale, mipLevelOffset);
 
 		float3 pixelToSample = normalize(samplePosVS - posVS);
 		float linearThicknessMultiplier = LinearThickness ? saturate(samplePosVS.z / 100000.0) * 100 : 1;
@@ -76,7 +218,7 @@ float3 HorizonSampling(
 		ComputeOccludedBitfield(frontBackHorizon.x, frontBackHorizon.y, globalOccludedBitfield, numOccludedZones);
 
 		if (numOccludedZones > 0) {
-			float3 lightColor = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * frameScale, 0).rgb;
+			float3 lightColor = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * frameScale, mipLevelOffset).rgb;
 			float luminance = dot(lightColor, float3(0.2126, 0.7152, 0.0722));
 
 			if (luminance > 0.001) {
@@ -89,7 +231,7 @@ float3 HorizonSampling(
 #	ifdef NORMAL_APPROXIMATION
 					lightNormalVS = -samplingDirection * cross(normalize(samplePosVS - lastSamplePosVS), planeNormal);
 #	else
-					lightNormalVS = GBuffer::DecodeNormal(srcNormalRoughness.SampleLevel(samplerPointClamp, sampleUV * frameScale, 0).xy);
+					lightNormalVS = GetNormalPyramidVS(sampleUV * frameScale, mipLevelOffset);
 #	endif
 
 					float lightNormalDotLightDirection = saturate(dot(lightNormalVS, -lightDirectionVS));
@@ -111,50 +253,44 @@ float3 HorizonSampling(
 	uint2 pxCoord = dtid;
 	float2 uv = (pxCoord + .5) * RcpFrameDim;
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
-	float2 normalizedScreenPos = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
-	// Convert raw scene depth to viewspace
-	float rawDepth = srcDepth.SampleLevel(samplerPointClamp, uv * frameScale, 0);
-	float viewspaceZ = ScreenToViewDepth(rawDepth);
+	float deviceDepth = srcDepth.SampleLevel(samplerPointClamp, uv * frameScale, 0);
 
-	if (viewspaceZ <= 1e-7) {
+	if (deviceDepth <= 1e-7) {
 		outGIOcclusion[pxCoord] = float4(0, 0, 0, 1);
 		return;
 	}
 
-	float2 normalSample = srcNormalRoughness.SampleLevel(samplerPointClamp, uv * frameScale, 0).xy;
-	float3 viewspaceNormal = GBuffer::DecodeNormal(normalSample);
-
-	float3 posVS = ScreenToViewPosition(uv * frameScale, rawDepth, eyeIndex);
+	float3 posVS = PositionSSToVS(uv * frameScale, 0);
+	float3 normalVS = GetNormalVS(pxCoord);
 	float3 viewDir = normalize(-posVS);
 
 	float noiseOffset = SpatialOffsets(pxCoord);
 	float noiseDirection = GradientNoise(pxCoord);
-	float initialRayStep = frac(noiseOffset + TemporalOffsets) + (ssrtRand(uv) * 2.0 - 1.0) * 1.0 * float(JitterSamples);
+	float initialRayStep = frac(noiseOffset + TemporalOffsets) + (rand(uv) * 2.0 - 1.0) * 1.0 * float(JitterSamples);
 
 	float ao = 0;
 	float3 col = 0;
-	float2 rcpOutDim = RcpFrameDim;
 
 	[loop] for (uint i = 0; i < RotationCount; i++)
 	{
 		float rotationAngle = (i + noiseDirection + TemporalDirections) * (Math::PI / (float)RotationCount);
 		float3 sliceDir = float3(cos(rotationAngle), sin(rotationAngle), 0);
-		float2 slideDir_TexelSize = sliceDir.xy * rcpOutDim;
+		float2 slideDir_TexelSize = sliceDir.xy * RcpFrameDim;
 		uint globalOccludedBitfield = 0;
 
 		float3 planeNormal = normalize(cross(sliceDir, viewDir));
 		float3 tangent = cross(viewDir, planeNormal);
-		float3 projectedNormal = viewspaceNormal - planeNormal * dot(viewspaceNormal, planeNormal);
+		float3 projectedNormal = normalVS - planeNormal * dot(normalVS, planeNormal);
 		float3 projectedNormalNormalized = normalize(projectedNormal);
 
 		float cos_n = clamp(dot(projectedNormalNormalized, viewDir), -1, 1);
 		float n = -sign(dot(projectedNormal, tangent)) * acos(cos_n);
 
 		col += HorizonSampling(true, posVS, slideDir_TexelSize, initialRayStep,
-			uv, viewDir, viewspaceNormal, n, globalOccludedBitfield, planeNormal, eyeIndex);
+			uv, viewDir, normalVS, n, globalOccludedBitfield, planeNormal);
 		col += HorizonSampling(false, posVS, slideDir_TexelSize, initialRayStep,
-			uv, viewDir, viewspaceNormal, n, globalOccludedBitfield, planeNormal, eyeIndex);
+			uv, viewDir, normalVS, n, globalOccludedBitfield, planeNormal);
 
 		ao += float(countbits(globalOccludedBitfield)) / float(MAX_RAY);
 	}
