@@ -50,7 +50,7 @@ float ReinhardFindBranchingPoint(float p)
 	float inner = 31.0 - 46.0 * p + 27.0 * p * p - 8.0 * p * p * p - 4.0 * p * p * p * p;
 	float A = 29.0 - 21.0 * p + 6.0 * p * p + 2.0 * p * p * p + 3.0 * sqrt(3.0) * sqrt(inner);
 
-	float cbrtA = pow(A, 1.0 / 3.0);
+	float cbrtA = pow(abs(A), 1.0 / 3.0);
 	float cbrt2 = pow(2.0, 1.0 / 3.0);
 
 	return (p - 2.0) / 3.0 - (-1.0 - 2.0 * p - p * p) / (3.0 * cbrt2 * cbrt2 * cbrtA) + cbrtA / (3.0 * cbrt2);
@@ -175,7 +175,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 contrastedColor = lerp(avgValue.x, tintedColor, Cinematic.z);
 
 	// Contrast modified to fix crushed shadows
-	float3 contrastedColorModified = pow(abs(tintedColor) / avgValue.x, Cinematic.z) * avgValue.x * sign(tintedColor);
+	float3 contrastedColorModified = pow(max(0.0, abs(tintedColor) / avgValue.x), Cinematic.z) * avgValue.x * sign(tintedColor);
 	contrastedColor = lerp(contrastedColorModified, contrastedColor, saturate(contrastedColorModified / 0.1f));  // blend in modified contrast for shadows
 
 	outputColor = contrastedColor;
@@ -198,7 +198,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float y_in = Color::RGBToLuminance(outputColor);
 		float highlight_start = 1.f;
 		float y_in_normalized = y_in / highlight_start;
-		float y_out = (y_in_normalized > 1.0) ? pow(y_in_normalized, 0.85) : y_in_normalized;
+		float y_out = (y_in_normalized > 1.0) ? pow(max(0.0, y_in_normalized), 0.85) : y_in_normalized;
 		y_out *= highlight_start;
 		float scale = (y_in > 0.0) ? (y_out / y_in) : 0.0;
 		outputColor *= scale;

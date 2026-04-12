@@ -162,7 +162,7 @@ namespace Color
 		float3 Encode(float3 color, float scaling = 10000.f)
 		{
 			color *= (scaling / 10000.f);
-			float3 y_m1 = pow(color, M1);
+			float3 y_m1 = pow(max(0.0, color), M1);
 			return pow((C1 + C2 * y_m1) / (1.f + C3 * y_m1), M2);
 		}
 

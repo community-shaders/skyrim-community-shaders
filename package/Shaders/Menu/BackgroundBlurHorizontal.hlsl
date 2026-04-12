@@ -41,7 +41,7 @@ float4 PS_Main(VS_OUTPUT input) :
 	SV_TARGET
 {
 	const int samples = min(BlurParams.x, 15);
-	const int halfSamples = samples / 2;
+	const int halfSamples = samples >> 1;
 
 	// Compute normalization factor for actual weights used
 	float weightSum = WEIGHTS[0];

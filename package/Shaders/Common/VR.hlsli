@@ -227,7 +227,7 @@ namespace Stereo
 	*/
 	int2 ClampToEyeBounds(int2 px, uint eyeIndex, float2 frameDim)
 	{
-		int halfWidth = (int)frameDim.x / 2;
+		int halfWidth = (int)((uint)frameDim.x >> 1);
 		px.x = clamp(px.x, eyeIndex == 0 ? 0 : halfWidth, eyeIndex == 0 ? (halfWidth - 1) : ((int)frameDim.x - 1));
 		px.y = clamp(px.y, 0, (int)frameDim.y - 1);
 		return px;
