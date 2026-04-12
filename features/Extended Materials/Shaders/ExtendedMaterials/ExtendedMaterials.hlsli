@@ -113,7 +113,8 @@ namespace ExtendedMaterials
 		activeMask = ComputeActiveMask(w1, w2);
 		// Highest parallax mip among contributing layers: large footprint (typically distance / grazing) → fewer POM steps.
 		float aggParallaxMip = 0.0;
-		[unroll] for (int emMipLi = 0; emMipLi < 6; ++emMipLi) {
+		[unroll] for (int emMipLi = 0; emMipLi < 6; ++emMipLi)
+		{
 			if (activeMask & (1u << emMipLi))
 				aggParallaxMip = max(aggParallaxMip, mipLevels[emMipLi]);
 		}
@@ -135,14 +136,14 @@ namespace ExtendedMaterials
 		float minHeight = maxHeight * 0.5;
 
 		{
-#			if defined(LANDSCAPE)
+#if defined(LANDSCAPE)
 			uint numSteps = uint(maxStepsF + 0.5);
 			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxStepsF + 0.5)));
-#			else
+#else
 			const float maxSteps = 16;
 			uint numSteps = uint(maxSteps + 0.5);
 			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxSteps)));
-#			endif
+#endif
 			numSteps = (numSteps + 2) & ~3;
 
 			float stepSize = rcp(numSteps);
@@ -176,8 +177,9 @@ namespace ExtendedMaterials
 				bool useParallaxCoarseGate = true;
 #	endif
 				// When already minified, the 4× upper-bound prepass (many SampleLevels) often costs more than four shadow taps.
-				useParallaxCoarseGate = useParallaxCoarseGate && (aggParallaxMip < 2.45);
-				[branch] if (useParallaxCoarseGate) {
+				useParallaxCoarseGate = useParallaxCoarseGate && (aggParallaxMip < 2.75);
+				[branch] if (useParallaxCoarseGate)
+				{
 					float4 heightUpper = float4(
 						GetTerrainHeightUpperBoundNonStochastic(currentOffset[0].xy, mipLevels, params, activeMask),
 						GetTerrainHeightUpperBoundNonStochastic(currentOffset[0].zw, mipLevels, params, activeMask),
@@ -185,7 +187,8 @@ namespace ExtendedMaterials
 						GetTerrainHeightUpperBoundNonStochastic(currentOffset[1].zw, mipLevels, params, activeMask));
 					float4 upperScaled = heightUpper * scalercp + 0.5;
 					bool4 coarseMayHit = upperScaled >= currentBound;
-					[branch] if (!any(coarseMayHit)) {
+					[branch] if (!any(coarseMayHit))
+					{
 						currHeight.w = GetTerrainHeightShadowTap(currentOffset[1].zw, mipLevels, params, w1, w2, activeMask, sharedOffset) * scalercp + 0.5;
 						prevOffset = currentOffset[1].zw;
 						prevBound = currentBound.w;
@@ -235,10 +238,10 @@ namespace ExtendedMaterials
 						pt1 = float2(currentBound.x, currHeight.x);
 						pt2 = float2(prevBound, prevHeight);
 					}
-#					if defined(LANDSCAPE)
+#if defined(LANDSCAPE)
 					// Skip second-phase refinement: terrain pays 4× multi-layer height taps per step; first crossing is enough at low step counts.
 					break;
-#					else
+#else
 					if (contactRefinement) {
 						break;
 					} else {
@@ -250,7 +253,7 @@ namespace ExtendedMaterials
 						offsetPerStep /= (float)numSteps;
 						continue;
 					}
-#					endif
+#endif
 				}
 
 				prevOffset = currentOffset[1].zw;
@@ -276,10 +279,10 @@ namespace ExtendedMaterials
 			float offset = (1.0 - parallaxAmount) * -maxHeight + minHeight;
 			pixelOffset = saturate(parallaxAmount);
 			float2 outCoords = viewDirTS.xy * offset + coords.xy;
-#			if defined(LANDSCAPE)
+#if defined(LANDSCAPE)
 			// ProcessTerrainHeightWeights once for final blend weights (loop only used linear height via GetTerrainHeightShadowTap).
 			GetTerrainHeight(noise, input, outCoords, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights);
-#			endif
+#endif
 			return outCoords;
 		}
 	}

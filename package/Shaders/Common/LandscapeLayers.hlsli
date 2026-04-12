@@ -40,16 +40,16 @@ namespace LandscapeLayers
 
 // tileIndex, displacementTexture, diffuseOrAlphaHeightTexture (mip dims / non-PBR height)
 #	if defined(TRUE_PBR)
-#		define LANDSCAPE_PBR_LAYER_FOREACH(X) \
-			X(0, TexLandDisplacement0Sampler, TexColorSampler) \
+#		define LANDSCAPE_PBR_LAYER_FOREACH(X)                      \
+			X(0, TexLandDisplacement0Sampler, TexColorSampler)      \
 			X(1, TexLandDisplacement1Sampler, TexLandColor2Sampler) \
 			X(2, TexLandDisplacement2Sampler, TexLandColor3Sampler) \
 			X(3, TexLandDisplacement3Sampler, TexLandColor4Sampler) \
 			X(4, TexLandDisplacement4Sampler, TexLandColor5Sampler) \
 			X(5, TexLandDisplacement5Sampler, TexLandColor6Sampler)
 #	else
-#		define LANDSCAPE_TH_LAYER_FOREACH(X) \
-			X(0, TexLandTHDisp0Sampler, TexColorSampler) \
+#		define LANDSCAPE_TH_LAYER_FOREACH(X)                 \
+			X(0, TexLandTHDisp0Sampler, TexColorSampler)      \
 			X(1, TexLandTHDisp1Sampler, TexLandColor2Sampler) \
 			X(2, TexLandTHDisp2Sampler, TexLandColor3Sampler) \
 			X(3, TexLandTHDisp3Sampler, TexLandColor4Sampler) \
