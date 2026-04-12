@@ -358,7 +358,7 @@ namespace globals
 		stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
 
 		// VR stereo optimization hooks: intercept DSS and stencil clear
-		if (globals::game::isVR) {
+		if (globals::game::isVR && globals::features::vr.IsStereoOptimizationCullingReady()) {
 			stl::detour_vfunc<36, ID3D11DeviceContext_OMSetDepthStencilState>(a_context);
 			stl::detour_vfunc<53, ID3D11DeviceContext_ClearDepthStencilView>(a_context);
 		}

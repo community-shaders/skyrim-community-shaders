@@ -111,7 +111,7 @@ public:
 	}
 
 	virtual inline std::string_view GetShaderDefineName() override { return "VR_STEREO_OPT"; }
-	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return stereoOpt.loaded && t == RE::BSShader::Type::Utility; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return stereoOpt.CanDispatchStencil() && t == RE::BSShader::Type::Utility; }
 	virtual void Reset() override;
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
@@ -171,7 +171,7 @@ public:
 		float MinOccludeeBoxExtent = 10.0f;  ///< Minimum bounding box size for occlusion culling
 
 		// Stereo consistency blend pass (post-composite safety net)
-		bool EnableStereoBlend = true;            ///< Enable depth-aware bilateral blend between eyes
+		bool EnableStereoBlend = false;           ///< Enable depth-aware bilateral blend between eyes
 		float StereoBlendDepthSigma = 0.01f;      ///< Depth sensitivity for bilateral weight (lower = stricter)
 		float StereoBlendMaxFactor = 0.1f;        ///< Maximum blend factor; keep low to preserve stereo parallax
 		float StereoBlendColorThreshold = 0.02f;  ///< Minimum color difference to trigger blending (luminance)
