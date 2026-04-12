@@ -3,7 +3,7 @@
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
-#include "Features/ENBPostProcessing.h"
+#include "Features/Effect11.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
@@ -84,7 +84,7 @@ namespace globals
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
 		HDRDisplay hdrDisplay{};
-		ENBPostProcessing enbPostProcessing{};
+		Effect11 effect11{};
 		RenderDoc renderDoc{};
 		WeatherEditor weatherEditor{};
 		ExponentialHeightFog exponentialHeightFog{};

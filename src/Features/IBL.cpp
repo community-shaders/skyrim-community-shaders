@@ -6,8 +6,8 @@
 #include "State.h"
 #include "WeatherVariableRegistry.h"
 
-#include "ENBPostProcessing.h"
-#include "ENBPostProcessing/SettingManager.h"
+#include "Effect11.h"
+#include "Effect11/SettingManager.h"
 
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
@@ -28,8 +28,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void IBL::DrawSettings()
 {
-	if (globals::features::enbPostProcessing.loaded) {
-		auto& enb = globals::features::enbPostProcessing;
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
 		if (enb.enableEffect) {
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
@@ -112,8 +112,8 @@ void IBL::RestoreDefaultSettings()
 
 void IBL::RegisterWeatherVariables()
 {
-	if (globals::features::enbPostProcessing.loaded) {
-		auto& enb = globals::features::enbPostProcessing;
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
 		if (enb.enableEffect) {
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
@@ -194,8 +194,8 @@ IBL::Settings IBL::GetCommonBufferData() const
 {
 	Settings data = settings;
 
-	if (globals::features::enbPostProcessing.loaded) {
-		auto& enb = globals::features::enbPostProcessing;
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
 		if (enb.enableEffect) {
 			auto& settingManager = SettingManager::GetSingleton();
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {

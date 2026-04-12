@@ -1,14 +1,14 @@
-#include "ENBPostProcessing.h"
+#include "Effect11.h"
 
-#include "ENBPostProcessing/ENBHelper.h"
-#include "ENBPostProcessing/EffectManager.h"
-#include "ENBPostProcessing/MenuManager.h"
-#include "ENBPostProcessing/SettingManager.h"
-#include "ENBPostProcessing/WeatherManager.h"
+#include "Effect11/ENBHelper.h"
+#include "Effect11/EffectManager.h"
+#include "Effect11/MenuManager.h"
+#include "Effect11/SettingManager.h"
+#include "Effect11/WeatherManager.h"
 
 #include "State.h"
 
-ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
+Effect11::PerFrame Effect11::GetCommonBufferData()
 {
 	CheckCommonData();
 
@@ -27,23 +27,23 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	return data;
 }
 
-void ENBPostProcessing::DrawSettings()
+void Effect11::DrawSettings()
 {
 	MenuManager::GetSingleton().RenderImGui();
 }
 
-void ENBPostProcessing::SetupResources()
+void Effect11::SetupResources()
 {
 	// Initialize the effects system
 	EffectManager::GetSingleton().Initialize();
 }
 
-void ENBPostProcessing::Reset()
+void Effect11::Reset()
 {
 	// Reset effect state if needed
 }
 
-void ENBPostProcessing::Prepass()
+void Effect11::Prepass()
 {
 	if (!enableEffect) {
 		return;
@@ -112,7 +112,7 @@ RE::NiColor F3ToNi(float3 color)
 	return { color.x, color.y, color.z };
 }
 
-void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
+void Effect11::OverrideWeather(RE::Sky* a_sky)
 {
 	if (!a_sky) {
 		return;
@@ -320,7 +320,7 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 	}
 }
 
-void ENBPostProcessing::CheckCommonData()
+void Effect11::CheckCommonData()
 {
 	static Util::FrameChecker checker;
 	if (checker.IsNewFrame()) {
@@ -345,7 +345,7 @@ void ENBPostProcessing::CheckCommonData()
 	}
 }
 
-void ENBPostProcessing::OverridePointLightColor(float3& a_color)
+void Effect11::OverridePointLightColor(float3& a_color)
 {
 	auto& settingManager = SettingManager::GetSingleton();
 
@@ -354,7 +354,7 @@ void ENBPostProcessing::OverridePointLightColor(float3& a_color)
 	a_color = Intensity(a_color, settingManager.GetInterpolatedTimeOfDayValue("PointLightingIntensity", "ENVIRONMENT"));
 }
 
-void ENBPostProcessing::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors)
+void Effect11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors)
 {
 	auto& settingManager = SettingManager::GetSingleton();
 
@@ -380,9 +380,9 @@ struct Sky_UpdateColors
 	static void thunk(RE::Sky* This, float a_delta)
 	{
 		func(This, a_delta);
-		globals::features::enbPostProcessing.CheckCommonData();
-		if (globals::features::enbPostProcessing.enableEffect)
-			globals::features::enbPostProcessing.OverrideWeather(This);
+		globals::features::effect11.CheckCommonData();
+		if (globals::features::effect11.enableEffect)
+			globals::features::effect11.OverrideWeather(This);
 	}
 
 	static inline REL::Relocation<decltype(thunk)> func;
@@ -390,11 +390,11 @@ struct Sky_UpdateColors
 
 struct Sky_SetDirectionalAmbientColors
 {
-	static void thunk(ENBPostProcessing::DirectionalAmbientColors& DirectionalAmbientColors, RE::NiColor* AmbientSpecularTint, float AmbientSpecularFresnel)
+	static void thunk(Effect11::DirectionalAmbientColors& DirectionalAmbientColors, RE::NiColor* AmbientSpecularTint, float AmbientSpecularFresnel)
 	{
-		globals::features::enbPostProcessing.CheckCommonData();
-		if (globals::features::enbPostProcessing.enableEffect)
-			globals::features::enbPostProcessing.OverrideAmbientLighting(DirectionalAmbientColors);
+		globals::features::effect11.CheckCommonData();
+		if (globals::features::effect11.enableEffect)
+			globals::features::effect11.OverrideAmbientLighting(DirectionalAmbientColors);
 		func(DirectionalAmbientColors, AmbientSpecularTint, AmbientSpecularFresnel);
 	}
 
@@ -405,12 +405,12 @@ struct Main_HDRTonemapBlendCinematic_Render
 {
 	static void thunk(RE::ImageSpaceManager* a1, RE::ImageSpaceEffect* a2, uint32_t a3, uint32_t a4, RE::ImageSpaceShaderParam* a5)
 	{
-		globals::features::enbPostProcessing.CheckCommonData();
+		globals::features::effect11.CheckCommonData();
 
 		auto& settingManager = SettingManager::GetSingleton();
 		auto& effectManager = EffectManager::GetSingleton();
 
-		if (globals::features::enbPostProcessing.enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
+		if (globals::features::effect11.enableEffect && !settingManager.GetValue<bool>("UseOriginalPostProcessing", "EFFECT")) {
 			effectManager.ExecuteEffects();
 		} else {
 			func(a1, a2, a3, a4, a5);
@@ -420,7 +420,7 @@ struct Main_HDRTonemapBlendCinematic_Render
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-void ENBPostProcessing::ModifySky(RE::BSRenderPass* Pass)
+void Effect11::ModifySky(RE::BSRenderPass* Pass)
 {
 	if (!Pass || !Pass->shaderProperty) {
 		return;
@@ -441,14 +441,14 @@ struct BSSkyShader_SetupMaterial
 {
 	static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 	{
-		globals::features::enbPostProcessing.ModifySky(Pass);
+		globals::features::effect11.ModifySky(Pass);
 		func(This, Pass, RenderFlags);
 	}
 
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-void ENBPostProcessing::PostPostLoad()
+void Effect11::PostPostLoad()
 {
 	stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x1EA, 0x178));
 	if (REL::Module::IsSE())
@@ -459,3 +459,4 @@ void ENBPostProcessing::PostPostLoad()
 	stl::detour_thunk<Sky_SetDirectionalAmbientColors>(REL::RelocationID(98989, 105643));
 	stl::write_vfunc<0x6, BSSkyShader_SetupMaterial>(RE::VTABLE_BSSkyShader[0]);
 }
+

@@ -1,16 +1,16 @@
 #pragma once
 
-struct ENBPostProcessing : Feature
+struct Effect11 : Feature
 {
 public:
-	virtual inline std::string GetName() override { return "ENB Post Processing"; }
-	virtual inline std::string GetShortName() override { return "ENBPostProcessing"; }
+	virtual inline std::string GetName() override { return "Effect11"; }
+	virtual inline std::string GetShortName() override { return "Effect11"; }
 	virtual std::string_view GetCategory() const override { return "Post-Processing"; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"ENB Post Processing provides a framework for loading and executing ENBSeries-compatible FX effect files.\n"
+			"Effect11 provides a framework for loading and executing ENBSeries-compatible FX effect files.\n"
 			"This allows for advanced post-processing effects and visual enhancements using DirectX 11 Effect (.fx) files.",
 			{ "ENBSeries-compatible FX support",
 				"DirectX 11 Effect file loading",

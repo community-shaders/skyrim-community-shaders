@@ -13,7 +13,7 @@ MenuManager& MenuManager::GetSingleton()
 
 void MenuManager::RenderImGui()
 {
-	if (!ImGui::BeginTable("ENBPostProcessing", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersV, ImVec2(0, 0))) {
+	if (!ImGui::BeginTable("Effect11", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersV, ImVec2(0, 0))) {
 		return;
 	}
 

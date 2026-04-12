@@ -33,7 +33,7 @@ struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
 struct WeatherEditor;
-struct ENBPostProcessing;
+struct Effect11;
 struct ExponentialHeightFog;
 struct HDRDisplay;
 
@@ -91,7 +91,7 @@ namespace globals
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern HDRDisplay hdrDisplay;
-		extern ENBPostProcessing enbPostProcessing;
+		extern Effect11 effect11;
 		extern RenderDoc renderDoc;
 		extern WeatherEditor weatherEditor;
 		extern ExponentialHeightFog exponentialHeightFog;

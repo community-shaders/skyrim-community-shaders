@@ -2,7 +2,7 @@
 
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
-#include "Features/ENBPostProcessing.h"
+#include "Features/Effect11.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
@@ -53,7 +53,7 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::ibl.GetCommonBufferData(),
 		globals::features::extendedTranslucency.GetCommonBufferData(),
 		globals::features::linearLighting.GetCommonBufferData(),
-		globals::features::enbPostProcessing.GetCommonBufferData(),
+		globals::features::effect11.GetCommonBufferData(),
 		globals::features::terrainBlending.settings,
 		globals::features::exponentialHeightFog.settings);
 }

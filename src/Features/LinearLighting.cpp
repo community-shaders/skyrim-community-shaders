@@ -2,8 +2,8 @@
 
 #include "State.h"
 
-#include "ENBPostProcessing.h"
-#include "ENBPostProcessing/SettingManager.h"
+#include "Effect11.h"
+#include "Effect11/SettingManager.h"
 #include "Utils/Game.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -37,8 +37,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void LinearLighting::DrawSettings()
 {
-	if (globals::features::enbPostProcessing.loaded) {
-		auto& enb = globals::features::enbPostProcessing;
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
 		if (enb.enableEffect) {
 			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Settings are currently managed by ENB.");
 			return;
@@ -181,8 +181,8 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.waterGamma = settings.waterGamma;
 	data.vlGamma = settings.vlGamma;
 
-	if (globals::features::enbPostProcessing.loaded) {
-		auto& enb = globals::features::enbPostProcessing;
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
 		if (enb.enableEffect) {
 			data.enableLinearLighting = false;
 			data.lightGamma = 1.0f;
@@ -214,8 +214,8 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.otherEffectMult = settings.otherEffectMult;
 
 	// Override multipliers to neutral values when ENB PP is active
-	if (globals::features::enbPostProcessing.loaded) {
-		auto& enb = globals::features::enbPostProcessing;
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
 		if (enb.enableEffect) {
 			data.vanillaDiffuseColorMult = 1.0f;
 			data.directionalLightMult = 1.0f;
