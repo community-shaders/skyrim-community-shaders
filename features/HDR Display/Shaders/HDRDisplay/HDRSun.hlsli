@@ -11,8 +11,8 @@ namespace HDRSun
 
 	// Sun boost uses 203 nits as reference white, not the user's paper-white setting.
 	static const float kReferencePaperWhiteNits = 203.0f;
-	// Menu / pause / map: scale sun down toward this target (nits) vs display peak.
-	static const float kComfortSunNits = 100.0f;
+	// Menu / pause / map: cap sun drive toward this luminance on the display (nits).
+	static const float kMenuSunNits = 100.0f;
 
 	void ApplyHdrSunToBaseColor(
 		float4 position,
@@ -31,10 +31,8 @@ namespace HDRSun
 		float peakNits = max(SharedData::HDRData.z, kReferencePaperWhiteNits + 1.0f);
 		float peakRatio = peakNits / kReferencePaperWhiteNits;
 
-		float comfortMul = (SharedData::HDRData.w > 1e-3f) ? (kComfortSunNits / peakNits) : 1.0f;
-		// Non-LL: apply headroom in gamma-ish shader space (~2.2). LL: already linear.
-		float hdrScale = (ENABLE_LL ? peakRatio : pow(peakRatio, rcp(2.2f))) * comfortMul;
-		float maxBoost = hdrScale * peakRatio;
+		float menuSunMul = (SharedData::HDRData.w > 1e-3f) ? (kMenuSunNits / peakNits) : 1.0f;
+		float maxBoost = pow(peakRatio, 2.0f) * menuSunMul;
 
 		float L = max(Color::RGBToLuminance(baseColor.xyz), 0.0f);
 		float highlight = max(1.0f - exp(-L), saturate(L));

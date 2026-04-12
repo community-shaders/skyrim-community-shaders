@@ -43,7 +43,7 @@ struct HDRDisplay : public Feature
 		bool hdrAutoDetected = false;     // Has auto-detection run at least once?
 	};
 
-	// SharedData::HDRData.w: menu/scene path for ISHDR; HDRSun uses w>0 to cap sun to ~kComfortSunNits on the display (see HDRSun.hlsli).
+	// SharedData::HDRData.w: menu/scene path for ISHDR; HDRSun uses w>0 to scale sun toward kMenuSunNits (see HDRSun.hlsli).
 	static constexpr float kHdrMenuSceneGameplay = 0.f;
 	static constexpr float kHdrMenuScenePauseOrMap = 0.58f;
 	static constexpr float kHdrMenuSceneMainOrLoading = 1.f;
