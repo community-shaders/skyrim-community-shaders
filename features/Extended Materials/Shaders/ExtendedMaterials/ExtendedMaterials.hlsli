@@ -119,15 +119,15 @@ namespace ExtendedMaterials
 				aggParallaxMip = max(aggParallaxMip, mipLevels[emMipLi]);
 		}
 		float maxStepsF = 16.0;
-		if (aggParallaxMip >= 1.45)
-			maxStepsF = min(maxStepsF, 8.0);
-		if (aggParallaxMip >= 2.55)
-			maxStepsF = min(maxStepsF, 4.0);
-		float distSq = distance * distance;
-		float distLin = sqrt(distSq);
+		maxStepsF = lerp(maxStepsF, 8.0, step(1.45, aggParallaxMip));
+		maxStepsF = lerp(maxStepsF, 4.0, step(2.55, aggParallaxMip));
+		float distLin = abs(distance);
 		// Distance POM: push toward minimum step count from ~0.65k (full) to several km (mostly 4-step march).
 		float pomFar = saturate((distLin - 650.0) / 5200.0);
 		maxStepsF = lerp(maxStepsF, 4.0, pomFar);
+		// Extra high-minification squeeze (continuous, branchless): beyond ~2.75 mip, converge rapidly to 4 steps.
+		float pomMinified = saturate((aggParallaxMip - 2.75) / 0.75);
+		maxStepsF = lerp(maxStepsF, 4.0, pomMinified);
 		maxStepsF = max(maxStepsF, 4.0);
 #else
 		float scale = params.HeightScale;
