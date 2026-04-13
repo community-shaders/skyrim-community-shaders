@@ -540,6 +540,8 @@ Texture2D<float4> TexLandLodBlend2Sampler : register(t15);
 Texture2D<float4> TexLandLodNoiseSampler : register(t15);
 #	endif
 
+Texture2D<float4> TexShadowMaskSampler : register(t14);
+
 cbuffer PerTechnique : register(b0)
 {
 	float4 FogColor : packoffset(c0);           // Color in xyz, invFrameBufferRange in w
@@ -882,14 +884,6 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "ScreenSpaceShadows/ScreenSpaceShadows.hlsli"
 #	endif
 
-#	if defined(LIGHT_LIMIT_FIX)
-#		include "LightLimitFix/LightLimitFix.hlsli"
-#	endif
-
-#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
-#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
-#	endif
-
 #	if defined(TREE_ANIM)
 #		undef WETNESS_EFFECTS
 #	endif
@@ -926,6 +920,14 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #	define LinearSampler SampColorSampler
 
 #	include "Common/ShadowSampling.hlsli"
+
+#	if defined(LIGHT_LIMIT_FIX)
+#		include "LightLimitFix/LightLimitFix.hlsli"
+#	endif
+
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
 
 #	if defined(IBL)
 #		include "IBL/IBL.hlsli"
@@ -2433,9 +2435,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
+#	if !defined(LIGHT_LIMIT_FIX)
+	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.Position.xy, 0));
+#	endif
+
 	// Sample directional shadow directly (VSM when VolumetricShadows loaded, PCF otherwise).
+	// Requires LIGHT_LIMIT_FIX shadow infrastructure; falls back to 1.0 (no shadow) otherwise.
 	if (inWorld && !inReflection && !SharedData::InInterior) {
-		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
+#	if defined(LIGHT_LIMIT_FIX)
+		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
+#	else
+		dirDetailedShadow = shadowColor.x;
+#	endif
 		dirSoftShadow = dirDetailedShadow;
 	}
 
@@ -2541,6 +2552,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 		float3 lightColor = Color::PointLight(PointLightColor[lightIndex].xyz) * intensityMultiplier;
 		float lightShadow = 1.f;
+		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
+			if (lightIndex < numShadowLights) {
+				lightShadow *= shadowColor[ShadowLightMaskSelect[lightIndex]];
+			}
+		}
 
 		float3 normalizedLightDirection = normalize(lightDirection);
 
@@ -2631,7 +2647,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		bool shadowCoverage = false;
 		if (inWorld && !inReflection) {
 			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, worldPositionWS, shadowCoverage);
+				shadowComponent = LightLimitFix::GetShadowLightShadow(light.shadowMapIndex, worldPositionWS, rotationMatrix, shadowCoverage);
 				lightShadow *= shadowComponent;
 			}
 		}

@@ -420,14 +420,6 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "ScreenSpaceShadows/ScreenSpaceShadows.hlsli"
 #	endif
 
-#	if defined(LIGHT_LIMIT_FIX)
-#		include "LightLimitFix/LightLimitFix.hlsli"
-#	endif
-
-#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
-#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
-#	endif
-
 #	define SampColorSampler SampBaseSampler
 
 #	if defined(DYNAMIC_CUBEMAPS)
@@ -449,6 +441,14 @@ cbuffer AlphaTestRefCB : register(b11)
 #	define LinearSampler SampBaseSampler
 
 #	include "Common/ShadowSampling.hlsli"
+
+#	if defined(LIGHT_LIMIT_FIX)
+#		include "LightLimitFix/LightLimitFix.hlsli"
+#	endif
+
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
 
 #	ifdef GRASS_LIGHTING
 #		if defined(TRUE_PBR)
@@ -602,7 +602,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 	if (!SharedData::InInterior) {
-		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
+#if defined(LIGHT_LIMIT_FIX)
+		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
+#else
+		dirDetailedShadow = shadowColor.x;
+#endif
 		dirSoftShadow = dirDetailedShadow;
 	}
 
@@ -698,7 +702,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float shadowComponent = 1.0;
 				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, worldPositionWS, shadowCoverage);
+					shadowComponent = LightLimitFix::GetShadowLightShadow(light.shadowMapIndex, worldPositionWS, rotationMatrix, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
 
@@ -891,7 +895,11 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 	if (!SharedData::InInterior) {
-		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
+#if defined(LIGHT_LIMIT_FIX)
+		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
+#else
+		dirDetailedShadow = shadowColor.x;
+#endif
 		dirSoftShadow = dirDetailedShadow;
 	}
 
@@ -943,7 +951,7 @@ PS_OUTPUT main(PS_INPUT input)
 				float shadowComponent = 1.0;
 				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, worldPositionWS, shadowCoverage);
+					shadowComponent = LightLimitFix::GetShadowLightShadow(light.shadowMapIndex, worldPositionWS, rotationMatrix, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
 

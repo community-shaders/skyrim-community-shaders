@@ -215,14 +215,6 @@ struct PS_OUTPUT
 
 #ifdef PSHADER
 
-#	if defined(LIGHT_LIMIT_FIX)
-#		include "LightLimitFix/LightLimitFix.hlsli"
-#	endif
-
-#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
-#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
-#	endif
-
 SamplerState SampSourceTexture : register(s0);
 #	if defined(GRAYSCALE_TO_COLOR) || defined(GRAYSCALE_TO_ALPHA)
 SamplerState SampGrayscaleTexture : register(s1);
@@ -248,7 +240,16 @@ cbuffer PerGeometry : register(b2)
 };
 
 #	define LinearSampler SampSourceTexture
+
 #	include "Common/ShadowSampling.hlsli"
+
+#	if defined(LIGHT_LIMIT_FIX)
+#		include "LightLimitFix/LightLimitFix.hlsli"
+#	endif
+
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -303,8 +304,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 worldPositionWS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 	float dirDetailedShadow = 1.0;
+#if defined(LIGHT_LIMIT_FIX)
 	if (!SharedData::InInterior)
 		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(positionWS.xyz, worldPositionWS, rotationMatrix);
+#endif
 
 	float3 dirLightColor = SharedData::DirLightColor.xyz * dirDetailedShadow;
 	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
