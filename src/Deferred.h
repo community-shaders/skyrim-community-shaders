@@ -25,8 +25,8 @@ public:
 	{
 		float4x4 ShadowProj[2];
 		float4x4 InvShadowProj[2];
-		float2   EndSplitDistances;
-		float2   StartSplitDistances;
+		float2 EndSplitDistances;
+		float2 StartSplitDistances;
 	};
 	STATIC_ASSERT_ALIGNAS_16(DirectionalShadowLightData);
 
