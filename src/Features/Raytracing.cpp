@@ -541,7 +541,7 @@ void Raytracing::DrawExperimentalSettings()
 
 	if (experimentalSettings.TextureMode == CreationEngineRaytracing::TextureMode::Exclusive) {
 		auto label = experimentalSettings.TextureCutOff == 0 ? "Never Share" : std::format("Share smaller than {}", 1 << (experimentalSettings.TextureCutOff + 7));
-		ImGui::SliderInt("Exclusive Mode Cutoff", reinterpret_cast<int*>(&experimentalSettings.TextureCutOff), 0, 13, label.c_str());
+		ImGui::SliderInt("Exclusive Mode Cutoff", reinterpret_cast<int*>(&experimentalSettings.TextureCutOff), 0, 6, label.c_str());
 	}
 
 	ImGui::PopID();
