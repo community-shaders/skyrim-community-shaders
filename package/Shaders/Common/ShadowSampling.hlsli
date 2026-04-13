@@ -55,7 +55,7 @@ Texture2DArray<float> ShadowMaps : register(t101);
 namespace ShadowSampling
 {
 	namespace Constants
-	{	
+	{
 		static const float DirectionalBias = (0.00025f) / 3.0f;
 
 		// Shadow Radius for PCF
@@ -165,7 +165,8 @@ namespace ShadowSampling
 
 		float shadow = 0.0;
 
-		[unroll] for (int i = 0; i < 8; i++) {
+		[unroll] for (int i = 0; i < 8; i++)
+		{
 			float2 sampleOffset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix);
 			float2 sampleUV = positionLS.xy + layerIndexRcp * sampleOffset * Constants::PCFRadius2D;
 			shadow += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(saturate(sampleUV), primaryCascade)) > positionLS.z), 0.25);
@@ -186,7 +187,8 @@ namespace ShadowSampling
 
 			float shadowBlend = 0.0;
 
-			[unroll] for (int i = 0; i < 8; i++) {
+			[unroll] for (int i = 0; i < 8; i++)
+			{
 				float2 sampleOffset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix);
 				float2 sampleUV = positionLS.xy + layerIndexRcp * sampleOffset * Constants::PCFRadius2D;
 				shadowBlend += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(saturate(sampleUV), secondaryCascade)) > positionLS.z), 0.25);
@@ -233,9 +235,7 @@ namespace ShadowSampling
 			float2 uv = sampleUV + offset;
 
 			// Clamp to the correct paraboloid half
-			uv.y = (sampleUV.y >= 0.5)
-				? max(uv.y, 0.5)
-				: min(uv.y, 0.5);
+			uv.y = (sampleUV.y >= 0.5) ? max(uv.y, 0.5) : min(uv.y, 0.5);
 
 			shadow += SampleShadowGather(shadowIndex, uv, depth);
 		}
@@ -278,10 +278,8 @@ namespace ShadowSampling
 		//   == 0  : slot not written (capacity exceeded) → unshadowed (fully lit)
 		//    < 0  : slot suppressed via debug overlay    → fully dark (light hidden)
 		//    > 0  : valid radius                         → normal shadow test
-		[flatten] if (shadowData.ShadowLightParam.y == 0)
-			return 1.0;
-		[flatten] if (shadowData.ShadowLightParam.y < 0)
-			return 0.0;
+		[flatten] if (shadowData.ShadowLightParam.y == 0) return 1.0;
+		[flatten] if (shadowData.ShadowLightParam.y < 0) return 0.0;
 
 		worldPosition.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
