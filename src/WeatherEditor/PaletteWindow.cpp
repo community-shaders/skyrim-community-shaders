@@ -1,5 +1,6 @@
 #include "PaletteWindow.h"
 #include "EditorWindow.h"
+#include "Menu/ThemeManager.h"
 #include "Utils/UI.h"
 
 // Forward declaration from EditorWindow.cpp
@@ -12,7 +13,7 @@ void PaletteWindow::Draw()
 
 	const auto* editor = EditorWindow::GetSingleton();
 	const float scale = Util::GetUIScale();
-	const float pad = 10.0f * scale;
+	const float pad = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
 	const auto& displaySize = ImGui::GetIO().DisplaySize;
 	const float paletteWidth = std::min(600.0f * scale, displaySize.x - pad * 2.0f);
 	const float bottomY = displaySize.y - pad;

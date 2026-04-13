@@ -164,6 +164,7 @@ bool Load()
 
 	auto state = globals::state;
 	state->Load();
+
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());
 

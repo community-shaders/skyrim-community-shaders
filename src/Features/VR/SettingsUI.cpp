@@ -4,6 +4,7 @@
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/VR.h"
 #include "Menu.h"
+#include "Menu/Fonts.h"
 #include "RE/B/BSOpenVR.h"
 #include "RE/P/PlayerCharacter.h"
 #include "State.h"
@@ -17,9 +18,9 @@ using AttachMode = VR::Settings::OverlayAttachMode;
 
 namespace
 {
-	bool BeginTabItemWithFont(const char* label, [[maybe_unused]] int role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
+	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
 	{
-		return ImGui::BeginTabItem(label, nullptr, flags);
+		return MenuFonts::BeginTabItemWithFont(label, role, flags);
 	}
 }
 
@@ -945,7 +946,7 @@ void VR::DrawSettings()
 	if (!menu)
 		return;
 	if (ImGui::BeginTabBar("##VRTabs", ImGuiTabBarFlags_None)) {
-		if (BeginTabItemWithFont("General", 0)) {
+		if (BeginTabItemWithFont("General", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##VRGeneralFrame", { 0, 0 }, true)) {
 				DrawGeneralVRSettings();
 				DrawControllerInputInstructions();
@@ -957,7 +958,7 @@ void VR::DrawSettings()
 			ImGui::EndTabItem();
 		}
 
-		if (BeginTabItemWithFont("Stereo", 0)) {
+		if (BeginTabItemWithFont("Stereo", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##VRStereoFrame", { 0, 0 }, true)) {
 				DrawStereoBlendSettings();
 				if (ImGui::CollapsingHeader("Stereo Optimizations", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -969,7 +970,7 @@ void VR::DrawSettings()
 		}
 
 		if (IsOpenVRCompatible()) {
-			if (BeginTabItemWithFont("Bindings", 0)) {
+			if (BeginTabItemWithFont("Bindings", Menu::FontRole::Subheading)) {
 				if (ImGui::BeginChild("##VRBindingsFrame", { 0, 0 }, true)) {
 					DrawKeyBindings();
 				}
@@ -978,7 +979,7 @@ void VR::DrawSettings()
 			}
 		}
 
-		if (BeginTabItemWithFont("Debug", 0)) {
+		if (BeginTabItemWithFont("Debug", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##VRDebugFrame", { 0, 0 }, true)) {
 				DrawDebugSection();
 			}

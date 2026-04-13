@@ -1,6 +1,5 @@
 #include "Widget.h"
 #include "EditorWindow.h"
-#include "Menu.h"
 #include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
@@ -277,6 +276,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 {
 	auto editorWindow = EditorWindow::GetSingleton();
 	auto menu = globals::menu;
+	bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons;
 	const float scale = Util::GetUIScale();
 
 	auto drawSearchBar = [&]() {
@@ -319,7 +319,56 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			ImGui::SetTooltip("Unsaved changes - click save to keep");
 	};
 
-	{
+	if (useIcons) {
+		const float iconSize = ImGui::GetFrameHeight() * 0.85f;
+		const ImVec2 buttonSize(iconSize, iconSize);
+
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, ImGui::GetStyle().ItemSpacing.y));
+
+		drawSearchBar();
+		drawForceWeatherButton();
+
+		// Transparent icon button style
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
+
+		auto iconButton = [&](const char* suffix, void* texture, const char* tooltip, auto callback) {
+			if (!texture)
+				return;
+			ImGui::SameLine();
+			if (ImGui::ImageButton((std::string(searchId) + suffix).c_str(), texture, buttonSize))
+				callback();
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", tooltip);
+		};
+
+		// Apply button
+		if (showApply && !editorWindow->settings.autoApplyChanges)
+			iconButton("_Apply", menu->uiIcons.applyToGame.texture, "Apply changes to the game", [&]() { ApplyChanges(); });
+
+		// Save/Load/Revert/Delete group
+		if (showSaveLoadRevert) {
+			iconButton("_Save", menu->uiIcons.saveSettings.texture, "Save to file", [&]() { Save(); });
+			iconButton("_Load", menu->uiIcons.loadSettings.texture, "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
+			iconButton("_Revert", menu->uiIcons.featureSettingRevert.texture, "Revert to original game values", [&]() { RevertChanges(); });
+
+			if (HasSavedFile() && menu->uiIcons.deleteSettings.texture) {
+				ImGui::SameLine();
+				{
+					auto _style = Util::ErrorButtonStyle();
+					if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
+						ImGui::OpenPopup("DeleteConfirmation");
+				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Delete saved file");
+			}
+		}
+
+		drawUnsavedIndicator();
+		ImGui::PopStyleColor(2);
+		ImGui::PopStyleVar(2);
+	} else {
 		const float buttonHeight = ImGui::GetFrameHeight();
 		if (!menu) {
 			drawSearchBar();

@@ -1,6 +1,7 @@
 #include "ABTesting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Menu.h"
+#include "Menu/ThemeManager.h"
 #include "State.h"
 #include "Utils/FileSystem.h"
 #include "Utils/UI.h"
@@ -236,7 +237,7 @@ void ABTestingManager::DrawOverlayUI()
 	auto remaining = static_cast<float>(testInterval) - seconds;
 
 	// Scale position for resolution
-	const float pos = 10.0f * Util::GetUIScale();
+	const float pos = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * Util::GetUIScale();
 	ImGui::SetNextWindowBgAlpha(0.85f);
 	ImGui::SetNextWindowPos(ImVec2(pos, pos));
 	if (!ImGui::Begin("A/B Testing", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {

@@ -1,6 +1,7 @@
 ﻿#include "UnifiedWater.h"
 
 #include "Menu.h"
+#include "Menu/ThemeManager.h"
 #include "Util.h"
 
 #include <imgui_internal.h>
@@ -167,7 +168,7 @@ void UnifiedWater::DrawOverlay()
 		return;
 
 	const float scale = Util::GetUIScale();
-	const float pos = 10.0f * scale;
+	const float pos = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
 	const auto& style = ImGui::GetStyle();
 
 	// Stack below shader compilation window if it's visible this frame

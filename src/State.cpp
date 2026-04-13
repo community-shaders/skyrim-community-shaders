@@ -967,3 +967,12 @@ float State::GetTotalSmoothedDrawCalls() const
 	return static_cast<float>(smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
 }
 
+void State::LoadTheme()
+{
+	// Theme switching removed - using hardcoded default theme only
+}
+
+void State::SaveTheme()
+{
+	// Theme switching removed - using hardcoded default theme only
+}

@@ -3,6 +3,9 @@
 #include "../WeatherEditor/EditorWindow.h"
 #include "FileSystem.h"
 #include "Menu.h"
+#include "Menu/Fonts.h"
+#include "Menu/IconLoader.h"
+#include "Menu/ThemeManager.h"
 #include "PerfUtils.h"
 #include "ShaderCache.h"
 #include "WeatherManager.h"
@@ -84,18 +87,29 @@ namespace Util
 		}
 	}
 
-	HoverTooltipWrapper::HoverTooltipWrapper()
+	HoverTooltipWrapper::HoverTooltipWrapper() :
+		previousFont(nullptr)
 	{
 		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
 		if (hovered) {
 			ImGui::BeginTooltip();
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+			// Apply Subtext font for consistent tooltip styling
+			if (auto* menu = globals::menu) {
+				if (auto* subtextFont = menu->GetFont(Menu::FontRole::Subtext)) {
+					previousFont = ImGui::GetFont();
+					ImGui::PushFont(subtextFont, subtextFont->LegacySize);
+				}
+			}
 		}
 	}
 
 	HoverTooltipWrapper::~HoverTooltipWrapper()
 	{
 		if (hovered) {
+			if (previousFont) {
+				ImGui::PopFont();
+			}
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}
@@ -227,6 +241,16 @@ namespace Util
 
 	void RequestClearShaderCacheConfirmation()
 	{
+		auto* menu = globals::menu;
+		if (!menu)
+			return;
+
+		// If user has opted to skip confirmation, clear immediately
+		if (menu->GetSettings().SkipClearCacheConfirmation) {
+			PerformClearShaderCache();
+			return;
+		}
+
 		// Show confirmation popup
 		showClearCacheConfirmation = true;
 		dontAskAgainCheckbox = false;
@@ -260,7 +284,7 @@ namespace Util
 			ImGui::Spacing();
 
 			// Center buttons
-			constexpr float buttonWidth = 180.0f;
+			constexpr float buttonWidth = ThemeManager::Constants::POPUP_BUTTON_WIDTH;
 			const float spacing = ImGui::GetStyle().ItemSpacing.x;
 			const float totalWidth = buttonWidth * 2 + spacing;
 			const float windowWidth = ImGui::GetWindowWidth();
@@ -269,6 +293,13 @@ namespace Util
 				ImGui::SetCursorPosX(offset);
 
 			if (ImGui::Button("Clear Cache", ImVec2(buttonWidth, 0))) {
+				// Save preference if checkbox is checked
+				if (dontAskAgainCheckbox) {
+					if (auto* menu = globals::menu) {
+						menu->GetSettings().SkipClearCacheConfirmation = true;
+					}
+				}
+
 				PerformClearShaderCache();
 				showClearCacheConfirmation = false;
 				ImGui::CloseCurrentPopup();
@@ -321,7 +352,7 @@ namespace Util
 			if (showDontAskAgain)
 				ImGui::Checkbox("Don't ask me again", &dontAskCheckbox);
 
-			constexpr float buttonWidth = 180.0f;
+			constexpr float buttonWidth = ThemeManager::Constants::POPUP_BUTTON_WIDTH;
 			const float spacing = ImGui::GetStyle().ItemSpacing.x;
 			const float totalWidth = buttonWidth * 2 + spacing;
 			const float offset = (ImGui::GetWindowWidth() - totalWidth) * 0.5f;
@@ -362,9 +393,9 @@ namespace Util
 		return { Size.x * scale, Size.y * scale };
 	}
 
-	bool InitializeMenuIcons([[maybe_unused]] Menu* menu)
+	bool InitializeMenuIcons(Menu* menu)
 	{
-		return true;
+		return IconLoader::InitializeMenuIcons(menu);
 	}
 
 	// Text rendering helpers
@@ -499,7 +530,8 @@ namespace Util
 
 	ImVec4 GetIconTint()
 	{
-		return ImVec4(1, 1, 1, 1);
+		const auto& theme = Menu::GetSingleton()->GetTheme();
+		return theme.UseMonochromeIcons ? theme.Palette.Text : ImVec4(1, 1, 1, 1);
 	}
 
 	// Shared constants for title-bar button overlays
@@ -629,6 +661,31 @@ namespace Util
 
 	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount)
 	{
+		// Get the appropriate icon for this category
+		ID3D11ShaderResourceView* categoryIcon = nullptr;
+		auto& menu = Menu::GetSingleton()->uiIcons;
+
+		if (strcmp(categoryName, "Characters") == 0) {
+			categoryIcon = menu.characters.texture;
+		} else if (strcmp(categoryName, "Display") == 0) {
+			categoryIcon = menu.display.texture;
+		} else if (strcmp(categoryName, "Grass") == 0) {
+			categoryIcon = menu.grass.texture;
+		} else if (strcmp(categoryName, "Lighting") == 0) {
+			categoryIcon = menu.lighting.texture;
+		} else if (strcmp(categoryName, "Sky") == 0) {
+			categoryIcon = menu.sky.texture;
+		} else if (strcmp(categoryName, "Landscape & Textures") == 0) {
+			categoryIcon = menu.landscape.texture;
+		} else if (strcmp(categoryName, "Water") == 0) {
+			categoryIcon = menu.water.texture;
+		} else if (strcmp(categoryName, "Utility") == 0) {
+			categoryIcon = menu.debug.texture;
+		} else if (strcmp(categoryName, "Materials") == 0) {
+			categoryIcon = menu.materials.texture;
+		} else if (strcmp(categoryName, "Post-Processing") == 0) {
+			categoryIcon = menu.postProcessing.texture;
+		}
 
 		// Add categoryCount to categoryName
 		std::string displayName = std::format("{} ({})", categoryName, categoryCount);
@@ -638,10 +695,18 @@ namespace Util
 		ImVec2 pos = ImGui::GetCursorScreenPos();
 		float availableWidth = ImGui::GetContentRegionAvail().x;
 
+		// Calculate icon size based on current font size to match text scaling
+		// This ensures icons scale consistently with text when the font scale changes
+		const float currentFontSize = ImGui::GetFontSize();
+		const float iconSize = currentFontSize * 1.2f;     // 20% larger than font height
+		const float iconSpacing = currentFontSize * 0.3f;  // 30% of font height for spacing
 		ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
 
-		// Calculate total content width (text only)
+		// Calculate total content width (icon + spacing + text)
 		float contentWidth = textSize.x;
+		if (categoryIcon) {
+			contentWidth += iconSize + iconSpacing;
+		}
 
 		// Calculate line positions
 		float lineY = pos.y + textSize.y * 0.5f;
@@ -660,7 +725,7 @@ namespace Util
 		hovered = ImGui::IsItemHovered();
 
 		// Draw the lines and text using Menu theme colors
-		auto& themeSettings = globals::menu->GetTheme();
+		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& palette = themeSettings.Palette;
 
 		// Use theme text color
@@ -685,8 +750,20 @@ namespace Util
 			drawList->AddLine(ImVec2(rightLineStart, lineY), ImVec2(pos.x + availableWidth, lineY), headerColor, 1.0f);
 		}
 
-		// Draw text
+		// Draw icon and text
 		float currentX = pos.x + lineLength + 10.0f;
+
+		// Draw icon if available
+		if (categoryIcon) {
+			ImVec2 iconPos = ImVec2(currentX, pos.y + (textSize.y - iconSize) * 0.5f + 2.0f);
+			ImVec2 iconMax = ImVec2(iconPos.x + iconSize, iconPos.y + iconSize);
+
+			// Apply the same color tint as the text
+			ImU32 iconTint = headerColor;
+			drawList->AddImage(categoryIcon, iconPos, iconMax, ImVec2(0, 0), ImVec2(1, 1), iconTint);
+
+			currentX += iconSize + iconSpacing;
+		}
 
 		// Center text
 		ImVec2 textPos = ImVec2(currentX, pos.y + 2.0f);
@@ -1064,10 +1141,10 @@ namespace Util
 			state.needsFocus = false;
 		}
 
-		constexpr float iconSize = 16.0f;
-		constexpr float iconAlpha = 0.5f;
-		constexpr float iconOffsetX = 5.0f;
-		constexpr float paddingLeft = 24.0f;
+		constexpr float iconSize = ThemeManager::Constants::COMBO_SEARCH_ICON_SIZE;
+		constexpr float iconAlpha = ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
+		constexpr float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X;
+		constexpr float paddingLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT;
 
 		char widgetId[128];
 		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
