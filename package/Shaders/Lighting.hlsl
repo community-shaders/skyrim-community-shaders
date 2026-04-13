@@ -1234,6 +1234,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float blendedAlpha = 0;
 	float3 blendedNormalRGB = 0;
 	float blendedNormalAlpha = 0;
+	float4 landscapeBlendWeights1 = input.LandBlendWeights1;
+	float2 landscapeBlendWeights2 = input.LandBlendWeights2.xy;
 
 #		if defined(TRUE_PBR)
 	float4 blendedRMAOS = 0;
@@ -1245,7 +1247,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(EMAT)
 	if (LAND_EMAT_PARALLAX_ACTIVE) {
 		ExtendedMaterials::ComputeLandscapeParallaxMipLevels(uv, screenNoise, mipLevels);
-		ExtendedMaterials::ApplyLandscapeParallaxDistanceMipBias(mipLevels, viewPosition.z);
 		float landParallaxMipAgg = max(max(max(max(max(mipLevels[0], mipLevels[1]), mipLevels[2]), mipLevels[3]), mipLevels[4]), mipLevels[5]);
 		float vzdParallax = abs(viewPosition.z);
 		landParallaxShadowQuality = saturate((1.0 - saturate((vzdParallax - 850.0) / 4600.0) * 0.94) * saturate(1.58 - 0.41 * landParallaxMipAgg));
@@ -1287,6 +1288,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Initialize mip levels for non-EMAT case
 	mipLevels[0] = mipLevels[1] = mipLevels[2] = mipLevels[3] = mipLevels[4] = mipLevels[5] = 0.0;
 #		endif  // EMAT
+	landscapeBlendWeights1 = input.LandBlendWeights1;
+	landscapeBlendWeights2 = input.LandBlendWeights2.xy;
+#		if defined(TRUE_PBR)
+	// Cull tiny layers when minified/distant and renormalize branchlessly to preserve total energy.
+	float landTinyWeightCutoff = lerp(0.01, 0.03, saturate(landDistanceTexMipBias * 1.25));
+	float4 culledWeights1 = landscapeBlendWeights1 * step(landTinyWeightCutoff.xxxx, landscapeBlendWeights1);
+	float2 culledWeights2 = landscapeBlendWeights2 * step(landTinyWeightCutoff.xx, landscapeBlendWeights2);
+	float culledTotalWeight = culledWeights1.x + culledWeights1.y + culledWeights1.z + culledWeights1.w + culledWeights2.x + culledWeights2.y;
+	float useCulledWeights = step(1e-4, culledTotalWeight);
+	float invCulledTotalWeight = rcp(max(culledTotalWeight, 1e-4));
+	float4 renormCulledWeights1 = culledWeights1 * invCulledTotalWeight;
+	float2 renormCulledWeights2 = culledWeights2 * invCulledTotalWeight;
+	landscapeBlendWeights1 = lerp(landscapeBlendWeights1, renormCulledWeights1, useCulledWeights);
+	landscapeBlendWeights2 = lerp(landscapeBlendWeights2, renormCulledWeights2, useCulledWeights);
+#		endif
 #	endif      // LANDSCAPE
 
 #	if defined(SPARKLE)
@@ -1314,12 +1330,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(LANDSCAPE)
 #		if defined(TRUE_PBR)
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(0u, TexColorSampler, SampColorSampler, TexNormalSampler, SampNormalSampler, TexRMAOSSampler, SampRMAOSSampler, PBRParams1, LandscapeTexture1GlintParameters, input.LandBlendWeights1.x);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(1u, TexLandColor2Sampler, SampLandColor2Sampler, TexLandNormal2Sampler, SampLandNormal2Sampler, TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, LandscapeTexture2PBRParams, LandscapeTexture2GlintParameters, input.LandBlendWeights1.y);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(2u, TexLandColor3Sampler, SampLandColor3Sampler, TexLandNormal3Sampler, SampLandNormal3Sampler, TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, LandscapeTexture3PBRParams, LandscapeTexture3GlintParameters, input.LandBlendWeights1.z);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(3u, TexLandColor4Sampler, SampLandColor4Sampler, TexLandNormal4Sampler, SampLandNormal4Sampler, TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, LandscapeTexture4PBRParams, LandscapeTexture4GlintParameters, input.LandBlendWeights1.w);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(4u, TexLandColor5Sampler, SampLandColor5Sampler, TexLandNormal5Sampler, SampLandNormal5Sampler, TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, LandscapeTexture5PBRParams, LandscapeTexture5GlintParameters, input.LandBlendWeights2.x);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(5u, TexLandColor6Sampler, SampLandColor6Sampler, TexLandNormal6Sampler, SampLandNormal6Sampler, TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, LandscapeTexture6PBRParams, LandscapeTexture6GlintParameters, input.LandBlendWeights2.y);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(0u, TexColorSampler, SampColorSampler, TexNormalSampler, SampNormalSampler, TexRMAOSSampler, SampRMAOSSampler, PBRParams1, LandscapeTexture1GlintParameters, landscapeBlendWeights1.x);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(1u, TexLandColor2Sampler, SampLandColor2Sampler, TexLandNormal2Sampler, SampLandNormal2Sampler, TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, LandscapeTexture2PBRParams, LandscapeTexture2GlintParameters, landscapeBlendWeights1.y);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(2u, TexLandColor3Sampler, SampLandColor3Sampler, TexLandNormal3Sampler, SampLandNormal3Sampler, TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, LandscapeTexture3PBRParams, LandscapeTexture3GlintParameters, landscapeBlendWeights1.z);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(3u, TexLandColor4Sampler, SampLandColor4Sampler, TexLandNormal4Sampler, SampLandNormal4Sampler, TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, LandscapeTexture4PBRParams, LandscapeTexture4GlintParameters, landscapeBlendWeights1.w);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(4u, TexLandColor5Sampler, SampLandColor5Sampler, TexLandNormal5Sampler, SampLandNormal5Sampler, TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, LandscapeTexture5PBRParams, LandscapeTexture5GlintParameters, landscapeBlendWeights2.x);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(5u, TexLandColor6Sampler, SampLandColor6Sampler, TexLandNormal6Sampler, SampLandNormal6Sampler, TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, LandscapeTexture6PBRParams, LandscapeTexture6GlintParameters, landscapeBlendWeights2.y);
 #		else
 	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexColorSampler, SampColorSampler, TexNormalSampler, SampNormalSampler, input.LandBlendWeights1.x, LandscapeTexture1to4IsSnow.x);
 	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor2Sampler, SampLandColor2Sampler, TexLandNormal2Sampler, SampLandNormal2Sampler, input.LandBlendWeights1.y, LandscapeTexture1to4IsSnow.y);

@@ -15,6 +15,8 @@ static const float HEIGHT_BLEND_CONTRAST = 12.0;
 static const float HEIGHT_INFLUENCE = 0.3;
 static const float CONTRAST_FACTOR = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
+static const float HEIGHT_BLEND_FADE_MIP_START = 1.6;
+static const float HEIGHT_BLEND_FADE_MIP_RANGE = 2.2;
 // Golden ratio for frac(rnd * φ) low-discrepancy jitter; precompute once per pixel at callsite when possible.
 static const float STOCHASTIC_LOD_PHI = 1.618;
 
@@ -125,6 +127,11 @@ inline float2 StochasticSampleLODJitter(float rnd)
 	return float2(rnd - 0.5, frac(rnd * STOCHASTIC_LOD_PHI) - 0.5);
 }
 
+inline float StochasticHeightFadeFromMip(float mipLevel)
+{
+	return saturate((mipLevel - HEIGHT_BLEND_FADE_MIP_START) / HEIGHT_BLEND_FADE_MIP_RANGE);
+}
+
 // LOD terrain stochastic sampling — 2 SampleBias, fixed blend (pass jitter from StochasticSampleLODJitter(screenNoise)).
 inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD)
 {
@@ -150,12 +157,14 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 
 	float w1 = exp2(log2(saturate(offsets.weights.x)) * CONTRAST_FACTOR);
 	float w2 = exp2(log2(saturate(offsets.weights.y)) * CONTRAST_FACTOR);
+	float heightFade = StochasticHeightFadeFromMip(mipLevel);
+	float heightInfluence = HEIGHT_INFLUENCE * (1.0 - heightFade);
 
 	float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
 	float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
 
-	w1 *= (1.0 + HEIGHT_INFLUENCE * h1);
-	w2 *= (1.0 + HEIGHT_INFLUENCE * h2);
+	w1 *= (1.0 + heightInfluence * h1);
+	w2 *= (1.0 + heightInfluence * h2);
 
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
@@ -171,9 +180,11 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 
 	float w1 = exp2(log2(saturate(offsets.weights.x)) * CONTRAST_FACTOR);
 	float w2 = exp2(log2(saturate(offsets.weights.y)) * CONTRAST_FACTOR);
+	float heightFade = StochasticHeightFadeFromMip(mipLevel);
+	float heightInfluence = HEIGHT_INFLUENCE * (1.0 - heightFade);
 
-	w1 *= (1.0 + HEIGHT_INFLUENCE * s1.a);
-	w2 *= (1.0 + HEIGHT_INFLUENCE * s2.a);
+	w1 *= (1.0 + heightInfluence * s1.a);
+	w2 *= (1.0 + heightInfluence * s2.a);
 
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }

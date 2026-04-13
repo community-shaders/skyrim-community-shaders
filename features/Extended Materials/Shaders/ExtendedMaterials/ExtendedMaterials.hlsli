@@ -239,8 +239,18 @@ namespace ExtendedMaterials
 						pt2 = float2(prevBound, prevHeight);
 					}
 #if defined(LANDSCAPE)
-					// Skip second-phase refinement: terrain pays 4× multi-layer height taps per step; first crossing is enough at low step counts.
-					break;
+					// One short refinement phase reduces residual stair stepping/stretching on terrain parallax hits.
+					if (contactRefinement) {
+						break;
+					} else {
+						contactRefinement = true;
+						prevOffset = outOffset;
+						prevBound = pt2.x;
+						numSteps = 4;
+						stepSize *= 0.25;
+						offsetPerStep *= 0.25;
+						continue;
+					}
 #else
 					if (contactRefinement) {
 						break;
