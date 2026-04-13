@@ -64,6 +64,23 @@ namespace ImageBasedLighting
 	}
 
 	// ============================================================================
+	// DALC SH occlusion helpers (Mode 3: apply visibility SH to DALC's own SH)
+	// ============================================================================
+
+	/// Get DALC ambient occluded by skylighting visibility SH
+	float3 GetDALCOccluded(float3 rayDir, sh2 visibilitySH)
+	{
+		sh2 occR = SphericalHarmonics::Product(SharedData::AmbientSHR, visibilitySH);
+		sh2 occG = SphericalHarmonics::Product(SharedData::AmbientSHG, visibilitySH);
+		sh2 occB = SphericalHarmonics::Product(SharedData::AmbientSHB, visibilitySH);
+
+		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(occR, rayDir);
+		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(occG, rayDir);
+		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(occB, rayDir);
+		return max(0, float3(colorR, colorG, colorB) / Math::PI);
+	}
+
+	// ============================================================================
 	// Ratio / settings helpers
 	// ============================================================================
 
@@ -120,7 +137,7 @@ namespace ImageBasedLighting
 	float3 GetDiffuseIBL(float3 vanillaDALC, float3 rayDir)
 	{
 		float3 linEnv, linSky;
-		if (SharedData::iblSettings.DALCMode == 2) {
+		if (SharedData::iblSettings.DALCMode >= 2) {
 			linEnv = Color::IrradianceToLinear(vanillaDALC * SharedData::iblSettings.DALCAmount);
 			linSky = GetSkyIBLColor(rayDir);
 		} else {
@@ -134,7 +151,10 @@ namespace ImageBasedLighting
 	float3 GetDiffuseIBLOccluded(float3 vanillaDALC, float3 rayDir, sh2 visibilitySH)
 	{
 		float3 linEnv, linSky;
-		if (SharedData::iblSettings.DALCMode == 2) {
+		if (SharedData::iblSettings.DALCMode == 3) {
+			linEnv = Color::IrradianceToLinear(Color::Ambient(GetDALCOccluded(rayDir, visibilitySH)) * SharedData::iblSettings.DALCAmount);
+			linSky = GetSkyIBLColorOccluded(rayDir, visibilitySH);
+		} else if (SharedData::iblSettings.DALCMode == 2) {
 			linEnv = Color::IrradianceToLinear(vanillaDALC * SharedData::iblSettings.DALCAmount);
 			linSky = GetSkyIBLColorOccluded(rayDir, visibilitySH);
 		} else {
@@ -167,7 +187,13 @@ namespace ImageBasedLighting
 
 	float3 GetFogIBLColor(float3 fogColor)
 	{
-		float3 iblColor = GetEnvIBLColor(float3(0, 0, 0)) + GetSkyIBLColor(float3(0, 0, 0));
+		float3 iblColor;
+		if (SharedData::iblSettings.DALCMode >= 2) {
+			float3 dalc0 = Color::Ambient(SharedData::GetAmbient(0.f));
+			iblColor = Color::IrradianceToLinear(dalc0 * SharedData::iblSettings.DALCAmount) + GetSkyIBLColor(float3(0, 0, 0));
+		} else {
+			iblColor = GetEnvIBLColor(float3(0, 0, 0)) + GetSkyIBLColor(float3(0, 0, 0));
+		}
 		if (SharedData::iblSettings.PreserveFogLuminance) {
 			const float fogLuminance = Color::RGBToLuminance(fogColor);
 			const float iblLuminance = Color::RGBToLuminance(iblColor);
