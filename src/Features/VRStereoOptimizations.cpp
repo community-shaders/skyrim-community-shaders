@@ -2,6 +2,7 @@
 
 #include "ExtendedMaterials.h"
 #include "Globals.h"
+#include "Menu.h"
 #include "State.h"
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
@@ -245,7 +246,7 @@ void VRStereoOptimizations::ClearPomOffsetTexture()
 {
 	if (!texPomOffset)
 		return;
-	const float clearValue[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	const float clearValue[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
 	globals::d3d::context->ClearUnorderedAccessViewFloat(texPomOffset->uav.get(), clearValue);
 }
 
@@ -262,6 +263,11 @@ void VRStereoOptimizations::DrawSettings()
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("Reprojects Eye 0 (left) pixels into Eye 1 (right) using depth and motion data,\nskipping redundant full shading where the views overlap.\nReduces GPU cost in VR by shading each pixel fewer times per frame.");
 
+	if (globals::game::isVR && settings.stereoMode == StereoMode::Enable && !loaded) {
+		const auto& themeSettings = Menu::GetSingleton()->GetTheme();
+		ImGui::TextColored(themeSettings.StatusPalette.RestartNeeded,
+			"Restart is required to enable VR stereo reprojection.");
+	}
 	if (settings.stereoMode == StereoMode::Off)
 		return;
 
