@@ -2431,10 +2431,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
-	// Per-pixel random world-space position jitter for point/spot light shadow softening.
-	// Seeded by pixel coords + frame for temporal stability with TAA.
-	float3 positionJitter = vertexNormal.xyz * ((float3(Random::pcg3d(uint3(uint2(input.Position.xy), SharedData::FrameCount))) / 4294967296.0 - 0.5) * 0.5 + 0.5) * ShadowSampling::Constants::PositionJitterScale;
-
 	// Sample directional shadow directly (VSM when VolumetricShadows loaded, PCF otherwise).
 	if (inWorld && !inReflection && !SharedData::InInterior) {
 		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, rotationMatrix, eyeIndex);
@@ -2633,7 +2629,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		bool shadowCoverage = false;
 		if (inWorld && !inReflection) {
 			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz + positionJitter, rotationMatrix, eyeIndex, shadowCoverage);
+				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, eyeIndex, shadowCoverage);
 				lightShadow *= shadowComponent;
 			}
 		}

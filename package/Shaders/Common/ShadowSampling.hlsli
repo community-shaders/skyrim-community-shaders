@@ -61,9 +61,6 @@ namespace ShadowSampling
 		// Shadow Radius for PCF
 		static const float PCFRadius2D = 0.002;
 
-		// World-space radius of per-pixel position jitter for point/spot light shadow sampling.
-		static const float PositionJitterScale = 4.0;
-
 		// Volumetric / 3D shadow ray-march parameters (world units).
 		static const float ShadowRayLength = 128.0;
 		static const float ShadowRayStepSize = 32.0;
@@ -208,7 +205,7 @@ namespace ShadowSampling
 		return dot(float4(samples > receiverDepth), 0.25);
 	}
 
-	float GetSpotlightShadow(ShadowData shadowData, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
+	float GetSpotlightShadow(ShadowData shadowData, uint shadowIndex, float4 positionLS)
 	{
 		positionLS.xyz /= positionLS.w;
 
@@ -217,7 +214,7 @@ namespace ShadowSampling
 		float shadow = 0.0;
 
 		[unroll] for (int i = 0; i < 8; i++) {
-			float2 sampleOffset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix);
+			float2 sampleOffset = Random::SpiralSampleOffsets8[i];
 			float2 sampleUV = positionLS.xy + sampleOffset * Constants::PCFRadius2D;
 			shadow += SampleShadowGather(shadowIndex, sampleUV, positionLS.z);
 		}
@@ -225,13 +222,13 @@ namespace ShadowSampling
 		return shadow / 8.0;
 	}
 
-	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth, float2x2 rotationMatrix)
+	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth)
 	{
 		float shadow = 0.0;
 
 		[unroll] for (int i = 0; i < 8; i++)
 		{
-			float2 offset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * Constants::PCFRadius2D;
+			float2 offset = Random::SpiralSampleOffsets8[i] * Constants::PCFRadius2D;
 			float2 uv = sampleUV + offset;
 
 			// Clamp to the correct paraboloid half
@@ -243,7 +240,7 @@ namespace ShadowSampling
 		return shadow / 8.0;
 	}
 
-	float GetOmnidirectionalShadow(ShadowData shadowData, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
+	float GetOmnidirectionalShadow(ShadowData shadowData, uint shadowIndex, float4 positionLS)
 	{
 		bool lowerHalf = positionLS.z < 0;
 
@@ -261,14 +258,14 @@ namespace ShadowSampling
 		float depth = saturate(length(positionLS.xyz) / shadowData.ShadowLightParam.y);
 		depth -= shadowData.ShadowLightParam.z;
 
-		return SampleParaboloidShadow(shadowIndex, sampleUV, depth, rotationMatrix);
+		return SampleParaboloidShadow(shadowIndex, sampleUV, depth);
 	}
 
 	// Returns the shadow factor for a point-light shadow slot.
 	// hasCoverage is set to false when the pixel falls outside the spotlight frustum /
 	// cone (early-exit with 0.0 return) so the debug visualizer can skip those pixels
 	// in its min-shadow accumulation.  For hemi / omni lights hasCoverage is always true.
-	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix, uint eyeIndex, out bool hasCoverage)
+	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, uint eyeIndex, out bool hasCoverage)
 	{
 		hasCoverage = true;  // default: paraboloid lights always sample
 
@@ -285,10 +282,10 @@ namespace ShadowSampling
 
 		float4 positionLS = mul(shadowData.ShadowProj, float4(worldPosition, 1));
 
-		[branch]
+		[branch] 
 		if (shadowData.ShadowLightParam.x == 0)
 		{
-			float shadowBaseVisibility = GetSpotlightShadow(shadowData, shadowIndex, positionLS, rotationMatrix);
+			float shadowBaseVisibility = GetSpotlightShadow(shadowData, shadowIndex, positionLS);
 			positionLS.xyz /= positionLS.w;
 
 			float spotFalloff = saturate(1.0 - dot(positionLS.xy, positionLS.xy));
@@ -297,7 +294,7 @@ namespace ShadowSampling
 			return shadowBaseVisibility * spotFalloff;
 		}
 
-		return GetOmnidirectionalShadow(shadowData, shadowIndex, positionLS, rotationMatrix);
+		return GetOmnidirectionalShadow(shadowData, shadowIndex, positionLS);
 	}
 
 #if defined(SKYLIGHTING) && !defined(INTERIOR)

@@ -599,9 +599,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
-	// Per-pixel random world-space position jitter for point/spot light shadow softening.
-	float3 positionJitter = (float3(Random::pcg3d(uint3(uint2(input.HPosition.xy), SharedData::FrameCount))) / 4294967296.0 - 0.5) * ShadowSampling::Constants::PositionJitterScale;
-
 	if (!SharedData::InInterior) {
 		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, rotationMatrix, eyeIndex);
 		dirSoftShadow = dirDetailedShadow;
@@ -699,7 +696,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float shadowComponent = 1.0;
 				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz + positionJitter, rotationMatrix, eyeIndex, shadowCoverage);
+					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, eyeIndex, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
 
@@ -889,9 +886,6 @@ PS_OUTPUT main(PS_INPUT input)
 	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
-	// Per-pixel random world-space position jitter for point/spot light shadow softening.
-	float3 positionJitter = (float3(Random::pcg3d(uint3(uint2(input.HPosition.xy), SharedData::FrameCount))) / 4294967296.0 - 0.5) * ShadowSampling::Constants::PositionJitterScale;
-
 	if (!SharedData::InInterior) {
 		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, rotationMatrix, eyeIndex);
 		dirSoftShadow = dirDetailedShadow;
@@ -945,7 +939,7 @@ PS_OUTPUT main(PS_INPUT input)
 				float shadowComponent = 1.0;
 				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz + positionJitter, rotationMatrix, eyeIndex, shadowCoverage);
+					shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, eyeIndex, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
 
