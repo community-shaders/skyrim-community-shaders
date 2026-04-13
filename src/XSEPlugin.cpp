@@ -194,18 +194,20 @@ bool Load()
 		}
 	}
 
+	auto pushMissingDllError = [&](std::string_view dllName) {
+		auto errorMessage = std::format("Required DLL {} was missing", dllName);
+		logger::error("{}", errorMessage);
+		errors.push_back(errorMessage);
+	};
+
 	// Engine Fixes: VR accepts either EngineFixesVR.dll or the EngineFixes.dll NG
 	if (REL::Module::IsVR()) {
 		if (!LoadLibrary(L"Data/SKSE/Plugins/EngineFixesVR.dll") && !LoadLibrary(L"Data/SKSE/Plugins/EngineFixes.dll")) {
-			auto errorMessage = std::string("Required DLL EngineFixesVR.dll or EngineFixes.dll was missing");
-			logger::error("{}", errorMessage);
-			errors.push_back(errorMessage);
+			pushMissingDllError("EngineFixesVR.dll or EngineFixes.dll");
 		}
 	} else {
 		if (!LoadLibrary(L"Data/SKSE/Plugins/EngineFixes.dll")) {
-			auto errorMessage = std::format("Required DLL {} was missing", stl::utf16_to_utf8(L"Data/SKSE/Plugins/EngineFixes.dll").value_or("<unicode conversion error>"s));
-			logger::error("{}", errorMessage);
-			errors.push_back(errorMessage);
+			pushMissingDllError(stl::utf16_to_utf8(L"Data/SKSE/Plugins/EngineFixes.dll").value_or("<unicode conversion error>"s));
 		}
 	}
 
@@ -215,9 +217,7 @@ bool Load()
 
 	for (const auto dll : requiredDLLs) {
 		if (!LoadLibrary(dll)) {
-			auto errorMessage = std::format("Required DLL {} was missing", stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
-			logger::error("{}", errorMessage);
-			errors.push_back(errorMessage);
+			pushMissingDllError(stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
 		}
 	}
 
