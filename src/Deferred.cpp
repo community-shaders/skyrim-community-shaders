@@ -586,7 +586,7 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
-		if (REL::Module::IsVR() && globals::features::vr.stereoOpt.loaded)
+		if (REL::Module::IsVR())
 			defines.push_back({ "VR_STEREO_OPT", nullptr });
 
 		mainCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
@@ -614,7 +614,7 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
-		if (REL::Module::IsVR() && globals::features::vr.stereoOpt.loaded)
+		if (REL::Module::IsVR())
 			defines.push_back({ "VR_STEREO_OPT", nullptr });
 
 		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));

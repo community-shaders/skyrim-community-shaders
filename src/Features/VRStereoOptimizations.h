@@ -63,7 +63,7 @@ struct VRStereoOptimizations
 
 	struct Settings
 	{
-		StereoMode stereoMode = StereoMode::Enable;
+		StereoMode stereoMode = StereoMode::Off;
 		float disocclusionDepthThreshold = 0.01f;
 		float edgeDepthThreshold = 0.05f;
 		float minEdgeDistance = 5000.0f;     ///< Minimum linearized depth for edge AA (game units)

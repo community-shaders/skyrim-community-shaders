@@ -120,9 +120,11 @@ void VR::SetupResources()
 	stereoBlendCopyTex->CreateSRV(srvDesc);
 	stereoBlendCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<StereoBlendCB>());
 
-	if (REL::Module::IsVR()) {
+	if (globals::game::isVR && stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off) {
 		stereoOpt.SetupResources();
 		stereoOpt.loaded = stereoOpt.GetModeTextureSRV() != nullptr;
+	} else {
+		stereoOpt.loaded = false;
 	}
 
 	DetectOpenVRInfo();
