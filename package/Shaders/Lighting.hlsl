@@ -1303,7 +1303,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	landscapeBlendWeights1 = lerp(landscapeBlendWeights1, renormCulledWeights1, useCulledWeights);
 	landscapeBlendWeights2 = lerp(landscapeBlendWeights2, renormCulledWeights2, useCulledWeights);
 #		endif
-#	endif      // LANDSCAPE
+#	endif  // LANDSCAPE
 
 #	if defined(SPARKLE)
 	diffuseUv = ProjectedUVParams2.yy * (input.TexCoord0.zw + (uv - uvOriginal));
