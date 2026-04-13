@@ -53,9 +53,14 @@ namespace ImageBasedLighting
 		sh2 shG = SkyIBLTexture.Load(int3(1, 0, 0));
 		sh2 shB = SkyIBLTexture.Load(int3(2, 0, 0));
 
-		sh2 occR = SphericalHarmonics::Product(shR, visibilitySH);
-		sh2 occG = SphericalHarmonics::Product(shG, visibilitySH);
-		sh2 occB = SphericalHarmonics::Product(shB, visibilitySH);
+		// IBL SH is viewing convention (DiffuseIBLCS: cubemap sampled at -rayDir, projected at +rayDir).
+		// Visibility SH is incoming convention (probes: Evaluate(OcclusionDir) with skyward dir).
+		// Negate L1 to convert visibility to viewing convention so Product operates in the same space.
+		sh2 visSHView = float4(visibilitySH.x, -visibilitySH.yzw);
+
+		sh2 occR = SphericalHarmonics::Product(shR, visSHView);
+		sh2 occG = SphericalHarmonics::Product(shG, visSHView);
+		sh2 occB = SphericalHarmonics::Product(shB, visSHView);
 
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(occR, rayDir);
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(occG, rayDir);
@@ -70,13 +75,15 @@ namespace ImageBasedLighting
 	/// Get DALC ambient occluded by skylighting visibility SH
 	float3 GetDALCOccluded(float3 rayDir, sh2 visibilitySH)
 	{
+		// DALC SH (incoming) and visibility SH (incoming) are in the same convention — Product is correct.
 		sh2 occR = SphericalHarmonics::Product(SharedData::AmbientSHR, visibilitySH);
 		sh2 occG = SphericalHarmonics::Product(SharedData::AmbientSHG, visibilitySH);
 		sh2 occB = SphericalHarmonics::Product(SharedData::AmbientSHB, visibilitySH);
 
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(occR, rayDir);
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(occG, rayDir);
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(occB, rayDir);
+		// Incoming convention: evaluate irradiance at +normal (= -rayDir).
+		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(occR, -rayDir);
+		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(occG, -rayDir);
+		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(occB, -rayDir);
 		return max(0, float3(colorR, colorG, colorB) / Math::PI);
 	}
 
