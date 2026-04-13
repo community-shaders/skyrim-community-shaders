@@ -30,7 +30,6 @@ struct DirectionalShadowData
 {
 	column_major float4x4 ShadowProj[2];
 	column_major float4x4 InvShadowProj[2];
-
 	float2 EndSplitDistances;
 	float2 StartSplitDistances;
 };
@@ -43,8 +42,7 @@ struct ShadowData
 {
 	column_major float4x4 ShadowProj;
 	column_major float4x4 InvShadowProj;
-
-	float4 ShadowParam;
+	float4 ShadowLightParam;
 };
 
 StructuredBuffer<ShadowData> Shadows : register(t100);
@@ -57,9 +55,8 @@ Texture2DArray<float> ShadowMaps : register(t101);
 namespace ShadowSampling
 {
 	namespace Constants
-	{
-		// Shadow depth bias — applied before depth comparisons to prevent self-shadowing acne.
-		static const float ShadowBiasConst = 0.0001;
+	{	
+		static const float DirectionalBias = (0.00025f) / 3.0f;
 
 		// Shadow Radius for PCF
 		static const float PCFRadius2D = 0.002;
@@ -157,7 +154,7 @@ namespace ShadowSampling
 
 		// Transform ray to light space for primary cascade
 		float3 positionLS = mul(shadowData.ShadowProj[primaryCascade], float4(worldPosition, 1)).xyz;
-		positionLS.z -= Constants::ShadowBiasConst;
+		positionLS.z -= Constants::DirectionalBias;
 
 		// Sample primary cascade
 		uint onePlusLayerIndex = 1.0 + primaryCascade;
@@ -165,7 +162,7 @@ namespace ShadowSampling
 
 		float shadow = 0.0;
 
-		for (int i = 0; i < 8; i++) {
+		[unroll] for (int i = 0; i < 8; i++) {
 			float2 sampleOffset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix);
 			float2 sampleUV = positionLS.xy + layerIndexRcp * sampleOffset * Constants::PCFRadius2D;
 			shadow += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(saturate(sampleUV), primaryCascade)) > positionLS.z), 0.25);
@@ -182,11 +179,11 @@ namespace ShadowSampling
 			layerIndexRcp = rcp(onePlusLayerIndex);
 
 			positionLS = mul(shadowData.ShadowProj[secondaryCascade], float4(worldPosition, 1)).xyz;
-			positionLS.z -= Constants::ShadowBiasConst;
+			positionLS.z -= Constants::DirectionalBias;
 
 			float shadowBlend = 0.0;
 
-			for (int i = 0; i < 8; i++) {
+			[unroll] for (int i = 0; i < 8; i++) {
 				float2 sampleOffset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix);
 				float2 sampleUV = positionLS.xy + layerIndexRcp * sampleOffset * Constants::PCFRadius2D;
 				shadowBlend += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(saturate(sampleUV), secondaryCascade)) > positionLS.z), 0.25);
@@ -209,13 +206,12 @@ namespace ShadowSampling
 	float GetSpotlightShadow(ShadowData shadowData, uint shadowIndex, float4 positionLS)
 	{
 		positionLS.xyz /= positionLS.w;
-		positionLS.z -= Constants::ShadowBiasConst;
 
 		positionLS.xy = positionLS.xy * 0.5 + 0.5;
 
 		float shadow = 0.0;
 
-		for (int i = 0; i < 8; i++) {
+		[unroll] for (int i = 0; i < 8; i++) {
 			float2 sampleOffset = Random::SpiralSampleOffsets8[i];
 			float2 sampleUV = positionLS.xy + sampleOffset * Constants::PCFRadius2D;
 			shadow += SampleShadowGather(shadowIndex, sampleUV, positionLS.z);
@@ -228,12 +224,15 @@ namespace ShadowSampling
 	{
 		float shadow = 0.0;
 
-		for (int i = 0; i < 8; i++) {
+		[unroll] for (int i = 0; i < 8; i++)
+		{
 			float2 offset = Random::SpiralSampleOffsets8[i] * Constants::PCFRadius2D;
 			float2 uv = sampleUV + offset;
 
 			// Clamp to the correct paraboloid half
-			uv.y = (sampleUV.y >= 0.5) ? max(uv.y, 0.5) : min(uv.y, 0.5);
+			uv.y = (sampleUV.y >= 0.5)
+				? max(uv.y, 0.5)
+				: min(uv.y, 0.5);
 
 			shadow += SampleShadowGather(shadowIndex, uv, depth);
 		}
@@ -256,8 +255,8 @@ namespace ShadowSampling
 		float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-		float depth = saturate(length(positionLS.xyz) / shadowData.ShadowParam.y);
-		depth -= Constants::ShadowBiasConst;
+		float depth = saturate(length(positionLS.xyz) / shadowData.ShadowLightParam.y);
+		depth -= shadowData.ShadowLightParam.z;
 
 		return SampleParaboloidShadow(shadowIndex, sampleUV, depth);
 	}
@@ -272,20 +271,30 @@ namespace ShadowSampling
 
 		ShadowData shadowData = Shadows[shadowIndex];
 
-		// ShadowParam.y encodes slot state:
+		// ShadowLightParam.y encodes slot state:
 		//   == 0  : slot not written (capacity exceeded) → unshadowed (fully lit)
 		//    < 0  : slot suppressed via debug overlay    → fully dark (light hidden)
 		//    > 0  : valid radius                         → normal shadow test
-		if (shadowData.ShadowParam.y == 0)
+		[flatten] if (shadowData.ShadowLightParam.y == 0)
 			return 1.0;
-		if (shadowData.ShadowParam.y < 0)
+		[flatten] if (shadowData.ShadowLightParam.y < 0)
 			return 0.0;
 
 		worldPosition.xyz += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 		float4 positionLS = mul(shadowData.ShadowProj, float4(worldPosition, 1));
 
-		[branch] if (shadowData.ShadowParam.x == 0) return GetSpotlightShadow(shadowData, shadowIndex, positionLS);
+		[branch] 
+		if (shadowData.ShadowLightParam.x == 0)
+		{
+			float shadowBaseVisibility = GetSpotlightShadow(shadowData, shadowIndex, positionLS);
+			positionLS.xyz /= positionLS.w;
+
+			float spotFalloff = saturate(1.0 - dot(positionLS.xy, positionLS.xy));
+			spotFalloff = spotFalloff * spotFalloff;
+
+			return shadowBaseVisibility * spotFalloff;
+		}
 
 		return GetOmnidirectionalShadow(shadowData, shadowIndex, positionLS);
 	}
