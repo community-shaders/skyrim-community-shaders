@@ -277,6 +277,8 @@ inline float3 HorizonSampling(
 		float rotationAngle = (i + noiseDirection + TemporalDirections) * (Math::PI / (float)RotationCount);
 		float3 sliceDir = float3(cos(rotationAngle), sin(rotationAngle), 0);
 		float2 slideDir_TexelSize = sliceDir.xy * RcpFrameDim;
+		slideDir_TexelSize.y = -slideDir_TexelSize.y;
+		
 		uint globalOccludedBitfield = 0;
 
 		float3 planeNormal = normalize(cross(sliceDir, viewDir));
