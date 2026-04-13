@@ -261,7 +261,7 @@ void Deferred::StartDeferred()
 		auto context = globals::d3d::context;
 
 		// Clear POM offset texture to -1.0 sentinel so pixels the Lighting PS never touches read "no POM"
-		if (REL::Module::IsVR())
+		if (globals::features::vr.stereoOpt.loaded)
 			globals::features::vr.stereoOpt.ClearPomOffsetTexture();
 
 		ID3D11Buffer* buffers[1] = { *globals::game::perFrame.get() };

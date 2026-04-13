@@ -295,7 +295,9 @@ namespace globals
 		{
 			func(This, NumViews, ppRenderTargetViews, pDepthStencilView);
 
-			if (globals::deferred->deferredPass) {
+			// NumViews == 0 is a teardown/unbind call — skip rebind to avoid leaving the UAV
+			// bound when DrawStereoBlend's CS subsequently reads from the same slot as an SRV.
+			if (NumViews > 0 && globals::deferred->deferredPass) {
 				auto& stereoOpt = globals::features::vr.stereoOpt;
 				if (stereoOpt.loaded) {
 					if (auto* uav = stereoOpt.GetPomOffsetUAV()) {
