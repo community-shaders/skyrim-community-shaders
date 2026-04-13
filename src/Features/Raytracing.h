@@ -266,6 +266,8 @@ struct CreationEngineRaytracing
 		HairBSDF HairBSDF = HairBSDF::FarFieldBCSDF;
 		DiffuseBRDF DiffuseBRDF = DiffuseBRDF::Burley;
 		SSSSettings SSSSettings;
+		bool EnableWater = false;
+		bool StablePlanes = false;
 
 		bool operator==(const AdvancedSettings&) const = default;
 
@@ -278,7 +280,9 @@ struct CreationEngineRaytracing
 			RIS,
 			HairBSDF,
 			DiffuseBRDF,
-			SSSSettings)
+			SSSSettings,
+			EnableWater,
+			StablePlanes)
 	};
 
 	struct WaterSettings
@@ -308,7 +312,7 @@ struct CreationEngineRaytracing
 
 	struct ReSTIRGISettings
 	{
-		bool Enabled = true;
+		bool Enabled = false;
 		ReSTIRGIResamplingMode ResamplingMode = ReSTIRGIResamplingMode::TemporalAndSpatial;
 
 		float TemporalDepthThreshold = 0.1f;
@@ -341,15 +345,37 @@ struct CreationEngineRaytracing
 			EnableFinalVisibility, EnableFinalMIS)
 	};
 
-	struct DebugSettings
+	enum struct TextureMode : uint32_t
+	{
+		Share = 0,
+		Exclusive = 1
+	};
+
+	struct ExperimentalSettings
 	{
 		bool PathTracingCull = false;
-		bool EnableWater = false;
-		bool StablePlanes = true;
+		TextureMode TextureMode = TextureMode::Share;
+		uint32_t TextureCutOff = 0;
+
+		bool operator==(const ExperimentalSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(ExperimentalSettings, PathTracingCull, TextureMode, TextureCutOff)
+	};
+
+	struct DebugSettings
+	{
+		bool Markers = false;
+		bool Timings = false;
 
 		bool operator==(const DebugSettings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DebugSettings, PathTracingCull, EnableWater, StablePlanes)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DebugSettings, Markers, Timings)
+	};
+
+	struct PassTiming
+	{
+		const char* name;
+		float timing;
 	};
 
 	struct Settings
@@ -363,8 +389,9 @@ struct CreationEngineRaytracing
 		SHaRCSettings SHaRCSettings;
 		AdvancedSettings AdvancedSettings;
 		WaterSettings WaterSettings;
-		DebugSettings DebugSettings;
+		ExperimentalSettings ExperimentalSettings;
 		ReSTIRGISettings ReSTIRGI;
+		DebugSettings DebugSettings;
 
 		bool operator==(const Settings&) const = default;
 
@@ -379,8 +406,9 @@ struct CreationEngineRaytracing
 			SHaRCSettings,
 			AdvancedSettings,
 			WaterSettings,
-			DebugSettings,
-			ReSTIRGI)
+			ExperimentalSettings,
+			ReSTIRGI,
+			DebugSettings)
 	};
 
 	HMODULE handle = nullptr;
@@ -396,7 +424,7 @@ struct CreationEngineRaytracing
 	using SetCopyTargetFn = void (*)(ID3D12Resource*);
 	using UpdateFeatureDataFn = void (*)(void*, uint32_t);
 	using SetSkyHemisphereFn = void (*)(ID3D12Resource*);
-	using GetFrameTimeFn = float* (*)();
+	using GetFrameTimeFn = void (*)(PassTiming*&, uint32_t&);
 	using UpdateSettingsFn = void (*)(Settings);
 	using GetRRInputFn = void (*)(ID3D12Resource*&, ID3D12Resource*&);
 	using SetSharedTexturesFn = void (*)(ID3D12Resource*, ID3D12Resource*, ID3D12Resource*, ID3D12Resource*);
@@ -559,7 +587,7 @@ struct Raytracing : public OverlayFeature
 
 	virtual bool IsInMenu() const override { return true; }
 
-	virtual bool IsOverlayVisible() const override { return settings.PerfOverlay; };
+	virtual bool IsOverlayVisible() const override { return settings.PerfOverlay != OverlayMode::None; };
 
 	virtual void DrawOverlay() override;
 
@@ -578,6 +606,7 @@ struct Raytracing : public OverlayFeature
 	void DrawSSSSettings();
 	void DrawAdvancedSettings();
 	void DrawReSTIRGISettings();
+	void DrawExperimentalSettings();
 	void DrawDebugSettings();
 
 	void CompileShaders();
@@ -591,6 +620,10 @@ struct Raytracing : public OverlayFeature
 	void DeferredPasses();
 	void GetRayReconstructionInputs(ID3D12Resource*& diffuseAlbedo, ID3D12Resource*& specularAlbedo, ID3D12Resource*& normalRoughness, ID3D12Resource*& specHitDistance);
 
+	CreationEngineRaytracing::Settings GetSettings() const;
+
+	void UpdateSettings();
+
 	inline CreationEngineRaytracing::Mode Mode() const
 	{
 		return Active() ? settings.CreationEngineRaytracingSettings.GeneralSettings.Mode : CreationEngineRaytracing::Mode::None;
@@ -601,10 +634,17 @@ struct Raytracing : public OverlayFeature
 		return Mode() == CreationEngineRaytracing::Mode::PathTracing;
 	}
 
+	enum struct OverlayMode
+	{
+		None,
+		Simple,
+		Complete
+	};
+
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
-		bool PerfOverlay = true;
+		OverlayMode PerfOverlay = OverlayMode::None;
 		bool ShowMainTexture = false;
 		CreationEngineRaytracing::Settings CreationEngineRaytracingSettings;
 	} settings;
@@ -688,8 +728,6 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11ComputeShader> ptCompositeCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> convertTexturesCS[2];
 	winrt::com_ptr<ID3D11ComputeShader> giCompositeCS = nullptr;
-
-	float* frameTime;
 
 	struct Hooks
 	{

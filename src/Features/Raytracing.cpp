@@ -29,8 +29,7 @@ void Raytracing::LoadSettings(json& o_json)
 {
 	settings = o_json;
 
-	if (initialized)
-		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
+	UpdateSettings();
 }
 
 void Raytracing::SaveSettings(json& o_json)
@@ -187,14 +186,34 @@ void Raytracing::DrawSettings()
 		DrawGeneralSettings();
 		DrawAdvancedSettings();
 		DrawReSTIRGISettings();
+		DrawExperimentalSettings();
 		DrawDebugSettings();
 
 		ImGui::EndTabBar();
 	}
 
 	if (ceRTSettingsBefore != settings.CreationEngineRaytracingSettings)
-		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
+		UpdateSettings();
 }
+
+CreationEngineRaytracing::Settings Raytracing::GetSettings() const
+{
+	auto certSettings = settings.CreationEngineRaytracingSettings;
+
+	certSettings.DebugSettings.Markers = globals::features::dx12Interop.settings.EnablePIXCapture;
+	certSettings.DebugSettings.Timings = settings.PerfOverlay != OverlayMode::None;
+
+	return certSettings;
+}
+
+void Raytracing::UpdateSettings()
+{
+	if (!initialized)
+		return;
+
+	creationEngineRaytracing->UpdateSettings(GetSettings());
+}
+
 
 void Raytracing::DrawGeneralSettings()
 {
@@ -414,6 +433,10 @@ void Raytracing::DrawAdvancedSettings()
 
 	DrawEnumCombo("Diffuse BRDF", advSettings.DiffuseBRDF);
 
+	ImGui::Checkbox("Enable Water", &settings.CreationEngineRaytracingSettings.AdvancedSettings.EnableWater);
+
+	ImGui::Checkbox("Stable Planes", &settings.CreationEngineRaytracingSettings.AdvancedSettings.StablePlanes);
+
 	ImGui::PopID();
 
 	ImGui::EndTabItem();
@@ -503,6 +526,29 @@ void Raytracing::DrawReSTIRGISettings()
 	ImGui::EndTabItem();
 }
 
+void Raytracing::DrawExperimentalSettings()
+{
+	if (!ImGui::BeginTabItem("Experimental"))
+		return;
+
+	ImGui::PushID("ExperimentalSettings");
+
+	auto& experimentalSettings = settings.CreationEngineRaytracingSettings.ExperimentalSettings;
+
+	ImGui::Checkbox("Path Tracing Cull", &experimentalSettings.PathTracingCull);
+
+	DrawEnumRadio("Texture Mode", experimentalSettings.TextureMode);
+
+	if (experimentalSettings.TextureMode == CreationEngineRaytracing::TextureMode::Exclusive) {
+		auto label = experimentalSettings.TextureCutOff == 0 ? "Never Share" : std::format("Share smaller than {}", 1 << (experimentalSettings.TextureCutOff + 7));
+		ImGui::SliderInt("Exclusive Mode Cutoff", reinterpret_cast<int*>(&experimentalSettings.TextureCutOff), 0, 13, label.c_str());
+	}
+
+	ImGui::PopID();
+
+	ImGui::EndTabItem();
+}
+
 void Raytracing::DrawDebugSettings()
 {
 	if (!ImGui::BeginTabItem("Debug"))
@@ -510,13 +556,7 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::PushID("DebugSettings");
 
-	ImGui::Checkbox("Performance Overlay", &settings.PerfOverlay);
-
-	ImGui::Checkbox("Path Tracing Cull", &settings.CreationEngineRaytracingSettings.DebugSettings.PathTracingCull);
-
-	ImGui::Checkbox("Enable Water", &settings.CreationEngineRaytracingSettings.DebugSettings.EnableWater);
-
-	ImGui::Checkbox("Stable Planes", &settings.CreationEngineRaytracingSettings.DebugSettings.StablePlanes);
+	DrawEnumRadio("Performance Overlay", settings.PerfOverlay);
 
 	ImGui::Checkbox("Show Main Texture", &settings.ShowMainTexture);
 
@@ -530,7 +570,7 @@ void Raytracing::DrawDebugSettings()
 
 void Raytracing::DrawOverlay()
 {
-	if (!settings.PerfOverlay)
+	if (!IsOverlayVisible())
 		return;
 
 	auto* menu = Menu::GetSingleton();
@@ -558,34 +598,51 @@ void Raytracing::DrawOverlay()
 
 	ImGui::Begin("Raytracing Overlay", NULL, windowFlags);
 
-	auto DrawRow = [](const char* label, size_t instances, float cpums, float gpums, [[maybe_unused]] double frameTime = 0.0f) {
+	auto DrawRow = [](const char* label, float gpums) {
 		ImGui::TableNextRow();
 
 		ImGui::TableNextColumn();
 		ImGui::Text(label);
 
 		ImGui::TableNextColumn();
-		ImGui::Text("%zu", instances);
-
-		ImGui::TableNextColumn();
-		ImGui::Text("%g ms", cpums);
-
-		ImGui::TableNextColumn();
 		ImGui::Text("%g ms", gpums);
 	};
 
-	if (ImGui::BeginTable("Effects", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-		ImGui::TableSetupColumn("Effect");
-		ImGui::TableSetupColumn("Instances");
-		ImGui::TableSetupColumn("CPU");
+	if (ImGui::BeginTable("Passes", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+		ImGui::TableSetupColumn("Pass");
 		ImGui::TableSetupColumn("GPU");
 		ImGui::TableHeadersRow();
 
-		// GI/PT
-		DrawRow("Frame Time", 0, 0, *frameTime);
+		CreationEngineRaytracing::PassTiming* passTimings = nullptr;
+		uint32_t numPasses = 0;
+
+		creationEngineRaytracing->GetFrameTime(passTimings, numPasses);
+
+		if (settings.PerfOverlay == OverlayMode::Simple) {
+			float totalTime = 0.0f;
+
+			for (size_t i = 0; i < numPasses; i++)
+				totalTime += passTimings[i].timing;
+
+			DrawRow("Total", totalTime);
+		} else {
+			float totalTime = 0.0f;
+
+			for (size_t i = 0; i < numPasses; i++) {
+				auto& passTiming = passTimings[i];
+				DrawRow(passTiming.name, passTiming.timing);
+				totalTime += passTiming.timing;
+			}
+
+			DrawRow("Total", totalTime);
+		}
 
 		ImGui::EndTable();
 	}
+
+	/*ImGui::Text("Textures %zu", instances);
+	ImGui::Text("Meshes %zu", instances);
+	ImGui::Text("Instances %zu", instances);*/
 
 	ImGui::End();
 }
@@ -673,8 +730,6 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 
 	UpdateResolution();
 
-	frameTime = creationEngineRaytracing->GetFrameTime();
-
 	logger::info("[Raytracing] Successfully initialized Creation Engine ray tracing.");
 }
 
@@ -750,7 +805,7 @@ void Raytracing::SetupResources()
 	}
 
 	if (initialized) {
-		creationEngineRaytracing->Initialize(settings.CreationEngineRaytracingSettings);
+		creationEngineRaytracing->Initialize(GetSettings());
 
 		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
 		creationEngineRaytracing->SetSharedTextures(albedoTexture.get(), normalRoughnessTexture->resource.get(), gnmaoTexture.get(), diffuseAlbedoTexture->resource.get());
