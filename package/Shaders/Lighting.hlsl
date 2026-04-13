@@ -3248,10 +3248,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 	float masksZ = Color::RGBToYCoCg(directionalAmbientColor).x;
-#		if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL)
-		masksZ = 0;
-#		endif
 
 #		if defined(SSS) && defined(SKIN)
 	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), masksZ, psout.Diffuse.w);

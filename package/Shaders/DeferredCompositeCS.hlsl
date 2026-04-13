@@ -156,12 +156,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(vanillaDALC, -normalWS) * albedo;
 #		endif
 
-		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
-		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
-		linDiffuseColor *= sqrt(multiBounceSSGIAo);
-		diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
-		diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSSGIAo);
-		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+		directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
+		directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
+		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
+		directionalAmbientColor = max(0, directionalAmbientColor);
 	} else
 #	endif
 	{
@@ -172,7 +170,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 		directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
 		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
 		directionalAmbientColor = max(0, directionalAmbientColor);
+	}
 
+	{
 		float maxScale = 1.0;
 		if (directionalAmbientColor.x > 0.0)
 			maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);

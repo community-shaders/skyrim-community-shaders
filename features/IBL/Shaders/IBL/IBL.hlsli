@@ -49,16 +49,13 @@ namespace ImageBasedLighting
 
 	float3 GetSkyIBLOccluded(float3 rayDir, sh2 visibilitySH)
 	{
-		const float unitL0 = sqrt(4.0 * Math::PI);
-		sh2 normVisibility = visibilitySH / unitL0;
-
 		sh2 shR = SkyIBLTexture.Load(int3(0, 0, 0));
 		sh2 shG = SkyIBLTexture.Load(int3(1, 0, 0));
 		sh2 shB = SkyIBLTexture.Load(int3(2, 0, 0));
 
-		sh2 occR = SphericalHarmonics::Product(shR, normVisibility);
-		sh2 occG = SphericalHarmonics::Product(shG, normVisibility);
-		sh2 occB = SphericalHarmonics::Product(shB, normVisibility);
+		sh2 occR = SphericalHarmonics::Product(shR, visibilitySH);
+		sh2 occG = SphericalHarmonics::Product(shG, visibilitySH);
+		sh2 occB = SphericalHarmonics::Product(shB, visibilitySH);
 
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(occR, rayDir);
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(occG, rayDir);

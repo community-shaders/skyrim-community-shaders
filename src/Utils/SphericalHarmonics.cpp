@@ -143,9 +143,9 @@ SH2 SphericalHarmonics::Product(SH2 shL, SH2 shR)
 	const float factor = 1.0f / (2.0f * sqrt(3.14159265358979323846f));
 	SH2 result;
 	result.c0 = factor * Dot(shL, shR);
-	result.c1[0] = factor * (shL.c1[0] * shR.c1[2] + shL.c1[2] * shR.c1[0]);
-	result.c1[1] = factor * (shL.c1[1] * shR.c1[2] + shL.c1[2] * shR.c1[1]);
-	result.c1[2] = factor * (shL.c1[2] * shR.c1[2] + shL.c1[2] * shR.c1[2]);
+	result.c1[0] = factor * (shL.c0 * shR.c1[0] + shL.c1[0] * shR.c0);
+	result.c1[1] = factor * (shL.c0 * shR.c1[1] + shL.c1[1] * shR.c0);
+	result.c1[2] = factor * (shL.c0 * shR.c1[2] + shL.c1[2] * shR.c0);
 	return result;
 }
 

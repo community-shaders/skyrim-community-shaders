@@ -171,9 +171,9 @@ namespace SphericalHarmonics
 		const float factor = 1.0f / (2.0f * sqrt(Math::PI));
 		return factor * sh2(
 							dot(shL, shR),
-							shL.y * shR.w + shL.w * shR.y,
-							shL.z * shR.w + shL.w * shR.z,
-							shL.w * shR.w + shL.w * shR.w);
+							shL.x * shR.y + shL.y * shR.x,
+							shL.x * shR.z + shL.z * shR.x,
+							shL.x * shR.w + shL.w * shR.x);
 	}
 
 	// Convolves a SH function using a Hanning filtering. This helps reducing ringing and negative values. (from [2], Windowing p.16)
