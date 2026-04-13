@@ -1379,6 +1379,7 @@ namespace Util
 	{
 		ImGuiID activeId = 0;    // ID of the item the flyout is open for
 		bool isOpen = false;
+		bool closing = false;    // True when close animation is playing
 		float closeTimer = 0.f;  // Countdown before closing on mouse-leave
 		float openProgress = 0.f;  // Slide animation progress (0..1)
 		ImVec2 sourceMin{};      // Source item rect min (for hover tracking)
@@ -1405,5 +1406,6 @@ namespace Util
 	bool ThemedDeleteButton(const char* label);
 
 	/// Draw an icon button using a texture (e.g. undo icon).
-	bool IconButton(const char* id, void* texture, const ImVec2& size);
+	/// @param iconPadding  Override internal padding (-1 uses default kIconShrink).
+	bool IconButton(const char* id, void* texture, const ImVec2& size, float iconPadding = -1.0f);
 }  // namespace Util

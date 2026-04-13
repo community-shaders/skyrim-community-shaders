@@ -21,81 +21,161 @@ namespace WeatherScenePanel
 	// Per-weather UI state (keyed by FormID to support multiple open widgets)
 	struct PanelState
 	{
-		SceneSettingsUI::AddSettingState addState;
 		SceneSettingsUI::AddSettingState periodAddStates[SceneSettingsManager::kPeriodCount];
 		SceneSettingsUI::AddSettingState allPeriodsAddState;
 		Util::FlyoutState flyoutState;      // Per-cell flyout
 		Util::FlyoutState rowFlyoutState;   // Row-level flyout (setting name)
 		Util::FlyoutState colFlyoutState;   // Column-level flyout (period headers)
-		Util::ConfirmationPopup todConfirm{
-			"Switch Time of Day Mode?",
-			"This will clear all existing entries for this weather.\nAre you sure?",
-			"Switch"
-		};
-		bool pendingTodValue = false;  // The value to set if confirmed
 	};
 	static std::map<RE::FormID, PanelState> panelStates;
 
 	static PanelState& GetState(RE::FormID id) { return panelStates[id]; }
 
-	// --- Value editor for weather entries (mirrors SceneSettingsUI::DrawValueEditor) ---
+	// --- Flat mode (InteriorOnly style) ---
 
-	static void DrawWeatherValueEditor(RE::FormID weatherId, size_t index, float inputWidth)
-	{
-		auto* manager = SceneSettingsManager::GetSingleton();
-		const auto& entry = manager->GetWeatherConfig(weatherId).entries[index];
-		auto settingType = SceneSettingsManager::DetectSettingType(entry.value);
-
-		switch (settingType) {
-		case SceneSettingsManager::SettingType::Boolean:
-			{
-				bool val = entry.value.is_boolean() ? entry.value.get<bool>() : (entry.value.get<int>() != 0);
-				if (ImGui::Checkbox("##val", &val))
-					manager->UpdateWeatherEntryValue(weatherId, index, entry.value.is_boolean() ? json(val) : json(val ? 1 : 0));
-			}
-			break;
-		case SceneSettingsManager::SettingType::Float:
-			{
-				float val = entry.value.is_number() ? entry.value.get<float>() : 0.0f;
-				if (!std::isfinite(val))
-					val = 0.0f;
-				ImGui::SetNextItemWidth(inputWidth);
-				if (ImGui::InputFloat("##val", &val, 0.0f, 0.0f, "%.3f"))
-					if (std::isfinite(val))
-						manager->UpdateWeatherEntryValue(weatherId, index, val, true);
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					manager->SaveWeatherSceneSettings(weatherId);
-			}
-			break;
-		case SceneSettingsManager::SettingType::Integer:
-			{
-				int val = entry.value.get<int>();
-				ImGui::SetNextItemWidth(inputWidth);
-				if (ImGui::InputInt("##val", &val, 0, 0))
-					manager->UpdateWeatherEntryValue(weatherId, index, val, true);
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					manager->SaveWeatherSceneSettings(weatherId);
-			}
-			break;
-		default:
-			ImGui::TextDisabled("(unsupported type)");
-			break;
-		}
-	}
+	using SettingId = SceneSettingsUI::SettingId;
+	using SourceGroup = SceneSettingsUI::SourceGroup;
 
 	// --- Flat mode (InteriorOnly style) ---
 
-	static void DrawFlatValueCell(RE::FormID weatherId, size_t entryIndex, PanelState& state)
+	/// Draw a single flat setting row with flyout controls.
+	static void DrawFlatSettingRow(RE::FormID weatherId, const std::vector<size_t>& rowIndices,
+		const std::string& key, PanelState& state)
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
 		const auto& entries = manager->GetWeatherConfig(weatherId).entries;
-		const auto& entry = entries[entryIndex];
+		if (rowIndices.empty())
+			return;
 
+		bool anyPaused = std::any_of(rowIndices.begin(), rowIndices.end(),
+			[&](size_t i) { return i < entries.size() && entries[i].paused; });
+		bool anyOverwrite = std::any_of(rowIndices.begin(), rowIndices.end(),
+			[&](size_t i) { return i < entries.size() && entries[i].source == EntrySource::Overwrite; });
+
+		ImGui::PushID(key.c_str());
+
+		float availWidth = ImGui::GetContentRegionAvail().x;
+		ImGui::Text("%s", key.c_str());
+
+		ImGui::SameLine(availWidth * C::SCENE_VALUE_LABEL_OFFSET_RATIO);
+		ImGui::PushID(static_cast<int>(rowIndices[0]));
+
+		if (anyPaused)
+			ImGui::BeginDisabled();
+
+		SceneSettingsUI::DrawWeatherValueEditor(weatherId, rowIndices, C::Em(C::SCENE_VALUE_INPUT_EM), anyOverwrite);
+
+		if (anyPaused)
+			ImGui::EndDisabled();
+
+		ImGuiID cellId = ImGui::GetItemID();
+		if (Util::BeginFlyout(state.flyoutState, cellId)) {
+			bool allPaused = std::all_of(rowIndices.begin(), rowIndices.end(),
+				[&](size_t i) { return i < entries.size() && entries[i].paused; });
+			auto result = SceneSettingsUI::DrawFlyoutControls(allPaused, true);
+
+			if (result.toggled)
+				for (auto idx : rowIndices)
+					if (idx < entries.size() && entries[idx].paused == allPaused)
+						manager->TogglePauseWeatherEntry(weatherId, idx);
+			if (result.reverted)
+				for (auto idx : rowIndices)
+					manager->RevertWeatherEntryToDefault(weatherId, idx);
+			if (result.deleted)
+				SceneSettingsUI::RemoveIndicesReversed(rowIndices, [&](size_t idx) { manager->RemoveWeatherSetting(weatherId, idx); });
+
+			Util::EndFlyout(state.flyoutState);
+		}
+
+		ImGui::PopID();
+		ImGui::PopID();
+	}
+
+	/// Draw flat entries grouped by feature using collapsible tree nodes (InteriorOnly style).
+	static void DrawFlatGroupedEntries(RE::FormID weatherId, const std::vector<size_t>& sourceIndices,
+		PanelState& state)
+	{
+		auto* manager = SceneSettingsManager::GetSingleton();
+		const auto& entries = manager->GetWeatherConfig(weatherId).entries;
+
+		// Group by feature -> key -> period indices
+		std::map<std::string, std::map<std::string, std::vector<size_t>>> grouped;
+		for (auto idx : sourceIndices) {
+			if (idx >= entries.size())
+				continue;
+			grouped[entries[idx].featureShortName][entries[idx].settingKey].push_back(idx);
+		}
+
+		bool firstGroup = true;
+		for (const auto& [featureName, settings] : grouped) {
+			SceneSettingsUI::DrawGroupSeparator(firstGroup);
+
+			auto label = SceneSettingsManager::GetFeatureDisplayName(featureName) + ":";
+			if (ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Indent(C::Em(C::SCENE_ENTRY_INDENT_EM));
+				for (const auto& [key, indices] : settings)
+					DrawFlatSettingRow(weatherId, indices, key, state);
+				ImGui::Unindent(C::Em(C::SCENE_ENTRY_INDENT_EM));
+				ImGui::TreePop();
+			}
+		}
+	}
+
+	/// Draw flat mode with Overwrite Files / User Settings section headers (InteriorOnly style).
+	static void DrawFlatSections(RE::FormID weatherId, PanelState& state)
+	{
+		auto* manager = SceneSettingsManager::GetSingleton();
+		const auto& entries = manager->GetWeatherConfig(weatherId).entries;
+		auto& theme = globals::menu->GetSettings().Theme;
+
+		std::vector<size_t> overwriteIndices, userIndices;
+		SceneSettingsUI::SplitBySource(entries, overwriteIndices, userIndices);
+
+		if (!overwriteIndices.empty()) {
+			bool allPaused = std::all_of(overwriteIndices.begin(), overwriteIndices.end(),
+				[&](size_t i) { return entries[i].paused; });
+			SceneSettingsUI::DrawSectionHeader("Overwrite Files", theme.StatusPalette.InfoColor, "##ow",
+				allPaused,
+				[&] { for (auto idx : overwriteIndices) if (entries[idx].paused == allPaused) manager->TogglePauseWeatherEntry(weatherId, idx); },
+				[&] { SceneSettingsUI::RemoveIndicesReversed(overwriteIndices, [&](size_t idx) { manager->RemoveWeatherSetting(weatherId, idx); }); });
+			DrawFlatGroupedEntries(weatherId, overwriteIndices, state);
+		}
+
+		if (!userIndices.empty()) {
+			bool allPaused = std::all_of(userIndices.begin(), userIndices.end(),
+				[&](size_t i) { return entries[i].paused; });
+			SceneSettingsUI::DrawSectionHeader("User Settings", theme.FeatureHeading.ColorDefault, "##usr",
+				allPaused,
+				[&] { for (auto idx : userIndices) if (entries[idx].paused == allPaused) manager->TogglePauseWeatherEntry(weatherId, idx); },
+				[&] { SceneSettingsUI::RemoveIndicesReversed(userIndices, [&](size_t idx) { manager->RemoveWeatherSetting(weatherId, idx); }); });
+			DrawFlatGroupedEntries(weatherId, userIndices, state);
+		}
+	}
+
+	// --- TOD mode helpers ---
+
+	static void DrawTodValueCell(RE::FormID weatherId, size_t entryIndex, PanelState& state)
+	{
+		auto* manager = SceneSettingsManager::GetSingleton();
+		const auto& entries = manager->GetWeatherConfig(weatherId).entries;
+
+		if (entryIndex == SIZE_MAX) {
+			ImGui::TextDisabled("--");
+			return;
+		}
+
+		const auto& entry = entries[entryIndex];
+		bool isOverwrite = entry.source == EntrySource::Overwrite;
 		ImGui::PushID(static_cast<int>(entryIndex));
 
-		DrawWeatherValueEditor(weatherId, entryIndex, ImGui::GetContentRegionAvail().x);
+		if (entry.paused)
+			ImGui::BeginDisabled();
 
-		// Flyout on hover
+		SceneSettingsUI::DrawWeatherValueEditor(weatherId, entryIndex, ImGui::GetContentRegionAvail().x, isOverwrite);
+
+		if (entry.paused)
+			ImGui::EndDisabled();
+
 		ImGuiID cellId = ImGui::GetItemID();
 		if (Util::BeginFlyout(state.flyoutState, cellId)) {
 			auto result = SceneSettingsUI::DrawFlyoutControls(entry.paused);
@@ -113,181 +193,19 @@ namespace WeatherScenePanel
 		ImGui::PopID();
 	}
 
-	static void DrawFlatEntries(RE::FormID weatherId, PanelState& state)
+	static void DrawTodTableForSource(RE::FormID weatherId, PanelState& state,
+		const std::vector<size_t>& sourceIndices, const char* tableId)
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
 		const auto& entries = manager->GetWeatherConfig(weatherId).entries;
+		auto& theme = globals::menu->GetSettings().Theme;
 
-		// Group by feature
-		std::map<std::string, std::vector<size_t>> grouped;
-		for (size_t i = 0; i < entries.size(); ++i)
-			grouped[entries[i].featureShortName].push_back(i);
-
-		for (auto& [_, indices] : grouped)
-			std::sort(indices.begin(), indices.end(), [&entries](size_t a, size_t b) {
-				return entries[a].settingKey < entries[b].settingKey;
-			});
-
-		bool first = true;
-		for (const auto& [featureName, indices] : grouped) {
-			if (!first) {
-				auto sepColor = ImGui::GetStyleColorVec4(ImGuiCol_Separator);
-				sepColor.w *= C::SCENE_GROUP_SEPARATOR_ALPHA;
-				ImGui::PushStyleColor(ImGuiCol_Separator, sepColor);
-				ImGui::Separator();
-				ImGui::PopStyleColor();
-			}
-			first = false;
-
-			auto label = SceneSettingsManager::GetFeatureDisplayName(featureName) + ":";
-			if (ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::Indent(C::Em(C::SCENE_ENTRY_INDENT_EM));
-				for (auto i : indices) {
-					ImGui::PushID(static_cast<int>(i));
-					float availWidth = ImGui::GetContentRegionAvail().x;
-					ImGui::Text("%s", entries[i].settingKey.c_str());
-					ImGui::SameLine(availWidth * C::SCENE_VALUE_LABEL_OFFSET_RATIO);
-					DrawFlatValueCell(weatherId, i, state);
-					ImGui::PopID();
-				}
-				ImGui::Unindent(C::Em(C::SCENE_ENTRY_INDENT_EM));
-				ImGui::TreePop();
-			}
-		}
-	}
-
-	// --- Add setting dialog (adapted for weather entries) ---
-
-	static void DrawWeatherAddDialog(RE::FormID weatherId, SceneSettingsUI::AddSettingState& addState,
-		bool isTod, Period period = Period::Count, bool addToAllPeriods = false)
-	{
-		if (!addState.dialogOpen)
-			return;
-
-		auto* manager = SceneSettingsManager::GetSingleton();
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-		ImGui::SetNextWindowSize(ImVec2(C::Em(C::SCENE_ADD_DIALOG_WIDTH_EM), 0));
-
-		if (!Util::BeginWithRoundedClose("Add Weather Setting", &addState.dialogOpen,
-				ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize)) {
-			ImGui::End();
-			return;
-		}
-
-		if (addState.cachedFeatureNames.empty())
-			addState.cachedFeatureNames = SceneSettingsManager::GetExteriorRelevantFeatureNames();
-
-		auto displayName = (addState.selectedFeatureIdx >= 0 &&
-							   addState.selectedFeatureIdx < static_cast<int>(addState.cachedFeatureNames.size()))
-		                       ? SceneSettingsManager::GetFeatureDisplayName(addState.cachedFeatureNames[addState.selectedFeatureIdx])
-		                       : std::string("Select Feature...");
-
-		ImGui::SetNextItemWidth(-FLT_MIN);
-		if (ImGui::BeginCombo("##FeatureSelect", displayName.c_str())) {
-			for (int i = 0; i < static_cast<int>(addState.cachedFeatureNames.size()); ++i) {
-				auto itemLabel = SceneSettingsManager::GetFeatureDisplayName(addState.cachedFeatureNames[i]);
-				if (ImGui::Selectable(itemLabel.c_str(), i == addState.selectedFeatureIdx)) {
-					addState.selectedFeatureIdx = i;
-					addState.cachedSettingKeys = isTod
-					                                 ? SceneSettingsManager::GetTransitionableSettingKeys(addState.cachedFeatureNames[i])
-					                                 : SceneSettingsManager::GetFeatureSettingKeys(addState.cachedFeatureNames[i]);
-					addState.selectedSettings.assign(addState.cachedSettingKeys.size(), false);
-				}
-				if (i == addState.selectedFeatureIdx)
-					ImGui::SetItemDefaultFocus();
-			}
-			ImGui::EndCombo();
-		}
-
-		bool hasFeature = addState.selectedFeatureIdx >= 0 && !addState.cachedSettingKeys.empty();
-		if (hasFeature) {
-			ImGui::Spacing();
-			ImGui::Separator();
-			if (ImGui::SmallButton("Select All"))
-				std::fill(addState.selectedSettings.begin(), addState.selectedSettings.end(), true);
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Select None"))
-				std::fill(addState.selectedSettings.begin(), addState.selectedSettings.end(), false);
-			ImGui::Spacing();
-
-			auto& featureName = addState.cachedFeatureNames[addState.selectedFeatureIdx];
-			if (ImGui::BeginChild("##SettingList", ImVec2(-FLT_MIN, C::Em(C::SCENE_ADD_LIST_HEIGHT_EM)), ImGuiChildFlags_Borders)) {
-				for (int i = 0; i < static_cast<int>(addState.cachedSettingKeys.size()); ++i) {
-					auto& key = addState.cachedSettingKeys[i];
-					bool alreadyAdded = addToAllPeriods
-					                        ? [&] { for (int p = 0; p < kPeriodCount; ++p) if (!manager->HasWeatherEntryForPeriod(weatherId, featureName, key, static_cast<Period>(p))) return false; return true; }()
-					                        : isTod ? manager->HasWeatherEntryForPeriod(weatherId, featureName, key, period)
-					                                : manager->HasWeatherEntry(weatherId, featureName, key);
-					if (alreadyAdded) {
-						auto _ = Util::DisableGuard(true);
-						bool checked = true;
-						ImGui::Checkbox(key.c_str(), &checked);
-					} else {
-						bool sel = addState.selectedSettings[i];
-						if (ImGui::Checkbox(key.c_str(), &sel))
-							addState.selectedSettings[i] = sel;
-					}
-				}
-			}
-			ImGui::EndChild();
-
-			ImGui::Spacing();
-			int selectedCount = 0;
-			for (size_t i = 0; i < addState.selectedSettings.size(); ++i)
-				if (addState.selectedSettings[i])
-					++selectedCount;
-
-			{
-				auto _ = Util::DisableGuard(selectedCount == 0);
-				auto label = std::format("Add ({})", selectedCount);
-				if (ImGui::Button(label.c_str(), ImVec2(-FLT_MIN, 0))) {
-					for (size_t i = 0; i < addState.cachedSettingKeys.size(); ++i) {
-						if (!addState.selectedSettings[i])
-							continue;
-						auto& key = addState.cachedSettingKeys[i];
-						auto currentValue = SceneSettingsManager::GetFeatureSettingValue(featureName, key);
-						if (addToAllPeriods) {
-							for (int p = 0; p < kPeriodCount; ++p)
-								if (!manager->HasWeatherEntryForPeriod(weatherId, featureName, key, static_cast<Period>(p)))
-									manager->AddWeatherSetting(weatherId, featureName, key, currentValue, static_cast<Period>(p));
-						} else {
-							if (isTod) {
-								if (!manager->HasWeatherEntryForPeriod(weatherId, featureName, key, period))
-									manager->AddWeatherSetting(weatherId, featureName, key, currentValue, period);
-							} else {
-								if (!manager->HasWeatherEntry(weatherId, featureName, key))
-									manager->AddWeatherSetting(weatherId, featureName, key, currentValue);
-							}
-						}
-					}
-					addState.dialogOpen = false;
-				}
-			}
-		}
-
-		ImGui::End();
-	}
-
-	// --- TOD mode helpers ---
-
-	struct SettingId
-	{
-		std::string feature;
-		std::string key;
-		bool operator<(const SettingId& o) const { return (feature < o.feature) || (feature == o.feature && key < o.key); }
-	};
-
-	struct SourceGroup
-	{
-		std::vector<SettingId> order;
-		std::map<std::string, std::map<std::string, std::array<size_t, kPeriodCount>>> map;
-	};
-
-	static SourceGroup BuildSourceGroup(const std::vector<SceneSettingsManager::SettingEntry>& entries)
-	{
+		// Build source group filtered to only the given indices
+		std::set<size_t> allowed(sourceIndices.begin(), sourceIndices.end());
 		SourceGroup group;
 		for (size_t idx = 0; idx < entries.size(); ++idx) {
+			if (allowed.find(idx) == allowed.end())
+				continue;
 			const auto& e = entries[idx];
 			int p = static_cast<int>(e.period);
 			if (p < 0 || p >= kPeriodCount)
@@ -301,55 +219,13 @@ namespace WeatherScenePanel
 			it->second[p] = idx;
 		}
 		std::sort(group.order.begin(), group.order.end());
-		return group;
-	}
 
-	static void DrawTodValueCell(RE::FormID weatherId, size_t entryIndex, PanelState& state)
-	{
-		auto* manager = SceneSettingsManager::GetSingleton();
-		const auto& entries = manager->GetWeatherConfig(weatherId).entries;
-
-		if (entryIndex == SIZE_MAX) {
-			ImGui::TextDisabled("--");
-			return;
-		}
-
-		const auto& entry = entries[entryIndex];
-		ImGui::PushID(static_cast<int>(entryIndex));
-
-		DrawWeatherValueEditor(weatherId, entryIndex, ImGui::GetContentRegionAvail().x);
-
-		ImGuiID cellId = ImGui::GetItemID();
-		if (Util::BeginFlyout(state.flyoutState, cellId)) {
-			auto result = SceneSettingsUI::DrawFlyoutControls(entry.paused);
-
-			if (result.toggled)
-				manager->TogglePauseWeatherEntry(weatherId, entryIndex);
-			if (result.reverted)
-				manager->RevertWeatherEntryToDefault(weatherId, entryIndex);
-			if (result.deleted)
-				manager->RemoveWeatherSetting(weatherId, entryIndex);
-
-			Util::EndFlyout(state.flyoutState);
-		}
-
-		ImGui::PopID();
-	}
-
-	static void DrawTodTable(RE::FormID weatherId, PanelState& state)
-	{
-		auto* manager = SceneSettingsManager::GetSingleton();
-		const auto& config = manager->GetWeatherConfig(weatherId);
-		const auto& entries = config.entries;
-		auto& theme = globals::menu->GetSettings().Theme;
-
-		auto group = BuildSourceGroup(entries);
 		if (group.order.empty())
 			return;
 
 		constexpr int kTotalCols = 1 + kPeriodCount;
 
-		if (!ImGui::BeginTable("##WeatherTOD", kTotalCols,
+		if (!ImGui::BeginTable(tableId, kTotalCols,
 				ImGuiTableFlags_Borders |
 					ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX))
 			return;
@@ -360,9 +236,11 @@ namespace WeatherScenePanel
 				ImGuiTableColumnFlags_WidthFixed, C::Em(C::SCENE_TOD_PERIOD_COL_EM));
 		ImGui::TableSetupScrollFreeze(0, 1);
 
-		// Collect per-period indices for column flyout controls
+		// Collect per-period indices for column flyout controls (filtered)
 		std::array<std::vector<size_t>, kPeriodCount> perPeriod{};
-		for (size_t idx = 0; idx < entries.size(); ++idx) {
+		for (auto idx : sourceIndices) {
+			if (idx >= entries.size())
+				continue;
 			int p = static_cast<int>(entries[idx].period);
 			if (p >= 0 && p < kPeriodCount)
 				perPeriod[p].push_back(idx);
@@ -384,21 +262,17 @@ namespace WeatherScenePanel
 				if (Util::BeginFlyout(state.colFlyoutState, colId)) {
 					bool allPaused = std::all_of(indices.begin(), indices.end(),
 						[&](size_t idx) { return idx < entries.size() && entries[idx].paused; });
-					auto result = SceneSettingsUI::DrawGroupFlyoutControls(allPaused);
+					auto result = SceneSettingsUI::DrawFlyoutControls(allPaused, true);
 
 					if (result.toggled)
 						for (auto idx : indices)
-							if (idx < entries.size() && entries[idx].paused == !allPaused)
+							if (idx < entries.size() && entries[idx].paused == allPaused)
 								manager->TogglePauseWeatherEntry(weatherId, idx);
 					if (result.reverted)
 						for (auto idx : indices)
 							manager->RevertWeatherEntryToDefault(weatherId, idx);
-					if (result.deleted) {
-						auto sorted = indices;
-						std::sort(sorted.begin(), sorted.end(), std::greater<>());
-						for (auto idx : sorted)
-							manager->RemoveWeatherSetting(weatherId, idx);
-					}
+					if (result.deleted)
+						SceneSettingsUI::RemoveIndicesReversed(indices, [&](size_t idx) { manager->RemoveWeatherSetting(weatherId, idx); });
 					if (result.deleted) {
 						state.colFlyoutState.isOpen = false;
 						state.colFlyoutState.activeId = 0;
@@ -459,22 +333,17 @@ namespace WeatherScenePanel
 			if (Util::BeginFlyout(state.rowFlyoutState, rowId, cellMin, cellMax)) {
 				bool allPaused = std::all_of(rowIndices.begin(), rowIndices.end(),
 					[&](size_t i) { return i < entries.size() && entries[i].paused; });
-				auto result = SceneSettingsUI::DrawGroupFlyoutControls(allPaused);
+				auto result = SceneSettingsUI::DrawFlyoutControls(allPaused, true);
 
 				if (result.toggled)
 					for (auto idx : rowIndices)
-						if (idx < entries.size() && entries[idx].paused == !allPaused)
+						if (idx < entries.size() && entries[idx].paused == allPaused)
 							manager->TogglePauseWeatherEntry(weatherId, idx);
 				if (result.reverted)
 					for (auto idx : rowIndices)
 						manager->RevertWeatherEntryToDefault(weatherId, idx);
-				if (result.deleted) {
-					auto sorted = rowIndices;
-					std::sort(sorted.begin(), sorted.end(), std::greater<>());
-					for (auto idx : sorted)
-						manager->RemoveWeatherSetting(weatherId, idx);
-				}
-				// Close flyout after any delete action
+				if (result.deleted)
+					SceneSettingsUI::RemoveIndicesReversed(rowIndices, [&](size_t idx) { manager->RemoveWeatherSetting(weatherId, idx); });
 				if (result.deleted) {
 					state.rowFlyoutState.isOpen = false;
 					state.rowFlyoutState.activeId = 0;
@@ -496,6 +365,37 @@ namespace WeatherScenePanel
 		ImGui::EndTable();
 	}
 
+	/// Draw TOD mode with Overwrite Files / User Settings section headers.
+	static void DrawTodSections(RE::FormID weatherId, PanelState& state)
+	{
+		auto* manager = SceneSettingsManager::GetSingleton();
+		const auto& entries = manager->GetWeatherConfig(weatherId).entries;
+		auto& theme = globals::menu->GetSettings().Theme;
+
+		std::vector<size_t> overwriteIndices, userIndices;
+		SceneSettingsUI::SplitBySource(entries, overwriteIndices, userIndices);
+
+		if (!overwriteIndices.empty()) {
+			bool allPaused = std::all_of(overwriteIndices.begin(), overwriteIndices.end(),
+				[&](size_t i) { return entries[i].paused; });
+			SceneSettingsUI::DrawSectionHeader("Overwrite Files", theme.StatusPalette.InfoColor, "##ow",
+				allPaused,
+				[&] { for (auto idx : overwriteIndices) if (entries[idx].paused == allPaused) manager->TogglePauseWeatherEntry(weatherId, idx); },
+				[&] { SceneSettingsUI::RemoveIndicesReversed(overwriteIndices, [&](size_t idx) { manager->RemoveWeatherSetting(weatherId, idx); }); });
+			DrawTodTableForSource(weatherId, state, overwriteIndices, "##TodOverwrite");
+		}
+
+		if (!userIndices.empty()) {
+			bool allPaused = std::all_of(userIndices.begin(), userIndices.end(),
+				[&](size_t i) { return entries[i].paused; });
+			SceneSettingsUI::DrawSectionHeader("User Settings", theme.FeatureHeading.ColorDefault, "##usr",
+				allPaused,
+				[&] { for (auto idx : userIndices) if (entries[idx].paused == allPaused) manager->TogglePauseWeatherEntry(weatherId, idx); },
+				[&] { SceneSettingsUI::RemoveIndicesReversed(userIndices, [&](size_t idx) { manager->RemoveWeatherSetting(weatherId, idx); }); });
+			DrawTodTableForSource(weatherId, state, userIndices, "##TodUser");
+		}
+	}
+
 	// --- Main Draw ---
 
 	void Draw(RE::FormID weatherId)
@@ -504,54 +404,42 @@ namespace WeatherScenePanel
 		auto& state = GetState(weatherId);
 		const auto& config = manager->GetWeatherConfig(weatherId);
 		auto& theme = globals::menu->GetSettings().Theme;
-		bool isTod = config.useTimeOfDay;
+		bool showTod = manager->IsWeatherShowTimeOfDay(weatherId);
 
-		// Title + add button
 		ImGui::Text("Scene Settings");
-		SceneSettingsUI::RightAlignNextButton();
-		if (isTod) {
-			// "Add to All Periods" button
-			if (ImGui::Button("+", ImVec2(C::Em(C::SCENE_ADD_BUTTON_EM), C::Em(C::SCENE_ADD_BUTTON_EM)))) {
-				state.allPeriodsAddState.Reset();
-				state.allPeriodsAddState.dialogOpen = true;
-				state.allPeriodsAddState.cachedFeatureNames = SceneSettingsManager::GetExteriorRelevantFeatureNames();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Add setting to all periods");
-		} else {
-			if (ImGui::Button("+", ImVec2(C::Em(C::SCENE_ADD_BUTTON_EM), C::Em(C::SCENE_ADD_BUTTON_EM)))) {
-				state.addState.Reset();
-				state.addState.dialogOpen = true;
-				state.addState.cachedFeatureNames = SceneSettingsManager::GetExteriorRelevantFeatureNames();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Add feature settings");
-		}
-
-		// Time of Day checkbox — confirm if entries would be lost
-		bool useTod = isTod;
-		if (ImGui::Checkbox("Time of Day", &useTod)) {
-			if (!config.entries.empty()) {
-				state.pendingTodValue = useTod;
-				state.todConfirm.Request();
-			} else {
-				manager->SetWeatherTimeOfDay(weatherId, useTod);
-			}
-		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Enable per-period overrides for this weather");
-
-		// Draw confirmation popup
-		if (state.todConfirm.Draw())
-			manager->SetWeatherTimeOfDay(weatherId, state.pendingTodValue);
-
 		ImGui::Separator();
 
+		// TOD toggle + add buttons
+		{
+			bool toggled = showTod;
+			if (ImGui::Checkbox("Time of Day", &toggled))
+				manager->SetWeatherShowTimeOfDay(weatherId, toggled);
+			showTod = toggled;
+		}
+
+		if (showTod) {
+			// Per-period add buttons
+			for (int i = 0; i < kPeriodCount; ++i) {
+				if (i > 0)
+					ImGui::SameLine();
+				ImGui::PushID(i);
+				auto label = std::format("Add {}", SceneSettingsManager::kPeriodNames[i]);
+				if (ImGui::SmallButton(label.c_str()))
+					SceneSettingsUI::OpenWeatherAddDialog(weatherId, state.periodAddStates[i]);
+				ImGui::PopID();
+			}
+			ImGui::SameLine();
+		}
+
+		// "Add" button (Delete All moved to section headers)
+		if (ImGui::SmallButton(showTod ? "Add All" : "Add Setting"))
+			SceneSettingsUI::OpenWeatherAddDialog(weatherId, state.allPeriodsAddState);
+
 		// Draw add dialogs
-		DrawWeatherAddDialog(weatherId, state.addState, isTod);
-		DrawWeatherAddDialog(weatherId, state.allPeriodsAddState, true, Period::Count, true);
-		for (int p = 0; p < kPeriodCount; ++p)
-			DrawWeatherAddDialog(weatherId, state.periodAddStates[p], true, static_cast<Period>(p));
+		SceneSettingsUI::DrawWeatherAddDialog(weatherId, state.allPeriodsAddState, Period::Count, true);
+		if (showTod)
+			for (int p = 0; p < kPeriodCount; ++p)
+				SceneSettingsUI::DrawWeatherAddDialog(weatherId, state.periodAddStates[p], static_cast<Period>(p));
 
 		// Empty state
 		if (config.entries.empty()) {
@@ -559,24 +447,13 @@ namespace WeatherScenePanel
 			ImGui::TextColored(theme.StatusPalette.Disable,
 				"No scene settings for this weather.");
 			ImGui::TextColored(theme.StatusPalette.Disable,
-				"Use the + button above to add overrides.");
-			ImGui::Spacing();
-			ImGui::TextWrapped(
-				"Settings added here will override feature defaults when this weather is active. "
-				"These layer on top of global Time of Day settings.");
+				"Use the Add buttons above to add overrides.");
 			return;
 		}
 
-		// Delete All button
-		if (ImGui::SmallButton("Delete All"))
-			manager->DeleteAllWeatherSettings(weatherId);
-
-		ImGui::Spacing();
-
-		if (isTod) {
-			DrawTodTable(weatherId, state);
-		} else {
-			DrawFlatEntries(weatherId, state);
-		}
+		if (showTod)
+			DrawTodSections(weatherId, state);
+		else
+			DrawFlatSections(weatherId, state);
 	}
 }

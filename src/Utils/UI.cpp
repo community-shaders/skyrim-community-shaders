@@ -2111,15 +2111,23 @@ namespace Util
 		if (hovered && (!state.isOpen || state.activeId != itemId)) {
 			state.activeId = itemId;
 			state.isOpen = true;
+			state.closing = false;
 			state.closeTimer = 0.f;
 			state.openProgress = 0.f;
+		}
+
+		// Re-hover cancels close animation
+		if (hovered && state.closing && state.activeId == itemId) {
+			state.closing = false;
+			state.closeTimer = 0.f;
 		}
 
 		if (!state.isOpen || state.activeId != itemId)
 			return false;
 
-		// Animate slide open
-		state.openProgress = std::min(state.openProgress + kFlyoutSlideOpenSpeed * dt, 1.0f);
+		// Only increase progress when opening, not when closing
+		if (!state.closing)
+			state.openProgress = std::min(state.openProgress + kFlyoutSlideOpenSpeed * dt, 1.0f);
 
 		// Track source item rect for hover checking in EndFlyout
 		state.sourceMin = hoverMin;
@@ -2131,7 +2139,7 @@ namespace Util
 		float p = state.openProgress;
 		float eased = 1.0f - (1.0f - p) * (1.0f - p);
 		float slideOffset = (1.0f - eased) * kFlyoutSlideDistance * scale;
-		float alpha = std::min(p * 4.0f, 1.0f);  // quick opacity ramp in first 25%
+		float alpha = std::min(p * 4.0f, 1.0f);  // full opacity by 25% progress, fades last 25% on close
 
 		ImVec2 flyoutPos(hoverMin.x - kFlyoutLeftOffset * scale, hoverMax.y + gap - slideOffset);
 
@@ -2172,16 +2180,23 @@ namespace Util
 		bool itemHovered = mousePos.x >= (state.sourceMin.x - leftOffset) && mousePos.x <= state.sourceMax.x &&
 		                   mousePos.y >= state.sourceMin.y && mousePos.y <= (state.sourceMax.y + gap);
 
-		if (flyoutHovered || itemHovered) {
+		// Once close animation has started, commit to it — only BeginFlyout
+		// re-hover on the source item can cancel. This prevents oscillation
+		// from the flyout sliding into the cursor during the animation.
+		if (state.closing) {
+			state.openProgress = std::max(state.openProgress - kFlyoutSlideCloseSpeed * dt, 0.0f);
+			if (state.openProgress <= 0.0f) {
+				state.isOpen = false;
+				state.closing = false;
+				state.activeId = 0;
+				state.openProgress = 0.f;
+			}
+		} else if (flyoutHovered || itemHovered) {
 			state.closeTimer = 0.f;
 		} else {
 			state.closeTimer += dt;
-			// Slide back up during close delay
-			state.openProgress = std::max(state.openProgress - kFlyoutSlideCloseSpeed * dt, 0.0f);
 			if (state.closeTimer >= kFlyoutCloseDelay) {
-				state.isOpen = false;
-				state.activeId = 0;
-				state.openProgress = 0.f;
+				state.closing = true;
 			}
 		}
 	}
@@ -2213,12 +2228,12 @@ namespace Util
 		return clicked;
 	}
 
-	bool IconButton(const char* id, void* texture, const ImVec2& size)
+	bool IconButton(const char* id, void* texture, const ImVec2& size, float iconPadding)
 	{
 		if (!texture)
 			return false;
 		// Shrink icon within button area so it visually matches text buttons
-		float pad = size.x * kIconShrink;
+		float pad = (iconPadding >= 0.0f) ? iconPadding : size.x * kIconShrink;
 		ImVec2 iconSize(size.x - pad * 2.0f, size.y - pad * 2.0f);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));

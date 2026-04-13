@@ -166,17 +166,21 @@ public:
 
 	// --- Persistence ---
 
-	void SaveUserSettings(SceneType type);
-	void LoadUserSettings(SceneType type);
+	/// Save all user data (interior, TOD, weather) to unified SceneManager.json.
+	void SaveAllUserSettings();
+
 	void DiscoverOverwrites(SceneType type);
 
-	/// Convenience: load all scene types
+	/// Discover weather-specific overwrite files from Weather/{SPID}/ folders.
+	void DiscoverWeatherOverwrites();
+
+	/// Load all scene types (overwrites + unified user file).
 	void LoadAll();
 
 	// --- Path Resolution ---
 
 	static std::string GetSceneTypeName(SceneType type);
-	static std::filesystem::path GetSettingsFilePath(SceneType type);
+	static std::filesystem::path GetUserSettingsFilePath();
 	static std::filesystem::path GetOverwritesPath(SceneType type);
 
 	// --- Time of Day Helpers (public for UI) ---
@@ -197,6 +201,9 @@ public:
 
 	/// Get loaded feature short names filtered to exterior/TOD-relevant features
 	static std::vector<std::string> GetExteriorRelevantFeatureNames();
+
+	/// Check if a feature is allowed for the given scene type (whitelist check)
+	static bool IsFeatureAllowedForType(SceneType type, const std::string& featureShortName);
 
 	/// Get the display name for a feature (e.g. "Screen Space GI" from "ScreenSpaceGI")
 	static std::string GetFeatureDisplayName(const std::string& featureShortName);
@@ -221,41 +228,59 @@ public:
 	};
 	static SettingType DetectSettingType(const json& value);
 
+	// --- SPID Helpers (load-order-portable FormID format) ---
+
+	/// Components of a SPID identifier: local FormID + plugin name.
+	struct SpidComponents
+	{
+		uint32_t localFormId = 0;
+		std::string pluginName;
+	};
+
+	/// Parse a SPID string like "0x12F89E~Skyrim.esm" into components.
+	static SpidComponents ParseSpid(const std::string& spid);
+
+	/// Format a SPID string from components.
+	static std::string FormatSpid(uint32_t localFormId, const std::string& pluginName);
+
+	/// Convert a runtime FormID to a portable SPID string.
+	static std::string FormIdToSpid(RE::FormID formId);
+
+	/// Resolve a SPID string to a runtime FormID (0 if not found).
+	static RE::FormID SpidToFormId(const std::string& spid);
+
+	/// Get a display name for a weather: "EditorID (12F89E)" or SPID fallback.
+	static std::string GetWeatherDisplayName(RE::FormID weatherId);
+
 	// --- Per-Weather Scene Settings ---
 
-	/// Per-weather configuration: flat overrides or per-period (TOD) overrides.
+	/// Per-weather configuration: all entries are per-period (TOD).
+	/// The UI flat/TOD toggle is a view-only preference, not a data mode.
 	struct WeatherSceneConfig
 	{
-		bool useTimeOfDay = false;
 		std::vector<SettingEntry> entries;
 	};
 
 	const WeatherSceneConfig& GetWeatherConfig(RE::FormID weatherId) const;
 	bool HasWeatherConfig(RE::FormID weatherId) const;
-	bool IsWeatherTimeOfDay(RE::FormID weatherId) const;
-	void SetWeatherTimeOfDay(RE::FormID weatherId, bool useTod);
 
+	/// Add a weather setting.  Requires a valid period (all entries are per-period).
 	void AddWeatherSetting(RE::FormID weatherId, const std::string& featureShortName,
-		const std::string& settingKey, const json& value,
-		TimeOfDayPeriod period = TimeOfDayPeriod::Count);
+		const std::string& settingKey, const json& value, TimeOfDayPeriod period);
 	void RemoveWeatherSetting(RE::FormID weatherId, size_t index);
 	void TogglePauseWeatherEntry(RE::FormID weatherId, size_t index);
 	void UpdateWeatherEntryValue(RE::FormID weatherId, size_t index, const json& newValue, bool deferSave = false);
 	void RevertWeatherEntryToDefault(RE::FormID weatherId, size_t index);
 	void DeleteAllWeatherSettings(RE::FormID weatherId);
 
-	bool HasWeatherEntry(RE::FormID weatherId, const std::string& featureShortName,
-		const std::string& settingKey) const;
 	bool HasWeatherEntryForPeriod(RE::FormID weatherId, const std::string& featureShortName,
 		const std::string& settingKey, TimeOfDayPeriod period) const;
 
-	void SaveWeatherSceneSettings(RE::FormID weatherId);
-	void LoadWeatherSceneSettings(RE::FormID weatherId);
-	void DiscoverAllWeatherSceneSettings();
+	/// Weather UI preference: show TOD table vs flat view (view-only, data is always per-period).
+	bool IsWeatherShowTimeOfDay(RE::FormID weatherId) const;
+	void SetWeatherShowTimeOfDay(RE::FormID weatherId, bool show);
 
-	static std::filesystem::path GetWeatherSceneDir();
-	static std::filesystem::path GetWeatherScenePath(RE::FormID weatherId);
-	static std::string GetWeatherFormKey(RE::FormID weatherId);
+	static std::filesystem::path GetWeatherOverwritesDir();
 
 private:
 	SceneSettingsManager() = default;
@@ -309,6 +334,9 @@ private:
 	// --- Per-Weather Scene storage ---
 	std::map<RE::FormID, WeatherSceneConfig> weatherSceneConfigs;
 	static const WeatherSceneConfig kEmptyWeatherConfig;
+
+	/// UI preference per weather: show TOD table vs flat view (keyed by FormID for fast access).
+	std::map<RE::FormID, bool> weatherShowTimeOfDay_;
 
 	/// Baseline settings saved before weather scene activation, for reverting.
 	std::map<std::string, json> savedWeatherBaseline;
@@ -386,4 +414,10 @@ private:
 	// --- Overwrite discovery helper ---
 	void DiscoverOverwritesInDir(SceneType type, const std::filesystem::path& dir,
 		TimeOfDayPeriod period = TimeOfDayPeriod::Count);
+
+	/// Discover overwrite files for a single weather SPID folder.
+	void DiscoverWeatherOverwritesForSpid(RE::FormID weatherId, const std::filesystem::path& weatherDir);
+
+	/// Load all user settings from unified SceneManager.json.
+	void LoadAllUserSettings();
 };

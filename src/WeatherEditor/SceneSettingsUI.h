@@ -5,13 +5,43 @@
 #include "SceneSettingsManager.h"
 #include "Utils/UI.h"
 
-/// Shared UI drawing utilities for scene-settings panels (Interior Only, Time of Day).
-/// Eliminates duplicate ImGui code between InteriorOnlyPanel and TimeOfDayPanel.
+/// Shared UI utilities for scene-settings panels.
 namespace SceneSettingsUI
 {
 	using SceneType = SceneSettingsManager::SceneType;
 	using EntrySource = SceneSettingsManager::EntrySource;
 	using Period = SceneSettingsManager::TimeOfDayPeriod;
+	static constexpr int kPeriodCount = SceneSettingsManager::kPeriodCount;
+
+	/// Unique feature+key identifier for TOD table ordering.
+	struct SettingId
+	{
+		std::string feature;
+		std::string key;
+		bool operator<(const SettingId& o) const { return std::tie(feature, key) < std::tie(o.feature, o.key); }
+	};
+
+	/// Period-indexed entry map built from a set of entries.
+	struct SourceGroup
+	{
+		std::vector<SettingId> order;
+		std::map<std::string, std::map<std::string, std::array<size_t, kPeriodCount>>> map;
+	};
+
+	/// Build a SourceGroup from entries, optionally filtered to a single source.
+	SourceGroup BuildSourceGroup(const std::vector<SceneSettingsManager::SettingEntry>& entries,
+		EntrySource sourceFilter, bool filterBySource = true);
+
+	/// Draw a light separator between feature groups (skips the first call).
+	void DrawGroupSeparator(bool& firstGroup);
+
+	/// Split entry indices by source (Overwrite vs User).
+	void SplitBySource(const std::vector<SceneSettingsManager::SettingEntry>& entries,
+		std::vector<size_t>& overwriteOut, std::vector<size_t>& userOut);
+
+	/// Remove entries by indices in reverse order.
+	void RemoveIndicesReversed(const std::vector<size_t>& indices,
+		std::function<void(size_t)> removeFn);
 
 	/// Persistent state for the "+" add-setting dialog.
 	struct AddSettingState
@@ -47,22 +77,14 @@ namespace SceneSettingsUI
 			deleteAllUser("Delete All User Settings?", userMsg, "Delete All") {}
 	};
 
-	/// Draw a "+" button that opens the add-setting dialog.
-	/// @param type            Scene type being edited.
-	/// @param state           Persistent dialog state.
-	/// @param period          For TimeOfDay entries, which period to add to. Count = none.
-	/// @param labelPrefix     Optional label drawn before the button (e.g. period name).
-	/// @param addToAllPeriods When true, adds the setting to every period at once.
-	void DrawAddSettingButton(SceneType type, AddSettingState& state,
-		Period period = Period::Count, const char* labelPrefix = nullptr,
-		bool addToAllPeriods = false);
+	/// Reset and open the add-setting dialog.
+	void OpenAddDialog(SceneType type, AddSettingState& state);
+	void OpenWeatherAddDialog(RE::FormID weatherId, AddSettingState& state);
 
-	/// Position the cursor so the next add-setting button is right-aligned on the current line.
-	void RightAlignNextButton();
-
-	/// Draw the modal dialog opened by DrawAddSettingButton.
-	/// Must be called each frame for each active dialog state.
+	/// Draw the modal add-setting dialog. Call each frame for each active dialog state.
 	void DrawAddSettingDialog(SceneType type, AddSettingState& state,
+		Period period = Period::Count, bool addToAllPeriods = false);
+	void DrawWeatherAddDialog(RE::FormID weatherId, AddSettingState& state,
 		Period period = Period::Count, bool addToAllPeriods = false);
 
 	/// Result from DrawFlyoutControls indicating which action the user triggered.
@@ -73,53 +95,20 @@ namespace SceneSettingsUI
 		bool deleted = false;
 	};
 
-	/// Draw the standard 2-row flyout controls (toggle on row 1, revert + delete on row 2).
-	/// @param paused Whether the entry is currently paused.
-	/// @return Which action buttons were clicked.
-	FlyoutResult DrawFlyoutControls(bool paused);
+	/// Draw flyout controls (toggle + revert + delete). Works for both single and group.
+	FlyoutResult DrawFlyoutControls(bool paused, bool isGroup = false);
 
-	/// Draw row/column flyout controls for a group of entries (toggle all + delete all).
-	/// @param allPaused Whether all entries in the group are currently paused.
-	/// @return Which action buttons were clicked.
-	FlyoutResult DrawGroupFlyoutControls(bool allPaused);
-
-	/// Draw the value editor widget (checkbox/float input/int input) for a setting entry.
-	/// @param type         Scene type being edited.
-	/// @param index        Index into the entries vector.
-	/// @param inputWidth   Width for float/int input widgets.
-	void DrawValueEditor(SceneType type, size_t index, float inputWidth);
-
-	/// Draw a single setting entry row (label, value editor, pause toggle, delete).
-	/// @param type         Scene type being edited.
-	/// @param index        Index into the entries vector.
-	/// @param popups       Shared popup state for confirmations.
-	/// @return true if the entry was deleted inline (caller should stop iterating).
+	void DrawValueEditor(SceneType type, size_t index, float inputWidth, bool readOnly = false);
+	void DrawWeatherValueEditor(RE::FormID weatherId, size_t index, float inputWidth, bool readOnly = false);
+	void DrawWeatherValueEditor(RE::FormID weatherId, const std::vector<size_t>& indices, float inputWidth, bool readOnly = false);
 	bool DrawSettingEntry(SceneType type, size_t index, PopupState& popups);
-
-	/// Process all three delete-confirmation popups relative to the given type.
 	void DrawPopups(SceneType type, PopupState& popups);
 
-	/// Draw a section header with Pause All / Delete All inline buttons.
-	/// @param label        Section label (e.g. "Overwrite Files", "User Settings").
-	/// @param color        Header text color.
-	/// @param idSuffix     ImGui ID suffix for button uniqueness (e.g. "##ow").
-	/// @param allPaused    Whether all entries in this section are currently paused.
-	/// @param onTogglePause Callback when Pause/Unpause All is clicked.
-	/// @param onDeleteAll   Callback when Delete All is clicked.
 	void DrawSectionHeader(const char* label, const ImVec4& color, const char* idSuffix,
 		bool allPaused, std::function<void()> onTogglePause, std::function<void()> onDeleteAll);
 
-	/// Draw overwrite + user entry sections with section-header-inline controls,
-	/// each section's entries grouped by feature name.
-	/// @param type         Scene type being edited.
-	/// @param popups       Shared popup state.
 	void DrawEntrySections(SceneType type, PopupState& popups);
 
-	/// Draw a standalone scene-settings panel that dispatches to this panel's Draw().
-	/// @param category     Category name to check (e.g. "Interior Only").
-	/// @param selected     Currently selected category string.
-	/// @param drawFn       Drawing function to call if category matches.
-	/// @return true if category matched and panel was drawn (caller should return).
 	bool DrawCategoryPanel(const char* category, const std::string& selected,
 		void (*drawFn)());
 }

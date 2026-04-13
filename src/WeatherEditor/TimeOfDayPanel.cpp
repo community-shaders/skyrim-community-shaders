@@ -38,16 +38,8 @@ namespace TimeOfDayPanel
 		"Are you sure you want to remove all user-added time-of-day settings?"
 	};
 
-	/// Collect all unique feature+setting pairs across all periods, preserving order.
-	struct SettingId
-	{
-		std::string feature;
-		std::string key;
-		bool operator<(const SettingId& o) const
-		{
-			return (feature < o.feature) || (feature == o.feature && key < o.key);
-		}
-	};
+	using SettingId = SceneSettingsUI::SettingId;
+	using SourceGroup = SceneSettingsUI::SourceGroup;
 
 	// Shared flyout states (one per flyout context to avoid conflicts)
 	static Util::FlyoutState flyoutState;       // Per-cell flyout
@@ -70,13 +62,12 @@ namespace TimeOfDayPanel
 
 		ImGui::PushID(static_cast<int>(entryIndex));
 
-		bool readOnly = isOverwrite;
-		if (readOnly)
+		if (entry.paused)
 			ImGui::BeginDisabled();
 
-		SceneSettingsUI::DrawValueEditor(kSceneType, entryIndex, ImGui::GetContentRegionAvail().x);
+		SceneSettingsUI::DrawValueEditor(kSceneType, entryIndex, ImGui::GetContentRegionAvail().x, isOverwrite);
 
-		if (readOnly)
+		if (entry.paused)
 			ImGui::EndDisabled();
 
 		// Flyout on hover with toggle / revert / delete
@@ -104,37 +95,6 @@ namespace TimeOfDayPanel
 		}
 
 		ImGui::PopID();
-	}
-
-	/// Build a setting map for entries from a specific source.
-	struct SourceGroup
-	{
-		std::vector<SettingId> order;
-		std::map<std::string, std::map<std::string, std::array<size_t, kPeriodCount>>> map;
-	};
-
-	static SourceGroup BuildSourceGroup(const std::vector<SceneSettingsManager::SettingEntry>& entries,
-		EntrySource source)
-	{
-		SourceGroup group;
-		for (size_t idx = 0; idx < entries.size(); ++idx) {
-			const auto& e = entries[idx];
-			if (e.source != source)
-				continue;
-			int p = static_cast<int>(e.period);
-			if (p < 0 || p >= kPeriodCount)
-				continue;
-			auto& featureMap = group.map[e.featureShortName];
-			auto [it, inserted] = featureMap.try_emplace(e.settingKey);
-			if (inserted) {
-				it->second.fill(SIZE_MAX);
-				group.order.push_back({ e.featureShortName, e.settingKey });
-			}
-			it->second[p] = idx;
-		}
-		// Sort by feature name then setting key
-		std::sort(group.order.begin(), group.order.end());
-		return group;
 	}
 
 	/// Draw TOD table rows for a set of entries grouped by feature.
@@ -195,11 +155,11 @@ namespace TimeOfDayPanel
 				const auto& entries = manager->GetEntries(kSceneType);
 				bool allPaused = std::all_of(rowIndices.begin(), rowIndices.end(),
 					[&](size_t i) { return i < entries.size() && entries[i].paused; });
-				auto result = SceneSettingsUI::DrawGroupFlyoutControls(allPaused);
+				auto result = SceneSettingsUI::DrawFlyoutControls(allPaused, true);
 
 				if (result.toggled)
 					for (auto idx : rowIndices)
-						if (idx < entries.size() && entries[idx].paused == !allPaused)
+						if (idx < entries.size() && entries[idx].paused == allPaused)
 							manager->TogglePauseEntry(kSceneType, idx);
 				if (result.reverted)
 					for (auto idx : rowIndices)
@@ -223,10 +183,7 @@ namespace TimeOfDayPanel
 							fileList);
 						popups.deleteRowOverwrite.Request();
 					} else {
-						auto sorted = rowIndices;
-						std::sort(sorted.begin(), sorted.end(), std::greater<>());
-						for (auto idx : sorted)
-							manager->RemoveSetting(kSceneType, idx);
+						SceneSettingsUI::RemoveIndicesReversed(rowIndices, [&](size_t idx) { manager->RemoveSetting(kSceneType, idx); });
 					}
 				}
 				Util::EndFlyout(rowFlyoutState);
@@ -295,11 +252,11 @@ namespace TimeOfDayPanel
 					if (Util::BeginFlyout(colFlyoutState, colId)) {
 						bool allPaused = std::all_of(indices.begin(), indices.end(),
 							[&](size_t idx) { return idx < entries.size() && entries[idx].paused; });
-						auto result = SceneSettingsUI::DrawGroupFlyoutControls(allPaused);
+						auto result = SceneSettingsUI::DrawFlyoutControls(allPaused, true);
 
 						if (result.toggled)
 							for (auto idx : indices)
-								if (idx < entries.size() && entries[idx].paused == !allPaused)
+								if (idx < entries.size() && entries[idx].paused == allPaused)
 									manager->TogglePauseEntry(kSceneType, idx);
 						if (result.reverted)
 							for (auto idx : indices)
@@ -322,10 +279,7 @@ namespace TimeOfDayPanel
 									SceneSettingsManager::kPeriodNames[i], fileList);
 								popups.deleteRowOverwrite.Request();
 							} else {
-								auto sorted = indices;
-								std::sort(sorted.begin(), sorted.end(), std::greater<>());
-								for (auto idx : sorted)
-									manager->RemoveSetting(kSceneType, idx);
+								SceneSettingsUI::RemoveIndicesReversed(indices, [&](size_t idx) { manager->RemoveSetting(kSceneType, idx); });
 							}
 						}
 						// Close flyout after any delete action
@@ -400,8 +354,8 @@ namespace TimeOfDayPanel
 		ImGui::Spacing();
 
 		// Build separate maps for overwrite and user entries
-		auto overwriteGroup = BuildSourceGroup(entries, EntrySource::Overwrite);
-		auto userGroup = BuildSourceGroup(entries, EntrySource::User);
+		auto overwriteGroup = SceneSettingsUI::BuildSourceGroup(entries, EntrySource::Overwrite);
+		auto userGroup = SceneSettingsUI::BuildSourceGroup(entries, EntrySource::User);
 
 		if (!overwriteGroup.order.empty()) {
 			SceneSettingsUI::DrawSectionHeader("Overwrite Files", theme.StatusPalette.InfoColor, "##ow", manager->AreAllOverwritesPaused(kSceneType), [&] { manager->SetAllOverwritesPaused(kSceneType, !manager->AreAllOverwritesPaused(kSceneType)); }, [&] { popups.deleteAllOverwrites.Request(); });
