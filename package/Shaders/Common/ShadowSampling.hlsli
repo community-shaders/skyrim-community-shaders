@@ -123,19 +123,22 @@ namespace ShadowSampling
 #endif
 	}
 
-	float GetDirectionalShadow(float3 worldPosition, float3 worldPositionWS, float2x2 rotationMatrix)
+	float GetDirectionalShadow(float3 worldPosition, float3 worldPositionWS, float2x2 rotationMatrix, uint eyeIndex)
 	{
 		DirectionalShadowLightData shadowLightData = DirectionalShadowLights[0];
 
-		float shadowMapDepth = length(worldPosition);
+		float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(worldPosition, eyeIndex));
 
-		if (shadowMapDepth > shadowLightData.EndSplitDistances.y)
+		float2 endSplitDistances = shadowLightData.EndSplitDistances;
+		float2 startSplitDistances = shadowLightData.StartSplitDistances;
+
+		if (shadowMapDepth > endSplitDistances.y)
 			return 1.0;
 
-		float fadeFactor = 1.0 - pow(saturate(dot(worldPosition.xyz, worldPosition.xyz) / shadowLightData.EndSplitDistances.y), 8);
+		float fadeFactor = 1.0 - pow(saturate(dot(worldPosition.xyz, worldPosition.xyz) / endSplitDistances.y), 8);
 
 		// Compute cascade blend factor
-		float cascadeSelect = smoothstep(shadowLightData.StartSplitDistances.y, shadowLightData.EndSplitDistances.x, shadowMapDepth);
+		float cascadeSelect = smoothstep(startSplitDistances.y, endSplitDistances.x, shadowMapDepth);
 
 		// Determine which cascade(s) to sample
 		uint primaryCascade = cascadeSelect;

@@ -602,7 +602,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 	if (!SharedData::InInterior) {
-		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix);
+		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
 		dirSoftShadow = dirDetailedShadow;
 	}
 
@@ -891,7 +891,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 	if (!SharedData::InInterior) {
-		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix);
+		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
 		dirSoftShadow = dirDetailedShadow;
 	}
 

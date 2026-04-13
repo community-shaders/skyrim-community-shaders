@@ -11,11 +11,6 @@ namespace VolumetricShadows
 	static const float VSM_MIN_VARIANCE = 0.00001;
 	static const float VSM_BLEEDING_REDUCTION = 0.2;
 
-	float GetShadowDepth(float3 positionWS, uint eyeIndex = 0)
-	{
-		return length(positionWS - FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
-	}
-
 	// Chebyshev upper bound on P(X >= t)
 	// moments.x = mean(z), moments.y = mean(z^2)
 	float ComputeVSM(float2 moments, float depth)
@@ -62,36 +57,36 @@ namespace VolumetricShadows
 		return shadow * rcpSampleCount;
 	}
 
-	float GetVSMShadow3D(DirectionalShadowData sD, float3 startPosition, float3 endPosition, float noise, uint baseSampleCount, uint eyeIndex, out float surfaceShadow)
+	float GetVSMShadow3D(DirectionalShadowLightData directionalShadowLightData, float3 startPosition, float3 endPosition, float noise, uint baseSampleCount, uint eyeIndex, out float surfaceShadow)
 	{
 		// Compute camera-relative distance before adjusting to world space.
 		float3 midPosition = (startPosition + endPosition) * 0.5;
-		float shadowMapDepth = length(midPosition);
+		float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(midPosition, eyeIndex));
 
 		startPosition += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 		endPosition += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 		// Early out beyond cascade range
-		if (shadowMapDepth >= sD.EndSplitDistances.y) {
+		if (shadowMapDepth >= directionalShadowLightData.EndSplitDistances.y) {
 			surfaceShadow = 1.0;
 			return 1.0;
 		}
 
 		// Reduce over distance
-		float fade = saturate(shadowMapDepth / sD.EndSplitDistances.y);
+		float fade = saturate(shadowMapDepth / directionalShadowLightData.EndSplitDistances.y);
 
 		uint sampleCount = max(1, ceil(float(baseSampleCount) * (1.0 - fade)));
 		float rcpSampleCount = rcp(sampleCount);
 
 		// Compute cascade blend factor with smoothstep
-		float cascadeSelect = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
+		float cascadeSelect = saturate((shadowMapDepth - directionalShadowLightData.StartSplitDistances.y) / (directionalShadowLightData.EndSplitDistances.x - directionalShadowLightData.StartSplitDistances.y));
 
 		// Determine which cascade(s) to sample
 		uint primaryCascade = uint(cascadeSelect);
 		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
 
 		// Transform ray to light space for primary cascade
-		float4x4 shadowProj = sD.ShadowProj[primaryCascade];
+		float4x4 shadowProj = directionalShadowLightData.ShadowProj[primaryCascade];
 		float3 startLS = mul(shadowProj, float4(startPosition, 1)).xyz;
 		float3 endLS = mul(shadowProj, float4(endPosition, 1)).xyz;
 		startLS.xy = saturate(startLS.xy);
@@ -107,7 +102,7 @@ namespace VolumetricShadows
 		{
 			uint secondaryCascade = 1 - primaryCascade;
 
-			shadowProj = sD.ShadowProj[secondaryCascade];
+			shadowProj = directionalShadowLightData.ShadowProj[secondaryCascade];
 			startLS = mul(shadowProj, float4(startPosition, 1)).xyz;
 			endLS = mul(shadowProj, float4(endPosition, 1)).xyz;
 			startLS.xy = saturate(startLS.xy);

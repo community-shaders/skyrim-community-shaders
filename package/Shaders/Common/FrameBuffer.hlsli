@@ -85,6 +85,12 @@ namespace FrameBuffer
 		return clamp(screenPositionDR, minValue, maxValue);
 	}
 
+	float GetShadowDepth(float3 positionWS, uint eyeIndex)
+	{
+		float4 positionCS = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(positionWS, 1));
+		return positionCS.z / positionCS.w;
+	}
+
 	/**
 	 * @brief Converts normalized screen UVs to dynamic-resolution UVs and clamps them.
 	 *
