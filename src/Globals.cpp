@@ -385,7 +385,8 @@ namespace globals
 		stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
 		stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
 
-		// VR stereo optimization hooks: intercept only when stereo reprojection is enabled, to minimize runtime impact.
+		// VR stereo optimization hooks: installed only when stereo reprojection is enabled at startup.
+		// Changing stereoMode at runtime requires a restart; the UI communicates this to the user.
 		if (globals::game::isVR && globals::features::vr.stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off) {
 			stl::detour_vfunc<33, ID3D11DeviceContext_OMSetRenderTargets>(a_context);
 			stl::detour_vfunc<36, ID3D11DeviceContext_OMSetDepthStencilState>(a_context);

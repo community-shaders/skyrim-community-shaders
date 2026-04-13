@@ -260,7 +260,7 @@ void Deferred::StartDeferred()
 	{
 		auto context = globals::d3d::context;
 
-		// Clear POM offset texture so sky/water pixels that the Lighting PS never touches read 0
+		// Clear POM offset texture to -1.0 sentinel so pixels the Lighting PS never touches read "no POM"
 		if (REL::Module::IsVR())
 			globals::features::vr.stereoOpt.ClearPomOffsetTexture();
 

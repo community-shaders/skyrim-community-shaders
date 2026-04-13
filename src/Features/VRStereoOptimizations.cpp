@@ -246,7 +246,7 @@ void VRStereoOptimizations::ClearPomOffsetTexture()
 {
 	if (!texPomOffset)
 		return;
-	const float clearValue[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
+	const float clearValue[4] = { kPomOffsetNoData, kPomOffsetNoData, kPomOffsetNoData, kPomOffsetNoData };
 	globals::d3d::context->ClearUnorderedAccessViewFloat(texPomOffset->uav.get(), clearValue);
 }
 

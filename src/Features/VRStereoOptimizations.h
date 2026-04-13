@@ -46,6 +46,14 @@ struct VRStereoOptimizations
 	};
 
 	//=============================================================================
+	// CONSTANTS
+	//=============================================================================
+
+	/// Sentinel written to texPomOffset when POM did not run for a pixel.
+	/// -1.0 = no POM; >= 0.0 = POM ran. Matches Stereo::POM_NO_DATA in Common/VR.hlsli.
+	static constexpr float kPomOffsetNoData = -1.0f;
+
+	//=============================================================================
 	// PUBLIC METHODS
 	//=============================================================================
 
@@ -172,7 +180,7 @@ struct VRStereoOptimizations
 	/// Get POM offset texture UAV for PS writes during deferred lighting (injected at u7)
 	ID3D11UnorderedAccessView* GetPomOffsetUAV() const { return texPomOffset ? texPomOffset->uav.get() : nullptr; }
 
-	/// Clear the POM offset texture to 0 at the start of each deferred frame
+	/// Clear the POM offset texture to -1.0 (no-POM sentinel) at the start of each deferred frame
 	void ClearPomOffsetTexture();
 
 private:

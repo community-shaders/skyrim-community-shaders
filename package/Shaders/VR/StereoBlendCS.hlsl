@@ -22,7 +22,7 @@ RWTexture2D<float4> OutputRW : register(u0);
 #ifdef STEREO_OVERWRITE
 RWTexture2D<float2> MotionRW : register(u1);
 Texture2D<uint> ModeTexture : register(t2);
-Texture2D<float> PomOffsetTexture : register(t3);  // R16_FLOAT: 0=no POM, [0,1] with 0.5=geometry plane when POM active
+Texture2D<float> PomOffsetTexture : register(t3);  // R16_FLOAT: Stereo::POM_NO_DATA (-1.0) = no POM; >= 0.0 = POM ran
 SamplerState LinearSampler : register(s0);
 
 #	include "VRStereoOptimizations/modes.hlsli"

@@ -11,6 +11,7 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
 #include "Common/Triplanar.hlsli"
+#include "Common/VR.hlsli"
 
 #if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
 #	define SKIN
@@ -360,7 +361,7 @@ struct PS_OUTPUT
 #	if defined(VR_STEREO_OPT) && !defined(SNOW)
 // POM depth offset UAV — written per-pixel for StereoBlendCS depth-aware reprojection.
 // Bound at u7 (after the 7 deferred MRT slots 0-6) via OMSetRenderTargetsAndUnorderedAccessViews.
-// 0.0 = no POM; [0,1] with 0.5 = geometry plane when POM is active.
+// -1.0 = no POM (sentinel, matches ClearPomOffsetTexture); >= 0 = POM ran (StereoBlendCS checks >= 0).
 RWTexture2D<float> PomOffsetTex : register(u7);
 #	endif
 
@@ -3242,7 +3243,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// VR stereo reprojection: write POM depth offset to dedicated texture (u7) for StereoBlendCS.
 	// hasPOM disambiguates "POM ran at geometry plane (pixelOffset=0.5)" from "POM did not run".
 	// -1.0 is the explicit no-POM sentinel (R16_FLOAT supports negatives); StereoBlendCS checks >= 0.
-	PomOffsetTex[uint2(input.Position.xy)] = hasPOM ? pixelOffset : -1.0;
+	PomOffsetTex[uint2(input.Position.xy)] = hasPOM ? pixelOffset : Stereo::POM_NO_DATA;
 #		endif
 
 #		if defined(SNOW)
