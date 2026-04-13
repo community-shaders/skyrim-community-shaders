@@ -216,7 +216,8 @@ namespace ShadowSampling
 
 		float shadow = 0.0;
 
-		[unroll] for (int i = 0; i < 8; i++) {
+		[unroll] for (int i = 0; i < 8; i++)
+		{
 			float2 sampleOffset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix);
 			float2 sampleUV = positionLS.xy + sampleOffset * Constants::PCFRadius2D;
 			shadow += SampleShadowGather(shadowIndex, sampleUV, positionLS.z);
@@ -285,8 +286,7 @@ namespace ShadowSampling
 
 		float4 positionLS = mul(shadowData.ShadowProj, float4(worldPosition, 1));
 
-		[branch]
-		if (shadowData.ShadowLightParam.x == 0)
+		[branch] if (shadowData.ShadowLightParam.x == 0)
 		{
 			float shadowBaseVisibility = GetSpotlightShadow(shadowData, shadowIndex, positionLS, rotationMatrix);
 			positionLS.xyz /= positionLS.w;
