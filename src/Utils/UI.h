@@ -9,7 +9,6 @@
 #include <windows.h>  // For WPARAM and virtual key constants
 
 #include "../FeatureConstraints.h"
-#include "../Menu/Fonts.h"
 #include "Utils/Input.h"
 
 // Forward declarations
@@ -77,13 +76,11 @@ namespace Util
 	 *     ImGui::Text("What the tooltip says.");
 	 * }
 	 *
-	 * Automatically applies the Subtext font role for consistent tooltip styling.
 	*/
 	class HoverTooltipWrapper
 	{
 	private:
 		bool hovered;
-		ImFont* previousFont;
 
 	public:
 		HoverTooltipWrapper();

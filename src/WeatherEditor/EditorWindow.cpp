@@ -4,7 +4,6 @@
 #include "Features/WeatherEditor.h"
 #include "InteriorOnlyPanel.h"
 #include "Menu.h"
-#include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
 #include "State.h"
 #include "Utils/UI.h"
@@ -460,20 +459,16 @@ void EditorWindow::ShowObjectsWindow()
 				auto drawJsonDeleteButton = [&](Widget* widget) {
 					ImGui::TableNextColumn();
 					if (HasCachedJsonAttachment(widget)) {
-						auto* menu = globals::menu;
-						if (menu && menu->uiIcons.deleteSettings.texture) {
-							const float iconSize = ImGui::GetFrameHeight() * 0.85f;
-							auto _style = Util::ErrorButtonStyle();
-							ImGui::SetNextItemAllowOverlap();
-							char idBuf[32];
-							snprintf(idBuf, sizeof(idBuf), "##jsondel_%s", widget->GetFormID().c_str());
-							if (ImGui::ImageButton(idBuf, menu->uiIcons.deleteSettings.texture, { iconSize, iconSize })) {
-								pendingDeleteWidget = widget;
-								pendingDeletePopupRequested = true;
-							}
-							if (ImGui::IsItemHovered())
-								ImGui::SetTooltip("Delete JSON file");
+						auto _style = Util::ErrorButtonStyle();
+						ImGui::SetNextItemAllowOverlap();
+						char idBuf[32];
+						snprintf(idBuf, sizeof(idBuf), "X##jsondel_%s", widget->GetFormID().c_str());
+						if (ImGui::Button(idBuf)) {
+							pendingDeleteWidget = widget;
+							pendingDeletePopupRequested = true;
 						}
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Delete JSON file");
 					}
 				};
 
@@ -598,7 +593,7 @@ void EditorWindow::ShowObjectsWindow()
 						ImGui::TableNextRow();
 
 						// Highlight current cell's lighting template
-						auto highlightColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.InfoColor;
+						auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
 						highlightColor.w = 0.3f;
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
@@ -994,7 +989,6 @@ void EditorWindow::RenderUI()
 		}
 		if (ImGui::BeginMenu("Window")) {
 			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
-				BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
 				Save();
 			}
 			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
@@ -1058,28 +1052,19 @@ void EditorWindow::RenderUI()
 		}
 
 		auto menu = globals::menu;
-		constexpr float kIconButtonPadding = 1.0f;  // minimal padding so icons render larger and smoother
+		constexpr float kIconButtonPadding = 1.0f;
 		const float iconButtonDim = ImGui::GetFrameHeight() - kIconButtonPadding * 2;
-		const ImVec2 iconButtonSize(iconButtonDim, iconButtonDim);
-		const auto iconTint = Util::GetIconTint();
 
 		// Undo button (stays on left side)
-		if (menu && menu->uiIcons.undo.texture) {
+		{
 			bool canUndo = CanUndo();
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kIconButtonPadding, kIconButtonPadding));
-			{
-				auto _style = Util::TransparentIconButtonStyle();
-				auto textColor = canUndo ? menu->GetTheme().Palette.Text : menu->GetTheme().StatusPalette.Disable;
-				if (!canUndo)
-					textColor.w = 0.5f;
-				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-				if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint) && canUndo)
-					PerformUndo();
-				ImGui::PopStyleColor();
-			}
-			ImGui::PopStyleVar(2);
-			if (ImGui::IsItemHovered())
+			if (!canUndo)
+				ImGui::BeginDisabled();
+			if (ImGui::Button("Undo"))
+				PerformUndo();
+			if (!canUndo)
+				ImGui::EndDisabled();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 				ImGui::SetTooltip(canUndo ? "Undo (Ctrl+Z) - %d states" : "Undo (Ctrl+Z) - No changes to undo", (int)undoStack.size());
 		}
 
@@ -1112,8 +1097,8 @@ void EditorWindow::RenderUI()
 
 		// Pause Time button
 		float pauseButtonX = 0;
-		bool hasPauseButton = menu && menu->uiIcons.pauseTime.texture;
-		if (hasPauseButton) {
+		bool hasPauseButton = true;
+		{
 			rightCursor -= itemSpacing + iconButtonDim + kIconButtonPadding * 2;
 			pauseButtonX = rightCursor;
 		}
@@ -1121,13 +1106,13 @@ void EditorWindow::RenderUI()
 		// Preview mode buttons (free camera / play mode)
 		const float previewButtonWidth = iconButtonDim + kIconButtonPadding * 2;
 		float freeCameraX = 0, playModeX = 0;
-		bool hasFreeCam = menu && menu->uiIcons.freeCamera.texture;
-		bool hasPlayMode = menu && menu->uiIcons.playMode.texture;
-		if (hasPlayMode) {
+		bool hasFreeCam = true;
+		bool hasPlayMode = true;
+		{
 			rightCursor -= itemSpacing + previewButtonWidth;
 			playModeX = rightCursor;
 		}
-		if (hasFreeCam) {
+		{
 			rightCursor -= itemSpacing + previewButtonWidth;
 			freeCameraX = rightCursor;
 		}
@@ -1190,11 +1175,9 @@ void EditorWindow::RenderUI()
 			ImGui::TextColored(Util::GetPulsingColor(statusPalette.CurrentHotkey), "%s", previewStatusBuf);
 		}
 
-		// Toggle-style icon button helper (active: SuccessColor bg, inactive: transparent)
-		auto DrawToggleIconButton = [&](const char* id, ImTextureRef texture, bool isActive, float posX) -> bool {
+		// Toggle-style text button helper (active: SuccessColor bg, inactive: transparent)
+		auto DrawToggleTextButton = [&](const char* label, bool isActive, float posX) -> bool {
 			ImGui::SetCursorScreenPos(ImVec2(posX, cursorY));
-			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kIconButtonPadding, kIconButtonPadding));
 			if (isActive) {
 				auto color = statusPalette.SuccessColor;
 				color.w = kToggleActiveAlpha;
@@ -1203,28 +1186,27 @@ void EditorWindow::RenderUI()
 				ImGui::PushStyleColor(ImGuiCol_Button, color);
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
 			} else {
-				auto hover = menu->GetTheme().Palette.Text;
+				auto hover = menu ? menu->GetTheme().Palette.Text : ImVec4(1, 1, 1, 1);
 				hover.w = kInactiveHoverAlpha;
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
 			}
-			bool clicked = ImGui::ImageButton(id, texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
+			bool clicked = ImGui::Button(label);
 			ImGui::PopStyleColor(2);
-			ImGui::PopStyleVar(2);
 			return clicked;
 		};
 
 		// Preview mode buttons
 		if (hasFreeCam) {
 			bool isActive = previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked;
-			if (DrawToggleIconButton("##FreeCamera", menu->uiIcons.freeCamera.texture, isActive, freeCameraX))
+			if (DrawToggleTextButton("FreeCam##FreeCamera", isActive, freeCameraX))
 				EnterPreviewMode(PreviewMode::FreeCamera);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isActive ? "Exit Free Camera" : "Free Camera (scroll to adjust speed)");
 		}
 		if (hasPlayMode) {
 			bool isActive = previewMode == PreviewMode::PlayMode;
-			if (DrawToggleIconButton("##PlayMode", menu->uiIcons.playMode.texture, isActive, playModeX))
+			if (DrawToggleTextButton("Play##PlayMode", isActive, playModeX))
 				EnterPreviewMode(PreviewMode::PlayMode);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isActive ? "Exit Play Mode" : "Play Mode - Walk around normally");
@@ -1232,7 +1214,7 @@ void EditorWindow::RenderUI()
 
 		if (hasPauseButton) {
 			bool isPaused = IsTimePaused();
-			if (DrawToggleIconButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, isPaused, pauseButtonX))
+			if (DrawToggleTextButton("Pause##GlobalPauseTime", isPaused, pauseButtonX))
 				TogglePause();
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
@@ -1281,7 +1263,7 @@ void EditorWindow::RenderUI()
 	auto width = ImGui::GetIO().DisplaySize.x;
 	auto height = ImGui::GetIO().DisplaySize.y;
 	const float scale = Util::GetUIScale();
-	const float pad = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * scale;
+	const float pad = 10.0f * scale;
 	const float menuBarHeight = ImGui::GetFrameHeight();
 	const float availableWidth = width - pad * 3.0f;  // left pad + gap + right pad
 	const float availableHeight = (height - menuBarHeight - pad * 2.0f) * 0.85f;
@@ -1400,12 +1382,9 @@ void EditorWindow::UpdateOpenState()
 	if (open && !wasOpen) {
 		DisableVanityCamera();
 		HideGameMenus();
-		BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
-
 	} else if (!open && wasOpen) {
 		RestoreVanityCamera();
 		ShowGameMenus();
-		BackgroundBlur::SetWeatherEditorActive(false);
 	}
 
 	wasOpen = open;
@@ -2068,7 +2047,7 @@ void EditorWindow::PerformUndo()
 		state.widget->ApplyChanges();
 		ShowNotification(
 			std::format("Undone changes to {}", state.widgetId),
-			Menu::GetSingleton()->GetSettings().Theme.StatusPalette.InfoColor,
+			Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor,
 			2.0f);
 	}
 }

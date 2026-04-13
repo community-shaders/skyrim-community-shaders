@@ -967,37 +967,3 @@ float State::GetTotalSmoothedDrawCalls() const
 	return static_cast<float>(smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
 }
 
-void State::LoadTheme()
-{
-	// Load the active preset from SettingsUser.json (already read during State::Load)
-	auto presetName = globals::menu->GetSettings().SelectedThemePreset;
-	if (presetName.empty()) {
-		logger::info("No active theme preset set; skipping preset load");
-		return;
-	}
-
-	// Ensure default themes exist and theme manager has discovered themes
-	globals::menu->CreateDefaultThemes();
-	auto themeManager = ThemeManager::GetSingleton();
-	if (themeManager && !themeManager->IsDiscovered()) {
-		themeManager->DiscoverThemes();
-	}
-
-	logger::info("Loading active theme preset: '{}'", presetName);
-	if (!globals::menu->LoadThemePreset(presetName)) {
-		logger::warn("Failed to load preset '{}', attempting to fall back to 'Default'", presetName);
-		if (globals::menu->LoadThemePreset("Default")) {
-			globals::menu->GetSettings().SelectedThemePreset = "Default";
-			logger::info("Fallback to 'Default' theme succeeded");
-		} else {
-			logger::warn("Fallback to 'Default' theme failed");
-		}
-	}
-}
-
-void State::SaveTheme()
-{
-	// SelectedThemePreset is now persisted via SettingsUser.json (State::Save)
-	// Keep this function as a no-op for backward compatibility and to avoid writing separate theme files.
-	logger::info("SaveTheme() no longer writes SettingsTheme.json; SelectedThemePreset is saved with SettingsUser.json");
-}

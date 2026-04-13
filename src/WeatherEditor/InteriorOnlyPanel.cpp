@@ -2,7 +2,6 @@
 
 #include "../Globals.h"
 #include "../Menu.h"
-#include "../Menu/ThemeManager.h"
 #include "../SceneSettingsManager.h"
 #include "../Utils/UI.h"
 #include "EditorWindow.h"
@@ -13,8 +12,15 @@ namespace InteriorOnlyPanel
 	using EntrySource = SceneSettingsManager::EntrySource;
 	static constexpr auto kSceneType = SceneType::InteriorOnly;
 
-	// Layout constants from centralized theme
-	using C = ThemeManager::Constants;
+	// Layout constants
+	struct C
+	{
+		static constexpr float SCENE_VALUE_INPUT_WIDTH = 240.0f;
+		static constexpr float SCENE_DELETE_BUTTON_WIDTH = 40.0f;
+		static constexpr float SCENE_FEATURE_DROPDOWN_RATIO = 0.45f;
+		static constexpr float SCENE_SETTING_DROPDOWN_RATIO = 0.6f;
+		static constexpr float SCENE_VALUE_LABEL_OFFSET_RATIO = 0.5f;
+	};
 
 	// Persistent state for the "Add Setting" workflow
 	static int selectedFeatureIdx = -1;
@@ -224,7 +230,7 @@ namespace InteriorOnlyPanel
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
 		const auto& entries = manager->GetEntries(kSceneType);
-		auto& theme = globals::menu->GetSettings().Theme;
+		auto& theme = globals::menu->GetTheme();
 
 		// Header
 		ImGui::Text("Interior Only Settings");

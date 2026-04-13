@@ -87,8 +87,6 @@ public:
 	void SaveToJson(nlohmann::json& o_json);
 	void LoadFromJson(nlohmann::json& i_json);
 
-	void LoadTheme();
-	void SaveTheme();
 
 	bool ValidateCache(CSimpleIniA& a_ini);
 	void WriteDiskCacheInfo(CSimpleIniA& a_ini);

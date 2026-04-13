@@ -157,6 +157,7 @@ namespace DX
 #include <ClibUtil/rng.hpp>
 #include <ClibUtil/simpleINI.hpp>
 
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include <imgui.h>
 
 #include <nlohmann/json.hpp>

@@ -1,100 +1,23 @@
 
 #pragma once
 #include "Feature.h"
-#include "Menu/ThemeManager.h"
+#include "ImGui/imgui_impl_win32.h"
 #include "Utils/Input.h"
-#include "Utils/Serialize.h"
-#include <array>
 #include <atomic>
 #include <cstdint>
 #include <dxgi1_4.h>
 #include <nlohmann/json.hpp>
-#include <optional>
+#include <map>
 #include <shared_mutex>
 #include <string>
-#include <string_view>
-#include <unordered_map>
 #include <vector>
 #include <winrt/base.h>
 
 using json = nlohmann::json;
 
-struct ImFont;
-
 class Menu
 {
 public:
-	/**
-	 * @brief Semantic font roles for hierarchical UI typography
-	 *
-	 * FONT ROLE SYSTEM:
-	 * =================
-	 * Replaces legacy single-font approach with semantic typography system.
-	 * Each role can use different font family, style, and size scaling.
-	 *
-	 * Roles:
-	 * - Body (0):       Default UI text, setting labels, general content
-	 * - Heading (1):    Feature section headers
-	 * - Subheading (2): Subsection headers within features
-	 * - Subtitle (3):   Secondary descriptive text, tooltips
-	 *
-	 * Theme JSON Configuration:
-	 * "FontRoles": [
-	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
-	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
-	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
-	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 }
-	 * ]
-	 *
-	 * SizeScale multiplies the base FontSize for each role.
-	 * Example: FontSize=27, Heading SizeScale=1.05 → 28.35px rendered size
-	 *
-	 * Migration from Legacy:
-	 * Old "FontName" field auto-populates Body role on theme load.
-	 * Themes without FontRoles get defaults (Jost family).
-	 */
-	enum class FontRole : std::uint8_t
-	{
-		Body = 0,    // Default UI text
-		Title,       // Large title text (e.g., "Community Shaders" header)
-		Heading,     // Section headers (tabs, category labels)
-		Subheading,  // Subsection headers (feature names, separators)
-		Subtext,     // Smaller secondary text (descriptions, about content)
-		Count        // Total number of roles
-	};
-
-	struct FontRoleDescriptor
-	{
-		std::string_view key;
-		std::string_view displayName;
-		float defaultScale;
-	};
-
-	static inline constexpr std::array<FontRoleDescriptor, static_cast<size_t>(FontRole::Count)> FontRoleDescriptors = {
-		FontRoleDescriptor{ "Body", "Body Text", 1.0f },
-		FontRoleDescriptor{ "Title", "Title", 1.0f },
-		FontRoleDescriptor{ "Heading", "Headings", 1.0f },
-		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f },
-		FontRoleDescriptor{ "Subtext", "Subtext", 0.9f }
-	};
-
-	static constexpr std::string_view GetFontRoleKey(FontRole role)
-	{
-		return FontRoleDescriptors[static_cast<size_t>(role)].key;
-	}
-
-	static constexpr std::string_view GetFontRoleDisplayName(FontRole role)
-	{
-		return FontRoleDescriptors[static_cast<size_t>(role)].displayName;
-	}
-
-	static constexpr float GetFontRoleDefaultScale(FontRole role)
-	{
-		return FontRoleDescriptors[static_cast<size_t>(role)].defaultScale;
-	}
-
-	static std::optional<FontRole> ResolveFontRole(std::string_view key);
-
 	~Menu();
 	Menu(const Menu&) = delete;
 	Menu& operator=(const Menu&) = delete;
@@ -108,179 +31,17 @@ public:
 	bool initialized = false;
 	bool IsEnabled = false;
 
-	void Load(json& o_json);
-	void Save(json& o_json);
-
-	void LoadTheme(json& o_json);
-	void SaveTheme(json& o_json);
-
-	// Multi-theme support
-	std::vector<std::string> DiscoverThemes();
-	bool LoadThemePreset(const std::string& themeName);
-	void CreateDefaultThemes();
-
-	void Init();
-	void DrawSettings();
-
-	// Search bar state
-	std::string featureSearch;  // For left pane feature search
-	void DrawOverlay();
-	void DrawWeatherDetailsWindow();
-
-	void ProcessInputEvents(RE::InputEvent* const* a_events);
-	bool ShouldSwallowInput();
-	bool IsPreviewFlying();
-	std::string BuildFontSignature(float baseFontSize) const;
-
-public:
-	// Input handling flags (made public for InputEventHandler access)
-	bool settingToggleKey = false;
-	bool settingSkipCompilationKey = false;
-	bool settingsEffectsToggle = false;
-	bool settingOverlayToggleKey = false;
-	bool settingShaderBlockPrevKey = false;      // Debug: capture shader block prev key
-	bool settingShaderBlockNextKey = false;      // Debug: capture shader block next key
-	bool settingWeatherEditorToggleKey = false;  // Weather Editor toggle key
-
-	// Font caching (made public for ThemeManager and OverlayRenderer access)
-	// Marked mutable because they're cache fields that may be updated from const methods
-	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
-	mutable std::string cachedFontName = "Jost/Jost-Regular.ttf";       // Tracks whether font file has changed and may require reloading
-	std::array<std::string, static_cast<size_t>(FontRole::Count)> cachedFontFilesByRole = []() {
-		std::array<std::string, static_cast<size_t>(FontRole::Count)> files{};
-		auto setFile = [&files](FontRole role, std::string value) {
-			files[static_cast<size_t>(role)] = std::move(value);
-		};
-		setFile(FontRole::Body, "Jost/Jost-Regular.ttf");
-		setFile(FontRole::Title, "Jost/Jost-Regular.ttf");
-		setFile(FontRole::Heading, "Jost/Jost-Regular.ttf");
-		setFile(FontRole::Subheading, "Jost/Jost-Regular.ttf");
-		setFile(FontRole::Subtext, "Jost/Jost-Regular.ttf");
-		return files;
-	}();
-	mutable std::array<float, static_cast<size_t>(FontRole::Count)> cachedFontPixelSizesByRole = {};
-	std::string cachedFontSignature;
-	mutable std::array<ImFont*, static_cast<size_t>(FontRole::Count)> loadedFontRoles = {};
-
-	// Deferred reload systems (public for SettingsTabRenderer access)
-	bool pendingFontReload = false;
-	bool pendingIconReload = false;
-
-	// Display size tracking for cross-session resolution change detection
-	float2 lastDisplaySize{};
-	bool resetLayout = false;
-
-	// Used for resetting input keys to solve alt-tab stuck issue
-	std::atomic<bool> focusChanged = false;
-	void OnFocusChanged();
-
-	struct Constants
-	{
-		static constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
-	};
-
-	// UI icon textures
-	struct UIIcon
-	{
-		ID3D11ShaderResourceView* texture = nullptr;
-		ImVec2 size = ImVec2(32.0f, 32.0f);
-
-		void Release()
-		{
-			if (texture) {
-				texture->Release();
-				texture = nullptr;
-			}
-		}
-	};
-	struct UIIcons
-	{
-		UIIcon saveSettings;
-		UIIcon loadSettings;
-		UIIcon deleteSettings;
-		UIIcon clearCache;
-		UIIcon logo;                  // New logo icon
-		UIIcon search;                // Search icon for search bars
-		UIIcon featureSettingRevert;  // Feature revert settings icon
-		UIIcon applyToGame;           // Apply changes to game icon (weather editor)
-		UIIcon pauseTime;             // Pause time icon (weather editor)
-		UIIcon undo;                  // Undo icon (weather editor)
-		UIIcon freeCamera;            // Free camera preview icon (weather editor)
-		UIIcon playMode;              // Play mode preview icon (weather editor)
-
-		// Social media/external link icons
-		UIIcon discord;
-
-		// Category icons
-		UIIcon characters;
-		UIIcon display;
-		UIIcon grass;
-		UIIcon lighting;
-		UIIcon sky;
-		UIIcon landscape;
-		UIIcon water;
-		UIIcon debug;
-		UIIcon materials;
-		UIIcon postProcessing;
-	} uiIcons;
-
+	// Minimal theme settings for color palettes used across features
 	struct ThemeSettings
 	{
-		struct FontRoleSettings
-		{
-			std::string Family;
-			std::string Style;
-			std::string File;
-			float SizeScale = 1.0f;
-		};
-
-		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
-		std::string FontName = "Jost/Jost-Regular.ttf";         // Default font file name (legacy)
-		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
-		std::array<FontRoleSettings, static_cast<size_t>(FontRole::Count)> FontRoles = []() {
-			std::array<FontRoleSettings, static_cast<size_t>(FontRole::Count)> roles{};
-			auto setRole = [&roles](FontRole role, std::string family, std::string style, std::string file, float sizeScale) {
-				auto index = static_cast<size_t>(role);
-				roles[index].Family = std::move(family);
-				roles[index].Style = std::move(style);
-				roles[index].File = std::move(file);
-				roles[index].SizeScale = sizeScale;
-			};
-
-			setRole(FontRole::Body, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
-			setRole(FontRole::Title, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
-			setRole(FontRole::Heading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
-			setRole(FontRole::Subheading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
-			setRole(FontRole::Subtext, "Jost", "Regular", "Jost/Jost-Regular.ttf", 0.9f);
-
-			return roles;
-		}();
-
-		bool UseSimplePalette = false;      // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
-		bool ShowActionIcons = true;        // whether to show action buttons as icons
-		bool UseMonochromeIcons = false;    // whether to use monochrome (white) action icons with text color tinting
-		bool UseMonochromeLogo = false;     // whether to use monochrome CS logo
-		bool ShowFooter = true;             // whether to show the footer with game version/GPU info
-		bool CenterHeader = false;          // whether to center the header title and logo
-		float TooltipHoverDelay = 0.5f;     // tooltip hover delay in seconds
-		bool BackgroundBlurEnabled = true;  // enable background blur effect
-		// Scrollbar opacity settings
-		struct ScrollbarOpacitySettings
-		{
-			float Background = 0.0f;     // Background of the scrollbar area
-			float Thumb = 0.5f;          // The draggable thumb/grip
-			float ThumbHovered = 0.75f;  // Thumb when hovered
-			float ThumbActive = 0.9f;    // Thumb when being dragged
-		} ScrollbarOpacity;
 		struct PaletteColors
 		{
 			ImVec4 Background{ 0.10f, 0.10f, 0.10f, 0.80f };
 			ImVec4 Text{ 1.0f, 1.0f, 1.0f, 1.0f };
-			// Separated border controls for better theming granularity
-			ImVec4 WindowBorder{ 0.5f, 0.5f, 0.5f, 0.8f };  // Outer window borders
-			ImVec4 FrameBorder{ 0.4f, 0.4f, 0.4f, 0.7f };   // Button, slider, input field borders
-			ImVec4 Separator{ 0.5f, 0.5f, 0.5f, 0.6f };     // Internal separators and dividers
-			ImVec4 ResizeGrip{ 0.6f, 0.6f, 0.6f, 0.8f };    // Window resize grips
+			ImVec4 WindowBorder{ 0.5f, 0.5f, 0.5f, 0.8f };
+			ImVec4 FrameBorder{ 0.4f, 0.4f, 0.4f, 0.7f };
+			ImVec4 Separator{ 0.5f, 0.5f, 0.5f, 0.6f };
+			ImVec4 ResizeGrip{ 0.6f, 0.6f, 0.6f, 0.8f };
 		} Palette;
 		struct StatusPaletteColors
 		{
@@ -296,143 +57,68 @@ public:
 		{
 			ImVec4 ColorDefault{ 0.8f, 0.8f, 0.8f, 1.0f };
 			ImVec4 ColorHovered{ 0.6f, 0.6f, 0.6f, 1.0f };
-			float MinimizedFactor = 0.7f;    // 70% of original alpha for when the header is minimized
-			float FeatureTitleScale = 1.5f;  // Scale multiplier for feature title text in settings tab
+			float MinimizedFactor = 0.7f;
+			float FeatureTitleScale = 1.5f;
 		} FeatureHeading;
-
-		ImGuiStyle Style = []() {
-			ImGuiStyle style = {};
-			style.WindowBorderSize = 2.0f;
-			style.ChildBorderSize = 0.0f;
-			style.FrameBorderSize = 1.0f;
-			style.WindowPadding = { 8.0f, 8.0f };
-			style.WindowRounding = 12.0f;
-			style.IndentSpacing = 8.0f;
-			style.FramePadding = { 8.0f, 4.0f };
-			style.CellPadding = { 8.0f, 2.0f };
-			style.ItemSpacing = { 4.0f, 8.0f };
-			style.FrameRounding = 4.0f;
-			style.TabRounding = 4.0f;
-			style.ScrollbarRounding = 9.0f;
-			style.ScrollbarSize = 12.0f;
-			style.GrabRounding = 3.0f;
-			style.GrabMinSize = 12.0f;
-			return std::move(style);
-		}();
-		// Theme by @Maksasj, edited by FiveLimbedCat
-		// url: https://github.com/ocornut/imgui/issues/707#issuecomment-1494706165
-		// Entries ordered to match imgui 1.92+ ImGuiCol_ enum (62 entries).
-		// 7 new slots were inserted in the middle of the 1.90 enum; all subsequent
-		// indices shifted — corrected here to prevent colour mismatches.
-		std::array<ImVec4, ImGuiCol_COUNT> FullPalette = {
-			ImVec4(0.9f, 0.9f, 0.9f, 0.9f),      // [0]  Text
-			ImVec4(0.6f, 0.6f, 0.6f, 1.0f),      // [1]  TextDisabled
-			ImVec4(0.1f, 0.1f, 0.15f, 1.0f),     // [2]  WindowBg
-			ImVec4(0.0f, 0.0f, 0.0f, 0.0f),      // [3]  ChildBg
-			ImVec4(0.05f, 0.05f, 0.1f, 0.85f),   // [4]  PopupBg
-			ImVec4(0.7f, 0.7f, 0.7f, 0.65f),     // [5]  Border
-			ImVec4(0.0f, 0.0f, 0.0f, 0.0f),      // [6]  BorderShadow
-			ImVec4(0.0f, 0.0f, 0.0f, 1.0f),      // [7]  FrameBg
-			ImVec4(0.9f, 0.8f, 0.8f, 0.4f),      // [8]  FrameBgHovered
-			ImVec4(0.9f, 0.65f, 0.65f, 0.45f),   // [9]  FrameBgActive
-			ImVec4(0.0f, 0.0f, 0.0f, 0.83f),     // [10] TitleBg
-			ImVec4(0.0f, 0.0f, 0.0f, 0.87f),     // [11] TitleBgActive
-			ImVec4(0.4f, 0.4f, 0.8f, 0.2f),      // [12] TitleBgCollapsed
-			ImVec4(0.01f, 0.01f, 0.02f, 0.8f),   // [13] MenuBarBg
-			ImVec4(0.2f, 0.25f, 0.3f, 0.6f),     // [14] ScrollbarBg
-			ImVec4(0.55f, 0.53f, 0.55f, 0.51f),  // [15] ScrollbarGrab
-			ImVec4(0.56f, 0.56f, 0.56f, 1.0f),   // [16] ScrollbarGrabHovered
-			ImVec4(0.56f, 0.56f, 0.56f, 0.91f),  // [17] ScrollbarGrabActive
-			ImVec4(0.9f, 0.9f, 0.9f, 0.83f),     // [18] CheckMark
-			ImVec4(0.7f, 0.7f, 0.7f, 0.62f),     // [19] SliderGrab
-			ImVec4(0.3f, 0.3f, 0.3f, 0.84f),     // [20] SliderGrabActive
-			ImVec4(0.48f, 0.72f, 0.89f, 0.49f),  // [21] Button
-			ImVec4(0.5f, 0.69f, 0.99f, 0.68f),   // [22] ButtonHovered
-			ImVec4(0.8f, 0.5f, 0.5f, 1.0f),      // [23] ButtonActive
-			ImVec4(0.3f, 0.69f, 1.0f, 0.53f),    // [24] Header
-			ImVec4(0.44f, 0.61f, 0.86f, 1.0f),   // [25] HeaderHovered
-			ImVec4(0.38f, 0.62f, 0.83f, 1.0f),   // [26] HeaderActive
-			ImVec4(0.5f, 0.5f, 0.5f, 1.0f),      // [27] Separator
-			ImVec4(0.7f, 0.6f, 0.6f, 1.0f),      // [28] SeparatorHovered
-			ImVec4(0.9f, 0.7f, 0.7f, 1.0f),      // [29] SeparatorActive
-			ImVec4(1.0f, 1.0f, 1.0f, 0.85f),     // [30] ResizeGrip
-			ImVec4(1.0f, 1.0f, 1.0f, 0.6f),      // [31] ResizeGripHovered
-			ImVec4(1.0f, 1.0f, 1.0f, 0.9f),      // [32] ResizeGripActive
-			ImVec4(0.9f, 0.9f, 0.9f, 1.0f),      // [33] InputTextCursor        (new in 1.92)
-			ImVec4(0.0f, 0.46f, 1.0f, 0.8f),     // [34] TabHovered
-			ImVec4(0.4f, 0.52f, 0.67f, 0.84f),   // [35] Tab
-			ImVec4(0.2f, 0.41f, 0.68f, 1.0f),    // [36] TabSelected
-			ImVec4(0.38f, 0.62f, 0.83f, 1.0f),   // [37] TabSelectedOverline     (new in 1.91)
-			ImVec4(0.07f, 0.1f, 0.15f, 0.97f),   // [38] TabDimmed
-			ImVec4(0.13f, 0.26f, 0.42f, 1.0f),   // [39] TabDimmedSelected
-			ImVec4(0.5f, 0.5f, 0.5f, 0.0f),      // [40] TabDimmedSelectedOverline (new in 1.91)
-			ImVec4(0.7f, 0.6f, 0.6f, 0.5f),      // [41] DockingPreview
-			ImVec4(0.0f, 0.0f, 0.0f, 0.0f),      // [42] DockingEmptyBg
-			ImVec4(1.0f, 1.0f, 1.0f, 1.0f),      // [43] PlotLines
-			ImVec4(0.0f, 0.87f, 1.0f, 1.0f),     // [44] PlotLinesHovered
-			ImVec4(0.22f, 0.26f, 0.7f, 1.0f),    // [45] PlotHistogram
-			ImVec4(0.8f, 0.26f, 0.26f, 1.0f),    // [46] PlotHistogramHovered
-			ImVec4(0.48f, 0.72f, 0.89f, 0.49f),  // [47] TableHeaderBg
-			ImVec4(0.3f, 0.3f, 0.35f, 1.0f),     // [48] TableBorderStrong
-			ImVec4(0.23f, 0.23f, 0.25f, 1.0f),   // [49] TableBorderLight
-			ImVec4(0.0f, 0.0f, 0.0f, 0.0f),      // [50] TableRowBg              (transparent)
-			ImVec4(1.0f, 1.0f, 1.0f, 0.06f),     // [51] TableRowBgAlt           (subtle tint)
-			ImVec4(0.38f, 0.62f, 0.83f, 1.0f),   // [52] TextLink                (new in 1.92)
-			ImVec4(0.0f, 0.0f, 1.0f, 0.35f),     // [53] TextSelectedBg
-			ImVec4(0.7f, 0.7f, 0.7f, 0.65f),     // [54] TreeLines               (new in 1.92)
-			ImVec4(0.8f, 0.5f, 0.5f, 1.0f),      // [55] DragDropTarget
-			ImVec4(0.0f, 0.0f, 0.0f, 0.0f),      // [56] DragDropTargetBg        (new in 1.92)
-			ImVec4(1.0f, 1.0f, 1.0f, 1.0f),      // [57] UnsavedMarker           (new in 1.92)
-			ImVec4(0.44f, 0.61f, 0.86f, 1.0f),   // [58] NavCursor
-			ImVec4(0.3f, 0.3f, 0.3f, 0.56f),     // [59] NavWindowingHighlight
-			ImVec4(0.2f, 0.2f, 0.2f, 0.35f),     // [60] NavWindowingDimBg
-			ImVec4(0.2f, 0.2f, 0.2f, 0.35f),     // [61] ModalWindowDimBg
-		};
 	};
 
-	static const ThemeSettings::FontRoleSettings& GetDefaultFontRole(FontRole role);
+	const ThemeSettings& GetTheme() const { return themeSettings; }
+	void SelectFeatureMenu(const std::string& featureName) { pendingFeatureSelection = featureName; }
+	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }
 
-	// Named-map palette serialization (resilient to ImGui enum changes)
-	static void PaletteToJson(json& themeJson, const std::array<ImVec4, ImGuiCol_COUNT>& palette);
-	static void PaletteFromJson(const json& themeJson, std::array<ImVec4, ImGuiCol_COUNT>& palette);
+	void Load(json& o_json);
+	void Save(json& o_json);
+
+	void Init();
+	void DrawSettings();
+	void DrawOverlay();
+
+	void ProcessInputEvents(RE::InputEvent* const* a_events);
+	bool ShouldSwallowInput();
+	bool IsPreviewFlying();
+
+	bool overlayVisible = false;
+
+	// Input handling flags
+	bool settingToggleKey = false;
+	bool settingSkipCompilationKey = false;
+	bool settingsEffectsToggle = false;
+	bool settingOverlayToggleKey = false;
+	bool settingShaderBlockPrevKey = false;
+	bool settingShaderBlockNextKey = false;
+	bool settingWeatherEditorToggleKey = false;
+
+	// Used for resetting input keys to solve alt-tab stuck issue
+	std::atomic<bool> focusChanged = false;
+	void OnFocusChanged();
+
+	struct Constants
+	{
+		static constexpr std::uint16_t KEY_PRESSED_MASK = 0x8000;
+	};
 
 	struct Settings
 	{
 		std::vector<InputCombo> ToggleKey = { InputCombo::Keyboard(VK_END) };
 		std::vector<InputCombo> SkipCompilationKey = { InputCombo::Keyboard(VK_ESCAPE) };
-		std::vector<InputCombo> EffectToggleKey = { InputCombo::Keyboard(VK_MULTIPLY) };    // toggle all effects
-		std::vector<InputCombo> OverlayToggleKey = { InputCombo::Keyboard(VK_F10) };        // Global overlay toggle key for all overlays
-		std::vector<InputCombo> ShaderBlockPrevKey = { InputCombo::Keyboard(VK_PRIOR) };    // Debug: cycle backward through shaders (PageUp)
-		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };     // Debug: cycle forward through shaders (PageDown)
-		std::vector<InputCombo> WeatherEditorToggleKey = { InputCombo::Keyboard(VK_F11) };  // Weather Editor toggle key
-		bool EnableShaderBlocking = false;                                                  // Enable shader blocking hotkeys for debugging
-		bool FirstTimeSetupCompleted = false;                                               // Track if first-time setup has been completed
-		bool SkipClearCacheConfirmation = false;                                            // Skip confirmation dialog when clearing shader cache
-		bool AutoHideFeatureList = false;                                                   // Auto-hide left feature list panel, show on hover
-		bool SkipConstraintWarning = false;                                                 // Skip popup when a setting change creates new constraints
-		bool RequireShiftToDock = true;                                                     // Require holding Shift to dock windows
-		ThemeSettings Theme;
-		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
+		std::vector<InputCombo> EffectToggleKey = { InputCombo::Keyboard(VK_MULTIPLY) };
+		std::vector<InputCombo> OverlayToggleKey = { InputCombo::Keyboard(VK_F10) };
+		std::vector<InputCombo> ShaderBlockPrevKey = { InputCombo::Keyboard(VK_PRIOR) };
+		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };
+		std::vector<InputCombo> WeatherEditorToggleKey = { InputCombo::Keyboard(VK_F11) };
+		bool EnableShaderBlocking = false;
+		float UIScale = 1.0f;
 	};
-	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
-	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components
-	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
-	ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
-	const ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) const { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
-	ImFont* GetFont(FontRole role) const { return loadedFontRoles[static_cast<size_t>(role)]; }
+	Settings& GetSettings() { return settings; }
 
-	void SelectFeatureMenu(const std::string& featureName);
-	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
-
-	bool overlayVisible = false;
-
-public:
-	// Move KeyEvent struct here
+	// CharEvent for text input (ported from OAR)
 	class CharEvent : public RE::InputEvent
 	{
 	public:
-		uint32_t keyCode;  // 18 (ascii code)
+		uint32_t keyCode;  // ascii code
 	};
+
+	// KeyEvent struct (ported from OAR, extended for VR thumbstick)
 	struct KeyEvent
 	{
 		explicit KeyEvent(const RE::ButtonEvent* a_event) :
@@ -454,15 +140,14 @@ public:
 			thumbstickY(0.0f) {}
 
 		explicit KeyEvent(const RE::ThumbstickEvent* a_event) :
-			keyCode(0),  // For thumbstick events, keyCode/value are replaced by x/y floats
+			keyCode(0),
 			device(a_event->GetDevice()),
 			eventType(a_event->GetEventType()),
 			value(0),
 			heldDownSecs(0),
 			thumbstickX(a_event->xValue),
-			thumbstickY(a_event->yValue)
-		{}
-		// For thumbstick events, keyCode/value are replaced by x/y floats
+			thumbstickY(a_event->yValue) {}
+
 		uint32_t keyCode;
 		RE::INPUT_DEVICE device;
 		RE::INPUT_EVENT_TYPE eventType;
@@ -476,30 +161,61 @@ public:
 		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
 		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
 	};
-	// VR overlay input and cursor helpers
+
+	// VR overlay input helpers
 	void ProcessVROverlayInput();
+
+	// Input consumption (ported from OAR)
+	bool ShouldConsumeInput() const;
+	void AddInputConsumer();
+	void RemoveInputConsumer();
 
 private:
 	Settings settings;
+	ThemeSettings themeSettings;
+	std::string pendingFeatureSelection;
+	winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3;
 
-	std::string cachedIniPath;  // io.IniFilename must point to a string that lives for the duration of the runtime
+	Menu() = default;
 
-	// Menu navigation
-	std::string pendingFeatureSelection;  // Feature to select on next frame
+	// OAR-style styling (ported from OAR UIManager)
+	static ImGuiStyle GetDefaultStyle();
+	void UpdateStyle();
+	float _prevScale = 1.f;
+
+	// Input state (ported from OAR)
+	uint8_t _menusConsumingInput = 0;
+	bool _bShiftHeld = false;
+	bool _bCtrlHeld = false;
+	bool _bAltHeld = false;
+	bool _bFocusLost = false;
+
+	OAR_ImGuiUserData _userData;
 
 	// Input event handling
 	std::vector<KeyEvent> _keyEventQueue;
 	mutable std::shared_mutex _inputEventMutex;
 
-	Menu() = default;
+	void addToEventQueue(KeyEvent e);
+	void ProcessInputEventQueue();
 
+	// Settings layout helpers
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
-	void BuildCategoryCounts();
 
-	void addToEventQueue(KeyEvent e);
-	void ProcessInputEventQueue();
-	winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3;
+	// Navigation state
+	size_t selectedMenu = 0;
+	std::string featureSearch;
+	std::map<std::string, bool> categoryExpansionStates;
+
+	// Rendering helpers
+	void RenderShaderCompilationStatus();
+	void RenderShaderBlockingStatus();
+	void RenderFeatureOverlays();
+	void HandleABTesting();
+
+	// OAR-style ScaleAllSizes (ported from OAR UICommon)
+	static void ScaleAllSizes(ImGuiStyle& style, float scaleFactor);
 };
