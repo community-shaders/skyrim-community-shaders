@@ -599,14 +599,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-	
+
 	if (!SharedData::InInterior) {
 		// On non-deferred passes, use the cheaper VSM shadows if available
 #			if defined(LIGHT_LIMIT_FIX)
 		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
-#			else 
+#			else
 		dirDetailedShadow = shadowColor.x;
-#			endif // LIGHT_LIMIT_FIX
+#			endif  // LIGHT_LIMIT_FIX
 
 #			if defined(VOLUMETRIC_SHADOWS)
 		float vsmDetailedShadow = 1.0;
@@ -614,7 +614,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
 #			else
 		dirSoftShadow = dirDetailedShadow;
-#			endif // VOLUMETRIC_SHADOWS
+#			endif  // VOLUMETRIC_SHADOWS
 
 #			if defined(SCREEN_SPACE_SHADOWS)
 		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
@@ -898,14 +898,14 @@ PS_OUTPUT main(PS_INPUT input)
 	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-	
+
 	if (!SharedData::InInterior) {
 		// On non-deferred passes, use the cheaper VSM shadows if available
 #			if defined(LIGHT_LIMIT_FIX)
 		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
-#			else 
+#			else
 		dirDetailedShadow = shadowColor.x;
-#			endif // LIGHT_LIMIT_FIX
+#			endif  // LIGHT_LIMIT_FIX
 
 #			if defined(VOLUMETRIC_SHADOWS)
 		float vsmDetailedShadow = 1.0;
@@ -913,7 +913,7 @@ PS_OUTPUT main(PS_INPUT input)
 		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
 #			else
 		dirSoftShadow = dirDetailedShadow;
-#			endif // VOLUMETRIC_SHADOWS
+#			endif  // VOLUMETRIC_SHADOWS
 
 #			if defined(SCREEN_SPACE_SHADOWS)
 		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);

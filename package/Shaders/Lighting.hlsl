@@ -2435,41 +2435,39 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 #	if !defined(LIGHT_LIMIT_FIX)
-		float4 shadowColor = (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) ? TexShadowMaskSampler.Load(int3(input.Position.xy, 0)) : 1.0;
+	float4 shadowColor = (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) ? TexShadowMaskSampler.Load(int3(input.Position.xy, 0)) : 1.0;
 #	endif
 
 	if (inWorld && !inReflection && !SharedData::InInterior) {
-
-#			if !defined(LOD)
+#	if !defined(LOD)
 		// On non-deferred passes, use the cheaper VSM shadows if available
-#				if defined(LIGHT_LIMIT_FIX) && (defined(DEFERRED) || !defined(VOLUMETRIC_SHADOWS))
+#		if defined(LIGHT_LIMIT_FIX) && (defined(DEFERRED) || !defined(VOLUMETRIC_SHADOWS))
 		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
-#				elif !defined(LIGHT_LIMIT_FIX)
+#		elif !defined(LIGHT_LIMIT_FIX)
 		dirDetailedShadow = (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir) ? shadowColor.x : 1.0;
-#				endif // LIGHT_LIMIT_FIX
+#		endif  // LIGHT_LIMIT_FIX
 
-#				if defined(VOLUMETRIC_SHADOWS)
+#		if defined(VOLUMETRIC_SHADOWS)
 		float vsmDetailedShadow = 1.0;
 		dirSoftShadow = VolumetricShadows::GetVSMShadow2D(input.WorldPosition.xyz, worldPositionWS, eyeIndex, vsmDetailedShadow);
 		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
 
-#					if !defined(LIGHT_LIMIT_FIX)
+#			if !defined(LIGHT_LIMIT_FIX)
 		if (!(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir))
 			dirDetailedShadow = vsmDetailedShadow;
-#					elif !(defined(DEFERRED))
-			dirDetailedShadow = vsmDetailedShadow;
-#					endif
-
-#				else
-		dirSoftShadow = dirDetailedShadow;
-#				endif // VOLUMETRIC_SHADOWS
+#			elif !(defined(DEFERRED))
+		dirDetailedShadow = vsmDetailedShadow;
 #			endif
 
-#			if defined(SCREEN_SPACE_SHADOWS)
-		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex);
-#			endif  // SCREEN_SPACE_SHADOWS
-	}
+#		else
+		dirSoftShadow = dirDetailedShadow;
+#		endif  // VOLUMETRIC_SHADOWS
+#	endif
 
+#	if defined(SCREEN_SPACE_SHADOWS)
+		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex);
+#	endif  // SCREEN_SPACE_SHADOWS
+	}
 
 #	if defined(EMAT) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	[branch] if (inWorld && SharedData::extendedMaterialSettings.EnableShadows)

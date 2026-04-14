@@ -135,7 +135,7 @@ namespace VolumetricShadows
 
 		if (shadowMapDepth > shadowLightData.EndSplitDistances.y)
 			return 1.0;
-			
+
 		float fadeFactor = 1.0 - pow(saturate(dot(worldPosition.xyz, worldPosition.xyz) / shadowLightData.EndSplitDistances.y), 8);
 
 		// Compute cascade blend factor
