@@ -47,44 +47,9 @@ namespace ImageBasedLighting
 		return max(0, float3(colorR, colorG, colorB) / Math::PI);
 	}
 
-	float3 GetSkyIBLOccluded(float3 rayDir, sh2 visibilitySH)
+	float3 GetSkyIBLOccluded(float3 rayDir, float visibility)
 	{
-		sh2 shR = SkyIBLTexture.Load(int3(0, 0, 0));
-		sh2 shG = SkyIBLTexture.Load(int3(1, 0, 0));
-		sh2 shB = SkyIBLTexture.Load(int3(2, 0, 0));
-
-		// IBL SH is viewing convention (DiffuseIBLCS: cubemap sampled at -rayDir, projected at +rayDir).
-		// Visibility SH is incoming convention (probes: Evaluate(OcclusionDir) with skyward dir).
-		// Negate L1 to convert visibility to viewing convention so Product operates in the same space.
-		sh2 visSHView = float4(visibilitySH.x, -visibilitySH.yzw);
-
-		sh2 occR = SphericalHarmonics::Product(shR, visSHView);
-		sh2 occG = SphericalHarmonics::Product(shG, visSHView);
-		sh2 occB = SphericalHarmonics::Product(shB, visSHView);
-
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(occR, rayDir);
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(occG, rayDir);
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(occB, rayDir);
-		return max(0, float3(colorR, colorG, colorB) / Math::PI);
-	}
-
-	// ============================================================================
-	// DALC SH occlusion helpers (Mode 3: apply visibility SH to DALC's own SH)
-	// ============================================================================
-
-	/// Get DALC ambient occluded by skylighting visibility SH
-	float3 GetDALCOccluded(float3 rayDir, sh2 visibilitySH)
-	{
-		// DALC SH (incoming) and visibility SH (incoming) are in the same convention — Product is correct.
-		sh2 occR = SphericalHarmonics::Product(SharedData::AmbientSHR, visibilitySH);
-		sh2 occG = SphericalHarmonics::Product(SharedData::AmbientSHG, visibilitySH);
-		sh2 occB = SphericalHarmonics::Product(SharedData::AmbientSHB, visibilitySH);
-
-		// Incoming convention: evaluate irradiance at +normal (= -rayDir).
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(occR, -rayDir);
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(occG, -rayDir);
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(occB, -rayDir);
-		return max(0, float3(colorR, colorG, colorB) / Math::PI);
+		return GetSkyIBL(rayDir) * visibility;
 	}
 
 	// ============================================================================
@@ -131,9 +96,9 @@ namespace ImageBasedLighting
 		return Color::Saturation(GetSkyIBL(rayDir), SharedData::iblSettings.SkyIBLSaturation) * SharedData::iblSettings.SkyIBLScale;
 	}
 
-	float3 GetSkyIBLColorOccluded(float3 rayDir, sh2 visibilitySH)
+	float3 GetSkyIBLColorOccluded(float3 rayDir, float visibility)
 	{
-		return Color::Saturation(GetSkyIBLOccluded(rayDir, visibilitySH), SharedData::iblSettings.SkyIBLSaturation) * SharedData::iblSettings.SkyIBLScale;
+		return Color::Saturation(GetSkyIBLOccluded(rayDir, visibility), SharedData::iblSettings.SkyIBLSaturation) * SharedData::iblSettings.SkyIBLScale;
 	}
 
 	// ============================================================================
@@ -154,19 +119,23 @@ namespace ImageBasedLighting
 		return Color::IrradianceToGamma(linEnv + linSky);
 	}
 
-	/// Compute diffuse IBL ambient (gamma-space) WITH directional sky occlusion from Skylighting SH.
-	float3 GetDiffuseIBLOccluded(float3 vanillaDALC, float3 rayDir, sh2 visibilitySH)
+	/// Compute diffuse IBL ambient (gamma-space) with visibility applied per DALCMode.
+	/// visibility: scalar skylighting factor (already computed in Lighting.hlsl).
+	float3 GetDiffuseIBLOccluded(float3 vanillaDALC, float3 rayDir, float visibility)
 	{
 		float3 linEnv, linSky;
 		if (SharedData::iblSettings.DALCMode == 3) {
-			linEnv = Color::IrradianceToLinear(Color::Ambient(GetDALCOccluded(rayDir, visibilitySH)) * SharedData::iblSettings.DALCAmount);
-			linSky = GetSkyIBLColorOccluded(rayDir, visibilitySH);
+			// Mode 3: Skylighting dims both DALC and sky
+			linEnv = Color::IrradianceToLinear(vanillaDALC * SharedData::iblSettings.DALCAmount) * visibility;
+			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
 		} else if (SharedData::iblSettings.DALCMode == 2) {
+			// Mode 2: Skylighting only dims sky, DALC unaffected
 			linEnv = Color::IrradianceToLinear(vanillaDALC * SharedData::iblSettings.DALCAmount);
-			linSky = GetSkyIBLColorOccluded(rayDir, visibilitySH);
+			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
 		} else {
+			// Mode 0/1: Skylighting only dims sky, env IBL unaffected
 			linEnv = GetEnvIBLColor(rayDir);
-			linSky = GetSkyIBLColorOccluded(rayDir, visibilitySH);
+			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
 		}
 		return Color::IrradianceToGamma(linEnv + linSky);
 	}
@@ -180,9 +149,9 @@ namespace ImageBasedLighting
 		return GetEnvIBLColor(rayDir) + GetSkyIBLColor(rayDir);
 	}
 
-	float3 GetIBLColorOccluded(float3 rayDir, sh2 visibilitySH)
+	float3 GetIBLColorOccluded(float3 rayDir, float visibility)
 	{
-		return GetEnvIBLColor(rayDir) + GetSkyIBLColorOccluded(rayDir, visibilitySH);
+		return GetEnvIBLColor(rayDir) + GetSkyIBLColorOccluded(rayDir, visibility);
 	}
 
 #if defined(LIGHTING)

@@ -1178,7 +1178,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 dirColor;
 	float3 ambientColor;
 #				if defined(SKYLIGHTING) && !defined(INTERIOR)
-	ShadowSampling::ExtractLighting(diffuseOutput.refractionDiffuseColor, dirColor, ambientColor, skylightingDiffuse, skylightingSH);
+	ShadowSampling::ExtractLighting(diffuseOutput.refractionDiffuseColor, dirColor, ambientColor, skylightingDiffuse);
 #				else
 	ShadowSampling::ExtractLighting(diffuseOutput.refractionDiffuseColor, dirColor, ambientColor);
 #				endif

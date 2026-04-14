@@ -105,7 +105,7 @@ namespace ShadowSampling
 	}
 
 #if defined(SKYLIGHTING) && !defined(INTERIOR)
-	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse, sh2 skylightingSH)
+	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse)
 #else
 	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
 #endif
@@ -115,7 +115,7 @@ namespace ShadowSampling
 #if defined(IBL)
 		if (SharedData::iblSettings.EnableIBL) {
 #	if defined(SKYLIGHTING) && !defined(INTERIOR)
-			ambientColorAmb = ImageBasedLighting::GetDiffuseIBLOccluded(ambientColorAmb, float3(0, 0, -1), skylightingSH);
+			ambientColorAmb = ImageBasedLighting::GetDiffuseIBLOccluded(ambientColorAmb, float3(0, 0, -1), skylightingDiffuse);
 #	else
 			ambientColorAmb = ImageBasedLighting::GetDiffuseIBL(ambientColorAmb, float3(0, 0, -1));
 #	endif
