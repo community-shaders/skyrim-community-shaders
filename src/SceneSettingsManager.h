@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "Globals.h"
+#include "Utils/Form.h"
 
 using json = nlohmann::json;
 
@@ -230,30 +231,6 @@ public:
 		Unknown
 	};
 	static SettingType DetectSettingType(const json& value);
-
-	// --- SPID Helpers (load-order-portable FormID format) ---
-
-	/// Components of a SPID identifier: local FormID + plugin name.
-	struct SpidComponents
-	{
-		uint32_t localFormId = 0;
-		std::string pluginName;
-	};
-
-	/// Parse a SPID string like "0x12F89E~Skyrim.esm" into components.
-	static SpidComponents ParseSpid(const std::string& spid);
-
-	/// Format a SPID string from components.
-	static std::string FormatSpid(uint32_t localFormId, const std::string& pluginName);
-
-	/// Convert a runtime FormID to a portable SPID string.
-	static std::string FormIdToSpid(RE::FormID formId);
-
-	/// Resolve a SPID string to a runtime FormID (0 if not found).
-	static RE::FormID SpidToFormId(const std::string& spid);
-
-	/// Get a display name for a weather: "EditorID (12F89E)" or SPID fallback.
-	static std::string GetWeatherDisplayName(RE::FormID weatherId);
 
 	// --- Per-Weather Scene Settings ---
 
