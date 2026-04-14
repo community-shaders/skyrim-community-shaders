@@ -111,7 +111,7 @@ public:
 	}
 
 	virtual inline std::string_view GetShaderDefineName() override { return "VR_STEREO_OPT"; }
-	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return stereoOpt.CanDispatchStencil() && t == RE::BSShader::Type::Utility; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return stereoOpt.CanDispatchStencil() && (t == RE::BSShader::Type::Utility || t == RE::BSShader::Type::Lighting); }
 	virtual void Reset() override;
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
