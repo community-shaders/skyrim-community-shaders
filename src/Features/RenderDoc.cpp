@@ -91,7 +91,7 @@ void RenderDoc::Load()
 	}
 
 	// Get the API interface
-	int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_6_0, (void**)&renderDocApi);
+	int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_7_0, (void**)&renderDocApi);
 	if (ret != 1 || !renderDocApi) {
 		logger::warn("[RenderDoc] Failed to get API interface");
 		FreeLibrary((HMODULE)renderDocModule);
