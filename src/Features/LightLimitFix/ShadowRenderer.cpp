@@ -22,7 +22,7 @@ static void SetShadowParameters(T& lightData, Deferred::ShadowLightData& sd)
 	DirectX::XMMATRIX invProj = DirectX::XMMatrixInverse(nullptr, proj);
 	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, invProj);
 
-	sd.ShadowParam.z = (lightData.shadowBiasScale * 0.00025f) / 3.0f;
+	sd.ShadowParam.z = lightData.shadowBiasScale * 0.00025f;
 }
 
 // ─── Per-frame shadow data copy ───────────────────────────────────────────────

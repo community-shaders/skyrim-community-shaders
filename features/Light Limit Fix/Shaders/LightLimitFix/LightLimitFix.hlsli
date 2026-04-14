@@ -145,7 +145,6 @@ namespace LightLimitFix
 	float GetSpotlightShadow(ShadowLightData shadowLightData, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
 	{
 		positionLS.xyz /= positionLS.w;
-
 		positionLS.xy = positionLS.xy * 0.5 + 0.5;
 		positionLS.z -= shadowLightData.ShadowLightParam.z;
 
