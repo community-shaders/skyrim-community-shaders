@@ -120,6 +120,54 @@ namespace VolumetricShadows
 		return lerp(1.0, shadow, fadeFactor);
 	}
 
+	// Sample a single cascade for VSM shadow (2D point sample)
+	float SampleVSMCascade2D(uint cascadeIndex, float3 positionLS)
+	{
+		float2 moments = SharedShadowMap.SampleLevel(LinearSampler, positionLS.xy, 1u - cascadeIndex);
+		return ComputeVSM(moments, positionLS.z);
+	}
+
+	float GetVSMShadow2D(float3 worldPosition, float3 worldPositionWS, uint eyeIndex, inout float detailedShadow)
+	{
+		DirectionalShadowLightData shadowLightData = DirectionalShadowLights[0];
+
+		float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(worldPosition, eyeIndex));
+
+		if (shadowMapDepth > shadowLightData.EndSplitDistances.y)
+			return 1.0;
+			
+		float fadeFactor = 1.0 - pow(saturate(dot(worldPosition.xyz, worldPosition.xyz) / shadowLightData.EndSplitDistances.y), 8);
+
+		// Compute cascade blend factor
+		float cascadeSelect = smoothstep(shadowLightData.StartSplitDistances.y, shadowLightData.EndSplitDistances.x, shadowMapDepth);
+
+		// Determine which cascade(s) to sample
+		uint primaryCascade = cascadeSelect;
+		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
+
+		// Transform ray to light space for primary cascade
+		float3 positionLS = mul(shadowLightData.ShadowProj[primaryCascade], float4(worldPositionWS, 1)).xyz;
+
+		// Sample primary cascade
+		float shadow = SampleVSMCascade2D(primaryCascade, positionLS);
+
+		// Blend with secondary cascade if needed
+		[branch] if (needsBlending)
+		{
+			uint secondaryCascade = 1 - primaryCascade;
+
+			positionLS = mul(shadowLightData.ShadowProj[secondaryCascade], float4(worldPositionWS, 1)).xyz;
+
+			float shadowBlend = SampleVSMCascade2D(secondaryCascade, positionLS);
+
+			shadow = lerp(shadow, shadowBlend, cascadeSelect);
+		}
+
+		// Sharper shadow
+		detailedShadow = lerp(ReduceBleeding(shadow, VSM_BLEEDING_REDUCTION), 1.0, fadeFactor);
+
+		return lerp(shadow, 1.0, 0);
+	}
 }
 
 #endif  // __VOLUMETRIC_SHADOWS_HLSLI__

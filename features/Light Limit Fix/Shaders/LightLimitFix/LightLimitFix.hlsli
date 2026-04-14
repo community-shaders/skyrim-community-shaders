@@ -4,7 +4,7 @@ namespace LightLimitFix
 
 #include "LightLimitFix/Common.hlsli"
 
-	static const float DirectionalBias = (0.00025f) / 3.0f;
+	static const float DirectionalBias = 0.5f * (0.00025f) / 3.0f;
 
 	// Shadow Radius for PCF
 	static const float PCFRadius2D = 0.002;
@@ -78,16 +78,13 @@ namespace LightLimitFix
 
 		float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(worldPosition, eyeIndex));
 
-		float2 endSplitDistances = shadowLightData.EndSplitDistances;
-		float2 startSplitDistances = shadowLightData.StartSplitDistances;
-
-		if (shadowMapDepth > endSplitDistances.y)
+		if (shadowMapDepth > shadowLightData.EndSplitDistances.y)
 			return 1.0;
 
-		float fadeFactor = 1.0 - pow(saturate(dot(worldPosition.xyz, worldPosition.xyz) / endSplitDistances.y), 8);
+		float fadeFactor = 1.0 - pow(saturate(dot(worldPosition.xyz, worldPosition.xyz) / shadowLightData.EndSplitDistances.y), 8);
 
 		// Compute cascade blend factor
-		float cascadeSelect = smoothstep(startSplitDistances.y, endSplitDistances.x, shadowMapDepth);
+		float cascadeSelect = smoothstep(shadowLightData.StartSplitDistances.y, shadowLightData.EndSplitDistances.x, shadowMapDepth);
 
 		// Determine which cascade(s) to sample
 		uint primaryCascade = cascadeSelect;
@@ -98,15 +95,12 @@ namespace LightLimitFix
 		positionLS.z -= DirectionalBias;
 
 		// Sample primary cascade
-		uint onePlusLayerIndex = 1.0 + primaryCascade;
-		float layerIndexRcp = rcp(onePlusLayerIndex);
-
 		float shadow = 0.0;
 
 		[unroll] for (int i = 0; i < 8; i++)
 		{
 			float2 sampleOffset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix);
-			float2 sampleUV = positionLS.xy + layerIndexRcp * sampleOffset * PCFRadius2D;
+			float2 sampleUV = positionLS.xy + sampleOffset * PCFRadius2D;
 			shadow += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(saturate(sampleUV), primaryCascade)) > positionLS.z), 0.25);
 		}
 
@@ -117,9 +111,6 @@ namespace LightLimitFix
 		{
 			uint secondaryCascade = 1 - primaryCascade;
 
-			onePlusLayerIndex = 1.0 + secondaryCascade;
-			layerIndexRcp = rcp(onePlusLayerIndex);
-
 			positionLS = mul(shadowLightData.ShadowProj[secondaryCascade], float4(worldPositionWS, 1)).xyz;
 			positionLS.z -= DirectionalBias;
 
@@ -128,7 +119,7 @@ namespace LightLimitFix
 			[unroll] for (int i = 0; i < 8; i++)
 			{
 				float2 sampleOffset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix);
-				float2 sampleUV = positionLS.xy + layerIndexRcp * sampleOffset * PCFRadius2D;
+				float2 sampleUV = positionLS.xy + sampleOffset * PCFRadius2D;
 				shadowBlend += dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(saturate(sampleUV), secondaryCascade)) > positionLS.z), 0.25);
 			}
 

@@ -538,7 +538,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 		shadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(positionLS.xy, cascadeIndex), positionLS.z).x;
 #			elif SHADOWFILTER == 3
-		shadowVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, positionLS.xy, cascadeIndex, positionLS.z, rotationMatrix, ShadowSampleParam.z * rcp(1.0 + cascadeIndex));
+		shadowVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, positionLS.xy, cascadeIndex, positionLS.z, rotationMatrix, ShadowSampleParam.z * 0.5);
 #			endif
 
 		if (cascadeIndex < 1 && StartSplitDistances.y < shadowMapDepth) {
@@ -592,7 +592,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 	shadowBaseVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(shadowMapUv, EndSplitDistances.x), positionLS.z - AlphaTestRef.y).x;
 #			elif SHADOWFILTER == 3
-	shadowBaseVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv, EndSplitDistances.x, positionLS.z - AlphaTestRef.y, rotationMatrix, ShadowSampleParam.z);
+	shadowBaseVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv, EndSplitDistances.x, positionLS.z - AlphaTestRef.y, rotationMatrix, ShadowSampleParam.z * 0.5);
 #			endif
 	float shadowVisibilityFactor = pow(2 * length(0.5 * positionLS.xy), ShadowLightParam.x);
 	float shadowVisibility = shadowBaseVisibility - shadowVisibilityFactor * shadowBaseVisibility;
@@ -611,7 +611,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 		focusShadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, focusShadowMapUv, focusShadowMapCompareValue).x;
 #			elif SHADOWFILTER == 3
-		focusShadowVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, focusShadowMapUv.xy, focusShadowMapUv.z, focusShadowMapCompareValue, rotationMatrix, ShadowSampleParam.z);
+		focusShadowVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, focusShadowMapUv.xy, focusShadowMapUv.z, focusShadowMapCompareValue, rotationMatrix, ShadowSampleParam.z * 0.5);
 #			endif
 		shadowVisibility = min(shadowVisibility, lerp(1, focusShadowVisibility, FocusShadowFadeParam[focusShadowIndex]));
 	}
@@ -635,7 +635,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 		shadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(shadowMapUv, EndSplitDistances.x), shadowMapCompareValue).x;
 #			elif SHADOWFILTER == 3
-		shadowVisibility = SampleDualParaboloidShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv, EndSplitDistances.x, shadowMapCompareValue, rotationMatrix, ShadowSampleParam.z, false);
+		shadowVisibility = SampleDualParaboloidShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv, EndSplitDistances.x, shadowMapCompareValue, rotationMatrix, ShadowSampleParam.z * 0.5, false);
 #			endif
 	} else {
 		shadowVisibility = 1;
@@ -653,7 +653,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
 	float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
 	float2 shadowMapUv = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
-	shadowMapUv.y = lowerHalf ? 1 - 0.5 * shadowMapUv.y : 0.5 * shadowMapUv.y;
+	shadowMapUv.y = lowerHalf ? 1.0 - 0.5 * shadowMapUv.y : 0.5 * shadowMapUv.y;
 
 	float shadowVisibility = 0;
 #			if SHADOWFILTER == 0
@@ -664,7 +664,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 	shadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(shadowMapUv, EndSplitDistances.x), shadowMapCompareValue).x;
 #			elif SHADOWFILTER == 3
-	shadowVisibility = SampleDualParaboloidShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv, EndSplitDistances.x, shadowMapCompareValue, rotationMatrix, ShadowSampleParam.z, lowerHalf);
+	shadowVisibility = SampleDualParaboloidShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv, EndSplitDistances.x, shadowMapCompareValue, rotationMatrix, ShadowSampleParam.z * 0.5, lowerHalf);
 #			endif
 
 	shadowColor.xyzw = fadeFactor * shadowVisibility;

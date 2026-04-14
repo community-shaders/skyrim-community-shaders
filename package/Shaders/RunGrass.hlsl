@@ -592,28 +592,34 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
+	float dirSoftShadow = 1.0;
 	float dirDetailedShadow = 1.0;
-	float dirSoftShadow = dirDetailedShadow;
 
 	float2 rotation;
 	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
-
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-
+	
 	if (!SharedData::InInterior) {
+		// On non-deferred passes, use the cheaper VSM shadows if available
 #			if defined(LIGHT_LIMIT_FIX)
 		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
-#			else
+#			else 
 		dirDetailedShadow = shadowColor.x;
-#			endif
+#			endif // LIGHT_LIMIT_FIX
+
+#			if defined(VOLUMETRIC_SHADOWS)
+		float vsmDetailedShadow = 1.0;
+		dirSoftShadow = VolumetricShadows::GetVSMShadow2D(input.WorldPosition.xyz, worldPositionWS, eyeIndex, vsmDetailedShadow);
+		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
+#			else
 		dirSoftShadow = dirDetailedShadow;
-	}
+#			endif // VOLUMETRIC_SHADOWS
 
 #			if defined(SCREEN_SPACE_SHADOWS)
-	if (!SharedData::InInterior)
 		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
 #			endif  // SCREEN_SPACE_SHADOWS
+	}
 
 	float3 diffuseColor = 0;
 	float3 specularColor = 0;
@@ -885,30 +891,36 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
+	float dirSoftShadow = 1.0;
 	float dirDetailedShadow = 1.0;
-	float dirSoftShadow = dirDetailedShadow;
 
 	float2 rotation;
 	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
-
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-
+	
 	if (!SharedData::InInterior) {
+		// On non-deferred passes, use the cheaper VSM shadows if available
 #			if defined(LIGHT_LIMIT_FIX)
 		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
-#			else
+#			else 
 		dirDetailedShadow = shadowColor.x;
-#			endif
+#			endif // LIGHT_LIMIT_FIX
+
+#			if defined(VOLUMETRIC_SHADOWS)
+		float vsmDetailedShadow = 1.0;
+		dirSoftShadow = VolumetricShadows::GetVSMShadow2D(input.WorldPosition.xyz, worldPositionWS, eyeIndex, vsmDetailedShadow);
+		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
+#			else
 		dirSoftShadow = dirDetailedShadow;
-	}
+#			endif // VOLUMETRIC_SHADOWS
 
 #			if defined(SCREEN_SPACE_SHADOWS)
-	if (!SharedData::InInterior)
 		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
 #			endif  // SCREEN_SPACE_SHADOWS
+	}
 
-	float3 diffuseColor = dirLightColor * dirDetailedShadow;
+	float3 diffuseColor = dirLightColor * dirDetailedShadow * 0.5;
 
 #			if defined(LLFDEBUG)
 	LightLimitFix::LLFDebugInfo llfDebug = LightLimitFix::LLFDebugInfoInit();
@@ -965,7 +977,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 				lightColor *= lightShadow;
 
-				diffuseColor += lightColor;
+				diffuseColor += lightColor * 0.5;
 			}
 		}
 	}

@@ -303,13 +303,20 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 worldPositionWS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
+	float dirSoftShadow = 1.0;
 	float dirDetailedShadow = 1.0;
-#	if defined(LIGHT_LIMIT_FIX)
-	if (!SharedData::InInterior)
-		dirDetailedShadow = ShadowSampling::GetDirectionalShadow(positionWS.xyz, worldPositionWS, rotationMatrix);
-#	endif
+	
+	float3 dirLightColor = SharedData::DirLightColor.xyz;
 
-	float3 dirLightColor = SharedData::DirLightColor.xyz * dirDetailedShadow;
+	if (!SharedData::InInterior) {
+		// Use the cheaper VSM shadows if available
+#			if defined(VOLUMETRIC_SHADOWS)
+		dirSoftShadow = VolumetricShadows::GetVSMShadow2D(positionWS.xyz, worldPositionWS, eyeIndex, dirDetailedShadow);
+#			elif defined(LIGHT_LIMIT_FIX)
+		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(positionWS.xyz, worldPositionWS, rotationMatrix, eyeIndex);
+#			endif
+	}
+
 	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 
 	propertyColor += dirLightColor;
