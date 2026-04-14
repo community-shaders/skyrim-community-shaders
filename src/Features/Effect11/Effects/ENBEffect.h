@@ -2,6 +2,19 @@
 
 #include "Effect.h"
 
+/**
+ * Get the effect's filename.
+ *
+ * @returns The literal filename "enbeffect.fx".
+ */
+
+/**
+ * Execute the effect.
+ */
+
+/**
+ * Update the effect's runtime variables prior to execution.
+ */
 class ENBEffect : public Effect
 {
 public:

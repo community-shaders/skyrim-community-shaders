@@ -1,6 +1,11 @@
 #pragma once
 
-struct Effect11 : Feature
+/**
+		 * Provide a human-readable summary and a list of capabilities for the Effect11 feature.
+		 *
+		 * @returns A pair whose first element is a descriptive string explaining the feature and whose second element is a vector of capability strings (feature bullet points).
+		 */
+		struct Effect11 : Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Effect11"; }

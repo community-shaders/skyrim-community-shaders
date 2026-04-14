@@ -4,18 +4,34 @@
 
 #include "State.h"
 
+/**
+ * @brief Provides access to the TextureManager singleton instance.
+ *
+ * @return TextureManager& Reference to the single TextureManager instance.
+ */
 TextureManager& TextureManager::GetSingleton()
 {
 	static TextureManager instance;
 	return instance;
 }
 
+/**
+ * @brief Prepares the texture manager's runtime resources.
+ *
+ * Populates the common texture cache with the set of application render targets and creates the shared downsample GPU resources (sampler, shaders, and downsample texture) required for generating mip-chained downsampled textures.
+ */
 void TextureManager::Initialize()
 {
 	CreateCommonTextures();
 	CreateDownsampleResources();
 }
 
+/**
+ * @brief Retrieve a cached common texture by name.
+ *
+ * @param name The key name of the texture in the common texture cache.
+ * @return Texture* Pointer to the cached Texture if found, `nullptr` otherwise.
+ */
 TextureManager::Texture* TextureManager::GetCommonTexture(const std::string& name)
 {
 	auto it = commonTextureCache.find(name);
@@ -25,6 +41,15 @@ TextureManager::Texture* TextureManager::GetCommonTexture(const std::string& nam
 	return nullptr;
 }
 
+/**
+ * @brief Swap the cached textures for two named entries in the common texture cache.
+ *
+ * If both `name1` and `name2` exist in the cache, their associated Texture values are exchanged.
+ * If either name is not found, the cache is left unchanged.
+ *
+ * @param name1 Key of the first texture in the common texture cache.
+ * @param name2 Key of the second texture in the common texture cache.
+ */
 void TextureManager::SwapTextures(const std::string& name1, const std::string& name2)
 {
 	auto it1 = commonTextureCache.find(name1);
@@ -34,6 +59,17 @@ void TextureManager::SwapTextures(const std::string& name1, const std::string& n
 	}
 }
 
+/**
+ * @brief Populate the common texture cache with standard render-target and shader-resource textures used by the renderer.
+ *
+ * @details Reads the current screen size from globals::state and creates a set of named textures stored in commonTextureCache:
+ * - Screen-sized render targets in multiple formats (HDR, SDR, various float/int channel formats) for temporary and final passes.
+ * - Fixed-size bloom/lens targets (1024×1024) and a lens render target sized to the screen.
+ * - Two 1×1 textures for luminance adaptation (ping/pong).
+ * - A series of square fixed-size render targets (1024, 512, 256, 128, 64, 32, 16) intended for bloom/lens downsampling.
+ *
+ * Each created texture is inserted into the cache with a descriptive debug name.
+ */
 void TextureManager::CreateCommonTextures()
 {
 	auto state = globals::state;
@@ -77,6 +113,19 @@ void TextureManager::CreateCommonTextures()
 	}
 }
 
+/**
+ * @brief Creates a GPU 2D texture with an associated render-target view and shader-resource view.
+ *
+ * Creates a single-level, single-array 2D texture sized width×height using the specified DXGI format
+ * and returns a Texture containing the ID3D11Texture2D, its render-target view (RTV), and shader-resource view (SRV).
+ * If `debugName` is non-empty, the D3D debug object name is assigned to the created texture.
+ *
+ * @param width Texture width in pixels.
+ * @param height Texture height in pixels.
+ * @param format DXGI format for the texture, RTV, and SRV.
+ * @param debugName Optional debug name to set on the underlying D3D resource; pass an empty string to skip.
+ * @return Texture Struct with `texture`, `rtv`, and `srv` members populated for the created resource.
+ */
 TextureManager::Texture TextureManager::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
 {
 	TextureManager::Texture result;
@@ -118,6 +167,18 @@ TextureManager::Texture TextureManager::CreateTexture(uint32_t width, uint32_t h
 	return result;
 }
 
+/**
+ * @brief Initializes GPU resources required for the downsample pipeline.
+ *
+ * Creates a linear sampler state, compiles and creates a fullscreen downsample vertex shader
+ * and a pixel shader, and allocates the shared downsample texture used by the manager.
+ *
+ * On shader compilation failure the function logs the shader compiler output (if available)
+ * and returns early without completing resource creation.
+ *
+ * The function initializes the following members: `linearSampler`, `downsampleVS`,
+ * `downsamplePS`, and `sharedDownsampleTexture`.
+ */
 void TextureManager::CreateDownsampleResources()
 {
 	auto device = globals::d3d::device;
@@ -239,6 +300,16 @@ float4 main(VS_OUTPUT_POST IN) : SV_Target
 	sharedDownsampleTexture = CreateDownsampleTexture(DXGI_FORMAT_R11G11B10_FLOAT);
 }
 
+/**
+ * @brief Creates a fixed 1024×1024 downsample texture with three mip levels for shared downsampling.
+ *
+ * Constructs a GPU texture configured as a render target and shader resource with 3 mip levels (1024, 512, 256),
+ * creates an RTV for mip 0, and three SRVs: a full mip-chain SRV, a base-mip SRV (mip 0), and a "blurry" SRV (mip 2).
+ * The created resources receive debug names and an informational log entry.
+ *
+ * @param format DXGI_FORMAT to use for the texture and its views.
+ * @return DownsampleTexture Struct containing the created ID3D11Texture2D, its RTV, the SRV chain, the base SRV, and the blurry SRV.
+ */
 TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_FORMAT format)
 {
 	auto device = globals::d3d::device;
@@ -292,6 +363,14 @@ TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_F
 	return fixedTexture;
 }
 
+/**
+ * @brief Downsamples an input shader-resource texture into a fixed 1024×1024 downsample target and generates its mip chain.
+ *
+ * Binds the downsample vertex/pixel shaders and linear sampler, renders a full-screen pass into the target's RTV, then calls GenerateMips on the target's SRV chain to populate lower mip levels. The function returns immediately without performing work if any required resource is missing or if the provided `source` cannot be resolved to a 2D texture.
+ *
+ * @param source Shader-resource view of the source texture to downsample. Must reference a 2D texture.
+ * @param texture Target DownsampleTexture whose RTV and SRV chain will be written and mipmapped.
+ */
 void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, DownsampleTexture& texture)
 {
 	if (!source || !texture.rtv || !downsampleVS || !downsamplePS || !linearSampler || !texture.srvChain) {
@@ -345,16 +424,33 @@ void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, Downsam
 	context->GenerateMips(texture.srvChain.get());
 }
 
+/**
+ * @brief Updates the shared downsample texture from a source shader-resource view.
+ *
+ * Downsamples the provided source SRV into the manager's shared downsample texture and updates its mip chain.
+ *
+ * @param source Shader-resource view of the source texture to downsample; may be nullptr (no action).
+ */
 void TextureManager::UpdateDownsampledTexture(ID3D11ShaderResourceView* source)
 {
 	DownsampleToFixed(source, sharedDownsampleTexture);
 }
 
+/**
+ * @brief Retrieves the shader-resource view for the shared downsample texture's base mip.
+ *
+ * @return ID3D11ShaderResourceView* Shader-resource view for the shared downsample texture at the base mip level, or `nullptr` if the resource has not been created.
+ */
 ID3D11ShaderResourceView* TextureManager::GetDownsampleTexture() const
 {
 	return sharedDownsampleTexture.srv.get();
 }
 
+/**
+ * @brief Retrieves the shader-resource view that samples the blurry (higher-mip) version of the shared downsample texture.
+ *
+ * @return ID3D11ShaderResourceView* Pointer to the SRV for the blurry mip level of the shared downsample texture, or `nullptr` if not available.
+ */
 ID3D11ShaderResourceView* TextureManager::GetDownsampleTextureBlurry() const
 {
 	return sharedDownsampleTexture.srvBlurry.get();

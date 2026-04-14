@@ -208,6 +208,15 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 	a_ini.SetValue(ini_name.c_str(), "Version", version.c_str());
 }
 
+/**
+ * @brief Retrieve the ordered list of all Feature instances used by the application.
+ *
+ * When running in VR, returns a VR-specific list that appends the global VR feature
+ * and, unless developer mode is enabled, is filtered to features that report VR support.
+ * The VR list is cached and automatically rebuilt when developer mode changes.
+ *
+ * @return const std::vector<Feature*>& Reference to a statically allocated vector of feature pointers in a stable order.
+ */
 const std::vector<Feature*>& Feature::GetFeatureList()
 {
 	static std::vector<Feature*> features = {

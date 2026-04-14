@@ -35,6 +35,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	deferredEffectMult,
 	otherEffectMult)
 
+/**
+ * @brief Renders the ImGui settings UI for Linear Lighting.
+ *
+ * Displays a checkbox to enable/disable linear lighting and provides tabbed controls
+ * for general and advanced gamma and multiplier parameters. If the Effect11 (ENB)
+ * feature is loaded and its post-processing is enabled, presents a yellow notice
+ * "Settings are currently managed by ENB." and does not render editable controls.
+ */
 void LinearLighting::DrawSettings()
 {
 	if (globals::features::effect11.loaded) {
@@ -116,6 +124,16 @@ void LinearLighting::SetupResources()
 	PerGeometryCB = new ConstantBuffer(ConstantBufferDesc<PerGeometryData>());
 }
 
+/**
+ * @brief Prepares and caches the per-frame directional light multiplier.
+ *
+ * If linear lighting is enabled and the main or loading menu is not open, queries
+ * the ImageSpaceManager singleton and stores its HDR sunlight scale into
+ * LinearLighting::dirLightMult. Otherwise leaves dirLightMult set to 1.0f.
+ *
+ * This function updates the internal dirLightMult used by subsequent rendering
+ * steps; it does nothing if the ImageSpaceManager singleton is unavailable.
+ */
 void LinearLighting::Prepass()
 {
 	bool isMainLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
@@ -155,6 +173,17 @@ void LinearLighting::PostPostLoad()
 	LinearLighting::Hooks::Install();
 }
 
+/**
+ * @brief Assembles per-frame shader constants from current settings and runtime state.
+ *
+ * Produces a PerFrameData value populated from LinearLighting settings and cached runtime
+ * values. If the feature is not initialized, the returned data has linear lighting disabled.
+ * Linear lighting is also disabled while the main or loading menu is open. When ENB Effect11
+ * is present and enabled, the function disables linear lighting and sets all gamma and
+ * lighting-multiplier fields to neutral values (1.0).
+ *
+ * @return PerFrameData Populated per-frame constant-buffer data for the linear lighting shader.
+ */
 LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 {
 	if (!loaded) {

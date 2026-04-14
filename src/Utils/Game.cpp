@@ -299,6 +299,18 @@ namespace Util
 		return textureSet;
 	}
 
+	/**
+	 * @brief Determines whether the current game context should be treated as an interior.
+	 *
+	 * Evaluates engine state to classify the current context as interior or exterior:
+	 * if the TES singleton exists, the current cell is exterior, and the associated
+	 * worldspace exists without the `kNoSky` or `kFixedDimensions` flags, the context
+	 * is considered exterior.
+	 *
+	 * @return `true` if the current context is considered interior; `false` if the
+	 *         TES singleton exists, the current cell is exterior, and the worldspace
+	 *         has neither `kNoSky` nor `kFixedDimensions` set.
+	 */
 	bool IsInterior()
 	{
 		if (auto tes = RE::TES::GetSingleton()) {

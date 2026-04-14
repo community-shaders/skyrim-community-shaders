@@ -9,7 +9,16 @@ namespace ENBExtender
 {
 	namespace
 	{
-		// Fix duplicate #endif markers that ENB Extender uses
+		/**
+		 * @brief Comments out surplus `#endif` directives when an include-guard header pattern is detected.
+		 *
+		 * Detects a leading sequence of `#ifndef <GUARD>` (optionally followed by `#define <GUARD>`) and, if such guards are found,
+		 * compares the number of `#if`-family directives to the number of `#endif` occurrences. When there are more `#endif`
+		 * occurrences than recognized `#if`-family directives, the extra `#endif` tokens are replaced with `//dup ` to mark/comment them out.
+		 *
+		 * @param content Input source text to scan and modify.
+		 * @return std::string The transformed source: extra `#endif` directives replaced by `//dup ` when include-guard patterns are present; otherwise the original `content`. 
+		 */
 		std::string FixDuplicateEndif(const std::string& content)
 		{
 			std::vector<std::string> guards;
@@ -93,7 +102,16 @@ namespace ENBExtender
 		}
 
 		// Fix malformed #elif lines that have trailing content after the condition
-		// Example: "#elif EBM_ENABLE == 2    string UIGroup = ..." -> "#elif EBM_ENABLE == 2\n// string UIGroup = ..."
+		/**
+		 * @brief Removes trailing non-preprocessor content following `#if`/`#elif` directives by commenting it out.
+		 *
+		 * Scans the input source line-by-line; when a `#if` or `#elif` directive contains a condition followed by trailing tokens that look like declarations
+		 * (e.g., `string`, `float`, `int`, `bool`, `float2`, `float3`, `float4`), preserves the directive and replaces the trailing portion with a comment
+		 * prefixed by "`// ENB Extender trailing content: `". Lines without such malformed directives are returned unchanged.
+		 *
+		 * @param content Source text to preprocess; may contain preprocessor directives and code on the same line.
+		 * @return std::string The transformed source text with trailing non-preprocessor content after `#if`/`#elif` directives commented out.
+		 */
 		std::string FixMalformedElif(const std::string& content)
 		{
 			std::string result;
@@ -126,7 +144,17 @@ namespace ENBExtender
 		}
 
 		// Handle files that start with #elif (comment out the orphaned directive)
-		// These are ENB Extender UI grouping directives that don't have a matching #if
+		/**
+		 * @brief Comments out leading orphaned `#elif`/`#else` directives that appear before any `#if`-family directive.
+		 *
+		 * Scans the provided source text and, for any `#elif` or `#else` lines that occur at the start of the file
+		 * before a matching `#if`, `#ifdef`, or `#ifndef` has been encountered, replaces those lines with a commented
+		 * marker of the form `// ENB Extender orphaned: <originalLine>`. All other lines are preserved and returned
+		 * with their original ordering and newline termination.
+		 *
+		 * @param content The input source text to inspect and rewrite.
+		 * @return std::string The transformed source text with leading orphaned conditional directives commented out.
+		 */
 		std::string FixOrphanedElif(const std::string& content)
 		{
 			std::string result;
@@ -180,6 +208,15 @@ namespace ENBExtender
 		}
 	}
 
+	/**
+	 * @brief Applies ENB Extender preprocessing transformations to source text.
+	 *
+	 * Processes the provided source string and corrects common ENB Extender preprocessor irregularities:
+	 * orphaned `#elif`/`#else` directives are commented out, trailing non-preprocessor content after `#if`/`#elif` conditions is removed and commented, and surplus `#endif` directives are commented to avoid duplicates.
+	 *
+	 * @param content Original source text to preprocess (e.g., shader or include file contents).
+	 * @return std::string The input `content` with ENB Extender preprocessing fixes applied.
+	 */
 	std::string PreprocessSource(const std::string& content)
 	{
 		std::string result = content;
@@ -189,11 +226,33 @@ namespace ENBExtender
 		return result;
 	}
 
+	/**
+	 * @brief Constructs an IncludeHandler that resolves include requests relative to a base directory.
+	 *
+	 * Stores the provided filesystem path as the handler's base path, which is used to resolve
+	 * local and system include filenames passed to Open().
+	 *
+	 * @param basePath Filesystem directory used as the root for resolving include file paths.
+	 */
 	IncludeHandler::IncludeHandler(const std::filesystem::path& basePath) :
 		basePath(basePath)
 	{
 	}
 
+	/**
+	 * @brief Opens and returns a preprocessed include file's contents resolved relative to the handler's base path.
+	 *
+	 * Resolves pFileName (leading '/' or '\' characters are stripped), restricts resolution to local or system include types,
+	 * reads the target file as binary, runs the ENB Extender preprocessing pipeline over the file contents, and returns a
+	 * heap-allocated buffer containing the transformed bytes via `ppData` with its length in `pBytes`.
+	 *
+	 * @param IncludeType Type of include request; must be `D3D_INCLUDE_LOCAL` or `D3D_INCLUDE_SYSTEM`.
+	 * @param pFileName Path of the include file; leading path-separators ('/' or '\') are removed before resolution.
+	 * @param ppData Out pointer that receives a newly allocated `char[]` buffer containing the preprocessed file data.
+	 *               The buffer is allocated with `new[]` and ownership is transferred to the caller (caller must free it).
+	 * @param pBytes Out pointer that receives the size in bytes of the buffer placed in `ppData`.
+	 * @return HRESULT `S_OK` on success; `E_FAIL` if the include type is unsupported, the file cannot be opened/read, or other I/O errors occur.
+	 */
 	HRESULT __stdcall IncludeHandler::Open(D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, LPCVOID /*pParentData*/, LPCVOID* ppData, UINT* pBytes)
 	{
 		std::filesystem::path includePath;
@@ -236,6 +295,14 @@ namespace ENBExtender
 		return S_OK;
 	}
 
+	/**
+	 * @brief Releases a buffer previously returned by IncludeHandler::Open.
+	 *
+	 * Frees the heap allocation created for the included file content.
+	 *
+	 * @param pData Pointer to the buffer returned by Open (must have been allocated with `new char[]`).
+	 * @return HRESULT S_OK on success.
+	 */
 	HRESULT __stdcall IncludeHandler::Close(LPCVOID pData)
 	{
 		delete[] static_cast<const char*>(pData);

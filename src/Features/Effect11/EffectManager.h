@@ -33,6 +33,103 @@ enum class TimeOfDayFactorIndex : int
 	Count
 };
 
+/**
+ * Return the singleton instance of EffectManager.
+ * @returns Reference to the global EffectManager instance.
+ */
+
+/**
+ * Execute the full post-processing effect pipeline for all configured effects.
+ */
+
+/**
+ * Initialize the EffectManager and create any required resources.
+ */
+
+/**
+ * Apply current settings to all managed effects and resources.
+ */
+
+/**
+ * Load persisted EffectManager configuration and state.
+ */
+
+/**
+ * Save current EffectManager configuration and state to persistent storage.
+ */
+
+/**
+ * Register configurable settings used by the manager and its effects.
+ */
+
+/**
+ * Update effect-specific common variables on the provided D3D11 effect object.
+ * @param effect Pointer to an ID3DX11Effect to receive updated common variables.
+ */
+
+/**
+ * Create resources shared across multiple effects (geometry, states, shaders).
+ */
+
+/**
+ * Create shared quad geometry used for full-screen passes.
+ */
+
+/**
+ * Create shared rasterizer, blend and other render state objects.
+ */
+
+/**
+ * Create vertex/pixel shaders and related resources used for texture copy passes.
+ */
+
+/**
+ * Create the compute shader and its constant buffer used for color correction.
+ */
+
+/**
+ * Render a list or ordering view of managed effects (for UI or debug visualization).
+ */
+
+/**
+ * Update the cached CommonVariableData values (timer, weather, time-of-day factors).
+ */
+
+/**
+ * Container for common variables applied to effects: timer, weather, time-of-day factors,
+ * and two scalar factors for night/day and interior blending.
+ */
+
+/**
+ * Setting identifiers for runtime-configurable toggles and parameters.
+ */
+
+/**
+ * Get the current set of common variable values prepared for application to effects.
+ * @returns Reference to the current CommonVariableData.
+ */
+
+/**
+ * Query whether the EffectManager has completed initialization.
+ * @returns `true` if initialized, `false` otherwise.
+ */
+
+/**
+ * Execute a single effect, performing common-variable setup and gating execution using an optional enable-setting ID.
+ * @param effect Effect instance to execute.
+ * @param enableSettingID Optional setting identifier that, if not equal to 0xFFFFFFFF, controls whether the effect runs.
+ */
+
+/**
+ * Copy a source shader resource view into a render target using the manager's copy shader pass.
+ * @param source Shader resource view providing the source texture.
+ * @param destination Render target view to receive the copied texture.
+ */
+
+/**
+ * Apply color correction to a texture via the manager's compute shader.
+ * @param textureUAV Unordered access view of the texture to be modified in place.
+ */
 class EffectManager
 {
 public:

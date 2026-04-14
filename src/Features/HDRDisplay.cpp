@@ -1252,6 +1252,19 @@ float4 HDRDisplay::GetSharedDataHDR() const
 	};
 }
 
+/**
+ * @brief Populate and upload the HDR constant buffer with current display, UI, and rendering state.
+ *
+ * This method fills an HDRDataCB instance with the current settings and runtime flags and updates the GPU constant buffer (`hdrDataCB`). It returns immediately if `hdrDataCB` is not available. The populated fields include:
+ * - `enableHDR`: whether HDR is enabled in settings.
+ * - `paperWhite`: user-configured paper white (nits).
+ * - `peakNits`: effective peak brightness used for highlight compression.
+ * - `skipUIComposite`: whether the frame-generation fast-path should skip compositing the UI this frame.
+ * - `uiBrightness`: UI brightness multiplier from settings.
+ * - `isSceneLinear`: whether linear lighting is enabled.
+ * - `isMainOrLoadingMenu`: indicator for main or loading menu being open.
+ * - `fgTweenMenuMidAlphaBoost`: mid-alpha boost when the tween (pause) menu is open.
+ */
 void HDRDisplay::UpdateHDRData() const
 {
 	if (!hdrDataCB)

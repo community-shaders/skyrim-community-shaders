@@ -5,7 +5,26 @@
 #include <unordered_map>
 #include <winrt/base.h>
 
-class TextureManager
+/**
+	 * Access the global TextureManager singleton instance.
+	 * @returns Reference to the singleton TextureManager.
+	 */
+	
+	/**
+	 * Initialize and allocate internal texture and downsample resources.
+	 */
+	
+	/**
+	 * Retrieve a cached common texture by name.
+	 * @param name Key name of the common texture to look up.
+	 * @returns Pointer to the Texture if found, `nullptr` otherwise.
+	 */
+	
+	/**
+	 * Return the entire common texture cache.
+	 * @returns Const reference to the map of common texture names to Texture objects.
+	 */
+	class TextureManager
 {
 public:
 	struct Texture
@@ -39,7 +58,12 @@ public:
 
 	// Frame-based state access
 	uint32_t GetTextureSwap() const { return textureSwap; }
-	void IncrementTextureSwap() { textureSwap++; }
+	/**
+ * Advance the internal texture swap counter by one.
+ *
+ * This increments the TextureManager's frame-based swap counter used to track texture updates.
+ */
+void IncrementTextureSwap() { textureSwap++; }
 
 private:
 	void CreateCommonTextures();

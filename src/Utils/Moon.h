@@ -26,10 +26,13 @@ namespace Util::Moon
 	};
 
 	/**
-	 * @brief Get the phase-based intensity factor for a moon
-	 * @param phase The current phase of the moon
-	 * @return Intensity factor between 0.05 (new moon) and 1.0 (full moon)
-	 */
+		 * Compute the intensity multiplier corresponding to a moon phase.
+		 *
+		 * For the new moon phase this returns the configured new-moon factor; for other phases
+		 * it returns a value interpolated between the crescent and full-moon factors.
+		 * @param phase The moon phase to evaluate.
+		 * @returns Intensity factor (0.05 for new moon up to 1.0 for full moon).
+		 */
 	inline float GetPhaseIntensityFactor(RE::Moon::Phases::Phase phase)
 	{
 		if (phase == RE::Moon::Phases::Phase::kNewMoon) {
@@ -41,9 +44,11 @@ namespace Util::Moon
 	}
 
 	/**
-	 * @brief Detect moon phase from texture name
-	 * @param textureName Name of the moon texture
-	 * @return Detected phase (defaults to kFull if not found)
+	 * Determine the moon phase represented by a texture name.
+	 *
+	 * @param textureName C-string containing the texture name; may be null.
+	 * @returns The detected RE::Moon::Phases::Phase corresponding to a known phase substring in the name.
+	 *          Returns `RE::Moon::Phases::Phase::kFull` if `textureName` is null or no known substring is found.
 	 */
 	inline RE::Moon::Phases::Phase GetPhaseFromTexture(const char* textureName)
 	{

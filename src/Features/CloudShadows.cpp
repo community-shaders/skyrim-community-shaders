@@ -8,6 +8,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CloudShadows::Settings,
 	Opacity)
 
+/**
+ * @brief Renders the CloudShadows settings UI in ImGui.
+ *
+ * If the Effect11 integration is loaded and ENB is currently managing effects, displays
+ * a yellow notice that settings are managed by ENB and skips the editable controls.
+ * Otherwise shows an "Opacity" slider (range 0.0–4.0, one-decimal display) and a tooltip
+ * explaining that higher values make cloud shadows darker.
+ */
 void CloudShadows::DrawSettings()
 {
 	if (globals::features::effect11.loaded) {
@@ -35,11 +43,27 @@ void CloudShadows::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
+/**
+ * @brief Restores cloud shadow settings to their defaults.
+ *
+ * Resets the stored Settings to a default-initialized state.
+ */
 void CloudShadows::RestoreDefaultSettings()
 {
 	settings = {};
 }
 
+/**
+ * @brief Produce CloudShadows settings adjusted for Effect11/ENB and runtime SettingManager overrides.
+ *
+ * When Effect11 is not loaded, this returns the current settings unchanged. If Effect11 is loaded
+ * and its effect is enabled, the returned settings use the SettingManager override for cloud
+ * shadows: when the "EnableCloudShadows" ("EFFECT") setting is true, `Opacity` is set to the
+ * interpolated time-of-day value of "Amount" in the "CLOUDSHADOWS" category; when that setting is
+ * false, `Opacity` is set to 0.0f.
+ *
+ * @return CloudShadows::Settings The settings to use for common/GPU buffers with any ENB overrides applied.
+ */
 CloudShadows::Settings CloudShadows::GetCommonBufferData()
 {
 	if (!loaded)
@@ -62,6 +86,15 @@ CloudShadows::Settings CloudShadows::GetCommonBufferData()
 	return data;
 }
 
+/**
+ * @brief Clears the cloud-occlusion render target for a specific cubemap face once per frame.
+ *
+ * If this is the first call for the given cubemap side in the current frame, the function
+ * clears that side's cloud-occlusion render target to transparent black; subsequent calls
+ * for the same side within the same frame are no-ops.
+ *
+ * @param side Index of the cubemap face to clear (expected 0–5).
+ */
 void CloudShadows::CheckResourcesSide(int side)
 {
 	static Util::FrameChecker frame_checker[6];

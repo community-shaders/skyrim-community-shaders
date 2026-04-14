@@ -9,12 +9,25 @@
 #include <d3dcompiler.h>
 #include <vector>
 
+/**
+ * @brief Provides access to the global EffectManager singleton instance.
+ *
+ * @return EffectManager& Reference to the single EffectManager instance.
+ */
 EffectManager& EffectManager::GetSingleton()
 {
 	static EffectManager instance;
 	return instance;
 }
 
+/**
+ * @brief Initializes the EffectManager, prepares shared resources, and validates readiness.
+ *
+ * Performs startup for dependent subsystems and builds common GPU resources required for
+ * post-processing. After setup, the function verifies that a set of critical resources
+ * (geometry, input layout, render states, copy shaders, and color-correction resources)
+ * were created; if any are missing it logs errors and marks the manager as not initialized.
+ */
 void EffectManager::Initialize()
 {
 	TextureManager::GetSingleton().Initialize();
@@ -57,6 +70,9 @@ void EffectManager::Initialize()
 	}
 }
 
+/**
+ * @brief Applies the current configuration to all post-processing effects in execution order.
+ */
 void EffectManager::Apply()
 {
 	enbBloom.Apply();
@@ -66,6 +82,12 @@ void EffectManager::Apply()
 	enbEffectPostPass.Apply();
 }
 
+/**
+ * @brief Loads runtime data and configuration for all managed post-processing effects.
+ *
+ * Ensures each internal effect module refreshes its settings and resources so they are ready
+ * for execution (bloom, lens, adaptation, main effect, and post-pass).
+ */
 void EffectManager::Load()
 {
 	enbBloom.Load();
@@ -75,6 +97,11 @@ void EffectManager::Load()
 	enbEffectPostPass.Load();
 }
 
+/**
+ * @brief Persists current configuration for all managed post-processing effects.
+ *
+ * Calls each effect module's Save method to write its settings/state to persistent storage.
+ */
 void EffectManager::Save()
 {
 	enbBloom.Save();
@@ -84,6 +111,14 @@ void EffectManager::Save()
 	enbEffectPostPass.Save();
 }
 
+/**
+ * @brief Register all configurable effect and environment settings and cache their IDs.
+ *
+ * Registers global, time-of-day, weather, color-correction, effect, adaptation, bloom,
+ * lens, cloud shadows, sky, environment, image-based lighting, sunglare, and volumetric
+ * rays settings with the SettingManager, then stores frequently accessed setting IDs
+ * in the manager's local cache for fast lookup.
+ */
 void EffectManager::RegisterSettings()
 {
 	auto& settingManager = SettingManager::GetSingleton();
@@ -228,6 +263,16 @@ void EffectManager::RegisterSettings()
 	ids.gammaCurve = settingManager.GetSettingID("GammaCurve", "COLORCORRECTION");
 }
 
+/**
+ * @brief Executes a single post-processing effect if it is compiled and enabled.
+ *
+ * Updates common shader variables for the effect, runs the effect's variable updates and execution,
+ * and brackets the work with a performance event using the effect's name. If the effect is not compiled
+ * or the provided enable setting is present and false, the function returns without executing the effect.
+ *
+ * @param a_effect Reference to the effect to execute.
+ * @param enableSettingID Setting ID used to gate execution; use 0xFFFFFFFF to bypass gating and always attempt execution.
+ */
 void EffectManager::ExecuteEffect(Effect& a_effect, uint32_t enableSettingID)
 {
 	if (!a_effect.IsCompiled())
@@ -244,6 +289,13 @@ void EffectManager::ExecuteEffect(Effect& a_effect, uint32_t enableSettingID)
 	state->EndPerfEvent();
 }
 
+/**
+ * @brief Executes the post-processing effect pipeline and restores GPU state.
+ *
+ * Saves the current D3D11 pipeline state, configures fullscreen-quad rendering state, applies color correction to the main render target, updates shared downsampled textures, runs the configured effect chain (bloom, lens, adaptation, main effect, post-pass) according to cached enable settings, advances the texture swap, optionally copies the final SDR texture to the image-space framebuffer, then restores and releases all previously saved pipeline state and COM interfaces.
+ *
+ * This function returns immediately if the manager is not initialized or if required GPU resources or the renderer are missing.
+ */
 void EffectManager::ExecuteEffects()
 {
 	if (!initialized)
@@ -397,6 +449,13 @@ void EffectManager::ExecuteEffects()
 	}
 }
 
+/**
+ * @brief Creates shared GPU resources required by the effect pipeline.
+ *
+ * Initializes the fullscreen quad geometry and input layout, common rasterizer and blend
+ * states, shaders used for copying textures, and the color-correction compute shader and
+ * its constant buffer.
+ */
 void EffectManager::CreateCommonResources()
 {
 	CreateQuadGeometry();
@@ -405,6 +464,18 @@ void EffectManager::CreateCommonResources()
 	CreateColorCorrectionShader();
 }
 
+/**
+ * @brief Creates shared fullscreen quad geometry and its input layout for post-processing effects.
+ *
+ * Initializes a vertex buffer containing a fullscreen quad and a matching input layout (POSITION/TEXCOORD)
+ * used by all ENB post-processing effects. Compiles a minimal vertex shader solely for input-layout creation.
+ *
+ * @throws std::runtime_error If creating the fullscreen quad vertex buffer fails.
+ *
+ * Side effects:
+ * - Populates the instance members `quadVertexBuffer` and `inputLayout`.
+ * - Logs an error and returns early if the embedded vertex shader fails to compile or the input layout cannot be created.
+ */
 void EffectManager::CreateQuadGeometry()
 {
 	// Create a fullscreen quad vertex buffer that all effects can share
@@ -471,6 +542,14 @@ void EffectManager::CreateQuadGeometry()
 	}
 }
 
+/**
+ * @brief Creates shared rasterizer and blend states used for fullscreen post-processing.
+ *
+ * Creates a rasterizer state configured for solid fill, no face culling, depth clipping enabled,
+ * scissor and multisample disabled, and a blend state with blending disabled and full color write mask.
+ *
+ * @throws If creation of either D3D11 rasterizer or blend state fails.
+ */
 void EffectManager::CreateRenderStates()
 {
 	// Rasterizer state for fullscreen quads
@@ -498,6 +577,14 @@ void EffectManager::CreateRenderStates()
 	DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&blendDesc, blendState.put()));
 }
 
+/**
+ * @brief Creates and compiles the vertex and pixel shaders used for fullscreen texture copying.
+ *
+ * This initializes the manager's copyVertexShader and copyPixelShader objects by compiling
+ * embedded HLSL sources and creating corresponding D3D11 shader objects on the device.
+ * If shader compilation or creation fails, an error is logged and the function returns
+ * without setting the corresponding shader(s).
+ */
 void EffectManager::CreateCopyShaders()
 {
 	// Compile vertex shader for texture copy
@@ -561,6 +648,16 @@ void EffectManager::CreateCopyShaders()
 	logger::info("[ENBPP] Created texture copy shaders successfully");
 }
 
+/**
+ * @brief Creates the GPU compute shader and its constant buffer used for color correction.
+ *
+ * Compiles an embedded HLSL compute shader that reads/writes an RWTexture2D (bound to UAV slot u0)
+ * and applies a gamma curve and brightness multiplier to each pixel. On success the created
+ * ID3D11ComputeShader is stored in colorCorrectionComputeShader and a dynamic constant buffer
+ * (containing `Brightness` and `GammaCurve`) is created and stored in colorCorrectionConstantBuffer.
+ * If shader compilation or resource creation fails, an error is logged and the corresponding
+ * resources are left unset.
+ */
 void EffectManager::CreateColorCorrectionShader()
 {
 	// Compile compute shader for color correction
@@ -622,6 +719,20 @@ void EffectManager::CreateColorCorrectionShader()
 	logger::info("[ENBPP] Created color correction compute shader successfully");
 }
 
+/**
+ * @brief Refreshes the shared shader/engine data used by post-processing effects.
+ *
+ * Updates EffectManager::commonData from runtime sources: accumulates a frame timer and frame index; samples current weather
+ * ids, blend percentage, and game hour from the global sky; and computes time-of-day blending factors including dawn/sunrise/day/sunset/dusk/night
+ * with 24-hour wraparound. Also updates the interior flag and derives a night/day interpolation factor used by shaders.
+ *
+ * The following fields of commonData are set:
+ * - timer[0..3]: normalized time, reference frame rate (60), frame index mod 9999, and last-frame delta.
+ * - weather[0..3]: current effective weather id, last effective weather id, weather blend percent, current game hour.
+ * - timeOfDay1 / timeOfDay2: per-period blend weights for shader use (dawn, sunrise, day, sunset, dusk, night).
+ * - eInteriorFactor: whether the player is indoors.
+ * - eNightDayFactor: normalized proximity between night and day times (0.0 = night, 1.0 = day).
+ */
 void EffectManager::UpdateCommonData()
 {
 	commonData = {};
@@ -797,6 +908,16 @@ void EffectManager::UpdateCommonData()
 	}
 }
 
+/**
+ * @brief Binds shared renderer textures and per-frame vector data into an effect.
+ *
+ * Updates the provided D3DX11 effect with the common shader resources and vector parameters
+ * used by post-processing effects, including the scene depth SRV, format-specific and
+ * fixed-size common render-target SRVs, and the per-frame vectors (Timer, Weather,
+ * TimeOfDay1, TimeOfDay2, ENightDayFactor, EInteriorFactor). If `effect` is null the function does nothing.
+ *
+ * @param effect Pointer to the ID3DX11Effect to update; may be null.
+ */
 void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 {
 	if (!effect)
@@ -844,6 +965,15 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	Effect::SetVectorVariable(effect, "EInteriorFactor", &commonData.eInteriorFactor, sizeof(commonData.eInteriorFactor));
 }
 
+/**
+ * @brief Copies a source shader resource view into a destination render target view using the internal fullscreen quad copy shaders.
+ *
+ * Validates inputs and copy shaders, sets a viewport matching the destination texture, binds the destination RTV and standard raster/blend/IA state,
+ * binds the source SRV to the pixel shader, draws a fullscreen quad to perform the copy, and then clears the SRV binding.
+ *
+ * @param a_source Shader resource view of the source texture to copy from.
+ * @param a_dest Render target view of the destination texture to copy into.
+ */
 void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11RenderTargetView* a_dest)
 {
 	if (!a_source || !a_dest || !copyPixelShader || !copyVertexShader) {
@@ -899,6 +1029,16 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 	context->PSSetShaderResources(0, 1, &nullSRV);
 }
 
+/**
+ * @brief Applies brightness and gamma correction to a UAV-backed texture.
+ *
+ * Updates the color-correction constant buffer from registered settings and dispatches
+ * the color-correction compute shader to modify the texture referenced by the given UAV.
+ * If the texture, shader, or constant buffer are not initialized, or if both settings
+ * are the identity values (brightness = 1, gamma = 1), the function returns without altering the texture.
+ *
+ * @param textureUAV Unordered access view of the target texture to be modified in-place.
+ */
 void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 {
 	if (!textureUAV || !colorCorrectionComputeShader || !colorCorrectionConstantBuffer) {
@@ -957,6 +1097,12 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 }
 
+/**
+ * @brief Renders ImGui controls for all managed post-processing effects.
+ *
+ * Calls each internal effect's RenderImGui() to populate the ImGui UI for
+ * bloom, lens, adaptation, the main effect, and the post-pass effect.
+ */
 void EffectManager::RenderEffectsList()
 {
 	enbBloom.RenderImGui();

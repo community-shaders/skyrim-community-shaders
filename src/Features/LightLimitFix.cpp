@@ -214,6 +214,18 @@ void LightLimitFix::BSLightingShader_SetupGeometry_Before(RE::BSRenderPass* a_pa
 	}
 }
 
+/**
+ * Populates temporary strict point-light data from the given render pass for use by the lighting shader.
+ *
+ * For the provided geometry render pass, sets `strictLightDataTemp.NumStrictLights` (zero if the pass is considered "in world", otherwise one less than `a_pass->numLights`),
+ * fills `strictLightDataTemp.StrictLights` with per-light `LightData` (color, radius/fade, flags, world-space positions per eye, and shadow indices/flags where applicable),
+ * and accumulates `strictLightDataTemp.ShadowBitMask` from the pass's shadow lights.
+ *
+ * When the inverse-square lighting feature is available it is used to compute light attenuation; otherwise the function copies radius and fade from runtime data and applies LOD dimmer.
+ * If the Effect11 color override feature is enabled, the point light color is adjusted before positions and shadow data are set.
+ *
+ * @param a_pass Render pass whose point lights and shadow lights will be read and converted into the strict-light temporary structure.
+ */
 void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights(RE::BSRenderPass* a_pass)
 {
 	auto& isl = globals::features::inverseSquareLighting;
@@ -374,6 +386,17 @@ void LightLimitFix::ClearShaderCache()
 	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
 }
 
+/**
+ * @brief Collects and uploads current scene point-light data for clustering and culling.
+ *
+ * Gathers active point lights from the shadow scene, caches per-eye camera positions, builds a packed
+ * LightData array (applying inverse-square processing or fallback radius/fade, applying ENB color override,
+ * assigning room flags and shadow mask indices, and filtering out inactive lights), writes up to MAX_LIGHTS
+ * entries into the GPU lights buffer, updates lightCount, and triggers a cluster structure update.
+ *
+ * This function modifies internal state: eyePositionCached, roomNodes, lightCount, and the GPU lights buffer,
+ * and calls UpdateStructure() to rebuild cluster data based on the newly uploaded lights.
+ */
 void LightLimitFix::UpdateLights()
 {
 	auto smState = globals::game::smState;

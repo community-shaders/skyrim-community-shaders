@@ -26,6 +26,18 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	DALCMode,
 	DisableInInteriors)
 
+/**
+ * @brief Render the ImGui controls for image-based lighting (IBL) settings.
+ *
+ * Draws the configurable UI for the IBL feature, including enable toggles, intensity
+ * and saturation sliders, DALC blending controls, static-IBL toggle for out-of-world
+ * objects, fog blending controls, and an option to disable IBL in interiors.
+ *
+ * If ENB/Effect11 reports that image-based lighting is managed by ENB, a yellow
+ * informational message is shown and the function returns without drawing the controls.
+ *
+ * The rendered controls provide inline tooltips describing each setting.
+ */
 void IBL::DrawSettings()
 {
 	if (globals::features::effect11.loaded) {
@@ -110,6 +122,20 @@ void IBL::RestoreDefaultSettings()
 	settings = {};
 }
 
+/**
+ * @brief Registers weather-variable bindings for IBL controls in the global weather registry.
+ *
+ * If Effect11 (ENB) is loaded and its "EnableImageBasedLighting" setting is true, this method
+ * returns early and does not register variables. Otherwise it obtains (or creates) a per-feature
+ * registry and registers variables that write into this feature's IBL settings:
+ * - `EnableIBL` (bool): default `true`; transition lambda switches at `factor > 0.5`.
+ * - `EnvIBLScale` (float): default `1.0`, range `[0, 10]`.
+ * - `SkyIBLScale` (float): default `1.0`, range `[0, 10]`.
+ * - `EnvIBLSaturation` (float): default `1.0`, range `[0, 2]`.
+ * - `SkyIBLSaturation` (float): default `1.0`, range `[0, 2]`.
+ * - `DALCAmount` (float): default `1.0`, range `[0, 1]`.
+ * - `FogAmount` (float): default `0.0`, range `[0, 1]`.
+ */
 void IBL::RegisterWeatherVariables()
 {
 	if (globals::features::effect11.loaded) {
@@ -190,6 +216,16 @@ void IBL::RegisterWeatherVariables()
 		0.0f, 1.0f));
 }
 
+/**
+ * @brief Create a Settings snapshot adjusted for ENB and interior conditions.
+ *
+ * Starts from the current settings and, if ENB's image-based lighting is active,
+ * applies ENB-controlled overrides (disabling env IBL scale, forcing DALC values,
+ * increasing saturations, and setting SkyIBLScale from ENB's time-of-day interpolation).
+ * Afterwards, if DisableInInteriors is set and the player is in an interior, disables IBL.
+ *
+ * @return IBL::Settings A copy of the settings with ENB overrides applied and interior disabling enforced.
+ */
 IBL::Settings IBL::GetCommonBufferData() const
 {
 	Settings data = settings;

@@ -1,4 +1,4 @@
-﻿#include "Effect.h"
+#include "Effect.h"
 #include <d3dcompiler.h>
 #include <fstream>
 #include <sstream>
@@ -10,6 +10,18 @@
 #include "../TextureManager.h"
 #include "State.h"
 
+/**
+ * Load effect settings from enbseries/<EffectName>.ini and apply them to UI variables and the selected technique.
+ *
+ * If the ini file does not exist this function leaves current values unchanged (defaults) and returns.
+ * If the file's last write time matches the cached value, the reload is skipped.
+ * Per-UI-variable values are read from the ini section named after the effect (uppercased) using each variable's display name;
+ * when a value is present it is parsed and applied via LoadVariableFromString.
+ * When UI techniques are defined, the function reads the 1-indexed `TECHNIQUE` entry, converts it to 0-indexed,
+ * clamps it to the valid range, and updates selectedTechniqueIndex.
+ *
+ * @return `true` if settings were loaded or defaults were used.
+ */
 bool Effect::Load()
 {
 	logger::debug("[ENBPP] Loading settings for effect '{}'", GetName());
@@ -61,6 +73,16 @@ bool Effect::Load()
 	return true;
 }
 
+/**
+ * @brief Persist UI-controlled effect settings to the effect's INI file.
+ *
+ * Writes the current UI variable values and the selected technique into enbseries/<EffectName>.ini
+ * under a section named by the effect name converted to uppercase. Scalar values are written as
+ * decimal strings, booleans as "true"/"false", and color values as comma-separated float components.
+ * After writing, the Windows INI cache is flushed so subsequent reads pick up the changes.
+ *
+ * @note The TECHNIQUE entry is stored as a 1-based index (selectedTechniqueIndex + 1).
+ */
 void Effect::Save()
 {
 	logger::debug("[ENBPP] Saving settings for effect '{}'", GetName());
@@ -119,6 +141,13 @@ void Effect::Save()
 	logger::info("[ENBPP] Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
 }
 
+/**
+ * @brief Initializes and activates the effect by compiling its FX file, loading saved settings, and creating effect textures.
+ *
+ * Resets any previous effect state before attempting to apply. On failure, a descriptive message is appended to the effect's internal error list and the effect remains unloaded.
+ *
+ * @return true if initialization succeeded and the effect is ready, false otherwise.
+ */
 bool Effect::Apply()
 {
 	logger::info("[ENBPP] Applying effect '{}'", GetName());
@@ -144,6 +173,13 @@ bool Effect::Apply()
 	return true;
 }
 
+/**
+ * @brief Releases the effect and resets all runtime state and caches.
+ *
+ * Clears compiled effect state, technique and variable registries, custom texture and effect texture caches,
+ * UI variable/technique lists, and recorded errors. Also resets selection index and the cached INI write time
+ * so subsequent loads will re-read settings from disk.
+ */
 void Effect::Unload()
 {
 	effect = nullptr;
@@ -167,6 +203,20 @@ void Effect::Unload()
 	logger::debug("[ENBPP] Unloaded effect '{}'", GetName());
 }
 
+/**
+ * @brief Compile and initialize the effect from its .fx source in enbseries/<EffectName>.
+ *
+ * Reads the main effect file, preprocesses it for ENB Extender, compiles the shader with a custom
+ * include handler, and creates the D3D11 effect from the compiled bytecode. On success this
+ * populates the effect instance: enumerates global variables, binds any custom annotated textures,
+ * loads technique sequences and UI-annotated techniques, populates available technique names,
+ * sets the default selected UI technique when present, and loads current UI variable values from
+ * the effect.
+ *
+ * On failure the function records a descriptive message in the `errors` vector and logs details.
+ *
+ * @return `true` if the effect was compiled and initialized successfully, `false` otherwise.
+ */
 bool Effect::LoadFXFile()
 {
 	auto filePath = std::filesystem::path("enbseries");
@@ -271,6 +321,21 @@ bool Effect::LoadFXFile()
 	return true;
 }
 
+/**
+ * @brief Executes a named technique sequence, rendering each technique pass with ping-ponging support.
+ *
+ * Executes the sequence identified by a_baseTechniqueName using a_input as the initial shader resource view,
+ * writing to a_output and using a_temp for intermediate ping-pong render targets. The method updates shader
+ * size variables and viewports as needed and applies each technique's passes in order. If a technique specifies
+ * a custom render target annotation, that override will be used for that pass.
+ *
+ * @param a_baseTechniqueName Base name of the technique sequence to execute.
+ * @param a_input Shader resource view used as the initial input texture.
+ * @param a_output Render target texture used as the primary output.
+ * @param a_temp Temporary render target texture used for ping-pong intermediate passes.
+ * @return true if the final pass wrote into a_output, false if it wrote into the temporary target or execution was skipped
+ *         (for example when the effect is not compiled or the named sequence is missing/empty).
+ */
 bool Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp)
 {
 	if (!IsCompiled() || !effect) {
@@ -400,6 +465,15 @@ bool Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 	return targetInOutput;
 }
 
+/**
+ * @brief Renders the specified effect technique into the provided output texture.
+ *
+ * Sets the output render target and viewport, applies every pass of the named technique,
+ * and issues full-screen draw calls so the technique's shader renders into the given output.
+ *
+ * @param techniqueName Name of the technique to execute.
+ * @param output       Render target texture into which the technique will draw.
+ */
 void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output)
 {
 	if (!IsCompiled() || !effect) {
@@ -442,6 +516,13 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::
 	}
 }
 
+/**
+ * @brief Loads textures specified by the "ResourceName" annotation and binds them to effect variables.
+ *
+ * Iterates effect global variables, and for each variable that provides a non-empty `ResourceName`
+ * annotation, loads the named texture and sets it as the variable's shader-resource view. Logs a
+ * warning when a texture cannot be loaded and logs debug information on successful bindings.
+ */
 void Effect::SetupCustomTextures()
 {
 	// Iterate through all variables to find texture variables with ResourceName annotations
@@ -468,6 +549,14 @@ void Effect::SetupCustomTextures()
 	}
 }
 
+/**
+ * @brief Loads a texture file from the enbseries folder and returns a shader-resource view, caching results.
+ *
+ * Attempts to load the texture named by `filename` from the enbseries/ directory. Tries DDS loader first and falls back to WIC-based formats (PNG, BMP, etc.). Caches successful loads in the effect's custom texture cache so subsequent calls for the same `filename` return the cached SRV.
+ *
+ * @param filename Filename or relative path under enbseries (e.g., "textures/mytex.dds").
+ * @return ID3D11ShaderResourceView* Pointer to the created shader-resource view on success, or `nullptr` on failure.
+ */
 ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filename)
 {
 	auto device = globals::d3d::device;
@@ -505,12 +594,30 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 	return srv.get();
 }
 
+/**
+ * @brief Retrieves the `ResourceName` annotation value from an effect variable.
+ *
+ * @param variable Pointer to the effect variable to inspect.
+ * @return std::string The annotation value for `ResourceName`, or an empty string if not present.
+ */
 std::string Effect::GetResourceNameFromVariable(ID3DX11EffectVariable* variable)
 {
 	return GetUIAnnotation(variable, "ResourceName");
 }
 
 template <typename Callback>
+/**
+ * @brief Iterates all effect techniques and invokes a callback for each, grouping numbered sequences by common base name.
+ *
+ * Techniques are grouped when a technique name equals the previous base name followed by an increasing decimal index
+ * (e.g., "Bloom", "Bloom1", "Bloom2" → base name "Bloom" with sequence numbers 0,1,2). For the first technique in a
+ * group the sequence number is 0; subsequent numbered entries increment the sequence number.
+ *
+ * @param effect Pointer to the D3D11 effect whose techniques will be enumerated. If `GetDesc` fails, the function returns immediately.
+ * @param callback Callable invoked for each valid technique with signature compatible with:
+ *                 `(ID3DX11EffectTechnique* technique, const std::string& baseName, const std::string& techniqueName, int sequenceNumber)`.
+ *                 Techniques that are invalid or whose `GetDesc` fails are skipped.
+ */
 static void ForEachTechniqueSequence(ID3DX11Effect* effect, Callback&& callback)
 {
 	D3DX11_EFFECT_DESC effectDesc;
@@ -554,6 +661,14 @@ static void ForEachTechniqueSequence(ID3DX11Effect* effect, Callback&& callback)
 	}
 }
 
+/**
+ * @brief Populate the effect's technique sequences from the compiled effect.
+ *
+ * @details Enumerates all techniques in the effect, groups them into numeric sequences by base name,
+ * and stores each technique's handle and its optional render-target override into the `techniques` map.
+ * Each sequence vector is resized to accommodate the technique's sequence index. Logs each loaded
+ * technique and a summary count per base sequence.
+ */
 void Effect::LoadTechniques()
 {
 	ForEachTechniqueSequence(effect.get(), [this](ID3DX11EffectTechnique* technique, const std::string& baseName, const std::string& techniqueName, int sequenceNumber) {
@@ -575,6 +690,11 @@ void Effect::LoadTechniques()
 	}
 }
 
+/**
+ * @brief Enumerates base technique names whose first sequence element contains a valid technique.
+ *
+ * @return std::vector<std::string> A list of base technique names where the sequence is non-empty and its first element has a valid technique pointer.
+ */
 std::vector<std::string> Effect::GetBaseTechniqueNames()
 {
 	std::vector<std::string> baseNames;
@@ -589,6 +709,14 @@ std::vector<std::string> Effect::GetBaseTechniqueNames()
 	return baseNames;
 }
 
+/**
+ * @brief Populate the list of UI-exposed techniques from the compiled effect.
+ *
+ * Clears the current UI technique list and selected index, then scans all technique sequences
+ * for a non-empty `UIName` annotation. For each unique technique base name that provides a
+ * `UIName`, adds a UITechnique entry with the base name as `techniqueName` and the annotation
+ * value as `displayName`.
+ */
 void Effect::LoadUITechniques()
 {
 	uiTechniques.clear();
@@ -615,6 +743,16 @@ void Effect::LoadUITechniques()
 	logger::debug("[ENBPP] Loaded {} UI techniques", uiTechniques.size());
 }
 
+/**
+ * @brief Retrieve a string annotation value from a technique by name.
+ *
+ * Searches the technique's annotations for one whose name equals @p annotationName
+ * and returns its string value.
+ *
+ * @param technique The technique to inspect; may be nullptr.
+ * @param annotationName The annotation name to look up.
+ * @return std::string The annotation's string value if found and valid, otherwise an empty string.
+ */
 static std::string GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, const char* annotationName)
 {
 	if (!technique)
@@ -645,16 +783,34 @@ static std::string GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, con
 	return "";
 }
 
+/**
+ * @brief Retrieves the "RenderTarget" annotation value from a technique.
+ *
+ * @param technique Technique to read the annotation from.
+ * @return std::string The annotation value specifying a render target name, or an empty string if the annotation is missing or cannot be read.
+ */
 std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
 {
 	return GetTechniqueAnnotation(technique, "RenderTarget");
 }
 
+/**
+ * @brief Retrieves the UI display name annotation for a technique.
+ *
+ * @param technique Effect technique to query.
+ * @return std::string The value of the "UIName" annotation for the technique, or an empty string if the annotation is missing or the technique is invalid.
+ */
 std::string Effect::GetUINameFromTechnique(ID3DX11EffectTechnique* technique)
 {
 	return GetTechniqueAnnotation(technique, "UIName");
 }
 
+/**
+ * @brief Retrieve a cached effect texture by name.
+ *
+ * @param name The texture identifier stored in the effect's texture cache.
+ * @return TextureManager::Texture* Pointer to the cached texture if found, `nullptr` otherwise.
+ */
 TextureManager::Texture* Effect::GetEffectTexture(const std::string& name)
 {
 	auto it = effectTextureCache.find(name);
@@ -664,6 +820,15 @@ TextureManager::Texture* Effect::GetEffectTexture(const std::string& name)
 	return nullptr;
 }
 
+/**
+ * @brief Resolve a render-target view by name from the effect's caches, using a provided fallback when unavailable.
+ *
+ * Looks up a texture by `renderTargetName` first in the effect-managed texture cache, then in the shared/common texture cache.
+ *
+ * @param renderTargetName Name of the render target texture to resolve; an empty string causes the function to return `fallback`.
+ * @param fallback Render target view to return if no matching cached render target is found.
+ * @return ID3D11RenderTargetView* The resolved render-target view from the caches, or `fallback` if none was found.
+ */
 ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback)
 {
 	if (renderTargetName.empty()) {
@@ -683,6 +848,18 @@ ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTar
 	return fallback;
 }
 
+/**
+ * @brief Populates the effect's UI variable list from annotated global effect variables.
+ *
+ * Scans the compiled effect for global variables annotated with `UIName`, constructs
+ * UIVariable entries (name, display name, type, widget metadata, min/max/step or dropdown
+ * items as applicable), loads each variable's current value into the UIVariable, and
+ * appends them to the `uiVariables` vector.
+ *
+ * If the effect is not available or its descriptor cannot be retrieved, the function
+ * returns without modifying `uiVariables`. Parsing errors for individual annotations
+ * are caught and logged; a failed parse does not abort the scan of other variables.
+ */
 void Effect::LoadUIVariables()
 {
 	D3DX11_EFFECT_DESC effectDesc;
@@ -811,6 +988,18 @@ void Effect::LoadUIVariables()
 	logger::debug("[ENBPP] Loaded {} UI variables", uiVariables.size());
 }
 
+/**
+ * @brief Retrieves a named annotation value from an effect variable.
+ *
+ * Looks up an annotation whose name equals `annotationName` on `variable` and returns its value as a string.
+ * If the annotation is a string the string value is returned. If the annotation is a scalar the integer
+ * value is returned, or the floating-point value if integer extraction fails. Returns an empty string
+ * when `variable` is null, the annotation is not found, or its value cannot be extracted.
+ *
+ * @param variable Effect variable to query annotations from.
+ * @param annotationName Name of the annotation to retrieve.
+ * @return std::string The annotation value as a string, or an empty string if missing or unreadable.
+ */
 std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName)
 {
 	if (!variable) {
@@ -863,6 +1052,14 @@ std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::
 	return "";
 }
 
+/**
+ * @brief Parses a widget type name and maps it to a UIWidgetType enum.
+ *
+ * Performs a case-insensitive match of common widget names.
+ *
+ * @param widget Widget type name (case-insensitive).
+ * @return Effect::UIWidgetType `Spinner` if `widget` equals "spinner", `Dropdown` if `widget` equals "dropdown", `Default` otherwise.
+ */
 Effect::UIWidgetType Effect::ParseWidgetType(const std::string& widget)
 {
 	std::string lowerWidget = widget;
@@ -875,6 +1072,14 @@ Effect::UIWidgetType Effect::ParseWidgetType(const std::string& widget)
 	return UIWidgetType::Default;
 }
 
+/**
+ * @brief Parses a comma-separated list into individual, trimmed items.
+ *
+ * Splits the input string on commas and removes leading and trailing spaces and tabs from each entry.
+ *
+ * @param list Comma-separated items.
+ * @return std::vector<std::string> Vector of trimmed items in the same order as they appear in the input.
+ */
 std::vector<std::string> Effect::ParseDropdownList(const std::string& list)
 {
 	std::vector<std::string> items;
@@ -891,6 +1096,17 @@ std::vector<std::string> Effect::ParseDropdownList(const std::string& list)
 	return items;
 }
 
+/**
+ * @brief Reads the current value from the underlying effect variable and stores it into the given UI variable container.
+ *
+ * The function queries the effect variable according to uiVar.type and updates the matching field on uiVar:
+ * - Float -> uiVar.floatValue
+ * - Int -> uiVar.intValue
+ * - Bool -> uiVar.boolValue
+ * - Color3/Color4 -> uiVar.colorValue (array of floats)
+ *
+ * @param uiVar UI variable container whose value will be populated from its associated effect variable.
+ */
 void Effect::LoadUIVariableValue(UIVariable& uiVar)
 {
 	switch (uiVar.type) {
@@ -917,6 +1133,26 @@ void Effect::LoadUIVariableValue(UIVariable& uiVar)
 	}
 }
 
+/**
+ * @brief Parses a string and applies its value to a UI variable and the underlying shader variable.
+ *
+ * Parses `value` according to `uiVar.type`, updates the corresponding field on `uiVar`
+ * (floatValue / intValue / boolValue / colorValue) and writes the value into the associated
+ * effect variable (scalar or vector) so the shader sees the change.
+ *
+ * Supported formats:
+ * - Float: parsed with `std::stof`.
+ * - Int: parsed with `std::stoi`.
+ * - Bool: case-insensitive `true`, `1`, `yes`, `on` → true; `false`, `0`, `no`, `off` → false;
+ *   otherwise falls back to `std::stoi(value) != 0`.
+ * - Color3/Color4: comma-separated floats (3 or 4 components respectively).
+ *
+ * If parsing fails or an exception is thrown, a warning is logged and the function leaves the
+ * variable unchanged.
+ *
+ * @param uiVar Reference to the UI variable metadata and storage to update.
+ * @param value String representation of the value to parse and apply.
+ */
 void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 {
 	try {
@@ -968,6 +1204,17 @@ void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 	}
 }
 
+/**
+ * @brief Pushes all stored UI values into their corresponding shader variables.
+ *
+ * Iterates the effect's UI variable list and updates each underlying effect variable
+ * with the value currently held in the UI representation.
+ *
+ * - Float -> SetFloat
+ * - Int -> SetInt
+ * - Bool -> SetBool
+ * - Color3/Color4 -> SetFloatVector
+ */
 void Effect::UpdateUIVariables()
 {
 	for (auto& uiVar : uiVariables) {
@@ -989,6 +1236,15 @@ void Effect::UpdateUIVariables()
 	}
 }
 
+/**
+ * @brief Render the effect's ImGui user interface, allowing technique selection and parameter editing.
+ *
+ * Renders a collapsible UI block named after the effect that displays a technique selector (when available)
+ * and a two-column table of UI-exposed parameters (float, int, bool, color3, color4). When the user modifies
+ * any control, the function pushes the new values back into the effect by calling UpdateUIVariables().
+ *
+ * Also displays any stored compilation or load errors as wrapped text below the controls.
+ */
 void Effect::RenderImGui()
 {
 	if (ImGui::CollapsingHeader(GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1106,6 +1362,13 @@ void Effect::RenderImGui()
 	}
 }
 
+/**
+ * @brief Enumerates the effect's global variables and caches them by name.
+ *
+ * Clears the internal `variables` map, inspects the effect's global variable list,
+ * and stores a copy of each valid global variable under its declared name.
+ * Logs each enumerated variable and a final count.
+ */
 void Effect::EnumerateAllVariables()
 {
 	D3DX11_EFFECT_DESC effectDesc;
@@ -1136,6 +1399,12 @@ void Effect::EnumerateAllVariables()
 	logger::debug("[ENBPP] Enumerated {} effect variables", variables.size());
 }
 
+/**
+ * @brief Retrieve an effect variable by name, using an internal cache to avoid repeated lookups.
+ *
+ * @param name The effect variable name to look up.
+ * @return ID3DX11EffectVariable* Pointer to the cached or newly retrieved effect variable; `nullptr` if the effect is not initialized.
+ */
 ID3DX11EffectVariable* Effect::GetCachedVariable(const std::string& name)
 {
 	if (!effect)
@@ -1151,6 +1420,15 @@ ID3DX11EffectVariable* Effect::GetCachedVariable(const std::string& name)
 	return variable;
 }
 
+/**
+ * @brief Retrieve a cached pointer to a common texture by name.
+ *
+ * If the texture is not already cached, queries TextureManager::GetSingleton().GetCommonTexture(name)
+ * and caches the result for subsequent calls.
+ *
+ * @param name Name of the common texture to look up.
+ * @return TextureManager::Texture* Pointer to the texture, or `nullptr` if the texture was not found.
+ */
 TextureManager::Texture* Effect::GetCachedCommonTexture(const std::string& name)
 {
 	auto it = commonTexturePointerCache.find(name);
@@ -1163,12 +1441,28 @@ TextureManager::Texture* Effect::GetCachedCommonTexture(const std::string& name)
 	return texture;
 }
 
+/**
+ * @brief Clears cached effect variables and cached common texture pointers.
+ *
+ * Removes all entries from the internal variable lookup cache and the cache
+ * that stores pointers to commonly used textures.
+ */
 void Effect::ClearVariableCache()
 {
 	variableCache.clear();
 	commonTexturePointerCache.clear();
 }
 
+/**
+ * @brief Binds a shader resource view to an effect variable by name.
+ *
+ * Looks up the effect variable cached under `variableName`, casts it to a
+ * shader-resource variable and sets its resource to `resource` when valid.
+ *
+ * @param variableName Name of the effect variable to set.
+ * @param resource Shader resource view to bind to the variable (may be nullptr to clear).
+ * @return true if the variable was found, is a valid shader-resource variable, and the resource was set; `false` otherwise.
+ */
 bool Effect::SetShaderResourceVariable(const std::string& variableName, ID3D11ShaderResourceView* resource)
 {
 	auto variable = GetCachedVariable(variableName);
@@ -1182,6 +1476,14 @@ bool Effect::SetShaderResourceVariable(const std::string& variableName, ID3D11Sh
 	return false;
 }
 
+/**
+ * @brief Binds a shader-resource view to a named shader resource variable in the given effect.
+ *
+ * @param effect Pointer to the effect containing the variable; if null the function returns false.
+ * @param variableName Name of the shader variable to set (as declared in the effect).
+ * @param resource Shader-resource view to bind to the variable (may be nullptr to unbind).
+ * @return true if the variable was found and the resource was bound; false otherwise.
+ */
 bool Effect::SetShaderResourceVariable(ID3DX11Effect* effect, const std::string& variableName, ID3D11ShaderResourceView* resource)
 {
 	if (!effect)
@@ -1195,6 +1497,18 @@ bool Effect::SetShaderResourceVariable(ID3DX11Effect* effect, const std::string&
 	return false;
 }
 
+/**
+ * @brief Sets a raw vector/array value for a named effect variable in the given effect.
+ *
+ * Attempts to find the variable named `variableName` on `effect` and writes `size` bytes
+ * from `data` into the variable using a raw value write.
+ *
+ * @param effect Pointer to the effect containing the variable.
+ * @param variableName Name of the effect variable to set.
+ * @param data Pointer to the source data to copy into the variable (interpreted as raw bytes).
+ * @param size Number of bytes to copy from `data`.
+ * @return true if the variable was found and updated, false otherwise.
+ */
 bool Effect::SetVectorVariable(ID3DX11Effect* effect, const std::string& variableName, const void* data, uint32_t size)
 {
 	if (!effect)
@@ -1208,6 +1522,16 @@ bool Effect::SetVectorVariable(ID3DX11Effect* effect, const std::string& variabl
 	return false;
 }
 
+/**
+ * @brief Sets a shader vector/raw value for a cached effect variable by name.
+ *
+ * Copies `size` bytes from `data` into the effect variable identified by `variableName`.
+ *
+ * @param variableName Name of the effect variable to update.
+ * @param data Pointer to the raw data to write into the variable.
+ * @param size Number of bytes to copy from `data` into the variable.
+ * @return true if the variable was found, valid, and updated; false otherwise.
+ */
 bool Effect::SetVectorVariable(const std::string& variableName, const void* data, uint32_t size)
 {
 	auto variable = GetCachedVariable(variableName);
@@ -1218,6 +1542,18 @@ bool Effect::SetVectorVariable(const std::string& variableName, const void* data
 	return false;
 }
 
+/**
+ * @brief Create a 2D texture configured as both a render target and shader resource.
+ *
+ * Allocates a single-mip, single-array-slice D3D11 texture with the requested width, height,
+ * and DXGI format, and creates an associated render target view (RTV) and shader resource view (SRV).
+ *
+ * @param width Width of the texture in pixels.
+ * @param height Height of the texture in pixels.
+ * @param format DXGI format to use for the texture.
+ * @param debugName Optional base name assigned to the created resources for debugging.
+ * @return TextureManager::Texture Struct containing the created texture, RTV, and SRV.
+ */
 TextureManager::Texture Effect::CreateTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, const std::string& debugName)
 {
 	auto device = globals::d3d::device;
@@ -1249,6 +1585,15 @@ TextureManager::Texture Effect::CreateTexture(uint32_t width, uint32_t height, D
 	return texture;
 }
 
+/**
+ * @brief Get the name of the currently selected technique.
+ *
+ * Returns the UI-annotated technique name when `selectedTechniqueIndex` addresses `uiTechniques`;
+ * otherwise returns the base technique name from `availableTechniques` when the index is valid;
+ * if the index is out of range for both lists, returns an empty string.
+ *
+ * @return std::string The selected technique name, or an empty string if no valid selection exists.
+ */
 std::string Effect::GetSelectedTechnique() const
 {
 	if (selectedTechniqueIndex < uiTechniques.size()) {
@@ -1259,6 +1604,22 @@ std::string Effect::GetSelectedTechnique() const
 	return "";
 }
 
+/**
+ * @brief Updates the shader "ScreenSize" vector using the provided output dimensions.
+ *
+ * When both outputWidth and outputHeight are greater than zero, sets the effect vector
+ * "ScreenSize" to an array where:
+ * - [0] = output width
+ * - [1] = 1 / output width
+ * - [2] = aspect ratio (width / height)
+ * - [3] = 1 / aspect ratio
+ *
+ * If `effect` is null or either dimension is zero, no change is made.
+ *
+ * @param effect Pointer to the D3D11 effect to update.
+ * @param outputWidth Output render target width in pixels.
+ * @param outputHeight Output render target height in pixels.
+ */
 void Effect::UpdateSizeVariables(ID3DX11Effect* effect, uint32_t outputWidth, uint32_t outputHeight)
 {
 	if (!effect)

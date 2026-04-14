@@ -1,16 +1,33 @@
-﻿#include "MenuManager.h"
+#include "MenuManager.h"
 
 #include "EffectManager.h"
 #include "SettingManager.h"
 
 static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
+/**
+ * @brief Provides access to the global MenuManager singleton.
+ *
+ * The returned reference refers to a single MenuManager instance that is
+ * created on first use and lives for the remainder of the program.
+ *
+ * @return MenuManager& Reference to the singleton MenuManager instance.
+ */
 MenuManager& MenuManager::GetSingleton()
 {
 	static MenuManager instance;
 	return instance;
 }
 
+/**
+ * @brief Renders the Effect11 configuration UI using ImGui.
+ *
+ * @details Presents a two-column table titled "Effect11" with a fixed-width
+ * left column labeled "Settings" (400px) and a stretchable right column
+ * labeled "Effects". The left column displays the settings panel; the right
+ * column displays the effects list. If the ImGui table cannot be begun, the
+ * function returns without rendering.
+ */
 void MenuManager::RenderImGui()
 {
 	if (!ImGui::BeginTable("Effect11", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersV, ImVec2(0, 0))) {
@@ -39,6 +56,13 @@ void MenuManager::RenderImGui()
 	ImGui::EndTable();
 }
 
+/**
+ * @brief Renders the Settings panel UI for Effect11.
+ *
+ * Displays "Apply", "Load", and "Save" buttons with hover tooltips that invoke the corresponding
+ * SettingManager and EffectManager operations (Load/Save/Apply), then renders the full settings list
+ * by calling RenderAllSettings().
+ */
 void MenuManager::RenderSettingsPanel()
 {
 	auto& settingManager = SettingManager::GetSingleton();
@@ -77,6 +101,12 @@ void MenuManager::RenderSettingsPanel()
 	RenderAllSettings();
 }
 
+/**
+ * @brief Displays current and outgoing weather identifiers and their blend factor.
+ *
+ * Renders the current weather ID and outgoing (last) weather ID as hexadecimal values
+ * and the weather blend factor as a floating-point value into the ImGui interface.
+ */
 void MenuManager::RenderWeatherControl()
 {
 	auto& effectManager = EffectManager::GetSingleton();
@@ -90,6 +120,18 @@ void MenuManager::RenderWeatherControl()
 	ImGui::Text("Weather Blend Factor: %.2f", blendFactor);
 }
 
+/**
+ * @brief Renders the debug controls for time-of-day values and loaded weather files.
+ *
+ * Displays a 3-column table of current time-of-day arrays (labeled rows for Dawn/Sunrise/Day/Sunset and
+ * Dusk/Night/InteriorDay/InteriorNight with their numeric values and array indices), followed by a
+ * tree node "Loaded Weather Files" (default open) that lists weather entries.
+ *
+ * The weather list is deterministically sorted by key, shown in a scrollable child region (height 300px).
+ * Each entry shows the file name, the map key in parentheses, and an "IDs: " suffix with up to the first
+ * three weather IDs formatted in hexadecimal (prefixed with 0x). If an entry has more than three IDs,
+ * "..." is appended.
+ */
 void MenuManager::RenderDebugControl()
 {
 	auto& effectManager = EffectManager::GetSingleton();
@@ -178,6 +220,17 @@ void MenuManager::RenderDebugControl()
 	}
 }
 
+/**
+ * @brief Provide the UI grouping of setting categories organized by tab.
+ *
+ * The map's keys are tab names and the values are ordered lists of setting
+ * category identifiers to render under each tab.
+ *
+ * @return std::map<std::string, std::vector<std::string>> Mapping of tab names to their category keys.
+ * - "Main": {"GLOBAL", "EFFECT", "COLORCORRECTION", "WEATHER", "TIMEOFDAY", "ADAPTATION"}
+ * - "Weather": {"BLOOM", "LENS", "ENVIRONMENT", "SKY", "VOLUMETRICFOG", "IMAGEBASEDLIGHTING", "PARTICLE", "GAMEVOLUMETRICRAYS", "SUNGLARE", "CLOUDSHADOWS"}
+ * - "Debug": {} (no categories)
+ */
 std::map<std::string, std::vector<std::string>> MenuManager::GetCategorizedSettings() const
 {
 	std::map<std::string, std::vector<std::string>> categorizedSettings;
@@ -201,6 +254,14 @@ std::map<std::string, std::vector<std::string>> MenuManager::GetCategorizedSetti
 	return categorizedSettings;
 }
 
+/**
+ * @brief Provides the indices of time-of-day periods currently active based on interior vs exterior state.
+ *
+ * If the environment is interior (commonData.eInteriorFactor > 0.5) this returns {6, 7} (InteriorDay, InteriorNight).
+ * Otherwise it returns {0, 1, 2, 3, 4, 5} (Dawn, Sunrise, Day, Sunset, Dusk, Night).
+ *
+ * @return std::vector<int> A vector of active time-of-day indices.
+ */
 std::vector<int> MenuManager::GetActiveTimeOfDayIndices() const
 {
 	auto& effectManager = EffectManager::GetSingleton();
@@ -229,6 +290,13 @@ std::vector<int> MenuManager::GetActiveTimeOfDayIndices() const
 	return activeIndices;
 }
 
+/**
+ * @brief Computes the effective blend factor for a given time-of-day period.
+ *
+ * @param timeIndex Index of the time period:
+ * 0=Dawn, 1=Sunrise, 2=Day, 3=Sunset, 4=Dusk, 5=Night, 6=InteriorDay, 7=InteriorNight.
+ * @return float The blend factor for the specified period (0.0f–1.0f). For indices 0–5 this is taken directly from the corresponding timeOfDay arrays; for 6 and 7, if the interior factor is greater than 0.5 the value is derived from a weighted combination of exterior day values (returned for 6, and 1.0 minus that value for 7). Returns 0.0f for out-of-range indices or when interior-derived values are not applicable.
+ */
 float MenuManager::GetTimeOfDayBlendFactor(int timeIndex) const
 {
 	auto& effectManager = EffectManager::GetSingleton();
@@ -263,6 +331,19 @@ float MenuManager::GetTimeOfDayBlendFactor(int timeIndex) const
 	}
 }
 
+/**
+ * @brief Render the full settings UI for the Effect11 menu.
+ *
+ * Renders a tabbed settings interface ("Main", "Weather", "Debug") and displays
+ * categorized setting groups. The Weather tab includes current weather controls
+ * and a time-of-day header that visually highlights active periods. Each
+ * category is shown as a collapsing section containing a two-column parameter /
+ * value table. Categories that support weather expose exterior/interior
+ * "IgnoreWeatherSystem" toggles. Individual settings are rendered and edited
+ * according to their type (boolean, float, time-of-day arrays, color
+ * time-of-day arrays), with inputs clamped to their configured ranges and
+ * changes propagated to SettingManager.
+ */
 void MenuManager::RenderAllSettings()
 {
 	auto& settingManager = SettingManager::GetSingleton();

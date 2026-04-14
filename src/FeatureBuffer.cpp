@@ -36,6 +36,14 @@ std::pair<unsigned char*, size_t> _GetFeatureBufferData(Ts... feat_datas)
 	return std::make_pair(data, totalSize);
 }
 
+/**
+ * @brief Assembles a contiguous buffer containing serialized configuration and common-data for all rendering features.
+ *
+ * Packs each feature's settings or common buffer payload into a single heap-allocated byte array in a fixed order and returns that buffer with its size.
+ *
+ * @param a_inWorld If true, provides "in-world" skylighting common-data when collecting skylighting payload.
+ * @return std::pair<unsigned char*, size_t> First: pointer to a heap-allocated contiguous byte buffer containing the packed feature data. Second: size of the buffer in bytes. The caller takes ownership of the pointer and must free it (delete[]). 
+ */
 std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 {
 	return _GetFeatureBufferData(

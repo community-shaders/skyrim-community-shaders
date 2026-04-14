@@ -832,6 +832,19 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 	}
 }
 
+/**
+ * @brief Renders a bottom-right "restore defaults" button for a feature's settings panel.
+ *
+ * When rendered, the button is positioned in the panel's bottom-right corner and invokes
+ * Feature::RestoreDefaultSettings() when activated. A hover tooltip describes the action.
+ *
+ * This function does nothing if the feature is disabled, not loaded, or its short name is
+ * "Effect11".
+ *
+ * @param feat Pointer to the feature whose defaults will be restored when the button is pressed.
+ * @param isDisabled True if the feature is currently disabled at boot (button will not be shown).
+ * @param isLoaded True if the feature is currently loaded (button will not be shown otherwise).
+ */
 void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* feat, bool isDisabled, bool isLoaded)
 {
 	if (isDisabled || !isLoaded || feat->GetShortName() == "Effect11") {

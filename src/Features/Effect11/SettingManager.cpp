@@ -9,6 +9,15 @@
 
 static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
+/**
+ * @brief Parses a boolean value from a string accepting "true"/"1" and "false"/"0" (whitespace-insensitive, case-insensitive).
+ *
+ * Trims leading/trailing whitespace and compares the lowercased string to the accepted literal forms.
+ *
+ * @param a_value Input string to parse.
+ * @param[out] a_out Parsed boolean when parsing succeeds.
+ * @return true if the input matches an accepted boolean representation, false otherwise.
+ */
 static bool TryParseBool(const std::string& a_value, bool& a_out)
 {
 	std::string s = a_value;
@@ -26,6 +35,15 @@ static bool TryParseBool(const std::string& a_value, bool& a_out)
 	return false;
 }
 
+/**
+ * @brief Parses a floating-point value from a string when the string contains a valid float optionally followed only by whitespace.
+ *
+ * Attempts to convert the entire numeric prefix of `a_value` to a `float` and succeeds only if any remaining characters are whitespace. On success, writes the parsed value to `a_out`.
+ *
+ * @param a_value Input string to parse.
+ * @param[out] a_out Receives the parsed float when the function returns `true`.
+ * @return `true` if `a_value` contains a valid float with only trailing whitespace, `false` otherwise.
+ */
 static bool TryParseFloat(const std::string& a_value, float& a_out)
 {
 	if (a_value.empty())
@@ -44,6 +62,13 @@ static bool TryParseFloat(const std::string& a_value, float& a_out)
 	}
 }
 
+/**
+ * @brief Parses a weather key of the form "weather_<id>" and extracts the numeric ID.
+ *
+ * @param a_key Input key string expected to start with "weather_" followed by a decimal number.
+ * @param a_out Output parameter set to the parsed unsigned integer ID when parsing succeeds.
+ * @return true if `a_key` begins with "weather_" and the entire suffix is a valid unsigned integer; `false` otherwise.
+ */
 static bool TryParseWeatherID(const std::string& a_key, uint32_t& a_out)
 {
 	const std::string prefix = "weather_";
@@ -61,12 +86,32 @@ static bool TryParseWeatherID(const std::string& a_key, uint32_t& a_out)
 	}
 }
 
+/**
+ * @brief Accesses the global SettingManager singleton.
+ *
+ * @return SettingManager& Reference to the single SettingManager instance.
+ */
 SettingManager& SettingManager::GetSingleton()
 {
 	static SettingManager instance;
 	return instance;
 }
 
+/**
+ * @brief Registers or updates a setting and assigns a stable numeric ID.
+ *
+ * Ensures the setting's category exists (adding it to categoryOrder if new),
+ * then either appends a new Setting to allSettings (assigning setting.id and
+ * initializing lastSavedValue) or replaces the existing Setting at the same
+ * numeric ID while preserving that ID and the previously stored lastSavedValue.
+ *
+ * @param setting Reference to the Setting to register or update; on return
+ *                `setting.id` and `setting.lastSavedValue` are set appropriately
+ *                and the global registration structures (`categories`,
+ *                `categoryOrder`, `allSettings`) are modified.
+ *
+ * @note Caller must hold the manager's unique_lock when calling this method.
+ */
 void SettingManager::RegisterSettingInternal(Setting& setting)
 {
 	// Already holding unique_lock from public Register... methods
@@ -92,6 +137,18 @@ void SettingManager::RegisterSettingInternal(Setting& setting)
 	}
 }
 
+/**
+ * @brief Register a boolean configuration setting and initialize its default and current values.
+ *
+ * Creates a new setting entry identified by `category` and `key`, sets its type to boolean,
+ * initializes both the stored default and current values to `defaultValue`, and records
+ * whether the setting supports per-weather overrides.
+ *
+ * @param key The setting's key name within the section/category.
+ * @param category The section or category under which the setting is registered.
+ * @param defaultValue The value used to initialize both the setting's default and current value.
+ * @param hasWeatherSupport If `true`, the setting will support per-weather overrides and blending.
+ */
 void SettingManager::RegisterBoolSetting(const std::string& key, const std::string& category,
 	bool defaultValue, bool hasWeatherSupport)
 {
@@ -107,6 +164,21 @@ void SettingManager::RegisterBoolSetting(const std::string& key, const std::stri
 	RegisterSettingInternal(setting);
 }
 
+/**
+ * @brief Registers a floating-point setting with bounds, step, and optional weather support.
+ *
+ * Creates or updates a setting identified by `category` and `key`, initializing its default
+ * and current values to `defaultValue` and storing `minValue`, `maxValue`, `step`, and whether
+ * the setting participates in weather-based overrides.
+ *
+ * @param key Setting key name within the section.
+ * @param category INI section or logical category for the setting.
+ * @param defaultValue Default value assigned to the setting when created.
+ * @param minValue Minimum allowed value for the setting; loaded values are clamped to this.
+ * @param maxValue Maximum allowed value for the setting; loaded values are clamped to this.
+ * @param step Increment step used for UI adjustments or snapping.
+ * @param hasWeatherSupport If `true`, the setting supports per-weather overrides and blending.
+ */
 void SettingManager::RegisterFloatSetting(const std::string& key, const std::string& category,
 	float defaultValue, float minValue, float maxValue, float step, bool hasWeatherSupport)
 {
@@ -125,6 +197,21 @@ void SettingManager::RegisterFloatSetting(const std::string& key, const std::str
 	RegisterSettingInternal(setting);
 }
 
+/**
+ * @brief Registers a time-of-day setting whose eight time slots are initialized to the same value.
+ *
+ * Creates a Setting of type TimeOfDay with every element of the TimeOfDayValue initialized to
+ * defaultValue, stores the provided bounds and step, and registers it so it receives a stable
+ * numeric ID and is tracked for persistence and (optionally) weather-specific overrides.
+ *
+ * @param key INI key or identifier for the setting.
+ * @param category Category or section name under which the setting is grouped.
+ * @param defaultValue Value used to initialize every time-of-day slot.
+ * @param minValue Minimum allowed value for each time-of-day element.
+ * @param maxValue Maximum allowed value for each time-of-day element.
+ * @param step Adjustment increment for the setting's value.
+ * @param hasWeatherSupport Enable per-weather overrides and blending for this setting when true.
+ */
 void SettingManager::RegisterTimeOfDaySetting(const std::string& key, const std::string& category,
 	float defaultValue, float minValue, float maxValue, float step, bool hasWeatherSupport)
 {
@@ -148,6 +235,18 @@ void SettingManager::RegisterTimeOfDaySetting(const std::string& key, const std:
 	RegisterSettingInternal(setting);
 }
 
+/**
+ * @brief Registers a color time-of-day setting and initializes its default and current values.
+ *
+ * Creates a setting of type ColorTimeOfDay identified by the given key and category, sets
+ * every time-slot element to the provided default color, and configures whether the setting
+ * participates in weather-based overrides.
+ *
+ * @param key Setting key name.
+ * @param category Setting category/INI section.
+ * @param defaultValue Color value used to initialize every time-of-day slot.
+ * @param hasWeatherSupport If `true`, the setting can be overridden per-weather; otherwise weather is ignored.
+ */
 void SettingManager::RegisterColorTimeOfDaySetting(const std::string& key, const std::string& category,
 	float3 defaultValue, bool hasWeatherSupport)
 {
@@ -169,6 +268,13 @@ void SettingManager::RegisterColorTimeOfDaySetting(const std::string& key, const
 }
 
 template <typename T>
+/**
+ * @brief Retrieve the stored value for a named setting, optionally bypassing weather blending.
+ *
+ * @tparam T The expected value type; must match the registered setting's stored type.
+ * @param rawValue If true, return the selected weather value without interpolating between weather entries; if false, return the blended/interpolated value when weather support applies.
+ * @return T Default-constructed `T` if the setting identified by `key` and `category` is not found; otherwise the setting's current value (possibly weather-blended).
+ */
 T SettingManager::GetValue(const std::string& key, const std::string& category, bool rawValue)
 {
 	std::shared_lock lock(mutex);
@@ -180,6 +286,14 @@ T SettingManager::GetValue(const std::string& key, const std::string& category, 
 }
 
 template <typename T>
+/**
+ * @brief Retrieve a setting value by numeric ID, optionally selecting the raw (uninterpolated) weather value.
+ *
+ * @tparam T The expected value type (e.g., `bool`, `float`, `TimeOfDayValue`, `ColorTimeOfDayValue`).
+ * @param id Numeric identifier of the setting.
+ * @param rawValue If true, return the nearer stored weather entry's value instead of interpolating between weather entries.
+ * @return T The setting's value; returns a default-constructed `T` if the `id` is not found.
+ */
 T SettingManager::GetValue(uint32_t id, bool rawValue)
 {
 	std::shared_lock lock(mutex);
@@ -187,6 +301,19 @@ T SettingManager::GetValue(uint32_t id, bool rawValue)
 }
 
 template <typename T>
+/**
+ * @brief Retrieve the resolved value for a setting ID, applying weather overrides and blending when applicable.
+ *
+ * When the setting supports weather and weather data exists, this returns the weather-specific value:
+ * - If the category's ignore-weather flag applies (depends on interiorFactor), returns the stored current value.
+ * - If rawValue is true, returns either the current or last weather value based on weatherBlendFactor.
+ * - Otherwise returns the interpolated value between last and current weather entries using weatherBlendFactor.
+ *
+ * @tparam T The expected setting value type (bool, float, TimeOfDayValue, or ColorTimeOfDayValue).
+ * @param id Numeric setting ID to retrieve.
+ * @param rawValue If true, select the nearer weather value based on weatherBlendFactor instead of interpolating.
+ * @return T The resolved setting value; returns a default-constructed `T` if `id` is out of range.
+ */
 T SettingManager::GetValueInternal(uint32_t id, bool rawValue) const
 {
 	if (id >= allSettings.size()) {
@@ -233,6 +360,17 @@ T SettingManager::GetValueInternal(uint32_t id, bool rawValue) const
 }
 
 template <typename T>
+/**
+ * @brief Set a registered setting identified by key and category to the provided value.
+ *
+ * If the setting exists, updates its stored value and propagates the change to weather-specific
+ * entries when applicable. If the setting is not found, the call is a no-op.
+ *
+ * @tparam T Type of the setting value.
+ * @param key Setting key within the category.
+ * @param category Setting category.
+ * @param value New value to store for the setting.
+ */
 void SettingManager::SetValue(const std::string& key, const std::string& category, const T& value)
 {
 	std::unique_lock lock(mutex);
@@ -243,6 +381,18 @@ void SettingManager::SetValue(const std::string& key, const std::string& categor
 }
 
 template <typename T>
+/**
+ * @brief Set a setting's value by its numeric identifier.
+ *
+ * Updates the stored value for the setting with the given id. If the setting has weather
+ * support, the provided value will be propagated into the appropriate weather data arrays
+ * according to the current weather blend state; otherwise the setting's current value is
+ * updated directly.
+ *
+ * @tparam T Type of the setting value (e.g., `bool`, `float`, `TimeOfDayValue`, `ColorTimeOfDayValue`).
+ * @param id Numeric identifier of the setting (as returned by GetSettingID / registration).
+ * @param value New value to store for the setting.
+ */
 void SettingManager::SetValue(uint32_t id, const T& value)
 {
 	std::unique_lock lock(mutex);
@@ -250,6 +400,18 @@ void SettingManager::SetValue(uint32_t id, const T& value)
 }
 
 template <typename T>
+/**
+ * @brief Sets a setting's current value and, when applicable, propagates the change into weather-specific data.
+ *
+ * If `id` is out of range this is a no-op. For settings with weather support, the function either updates the
+ * base current value (when the category's ignore-weather flag applies) or writes `value` into the weather array
+ * for the chosen target weather ID. The target weather ID is selected from current/last based on `weatherBlendFactor`.
+ * When writing weather data, all weather IDs that share the same weather file are also updated. Weather arrays are
+ * resized and initialized from the stored current values when necessary before writing.
+ *
+ * @param id Numeric setting identifier previously assigned by the manager.
+ * @param value New value to assign to the setting (or to write into weather data).
+ */
 void SettingManager::SetValueInternal(uint32_t id, const T& value)
 {
 	if (id >= allSettings.size()) {
@@ -304,12 +466,24 @@ void SettingManager::SetValueInternal(uint32_t id, const T& value)
 	setting.currentValue = value;
 }
 
+/**
+ * @brief Retrieves the numeric ID for a setting identified by key and category.
+ *
+ * @return uint32_t The setting's numeric ID, or `0xFFFFFFFF` if the setting does not exist.
+ */
 uint32_t SettingManager::GetSettingID(const std::string& key, const std::string& category) const
 {
 	std::shared_lock lock(mutex);
 	return GetSettingIDInternal(key, category);
 }
 
+/**
+ * Retrieve the numeric ID for a setting given its key and category.
+ *
+ * @param key Setting key name.
+ * @param category Category name containing the setting.
+ * @return uint32_t The setting's numeric ID, or 0xFFFFFFFF if the setting or category does not exist.
+ */
 uint32_t SettingManager::GetSettingIDInternal(const std::string& key, const std::string& category) const
 {
 	auto catIt = categories.find(category);
@@ -322,6 +496,14 @@ uint32_t SettingManager::GetSettingIDInternal(const std::string& key, const std:
 	return 0xFFFFFFFF;
 }
 
+/**
+ * @brief Computes the interpolated time-of-day value for a registered setting.
+ *
+ * Retrieves the time-of-day setting identified by key and category and computes its
+ * interpolated scalar using the manager's current time-of-day and interior/exterior factors.
+ *
+ * @return float Interpolated time-of-day value for the setting, or 0.0f if the setting is not found.
+ */
 float SettingManager::GetInterpolatedTimeOfDayValue(const std::string& key, const std::string& category)
 {
 	std::shared_lock lock(mutex);
@@ -332,6 +514,13 @@ float SettingManager::GetInterpolatedTimeOfDayValue(const std::string& key, cons
 	return ComputeTimeOfDayInterpolation(timeOfDayValue);
 }
 
+/**
+ * @brief Computes the color for a time-of-day setting by applying the manager's interpolation state.
+ *
+ * @param key The setting key name.
+ * @param category The setting category / INI section name.
+ * @return float3 The interpolated RGB color for the current time-of-day and interior/exterior factors; returns {0,0,0} if the setting is not found.
+ */
 float3 SettingManager::GetInterpolatedColorTimeOfDayValue(const std::string& key, const std::string& category)
 {
 	std::shared_lock lock(mutex);
@@ -342,6 +531,13 @@ float3 SettingManager::GetInterpolatedColorTimeOfDayValue(const std::string& key
 	return ComputeColorTimeOfDayInterpolation(colorTimeOfDayValue);
 }
 
+/**
+ * @brief Check whether a setting exists in the specified category.
+ *
+ * @param key Setting key within the category.
+ * @param category Category name to search.
+ * @return `true` if a setting with `key` exists in `category`, `false` otherwise.
+ */
 bool SettingManager::HasSetting(const std::string& key, const std::string& category) const
 {
 	std::shared_lock lock(mutex);
@@ -349,6 +545,13 @@ bool SettingManager::HasSetting(const std::string& key, const std::string& categ
 	return categoryIt != categories.end() && categoryIt->second.settings.find(key) != categoryIt->second.settings.end();
 }
 
+/**
+ * @brief Retrieve metadata for a registered setting by key and category.
+ *
+ * @param key The setting's key name within its category.
+ * @param category The category name that groups the setting.
+ * @return const Setting* Pointer to the Setting when found, `nullptr` otherwise.
+ */
 const Setting* SettingManager::GetSettingInfo(const std::string& key, const std::string& category) const
 {
 	std::shared_lock lock(mutex);
@@ -358,6 +561,15 @@ const Setting* SettingManager::GetSettingInfo(const std::string& key, const std:
 	return nullptr;
 }
 
+/**
+ * @brief Retrieve metadata for a setting by its numeric ID.
+ *
+ * Looks up the setting registered at the given stable numeric ID and returns a pointer to its stored
+ * Setting record, or `nullptr` if the ID is not valid.
+ *
+ * @param id Numeric setting ID assigned during registration.
+ * @return const Setting* Pointer to the Setting for `id`, or `nullptr` if `id` is out of range.
+ */
 const Setting* SettingManager::GetSettingInfo(uint32_t id) const
 {
 	std::shared_lock lock(mutex);
@@ -367,6 +579,12 @@ const Setting* SettingManager::GetSettingInfo(uint32_t id) const
 	return nullptr;
 }
 
+/**
+ * @brief Retrieves the ordered list of setting keys for the given category.
+ *
+ * @param category Name of the category to query.
+ * @return std::vector<std::string> Vector of setting keys in the category's insertion order, or an empty vector if the category does not exist.
+ */
 std::vector<std::string> SettingManager::GetSettingsByCategory(const std::string& category) const
 {
 	std::shared_lock lock(mutex);
@@ -377,12 +595,25 @@ std::vector<std::string> SettingManager::GetSettingsByCategory(const std::string
 	return {};
 }
 
+/**
+ * @brief Returns the list of registered setting categories in registration order.
+ *
+ * This call is safe to use concurrently; it returns a copy of the internal category order.
+ *
+ * @return std::vector<std::string> Category names in the order they were registered.
+ */
 std::vector<std::string> SettingManager::GetAllCategories() const
 {
 	std::shared_lock lock(mutex);
 	return categoryOrder;
 }
 
+/**
+ * @brief Checks whether any setting in the given category supports per-weather overrides.
+ *
+ * @param category Name of the category to check.
+ * @return true if the category contains at least one setting with weather support, false otherwise.
+ */
 bool SettingManager::CategoryHasWeatherSupport(const std::string& category) const
 {
 	std::shared_lock lock(mutex);
@@ -398,6 +629,16 @@ bool SettingManager::CategoryHasWeatherSupport(const std::string& category) cons
 	return false;
 }
 
+/**
+ * @brief Update the active weather identifiers and the blend factor used for weather-based value blending.
+ *
+ * Sets the current and last weather IDs and the blend factor that determines how values are selected or interpolated
+ * between those weather states when retrieving or writing weather-supported settings.
+ *
+ * @param newCurrentWeatherID Weather ID considered the "current" weather state.
+ * @param newLastWeatherID    Weather ID considered the "last" (previous) weather state.
+ * @param blendFactor         Blend weight in [0,1] where values closer to 1 favor `newCurrentWeatherID` and closer to 0 favor `newLastWeatherID`.
+ */
 void SettingManager::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32_t newLastWeatherID, float blendFactor)
 {
 	std::unique_lock lock(mutex);
@@ -406,6 +647,25 @@ void SettingManager::SetWeatherBlendFactors(uint32_t newCurrentWeatherID, uint32
 	weatherBlendFactor = blendFactor;
 }
 
+/**
+ * @brief Loads weather-specific setting values from an INI file and stores them for the given weather IDs.
+ *
+ * Reads the file at filePath (if it exists) and, for each registered setting that supports weather,
+ * loads its value from the file. File I/O is performed without holding the manager mutex. If the
+ * file's last-write time matches a previously recorded time for the same path, the function returns
+ * early to avoid redundant work. After loading, the function records the file's write time and stores
+ * the loaded values into internal weather data maps for each weather ID in weatherIDs.
+ *
+ * @param weatherIDs Vector of weather IDs to populate with the loaded values; each ID will be mapped
+ *                   to the same loaded values array.
+ * @param filePath   Path to the INI file to read; if the file does not exist, the function logs a
+ *                   warning and returns without modifying internal state.
+ *
+ * Side effects:
+ * - Updates weatherFileWriteTimes[filePath] to the file's last-write time.
+ * - Sets weatherData[weatherID] and lastSavedWeatherData[weatherID] to the loaded values for each
+ *   provided weatherID.
+ */
 void SettingManager::LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs, const std::string& filePath)
 {
 	if (!std::filesystem::exists(filePath)) {
@@ -453,6 +713,17 @@ void SettingManager::LoadWeatherSettings(const std::vector<uint32_t>& weatherIDs
 	}
 }
 
+/**
+ * @brief Saves weather-specific settings for a given weather key into an INI file.
+ *
+ * Parses `weatherKey` as `"weather_<id>"`, compares the current per-setting weather values
+ * to the last-saved snapshot for that weather ID, and writes only settings whose weather
+ * value changed to the specified INI `filePath`. Updates the internal last-saved snapshot
+ * for the weather ID and flushes the Windows INI cache after writing.
+ *
+ * @param weatherKey Weather key string in the form `"weather_<id>"`. If parsing fails the function returns without writing.
+ * @param filePath Path to the INI file to write changed weather settings to.
+ */
 void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath)
 {
 	uint32_t weatherID;
@@ -507,6 +778,11 @@ void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const st
 	WritePrivateProfileStringA(NULL, NULL, NULL, filePath.c_str());
 }
 
+/**
+ * @brief Saves weather-specific settings for all known weather files.
+ *
+ * Queries the WeatherManager for available (weatherKey, filePath) pairs, deduplicates entries by file path (keeping the first weatherKey encountered for each path), and invokes SaveWeatherSettings for each unique file path to persist its weather settings.
+ */
 void SettingManager::SaveAllWeatherSettings()
 {
 	auto& weatherManager = WeatherManager::GetSingleton();
@@ -525,6 +801,13 @@ void SettingManager::SaveAllWeatherSettings()
 	}
 }
 
+/**
+ * @brief Clears cached weather data and forces a reload of all weather files.
+ *
+ * Acquires the manager mutex to remove in-memory per-weather value arrays and
+ * stored weather-file write timestamps, then triggers reinitialization of the
+ * weather subsystem so weather files will be re-read and repopulated.
+ */
 void SettingManager::ReloadAllWeatherSettings()
 {
 	{
@@ -536,6 +819,23 @@ void SettingManager::ReloadAllWeatherSettings()
 	weatherManager.Initialize();
 }
 
+/**
+ * @brief Update the inputs used for time-of-day interpolation.
+ *
+ * Replaces the stored time-of-day weight arrays and the interior blending factor
+ * that are later used by ComputeTimeOfDayInterpolation and
+ * ComputeColorTimeOfDayInterpolation.
+ *
+ * @param newTimeOfDay1 Four-element array of floats representing the primary
+ *        time-of-day weight set (used for Dawn, Sunrise, Day, Sunset and for
+ *        interior weighting).
+ * @param newTimeOfDay2 Four-element array of floats representing the secondary
+ *        time-of-day weight set (used for Dusk, Night and ancillary exterior
+ *        blending).
+ * @param newInteriorFactor Blend factor in [0,1] that controls interior vs
+ *        exterior interpolation behavior (interior path is used when this
+ *        value is greater than 0.5).
+ */
 void SettingManager::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor)
 {
 	std::unique_lock lock(mutex);
@@ -544,6 +844,17 @@ void SettingManager::SetTimeOfDayData(const float newTimeOfDay1[4], const float 
 	interiorFactor = newInteriorFactor;
 }
 
+/**
+ * @brief Loads main settings and per-category weather-ignore flags from an INI file.
+ *
+ * Reads settings from the given INI file and updates the manager's stored settings only when the file has changed.
+ * For each registered setting the function reads its persisted value and updates the setting's last-saved value.
+ * For categories containing weather-supported settings it also reads the `IgnoreWeatherSystem` and
+ * `IgnoreWeatherSystemInterior` flags and applies them atomically with the settings update.
+ * If the file does not exist or its last-write time matches the last loaded time, no changes are made.
+ *
+ * @param filePath Path to the INI file to load (may be relative; resolved to an absolute path).
+ */
 void SettingManager::LoadFromFile(const std::string& filePath)
 {
 	std::filesystem::path absPath = std::filesystem::absolute(filePath);
@@ -633,6 +944,16 @@ void SettingManager::LoadFromFile(const std::string& filePath)
 	}
 }
 
+/**
+ * @brief Writes changed settings and updated weather-ignore flags to an INI file.
+ *
+ * Collects settings whose current value differs from their last-saved value and categories
+ * whose weather-ignore flags have changed, updates the in-memory "last saved" markers,
+ * and writes those changes to the given INI file. If there are no changes to persist,
+ * the function returns without modifying the file. The INI cache is flushed after writing.
+ *
+ * @param filePath Path to the INI file to write.
+ */
 void SettingManager::SaveToFile(const std::string& filePath)
 {
 	std::vector<std::tuple<std::string, std::string, Setting>> settingsToWrite;
@@ -688,6 +1009,21 @@ void SettingManager::SaveToFile(const std::string& filePath)
 	WritePrivateProfileStringA(NULL, NULL, NULL, filePath.c_str());
 }
 
+/**
+ * @brief Interpolate between two setting values according to a blend factor.
+ *
+ * If the two values hold different underlying types, the function selects
+ * `a` when `t <= 0.5` or `b` when `t > 0.5`. For matching types the behavior is:
+ * - `bool`: selects `a` when `t <= 0.5` or `b` when `t > 0.5`.
+ * - `float`: linear interpolation `a + t*(b - a)`.
+ * - `TimeOfDayValue`: element-wise linear interpolation across the 8 time-of-day entries.
+ * - `ColorTimeOfDayValue`: element-wise linear interpolation across the 8 color entries.
+ *
+ * @param a The first value (returned when t <= 0.5 for type-mismatch or thresholded types).
+ * @param b The second value (returned when t > 0.5 for type-mismatch or thresholded types).
+ * @param t Blend factor in [0,1], where 0 yields `a` and 1 yields `b` for interpolatable types.
+ * @return SettingValue The interpolated or selected setting value as described above.
+ */
 SettingValue SettingManager::InterpolateValues(const SettingValue& a, const SettingValue& b, float t) const
 {
 	if (a.index() != b.index()) {
@@ -720,6 +1056,14 @@ SettingValue SettingManager::InterpolateValues(const SettingValue& a, const Sett
 		a);
 }
 
+/**
+ * @brief Computes an interpolated scalar from a time-of-day sample using the manager's current blend state.
+ *
+ * Chooses between an interior interpolation and an exterior weighted sum based on the current interior factor.
+ *
+ * @param value TimeOfDayValue containing samples for the eight time-of-day slots (Dawn, Sunrise, Day, Sunset, Dusk, Night, InteriorDay, InteriorNight).
+ * @return float Interpolated value: when the interior factor is greater than 0.5, returns a blend between `InteriorNight` and `InteriorDay` using interior weights; otherwise returns a weighted sum of `Dawn`, `Sunrise`, `Day`, `Sunset`, `Dusk`, and `Night` using the exterior time-of-day weights.
+ */
 float SettingManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value) const
 {
 	if (interiorFactor > 0.5f) {
@@ -736,6 +1080,17 @@ float SettingManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value)
 	       timeOfDay2[1] * value.values[TimeOfDayValue::Night];
 }
 
+/**
+ * @brief Compute the scene color for the current time-of-day using configured time/interior blend factors.
+ *
+ * If the interior factor is greater than 0.5, the result is a blend between the `InteriorNight` and
+ * `InteriorDay` entries weighted by a derived day/night factor. Otherwise the result is the weighted
+ * sum of the exterior time-of-day entries (Dawn, Sunrise, Day, Sunset, Dusk, Night) using the
+ * current `timeOfDay1` and `timeOfDay2` weights.
+ *
+ * @param value ColorTimeOfDayValue containing per-time-of-day color entries (Dawn, Sunrise, Day, Sunset, Dusk, Night, InteriorDay, InteriorNight).
+ * @return float3 The interpolated RGB color for the current time-of-day and interior/exterior blend.
+ */
 float3 SettingManager::ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value) const
 {
 	if (interiorFactor > 0.5f) {
@@ -753,6 +1108,20 @@ float3 SettingManager::ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayVa
 	       timeOfDay2[1] * value.values[ColorTimeOfDayValue::Night];
 }
 
+/**
+ * @brief Load a setting's value(s) from an INI file and update the provided Setting.
+ *
+ * Reads the specified section/key(s) from filePath and updates setting.currentValue according to setting.type:
+ * - Bool: accepts `"true"`/`"1"` or `"false"`/`"0"`, falling back to the setting's default on parse failure.
+ * - Float: parses a float and clamps it to [minValue, maxValue], falling back to the default on parse failure.
+ * - TimeOfDay: reads eight keys formed by appending the time-of-day suffixes to the base key, parses each as a float, clamps to [minValue, maxValue], and updates the corresponding elements; elements with invalid values keep their defaults.
+ * - ColorTimeOfDay: reads eight keys formed by appending the time-of-day suffixes to the base key, parses comma-separated `x, y, z` floats, clamps components to [minValue, maxValue], and updates an element only when exactly three components parse successfully.
+ *
+ * @param filePath Path to the INI file to read.
+ * @param section INI section (category) containing the key(s).
+ * @param key Base key name; time-of-day variants are formed by appending known suffixes.
+ * @param setting Setting object whose currentValue will be updated in-place.
+ */
 void SettingManager::LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting)
 {
 	switch (setting.type) {
@@ -845,6 +1214,20 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 	}
 }
 
+/**
+ * @brief Writes a single setting to the specified INI file section.
+ *
+ * Writes the setting's current value(s) into the INI file at filePath under the given section and key.
+ * - Bool settings are written as "true" or "false".
+ * - Float settings are written with up to three decimal places, trailing zeros removed, and at least one decimal digit preserved.
+ * - TimeOfDay settings write eight separate keys formed by appending time-of-day suffixes (Dawn, Sunrise, Day, Sunset, Dusk, Night, InteriorDay, InteriorNight) to `key`, each with a formatted float value.
+ * - ColorTimeOfDay settings write eight keys (same suffixes) with comma-separated `x, y, z` components formatted as floats.
+ *
+ * @param filePath Path to the INI file to write.
+ * @param section INI section (category) under which the key(s) will be written.
+ * @param key Base key name; for time-of-day variants this is used as a prefix for the eight suffixed keys.
+ * @param setting Setting object whose `currentValue` will be persisted.
+ */
 void SettingManager::SaveSettingToFile(const std::string& filePath, const std::string& section, const std::string& key, const Setting& setting)
 {
 	auto formatFloat = [](float value) -> std::string {
@@ -905,6 +1288,15 @@ void SettingManager::SaveSettingToFile(const std::string& filePath, const std::s
 	}
 }
 
+/**
+ * @brief Loads per-category weather-ignore flags from an INI file and updates category state.
+ *
+ * Reads the "IgnoreWeatherSystem" and "IgnoreWeatherSystemInterior" keys for each category that contains
+ * at least one weather-supported setting and updates the category's ignore flags and their last-saved copies.
+ * Intended to be called while already holding the manager's unique lock.
+ *
+ * @param filePath Path to the INI file to read.
+ */
 void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 {
 	// Internal helper, called from methods already holding a unique lock
@@ -937,6 +1329,12 @@ void SettingManager::LoadWeatherIgnoreSettings(const std::string& filePath)
 	}
 }
 
+/**
+ * @brief Checks whether the specified category is configured to ignore the weather system.
+ *
+ * @param category Category name to query.
+ * @return `true` if the category exists and its IgnoreWeatherSystem flag is set, `false` otherwise.
+ */
 bool SettingManager::GetIgnoreWeatherSystem(const std::string& category) const
 {
 	std::shared_lock lock(mutex);
@@ -944,6 +1342,12 @@ bool SettingManager::GetIgnoreWeatherSystem(const std::string& category) const
 	return categoryIt != categories.end() ? categoryIt->second.ignoreWeatherSystem : false;
 }
 
+/**
+ * @brief Query whether the specified category ignores weather effects while the player is interior.
+ *
+ * @param category Category name to query.
+ * @return true if the category's IgnoreWeatherSystemInterior flag is set or the category is missing, `false` otherwise.
+ */
 bool SettingManager::GetIgnoreWeatherSystemInterior(const std::string& category) const
 {
 	std::shared_lock lock(mutex);
@@ -951,24 +1355,51 @@ bool SettingManager::GetIgnoreWeatherSystemInterior(const std::string& category)
 	return categoryIt != categories.end() ? categoryIt->second.ignoreWeatherSystemInterior : true;
 }
 
+/**
+ * @brief Set whether the weather system should be ignored for a settings category.
+ *
+ * Updates the category's IgnoreWeatherSystem flag. If the category does not exist, it will be created.
+ *
+ * @param category Name of the settings category.
+ * @param ignore `true` to ignore the weather system for this category, `false` to allow weather effects.
+ */
 void SettingManager::SetIgnoreWeatherSystem(const std::string& category, bool ignore)
 {
 	std::unique_lock lock(mutex);
 	categories[category].ignoreWeatherSystem = ignore;
 }
 
+/**
+ * @brief Set whether a category ignores the weather system for interior blending.
+ *
+ * @param category Name of the setting category to modify.
+ * @param ignore `true` to have the category ignore weather when interior blending is active, `false` to apply weather normally.
+ */
 void SettingManager::SetIgnoreWeatherSystemInterior(const std::string& category, bool ignore)
 {
 	std::unique_lock lock(mutex);
 	categories[category].ignoreWeatherSystemInterior = ignore;
 }
 
+/**
+ * @brief Reloads the main configuration and refreshes weather-specific settings.
+ *
+ * Reads and applies settings from the primary INI ("enbseries.ini"), updates
+ * internal state tracking for main-file persistence, and clears/reloads any
+ * cached per-weather data so weather-linked settings are refreshed from disk.
+ */
 void SettingManager::Load()
 {
 	LoadFromFile("enbseries.ini");
 	ReloadAllWeatherSettings();
 }
 
+/**
+ * @brief Persist all current settings to disk.
+ *
+ * Writes non-weather settings to "enbseries.ini" and saves all weather-linked settings
+ * to their respective weather files.
+ */
 void SettingManager::Save()
 {
 	SaveToFile("enbseries.ini");

@@ -199,6 +199,13 @@ void State::Reset()
 	activeReflections = false;
 }
 
+/**
+ * @brief Initialize renderer state, allocate resources, and load scene/weather settings.
+ *
+ * Detects the Moon & Stars mod for compatibility, sets up global and feature-specific
+ * rendering resources (including truePBR and deferred subsystems), and loads per-weather
+ * and scene-specific settings from disk.
+ */
 void State::Setup()
 {
 	// Detect Moon and Stars mod for compatibility adjustments
@@ -820,6 +827,17 @@ void State::SetAdapterDescription(const std::wstring& description)
 	adapterDescription = converter.to_bytes(description);
 }
 
+/**
+ * @brief Populate and upload shared shader constant buffers with scene, lighting, and environment data.
+ *
+ * Builds a SharedDataCB from current game state (directional light, camera, timer/frame counters,
+ * water tiles, sky/sun/moon colors and directions, DALC spherical harmonics, HDR data, etc.),
+ * updates the sharedDataCB, updates the per-feature constant buffer returned by GetFeatureBufferData(),
+ * and binds the current scene depth SRV to pixel shader slot 17.
+ *
+ * @param a_inWorld When true, sample and populate the 5x5 WaterData tile grid; when false, WaterData is not sampled.
+ * @param a_prepass Unused placeholder controlling prepass-specific behavior (no effect in current implementation).
+ */
 void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] bool a_prepass)
 {
 	{

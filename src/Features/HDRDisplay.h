@@ -7,6 +7,70 @@
 #include <dxgi.h>
 #include <mutex>
 
+/**
+ * Return a descriptive name and summary lines for the feature.
+ * @return A pair where the first element is a short feature description and the second is a vector of summary strings describing key capabilities.
+ */
+/**
+ * Produce HDR-related shared data used by shaders (packed float4 matching HLSL layout).
+ * @return A float4 containing the HDR shared-data payload (paper white, peak, UI/scene flags and related values).
+ */
+/**
+ * Update the GPU/engine-side HDR constant/shared data so shaders receive current settings and state.
+ */
+/**
+ * Update the swapchain color space to match current HDR/SDR output configuration.
+ */
+/**
+ * Begin redirecting UI rendering to a separate render target for HDR-aware compositing.
+ */
+/**
+ * End UI rendering redirection and restore rendering to the normal path.
+ */
+/**
+ * Redirect the game's primary framebuffer to the HDR float16 target so ISHDR can output HDR values greater than 1.0.
+ * This saves original framebuffer state for later restoration.
+ */
+/**
+ * Restore the game's primary framebuffer to the previously saved non-HDR targets after a redirect.
+ */
+/**
+ * Redirect the framebuffer's RTV to capture the vanilla UI into a separate buffer suitable for Frame Gen–style compositing.
+ */
+/**
+ * Clear any framebuffer RTV redirection established for capturing vanilla UI.
+ */
+/**
+ * Apply a brightness scaling pass to the UI capture buffer to emulate SDR Frame Gen behavior.
+ */
+/**
+ * Execute the HDR output/compositing pipeline for the current frame/state (tonemapping, UI composite, and final output).
+ */
+/**
+ * Destroy and release all GPU resources and state owned by the HDR feature.
+ */
+/**
+ * Retrieve or create the compute shader used for HDR output compositing.
+ * @return Pointer to the ID3D11ComputeShader used for HDR output.
+ */
+/**
+ * Retrieve or create the compute shader used to adjust UI brightness.
+ * @return Pointer to the ID3D11ComputeShader used for UI brightness scaling.
+ */
+/**
+ * Detect whether the current system/output supports HDR.
+ * @return `true` if an HDR-capable display/output was detected, `false` otherwise.
+ */
+/**
+ * Return the maximum display luminance (nits) that the feature uses for tone mapping and scaling.
+ * @return Maximum display luminance in nits.
+ */
+/**
+ * Upgrade LDR (post-tonemapping) render targets to 16-bit float variants to preserve HDR values through the pipeline.
+ */
+/**
+ * Restore previously upgraded LDR render targets to their original non-upgraded resources.
+ */
 struct HDRDisplay : public Feature
 {
 	virtual inline std::string GetName() override { return "HDR Display"; }
