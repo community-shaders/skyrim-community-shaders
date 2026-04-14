@@ -203,7 +203,7 @@ public:
 	 * @brief Execute a callable for each loaded feature with optional Tracy CPU profiling
 	 *
 	 * Iterates through all loaded features and calls the provided function with automatic
-	 * CPU profiling zones (ZoneScoped/ZoneText via Tracy) when TRACY_ENABLE is defined.
+	 * CPU profiling zones (ZoneScoped/ZoneName via Tracy) when TRACY_ENABLE is defined.
 	 * Thread-local string formatting is used to minimize per-call overhead.
 	 *
 	 * Usage:
@@ -223,7 +223,7 @@ public:
 					ZoneScoped;
 					static thread_local std::string zoneName;
 					zoneName = std::format("{}::{}", feature->GetShortName(), methodName);
-					ZoneText(zoneName.c_str(), zoneName.size());
+					ZoneName(zoneName.c_str(), zoneName.size());
 					callback(feature);
 				}
 #else

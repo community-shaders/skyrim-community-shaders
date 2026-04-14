@@ -25,6 +25,10 @@
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
 
+#ifdef TRACY_ENABLE
+static thread_local std::vector<TracyCZoneCtx> s_tracyPerfZones;
+#endif
+
 void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
 {
 	permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsSun);
@@ -796,11 +800,23 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 
 void State::BeginPerfEvent(std::string_view title)
 {
+#ifdef TRACY_ENABLE
+	static const ___tracy_source_location_data tracyPerfSrcLoc = { nullptr, __FUNCTION__, __FILE__, (uint32_t)__LINE__, 0 };
+	TracyCZoneCtx ctx = ___tracy_emit_zone_begin(&tracyPerfSrcLoc, true);
+	___tracy_emit_zone_name(ctx, title.data(), title.size());
+	s_tracyPerfZones.push_back(ctx);
+#endif
 	pPerf->BeginEvent(std::wstring(title.begin(), title.end()).c_str());
 }
 
 void State::EndPerfEvent()
 {
+#ifdef TRACY_ENABLE
+	if (!s_tracyPerfZones.empty()) {
+		___tracy_emit_zone_end(s_tracyPerfZones.back());
+		s_tracyPerfZones.pop_back();
+	}
+#endif
 	pPerf->EndEvent();
 }
 
