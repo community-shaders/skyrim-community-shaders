@@ -153,14 +153,14 @@ public:
 		 * Returns the sum of the smoothed draw call counts tracked in global state.
 		 * @returns Total smoothed draw calls as a float.
 		 */
-		/**
+	/**
 		 * Iterate over each valid shader type, excluding `None` and `Total`.
 		 * @param callback Callable invoked as `callback(type, typeIndex, classIndex)` where:
 		 *   - `type` is the `RE::BSShader::Type` enum value,
 		 *   - `typeIndex` is the integer enum value,
 		 *   - `classIndex` is `typeIndex - 1`.
 		 */
-		/**
+	/**
 		 * Iterate over each valid shader type and provide basic performance metrics.
 		 * @param callback Callable invoked as `callback(type, typeIndex, drawCalls, frameTime, percent, costPerCall)` where:
 		 *   - `type` is the `RE::BSShader::Type` enum value,
@@ -170,13 +170,13 @@ public:
 		 *   - `percent` is the percent of total frame time attributed to that type,
 		 *   - `costPerCall` is `frameTime / drawCalls` when `drawCalls > 0`, otherwise `0`.
 		 */
-		/**
+	/**
 		 * Iterate over each valid shader type and provide its class index for UI or indexing purposes.
 		 * @param callback Callable invoked as `callback(type, classIndex)` where:
 		 *   - `type` is the `RE::BSShader::Type` enum value,
 		 *   - `classIndex` is `typeIndex - 1`.
 		 */
-		enum class ExtraShaderDescriptors : uint32_t
+	enum class ExtraShaderDescriptors : uint32_t
 	{
 		InWorld = 1 << 0,
 		IsReflections = 1 << 1,

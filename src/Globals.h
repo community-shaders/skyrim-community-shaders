@@ -54,12 +54,12 @@ namespace SIE
 		 * @param eyeIndex Index of the eye to read when running in VR; use 0 for the primary eye or non‑VR.
 		 * @returns const Matrix& camera view matrix for the specified eye.
 		 */
-		/**
+/**
 		 * Retrieve the camera projection matrix for the specified eye in VR or the single non‑VR projection.
 		 * @param eyeIndex Index of the eye to read when running in VR; use 0 for the primary eye or non‑VR.
 		 * @returns const Matrix& camera projection matrix for the specified eye.
 		 */
-		namespace globals
+namespace globals
 {
 	namespace d3d
 	{

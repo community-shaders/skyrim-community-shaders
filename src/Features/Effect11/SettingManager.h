@@ -37,7 +37,7 @@ inline int TimeOfDayIndexFromName(const std::string& name)
 	 * Dawn, Sunrise, Day, Sunset, Dusk, Night, InteriorDay, and InteriorNight. Provides read/write
 	 * indexed access via operator[] using the Index enumeration.
 	 */
-	struct TimeOfDayValue
+struct TimeOfDayValue
 {
 	float values[8] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
 
@@ -67,7 +67,7 @@ inline int TimeOfDayIndexFromName(const std::string& name)
  * @param name Period name used to index the internal array (e.g., "Dawn", "Morning", "Noon", "Afternoon", "Dusk", "Evening", "Night", "InteriorNight").
  * @returns Reference to the stored float value for the named period.
  */
-float& GetByName(const std::string& name) { return values[TimeOfDayIndexFromName(name)]; }
+	float& GetByName(const std::string& name) { return values[TimeOfDayIndexFromName(name)]; }
 };
 
 /**
@@ -84,7 +84,7 @@ float& GetByName(const std::string& name) { return values[TimeOfDayIndexFromName
 	 * @return (non-const) Reference to the RGB color for the selected time-of-day period.
 	 * @return (const) Const reference to the RGB color for the selected time-of-day period.
 	 */
-	struct ColorTimeOfDayValue
+struct ColorTimeOfDayValue
 {
 	float3 values[8] = {
 		{ 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f },

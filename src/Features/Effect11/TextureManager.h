@@ -9,22 +9,22 @@
 	 * Access the global TextureManager singleton instance.
 	 * @returns Reference to the singleton TextureManager.
 	 */
-	
-	/**
+
+/**
 	 * Initialize and allocate internal texture and downsample resources.
 	 */
-	
-	/**
+
+/**
 	 * Retrieve a cached common texture by name.
 	 * @param name Key name of the common texture to look up.
 	 * @returns Pointer to the Texture if found, `nullptr` otherwise.
 	 */
-	
-	/**
+
+/**
 	 * Return the entire common texture cache.
 	 * @returns Const reference to the map of common texture names to Texture objects.
 	 */
-	class TextureManager
+class TextureManager
 {
 public:
 	struct Texture
@@ -63,7 +63,7 @@ public:
  *
  * This increments the TextureManager's frame-based swap counter used to track texture updates.
  */
-void IncrementTextureSwap() { textureSwap++; }
+	void IncrementTextureSwap() { textureSwap++; }
 
 private:
 	void CreateCommonTextures();

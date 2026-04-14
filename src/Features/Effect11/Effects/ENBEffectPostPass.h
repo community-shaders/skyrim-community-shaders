@@ -8,7 +8,7 @@
  * Implements the post-processing pass used by ENB; provides effect identity,
  * execution entry point, and a hook to refresh shader/effect variables before execution.
  */
- 
+
 /**
  * Get the filename of the effect shader used by this effect.
  * @returns The effect filename "enbeffectpostpass.fx".
@@ -20,7 +20,7 @@
  * Performs all work required to run the post-pass, including issuing draw calls
  * and applying the effect to the current render targets.
  */
- 
+
 /**
  * Update shader/effect variables used by the effect.
  *

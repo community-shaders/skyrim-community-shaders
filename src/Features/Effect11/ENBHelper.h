@@ -44,7 +44,7 @@
  *
  * Call once per frame before reading any cached data.
  */
- 
+
 /**
  * Get the cached WeatherInfo for the current frame.
  *

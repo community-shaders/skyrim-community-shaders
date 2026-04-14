@@ -5,7 +5,7 @@
 		 *
 		 * @returns A pair whose first element is a descriptive string explaining the feature and whose second element is a vector of capability strings (feature bullet points).
 		 */
-		struct Effect11 : Feature
+struct Effect11 : Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Effect11"; }

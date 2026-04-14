@@ -17,7 +17,7 @@ namespace ENBExtender
 		 * occurrences than recognized `#if`-family directives, the extra `#endif` tokens are replaced with `//dup ` to mark/comment them out.
 		 *
 		 * @param content Input source text to scan and modify.
-		 * @return std::string The transformed source: extra `#endif` directives replaced by `//dup ` when include-guard patterns are present; otherwise the original `content`. 
+		 * @return std::string The transformed source: extra `#endif` directives replaced by `//dup ` when include-guard patterns are present; otherwise the original `content`.
 		 */
 		std::string FixDuplicateEndif(const std::string& content)
 		{
