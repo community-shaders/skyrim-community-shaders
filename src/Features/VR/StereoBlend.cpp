@@ -123,9 +123,9 @@ void VR::DrawStereoBlend()
 		ID3D11ShaderResourceView* modeSRV = globals::features::vr.stereoOpt.GetModeTextureSRV();
 		context->CSSetShaderResources(2, 1, &modeSRV);
 
-		// Bind REFLECTANCE SRV for POM depth offset (stored in .w by Lighting pass)
-		auto& reflectanceRT = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
-		context->CSSetShaderResources(3, 1, &reflectanceRT.SRV);
+		// Bind dedicated POM offset SRV (R16_FLOAT, written by Lighting PS at u7)
+		auto* pomSRV = globals::features::vr.stereoOpt.GetPomOffsetSRV();
+		context->CSSetShaderResources(3, 1, &pomSRV);
 
 		ID3D11UnorderedAccessView* uavs[2]{ main.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);

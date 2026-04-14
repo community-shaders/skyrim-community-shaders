@@ -166,7 +166,7 @@ cbuffer PerGeometry : register(b2)
 
 VS_OUTPUT main(VS_INPUT input)
 {
-	VS_OUTPUT vsout;
+	VS_OUTPUT vsout = (VS_OUTPUT)0;
 
 	uint eyeIndex = Stereo::GetEyeIndexVS(
 #		if defined(VR)
