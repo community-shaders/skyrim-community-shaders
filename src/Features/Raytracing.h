@@ -374,7 +374,7 @@ struct CreationEngineRaytracing
 
 	struct PassTiming
 	{
-		const char* name;
+		eastl::string name;
 		float timing;
 	};
 
@@ -424,7 +424,7 @@ struct CreationEngineRaytracing
 	using SetCopyTargetFn = void (*)(ID3D12Resource*);
 	using UpdateFeatureDataFn = void (*)(void*, uint32_t);
 	using SetSkyHemisphereFn = void (*)(ID3D12Resource*);
-	using GetFrameTimeFn = void (*)(PassTiming*&, uint32_t&);
+	using GetPassTimingsFn = void (*)(eastl::vector<PassTiming>&);
 	using UpdateSettingsFn = void (*)(Settings);
 	using GetRRInputFn = void (*)(ID3D12Resource*&, ID3D12Resource*&);
 	using SetSharedTexturesFn = void (*)(ID3D12Resource*, ID3D12Resource*, ID3D12Resource*, ID3D12Resource*);
@@ -441,7 +441,7 @@ struct CreationEngineRaytracing
 	SetCopyTargetFn SetCopyTarget = nullptr;
 	UpdateFeatureDataFn UpdateFeatureData = nullptr;
 	SetSkyHemisphereFn SetSkyHemisphere = nullptr;
-	GetFrameTimeFn GetFrameTime = nullptr;
+	GetPassTimingsFn GetPassTimings = nullptr;
 	UpdateSettingsFn UpdateSettings = nullptr;
 	GetRRInputFn GetRRInput = nullptr;
 	SetSharedTexturesFn SetSharedTextures = nullptr;
@@ -510,10 +510,10 @@ struct CreationEngineRaytracing
 		if (!SetSkyHemisphere)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetSkyHemisphere is nullptr");
 
-		GetFrameTime = reinterpret_cast<GetFrameTimeFn>(GetProcAddress(handle, "GetFrameTime"));
+		GetPassTimings = reinterpret_cast<GetPassTimingsFn>(GetProcAddress(handle, "GetPassTimings"));
 
-		if (!GetFrameTime)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' GetFrameTime is nullptr");
+		if (!GetPassTimings)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' GetPassTimings is nullptr");
 
 		UpdateSettings = reinterpret_cast<UpdateSettingsFn>(GetProcAddress(handle, "UpdateSettings"));
 
@@ -713,6 +713,8 @@ struct Raytracing : public OverlayFeature
 	RE::NiPointer<RE::TESWaterReflections> waterReflections = nullptr;
 
 	eastl::unique_ptr<CreationEngineRaytracing> creationEngineRaytracing = nullptr;
+
+	eastl::vector<CreationEngineRaytracing::PassTiming> passTimings;
 
 	struct alignas(16) ScreenData
 	{
