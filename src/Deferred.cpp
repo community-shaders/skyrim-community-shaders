@@ -260,6 +260,10 @@ void Deferred::StartDeferred()
 	{
 		auto context = globals::d3d::context;
 
+		// Clear POM offset texture to -1.0 sentinel so pixels the Lighting PS never touches read "no POM"
+		if (globals::features::vr.stereoOpt.loaded)
+			globals::features::vr.stereoOpt.ClearPomOffsetTexture();
+
 		ID3D11Buffer* buffers[1] = { *globals::game::perFrame.get() };
 
 		ID3D11Buffer* vrBuffer = nullptr;
@@ -505,10 +509,6 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 							}
-
-							// RT[5] = REFLECTANCE: enable alpha writes for POM depth data
-							// stored in Reflectance.w, used by StereoBlendCS for depth-aware reprojection
-							blendDesc.RenderTarget[5].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
 							DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &deferredBlendStates[a][b][c][d]));
 						} else {
