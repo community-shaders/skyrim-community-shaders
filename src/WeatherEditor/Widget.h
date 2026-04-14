@@ -2,6 +2,7 @@
 #pragma once
 
 #include "Util.h"
+#include "Utils/Form.h"
 
 class WidgetSharedData
 {
@@ -42,6 +43,15 @@ public:
 		return cachedEditorID;
 	}
 
+	/// SPID-based key for file save/load operations (load-order-portable).
+	std::string GetSaveKey() const
+	{
+		return cachedSaveKey;
+	}
+
+	/// Full path to this widget's save file.
+	std::string GetSaveFilePath() const;
+
 	virtual std::string GetFormID() const
 	{
 		if (!form)
@@ -62,55 +72,34 @@ public:
 	{
 		if (!form) {
 			cachedEditorID = "Invalid";
+			cachedSaveKey = "Invalid";
 			isFallbackEditorID = false;
 			return;
 		}
 
-		// Try GetFormEditorID first
-		const char* editorID = form->GetFormEditorID();
-		if (editorID && editorID[0] != '\0') {
-			cachedEditorID = editorID;
+		// Cache the SPID-based save key (always load-order-portable)
+		cachedSaveKey = Util::GetFormFileKey(form);
+
+		// Try to resolve EditorID via shared utility
+		std::string editorId = Util::GetFormEditorID(form);
+		if (!editorId.empty()) {
+			cachedEditorID = editorId;
 			isFallbackEditorID = false;
 			return;
 		}
 
-		// Search the global EditorID map
-		auto [map, lock] = RE::TESForm::GetAllFormsByEditorID();
-		if (map) {
-			RE::BSReadLockGuard locker(lock);
-			for (const auto& [name, f] : *map) {
-				if (f == form) {
-					cachedEditorID = std::string(name.c_str());
-					isFallbackEditorID = false;
-					return;
-				}
+		// Fallback: type prefix + SPID key
+		const char* prefix = [&]() -> const char* {
+			switch (form->GetFormType()) {
+			case RE::FormType::ImageSpace: return "IS";
+			case RE::FormType::VolumetricLighting: return "VL";
+			case RE::FormType::ShaderParticleGeometryData: return "Particle";
+			case RE::FormType::LensFlare: return "LensFlare";
+			case RE::FormType::ReferenceEffect: return "VisualEffect";
+			default: return "Form";
 			}
-		}
-
-		// Fallback: use SPID-format filename (0xLocalFormID~PluginName) for load-order independence
-		const auto* file = form->GetFile();
-		const auto spidID = file ? std::format("0x{:X}~{}", form->GetLocalFormID(), file->GetFilename()) : std::format("0x{:X}", form->GetLocalFormID());
-		auto formType = form->GetFormType();
-		switch (formType) {
-		case RE::FormType::ImageSpace:
-			cachedEditorID = std::format("IS_{}", spidID);
-			break;
-		case RE::FormType::VolumetricLighting:
-			cachedEditorID = std::format("VL_{}", spidID);
-			break;
-		case RE::FormType::ShaderParticleGeometryData:
-			cachedEditorID = std::format("Particle_{}", spidID);
-			break;
-		case RE::FormType::LensFlare:
-			cachedEditorID = std::format("LensFlare_{}", spidID);
-			break;
-		case RE::FormType::ReferenceEffect:
-			cachedEditorID = std::format("VisualEffect_{}", spidID);
-			break;
-		default:
-			cachedEditorID = std::format("Form_{}", spidID);
-			break;
-		}
+		}();
+		cachedEditorID = std::format("{}_{}", prefix, cachedSaveKey);
 		isFallbackEditorID = true;
 	}
 
@@ -167,9 +156,10 @@ public:
 
 protected:
 	mutable std::string cachedEditorID;
+	mutable std::string cachedSaveKey;
 	mutable bool isFallbackEditorID = false;
 	virtual void DrawMenu();
-	std::string GetFolderName();
+	std::string GetFolderName() const;
 };
 
 // Simple widget for caching form data without full widget functionality
