@@ -801,6 +801,8 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 void State::BeginPerfEvent(std::string_view title)
 {
 #ifdef TRACY_ENABLE
+	// The static source location is required by Tracy's protocol and must have static lifetime.
+	// Individual events are distinguished by their dynamic name set via ___tracy_emit_zone_name.
 	static const ___tracy_source_location_data tracyPerfSrcLoc = { nullptr, __FUNCTION__, __FILE__, (uint32_t)__LINE__, 0 };
 	TracyCZoneCtx ctx = ___tracy_emit_zone_begin(&tracyPerfSrcLoc, true);
 	___tracy_emit_zone_name(ctx, title.data(), title.size());
@@ -815,6 +817,8 @@ void State::EndPerfEvent()
 	if (!s_tracyPerfZones.empty()) {
 		___tracy_emit_zone_end(s_tracyPerfZones.back());
 		s_tracyPerfZones.pop_back();
+	} else {
+		logger::warn("EndPerfEvent called without a matching BeginPerfEvent");
 	}
 #endif
 	pPerf->EndEvent();
