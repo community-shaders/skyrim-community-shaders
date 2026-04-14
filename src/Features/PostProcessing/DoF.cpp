@@ -1,5 +1,6 @@
 ﻿#include "DoF.h"
 
+#include "Features/PostProcessing.h"
 #include "Menu.h"
 #include "State.h"
 #include "Util.h"
@@ -63,7 +64,6 @@ void DoF::DrawSettings()
 
 		BUFFER_VIEWER_NODE(texFocus, 64.0f)
 		BUFFER_VIEWER_NODE(texPreFocus, 64.0f)
-		BUFFER_VIEWER_NODE(texBokehShapes[std::clamp((settings.HighlightShape - 1), 0, (int)texBokehShapes.size() - 1)], 1.f)
 
 		BUFFER_VIEWER_NODE(texCoC, debugRescale)
 		BUFFER_VIEWER_NODE(texCoCTileTmp, debugRescale)
@@ -209,38 +209,7 @@ void DoF::SetupResources()
 		g_TDM = reinterpret_cast<TDM_API::IVTDM2*>(TDM_API::RequestPluginAPI(TDM_API::InterfaceVersion::V2));
 	}
 
-	logger::debug("Loading Bokeh Shapes...");
-	{
-		for (int i = 0; i < bokehShapeFiles.size(); i++) {
-			auto& shapeFile = bokehShapeFiles[i];
-			auto shapePath = bokehShapesPath / shapeFile;
-
-			DirectX::ScratchImage image;
-			try {
-				DX::ThrowIfFailed(DirectX::LoadFromWICFile(shapePath.c_str(), DirectX::WIC_FLAGS_NONE, nullptr, image));
-			} catch (std::runtime_error& e) {
-				logger::warn("Error loading bokeh shape {}: {}", shapePath.string(), e.what());
-			}
-
-			ID3D11Resource* pRsrc = nullptr;
-			try {
-				DX::ThrowIfFailed(CreateTexture(device, image.GetImages(), image.GetImageCount(), image.GetMetadata(), &pRsrc));
-			} catch (std::runtime_error& e) {
-				logger::warn("Error creating texture for bokeh shape {}: {}", shapePath.string(), e.what());
-			}
-
-			texBokehShapes[i] = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pRsrc));
-
-			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-				.Format = texBokehShapes[i]->desc.Format,
-				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-				.Texture2D = {
-					.MostDetailedMip = 0,
-					.MipLevels = 1 }
-			};
-			texBokehShapes[i]->CreateSRV(srvDesc);
-		}
-	}
+	// Bokeh shapes are loaded by PostProcessing::bokehResources (shared with LensFlare)
 
 	logger::debug("Creating samplers...");
 	{
@@ -593,7 +562,8 @@ void DoF::Draw(TextureInfo& inout_tex)
 		srvs.at(0) = texPreBlurred->srv.get();
 		srvs.at(3) = texCoC->srv.get();
 		srvs.at(4) = texCoCBlur2->srv.get();
-		srvs.at(8) = texBokehShapes[std::clamp((settings.HighlightShape - 1), 0, (int)texBokehShapes.size() - 1)]->srv.get();
+		if (owner)
+			srvs.at(8) = owner->bokehResources.GetShapeSRV(std::clamp(settings.HighlightShape - 1, 0, BokehResources::NUM_BUILTIN_SHAPES - 1));
 		uavs.at(0) = texFarBlurred->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
@@ -609,7 +579,8 @@ void DoF::Draw(TextureInfo& inout_tex)
 		srvs.at(0) = texFarBlurred->srv.get();
 		srvs.at(3) = texCoCTileNeighbor->srv.get();
 		srvs.at(4) = texCoCBlur2->srv.get();
-		srvs.at(8) = texBokehShapes[std::clamp((settings.HighlightShape - 1), 0, (int)texBokehShapes.size() - 1)]->srv.get();
+		if (owner)
+			srvs.at(8) = owner->bokehResources.GetShapeSRV(std::clamp(settings.HighlightShape - 1, 0, BokehResources::NUM_BUILTIN_SHAPES - 1));
 		uavs.at(0) = texNearBlurred->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());

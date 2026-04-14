@@ -6,12 +6,20 @@
 struct LensFlare : public PostProcessFeature
 {
 	virtual inline std::string GetType() const override { return "Lens Flare"; }
-	virtual inline std::string GetDesc() const override { return "Screen-space lens flare with ghosts, halo, and glare."; }
+	virtual inline std::string GetDesc() const override { return "Screen-space lens flare with ghosts, halo, and glare. Supports FFT bokeh convolution for physically-shaped ghosts."; }
 	virtual bool WritesToMainTexture() const override { return false; }
 
 	TextureInfo GetFlareOutput() const;
 
 	static constexpr int NUM_GHOSTS = 8;
+	static constexpr uint FFT_MIN = 128;
+	static constexpr uint FFT_MAX = 512;
+
+	enum class GhostMode : int
+	{
+		Fast = 0,     // Original procedural radial scaling
+		Quality = 1,  // FFT convolution with bokeh shape
+	};
 
 	struct GhostSettings
 	{
@@ -26,6 +34,9 @@ struct LensFlare : public PostProcessFeature
 		float ThresholdRange = 1.0f;
 		float GhostStrength = 0.3f;
 		float GhostChromaShift = 0.015f;
+		int GhostModeInt = 0;  // 0 = Fast, 1 = Quality (FFT)
+		int BokehShape = 0;    // 0 = None/Circle, 1-6 = built-in, 7+ = custom
+		int FFTResolution = 256;
 		float HaloStrength = 0.2f;
 		float HaloRadius = 0.5f;
 		float HaloWidth = 0.5f;
@@ -47,6 +58,7 @@ struct LensFlare : public PostProcessFeature
 			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f },
 			{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f },
 		} };
+		std::string CustomBokehPath;  // User-specified custom bokeh texture path
 	} settings;
 
 	struct alignas(16) LensFlareCB
@@ -76,7 +88,9 @@ struct LensFlare : public PostProcessFeature
 
 		// Glare params
 		float GlareDirection[2];
-		float pad0[2]{};
+		// FFT params
+		uint FFTResolution;
+		float pad0{};
 
 		float GlareScale[3];
 		int GLocalMask;
@@ -108,9 +122,15 @@ struct LensFlare : public PostProcessFeature
 	eastl::unique_ptr<Texture2D> texGlare = nullptr;      // half resolution
 	eastl::unique_ptr<Texture2D> texBlurTemp = nullptr;   // quarter resolution
 
+	// FFT ghost pipeline textures
+	eastl::unique_ptr<Texture2D> texFFT[2] = {};          // RG32F ping-pong (N×N)
+	eastl::unique_ptr<Texture2D> texBokehFFT = nullptr;   // RG32F cached bokeh kernel FFT (N×N)
+	eastl::unique_ptr<Texture2D> texFFTResult = nullptr;  // RGBA16F FFT convolution result (N×N)
+
 	winrt::com_ptr<ID3D11SamplerState> colorSampler = nullptr;
 	winrt::com_ptr<ID3D11SamplerState> borderSampler = nullptr;
 
+	// Original pipeline shaders
 	winrt::com_ptr<ID3D11ComputeShader> thresholdCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> ghostHaloCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> blurDownCS = nullptr;
@@ -118,9 +138,24 @@ struct LensFlare : public PostProcessFeature
 	winrt::com_ptr<ID3D11ComputeShader> glareStreakCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> mixCS = nullptr;
 
+	// FFT ghost pipeline shaders (self-contained in lensflare_fft.cs.hlsl)
+	winrt::com_ptr<ID3D11ComputeShader> fftRowCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> fftColCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> fftRowInvCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> fftColInvCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> fftMultiplyCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> bokehPrepareCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> fftThresholdCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> fftGhostComposeCS = nullptr;
+
+	uint currentFFTResolution = 256;
+	int cachedBokehShape = -1;
+	bool bokehFFTDirty = true;
+
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 	void CompileComputeShaders();
+	void CreateFFTTextures(uint resolution);
 
 	virtual void RestoreDefaultSettings() override;
 	virtual void LoadSettings(json&) override;
@@ -129,6 +164,14 @@ struct LensFlare : public PostProcessFeature
 	virtual void DrawSettings() override;
 
 	virtual void Draw(TextureInfo&) override;
+
+	virtual inline void Reset() override { bokehFFTDirty = true; }
+
+private:
+	void DispatchFFT(ID3D11ComputeShader* shader, Texture2D* input, Texture2D* output, uint resolution);
+	void DrawFast(TextureInfo& inout_tex, LensFlareCB& data);
+	void DrawQuality(TextureInfo& inout_tex, LensFlareCB& data);
+	void PrepareBokehFFT();
 };
 
 inline PostProcessFeature::TextureInfo LensFlare::GetFlareOutput() const { return { texFlare->resource.get(), texFlare->srv.get() }; }

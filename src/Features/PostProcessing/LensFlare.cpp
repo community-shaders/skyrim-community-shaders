@@ -1,7 +1,12 @@
 #include "LensFlare.h"
+
+#include "BokehResources.h"
+#include "Features/PostProcessing.h"
 #include "Menu.h"
 #include "State.h"
 #include "Util.h"
+
+#include "imgui_stdlib.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensFlare::Settings,
@@ -10,6 +15,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ThresholdRange,
 	GhostStrength,
 	GhostChromaShift,
+	GhostModeInt,
+	BokehShape,
+	FFTResolution,
 	HaloStrength,
 	HaloRadius,
 	HaloWidth,
@@ -20,7 +28,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GlareScale,
 	Tint,
 	GLocalMask,
-	Ghosts)
+	Ghosts,
+	CustomBokehPath)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensFlare::GhostSettings,
@@ -56,6 +65,72 @@ void LensFlare::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Text("Ghost Settings");
 	ImGui::Separator();
+
+	{
+		const char* modeNames[] = { "Fast (Procedural)", "Quality (FFT Bokeh)" };
+		ImGui::Combo("Ghost Mode", &settings.GhostModeInt, modeNames, 2);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Fast: procedural radial ghosts (low cost).\nQuality: FFT convolution with bokeh shape (physically-based ghost shapes).");
+	}
+
+	if (settings.GhostModeInt == static_cast<int>(GhostMode::Quality)) {
+		// Bokeh shape selection
+		if (owner) {
+			auto& bokeh = owner->bokehResources;
+			int shapeCount = bokeh.GetTotalShapeCount();
+
+			if (ImGui::BeginCombo("Bokeh Shape", settings.BokehShape == 0 ? "Circle (Default)" : bokeh.GetShapeName(settings.BokehShape - 1))) {
+				if (ImGui::Selectable("Circle (Default)", settings.BokehShape == 0))
+					settings.BokehShape = 0;
+				for (int i = 0; i < shapeCount; i++) {
+					if (bokeh.GetShapeSRV(i)) {
+						bool selected = (settings.BokehShape == i + 1);
+						if (ImGui::Selectable(bokeh.GetShapeName(i), selected))
+							settings.BokehShape = i + 1;
+					}
+				}
+				ImGui::EndCombo();
+			}
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Select a bokeh shape for FFT ghost convolution.\nShared with Depth of Field.");
+		}
+
+		// Custom bokeh path
+		if (ImGui::TreeNode("Custom Bokeh Texture")) {
+			ImGui::InputText("File Path", &settings.CustomBokehPath);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Path to a PNG/DDS/BMP/TGA file for a custom bokeh shape.\nRecommended: square, grayscale, 256x256 or 512x512.");
+			if (ImGui::Button("Load Custom Bokeh")) {
+				if (!settings.CustomBokehPath.empty() && owner) {
+					if (owner->bokehResources.LoadCustomShape(settings.CustomBokehPath, 0)) {
+						settings.BokehShape = BokehResources::NUM_BUILTIN_SHAPES + 1;
+						bokehFFTDirty = true;
+						logger::info("LensFlare: Loaded custom bokeh from {}", settings.CustomBokehPath);
+					} else {
+						logger::warn("LensFlare: Failed to load custom bokeh from {}", settings.CustomBokehPath);
+					}
+				}
+			}
+			ImGui::TreePop();
+		}
+
+		// FFT Resolution
+		{
+			const char* resNames[] = { "128", "256", "512" };
+			int resValues[] = { 128, 256, 512 };
+			int curIdx = 1;
+			for (int i = 0; i < 3; i++)
+				if (resValues[i] == settings.FFTResolution)
+					curIdx = i;
+
+			if (ImGui::Combo("FFT Resolution", &curIdx, resNames, 3))
+				settings.FFTResolution = resValues[curIdx];
+
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Resolution of the FFT convolution. Higher = sharper bokeh ghost shapes but more expensive.");
+		}
+	}
+
 	ImGui::SliderFloat("Ghost Strength", &settings.GhostStrength, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat("Ghost Chroma Shift", &settings.GhostChromaShift, 0.0f, 0.1f, "%.4f");
 	ImGui::Checkbox("Non-intrusive Ghosts", &settings.GLocalMask);
@@ -235,12 +310,73 @@ void LensFlare::SetupResources()
 	}
 
 	CompileComputeShaders();
+
+	// Create initial FFT textures
+	CreateFFTTextures(std::clamp((uint)settings.FFTResolution, FFT_MIN, FFT_MAX));
+}
+
+void LensFlare::CreateFFTTextures(uint resolution)
+{
+	currentFFTResolution = resolution;
+	bokehFFTDirty = true;
+
+	D3D11_TEXTURE2D_DESC texDesc = {
+		.Width = resolution,
+		.Height = resolution,
+		.MipLevels = 1,
+		.ArraySize = 1,
+		.Format = DXGI_FORMAT_R32G32_FLOAT,
+		.SampleDesc = { .Count = 1, .Quality = 0 },
+		.Usage = D3D11_USAGE_DEFAULT,
+		.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
+	};
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		.Format = texDesc.Format,
+		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+		.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+	};
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+		.Format = texDesc.Format,
+		.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+		.Texture2D = { .MipSlice = 0 }
+	};
+
+	// FFT ping-pong textures (RG32F)
+	for (int pp = 0; pp < 2; pp++) {
+		texFFT[pp] = eastl::make_unique<Texture2D>(texDesc);
+		texFFT[pp]->CreateSRV(srvDesc);
+		texFFT[pp]->CreateUAV(uavDesc);
+	}
+
+	// Bokeh kernel FFT cache (RG32F)
+	texBokehFFT = eastl::make_unique<Texture2D>(texDesc);
+	texBokehFFT->CreateSRV(srvDesc);
+	texBokehFFT->CreateUAV(uavDesc);
+
+	// FFT result (RGBA16F at FFT resolution)
+	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	srvDesc.Format = texDesc.Format;
+	uavDesc.Format = texDesc.Format;
+
+	texFFTResult = eastl::make_unique<Texture2D>(texDesc);
+	texFFTResult->CreateSRV(srvDesc);
+	texFFTResult->CreateUAV(uavDesc);
+
+	auto context = globals::d3d::context;
+	const FLOAT clearColor[4] = { 0.f, 0.f, 0.f, 0.f };
+	context->ClearUnorderedAccessViewFloat(texFFTResult->uav.get(), clearColor);
+
+	logger::debug("LensFlare: FFT textures created at {}x{}", resolution, resolution);
 }
 
 void LensFlare::ClearShaderCache()
 {
 	const auto shaderPtrs = std::array{
-		&thresholdCS, &ghostHaloCS, &blurDownCS, &blurUpCS, &glareStreakCS, &mixCS
+		&thresholdCS, &ghostHaloCS, &blurDownCS, &blurUpCS, &glareStreakCS, &mixCS,
+		&fftRowCS, &fftColCS, &fftRowInvCS, &fftColInvCS, &fftMultiplyCS,
+		&bokehPrepareCS, &fftThresholdCS, &fftGhostComposeCS
 	};
 
 	for (auto shader : shaderPtrs)
@@ -269,6 +405,10 @@ void LensFlare::CompileComputeShaders()
 		{ &blurUpCS, "lensflare.cs.hlsl", {}, "CSFlareUp" },
 		{ &glareStreakCS, "lensflare.cs.hlsl", {}, "CSGlareStreak" },
 		{ &mixCS, "lensflare.cs.hlsl", {}, "CSMix" },
+		// FFT ghost pipeline shaders
+		{ &bokehPrepareCS, "lensflare_fft.cs.hlsl", {}, "CSBokehPrepare" },
+		{ &fftThresholdCS, "lensflare_fft.cs.hlsl", {}, "CSFFTThreshold" },
+		{ &fftGhostComposeCS, "lensflare_fft.cs.hlsl", {}, "CSFFTGhostCompose" },
 	};
 
 	for (auto& info : shaderInfos) {
@@ -277,8 +417,258 @@ void LensFlare::CompileComputeShaders()
 			info.programPtr->attach(rawPtr);
 	}
 
+	// FFT shaders — self-contained in lensflare_fft.cs.hlsl with LensFlareConstants CB
+	std::vector<ShaderCompileInfo> fftShaderInfos = {
+		{ &fftRowCS, "lensflare_fft.cs.hlsl", { { "ROW_PASS", "" }, { "FORWARD", "" } }, "CS_FFT" },
+		{ &fftColCS, "lensflare_fft.cs.hlsl", { { "COL_PASS", "" }, { "FORWARD", "" } }, "CS_FFT" },
+		{ &fftRowInvCS, "lensflare_fft.cs.hlsl", { { "ROW_PASS", "" }, { "INVERSE", "" } }, "CS_FFT" },
+		{ &fftColInvCS, "lensflare_fft.cs.hlsl", { { "COL_PASS", "" }, { "INVERSE", "" } }, "CS_FFT" },
+		{ &fftMultiplyCS, "lensflare_fft.cs.hlsl", {}, "CS_Multiply" },
+	};
+
+	for (auto& info : fftShaderInfos) {
+		auto path = std::filesystem::path("Data\\Shaders\\PostProcessing\\LensFlare") / info.filename;
+		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), info.defines, "cs_5_0", info.entry.c_str())))
+			info.programPtr->attach(rawPtr);
+	}
+
 	if (!thresholdCS || !ghostHaloCS || !mixCS) {
 		logger::error("Failed to compile lens flare compute shaders!");
+	}
+}
+
+void LensFlare::DispatchFFT(ID3D11ComputeShader* shader, Texture2D* input, Texture2D* output, uint resolution)
+{
+	auto context = globals::d3d::context;
+
+	ID3D11ShaderResourceView* srv = input->srv.get();
+	ID3D11UnorderedAccessView* uav = output->uav.get();
+
+	context->CSSetShaderResources(0, 1, &srv);
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	context->CSSetShader(shader, nullptr, 0);
+	context->Dispatch(resolution, 1, 1);
+
+	srv = nullptr;
+	uav = nullptr;
+	context->CSSetShaderResources(0, 1, &srv);
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+}
+
+void LensFlare::PrepareBokehFFT()
+{
+	auto context = globals::d3d::context;
+
+	// Step 1: Prepare bokeh kernel from texture → RG32F (real=luminance, imag=0), centered + zero-padded
+	{
+		ID3D11ShaderResourceView* bokehSRV = nullptr;
+		if (settings.BokehShape > 0 && owner) {
+			bokehSRV = owner->bokehResources.GetShapeSRV(settings.BokehShape - 1);
+		}
+
+		std::array<ID3D11ShaderResourceView*, 1> srvs = { bokehSRV };
+		std::array<ID3D11UnorderedAccessView*, 1> uavs = { texFFT[0]->uav.get() };
+
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+
+		if (owner) {
+			ID3D11SamplerState* sampler = owner->bokehResources.bokehSampler.get();
+			context->CSSetSamplers(0, 1, &sampler);
+		}
+
+		context->CSSetShader(bokehPrepareCS.get(), nullptr, 0);
+		context->Dispatch((currentFFTResolution + 7) >> 3, (currentFFTResolution + 7) >> 3, 1);
+
+		srvs.fill(nullptr);
+		uavs.fill(nullptr);
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+	}
+
+	// Step 2: Forward FFT bokeh kernel: texFFT[0] → texFFT[1] → texBokehFFT
+	DispatchFFT(fftRowCS.get(), texFFT[0].get(), texFFT[1].get(), currentFFTResolution);
+	DispatchFFT(fftColCS.get(), texFFT[1].get(), texBokehFFT.get(), currentFFTResolution);
+
+	cachedBokehShape = settings.BokehShape;
+	bokehFFTDirty = false;
+}
+
+void LensFlare::DrawFast(TextureInfo& inout_tex, LensFlareCB& data)
+{
+	auto context = globals::d3d::context;
+	uint halfW = texThreshold->desc.Width;
+	uint halfH = texThreshold->desc.Height;
+	uint quarterW = texBlurTemp->desc.Width;
+	uint quarterH = texBlurTemp->desc.Height;
+
+	std::array<ID3D11ShaderResourceView*, 2> srvs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
+
+	auto resetViews = [&]() {
+		srvs.fill(nullptr);
+		uavs.fill(nullptr);
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+	};
+
+	// === Pass 2: Ghost + Halo — half res → half res ===
+	if (!debugsettings.disableGhosts && ghostHaloCS) {
+		data.OutputWidth = (float)halfW;
+		data.OutputHeight = (float)halfH;
+		data.InputWidth = (float)halfW;
+		data.InputHeight = (float)halfH;
+		lensFlareCB->Update(data);
+		auto cb = lensFlareCB->CB();
+		context->CSSetConstantBuffers(1, 1, &cb);
+
+		srvs.at(0) = texThreshold->srv.get();
+		uavs.at(0) = texGhostHalo->uav.get();
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+		context->CSSetShader(ghostHaloCS.get(), nullptr, 0);
+		context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
+		resetViews();
+	}
+
+	// === Pass 3: Kawase blur ===
+	if (!debugsettings.disableBlur && blurDownCS && blurUpCS) {
+		for (int iter = 0; iter < debugsettings.blurIterations; iter++) {
+			data.OutputWidth = (float)quarterW;
+			data.OutputHeight = (float)quarterH;
+			data.InputWidth = (float)halfW;
+			data.InputHeight = (float)halfH;
+			lensFlareCB->Update(data);
+			auto cb = lensFlareCB->CB();
+			context->CSSetConstantBuffers(1, 1, &cb);
+
+			srvs.at(0) = texGhostHalo->srv.get();
+			uavs.at(0) = texBlurTemp->uav.get();
+			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+			context->CSSetShader(blurDownCS.get(), nullptr, 0);
+			context->Dispatch((quarterW + 7) >> 3, (quarterH + 7) >> 3, 1);
+			resetViews();
+
+			data.OutputWidth = (float)halfW;
+			data.OutputHeight = (float)halfH;
+			data.InputWidth = (float)quarterW;
+			data.InputHeight = (float)quarterH;
+			lensFlareCB->Update(data);
+			cb = lensFlareCB->CB();
+			context->CSSetConstantBuffers(1, 1, &cb);
+
+			srvs.at(0) = texBlurTemp->srv.get();
+			uavs.at(0) = texGhostHalo->uav.get();
+			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+			context->CSSetShader(blurUpCS.get(), nullptr, 0);
+			context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
+			resetViews();
+		}
+	}
+}
+
+void LensFlare::DrawQuality(TextureInfo& inout_tex, LensFlareCB& data)
+{
+	auto context = globals::d3d::context;
+	uint N = currentFFTResolution;
+	uint halfW = texThreshold->desc.Width;
+	uint halfH = texThreshold->desc.Height;
+
+	// Handle FFT resolution change
+	uint targetRes = std::clamp((uint)settings.FFTResolution, FFT_MIN, FFT_MAX);
+	if (targetRes != currentFFTResolution) {
+		CreateFFTTextures(targetRes);
+		N = targetRes;
+	}
+
+	// Regenerate bokeh FFT if shape changed
+	if (bokehFFTDirty || cachedBokehShape != settings.BokehShape) {
+		data.FFTResolution = N;
+		lensFlareCB->Update(data);
+		auto cb = lensFlareCB->CB();
+		context->CSSetConstantBuffers(1, 1, &cb);
+		PrepareBokehFFT();
+	}
+
+	data.FFTResolution = N;
+
+	// === Step 1: Threshold scene → FFT format (RG32F, N×N) ===
+	if (!debugsettings.disableGhosts && fftThresholdCS) {
+		data.OutputWidth = (float)N;
+		data.OutputHeight = (float)N;
+		data.InputWidth = (float)halfW;
+		data.InputHeight = (float)halfH;
+		lensFlareCB->Update(data);
+		auto cb = lensFlareCB->CB();
+		context->CSSetConstantBuffers(1, 1, &cb);
+
+		ID3D11ShaderResourceView* srv = texThreshold->srv.get();
+		ID3D11UnorderedAccessView* uav = texFFT[0]->uav.get();
+		context->CSSetShaderResources(0, 1, &srv);
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		context->CSSetShader(fftThresholdCS.get(), nullptr, 0);
+		context->Dispatch((N + 7) >> 3, (N + 7) >> 3, 1);
+
+		srv = nullptr;
+		uav = nullptr;
+		context->CSSetShaderResources(0, 1, &srv);
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	}
+
+	// === Step 2: Forward FFT scene ===
+	if (!debugsettings.disableGhosts) {
+		DispatchFFT(fftRowCS.get(), texFFT[0].get(), texFFT[1].get(), N);
+		DispatchFFT(fftColCS.get(), texFFT[1].get(), texFFT[0].get(), N);
+	}
+
+	// === Step 3: Frequency-domain multiply (scene * bokeh) ===
+	if (!debugsettings.disableGhosts && fftMultiplyCS) {
+		std::array<ID3D11ShaderResourceView*, 2> mulSrvs = { texFFT[0]->srv.get(), texBokehFFT->srv.get() };
+		std::array<ID3D11UnorderedAccessView*, 1> mulUavs = { texFFT[1]->uav.get() };
+
+		context->CSSetShaderResources(0, (uint)mulSrvs.size(), mulSrvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)mulUavs.size(), mulUavs.data(), nullptr);
+		context->CSSetShader(fftMultiplyCS.get(), nullptr, 0);
+		context->Dispatch((N + 7) >> 3, (N + 7) >> 3, 1);
+
+		mulSrvs.fill(nullptr);
+		mulUavs.fill(nullptr);
+		context->CSSetShaderResources(0, (uint)mulSrvs.size(), mulSrvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)mulUavs.size(), mulUavs.data(), nullptr);
+	}
+
+	// === Step 4: Inverse FFT ===
+	if (!debugsettings.disableGhosts) {
+		DispatchFFT(fftRowInvCS.get(), texFFT[1].get(), texFFT[0].get(), N);
+		DispatchFFT(fftColInvCS.get(), texFFT[0].get(), texFFT[1].get(), N);
+	}
+
+	// === Step 5: Compose FFT result → multi-ghost with scales + chroma + halo → texGhostHalo ===
+	if (!debugsettings.disableGhosts && fftGhostComposeCS) {
+		data.OutputWidth = (float)halfW;
+		data.OutputHeight = (float)halfH;
+		data.InputWidth = (float)N;
+		data.InputHeight = (float)N;
+		lensFlareCB->Update(data);
+		auto cb = lensFlareCB->CB();
+		context->CSSetConstantBuffers(1, 1, &cb);
+
+		// t0 = FFT convolution result (RG32F, luminance in .x)
+		// t1 = threshold texture (for halo)
+		std::array<ID3D11ShaderResourceView*, 2> srvs = { texFFT[1]->srv.get(), texThreshold->srv.get() };
+		std::array<ID3D11UnorderedAccessView*, 1> uavs = { texGhostHalo->uav.get() };
+
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+		context->CSSetShader(fftGhostComposeCS.get(), nullptr, 0);
+		context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
+
+		srvs.fill(nullptr);
+		uavs.fill(nullptr);
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 	}
 }
 
@@ -293,10 +683,8 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	uint fullH = texFlare->desc.Height;
 	uint halfW = texThreshold->desc.Width;
 	uint halfH = texThreshold->desc.Height;
-	uint quarterW = texBlurTemp->desc.Width;
-	uint quarterH = texBlurTemp->desc.Height;
 
-	// Build base constant buffer data (settings that don't change per-pass)
+	// Build base constant buffer data
 	LensFlareCB data = {};
 	data.ThresholdLevel = settings.ThresholdLevel;
 	data.ThresholdRange = settings.ThresholdRange;
@@ -312,6 +700,7 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	data.GlareDivider = settings.GlareDivider;
 	data.GlareDirection[0] = 0.f;
 	data.GlareDirection[1] = 0.f;
+	data.FFTResolution = currentFFTResolution;
 	std::memcpy(data.GlareScale, settings.GlareScale.data(), sizeof(float) * 3);
 	std::memcpy(data.Tint, settings.Tint.data(), sizeof(float) * 3);
 	data.GLocalMask = settings.GLocalMask ? 1 : 0;
@@ -353,62 +742,12 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 		resetViews();
 	}
 
-	// === Pass 2: Ghost + Halo — half res → half res ===
-	if (!debugsettings.disableGhosts && ghostHaloCS) {
-		data.OutputWidth = (float)halfW;
-		data.OutputHeight = (float)halfH;
-		data.InputWidth = (float)halfW;
-		data.InputHeight = (float)halfH;
-		lensFlareCB->Update(data);
-		auto cb = lensFlareCB->CB();
-		context->CSSetConstantBuffers(1, 1, &cb);
-
-		srvs.at(0) = texThreshold->srv.get();
-		uavs.at(0) = texGhostHalo->uav.get();
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(ghostHaloCS.get(), nullptr, 0);
-		context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
-		resetViews();
-	}
-
-	// === Pass 3: Kawase blur on ghost+halo (half → quarter → half per iteration) ===
-	if (!debugsettings.disableBlur && blurDownCS && blurUpCS) {
-		for (int iter = 0; iter < debugsettings.blurIterations; iter++) {
-			// Down: half → quarter
-			data.OutputWidth = (float)quarterW;
-			data.OutputHeight = (float)quarterH;
-			data.InputWidth = (float)halfW;
-			data.InputHeight = (float)halfH;
-			lensFlareCB->Update(data);
-			auto cb = lensFlareCB->CB();
-			context->CSSetConstantBuffers(1, 1, &cb);
-
-			srvs.at(0) = texGhostHalo->srv.get();
-			uavs.at(0) = texBlurTemp->uav.get();
-			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-			context->CSSetShader(blurDownCS.get(), nullptr, 0);
-			context->Dispatch((quarterW + 7) >> 3, (quarterH + 7) >> 3, 1);
-			resetViews();
-
-			// Up: quarter → half
-			data.OutputWidth = (float)halfW;
-			data.OutputHeight = (float)halfH;
-			data.InputWidth = (float)quarterW;
-			data.InputHeight = (float)quarterH;
-			lensFlareCB->Update(data);
-			cb = lensFlareCB->CB();
-			context->CSSetConstantBuffers(1, 1, &cb);
-
-			srvs.at(0) = texBlurTemp->srv.get();
-			uavs.at(0) = texGhostHalo->uav.get();
-			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-			context->CSSetShader(blurUpCS.get(), nullptr, 0);
-			context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
-			resetViews();
-		}
+	// === Ghost + Halo generation (mode-dependent) ===
+	GhostMode mode = static_cast<GhostMode>(settings.GhostModeInt);
+	if (mode == GhostMode::Quality && fftRowCS && fftColCS && fftMultiplyCS && fftThresholdCS && fftGhostComposeCS) {
+		DrawQuality(inout_tex, data);
+	} else {
+		DrawFast(inout_tex, data);
 	}
 
 	// === Pass 4: Glare streaks (3 directions for 6-point star) — half res ===

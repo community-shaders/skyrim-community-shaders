@@ -39,7 +39,8 @@ cbuffer LensFlareConstants : register(b1)
 
 	// Glare
 	float2 GlareDirection;
-	float2 _pad0;
+	uint FFTResolution;
+	float _pad0;
 
 	float3 GlareScale_packed;
 	int GLocalMask;
