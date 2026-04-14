@@ -128,7 +128,12 @@ namespace ExtendedMaterials
 		// Extra high-minification squeeze (continuous, branchless): beyond ~2.75 mip, converge rapidly to 4 steps.
 		float pomMinified = saturate((aggParallaxMip - 2.75) / 0.75);
 		maxStepsF = lerp(maxStepsF, 4.0, pomMinified);
-		maxStepsF = max(maxStepsF, 4.0);
+		// Very far / highly minified: allow 2-step POM to keep height while heavily trading quality for cost.
+		float pomUltraFar = saturate((distLin - 3600.0) / 2600.0);
+		float pomUltraMinified = saturate((aggParallaxMip - 3.3) / 0.9);
+		float pomTwoStep = max(pomUltraFar, pomUltraMinified);
+		maxStepsF = lerp(maxStepsF, 2.0, pomTwoStep);
+		maxStepsF = max(maxStepsF, 2.0);
 #else
 		float scale = params.HeightScale;
 		float maxHeight = 0.1 * scale;
@@ -138,11 +143,45 @@ namespace ExtendedMaterials
 		{
 #if defined(LANDSCAPE)
 			uint numSteps = uint(maxStepsF + 0.5);
-			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxStepsF + 0.5)));
+			numSteps = clamp(numSteps, 2, max(2, uint(scale * maxStepsF + 0.5)));
 #else
 			const float maxSteps = 16;
 			uint numSteps = uint(maxSteps + 0.5);
 			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxSteps)));
+#endif
+#if defined(LANDSCAPE)
+			[branch] if (numSteps <= 2)
+			{
+				const float stepSize2 = 0.5;
+				float2 offsetPerStep2 = viewDirTS.xy * float2(maxHeight, maxHeight) * stepSize2.xx;
+				float2 prevOffset2 = viewDirTS.xy * float2(minHeight, minHeight) + coords.xy;
+				float2 sample1Offset = prevOffset2 - offsetPerStep2;
+				float2 sample2Offset = sample1Offset - offsetPerStep2;
+
+				float h1 = GetTerrainHeightShadowTap(sample1Offset, mipLevels, params, w1, w2, activeMask, sharedOffset) * scalercp + 0.5;
+				float h2 = GetTerrainHeightShadowTap(sample2Offset, mipLevels, params, w1, w2, activeMask, sharedOffset) * scalercp + 0.5;
+
+				float2 pt1 = float2(0.0, h2);
+				float2 pt2 = float2(0.5, h1);
+				if (h1 >= 0.5)
+				{
+					pt1 = float2(0.5, h1);
+					pt2 = float2(1.0, 1.0);
+				}
+
+				float delta2 = pt2.x - pt2.y;
+				float delta1 = pt1.x - pt1.y;
+				float denominator = delta2 - delta1;
+				float parallaxAmount = 0.0;
+				[flatten] if (denominator != 0.0)
+					parallaxAmount = (pt1.x * delta2 - pt2.x * delta1) / denominator;
+
+				float offset2 = (1.0 - parallaxAmount) * -maxHeight + minHeight;
+				pixelOffset = saturate(parallaxAmount);
+				float2 outCoords2 = viewDirTS.xy * offset2 + coords.xy;
+				GetTerrainHeight(noise, input, outCoords2, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights);
+				return outCoords2;
+			}
 #endif
 			numSteps = (numSteps + 2) & ~3;
 

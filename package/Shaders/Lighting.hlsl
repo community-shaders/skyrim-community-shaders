@@ -981,6 +981,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(LANDSCAPE)
 	// Softer landscape albedo/normals at distance (SampleBias); parallax mips get a separate bump in EMAT path.
 	float landDistanceTexMipBias = saturate((abs(viewPosition.z) - 380.0) / 3400.0) * 0.72;
+	float landParallaxTexMipBias = 0.0;
 #	endif
 
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
@@ -1250,6 +1251,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float landParallaxMipAgg = max(max(max(max(max(mipLevels[0], mipLevels[1]), mipLevels[2]), mipLevels[3]), mipLevels[4]), mipLevels[5]);
 		float vzdParallax = abs(viewPosition.z);
 		landParallaxShadowQuality = saturate((1.0 - saturate((vzdParallax - 850.0) / 4600.0) * 0.94) * saturate(1.58 - 0.41 * landParallaxMipAgg));
+		// Keep shadows always present, but push distant terrain into very low quality (mostly single-tap path).
+		landParallaxShadowQuality = max(0.06, landParallaxShadowQuality * landParallaxShadowQuality);
 
 		displacementParams[1] = displacementParams[0];
 		displacementParams[2] = displacementParams[0];
@@ -1277,17 +1280,33 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			input.LandBlendWeights2.x = weights[4];
 			input.LandBlendWeights2.y = weights[5];
 		}
+		float landParallaxShadowEvalQuality = SharedData::extendedMaterialSettings.ExtendShadows ? 1.0 : landParallaxShadowQuality;
 		if (SharedData::extendedMaterialSettings.EnableShadows) {
 			// Reuse POM layer mask unless height blending rewrote weights (then mask must match new weights).
 			uint sh0ActiveMask = SharedData::extendedMaterialSettings.EnableHeightBlending ? ExtendedMaterials::ComputeActiveMask(input.LandBlendWeights1, input.LandBlendWeights2.xy) : landParallaxActiveMask;
-			sh0 = ExtendedMaterials::GetTerrainHeightShadowTap(uv, mipLevels, displacementParams, input.LandBlendWeights1, input.LandBlendWeights2.xy, sh0ActiveMask, sharedOffset);
+			// For very low quality, use cheaper non-stochastic upper-bound baseline; keeps shadows "on" while reducing cost.
+			[branch] if (landParallaxShadowEvalQuality < 0.26)
+				sh0 = ExtendedMaterials::GetTerrainHeightUpperBoundNonStochastic(uv, mipLevels, displacementParams, sh0ActiveMask);
+			else
+				sh0 = ExtendedMaterials::GetTerrainHeightShadowTap(uv, mipLevels, displacementParams, input.LandBlendWeights1, input.LandBlendWeights2.xy, sh0ActiveMask, sharedOffset);
 		}
+
+		// Stronger parallax displaces UVs more and can look artificially over-sharp versus flatter materials.
+		// Apply a small extra SampleBias so terrain mip response stays consistent across parallax scales.
+		float landParallaxWeightedScale = max(displacementParams[0].HeightScale * input.LandBlendWeights1.x,
+			max(displacementParams[1].HeightScale * input.LandBlendWeights1.y,
+				max(displacementParams[2].HeightScale * input.LandBlendWeights1.z,
+					max(displacementParams[3].HeightScale * input.LandBlendWeights1.w,
+						max(displacementParams[4].HeightScale * input.LandBlendWeights2.x,
+							displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
+		landParallaxTexMipBias = saturate((landParallaxWeightedScale - 0.05) / 0.25) * 0.35;
 	}
 
 #		else
 	// Initialize mip levels for non-EMAT case
 	mipLevels[0] = mipLevels[1] = mipLevels[2] = mipLevels[3] = mipLevels[4] = mipLevels[5] = 0.0;
 #		endif  // EMAT
+	landDistanceTexMipBias += landParallaxTexMipBias;
 	landscapeBlendWeights1 = input.LandBlendWeights1;
 	landscapeBlendWeights2 = input.LandBlendWeights2.xy;
 #		if defined(TRUE_PBR)
