@@ -174,8 +174,11 @@ public:
 	/// Discover weather-specific overwrite files from Weather/{SPID}/ folders.
 	void DiscoverWeatherOverwrites();
 
-	/// Load all scene types (overwrites + unified user file).
+	/// Load non-weather scene types (overwrites + user settings). Called early from Setup().
 	void LoadAll();
+
+	/// Load weather overwrites and weather user settings. Requires TESDataHandler (call after kDataLoaded).
+	void LoadWeatherData();
 
 	// --- Path Resolution ---
 
@@ -418,6 +421,9 @@ private:
 	/// Discover overwrite files for a single weather SPID folder.
 	void DiscoverWeatherOverwritesForSpid(RE::FormID weatherId, const std::filesystem::path& weatherDir);
 
-	/// Load all user settings from unified SceneManager.json.
+	/// Load non-weather user settings from unified SceneManager.json.
 	void LoadAllUserSettings();
+
+	/// Load weather user settings from SceneManager.json. Requires TESDataHandler.
+	void LoadWeatherUserSettings();
 };

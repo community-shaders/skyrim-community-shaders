@@ -276,4 +276,49 @@ namespace Util
 		}
 		return std::format("_{:08X}", h);
 	}
+
+	std::string PrettifyIdentifier(std::string_view id)
+	{
+		if (id.empty())
+			return {};
+
+		std::string result;
+		result.reserve(id.size() + id.size() / 4);
+
+		for (size_t i = 0; i < id.size(); ++i) {
+			char c = id[i];
+
+			// Replace underscores and dashes with spaces
+			if (c == '_' || c == '-') {
+				if (!result.empty() && result.back() != ' ')
+					result += ' ';
+				continue;
+			}
+
+			if (i > 0 && std::isupper(static_cast<unsigned char>(c))) {
+				char prev = id[i - 1];
+				bool prevUpper = std::isupper(static_cast<unsigned char>(prev));
+				bool prevSep = (prev == '_' || prev == '-');
+
+				if (!prevUpper && !prevSep) {
+					// lowercase->UPPER: "ambientM" -> "ambient M"
+					if (!result.empty() && result.back() != ' ')
+						result += ' ';
+				} else if (prevUpper && i + 1 < id.size() &&
+				           std::islower(static_cast<unsigned char>(id[i + 1]))) {
+					// End of acronym run: "XMLParser" at 'P' -> "XML Parser"
+					if (!result.empty() && result.back() != ' ')
+						result += ' ';
+				}
+			}
+
+			// Capitalize after space or at start
+			if (result.empty() || result.back() == ' ')
+				result += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+			else
+				result += c;
+		}
+
+		return result;
+	}
 }  // namespace Util

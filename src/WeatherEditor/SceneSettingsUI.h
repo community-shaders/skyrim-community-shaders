@@ -95,20 +95,60 @@ namespace SceneSettingsUI
 		bool deleted = false;
 	};
 
+	/// Flyout state for the shared table renderer (one set per table instance).
+	struct TableFlyoutState
+	{
+		Util::FlyoutState cell;  // Per-value-cell flyout
+		Util::FlyoutState row;   // Row-level flyout (setting name)
+		Util::FlyoutState col;   // Column-header flyout (period names)
+	};
+
+	/// Callbacks for the shared table renderer, abstracting manager operations.
+	struct TableCallbacks
+	{
+		std::function<void(size_t idx, float width, bool readOnly)> drawEditor;
+		std::function<void(const std::vector<size_t>& indices, float width, bool readOnly)> drawEditorMulti;  // optional: for collapsed single-column mode
+		std::function<void(size_t idx)> togglePause;
+		std::function<void(size_t idx)> revert;
+		std::function<void(size_t idx)> remove;
+	};
+
 	/// Draw flyout controls (toggle + revert + delete). Works for both single and group.
 	FlyoutResult DrawFlyoutControls(bool paused, bool isGroup = false);
 
 	void DrawValueEditor(SceneType type, size_t index, float inputWidth, bool readOnly = false);
 	void DrawWeatherValueEditor(RE::FormID weatherId, size_t index, float inputWidth, bool readOnly = false);
 	void DrawWeatherValueEditor(RE::FormID weatherId, const std::vector<size_t>& indices, float inputWidth, bool readOnly = false);
-	bool DrawSettingEntry(SceneType type, size_t index, PopupState& popups);
 	void DrawPopups(SceneType type, PopupState& popups);
 
-	void DrawSectionHeader(const char* label, const ImVec4& color, const char* idSuffix,
+	bool DrawSectionHeader(const char* label, const char* idSuffix,
 		bool allPaused, std::function<void()> onTogglePause, std::function<void()> onDeleteAll);
 
-	void DrawEntrySections(SceneType type, PopupState& popups);
+	/// Draw a source table with feature-grouped rows and per-cell value editing.
+	/// @param numValueColumns 1 for single-value (Interior), kPeriodCount for TOD.
+	/// When numValueColumns == 1, row and column flyouts are suppressed to avoid
+	/// dual-functionality with the section header's Pause All / Delete All buttons.
+	void DrawSourceTable(
+		const SourceGroup& group,
+		const std::vector<SceneSettingsManager::SettingEntry>& entries,
+		const char* tableId,
+		EntrySource source,
+		int numValueColumns,
+		PopupState* popups,
+		TableFlyoutState& flyout,
+		const TableCallbacks& cb);
 
 	bool DrawCategoryPanel(const char* category, const std::string& selected,
 		void (*drawFn)());
+
+	// --- Consolidated Panel Functions ---
+
+	/// Draw the full Interior Only settings panel.
+	void DrawInteriorOnlyPanel();
+
+	/// Draw the full Time of Day settings panel.
+	void DrawTimeOfDayPanel();
+
+	/// Draw the per-weather scene settings panel.
+	void DrawWeatherScenePanel(RE::FormID weatherId);
 }

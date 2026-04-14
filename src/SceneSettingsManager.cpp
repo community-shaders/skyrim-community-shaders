@@ -74,7 +74,8 @@ std::string SceneSettingsManager::FormIdToSpid(RE::FormID formId)
 	auto* form = RE::TESForm::LookupByID(formId);
 	if (!form)
 		return std::format("0x{:X}", formId);
-	auto* file = form->GetFile();
+	// Use GetFile(0) to get the originating plugin — consistent with GetLocalFormID()
+	auto* file = form->GetFile(0);
 	if (!file)
 		return std::format("0x{:X}", form->GetLocalFormID());
 	return FormatSpid(form->GetLocalFormID(), std::string(file->GetFilename()));
@@ -83,13 +84,46 @@ std::string SceneSettingsManager::FormIdToSpid(RE::FormID formId)
 RE::FormID SceneSettingsManager::SpidToFormId(const std::string& spid)
 {
 	auto components = ParseSpid(spid);
-	if (components.pluginName.empty() || components.localFormId == 0)
+	if (components.pluginName.empty() || components.localFormId == 0) {
+		logger::warn("[SceneSettings] SpidToFormId: bad parse for '{}' — plugin='{}' localId=0x{:X}", spid, components.pluginName, components.localFormId);
 		return 0;
+	}
 	auto* handler = RE::TESDataHandler::GetSingleton();
-	if (!handler)
+	if (!handler) {
+		logger::warn("[SceneSettings] SpidToFormId: TESDataHandler is null for '{}'", spid);
 		return 0;
+	}
+
+	// Primary path: use CommonLibSSE-NG's LookupForm
 	auto* form = handler->LookupForm(components.localFormId, components.pluginName);
-	return form ? form->GetFormID() : 0;
+	if (form)
+		return form->GetFormID();
+
+	// Fallback: manually reconstruct the full FormID from compile indices
+	// This handles edge cases where LookupForm's internal reconstruction differs
+	auto* file = handler->LookupModByName(components.pluginName);
+	if (!file) {
+		logger::warn("[SceneSettings] SpidToFormId: plugin '{}' not found in load order", components.pluginName);
+		return 0;
+	}
+
+	if (file->compileIndex == 0xFF) {
+		logger::warn("[SceneSettings] SpidToFormId: plugin '{}' has invalid compile index 0xFF", components.pluginName);
+		return 0;
+	}
+
+	RE::FormID reconstructed = (static_cast<RE::FormID>(file->compileIndex) << 24) +
+	                           (static_cast<RE::FormID>(file->smallFileCompileIndex) << 12) +
+	                           components.localFormId;
+	auto* directForm = RE::TESForm::LookupByID(reconstructed);
+	if (directForm) {
+		logger::info("[SceneSettings] SpidToFormId: '{}' resolved via direct reconstruction to 0x{:08X}", spid, reconstructed);
+		return reconstructed;
+	}
+
+	logger::warn("[SceneSettings] SpidToFormId: plugin '{}' index=0x{:X} smallIndex=0x{:X} localId=0x{:X} reconstructed=0x{:08X} — form not found",
+		components.pluginName, file->compileIndex, file->smallFileCompileIndex, components.localFormId, reconstructed);
+	return 0;
 }
 
 std::string SceneSettingsManager::GetWeatherDisplayName(RE::FormID weatherId)
@@ -323,6 +357,20 @@ SceneSettingsManager::SettingType SceneSettingsManager::DetectSettingType(const 
 	return SettingType::Unknown;
 }
 
+// JSON stores 1.0f as integer 1; treat any number as usable for float interpolation
+static bool IsNumericValue(const json& value)
+{
+	return value.is_number();
+}
+
+// Normalize an integer JSON value to float (e.g. json(1) -> json(1.0f))
+static json NormalizeToFloat(const json& value)
+{
+	if (value.is_number_integer())
+		return json(value.get<float>());
+	return value;
+}
+
 std::vector<std::string> SceneSettingsManager::GetTransitionableSettingKeys(const std::string& featureShortName)
 {
 	auto* feature = Feature::FindFeatureByShortName(featureShortName);
@@ -336,7 +384,7 @@ std::vector<std::string> SceneSettingsManager::GetTransitionableSettingKeys(cons
 
 	std::vector<std::string> keys;
 	for (auto& [key, val] : settings.items()) {
-		if (DetectSettingType(val) == SettingType::Float)
+		if (IsNumericValue(val))
 			keys.push_back(key);
 	}
 	std::sort(keys.begin(), keys.end());
@@ -419,9 +467,9 @@ void SceneSettingsManager::AddSetting(SceneType type, const std::string& feature
 			return;
 		}
 
-		// TOD only supports float settings (smooth interpolation)
-		if (DetectSettingType(value) != SettingType::Float) {
-			logger::warn("[SceneSettings] Rejecting non-float TOD setting: {}.{}", featureShortName, settingKey);
+		// TOD only supports numeric settings (smooth interpolation)
+		if (!IsNumericValue(value)) {
+			logger::warn("[SceneSettings] Rejecting non-numeric TOD setting: {}.{}", featureShortName, settingKey);
 			return;
 		}
 
@@ -440,8 +488,8 @@ void SceneSettingsManager::AddSetting(SceneType type, const std::string& feature
 	SettingEntry entry;
 	entry.featureShortName = featureShortName;
 	entry.settingKey = settingKey;
-	entry.value = value;
-	entry.originalValue = value;
+	entry.value = (type == SceneType::TimeOfDay) ? NormalizeToFloat(value) : value;
+	entry.originalValue = entry.value;
 	entry.source = EntrySource::User;
 	entry.period = period;
 	vec.push_back(std::move(entry));
@@ -1013,7 +1061,7 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 			if (!baseline)
 				continue;
 
-			if (DetectSettingType(*baseline) == SettingType::Float) {
+			if (IsNumericValue(*baseline)) {
 				if (!baseline->is_number()) {
 					logger::warn("SceneSettingsManager: TOD baseline for '{}' key '{}' is not numeric — skipping", shortName, key);
 					continue;
@@ -1118,62 +1166,44 @@ json SceneSettingsManager::SnapNonFloatToDominant(const json& baseline, const st
 
 // --- Unified Persistence ---
 
+static json EntryToJson(const SceneSettingsManager::SettingEntry& entry)
+{
+	json item;
+	item["feature"] = entry.featureShortName;
+	item["setting"] = entry.settingKey;
+	item["value"] = entry.value;
+	item["originalValue"] = entry.originalValue;
+	item["paused"] = entry.paused;
+	if (entry.period != SceneSettingsManager::TimeOfDayPeriod::Count)
+		item["period"] = SceneSettingsManager::GetPeriodName(entry.period);
+	return item;
+}
+
+static json UserEntriesToArray(const std::vector<SceneSettingsManager::SettingEntry>& entries)
+{
+	json arr = json::array();
+	for (const auto& entry : entries)
+		if (entry.source == SceneSettingsManager::EntrySource::User)
+			arr.push_back(EntryToJson(entry));
+	return arr;
+}
+
 void SceneSettingsManager::SaveAllUserSettings()
 {
 	auto path = GetUserSettingsFilePath();
 	Util::FileHelpers::EnsureDirectoryExists(path.parent_path());
 
 	json data;
-
-	// Interior Only entries
-	{
-		json arr = json::array();
-		for (const auto& entry : GetEntries(SceneType::InteriorOnly)) {
-			if (entry.source != EntrySource::User)
-				continue;
-			json item;
-			item["feature"] = entry.featureShortName;
-			item["setting"] = entry.settingKey;
-			item["value"] = entry.value;
-			item["originalValue"] = entry.originalValue;
-			item["paused"] = entry.paused;
-			arr.push_back(std::move(item));
-		}
-		data["interiorOnly"] = std::move(arr);
-	}
-
-	// Time of Day entries
-	{
-		json arr = json::array();
-		for (const auto& entry : GetEntries(SceneType::TimeOfDay)) {
-			if (entry.source != EntrySource::User)
-				continue;
-			json item;
-			item["feature"] = entry.featureShortName;
-			item["setting"] = entry.settingKey;
-			item["value"] = entry.value;
-			item["originalValue"] = entry.originalValue;
-			item["paused"] = entry.paused;
-			if (entry.period != TimeOfDayPeriod::Count)
-				item["period"] = GetPeriodName(entry.period);
-			arr.push_back(std::move(item));
-		}
-		data["timeOfDay"] = std::move(arr);
-	}
+	data["interiorOnly"] = UserEntriesToArray(GetEntries(SceneType::InteriorOnly));
+	data["timeOfDay"] = UserEntriesToArray(GetEntries(SceneType::TimeOfDay));
 
 	// Weather entries (keyed by SPID)
 	{
 		json weatherObj = json::object();
 		for (const auto& [weatherId, config] : weatherSceneConfigs) {
-			// Check if there are any user entries for this weather
-			bool hasUserEntries = false;
-			for (const auto& e : config.entries)
-				if (e.source == EntrySource::User) {
-					hasUserEntries = true;
-					break;
-				}
+			bool hasUserEntries = std::any_of(config.entries.begin(), config.entries.end(),
+				[](const SettingEntry& e) { return e.source == EntrySource::User; });
 
-			// Also check if there's a non-default showTimeOfDay preference
 			auto showIt = weatherShowTimeOfDay_.find(weatherId);
 			bool hasShowPref = showIt != weatherShowTimeOfDay_.end() && showIt->second;
 
@@ -1182,25 +1212,9 @@ void SceneSettingsManager::SaveAllUserSettings()
 
 			auto spid = FormIdToSpid(weatherId);
 			json weatherEntry = json::object();
-
 			if (hasShowPref)
 				weatherEntry["showTimeOfDay"] = true;
-
-			json entriesArr = json::array();
-			for (const auto& entry : config.entries) {
-				if (entry.source != EntrySource::User)
-					continue;
-				json item;
-				item["feature"] = entry.featureShortName;
-				item["setting"] = entry.settingKey;
-				item["value"] = entry.value;
-				item["originalValue"] = entry.originalValue;
-				item["paused"] = entry.paused;
-				if (entry.period != TimeOfDayPeriod::Count)
-					item["period"] = GetPeriodName(entry.period);
-				entriesArr.push_back(std::move(item));
-			}
-			weatherEntry["entries"] = std::move(entriesArr);
+			weatherEntry["entries"] = UserEntriesToArray(config.entries);
 			weatherObj[spid] = std::move(weatherEntry);
 		}
 		data["weather"] = std::move(weatherObj);
@@ -1225,10 +1239,14 @@ static bool LoadEntryFromJson(const nlohmann::json& item, SceneSettingsManager::
 {
 	using SSM = SceneSettingsManager;
 
-	if (!item.contains("feature") || !item.contains("setting") || !item.contains("value"))
+	if (!item.contains("feature") || !item.contains("setting") || !item.contains("value")) {
+		logger::warn("[SceneSettings] {} entry missing feature/setting/value fields", typeName);
 		return false;
-	if (!item["feature"].is_string() || !item["setting"].is_string())
+	}
+	if (!item["feature"].is_string() || !item["setting"].is_string()) {
+		logger::warn("[SceneSettings] {} entry feature/setting not strings", typeName);
 		return false;
+	}
 
 	entry.featureShortName = item["feature"].get<std::string>();
 	entry.settingKey = item["setting"].get<std::string>();
@@ -1244,17 +1262,28 @@ static bool LoadEntryFromJson(const nlohmann::json& item, SceneSettingsManager::
 		}
 		entry.period = SSM::GetPeriodFromName(item["period"].get<std::string>());
 		if (entry.period == SSM::TimeOfDayPeriod::Count) {
-			logger::warn("[SceneSettings] {} entry {}.{} has invalid period — skipping", typeName, entry.featureShortName, entry.settingKey);
+			logger::warn("[SceneSettings] {} entry {}.{} has invalid period '{}' — skipping", typeName, entry.featureShortName, entry.settingKey, item["period"].get<std::string>());
 			return false;
 		}
-		if (SSM::DetectSettingType(entry.value) != SSM::SettingType::Float)
+		if (!entry.value.is_number()) {
+			logger::warn("[SceneSettings] {} entry {}.{} value is not a number (type={}) — skipping", typeName, entry.featureShortName, entry.settingKey, entry.value.type_name());
 			return false;
-		if (!std::isfinite(entry.value.get<float>()))
+		}
+		// Normalize integer-valued floats from JSON roundtrip (e.g. 1 -> 1.0)
+		if (entry.value.is_number_integer())
+			entry.value = json(entry.value.get<float>());
+		if (entry.originalValue.is_number_integer())
+			entry.originalValue = json(entry.originalValue.get<float>());
+		if (!std::isfinite(entry.value.get<float>())) {
+			logger::warn("[SceneSettings] {} entry {}.{} has non-finite value — skipping", typeName, entry.featureShortName, entry.settingKey);
 			return false;
+		}
 	}
 
-	if (!Feature::FindFeatureByShortName(entry.featureShortName))
+	if (!Feature::FindFeatureByShortName(entry.featureShortName)) {
+		logger::warn("[SceneSettings] {} entry {}.{} — feature '{}' not found/loaded", typeName, entry.featureShortName, entry.settingKey, entry.featureShortName);
 		return false;
+	}
 
 	return true;
 }
@@ -1262,9 +1291,12 @@ static bool LoadEntryFromJson(const nlohmann::json& item, SceneSettingsManager::
 void SceneSettingsManager::LoadAllUserSettings()
 {
 	auto path = GetUserSettingsFilePath();
+	logger::info("[SceneSettings] Loading user settings from: {}", path.string());
 	std::error_code ec;
-	if (!std::filesystem::exists(path, ec))
+	if (!std::filesystem::exists(path, ec)) {
+		logger::info("[SceneSettings] SceneManager.json not found at {}", path.string());
 		return;
+	}
 
 	try {
 		std::ifstream file(path);
@@ -1307,14 +1339,39 @@ void SceneSettingsManager::LoadAllUserSettings()
 				logger::info("[SceneSettings] Loaded {} TimeOfDay user settings", loaded);
 		}
 
+		// Weather is loaded separately in LoadWeatherUserSettings() after kDataLoaded
+
+		logger::info("[SceneSettings] Loaded SceneManager.json (non-weather)");
+	} catch (const std::exception& e) {
+		logger::error("[SceneSettings] Failed to load SceneManager.json: {}", e.what());
+	}
+}
+
+void SceneSettingsManager::LoadWeatherUserSettings()
+{
+	auto path = GetUserSettingsFilePath();
+	std::error_code ec;
+	if (!std::filesystem::exists(path, ec))
+		return;
+
+	try {
+		std::ifstream file(path);
+		if (!file.is_open())
+			return;
+
+		json data = json::parse(file);
+
 		// Weather
 		if (data.contains("weather") && data["weather"].is_object()) {
+			logger::info("[SceneSettings] Weather section found with {} entries", data["weather"].size());
 			for (auto& [spidKey, weatherData] : data["weather"].items()) {
+				logger::info("[SceneSettings] Processing weather SPID '{}'", spidKey);
 				RE::FormID weatherId = SpidToFormId(spidKey);
 				if (weatherId == 0) {
 					logger::warn("[SceneSettings] Weather SPID '{}' could not be resolved — skipping", spidKey);
 					continue;
 				}
+				logger::info("[SceneSettings] Resolved SPID '{}' to FormID 0x{:X}", spidKey, weatherId);
 
 				// Load showTimeOfDay preference
 				if (weatherData.contains("showTimeOfDay") && weatherData["showTimeOfDay"].is_boolean())
@@ -1339,9 +1396,9 @@ void SceneSettingsManager::LoadAllUserSettings()
 			}
 		}
 
-		logger::info("[SceneSettings] Loaded SceneManager.json");
+		logger::info("[SceneSettings] Loaded weather user settings");
 	} catch (const std::exception& e) {
-		logger::error("[SceneSettings] Failed to load SceneManager.json: {}", e.what());
+		logger::error("[SceneSettings] Failed to load weather user settings: {}", e.what());
 	}
 }
 
@@ -1361,6 +1418,85 @@ void SceneSettingsManager::DiscoverOverwrites(SceneType type)
 	DiscoverOverwritesInDir(type, GetOverwritesPath(type));
 }
 
+/// Parse a single overwrite JSON file into a SettingEntry.
+/// Returns true on success; fills outEntry with the parsed data.
+/// When requireNumeric is true, non-numeric or non-finite values are rejected
+/// and the value is normalized to float.
+static bool ParseOverwriteFile(const std::filesystem::path& filePath,
+	SceneSettingsManager::SceneType allowedType, bool requireNumeric,
+	SceneSettingsManager::SettingEntry& outEntry)
+{
+	using SSM = SceneSettingsManager;
+
+	auto filename = filePath.filename().string();
+
+	if (std::filesystem::file_size(filePath) > 1024 * 1024)
+		return false;
+
+	std::ifstream file(filePath);
+	if (!file.is_open())
+		return false;
+
+	json data = json::parse(file);
+
+	// Resolve feature name: explicit _feature field, or infer from filename stem
+	std::string featureShortName = data.value("_feature", "");
+	if (featureShortName.empty()) {
+		auto stem = filePath.stem().string();
+		auto lastUnderscore = stem.rfind('_');
+		if (lastUnderscore != std::string::npos) {
+			auto candidate = stem.substr(lastUnderscore + 1);
+			if (Feature::FindFeatureByShortName(candidate))
+				featureShortName = candidate;
+		}
+	}
+
+	if (featureShortName.empty() || !Feature::FindFeatureByShortName(featureShortName))
+		return false;
+
+	if (!SSM::IsFeatureAllowedForType(allowedType, featureShortName))
+		return false;
+
+	auto* featurePtr = Feature::FindFeatureByShortName(featureShortName);
+
+	// Exactly one non-metadata setting per file
+	int settingCount = 0;
+	std::string settingKey;
+	json settingValue;
+	for (auto& [key, val] : data.items()) {
+		if (!key.starts_with("_")) {
+			settingCount++;
+			if (settingCount == 1) {
+				settingKey = key;
+				settingValue = val;
+			}
+		}
+	}
+	if (settingCount != 1)
+		return false;
+
+	// Validate key exists in feature
+	{
+		json featureSettings;
+		featurePtr->SaveSettings(featureSettings);
+		if (!featureSettings.is_object() || !featureSettings.contains(settingKey))
+			return false;
+	}
+
+	if (requireNumeric) {
+		if (!IsNumericValue(settingValue) || !std::isfinite(settingValue.get<float>()))
+			return false;
+	}
+
+	outEntry.featureShortName = featureShortName;
+	outEntry.settingKey = settingKey;
+	outEntry.value = requireNumeric ? NormalizeToFloat(settingValue) : settingValue;
+	outEntry.originalValue = outEntry.value;
+	outEntry.source = SSM::EntrySource::Overwrite;
+	outEntry.sourceFilename = filename;
+	return true;
+}
+
 void SceneSettingsManager::DiscoverOverwritesInDir(SceneType type, const std::filesystem::path& dir, TimeOfDayPeriod period)
 {
 	auto typeName = GetSceneTypeName(type);
@@ -1371,6 +1507,7 @@ void SceneSettingsManager::DiscoverOverwritesInDir(SceneType type, const std::fi
 
 	logger::info("[SceneSettings] Discovering {} overwrites in: {}", typeName, dir.string());
 
+	bool requireNumeric = (type == SceneType::TimeOfDay);
 	auto& vec = GetEntriesMut(type);
 	int filesFound = 0, overwritesLoaded = 0;
 
@@ -1382,105 +1519,18 @@ void SceneSettingsManager::DiscoverOverwritesInDir(SceneType type, const std::fi
 		if (!dirEntry.is_regular_file() || dirEntry.path().extension() != ".json")
 			continue;
 
-		auto filename = dirEntry.path().filename().string();
 		filesFound++;
-
 		try {
-			if (dirEntry.file_size() > MAX_OVERWRITE_FILE_SIZE) {
-				logger::warn("[SceneSettings] Skipping overwrite '{}': file too large", filename);
-				continue;
-			}
-
-			std::ifstream file(dirEntry.path());
-			if (!file.is_open()) {
-				logger::warn("[SceneSettings] Skipping overwrite '{}': could not open file", filename);
-				continue;
-			}
-
-			json data = json::parse(file);
-
-			// Resolve feature name: explicit _feature field, or infer from filename
-			std::string featureShortName = data.value("_feature", "");
-			if (featureShortName.empty()) {
-				auto stem = dirEntry.path().stem().string();
-				auto lastUnderscore = stem.rfind('_');
-				if (lastUnderscore != std::string::npos) {
-					auto candidate = stem.substr(lastUnderscore + 1);
-					if (Feature::FindFeatureByShortName(candidate))
-						featureShortName = candidate;
-				}
-			}
-
-			if (featureShortName.empty() || !Feature::FindFeatureByShortName(featureShortName)) {
-				logger::warn("[SceneSettings] Skipping overwrite '{}': feature not resolved", filename);
-				continue;
-			}
-
-			if (!IsFeatureAllowedForType(type, featureShortName)) {
-				logger::warn("[SceneSettings] Skipping overwrite '{}': feature '{}' not allowed for {} scene type", filename, featureShortName, typeName);
-				continue;
-			}
-
-			// Validate that the feature actually exposes the setting key
-			auto* featurePtr = Feature::FindFeatureByShortName(featureShortName);
-
-			// Exactly one non-metadata setting per file
-			int settingCount = 0;
-			std::string settingKey;
-			json settingValue;
-			for (auto& [key, val] : data.items()) {
-				if (!key.starts_with("_")) {
-					settingCount++;
-					if (settingCount == 1) {
-						settingKey = key;
-						settingValue = val;
-					}
-				}
-			}
-
-			if (settingCount != 1) {
-				logger::warn("[SceneSettings] Skipping overwrite '{}': expected 1 setting, found {}", filename, settingCount);
-				continue;
-			}
-
-			// Validate that the setting key exists in the feature's actual settings
-			{
-				json featureSettings;
-				featurePtr->SaveSettings(featureSettings);
-				if (!featureSettings.is_object() || !featureSettings.contains(settingKey)) {
-					logger::warn("[SceneSettings] Skipping overwrite '{}': setting '{}' not found in feature '{}'", filename, settingKey, featureShortName);
-					continue;
-				}
-			}
-
-			// TOD only supports float settings (smooth interpolation)
-			if (type == SceneType::TimeOfDay && DetectSettingType(settingValue) != SettingType::Float) {
-				logger::warn("[SceneSettings] Skipping overwrite '{}': non-float setting '{}' not allowed in Time of Day", filename, settingKey);
-				continue;
-			}
-			if (type == SceneType::TimeOfDay && !std::isfinite(settingValue.get<float>())) {
-				logger::warn("[SceneSettings] Skipping overwrite '{}': non-finite value for setting '{}'", filename, settingKey);
-				continue;
-			}
-
-			// Duplicate check
-			if (HasDuplicateEntry(type, featureShortName, settingKey, EntrySource::Overwrite, period))
-				continue;
-
 			SettingEntry entry;
-			entry.featureShortName = featureShortName;
-			entry.settingKey = settingKey;
-			entry.value = settingValue;
-			entry.originalValue = settingValue;
-			entry.source = EntrySource::Overwrite;
-			entry.sourceFilename = filename;
+			if (!ParseOverwriteFile(dirEntry.path(), type, requireNumeric, entry))
+				continue;
+			if (HasDuplicateEntry(type, entry.featureShortName, entry.settingKey, EntrySource::Overwrite, period))
+				continue;
 			entry.period = period;
 			vec.push_back(std::move(entry));
-
 			overwritesLoaded++;
-			logger::info("[SceneSettings] Loaded {} overwrite: {} -> {}.{}", typeName, filename, featureShortName, settingKey);
 		} catch (const std::exception& e) {
-			logger::error("[SceneSettings] Failed to load {} overwrite '{}': {}", typeName, filename, e.what());
+			logger::error("[SceneSettings] Failed to load {} overwrite '{}': {}", typeName, dirEntry.path().filename().string(), e.what());
 		}
 	}
 
@@ -1492,8 +1542,13 @@ void SceneSettingsManager::LoadAll()
 {
 	DiscoverOverwrites(SceneType::InteriorOnly);
 	DiscoverOverwrites(SceneType::TimeOfDay);
-	DiscoverWeatherOverwrites();
 	LoadAllUserSettings();
+}
+
+void SceneSettingsManager::LoadWeatherData()
+{
+	DiscoverWeatherOverwrites();
+	LoadWeatherUserSettings();
 }
 
 // --- Per-Weather Scene Settings ---
@@ -1523,7 +1578,7 @@ void SceneSettingsManager::AddWeatherSetting(RE::FormID weatherId, const std::st
 	// All weather entries are per-period
 	if (period == TimeOfDayPeriod::Count || static_cast<int>(period) < 0 || static_cast<int>(period) >= kPeriodCount)
 		return;
-	if (DetectSettingType(value) != SettingType::Float)
+	if (!IsNumericValue(value))
 		return;
 	if (!std::isfinite(value.get<float>()))
 		return;
@@ -1535,8 +1590,8 @@ void SceneSettingsManager::AddWeatherSetting(RE::FormID weatherId, const std::st
 	SettingEntry entry;
 	entry.featureShortName = featureShortName;
 	entry.settingKey = settingKey;
-	entry.value = value;
-	entry.originalValue = value;
+	entry.value = NormalizeToFloat(value);
+	entry.originalValue = NormalizeToFloat(value);
 	entry.source = EntrySource::User;
 	entry.period = period;
 	config.entries.push_back(std::move(entry));
@@ -1566,7 +1621,7 @@ void SceneSettingsManager::UpdateWeatherEntryValue(RE::FormID weatherId, size_t 
 	auto it = weatherSceneConfigs.find(weatherId);
 	if (it == weatherSceneConfigs.end() || index >= it->second.entries.size())
 		return;
-	it->second.entries[index].value = newValue;
+	it->second.entries[index].value = NormalizeToFloat(newValue);
 	if (!deferSave)
 		SaveAllUserSettings();
 }
@@ -1655,84 +1710,16 @@ void SceneSettingsManager::DiscoverWeatherOverwritesForSpid(RE::FormID weatherId
 		for (const auto& fileEntry : std::filesystem::directory_iterator(periodDir, ec)) {
 			if (!fileEntry.is_regular_file() || fileEntry.path().extension() != ".json")
 				continue;
-
-			auto filename = fileEntry.path().filename().string();
 			try {
-				if (fileEntry.file_size() > MAX_OVERWRITE_FILE_SIZE)
-					continue;
-
-				std::ifstream file(fileEntry.path());
-				if (!file.is_open())
-					continue;
-
-				json data = json::parse(file);
-
-				std::string featureShortName = data.value("_feature", "");
-				if (featureShortName.empty()) {
-					auto stem = fileEntry.path().stem().string();
-					auto lastUnderscore = stem.rfind('_');
-					if (lastUnderscore != std::string::npos) {
-						auto candidate = stem.substr(lastUnderscore + 1);
-						if (Feature::FindFeatureByShortName(candidate))
-							featureShortName = candidate;
-					}
-				}
-
-				if (featureShortName.empty() || !Feature::FindFeatureByShortName(featureShortName))
-					continue;
-
-				// Weather TOD uses exterior whitelist
-				if (!IsFeatureAllowedForType(SceneType::TimeOfDay, featureShortName))
-					continue;
-
-				auto* featurePtr = Feature::FindFeatureByShortName(featureShortName);
-
-				int settingCount = 0;
-				std::string settingKey;
-				json settingValue;
-				for (auto& [key, val] : data.items()) {
-					if (!key.starts_with("_")) {
-						settingCount++;
-						if (settingCount == 1) {
-							settingKey = key;
-							settingValue = val;
-						}
-					}
-				}
-
-				if (settingCount != 1)
-					continue;
-
-				// Validate setting key exists in feature
-				{
-					json featureSettings;
-					featurePtr->SaveSettings(featureSettings);
-					if (!featureSettings.is_object() || !featureSettings.contains(settingKey)) {
-						logger::warn("[SceneSettings] Skipping weather overwrite '{}': setting '{}' not found in feature '{}'", filename, settingKey, featureShortName);
-						continue;
-					}
-				}
-
-				if (DetectSettingType(settingValue) != SettingType::Float)
-					continue;
-				if (!std::isfinite(settingValue.get<float>()))
-					continue;
-				if (HasWeatherEntryForPeriod(weatherId, featureShortName, settingKey, period))
-					continue;
-
 				SettingEntry entry;
-				entry.featureShortName = featureShortName;
-				entry.settingKey = settingKey;
-				entry.value = settingValue;
-				entry.originalValue = settingValue;
-				entry.source = EntrySource::Overwrite;
-				entry.sourceFilename = filename;
+				if (!ParseOverwriteFile(fileEntry.path(), SceneType::TimeOfDay, true, entry))
+					continue;
+				if (HasWeatherEntryForPeriod(weatherId, entry.featureShortName, entry.settingKey, period))
+					continue;
 				entry.period = period;
 				config.entries.push_back(std::move(entry));
-
-				logger::info("[SceneSettings] Weather overwrite: {} -> {}.{} [{}]", filename, featureShortName, settingKey, GetPeriodName(period));
 			} catch (const std::exception& e) {
-				logger::error("[SceneSettings] Failed to load weather overwrite '{}': {}", filename, e.what());
+				logger::error("[SceneSettings] Failed to load weather overwrite '{}': {}", fileEntry.path().filename().string(), e.what());
 			}
 		}
 	}
@@ -1743,89 +1730,20 @@ void SceneSettingsManager::DiscoverWeatherOverwritesForSpid(RE::FormID weatherId
 		for (const auto& fileEntry : std::filesystem::directory_iterator(weatherDir, ec)) {
 			if (!fileEntry.is_regular_file() || fileEntry.path().extension() != ".json")
 				continue;
-
-			auto filename = fileEntry.path().filename().string();
 			try {
-				if (fileEntry.file_size() > MAX_OVERWRITE_FILE_SIZE)
+				SettingEntry parsed;
+				if (!ParseOverwriteFile(fileEntry.path(), SceneType::TimeOfDay, true, parsed))
 					continue;
-
-				std::ifstream file(fileEntry.path());
-				if (!file.is_open())
-					continue;
-
-				json data = json::parse(file);
-
-				std::string featureShortName = data.value("_feature", "");
-				if (featureShortName.empty()) {
-					auto stem = fileEntry.path().stem().string();
-					auto lastUnderscore = stem.rfind('_');
-					if (lastUnderscore != std::string::npos) {
-						auto candidate = stem.substr(lastUnderscore + 1);
-						if (Feature::FindFeatureByShortName(candidate))
-							featureShortName = candidate;
-					}
-				}
-
-				if (featureShortName.empty() || !Feature::FindFeatureByShortName(featureShortName))
-					continue;
-
-				// Weather flat uses exterior whitelist
-				if (!IsFeatureAllowedForType(SceneType::TimeOfDay, featureShortName))
-					continue;
-
-				auto* featurePtr = Feature::FindFeatureByShortName(featureShortName);
-
-				int settingCount = 0;
-				std::string settingKey;
-				json settingValue;
-				for (auto& [key, val] : data.items()) {
-					if (!key.starts_with("_")) {
-						settingCount++;
-						if (settingCount == 1) {
-							settingKey = key;
-							settingValue = val;
-						}
-					}
-				}
-
-				if (settingCount != 1)
-					continue;
-
-				// Validate setting key exists in feature
-				{
-					json featureSettings;
-					featurePtr->SaveSettings(featureSettings);
-					if (!featureSettings.is_object() || !featureSettings.contains(settingKey)) {
-						logger::warn("[SceneSettings] Skipping weather overwrite '{}': setting '{}' not found in feature '{}'", filename, settingKey, featureShortName);
-						continue;
-					}
-				}
-
-				if (DetectSettingType(settingValue) != SettingType::Float)
-					continue;
-				if (!std::isfinite(settingValue.get<float>()))
-					continue;
-
-				// Copy to all periods
 				for (int p = 0; p < kPeriodCount; ++p) {
 					auto period = static_cast<TimeOfDayPeriod>(p);
-					if (HasWeatherEntryForPeriod(weatherId, featureShortName, settingKey, period))
+					if (HasWeatherEntryForPeriod(weatherId, parsed.featureShortName, parsed.settingKey, period))
 						continue;
-
-					SettingEntry entry;
-					entry.featureShortName = featureShortName;
-					entry.settingKey = settingKey;
-					entry.value = settingValue;
-					entry.originalValue = settingValue;
-					entry.source = EntrySource::Overwrite;
-					entry.sourceFilename = filename;
+					SettingEntry entry = parsed;
 					entry.period = period;
 					config.entries.push_back(std::move(entry));
 				}
-
-				logger::info("[SceneSettings] Weather overwrite (all periods): {} -> {}.{}", filename, featureShortName, settingKey);
 			} catch (const std::exception& e) {
-				logger::error("[SceneSettings] Failed to load weather overwrite '{}': {}", filename, e.what());
+				logger::error("[SceneSettings] Failed to load weather overwrite '{}': {}", fileEntry.path().filename().string(), e.what());
 			}
 		}
 	}
@@ -1922,20 +1840,17 @@ bool SceneSettingsManager::ComputeWeatherBlendedFloat(const std::string& shortNa
 
 	if (hasCurrent && hasLast) {
 		outValue = lastVal + (currentVal - lastVal) * weatherLerp;
-	} else if (hasCurrent) {
-		// Blend from baseline to current weather value as lerp approaches 1
-		auto baseIt = savedWeatherBaseline.find(shortName);
-		float baseVal = 0.0f;
-		if (baseIt != savedWeatherBaseline.end() && baseIt->second.contains(key) && baseIt->second[key].is_number())
-			baseVal = baseIt->second[key].get<float>();
-		outValue = baseVal + (currentVal - baseVal) * weatherLerp;
 	} else {
-		// Blend from last weather value back to baseline as lerp approaches 1
-		auto baseIt = savedWeatherBaseline.find(shortName);
+		// One weather missing config — lerp between baseline and the known weather value
 		float baseVal = 0.0f;
+		auto baseIt = savedWeatherBaseline.find(shortName);
 		if (baseIt != savedWeatherBaseline.end() && baseIt->second.contains(key) && baseIt->second[key].is_number())
 			baseVal = baseIt->second[key].get<float>();
-		outValue = lastVal + (baseVal - lastVal) * weatherLerp;
+
+		if (hasCurrent)
+			outValue = baseVal + (currentVal - baseVal) * weatherLerp;
+		else
+			outValue = lastVal + (baseVal - lastVal) * weatherLerp;
 	}
 	return true;
 }

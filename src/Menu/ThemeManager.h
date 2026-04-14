@@ -196,12 +196,14 @@ public:
 		static constexpr float SCENE_VALUE_INPUT_EM = 3.4f;            // Width for float/int value inputs
 		static constexpr float SCENE_DELETE_BUTTON_EM = 1.0f;          // Width for delete (X) buttons
 		static constexpr float SCENE_VALUE_LABEL_OFFSET_RATIO = 0.4f;  // Value label right-alignment ratio
-		static constexpr float SCENE_TOD_PARAM_COL_EM = 3.6f;          // Parameter column width (TOD table)
+		static constexpr float SCENE_TOD_PARAM_COL_EM = 5.0f;          // Parameter column width (TOD table)
 		static constexpr float SCENE_TOD_PERIOD_COL_EM = 2.6f;         // Per-period column width (TOD table)
 		static constexpr float SCENE_TOD_INACTIVE_ALPHA = 0.5f;        // Alpha for inactive TOD periods
 		static constexpr float SCENE_TOD_ACTIVE_THRESHOLD = 0.01f;     // Factor threshold to consider a period active
 		static constexpr float SCENE_ENTRY_INDENT_EM = 0.4f;           // Indent for setting entries under feature headers
 		static constexpr float SCENE_TOD_FEATURE_TEXT_SCALE = 0.85f;   // Smaller text scale for feature names in TOD table
+		static constexpr float SCENE_SETTING_MAX_LINES = 2;            // Max visible lines for setting names in table rows
+		static constexpr float SCENE_SECTION_HEADER_TARGET_COLS = 4.3f; // Header extends as if this many value columns exist
 		static constexpr float SCENE_GROUP_SEPARATOR_ALPHA = 0.4f;     // Alpha for light separators between feature groups
 		static constexpr float SCENE_ADD_DIALOG_WIDTH_EM = 22.0f;      // Width of add-setting dialog
 		static constexpr float SCENE_ADD_DIALOG_HEIGHT_EM = 20.0f;     // Max height of add-setting dialog

@@ -2,13 +2,11 @@
 
 #include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
-#include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
 #include "SceneSettingsUI.h"
 #include "State.h"
-#include "TimeOfDayPanel.h"
 #include "Utils/UI.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "WeatherUtils.h"
@@ -201,7 +199,7 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::Spacing();
 
 			// List of categories
-			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only", "Time of Day" };
+			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Time of Day", "Interior Only" };
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
 				if (ImGui::Selectable(categories[i], m_selectedCategory == categories[i])) {
@@ -216,10 +214,10 @@ void EditorWindow::ShowObjectsWindow()
 		// Right column: Objects
 		ImGui::TableSetColumnIndex(1);
 
-		// Interior Only / Time of Day categories have their own panels
+		// Time of Day / Interior Only categories have their own panels
 		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Borders, kStickyHeaderFlags)) {
-			if (SceneSettingsUI::DrawCategoryPanel("Interior Only", m_selectedCategory, InteriorOnlyPanel::Draw) ||
-				SceneSettingsUI::DrawCategoryPanel("Time of Day", m_selectedCategory, TimeOfDayPanel::Draw))
+			if (SceneSettingsUI::DrawCategoryPanel("Time of Day", m_selectedCategory, SceneSettingsUI::DrawTimeOfDayPanel) ||
+				SceneSettingsUI::DrawCategoryPanel("Interior Only", m_selectedCategory, SceneSettingsUI::DrawInteriorOnlyPanel))
 				return;
 
 			// Display current active weather

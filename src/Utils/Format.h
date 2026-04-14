@@ -130,4 +130,14 @@ namespace Util
 	 * that any code building a cache path by hand stays in sync.
 	 */
 	std::string GetShaderDefinesSuffix(const std::string& definesStr);
+
+	/**
+	 * @brief Convert a camelCase or PascalCase identifier to a human-readable
+	 * display string by inserting spaces at word boundaries and capitalizing
+	 * the first letter.
+	 *
+	 * Handles uppercase acronym runs (e.g. "ScreenSpaceGI" -> "Screen Space GI"),
+	 * underscores/dashes as separators, and leading lowercase.
+	 */
+	std::string PrettifyIdentifier(std::string_view id);
 }  // namespace Util

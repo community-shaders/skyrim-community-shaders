@@ -3,7 +3,7 @@
 #include <format>
 
 #include "../EditorWindow.h"
-#include "../WeatherScenePanel.h"
+#include "../SceneSettingsUI.h"
 #include "FeatureIssues.h"
 #include "State.h"
 #include "Utils/UI.h"
@@ -431,7 +431,7 @@ void WeatherWidget::DrawWidget()
 
 		if (ImGui::BeginTabItem("Scene Settings", nullptr, sceneFlags)) {
 			BeginScrollableContent("##SceneScroll");
-			WeatherScenePanel::Draw(weather->GetFormID());
+			SceneSettingsUI::DrawWeatherScenePanel(weather->GetFormID());
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}

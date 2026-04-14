@@ -2091,16 +2091,90 @@ namespace Util
 	static constexpr float kSmallToggleScale = 0.7f;
 	static constexpr float kFlyoutSlideOpenSpeed = 10.0f;  // progress/sec (0→1 in 0.1s)
 	static constexpr float kFlyoutSlideCloseSpeed = 14.0f; // progress/sec (1→0 in ~0.07s)
-	static constexpr float kFlyoutSlideDistance = 6.0f;    // unscaled px of vertical slide
-	static constexpr float kFlyoutLeftOffset = 8.0f;       // shift flyout left by this many unscaled px
+	static constexpr float kFlyoutSlideDistance = 6.0f;    // unscaled px of slide offset
+	static constexpr float kFlyoutLeftOffset = 8.0f;       // shift below-flyout left by this many unscaled px
 	static constexpr float kIconShrink = 0.15f;            // shrink icon within button by this fraction
 
-	bool BeginFlyout(FlyoutState& state, ImGuiID itemId)
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, bool slideRight)
 	{
-		return BeginFlyout(state, itemId, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+		return BeginFlyout(state, itemId, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), slideRight);
 	}
 
-	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax)
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax, const ImVec2& anchorMax, bool slideRight)
+	{
+		// Use hoverMin/hoverMax for mouse detection, but anchorMax for flyout positioning
+		float dt = ImGui::GetIO().DeltaTime;
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		bool hovered = mousePos.x >= hoverMin.x && mousePos.x <= hoverMax.x &&
+		               mousePos.y >= hoverMin.y && mousePos.y <= hoverMax.y;
+
+		if (hovered && (!state.isOpen || (state.activeId != itemId && !state.flyoutHovered))) {
+			state.activeId = itemId;
+			state.isOpen = true;
+			state.closing = false;
+			state.closeTimer = 0.f;
+			state.openProgress = 0.f;
+			state.slideRight = slideRight;
+		}
+
+		if (hovered && state.closing && state.activeId == itemId) {
+			state.closing = false;
+			state.closeTimer = 0.f;
+		}
+
+		if (!state.isOpen || state.activeId != itemId)
+			return false;
+
+		if (!state.closing)
+			state.openProgress = std::min(state.openProgress + kFlyoutSlideOpenSpeed * dt, 1.0f);
+
+		// Hover detection uses full rect, but source rect for EndFlyout uses hover area
+		state.sourceMin = hoverMin;
+		state.sourceMax = hoverMax;
+
+		float scale = GetUIScale();
+		float gap = 2.0f * scale;
+		float p = state.openProgress;
+		float eased = 1.0f - (1.0f - p) * (1.0f - p);
+		float slideOffset = (1.0f - eased) * kFlyoutSlideDistance * scale;
+		float alpha = std::min(p * 4.0f, 1.0f);
+
+		// Position flyout using anchorMax instead of hoverMax
+		ImVec2 flyoutPos;
+		if (state.slideRight) {
+			flyoutPos = ImVec2(anchorMax.x + gap - slideOffset, hoverMin.y);
+		} else {
+			flyoutPos = ImVec2(hoverMin.x - kFlyoutLeftOffset * scale, anchorMax.y + gap - slideOffset);
+		}
+
+		ImGui::SetNextWindowPos(flyoutPos, ImGuiCond_Always);
+		ImGui::SetNextWindowBgAlpha(0.95f * alpha);
+
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+		                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+		                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
+
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kFlyoutRounding * scale);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale, 2.0f * scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+
+		auto flyoutLabel = std::format("##flyout_{}", itemId);
+		bool visible = ImGui::Begin(flyoutLabel.c_str(), nullptr, flags);
+
+		if (visible)
+			ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+
+		ImGui::PopStyleVar(3);
+
+		if (!visible) {
+			ImGui::End();
+			return false;
+		}
+
+		return true;
+	}
+
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax, bool slideRight)
 	{
 		float dt = ImGui::GetIO().DeltaTime;
 		ImVec2 mousePos = ImGui::GetIO().MousePos;
@@ -2108,12 +2182,14 @@ namespace Util
 		               mousePos.y >= hoverMin.y && mousePos.y <= hoverMax.y;
 
 		// Open on hover, or switch to new item if different item hovered
-		if (hovered && (!state.isOpen || state.activeId != itemId)) {
+		// But don't steal the flyout if the mouse is currently over the open flyout window
+		if (hovered && (!state.isOpen || (state.activeId != itemId && !state.flyoutHovered))) {
 			state.activeId = itemId;
 			state.isOpen = true;
 			state.closing = false;
 			state.closeTimer = 0.f;
 			state.openProgress = 0.f;
+			state.slideRight = slideRight;
 		}
 
 		// Re-hover cancels close animation
@@ -2141,7 +2217,14 @@ namespace Util
 		float slideOffset = (1.0f - eased) * kFlyoutSlideDistance * scale;
 		float alpha = std::min(p * 4.0f, 1.0f);  // full opacity by 25% progress, fades last 25% on close
 
-		ImVec2 flyoutPos(hoverMin.x - kFlyoutLeftOffset * scale, hoverMax.y + gap - slideOffset);
+		ImVec2 flyoutPos;
+		if (state.slideRight) {
+			// Flyout appears to the right of the hovered item, slides left-to-right
+			flyoutPos = ImVec2(hoverMax.x + gap - slideOffset, hoverMin.y);
+		} else {
+			// Flyout appears below the hovered item, slides top-to-bottom, shifted left
+			flyoutPos = ImVec2(hoverMin.x - kFlyoutLeftOffset * scale, hoverMax.y + gap - slideOffset);
+		}
 
 		ImGui::SetNextWindowPos(flyoutPos, ImGuiCond_Always);
 		ImGui::SetNextWindowBgAlpha(0.95f * alpha);
@@ -2163,12 +2246,19 @@ namespace Util
 
 		ImGui::PopStyleVar(3);
 
-		return visible;
+		// If Begin returned false, close the window and return false
+		if (!visible) {
+			ImGui::End();
+			return false;
+		}
+
+		return true;
 	}
 
 	void EndFlyout(FlyoutState& state)
 	{
 		bool flyoutHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem | ImGuiHoveredFlags_RootAndChildWindows);
+		state.flyoutHovered = flyoutHovered;
 		ImGui::End();
 
 		// Check if mouse is over the source item or the gap between source and flyout
@@ -2176,9 +2266,17 @@ namespace Util
 		ImVec2 mousePos = ImGui::GetIO().MousePos;
 		float scale = GetUIScale();
 		float gap = 2.0f * scale;
-		float leftOffset = kFlyoutLeftOffset * scale;
-		bool itemHovered = mousePos.x >= (state.sourceMin.x - leftOffset) && mousePos.x <= state.sourceMax.x &&
-		                   mousePos.y >= state.sourceMin.y && mousePos.y <= (state.sourceMax.y + gap);
+		bool itemHovered;
+		if (state.slideRight) {
+			// Cover source item and the horizontal gap to the right
+			itemHovered = mousePos.x >= state.sourceMin.x && mousePos.x <= (state.sourceMax.x + gap) &&
+			              mousePos.y >= state.sourceMin.y && mousePos.y <= state.sourceMax.y;
+		} else {
+			// Cover source item (with left offset) and the vertical gap below
+			float leftOffset = kFlyoutLeftOffset * scale;
+			itemHovered = mousePos.x >= (state.sourceMin.x - leftOffset) && mousePos.x <= state.sourceMax.x &&
+			              mousePos.y >= state.sourceMin.y && mousePos.y <= (state.sourceMax.y + gap);
+		}
 
 		// Once close animation has started, commit to it — only BeginFlyout
 		// re-hover on the source item can cancel. This prevents oscillation
