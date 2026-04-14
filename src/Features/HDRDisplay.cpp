@@ -211,6 +211,27 @@ namespace
 			hdr->RedirectFramebuffer();
 			func(a_this, a3, a_target, a_4, a_5);
 			hdr->RestoreFramebuffer();
+
+			// VR: RedirectFramebuffer made ISHDR write to hdrTexture (float16); after
+			// RestoreFramebuffer kFRAMEBUFFER reverts to its original texture.
+			// ISCopy reads kFRAMEBUFFER.SRV to distribute the frame to the HMD and
+			// companion window, so we must write the tonemapped content back into
+			// kFRAMEBUFFER before ISCopy runs.
+			//
+			// TODO (future HDR HMD support): The correct pipeline is to run the full
+			// HDR composite (PQ encode, paper white, peak nits) HERE, writing the
+			// result back to kFRAMEBUFFER so ISCopy distributes HDR-processed content
+			// to both the HMD and companion at their native sizes.  The post-Present
+			// ApplyHDR path cannot do this correctly because ISCopy has already run
+			// and the companion back buffer (1024x1024) does not match outputTexture
+			// (sized from kMAIN).  Requires hooking the ISCopy vfunc to fire
+			// HDROutputCS before distribution.
+			if (globals::game::isVR && hdr->settings.enableHDR &&
+				hdr->hdrTexture && hdr->hdrTexture->resource) {
+				auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+				if (fb.texture)
+					globals::d3d::context->CopyResource(fb.texture, hdr->hdrTexture->resource.get());
+			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -596,6 +617,12 @@ void HDRDisplay::SetupResources()
 	DXGI_SWAP_CHAIN_DESC scDesc;
 	if (SUCCEEDED(globals::d3d::swapChain->GetDesc(&scDesc))) {
 		swapChainFormat = scDesc.BufferDesc.Format;
+		logger::info("[HDR] Swap chain format: {} ({})", (int)swapChainFormat,
+			swapChainFormat == DXGI_FORMAT_R10G10B10A2_UNORM  ? "R10G10B10A2_UNORM (HDR10)" :
+			swapChainFormat == DXGI_FORMAT_R16G16B16A16_FLOAT ? "R16G16B16A16_FLOAT (scRGB)" :
+			swapChainFormat == DXGI_FORMAT_R8G8B8A8_UNORM     ? "R8G8B8A8_UNORM (SDR 8-bit)" :
+			swapChainFormat == DXGI_FORMAT_B8G8R8A8_UNORM     ? "B8G8R8A8_UNORM (SDR 8-bit)" :
+																"other");
 	}
 
 	// Intermediate texture for HDR processing
@@ -614,7 +641,8 @@ void HDRDisplay::SetupResources()
 	hdrRtvDesc.Texture2D.MipSlice = 0;
 	hdrTexture->CreateRTV(hdrRtvDesc);
 
-	// Output texture - must match swap chain format for CopyResource to work
+	// Output texture must match the swap chain format: ApplyHDR does
+	// CopyResource(backBuffer, outputTexture) and CopyResource requires identical formats.
 	texDesc.Format = swapChainFormat;
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
@@ -763,6 +791,13 @@ void HDRDisplay::RestoreFramebuffer()
 
 void HDRDisplay::SetUIBuffer()
 {
+	// VR: ISCopy reads kFRAMEBUFFER.SRV to distribute the frame to the HMD and
+	// companion window.  Redirecting kFRAMEBUFFER.RTV here would cause vanilla UI
+	// to render into uiTexture instead, so ISCopy would send a UI-less frame to
+	// the HMD.  Leave kFRAMEBUFFER alone; vanilla UI bakes directly into it.
+	if (globals::game::isVR)
+		return;
+
 	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
 	// Handle Frame Generation case - redirect to FG's UI buffer
@@ -850,16 +885,29 @@ void HDRDisplay::ApplyHDR()
 		// When HDR is enabled, ISHDR wrote to hdrTexture (float16, values >1.0 preserved).
 		// When SDR, ISHDR wrote to kFRAMEBUFFER (UNORM, tonemapped 0-1).
 		auto& framebufferRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-		ID3D11ShaderResourceView* sceneSRV = (settings.enableHDR && hdrTexture && hdrTexture->srv) ? hdrTexture->srv.get() : framebufferRT.SRV;
 
-		// Choose the correct UI buffer based on which path is active
-		// When D3D12 swap chain is active, vanilla UI renders to uiBufferWrapped
-		// Otherwise it renders to our uiTexture
+		// Scene SRV selection:
+		// - VR: kFRAMEBUFFER at this point has scene + vanilla UI + ImGui all baked in
+		//   (thunk restored hdrTexture→kFRAMEBUFFER, vanilla UI rendered on top, ImGui
+		//   just rendered to kFRAMEBUFFER.RTV above). Use it directly so the companion
+		//   window gets everything without a separate uiTexture capture pass.
+		// - Non-VR HDR: hdrTexture has float16 scene values >1.0 preserved from ISHDR.
+		// - Non-VR SDR: kFRAMEBUFFER has the tonemapped 0-1 ISHDR output.
+		ID3D11ShaderResourceView* sceneSRV =
+			globals::game::isVR                                   ? framebufferRT.SRV :
+			(settings.enableHDR && hdrTexture && hdrTexture->srv) ? hdrTexture->srv.get() :
+																	framebufferRT.SRV;
+
+		// Choose the correct UI buffer based on which path is active.
+		// VR uses the framebuffer directly, which already contains vanilla UI/ImGui.
+		// Binding a separate uiTexture here would duplicate the UI layer.
 		ID3D11ShaderResourceView* uiSRV = nullptr;
-		if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.uiBufferWrapped) {
-			uiSRV = upscaling.dx12SwapChain.uiBufferWrapped->srv;
-		} else if (uiTexture && uiTexture->srv) {
-			uiSRV = uiTexture->srv.get();
+		if (!globals::game::isVR) {
+			if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.uiBufferWrapped) {
+				uiSRV = upscaling.dx12SwapChain.uiBufferWrapped->srv;
+			} else if (uiTexture && uiTexture->srv) {
+				uiSRV = uiTexture->srv.get();
+			}
 		}
 
 		ID3D11ShaderResourceView* views[2] = { sceneSRV, uiSRV };

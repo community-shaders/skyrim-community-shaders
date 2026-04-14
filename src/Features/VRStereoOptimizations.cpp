@@ -2,6 +2,7 @@
 
 #include "ExtendedMaterials.h"
 #include "Globals.h"
+#include "Menu.h"
 #include "State.h"
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
@@ -128,6 +129,34 @@ void VRStereoOptimizations::SetupResources()
 			.Texture2D = { .MipSlice = 0 } });
 	}
 
+	// POM offset texture (R16_FLOAT, full SBS resolution)
+	// Written by Lighting PS (u7) for POM-active pixels, read by StereoBlendCS for depth-aware reprojection.
+	// Replaces the former overloading of Reflectance.w, so Reflectance stays R11G11B10 with no alpha.
+	{
+		D3D11_TEXTURE2D_DESC pomDesc{};
+		pomDesc.Width = mainDesc.Width;
+		pomDesc.Height = mainDesc.Height;
+		pomDesc.MipLevels = 1;
+		pomDesc.ArraySize = 1;
+		pomDesc.Format = DXGI_FORMAT_R16_FLOAT;
+		pomDesc.SampleDesc.Count = 1;
+		pomDesc.SampleDesc.Quality = 0;
+		pomDesc.Usage = D3D11_USAGE_DEFAULT;
+		pomDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		pomDesc.CPUAccessFlags = 0;
+		pomDesc.MiscFlags = 0;
+
+		texPomOffset = eastl::make_unique<Texture2D>(pomDesc);
+		texPomOffset->CreateSRV(D3D11_SHADER_RESOURCE_VIEW_DESC{
+			.Format = DXGI_FORMAT_R16_FLOAT,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 } });
+		texPomOffset->CreateUAV(D3D11_UNORDERED_ACCESS_VIEW_DESC{
+			.Format = DXGI_FORMAT_R16_FLOAT,
+			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MipSlice = 0 } });
+	}
+
 	// Depth-stencil state for stencil write pass:
 	// Depth test OFF (not rendering geometry), depth writes OFF, stencil ALWAYS + REPLACE with ref=1.
 	// We use the normal (writable) kMAIN DSV — no simultaneous SRV binding needed.
@@ -213,6 +242,14 @@ void VRStereoOptimizations::Reset()
 	stencilSwapCount = 0;
 }
 
+void VRStereoOptimizations::ClearPomOffsetTexture()
+{
+	if (!texPomOffset)
+		return;
+	const float clearValue[4] = { kPomOffsetNoData, kPomOffsetNoData, kPomOffsetNoData, kPomOffsetNoData };
+	globals::d3d::context->ClearUnorderedAccessViewFloat(texPomOffset->uav.get(), clearValue);
+}
+
 //=============================================================================
 // IMGUI SETTINGS
 //=============================================================================
@@ -226,6 +263,11 @@ void VRStereoOptimizations::DrawSettings()
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("Reprojects Eye 0 (left) pixels into Eye 1 (right) using depth and motion data,\nskipping redundant full shading where the views overlap.\nReduces GPU cost in VR by shading each pixel fewer times per frame.");
 
+	if (globals::game::isVR && settings.stereoMode == StereoMode::Enable && !loaded) {
+		const auto& themeSettings = Menu::GetSingleton()->GetTheme();
+		ImGui::TextColored(themeSettings.StatusPalette.RestartNeeded,
+			"Restart is required to enable VR stereo reprojection.");
+	}
 	if (settings.stereoMode == StereoMode::Off)
 		return;
 

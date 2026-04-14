@@ -25,6 +25,12 @@ cbuffer VRValues : register(b13)
 
 namespace Stereo
 {
+#ifdef VR_STEREO_OPT
+	/// Sentinel written to PomOffsetTex when a pixel's Lighting PS did not run POM.
+	/// Convention: -1.0 = no POM; >= 0.0 = POM ran (StereoBlendCS detects by sign).
+	/// Must match kPomOffsetNoData in VRStereoOptimizations.h.
+	static const float POM_NO_DATA = -1.0;
+#endif
 	/**
 	Converts to the eye specific uv [0,1].
 	In VR, texture buffers include the left and right eye in the same buffer. Flat
@@ -227,7 +233,7 @@ namespace Stereo
 	*/
 	int2 ClampToEyeBounds(int2 px, uint eyeIndex, float2 frameDim)
 	{
-		int halfWidth = (int)frameDim.x / 2;
+		int halfWidth = (int)((uint)frameDim.x >> 1);
 		px.x = clamp(px.x, eyeIndex == 0 ? 0 : halfWidth, eyeIndex == 0 ? (halfWidth - 1) : ((int)frameDim.x - 1));
 		px.y = clamp(px.y, 0, (int)frameDim.y - 1);
 		return px;
