@@ -179,7 +179,8 @@ namespace ExtendedMaterials
 				float offset2 = (1.0 - parallaxAmount) * -maxHeight + minHeight;
 				pixelOffset = saturate(parallaxAmount);
 				float2 outCoords2 = viewDirTS.xy * offset2 + coords.xy;
-				GetTerrainHeight(noise, input, outCoords2, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights);
+				if (SharedData::extendedMaterialSettings.EnableHeightBlending)
+					GetTerrainHeight(noise, input, outCoords2, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights);
 				return outCoords2;
 			}
 #endif
@@ -329,8 +330,9 @@ namespace ExtendedMaterials
 			pixelOffset = saturate(parallaxAmount);
 			float2 outCoords = viewDirTS.xy * offset + coords.xy;
 #if defined(LANDSCAPE)
-			// ProcessTerrainHeightWeights once for final blend weights (loop only used linear height via GetTerrainHeightShadowTap).
-			GetTerrainHeight(noise, input, outCoords, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights);
+			// ProcessTerrainHeightWeights only when height blending is enabled; otherwise weights are unused.
+			if (SharedData::extendedMaterialSettings.EnableHeightBlending)
+				GetTerrainHeight(noise, input, outCoords, mipLevels, params, blendFactor, w1, w2, activeMask, sharedOffset, weights);
 #endif
 			return outCoords;
 		}

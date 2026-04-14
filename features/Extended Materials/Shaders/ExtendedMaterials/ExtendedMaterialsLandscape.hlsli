@@ -67,6 +67,33 @@ void ComputeLandscapeParallaxMipLevels(float2 uv, float screenNoise, out float m
 	float2 duvx = ddx(uv);
 	float2 duvy = ddy(uv);
 	float2 dims;
+	float representativeMip;
+
+#if defined(TRUE_PBR)
+	if (LandscapeLayers::PbrTileHasDisplacement(0))
+		TexLandDisplacement0Sampler.GetDimensions(dims.x, dims.y);
+	else
+		TexColorSampler.GetDimensions(dims.x, dims.y);
+#else
+	if (LandscapeLayers::ThTileHasDisplacement(0))
+		TexLandTHDisp0Sampler.GetDimensions(dims.x, dims.y);
+	else
+		TexColorSampler.GetDimensions(dims.x, dims.y);
+#endif
+	representativeMip = GetMipLevelForTextureDims(dims, duvx, duvy, screenNoise);
+
+	// Far/minified landscape: shared mip avoids per-layer GetDimensions + mip math.
+	// This keeps full-distance parallax height while accepting extra blur/artifacts in the far field.
+	[branch] if (representativeMip >= 3.1)
+	{
+		mipLevels[0] = representativeMip;
+		mipLevels[1] = representativeMip;
+		mipLevels[2] = representativeMip;
+		mipLevels[3] = representativeMip;
+		mipLevels[4] = representativeMip;
+		mipLevels[5] = representativeMip;
+		return;
+	}
 
 #if defined(TRUE_PBR)
 #	define EMAT_LAND_PBR_MIPDIMS_FOREACH(i, DISPTEX, COLTEX)                        \

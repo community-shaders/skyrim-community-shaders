@@ -17,6 +17,9 @@ static const float CONTRAST_FACTOR = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLU
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 static const float HEIGHT_BLEND_FADE_MIP_START = 1.6;
 static const float HEIGHT_BLEND_FADE_MIP_RANGE = 2.2;
+// TV distant/minified fallback: bypass stochastic blend and use one sample.
+static const float TV_SINGLE_SAMPLE_MIP_START = 2.9;
+static const float TV_SINGLE_SAMPLE_PARALLAX_MIP_START = 2.6;
 // Golden ratio for frac(rnd * φ) low-discrepancy jitter; precompute once per pixel at callsite when possible.
 static const float STOCHASTIC_LOD_PHI = 1.618;
 
@@ -152,6 +155,9 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 		return tex.SampleBias(samp, uv, SharedData::MipBias + extraLandMipBias);
 
 	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias + extraLandMipBias;
+	// Far/minified: skip TV blending math + second sample.
+	if (mipLevel >= TV_SINGLE_SAMPLE_MIP_START)
+		return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 
@@ -174,6 +180,9 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 {
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
 		return tex.SampleLevel(samp, uv, mipLevel);
+	// Keep parallax height active, but cut TV to one sample once heavily minified.
+	if (mipLevel >= TV_SINGLE_SAMPLE_PARALLAX_MIP_START)
+		return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 
 	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);

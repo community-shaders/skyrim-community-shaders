@@ -1242,8 +1242,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float4 blendedRMAOS = 0;
 #		endif
 
-	// Stochastic offsets shared across all terrain layer samples (TV permutation only).
-	StochasticOffsets sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
+	// Stochastic offsets shared across terrain layer samples; skip compute when TV tiling fix is disabled.
+	StochasticOffsets sharedOffset = (StochasticOffsets)0;
+#		if defined(TERRAIN_VARIATION)
+	if (SharedData::terrainVariationSettings.enableTilingFix)
+		sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
+#		endif
 
 #		if defined(EMAT)
 	if (LAND_EMAT_PARALLAX_ACTIVE) {
@@ -1309,9 +1313,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	landDistanceTexMipBias += landParallaxTexMipBias;
 	landscapeBlendWeights1 = input.LandBlendWeights1;
 	landscapeBlendWeights2 = input.LandBlendWeights2.xy;
-#		if defined(TRUE_PBR)
 	// Cull tiny layers when minified/distant and renormalize branchlessly to preserve total energy.
-	float landTinyWeightCutoff = lerp(0.01, 0.03, saturate(landDistanceTexMipBias * 1.25));
+	float landTinyWeightCutoff = lerp(0.012, 0.05, saturate(landDistanceTexMipBias * 1.35));
 	float4 culledWeights1 = landscapeBlendWeights1 * step(landTinyWeightCutoff.xxxx, landscapeBlendWeights1);
 	float2 culledWeights2 = landscapeBlendWeights2 * step(landTinyWeightCutoff.xx, landscapeBlendWeights2);
 	float culledTotalWeight = culledWeights1.x + culledWeights1.y + culledWeights1.z + culledWeights1.w + culledWeights2.x + culledWeights2.y;
@@ -1321,7 +1324,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 renormCulledWeights2 = culledWeights2 * invCulledTotalWeight;
 	landscapeBlendWeights1 = lerp(landscapeBlendWeights1, renormCulledWeights1, useCulledWeights);
 	landscapeBlendWeights2 = lerp(landscapeBlendWeights2, renormCulledWeights2, useCulledWeights);
-#		endif
 #	endif  // LANDSCAPE
 
 #	if defined(SPARKLE)
@@ -1356,12 +1358,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(4u, TexLandColor5Sampler, SampLandColor5Sampler, TexLandNormal5Sampler, SampLandNormal5Sampler, TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, LandscapeTexture5PBRParams, LandscapeTexture5GlintParameters, landscapeBlendWeights2.x);
 	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(5u, TexLandColor6Sampler, SampLandColor6Sampler, TexLandNormal6Sampler, SampLandNormal6Sampler, TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, LandscapeTexture6PBRParams, LandscapeTexture6GlintParameters, landscapeBlendWeights2.y);
 #		else
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexColorSampler, SampColorSampler, TexNormalSampler, SampNormalSampler, input.LandBlendWeights1.x, LandscapeTexture1to4IsSnow.x);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor2Sampler, SampLandColor2Sampler, TexLandNormal2Sampler, SampLandNormal2Sampler, input.LandBlendWeights1.y, LandscapeTexture1to4IsSnow.y);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor3Sampler, SampLandColor3Sampler, TexLandNormal3Sampler, SampLandNormal3Sampler, input.LandBlendWeights1.z, LandscapeTexture1to4IsSnow.z);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor4Sampler, SampLandColor4Sampler, TexLandNormal4Sampler, SampLandNormal4Sampler, input.LandBlendWeights1.w, LandscapeTexture1to4IsSnow.w);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor5Sampler, SampLandColor5Sampler, TexLandNormal5Sampler, SampLandNormal5Sampler, input.LandBlendWeights2.x, LandscapeTexture5to6IsSnow.x);
-	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor6Sampler, SampLandColor6Sampler, TexLandNormal6Sampler, SampLandNormal6Sampler, input.LandBlendWeights2.y, LandscapeTexture5to6IsSnow.y);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexColorSampler, SampColorSampler, TexNormalSampler, SampNormalSampler, landscapeBlendWeights1.x, LandscapeTexture1to4IsSnow.x);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor2Sampler, SampLandColor2Sampler, TexLandNormal2Sampler, SampLandNormal2Sampler, landscapeBlendWeights1.y, LandscapeTexture1to4IsSnow.y);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor3Sampler, SampLandColor3Sampler, TexLandNormal3Sampler, SampLandNormal3Sampler, landscapeBlendWeights1.z, LandscapeTexture1to4IsSnow.z);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor4Sampler, SampLandColor4Sampler, TexLandNormal4Sampler, SampLandNormal4Sampler, landscapeBlendWeights1.w, LandscapeTexture1to4IsSnow.w);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor5Sampler, SampLandColor5Sampler, TexLandNormal5Sampler, SampLandNormal5Sampler, landscapeBlendWeights2.x, LandscapeTexture5to6IsSnow.x);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_LEGACY(TexLandColor6Sampler, SampLandColor6Sampler, TexLandNormal6Sampler, SampLandNormal6Sampler, landscapeBlendWeights2.y, LandscapeTexture5to6IsSnow.y);
 #		endif
 
 	float4 rawBaseColor = float4(blendedRGB, blendedAlpha);
