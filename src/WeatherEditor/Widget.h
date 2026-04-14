@@ -91,12 +91,18 @@ public:
 		// Fallback: type prefix + SPID key
 		const char* prefix = [&]() -> const char* {
 			switch (form->GetFormType()) {
-			case RE::FormType::ImageSpace: return "IS";
-			case RE::FormType::VolumetricLighting: return "VL";
-			case RE::FormType::ShaderParticleGeometryData: return "Particle";
-			case RE::FormType::LensFlare: return "LensFlare";
-			case RE::FormType::ReferenceEffect: return "VisualEffect";
-			default: return "Form";
+			case RE::FormType::ImageSpace:
+				return "IS";
+			case RE::FormType::VolumetricLighting:
+				return "VL";
+			case RE::FormType::ShaderParticleGeometryData:
+				return "Particle";
+			case RE::FormType::LensFlare:
+				return "LensFlare";
+			case RE::FormType::ReferenceEffect:
+				return "VisualEffect";
+			default:
+				return "Form";
 			}
 		}();
 		cachedEditorID = std::format("{}_{}", prefix, cachedSaveKey);
