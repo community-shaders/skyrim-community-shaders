@@ -1090,13 +1090,13 @@ void Menu::ProcessInputEventQueue()
 			bool isHotkey = ShouldSwallowInput() && std::any_of(std::begin(hotkeys), std::end(hotkeys),
 														[key](const auto* combo) { return InputCombo::MatchesKeyboardCombo(*combo, key); });
 
-			// Swallow hotkey key-down events to avoid UI side effects, but always forward
-			// key-up events so ImGui state cannot get stuck in a held-key state.
-			// While recording a new hotkey, suppress keyboard forwarding so capture input
-			// does not trigger menu navigation; first-time setup Enter/Escape is allowed.
-			if ((!isHotkey || !event.IsPressed()) && (!wasCapturingHotkey || allowSetupCloseKey)) {
+			// Always forward key-up events. Suppress key-down during active hotkeys,
+			// and during hotkey capture except setup close keys (Enter/Escape).
+			const bool isKeyDown = event.IsPressed();
+			const bool suppressForwarding = isKeyDown && (isHotkey || (wasCapturingHotkey && !allowSetupCloseKey));
+			if (!suppressForwarding) {
 				// DirectInput loses key-up events after alt-tab; validate against OS state.
-				bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
+				bool pressed = isKeyDown && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
 				io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
 
 				if (key == VK_LCONTROL || key == VK_RCONTROL)
