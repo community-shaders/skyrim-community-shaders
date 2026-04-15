@@ -3,6 +3,7 @@
 #include "CODBloom.h"
 #include "Features/PostProcessing.h"
 #include "LensFlare.h"
+#include "PhysicalGlare.h"
 
 #include "State.h"
 #include "Util.h"
@@ -14,8 +15,9 @@ void BloomFlareComposite::UpdateAutoEnabled()
 
 	auto* bloom = owner->GetPipelineFeature<CODBloom>(PostProcessing::FeaturePipelineIndex::CODBloom);
 	auto* flare = owner->GetPipelineFeature<LensFlare>(PostProcessing::FeaturePipelineIndex::LensFlare);
+	auto* glare = owner->GetPipelineFeature<PhysicalGlare>(PostProcessing::FeaturePipelineIndex::PhysicalGlare);
 
-	enabled = (bloom && bloom->enabled) || (flare && flare->enabled);
+	enabled = (bloom && bloom->enabled) || (flare && flare->enabled) || (glare && glare->enabled);
 }
 
 void BloomFlareComposite::SetupResources()
@@ -55,40 +57,32 @@ void BloomFlareComposite::SetupResources()
 
 void BloomFlareComposite::ClearShaderCache()
 {
-	auto const shaderPtrs = std::array{
-		&compositeCS, &compositeBloomOnlyCS, &compositeFlareOnlyCS
-	};
-
-	for (auto shader : shaderPtrs)
-		if ((*shader)) {
-			(*shader)->Release();
-			shader->detach();
+	for (auto& shader : compositeShaders) {
+		if (shader) {
+			shader->Release();
+			shader.detach();
 		}
+	}
 
 	CompileComputeShaders();
 }
 
 void BloomFlareComposite::CompileComputeShaders()
 {
-	struct ShaderCompileInfo
-	{
-		winrt::com_ptr<ID3D11ComputeShader>* programPtr;
-		std::string_view filename;
+	auto path = std::filesystem::path("Data\\Shaders\\PostProcessing\\BloomFlareComposite\\composite.cs.hlsl");
+
+	// Compile all non-empty flag combinations (1..7)
+	for (uint flags = 1; flags < CompositeFlags::FLAG_COUNT; flags++) {
 		std::vector<std::pair<const char*, const char*>> defines;
-		std::string entry = "main";
-	};
+		if (flags & BLOOM)
+			defines.push_back({ "HAS_BLOOM", "" });
+		if (flags & FLARE)
+			defines.push_back({ "HAS_LENS_FLARE", "" });
+		if (flags & GLARE)
+			defines.push_back({ "HAS_GLARE", "" });
 
-	std::vector<ShaderCompileInfo>
-		shaderInfos = {
-			{ &compositeCS, "composite.cs.hlsl", { { "HAS_BLOOM", "" }, { "HAS_LENS_FLARE", "" } }, "CSComposite" },
-			{ &compositeBloomOnlyCS, "composite.cs.hlsl", { { "HAS_BLOOM", "" } }, "CSComposite" },
-			{ &compositeFlareOnlyCS, "composite.cs.hlsl", { { "HAS_LENS_FLARE", "" } }, "CSComposite" },
-		};
-
-	for (auto& info : shaderInfos) {
-		auto path = std::filesystem::path("Data\\Shaders\\PostProcessing\\BloomFlareComposite") / info.filename;
-		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), info.defines, "cs_5_0", info.entry.c_str())))
-			info.programPtr->attach(rawPtr);
+		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), defines, "cs_5_0", "CSComposite")))
+			compositeShaders[flags].attach(rawPtr);
 	}
 }
 
@@ -99,27 +93,22 @@ void BloomFlareComposite::Draw(TextureInfo& inout_tex)
 
 	auto* bloom = owner->GetPipelineFeature<CODBloom>(PostProcessing::FeaturePipelineIndex::CODBloom);
 	auto* flare = owner->GetPipelineFeature<LensFlare>(PostProcessing::FeaturePipelineIndex::LensFlare);
+	auto* glare = owner->GetPipelineFeature<PhysicalGlare>(PostProcessing::FeaturePipelineIndex::PhysicalGlare);
 
 	bool hasBloom = bloom && bloom->enabled;
 	bool hasFlare = flare && flare->enabled;
+	bool hasGlare = glare && glare->enabled;
 
-	if (!hasBloom && !hasFlare)
+	uint flags = (hasBloom ? BLOOM : 0) | (hasFlare ? FLARE : 0) | (hasGlare ? GLARE : 0);
+	if (flags == NONE)
 		return;
 
 	auto state = globals::state;
 	auto context = globals::d3d::context;
 
-	state->BeginPerfEvent("Bloom/Flare Composite");
+	state->BeginPerfEvent("Bloom/Flare/Glare Composite");
 
-	// Select the appropriate shader permutation
-	ID3D11ComputeShader* shader = nullptr;
-	if (hasBloom && hasFlare)
-		shader = compositeCS.get();
-	else if (hasBloom)
-		shader = compositeBloomOnlyCS.get();
-	else
-		shader = compositeFlareOnlyCS.get();
-
+	ID3D11ComputeShader* shader = compositeShaders[flags].get();
 	if (!shader) {
 		state->EndPerfEvent();
 		return;
@@ -129,8 +118,9 @@ void BloomFlareComposite::Draw(TextureInfo& inout_tex)
 	//   t0 = main color (inout_tex)
 	//   t1 = bloom texture (if available)
 	//   t2 = flare texture (if available)
+	//   t3 = glare texture (if available)
 	//   u0 = output
-	std::array<ID3D11ShaderResourceView*, 3> srvs = { nullptr };
+	std::array<ID3D11ShaderResourceView*, 4> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
 
 	srvs[0] = inout_tex.srv;
@@ -142,6 +132,10 @@ void BloomFlareComposite::Draw(TextureInfo& inout_tex)
 	if (hasFlare) {
 		auto flareOutput = flare->GetFlareOutput();
 		srvs[2] = flareOutput.srv;
+	}
+	if (hasGlare) {
+		auto glareOutput = glare->GetGlareOutput();
+		srvs[3] = glareOutput.srv;
 	}
 
 	uavs[0] = texOutput->uav.get();

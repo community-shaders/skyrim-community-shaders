@@ -873,6 +873,4 @@ void PhysicalGlare::Draw(TextureInfo& inout_tex)
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	state->EndPerfEvent();
-
-	inout_tex = { texOutput->resource.get(), texOutput->srv.get() };
 }

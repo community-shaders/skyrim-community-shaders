@@ -6,8 +6,8 @@
 
 struct BloomFlareComposite : public PostProcessFeature
 {
-	virtual inline std::string GetType() const override { return "Bloom/Flare Composite"; }
-	virtual inline std::string GetDesc() const override { return "Composites Bloom and Lens Flare results onto the main image. Automatically enabled when either Bloom or Lens Flare is active."; }
+	virtual inline std::string GetType() const override { return "Bloom/Flare/Glare Composite"; }
+	virtual inline std::string GetDesc() const override { return "Composites Bloom, Lens Flare, and Physical Glare results onto the main image. Automatically enabled when any of them is active."; }
 	virtual bool IsVisible() const override { return false; }
 	virtual bool IsAutoEnabled() const override { return true; }
 	virtual void UpdateAutoEnabled() override;
@@ -15,9 +15,18 @@ struct BloomFlareComposite : public PostProcessFeature
 
 	eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
-	winrt::com_ptr<ID3D11ComputeShader> compositeCS = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> compositeBloomOnlyCS = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> compositeFlareOnlyCS = nullptr;
+	// Bit flags for shader permutation selection
+	enum CompositeFlags : uint
+	{
+		NONE = 0,
+		BLOOM = 1 << 0,
+		FLARE = 1 << 1,
+		GLARE = 1 << 2,
+		FLAG_COUNT = 8  // 2^3 combinations
+	};
+
+	// Shader permutations indexed by composite flags (index 0 unused)
+	std::array<winrt::com_ptr<ID3D11ComputeShader>, CompositeFlags::FLAG_COUNT> compositeShaders = {};
 
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
