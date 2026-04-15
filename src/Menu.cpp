@@ -954,6 +954,10 @@ void Menu::ProcessInputEventQueue()
 			logger::trace("Detected key code {} ({})", event.keyCode, key);
 			if (key == event.keyCode)
 				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
+
+			const bool wasCapturingHotkey = IsCapturingHotkeyInput();
+			const bool allowSetupCloseKey = wasCapturingHotkey && HomePageRenderer::ShouldShowFirstTimeSetup() &&
+				(key == VK_RETURN || key == VK_ESCAPE);
 			if (!event.IsPressed()) {
 				// Skip key release if it was used to close the first-time setup dialog
 				if (HomePageRenderer::ShouldSkipKeyRelease(key)) {
@@ -1088,7 +1092,9 @@ void Menu::ProcessInputEventQueue()
 
 			// Swallow hotkey key-down events to avoid UI side effects, but always forward
 			// key-up events so ImGui state cannot get stuck in a held-key state.
-			if (!isHotkey || !event.IsPressed()) {
+			// While recording a new hotkey, suppress keyboard forwarding so capture input
+			// does not trigger menu navigation; first-time setup Enter/Escape is allowed.
+			if ((!isHotkey || !event.IsPressed()) && (!wasCapturingHotkey || allowSetupCloseKey)) {
 				// DirectInput loses key-up events after alt-tab; validate against OS state.
 				bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
 				io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
@@ -1104,6 +1110,12 @@ void Menu::ProcessInputEventQueue()
 	}
 
 	_keyEventQueue.clear();
+}
+
+bool Menu::IsCapturingHotkeyInput() const
+{
+	return settingToggleKey || settingSkipCompilationKey || settingsEffectsToggle ||
+		settingOverlayToggleKey || settingShaderBlockPrevKey || settingShaderBlockNextKey || settingWeatherEditorToggleKey;
 }
 
 void Menu::addToEventQueue(KeyEvent e)
