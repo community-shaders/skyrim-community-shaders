@@ -220,10 +220,11 @@ public:
 			if (feature->loaded) {
 #ifdef TRACY_ENABLE
 				{
-					ZoneScoped;
-					static thread_local std::string zoneName;
-					zoneName = std::format("{}::{}", feature->GetShortName(), methodName);
-					ZoneName(zoneName.c_str(), zoneName.size());
+					// ZoneTransientN allocates the source location dynamically so the
+					// runtime string becomes the zone's actual name in Tracy, not just
+					// a per-instance annotation on a static "ForEachLoadedFeature" zone.
+					const auto zoneName = std::format("{}::{}", feature->GetShortName(), methodName);
+					ZoneTransientN(___tracy_feature_zone, zoneName.c_str(), true);
 					callback(feature);
 				}
 #else
