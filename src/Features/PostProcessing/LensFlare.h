@@ -41,7 +41,7 @@ struct LensFlare : public PostProcessFeature
 		int GhostModeInt = 0;  // 0 = Fast, 1 = Quality, 2 = Ultra
 		int BokehShape = 0;    // 0 = None/Circle, 1-6 = built-in, 7+ = custom
 		int FFTResolution = 256;
-		float KernelScale = 0.25f;  // Fraction of FFT resolution for bokeh kernel size
+		float KernelScale = 0.1f;   // Fraction of FFT resolution for bokeh kernel size
 		float BokehRotation = 0.f;  // Global bokeh rotation in degrees
 		float HaloStrength = 0.2f;
 		float HaloRadius = 0.5f;

@@ -130,7 +130,7 @@ void LensFlare::DrawSettings()
 				ImGui::SetTooltip("Resolution of the FFT convolution. Higher = sharper bokeh ghost shapes but more expensive.");
 		}
 
-		ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.025f, 0.5f, "%.3f");
+		ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.01f, 0.5f, "%.3f");
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Base size of the bokeh kernel relative to FFT resolution.\nPer-ghost scales multiply this value in Ultra mode.");
 
