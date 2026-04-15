@@ -133,7 +133,7 @@ float DiscMask(float2 screenPos)
 	float3 color = 0;
 	float2 radiantVector = uv - 0.5f;
 
-	// --- Ghosts (MIT licensed section from PotatoFX) ---
+	// --- Ghosts ---
 	[branch] if (GhostStrength > EPSILON)
 	{
 		// Chromatic aberration on input for ghosts

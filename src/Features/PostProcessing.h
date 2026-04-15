@@ -6,6 +6,7 @@
 #include "PostProcessing/BokehResources.h"
 #include "PostProcessing/Border.h"
 #include "PostProcessing/CODBloom.h"
+#include "PostProcessing/Camera.h"
 #include "PostProcessing/ColorGrading.h"
 #include "PostProcessing/DoF.h"
 #include "PostProcessing/HistogramAutoExposure.h"
@@ -14,7 +15,6 @@
 #include "PostProcessing/MotionBlur.h"
 #include "PostProcessing/PhysicalGlare.h"
 #include "PostProcessing/Vignette.h"
-#include "PostProcessing/pCamera.h"
 
 struct PostProcessing : Feature
 {

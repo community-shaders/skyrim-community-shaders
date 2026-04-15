@@ -1,30 +1,8 @@
-// Originally from PotatoFX by Gimle Larpes, modified by Jiaye for Community Shaders
-/*
-MIT License
-
-Copyright (c) 2023 Gimle Larpes
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+// Camera effects for Community Shaders
+// Film grain based on https://www.shadertoy.com/view/3sGSWVhttps (MIT License)
 
 #include "Common/Math.hlsli"
-#include "Common/Random.hlsli"
+#include "Common/SharedData.hlsli"
 #include "PostProcessing/common.hlsli"
 
 cbuffer CameraCB : register(b1)
@@ -52,7 +30,47 @@ RWTexture2D<float4> OutputTexture : register(u0);
 
 #define BUFFER_ASPECT_RATIO ScreenSize.x / ScreenSize.y
 #define ASPECT_RATIO float2(BUFFER_ASPECT_RATIO, 1.0)
-#define EPSILON 1e-6
+
+// Film grain helper functions
+// From Dave Hoskins: https://www.shadertoy.com/view/4djSRW
+float GrainHash(float3 p3)
+{
+	p3 = frac(p3 * 0.1031);
+	p3 += dot(p3, p3.yzx + 19.19);
+	return frac((p3.x + p3.y) * p3.z);
+}
+
+// From iq: https://www.shadertoy.com/view/4sfGzS
+float GrainNoise(float3 x)
+{
+	float3 i = floor(x);
+	float3 f = frac(x);
+	f = f * f * (3.0 - 2.0 * f);
+	return lerp(lerp(lerp(GrainHash(i + float3(0, 0, 0)),
+						 GrainHash(i + float3(1, 0, 0)), f.x),
+					lerp(GrainHash(i + float3(0, 1, 0)),
+						GrainHash(i + float3(1, 1, 0)), f.x),
+					f.y),
+		lerp(lerp(GrainHash(i + float3(0, 0, 1)),
+				 GrainHash(i + float3(1, 0, 1)), f.x),
+			lerp(GrainHash(i + float3(0, 1, 1)),
+				GrainHash(i + float3(1, 1, 1)), f.x),
+			f.y),
+		f.z);
+}
+
+// Slightly high-passed continuous value-noise
+float GrainSource(float3 x, float strength, float pitch)
+{
+	float center = GrainNoise(x);
+	float v1 = center - GrainNoise(float3(1, 0, 0) / pitch + x) + 0.5;
+	float v2 = center - GrainNoise(float3(0, 1, 0) / pitch + x) + 0.5;
+	float v3 = center - GrainNoise(float3(-1, 0, 0) / pitch + x) + 0.5;
+	float v4 = center - GrainNoise(float3(0, -1, 0) / pitch + x) + 0.5;
+
+	float total = (v1 + v2 + v3 + v4) * 0.25;
+	return lerp(1.0, 0.5 + total, strength);
+}
 
 float2 FishEye(float2 texcoord, float FEFoV, float FECrop)
 {
@@ -62,13 +80,12 @@ float2 FishEye(float2 texcoord, float FEFoV, float FECrop)
 	float fov_factor = Math::PI * float(FEFoV) / 360.0;
 
 	float fit_fov = sin(atan(tan(fov_factor) * diagonal_length));
-	float crop_value = lerp(1.0 + (diagonal_length - 1.0) * cos(fov_factor), diagonal_length, FECrop * pow(abs(sin(fov_factor)), 6.0));  //This is stupid and there is a better way.
+	float crop_value = lerp(1.0 + (diagonal_length - 1.0) * cos(fov_factor), diagonal_length, FECrop * pow(abs(sin(fov_factor)), 6.0));
 
-	//Circularize radiant vector and apply cropping
+	// Circularize radiant vector and apply cropping
 	float2 cn_radiant_vector = 2.0 * radiant_vector * ASPECT_RATIO / crop_value * fit_fov;
 
 	if (length(cn_radiant_vector) < 1.0) {
-		//Calculate z-coordinate and angle
 		float z = sqrt(1.0 - cn_radiant_vector.x * cn_radiant_vector.x - cn_radiant_vector.y * cn_radiant_vector.y);
 		float theta = acos(z) / fov_factor;
 
@@ -79,54 +96,51 @@ float2 FishEye(float2 texcoord, float FEFoV, float FECrop)
 	return texcoord;
 }
 
-float3 ClipBlacks(float3 c)
-{
-	return float3(max(c.r, 0.0), max(c.g, 0.0), max(c.b, 0.0));
-}
-
 [numthreads(8, 8, 1)] void CS_Camera(uint3 DTid : SV_DispatchThreadID) {
-	static const float INVNORM_FACTOR = 0.57735026918962576450914878050196f;  // 1/√3
 	static const float2 TEXEL_SIZE = float2(1.0f / ScreenSize.x, 1.0f / ScreenSize.y);
 	float2 texcoord = (DTid.xy + 0.5f) * TEXEL_SIZE;
-	float2 radiant_vector = texcoord.xy - 0.5;
 	float2 texcoord_clean = texcoord.xy;
 
-	////Effects
-	//Fisheye
+	// Fisheye
 	if (UseFE) {
 		texcoord.xy = FishEye(texcoord_clean, FEFoV, FECrop);
 	}
 
 	float3 color = InputTexture.SampleLevel(ColorSampler, texcoord, 0).rgb;
 
-	//Chromatic aberration
+	// Chromatic aberration
 	[branch] if (CAStrength != 0.0)
 	{
 		color = SampleCA(InputTexture, ColorSampler, texcoord, CAStrength, 0).rgb;
 	}
 
-	//Noise
+	// Film grain
 	[branch] if (NoiseStrength != 0.0)
 	{
-		static const float NOISE_CURVE = max(INVNORM_FACTOR * 0.025, 1.0);
-		float luminance = Color::RGBToLuminance(color);
+		float2 pixelCoord = DTid.xy;
+		float t = float(SharedData::FrameCount);
 
-		//White noise
-		float noise1 = wnoise(texcoord, float2(6.4949, 39.116));
-		float noise2 = wnoise(texcoord, float2(19.673, 5.5675));
-		float noise3 = wnoise(texcoord, float2(36.578, 26.118));
+		static const float GRAIN_RATE = 1.0;
+		static const float GRAIN_PITCH = 1.0;
+		static const float GRAIN_LIFT_RATIO = 0.5;
 
-		//Box-Muller transform
-		float r = sqrt(-2.0 * log(noise1 + EPSILON));
-		float theta1 = 2.0 * Math::PI * noise2;
-		float theta2 = 2.0 * Math::PI * noise3;
+		float3 grain;
+		if (NoiseType == 1) {
+			// Color grain
+			float rg = GrainSource(float3(pixelCoord, floor(GRAIN_RATE * t)), NoiseStrength, GRAIN_PITCH);
+			float gg = GrainSource(float3(pixelCoord, floor(GRAIN_RATE * (t + 9.0))), NoiseStrength, GRAIN_PITCH);
+			float bg = GrainSource(float3(pixelCoord, floor(GRAIN_RATE * (t - 9.0))), NoiseStrength, GRAIN_PITCH);
 
-		//Sensor sensitivity to color channels: https://www.1stvision.com/cameras/AVT/dataman/ibis5_a_1300_8.pdf
-		float3 gauss_noise = float3(r * cos(theta1) * 1.33, r * sin(theta1) * 1.25, r * cos(theta2) * 2.0);
-		gauss_noise = (NoiseType == 0) ? gauss_noise.rrr : gauss_noise;
+			static const float COLOR_LEVEL = 1.0;
+			float3 color_grain = float3(rg, gg, bg);
+			grain = lerp(dot(color_grain, float3(0.2126, 0.7152, 0.0722)).xxx, color_grain, COLOR_LEVEL);
+		} else {
+			// Monochrome film grain
+			static const float NEUTRAL_GRAIN_FACTOR = 1.4142135;  // sqrt(2)
+			grain = GrainSource(float3(pixelCoord, floor(GRAIN_RATE * t)), NoiseStrength / NEUTRAL_GRAIN_FACTOR, GRAIN_PITCH).xxx;
+		}
 
-		float weight = (NoiseStrength * NoiseStrength) * NOISE_CURVE / (luminance * (1.0 + rcp(INVNORM_FACTOR)) + 2.0);  //Multiply luminance to simulate a wider dynamic range
-		color.rgb = ClipBlacks(color.rgb + gauss_noise * weight);
+		color = max(lerp(color * grain, color + (grain - 1.0), GRAIN_LIFT_RATIO), 0.0);
 	}
 
 	OutputTexture[DTid.xy] = float4(color, 1.0f);

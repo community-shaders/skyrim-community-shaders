@@ -5,8 +5,8 @@
 
 struct Camera : public PostProcessFeature
 {
-	virtual inline std::string GetType() const override { return "PotatoFX Camera"; }
-	virtual inline std::string GetDesc() const override { return "Some camera fx from PotatoFX, originally by Gimle Larpes."; }
+	virtual inline std::string GetType() const override { return "Camera"; }
+	virtual inline std::string GetDesc() const override { return "Camera effects including fisheye, chromatic aberration, and film grain."; }
 	virtual inline bool DrawAfterColorGrading() const override { return true; }
 
 	struct Settings

@@ -1,4 +1,4 @@
-#include "pCamera.h"
+#include "Camera.h"
 
 #include "State.h"
 #include "Util.h"
@@ -41,7 +41,7 @@ void Camera::DrawSettings()
 		ImGui::SetTooltip("Amount of noise to apply");
 	}
 
-	ImGui::Combo("Noise type", &settings.NoiseType, "Film grain\0Color noise\0\0");
+	ImGui::Combo("Noise type", &settings.NoiseType, "Film grain\0Color grain\0\0");
 	if (ImGui::IsItemHovered()) {
 		ImGui::SetTooltip("Type of noise to apply");
 	}
