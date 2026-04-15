@@ -1065,7 +1065,8 @@ void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 		context->CopySubresourceRegion(vrIntermediateColorIn[i]->resource.get(), 0, 0, 0, 0, colorSrc, 0, &srcBox);
 		// Depth copy keeps vrIntermediateDepth populated for DLSS (Streamline handles R24G8_TYPELESS).
 		// FSR uses vrIntermediateLinearDepth (R32_FLOAT) written by EncodeTexturesCS instead.
-		context->CopySubresourceRegion(vrIntermediateDepth[i]->resource.get(), 0, 0, 0, 0, depthSrc, 0, &srcBox);
+		if (GetUpscaleMethod() == UpscaleMethod::kDLSS)
+			context->CopySubresourceRegion(vrIntermediateDepth[i]->resource.get(), 0, 0, 0, 0, depthSrc, 0, &srcBox);
 		// DLSS motion vectors are written per-eye by EncodeTexturesCS with 5x5 dilation.
 		// FSR uses a raw copy here since it does not use the dilated output.
 		if (GetUpscaleMethod() != UpscaleMethod::kDLSS)
