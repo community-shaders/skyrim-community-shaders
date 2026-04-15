@@ -198,6 +198,9 @@ void IBL::ReflectionsPrepass()
 
 void IBL::Prepass()
 {
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "IBL");
+
 	if (settings.DisableInInteriors && Util::IsInterior())
 		return;
 
