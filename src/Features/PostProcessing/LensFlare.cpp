@@ -11,21 +11,20 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensFlare::Settings,
 	Intensity,
-	ThresholdLevel,
+	ThresholdEV,
 	ThresholdRange,
 	GhostStrength,
 	GhostChromaShift,
 	GhostModeInt,
 	BokehShape,
 	FFTResolution,
+	KernelScale,
+	BokehRotation,
 	HaloStrength,
 	HaloRadius,
 	HaloWidth,
 	HaloCompression,
 	HaloChromaShift,
-	GlareIntensity,
-	GlareDivider,
-	GlareScale,
 	Tint,
 	GLocalMask,
 	Ghosts,
@@ -34,14 +33,15 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensFlare::GhostSettings,
 	Color,
-	Scale)
+	Scale,
+	Enabled,
+	KernelScale)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensFlare::DebugSettings,
 	blurIterations,
 	disableThreshold,
 	disableGhosts,
-	disableGlare,
 	disableBlur)
 
 void LensFlare::DrawSettings()
@@ -54,9 +54,9 @@ void LensFlare::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Text("Threshold");
 	ImGui::Separator();
-	ImGui::SliderFloat("Threshold Level", &settings.ThresholdLevel, 0.0f, 5.0f, "%.3f");
+	ImGui::SliderFloat("Threshold (EV)", &settings.ThresholdEV, -4.0f, 10.0f, "%.2f");
 	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Minimum brightness for lens flare to appear");
+		ImGui::SetTooltip("Brightness threshold in EV.\nEV 0 = 1.0 linear, EV 2 = 4.0 linear");
 	ImGui::SliderFloat("Threshold Range", &settings.ThresholdRange, 0.01f, 5.0f, "%.3f");
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("Fade range for the threshold cutoff");
@@ -67,13 +67,13 @@ void LensFlare::DrawSettings()
 	ImGui::Separator();
 
 	{
-		const char* modeNames[] = { "Fast (Procedural)", "Quality (FFT Bokeh)" };
-		ImGui::Combo("Ghost Mode", &settings.GhostModeInt, modeNames, 2);
+		const char* modeNames[] = { "Fast (Procedural)", "Quality (FFT Bokeh)", "Ultra (Per-Ghost FFT)" };
+		ImGui::Combo("Ghost Mode", &settings.GhostModeInt, modeNames, 3);
 		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Fast: procedural radial ghosts (low cost).\nQuality: FFT convolution with bokeh shape (physically-based ghost shapes).");
+			ImGui::SetTooltip("Fast: procedural radial ghosts (low cost).\nQuality: FFT convolution with bokeh shape.\nUltra: per-ghost kernel sizes via multi-pass FFT (expensive).");
 	}
 
-	if (settings.GhostModeInt == static_cast<int>(GhostMode::Quality)) {
+	if (settings.GhostModeInt == static_cast<int>(GhostMode::Quality) || settings.GhostModeInt == static_cast<int>(GhostMode::Ultra)) {
 		// Bokeh shape selection
 		if (owner) {
 			auto& bokeh = owner->bokehResources;
@@ -116,19 +116,27 @@ void LensFlare::DrawSettings()
 
 		// FFT Resolution
 		{
-			const char* resNames[] = { "128", "256", "512" };
-			int resValues[] = { 128, 256, 512 };
+			const char* resNames[] = { "128", "256", "512", "1024" };
+			int resValues[] = { 128, 256, 512, 1024 };
 			int curIdx = 1;
-			for (int i = 0; i < 3; i++)
+			for (int i = 0; i < 4; i++)
 				if (resValues[i] == settings.FFTResolution)
 					curIdx = i;
 
-			if (ImGui::Combo("FFT Resolution", &curIdx, resNames, 3))
+			if (ImGui::Combo("FFT Resolution", &curIdx, resNames, 4))
 				settings.FFTResolution = resValues[curIdx];
 
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("Resolution of the FFT convolution. Higher = sharper bokeh ghost shapes but more expensive.");
 		}
+
+		ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.025f, 0.5f, "%.3f");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Size of the bokeh kernel relative to FFT resolution.\nSmaller = sharper/brighter ghosts, larger = softer/dimmer.");
+
+		ImGui::SliderFloat("Bokeh Rotation", &settings.BokehRotation, -180.0f, 180.0f, "%.1f deg");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Global rotation of the bokeh pattern.");
 	}
 
 	ImGui::SliderFloat("Ghost Strength", &settings.GhostStrength, 0.0f, 1.0f, "%.3f");
@@ -143,22 +151,28 @@ void LensFlare::DrawSettings()
 			char label[32];
 			snprintf(label, sizeof(label), "Ghost %d", i + 1);
 			if (ImGui::TreeNode(label)) {
+				ImGui::Checkbox("Enabled", &settings.Ghosts[i].Enabled);
 				ImGui::ColorEdit4("Color", settings.Ghosts[i].Color.data());
 				ImGui::SliderFloat("Scale", &settings.Ghosts[i].Scale, -15.0f, 15.0f, "%.2f");
+				if (settings.GhostModeInt == static_cast<int>(GhostMode::Ultra)) {
+					ImGui::SliderFloat("Kernel Scale", &settings.Ghosts[i].KernelScale, 0.025f, 0.5f, "%.3f");
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("Per-ghost bokeh kernel size.\nDifferent sizes create mixed-focus ghost effects.");
+				}
 				ImGui::TreePop();
 			}
 			ImGui::PopID();
 		}
 		if (ImGui::Button("Reset Ghosts to Default")) {
 			GhostSettings defaults[NUM_GHOSTS] = {
-				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f },
-				{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f },
-				{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f },
-				{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f },
-				{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f },
-				{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f },
-				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f },
-				{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f },
+				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f, true, 0.25f },
+				{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f, true, 0.25f },
+				{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f, true, 0.25f },
+				{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f, true, 0.25f },
+				{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f, true, 0.25f },
+				{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f, true, 0.25f },
+				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f, true, 0.25f },
+				{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f, true, 0.25f },
 			};
 			std::memcpy(settings.Ghosts.data(), defaults, sizeof(settings.Ghosts));
 		}
@@ -177,16 +191,6 @@ void LensFlare::DrawSettings()
 		ImGui::SetTooltip("Fisheye distortion strength for the halo effect");
 	ImGui::SliderFloat("Halo Chroma Shift", &settings.HaloChromaShift, 0.0f, 0.1f, "%.4f");
 
-	// Glare Settings
-	ImGui::Spacing();
-	ImGui::Text("Glare (Starburst)");
-	ImGui::Separator();
-	ImGui::SliderFloat("Glare Intensity", &settings.GlareIntensity, 0.0f, 1.0f, "%.4f");
-	ImGui::SliderFloat("Glare Divider", &settings.GlareDivider, 0.01f, 200.0f, "%.1f");
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Higher values normalize brighter lights; controls glare size scaling");
-	ImGui::SliderFloat3("Glare Scale (per branch)", settings.GlareScale.data(), 0.0f, 5.0f, "%.2f");
-
 	// Tint
 	ImGui::Spacing();
 	ImGui::Text("Color Tint");
@@ -203,7 +207,6 @@ void LensFlare::DrawSettings()
 	if (ImGui::CollapsingHeader("Debug")) {
 		ImGui::Checkbox("Disable Threshold", &debugsettings.disableThreshold);
 		ImGui::Checkbox("Disable Ghosts", &debugsettings.disableGhosts);
-		ImGui::Checkbox("Disable Glare", &debugsettings.disableGlare);
 		ImGui::Checkbox("Disable Blur", &debugsettings.disableBlur);
 		ImGui::SliderInt("Blur Iterations", &debugsettings.blurIterations, 1, 4);
 		if (ImGui::IsItemHovered())
@@ -278,7 +281,6 @@ void LensFlare::SetupResources()
 		createTex(texFlare, fullW, fullH);           // full resolution (final output)
 		createTex(texThreshold, halfW, halfH);       // half resolution
 		createTex(texGhostHalo, halfW, halfH);       // half resolution
-		createTex(texGlare, halfW, halfH);           // half resolution
 		createTex(texBlurTemp, quarterW, quarterH);  // quarter resolution
 
 		logger::debug("LensFlare: textures created - full {}x{}, half {}x{}, quarter {}x{}", fullW, fullH, halfW, halfH, quarterW, quarterH);
@@ -355,6 +357,11 @@ void LensFlare::CreateFFTTextures(uint resolution)
 	texBokehFFT->CreateSRV(srvDesc);
 	texBokehFFT->CreateUAV(uavDesc);
 
+	// Scene FFT cache (RG32F) — reused across kernel groups in Ultra mode
+	texSceneFFT = eastl::make_unique<Texture2D>(texDesc);
+	texSceneFFT->CreateSRV(srvDesc);
+	texSceneFFT->CreateUAV(uavDesc);
+
 	// FFT result (RGBA16F at FFT resolution)
 	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	srvDesc.Format = texDesc.Format;
@@ -374,7 +381,7 @@ void LensFlare::CreateFFTTextures(uint resolution)
 void LensFlare::ClearShaderCache()
 {
 	const auto shaderPtrs = std::array{
-		&thresholdCS, &ghostHaloCS, &blurDownCS, &blurUpCS, &glareStreakCS, &mixCS,
+		&thresholdCS, &ghostHaloCS, &blurDownCS, &blurUpCS, &mixCS,
 		&fftRowCS, &fftColCS, &fftRowInvCS, &fftColInvCS, &fftMultiplyCS,
 		&bokehPrepareCS, &fftThresholdCS, &fftGhostComposeCS
 	};
@@ -403,7 +410,6 @@ void LensFlare::CompileComputeShaders()
 		{ &ghostHaloCS, "lensflare.cs.hlsl", {}, "CSGhostHalo" },
 		{ &blurDownCS, "lensflare.cs.hlsl", {}, "CSFlareDown" },
 		{ &blurUpCS, "lensflare.cs.hlsl", {}, "CSFlareUp" },
-		{ &glareStreakCS, "lensflare.cs.hlsl", {}, "CSGlareStreak" },
 		{ &mixCS, "lensflare.cs.hlsl", {}, "CSMix" },
 		// FFT ghost pipeline shaders
 		{ &bokehPrepareCS, "lensflare_fft.cs.hlsl", {}, "CSBokehPrepare" },
@@ -496,13 +502,14 @@ void LensFlare::PrepareBokehFFT()
 
 void LensFlare::DrawFast(TextureInfo& inout_tex, LensFlareCB& data)
 {
+	std::ignore = inout_tex;
 	auto context = globals::d3d::context;
 	uint halfW = texThreshold->desc.Width;
 	uint halfH = texThreshold->desc.Height;
 	uint quarterW = texBlurTemp->desc.Width;
 	uint quarterH = texBlurTemp->desc.Height;
 
-	std::array<ID3D11ShaderResourceView*, 2> srvs = { nullptr };
+	std::array<ID3D11ShaderResourceView*, 1> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
 
 	auto resetViews = [&]() {
@@ -571,6 +578,7 @@ void LensFlare::DrawFast(TextureInfo& inout_tex, LensFlareCB& data)
 
 void LensFlare::DrawQuality(TextureInfo& inout_tex, LensFlareCB& data)
 {
+	std::ignore = inout_tex;
 	auto context = globals::d3d::context;
 	uint N = currentFFTResolution;
 	uint halfW = texThreshold->desc.Width;
@@ -583,19 +591,67 @@ void LensFlare::DrawQuality(TextureInfo& inout_tex, LensFlareCB& data)
 		N = targetRes;
 	}
 
-	// Regenerate bokeh FFT if shape changed
-	if (bokehFFTDirty || cachedBokehShape != settings.BokehShape) {
-		data.FFTResolution = N;
-		lensFlareCB->Update(data);
-		auto cb = lensFlareCB->CB();
-		context->CSSetConstantBuffers(1, 1, &cb);
-		PrepareBokehFFT();
+	data.FFTResolution = N;
+	GhostMode mode = static_cast<GhostMode>(settings.GhostModeInt);
+
+	// === Build kernel groups ===
+	struct KernelGroup
+	{
+		float kernelScale;
+		uint32_t ghostMask;
+	};
+	std::vector<KernelGroup> groups;
+
+	if (mode == GhostMode::Ultra) {
+		// Group enabled ghosts by kernel scale (merge similar within 0.001)
+		for (int i = 0; i < NUM_GHOSTS; i++) {
+			if (!(data.ActiveGhostMask & (1u << i)))
+				continue;
+			float ks = settings.Ghosts[i].KernelScale;
+			bool merged = false;
+			for (auto& g : groups) {
+				if (std::abs(g.kernelScale - ks) < 0.001f) {
+					g.ghostMask |= (1u << i);
+					merged = true;
+					break;
+				}
+			}
+			if (!merged) {
+				if ((int)groups.size() < MAX_KERNEL_GROUPS) {
+					groups.push_back({ ks, 1u << (uint)i });
+				} else {
+					// Overflow: merge into closest existing group
+					float bestDist = 1e9f;
+					int bestIdx = 0;
+					for (int g = 0; g < (int)groups.size(); g++) {
+						float d = std::abs(groups[g].kernelScale - ks);
+						if (d < bestDist) {
+							bestDist = d;
+							bestIdx = g;
+						}
+					}
+					groups[bestIdx].ghostMask |= (1u << i);
+				}
+			}
+		}
 	}
 
-	data.FFTResolution = N;
+	if (groups.empty()) {
+		// Quality mode or no Ultra groups: single pass with global KernelScale
+		groups.push_back({ settings.KernelScale, data.ActiveGhostMask });
+	}
+
+	// === Clear texGhostHalo for additive compositing ===
+	{
+		const FLOAT clearColor[4] = { 0.f, 0.f, 0.f, 0.f };
+		context->ClearUnorderedAccessViewFloat(texGhostHalo->uav.get(), clearColor);
+	}
+
+	if (debugsettings.disableGhosts)
+		return;
 
 	// === Step 1: Threshold scene → FFT format (RG32F, N×N) ===
-	if (!debugsettings.disableGhosts && fftThresholdCS) {
+	if (fftThresholdCS) {
 		data.OutputWidth = (float)N;
 		data.OutputHeight = (float)N;
 		data.InputWidth = (float)halfW;
@@ -617,59 +673,85 @@ void LensFlare::DrawQuality(TextureInfo& inout_tex, LensFlareCB& data)
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 	}
 
-	// === Step 2: Forward FFT scene ===
-	if (!debugsettings.disableGhosts) {
+	// === Step 2: Forward FFT scene → cache in texSceneFFT ===
+	{
 		DispatchFFT(fftRowCS.get(), texFFT[0].get(), texFFT[1].get(), N);
-		DispatchFFT(fftColCS.get(), texFFT[1].get(), texFFT[0].get(), N);
+		DispatchFFT(fftColCS.get(), texFFT[1].get(), texSceneFFT.get(), N);
 	}
 
-	// === Step 3: Frequency-domain multiply (scene * bokeh) ===
-	if (!debugsettings.disableGhosts && fftMultiplyCS) {
-		std::array<ID3D11ShaderResourceView*, 2> mulSrvs = { texFFT[0]->srv.get(), texBokehFFT->srv.get() };
-		std::array<ID3D11UnorderedAccessView*, 1> mulUavs = { texFFT[1]->uav.get() };
+	// === Step 3: Per-group convolution loop ===
+	float originalHaloStrength = data.HaloStrength;
 
-		context->CSSetShaderResources(0, (uint)mulSrvs.size(), mulSrvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)mulUavs.size(), mulUavs.data(), nullptr);
-		context->CSSetShader(fftMultiplyCS.get(), nullptr, 0);
-		context->Dispatch((N + 7) >> 3, (N + 7) >> 3, 1);
+	for (int gi = 0; gi < (int)groups.size(); gi++) {
+		auto& group = groups[gi];
 
-		mulSrvs.fill(nullptr);
-		mulUavs.fill(nullptr);
-		context->CSSetShaderResources(0, (uint)mulSrvs.size(), mulSrvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)mulUavs.size(), mulUavs.data(), nullptr);
-	}
+		// Update CB for this group
+		data.KernelScale = group.kernelScale;
+		data.ActiveGhostMask = group.ghostMask;
+		if (gi > 0)
+			data.HaloStrength = 0.f;  // Halo only in first group
 
-	// === Step 4: Inverse FFT ===
-	if (!debugsettings.disableGhosts) {
+		// 3a: Prepare bokeh kernel at this group's scale
+		{
+			bool needBokehRebuild = bokehFFTDirty || cachedBokehShape != settings.BokehShape;
+			// Multi-group Ultra: rebuild bokeh each group (different KernelScale)
+			// Single-group Quality: only rebuild when shape/dirty changes
+			if (needBokehRebuild || groups.size() > 1) {
+				lensFlareCB->Update(data);
+				auto cb = lensFlareCB->CB();
+				context->CSSetConstantBuffers(1, 1, &cb);
+				PrepareBokehFFT();
+			}
+		}
+
+		// 3b: Frequency-domain multiply (scene × bokeh)
+		if (fftMultiplyCS) {
+			std::array<ID3D11ShaderResourceView*, 2> mulSrvs = { texSceneFFT->srv.get(), texBokehFFT->srv.get() };
+			std::array<ID3D11UnorderedAccessView*, 1> mulUavs = { texFFT[1]->uav.get() };
+
+			context->CSSetShaderResources(0, (uint)mulSrvs.size(), mulSrvs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)mulUavs.size(), mulUavs.data(), nullptr);
+			context->CSSetShader(fftMultiplyCS.get(), nullptr, 0);
+			context->Dispatch((N + 7) >> 3, (N + 7) >> 3, 1);
+
+			mulSrvs.fill(nullptr);
+			mulUavs.fill(nullptr);
+			context->CSSetShaderResources(0, (uint)mulSrvs.size(), mulSrvs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)mulUavs.size(), mulUavs.data(), nullptr);
+		}
+
+		// 3c: Inverse FFT
 		DispatchFFT(fftRowInvCS.get(), texFFT[1].get(), texFFT[0].get(), N);
 		DispatchFFT(fftColInvCS.get(), texFFT[0].get(), texFFT[1].get(), N);
+
+		// 3d: Compose IFFT result → additive into texGhostHalo
+		if (fftGhostComposeCS) {
+			data.OutputWidth = (float)halfW;
+			data.OutputHeight = (float)halfH;
+			data.InputWidth = (float)N;
+			data.InputHeight = (float)N;
+			lensFlareCB->Update(data);
+			auto cb = lensFlareCB->CB();
+			context->CSSetConstantBuffers(1, 1, &cb);
+
+			// t0 = IFFT result (RG32F)
+			std::array<ID3D11ShaderResourceView*, 1> srvs = { texFFT[1]->srv.get() };
+			std::array<ID3D11UnorderedAccessView*, 1> uavs = { texGhostHalo->uav.get() };
+
+			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+			context->CSSetShader(fftGhostComposeCS.get(), nullptr, 0);
+			context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
+
+			srvs.fill(nullptr);
+			uavs.fill(nullptr);
+			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+		}
 	}
 
-	// === Step 5: Compose FFT result → multi-ghost with scales + chroma + halo → texGhostHalo ===
-	if (!debugsettings.disableGhosts && fftGhostComposeCS) {
-		data.OutputWidth = (float)halfW;
-		data.OutputHeight = (float)halfH;
-		data.InputWidth = (float)N;
-		data.InputHeight = (float)N;
-		lensFlareCB->Update(data);
-		auto cb = lensFlareCB->CB();
-		context->CSSetConstantBuffers(1, 1, &cb);
-
-		// t0 = FFT convolution result (RG32F, luminance in .x)
-		// t1 = threshold texture (for halo)
-		std::array<ID3D11ShaderResourceView*, 2> srvs = { texFFT[1]->srv.get(), texThreshold->srv.get() };
-		std::array<ID3D11UnorderedAccessView*, 1> uavs = { texGhostHalo->uav.get() };
-
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(fftGhostComposeCS.get(), nullptr, 0);
-		context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
-
-		srvs.fill(nullptr);
-		uavs.fill(nullptr);
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-	}
+	// Restore original halo strength for subsequent passes
+	data.HaloStrength = originalHaloStrength;
 }
 
 void LensFlare::Draw(TextureInfo& inout_tex)
@@ -686,7 +768,7 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 
 	// Build base constant buffer data
 	LensFlareCB data = {};
-	data.ThresholdLevel = settings.ThresholdLevel;
+	data.ThresholdLevel = std::exp2f(settings.ThresholdEV);  // EV → linear
 	data.ThresholdRange = settings.ThresholdRange;
 	data.GhostStrength = settings.GhostStrength;
 	data.GhostChromaShift = settings.GhostChromaShift;
@@ -696,21 +778,36 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	data.HaloCompression = settings.HaloCompression;
 	data.HaloChromaShift = settings.HaloChromaShift;
 	data.Intensity = settings.Intensity;
-	data.GlareIntensity = settings.GlareIntensity;
-	data.GlareDivider = settings.GlareDivider;
-	data.GlareDirection[0] = 0.f;
-	data.GlareDirection[1] = 0.f;
 	data.FFTResolution = currentFFTResolution;
-	std::memcpy(data.GlareScale, settings.GlareScale.data(), sizeof(float) * 3);
 	std::memcpy(data.Tint, settings.Tint.data(), sizeof(float) * 3);
 	data.GLocalMask = settings.GLocalMask ? 1 : 0;
 
+	uint enabledMask = 0;
 	for (int i = 0; i < NUM_GHOSTS; i++) {
 		std::memcpy(&data.GhostColors[i * 4], settings.Ghosts[i].Color.data(), sizeof(float) * 4);
 		data.GhostScalesPacked[i] = settings.Ghosts[i].Scale;
+		data.GhostKernelScalesPacked[i] = settings.Ghosts[i].KernelScale;
+		if (settings.Ghosts[i].Enabled)
+			enabledMask |= (1u << i);
 	}
+	data.ActiveGhostMask = enabledMask;
+	data.KernelScale = settings.KernelScale;
+	data.AspectRatio = (float)fullW / (float)fullH;
+	data.UseBokehTexture = (settings.BokehShape > 0) ? 1 : 0;
+	data.BokehRotation = settings.BokehRotation * 3.14159265358979323846f / 180.0f;  // degrees → radians
 
-	std::array<ID3D11ShaderResourceView*, 2> srvs = { nullptr };
+	// Compute PadScale based on mode
+	GhostMode mode = static_cast<GhostMode>(settings.GhostModeInt);
+	float maxKernelScale = settings.KernelScale;
+	if (mode == GhostMode::Ultra) {
+		for (int i = 0; i < NUM_GHOSTS; i++) {
+			if (settings.Ghosts[i].Enabled)
+				maxKernelScale = std::max(maxKernelScale, settings.Ghosts[i].KernelScale);
+		}
+	}
+	data.PadScale = std::clamp(1.0f - maxKernelScale, 0.1f, 1.0f);
+
+	std::array<ID3D11ShaderResourceView*, 1> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
 	std::array<ID3D11SamplerState*, 2> samplers = { colorSampler.get(), borderSampler.get() };
 
@@ -743,52 +840,13 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	}
 
 	// === Ghost + Halo generation (mode-dependent) ===
-	GhostMode mode = static_cast<GhostMode>(settings.GhostModeInt);
-	if (mode == GhostMode::Quality && fftRowCS && fftColCS && fftMultiplyCS && fftThresholdCS && fftGhostComposeCS) {
+	if ((mode == GhostMode::Quality || mode == GhostMode::Ultra) && fftRowCS && fftColCS && fftMultiplyCS && fftThresholdCS && fftGhostComposeCS) {
 		DrawQuality(inout_tex, data);
 	} else {
 		DrawFast(inout_tex, data);
 	}
 
-	// === Pass 4: Glare streaks (3 directions for 6-point star) — half res ===
-	if (!debugsettings.disableGlare && glareStreakCS && settings.GlareIntensity > 0.0001f) {
-		float clearColor[4] = { 0, 0, 0, 0 };
-		context->ClearUnorderedAccessViewFloat(texGlare->uav.get(), clearColor);
-
-		data.OutputWidth = (float)halfW;
-		data.OutputHeight = (float)halfH;
-		data.InputWidth = (float)halfW;
-		data.InputHeight = (float)halfH;
-
-		static const float angles[3] = {
-			1.5707963f,  // 90 deg
-			0.5235988f,  // 30 deg
-			2.6179938f   // 150 deg
-		};
-
-		context->CSSetShader(glareStreakCS.get(), nullptr, 0);
-
-		for (int dir = 0; dir < 3; dir++) {
-			float glareScaleForDir = settings.GlareScale[dir];
-			if (glareScaleForDir < 0.0001f)
-				continue;
-
-			data.GlareDirection[0] = cosf(angles[dir]) * glareScaleForDir;
-			data.GlareDirection[1] = sinf(angles[dir]) * glareScaleForDir;
-			lensFlareCB->Update(data);
-			auto cb = lensFlareCB->CB();
-			context->CSSetConstantBuffers(1, 1, &cb);
-
-			srvs.at(0) = texThreshold->srv.get();
-			uavs.at(0) = texGlare->uav.get();
-			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-			context->Dispatch((halfW + 7) >> 3, (halfH + 7) >> 3, 1);
-			resetViews();
-		}
-	}
-
-	// === Pass 5: Mix ghost+halo + glare → full res output ===
+	// === Pass 4: Mix ghost+halo → full res output ===
 	if (mixCS) {
 		data.OutputWidth = (float)fullW;
 		data.OutputHeight = (float)fullH;
@@ -799,7 +857,6 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 		context->CSSetConstantBuffers(1, 1, &cb);
 
 		srvs.at(0) = texGhostHalo->srv.get();
-		srvs.at(1) = texGlare->srv.get();
 		uavs.at(0) = texFlare->uav.get();
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);

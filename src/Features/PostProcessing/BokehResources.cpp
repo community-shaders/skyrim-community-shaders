@@ -1,6 +1,8 @@
 #include "BokehResources.h"
 #include "Util.h"
 
+#include <DirectXTex.h>
+
 void BokehResources::Setup()
 {
 	auto device = globals::d3d::device;

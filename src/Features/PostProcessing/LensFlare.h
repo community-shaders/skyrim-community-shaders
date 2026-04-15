@@ -6,57 +6,60 @@
 struct LensFlare : public PostProcessFeature
 {
 	virtual inline std::string GetType() const override { return "Lens Flare"; }
-	virtual inline std::string GetDesc() const override { return "Screen-space lens flare with ghosts, halo, and glare. Supports FFT bokeh convolution for physically-shaped ghosts."; }
+	virtual inline std::string GetDesc() const override { return "Screen-space lens flare with ghosts and halo. Supports FFT bokeh convolution for physically-shaped ghosts."; }
 	virtual bool WritesToMainTexture() const override { return false; }
 
 	TextureInfo GetFlareOutput() const;
 
 	static constexpr int NUM_GHOSTS = 8;
 	static constexpr uint FFT_MIN = 128;
-	static constexpr uint FFT_MAX = 512;
+	static constexpr uint FFT_MAX = 1024;
+	static constexpr int MAX_KERNEL_GROUPS = 4;
 
 	enum class GhostMode : int
 	{
 		Fast = 0,     // Original procedural radial scaling
-		Quality = 1,  // FFT convolution with bokeh shape
+		Quality = 1,  // FFT convolution with bokeh shape (single kernel)
+		Ultra = 2,    // FFT convolution with per-ghost kernel sizes
 	};
 
 	struct GhostSettings
 	{
 		std::array<float, 4> Color = { 1.f, 1.f, 1.f, 1.f };
 		float Scale = 1.f;
+		bool Enabled = true;
+		float KernelScale = 0.25f;  // Per-ghost kernel size (Ultra mode only)
 	};
 
 	struct Settings
 	{
 		float Intensity = 0.5f;
-		float ThresholdLevel = 1.0f;
+		float ThresholdEV = 0.0f;  // EV-based threshold (converted to linear for shader)
 		float ThresholdRange = 1.0f;
 		float GhostStrength = 0.3f;
 		float GhostChromaShift = 0.015f;
-		int GhostModeInt = 0;  // 0 = Fast, 1 = Quality (FFT)
+		int GhostModeInt = 0;  // 0 = Fast, 1 = Quality, 2 = Ultra
 		int BokehShape = 0;    // 0 = None/Circle, 1-6 = built-in, 7+ = custom
 		int FFTResolution = 256;
+		float KernelScale = 0.25f;  // Fraction of FFT resolution for bokeh kernel size
+		float BokehRotation = 0.f;  // Global bokeh rotation in degrees
 		float HaloStrength = 0.2f;
 		float HaloRadius = 0.5f;
 		float HaloWidth = 0.5f;
 		float HaloCompression = 0.65f;
 		float HaloChromaShift = 0.015f;
-		float GlareIntensity = 0.02f;
-		float GlareDivider = 60.0f;
-		std::array<float, 3> GlareScale = { 1.f, 1.f, 1.f };
 		std::array<float, 3> Tint = { 1.0f, 0.85f, 0.7f };
 		bool GLocalMask = true;
 		uint8_t pad[3]{};
 		std::array<GhostSettings, NUM_GHOSTS> Ghosts = { {
-			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f },
-			{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f },
-			{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f },
-			{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f },
-			{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f },
-			{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f },
-			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f },
-			{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f },
+			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f, true, 0.25f },
+			{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f, true, 0.25f },
+			{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f, true, 0.25f },
+			{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f, true, 0.25f },
+			{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f, true, 0.25f },
+			{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f, true, 0.25f },
+			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f, true, 0.25f },
+			{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f, true, 0.25f },
 		} };
 		std::string CustomBokehPath;  // User-specified custom bokeh texture path
 	} settings;
@@ -83,25 +86,26 @@ struct LensFlare : public PostProcessFeature
 
 		float HaloChromaShift;
 		float Intensity;
-		float GlareIntensity;
-		float GlareDivider;
-
-		// Glare params
-		float GlareDirection[2];
-		// FFT params
 		uint FFTResolution;
-		float pad0{};
-
-		float GlareScale[3];
 		int GLocalMask;
 
 		float Tint[3];
-		float pad1{};
+		float KernelScale;
+
+		float AspectRatio;
+		int UseBokehTexture;
+		float BokehRotation;  // radians
+		float PadScale;       // 1.0 - maxKernelScale, for zero-padding
+
+		uint ActiveGhostMask;  // bitmask of enabled ghosts for current pass
+		float pad0[3]{};
 
 		// Ghost colors as float4[8] = 128 bytes, matches HLSL float4 array
 		float GhostColors[NUM_GHOSTS * 4];
 		// Ghost scales packed as 2 × float4 = 32 bytes, matches HLSL float4[2]
 		float GhostScalesPacked[8];
+		// Per-ghost kernel scales packed as 2 × float4 (Ultra mode)
+		float GhostKernelScalesPacked[8];
 	};
 
 	struct DebugSettings
@@ -109,7 +113,6 @@ struct LensFlare : public PostProcessFeature
 		int blurIterations = 1;
 		bool disableThreshold = false;
 		bool disableGhosts = false;
-		bool disableGlare = false;
 		bool disableBlur = false;
 		uint8_t pad[3]{};
 	} debugsettings;
@@ -119,12 +122,12 @@ struct LensFlare : public PostProcessFeature
 	eastl::unique_ptr<Texture2D> texFlare = nullptr;      // full resolution (final output)
 	eastl::unique_ptr<Texture2D> texThreshold = nullptr;  // half resolution
 	eastl::unique_ptr<Texture2D> texGhostHalo = nullptr;  // half resolution
-	eastl::unique_ptr<Texture2D> texGlare = nullptr;      // half resolution
 	eastl::unique_ptr<Texture2D> texBlurTemp = nullptr;   // quarter resolution
 
 	// FFT ghost pipeline textures
 	eastl::unique_ptr<Texture2D> texFFT[2] = {};          // RG32F ping-pong (N×N)
 	eastl::unique_ptr<Texture2D> texBokehFFT = nullptr;   // RG32F cached bokeh kernel FFT (N×N)
+	eastl::unique_ptr<Texture2D> texSceneFFT = nullptr;   // RG32F cached scene FFT (N×N)
 	eastl::unique_ptr<Texture2D> texFFTResult = nullptr;  // RGBA16F FFT convolution result (N×N)
 
 	winrt::com_ptr<ID3D11SamplerState> colorSampler = nullptr;
@@ -135,7 +138,6 @@ struct LensFlare : public PostProcessFeature
 	winrt::com_ptr<ID3D11ComputeShader> ghostHaloCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> blurDownCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> blurUpCS = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> glareStreakCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> mixCS = nullptr;
 
 	// FFT ghost pipeline shaders (self-contained in lensflare_fft.cs.hlsl)

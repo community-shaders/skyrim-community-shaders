@@ -1,4 +1,3 @@
-#include "Common/Random.hlsli"
 #include "PostProcessing/common.hlsli"
 
 static const float PI = 3.14159265359;
@@ -7,7 +6,6 @@ static const int NUM_GHOSTS = 8;
 
 // Resources
 Texture2D<float4> InputTexture : register(t0);
-Texture2D<float4> FlareTexture : register(t1);
 SamplerState ColorSampler : register(s0);
 SamplerState BorderSampler : register(s1);
 RWTexture2D<float4> OutputTexture : register(u0);
@@ -34,23 +32,24 @@ cbuffer LensFlareConstants : register(b1)
 
 	float HaloChromaShift;
 	float Intensity;
-	float GlareIntensity;
-	float GlareDivider;
-
-	// Glare
-	float2 GlareDirection;
 	uint FFTResolution;
-	float _pad0;
-
-	float3 GlareScale_packed;
 	int GLocalMask;
 
 	float3 Tint;
-	float _pad1;
+	float KernelScale;
+
+	float AspectRatio;
+	int UseBokehTexture;
+	float BokehRotation;
+	float PadScale;
+
+	uint ActiveGhostMask;
+	float3 _pad0;
 
 	// Ghost data
 	float4 GhostColors[NUM_GHOSTS];
 	float4 GhostScalesPacked[2];  // 8 scales packed into 2 float4s
+	float4 GhostKernelScalesPacked[2];
 }
 
 // ============================================================
@@ -247,112 +246,51 @@ float DiscMask(float2 screenPos)
 }
 
 // ============================================================
-// Pass 4: CSGlareStreak — directional blur streak
-// Dispatched 3x at different angles (0, 60, 120 deg) for 6-point star
-// Input: threshold buffer (t0), Output: glare buffer (u0, additive)
-// GlareDirection is set per-dispatch from CPU
 // ============================================================
-[numthreads(8, 8, 1)] void CSGlareStreak(uint3 DTid : SV_DispatchThreadID) {
-	if (DTid.x >= (uint)OutputWidth || DTid.y >= (uint)OutputHeight || GlareIntensity < EPSILON)
-		return;
+// Pass 4: CSMix — combine ghost+halo, apply tint & gradient
+// Input: ghost+halo (t0), Output: full-res final flare (u0)
+// Uses InputWidth/InputHeight for sampling half-res inputs
+// Bicubic Catmull-Rom upsampling for sharper ghost reproduction
+// ============================================================
 
-	float2 uv = (DTid.xy + 0.5f) / float2(OutputWidth, OutputHeight);
-	float2 pixelSize = 1.0f / float2(OutputWidth, OutputHeight);
+float3 SampleBicubicCatmullRom(Texture2D<float4> tex, SamplerState samp, float2 uv, float2 texSize)
+{
+	float2 samplePos = uv * texSize;
+	float2 tc = floor(samplePos - 0.5) + 0.5;
+	float2 f = samplePos - tc;
+	float2 f2 = f * f;
+	float2 f3 = f2 * f;
 
-	// Smooth 2D value noise — breaks up uniform streaks without looking screen-fixed.
-	// Project pixel into streak-local coordinate system (perpendicular & parallel to streak),
-	// then use smooth bilinear-interpolated hash noise. Center brightness offsets the coordinate
-	// so the pattern drifts naturally as the camera pans across bright sources.
-	float2 toCenter = uv - 0.5f;
-	float2 streakDir = normalize(GlareDirection);
-	float2 streakPerp = float2(-streakDir.y, streakDir.x);
+	// Catmull-Rom weights
+	float2 w0 = f2 - 0.5 * (f3 + f);
+	float2 w1 = 1.5 * f3 - 2.5 * f2 + 1.0;
+	float2 w2 = -1.5 * f3 + 2.0 * f2 + 0.5 * f;
+	float2 w3 = 0.5 * (f3 - f2);
 
-	// Sample center brightness as a camera-dependent offset
-	float centerLum = dot(InputTexture.SampleLevel(ColorSampler, float2(0.5f, 0.5f), 0).rgb, float3(0.299f, 0.587f, 0.114f));
-	float driftOffset = centerLum * 50.0f;
+	// Collapse to 4 bilinear taps
+	float2 w12 = w1 + w2;
+	float2 tc0 = (tc - 1.0) / texSize;
+	float2 tc12 = (tc + w2 / w12) / texSize;
+	float2 tc3 = (tc + 2.0) / texSize;
 
-	// Streak-space coordinates: perpendicular (tight period → distinct rays), parallel (loose period → subtle length variation)
-	float perpCoord = dot(toCenter, streakPerp) * OutputWidth / 12.0f + driftOffset;
-	float paraCoord = dot(toCenter, streakDir) * OutputWidth / 80.0f + driftOffset * 0.3f;
+	float3 result =
+		tex.SampleLevel(samp, float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y) +
+		tex.SampleLevel(samp, float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y) +
+		tex.SampleLevel(samp, float2(tc12.x, tc12.y), 0).rgb * (w12.x * w12.y) +
+		tex.SampleLevel(samp, float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y) +
+		tex.SampleLevel(samp, float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
 
-	// Bilinear value noise — smooth blobs instead of sharp bands
-	int2 cell = int2(floor(perpCoord), floor(paraCoord));
-	float2 f = float2(perpCoord, paraCoord) - float2(cell);
-	f = f * f * (3.0f - 2.0f * f);  // smoothstep
-
-	float n00 = (float)(Random::iqint3(uint2((uint)abs(cell.x), (uint)abs(cell.y))) & 0xFFFFu) / 65535.0f;
-	float n10 = (float)(Random::iqint3(uint2((uint)abs(cell.x + 1), (uint)abs(cell.y))) & 0xFFFFu) / 65535.0f;
-	float n01 = (float)(Random::iqint3(uint2((uint)abs(cell.x), (uint)abs(cell.y + 1))) & 0xFFFFu) / 65535.0f;
-	float n11 = (float)(Random::iqint3(uint2((uint)abs(cell.x + 1), (uint)abs(cell.y + 1))) & 0xFFFFu) / 65535.0f;
-
-	float noiseVal = lerp(lerp(n00, n10, f.x), lerp(n01, n11, f.x), f.y);
-	// 0.6 base + 0.4 noise → visible but not harsh brightness variation
-	float noiseModulation = 0.6f + 0.4f * noiseVal;
-
-	// Directional streak: sample along direction with exponential falloff
-	static const int NUM_SAMPLES = 16;
-	static const float ATTENUATION = 0.92f;
-
-	float3 color = InputTexture.SampleLevel(ColorSampler, uv, 0).rgb;
-	float falloff = 1.0f;
-	float totalWeight = 1.0f;
-
-	float2 stepDir = GlareDirection * pixelSize * 4.0f;
-
-	[unroll] for (int i = 1; i <= NUM_SAMPLES; i++)
-	{
-		falloff *= ATTENUATION;
-
-		float2 offset = stepDir * (float)i;
-
-		float3 s1 = InputTexture.SampleLevel(ColorSampler, uv + offset, 0).rgb;
-		float3 s2 = InputTexture.SampleLevel(ColorSampler, uv - offset, 0).rgb;
-
-		color += (s1 + s2) * falloff;
-		totalWeight += 2.0f * falloff;
-	}
-
-	color /= totalWeight;
-
-	// Scale by luminance-based intensity
-	float luminance = dot(color, float3(0.333f, 0.333f, 0.333f));
-	float luminanceScale = saturate(luminance / max(GlareDivider, 0.01f));
-
-	// Screen-space fade at edges
-	float edgeMask = 1.0f - saturate(distance(uv, 0.5f) * 2.0f);
-	edgeMask = edgeMask * 0.6f + 0.4f;
-
-	color *= luminanceScale * edgeMask * GlareIntensity * noiseModulation;
-
-	// Read existing glare and add (additive accumulation across 3 dispatches)
-	float3 existing = OutputTexture[DTid.xy].rgb;
-	OutputTexture[DTid.xy] = float4(existing + color, 1.0f);
+	// The 4 corner taps have very small weights, skip for performance
+	return max(result, 0.0);
 }
 
-	// ============================================================
-	// Pass 5: CSMix — combine ghost+halo + glare, apply tint & gradient
-	// Input: ghost+halo (t0), glare (t1), Output: full-res final flare (u0)
-	// Uses InputWidth/InputHeight for sampling half-res inputs
-	// ============================================================
-	[numthreads(8, 8, 1)] void CSMix(uint3 DTid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void CSMix(uint3 DTid : SV_DispatchThreadID) {
 	if (DTid.x >= (uint)OutputWidth || DTid.y >= (uint)OutputHeight)
 		return;
 
 	float2 uv = (DTid.xy + 0.5f) / float2(OutputWidth, OutputHeight);
-	float2 pixelSize = 1.0f / float2(InputWidth, InputHeight);
 
-	float3 flares = InputTexture.SampleLevel(ColorSampler, uv, 0).rgb;
-
-	// Sample glare with 4-tap box filter to smooth artifacts
-	float3 glare = 0;
-	glare += FlareTexture.SampleLevel(ColorSampler, uv + pixelSize * float2(-1.0f, 1.0f), 0).rgb;
-	glare += FlareTexture.SampleLevel(ColorSampler, uv + pixelSize * float2(1.0f, 1.0f), 0).rgb;
-	glare += FlareTexture.SampleLevel(ColorSampler, uv + pixelSize * float2(-1.0f, -1.0f), 0).rgb;
-	glare += FlareTexture.SampleLevel(ColorSampler, uv + pixelSize * float2(1.0f, -1.0f), 0).rgb;
-	glare *= 0.25f;
-
-	flares += glare;
+	float3 flares = SampleBicubicCatmullRom(InputTexture, ColorSampler, uv, float2(InputWidth, InputHeight));
 
 	// Procedural radial gradient based on distance from center
 	float gradientT = saturate(distance(uv, 0.5f) * 2.0f);

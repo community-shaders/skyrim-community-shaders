@@ -56,26 +56,46 @@ cbuffer LensFlareConstants : register(b1)
 
 	float HaloChromaShift;
 	float Intensity;
-	float GlareIntensity;
-	float GlareDivider;
-
-	float2 GlareDirection;
 	uint FFTResolution;
-	float _pad0;
-
-	float3 GlareScale_packed;
 	int GLocalMask;
 
 	float3 Tint;
-	float _pad1;
+	float KernelScale;
+
+	float AspectRatio;
+	int UseBokehTexture;
+	float BokehRotation;
+	float PadScale;
+
+	uint ActiveGhostMask;
+	float3 _pad0;
 
 	float4 GhostColors[NUM_GHOSTS];
 	float4 GhostScalesPacked[2];
+	float4 GhostKernelScalesPacked[2];
 }
 
 float GetGhostScale(int i)
 {
 	return GhostScalesPacked[i / 4][i % 4];
+}
+
+float GetGhostKernelScale(int i)
+{
+	return GhostKernelScalesPacked[i / 4][i % 4];
+}
+
+// Convert screen UV to FFT UV (aspect-corrected + zero-padding)
+float2 ScreenToFFT(float2 screenUV)
+{
+	float2 fftUV = screenUV;
+	if (AspectRatio > 1.0)
+		fftUV.y = (screenUV.y - 0.5) / AspectRatio + 0.5;
+	else if (AspectRatio < 1.0)
+		fftUV.x = (screenUV.x - 0.5) * AspectRatio + 0.5;
+	// Apply zero-padding: scene occupies center PadScale fraction
+	fftUV = (fftUV - 0.5) * PadScale + 0.5;
+	return fftUV;
 }
 
 // ============================================================
@@ -214,32 +234,38 @@ float2 Twiddle(uint k, uint N)
 	if (tid.x >= N || tid.y >= N)
 		return;
 
-	// Bokeh occupies the center kernelSize × kernelSize region
-	// Typical bokeh kernel is ~1/4 of FFT resolution for good padding
-	uint kernelSize = N / 4;
-	uint halfKernel = kernelSize / 2;
-	uint centerX = N / 2;
-	uint centerY = N / 2;
+	// Kernel radius based on KernelScale (fraction of N)
+	float kernelRadius = float(N) * KernelScale * 0.5;
+	float centerX = float(N) * 0.5;
+	float centerY = float(N) * 0.5;
+
+	float dx = (float)tid.x - centerX;
+	float dy = (float)tid.y - centerY;
+	float dist = length(float2(dx, dy));
 
 	float2 result = float2(0, 0);
 
-	// Check if this pixel falls within the kernel region (centered)
-	int dx = (int)tid.x - (int)centerX;
-	int dy = (int)tid.y - (int)centerY;
-
-	if (abs(dx) <= (int)halfKernel && abs(dy) <= (int)halfKernel) {
-		// Map kernel pixel to [0,1] UV of bokeh texture
-		float2 uv = float2(
-			(float)(dx + (int)halfKernel) / (float)kernelSize,
-			(float)(dy + (int)halfKernel) / (float)kernelSize);
-
-		float3 bokehColor = InputTexture.SampleLevel(BokehSampler, uv, 0).rgb;
-		float luminance = dot(bokehColor, float3(0.2126, 0.7152, 0.0722));
-		result.x = luminance;
+	if (dist <= kernelRadius) {
+		if (UseBokehTexture) {
+			// Apply global bokeh rotation
+			float2 kernelPos = float2(dx, dy);
+			if (abs(BokehRotation) > EPSILON) {
+				float sr, cr;
+				sincos(-BokehRotation, sr, cr);
+				kernelPos = float2(kernelPos.x * cr - kernelPos.y * sr, kernelPos.x * sr + kernelPos.y * cr);
+			}
+			// Map kernel pixel to [0,1] UV of bokeh texture
+			float2 uv = kernelPos / (kernelRadius * 2.0) + 0.5;
+			float3 bokehColor = InputTexture.SampleLevel(BokehSampler, uv, 0).rgb;
+			result.x = dot(bokehColor, float3(0.2126, 0.7152, 0.0722));
+		} else {
+			// Procedural soft-edged circle (fallback for BokehShape=0)
+			float edge = smoothstep(kernelRadius, kernelRadius * 0.8, dist);
+			result.x = edge;
+		}
 	}
 
 	// FFT-shift: swap quadrants so DC is at corner (0,0)
-	// This is required for correct convolution via FFT
 	uint sx = (tid.x + N / 2) % N;
 	uint sy = (tid.y + N / 2) % N;
 
@@ -260,12 +286,25 @@ float2 Twiddle(uint k, uint N)
 	if (tid.x >= N || tid.y >= N)
 		return;
 
-	// Map FFT pixel to threshold texture UV
-	// The threshold image is mapped to fill the center of the FFT buffer
+	// Map FFT pixel to threshold texture UV with aspect correction and zero-padding
 	float2 uv = (float2(tid.xy) + 0.5) / float(N);
 
-	// Sample threshold (using InputWidth/InputHeight as the source resolution)
-	float3 color = InputTexture.SampleLevel(BokehSampler, uv, 0).rgb;
+	// Undo zero-padding: scene occupies center PadScale fraction
+	float2 sceneUV = (uv - 0.5) / max(PadScale, 0.01) + 0.5;
+
+	// Preserve scene proportions in square FFT buffer
+	if (AspectRatio > 1.0)
+		sceneUV.y = (sceneUV.y - 0.5) * AspectRatio + 0.5;
+	else if (AspectRatio < 1.0)
+		sceneUV.x = (sceneUV.x - 0.5) / AspectRatio + 0.5;
+
+	// Outside scene bounds → zero padding
+	if (any(sceneUV < 0.0) || any(sceneUV > 1.0)) {
+		RWTexComplex[tid] = float2(0, 0);
+		return;
+	}
+
+	float3 color = InputTexture.SampleLevel(BokehSampler, sceneUV, 0).rgb;
 	float luminance = dot(color, float3(0.333, 0.333, 0.333));
 
 	RWTexComplex[tid] = float2(luminance, 0);
@@ -313,6 +352,10 @@ float DiscMask(float2 screenPos)
 		float2 radiantVector = uv - 0.5;
 
 		for (int i = 0; i < NUM_GHOSTS; i++) {
+			// Skip ghosts not in current pass mask
+			if (!(ActiveGhostMask & (1u << (uint)i)))
+				continue;
+
 			float4 ghostColor = GhostColors[i];
 			float ghostScale = GetGhostScale(i);
 
@@ -332,23 +375,22 @@ float DiscMask(float2 screenPos)
 				weight = distanceMask;
 			}
 
-			// Sample FFT result at ghost position (UV in FFT space)
+			// Ghost UV in screen space
 			float2 ghostUV = ghostVector + 0.5;
 
-			// Chromatic aberration: offset R and B channels
+			// Chromatic aberration in screen space
 			float chromaOffset = GhostChromaShift * 8.0;
 			float2 dir = normalize(ghostVector + 0.0001);
-			float2 uvR = ghostUV + dir * chromaOffset / float2(InputWidth, InputHeight);
+			float2 pixelOffset = dir * chromaOffset / float2(OutputWidth, OutputHeight);
+			float2 uvR = ghostUV + pixelOffset;
 			float2 uvG = ghostUV;
-			float2 uvB = ghostUV - dir * chromaOffset / float2(InputWidth, InputHeight);
+			float2 uvB = ghostUV - pixelOffset;
 
-			// Sample FFT convolution result (luminance in .x, imag in .y)
-			// Map UV from half-res space to FFT texture space
-			float sR = InputTexture.SampleLevel(BokehSampler, uvR, 0).x;
-			float sG = InputTexture.SampleLevel(BokehSampler, uvG, 0).x;
-			float sB = InputTexture.SampleLevel(BokehSampler, uvB, 0).x;
+			// Convert to FFT space (aspect + pad corrected) and sample IFFT result
+			float sR = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvR), 0).x;
+			float sG = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvG), 0).x;
+			float sB = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvB), 0).x;
 
-			// FFT result is grayscale luminance — reconstruct color using ghost tint
 			color += float3(sR, sG, sB) * ghostColor.rgb * ghostColor.a * weight;
 		}
 
@@ -358,7 +400,7 @@ float DiscMask(float2 screenPos)
 		color *= screenBorderMask * GhostStrength;
 	}
 
-	// --- Halo (same as fast path, uses threshold texture in t1) ---
+	// --- Halo (samples from IFFT result for bokeh-shaped halo) ---
 	if (HaloStrength > EPSILON) {
 		float2 fishUV = FisheyeUV(uv, HaloCompression, 1.0);
 		float2 haloVector = normalize(0.5 - uv) * HaloWidth;
@@ -374,13 +416,15 @@ float DiscMask(float2 screenPos)
 		float2 uvG = fishUV + haloVector;
 		float2 uvB = (fishUV - 0.5) * (1.0 - HaloChromaShift) + 0.5 + haloVector;
 
+		// Sample halo from IFFT result (aspect + pad corrected) for bokeh-shaped halo
 		float3 haloColor;
-		haloColor.r = FlareTexture.SampleLevel(BorderSampler, uvR, 0).r;
-		haloColor.g = FlareTexture.SampleLevel(BorderSampler, uvG, 0).g;
-		haloColor.b = FlareTexture.SampleLevel(BorderSampler, uvB, 0).b;
+		haloColor.r = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvR), 0).x;
+		haloColor.g = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvG), 0).x;
+		haloColor.b = InputTexture.SampleLevel(BokehSampler, ScreenToFFT(uvB), 0).x;
 
 		color += haloColor * screenBorderMask * haloMask * HaloStrength;
 	}
 
-	RWTexColor[tid] = float4(color, 1.0);
+	// Additive write (supports multi-pass for Ultra mode)
+	RWTexColor[tid] = RWTexColor[tid] + float4(color, 0.0);
 }
