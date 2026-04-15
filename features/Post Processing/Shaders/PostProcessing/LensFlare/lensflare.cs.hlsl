@@ -39,12 +39,13 @@ cbuffer LensFlareConstants : register(b1)
 	float KernelScale;
 
 	float AspectRatio;
-	int UseBokehTexture;
-	float BokehRotation;
+	int ApertureBlades;
+	float ApertureRotation;
 	float PadScale;
 
 	uint ActiveGhostMask;
-	float3 _pad0;
+	float ApertureSize;
+	float2 _pad0;
 
 	// Ghost data
 	float4 GhostColors[NUM_GHOSTS];

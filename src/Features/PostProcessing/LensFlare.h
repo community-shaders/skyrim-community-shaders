@@ -39,10 +39,11 @@ struct LensFlare : public PostProcessFeature
 		float GhostStrength = 0.3f;
 		float GhostChromaShift = 0.015f;
 		int GhostModeInt = 0;  // 0 = Fast, 1 = Quality, 2 = Ultra
-		int BokehShape = 0;    // 0 = None/Circle, 1-6 = built-in, 7+ = custom
 		int FFTResolution = 256;
-		float KernelScale = 0.1f;   // Fraction of FFT resolution for bokeh kernel size
-		float BokehRotation = 0.f;  // Global bokeh rotation in degrees
+		float KernelScale = 0.1f;      // Fraction of FFT resolution for bokeh kernel size
+		float FStop = 2.8f;            // F-number for procedural aperture (e.g. F2.8)
+		int ApertureBlades = 6;        // Number of aperture blades (3-10)
+		float ApertureRotation = 0.f;  // Aperture rotation in degrees
 		float HaloStrength = 0.2f;
 		float HaloRadius = 0.5f;
 		float HaloWidth = 0.5f;
@@ -61,7 +62,6 @@ struct LensFlare : public PostProcessFeature
 			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f, true, 1.0f },
 			{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f, true, 1.0f },
 		} };
-		std::string CustomBokehPath;  // User-specified custom bokeh texture path
 	} settings;
 
 	struct alignas(16) LensFlareCB
@@ -93,12 +93,13 @@ struct LensFlare : public PostProcessFeature
 		float KernelScale;
 
 		float AspectRatio;
-		int UseBokehTexture;
-		float BokehRotation;  // radians
-		float PadScale;       // 1.0 - maxKernelScale, for zero-padding
+		int ApertureBlades;
+		float ApertureRotation;  // radians
+		float PadScale;          // 1.0 - maxKernelScale, for zero-padding
 
 		uint ActiveGhostMask;  // bitmask of enabled ghosts for current pass
-		float pad0[3]{};
+		float ApertureSize;    // 1.0 / FStop
+		float pad0[2]{};
 
 		// Ghost colors as float4[8] = 128 bytes, matches HLSL float4 array
 		float GhostColors[NUM_GHOSTS * 4];
@@ -151,7 +152,6 @@ struct LensFlare : public PostProcessFeature
 	winrt::com_ptr<ID3D11ComputeShader> fftGhostComposeCS = nullptr;
 
 	uint currentFFTResolution = 256;
-	int cachedBokehShape = -1;
 	bool bokehFFTDirty = true;
 
 	virtual void SetupResources() override;

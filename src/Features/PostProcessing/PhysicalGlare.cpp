@@ -17,8 +17,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	FFTResolution,
 	FresnelExponent,
 	ChromaticSpread,
-	ApertureSize,
+	FStop,
 	SphericalAberration,
+	KernelScale,
 	PSFSharpness,
 	PSFNoiseFloor,
 	PaddingRatio,
@@ -70,9 +71,9 @@ void PhysicalGlare::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Number of aperture blades. Controls starburst pattern.");
 
-		ImGui::SliderFloat("Aperture Size", &settings.ApertureSize, 0.1f, 0.5f, "%.2f");
+		ImGui::SliderFloat("F-Stop", &settings.FStop, 1.0f, 22.0f, "F%.1f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Aperture radius as fraction of FFT extent. Smaller = wider diffraction spikes.");
+			ImGui::Text("Aperture f-number (e.g. F2.8). Smaller = larger aperture = wider diffraction spikes.\nPhysically: aperture radius = 1 / f-number.");
 
 		ImGui::SliderFloat("Spherical Aberration", &settings.SphericalAberration, 0.f, 100.f, "%.1f");
 		if (auto _tt = Util::HoverTooltipWrapper())
@@ -246,6 +247,13 @@ void PhysicalGlare::DrawSettings()
 			"0.1  = 80%% effective (recommended for high-res).\n"
 			"0.0  = 100%% (maximum sharpness, may wrap at edges).\n"
 			"Lower = sharper glare on high-res screens.");
+
+	ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.01f, 1.f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text(
+			"Scale of the convolution kernel on screen.\n"
+			"1.0 = full size. Smaller = more concentrated glare.\n"
+			"Independent of aperture f-stop setting.");
 
 	ImGui::SliderFloat("Fresnel Exponent", &settings.FresnelExponent, 0.f, 80.f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -488,7 +496,7 @@ bool PhysicalGlare::NeedsPSFRegeneration() const
 	       cachedPSFParams.EyelashCurvature != settings.EyelashCurvature ||
 	       cachedPSFParams.FresnelExponent != settings.FresnelExponent ||
 	       cachedPSFParams.ChromaticSpread != settings.ChromaticSpread ||
-	       cachedPSFParams.ApertureSize != settings.ApertureSize ||
+	       cachedPSFParams.FStop != settings.FStop ||
 	       cachedPSFParams.PSFSharpness != settings.PSFSharpness ||
 	       cachedPSFParams.PSFNoiseFloor != settings.PSFNoiseFloor ||
 	       cachedPSFParams.ParticleCount != settings.ParticleCount ||
@@ -538,7 +546,7 @@ void PhysicalGlare::GeneratePSF()
 		.ChannelIndex = 0,
 		.FresnelExponent = settings.FresnelExponent,
 		.ChromaticSpread = settings.ChromaticSpread,
-		.ApertureSize = settings.ApertureSize,
+		.ApertureSize = 1.0f / std::max(settings.FStop, 1.0f),
 		.PSFSharpness = settings.PSFSharpness,
 		.PSFNoiseFloor = settings.PSFNoiseFloor,
 		.EnableEyelashes = settings.EnableEyelashes ? 1u : 0u,
@@ -571,6 +579,7 @@ void PhysicalGlare::GeneratePSF()
 		.ScratchWidth = settings.ScratchWidth,
 		.SphericalAberration = settings.SphericalAberration,
 		.UseAP1 = (globals::features::linearLighting.settings.enableACEScg && globals::features::linearLighting.settings.enableLinearLighting) ? 1u : 0u,
+		.KernelScale = settings.KernelScale,
 	};
 
 	glareCB->Update(cbData);
@@ -645,7 +654,7 @@ void PhysicalGlare::GeneratePSF()
 	cachedPSFParams.EyelashCurvature = settings.EyelashCurvature;
 	cachedPSFParams.FresnelExponent = settings.FresnelExponent;
 	cachedPSFParams.ChromaticSpread = settings.ChromaticSpread;
-	cachedPSFParams.ApertureSize = settings.ApertureSize;
+	cachedPSFParams.FStop = settings.FStop;
 	cachedPSFParams.ParticleCount = settings.ParticleCount;
 	cachedPSFParams.ParticleSize = settings.ParticleSize;
 	cachedPSFParams.GratingCount = settings.GratingCount;
@@ -727,7 +736,7 @@ void PhysicalGlare::Draw(TextureInfo& inout_tex)
 		.ChannelIndex = 0,
 		.FresnelExponent = settings.FresnelExponent,
 		.ChromaticSpread = settings.ChromaticSpread,
-		.ApertureSize = settings.ApertureSize,
+		.ApertureSize = 1.0f / std::max(settings.FStop, 1.0f),
 		.PSFSharpness = settings.PSFSharpness,
 		.PSFNoiseFloor = settings.PSFNoiseFloor,
 		.EnableEyelashes = settings.EnableEyelashes ? 1u : 0u,
@@ -760,6 +769,7 @@ void PhysicalGlare::Draw(TextureInfo& inout_tex)
 		.ScratchWidth = settings.ScratchWidth,
 		.SphericalAberration = settings.SphericalAberration,
 		.UseAP1 = (globals::features::linearLighting.settings.enableACEScg && globals::features::linearLighting.settings.enableLinearLighting) ? 1u : 0u,
+		.KernelScale = settings.KernelScale,
 	};
 	glareCB->Update(cbData);
 

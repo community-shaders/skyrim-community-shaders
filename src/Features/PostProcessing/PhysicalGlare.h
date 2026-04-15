@@ -55,8 +55,9 @@ struct PhysicalGlare : public PostProcessFeature
 		int FFTResolution = 512;
 		float FresnelExponent = 30.f;
 		float ChromaticSpread = 1.f;
-		float ApertureSize = 0.35f;
+		float FStop = 2.8f;               // F-number (e.g. F2.8). ApertureSize = 1.0 / FStop.
 		float SphericalAberration = 0.f;  // Seidel r^4 wavefront error from lens curvature
+		float KernelScale = 1.0f;         // Scale of the convolution kernel (0.01-1.0). Smaller = more concentrated glare.
 
 		// --- PSF shaping ---
 		float PSFSharpness = 0.45f;    // pow() exponent (paper Table 3.9: 0.45). Higher = concentrated.
@@ -167,7 +168,8 @@ struct PhysicalGlare : public PostProcessFeature
 		// --- Row 11: Additional optics ---
 		float SphericalAberration;
 		uint UseAP1;
-		float _pad11[2];
+		float KernelScale;
+		float _pad11;
 	};
 	eastl::unique_ptr<ConstantBuffer> glareCB = nullptr;
 
@@ -211,7 +213,7 @@ struct PhysicalGlare : public PostProcessFeature
 		int FFTResolution = 0;
 		float FresnelExponent = 0.f;
 		float ChromaticSpread = 0.f;
-		float ApertureSize = 0.f;
+		float FStop = 0.f;
 		float PSFSharpness = 0.f;
 		float PSFNoiseFloor = 0.f;
 		// Eye mode

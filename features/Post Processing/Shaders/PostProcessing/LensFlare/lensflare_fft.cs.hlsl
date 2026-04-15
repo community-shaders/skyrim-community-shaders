@@ -63,12 +63,13 @@ cbuffer LensFlareConstants : register(b1)
 	float KernelScale;
 
 	float AspectRatio;
-	int UseBokehTexture;
-	float BokehRotation;
+	int ApertureBlades;
+	float ApertureRotation;
 	float PadScale;
 
 	uint ActiveGhostMask;
-	float3 _pad0;
+	float ApertureSize;
+	float2 _pad0;
 
 	float4 GhostColors[NUM_GHOSTS];
 	float4 GhostScalesPacked[2];
@@ -222,10 +223,10 @@ float2 Twiddle(uint k, uint N)
 }
 
 // ============================================================
-// CSBokehPrepare — Sample bokeh shape texture into N×N RG32F
-// Normalizes, zero-pads, and FFT-shifts (center-to-corner)
-// t0 = bokeh shape texture (RGBA color), s0 = linear sampler
-// u0 = RG32F output (real = luminance, imag = 0)
+// CSBokehPrepare — Generate procedural aperture shape into N×N RG32F
+// Creates an N-polygon aperture (like Physical Glare) with soft edges,
+// zero-pads, and FFT-shifts (center-to-corner).
+// u0 = RG32F output (real = aperture transmittance, imag = 0)
 // Dispatch: ((N+7)/8, (N+7)/8, 1)
 // ============================================================
 
@@ -241,28 +242,34 @@ float2 Twiddle(uint k, uint N)
 
 	float dx = (float)tid.x - centerX;
 	float dy = (float)tid.y - centerY;
-	float dist = length(float2(dx, dy));
+
+	// Aperture size scales the polygon relative to the kernel radius
+	float apertureRadius = kernelRadius * ApertureSize * 2.0;  // ApertureSize = 1/FStop
+	float edgeW = 1.5;                                         // smoothstep half-width in pixels for AA
 
 	float2 result = float2(0, 0);
 
-	if (dist <= kernelRadius) {
-		if (UseBokehTexture) {
-			// Apply global bokeh rotation
-			float2 kernelPos = float2(dx, dy);
-			if (abs(BokehRotation) > EPSILON) {
-				float sr, cr;
-				sincos(-BokehRotation, sr, cr);
-				kernelPos = float2(kernelPos.x * cr - kernelPos.y * sr, kernelPos.x * sr + kernelPos.y * cr);
-			}
-			// Map kernel pixel to [0,1] UV of bokeh texture
-			float2 uv = kernelPos / (kernelRadius * 2.0) + 0.5;
-			float3 bokehColor = InputTexture.SampleLevel(BokehSampler, uv, 0).rgb;
-			result.x = dot(bokehColor, float3(0.2126, 0.7152, 0.0722));
-		} else {
-			// Procedural soft-edged circle (fallback for BokehShape=0)
-			float edge = smoothstep(kernelRadius, kernelRadius * 0.8, dist);
-			result.x = edge;
-		}
+	// Apply rotation
+	float2 pos = float2(dx, dy);
+	if (abs(ApertureRotation) > EPSILON) {
+		float sr, cr;
+		sincos(-ApertureRotation, sr, cr);
+		pos = float2(pos.x * cr - pos.y * sr, pos.x * sr + pos.y * cr);
+	}
+
+	float dist = length(pos);
+
+	if (ApertureBlades <= 2) {
+		// Circle fallback
+		result.x = 1.0 - smoothstep(apertureRadius - edgeW, apertureRadius + edgeW, dist);
+	} else {
+		// N-polygon aperture
+		float sectorAngle = 2.0 * PI / float(ApertureBlades);
+		float rawAngle = atan2(pos.y, pos.x);
+		float localAngle = frac(rawAngle / sectorAngle) * sectorAngle - sectorAngle * 0.5;
+		float apothem = apertureRadius * cos(sectorAngle * 0.5);
+		float projDist = dist * cos(localAngle);
+		result.x = 1.0 - smoothstep(apothem - edgeW, apothem + edgeW, projDist);
 	}
 
 	// FFT-shift: swap quadrants so DC is at corner (0,0)

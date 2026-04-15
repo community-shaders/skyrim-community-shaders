@@ -1,12 +1,8 @@
 #include "LensFlare.h"
 
-#include "BokehResources.h"
 #include "Features/PostProcessing.h"
-#include "Menu.h"
 #include "State.h"
 #include "Util.h"
-
-#include "imgui_stdlib.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensFlare::Settings,
@@ -16,10 +12,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GhostStrength,
 	GhostChromaShift,
 	GhostModeInt,
-	BokehShape,
 	FFTResolution,
 	KernelScale,
-	BokehRotation,
+	FStop,
+	ApertureBlades,
+	ApertureRotation,
 	HaloStrength,
 	HaloRadius,
 	HaloWidth,
@@ -27,8 +24,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HaloChromaShift,
 	Tint,
 	GLocalMask,
-	Ghosts,
-	CustomBokehPath)
+	Ghosts)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensFlare::GhostSettings,
@@ -74,45 +70,18 @@ void LensFlare::DrawSettings()
 	}
 
 	if (settings.GhostModeInt == static_cast<int>(GhostMode::Quality) || settings.GhostModeInt == static_cast<int>(GhostMode::Ultra)) {
-		// Bokeh shape selection
-		if (owner) {
-			auto& bokeh = owner->bokehResources;
-			int shapeCount = bokeh.GetTotalShapeCount();
+		// Procedural aperture settings
+		ImGui::SliderInt("Aperture Blades", &settings.ApertureBlades, 3, 10);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Number of aperture blades for the procedural bokeh shape.");
 
-			if (ImGui::BeginCombo("Bokeh Shape", settings.BokehShape == 0 ? "Circle (Default)" : bokeh.GetShapeName(settings.BokehShape - 1))) {
-				if (ImGui::Selectable("Circle (Default)", settings.BokehShape == 0))
-					settings.BokehShape = 0;
-				for (int i = 0; i < shapeCount; i++) {
-					if (bokeh.GetShapeSRV(i)) {
-						bool selected = (settings.BokehShape == i + 1);
-						if (ImGui::Selectable(bokeh.GetShapeName(i), selected))
-							settings.BokehShape = i + 1;
-					}
-				}
-				ImGui::EndCombo();
-			}
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Select a bokeh shape for FFT ghost convolution.\nShared with Depth of Field.");
-		}
+		ImGui::SliderFloat("F-Stop", &settings.FStop, 1.0f, 22.0f, "F%.1f");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Aperture f-number (e.g. F2.8). Smaller = larger aperture.\nControls the bokeh shape characteristics.");
 
-		// Custom bokeh path
-		if (ImGui::TreeNode("Custom Bokeh Texture")) {
-			ImGui::InputText("File Path", &settings.CustomBokehPath);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Path to a PNG/DDS/BMP/TGA file for a custom bokeh shape.\nRecommended: square, grayscale, 256x256 or 512x512.");
-			if (ImGui::Button("Load Custom Bokeh")) {
-				if (!settings.CustomBokehPath.empty() && owner) {
-					if (owner->bokehResources.LoadCustomShape(settings.CustomBokehPath, 0)) {
-						settings.BokehShape = BokehResources::NUM_BUILTIN_SHAPES + 1;
-						bokehFFTDirty = true;
-						logger::info("LensFlare: Loaded custom bokeh from {}", settings.CustomBokehPath);
-					} else {
-						logger::warn("LensFlare: Failed to load custom bokeh from {}", settings.CustomBokehPath);
-					}
-				}
-			}
-			ImGui::TreePop();
-		}
+		ImGui::SliderFloat("Aperture Rotation", &settings.ApertureRotation, -180.0f, 180.0f, "%.1f deg");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Rotation of the procedural aperture.");
 
 		// FFT Resolution
 		{
@@ -133,10 +102,6 @@ void LensFlare::DrawSettings()
 		ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.01f, 0.5f, "%.3f");
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Base size of the bokeh kernel relative to FFT resolution.\nPer-ghost scales multiply this value in Ultra mode.");
-
-		ImGui::SliderFloat("Bokeh Rotation", &settings.BokehRotation, -180.0f, 180.0f, "%.1f deg");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Global rotation of the bokeh pattern.");
 	}
 
 	ImGui::SliderFloat("Ghost Strength", &settings.GhostStrength, 0.0f, 1.0f, "%.3f");
@@ -465,30 +430,16 @@ void LensFlare::PrepareBokehFFT()
 {
 	auto context = globals::d3d::context;
 
-	// Step 1: Prepare bokeh kernel from texture → RG32F (real=luminance, imag=0), centered + zero-padded
+	// Step 1: Generate procedural aperture kernel → RG32F (real=aperture, imag=0), centered + zero-padded
 	{
-		ID3D11ShaderResourceView* bokehSRV = nullptr;
-		if (settings.BokehShape > 0 && owner) {
-			bokehSRV = owner->bokehResources.GetShapeSRV(settings.BokehShape - 1);
-		}
-
-		std::array<ID3D11ShaderResourceView*, 1> srvs = { bokehSRV };
 		std::array<ID3D11UnorderedAccessView*, 1> uavs = { texFFT[0]->uav.get() };
 
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-
-		if (owner) {
-			ID3D11SamplerState* sampler = owner->bokehResources.bokehSampler.get();
-			context->CSSetSamplers(0, 1, &sampler);
-		}
 
 		context->CSSetShader(bokehPrepareCS.get(), nullptr, 0);
 		context->Dispatch((currentFFTResolution + 7) >> 3, (currentFFTResolution + 7) >> 3, 1);
 
-		srvs.fill(nullptr);
 		uavs.fill(nullptr);
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 	}
 
@@ -496,7 +447,6 @@ void LensFlare::PrepareBokehFFT()
 	DispatchFFT(fftRowCS.get(), texFFT[0].get(), texFFT[1].get(), currentFFTResolution);
 	DispatchFFT(fftColCS.get(), texFFT[1].get(), texBokehFFT.get(), currentFFTResolution);
 
-	cachedBokehShape = settings.BokehShape;
 	bokehFFTDirty = false;
 }
 
@@ -693,7 +643,7 @@ void LensFlare::DrawQuality(TextureInfo& inout_tex, LensFlareCB& data)
 
 		// 3a: Prepare bokeh kernel at this group's scale
 		{
-			bool needBokehRebuild = bokehFFTDirty || cachedBokehShape != settings.BokehShape;
+			bool needBokehRebuild = bokehFFTDirty;
 			// Multi-group Ultra: rebuild bokeh each group (different KernelScale)
 			// Single-group Quality: only rebuild when shape/dirty changes
 			if (needBokehRebuild || groups.size() > 1) {
@@ -794,8 +744,9 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	data.ActiveGhostMask = enabledMask;
 	data.KernelScale = settings.KernelScale;
 	data.AspectRatio = (float)fullW / (float)fullH;
-	data.UseBokehTexture = (settings.BokehShape > 0) ? 1 : 0;
-	data.BokehRotation = settings.BokehRotation * 3.14159265358979323846f / 180.0f;  // degrees → radians
+	data.ApertureBlades = settings.ApertureBlades;
+	data.ApertureRotation = settings.ApertureRotation * 3.14159265358979323846f / 180.0f;  // degrees → radians
+	data.ApertureSize = 1.0f / std::max(settings.FStop, 1.0f);
 
 	// Compute PadScale based on mode
 	GhostMode mode = static_cast<GhostMode>(settings.GhostModeInt);
