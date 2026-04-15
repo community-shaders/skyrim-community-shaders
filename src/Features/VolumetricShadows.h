@@ -41,6 +41,8 @@ public:
 		// Since PerGeometry is passed between c++ and hlsl, can't have different defines due to strong typing
 		DirectX::XMFLOAT4X3 ShadowMapProj[2][3];
 		DirectX::XMFLOAT4X3 CameraViewProjInverse[2];
+		float4 Pad0;
+		float4 Pad1;
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerGeometry);
 
