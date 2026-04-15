@@ -97,6 +97,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
+	Flags |= D3D11_CREATE_DEVICE_DEBUG;
+
 	if (shouldProxy) {
 		logger::info("[Frame Generation] Frame Generation enabled, using D3D12 proxy");
 
@@ -769,6 +771,7 @@ void Upscaling::DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 		if (reactiveMaskTexture) {
 			reactiveMaskTexture->srv = nullptr;
 			reactiveMaskTexture->uav = nullptr;
+			reactiveMaskTexture->rtv = nullptr;
 			reactiveMaskTexture->resource = nullptr;
 
 			delete reactiveMaskTexture;
@@ -1783,7 +1786,8 @@ void Upscaling::CopySharedD3D12Resources()
 		auto cb = upscalingDataCB->CB();
 		context->CSSetConstantBuffers(0, 1, &cb);
 
-		context->CSSetShaderResources(0, 1, &depth.depthSRV);
+		auto srv = depth.depthSRV;
+		context->CSSetShaderResources(0, 1, &srv);
 
 		auto& rt = globals::features::raytracing;
 
@@ -1795,7 +1799,7 @@ void Upscaling::CopySharedD3D12Resources()
 			context->CSSetShaderResources(1, ARRAYSIZE(views), views);
 		}
 
-		ID3D11UnorderedAccessView* uav = sharedResources.depth->uav;
+		auto* uav = sharedResources.depth->uav;
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
 		context->CSSetShader(GetCopyDepthCS(rt.IsPathTracing()), nullptr, 0);
@@ -1804,11 +1808,14 @@ void Upscaling::CopySharedD3D12Resources()
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 		// Reset
+		srv = nullptr;
+		context->CSSetShaderResources(0, 1, &srv);
+
 		uav = nullptr;
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
 		if (rt.IsPathTracing()) {
-			ID3D11ShaderResourceView* nullViews[] = { nullptr, nullptr, nullptr };
+			ID3D11ShaderResourceView* nullViews[] = { nullptr, nullptr };
 			context->CSSetShaderResources(1, ARRAYSIZE(nullViews), nullViews);
 		}
 	}
