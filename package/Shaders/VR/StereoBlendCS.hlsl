@@ -22,7 +22,7 @@ RWTexture2D<float4> OutputRW : register(u0);
 #ifdef STEREO_OVERWRITE
 RWTexture2D<float2> MotionRW : register(u1);
 Texture2D<uint> ModeTexture : register(t2);
-Texture2D<float4> ReflectanceTexture : register(t3);  // .w = POM pixelOffset from Lighting pass
+Texture2D<float> PomOffsetTexture : register(t3);  // R16_FLOAT: Stereo::POM_NO_DATA (-1.0) = no POM; >= 0.0 = POM ran
 SamplerState LinearSampler : register(s0);
 
 #	include "VRStereoOptimizations/modes.hlsli"
@@ -121,17 +121,17 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 		return;
 	}
 
-	// Debug mode 3: POM depth data visualizer — show Reflectance.w as color
+	// Debug mode 3: POM depth data visualizer — show PomOffsetTexture as color
 	if (DebugMode == 3) {
-		float pomVal = ReflectanceTexture[dtid].w;
+		float pomVal = PomOffsetTexture[dtid];
 		float4 c = ColorTexture[dtid];
-		if (pomVal > 1e-2) {
+		if (pomVal >= 0.0) {
 			// POM pixel: red-to-green gradient based on parallaxAmount
 			// Red = peak (high pomVal, closer to camera), Green = valley (low pomVal, farther), Yellow = geometry plane
 			float3 pomColor = float3(pomVal, 1.0 - pomVal, 0);
 			OutputRW[dtid] = float4(lerp(c.rgb, pomColor, 0.7), c.a);
 		}
-		// Non-POM pixels (pomVal ~ 0) left untouched
+		// Non-POM pixels store -1.0 sentinel, left untouched
 		return;
 	}
 
@@ -148,10 +148,10 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 		// Values > 0.5 are peaks (closer to camera), < 0.5 are valleys (farther from camera).
 		// Correction: high pomVal should push depth closer (smaller linear depth),
 		// so we use (0.5 - pomOffset) to get a negative correction for peaks.
-		// Non-POM pixels store 0.0, so threshold > 1e-2 distinguishes them.
+		// Non-POM pixels store -1.0 (sentinel); hasPOM is encoded by sign: >= 0 means POM ran.
 		float reprojDepthFB = centerDepth;
-		float pomOffsetFB = ReflectanceTexture[dtid].w;
-		if (pomOffsetFB > 1e-2 && POMDepthScale > 0) {
+		float pomOffsetFB = PomOffsetTexture[dtid];
+		if (pomOffsetFB >= 0.0 && POMDepthScale > 0) {
 			float linDepthFB = SharedData::GetScreenDepth(centerDepth);
 			float depthCorrectionFB = (0.5 - pomOffsetFB) * POMDepthScale;
 			float newLinDepthFB = max(linDepthFB + depthCorrectionFB, 1e-4);
@@ -214,14 +214,14 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 	// Save first-pass result as fallback before POM adjustment
 	Stereo::StereoBilateralResult firstPassR = r;
 
-	// Read POM offset from Eye 0 source's reflectance.w
+	// Read POM offset from dedicated POM texture (R16_FLOAT, written by Lighting PS at u7).
 	// pixelOffset = parallaxAmount (0-1) from ExtendedMaterials, 0.5 = geometry plane.
 	// Values > 0.5 are peaks (closer to camera), < 0.5 are valleys (farther from camera).
-	// Correction: high pomVal should push depth closer (smaller linear depth),
+	// Correction: high pomOffset should push depth closer (smaller linear depth),
 	// so we use (0.5 - pomOffset) to get a negative correction for peaks.
-	// Non-POM pixels store 0.0, so threshold > 1e-2 distinguishes them.
-	float pomOffset = ReflectanceTexture[r.otherPx].w;
-	if (pomOffset > 1e-2) {
+	// Non-POM pixels store -1.0 (sentinel); hasPOM is encoded by sign: >= 0 means POM ran.
+	float pomOffset = PomOffsetTexture[r.otherPx];
+	if (pomOffset >= 0.0) {
 		// Re-reproject with POM-adjusted depth centered at geometry plane
 		float linearDepth = SharedData::GetScreenDepth(centerDepth);
 		float depthCorrection = (0.5 - pomOffset) * POMDepthScale;

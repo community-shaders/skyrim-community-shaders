@@ -166,6 +166,10 @@ public:
 	bool pendingFontReload = false;
 	bool pendingIconReload = false;
 
+	// Display size tracking for cross-session resolution change detection
+	float2 lastDisplaySize{};
+	bool resetLayout = false;
+
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
 	void OnFocusChanged();

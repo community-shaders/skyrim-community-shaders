@@ -46,6 +46,14 @@ struct VRStereoOptimizations
 	};
 
 	//=============================================================================
+	// CONSTANTS
+	//=============================================================================
+
+	/// Sentinel written to texPomOffset when POM did not run for a pixel.
+	/// -1.0 = no POM; >= 0.0 = POM ran. Matches Stereo::POM_NO_DATA in Common/VR.hlsli.
+	static constexpr float kPomOffsetNoData = -1.0f;
+
+	//=============================================================================
 	// PUBLIC METHODS
 	//=============================================================================
 
@@ -63,7 +71,7 @@ struct VRStereoOptimizations
 
 	struct Settings
 	{
-		StereoMode stereoMode = StereoMode::Enable;
+		StereoMode stereoMode = StereoMode::Off;
 		float disocclusionDepthThreshold = 0.01f;
 		float edgeDepthThreshold = 0.05f;
 		float minEdgeDistance = 5000.0f;     ///< Minimum linearized depth for edge AA (game units)
@@ -83,7 +91,7 @@ struct VRStereoOptimizations
 		bool debugForceAllStencil = false;
 		bool debugForceAllReprojectCS = false;
 		bool debugDepthMap = false;
-		bool debugPOMDepth = false;  ///< Show POM depth data (Reflectance.w) as heatmap overlay
+		bool debugPOMDepth = false;  ///< Show POM depth data (texPomOffset) as heatmap overlay
 
 	} settings;
 
@@ -166,6 +174,15 @@ struct VRStereoOptimizations
 	/// Get mode texture SRV for external consumers (e.g., DeferredCompositeCS Eye 1 skip)
 	ID3D11ShaderResourceView* GetModeTextureSRV() const { return texPerPixelMode ? texPerPixelMode->srv.get() : nullptr; }
 
+	/// Get POM offset texture SRV for StereoBlendCS (reads per-pixel parallax depth offset)
+	ID3D11ShaderResourceView* GetPomOffsetSRV() const { return texPomOffset ? texPomOffset->srv.get() : nullptr; }
+
+	/// Get POM offset texture UAV for PS writes during deferred lighting (injected at u7)
+	ID3D11UnorderedAccessView* GetPomOffsetUAV() const { return texPomOffset ? texPomOffset->uav.get() : nullptr; }
+
+	/// Clear the POM offset texture to -1.0 (no-POM sentinel) at the start of each deferred frame
+	void ClearPomOffsetTexture();
+
 private:
 	//=============================================================================
 	// INTERNAL METHODS
@@ -186,6 +203,7 @@ private:
 
 	eastl::unique_ptr<ConstantBuffer> paramsCB;
 	eastl::unique_ptr<Texture2D> texPerPixelMode;  ///< R8_UINT classification texture (full SBS resolution)
+	eastl::unique_ptr<Texture2D> texPomOffset;     ///< R16_FLOAT POM depth offset written by Lighting PS, read by StereoBlendCS
 
 	winrt::com_ptr<ID3D11DepthStencilState> stencilWriteDSS;
 	winrt::com_ptr<ID3D11RasterizerState> stencilWriteRS;
