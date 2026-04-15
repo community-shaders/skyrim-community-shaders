@@ -957,7 +957,7 @@ void Menu::ProcessInputEventQueue()
 
 			const bool wasCapturingHotkey = IsCapturingHotkeyInput();
 			const bool allowSetupCloseKey = wasCapturingHotkey && HomePageRenderer::ShouldShowFirstTimeSetup() &&
-				(key == VK_RETURN || key == VK_ESCAPE);
+			                                (key == VK_RETURN || key == VK_ESCAPE);
 			if (!event.IsPressed()) {
 				// Skip key release if it was used to close the first-time setup dialog
 				if (HomePageRenderer::ShouldSkipKeyRelease(key)) {
@@ -1033,12 +1033,12 @@ void Menu::ProcessInputEventQueue()
 					};
 					KeyAction keyActions[] = {
 						{ settings.ToggleKey, [this]() {
-							if (!HomePageRenderer::ShouldShowFirstTimeSetup()) {
-								IsEnabled = !IsEnabled;
-								if (IsEnabled)
-									ImGui::GetIO().ClearInputKeys();  // Prevent toggle key from remaining "held" in ImGui after open.
-							}
-						} },
+							 if (!HomePageRenderer::ShouldShowFirstTimeSetup()) {
+								 IsEnabled = !IsEnabled;
+								 if (IsEnabled)
+									 ImGui::GetIO().ClearInputKeys();  // Prevent toggle key from remaining "held" in ImGui after open.
+							 }
+						 } },
 						{ settings.SkipCompilationKey, [this, shaderCache]() { if (!ShouldSwallowInput() && shaderCache->IsCompiling()) shaderCache->backgroundCompilation = true; } },
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
@@ -1115,7 +1115,7 @@ void Menu::ProcessInputEventQueue()
 bool Menu::IsCapturingHotkeyInput() const
 {
 	return settingToggleKey || settingSkipCompilationKey || settingsEffectsToggle ||
-		settingOverlayToggleKey || settingShaderBlockPrevKey || settingShaderBlockNextKey || settingWeatherEditorToggleKey;
+	       settingOverlayToggleKey || settingShaderBlockPrevKey || settingShaderBlockNextKey || settingWeatherEditorToggleKey;
 }
 
 void Menu::addToEventQueue(KeyEvent e)
