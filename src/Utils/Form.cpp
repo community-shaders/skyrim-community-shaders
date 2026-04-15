@@ -65,8 +65,8 @@ RE::FormID Util::SpidToFormId(const std::string& spid)
 		return 0;
 	}
 
-	RE::FormID reconstructed = (static_cast<RE::FormID>(file->compileIndex) << 24) +
-	                           (static_cast<RE::FormID>(file->smallFileCompileIndex) << 12) +
+	RE::FormID reconstructed = (static_cast<RE::FormID>(file->compileIndex) << 24) |
+	                           (static_cast<RE::FormID>(file->smallFileCompileIndex) << 12) |
 	                           components.localFormId;
 	auto* directForm = RE::TESForm::LookupByID(reconstructed);
 	if (directForm) {
