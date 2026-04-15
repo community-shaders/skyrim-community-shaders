@@ -1086,7 +1086,9 @@ void Menu::ProcessInputEventQueue()
 			bool isHotkey = ShouldSwallowInput() && std::any_of(std::begin(hotkeys), std::end(hotkeys),
 														[key](const auto* combo) { return InputCombo::MatchesKeyboardCombo(*combo, key); });
 
-			if (!isHotkey) {
+			// Swallow hotkey key-down events to avoid UI side effects, but always forward
+			// key-up events so ImGui state cannot get stuck in a held-key state.
+			if (!isHotkey || !event.IsPressed()) {
 				// DirectInput loses key-up events after alt-tab; validate against OS state.
 				bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
 				io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
