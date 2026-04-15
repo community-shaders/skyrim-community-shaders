@@ -14,7 +14,7 @@ struct LensFlare : public PostProcessFeature
 	static constexpr int NUM_GHOSTS = 8;
 	static constexpr uint FFT_MIN = 128;
 	static constexpr uint FFT_MAX = 1024;
-	static constexpr int MAX_KERNEL_GROUPS = 4;
+	static constexpr int MAX_KERNEL_GROUPS = 8;
 
 	enum class GhostMode : int
 	{
@@ -28,7 +28,7 @@ struct LensFlare : public PostProcessFeature
 		std::array<float, 4> Color = { 1.f, 1.f, 1.f, 1.f };
 		float Scale = 1.f;
 		bool Enabled = true;
-		float KernelScale = 0.25f;  // Per-ghost kernel size (Ultra mode only)
+		float KernelScale = 1.0f;  // Multiplier on global KernelScale (Ultra mode only)
 	};
 
 	struct Settings
@@ -52,14 +52,14 @@ struct LensFlare : public PostProcessFeature
 		bool GLocalMask = true;
 		uint8_t pad[3]{};
 		std::array<GhostSettings, NUM_GHOSTS> Ghosts = { {
-			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f, true, 0.25f },
-			{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f, true, 0.25f },
-			{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f, true, 0.25f },
-			{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f, true, 0.25f },
-			{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f, true, 0.25f },
-			{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f, true, 0.25f },
-			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f, true, 0.25f },
-			{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f, true, 0.25f },
+			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f, true, 1.0f },
+			{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f, true, 1.0f },
+			{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f, true, 1.0f },
+			{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f, true, 1.0f },
+			{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f, true, 1.0f },
+			{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f, true, 1.0f },
+			{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f, true, 1.0f },
+			{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f, true, 1.0f },
 		} };
 		std::string CustomBokehPath;  // User-specified custom bokeh texture path
 	} settings;

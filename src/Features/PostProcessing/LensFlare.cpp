@@ -132,7 +132,7 @@ void LensFlare::DrawSettings()
 
 		ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.025f, 0.5f, "%.3f");
 		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Size of the bokeh kernel relative to FFT resolution.\nSmaller = sharper/brighter ghosts, larger = softer/dimmer.");
+			ImGui::SetTooltip("Base size of the bokeh kernel relative to FFT resolution.\nPer-ghost scales multiply this value in Ultra mode.");
 
 		ImGui::SliderFloat("Bokeh Rotation", &settings.BokehRotation, -180.0f, 180.0f, "%.1f deg");
 		if (ImGui::IsItemHovered())
@@ -155,9 +155,9 @@ void LensFlare::DrawSettings()
 				ImGui::ColorEdit4("Color", settings.Ghosts[i].Color.data());
 				ImGui::SliderFloat("Scale", &settings.Ghosts[i].Scale, -15.0f, 15.0f, "%.2f");
 				if (settings.GhostModeInt == static_cast<int>(GhostMode::Ultra)) {
-					ImGui::SliderFloat("Kernel Scale", &settings.Ghosts[i].KernelScale, 0.025f, 0.5f, "%.3f");
+					ImGui::SliderFloat("Kernel Scale", &settings.Ghosts[i].KernelScale, 0.1f, 4.0f, "%.2fx");
 					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip("Per-ghost bokeh kernel size.\nDifferent sizes create mixed-focus ghost effects.");
+						ImGui::SetTooltip("Multiplier on global Kernel Scale.\n1x = same as global, <1 = sharper, >1 = softer.\nEach distinct value requires a separate FFT pass.");
 				}
 				ImGui::TreePop();
 			}
@@ -165,14 +165,14 @@ void LensFlare::DrawSettings()
 		}
 		if (ImGui::Button("Reset Ghosts to Default")) {
 			GhostSettings defaults[NUM_GHOSTS] = {
-				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f, true, 0.25f },
-				{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f, true, 0.25f },
-				{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f, true, 0.25f },
-				{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f, true, 0.25f },
-				{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f, true, 0.25f },
-				{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f, true, 0.25f },
-				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f, true, 0.25f },
-				{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f, true, 0.25f },
+				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -1.5f, true, 1.0f },
+				{ { { 1.0f, 1.0f, 0.6f, 1.0f } }, 2.5f, true, 1.0f },
+				{ { { 0.8f, 0.8f, 1.0f, 1.0f } }, -5.0f, true, 1.0f },
+				{ { { 0.5f, 1.0f, 0.4f, 1.0f } }, 10.0f, true, 1.0f },
+				{ { { 0.5f, 0.8f, 1.0f, 1.0f } }, 0.7f, true, 1.0f },
+				{ { { 0.9f, 1.0f, 0.8f, 1.0f } }, -0.4f, true, 1.0f },
+				{ { { 1.0f, 0.8f, 0.4f, 1.0f } }, -0.2f, true, 1.0f },
+				{ { { 0.9f, 0.7f, 0.7f, 1.0f } }, -0.1f, true, 1.0f },
 			};
 			std::memcpy(settings.Ghosts.data(), defaults, sizeof(settings.Ghosts));
 		}
@@ -603,11 +603,11 @@ void LensFlare::DrawQuality(TextureInfo& inout_tex, LensFlareCB& data)
 	std::vector<KernelGroup> groups;
 
 	if (mode == GhostMode::Ultra) {
-		// Group enabled ghosts by kernel scale (merge similar within 0.001)
+		// Group enabled ghosts by effective kernel scale (merge similar within 0.001)
 		for (int i = 0; i < NUM_GHOSTS; i++) {
 			if (!(data.ActiveGhostMask & (1u << i)))
 				continue;
-			float ks = settings.Ghosts[i].KernelScale;
+			float ks = settings.KernelScale * settings.Ghosts[i].KernelScale;  // effective scale
 			bool merged = false;
 			for (auto& g : groups) {
 				if (std::abs(g.kernelScale - ks) < 0.001f) {
@@ -786,7 +786,8 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 	for (int i = 0; i < NUM_GHOSTS; i++) {
 		std::memcpy(&data.GhostColors[i * 4], settings.Ghosts[i].Color.data(), sizeof(float) * 4);
 		data.GhostScalesPacked[i] = settings.Ghosts[i].Scale;
-		data.GhostKernelScalesPacked[i] = settings.Ghosts[i].KernelScale;
+		// Effective kernel scale = global * per-ghost multiplier
+		data.GhostKernelScalesPacked[i] = settings.KernelScale * settings.Ghosts[i].KernelScale;
 		if (settings.Ghosts[i].Enabled)
 			enabledMask |= (1u << i);
 	}
@@ -798,12 +799,16 @@ void LensFlare::Draw(TextureInfo& inout_tex)
 
 	// Compute PadScale based on mode
 	GhostMode mode = static_cast<GhostMode>(settings.GhostModeInt);
-	float maxKernelScale = settings.KernelScale;
+	float maxKernelScale = settings.KernelScale;  // Quality mode: use global directly
 	if (mode == GhostMode::Ultra) {
+		// Ultra: PadScale based on max effective scale across enabled ghosts
+		maxKernelScale = 0.0f;
 		for (int i = 0; i < NUM_GHOSTS; i++) {
 			if (settings.Ghosts[i].Enabled)
-				maxKernelScale = std::max(maxKernelScale, settings.Ghosts[i].KernelScale);
+				maxKernelScale = std::max(maxKernelScale, settings.KernelScale * settings.Ghosts[i].KernelScale);
 		}
+		if (maxKernelScale == 0.0f)
+			maxKernelScale = settings.KernelScale;  // fallback if none enabled
 	}
 	data.PadScale = std::clamp(1.0f - maxKernelScale, 0.1f, 1.0f);
 
