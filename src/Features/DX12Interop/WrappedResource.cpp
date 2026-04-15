@@ -5,18 +5,18 @@
 WrappedResource::WrappedResource(D3D11_TEXTURE2D_DESC a_texDesc, ID3D11Device5* a_d3d11Device, ID3D12Device* a_d3d12Device)
 {
 	// Create D3D11 shared texture directly instead of wrapping D3D12 resource
-	a_texDesc.MiscFlags |= D3D11_RESOURCE_MISC_SHARED;
+	a_texDesc.MiscFlags |= D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 	DX::ThrowIfFailed(a_d3d11Device->CreateTexture2D(&a_texDesc, nullptr, &resource11));
 
 	// Get shared handle from D3D11 texture to enable D3D12 access
 	winrt::com_ptr<IDXGIResource1> dxgiResource;
 	DX::ThrowIfFailed(resource11->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
-
 	HANDLE sharedHandle = nullptr;
-	DX::ThrowIfFailed(dxgiResource->GetSharedHandle(&sharedHandle));
+	DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &sharedHandle));
 
 	// Open the shared D3D11 texture as D3D12 resource
 	DX::ThrowIfFailed(a_d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put())));
+	CloseHandle(sharedHandle);
 
 	if (a_texDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE) {
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
