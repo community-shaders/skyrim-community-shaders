@@ -832,12 +832,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 
 	psout.Specular = float4(specularColor, 1);
-	float masksZ = Color::RGBToYCoCg(directionalAmbientColor).x;
-#			if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL)
-		masksZ = 0;
-#			endif
-	psout.Masks = float4(0, 0, masksZ, 0);
+	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x;, 0);
 #		endif
 	return psout;
 }
@@ -1007,12 +1002,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Normal.zw = 0;
 
 	psout.Albedo = float4(albedo, 1);
-	float masksZ2 = Color::RGBToYCoCg(directionalAmbientColor).x;
-#			if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL)
-		masksZ2 = 0;
-#			endif
-	psout.Masks = float4(0, 0, masksZ2, 0);
+	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, 0);
 #		endif
 
 	return psout;
