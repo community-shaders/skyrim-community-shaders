@@ -169,4 +169,94 @@ float4 SSSSBlurCS(
 	return colorBlurred;
 }
 
+// Pixel shader variant: divides out albedo before blur for correct color-space blurring
+float4 SSSSBlurPS(
+	uint2 DTid,
+	float2 texcoord,
+	float2 dir,
+	float sssAmount,
+	bool humanProfile)
+{
+	// Fetch color and albedo of current pixel:
+	float4 colorM = ColorTexture[DTid.xy];
+
+	if (sssAmount == 0)
+		return colorM;
+
+	float4 surfaceAlbedo = AlbedoTexture[DTid.xy];
+
+#if defined(HORIZONTAL)
+	// Horizontal pass: divide out albedo and convert to linear
+	colorM.rgb = Color::IrradianceToLinear(colorM.rgb / max(surfaceAlbedo.xyz, EPSILON_SSS_ALBEDO));
+#endif
+
+	// Fetch linear depth of current pixel:
+	float depthM = DepthTexture[DTid.xy].r;
+	depthM = SharedData::GetScreenDepth(depthM);
+
+	float2 profile = humanProfile ? HumanProfile.xy : BaseProfile.xy;
+	uint kernelOffset = humanProfile ? SSSS_N_SAMPLES : 0;
+
+	// Accumulate center sample, multiplying it with its gaussian weight:
+	float4 colorBlurred = colorM;
+	colorBlurred.rgb *= Kernels[kernelOffset].rgb;
+
+	// World-space width
+	float distanceToProjectionWindow = 1.0 / tan(0.5 * radians(SSSS_FOVY));
+	float scale = distanceToProjectionWindow / depthM;
+
+	// Calculate the final step to fetch the surrounding pixels:
+	float2 finalStep = scale * SharedData::BufferDim.xy * dir;
+	finalStep *= sssAmount;
+	finalStep *= profile.x;  // Modulate it using the profile
+	finalStep *= 1.0 / 3.0;  // Divide by 3 as the kernels range from -3 to 3.
+
+#if defined(VR)
+	finalStep.x *= 0.5;                 // Halve horizontal screen resolution
+	uint eyeIndex = texcoord.x >= 0.5;  // 0 = left 1 = right
+	uint bufferDimHalfX = uint(SharedData::BufferDim.x * 0.5);
+	uint2 minCoord = uint2(eyeIndex ? bufferDimHalfX : 0, 0);
+	uint2 maxCoord = uint2(eyeIndex ? SharedData::BufferDim.x : bufferDimHalfX, SharedData::BufferDim.y);
+#else
+	uint2 minCoord = uint2(0, 0);
+	uint2 maxCoord = uint2(SharedData::BufferDim.x, SharedData::BufferDim.y);
+#endif
+
+	// Accumulate the other samples:
+	for (uint i = kernelOffset + 1; i < kernelOffset + SSSS_N_SAMPLES; i++) {
+		float2 offset = Kernels[i].a * finalStep;
+
+		uint2 coords = DTid.xy + int2(offset + 0.5);
+
+		// Clamp for dynamic resolution
+		coords = clamp(coords, minCoord, maxCoord);
+
+		float3 color = ColorTexture[coords].rgb;
+
+#if defined(HORIZONTAL)
+		float sampleMask = MaskTexture[coords].x;
+		if (sampleMask > 1e-5f) {
+			// Skin pixel: divide out albedo for correct color-space blurring
+			float3 sampleAlbedo = AlbedoTexture[coords].xyz;
+			color.rgb = Color::IrradianceToLinear(color.rgb / max(sampleAlbedo, EPSILON_SSS_ALBEDO));
+		} else {
+			// Non-skin pixel: just convert to linear
+			color.rgb = Color::IrradianceToLinear(color.rgb);
+		}
+#endif
+
+		float depth = DepthTexture[coords].r;
+		depth = SharedData::GetScreenDepth(depth);
+
+		// If the difference in depth is huge, we lerp color back to "colorM":
+		float s = saturate(profile.y * distanceToProjectionWindow * abs(depthM - depth));
+		color = lerp(color, colorM.rgb, s * s);
+
+		// Accumulate:
+		colorBlurred.rgb += Kernels[i].rgb * color.rgb;
+	}
+
+	return colorBlurred;
+}
+
 //-----------------------------------------------------------------------------

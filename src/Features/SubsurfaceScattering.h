@@ -63,8 +63,8 @@ public:
 
 	Texture2D* blurHorizontalTemp = nullptr;
 
-	ID3D11ComputeShader* horizontalSSBlur = nullptr;
-	ID3D11ComputeShader* verticalSSBlur = nullptr;
+	ID3D11PixelShader* horizontalSSBlur = nullptr;
+	ID3D11PixelShader* verticalSSBlur = nullptr;
 	ID3D11ComputeShader* burleySS = nullptr;
 	RE::BGSKeyword* isBeastRaceKeyword = nullptr;
 
@@ -105,8 +105,8 @@ public:
 	virtual void SaveSettings(json& o_json) override;
 
 	virtual void ClearShaderCache() override;
-	ID3D11ComputeShader* GetComputeShaderHorizontalBlur();
-	ID3D11ComputeShader* GetComputeShaderVerticalBlur();
+	ID3D11PixelShader* GetPixelShaderHorizontalBlur();
+	ID3D11PixelShader* GetPixelShaderVerticalBlur();
 	ID3D11ComputeShader* GetComputeShaderBurley();
 
 	virtual void DataLoaded() override;

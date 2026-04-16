@@ -3,6 +3,7 @@
 #include "Deferred.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Utils/D3D11StateBackup.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SubsurfaceScattering::DiffusionProfile,
 	BlurRadius, Thickness, Strength, Falloff)
@@ -225,83 +226,114 @@ void SubsurfaceScattering::DrawSSS()
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
-	{
-		ID3D11Buffer* buffer[1] = { blurCB->CB() };
-		context->CSSetConstantBuffers(1, 1, buffer);
-
+	if (settings.SSMode == 0) {
+		// Pixel shader path for separable SSS
 		auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
 		auto mask = renderer->GetRuntimeData().renderTargets[MASKS];
 		auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
-		auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
 
-		ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
-		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		Util::FullscreenPass pass(context);
 
-		ID3D11ShaderResourceView* views[5];
-		views[0] = main.SRV;
-		views[1] = Util::GetCurrentSceneDepthSRV(true);
-		views[2] = mask.SRV;
-		views[3] = albedo.SRV;
-		views[4] = normal.SRV;
+		ID3D11Buffer* buffer[1] = { blurCB->CB() };
+		context->PSSetConstantBuffers(1, 1, buffer);
 
-		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+		// Bind SharedData cbuffer to PS slot 5 — game shaders (BSLightingShader)
+		// may have overwritten PS cbuffer bindings during the geometry pass.
+		// The SSS shader needs SharedData at register(b5) for CameraData/BufferDim.
+		ID3D11Buffer* sharedDataBuf = globals::state->sharedDataCB->CB();
+		context->PSSetConstantBuffers(5, 1, &sharedDataBuf);
 
-		if (settings.SSMode == 0) {
-			// Horizontal pass to temporary texture
-			{
-				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Horizontal");
+		// Horizontal pass: main -> blurHorizontalTemp
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Horizontal");
 
-				auto shader = GetComputeShaderHorizontalBlur();
-				context->CSSetShader(shader, nullptr, 0);
+			ID3D11ShaderResourceView* views[4];
+			views[0] = main.SRV;
+			views[1] = Util::GetCurrentSceneDepthSRV(true);
+			views[2] = mask.SRV;
+			views[3] = albedo.SRV;
+			context->PSSetShaderResources(0, ARRAYSIZE(views), views);
 
-				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-			}
+			ID3D11RenderTargetView* rtv = blurHorizontalTemp->rtv.get();
+			context->OMSetRenderTargets(1, &rtv, nullptr);
 
-			uav = nullptr;
+			context->PSSetShader(GetPixelShaderHorizontalBlur(), nullptr, 0);
+			pass.Draw();
+		}
+
+		// Unbind SRVs to avoid hazards (main.SRV -> blurHorizontalTemp->srv swap)
+		ID3D11ShaderResourceView* nullViews[4] = { nullptr, nullptr, nullptr, nullptr };
+		context->PSSetShaderResources(0, 4, nullViews);
+
+		// Vertical pass: blurHorizontalTemp -> main
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Vertical");
+
+			ID3D11ShaderResourceView* views[4];
+			views[0] = blurHorizontalTemp->srv.get();
+			views[1] = Util::GetCurrentSceneDepthSRV(true);
+			views[2] = mask.SRV;
+			views[3] = albedo.SRV;
+			context->PSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			context->OMSetRenderTargets(1, &main.RTV, nullptr);
+
+			context->PSSetShader(GetPixelShaderVerticalBlur(), nullptr, 0);
+			pass.Draw();
+		}
+
+		// ~FullscreenPass restores all D3D11 state
+	} else {
+		// Original compute shader paths (Burley) — kept identical to dev branch
+		{
+			ID3D11Buffer* buffer[1] = { blurCB->CB() };
+			context->CSSetConstantBuffers(1, 1, buffer);
+
+			auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+			auto mask = renderer->GetRuntimeData().renderTargets[MASKS];
+			auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
+			auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
+
+			ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
 			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-			// Vertical pass to main texture
-			{
-				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Vertical");
+			ID3D11ShaderResourceView* views[5];
+			views[0] = main.SRV;
+			views[1] = Util::GetCurrentSceneDepthSRV(true);
+			views[2] = mask.SRV;
+			views[3] = albedo.SRV;
+			views[4] = normal.SRV;
 
-				views[0] = blurHorizontalTemp->srv.get();
-				context->CSSetShaderResources(0, 1, views);
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
-				ID3D11UnorderedAccessView* uavs[1] = { main.UAV };
-				context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+			if (settings.SSMode == 1) {
+				// Burley pass to main texture
+				{
+					TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Burley");
 
-				auto shader = GetComputeShaderVerticalBlur();
-				context->CSSetShader(shader, nullptr, 0);
+					auto shader = GetComputeShaderBurley();
+					context->CSSetShader(shader, nullptr, 0);
 
-				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-			}
-		} else if (settings.SSMode == 1) {
-			// Burley pass to main texture
-			{
-				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Burley");
+					context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-				auto shader = GetComputeShaderBurley();
-				context->CSSetShader(shader, nullptr, 0);
-
-				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-
-				context->CopyResource(main.texture, blurHorizontalTemp->resource.get());
+					context->CopyResource(main.texture, blurHorizontalTemp->resource.get());
+				}
 			}
 		}
+
+		ID3D11Buffer* buffer = nullptr;
+		context->CSSetConstantBuffers(1, 1, &buffer);
+
+		ID3D11ShaderResourceView* views[5]{ nullptr, nullptr, nullptr, nullptr, nullptr };
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+		ID3D11UnorderedAccessView* uavs[1]{ nullptr };
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+		ID3D11ComputeShader* shader = nullptr;
+		context->CSSetShader(shader, nullptr, 0);
 	}
-
-	ID3D11Buffer* buffer = nullptr;
-	context->CSSetConstantBuffers(1, 1, &buffer);
-
-	ID3D11ShaderResourceView* views[5]{ nullptr, nullptr, nullptr, nullptr, nullptr };
-	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-	ID3D11UnorderedAccessView* uavs[1]{ nullptr };
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-
-	ID3D11ComputeShader* shader = nullptr;
-	context->CSSetShader(shader, nullptr, 0);
 }
 
 void SubsurfaceScattering::SetupResources()
@@ -318,7 +350,7 @@ void SubsurfaceScattering::SetupResources()
 		D3D11_TEXTURE2D_DESC texDesc{};
 		main.texture->GetDesc(&texDesc);
 
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_RENDER_TARGET;
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		main.SRV->GetDesc(&srvDesc);
@@ -326,9 +358,13 @@ void SubsurfaceScattering::SetupResources()
 		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 		main.UAV->GetDesc(&uavDesc);
 
+		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		main.RTV->GetDesc(&rtvDesc);
+
 		blurHorizontalTemp = new Texture2D(texDesc);
 		blurHorizontalTemp->CreateSRV(srvDesc);
 		blurHorizontalTemp->CreateUAV(uavDesc);
+		blurHorizontalTemp->CreateRTV(rtvDesc);
 	}
 }
 
@@ -380,22 +416,23 @@ void SubsurfaceScattering::ClearShaderCache()
 		burleySS->Release();
 		burleySS = nullptr;
 	}
+	Util::FullscreenPass::ClearSharedResources();
 }
 
-ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderHorizontalBlur()
+ID3D11PixelShader* SubsurfaceScattering::GetPixelShaderHorizontalBlur()
 {
 	if (!horizontalSSBlur) {
-		logger::debug("Compiling horizontalSSBlur");
-		horizontalSSBlur = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\SeparableSSSCS.hlsl", { { "HORIZONTAL", "" } }, "cs_5_0");
+		logger::debug("Compiling horizontalSSBlur PS");
+		horizontalSSBlur = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\SeparableSSSPS.hlsl", { { "HORIZONTAL", "" } }, "ps_5_0");
 	}
 	return horizontalSSBlur;
 }
 
-ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderVerticalBlur()
+ID3D11PixelShader* SubsurfaceScattering::GetPixelShaderVerticalBlur()
 {
 	if (!verticalSSBlur) {
-		logger::debug("Compiling verticalSSBlur");
-		verticalSSBlur = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\SeparableSSSCS.hlsl", {}, "cs_5_0");
+		logger::debug("Compiling verticalSSBlur PS");
+		verticalSSBlur = (ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\SeparableSSSPS.hlsl", {}, "ps_5_0");
 	}
 	return verticalSSBlur;
 }
