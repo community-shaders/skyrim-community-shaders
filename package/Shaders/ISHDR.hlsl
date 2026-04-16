@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
@@ -175,7 +176,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 contrastedColor = lerp(avgValue.x, tintedColor, Cinematic.z);
 
 	// Contrast modified to fix crushed shadows
-	float safeAvgValue = max(avgValue.x, 1e-6);
+	float safeAvgValue = max(avgValue.x, EPSILON_DIVISION);
 	float3 contrastedColorModified = pow(max(0.0, abs(tintedColor) / safeAvgValue), Cinematic.z) * safeAvgValue * sign(tintedColor);
 	contrastedColor = lerp(contrastedColorModified, contrastedColor, saturate(contrastedColorModified / 0.1f));  // blend in modified contrast for shadows
 
