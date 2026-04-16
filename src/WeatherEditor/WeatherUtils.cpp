@@ -207,7 +207,7 @@ namespace WeatherUtils
 		const double debounceDelay = 2.0;
 		double currentTime = ImGui::GetTime();
 
-		bool changed = ImGui::SliderInt(label.c_str(), &property, -128, 127);
+		bool changed = ImGui::SliderInt(label.c_str(), &property, -127, 127);
 		bool isNowActive = ImGui::IsItemActive();
 
 		// Push undo state when slider becomes active
@@ -1025,7 +1025,7 @@ namespace TOD
 
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
-			if (ImGui::SliderInt(id.c_str(), &values[i], -128, 127))
+			if (ImGui::SliderInt(id.c_str(), &values[i], -127, 127))
 				changed = true;
 
 			if (ImGui::IsItemHovered())

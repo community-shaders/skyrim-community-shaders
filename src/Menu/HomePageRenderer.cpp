@@ -64,7 +64,9 @@ void HomePageRenderer::RenderWelcomeSection()
 	}
 
 	ImVec2 windowSize = ImGui::GetWindowSize();
-	std::string titleWithVersion = "Welcome to Community Shaders " + Util::GetFormattedVersion(Plugin::VERSION);
+	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
+	auto expectedTag = std::format("v{}", versionStr);
+	std::string titleWithVersion = Plugin::BUILD_DESCRIBE == expectedTag ? std::format("Welcome to Community Shaders {}", versionStr) : std::format("Welcome to Community Shaders {} [{}]", versionStr, Plugin::BUILD_DESCRIBE);
 	ImVec2 titleSize = ImGui::CalcTextSize(titleWithVersion.c_str());
 	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
 	ImGui::Text("%s", titleWithVersion.c_str());

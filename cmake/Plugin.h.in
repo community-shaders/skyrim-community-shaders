@@ -16,4 +16,8 @@ namespace Plugin
 	};
 
 	inline constexpr auto NAME = "@PROJECT_NAME@"sv;
+
+	/// Full git describe string, e.g. "v1.4.11", "v1.4.11-3-gabcdef1", "v1.4.11-3-gabcdef1-dirty".
+	/// Matches "v{VERSION}" exactly on a clean tagged release build.
+	inline constexpr auto BUILD_DESCRIBE = "@GIT_DESCRIBE@"sv;
 }

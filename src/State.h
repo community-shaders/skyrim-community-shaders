@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Tracy/Tracy.hpp>
+#include <Tracy/TracyC.h>
 #include <Tracy/TracyD3D11.hpp>
 
 #include <Buffer.h>

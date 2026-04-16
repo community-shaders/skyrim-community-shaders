@@ -622,7 +622,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		uint32_t eyeWidthIn = (uint32_t)(renderSize.x / 2);
 		uint32_t eyeHeightIn = (uint32_t)renderSize.y;
 
-		upscaling.PreparePerEyeInputs(a_upscalingTexture, depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask);
+		upscaling.PreparePerEyeInputs(a_upscalingTexture, depthTexture.texture);
 
 		for (uint32_t i = 0; i < 2; ++i) {
 			sl::ViewportHandle vp = (i == 1) ? viewportRight : viewport;

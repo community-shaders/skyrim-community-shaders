@@ -501,5 +501,6 @@ private:
 
 	void addToEventQueue(KeyEvent e);
 	void ProcessInputEventQueue();
+	bool IsCapturingHotkeyInput() const;
 	winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3;
 };

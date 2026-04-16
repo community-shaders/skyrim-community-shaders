@@ -318,6 +318,8 @@ void LightLimitFix::Prepass()
 
 	auto state = globals::state;
 
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "LightLimitFix Prepass");
 	state->BeginPerfEvent("LightLimitFix Prepass");
 	UpdateLights();
 

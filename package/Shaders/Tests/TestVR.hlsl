@@ -335,3 +335,28 @@ static const float kEps = 0.0001f;
 	result = Stereo::ConvertUVToNormalizedScreenSpace(float2(0.25, 1.0));
 	ASSERT(IsTrue, abs(result.y - 1.0) < kEps);
 }
+
+/// @tags vr, stereo, uv
+/// ApplyVelocityToUV: correctly translates UV keeping stereoscopic boundaries intact and reports bounds
+[numthreads(1, 1, 1)] void TestApplyVelocityToUV() {
+	float2 velocity = float2(0.1, 0.0);
+	bool oob;
+
+	// Left eye bounds [0, 0.5], mapping left eye UV of 0.25 + 0.1 mono velocity -> 0.3 stereo
+	float2 resultLeft = Stereo::ApplyVelocityToUV(float2(0.25, 0.5), velocity, oob);
+	ASSERT(IsTrue, abs(resultLeft.x - 0.3) < kEps);
+	ASSERT(IsTrue, abs(resultLeft.y - 0.5) < kEps);
+	ASSERT(IsFalse, oob);
+
+	// Right eye bounds [0.5, 1.0], mapping right eye UV of 0.75 + 0.1 mono velocity -> 0.8 stereo
+	float2 resultRight = Stereo::ApplyVelocityToUV(float2(0.75, 0.5), velocity, oob);
+	ASSERT(IsTrue, abs(resultRight.x - 0.8) < kEps);
+	ASSERT(IsTrue, abs(resultRight.y - 0.5) < kEps);
+	ASSERT(IsFalse, oob);
+
+	// OOB condition: mono velocity pushes past 1.0
+	float2 resultOob = Stereo::ApplyVelocityToUV(float2(0.25, 0.5), float2(1.5, 0.0), oob);
+	ASSERT(IsTrue, oob);
+	// In VR, out of bounds is clamped (mono x < 0 maps to 0 -> stereo 0, mono x > 1 saturates to 1 -> stereo 0.5 for left)
+	ASSERT(IsTrue, abs(resultOob.x - 0.5) < kEps);
+}
