@@ -62,7 +62,8 @@ cbuffer GlareCB : register(b1)
 	// Row 11: Additional optics
 	float SphericalAberration;
 	uint UseAP1;
-	float2 _pad11;
+	float KernelScale;
+	float _pad11;
 };
 
 static const float PI = 3.14159265358979323846;
@@ -145,6 +146,11 @@ float3 XYZToAP1(float3 xyz)
 		freq.x -= N;
 	if (freq.y >= N * 0.5)
 		freq.y -= N;
+
+	// KernelScale: shrink/grow the PSF spatially by scaling frequency coordinates.
+	// Dividing by KernelScale < 1 maps each position to further from DC,
+	// making the PSF drop off faster → smaller glare on screen.
+	freq /= max(KernelScale, 0.01);
 
 	for (int w = 0; w < NUM_WAVELENGTHS; w++) {
 		float lambda = 380.0 + float(w) * (770.0 - 380.0) / float(NUM_WAVELENGTHS - 1);

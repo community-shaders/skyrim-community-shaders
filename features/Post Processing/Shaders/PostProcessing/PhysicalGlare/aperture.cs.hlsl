@@ -85,7 +85,8 @@ cbuffer GlareCB : register(b1)
 
 	float SphericalAberration;
 	uint UseAP1;
-	float2 _pad11;
+	float KernelScale;
+	float _pad11;
 };
 static const float PI = 3.14159265358979323846;
 

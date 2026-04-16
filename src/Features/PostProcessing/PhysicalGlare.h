@@ -245,6 +245,7 @@ struct PhysicalGlare : public PostProcessFeature
 		float ScratchWidth = 0.f;
 		float SphericalAberration = 0.f;
 		bool UseAP1 = false;
+		float KernelScale = 0.f;
 	} cachedPSFParams;
 	bool psfDirty = true;
 	float tearFilmTimeAccum = 0.f;

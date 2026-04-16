@@ -251,9 +251,9 @@ void PhysicalGlare::DrawSettings()
 	ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.01f, 1.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text(
-			"Scale of the convolution kernel on screen.\n"
-			"1.0 = full size. Smaller = more concentrated glare.\n"
-			"Independent of aperture f-stop setting.");
+			"Scale of the glare kernel size on screen.\n"
+			"1.0 = default. Smaller = more concentrated glare.\n"
+			"Does not affect aperture physics.");
 
 	ImGui::SliderFloat("Fresnel Exponent", &settings.FresnelExponent, 0.f, 80.f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -521,6 +521,7 @@ bool PhysicalGlare::NeedsPSFRegeneration() const
 	       cachedPSFParams.ScratchLength != settings.ScratchLength ||
 	       cachedPSFParams.ScratchWidth != settings.ScratchWidth ||
 	       cachedPSFParams.SphericalAberration != settings.SphericalAberration ||
+	       cachedPSFParams.KernelScale != settings.KernelScale ||
 	       cachedPSFParams.UseAP1 != (globals::features::linearLighting.settings.enableACEScg && globals::features::linearLighting.settings.enableLinearLighting) ||
 	       settings.TearFilmStrength > 0.f;  // force per-frame regen when active
 }
@@ -679,6 +680,7 @@ void PhysicalGlare::GeneratePSF()
 	cachedPSFParams.ScratchLength = settings.ScratchLength;
 	cachedPSFParams.ScratchWidth = settings.ScratchWidth;
 	cachedPSFParams.SphericalAberration = settings.SphericalAberration;
+	cachedPSFParams.KernelScale = settings.KernelScale;
 	cachedPSFParams.UseAP1 = globals::features::linearLighting.settings.enableACEScg && globals::features::linearLighting.settings.enableLinearLighting;
 	psfDirty = false;
 }
