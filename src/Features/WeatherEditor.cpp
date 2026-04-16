@@ -131,25 +131,25 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 	}
 
 	//// Precipitation
-	newWeather->data.precipitationBeginFadeIn = LerpInt8_t(oldWeather->data.precipitationBeginFadeIn, newWeather->data.precipitationBeginFadeIn, currentWeatherPct);
-	newWeather->data.precipitationEndFadeOut = LerpInt8_t(oldWeather->data.precipitationEndFadeOut, newWeather->data.precipitationEndFadeOut, currentWeatherPct);
+	newWeather->data.precipitationBeginFadeIn = LerpUint8_t(oldWeather->data.precipitationBeginFadeIn, newWeather->data.precipitationBeginFadeIn, currentWeatherPct);
+	newWeather->data.precipitationEndFadeOut = LerpUint8_t(oldWeather->data.precipitationEndFadeOut, newWeather->data.precipitationEndFadeOut, currentWeatherPct);
 
 	//// Sun
 	newWeather->data.sunDamage = LerpInt8_t(oldWeather->data.sunDamage, newWeather->data.sunDamage, currentWeatherPct);
 	newWeather->data.sunGlare = LerpInt8_t(oldWeather->data.sunGlare, newWeather->data.sunGlare, currentWeatherPct);
 
 	//// Lightning
-	newWeather->data.thunderLightningBeginFadeIn = LerpInt8_t(oldWeather->data.thunderLightningBeginFadeIn, newWeather->data.thunderLightningBeginFadeIn, currentWeatherPct);
-	newWeather->data.thunderLightningEndFadeOut = LerpInt8_t(oldWeather->data.thunderLightningEndFadeOut, newWeather->data.thunderLightningEndFadeOut, currentWeatherPct);
-	newWeather->data.thunderLightningFrequency = LerpInt8_t(oldWeather->data.thunderLightningFrequency, newWeather->data.thunderLightningFrequency, currentWeatherPct);
+	newWeather->data.thunderLightningBeginFadeIn = LerpUint8_t(oldWeather->data.thunderLightningBeginFadeIn, newWeather->data.thunderLightningBeginFadeIn, currentWeatherPct);
+	newWeather->data.thunderLightningEndFadeOut = LerpUint8_t(oldWeather->data.thunderLightningEndFadeOut, newWeather->data.thunderLightningEndFadeOut, currentWeatherPct);
+	newWeather->data.thunderLightningFrequency = (int8_t)LerpUint8_t((uint8_t)oldWeather->data.thunderLightningFrequency, (uint8_t)newWeather->data.thunderLightningFrequency, currentWeatherPct);
 	LerpColor(oldWeather->data.lightningColor, newWeather->data.lightningColor, currentWeatherPct);
 
 	//// Trans delta
-	newWeather->data.transDelta = LerpInt8_t(oldWeather->data.transDelta, newWeather->data.transDelta, currentWeatherPct);
+	newWeather->data.transDelta = LerpUint8_t(oldWeather->data.transDelta, newWeather->data.transDelta, currentWeatherPct);
 
 	//// Visual Effects
-	newWeather->data.visualEffectBegin = LerpInt8_t(oldWeather->data.visualEffectBegin, newWeather->data.visualEffectBegin, currentWeatherPct);
-	newWeather->data.visualEffectEnd = LerpInt8_t(oldWeather->data.visualEffectEnd, newWeather->data.visualEffectEnd, currentWeatherPct);
+	newWeather->data.visualEffectBegin = LerpUint8_t(oldWeather->data.visualEffectBegin, newWeather->data.visualEffectBegin, currentWeatherPct);
+	newWeather->data.visualEffectEnd = LerpUint8_t(oldWeather->data.visualEffectEnd, newWeather->data.visualEffectEnd, currentWeatherPct);
 
 	//// Wind
 	newWeather->data.windDirection = LerpInt8_t(oldWeather->data.windDirection, newWeather->data.windDirection, currentWeatherPct);
@@ -404,7 +404,7 @@ void WeatherEditor::DisplayPrecipitationInfo(RE::TESWeather* weather)
 
 void WeatherEditor::DisplayLightningInfo(RE::TESWeather* weather, bool showInteractiveElements)
 {
-	if (!weather || weather->data.thunderLightningFrequency <= 0)
+	if (!weather || (uint8_t)weather->data.thunderLightningFrequency == 0)
 		return;
 	const auto& theme = Menu::GetSingleton()->GetTheme();
 	uint8_t lightningR = weather->data.lightningColor.red;
@@ -427,57 +427,19 @@ void WeatherEditor::DisplayLightningInfo(RE::TESWeather* weather, bool showInter
 		weather->data.lightningColor.green = static_cast<std::uint8_t>(lightningColor[1] * 255.0f + 0.5f);
 		weather->data.lightningColor.blue = static_cast<std::uint8_t>(lightningColor[2] * 255.0f + 0.5f);
 	}
-	int8_t thunderFreqRaw = weather->data.thunderLightningFrequency;
-	ImGui::BulletText("Thunder Frequency: %d (signed 8-bit)", static_cast<int>(thunderFreqRaw));
-	ImGui::Indent();
-	if (thunderFreqRaw >= 76) {
-		if (thunderFreqRaw == 76) {
-			ImGui::BulletText("This matches ~75%% frequency in Creation Kit");
-		} else if (thunderFreqRaw > 76) {
-			ImGui::BulletText("High frequency range: Above 75%% (raw > 76)");
-		}
-	} else if (thunderFreqRaw >= 15) {
-		if (thunderFreqRaw == 15) {
-			ImGui::BulletText("This matches maximum observed frequency in Creation Kit");
-		} else {
-			ImGui::BulletText("High-medium frequency range: 75-100%% (raw 15-76)");
-		}
-	} else if (thunderFreqRaw >= 0) {
-		ImGui::BulletText("Medium frequency range: 25-75%% (raw 0-15)");
-	} else if (thunderFreqRaw >= -10) {
-		if (thunderFreqRaw == -1) {
-			ImGui::BulletText("This matches minimum frequency in Creation Kit (255 unsigned)");
-		} else if (thunderFreqRaw == -10) {
-			ImGui::BulletText("This matches ~5%% frequency in Creation Kit (246 unsigned)");
-		} else {
-			ImGui::BulletText("Low frequency range: 0-25%% (raw -10 to 0)");
-		}
-	} else if (thunderFreqRaw >= -53) {
-		if (thunderFreqRaw == -53) {
-			ImGui::BulletText("This matches ~20%% frequency in Creation Kit (203 unsigned)");
-		} else {
-			ImGui::BulletText("Low-medium frequency range: 5-20%% (raw -53 to -10)");
-		}
-	} else if (thunderFreqRaw >= -100) {
-		ImGui::BulletText("Very low frequency range: Near 0%% (raw -100 to -53)");
-	} else {
-		ImGui::BulletText("Extreme low frequency: Likely no thunder (raw < -100)");
-	}
-	ImGui::Unindent();
+	uint8_t thunderFreqRaw = (uint8_t)weather->data.thunderLightningFrequency;
+	ImGui::BulletText("Thunder Frequency: %u", static_cast<unsigned>(thunderFreqRaw));
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		Util::DrawMultiLineTooltip({ "Thunder frequency raw value with observed Creation Kit behavior:",
+		Util::DrawMultiLineTooltip({ "Thunder frequency raw value (0-255):",
 			"",
 			"Known data points from Creation Kit slider:",
 			"- Raw 15 = ~100% frequency (highest thunder)",
 			"- Raw 76 = ~75% frequency",
-			"- Raw -10 (246 unsigned) = ~5% frequency",
-			"- Raw -53 (203 unsigned) = ~20% frequency",
-			"- Raw -1 (255 unsigned) = ~0% frequency (lowest thunder)",
+			"- Raw 203 = ~20% frequency",
+			"- Raw 246 = ~5% frequency",
+			"- Raw 255 = ~0% frequency (lowest thunder)",
 			"",
-			"Pattern: Higher positive values = more frequent thunder",
-			"Lower/negative values = less frequent thunder",
-			"",
-			"Range: -128 to +127 (signed 8-bit integer)",
+			"Range: 0-255 (unsigned 8-bit integer)",
 			"Note: Creation Kit interprets this value non-linearly" });
 	}
 	uint8_t lightningBeginFadeIn = weather->data.thunderLightningBeginFadeIn;
