@@ -175,7 +175,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 contrastedColor = lerp(avgValue.x, tintedColor, Cinematic.z);
 
 	// Contrast modified to fix crushed shadows
-	float3 contrastedColorModified = pow(max(0.0, abs(tintedColor) / avgValue.x), Cinematic.z) * avgValue.x * sign(tintedColor);
+	float safeAvgValue = max(avgValue.x, 1e-6);
+	float3 contrastedColorModified = pow(max(0.0, abs(tintedColor) / safeAvgValue), Cinematic.z) * safeAvgValue * sign(tintedColor);
 	contrastedColor = lerp(contrastedColorModified, contrastedColor, saturate(contrastedColorModified / 0.1f));  // blend in modified contrast for shadows
 
 	outputColor = contrastedColor;
