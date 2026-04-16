@@ -188,7 +188,7 @@ void WeatherWidget::DrawWidget()
 			DrawProperties("Sun", { { "Sun Damage", INT8_SLIDER } });
 			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
 			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", UINT8_SLIDER }, { "Precipitation End Fade Out", UINT8_SLIDER } });
-			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", INT8_SLIDER }, { "Thunder Lightning End Fade Out", INT8_SLIDER },
+			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", UINT8_SLIDER }, { "Thunder Lightning End Fade Out", UINT8_SLIDER },
 											{ "Thunder Lightning Frequency", UINT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
 			DrawProperties("Visual Effects", { { "Visual Effect Begin", UINT8_SLIDER }, { "Visual Effect End", UINT8_SLIDER } });
 			DrawProperties("Weather Transition", { { "Trans Delta", UINT8_SLIDER } });
@@ -552,8 +552,8 @@ void WeatherWidget::SetWeatherValues()
 	data.precipitationEndFadeOut = (uint8_t)weatherProps["Precipitation End Fade Out"];
 
 	// Lightning
-	data.thunderLightningBeginFadeIn = (int8_t)weatherProps["Thunder Lightning Begin Fade In"];
-	data.thunderLightningEndFadeOut = (int8_t)weatherProps["Thunder Lightning End Fade Out"];
+	data.thunderLightningBeginFadeIn = (uint8_t)weatherProps["Thunder Lightning Begin Fade In"];
+	data.thunderLightningEndFadeOut = (uint8_t)weatherProps["Thunder Lightning End Fade Out"];
 	data.thunderLightningFrequency = (int8_t)weatherProps["Thunder Lightning Frequency"];
 	Float3ToColor(weatherColors["Lightning Color"], weather->data.lightningColor);
 
