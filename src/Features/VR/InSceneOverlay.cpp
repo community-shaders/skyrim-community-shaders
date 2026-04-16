@@ -320,7 +320,8 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 	// World-space VP (for controller attach and fixed world position modes)
 	if (hmdPose.bPoseIsValid) {
 		hmdWorld = Util::HmdMatrix34ToMatrix(hmdPose.mDeviceToAbsoluteTracking);
-		Matrix eyeToWorld = hmdWorld * eyeToHead;
+		// Transform chain: eye → head → world (row-vector: left-to-right composition)
+		Matrix eyeToWorld = eyeToHead * hmdWorld;
 		vpWorldSpace = eyeToWorld.Invert() * proj;
 	}
 
@@ -516,7 +517,7 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 				Matrix overlayTransform = offset * controllerWorld;
 				Vector3 overlayNormal(overlayTransform._31, overlayTransform._32, overlayTransform._33);
 				overlayNormal.Normalize();
-				Matrix eyeWorld = hmdWorld * eyeToHead;
+				Matrix eyeWorld = eyeToHead * hmdWorld;
 				Vector3 eyePos = eyeWorld.Translation();
 				Vector3 overlayPos = overlayTransform.Translation();
 				Vector3 toEye = eyePos - overlayPos;
