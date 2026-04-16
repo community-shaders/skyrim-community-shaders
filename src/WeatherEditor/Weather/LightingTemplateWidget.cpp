@@ -160,9 +160,9 @@ void LightingTemplateWidget::DrawDALCSettings()
 	bool changed = false;
 
 	ImGui::SeparatorText("Directional Ambient Lighting (DALC)");
-	if (WeatherUtils::DrawColorEdit("Specular", settings.dalc.specular))
+	if (MatchesSearch("Specular") && WeatherUtils::DrawColorEdit("Specular", settings.dalc.specular))
 		changed = true;
-	if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower))
+	if (MatchesSearch("Fresnel Power") && WeatherUtils::DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower))
 		changed = true;
 
 	ImGui::SeparatorText("Directional Colors");
