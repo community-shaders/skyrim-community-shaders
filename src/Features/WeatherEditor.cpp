@@ -145,11 +145,11 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 	LerpColor(oldWeather->data.lightningColor, newWeather->data.lightningColor, currentWeatherPct);
 
 	//// Trans delta
-	newWeather->data.transDelta = LerpInt8_t(oldWeather->data.transDelta, newWeather->data.transDelta, currentWeatherPct);
+	newWeather->data.transDelta = LerpUint8_t(oldWeather->data.transDelta, newWeather->data.transDelta, currentWeatherPct);
 
 	//// Visual Effects
-	newWeather->data.visualEffectBegin = LerpInt8_t(oldWeather->data.visualEffectBegin, newWeather->data.visualEffectBegin, currentWeatherPct);
-	newWeather->data.visualEffectEnd = LerpInt8_t(oldWeather->data.visualEffectEnd, newWeather->data.visualEffectEnd, currentWeatherPct);
+	newWeather->data.visualEffectBegin = LerpUint8_t(oldWeather->data.visualEffectBegin, newWeather->data.visualEffectBegin, currentWeatherPct);
+	newWeather->data.visualEffectEnd = LerpUint8_t(oldWeather->data.visualEffectEnd, newWeather->data.visualEffectEnd, currentWeatherPct);
 
 	//// Wind
 	newWeather->data.windDirection = LerpInt8_t(oldWeather->data.windDirection, newWeather->data.windDirection, currentWeatherPct);
