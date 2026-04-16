@@ -93,11 +93,11 @@ void LightingTemplateWidget::DrawBasicSettings()
 
 	if (ImGui::CollapsingHeader("Light Fade", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Light Fade Start") && WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 16384.0f))
+		if (MatchesSearch("Light Fade Start") && WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 163840.0f))
 			changed = true;
 		if (MatchesSearch("Light Fade Start"))
 			ImGui::Spacing();
-		if (MatchesSearch("Light Fade End") && WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd, 0.0f, 16384.0f))
+		if (MatchesSearch("Light Fade End") && WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd, 0.0f, 163840.0f))
 			changed = true;
 		if (MatchesSearch("Light Fade End"))
 			ImGui::Spacing();
@@ -105,7 +105,7 @@ void LightingTemplateWidget::DrawBasicSettings()
 
 	if (ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Clip Distance") && WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist, 0.0f, 16384.0f))
+		if (MatchesSearch("Clip Distance") && WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist, 0.0f, 163840.0f))
 			changed = true;
 		if (MatchesSearch("Clip Distance"))
 			ImGui::Spacing();
@@ -131,11 +131,11 @@ void LightingTemplateWidget::DrawFogSettings()
 		ImGui::Spacing();
 
 	ImGui::Spacing();
-	if (MatchesSearch("Fog Near") && WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 16384.0f))
+	if (MatchesSearch("Fog Near") && WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 163840.0f))
 		changed = true;
 	if (MatchesSearch("Fog Near"))
 		ImGui::Spacing();
-	if (MatchesSearch("Fog Far") && WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 16384.0f))
+	if (MatchesSearch("Fog Far") && WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 163840.0f))
 		changed = true;
 	if (MatchesSearch("Fog Far"))
 		ImGui::Spacing();
