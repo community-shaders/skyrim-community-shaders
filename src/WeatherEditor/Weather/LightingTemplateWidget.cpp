@@ -166,17 +166,17 @@ void LightingTemplateWidget::DrawDALCSettings()
 		changed = true;
 
 	ImGui::SeparatorText("Directional Colors");
-	if (MatchesSearch("X+ (Right)") && WeatherUtils::DrawColorEdit("X+ (Right)", settings.dalc.directional[0].max))
+	if ((MatchesSearch("Directional") || MatchesSearch("X+ (Right)")) && WeatherUtils::DrawColorEdit("X+ (Right)", settings.dalc.directional[0].max))
 		changed = true;
-	if (MatchesSearch("X- (Left)") && WeatherUtils::DrawColorEdit("X- (Left)", settings.dalc.directional[0].min))
+	if ((MatchesSearch("Directional") || MatchesSearch("X- (Left)")) && WeatherUtils::DrawColorEdit("X- (Left)", settings.dalc.directional[0].min))
 		changed = true;
-	if (MatchesSearch("Y+ (Front)") && WeatherUtils::DrawColorEdit("Y+ (Front)", settings.dalc.directional[1].max))
+	if ((MatchesSearch("Directional") || MatchesSearch("Y+ (Front)")) && WeatherUtils::DrawColorEdit("Y+ (Front)", settings.dalc.directional[1].max))
 		changed = true;
-	if (MatchesSearch("Y- (Back)") && WeatherUtils::DrawColorEdit("Y- (Back)", settings.dalc.directional[1].min))
+	if ((MatchesSearch("Directional") || MatchesSearch("Y- (Back)")) && WeatherUtils::DrawColorEdit("Y- (Back)", settings.dalc.directional[1].min))
 		changed = true;
-	if (MatchesSearch("Z+ (Up)") && WeatherUtils::DrawColorEdit("Z+ (Up)", settings.dalc.directional[2].max))
+	if ((MatchesSearch("Directional") || MatchesSearch("Z+ (Up)")) && WeatherUtils::DrawColorEdit("Z+ (Up)", settings.dalc.directional[2].max))
 		changed = true;
-	if (MatchesSearch("Z- (Down)") && WeatherUtils::DrawColorEdit("Z- (Down)", settings.dalc.directional[2].min))
+	if ((MatchesSearch("Directional") || MatchesSearch("Z- (Down)")) && WeatherUtils::DrawColorEdit("Z- (Down)", settings.dalc.directional[2].min))
 		changed = true;
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
