@@ -159,59 +159,25 @@ void LightingTemplateWidget::DrawDALCSettings()
 {
 	bool changed = false;
 
-	if (ImGui::CollapsingHeader("Basic DALC", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Spacing();
-		if (WeatherUtils::DrawColorEdit("Specular", settings.dalc.specular))
-			changed = true;
-		ImGui::Spacing();
-		if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower))
-			changed = true;
-		ImGui::Spacing();
-	}
+	ImGui::SeparatorText("Directional Ambient Lighting (DALC)");
+	if (WeatherUtils::DrawColorEdit("Specular", settings.dalc.specular))
+		changed = true;
+	if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower))
+		changed = true;
 
-	if (ImGui::CollapsingHeader("Directional Colors (Time of Day)", ImGuiTreeNodeFlags_DefaultOpen)) {
-		// Note: The game engine uses X, Y, Z to represent time periods
-		// We map them to: X=Sunrise/Day, Y=Sunset, Z=Night for TOD display
-
-		if (TOD::BeginTODTable("DALCDirectionalTable")) {
-			TOD::RenderTODHeader();
-			TOD::DrawTODSeparator();
-
-			// Prepare arrays for TOD rendering (map X,Y,Z to Sunrise,Day,Sunset,Night)
-			float3 maxColors[4];
-			float3 minColors[4];
-
-			// Map X (index 0) to Sunrise and Day
-			maxColors[TOD::Sunrise] = settings.dalc.directional[0].max;
-			maxColors[TOD::Day] = settings.dalc.directional[0].max;
-			minColors[TOD::Sunrise] = settings.dalc.directional[0].min;
-			minColors[TOD::Day] = settings.dalc.directional[0].min;
-
-			// Map Y (index 1) to Sunset
-			maxColors[TOD::Sunset] = settings.dalc.directional[1].max;
-			minColors[TOD::Sunset] = settings.dalc.directional[1].min;
-
-			// Map Z (index 2) to Night
-			maxColors[TOD::Night] = settings.dalc.directional[2].max;
-			minColors[TOD::Night] = settings.dalc.directional[2].min;
-
-			if (TOD::DrawTODColorRow("Positive Direction (+)", maxColors)) {
-				settings.dalc.directional[0].max = maxColors[TOD::Sunrise];  // X from Sunrise
-				settings.dalc.directional[1].max = maxColors[TOD::Sunset];   // Y from Sunset
-				settings.dalc.directional[2].max = maxColors[TOD::Night];    // Z from Night
-				changed = true;
-			}
-
-			if (TOD::DrawTODColorRow("Negative Direction (-)", minColors)) {
-				settings.dalc.directional[0].min = minColors[TOD::Sunrise];  // X from Sunrise
-				settings.dalc.directional[1].min = minColors[TOD::Sunset];   // Y from Sunset
-				settings.dalc.directional[2].min = minColors[TOD::Night];    // Z from Night
-				changed = true;
-			}
-
-			TOD::EndTODTable();
-		}
-	}
+	ImGui::SeparatorText("Directional Colors");
+	if (MatchesSearch("X+ (Right)") && WeatherUtils::DrawColorEdit("X+ (Right)", settings.dalc.directional[0].max))
+		changed = true;
+	if (MatchesSearch("X- (Left)") && WeatherUtils::DrawColorEdit("X- (Left)", settings.dalc.directional[0].min))
+		changed = true;
+	if (MatchesSearch("Y+ (Front)") && WeatherUtils::DrawColorEdit("Y+ (Front)", settings.dalc.directional[1].max))
+		changed = true;
+	if (MatchesSearch("Y- (Back)") && WeatherUtils::DrawColorEdit("Y- (Back)", settings.dalc.directional[1].min))
+		changed = true;
+	if (MatchesSearch("Z+ (Up)") && WeatherUtils::DrawColorEdit("Z+ (Up)", settings.dalc.directional[2].max))
+		changed = true;
+	if (MatchesSearch("Z- (Down)") && WeatherUtils::DrawColorEdit("Z- (Down)", settings.dalc.directional[2].min))
+		changed = true;
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();
