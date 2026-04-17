@@ -166,10 +166,13 @@ void PrecipitationWidget::LoadSettings()
 					logger::warn("Precipitation {}: particleTexture is not a string, skipping", GetEditorID());
 				} else {
 					auto texPath = js["particleTexture"].get<std::string>();
-					if (IsValidTexturePath(texPath))
+					if (!HasValidTextureFormat(texPath)) {
+						logger::warn("Precipitation {}: ignoring malformed texture path '{}'", GetEditorID(), texPath);
+					} else {
 						settings.particleTexture = texPath;
-					else
-						logger::warn("Precipitation {}: ignoring invalid saved texture path '{}'", GetEditorID(), texPath);
+						if (!IsValidTexturePath(texPath))
+							logger::warn("Precipitation {}: saved texture path '{}' not found on disk", GetEditorID(), texPath);
+					}
 				}
 			}
 		} catch (const std::exception& e) {
@@ -264,8 +267,9 @@ void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 	if (!sky || !sky->precip)
 		return;
 
-	auto* currentPrecip = sky->precip->currentPrecip.get();
-	if (path == lastAppliedTexture && currentPrecip == lastAppliedPrecip)
+	if (path == lastAppliedTexture &&
+		sky->precip->currentPrecip == lastAppliedPrecip &&
+		sky->precip->lastPrecip == lastAppliedPrecip)
 		return;
 
 	RE::NiPointer<RE::NiTexture> tex;
@@ -277,7 +281,7 @@ void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 	if (!sourceTex->rendererTexture || !sourceTex->rendererTexture->texture)
 		return;
 
-	RE::BSGeometry* precipObjects[] = { currentPrecip, sky->precip->lastPrecip.get() };
+	RE::BSGeometry* precipObjects[] = { sky->precip->currentPrecip.get(), sky->precip->lastPrecip.get() };
 	for (auto* precipObject : precipObjects) {
 		if (!precipObject)
 			continue;
@@ -286,13 +290,15 @@ void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 	}
 
 	lastAppliedTexture = path;
-	lastAppliedPrecip = currentPrecip;
+	lastAppliedPrecip = sky->precip->currentPrecip;
 }
 
 void PrecipitationWidget::RevertChanges()
 {
 	settings = vanillaSettings;
 	strncpy_s(textureBuffer, sizeof(textureBuffer), settings.particleTexture.c_str(), _TRUNCATE);
+	lastAppliedTexture.clear();
+	lastAppliedPrecip.reset();
 	ApplyChanges();
 }
 

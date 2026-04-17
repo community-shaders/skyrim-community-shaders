@@ -60,7 +60,7 @@ private:
 	char textureBuffer[256] = {};
 	std::string lastAppliedTexture;
 	std::string lastInvalidTexture;
-	RE::BSGeometry* lastAppliedPrecip = nullptr;
+	RE::NiPointer<RE::BSGeometry> lastAppliedPrecip;
 	std::string lastCheckedBuffer;
 	bool lastCheckedExists = false;
 };
