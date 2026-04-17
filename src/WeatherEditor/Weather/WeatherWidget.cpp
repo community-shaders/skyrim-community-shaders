@@ -477,22 +477,31 @@ void WeatherWidget::LoadSettings()
 					settings.fogProperties.size());
 			}
 
-			// Record form references (stored as EditorIDs for load-order independence)
-			auto loadFormRef = [&](const std::string& key, auto*& ptr, auto* fallback) {
+			// Record form references (resolved by matching widget EditorID)
+			auto* editorWindow = EditorWindow::GetSingleton();
+			auto findFormByEditorID = [](const std::string& editorID, const WidgetVec& widgets) -> RE::TESForm* {
+				if (editorID.empty())
+					return nullptr;
+				for (const auto& w : widgets)
+					if (w->GetEditorID() == editorID)
+						return w->form;
+				return nullptr;
+			};
+			auto loadFormRef = [&](const std::string& key, auto*& ptr, const WidgetVec& widgets, auto* fallback) {
 				using T = std::remove_pointer_t<std::remove_reference_t<decltype(ptr)>>;
 				if (js.contains(key)) {
 					std::string editorID = js[key].get<std::string>();
-					ptr = editorID.empty() ? nullptr : RE::TESForm::LookupByEditorID<T>(editorID);
+					ptr = static_cast<T*>(findFormByEditorID(editorID, widgets));
 				} else {
 					ptr = fallback;
 				}
 			};
 			for (int i = 0; i < ColorTimes::kTotal; i++) {
-				loadFormRef(std::format("imageSpaceRef_{}", i), settings.imageSpaceRefs[i], vanillaSettings.imageSpaceRefs[i]);
-				loadFormRef(std::format("volumetricLightingRef_{}", i), settings.volumetricLightingRefs[i], vanillaSettings.volumetricLightingRefs[i]);
+				loadFormRef(std::format("imageSpaceRef_{}", i), settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets, vanillaSettings.imageSpaceRefs[i]);
+				loadFormRef(std::format("volumetricLightingRef_{}", i), settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets, vanillaSettings.volumetricLightingRefs[i]);
 			}
-			loadFormRef("precipitationDataRef", settings.precipitationData, vanillaSettings.precipitationData);
-			loadFormRef("referenceEffectRef", settings.referenceEffect, vanillaSettings.referenceEffect);
+			loadFormRef("precipitationDataRef", settings.precipitationData, editorWindow->precipitationWidgets, vanillaSettings.precipitationData);
+			loadFormRef("referenceEffectRef", settings.referenceEffect, editorWindow->referenceEffectWidgets, vanillaSettings.referenceEffect);
 
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
@@ -522,13 +531,22 @@ void WeatherWidget::SaveSettings()
 	try {
 		js = settings;
 
-		// Record form references (serialized as EditorIDs for load-order independence)
+		// Record form references (serialized as widget EditorIDs for load-order independence)
+		auto* editorWindow = EditorWindow::GetSingleton();
+		auto findWidgetEditorID = [](RE::TESForm* form, const WidgetVec& widgets) -> std::string {
+			if (!form)
+				return "";
+			for (const auto& w : widgets)
+				if (w->form == form)
+					return w->GetEditorID();
+			return "";
+		};
 		for (int i = 0; i < ColorTimes::kTotal; i++) {
-			js[std::format("imageSpaceRef_{}", i)] = settings.imageSpaceRefs[i] ? settings.imageSpaceRefs[i]->GetFormEditorID() : "";
-			js[std::format("volumetricLightingRef_{}", i)] = settings.volumetricLightingRefs[i] ? settings.volumetricLightingRefs[i]->GetFormEditorID() : "";
+			js[std::format("imageSpaceRef_{}", i)] = findWidgetEditorID(settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets);
+			js[std::format("volumetricLightingRef_{}", i)] = findWidgetEditorID(settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets);
 		}
-		js["precipitationDataRef"] = settings.precipitationData ? settings.precipitationData->GetFormEditorID() : "";
-		js["referenceEffectRef"] = settings.referenceEffect ? settings.referenceEffect->GetFormEditorID() : "";
+		js["precipitationDataRef"] = findWidgetEditorID(settings.precipitationData, editorWindow->precipitationWidgets);
+		js["referenceEffectRef"] = findWidgetEditorID(settings.referenceEffect, editorWindow->referenceEffectWidgets);
 
 		if (js.is_null()) {
 			logger::error("Weather {}: Serialization produced null JSON!", GetEditorID());
