@@ -79,8 +79,12 @@ void PrecipitationWidget::DrawWidget()
 					settings.particleTexture = textureBuffer;
 					changed = true;
 				}
-				if (settings.particleTexture != textureBuffer)
-					ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Warning, "Press Enter to apply texture change.");
+				if (std::string buf(textureBuffer); settings.particleTexture != buf) {
+					if (!buf.empty() && !IsValidTexturePath(buf))
+						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must start with 'textures\\' and end with '.dds'");
+					else
+						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Warning, "Press Enter to apply texture change.");
+				}
 
 				EndScrollableContent();
 				ImGui::EndTabItem();
@@ -206,9 +210,26 @@ void PrecipitationWidget::ApplyChanges()
 	ApplyLiveParticleTexture(settings.particleTexture);
 }
 
+static bool IsValidTexturePath(const std::string& path)
+{
+	std::string lower = path;
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+	if (!lower.starts_with("textures\\") || !lower.ends_with(".dds"))
+		return false;
+	return std::filesystem::exists(std::filesystem::path("Data") / path);
+}
+
 void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 {
-	if (path.empty())
+	if (path.empty()) {
+		logger::warn("Precipitation {}: empty texture path, live texture not updated", GetEditorID());
+		return;
+	}
+	if (!IsValidTexturePath(path)) {
+		logger::warn("Precipitation {}: invalid texture path '{}', must start with 'textures\\' and end with '.dds'", GetEditorID(), path);
+		return;
+	}
+	if (path == lastAppliedTexture)
 		return;
 
 	RE::NiPointer<RE::NiTexture> tex;
@@ -216,16 +237,23 @@ void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 	if (!tex || tex->GetRTTI() != globals::rtti::NiSourceTextureRTTI.get())
 		return;
 
+	auto* sourceTex = static_cast<RE::NiSourceTexture*>(tex.get());
+	if (!sourceTex->rendererTexture || !sourceTex->rendererTexture->texture)
+		return;
+
 	auto* sky = globals::game::sky;
 	if (!sky || !sky->precip)
 		return;
 
-	auto precipObject = sky->precip->currentPrecip ? sky->precip->currentPrecip : sky->precip->lastPrecip;
-	if (!precipObject)
-		return;
+	RE::BSGeometry* precipObjects[] = { sky->precip->currentPrecip.get(), sky->precip->lastPrecip.get() };
+	for (auto* precipObject : precipObjects) {
+		if (!precipObject)
+			continue;
+		if (auto* shaderProp = netimmerse_cast<RE::BSParticleShaderProperty*>(precipObject->GetGeometryRuntimeData().shaderProperty.get()))
+			shaderProp->particleShaderTexture = RE::NiPointer(sourceTex);
+	}
 
-	if (auto* shaderProp = netimmerse_cast<RE::BSParticleShaderProperty*>(precipObject->GetGeometryRuntimeData().shaderProperty.get()))
-		shaderProp->particleShaderTexture = RE::NiPointer(static_cast<RE::NiSourceTexture*>(tex.get()));
+	lastAppliedTexture = path;
 }
 
 void PrecipitationWidget::RevertChanges()

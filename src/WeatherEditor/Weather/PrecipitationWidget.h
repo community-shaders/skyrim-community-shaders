@@ -34,7 +34,7 @@ private:
 
 	// Swaps the live precipitation particle texture (Sky → precip → BSParticleShaderProperty::particleShaderTexture).
 	// Needed because updating BGSShaderParticleGeometryData::particleTexture.textureName alone doesn't reload the GPU texture.
-	static void ApplyLiveParticleTexture(const std::string& path);
+	void ApplyLiveParticleTexture(const std::string& path);
 
 	struct Settings
 	{
@@ -58,4 +58,5 @@ private:
 	Settings vanillaSettings;
 	Settings originalSettings;
 	char textureBuffer[256] = {};
+	std::string lastAppliedTexture;
 };
