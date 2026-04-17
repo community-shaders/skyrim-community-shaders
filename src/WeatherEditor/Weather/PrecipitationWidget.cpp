@@ -4,14 +4,20 @@
 #include "Globals.h"
 #include "RE/B/BSShaderManager.h"
 #include "RE/N/NiSourceTexture.h"
+#include "Utils/FileSystem.h"
+
+static bool HasValidTextureFormat(std::string_view path)
+{
+	std::string lower(path);
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+	return lower.starts_with("textures\\") && lower.ends_with(".dds");
+}
 
 static bool IsValidTexturePath(const std::string& path)
 {
-	std::string lower = path;
-	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
-	if (!lower.starts_with("textures\\") || !lower.ends_with(".dds"))
+	if (!HasValidTextureFormat(path))
 		return false;
-	return std::filesystem::exists(std::filesystem::path("Data") / path);
+	return std::filesystem::exists(Util::PathHelpers::GetDataPath() / path);
 }
 
 void PrecipitationWidget::DrawWidget()
@@ -90,8 +96,8 @@ void PrecipitationWidget::DrawWidget()
 						changed = true;
 					}
 				}
-				if (std::string buf(textureBuffer); settings.particleTexture != buf) {
-					if (!buf.empty() && !IsValidTexturePath(buf))
+				if (std::string_view buf(textureBuffer); settings.particleTexture != buf) {
+					if (!buf.empty() && !HasValidTextureFormat(buf))
 						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must start with 'textures\\' and end with '.dds'");
 					else
 						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Warning, "Press Enter to apply texture change.");
