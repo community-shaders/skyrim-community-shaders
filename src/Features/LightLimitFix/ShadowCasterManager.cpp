@@ -185,7 +185,7 @@ namespace ShadowCasterManager
 	// kVanillaMinLights redraws (matching Skyrim's original 4-caster behaviour)
 	// even when the game is running below the FPS target.
 	static float s_autoTargetMs = 0.0f;        // target frame time (ms); 0 = not yet initialised
-	static float s_adaptiveBudgetMs = 0.5f;    // current adaptive budget (ms)
+	static float s_adaptiveBudgetMs = 2.0f;    // current adaptive budget (ms); seeded high so first frames aren't starved
 	static float s_actualShadowCostMs = 0.0f;  // EMA-smoothed actual shadow GPU cost (ms)
 	static float s_utilizationRatio = 0.0f;    // EMA-smoothed budget utilization (0..1+)
 
@@ -1298,6 +1298,14 @@ namespace ShadowCasterManager
 					double hz = globals::game::isVR ? globals::features::vr.GetHMDRefreshRate() : globals::features::upscaling.refreshRate;
 					s_autoTargetMs = (hz > 1.0) ? static_cast<float>(1000.0 / hz) : kAutoTargetFallbackMs;
 				}
+
+				// Never target a frame time faster than the game is actually achieving.
+				// Without this, high refresh rate monitors (e.g. 240 Hz → 4.17 ms target)
+				// create massive negative headroom when the game runs at 60 fps (16.67 ms),
+				// slamming the budget to the floor and starving shadow redraws.
+				// Clamping to s_ftEMA keeps headroom at zero when the game can't reach the
+				// monitor target, so the budget holds steady rather than collapsing.
+				s_autoTargetMs = std::max(s_autoTargetMs, s_ftEMA);
 
 				// Smooth actual shadow cost from consumed budget history (us -> ms).
 				const float avgConsumedMs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize) / 1000.0f;
