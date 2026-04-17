@@ -113,7 +113,7 @@ namespace ENBExtender
 					if (std::regex_search(line, match, trailingPattern)) {
 						// Split the line: keep the directive part, comment out the rest
 						std::string directivePart = match[1].str();
-						std::string trailingPart = line.substr(match.position(1) + match.length(1) - match.length(2));
+						std::string trailingPart = line.substr(match.position(2));
 						result += directivePart + "\n// ENB Extender trailing content: " + trailingPart + "\n";
 						continue;
 					}
@@ -217,6 +217,10 @@ namespace ENBExtender
 		}
 
 		std::streamsize size = file.tellg();
+		if (size < 0) {
+			logger::warn("[ENBPP] Failed to determine size of include file: {}", includePath.string());
+			return E_FAIL;
+		}
 		file.seekg(0, std::ios::beg);
 
 		std::string content(size, '\0');

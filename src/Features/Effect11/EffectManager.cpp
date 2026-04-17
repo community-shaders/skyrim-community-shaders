@@ -945,15 +945,15 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	winrt::com_ptr<ID3D11Texture2D> texture;
 	if (!resource || !resource.try_as(texture) || !texture) {
 		logger::error("[ENBPP] Failed to get Texture2D from UAV in ApplyColorCorrection");
-		return;
-	}
-	D3D11_TEXTURE2D_DESC texDesc;
-	texture->GetDesc(&texDesc);
+	} else {
+		D3D11_TEXTURE2D_DESC texDesc;
+		texture->GetDesc(&texDesc);
 
-	// Dispatch compute shader (8x8 thread groups)
-	UINT dispatchX = (texDesc.Width + 7) / 8;
-	UINT dispatchY = (texDesc.Height + 7) / 8;
-	context->Dispatch(dispatchX, dispatchY, 1);
+		// Dispatch compute shader (8x8 thread groups)
+		UINT dispatchX = (texDesc.Width + 7) / 8;
+		UINT dispatchY = (texDesc.Height + 7) / 8;
+		context->Dispatch(dispatchX, dispatchY, 1);
+	}
 
 	// Clear bindings
 	ID3D11UnorderedAccessView* nullUAV = nullptr;

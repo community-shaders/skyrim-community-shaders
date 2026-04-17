@@ -322,8 +322,6 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 
-	psout.Color.w = input.Color.w * baseColor.w;
-
 #			if defined(CLOUDS)
 	if (SharedData::enbSettings.EnableSky) {
 		float cloudsCurve = max(SharedData::enbSettings.CloudsCurve, 1e-3);
