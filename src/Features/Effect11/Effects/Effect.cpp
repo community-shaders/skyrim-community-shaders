@@ -181,6 +181,11 @@ bool Effect::LoadFXFile()
 	}
 
 	std::streamsize size = mainFile.tellg();
+	if (size < 0) {
+		errors.push_back("Failed to determine size of effect file: " + filePath.string());
+		logger::error("[ENBPP] Failed to determine size of effect file: {}", filePath.string());
+		return false;
+	}
 	mainFile.seekg(0, std::ios::beg);
 	std::string sourceCode(size, '\0');
 	if (!mainFile.read(sourceCode.data(), size)) {
@@ -271,10 +276,10 @@ bool Effect::LoadFXFile()
 	return true;
 }
 
-bool Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp)
+Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp)
 {
 	if (!IsCompiled() || !effect) {
-		return false;  // Skip execution if not compiled
+		return {};
 	}
 
 	auto context = globals::d3d::context;
@@ -283,14 +288,14 @@ bool Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 	auto sequenceIt = techniques.find(a_baseTechniqueName);
 	if (sequenceIt == techniques.end()) {
 		logger::debug("[ENBPP] Technique sequence '{}' not found", a_baseTechniqueName);
-		return false;
+		return {};
 	}
 
 	const auto& sequence = sequenceIt->second;
 
 	if (sequence.empty()) {
 		logger::debug("[ENBPP] Technique sequence '{}' is empty", a_baseTechniqueName);
-		return false;
+		return {};
 	}
 
 	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
@@ -355,7 +360,7 @@ bool Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 		inputSRV->GetResource(inputResource.put());
 		winrt::com_ptr<ID3D11Texture2D> inputTexture;
 		if (inputResource) {
-			inputResource.as(inputTexture);
+			inputResource.try_as(inputTexture);
 			if (inputTexture) {
 				D3D11_TEXTURE2D_DESC inputDesc;
 				inputTexture->GetDesc(&inputDesc);
@@ -369,7 +374,7 @@ bool Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 		outputRTV->GetResource(outputResource.put());
 		winrt::com_ptr<ID3D11Texture2D> outputTexture;
 		if (outputResource) {
-			outputResource.as(outputTexture);
+			outputResource.try_as(outputTexture);
 			if (outputTexture) {
 				D3D11_TEXTURE2D_DESC outputDesc;
 				outputTexture->GetDesc(&outputDesc);
@@ -397,7 +402,7 @@ bool Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 		}
 	}
 
-	return targetInOutput;
+	return { true, targetInOutput };
 }
 
 void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output)

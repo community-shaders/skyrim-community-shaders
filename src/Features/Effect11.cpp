@@ -70,9 +70,9 @@ void Effect11::Prepass()
 
 float3 Curve(float3 color, float power)
 {
-	color.x = pow(color.x, power);
-	color.y = pow(color.y, power);
-	color.z = pow(color.z, power);
+	color.x = pow(std::max(color.x, 0.0f), power);
+	color.y = pow(std::max(color.y, 0.0f), power);
+	color.z = pow(std::max(color.z, 0.0f), power);
 
 	return color;
 }

@@ -13,9 +13,9 @@ void ENBEffectPostPass::Execute()
 		return;
 	}
 
-	bool inOutput = ExecuteTechniqueSequence(GetSelectedTechnique(), textureSDRTemp->srv.get(), *textureSDRTemp2, *textureSDRTemp);
+	auto [executed, inOutput] = ExecuteTechniqueSequence(GetSelectedTechnique(), textureSDRTemp->srv.get(), *textureSDRTemp2, *textureSDRTemp);
 
-	if (inOutput) {
+	if (executed && inOutput) {
 		textureManager.SwapTextures("TextureSDRTemp", "TextureSDRTemp2");
 	}
 }
@@ -24,7 +24,5 @@ void ENBEffectPostPass::UpdateEffectVariables()
 {
 	auto& textureManager = TextureManager::GetSingleton();
 	auto textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
-	if (textureSDRTemp) {
-		SetShaderResourceVariable("TextureOriginal", textureSDRTemp->srv.get());
-	}
+	SetShaderResourceVariable("TextureOriginal", textureSDRTemp ? textureSDRTemp->srv.get() : nullptr);
 }

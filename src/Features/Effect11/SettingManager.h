@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <shared_mutex>
 
 enum class SettingType
@@ -12,7 +13,7 @@ enum class SettingType
 };
 
 // Shared time-of-day index lookup used by both TimeOfDayValue and ColorTimeOfDayValue
-inline int TimeOfDayIndexFromName(const std::string& name)
+inline std::optional<int> TimeOfDayIndexFromName(const std::string& name)
 {
 	static const std::pair<const char*, int> lookup[] = {
 		{ "Dawn", 0 }, { "Sunrise", 1 }, { "Day", 2 }, { "Sunset", 3 },
@@ -22,7 +23,8 @@ inline int TimeOfDayIndexFromName(const std::string& name)
 		if (name == n)
 			return idx;
 	}
-	return 0;  // Default to Dawn
+	logger::warn("[SettingManager] Unknown time-of-day name '{}', no default used", name);
+	return std::nullopt;
 }
 
 struct TimeOfDayValue
@@ -50,7 +52,11 @@ struct TimeOfDayValue
 		return std::equal(std::begin(values), std::end(values), std::begin(other.values));
 	}
 
-	float& GetByName(const std::string& name) { return values[TimeOfDayIndexFromName(name)]; }
+	float& GetByName(const std::string& name)
+	{
+		auto idx = TimeOfDayIndexFromName(name);
+		return values[idx.value_or(0)];
+	}
 };
 
 struct ColorTimeOfDayValue
@@ -86,7 +92,11 @@ struct ColorTimeOfDayValue
 		return true;
 	}
 
-	float3& GetByName(const std::string& name) { return values[TimeOfDayIndexFromName(name)]; }
+	float3& GetByName(const std::string& name)
+	{
+		auto idx = TimeOfDayIndexFromName(name);
+		return values[idx.value_or(0)];
+	}
 };
 
 using SettingValue = std::variant<bool, float, TimeOfDayValue, ColorTimeOfDayValue>;

@@ -21,9 +21,9 @@ void ENBLens::Execute()
 		return;
 	}
 
-	bool inOutput = ExecuteTechniqueSequence(GetSelectedTechnique(), downsampledInputSRV, *textureLens, *textureHDRTemp);
+	auto [executed, inOutput] = ExecuteTechniqueSequence(GetSelectedTechnique(), downsampledInputSRV, *textureLens, *textureHDRTemp);
 
-	if (!inOutput) {
+	if (executed && !inOutput) {
 		textureManager.SwapTextures("TextureLens", "TextureHDRTemp");
 	}
 }

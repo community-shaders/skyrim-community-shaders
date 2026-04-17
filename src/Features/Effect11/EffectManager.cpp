@@ -857,7 +857,10 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 	winrt::com_ptr<ID3D11Resource> resource;
 	a_dest->GetResource(resource.put());
 	winrt::com_ptr<ID3D11Texture2D> texture;
-	resource.as(texture);
+	if (!resource || !resource.try_as(texture) || !texture) {
+		logger::error("[ENBPP] Failed to get Texture2D from destination render target");
+		return;
+	}
 	D3D11_TEXTURE2D_DESC texDesc;
 	texture->GetDesc(&texDesc);
 
@@ -940,7 +943,10 @@ void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
 	winrt::com_ptr<ID3D11Resource> resource;
 	textureUAV->GetResource(resource.put());
 	winrt::com_ptr<ID3D11Texture2D> texture;
-	resource.as(texture);
+	if (!resource || !resource.try_as(texture) || !texture) {
+		logger::error("[ENBPP] Failed to get Texture2D from UAV in ApplyColorCorrection");
+		return;
+	}
 	D3D11_TEXTURE2D_DESC texDesc;
 	texture->GetDesc(&texDesc);
 
