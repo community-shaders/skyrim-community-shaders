@@ -259,6 +259,7 @@ void WeatherWidget::DrawWidget()
 						if (ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag)) {
 							if (inheritFlag && parentWidget) {
 								weather->imageSpaces[i] = parentWidget->weather->imageSpaces[i];
+								settings.imageSpaceRefs[i] = weather->imageSpaces[i];
 								recordChanged = true;
 							}
 						}
@@ -271,6 +272,7 @@ void WeatherWidget::DrawWidget()
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
 					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", weather->imageSpaces[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
+						settings.imageSpaceRefs[i] = weather->imageSpaces[i];
 						recordChanged = true;
 					}  // Add "Open" button
 					if (weather->imageSpaces[i]) {
@@ -306,6 +308,7 @@ void WeatherWidget::DrawWidget()
 						if (ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag)) {
 							if (inheritFlag && parentWidget) {
 								weather->volumetricLighting[i] = parentWidget->weather->volumetricLighting[i];
+								settings.volumetricLightingRefs[i] = weather->volumetricLighting[i];
 								recordChanged = true;
 							}
 						}
@@ -318,6 +321,7 @@ void WeatherWidget::DrawWidget()
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
 					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", weather->volumetricLighting[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
+						settings.volumetricLightingRefs[i] = weather->volumetricLighting[i];
 						recordChanged = true;
 					}  // Add "Open" button
 					if (weather->volumetricLighting[i]) {
@@ -348,6 +352,7 @@ void WeatherWidget::DrawWidget()
 					if (ImGui::Checkbox("##inherit_Precipitation", &inheritFlag)) {
 						if (inheritFlag && parentWidget) {
 							weather->precipitationData = parentWidget->weather->precipitationData;
+							settings.precipitationData = weather->precipitationData;
 							recordChanged = true;
 						}
 					}
@@ -360,6 +365,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::Text("Particle Shader:");
 				ImGui::SameLine(formLabelOffset);
 				if (WeatherUtils::DrawFormPickerCached("##Precipitation", weather->precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
+					settings.precipitationData = weather->precipitationData;
 					recordChanged = true;
 				}  // Add "Open" button
 				if (weather->precipitationData) {
@@ -388,6 +394,7 @@ void WeatherWidget::DrawWidget()
 					if (ImGui::Checkbox("##inherit_ReferenceEffect", &inheritFlag)) {
 						if (inheritFlag && parentWidget) {
 							weather->referenceEffect = parentWidget->weather->referenceEffect;
+							settings.referenceEffect = weather->referenceEffect;
 							recordChanged = true;
 						}
 					}
@@ -400,6 +407,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::Text("Reference Effect:");
 				ImGui::SameLine(formLabelOffset);
 				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", weather->referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
+					settings.referenceEffect = weather->referenceEffect;
 					recordChanged = true;
 				}  // Add "Open" button
 				if (weather->referenceEffect) {
@@ -786,6 +794,14 @@ void WeatherWidget::LoadWeatherValues()
 			ColorToFloat3(cloudColors[j], settingsCloud.color[j]);
 		}
 	}
+
+	// Record form references
+	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+		settings.imageSpaceRefs[i] = weather->imageSpaces[i];
+		settings.volumetricLightingRefs[i] = weather->volumetricLighting[i];
+	}
+	settings.precipitationData = weather->precipitationData;
+	settings.referenceEffect = weather->referenceEffect;
 }
 
 void WeatherWidget::DrawDALCSettings()
@@ -1659,6 +1675,10 @@ bool WeatherWidget::Settings::operator==(const Settings& o) const
 	       std::equal(std::begin(dalc), std::end(dalc), std::begin(o.dalc)) &&
 	       std::equal(std::begin(clouds), std::end(clouds), std::begin(o.clouds)) &&
 	       std::equal(std::begin(imageSpaces), std::end(imageSpaces), std::begin(o.imageSpaces)) &&
+	       std::equal(std::begin(imageSpaceRefs), std::end(imageSpaceRefs), std::begin(o.imageSpaceRefs)) &&
+	       std::equal(std::begin(volumetricLightingRefs), std::end(volumetricLightingRefs), std::begin(o.volumetricLightingRefs)) &&
+	       precipitationData == o.precipitationData &&
+	       referenceEffect == o.referenceEffect &&
 	       featureSettings == o.featureSettings;
 }
 

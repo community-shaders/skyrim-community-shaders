@@ -110,6 +110,12 @@ public:
 		// ImageSpace settings for each time of day
 		ImageSpaceSettings imageSpaces[ColorTimes::kTotal];
 
+		// Record form references
+		RE::TESImageSpace* imageSpaceRefs[ColorTimes::kTotal] = {};
+		RE::BGSVolumetricLighting* volumetricLightingRefs[ColorTimes::kTotal] = {};
+		RE::BGSShaderParticleGeometryData* precipitationData = nullptr;
+		RE::BGSReferenceEffect* referenceEffect = nullptr;
+
 		// Per-feature settings storage
 		std::map<std::string, json> featureSettings;
 
