@@ -685,6 +685,12 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				else
 					sky->SetWeather(selectedWeather, true, false);
 
+				// If the lock is active, retarget it to the newly chosen weather so
+				// Prepass() enforces the new choice instead of reverting it.
+				if (editorWindow->IsWeatherLocked()) {
+					editorWindow->lockedWeather = selectedWeather;
+				}
+
 				Util::ClearComboSearch(kWeatherSearchId);
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
 				break;
