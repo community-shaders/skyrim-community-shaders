@@ -85,8 +85,10 @@ void PrecipitationWidget::DrawWidget()
 
 				ImGui::SeparatorText("Texture Path");
 				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
-					settings.particleTexture = textureBuffer;
-					changed = true;
+					if (IsValidTexturePath(textureBuffer)) {
+						settings.particleTexture = textureBuffer;
+						changed = true;
+					}
 				}
 				if (std::string buf(textureBuffer); settings.particleTexture != buf) {
 					if (!buf.empty() && !IsValidTexturePath(buf))
@@ -141,8 +143,13 @@ void PrecipitationWidget::LoadSettings()
 				settings.boxSize = js["boxSize"];
 			if (js.contains("particleDensity"))
 				settings.particleDensity = js["particleDensity"];
-			if (js.contains("particleTexture"))
-				settings.particleTexture = js["particleTexture"].get<std::string>();
+			if (js.contains("particleTexture")) {
+				auto texPath = js["particleTexture"].get<std::string>();
+				if (IsValidTexturePath(texPath))
+					settings.particleTexture = texPath;
+				else
+					logger::warn("Precipitation {}: ignoring invalid saved texture path '{}'", GetEditorID(), texPath);
+			}
 		} catch (const std::exception& e) {
 			logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 			settings = vanillaSettings;
