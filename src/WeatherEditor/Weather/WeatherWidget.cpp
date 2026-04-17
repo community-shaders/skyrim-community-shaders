@@ -479,7 +479,7 @@ void WeatherWidget::LoadSettings()
 
 			// Record form references (resolved by matching widget EditorID)
 			auto* editorWindow = EditorWindow::GetSingleton();
-			auto findFormByEditorID = [](const std::string& editorID, const WidgetVec& widgets) -> RE::TESForm* {
+			auto findFormByEditorID = [](const std::string& editorID, const EditorWindow::WidgetVec& widgets) -> RE::TESForm* {
 				if (editorID.empty())
 					return nullptr;
 				for (const auto& w : widgets)
@@ -487,21 +487,19 @@ void WeatherWidget::LoadSettings()
 						return w->form;
 				return nullptr;
 			};
-			auto loadFormRef = [&](const std::string& key, auto*& ptr, const WidgetVec& widgets, auto* fallback) {
-				using T = std::remove_pointer_t<std::remove_reference_t<decltype(ptr)>>;
-				if (js.contains(key)) {
-					std::string editorID = js[key].get<std::string>();
-					ptr = static_cast<T*>(findFormByEditorID(editorID, widgets));
-				} else {
-					ptr = fallback;
-				}
+			auto loadEditorID = [&](const std::string& key) -> std::string {
+				return js.contains(key) ? js[key].get<std::string>() : "";
 			};
 			for (int i = 0; i < ColorTimes::kTotal; i++) {
-				loadFormRef(std::format("imageSpaceRef_{}", i), settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets, vanillaSettings.imageSpaceRefs[i]);
-				loadFormRef(std::format("volumetricLightingRef_{}", i), settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets, vanillaSettings.volumetricLightingRefs[i]);
+				auto* f = findFormByEditorID(loadEditorID(std::format("imageSpaceRef_{}", i)), editorWindow->imageSpaceWidgets);
+				settings.imageSpaceRefs[i] = f ? static_cast<RE::TESImageSpace*>(f) : vanillaSettings.imageSpaceRefs[i];
+				auto* vl = findFormByEditorID(loadEditorID(std::format("volumetricLightingRef_{}", i)), editorWindow->volumetricLightingWidgets);
+				settings.volumetricLightingRefs[i] = vl ? static_cast<RE::BGSVolumetricLighting*>(vl) : vanillaSettings.volumetricLightingRefs[i];
 			}
-			loadFormRef("precipitationDataRef", settings.precipitationData, editorWindow->precipitationWidgets, vanillaSettings.precipitationData);
-			loadFormRef("referenceEffectRef", settings.referenceEffect, editorWindow->referenceEffectWidgets, vanillaSettings.referenceEffect);
+			auto* precip = findFormByEditorID(loadEditorID("precipitationDataRef"), editorWindow->precipitationWidgets);
+			settings.precipitationData = precip ? static_cast<RE::BGSShaderParticleGeometryData*>(precip) : vanillaSettings.precipitationData;
+			auto* refEffect = findFormByEditorID(loadEditorID("referenceEffectRef"), editorWindow->referenceEffectWidgets);
+			settings.referenceEffect = refEffect ? static_cast<RE::BGSReferenceEffect*>(refEffect) : vanillaSettings.referenceEffect;
 
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
@@ -533,7 +531,7 @@ void WeatherWidget::SaveSettings()
 
 		// Record form references (serialized as widget EditorIDs for load-order independence)
 		auto* editorWindow = EditorWindow::GetSingleton();
-		auto findWidgetEditorID = [](RE::TESForm* form, const WidgetVec& widgets) -> std::string {
+		auto findWidgetEditorID = [](RE::TESForm* form, const EditorWindow::WidgetVec& widgets) -> std::string {
 			if (!form)
 				return "";
 			for (const auto& w : widgets)
