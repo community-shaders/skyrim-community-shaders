@@ -24,9 +24,7 @@ static bool IsValidTexturePath(const std::string& path)
 	const std::string lower = ToLowerBackslash(path);
 	if (!lower.ends_with(".dds"))
 		return false;
-	auto fullPath = lower.starts_with("textures\\")
-	                    ? Util::PathHelpers::GetDataPath() / path
-	                    : Util::PathHelpers::GetDataPath() / "textures" / path;
+	auto fullPath = lower.starts_with("textures\\") ? Util::PathHelpers::GetDataPath() / path : Util::PathHelpers::GetDataPath() / "textures" / path;
 	std::error_code ec;
 	return std::filesystem::exists(fullPath, ec) && !ec;
 }
