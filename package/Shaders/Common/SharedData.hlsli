@@ -48,12 +48,10 @@ namespace SharedData
 	{
 		bool EnableComplexMaterial;
 		bool EnableParallax;
-		bool EnableTerrainParallax;
+		bool EnableTerrain;
 		bool EnableHeightBlending;
-		bool EnableShadows;
-		bool ExtendShadows;
-		bool EnableParallaxWarpingFix;
-		bool pad0;
+		float DisplacementScale;
+		float3 pad0;
 	};
 
 	struct CubemapCreatorSettings

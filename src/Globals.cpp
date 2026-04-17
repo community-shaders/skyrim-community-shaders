@@ -281,32 +281,11 @@ namespace globals
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	/**
-	 * @brief Hooked OMSetRenderTargets — injects POM offset UAV at slot 7 when in the deferred pass.
-	 *
-	 * vtable index 33 for ID3D11DeviceContext::OMSetRenderTargets.
-	 * After Skyrim binds the deferred MRT (clearing all UAVs), this hook re-adds the POM offset
-	 * UAV at slot u7 so the Lighting PS (VR_STEREO_OPT permutation) can write per-pixel parallax
-	 * depth offsets without overloading Reflectance.w.
-	 */
 	struct ID3D11DeviceContext_OMSetRenderTargets
 	{
 		static void STDMETHODCALLTYPE thunk(ID3D11DeviceContext* This, UINT NumViews, ID3D11RenderTargetView* const* ppRenderTargetViews, ID3D11DepthStencilView* pDepthStencilView)
 		{
 			func(This, NumViews, ppRenderTargetViews, pDepthStencilView);
-
-			// D3D11 handles any SRV/UAV conflict automatically (silently unbinds the UAV when
-			// the same resource is later bound as an SRV), so no NumViews guard is needed.
-			if (globals::deferred->deferredPass) {
-				auto& stereoOpt = globals::features::vr.stereoOpt;
-				if (stereoOpt.loaded) {
-					if (auto* uav = stereoOpt.GetPomOffsetUAV()) {
-						This->OMSetRenderTargetsAndUnorderedAccessViews(
-							D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL, nullptr, nullptr,
-							7, 1, &uav, nullptr);
-					}
-				}
-			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

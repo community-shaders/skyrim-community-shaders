@@ -8,6 +8,7 @@
 #define NORMALROUGHNESS RE::RENDER_TARGETS::kRAWINDIRECT_DOWNSCALED
 #define MASKS RE::RENDER_TARGETS::kRAWINDIRECT_PREVIOUS
 #define MASKS2 RE::RENDER_TARGETS::kRAWINDIRECT_PREVIOUS_DOWNSCALED
+#define SSDM_DISPLACEMENT RE::RENDER_TARGETS::kRAWINDIRECT_SWAP
 
 class Deferred
 {
@@ -46,6 +47,8 @@ public:
 
 	ID3D11SamplerState* linearSampler = nullptr;
 	ID3D11SamplerState* pointSampler = nullptr;
+
+	eastl::unique_ptr<Texture2D> texMainCopy;
 
 	struct Hooks
 	{

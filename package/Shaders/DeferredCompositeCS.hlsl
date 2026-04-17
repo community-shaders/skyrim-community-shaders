@@ -24,6 +24,11 @@ Texture2D<float> DepthTexture : register(t4);
 Texture2D<uint> StereoOptModeTexture : register(t16);
 #endif
 
+#if defined(SSDM)
+Texture2D<float2> SSDMOffsetTexture : register(t17);
+Texture2D<float4> MainCopyTexture : register(t18);
+#endif
+
 #if defined(DYNAMIC_CUBEMAPS)
 Texture2D<float3> ReflectanceTexture : register(t5);
 TextureCube<float3> EnvTexture : register(t6);
@@ -109,12 +114,25 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
-	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
+	uint2 gbufferCoord = dispatchID.xy;
+#if defined(SSDM)
+	{
+		float2 sourceUV = SSDMOffsetTexture[dispatchID.xy];
+		if (any(sourceUV != 0))
+			gbufferCoord = uint2(clamp(sourceUV * SharedData::BufferDim.xy, 0, SharedData::BufferDim.xy - 1));
+	}
+#endif
+
+	float3 normalGlossiness = NormalRoughnessTexture[gbufferCoord];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 
-	float3 diffuseColor = MainRW[dispatchID.xy].xyz;
-	float3 specularColor = SpecularTexture[dispatchID.xy];
-	float3 albedo = AlbedoTexture[dispatchID.xy];
+#if defined(SSDM)
+	float3 diffuseColor = MainCopyTexture[gbufferCoord].xyz;
+#else
+	float3 diffuseColor = MainRW[gbufferCoord].xyz;
+#endif
+	float3 specularColor = SpecularTexture[gbufferCoord];
+	float3 albedo = AlbedoTexture[gbufferCoord];
 
 	float depth = DepthTexture[dispatchID.xy];
 	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
@@ -160,7 +178,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #		endif
 
 		directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-		directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
+		directionalAmbientColor.x = MasksTexture[gbufferCoord].z;
 		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
 		directionalAmbientColor = max(0, directionalAmbientColor);
 	} else
@@ -170,7 +188,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 		directionalAmbientColor *= albedo;
 
 		directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-		directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
+		directionalAmbientColor.x = MasksTexture[gbufferCoord].z;
 		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
 		directionalAmbientColor = max(0, directionalAmbientColor);
 	}
@@ -200,7 +218,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 #if defined(DYNAMIC_CUBEMAPS)
 
-	float3 reflectance = ReflectanceTexture[dispatchID.xy];
+	float3 reflectance = ReflectanceTexture[gbufferCoord];
 
 	if (any(reflectance > 0.0)) {
 		float3 V = -normalize(positionWS.xyz);

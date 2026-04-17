@@ -7,6 +7,7 @@
 #include "TruePBR.h"
 
 #include "Features/DynamicCubemaps.h"
+#include "Features/ExtendedMaterials.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
@@ -110,6 +111,9 @@ void Deferred::SetupResources()
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 
+		// SSDM Displacement
+		SetupRenderTarget(SSDM_DISPLACEMENT, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16G16_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+
 		// TAA Water Buffers
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_1, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
@@ -134,24 +138,15 @@ void Deferred::SetupResources()
 
 	{
 		D3D11_TEXTURE2D_DESC texDesc;
-		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-		mainTex.texture->GetDesc(&texDesc);
+		auto& mainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		mainRT.texture->GetDesc(&texDesc);
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
-		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		texMainCopy = eastl::make_unique<Texture2D>(texDesc);
+		texMainCopy->CreateSRV(D3D11_SHADER_RESOURCE_VIEW_DESC{
 			.Format = texDesc.Format,
 			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = {
-				.MostDetailedMip = 0,
-				.MipLevels = 1 }
-		};
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
+			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 } });
 	}
 }
 
@@ -237,6 +232,8 @@ void Deferred::StartDeferred()
 		forwardRenderTargets[i] = renderTargets[i];
 	}
 
+	globals::features::extendedMaterials.RegisterDisplacementRT();
+
 	RE::RENDER_TARGET targets[8]{
 		RE::RENDER_TARGET::kMAIN,
 		RE::RENDER_TARGET::kMOTION_VECTOR,
@@ -245,7 +242,7 @@ void Deferred::StartDeferred()
 		SPECULAR,
 		REFLECTANCE,
 		MASKS,
-		RE::RENDER_TARGET::kNONE
+		SSDM_DISPLACEMENT
 	};
 
 	for (uint i = 2; i < 8; i++) {
@@ -260,7 +257,8 @@ void Deferred::StartDeferred()
 	{
 		auto context = globals::d3d::context;
 
-		// Clear POM offset texture to -1.0 sentinel so pixels the Lighting PS never touches read "no POM"
+		globals::features::extendedMaterials.ClearDisplacementTexture();
+
 		if (globals::features::vr.stereoOpt.loaded)
 			globals::features::vr.stereoOpt.ClearPomOffsetTexture();
 
@@ -349,6 +347,9 @@ void Deferred::DeferredPasses()
 
 	auto& ibl = globals::features::ibl;
 
+	auto& extendedMaterials = globals::features::extendedMaterials;
+	extendedMaterials.DrawSSDM();
+
 	// Deferred Composite
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
@@ -385,6 +386,15 @@ void Deferred::DeferredPasses()
 		ID3D11ShaderResourceView* modeSRV = stereoCullingReady ? vrStereoOpt.GetModeTextureSRV() : nullptr;
 		context->CSSetShaderResources(16, 1, &modeSRV);
 
+		ID3D11ShaderResourceView* ssdmSRV = extendedMaterials.GetSSDMOffsetSRV();
+		context->CSSetShaderResources(17, 1, &ssdmSRV);
+
+		if (extendedMaterials.loaded && extendedMaterials.settings.EnableParallax && texMainCopy) {
+			context->CopyResource(texMainCopy->resource.get(), main.texture);
+			ID3D11ShaderResourceView* mainCopySRV = texMainCopy->srv.get();
+			context->CSSetShaderResources(18, 1, &mainCopySRV);
+		}
+
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
@@ -393,9 +403,8 @@ void Deferred::DeferredPasses()
 
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-		// Unbind mode texture SRV
-		ID3D11ShaderResourceView* nullSRV = nullptr;
-		context->CSSetShaderResources(16, 1, &nullSRV);
+		ID3D11ShaderResourceView* nullSRVs[3]{ nullptr, nullptr, nullptr };
+		context->CSSetShaderResources(16, 3, nullSRVs);
 	}
 
 	// VR: Deactivate stencil culling now that geometry rendering is complete.
@@ -510,6 +519,10 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 							}
 
+							// SSDM displacement (RT7) must overwrite without blending
+							blendDesc.RenderTarget[7].BlendEnable = FALSE;
+							blendDesc.RenderTarget[7].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
 							DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &deferredBlendStates[a][b][c][d]));
 						} else {
 							deferredBlendStates[a][b][c][d] = nullptr;
@@ -589,6 +602,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (REL::Module::IsVR())
 			defines.push_back({ "VR_STEREO_OPT", nullptr });
 
+		if (globals::features::extendedMaterials.loaded && globals::features::extendedMaterials.settings.EnableParallax)
+			defines.push_back({ "SSDM", nullptr });
+
 		mainCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
 	return mainCompositeCS;
@@ -616,6 +632,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "VR_STEREO_OPT", nullptr });
+
+		if (globals::features::extendedMaterials.loaded && globals::features::extendedMaterials.settings.EnableParallax)
+			defines.push_back({ "SSDM", nullptr });
 
 		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
