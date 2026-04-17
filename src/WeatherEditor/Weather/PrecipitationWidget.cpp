@@ -5,6 +5,15 @@
 #include "RE/B/BSShaderManager.h"
 #include "RE/N/NiSourceTexture.h"
 
+static bool IsValidTexturePath(const std::string& path)
+{
+	std::string lower = path;
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+	if (!lower.starts_with("textures\\") || !lower.ends_with(".dds"))
+		return false;
+	return std::filesystem::exists(std::filesystem::path("Data") / path);
+}
+
 void PrecipitationWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
@@ -208,15 +217,6 @@ void PrecipitationWidget::ApplyChanges()
 	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleDensity].f = settings.particleDensity;
 	runtime.particleTexture.textureName = settings.particleTexture.c_str();
 	ApplyLiveParticleTexture(settings.particleTexture);
-}
-
-static bool IsValidTexturePath(const std::string& path)
-{
-	std::string lower = path;
-	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
-	if (!lower.starts_with("textures\\") || !lower.ends_with(".dds"))
-		return false;
-	return std::filesystem::exists(std::filesystem::path("Data") / path);
 }
 
 void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
