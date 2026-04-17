@@ -32,6 +32,10 @@ public:
 private:
 	void LoadFromGameSettings();
 
+	// Swaps the live precipitation particle texture (Sky → precip → BSParticleShaderProperty::particleShaderTexture).
+	// Needed because updating BGSShaderParticleGeometryData::particleTexture.textureName alone doesn't reload the GPU texture.
+	static void ApplyLiveParticleTexture(const std::string& path);
+
 	struct Settings
 	{
 		float gravityVelocity = 0.0f;

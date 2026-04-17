@@ -1,6 +1,9 @@
 #include "PrecipitationWidget.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
+#include "RE/B/BSShaderManager.h"
+#include "RE/N/NiSourceTexture.h"
+#include "Globals.h"
 
 void PrecipitationWidget::DrawWidget()
 {
@@ -72,10 +75,12 @@ void PrecipitationWidget::DrawWidget()
 				}
 
 				ImGui::SeparatorText("Texture Path");
-				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
+				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
 					settings.particleTexture = textureBuffer;
 					changed = true;
 				}
+				if (settings.particleTexture != textureBuffer)
+					ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Warning, "Press Enter to apply texture change.");
 
 				EndScrollableContent();
 				ImGui::EndTabItem();
@@ -198,6 +203,29 @@ void PrecipitationWidget::ApplyChanges()
 	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kBoxSize].f = settings.boxSize;
 	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleDensity].f = settings.particleDensity;
 	runtime.particleTexture.textureName = settings.particleTexture.c_str();
+	ApplyLiveParticleTexture(settings.particleTexture);
+}
+
+void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
+{
+	if (path.empty())
+		return;
+
+	RE::NiPointer<RE::NiTexture> tex;
+	RE::BSShaderManager::GetTexture(path.c_str(), true, tex, false);
+	if (!tex || tex->GetRTTI() != globals::rtti::NiSourceTextureRTTI.get())
+		return;
+
+	auto* sky = globals::game::sky;
+	if (!sky || !sky->precip)
+		return;
+
+	auto precipObject = sky->precip->currentPrecip ? sky->precip->currentPrecip : sky->precip->lastPrecip;
+	if (!precipObject)
+		return;
+
+	if (auto* shaderProp = netimmerse_cast<RE::BSParticleShaderProperty*>(precipObject->GetGeometryRuntimeData().shaderProperty.get()))
+		shaderProp->particleShaderTexture = RE::NiPointer(static_cast<RE::NiSourceTexture*>(tex.get()));
 }
 
 void PrecipitationWidget::RevertChanges()
