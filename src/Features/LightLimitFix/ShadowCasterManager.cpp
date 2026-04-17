@@ -3059,8 +3059,13 @@ namespace ShadowCasterManager
 				ImGui::SetTooltip("Edit the Redraw Budget formula in the Advanced section below.");
 		}
 		{
-			int maxRedraws = std::max(1, std::min(s_totalShadowLightsThisFrame, 64));
-			settings.MaxRedrawPerFrame = std::min(settings.MaxRedrawPerFrame, maxRedraws);
+			// Use ShadowLightCount as the slider upper bound when the scheduler hasn't
+			// run yet (s_totalShadowLightsThisFrame == 0 on the first menu open).
+			// Never clamp the stored setting here — the scheduling code already applies
+			// the live cap.  Clamping here caused MaxRedrawPerFrame to be permanently
+			// written to 1 on the first DrawSettings call before the hook fired.
+			int maxRedraws = s_totalShadowLightsThisFrame > 0 ? std::min(s_totalShadowLightsThisFrame, 64) : std::min(settings.ShadowLightCount, 64);
+			maxRedraws = std::max(maxRedraws, 1);
 			ImGui::SliderInt("Max Redraws Per Frame", &settings.MaxRedrawPerFrame, 1, maxRedraws);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
