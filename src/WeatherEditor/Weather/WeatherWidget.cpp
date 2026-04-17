@@ -632,6 +632,14 @@ void WeatherWidget::SetWeatherValues()
 	}
 	weather->cloudLayerDisabledBits = disabledBits;
 
+	// Record form references
+	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+		weather->imageSpaces[i] = settings.imageSpaceRefs[i];
+		weather->volumetricLighting[i] = settings.volumetricLightingRefs[i];
+	}
+	weather->precipitationData = settings.precipitationData;
+	weather->referenceEffect = settings.referenceEffect;
+
 	// If this weather is currently active, immediately apply feature settings to game memory
 	auto* weatherManager = WeatherManager::GetSingleton();
 	if (weatherManager->GetCurrentWeathers().currentWeather == weather) {
