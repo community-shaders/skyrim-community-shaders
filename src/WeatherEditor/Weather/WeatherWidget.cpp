@@ -477,6 +477,23 @@ void WeatherWidget::LoadSettings()
 					settings.fogProperties.size());
 			}
 
+			// Record form references (stored as EditorIDs for load-order independence)
+			auto loadFormRef = [&](const std::string& key, auto*& ptr, auto* fallback) {
+				using T = std::remove_pointer_t<std::remove_reference_t<decltype(ptr)>>;
+				if (js.contains(key)) {
+					std::string editorID = js[key].get<std::string>();
+					ptr = editorID.empty() ? nullptr : RE::TESForm::LookupByEditorID<T>(editorID);
+				} else {
+					ptr = fallback;
+				}
+			};
+			for (int i = 0; i < ColorTimes::kTotal; i++) {
+				loadFormRef(std::format("imageSpaceRef_{}", i), settings.imageSpaceRefs[i], vanillaSettings.imageSpaceRefs[i]);
+				loadFormRef(std::format("volumetricLightingRef_{}", i), settings.volumetricLightingRefs[i], vanillaSettings.volumetricLightingRefs[i]);
+			}
+			loadFormRef("precipitationDataRef", settings.precipitationData, vanillaSettings.precipitationData);
+			loadFormRef("referenceEffectRef", settings.referenceEffect, vanillaSettings.referenceEffect);
+
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
 			// Fallback to vanilla/game values on exception
@@ -504,6 +521,14 @@ void WeatherWidget::SaveSettings()
 
 	try {
 		js = settings;
+
+		// Record form references (serialized as EditorIDs for load-order independence)
+		for (int i = 0; i < ColorTimes::kTotal; i++) {
+			js[std::format("imageSpaceRef_{}", i)] = settings.imageSpaceRefs[i] ? settings.imageSpaceRefs[i]->GetFormEditorID() : "";
+			js[std::format("volumetricLightingRef_{}", i)] = settings.volumetricLightingRefs[i] ? settings.volumetricLightingRefs[i]->GetFormEditorID() : "";
+		}
+		js["precipitationDataRef"] = settings.precipitationData ? settings.precipitationData->GetFormEditorID() : "";
+		js["referenceEffectRef"] = settings.referenceEffect ? settings.referenceEffect->GetFormEditorID() : "";
 
 		if (js.is_null()) {
 			logger::error("Weather {}: Serialization produced null JSON!", GetEditorID());
