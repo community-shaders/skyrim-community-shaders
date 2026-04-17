@@ -230,7 +230,7 @@ void VR::InitInSceneResources()
 
 void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, const vr::VRTextureBounds_t* bounds)
 {
-	if (!globals::menu || !(globals::menu->IsEnabled || globals::menu->overlayVisible || globals::features::vr.IsWelcomeOverlayVisible()) || settings.attachMode == AttachMode::None || !menuTexture) {
+	if (!globals::menu || !(globals::menu->IsEnabled || globals::menu->overlayVisible || IsWelcomeOverlayVisible()) || settings.attachMode == AttachMode::None || !menuTexture) {
 		return;
 	}
 
