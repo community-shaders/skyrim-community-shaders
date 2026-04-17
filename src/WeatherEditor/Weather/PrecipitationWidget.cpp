@@ -17,8 +17,14 @@ static bool IsValidTexturePath(const std::string& path)
 {
 	if (!HasValidTextureFormat(path))
 		return false;
+	std::string lower(path);
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+	std::replace(lower.begin(), lower.end(), '/', '\\');
+	auto fullPath = lower.starts_with("textures\\")
+	                    ? Util::PathHelpers::GetDataPath() / path
+	                    : Util::PathHelpers::GetDataPath() / "textures" / path;
 	std::error_code ec;
-	return std::filesystem::exists(Util::PathHelpers::GetDataPath() / "textures" / path, ec) && !ec;
+	return std::filesystem::exists(fullPath, ec) && !ec;
 }
 
 void PrecipitationWidget::DrawWidget()
@@ -299,6 +305,9 @@ void PrecipitationWidget::RevertChanges()
 	strncpy_s(textureBuffer, sizeof(textureBuffer), settings.particleTexture.c_str(), _TRUNCATE);
 	lastAppliedTexture.clear();
 	lastAppliedPrecip.reset();
+	lastInvalidTexture.clear();
+	lastCheckedBuffer.clear();
+	lastCheckedExists = false;
 	ApplyChanges();
 }
 
