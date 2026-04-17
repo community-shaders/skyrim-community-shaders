@@ -99,6 +99,8 @@ void PrecipitationWidget::DrawWidget()
 				if (std::string_view buf(textureBuffer); settings.particleTexture != buf) {
 					if (!buf.empty() && !HasValidTextureFormat(buf))
 						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must start with 'textures\\' and end with '.dds'");
+					else if (!buf.empty() && HasValidTextureFormat(buf) && !IsValidTexturePath(std::string(buf)))
+						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/.");
 					else
 						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Warning, "Press Enter to apply texture change.");
 				}
@@ -150,11 +152,15 @@ void PrecipitationWidget::LoadSettings()
 			if (js.contains("particleDensity"))
 				settings.particleDensity = js["particleDensity"];
 			if (js.contains("particleTexture")) {
-				auto texPath = js["particleTexture"].get<std::string>();
-				if (IsValidTexturePath(texPath))
-					settings.particleTexture = texPath;
-				else
-					logger::warn("Precipitation {}: ignoring invalid saved texture path '{}'", GetEditorID(), texPath);
+				if (!js["particleTexture"].is_string()) {
+					logger::warn("Precipitation {}: particleTexture is not a string, skipping", GetEditorID());
+				} else {
+					auto texPath = js["particleTexture"].get<std::string>();
+					if (IsValidTexturePath(texPath))
+						settings.particleTexture = texPath;
+					else
+						logger::warn("Precipitation {}: ignoring invalid saved texture path '{}'", GetEditorID(), texPath);
+				}
 			}
 		} catch (const std::exception& e) {
 			logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
