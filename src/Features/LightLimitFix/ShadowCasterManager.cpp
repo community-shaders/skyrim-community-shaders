@@ -1595,6 +1595,17 @@ namespace ShadowCasterManager
 					// transitively freed this light via game-side scene mutations.
 					if (!isAliveNow(e.Light))
 						continue;
+					// tbbmalloc (EngineFixes) zeroes freed memory blocks, making the
+					// vtable pointer at offset 0 become 0.  The game sometimes frees
+					// BSShadowLight objects via a path that bypasses BSSmartPointer
+					// ref-counting (raw DecRefCount / direct delete), leaving a dangling
+					// non-null pointer in activeShadowLights — and therefore in aliveSet
+					// / isAliveNow.  Checking the vtable is the last-resort guard
+					// against that case.
+					if (*reinterpret_cast<const uintptr_t*>(e.Light) == 0) {
+						e.Light = nullptr;
+						continue;
+					}
 
 					auto* lightSnapshot = e.Light;  // value snapshot for budget pairing
 
@@ -1670,6 +1681,14 @@ namespace ShadowCasterManager
 						// (typically ConvertLight on an excess light). Drop
 						// the s_lights entry and skip.
 						e.Clear();
+						continue;
+					}
+					// Same vtable guard as the redrawn path: GameSetShadowCasterSlot
+					// calls Accumulate virtually and will crash if the object is freed
+					// by game code that bypasses ref-counting (tbbmalloc zeroes the
+					// vtable pointer at offset 0).
+					if (*reinterpret_cast<const uintptr_t*>(e.Light) == 0) {
+						e.Light = nullptr;
 						continue;
 					}
 					GameSetShadowCasterSlot(ssn, e.Light, endIdx, 1);
