@@ -10,14 +10,15 @@ static bool HasValidTextureFormat(std::string_view path)
 {
 	std::string lower(path);
 	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
-	return lower.starts_with("textures\\") && lower.ends_with(".dds");
+	return lower.ends_with(".dds");
 }
 
 static bool IsValidTexturePath(const std::string& path)
 {
 	if (!HasValidTextureFormat(path))
 		return false;
-	return std::filesystem::exists(Util::PathHelpers::GetDataPath() / path);
+	std::error_code ec;
+	return std::filesystem::exists(Util::PathHelpers::GetDataPath() / "textures" / path, ec) && !ec;
 }
 
 void PrecipitationWidget::DrawWidget()
@@ -90,19 +91,28 @@ void PrecipitationWidget::DrawWidget()
 				}
 
 				ImGui::SeparatorText("Texture Path");
-				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
-					if (IsValidTexturePath(textureBuffer)) {
-						settings.particleTexture = textureBuffer;
+				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
+					std::string_view buf(textureBuffer);
+					if (buf != lastCheckedBuffer) {
+						lastCheckedExists = IsValidTexturePath(std::string(buf));
+						lastCheckedBuffer = std::string(buf);
+					}
+					if (lastCheckedExists) {
+						settings.particleTexture = lastCheckedBuffer;
 						changed = true;
 					}
 				}
 				if (std::string_view buf(textureBuffer); settings.particleTexture != buf) {
 					if (!buf.empty() && !HasValidTextureFormat(buf))
-						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must start with 'textures\\' and end with '.dds'");
-					else if (!buf.empty() && HasValidTextureFormat(buf) && !IsValidTexturePath(std::string(buf)))
-						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/.");
-					else
-						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Warning, "Press Enter to apply texture change.");
+						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must end with '.dds'");
+					else if (!buf.empty()) {
+						if (buf != lastCheckedBuffer) {
+							lastCheckedExists = IsValidTexturePath(std::string(buf));
+							lastCheckedBuffer = std::string(buf);
+						}
+						if (!lastCheckedExists)
+							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/textures/.");
+					}
 				}
 
 				EndScrollableContent();
@@ -240,15 +250,22 @@ void PrecipitationWidget::ApplyChanges()
 
 void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 {
-	if (path.empty()) {
-		logger::warn("Precipitation {}: empty texture path, live texture not updated", GetEditorID());
+	if (path.empty())
 		return;
-	}
 	if (!IsValidTexturePath(path)) {
-		logger::warn("Precipitation {}: invalid texture path '{}', must start with 'textures\\' and end with '.dds'", GetEditorID(), path);
+		if (path != lastInvalidTexture) {
+			logger::warn("Precipitation {}: invalid texture path '{}', must end with '.dds'", GetEditorID(), path);
+			lastInvalidTexture = path;
+		}
 		return;
 	}
-	if (path == lastAppliedTexture)
+
+	auto* sky = globals::game::sky;
+	if (!sky || !sky->precip)
+		return;
+
+	auto* currentPrecip = sky->precip->currentPrecip.get();
+	if (path == lastAppliedTexture && currentPrecip == lastAppliedPrecip)
 		return;
 
 	RE::NiPointer<RE::NiTexture> tex;
@@ -260,11 +277,7 @@ void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 	if (!sourceTex->rendererTexture || !sourceTex->rendererTexture->texture)
 		return;
 
-	auto* sky = globals::game::sky;
-	if (!sky || !sky->precip)
-		return;
-
-	RE::BSGeometry* precipObjects[] = { sky->precip->currentPrecip.get(), sky->precip->lastPrecip.get() };
+	RE::BSGeometry* precipObjects[] = { currentPrecip, sky->precip->lastPrecip.get() };
 	for (auto* precipObject : precipObjects) {
 		if (!precipObject)
 			continue;
@@ -273,6 +286,7 @@ void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 	}
 
 	lastAppliedTexture = path;
+	lastAppliedPrecip = currentPrecip;
 }
 
 void PrecipitationWidget::RevertChanges()

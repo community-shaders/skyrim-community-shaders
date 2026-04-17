@@ -59,4 +59,8 @@ private:
 	Settings originalSettings;
 	char textureBuffer[256] = {};
 	std::string lastAppliedTexture;
+	std::string lastInvalidTexture;
+	RE::BSGeometry* lastAppliedPrecip = nullptr;
+	std::string lastCheckedBuffer;
+	bool lastCheckedExists = false;
 };
