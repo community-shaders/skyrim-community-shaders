@@ -22,9 +22,9 @@ public:
 	{
 		uint EnableCharacterLighting = false;
 		float CharacterLightingStrength = 1.0f;
-		int SSMode = 1;
-		DiffusionProfile BaseProfile{ 0.5f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 0.56f, 0.56f, 0.56f } };
-		DiffusionProfile HumanProfile{ 0.5f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 1.0f, 0.37f, 0.3f } };
+		int SSMode = 0;
+		DiffusionProfile BaseProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 0.56f, 0.56f, 0.56f } };
+		DiffusionProfile HumanProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 1.0f, 0.37f, 0.3f } };
 		uint BurleySamples = 16;
 		float4 MeanFreePathBase = { 0.56f, 0.56f, 0.56f, 2.67f };
 		float4 MeanFreePathHuman = { 1.0f, 0.37f, 0.3f, 2.67f };
@@ -62,7 +62,9 @@ public:
 	bool validMaterials = false;
 
 	Texture2D* blurHorizontalTemp = nullptr;
+	Texture2D* diffuseNoAlbedoTex = nullptr;
 
+	ID3D11ComputeShader* prepassSS = nullptr;
 	ID3D11ComputeShader* horizontalSSBlur = nullptr;
 	ID3D11ComputeShader* verticalSSBlur = nullptr;
 	ID3D11ComputeShader* burleySS = nullptr;
@@ -105,6 +107,7 @@ public:
 	virtual void SaveSettings(json& o_json) override;
 
 	virtual void ClearShaderCache() override;
+	ID3D11ComputeShader* GetComputeShaderPrepass();
 	ID3D11ComputeShader* GetComputeShaderHorizontalBlur();
 	ID3D11ComputeShader* GetComputeShaderVerticalBlur();
 	ID3D11ComputeShader* GetComputeShaderBurley();

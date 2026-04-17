@@ -98,12 +98,8 @@ float4 SSSSBlurCS(
 	float sssAmount,
 	bool humanProfile)
 {
-	// Fetch color of current pixel:
+	// Input is already linear and albedo-free from the pre-pass
 	float4 colorM = ColorTexture[DTid.xy];
-
-#if defined(HORIZONTAL)
-	colorM.rgb = Color::IrradianceToLinear(colorM.rgb);
-#endif
 
 	if (sssAmount == 0)
 		return colorM;
@@ -150,10 +146,6 @@ float4 SSSSBlurCS(
 		coords = clamp(coords, minCoord, maxCoord);
 
 		float3 color = ColorTexture[coords].rgb;
-
-#if defined(HORIZONTAL)
-		color.rgb = Color::IrradianceToLinear(color.rgb);
-#endif
 
 		float depth = DepthTexture[coords].r;
 		depth = SharedData::GetScreenDepth(depth);

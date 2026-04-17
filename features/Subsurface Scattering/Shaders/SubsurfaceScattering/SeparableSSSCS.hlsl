@@ -23,6 +23,7 @@ cbuffer PerFrameSSS : register(b1)
 #include "Common/Color.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
+#include "SubsurfaceScattering/SSSCommon.hlsli"
 
 #if defined(BURLEY)
 #	include "SubsurfaceScattering/Burley.hlsli"
@@ -41,10 +42,13 @@ cbuffer PerFrameSSS : register(b1)
 #if defined(BURLEY)
 
 	float sssAmount = MaskTexture[DTid.xy].x;
-	bool humanProfile = MaskTexture[DTid.xy].y > 0.0;
 
-	float4 color = BurleyNormalizedSS(DTid.xy, texCoord, eyeIndex, sssAmount, humanProfile);
-	SSSRW[DTid.xy] = max(0, color);
+	if (sssAmount > 0.0) {
+		bool humanProfile = MaskTexture[DTid.xy].y > 0.0;
+
+		float4 color = BurleyNormalizedSS(DTid.xy, texCoord, eyeIndex, sssAmount, humanProfile);
+		SSSRW[DTid.xy] = max(0, color);
+	}
 
 #elif defined(HORIZONTAL)
 
@@ -63,6 +67,7 @@ cbuffer PerFrameSSS : register(b1)
 
 		float4 color = SSSSBlurCS(DTid.xy, texCoord, float2(0.0, 1.0), sssAmount, humanProfile);
 		color.rgb = Color::IrradianceToGamma(color.rgb);
+		color.rgb = SSSApplyAlbedo(color.rgb, AlbedoTexture[DTid.xy].rgb);
 		SSSRW[DTid.xy] = float4(color.rgb, 1.0);
 	}
 

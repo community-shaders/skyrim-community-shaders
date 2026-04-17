@@ -235,9 +235,6 @@ void SubsurfaceScattering::DrawSSS()
 		auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
 		auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
 
-		ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
-		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
-
 		ID3D11ShaderResourceView* views[5];
 		views[0] = main.SRV;
 		views[1] = Util::GetCurrentSceneDepthSRV(true);
@@ -247,21 +244,44 @@ void SubsurfaceScattering::DrawSSS()
 
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
+		// Pre-pass: remove albedo from diffuse, write to diffuseNoAlbedoTex
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Prepass");
+
+			ID3D11UnorderedAccessView* uav = diffuseNoAlbedoTex->uav.get();
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+			auto shader = GetComputeShaderPrepass();
+			context->CSSetShader(shader, nullptr, 0);
+
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+			uav = nullptr;
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		}
+
+		// Swap color input to pre-processed texture
+		views[0] = diffuseNoAlbedoTex->srv.get();
+		context->CSSetShaderResources(0, 1, views);
+
 		if (settings.SSMode == 0) {
-			// Horizontal pass to temporary texture
+			// Horizontal pass: diffuseNoAlbedoTex -> blurHorizontalTemp
 			{
 				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Horizontal");
+
+				ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
+				context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
 				auto shader = GetComputeShaderHorizontalBlur();
 				context->CSSetShader(shader, nullptr, 0);
 
 				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+				uav = nullptr;
+				context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 			}
 
-			uav = nullptr;
-			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
-
-			// Vertical pass to main texture
+			// Vertical pass: blurHorizontalTemp -> main
 			{
 				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Vertical");
 
@@ -277,16 +297,17 @@ void SubsurfaceScattering::DrawSSS()
 				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 			}
 		} else if (settings.SSMode == 1) {
-			// Burley pass to main texture
+			// Burley pass: diffuseNoAlbedoTex -> main (SSS pixels only)
 			{
 				TracyD3D11Zone(globals::state->tracyCtx, "Subsurface Scattering - Burley");
+
+				ID3D11UnorderedAccessView* uavs[1] = { main.UAV };
+				context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 
 				auto shader = GetComputeShaderBurley();
 				context->CSSetShader(shader, nullptr, 0);
 
 				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-
-				context->CopyResource(main.texture, blurHorizontalTemp->resource.get());
 			}
 		}
 	}
@@ -329,6 +350,10 @@ void SubsurfaceScattering::SetupResources()
 		blurHorizontalTemp = new Texture2D(texDesc);
 		blurHorizontalTemp->CreateSRV(srvDesc);
 		blurHorizontalTemp->CreateUAV(uavDesc);
+
+		diffuseNoAlbedoTex = new Texture2D(texDesc);
+		diffuseNoAlbedoTex->CreateSRV(srvDesc);
+		diffuseNoAlbedoTex->CreateUAV(uavDesc);
 	}
 }
 
@@ -368,6 +393,10 @@ void SubsurfaceScattering::SaveSettings(json& o_json)
 
 void SubsurfaceScattering::ClearShaderCache()
 {
+	if (prepassSS) {
+		prepassSS->Release();
+		prepassSS = nullptr;
+	}
 	if (horizontalSSBlur) {
 		horizontalSSBlur->Release();
 		horizontalSSBlur = nullptr;
@@ -380,6 +409,15 @@ void SubsurfaceScattering::ClearShaderCache()
 		burleySS->Release();
 		burleySS = nullptr;
 	}
+}
+
+ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderPrepass()
+{
+	if (!prepassSS) {
+		logger::debug("Compiling prepassSS");
+		prepassSS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\SubsurfaceScattering\\DiffuseExtractionCS.hlsl", {}, "cs_5_0");
+	}
+	return prepassSS;
 }
 
 ID3D11ComputeShader* SubsurfaceScattering::GetComputeShaderHorizontalBlur()
