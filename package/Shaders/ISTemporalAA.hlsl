@@ -59,8 +59,6 @@ cbuffer PerGeometry : register(b2)
 	float4 ThresholdParams : packoffset(c5);  // w = depth rejection threshold
 };
 
-// Dynamic resolution parameters are declared via FrameBuffer.hlsli include (handles SE/AE vs VR).
-
 namespace TAA
 {
 	// Neighbor tap indices within the 9-tap grid (row-major, 3x3).
@@ -226,9 +224,9 @@ PS_OUTPUT main(PS_INPUT input)
 	// =========================================================================
 	// Phase 4: Luminance-bounded AABB history clamping
 	//
-	// Builds two color brackets from the 8 non-BR neighbors to constrain output:
+	// Builds two color brackets from the 8 non-center neighbors to constrain output:
 	//   maxBracket: neighbor with luma in [historyLuma, 1.001) — nearest brighter than history
-	//   minBracket: neighbor with luma in (-0.001, lumaC]    — nearest darker than center
+	//   minBracket: neighbor with luma in (-0.001, historyLuma) — nearest darker than history
 	//
 	// Also accumulates flickerFactor: counts neighbors with luma within ±0.2 of center.
 	// More similar neighbors = more stable pixel → flickerFactor grows → tighter temporal anchor.
@@ -249,9 +247,13 @@ PS_OUTPUT main(PS_INPUT input)
 	// edges/flickering regions score low. Matches VR decompile: saturate(FlickerMaxScore - #similar_neighbors).
 	float flickerFactor = TAA::Constants::FlickerMaxScore;
 
-	// Walk all 8 non-BR neighbors (indices 0–7).
-	[unroll] for (int neighborIdx = 0; neighborIdx < 8; neighborIdx++)
+	// Walk all 8 non-center neighbors (0–3, 5–8); center is handled via initialization only.
+	// BR (index 8) is included — do not reduce this bound to < 8.
+	[unroll] for (int neighborIdx = 0; neighborIdx < 9; neighborIdx++)
 	{
+		if (neighborIdx == 4)
+			continue;  // center is initialization-only
+
 		float luma = lumas[neighborIdx];
 		float3 color = colors[neighborIdx];
 
@@ -259,7 +261,7 @@ PS_OUTPUT main(PS_INPUT input)
 			maxBracket = color;
 			maxLuma = luma;
 		}
-		if (luma > minLuma && luma <= lumaC) {
+		if (luma > minLuma && luma < historyLuma) {
 			minBracket = color;
 			minLuma = luma;
 		}
@@ -273,12 +275,12 @@ PS_OUTPUT main(PS_INPUT input)
 	// FlickerDecay preserves temporal continuity across frames.
 	float blendFactor_base = saturate(flickerFactor * TAA::Constants::FlickerWeightScale + TAA::Constants::FlickerDecay * historyFlicker);
 
-	// Sentinel collapse (VR lines 299-344, SE lines 290-320): vanilla computes collapsed bracket
-	// values unconditionally, then selects between collapsed and pre-collapse based on bfb.
+	// Sentinel collapse: collapsed bracket values are computed unconditionally,
+	// then selected between collapsed and pre-collapse based on blendFactor_base.
 	//
-	// minSentinel: minLuma stayed at MinLumaCap (<0). Fires only if centerAboveHistory AND no
-	// neighbor had luma <= lumaC — near-impossible in practice (center fills the slot via index 4),
-	// but vanilla handles it defensively by swapping min/max brackets.
+	// minSentinel: minLuma stayed at MinLumaCap (<0). Fires when centerAboveHistory AND no
+	// neighbor had luma in (-0.001, historyLuma) — rare but possible in high-contrast regions.
+	// Vanilla handles it defensively by swapping min/max brackets.
 	// maxSentinel: maxLuma stayed at MaxLumaCap (>1). Fires when centerBelowHistory AND no
 	// neighbor had luma >= historyLuma — the ghost-pixel trigger case.
 	bool minSentinel = minLuma < 0.0;
@@ -289,10 +291,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 minBracket_collapsed = minBracket_adj;
 	float maxLuma_collapsed = maxSentinel ? minLuma_adj : maxLuma;
 	float minLuma_collapsed = minLuma_adj;
-	// Vanilla raw: min(max(minLuma_collapsed, historyLuma), maxLuma_collapsed)
 	float effectiveHistLuma_collapsed = min(max(minLuma_collapsed, historyLuma), maxLuma_collapsed);
 
-	// Select collapsed vs pre-collapse based on blendFactor_base (VR line 336, SE line 312):
+	// Select collapsed vs pre-collapse based on blendFactor_base:
 	//   < 0.9025 (stable pixel)    → collapsed bracket + clamped historyLuma (prevents ghosting)
 	//   >= 0.9025 (flickery pixel) → pre-collapse bracket + raw historyLuma (trusts history)
 	bool useClamped = blendFactor_base < TAA::Constants::ClampBlendThreshold;
@@ -308,12 +309,11 @@ PS_OUTPUT main(PS_INPUT input)
 	float lumaRatio = (lumaRange > TAA::Constants::LumaThreshold) ? (effectiveHistoryLuma - minLuma_sel) / lumaRange : TAA::Constants::LumaRatioFallback;
 	float3 bracketColor = lerp(minBracket_sel, maxBracket_sel, lumaRatio);
 
-	// Mask sample and reject flag are computed here (before Phase 5) so VR can use reject
-	// inside the neighborBlend computation (VR raw lines 345-361: reject check precedes
-	// neighborBlend; when reject, r3=centerColor so neighborBlend collapses to centerColor).
+	// Mask sample and reject flag are computed here (before Phase 5) so the reject state
+	// is available inside the VR neighborBlend computation.
 	float2 maskSample = maskTex.Sample(maskSampler, uvs[4]).xy;
-	float maskGate = maskSample.x;    // allTransparent gate (raw cb2[5].w >= mask.x)
-	float maskReject = maskSample.y;  // history reject threshold + feedback scale
+	float maskGate = maskSample.x;    // allTransparent gate: DepthRejectionThreshold >= maskGate
+	float maskReject = maskSample.y;  // reject threshold; also scales lumaFeedback via (1 - maskReject)
 	bool reject = prevUVOutOfBounds || TAA::Constants::DepthRejectionThreshold < maskReject;
 
 	// =========================================================================
@@ -323,8 +323,7 @@ PS_OUTPUT main(PS_INPUT input)
 	//      Regular objects: blendFactor = 0, output = neighborColor (current frame only).
 	//      Sky (minDepth≥0.975): blendFactor > 0, output blends toward bracketColor.
 	//      neighborBlend interpolates between neighborColor and center based on skyFactor.
-	//      When reject is true, neighborBase = centerColor so neighborBlend = centerColor
-	//      (VR raw lines 350-361: r3 = reject ? centerColor : neighborColor).
+	//      When reject is true, neighborBase = centerColor so neighborBlend = centerColor.
 	//
 	// SE:  blendFactor = strictFeedback × (0.99 − motionBlend), no constant floor.
 	//      motionSimilarity (×20 decay) and strictSimilarity (×100 decay) are computed
@@ -350,19 +349,18 @@ PS_OUTPUT main(PS_INPUT input)
 	float motionDiff = normalizedMotion - prevMotion;
 	float motionSimilarity = max(0.0, 1.0 - TAA::Constants::MotionSimilarityScale * abs(motionDiff));
 	float strictSimilarity = max(0.0, 1.0 - TAA::Constants::StrictSimilarityScale * abs(motionDiff));
-	// motionBlend is clamped by motionSimilarity (confirmed SE decompile: min(lerp(...), motionSimilarity)).
+	// motionBlend: lerp from maxBlend→minBlend with motion, then clamped by motionSimilarity.
 	float motionBlend = min(lerp(TAA::Constants::MaxBlend, TAA::Constants::MinBlend, normalizedMotion), motionSimilarity);
 	neighborBlend = motionSimilarity * (colors[4] - neighborColor) + neighborColor;
 	strictFeedback = strictSimilarity * blendFactor_base;
-	// blendFactor has a motionBlend floor (SE decompile: strictFeedback*(0.99-mb) + mb).
-	// This ensures at least motionBlend-worth of temporal mixing even in perfectly stable regions.
+	// blendFactor has a motionBlend floor: ensures at least motionBlend-worth of temporal mixing
+	// even in perfectly stable regions.
 	blendFactor = strictFeedback * (TAA::Constants::BlendFloorScale - motionBlend) + motionBlend;
 #	endif
 
 	// Non-HDR path saturates each stage (raw wraps all three in saturate() outside
 	// #ifdef HDR_OUTPUT). HDR path leaves values unclamped so the PQ range survives.
-	// Vanilla lerps sharpened back toward neighborColor (unsharpened current-frame mix),
-	// not toward blended — confirmed from decompile lines 366-369.
+	// Final lerp is toward neighborColor (unsharpened current-frame mix), not toward blended.
 
 	float3 blended = TAA::SaturateSDR(blendFactor * (bracketColor - neighborBlend) + neighborBlend);
 	float3 sharpened = TAA::SaturateSDR(blended + (blended - neighborColor) * TAA::Constants::SharpenA);
@@ -376,9 +374,9 @@ PS_OUTPUT main(PS_INPUT input)
 	// =========================================================================
 
 	// If all 8 non-BR neighbors are transparent (glass/water), bypass TAA —
-	// but only when the mask gate permits it (mask.x <= threshold). Masked
+	// but only when the mask gate permits it (DepthRejectionThreshold >= maskGate). Masked
 	// regions always run the regular blend path regardless of alpha.
-	// Matches original decompile: BR (index 8) is excluded from this check.
+	// BR (index 8) is intentionally excluded here — loop bound < 8 is correct for alpha.
 	bool allTransparent = TAA::Constants::DepthRejectionThreshold >= maskGate;
 	[unroll] for (int alphaIdx = 0; alphaIdx < 8; alphaIdx++)
 	{
@@ -386,14 +384,14 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float3 outputColor = reject ? colors[4] : finalColor;
-	// Vanilla allTransparent path outputs neighborBlend (not center) with alpha=0 (decompile line 389-391).
+	// allTransparent path outputs neighborBlend (not center) with alpha=0.
 	float3 finalOutput = allTransparent ? neighborBlend : outputColor;
 
 #	ifdef HDR_OUTPUT
 	finalOutput = DisplayMapping::ConvertPQToGame(finalOutput);
 #	endif
 
-	// lumaFeedback: vanilla anchors on lumaC, not Luma(finalColor).
+	// lumaFeedback anchors on lumaC (center luma), not Luma(finalColor).
 	// effectiveHistoryLuma was computed in Phase 4 (sentinel collapse + bfb gate).
 	// Collapse to lumaC when rejected so history decays cleanly.
 	// rawLuma = lumaC + blendFactor * (effectiveHistoryLuma - lumaC)
@@ -411,12 +409,12 @@ PS_OUTPUT main(PS_INPUT input)
 #	ifdef VR
 	// VR uses alpha=0 for transparent surfaces to signal downstream compositing.
 	float outAlpha = allTransparent ? 0.0 : 1.0;
-	// VR historyFlicker: vanilla zeros it when minDepth >= 1.0 (decompile lines 354-357).
+	// VR historyFlicker: zeroed when minDepth >= 1.0 (sky/void pixels get no temporal anchor).
 	// ceil(minDepth - (1.0 - EPSILON_DEPTH_SKY)) = 1 when minDepth >= 1.0, 0 otherwise → 1 - that = gate.
 	float outFlicker = saturate(blendFactor_base * (1.0 - ceil(minDepth - (1.0f - EPSILON_DEPTH_SKY))));
-	float outMotion = 0.0;  // VR does not use prevMotion (o1.zw = float2(0,1) in decompile).
+	float outMotion = 0.0;  // VR does not use prevMotion.
 #	else
-	// SE always writes alpha=1 (o0.w=1 unconditionally in SE decompile).
+	// SE always writes alpha=1.
 	float outAlpha = 1.0;
 	float outFlicker = saturate(strictFeedback);  // historyFlicker for next frame
 	float outMotion = normalizedMotion;           // prevMotion: drives motionDiff next frame

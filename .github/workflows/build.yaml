@@ -189,7 +189,7 @@ jobs:
               shell: pwsh
               run: |
                   $tag = '${{ github.ref_name }}'
-                  $expected = $tag.TrimStart('v')
+                  $expected = ($tag -replace '^v([0-9]+\.[0-9]+\.[0-9]+).*', '$1')
                   $version = '${{ steps.get_version.outputs.version }}'
                   if (-not $version -or $version -eq "") {
                     Write-Error "Version extraction failed: no version found in previous step" -ErrorAction Stop

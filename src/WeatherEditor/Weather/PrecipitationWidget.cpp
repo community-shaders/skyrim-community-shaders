@@ -22,15 +22,15 @@ void PrecipitationWidget::DrawWidget()
 				}
 
 				ImGui::SeparatorText("Particle Size");
-				if (WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 200.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 200.0f))
 					changed = true;
 
 				ImGui::SeparatorText("Velocity");
-				if (WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, -100.0f, 100.0f))
+				if (WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, 0.0f, 10000.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, -360.0f, 360.0f))
+				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, 0.0f, 10000.0f))
 					changed = true;
 
 				EndScrollableContent();
@@ -40,17 +40,17 @@ void PrecipitationWidget::DrawWidget()
 			if (ImGui::BeginTabItem("Position")) {
 				BeginScrollableContent("##PositionScroll");
 				ImGui::SeparatorText("Offset");
-				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, -1000.0f, 1000.0f))
+				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, 0.0f, 200.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, -1000.0f, 1000.0f))
+				if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, 0.0f, 200.0f))
 					changed = true;
 				if (WeatherUtils::DrawSliderFloat("Start Rotation Range", settings.startRotationRange, 0.0f, 360.0f))
 					changed = true;
 
 				ImGui::SeparatorText("Volume");
-				if (WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 10000.0f))
+				if (WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 1000.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 1000.0f))
 					changed = true;
 
 				EndScrollableContent();

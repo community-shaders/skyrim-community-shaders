@@ -413,14 +413,14 @@ void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 	if (globals::game::isVR) {
 		// Prepare per-eye inputs and clear mask
-		upscaling.PreparePerEyeInputs(a_upscalingTexture, depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask);
+		upscaling.PreparePerEyeInputs(a_upscalingTexture, depthTexture.texture);
 
 		uint32_t numViews = 2;
 		uint32_t eyeWidth = (uint32_t)(renderSize.x / 2);
 		for (uint32_t i = 0; i < numViews; ++i) {
 			DispatchFSR(i,
 				upscaling.vrIntermediateColorIn[i]->resource.get(),
-				upscaling.vrIntermediateDepth[i]->resource.get(),
+				upscaling.vrIntermediateLinearDepth[i]->resource.get(),
 				upscaling.vrIntermediateMotionVectors[i]->resource.get(),
 				upscaling.vrIntermediateReactiveMask[i]->resource.get(),
 				upscaling.vrIntermediateTransparencyMask[i]->resource.get(),

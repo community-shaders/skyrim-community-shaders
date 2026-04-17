@@ -223,9 +223,14 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 	strictLightDataTemp.NumStrictLights = inWorld ? 0 : (a_pass->numLights - 1);
 
+	uint32_t writeIdx = 0;
 	for (uint32_t i = 0; i < strictLightDataTemp.NumStrictLights; i++) {
 		auto bsLight = a_pass->sceneLights[i + 1];
+		if (!bsLight)
+			continue;
 		auto niLight = bsLight->light.get();
+		if (!niLight)
+			continue;
 
 		auto& runtimeData = niLight->GetLightRuntimeData();
 
@@ -256,14 +261,17 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 			light.lightFlags.set(LightFlags::Shadow);
 		}
 
-		strictLightDataTemp.StrictLights[i] = light;
+		strictLightDataTemp.StrictLights[writeIdx++] = light;
 	}
+	strictLightDataTemp.NumStrictLights = writeIdx;
 
 	for (uint32_t i = 0; i < a_pass->numShadowLights; i++) {
 		auto bsLight = a_pass->sceneLights[i + 1];
+		if (!bsLight)
+			continue;
 		auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
 		GET_INSTANCE_MEMBER(maskIndex, shadowLight);
-		strictLightDataTemp.ShadowBitMask |= (1 << maskIndex);
+		strictLightDataTemp.ShadowBitMask |= (1u << maskIndex);
 	}
 }
 
@@ -323,6 +331,8 @@ void LightLimitFix::Prepass()
 
 	auto state = globals::state;
 
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "LightLimitFix Prepass");
 	state->BeginPerfEvent("LightLimitFix Prepass");
 	UpdateLights();
 

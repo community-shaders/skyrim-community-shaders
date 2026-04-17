@@ -863,6 +863,9 @@ void HDRDisplay::ClearUIBuffer()
 
 void HDRDisplay::ApplyHDR()
 {
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "HDR Processing");
+
 	std::lock_guard<std::mutex> lock(settingsMutex);
 
 	if (!hdrDataCB || !hdrTexture || !outputTexture)
@@ -1155,6 +1158,9 @@ ID3D11ComputeShader* HDRDisplay::GetUIBrightnessCS()
 
 void HDRDisplay::ScaleUIBrightnessForFG()
 {
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "UI Brightness Scale");
+
 	auto& upscaling = globals::features::upscaling;
 	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 

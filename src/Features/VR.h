@@ -301,6 +301,7 @@ public:
 
 	void RecreateOverlayTexturesIfNeeded();
 	void SubmitOverlayFrame();
+	bool IsWelcomeOverlayVisible() const;
 
 	/**
 	 * @brief Context for rendering VR overlays with render target management

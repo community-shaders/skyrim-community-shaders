@@ -221,6 +221,15 @@ void VR::RecreateOverlayTexturesIfNeeded()
 	Util::CreateOverlayTextureAndRTV(globals::d3d::device, Config::kOverlayWidth, Config::kOverlayHeight, menuTexture.put(), menuRTV.put());
 }
 
+bool VR::IsWelcomeOverlayVisible() const
+{
+	return settings.kAutoHideSeconds > 0 &&
+	       globals::game::ui &&
+	       globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) &&
+	       globals::menu &&
+	       !globals::menu->IsEnabled;
+}
+
 void VR::SubmitOverlayFrame()
 {
 	InstallSubmitHook();
@@ -233,7 +242,7 @@ void VR::SubmitOverlayFrame()
 	auto& enabled = globals::menu->IsEnabled;
 	auto& overlayVisible = globals::menu->overlayVisible;
 
-	if ((enabled || overlayVisible || settings.kAutoHideSeconds > 0) && menuTexture.get() && menuRTV.get()) {
+	if ((enabled || overlayVisible || IsWelcomeOverlayVisible()) && menuTexture.get() && menuRTV.get()) {
 		UpdateFixedWorldPositioning();
 		UpdateOverlayDrag();
 

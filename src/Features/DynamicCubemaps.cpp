@@ -471,6 +471,7 @@ void DynamicCubemaps::Irradiance(bool a_reflections)
 
 void DynamicCubemaps::UpdateCubemap()
 {
+	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Cubemap Update");
 
 	// Reset capture when game time jumps (wait menu, timescale changes, console commands)

@@ -51,6 +51,23 @@ message("\tTracy profiler: ${TRACY_SUPPORT}")
 message("\tShader tests: ${BUILD_SHADER_TESTS}")
 
 # #######################################################################################################################
+# # Build version info from git
+# #######################################################################################################################
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_DESCRIBE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+else()
+    set(GIT_DESCRIBE "unknown")
+endif()
+message("\tBuild version: ${GIT_DESCRIBE}")
+
+# #######################################################################################################################
 # # Add CMake features
 # #######################################################################################################################
 include(XSEPlugin)
