@@ -6,21 +6,27 @@
 #include "RE/N/NiSourceTexture.h"
 #include "Utils/FileSystem.h"
 
+static std::string ToLowerBackslash(std::string_view path)
+{
+	std::string result(path);
+	std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
+	std::replace(result.begin(), result.end(), '/', '\\');
+	return result;
+}
+
 static bool HasValidTextureFormat(std::string_view path)
 {
-	std::string lower(path);
-	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
-	return lower.ends_with(".dds");
+	return ToLowerBackslash(path).ends_with(".dds");
 }
 
 static bool IsValidTexturePath(const std::string& path)
 {
-	if (!HasValidTextureFormat(path))
+	const std::string lower = ToLowerBackslash(path);
+	if (!lower.ends_with(".dds"))
 		return false;
-	std::string lower(path);
-	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
-	std::replace(lower.begin(), lower.end(), '/', '\\');
-	auto fullPath = lower.starts_with("textures\\") ? Util::PathHelpers::GetDataPath() / path : Util::PathHelpers::GetDataPath() / "textures" / path;
+	auto fullPath = lower.starts_with("textures\\")
+	                    ? Util::PathHelpers::GetDataPath() / path
+	                    : Util::PathHelpers::GetDataPath() / "textures" / path;
 	std::error_code ec;
 	return std::filesystem::exists(fullPath, ec) && !ec;
 }
