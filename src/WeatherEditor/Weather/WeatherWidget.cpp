@@ -531,11 +531,11 @@ void WeatherWidget::SaveSettings()
 
 		// Record form references (serialized as widget EditorIDs for load-order independence)
 		auto* editorWindow = EditorWindow::GetSingleton();
-		auto findWidgetEditorID = [](RE::TESForm* form, const EditorWindow::WidgetVec& widgets) -> std::string {
-			if (!form)
+		auto findWidgetEditorID = [](RE::TESForm* targetForm, const EditorWindow::WidgetVec& widgets) -> std::string {
+			if (!targetForm)
 				return "";
 			for (const auto& w : widgets)
-				if (w->form == form)
+				if (w->form == targetForm)
 					return w->GetEditorID();
 			return "";
 		};
