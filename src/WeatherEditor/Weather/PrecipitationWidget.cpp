@@ -1,9 +1,9 @@
 #include "PrecipitationWidget.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
+#include "Globals.h"
 #include "RE/B/BSShaderManager.h"
 #include "RE/N/NiSourceTexture.h"
-#include "Globals.h"
 
 void PrecipitationWidget::DrawWidget()
 {
