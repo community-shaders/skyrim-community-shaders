@@ -86,31 +86,31 @@ void PrecipitationWidget::DrawWidget()
 					}
 				}
 				if (MatchesSearch("Particle Texture")) {
-				ImGui::SeparatorText("Texture Path");
-				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
-					std::string_view buf(textureBuffer);
-					if (buf != lastCheckedBuffer) {
-						lastCheckedExists = WeatherUtils::TexturePath::ExistsOnDisk(buf);
-						lastCheckedBuffer = std::string(buf);
-					}
-					if (lastCheckedExists) {
-						settings.particleTexture = lastCheckedBuffer;
-						changed = true;
-					}
-				}
-				if (std::string_view buf(textureBuffer); settings.particleTexture != buf) {
-					if (!buf.empty() && !WeatherUtils::TexturePath::HasDdsExtension(buf))
-						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must end with '.dds'");
-					else if (!buf.empty()) {
+					ImGui::SeparatorText("Texture Path");
+					if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
+						std::string_view buf(textureBuffer);
 						if (buf != lastCheckedBuffer) {
 							lastCheckedExists = WeatherUtils::TexturePath::ExistsOnDisk(buf);
 							lastCheckedBuffer = std::string(buf);
 						}
-						if (!lastCheckedExists)
-							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/textures/.");
+						if (lastCheckedExists) {
+							settings.particleTexture = lastCheckedBuffer;
+							changed = true;
+						}
+					}
+					if (std::string_view buf(textureBuffer); settings.particleTexture != buf) {
+						if (!buf.empty() && !WeatherUtils::TexturePath::HasDdsExtension(buf))
+							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must end with '.dds'");
+						else if (!buf.empty()) {
+							if (buf != lastCheckedBuffer) {
+								lastCheckedExists = WeatherUtils::TexturePath::ExistsOnDisk(buf);
+								lastCheckedBuffer = std::string(buf);
+							}
+							if (!lastCheckedExists)
+								ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/textures/.");
+						}
 					}
 				}
-				} // MatchesSearch("Particle Texture")
 
 				EndScrollableContent();
 				ImGui::EndTabItem();

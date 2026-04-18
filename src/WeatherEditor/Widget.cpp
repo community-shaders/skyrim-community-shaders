@@ -467,30 +467,26 @@ void Widget::DrawSearchDropdown()
 		bool clickedOutside = ImGui::GetIO().MouseClicked[0] && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
 		if (clickedOutside || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 			dropdownVisible = false;
-			ImGui::End();
-			ImGui::PopStyleColor();
-			ImGui::PopStyleVar();
-			return;
-		}
+		} else {
+			const size_t shown = std::min(size_t(5), searchResults.size());
+			for (size_t i = 0; i < shown; ++i) {
+				const auto& result = searchResults[i];
+				std::string label = result.tabName.empty()
+				                        ? result.displayName
+				                        : std::format("{} ({})", result.displayName, result.tabName);
 
-		const size_t shown = std::min(size_t(5), searchResults.size());
-		for (size_t i = 0; i < shown; ++i) {
-			const auto& result = searchResults[i];
-			std::string label = result.tabName.empty()
-			                        ? result.displayName
-			                        : std::format("{} ({})", result.displayName, result.tabName);
-
-			if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
-				NavigateToSearchResult(result);
-				searchBuffer[0] = '\0';
-				searchResults.clear();
-				dropdownVisible = false;
+				if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
+					NavigateToSearchResult(result);
+					searchBuffer[0] = '\0';
+					searchResults.clear();
+					dropdownVisible = false;
+				}
 			}
-		}
 
-		if (searchResults.size() > 5) {
-			ImGui::Separator();
-			ImGui::TextDisabled("... %zu more results", searchResults.size() - 5);
+			if (searchResults.size() > 5) {
+				ImGui::Separator();
+				ImGui::TextDisabled("... %zu more results", searchResults.size() - 5);
+			}
 		}
 	}
 	ImGui::End();

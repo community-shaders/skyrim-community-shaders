@@ -44,21 +44,15 @@ void VolumetricLightingWidget::DrawWidget()
 
 		if (ImGui::BeginTabItem("Density", nullptr, densityFlags)) {
 			BeginScrollableContent("##DensityScroll");
-			ImGui::SeparatorText("Density Settings");
-			if (MatchesSearch("Contribution")) {
-				if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
+			if (MatchesSearch("Contribution") || MatchesSearch("Size") || MatchesSearch("Wind Speed") || MatchesSearch("Falling Speed")) {
+				ImGui::SeparatorText("Density Settings");
+				if (MatchesSearch("Contribution") && WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
 					changed = true;
-			}
-			if (MatchesSearch("Size")) {
-				if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
+				if (MatchesSearch("Size") && WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
 					changed = true;
-			}
-			if (MatchesSearch("Wind Speed")) {
-				if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, 0.0f, 100.0f))
+				if (MatchesSearch("Wind Speed") && WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, 0.0f, 100.0f))
 					changed = true;
-			}
-			if (MatchesSearch("Falling Speed")) {
-				if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
+				if (MatchesSearch("Falling Speed") && WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
 					changed = true;
 			}
 			EndScrollableContent();
@@ -67,13 +61,11 @@ void VolumetricLightingWidget::DrawWidget()
 
 		if (ImGui::BeginTabItem("Advanced", nullptr, advancedFlags)) {
 			BeginScrollableContent("##AdvancedScroll");
-			ImGui::SeparatorText("Phase Function");
-			if (MatchesSearch("Contribution")) {
-				if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
+			if (MatchesSearch("Contribution") || MatchesSearch("Scattering")) {
+				ImGui::SeparatorText("Phase Function");
+				if (MatchesSearch("Contribution") && WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
 					changed = true;
-			}
-			if (MatchesSearch("Scattering")) {
-				if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
+				if (MatchesSearch("Scattering") && WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
 					changed = true;
 			}
 			if (MatchesSearch("Range Factor")) {

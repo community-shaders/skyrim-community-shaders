@@ -358,12 +358,13 @@ namespace WeatherUtils
 		return changed;
 	}
 
-	bool DrawSliderFloat(const std::string& label, float& property, float min, float max, Widget* widget, const char* format, const std::string& highlightId)
+	bool DrawSliderFloat(const std::string& label, float& property, float min, float max, Widget* widget, const char* format)
 	{
 		const double debounceDelay = 2.0;
 		double currentTime = ImGui::GetTime();
 
-		const std::string& hid = highlightId.empty() ? label : highlightId;
+		// Strip leading "##" so hidden-label sliders still match highlight/search ids.
+		std::string hid = label.starts_with("##") ? label.substr(2) : label;
 		Widget* w = widget ? widget : g_currentWidget;
 		if (w) w->PushHighlightStyle(hid);
 		bool changed = ImGui::SliderFloat(label.c_str(), &property, min, max, format);
