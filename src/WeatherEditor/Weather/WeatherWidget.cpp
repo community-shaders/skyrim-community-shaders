@@ -998,7 +998,14 @@ void WeatherWidget::DrawCloudSettings()
 		// Label is constant so the storage ID never changes — open/closed state always persists.
 		// [Enabled] badge is overlaid on the header via the draw list instead of altering the label.
 		float headerScreenY = ImGui::GetCursorScreenPos().y;
+		bool isTarget = IsHighlighted(layer);
+		if (isTarget)
+			ImGui::SetNextItemOpen(true);
 		bool layerOpen = ImGui::CollapsingHeader(layer.c_str(), flags);
+		if (isTarget && scrollToHighlighted) {
+			ImGui::SetScrollHereY(0.5f);
+			scrollToHighlighted = false;
+		}
 
 		if (!layerEnabled)
 			ImGui::PopStyleColor(3);
