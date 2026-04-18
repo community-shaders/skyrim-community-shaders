@@ -25,9 +25,22 @@ namespace WeatherUtils::TexturePath
 		const std::string lower = Normalize(path);
 		if (!lower.ends_with(".dds"))
 			return false;
-		auto fullPath = lower.starts_with("textures\\") ?
-		                    Util::PathHelpers::GetDataPath() / path :
-		                    Util::PathHelpers::GetDataPath() / "textures" / path;
+
+		// Reject absolute paths
+		const std::filesystem::path fsPath(lower);
+		if (fsPath.is_absolute())
+			return false;
+
+		// Reject any ".." component
+		for (const auto& part : fsPath)
+			if (part == "..")
+				return false;
+
+		const std::filesystem::path dataPath = Util::PathHelpers::GetDataPath();
+		const std::filesystem::path fullPath = lower.starts_with("textures\\") ?
+		                                           dataPath / lower :
+		                                           dataPath / "textures" / lower;
+
 		std::error_code ec;
 		return std::filesystem::exists(fullPath, ec) && !ec;
 	}
