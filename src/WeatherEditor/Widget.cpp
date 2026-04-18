@@ -443,7 +443,9 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	if (searchBuffer[0] != '\0') {
 		searchResults = CollectSearchableSettings();
 		std::erase_if(searchResults, [&](const SearchResult& r) {
-			return !ContainsStringIgnoreCase(r.displayName, searchBuffer);
+			return !ContainsStringIgnoreCase(r.displayName, searchBuffer) &&
+			       !ContainsStringIgnoreCase(r.tabName, searchBuffer) &&
+			       !ContainsStringIgnoreCase(r.settingId, searchBuffer);
 		});
 	} else {
 		searchResults.clear();

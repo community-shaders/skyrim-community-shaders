@@ -1132,6 +1132,29 @@ void WeatherWidget::DrawFogSettings()
 	WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 
 	bool changed = false;
+	const bool nearMatches = MatchesSearch("Day Near") || MatchesSearch("Night Near");
+	const bool farMatches = MatchesSearch("Day Far") || MatchesSearch("Night Far");
+	const bool powerMatches = MatchesSearch("Day Power") || MatchesSearch("Night Power");
+	const bool maxMatches = MatchesSearch("Day Max") || MatchesSearch("Night Max");
+	const bool anyFogMatches = nearMatches || farMatches || powerMatches || maxMatches;
+	if (!anyFogMatches)
+		return;
+
+	auto pushFogRowHighlight = [&](const char* dayId, const char* nightId) -> const char* {
+		if (IsHighlighted(dayId)) {
+			PushHighlightStyle(dayId);
+			return dayId;
+		}
+		if (IsHighlighted(nightId)) {
+			PushHighlightStyle(nightId);
+			return nightId;
+		}
+		return nullptr;
+	};
+	auto popFogRowHighlight = [&](const char* highlightId) {
+		if (highlightId)
+			PopHighlightStyle(highlightId);
+	};
 
 	const float scale = Util::GetUIScale();
 	if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
@@ -1158,7 +1181,8 @@ void WeatherWidget::DrawFogSettings()
 		ImGui::Separator();
 
 		// Near
-		if (MatchesSearch("Day Near") || MatchesSearch("Night Near")) {
+		if (nearMatches) {
+			const char* highlightId = pushFogRowHighlight("Day Near", "Night Near");
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			if (hasParent) {
@@ -1185,10 +1209,12 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::SetNextItemWidth(-1);
 			if (WeatherUtils::DrawSliderFloat("##Night Near", settings.fogProperties["Night Near"], 0.0f, 1000000.0f, nullptr, "%.0f"))
 				changed = true;
+			popFogRowHighlight(highlightId);
 		}
 
 		// Far
-		if (MatchesSearch("Day Far") || MatchesSearch("Night Far")) {
+		if (farMatches) {
+			const char* highlightId = pushFogRowHighlight("Day Far", "Night Far");
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			if (hasParent) {
@@ -1215,10 +1241,12 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::SetNextItemWidth(-1);
 			if (WeatherUtils::DrawSliderFloat("##Night Far", settings.fogProperties["Night Far"], 0.0f, 1000000.0f, nullptr, "%.0f"))
 				changed = true;
+			popFogRowHighlight(highlightId);
 		}
 
 		// Power
-		if (MatchesSearch("Day Power") || MatchesSearch("Night Power")) {
+		if (powerMatches) {
+			const char* highlightId = pushFogRowHighlight("Day Power", "Night Power");
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			if (hasParent) {
@@ -1245,10 +1273,12 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::SetNextItemWidth(-1);
 			if (WeatherUtils::DrawSliderFloat("##Night Power", settings.fogProperties["Night Power"], 0.0f, 10.0f, nullptr, "%.3f"))
 				changed = true;
+			popFogRowHighlight(highlightId);
 		}
 
 		// Max
-		if (MatchesSearch("Day Max") || MatchesSearch("Night Max")) {
+		if (maxMatches) {
+			const char* highlightId = pushFogRowHighlight("Day Max", "Night Max");
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			if (hasParent) {
@@ -1275,6 +1305,7 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::SetNextItemWidth(-1);
 			if (WeatherUtils::DrawSliderFloat("##Night Max", settings.fogProperties["Night Max"], 0.0f, 1.0f, nullptr, "%.3f"))
 				changed = true;
+			popFogRowHighlight(highlightId);
 		}
 
 		ImGui::EndTable();
