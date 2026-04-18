@@ -42,7 +42,7 @@ void ImageSpaceWidget::DrawWidget()
 		if (PropertyDrawer::BeginTable("ImageSpaceSettings")) {
 			bool changed = false;
 			const bool showHdr = MatchesSearch("Eye Adapt Speed") || MatchesSearch("Bloom Blur Radius") || MatchesSearch("Bloom Threshold") ||
-				MatchesSearch("Bloom Scale") || MatchesSearch("White") || MatchesSearch("Sunlight Scale") || MatchesSearch("Sky Scale");
+			                     MatchesSearch("Bloom Scale") || MatchesSearch("White") || MatchesSearch("Sunlight Scale") || MatchesSearch("Sky Scale");
 			const bool showCinematic = MatchesSearch("Saturation") || MatchesSearch("Brightness") || MatchesSearch("Contrast");
 			const bool showTint = MatchesSearch("Tint Color") || MatchesSearch("Tint Amount");
 			const bool showDOF = MatchesSearch("DOF Strength") || MatchesSearch("DOF Distance") || MatchesSearch("DOF Range");

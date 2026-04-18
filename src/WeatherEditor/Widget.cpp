@@ -279,7 +279,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	auto drawSearchBar = [&]() {
 		ImGui::SetNextItemWidth(200.0f * scale);
 		bool ctrlF = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-			ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
+		             ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
 		if (ctrlF) {
 			searchBuffer[0] = '\0';
 			searchResults.clear();
