@@ -202,7 +202,7 @@ IBL::Settings IBL::GetCommonBufferData() const
 			if (settingManager.GetValue<bool>("EnableImageBasedLighting", "EFFECT")) {
 				data.EnableIBL = !Util::IsInterior();
 				data.EnvIBLScale = 0.0f;
-				data.SkyIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING") / 3.0f;
+				data.SkyIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING") / 2.0f;
 				data.DALCAmount = 1.0f;
 				data.EnvIBLSaturation = 2.5f;
 				data.SkyIBLSaturation = 2.5f;
