@@ -210,6 +210,7 @@ protected:
 	std::string activeTabOverride;
 	std::string highlightedSetting;
 	float highlightStartTime = 0.0f;
+	bool scrollToHighlighted = false;
 
 	void NavigateToSearchResult(const SearchResult& result);
 };

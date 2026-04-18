@@ -503,6 +503,7 @@ void Widget::NavigateToSearchResult(const SearchResult& result)
 	activeTabOverride = result.tabName;
 	highlightedSetting = result.settingId;
 	highlightStartTime = static_cast<float>(ImGui::GetTime());
+	scrollToHighlighted = true;
 }
 
 int Widget::GetTabFlagsForOverride(const std::string& tabName)
@@ -544,4 +545,8 @@ void Widget::PopHighlightStyle(const std::string& settingId)
 	if (!IsHighlighted(settingId))
 		return;
 	ImGui::PopStyleColor(2);
+	if (scrollToHighlighted) {
+		ImGui::SetScrollHereY(0.5f);
+		scrollToHighlighted = false;
+	}
 }
