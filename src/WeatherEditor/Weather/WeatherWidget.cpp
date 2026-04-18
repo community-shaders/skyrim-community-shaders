@@ -2030,14 +2030,7 @@ ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)
 		return nullptr;
 	}
 
-	// Build resource path for BSA loading: Textures\path (relative to Data folder)
-	// Note: Skyrim texture paths don't include .dds extension, so we add it
-	std::string resourcePath = std::string("Textures\\") + texturePath;
-
-	// Add .dds extension if not present
-	if (resourcePath.size() < 4 || resourcePath.substr(resourcePath.size() - 4) != ".dds") {
-		resourcePath += ".dds";
-	}
+	std::string resourcePath = WeatherUtils::TexturePath::BuildResourcePath(texturePath);
 
 	ID3D11ShaderResourceView* srv = nullptr;
 	ImVec2 textureSize;

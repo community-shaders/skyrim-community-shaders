@@ -1,7 +1,59 @@
 #include "WeatherUtils.h"
 #include "EditorWindow.h"
 #include "PaletteWindow.h"
+#include "Utils/FileSystem.h"
 #include "Utils/UI.h"
+
+namespace WeatherUtils::TexturePath
+{
+	std::string Normalize(std::string_view path)
+	{
+		std::string result(path);
+		std::transform(result.begin(), result.end(), result.begin(),
+			[](unsigned char c) { return std::tolower(c); });
+		std::replace(result.begin(), result.end(), '/', '\\');
+		return result;
+	}
+
+	bool HasDdsExtension(std::string_view path)
+	{
+		return Normalize(path).ends_with(".dds");
+	}
+
+	bool ExistsOnDisk(std::string_view path)
+	{
+		const std::string lower = Normalize(path);
+		if (!lower.ends_with(".dds"))
+			return false;
+
+		// Reject absolute paths
+		const std::filesystem::path fsPath(lower);
+		if (fsPath.is_absolute())
+			return false;
+
+		// Reject any ".." component
+		for (const auto& part : fsPath)
+			if (part == "..")
+				return false;
+
+		const std::filesystem::path dataPath = Util::PathHelpers::GetDataPath();
+		const std::filesystem::path fullPath = lower.starts_with("textures\\") ?
+		                                           dataPath / lower :
+		                                           dataPath / "textures" / lower;
+
+		std::error_code ec;
+		return std::filesystem::exists(fullPath, ec) && !ec;
+	}
+
+	std::string BuildResourcePath(std::string_view path)
+	{
+		std::string result = "Textures\\";
+		result.append(path);
+		if (!Normalize(result).ends_with(".dds"))
+			result += ".dds";
+		return result;
+	}
+}
 
 // Global widget context for undo tracking
 static Widget* g_currentWidget = nullptr;
