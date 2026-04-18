@@ -276,9 +276,16 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 	auto drawSearchBar = [&]() {
 		ImGui::SetNextItemWidth(200.0f * scale);
+		bool ctrlF = ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
+		if (ctrlF) {
+			searchBuffer[0] = '\0';
+			searchResults.clear();
+			dropdownVisible = false;
+			ImGui::SetKeyboardFocusHere();
+		}
 		ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer));
-		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false))
-			ImGui::SetKeyboardFocusHere(-1);
+		if (ImGui::IsItemEdited())
+			dropdownVisible = true;
 	};
 
 	auto drawForceWeatherButton = [&]() {
@@ -437,12 +444,13 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		});
 	} else {
 		searchResults.clear();
+		dropdownVisible = false;
 	}
 }
 
 void Widget::DrawSearchDropdown()
 {
-	if (searchBuffer[0] == '\0' || searchResults.empty())
+	if (!dropdownVisible || searchResults.empty())
 		return;
 
 	const float scale = Util::GetUIScale();
@@ -456,6 +464,15 @@ void Widget::DrawSearchDropdown()
 				ImGuiWindowFlags_NoFocusOnAppearing)) {
 		ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
 
+		bool clickedOutside = ImGui::GetIO().MouseClicked[0] && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+		if (clickedOutside || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+			dropdownVisible = false;
+			ImGui::End();
+			ImGui::PopStyleColor();
+			ImGui::PopStyleVar();
+			return;
+		}
+
 		const size_t shown = std::min(size_t(5), searchResults.size());
 		for (size_t i = 0; i < shown; ++i) {
 			const auto& result = searchResults[i];
@@ -467,17 +484,13 @@ void Widget::DrawSearchDropdown()
 				NavigateToSearchResult(result);
 				searchBuffer[0] = '\0';
 				searchResults.clear();
+				dropdownVisible = false;
 			}
 		}
 
 		if (searchResults.size() > 5) {
 			ImGui::Separator();
 			ImGui::TextDisabled("... %zu more results", searchResults.size() - 5);
-		}
-
-		if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-			searchBuffer[0] = '\0';
-			searchResults.clear();
 		}
 	}
 	ImGui::End();

@@ -202,6 +202,9 @@ protected:
 	// Cached dropdown position from DrawWidgetHeader so DrawSearchDropdown() can anchor below the search bar.
 	ImVec2 searchDropdownAnchor{ 0.0f, 0.0f };
 
+	// Whether the search result dropdown is currently visible.
+	bool dropdownVisible = false;
+
 	// Navigation / highlight state shared by the search dropdown.
 	std::vector<SearchResult> searchResults;
 	std::string activeTabOverride;
