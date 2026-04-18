@@ -794,25 +794,25 @@ void WeatherWidget::DrawDALCSettings()
 
 		// Draw with per-parameter inheritance
 		if (hasParent) {
-			if (TOD::DrawTODColorRow("Specular", specularColors, settings.inheritFlags["DALC_Specular"], parentSpecular)) {
+			if (MatchesSearch("Specular") && TOD::DrawTODColorRow("Specular", specularColors, settings.inheritFlags["DALC_Specular"], parentSpecular)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].specular = specularColors[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODFloatRow("Fresnel Power", fresnelPowers, settings.inheritFlags["DALC_Fresnel"], parentFresnel, 0.0f, 10.0f)) {
+			if (MatchesSearch("Fresnel Power") && TOD::DrawTODFloatRow("Fresnel Power", fresnelPowers, settings.inheritFlags["DALC_Fresnel"], parentFresnel, 0.0f, 10.0f)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].fresnelPower = fresnelPowers[i];
 				changed = true;
 			}
 		} else {
-			if (TOD::DrawTODColorRow("Specular", specularColors)) {
+			if (MatchesSearch("Specular") && TOD::DrawTODColorRow("Specular", specularColors)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].specular = specularColors[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODFloatRow("Fresnel Power", fresnelPowers, 0.0f, 10.0f)) {
+			if (MatchesSearch("Fresnel Power") && TOD::DrawTODFloatRow("Fresnel Power", fresnelPowers, 0.0f, 10.0f)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].fresnelPower = fresnelPowers[i];
 				changed = true;
@@ -823,73 +823,73 @@ void WeatherWidget::DrawDALCSettings()
 
 		// Directional colors with per-parameter inheritance
 		if (hasParent) {
-			if (TOD::DrawTODColorRow("Directional +X", directionalXMax, settings.inheritFlags["DALC_DirXMax"], parentDirXMax)) {
+			if (MatchesSearch("Directional X Max") && TOD::DrawTODColorRow("Directional +X", directionalXMax, settings.inheritFlags["DALC_DirXMax"], parentDirXMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].max = directionalXMax[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional -X", directionalXMin, settings.inheritFlags["DALC_DirXMin"], parentDirXMin)) {
+			if (MatchesSearch("Directional X Min") && TOD::DrawTODColorRow("Directional -X", directionalXMin, settings.inheritFlags["DALC_DirXMin"], parentDirXMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].min = directionalXMin[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional +Y", directionalYMax, settings.inheritFlags["DALC_DirYMax"], parentDirYMax)) {
+			if (MatchesSearch("Directional Y Max") && TOD::DrawTODColorRow("Directional +Y", directionalYMax, settings.inheritFlags["DALC_DirYMax"], parentDirYMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].max = directionalYMax[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional -Y", directionalYMin, settings.inheritFlags["DALC_DirYMin"], parentDirYMin)) {
+			if (MatchesSearch("Directional Y Min") && TOD::DrawTODColorRow("Directional -Y", directionalYMin, settings.inheritFlags["DALC_DirYMin"], parentDirYMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].min = directionalYMin[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional +Z", directionalZMax, settings.inheritFlags["DALC_DirZMax"], parentDirZMax)) {
+			if (MatchesSearch("Directional Z Max") && TOD::DrawTODColorRow("Directional +Z", directionalZMax, settings.inheritFlags["DALC_DirZMax"], parentDirZMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].max = directionalZMax[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional -Z", directionalZMin, settings.inheritFlags["DALC_DirZMin"], parentDirZMin)) {
+			if (MatchesSearch("Directional Z Min") && TOD::DrawTODColorRow("Directional -Z", directionalZMin, settings.inheritFlags["DALC_DirZMin"], parentDirZMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].min = directionalZMin[i];
 				changed = true;
 			}
 		} else {
-			if (TOD::DrawTODColorRow("Directional +X", directionalXMax)) {
+			if (MatchesSearch("Directional X Max") && TOD::DrawTODColorRow("Directional +X", directionalXMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].max = directionalXMax[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional -X", directionalXMin)) {
+			if (MatchesSearch("Directional X Min") && TOD::DrawTODColorRow("Directional -X", directionalXMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].min = directionalXMin[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional +Y", directionalYMax)) {
+			if (MatchesSearch("Directional Y Max") && TOD::DrawTODColorRow("Directional +Y", directionalYMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].max = directionalYMax[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional -Y", directionalYMin)) {
+			if (MatchesSearch("Directional Y Min") && TOD::DrawTODColorRow("Directional -Y", directionalYMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].min = directionalYMin[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional +Z", directionalZMax)) {
+			if (MatchesSearch("Directional Z Max") && TOD::DrawTODColorRow("Directional +Z", directionalZMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].max = directionalZMax[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional -Z", directionalZMin)) {
+			if (MatchesSearch("Directional Z Min") && TOD::DrawTODColorRow("Directional -Z", directionalZMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].min = directionalZMin[i];
 				changed = true;
@@ -940,6 +940,9 @@ void WeatherWidget::DrawWeatherColorSettings()
 			int i = displayOrder[idx];
 			std::string colorTypeLabel = ColorTypeLabel(i);
 
+			if (!MatchesSearch(colorTypeLabel))
+				continue;
+
 			if (hasParent) {
 				float3 parentColors[4];
 				for (int j = 0; j < 4; j++)
@@ -980,6 +983,10 @@ void WeatherWidget::DrawCloudSettings()
 
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
+
+		if (!MatchesSearch(std::format("Cloud {}", layer)))
+			continue;
+
 		bool layerEnabled = settings.clouds[i].enabled;
 
 		if (!layerEnabled) {
@@ -1143,116 +1150,124 @@ void WeatherWidget::DrawFogSettings()
 		ImGui::Separator();
 
 		// Near
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		if (hasParent) {
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
-			ImGui::Checkbox("##FogNear", &settings.inheritFlags["Fog_Near"]);
-			if (settings.inheritFlags["Fog_Near"]) {
-				settings.fogProperties["Day Near"] = parentWidget->settings.fogProperties["Day Near"];
-				settings.fogProperties["Night Near"] = parentWidget->settings.fogProperties["Night Near"];
-				changed = true;
+		if (MatchesSearch("Day Near") || MatchesSearch("Night Near")) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			if (hasParent) {
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
+				ImGui::Checkbox("##FogNear", &settings.inheritFlags["Fog_Near"]);
+				if (settings.inheritFlags["Fog_Near"]) {
+					settings.fogProperties["Day Near"] = parentWidget->settings.fogProperties["Day Near"];
+					settings.fogProperties["Night Near"] = parentWidget->settings.fogProperties["Night Near"];
+					changed = true;
+				}
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor(2);
+				ImGui::SameLine();
 			}
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-			ImGui::SameLine();
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Near");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SetNextItemWidth(-1);
+			if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 1000000.0f, "%.0f"))
+				changed = true;
+			ImGui::TableSetColumnIndex(2);
+			ImGui::SetNextItemWidth(-1);
+			if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 1000000.0f, "%.0f"))
+				changed = true;
 		}
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Near");
-		ImGui::TableSetColumnIndex(1);
-		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 1000000.0f, "%.0f"))
-			changed = true;
-		ImGui::TableSetColumnIndex(2);
-		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 1000000.0f, "%.0f"))
-			changed = true;
 
 		// Far
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		if (hasParent) {
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
-			ImGui::Checkbox("##FogFar", &settings.inheritFlags["Fog_Far"]);
-			if (settings.inheritFlags["Fog_Far"]) {
-				settings.fogProperties["Day Far"] = parentWidget->settings.fogProperties["Day Far"];
-				settings.fogProperties["Night Far"] = parentWidget->settings.fogProperties["Night Far"];
-				changed = true;
+		if (MatchesSearch("Day Far") || MatchesSearch("Night Far")) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			if (hasParent) {
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
+				ImGui::Checkbox("##FogFar", &settings.inheritFlags["Fog_Far"]);
+				if (settings.inheritFlags["Fog_Far"]) {
+					settings.fogProperties["Day Far"] = parentWidget->settings.fogProperties["Day Far"];
+					settings.fogProperties["Night Far"] = parentWidget->settings.fogProperties["Night Far"];
+					changed = true;
+				}
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor(2);
+				ImGui::SameLine();
 			}
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-			ImGui::SameLine();
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Far");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SetNextItemWidth(-1);
+			if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 1000000.0f, "%.0f"))
+				changed = true;
+			ImGui::TableSetColumnIndex(2);
+			ImGui::SetNextItemWidth(-1);
+			if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 1000000.0f, "%.0f"))
+				changed = true;
 		}
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Far");
-		ImGui::TableSetColumnIndex(1);
-		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 1000000.0f, "%.0f"))
-			changed = true;
-		ImGui::TableSetColumnIndex(2);
-		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 1000000.0f, "%.0f"))
-			changed = true;
 
 		// Power
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		if (hasParent) {
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
-			ImGui::Checkbox("##FogPower", &settings.inheritFlags["Fog_Power"]);
-			if (settings.inheritFlags["Fog_Power"]) {
-				settings.fogProperties["Day Power"] = parentWidget->settings.fogProperties["Day Power"];
-				settings.fogProperties["Night Power"] = parentWidget->settings.fogProperties["Night Power"];
-				changed = true;
+		if (MatchesSearch("Day Power") || MatchesSearch("Night Power")) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			if (hasParent) {
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
+				ImGui::Checkbox("##FogPower", &settings.inheritFlags["Fog_Power"]);
+				if (settings.inheritFlags["Fog_Power"]) {
+					settings.fogProperties["Day Power"] = parentWidget->settings.fogProperties["Day Power"];
+					settings.fogProperties["Night Power"] = parentWidget->settings.fogProperties["Night Power"];
+					changed = true;
+				}
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor(2);
+				ImGui::SameLine();
 			}
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-			ImGui::SameLine();
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Power");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SetNextItemWidth(-1);
+			if (ImGui::SliderFloat("##FogDayPower", &settings.fogProperties["Day Power"], 0.0f, 10.0f, "%.3f"))
+				changed = true;
+			ImGui::TableSetColumnIndex(2);
+			ImGui::SetNextItemWidth(-1);
+			if (ImGui::SliderFloat("##FogNightPower", &settings.fogProperties["Night Power"], 0.0f, 10.0f, "%.3f"))
+				changed = true;
 		}
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Power");
-		ImGui::TableSetColumnIndex(1);
-		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayPower", &settings.fogProperties["Day Power"], 0.0f, 10.0f, "%.3f"))
-			changed = true;
-		ImGui::TableSetColumnIndex(2);
-		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightPower", &settings.fogProperties["Night Power"], 0.0f, 10.0f, "%.3f"))
-			changed = true;
 
 		// Max
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		if (hasParent) {
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
-			ImGui::Checkbox("##FogMax", &settings.inheritFlags["Fog_Max"]);
-			if (settings.inheritFlags["Fog_Max"]) {
-				settings.fogProperties["Day Max"] = parentWidget->settings.fogProperties["Day Max"];
-				settings.fogProperties["Night Max"] = parentWidget->settings.fogProperties["Night Max"];
-				changed = true;
+		if (MatchesSearch("Day Max") || MatchesSearch("Night Max")) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			if (hasParent) {
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
+				ImGui::Checkbox("##FogMax", &settings.inheritFlags["Fog_Max"]);
+				if (settings.inheritFlags["Fog_Max"]) {
+					settings.fogProperties["Day Max"] = parentWidget->settings.fogProperties["Day Max"];
+					settings.fogProperties["Night Max"] = parentWidget->settings.fogProperties["Night Max"];
+					changed = true;
+				}
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor(2);
+				ImGui::SameLine();
 			}
-			ImGui::PopStyleVar();
-			ImGui::PopStyleColor(2);
-			ImGui::SameLine();
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Max");
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SetNextItemWidth(-1);
+			if (ImGui::SliderFloat("##FogDayMax", &settings.fogProperties["Day Max"], 0.0f, 1.0f, "%.3f"))
+				changed = true;
+			ImGui::TableSetColumnIndex(2);
+			ImGui::SetNextItemWidth(-1);
+			if (ImGui::SliderFloat("##FogNightMax", &settings.fogProperties["Night Max"], 0.0f, 1.0f, "%.3f"))
+				changed = true;
 		}
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Max");
-		ImGui::TableSetColumnIndex(1);
-		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayMax", &settings.fogProperties["Day Max"], 0.0f, 1.0f, "%.3f"))
-			changed = true;
-		ImGui::TableSetColumnIndex(2);
-		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightMax", &settings.fogProperties["Night Max"], 0.0f, 1.0f, "%.3f"))
-			changed = true;
 
 		ImGui::EndTable();
 	}
@@ -1264,6 +1279,17 @@ void WeatherWidget::DrawFogSettings()
 
 void WeatherWidget::DrawProperties(std::string category, std::map<std::string, int> properties)
 {
+	// Only show category if any property matches search
+	bool anyCategoryMatches = false;
+	for (const auto& p : properties) {
+		if (MatchesSearch(p.first)) {
+			anyCategoryMatches = true;
+			break;
+		}
+	}
+	if (!anyCategoryMatches)
+		return;
+
 	ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", category.c_str());
 
 	bool changed = false;
@@ -1273,6 +1299,9 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * WidgetDefaults::kSliderWidthRatio);
 
 	for (auto& p : properties) {
+		if (!MatchesSearch(p.first))
+			continue;
+
 		PushHighlightStyle(p.first);
 
 		// Inherit checkbox
