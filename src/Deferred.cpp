@@ -136,33 +136,7 @@ void Deferred::SetupResources()
 	{
 		auto device = globals::d3d::device;
 
-		D3D11_TEXTURE2D_DESC mainTexDesc{};
-		renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&mainTexDesc);
-
-		D3D11_TEXTURE2D_DESC copyDesc = mainTexDesc;
-		copyDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		copyDesc.MiscFlags = 0;
-		mainCopy = std::make_unique<Texture2D>(copyDesc);
-		mainCopy->CreateSRV(D3D11_SHADER_RESOURCE_VIEW_DESC{
-			.Format = copyDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 } });
-
-		D3D11_TEXTURE2D_DESC mvTexDesc{};
-		renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture->GetDesc(&mvTexDesc);
-
-		D3D11_TEXTURE2D_DESC mvCopyDesc = mvTexDesc;
-		mvCopyDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		mvCopyDesc.MiscFlags = 0;
-		motionVectorsCopy = std::make_unique<Texture2D>(mvCopyDesc);
-		motionVectorsCopy->CreateSRV(D3D11_SHADER_RESOURCE_VIEW_DESC{
-			.Format = mvCopyDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 } });
-
 		D3D11_BLEND_DESC blendDesc{};
-		blendDesc.IndependentBlendEnable = FALSE;
-		blendDesc.RenderTarget[0].BlendEnable = FALSE;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, compositeBlendState.put()));
 
@@ -171,6 +145,19 @@ void Deferred::SetupResources()
 		dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 		dsDesc.StencilEnable = FALSE;
 		DX::ThrowIfFailed(device->CreateDepthStencilState(&dsDesc, compositeDepthStencilState.put()));
+
+		D3D11_DEPTH_STENCIL_DESC stencilDsDesc{};
+		stencilDsDesc.DepthEnable = FALSE;
+		stencilDsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+		stencilDsDesc.StencilEnable = TRUE;
+		stencilDsDesc.StencilReadMask = 0xFF;
+		stencilDsDesc.StencilWriteMask = 0x00;
+		stencilDsDesc.FrontFace.StencilFunc = D3D11_COMPARISON_NOT_EQUAL;
+		stencilDsDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+		stencilDsDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
+		stencilDsDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+		stencilDsDesc.BackFace = stencilDsDesc.FrontFace;
+		DX::ThrowIfFailed(device->CreateDepthStencilState(&stencilDsDesc, compositeStencilDSState.put()));
 
 		D3D11_RASTERIZER_DESC rsDesc{};
 		rsDesc.FillMode = D3D11_FILL_SOLID;
@@ -337,8 +324,6 @@ void Deferred::DeferredPasses()
 	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	auto reflectance = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
 
-	auto motionVectors = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-
 	bool interior = Util::IsInterior();
 
 	auto& skylighting = globals::features::skylighting;
@@ -366,8 +351,10 @@ void Deferred::DeferredPasses()
 		Util::D3DStateBackup stateBackup;
 		stateBackup.Backup(context);
 
-		context->CopyResource(mainCopy->resource.get(), main.texture);
-		context->CopyResource(motionVectorsCopy->resource.get(), motionVectors.texture);
+		auto& mainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
+		float2 resolution = Util::ConvertToDynamic(globals::state->screenSize);
+		D3D11_BOX srcBox = { 0, 0, 0, (UINT)resolution.x, (UINT)resolution.y, 1 };
+		context->CopySubresourceRegion(mainCopy.texture, 0, 0, 0, 0, main.texture, 0, &srcBox);
 
 		// Constant buffers
 		{
@@ -383,7 +370,7 @@ void Deferred::DeferredPasses()
 		}
 
 		// SRVs
-		ID3D11ShaderResourceView* srvs[19]{
+		ID3D11ShaderResourceView* srvs[18]{
 			specular.SRV,
 			albedo.SRV,
 			normalRoughness.SRV,
@@ -401,27 +388,23 @@ void Deferred::DeferredPasses()
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,
 			nullptr,
-			mainCopy->srv.get(),
-			motionVectorsCopy->srv.get(),
+			mainCopy.SRV,
 		};
-
-		auto& vrStereoOpt = globals::features::vr.stereoOpt;
-		bool stereoCullingReady = globals::features::vr.IsStereoOptimizationCullingReady();
-		srvs[16] = stereoCullingReady ? vrStereoOpt.GetModeTextureSRV() : nullptr;
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
 		if (dynamicCubemaps.loaded)
 			context->PSSetSamplers(0, 1, &linearSampler);
 
-		// Render targets
-		ID3D11RenderTargetView* rtvs[3]{ main.RTV, normals.RTV, motionVectors.RTV };
-		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, nullptr);
+		// Render targets + stencil test for VR stereo culling
+		bool useStencil = globals::game::isVR && globals::features::vr.stereoOpt.IsStencilActive();
+		ID3D11RenderTargetView* rtvs[2]{ main.RTV, normals.RTV };
+		ID3D11DepthStencilView* dsv = useStencil ? depth.views[0] : nullptr;
+		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, dsv);
 		context->OMSetBlendState(compositeBlendState.get(), nullptr, 0xFFFFFFFF);
-		context->OMSetDepthStencilState(compositeDepthStencilState.get(), 0);
+		context->OMSetDepthStencilState(useStencil ? compositeStencilDSState.get() : compositeDepthStencilState.get(), 1);
 
 		// Viewport
-		float2 resolution = Util::ConvertToDynamic(globals::state->screenSize);
 		D3D11_VIEWPORT vp{};
 		vp.Width = resolution.x;
 		vp.Height = resolution.y;
@@ -635,9 +618,6 @@ ID3D11PixelShader* Deferred::GetCompositePS(bool interior)
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
-
-		if (REL::Module::IsVR())
-			defines.push_back({ "VR_STEREO_OPT", nullptr });
 
 		cached = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositePS.hlsl", defines, "ps_5_0"));
 	}

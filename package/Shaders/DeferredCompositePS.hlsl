@@ -3,7 +3,6 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
-#include "Common/MotionBlur.hlsli"
 #include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
@@ -17,12 +16,6 @@ Texture2D<float3> MasksTexture : register(t3);
 Texture2D<float> DepthTexture : register(t4);
 
 Texture2D<float4> MainInputTexture : register(t17);
-Texture2D<float2> MotionVectorsInputTexture : register(t18);
-
-#if defined(VR_STEREO_OPT)
-#	include "VRStereoOptimizations/modes.hlsli"
-Texture2D<uint> StereoOptModeTexture : register(t16);
-#endif
 
 #if defined(DYNAMIC_CUBEMAPS)
 Texture2D<float3> ReflectanceTexture : register(t5);
@@ -98,7 +91,6 @@ struct PS_OUTPUT
 {
 	float4 Main : SV_Target0;
 	float4 NormalTAAMaskSpecularMask : SV_Target1;
-	float4 MotionVectors : SV_Target2;
 };
 
 PS_OUTPUT main(PS_INPUT input)
@@ -109,19 +101,6 @@ PS_OUTPUT main(PS_INPUT input)
 	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // adjust for dynamic res
 
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
-
-#if defined(VR_STEREO_OPT)
-	if (eyeIndex == 1) {
-		uint mode = StereoOptModeTexture[uint2(pixCoord)] & 0x0F;
-		if (mode == MODE_MAIN) {  // stencil-culled in Eye 1, filled by ReprojectionCS
-			PS_OUTPUT discardOutput;
-			discardOutput.Main = MainInputTexture[pixCoord];
-			discardOutput.NormalTAAMaskSpecularMask = float4(0, 0, 0, 0);
-			discardOutput.MotionVectors = float4(MotionVectorsInputTexture[pixCoord], 0, 0);
-			return discardOutput;
-		}
-	}
-#endif
 
 	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
@@ -136,10 +115,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
-
-	float2 motionVectorsOutput = MotionVectorsInputTexture[pixCoord];
-	if (depth == 1.0)
-		motionVectorsOutput = MotionBlur::GetSSMotionVector(positionWS, positionWS, eyeIndex);
 
 	float glossiness = normalGlossiness.z;
 
@@ -350,6 +325,5 @@ PS_OUTPUT main(PS_INPUT input)
 	PS_OUTPUT output;
 	output.Main = float4(color, 1.0);
 	output.NormalTAAMaskSpecularMask = float4(GBuffer::EncodeNormalVanilla(normalVS), 0.0, 0.0);
-	output.MotionVectors = float4(motionVectorsOutput, 0.0, 0.0);
 	return output;
 }

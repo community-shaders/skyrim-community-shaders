@@ -46,10 +46,8 @@ public:
 
 	winrt::com_ptr<ID3D11BlendState> compositeBlendState;
 	winrt::com_ptr<ID3D11DepthStencilState> compositeDepthStencilState;
+	winrt::com_ptr<ID3D11DepthStencilState> compositeStencilDSState;
 	winrt::com_ptr<ID3D11RasterizerState> compositeRasterizerState;
-
-	std::unique_ptr<Texture2D> mainCopy;
-	std::unique_ptr<Texture2D> motionVectorsCopy;
 
 	bool deferredPass = false;
 
