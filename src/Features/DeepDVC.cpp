@@ -50,7 +50,7 @@ void DeepDVC::DrawSettings()
 	if (ImGui::TreeNodeEx("DeepDVC Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 		const char* modes[] = { "Off", "On" };
 		ImGui::SliderInt("Mode", (int*)&settings.mode, 0, 1, modes[settings.mode]);
-		
+
 		if (settings.mode == 1) {
 			if (missingInput) {
 				ImGui::TextColored({ 1.0f, 0.4f, 0.4f, 1.0f }, "Input render target not found.");
@@ -133,9 +133,9 @@ void DeepDVC::Evaluate()
 		D3D11_TEXTURE2D_DESC proxyDesc = desc;
 		proxyDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		proxyDesc.Usage = D3D11_USAGE_DEFAULT;
-		proxyDesc.CPUAccessFlags = 0; 
-		proxyDesc.MiscFlags = 0; 
-		
+		proxyDesc.CPUAccessFlags = 0;
+		proxyDesc.MiscFlags = 0;
+
 		HRESULT hr = device->CreateTexture2D(&proxyDesc, nullptr, &proxyBuffer);
 		if (FAILED(hr)) {
 			logger::error("[DeepDVC] Failed to create proxy buffer. HR = {:x}", (uint32_t)hr);
