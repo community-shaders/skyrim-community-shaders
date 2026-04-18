@@ -1171,11 +1171,11 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::Text("Near");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 1000000.0f, "%.0f"))
+			if (WeatherUtils::DrawSliderFloat("##Day Near", settings.fogProperties["Day Near"], 0.0f, 1000000.0f, nullptr, "%.0f", "Day Near"))
 				changed = true;
 			ImGui::TableSetColumnIndex(2);
 			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 1000000.0f, "%.0f"))
+			if (WeatherUtils::DrawSliderFloat("##Night Near", settings.fogProperties["Night Near"], 0.0f, 1000000.0f, nullptr, "%.0f", "Night Near"))
 				changed = true;
 		}
 
@@ -1201,11 +1201,11 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::Text("Far");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 1000000.0f, "%.0f"))
+			if (WeatherUtils::DrawSliderFloat("##Day Far", settings.fogProperties["Day Far"], 0.0f, 1000000.0f, nullptr, "%.0f", "Day Far"))
 				changed = true;
 			ImGui::TableSetColumnIndex(2);
 			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 1000000.0f, "%.0f"))
+			if (WeatherUtils::DrawSliderFloat("##Night Far", settings.fogProperties["Night Far"], 0.0f, 1000000.0f, nullptr, "%.0f", "Night Far"))
 				changed = true;
 		}
 
@@ -1231,11 +1231,11 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::Text("Power");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogDayPower", &settings.fogProperties["Day Power"], 0.0f, 10.0f, "%.3f"))
+			if (WeatherUtils::DrawSliderFloat("##Day Power", settings.fogProperties["Day Power"], 0.0f, 10.0f, nullptr, "%.3f", "Day Power"))
 				changed = true;
 			ImGui::TableSetColumnIndex(2);
 			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogNightPower", &settings.fogProperties["Night Power"], 0.0f, 10.0f, "%.3f"))
+			if (WeatherUtils::DrawSliderFloat("##Night Power", settings.fogProperties["Night Power"], 0.0f, 10.0f, nullptr, "%.3f", "Night Power"))
 				changed = true;
 		}
 
@@ -1261,11 +1261,11 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::Text("Max");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogDayMax", &settings.fogProperties["Day Max"], 0.0f, 1.0f, "%.3f"))
+			if (WeatherUtils::DrawSliderFloat("##Day Max", settings.fogProperties["Day Max"], 0.0f, 1.0f, nullptr, "%.3f", "Day Max"))
 				changed = true;
 			ImGui::TableSetColumnIndex(2);
 			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogNightMax", &settings.fogProperties["Night Max"], 0.0f, 1.0f, "%.3f"))
+			if (WeatherUtils::DrawSliderFloat("##Night Max", settings.fogProperties["Night Max"], 0.0f, 1.0f, nullptr, "%.3f", "Night Max"))
 				changed = true;
 		}
 
@@ -1301,8 +1301,6 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	for (auto& p : properties) {
 		if (!MatchesSearch(p.first))
 			continue;
-
-		PushHighlightStyle(p.first);
 
 		// Inherit checkbox
 		if (hasParent) {
@@ -1340,7 +1338,6 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 			break;
 		}
 
-		PopHighlightStyle(p.first);
 	}
 
 	ImGui::PopItemWidth();

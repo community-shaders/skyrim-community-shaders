@@ -367,7 +367,7 @@ namespace WeatherUtils
 	bool DrawSliderInt8(const std::string& label, int& property);
 	bool DrawColorEdit(const std::string& l, float3& property, Widget* widget = nullptr);
 	bool DrawSliderUint8(const std::string& label, int& property);
-	bool DrawSliderFloat(const std::string& label, float& property, float min = 0.0f, float max = 1.0f, Widget* widget = nullptr);
+	bool DrawSliderFloat(const std::string& label, float& property, float min = 0.0f, float max = 1.0f, Widget* widget = nullptr, const char* format = "%.3f", const std::string& highlightId = "");
 
 	// Generic form picker combo box using cached widget EditorIDs for performance
 	// Returns true if selection changed
