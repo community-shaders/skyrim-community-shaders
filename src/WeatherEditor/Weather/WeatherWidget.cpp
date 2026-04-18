@@ -2,6 +2,8 @@
 
 #include <format>
 
+#include "imgui_internal.h"
+
 #include "../EditorWindow.h"
 #include "FeatureIssues.h"
 #include "State.h"
@@ -59,6 +61,7 @@ void WeatherWidget::DrawWidget()
 	if (BeginWidgetWindow()) {
 		// Draw header with search and all buttons
 		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
+		const ImVec2 searchDropdownPos = ImGui::GetCursorScreenPos();
 
 		// Update search results when search buffer changes
 		if (searchActive) {
@@ -67,15 +70,15 @@ void WeatherWidget::DrawWidget()
 
 		// Show search results dropdown
 		if (searchBuffer[0] != '\0' && !searchResults.empty()) {
-			// Find the search input position for dropdown placement
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y));
+			ImGui::SetNextWindowPos(searchDropdownPos, ImGuiCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(300.0f * Util::GetUIScale(), 0));
-			ImGui::SetNextWindowFocus();
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
 			ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
 			if (ImGui::Begin("##SearchDropdown", nullptr,
 					ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-						ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+						ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+						ImGuiWindowFlags_NoFocusOnAppearing)) {
+				ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
 				for (size_t i = 0; i < std::min(size_t(5), searchResults.size()); ++i) {
 					const auto& result = searchResults[i];
 					std::string label = std::format("{} ({})", result.displayName, result.tabName);
@@ -92,8 +95,7 @@ void WeatherWidget::DrawWidget()
 					ImGui::TextDisabled("... %zu more results", searchResults.size() - 5);
 				}
 
-				// Close dropdown if clicking outside or pressing Escape
-				if (!ImGui::IsWindowFocused() || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+				if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 					searchBuffer[0] = '\0';
 					searchResults.clear();
 				}

@@ -230,6 +230,10 @@ void VR::InitInSceneResources()
 
 void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, const vr::VRTextureBounds_t* bounds)
 {
+	if (!globals::menu || !(globals::menu->IsEnabled || globals::menu->overlayVisible || IsWelcomeOverlayVisible()) || settings.attachMode == AttachMode::None || !menuTexture) {
+		return;
+	}
+
 	auto context = globals::d3d::context;
 	winrt::com_ptr<ID3DUserDefinedAnnotation> perf;
 	context->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), perf.put_void());
@@ -241,25 +245,6 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 	if (!inSceneResources.initialized)
 		InitInSceneResources();
 	if (!inSceneResources.initialized) {
-		if (perf)
-			perf->EndEvent();
-		return;
-	}
-
-	// Only render if overlay should be visible
-	if (!globals::menu || !(globals::menu->IsEnabled || globals::menu->overlayVisible || settings.kAutoHideSeconds > 0)) {
-		if (perf)
-			perf->EndEvent();
-		return;
-	}
-	if (!menuTexture) {
-		if (perf)
-			perf->EndEvent();
-		return;
-	}
-
-	// Skip rendering when attach mode is None (disabled)
-	if (settings.attachMode == AttachMode::None) {
 		if (perf)
 			perf->EndEvent();
 		return;
