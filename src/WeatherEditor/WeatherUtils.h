@@ -354,6 +354,22 @@ void EndWidgetSearchBar();
 
 namespace WeatherUtils
 {
+	// Texture path helpers shared by precipitation and cloud layer widgets.
+	namespace TexturePath
+	{
+		// Lowercase + convert forward slashes to backslashes.
+		std::string Normalize(std::string_view path);
+
+		// True if the normalized path ends with ".dds".
+		bool HasDdsExtension(std::string_view path);
+
+		// True if the file exists under Data/textures/ (accepts paths with or without the leading "textures\").
+		bool ExistsOnDisk(std::string_view path);
+
+		// Build a BSA-style resource path ("Textures\\<path>" with .dds appended if missing).
+		std::string BuildResourcePath(std::string_view path);
+	}
+
 	// Set the current widget for undo tracking (should be called at start of widget Draw())
 	void SetCurrentWidget(Widget* widget);
 
