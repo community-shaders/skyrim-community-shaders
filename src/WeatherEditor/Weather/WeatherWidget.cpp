@@ -1000,12 +1000,20 @@ void WeatherWidget::DrawCloudSettings()
 		// [Enabled] badge is overlaid on the header via the draw list instead of altering the label.
 		float headerScreenY = ImGui::GetCursorScreenPos().y;
 		bool isTarget = IsHighlighted(layerId);
-		if (isTarget)
+		if (isTarget) {
 			ImGui::SetNextItemOpen(true);
+			const ImVec4 targetHeaderColor = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
+			ImGui::PushStyleColor(ImGuiCol_Header, targetHeaderColor);
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, targetHeaderColor);
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, targetHeaderColor);
+		}
 		bool layerOpen = ImGui::CollapsingHeader(layer.c_str(), flags);
-		if (isTarget && scrollToHighlighted) {
-			ImGui::SetScrollHereY(0.5f);
-			scrollToHighlighted = false;
+		if (isTarget) {
+			ImGui::PopStyleColor(3);
+			if (scrollToHighlighted) {
+				ImGui::SetScrollHereY(0.5f);
+				scrollToHighlighted = false;
+			}
 		}
 
 		if (!layerEnabled)
