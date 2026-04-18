@@ -125,26 +125,41 @@ void LightingTemplateWidget::DrawFogSettings()
 {
 	bool changed = false;
 
-	ImGui::Spacing();
-	if (MatchesSearch("Fog Color Near") && WeatherUtils::DrawColorEdit("Fog Color Near", settings.fogColorNear))
-		changed = true;
-	ImGui::Spacing();
-	if (MatchesSearch("Fog Color Far") && WeatherUtils::DrawColorEdit("Fog Color Far", settings.fogColorFar))
-		changed = true;
+	if (MatchesSearch("Fog Color Near")) {
+		ImGui::Spacing();
+		if (WeatherUtils::DrawColorEdit("Fog Color Near", settings.fogColorNear))
+			changed = true;
+	}
 
-	ImGui::Spacing();
-	if (MatchesSearch("Fog Near") && WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 163840.0f))
-		changed = true;
-	ImGui::Spacing();
-	if (MatchesSearch("Fog Far") && WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 163840.0f))
-		changed = true;
+	if (MatchesSearch("Fog Color Far")) {
+		ImGui::Spacing();
+		if (WeatherUtils::DrawColorEdit("Fog Color Far", settings.fogColorFar))
+			changed = true;
+	}
 
-	ImGui::Spacing();
-	if (MatchesSearch("Fog Power") && WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower, 0.0f, 10.0f))
-		changed = true;
-	ImGui::Spacing();
-	if (MatchesSearch("Fog Clamp") && WeatherUtils::DrawSliderFloat("Fog Clamp", settings.fogClamp, 0.0f, 1.0f))
-		changed = true;
+	if (MatchesSearch("Fog Near")) {
+		ImGui::Spacing();
+		if (WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 163840.0f))
+			changed = true;
+	}
+
+	if (MatchesSearch("Fog Far")) {
+		ImGui::Spacing();
+		if (WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 163840.0f))
+			changed = true;
+	}
+
+	if (MatchesSearch("Fog Power")) {
+		ImGui::Spacing();
+		if (WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower, 0.0f, 10.0f))
+			changed = true;
+	}
+
+	if (MatchesSearch("Fog Clamp")) {
+		ImGui::Spacing();
+		if (WeatherUtils::DrawSliderFloat("Fog Clamp", settings.fogClamp, 0.0f, 1.0f))
+			changed = true;
+	}
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();

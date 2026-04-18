@@ -41,6 +41,11 @@ void ImageSpaceWidget::DrawWidget()
 	{
 		if (PropertyDrawer::BeginTable("ImageSpaceSettings")) {
 			bool changed = false;
+			const bool showHdr = MatchesSearch("Eye Adapt Speed") || MatchesSearch("Bloom Blur Radius") || MatchesSearch("Bloom Threshold") ||
+				MatchesSearch("Bloom Scale") || MatchesSearch("White") || MatchesSearch("Sunlight Scale") || MatchesSearch("Sky Scale");
+			const bool showCinematic = MatchesSearch("Saturation") || MatchesSearch("Brightness") || MatchesSearch("Contrast");
+			const bool showTint = MatchesSearch("Tint Color") || MatchesSearch("Tint Amount");
+			const bool showDOF = MatchesSearch("DOF Strength") || MatchesSearch("DOF Distance") || MatchesSearch("DOF Range");
 
 			// HDR Settings
 			if (MatchesSearch("Eye Adapt Speed"))
@@ -58,7 +63,8 @@ void ImageSpaceWidget::DrawWidget()
 			if (MatchesSearch("Sky Scale"))
 				changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f);
 
-			PropertyDrawer::DrawSeparator();
+			if (showHdr && (showCinematic || showTint || showDOF))
+				PropertyDrawer::DrawSeparator();
 
 			// Cinematic Settings
 			if (MatchesSearch("Saturation"))
@@ -68,7 +74,8 @@ void ImageSpaceWidget::DrawWidget()
 			if (MatchesSearch("Contrast"))
 				changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 2.0f);
 
-			PropertyDrawer::DrawSeparator();
+			if (showCinematic && (showTint || showDOF))
+				PropertyDrawer::DrawSeparator();
 
 			// Tint Settings
 			float3 tintColor{ settings.tintColor.x, settings.tintColor.y, settings.tintColor.z };
@@ -79,7 +86,8 @@ void ImageSpaceWidget::DrawWidget()
 			if (MatchesSearch("Tint Amount"))
 				changed |= PropertyDrawer::DrawFloat("Tint Amount", settings.tintAmount, 0.0f, 1.0f);
 
-			PropertyDrawer::DrawSeparator();
+			if (showTint && showDOF)
+				PropertyDrawer::DrawSeparator();
 
 			// Depth of Field
 			if (MatchesSearch("DOF Strength"))

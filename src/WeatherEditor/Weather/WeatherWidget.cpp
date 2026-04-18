@@ -983,8 +983,9 @@ void WeatherWidget::DrawCloudSettings()
 
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
+		std::string layerId = std::format("Cloud {}", layer);
 
-		if (!MatchesSearch(std::format("Cloud {}", layer)))
+		if (!MatchesSearch(layerId))
 			continue;
 
 		bool layerEnabled = settings.clouds[i].enabled;
@@ -998,7 +999,7 @@ void WeatherWidget::DrawCloudSettings()
 		// Label is constant so the storage ID never changes — open/closed state always persists.
 		// [Enabled] badge is overlaid on the header via the draw list instead of altering the label.
 		float headerScreenY = ImGui::GetCursorScreenPos().y;
-		bool isTarget = IsHighlighted(layer);
+		bool isTarget = IsHighlighted(layerId);
 		if (isTarget)
 			ImGui::SetNextItemOpen(true);
 		bool layerOpen = ImGui::CollapsingHeader(layer.c_str(), flags);
@@ -1900,10 +1901,6 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 					   "Visual Effect Begin", "Visual Effect End", "Trans Delta" } },
 		{ "Fog", { "Day Near", "Day Far", "Day Power", "Day Max",
 					 "Night Near", "Night Far", "Night Power", "Night Max" } },
-		{ "Lighting (DALC)", { "Fresnel Power", "Specular",
-								 "Directional X Max", "Directional X Min",
-								 "Directional Y Max", "Directional Y Min",
-								 "Directional Z Max", "Directional Z Min" } },
 	};
 
 	for (const auto& [tab, names] : tabEntries) {
@@ -1912,14 +1909,23 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 		}
 	}
 
+	results.push_back({ "Fresnel Power", "Lighting (DALC)", "Fresnel Power" });
+	results.push_back({ "Specular", "Lighting (DALC)", "Specular" });
+	results.push_back({ "Directional +X", "Lighting (DALC)", "Directional X Max" });
+	results.push_back({ "Directional -X", "Lighting (DALC)", "Directional X Min" });
+	results.push_back({ "Directional +Y", "Lighting (DALC)", "Directional Y Max" });
+	results.push_back({ "Directional -Y", "Lighting (DALC)", "Directional Y Min" });
+	results.push_back({ "Directional +Z", "Lighting (DALC)", "Directional Z Max" });
+	results.push_back({ "Directional -Z", "Lighting (DALC)", "Directional Z Min" });
+
 	for (int i = 0; i < ColorTypes::kTotal; i++) {
 		std::string colorType = ColorTypeLabel(i);
 		results.push_back({ colorType, "Atmosphere Colors", colorType });
 	}
 
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
-		std::string layer = std::format("Layer {}", i);
-		results.push_back({ std::format("Cloud {}", layer), "Clouds", layer });
+		std::string layerId = std::format("Cloud Layer {}", i);
+		results.push_back({ layerId, "Clouds", layerId });
 	}
 
 	return results;

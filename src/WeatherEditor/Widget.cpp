@@ -1,5 +1,7 @@
 #include "Widget.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <format>
 
 #include "EditorWindow.h"
@@ -276,7 +278,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 	auto drawSearchBar = [&]() {
 		ImGui::SetNextItemWidth(200.0f * scale);
-		bool ctrlF = ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
+		bool ctrlF = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+			ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
 		if (ctrlF) {
 			searchBuffer[0] = '\0';
 			searchResults.clear();
@@ -458,7 +461,8 @@ void Widget::DrawSearchDropdown()
 	ImGui::SetNextWindowSize(ImVec2(300.0f * scale, 0));
 	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
-	if (ImGui::Begin("##SearchDropdown", nullptr,
+	const std::string dropdownWindowId = std::format("##SearchDropdown_{:X}", reinterpret_cast<std::uintptr_t>(this));
+	if (ImGui::Begin(dropdownWindowId.c_str(), nullptr,
 			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
 				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
 				ImGuiWindowFlags_NoFocusOnAppearing)) {
@@ -496,6 +500,7 @@ void Widget::NavigateToSearchResult(const SearchResult& result)
 {
 	activeTabOverride = result.tabName;
 	highlightedSetting = result.settingId;
+	highlightedDisplaySetting = result.displayName;
 	highlightStartTime = static_cast<float>(ImGui::GetTime());
 	scrollToHighlighted = true;
 }
@@ -518,7 +523,7 @@ bool Widget::MatchesSearch(const std::string& settingId) const
 
 bool Widget::IsHighlighted(const std::string& settingId) const
 {
-	if (highlightedSetting != settingId)
+	if (highlightedSetting != settingId && highlightedDisplaySetting != settingId)
 		return false;
 	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
 	return elapsed < 2.0f;
@@ -529,7 +534,11 @@ void Widget::PushHighlightStyle(const std::string& settingId)
 	if (!IsHighlighted(settingId))
 		return;
 	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
-	const float alpha = 0.3f * (1.0f - std::abs(elapsed - 0.5f) * 2.0f);
+	constexpr float kHighlightDuration = 2.0f;
+	constexpr float kMaxAlpha = 0.3f;
+	const float normalized = std::clamp(elapsed / kHighlightDuration, 0.0f, 1.0f);
+	const float triangularFade = 1.0f - std::abs(normalized * 2.0f - 1.0f);
+	const float alpha = std::clamp(kMaxAlpha * triangularFade, 0.0f, kMaxAlpha);
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.6f, 1.0f, alpha));
 	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.7f, 1.0f, alpha));
 }

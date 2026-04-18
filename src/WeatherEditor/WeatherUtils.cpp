@@ -810,6 +810,9 @@ namespace TOD
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
 
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
+
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 
@@ -962,6 +965,8 @@ namespace TOD
 			ImGui::EndChild();
 		}
 
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 

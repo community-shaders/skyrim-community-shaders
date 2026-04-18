@@ -209,6 +209,7 @@ protected:
 	std::vector<SearchResult> searchResults;
 	std::string activeTabOverride;
 	std::string highlightedSetting;
+	std::string highlightedDisplaySetting;
 	float highlightStartTime = 0.0f;
 	bool scrollToHighlighted = false;
 
