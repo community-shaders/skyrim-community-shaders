@@ -364,143 +364,29 @@ cbuffer AlphaTestRefCB : register(b11)
 }
 #	endif  // !VR
 
-#	if defined(RENDER_SHADOWMASKDPB)
-float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> tex, SamplerComparisonState samp, float3 positionMS, float layerIndex, uint eyeIndex)
+float SampleShadowPCF(Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, float2x2 rotationMatrix, float radius)
 {
-	const int sampleCount = 12;  // reduced from 16
-
-	// Pre-compute expensive operations outside the loop
-	float4x4 shadowTransform = transpose(ShadowMapProj[eyeIndex][0]);
-	float rcpShadowLightParam = rcp(ShadowLightParam.x);
-	float alphaTestOffset = -AlphaTestRef.y;
-	float sampleRadius = ShadowSampleParam.z * 2048.0;
-	float seedNormalized = seed.x * (1.0 / 4294967295.0);  // Use only x component for efficiency
-	uint frameOffset = SharedData::FrameCount * sampleCount;
-
-	// Pre-compute constants
-	const float3 positionOffsetUp = float3(0, 0, 1);
-	const float3 positionOffsetDown = float3(0, 0, -1);
-	const float rcpSampleCount = rcp((float)sampleCount);
-
-	float visibility = 0;
-
-	// Unroll first few samples for better instruction scheduling
-	[unroll(4)] for (int unrollSampleIndex = 0; unrollSampleIndex < 4; ++unrollSampleIndex)
+	float visibility = 0.0;
+	[unroll] for (int i = 0; i < 8; i++)
 	{
-		// Optimized random generation using simplified hash
-		uint hashInput = unrollSampleIndex + frameOffset;
-		float3 randomVec = Random::R3Modified(hashInput, seedNormalized);
-		float3 sampleOffset = (randomVec * 2.0 - 1.0) * sampleRadius;
-
-		float3 worldPos = positionMS.xyz + sampleOffset;
-		float4 positionLS4 = mul(shadowTransform, float4(worldPos, 1));
-		float3 positionLS = positionLS4.xyz;
-
-		// Fast length calculation and compare value
-		float positionLength = length(positionLS);
-		float compareValue = saturate(positionLength * rcpShadowLightParam) + alphaTestOffset;
-
-		// Optimized hemisphere calculation
-		bool lowerHalf = positionLS.z < 0;
-		float3 normalizedPos = positionLS * rcp(positionLength);  // Avoid second normalize
-
-		float3 positionOffset = lowerHalf ? positionOffsetDown : positionOffsetUp;
-		float3 lightDirection = normalizedPos + positionOffset;
-
-		// Fast normalization using rsqrt
-		float lightDirLengthSq = dot(lightDirection, lightDirection);
-		float rcpLightDirLength = rsqrt(lightDirLengthSq);
-		lightDirection *= rcpLightDirLength;
-
-		// Optimized UV calculation
-		float rcpZ = rcp(lightDirection.z);
-		float2 shadowMapUV = lightDirection.xy * rcpZ * 0.5 + 0.5;
-		shadowMapUV.y = lowerHalf ? (1.0 - 0.5 * shadowMapUV.y) : (0.5 * shadowMapUV.y);
-
-		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
+		float2 offset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * radius;
+		visibility += tex.SampleCmpLevelZero(samp, float3(baseUV + offset, layerIndex), compareValue).x;
 	}
-
-	// Continue with remaining samples
-	for (int remainingSampleIndex = 4; remainingSampleIndex < sampleCount; ++remainingSampleIndex) {
-		uint hashInput = remainingSampleIndex + frameOffset;
-		float3 randomVec = Random::R3Modified(hashInput, seedNormalized);
-		float3 sampleOffset = (randomVec * 2.0 - 1.0) * sampleRadius;
-
-		float3 worldPos = positionMS.xyz + sampleOffset;
-		float4 positionLS4 = mul(shadowTransform, float4(worldPos, 1));
-		float3 positionLS = positionLS4.xyz;
-
-		float positionLength = length(positionLS);
-		float compareValue = saturate(positionLength * rcpShadowLightParam) + alphaTestOffset;
-
-		bool lowerHalf = positionLS.z < 0;
-		float3 normalizedPos = positionLS * rcp(positionLength);
-
-		float3 positionOffset = lowerHalf ? positionOffsetDown : positionOffsetUp;
-		float3 lightDirection = normalizedPos + positionOffset;
-
-		float lightDirLengthSq = dot(lightDirection, lightDirection);
-		float rcpLightDirLength = rsqrt(lightDirLengthSq);
-		lightDirection *= rcpLightDirLength;
-
-		float rcpZ = rcp(lightDirection.z);
-		float2 shadowMapUV = lightDirection.xy * rcpZ * 0.5 + 0.5;
-		shadowMapUV.y = lowerHalf ? (1.0 - 0.5 * shadowMapUV.y) : (0.5 * shadowMapUV.y);
-
-		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
-
-		// Early termination for clear shadow/light cases
-		if (remainingSampleIndex >= 8) {
-			float currentAverage = visibility * rcp((float)(remainingSampleIndex + 1));
-			if (currentAverage < 0.1 || currentAverage > 0.9) {
-				// Extrapolate remaining samples based on current trend
-				visibility += (sampleCount - remainingSampleIndex - 1) * (currentAverage > 0.5 ? 1.0 : 0.0);
-				break;
-			}
-		}
-	}
-
-	return visibility * rcpSampleCount;
+	return visibility / 8.0;
 }
-#	else
-float GetPoissonDiskFilteredShadowVisibility(float noise, float2x2 rotationMatrix, Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, bool asymmetric)
+
+float SampleDualParaboloidShadowPCF(Texture2DArray<float4> tex, SamplerComparisonState samp, float2 baseUV, float layerIndex, float compareValue, float2x2 rotationMatrix, float radius, bool lowerHalf)
 {
-	const int sampleCount = 16;
-
-#		if defined(RENDER_SHADOWMASK)
-	uint onePlusLayerIndex = 1.0 + layerIndex;
-	float layerIndexRcp = rcp(onePlusLayerIndex);
-#		endif
-
-	float visibility = 0;
-	for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
-		float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);
-
-#		if defined(RENDER_SHADOWMASKDPB)
-		float2 sampleUV = baseUV.xy + sampleOffset;
-		baseUV.z += noise * 0.5;
-
-		bool lowerHalf = baseUV.z * 0.5 + 0.5 < 0;
-		float3 normalizedPositionLS = normalize(float3(sampleUV.xy, baseUV.z));
-
-		float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
-		float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
-		float2 shadowMapUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
-		shadowMapUV.y = lowerHalf ? 1 - 0.5 * shadowMapUV.y : 0.5 * shadowMapUV.y;
-
-		visibility += tex.SampleCmpLevelZero(samp, float3(shadowMapUV, layerIndex), compareValue).x;
-
-#		elif defined(RENDER_SHADOWMASK)
-		float2 sampleUV = layerIndexRcp * sampleOffset * ShadowSampleParam.z + baseUV;
-		visibility += tex.SampleCmpLevelZero(samp, float3(sampleUV, layerIndex), compareValue).x;
-#		else
-		float2 sampleUV = sampleOffset * ShadowSampleParam.z + baseUV;
-		visibility += tex.SampleCmpLevelZero(samp, float3(sampleUV, layerIndex), compareValue).x;
-#		endif
+	float visibility = 0.0;
+	[unroll] for (int i = 0; i < 8; i++)
+	{
+		float2 offset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * radius;
+		float2 uv = baseUV + offset;
+		uv.y = lowerHalf ? max(uv.y, 0.5) : min(uv.y, 0.5);
+		visibility += tex.SampleCmpLevelZero(samp, float3(uv, layerIndex), compareValue).x;
 	}
-	return visibility * rcp((float)sampleCount);
+	return visibility / 8.0;
 }
-#	endif
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -622,10 +508,6 @@ PS_OUTPUT main(PS_INPUT input)
 	sincos(Math::TAU * noise, rotation.y, rotation.x);
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
-	noise = noise * 2.0 - 1.0;
-
-	uint3 seed = Random::pcg3d(uint3(input.PositionCS.xy, input.PositionCS.x * Math::PI));
-
 #		if defined(RENDER_SHADOWMASK)
 	if (SharedData::InInterior)
 		shadowColor = float4(0, 0, 0, 0);
@@ -656,7 +538,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 		shadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(positionLS.xy, cascadeIndex), positionLS.z).x;
 #			elif SHADOWFILTER == 3
-		shadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, positionLS.xy, cascadeIndex, positionLS.z, false);
+		shadowVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, positionLS.xy, cascadeIndex, positionLS.z, rotationMatrix, ShadowSampleParam.z * 0.5);
 #			endif
 
 		if (cascadeIndex < 1 && StartSplitDistances.y < shadowMapDepth) {
@@ -672,7 +554,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 			cascade1ShadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(cascade1PositionLS.xy, 1), cascade1PositionLS.z).x;
 #			elif SHADOWFILTER == 3
-			cascade1ShadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, cascade1PositionLS.xy, 1, cascade1PositionLS.z, false);
+			cascade1ShadowVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, cascade1PositionLS.xy, 1, cascade1PositionLS.z, rotationMatrix, ShadowSampleParam.z * 0.5);
 #			endif
 
 			float cascade1BlendFactor = smoothstep(0, 1, (shadowMapDepth - StartSplitDistances.y) / (EndSplitDistances.x - StartSplitDistances.y));
@@ -687,7 +569,7 @@ PS_OUTPUT main(PS_INPUT input)
 			float3 focusShadowMapUv = float3(focusShadowMapPosition.xy, StartSplitDistances.w + focusShadowIndex);
 			float focusShadowMapCompareValue = focusShadowMapPosition.z - 3 * shadowMapThreshold;
 #			if SHADOWFILTER == 3
-			float focusShadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexFocusShadowMapSamplerComp, SampFocusShadowMapSamplerComp, focusShadowMapUv.xy, focusShadowMapUv.z, focusShadowMapCompareValue, false).x;
+			float focusShadowVisibility = SampleShadowPCF(TexFocusShadowMapSamplerComp, SampFocusShadowMapSamplerComp, focusShadowMapUv.xy, focusShadowMapUv.z, focusShadowMapCompareValue, rotationMatrix, ShadowSampleParam.z);
 #			else
 			float focusShadowVisibility = TexFocusShadowMapSamplerComp.SampleCmpLevelZero(SampFocusShadowMapSamplerComp, focusShadowMapUv, focusShadowMapCompareValue).x;
 #			endif
@@ -710,7 +592,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 	shadowBaseVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(shadowMapUv, EndSplitDistances.x), positionLS.z - AlphaTestRef.y).x;
 #			elif SHADOWFILTER == 3
-	shadowBaseVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv.xy, EndSplitDistances.x, positionLS.z - AlphaTestRef.y, false);
+	shadowBaseVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv, EndSplitDistances.x, positionLS.z - AlphaTestRef.y, rotationMatrix, ShadowSampleParam.z);
 #			endif
 	float shadowVisibilityFactor = pow(2 * length(0.5 * positionLS.xy), ShadowLightParam.x);
 	float shadowVisibility = shadowBaseVisibility - shadowVisibilityFactor * shadowBaseVisibility;
@@ -729,7 +611,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 		focusShadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, focusShadowMapUv, focusShadowMapCompareValue).x;
 #			elif SHADOWFILTER == 3
-		focusShadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, focusShadowMapUv.xy, focusShadowMapUv.z, focusShadowMapCompareValue, false);
+		focusShadowVisibility = SampleShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, focusShadowMapUv.xy, focusShadowMapUv.z, focusShadowMapCompareValue, rotationMatrix, ShadowSampleParam.z);
 #			endif
 		shadowVisibility = min(shadowVisibility, lerp(1, focusShadowVisibility, FocusShadowFadeParam[focusShadowIndex]));
 	}
@@ -753,7 +635,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 		shadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(shadowMapUv, EndSplitDistances.x), shadowMapCompareValue).x;
 #			elif SHADOWFILTER == 3
-		shadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv.xy, EndSplitDistances.x, shadowMapCompareValue, false);
+		shadowVisibility = SampleDualParaboloidShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv, EndSplitDistances.x, shadowMapCompareValue, rotationMatrix, ShadowSampleParam.z, false);
 #			endif
 	} else {
 		shadowVisibility = 1;
@@ -771,7 +653,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
 	float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
 	float2 shadowMapUv = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
-	shadowMapUv.y = lowerHalf ? 1 - 0.5 * shadowMapUv.y : 0.5 * shadowMapUv.y;
+	shadowMapUv.y = lowerHalf ? 1.0 - 0.5 * shadowMapUv.y : 0.5 * shadowMapUv.y;
 
 	float shadowVisibility = 0;
 #			if SHADOWFILTER == 0
@@ -782,7 +664,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			elif SHADOWFILTER == 1
 	shadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(shadowMapUv, EndSplitDistances.x), shadowMapCompareValue).x;
 #			elif SHADOWFILTER == 3
-	shadowVisibility = GetPoissonDiskFilteredShadowVisibility(seed, TexShadowMapSamplerComp, SampShadowMapSamplerComp, positionMS.xyz, EndSplitDistances.x, eyeIndex);
+	shadowVisibility = SampleDualParaboloidShadowPCF(TexShadowMapSamplerComp, SampShadowMapSamplerComp, shadowMapUv, EndSplitDistances.x, shadowMapCompareValue, rotationMatrix, ShadowSampleParam.z, lowerHalf);
 #			endif
 
 	shadowColor.xyzw = fadeFactor * shadowVisibility;
