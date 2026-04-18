@@ -4,30 +4,6 @@
 #include "Globals.h"
 #include "RE/B/BSShaderManager.h"
 #include "RE/N/NiSourceTexture.h"
-#include "Utils/FileSystem.h"
-
-static std::string ToLowerBackslash(std::string_view path)
-{
-	std::string result(path);
-	std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
-	std::replace(result.begin(), result.end(), '/', '\\');
-	return result;
-}
-
-static bool HasValidTextureFormat(std::string_view path)
-{
-	return ToLowerBackslash(path).ends_with(".dds");
-}
-
-static bool IsValidTexturePath(const std::string& path)
-{
-	const std::string lower = ToLowerBackslash(path);
-	if (!lower.ends_with(".dds"))
-		return false;
-	auto fullPath = lower.starts_with("textures\\") ? Util::PathHelpers::GetDataPath() / path : Util::PathHelpers::GetDataPath() / "textures" / path;
-	std::error_code ec;
-	return std::filesystem::exists(fullPath, ec) && !ec;
-}
 
 void PrecipitationWidget::DrawWidget()
 {
@@ -102,7 +78,7 @@ void PrecipitationWidget::DrawWidget()
 				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
 					std::string_view buf(textureBuffer);
 					if (buf != lastCheckedBuffer) {
-						lastCheckedExists = IsValidTexturePath(std::string(buf));
+						lastCheckedExists = WeatherUtils::TexturePath::ExistsOnDisk(buf);
 						lastCheckedBuffer = std::string(buf);
 					}
 					if (lastCheckedExists) {
@@ -111,11 +87,11 @@ void PrecipitationWidget::DrawWidget()
 					}
 				}
 				if (std::string_view buf(textureBuffer); settings.particleTexture != buf) {
-					if (!buf.empty() && !HasValidTextureFormat(buf))
+					if (!buf.empty() && !WeatherUtils::TexturePath::HasDdsExtension(buf))
 						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must end with '.dds'");
 					else if (!buf.empty()) {
 						if (buf != lastCheckedBuffer) {
-							lastCheckedExists = IsValidTexturePath(std::string(buf));
+							lastCheckedExists = WeatherUtils::TexturePath::ExistsOnDisk(buf);
 							lastCheckedBuffer = std::string(buf);
 						}
 						if (!lastCheckedExists)
@@ -174,11 +150,11 @@ void PrecipitationWidget::LoadSettings()
 					logger::warn("Precipitation {}: particleTexture is not a string, skipping", GetEditorID());
 				} else {
 					auto texPath = js["particleTexture"].get<std::string>();
-					if (!HasValidTextureFormat(texPath)) {
+					if (!WeatherUtils::TexturePath::HasDdsExtension(texPath)) {
 						logger::warn("Precipitation {}: ignoring malformed texture path '{}'", GetEditorID(), texPath);
 					} else {
 						settings.particleTexture = texPath;
-						if (!IsValidTexturePath(texPath))
+						if (!WeatherUtils::TexturePath::ExistsOnDisk(texPath))
 							logger::warn("Precipitation {}: saved texture path '{}' not found on disk", GetEditorID(), texPath);
 					}
 				}
@@ -263,7 +239,7 @@ void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
 {
 	if (path.empty())
 		return;
-	if (!IsValidTexturePath(path)) {
+	if (!WeatherUtils::TexturePath::ExistsOnDisk(path)) {
 		if (path != lastInvalidTexture) {
 			logger::warn("Precipitation {}: invalid texture path '{}', must end with '.dds'", GetEditorID(), path);
 			lastInvalidTexture = path;
