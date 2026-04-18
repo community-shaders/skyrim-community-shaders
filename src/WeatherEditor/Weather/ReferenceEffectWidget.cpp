@@ -6,6 +6,7 @@ void ReferenceEffectWidget::DrawWidget()
 {
 	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##ReferenceEffectSearch", true, true);
+		DrawSearchDropdown();
 		BeginScrollableContent("##REScroll");
 		{
 			bool changed = false;
@@ -137,4 +138,15 @@ void ReferenceEffectWidget::RevertChanges()
 bool ReferenceEffectWidget::HasUnsavedChanges() const
 {
 	return !(settings == originalSettings);
+}
+
+std::vector<Widget::SearchResult> ReferenceEffectWidget::CollectSearchableSettings() const
+{
+	return {
+		{ "Art Object", "", "Art Object" },
+		{ "Effect Shader", "", "Effect Shader" },
+		{ "Face Target", "", "Face Target" },
+		{ "Attach To Camera", "", "Attach To Camera" },
+		{ "Inherit Rotation", "", "Inherit Rotation" },
+	};
 }

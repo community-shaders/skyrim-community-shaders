@@ -7,11 +7,16 @@ void PrecipitationWidget::DrawWidget()
 	WeatherUtils::SetCurrentWidget(this);
 	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##PrecipitationSearch", true, true);
+		DrawSearchDropdown();
 
 		bool changed = false;
 
 		if (ImGui::BeginTabBar("PrecipitationTabs")) {
-			if (ImGui::BeginTabItem("Particle")) {
+			const ImGuiTabItemFlags particleFlags = GetTabFlagsForOverride("Particle");
+			const ImGuiTabItemFlags positionFlags = GetTabFlagsForOverride("Position");
+			const ImGuiTabItemFlags textureFlags = GetTabFlagsForOverride("Texture");
+
+			if (ImGui::BeginTabItem("Particle", nullptr, particleFlags)) {
 				BeginScrollableContent("##ParticleScroll");
 				ImGui::SeparatorText("Particle Type");
 				const char* types[] = { "Rain", "Snow" };
@@ -37,7 +42,7 @@ void PrecipitationWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Position")) {
+			if (ImGui::BeginTabItem("Position", nullptr, positionFlags)) {
 				BeginScrollableContent("##PositionScroll");
 				ImGui::SeparatorText("Offset");
 				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, 0.0f, 200.0f))
@@ -57,7 +62,7 @@ void PrecipitationWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Texture")) {
+			if (ImGui::BeginTabItem("Texture", nullptr, textureFlags)) {
 				BeginScrollableContent("##TextureScroll");
 				ImGui::SeparatorText("Subtextures");
 				int numX = static_cast<int>(settings.numSubtexturesX);
@@ -210,4 +215,21 @@ void PrecipitationWidget::RevertChanges()
 bool PrecipitationWidget::HasUnsavedChanges() const
 {
 	return !(settings == originalSettings);
+}
+
+std::vector<Widget::SearchResult> PrecipitationWidget::CollectSearchableSettings() const
+{
+	const std::vector<std::pair<std::string, std::vector<std::string>>> entries = {
+		{ "Particle", { "Type", "Size X", "Size Y", "Gravity Velocity", "Rotation Velocity" } },
+		{ "Position", { "Center Offset Min", "Center Offset Max", "Start Rotation Range", "Box Size", "Particle Density" } },
+		{ "Texture", { "Num Subtextures X", "Num Subtextures Y", "Particle Texture" } },
+	};
+
+	std::vector<SearchResult> results;
+	for (const auto& [tab, names] : entries) {
+		for (const auto& name : names) {
+			results.push_back({ name, tab, name });
+		}
+	}
+	return results;
 }

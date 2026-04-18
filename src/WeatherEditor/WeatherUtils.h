@@ -154,21 +154,15 @@ namespace PropertyDrawer
 	// Draw a vertically-centered label in the first table column. Call between TableNextRow and drawing the value.
 	void DrawLabel(const char* label);
 
-	// Draw properties with optional search filtering.
-	// searchBuffer can be nullptr to skip search filtering.
 	// Returns true if value was changed.
 	bool DrawFloat(const char* label, float& value, float minVal, float maxVal,
-		const char* searchBuffer = nullptr, const char* format = "%.3f");
+		const char* format = "%.3f");
 
-	bool DrawInt(const char* label, int& value, int minVal, int maxVal,
-		const char* searchBuffer = nullptr);
+	bool DrawInt(const char* label, int& value, int minVal, int maxVal);
 
-	bool DrawColor(const char* label, float3& value, const char* searchBuffer = nullptr);
+	bool DrawColor(const char* label, float3& value);
 
-	bool DrawCheckbox(const char* label, bool& value, const char* searchBuffer = nullptr);
-
-	// Check if a label matches the current search (convenience wrapper)
-	bool MatchesSearch(const char* label, const char* searchBuffer);
+	bool DrawCheckbox(const char* label, bool& value);
 }  // namespace PropertyDrawer
 
 // ============================================================================
@@ -347,10 +341,6 @@ namespace TOD
 	// Draw a separator row in a TOD table
 	void DrawTODSeparator();
 }  // namespace TOD
-
-// Widget search bar helpers
-bool BeginWidgetSearchBar(char* searchBuffer, size_t bufferSize, bool& searchActive);
-void EndWidgetSearchBar();
 
 namespace WeatherUtils
 {

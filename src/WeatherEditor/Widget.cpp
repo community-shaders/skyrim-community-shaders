@@ -1,18 +1,13 @@
 #include "Widget.h"
+
+#include <format>
+
 #include "EditorWindow.h"
 #include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
 #include "WeatherUtils.h"
-
-bool Widget::MatchesSearch(const std::string& text) const
-{
-	// If search is empty or inactive, match everything
-	if (searchBuffer[0] == '\0') {
-		return true;
-	}
-	return ContainsStringIgnoreCase(text, searchBuffer);
-}
+#include "imgui_internal.h"
 
 void Widget::Save()
 {
@@ -281,8 +276,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 	auto drawSearchBar = [&]() {
 		ImGui::SetNextItemWidth(200.0f * scale);
-		if (ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer)))
-			searchActive = searchBuffer[0] != '\0';
+		ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer));
 		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false))
 			ImGui::SetKeyboardFocusHere(-1);
 	};
@@ -430,4 +424,103 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	DrawDeleteConfirmationModal();
 
 	ImGui::Separator();
+
+	// Remember where the dropdown should appear so DrawSearchDropdown()
+	// (called after this function) can anchor itself below the search bar.
+	searchDropdownAnchor = ImGui::GetCursorScreenPos();
+
+	// Rebuild match list while a query is active.
+	if (searchBuffer[0] != '\0') {
+		searchResults = CollectSearchableSettings();
+		std::erase_if(searchResults, [&](const SearchResult& r) {
+			return !ContainsStringIgnoreCase(r.displayName, searchBuffer);
+		});
+	} else {
+		searchResults.clear();
+	}
+}
+
+void Widget::DrawSearchDropdown()
+{
+	if (searchBuffer[0] == '\0' || searchResults.empty())
+		return;
+
+	const float scale = Util::GetUIScale();
+	ImGui::SetNextWindowPos(searchDropdownAnchor, ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(300.0f * scale, 0));
+	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
+	if (ImGui::Begin("##SearchDropdown", nullptr,
+			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+				ImGuiWindowFlags_NoFocusOnAppearing)) {
+		ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+
+		const size_t shown = std::min(size_t(5), searchResults.size());
+		for (size_t i = 0; i < shown; ++i) {
+			const auto& result = searchResults[i];
+			std::string label = result.tabName.empty()
+			                        ? result.displayName
+			                        : std::format("{} ({})", result.displayName, result.tabName);
+
+			if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
+				NavigateToSearchResult(result);
+				searchBuffer[0] = '\0';
+				searchResults.clear();
+			}
+		}
+
+		if (searchResults.size() > 5) {
+			ImGui::Separator();
+			ImGui::TextDisabled("... %zu more results", searchResults.size() - 5);
+		}
+
+		if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+			searchBuffer[0] = '\0';
+			searchResults.clear();
+		}
+	}
+	ImGui::End();
+	ImGui::PopStyleColor();
+	ImGui::PopStyleVar();
+}
+
+void Widget::NavigateToSearchResult(const SearchResult& result)
+{
+	activeTabOverride = result.tabName;
+	highlightedSetting = result.settingId;
+	highlightStartTime = static_cast<float>(ImGui::GetTime());
+}
+
+int Widget::GetTabFlagsForOverride(const std::string& tabName)
+{
+	if (activeTabOverride.empty() || activeTabOverride != tabName)
+		return 0;
+	activeTabOverride.clear();
+	return ImGuiTabItemFlags_SetSelected;
+}
+
+bool Widget::IsHighlighted(const std::string& settingId) const
+{
+	if (highlightedSetting != settingId)
+		return false;
+	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
+	return elapsed < 2.0f;
+}
+
+void Widget::PushHighlightStyle(const std::string& settingId)
+{
+	if (!IsHighlighted(settingId))
+		return;
+	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
+	const float alpha = 0.3f * (1.0f - std::abs(elapsed - 0.5f) * 2.0f);
+	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.6f, 1.0f, alpha));
+	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.7f, 1.0f, alpha));
+}
+
+void Widget::PopHighlightStyle(const std::string& settingId)
+{
+	if (!IsHighlighted(settingId))
+		return;
+	ImGui::PopStyleColor(2);
 }

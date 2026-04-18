@@ -35,45 +35,45 @@ void ImageSpaceWidget::DrawWidget()
 
 	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##ImageSpaceSearch", false, true);
+		DrawSearchDropdown();
 	}
 	BeginScrollableContent("##ISScroll");
 	{
 		if (PropertyDrawer::BeginTable("ImageSpaceSettings")) {
 			bool changed = false;
-			const char* search = searchBuffer[0] ? searchBuffer : nullptr;
 
 			// HDR Settings
-			changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 100.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Bloom Blur Radius", settings.hdrBloomBlurRadius, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 50.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 100.0f);
+			changed |= PropertyDrawer::DrawFloat("Bloom Blur Radius", settings.hdrBloomBlurRadius, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 50.0f);
+			changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f);
 
 			PropertyDrawer::DrawSeparator();
 
 			// Cinematic Settings
-			changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 2.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 2.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 2.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 2.0f);
+			changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 2.0f);
+			changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 2.0f);
 
 			PropertyDrawer::DrawSeparator();
 
 			// Tint Settings
 			float3 tintColor{ settings.tintColor.x, settings.tintColor.y, settings.tintColor.z };
-			if (PropertyDrawer::DrawColor("Tint Color", tintColor, search)) {
+			if (PropertyDrawer::DrawColor("Tint Color", tintColor)) {
 				settings.tintColor = tintColor;
 				changed = true;
 			}
-			changed |= PropertyDrawer::DrawFloat("Tint Amount", settings.tintAmount, 0.0f, 1.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Tint Amount", settings.tintAmount, 0.0f, 1.0f);
 
 			PropertyDrawer::DrawSeparator();
 
 			// Depth of Field
-			changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 50000.0f, search, "%.1f");
-			changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 50000.0f, search, "%.1f");
+			changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 50000.0f, "%.1f");
+			changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 50000.0f, "%.1f");
 
 			PropertyDrawer::EndTable();
 
@@ -193,4 +193,22 @@ void ImageSpaceWidget::RevertChanges()
 bool ImageSpaceWidget::HasUnsavedChanges() const
 {
 	return !(settings == originalSettings);
+}
+
+std::vector<Widget::SearchResult> ImageSpaceWidget::CollectSearchableSettings() const
+{
+	const std::vector<std::string> names = {
+		"Eye Adapt Speed", "Bloom Blur Radius", "Bloom Threshold", "Bloom Scale",
+		"White", "Sunlight Scale", "Sky Scale",
+		"Saturation", "Brightness", "Contrast",
+		"Tint Color", "Tint Amount",
+		"DOF Strength", "DOF Distance", "DOF Range"
+	};
+
+	std::vector<SearchResult> results;
+	results.reserve(names.size());
+	for (const auto& name : names) {
+		results.push_back({ name, "", name });
+	}
+	return results;
 }

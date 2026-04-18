@@ -7,6 +7,7 @@ void CellLightingWidget::DrawWidget()
 	WeatherUtils::SetCurrentWidget(this);
 	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##CellLightingSearch", true, true);
+		DrawSearchDropdown();
 	}
 
 	if (!cell || !cell->IsInteriorCell()) {
@@ -18,7 +19,13 @@ void CellLightingWidget::DrawWidget()
 		bool changed = false;
 
 		if (ImGui::BeginTabBar("CellLightingTabs")) {
-			if (ImGui::BeginTabItem("Colors")) {
+			const ImGuiTabItemFlags colorsFlags = GetTabFlagsForOverride("Colors");
+			const ImGuiTabItemFlags fogFlags = GetTabFlagsForOverride("Fog");
+			const ImGuiTabItemFlags dalcFlags = GetTabFlagsForOverride("Directional Ambient");
+			const ImGuiTabItemFlags advancedFlags = GetTabFlagsForOverride("Advanced");
+			const ImGuiTabItemFlags inheritFlags = GetTabFlagsForOverride("Inheritance");
+
+			if (ImGui::BeginTabItem("Colors", nullptr, colorsFlags)) {
 				BeginScrollableContent("##ColorsScroll");
 				ImGui::SeparatorText("Ambient & Directional");
 				if (WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient))
@@ -38,7 +45,7 @@ void CellLightingWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Fog")) {
+			if (ImGui::BeginTabItem("Fog", nullptr, fogFlags)) {
 				BeginScrollableContent("##FogScroll");
 				ImGui::SeparatorText("Fog Distance");
 				if (WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 163840.0f))
@@ -56,7 +63,7 @@ void CellLightingWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Directional Ambient")) {
+			if (ImGui::BeginTabItem("Directional Ambient", nullptr, dalcFlags)) {
 				BeginScrollableContent("##DAmbientScroll");
 				ImGui::SeparatorText("Directional Ambient Lighting (DALC)");
 
@@ -81,7 +88,7 @@ void CellLightingWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Advanced")) {
+			if (ImGui::BeginTabItem("Advanced", nullptr, advancedFlags)) {
 				BeginScrollableContent("##AdvancedScroll");
 				ImGui::SeparatorText("Light Fade Distances");
 				if (WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 163840.0f))
@@ -107,7 +114,7 @@ void CellLightingWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Inheritance")) {
+			if (ImGui::BeginTabItem("Inheritance", nullptr, inheritFlags)) {
 				BeginScrollableContent("##InheritanceScroll");
 				ImGui::TextWrapped("These flags control which lighting properties are inherited from the cell's lighting template.");
 				ImGui::Separator();
@@ -437,4 +444,26 @@ void CellLightingWidget::RevertChanges()
 bool CellLightingWidget::HasUnsavedChanges() const
 {
 	return !(settings == originalSettings);
+}
+
+std::vector<Widget::SearchResult> CellLightingWidget::CollectSearchableSettings() const
+{
+	const std::vector<std::pair<std::string, std::vector<std::string>>> entries = {
+		{ "Colors", { "Ambient Color", "Directional Color", "Directional Fade", "Fog Near Color", "Fog Far Color" } },
+		{ "Fog", { "Fog Near", "Fog Far", "Fog Power", "Fog Clamp (Max)" } },
+		{ "Directional Ambient", { "X+ (Right)", "X- (Left)", "Y+ (Front)", "Y- (Back)", "Z+ (Up)", "Z- (Down)", "Specular", "Fresnel Power" } },
+		{ "Advanced", { "Light Fade Start", "Light Fade End", "Clip Distance", "XY Rotation", "Z Rotation" } },
+		{ "Inheritance", { "Inherit Ambient Color", "Inherit Directional Color", "Inherit Fog Color",
+							 "Inherit Fog Near", "Inherit Fog Far", "Inherit Directional Rotation",
+							 "Inherit Directional Fade", "Inherit Clip Distance", "Inherit Fog Power",
+							 "Inherit Fog Max (Clamp)", "Inherit Light Fade Distances" } },
+	};
+
+	std::vector<SearchResult> results;
+	for (const auto& [tab, names] : entries) {
+		for (const auto& name : names) {
+			results.push_back({ name, tab, name });
+		}
+	}
+	return results;
 }

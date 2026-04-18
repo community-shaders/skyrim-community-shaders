@@ -6,6 +6,7 @@ void LensFlareWidget::DrawWidget()
 {
 	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##LensFlareSearch", true, true);
+		DrawSearchDropdown();
 	}
 	BeginScrollableContent("##LFScroll");
 	{
@@ -83,4 +84,12 @@ void LensFlareWidget::RevertChanges()
 bool LensFlareWidget::HasUnsavedChanges() const
 {
 	return !(settings == originalSettings);
+}
+
+std::vector<Widget::SearchResult> LensFlareWidget::CollectSearchableSettings() const
+{
+	return {
+		{ "Fade Dist Radius Scale", "", "Fade Dist Radius Scale" },
+		{ "Color Influence", "", "Color Influence" },
+	};
 }

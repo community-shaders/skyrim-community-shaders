@@ -61,49 +61,7 @@ void WeatherWidget::DrawWidget()
 	if (BeginWidgetWindow()) {
 		// Draw header with search and all buttons
 		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
-		const ImVec2 searchDropdownPos = ImGui::GetCursorScreenPos();
-
-		// Update search results when search buffer changes
-		if (searchActive) {
-			UpdateSearchResults();
-		}
-
-		// Show search results dropdown
-		if (searchBuffer[0] != '\0' && !searchResults.empty()) {
-			ImGui::SetNextWindowPos(searchDropdownPos, ImGuiCond_Always);
-			ImGui::SetNextWindowSize(ImVec2(300.0f * Util::GetUIScale(), 0));
-			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
-			ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
-			if (ImGui::Begin("##SearchDropdown", nullptr,
-					ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-						ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-						ImGuiWindowFlags_NoFocusOnAppearing)) {
-				ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
-				for (size_t i = 0; i < std::min(size_t(5), searchResults.size()); ++i) {
-					const auto& result = searchResults[i];
-					std::string label = std::format("{} ({})", result.displayName, result.tabName);
-
-					if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
-						NavigateToSetting(result);
-						searchBuffer[0] = '\0';
-						searchResults.clear();
-					}
-				}
-
-				if (searchResults.size() > 5) {
-					ImGui::Separator();
-					ImGui::TextDisabled("... %zu more results", searchResults.size() - 5);
-				}
-
-				if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-					searchBuffer[0] = '\0';
-					searchResults.clear();
-				}
-			}
-			ImGui::End();
-			ImGui::PopStyleColor();
-			ImGui::PopStyleVar();
-		}
+		DrawSearchDropdown();
 
 		auto editorWindow = EditorWindow::GetSingleton();
 		auto& widgets = editorWindow->weatherWidgets;
@@ -173,17 +131,13 @@ void WeatherWidget::DrawWidget()
 
 	// Tab bar for organizing settings
 	if (ImGui::BeginTabBar("WeatherSettingsTabs", ImGuiTabBarFlags_None)) {
-		// Use activeTabOverride to auto-navigate to specific tab
-		ImGuiTabItemFlags basicFlags = (activeTabOverride == "Basic") ? ImGuiTabItemFlags_SetSelected : 0;
-		ImGuiTabItemFlags dalcFlags = (activeTabOverride == "Lighting (DALC)") ? ImGuiTabItemFlags_SetSelected : 0;
-		ImGuiTabItemFlags atmosphereFlags = (activeTabOverride == "Atmosphere Colors") ? ImGuiTabItemFlags_SetSelected : 0;
-		ImGuiTabItemFlags cloudsFlags = (activeTabOverride == "Clouds") ? ImGuiTabItemFlags_SetSelected : 0;
-		ImGuiTabItemFlags fogFlags = (activeTabOverride == "Fog") ? ImGuiTabItemFlags_SetSelected : 0;
-		ImGuiTabItemFlags featuresFlags = (activeTabOverride == "Features") ? ImGuiTabItemFlags_SetSelected : 0;
-		ImGuiTabItemFlags recordsFlags = (activeTabOverride == "Records") ? ImGuiTabItemFlags_SetSelected : 0;
-		if (!activeTabOverride.empty()) {
-			activeTabOverride = "";  // Clear after use
-		}
+		const ImGuiTabItemFlags basicFlags = GetTabFlagsForOverride("Basic");
+		const ImGuiTabItemFlags dalcFlags = GetTabFlagsForOverride("Lighting (DALC)");
+		const ImGuiTabItemFlags atmosphereFlags = GetTabFlagsForOverride("Atmosphere Colors");
+		const ImGuiTabItemFlags cloudsFlags = GetTabFlagsForOverride("Clouds");
+		const ImGuiTabItemFlags fogFlags = GetTabFlagsForOverride("Fog");
+		const ImGuiTabItemFlags featuresFlags = GetTabFlagsForOverride("Features");
+		const ImGuiTabItemFlags recordsFlags = GetTabFlagsForOverride("Records");
 
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
@@ -1310,24 +1264,6 @@ void WeatherWidget::DrawFogSettings()
 
 void WeatherWidget::DrawProperties(std::string category, std::map<std::string, int> properties)
 {
-	// Check if any property matches search (only check if search is active)
-	bool hasMatchingProperty = false;
-	if (searchBuffer[0] != '\0') {
-		hasMatchingProperty = MatchesSearch(category);
-		if (!hasMatchingProperty) {
-			for (auto& p : properties) {
-				if (MatchesSearch(p.first)) {
-					hasMatchingProperty = true;
-					break;
-				}
-			}
-		}
-		// Skip this entire category if nothing matches
-		if (!hasMatchingProperty) {
-			return;
-		}
-	}
-
 	ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", category.c_str());
 
 	bool changed = false;
@@ -1337,18 +1273,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * WidgetDefaults::kSliderWidthRatio);
 
 	for (auto& p : properties) {
-		// Filter individual properties based on search
-		if (searchBuffer[0] != '\0' && !MatchesSearch(p.first)) {
-			continue;
-		}
-
-		// Apply highlight effect if this setting should be highlighted
-		if (ShouldHighlight(p.first)) {
-			float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
-			float alpha = 0.3f * (1.0f - std::abs(elapsed - 0.5f) * 2.0f);
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.6f, 1.0f, alpha));
-			ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.7f, 1.0f, alpha));
-		}
+		PushHighlightStyle(p.first);
 
 		// Inherit checkbox
 		if (hasParent) {
@@ -1386,9 +1311,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 			break;
 		}
 
-		if (ShouldHighlight(p.first)) {
-			ImGui::PopStyleColor(2);
-		}
+		PopHighlightStyle(p.first);
 	}
 
 	ImGui::PopItemWidth();
@@ -1933,90 +1856,41 @@ void WeatherWidget::NavigateToFeatureSetting(const std::string& featureName, con
 	activeTabOverride = "Features";
 }
 
-void WeatherWidget::UpdateSearchResults()
+std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() const
 {
-	searchResults.clear();
+	std::vector<SearchResult> results;
 
-	if (searchBuffer[0] == '\0')
-		return;
-
-	std::string searchTerm = searchBuffer;
-
-	// Search in Basic tab properties
-	std::vector<std::pair<std::string, std::map<std::string, int>>> basicCategories = {
-		{ "Sun", { { "Sun Damage", 0 } } },
-		{ "Wind", { { "Wind Speed", 0 }, { "Wind Direction", 0 }, { "Wind Direction Range", 0 } } },
-		{ "Precipitation", { { "Precipitation Begin Fade In", 0 }, { "Precipitation End Fade Out", 0 } } },
-		{ "Lightning", { { "Thunder Lightning Begin Fade In", 0 }, { "Thunder Lightning End Fade Out", 0 },
-						   { "Thunder Lightning Frequency", 0 }, { "Lightning Color", 1 } } },
-		{ "Visual Effects", { { "Visual Effect Begin", 0 }, { "Visual Effect End", 0 } } },
-		{ "Weather Transition", { { "Trans Delta", 0 } } }
+	const std::vector<std::pair<std::string, std::vector<std::string>>> tabEntries = {
+		{ "Basic", { "Sun Damage", "Wind Speed", "Wind Direction", "Wind Direction Range",
+					   "Precipitation Begin Fade In", "Precipitation End Fade Out",
+					   "Thunder Lightning Begin Fade In", "Thunder Lightning End Fade Out",
+					   "Thunder Lightning Frequency", "Lightning Color",
+					   "Visual Effect Begin", "Visual Effect End", "Trans Delta" } },
+		{ "Fog", { "Day Near", "Day Far", "Day Power", "Day Max",
+					 "Night Near", "Night Far", "Night Power", "Night Max" } },
+		{ "Lighting (DALC)", { "Fresnel Power", "Specular",
+								 "Directional X Max", "Directional X Min",
+								 "Directional Y Max", "Directional Y Min",
+								 "Directional Z Max", "Directional Z Min" } },
 	};
 
-	for (const auto& [category, properties] : basicCategories) {
-		for (const auto& [propName, type] : properties) {
-			if (ContainsStringIgnoreCase(propName, searchTerm)) {
-				searchResults.push_back({ propName, "Basic", propName });
-			}
+	for (const auto& [tab, names] : tabEntries) {
+		for (const auto& name : names) {
+			results.push_back({ name, tab, name });
 		}
 	}
 
-	// Search in Fog tab
-	std::vector<std::string> fogProperties = {
-		"Day Near", "Day Far", "Day Power", "Day Max",
-		"Night Near", "Night Far", "Night Power", "Night Max"
-	};
-	for (const auto& propName : fogProperties) {
-		if (ContainsStringIgnoreCase(propName, searchTerm)) {
-			searchResults.push_back({ propName, "Fog", propName });
-		}
-	}
-
-	// Search in DALC settings
-	std::vector<std::string> dalcSettings = {
-		"Fresnel Power", "Specular",
-		"Directional X Max", "Directional X Min",
-		"Directional Y Max", "Directional Y Min",
-		"Directional Z Max", "Directional Z Min"
-	};
-	for (const auto& setting : dalcSettings) {
-		if (ContainsStringIgnoreCase(setting, searchTerm)) {
-			searchResults.push_back({ setting, "Lighting (DALC)", setting });
-		}
-	}
-
-	// Search in Atmosphere Colors
 	for (int i = 0; i < ColorTypes::kTotal; i++) {
 		std::string colorType = ColorTypeLabel(i);
-		if (ContainsStringIgnoreCase(colorType, searchTerm)) {
-			searchResults.push_back({ colorType, "Atmosphere Colors", colorType });
-		}
+		results.push_back({ colorType, "Atmosphere Colors", colorType });
 	}
 
-	// Search in Cloud settings
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
-		if (ContainsStringIgnoreCase(layer, searchTerm) ||
-			ContainsStringIgnoreCase("Cloud", searchTerm)) {
-			searchResults.push_back({ std::format("Cloud {}", layer), "Clouds", layer });
-		}
+		results.push_back({ std::format("Cloud {}", layer), "Clouds", layer });
 	}
-}
 
-void WeatherWidget::NavigateToSetting(const SearchResult& result)
-{
-	activeTabOverride = result.tabName;
-	highlightedSetting = result.settingId;
-	highlightStartTime = static_cast<float>(ImGui::GetTime());
-}
-
-bool WeatherWidget::ShouldHighlight(const std::string& settingId) const
-{
-	if (highlightedSetting != settingId)
-		return false;
-
-	float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
-	return elapsed < 2.0f;
+	return results;
 }
 
 ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)

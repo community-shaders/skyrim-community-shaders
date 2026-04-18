@@ -156,10 +156,33 @@ public:
 
 	// Search functionality
 	char searchBuffer[256] = "";
-	bool searchActive = false;
 	int deleteConfirmationFrame = -1;
 
-	bool MatchesSearch(const std::string& text) const;
+	// Unified search dropdown + tab navigation + highlight helpers.
+	// Widgets supply searchable entries via CollectSearchableSettings(); DrawSearchDropdown()
+	// renders the matches and updates navigation state on selection.
+	struct SearchResult
+	{
+		std::string displayName;
+		std::string tabName;    // empty if widget has no tabs
+		std::string settingId;  // id used for highlight matching
+	};
+	virtual std::vector<SearchResult> CollectSearchableSettings() const { return {}; }
+
+	// Call immediately after DrawWidgetHeader() to render the search dropdown.
+	void DrawSearchDropdown();
+
+	// Returns ImGuiTabItemFlags_SetSelected if the given tab matches the pending
+	// navigation request, otherwise 0. Clears the override after the first tab is set.
+	int GetTabFlagsForOverride(const std::string& tabName);
+
+	// True if the given id matches the currently highlighted setting within the
+	// animated highlight window.
+	bool IsHighlighted(const std::string& settingId) const;
+
+	// Pushes a pulsing highlight style for the next widget; call PopHighlightStyle() after.
+	void PushHighlightStyle(const std::string& settingId);
+	void PopHighlightStyle(const std::string& settingId);
 
 	void DrawDeleteConfirmationModal(const char* popupId = "DeleteConfirmation");
 
@@ -170,6 +193,17 @@ protected:
 	mutable bool isFallbackEditorID = false;
 	virtual void DrawMenu();
 	std::string GetFolderName();
+
+	// Cached dropdown position from DrawWidgetHeader so DrawSearchDropdown() can anchor below the search bar.
+	ImVec2 searchDropdownAnchor{ 0.0f, 0.0f };
+
+	// Navigation / highlight state shared by the search dropdown.
+	std::vector<SearchResult> searchResults;
+	std::string activeTabOverride;
+	std::string highlightedSetting;
+	float highlightStartTime = 0.0f;
+
+	void NavigateToSearchResult(const SearchResult& result);
 };
 
 // Simple widget for caching form data without full widget functionality

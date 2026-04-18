@@ -1067,44 +1067,6 @@ namespace TOD
 	}
 }
 
-bool BeginWidgetSearchBar(char* searchBuffer, size_t bufferSize, bool& searchActive)
-{
-	const float scale = Util::GetUIScale();
-
-	if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-		ImGui::IsKeyPressed(ImGuiKey_F, false) && ImGui::GetIO().KeyCtrl) {
-		searchActive = true;
-	}
-
-	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.25f, 0.3f, 1.0f));
-	ImGui::SetNextItemWidth(-100.0f * scale);
-
-	if (searchActive) {
-		ImGui::SetKeyboardFocusHere();
-		searchActive = false;
-	}
-
-	if (ImGui::InputTextWithHint("##WidgetSearch", "Search parameters... (Ctrl+F)", searchBuffer, bufferSize)) {
-		// Text changed
-	}
-
-	// Clear button
-	ImGui::SameLine();
-	if (Util::ButtonWithFlash("Clear", ImVec2(90 * scale, 0))) {
-		searchBuffer[0] = '\0';
-	}
-
-	ImGui::PopStyleColor();
-	ImGui::Separator();
-
-	return searchBuffer[0] != '\0';  // Return true if search is active
-}
-
-void EndWidgetSearchBar()
-{
-	// Currently no cleanup needed, but keeping for symmetry and future use
-}
-
 // ============================================================================
 // PropertyDrawer Implementation - Consolidates repeated table property drawing
 // ============================================================================
@@ -1144,53 +1106,29 @@ namespace PropertyDrawer
 		ImGui::SetNextItemWidth(-1);
 	}
 
-	bool MatchesSearch(const char* label, const char* searchBuffer)
+	bool DrawFloat(const char* label, float& value, float minVal, float maxVal, const char* format)
 	{
-		if (!searchBuffer || searchBuffer[0] == '\0')
-			return true;
-		return ContainsStringIgnoreCase(label, searchBuffer);
-	}
-
-	bool DrawFloat(const char* label, float& value, float minVal, float maxVal,
-		const char* searchBuffer, const char* format)
-	{
-		if (!MatchesSearch(label, searchBuffer))
-			return false;
-
 		DrawLabel(label);
-
 		std::string id = std::string("##") + label;
 		return ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
 	}
 
-	bool DrawInt(const char* label, int& value, int minVal, int maxVal, const char* searchBuffer)
+	bool DrawInt(const char* label, int& value, int minVal, int maxVal)
 	{
-		if (!MatchesSearch(label, searchBuffer))
-			return false;
-
 		DrawLabel(label);
-
 		std::string id = std::string("##") + label;
 		return ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
 	}
 
-	bool DrawColor(const char* label, float3& value, const char* searchBuffer)
+	bool DrawColor(const char* label, float3& value)
 	{
-		if (!MatchesSearch(label, searchBuffer))
-			return false;
-
 		DrawLabel(label);
-
 		return WeatherUtils::DrawColorEdit(label, value);
 	}
 
-	bool DrawCheckbox(const char* label, bool& value, const char* searchBuffer)
+	bool DrawCheckbox(const char* label, bool& value)
 	{
-		if (!MatchesSearch(label, searchBuffer))
-			return false;
-
 		DrawLabel(label);
-
 		std::string id = std::string("##") + label;
 		return ImGui::Checkbox(id.c_str(), &value);
 	}

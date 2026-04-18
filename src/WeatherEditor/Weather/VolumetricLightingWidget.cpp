@@ -7,11 +7,16 @@ void VolumetricLightingWidget::DrawWidget()
 	WeatherUtils::SetCurrentWidget(this);
 	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##VolumetricLightingSearch", true, true);
+		DrawSearchDropdown();
 	}
 	bool changed = false;
 
 	if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
-		if (ImGui::BeginTabItem("Basic")) {
+		const ImGuiTabItemFlags basicFlags = GetTabFlagsForOverride("Basic");
+		const ImGuiTabItemFlags densityFlags = GetTabFlagsForOverride("Density");
+		const ImGuiTabItemFlags advancedFlags = GetTabFlagsForOverride("Advanced");
+
+		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
 			ImGui::SeparatorText("Intensity");
 			if (WeatherUtils::DrawSliderFloat("Intensity", settings.intensity, 0.0f, 50.0f))
@@ -34,7 +39,7 @@ void VolumetricLightingWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem("Density")) {
+		if (ImGui::BeginTabItem("Density", nullptr, densityFlags)) {
 			BeginScrollableContent("##DensityScroll");
 			ImGui::SeparatorText("Density Settings");
 			if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
@@ -50,7 +55,7 @@ void VolumetricLightingWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem("Advanced")) {
+		if (ImGui::BeginTabItem("Advanced", nullptr, advancedFlags)) {
 			BeginScrollableContent("##AdvancedScroll");
 			ImGui::SeparatorText("Phase Function");
 			if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
@@ -182,4 +187,22 @@ void VolumetricLightingWidget::RevertChanges()
 bool VolumetricLightingWidget::HasUnsavedChanges() const
 {
 	return !(settings == originalSettings);
+}
+
+std::vector<Widget::SearchResult> VolumetricLightingWidget::CollectSearchableSettings() const
+{
+	// Many tabs share the same inner label ("Contribution"); display names are
+	// disambiguated for the dropdown while the inner id matches the ImGui label.
+	return {
+		{ "Intensity", "Basic", "Intensity" },
+		{ "Custom Color Contribution", "Basic", "Contribution" },
+		{ "Color", "Basic", "Color" },
+		{ "Density Contribution", "Density", "Contribution" },
+		{ "Density Size", "Density", "Size" },
+		{ "Wind Speed", "Density", "Wind Speed" },
+		{ "Falling Speed", "Density", "Falling Speed" },
+		{ "Phase Function Contribution", "Advanced", "Contribution" },
+		{ "Phase Function Scattering", "Advanced", "Scattering" },
+		{ "Sampling Range Factor", "Advanced", "Range Factor" },
+	};
 }
