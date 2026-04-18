@@ -12,13 +12,16 @@ void LensFlareWidget::DrawWidget()
 	{
 		bool changed = false;
 
-		ImGui::SeparatorText("Fade Distance");
-		if (ImGui::SliderFloat("Fade Dist Radius Scale", &settings.fadeDistRadiusScale, 0.0f, 1.0f))
-			changed = true;
-
-		ImGui::SeparatorText("Color");
-		if (ImGui::SliderFloat("Color Influence", &settings.colorInfluence, 0.0f, 1.0f))
-			changed = true;
+		if (MatchesSearch("Fade Dist Radius Scale")) {
+			ImGui::SeparatorText("Fade Distance");
+			if (ImGui::SliderFloat("Fade Dist Radius Scale", &settings.fadeDistRadiusScale, 0.0f, 1.0f))
+				changed = true;
+		}
+		if (MatchesSearch("Color Influence")) {
+			ImGui::SeparatorText("Color");
+			if (ImGui::SliderFloat("Color Influence", &settings.colorInfluence, 0.0f, 1.0f))
+				changed = true;
+		}
 
 		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 			ApplyChanges();

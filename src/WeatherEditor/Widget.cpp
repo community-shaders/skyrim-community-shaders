@@ -500,6 +500,14 @@ int Widget::GetTabFlagsForOverride(const std::string& tabName)
 	return ImGuiTabItemFlags_SetSelected;
 }
 
+bool Widget::MatchesSearch(const std::string& settingId) const
+{
+	if (searchBuffer[0] == '\0')
+		return true;
+	return std::any_of(searchResults.begin(), searchResults.end(),
+		[&](const SearchResult& r) { return r.settingId == settingId; });
+}
+
 bool Widget::IsHighlighted(const std::string& settingId) const
 {
 	if (highlightedSetting != settingId)

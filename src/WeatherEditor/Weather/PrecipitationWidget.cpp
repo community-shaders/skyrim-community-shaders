@@ -21,64 +21,71 @@ void PrecipitationWidget::DrawWidget()
 
 			if (ImGui::BeginTabItem("Particle", nullptr, particleFlags)) {
 				BeginScrollableContent("##ParticleScroll");
-				ImGui::SeparatorText("Particle Type");
-				const char* types[] = { "Rain", "Snow" };
-				int currentType = static_cast<int>(settings.particleType);
-				if (ImGui::Combo("Type", &currentType, types, IM_ARRAYSIZE(types))) {
-					settings.particleType = static_cast<uint32_t>(currentType);
-					changed = true;
+				if (MatchesSearch("Type")) {
+					ImGui::SeparatorText("Particle Type");
+					const char* types[] = { "Rain", "Snow" };
+					int currentType = static_cast<int>(settings.particleType);
+					if (ImGui::Combo("Type", &currentType, types, IM_ARRAYSIZE(types))) {
+						settings.particleType = static_cast<uint32_t>(currentType);
+						changed = true;
+					}
 				}
-
-				ImGui::SeparatorText("Particle Size");
-				if (WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 200.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 200.0f))
-					changed = true;
-
-				ImGui::SeparatorText("Velocity");
-				if (WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, 0.0f, 10000.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, 0.0f, 10000.0f))
-					changed = true;
-
+				if (MatchesSearch("Size X") || MatchesSearch("Size Y")) {
+					ImGui::SeparatorText("Particle Size");
+					if (MatchesSearch("Size X") && WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 200.0f))
+						changed = true;
+					if (MatchesSearch("Size Y") && WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 200.0f))
+						changed = true;
+				}
+				if (MatchesSearch("Gravity Velocity") || MatchesSearch("Rotation Velocity")) {
+					ImGui::SeparatorText("Velocity");
+					if (MatchesSearch("Gravity Velocity") && WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, 0.0f, 10000.0f))
+						changed = true;
+					if (MatchesSearch("Rotation Velocity") && WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, 0.0f, 10000.0f))
+						changed = true;
+				}
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Position", nullptr, positionFlags)) {
 				BeginScrollableContent("##PositionScroll");
-				ImGui::SeparatorText("Offset");
-				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, 0.0f, 200.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, 0.0f, 200.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Start Rotation Range", settings.startRotationRange, 0.0f, 360.0f))
-					changed = true;
-
-				ImGui::SeparatorText("Volume");
-				if (WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 1000.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 1000.0f))
-					changed = true;
-
+				if (MatchesSearch("Center Offset Min") || MatchesSearch("Center Offset Max") || MatchesSearch("Start Rotation Range")) {
+					ImGui::SeparatorText("Offset");
+					if (MatchesSearch("Center Offset Min") && WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, 0.0f, 200.0f))
+						changed = true;
+					if (MatchesSearch("Center Offset Max") && WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, 0.0f, 200.0f))
+						changed = true;
+					if (MatchesSearch("Start Rotation Range") && WeatherUtils::DrawSliderFloat("Start Rotation Range", settings.startRotationRange, 0.0f, 360.0f))
+						changed = true;
+				}
+				if (MatchesSearch("Box Size") || MatchesSearch("Particle Density")) {
+					ImGui::SeparatorText("Volume");
+					if (MatchesSearch("Box Size") && WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 1000.0f))
+						changed = true;
+					if (MatchesSearch("Particle Density") && WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 1000.0f))
+						changed = true;
+				}
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Texture", nullptr, textureFlags)) {
 				BeginScrollableContent("##TextureScroll");
-				ImGui::SeparatorText("Subtextures");
-				int numX = static_cast<int>(settings.numSubtexturesX);
-				int numY = static_cast<int>(settings.numSubtexturesY);
-				if (ImGui::InputInt("Num Subtextures X", &numX)) {
-					settings.numSubtexturesX = std::max(1, numX);
-					changed = true;
+				if (MatchesSearch("Num Subtextures X") || MatchesSearch("Num Subtextures Y")) {
+					ImGui::SeparatorText("Subtextures");
+					int numX = static_cast<int>(settings.numSubtexturesX);
+					int numY = static_cast<int>(settings.numSubtexturesY);
+					if (MatchesSearch("Num Subtextures X") && ImGui::InputInt("Num Subtextures X", &numX)) {
+						settings.numSubtexturesX = std::max(1, numX);
+						changed = true;
+					}
+					if (MatchesSearch("Num Subtextures Y") && ImGui::InputInt("Num Subtextures Y", &numY)) {
+						settings.numSubtexturesY = std::max(1, numY);
+						changed = true;
+					}
 				}
-				if (ImGui::InputInt("Num Subtextures Y", &numY)) {
-					settings.numSubtexturesY = std::max(1, numY);
-					changed = true;
-				}
-
+				if (MatchesSearch("Particle Texture")) {
 				ImGui::SeparatorText("Texture Path");
 				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
 					std::string_view buf(textureBuffer);
@@ -103,6 +110,7 @@ void PrecipitationWidget::DrawWidget()
 							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/textures/.");
 					}
 				}
+				} // MatchesSearch("Particle Texture")
 
 				EndScrollableContent();
 				ImGui::EndTabItem();

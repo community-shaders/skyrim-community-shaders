@@ -27,38 +27,42 @@ void CellLightingWidget::DrawWidget()
 
 			if (ImGui::BeginTabItem("Colors", nullptr, colorsFlags)) {
 				BeginScrollableContent("##ColorsScroll");
-				ImGui::SeparatorText("Ambient & Directional");
-				if (WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient))
-					changed = true;
-				if (WeatherUtils::DrawColorEdit("Directional Color", settings.directional))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Directional Fade", settings.directionalFade, 0.0f, 1.0f))
-					changed = true;
-
-				ImGui::SeparatorText("Fog Colors");
-				if (WeatherUtils::DrawColorEdit("Fog Near Color", settings.fogColorNear))
-					changed = true;
-				if (WeatherUtils::DrawColorEdit("Fog Far Color", settings.fogColorFar))
-					changed = true;
-
+				if (MatchesSearch("Ambient Color") || MatchesSearch("Directional Color") || MatchesSearch("Directional Fade")) {
+					ImGui::SeparatorText("Ambient & Directional");
+					if (MatchesSearch("Ambient Color") && WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient))
+						changed = true;
+					if (MatchesSearch("Directional Color") && WeatherUtils::DrawColorEdit("Directional Color", settings.directional))
+						changed = true;
+					if (MatchesSearch("Directional Fade") && WeatherUtils::DrawSliderFloat("Directional Fade", settings.directionalFade, 0.0f, 1.0f))
+						changed = true;
+				}
+				if (MatchesSearch("Fog Near Color") || MatchesSearch("Fog Far Color")) {
+					ImGui::SeparatorText("Fog Colors");
+					if (MatchesSearch("Fog Near Color") && WeatherUtils::DrawColorEdit("Fog Near Color", settings.fogColorNear))
+						changed = true;
+					if (MatchesSearch("Fog Far Color") && WeatherUtils::DrawColorEdit("Fog Far Color", settings.fogColorFar))
+						changed = true;
+				}
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Fog", nullptr, fogFlags)) {
 				BeginScrollableContent("##FogScroll");
-				ImGui::SeparatorText("Fog Distance");
-				if (WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 163840.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 163840.0f))
-					changed = true;
-
-				ImGui::SeparatorText("Fog Properties");
-				if (WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower, 0.0f, 10.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Fog Clamp (Max)", settings.fogClamp, 0.0f, 1.0f))
-					changed = true;
-
+				if (MatchesSearch("Fog Near") || MatchesSearch("Fog Far")) {
+					ImGui::SeparatorText("Fog Distance");
+					if (MatchesSearch("Fog Near") && WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 163840.0f))
+						changed = true;
+					if (MatchesSearch("Fog Far") && WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 163840.0f))
+						changed = true;
+				}
+				if (MatchesSearch("Fog Power") || MatchesSearch("Fog Clamp (Max)")) {
+					ImGui::SeparatorText("Fog Properties");
+					if (MatchesSearch("Fog Power") && WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower, 0.0f, 10.0f))
+						changed = true;
+					if (MatchesSearch("Fog Clamp (Max)") && WeatherUtils::DrawSliderFloat("Fog Clamp (Max)", settings.fogClamp, 0.0f, 1.0f))
+						changed = true;
+				}
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
@@ -66,50 +70,50 @@ void CellLightingWidget::DrawWidget()
 			if (ImGui::BeginTabItem("Directional Ambient", nullptr, dalcFlags)) {
 				BeginScrollableContent("##DAmbientScroll");
 				ImGui::SeparatorText("Directional Ambient Lighting (DALC)");
-
-				if (WeatherUtils::DrawColorEdit("X+ (Right)", settings.directionalXPlus))
+				if (MatchesSearch("X+ (Right)") && WeatherUtils::DrawColorEdit("X+ (Right)", settings.directionalXPlus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("X- (Left)", settings.directionalXMinus))
+				if (MatchesSearch("X- (Left)") && WeatherUtils::DrawColorEdit("X- (Left)", settings.directionalXMinus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Y+ (Front)", settings.directionalYPlus))
+				if (MatchesSearch("Y+ (Front)") && WeatherUtils::DrawColorEdit("Y+ (Front)", settings.directionalYPlus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Y- (Back)", settings.directionalYMinus))
+				if (MatchesSearch("Y- (Back)") && WeatherUtils::DrawColorEdit("Y- (Back)", settings.directionalYMinus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Z+ (Up)", settings.directionalZPlus))
+				if (MatchesSearch("Z+ (Up)") && WeatherUtils::DrawColorEdit("Z+ (Up)", settings.directionalZPlus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Z- (Down)", settings.directionalZMinus))
+				if (MatchesSearch("Z- (Down)") && WeatherUtils::DrawColorEdit("Z- (Down)", settings.directionalZMinus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Specular", settings.directionalSpecular))
+				if (MatchesSearch("Specular") && WeatherUtils::DrawColorEdit("Specular", settings.directionalSpecular))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.fresnelPower, 0.0f, 10.0f))
+				if (MatchesSearch("Fresnel Power") && WeatherUtils::DrawSliderFloat("Fresnel Power", settings.fresnelPower, 0.0f, 10.0f))
 					changed = true;
-
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Advanced", nullptr, advancedFlags)) {
 				BeginScrollableContent("##AdvancedScroll");
-				ImGui::SeparatorText("Light Fade Distances");
-				if (WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 163840.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd, 0.0f, 163840.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist, 0.0f, 163840.0f))
-					changed = true;
-
-				ImGui::SeparatorText("Directional Rotation");
-				int xyDegrees = settings.directionalXY;
-				int zDegrees = settings.directionalZ;
-				if (ImGui::SliderInt("XY Rotation", &xyDegrees, 0, 360)) {
-					settings.directionalXY = static_cast<uint32_t>(xyDegrees);
-					changed = true;
+				if (MatchesSearch("Light Fade Start") || MatchesSearch("Light Fade End") || MatchesSearch("Clip Distance")) {
+					ImGui::SeparatorText("Light Fade Distances");
+					if (MatchesSearch("Light Fade Start") && WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 163840.0f))
+						changed = true;
+					if (MatchesSearch("Light Fade End") && WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd, 0.0f, 163840.0f))
+						changed = true;
+					if (MatchesSearch("Clip Distance") && WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist, 0.0f, 163840.0f))
+						changed = true;
 				}
-				if (ImGui::SliderInt("Z Rotation", &zDegrees, 0, 360)) {
-					settings.directionalZ = static_cast<uint32_t>(zDegrees);
-					changed = true;
+				if (MatchesSearch("XY Rotation") || MatchesSearch("Z Rotation")) {
+					ImGui::SeparatorText("Directional Rotation");
+					int xyDegrees = settings.directionalXY;
+					int zDegrees = settings.directionalZ;
+					if (MatchesSearch("XY Rotation") && ImGui::SliderInt("XY Rotation", &xyDegrees, 0, 360)) {
+						settings.directionalXY = static_cast<uint32_t>(xyDegrees);
+						changed = true;
+					}
+					if (MatchesSearch("Z Rotation") && ImGui::SliderInt("Z Rotation", &zDegrees, 0, 360)) {
+						settings.directionalZ = static_cast<uint32_t>(zDegrees);
+						changed = true;
+					}
 				}
-
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
@@ -118,30 +122,28 @@ void CellLightingWidget::DrawWidget()
 				BeginScrollableContent("##InheritanceScroll");
 				ImGui::TextWrapped("These flags control which lighting properties are inherited from the cell's lighting template.");
 				ImGui::Separator();
-
-				if (ImGui::Checkbox("Inherit Ambient Color", &settings.inheritAmbientColor))
+				if (MatchesSearch("Inherit Ambient Color") && ImGui::Checkbox("Inherit Ambient Color", &settings.inheritAmbientColor))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Directional Color", &settings.inheritDirectionalColor))
+				if (MatchesSearch("Inherit Directional Color") && ImGui::Checkbox("Inherit Directional Color", &settings.inheritDirectionalColor))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Color", &settings.inheritFogColor))
+				if (MatchesSearch("Inherit Fog Color") && ImGui::Checkbox("Inherit Fog Color", &settings.inheritFogColor))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Near", &settings.inheritFogNear))
+				if (MatchesSearch("Inherit Fog Near") && ImGui::Checkbox("Inherit Fog Near", &settings.inheritFogNear))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Far", &settings.inheritFogFar))
+				if (MatchesSearch("Inherit Fog Far") && ImGui::Checkbox("Inherit Fog Far", &settings.inheritFogFar))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Directional Rotation", &settings.inheritDirectionalRotation))
+				if (MatchesSearch("Inherit Directional Rotation") && ImGui::Checkbox("Inherit Directional Rotation", &settings.inheritDirectionalRotation))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Directional Fade", &settings.inheritDirectionalFade))
+				if (MatchesSearch("Inherit Directional Fade") && ImGui::Checkbox("Inherit Directional Fade", &settings.inheritDirectionalFade))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Clip Distance", &settings.inheritClipDistance))
+				if (MatchesSearch("Inherit Clip Distance") && ImGui::Checkbox("Inherit Clip Distance", &settings.inheritClipDistance))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Power", &settings.inheritFogPower))
+				if (MatchesSearch("Inherit Fog Power") && ImGui::Checkbox("Inherit Fog Power", &settings.inheritFogPower))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Max (Clamp)", &settings.inheritFogMax))
+				if (MatchesSearch("Inherit Fog Max (Clamp)") && ImGui::Checkbox("Inherit Fog Max (Clamp)", &settings.inheritFogMax))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Light Fade Distances", &settings.inheritLightFadeDistances))
+				if (MatchesSearch("Inherit Light Fade Distances") && ImGui::Checkbox("Inherit Light Fade Distances", &settings.inheritLightFadeDistances))
 					changed = true;
-
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}

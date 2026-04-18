@@ -176,6 +176,11 @@ public:
 	// navigation request, otherwise 0. Clears the override after the first tab is set.
 	int GetTabFlagsForOverride(const std::string& tabName);
 
+	// True if the setting matches the current search query or no search is active.
+	// Returns true when no search is active, or when settingId appears in the
+	// current filtered results. Wrap each control in: if (MatchesSearch("Label")) { ... }
+	bool MatchesSearch(const std::string& settingId) const;
+
 	// True if the given id matches the currently highlighted setting within the
 	// animated highlight window.
 	bool IsHighlighted(const std::string& settingId) const;
