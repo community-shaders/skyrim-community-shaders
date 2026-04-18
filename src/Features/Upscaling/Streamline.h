@@ -14,6 +14,7 @@
 #include <sl.h>
 #include <sl_consts.h>
 #include <sl_dlss.h>
+#include <sl_deepdvc.h>
 #include <sl_matrix_helpers.h>
 #include <sl_reflex.h>
 #include <sl_version.h>
@@ -36,6 +37,7 @@ public:
 	bool featureReflex = false;
 	bool featurePCL = false;
 	bool reflexSupportedOnCurrentAdapter = false;
+	bool featureDeepDVC = false;
 
 	sl::ViewportHandle viewport{ 0 };
 	sl::ViewportHandle viewportRight{ 1 };
@@ -65,6 +67,8 @@ public:
 	PFun_slDLSSGetOptimalSettings* slDLSSGetOptimalSettings{};
 	PFun_slDLSSGetState* slDLSSGetState{};
 	PFun_slDLSSSetOptions* slDLSSSetOptions{};
+	// DeepDVC specific functions
+	PFun_slDeepDVCSetOptions* slDeepDVCSetOptions{};
 
 	// Reflex specific functions
 	PFun_slReflexGetState* slReflexGetState{};

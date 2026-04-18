@@ -29,6 +29,7 @@
 #include "Features/TerrainVariation.h"
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
+#include "Features/DeepDVC.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
@@ -83,6 +84,7 @@ namespace globals
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
 		HDRDisplay hdrDisplay{};
+		DeepDVC deepDVC{};
 		RenderDoc renderDoc{};
 		WeatherEditor weatherEditor{};
 		ExponentialHeightFog exponentialHeightFog{};

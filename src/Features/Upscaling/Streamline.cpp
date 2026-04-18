@@ -113,7 +113,8 @@ void Streamline::LoadInterposer()
 
 	sl::Preferences pref;
 
-	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureReflex, sl::kFeaturePCL };
+	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureReflex, sl::kFeaturePCL, sl::kFeatureDeepDVC };
+	sl::Feature featuresToLoadVR[] = { sl::kFeatureDLSS, sl::kFeatureReflex, sl::kFeaturePCL, sl::kFeatureDeepDVC };
 
 	pref.featuresToLoad = featuresToLoad;
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
@@ -244,6 +245,10 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	}
 	reflexOptionsCache = {};
 	lastReflexSleepFrame = UINT32_MAX;
+
+	checkFeatureAvailability(sl::kFeatureDeepDVC, "DeepDVC", featureDeepDVC);
+
+	logger::info("[Streamline] DeepDVC {} available", featureDeepDVC ? "is" : "is not");
 }
 
 void Streamline::PostDevice()
@@ -310,6 +315,20 @@ void Streamline::PostDevice()
 
 	reflexOptionsCache = {};
 	lastReflexSleepFrame = UINT32_MAX;
+
+	slDeepDVCSetOptions = nullptr;
+	if (featureDeepDVC && slGetFeatureFunction) {
+		auto fn = (void*)nullptr;
+		const sl::Result bindResult = slGetFeatureFunction(sl::kFeatureDeepDVC, "slDeepDVCSetOptions", fn);
+		if (bindResult == sl::Result::eOk && fn) {
+			slDeepDVCSetOptions = reinterpret_cast<decltype(slDeepDVCSetOptions)>(fn);
+			logger::info("[Streamline] DeepDVC runtime controls are available");
+		} else {
+			logger::warn("[Streamline] DeepDVC options bind failed with {}; DeepDVC will be disabled",
+				magic_enum::enum_name(bindResult));
+			featureDeepDVC = false;
+		}
+	}
 }
 
 /**
