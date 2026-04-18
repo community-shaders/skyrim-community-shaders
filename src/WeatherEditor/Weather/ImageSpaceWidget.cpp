@@ -43,20 +43,30 @@ void ImageSpaceWidget::DrawWidget()
 			bool changed = false;
 
 			// HDR Settings
-			if (MatchesSearch("Eye Adapt Speed")) changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 100.0f);
-			if (MatchesSearch("Bloom Blur Radius")) changed |= PropertyDrawer::DrawFloat("Bloom Blur Radius", settings.hdrBloomBlurRadius, 0.0f, 10.0f);
-			if (MatchesSearch("Bloom Threshold")) changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f);
-			if (MatchesSearch("Bloom Scale")) changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 10.0f);
-			if (MatchesSearch("White")) changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 10.0f);
-			if (MatchesSearch("Sunlight Scale")) changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 50.0f);
-			if (MatchesSearch("Sky Scale")) changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f);
+			if (MatchesSearch("Eye Adapt Speed"))
+				changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 100.0f);
+			if (MatchesSearch("Bloom Blur Radius"))
+				changed |= PropertyDrawer::DrawFloat("Bloom Blur Radius", settings.hdrBloomBlurRadius, 0.0f, 10.0f);
+			if (MatchesSearch("Bloom Threshold"))
+				changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f);
+			if (MatchesSearch("Bloom Scale"))
+				changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 10.0f);
+			if (MatchesSearch("White"))
+				changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 10.0f);
+			if (MatchesSearch("Sunlight Scale"))
+				changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 50.0f);
+			if (MatchesSearch("Sky Scale"))
+				changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f);
 
 			PropertyDrawer::DrawSeparator();
 
 			// Cinematic Settings
-			if (MatchesSearch("Saturation")) changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 2.0f);
-			if (MatchesSearch("Brightness")) changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 2.0f);
-			if (MatchesSearch("Contrast")) changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 2.0f);
+			if (MatchesSearch("Saturation"))
+				changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 2.0f);
+			if (MatchesSearch("Brightness"))
+				changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 2.0f);
+			if (MatchesSearch("Contrast"))
+				changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 2.0f);
 
 			PropertyDrawer::DrawSeparator();
 
@@ -66,14 +76,18 @@ void ImageSpaceWidget::DrawWidget()
 				settings.tintColor = tintColor;
 				changed = true;
 			}
-			if (MatchesSearch("Tint Amount")) changed |= PropertyDrawer::DrawFloat("Tint Amount", settings.tintAmount, 0.0f, 1.0f);
+			if (MatchesSearch("Tint Amount"))
+				changed |= PropertyDrawer::DrawFloat("Tint Amount", settings.tintAmount, 0.0f, 1.0f);
 
 			PropertyDrawer::DrawSeparator();
 
 			// Depth of Field
-			if (MatchesSearch("DOF Strength")) changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 10.0f);
-			if (MatchesSearch("DOF Distance")) changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 50000.0f, "%.1f");
-			if (MatchesSearch("DOF Range")) changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 50000.0f, "%.1f");
+			if (MatchesSearch("DOF Strength"))
+				changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 10.0f);
+			if (MatchesSearch("DOF Distance"))
+				changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 50000.0f, "%.1f");
+			if (MatchesSearch("DOF Range"))
+				changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 50000.0f, "%.1f");
 
 			PropertyDrawer::EndTable();
 

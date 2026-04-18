@@ -471,9 +471,7 @@ void Widget::DrawSearchDropdown()
 			const size_t shown = std::min(size_t(5), searchResults.size());
 			for (size_t i = 0; i < shown; ++i) {
 				const auto& result = searchResults[i];
-				std::string label = result.tabName.empty()
-				                        ? result.displayName
-				                        : std::format("{} ({})", result.displayName, result.tabName);
+				std::string label = result.tabName.empty() ? result.displayName : std::format("{} ({})", result.displayName, result.tabName);
 
 				if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
 					NavigateToSearchResult(result);

@@ -259,9 +259,11 @@ namespace WeatherUtils
 		const double debounceDelay = 2.0;
 		double currentTime = ImGui::GetTime();
 
-		if (g_currentWidget) g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::SliderInt(label.c_str(), &property, -127, 127);
-		if (g_currentWidget) g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		bool isNowActive = ImGui::IsItemActive();
 
 		// Push undo state when slider becomes active
@@ -317,9 +319,11 @@ namespace WeatherUtils
 		}
 
 		Widget* w = widget ? widget : g_currentWidget;
-		if (w) w->PushHighlightStyle(l);
+		if (w)
+			w->PushHighlightStyle(l);
 		bool changed = ImGui::ColorEdit3(l.c_str(), (float*)&property);
-		if (w) w->PopHighlightStyle(l);
+		if (w)
+			w->PopHighlightStyle(l);
 
 		// Track color usage only when picker closes
 		if (wasActive && !isActive) {
@@ -352,9 +356,11 @@ namespace WeatherUtils
 
 	bool DrawSliderUint8(const std::string& label, int& property)
 	{
-		if (g_currentWidget) g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::SliderInt(label.c_str(), &property, 0, 255);
-		if (g_currentWidget) g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
@@ -366,9 +372,11 @@ namespace WeatherUtils
 		// Strip leading "##" so hidden-label sliders still match highlight/search ids.
 		std::string hid = label.starts_with("##") ? label.substr(2) : label;
 		Widget* w = widget ? widget : g_currentWidget;
-		if (w) w->PushHighlightStyle(hid);
+		if (w)
+			w->PushHighlightStyle(hid);
 		bool changed = ImGui::SliderFloat(label.c_str(), &property, min, max, format);
-		if (w) w->PopHighlightStyle(hid);
+		if (w)
+			w->PopHighlightStyle(hid);
 		bool isNowActive = ImGui::IsItemActive();
 
 		// Push undo state when slider becomes active
@@ -572,7 +580,8 @@ namespace TOD
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
 
-		if (g_currentWidget) g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 
@@ -693,7 +702,8 @@ namespace TOD
 			ImGui::EndChild();
 		}
 
-		if (g_currentWidget) g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
@@ -967,7 +977,8 @@ namespace TOD
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
 
-		if (g_currentWidget) g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 		DrawCenteredLabel(label);
@@ -1000,7 +1011,8 @@ namespace TOD
 			ImGui::PopID();
 		}
 
-		if (g_currentWidget) g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
@@ -1178,9 +1190,11 @@ namespace PropertyDrawer
 	{
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		if (g_currentWidget) g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
-		if (g_currentWidget) g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
@@ -1188,18 +1202,22 @@ namespace PropertyDrawer
 	{
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		if (g_currentWidget) g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
-		if (g_currentWidget) g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
 	bool DrawColor(const char* label, float3& value)
 	{
 		DrawLabel(label);
-		if (g_currentWidget) g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = WeatherUtils::DrawColorEdit(label, value);
-		if (g_currentWidget) g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
@@ -1207,9 +1225,11 @@ namespace PropertyDrawer
 	{
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		if (g_currentWidget) g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::Checkbox(id.c_str(), &value);
-		if (g_currentWidget) g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 }  // namespace PropertyDrawer
