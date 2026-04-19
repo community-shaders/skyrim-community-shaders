@@ -135,20 +135,13 @@ void ScreenSpaceRayTracing::SetupResources()
         texDesc.Height >>= 2;
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
-        // texColor: mip pyramid for Hi-Z color sampling
-        texDesc.MipLevels = maxColorMips;
+        // texColor: single-mip for color input
+        texDesc.MipLevels = 1;
         texDesc.MiscFlags &= ~D3D11_RESOURCE_MISC_GENERATE_MIPS;
-        srvDesc.Texture2D.MipLevels = maxColorMips;
+        srvDesc.Texture2D.MipLevels = 1;
         texColor = eastl::make_unique<Texture2D>(texDesc);
         texColor->CreateSRV(srvDesc);
-        for (uint i = 0; i < maxColorMips; i++) {
-            D3D11_UNORDERED_ACCESS_VIEW_DESC mipUavDesc = {
-                .Format = texDesc.Format,
-                .ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-                .Texture2D = { .MipSlice = i }
-            };
-            DX::ThrowIfFailed(device->CreateUnorderedAccessView(texColor->resource.get(), &mipUavDesc, colorUAVs[i].put()));
-        }
+        texColor->CreateUAV(uavDesc);
 
         // Restore single-mip settings for remaining textures
         texDesc.MipLevels = 1;
@@ -202,6 +195,9 @@ void ScreenSpaceRayTracing::SetupResources()
 			.MaxLOD = D3D11_FLOAT32_MAX
 		};
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.put()));
+
+        samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+        DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, pointSampler.put()));
 	}
 
     logger::debug("Loading noise texture...");
@@ -282,8 +278,32 @@ void ScreenSpaceRayTracing::Prepass()
 
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 
-    float2 size = Util::ConvertToDynamic(state->screenSize);
+    float2 res = state->screenSize;
+    float2 dynres = Util::ConvertToDynamic(res);
+    dynres = { floor(dynres.x), floor(dynres.y) };
+
+    float2 size = dynres;
     float2 dispatchCount = { (size.x / 4 + 7) / 8, (size.y / 4 + 7) / 8 };
+
+    SSRTCB ssrCBData;
+    {
+        ssrCBData.MaxSteps = settings.MaxSteps;
+        ssrCBData.MaxMips = settings.MaxMips;
+        ssrCBData.Thickness = settings.Thickness;
+        ssrCBData.NormalBias = settings.NormalBias;
+        ssrCBData.BRDFBias = settings.BRDFBias;
+        ssrCBData.UseDynamicCubemapsAsFallback = 0;
+        ssrCBData.OcclusionStrength = settings.OcclusionStrength;
+        ssrCBData.CubemapNormalization = settings.CubemapNormalization;
+
+        ssrCBData.TexDim = res;
+        ssrCBData.RcpTexDim = float2(1.0f) / res;
+        ssrCBData.FrameDim = dynres;
+        ssrCBData.RcpFrameDim = float2(1.0f) / dynres;
+    }
+    ssrtCB->Update(ssrCBData);
+    auto buffer = ssrtCB->CB();
+    context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 5> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
@@ -296,33 +316,28 @@ void ScreenSpaceRayTracing::Prepass()
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 	};
 
-    std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
-    context->CSSetSamplers(0, 1, samplers.data());
+    std::array<ID3D11SamplerState*, 2> samplers = { pointSampler.get(), linearSampler.get() };
+    context->CSSetSamplers(0, 2, samplers.data());
 
     state->BeginPerfEvent("SSRT Prepass");
 
-    // prefilter depth: builds mips 0-4 in one pass
+    // prefilter depth: full-res NDC depth → quarter-res mip 0 (Hi-Z min of 4×4 block)
     {
-        std::array<ID3D11UnorderedAccessView*, 5> depthUavs5 = {
-            depthUAVs[0].get(), depthUAVs[1].get(), depthUAVs[2].get(), depthUAVs[3].get(), depthUAVs[4].get()
-        };
-        srvs.at(4) = depth.depthSRV;
+        uavs.at(0) = depthUAVs[0].get();
+        srvs.at(0) = depth.depthSRV;
 
         context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, 5, depthUavs5.data(), nullptr);
+        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
         context->CSSetShader(prefilterDepthCS.get(), nullptr, 0);
-        context->Dispatch((uint)((size.x / 8 + 7) / 8), (uint)((size.y / 8 + 7) / 8), 1);
+        context->Dispatch(((uint)dynres.x + 15) >> 4, ((uint)dynres.y + 15) >> 4, 1);
 
-        srvs.fill(nullptr);
-        std::array<ID3D11UnorderedAccessView*, 5> nullUavs5 = {};
-        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, 5, nullUavs5.data(), nullptr);
+        resetViews();
     }
 
-    // downsample depth: mips 5-8
+    // downsample depth: mips 1-8 chained from quarter-res mip 0
     {
         state->BeginPerfEvent("Downsample Depth - HiZ Buffer");
-        for (int i = 4; i < maxMips - 1; ++i) {
+        for (int i = 0; i < maxMips - 1; ++i) {
             uavs.at(0) = depthUAVs[i + 1].get();
             srvs.at(0) = depthSRVs[i].get();
 
@@ -330,7 +345,9 @@ void ScreenSpaceRayTracing::Prepass()
             context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
             context->CSSetShader(depthDownsampleCS.get(), nullptr, 0);
 
-            context->Dispatch((uint)dispatchCount.x >> i, (uint)dispatchCount.y >> i, 1);
+            uint32_t width = (uint32_t)dynres.x >> (i + 3);
+            uint32_t height = (uint32_t)dynres.y >> (i + 3);
+            context->Dispatch((width + 7) / 8, (height + 7) / 8, 1);
             resetViews();
         }
         state->EndPerfEvent();
@@ -363,8 +380,11 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     auto& ssgi = globals::features::screenSpaceGI;
     auto& skylighting = globals::features::skylighting;
 
-    float2 size = Util::ConvertToDynamic(state->screenSize);
-    float2 dispatchCount = { (size.x / 4 + 7) / 8, (size.y / 4 + 7) / 8 };
+    float2 res = state->screenSize;
+    float2 dynres = Util::ConvertToDynamic(res);
+    dynres = { floor(dynres.x), floor(dynres.y) };
+
+    float2 dispatchCount = { (dynres.x / 4 + 7) / 8, (dynres.y / 4 + 7) / 8 };
 
     SSRTCB ssrCBData;
     {
@@ -376,6 +396,11 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallbackSpecular && dynamicCubemaps.loaded;
         ssrCBData.OcclusionStrength = settings.OcclusionStrength;
         ssrCBData.CubemapNormalization = settings.CubemapNormalization;
+
+        ssrCBData.TexDim = res;
+        ssrCBData.RcpTexDim = float2(1.0f) / res;
+        ssrCBData.FrameDim = dynres;
+        ssrCBData.RcpFrameDim = float2(1.0f) / dynres;
     }
     ssrtCB->Update(ssrCBData);
     auto buffer = ssrtCB->CB();
@@ -392,27 +417,26 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 	};
 
-    std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
+    std::array<ID3D11SamplerState*, 2> samplers = { pointSampler.get(), linearSampler.get() };
 
-    context->CSSetSamplers(0, 1, samplers.data());
+    context->CSSetSamplers(0, 2, samplers.data());
 
-    // prefilter radiance: builds color mip pyramid (mips 0-4)
+    // prefilter radiance: builds color input (quarter-res)
     {
-        std::array<ID3D11UnorderedAccessView*, maxColorMips> colorUavArr = {
-            colorUAVs[0].get(), colorUAVs[1].get(), colorUAVs[2].get(), colorUAVs[3].get(), colorUAVs[4].get()
-        };
+        ID3D11UnorderedAccessView* colorUav = texColor->uav.get();
+
         srvs.at(0) = main.SRV;
         srvs.at(1) = specular.SRV;
 
         context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, maxColorMips, colorUavArr.data(), nullptr);
+        context->CSSetUnorderedAccessViews(0, 1, &colorUav, nullptr);
         context->CSSetShader(prefilterRadianceCS.get(), nullptr, 0);
-        context->Dispatch((uint)((size.x / 8 + 7) / 8), (uint)((size.y / 8 + 7) / 8), 1);
+        context->Dispatch(((uint)dynres.x + 15) >> 4, ((uint)dynres.y + 15) >> 4, 1);
 
         srvs.fill(nullptr);
-        std::array<ID3D11UnorderedAccessView*, maxColorMips> nullColorUavArr = {};
+        ID3D11UnorderedAccessView* nullUav = nullptr;
         context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, maxColorMips, nullColorUavArr.data(), nullptr);
+        context->CSSetUnorderedAccessViews(0, 1, &nullUav, nullptr);
     }
 
     const auto envTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr;
@@ -485,8 +509,11 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     auto& ssgi = globals::features::screenSpaceGI;
     auto& skylighting = globals::features::skylighting;
 
-    float2 size = Util::ConvertToDynamic(state->screenSize);
-    float2 dispatchCount = { (size.x / 4 + 7) / 8, (size.y / 4 + 7) / 8 };
+    float2 res = state->screenSize;
+    float2 dynres = Util::ConvertToDynamic(res);
+    dynres = { floor(dynres.x), floor(dynres.y) };
+
+    float2 dispatchCount = { (dynres.x / 4 + 7) / 8, (dynres.y / 4 + 7) / 8 };
 
     SSRTCB ssrCBData;
     {
@@ -498,6 +525,11 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
         ssrCBData.OcclusionStrength = settings.OcclusionStrength;
         ssrCBData.CubemapNormalization = settings.CubemapNormalization;
+
+        ssrCBData.TexDim = res;
+        ssrCBData.RcpTexDim = float2(1.0f) / res;
+        ssrCBData.FrameDim = dynres;
+        ssrCBData.RcpFrameDim = float2(1.0f) / dynres;
     }
     ssrtCB->Update(ssrCBData);
     auto buffer = ssrtCB->CB();
@@ -514,9 +546,9 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 	};
 
-    std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
+    std::array<ID3D11SamplerState*, 2> samplers = { pointSampler.get(), linearSampler.get() };
 
-    context->CSSetSamplers(0, 1, samplers.data());
+    context->CSSetSamplers(0, 2, samplers.data());
 
     const auto envTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr;
 	const auto envReflectionsTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr;

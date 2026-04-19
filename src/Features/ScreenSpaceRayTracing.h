@@ -75,6 +75,11 @@ struct ScreenSpaceRayTracing : Feature
         float BRDFBias;
         float OcclusionStrength;
         float CubemapNormalization;
+
+        float2 TexDim;
+        float2 RcpTexDim;
+        float2 FrameDim;
+        float2 RcpFrameDim;
     };
 
     eastl::unique_ptr<ConstantBuffer> ssrtCB;
@@ -96,13 +101,12 @@ struct ScreenSpaceRayTracing : Feature
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
     static const uint maxMips = 9;
-    static const uint maxColorMips = 5;
 
     std::array<winrt::com_ptr<ID3D11ShaderResourceView>, maxMips> depthSRVs = { nullptr };
 	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, maxMips> depthUAVs = { nullptr };
-	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, maxColorMips> colorUAVs = { nullptr };
 
     winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
+    winrt::com_ptr<ID3D11SamplerState> pointSampler = nullptr;
 
     winrt::com_ptr<ID3D11ComputeShader> prefilterDepthCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCS = nullptr;

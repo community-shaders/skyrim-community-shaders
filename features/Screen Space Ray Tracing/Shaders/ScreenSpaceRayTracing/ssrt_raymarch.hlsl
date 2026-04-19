@@ -53,6 +53,11 @@ cbuffer SSRTCB : register(b1)
     float BRDFBias;
     float OcclusionStrength;
     float CubemapNormalization;
+
+    float2 TexDim;
+    float2 RcpTexDim;
+    float2 FrameDim;
+    float2 RcpFrameDim;
 };
 
 #define HIZ_MAX_ITERATIONS MaxSteps

@@ -1,96 +1,66 @@
 #include "ScreenSpaceRayTracing/ssrt_common.hlsli"
 
-Texture2D<float4> DiffuseTexture : register(t0);
-Texture2D<float3> SpecularTexture : register(t1);
+Texture2D<float3> srcRadiance : register(t0);
+RWTexture2D<float3> outRadiance0 : register(u0);
 
-RWTexture2D<float4> outColor0 : register(u0);
-RWTexture2D<float4> outColor1 : register(u1);
-RWTexture2D<float4> outColor2 : register(u2);
-RWTexture2D<float4> outColor3 : register(u3);
-RWTexture2D<float4> outColor4 : register(u4);
+SamplerState samplerPointClamp : register(s0);
 
-float4 CombineColor(uint2 coord)
+cbuffer SSRTCB : register(b1)
 {
-    float3 color = Color::IrradianceToLinear(DiffuseTexture[coord].xyz) + SpecularTexture[coord].xyz;
-    return float4(color, 1.0f);
+    uint MaxSteps;
+    uint MaxMips;
+    uint UseDynamicCubemapsAsFallback;
+    float Thickness;
+    float NormalBias;
+    float BRDFBias;
+    float OcclusionStrength;
+    float CubemapNormalization;
+
+    float2 TexDim;
+    float2 RcpTexDim;
+    float2 FrameDim;
+    float2 RcpFrameDim;
+};
+
+float3 RadianceMIPFilter(float3 radiance0, float3 radiance1, float3 radiance2, float3 radiance3)
+{
+	return (radiance0 + radiance1 + radiance2 + radiance3) * 0.25;
 }
 
-// Average of center 2x2 within a 4x4 full-res block, with color combination
-float4 DownsampleColor4x4(uint2 fullRegionTL)
-{
-    float4 c0 = CombineColor(fullRegionTL + uint2(1, 1));
-    float4 c1 = CombineColor(fullRegionTL + uint2(2, 1));
-    float4 c2 = CombineColor(fullRegionTL + uint2(1, 2));
-    float4 c3 = CombineColor(fullRegionTL + uint2(2, 2));
-    return (c0 + c1 + c2 + c3) * 0.25f;
-}
+groupshared float3 g_scratchRadiance[8][8];
 
-float4 ColorMIPFilter(float4 c0, float4 c1, float4 c2, float4 c3)
-{
-    return (c0 + c1 + c2 + c3) * 0.25f;
-}
+[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID, uint2 GTid : SV_GroupThreadID) {
+	const float2 frameScale = FrameDim * RcpTexDim;
 
-groupshared float4 g_scratchColor[8][8];
+	// MIP 0
+	const uint2 baseCoord = DTid;
+	const uint2 pixCoord = baseCoord * 2;
+	const float2 uv = (pixCoord + .5) * RcpFrameDim;
 
-// Dispatch at (fullResW/8 + 7)/8, (fullResH/8 + 7)/8, 1
-[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID, uint2 GTid : SV_GroupThreadID)
-{
-    uint2 baseCoord = DTid;
-    uint2 pixCoord = baseCoord * 2;
-    uint2 fullCoord = pixCoord * 4;
+	float4 rad0 = srcRadiance.GatherRed(samplerPointClamp, uv * frameScale);
+	float4 rad1 = srcRadiance.GatherGreen(samplerPointClamp, uv * frameScale);
+	float4 rad2 = srcRadiance.GatherBlue(samplerPointClamp, uv * frameScale);
 
-    float4 c00 = DownsampleColor4x4(fullCoord + uint2(0, 0));
-    float4 c10 = DownsampleColor4x4(fullCoord + uint2(4, 0));
-    float4 c01 = DownsampleColor4x4(fullCoord + uint2(0, 4));
-    float4 c11 = DownsampleColor4x4(fullCoord + uint2(4, 4));
+	float3 radiance0 = Color::IrradianceToLinear(float3(rad0.w, rad1.w, rad2.w));
+	float3 radiance1 = Color::IrradianceToLinear(float3(rad0.z, rad1.z, rad2.z));
+	float3 radiance2 = Color::IrradianceToLinear(float3(rad0.x, rad1.x, rad2.x));
+	float3 radiance3 = Color::IrradianceToLinear(float3(rad0.y, rad1.y, rad2.y));
 
-    outColor0[pixCoord + uint2(0, 0)] = c00;
-    outColor0[pixCoord + uint2(1, 0)] = c10;
-    outColor0[pixCoord + uint2(0, 1)] = c01;
-    outColor0[pixCoord + uint2(1, 1)] = c11;
+	// MIP 1 (half res)
+	float3 rm1 = RadianceMIPFilter(radiance0, radiance1, radiance2, radiance3);
+	g_scratchRadiance[GTid.x][GTid.y] = rm1;
 
-    // MIP 1
-    float4 cm1 = ColorMIPFilter(c00, c10, c01, c11);
-    outColor1[baseCoord] = cm1;
-    g_scratchColor[GTid.x][GTid.y] = cm1;
+	GroupMemoryBarrierWithGroupSync();
 
-    GroupMemoryBarrierWithGroupSync();
+	// MIP 2 (quarter res) -> SSRT Output
+	[branch] if (all((GTid.xy % 2) == 0))
+	{
+		float3 inTL = g_scratchRadiance[GTid.x + 0][GTid.y + 0];
+		float3 inTR = g_scratchRadiance[GTid.x + 1][GTid.y + 0];
+		float3 inBL = g_scratchRadiance[GTid.x + 0][GTid.y + 1];
+		float3 inBR = g_scratchRadiance[GTid.x + 1][GTid.y + 1];
 
-    // MIP 2
-    [branch] if (all((GTid % 2) == 0))
-    {
-        float4 inTL = g_scratchColor[GTid.x + 0][GTid.y + 0];
-        float4 inTR = g_scratchColor[GTid.x + 1][GTid.y + 0];
-        float4 inBL = g_scratchColor[GTid.x + 0][GTid.y + 1];
-        float4 inBR = g_scratchColor[GTid.x + 1][GTid.y + 1];
-        float4 cm2 = ColorMIPFilter(inTL, inTR, inBL, inBR);
-        outColor2[baseCoord / 2] = cm2;
-        g_scratchColor[GTid.x][GTid.y] = cm2;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    // MIP 3
-    [branch] if (all((GTid % 4) == 0))
-    {
-        float4 inTL = g_scratchColor[GTid.x + 0][GTid.y + 0];
-        float4 inTR = g_scratchColor[GTid.x + 2][GTid.y + 0];
-        float4 inBL = g_scratchColor[GTid.x + 0][GTid.y + 2];
-        float4 inBR = g_scratchColor[GTid.x + 2][GTid.y + 2];
-        float4 cm3 = ColorMIPFilter(inTL, inTR, inBL, inBR);
-        outColor3[baseCoord / 4] = cm3;
-        g_scratchColor[GTid.x][GTid.y] = cm3;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    // MIP 4
-    [branch] if (all((GTid % 8) == 0))
-    {
-        float4 inTL = g_scratchColor[GTid.x + 0][GTid.y + 0];
-        float4 inTR = g_scratchColor[GTid.x + 4][GTid.y + 0];
-        float4 inBL = g_scratchColor[GTid.x + 0][GTid.y + 4];
-        float4 inBR = g_scratchColor[GTid.x + 4][GTid.y + 4];
-        outColor4[baseCoord / 8] = ColorMIPFilter(inTL, inTR, inBL, inBR);
-    }
+		float3 rm2 = RadianceMIPFilter(inTL, inTR, inBL, inBR);
+		outRadiance0[baseCoord / 2] = rm2;
+	}
 }
