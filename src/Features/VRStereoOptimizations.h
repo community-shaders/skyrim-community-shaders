@@ -171,7 +171,7 @@ struct VRStereoOptimizations
 	/// Deactivate stencil culling (called from Deferred after geometry rendering completes)
 	void DeactivateStencil();
 
-	/// Get mode texture SRV for external consumers (e.g., DeferredCompositeCS Eye 1 skip)
+	/// Get mode texture SRV for external consumers (e.g., DeferredCompositePS Eye 1 skip)
 	ID3D11ShaderResourceView* GetModeTextureSRV() const { return texPerPixelMode ? texPerPixelMode->srv.get() : nullptr; }
 
 	/// Get POM offset texture SRV for StereoBlendCS (reads per-pixel parallax depth offset)
