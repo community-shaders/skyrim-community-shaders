@@ -23,7 +23,7 @@ struct ScreenSpaceRayTracing : Feature
                 "Importance sampling for advanced reflections based on roughness",
                 "Efficient ray marching with Hi-Z buffer",
                 "Uses dynamic cubemaps as fallback for missing information",
-                "Spatiotemporal Variance-Guided Filtering (SVGF) denoiser"
+                "Spatially Hashed Radiance Cache (SHARC)"
             }
 		};
 	}
@@ -58,11 +58,6 @@ struct ScreenSpaceRayTracing : Feature
         float AmbientMult = 0.0f;
         float OcclusionStrength = 1.0f;
         float CubemapNormalization = 0.0f;
-        bool EnableSVGF = false;
-        uint MaxAccumulatedFrames = 16;
-        uint AtrousIterations = 3;
-        float ColorPhi = 0.5f;
-        float NormalPhi = 512.0f;
 #ifdef ENABLE_SHARC
         bool EnableSharc = false;
 #endif
@@ -88,16 +83,7 @@ struct ScreenSpaceRayTracing : Feature
         float CubemapNormalization;
     };
 
-    struct alignas(16) DenoiserCB
-    {
-        float invMaxAccumulatedFrames;
-        uint atrousIterations;
-        float colorPhi;
-        float normalPhi;
-    };
-
     eastl::unique_ptr<ConstantBuffer> ssrtCB;
-    eastl::unique_ptr<ConstantBuffer> denoiserCB;
 
     bool recompileFlag = false;
 
@@ -114,12 +100,7 @@ struct ScreenSpaceRayTracing : Feature
     eastl::unique_ptr<Texture2D> texHitPDF = nullptr;
     eastl::unique_ptr<Texture2D> texHistory = nullptr;
     eastl::unique_ptr<Texture2D> texHistoryDiffuse = nullptr;
-    eastl::unique_ptr<Texture2D> texTemporal = nullptr;
-    eastl::unique_ptr<Texture2D> texMoments = nullptr;
-    eastl::unique_ptr<Texture2D> texHistoryMoments = nullptr;
-    eastl::unique_ptr<Texture2D> texHistoryMomentsDiffuse = nullptr;
     eastl::unique_ptr<Texture2D> texHistoryNormals = nullptr;
-    eastl::unique_ptr<Texture2D> texVariance = nullptr;
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
 #ifdef ENABLE_SHARC
@@ -145,9 +126,6 @@ struct ScreenSpaceRayTracing : Feature
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> diffuseCompositeCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> temporalCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> varianceCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialSpecularCS = nullptr;
 #ifdef ENABLE_SHARC
     winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseSharcCS = nullptr;

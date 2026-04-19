@@ -29,11 +29,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     AmbientMult,
     OcclusionStrength,
     CubemapNormalization,
-    EnableSVGF,
-    MaxAccumulatedFrames,
-    AtrousIterations,
-    ColorPhi,
-    NormalPhi,
     EnableSharc
 )
 #else
@@ -53,12 +48,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     DiffuseMult,
     AmbientMult,
     OcclusionStrength,
-    CubemapNormalization,
-    EnableSVGF,
-    MaxAccumulatedFrames,
-    AtrousIterations,
-    ColorPhi,
-    NormalPhi
+    CubemapNormalization
 )
 #endif
 
@@ -100,21 +90,6 @@ void ScreenSpaceRayTracing::DrawSettings()
 
     ImGui::Separator();
 
-    ImGui::Checkbox("Enable Spatiotemporal Variance-Guided Filtering", &settings.EnableSVGF);
-    if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("SVGF denoiser. This may introduce some blurriness and temporal artifacts but significantly reduces noise.");
-    if (settings.EnableSVGF) {
-        ImGui::SliderInt("Max Accumulated Frames", (int*)&settings.MaxAccumulatedFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
-        ImGui::SliderInt("À Trous Iterations", (int*)&settings.AtrousIterations, 1, 5, "%d", ImGuiSliderFlags_AlwaysClamp);
-        if (auto _tt = Util::HoverTooltipWrapper())
-            ImGui::Text("Number of À Trous wavelet filter iterations. More iterations yield smoother results but may blur details and have a higher computational cost.");
-        ImGui::SliderFloat("Color Phi", &settings.ColorPhi, 0.01f, 32.0f, "%.2f");
-        if (auto _tt = Util::HoverTooltipWrapper())
-            ImGui::Text("Controls sensitivity to color differences in the À Trous filter. Lower values preserve more detail but may retain noise.");
-        ImGui::SliderFloat("Normal Phi", &settings.NormalPhi, 1.0f, 1024.0f, "%.2f");
-        if (auto _tt = Util::HoverTooltipWrapper())
-            ImGui::Text("Controls sensitivity to normal differences in the À Trous filter. Higher values preserve more detail but may retain noise.");
-    }
 #ifdef ENABLE_SHARC
     ImGui::Checkbox("Enable SHARC", &settings.EnableSharc);
     if (auto _tt = Util::HoverTooltipWrapper())
@@ -133,11 +108,6 @@ void ScreenSpaceRayTracing::DrawSettings()
         BUFFER_VIEWER_NODE(texHistory, debugRescale)
         BUFFER_VIEWER_NODE(texHistoryDiffuse, debugRescale)
         BUFFER_VIEWER_NODE(texHitPDF, debugRescale)
-        BUFFER_VIEWER_NODE(texTemporal, debugRescale)
-        BUFFER_VIEWER_NODE(texMoments, debugRescale)
-        BUFFER_VIEWER_NODE(texHistoryMoments, debugRescale)
-        BUFFER_VIEWER_NODE(texHistoryMomentsDiffuse, debugRescale)
-        BUFFER_VIEWER_NODE(texVariance, debugRescale)
         BUFFER_VIEWER_NODE(texOutput, debugRescale)
 
 		ImGui::TreePop();
@@ -167,7 +137,6 @@ void ScreenSpaceRayTracing::SetupResources()
 	logger::debug("Creating buffers...");
 	{
         ssrtCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSRTCB>());
-        denoiserCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<DenoiserCB>());
     }
 
     logger::debug("Creating textures...");
@@ -211,27 +180,9 @@ void ScreenSpaceRayTracing::SetupResources()
         texHistoryDiffuse = eastl::make_unique<Texture2D>(texDesc);
         texHistoryDiffuse->CreateSRV(srvDesc);
         texHistoryDiffuse->CreateUAV(uavDesc);
-        texTemporal = eastl::make_unique<Texture2D>(texDesc);
-        texTemporal->CreateSRV(srvDesc);
-        texTemporal->CreateUAV(uavDesc);
-        texVariance = eastl::make_unique<Texture2D>(texDesc);
-        texVariance->CreateSRV(srvDesc);
-        texVariance->CreateUAV(uavDesc);
         texOutput = eastl::make_unique<Texture2D>(texDesc);
         texOutput->CreateSRV(srvDesc);
         texOutput->CreateUAV(uavDesc);
-
-        texDesc.Format = srvDesc.Format = uavDesc.Format =  DXGI_FORMAT_R11G11B10_FLOAT;
-
-        texMoments = eastl::make_unique<Texture2D>(texDesc);
-        texMoments->CreateSRV(srvDesc);
-        texMoments->CreateUAV(uavDesc);
-        texHistoryMoments = eastl::make_unique<Texture2D>(texDesc);
-        texHistoryMoments->CreateSRV(srvDesc);
-        texHistoryMoments->CreateUAV(uavDesc);
-        texHistoryMomentsDiffuse = eastl::make_unique<Texture2D>(texDesc);
-        texHistoryMomentsDiffuse->CreateSRV(srvDesc);
-        texHistoryMomentsDiffuse->CreateUAV(uavDesc);
 
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
         texHistoryNormals = eastl::make_unique<Texture2D>(texDesc);
@@ -343,7 +294,7 @@ void ScreenSpaceRayTracing::SetupResources()
 void ScreenSpaceRayTracing::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &raymarchDiffuseCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS, &diffuseCompositeCS, &temporalCS, &varianceCS, &spatialCS,
+        &raymarchSpecularCS, &raymarchDiffuseCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS, &diffuseCompositeCS, &spatialSpecularCS,
 #ifdef ENABLE_SHARC
         &raymarchDiffuseSharcCS, &sharcUpdateRaymarchCS, &sharcResolveCS
 #endif
@@ -398,9 +349,6 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
             { &preprocessDepthCS, "ssrt_preprocess_depth.hlsl", {} },
             { &depthDownsampleCS, "ssrt_depth_downsample.hlsl", {} },
             { &diffuseCompositeCS, "ssrt_diffuse_composite.hlsl", {} },
-            { &temporalCS, "ssrt_temporal.hlsl", {} },
-            { &varianceCS, "ssrt_variance.hlsl", {} },
-            { &spatialCS, "ssrt_spatial.hlsl", {} },
             { &spatialSpecularCS, "ssrt_spatial.hlsl", definesSpecular },
 #ifdef ENABLE_SHARC
             { &raymarchDiffuseSharcCS, "ssrt_raymarch.hlsl", definesSharc },
@@ -598,81 +546,6 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 
     resetViews();
 
-    if (settings.EnableSVGF) {
-        DenoiserCB denoiserCBData;
-        {
-            denoiserCBData.invMaxAccumulatedFrames = 1.0f / (settings.MaxAccumulatedFrames + 1.0f);
-            denoiserCBData.atrousIterations = settings.AtrousIterations;
-            denoiserCBData.colorPhi = settings.ColorPhi;
-            denoiserCBData.normalPhi = settings.NormalPhi;
-        }
-        denoiserCB->Update(denoiserCBData);
-        auto denoiserBuffer = denoiserCB->CB();
-        context->CSSetConstantBuffers(2, 1, &denoiserBuffer);
-
-        // temporal filter
-        uavs.at(0) = texTemporal->uav.get();
-        uavs.at(1) = texMoments->uav.get();
-        srvs.at(0) = texHistory->srv.get();
-        srvs.at(1) = motion.SRV;
-        srvs.at(2) = normal.SRV;
-        srvs.at(3) = texSSRColor->srv.get();
-        srvs.at(4) = depth.depthSRV;
-        srvs.at(5) = texHistoryMoments->srv.get();
-        srvs.at(6) = texHistoryNormals->srv.get();
-
-        context->CSSetShaderResources(0, 7, srvs.data());
-        context->CSSetUnorderedAccessViews(0, 2, uavs.data(), nullptr);
-        context->CSSetShader(temporalCS.get(), nullptr, 0);
-
-        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-        resetViews();
-
-        context->CopyResource(texHistoryMoments->resource.get(), texMoments->resource.get());
-
-        // variance filter
-        uavs.at(0) = texVariance->uav.get();
-        srvs.at(0) = texHistory->srv.get();
-        srvs.at(1) = texMoments->srv.get();
-        srvs.at(2) = normal.SRV;
-        srvs.at(3) = texTemporal->srv.get();
-        srvs.at(4) = depth.depthSRV;
-
-        context->CSSetShaderResources(0, 5, srvs.data());
-        context->CSSetUnorderedAccessViews(0, 1, uavs.data(), nullptr);
-        context->CSSetShader(varianceCS.get(), nullptr, 0);
-
-        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-        resetViews();
-
-        // spatial filter
-        for (int i = 0; i < (int)settings.AtrousIterations; ++i)
-        {
-            denoiserCBData.atrousIterations = i;
-            denoiserCB->Update(denoiserCBData);
-            denoiserBuffer = denoiserCB->CB();
-            context->CSSetConstantBuffers(2, 1, &denoiserBuffer);
-            uavs.at(0) = (i % 2 == 0) ? texSSRColor->uav.get() : texVariance->uav.get();
-            srvs.at(0) = texHistory->srv.get();
-            srvs.at(1) = motion.SRV;
-            srvs.at(2) = normal.SRV;
-            srvs.at(3) = (i % 2 == 0) ? texVariance->srv.get() : texSSRColor->srv.get();
-            srvs.at(4) = depth.depthSRV;
-
-            context->CSSetShaderResources(0, 5, srvs.data());
-            context->CSSetUnorderedAccessViews(0, 1, uavs.data(), nullptr);
-            context->CSSetShader(spatialSpecularCS.get(), nullptr, 0);
-
-            context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-
-            resetViews();
-        }
-
-        if (settings.AtrousIterations % 2 == 0) {
-            context->CopyResource(texSSRColor->resource.get(), texVariance->resource.get());
-        }
-    }
-
     // output
     context->CopyResource(texHistoryNormals->resource.get(), normal.texture);
     context->CopyResource(texOutput->resource.get(), texSSRColor->resource.get());
@@ -804,80 +677,6 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         std::swap(sharcVoxelData, sharcVoxelDataPrev);
     }
 #endif
-
-    if (settings.EnableSVGF) {
-        DenoiserCB denoiserCBData;
-        {
-            denoiserCBData.invMaxAccumulatedFrames = 1.0f / (settings.MaxAccumulatedFrames + 1.0f);
-            denoiserCBData.atrousIterations = settings.AtrousIterations;
-            denoiserCBData.colorPhi = settings.ColorPhi;
-            denoiserCBData.normalPhi = settings.NormalPhi;
-        }
-        denoiserCB->Update(denoiserCBData);
-        auto denoiserBuffer = denoiserCB->CB();
-        context->CSSetConstantBuffers(2, 1, &denoiserBuffer);
-        // temporal filter
-        uavs.at(0) = texTemporal->uav.get();
-        uavs.at(1) = texMoments->uav.get();
-        srvs.at(0) = texHistoryDiffuse->srv.get();
-        srvs.at(1) = motion.SRV;
-        srvs.at(2) = normal.SRV;
-        srvs.at(3) = texSSRTDiffuseColor->srv.get();
-        srvs.at(4) = depth.depthSRV;
-        srvs.at(5) = texHistoryMomentsDiffuse->srv.get();
-        srvs.at(6) = texHistoryNormals->srv.get();
-
-        context->CSSetShaderResources(0, 7, srvs.data());
-        context->CSSetUnorderedAccessViews(0, 2, uavs.data(), nullptr);
-        context->CSSetShader(temporalCS.get(), nullptr, 0);
-
-        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-        resetViews();
-
-        context->CopyResource(texHistoryMomentsDiffuse->resource.get(), texMoments->resource.get());
-
-        // variance filter
-        uavs.at(0) = texVariance->uav.get();
-        srvs.at(0) = texHistoryDiffuse->srv.get();
-        srvs.at(1) = texMoments->srv.get();
-        srvs.at(2) = normal.SRV;
-        srvs.at(3) = texTemporal->srv.get();
-        srvs.at(4) = depth.depthSRV;
-
-        context->CSSetShaderResources(0, 5, srvs.data());
-        context->CSSetUnorderedAccessViews(0, 1, uavs.data(), nullptr);
-        context->CSSetShader(varianceCS.get(), nullptr, 0);
-
-        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-        resetViews();
-
-        // spatial filter
-        for (int i = 0; i < (int)settings.AtrousIterations; ++i)
-        {
-            denoiserCBData.atrousIterations = i;
-            denoiserCB->Update(denoiserCBData);
-            denoiserBuffer = denoiserCB->CB();
-            context->CSSetConstantBuffers(2, 1, &denoiserBuffer);
-            uavs.at(0) = (i % 2 == 0) ? texSSRTDiffuseColor->uav.get() : texVariance->uav.get();
-            srvs.at(0) = texHistoryDiffuse->srv.get();
-            srvs.at(1) = motion.SRV;
-            srvs.at(2) = normal.SRV;
-            srvs.at(3) = (i % 2 == 0) ? texVariance->srv.get() : texSSRTDiffuseColor->srv.get();
-            srvs.at(4) = depth.depthSRV;
-
-            context->CSSetShaderResources(0, 5, srvs.data());
-            context->CSSetUnorderedAccessViews(0, 1, uavs.data(), nullptr);
-            context->CSSetShader(spatialCS.get(), nullptr, 0);
-
-            context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-
-            resetViews();
-        }
-
-        if (settings.AtrousIterations % 2 == 0) {
-            context->CopyResource(texSSRTDiffuseColor->resource.get(), texVariance->resource.get());
-        }
-    }
 
     context->CopyResource(texHistoryDiffuse->resource.get(), texSSRTDiffuseColor->resource.get());
 

@@ -782,13 +782,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #				endif
 
-#				if defined(SSRT)
-	if (SharedData::ssrtSettings.DiffuseMult > 0.0) {
-		directionalAmbientColor *= SharedData::ssrtSettings.AmbientMult;
-		iblColor *= SharedData::ssrtSettings.AmbientMult;
-	}
-#				endif
-
 	diffuseColor += directionalAmbientColor;
 
 	diffuseColor *= albedo;
@@ -977,13 +970,6 @@ PS_OUTPUT main(PS_INPUT input)
 #				else
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
 #				endif
-	}
-#			endif
-
-#			if defined(SSRT)
-	if (SharedData::ssrtSettings.DiffuseMult > 0.0) {
-		directionalAmbientColor *= SharedData::ssrtSettings.AmbientMult;
-		iblColor *= SharedData::ssrtSettings.AmbientMult;
 	}
 #			endif
 
