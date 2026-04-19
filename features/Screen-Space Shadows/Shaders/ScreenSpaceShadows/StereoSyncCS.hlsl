@@ -85,6 +85,7 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 [numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	if (any(dtid >= uint2(FrameDim)))
 		return;
+
 	float2 uv = (dtid + 0.5) * RcpFrameDim;
 
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);

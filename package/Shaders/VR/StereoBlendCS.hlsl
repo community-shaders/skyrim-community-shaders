@@ -75,6 +75,7 @@ float4 SampleCrossDepths(int2 center, int offset, uint eyeIndex)
 [numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	if (any(dtid >= uint2(FrameDim)))
 		return;
+
 #ifdef STEREO_OVERWRITE
 	// =========================================================================
 	// Mode-driven stereo merge: reads per-pixel classification from StencilCS
