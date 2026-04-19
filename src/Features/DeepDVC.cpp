@@ -154,6 +154,10 @@ void DeepDVC::Evaluate()
 	sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &extent };
 
 	sl::ResourceTag inputs[] = { colorOutTag };
+	if (!upscaling.streamline.slSetTag) {
+		logger::warn("[DeepDVC] slSetTag not available");
+		return;
+	}
 	upscaling.streamline.slSetTag(viewport, inputs, _countof(inputs), context);
 
 	sl::DeepDVCOptions options{};
