@@ -143,13 +143,15 @@ void Deferred::SetupResources()
 		DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, compositeBlendState.put()));
 
 		D3D11_DEPTH_STENCIL_DESC dsDesc{};
-		dsDesc.DepthEnable = FALSE;
+		dsDesc.DepthEnable = TRUE;
+		dsDesc.DepthFunc = D3D11_COMPARISON_GREATER;
 		dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 		dsDesc.StencilEnable = FALSE;
 		DX::ThrowIfFailed(device->CreateDepthStencilState(&dsDesc, compositeDepthStencilState.put()));
 
 		D3D11_DEPTH_STENCIL_DESC stencilDsDesc{};
-		stencilDsDesc.DepthEnable = FALSE;
+		stencilDsDesc.DepthEnable = TRUE;
+		stencilDsDesc.DepthFunc = D3D11_COMPARISON_GREATER;
 		stencilDsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 		stencilDsDesc.StencilEnable = TRUE;
 		stencilDsDesc.StencilReadMask = 0xFF;
@@ -401,8 +403,7 @@ void Deferred::DeferredPasses()
 		// Render targets + stencil test for VR stereo culling
 		bool useStencil = globals::game::isVR && globals::features::vr.stereoOpt.IsStencilActive();
 		ID3D11RenderTargetView* rtvs[2]{ main.RTV, normalRoughness.RTV };
-		ID3D11DepthStencilView* dsv = useStencil ? depth.views[0] : nullptr;
-		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, dsv);
+		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, depth.views[0]);
 		context->OMSetBlendState(compositeBlendState.get(), nullptr, 0xFFFFFFFF);
 		context->OMSetDepthStencilState(useStencil ? compositeStencilDSState.get() : compositeDepthStencilState.get(), 1);
 
