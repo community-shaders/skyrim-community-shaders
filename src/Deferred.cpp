@@ -320,7 +320,6 @@ void Deferred::DeferredPasses()
 	auto masks = renderer->GetRuntimeData().renderTargets[MASKS];
 
 	auto main = renderer->GetRuntimeData().renderTargets[forwardRenderTargets[0]];
-	auto normals = renderer->GetRuntimeData().renderTargets[forwardRenderTargets[2]];
 	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	auto reflectance = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
 
@@ -398,7 +397,7 @@ void Deferred::DeferredPasses()
 
 		// Render targets + stencil test for VR stereo culling
 		bool useStencil = globals::game::isVR && globals::features::vr.stereoOpt.IsStencilActive();
-		ID3D11RenderTargetView* rtvs[2]{ main.RTV, normals.RTV };
+		ID3D11RenderTargetView* rtvs[1]{ main.RTV };
 		ID3D11DepthStencilView* dsv = useStencil ? depth.views[0] : nullptr;
 		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, dsv);
 		context->OMSetBlendState(compositeBlendState.get(), nullptr, 0xFFFFFFFF);
