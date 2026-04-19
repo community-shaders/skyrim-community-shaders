@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Feature.h"
-#include "Subrect/Subrect.h"
+#include "Utils/Subrect/Subrect.h"
 #include "VRS/NvVrsController.h"
 
 namespace RE::BSGraphics
