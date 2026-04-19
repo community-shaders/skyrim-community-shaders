@@ -99,6 +99,7 @@ struct PS_INPUT
 struct PS_OUTPUT
 {
 	float4 Main: SV_Target0;
+	float4 NormalRoughness: SV_Target1;
 };
 
 PS_OUTPUT main(PS_INPUT input)
@@ -348,5 +349,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	PS_OUTPUT output;
 	output.Main = float4(color, 1.0);
+	output.NormalRoughness = 0;
 	return output;
 }

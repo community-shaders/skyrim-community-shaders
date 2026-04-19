@@ -137,7 +137,9 @@ void Deferred::SetupResources()
 		auto device = globals::d3d::device;
 
 		D3D11_BLEND_DESC blendDesc{};
+		blendDesc.IndependentBlendEnable = TRUE;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_BLUE;
 		DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, compositeBlendState.put()));
 
 		D3D11_DEPTH_STENCIL_DESC dsDesc{};
@@ -398,7 +400,7 @@ void Deferred::DeferredPasses()
 
 		// Render targets + stencil test for VR stereo culling
 		bool useStencil = globals::game::isVR && globals::features::vr.stereoOpt.IsStencilActive();
-		ID3D11RenderTargetView* rtvs[1]{ main.RTV };
+		ID3D11RenderTargetView* rtvs[2]{ main.RTV, normalRoughness.RTV };
 		ID3D11DepthStencilView* dsv = useStencil ? depth.views[0] : nullptr;
 		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, dsv);
 		context->OMSetBlendState(compositeBlendState.get(), nullptr, 0xFFFFFFFF);
