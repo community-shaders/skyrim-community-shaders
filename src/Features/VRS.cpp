@@ -80,7 +80,7 @@ void VRS::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Reduces pixel shading rate in peripheral vision using concentric elliptical zones.");
 		ImGui::Text("Directional-adaptive rates (2x1/1x2) preserve detail along natural eye-tracking axes.");
-		ImGui::Text("Known conflicts: Terrain Blending, VR DepthBuffer Culling.");
+		ImGui::Text("Known conflict: Terrain Blending.");
 	}
 
 	settings.vrVRSSrsPreset = std::min(settings.vrVRSSrsPreset, 2u);

@@ -21,7 +21,6 @@ namespace RE::BSGraphics
 ///
 /// Known conflicts:
 ///   - Terrain Blending: visual artifacts when both active.
-///   - VR DepthBuffer Culling: incorrect cull combined with VRS cull ring.
 ///
 /// Hard-gated at PostPostLoad: hooks only installed in VR runtime.
 struct VRS : Feature
