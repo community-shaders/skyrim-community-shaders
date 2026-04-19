@@ -92,15 +92,24 @@ struct ScreenSpaceRayTracing : Feature
 
     SharedData GetCommonBufferData();
 
+    struct DiffuseOutput
+    {
+        ID3D11ShaderResourceView* sh[4];
+    };
+    DiffuseOutput GetDiffuseOutputTextures();
+
     eastl::unique_ptr<Texture2D> texDepth = nullptr;
+    eastl::unique_ptr<Texture2D> texSSRTDiffuseHalfResDepth = nullptr;
     eastl::unique_ptr<Texture2D> texColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRTDiffuseColor = nullptr;
+    eastl::unique_ptr<Texture2D> texSSRTDiffuseDirection = nullptr;
+    eastl::unique_ptr<Texture2D> texSSRTDiffuseSH[4] = { nullptr };
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
-    static const uint maxMips = 9;
+    static const uint maxMips = 3;
 
     std::array<winrt::com_ptr<ID3D11ShaderResourceView>, maxMips> depthSRVs = { nullptr };
 	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, maxMips> depthUAVs = { nullptr };
@@ -110,7 +119,9 @@ struct ScreenSpaceRayTracing : Feature
 
     winrt::com_ptr<ID3D11ComputeShader> prefilterDepthCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> preprocessDepthCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchSpecularCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> upscaleDiffuseCS = nullptr;
 };

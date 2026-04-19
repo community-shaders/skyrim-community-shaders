@@ -389,7 +389,8 @@ void Deferred::DeferredPasses()
 		}
 
 		// SRVs
-		ID3D11ShaderResourceView* srvs[19]{
+		auto ssrtDiffuse = ssrt.GetDiffuseOutputTextures();
+		ID3D11ShaderResourceView* srvs[22]{
 			mainCopy.SRV,                                                                                           // t0  MainInputTexture
 			specular.SRV,                                                                                           // t1  SpecularTexture
 			normalRoughnessCopy.SRV,                                                                                // t2  NormalRoughnessTexture
@@ -408,7 +409,10 @@ void Deferred::DeferredPasses()
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
 			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.texOutput->srv.get() : nullptr,                    // t17 SsrtSpecularTexture
-			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrt.texSSRTDiffuseColor->srv.get() : nullptr,           // t18 SsrtDiffuseTexture
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[0] : nullptr,                             // t18 SsrtDiffuseSH0
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[1] : nullptr,                             // t19 SsrtDiffuseSH1
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[2] : nullptr,                             // t20 SsrtDiffuseSH2
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[3] : nullptr,                             // t21 SsrtDiffuseSH3
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);

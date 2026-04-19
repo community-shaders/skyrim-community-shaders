@@ -156,11 +156,33 @@ void ScreenSpaceRayTracing::SetupResources()
         texSSRTDiffuseColor = eastl::make_unique<Texture2D>(texDesc);
         texSSRTDiffuseColor->CreateSRV(srvDesc);
         texSSRTDiffuseColor->CreateUAV(uavDesc);
+
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R8G8_UNORM;
+        texSSRTDiffuseDirection = eastl::make_unique<Texture2D>(texDesc);
+        texSSRTDiffuseDirection->CreateSRV(srvDesc);
+        texSSRTDiffuseDirection->CreateUAV(uavDesc);
+
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
         texOutput = eastl::make_unique<Texture2D>(texDesc);
         texOutput->CreateSRV(srvDesc);
         texOutput->CreateUAV(uavDesc);
 
-        // Quarter-resolution depth pyramid
+        texDesc.Width /= 2;
+		texDesc.Height /= 2;
+        texSSRTDiffuseHalfResDepth = eastl::make_unique<Texture2D>(texDesc);
+        texSSRTDiffuseHalfResDepth->CreateSRV(srvDesc);
+        texSSRTDiffuseHalfResDepth->CreateUAV(uavDesc);
+
+        // SH textures at 1/2 resolution
+        for (int i = 0; i < 4; ++i) {
+            texSSRTDiffuseSH[i] = eastl::make_unique<Texture2D>(texDesc);
+            texSSRTDiffuseSH[i]->CreateSRV(srvDesc);
+            texSSRTDiffuseSH[i]->CreateUAV(uavDesc);
+        }
+
+        // Quarter-resolution depth pyramid (Mip 0=Quarter, Mip 1=Eighth, Mip 2=Sixteenth)
+		texDesc.Width /= 2;
+		texDesc.Height /= 2;
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
         texDesc.MipLevels = maxMips;
         srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
@@ -214,7 +236,7 @@ void ScreenSpaceRayTracing::SetupResources()
 void ScreenSpaceRayTracing::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS, &depthDownsampleCS,
+        &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS, &depthDownsampleCS, &upscaleDiffuseCS, &preprocessDepthCS,
     };
 
     for (auto shader : shaderPtrs)
@@ -256,7 +278,9 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
             { &raymarchSpecularCS, "ssrt_raymarch.hlsl", definesSpecular },
             { &prefilterRadianceCS, "ssrt_prefilterRadiance.hlsl", {} },
             { &prefilterDepthCS, "ssrt_prefilterDepths.hlsl", {} },
+            { &preprocessDepthCS, "ssrt_preprocess_depth.hlsl", {} },
             { &depthDownsampleCS, "ssrt_depth_downsample.hlsl", {} },
+            { &upscaleDiffuseCS, "ssrt_upscale_diffuse.hlsl", {} },
         };
 
     for (auto& info : shaderInfos) {
@@ -322,10 +346,11 @@ void ScreenSpaceRayTracing::Prepass()
 
     state->BeginPerfEvent("SSRT Prepass");
 
-    // prefilter depth: full-res NDC depth → quarter-res mip 0 (Hi-Z min of 4×4 block)
+    // prefilter depth: full-res NDC depth → quarter-res mip 2 (Hi-Z min of 4×4 block) and half-res depth (mip 1)
     {
-        uavs.at(0) = depthUAVs[0].get();
-        srvs.at(0) = depth.depthSRV;
+        uavs.at(0) = depthUAVs[0].get(); // quarter res
+        uavs.at(1) = texSSRTDiffuseHalfResDepth->uav.get(); // separate half res for upscale
+        srvs.at(0) = depth.depthSRV; // t0 in prefilter shader
 
         context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
         context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
@@ -335,8 +360,10 @@ void ScreenSpaceRayTracing::Prepass()
         resetViews();
     }
 
-    // downsample depth: mips 1-8 chained from quarter-res mip 0
+    // downsample depth: mips 0-6 chained from quarter-res mip 0
     {
+		float2 dispatchCountDownsample = { ((size.x / 2) + 7) / 8, ((size.y / 2) + 7) / 8 };
+
         state->BeginPerfEvent("Downsample Depth - HiZ Buffer");
         for (int i = 0; i < maxMips - 1; ++i) {
             uavs.at(0) = depthUAVs[i + 1].get();
@@ -346,9 +373,8 @@ void ScreenSpaceRayTracing::Prepass()
             context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
             context->CSSetShader(depthDownsampleCS.get(), nullptr, 0);
 
-            uint32_t width = (uint32_t)dynres.x >> (i + 3);
-            uint32_t height = (uint32_t)dynres.y >> (i + 3);
-            context->Dispatch((width + 7) / 8, (height + 7) / 8, 1);
+            context->Dispatch((uint)dispatchCountDownsample.x >> i, (uint)dispatchCountDownsample.y >> i, 1);
+
             resetViews();
         }
         state->EndPerfEvent();
@@ -537,7 +563,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 13> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
 
     auto resetViews = [&]() {
 		srvs.fill(nullptr);
@@ -565,6 +591,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     }
 
     uavs.at(0) = texSSRTDiffuseColor->uav.get();
+    uavs.at(1) = texSSRTDiffuseDirection->uav.get();
 
     srvs.at(1) = motion.SRV;
     srvs.at(2) = normal.SRV;
@@ -586,9 +613,44 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
     resetViews();
 
+    // Upscale diffuse to 1/2 res using SH accumulation
+    {
+        state->BeginPerfEvent("SSRT Diffuse Upscale");
+
+        srvs.fill(nullptr);
+        srvs.at(0) = texSSRTDiffuseColor->srv.get();
+        srvs.at(1) = texSSRTDiffuseDirection->srv.get();
+        srvs.at(2) = texSSRTDiffuseHalfResDepth->srv.get();
+
+        std::array<ID3D11UnorderedAccessView*, 4> shUavs = {
+            texSSRTDiffuseSH[0]->uav.get(),
+            texSSRTDiffuseSH[1]->uav.get(),
+            texSSRTDiffuseSH[2]->uav.get(),
+            texSSRTDiffuseSH[3]->uav.get()
+        };
+
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)shUavs.size(), shUavs.data(), nullptr);
+        context->CSSetShader(upscaleDiffuseCS.get(), nullptr, 0);
+
+        context->Dispatch(((uint)dynres.x / 2 + 7) / 8, ((uint)dynres.y / 2 + 7) / 8, 1);
+        resetViews();
+
+        state->EndPerfEvent();
+    }
+
     state->EndPerfEvent();
 
     context->CSSetShader(nullptr, nullptr, 0);
+}
+
+ScreenSpaceRayTracing::DiffuseOutput ScreenSpaceRayTracing::GetDiffuseOutputTextures()
+{
+    DiffuseOutput output;
+    for (int i = 0; i < 4; ++i) {
+        output.sh[i] = texSSRTDiffuseSH[i]->srv.get();
+    }
+    return output;
 }
 
 ScreenSpaceRayTracing::SharedData ScreenSpaceRayTracing::GetCommonBufferData()

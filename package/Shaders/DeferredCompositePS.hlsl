@@ -99,7 +99,28 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 #if defined(SSRT)
 Texture2D<float4> SSRTexture : register(t17);
-Texture2D<float4> SSRTDiffuseTexture : register(t18);
+Texture2D<float4> SSRTDiffuseSH0 : register(t18);
+Texture2D<float4> SSRTDiffuseSH1 : register(t19);
+Texture2D<float4> SSRTDiffuseSH2 : register(t20);
+Texture2D<float4> SSRTDiffuseSH3 : register(t21);
+
+void SampleSSRTDiffuse(float2 uv, float3 normalWS, out float3 il, out float ao)
+{
+	float4 l0 = SSRTDiffuseSH0.SampleLevel(LinearSampler, uv, 0);
+	float4 l1y = SSRTDiffuseSH1.SampleLevel(LinearSampler, uv, 0);
+	float4 l1z = SSRTDiffuseSH2.SampleLevel(LinearSampler, uv, 0);
+	float4 l1x = SSRTDiffuseSH3.SampleLevel(LinearSampler, uv, 0);
+
+	ao = l0.a;
+
+	float4 shR = float4(l0.x, l1y.x, l1z.x, l1x.x);
+	float4 shG = float4(l0.y, l1y.y, l1z.y, l1x.y);
+	float4 shB = float4(l0.z, l1y.z, l1z.z, l1x.z);
+
+	il.r = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, normalWS);
+	il.g = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, normalWS);
+	il.b = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, normalWS);
+}
 #endif
 
 struct PS_INPUT
@@ -218,7 +239,9 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 albedo = AlbedoTexture[pixCoord];
 #	endif
 		float3 linAlbedoSSRT = Color::IrradianceToLinear(albedo);
-		float3 ssrtDiffuse = SSRTDiffuseTexture[pixCoord >> 2].xyz;
+		float3 ssrtDiffuse;
+		float ssrtAo;
+		SampleSSRTDiffuse(uv, normalWS, ssrtDiffuse, ssrtAo);
 		linDiffuseColor += ssrtDiffuse * linAlbedoSSRT;
 	}
 #endif

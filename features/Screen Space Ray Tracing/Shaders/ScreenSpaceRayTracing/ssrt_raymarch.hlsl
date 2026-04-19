@@ -42,6 +42,7 @@ Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t11);
 Texture2D<float3> AlbedoTexture : register(t12);
 
 RWTexture2D<float4> SSRColorOutput : register(u0);
+RWTexture2D<unorm float2> AverageDirectionOutput : register(u1);
 
 cbuffer SSRTCB : register(b1)
 {
@@ -392,6 +393,7 @@ float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
 }
 
 groupshared float4 samples[64][SAMPLES_PER_PIXEL];
+groupshared float3 sampleDirs[64][SAMPLES_PER_PIXEL];
 groupshared float4 weights[64][SAMPLES_PER_PIXEL];
 
 bool IsInGroup(int2 groupThreadID)
@@ -603,6 +605,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
         }
 #endif
         samples[groupThreadID.x * 8 + groupThreadID.y][sample_id] = float4(sampleColor, confidence);
+        sampleDirs[groupThreadID.x * 8 + groupThreadID.y][sample_id] = view_space_reflected_direction * confidence;
     }
     GroupMemoryBarrierWithGroupSync();
 
@@ -613,13 +616,21 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #else
     if (sample_id == 0) {
         outColor = 0.f;
+        float3 avgDir = 0.f;
         for (int i = 0; i < SAMPLES_PER_PIXEL; ++i) {
             outColor.xyz += samples[groupThreadID.x * 8 + groupThreadID.y][i].xyz;
             outColor.w += samples[groupThreadID.x * 8 + groupThreadID.y][i].w;
+            avgDir += sampleDirs[groupThreadID.x * 8 + groupThreadID.y][i];
         }
         outColor.xyz /= SAMPLES_PER_PIXEL;
         outColor.w = saturate(outColor.w / SAMPLES_PER_PIXEL);
         SSRColorOutput[coords.xy] = outColor;
+
+        if (any(avgDir != 0)) {
+            AverageDirectionOutput[coords.xy] = Octahedral::Encode(normalize(avgDir));
+        } else {
+            AverageDirectionOutput[coords.xy] = 0;
+        }
     }
 #endif
 }

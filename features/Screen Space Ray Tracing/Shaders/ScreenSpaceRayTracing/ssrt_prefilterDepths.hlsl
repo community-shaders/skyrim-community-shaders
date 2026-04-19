@@ -2,6 +2,7 @@
 
 Texture2D<float> srcNDCDepth : register(t0);
 RWTexture2D<float> outDepth0 : register(u0);
+RWTexture2D<float> halfResDepth : register(u1);
 
 SamplerState samplerPointClamp : register(s0);
 
@@ -22,16 +23,6 @@ cbuffer SSRTCB : register(b1)
     float2 RcpFrameDim;
 };
 
-float ClampDepth(float depth)
-{
-#ifdef VR
-	if (depth == 0.0)  // VR 0 indicates a mask
-		return 0.0;
-#endif
-	depth = SharedData::GetScreenDepth(depth);
-	return clamp(depth, 0.0, SSRT_FLOAT_MAX);
-}
-
 float DepthMIPFilter(float depth0, float depth1, float depth2, float depth3)
 {
 	return min(min(depth0, depth1), min(depth2, depth3));
@@ -49,14 +40,15 @@ groupshared float g_scratchDepths[8][8];
 	const float2 uv = (pixCoord + .5) * RcpFrameDim;
 
 	float4 depths4 = srcNDCDepth.GatherRed(samplerPointClamp, uv * frameScale);
-	float depth0 = ClampDepth(depths4.w);
-	float depth1 = ClampDepth(depths4.z);
-	float depth2 = ClampDepth(depths4.x);
-	float depth3 = ClampDepth(depths4.y);
+	float depth0 = depths4.w;
+	float depth1 = depths4.z;
+	float depth2 = depths4.x;
+	float depth3 = depths4.y;
 
 	// MIP 1
 	float dm1 = DepthMIPFilter(depth0, depth1, depth2, depth3);
 	g_scratchDepths[GTid.x][GTid.y] = dm1;
+	halfResDepth[baseCoord] = dm1;
 
 	GroupMemoryBarrierWithGroupSync();
 
