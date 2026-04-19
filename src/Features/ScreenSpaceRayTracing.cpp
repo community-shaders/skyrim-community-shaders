@@ -114,7 +114,6 @@ void ScreenSpaceRayTracing::SetupResources()
         mainTex.texture->GetDesc(&texDesc);
         texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
         texDesc.MipLevels = 1;
-        texDesc.MiscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
         texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
@@ -137,7 +136,6 @@ void ScreenSpaceRayTracing::SetupResources()
 
         // texColor: single-mip for color input
         texDesc.MipLevels = 1;
-        texDesc.MiscFlags &= ~D3D11_RESOURCE_MISC_GENERATE_MIPS;
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
         srvDesc.Texture2D.MipLevels = 1;
         texColor = eastl::make_unique<Texture2D>(texDesc);
@@ -146,7 +144,6 @@ void ScreenSpaceRayTracing::SetupResources()
 
         // Restore single-mip settings for remaining textures
         texDesc.MipLevels = 1;
-        texDesc.MiscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
         srvDesc.Texture2D.MipLevels = 1;
 
