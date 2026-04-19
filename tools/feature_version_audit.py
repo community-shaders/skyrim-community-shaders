@@ -186,28 +186,33 @@ def get_feature_ini_metadata(feature_dir_or_ini_path):
     if not sections:
         sections = ['Info'] if parser.has_section('Info') else []
 
-    metadata = {}
+    metadata = {'auto_upload': False}
     for section in sections:
         if not parser.has_section(section):
             continue
         section_items = dict(parser.items(section))
         # ConfigParser converts keys to lowercase, so look for both variants
-        # Parse AutoUpload as boolean (defaults to false if not specified — opt-in)
-        auto_upload_str = section_items.get('autoupload') or section_items.get('auto_upload') or 'false'
-        auto_upload = auto_upload_str.lower() not in ('false', '0', 'no')
+        auto_upload_str = section_items.get('autoupload') or section_items.get('auto_upload')
+        if auto_upload_str is not None:
+            metadata['auto_upload'] = str(auto_upload_str).strip().lower() not in ('false', '0', 'no', 'off', '')
 
-        metadata.update({
+        section_metadata = {
             'mod_id': section_items.get('nexusmodid') or section_items.get('nexus_mod_id') or section_items.get('mod_id'),
             'mod_filename': section_items.get('nexusfilename') or section_items.get('nexus_filename') or section_items.get('nexusmodfilename') or section_items.get('nexus_mod_filename') or section_items.get('mod_filename') or section_items.get('modname') or section_items.get('name'),
             'mod_link': section_items.get('nexusmodlink') or section_items.get('nexus_mod_link') or section_items.get('mod_link') or section_items.get('link'),
             'description': section_items.get('nexusdescription') or section_items.get('nexus_description') or section_items.get('description'),
             'artifact_pattern': section_items.get('nexusartifactpattern') or section_items.get('nexus_artifact_pattern') or section_items.get('artifact_pattern'),
             'short_name': section_items.get('shortname') or section_items.get('short_name') or section_items.get('nexusshortname') or section_items.get('nexus_short_name'),
-            'auto_upload': auto_upload,
-        })
+        }
+        metadata.update({k: v for k, v in section_metadata.items() if v is not None and v != ""})
         key_features = section_items.get('nexuskeyfeatures') or section_items.get('nexus_key_features') or section_items.get('key_features') or section_items.get('keyfeatures')
         if key_features:
-            metadata['key_features'] = [k.strip() for k in re.split(r'[;,]', key_features) if k.strip()]
+            parsed_kf = [k.strip() for k in re.split(r'[;,]', key_features) if k.strip()]
+            existing_kf = metadata.get('key_features', [])
+            for kf in parsed_kf:
+                if kf not in existing_kf:
+                    existing_kf.append(kf)
+            metadata['key_features'] = existing_kf
 
     return {k: v for k, v in metadata.items() if v is not None and v != ""}
 
@@ -718,10 +723,11 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 if status == "A":
                     # Get the commit that added this file (not the latest commit)
                     try:
-                        add_commit = subprocess.check_output(
+                        add_commits = subprocess.check_output(
                             ["git", "log", "--follow", "--diff-filter=A", "--format=%H", f"{version_ref}..{HEAD_REF}", "--", f],
                             stderr=subprocess.DEVNULL
-                        ).decode("utf-8").strip().split("\n")[0]  # First (oldest) commit
+                        ).decode("utf-8").splitlines()
+                        add_commit = add_commits[-1].strip() if add_commits else None
                         if add_commit:
                             new_code_author = get_commit_author(add_commit)
                             if new_code_author:
@@ -923,36 +929,59 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
 
 
 def build_feature_actions(bump_suggestions, metadata_issues, new_features, get_commit_author, normalize_name):
-    feature_actions = {}
+    consolidated = {}
+    display_name_map = {}
+
     for suggestion in bump_suggestions:
         m = RE_BUMP_SUGGESTION.match(suggestion)
         if m:
             fname, ver, author = m.group(1), m.group(2), m.group(3)
-            if fname not in feature_actions:
-                feature_actions[fname] = {"actions": [], "author": author}
-            feature_actions[fname]["actions"].append(f"Bump INI version to `{ver}`")
+            norm = normalize_name(fname)
+            display_name_map.setdefault(norm, fname)
+            if ' ' in fname and ' ' not in display_name_map[norm]:
+                display_name_map[norm] = fname
+            if norm not in consolidated:
+                consolidated[norm] = {"actions": [], "author": author}
+            consolidated[norm]["actions"].append(f"Bump INI version to `{ver}`")
+            if author and not consolidated[norm]["author"]:
+                consolidated[norm]["author"] = author
+
     for name, fields in metadata_issues:
-        if name not in feature_actions:
-            feature_actions[name] = {"actions": [], "author": None}
-        feature_actions[name]["actions"].append(f"Update INI: add {', '.join(fields)}")
+        norm = normalize_name(name)
+        display_name_map.setdefault(norm, name)
+        if ' ' in name and ' ' not in display_name_map[norm]:
+            display_name_map[norm] = name
+        if norm not in consolidated:
+            consolidated[norm] = {"actions": [], "author": None}
+        consolidated[norm]["actions"].append(f"Update INI: add {', '.join(fields)}")
+
     # Add new features with authors
     for feat_name, _, commit in new_features:
+        norm = normalize_name(feat_name)
+        display_name_map.setdefault(norm, feat_name)
+        if ' ' in feat_name and ' ' not in display_name_map[norm]:
+            display_name_map[norm] = feat_name
         author = get_commit_author(commit) if commit else None
-        if feat_name not in feature_actions:
-            feature_actions[feat_name] = {"actions": [], "author": author}
-        if "New feature" not in "".join(feature_actions[feat_name]["actions"]):
-            feature_actions[feat_name]["actions"].append("New feature")
-            feature_actions[feat_name]["author"] = author
+        if norm not in consolidated:
+            consolidated[norm] = {"actions": [], "author": author}
+        if "New feature" not in "".join(consolidated[norm]["actions"]):
+            consolidated[norm]["actions"].append("New feature")
+        if author and not consolidated[norm]["author"]:
+            consolidated[norm]["author"] = author
+
+    feature_actions = {}
+    for norm, info in consolidated.items():
+        feature_actions[display_name_map[norm]] = info
 
     # Also assign authors to existing entries if not already set
     new_features_map = {normalize_name(n): (commit, get_commit_author(commit) if commit else None) for n, _, commit in new_features}
-    for name in feature_actions:
-        if not feature_actions[name]["author"]:
-            norm = normalize_name(name)
+    for disp, info in feature_actions.items():
+        if not info["author"]:
+            norm = normalize_name(disp)
             if norm in new_features_map:
                 commit, author = new_features_map[norm]
                 if author:
-                    feature_actions[name]["author"] = author
+                    info["author"] = author
     return feature_actions
 
 def build_author_stats(feature_analysis, feature_actions):
@@ -1031,7 +1060,6 @@ def main():
     parser.add_argument('--export-nexus-matrix', action='store_true', help='Export a JSON Nexus upload matrix and exit')
     parser.add_argument('--matrix-output', type=str, default='nexus-matrix.json', help='Output filename for Nexus matrix JSON')
     parser.add_argument('--nexus-metadata-file', type=str, help='Optional Nexus metadata JSON file exported from nexus_mods_api')
-    # NEXUS_API_KEY is read from the environment at runtime; never pass secrets on the CLI
     parser.add_argument('--all-features', action='store_true', help='Include all Nexus-capable features in export, not just version-changed ones')
     parser.add_argument('--core-mod-id', type=str, default='86492', help='Core Nexus mod ID for the generated upload matrix')
     parser.add_argument('--core-filename', type=str, default='Community Shaders', help='Core Nexus filename for the generated upload matrix')
