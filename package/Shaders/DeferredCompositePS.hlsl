@@ -65,6 +65,13 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float alpha = roughness * roughness;
 	ao = SpecularOcclusion(saturate(NdotV), alpha, ao);
 
+#	if defined(SSRT)
+	if (SharedData::ssrtSettings.EnableSpecular) {
+		il = 0;
+		return;
+	}
+#	endif
+
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
 	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
@@ -88,6 +95,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #		define IBL_DEFERRED
 #		include "IBL/IBL.hlsli"
 #	endif
+#endif
+
+#if defined(SSRT)
+Texture2D<float4> SSRTexture : register(t17);
 #endif
 
 struct PS_INPUT
@@ -307,6 +318,13 @@ PS_OUTPUT main(PS_INPUT input)
 		ssgiIlSpecular = max(0, Color::YCoCgToRGB(float3(ssgiIlSpecular.x, lerp(ssgiIlSpecular.yz, Color::RGBToYCoCg(finalIrradiance).yz, 0.5))));
 
 		finalIrradiance += ssgiIlSpecular;
+#	endif
+
+#	if defined(SSRT)
+		if (SharedData::ssrtSettings.EnableSpecular) {
+			float4 ssrIrradiance = SSRTexture[pixCoord];
+			finalIrradiance = any(ssrIrradiance.rgb > 0) ? ssrIrradiance.rgb : finalIrradiance;
+		}
 #	endif
 
 		color += reflectance * finalIrradiance;
