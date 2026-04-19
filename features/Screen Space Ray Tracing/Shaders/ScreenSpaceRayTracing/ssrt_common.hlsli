@@ -3,6 +3,7 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/Game.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"

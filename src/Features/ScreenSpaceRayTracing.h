@@ -1,5 +1,7 @@
 #pragma once
 
+#define ENABLE_SHARC
+
 struct ScreenSpaceRayTracing : Feature
 {
     static ScreenSpaceRayTracing* GetSingleton()

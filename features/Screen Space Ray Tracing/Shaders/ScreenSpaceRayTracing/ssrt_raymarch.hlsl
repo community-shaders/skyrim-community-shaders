@@ -632,7 +632,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             ao = GetSpecularOcclusionFromAmbientOcclusion(NdotV, ao, roughness);
             envColor *= ao;
 #   else
-            float3 multiBounceAO = Color::MultiBounceAO(albedo, ao);
+            float3 multiBounceAO = MultiBounceAO(albedo, ao);
             envColor *= multiBounceAO;
 #   endif
             sampleColor.xyz = lerp(envColor, sampleColor.xyz, confidence);
