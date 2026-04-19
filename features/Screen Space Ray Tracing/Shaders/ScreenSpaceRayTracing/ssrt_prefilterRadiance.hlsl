@@ -1,7 +1,6 @@
 #include "ScreenSpaceRayTracing/ssrt_common.hlsli"
 
 Texture2D<float4> DiffuseTexture : register(t0);
-Texture2D<float3> SpecularTexture : register(t1);
 
 RWTexture2D<float4> outColor0 : register(u0);
 RWTexture2D<float4> outColor1 : register(u1);
@@ -9,19 +8,13 @@ RWTexture2D<float4> outColor2 : register(u2);
 RWTexture2D<float4> outColor3 : register(u3);
 RWTexture2D<float4> outColor4 : register(u4);
 
-float4 CombineColor(uint2 coord)
-{
-    float3 color = Color::IrradianceToGamma(Color::IrradianceToLinear(DiffuseTexture[coord].xyz) + SpecularTexture[coord].xyz);
-    return float4(color, 1.0f);
-}
-
-// Average of center 2x2 within a 4x4 full-res block, with color combination
+// Average of center 2x2 within a 4x4 full-res block
 float4 DownsampleColor4x4(uint2 fullRegionTL)
 {
-    float4 c0 = CombineColor(fullRegionTL + uint2(1, 1));
-    float4 c1 = CombineColor(fullRegionTL + uint2(2, 1));
-    float4 c2 = CombineColor(fullRegionTL + uint2(1, 2));
-    float4 c3 = CombineColor(fullRegionTL + uint2(2, 2));
+    float4 c0 = Color::IrradianceToLinear(DiffuseTexture[fullRegionTL + uint2(1, 1)].xyz);
+    float4 c1 = Color::IrradianceToLinear(DiffuseTexture[fullRegionTL + uint2(2, 1)].xyz);
+    float4 c2 = Color::IrradianceToLinear(DiffuseTexture[fullRegionTL + uint2(1, 2)].xyz);
+    float4 c3 = Color::IrradianceToLinear(DiffuseTexture[fullRegionTL + uint2(2, 2)].xyz);
     return (c0 + c1 + c2 + c3) * 0.25f;
 }
 

@@ -525,7 +525,6 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             // ReprojectHit(MotionVectorTexture, LinearSampler, hit, eyeIndex, projUV);
 
             sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz;
-            sampleColor = Color::IrradianceToLinear(sampleColor);
 #if !defined(SSRT_SPECULAR)
             sampleColor *= SharedData::ssrtSettings.DiffuseMult;
 #else
