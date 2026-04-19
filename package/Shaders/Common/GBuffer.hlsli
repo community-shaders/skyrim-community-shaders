@@ -1,40 +1,24 @@
 #ifndef __GBUFFER_DEPENDENCY_HLSL__
 #define __GBUFFER_DEPENDENCY_HLSL__
 
-// https://knarkowicz.wordpress.com/2014/04/16/octahedron-normal-vector-encoding/
-
 namespace GBuffer
 {
 
-	half2 OctWrap(half2 v)
+	float2 EncodeNormal(float3 n)
 	{
-		return (1.0h - abs(v.yx)) * (v.xy >= 0.0h ? 1.0h : -1.0h);
-	}
-
-	half2 EncodeNormal(half3 n)
-	{
-		n = -n;
-		n /= (abs(n.x) + abs(n.y) + abs(n.z));
-		n.xy = n.z >= 0.0h ? n.xy : OctWrap(n.xy);
-		n.xy = n.xy * 0.5h + 0.5h;
-		return n.xy;
-	}
-
-	half3 DecodeNormal(half2 f)
-	{
-		f = f * 2.0h - 1.0h;
-		// https://twitter.com/Stubbesaurus/status/937994790553227264
-		half3 n = half3(f.x, f.y, 1.0h - abs(f.x) - abs(f.y));
-		half t = saturate(-n.z);
-		n.xy += n.xy >= 0.0h ? -t : t;
-		return -normalize(n);
-	}
-
-	half2 EncodeNormalVanilla(half3 n)
-	{
-		n.z = max(1.0h / 1000.0h, sqrt(8.0h + -8.0h * n.z));
+		n.z = max(0.001, sqrt(8.0 - 8.0 * n.z));
 		n.xy /= n.z;
-		return n.xy + 0.5h;
+		return n.xy + 0.5;
+	}
+
+	float3 DecodeNormal(float2 enc)
+	{
+		float2 fenc = enc * 4.0 - 2.0;
+		float f = dot(fenc, fenc);
+		float3 n;
+		n.xy = fenc * sqrt(1.0 - f / 4.0);
+		n.z = f / 2.0 - 1.0;
+		return n;
 	}
 
 }
