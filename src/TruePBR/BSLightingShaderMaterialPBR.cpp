@@ -20,7 +20,10 @@ BSLightingShaderMaterialPBR* BSLightingShaderMaterialPBR::Make()
 
 RE::BSShaderMaterial* BSLightingShaderMaterialPBR::Create()
 {
-	return Make();
+	// Must use regular heap (not scrap heap like Make()). BSLightingShaderProperty::LinkObject
+	// calls ScrapHeap::Free() after LinkMaterial — if Create() used scrap heap, it would pop
+	// the canonical off the stack, causing immediate use-after-free in property->material.
+	return new BSLightingShaderMaterialPBR();
 }
 
 void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
