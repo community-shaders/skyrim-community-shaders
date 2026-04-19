@@ -76,22 +76,20 @@ void PrecipitationWidget::DrawWidget()
 
 				ImGui::SeparatorText("Texture Path");
 				const bool inputChanged = ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer));
-				{
-					std::string_view buf(textureBuffer);
-					if (buf != lastCheckedBuffer) {
-						lastCheckedBuffer = std::string(buf);
-						lastCheckedExists = WeatherUtils::TexturePath::ExistsOnDisk(buf);
-					}
-					if (inputChanged && lastCheckedExists) {
-						settings.particleTexture = lastCheckedBuffer;
-						changed = true;
-					}
-					if (settings.particleTexture != buf && !buf.empty()) {
-						if (!WeatherUtils::TexturePath::HasDdsExtension(buf))
-							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must end with '.dds'");
-						else if (!lastCheckedExists)
-							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/textures/.");
-					}
+				std::string_view buf(textureBuffer);
+				if (buf != lastCheckedBuffer) {
+					lastCheckedBuffer = std::string(buf);
+					lastCheckedExists = WeatherUtils::TexturePath::ExistsOnDisk(buf);
+				}
+				if (inputChanged && lastCheckedExists) {
+					settings.particleTexture = lastCheckedBuffer;
+					changed = true;
+				}
+				if (settings.particleTexture != buf && !buf.empty()) {
+					if (!WeatherUtils::TexturePath::HasDdsExtension(buf))
+						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must end with '.dds'");
+					else if (!lastCheckedExists)
+						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/textures/.");
 				}
 
 				EndScrollableContent();
