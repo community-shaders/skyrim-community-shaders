@@ -218,7 +218,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 albedo = AlbedoTexture[pixCoord];
 #	endif
 		float3 linAlbedoSSRT = Color::IrradianceToLinear(albedo);
-		float3 ssrtDiffuse = SSRTDiffuseTexture[pixCoord].xyz;
+		float3 ssrtDiffuse = SSRTDiffuseTexture[pixCoord >> 2].xyz;
 		linDiffuseColor += ssrtDiffuse * linAlbedoSSRT;
 	}
 #endif
@@ -334,7 +334,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if defined(SSRT)
 		if (SharedData::ssrtSettings.EnableSpecular) {
-			float4 ssrIrradiance = SSRTexture[pixCoord];
+			float4 ssrIrradiance = SSRTexture[pixCoord >> 2];
 			finalIrradiance = any(ssrIrradiance.rgb > 0) ? ssrIrradiance.rgb : finalIrradiance;
 		}
 #	endif

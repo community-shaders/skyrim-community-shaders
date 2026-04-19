@@ -1,7 +1,5 @@
 #pragma once
 
-#define ENABLE_SHARC
-
 struct ScreenSpaceRayTracing : Feature
 {
     static ScreenSpaceRayTracing* GetSingleton()
@@ -22,8 +20,7 @@ struct ScreenSpaceRayTracing : Feature
                 "Realistic indirect lighting",
                 "Importance sampling for advanced reflections based on roughness",
                 "Efficient ray marching with Hi-Z buffer",
-                "Uses dynamic cubemaps as fallback for missing information",
-                "Spatially Hashed Radiance Cache (SHARC)"
+                "Uses dynamic cubemaps as fallback for missing information"
             }
 		};
 	}
@@ -58,9 +55,6 @@ struct ScreenSpaceRayTracing : Feature
         float AmbientMult = 0.0f;
         float OcclusionStrength = 1.0f;
         float CubemapNormalization = 0.0f;
-#ifdef ENABLE_SHARC
-        bool EnableSharc = false;
-#endif
     } settings;
 
     struct alignas(16) SharedData
@@ -97,39 +91,24 @@ struct ScreenSpaceRayTracing : Feature
     eastl::unique_ptr<Texture2D> texColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRTDiffuseColor = nullptr;
-    eastl::unique_ptr<Texture2D> texHitPDF = nullptr;
-    eastl::unique_ptr<Texture2D> texHistory = nullptr;
-    eastl::unique_ptr<Texture2D> texHistoryDiffuse = nullptr;
-    eastl::unique_ptr<Texture2D> texHistoryNormals = nullptr;
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
-
-#ifdef ENABLE_SHARC
-    eastl::unique_ptr<Buffer> sharcHashEntries = nullptr;
-    eastl::unique_ptr<Buffer> sharcHashCopyOffsets = nullptr;
-    eastl::unique_ptr<Buffer> sharcVoxelData = nullptr;
-    eastl::unique_ptr<Buffer> sharcVoxelDataPrev = nullptr;
-#endif
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
     static const uint maxMips = 9;
-    static const uint sharcNumEntries = 0x100000;
+    static const uint maxColorMips = 5;
 
     std::array<winrt::com_ptr<ID3D11ShaderResourceView>, maxMips> depthSRVs = { nullptr };
 	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, maxMips> depthUAVs = { nullptr };
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, maxColorMips> colorUAVs = { nullptr };
 
     winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
 
-    winrt::com_ptr<ID3D11ComputeShader> preprocessDepthCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> prefilterDepthCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchSpecularCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> diffuseCompositeCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialSpecularCS = nullptr;
-#ifdef ENABLE_SHARC
-    winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseSharcCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> sharcUpdateRaymarchCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> sharcResolveCS = nullptr;
-#endif
 };

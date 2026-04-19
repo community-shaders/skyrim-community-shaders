@@ -11,27 +11,6 @@
 #include "ScreenSpaceGI.h"
 #include "Skylighting.h"
 
-#ifdef ENABLE_SHARC
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    ScreenSpaceRayTracing::Settings,
-    EnableSpecular,
-    MaxSteps,
-    MaxMips,
-    Thickness,
-    NormalBias,
-    BRDFBias,
-    UseDynamicCubemapsAsFallback,
-    UseDynamicCubemapsAsFallbackSpecular,
-    DiffuseSPP,
-    EnableDiffuse,
-    SpecularMult,
-    DiffuseMult,
-    AmbientMult,
-    OcclusionStrength,
-    CubemapNormalization,
-    EnableSharc
-)
-#else
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ScreenSpaceRayTracing::Settings,
     EnableSpecular,
@@ -50,7 +29,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     OcclusionStrength,
     CubemapNormalization
 )
-#endif
 
 void ScreenSpaceRayTracing::DrawSettings()
 {
@@ -88,13 +66,6 @@ void ScreenSpaceRayTracing::DrawSettings()
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("Matches cubemap luminance with ambient color.");
 
-    ImGui::Separator();
-
-#ifdef ENABLE_SHARC
-    ImGui::Checkbox("Enable SHARC", &settings.EnableSharc);
-    if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("(Experimental) Enables Spatially Hashed Radiance Cache (SHARC) to improve diffuse quality. This requires more memory and might impact performance.");
-#endif
     ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
@@ -105,9 +76,6 @@ void ScreenSpaceRayTracing::DrawSettings()
         BUFFER_VIEWER_NODE(texColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRTDiffuseColor, debugRescale)
-        BUFFER_VIEWER_NODE(texHistory, debugRescale)
-        BUFFER_VIEWER_NODE(texHistoryDiffuse, debugRescale)
-        BUFFER_VIEWER_NODE(texHitPDF, debugRescale)
         BUFFER_VIEWER_NODE(texOutput, debugRescale)
 
 		ImGui::TreePop();
@@ -162,35 +130,43 @@ void ScreenSpaceRayTracing::SetupResources()
 			.Texture2D = { .MipSlice = 0 }
 		};
 
+        // Quarter-resolution textures: color input, output, and specular/diffuse results
+        texDesc.Width >>= 2;
+        texDesc.Height >>= 2;
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+        // texColor: mip pyramid for Hi-Z color sampling
+        texDesc.MipLevels = maxColorMips;
+        texDesc.MiscFlags &= ~D3D11_RESOURCE_MISC_GENERATE_MIPS;
+        srvDesc.Texture2D.MipLevels = maxColorMips;
         texColor = eastl::make_unique<Texture2D>(texDesc);
         texColor->CreateSRV(srvDesc);
-        texColor->CreateUAV(uavDesc);
+        for (uint i = 0; i < maxColorMips; i++) {
+            D3D11_UNORDERED_ACCESS_VIEW_DESC mipUavDesc = {
+                .Format = texDesc.Format,
+                .ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+                .Texture2D = { .MipSlice = i }
+            };
+            DX::ThrowIfFailed(device->CreateUnorderedAccessView(texColor->resource.get(), &mipUavDesc, colorUAVs[i].put()));
+        }
+
+        // Restore single-mip settings for remaining textures
+        texDesc.MipLevels = 1;
+        texDesc.MiscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
+        srvDesc.Texture2D.MipLevels = 1;
+
         texSSRColor = eastl::make_unique<Texture2D>(texDesc);
         texSSRColor->CreateSRV(srvDesc);
         texSSRColor->CreateUAV(uavDesc);
         texSSRTDiffuseColor = eastl::make_unique<Texture2D>(texDesc);
         texSSRTDiffuseColor->CreateSRV(srvDesc);
         texSSRTDiffuseColor->CreateUAV(uavDesc);
-        texHitPDF = eastl::make_unique<Texture2D>(texDesc);
-        texHitPDF->CreateSRV(srvDesc);
-        texHitPDF->CreateUAV(uavDesc);
-        texHistory = eastl::make_unique<Texture2D>(texDesc);
-        texHistory->CreateSRV(srvDesc);
-        texHistory->CreateUAV(uavDesc);
-        texHistoryDiffuse = eastl::make_unique<Texture2D>(texDesc);
-        texHistoryDiffuse->CreateSRV(srvDesc);
-        texHistoryDiffuse->CreateUAV(uavDesc);
         texOutput = eastl::make_unique<Texture2D>(texDesc);
         texOutput->CreateSRV(srvDesc);
         texOutput->CreateUAV(uavDesc);
 
-        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
-        texHistoryNormals = eastl::make_unique<Texture2D>(texDesc);
-        texHistoryNormals->CreateSRV(srvDesc);
-        texHistoryNormals->CreateUAV(uavDesc);
-
+        // Quarter-resolution depth pyramid
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
-
         texDesc.MipLevels = maxMips;
         srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
         texDepth = eastl::make_unique<Texture2D>(texDesc);
@@ -213,60 +189,6 @@ void ScreenSpaceRayTracing::SetupResources()
 			DX::ThrowIfFailed(device->CreateUnorderedAccessView(texDepth->resource.get(), &mipUavDesc, depthUAVs[i].put()));
 		}
     }
-
-#ifdef ENABLE_SHARC
-    logger::debug("Creating buffers...");
-	{
-		D3D11_BUFFER_DESC sbDesc{};
-		sbDesc.Usage = D3D11_USAGE_DEFAULT;
-		sbDesc.CPUAccessFlags = 0;
-		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-		srvDesc.Buffer.FirstElement = 0;
-
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
-		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
-		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-		uavDesc.Buffer.FirstElement = 0;
-		uavDesc.Buffer.Flags = 0;
-
-        std::uint32_t numEntries = sharcNumEntries;
-
-        // Hash entries buffer - structured buffer with 64-bits entries to store the hashes
-        // Voxel data buffer - structured buffer with 128-bit entries which stores accumulated radiance and sample count. Two instances are used to store current and previous frame data
-
-        sbDesc.StructureByteStride = sizeof(std::uint64_t);
-        sbDesc.ByteWidth = sbDesc.StructureByteStride * numEntries;
-        sharcHashEntries = eastl::make_unique<Buffer>(sbDesc);
-        srvDesc.Buffer.NumElements = numEntries;
-        uavDesc.Buffer.NumElements = numEntries;
-        sharcHashEntries->CreateSRV(srvDesc);
-        sharcHashEntries->CreateUAV(uavDesc);
-
-        sbDesc.StructureByteStride = sizeof(std::uint32_t);
-        sbDesc.ByteWidth = sbDesc.StructureByteStride * numEntries;
-        sharcHashCopyOffsets = eastl::make_unique<Buffer>(sbDesc);
-        srvDesc.Buffer.NumElements = numEntries;
-        uavDesc.Buffer.NumElements = numEntries;
-        sharcHashCopyOffsets->CreateSRV(srvDesc);
-        sharcHashCopyOffsets->CreateUAV(uavDesc);
-
-        sbDesc.StructureByteStride = 4 * sizeof(uint32_t);
-        sbDesc.ByteWidth = numEntries * sizeof(float4);
-        sharcVoxelData = eastl::make_unique<Buffer>(sbDesc);
-        srvDesc.Buffer.NumElements = numEntries;
-        uavDesc.Buffer.NumElements = numEntries;
-        sharcVoxelData->CreateSRV(srvDesc);
-        sharcVoxelData->CreateUAV(uavDesc);
-        sharcVoxelDataPrev = eastl::make_unique<Buffer>(sbDesc);
-        sharcVoxelDataPrev->CreateSRV(srvDesc);
-        sharcVoxelDataPrev->CreateUAV(uavDesc);
-	}
-#endif
 
     logger::debug("Creating samplers...");
 	{
@@ -294,10 +216,7 @@ void ScreenSpaceRayTracing::SetupResources()
 void ScreenSpaceRayTracing::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &raymarchDiffuseCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS, &diffuseCompositeCS, &spatialSpecularCS,
-#ifdef ENABLE_SHARC
-        &raymarchDiffuseSharcCS, &sharcUpdateRaymarchCS, &sharcResolveCS
-#endif
+        &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS, &depthDownsampleCS, &diffuseCompositeCS, &spatialSpecularCS,
     };
 
     for (auto shader : shaderPtrs)
@@ -330,14 +249,6 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
 
     defines.push_back({ "DIFFUSE_SPP", DiffuseSPPStr.c_str() });
 
-#ifdef ENABLE_SHARC
-    auto definesSharcUpdate = defines;
-    definesSharcUpdate.push_back({ "SHARC_UPDATE", "1" });
-
-    auto definesSharc = defines;
-    definesSharc.push_back({ "SHARC_RENDER", "1" });
-#endif
-
     auto definesSpecular = defines;
     definesSpecular.push_back({ "SSRT_SPECULAR", nullptr });
 
@@ -345,16 +256,11 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
         shaderInfos = {
             { &raymarchDiffuseCS, "ssrt_raymarch.hlsl", defines },
             { &raymarchSpecularCS, "ssrt_raymarch.hlsl", definesSpecular },
-            { &prepareColorCS, "ssrt_prepare_color.hlsl", {} },
-            { &preprocessDepthCS, "ssrt_preprocess_depth.hlsl", {} },
+            { &prefilterRadianceCS, "ssrt_prefilterRadiance.hlsl", {} },
+            { &prefilterDepthCS, "ssrt_prefilterDepths.hlsl", {} },
             { &depthDownsampleCS, "ssrt_depth_downsample.hlsl", {} },
             { &diffuseCompositeCS, "ssrt_diffuse_composite.hlsl", {} },
             { &spatialSpecularCS, "ssrt_spatial.hlsl", definesSpecular },
-#ifdef ENABLE_SHARC
-            { &raymarchDiffuseSharcCS, "ssrt_raymarch.hlsl", definesSharc },
-            { &sharcUpdateRaymarchCS, "ssrt_raymarch.hlsl", definesSharcUpdate },
-            { &sharcResolveCS, "sharc_resolve.hlsl", {} }
-#endif
         };
 
     for (auto& info : shaderInfos) {
@@ -378,7 +284,7 @@ void ScreenSpaceRayTracing::Prepass()
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 
     float2 size = Util::ConvertToDynamic(state->screenSize);
-    float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
+    float2 dispatchCount = { (size.x / 4 + 7) / 8, (size.y / 4 + 7) / 8 };
 
     std::array<ID3D11ShaderResourceView*, 5> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
@@ -396,26 +302,28 @@ void ScreenSpaceRayTracing::Prepass()
 
     state->BeginPerfEvent("SSRT Prepass");
 
-    // preprocess depth
+    // prefilter depth: builds mips 0-4 in one pass
     {
-        uavs.at(0) = texDepth->uav.get();
+        std::array<ID3D11UnorderedAccessView*, 5> depthUavs5 = {
+            depthUAVs[0].get(), depthUAVs[1].get(), depthUAVs[2].get(), depthUAVs[3].get(), depthUAVs[4].get()
+        };
         srvs.at(4) = depth.depthSRV;
 
         context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-        context->CSSetShader(preprocessDepthCS.get(), nullptr, 0);
+        context->CSSetUnorderedAccessViews(0, 5, depthUavs5.data(), nullptr);
+        context->CSSetShader(prefilterDepthCS.get(), nullptr, 0);
+        context->Dispatch((uint)((size.x / 8 + 7) / 8), (uint)((size.y / 8 + 7) / 8), 1);
 
-        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-
-        // context->GenerateMips(texDepth->srv.get());
-
-        resetViews();
+        srvs.fill(nullptr);
+        std::array<ID3D11UnorderedAccessView*, 5> nullUavs5 = {};
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, 5, nullUavs5.data(), nullptr);
     }
 
-    // downsample depth
+    // downsample depth: mips 5-8
     {
         state->BeginPerfEvent("Downsample Depth - HiZ Buffer");
-        for (int i = 0; i < maxMips - 1; ++i) {
+        for (int i = 4; i < maxMips - 1; ++i) {
             uavs.at(0) = depthUAVs[i + 1].get();
             srvs.at(0) = depthSRVs[i].get();
 
@@ -457,8 +365,8 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     auto& skylighting = globals::features::skylighting;
 
     float2 size = Util::ConvertToDynamic(state->screenSize);
-    float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
-    
+    float2 dispatchCount = { (size.x / 4 + 7) / 8, (size.y / 4 + 7) / 8 };
+
     SSRTCB ssrCBData;
     {
         ssrCBData.MaxSteps = settings.MaxSteps;
@@ -475,7 +383,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 12> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
 
     auto resetViews = [&]() {
 		srvs.fill(nullptr);
@@ -489,19 +397,24 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 
     context->CSSetSamplers(0, 1, samplers.data());
 
-    // prepare color
-    srvs.at(0) = main.SRV;
-    srvs.at(1) = specular.SRV;
-    srvs.at(2) = normal.SRV;
-    uavs.at(0) = texColor->uav.get();
+    // prefilter radiance: builds color mip pyramid (mips 0-4)
+    {
+        std::array<ID3D11UnorderedAccessView*, maxColorMips> colorUavArr = {
+            colorUAVs[0].get(), colorUAVs[1].get(), colorUAVs[2].get(), colorUAVs[3].get(), colorUAVs[4].get()
+        };
+        srvs.at(0) = main.SRV;
+        srvs.at(1) = specular.SRV;
 
-    context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-    context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-    context->CSSetShader(prepareColorCS.get(), nullptr, 0);
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, maxColorMips, colorUavArr.data(), nullptr);
+        context->CSSetShader(prefilterRadianceCS.get(), nullptr, 0);
+        context->Dispatch((uint)((size.x / 8 + 7) / 8), (uint)((size.y / 8 + 7) / 8), 1);
 
-    context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-
-    resetViews();
+        srvs.fill(nullptr);
+        std::array<ID3D11UnorderedAccessView*, maxColorMips> nullColorUavArr = {};
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, maxColorMips, nullColorUavArr.data(), nullptr);
+    }
 
     const auto envTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr;
 	const auto envReflectionsTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr;
@@ -518,11 +431,9 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 
     // raymarch
     state->BeginPerfEvent("Raymarch");
-    
-    uavs.at(0) = texSSRColor->uav.get();
-    uavs.at(1) = texHitPDF->uav.get();
 
-    srvs.at(0) = texHistory->srv.get();
+    uavs.at(0) = texSSRColor->uav.get();
+
     srvs.at(1) = motion.SRV;
     srvs.at(2) = normal.SRV;
     srvs.at(3) = texColor->srv.get();
@@ -546,10 +457,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 
     resetViews();
 
-    // output
-    context->CopyResource(texHistoryNormals->resource.get(), normal.texture);
     context->CopyResource(texOutput->resource.get(), texSSRColor->resource.get());
-    context->CopyResource(texHistory->resource.get(), texSSRColor->resource.get());
 
     context->CSSetShader(nullptr, nullptr, 0);
 
@@ -579,8 +487,8 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     auto& skylighting = globals::features::skylighting;
 
     float2 size = Util::ConvertToDynamic(state->screenSize);
-    float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
-    
+    float2 dispatchCount = { (size.x / 4 + 7) / 8, (size.y / 4 + 7) / 8 };
+
     SSRTCB ssrCBData;
     {
         ssrCBData.MaxSteps = settings.MaxSteps;
@@ -597,7 +505,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 13> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 6> uavs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
 
     auto resetViews = [&]() {
 		srvs.fill(nullptr);
@@ -625,15 +533,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     }
 
     uavs.at(0) = texSSRTDiffuseColor->uav.get();
-    uavs.at(1) = texHitPDF->uav.get();
-#ifdef ENABLE_SHARC
-    uavs.at(2) = sharcHashEntries->uav.get();
-    uavs.at(3) = sharcHashCopyOffsets->uav.get();
-    uavs.at(4) = sharcVoxelData->uav.get();
-    uavs.at(5) = sharcVoxelDataPrev->uav.get();
-#endif
 
-    srvs.at(0) = texHistoryDiffuse->srv.get();
     srvs.at(1) = motion.SRV;
     srvs.at(2) = normal.SRV;
     srvs.at(3) = main.SRV;
@@ -650,35 +550,9 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
     context->CSSetConstantBuffers(1, 1, &buffer);
-#ifdef ENABLE_SHARC
-    if (settings.EnableSharc) {
-        state->BeginPerfEvent("SHARC Update");
-        context->CSSetShader(sharcUpdateRaymarchCS.get(), nullptr, 0);
-
-        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-        state->EndPerfEvent();
-
-        state->BeginPerfEvent("SHARC Resolve");
-        context->CSSetShader(sharcResolveCS.get(), nullptr, 0);
-
-        context->Dispatch(sharcNumEntries / 256u, 1, 1);
-        state->EndPerfEvent();
-    }
-
-    context->CSSetShader(settings.EnableSharc ? raymarchDiffuseSharcCS.get() : raymarchDiffuseCS.get(), nullptr, 0);
-#else
     context->CSSetShader(raymarchDiffuseCS.get(), nullptr, 0);
-#endif
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
     resetViews();
-
-#ifdef ENABLE_SHARC
-    if (settings.EnableSharc) {
-        std::swap(sharcVoxelData, sharcVoxelDataPrev);
-    }
-#endif
-
-    context->CopyResource(texHistoryDiffuse->resource.get(), texSSRTDiffuseColor->resource.get());
 
     state->EndPerfEvent();
 
