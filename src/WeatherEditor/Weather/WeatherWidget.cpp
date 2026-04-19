@@ -16,22 +16,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DirectionalColor, max, min)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DALC, specular, fresnelPower, directional)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Cloud, cloudLayerSpeedY, cloudLayerSpeedX, color, cloudAlpha, enabled, texturePath)
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::ImageSpaceSettings,
-	hdrEyeAdaptSpeed,
-	hdrBloomBlurRadius,
-	hdrBloomThreshold,
-	hdrBloomScale,
-	hdrSunlightScale,
-	hdrSkyScale,
-	cinematicSaturation,
-	cinematicBrightness,
-	cinematicContrast,
-	tintColor,
-	tintAmount,
-	dofStrength,
-	dofDistance,
-	dofRange)
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
 	parent,
 	inheritFlags,
@@ -41,7 +25,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
 	atmosphereColors,
 	dalc,
 	clouds,
-	imageSpaces,
 	featureSettings)
 
 WeatherWidget::~WeatherWidget()
@@ -1660,7 +1643,6 @@ bool WeatherWidget::Settings::operator==(const Settings& o) const
 	       std::equal(std::begin(atmosphereColors), std::end(atmosphereColors), std::begin(o.atmosphereColors)) &&
 	       std::equal(std::begin(dalc), std::end(dalc), std::begin(o.dalc)) &&
 	       std::equal(std::begin(clouds), std::end(clouds), std::begin(o.clouds)) &&
-	       std::equal(std::begin(imageSpaces), std::end(imageSpaces), std::begin(o.imageSpaces)) &&
 	       featureSettings == o.featureSettings;
 }
 
