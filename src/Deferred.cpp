@@ -369,25 +369,24 @@ void Deferred::DeferredPasses()
 		}
 
 		// SRVs
-		ID3D11ShaderResourceView* srvs[18]{
-			specular.SRV,
-			albedo.SRV,
-			normalRoughness.SRV,
-			masks.SRV,
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,
-			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,
-			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,
-			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
-			ssgi_ao,
-			ssgi_hq_spec ? nullptr : ssgi_y,
-			ssgi_hq_spec ? nullptr : ssgi_cocg,
-			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,
-			nullptr,
-			mainCopy.SRV,
+		ID3D11ShaderResourceView* srvs[17]{
+			mainCopy.SRV,                                                                          // t0  MainInputTexture
+			specular.SRV,                                                                          // t1  SpecularTexture
+			normalRoughness.SRV,                                                                   // t2  NormalRoughnessTexture
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,  // t3  DepthTexture
+			albedo.SRV,                                                                            // t4  AlbedoTexture
+			masks.SRV,                                                                             // t5  MasksTexture
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                    // t6  ReflectanceTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,               // t7  EnvTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,    // t8  EnvReflectionsTexture
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,          // t9  SkylightingProbeArray
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr,  // t10 stbn
+			ssgi_ao,                                                                               // t11 SsgiAoTexture
+			ssgi_hq_spec ? nullptr : ssgi_y,                                                       // t12 SsgiYTexture
+			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                    // t13 SsgiCoCgTexture
+			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                 // t14 SsgiSpecularTexture
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                   // t15 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                   // t16 SkyIBLTexture
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);

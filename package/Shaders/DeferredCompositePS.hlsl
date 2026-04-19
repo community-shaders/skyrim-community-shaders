@@ -8,19 +8,29 @@
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #include "Common/VR.hlsli"
 
-Texture2D<float3> SpecularTexture : register(t0);
-Texture2D<unorm float3> AlbedoTexture : register(t1);
+Texture2D<float4> MainInputTexture : register(t0);
+Texture2D<float3> SpecularTexture : register(t1);
+
+#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(DEBUG)
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
-Texture2D<float3> MasksTexture : register(t3);
+#endif
 
-Texture2D<float> DepthTexture : register(t4);
+#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
+Texture2D<float> DepthTexture : register(t3);
+#endif
 
-Texture2D<float4> MainInputTexture : register(t17);
+#if defined(SSGI) || defined(DEBUG)
+Texture2D<unorm float3> AlbedoTexture : register(t4);
+#endif
+
+#if defined(SSGI)
+Texture2D<float3> MasksTexture : register(t5);
+#endif
 
 #if defined(DYNAMIC_CUBEMAPS)
-Texture2D<float3> ReflectanceTexture : register(t5);
-TextureCube<float3> EnvTexture : register(t6);
-TextureCube<float3> EnvReflectionsTexture : register(t7);
+Texture2D<float3> ReflectanceTexture : register(t6);
+TextureCube<float3> EnvTexture : register(t7);
+TextureCube<float3> EnvReflectionsTexture : register(t8);
 
 SamplerState LinearSampler : register(s0);
 #endif
@@ -28,16 +38,15 @@ SamplerState LinearSampler : register(s0);
 #if defined(SKYLIGHTING)
 #	include "Skylighting/Skylighting.hlsli"
 
-Texture3D<sh2> SkylightingProbeArray : register(t8);
-Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t9);
-
+Texture3D<sh2> SkylightingProbeArray : register(t9);
+Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t10);
 #endif
 
 #if defined(SSGI)
-Texture2D<float4> SsgiAoTexture : register(t10);
-Texture2D<float4> SsgiYTexture : register(t11);
-Texture2D<float4> SsgiCoCgTexture : register(t12);
-Texture2D<float4> SsgiSpecularTexture : register(t13);
+Texture2D<float4> SsgiAoTexture : register(t11);
+Texture2D<float4> SsgiYTexture : register(t12);
+Texture2D<float4> SsgiCoCgTexture : register(t13);
+Texture2D<float4> SsgiSpecularTexture : register(t14);
 
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
@@ -103,24 +112,27 @@ PS_OUTPUT main(PS_INPUT input)
 
 	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
-	float3 normalGlossiness = NormalRoughnessTexture[pixCoord];
-	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
-
 	float3 diffuseColor = MainInputTexture[pixCoord].xyz;
 	float3 specularColor = SpecularTexture[pixCoord];
-	float3 albedo = AlbedoTexture[pixCoord];
+	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+
+#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
+	float3 normalGlossiness = NormalRoughnessTexture[pixCoord];
+	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
+	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
 	float depth = DepthTexture[pixCoord];
 	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
+#endif
 
+#if defined(DYNAMIC_CUBEMAPS)
 	float glossiness = normalGlossiness.z;
-
-	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
-	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
+#endif
 
 #if defined(SSGI)
+	float3 albedo = AlbedoTexture[pixCoord];
 
 	float ssgiAo;
 	float3 ssgiIl;
@@ -305,9 +317,22 @@ PS_OUTPUT main(PS_INPUT input)
 
 #if defined(DEBUG)
 
+#	if !defined(SSGI) && !defined(DYNAMIC_CUBEMAPS)
+	float3 normalGlossiness = NormalRoughnessTexture[pixCoord];
+	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
+#	endif
+
+#	if !defined(SSGI)
+	float3 albedo = AlbedoTexture[pixCoord];
+#	endif
+
+#	if !defined(DYNAMIC_CUBEMAPS)
+	float glossiness = normalGlossiness.z;
+#	endif
+
 #	if defined(VR)
 	uv.x += (eyeIndex ? 0.1 : -0.1);
-#	endif  // VR
+#	endif
 
 	if (uv.x < 0.5 && uv.y < 0.5) {
 		color = color;
