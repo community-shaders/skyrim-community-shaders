@@ -27,7 +27,7 @@ public:
 
 	struct Settings
 	{
-		uint32_t mode = 1;
+		uint32_t mode = 0;
 		float intensity = 0.3f;
 		float saturationBoost = 0.2f;
 

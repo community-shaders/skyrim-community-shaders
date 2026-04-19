@@ -114,7 +114,6 @@ void Streamline::LoadInterposer()
 	sl::Preferences pref;
 
 	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureReflex, sl::kFeaturePCL, sl::kFeatureDeepDVC };
-	sl::Feature featuresToLoadVR[] = { sl::kFeatureDLSS, sl::kFeatureReflex, sl::kFeaturePCL, sl::kFeatureDeepDVC };
 
 	pref.featuresToLoad = featuresToLoad;
 	pref.numFeaturesToLoad = _countof(featuresToLoad);
