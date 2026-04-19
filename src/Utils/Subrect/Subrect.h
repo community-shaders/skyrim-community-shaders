@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Feature.h"
+
 #include <vector>
 
 namespace Subrect

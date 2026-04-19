@@ -29,7 +29,7 @@
 // ============================================================================
 
 #include "Feature.h"
-#include "Subrect/Subrect.h"
+#include "Utils/Subrect/Subrect.h"
 
 struct DlssEnhancerFeature : Feature
 {
