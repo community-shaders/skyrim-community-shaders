@@ -357,9 +357,14 @@ void Deferred::DeferredPasses()
 		stateBackup.Backup(context);
 
 		auto& mainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
+		auto normalRoughnessCopyRT = (normalRoughnessRT == RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK)
+		                                 ? RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK_SWAP
+		                                 : RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK;
+		auto& normalRoughnessCopy = renderer->GetRuntimeData().renderTargets[normalRoughnessCopyRT];
 		float2 resolution = Util::ConvertToDynamic(globals::state->screenSize);
 		D3D11_BOX srcBox = { 0, 0, 0, (UINT)resolution.x, (UINT)resolution.y, 1 };
 		context->CopySubresourceRegion(mainCopy.texture, 0, 0, 0, 0, main.texture, 0, &srcBox);
+		context->CopySubresourceRegion(normalRoughnessCopy.texture, 0, 0, 0, 0, normalRoughness.texture, 0, &srcBox);
 
 		// Constant buffers
 		{
@@ -378,7 +383,7 @@ void Deferred::DeferredPasses()
 		ID3D11ShaderResourceView* srvs[17]{
 			mainCopy.SRV,                                                                                           // t0  MainInputTexture
 			specular.SRV,                                                                                           // t1  SpecularTexture
-			normalRoughness.SRV,                                                                                    // t2  NormalRoughnessTexture
+			normalRoughnessCopy.SRV,                                                                                // t2  NormalRoughnessTexture
 			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,          // t3  DepthTexture
 			albedo.SRV,                                                                                             // t4  AlbedoTexture
 			masks.SRV,                                                                                              // t5  MasksTexture
