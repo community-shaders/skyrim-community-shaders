@@ -177,8 +177,8 @@ void VrsSrsBuilder::Build(uint8_t* dst, uint32_t width, uint32_t height, uint32_
 			continue;
 
 		const uint32_t eyeMaxX = std::min(eyeOffsetX + eyeRenderWidth, renderWidth);
-		for (uint32_t ty = 0; ty < renderHeight; ++ty) {
-			for (uint32_t tx = eyeOffsetX; tx < eyeMaxX; ++tx) {
+		for (uint32_t ty = 0; ty < renderHeight && ty < height; ++ty) {
+			for (uint32_t tx = eyeOffsetX; tx < eyeMaxX && tx < width; ++tx) {
 				const uint32_t idx = ty * width + tx;
 
 				const float dxRaw = static_cast<float>(tx) + 0.5f - cx;

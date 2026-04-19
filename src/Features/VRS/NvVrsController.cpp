@@ -136,10 +136,17 @@ bool NvVrsController::EnsureInitialized(ID3D11Device* device)
 
 	NV_D3D1x_GRAPHICS_CAPS caps{};
 	const NvAPI_Status graphicsCapsStatus = NvAPI_D3D1x_GetGraphicsCapabilities(device, NV_D3D1x_GRAPHICS_CAPS_VER, &caps);
-	if (graphicsCapsStatus != NVAPI_OK || !caps.bVariablePixelRateShadingSupported) {
+	if (graphicsCapsStatus != NVAPI_OK) {
 		MarkError(static_cast<int>(graphicsCapsStatus), "EnsureInitialized.GetGraphicsCapabilities");
 		debugState.initialized = true;
 		debugState.supported = false;
+		return false;
+	}
+
+	if (!caps.bVariablePixelRateShadingSupported) {
+		debugState.initialized = true;
+		debugState.supported = false;
+		debugState.lastNvapiStatus = NVAPI_OK;
 		return false;
 	}
 
@@ -222,7 +229,11 @@ bool NvVrsController::EnsureSurface(ID3D11Device* device)
 			srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 			srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 			srvDesc.Texture2D.MipLevels = 1;
-			device->CreateShaderResourceView(debugVisualizationTexture.Get(), &srvDesc, debugVisualizationSRV.ReleaseAndGetAddressOf());
+			auto srvHr = device->CreateShaderResourceView(debugVisualizationTexture.Get(), &srvDesc, debugVisualizationSRV.ReleaseAndGetAddressOf());
+			if (FAILED(srvHr) || !debugVisualizationSRV) {
+				debugVisualizationTexture.Reset();
+				debugVisualizationSRV.Reset();
+			}
 		}
 	}
 	srsBuilder = VrsSrsBuilder{};
