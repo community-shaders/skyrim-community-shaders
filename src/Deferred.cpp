@@ -9,6 +9,7 @@
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
+#include "Features/ScreenSpaceRayTracing.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
@@ -339,6 +340,13 @@ void Deferred::DeferredPasses()
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
+	auto& ssrt = globals::features::screenSpaceRayTracing;
+	if (ssrt.loaded && ssrt.settings.EnableDiffuse)
+		ssrt.DrawSSRTDiffuse();
+
+	auto dispatchCount = Util::GetScreenDispatchCount(true);
+
+
 	auto& sss = globals::features::subsurfaceScattering;
 	if (sss.loaded)
 		sss.DrawSSS();
@@ -348,6 +356,9 @@ void Deferred::DeferredPasses()
 		dynamicCubemaps.UpdateCubemap();
 
 	auto& ibl = globals::features::ibl;
+
+	if (ssrt.loaded && ssrt.settings.EnableSpecular)
+		ssrt.DrawSSRTSpecular();
 
 	// Deferred Composite
 	{
@@ -378,7 +389,7 @@ void Deferred::DeferredPasses()
 		}
 
 		// SRVs
-		ID3D11ShaderResourceView* srvs[17]{
+		ID3D11ShaderResourceView* srvs[18]{
 			mainCopy.SRV,                                                                                           // t0  MainInputTexture
 			specular.SRV,                                                                                           // t1  SpecularTexture
 			normalRoughnessCopy.SRV,                                                                                // t2  NormalRoughnessTexture
@@ -396,6 +407,7 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                                  // t14 SsgiSpecularTexture
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
+			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.texOutput->srv.get() : nullptr,                    // t17 SsrtSpecularTexture
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
@@ -439,6 +451,12 @@ void Deferred::DeferredPasses()
 		if (stereoOpt.IsStencilActive()) {
 			stereoOpt.DeactivateStencil();
 		}
+	}
+
+	// Clear
+	{
+		ID3D11ShaderResourceView* views[17]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 	}
 
 	// VR: Stereo reprojection fills Eye 1 holes here (after DeferredComposite, before SSR/water/sky)
@@ -622,12 +640,43 @@ ID3D11PixelShader* Deferred::GetCompositePS(bool interior)
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
+		if (globals::features::screenSpaceRayTracing.loaded)
+			defines.push_back({ "SSRT", nullptr });
+
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
 		cached = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositePS.hlsl", defines, "ps_5_0"));
 	}
 	return cached;
+}
+
+ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
+{
+	if (!mainCompositeInteriorCS) {
+		logger::debug("Compiling DeferredCompositeCS INTERIOR");
+
+		std::vector<std::pair<const char*, const char*>> defines;
+		defines.push_back({ "INTERIOR", nullptr });
+
+		if (globals::features::dynamicCubemaps.loaded)
+			defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
+
+		if (globals::features::screenSpaceGI.loaded)
+			defines.push_back({ "SSGI", nullptr });
+
+		if (globals::features::ibl.loaded)
+			defines.push_back({ "IBL", nullptr });
+
+		if (globals::features::screenSpaceRayTracing.loaded)
+			defines.push_back({ "SSRT", nullptr });
+
+		if (REL::Module::IsVR())
+			defines.push_back({ "FRAMEBUFFER", nullptr });
+
+		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
+	}
+	return mainCompositeInteriorCS;
 }
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()

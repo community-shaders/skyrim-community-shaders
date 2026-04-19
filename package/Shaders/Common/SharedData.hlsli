@@ -248,6 +248,14 @@ namespace SharedData
 		uint3 _padding;
 	};
 
+	struct SSRTSettings
+    {
+        uint EnableSpecular;
+        float SpecularMult;
+        float DiffuseMult;
+		float AmbientMult;
+    };
+
 	struct ExponentialHeightFogSettings
 	{
 		uint enabled;
@@ -280,6 +288,7 @@ namespace SharedData
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
+		SSRTSettings ssrtSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
 	};
 
