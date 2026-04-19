@@ -254,7 +254,7 @@ float SSRT_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, 
 
     // Don't lookup radiance from the background.
     int2  texel_coords = int2(screen_size * hit.xy * FrameBuffer::DynamicResolutionParams1.xy);
-    float surface_z    = SSRT_LoadDepth(texel_coords / 2, 1);
+    float surface_z    = SSRT_LoadDepth(texel_coords / 8, 1);  // depth pyramid base is quarter-res; mip1 = fullRes/8
 #if SSRT_OPTION_INVERTED_DEPTH
     if (surface_z == 0.0)
     {
@@ -432,6 +432,8 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
                                                 uint3 DTid : SV_DispatchThreadID)
 {
     uint2 screen_size = SharedData::BufferDim.xy;
+    // texDepth pyramid starts at quarter-res; all depth load coords must use this base
+    const float2 depth_screen_size = float2(screen_size) / 4.f;
     uint2 coords = DTid.xy;
     uint2 fullResCoords = coords * 4 + 2;
 #if defined(SSRT_SPECULAR)
@@ -458,7 +460,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 
     bool is_mirror = IsMirrorReflection(roughness);
     int most_detailed_mip = HIZ_MIN_MIP;
-    float2 mip_resolution = SSRT_GetMipResolution(screen_size, most_detailed_mip);
+    float2 mip_resolution = SSRT_GetMipResolution(depth_screen_size, most_detailed_mip);
     float z = SSRT_LoadDepth(uv * mip_resolution * FrameBuffer::DynamicResolutionParams1.xy, most_detailed_mip);
     float3 screen_uv_space_ray_origin = float3(uv, z);
     float3 view_space_ray = ScreenSpaceToViewSpace(screen_uv_space_ray_origin, FrameBuffer::CameraProjInverse[eyeIndex]);
@@ -498,7 +500,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
         hit = SSRT_HierarchicalRaymarch(screen_uv_space_ray_origin,
                                             screen_space_ray_direction,
                                             is_mirror,
-                                            screen_size,
+                                            depth_screen_size,
                                             most_detailed_mip,
                                             roughness,
                                             thickness,
