@@ -389,7 +389,7 @@ void Deferred::DeferredPasses()
 		}
 
 		// SRVs
-		ID3D11ShaderResourceView* srvs[18]{
+		ID3D11ShaderResourceView* srvs[19]{
 			mainCopy.SRV,                                                                                           // t0  MainInputTexture
 			specular.SRV,                                                                                           // t1  SpecularTexture
 			normalRoughnessCopy.SRV,                                                                                // t2  NormalRoughnessTexture
@@ -408,6 +408,7 @@ void Deferred::DeferredPasses()
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
 			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.texOutput->srv.get() : nullptr,                    // t17 SsrtSpecularTexture
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrt.texSSRTDiffuseColor->srv.get() : nullptr,           // t18 SsrtDiffuseTexture
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);

@@ -19,7 +19,7 @@ Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 Texture2D<float> DepthTexture : register(t3);
 #endif
 
-#if defined(SSGI) || defined(DEBUG)
+#if defined(SSGI) || defined(SSRT) || defined(DEBUG)
 Texture2D<unorm float3> AlbedoTexture : register(t4);
 #endif
 
@@ -99,6 +99,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 #if defined(SSRT)
 Texture2D<float4> SSRTexture : register(t17);
+Texture2D<float4> SSRTDiffuseTexture : register(t18);
 #endif
 
 struct PS_INPUT
@@ -209,6 +210,17 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	linDiffuseColor += ssgiIl * linAlbedo;
+#endif
+
+#if defined(SSRT)
+	if (SharedData::ssrtSettings.DiffuseMult > 0.0) {
+#	if !defined(SSGI)
+		float3 albedo = AlbedoTexture[pixCoord];
+#	endif
+		float3 linAlbedoSSRT = Color::IrradianceToLinear(albedo);
+		float3 ssrtDiffuse = SSRTDiffuseTexture[pixCoord].xyz;
+		linDiffuseColor += ssrtDiffuse * linAlbedoSSRT;
+	}
 #endif
 
 	float3 color = linDiffuseColor + specularColor;

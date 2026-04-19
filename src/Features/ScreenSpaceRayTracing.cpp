@@ -881,21 +881,6 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 
     context->CopyResource(texHistoryDiffuse->resource.get(), texSSRTDiffuseColor->resource.get());
 
-    // composite
-    {
-        uavs.at(0) = main.UAV;
-        srvs.at(0) = texSSRTDiffuseColor->srv.get();
-        srvs.at(1) = albedo.SRV;
-
-        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, 1, uavs.data(), nullptr);
-        context->CSSetShader(diffuseCompositeCS.get(), nullptr, 0);
-
-        context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-
-        resetViews();
-    }
-
     state->EndPerfEvent();
 
     context->CSSetShader(nullptr, nullptr, 0);
