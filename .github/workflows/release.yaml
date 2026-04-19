@@ -1,0 +1,77 @@
+name: Semantic Release
+
+on:
+    workflow_dispatch:
+        inputs:
+            release_type:
+                description: "Release type: rc or stable"
+                required: true
+                default: "rc"
+            dry_run:
+                description: "Dry-run for downstream Nexus upload (true uploads nothing)"
+                required: false
+                default: "true"
+
+permissions:
+    contents: write
+    actions: write
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        outputs:
+            new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+            new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Apply feature version bumps
+              run: |
+                  python tools/feature_version_audit.py \
+                    --apply-bumps \
+                    --ci \
+                    --output /tmp/feature-version-audit.txt
+
+            - name: Semantic Release
+              id: semantic
+              uses: cycjimmy/semantic-release-action@v6
+              with:
+                  extra_plugins: |
+                      @google/semantic-release-replace-plugin
+                      @semantic-release/git
+                  tag_format: "v${version}"
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  RELEASE_TYPE: ${{ github.event.inputs.release_type }}
+
+    dispatch-upload:
+        name: Trigger Nexus upload workflow
+        runs-on: ubuntu-latest
+        needs: release
+        if: needs.release.outputs.new_release_published == 'true'
+        steps:
+            - name: Dispatch upload-nexus.yaml
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REPO: ${{ github.repository }}
+                  RELEASE_TAG: v${{ needs.release.outputs.new_release_version }}
+                  DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+              run: |
+                  gh workflow run upload-nexus.yaml \
+                    --repo "$REPO" \
+                    --ref "${GITHUB_REF_NAME}" \
+                    -f tag="$RELEASE_TAG" \
+                    -f dry_run="$DRY_RUN"
+
+            - name: Create job summary
+              env:
+                  RELEASE_TAG: v${{ needs.release.outputs.new_release_version }}
+                  DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+              run: |
+                  echo "## Release Complete - Nexus Upload Dispatched" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "✓ Release **$RELEASE_TAG** created successfully" >> $GITHUB_STEP_SUMMARY
+                  echo "✓ Dispatched [upload-nexus.yaml](https://github.com/${{ github.repository }}/actions/workflows/upload-nexus.yaml) with tag \`$RELEASE_TAG\` (dry_run=\`$DRY_RUN\`)" >> $GITHUB_STEP_SUMMARY

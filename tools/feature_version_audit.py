@@ -1,6 +1,8 @@
 import os
 import subprocess
 import re
+import json
+import configparser
 from pathlib import Path
 import datetime
 import sys
@@ -31,7 +33,7 @@ RE_FEATURE_SUMMARY_CPP = re.compile(r'GetFeatureSummary\s*\([^)]*\)\s*\{[^}]*?st
 RE_FEATURE_SUMMARY_CPP_MULTILINE = re.compile(r'GetFeatureSummary\s*\([^)]*\)\s*\{[^}]*?std::string description\s*=\s*((?:"[^"]*"\s*)+);\s*std::vector<std::string> keyFeatures\s*=\s*\{([^}]*)\}', re.DOTALL)
 RE_FEATURE_DESCRIPTION_DIRECT = re.compile(r'GetFeatureDescription\s*\([^)]*\)\s*\{\s*return\s*"([^"]+)";\s*\}')
 RE_IS_CORE = re.compile(r"IsCore\s*\(.*\)\s*const\s*override\s*\{\s*return true;\s*\}")
-RE_VERSION = re.compile(r"Version\s*=\s*([0-9]+)-([0-9]+)-([0-9]+)")
+RE_VERSION = re.compile(r"(?i)version\s*=\s*([0-9]+)-([0-9]+)-([0-9]+)")
 RE_BUMP_SUGGESTION = re.compile(r"- \*\*(.+?)\.ini\*\*: bump to `([\d-]+)`.*\[link\]\([^)]+\) ?(?:\(([^)]+)\))?")
 
 # Commit type regexes
@@ -57,14 +59,162 @@ def extract_regex(pattern, content, group=1):
     return m.group(group) if m else None
 
 def extract_multiline_strings(multiline):
-    return [d.replace("\n", " ").strip() for d in re.findall(r'"([^"]*)"', multiline) if d.strip()]
+    return [d.replace("\n", " ").strip() for d in re.findall(r'"([^\"]*)"', multiline) if d.strip()]
+
+def normalize_feature_key(name):
+    return ''.join(str(name or '').lower().replace('-', ' ').split())
+
+def load_nexus_metadata_file(path):
+    try:
+        raw = json.loads(Path(path).read_text(encoding='utf-8'))
+    except Exception as e:
+        raise RuntimeError(f"Failed to load Nexus metadata file {path}: {e}")
+
+    if isinstance(raw, dict):
+        if 'mods' in raw and isinstance(raw['mods'], list):
+            raw = raw['mods']
+        elif 'data' in raw and isinstance(raw['data'], list):
+            raw = raw['data']
+        elif 'features' in raw and isinstance(raw['features'], list):
+            raw = raw['features']
+        else:
+            candidates = []
+            for key, value in raw.items():
+                if isinstance(value, dict):
+                    value = dict(value)
+                    if 'name' not in value:
+                        value['name'] = key
+                    candidates.append(value)
+            if candidates:
+                raw = candidates
+
+    if not isinstance(raw, list):
+        raise RuntimeError(f"Expected JSON list or object containing a feature list in {path}")
+
+    nexus_metadata = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get('name') or item.get('mod_name') or item.get('modFilename') or item.get('mod_filename') or item.get('file_name')
+        if not name:
+            continue
+        key = normalize_feature_key(name)
+        mod_id = item.get('nexus_mod_id') or item.get('mod_id') or item.get('modId') or item.get('id')
+        if isinstance(mod_id, int):
+            mod_id = str(mod_id)
+        mod_filename = item.get('mod_filename') or item.get('modFilename') or item.get('file_name') or item.get('fileName')
+        mod_link = item.get('mod_link') or item.get('modLink') or item.get('url') or item.get('link')
+        description = item.get('description') or item.get('summary') or item.get('details') or ""
+        key_features = item.get('key_features') or item.get('keyFeatures') or item.get('features') or []
+        if isinstance(key_features, str):
+            key_features = [k.strip() for k in key_features.split(',') if k.strip()]
+        elif not isinstance(key_features, list):
+            key_features = []
+        artifact_pattern = item.get('artifact_pattern') or item.get('artifactPattern')
+        short_name = item.get('short_name') or item.get('shortName')
+
+        nexus_metadata[key] = {
+            'name': name,
+            'mod_id': mod_id,
+            'mod_filename': mod_filename,
+            'mod_link': mod_link,
+            'description': description,
+            'key_features': key_features,
+            'artifact_pattern': artifact_pattern,
+            'short_name': short_name,
+        }
+    return nexus_metadata
+
+def find_feature_dir(feature_name):
+    """Find the feature directory matching the given name, with fuzzy matching support."""
+    base_dir = FEATURES_DIR / feature_name
+    if base_dir.exists():
+        return base_dir
+
+    # Fuzzy search: try removing spaces/hyphens and matching case-insensitively
+    normalized_name = normalize_feature_key(feature_name)
+    for entry in FEATURES_DIR.iterdir():
+        if entry.is_dir() and normalize_feature_key(entry.name) == normalized_name:
+            return entry
+
+    return None
 
 def get_feature_ini(feature_path):
+    # Support both direct paths and feature names (strings)
+    if isinstance(feature_path, str):
+        feature_path = find_feature_dir(feature_path)
+        if not feature_path:
+            return None
+
     ini_dir = feature_path / "Shaders" / "Features"
     if ini_dir.exists():
         for f in ini_dir.glob("*.ini"):
             return f
     return None
+
+def get_feature_mod_id_from_ini(feature_dir):
+    ini_path = get_feature_ini(feature_dir)
+    if not ini_path:
+        return None
+    try:
+        content = ini_path.read_text(encoding='utf-8')
+    except Exception:
+        return None
+    m = RE_MOD_ID.search(content)
+    return m.group(1) if m else None
+
+def get_feature_ini_metadata(feature_dir_or_ini_path):
+    # Accept both directory and direct INI path
+    if isinstance(feature_dir_or_ini_path, (str, Path)):
+        path = Path(feature_dir_or_ini_path)
+        if path.suffix == '.ini':
+            ini_path = path
+        else:
+            ini_path = get_feature_ini(feature_dir_or_ini_path)
+    else:
+        ini_path = get_feature_ini(feature_dir_or_ini_path)
+
+    if not ini_path:
+        return {}
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(ini_path, encoding='utf-8')
+    except Exception:
+        return {}
+
+    sections = [s for s in parser.sections() if s.lower() in {'info', 'nexus'}]
+    if not sections:
+        sections = ['Info'] if parser.has_section('Info') else []
+
+    metadata = {'auto_upload': False}
+    for section in sections:
+        if not parser.has_section(section):
+            continue
+        section_items = dict(parser.items(section))
+        # ConfigParser converts keys to lowercase, so look for both variants
+        auto_upload_str = section_items.get('autoupload') or section_items.get('auto_upload')
+        if auto_upload_str is not None:
+            metadata['auto_upload'] = str(auto_upload_str).strip().lower() not in ('false', '0', 'no', 'off', '')
+
+        section_metadata = {
+            'mod_id': section_items.get('nexusmodid') or section_items.get('nexus_mod_id') or section_items.get('mod_id'),
+            'mod_filename': section_items.get('nexusfilename') or section_items.get('nexus_filename') or section_items.get('nexusmodfilename') or section_items.get('nexus_mod_filename') or section_items.get('mod_filename') or section_items.get('modname') or section_items.get('name'),
+            'mod_link': section_items.get('nexusmodlink') or section_items.get('nexus_mod_link') or section_items.get('mod_link') or section_items.get('link'),
+            'description': section_items.get('nexusdescription') or section_items.get('nexus_description') or section_items.get('description'),
+            'artifact_pattern': section_items.get('nexusartifactpattern') or section_items.get('nexus_artifact_pattern') or section_items.get('artifact_pattern'),
+            'short_name': section_items.get('shortname') or section_items.get('short_name') or section_items.get('nexusshortname') or section_items.get('nexus_short_name'),
+        }
+        metadata.update({k: v for k, v in section_metadata.items() if v is not None and v != ""})
+        key_features = section_items.get('nexuskeyfeatures') or section_items.get('nexus_key_features') or section_items.get('key_features') or section_items.get('keyfeatures')
+        if key_features:
+            parsed_kf = [k.strip() for k in re.split(r'[;,]', key_features) if k.strip()]
+            existing_kf = metadata.get('key_features', [])
+            for kf in parsed_kf:
+                if kf not in existing_kf:
+                    existing_kf.append(kf)
+            metadata['key_features'] = existing_kf
+
+    return {k: v for k, v in metadata.items() if v is not None and v != ""}
 
 def get_version_from_ini(ini_path, content=None):
     if content is None:
@@ -172,8 +322,13 @@ def apply_version_bump(ini_path, proposed_ver_str):
         with open(ini_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Replace Version = X-X-X with Version = proposed_ver_str
-        new_content = RE_VERSION.sub(f"Version = {proposed_ver_str}", content, count=1)
+        # Replace version = X-X-X preserving original key casing
+        new_content = re.sub(
+            r"(?i)(version\s*=\s*)[0-9]+-[0-9]+-[0-9]+",
+            lambda m: f"{m.group(1)}{proposed_ver_str}",
+            content,
+            count=1,
+        )
 
         if new_content != content:
             with open(ini_path, "w", encoding="utf-8") as f:
@@ -225,7 +380,8 @@ def parse_feature_metadata_file(path, mod_id=None, is_core=False):
         "key_features": key_features
     }
 
-def extract_feature_metadata(feature_headers_dir):
+def extract_feature_metadata(feature_headers_dir, nexus_metadata=None):
+    nexus_metadata = nexus_metadata or {}
     feature_info = []
     for header in sorted(feature_headers_dir.glob("*.h")):
         name = header.stem
@@ -251,14 +407,86 @@ def extract_feature_metadata(feature_headers_dir):
         mod_link = h_meta["mod_link"] or cpp_meta["mod_link"]
         description = h_meta["description"] or cpp_meta["description"]
         key_features = h_meta["key_features"] or cpp_meta["key_features"]
-        feature_info.append({
-            "name": name,
-            "short_name": short_name,
-            "is_core": is_core,
-            "mod_link": mod_link,
-            "description": description,
-            "key_features": key_features
-        })
+        feature_dir = FEATURES_DIR / name
+        ini_meta = get_feature_ini_metadata(feature_dir) if feature_dir.exists() else {}
+        if not mod_id:
+            mod_id = ini_meta.get('mod_id')
+
+        if ini_meta.get('mod_link'):
+            mod_link = ini_meta['mod_link']
+        if ini_meta.get('description') and not description:
+            description = ini_meta['description']
+        if ini_meta.get('key_features') and not key_features:
+            key_features = ini_meta['key_features']
+        if ini_meta.get('short_name'):
+            short_name = ini_meta['short_name']
+        if ini_meta.get('artifact_pattern'):
+            artifact_pattern = ini_meta['artifact_pattern']
+        else:
+            artifact_pattern = None
+        if ini_meta.get('mod_filename'):
+            mod_filename = ini_meta['mod_filename']
+        else:
+            mod_filename = None
+
+        # Fallback: if exact match failed, try fuzzy matching
+        if not feature_dir.exists():
+            # Try to find directory by normalizing names (ScreenSpaceGI -> screen space gi)
+            normalized_name = normalize_feature_key(name)
+            for candidate_dir in FEATURES_DIR.iterdir():
+                if candidate_dir.is_dir() and normalize_feature_key(candidate_dir.name) == normalized_name:
+                    feature_dir = candidate_dir
+                    ini_meta = get_feature_ini_metadata(candidate_dir)
+                    break
+
+        # Update mod_id from INI if still missing
+        if not mod_id:
+            mod_id = ini_meta.get('mod_id')
+        if ini_meta.get('mod_link'):
+            mod_link = ini_meta['mod_link']
+        if ini_meta.get('description') and not description:
+            description = ini_meta['description']
+        if ini_meta.get('key_features') and not key_features:
+            key_features = ini_meta['key_features']
+        if ini_meta.get('short_name'):
+            short_name = ini_meta['short_name']
+        if ini_meta.get('artifact_pattern'):
+            artifact_pattern = ini_meta['artifact_pattern']
+        if ini_meta.get('mod_filename'):
+            mod_filename = ini_meta['mod_filename']
+
+        key = normalize_feature_key(name)
+        nexus_meta = nexus_metadata.get(key, {})
+        if nexus_meta:
+            mod_id = nexus_meta.get('mod_id') or mod_id
+            mod_filename = nexus_meta.get('mod_filename') or mod_filename
+            artifact_pattern = nexus_meta.get('artifact_pattern') or artifact_pattern
+            mod_link = nexus_meta.get('mod_link') or mod_link
+            description = nexus_meta.get('description') or description
+            if nexus_meta.get('key_features'):
+                key_features = nexus_meta.get('key_features')
+            if nexus_meta.get('short_name'):
+                short_name = nexus_meta.get('short_name')
+
+        if not mod_link and not is_core and mod_id:
+            mod_link = DEFAULT_NEXUS_BASE_URL + mod_id
+
+        if not mod_filename:
+            mod_filename = name
+
+        # Only include if a feature directory exists (or will be found by fuzzy match)
+        if feature_dir.exists() or ini_meta.get('mod_id'):
+            feature_info.append({
+                "name": name,
+                "short_name": short_name,
+                "is_core": is_core,
+                "mod_id": mod_id,
+                "mod_link": mod_link,
+                "description": description,
+                "key_features": key_features,
+                "artifact_pattern": artifact_pattern,
+                "mod_filename": mod_filename,
+            })
     return feature_info
 
 def get_latest_release_tag(ref="HEAD"):
@@ -311,6 +539,7 @@ def propose_new_version(prior_version, commits):
 def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=False, release_ref=None):
     bump_suggestions = []
     new_features = []
+    new_code_features = []  # Features with new code added (not entirely new)
     actionable = False
     feature_actions = {}
     feature_analysis = []
@@ -401,6 +630,14 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 changes.extend(get_changed_files(cpp_path, base_ref, file_types=cpp_types))
             if feature_src_dir.exists() and feature_src_dir.is_dir():
                 changes.extend(get_changed_files(feature_src_dir, base_ref, file_types=cpp_types))
+            # Special case: VR feature includes VRStereoOptimizations
+            if meta['name'] == 'VR':
+                vr_stereo_h = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.h"
+                vr_stereo_cpp = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.cpp"
+                if vr_stereo_h.exists():
+                    changes.extend(get_changed_files(vr_stereo_h, base_ref, file_types=cpp_types))
+                if vr_stereo_cpp.exists():
+                    changes.extend(get_changed_files(vr_stereo_cpp, base_ref, file_types=cpp_types))
         changes = list(set(changes))
 
         # Release-scoped changes: all changes since last release, used to propose the correct
@@ -416,6 +653,14 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 release_changes.extend(get_changed_files(cpp_path, version_ref, file_types=cpp_types))
             if feature_src_dir.exists() and feature_src_dir.is_dir():
                 release_changes.extend(get_changed_files(feature_src_dir, version_ref, file_types=cpp_types))
+            # Special case: VR feature includes VRStereoOptimizations
+            if meta['name'] == 'VR':
+                vr_stereo_h = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.h"
+                vr_stereo_cpp = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.cpp"
+                if vr_stereo_h.exists():
+                    release_changes.extend(get_changed_files(vr_stereo_h, version_ref, file_types=cpp_types))
+                if vr_stereo_cpp.exists():
+                    release_changes.extend(get_changed_files(vr_stereo_cpp, version_ref, file_types=cpp_types))
         release_changes = list(set(release_changes))
 
         change_types = set(os.path.splitext(f)[1].lower() for _, f in changes)
@@ -469,6 +714,28 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
             new_features.append((feature_dir.name, "-", bump_commit))
             is_attention = True
 
+        # Detect new code added to existing feature (not entirely new since last release)
+        # Feature existed before version_ref (has non-"A" release_changes) AND has new files
+        if (not (release_changes and all(s == "A" for s, _ in release_changes)) and  # Not brand new since last release
+            release_changes and any(s == "A" for s, _ in release_changes)):  # Has new files added
+            # Find author of the commit that added the file (first commit touching it since version_ref)
+            for status, f in release_changes:
+                if status == "A":
+                    # Get the commit that added this file (not the latest commit)
+                    try:
+                        add_commits = subprocess.check_output(
+                            ["git", "log", "--follow", "--diff-filter=A", "--format=%H", f"{version_ref}..{HEAD_REF}", "--", f],
+                            stderr=subprocess.DEVNULL
+                        ).decode("utf-8").splitlines()
+                        add_commit = add_commits[-1].strip() if add_commits else None
+                        if add_commit:
+                            new_code_author = get_commit_author(add_commit)
+                            if new_code_author:
+                                new_code_features.append((feature_dir.name, new_code_author))
+                                break
+                    except Exception:
+                        pass
+
         if needs_bump:
             is_attention = True
         if is_attention:
@@ -491,7 +758,8 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
             'note': note,
             'commit_link': commit_link,
             'is_attention': is_attention,
-            'ini_path': str(ini_path) if ini_path else None
+            'ini_path': str(ini_path) if ini_path else None,
+            'author': bump_author
         })
         if needs_bump:
             bump_suggestions.append(f"- **{os.path.basename(ini_path)}**: bump to `{proposed_ver_str}` {commit_link}")
@@ -502,7 +770,7 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
             if needs_bump:
                 feat_act["actions"].append(f"Needs version bump to {proposed_ver_str}")
 
-    return feature_analysis, bump_suggestions, new_features, actionable, feature_actions
+    return feature_analysis, bump_suggestions, new_features, new_code_features, actionable, feature_actions
 
 def print_actionable_suggestions(feature_actions):
     if feature_actions:
@@ -517,11 +785,11 @@ def format_author_stats(author_stats):
     lines = []
     if author_stats:
         lines.append("\n### Author Stats\n")
-        lines.append("| Author | New Features | Updated Features | Metadata Issues | Total Actionable |")
-        lines.append("|--------|--------------|------------------|----------------|------------------|")
-        for author, stat in sorted(author_stats.items(), key=lambda x: (-(x[1].get('new',0)+x[1].get('bump',0)+x[1].get('meta',0)), x[0])):
-            total = stat.get('new',0) + stat.get('bump',0) + stat.get('meta',0)
-            lines.append(f"| {author} | {stat.get('new',0)} | {stat.get('bump',0)} | {stat.get('meta',0)} | {total} |")
+        lines.append("| Author | Changed Features | New Features | Version Bumps | Metadata Issues | Total Actionable |")
+        lines.append("|--------|------------------|--------------|---------------|-----------------|------------------|")
+        for author, stat in sorted(author_stats.items(), key=lambda x: (-(x[1].get('total_changed',0)), x[0])):
+            total_actionable = stat.get('new',0) + stat.get('bump',0) + stat.get('meta',0)
+            lines.append(f"| {author} | {stat.get('total_changed',0)} | {stat.get('new',0)} | {stat.get('bump',0)} | {stat.get('meta',0)} | {total_actionable} |")
     return lines
 
 def format_actionable_lines(feature_actions):
@@ -568,6 +836,16 @@ def format_new_features_table(new_features, feature_meta_map, get_commit_author,
             lines.append(f"| {boldmeta(name)} | {boldmeta(ver)} | {nexus_link} | {commit_link} |")
     return lines
 
+def format_new_code_table(new_code_features):
+    lines = []
+    if new_code_features:
+        lines.append(f"### New Code Added to Existing Features ({len(new_code_features)})\n")
+        lines.append("| Feature | Author |")
+        lines.append("|---------|--------|")
+        for name, author in new_code_features:
+            lines.append(f"| {name} | {author} |")
+    return lines
+
 def format_metadata_summary(feature_metadata):
     lines = []
     lines.append("\n## Feature Metadata Summary\n")
@@ -596,45 +874,143 @@ def format_metadata_summary(feature_metadata):
             metadata_issues.append((info['name'], missing_fields))
     return lines, metadata_issues
 
+
+def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core_artifact_pattern):
+    rows = [
+        {
+            'name': 'core',
+            'artifact_pattern': core_artifact_pattern,
+            'artifact_name': 'nexus-upload-core',
+            'nexus_mod_id': core_mod_id,
+            'mod_filename': core_filename,
+        }
+    ]
+    def sanitize_name(name):
+        return re.sub(r'[^A-Za-z0-9_-]+', '_', name.strip())
+
+    for info in sorted(feature_metadata, key=lambda x: x['name']):
+        if info.get('is_core'):
+            continue
+        mod_id = info.get('mod_id')
+        if not mod_id:
+            continue
+        name = info['name']
+        artifact_pattern = info.get('artifact_pattern') or f'{name}-*.7z'
+
+        # Read INI metadata (version, filename, etc.)
+        ini_path = get_feature_ini(name)  # Pass name as string for fuzzy matching
+        ini_metadata = {}
+        mod_version = None
+        if ini_path:
+            ini_metadata = get_feature_ini_metadata(ini_path)
+            version_tuple = get_version_from_ini(ini_path)
+            if version_tuple:
+                mod_version = '.'.join(str(v) for v in version_tuple)
+
+        # Use mod_filename from INI if available, else from feature metadata, else use name
+        mod_filename = ini_metadata.get('mod_filename') or info.get('mod_filename') or name
+
+        # Auto-upload is opt-in; missing metadata should not enable uploads.
+        auto_upload = ini_metadata.get('auto_upload', False)
+
+        row = {
+            'name': name,
+            'artifact_pattern': artifact_pattern,
+            'artifact_name': f'nexus-upload-{sanitize_name(name)}',
+            'nexus_mod_id': mod_id,
+            'mod_filename': mod_filename,
+            'auto_upload': auto_upload,
+        }
+        if mod_version:
+            row['mod_version'] = mod_version
+
+        rows.append(row)
+    return rows
+
+
 def build_feature_actions(bump_suggestions, metadata_issues, new_features, get_commit_author, normalize_name):
-    feature_actions = {}
+    consolidated = {}
+    display_name_map = {}
+
     for suggestion in bump_suggestions:
         m = RE_BUMP_SUGGESTION.match(suggestion)
         if m:
             fname, ver, author = m.group(1), m.group(2), m.group(3)
-            if fname not in feature_actions:
-                feature_actions[fname] = {"actions": [], "author": author}
-            feature_actions[fname]["actions"].append(f"Bump INI version to `{ver}`")
+            norm = normalize_name(fname)
+            display_name_map.setdefault(norm, fname)
+            if ' ' in fname and ' ' not in display_name_map[norm]:
+                display_name_map[norm] = fname
+            if norm not in consolidated:
+                consolidated[norm] = {"actions": [], "author": author}
+            consolidated[norm]["actions"].append(f"Bump INI version to `{ver}`")
+            if author and not consolidated[norm]["author"]:
+                consolidated[norm]["author"] = author
+
     for name, fields in metadata_issues:
-        if name not in feature_actions:
-            feature_actions[name] = {"actions": [], "author": None}
-        feature_actions[name]["actions"].append(f"Add: {', '.join(fields)}")
-    # Mapping new features to authors
+        norm = normalize_name(name)
+        display_name_map.setdefault(norm, name)
+        if ' ' in name and ' ' not in display_name_map[norm]:
+            display_name_map[norm] = name
+        if norm not in consolidated:
+            consolidated[norm] = {"actions": [], "author": None}
+        consolidated[norm]["actions"].append(f"Update INI: add {', '.join(fields)}")
+
+    # Add new features with authors
+    for feat_name, _, commit in new_features:
+        norm = normalize_name(feat_name)
+        display_name_map.setdefault(norm, feat_name)
+        if ' ' in feat_name and ' ' not in display_name_map[norm]:
+            display_name_map[norm] = feat_name
+        author = get_commit_author(commit) if commit else None
+        if norm not in consolidated:
+            consolidated[norm] = {"actions": [], "author": author}
+        if "New feature" not in "".join(consolidated[norm]["actions"]):
+            consolidated[norm]["actions"].append("New feature")
+        if author and not consolidated[norm]["author"]:
+            consolidated[norm]["author"] = author
+
+    feature_actions = {}
+    for norm, info in consolidated.items():
+        feature_actions[display_name_map[norm]] = info
+
+    # Also assign authors to existing entries if not already set
     new_features_map = {normalize_name(n): (commit, get_commit_author(commit) if commit else None) for n, _, commit in new_features}
-    for name in feature_actions:
-        if not feature_actions[name]["author"]:
-            norm = normalize_name(name)
+    for disp, info in feature_actions.items():
+        if not info["author"]:
+            norm = normalize_name(disp)
             if norm in new_features_map:
                 commit, author = new_features_map[norm]
                 if author:
-                    feature_actions[name]["author"] = author
+                    info["author"] = author
     return feature_actions
 
-def build_author_stats(feature_actions):
+def build_author_stats(feature_analysis, feature_actions):
+    # Count all features per author from feature_analysis
     author_stats = {}
+    for fa in feature_analysis:
+        author = fa.get('author')
+        if not author:
+            continue
+        if author not in author_stats:
+            author_stats[author] = {'new': 0, 'bump': 0, 'meta': 0, 'total_changed': 0}
+        # Count each feature once per author
+        author_stats[author]['total_changed'] += 1
+
+    # Then, count actionable items for authors who have them (from feature_actions)
     for fname, info in feature_actions.items():
         author = info["author"]
         if not author:
             continue
         if author not in author_stats:
-            author_stats[author] = {'new': 0, 'bump': 0, 'meta': 0}
+            author_stats[author] = {'new': 0, 'bump': 0, 'meta': 0, 'total_changed': 0}
         for action in info["actions"]:
             if action.startswith("Bump INI version"):
                 author_stats[author]['bump'] += 1
-            elif action.startswith("Add: "):
+            elif action.startswith("Update INI"):
                 author_stats[author]['meta'] += 1
-            elif "new feature" in action.lower():
+            elif "new feature" in action.lower() or "new ini" in action.lower():
                 author_stats[author]['new'] += 1
+
     return author_stats
 
 def generate_audit_report(
@@ -644,6 +1020,7 @@ def generate_audit_report(
     now,
     feature_analysis,
     new_features,
+    new_code_features,
     feature_meta_map,
     get_commit_author,
     normalize_name,
@@ -659,10 +1036,11 @@ def generate_audit_report(
     lines.extend(format_feature_table(feature_analysis))
     lines.append("\n## Critical Information Summary\n")
     lines.extend(format_new_features_table(new_features, feature_meta_map, get_commit_author, normalize_name))
+    lines.extend(format_new_code_table(new_code_features))
     metadata_lines, metadata_issues = format_metadata_summary(feature_metadata)
     lines.extend(metadata_lines)
     feature_actions = build_feature_actions(bump_suggestions, metadata_issues, new_features, get_commit_author, normalize_name)
-    author_stats = build_author_stats(feature_actions)
+    author_stats = build_author_stats(feature_analysis, feature_actions)
     author_stats_lines = format_author_stats(author_stats)
     actionable_lines = format_actionable_lines(feature_actions)
     output = "\n".join(lines)
@@ -679,6 +1057,13 @@ def main():
     parser.add_argument('--fail-on-actionable', action='store_true', help='Exit 1 if actionable items found (alias for --ci)')
     parser.add_argument('--pr-check', action='store_true', help='Only show actionable items for changes since base')
     parser.add_argument('--apply-bumps', action='store_true', help='Automatically apply suggested version bumps')
+    parser.add_argument('--export-nexus-matrix', action='store_true', help='Export a JSON Nexus upload matrix and exit')
+    parser.add_argument('--matrix-output', type=str, default='nexus-matrix.json', help='Output filename for Nexus matrix JSON')
+    parser.add_argument('--nexus-metadata-file', type=str, help='Optional Nexus metadata JSON file exported from nexus_mods_api')
+    parser.add_argument('--all-features', action='store_true', help='Include all Nexus-capable features in export, not just version-changed ones')
+    parser.add_argument('--core-mod-id', type=str, default='86492', help='Core Nexus mod ID for the generated upload matrix')
+    parser.add_argument('--core-filename', type=str, default='Community Shaders', help='Core Nexus filename for the generated upload matrix')
+    parser.add_argument('--core-artifact-pattern', type=str, default='CommunityShaders-*.7z', help='Core artifact pattern for the generated upload matrix')
     args = parser.parse_args()
 
     global HEAD_REF
@@ -722,11 +1107,37 @@ def main():
     if base_date_iso:
         print(f"Base commit date: {base_date_iso} ({base_date_human})", file=sys.stderr)
 
-    feature_metadata = extract_feature_metadata(DEFAULT_FEATURE_HEADERS_DIR)
-    def normalize_name(name): return ''.join(name.lower().split())
+    nexus_metadata = load_nexus_metadata_file(args.nexus_metadata_file) if args.nexus_metadata_file else None
+    feature_metadata = extract_feature_metadata(DEFAULT_FEATURE_HEADERS_DIR, nexus_metadata=nexus_metadata)
+    def normalize_name(name): return normalize_feature_key(name)
     feature_meta_map = {normalize_name(f['name']): f for f in feature_metadata}
 
-    feature_analysis, bump_suggestions, new_features, actionable, feature_actions = analyze_features(
+    def feature_changed_versions(metadata_item):
+        ini_path = get_feature_ini(metadata_item['name'])  # Use fuzzy matching
+        if not ini_path:
+            return False
+        prior_ver = get_prior_version(ini_path, base_ref)
+        new_ver = get_version_from_ini(ini_path)
+        return new_ver is not None and prior_ver != new_ver
+
+    if args.export_nexus_matrix:
+        export_features = feature_metadata
+        if not args.all_features:
+            export_features = [f for f in feature_metadata if f.get('is_core') or feature_changed_versions(f)]
+        matrix = build_nexus_upload_matrix(
+            export_features,
+            args.core_mod_id,
+            args.core_filename,
+            args.core_artifact_pattern,
+        )
+        output_path = args.matrix_output
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(matrix, f, indent=2)
+        visibility = 'all features' if args.all_features else 'version-changed only'
+        print(f'Wrote Nexus matrix to {output_path} ({visibility})')
+        sys.exit(0)
+
+    feature_analysis, bump_suggestions, new_features, new_code_features, actionable, feature_actions = analyze_features(
         FEATURES_DIR, feature_meta_map, base_ref, only_changed=args.pr_check, release_ref=release_ref)
 
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -772,7 +1183,7 @@ def main():
         print_actionable_suggestions(feature_actions)
     else:
         output = generate_audit_report(base_ref, base_date_iso, base_date_human, now,
-                                      feature_analysis, new_features, feature_meta_map,
+                                      feature_analysis, new_features, new_code_features, feature_meta_map,
                                       get_commit_author, normalize_name, feature_metadata, bump_suggestions)
         if output_file:
             with open(output_file, "w", encoding="utf-8") as f: f.write(output)
