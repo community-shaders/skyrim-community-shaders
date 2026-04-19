@@ -409,10 +409,10 @@ void Deferred::DeferredPasses()
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
 			nullptr,                    // t17 SsrtSpecularTexture
-			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[0] : nullptr,                             // t18 SsrtDiffuseSH0
-			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[1] : nullptr,                             // t19 SsrtDiffuseSH1
-			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[2] : nullptr,                             // t20 SsrtDiffuseSH2
-			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[3] : nullptr,                             // t21 SsrtDiffuseSH3
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[0] : nullptr,                             // t18 SsrtDiffuseSH0 (NRD-packed)
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[1] : nullptr,                             // t19 SsrtDiffuseSH1 (NRD-packed)
+			nullptr,                                                                                                 // t20 (unused)
+			nullptr,                                                                                                 // t21 (unused)
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);

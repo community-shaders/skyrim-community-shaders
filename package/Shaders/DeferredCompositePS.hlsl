@@ -11,11 +11,11 @@
 Texture2D<float4> MainInputTexture : register(t0);
 Texture2D<float3> SpecularTexture : register(t1);
 
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(DEBUG)
+#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(SSRT) || defined(DEBUG)
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 #endif
 
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
+#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(SSRT)
 Texture2D<float> DepthTexture : register(t3);
 #endif
 
@@ -98,28 +98,20 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #endif
 
 #if defined(SSRT)
-Texture2D<float4> SSRTexture : register(t17);
-Texture2D<float4> SSRTDiffuseSH0 : register(t18);
-Texture2D<float4> SSRTDiffuseSH1 : register(t19);
-Texture2D<float4> SSRTDiffuseSH2 : register(t20);
-Texture2D<float4> SSRTDiffuseSH3 : register(t21);
+#include "NRD/NRDReblurSH.hlsli"
 
-void SampleSSRTDiffuse(float2 uv, float3 normalWS, out float3 il, out float ao)
+Texture2D<float4> SSRTexture      : register(t17);
+Texture2D<float4> SSRTDiffuseSH0  : register(t18);  // NRD-packed SH0 (OUT_DIFF_SH0)
+Texture2D<float4> SSRTDiffuseSH1  : register(t19);  // NRD-packed SH1 (OUT_DIFF_SH1)
+
+void SampleSSRTDiffuse(float2 uv, float3 normalWS, float3 V, float roughness, out float3 il, out float ao)
 {
-	float4 l0 = SSRTDiffuseSH0.SampleLevel(LinearSampler, uv, 0);
-	float4 l1y = SSRTDiffuseSH1.SampleLevel(LinearSampler, uv, 0);
-	float4 l1z = SSRTDiffuseSH2.SampleLevel(LinearSampler, uv, 0);
-	float4 l1x = SSRTDiffuseSH3.SampleLevel(LinearSampler, uv, 0);
+	float4 sh0 = SSRTDiffuseSH0.SampleLevel(LinearSampler, uv, 0);
+	float4 sh1 = SSRTDiffuseSH1.SampleLevel(LinearSampler, uv, 0);
 
-	ao = l0.a;
-
-	float4 shR = float4(l0.x, l1y.x, l1z.x, l1x.x);
-	float4 shG = float4(l0.y, l1y.y, l1z.y, l1x.y);
-	float4 shB = float4(l0.z, l1y.z, l1z.z, l1x.z);
-
-	il.r = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, normalWS);
-	il.g = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, normalWS);
-	il.b = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, normalWS);
+	NRD_SG sg = REBLUR_BackEnd_UnpackSh(sh0, sh1);
+	ao = sg.normHitDist;
+	il = NRD_SG_ResolveDiffuse(sg, normalWS, V, roughness);
 }
 #endif
 
@@ -150,7 +142,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 specularColor = SpecularTexture[pixCoord];
 	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
+#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(SSRT)
 	float3 normalGlossiness = NormalRoughnessTexture[pixCoord];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
@@ -239,10 +231,12 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 albedo = AlbedoTexture[pixCoord];
 #	endif
 		float3 linAlbedoSSRT = Color::IrradianceToLinear(albedo);
+		float3 V = normalize(-positionWS.xyz);
+		float  roughness = 1.0 - normalGlossiness.z;
 		float3 ssrtDiffuse;
-		float ssrtAo;
-		SampleSSRTDiffuse(uv, normalWS, ssrtDiffuse, ssrtAo);
-		linDiffuseColor += ssrtDiffuse * linAlbedoSSRT;
+		float  ssrtAo;
+		SampleSSRTDiffuse(uv, normalWS, V, roughness, ssrtDiffuse, ssrtAo);
+		linDiffuseColor += ssrtDiffuse * linAlbedoSSRT * SharedData::ssrtSettings.DiffuseMult;
 	}
 #endif
 

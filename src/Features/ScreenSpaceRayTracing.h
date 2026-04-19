@@ -1,5 +1,8 @@
 #pragma once
 
+#include "NRDReblurIntegration.h"
+#include <NRDSettings.h>
+
 struct ScreenSpaceRayTracing : Feature
 {
     static ScreenSpaceRayTracing* GetSingleton()
@@ -20,7 +23,8 @@ struct ScreenSpaceRayTracing : Feature
                 "Realistic indirect lighting",
                 "Importance sampling for advanced reflections based on roughness",
                 "Efficient ray marching with Hi-Z buffer",
-                "Uses dynamic cubemaps as fallback for missing information"
+                "Uses dynamic cubemaps as fallback for missing information",
+                "NVIDIA REBLUR temporal denoising for diffuse GI"
             }
 		};
 	}
@@ -55,6 +59,9 @@ struct ScreenSpaceRayTracing : Feature
         float AmbientMult = 0.0f;
         float OcclusionStrength = 1.0f;
         float CubemapNormalization = 0.0f;
+        bool EnableREBLUR = true;
+        uint REBLURMaxAccumFrames = 30;
+        float REBLURSplitScreen = 0.0f;
     } settings;
 
     struct alignas(16) SharedData
@@ -92,20 +99,33 @@ struct ScreenSpaceRayTracing : Feature
 
     SharedData GetCommonBufferData();
 
+    // Returns SRVs for the two NRD-packed SH output textures (or input if REBLUR disabled).
+    // sh[0] = SH0 (Y/DC + normHitDist), sh[1] = SH1 (directional)
     struct DiffuseOutput
     {
-        ID3D11ShaderResourceView* sh[4];
+        ID3D11ShaderResourceView* sh[2];
     };
     DiffuseOutput GetDiffuseOutputTextures();
 
+    // Ray march intermediate textures (1/4 res)
     eastl::unique_ptr<Texture2D> texDepth = nullptr;
     eastl::unique_ptr<Texture2D> texColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRTDiffuseColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRTDiffuseDirection = nullptr;
-    eastl::unique_ptr<Texture2D> texSSRTDiffuseSH[4] = { nullptr };
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
 	eastl::unique_ptr<Texture2D> texHalfResDepth = nullptr;
+
+    // NRD SH textures (1/2 res, RGBA16F)
+    eastl::unique_ptr<Texture2D> texNRDInputSH0 = nullptr;   // IN_DIFF_SH0
+    eastl::unique_ptr<Texture2D> texNRDInputSH1 = nullptr;   // IN_DIFF_SH1
+    eastl::unique_ptr<Texture2D> texNRDOutputSH0 = nullptr;  // OUT_DIFF_SH0
+    eastl::unique_ptr<Texture2D> texNRDOutputSH1 = nullptr;  // OUT_DIFF_SH1
+
+    // NRD guide textures (1/2 res)
+    eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;            // IN_VIEWZ (R16F)
+    eastl::unique_ptr<Texture2D> texNRDNormalRoughness = nullptr;  // IN_NORMAL_ROUGHNESS (R10G10B10A2)
+    eastl::unique_ptr<Texture2D> texNRDMotionVectors = nullptr;    // IN_MV (R16G16F)
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
@@ -123,4 +143,12 @@ struct ScreenSpaceRayTracing : Feature
     winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> upscaleDiffuseCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> prepareNRDGuidesCS = nullptr;
+
+    NRDReblurIntegration nrdReblur;
+    nrd::ReblurSettings reblurSettings{};
+    uint32_t frameIndex = 0;
+
+    Matrix prevViewMatrix{};
+    Matrix prevProjMatrix{};
 };

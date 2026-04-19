@@ -27,7 +27,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     DiffuseMult,
     AmbientMult,
     OcclusionStrength,
-    CubemapNormalization
+    CubemapNormalization,
+    EnableREBLUR,
+    REBLURMaxAccumFrames,
+    REBLURSplitScreen
 )
 
 void ScreenSpaceRayTracing::DrawSettings()
@@ -66,6 +69,22 @@ void ScreenSpaceRayTracing::DrawSettings()
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("Matches cubemap luminance with ambient color.");
 
+    ImGui::SeparatorText("REBLUR Denoiser");
+    ImGui::Checkbox("Enable REBLUR", &settings.EnableREBLUR);
+    if (auto _tt = Util::HoverTooltipWrapper())
+        ImGui::Text("NVIDIA REBLUR temporal denoiser for diffuse GI. Reduces noise at the cost of temporal lag.");
+    if (settings.EnableREBLUR) {
+        int maxFrames = (int)settings.REBLURMaxAccumFrames;
+        if (ImGui::SliderInt("Max Accum Frames", &maxFrames, 1, 63)) {
+            settings.REBLURMaxAccumFrames = (uint32_t)maxFrames;
+        }
+        if (auto _tt = Util::HoverTooltipWrapper())
+            ImGui::Text("Maximum frames REBLUR accumulates. Lower = less lag but more noise.");
+        ImGui::SliderFloat("Split Screen", &settings.REBLURSplitScreen, 0.0f, 1.0f, "%.2f");
+        if (auto _tt = Util::HoverTooltipWrapper())
+            ImGui::Text("Debug: left side shows raw (no temporal) output, right shows denoised. 0 = disabled.");
+    }
+
     ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
@@ -77,6 +96,12 @@ void ScreenSpaceRayTracing::DrawSettings()
         BUFFER_VIEWER_NODE(texColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRTDiffuseColor, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDInputSH0, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDInputSH1, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDOutputSH0, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDOutputSH1, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDViewZ, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDNormalRoughness, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -114,7 +139,6 @@ void ScreenSpaceRayTracing::SetupResources()
         mainTex.texture->GetDesc(&texDesc);
         texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
         texDesc.MipLevels = 1;
-        texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texDesc.Format,
@@ -129,34 +153,68 @@ void ScreenSpaceRayTracing::SetupResources()
 			.Texture2D = { .MipSlice = 0 }
 		};
 
+        // -- 1/2 resolution textures --
+
         texDesc.Width /= 2;
 		texDesc.Height /= 2;
 
-		// SH textures at 1/2 resolution
-		for (int i = 0; i < 4; ++i) {
-			texSSRTDiffuseSH[i] = eastl::make_unique<Texture2D>(texDesc);
-			texSSRTDiffuseSH[i]->CreateSRV(srvDesc);
-			texSSRTDiffuseSH[i]->CreateUAV(uavDesc);
-		}
+        uint32_t halfW = texDesc.Width;
+        uint32_t halfH = texDesc.Height;
 
-		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
-		texHalfResDepth = eastl::make_unique<Texture2D>(texDesc);
-		texHalfResDepth->CreateSRV(srvDesc);
-		texHalfResDepth->CreateUAV(uavDesc);
+        // NRD SH textures (RGBA16F)
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+        texNRDInputSH0 = eastl::make_unique<Texture2D>(texDesc);
+        texNRDInputSH0->CreateSRV(srvDesc);
+        texNRDInputSH0->CreateUAV(uavDesc);
 
-        // Quarter-resolution textures: color input, output, and specular/diffuse results
-		texDesc.Width /= 2;
+        texNRDInputSH1 = eastl::make_unique<Texture2D>(texDesc);
+        texNRDInputSH1->CreateSRV(srvDesc);
+        texNRDInputSH1->CreateUAV(uavDesc);
+
+        texNRDOutputSH0 = eastl::make_unique<Texture2D>(texDesc);
+        texNRDOutputSH0->CreateSRV(srvDesc);
+        texNRDOutputSH0->CreateUAV(uavDesc);
+
+        texNRDOutputSH1 = eastl::make_unique<Texture2D>(texDesc);
+        texNRDOutputSH1->CreateSRV(srvDesc);
+        texNRDOutputSH1->CreateUAV(uavDesc);
+
+        // NRD ViewZ (R16F)
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16_FLOAT;
+        texNRDViewZ = eastl::make_unique<Texture2D>(texDesc);
+        texNRDViewZ->CreateSRV(srvDesc);
+        texNRDViewZ->CreateUAV(uavDesc);
+
+        // NRD NormalRoughness: R8G8B8A8_UNORM is guaranteed UAV store on D3D11.1.
+        // We use NRD_NORMAL_ENCODING=2 packing math; the [0,1] values decode correctly
+        // regardless of whether the backing texture is R10G10B10A2 or R8G8B8A8.
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        texNRDNormalRoughness = eastl::make_unique<Texture2D>(texDesc);
+        texNRDNormalRoughness->CreateSRV(srvDesc);
+        texNRDNormalRoughness->CreateUAV(uavDesc);
+
+        // NRD MotionVectors at 1/2 res (R16G16F)
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+        texNRDMotionVectors = eastl::make_unique<Texture2D>(texDesc);
+        texNRDMotionVectors->CreateSRV(srvDesc);
+        texNRDMotionVectors->CreateUAV(uavDesc);
+
+        // Half-res linear depth
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
+        texHalfResDepth = eastl::make_unique<Texture2D>(texDesc);
+        texHalfResDepth->CreateSRV(srvDesc);
+        texHalfResDepth->CreateUAV(uavDesc);
+
+        // -- 1/4 resolution textures --
+        texDesc.Width /= 2;
 		texDesc.Height /= 2;
 
-        // texColor: single-mip for color input
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
         srvDesc.Texture2D.MipLevels = 1;
         texColor = eastl::make_unique<Texture2D>(texDesc);
         texColor->CreateSRV(srvDesc);
         texColor->CreateUAV(uavDesc);
 
-        // Restore single-mip settings for remaining textures
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
         srvDesc.Texture2D.MipLevels = 1;
 
@@ -172,7 +230,6 @@ void ScreenSpaceRayTracing::SetupResources()
         texSSRTDiffuseDirection->CreateSRV(srvDesc);
         texSSRTDiffuseDirection->CreateUAV(uavDesc);
 
-        // Quarter-resolution depth pyramid (Mip 0=Quarter, Mip 1=Eighth, Mip 2=Sixteenth)
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
         texDesc.MipLevels = maxMips;
         srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
@@ -195,6 +252,9 @@ void ScreenSpaceRayTracing::SetupResources()
 			};
 			DX::ThrowIfFailed(device->CreateUnorderedAccessView(texDepth->resource.get(), &mipUavDesc, depthUAVs[i].put()));
 		}
+
+        // Initialize NRD
+        nrdReblur.Init(halfW, halfH, nrd::Denoiser::REBLUR_DIFFUSE_SH, 0);
     }
 
     logger::debug("Creating samplers...");
@@ -226,7 +286,8 @@ void ScreenSpaceRayTracing::SetupResources()
 void ScreenSpaceRayTracing::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS, &depthDownsampleCS, &upscaleDiffuseCS,
+        &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS,
+        &depthDownsampleCS, &upscaleDiffuseCS, &prepareNRDGuidesCS,
     };
 
     for (auto shader : shaderPtrs)
@@ -270,6 +331,7 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
             { &prefilterDepthCS, "ssrt_prefilterDepths.hlsl", {} },
             { &depthDownsampleCS, "ssrt_depth_downsample.hlsl", {} },
             { &upscaleDiffuseCS, "ssrt_upscale_diffuse.hlsl", {} },
+            { &prepareNRDGuidesCS, "ssrt_preprocess_nrd_guides.hlsl", {} },
         };
 
     for (auto& info : shaderInfos) {
@@ -320,7 +382,7 @@ void ScreenSpaceRayTracing::Prepass()
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 5> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
 
     auto resetViews = [&]() {
 		srvs.fill(nullptr);
@@ -349,7 +411,7 @@ void ScreenSpaceRayTracing::Prepass()
         resetViews();
     }
 
-    // downsample depth: mips 0-6 chained from quarter-res mip 0
+    // downsample depth Hi-Z
     {
 		float2 dispatchCountDownsample = { ((size.x / 2) + 7) / 8, ((size.y / 2) + 7) / 8 };
 
@@ -437,7 +499,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 
     context->CSSetSamplers(0, 2, samplers.data());
 
-    // prefilter radiance: builds color input (quarter-res)
+    // prefilter radiance
     {
         ID3D11UnorderedAccessView* colorUav = texColor->uav.get();
 
@@ -467,7 +529,6 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
         }
     }
 
-    // raymarch
     state->BeginPerfEvent("Raymarch");
 
     uavs.at(0) = texSSRColor->uav.get();
@@ -549,7 +610,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 13> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 3> uavs = { nullptr };
 
     auto resetViews = [&]() {
 		srvs.fill(nullptr);
@@ -576,6 +637,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         }
     }
 
+    // --- Ray march ---
     uavs.at(0) = texSSRTDiffuseColor->uav.get();
     uavs.at(1) = texSSRTDiffuseDirection->uav.get();
 
@@ -599,20 +661,43 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
     resetViews();
 
-    // Upscale diffuse to 1/2 res using SH accumulation
+    // --- Preprocess NRD guide textures (1/2 res) ---
+    if (settings.EnableREBLUR && nrdReblur.IsValid() && prepareNRDGuidesCS) {
+        state->BeginPerfEvent("SSRT NRD Guide Preprocess");
+
+        std::array<ID3D11ShaderResourceView*, 3> guideSRVs = {
+            depth.depthSRV,
+            normal.SRV,
+            motion.SRV
+        };
+        std::array<ID3D11UnorderedAccessView*, 3> guideUAVs = {
+            texNRDViewZ->uav.get(),
+            texNRDNormalRoughness->uav.get(),
+            texNRDMotionVectors->uav.get()
+        };
+
+        context->CSSetShaderResources(0, (uint)guideSRVs.size(), guideSRVs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)guideUAVs.size(), guideUAVs.data(), nullptr);
+        context->CSSetShader(prepareNRDGuidesCS.get(), nullptr, 0);
+        context->Dispatch(((uint)dynres.x / 2 + 7) / 8, ((uint)dynres.y / 2 + 7) / 8, 1);
+        resetViews();
+
+        state->EndPerfEvent();
+    }
+
+    // --- Upscale diffuse to NRD-packed SH (1/2 res, 2 textures) ---
     {
         state->BeginPerfEvent("SSRT Diffuse Upscale");
 
         srvs.fill(nullptr);
         srvs.at(0) = texSSRTDiffuseColor->srv.get();
         srvs.at(1) = texSSRTDiffuseDirection->srv.get();
-		srvs.at(2) = texHalfResDepth->srv.get();	
+		srvs.at(2) = texHalfResDepth->srv.get();
 		srvs.at(3) = depthSRVs[0].get();
-        std::array<ID3D11UnorderedAccessView*, 4> shUavs = {
-            texSSRTDiffuseSH[0]->uav.get(),
-            texSSRTDiffuseSH[1]->uav.get(),
-            texSSRTDiffuseSH[2]->uav.get(),
-            texSSRTDiffuseSH[3]->uav.get()
+
+        std::array<ID3D11UnorderedAccessView*, 2> shUavs = {
+            texNRDInputSH0->uav.get(),
+            texNRDInputSH1->uav.get()
         };
 
         context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
@@ -625,6 +710,81 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         state->EndPerfEvent();
     }
 
+    // --- REBLUR denoising ---
+    if (settings.EnableREBLUR && nrdReblur.IsValid()) {
+        state->BeginPerfEvent("SSRT REBLUR");
+
+        // Update NRD common settings
+        nrd::CommonSettings commonSettings{};
+        {
+            float2 halfDynres = { floor(dynres.x / 2), floor(dynres.y / 2) };
+            uint16_t hw = (uint16_t)halfDynres.x;
+            uint16_t hh = (uint16_t)halfDynres.y;
+
+            // Resource size = half-res allocations
+            commonSettings.resourceSize[0] = (uint16_t)texNRDInputSH0->desc.Width;
+            commonSettings.resourceSize[1] = (uint16_t)texNRDInputSH0->desc.Height;
+            commonSettings.resourceSizePrev[0] = commonSettings.resourceSize[0];
+            commonSettings.resourceSizePrev[1] = commonSettings.resourceSize[1];
+            commonSettings.rectSize[0] = hw;
+            commonSettings.rectSize[1] = hh;
+            commonSettings.rectSizePrev[0] = hw;
+            commonSettings.rectSizePrev[1] = hh;
+
+            // NRD wants column-major matrices; game stores row-major — transpose to convert.
+            // Use unjittered projection to avoid NRD temporal artifacts.
+            auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
+            auto projMat = globals::game::frameBufferCached.GetCameraProjUnjittered(0).Transpose();
+
+            memcpy(commonSettings.viewToClipMatrix,      &projMat,        sizeof(float) * 16);
+            memcpy(commonSettings.viewToClipMatrixPrev,  &prevProjMatrix, sizeof(float) * 16);
+            memcpy(commonSettings.worldToViewMatrix,     &viewMat,        sizeof(float) * 16);
+            memcpy(commonSettings.worldToViewMatrixPrev, &prevViewMatrix, sizeof(float) * 16);
+
+            prevViewMatrix = viewMat;
+            prevProjMatrix = projMat;
+
+            // 2D screen-space motion vectors (pixelUvPrev = pixelUv + mv)
+            commonSettings.motionVectorScale[0] = 1.0f;
+            commonSettings.motionVectorScale[1] = 1.0f;
+            commonSettings.motionVectorScale[2] = 0.0f;
+            commonSettings.isMotionVectorInWorldSpace = false;
+
+            commonSettings.frameIndex = frameIndex++;
+
+            // Skyrim world units can be very large (far plane ~300k+ units).
+            // Default denoisingRange=500000 may clip distant geometry; use a safe margin.
+            commonSettings.denoisingRange = 1e6f;
+
+            // Debug: expose split-screen so left half shows raw (no-temporal) output.
+            commonSettings.splitScreen = settings.REBLURSplitScreen;
+        }
+        nrdReblur.SetCommonSettings(commonSettings);
+
+        // Update REBLUR settings
+        reblurSettings.maxAccumulatedFrameNum = settings.REBLURMaxAccumFrames;
+        nrdReblur.SetDenoiserSettings(&reblurSettings);
+
+        // Bind named resources
+        nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV,               texNRDMotionVectors->srv.get());
+        nrdReblur.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS,  texNRDNormalRoughness->srv.get());
+        nrdReblur.SetNamedSRV(nrd::ResourceType::IN_VIEWZ,             texNRDViewZ->srv.get());
+        nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH0,          texNRDInputSH0->srv.get());
+        nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH1,          texNRDInputSH1->srv.get());
+        // OUT_DIFF_SH0/SH1 serve as temp storage (DIFF_TEMP1/SH_TEMP1) between PrePass→TA→Blur,
+        // then TemporalStabilization overwrites them with the final denoised result.
+        // Both SRV (read by TA and Blur) and UAV (written by PrePass, HistoryFix, TS) must be bound.
+        nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH0,         texNRDOutputSH0->srv.get());
+        nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH1,         texNRDOutputSH1->srv.get());
+        nrdReblur.SetNamedUAV(nrd::ResourceType::IN_MV,                texNRDMotionVectors->uav.get());  // temporal stabilization writes disocclusion correction here
+        nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH0,         texNRDOutputSH0->uav.get());
+        nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH1,         texNRDOutputSH1->uav.get());
+
+        nrdReblur.Dispatch();
+
+        state->EndPerfEvent();
+    }
+
     state->EndPerfEvent();
 
     context->CSSetShader(nullptr, nullptr, 0);
@@ -633,8 +793,13 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 ScreenSpaceRayTracing::DiffuseOutput ScreenSpaceRayTracing::GetDiffuseOutputTextures()
 {
     DiffuseOutput output;
-    for (int i = 0; i < 4; ++i) {
-        output.sh[i] = texSSRTDiffuseSH[i]->srv.get();
+    if (settings.EnableREBLUR && nrdReblur.IsValid()) {
+        output.sh[0] = texNRDOutputSH0->srv.get();
+        output.sh[1] = texNRDOutputSH1->srv.get();
+    } else {
+        // Fallback: return NRD input textures (upscaled SH without denoising)
+        output.sh[0] = texNRDInputSH0->srv.get();
+        output.sh[1] = texNRDInputSH1->srv.get();
     }
     return output;
 }
