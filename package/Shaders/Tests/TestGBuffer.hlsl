@@ -5,7 +5,7 @@
 /// @tags gbuffer, normal, encoding
 [numthreads(1, 1, 1)] void TestNormalEncodingRoundtrip() {
 	float3 testNormals[5] = {
-		float3(0.3, 0.0, 1.0),    // near +Z
+		float3(0.3, 0.0, 1.0),  // near +Z
 		float3(1.0, 0.0, 0.0),
 		float3(-1.0, 0.0, 0.0),
 		float3(0.0, 1.0, 0.0),
