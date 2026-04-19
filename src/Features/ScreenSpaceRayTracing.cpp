@@ -214,7 +214,7 @@ void ScreenSpaceRayTracing::SetupResources()
 void ScreenSpaceRayTracing::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS, &depthDownsampleCS, &diffuseCompositeCS,
+        &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS, &depthDownsampleCS,
     };
 
     for (auto shader : shaderPtrs)
@@ -257,7 +257,6 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
             { &prefilterRadianceCS, "ssrt_prefilterRadiance.hlsl", {} },
             { &prefilterDepthCS, "ssrt_prefilterDepths.hlsl", {} },
             { &depthDownsampleCS, "ssrt_depth_downsample.hlsl", {} },
-            { &diffuseCompositeCS, "ssrt_diffuse_composite.hlsl", {} },
         };
 
     for (auto& info : shaderInfos) {
