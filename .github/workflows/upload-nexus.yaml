@@ -29,12 +29,6 @@ on:
             changelog:
                 description: "Optional release notes or changelog for Nexus"
                 required: false
-    workflow_run:
-        workflows:
-            - Semantic Release
-            - Build Community Shaders and addons
-        types:
-            - completed
 
 jobs:
     prepare-nexus-matrix:
@@ -46,7 +40,6 @@ jobs:
             version: ${{ steps.resolve.outputs.version }}
             dry_run: ${{ steps.dryrun.outputs.dry_run }}
             has_uploads: ${{ steps.generate.outputs.has_uploads }}
-            skip: ${{ steps.resolve.outputs.skip }}
         steps:
             - name: Checkout repository
               uses: actions/checkout@v6
@@ -61,54 +54,30 @@ jobs:
             - name: Resolve release tag
               id: resolve
               run: |
-                  if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-                    TAG="$INPUT_TAG"
-                  else
-                    # Resolve the tag pointing at the head SHA of the triggering workflow run
-                    TAG=$(gh api "repos/$REPO/git/refs/tags" \
-                      --jq ".[] | select(.object.sha == \"$HEAD_SHA\") | .ref | ltrimstr(\"refs/tags/\")" \
-                      2>/dev/null | head -1)
-                  fi
-
+                  TAG="$INPUT_TAG"
                   if [ -z "$TAG" ]; then
-                    if [ "$EVENT_NAME" = "workflow_run" ]; then
-                      echo 'No release tag for triggering workflow run; skipping Nexus upload.' >&2
-                      echo 'skip=true' >> $GITHUB_OUTPUT
-                      echo 'tag=' >> $GITHUB_OUTPUT
-                      echo 'version=' >> $GITHUB_OUTPUT
-                      exit 0
-                    fi
-                    echo 'No tag found for Nexus upload' >&2
+                    echo 'No tag provided for Nexus upload' >&2
                     exit 1
                   fi
-
                   VERSION="${TAG#v}"
-                  echo "skip=false" >> $GITHUB_OUTPUT
                   echo "tag=$TAG" >> $GITHUB_OUTPUT
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
               env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  EVENT_NAME: ${{ github.event_name }}
-                  REPO: ${{ github.repository }}
                   INPUT_TAG: ${{ github.event.inputs.tag || '' }}
-                  HEAD_SHA: ${{ github.event.workflow_run.head_sha || '' }}
 
             - name: Compute dry-run mode
               id: dryrun
-              if: steps.resolve.outputs.skip != 'true'
               run: |
-                  if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_DRY_RUN" = "false" ]; then
+                  if [ "$INPUT_DRY_RUN" = "false" ]; then
                     echo "dry_run=false" >> $GITHUB_OUTPUT
                   else
                     echo "dry_run=true" >> $GITHUB_OUTPUT
                   fi
               env:
-                  EVENT_NAME: ${{ github.event_name }}
                   INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || '' }}
 
             - name: Generate Nexus upload matrix
               id: generate
-              if: steps.resolve.outputs.skip != 'true'
               run: |
                   ARGS=( --export-nexus-matrix --matrix-output nexus-matrix-raw.json )
                   PREVIOUS_TAG=$(git tag --merged "$RELEASE_TAG" --list 'v*.*.*' --sort=-v:refname 2>/dev/null \
@@ -157,15 +126,6 @@ jobs:
 
     prepare-artifacts:
         needs: prepare-nexus-matrix
-        if: >
-            needs.prepare-nexus-matrix.outputs.skip != 'true' &&
-            (
-              github.event_name == 'workflow_dispatch' ||
-              (
-                github.event_name == 'workflow_run' &&
-                github.event.workflow_run.conclusion == 'success'
-              )
-            )
         runs-on: ubuntu-latest
         strategy:
             matrix: ${{ fromJson(needs.prepare-nexus-matrix.outputs.matrix) }}
@@ -232,16 +192,8 @@ jobs:
         # filtering is needed in the if condition (matrix is not available in job-level if).
         needs: [prepare-nexus-matrix, prepare-artifacts]
         if: >
-            needs.prepare-nexus-matrix.outputs.skip != 'true' &&
             needs.prepare-nexus-matrix.outputs.dry_run != 'true' &&
-            needs.prepare-nexus-matrix.outputs.has_uploads == 'true' &&
-            (
-              github.event_name == 'workflow_dispatch' ||
-              (
-                github.event_name == 'workflow_run' &&
-                github.event.workflow_run.conclusion == 'success'
-              )
-            )
+            needs.prepare-nexus-matrix.outputs.has_uploads == 'true'
         strategy:
             matrix: ${{ fromJson(needs.prepare-nexus-matrix.outputs.upload_matrix) }}
             fail-fast: false
@@ -263,7 +215,7 @@ jobs:
         name: Upload Summary
         runs-on: ubuntu-latest
         needs: [prepare-nexus-matrix, prepare-artifacts, upload-to-nexus]
-        if: always() && needs.prepare-nexus-matrix.outputs.skip != 'true'
+        if: always() && needs.prepare-nexus-matrix.result == 'success'
         steps:
             - name: Check upload status
               run: |
