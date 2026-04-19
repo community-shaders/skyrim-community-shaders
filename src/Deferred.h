@@ -6,7 +6,6 @@
 #define ALBEDO RE::RENDER_TARGETS::kINDIRECT
 #define SPECULAR RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED
 #define REFLECTANCE RE::RENDER_TARGETS::kRAWINDIRECT
-#define NORMALROUGHNESS RE::RENDER_TARGETS::kRAWINDIRECT_DOWNSCALED
 #define MASKS RE::RENDER_TARGETS::kRAWINDIRECT_PREVIOUS
 #define MASKS2 RE::RENDER_TARGETS::kRAWINDIRECT_PREVIOUS_DOWNSCALED
 
@@ -48,6 +47,8 @@ public:
 	winrt::com_ptr<ID3D11DepthStencilState> compositeDepthStencilState;
 	winrt::com_ptr<ID3D11DepthStencilState> compositeStencilDSState;
 	winrt::com_ptr<ID3D11RasterizerState> compositeRasterizerState;
+
+	RE::RENDER_TARGET normalRoughnessRT = RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK;
 
 	bool deferredPass = false;
 
