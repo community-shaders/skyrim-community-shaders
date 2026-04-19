@@ -260,8 +260,10 @@ void WeatherWidget::DrawWidget()
 						bool& inheritFlag = settings.inheritFlags[inheritKey];
 						ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag);
 						if (inheritFlag && parentWidget) {
-							settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
-							recordChanged = true;
+							if (settings.imageSpaceRefs[i] != parentWidget->settings.imageSpaceRefs[i]) {
+								settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
+								recordChanged = true;
+							}
 						}
 						if (ImGui::IsItemHovered()) {
 							ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
@@ -306,8 +308,10 @@ void WeatherWidget::DrawWidget()
 						bool& inheritFlag = settings.inheritFlags[inheritKey];
 						ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag);
 						if (inheritFlag && parentWidget) {
-							settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
-							recordChanged = true;
+							if (settings.volumetricLightingRefs[i] != parentWidget->settings.volumetricLightingRefs[i]) {
+								settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
+								recordChanged = true;
+							}
 						}
 						if (ImGui::IsItemHovered()) {
 							ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
@@ -347,8 +351,10 @@ void WeatherWidget::DrawWidget()
 					bool& inheritFlag = settings.inheritFlags["Precipitation"];
 					ImGui::Checkbox("##inherit_Precipitation", &inheritFlag);
 					if (inheritFlag && parentWidget) {
-						settings.precipitationData = parentWidget->settings.precipitationData;
-						recordChanged = true;
+						if (settings.precipitationData != parentWidget->settings.precipitationData) {
+							settings.precipitationData = parentWidget->settings.precipitationData;
+							recordChanged = true;
+						}
 					}
 					if (ImGui::IsItemHovered()) {
 						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
@@ -386,8 +392,10 @@ void WeatherWidget::DrawWidget()
 					bool& inheritFlag = settings.inheritFlags["ReferenceEffect"];
 					ImGui::Checkbox("##inherit_ReferenceEffect", &inheritFlag);
 					if (inheritFlag && parentWidget) {
-						settings.referenceEffect = parentWidget->settings.referenceEffect;
-						recordChanged = true;
+						if (settings.referenceEffect != parentWidget->settings.referenceEffect) {
+							settings.referenceEffect = parentWidget->settings.referenceEffect;
+							recordChanged = true;
+						}
 					}
 					if (ImGui::IsItemHovered()) {
 						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
@@ -477,7 +485,7 @@ void WeatherWidget::LoadSettings()
 				if (id.empty())
 					return nullptr;
 				auto* f = WeatherUtils::FindFormByEditorID(id, widgets);
-				return f ? static_cast<T*>(f) : nullptr;
+				return f ? static_cast<T*>(f) : vanillaValue;
 			};
 			for (size_t i = 0; i < ColorTimes::kTotal; i++) {
 				settings.imageSpaceRefs[i] = loadRef(std::format("imageSpaceRef_{}", i), editorWindow->imageSpaceWidgets, vanillaSettings.imageSpaceRefs[i]);
