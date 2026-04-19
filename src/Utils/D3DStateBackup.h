@@ -16,8 +16,6 @@ namespace Util
 		ID3D11VertexShader* vs = nullptr;
 		ID3D11Buffer* vsCBs[kNumCBSlots] = {};
 
-		ID3D11GeometryShader* gs = nullptr;
-
 		ID3D11RasterizerState* rsState = nullptr;
 		UINT rsNumViewports = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
 		D3D11_VIEWPORT rsViewports[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE] = {};
@@ -43,8 +41,6 @@ namespace Util
 			context->VSGetShader(&vs, nullptr, nullptr);
 			context->VSGetConstantBuffers(0, kNumCBSlots, vsCBs);
 
-			context->GSGetShader(&gs, nullptr, nullptr);
-
 			context->RSGetState(&rsState);
 			rsNumViewports = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
 			context->RSGetViewports(&rsNumViewports, rsViewports);
@@ -66,8 +62,6 @@ namespace Util
 
 			context->VSSetShader(vs, nullptr, 0);
 			context->VSSetConstantBuffers(0, kNumCBSlots, vsCBs);
-
-			context->GSSetShader(gs, nullptr, 0);
 
 			context->RSSetState(rsState);
 			context->RSSetViewports(rsNumViewports, rsViewports);
@@ -99,10 +93,6 @@ namespace Util
 					cb->Release();
 					cb = nullptr;
 				}
-			}
-			if (gs) {
-				gs->Release();
-				gs = nullptr;
 			}
 			if (rsState) {
 				rsState->Release();
