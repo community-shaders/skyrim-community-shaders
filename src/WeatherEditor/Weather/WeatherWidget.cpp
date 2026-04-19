@@ -260,8 +260,7 @@ void WeatherWidget::DrawWidget()
 						bool& inheritFlag = settings.inheritFlags[inheritKey];
 						ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag);
 						if (inheritFlag && parentWidget) {
-							weather->imageSpaces[i] = parentWidget->weather->imageSpaces[i];
-							settings.imageSpaceRefs[i] = weather->imageSpaces[i];
+							settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
 							recordChanged = true;
 						}
 						if (ImGui::IsItemHovered()) {
@@ -272,15 +271,14 @@ void WeatherWidget::DrawWidget()
 
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
-					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", weather->imageSpaces[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
-						settings.imageSpaceRefs[i] = weather->imageSpaces[i];
+					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
 						recordChanged = true;
 					}  // Add "Open" button
-					if (weather->imageSpaces[i]) {
+					if (settings.imageSpaceRefs[i]) {
 						ImGui::SameLine();
 						if (ImGui::SmallButton(std::format("Open##{}", i).c_str())) {
 							for (auto& widget : editorWindow->imageSpaceWidgets) {
-								if (widget->form == weather->imageSpaces[i]) {
+								if (widget->form == settings.imageSpaceRefs[i]) {
 									widget->SetOpen(true);
 									break;
 								}
@@ -308,8 +306,7 @@ void WeatherWidget::DrawWidget()
 						bool& inheritFlag = settings.inheritFlags[inheritKey];
 						ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag);
 						if (inheritFlag && parentWidget) {
-							weather->volumetricLighting[i] = parentWidget->weather->volumetricLighting[i];
-							settings.volumetricLightingRefs[i] = weather->volumetricLighting[i];
+							settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
 							recordChanged = true;
 						}
 						if (ImGui::IsItemHovered()) {
@@ -320,15 +317,14 @@ void WeatherWidget::DrawWidget()
 
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
-					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", weather->volumetricLighting[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
-						settings.volumetricLightingRefs[i] = weather->volumetricLighting[i];
+					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
 						recordChanged = true;
 					}  // Add "Open" button
-					if (weather->volumetricLighting[i]) {
+					if (settings.volumetricLightingRefs[i]) {
 						ImGui::SameLine();
 						if (ImGui::SmallButton(std::format("Open##{}", i).c_str())) {
 							for (auto& widget : editorWindow->volumetricLightingWidgets) {
-								if (widget->form == weather->volumetricLighting[i]) {
+								if (widget->form == settings.volumetricLightingRefs[i]) {
 									widget->SetOpen(true);
 									break;
 								}
@@ -351,8 +347,7 @@ void WeatherWidget::DrawWidget()
 					bool& inheritFlag = settings.inheritFlags["Precipitation"];
 					ImGui::Checkbox("##inherit_Precipitation", &inheritFlag);
 					if (inheritFlag && parentWidget) {
-						weather->precipitationData = parentWidget->weather->precipitationData;
-						settings.precipitationData = weather->precipitationData;
+						settings.precipitationData = parentWidget->settings.precipitationData;
 						recordChanged = true;
 					}
 					if (ImGui::IsItemHovered()) {
@@ -363,15 +358,14 @@ void WeatherWidget::DrawWidget()
 
 				ImGui::Text("Particle Shader:");
 				ImGui::SameLine(formLabelOffset);
-				if (WeatherUtils::DrawFormPickerCached("##Precipitation", weather->precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
-					settings.precipitationData = weather->precipitationData;
+				if (WeatherUtils::DrawFormPickerCached("##Precipitation", settings.precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
 					recordChanged = true;
 				}  // Add "Open" button
-				if (weather->precipitationData) {
+				if (settings.precipitationData) {
 					ImGui::SameLine();
 					if (ImGui::SmallButton("Open##Precip")) {
 						for (auto& widget : editorWindow->precipitationWidgets) {
-							if (widget->form == weather->precipitationData) {
+							if (widget->form == settings.precipitationData) {
 								widget->SetOpen(true);
 								break;
 							}
@@ -392,8 +386,7 @@ void WeatherWidget::DrawWidget()
 					bool& inheritFlag = settings.inheritFlags["ReferenceEffect"];
 					ImGui::Checkbox("##inherit_ReferenceEffect", &inheritFlag);
 					if (inheritFlag && parentWidget) {
-						weather->referenceEffect = parentWidget->weather->referenceEffect;
-						settings.referenceEffect = weather->referenceEffect;
+						settings.referenceEffect = parentWidget->settings.referenceEffect;
 						recordChanged = true;
 					}
 					if (ImGui::IsItemHovered()) {
@@ -404,15 +397,14 @@ void WeatherWidget::DrawWidget()
 
 				ImGui::Text("Reference Effect:");
 				ImGui::SameLine(formLabelOffset);
-				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", weather->referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
-					settings.referenceEffect = weather->referenceEffect;
+				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", settings.referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
 					recordChanged = true;
 				}  // Add "Open" button
-				if (weather->referenceEffect) {
+				if (settings.referenceEffect) {
 					ImGui::SameLine();
 					if (ImGui::SmallButton("Open##RefEffect")) {
 						for (auto& widget : editorWindow->referenceEffectWidgets) {
-							if (widget->form == weather->referenceEffect) {
+							if (widget->form == settings.referenceEffect) {
 								widget->SetOpen(true);
 								break;
 							}
@@ -476,20 +468,23 @@ void WeatherWidget::LoadSettings()
 			}
 
 			// Record form references (resolved by matching widget EditorID)
+			// Three cases: key missing -> vanilla, key present with "" -> explicit None (nullptr), key present with id -> lookup form
 			auto* editorWindow = EditorWindow::GetSingleton();
-			auto loadEditorID = [&](const std::string& key) -> std::string {
-				return (js.contains(key) && js[key].is_string()) ? js[key].get<std::string>() : "";
+			auto loadRef = [&]<typename T>(const std::string& key, const std::vector<std::unique_ptr<Widget>>& widgets, T* vanillaValue) -> T* {
+				if (!js.contains(key) || !js[key].is_string())
+					return vanillaValue;
+				const std::string id = js[key].get<std::string>();
+				if (id.empty())
+					return nullptr;
+				auto* f = WeatherUtils::FindFormByEditorID(id, widgets);
+				return f ? static_cast<T*>(f) : nullptr;
 			};
 			for (size_t i = 0; i < ColorTimes::kTotal; i++) {
-				auto* f = WeatherUtils::FindFormByEditorID(loadEditorID(std::format("imageSpaceRef_{}", i)), editorWindow->imageSpaceWidgets);
-				settings.imageSpaceRefs[i] = f ? static_cast<RE::TESImageSpace*>(f) : vanillaSettings.imageSpaceRefs[i];
-				auto* vl = WeatherUtils::FindFormByEditorID(loadEditorID(std::format("volumetricLightingRef_{}", i)), editorWindow->volumetricLightingWidgets);
-				settings.volumetricLightingRefs[i] = vl ? static_cast<RE::BGSVolumetricLighting*>(vl) : vanillaSettings.volumetricLightingRefs[i];
+				settings.imageSpaceRefs[i] = loadRef(std::format("imageSpaceRef_{}", i), editorWindow->imageSpaceWidgets, vanillaSettings.imageSpaceRefs[i]);
+				settings.volumetricLightingRefs[i] = loadRef(std::format("volumetricLightingRef_{}", i), editorWindow->volumetricLightingWidgets, vanillaSettings.volumetricLightingRefs[i]);
 			}
-			auto* precip = WeatherUtils::FindFormByEditorID(loadEditorID("precipitationDataRef"), editorWindow->precipitationWidgets);
-			settings.precipitationData = precip ? static_cast<RE::BGSShaderParticleGeometryData*>(precip) : vanillaSettings.precipitationData;
-			auto* refEffect = WeatherUtils::FindFormByEditorID(loadEditorID("referenceEffectRef"), editorWindow->referenceEffectWidgets);
-			settings.referenceEffect = refEffect ? static_cast<RE::BGSReferenceEffect*>(refEffect) : vanillaSettings.referenceEffect;
+			settings.precipitationData = loadRef("precipitationDataRef", editorWindow->precipitationWidgets, vanillaSettings.precipitationData);
+			settings.referenceEffect = loadRef("referenceEffectRef", editorWindow->referenceEffectWidgets, vanillaSettings.referenceEffect);
 
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
