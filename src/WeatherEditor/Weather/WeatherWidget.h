@@ -80,6 +80,12 @@ public:
 		DALC dalc[ColorTimes::kTotal];
 		Cloud clouds[TESWeather::kTotalLayers];
 
+		// Record form references
+		RE::TESImageSpace* imageSpaceRefs[ColorTimes::kTotal] = {};
+		RE::BGSVolumetricLighting* volumetricLightingRefs[ColorTimes::kTotal] = {};
+		RE::BGSShaderParticleGeometryData* precipitationData = nullptr;
+		RE::BGSReferenceEffect* referenceEffect = nullptr;
+
 		// Per-feature settings storage
 		std::map<std::string, json> featureSettings;
 
