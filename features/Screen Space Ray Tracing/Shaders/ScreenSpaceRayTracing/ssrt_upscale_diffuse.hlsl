@@ -2,7 +2,7 @@
 
 Texture2D<float4> SSRTDiffuseTexture : register(t0);
 Texture2D<float2> AverageDirectionTexture : register(t1);
-Texture2D<float> halfResDepth : register(t2);
+Texture2D<float> quarterResDepth : register(t2);
 
 RWTexture2D<float4> outSH0 : register(u0);
 RWTexture2D<float4> outSH1 : register(u1);
@@ -38,11 +38,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
     uint2 outputRes = FrameDim / 2;
     if (any(DTid.xy >= outputRes)) return;
 
-    float centerDepth = halfResDepth[DTid.xy];
-
     // We are at 1/2 res. Map to 1/4 res neighborhood.
     // 1/2 res pixel (x,y) -> 1/4 res pixel (x/2, y/2)
     int2 centerCoord = DTid.xy / 2;
+    float centerDepth = quarterResDepth[centerCoord];
 
     float3 accSH0 = 0;
     float3 accSH1 = 0;
@@ -62,14 +61,12 @@ void main(uint3 DTid : SV_DispatchThreadID)
             float4 radiance = SSRTDiffuseTexture[tapCoord];
             float2 encDir = AverageDirectionTexture[tapCoord];
             
-            if (radiance.w <= 0) continue;
-
-            float tapDepth = halfResDepth[tapCoord * 2]; // Match 1/4 tap to 1/2 res depth
-            float depthWeight = exp(-abs(centerDepth - tapDepth) * 0.1); // Simple bilateral depth weight
+            float tapDepth = quarterResDepth[tapCoord];
+           // float depthWeight = exp(-abs(centerDepth - tapDepth) * 0.1); // Simple bilateral depth weight
 
             float3 dir = Octahedral::Decode(encDir);
             float3 color = radiance.xyz;
-            float weight = depthWeight;
+            float weight = 1;
 
             float4 sh = SH2Basis(dir);
             

@@ -73,10 +73,10 @@ void ScreenSpaceRayTracing::DrawSettings()
 		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
 
 		BUFFER_VIEWER_NODE(texDepth, debugRescale)
+		BUFFER_VIEWER_NODE(texHalfResDepth, debugRescale)
         BUFFER_VIEWER_NODE(texColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRTDiffuseColor, debugRescale)
-        BUFFER_VIEWER_NODE(texOutput, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -129,13 +129,27 @@ void ScreenSpaceRayTracing::SetupResources()
 			.Texture2D = { .MipSlice = 0 }
 		};
 
+        texDesc.Width /= 2;
+		texDesc.Height /= 2;
+
+		// SH textures at 1/2 resolution
+		for (int i = 0; i < 4; ++i) {
+			texSSRTDiffuseSH[i] = eastl::make_unique<Texture2D>(texDesc);
+			texSSRTDiffuseSH[i]->CreateSRV(srvDesc);
+			texSSRTDiffuseSH[i]->CreateUAV(uavDesc);
+		}
+
+		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
+		texHalfResDepth = eastl::make_unique<Texture2D>(texDesc);
+		texHalfResDepth->CreateSRV(srvDesc);
+		texHalfResDepth->CreateUAV(uavDesc);
+
         // Quarter-resolution textures: color input, output, and specular/diffuse results
-        texDesc.Width >>= 2;
-        texDesc.Height >>= 2;
-        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.Width /= 2;
+		texDesc.Height /= 2;
 
         // texColor: single-mip for color input
-        texDesc.MipLevels = 1;
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
         srvDesc.Texture2D.MipLevels = 1;
         texColor = eastl::make_unique<Texture2D>(texDesc);
@@ -143,7 +157,6 @@ void ScreenSpaceRayTracing::SetupResources()
         texColor->CreateUAV(uavDesc);
 
         // Restore single-mip settings for remaining textures
-        texDesc.MipLevels = 1;
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
         srvDesc.Texture2D.MipLevels = 1;
 
@@ -159,27 +172,7 @@ void ScreenSpaceRayTracing::SetupResources()
         texSSRTDiffuseDirection->CreateSRV(srvDesc);
         texSSRTDiffuseDirection->CreateUAV(uavDesc);
 
-        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-        texOutput = eastl::make_unique<Texture2D>(texDesc);
-        texOutput->CreateSRV(srvDesc);
-        texOutput->CreateUAV(uavDesc);
-
-        texDesc.Width /= 2;
-		texDesc.Height /= 2;
-        texSSRTDiffuseHalfResDepth = eastl::make_unique<Texture2D>(texDesc);
-        texSSRTDiffuseHalfResDepth->CreateSRV(srvDesc);
-        texSSRTDiffuseHalfResDepth->CreateUAV(uavDesc);
-
-        // SH textures at 1/2 resolution
-        for (int i = 0; i < 4; ++i) {
-            texSSRTDiffuseSH[i] = eastl::make_unique<Texture2D>(texDesc);
-            texSSRTDiffuseSH[i]->CreateSRV(srvDesc);
-            texSSRTDiffuseSH[i]->CreateUAV(uavDesc);
-        }
-
         // Quarter-resolution depth pyramid (Mip 0=Quarter, Mip 1=Eighth, Mip 2=Sixteenth)
-		texDesc.Width /= 2;
-		texDesc.Height /= 2;
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
         texDesc.MipLevels = maxMips;
         srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
@@ -233,7 +226,7 @@ void ScreenSpaceRayTracing::SetupResources()
 void ScreenSpaceRayTracing::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-        &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS, &depthDownsampleCS, &upscaleDiffuseCS, &preprocessDepthCS,
+        &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS, &depthDownsampleCS, &upscaleDiffuseCS,
     };
 
     for (auto shader : shaderPtrs)
@@ -275,7 +268,6 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
             { &raymarchSpecularCS, "ssrt_raymarch.hlsl", definesSpecular },
             { &prefilterRadianceCS, "ssrt_prefilterRadiance.hlsl", {} },
             { &prefilterDepthCS, "ssrt_prefilterDepths.hlsl", {} },
-            { &preprocessDepthCS, "ssrt_preprocess_depth.hlsl", {} },
             { &depthDownsampleCS, "ssrt_depth_downsample.hlsl", {} },
             { &upscaleDiffuseCS, "ssrt_upscale_diffuse.hlsl", {} },
         };
@@ -343,14 +335,14 @@ void ScreenSpaceRayTracing::Prepass()
 
     state->BeginPerfEvent("SSRT Prepass");
 
-    // prefilter depth: full-res NDC depth → quarter-res mip 2 (Hi-Z min of 4×4 block) and half-res depth (mip 1)
+    // prefilter depth: full-res NDC depth → quarter-res min-filtered base of Hi-Z pyramid
     {
-        uavs.at(0) = depthUAVs[0].get(); // quarter res
-        uavs.at(1) = texSSRTDiffuseHalfResDepth->uav.get(); // separate half res for upscale
-        srvs.at(0) = depth.depthSRV; // t0 in prefilter shader
+		auto srv = depth.depthSRV;
+		context->CSSetShaderResources(0, 1, &srv);
 
-        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+        ID3D11UnorderedAccessView* uavs2[] = { depthUAVs[0].get(), texHalfResDepth->uav.get() };
+		context->CSSetUnorderedAccessViews(0, 2, uavs2, nullptr);
+
         context->CSSetShader(prefilterDepthCS.get(), nullptr, 0);
         context->Dispatch(((uint)dynres.x + 15) >> 4, ((uint)dynres.y + 15) >> 4, 1);
 
@@ -450,7 +442,6 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
         ID3D11UnorderedAccessView* colorUav = texColor->uav.get();
 
         srvs.at(0) = main.SRV;
-        srvs.at(1) = specular.SRV;
 
         context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
         context->CSSetUnorderedAccessViews(0, 1, &colorUav, nullptr);
@@ -503,8 +494,6 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     state->EndPerfEvent();
 
     resetViews();
-
-    context->CopyResource(texOutput->resource.get(), texSSRColor->resource.get());
 
     context->CSSetShader(nullptr, nullptr, 0);
 
@@ -617,8 +606,8 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         srvs.fill(nullptr);
         srvs.at(0) = texSSRTDiffuseColor->srv.get();
         srvs.at(1) = texSSRTDiffuseDirection->srv.get();
-        srvs.at(2) = texSSRTDiffuseHalfResDepth->srv.get();
-
+		srvs.at(2) = texHalfResDepth->srv.get();	
+		srvs.at(3) = depthSRVs[0].get();
         std::array<ID3D11UnorderedAccessView*, 4> shUavs = {
             texSSRTDiffuseSH[0]->uav.get(),
             texSSRTDiffuseSH[1]->uav.get(),

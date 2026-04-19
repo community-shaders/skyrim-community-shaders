@@ -408,7 +408,7 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                                  // t14 SsgiSpecularTexture
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
-			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.texOutput->srv.get() : nullptr,                    // t17 SsrtSpecularTexture
+			nullptr,                    // t17 SsrtSpecularTexture
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[0] : nullptr,                             // t18 SsrtDiffuseSH0
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[1] : nullptr,                             // t19 SsrtDiffuseSH1
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[2] : nullptr,                             // t20 SsrtDiffuseSH2
