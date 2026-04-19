@@ -357,9 +357,7 @@ void Deferred::DeferredPasses()
 		stateBackup.Backup(context);
 
 		auto& mainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-		auto normalRoughnessCopyRT = (normalRoughnessRT == RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK)
-		                                 ? RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK_SWAP
-		                                 : RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK;
+		auto normalRoughnessCopyRT = (normalRoughnessRT == RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK) ? RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK_SWAP : RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK;
 		auto& normalRoughnessCopy = renderer->GetRuntimeData().renderTargets[normalRoughnessCopyRT];
 		float2 resolution = Util::ConvertToDynamic(globals::state->screenSize);
 		D3D11_BOX srcBox = { 0, 0, 0, (UINT)resolution.x, (UINT)resolution.y, 1 };
