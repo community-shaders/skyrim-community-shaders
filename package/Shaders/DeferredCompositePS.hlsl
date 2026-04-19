@@ -83,13 +83,13 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 struct PS_INPUT
 {
-	float4 Position : SV_Position;
-	float2 TexCoord : TEXCOORD0;
+	float4 Position: SV_Position;
+	float2 TexCoord: TEXCOORD0;
 };
 
 struct PS_OUTPUT
 {
-	float4 Main : SV_Target0;
+	float4 Main: SV_Target0;
 };
 
 PS_OUTPUT main(PS_INPUT input)

@@ -24,8 +24,9 @@
 	}
 }
 
-/// @tags gbuffer, normal, encoding
-[numthreads(1, 1, 1)] void TestNormalEncodingAngledNormals() {
+	/// @tags gbuffer, normal, encoding
+	[numthreads(1, 1, 1)] void TestNormalEncodingAngledNormals()
+{
 	half3 testNormals[4] = {
 		normalize(half3(1.0h, 1.0h, 1.0h)),
 		normalize(half3(-1.0h, 1.0h, 1.0h)),
