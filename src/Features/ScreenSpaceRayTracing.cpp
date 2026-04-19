@@ -501,7 +501,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
     auto specular = renderer->GetRuntimeData().renderTargets[SPECULAR];
-    auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
+    auto normal = renderer->GetRuntimeData().renderTargets[globals::deferred->normalRoughnessRT];
     auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
     auto& dynamicCubemaps = globals::features::dynamicCubemaps;
@@ -697,7 +697,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
     auto specular = renderer->GetRuntimeData().renderTargets[SPECULAR];
-    auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
+    auto normal = renderer->GetRuntimeData().renderTargets[globals::deferred->normalRoughnessRT];
     auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
     auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
