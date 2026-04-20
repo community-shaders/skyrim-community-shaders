@@ -68,8 +68,6 @@ void VRS::Main_FinishAccumulatingDispatch::thunk(RE::BSGraphics::BSShaderAccumul
 
 void VRS::DrawSettings()
 {
-
-
 	settings.vrEnableVRS = std::min(settings.vrEnableVRS, 1u);
 	const char* vrsToggle[] = { "Disabled", "Enabled" };
 	ImGui::SliderInt("VR NVAPI VRS", (int*)&settings.vrEnableVRS, 0, 1, vrsToggle[settings.vrEnableVRS]);
