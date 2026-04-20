@@ -2187,14 +2187,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		[branch] if ((PBRFlags & PBR::Flags::HasFeatureTexture0) != 0)
 		{
 			float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
-			
+
 			// If LL is off, Diffuse returns sRGB
 			material.SubsurfaceColor *= Color::Diffuse(sampledSubsurfaceProperties.xyz);
-			
+
 			if (!SharedData::linearLightingSettings.enableLinearLighting) {
 				material.SubsurfaceColor = Color::LinearToSrgb(
-					Color::SrgbToLinear(material.SubsurfaceColor) * pbrVertexColor
-				);
+					Color::SrgbToLinear(material.SubsurfaceColor) * pbrVertexColor);
 			} else {
 				material.SubsurfaceColor *= pbrVertexColor;
 			}
@@ -2826,7 +2825,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		} else {
 			emitColor *= glowColor;
 		}
-#		endif // TRUE_PBR
+#		endif  // TRUE_PBR
 	}
 #	endif
 
