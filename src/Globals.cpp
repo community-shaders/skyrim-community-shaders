@@ -18,7 +18,6 @@
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/RenderDoc.h"
-#include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceRayTracing.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
@@ -66,7 +65,6 @@ namespace globals
 		HairSpecular hairSpecular{};
 		InteriorSun interiorSun{};
 		InverseSquareLighting inverseSquareLighting{};
-		ScreenSpaceGI screenSpaceGI{};
 		ScreenSpaceRayTracing screenSpaceRayTracing{};
 		ScreenSpaceShadows screenSpaceShadows{};
 		Skylighting skylighting{};

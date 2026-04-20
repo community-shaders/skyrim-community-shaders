@@ -28,9 +28,7 @@ float DepthMIPFilter(float depth0, float depth1, float depth2, float depth3)
 	return min(min(depth0, depth1), min(depth2, depth3));
 }
 
-groupshared float g_scratchDepths[8][8];
-
-[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID, uint2 GTid : SV_GroupThreadID)
+[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID)
 {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
@@ -45,22 +43,8 @@ groupshared float g_scratchDepths[8][8];
 	float depth2 = depths4.x;
 	float depth3 = depths4.y;
 
-	// MIP 1
+	// MIP 1 (half res) -> Hi-Z base and bilateral guide
 	float dm1 = DepthMIPFilter(depth0, depth1, depth2, depth3);
-	g_scratchDepths[GTid.x][GTid.y] = dm1;
+	outDepth0[baseCoord] = dm1;
 	halfResDepth[baseCoord] = dm1;
-
-	GroupMemoryBarrierWithGroupSync();
-
-	// MIP 2
-	[branch] if (all((GTid.xy % 2) == 0))
-	{
-		float inTL = g_scratchDepths[GTid.x + 0][GTid.y + 0];
-		float inTR = g_scratchDepths[GTid.x + 1][GTid.y + 0];
-		float inBL = g_scratchDepths[GTid.x + 0][GTid.y + 1];
-		float inBR = g_scratchDepths[GTid.x + 1][GTid.y + 1];
-
-		float dm2 = DepthMIPFilter(inTL, inTR, inBL, inBR);
-		outDepth0[baseCoord / 2] = dm2;
-	}
 }

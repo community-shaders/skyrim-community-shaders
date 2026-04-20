@@ -8,7 +8,6 @@
 #include "ShaderCache.h"
 
 #include "DynamicCubemaps.h"
-#include "ScreenSpaceGI.h"
 #include "Skylighting.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -30,7 +29,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     FireflySuppressorMinRelativeScale,
     EnableAntiFirefly,
     ReturnHistoryLengthInsteadOfOcclusion,
-    SplitScreen
+    SplitScreen,
+    HitDistanceReconstructionMode,
+    EnableNRDValidation
 )
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -52,6 +53,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     CubemapNormalization,
     EnableREBLUR,
     WorldScale,
+    DebugMode,
     Reblur
 )
 
@@ -178,12 +180,39 @@ void ScreenSpaceRayTracing::DrawSettings()
         }
 
         ImGui::SeparatorText("Debug");
-        ImGui::SliderFloat("Split Screen", &r.SplitScreen, 0.0f, 1.0f, "%.2f");
-        if (auto _tt = Util::HoverTooltipWrapper())
-            ImGui::Text("Left of threshold shows raw input, right shows denoised output.");
+        {
+            ImGui::SliderFloat("Split Screen", &r.SplitScreen, 0.0f, 1.0f, "%.2f");
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Left of threshold shows raw input, right shows denoised output.");
+
+            ImGui::Checkbox("NRD Validation Layer", &r.EnableNRDValidation);
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("NRD internal debug overlay. Output textures show convergence/disocclusion info.");
+
+            static const char* hitDistReconModes[] = { "OFF", "AREA_3X3 (performance)", "AREA_5X5" };
+            int hdMode = (int)r.HitDistanceReconstructionMode;
+            if (ImGui::Combo("Hit Distance Reconstruction", &hdMode, hitDistReconModes, 3))
+                r.HitDistanceReconstructionMode = (uint32_t)hdMode;
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("AREA_3X3 enables sparse raycast (performance mode): NRD reconstructs missing hit distances from neighbours.");
+        }
     }
 
     ImGui::SeparatorText("Debug");
+    {
+        static const char* debugModes[] = {
+            "None",
+            "Denoised Specular Radiance",
+            "Denoised Diffuse GI",
+            "Denoised Occlusion",
+            "Half-Res Depth Guide",
+        };
+        int dbg = (int)settings.DebugMode;
+        if (ImGui::Combo("Debug Mode", &dbg, debugModes, 5))
+            settings.DebugMode = (uint)dbg;
+        if (auto _tt = Util::HoverTooltipWrapper())
+            ImGui::Text("Replaces the final image with the selected REBLUR layer for validation.");
+    }
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
 		static float debugRescale = .3f;
@@ -192,7 +221,8 @@ void ScreenSpaceRayTracing::DrawSettings()
 		BUFFER_VIEWER_NODE(texDepth, debugRescale)
 		BUFFER_VIEWER_NODE(texHalfResDepth, debugRescale)
         BUFFER_VIEWER_NODE(texColor, debugRescale)
-        BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDInputSpecRadianceHitDist, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDOutputSpecRadianceHitDist, debugRescale)
         BUFFER_VIEWER_NODE(texNRDInputSH0, debugRescale)
         BUFFER_VIEWER_NODE(texNRDInputSH1, debugRescale)
         BUFFER_VIEWER_NODE(texNRDOutputSH0, debugRescale)
@@ -304,19 +334,15 @@ void ScreenSpaceRayTracing::SetupResources()
         texHalfResDepth->CreateSRV(srvDesc);
         texHalfResDepth->CreateUAV(uavDesc);
 
-        // -- 1/4 resolution textures --
-        texDesc.Width /= 2;
-		texDesc.Height /= 2;
-
+        // Prefiltered radiance (1/2 res, R11G11B10F)
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+        texDesc.MipLevels = 1;
         srvDesc.Texture2D.MipLevels = 1;
         texColor = eastl::make_unique<Texture2D>(texDesc);
         texColor->CreateSRV(srvDesc);
         texColor->CreateUAV(uavDesc);
 
-        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-        srvDesc.Texture2D.MipLevels = 1;
-
+        // Hi-Z depth pyramid base (1/2 res, R32F, maxMips mips)
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
         texDesc.MipLevels = maxMips;
         srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
@@ -426,9 +452,6 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
 
     if (globals::features::dynamicCubemaps.loaded)
 		defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
-
-    if (globals::features::screenSpaceGI.loaded)
-		defines.push_back({ "SSGI", nullptr });
 
     if (globals::features::skylighting.loaded)
 		defines.push_back({ "SKYLIGHTING", nullptr });
@@ -599,7 +622,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
     auto& dynamicCubemaps = globals::features::dynamicCubemaps;
-    auto& ssgi = globals::features::screenSpaceGI;
+
     auto& skylighting = globals::features::skylighting;
 
     float2 res = state->screenSize;
@@ -664,8 +687,6 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     const auto envTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr;
 	const auto envReflectionsTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr;
 
-    auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
-
     bool inInterior = true;
 
     if (auto player = RE::PlayerCharacter::GetSingleton()) {
@@ -686,7 +707,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     srvs.at(6) = noiseSRV.get();
     srvs.at(7) = envTexture;
     srvs.at(8) = inInterior ? envTexture : envReflectionsTexture;
-    srvs.at(9) = ssgi_ao;
+    srvs.at(9) = nullptr;  // t9 unused
     srvs.at(10) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr;
     srvs.at(11) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr;
 
@@ -737,6 +758,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
             specCommonSettings.frameIndex = settings.EnableDiffuse ? frameIndex - 1 : frameIndex++;
             specCommonSettings.denoisingRange = 1e6f;
             specCommonSettings.splitScreen = settings.Reblur.SplitScreen;
+            specCommonSettings.enableValidation = settings.Reblur.EnableNRDValidation;
         }
         nrdReblurSpecular.SetCommonSettings(specCommonSettings);
 
@@ -761,6 +783,8 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
             reblurSpecularSettings.enableAntiFirefly = r.EnableAntiFirefly;
             reblurSpecularSettings.returnHistoryLengthInsteadOfOcclusion = r.ReturnHistoryLengthInsteadOfOcclusion;
             reblurSpecularSettings.specularPrepassBlurRadius = std::max(r.DiffusePrepassBlurRadius, 0.0f);
+            reblurSpecularSettings.hitDistanceReconstructionMode = static_cast<nrd::HitDistanceReconstructionMode>(
+                std::min(r.HitDistanceReconstructionMode, 2u));
             reblurSpecularSettings.hitDistanceParameters.A = 3.0f * settings.WorldScale;
             reblurSpecularSettings.hitDistanceParameters.B = 0.1f;
             reblurSpecularSettings.hitDistanceParameters.C = 20.0f;
@@ -804,7 +828,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
     auto& dynamicCubemaps = globals::features::dynamicCubemaps;
-    auto& ssgi = globals::features::screenSpaceGI;
+
     auto& skylighting = globals::features::skylighting;
 
     float2 res = state->screenSize;
@@ -852,8 +876,6 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     const auto envTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr;
     const auto envReflectionsTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr;
 
-    auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
-
     bool inInterior = true;
 
     if (auto player = RE::PlayerCharacter::GetSingleton()) {
@@ -875,7 +897,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     srvs.at(6) = noiseSRV.get();
     srvs.at(7) = envTexture;
     srvs.at(8) = inInterior ? envTexture : envReflectionsTexture;
-    srvs.at(9) = ssgi_ao;
+    srvs.at(9) = nullptr;  // t9 unused
     srvs.at(10) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr;
     srvs.at(11) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr;
     srvs.at(12) = albedo.SRV;
@@ -912,7 +934,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
             // NRD wants column-major matrices; game stores row-major — transpose to convert.
             // Use unjittered projection to avoid NRD temporal artifacts.
             auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
-            auto projMat = globals::game::frameBufferCached.GetCameraProjUnjittered(0).Transpose();
+            auto projMat = globals::game::frameBufferCached.GetCameraProj(0).Transpose();
 
             memcpy(commonSettings.viewToClipMatrix,      &projMat,        sizeof(float) * 16);
             memcpy(commonSettings.viewToClipMatrixPrev,  &prevProjMatrix, sizeof(float) * 16);
@@ -929,12 +951,8 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
             commonSettings.isMotionVectorInWorldSpace = false;
 
             commonSettings.frameIndex = frameIndex++;
-
-            // Skyrim world units can be very large (far plane ~300k+ units).
-            // Default denoisingRange=500000 may clip distant geometry; use a safe margin.
-            commonSettings.denoisingRange = 1e6f;
-
             commonSettings.splitScreen = settings.Reblur.SplitScreen;
+            commonSettings.enableValidation = settings.Reblur.EnableNRDValidation;
         }
         nrdReblur.SetCommonSettings(commonSettings);
 
@@ -960,6 +978,8 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
             reblurSettings.fireflySuppressorMinRelativeScale = std::clamp(r.FireflySuppressorMinRelativeScale, 1.0f, 3.0f);
             reblurSettings.enableAntiFirefly = r.EnableAntiFirefly;
             reblurSettings.returnHistoryLengthInsteadOfOcclusion = r.ReturnHistoryLengthInsteadOfOcclusion;
+            reblurSettings.hitDistanceReconstructionMode = static_cast<nrd::HitDistanceReconstructionMode>(
+                std::min(r.HitDistanceReconstructionMode, 2u));
             reblurSettings.hitDistanceParameters.A = 3.0f * settings.WorldScale;
             reblurSettings.hitDistanceParameters.B = 0.1f;
             reblurSettings.hitDistanceParameters.C = 20.0f;
@@ -1021,6 +1041,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
             occCommonSettings.frameIndex = frameIndex - 1;  // already incremented by SH pass
             occCommonSettings.denoisingRange = 1e6f;
             occCommonSettings.splitScreen = settings.Reblur.SplitScreen;
+            occCommonSettings.enableValidation = settings.Reblur.EnableNRDValidation;
         }
         nrdReblurOcclusion.SetCommonSettings(occCommonSettings);
 
@@ -1045,6 +1066,8 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
             reblurOcclusionSettings.fireflySuppressorMinRelativeScale = std::clamp(r.FireflySuppressorMinRelativeScale, 1.0f, 3.0f);
             reblurOcclusionSettings.enableAntiFirefly = r.EnableAntiFirefly;
             reblurOcclusionSettings.returnHistoryLengthInsteadOfOcclusion = r.ReturnHistoryLengthInsteadOfOcclusion;
+            reblurOcclusionSettings.hitDistanceReconstructionMode = static_cast<nrd::HitDistanceReconstructionMode>(
+                std::min(r.HitDistanceReconstructionMode, 2u));
             reblurOcclusionSettings.hitDistanceParameters.A = 3.0f * settings.WorldScale;
             reblurOcclusionSettings.hitDistanceParameters.B = 0.1f;
             reblurOcclusionSettings.hitDistanceParameters.C = 20.0f;
@@ -1099,5 +1122,7 @@ ScreenSpaceRayTracing::SharedData ScreenSpaceRayTracing::GetCommonBufferData()
     data.SpecularMult = settings.SpecularMult;
     data.DiffuseMult = settings.EnableDiffuse ? settings.DiffuseMult : 0.0f;
     data.AmbientMult = settings.AmbientMult;
+    data.DebugMode = settings.DebugMode;
+    data._pad0[0] = data._pad0[1] = data._pad0[2] = 0.0f;
     return data;
 }

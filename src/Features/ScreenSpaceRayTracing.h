@@ -62,6 +62,9 @@ struct ScreenSpaceRayTracing : Feature
         bool EnableAntiFirefly = false;
         bool ReturnHistoryLengthInsteadOfOcclusion = false;
         float SplitScreen = 0.0f;
+        // 0 = OFF (default), 1 = AREA_3X3 (performance mode — sparser raycast OK), 2 = AREA_5X5
+        uint32_t HitDistanceReconstructionMode = 0;
+        bool EnableNRDValidation = false;  // NRD internal debug overlay written to output textures
     };
 
     struct Settings
@@ -82,6 +85,7 @@ struct ScreenSpaceRayTracing : Feature
         float CubemapNormalization = 0.0f;
         bool EnableREBLUR = true;
         float WorldScale = 70.0f;
+        uint DebugMode = 0;  // 0=none,1=spec,2=diffuse,3=occlusion,4=depth
         REBLURSettings Reblur;
     } settings;
 
@@ -91,6 +95,8 @@ struct ScreenSpaceRayTracing : Feature
         float SpecularMult;
         float DiffuseMult;
         float AmbientMult;
+        uint DebugMode;
+        float _pad0[3];  // pad to 32 bytes to match HLSL SSRTSettings cbuffer layout
     };
 
     struct alignas(16) SSRTCB
@@ -109,6 +115,7 @@ struct ScreenSpaceRayTracing : Feature
         float2 FrameDim;
         float2 RcpFrameDim;
         float WorldScale;
+        float _pad[3];  // pad to 80 bytes (next 16-byte multiple after WorldScale)
     };
 
     eastl::unique_ptr<ConstantBuffer> ssrtCB;

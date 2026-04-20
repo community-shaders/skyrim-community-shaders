@@ -27,12 +27,9 @@ float3 RadianceMIPFilter(float3 radiance0, float3 radiance1, float3 radiance2, f
 	return (radiance0 + radiance1 + radiance2 + radiance3) * 0.25;
 }
 
-groupshared float3 g_scratchRadiance[8][8];
-
-[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID, uint2 GTid : SV_GroupThreadID) {
+[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
-	// MIP 0
 	const uint2 baseCoord = DTid;
 	const uint2 pixCoord = baseCoord * 2;
 	const float2 uv = (pixCoord + .5) * RcpFrameDim;
@@ -46,21 +43,5 @@ groupshared float3 g_scratchRadiance[8][8];
 	float3 radiance2 = Color::IrradianceToLinear(float3(rad0.x, rad1.x, rad2.x));
 	float3 radiance3 = Color::IrradianceToLinear(float3(rad0.y, rad1.y, rad2.y));
 
-	// MIP 1 (half res)
-	float3 rm1 = RadianceMIPFilter(radiance0, radiance1, radiance2, radiance3);
-	g_scratchRadiance[GTid.x][GTid.y] = rm1;
-
-	GroupMemoryBarrierWithGroupSync();
-
-	// MIP 2 (quarter res) -> SSRT Output
-	[branch] if (all((GTid.xy % 2) == 0))
-	{
-		float3 inTL = g_scratchRadiance[GTid.x + 0][GTid.y + 0];
-		float3 inTR = g_scratchRadiance[GTid.x + 1][GTid.y + 0];
-		float3 inBL = g_scratchRadiance[GTid.x + 0][GTid.y + 1];
-		float3 inBR = g_scratchRadiance[GTid.x + 1][GTid.y + 1];
-
-		float3 rm2 = RadianceMIPFilter(inTL, inTR, inBL, inBR);
-		outRadiance0[baseCoord / 2] = rm2;
-	}
+	outRadiance0[baseCoord] = RadianceMIPFilter(radiance0, radiance1, radiance2, radiance3);
 }

@@ -11,20 +11,16 @@
 Texture2D<float4> MainInputTexture : register(t0);
 Texture2D<float3> SpecularTexture : register(t1);
 
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(SSRT) || defined(DEBUG)
+#if defined(DYNAMIC_CUBEMAPS) || defined(SSRT) || defined(DEBUG)
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 #endif
 
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(SSRT)
+#if defined(DYNAMIC_CUBEMAPS) || defined(SSRT)
 Texture2D<float> DepthTexture : register(t3);
 #endif
 
-#if defined(SSGI) || defined(SSRT) || defined(DEBUG)
+#if defined(SSRT) || defined(DEBUG)
 Texture2D<unorm float3> AlbedoTexture : register(t4);
-#endif
-
-#if defined(SSGI)
-Texture2D<float3> MasksTexture : register(t5);
 #endif
 
 #if defined(DYNAMIC_CUBEMAPS)
@@ -42,51 +38,6 @@ Texture3D<sh2> SkylightingProbeArray : register(t9);
 Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t10);
 #endif
 
-#if defined(SSGI)
-Texture2D<float4> SsgiAoTexture : register(t11);
-Texture2D<float4> SsgiYTexture : register(t12);
-Texture2D<float4> SsgiCoCgTexture : register(t13);
-Texture2D<float4> SsgiSpecularTexture : register(t14);
-
-void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
-{
-	ao = 1 - SsgiAoTexture[pixCoord];
-	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	// without ZH hallucination
-	// float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS));
-	float ssgiIlY = SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
-	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
-}
-
-void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il, in float3 normal, in float3 view, in float roughness)
-{
-	float NdotV = dot(normal, view);
-	float alpha = roughness * roughness;
-	ao = SpecularOcclusion(saturate(NdotV), alpha, ao);
-
-#	if defined(SSRT)
-	if (SharedData::ssrtSettings.EnableSpecular) {
-		il = 0;
-		return;
-	}
-#	endif
-
-	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
-
-	// pi to compensate for the /pi in specularLobe
-	// i don't think there really should be a 1/PI but without it the specular is too strong
-	// reflectance being ambient reflectance doesn't help either
-	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg / Math::PI)));
-
-	// HQ spec
-	float4 hq_spec = SsgiSpecularTexture[pixCoord];
-	ao *= 1 - hq_spec.a;
-	il += hq_spec.rgb;
-}
-#endif
 
 #if defined(IBL)
 #	if !defined(DYNAMIC_CUBEMAPS)
@@ -283,7 +234,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 specularColor = SpecularTexture[pixCoord];
 	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(SSRT)
+#if defined(DYNAMIC_CUBEMAPS) || defined(SSRT)
 	float3 normalGlossiness = NormalRoughnessTexture[pixCoord];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
@@ -298,79 +249,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float glossiness = normalGlossiness.z;
 #endif
 
-#if defined(SSGI)
-	float3 albedo = AlbedoTexture[pixCoord];
-
-	float ssgiAo;
-	float3 ssgiIl;
-	SampleSSGI(pixCoord, normalWS, ssgiAo, ssgiIl);
-
-	float3 linAlbedo = Color::IrradianceToLinear(albedo / Color::PBRLightingScale);
-	float3 multiBounceSSGIAo = MultiBounceAO(linAlbedo, ssgiAo);
-
-	float3 directionalAmbientColor = 0;
-
-#	if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL) {
-		float3 vanillaDALC = Color::Ambient(max(0, SharedData::GetAmbient(normalWS)));
-
-#		if defined(SKYLIGHTING)
-#			if defined(VR)
-		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#			else
-		float3 positionMS = positionWS.xyz;
-#			endif
-		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, pixCoord, positionMS.xyz, normalWS);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normalWS)) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);
-		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(vanillaDALC, -normalWS, skylightingDiffuse) * albedo;
-#		else
-		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(vanillaDALC, -normalWS) * albedo;
-#		endif
-
-		directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-		directionalAmbientColor.x = MasksTexture[pixCoord].z;
-		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
-		directionalAmbientColor = max(0, directionalAmbientColor);
-	} else
-#	endif
-	{
-		directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normalWS)));
-		directionalAmbientColor *= albedo;
-
-		directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-		directionalAmbientColor.x = MasksTexture[pixCoord].z;
-		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
-		directionalAmbientColor = max(0, directionalAmbientColor);
-	}
-
-	{
-		float maxScale = 1.0;
-		if (directionalAmbientColor.x > 0.0)
-			maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
-		if (directionalAmbientColor.y > 0.0)
-			maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
-		if (directionalAmbientColor.z > 0.0)
-			maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
-		directionalAmbientColor *= maxScale;
-
-		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
-		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
-		linDiffuseColor *= sqrt(multiBounceSSGIAo);
-		diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
-		diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSSGIAo);
-		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
-	}
-
-	linDiffuseColor += ssgiIl * linAlbedo;
-#endif
-
 #if defined(SSRT)
 	if (SharedData::ssrtSettings.DiffuseMult > 0.0) {
-#	if !defined(SSGI)
 		float3 albedo = AlbedoTexture[pixCoord];
-#	endif
 		float3 linAlbedoSSRT = Color::IrradianceToLinear(albedo);
 		float3 V = normalize(-positionWS.xyz);
 		float  roughness = 1.0 - normalGlossiness.z;
@@ -482,18 +363,6 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 		}
 
-#	if defined(SSGI)
-		float3 ssgiIlSpecular;
-		SampleSSGISpecular(pixCoord, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
-
-		finalIrradiance = (finalIrradiance * ssgiAo);
-
-		ssgiIlSpecular = Color::RGBToYCoCg(ssgiIlSpecular);
-		ssgiIlSpecular = max(0, Color::YCoCgToRGB(float3(ssgiIlSpecular.x, lerp(ssgiIlSpecular.yz, Color::RGBToYCoCg(finalIrradiance).yz, 0.5))));
-
-		finalIrradiance += ssgiIlSpecular;
-#	endif
-
 #	if defined(SSRT)
 		if (SharedData::ssrtSettings.EnableSpecular) {
 			float3 ssrIrradiance = SampleSSRTSpecular(pixCoord, normalVS);
@@ -510,14 +379,12 @@ PS_OUTPUT main(PS_INPUT input)
 
 #if defined(DEBUG)
 
-#	if !defined(SSGI) && !defined(DYNAMIC_CUBEMAPS)
+#	if !defined(DYNAMIC_CUBEMAPS) && !defined(SSRT)
 	float3 normalGlossiness = NormalRoughnessTexture[pixCoord];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 #	endif
 
-#	if !defined(SSGI)
 	float3 albedo = AlbedoTexture[pixCoord];
-#	endif
 
 #	if !defined(DYNAMIC_CUBEMAPS)
 	float glossiness = normalGlossiness.z;
@@ -537,6 +404,38 @@ PS_OUTPUT main(PS_INPUT input)
 		color = glossiness;
 	}
 
+#endif
+
+#if defined(SSRT)
+	if (SharedData::ssrtSettings.DebugMode != 0) {
+		// All debug modes use the already-bound half-res NRD output textures (t17-t21).
+		// NRD guide normals are world-space; DeferredCompositePS normalWS is also world-space.
+		float3 V = normalize(-positionWS.xyz);
+		float  roughness = 1.0 - normalGlossiness.z;
+		int2   halfCoord = pixCoord / 2;
+
+		if (ssrtSettings.DebugMode == 1) {
+			// Denoised specular radiance (nearest half-res tap — raw NRD output, no bilateral)
+			float3 specRad;
+			float  normHitDist;
+			REBLUR_BackEnd_UnpackRadianceAndNormHitDist(SSRTSpecRadianceHitDist[halfCoord], specRad, normHitDist);
+			color = Color::IrradianceToGamma(specRad);
+		} else if (ssrtSettings.DebugMode == 2) {
+			// Denoised diffuse GI evaluated at surface normal (bilateral bilateral upscale)
+			float3 il;
+			SampleSSRTDiffuse(pixCoord, normalVS, normalWS, V, roughness, il);
+			color = Color::IrradianceToGamma(il);
+		} else if (ssrtSettings.DebugMode == 3) {
+			// Denoised occlusion normHitDist (0 = fully occluded / near hit, 1 = miss)
+			float occ = SampleSSRTOcclusion(pixCoord, normalVS);
+			color = occ.xxx;
+		} else if (ssrtSettings.DebugMode == 4) {
+			// Half-res linear depth guide (repeating metric scale — each stripe = 10 units)
+			float z = SSRTHalfResDepth[halfCoord];
+			float linZ = SharedData::GetScreenDepth(z);
+			color = frac(linZ / 10.0).xxx;
+		}
+	}
 #endif
 
 	PS_OUTPUT output;

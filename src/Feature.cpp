@@ -19,7 +19,6 @@
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/RenderDoc.h"
-#include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceRayTracing.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
@@ -223,7 +222,6 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::performanceOverlay,
 		&globals::features::subsurfaceScattering,
 		&globals::features::terrainShadows,
-		&globals::features::screenSpaceGI,
 		&globals::features::screenSpaceRayTracing,
 		&globals::features::skylighting,
 		&globals::features::skySync,

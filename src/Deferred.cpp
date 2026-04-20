@@ -8,7 +8,6 @@
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
-#include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceRayTracing.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -334,12 +333,6 @@ void Deferred::DeferredPasses()
 
 	auto& skylighting = globals::features::skylighting;
 
-	auto& ssgi = globals::features::screenSpaceGI;
-	if (ssgi.loaded)
-		ssgi.DrawSSGI();
-	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
-	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
-
 	auto& ssrt = globals::features::screenSpaceRayTracing;
 	if (ssrt.loaded && ssrt.settings.EnableDiffuse)
 		ssrt.DrawSSRTDiffuse();
@@ -394,7 +387,7 @@ void Deferred::DeferredPasses()
 			mainCopy.SRV,                                                                                           // t0  MainInputTexture
 			specular.SRV,                                                                                           // t1  SpecularTexture
 			normalRoughnessCopy.SRV,                                                                                // t2  NormalRoughnessTexture
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,          // t3  DepthTexture
+			dynamicCubemaps.loaded || REL::Module::IsVR() || ssrt.loaded ? Util::GetCurrentSceneDepthSRV(true) : nullptr,  // t3  DepthTexture
 			albedo.SRV,                                                                                             // t4  AlbedoTexture
 			masks.SRV,                                                                                              // t5  MasksTexture
 			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                                     // t6  ReflectanceTexture
@@ -402,16 +395,16 @@ void Deferred::DeferredPasses()
 			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,                    // t8  EnvReflectionsTexture
 			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,          // t9  SkylightingProbeArray
 			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr,  // t10 stbn
-			ssgi_ao,                                                                                                // t11 SsgiAoTexture
-			ssgi_hq_spec ? nullptr : ssgi_y,                                                                        // t12 SsgiYTexture
-			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                                     // t13 SsgiCoCgTexture
-			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                                  // t14 SsgiSpecularTexture
+			nullptr,                                                                                                // t11 (unused)
+			nullptr,                                                                                                // t12 (unused)
+			nullptr,                                                                                                // t13 (unused)
+			nullptr,                                                                                                // t14 (unused)
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
 			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.GetSpecularOutputTexture() : nullptr,  // t17 SsrtSpecRadianceHitDist (NRD denoised)
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[0] : nullptr,                             // t18 SsrtDiffuseSH0 (NRD-packed)
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[1] : nullptr,                             // t19 SsrtDiffuseSH1 (NRD-packed)
-			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrt.texHalfResDepth->srv.get() : nullptr,               // t20 SsrtHalfResDepth (1/2-res NDC min, for bilateral)
+			ssrt.loaded ? ssrt.texHalfResDepth->srv.get() : nullptr,                                                 // t20 SsrtHalfResDepth (1/2-res NDC min, for bilateral)
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.occlusion : nullptr,                         // t21 SsrtOcclusionHitDist (denoised normHitDist)
 		};
 
@@ -639,9 +632,6 @@ ID3D11PixelShader* Deferred::GetCompositePS(bool interior)
 		if (!interior && globals::features::skylighting.loaded)
 			defines.push_back({ "SKYLIGHTING", nullptr });
 
-		if (globals::features::screenSpaceGI.loaded)
-			defines.push_back({ "SSGI", nullptr });
-
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
@@ -666,9 +656,6 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 
 		if (globals::features::dynamicCubemaps.loaded)
 			defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
-
-		if (globals::features::screenSpaceGI.loaded)
-			defines.push_back({ "SSGI", nullptr });
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
