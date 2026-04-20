@@ -38,7 +38,7 @@ namespace HDRSun
 		float menuSunMul = (SharedData::HDRData.w > 1e-3f) ? (kMenuSunNits / peakNits) : 1.0f;
 		float maxBoost = max(kMinHdrSunBoost, peakRatio * menuSunMul);
 
-		// --- weight 0..1: local brightness / alpha / UV rim, then damp if fine ≈ blurred mip (wide soft sun) ---
+		// --- weight 0..1: local brightness / alpha / UV rim, then damp if fine ≈ widened-filter sample (soft corona) ---
 		float L = max(Color::RGBToLuminance(baseColor.xyz), 0.0f);
 		float highlight = max(1.0f - exp(-L), saturate(L));
 		float a = saturate(baseColor.w);
@@ -53,9 +53,12 @@ namespace HDRSun
 
 		float weight = saturate(highlight * alphaWeight * radialWeight);
 
-		float fineLod = sunTex.CalculateLevelOfDetail(samp, texCoord0_xy);
-		float coarseMip = max(fineLod + 2.0f, 0.0f);
-		float4 coarseS = sunTex.SampleLevel(samp, texCoord0_xy, coarseMip);
+		// Wider footprint for a lower-frequency reference (~+1 mip) without SampleLevel(..., lod+2),
+		// which snaps to tiny mips and makes Lc / mipQuell (and thus gain) look blocky on the disc.
+		float2 uvGradX = ddx(texCoord0_xy);
+		float2 uvGradY = ddy(texCoord0_xy);
+		const float kCoarseSunFootprint = 2.0f;
+		float4 coarseS = sunTex.SampleGrad(samp, texCoord0_xy, uvGradX * kCoarseSunFootprint, uvGradY * kCoarseSunFootprint);
 		float3 coarseRgb = Color::Sky(coarseS.rgb);
 		float Lc = max(Color::RGBToLuminance(coarseRgb), 1e-4f);
 		float lac = Lc * saturate(coarseS.w * alphaPostScale);  // alphaPostScale = TEXFADE factor from Sky, else 1
@@ -70,8 +73,14 @@ namespace HDRSun
 		}
 		weight *= max(mipQuell, saturate(L));
 
-		// Pow shaping keeps the corona from exploding on high-nit displays.
-		return pow(max(maxBoost, 1e-6f), weight);
+		// pow(maxBoost, weight) grows the boosted footprint as maxBoost rises (same weight → more
+		// gain → sun reads larger). Tighten with wCurve = weight^sharpen; sharpen == 1 when
+		// maxBoost == kMinHdrSunBoost so low-boost paths match plain pow(maxBoost, weight).
+		float boostForPow = max(maxBoost, 1e-6f);
+		float sharpen = max(1.0f, 1.0f + log2(boostForPow / kMinHdrSunBoost));
+		float wCurve = pow(saturate(weight), sharpen);
+
+		return pow(boostForPow, wCurve);
 	}
 }
 

@@ -200,7 +200,8 @@ Texture2D<float> TexDepthSampler : register(t17);
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	// Color::Sky is defined for float3, so keep this as RGB scale.
+	// Color::Sky is float3->float3 (per-channel sky gamma). PParams.yyy broadcasts the packed
+	// scalar in PParams.y to RGB; float3 matches output .xyz where skyScale is added.
 	float3 skyScale = Color::Sky(PParams.yyy);
 #	if !defined(VR)
 	uint eyeIndex = 0;
@@ -236,22 +237,17 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 	);
 	baseColor.xyz *= hdrSunGain;
-#			if !defined(DITHER)
 	if (HDRSun::IsHdrSunActive()) {
 		// Dither bright output to reduce banding in high-boost sun path.
+		// Same baseColor/skyScale treatment for DITHER and non-DITHER; DITHER adds noiseGrad later.
 		baseColor.xyz += (Random::InterleavedGradientNoise(input.Position.xy) - 0.5f) *
 		                 (saturate(hdrSunGain - 1.0f) / 255.0f);
 		skyScale = 0.0f;
 	}
-#			endif
 
 #			if defined(CLOUD_SHADOWS)
 	if (HDRSun::IsHdrSunActive()) {
-		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(input.WorldPosition.xyz, SharedData::DirLightDirection.xyz);
-		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 0).x;
-		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 1).x;
-		float cloudCube = lerp(cloudCube0, cloudCube1, 0.5f);
-		float cloudMult = lerp(1.0f, 1.0f - cloudCube, SharedData::cloudShadowsSettings.Opacity);
+		float cloudMult = CloudShadows::GetCloudShadowMult(input.WorldPosition.xyz, SampBaseSampler);
 		baseColor.xyz *= cloudMult;
 		baseColor.w *= cloudMult;
 	}
