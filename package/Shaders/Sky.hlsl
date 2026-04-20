@@ -192,6 +192,7 @@ cbuffer AlphaTestRefCB : register(b11)
 
 #	ifdef HDR_OUTPUT
 #		include "HDRDisplay/HDRSun.hlsli"
+#		include "Common/Random.hlsli"
 #	endif
 
 Texture2D<float> TexDepthSampler : register(t17);
@@ -199,7 +200,8 @@ Texture2D<float> TexDepthSampler : register(t17);
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	float3 yyy = Color::Sky(PParams.yyy);
+	// Color::Sky is defined for float3, so keep this as RGB scale.
+	float3 skyScale = Color::Sky(PParams.yyy);
 #	if !defined(VR)
 	uint eyeIndex = 0;
 #	else
@@ -222,20 +224,38 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 #		ifdef HDR_OUTPUT
-	HDRSun::ApplyHdrSunToBaseColor(
-		input.Position,
+	float hdrSunGain = HDRSun::GetHdrSunGain(
 		input.TexCoord0.xy,
-		input.Color,
-		input.WorldPosition.xyz,
+		baseColor,
 		TexBaseSampler,
 		SampBaseSampler,
 #			if !defined(TEXLERP) && defined(TEXFADE)
-		PParams.x,
+		PParams.x
 #			else
-		1.0,
+		1.0
 #			endif
-		baseColor,
-		yyy);
+	);
+	baseColor.xyz *= hdrSunGain;
+#			if !defined(DITHER)
+	if (HDRSun::IsHdrSunActive()) {
+		// Dither bright output to reduce banding in high-boost sun path.
+		baseColor.xyz += (Random::InterleavedGradientNoise(input.Position.xy) - 0.5f) *
+		                 (saturate(hdrSunGain - 1.0f) / 255.0f);
+		skyScale = 0.0f;
+	}
+#			endif
+
+#			if defined(CLOUD_SHADOWS)
+	if (HDRSun::IsHdrSunActive()) {
+		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(input.WorldPosition.xyz, SharedData::DirLightDirection.xyz);
+		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 0).x;
+		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 1).x;
+		float cloudCube = lerp(cloudCube0, cloudCube1, 0.5f);
+		float cloudMult = lerp(1.0f, 1.0f - cloudCube, SharedData::cloudShadowsSettings.Opacity);
+		baseColor.xyz *= cloudMult;
+		baseColor.w *= cloudMult;
+	}
+#			endif
 #		endif
 
 #		if defined(DITHER)
@@ -245,15 +265,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			ifdef TEX
 	float3 sunGlareColor = Color::Sky(input.Color.xyz) * baseColor.xyz;
-#				ifdef HDR_OUTPUT
-	if (HDRSun::IsHdrSunActive())
-		sunGlareColor = baseColor.xyz;
-#				endif
 	// Dither/noise term is the legacy sky path contribution for gradient smoothing.
-	psout.Color.xyz = (sunGlareColor + yyy) + noiseGrad;
+	psout.Color.xyz = (sunGlareColor + skyScale) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	psout.Color.xyz = (yyy + Color::Sky(input.Color.xyz)) + noiseGrad;
+	psout.Color.xyz = (skyScale + Color::Sky(input.Color.xyz)) + noiseGrad;
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
@@ -265,11 +281,11 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		elif defined(HORIZFADE)
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy);
+	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else  // not DITHER, not MOONMASK, not HORIZFADE
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 #		endif
 
 #	else

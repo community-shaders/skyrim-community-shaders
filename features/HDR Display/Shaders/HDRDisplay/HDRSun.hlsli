@@ -4,38 +4,39 @@
 
 namespace HDRSun
 {
+	// SharedData::HDRData units used here:
+	// .x - HDR enabled flag (0/1)
+	// .z - display peak luminance in nits
+	// .w - menu-state blend amount (>0 means menu/pause/map is active)
 	// 203 nits ref for sun math only (not the paper-white UI slider).
 	static const float kReferencePaperWhiteNits = 203.0f;
 	// Menu / pause / map: HDRData.w > 0 — scale sun toward this nit level vs peak.
 	static const float kMenuSunNits = 100.0f;
+	// Keep a floor to avoid dimming below SDR behavior.
+	static const float kMinHdrSunBoost = 1.0f;
 
 	inline bool IsHdrSunActive()
 	{
 		return SharedData::HDRData.x > 0.5f && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun);
 	}
 
-	// Sky PS already sampled sunTex and ran Color::Sky on rgb. We only adjust when HDR+IsSun.
-	// Pipeline: peak → maxBoost → per-pixel weight → rgb *= pow(maxBoost, weight)
-	//           → DITHER: vertex tint | else: IGN dither + clear yyy → optional cloud shadow on rgba.
-	void ApplyHdrSunToBaseColor(
-		float4 position,
+	// Returns an HDR sun gain in normalized linear space. Caller owns all sampling/tint/noise output logic.
+	float GetHdrSunGain(
 		float2 texCoord0_xy,
-		float4 vertexColor,
-		float3 worldPosition,
+		float4 baseColor,
 		Texture2D<float4> sunTex,
 		SamplerState samp,
-		float alphaPostScale,
-		inout float4 baseColor,
-		inout float3 yyy)
+		float alphaPostScale)
 	{
 		if (!IsHdrSunActive())
-			return;
+			return 1.0f;
 
-		// --- max linear multiplier for this display (menu scales it down when HDRData.w > 0) ---
+		// --- Max linear multiplier for this display ---
+		// Scene target: peak/203, menu target: 100/peak (via kMenuSunNits).
 		float peakNits = max(SharedData::HDRData.z, kReferencePaperWhiteNits + 1.0f);
 		float peakRatio = peakNits / kReferencePaperWhiteNits;
 		float menuSunMul = (SharedData::HDRData.w > 1e-3f) ? (kMenuSunNits / peakNits) : 1.0f;
-		float maxBoost = pow(peakRatio, 2.0f) * menuSunMul;
+		float maxBoost = max(kMinHdrSunBoost, peakRatio * menuSunMul);
 
 		// --- weight 0..1: local brightness / alpha / UV rim, then damp if fine ≈ blurred mip (wide soft sun) ---
 		float L = max(Color::RGBToLuminance(baseColor.xyz), 0.0f);
@@ -69,28 +70,8 @@ namespace HDRSun
 		}
 		weight *= max(mipQuell, saturate(L));
 
-		// --- apply boost (pow keeps mid-ring from exploding when peak is high) ---
-		float boost = pow(max(maxBoost, 1e-6f), weight);
-		baseColor.xyz *= boost;
-
-		// --- finish: Sky PS output path differs for glare vs disc ---
-#	if defined(DITHER)
-		baseColor.xyz = Color::Sky(vertexColor.xyz) * baseColor.xyz;
-#	else
-		// Dither bright output to reduce banding.
-		baseColor.xyz += (Random::InterleavedGradientNoise(position.xy) - 0.5f) * (saturate(boost - 1.0f) / 255.0f);
-		yyy = 0.0f;
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(worldPosition.xyz, SharedData::DirLightDirection.xyz);
-		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(samp, cloudSampleDir, 0).x;
-		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(samp, cloudSampleDir, 1).x;
-		float cloudCube = lerp(cloudCube0, cloudCube1, 0.5f);
-		float cloudMult = lerp(1.0f, 1.0f - cloudCube, SharedData::cloudShadowsSettings.Opacity);
-		baseColor.xyz *= cloudMult;
-		baseColor.w *= cloudMult;
-#	endif
+		// Pow shaping keeps the corona from exploding on high-nit displays.
+		return pow(max(maxBoost, 1e-6f), weight);
 	}
 }
 
