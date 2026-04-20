@@ -200,7 +200,7 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     string(STRIP "${CONFIG_VALUE}" CONFIG_VALUE)
     if(CONFIG_VALUE)
         string(
-            REGEX MATCH "Version = ([0-9]+)-([0-9]+)-([0-9]+)"
+            REGEX MATCH "[Vv]ersion = ([0-9]+)-([0-9]+)-([0-9]+)"
             _
             "${CONFIG_VALUE}"
         )
