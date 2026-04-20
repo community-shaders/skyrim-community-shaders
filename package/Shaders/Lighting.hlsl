@@ -2807,6 +2807,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		// Input TexGlowSampler = linear by default, but Color::Glowmap returns in sRGB if LL disabled
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
 
+#		if defined(TRUE_PBR)
 		float3 vertexColor = Color::SrgbToLinear(input.Color.xyz);
 
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {
@@ -2819,6 +2820,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			emitColor *= glowColor;
 			emitColor *= vertexColor;
 		}
+#		else
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			emitColor = Color::LinearToSrgb(Color::SrgbToLinear(emitColor) * Color::SrgbToLinear(glowColor));
+		} else {
+			emitColor *= glowColor;
+		}
+#		endif // TRUE_PBR
 	}
 #	endif
 
