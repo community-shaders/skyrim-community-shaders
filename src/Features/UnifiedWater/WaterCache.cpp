@@ -152,7 +152,7 @@ bool WaterCache::LoadCaches()
 
 	for (auto& worldSpace : worldSpaces) {
 		const auto editorID = worldSpace ? worldSpace->GetFormEditorID() : nullptr;
-		if (!worldSpace || !editorID) {
+		if (!worldSpace || !editorID || !*editorID) {
 			logger::warn("[Unified Water] [Cache] WorldSpace has no EditorID - skipping");
 			continue;
 		}
@@ -263,10 +263,10 @@ bool WaterCache::GenerateCaches()
 			async.pool->wait();
 
 		buildProgress.Stop();
-		async.running.store(false);
 
 		logger::info("[Unified Water] [Cache] Disk caches generated in {} ms  ({} / {} complete - {} failed)", buildProgress.ElapsedMs(), buildProgress.completed.load(), buildProgress.total.load(), buildProgress.failed.load());
 		LoadCaches();
+		async.running.store(false);
 	});
 
 	return true;
