@@ -2152,11 +2152,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.AO = rawRMAOS.z;
 
 	// Apply vertex color to base color so PBR metals use it
-	baseColor.xyz *= input.Color.xyz;
+	float3 pbrVertexColor = Color::SrgbToLinear(input.Color.xyz);
 
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		material.F0 = lerp(rawRMAOS.w, Color::SrgbToLinear(baseColor.xyz), material.Metallic);
+		baseColor.xyz = Color::SrgbToLinear(baseColor.xyz) * pbrVertexColor;
+		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
+		baseColor.xyz = Color::LinearToSrgb(baseColor.xyz);
 	} else {
+		baseColor.xyz *= pbrVertexColor;
 		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
 	}
 
@@ -2184,7 +2187,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		[branch] if ((PBRFlags & PBR::Flags::HasFeatureTexture0) != 0)
 		{
 			float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
+			
+			// If LL is off, Diffuse returns sRGB
 			material.SubsurfaceColor *= Color::Diffuse(sampledSubsurfaceProperties.xyz);
+			
+			if (!SharedData::linearLightingSettings.enableLinearLighting) {
+				material.SubsurfaceColor = Color::LinearToSrgb(
+					Color::SrgbToLinear(material.SubsurfaceColor) * pbrVertexColor
+				);
+			} else {
+				material.SubsurfaceColor *= pbrVertexColor;
+			}
+
 			material.Thickness *= sampledSubsurfaceProperties.w;
 		}
 		material.Thickness = lerp(material.Thickness, 1, projectedMaterialWeight);
@@ -2781,6 +2795,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	worldNormal.xyz = input.EyeNormal;
 #	endif  // EYE
 
+	// sRGB by default, linear if LL on
 	float3 emitColor = Color::EmitColor(EmitColor);
 #	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	bool hasEmissive = (0x3F & (Permutation::PixelShaderDescriptor >> 24)) == Permutation::LightingTechnique::Glowmap;
@@ -2789,14 +2804,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	[branch] if (hasEmissive)
 	{
+		// Input TexGlowSampler = linear by default, but Color::Glowmap returns in sRGB if LL disabled
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
-		emitColor *= glowColor;
-#		if defined(TRUE_PBR)
-		// TRUE_PBR sets vertexColor=1 and adds emitColor directly to color (see below),
-		// so vertex tint must be applied here. Non-PBR folds emitColor into diffuseColor
-		// and the global color.xyz *= vertexColor (line 2918) already covers it.
-		emitColor *= input.Color.xyz;
-#		endif
+
+		float3 vertexColor = Color::SrgbToLinear(input.Color.xyz);
+
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			emitColor = Color::SrgbToLinear(emitColor);
+			glowColor = Color::SrgbToLinear(glowColor);
+			emitColor *= glowColor;
+			emitColor *= vertexColor;
+			emitColor = Color::LinearToSrgb(emitColor);
+		} else {
+			emitColor *= glowColor;
+			emitColor *= vertexColor;
+		}
 	}
 #	endif
 
