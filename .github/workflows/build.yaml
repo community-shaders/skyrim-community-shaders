@@ -619,6 +619,7 @@ jobs:
         uses: ./.github/workflows/upload-nexus.yaml
         with:
             tag: ${{ needs.release.outputs.release_tag }}
+            artifact_pattern: "CommunityShaders-*.7z"
             dry_run: "true"
         secrets:
             UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
