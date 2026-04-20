@@ -20,9 +20,13 @@ This port does **not** include the `renderdoc.dll` runtime library because:
 
 ## Getting the Runtime DLL
 
-The `renderdoc.dll` should be obtained from official RenderDoc releases:
+The `renderdoc.dll` should be obtained from official RenderDoc releases. For stable Windows releases the runtime package follows this pattern:
 
--   Download page: https://renderdoc.org/builds
+-   `https://renderdoc.org/stable/${VERSION}/RenderDoc_${VERSION}_64.zip`
+
+For example, for v1.43:
+
+-   `https://renderdoc.org/stable/1.43/RenderDoc_1.43_64.zip`
 
 For Community Shaders, the DLL is stored in `package/SKSE/Plugins/Renderdoc/renderdoc.dll` and is deployed as part of the mod package.
 

@@ -309,6 +309,8 @@ void TerrainShadows::Precompute()
 
 void TerrainShadows::UpdateShadow()
 {
+	ZoneScoped;
+
 	if (!IsHeightMapReady())
 		return;
 
@@ -328,8 +330,6 @@ void TerrainShadows::UpdateShadow()
 	auto sunLight = skyrim_cast<RE::NiDirectionalLight*>(accumulator->GetRuntimeData().activeShadowSceneNode->GetRuntimeData().sunLight->light.get());
 	if (!sunLight)
 		return;
-
-	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "Terrain Occlusion - Update Shadows");
 
 	/* ---- UPDATE CB ---- */

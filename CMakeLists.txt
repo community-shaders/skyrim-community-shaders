@@ -51,6 +51,23 @@ message("\tTracy profiler: ${TRACY_SUPPORT}")
 message("\tShader tests: ${BUILD_SHADER_TESTS}")
 
 # #######################################################################################################################
+# # Build version info from git
+# #######################################################################################################################
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_DESCRIBE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+else()
+    set(GIT_DESCRIBE "unknown")
+endif()
+message("\tBuild version: ${GIT_DESCRIBE}")
+
+# #######################################################################################################################
 # # Add CMake features
 # #######################################################################################################################
 include(XSEPlugin)
@@ -180,7 +197,7 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     string(STRIP "${CONFIG_VALUE}" CONFIG_VALUE)
     if(CONFIG_VALUE)
         string(
-            REGEX MATCH "Version = ([0-9]+)-([0-9]+)-([0-9]+)"
+            REGEX MATCH "[Vv]ersion = ([0-9]+)-([0-9]+)-([0-9]+)"
             _
             "${CONFIG_VALUE}"
         )

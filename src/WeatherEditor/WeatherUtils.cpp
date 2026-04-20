@@ -1,7 +1,80 @@
 #include "WeatherUtils.h"
 #include "EditorWindow.h"
 #include "PaletteWindow.h"
+#include "Utils/FileSystem.h"
 #include "Utils/UI.h"
+
+namespace WeatherUtils::TexturePath
+{
+	std::string Normalize(std::string_view path)
+	{
+		std::string result(path);
+		std::transform(result.begin(), result.end(), result.begin(),
+			[](unsigned char c) { return std::tolower(c); });
+		std::replace(result.begin(), result.end(), '/', '\\');
+		return result;
+	}
+
+	bool HasDdsExtension(std::string_view path)
+	{
+		return Normalize(path).ends_with(kDdsExtension);
+	}
+
+	bool ExistsOnDisk(std::string_view path)
+	{
+		const std::string lower = Normalize(path);
+		if (!lower.ends_with(kDdsExtension))
+			return false;
+
+		// Reject absolute paths and ".." traversal
+		const std::filesystem::path fsPath(lower);
+		if (fsPath.is_absolute())
+			return false;
+		for (const auto& part : fsPath)
+			if (part == "..")
+				return false;
+
+		const std::filesystem::path dataPath = Util::PathHelpers::GetDataPath();
+		const std::filesystem::path fullPath = lower.starts_with(kTexturePrefix) ?
+		                                           dataPath / lower :
+		                                           dataPath / kTexturePrefix / lower;
+
+		std::error_code ec;
+		return std::filesystem::exists(fullPath, ec) && !ec;
+	}
+
+	std::string BuildResourcePath(std::string_view path)
+	{
+		std::string result(kResourcePrefix);
+		result.append(path);
+		if (!Normalize(result).ends_with(kDdsExtension))
+			result += kDdsExtension;
+		return result;
+	}
+}
+
+namespace WeatherUtils
+{
+	RE::TESForm* FindFormByEditorID(std::string_view editorID, const std::vector<std::unique_ptr<Widget>>& widgets)
+	{
+		if (editorID.empty())
+			return nullptr;
+		for (const auto& w : widgets)
+			if (w->GetEditorID() == editorID)
+				return w->form;
+		return nullptr;
+	}
+
+	std::string FindEditorIDByForm(const RE::TESForm* form, const std::vector<std::unique_ptr<Widget>>& widgets)
+	{
+		if (!form)
+			return "";
+		for (const auto& w : widgets)
+			if (w->form == form)
+				return w->GetEditorID();
+		return "";
+	}
+}
 
 // Global widget context for undo tracking
 static Widget* g_currentWidget = nullptr;
@@ -207,7 +280,7 @@ namespace WeatherUtils
 		const double debounceDelay = 2.0;
 		double currentTime = ImGui::GetTime();
 
-		bool changed = ImGui::SliderInt(label.c_str(), &property, -128, 127);
+		bool changed = ImGui::SliderInt(label.c_str(), &property, -127, 127);
 		bool isNowActive = ImGui::IsItemActive();
 
 		// Push undo state when slider becomes active
@@ -1030,7 +1103,7 @@ namespace TOD
 
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
-			if (ImGui::SliderInt(id.c_str(), &values[i], -128, 127))
+			if (ImGui::SliderInt(id.c_str(), &values[i], -127, 127))
 				changed = true;
 
 			if (ImGui::IsItemHovered())

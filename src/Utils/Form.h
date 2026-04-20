@@ -2,14 +2,16 @@
 
 namespace Util
 {
-	/// Components of a SPID identifier: local FormID + plugin name.
+	// --- SPID Helpers (load-order-portable FormID format) ---
+	// SPID format: "0x{localFormId}~{pluginName}" e.g. "0x12F89E~Skyrim.esm"
+
 	struct SpidComponents
 	{
 		uint32_t localFormId = 0;
 		std::string pluginName;
 	};
 
-	/// Parse a SPID string like "0x12F89E~Skyrim.esm" into components.
+	/// Parse a SPID string into components.
 	SpidComponents ParseSpid(const std::string& spid);
 
 	/// Format a SPID string from components.
@@ -21,12 +23,12 @@ namespace Util
 	/// Resolve a SPID string to a runtime FormID (0 if not found).
 	RE::FormID SpidToFormId(const std::string& spid);
 
-	/// Get a human-readable display name: "EditorID (LocalFormID)" or SPID fallback.
+	/// Get a display name: "EditorID (localFormId)" or SPID fallback.
 	std::string GetFormDisplayName(RE::FormID formId);
 
-	/// Get the EditorID for a form, with fallback search through all forms.
-	std::string GetFormEditorID(RE::TESForm* form);
+	/// Get the EditorID for a form, or empty string if not available.
+	std::string GetFormEditorID(const RE::TESForm* form);
 
-	/// Get a filesystem-safe key for a form (always SPID format).
-	std::string GetFormFileKey(RE::TESForm* form);
+	/// Get a file-safe key for a form: always SPID format for load-order independence.
+	std::string GetFormFileKey(const RE::TESForm* form);
 }
