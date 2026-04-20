@@ -75,12 +75,36 @@ public:
 		kCapture,
 		kInferrence,
 		kIrradiance,
+		kBC6HCompress,
 		kCapture2,
 		kInferrence2,
-		kIrradiance2
+		kIrradiance2,
+		kBC6HCompress2
 	};
 
 	NextTask nextTask = NextTask::kCapture;
+
+	// BC6H compression
+	struct alignas(16) BC6HEncodeCB
+	{
+		uint TextureSizeInBlocksX;
+		uint TextureSizeInBlocksY;
+		float TextureSizeRcpX;
+		float TextureSizeRcpY;
+	};
+	STATIC_ASSERT_ALIGNAS_16(BC6HEncodeCB);
+
+	ID3D11ComputeShader* bc6hEncodeCS = nullptr;
+	ConstantBuffer* bc6hEncodeCB = nullptr;
+	ID3D11SamplerState* bc6hPointSampler = nullptr;
+
+	Texture2D* envTextureBC6H = nullptr;
+	Texture2D* envReflectionsTextureBC6H = nullptr;
+	Texture2D* bc6hScratchTexture = nullptr;
+
+	ID3D11UnorderedAccessView* bc6hScratchUAVs[8] = {};
+	ID3D11ShaderResourceView* envTextureMipSRVs[8] = {};
+	ID3D11ShaderResourceView* envReflectionsTextureMipSRVs[8] = {};
 
 	// Editor window
 
@@ -157,6 +181,10 @@ public:
 	void Inferrence(bool a_reflections);
 
 	void Irradiance(bool a_reflections);
+
+	void CompressToBC6H(bool a_reflections);
+
+	ID3D11ComputeShader* GetComputeShaderBC6HEncode();
 
 	virtual bool SupportsVR() override { return true; };
 	virtual bool IsCore() const override { return true; };
