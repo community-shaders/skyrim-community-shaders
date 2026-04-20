@@ -757,8 +757,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
 
 #				if defined(SKYLIGHTING)
-	const static sh2 unitSH_grass1 = float4(sqrt(4.0 * Math::PI), 0, 0, 0);
-	sh2 skylightingSH = unitSH_grass1;
 	float skylightingDiffuse = 1.0;
 	if (!SharedData::InInterior) {
 #					if defined(VR)
@@ -766,7 +764,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					else
 		float3 positionMSSkylight = input.WorldPosition.xyz;
 #					endif
-		skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
+		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
 		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
@@ -950,8 +948,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
 
 #			if defined(SKYLIGHTING)
-	const static sh2 unitSH_grass2 = float4(sqrt(4.0 * Math::PI), 0, 0, 0);
-	sh2 skylightingSH = unitSH_grass2;
 	float skylightingDiffuse = 1.0;
 	if (!SharedData::InInterior) {
 #				if defined(VR)
@@ -959,7 +955,7 @@ PS_OUTPUT main(PS_INPUT input)
 #				else
 		float3 positionMSSkylight = input.WorldPosition.xyz;
 #				endif
-		skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
+		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
 		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
