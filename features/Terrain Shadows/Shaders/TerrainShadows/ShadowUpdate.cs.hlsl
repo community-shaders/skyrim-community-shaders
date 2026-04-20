@@ -63,9 +63,11 @@ float2 GetInterpolatedHeightRW(float2 pxCoord, bool isVertical)
 groupshared float2 g_shadowHeight[NTHREADS];
 
 [numthreads(NTHREADS, 1, 1)] void main(const uint gtid : SV_GroupThreadID, const uint gid : SV_GroupID) {
-	// Heightmap is sampled at full resolution; shadow is written at half
-	// resolution per axis. LightPxDir and PxSize are expressed in
-	// shadow-pixel units.
+	// Two independent coordinate spaces are used here: the heightmap sampling
+	// space (TexHeight) and the shadow-pixel space (RWTexShadowHeights). The
+	// CPU path may resize the height texture independently of the shadow
+	// resolution, so sampling and resizing can be done separately for each
+	// space. LightPxDir and PxSize are expressed in shadow-pixel units.
 	uint2 heightDims;
 	TexHeight.GetDimensions(heightDims.x, heightDims.y);
 	uint2 shadowDims;
