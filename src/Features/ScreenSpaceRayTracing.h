@@ -42,6 +42,28 @@ struct ScreenSpaceRayTracing : Feature
     bool HasShaderDefine(RE::BSShader::Type) override { return true; };
     virtual bool SupportsVR() override { return true; };
 
+    struct REBLURSettings
+    {
+        uint32_t MaxAccumulatedFrameNum = 30;
+        uint32_t MaxFastAccumulatedFrameNum = 6;
+        uint32_t MaxStabilizedFrameNum = 5;
+        uint32_t HistoryFixFrameNum = 3;
+        uint32_t HistoryFixBasePixelStride = 14;
+        uint32_t HistoryFixAlternatePixelStride = 1;
+        float FastHistoryClampingSigmaScale = 2.0f;
+        float DiffusePrepassBlurRadius = 30.0f;
+        float MinHitDistanceWeight = 0.1f;
+        float MinBlurRadius = 1.0f;
+        float MaxBlurRadius = 35.0f;
+        float LobeAngleFraction = 0.5f;
+        float RoughnessFraction = 0.15f;
+        float PlaneDistanceSensitivity = 0.005f;
+        float FireflySuppressorMinRelativeScale = 1.5f;
+        bool EnableAntiFirefly = false;
+        bool ReturnHistoryLengthInsteadOfOcclusion = false;
+        float SplitScreen = 0.0f;
+    };
+
     struct Settings
     {
         bool EnableSpecular = true;
@@ -52,7 +74,6 @@ struct ScreenSpaceRayTracing : Feature
         float BRDFBias = 0.25f;
         bool UseDynamicCubemapsAsFallback = true;
         bool UseDynamicCubemapsAsFallbackSpecular = true;
-        uint DiffuseSPP = 2;
         bool EnableDiffuse = true;
         float SpecularMult = 1.0f;
         float DiffuseMult = 1.0f;
@@ -60,8 +81,8 @@ struct ScreenSpaceRayTracing : Feature
         float OcclusionStrength = 1.0f;
         float CubemapNormalization = 0.0f;
         bool EnableREBLUR = true;
-        uint REBLURMaxAccumFrames = 30;
-        float REBLURSplitScreen = 0.0f;
+        float WorldScale = 70.0f;
+        REBLURSettings Reblur;
     } settings;
 
     struct alignas(16) SharedData
@@ -87,6 +108,7 @@ struct ScreenSpaceRayTracing : Feature
         float2 RcpTexDim;
         float2 FrameDim;
         float2 RcpFrameDim;
+        float WorldScale;
     };
 
     eastl::unique_ptr<ConstantBuffer> ssrtCB;
@@ -104,23 +126,30 @@ struct ScreenSpaceRayTracing : Feature
     struct DiffuseOutput
     {
         ID3D11ShaderResourceView* sh[2];
+        ID3D11ShaderResourceView* occlusion;  // OUT_DIFF_HITDIST (denoised normHitDist, null if disabled)
     };
     DiffuseOutput GetDiffuseOutputTextures();
+    ID3D11ShaderResourceView* GetSpecularOutputTexture();
 
-    // Ray march intermediate textures (1/4 res)
-    eastl::unique_ptr<Texture2D> texDepth = nullptr;
-    eastl::unique_ptr<Texture2D> texColor = nullptr;
-    eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
-    eastl::unique_ptr<Texture2D> texSSRTDiffuseColor = nullptr;
-    eastl::unique_ptr<Texture2D> texSSRTDiffuseDirection = nullptr;
+    // Ray march intermediate textures
+    eastl::unique_ptr<Texture2D> texDepth = nullptr;        // Hi-Z pyramid (1/4 res)
+    eastl::unique_ptr<Texture2D> texColor = nullptr;        // prefiltered radiance (1/4 res)
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
-	eastl::unique_ptr<Texture2D> texHalfResDepth = nullptr;
+    eastl::unique_ptr<Texture2D> texHalfResDepth = nullptr; // (1/2 res)
+
+    // NRD specular textures (1/2 res, RGBA16F)
+    eastl::unique_ptr<Texture2D> texNRDInputSpecRadianceHitDist = nullptr;   // IN_SPEC_RADIANCE_HITDIST
+    eastl::unique_ptr<Texture2D> texNRDOutputSpecRadianceHitDist = nullptr;  // OUT_SPEC_RADIANCE_HITDIST
 
     // NRD SH textures (1/2 res, RGBA16F)
     eastl::unique_ptr<Texture2D> texNRDInputSH0 = nullptr;   // IN_DIFF_SH0
     eastl::unique_ptr<Texture2D> texNRDInputSH1 = nullptr;   // IN_DIFF_SH1
     eastl::unique_ptr<Texture2D> texNRDOutputSH0 = nullptr;  // OUT_DIFF_SH0
     eastl::unique_ptr<Texture2D> texNRDOutputSH1 = nullptr;  // OUT_DIFF_SH1
+
+    // NRD occlusion textures (1/2 res, R16F)
+    eastl::unique_ptr<Texture2D> texNRDInputHitDist = nullptr;   // IN_DIFF_HITDIST
+    eastl::unique_ptr<Texture2D> texNRDOutputHitDist = nullptr;  // OUT_DIFF_HITDIST
 
     // NRD guide textures (1/2 res)
     eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;            // IN_VIEWZ (R16F)
@@ -142,11 +171,14 @@ struct ScreenSpaceRayTracing : Feature
     winrt::com_ptr<ID3D11ComputeShader> raymarchSpecularCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> upscaleDiffuseCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prepareNRDGuidesCS = nullptr;
 
     NRDReblurIntegration nrdReblur;
     nrd::ReblurSettings reblurSettings{};
+    NRDReblurIntegration nrdReblurOcclusion;
+    nrd::ReblurSettings reblurOcclusionSettings{};
+    NRDReblurIntegration nrdReblurSpecular;
+    nrd::ReblurSettings reblurSpecularSettings{};
     uint32_t frameIndex = 0;
 
     Matrix prevViewMatrix{};

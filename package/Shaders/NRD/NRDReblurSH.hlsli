@@ -111,6 +111,19 @@ float3 _NRD_EncodeNormalRoughness101010(float3 n, float roughness)
     return r;
 }
 
+// Decode the world-space normal and linear roughness from NRD_FrontEnd_PackNormalAndRoughness output.
+void NRD_BackEnd_UnpackNormalAndRoughness(float4 p, out float3 N, out float roughness)
+{
+    float3 r = p.xyz;
+    N.x = r.x - r.y;
+    N.y = r.x + r.y - 1.0;
+    N.z = 1.0 - abs(N.x) - abs(N.y);
+    float t = saturate(-N.z);
+    N.xy += N.xy >= 0.0 ? -t : t;
+    N = normalize(N);
+    roughness = abs(2.0 * r.z - 1.0);
+}
+
 // Pack world-space normal + linear roughness + materialID into R10G10B10A2.
 float4 NRD_FrontEnd_PackNormalAndRoughness(float3 N, float roughness, float materialID)
 {
@@ -119,6 +132,18 @@ float4 NRD_FrontEnd_PackNormalAndRoughness(float3 N, float roughness, float mate
     p.xyz = _NRD_EncodeNormalRoughness101010(N, roughness);
     p.w   = saturate(materialID / 3.0);
     return p;
+}
+
+// --- Hit distance normalization (must match nrd::ReblurSettings::hitDistanceParameters) ---
+// f = (A + |viewZ| * B) * lerp(1, C, exp2(D * roughness^2))
+// For diffuse (roughness = 1): f ≈ A + |viewZ| * B  (since exp2(D) ≈ 0 for D = -25)
+
+float REBLUR_FrontEnd_GetNormHitDist(float hitDist, float viewZ,
+    float4 hitDistParams /* = float4(3, 0.1, 20, -25) */, float roughness = 1.0)
+{
+    float f = (hitDistParams.x + abs(viewZ) * hitDistParams.y) *
+              lerp(1.0, hitDistParams.z, exp2(hitDistParams.w * roughness * roughness));
+    return saturate(hitDist / max(f, NRD_EPS));
 }
 
 // --- REBLUR front-end SH packing ---
@@ -177,6 +202,24 @@ float3 NRD_SG_ResolveDiffuse(NRD_SG sg, float3 N, float3 V, float roughness)
     Y  = max(Y, sg.c0 / NRD_PI);
 
     return _NRD_YCoCgToLinear_Corrected(Y, sg.c0, sg.chroma);
+}
+
+// --- REBLUR specular packing (IN_SPEC_RADIANCE_HITDIST / OUT_SPEC_RADIANCE_HITDIST) ---
+// Format: (Y, Co, Cg, normHitDist) in RGBA16F.
+
+float4 REBLUR_FrontEnd_PackRadianceAndNormHitDist(float3 radiance, float normHitDist, bool sanitize)
+{
+    if (sanitize) {
+        radiance    = _NRD_IsInvalidF3(radiance)   ? float3(0,0,0) : clamp(radiance, 0, NRD_FP16_MAX);
+        normHitDist = _NRD_IsInvalidF(normHitDist) ? 0             : saturate(normHitDist);
+    }
+    return float4(_NRD_LinearToYCoCg(radiance), normHitDist);
+}
+
+void REBLUR_BackEnd_UnpackRadianceAndNormHitDist(float4 p, out float3 radiance, out float normHitDist)
+{
+    radiance    = _NRD_YCoCgToLinear(p.xyz);
+    normHitDist = p.w;
 }
 
 #endif // NRD_REBLUR_SH_HLSLI

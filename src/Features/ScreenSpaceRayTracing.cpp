@@ -12,6 +12,28 @@
 #include "Skylighting.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+    ScreenSpaceRayTracing::REBLURSettings,
+    MaxAccumulatedFrameNum,
+    MaxFastAccumulatedFrameNum,
+    MaxStabilizedFrameNum,
+    HistoryFixFrameNum,
+    HistoryFixBasePixelStride,
+    HistoryFixAlternatePixelStride,
+    FastHistoryClampingSigmaScale,
+    DiffusePrepassBlurRadius,
+    MinHitDistanceWeight,
+    MinBlurRadius,
+    MaxBlurRadius,
+    LobeAngleFraction,
+    RoughnessFraction,
+    PlaneDistanceSensitivity,
+    FireflySuppressorMinRelativeScale,
+    EnableAntiFirefly,
+    ReturnHistoryLengthInsteadOfOcclusion,
+    SplitScreen
+)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ScreenSpaceRayTracing::Settings,
     EnableSpecular,
     MaxSteps,
@@ -21,7 +43,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     BRDFBias,
     UseDynamicCubemapsAsFallback,
     UseDynamicCubemapsAsFallbackSpecular,
-    DiffuseSPP,
+
     EnableDiffuse,
     SpecularMult,
     DiffuseMult,
@@ -29,8 +51,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     OcclusionStrength,
     CubemapNormalization,
     EnableREBLUR,
-    REBLURMaxAccumFrames,
-    REBLURSplitScreen
+    WorldScale,
+    Reblur
 )
 
 void ScreenSpaceRayTracing::DrawSettings()
@@ -40,15 +62,13 @@ void ScreenSpaceRayTracing::DrawSettings()
     ImGui::Checkbox("Enable Diffuse", &settings.EnableDiffuse);
     ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 256);
     ImGui::SliderInt("Max Mip Level", (int*)&settings.MaxMips, 1, maxMips, "%d", ImGuiSliderFlags_AlwaysClamp);
-    recompileFlag |= ImGui::SliderInt("Diffuse SPP", (int*)&settings.DiffuseSPP, 1, 16, "%d", ImGuiSliderFlags_AlwaysClamp);
-    if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("Samples per pixel for diffuse component. Higher values reduce noise but impact performance.");
+
     ImGui::SliderFloat("Specular Multiplier", &settings.SpecularMult, 0.0f, 5.0f, "%.2f");
     ImGui::SliderFloat("Diffuse Multiplier", &settings.DiffuseMult, 0.01f, 5.0f, "%.2f");
     ImGui::SliderFloat("Occlusion Strength", &settings.OcclusionStrength, 0.0f, 1.0f, "%.2f");
-    ImGui::SliderFloat("Ambient Multiplier", &settings.AmbientMult, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("AO Strength", &settings.AmbientMult, 0.0f, 1.0f, "%.2f");
     if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("Mix diffuse with vanilla ambient color. Not suggested if using dynamic cubemaps as fallback.");
+        ImGui::Text("Applies REBLUR denoised hit distance as ambient occlusion. Darkens areas where diffuse rays hit nearby geometry.");
 
     ImGui::Separator();
 
@@ -70,19 +90,97 @@ void ScreenSpaceRayTracing::DrawSettings()
         ImGui::Text("Matches cubemap luminance with ambient color.");
 
     ImGui::SeparatorText("REBLUR Denoiser");
+    ImGui::SliderFloat("World Scale", &settings.WorldScale, 1.0f, 200.0f, "%.1f");
+    if (auto _tt = Util::HoverTooltipWrapper())
+        ImGui::Text("Skyrim units per meter (default 70). Scales NRD hit distance normalization. Increase if denoising looks over-blurred.");
     ImGui::Checkbox("Enable REBLUR", &settings.EnableREBLUR);
     if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("NVIDIA REBLUR temporal denoiser for diffuse GI. Reduces noise at the cost of temporal lag.");
+        ImGui::Text("NVIDIA REBLUR temporal denoiser for diffuse GI.");
     if (settings.EnableREBLUR) {
-        int maxFrames = (int)settings.REBLURMaxAccumFrames;
-        if (ImGui::SliderInt("Max Accum Frames", &maxFrames, 1, 63)) {
-            settings.REBLURMaxAccumFrames = (uint32_t)maxFrames;
+        auto& r = settings.Reblur;
+
+        ImGui::SeparatorText("Accumulation");
+        {
+            int v = (int)r.MaxAccumulatedFrameNum;
+            if (ImGui::SliderInt("Max Accumulated Frames", &v, 1, (int)nrd::REBLUR_MAX_HISTORY_FRAME_NUM))
+                r.MaxAccumulatedFrameNum = (uint32_t)v;
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Maximum frames for slow history accumulation. Higher = less noise, more lag.");
+
+            v = (int)r.MaxFastAccumulatedFrameNum;
+            if (ImGui::SliderInt("Max Fast Accumulated Frames", &v, 1, (int)r.MaxAccumulatedFrameNum))
+                r.MaxFastAccumulatedFrameNum = (uint32_t)v;
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Maximum frames for fast history (reacts faster to disocclusion).");
+
+            v = (int)r.MaxStabilizedFrameNum;
+            if (ImGui::SliderInt("Max Stabilized Frames", &v, 0, (int)r.MaxAccumulatedFrameNum))
+                r.MaxStabilizedFrameNum = (uint32_t)v;
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Temporal stabilization pass frame count. 0 = disabled.");
         }
+
+        ImGui::SeparatorText("History Fix");
+        {
+            int v = (int)r.HistoryFixFrameNum;
+            if (ImGui::SliderInt("History Fix Frame Num", &v, 0, 4))
+                r.HistoryFixFrameNum = (uint32_t)v;
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Frames to apply history reconstruction after disocclusion.");
+
+            v = (int)r.HistoryFixBasePixelStride;
+            if (ImGui::SliderInt("History Fix Pixel Stride", &v, 1, 20))
+                r.HistoryFixBasePixelStride = (uint32_t)v;
+
+            v = (int)r.HistoryFixAlternatePixelStride;
+            if (ImGui::SliderInt("History Fix Alternate Stride", &v, 1, 20))
+                r.HistoryFixAlternatePixelStride = (uint32_t)v;
+        }
+
+        ImGui::SeparatorText("Spatial Filter");
+        {
+            ImGui::SliderFloat("Min Blur Radius", &r.MinBlurRadius, 0.0f, 10.0f, "%.1f px");
+            ImGui::SliderFloat("Max Blur Radius", &r.MaxBlurRadius, 0.0f, 60.0f, "%.1f px");
+            ImGui::SliderFloat("Diffuse Prepass Blur Radius", &r.DiffusePrepassBlurRadius, 0.0f, 60.0f, "%.1f px");
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Spatial blur before temporal accumulation. Helps with very noisy input.");
+
+            ImGui::SliderFloat("Lobe Angle Fraction", &r.LobeAngleFraction, 0.0f, 1.0f, "%.2f");
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Controls normal-based weight in spatial filter. Higher = sharper boundaries.");
+
+            ImGui::SliderFloat("Roughness Fraction", &r.RoughnessFraction, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("Plane Distance Sensitivity", &r.PlaneDistanceSensitivity, 0.0f, 0.1f, "%.4f");
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Geometry rejection threshold. Higher = more aggressive edge stopping.");
+        }
+
+        ImGui::SeparatorText("Quality");
+        {
+            ImGui::SliderFloat("Fast History Clamping Sigma", &r.FastHistoryClampingSigmaScale, 1.0f, 3.0f, "%.2f");
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Standard deviations for fast history clamping. Lower = more responsive but flickery.");
+
+            ImGui::SliderFloat("Min Hit Distance Weight", &r.MinHitDistanceWeight, 0.0001f, 0.2f, "%.4f");
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Minimum weight for hit distance blending in spatial passes.");
+
+            ImGui::Checkbox("Enable Anti-Firefly", &r.EnableAntiFirefly);
+            if (r.EnableAntiFirefly) {
+                ImGui::SliderFloat("Firefly Suppressor Scale", &r.FireflySuppressorMinRelativeScale, 1.0f, 3.0f, "%.2f");
+                if (auto _tt = Util::HoverTooltipWrapper())
+                    ImGui::Text("Scale of the firefly suppressor. Higher = more aggressive firefly removal.");
+            }
+
+            ImGui::Checkbox("Return History Length", &r.ReturnHistoryLengthInsteadOfOcclusion);
+            if (auto _tt = Util::HoverTooltipWrapper())
+                ImGui::Text("Output history length in .w instead of AO. Useful for debugging.");
+        }
+
+        ImGui::SeparatorText("Debug");
+        ImGui::SliderFloat("Split Screen", &r.SplitScreen, 0.0f, 1.0f, "%.2f");
         if (auto _tt = Util::HoverTooltipWrapper())
-            ImGui::Text("Maximum frames REBLUR accumulates. Lower = less lag but more noise.");
-        ImGui::SliderFloat("Split Screen", &settings.REBLURSplitScreen, 0.0f, 1.0f, "%.2f");
-        if (auto _tt = Util::HoverTooltipWrapper())
-            ImGui::Text("Debug: left side shows raw (no temporal) output, right shows denoised. 0 = disabled.");
+            ImGui::Text("Left of threshold shows raw input, right shows denoised output.");
     }
 
     ImGui::SeparatorText("Debug");
@@ -95,13 +193,14 @@ void ScreenSpaceRayTracing::DrawSettings()
 		BUFFER_VIEWER_NODE(texHalfResDepth, debugRescale)
         BUFFER_VIEWER_NODE(texColor, debugRescale)
         BUFFER_VIEWER_NODE(texSSRColor, debugRescale)
-        BUFFER_VIEWER_NODE(texSSRTDiffuseColor, debugRescale)
         BUFFER_VIEWER_NODE(texNRDInputSH0, debugRescale)
         BUFFER_VIEWER_NODE(texNRDInputSH1, debugRescale)
         BUFFER_VIEWER_NODE(texNRDOutputSH0, debugRescale)
         BUFFER_VIEWER_NODE(texNRDOutputSH1, debugRescale)
         BUFFER_VIEWER_NODE(texNRDViewZ, debugRescale)
         BUFFER_VIEWER_NODE(texNRDNormalRoughness, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDInputHitDist, debugRescale)
+        BUFFER_VIEWER_NODE(texNRDOutputHitDist, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -218,18 +317,6 @@ void ScreenSpaceRayTracing::SetupResources()
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
         srvDesc.Texture2D.MipLevels = 1;
 
-        texSSRColor = eastl::make_unique<Texture2D>(texDesc);
-        texSSRColor->CreateSRV(srvDesc);
-        texSSRColor->CreateUAV(uavDesc);
-        texSSRTDiffuseColor = eastl::make_unique<Texture2D>(texDesc);
-        texSSRTDiffuseColor->CreateSRV(srvDesc);
-        texSSRTDiffuseColor->CreateUAV(uavDesc);
-
-        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R8G8_UNORM;
-        texSSRTDiffuseDirection = eastl::make_unique<Texture2D>(texDesc);
-        texSSRTDiffuseDirection->CreateSRV(srvDesc);
-        texSSRTDiffuseDirection->CreateUAV(uavDesc);
-
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
         texDesc.MipLevels = maxMips;
         srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
@@ -253,8 +340,38 @@ void ScreenSpaceRayTracing::SetupResources()
 			DX::ThrowIfFailed(device->CreateUnorderedAccessView(texDepth->resource.get(), &mipUavDesc, depthUAVs[i].put()));
 		}
 
+        // NRD occlusion textures (1/2 res, R16F)
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16_FLOAT;
+        texDesc.Width     = halfW;
+        texDesc.Height    = halfH;
+        texDesc.MipLevels = 1;
+        srvDesc.Texture2D.MipLevels = 1;
+        texNRDInputHitDist = eastl::make_unique<Texture2D>(texDesc);
+        texNRDInputHitDist->CreateSRV(srvDesc);
+        texNRDInputHitDist->CreateUAV(uavDesc);
+
+        texNRDOutputHitDist = eastl::make_unique<Texture2D>(texDesc);
+        texNRDOutputHitDist->CreateSRV(srvDesc);
+        texNRDOutputHitDist->CreateUAV(uavDesc);
+
+        // NRD specular textures (1/2 res, RGBA16F)
+        texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+        texDesc.Width     = halfW;
+        texDesc.Height    = halfH;
+        texDesc.MipLevels = 1;
+        srvDesc.Texture2D.MipLevels = 1;
+        texNRDInputSpecRadianceHitDist = eastl::make_unique<Texture2D>(texDesc);
+        texNRDInputSpecRadianceHitDist->CreateSRV(srvDesc);
+        texNRDInputSpecRadianceHitDist->CreateUAV(uavDesc);
+
+        texNRDOutputSpecRadianceHitDist = eastl::make_unique<Texture2D>(texDesc);
+        texNRDOutputSpecRadianceHitDist->CreateSRV(srvDesc);
+        texNRDOutputSpecRadianceHitDist->CreateUAV(uavDesc);
+
         // Initialize NRD
         nrdReblur.Init(halfW, halfH, nrd::Denoiser::REBLUR_DIFFUSE_SH, 0);
+        nrdReblurOcclusion.Init(halfW, halfH, nrd::Denoiser::REBLUR_DIFFUSE_OCCLUSION, 1);
+        nrdReblurSpecular.Init(halfW, halfH, nrd::Denoiser::REBLUR_SPECULAR, 2);
     }
 
     logger::debug("Creating samplers...");
@@ -287,7 +404,7 @@ void ScreenSpaceRayTracing::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
         &raymarchSpecularCS, &raymarchDiffuseCS, &prefilterRadianceCS, &prefilterDepthCS,
-        &depthDownsampleCS, &upscaleDiffuseCS, &prepareNRDGuidesCS,
+        &depthDownsampleCS, &prepareNRDGuidesCS,
     };
 
     for (auto shader : shaderPtrs)
@@ -316,10 +433,6 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
     if (globals::features::skylighting.loaded)
 		defines.push_back({ "SKYLIGHTING", nullptr });
 
-    const std::string DiffuseSPPStr = std::to_string(settings.DiffuseSPP);
-
-    defines.push_back({ "DIFFUSE_SPP", DiffuseSPPStr.c_str() });
-
     auto definesSpecular = defines;
     definesSpecular.push_back({ "SSRT_SPECULAR", nullptr });
 
@@ -330,7 +443,6 @@ void ScreenSpaceRayTracing::CompileComputeShaders()
             { &prefilterRadianceCS, "ssrt_prefilterRadiance.hlsl", {} },
             { &prefilterDepthCS, "ssrt_prefilterDepths.hlsl", {} },
             { &depthDownsampleCS, "ssrt_depth_downsample.hlsl", {} },
-            { &upscaleDiffuseCS, "ssrt_upscale_diffuse.hlsl", {} },
             { &prepareNRDGuidesCS, "ssrt_preprocess_nrd_guides.hlsl", {} },
         };
 
@@ -376,6 +488,7 @@ void ScreenSpaceRayTracing::Prepass()
         ssrCBData.RcpTexDim = float2(1.0f) / res;
         ssrCBData.FrameDim = dynres;
         ssrCBData.RcpFrameDim = float2(1.0f) / dynres;
+        ssrCBData.WorldScale = settings.WorldScale;
     }
     ssrtCB->Update(ssrCBData);
     auto buffer = ssrtCB->CB();
@@ -435,6 +548,37 @@ void ScreenSpaceRayTracing::Prepass()
 
     auto view = texDepth->srv.get();
     context->PSSetShaderResources(99, 1, &view);
+
+    // --- NRD guide textures (1/2 res) — run unconditionally so both diffuse and specular REBLUR can use them ---
+    if (prepareNRDGuidesCS && settings.EnableREBLUR) {
+        auto normal = renderer->GetRuntimeData().renderTargets[globals::deferred->normalRoughnessRT];
+        auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+
+        state->BeginPerfEvent("SSRT NRD Guide Preprocess");
+
+        std::array<ID3D11ShaderResourceView*, 3> guideSRVs = {
+            depth.depthSRV,
+            normal.SRV,
+            motion.SRV
+        };
+        std::array<ID3D11UnorderedAccessView*, 3> guideUAVs = {
+            texNRDViewZ->uav.get(),
+            texNRDNormalRoughness->uav.get(),
+            texNRDMotionVectors->uav.get()
+        };
+
+        context->CSSetShaderResources(0, (uint)guideSRVs.size(), guideSRVs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)guideUAVs.size(), guideUAVs.data(), nullptr);
+        context->CSSetShader(prepareNRDGuidesCS.get(), nullptr, 0);
+        context->Dispatch(((uint)dynres.x / 2 + 7) / 8, ((uint)dynres.y / 2 + 7) / 8, 1);
+
+        std::array<ID3D11ShaderResourceView*, 3> nullSRVs = { nullptr };
+        std::array<ID3D11UnorderedAccessView*, 3> nullUAVs = { nullptr };
+        context->CSSetShaderResources(0, (uint)nullSRVs.size(), nullSRVs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)nullUAVs.size(), nullUAVs.data(), nullptr);
+
+        state->EndPerfEvent();
+    }
 }
 
 void ScreenSpaceRayTracing::DrawSSRTSpecular()
@@ -462,7 +606,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     float2 dynres = Util::ConvertToDynamic(res);
     dynres = { floor(dynres.x), floor(dynres.y) };
 
-    float2 dispatchCount = { (dynres.x / 4 + 7) / 8, (dynres.y / 4 + 7) / 8 };
+    float2 dispatchCount = { (dynres.x / 2 + 7) / 8, (dynres.y / 2 + 7) / 8 };
 
     SSRTCB ssrCBData;
     {
@@ -479,6 +623,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
         ssrCBData.RcpTexDim = float2(1.0f) / res;
         ssrCBData.FrameDim = dynres;
         ssrCBData.RcpFrameDim = float2(1.0f) / dynres;
+        ssrCBData.WorldScale = settings.WorldScale;
     }
     ssrtCB->Update(ssrCBData);
     auto buffer = ssrtCB->CB();
@@ -531,7 +676,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 
     state->BeginPerfEvent("Raymarch");
 
-    uavs.at(0) = texSSRColor->uav.get();
+    uavs.at(0) = texNRDInputSpecRadianceHitDist->uav.get();
 
     srvs.at(1) = motion.SRV;
     srvs.at(2) = normal.SRV;
@@ -555,6 +700,85 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     state->EndPerfEvent();
 
     resetViews();
+
+    // --- REBLUR_SPECULAR denoising ---
+    if (settings.EnableREBLUR && nrdReblurSpecular.IsValid()) {
+        state->BeginPerfEvent("SSRT REBLUR Specular");
+
+        nrd::CommonSettings specCommonSettings{};
+        {
+            float2 halfDynres = { floor(dynres.x / 2), floor(dynres.y / 2) };
+            uint16_t hw = (uint16_t)halfDynres.x;
+            uint16_t hh = (uint16_t)halfDynres.y;
+
+            specCommonSettings.resourceSize[0] = (uint16_t)texNRDInputSpecRadianceHitDist->desc.Width;
+            specCommonSettings.resourceSize[1] = (uint16_t)texNRDInputSpecRadianceHitDist->desc.Height;
+            specCommonSettings.resourceSizePrev[0] = specCommonSettings.resourceSize[0];
+            specCommonSettings.resourceSizePrev[1] = specCommonSettings.resourceSize[1];
+            specCommonSettings.rectSize[0] = hw;
+            specCommonSettings.rectSize[1] = hh;
+            specCommonSettings.rectSizePrev[0] = hw;
+            specCommonSettings.rectSizePrev[1] = hh;
+
+            auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
+            auto projMat = globals::game::frameBufferCached.GetCameraProjUnjittered(0).Transpose();
+
+            memcpy(specCommonSettings.viewToClipMatrix,      &projMat,        sizeof(float) * 16);
+            memcpy(specCommonSettings.viewToClipMatrixPrev,  &prevProjMatrix, sizeof(float) * 16);
+            memcpy(specCommonSettings.worldToViewMatrix,     &viewMat,        sizeof(float) * 16);
+            memcpy(specCommonSettings.worldToViewMatrixPrev, &prevViewMatrix, sizeof(float) * 16);
+
+            specCommonSettings.motionVectorScale[0] = 1.0f;
+            specCommonSettings.motionVectorScale[1] = 1.0f;
+            specCommonSettings.motionVectorScale[2] = 0.0f;
+            specCommonSettings.isMotionVectorInWorldSpace = false;
+
+            // If diffuse ran first it already incremented frameIndex; use same frame value.
+            specCommonSettings.frameIndex = settings.EnableDiffuse ? frameIndex - 1 : frameIndex++;
+            specCommonSettings.denoisingRange = 1e6f;
+            specCommonSettings.splitScreen = settings.Reblur.SplitScreen;
+        }
+        nrdReblurSpecular.SetCommonSettings(specCommonSettings);
+
+        {
+            const auto& r = settings.Reblur;
+            reblurSpecularSettings.maxAccumulatedFrameNum = std::min((uint32_t)r.MaxAccumulatedFrameNum, nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+            reblurSpecularSettings.maxFastAccumulatedFrameNum = std::min((uint32_t)r.MaxFastAccumulatedFrameNum, reblurSpecularSettings.maxAccumulatedFrameNum);
+            reblurSpecularSettings.maxStabilizedFrameNum = std::min((uint32_t)r.MaxStabilizedFrameNum, reblurSpecularSettings.maxAccumulatedFrameNum);
+            reblurSpecularSettings.historyFixFrameNum = reblurSpecularSettings.maxFastAccumulatedFrameNum > 0
+                ? std::min((uint32_t)r.HistoryFixFrameNum, reblurSpecularSettings.maxFastAccumulatedFrameNum - 1)
+                : 0;
+            reblurSpecularSettings.historyFixBasePixelStride = std::max(r.HistoryFixBasePixelStride, 1u);
+            reblurSpecularSettings.historyFixAlternatePixelStride = std::max(r.HistoryFixAlternatePixelStride, 1u);
+            reblurSpecularSettings.fastHistoryClampingSigmaScale = std::clamp(r.FastHistoryClampingSigmaScale, 1.0f, 3.0f);
+            reblurSpecularSettings.minHitDistanceWeight = std::clamp(r.MinHitDistanceWeight, 0.0001f, 0.2f);
+            reblurSpecularSettings.minBlurRadius = std::max(r.MinBlurRadius, 0.0f);
+            reblurSpecularSettings.maxBlurRadius = std::max(r.MaxBlurRadius, reblurSpecularSettings.minBlurRadius);
+            reblurSpecularSettings.lobeAngleFraction = std::clamp(r.LobeAngleFraction, 0.0f, 1.0f);
+            reblurSpecularSettings.roughnessFraction = std::clamp(r.RoughnessFraction, 0.0f, 1.0f);
+            reblurSpecularSettings.planeDistanceSensitivity = std::max(r.PlaneDistanceSensitivity, 0.0f);
+            reblurSpecularSettings.fireflySuppressorMinRelativeScale = std::clamp(r.FireflySuppressorMinRelativeScale, 1.0f, 3.0f);
+            reblurSpecularSettings.enableAntiFirefly = r.EnableAntiFirefly;
+            reblurSpecularSettings.returnHistoryLengthInsteadOfOcclusion = r.ReturnHistoryLengthInsteadOfOcclusion;
+            reblurSpecularSettings.specularPrepassBlurRadius = std::max(r.DiffusePrepassBlurRadius, 0.0f);
+            reblurSpecularSettings.hitDistanceParameters.A = 3.0f * settings.WorldScale;
+            reblurSpecularSettings.hitDistanceParameters.B = 0.1f;
+            reblurSpecularSettings.hitDistanceParameters.C = 20.0f;
+        }
+        nrdReblurSpecular.SetDenoiserSettings(&reblurSpecularSettings);
+
+        nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_MV,                    texNRDMotionVectors->srv.get());
+        nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS,       texNRDNormalRoughness->srv.get());
+        nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_VIEWZ,                  texNRDViewZ->srv.get());
+        nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_SPEC_RADIANCE_HITDIST,  texNRDInputSpecRadianceHitDist->srv.get());
+        nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::OUT_SPEC_RADIANCE_HITDIST, texNRDOutputSpecRadianceHitDist->srv.get());
+        nrdReblurSpecular.SetNamedUAV(nrd::ResourceType::IN_MV,                     texNRDMotionVectors->uav.get());
+        nrdReblurSpecular.SetNamedUAV(nrd::ResourceType::OUT_SPEC_RADIANCE_HITDIST, texNRDOutputSpecRadianceHitDist->uav.get());
+
+        nrdReblurSpecular.Dispatch();
+
+        state->EndPerfEvent();
+    }
 
     context->CSSetShader(nullptr, nullptr, 0);
 
@@ -587,7 +811,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     float2 dynres = Util::ConvertToDynamic(res);
     dynres = { floor(dynres.x), floor(dynres.y) };
 
-    float2 dispatchCount = { (dynres.x / 4 + 7) / 8, (dynres.y / 4 + 7) / 8 };
+    float2 dispatchCount = { (dynres.x / 2 + 7) / 8, (dynres.y / 2 + 7) / 8 };
 
     SSRTCB ssrCBData;
     {
@@ -604,28 +828,29 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         ssrCBData.RcpTexDim = float2(1.0f) / res;
         ssrCBData.FrameDim = dynres;
         ssrCBData.RcpFrameDim = float2(1.0f) / dynres;
+        ssrCBData.WorldScale = settings.WorldScale;
     }
     ssrtCB->Update(ssrCBData);
     auto buffer = ssrtCB->CB();
     context->CSSetConstantBuffers(1, 1, &buffer);
 
-    std::array<ID3D11ShaderResourceView*, 13> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 3> uavs = { nullptr };
+    std::array<ID3D11ShaderResourceView*, 14> srvs = { nullptr };
+    std::array<ID3D11UnorderedAccessView*, 3> uavs = { nullptr };
 
     auto resetViews = [&]() {
-		srvs.fill(nullptr);
-		uavs.fill(nullptr);
+        srvs.fill(nullptr);
+        uavs.fill(nullptr);
 
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-	};
+        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+        context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+    };
 
     std::array<ID3D11SamplerState*, 2> samplers = { pointSampler.get(), linearSampler.get() };
 
     context->CSSetSamplers(0, 2, samplers.data());
 
     const auto envTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr;
-	const auto envReflectionsTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr;
+    const auto envReflectionsTexture = dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr;
 
     auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
 
@@ -637,12 +862,13 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         }
     }
 
-    // --- Ray march ---
-    uavs.at(0) = texSSRTDiffuseColor->uav.get();
-    uavs.at(1) = texSSRTDiffuseDirection->uav.get();
+    // --- Ray march at half-res: uses NRD guide normals, outputs directly to NRD input textures ---
+    uavs.at(0) = texNRDInputSH0->uav.get();
+    uavs.at(1) = texNRDInputSH1->uav.get();
+    uavs.at(2) = texNRDInputHitDist->uav.get();
 
     srvs.at(1) = motion.SRV;
-    srvs.at(2) = normal.SRV;
+    srvs.at(2) = normal.SRV;          // full-res GBuffer still needed for hit validation
     srvs.at(3) = main.SRV;
     srvs.at(4) = depth.depthSRV;
     srvs.at(5) = texDepth->srv.get();
@@ -653,6 +879,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     srvs.at(10) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr;
     srvs.at(11) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr;
     srvs.at(12) = albedo.SRV;
+    srvs.at(13) = texNRDNormalRoughness->srv.get();  // half-res NRD normal for ray origin
 
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
@@ -660,55 +887,6 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     context->CSSetShader(raymarchDiffuseCS.get(), nullptr, 0);
     context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
     resetViews();
-
-    // --- Preprocess NRD guide textures (1/2 res) ---
-    if (settings.EnableREBLUR && nrdReblur.IsValid() && prepareNRDGuidesCS) {
-        state->BeginPerfEvent("SSRT NRD Guide Preprocess");
-
-        std::array<ID3D11ShaderResourceView*, 3> guideSRVs = {
-            depth.depthSRV,
-            normal.SRV,
-            motion.SRV
-        };
-        std::array<ID3D11UnorderedAccessView*, 3> guideUAVs = {
-            texNRDViewZ->uav.get(),
-            texNRDNormalRoughness->uav.get(),
-            texNRDMotionVectors->uav.get()
-        };
-
-        context->CSSetShaderResources(0, (uint)guideSRVs.size(), guideSRVs.data());
-        context->CSSetUnorderedAccessViews(0, (uint)guideUAVs.size(), guideUAVs.data(), nullptr);
-        context->CSSetShader(prepareNRDGuidesCS.get(), nullptr, 0);
-        context->Dispatch(((uint)dynres.x / 2 + 7) / 8, ((uint)dynres.y / 2 + 7) / 8, 1);
-        resetViews();
-
-        state->EndPerfEvent();
-    }
-
-    // --- Upscale diffuse to NRD-packed SH (1/2 res, 2 textures) ---
-    {
-        state->BeginPerfEvent("SSRT Diffuse Upscale");
-
-        srvs.fill(nullptr);
-        srvs.at(0) = texSSRTDiffuseColor->srv.get();
-        srvs.at(1) = texSSRTDiffuseDirection->srv.get();
-		srvs.at(2) = texHalfResDepth->srv.get();
-		srvs.at(3) = depthSRVs[0].get();
-
-        std::array<ID3D11UnorderedAccessView*, 2> shUavs = {
-            texNRDInputSH0->uav.get(),
-            texNRDInputSH1->uav.get()
-        };
-
-        context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-        context->CSSetUnorderedAccessViews(0, (uint)shUavs.size(), shUavs.data(), nullptr);
-        context->CSSetShader(upscaleDiffuseCS.get(), nullptr, 0);
-
-        context->Dispatch(((uint)dynres.x / 2 + 7) / 8, ((uint)dynres.y / 2 + 7) / 8, 1);
-        resetViews();
-
-        state->EndPerfEvent();
-    }
 
     // --- REBLUR denoising ---
     if (settings.EnableREBLUR && nrdReblur.IsValid()) {
@@ -756,13 +934,36 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
             // Default denoisingRange=500000 may clip distant geometry; use a safe margin.
             commonSettings.denoisingRange = 1e6f;
 
-            // Debug: expose split-screen so left half shows raw (no-temporal) output.
-            commonSettings.splitScreen = settings.REBLURSplitScreen;
+            commonSettings.splitScreen = settings.Reblur.SplitScreen;
         }
         nrdReblur.SetCommonSettings(commonSettings);
 
-        // Update REBLUR settings
-        reblurSettings.maxAccumulatedFrameNum = settings.REBLURMaxAccumFrames;
+        // Update REBLUR settings (clamped to valid ranges)
+        {
+            const auto& r = settings.Reblur;
+            reblurSettings.maxAccumulatedFrameNum = std::min((uint32_t)r.MaxAccumulatedFrameNum, nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+            reblurSettings.maxFastAccumulatedFrameNum = std::min((uint32_t)r.MaxFastAccumulatedFrameNum, reblurSettings.maxAccumulatedFrameNum);
+            reblurSettings.maxStabilizedFrameNum = std::min((uint32_t)r.MaxStabilizedFrameNum, reblurSettings.maxAccumulatedFrameNum);
+            reblurSettings.historyFixFrameNum = reblurSettings.maxFastAccumulatedFrameNum > 0
+                ? std::min((uint32_t)r.HistoryFixFrameNum, reblurSettings.maxFastAccumulatedFrameNum - 1)
+                : 0;
+            reblurSettings.historyFixBasePixelStride = std::max(r.HistoryFixBasePixelStride, 1u);
+            reblurSettings.historyFixAlternatePixelStride = std::max(r.HistoryFixAlternatePixelStride, 1u);
+            reblurSettings.fastHistoryClampingSigmaScale = std::clamp(r.FastHistoryClampingSigmaScale, 1.0f, 3.0f);
+            reblurSettings.diffusePrepassBlurRadius = std::max(r.DiffusePrepassBlurRadius, 0.0f);
+            reblurSettings.minHitDistanceWeight = std::clamp(r.MinHitDistanceWeight, 0.0001f, 0.2f);
+            reblurSettings.minBlurRadius = std::max(r.MinBlurRadius, 0.0f);
+            reblurSettings.maxBlurRadius = std::max(r.MaxBlurRadius, reblurSettings.minBlurRadius);
+            reblurSettings.lobeAngleFraction = std::clamp(r.LobeAngleFraction, 0.0f, 1.0f);
+            reblurSettings.roughnessFraction = std::clamp(r.RoughnessFraction, 0.0f, 1.0f);
+            reblurSettings.planeDistanceSensitivity = std::max(r.PlaneDistanceSensitivity, 0.0f);
+            reblurSettings.fireflySuppressorMinRelativeScale = std::clamp(r.FireflySuppressorMinRelativeScale, 1.0f, 3.0f);
+            reblurSettings.enableAntiFirefly = r.EnableAntiFirefly;
+            reblurSettings.returnHistoryLengthInsteadOfOcclusion = r.ReturnHistoryLengthInsteadOfOcclusion;
+            reblurSettings.hitDistanceParameters.A = 3.0f * settings.WorldScale;
+            reblurSettings.hitDistanceParameters.B = 0.1f;
+            reblurSettings.hitDistanceParameters.C = 20.0f;
+        }
         nrdReblur.SetDenoiserSettings(&reblurSettings);
 
         // Bind named resources
@@ -785,6 +986,84 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         state->EndPerfEvent();
     }
 
+    // --- REBLUR_DIFFUSE_OCCLUSION denoising ---
+    if (settings.EnableREBLUR && nrdReblurOcclusion.IsValid()) {
+        state->BeginPerfEvent("SSRT REBLUR Occlusion");
+
+        nrd::CommonSettings occCommonSettings{};
+        {
+            float2 halfDynres = { floor(dynres.x / 2), floor(dynres.y / 2) };
+            uint16_t hw = (uint16_t)halfDynres.x;
+            uint16_t hh = (uint16_t)halfDynres.y;
+
+            occCommonSettings.resourceSize[0] = (uint16_t)texNRDInputHitDist->desc.Width;
+            occCommonSettings.resourceSize[1] = (uint16_t)texNRDInputHitDist->desc.Height;
+            occCommonSettings.resourceSizePrev[0] = occCommonSettings.resourceSize[0];
+            occCommonSettings.resourceSizePrev[1] = occCommonSettings.resourceSize[1];
+            occCommonSettings.rectSize[0] = hw;
+            occCommonSettings.rectSize[1] = hh;
+            occCommonSettings.rectSizePrev[0] = hw;
+            occCommonSettings.rectSizePrev[1] = hh;
+
+            auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
+            auto projMat = globals::game::frameBufferCached.GetCameraProjUnjittered(0).Transpose();
+
+            memcpy(occCommonSettings.viewToClipMatrix,      &projMat,        sizeof(float) * 16);
+            memcpy(occCommonSettings.viewToClipMatrixPrev,  &prevProjMatrix, sizeof(float) * 16);
+            memcpy(occCommonSettings.worldToViewMatrix,     &viewMat,        sizeof(float) * 16);
+            memcpy(occCommonSettings.worldToViewMatrixPrev, &prevViewMatrix, sizeof(float) * 16);
+
+            occCommonSettings.motionVectorScale[0] = 1.0f;
+            occCommonSettings.motionVectorScale[1] = 1.0f;
+            occCommonSettings.motionVectorScale[2] = 0.0f;
+            occCommonSettings.isMotionVectorInWorldSpace = false;
+
+            occCommonSettings.frameIndex = frameIndex - 1;  // already incremented by SH pass
+            occCommonSettings.denoisingRange = 1e6f;
+            occCommonSettings.splitScreen = settings.Reblur.SplitScreen;
+        }
+        nrdReblurOcclusion.SetCommonSettings(occCommonSettings);
+
+        {
+            const auto& r = settings.Reblur;
+            reblurOcclusionSettings.maxAccumulatedFrameNum = std::min((uint32_t)r.MaxAccumulatedFrameNum, nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+            reblurOcclusionSettings.maxFastAccumulatedFrameNum = std::min((uint32_t)r.MaxFastAccumulatedFrameNum, reblurOcclusionSettings.maxAccumulatedFrameNum);
+            reblurOcclusionSettings.maxStabilizedFrameNum = std::min((uint32_t)r.MaxStabilizedFrameNum, reblurOcclusionSettings.maxAccumulatedFrameNum);
+            reblurOcclusionSettings.historyFixFrameNum = reblurOcclusionSettings.maxFastAccumulatedFrameNum > 0
+                ? std::min((uint32_t)r.HistoryFixFrameNum, reblurOcclusionSettings.maxFastAccumulatedFrameNum - 1)
+                : 0;
+            reblurOcclusionSettings.historyFixBasePixelStride = std::max(r.HistoryFixBasePixelStride, 1u);
+            reblurOcclusionSettings.historyFixAlternatePixelStride = std::max(r.HistoryFixAlternatePixelStride, 1u);
+            reblurOcclusionSettings.fastHistoryClampingSigmaScale = std::clamp(r.FastHistoryClampingSigmaScale, 1.0f, 3.0f);
+            reblurOcclusionSettings.diffusePrepassBlurRadius = std::max(r.DiffusePrepassBlurRadius, 0.0f);
+            reblurOcclusionSettings.minHitDistanceWeight = std::clamp(r.MinHitDistanceWeight, 0.0001f, 0.2f);
+            reblurOcclusionSettings.minBlurRadius = std::max(r.MinBlurRadius, 0.0f);
+            reblurOcclusionSettings.maxBlurRadius = std::max(r.MaxBlurRadius, reblurOcclusionSettings.minBlurRadius);
+            reblurOcclusionSettings.lobeAngleFraction = std::clamp(r.LobeAngleFraction, 0.0f, 1.0f);
+            reblurOcclusionSettings.roughnessFraction = std::clamp(r.RoughnessFraction, 0.0f, 1.0f);
+            reblurOcclusionSettings.planeDistanceSensitivity = std::max(r.PlaneDistanceSensitivity, 0.0f);
+            reblurOcclusionSettings.fireflySuppressorMinRelativeScale = std::clamp(r.FireflySuppressorMinRelativeScale, 1.0f, 3.0f);
+            reblurOcclusionSettings.enableAntiFirefly = r.EnableAntiFirefly;
+            reblurOcclusionSettings.returnHistoryLengthInsteadOfOcclusion = r.ReturnHistoryLengthInsteadOfOcclusion;
+            reblurOcclusionSettings.hitDistanceParameters.A = 3.0f * settings.WorldScale;
+            reblurOcclusionSettings.hitDistanceParameters.B = 0.1f;
+            reblurOcclusionSettings.hitDistanceParameters.C = 20.0f;
+        }
+        nrdReblurOcclusion.SetDenoiserSettings(&reblurOcclusionSettings);
+
+        nrdReblurOcclusion.SetNamedSRV(nrd::ResourceType::IN_MV,               texNRDMotionVectors->srv.get());
+        nrdReblurOcclusion.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS,  texNRDNormalRoughness->srv.get());
+        nrdReblurOcclusion.SetNamedSRV(nrd::ResourceType::IN_VIEWZ,             texNRDViewZ->srv.get());
+        nrdReblurOcclusion.SetNamedSRV(nrd::ResourceType::IN_DIFF_HITDIST,      texNRDInputHitDist->srv.get());
+        nrdReblurOcclusion.SetNamedSRV(nrd::ResourceType::OUT_DIFF_HITDIST,     texNRDOutputHitDist->srv.get());
+        nrdReblurOcclusion.SetNamedUAV(nrd::ResourceType::IN_MV,                texNRDMotionVectors->uav.get());
+        nrdReblurOcclusion.SetNamedUAV(nrd::ResourceType::OUT_DIFF_HITDIST,     texNRDOutputHitDist->uav.get());
+
+        nrdReblurOcclusion.Dispatch();
+
+        state->EndPerfEvent();
+    }
+
     state->EndPerfEvent();
 
     context->CSSetShader(nullptr, nullptr, 0);
@@ -797,11 +1076,20 @@ ScreenSpaceRayTracing::DiffuseOutput ScreenSpaceRayTracing::GetDiffuseOutputText
         output.sh[0] = texNRDOutputSH0->srv.get();
         output.sh[1] = texNRDOutputSH1->srv.get();
     } else {
-        // Fallback: return NRD input textures (upscaled SH without denoising)
         output.sh[0] = texNRDInputSH0->srv.get();
         output.sh[1] = texNRDInputSH1->srv.get();
     }
+    output.occlusion = (settings.EnableREBLUR && nrdReblurOcclusion.IsValid())
+        ? texNRDOutputHitDist->srv.get()
+        : nullptr;
     return output;
+}
+
+ID3D11ShaderResourceView* ScreenSpaceRayTracing::GetSpecularOutputTexture()
+{
+    if (settings.EnableREBLUR && nrdReblurSpecular.IsValid())
+        return texNRDOutputSpecRadianceHitDist->srv.get();
+    return texNRDInputSpecRadianceHitDist->srv.get();
 }
 
 ScreenSpaceRayTracing::SharedData ScreenSpaceRayTracing::GetCommonBufferData()

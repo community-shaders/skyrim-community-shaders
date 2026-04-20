@@ -1,4 +1,4 @@
-// Preprocesses NRD guide textures at 1/2 resolution.
+// Preprocesses NRD guide textures at 1/2 resolution via 2x2 downsampling.
 // Input: fullres NDC depth (t0), fullres GBuffer normal+roughness (t1), fullres motion vectors (t2).
 // Output: halfres viewZ R16F (u0), halfres NRD normal+roughness R8G8B8A8 (u1), halfres motion R16G16F (u2).
 
@@ -37,26 +37,35 @@ void main(uint3 DTid : SV_DispatchThreadID)
     uint2 halfRes = (uint2)(FrameDim / 2);
     if (any(DTid.xy >= halfRes)) return;
 
-    // Map to fullres center pixel
-    uint2 fullCoord = DTid.xy * 2;
+    uint2 base = DTid.xy * 2;
 
-    // --- ViewZ: linearise the NDC depth ---
-    float ndcDepth = srcNDCDepth[fullCoord];
-    float viewZ    = SharedData::GetScreenDepth(ndcDepth);
-    outViewZ[DTid.xy] = viewZ;
+    // --- ViewZ: minimum of 2x2 quad (closest surface prevents sky leak into tile classification) ---
+    float4 depths = float4(
+        srcNDCDepth[base],
+        srcNDCDepth[base + uint2(1, 0)],
+        srcNDCDepth[base + uint2(0, 1)],
+        srcNDCDepth[base + uint2(1, 1)]);
+    float4 viewZs = SharedData::GetScreenDepths(depths);
+    outViewZ[DTid.xy] = min(min(viewZs.x, viewZs.y), min(viewZs.z, viewZs.w));
 
-    // --- Normal + roughness: decode view-space, rotate to world-space ---
-    float3 normalGlossiness = srcNormalRough[fullCoord];
-    float3 normalVS  = GBuffer::DecodeNormal(normalGlossiness.xy);
-    float  roughness = 1.0 - normalGlossiness.z;
+    // --- Normal + roughness: decode all 4 samples, average in view-space, rotate to world-space ---
+    float3 nr0 = srcNormalRough[base];
+    float3 nr1 = srcNormalRough[base + uint2(1, 0)];
+    float3 nr2 = srcNormalRough[base + uint2(0, 1)];
+    float3 nr3 = srcNormalRough[base + uint2(1, 1)];
 
-    // View-space normal -> world-space via the camera view-inverse matrix
-    // (rotation only, so we can use 3x3 portion via mul with float3x3 cast)
+    float3 normalVS = normalize(
+        GBuffer::DecodeNormal(nr0.xy) +
+        GBuffer::DecodeNormal(nr1.xy) +
+        GBuffer::DecodeNormal(nr2.xy) +
+        GBuffer::DecodeNormal(nr3.xy));
+
+    float roughness = ((1.0 - nr0.z) + (1.0 - nr1.z) + (1.0 - nr2.z) + (1.0 - nr3.z)) * 0.25;
+
     float3 normalWS = normalize(mul((float3x3)FrameBuffer::CameraViewInverse[0], normalVS));
-
-    // Pack using NRD R10G10B10A2 encoding (materialID = 0)
     outNormalRoughness[DTid.xy] = NRD_FrontEnd_PackNormalAndRoughness(normalWS, roughness, 0.0);
 
-    // --- Motion vectors: pass through (game stores UV-space delta) ---
-    outMotion[DTid.xy] = srcMotion[fullCoord];
+    // --- Motion vectors: 2x2 average ---
+    outMotion[DTid.xy] = (srcMotion[base] + srcMotion[base + uint2(1, 0)] +
+                          srcMotion[base + uint2(0, 1)] + srcMotion[base + uint2(1, 1)]) * 0.25;
 }

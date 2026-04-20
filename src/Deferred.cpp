@@ -408,11 +408,11 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                                  // t14 SsgiSpecularTexture
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
-			nullptr,                    // t17 SsrtSpecularTexture
+			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.GetSpecularOutputTexture() : nullptr,  // t17 SsrtSpecRadianceHitDist (NRD denoised)
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[0] : nullptr,                             // t18 SsrtDiffuseSH0 (NRD-packed)
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[1] : nullptr,                             // t19 SsrtDiffuseSH1 (NRD-packed)
-			nullptr,                                                                                                 // t20 (unused)
-			nullptr,                                                                                                 // t21 (unused)
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrt.texHalfResDepth->srv.get() : nullptr,               // t20 SsrtHalfResDepth (1/2-res NDC min, for bilateral)
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.occlusion : nullptr,                         // t21 SsrtOcclusionHitDist (denoised normHitDist)
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);

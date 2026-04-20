@@ -98,20 +98,161 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #endif
 
 #if defined(SSRT)
+#include "Common/GBuffer.hlsli"
 #include "NRD/NRDReblurSH.hlsli"
 
-Texture2D<float4> SSRTexture      : register(t17);
-Texture2D<float4> SSRTDiffuseSH0  : register(t18);  // NRD-packed SH0 (OUT_DIFF_SH0)
-Texture2D<float4> SSRTDiffuseSH1  : register(t19);  // NRD-packed SH1 (OUT_DIFF_SH1)
+Texture2D<float4> SSRTSpecRadianceHitDist : register(t17);  // NRD-packed OUT_SPEC_RADIANCE_HITDIST (1/2-res)
+Texture2D<float4> SSRTDiffuseSH0          : register(t18);  // NRD-packed SH0 (OUT_DIFF_SH0)
+Texture2D<float4> SSRTDiffuseSH1          : register(t19);  // NRD-packed SH1 (OUT_DIFF_SH1)
+Texture2D<float>  SSRTHalfResDepth        : register(t20);  // 1/2-res NDC min depth (for bilateral)
+Texture2D<float>  SSRTOcclusionHitDist    : register(t21);  // OUT_DIFF_HITDIST (denoised normHitDist)
 
-void SampleSSRTDiffuse(float2 uv, float3 normalWS, float3 V, float roughness, out float3 il, out float ao)
+// NRD bilateral depth weight: 1.0 at equal depth, 0.0 when relative difference >= 3%.
+float SSRT_BilateralDepthWeight(float z, float zc)
 {
-	float4 sh0 = SSRTDiffuseSH0.SampleLevel(LinearSampler, uv, 0);
-	float4 sh1 = SSRTDiffuseSH1.SampleLevel(LinearSampler, uv, 0);
+    float relDiff = abs(z - zc) * rcp(max(z, zc) + NRD_EPS);
+    return saturate(1.0 - relDiff / 0.03);
+}
 
-	NRD_SG sg = REBLUR_BackEnd_UnpackSh(sh0, sh1);
-	ao = sg.normHitDist;
-	il = NRD_SG_ResolveDiffuse(sg, normalWS, V, roughness);
+// Bilinear bilateral 2x upscale from 1/2-res SH to full-res.
+void SampleSSRTDiffuse(uint2 pixCoord, float3 normalVS, float3 normalWS, float3 V, float roughness, out float3 il)
+{
+    float centerZ = SharedData::GetScreenDepth(DepthTexture[pixCoord]);
+
+    float2 samplePos = (float2(pixCoord) + 0.5) * 0.5 - 0.5;
+    int2   base  = (int2)floor(samplePos);
+    float2 frac_ = saturate(samplePos - (float2)base);
+
+    float4 bilinearW = float4(
+        (1.0 - frac_.x) * (1.0 - frac_.y),
+        frac_.x         * (1.0 - frac_.y),
+        (1.0 - frac_.x) * frac_.y,
+        frac_.x         * frac_.y);
+
+    int2 halfRes = (int2)(SharedData::BufferDim.xy) / 2;
+    int2 fullRes = (int2)(SharedData::BufferDim.xy);
+
+    float4 accSH0    = 0;
+    float4 accSH1    = 0;
+    float  accWeight = 0;
+
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        int2 offset = int2(i & 1, i >> 1);
+        int2 tc     = base + offset;
+        if (any(tc < 0) || any(tc >= halfRes)) continue;
+
+        float tapZ = SharedData::GetScreenDepth(SSRTHalfResDepth[tc]);
+        float depthW = SSRT_BilateralDepthWeight(centerZ, tapZ);
+
+        int2 fullTc = min(tc * 2, fullRes - 1);
+        float3 tapNormalVS = GBuffer::DecodeNormal(NormalRoughnessTexture[fullTc].xy);
+        float normalW = pow(saturate(dot(normalVS, tapNormalVS)), 32.0);
+
+        float w      = bilinearW[i] * depthW * normalW;
+        accSH0      += SSRTDiffuseSH0[tc] * w;
+        accSH1      += SSRTDiffuseSH1[tc] * w;
+        accWeight   += w;
+    }
+
+    if (accWeight < NRD_EPS) { il = 0; return; }
+
+    float invW = rcp(accWeight);
+    NRD_SG sg  = REBLUR_BackEnd_UnpackSh(accSH0 * invW, accSH1 * invW);
+    il = NRD_SG_ResolveDiffuse(sg, normalWS, V, roughness);
+}
+
+// Bilinear bilateral 2x upscale from 1/2-res denoised occlusion hit distance.
+// Returns normHitDist: 0 = occluded, 1 = unoccluded.
+float SampleSSRTOcclusion(uint2 pixCoord, float3 normalVS)
+{
+    float centerZ = SharedData::GetScreenDepth(DepthTexture[pixCoord]);
+
+    float2 samplePos = (float2(pixCoord) + 0.5) * 0.5 - 0.5;
+    int2   base  = (int2)floor(samplePos);
+    float2 frac_ = saturate(samplePos - (float2)base);
+
+    float4 bilinearW = float4(
+        (1.0 - frac_.x) * (1.0 - frac_.y),
+        frac_.x         * (1.0 - frac_.y),
+        (1.0 - frac_.x) * frac_.y,
+        frac_.x         * frac_.y);
+
+    int2 halfRes = (int2)(SharedData::BufferDim.xy) / 2;
+    int2 fullRes = (int2)(SharedData::BufferDim.xy);
+
+    float accHitDist = 0;
+    float accWeight  = 0;
+
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        int2 offset = int2(i & 1, i >> 1);
+        int2 tc     = base + offset;
+        if (any(tc < 0) || any(tc >= halfRes)) continue;
+
+        float tapZ   = SharedData::GetScreenDepth(SSRTHalfResDepth[tc]);
+        float depthW = SSRT_BilateralDepthWeight(centerZ, tapZ);
+
+        int2 fullTc = min(tc * 2, fullRes - 1);
+        float3 tapNormalVS = GBuffer::DecodeNormal(NormalRoughnessTexture[fullTc].xy);
+        float normalW = pow(saturate(dot(normalVS, tapNormalVS)), 32.0);
+
+        float w       = bilinearW[i] * depthW * normalW;
+        accHitDist   += SSRTOcclusionHitDist[tc] * w;
+        accWeight    += w;
+    }
+
+    return (accWeight < NRD_EPS) ? 1.0 : (accHitDist / accWeight);
+}
+
+// Bilinear bilateral 2x upscale from 1/2-res denoised specular radiance+hitdist.
+float3 SampleSSRTSpecular(uint2 pixCoord, float3 normalVS)
+{
+    float centerZ = SharedData::GetScreenDepth(DepthTexture[pixCoord]);
+
+    float2 samplePos = (float2(pixCoord) + 0.5) * 0.5 - 0.5;
+    int2   base  = (int2)floor(samplePos);
+    float2 frac_ = saturate(samplePos - (float2)base);
+
+    float4 bilinearW = float4(
+        (1.0 - frac_.x) * (1.0 - frac_.y),
+        frac_.x         * (1.0 - frac_.y),
+        (1.0 - frac_.x) * frac_.y,
+        frac_.x         * frac_.y);
+
+    int2 halfRes = (int2)(SharedData::BufferDim.xy) / 2;
+    int2 fullRes = (int2)(SharedData::BufferDim.xy);
+
+    float4 accPacked = 0;
+    float  accWeight = 0;
+
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        int2 offset = int2(i & 1, i >> 1);
+        int2 tc     = base + offset;
+        if (any(tc < 0) || any(tc >= halfRes)) continue;
+
+        float tapZ   = SharedData::GetScreenDepth(SSRTHalfResDepth[tc]);
+        float depthW = SSRT_BilateralDepthWeight(centerZ, tapZ);
+
+        int2 fullTc = min(tc * 2, fullRes - 1);
+        float3 tapNormalVS = GBuffer::DecodeNormal(NormalRoughnessTexture[fullTc].xy);
+        float normalW = pow(saturate(dot(normalVS, tapNormalVS)), 32.0);
+
+        float w    = bilinearW[i] * depthW * normalW;
+        accPacked += SSRTSpecRadianceHitDist[tc] * w;
+        accWeight += w;
+    }
+
+    if (accWeight < NRD_EPS) return 0;
+
+    float3 radiance;
+    float normHitDist;
+    REBLUR_BackEnd_UnpackRadianceAndNormHitDist(accPacked / accWeight, radiance, normHitDist);
+    return radiance;
 }
 #endif
 
@@ -234,8 +375,12 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 V = normalize(-positionWS.xyz);
 		float  roughness = 1.0 - normalGlossiness.z;
 		float3 ssrtDiffuse;
-		float  ssrtAo;
-		SampleSSRTDiffuse(uv, normalWS, V, roughness, ssrtDiffuse, ssrtAo);
+		SampleSSRTDiffuse(pixCoord, normalVS, normalWS, V, roughness, ssrtDiffuse);
+		if (SharedData::ssrtSettings.AmbientMult > 0.0) {
+			float ssrtAo = SampleSSRTOcclusion(pixCoord, normalVS);
+			float3 multiBounceAO = MultiBounceAO(linAlbedoSSRT, ssrtAo);
+			linDiffuseColor *= lerp(1.0, sqrt(multiBounceAO), SharedData::ssrtSettings.AmbientMult);
+		}
 		linDiffuseColor += ssrtDiffuse * linAlbedoSSRT * SharedData::ssrtSettings.DiffuseMult;
 	}
 #endif
@@ -351,8 +496,8 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if defined(SSRT)
 		if (SharedData::ssrtSettings.EnableSpecular) {
-			float4 ssrIrradiance = SSRTexture[pixCoord >> 2];
-			finalIrradiance = any(ssrIrradiance.rgb > 0) ? ssrIrradiance.rgb : finalIrradiance;
+			float3 ssrIrradiance = SampleSSRTSpecular(pixCoord, normalVS);
+			finalIrradiance = any(ssrIrradiance > 0) ? ssrIrradiance : finalIrradiance;
 		}
 #	endif
 
