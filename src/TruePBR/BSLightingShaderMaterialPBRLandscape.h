@@ -18,6 +18,10 @@ public:
 	~BSLightingShaderMaterialPBRLandscape();
 
 	// override (BSLightingShaderMaterialBase)
+	// Called by BSShaderMaterialHashMap::Link to produce the heap-allocated canonical copy.
+	// MUST use regular heap (new), NOT Make()/scrap heap. BSLightingShaderProperty::LinkObject
+	// calls ScrapHeap::Free() immediately after Link — a scrap-heap canonical would be popped
+	// off the stack and freed while property->material still points to it (use-after-free).
 	RE::BSShaderMaterial* Create() override;                                                                                      // 01
 	void CopyMembers(RE::BSShaderMaterial* that) override;                                                                        // 02
 	Feature GetFeature() const override;                                                                                          // 06
@@ -25,6 +29,10 @@ public:
 	void ReceiveValuesFromRootMaterial(bool skinned, bool rimLighting, bool softLighting, bool backLighting, bool MSN) override;  // 0A
 	uint32_t GetTextures(RE::NiSourceTexture** textures) override;                                                                // 0B
 
+	// Allocates a scrap-heap temp for use during BSLightingShaderProperty::LoadBinary.
+	// The temp is direct-assigned to property->material so that BSLightingShaderProperty::LinkObject
+	// (NiStream link phase) can find it, call BSShaderMaterialHashMap::Link to produce the canonical,
+	// then ScrapHeap::Free() to pop this temp. Never use Make() as the Create() implementation.
 	static BSLightingShaderMaterialPBRLandscape* Make();
 
 	bool HasGlint() const;

@@ -76,8 +76,9 @@ public:
 
 	struct UpscalingDataCB
 	{
-		float2 trueSamplingDim;  // BufferDim.xy * ResolutionScale
-		float2 pad0;
+		float2 trueSamplingDim;  // per-eye render dim in VR, full render dim otherwise
+		uint eyeOffsetX;         // X offset into stereo source buffers; 0 for non-VR / left eye
+		uint pad0;
 	};
 
 	ConstantBuffer* jitterCB = nullptr;
@@ -122,7 +123,8 @@ public:
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 
-	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5];  // One for each UpscaleMethod
+	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5];          // One for each UpscaleMethod
+	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCSDepthOutput;  // FSR + VR: converts R24G8_TYPELESS depth to R32_FLOAT
 	ID3D11ComputeShader* GetEncodeTexturesCS();
 
 	winrt::com_ptr<ID3D11PixelShader> depthRefractionUpscalePS;
@@ -149,7 +151,8 @@ public:
 	// Owned here so both Streamline (DLSS) and FidelityFX (FSR) can use them.
 	eastl::unique_ptr<Texture2D> vrIntermediateColorIn[2];           // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateColorOut[2];          // per-eye output resolution
-	eastl::unique_ptr<Texture2D> vrIntermediateDepth[2];             // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateDepth[2];             // per-eye render resolution (R24G8_TYPELESS, for DLSS)
+	eastl::unique_ptr<Texture2D> vrIntermediateLinearDepth[2];       // per-eye render resolution (R32_FLOAT, for FSR)
 	eastl::unique_ptr<Texture2D> vrIntermediateMotionVectors[2];     // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateReactiveMask[2];      // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateTransparencyMask[2];  // per-eye render resolution
@@ -163,8 +166,15 @@ public:
 		bool copyBindFlags = false, bool createSRV = false, bool createUAV = false, const char* name = nullptr);
 
 	// Shared Pipeline Steps
-	void PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* depthSrc, ID3D11Resource* mvecSrc,
-		ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc);
+
+	/// Ensures VR per-eye intermediate textures exist at the correct resolution.
+	/// Must be called before any per-eye EncodeTexturesCS dispatch or PreparePerEyeInputs.
+	void EnsureVRIntermediateTextures();
+
+	/// Splits the combined stereo color/depth buffers into per-eye intermediates, copies motion
+	/// vectors for non-DLSS paths, and clears the HMD hidden area.
+	/// Reactive/transparency masks are written by EncodeTexturesCS.
+	void PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* depthSrc);
 	void FinalizePerEyeOutputs(ID3D11Resource* colorDst);
 
 	void ConfigureTAA();

@@ -25,6 +25,10 @@
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
 
+#ifdef TRACY_ENABLE
+static thread_local std::vector<TracyCZoneCtx> s_tracyPerfZones;
+#endif
+
 void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
 {
 	permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsSun);
@@ -796,11 +800,31 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 
 void State::BeginPerfEvent(std::string_view title)
 {
+#ifdef TRACY_ENABLE
+	// Use dynamic source location so Tracy displays the title as the zone name
+	// rather than the static function name "BeginPerfEvent".
+	const auto srcloc = ___tracy_alloc_srcloc_name(
+		static_cast<uint32_t>(__LINE__),
+		__FILE__, sizeof(__FILE__) - 1,
+		__func__, sizeof(__func__) - 1,
+		title.data(), title.size(),
+		0);
+	const TracyCZoneCtx ctx = ___tracy_emit_zone_begin_alloc(srcloc, true);
+	s_tracyPerfZones.push_back(ctx);
+#endif
 	pPerf->BeginEvent(std::wstring(title.begin(), title.end()).c_str());
 }
 
 void State::EndPerfEvent()
 {
+#ifdef TRACY_ENABLE
+	if (!s_tracyPerfZones.empty()) {
+		TracyCZoneEnd(s_tracyPerfZones.back());
+		s_tracyPerfZones.pop_back();
+	} else {
+		logger::warn("EndPerfEvent called without a matching BeginPerfEvent");
+	}
+#endif
 	pPerf->EndEvent();
 }
 
