@@ -103,7 +103,6 @@ public:
 	Texture2D* envTextureBC6H = nullptr;
 	Texture2D* envReflectionsTextureBC6H = nullptr;
 	Texture2D* bc6hScratchTexture = nullptr;
-	ID3D11Texture2D* bc6hStagingTexture = nullptr;
 
 	uint32_t bc6hMipLevels = 0;
 

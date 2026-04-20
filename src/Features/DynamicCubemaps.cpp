@@ -531,25 +531,11 @@ void DynamicCubemaps::CompressToBC6H(bool a_reflections)
 		context->CSSetShader(nullptr, nullptr, 0);
 	}
 
-	// Copy scratch → staging (same format, always valid), then upload to BC6H via
-	// UpdateSubresource so the format conversion is handled by the D3D11 runtime.
-	context->CopyResource(bc6hStagingTexture, bc6hScratchTexture->resource.get());
-
+	// BC formats are bitwise-compatible with matching block-equivalent uncompressed
+	// formats for CopyResource: an R32G32B32A32_UINT (W/4 × H/4) resource maps 1:1
+	// to a BC6H_UF16 (W × H) resource because each block is 16 bytes either way.
 	auto dst = a_reflections ? envReflectionsTextureBC6H : envTextureBC6H;
-
-	for (std::uint32_t face = 0; face < 6; ++face) {
-		for (std::uint32_t level = 0; level < bc6hMipLevels; ++level) {
-			std::uint32_t stagingSR = D3D11CalcSubresource(level, face, bc6hMipLevels);
-			std::uint32_t dstSR = D3D11CalcSubresource(level, face, bc6hMipLevels);
-
-			D3D11_MAPPED_SUBRESOURCE mapped{};
-			if (FAILED(context->Map(bc6hStagingTexture, stagingSR, D3D11_MAP_READ, 0, &mapped)))
-				continue;
-
-			context->UpdateSubresource(dst->resource.get(), dstSR, nullptr, mapped.pData, mapped.RowPitch, 0);
-			context->Unmap(bc6hStagingTexture, stagingSR);
-		}
-	}
+	context->CopyResource(dst->resource.get(), bc6hScratchTexture->resource.get());
 }
 
 void DynamicCubemaps::UpdateCubemap()
@@ -737,8 +723,8 @@ void DynamicCubemaps::SetupResources()
 		envInferredTexture->CreateUAV(uavDesc);
 
 		// BC6H scratch: R32G32B32A32_UINT at quarter-resolution, 6-face array.
-		// Mip count is determined by scratch base dimensions (W/4), not MIPLEVELS,
-		// so that CopyResource byte sizes align with the BC6H target texture.
+		// Encoded directly into here via UAV, then CopyResource'd to the BC6H texture.
+		// Mip count must match the BC6H target so block-equivalent dimensions align.
 		{
 			std::uint32_t scratchBase = std::max(1u, texDesc.Width / 4);
 			bc6hMipLevels = 0;
@@ -760,13 +746,6 @@ void DynamicCubemaps::SetupResources()
 			scratchDesc.MiscFlags = 0;
 			bc6hScratchTexture = new Texture2D(scratchDesc);
 
-			// Staging texture for CPU readback — same format/layout as scratch, CPU-readable.
-			D3D11_TEXTURE2D_DESC stagingDesc = scratchDesc;
-			stagingDesc.Usage = D3D11_USAGE_STAGING;
-			stagingDesc.BindFlags = 0;
-			stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-			DX::ThrowIfFailed(device->CreateTexture2D(&stagingDesc, nullptr, &bc6hStagingTexture));
-
 			D3D11_UNORDERED_ACCESS_VIEW_DESC scratchUAVDesc = {};
 			scratchUAVDesc.Format = DXGI_FORMAT_R32G32B32A32_UINT;
 			scratchUAVDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
@@ -779,7 +758,6 @@ void DynamicCubemaps::SetupResources()
 		}
 
 		// BC6H compressed cubemap textures (shader-read-only).
-		// Must use the same mip count as scratch for CopyResource to succeed.
 		{
 			D3D11_TEXTURE2D_DESC bc6hDesc = {};
 			bc6hDesc.Width = texDesc.Width;
