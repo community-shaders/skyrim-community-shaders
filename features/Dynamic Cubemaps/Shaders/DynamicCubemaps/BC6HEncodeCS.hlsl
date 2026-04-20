@@ -30,7 +30,7 @@
 //   - cbuffer simplified to only fields needed for compression
 //   - QUALITY forced to 0 (fast P1-only mode)
 
-#pragma warning(disable : 3078)
+#pragma warning(disable: 3078)
 
 // Fast mode: P1 only (single endpoint pair, 4-bit indices). No P2.
 #define QUALITY 0
@@ -315,10 +315,8 @@ void EncodeP1(inout uint4 block, inout float blockMSLE, float3 texels[16])
 	block.w |= indices[15] << 28;
 }
 
-[numthreads(8, 8, 1)]
-void main(
-	uint3 dispatchThreadID : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(
+	uint3 dispatchThreadID : SV_DispatchThreadID) {
 	uint2 blockCoord = dispatchThreadID.xy;
 	uint faceIndex = dispatchThreadID.z;
 
@@ -326,7 +324,8 @@ void main(
 		int2 texelBase = int2(blockCoord) * 4;
 
 		float3 texels[16];
-		[unroll] for (int i = 0; i < 16; i++) {
+		[unroll] for (int i = 0; i < 16; i++)
+		{
 			int tx = i % 4;
 			int ty = i / 4;
 			texels[i] = SrcTexture.Load(int4(texelBase.x + tx, texelBase.y + ty, int(faceIndex), int(MipLevel))).rgb;
