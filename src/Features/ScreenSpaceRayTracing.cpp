@@ -522,42 +522,6 @@ void ScreenSpaceRayTracing::Prepass()
 
     state->BeginPerfEvent("SSRT Prepass");
 
-    // --- Apply reprojected multi-bounce GI directly into MAIN before any other prepass. ---
-    //     Reads last frame's denoised NRD SH and writes gamma-space contribution additively.
-    //     Runs first so downstream sub-passes (prefilter radiance, guides, raymarch) all observe
-    //     the GI-augmented MAIN.
-    if (applyGIToMainCS && settings.EnablePrevGIReprojection) {
-        state->BeginPerfEvent("SSRT Apply GI to Main");
-
-        auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-        auto normal = renderer->GetRuntimeData().renderTargets[globals::deferred->normalRoughnessRT];
-        auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-        auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
-
-        std::array<ID3D11ShaderResourceView*, 7> giSRVs = { nullptr };
-        giSRVs[0] = texNRDOutputSH0->srv.get();   // last-frame denoised SH0
-        giSRVs[1] = texNRDOutputSH1->srv.get();   // last-frame denoised SH1
-        giSRVs[2] = normal.SRV;
-        giSRVs[3] = depth.depthSRV;
-        giSRVs[4] = motion.SRV;
-        giSRVs[5] = texNRDViewZ->srv.get();       // last-frame viewZ (guides pass hasn't overwritten yet)
-        giSRVs[6] = albedo.SRV;
-
-        ID3D11UnorderedAccessView* mainUAV = main.UAV;
-
-        context->CSSetShaderResources(0, (uint)giSRVs.size(), giSRVs.data());
-        context->CSSetUnorderedAccessViews(0, 1, &mainUAV, nullptr);
-        context->CSSetShader(applyGIToMainCS.get(), nullptr, 0);
-        context->Dispatch(((uint)dynres.x + 7) >> 3, ((uint)dynres.y + 7) >> 3, 1);
-
-        std::array<ID3D11ShaderResourceView*, 7> nullSRVs = { nullptr };
-        ID3D11UnorderedAccessView* nullUAV = nullptr;
-        context->CSSetShaderResources(0, (uint)nullSRVs.size(), nullSRVs.data());
-        context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
-
-        state->EndPerfEvent();
-    }
-
     // prefilter depth: full-res NDC depth → full-res texDepth mip0 (1:1 copy; downsample loop produces Hi-Z mips)
     {
 		auto srv = depth.depthSRV;
@@ -902,6 +866,38 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         if (auto parentCell = player->GetParentCell()) {
             inInterior = parentCell->IsInteriorCell();
         }
+    }
+
+    // --- Apply reprojected multi-bounce GI directly into MAIN before the raymarch. ---
+    //     Reads last frame's denoised NRD SH and adds a gamma-space contribution so the
+    //     raymarch (which samples MAIN) picks up indirect bounce light.
+    //     Runs here (post-opaque, pre-raymarch) so the UAV writes aren't clobbered by
+    //     the opaque geometry pass that binds MAIN as an RTV.
+    if (applyGIToMainCS && settings.EnablePrevGIReprojection) {
+        state->BeginPerfEvent("SSRT Apply GI to Main");
+
+        std::array<ID3D11ShaderResourceView*, 7> giSRVs = { nullptr };
+        giSRVs[0] = texNRDOutputSH0->srv.get();
+        giSRVs[1] = texNRDOutputSH1->srv.get();
+        giSRVs[2] = normal.SRV;
+        giSRVs[3] = depth.depthSRV;
+        giSRVs[4] = motion.SRV;
+        giSRVs[5] = texNRDViewZ->srv.get();
+        giSRVs[6] = albedo.SRV;
+
+        ID3D11UnorderedAccessView* mainUAV = main.UAV;
+
+        context->CSSetShaderResources(0, (uint)giSRVs.size(), giSRVs.data());
+        context->CSSetUnorderedAccessViews(0, 1, &mainUAV, nullptr);
+        context->CSSetShader(applyGIToMainCS.get(), nullptr, 0);
+        context->Dispatch(((uint)dynres.x + 7) >> 3, ((uint)dynres.y + 7) >> 3, 1);
+
+        std::array<ID3D11ShaderResourceView*, 7> nullSRVs = { nullptr };
+        ID3D11UnorderedAccessView* nullUAV = nullptr;
+        context->CSSetShaderResources(0, (uint)nullSRVs.size(), nullSRVs.data());
+        context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+
+        state->EndPerfEvent();
     }
 
     // --- Ray march: outputs directly to NRD input textures ---

@@ -123,6 +123,21 @@ PS_OUTPUT main(PS_INPUT input)
 		float  roughness = 1.0 - normalGlossiness.z;
 		float3 ssrtDiffuse;
 		SampleSSRTDiffuse(pixCoord, normalWS, V, roughness, ssrtDiffuse, ssrtAo);
+
+		// Remove the vanilla directional ambient that's already baked into MAIN's diffuseColor so
+		// SSRT GI replaces it rather than stacking on top. Per-channel maxScale clamp keeps us
+		// from driving diffuseColor negative where albedo * DALC overshoots MAIN's stored value.
+		float3 directionalAmbientColor = max(0, Color::Ambient(max(0, SharedData::GetAmbient(normalWS))) * albedo);
+
+		float maxScale = 1.0;
+		if (directionalAmbientColor.x > 0.0) maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
+		if (directionalAmbientColor.y > 0.0) maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
+		if (directionalAmbientColor.z > 0.0) maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
+		directionalAmbientColor *= maxScale;
+
+		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
+		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+
 		linDiffuseColor += ssrtDiffuse * linAlbedoSSRT * SharedData::ssrtSettings.DiffuseMult;
 	}
 #endif
