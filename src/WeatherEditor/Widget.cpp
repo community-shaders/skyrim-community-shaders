@@ -17,14 +17,14 @@ bool Widget::MatchesSearch(const std::string& text) const
 void Widget::Save()
 {
 	SaveSettings();
-	const std::string filePath = std::format("{}\\{}", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName());
-	const std::string file = std::format("{}\\{}.json", filePath, GetEditorID());
+	const auto file = GetSaveFilePath();
+	const auto filePath = std::filesystem::path(file).parent_path();
 
 	if (!std::filesystem::exists(filePath) || !std::filesystem::is_directory(filePath)) {
 		try {
 			std::filesystem::create_directories(filePath);
 		} catch (const std::filesystem::filesystem_error& e) {
-			logger::warn("Error creating directory during Save ({}) : {}\n", filePath, e.what());
+			logger::warn("Error creating directory during Save ({}) : {}\n", filePath.string(), e.what());
 			return;
 		}
 	}
@@ -72,7 +72,7 @@ void Widget::Save()
 
 void Widget::Load()
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
+	std::string filePath = GetSaveFilePath();
 
 	if (!std::filesystem::exists(filePath)) {
 		js = json();
@@ -146,7 +146,7 @@ void Widget::Load()
 
 void Widget::Delete()
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
+	std::string filePath = GetSaveFilePath();
 
 	if (!std::filesystem::exists(filePath)) {
 		return;
@@ -176,8 +176,7 @@ void Widget::Delete()
 
 bool Widget::HasSavedFile() const
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), const_cast<Widget*>(this)->GetFolderName(), GetEditorID());
-	return std::filesystem::exists(filePath);
+	return std::filesystem::exists(GetSaveFilePath());
 }
 
 void Widget::DrawMenu()
@@ -242,7 +241,12 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 	}
 }
 
-std::string Widget::GetFolderName()
+std::string Widget::GetSaveFilePath() const
+{
+	return std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetSaveKey());
+}
+
+std::string Widget::GetFolderName() const
 {
 	switch (form->GetFormType()) {
 	case RE::FormType::Weather:
