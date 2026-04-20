@@ -89,22 +89,25 @@ public:
 	{
 		uint TextureSizeInBlocksX;
 		uint TextureSizeInBlocksY;
-		float TextureSizeRcpX;
-		float TextureSizeRcpY;
+		uint MipLevel;
+		uint pad;
 	};
 	STATIC_ASSERT_ALIGNAS_16(BC6HEncodeCB);
 
 	ID3D11ComputeShader* bc6hEncodeCS = nullptr;
 	ConstantBuffer* bc6hEncodeCB = nullptr;
-	ID3D11SamplerState* bc6hPointSampler = nullptr;
+
+	ID3D11ShaderResourceView* envTextureArraySRV = nullptr;
+	ID3D11ShaderResourceView* envReflectionsTextureArraySRV = nullptr;
 
 	Texture2D* envTextureBC6H = nullptr;
 	Texture2D* envReflectionsTextureBC6H = nullptr;
 	Texture2D* bc6hScratchTexture = nullptr;
+	ID3D11Texture2D* bc6hStagingTexture = nullptr;
+
+	uint32_t bc6hMipLevels = 0;
 
 	ID3D11UnorderedAccessView* bc6hScratchUAVs[8] = {};
-	ID3D11ShaderResourceView* envTextureMipSRVs[8] = {};
-	ID3D11ShaderResourceView* envReflectionsTextureMipSRVs[8] = {};
 
 	// Editor window
 
