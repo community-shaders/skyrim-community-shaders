@@ -82,6 +82,47 @@ void NvVrsController::Update(const Settings& settings, const FrameInfo& frameInf
 	rateTableDirty = false;
 }
 
+/// Temporarily unbind VRS without dirtying state.  Resume() re-binds cheaply.
+void NvVrsController::Suspend(ID3D11DeviceContext* context)
+{
+	if (!context || !debugState.active)
+		return;
+
+	NvAPI_D3D11_RSSetShadingRateResourceView(context, nullptr);
+
+	const uint32_t viewportCount = QueryViewportCount(context, 2);
+	std::vector<NV_D3D11_VIEWPORT_SHADING_RATE_DESC> vsrd(viewportCount);
+	for (auto& desc : vsrd) {
+		desc.enableVariablePixelShadingRate = false;
+		VrsLutManager::FillDisabledRateTable(desc.shadingRateTable, static_cast<uint32_t>(std::size(desc.shadingRateTable)));
+	}
+
+	NV_D3D11_VIEWPORTS_SHADING_RATE_DESC srd{};
+	srd.version = NV_D3D11_VIEWPORTS_SHADING_RATE_DESC_VER;
+	srd.numViewports = viewportCount;
+	srd.pViewports = vsrd.data();
+
+	NvAPI_D3D11_RSSetViewportsPixelShadingRates(context, &srd);
+	debugState.active = false;
+	// Note: surfaceDirty / rateTableDirty intentionally NOT set.
+}
+
+/// Re-bind existing shading rate surface + rate table after Suspend().
+void NvVrsController::Resume(ID3D11DeviceContext* context)
+{
+	if (!context || debugState.active || !debugState.initialized || !debugState.supported)
+		return;
+
+	if (!shadingRateSurface || !shadingRateResourceView)
+		return;
+
+	if (!BindSurface(context) || !BindRateTable(context)) {
+		Disable(context);
+		return;
+	}
+	debugState.active = true;
+}
+
 /// Unbind VRS: clear SRRV, reset viewports to 1×1, mark dirty for next Update.
 void NvVrsController::Disable(ID3D11DeviceContext* context)
 {

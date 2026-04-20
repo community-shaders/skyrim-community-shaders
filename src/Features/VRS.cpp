@@ -10,7 +10,7 @@
 
 #include "RE/S/ShaderAccumulator.h"
 
-// Known conflict: enabling VRS together with Terrain Blending causes distant terrain artifacts.
+// Terrain Blending compatibility: VRS is suspended around TB's deferred terrain passes.
 // Note: VRS reduces pixel shader overhead at high resolutions but does not affect compute shader cost; further adaptation needed.
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -68,10 +68,7 @@ void VRS::Main_FinishAccumulatingDispatch::thunk(RE::BSGraphics::BSShaderAccumul
 
 void VRS::DrawSettings()
 {
-	ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.3f, 1.0f), "Warning: VRS currently conflicts with Terrain Blending — distant terrain");
-	ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.3f, 1.0f), "may render incorrectly in the outer ring. Disable Terrain Blending or");
-	ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.3f, 1.0f), "increase the foveal center region to mitigate.");
-	ImGui::Separator();
+
 
 	settings.vrEnableVRS = std::min(settings.vrEnableVRS, 1u);
 	const char* vrsToggle[] = { "Disabled", "Enabled" };
@@ -80,7 +77,7 @@ void VRS::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Reduces pixel shading rate in peripheral vision using concentric elliptical zones.");
 		ImGui::Text("Directional-adaptive rates (2x1/1x2) preserve detail along natural eye-tracking axes.");
-		ImGui::Text("Known conflict: Terrain Blending.");
+		ImGui::Text("Terrain Blending: terrain always renders at 1x1 when TB is active.");
 	}
 
 	settings.vrVRSSrsPreset = std::min(settings.vrVRSSrsPreset, 2u);
@@ -286,4 +283,15 @@ void VRS::DisableVRShadingRateState()
 {
 	nvVrs.SetLastDisableReason(NvVrsController::DisableReason::UIPass);
 	nvVrs.Disable(globals::d3d::context);
+}
+
+void VRS::SuspendVRS()
+{
+	nvVrs.SetLastDisableReason(NvVrsController::DisableReason::TerrainBlending);
+	nvVrs.Suspend(globals::d3d::context);
+}
+
+void VRS::ResumeVRS()
+{
+	nvVrs.Resume(globals::d3d::context);
 }

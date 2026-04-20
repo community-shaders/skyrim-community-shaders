@@ -25,6 +25,7 @@ public:
 		BindSurfaceFailed,
 		BindRateTableFailed,
 		UIPass,
+		TerrainBlending,
 	};
 
 	enum class RebuildReason : uint32_t
@@ -82,6 +83,8 @@ public:
 
 	void Update(const Settings& settings, const FrameInfo& frameInfo, ID3D11Device* device, ID3D11DeviceContext* context);
 	void Disable(ID3D11DeviceContext* context);
+	void Suspend(ID3D11DeviceContext* context);
+	void Resume(ID3D11DeviceContext* context);
 	void SetLastDisableReason(DisableReason reason);
 
 	const DebugState& GetDebugState() const { return debugState; }

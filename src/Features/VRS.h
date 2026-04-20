@@ -19,8 +19,10 @@ namespace RE::BSGraphics
 /// Subrect integration: foveal center defined by Subrect::Controller, sharing
 /// crop presets with Screenshot, DLSSEnhancer, and lossless recording (WIP).
 ///
-/// Known conflicts:
-///   - Terrain Blending: visual artifacts when both active.
+/// Terrain Blending compatibility: when TB is active, VRS is temporarily
+/// suspended during RenderTerrainBlendingPasses() so terrain always shades
+/// at full 1x1 rate.  When TB is off, terrain benefits from reduced shading
+/// rates like all other geometry.
 ///
 /// Hard-gated at PostPostLoad: hooks only installed in VR runtime.
 struct VRS : Feature
@@ -78,6 +80,8 @@ public:
 
 	void UpdateVRShadingRateState();
 	void DisableVRShadingRateState();
+	void SuspendVRS();
+	void ResumeVRS();
 
 	NvVrsController nvVrs;            ///< NVAPI surface + rate table lifecycle
 	Subrect::Controller subrectCtrl;  ///< Per-eye crop region (foveal center)
