@@ -41,19 +41,12 @@ Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t11);
 #   endif
 #endif
 Texture2D<float3> AlbedoTexture : register(t12);
-#if !defined(SSRT_SPECULAR)
-// Half-res NRD guide normal+roughness prepared before this dispatch.
-// Used instead of full-res GBuffer to match the half-res ray origin.
-Texture2D<float4> NRDNormalRoughnessTexture : register(t13);
-#endif
 
 #if defined(SSRT_SPECULAR)
 RWTexture2D<float4> OutSpecRadianceHitDist : register(u0);  // IN_SPEC_RADIANCE_HITDIST (NRD packed)
 #else
-// Diffuse outputs directly to NRD input textures (no intermediate upscale needed).
-RWTexture2D<float4> OutSH0     : register(u0);  // IN_DIFF_SH0
-RWTexture2D<float4> OutSH1     : register(u1);  // IN_DIFF_SH1
-RWTexture2D<float>  OutHitDist : register(u2);  // IN_DIFF_HITDIST (AO, miss=1)
+RWTexture2D<float4> OutSH0 : register(u0);  // IN_DIFF_SH0
+RWTexture2D<float4> OutSH1 : register(u1);  // IN_DIFF_SH1
 #endif
 
 cbuffer SSRTCB : register(b1)
@@ -71,14 +64,22 @@ cbuffer SSRTCB : register(b1)
     float2 RcpTexDim;
     float2 FrameDim;
     float2 RcpFrameDim;
-    float WorldScale;
+    float HitDistA;
+    float HitDistB;
+    float HitDistC;
+    float HitDistD;
+    uint FrameIndex;
+    uint TracingMode;  // 0=FULL, 1=FULL_PROBABILISTIC, 2=HALF (checkerboard) — matches NRD Sample
 };
+
+#define TRACING_MODE_FULL               0
+#define TRACING_MODE_FULL_PROBABILISTIC 1
+#define TRACING_MODE_HALF               2
 
 #define HIZ_MAX_ITERATIONS MaxSteps
 #define HIZ_MIN_MIP 0
 #define SSRT_FLOAT_MAX 3.402823466e+38
 #define SSRT_DEPTH_HIERARCHY_MAX_MIP MaxMips
-#define SAMPLES_PER_PIXEL 1
 
 float3 ProjectPosition(float3 origin, float4x4 mat)
 {
@@ -255,9 +256,10 @@ float3 SSRT_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mirror
     return position;
 }
 
-float SSRT_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness, uint eyeIndex, out float occlusion)
+float SSRT_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness, uint eyeIndex, out float occlusion, out bool isBackfaceHit)
 {
     occlusion = 1.f;
+    isBackfaceHit = false;
 
     // Reject hits outside the view frustum
     if ((hit.x < 0.0f) || (hit.y < 0.0f) || (hit.x > 1.0f) || (hit.y > 1.0f))
@@ -267,7 +269,7 @@ float SSRT_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, 
 
     // Don't lookup radiance from the background.
     int2  texel_coords = int2(screen_size * hit.xy * FrameBuffer::DynamicResolutionParams1.xy);
-    float surface_z    = SSRT_LoadDepth(texel_coords / 8, 1);  // depth pyramid base is quarter-res; mip1 = fullRes/8
+    float surface_z    = SSRT_LoadDepth(texel_coords / 2, 1);  // depth pyramid base is full-res; mip1 = fullRes/2
 #if SSRT_OPTION_INVERTED_DEPTH
     if (surface_z == 0.0)
     {
@@ -295,6 +297,7 @@ float SSRT_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, 
     if (dot(hit_normal, world_space_ray_direction) > 0)
     {
         occlusion = 1 - confidence;
+        isBackfaceHit = true;
         return 0;
     }
 
@@ -306,12 +309,7 @@ float SSRT_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, 
         return 0;
     }
 
-    // Fade out hits near the screen borders
-    float2 fov      = 0.01 * float2(screen_size.y / screen_size.x, 1);
-    float2 border   = smoothstep(float2(0.0f, 0.0f), fov, hit.xy) * (1 - smoothstep(float2(1.0f, 1.0f) - fov, float2(1.0f, 1.0f), hit.xy));
-    float  vignette = border.x * border.y;
-
-    return vignette * confidence;
+    return confidence;
 }
 
 bool IsMirrorReflection(float roughness)
@@ -344,25 +342,25 @@ float3x3 CreateTBN(float3 N) {
     return transpose(TBN);
 }
 
-float2 SampleRandomVector2DBaked(uint2 pixel, uint index, uint numSamples) {
+float2 SampleRandomVector2DBaked(uint2 pixel) {
     int3 seed = int3(pixel.xy, 0);
     seed.z = Random::pcg3d(int3(seed.xy, SharedData::FrameCount)).x;
     uint2 xi = Random::pcg3d(seed).xy / 0x10000;
-    float2 E = Hammersley16(index, numSamples, xi);
+    float2 E = Hammersley16(0, 1, xi);
 #if defined(SSRT_SPECULAR)
     E.y = lerp(E.y, 0, BRDFBias);
 #endif
     return E;
 }
 
-float3 SampleReflectionVector(float3 view_direction, float3 normal, float roughness, int2 dispatch_thread_id, uint index, uint numSamples, out float pdf) {
+float3 SampleReflectionVector(float3 view_direction, float3 normal, float roughness, int2 dispatch_thread_id, out float pdf) {
     if (roughness < 0.001f) {
         pdf = 1.0f;
         return reflect(view_direction, normal);
     }
     float3x3 tbn_transform = CreateTBN(normal);
     float3   view_direction_tbn = mul(-view_direction, tbn_transform);
-    float2   u = SampleRandomVector2DBaked(dispatch_thread_id, index, numSamples);
+    float2   u = SampleRandomVector2DBaked(dispatch_thread_id);
     // float3   sampled_normal_tbn = Sample_GGX_VNDF_Hemisphere(view_direction_tbn, roughness, u.x, u.y);
 #if defined(SSRT_SPECULAR)
     float4   sampled_normal_tbn = ImportanceSampleGGX(u, roughness * roughness * roughness * roughness);
@@ -391,15 +389,6 @@ float3 ScreenSpaceToWorldSpace(float3 screen_space_position, float4x4 invViewPro
 float3 ScreenSpaceToViewSpace(float3 screen_uv_coord, float4x4 invProj)
 {
     return InvProjectPosition(screen_uv_coord, invProj);
-}
-
-groupshared float4 samples[64][SAMPLES_PER_PIXEL];
-groupshared float3 sampleDirs[64][SAMPLES_PER_PIXEL];
-groupshared float4 weights[64][SAMPLES_PER_PIXEL];
-
-bool IsInGroup(int2 groupThreadID)
-{
-    return groupThreadID.x < 8 && groupThreadID.y < 8 && groupThreadID.x >= 0 && groupThreadID.y >= 0;
 }
 
 static const int2 offset[4] = {
@@ -435,20 +424,16 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 }
 #endif
 
-[numthreads(8, 8, SAMPLES_PER_PIXEL)] void main(uint3 groupID : SV_GroupID,
-                                                uint3 groupThreadID : SV_GroupThreadID,
-                                                uint3 DTid : SV_DispatchThreadID)
+[numthreads(8, 8, 1)] void main(uint3 groupID : SV_GroupID,
+                                uint3 groupThreadID : SV_GroupThreadID,
+                                uint3 DTid : SV_DispatchThreadID)
 {
     uint2 screen_size = SharedData::BufferDim.xy;
-    // texDepth Hi-Z pyramid base is quarter-res; traversal coords must use this scale
-    const float2 depth_screen_size = float2(screen_size) / 4.f;
-    uint2 coords = DTid.xy;
-    uint2 fullResCoords = coords * 2;  // half-res → full-res top-left of 2×2 block
-#if defined(SSRT_SPECULAR)
-    uint sample_id = 0;
-#else
-    uint sample_id = groupThreadID.z;
-#endif
+    // texDepth Hi-Z pyramid base is full-res
+    const float2 depth_screen_size = float2(screen_size);
+    uint2 coords = DTid.xy;        // full-res pixel position
+    uint2 fullResCoords = coords;  // dispatch is full-res, no 2× expansion
+
     float3 debug;
 
     float4 outColor = float4(0, 0, 0, 0);
@@ -459,15 +444,39 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 
     float3 normalVS;
     float roughness;
-#if defined(SSRT_SPECULAR)
     GetNormalRoughness(fullResCoords, normalVS, roughness);
-#else
-    // Use averaged half-res NRD guide normal (world-space), decode and transform to view-space.
-    float3 normalWS_guide;
-    NRD_BackEnd_UnpackNormalAndRoughness(NRDNormalRoughnessTexture[coords], normalWS_guide, roughness);
-    normalVS = normalize(mul((float3x3)FrameBuffer::CameraView[eyeIndex], normalWS_guide));
-#endif
     roughness = clamp(roughness, 0.02f, 1.0f);
+
+    // Tracing mode determines which lanes own this pixel and where in the NRD output it gets written.
+    bool isMyPixel;
+    uint2 outPixelPos;
+    if (TracingMode == TRACING_MODE_HALF) {
+        // Checkerboard: diffuse = WHITE (even sum), specular = BLACK (odd sum); data packed to left half.
+        uint checker = (coords.x + coords.y + FrameIndex) & 1;
+#if defined(SSRT_SPECULAR)
+        isMyPixel = (checker == 1);
+#else
+        isMyPixel = (checker == 0);
+#endif
+        outPixelPos = uint2(coords.x >> 1, coords.y);
+    } else if (TracingMode == TRACING_MODE_FULL_PROBABILISTIC) {
+        // Roughness-weighted 1-ray-per-pixel split. Both diffuse and specular passes compute the same
+        // decision from identical inputs so exactly one writes each pixel; NRD AREA_3X3 fills the gaps.
+        float diffuseProbability = clamp(roughness, 0.25, 0.75);
+        uint hash = Random::pcg3d(uint3(coords, FrameIndex)).x;
+        float rnd = float(hash) * (1.0 / 4294967296.0);
+        bool isDiffusePath = rnd < diffuseProbability;
+#if defined(SSRT_SPECULAR)
+        isMyPixel = !isDiffusePath;
+#else
+        isMyPixel = isDiffusePath;
+#endif
+        outPixelPos = coords;
+    } else {
+        // FULL: every pixel traces both diffuse and specular in their respective dispatches.
+        isMyPixel = true;
+        outPixelPos = coords;
+    }
 
 #if !defined(SSRT_SPECULAR)
     float3 albedo = AlbedoTexture[fullResCoords].xyz;
@@ -483,16 +492,16 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     float3 view_space_surface_normal = normalVS;
     float3 view_space_ray_direction = normalize(view_space_ray);
     float viewZ = abs(view_space_ray.z);  // save before bias for NRD hit dist normalization
-    static const float4 kHitDistParams = float4(3.0 * WorldScale, 0.1, 20.0, -25.0);
+    static const float4 kHitDistParams = float4(HitDistA, HitDistB, HitDistC, HitDistD);
     view_space_ray += view_space_surface_normal * NormalBias * view_space_ray.z * GAME_UNIT_TO_M;
     float pdf;
-    float3 view_space_reflected_direction = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, coords, sample_id, SAMPLES_PER_PIXEL, pdf);
+    float3 view_space_reflected_direction = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, coords, pdf);
     screen_uv_space_ray_origin = ProjectPosition(view_space_ray, FrameBuffer::CameraProj[eyeIndex]);
     float3 screen_space_ray_direction = ProjectDirection(view_space_ray, view_space_reflected_direction, screen_uv_space_ray_origin, FrameBuffer::CameraProj[eyeIndex]);
     float3 world_space_reflected_direction = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_reflected_direction, 0)).xyz;
     float3 world_space_origin = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_ray, 1)).xyz;
     float world_ray_length = 0.0;
-    bool valid_ray = all(fullResCoords < int2(screen_size * FrameBuffer::DynamicResolutionParams1.xy)) && all(coords >= int2(0, 0));
+    bool valid_ray = isMyPixel && all(coords < (uint2)(screen_size * FrameBuffer::DynamicResolutionParams1.xy));
     uint hit_counter = 0;
     float3 hit = float3(0.0, 0.0, 0.0);
     float confidence = 0.0;
@@ -504,9 +513,8 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
-    samples[groupThreadID.x * 8 + groupThreadID.y][sample_id] = 0.f;
-    float localWeight = pdf == 0 ? 0 : LocalBRDF(-view_space_ray_direction, view_space_surface_normal, view_space_reflected_direction, roughness) / max(pdf, 1e-4);
-    weights[groupThreadID.x * 8 + groupThreadID.y][sample_id] = float4(view_space_surface_normal, localWeight);
+    float4 sampleData = 0.f;
+    float3 sampleDirVS = 0.f;
 
     if (valid_ray)
     {
@@ -528,23 +536,24 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
         world_space_ray  = world_space_hit - world_space_origin.xyz;
         world_ray_length = length(world_space_ray);
         float occlusion;
+        bool isBackfaceHit = false;
         confidence       = valid_hit ? SSRT_ValidateHit(hit,
                                                       uv,
                                                       world_space_ray,
                                                       screen_size,
                                                       thickness,
                                                       eyeIndex,
-                                                      occlusion
+                                                      occlusion,
+                                                      isBackfaceHit
                                                       )
                                      : 0;
-        float screenConfidence = confidence; // preserve before cubemap fallback overwrites it
+        // Preserve before cubemap fallback overwrites. Backface hits still count as occluders
+        // for AO — their geometry is valid even if radiance from screen is not trustworthy.
+        float screenConfidence = isBackfaceHit ? 1.0 : confidence;
         float3 sampleColor = 0;
         if (confidence > 0.0f)
         {
-            // float2 projUV;
-            // ReprojectHit(MotionVectorTexture, LinearSampler, hit, eyeIndex, projUV);
-
-            sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz;
+            sampleColor = Color::IrradianceToLinear(ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz);
 #if !defined(SSRT_SPECULAR)
             sampleColor *= SharedData::ssrtSettings.DiffuseMult;
 #else
@@ -618,46 +627,35 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
         // Raw world-space hit distance weighted by screen-space hit validity.
         // 0 for pure environment fallback samples. Normalized to normHitDist in output.
         float sampleW = world_ray_length * screenConfidence;
-        samples[groupThreadID.x * 8 + groupThreadID.y][sample_id] = float4(sampleColor, sampleW);
-        sampleDirs[groupThreadID.x * 8 + groupThreadID.y][sample_id] = view_space_reflected_direction * confidence;
+        sampleData = float4(sampleColor, sampleW);
+        sampleDirVS = view_space_reflected_direction * confidence;
     }
-    GroupMemoryBarrierWithGroupSync();
 
 #if defined(SSRT_SPECULAR)
-    {
-        float4 sampleData = samples[groupThreadID.x * 8 + groupThreadID.y][0];
+    if (isMyPixel) {
         float rawHitDist  = sampleData.w;  // world_ray_length * screenConfidence; 0 = env-only
-        float normHitDist = (rawHitDist > 0.0)
-            ? REBLUR_FrontEnd_GetNormHitDist(rawHitDist, viewZ, kHitDistParams, roughness)
-            : 0.0;
-        OutSpecRadianceHitDist[coords.xy] = REBLUR_FrontEnd_PackRadianceAndNormHitDist(
+        float normHitDist = REBLUR_FrontEnd_GetNormHitDist(rawHitDist, viewZ, kHitDistParams, roughness);
+        OutSpecRadianceHitDist[outPixelPos] = REBLUR_FrontEnd_PackRadianceAndNormHitDist(
             sampleData.xyz, normHitDist, true);
     }
 #else
-    if (sample_id == 0) {
-        float4 sampleData = samples[groupThreadID.x * 8 + groupThreadID.y][0];
-        float3 dirVS      = sampleDirs[groupThreadID.x * 8 + groupThreadID.y][0];
-
-        float3 radiance   = sampleData.xyz;
-        float rawHitDist  = sampleData.w;  // world_ray_length * screenConfidence; 0 = miss
-
-        // AO normHitDist: misses = 1.0 (unoccluded), hits = normalized distance
-        float normHitDist_ao = (rawHitDist > 0.0)
+    if (isMyPixel) {
+        float3 radiance  = sampleData.xyz;
+        float rawHitDist = sampleData.w;  // world_ray_length * screenConfidence; 0 = miss/off-screen
+        bool hitInScreen = rawHitDist > 0.0 && all(hit.xy > 0.0) && all(hit.xy < 1.0);
+        // Max out normHitDist when no screen-space hit — NRD treats 1 as "infinite distance / unoccluded"
+        float normHitDist = hitInScreen
             ? REBLUR_FrontEnd_GetNormHitDist(rawHitDist, viewZ, kHitDistParams, 1.0)
             : 1.0;
 
-        // SH normHitDist: same but 0 for misses (NRD convention)
-        float normHitDist_sh = REBLUR_FrontEnd_GetNormHitDist(rawHitDist, viewZ, kHitDistParams, 1.0);
-
-        float3 dirVS_norm = normalize(dirVS + float3(0, 0, NRD_EPS));
+        float3 dirVS_norm = normalize(sampleDirVS + float3(0, 0, NRD_EPS));
         float3 dirWS      = normalize(mul((float3x3)FrameBuffer::CameraViewInverse[eyeIndex], dirVS_norm));
 
         float4 sh1;
-        float4 sh0 = REBLUR_FrontEnd_PackSh(radiance, normHitDist_sh, dirWS, sh1, true);
+        float4 sh0 = REBLUR_FrontEnd_PackSh(radiance, normHitDist, dirWS, sh1, true);
 
-        OutSH0[coords.xy]     = sh0;
-        OutSH1[coords.xy]     = sh1;
-        OutHitDist[coords.xy] = normHitDist_ao;
+        OutSH0[outPixelPos] = sh0;
+        OutSH1[outPixelPos] = sh1;
     }
 #endif
 }

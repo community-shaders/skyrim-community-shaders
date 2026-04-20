@@ -404,8 +404,6 @@ void Deferred::DeferredPasses()
 			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.GetSpecularOutputTexture() : nullptr,  // t17 SsrtSpecRadianceHitDist (NRD denoised)
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[0] : nullptr,                             // t18 SsrtDiffuseSH0 (NRD-packed)
 			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[1] : nullptr,                             // t19 SsrtDiffuseSH1 (NRD-packed)
-			ssrt.loaded ? ssrt.texHalfResDepth->srv.get() : nullptr,                                                 // t20 SsrtHalfResDepth (1/2-res NDC min, for bilateral)
-			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.occlusion : nullptr,                         // t21 SsrtOcclusionHitDist (denoised normHitDist)
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);

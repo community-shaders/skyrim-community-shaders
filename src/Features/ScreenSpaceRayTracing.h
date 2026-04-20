@@ -67,9 +67,21 @@ struct ScreenSpaceRayTracing : Feature
         bool EnableNRDValidation = false;  // NRD internal debug overlay written to output textures
     };
 
+    // Matches NRD Sample's tracing mode enum (Shared.hlsli).
+    // FULL: every pixel traces both diffuse and specular (2 dispatches, 2 rays/pixel).
+    // FULL_PROBABILISTIC: every pixel traces ONE ray, randomly diffuse vs specular — requires NRD AREA_3X3 reconstruction.
+    // HALF: checkerboard — even pixels diffuse, odd pixels specular. ~half the ray cost.
+    enum TracingMode : uint
+    {
+        TRACING_MODE_FULL = 0,
+        TRACING_MODE_FULL_PROBABILISTIC = 1,
+        TRACING_MODE_HALF = 2,
+    };
+
     struct Settings
     {
         bool EnableSpecular = true;
+        uint Mode = TRACING_MODE_HALF;
         uint MaxSteps = 128;
         uint MaxMips = 6;
         float Thickness = 5.f;
@@ -84,8 +96,12 @@ struct ScreenSpaceRayTracing : Feature
         float OcclusionStrength = 1.0f;
         float CubemapNormalization = 0.0f;
         bool EnableREBLUR = true;
-        float WorldScale = 70.0f;
+        float HitDistA = 210.0f;  // NRD hitDistanceParameters.A (typical hit dist, Skyrim units)
+        float HitDistB = 0.1f;    // NRD hitDistanceParameters.B (correction factor)
+        float HitDistC = 20.0f;   // NRD hitDistanceParameters.C (sky hit dist)
+        float HitDistD = -25.0f;  // NRD hitDistanceParameters.D (thin surface correction)
         uint DebugMode = 0;  // 0=none,1=spec,2=diffuse,3=occlusion,4=depth
+        bool EnablePrevGIReprojection = true;
         REBLURSettings Reblur;
     } settings;
 
@@ -96,7 +112,8 @@ struct ScreenSpaceRayTracing : Feature
         float DiffuseMult;
         float AmbientMult;
         uint DebugMode;
-        float _pad0[3];  // pad to 32 bytes to match HLSL SSRTSettings cbuffer layout
+        uint EnablePrevGIReprojection;
+        float _pad0[2];  // pad to 32 bytes to match HLSL SSRTSettings cbuffer layout
     };
 
     struct alignas(16) SSRTCB
@@ -114,8 +131,13 @@ struct ScreenSpaceRayTracing : Feature
         float2 RcpTexDim;
         float2 FrameDim;
         float2 RcpFrameDim;
-        float WorldScale;
-        float _pad[3];  // pad to 80 bytes (next 16-byte multiple after WorldScale)
+        float HitDistA;
+        float HitDistB;
+        float HitDistC;
+        float HitDistD;
+        uint FrameIndex;
+        uint TracingMode;
+        uint _pad1[2];
     };
 
     eastl::unique_ptr<ConstantBuffer> ssrtCB;
@@ -133,35 +155,26 @@ struct ScreenSpaceRayTracing : Feature
     struct DiffuseOutput
     {
         ID3D11ShaderResourceView* sh[2];
-        ID3D11ShaderResourceView* occlusion;  // OUT_DIFF_HITDIST (denoised normHitDist, null if disabled)
     };
     DiffuseOutput GetDiffuseOutputTextures();
     ID3D11ShaderResourceView* GetSpecularOutputTexture();
 
     // Ray march intermediate textures
-    eastl::unique_ptr<Texture2D> texDepth = nullptr;        // Hi-Z pyramid (1/4 res)
-    eastl::unique_ptr<Texture2D> texColor = nullptr;        // prefiltered radiance (1/4 res)
-    eastl::unique_ptr<Texture2D> texOutput = nullptr;
-    eastl::unique_ptr<Texture2D> texHalfResDepth = nullptr; // (1/2 res)
+    eastl::unique_ptr<Texture2D> texDepth = nullptr;  // Hi-Z pyramid base (1/2 res)
 
-    // NRD specular textures (1/2 res, RGBA16F)
+    // NRD specular textures (checkerboard packed, full-res allocation, RGBA16F)
     eastl::unique_ptr<Texture2D> texNRDInputSpecRadianceHitDist = nullptr;   // IN_SPEC_RADIANCE_HITDIST
     eastl::unique_ptr<Texture2D> texNRDOutputSpecRadianceHitDist = nullptr;  // OUT_SPEC_RADIANCE_HITDIST
 
-    // NRD SH textures (1/2 res, RGBA16F)
+    // NRD SH textures (checkerboard packed, full-res allocation, RGBA16F)
     eastl::unique_ptr<Texture2D> texNRDInputSH0 = nullptr;   // IN_DIFF_SH0
     eastl::unique_ptr<Texture2D> texNRDInputSH1 = nullptr;   // IN_DIFF_SH1
     eastl::unique_ptr<Texture2D> texNRDOutputSH0 = nullptr;  // OUT_DIFF_SH0
     eastl::unique_ptr<Texture2D> texNRDOutputSH1 = nullptr;  // OUT_DIFF_SH1
 
-    // NRD occlusion textures (1/2 res, R16F)
-    eastl::unique_ptr<Texture2D> texNRDInputHitDist = nullptr;   // IN_DIFF_HITDIST
-    eastl::unique_ptr<Texture2D> texNRDOutputHitDist = nullptr;  // OUT_DIFF_HITDIST
-
-    // NRD guide textures (1/2 res)
-    eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;            // IN_VIEWZ (R16F)
-    eastl::unique_ptr<Texture2D> texNRDNormalRoughness = nullptr;  // IN_NORMAL_ROUGHNESS (R10G10B10A2)
-    eastl::unique_ptr<Texture2D> texNRDMotionVectors = nullptr;    // IN_MV (R16G16F)
+    // NRD guide textures (full-res)
+    eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;            // IN_VIEWZ (R32F)
+    eastl::unique_ptr<Texture2D> texNRDNormalRoughness = nullptr;  // IN_NORMAL_ROUGHNESS (R8G8B8A8)
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
@@ -174,16 +187,14 @@ struct ScreenSpaceRayTracing : Feature
     winrt::com_ptr<ID3D11SamplerState> pointSampler = nullptr;
 
     winrt::com_ptr<ID3D11ComputeShader> prefilterDepthCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchSpecularCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prepareNRDGuidesCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> applyGIToMainCS = nullptr;
 
     NRDReblurIntegration nrdReblur;
     nrd::ReblurSettings reblurSettings{};
-    NRDReblurIntegration nrdReblurOcclusion;
-    nrd::ReblurSettings reblurOcclusionSettings{};
     NRDReblurIntegration nrdReblurSpecular;
     nrd::ReblurSettings reblurSpecularSettings{};
     uint32_t frameIndex = 0;
