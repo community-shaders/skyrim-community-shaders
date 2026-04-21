@@ -225,7 +225,6 @@ void WeatherWidget::DrawWidget()
 			auto* editorWindow = EditorWindow::GetSingleton();
 
 			bool recordChanged = false;
-			bool needsReinit = false;
 			bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
 			WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 			const float todLabelOffset = (hasParent ? 120.0f : 100.0f) * scale;
@@ -338,7 +337,7 @@ void WeatherWidget::DrawWidget()
 						if (settings.precipitationData != parentWidget->settings.precipitationData) {
 							settings.precipitationData = parentWidget->settings.precipitationData;
 							recordChanged = true;
-							needsReinit = true;
+							pendingReinit = true;
 						}
 					}
 					if (ImGui::IsItemHovered()) {
@@ -351,7 +350,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::SameLine(formLabelOffset);
 				if (WeatherUtils::DrawFormPickerCached("##Precipitation", settings.precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
 					recordChanged = true;
-					needsReinit = true;
+					pendingReinit = true;
 				}  // Add "Open" button
 				if (settings.precipitationData) {
 					ImGui::SameLine();
@@ -381,7 +380,7 @@ void WeatherWidget::DrawWidget()
 						if (settings.referenceEffect != parentWidget->settings.referenceEffect) {
 							settings.referenceEffect = parentWidget->settings.referenceEffect;
 							recordChanged = true;
-							needsReinit = true;
+							pendingReinit = true;
 						}
 					}
 					if (ImGui::IsItemHovered()) {
@@ -394,7 +393,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::SameLine(formLabelOffset);
 				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", settings.referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
 					recordChanged = true;
-					needsReinit = true;
+					pendingReinit = true;
 				}  // Add "Open" button
 				if (settings.referenceEffect) {
 					ImGui::SameLine();
@@ -416,9 +415,6 @@ void WeatherWidget::DrawWidget()
 
 			if (recordChanged && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 				ApplyChanges();
-				if (needsReinit) {
-					Widget::ForceWeatherReinit(weather);
-				}
 			}
 
 			EndScrollableContent();
@@ -503,6 +499,7 @@ void WeatherWidget::LoadSettings()
 		LoadFeatureSettings();
 	}
 	originalSettings = settings;
+	pendingReinit = false;
 	ApplyChanges();
 	Widget::ForceWeatherReinit(weather);
 }
@@ -1666,6 +1663,10 @@ void WeatherWidget::LoadFeatureSettings()
 void WeatherWidget::ApplyChanges()
 {
 	SetWeatherValues();
+	if (pendingReinit) {
+		Widget::ForceWeatherReinit(weather);
+		pendingReinit = false;
+	}
 }
 
 void WeatherWidget::RevertChanges()
@@ -1693,6 +1694,7 @@ void WeatherWidget::RevertChanges()
 
 	weatherManager->ClearAllFeatureSettingsForWeather(weather);
 	settings = vanillaSettings;
+	pendingReinit = false;
 	ApplyChanges();
 	Widget::ForceWeatherReinit(weather);
 }

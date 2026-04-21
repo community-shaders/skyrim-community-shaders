@@ -36,10 +36,6 @@ void ReferenceEffectWidget::DrawWidget()
 			if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
 				changed = true;
 
-			if (changed && editorWindow->settings.autoApplyChanges) {
-				editorWindow->PushUndoState(this);
-				ApplyChanges();
-			}
 		}
 		EndScrollableContent();
 	}
@@ -126,6 +122,8 @@ void ReferenceEffectWidget::ApplyChanges()
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kAttachToCamera);
 	if (settings.inheritRotation)
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kInheritRotation);
+
+	Widget::ForceCurrentWeatherReinit();
 }
 
 void ReferenceEffectWidget::RevertChanges()
