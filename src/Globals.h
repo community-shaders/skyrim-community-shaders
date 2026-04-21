@@ -31,10 +31,12 @@ struct WaterEffects;
 struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
+struct DlssEnhancerFeature;
 struct Upscaling;
 struct WeatherEditor;
 struct ExponentialHeightFog;
 struct HDRDisplay;
+struct DLSSperf;
 
 class State;
 class Deferred;
@@ -88,11 +90,13 @@ namespace globals
 		extern PerformanceOverlay performanceOverlay;
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
+		extern DlssEnhancerFeature dlssEnhancer;
 		extern Upscaling upscaling;
 		extern HDRDisplay hdrDisplay;
 		extern RenderDoc renderDoc;
 		extern WeatherEditor weatherEditor;
 		extern ExponentialHeightFog exponentialHeightFog;
+		extern DLSSperf dlssPerf;
 
 		namespace llf
 		{

@@ -3,6 +3,7 @@
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
 #include "Features/CloudShadows.h"
+#include "Features/DlssEnhancerFeature.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
@@ -235,6 +236,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::terrainVariation,
 		&globals::features::ibl,
 		&globals::features::extendedTranslucency,
+		&globals::features::dlssEnhancer,
 		&globals::features::upscaling,
 		&globals::features::renderDoc,
 		&globals::features::weatherEditor,
