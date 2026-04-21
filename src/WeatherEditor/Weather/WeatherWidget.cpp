@@ -224,7 +224,6 @@ void WeatherWidget::DrawWidget()
 			ImGui::Spacing();
 			auto* editorWindow = EditorWindow::GetSingleton();
 
-			bool recordChanged = false;
 			bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
 			WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 			const float todLabelOffset = (hasParent ? 120.0f : 100.0f) * scale;
@@ -245,7 +244,6 @@ void WeatherWidget::DrawWidget()
 						if (inheritFlag && parentWidget) {
 							if (settings.imageSpaceRefs[i] != parentWidget->settings.imageSpaceRefs[i]) {
 								settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
-								recordChanged = true;
 								pendingReinit = true;
 							}
 						}
@@ -258,7 +256,6 @@ void WeatherWidget::DrawWidget()
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
 					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
-						recordChanged = true;
 						pendingReinit = true;
 					}  // Add "Open" button
 					if (settings.imageSpaceRefs[i]) {
@@ -295,7 +292,6 @@ void WeatherWidget::DrawWidget()
 						if (inheritFlag && parentWidget) {
 							if (settings.volumetricLightingRefs[i] != parentWidget->settings.volumetricLightingRefs[i]) {
 								settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
-								recordChanged = true;
 								pendingReinit = true;
 							}
 						}
@@ -308,7 +304,6 @@ void WeatherWidget::DrawWidget()
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
 					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
-						recordChanged = true;
 						pendingReinit = true;
 					}  // Add "Open" button
 					if (settings.volumetricLightingRefs[i]) {
@@ -340,7 +335,6 @@ void WeatherWidget::DrawWidget()
 					if (inheritFlag && parentWidget) {
 						if (settings.precipitationData != parentWidget->settings.precipitationData) {
 							settings.precipitationData = parentWidget->settings.precipitationData;
-							recordChanged = true;
 							pendingReinit = true;
 						}
 					}
@@ -353,7 +347,6 @@ void WeatherWidget::DrawWidget()
 				ImGui::Text("Particle Shader:");
 				ImGui::SameLine(formLabelOffset);
 				if (WeatherUtils::DrawFormPickerCached("##Precipitation", settings.precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
-					recordChanged = true;
 					pendingReinit = true;
 				}  // Add "Open" button
 				if (settings.precipitationData) {
@@ -383,7 +376,6 @@ void WeatherWidget::DrawWidget()
 					if (inheritFlag && parentWidget) {
 						if (settings.referenceEffect != parentWidget->settings.referenceEffect) {
 							settings.referenceEffect = parentWidget->settings.referenceEffect;
-							recordChanged = true;
 							pendingReinit = true;
 						}
 					}
@@ -396,7 +388,6 @@ void WeatherWidget::DrawWidget()
 				ImGui::Text("Reference Effect:");
 				ImGui::SameLine(formLabelOffset);
 				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", settings.referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
-					recordChanged = true;
 					pendingReinit = true;
 				}  // Add "Open" button
 				if (settings.referenceEffect) {
@@ -417,7 +408,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::Spacing();
 			}
 
-			if (recordChanged && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+			if (pendingReinit && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 				ApplyChanges();
 			}
 
@@ -1540,7 +1531,8 @@ void WeatherWidget::InheritAllFromParent()
 	settings.inheritFlags["Precipitation"] = true;
 	settings.inheritFlags["ReferenceEffect"] = true;
 
-	// Apply the changes
+	// Apply the changes — form references require a weather reinit to propagate
+	pendingReinit = true;
 	if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();
 	}
