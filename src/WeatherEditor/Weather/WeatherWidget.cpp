@@ -1184,12 +1184,8 @@ void WeatherWidget::DrawCloudSettings()
 	if (enableChanged) {
 		// Apply enable/disable immediately for instant feedback, regardless of autoApplyChanges.
 		editorWindow->PushUndoState(this);
+		pendingReinit = true;
 		ApplyChanges();
-		if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
-			if (auto sky = RE::Sky::GetSingleton()) {
-				sky->ForceWeather(weather, true);  // override=true for immediate application; matches "instant feedback" intent above
-			}
-		}
 	} else if (changed && editorWindow->settings.autoApplyChanges) {
 		editorWindow->PushUndoState(this);
 		ApplyChanges();
