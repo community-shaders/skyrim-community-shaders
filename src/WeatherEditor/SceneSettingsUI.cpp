@@ -744,7 +744,7 @@ namespace SceneSettingsUI
 
 	bool DrawSectionHeader(const char* label, const char* idSuffix,
 		bool allPaused, std::function<void()> onTogglePause, std::function<void()> onDeleteAll,
-		int numValueColumns)
+		int numValueColumns, std::function<void()> onExportAll)
 	{
 		ImGui::Spacing();
 		float w = GetSectionWidth(numValueColumns);
@@ -753,12 +753,15 @@ namespace SceneSettingsUI
 		bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 
 		if (open) {
-			auto pauseLabel = std::format("{}{}", allPaused ? "Unpause All" : "Pause All", idSuffix);
-			if (ImGui::SmallButton(pauseLabel.c_str()))
+			if (onExportAll) {
+				if (ImGui::SmallButton(std::format("Export All{}", idSuffix).c_str()))
+					onExportAll();
+				ImGui::SameLine();
+			}
+			if (ImGui::SmallButton(std::format("{}{}", allPaused ? "Unpause All" : "Pause All", idSuffix).c_str()))
 				onTogglePause();
 			ImGui::SameLine();
-			auto deleteLabel = std::format("Delete All{}", idSuffix);
-			if (ImGui::SmallButton(deleteLabel.c_str()))
+			if (ImGui::SmallButton(std::format("Delete All{}", idSuffix).c_str()))
 				onDeleteAll();
 		}
 		return open;
@@ -767,6 +770,88 @@ namespace SceneSettingsUI
 	void EndSection()
 	{
 		ImGui::EndChild();
+	}
+
+	// Core export popup: list user entries with checkboxes (all on by default), then export on confirm.
+	static void DrawExportPopupCore(
+		const char* popupId,
+		const std::vector<SceneSettingsManager::SettingEntry>& entries,
+		ExportAllPopupState& state,
+		std::function<void(const std::vector<size_t>&)> exportFn)
+	{
+		if (!state.dialogOpen)
+			return;
+
+		ImGui::OpenPopup(popupId);
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowSize(ImVec2(C::Em(C::SCENE_ADD_DIALOG_WIDTH_EM), 0));
+
+		if (!ImGui::BeginPopupModal(popupId, &state.dialogOpen, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
+			state.dialogOpen = false;
+			return;
+		}
+
+		ImGui::TextUnformatted("Select settings to export as overwrite files:");
+		ImGui::Spacing();
+
+		if (ImGui::SmallButton("Select All"))
+			std::fill(state.selected.begin(), state.selected.end(), uint8_t(1));
+		ImGui::SameLine();
+		if (ImGui::SmallButton("Select None"))
+			std::fill(state.selected.begin(), state.selected.end(), uint8_t(0));
+
+		ImGui::Spacing();
+		if (ImGui::BeginChild("##ExportList", ImVec2(-FLT_MIN, C::Em(C::SCENE_ADD_LIST_HEIGHT_EM)), ImGuiChildFlags_Borders)) {
+			for (size_t i = 0; i < state.userIndices.size(); ++i) {
+				auto idx = state.userIndices[i];
+				if (idx >= entries.size())
+					continue;
+				const auto& e = entries[idx];
+				auto label = e.period != SceneSettingsManager::TimeOfDayPeriod::Count
+					? std::format("{} — {} ({})", SceneSettingsManager::GetFeatureDisplayName(e.featureShortName),
+						Util::PrettifyIdentifier(e.settingKey), SceneSettingsManager::GetPeriodName(e.period))
+					: std::format("{} — {}", SceneSettingsManager::GetFeatureDisplayName(e.featureShortName),
+						Util::PrettifyIdentifier(e.settingKey));
+				ImGui::Checkbox(std::format("{}##exp{}", label, i).c_str(), reinterpret_cast<bool*>(&state.selected[i]));
+			}
+		}
+		ImGui::EndChild();
+
+		ImGui::Spacing();
+
+		int count = static_cast<int>(std::count_if(state.selected.begin(), state.selected.end(), [](uint8_t v) { return v != 0; }));
+		{
+			auto _ = Util::DisableGuard(count == 0);
+			if (ImGui::Button(std::format("Export ({})", count).c_str(), ImVec2(-FLT_MIN, 0))) {
+				std::vector<size_t> toExport;
+				for (size_t i = 0; i < state.userIndices.size(); ++i)
+					if (state.selected[i])
+						toExport.push_back(state.userIndices[i]);
+				exportFn(toExport);
+				state.dialogOpen = false;
+				ImGui::CloseCurrentPopup();
+			}
+		}
+
+		ImGui::EndPopup();
+	}
+
+	void DrawExportAllPopup(SceneType type, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state)
+	{
+		DrawExportPopupCore("Export User Settings##scene", entries, state,
+			[type](const std::vector<size_t>& indices) {
+				SceneSettingsManager::GetSingleton()->ExportUserSettingsToOverwrites(type, indices);
+			});
+	}
+
+	void DrawWeatherExportAllPopup(RE::FormID weatherId, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state)
+	{
+		auto popupId = std::format("Export User Settings##wx{:08X}", weatherId);
+		DrawExportPopupCore(popupId.c_str(), entries, state,
+			[weatherId](const std::vector<size_t>& indices) {
+				SceneSettingsManager::GetSingleton()->ExportWeatherUserSettingsToOverwrites(weatherId, indices);
+			});
 	}
 
 	bool DrawCategoryPanel(const char* category, const std::string& selected, void (*drawFn)())
@@ -797,6 +882,7 @@ namespace SceneSettingsUI
 		"Are you sure you want to remove all user-added interior-only settings?"
 	};
 	static TableFlyoutState s_interiorTableFlyout;
+	static ExportAllPopupState s_interiorExportState;
 
 	void DrawInteriorOnlyPanel()
 	{
@@ -846,10 +932,16 @@ namespace SceneSettingsUI
 		}
 
 		if (!userGroup.order.empty()) {
-			if (DrawSectionHeader("User Settings", "##iusr", manager->AreAllUserPaused(SceneType::InteriorOnly), [&] { manager->SetAllUserPaused(SceneType::InteriorOnly, !manager->AreAllUserPaused(SceneType::InteriorOnly)); }, [&] { s_interiorPopups.deleteAllUser.Request(); }, 1))
+			std::vector<size_t> owTmp, userIndices;
+			SplitBySource(entries, owTmp, userIndices);
+			if (DrawSectionHeader("User Settings", "##iusr", manager->AreAllUserPaused(SceneType::InteriorOnly),
+					[&] { manager->SetAllUserPaused(SceneType::InteriorOnly, !manager->AreAllUserPaused(SceneType::InteriorOnly)); },
+					[&] { s_interiorPopups.deleteAllUser.Request(); }, 1,
+					[&] { s_interiorExportState.Open(userIndices); }))
 				DrawSourceTable(userGroup, entries, "##InteriorUsr", EntrySource::User, 1, &s_interiorPopups, s_interiorTableFlyout, cb);
 			EndSection();
 		}
+		DrawExportAllPopup(SceneType::InteriorOnly, entries, s_interiorExportState);
 	}
 
 	// --- Time of Day Panel ---
@@ -861,6 +953,7 @@ namespace SceneSettingsUI
 		"Are you sure you want to remove all user-added time-of-day settings?"
 	};
 	static TableFlyoutState s_todTableFlyout;
+	static ExportAllPopupState s_todExportState;
 
 	void DrawTimeOfDayPanel()
 	{
@@ -930,10 +1023,16 @@ namespace SceneSettingsUI
 		}
 
 		if (!userGroup.order.empty()) {
-			if (DrawSectionHeader("User Settings", "##tusr", manager->AreAllUserPaused(SceneType::TimeOfDay), [&] { manager->SetAllUserPaused(SceneType::TimeOfDay, !manager->AreAllUserPaused(SceneType::TimeOfDay)); }, [&] { s_todPopups.deleteAllUser.Request(); }, kPeriodCount))
+			std::vector<size_t> owTmp, userIndices;
+			SplitBySource(entries, owTmp, userIndices);
+			if (DrawSectionHeader("User Settings", "##tusr", manager->AreAllUserPaused(SceneType::TimeOfDay),
+					[&] { manager->SetAllUserPaused(SceneType::TimeOfDay, !manager->AreAllUserPaused(SceneType::TimeOfDay)); },
+					[&] { s_todPopups.deleteAllUser.Request(); }, kPeriodCount,
+					[&] { s_todExportState.Open(userIndices); }))
 				DrawSourceTable(userGroup, entries, "##TODUser", EntrySource::User, kPeriodCount, &s_todPopups, s_todTableFlyout, cb);
 			EndSection();
 		}
+		DrawExportAllPopup(SceneType::TimeOfDay, entries, s_todExportState);
 	}
 
 	// --- Weather Scene Panel ---
@@ -943,6 +1042,7 @@ namespace SceneSettingsUI
 		AddSettingState periodAddStates[kPeriodCount];
 		AddSettingState allPeriodsAddState;
 		TableFlyoutState tableFlyout;
+		ExportAllPopupState exportState;
 	};
 	static std::map<RE::FormID, WeatherPanelState> s_weatherPanelStates;
 
@@ -991,10 +1091,12 @@ namespace SceneSettingsUI
 					allPaused,
 					[&] { for (auto idx : userIndices) if (entries[idx].paused == allPaused) manager->TogglePauseWeatherEntry(weatherId, idx); },
 					[&] { RemoveIndicesReversed(userIndices, [&](size_t idx) { manager->RemoveWeatherSetting(weatherId, idx); }); },
-					numValueColumns))
+					numValueColumns,
+					[&] { state.exportState.Open(userIndices); }))
 				DrawSourceTable(group, entries, "##WxUser", EntrySource::User, numValueColumns, nullptr, state.tableFlyout, cb);
 			EndSection();
 		}
+		DrawWeatherExportAllPopup(weatherId, entries, state.exportState);
 	}
 
 	void DrawWeatherScenePanel(RE::FormID weatherId)

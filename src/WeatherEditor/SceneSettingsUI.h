@@ -122,7 +122,26 @@ namespace SceneSettingsUI
 	void DrawPopups(SceneType type, PopupState& popups);
 
 	bool DrawSectionHeader(const char* label, const char* idSuffix,
-		bool allPaused, std::function<void()> onTogglePause, std::function<void()> onDeleteAll);
+		bool allPaused, std::function<void()> onTogglePause, std::function<void()> onDeleteAll,
+		int numValueColumns, std::function<void()> onExportAll = nullptr);
+
+	/// State for the export-to-overwrites selection popup.
+	struct ExportAllPopupState
+	{
+		bool dialogOpen = false;
+		std::vector<size_t> userIndices;
+		std::vector<uint8_t> selected;
+
+		void Open(const std::vector<size_t>& indices)
+		{
+			dialogOpen = true;
+			userIndices = indices;
+			selected.assign(indices.size(), 1);
+		}
+	};
+
+	void DrawExportAllPopup(SceneType type, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state);
+	void DrawWeatherExportAllPopup(RE::FormID weatherId, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state);
 
 	/// Draw a source table with feature-grouped rows and per-cell value editing.
 	/// @param numValueColumns 1 for single-value (Interior), kPeriodCount for TOD.

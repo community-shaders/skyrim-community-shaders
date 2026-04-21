@@ -147,6 +147,10 @@ public:
 	bool AreAllUserPaused(SceneType type) const;
 	void DeleteAllUserSettings(SceneType type);
 
+	/// Export selected user entries to individual overwrite JSON files; promotes them to Overwrite source.
+	void ExportUserSettingsToOverwrites(SceneType type, const std::vector<size_t>& indices);
+	void ExportWeatherUserSettingsToOverwrites(RE::FormID weatherId, const std::vector<size_t>& indices);
+
 	// --- Scene Application ---
 
 	/// Called every frame from State::Update().

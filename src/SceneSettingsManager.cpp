@@ -538,6 +538,53 @@ void SceneSettingsManager::DeleteAllUserSettings(SceneType type)
 	ReapplyIfActive();
 }
 
+/// Write a single setting as an overwrite JSON file; creates parent dirs as needed.
+static bool WriteOverwriteFile(const std::filesystem::path& path,
+	const std::string& featureShortName, const std::string& key, const json& value)
+{
+	std::error_code ec;
+	std::filesystem::create_directories(path.parent_path(), ec);
+	if (ec) {
+		logger::error("[SceneSettings] WriteOverwriteFile: failed to create dirs for '{}': {}", path.string(), ec.message());
+		return false;
+	}
+	std::ofstream f(path);
+	if (!f.is_open()) {
+		logger::error("[SceneSettings] WriteOverwriteFile: could not open '{}' for writing", path.string());
+		return false;
+	}
+	f << json{ { "_feature", featureShortName }, { key, value } }.dump(2);
+	return true;
+}
+
+void SceneSettingsManager::ExportUserSettingsToOverwrites(SceneType type, const std::vector<size_t>& indices)
+{
+	auto& vec = GetEntriesMut(type);
+	auto basePath = GetOverwritesPath(type);
+	for (auto idx : indices) {
+		if (idx >= vec.size() || vec[idx].source != EntrySource::User)
+			continue;
+		auto& e = vec[idx];
+		auto filename = std::format("{}_{}.json", e.settingKey, e.featureShortName);
+		auto dir = (type == SceneType::TimeOfDay && e.period != TimeOfDayPeriod::Count) ? basePath / GetPeriodName(e.period) : basePath;
+		WriteOverwriteFile(dir / filename, e.featureShortName, e.settingKey, e.value);
+	}
+}
+
+void SceneSettingsManager::ExportWeatherUserSettingsToOverwrites(RE::FormID weatherId, const std::vector<size_t>& indices)
+{
+	auto& vec = GetWeatherConfigMut(weatherId).entries;
+	auto baseDir = GetWeatherOverwritesDir() / Util::FormIdToSpid(weatherId);
+	for (auto idx : indices) {
+		if (idx >= vec.size() || vec[idx].source != EntrySource::User)
+			continue;
+		auto& e = vec[idx];
+		auto filename = std::format("{}_{}.json", e.settingKey, e.featureShortName);
+		auto dir = (e.period != TimeOfDayPeriod::Count) ? baseDir / GetPeriodName(e.period) : baseDir;
+		WriteOverwriteFile(dir / filename, e.featureShortName, e.settingKey, e.value);
+	}
+}
+
 void SceneSettingsManager::UpdateEntryValue(SceneType type, size_t index, const json& newValue, bool deferSave)
 {
 	auto& vec = GetEntriesMut(type);
