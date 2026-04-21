@@ -292,21 +292,22 @@ float3 AccentuateWhites(float3 fragment)
 // In: pixelVector which is the current pixel converted into a vector where (0,0) is the center of the screen.
 float2 ApplyPetzvalMorph(float2 pointOffset, float2 texcoord)
 {
-	float2 fromCenter = texcoord - 0.5;
-	float radius = saturate(length(fromCenter) * 2.0f);
-	if (PetzvalStrength <= 0.001f || radius <= 0.0001f)
+	float2 centeredUV = texcoord;
+	float2 fromCenter = centeredUV - 0.5f;
+	float distanceFromCenter = length(fromCenter);
+	float radius = saturate(distanceFromCenter * 2.0f);
+	if (PetzvalStrength <= 0.001f || distanceFromCenter <= 0.0001f)
 		return pointOffset;
 
-	float2 radialAxis = fromCenter / radius;
+	float2 radialAxis = fromCenter / distanceFromCenter;
 	float2 tangentialAxis = float2(-radialAxis.y, radialAxis.x);
 	float radialComponent = dot(pointOffset, radialAxis);
 	float tangentialComponent = dot(pointOffset, tangentialAxis);
-	float petzvalAmount = PetzvalStrength * radius * radius;
+	float petzvalAmount = PetzvalStrength * radius * radius * 1.35f;
+	float tangentialScale = 1.0f + petzvalAmount;
+	float radialScale = rcp(tangentialScale);
 
-	radialComponent *= max(0.2f, 1.0f - petzvalAmount * 0.75f);
-	tangentialComponent *= 1.0f + petzvalAmount;
-
-	return radialAxis * radialComponent + tangentialAxis * tangentialComponent;
+	return radialAxis * (radialComponent * radialScale) + tangentialAxis * (tangentialComponent * tangentialScale);
 }
 
 // calculate the sample weight based on the values specified.
@@ -527,7 +528,8 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 			// shapeLuma is in Alpha
 			if (useShape)
 				shapeTap = GetShapeTap(angle, shapeRingDistance);
-			pointOffset = ApplyPetzvalMorph(pointOffset, blurInfo.texcoord);
+			else
+				pointOffset = ApplyPetzvalMorph(pointOffset, blurInfo.texcoord);
 			float2 tapCoords = float2(blurInfo.texcoord + (pointOffset * currentRingRadiusCoords));
 			float sampleRadius = TexCoCInput.SampleLevel(LinearSampler, tapCoords, 0).r;
 			float4 tap = 0;
@@ -594,7 +596,8 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 			// shapeLuma is in Alpha
 			if (useShape)
 				shapeTap = GetShapeTap(angle, shapeRingDistance);
-			pointOffset = ApplyPetzvalMorph(pointOffset, blurInfo.texcoord);
+			else
+				pointOffset = ApplyPetzvalMorph(pointOffset, blurInfo.texcoord);
 			float2 tapCoords = float2(blurInfo.texcoord + (pointOffset * currentRingRadiusCoords));
 			float4 tap = TexColor.SampleLevel(LinearSampler, tapCoords, 0);
 			// r contains blurred CoC, g contains original CoC. Original can be negative
