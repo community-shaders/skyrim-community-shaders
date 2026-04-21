@@ -428,12 +428,6 @@ void Menu::Save(json& o_json)
 	InputCombo::ComboList::to_json(o_json["WeatherEditorToggleKey"], settings.WeatherEditorToggleKey);
 }
 
-void Menu::ApplyResolutionFontOverride()
-{
-	if (settings.UseResolutionFont)
-		settings.Theme.FontSize = 0.0f;
-}
-
 void Menu::LoadTheme(json& o_json)
 {
 	if (o_json["Theme"].is_object()) {
@@ -454,8 +448,6 @@ void Menu::LoadTheme(json& o_json)
 
 		// Apply background blur enabled state from theme
 		BackgroundBlur::SetEnabled(settings.Theme.BackgroundBlurEnabled);
-
-		ApplyResolutionFontOverride();
 	}
 }
 void Menu::SaveTheme(json& o_json)
@@ -528,8 +520,6 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 
 			// Apply background blur enabled state from theme
 			BackgroundBlur::SetEnabled(settings.Theme.BackgroundBlurEnabled);
-
-			ApplyResolutionFontOverride();
 
 			logger::info("Applied theme preset: {}", themeName);
 			return true;

@@ -113,7 +113,6 @@ public:
 
 	void LoadTheme(json& o_json);
 	void SaveTheme(json& o_json);
-	void ApplyResolutionFontOverride();
 
 	// Multi-theme support
 	std::vector<std::string> DiscoverThemes();
@@ -418,6 +417,7 @@ public:
 	};
 	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
 	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components
+	const Settings& GetSettings() const { return settings; }
 	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
 	ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
 	const ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) const { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
