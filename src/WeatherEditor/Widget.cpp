@@ -276,6 +276,13 @@ bool Widget::BeginWidgetWindow()
 	return result;
 }
 
+void Widget::ForceWeatherReinit(RE::TESWeather* weather)
+{
+	if (auto sky = RE::Sky::GetSingleton()) {
+		sky->ForceWeather(weather, true);
+	}
+}
+
 void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather)
 {
 	auto editorWindow = EditorWindow::GetSingleton();

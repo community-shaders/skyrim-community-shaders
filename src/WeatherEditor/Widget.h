@@ -146,6 +146,9 @@ public:
 	virtual void RevertChanges() { LoadSettings(); }
 	virtual bool HasUnsavedChanges() const { return false; }
 
+	// Reinitialize weather to apply form refs that are only read at load time.
+	static void ForceWeatherReinit(RE::TESWeather* weather);
+
 	// Draw common header with search bar and action buttons
 	void DrawWidgetHeader(const char* searchId, bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
 
