@@ -995,7 +995,7 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
-			const bool hdrActive = globals::features::hdrDisplay.settings.enableHDR;
+			const bool hdrActive = globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.settings.enableHDR;
 			if (hdrActive)
 				ImGui::BeginDisabled();
 			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
@@ -1405,7 +1405,7 @@ void EditorWindow::SetupResources()
 
 bool EditorWindow::IsViewportActive() const
 {
-	return settings.showViewport && !globals::features::hdrDisplay.settings.enableHDR;
+	return settings.showViewport && !(globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.settings.enableHDR);
 }
 
 void EditorWindow::UpdateOpenState()
