@@ -265,6 +265,7 @@
             "ManualFocusPlane": 0.4000000059604645,
             "NearFarDistanceCompensation": 1.0,
             "NearPlaneMaxBlur": 0.20000000298023224,
+            "PetzvalStrength": 0.0,
             "PostBlurSmoothing": 0.0,
             "TransitionSpeed": 0.5,
             "consoleSelection": true,

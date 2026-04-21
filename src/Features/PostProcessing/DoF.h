@@ -27,6 +27,7 @@ struct DoF : public PostProcessFeature
 		float BokehBusyFactor = 0.5f;
 		float HighlightBoost = 0.0f;
 		float PostBlurSmoothing = 0.0f;
+		float PetzvalStrength = 0.0f;
 		int HighlightShape = 0;
 		float HighlightShapeRotationAngle = 0.0f;
 		bool targetFocus = false;
@@ -50,7 +51,9 @@ struct DoF : public PostProcessFeature
 		float PostBlurSmoothing;
 		uint HighlightShape;
 		float HighlightShapeRotationAngle;
+		float PetzvalStrength;
 		uint AutoFocus;
+		uint pad[3];
 	};
 
 	eastl::unique_ptr<ConstantBuffer> dofCB = nullptr;

@@ -147,7 +147,9 @@ cbuffer DoFCB : register(b1)
 	float PostBlurSmoothing;
 	uint HighlightShape;
 	float HighlightShapeRotationAngle;
+	float PetzvalStrength;
 	uint AutoFocus;
+	uint3 pad;
 };
 
 #define SENSOR_SIZE 0.024f
@@ -288,28 +290,23 @@ float3 AccentuateWhites(float3 fragment)
 
 // returns 2 vectors, (x,y) are up vector, (z,w) are right vector.
 // In: pixelVector which is the current pixel converted into a vector where (0,0) is the center of the screen.
-float4 CalculateAnamorphicFactor(float2 pixelVector)
+float2 ApplyPetzvalMorph(float2 pointOffset, float2 texcoord)
 {
-	float HighlightAnamorphicFactor = 1.0f;
-	float HighlightAnamorphicSpreadFactor = 0.0f;
-	float normalizedFactor = lerp(1, HighlightAnamorphicFactor, lerp(length(pixelVector * 2), 1, HighlightAnamorphicSpreadFactor));
-	return float4(0, 1 + (1 - normalizedFactor), normalizedFactor, 0);
-}
+	float2 fromCenter = texcoord - 0.5;
+	float radius = saturate(length(fromCenter) * 2.0f);
+	if (PetzvalStrength <= 0.001f || radius <= 0.0001f)
+		return pointOffset;
 
-// Calculates a rotation matrix for the current pixel specified in texcoord, which can be used to rotate the bokeh shape to match
-// a distored field around the center of the screen: it rotates the anamorphic factors with this matrix so the bokeh shapes form a circle
-// around the center of the screen.
-float2x2 CalculateAnamorphicRotationMatrix(float2 texcoord)
-{
-	float HighlightAnamorphicAlignmentFactor = 0.0f;
-	float2 pixelVector = normalize(texcoord - 0.5);
-	float limiter = (1 - HighlightAnamorphicAlignmentFactor) / 2;
-	pixelVector.y = clamp(pixelVector.y, -limiter, limiter);
-	float2 refVector = normalize(float2(-0.5, 0));
-	float2 sincosFactor = float2(0, 0);
-	// calculate the angle between the pixelvector and the ref vector and grab the sin/cos for that angle for the rotation matrix.
-	sincos(atan2(pixelVector.y, pixelVector.x) - atan2(refVector.y, refVector.x), sincosFactor.x, sincosFactor.y);
-	return float2x2(sincosFactor.y, sincosFactor.x, -sincosFactor.x, sincosFactor.y);
+	float2 radialAxis = fromCenter / radius;
+	float2 tangentialAxis = float2(-radialAxis.y, radialAxis.x);
+	float radialComponent = dot(pointOffset, radialAxis);
+	float tangentialComponent = dot(pointOffset, tangentialAxis);
+	float petzvalAmount = PetzvalStrength * radius * radius;
+
+	radialComponent *= max(0.2f, 1.0f - petzvalAmount * 0.75f);
+	tangentialComponent *= 1.0f + petzvalAmount;
+
+	return radialAxis * radialComponent + tangentialAxis * tangentialComponent;
 }
 
 // calculate the sample weight based on the values specified.
@@ -517,8 +514,6 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 	float cocPerRing = (colorRadius * FarPlaneMaxBlur) / blurInfo.numberOfRings;
 	float ringDistance = 0;
 	float pointsOnRing = pointsFirstRing;
-	float4 anamorphicFactors = CalculateAnamorphicFactor(blurInfo.texcoord - 0.5);  // xy are up vector, zw are right vector
-	float2x2 anamorphicRotationMatrix = CalculateAnamorphicRotationMatrix(blurInfo.texcoord);
 	bool useShape = HighlightShape > 0;
 	float4 shapeTap = float4(1.0f, 1.0f, 1.0f, 1.0f);
 	for (float ringIndex = 0; ringIndex < blurInfo.numberOfRings; ringIndex++) {
@@ -532,10 +527,7 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 			// shapeLuma is in Alpha
 			if (useShape)
 				shapeTap = GetShapeTap(angle, shapeRingDistance);
-			// now transform the offset vector with the anamorphic factors and rotate it accordingly to the rotation matrix, so we get a nice
-			// bending around the center of the screen.
-			else
-				pointOffset = MorphPointOffsetWithAnamorphicDeltas(pointOffset, anamorphicFactors, anamorphicRotationMatrix);
+			pointOffset = ApplyPetzvalMorph(pointOffset, blurInfo.texcoord);
 			float2 tapCoords = float2(blurInfo.texcoord + (pointOffset * currentRingRadiusCoords));
 			float sampleRadius = TexCoCInput.SampleLevel(LinearSampler, tapCoords, 0).r;
 			float4 tap = 0;
@@ -589,8 +581,6 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 	float2 ringRadiusDeltaCoords = float2(SharedData::BufferDim.z, SharedData::BufferDim.w) * (nearPlaneBlurInPixels / (numberOfRings - 1));
 	float pointsOnRing = pointsFirstRing;
 	float2 currentRingRadiusCoords = ringRadiusDeltaCoords;
-	float4 anamorphicFactors = CalculateAnamorphicFactor(blurInfo.texcoord - 0.5);  // xy are up vector, zw are right vector
-	float2x2 anamorphicRotationMatrix = CalculateAnamorphicRotationMatrix(blurInfo.texcoord);
 	bool useShape = HighlightShape > 0;
 	float4 shapeTap = float4(1.0f, 1.0f, 1.0f, 1.0f);
 	for (float ringIndex = 0; ringIndex < numberOfRings; ringIndex++) {
@@ -604,10 +594,7 @@ float4 PerformFullFragmentGaussianBlur(Texture2D source, float2 texcoord, uint2 
 			// shapeLuma is in Alpha
 			if (useShape)
 				shapeTap = GetShapeTap(angle, shapeRingDistance);
-			// now transform the offset vector with the anamorphic factors and rotate it accordingly to the rotation matrix, so we get a nice
-			// bending around the center of the screen.
-			else
-				pointOffset = MorphPointOffsetWithAnamorphicDeltas(pointOffset, anamorphicFactors, anamorphicRotationMatrix);
+			pointOffset = ApplyPetzvalMorph(pointOffset, blurInfo.texcoord);
 			float2 tapCoords = float2(blurInfo.texcoord + (pointOffset * currentRingRadiusCoords));
 			float4 tap = TexColor.SampleLevel(LinearSampler, tapCoords, 0);
 			// r contains blurred CoC, g contains original CoC. Original can be negative

@@ -23,6 +23,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HighlightBoost,
 	BokehBusyFactor,
 	PostBlurSmoothing,
+	PetzvalStrength,
 	HighlightShape,
 	HighlightShapeRotationAngle,
 	targetFocus,
@@ -45,6 +46,7 @@ void DoF::DrawSettings()
 	ImGui::SliderFloat("Blur Quality", &settings.BlurQuality, 2.0f, 30.0f, "%.1f");
 	ImGui::SliderFloat("Near-Far Plane Distance Compenation", &settings.NearFarDistanceCompensation, 1.0f, 5.0f, "%.2f");
 	ImGui::SliderFloat("Bokeh Busy Factor", &settings.BokehBusyFactor, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat("Petzval Strength", &settings.PetzvalStrength, 0.0f, 2.0f, "%.2f");
 	ImGui::SliderFloat("Highlight Boost", &settings.HighlightBoost, 0.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat("Post Blur Smoothing", &settings.PostBlurSmoothing, 0.0f, 2.0f, "%.2f");
 	ImGui::Combo("Highlight Custom Shape", &settings.HighlightShape, "Circle (No custom shape)\0Heart\0Hexagon\0Circle with fringe\0Hexagon with fringe\0Star\0Square\0");
@@ -418,6 +420,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 		.PostBlurSmoothing = settings.PostBlurSmoothing,
 		.HighlightShape = (uint)settings.HighlightShape,
 		.HighlightShapeRotationAngle = settings.HighlightShapeRotationAngle,
+		.PetzvalStrength = settings.PetzvalStrength,
 		.AutoFocus = autoFocus
 	};
 	dofCB->Update(dofData);
