@@ -278,17 +278,15 @@ bool Widget::BeginWidgetWindow()
 
 void Widget::ForceWeatherReinit(RE::TESWeather* weather)
 {
-	if (auto sky = RE::Sky::GetSingleton()) {
-		sky->ForceWeather(weather, true);
-	}
+	if (weather && globals::game::sky)
+		globals::game::sky->ForceWeather(weather, true);
 }
 
 void Widget::ForceCurrentWeatherReinit()
 {
-	if (auto sky = RE::Sky::GetSingleton()) {
-		if (sky->currentWeather)
-			sky->ForceWeather(sky->currentWeather, true);
-	}
+	auto* sky = globals::game::sky;
+	if (sky && sky->currentWeather)
+		sky->ForceWeather(sky->currentWeather, true);
 }
 
 void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather)

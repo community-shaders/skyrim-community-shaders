@@ -246,6 +246,7 @@ void WeatherWidget::DrawWidget()
 							if (settings.imageSpaceRefs[i] != parentWidget->settings.imageSpaceRefs[i]) {
 								settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
 								recordChanged = true;
+								pendingReinit = true;
 							}
 						}
 						if (ImGui::IsItemHovered()) {
@@ -258,6 +259,7 @@ void WeatherWidget::DrawWidget()
 					ImGui::SameLine(todLabelOffset);
 					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
 						recordChanged = true;
+						pendingReinit = true;
 					}  // Add "Open" button
 					if (settings.imageSpaceRefs[i]) {
 						ImGui::SameLine();
@@ -294,6 +296,7 @@ void WeatherWidget::DrawWidget()
 							if (settings.volumetricLightingRefs[i] != parentWidget->settings.volumetricLightingRefs[i]) {
 								settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
 								recordChanged = true;
+								pendingReinit = true;
 							}
 						}
 						if (ImGui::IsItemHovered()) {
@@ -306,6 +309,7 @@ void WeatherWidget::DrawWidget()
 					ImGui::SameLine(todLabelOffset);
 					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
 						recordChanged = true;
+						pendingReinit = true;
 					}  // Add "Open" button
 					if (settings.volumetricLightingRefs[i]) {
 						ImGui::SameLine();
@@ -499,9 +503,8 @@ void WeatherWidget::LoadSettings()
 		LoadFeatureSettings();
 	}
 	originalSettings = settings;
-	pendingReinit = false;
+	pendingReinit = true;
 	ApplyChanges();
-	Widget::ForceWeatherReinit(weather);
 }
 
 void WeatherWidget::SaveSettings()
@@ -1694,9 +1697,8 @@ void WeatherWidget::RevertChanges()
 
 	weatherManager->ClearAllFeatureSettingsForWeather(weather);
 	settings = vanillaSettings;
-	pendingReinit = false;
+	pendingReinit = true;
 	ApplyChanges();
-	Widget::ForceWeatherReinit(weather);
 }
 
 void WeatherWidget::Delete()
