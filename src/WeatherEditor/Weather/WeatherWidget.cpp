@@ -408,7 +408,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::Spacing();
 			}
 
-			if (pendingReinit && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+			if (pendingReinit) {
 				ApplyChanges();
 			}
 
