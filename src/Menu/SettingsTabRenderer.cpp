@@ -856,11 +856,10 @@ void SettingsTabRenderer::RenderFontsTab()
 
 		SeparatorTextWithFont("Font", Menu::FontRole::Subheading);
 
-		bool useAutoFont = (themeSettings.FontSize <= 0.0f);
+		bool& useAutoFont = menuInstance->GetSettings().UseResolutionFont;
 		if (ImGui::Checkbox("Use resolution-based font size", &useAutoFont)) {
-			if (useAutoFont) {
-				themeSettings.FontSize = 0.0f;
-			} else {
+			if (!useAutoFont) {
+				// Seed the fixed-size slider with the current effective size so it doesn't jump
 				float effective = ThemeManager::ResolveFontSize(*menuInstance);
 				themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 			}
