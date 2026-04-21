@@ -132,8 +132,8 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	colorSum = lerp(colorSum, originalColor, saturate(centerWeight));
 
 	float3 albedo = AlbedoTexture[DTid.xy].xyz;
-	float3 color = SSSApplyAlbedo(Color::IrradianceToGamma(colorSum), albedo);
-	float3 centerColorRestored = SSSApplyAlbedo(Color::IrradianceToGamma(originalColor), albedo);
+	float3 color = SSSApplyAlbedo(Color::IrradianceToGamma(colorSum), albedo, SSS_SCATTER_MODE_POST);
+	float3 centerColorRestored = SSSApplyAlbedo(Color::IrradianceToGamma(originalColor), albedo, SSS_SCATTER_MODE_POST);
 	color = lerp(centerColorRestored, color, saturate(sssAmount > 0.0));
 
 	float4 outColor = float4(color, ColorTexture[DTid.xy].w);

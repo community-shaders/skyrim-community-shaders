@@ -12,6 +12,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableCharacterLighting,
 	CharacterLightingStrength,
 	SSMode,
+	ScatterMode,
 	BaseProfile,
 	HumanProfile,
 	BurleySamples,
@@ -32,6 +33,25 @@ void SubsurfaceScattering::DrawSettings()
 		ImGui::RadioButton("Separable SSS", &settings.SSMode, 0);
 		ImGui::SameLine();
 		ImGui::RadioButton("Burley", &settings.SSMode, 1);
+
+		if (settings.SSMode == 0) {
+			ImGui::Spacing();
+			ImGui::Text("Albedo Handling");
+			ImGui::RadioButton("Pre-scatter", &settings.ScatterMode, kPreScatter);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Blur the lit color directly. Fastest, but blurs albedo texture detail along with lighting.");
+			}
+			ImGui::SameLine();
+			ImGui::RadioButton("Post-scatter", &settings.ScatterMode, kPostScatter);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Divide out albedo, blur the irradiance, multiply albedo back. Preserves texture detail.");
+			}
+			ImGui::SameLine();
+			ImGui::RadioButton("Pre and Post", &settings.ScatterMode, kPreAndPostScatter);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Split albedo across the blur using sqrt(albedo) on each side. A physically motivated middle ground.");
+			}
+		}
 
 		if (settings.SSMode == 0) {
 			if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -215,6 +235,10 @@ void SubsurfaceScattering::DrawSSS()
 		blurCBData.HumanProfile = { settings.HumanProfile.BlurRadius, settings.HumanProfile.Thickness, 0, 0 };
 
 		blurCBData.BurleySamples = settings.BurleySamples;
+		// Burley always does full albedo removal/reapply; scatter mode only applies to Separable SSS.
+		blurCBData.ScatterMode = (settings.SSMode == 0)
+		                             ? (uint)std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter)
+		                             : (uint)kPostScatter;
 
 		blurCBData.MeanFreePathBase = settings.MeanFreePathBase;
 		blurCBData.MeanFreePathHuman = settings.MeanFreePathHuman;

@@ -12,7 +12,7 @@ Texture2D<float4> AlbedoTexture : register(t3);
 		return;
 
 	float4 color = ColorTexture[DTid.xy];
-	color.rgb = SSSRemoveAlbedo(color.rgb, AlbedoTexture[DTid.xy].rgb);
+	color.rgb = SSSRemoveAlbedo(color.rgb, AlbedoTexture[DTid.xy].rgb, ScatterMode);
 	color.rgb = Color::IrradianceToLinear(color.rgb);
 	OutputRW[DTid.xy] = color;
 }
