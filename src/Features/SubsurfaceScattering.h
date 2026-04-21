@@ -31,8 +31,8 @@ public:
 		float CharacterLightingStrength = 1.0f;
 		int SSMode = 0;
 		int ScatterMode = kPreAndPostScatter;
-		DiffusionProfile BaseProfile{ 1.0f, 1.0f, { 1.0f, 0.8541667f, 0.5833333f }, { 0.56f, 0.56f, 0.56f } };
-		DiffusionProfile HumanProfile{ 1.0f, 1.0f, { 1.0f, 0.8541667f, 0.5833333f }, { 1.0f, 0.37f, 0.3f } };
+		DiffusionProfile BaseProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 0.56f, 0.56f, 0.56f } };
+		DiffusionProfile HumanProfile{ 1.0f, 1.0f, { 0.48f, 0.41f, 0.28f }, { 1.0f, 0.37f, 0.3f } };
 		uint BurleySamples = 16;
 		float4 MeanFreePathBase = { 0.56f, 0.56f, 0.56f, 2.67f };
 		float4 MeanFreePathHuman = { 1.0f, 0.37f, 0.3f, 2.67f };
