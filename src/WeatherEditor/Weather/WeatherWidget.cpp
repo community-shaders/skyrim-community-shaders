@@ -561,8 +561,8 @@ void WeatherWidget::SetWeatherValues()
 	weather->data.transDelta = (uint8_t)weatherProps["Trans Delta"];
 
 	// Sun
-	data.sunGlare = (int8_t)weatherProps["Sun Glare"];
-	data.sunDamage = (int8_t)weatherProps["Sun Damage"];
+	data.sunGlare = (uint8_t)weatherProps["Sun Glare"];
+	data.sunDamage = (uint8_t)weatherProps["Sun Damage"];
 
 	// Precipitation
 	data.precipitationBeginFadeIn = (uint8_t)weatherProps["Precipitation Begin Fade In"];
