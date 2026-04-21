@@ -278,8 +278,9 @@ bool Widget::BeginWidgetWindow()
 
 void Widget::ForceWeatherReinit(RE::TESWeather* weather)
 {
-	if (weather && globals::game::sky)
-		globals::game::sky->ForceWeather(weather, true);
+	auto* sky = globals::game::sky;
+	if (weather && sky && sky->currentWeather == weather)
+		sky->ForceWeather(weather, true);
 }
 
 void Widget::ForceCurrentWeatherReinit()
@@ -455,7 +456,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 	DrawDeleteConfirmationModal();
 
-	if (RequiresManualApply() && editorWindow->settings.autoApplyChanges && menu) {
+	if (showApply && RequiresManualApply() && editorWindow->settings.autoApplyChanges && menu) {
 		ImGui::SameLine();
 		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(Changes require manual apply)");
 		if (ImGui::IsItemHovered())
