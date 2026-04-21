@@ -890,7 +890,7 @@ void EditorWindow::RenderUI()
 	float previousScale = ImGui::GetStyle().FontScaleMain;
 	ImGui::GetStyle().FontScaleMain = settings.editorUIScale;
 
-	if (settings.showViewport) {
+	if (IsViewportActive()) {
 		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
 	}
 
@@ -1304,7 +1304,7 @@ void EditorWindow::RenderUI()
 	ImGui::SetNextWindowPos(ImVec2(pad, menuBarHeight + pad), layoutCond);
 	ShowObjectsWindow();
 
-	if (settings.showViewport) {
+	if (IsViewportActive()) {
 		// Size viewport height to match game aspect ratio so the preview fits snugly
 		const float aspectRatio = width / height;
 		const float imageHeight = viewportWidth / aspectRatio;
@@ -1403,6 +1403,11 @@ void EditorWindow::SetupResources()
 	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets);
 }
 
+bool EditorWindow::IsViewportActive() const
+{
+	return settings.showViewport && !globals::features::hdrDisplay.settings.enableHDR;
+}
+
 void EditorWindow::UpdateOpenState()
 {
 	static bool wasOpen = false;
@@ -1410,9 +1415,7 @@ void EditorWindow::UpdateOpenState()
 	if (open && !wasOpen) {
 		DisableVanityCamera();
 		HideGameMenus();
-		if (globals::features::hdrDisplay.settings.enableHDR)
-			settings.showViewport = false;
-		BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
+		BackgroundBlur::SetWeatherEditorActive(IsViewportActive());
 
 	} else if (!open && wasOpen) {
 		RestoreVanityCamera();
@@ -1433,7 +1436,7 @@ void EditorWindow::Draw()
 		}
 	}
 
-	if (!settings.showViewport) {
+	if (!IsViewportActive()) {
 		delete tempTexture;
 		tempTexture = nullptr;
 	} else {
