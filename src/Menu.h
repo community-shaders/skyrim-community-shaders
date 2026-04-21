@@ -411,7 +411,7 @@ public:
 		bool AutoHideFeatureList = false;                                                   // Auto-hide left feature list panel, show on hover
 		bool SkipConstraintWarning = false;                                                 // Skip popup when a setting change creates new constraints
 		bool RequireShiftToDock = true;                                                     // Require holding Shift to dock windows
-		bool UseResolutionFont = true;                                                      // When true, font size scales with screen resolution (FontSize=0)
+		bool UseResolutionFont = true;                                                      // When true, runtime font size scales with screen resolution; when persisted to theme files, FontSize is zeroed for backward compatibility
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};
