@@ -44,7 +44,7 @@ void ImageSpaceWidget::DrawWidget()
 			const char* search = searchBuffer[0] ? searchBuffer : nullptr;
 
 			// HDR Settings
-			changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 100.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Eye Adapt Strength", settings.hdrEyeAdaptStrength, 0.0f, 50.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Bloom Blur Radius", settings.hdrBloomBlurRadius, 0.0f, 10.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f, search);
@@ -74,8 +74,8 @@ void ImageSpaceWidget::DrawWidget()
 
 			// Depth of Field
 			changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 1.0f, search);
-			changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 25000.0f, search, "%.1f");
-			changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 25000.0f, search, "%.1f");
+			changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 50000.0f, search, "%.1f");
+			changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 50000.0f, search, "%.1f");
 
 			PropertyDrawer::EndTable();
 
