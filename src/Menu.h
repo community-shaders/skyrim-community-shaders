@@ -415,8 +415,8 @@ public:
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};
-	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
-	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components
+	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
+	Settings& GetSettings() { return settings; }                      // Provide access to settings for other components
 	const Settings& GetSettings() const { return settings; }
 	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
 	ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
