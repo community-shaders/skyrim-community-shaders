@@ -1,7 +1,9 @@
 #include "EditorWindow.h"
 
+#include "Features/HDRDisplay.h"
 #include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
+#include "Globals.h"
 #include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "Menu/BackgroundBlur.h"
@@ -993,9 +995,17 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
+			const bool hdrActive = globals::features::hdrDisplay.settings.enableHDR;
+			if (hdrActive)
+				ImGui::BeginDisabled();
 			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
 				BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
 				Save();
+			}
+			if (hdrActive) {
+				ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("Viewport is unavailable when HDR Display is enabled");
 			}
 			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
 			}
@@ -1400,6 +1410,8 @@ void EditorWindow::UpdateOpenState()
 	if (open && !wasOpen) {
 		DisableVanityCamera();
 		HideGameMenus();
+		if (globals::features::hdrDisplay.settings.enableHDR)
+			settings.showViewport = false;
 		BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
 
 	} else if (!open && wasOpen) {
