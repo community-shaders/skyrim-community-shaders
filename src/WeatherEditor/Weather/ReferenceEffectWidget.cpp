@@ -35,7 +35,6 @@ void ReferenceEffectWidget::DrawWidget()
 				changed = true;
 			if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
 				changed = true;
-
 		}
 		EndScrollableContent();
 	}

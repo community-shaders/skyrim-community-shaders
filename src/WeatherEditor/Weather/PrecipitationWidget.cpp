@@ -98,7 +98,6 @@ void PrecipitationWidget::DrawWidget()
 
 			ImGui::EndTabBar();
 		}
-
 	}
 	ImGui::End();
 }
