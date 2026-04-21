@@ -856,7 +856,7 @@ void SettingsTabRenderer::RenderFontsTab()
 
 		SeparatorTextWithFont("Font", Menu::FontRole::Subheading);
 
-		bool useAutoFont = (themeSettings.FontSize <= 0.0f);
+		bool& useAutoFont = menuInstance->GetSettings().UseResolutionFont;
 		if (ImGui::Checkbox("Use resolution-based font size", &useAutoFont)) {
 			if (useAutoFont) {
 				themeSettings.FontSize = 0.0f;

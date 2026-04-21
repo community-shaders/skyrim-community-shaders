@@ -113,6 +113,7 @@ public:
 
 	void LoadTheme(json& o_json);
 	void SaveTheme(json& o_json);
+	void ApplyResolutionFontOverride();
 
 	// Multi-theme support
 	std::vector<std::string> DiscoverThemes();
@@ -411,6 +412,7 @@ public:
 		bool AutoHideFeatureList = false;                                                   // Auto-hide left feature list panel, show on hover
 		bool SkipConstraintWarning = false;                                                 // Skip popup when a setting change creates new constraints
 		bool RequireShiftToDock = true;                                                     // Require holding Shift to dock windows
+		bool UseResolutionFont = true;                                                      // When true, font size scales with screen resolution (FontSize=0)
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};
