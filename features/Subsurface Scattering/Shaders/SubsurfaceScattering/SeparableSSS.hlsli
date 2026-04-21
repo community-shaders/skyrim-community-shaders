@@ -97,6 +97,11 @@ float4 SSSSBlurCS(
 	float sssAmount,
 	bool humanProfile)
 {
+	// texcoord is in DR-space UVs (coming from DTid / full buffer dim), so it already
+	// addresses the rendered sub-rectangle of the texture. Non-DR UVs are derived for
+	// eye-half detection during clamping.
+	float2 texcoordNonDR = texcoord * FrameBuffer::DynamicResolutionParams2.xy;
+
 	// Input is already linear and albedo-free from the pre-pass
 	float4 colorM = ColorTexture.SampleLevel(LinearSampler, texcoord, 0);
 
@@ -123,11 +128,14 @@ float4 SSSSBlurCS(
 	finalStep *= sssAmount;
 	finalStep *= profile.x;  // Modulate it using the profile
 	finalStep *= 1.0 / 3.0;  // Divide by 3 as the kernels range from -3 to 3.
+	// Scale the step into DR-UV space so blur width in rendered pixels stays consistent.
+	finalStep *= FrameBuffer::DynamicResolutionParams1.xy;
 
 	// Accumulate the other samples:
 	for (uint i = kernelOffset + 1; i < kernelOffset + SSSS_N_SAMPLES; i++) {
 		float2 sampleCoord = texcoord + Kernels[i].a * finalStep;
-		sampleCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(sampleCoord);
+		// Clamp to the DR-rendered region (per-eye in VR) to avoid sampling outside it.
+		sampleCoord = FrameBuffer::ClampDynamicResolutionAdjustedScreenPosition(sampleCoord, texcoordNonDR);
 
 		float3 color = ColorTexture.SampleLevel(LinearSampler, sampleCoord, 0).rgb;
 
