@@ -1428,6 +1428,16 @@ void EditorWindow::UpdateOpenState()
 
 void EditorWindow::Draw()
 {
+	// Keep background blur in sync when HDR toggles while the editor stays open
+	{
+		static bool prevViewportActive = false;
+		const bool viewportActive = IsViewportActive();
+		if (viewportActive != prevViewportActive) {
+			BackgroundBlur::SetWeatherEditorActive(viewportActive);
+			prevViewportActive = viewportActive;
+		}
+	}
+
 	// Re-enforce weather lock if active (handles time changes)
 	if (weatherLockActive && lockedWeather) {
 		auto sky = RE::Sky::GetSingleton();
