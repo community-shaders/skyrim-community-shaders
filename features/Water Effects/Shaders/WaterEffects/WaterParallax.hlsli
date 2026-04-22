@@ -166,15 +166,8 @@ namespace WaterEffects
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
 		parallaxOffsetTS *= 80.0;
 
-		float2 textureDims;
-		Normals01Tex.GetDimensions(textureDims.x, textureDims.y);
-
-		float2 texCoordsPerSize = input.TexCoord1.xy * textureDims;
-		float2 dxSize = ddx(texCoordsPerSize);
-		float2 dySize = ddy(texCoordsPerSize);
-		float2 dTexCoords = dxSize * dxSize + dySize * dySize;
-		float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
-		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+		float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
+		float mipLevel = GetMipLevel(input.TexCoord1.xy, Normals01Tex, screenNoise);
 
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;
