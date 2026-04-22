@@ -541,7 +541,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 #			endif
 
 	sh2 skylightingSH = Skylighting::SampleNoBias(positionMSSkylight);
-	float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(worldPosition));
+	float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(positionMSSkylight));
 #		endif
 
 	float3 dirColor;

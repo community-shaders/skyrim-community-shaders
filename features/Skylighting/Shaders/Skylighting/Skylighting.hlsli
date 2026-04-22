@@ -136,7 +136,7 @@ namespace Skylighting
 		float fadeOutFactor = GetFadeOutFactor(positionMS);
 
 		float3 biasedNormal = normalWS;
-		biasedNormal.z = max(0.0, biasedNormal);
+		biasedNormal.z = max(0.0, biasedNormal.z);
 		biasedNormal = normalize(biasedNormal);
 
 		sh2 skylightingSH = Sample(positionMS, normalWS);
