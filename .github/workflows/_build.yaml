@@ -130,7 +130,6 @@ jobs:
 
     shader-validation:
         if: inputs.run-shader-validation
-        needs: []
         name: Validate shader compilation (${{ matrix.config.name }})
         runs-on: windows-2025
         permissions:
@@ -218,7 +217,6 @@ jobs:
     shader-unit-tests:
         name: Run Shader Unit Tests
         if: inputs.run-shader-tests
-        needs: []
         runs-on: windows-2025
         permissions:
             contents: read

@@ -44,7 +44,6 @@ jobs:
             - uses: actions/checkout@v4
               with:
                   fetch-depth: 0
-                  token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Fetch PR head and base
               run: |
@@ -107,6 +106,8 @@ jobs:
             ref: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             run-cpp: ${{ needs.check-changes.outputs.should-build != 'false' }}
+            run-shader-validation: ${{ needs.check-changes.outputs.hlsl-should-build != 'false' }}
+            run-shader-tests: ${{ needs.check-changes.outputs.shader-tests-should-build != 'false' }}
             hlsl-should-build: ${{ needs.check-changes.outputs.hlsl-should-build || 'true' }}
             shader-tests-should-build: ${{ needs.check-changes.outputs.shader-tests-should-build || 'true' }}
 
