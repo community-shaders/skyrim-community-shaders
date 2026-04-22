@@ -479,7 +479,7 @@ void SSRT::DrawSSRT()
 
 		resetViews();
 		srvs.at(0) = texWorkingDepth->srv.get();
-		srvs.at(1) = rts[NORMALROUGHNESS].SRV;
+		srvs.at(1) = rts[deferred->normalRoughnessRT].SRV;
 		srvs.at(2) = texRadiance->srv.get();
 
 		std::array<ID3D11UnorderedAccessView*, 1> mainUavs = { texGIOcclusion->uav.get() };
