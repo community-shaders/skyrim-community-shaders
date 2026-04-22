@@ -1,5 +1,5 @@
-#include "SSRT/common.hlsli"
 #include "Common/Color.hlsli"
+#include "SSRT/common.hlsli"
 
 Texture2D<float3> srcRadiance : register(t0);
 

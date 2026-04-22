@@ -415,8 +415,8 @@ void Deferred::DeferredPasses()
 			nullptr,
 			nullptr,
 			nullptr,
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                           // t14 EnvIBLTexture
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                           // t15 SkyIBLTexture
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,  // t14 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,  // t15 SkyIBLTexture
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
