@@ -66,19 +66,10 @@ RWTexture2D<float4> outGIOcclusion : register(u0);
 // Utility functions matching SSRT3's API with CS-specific implementations
 ///////////////////////////////////////////////////////////////////////////////
 
-// SSRT3: GetLinearDepth - converts device depth to linear eye depth
-// Original samples _DepthPyramidTexture with LOD; CS has no depth pyramid so lod is unused
-inline float GetLinearDepth(float2 uv, float lod)
-{
-	float deviceDepth = srcDepth.SampleLevel(samplerPointClamp, uv, 0);
-	return SharedData::CameraData.w / (-deviceDepth * SharedData::CameraData.z + SharedData::CameraData.x);
-}
-
-// SSRT3: PositionSSToVS - converts screen UV + depth to view-space position
 // Original uses _InverseProjectionMatrix; CS uses NDCToViewMul/Add
-inline float3 PositionSSToVS(float2 uv, float lod)
+inline float3 PositionSSToVS(float2 uv, float depth)
 {
-	float linearDepth = GetLinearDepth(uv, lod);
+	float linearDepth = SharedData::GetScreenDepth(depth);
 
 	const float2 _mul = NDCToViewMul.xy;
 	const float2 _add = NDCToViewAdd.xy;
@@ -203,16 +194,24 @@ inline float3 HorizonSampling(
 			break;
 
 		int mipLevelOffset = MipOptimization ? min((j + 1) / 2, 4) : 0;
-		float3 samplePosVS = PositionSSToVS(sampleUV * frameScale, mipLevelOffset);
+		
+		float deviceDepth = srcDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, mipLevelOffset);
+
+		if (deviceDepth == 1.0)
+			continue;
+
+		float3 samplePosVS = PositionSSToVS(sampleUV * frameScale, deviceDepth);
 
 		float3 pixelToSample = normalize(samplePosVS - posVS);
 		float linearThicknessMultiplier = LinearThickness ? saturate(samplePosVS.z / 100000.0) * 100 : 1;
 		float3 pixelToSampleBackface = normalize((samplePosVS - (linearThicknessMultiplier * viewDir * Thickness)) - posVS);
 
 		float2 frontBackHorizon = float2(dot(pixelToSample, viewDir), dot(pixelToSampleBackface, viewDir));
-		frontBackHorizon = GTAOFastAcos(clamp(frontBackHorizon, -1, 1));
-		frontBackHorizon = saturate(((samplingDirection * -frontBackHorizon) - n + Math::HALF_PI) / Math::PI);
-		frontBackHorizon = directionIsRight ? frontBackHorizon.yx : frontBackHorizon.xy;
+		frontBackHorizon = GTAOFastAcos(frontBackHorizon);
+		frontBackHorizon = directionIsRight ? -frontBackHorizon.yx : frontBackHorizon.xy;
+		// The math: https://www.desmos.com/calculator/je4y5ved2j
+		// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
+		frontBackHorizon = smoothstep(0, 1, (frontBackHorizon + n) * (1.0 / Math::PI) + 0.5);
 
 		uint numOccludedZones;
 		ComputeOccludedBitfield(frontBackHorizon.x, frontBackHorizon.y, globalOccludedBitfield, numOccludedZones);
@@ -256,12 +255,12 @@ inline float3 HorizonSampling(
 
 	float deviceDepth = srcDepth.SampleLevel(samplerPointClamp, uv * frameScale, 0);
 
-	if (deviceDepth <= 1e-7) {
+	if (deviceDepth == 1.0 ) {
 		outGIOcclusion[pxCoord] = float4(0, 0, 0, 1);
 		return;
 	}
 
-	float3 posVS = PositionSSToVS(uv * frameScale, 0);
+	float3 posVS = PositionSSToVS(uv * frameScale, deviceDepth);
 	float3 normalVS = GetNormalVS(pxCoord);
 	float3 viewDir = normalize(-posVS);
 
