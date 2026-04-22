@@ -80,10 +80,8 @@ namespace
 	bool GetDisplayConfigPathInfo(IDXGISwapChain* swapChain, DISPLAYCONFIG_PATH_INFO& outPathInfo)
 	{
 		WCHAR deviceName[32]{};
-		if (!GetSwapChainOutputDeviceName(swapChain, deviceName)) {
-			logger::warn("[HDR] GetContainingOutput failed - cannot determine monitor for HDR detection (Streamline/frame-gen?)");
+		if (!GetSwapChainOutputDeviceName(swapChain, deviceName))
 			return false;
-		}
 
 		uint32_t pathCount, modeCount;
 		if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
@@ -115,7 +113,6 @@ namespace
 				}
 			}
 		}
-		logger::warn("[HDR] No DisplayConfig path matched output device name");
 		return false;
 	}
 
@@ -143,6 +140,7 @@ namespace
 					}
 				}
 			}
+			logger::warn("[HDR] HDR detection failed - cannot determine monitor (Streamline/frame-gen?)");
 			return false;
 		}
 
@@ -231,6 +229,12 @@ bool HDRDisplay::isHDRCapableMonitor = false;
 
 bool HDRDisplay::DetectHDR()
 {
+	if (!globals::d3d::swapChain) {
+		isHDRMonitor = false;
+		isHDRCapableMonitor = false;
+		return false;
+	}
+
 	bool hdrSupported = false;
 	bool hdrEnabled = false;
 
