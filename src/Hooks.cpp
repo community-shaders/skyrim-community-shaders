@@ -364,6 +364,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		modifiedDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		if (modifiedDesc.BufferCount < 2)
 			modifiedDesc.BufferCount = 2;
+
+		if (!modifiedDesc.Windowed)
+			HDRDisplay::wasExclusiveFullscreen = true;
+
 		logger::info("[HDR] Upgraded swap chain: R10G10B10A2_UNORM + FLIP_DISCARD");
 	}
 
