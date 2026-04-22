@@ -135,19 +135,18 @@ namespace
 			if (SUCCEEDED(swapChain->GetDesc(&scDescFull)))
 				outputWindow = scDescFull.OutputWindow;
 
-			HMONITOR hMonitor = nullptr;
-			if (outputWindow)
-				hMonitor = MonitorFromWindow(outputWindow, MONITOR_DEFAULTTONEAREST);
+			HMONITOR hMonitor = outputWindow ? MonitorFromWindow(outputWindow, MONITOR_DEFAULTTONEAREST) : nullptr;
 			if (!hMonitor) {
-				RECT r{ 0, 0, 1, 1 };
-				hMonitor = MonitorFromRect(&r, MONITOR_DEFAULTTOPRIMARY);
+				logger::warn("[HDR] HDR detection failed - cannot determine monitor from swap chain OutputWindow");
+				return false;
 			}
 
 			// Walk all adapters/outputs to find the one matching hMonitor
 			winrt::com_ptr<IDXGIDevice> dxgiDevice;
 			winrt::com_ptr<IDXGIAdapter> adapter;
 			winrt::com_ptr<IDXGIFactory1> factory;
-			if (SUCCEEDED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(dxgiDevice.put()))) &&
+			if (globals::d3d::device &&
+				SUCCEEDED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(dxgiDevice.put()))) &&
 				SUCCEEDED(dxgiDevice->GetAdapter(adapter.put())) &&
 				SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(factory.put())))) {
 				for (UINT ai = 0;; ++ai) {
