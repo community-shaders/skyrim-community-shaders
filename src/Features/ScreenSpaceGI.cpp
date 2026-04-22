@@ -454,6 +454,16 @@ void ScreenSpaceGI::SetupResources()
 			}
 		}
 
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8G8_UNORM;
+		{
+			texNormal = eastl::make_unique<Texture2D>(texDesc);
+			texNormal->CreateSRV(srvDesc);
+			for (uint i = 0; i < 5; ++i) {
+				uavDesc.Texture2D.MipSlice = i;
+				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texNormal->resource.get(), &uavDesc, uavNormal[i].put()));
+			}
+		}
+
 		uavDesc.Texture2D.MipSlice = 0;
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -569,7 +579,7 @@ void ScreenSpaceGI::SetupResources()
 void ScreenSpaceGI::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&prefilterDepthsCompute, &prefilterRadianceCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &stereoSyncCompute, &upsampleCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &prefilterNormalCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &stereoSyncCompute, &upsampleCompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -591,6 +601,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 		shaderInfos = {
 			{ &prefilterDepthsCompute, "prefilterDepths.cs.hlsl", { { "LINEAR_FILTER", "" } } },
 			{ &prefilterRadianceCompute, "prefilterRadiance.cs.hlsl", {} },
+			{ &prefilterNormalCompute, "prefilterNormal.cs.hlsl", {} },
 			{ &radianceDisoccCompute, "radianceDisocc.cs.hlsl", {} },
 			{ &giCompute, "gi.cs.hlsl", {} },
 			{ &blurCompute, "blur.cs.hlsl", {} },
@@ -625,7 +636,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 
 bool ScreenSpaceGI::ShadersOK()
 {
-	return texNoise && prefilterDepthsCompute && prefilterRadianceCompute && radianceDisoccCompute && giCompute && blurCompute && upsampleCompute;
+	return texNoise && prefilterDepthsCompute && prefilterRadianceCompute && prefilterNormalCompute && radianceDisoccCompute && giCompute && blurCompute && upsampleCompute;
 }
 
 void ScreenSpaceGI::UpdateSB()
@@ -820,6 +831,24 @@ void ScreenSpaceGI::DrawSSGI()
 		lastFrameAccumTexIdx = !lastFrameAccumTexIdx;
 	}
 
+	// Prefilter normals
+	{
+		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Normals");
+
+		resetViews();
+		srvs.at(0) = rts[globals::deferred->normalRoughnessRT].SRV;
+		uavs.at(0) = uavNormal[0].get();
+		uavs.at(1) = uavNormal[1].get();
+		uavs.at(2) = uavNormal[2].get();
+		uavs.at(3) = uavNormal[3].get();
+		uavs.at(4) = uavNormal[4].get();
+
+		context->CSSetShaderResources(0, 1, srvs.data());
+		context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
+		context->CSSetShader(prefilterNormalCompute.get(), nullptr, 0);
+		context->Dispatch((internalRes[0] + 15u) >> 4, (internalRes[1] + 15u) >> 4, 1);
+	}
+
 	// GI
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - GI");
@@ -834,6 +863,7 @@ void ScreenSpaceGI::DrawSSGI()
 		srvs.at(6) = texIlY[inputGITexIdx]->srv.get();
 		srvs.at(7) = texIlCoCg[inputGITexIdx]->srv.get();
 		srvs.at(8) = texGiSpecular[inputAoTexIdx]->srv.get();
+		srvs.at(9) = texNormal->srv.get();
 
 		uavs.at(0) = texAo[!inputAoTexIdx]->uav.get();
 		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();
