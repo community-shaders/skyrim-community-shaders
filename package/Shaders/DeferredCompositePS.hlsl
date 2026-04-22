@@ -36,17 +36,15 @@ SamplerState LinearSampler : register(s0);
 #endif
 
 #if defined(SKYLIGHTING)
+#	define SKYLIGHTING_PROBE_REGISTER t9
 #	include "Skylighting/Skylighting.hlsli"
-
-Texture3D<sh2> SkylightingProbeArray : register(t9);
-Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t10);
 #endif
 
 #if defined(SSGI)
-Texture2D<float4> SsgiAoTexture : register(t11);
-Texture2D<float4> SsgiYTexture : register(t12);
-Texture2D<float4> SsgiCoCgTexture : register(t13);
-Texture2D<float4> SsgiSpecularTexture : register(t14);
+Texture2D<float4> SsgiAoTexture : register(t10);
+Texture2D<float4> SsgiYTexture : register(t11);
+Texture2D<float4> SsgiCoCgTexture : register(t12);
+Texture2D<float4> SsgiSpecularTexture : register(t13);
 
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
@@ -154,10 +152,8 @@ PS_OUTPUT main(PS_INPUT input)
 #			else
 		float3 positionMS = positionWS.xyz;
 #			endif
-		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, pixCoord, positionMS.xyz, normalWS);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normalWS)) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);
-		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, normalWS);
+		float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, normalWS);
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(vanillaDALC, -normalWS, skylightingDiffuse) * albedo;
 #		else
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(vanillaDALC, -normalWS) * albedo;
@@ -226,11 +222,8 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 positionMS = positionWS.xyz;
 #		endif
 
-		sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, pixCoord, positionMS.xyz, R);
-
-		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
-		skylightingSpecular = saturate(skylightingSpecular);
-		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, R);
+		float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe);
 #	endif
 
 #	if defined(IBL)

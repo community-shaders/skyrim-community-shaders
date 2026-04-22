@@ -19,39 +19,7 @@ void VolumetricShadows::SetupResources()
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
 	}
 
-	// Create shadow data buffer
-	{
-		D3D11_BUFFER_DESC sbDesc{};
-		sbDesc.Usage = D3D11_USAGE_DEFAULT;
-		sbDesc.CPUAccessFlags = 0;
-		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-		srvDesc.Buffer.FirstElement = 0;
-
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
-		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
-		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-		uavDesc.Buffer.FirstElement = 0;
-		uavDesc.Buffer.Flags = 0;
-
-		std::uint32_t numElements = 1;
-
-		sbDesc.StructureByteStride = sizeof(PerGeometry);
-		sbDesc.ByteWidth = sizeof(PerGeometry) * numElements;
-		perShadow = new Buffer(sbDesc);
-		srvDesc.Buffer.NumElements = numElements;
-		perShadow->CreateSRV(srvDesc);
-		uavDesc.Buffer.NumElements = numElements;
-		perShadow->CreateUAV(uavDesc);
-	}
-
 	// Compile compute shaders
-	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
-
 	std::vector<std::pair<const char*, const char*>> defines;
 	defines.push_back({ "DOWNSAMPLE_SHADOW_MIP0", nullptr });
 	downsampleShadowMip0CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
@@ -69,10 +37,6 @@ void VolumetricShadows::SetupResources()
 
 void VolumetricShadows::ClearShaderCache()
 {
-	if (copyShadowCS) {
-		copyShadowCS->Release();
-		copyShadowCS = nullptr;
-	}
 	if (downsampleShadowMip0CS) {
 		downsampleShadowMip0CS->Release();
 		downsampleShadowMip0CS = nullptr;
@@ -90,9 +54,6 @@ void VolumetricShadows::ClearShaderCache()
 		blurShadowVerticalCS = nullptr;
 	}
 
-	// Re-compile compute shaders (same as in SetupResources)
-	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
-
 	std::vector<std::pair<const char*, const char*>> defines;
 	defines.push_back({ "DOWNSAMPLE_SHADOW_MIP0", nullptr });
 	downsampleShadowMip0CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
@@ -108,44 +69,12 @@ void VolumetricShadows::ClearShaderCache()
 	blurShadowVerticalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\BlurShadowCS.hlsl", defines, "cs_5_0"));
 }
 
-void VolumetricShadows::CopyShadowData()
+void VolumetricShadows::CopyShadowLightData()
 {
 	ZoneScoped;
-	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowData");
+	TracyD3D11Zone(globals::state->tracyCtx, "VolumetricShadows::CopyShadowLightData");
 
 	auto context = globals::d3d::context;
-
-	ID3D11UnorderedAccessView* uavs[1]{ perShadow->uav.get() };
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-
-	ID3D11Buffer* buffers[3];
-	context->PSGetConstantBuffers(0, 3, buffers);
-
-	// Release the buffer at slot 1 before overwriting
-	if (buffers[1])
-		buffers[1]->Release();
-
-	context->PSGetConstantBuffers(12, 1, buffers + 1);
-
-	context->CSSetConstantBuffers(0, 3, buffers);
-
-	context->CSSetShader(copyShadowCS, nullptr, 0);
-
-	context->Dispatch(1, 1, 1);
-
-	uavs[0] = nullptr;
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-
-	// Release all COM references from PSGetConstantBuffers
-	for (auto& buf : buffers) {
-		if (buf)
-			buf->Release();
-		buf = nullptr;
-	}
-
-	context->CSSetConstantBuffers(0, 3, buffers);
-
-	context->CSSetShader(nullptr, nullptr, 0);
 
 	{
 		context->PSGetShaderResources(4, 1, &shadowView);
@@ -341,14 +270,9 @@ void VolumetricShadows::CopyShadowData()
 			}
 		}
 
-		ID3D11ShaderResourceView* srvs[2]{
-			shadowCopySRV ? shadowCopySRV : shadowView,
-			perShadow->srv.get(),
-		};
+		ID3D11ShaderResourceView* srv = shadowView ? (shadowCopySRV ? shadowCopySRV : shadowView) : nullptr;
+		context->PSSetShaderResources(18, 1, &srv);
 
-		context->PSSetShaderResources(18, ARRAYSIZE(srvs), srvs);
-
-		// Release COM object to prevent memory leak
 		if (shadowView)
 			shadowView->Release();
 		shadowView = nullptr;

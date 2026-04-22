@@ -94,7 +94,7 @@ void State::Draw()
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
 					if (volumetricShadows.loaded)
-						volumetricShadows.CopyShadowData();
+						volumetricShadows.CopyShadowLightData();
 				}
 			}
 		}

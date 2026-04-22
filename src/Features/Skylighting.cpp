@@ -1,7 +1,5 @@
 #include "Skylighting.h"
 
-#include <DDSTextureLoader.h>
-
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -125,10 +123,6 @@ void Skylighting::SetupResources()
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, comparisonSampler.put()));
 	}
 
-	{
-		DirectX::CreateDDSTextureFromFile(device, globals::d3d::context, L"Data\\Shaders\\Skylighting\\SpatiotemporalBlueNoise\\stbn_vec3_2Dx1D_128x128x64.dds", nullptr, stbn_vec3_2Dx1D_128x128x64.put());
-	}
-
 	CompileComputeShaders();
 }
 
@@ -249,8 +243,8 @@ void Skylighting::Prepass()
 
 	// Set PS shader resources
 	{
-		ID3D11ShaderResourceView* srvs[2] = { texProbeArray->srv.get(), stbn_vec3_2Dx1D_128x128x64.get() };
-		context->PSSetShaderResources(50, 2, srvs);
+		ID3D11ShaderResourceView* srv = texProbeArray->srv.get();
+		context->PSSetShaderResources(50, 1, &srv);
 	}
 }
 
