@@ -169,6 +169,28 @@ void Deferred::SetupResources()
 		rsDesc.DepthClipEnable = FALSE;
 		DX::ThrowIfFailed(device->CreateRasterizerState(&rsDesc, compositeRasterizerState.put()));
 	}
+
+	// Directional shadow structured buffer (t98): CPU-written each frame, read-only on GPU.
+	// One element holds the sun cascade data uploaded from BSShadowDirectionalLight.
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(DirectionalShadowLightData);
+		sbDesc.ByteWidth = sizeof(DirectionalShadowLightData);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 1;
+
+		delete directionalShadowLights;
+		directionalShadowLights = new Buffer(sbDesc);
+		directionalShadowLights->CreateSRV(srvDesc);
+	}
 }
 
 void Deferred::ReflectionsPrepasses()
@@ -212,6 +234,9 @@ void Deferred::EarlyPrepasses()
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+
+	// Shadow maps have just been rendered — upload BSShadowDirectionalLight data to t98.
+	CopyShadowLightData();
 
 	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) {
 		feature->EarlyPrepass();
@@ -570,6 +595,52 @@ void Deferred::ResetBlendStates()
 	}
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
+}
+
+template <typename T>
+void Deferred::SetShadowCascadeParameters(T& lightData, DirectionalShadowLightData& dd)
+{
+	for (uint i = 0; i < lightData.shadowmapDescriptors.size(); i++) {
+		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
+		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
+
+		DirectX::XMMATRIX invProj = DirectX::XMMatrixInverse(nullptr, proj);
+		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], invProj);
+	}
+}
+
+void Deferred::CopyShadowLightData()
+{
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowLightData");
+
+	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
+	if (!shadowSceneNode)
+		return;
+
+	auto* sunShadowLight = shadowSceneNode->GetRuntimeData().sunShadowDirLight;
+	if (!sunShadowLight)
+		return;
+
+	DirectionalShadowLightData dd{};
+	auto context = globals::d3d::context;
+
+	auto& dirData = sunShadowLight->GetShadowDirectionalLightRuntimeData();
+	dd.EndSplitDistances = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
+	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
+
+	if (globals::game::isVR)
+		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), dd);
+	else
+		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
+
+	D3D11_MAPPED_SUBRESOURCE mapped{};
+	DX::ThrowIfFailed(context->Map(directionalShadowLights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+	memcpy(mapped.pData, &dd, sizeof(DirectionalShadowLightData));
+	context->Unmap(directionalShadowLights->resource.get(), 0);
+
+	ID3D11ShaderResourceView* srv = directionalShadowLights->srv.get();
+	context->PSSetShaderResources(98, 1, &srv);
 }
 
 void Deferred::ClearShaderCache()
