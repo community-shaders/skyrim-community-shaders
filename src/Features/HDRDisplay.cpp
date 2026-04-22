@@ -11,6 +11,7 @@
 #include "Util.h"
 #include <dxgi1_4.h>
 #include <dxgi1_6.h>
+#include <filesystem>
 #include <imgui.h>
 
 #ifndef NTDDI_WIN11_GE
@@ -57,47 +58,62 @@ typedef struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
 // https://github.com/Filoppi/Luma-Framework/blob/f1fbc2a36f2d24fd551721ce90f26821a8e754c1/Source/Core/utils/display.hpp
 namespace
 {
-	bool GetDisplayConfigPathInfo(HWND hwnd, DISPLAYCONFIG_PATH_INFO& outPathInfo)
+	bool GetDisplayConfigPathInfo(IDXGISwapChain* swapChain, DISPLAYCONFIG_PATH_INFO& outPathInfo)
 	{
+		// Get the GDI device name from the swap chain's containing output.
+		// This is more reliable than HWND-based monitor lookup because GetCurrentRenderWindow()
+		// may return an offscreen handle that MonitorFromWindow can't resolve.
+		winrt::com_ptr<IDXGIOutput> output;
+		if (FAILED(swapChain->GetContainingOutput(output.put()))) {
+			logger::debug("[HDR] GetContainingOutput failed");
+			return false;
+		}
+		DXGI_OUTPUT_DESC outputDesc{};
+		if (FAILED(output->GetDesc(&outputDesc))) {
+			logger::debug("[HDR] IDXGIOutput::GetDesc failed");
+			return false;
+		}
+		logger::debug("[HDR] Swap chain output device: {}", std::filesystem::path(outputDesc.DeviceName).string());
+
 		uint32_t pathCount, modeCount;
-		if (ERROR_SUCCESS != GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount))
+		if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
 			return false;
 
 		std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
 		std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
-		if (ERROR_SUCCESS != QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr))
+		if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr) != ERROR_SUCCESS)
 			return false;
 
-		const HMONITOR monitorFromWindow = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
 		for (auto& pathInfo : paths) {
-			if (pathInfo.flags & DISPLAYCONFIG_PATH_ACTIVE && pathInfo.sourceInfo.statusFlags & DISPLAYCONFIG_SOURCE_IN_USE) {
-				const bool bVirtual = pathInfo.flags & DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE;
-				const uint32_t modeIndex = bVirtual ? pathInfo.sourceInfo.sourceModeInfoIdx : pathInfo.sourceInfo.modeInfoIdx;
-				if (modeIndex == DISPLAYCONFIG_PATH_MODE_IDX_INVALID || modeIndex >= modeCount)
-					continue;
-				const DISPLAYCONFIG_SOURCE_MODE& sourceMode = modes[modeIndex].sourceMode;
+			if (!(pathInfo.flags & DISPLAYCONFIG_PATH_ACTIVE))
+				continue;
 
-				RECT rect{ sourceMode.position.x, sourceMode.position.y, sourceMode.position.x + (LONG)sourceMode.width, sourceMode.position.y + (LONG)sourceMode.height };
-				if (!IsRectEmpty(&rect)) {
-					const HMONITOR monitorFromMode = MonitorFromRect(&rect, MONITOR_DEFAULTTONULL);
-					if (monitorFromMode != nullptr && monitorFromMode == monitorFromWindow) {
-						outPathInfo = pathInfo;
-						return true;
-					}
+			DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName{};
+			sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+			sourceName.header.size = sizeof(sourceName);
+			sourceName.header.adapterId = pathInfo.sourceInfo.adapterId;
+			sourceName.header.id = pathInfo.sourceInfo.id;
+			if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS) {
+				if (wcscmp(sourceName.viewGdiDeviceName, outputDesc.DeviceName) == 0) {
+					outPathInfo = pathInfo;
+					return true;
 				}
 			}
 		}
+		logger::debug("[HDR] No DisplayConfig path matched output device name");
 		return false;
 	}
 
-	bool IsHDRSupportedAndEnabled(HWND hwnd, bool& supported, bool& enabled)
+	bool IsHDRSupportedAndEnabled(IDXGISwapChain* swapChain, bool& supported, bool& enabled)
 	{
 		supported = false;
 		enabled = false;
 
 		DISPLAYCONFIG_PATH_INFO pathInfo{};
-		if (!GetDisplayConfigPathInfo(hwnd, pathInfo))
+		if (!GetDisplayConfigPathInfo(swapChain, pathInfo)) {
+			logger::debug("[HDR] GetDisplayConfigPathInfo failed - no matching monitor path found");
 			return false;
+		}
 
 		// Try Windows 11 24H2+ API first - directly reports HDR hardware capability
 		// Credits: renodx by clshortfuse (MIT License)
@@ -186,8 +202,7 @@ bool HDRDisplay::DetectHDR()
 	bool hdrSupported = false;
 	bool hdrEnabled = false;
 
-	HWND hwnd = reinterpret_cast<HWND>(RE::BSGraphics::Renderer::GetSingleton()->GetCurrentRenderWindow());
-	IsHDRSupportedAndEnabled(hwnd, hdrSupported, hdrEnabled);
+	IsHDRSupportedAndEnabled(globals::d3d::swapChain, hdrSupported, hdrEnabled);
 
 	isHDRMonitor = hdrSupported;
 	logger::info("[HDR] HDR display detection: supported={}, enabled={}", hdrSupported, hdrEnabled);
