@@ -41,10 +41,10 @@ SamplerState LinearSampler : register(s0);
 #endif
 
 #if defined(SSGI)
-Texture2D<float4> SsgiAoTexture : register(t11);
-Texture2D<float4> SsgiYTexture : register(t12);
-Texture2D<float4> SsgiCoCgTexture : register(t13);
-Texture2D<float4> SsgiSpecularTexture : register(t14);
+Texture2D<float4> SsgiAoTexture : register(t10);
+Texture2D<float4> SsgiYTexture : register(t11);
+Texture2D<float4> SsgiCoCgTexture : register(t12);
+Texture2D<float4> SsgiSpecularTexture : register(t13);
 
 void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
 {
