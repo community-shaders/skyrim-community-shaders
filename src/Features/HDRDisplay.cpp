@@ -13,23 +13,7 @@
 #include <dxgi1_6.h>
 #include <imgui.h>
 
-#ifndef NTDDI_WIN11_GE
-#	define NTDDI_WIN11_GE 0x0A000010
-#endif
-
-// Win11 24H2 display config types.
-// DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2 is an enum member on newer SDKs,
-// not a macro, so #ifndef cannot guard against redeclaration. Use Compat_ prefixed
-// names and alias to the SDK types when they exist.
-#if defined(NTDDI_WIN11_GE) && WDK_NTDDI_VERSION >= NTDDI_WIN11_GE
-using Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE = DISPLAYCONFIG_ADVANCED_COLOR_MODE;
-using Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2;
-static constexpr DISPLAYCONFIG_DEVICE_INFO_TYPE kDisplayConfigGetAdvancedColorInfo2 =
-	DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2;
-static constexpr Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_SDR = DISPLAYCONFIG_ADVANCED_COLOR_MODE_SDR;
-static constexpr Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_WCG = DISPLAYCONFIG_ADVANCED_COLOR_MODE_WCG;
-static constexpr Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR = DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR;
-#else
+// Win11 24H2 display config types. Compat_ prefix avoids collision with SDK enum members.
 typedef enum
 {
 	Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_SDR = 0,
@@ -63,17 +47,14 @@ typedef struct Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
 
 static constexpr DISPLAYCONFIG_DEVICE_INFO_TYPE kDisplayConfigGetAdvancedColorInfo2 =
 	static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(15);
-#endif
 
 // HDR display detection
 // Credits: Luma Framework by Filippo Tarpini (MIT License)
 // https://github.com/Filoppi/Luma-Framework/blob/f1fbc2a36f2d24fd551721ce90f26821a8e754c1/Source/Core/utils/display.hpp
 namespace
 {
-	// Returns the GDI device name for the output the swap chain is presenting to.
-	// Uses GetContainingOutput which works for both windowed and borderless-fullscreen.
-	// Returns false if the swap chain's output cannot be determined (e.g. Streamline
-	// replaces the swap chain with a wrapper that does not implement GetContainingOutput).
+	// Returns the GDI device name for the swap chain's output via GetContainingOutput.
+	// Returns false if the output cannot be determined (e.g. Streamline wraps the swap chain).
 	bool GetSwapChainOutputDeviceName(IDXGISwapChain* swapChain, WCHAR (&outDeviceName)[32])
 	{
 		winrt::com_ptr<IDXGIOutput> output;
@@ -106,14 +87,12 @@ namespace
 			return false;
 
 		for (auto& pathInfo : paths) {
-			// DISPLAYCONFIG_SOURCE_IN_USE guards against inactive sources on multi-monitor
-			// setups where a disconnected display may still appear in the path table
+			// DISPLAYCONFIG_SOURCE_IN_USE skips inactive sources (disconnected displays)
 			if (!(pathInfo.flags & DISPLAYCONFIG_PATH_ACTIVE) ||
 				!(pathInfo.sourceInfo.statusFlags & DISPLAYCONFIG_SOURCE_IN_USE))
 				continue;
 
-			// QDC_ONLY_ACTIVE_PATHS never returns virtual-mode paths, so no
-			// DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE index selection is needed here
+			// QDC_ONLY_ACTIVE_PATHS excludes virtual-mode paths; no index selection needed
 			DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName{};
 			sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
 			sourceName.header.size = sizeof(sourceName);
@@ -136,12 +115,8 @@ namespace
 
 		DISPLAYCONFIG_PATH_INFO pathInfo{};
 		if (!GetDisplayConfigPathInfo(swapChain, pathInfo)) {
-			// GetContainingOutput fails under Streamline/frame-gen wrappers. Fall back by
-			// finding the monitor via the swap chain's OutputWindow, then enumerating all
-			// DXGI outputs to locate the matching IDXGIOutput6 without relying on
-			// GetContainingOutput. This only detects whether HDR is currently active (not
-			// whether the monitor supports HDR while Windows HDR is off), but is better
-			// than reporting nothing.
+			// GetContainingOutput fails under frame-gen wrappers. Fall back to enumerating
+			// the device adapter's outputs by HMONITOR. Only detects active HDR, not capable.
 			HWND outputWindow = nullptr;
 			DXGI_SWAP_CHAIN_DESC scDescFull{};
 			if (SUCCEEDED(swapChain->GetDesc(&scDescFull)))
@@ -153,36 +128,27 @@ namespace
 				return false;
 			}
 
-			// Walk all adapters/outputs to find the one matching hMonitor
+			// Enumerate outputs on the device's own adapter; avoids touching other GPUs.
 			winrt::com_ptr<IDXGIDevice> dxgiDevice;
 			winrt::com_ptr<IDXGIAdapter> adapter;
-			winrt::com_ptr<IDXGIFactory1> factory;
 			if (globals::d3d::device &&
 				SUCCEEDED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(dxgiDevice.put()))) &&
-				SUCCEEDED(dxgiDevice->GetAdapter(adapter.put())) &&
-				SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(factory.put())))) {
-				for (UINT ai = 0;; ++ai) {
-					winrt::com_ptr<IDXGIAdapter1> adap;
-					if (factory->EnumAdapters1(ai, adap.put()) == DXGI_ERROR_NOT_FOUND)
+				SUCCEEDED(dxgiDevice->GetAdapter(adapter.put()))) {
+				for (UINT oi = 0;; ++oi) {
+					winrt::com_ptr<IDXGIOutput> out;
+					if (adapter->EnumOutputs(oi, out.put()) == DXGI_ERROR_NOT_FOUND)
 						break;
-					for (UINT oi = 0;; ++oi) {
-						winrt::com_ptr<IDXGIOutput> out;
-						if (adap->EnumOutputs(oi, out.put()) == DXGI_ERROR_NOT_FOUND)
-							break;
-						DXGI_OUTPUT_DESC outDesc{};
-						if (FAILED(out->GetDesc(&outDesc)))
-							continue;
-						if (outDesc.Monitor != hMonitor)
-							continue;
-						winrt::com_ptr<IDXGIOutput6> out6;
-						if (SUCCEEDED(out->QueryInterface(IID_PPV_ARGS(out6.put())))) {
-							DXGI_OUTPUT_DESC1 desc1{};
-							if (SUCCEEDED(out6->GetDesc1(&desc1))) {
-								enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
-								supported = enabled;
-								logger::debug("[HDR] DXGI fallback detection: colorSpace={}", static_cast<int>(desc1.ColorSpace));
-								return true;
-							}
+					DXGI_OUTPUT_DESC outDesc{};
+					if (FAILED(out->GetDesc(&outDesc)) || outDesc.Monitor != hMonitor)
+						continue;
+					winrt::com_ptr<IDXGIOutput6> out6;
+					if (SUCCEEDED(out->QueryInterface(IID_PPV_ARGS(out6.put())))) {
+						DXGI_OUTPUT_DESC1 desc1{};
+						if (SUCCEEDED(out6->GetDesc1(&desc1))) {
+							enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+							supported = enabled;
+							logger::debug("[HDR] DXGI fallback detection: colorSpace={}", static_cast<int>(desc1.ColorSpace));
+							return true;
 						}
 					}
 				}
