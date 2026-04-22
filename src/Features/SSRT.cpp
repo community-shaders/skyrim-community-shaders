@@ -170,6 +170,9 @@ void SSRT::DrawSettings()
 		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
 
 		BUFFER_VIEWER_NODE(texGIOcclusion, debugRescale)
+		BUFFER_VIEWER_NODE(texWorkingDepth, debugRescale)
+		BUFFER_VIEWER_NODE(texNormals, debugRescale)
+		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
 
 		ImGui::TreePop();
 	}

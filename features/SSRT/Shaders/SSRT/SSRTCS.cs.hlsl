@@ -30,10 +30,9 @@ RWTexture2D<float4> outGIOcclusion : register(u0);
 ///////////////////////////////////////////////////////////////////////////////
 
 // Original uses _InverseProjectionMatrix; CS uses NDCToViewMul/Add
-inline float3 PositionSSToVS(float2 uv, float depth)
+// Input depth is already linear from prefiltered depth buffer (sky = 0)
+inline float3 PositionSSToVS(float2 uv, float linearDepth)
 {
-	float linearDepth = SharedData::GetScreenDepth(depth);
-
 	const float2 _mul = NDCToViewMul.xy;
 	const float2 _add = NDCToViewAdd.xy;
 
@@ -156,12 +155,12 @@ inline float3 HorizonSampling(
 
 		int mipLevelOffset = MipOptimization ? min((j + 1) / 2, 4) : 0;
 
-		float deviceDepth = srcDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, mipLevelOffset);
+		float sampleDepth = srcDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, mipLevelOffset);
 
-		if (deviceDepth == 1.0)
+		if (sampleDepth <= 0)
 			continue;
 
-		float3 samplePosVS = PositionSSToVS(sampleUV * frameScale, deviceDepth);
+		float3 samplePosVS = PositionSSToVS(sampleUV * frameScale, sampleDepth);
 
 		float3 pixelToSample = normalize(samplePosVS - posVS);
 		float linearThicknessMultiplier = LinearThickness ? saturate(samplePosVS.z / 100000.0) * 100 : 1;
@@ -214,14 +213,14 @@ inline float3 HorizonSampling(
 	float2 uv = (pxCoord + .5) * RcpFrameDim;
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 
-	float deviceDepth = srcDepth.SampleLevel(samplerPointClamp, uv * frameScale, 0);
+	float depth = srcDepth.SampleLevel(samplerPointClamp, uv * frameScale, 0);
 
-	if (deviceDepth == 1.0) {
+	if (depth <= 0) {
 		outGIOcclusion[pxCoord] = float4(0, 0, 0, 1);
 		return;
 	}
 
-	float3 posVS = PositionSSToVS(uv * frameScale, deviceDepth);
+	float3 posVS = PositionSSToVS(uv * frameScale, depth);
 	float3 normalVS = GetNormalVS(pxCoord);
 	float3 viewDir = normalize(-posVS);
 
