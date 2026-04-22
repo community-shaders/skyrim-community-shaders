@@ -139,6 +139,7 @@ namespace
 						enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
 						supported = enabled;
 						logger::debug("[HDR] DXGI fallback detection: colorSpace={}", static_cast<int>(desc1.ColorSpace));
+						return true;
 					}
 				}
 			}
