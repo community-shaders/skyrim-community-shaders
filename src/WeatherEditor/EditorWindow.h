@@ -96,6 +96,7 @@ public:
 	void EnterPreviewMode(PreviewMode mode);
 	void ExitPreviewMode();
 	bool IsInPreviewMode() const { return previewMode != PreviewMode::None; }
+	bool IsViewportActive() const;
 	bool IsPreviewFlying() const { return previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::PlayMode; }
 	PreviewMode GetPreviewMode() const { return previewMode; }
 	void ToggleFreeCameraLock();

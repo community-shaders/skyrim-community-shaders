@@ -98,10 +98,6 @@ void PrecipitationWidget::DrawWidget()
 
 			ImGui::EndTabBar();
 		}
-
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
 	}
 	ImGui::End();
 }
@@ -226,6 +222,7 @@ void PrecipitationWidget::ApplyChanges()
 	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleDensity].f = settings.particleDensity;
 	runtime.particleTexture.textureName = settings.particleTexture.c_str();
 	ApplyLiveParticleTexture(settings.particleTexture);
+	Widget::ForceCurrentWeatherReinit();
 }
 
 void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)

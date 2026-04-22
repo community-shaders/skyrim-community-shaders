@@ -170,7 +170,7 @@ void WeatherWidget::DrawWidget()
 
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
-			DrawProperties("Sun", { { "Sun Damage", INT8_SLIDER } });
+			DrawProperties("Sun", { { "Sun Damage", UINT8_SLIDER } });
 			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
 			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", UINT8_SLIDER }, { "Precipitation End Fade Out", UINT8_SLIDER } });
 			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", UINT8_SLIDER }, { "Thunder Lightning End Fade Out", UINT8_SLIDER },
@@ -224,7 +224,6 @@ void WeatherWidget::DrawWidget()
 			ImGui::Spacing();
 			auto* editorWindow = EditorWindow::GetSingleton();
 
-			bool recordChanged = false;
 			bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
 			WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 			const float todLabelOffset = (hasParent ? 120.0f : 100.0f) * scale;
@@ -245,7 +244,7 @@ void WeatherWidget::DrawWidget()
 						if (inheritFlag && parentWidget) {
 							if (settings.imageSpaceRefs[i] != parentWidget->settings.imageSpaceRefs[i]) {
 								settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
-								recordChanged = true;
+								pendingReinit = true;
 							}
 						}
 						if (ImGui::IsItemHovered()) {
@@ -257,7 +256,7 @@ void WeatherWidget::DrawWidget()
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
 					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
-						recordChanged = true;
+						pendingReinit = true;
 					}  // Add "Open" button
 					if (settings.imageSpaceRefs[i]) {
 						ImGui::SameLine();
@@ -293,7 +292,7 @@ void WeatherWidget::DrawWidget()
 						if (inheritFlag && parentWidget) {
 							if (settings.volumetricLightingRefs[i] != parentWidget->settings.volumetricLightingRefs[i]) {
 								settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
-								recordChanged = true;
+								pendingReinit = true;
 							}
 						}
 						if (ImGui::IsItemHovered()) {
@@ -305,7 +304,7 @@ void WeatherWidget::DrawWidget()
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
 					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
-						recordChanged = true;
+						pendingReinit = true;
 					}  // Add "Open" button
 					if (settings.volumetricLightingRefs[i]) {
 						ImGui::SameLine();
@@ -336,7 +335,7 @@ void WeatherWidget::DrawWidget()
 					if (inheritFlag && parentWidget) {
 						if (settings.precipitationData != parentWidget->settings.precipitationData) {
 							settings.precipitationData = parentWidget->settings.precipitationData;
-							recordChanged = true;
+							pendingReinit = true;
 						}
 					}
 					if (ImGui::IsItemHovered()) {
@@ -348,7 +347,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::Text("Particle Shader:");
 				ImGui::SameLine(formLabelOffset);
 				if (WeatherUtils::DrawFormPickerCached("##Precipitation", settings.precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
-					recordChanged = true;
+					pendingReinit = true;
 				}  // Add "Open" button
 				if (settings.precipitationData) {
 					ImGui::SameLine();
@@ -377,7 +376,7 @@ void WeatherWidget::DrawWidget()
 					if (inheritFlag && parentWidget) {
 						if (settings.referenceEffect != parentWidget->settings.referenceEffect) {
 							settings.referenceEffect = parentWidget->settings.referenceEffect;
-							recordChanged = true;
+							pendingReinit = true;
 						}
 					}
 					if (ImGui::IsItemHovered()) {
@@ -389,7 +388,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::Text("Reference Effect:");
 				ImGui::SameLine(formLabelOffset);
 				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", settings.referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
-					recordChanged = true;
+					pendingReinit = true;
 				}  // Add "Open" button
 				if (settings.referenceEffect) {
 					ImGui::SameLine();
@@ -409,7 +408,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::Spacing();
 			}
 
-			if (recordChanged && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+			if (pendingReinit) {
 				ApplyChanges();
 			}
 
@@ -495,6 +494,7 @@ void WeatherWidget::LoadSettings()
 		LoadFeatureSettings();
 	}
 	originalSettings = settings;
+	pendingReinit = true;
 	ApplyChanges();
 }
 
@@ -561,8 +561,8 @@ void WeatherWidget::SetWeatherValues()
 	weather->data.transDelta = (uint8_t)weatherProps["Trans Delta"];
 
 	// Sun
-	data.sunGlare = (int8_t)weatherProps["Sun Glare"];
-	data.sunDamage = (int8_t)weatherProps["Sun Damage"];
+	data.sunGlare = (uint8_t)weatherProps["Sun Glare"];
+	data.sunDamage = (uint8_t)weatherProps["Sun Damage"];
 
 	// Precipitation
 	data.precipitationBeginFadeIn = (uint8_t)weatherProps["Precipitation Begin Fade In"];
@@ -1175,12 +1175,8 @@ void WeatherWidget::DrawCloudSettings()
 	if (enableChanged) {
 		// Apply enable/disable immediately for instant feedback, regardless of autoApplyChanges.
 		editorWindow->PushUndoState(this);
+		pendingReinit = true;
 		ApplyChanges();
-		if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
-			if (auto sky = RE::Sky::GetSingleton()) {
-				sky->ForceWeather(weather, true);  // override=true for immediate application; matches "instant feedback" intent above
-			}
-		}
 	} else if (changed && editorWindow->settings.autoApplyChanges) {
 		editorWindow->PushUndoState(this);
 		ApplyChanges();
@@ -1240,11 +1236,11 @@ void WeatherWidget::DrawFogSettings()
 		ImGui::Text("Near");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 		ImGui::TableSetColumnIndex(2);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 
 		// Far
@@ -1268,11 +1264,11 @@ void WeatherWidget::DrawFogSettings()
 		ImGui::Text("Far");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 		ImGui::TableSetColumnIndex(2);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 
 		// Power
@@ -1535,7 +1531,8 @@ void WeatherWidget::InheritAllFromParent()
 	settings.inheritFlags["Precipitation"] = true;
 	settings.inheritFlags["ReferenceEffect"] = true;
 
-	// Apply the changes
+	// Apply the changes — form references require a weather reinit to propagate
+	pendingReinit = true;
 	if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();
 	}
@@ -1657,6 +1654,10 @@ void WeatherWidget::LoadFeatureSettings()
 void WeatherWidget::ApplyChanges()
 {
 	SetWeatherValues();
+	if (pendingReinit) {
+		Widget::ForceWeatherReinit(weather);
+		pendingReinit = false;
+	}
 }
 
 void WeatherWidget::RevertChanges()
@@ -1684,6 +1685,7 @@ void WeatherWidget::RevertChanges()
 
 	weatherManager->ClearAllFeatureSettingsForWeather(weather);
 	settings = vanillaSettings;
+	pendingReinit = true;
 	ApplyChanges();
 }
 

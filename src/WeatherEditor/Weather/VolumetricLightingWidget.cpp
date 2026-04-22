@@ -55,7 +55,7 @@ void VolumetricLightingWidget::DrawWidget()
 			ImGui::SeparatorText("Phase Function");
 			if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
 				changed = true;
-			if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
+			if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, -1.0f, 1.0f))
 				changed = true;
 
 			ImGui::SeparatorText("Sampling");
