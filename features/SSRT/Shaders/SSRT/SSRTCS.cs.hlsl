@@ -157,7 +157,7 @@ inline float3 HorizonSampling(
 			break;
 
 		int mipLevelOffset = MipOptimization ? min((j + 1) / 2, 4) : 0;
-		
+
 		float deviceDepth = srcDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, mipLevelOffset);
 
 		if (deviceDepth == 1.0)
@@ -190,11 +190,11 @@ inline float3 HorizonSampling(
 				if (normalDotLightDirection > 0.001) {
 					float3 lightNormalVS;
 
-#	ifdef NORMAL_APPROXIMATION
+#ifdef NORMAL_APPROXIMATION
 					lightNormalVS = -samplingDirection * cross(normalize(samplePosVS - lastSamplePosVS), planeNormal);
-#	else
+#else
 					lightNormalVS = GetNormalPyramidVS(sampleUV * frameScale, mipLevelOffset);
-#	endif
+#endif
 
 					float lightNormalDotLightDirection = saturate(dot(lightNormalVS, -lightDirectionVS));
 
@@ -218,7 +218,7 @@ inline float3 HorizonSampling(
 
 	float deviceDepth = srcDepth.SampleLevel(samplerPointClamp, uv * frameScale, 0);
 
-	if (deviceDepth == 1.0 ) {
+	if (deviceDepth == 1.0) {
 		outGIOcclusion[pxCoord] = float4(0, 0, 0, 1);
 		return;
 	}
@@ -239,7 +239,7 @@ inline float3 HorizonSampling(
 		float rotationAngle = (i + noiseDirection + TemporalDirections) * (Math::PI / (float)RotationCount);
 		float3 sliceDir = float3(cos(rotationAngle), sin(rotationAngle), 0);
 		float2 slideDir_TexelSize = sliceDir.xy * RcpFrameDim;
-		
+
 		uint globalOccludedBitfield = 0;
 
 		float3 planeNormal = normalize(cross(sliceDir, viewDir));
