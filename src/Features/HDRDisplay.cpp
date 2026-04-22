@@ -90,112 +90,44 @@ namespace
 		return false;
 	}
 
-	bool GetAdvancedColorInfo(HWND hwnd, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO& outColorInfo)
-	{
-		DISPLAYCONFIG_PATH_INFO pathInfo{};
-		if (GetDisplayConfigPathInfo(hwnd, pathInfo)) {
-			DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo{};
-			colorInfo.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
-			colorInfo.header.size = sizeof(colorInfo);
-			colorInfo.header.adapterId = pathInfo.targetInfo.adapterId;
-			colorInfo.header.id = pathInfo.targetInfo.id;
-			if (ERROR_SUCCESS == DisplayConfigGetDeviceInfo(&colorInfo.header)) {
-				outColorInfo = colorInfo;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	// Win11 24H2+ API - uses runtime detection, will fail gracefully on older Windows
-	bool GetAdvancedColorInfo2(HWND hwnd, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2& outColorInfo2)
-	{
-		DISPLAYCONFIG_PATH_INFO pathInfo{};
-		if (GetDisplayConfigPathInfo(hwnd, pathInfo)) {
-			DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
-			colorInfo2.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2;
-			colorInfo2.header.size = sizeof(colorInfo2);
-			colorInfo2.header.adapterId = pathInfo.targetInfo.adapterId;
-			colorInfo2.header.id = pathInfo.targetInfo.id;
-			// This will fail on older Windows versions that don't support the API
-			if (ERROR_SUCCESS == DisplayConfigGetDeviceInfo(&colorInfo2.header)) {
-				outColorInfo2 = colorInfo2;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool CheckSwapChainHDRSupport(IDXGISwapChain* swapChain, bool& supported, bool& enabled)
-	{
-		winrt::com_ptr<IDXGIOutput> output;
-		if (SUCCEEDED(swapChain->GetContainingOutput(output.put()))) {
-			winrt::com_ptr<IDXGIOutput6> output6;
-			if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
-				DXGI_OUTPUT_DESC1 desc1;
-				if (SUCCEEDED(output6->GetDesc1(&desc1))) {
-					enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ||
-					          desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
-					supported |= enabled;
-					logger::debug("[HDR] DXGI output detection: colorSpace={}, maxLuminance={}", static_cast<int>(desc1.ColorSpace), desc1.MaxLuminance);
-				}
-			}
-		}
-
-		winrt::com_ptr<IDXGISwapChain3> swapChain3;
-		if (SUCCEEDED(swapChain->QueryInterface(IID_PPV_ARGS(swapChain3.put())))) {
-			UINT colorSpaceSupported = 0;
-			if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, &colorSpaceSupported))) {
-				supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
-			}
-			if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709, &colorSpaceSupported))) {
-				supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
-			}
-		}
-		return true;
-	}
-
-	bool IsHDRSupportedAndEnabled(HWND hwnd, bool& supported, bool& enabled, IDXGISwapChain* swapChain = nullptr)
+	bool IsHDRSupportedAndEnabled(HWND hwnd, bool& supported, bool& enabled)
 	{
 		supported = false;
 		enabled = false;
 
-		// Try Windows 11 24H2+ API first - distinguishes HDR from WCG
+		DISPLAYCONFIG_PATH_INFO pathInfo{};
+		if (!GetDisplayConfigPathInfo(hwnd, pathInfo))
+			return false;
+
+		// Try Windows 11 24H2+ API first - directly reports HDR hardware capability
+		// Credits: renodx by clshortfuse (MIT License)
 		DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
-		if (GetAdvancedColorInfo2(hwnd, colorInfo2)) {
-			// WCG (Wide Color Gamut) allows wider color range without higher brightness peak
-			// We only consider true HDR mode, not WCG
+		colorInfo2.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2;
+		colorInfo2.header.size = sizeof(colorInfo2);
+		colorInfo2.header.adapterId = pathInfo.targetInfo.adapterId;
+		colorInfo2.header.id = pathInfo.targetInfo.id;
+		if (DisplayConfigGetDeviceInfo(&colorInfo2.header) == ERROR_SUCCESS) {
+			supported = colorInfo2.highDynamicRangeSupported != 0;
 			enabled = colorInfo2.activeColorMode == DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR;
-			supported = enabled || (colorInfo2.highDynamicRangeSupported && !colorInfo2.advancedColorLimitedByPolicy);
-			// Copy bitfield members to avoid non-const reference binding issues
 			UINT32 hdrSupported = colorInfo2.highDynamicRangeSupported;
-			UINT32 limitedByPolicy = colorInfo2.advancedColorLimitedByPolicy;
-			logger::debug("[HDR] Win11 24H2 detection: activeColorMode={}, hdrSupported={}, limitedByPolicy={}",
-				static_cast<int>(colorInfo2.activeColorMode), hdrSupported, limitedByPolicy);
+			UINT32 activeMode = static_cast<UINT32>(colorInfo2.activeColorMode);
+			logger::debug("[HDR] Win11 24H2 detection: highDynamicRangeSupported={}, activeColorMode={}", hdrSupported, activeMode);
 			return true;
 		}
 
 		// Fallback for older Windows versions
 		DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo{};
-		if (GetAdvancedColorInfo(hwnd, colorInfo)) {
-			enabled = colorInfo.advancedColorEnabled;
-			supported = enabled || (colorInfo.advancedColorSupported && !colorInfo.advancedColorForceDisabled);
-			// Copy bitfield members to avoid non-const reference binding issues
-			UINT32 advancedEnabled = colorInfo.advancedColorEnabled;
+		colorInfo.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+		colorInfo.header.size = sizeof(colorInfo);
+		colorInfo.header.adapterId = pathInfo.targetInfo.adapterId;
+		colorInfo.header.id = pathInfo.targetInfo.id;
+		if (DisplayConfigGetDeviceInfo(&colorInfo.header) == ERROR_SUCCESS) {
+			supported = colorInfo.advancedColorSupported != 0;
+			enabled = colorInfo.advancedColorEnabled != 0;
 			UINT32 advancedSupported = colorInfo.advancedColorSupported;
-			UINT32 forceDisabled = colorInfo.advancedColorForceDisabled;
-			logger::debug("[HDR] Legacy detection: advancedColorEnabled={}, advancedColorSupported={}, forceDisabled={}",
-				advancedEnabled, advancedSupported, forceDisabled);
+			UINT32 advancedEnabled = colorInfo.advancedColorEnabled;
+			logger::debug("[HDR] Legacy detection: advancedColorSupported={}, advancedColorEnabled={}", advancedSupported, advancedEnabled);
 			return true;
-		}
-
-		// Last resort: check swap chain color space support
-		if (swapChain) {
-			__try {
-				CheckSwapChainHDRSupport(swapChain, supported, enabled);
-			} __except (EXCEPTION_EXECUTE_HANDLER) {
-				logger::warn("[HDR] Exception during swap chain HDR detection (possibly due to Streamline interposer), skipping swap chain queries");
-			}
 		}
 
 		return false;
@@ -255,7 +187,7 @@ bool HDRDisplay::DetectHDR()
 	bool hdrEnabled = false;
 
 	HWND hwnd = reinterpret_cast<HWND>(RE::BSGraphics::Renderer::GetSingleton()->GetCurrentRenderWindow());
-	IsHDRSupportedAndEnabled(hwnd, hdrSupported, hdrEnabled, globals::d3d::swapChain);
+	IsHDRSupportedAndEnabled(hwnd, hdrSupported, hdrEnabled);
 
 	isHDRMonitor = hdrSupported;
 	logger::info("[HDR] HDR display detection: supported={}, enabled={}", hdrSupported, hdrEnabled);
