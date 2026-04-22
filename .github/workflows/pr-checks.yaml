@@ -20,6 +20,8 @@ on:
             - "cmake/**"
             - "features/**"
             - "src/Features/**"
+            - "package/Shaders/**"
+            - "tests/shaders/**"
             - ".github/workflows/**"
             - ".github/configs/**"
             - ".github/actions/**"
@@ -170,7 +172,7 @@ jobs:
 
             - name: Upload prerelease (custom notes)
               if: steps.gen_notes.outputs.notes_generated == 'true'
-              uses: ncipollo/release-action@v1
+              uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
               with:
                   name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
                   tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
@@ -183,7 +185,7 @@ jobs:
 
             - name: Upload prerelease (auto-generated notes)
               if: steps.gen_notes.outputs.notes_generated != 'true'
-              uses: ncipollo/release-action@v1
+              uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
               with:
                   name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
                   tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
@@ -196,7 +198,7 @@ jobs:
 
             - name: Comment on PR
               if: success()
-              uses: thollander/actions-comment-pull-request@v3
+              uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3
               with:
                   mode: upsert
                   comment-tag: prerelease-build
@@ -258,8 +260,16 @@ jobs:
                   name: pr-feature-audit
                   path: .
 
+            - name: Create fallback audit markdown
+              if: ${{ hashFiles('pr-feature-audit.md') == '' }}
+              shell: bash
+              run: |
+                  cat > pr-feature-audit.md <<'EOF'
+                  ⚠️ Feature version audit did not produce a report. Check the `Feature Version Audit (PR)` job logs.
+                  EOF
+
             - name: Comment on PR with audit results
-              uses: thollander/actions-comment-pull-request@v3
+              uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3
               with:
                   file-path: pr-feature-audit.md
                   mode: upsert
