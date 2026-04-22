@@ -11,7 +11,6 @@
 #include "Util.h"
 #include <dxgi1_4.h>
 #include <dxgi1_6.h>
-#include <filesystem>
 #include <imgui.h>
 
 #ifndef NTDDI_WIN11_GE
@@ -58,22 +57,31 @@ typedef struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
 // https://github.com/Filoppi/Luma-Framework/blob/f1fbc2a36f2d24fd551721ce90f26821a8e754c1/Source/Core/utils/display.hpp
 namespace
 {
+	// Returns the GDI device name for the output the swap chain is presenting to.
+	// Uses GetContainingOutput which works for both windowed and borderless-fullscreen.
+	// Returns false if the swap chain's output cannot be determined (e.g. Streamline
+	// replaces the swap chain with a wrapper that does not implement GetContainingOutput).
+	bool GetSwapChainOutputDeviceName(IDXGISwapChain* swapChain, WCHAR (&outDeviceName)[32])
+	{
+		winrt::com_ptr<IDXGIOutput> output;
+		if (FAILED(swapChain->GetContainingOutput(output.put())))
+			return false;
+		DXGI_OUTPUT_DESC desc{};
+		if (FAILED(output->GetDesc(&desc)))
+			return false;
+		wcsncpy_s(outDeviceName, desc.DeviceName, _TRUNCATE);
+		// DeviceName is ASCII (e.g. "\\.\DISPLAY1") — safe to log as narrow string
+		logger::debug("[HDR] Swap chain output device: {}", std::string(desc.DeviceName, desc.DeviceName + wcslen(desc.DeviceName)));
+		return true;
+	}
+
 	bool GetDisplayConfigPathInfo(IDXGISwapChain* swapChain, DISPLAYCONFIG_PATH_INFO& outPathInfo)
 	{
-		// Get the GDI device name from the swap chain's containing output.
-		// This is more reliable than HWND-based monitor lookup because GetCurrentRenderWindow()
-		// may return an offscreen handle that MonitorFromWindow can't resolve.
-		winrt::com_ptr<IDXGIOutput> output;
-		if (FAILED(swapChain->GetContainingOutput(output.put()))) {
-			logger::debug("[HDR] GetContainingOutput failed");
+		WCHAR deviceName[32]{};
+		if (!GetSwapChainOutputDeviceName(swapChain, deviceName)) {
+			logger::warn("[HDR] GetContainingOutput failed - cannot determine monitor for HDR detection (Streamline/frame-gen?)");
 			return false;
 		}
-		DXGI_OUTPUT_DESC outputDesc{};
-		if (FAILED(output->GetDesc(&outputDesc))) {
-			logger::debug("[HDR] IDXGIOutput::GetDesc failed");
-			return false;
-		}
-		logger::debug("[HDR] Swap chain output device: {}", std::filesystem::path(outputDesc.DeviceName).string());
 
 		uint32_t pathCount, modeCount;
 		if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
@@ -85,22 +93,27 @@ namespace
 			return false;
 
 		for (auto& pathInfo : paths) {
-			if (!(pathInfo.flags & DISPLAYCONFIG_PATH_ACTIVE))
+			// DISPLAYCONFIG_SOURCE_IN_USE guards against inactive sources on multi-monitor
+			// setups where a disconnected display may still appear in the path table
+			if (!(pathInfo.flags & DISPLAYCONFIG_PATH_ACTIVE) ||
+				!(pathInfo.sourceInfo.statusFlags & DISPLAYCONFIG_SOURCE_IN_USE))
 				continue;
 
+			// QDC_ONLY_ACTIVE_PATHS never returns virtual-mode paths, so no
+			// DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE index selection is needed here
 			DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName{};
 			sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
 			sourceName.header.size = sizeof(sourceName);
 			sourceName.header.adapterId = pathInfo.sourceInfo.adapterId;
 			sourceName.header.id = pathInfo.sourceInfo.id;
 			if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS) {
-				if (wcscmp(sourceName.viewGdiDeviceName, outputDesc.DeviceName) == 0) {
+				if (wcscmp(sourceName.viewGdiDeviceName, deviceName) == 0) {
 					outPathInfo = pathInfo;
 					return true;
 				}
 			}
 		}
-		logger::debug("[HDR] No DisplayConfig path matched output device name");
+		logger::warn("[HDR] No DisplayConfig path matched output device name");
 		return false;
 	}
 
@@ -111,7 +124,22 @@ namespace
 
 		DISPLAYCONFIG_PATH_INFO pathInfo{};
 		if (!GetDisplayConfigPathInfo(swapChain, pathInfo)) {
-			logger::debug("[HDR] GetDisplayConfigPathInfo failed - no matching monitor path found");
+			// GetContainingOutput can fail under Streamline/frame-gen wrappers. Fall back to
+			// IDXGIOutput6::GetDesc1 which reads the output's current color space directly.
+			// This only detects whether HDR is currently active, not whether the monitor
+			// supports it while Windows HDR is off, but is better than reporting nothing.
+			winrt::com_ptr<IDXGIOutput> output;
+			if (SUCCEEDED(swapChain->GetContainingOutput(output.put()))) {
+				winrt::com_ptr<IDXGIOutput6> output6;
+				if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
+					DXGI_OUTPUT_DESC1 desc1{};
+					if (SUCCEEDED(output6->GetDesc1(&desc1))) {
+						enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+						supported = enabled;
+						logger::debug("[HDR] DXGI fallback detection: colorSpace={}", static_cast<int>(desc1.ColorSpace));
+					}
+				}
+			}
 			return false;
 		}
 
@@ -273,12 +301,14 @@ void HDRDisplay::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		if (isHDRMonitor) {
 			ImGui::Text("Enable HDR output. Matches vanilla visuals with extended dynamic range.");
+		} else if (isHDRCapableMonitor) {
+			ImGui::Text("Monitor supports HDR but Windows HDR is off. Enable HDR in Windows Display Settings, then restart the game.");
 		} else {
 			ImGui::Text("HDR display not detected. Use Advanced button to override.");
 		}
 	}
 
-	// Advanced override button for SDR monitors
+	// Advanced override button — shown when HDR is neither active nor auto-detected
 	if (!isHDRMonitor && !oldEnableHDR) {
 		ImGui::SameLine();
 		if (ImGui::Button("Advanced")) {
@@ -303,7 +333,11 @@ void HDRDisplay::DrawSettings()
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Force enable HDR even without detection (not recommended).");
+			if (isHDRCapableMonitor) {
+				ImGui::Text("Enable Windows HDR instead of forcing it here.");
+			} else {
+				ImGui::Text("Force enable HDR even without detection (not recommended).");
+			}
 		}
 	}
 
@@ -483,8 +517,8 @@ void HDRDisplay::LoadSettings(json& o_json)
 
 	settings = o_json;
 
-	// Defer auto-detection to SetupResources where the renderer is available.
-	// DetectHDR() needs a valid HWND which doesn't exist during early plugin init.
+	// Defer auto-detection to SetupResources where the swap chain is available.
+	// DetectHDR() needs globals::d3d::swapChain which isn't valid during early plugin init.
 	// hdrAutoDetected starts false in defaults and is only set true after auto-detect
 	// completes in SetupResources, so this correctly triggers on first launch even
 	// when the default config was auto-generated with enableHDR: false.
