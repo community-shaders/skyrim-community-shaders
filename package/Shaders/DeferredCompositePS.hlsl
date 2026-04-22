@@ -152,7 +152,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			else
 		float3 positionMS = positionWS.xyz;
 #			endif
-		sh2 skylightingSH = Skylighting::Sample(pixCoord, positionMS.xyz, normalWS);
+		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, normalWS);
 		float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, normalWS);
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(vanillaDALC, -normalWS, skylightingDiffuse) * albedo;
 #		else
@@ -222,7 +222,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 positionMS = positionWS.xyz;
 #		endif
 
-		sh2 skylightingSH = Skylighting::Sample(pixCoord, positionMS.xyz, R);
+		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, R);
 		float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe);
 #	endif
 

@@ -2360,9 +2360,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 #		endif
 #		if defined(DEFERRED)
-	sh2 skylightingSH = Skylighting::Sample(input.Position.xy, positionMSSkylight, worldNormal);
+	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, worldNormal);
 #		else
-	sh2 skylightingSH = inWorld ? Skylighting::Sample(input.Position.xy, positionMSSkylight, worldNormal) : float4(sqrt(4.0 * Math::PI), 0, 0, 0);
+	sh2 skylightingSH = inWorld ? Skylighting::Sample(positionMSSkylight, worldNormal) : Skylighting::UNIT_SH;
 #		endif
 
 #	endif

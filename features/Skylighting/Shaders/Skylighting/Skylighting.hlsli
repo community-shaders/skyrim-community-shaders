@@ -2,7 +2,6 @@
 #define __SKYLIGHTING_DEPENDENCY_HLSL__
 
 #include "Common/Math.hlsli"
-#include "Common/Random.hlsli"
 #include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
@@ -14,6 +13,8 @@ namespace Skylighting
 #elif defined(PSHADER)
 	Texture3D<sh2> SkylightingProbeArray : register(t50);
 #endif
+
+	const static sh2 UNIT_SH = float4(sqrt(4.0 * Math::PI), 0, 0, 0);
 
 	const static uint3 ARRAY_DIM = uint3(256, 256, 128);
 	const static float3 ARRAY_SIZE = 10000.f * float3(1, 1, 0.5);
@@ -34,21 +35,21 @@ namespace Skylighting
 
 	float MixSpecular(float visibility)
 	{
-		return lerp(SharedData::skylightingSettings.MinSpecularVisibility, 1.0, saturate(visibility));
+		return lerp(SharedData::skylightingSettings.MinSpecularVisibility, 1.0, visibility);
 	}
 
 	float EvaluateDiffuse(sh2 skylightingSH, float3 normal, float fadeOutFactor = 1.0)
 	{
 		float visibility = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normal)) / Math::PI;
-		visibility = saturate(visibility);
-		visibility = lerp(1.0, visibility, fadeOutFactor);
+		visibility = lerp(1.0, saturate(visibility), fadeOutFactor);
 		return MixDiffuse(visibility);
 	}
 
-	float EvaluateSpecular(sh2 skylightingSH, sh2 specularLobe)
+	float EvaluateSpecular(sh2 skylightingSH, sh2 specularLobe, float fadeOutFactor = 1.0)
 	{
 		float visibility = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
-		return MixSpecular(saturate(visibility));
+		visibility = lerp(1.0, saturate(visibility), fadeOutFactor);
+		return MixSpecular(visibility);
 	}
 
 #if defined(PSHADER)
@@ -74,21 +75,14 @@ namespace Skylighting
 #endif
 
 #if defined(PSHADER) || defined(SKYLIGHTING_PROBE_REGISTER)
-	sh2 Sample(float2 screenPosition, float3 positionMS, float3 normalWS)
+	sh2 Sample(float3 positionMS, float3 normalWS)
 	{
-		const static sh2 unitSH = float4(sqrt(4 * Math::PI), 0, 0, 0);
-		sh2 scaledUnitSH = unitSH / 1e-10;
+		sh2 scaledUnitSH = UNIT_SH / 1e-10;
 
 		if (SharedData::InInterior)
 			return scaledUnitSH;
 
 		positionMS.xyz += normalWS * CELL_SIZE * 0.5;  // Receiver normal bias
-
-		if (SharedData::FrameCount) {  // Check TAA
-			uint3 rand = Random::pcg3d(uint3(uint2(screenPosition.xy) & 127u, SharedData::FrameCount & 63u));
-			float3 offset = float3(rand) * (1.0f / 4294967296.0f) * 2.0 - 1.0;
-			positionMS.xyz += offset * CELL_SIZE * 0.5;
-		}
 
 		float3 positionMSAdjusted = positionMS - SharedData::skylightingSettings.PosOffset.xyz;
 		float3 uvw = positionMSAdjusted / ARRAY_SIZE + .5;
@@ -134,7 +128,7 @@ namespace Skylighting
 	// Compute skylighting diffuse for a receiver biased to face upward (grass/foliage).
 	// The result is pre-divided by vertexAO so that a subsequent multiply by vertexAO
 	// yields min(skylightingDiffuse, vertexAO). Pass vertexAO = 1 to skip this compensation.
-	float GetVertexSkylightingDiffuse(float2 screenPosition, float3 positionMS, float3 normalWS, float vertexAO)
+	float GetVertexSkylightingDiffuse(float3 positionMS, float3 normalWS, float vertexAO)
 	{
 		if (SharedData::InInterior)
 			return 1.0;
@@ -145,7 +139,7 @@ namespace Skylighting
 		biasedNormal.z = max(0.0, biasedNormal);
 		biasedNormal = normalize(biasedNormal);
 
-		sh2 skylightingSH = Sample(screenPosition, positionMS, normalWS);
+		sh2 skylightingSH = Sample(positionMS, normalWS);
 		float skylightingDiffuse = EvaluateDiffuse(skylightingSH, biasedNormal, fadeOutFactor);
 
 		return saturate(skylightingDiffuse / max(vertexAO, 1e-5));
@@ -153,8 +147,7 @@ namespace Skylighting
 
 	sh2 SampleNoBias(float3 positionMS)
 	{
-		const static sh2 unitSH = float4(sqrt(4 * Math::PI), 0, 0, 0);
-		sh2 scaledUnitSH = unitSH / 1e-10;
+		sh2 scaledUnitSH = UNIT_SH / 1e-10;
 
 		if (SharedData::InInterior)
 			return scaledUnitSH;

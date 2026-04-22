@@ -657,7 +657,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 #					endif
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
-	float skylightingDiffuse = Skylighting::GetVertexSkylightingDiffuse(input.HPosition.xy, positionMSSkylight, normal, vertexAO);
+	float skylightingDiffuse = Skylighting::GetVertexSkylightingDiffuse(positionMSSkylight, normal, vertexAO);
 #				endif  // SKYLIGHTING
 
 	float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
@@ -930,7 +930,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 #				endif
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
-	float skylightingDiffuse = Skylighting::GetVertexSkylightingDiffuse(input.HPosition.xy, positionMSSkylight, normal, vertexAO);
+	float skylightingDiffuse = Skylighting::GetVertexSkylightingDiffuse(positionMSSkylight, normal, vertexAO);
 #			endif  // SKYLIGHTING
 
 	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));

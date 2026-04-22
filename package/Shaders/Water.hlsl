@@ -1128,7 +1128,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			if defined(SKYLIGHTING)
 	sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
-	float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe);
+	float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe, Skylighting::GetFadeOutFactor(input.WPosition.xyz));
 #			endif
 
 	float fresnel = GetFresnelValue(normal, viewDirection);
