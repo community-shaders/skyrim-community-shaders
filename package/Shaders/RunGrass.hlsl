@@ -656,8 +656,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 albedo = baseColor.xyz * vertexColor;
 
-	float3 subsurfaceAlbedo = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0) * albedo;
-
 	float3 subsurfaceColor = dirLightColor * dirSoftShadow * saturate(-dirLightAngle) * Color::VanillaNormalization();
 
 	if (complex)
@@ -780,9 +778,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif
 
 	diffuseColor += directionalAmbientColor;
-
+	diffuseColor += subsurfaceColor * albedo * SharedData::grassLightingSettings.SubsurfaceScatteringAmount;
 	diffuseColor *= albedo;
-	diffuseColor += max(0, subsurfaceColor * subsurfaceAlbedo * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
 
 	directionalAmbientColor *= albedo;
 
@@ -929,8 +926,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 ddx = ddx_coarse(input.WorldPosition);
 	float3 ddy = ddy_coarse(input.WorldPosition);
 	float3 normal = -normalize(cross(ddx, ddy));
-
-	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
 	float3 vertexColor = Color::ColorToLinear(input.VertexColor.xyz);
 
