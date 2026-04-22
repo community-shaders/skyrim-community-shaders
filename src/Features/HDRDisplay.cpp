@@ -19,7 +19,7 @@
 
 // Win11 24H2 structures - define if SDK doesn't have them
 #ifndef DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2
-#	define DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2 ((DISPLAYCONFIG_DEVICE_INFO_TYPE)13)
+#	define DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2 ((DISPLAYCONFIG_DEVICE_INFO_TYPE)15)
 
 typedef enum
 {
@@ -41,8 +41,9 @@ typedef struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
 			UINT32 advancedColorLimitedByPolicy: 1;
 			UINT32 highDynamicRangeSupported: 1;
 			UINT32 highDynamicRangeUserEnabled: 1;
-			UINT32 wideColorEnforced: 1;
-			UINT32 reserved: 25;
+			UINT32 wideColorSupported: 1;
+			UINT32 wideColorUserEnabled: 1;
+			UINT32 reserved: 24;
 		};
 		UINT32 value;
 	};
@@ -123,20 +124,55 @@ namespace
 
 		DISPLAYCONFIG_PATH_INFO pathInfo{};
 		if (!GetDisplayConfigPathInfo(swapChain, pathInfo)) {
-			// GetContainingOutput can fail under Streamline/frame-gen wrappers. Fall back to
-			// IDXGIOutput6::GetDesc1 which reads the output's current color space directly.
-			// This only detects whether HDR is currently active, not whether the monitor
-			// supports it while Windows HDR is off, but is better than reporting nothing.
-			winrt::com_ptr<IDXGIOutput> output;
-			if (SUCCEEDED(swapChain->GetContainingOutput(output.put()))) {
-				winrt::com_ptr<IDXGIOutput6> output6;
-				if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
-					DXGI_OUTPUT_DESC1 desc1{};
-					if (SUCCEEDED(output6->GetDesc1(&desc1))) {
-						enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
-						supported = enabled;
-						logger::debug("[HDR] DXGI fallback detection: colorSpace={}", static_cast<int>(desc1.ColorSpace));
-						return true;
+			// GetContainingOutput fails under Streamline/frame-gen wrappers. Fall back by
+			// finding the monitor via the swap chain's OutputWindow, then enumerating all
+			// DXGI outputs to locate the matching IDXGIOutput6 without relying on
+			// GetContainingOutput. This only detects whether HDR is currently active (not
+			// whether the monitor supports HDR while Windows HDR is off), but is better
+			// than reporting nothing.
+			HWND outputWindow = nullptr;
+			DXGI_SWAP_CHAIN_DESC scDescFull{};
+			if (SUCCEEDED(swapChain->GetDesc(&scDescFull)))
+				outputWindow = scDescFull.OutputWindow;
+
+			HMONITOR hMonitor = nullptr;
+			if (outputWindow)
+				hMonitor = MonitorFromWindow(outputWindow, MONITOR_DEFAULTTONEAREST);
+			if (!hMonitor) {
+				RECT r{ 0, 0, 1, 1 };
+				hMonitor = MonitorFromRect(&r, MONITOR_DEFAULTTOPRIMARY);
+			}
+
+			// Walk all adapters/outputs to find the one matching hMonitor
+			winrt::com_ptr<IDXGIDevice> dxgiDevice;
+			winrt::com_ptr<IDXGIAdapter> adapter;
+			winrt::com_ptr<IDXGIFactory1> factory;
+			if (SUCCEEDED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(dxgiDevice.put()))) &&
+				SUCCEEDED(dxgiDevice->GetAdapter(adapter.put())) &&
+				SUCCEEDED(adapter->GetParent(IID_PPV_ARGS(factory.put())))) {
+				for (UINT ai = 0;; ++ai) {
+					winrt::com_ptr<IDXGIAdapter1> adap;
+					if (factory->EnumAdapters1(ai, adap.put()) == DXGI_ERROR_NOT_FOUND)
+						break;
+					for (UINT oi = 0;; ++oi) {
+						winrt::com_ptr<IDXGIOutput> out;
+						if (adap->EnumOutputs(oi, out.put()) == DXGI_ERROR_NOT_FOUND)
+							break;
+						DXGI_OUTPUT_DESC outDesc{};
+						if (FAILED(out->GetDesc(&outDesc)))
+							continue;
+						if (outDesc.Monitor != hMonitor)
+							continue;
+						winrt::com_ptr<IDXGIOutput6> out6;
+						if (SUCCEEDED(out->QueryInterface(IID_PPV_ARGS(out6.put())))) {
+							DXGI_OUTPUT_DESC1 desc1{};
+							if (SUCCEEDED(out6->GetDesc1(&desc1))) {
+								enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+								supported = enabled;
+								logger::debug("[HDR] DXGI fallback detection: colorSpace={}", static_cast<int>(desc1.ColorSpace));
+								return true;
+							}
+						}
 					}
 				}
 			}
