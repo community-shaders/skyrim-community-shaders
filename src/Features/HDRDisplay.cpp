@@ -280,9 +280,7 @@ void HDRDisplay::DrawSettings()
 		ImGui::TextColored(Util::Colors::GetWarning(), "SDR Display (HDR not detected)");
 	}
 
-	const bool isExclusiveFullscreen = globals::features::upscaling.loaded
-	                                        ? !globals::features::upscaling.isWindowed
-	                                        : wasExclusiveFullscreen;
+	const bool isExclusiveFullscreen = globals::features::upscaling.loaded ? !globals::features::upscaling.isWindowed : wasExclusiveFullscreen;
 
 	if (isExclusiveFullscreen) {
 		ImGui::Spacing();
