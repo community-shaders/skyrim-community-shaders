@@ -17,18 +17,24 @@
 #	define NTDDI_WIN11_GE 0x0A000010
 #endif
 
-// Win11 24H2 structures - define if SDK doesn't have them
-#ifndef DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2
-#	define DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2 ((DISPLAYCONFIG_DEVICE_INFO_TYPE)15)
-
+// Win11 24H2 display config types.
+// DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2 is an enum member on newer SDKs,
+// not a macro, so #ifndef cannot guard against redeclaration. Use Compat_ prefixed
+// names and alias to the SDK types when they exist.
+#if defined(NTDDI_WIN11_GE) && WDK_NTDDI_VERSION >= NTDDI_WIN11_GE
+using Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE = DISPLAYCONFIG_ADVANCED_COLOR_MODE;
+using Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2;
+static constexpr DISPLAYCONFIG_DEVICE_INFO_TYPE kDisplayConfigGetAdvancedColorInfo2 =
+	DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2;
+#else
 typedef enum
 {
-	DISPLAYCONFIG_ADVANCED_COLOR_MODE_SDR = 0,
-	DISPLAYCONFIG_ADVANCED_COLOR_MODE_WCG = 1,
-	DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR = 2
-} DISPLAYCONFIG_ADVANCED_COLOR_MODE;
+	Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_SDR = 0,
+	Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_WCG = 1,
+	Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR = 2
+} Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE;
 
-typedef struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
+typedef struct Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
 {
 	DISPLAYCONFIG_DEVICE_INFO_HEADER header;
 	union
@@ -49,8 +55,11 @@ typedef struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
 	};
 	DISPLAYCONFIG_COLOR_ENCODING colorEncoding;
 	UINT32 bitsPerColorChannel;
-	DISPLAYCONFIG_ADVANCED_COLOR_MODE activeColorMode;
-} DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2;
+	Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE activeColorMode;
+} Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2;
+
+static constexpr DISPLAYCONFIG_DEVICE_INFO_TYPE kDisplayConfigGetAdvancedColorInfo2 =
+	static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(15);
 #endif
 
 // HDR display detection
@@ -181,14 +190,14 @@ namespace
 
 		// Try Windows 11 24H2+ API first - directly reports HDR hardware capability
 		// Credits: renodx by clshortfuse (MIT License)
-		DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
-		colorInfo2.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2;
+		Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
+		colorInfo2.header.type = kDisplayConfigGetAdvancedColorInfo2;
 		colorInfo2.header.size = sizeof(colorInfo2);
 		colorInfo2.header.adapterId = pathInfo.targetInfo.adapterId;
 		colorInfo2.header.id = pathInfo.targetInfo.id;
 		if (DisplayConfigGetDeviceInfo(&colorInfo2.header) == ERROR_SUCCESS) {
 			supported = colorInfo2.highDynamicRangeSupported != 0;
-			enabled = colorInfo2.activeColorMode == DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR;
+			enabled = colorInfo2.activeColorMode == Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR;
 			UINT32 hdrSupported = colorInfo2.highDynamicRangeSupported;
 			UINT32 activeMode = static_cast<UINT32>(colorInfo2.activeColorMode);
 			logger::debug("[HDR] Win11 24H2 detection: highDynamicRangeSupported={}, activeColorMode={}", hdrSupported, activeMode);
