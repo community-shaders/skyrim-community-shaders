@@ -117,6 +117,29 @@ namespace Skylighting
 		return SphericalHarmonics::Scale(sum, rcp(wsum + EPSILON_WEIGHT_SUM));
 	}
 
+	// Compute skylighting diffuse for a receiver biased to face upward (grass/foliage).
+	// The result is pre-divided by vertexAO so that a subsequent multiply by vertexAO
+	// yields min(skylightingDiffuse, vertexAO). Pass vertexAO = 1 to skip this compensation.
+	float GetVertexSkylightingDiffuse(float2 screenPosition, float3 positionMS, float3 normalWS, float vertexAO)
+	{
+		if (SharedData::InInterior)
+			return 1.0;
+
+		float fadeOutFactor = GetFadeOutFactor(positionMS);
+
+		float3 biasedNormal = normalWS;
+		biasedNormal.z = biasedNormal.z * 0.5 + 0.5;
+		biasedNormal = normalize(biasedNormal);
+
+		sh2 skylightingSH = Sample(screenPosition, positionMS, normalWS);
+		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(biasedNormal)) / Math::PI;
+		skylightingDiffuse = saturate(skylightingDiffuse);
+		skylightingDiffuse = lerp(1.0, skylightingDiffuse, fadeOutFactor);
+		skylightingDiffuse = MixDiffuse(skylightingDiffuse);
+
+		return saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+	}
+
 	sh2 SampleNoBias(float3 positionMS)
 	{
 		const static sh2 unitSH = float4(sqrt(4 * Math::PI), 0, 0, 0);
