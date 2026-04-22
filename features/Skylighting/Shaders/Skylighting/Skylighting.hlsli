@@ -37,6 +37,20 @@ namespace Skylighting
 		return lerp(SharedData::skylightingSettings.MinSpecularVisibility, 1.0, saturate(visibility));
 	}
 
+	float EvaluateDiffuse(sh2 skylightingSH, float3 normal, float fadeOutFactor = 1.0)
+	{
+		float visibility = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normal)) / Math::PI;
+		visibility = saturate(visibility);
+		visibility = lerp(1.0, visibility, fadeOutFactor);
+		return MixDiffuse(visibility);
+	}
+
+	float EvaluateSpecular(sh2 skylightingSH, sh2 specularLobe)
+	{
+		float visibility = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
+		return MixSpecular(saturate(visibility));
+	}
+
 #if defined(PSHADER)
 	void ApplySkylighting(inout float3 diffuseColor, inout float3 directionalAmbientColor, float3 albedo, float skylightingDiffuse)
 	{
@@ -132,10 +146,7 @@ namespace Skylighting
 		biasedNormal = normalize(biasedNormal);
 
 		sh2 skylightingSH = Sample(screenPosition, positionMS, normalWS);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(biasedNormal)) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);
-		skylightingDiffuse = lerp(1.0, skylightingDiffuse, fadeOutFactor);
-		skylightingDiffuse = MixDiffuse(skylightingDiffuse);
+		float skylightingDiffuse = EvaluateDiffuse(skylightingSH, biasedNormal, fadeOutFactor);
 
 		return saturate(skylightingDiffuse / max(vertexAO, 1e-5));
 	}
