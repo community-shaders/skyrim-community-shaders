@@ -1,4 +1,5 @@
 #include "SSRT/common.hlsli"
+#include "Common/GBuffer.hlsli"
 
 Texture2D<float4> srcNormal : register(t0);
 
@@ -8,13 +9,17 @@ RWTexture2D<float2> outNormals2 : register(u2);
 RWTexture2D<float2> outNormals3 : register(u3);
 RWTexture2D<float2> outNormals4 : register(u4);
 
-float2 NormalsMIPFilter(float2 n0, float2 n1, float2 n2, float2 n3)
+float2 NormalsMIPFilter(float2 enc0, float2 enc1, float2 enc2, float2 enc3)
 {
-	return (n0 + n1 + n2 + n3) * 0.25;
+	float3 avg = GBuffer::DecodeNormal(enc0) + GBuffer::DecodeNormal(enc1) + GBuffer::DecodeNormal(enc2) + GBuffer::DecodeNormal(enc3);
+	return GBuffer::EncodeNormal(normalize(avg));
 }
 
 groupshared float2 g_scratchNormals[8][8];
-[numthreads(8, 8, 1)] void main(uint2 dispatchThreadID : SV_DispatchThreadID, uint2 groupThreadID : SV_GroupThreadID) {
+[numthreads(8, 8, 1)] void main(uint2 dispatchThreadID
+										  : SV_DispatchThreadID, uint2 groupThreadID
+										  : SV_GroupThreadID)
+{
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	// MIP 0
@@ -34,7 +39,7 @@ groupshared float2 g_scratchNormals[8][8];
 	outNormals0[pixCoord + uint2(1, 0)] = normals1;
 	outNormals0[pixCoord + uint2(0, 1)] = normals2;
 	outNormals0[pixCoord + uint2(1, 1)] = normals3;
-
+	
 	// MIP 1
 	float2 nm1 = NormalsMIPFilter(normals0, normals1, normals2, normals3);
 	outNormals1[baseCoord] = nm1;
