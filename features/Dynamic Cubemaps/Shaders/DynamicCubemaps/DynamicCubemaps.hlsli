@@ -54,7 +54,7 @@ namespace DynamicCubemaps
 			sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, V, roughness);
 			skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 			skylightingSpecular = saturate(skylightingSpecular);
-			skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+			skylightingSpecular = Skylighting::MixSpecular(skylightingSpecular);
 		} else {
 			skylightingSpecular = 0.0;
 		}
@@ -160,7 +160,7 @@ namespace DynamicCubemaps
 			sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, V, roughness);
 			skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 			skylightingSpecular = saturate(skylightingSpecular);
-			skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+			skylightingSpecular = Skylighting::MixSpecular(skylightingSpecular);
 		} else {
 			skylightingSpecular = 0.0;
 		}
