@@ -136,8 +136,11 @@ namespace
 				SUCCEEDED(dxgiDevice->GetAdapter(adapter.put()))) {
 				for (UINT oi = 0;; ++oi) {
 					winrt::com_ptr<IDXGIOutput> out;
-					if (adapter->EnumOutputs(oi, out.put()) == DXGI_ERROR_NOT_FOUND)
+					HRESULT hr = adapter->EnumOutputs(oi, out.put());
+					if (hr == DXGI_ERROR_NOT_FOUND)
 						break;
+					if (FAILED(hr))
+						continue;
 					DXGI_OUTPUT_DESC outDesc{};
 					if (FAILED(out->GetDesc(&outDesc)) || outDesc.Monitor != hMonitor)
 						continue;
@@ -159,6 +162,7 @@ namespace
 
 		// Try Windows 11 24H2+ API first - directly reports HDR hardware capability
 		// Credits: renodx by clshortfuse (MIT License)
+		// https://github.com/clshortfuse/renodx/blob/01f3739685ba8f850d82fb1a11a5ec1104e6b1b8/src/games/hollowknight-silksong/addon.cpp#L545
 		Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
 		colorInfo2.header.type = kDisplayConfigGetAdvancedColorInfo2;
 		colorInfo2.header.size = sizeof(colorInfo2);
