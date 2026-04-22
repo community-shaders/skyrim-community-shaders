@@ -152,4 +152,5 @@ private:
 	void DrawProperties(std::string category, std::map<std::string, int> properties);
 	void InheritFromParent(const std::string& property);
 	void InheritAllFromParent();
+	bool pendingReinit = false;
 };

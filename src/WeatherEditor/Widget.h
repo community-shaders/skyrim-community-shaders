@@ -146,6 +146,14 @@ public:
 	virtual void RevertChanges() { LoadSettings(); }
 	virtual bool HasUnsavedChanges() const { return false; }
 
+	// Reinitialize weather to apply form refs that are only read at load time.
+	static void ForceWeatherReinit(RE::TESWeather* weather);
+	// Reinitialize the current sky weather (use when the specific weather is unknown).
+	static void ForceCurrentWeatherReinit();
+
+	// Override to suppress per-frame auto-apply and show a manual-apply warning in the header.
+	virtual bool RequiresManualApply() const { return false; }
+
 	// Draw common header with search bar and action buttons
 	void DrawWidgetHeader(const char* searchId, bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
 

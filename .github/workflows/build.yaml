@@ -21,437 +21,25 @@ on:
                 type: boolean
                 required: false
                 default: true
-    pull_request_target:
-        types: [opened, synchronize, reopened, ready_for_review]
-        paths:
-            - "**.cpp"
-            - "**.h"
-            - "**.hpp"
-            - "**.c"
-            - "**.hlsl"
-            - "**.hlsli"
-            - "**.ini"
-            - "CMakeLists.txt"
-            - "CMakePresets.json"
-            - "vcpkg.json"
-            - "vcpkg-configuration.json"
-            - ".gitmodules"
-            - "extern/**"
-            - "cmake/**"
-            - "features/**"
-            - "src/Features/**"
-            - ".github/workflows/**"
-            - ".github/configs/**"
 
 permissions:
     contents: read
-    pull-requests: read
 
 concurrency:
-    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    group: ${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
 
 jobs:
-    check-changes:
-        name: Check for changes in PRs
-        runs-on: ubuntu-latest
-        if: ${{ github.event_name == 'pull_request_target' }}
-        outputs:
-            should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
-            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
-            shader-tests-should-build: ${{ steps.changed-files.outputs.shader_tests_any_changed == 'true' || steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-                  token: ${{ secrets.GITHUB_TOKEN }}
-
-            - name: Fetch PR head and base
-              run: |
-                  git fetch origin ${{ github.event.pull_request.head.sha }}
-                  git fetch origin ${{ github.event.pull_request.base.sha }}
-
-            - name: Get changed files
-              id: changed-files
-              uses: tj-actions/changed-files@v46
-              continue-on-error: true
-              with:
-                  files_yaml: |
-                      cpp:
-                        - '**.cpp'
-                        - '**.h'
-                        - '**.hpp'
-                        - '**.c'
-                        - 'src/**'
-                        - 'include/**'
-                        - '!**.hlsl'
-                        - '!**.hlsli'
-                        - '!tests/shaders/**'
-                      build:
-                        - 'CMakeLists.txt'
-                        - 'CMakePresets.json'
-                        - 'vcpkg.json'
-                        - 'vcpkg-configuration.json'
-                        - '.gitmodules'
-                        - 'extern/**'
-                      cmake:
-                        - 'CMakeLists.txt'
-                        - 'CMakePresets.json'
-                        - 'cmake/**'
-                      ci:
-                        - '.github/workflows/**'
-                        - '.github/configs/**'
-                      hlsl:
-                        - '**.hlsl'
-                        - '**.hlsli'
-                        - 'package/Shaders/**'
-                        - 'features/**/Shaders/**'
-                      shader_tests:
-                        - 'tests/shaders/**'
-                  base_sha: ${{ github.event.pull_request.base.sha }}
-                  sha: ${{ github.event.pull_request.head.sha }}
-
-            - name: Fallback - Set outputs if changed-files failed
-              if: failure()
-              run: |
-                  echo "should-build=true" >> $GITHUB_OUTPUT
-                  echo "hlsl-should-build=true" >> $GITHUB_OUTPUT
-
-    cpp-build:
-        needs: [check-changes]
-        if: >
-            always() && !cancelled() &&
-            ((github.event_name == 'workflow_dispatch' &&
-              github.event.inputs.build-cpp == 'true') ||
-            (github.event_name == 'pull_request_target' &&
-             !github.event.pull_request.draft) ||
-            (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
-        name: Build plugin and addons (${{ matrix.compiler.name }})
-        runs-on: windows-2025
-        permissions:
-            contents: read
-        outputs:
-            version: ${{ steps.get_version.outputs.version }}
-        strategy:
-            matrix:
-                compiler:
-                    - name: vs2026
-                      vs-version: "2026"
-                      cmake-preset: ALL
-                      build-dir: build/ALL
-                    - name: vs2022
-                      vs-version: "2022"
-                      cmake-preset: ALL-VS2022
-                      build-dir: build/ALL-VS2022
-            fail-fast: false
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-              with:
-                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
-                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-                  submodules: recursive
-
-            - name: Setup Build Environment
-              id: setup
-              uses: ./.github/actions/setup-build-environment
-              with:
-                  cache-key-suffix: "cpp-${{ matrix.compiler.name }}"
-                  vs-version: ${{ matrix.compiler.vs-version }}
-                  cmake-preset: ${{ matrix.compiler.cmake-preset }}
-                  build-dir: ${{ matrix.compiler.build-dir }}
-
-            - name: Build using run-cmake
-              uses: lukka/run-cmake@v10
-              with:
-                  configurePreset: ${{ matrix.compiler.cmake-preset }}
-                  configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=OFF']"
-                  buildPreset: ${{ matrix.compiler.cmake-preset }}
-
-            - name: Extract version from CMake
-              id: get_version
-              shell: pwsh
-              run: |
-                  $content = Get-Content ${{ matrix.compiler.build-dir }}/CMakeCache.txt
-                  $versionLine = $content | Select-String -Pattern 'CMAKE_PROJECT_VERSION:STATIC'
-                  if ($versionLine) {
-                      $version = ($versionLine -replace '.*=([0-9]+\.[0-9]+\.[0-9]+).*', '$1').ToString()
-                  } else {
-                      Write-Error "Version extraction failed: CMAKE_PROJECT_VERSION not found in CMakeCache.txt" -ErrorAction Stop
-                  }
-                  if (-not $version -or $version -eq "") {
-                      Write-Error "Version extraction failed: no version found" -ErrorAction Stop
-                  }
-                  "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-            - name: Fail if CMake version does not match tag
-              if: success() && github.ref_type == 'tag'
-              shell: pwsh
-              run: |
-                  $tag = '${{ github.ref_name }}'
-                  $expected = ($tag -replace '^v([0-9]+\.[0-9]+\.[0-9]+).*', '$1')
-                  $version = '${{ steps.get_version.outputs.version }}'
-                  if (-not $version -or $version -eq "") {
-                    Write-Error "Version extraction failed: no version found in previous step" -ErrorAction Stop
-                  }
-                  if ($version -ne $expected) {
-                    Write-Error "CMakeLists.txt version '$version' does not match tag version '$expected'. Please update CMakeLists.txt before tagging." -ErrorAction Stop
-                  } else {
-                    Write-Host "CMakeLists.txt version matches tag."
-                  }
-
-            - name: Upload dist artifacts
-              if: success() && matrix.compiler.name == 'vs2026'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: dist-artifacts
-                  path: dist/
-                  retention-days: 30
-
-    shader-validation:
-        needs: [check-changes]
-        if: >
-            always() && !cancelled() &&
-            ((github.event_name == 'pull_request_target' &&
-              !github.event.pull_request.draft) ||
-             (github.event_name == 'workflow_dispatch' &&
-              github.event.inputs.validate-shaders == 'true') ||
-             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
-        name: Validate shader compilation (${{ matrix.config.name }})
-        runs-on: windows-2025
-        permissions:
-            contents: read
-        strategy:
-            matrix:
-                config:
-                    - name: "Flatrim"
-                      file: ".github/configs/shader-validation.yaml"
-                    - name: "VR"
-                      file: ".github/configs/shader-validation-vr.yaml"
-            fail-fast: false # Let both configs run to completion for full output
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-              with:
-                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
-                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-                  submodules: recursive
-
-            - name: Check for HLSL Changes
-              id: check-hlsl
-              uses: ./.github/actions/check-hlsl-changes
-              with:
-                  hlsl-should-build: ${{ needs.check-changes.outputs.hlsl-should-build }}
-            - name: Setup Build Environment
-              id: setup
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: ./.github/actions/setup-build-environment
-              with:
-                  cache-key-suffix: "validation-${{ matrix.config.name }}"
-            - name: Prepare shaders
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: ./.github/actions/prepare-shaders
-            - name: Locate fxc.exe
-              if: steps.check-hlsl.outputs.skip != 'true'
-              id: find_fxc
-              shell: pwsh
-              run: |
-                  # Try to find fxc.exe on PATH first
-                  $fxcCmd = Get-Command -Name fxc.exe -ErrorAction SilentlyContinue
-                  if ($fxcCmd) {
-                    $fxcPath = $fxcCmd.Source
-                    Write-Host "Found fxc.exe at $fxcPath"
-                    Add-Content -Path $env:GITHUB_OUTPUT -Value "fxc_path=$fxcPath"
-                  } else {
-                    # Try known Windows SDK locations (x64)
-                    $fxcPath = ''
-                    $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\bin'
-                    if (Test-Path $sdkRoot) {
-                      $versions = Get-ChildItem -Path $sdkRoot -Directory | Sort-Object -Descending
-                      foreach ($v in $versions) {
-                        $candidate = Join-Path $v.FullName 'x64\fxc.exe'
-                        if (Test-Path $candidate) { $fxcPath = $candidate; break }
-                      }
-                    }
-                    if ($fxcPath -ne '') {
-                      Write-Host "Found fxc.exe at $fxcPath"
-                      Add-Content -Path $env:GITHUB_OUTPUT -Value "fxc_path=$fxcPath"
-                    } else {
-                      Write-Warning "fxc.exe not found in PATH or common SDK locations"
-                      Add-Content -Path $env:GITHUB_OUTPUT -Value "fxc_path="
-                    }
-                  }
-
-            - name: Validate shader compilation (${{ matrix.config.name }})
-              if: steps.check-hlsl.outputs.skip != 'true'
-              run: |
-                  if [ -z "${{ steps.find_fxc.outputs.fxc_path }}" ]; then
-                    echo "fxc.exe not found - shader validation requires fxc.exe. Set --fxc to a valid path or ensure fxc.exe is in PATH." >&2
-                    exit 1
-                  fi
-                  hlslkit-compile --fxc "${{ steps.find_fxc.outputs.fxc_path }}" --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
-              shell: bash
-
-            - name: Upload shader validation logs
-              if: failure() && steps.check-hlsl.outputs.skip != 'true'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: shader-validation-logs-${{ matrix.config.name }}
-                  path: |
-                      build/ShaderCache/new_issues.log
-                      build/ShaderCache/*.log
-                  retention-days: 7
-                  if-no-files-found: ignore
-
-    shader-unit-tests:
-        name: Run Shader Unit Tests
-        needs: [check-changes]
-        if: >
-            always() && !cancelled() &&
-            ((github.event_name == 'pull_request_target' &&
-              !github.event.pull_request.draft) ||
-             (github.event_name == 'workflow_dispatch' &&
-              github.event.inputs.validate-shaders == 'true') ||
-             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
-        runs-on: windows-2025
-        permissions:
-            contents: read
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-              with:
-                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
-                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-                  submodules: recursive
-
-            - name: Check for HLSL Changes
-              id: check-hlsl
-              uses: ./.github/actions/check-hlsl-changes
-              with:
-                  hlsl-should-build: ${{ needs.check-changes.outputs.shader-tests-should-build }}
-            - name: Setup Build Environment
-              id: setup
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: ./.github/actions/setup-build-environment
-              with:
-                  cache-key-suffix: "tests"
-                  vs-version: "2022"
-                  cmake-preset: "ALL-VS2022"
-                  build-dir: "build/ALL-VS2022"
-
-            - name: Build shader tests
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: lukka/run-cmake@v10
-              with:
-                  configurePreset: ALL-VS2022
-                  configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=ON']"
-                  buildPreset: ALL-VS2022
-                  buildPresetAdditionalArgs: "['--target shader_tests']"
-
-            - name: Run shader unit tests
-              if: steps.check-hlsl.outputs.skip != 'true'
-              run: |
-                  ctest --test-dir build/ALL-VS2022 -C Release --output-on-failure -R ShaderTests --timeout 300
-
-            - name: Upload test results on failure
-              if: failure() && steps.check-hlsl.outputs.skip != 'true'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: shader-test-results
-                  path: |
-                      build/ALL-VS2022/Testing/**
-                  retention-days: 7
-                  if-no-files-found: ignore
-
-    prerelease:
-        name: Post Prerelease from PR
-        if: github.event_name == 'pull_request_target'
-        needs: [cpp-build, shader-validation, shader-unit-tests]
-        runs-on: windows-2025
-        permissions:
-            contents: write
-            pull-requests: write
-        steps:
-            - name: Download dist artifacts
-              uses: actions/download-artifact@v4
-              with:
-                  name: dist-artifacts
-                  path: dist/
-
-            - name: Generate release notes comparing against base version tag
-              id: gen_notes
-              continue-on-error: true
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              shell: bash
-              run: |
-                  TAG="v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}"
-                  BASE_TAG="v${{ needs.cpp-build.outputs.version }}"
-                  REPO="${{ github.repository }}"
-                  BASE_SHA="${{ github.event.pull_request.base.sha }}"
-                  HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-                  PR_NUMBER="${{ github.event.pull_request.number }}"
-                  PR_URL="https://github.com/$REPO/pull/$PR_NUMBER"
-
-                  # Get PR author with fallback
-                  if PR_AUTHOR=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json author -q '.author.login' 2>/dev/null); then
-                    echo "✅ Found PR author: $PR_AUTHOR"
-                  else
-                    PR_AUTHOR="${{ github.event.pull_request.user.login }}"
-                    echo "⚠️ Using fallback PR author: $PR_AUTHOR"
-                  fi
-
-                  echo "🔍 Comparing $BASE_SHA...$HEAD_SHA"
-
-                  # Generate commit-based release notes
-                  if NOTES=$(gh api repos/$REPO/compare/$BASE_SHA...$HEAD_SHA 2>/dev/null | jq -r --arg author "$PR_AUTHOR" '
-                    .commits[]
-                    | "- \(.commit.message | split("\n")[0]) by @\(.author.login // $author)"
-                  ' 2>/dev/null) && [[ -n "$NOTES" ]]; then
-                    echo "$NOTES" > release-notes.md
-                    echo -e "\n[View Pull Request]($PR_URL)" >> release-notes.md
-                    echo "notes_generated=true" >> "$GITHUB_OUTPUT"
-                    echo "✅ Generated custom release notes"
-                  else
-                    echo "⚠️ Failed to generate notes from commit diff. Will use GitHub autogeneration." >&2
-                    echo "notes_generated=false" >> "$GITHUB_OUTPUT"
-                  fi
-
-            - name: Upload prerelease (custom notes)
-              if: steps.gen_notes.outputs.notes_generated == 'true'
-              uses: ncipollo/release-action@v1
-              with:
-                  name: "Community Shaders ${{ needs.cpp-build.outputs.version }} PR #${{ github.event.pull_request.number }}"
-                  tag: v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}
-                  prerelease: true
-                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
-                  bodyFile: release-notes.md
-                  allowUpdates: true
-                  replacesArtifacts: true
-                  removeArtifacts: true
-
-            - name: Upload prerelease (auto-generated notes)
-              if: steps.gen_notes.outputs.notes_generated != 'true'
-              uses: ncipollo/release-action@v1
-              with:
-                  name: "Community Shaders ${{ needs.cpp-build.outputs.version }} PR #${{ github.event.pull_request.number }}"
-                  tag: v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }}
-                  prerelease: true
-                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
-                  generateReleaseNotes: true
-                  allowUpdates: true
-                  replacesArtifacts: true
-                  removeArtifacts: true
-
-            - name: Comment on PR
-              if: success()
-              uses: thollander/actions-comment-pull-request@v3
-              with:
-                  mode: upsert
-                  comment-tag: prerelease-build
-                  message: |
-                      ✅ A pre-release build is available for this PR:
-                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.cpp-build.outputs.version }}-pr${{ github.event.pull_request.number }})
+    build:
+        name: Build
+        uses: ./.github/workflows/_build.yaml
+        with:
+            ref: ${{ github.ref }}
+            repository: ${{ github.repository }}
+            run-cpp: ${{ github.event_name != 'workflow_dispatch' || inputs.build-cpp == true }}
+            run-shader-validation: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
+            run-shader-tests: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
+            cache-key-suffix: ${{ inputs.cache-key-suffix || '' }}
 
     feature-audit:
         name: Feature Version Audit (Release)
@@ -481,75 +69,15 @@ jobs:
                   name: feature-version-audit
                   path: feature-version-audit-latest.md
 
-    feature-audit-pr:
-        name: Feature Version Audit (PR)
-        if: github.event_name == 'pull_request_target'
-        runs-on: ubuntu-latest
-        permissions:
-            contents: read
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-                  submodules: recursive
-
-            - name: Setup Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-
-            - name: Fetch PR head and base
-              run: |
-                  git fetch origin refs/pull/${{ github.event.pull_request.number }}/head:refs/pr_head
-                  git fetch origin ${{ github.event.pull_request.base.sha }}
-
-            - name: Run feature version audit (PR check)
-              id: audit
-              run: |
-                  set +e
-                  python tools/feature_version_audit.py --pr-check --ci --base ${{ github.event.pull_request.base.sha }} --head refs/pr_head > pr-feature-audit.md
-                  EXIT_CODE=$?
-                  set -e
-                  cat pr-feature-audit.md
-                  exit $EXIT_CODE
-
-            - name: Upload feature audit markdown (PR)
-              if: always()
-              uses: actions/upload-artifact@v4
-              with:
-                  name: pr-feature-audit
-                  path: pr-feature-audit.md
-
-    feature-audit-pr-comment:
-        name: Comment on PR with audit results
-        if: always() && github.event_name == 'pull_request_target' && (needs.feature-audit-pr.result == 'success' || needs.feature-audit-pr.result == 'failure')
-        needs: feature-audit-pr
-        runs-on: ubuntu-latest
-        permissions:
-            pull-requests: write
-        steps:
-            - name: Download feature audit markdown (PR)
-              continue-on-error: true
-              uses: actions/download-artifact@v4
-              with:
-                  name: pr-feature-audit
-                  path: .
-
-            - name: Comment on PR with audit results
-              uses: thollander/actions-comment-pull-request@v3
-              with:
-                  file-path: pr-feature-audit.md
-                  mode: upsert
-                  comment-tag: feature-version-audit
-
     release:
         name: Post Release for Draft, Manual Run, or Tag
-        needs: [cpp-build, shader-validation, shader-unit-tests, feature-audit]
+        needs: [build, feature-audit]
         if: >
-            github.event_name == 'workflow_dispatch' ||
-            startsWith(github.ref, 'refs/tags/v') ||
-            (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+            always() && !cancelled() &&
+            needs.build.outputs.cpp-built == 'true' &&
+            (github.event_name == 'workflow_dispatch' ||
+             startsWith(github.ref, 'refs/tags/v') ||
+             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
         runs-on: windows-2025
         outputs:
             release_tag: ${{ steps.combined_notes.outputs.release_tag }}
@@ -581,16 +109,13 @@ jobs:
               id: combined_notes
               shell: bash
               run: |
-                  # For release events, use the release tag name
                   if [ "${{ github.event_name }}" = "release" ]; then
                     RELEASE_TAG="${{ github.event.release.tag_name }}"
                   else
                     RELEASE_TAG="${{ github.ref_name }}"
                   fi
 
-                  # Generate GitHub release notes
                   gh release view $RELEASE_TAG --json body -q .body > auto-release-notes.md || echo '' > auto-release-notes.md
-                  # Merge feature audit if present
                   if [ -f feature-version-audit-latest.md ]; then
                     echo -e "\n---\n\n" >> auto-release-notes.md
                     cat feature-version-audit-latest.md >> auto-release-notes.md
@@ -611,20 +136,3 @@ jobs:
                   replacesArtifacts: true
                   removeArtifacts: true
                   allowUpdates: true
-
-    nexus-upload:
-        name: Nexus Upload (dry run)
-        needs: release
-        if: >
-            always() &&
-            needs.release.result == 'success' &&
-            startsWith(github.ref, 'refs/tags/v') &&
-            !contains(github.ref_name, '-')
-        uses: ./.github/workflows/upload-nexus.yaml
-        with:
-            tag: ${{ needs.release.outputs.release_tag }}
-            artifact_pattern: "CommunityShaders-*.7z"
-            dry_run: "true"
-        secrets:
-            UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
-            UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}

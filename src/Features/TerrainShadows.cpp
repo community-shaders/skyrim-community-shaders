@@ -224,17 +224,7 @@ void TerrainShadows::LoadHeightmap()
 			std::filesystem::path path{ target_heightmap.dir };
 			path /= target_heightmap.filename;
 
-			DirectX::ScratchImage rawImage;
-			DX::ThrowIfFailed(LoadFromDDSFile(path.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, rawImage));
-
-			// Downscale heightmap to 1/2 resolution per axis to match the
-			// shadow texture and speed up full shadow updates by ~4x.
-			auto& rawMeta = rawImage.GetMetadata();
-			size_t newWidth = std::max<size_t>(1, rawMeta.width / 2);
-			size_t newHeight = std::max<size_t>(1, rawMeta.height / 2);
-			DX::ThrowIfFailed(DirectX::Resize(
-				rawImage.GetImages(), rawImage.GetImageCount(), rawMeta,
-				newWidth, newHeight, DirectX::TEX_FILTER_LINEAR, image));
+			DX::ThrowIfFailed(LoadFromDDSFile(path.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image));
 		} catch (const DX::com_exception& e) {
 			logger::error("{}", e.what());
 			return;
@@ -343,11 +333,8 @@ void TerrainShadows::UpdateShadow()
 	TracyD3D11Zone(globals::state->tracyCtx, "Terrain Occlusion - Update Shadows");
 
 	/* ---- UPDATE CB ---- */
-	// Shadow texture is 1/2 heightmap resolution per axis; ray stepping,
-	// dispatch and PxSize all operate in shadow-pixel space, while the
-	// shader still samples the full-res heightmap via UV.
-	uint width = texShadowHeight->desc.Width;
-	uint height = texShadowHeight->desc.Height;
+	uint width = texHeightMap->desc.Width;
+	uint height = texHeightMap->desc.Height;
 
 	// only update direction at the start of each cycle
 	static uint edgePxCoord;
@@ -393,7 +380,7 @@ void TerrainShadows::UpdateShadow()
 	}
 
 	shadowUpdateCBData.StartPxCoord = edgePxCoord + signDir * shadowUpdateIdx * updateLength;
-	shadowUpdateCBData.PxSize = { 1.f / width, 1.f / height };
+	shadowUpdateCBData.PxSize = { 1.f / texHeightMap->desc.Width, 1.f / texHeightMap->desc.Height };
 
 	shadowUpdateCBData.PosRange = { cachedHeightmap->pos0.z, cachedHeightmap->pos1.z };
 	shadowUpdateCBData.ZRange = cachedHeightmap->zRange;
