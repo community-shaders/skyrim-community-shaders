@@ -54,8 +54,8 @@ public:
 		// Sampling
 		uint RotationCount = 1;
 		uint StepCount = 12;
-		float Radius = 5.f;
-		float ExpFactor = 1.f;
+		float Radius = 256.f;
+		float ExpFactor = 2.f;
 		bool JitterSamples = true;
 		bool ScreenSpaceSampling = false;
 		bool MipOptimization = true;
@@ -103,6 +103,12 @@ public:
 
 	eastl::unique_ptr<Texture2D> texGIOcclusion = nullptr;
 
+	eastl::unique_ptr<Texture2D> texWorkingDepth = nullptr;
+	winrt::com_ptr<ID3D11UnorderedAccessView> uavWorkingDepth[5] = { nullptr };
+
+	eastl::unique_ptr<Texture2D> texRadiance = nullptr;
+	winrt::com_ptr<ID3D11UnorderedAccessView> uavRadiance[5] = { nullptr };
+
 	inline ID3D11ShaderResourceView* GetOutputTexture()
 	{
 		return (loaded && settings.Enabled) ?
@@ -113,5 +119,7 @@ public:
 	winrt::com_ptr<ID3D11SamplerState> linearClampSampler = nullptr;
 	winrt::com_ptr<ID3D11SamplerState> pointClampSampler = nullptr;
 
+	winrt::com_ptr<ID3D11ComputeShader> prefilterDepthsCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> ssrtCSCompute = nullptr;
 };

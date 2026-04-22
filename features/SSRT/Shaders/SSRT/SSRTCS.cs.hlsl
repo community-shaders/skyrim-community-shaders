@@ -9,45 +9,8 @@
 
 #include "Common/FastMath.hlsli"
 #include "Common/GBuffer.hlsli"
-#include "Common/Math.hlsli"
-#include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
-
-///////////////////////////////////////////////////////////////////////////////
-
-cbuffer SSRTCB : register(b1)
-{
-	float4 NDCToViewMul;
-	float4 NDCToViewAdd;
-
-	float2 TexDim;
-	float2 RcpTexDim;
-	float2 FrameDim;
-	float2 RcpFrameDim;
-
-	uint FrameIndex;
-	uint RotationCount;
-	uint StepCount;
-	float Radius;
-
-	float ExpFactor;
-	float HalfProjScale;
-	uint JitterSamples;
-	uint ScreenSpaceSampling;
-
-	uint MipOptimization;
-	float GIIntensity;
-	float AOIntensity;
-	float Thickness;
-
-	uint LinearThickness;
-	float TemporalOffsets;
-	float TemporalDirections;
-	float pad0;
-};
-
-SamplerState samplerPointClamp : register(s0);
-SamplerState samplerLinearClamp : register(s1);
+#include "SSRT/common.hlsli"
 
 ///////////////////////////////////////////////////////////////////////////////
 

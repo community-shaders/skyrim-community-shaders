@@ -142,7 +142,7 @@ void SSRT::DrawSettings()
 
 		ImGui::SliderFloat("AO Intensity", &settings.AOIntensity, 0.f, 4.f, "%.2f");
 
-		ImGui::SliderFloat("Radius", &settings.Radius, 1.f, 25.f, "%.1f units");
+		ImGui::SliderFloat("Radius", &settings.Radius, 1.f, 512.f, "%.1f units");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			std::vector<std::string> tooltipLines = {
 				"World-space effect radius.",
@@ -152,7 +152,7 @@ void SSRT::DrawSettings()
 		}
 
 		if (showAdvanced) {
-			ImGui::SliderFloat("Thickness", &settings.Thickness, 0.01f, 10.0f, "%.2f");
+			ImGui::SliderFloat("Thickness", &settings.Thickness, 0.01f, 128.0f, "%.2f");
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("Controls the assumed thickness of occluders.");
 
@@ -225,11 +225,35 @@ void SSRT::SetupResources()
 
 		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		mainTex.texture->GetDesc(&texDesc);
-		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MiscFlags = 0;
 
+		// Prefiltered depth (R16F, 5 mip levels)
+		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 5;
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16_FLOAT;
+		{
+			texWorkingDepth = eastl::make_unique<Texture2D>(texDesc);
+			texWorkingDepth->CreateSRV(srvDesc);
+			for (uint i = 0; i < 5; ++i) {
+				uavDesc.Texture2D.MipSlice = i;
+				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texWorkingDepth->resource.get(), &uavDesc, uavWorkingDepth[i].put()));
+			}
+		}
+
+		// Prefiltered radiance (R11G11B10F, 5 mip levels)
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+		{
+			texRadiance = eastl::make_unique<Texture2D>(texDesc);
+			texRadiance->CreateSRV(srvDesc);
+			for (uint i = 0; i < 5; ++i) {
+				uavDesc.Texture2D.MipSlice = i;
+				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texRadiance->resource.get(), &uavDesc, uavRadiance[i].put()));
+			}
+		}
+
 		// GI+Occlusion output (RGBA16F, single combined output matching SSRT3)
+		uavDesc.Texture2D.MipSlice = 0;
+		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		{
 			texGIOcclusion = eastl::make_unique<Texture2D>(texDesc);
@@ -261,7 +285,7 @@ void SSRT::SetupResources()
 void SSRT::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&ssrtCSCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &ssrtCSCompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -281,13 +305,13 @@ void SSRT::CompileComputeShaders()
 
 	std::vector<ShaderCompileInfo>
 		shaderInfos = {
+			{ &prefilterDepthsCompute, "prefilterDepths.cs.hlsl", {} },
+			{ &prefilterRadianceCompute, "prefilterRadiance.cs.hlsl", {} },
 			{ &ssrtCSCompute, "SSRTCS.cs.hlsl", {} },
 		};
 
-	for (auto& info : shaderInfos) {
-		if (settings.NormalApproximation)
-			info.defines.push_back({ "NORMAL_APPROXIMATION", "" });
-	}
+	if (settings.NormalApproximation)
+		shaderInfos.back().defines.push_back({ "NORMAL_APPROXIMATION", "" });
 
 	for (auto& info : shaderInfos) {
 		auto path = std::filesystem::path("Data\\Shaders\\SSRT") / info.filename;
@@ -300,7 +324,7 @@ void SSRT::CompileComputeShaders()
 
 bool SSRT::ShadersOK()
 {
-	return ssrtCSCompute != nullptr;
+	return prefilterDepthsCompute && prefilterRadianceCompute && ssrtCSCompute;
 }
 
 void SSRT::UpdateCB()
@@ -401,7 +425,7 @@ void SSRT::DrawSSRT()
 	auto resolution = std::array{ (uint)size.x, (uint)size.y };
 
 	std::array<ID3D11ShaderResourceView*, 3> srvs = { nullptr };
-	std::array<ID3D11UnorderedAccessView*, 1> uavs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 5> uavs = { nullptr };
 	std::array<ID3D11SamplerState*, 2> samplers = { pointClampSampler.get(), linearClampSampler.get() };
 	auto cb = ssrtCB->CB();
 
@@ -420,18 +444,48 @@ void SSRT::DrawSSRT()
 	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 
+	// Prefilter depths
+	{
+		TracyD3D11Zone(globals::state->tracyCtx, "SSRT - Prefilter Depths");
+
+		srvs.at(0) = Util::GetCurrentSceneDepthSRV();
+		for (uint i = 0; i < 5; ++i)
+			uavs.at(i) = uavWorkingDepth[i].get();
+
+		context->CSSetShaderResources(0, 1, srvs.data());
+		context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
+		context->CSSetShader(prefilterDepthsCompute.get(), nullptr, 0);
+		context->Dispatch((resolution[0] + 15u) >> 4, (resolution[1] + 15u) >> 4, 1);
+	}
+
+	// Prefilter radiance
+	{
+		TracyD3D11Zone(globals::state->tracyCtx, "SSRT - Prefilter Radiance");
+
+		resetViews();
+		srvs.at(0) = rts[deferred->forwardRenderTargets[0]].SRV;
+		for (uint i = 0; i < 5; ++i)
+			uavs.at(i) = uavRadiance[i].get();
+
+		context->CSSetShaderResources(0, 1, srvs.data());
+		context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
+		context->CSSetShader(prefilterRadianceCompute.get(), nullptr, 0);
+		context->Dispatch((resolution[0] + 15u) >> 4, (resolution[1] + 15u) >> 4, 1);
+	}
+
 	// SSRT main pass
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSRT - Main");
 
-		srvs.at(0) = Util::GetCurrentSceneDepthSRV();
+		resetViews();
+		srvs.at(0) = texWorkingDepth->srv.get();
 		srvs.at(1) = rts[NORMALROUGHNESS].SRV;
-		srvs.at(2) = rts[deferred->forwardRenderTargets[0]].SRV;
+		srvs.at(2) = texRadiance->srv.get();
 
-		uavs.at(0) = texGIOcclusion->uav.get();
+		std::array<ID3D11UnorderedAccessView*, 1> mainUavs = { texGIOcclusion->uav.get() };
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+		context->CSSetUnorderedAccessViews(0, (uint)mainUavs.size(), mainUavs.data(), nullptr);
 		context->CSSetShader(ssrtCSCompute.get(), nullptr, 0);
 		context->Dispatch((resolution[0] + 7u) >> 3, (resolution[1] + 7u) >> 3, 1);
 	}
