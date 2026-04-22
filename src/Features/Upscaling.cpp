@@ -1931,8 +1931,11 @@ void Upscaling::UpscaleDepth()
 		ID3D11ShaderResourceView* srvs[] = { refractionNormals.SRVCopy, depthCopy.depthSRV, depthCopy.stencilSRV };
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
-		ID3D11RenderTargetView* rtvs[] = { refractionNormals.RTV, saoCameraZ.RTV };
-		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, depth.views[0]);
+		// kSAO_CAMERAZ is at quarter-stereo resolution in VR; the full-stereo viewport would
+		// corrupt only the top-left quarter. The engine's ISSAOCameraZ pass populates it correctly.
+		ID3D11RenderTargetView* rtvs[] = { refractionNormals.RTV,
+			globals::game::isVR ? nullptr : saoCameraZ.RTV };
+		context->OMSetRenderTargets(2, rtvs, depth.views[0]);
 
 		context->PSSetShader(depthUpscalePS, nullptr, 0);
 		context->Draw(3, 0);
