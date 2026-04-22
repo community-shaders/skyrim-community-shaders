@@ -521,13 +521,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 
 	// Swaps direction of the backfaces otherwise they seem to get lit from the wrong direction.
-	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::GrassSphereNormal)) {
+	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::GrassSphereNormal))
 		if (!frontFace)
 			normal = -normal;
-
-		normal.z = max(0.0, normal.z);
-		normal = normalize(float3(normal.xy, max(0, normal.z)));
-	}
 
 	float3x3 tbn = 0;
 
@@ -648,20 +644,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(dirLightAngle) * Color::VanillaNormalization();
 	}
 
-	float3 vertexColor = input.VertexColor.xyz;
+	float3 vertexColor = Color::ColorToLinear(input.VertexColor.xyz);
 
 #				if defined(SKYLIGHTING)
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
 		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
-		vertexColor = lerp(input.VertexColor.xyz * input.VertexMult, vertexColor, skylightingFadeOutFactor);
+		vertexColor = lerp(Color::ColorToLinear(input.VertexColor.xyz * input.VertexMult), vertexColor, skylightingFadeOutFactor);
 	}
 #				endif
 
-	float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
+	float3 albedo = baseColor.xyz * vertexColor;
 
-	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
-	float3 sss = dirLightColor * dirSoftShadow * saturate(-dirLightAngle) * Color::VanillaNormalization();
+	float3 subsurfaceAlbedo = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0) * albedo;
+
+	float3 subsurfaceColor = dirLightColor * dirSoftShadow * saturate(-dirLightAngle) * Color::VanillaNormalization();
 
 	if (complex)
 		lightsSpecularColor += dirDetailedShadow * GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
@@ -730,7 +727,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 					lightDiffuseColor = lightColor * saturate(lightAngle);
 				}
 
-				sss += lightColor * saturate(-lightAngle);
+				subsurfaceColor += lightColor * saturate(-lightAngle);
 
 				lightsDiffuseColor += lightDiffuseColor * Color::VanillaNormalization();
 
@@ -785,7 +782,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor += directionalAmbientColor;
 
 	diffuseColor *= albedo;
-	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
+	diffuseColor += max(0, subsurfaceColor * subsurfaceAlbedo * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
 
 	directionalAmbientColor *= albedo;
 
@@ -935,13 +932,13 @@ PS_OUTPUT main(PS_INPUT input)
 
 	normal = normalize(float3(normal.xy, max(0, normal.z)));
 
-	float3 vertexColor = input.VertexColor.xyz;
+	float3 vertexColor = Color::ColorToLinear(input.VertexColor.xyz);
 
 #			if defined(SKYLIGHTING)
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
 		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
-		vertexColor = lerp(input.VertexColor.xyz * input.VertexMult, vertexColor, skylightingFadeOutFactor);
+		vertexColor = lerp(Color::ColorToLinear(input.VertexColor.xyz * input.VertexMult), vertexColor, skylightingFadeOutFactor);
 	}
 #			endif
 
