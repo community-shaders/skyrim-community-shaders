@@ -170,7 +170,7 @@ void WeatherWidget::DrawWidget()
 
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
-			DrawProperties("Sun", { { "Sun Damage", INT8_SLIDER } });
+			DrawProperties("Sun", { { "Sun Damage", UINT8_SLIDER } });
 			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
 			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", UINT8_SLIDER }, { "Precipitation End Fade Out", UINT8_SLIDER } });
 			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", UINT8_SLIDER }, { "Thunder Lightning End Fade Out", UINT8_SLIDER },
@@ -561,8 +561,8 @@ void WeatherWidget::SetWeatherValues()
 	weather->data.transDelta = (uint8_t)weatherProps["Trans Delta"];
 
 	// Sun
-	data.sunGlare = (int8_t)weatherProps["Sun Glare"];
-	data.sunDamage = (int8_t)weatherProps["Sun Damage"];
+	data.sunGlare = (uint8_t)weatherProps["Sun Glare"];
+	data.sunDamage = (uint8_t)weatherProps["Sun Damage"];
 
 	// Precipitation
 	data.precipitationBeginFadeIn = (uint8_t)weatherProps["Precipitation Begin Fade In"];
@@ -1236,11 +1236,11 @@ void WeatherWidget::DrawFogSettings()
 		ImGui::Text("Near");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 		ImGui::TableSetColumnIndex(2);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 
 		// Far
@@ -1264,11 +1264,11 @@ void WeatherWidget::DrawFogSettings()
 		ImGui::Text("Far");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 		ImGui::TableSetColumnIndex(2);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 
 		// Power
