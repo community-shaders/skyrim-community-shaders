@@ -196,6 +196,7 @@ namespace
 }
 
 bool HDRDisplay::isHDRMonitor = false;
+bool HDRDisplay::isHDRCapableMonitor = false;
 
 bool HDRDisplay::DetectHDR()
 {
@@ -204,9 +205,10 @@ bool HDRDisplay::DetectHDR()
 
 	IsHDRSupportedAndEnabled(globals::d3d::swapChain, hdrSupported, hdrEnabled);
 
-	isHDRMonitor = hdrSupported;
+	isHDRMonitor = hdrEnabled;
+	isHDRCapableMonitor = hdrSupported;
 	logger::info("[HDR] HDR display detection: supported={}, enabled={}", hdrSupported, hdrEnabled);
-	return hdrSupported;
+	return hdrEnabled;
 }
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -222,6 +224,12 @@ void HDRDisplay::DrawSettings()
 {
 	if (isHDRMonitor) {
 		ImGui::TextColored(Util::Colors::GetSuccess(), "HDR Display Detected");
+	} else if (isHDRCapableMonitor) {
+		ImGui::TextColored(Util::Colors::GetWarning(), "HDR Capable Display (Windows HDR is off)");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Your monitor supports HDR, but Windows HDR is currently disabled.");
+			ImGui::Text("Enable HDR in Windows Display Settings to allow auto-detection.");
+		}
 	} else {
 		ImGui::TextColored(Util::Colors::GetWarning(), "SDR Display (HDR not detected)");
 	}

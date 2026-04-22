@@ -113,7 +113,8 @@ struct HDRDisplay : public Feature
 	ID3D11ComputeShader* GetUIBrightnessCS();
 
 	static bool DetectHDR();
-	static bool isHDRMonitor;
+	static bool isHDRMonitor;        // Windows HDR is active (enabled in OS settings)
+	static bool isHDRCapableMonitor; // Monitor supports HDR but Windows HDR may be off
 	bool pendingAutoDetect = false;
 
 	float GetDisplayMaxLuminance() const;
