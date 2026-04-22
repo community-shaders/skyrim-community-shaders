@@ -600,7 +600,8 @@ void Deferred::ResetBlendStates()
 template <typename T>
 void Deferred::SetShadowCascadeParameters(T& lightData, DirectionalShadowLightData& dd)
 {
-	for (uint i = 0; i < lightData.shadowmapDescriptors.size(); i++) {
+	const size_t count = std::min<size_t>(lightData.shadowmapDescriptors.size(), std::size(dd.ShadowProj));
+	for (size_t i = 0; i < count; i++) {
 		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
 		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
 

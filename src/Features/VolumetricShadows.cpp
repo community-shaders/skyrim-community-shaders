@@ -270,7 +270,7 @@ void VolumetricShadows::CopyShadowLightData()
 			}
 		}
 
-		ID3D11ShaderResourceView* srv = shadowCopySRV ? shadowCopySRV : shadowView;
+		ID3D11ShaderResourceView* srv = shadowView ? (shadowCopySRV ? shadowCopySRV : shadowView) : nullptr;
 		context->PSSetShaderResources(18, 1, &srv);
 
 		if (shadowView)
