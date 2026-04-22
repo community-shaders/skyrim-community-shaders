@@ -725,7 +725,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 					lightDiffuseColor = lightColor * saturate(lightAngle);
 				}
 
-				subsurfaceColor += lightColor * saturate(-lightAngle);
+				subsurfaceColor += lightColor * saturate(-lightAngle) * Color::VanillaNormalization();
 
 				lightsDiffuseColor += lightDiffuseColor * Color::VanillaNormalization();
 
