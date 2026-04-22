@@ -12,7 +12,7 @@ Texture2D<float4> MainInputTexture : register(t0);
 Texture2D<float3> SpecularTexture : register(t1);
 
 #if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(DEBUG)
-Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
+Texture2D<float4> NormalRoughnessTexture : register(t2);
 #endif
 
 #if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
@@ -20,7 +20,7 @@ Texture2D<float> DepthTexture : register(t3);
 #endif
 
 #if defined(SSGI) || defined(DEBUG)
-Texture2D<unorm float3> AlbedoTexture : register(t4);
+Texture2D<float3> AlbedoTexture : register(t4);
 #endif
 
 #if defined(SSGI)
@@ -118,7 +118,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 
 #if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
-	float3 normalGlossiness = NormalRoughnessTexture[pixCoord];
+	float3 normalGlossiness = NormalRoughnessTexture[pixCoord].xyz;
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
