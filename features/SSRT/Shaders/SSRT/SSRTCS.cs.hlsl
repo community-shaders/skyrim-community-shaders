@@ -15,7 +15,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 Texture2D<float> srcDepth : register(t0);
-Texture2D<float4> srcNormalRoughness : register(t1);
+Texture2D<float2> srcNormal : register(t1);
 Texture2D<float3> srcRadiance : register(t2);
 
 RWTexture2D<float4> outGIOcclusion : register(u0);
@@ -48,15 +48,13 @@ inline float3 PositionSSToVS(float2 uv, float depth)
 // CS GBuffer already stores view-space normals
 inline float3 GetNormalVS(uint2 positionSS)
 {
-	return GBuffer::DecodeNormal(srcNormalRoughness.Load(int3(positionSS, 0)).xy);
+	return GBuffer::DecodeNormal(srcNormal.Load(int3(positionSS, 0)));
 }
 
 // SSRT3: GetNormalPyramidVS - reads view-space normal at UV with LOD
-// Original decodes spheremap from _NormalPyramidTexture; CS has no normal pyramid,
-// samples the flat normal buffer instead (lod unused)
 inline float3 GetNormalPyramidVS(float2 uv, float lod)
 {
-	return GBuffer::DecodeNormal(srcNormalRoughness.SampleLevel(samplerPointClamp, uv, 0).xy);
+	return GBuffer::DecodeNormal(srcNormal.SampleLevel(samplerPointClamp, uv, lod));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

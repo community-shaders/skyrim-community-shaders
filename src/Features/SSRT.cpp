@@ -251,6 +251,17 @@ void SSRT::SetupResources()
 			}
 		}
 
+		// Prefiltered normals (R8G8_UNORM, 5 mip levels)
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8G8_UNORM;
+		{
+			texNormals = eastl::make_unique<Texture2D>(texDesc);
+			texNormals->CreateSRV(srvDesc);
+			for (uint i = 0; i < 5; ++i) {
+				uavDesc.Texture2D.MipSlice = i;
+				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texNormals->resource.get(), &uavDesc, uavNormals[i].put()));
+			}
+		}
+
 		// GI+Occlusion output (RGBA16F, single combined output matching SSRT3)
 		uavDesc.Texture2D.MipSlice = 0;
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
@@ -285,7 +296,7 @@ void SSRT::SetupResources()
 void SSRT::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&prefilterDepthsCompute, &prefilterRadianceCompute, &ssrtCSCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &prefilterNormalsCompute, &ssrtCSCompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -307,6 +318,7 @@ void SSRT::CompileComputeShaders()
 		shaderInfos = {
 			{ &prefilterDepthsCompute, "prefilterDepths.cs.hlsl", {} },
 			{ &prefilterRadianceCompute, "prefilterRadiance.cs.hlsl", {} },
+			{ &prefilterNormalsCompute, "prefilterNormals.cs.hlsl", {} },
 			{ &ssrtCSCompute, "SSRTCS.cs.hlsl", {} },
 		};
 
@@ -324,7 +336,7 @@ void SSRT::CompileComputeShaders()
 
 bool SSRT::ShadersOK()
 {
-	return prefilterDepthsCompute && prefilterRadianceCompute && ssrtCSCompute;
+	return prefilterDepthsCompute && prefilterRadianceCompute && prefilterNormalsCompute && ssrtCSCompute;
 }
 
 void SSRT::UpdateCB()
@@ -473,13 +485,28 @@ void SSRT::DrawSSRT()
 		context->Dispatch((resolution[0] + 15u) >> 4, (resolution[1] + 15u) >> 4, 1);
 	}
 
+	// Prefilter normals
+	{
+		TracyD3D11Zone(globals::state->tracyCtx, "SSRT - Prefilter Normals");
+
+		resetViews();
+		srvs.at(0) = rts[deferred->normalRoughnessRT].SRV;
+		for (uint i = 0; i < 5; ++i)
+			uavs.at(i) = uavNormals[i].get();
+
+		context->CSSetShaderResources(0, 1, srvs.data());
+		context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
+		context->CSSetShader(prefilterNormalsCompute.get(), nullptr, 0);
+		context->Dispatch((resolution[0] + 15u) >> 4, (resolution[1] + 15u) >> 4, 1);
+	}
+
 	// SSRT main pass
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSRT - Main");
 
 		resetViews();
 		srvs.at(0) = texWorkingDepth->srv.get();
-		srvs.at(1) = rts[deferred->normalRoughnessRT].SRV;
+		srvs.at(1) = texNormals->srv.get();
 		srvs.at(2) = texRadiance->srv.get();
 
 		std::array<ID3D11UnorderedAccessView*, 1> mainUavs = { texGIOcclusion->uav.get() };

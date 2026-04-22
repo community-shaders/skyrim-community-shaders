@@ -109,6 +109,9 @@ public:
 	eastl::unique_ptr<Texture2D> texRadiance = nullptr;
 	winrt::com_ptr<ID3D11UnorderedAccessView> uavRadiance[5] = { nullptr };
 
+	eastl::unique_ptr<Texture2D> texNormals = nullptr;
+	winrt::com_ptr<ID3D11UnorderedAccessView> uavNormals[5] = { nullptr };
+
 	inline ID3D11ShaderResourceView* GetOutputTexture()
 	{
 		return (loaded && settings.Enabled) ?
@@ -121,5 +124,6 @@ public:
 
 	winrt::com_ptr<ID3D11ComputeShader> prefilterDepthsCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> prefilterNormalsCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> ssrtCSCompute = nullptr;
 };

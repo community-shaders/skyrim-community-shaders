@@ -401,21 +401,22 @@ void Deferred::DeferredPasses()
 
 		// SRVs
 		ID3D11ShaderResourceView* srvs[16]{
-			specular.SRV,
-			albedo.SRV,
-			normalRoughness.SRV,
-			masks.SRV,
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,
-			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,
-			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,
-			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,
-			ssrt_output,
+			mainCopy.SRV,                                                                                   // t0  MainInputTexture
+			specular.SRV,                                                                                   // t1  SpecularTexture
+			normalRoughnessCopy.SRV,                                                                        // t2  NormalRoughnessTexture
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,  // t3  DepthTexture
+			albedo.SRV,                                                                                     // t4  AlbedoTexture
+			masks.SRV,                                                                                      // t5  MasksTexture
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                             // t6  ReflectanceTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                       // t7  EnvTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,            // t8  EnvReflectionsTexture
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,  // t9  SkylightingProbeArray
+			ssrt_output,                                                                                    // t10 SsrtTexture
 			nullptr,
 			nullptr,
 			nullptr,
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                           // t14 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                           // t15 SkyIBLTexture
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
