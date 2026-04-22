@@ -151,30 +151,6 @@ PS_OUTPUT main(PS_INPUT input)
 		directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normalWS)));
 		directionalAmbientColor *= albedo;
 
-		directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-		directionalAmbientColor.x = MasksTexture[pixCoord].z;
-		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
-		directionalAmbientColor = max(0, directionalAmbientColor);
-	}
-
-	{
-		float maxScale = 1.0;
-		if (directionalAmbientColor.x > 0.0)
-			maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
-		if (directionalAmbientColor.y > 0.0)
-			maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
-		if (directionalAmbientColor.z > 0.0)
-			maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
-		directionalAmbientColor *= maxScale;
-
-		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
-		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
-		linDiffuseColor *= sqrt(multiBounceSSGIAo);
-		diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
-		diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSSGIAo);
-		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
-	}
-
 	linDiffuseColor += ssrtIl * linAlbedo;
 #endif
 
