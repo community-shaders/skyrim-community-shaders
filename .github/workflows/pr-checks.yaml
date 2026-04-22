@@ -1,0 +1,263 @@
+name: PR Checks
+
+on:
+    pull_request_target:
+        types: [opened, synchronize, reopened, ready_for_review]
+        paths:
+            - "**.cpp"
+            - "**.h"
+            - "**.hpp"
+            - "**.c"
+            - "**.hlsl"
+            - "**.hlsli"
+            - "**.ini"
+            - "CMakeLists.txt"
+            - "CMakePresets.json"
+            - "vcpkg.json"
+            - "vcpkg-configuration.json"
+            - ".gitmodules"
+            - "extern/**"
+            - "cmake/**"
+            - "features/**"
+            - "src/Features/**"
+            - ".github/workflows/**"
+            - ".github/configs/**"
+
+# Least-privilege defaults; individual jobs override where needed.
+permissions:
+    contents: read
+    pull-requests: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+jobs:
+    check-changes:
+        name: Check for changes in PRs
+        runs-on: ubuntu-latest
+        outputs:
+            should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            shader-tests-should-build: ${{ steps.changed-files.outputs.shader_tests_any_changed == 'true' || steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Fetch PR head and base
+              run: |
+                  git fetch origin ${{ github.event.pull_request.head.sha }}
+                  git fetch origin ${{ github.event.pull_request.base.sha }}
+
+            - name: Get changed files
+              id: changed-files
+              uses: tj-actions/changed-files@v46
+              continue-on-error: true
+              with:
+                  files_yaml: |
+                      cpp:
+                        - '**.cpp'
+                        - '**.h'
+                        - '**.hpp'
+                        - '**.c'
+                        - 'src/**'
+                        - 'include/**'
+                        - '!**.hlsl'
+                        - '!**.hlsli'
+                        - '!tests/shaders/**'
+                      build:
+                        - 'CMakeLists.txt'
+                        - 'CMakePresets.json'
+                        - 'vcpkg.json'
+                        - 'vcpkg-configuration.json'
+                        - '.gitmodules'
+                        - 'extern/**'
+                      cmake:
+                        - 'CMakeLists.txt'
+                        - 'CMakePresets.json'
+                        - 'cmake/**'
+                      ci:
+                        - '.github/workflows/**'
+                        - '.github/configs/**'
+                      hlsl:
+                        - '**.hlsl'
+                        - '**.hlsli'
+                        - 'package/Shaders/**'
+                        - 'features/**/Shaders/**'
+                      shader_tests:
+                        - 'tests/shaders/**'
+                  base_sha: ${{ github.event.pull_request.base.sha }}
+                  sha: ${{ github.event.pull_request.head.sha }}
+
+    # Security: this job compiles untrusted fork code.
+    # It uses _build.yaml which enforces permissions: contents: read and receives NO secrets.
+    # The absence of a `secrets:` block here is intentional — passing secrets to a reusable
+    # workflow from pull_request_target triggered by a fork causes GitHub to reject the
+    # entire workflow file at parse time (0 jobs, "workflow file issue").
+    build:
+        name: Build (PR)
+        needs: [check-changes]
+        if: >
+            always() && !cancelled() &&
+            !github.event.pull_request.draft
+        uses: ./.github/workflows/_build.yaml
+        with:
+            ref: ${{ github.event.pull_request.head.sha }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            run-cpp: ${{ needs.check-changes.outputs.should-build != 'false' }}
+            hlsl-should-build: ${{ needs.check-changes.outputs.hlsl-should-build || 'true' }}
+            shader-tests-should-build: ${{ needs.check-changes.outputs.shader-tests-should-build || 'true' }}
+
+    # Security: this job uses GITHUB_TOKEN with write permissions but does NOT execute
+    # fork code — it only downloads pre-built artifacts from the build job above.
+    prerelease:
+        name: Post Prerelease from PR
+        needs: [build]
+        if: >
+            always() && !cancelled() &&
+            needs.build.outputs.cpp-built == 'true'
+        runs-on: windows-2025
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            - name: Download dist artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: dist-artifacts
+                  path: dist/
+
+            - name: Generate release notes comparing against base version tag
+              id: gen_notes
+              continue-on-error: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              shell: bash
+              run: |
+                  TAG="v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}"
+                  REPO="${{ github.repository }}"
+                  BASE_SHA="${{ github.event.pull_request.base.sha }}"
+                  HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+                  PR_NUMBER="${{ github.event.pull_request.number }}"
+                  PR_URL="https://github.com/$REPO/pull/$PR_NUMBER"
+
+                  if PR_AUTHOR=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json author -q '.author.login' 2>/dev/null); then
+                    echo "✅ Found PR author: $PR_AUTHOR"
+                  else
+                    PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+                    echo "⚠️ Using fallback PR author: $PR_AUTHOR"
+                  fi
+
+                  echo "🔍 Comparing $BASE_SHA...$HEAD_SHA"
+
+                  if NOTES=$(gh api repos/$REPO/compare/$BASE_SHA...$HEAD_SHA 2>/dev/null | jq -r --arg author "$PR_AUTHOR" '
+                    .commits[]
+                    | "- \(.commit.message | split("\n")[0]) by @\(.author.login // $author)"
+                  ' 2>/dev/null) && [[ -n "$NOTES" ]]; then
+                    echo "$NOTES" > release-notes.md
+                    echo -e "\n[View Pull Request]($PR_URL)" >> release-notes.md
+                    echo "notes_generated=true" >> "$GITHUB_OUTPUT"
+                    echo "✅ Generated custom release notes"
+                  else
+                    echo "⚠️ Failed to generate notes from commit diff. Will use GitHub autogeneration." >&2
+                    echo "notes_generated=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Upload prerelease (custom notes)
+              if: steps.gen_notes.outputs.notes_generated == 'true'
+              uses: ncipollo/release-action@v1
+              with:
+                  name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  prerelease: true
+                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
+                  bodyFile: release-notes.md
+                  allowUpdates: true
+                  replacesArtifacts: true
+                  removeArtifacts: true
+
+            - name: Upload prerelease (auto-generated notes)
+              if: steps.gen_notes.outputs.notes_generated != 'true'
+              uses: ncipollo/release-action@v1
+              with:
+                  name: "Community Shaders ${{ needs.build.outputs.version }} PR #${{ github.event.pull_request.number }}"
+                  tag: v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }}
+                  prerelease: true
+                  artifacts: "${{ github.workspace }}/dist/CommunityShaders_AIO-*.7z"
+                  generateReleaseNotes: true
+                  allowUpdates: true
+                  replacesArtifacts: true
+                  removeArtifacts: true
+
+            - name: Comment on PR
+              if: success()
+              uses: thollander/actions-comment-pull-request@v3
+              with:
+                  mode: upsert
+                  comment-tag: prerelease-build
+                  message: |
+                      ✅ A pre-release build is available for this PR:
+                      [Download](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.build.outputs.version }}-pr${{ github.event.pull_request.number }})
+
+    feature-audit-pr:
+        name: Feature Version Audit (PR)
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  submodules: recursive
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Fetch PR head and base
+              run: |
+                  git fetch origin refs/pull/${{ github.event.pull_request.number }}/head:refs/pr_head
+                  git fetch origin ${{ github.event.pull_request.base.sha }}
+
+            - name: Run feature version audit (PR check)
+              id: audit
+              run: |
+                  set +e
+                  python tools/feature_version_audit.py --pr-check --ci --base ${{ github.event.pull_request.base.sha }} --head refs/pr_head > pr-feature-audit.md
+                  EXIT_CODE=$?
+                  set -e
+                  cat pr-feature-audit.md
+                  exit $EXIT_CODE
+
+            - name: Upload feature audit markdown (PR)
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: pr-feature-audit.md
+
+    feature-audit-pr-comment:
+        name: Comment on PR with audit results
+        if: always() && (needs.feature-audit-pr.result == 'success' || needs.feature-audit-pr.result == 'failure')
+        needs: feature-audit-pr
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+        steps:
+            - name: Download feature audit markdown (PR)
+              continue-on-error: true
+              uses: actions/download-artifact@v4
+              with:
+                  name: pr-feature-audit
+                  path: .
+
+            - name: Comment on PR with audit results
+              uses: thollander/actions-comment-pull-request@v3
+              with:
+                  file-path: pr-feature-audit.md
+                  mode: upsert
+                  comment-tag: feature-version-audit
