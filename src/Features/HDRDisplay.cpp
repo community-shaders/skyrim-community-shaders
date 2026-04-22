@@ -71,7 +71,9 @@ namespace
 			return false;
 		wcsncpy_s(outDeviceName, desc.DeviceName, _TRUNCATE);
 		// DeviceName is ASCII (e.g. "\\.\DISPLAY1") — safe to log as narrow string
-		logger::debug("[HDR] Swap chain output device: {}", std::string(desc.DeviceName, desc.DeviceName + wcslen(desc.DeviceName)));
+		char narrowName[32]{};
+		WideCharToMultiByte(CP_UTF8, 0, desc.DeviceName, -1, narrowName, sizeof(narrowName), nullptr, nullptr);
+		logger::debug("[HDR] Swap chain output device: {}", narrowName);
 		return true;
 	}
 
