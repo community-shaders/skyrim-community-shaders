@@ -16,17 +16,9 @@ module.exports = {
           {
             files: ['CMakeLists.txt'],
             from: 'VERSION [0-9]+\\.[0-9]+\\.[0-9]+',
-            // Strip prerelease suffix so CMake gets '1.5.0' not '1.5.0-rc.1'
+            // Strip prerelease suffix so CMake gets '1.5.0' not '1.5.0-rc.1'.
+            // No results assertion: stable after RC is a no-op (version already set).
             to: "VERSION ${nextRelease.version.split('-')[0]}",
-            results: [
-              {
-                file: 'CMakeLists.txt',
-                hasChanged: true,
-                numReplacements: 1,
-                numMatches: 1,
-              },
-            ],
-            countMatches: true,
           },
         ],
       },
