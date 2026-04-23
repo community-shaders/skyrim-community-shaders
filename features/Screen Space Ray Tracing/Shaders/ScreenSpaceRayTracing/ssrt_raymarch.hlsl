@@ -308,11 +308,6 @@ float SSRT_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, 
     return confidence;
 }
 
-bool IsMirrorReflection(float roughness)
-{
-    return roughness < 0.1;
-}
-
 float3 Sample_GGX_VNDF_Ellipsoid(float3 Ve, float alpha_x, float alpha_y, float U1, float U2) { return SampleGGXVNDF(Ve, alpha_x, alpha_y, U1, U2); }
 
 float3 Sample_GGX_VNDF_Hemisphere(float3 Ve, float alpha, float U1, float U2) { return Sample_GGX_VNDF_Ellipsoid(Ve, alpha, alpha, U1, U2); }
@@ -487,9 +482,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     float3 albedo = AlbedoTexture[fullResCoords].xyz;
 #endif
 
-    bool is_mirror = IsMirrorReflection(roughness);
-
-    int most_detailed_mip = is_mirror ? 0 : min(2, (int)SSRT_DEPTH_HIERARCHY_MAX_MIP);
+    int most_detailed_mip = min(1, (int)SSRT_DEPTH_HIERARCHY_MAX_MIP);
 
     float z;
     if (most_detailed_mip == 0) {
@@ -563,12 +556,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #if defined(DYNAMIC_CUBEMAPS) && !SHARC_UPDATE
     if (UseDynamicCubemapsAsFallback != 0 && (confidence < 0.999f))
     {
-#   if defined(SSRT_SPECULAR)
-        const uint sampleMip = 0;
-#   else
-        const uint sampleMip = 2;
-#   endif
-        float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
+        float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 0);
 #	if defined(SKYLIGHTING)
         if (!SharedData::InInterior)
         {
@@ -587,7 +575,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #       if defined(SSRT_SPECULAR)
             skylightingDiffuse = GetSpecularOcclusionFromAmbientOcclusion(NdotV, skylightingDiffuse, roughness);
 #       endif
-            float3 envNoSkyColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
+            float3 envNoSkyColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 0);
             float3 envSkyColor = envColor;
             float3 skyColor = max(envSkyColor - envNoSkyColor, 0);
             envColor = envNoSkyColor * skylightingDiffuse;

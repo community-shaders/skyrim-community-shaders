@@ -17,7 +17,7 @@ Texture2D<float4> PrevSH1       : register(t1);   // last-frame OUT_DIFF_SH1
 Texture2D<float>  DepthTexture          : register(t3);
 Texture2D<float4> MotionVectorTexture   : register(t4);
 Texture2D<float>  PrevViewZ     : register(t5);   // last-frame texNRDViewZ
-Texture2D<unorm float3> AlbedoTexture   : register(t6);
+Texture2D<float3> AlbedoTexture   : register(t6);
 
 RWTexture2D<float4> outMain : register(u0);
 
@@ -74,16 +74,23 @@ cbuffer SSRTCB : register(b1)
         PrevSH0.SampleLevel(samplerPointClamp, prevSamp, 0),
         PrevSH1.SampleLevel(samplerPointClamp, prevSamp, 0));
 
-    if (sg.c0 <= 0.0) return;
-
-    float3 nr = NormalRoughnessTexture.SampleLevel(samplerPointClamp, uv * FrameBuffer::DynamicResolutionParams1.xy, 0);
-    float3 normalVS = GBuffer::DecodeNormal(nr.xy);
+    float3 nr = NormalRoughnessTexture[pixCoord].xyz;
+    float3 normalVS = GBuffer::DecodeNormal(nr);
     float3 normalWS = normalize(mul((float3x3)FrameBuffer::CameraViewInverse[eyeIndex], normalVS));
 
-    float3 giLinear = NRD_SH_ResolveDiffuse(sg, normalWS);
-    float3 albedo = Color::IrradianceToLinear(AlbedoTexture.SampleLevel(samplerPointClamp, uv * FrameBuffer::DynamicResolutionParams1.xy, 0));
-    float3 contribution = Color::IrradianceToGamma(giLinear * albedo);
+	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS.xyz = positionWS.xyz / positionWS.w;
 
-    float4 existing = outMain[pixCoord];
-    outMain[pixCoord] = float4(existing.rgb + contribution, existing.a);
+    float3 V = -normalize(positionWS.xyz);
+
+    float3 il = NRD_SG_ResolveDiffuse(sg, normalWS, V, 1.0 - nr.z);
+
+    float3 linAlbedo = Color::IrradianceToLinear(AlbedoTexture[pixCoord]);
+
+    float3 color = Color::IrradianceToLinear(outMain[pixCoord].xyz);
+    color += il * linAlbedo; 
+    color = Color::IrradianceToGamma(color);
+
+    outMain[pixCoord] = float4(color, 1.0);
 }
