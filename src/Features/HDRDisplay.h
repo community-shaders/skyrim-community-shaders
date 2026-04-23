@@ -114,6 +114,7 @@ struct HDRDisplay : public Feature
 
 	static bool DetectHDR();
 	static bool isHDRMonitor;
+	static bool wasExclusiveFullscreen;  // EFS detected at swapchain creation; incompatible with HDR
 	bool pendingAutoDetect = false;
 
 	float GetDisplayMaxLuminance() const;
