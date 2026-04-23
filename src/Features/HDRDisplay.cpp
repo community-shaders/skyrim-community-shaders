@@ -139,8 +139,10 @@ namespace
 					HRESULT hr = adapter->EnumOutputs(oi, out.put());
 					if (hr == DXGI_ERROR_NOT_FOUND)
 						break;
-					if (FAILED(hr))
-						continue;
+					if (FAILED(hr)) {
+						logger::debug("[HDR] EnumOutputs failed: hr=0x{:08X}", static_cast<unsigned>(hr));
+						break;
+					}
 					DXGI_OUTPUT_DESC outDesc{};
 					if (FAILED(out->GetDesc(&outDesc)) || outDesc.Monitor != hMonitor)
 						continue;
@@ -185,10 +187,26 @@ namespace
 		colorInfo.header.id = pathInfo.targetInfo.id;
 		if (DisplayConfigGetDeviceInfo(&colorInfo.header) == ERROR_SUCCESS) {
 			supported = colorInfo.advancedColorSupported != 0;
-			enabled = colorInfo.advancedColorEnabled != 0;
+
+			DXGI_COLOR_SPACE_TYPE swapChainOutputColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+			{
+				winrt::com_ptr<IDXGIOutput> containingOutput;
+				if (SUCCEEDED(swapChain->GetContainingOutput(containingOutput.put()))) {
+					winrt::com_ptr<IDXGIOutput6> out6;
+					if (SUCCEEDED(containingOutput->QueryInterface(IID_PPV_ARGS(out6.put())))) {
+						DXGI_OUTPUT_DESC1 desc1{};
+						if (SUCCEEDED(out6->GetDesc1(&desc1)))
+							swapChainOutputColorSpace = desc1.ColorSpace;
+					}
+				}
+			}
+
+			enabled = (colorInfo.advancedColorEnabled != 0) && (swapChainOutputColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
 			UINT32 advancedSupported = colorInfo.advancedColorSupported;
 			UINT32 advancedEnabled = colorInfo.advancedColorEnabled;
-			logger::debug("[HDR] Legacy detection: advancedColorSupported={}, advancedColorEnabled={}", advancedSupported, advancedEnabled);
+			int colorSpaceInt = static_cast<int>(swapChainOutputColorSpace);
+			logger::debug("[HDR] Legacy detection: advancedColorSupported={}, advancedColorEnabled={}, swapChainColorSpace={}, enabled={}",
+				advancedSupported, advancedEnabled, colorSpaceInt, enabled);
 			return true;
 		}
 
