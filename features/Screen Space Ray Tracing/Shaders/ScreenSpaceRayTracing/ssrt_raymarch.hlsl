@@ -437,7 +437,6 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     GetNormalRoughness(fullResCoords, normalVS, roughness);
     roughness = clamp(roughness, 0.02f, 1.0f);
 
-    // [Fix #4] Determine pixel ownership before expensive ray setup.
     bool isMyPixel;
     uint2 outPixelPos;
     if (TracingMode == TRACING_MODE_HALF) {
