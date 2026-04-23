@@ -491,7 +491,6 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 
     int most_detailed_mip = is_mirror ? 0 : min(2, (int)SSRT_DEPTH_HIERARCHY_MAX_MIP);
 
-    // [Fix #6] Reuse full-res depth for mip 0; load from Hi-Z pyramid for coarser starting mips.
     float z;
     if (most_detailed_mip == 0) {
         z = depth;
@@ -594,7 +593,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             float3 envSkyColor = envColor;
             float3 skyColor = max(envSkyColor - envNoSkyColor, 0);
             envLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
-            envColor = lerp(envNoSkyColor, envNoSkyColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
+            envColor = envNoSkyColor * skylightingDiffuse;
             envColor += skyColor * skylightingDiffuse;
         } else {
             envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
