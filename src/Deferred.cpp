@@ -384,8 +384,11 @@ void Deferred::DeferredPasses()
 		auto& normalRoughnessCopy = renderer->GetRuntimeData().renderTargets[normalRoughnessCopyRT];
 		float2 resolution = Util::ConvertToDynamic(globals::state->screenSize);
 		D3D11_BOX srcBox = { 0, 0, 0, (UINT)resolution.x, (UINT)resolution.y, 1 };
-		context->CopySubresourceRegion(mainCopy.texture, 0, 0, 0, 0, main.texture, 0, &srcBox);
-		context->CopySubresourceRegion(normalRoughnessCopy.texture, 0, 0, 0, 0, normalRoughness.texture, 0, &srcBox);
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite - Copies");
+			context->CopySubresourceRegion(mainCopy.texture, 0, 0, 0, 0, main.texture, 0, &srcBox);
+			context->CopySubresourceRegion(normalRoughnessCopy.texture, 0, 0, 0, 0, normalRoughness.texture, 0, &srcBox);
+		}
 
 		// Constant buffers
 		{
@@ -449,7 +452,10 @@ void Deferred::DeferredPasses()
 		context->IASetInputLayout(nullptr);
 		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		context->Draw(3, 0);
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite - Draw");
+			context->Draw(3, 0);
+		}
 
 		stateBackup.Restore(context);
 	}

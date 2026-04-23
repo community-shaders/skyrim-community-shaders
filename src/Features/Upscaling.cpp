@@ -1914,6 +1914,8 @@ void Upscaling::UpscaleDepth()
 	};
 
 	{
+		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Depth Upscale");
+
 		// Engine copies kMAIN→kMAIN_COPY during 3D scene rendering.
 		// In non-3D contexts (map, main menu, loading, pause) the engine skips its copy.
 		auto* ui = globals::game::ui;
@@ -1946,6 +1948,8 @@ void Upscaling::UpscaleDepth()
 	}
 
 	{
+		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Underwater Mask");
+
 		viewport.Width = screenSize.x * 0.5f;
 		viewport.Height = screenSize.y * 0.5f;
 		context->RSSetViewports(1, &viewport);
@@ -1968,6 +1972,7 @@ void Upscaling::UpscaleDepth()
 
 	// Now propagate the upscaled depth to kMAIN_COPY so downstream VR passes see it.
 	if (globals::game::isVR) {
+		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Depth VR Propagate");
 		copyIfNonAliased(depthCopy.texture, depth.texture);
 	}
 
