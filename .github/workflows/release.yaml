@@ -20,6 +20,11 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Configure git identity
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
             - name: Apply feature version bumps
               run: |
                   python tools/feature_version_audit.py \

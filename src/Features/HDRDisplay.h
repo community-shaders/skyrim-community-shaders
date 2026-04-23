@@ -115,6 +115,7 @@ struct HDRDisplay : public Feature
 	static bool DetectHDR();          // Returns true if Windows HDR is currently active (enabled in OS settings)
 	static bool isHDRMonitor;         // Windows HDR is active (enabled in OS settings)
 	static bool isHDRCapableMonitor;  // Monitor supports HDR but Windows HDR may be off
+	static bool wasExclusiveFullscreen;  // EFS detected at swapchain creation; incompatible with HDR
 	bool pendingAutoDetect = false;
 
 	float GetDisplayMaxLuminance() const;

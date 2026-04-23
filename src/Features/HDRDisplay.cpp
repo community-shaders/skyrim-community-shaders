@@ -261,6 +261,7 @@ namespace
 
 bool HDRDisplay::isHDRMonitor = false;
 bool HDRDisplay::isHDRCapableMonitor = false;
+bool HDRDisplay::wasExclusiveFullscreen = false;
 
 bool HDRDisplay::DetectHDR()
 {
@@ -303,6 +304,18 @@ void HDRDisplay::DrawSettings()
 	} else {
 		ImGui::TextColored(Util::Colors::GetWarning(), "SDR Display (HDR not detected)");
 	}
+
+	const bool isExclusiveFullscreen = globals::features::upscaling.loaded ? !globals::features::upscaling.isWindowed : wasExclusiveFullscreen;
+
+	if (isExclusiveFullscreen) {
+		ImGui::Spacing();
+		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+		ImGui::TextWrapped("WARNING: Exclusive Fullscreen detected.");
+		ImGui::TextWrapped("HDR is not compatible with Exclusive Fullscreen and may not work correctly. Switch to Borderless Windowed mode for proper HDR support.");
+		ImGui::PopStyleColor();
+		ImGui::Spacing();
+	}
+
 	ImGui::Spacing();
 
 	// Gate HDR checkbox behind monitor detection
