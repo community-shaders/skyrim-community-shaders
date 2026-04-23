@@ -83,7 +83,7 @@ struct ScreenSpaceRayTracing : Feature
         bool EnableSpecular = true;
         uint Mode = TRACING_MODE_HALF;
         uint MaxSteps = 128;
-        uint MaxMips = 6;
+        uint MaxMips = kMaxMipSlots;
         float Thickness = 5.f;
         float NormalBias = 0.1f;
         float BRDFBias = 0.25f;
@@ -178,10 +178,11 @@ struct ScreenSpaceRayTracing : Feature
 
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
-    static const uint maxMips = 3;
+    static const uint kMaxMipSlots = 12;
+    uint numMips = 1;
 
-    std::array<winrt::com_ptr<ID3D11ShaderResourceView>, maxMips> depthSRVs = { nullptr };
-	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, maxMips> depthUAVs = { nullptr };
+    std::array<winrt::com_ptr<ID3D11ShaderResourceView>, kMaxMipSlots> depthSRVs = { nullptr };
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, kMaxMipSlots> depthUAVs = { nullptr };
 
     winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
     winrt::com_ptr<ID3D11SamplerState> pointSampler = nullptr;

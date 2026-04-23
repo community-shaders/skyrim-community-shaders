@@ -79,7 +79,7 @@ cbuffer SSRTCB : register(b1)
 #define HIZ_MAX_ITERATIONS MaxSteps
 #define HIZ_MIN_MIP 0
 #define SSRT_FLOAT_MAX 3.402823466e+38
-#define SSRT_DEPTH_HIERARCHY_MAX_MIP MaxMips
+#define SSRT_DEPTH_HIERARCHY_MAX_MIP (MaxMips - 1)
 
 float3 ProjectPosition(float3 origin, float4x4 mat)
 {
@@ -109,10 +109,6 @@ float3 InvProjectPosition(float3 coord, float4x4 mat)
 float2 SSRT_GetMipResolution(float2 screen_dimensions, int mip_level)
 {
     return screen_dimensions * pow(0.5, mip_level);
-    // uint2 dimensions;
-    // uint levels;
-    // DepthTextureMips.GetDimensions(mip_level, dimensions.x, dimensions.y, levels);
-    // return float2(dimensions.x, dimensions.y);
 }
 
 float SSRT_LoadDepth(int2 pixel_coordinate, int mip)

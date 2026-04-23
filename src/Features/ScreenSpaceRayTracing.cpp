@@ -81,7 +81,7 @@ void ScreenSpaceRayTracing::DrawSettings()
     }
 
     ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 256);
-    ImGui::SliderInt("Max Mip Level", (int*)&settings.MaxMips, 1, maxMips, "%d", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SliderInt("Max Mip Level", (int*)&settings.MaxMips, 1, numMips, "%d", ImGuiSliderFlags_AlwaysClamp);
 
     ImGui::SliderFloat("Specular Multiplier", &settings.SpecularMult, 0.0f, 5.0f, "%.2f");
     ImGui::SliderFloat("Diffuse Multiplier", &settings.DiffuseMult, 0.01f, 5.0f, "%.2f");
@@ -342,15 +342,21 @@ void ScreenSpaceRayTracing::SetupResources()
         texNRDNormalRoughness->CreateSRV(srvDesc);
         texNRDNormalRoughness->CreateUAV(uavDesc);
 
-        // Hi-Z depth pyramid (full-res mip0, R32F, maxMips mips — min-filtered downsample)
+        // Hi-Z depth pyramid (full-res mip0, R32F, mip count derived from resolution)
         texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
-        texDesc.MipLevels = maxMips;
+        {
+            uint minDim = std::min(fullW, fullH);
+            numMips = 1;
+            while ((minDim >> numMips) >= 16 && numMips < kMaxMipSlots)
+                ++numMips;
+        }
+        texDesc.MipLevels = numMips;
         srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
         texDepth = eastl::make_unique<Texture2D>(texDesc);
         texDepth->CreateSRV(srvDesc);
         texDepth->CreateUAV(uavDesc);
 
-        for (uint i = 0; i < maxMips; i++) {
+        for (uint i = 0; i < numMips; i++) {
 			D3D11_SHADER_RESOURCE_VIEW_DESC mipSrvDesc = {
 				.Format = texDesc.Format,
 				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
@@ -483,7 +489,7 @@ void ScreenSpaceRayTracing::Prepass()
     SSRTCB ssrCBData = {};
     {
         ssrCBData.MaxSteps = settings.MaxSteps;
-        ssrCBData.MaxMips = settings.MaxMips;
+        ssrCBData.MaxMips = std::min(settings.MaxMips, numMips);
         ssrCBData.Thickness = settings.Thickness;
         ssrCBData.NormalBias = settings.NormalBias;
         ssrCBData.BRDFBias = settings.BRDFBias;
@@ -538,10 +544,11 @@ void ScreenSpaceRayTracing::Prepass()
 
     // downsample depth Hi-Z
     {
-		float2 dispatchCountDownsample = { ((size.x / 2) + 7) / 8, ((size.y / 2) + 7) / 8 };
-
         state->BeginPerfEvent("Downsample Depth - HiZ Buffer");
-        for (int i = 0; i < maxMips - 1; ++i) {
+        for (uint i = 0; i < numMips - 1; ++i) {
+            uint outW = std::max(1u, (uint)size.x >> (i + 1));
+            uint outH = std::max(1u, (uint)size.y >> (i + 1));
+
             uavs.at(0) = depthUAVs[i + 1].get();
             srvs.at(0) = depthSRVs[i].get();
 
@@ -549,7 +556,7 @@ void ScreenSpaceRayTracing::Prepass()
             context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
             context->CSSetShader(depthDownsampleCS.get(), nullptr, 0);
 
-            context->Dispatch((uint)dispatchCountDownsample.x >> i, (uint)dispatchCountDownsample.y >> i, 1);
+            context->Dispatch((outW + 7) / 8, (outH + 7) / 8, 1);
 
             resetViews();
         }
@@ -620,7 +627,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     SSRTCB ssrCBData = {};
     {
         ssrCBData.MaxSteps = settings.MaxSteps;
-        ssrCBData.MaxMips = settings.MaxMips;
+        ssrCBData.MaxMips = std::min(settings.MaxMips, numMips);
         ssrCBData.Thickness = settings.Thickness;
         ssrCBData.NormalBias = settings.NormalBias;
         ssrCBData.BRDFBias = settings.BRDFBias;
@@ -819,7 +826,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     SSRTCB ssrCBData = {};
     {
         ssrCBData.MaxSteps = settings.MaxSteps;
-        ssrCBData.MaxMips = settings.MaxMips;
+        ssrCBData.MaxMips = std::min(settings.MaxMips, numMips);
         ssrCBData.Thickness = settings.Thickness;
         ssrCBData.NormalBias = settings.NormalBias;
         ssrCBData.BRDFBias = settings.BRDFBias;
