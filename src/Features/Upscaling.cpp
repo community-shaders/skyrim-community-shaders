@@ -1461,10 +1461,8 @@ void Upscaling::PostDisplay()
 	globals::game::renderer->UpdateViewPort(0, 0, 1);
 	UpdateCameraData();
 
-	if (d3d12SwapChainActive) {
-		if (globals::features::hdrDisplay.loaded)
-			globals::features::hdrDisplay.SetUIBuffer();
-	}
+	if (d3d12SwapChainActive)
+		globals::features::hdrDisplay.SetUIBuffer();
 
 	globals::state->UpdateSharedData(false, false);
 }
