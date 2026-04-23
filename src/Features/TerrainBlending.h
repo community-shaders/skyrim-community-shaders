@@ -72,6 +72,7 @@ public:
 
 	Texture2D* blendedDepthTexture = nullptr;
 	Texture2D* blendedDepthTexture16 = nullptr;
+	Texture2D* mainDepthCopy = nullptr;  // R32_FLOAT snapshot written inline by DepthBlend CS, replaces CopyResource
 
 	ID3D11ShaderResourceView* GetBlendedDepthSRV() const
 	{
