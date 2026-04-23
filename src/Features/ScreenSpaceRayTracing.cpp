@@ -51,7 +51,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     DiffuseMult,
     AmbientMult,
     OcclusionStrength,
-    CubemapNormalization,
     EnableREBLUR,
     HitDistA,
     HitDistB,
@@ -108,10 +107,6 @@ void ScreenSpaceRayTracing::DrawSettings()
     ImGui::Checkbox("Use Dynamic Cubemaps as Fallback for Specular", &settings.UseDynamicCubemapsAsFallbackSpecular);
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("When ray marching misses, use dynamic cubemaps for reflections. Recommended for specular.");
-    ImGui::SliderFloat("Cubemap Normalization", &settings.CubemapNormalization, 0.0f, 1.0f, "%.2f");
-    if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("Matches cubemap luminance with ambient color.");
-
     ImGui::SeparatorText("REBLUR Denoiser");
     ImGui::SliderFloat("Hit Dist A", &settings.HitDistA, 1.0f, 1000.0f, "%.1f");
     if (auto _tt = Util::HoverTooltipWrapper())
@@ -495,7 +490,7 @@ void ScreenSpaceRayTracing::Prepass()
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = 0;
         ssrCBData.OcclusionStrength = settings.OcclusionStrength;
-        ssrCBData.CubemapNormalization = settings.CubemapNormalization;
+        ssrCBData._pad0 = 0;
 
         ssrCBData.TexDim = res;
         ssrCBData.RcpTexDim = float2(1.0f) / res;
@@ -633,7 +628,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallbackSpecular && dynamicCubemaps.loaded;
         ssrCBData.OcclusionStrength = settings.OcclusionStrength;
-        ssrCBData.CubemapNormalization = settings.CubemapNormalization;
+        ssrCBData._pad0 = 0;
 
         ssrCBData.TexDim = res;
         ssrCBData.RcpTexDim = float2(1.0f) / res;
@@ -832,7 +827,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
         ssrCBData.OcclusionStrength = settings.OcclusionStrength;
-        ssrCBData.CubemapNormalization = settings.CubemapNormalization;
+        ssrCBData._pad0 = 0;
 
         ssrCBData.TexDim = res;
         ssrCBData.RcpTexDim = float2(1.0f) / res;

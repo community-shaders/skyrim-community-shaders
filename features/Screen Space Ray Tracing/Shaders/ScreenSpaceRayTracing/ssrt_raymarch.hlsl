@@ -58,7 +58,7 @@ cbuffer SSRTCB : register(b1)
     float NormalBias;
     float BRDFBias;
     float OcclusionStrength;
-    float CubemapNormalization;
+    float _pad0;
 
     float2 TexDim;
     float2 RcpTexDim;
@@ -568,8 +568,6 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #   else
         const uint sampleMip = 2;
 #   endif
-        float directionalAmbientLuminance = Color::RGBToLuminance(max(0.0, mul(SharedData::DirectionalAmbient, float4(world_space_reflected_direction, 1.0)))) * Color::ReflectionNormalisationScale;
-        float envLuminance;
         float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
 #	if defined(SKYLIGHTING)
         if (!SharedData::InInterior)
@@ -592,16 +590,10 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             float3 envNoSkyColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
             float3 envSkyColor = envColor;
             float3 skyColor = max(envSkyColor - envNoSkyColor, 0);
-            envLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
             envColor = envNoSkyColor * skylightingDiffuse;
             envColor += skyColor * skylightingDiffuse;
-        } else {
-            envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
-            envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
         }
 #   else
-        envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15).xyz);
-        envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
 #   endif
         envColor = Color::IrradianceToLinear(envColor);
         float ao = lerp(1.0, occlusion, OcclusionStrength);

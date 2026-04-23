@@ -94,7 +94,6 @@ struct ScreenSpaceRayTracing : Feature
         float DiffuseMult = 1.0f;
         float AmbientMult = 0.0f;
         float OcclusionStrength = 1.0f;
-        float CubemapNormalization = 0.0f;
         bool EnableREBLUR = true;
         float HitDistA = 210.0f;  // NRD hitDistanceParameters.A (typical hit dist, Skyrim units)
         float HitDistB = 0.1f;    // NRD hitDistanceParameters.B (correction factor)
@@ -125,7 +124,7 @@ struct ScreenSpaceRayTracing : Feature
         float NormalBias;
         float BRDFBias;
         float OcclusionStrength;
-        float CubemapNormalization;
+        float _pad0;
 
         float2 TexDim;
         float2 RcpTexDim;

@@ -32,7 +32,7 @@ cbuffer SSRTCB : register(b1)
     float NormalBias;
     float BRDFBias;
     float OcclusionStrength;
-    float CubemapNormalization;
+    float _pad0;
 
     float2 TexDim;
     float2 RcpTexDim;
@@ -70,25 +70,17 @@ cbuffer SSRTCB : register(b1)
     // Disocclusion: reject reprojection when current-vs-prev linear depth diverges.
     if (abs(SharedData::GetScreenDepth(depth) - prevViewZ) >= 10) return;
 
-    // Unpack previous frame's SH.
     NRD_SG sg = REBLUR_BackEnd_UnpackSh(
         PrevSH0.SampleLevel(samplerPointClamp, prevSamp, 0),
         PrevSH1.SampleLevel(samplerPointClamp, prevSamp, 0));
 
     if (sg.c0 <= 0.0) return;
 
-    // Current-pixel world-space normal + view direction.
-    float4 thisClip = float4(thisScreen, depth, 1);
-    float4 thisView = mul(FrameBuffer::CameraProjUnjitteredInverse[eyeIndex], thisClip);
-    thisView.xyz /= thisView.w;
-    float3 V = normalize(mul((float3x3)FrameBuffer::CameraViewInverse[eyeIndex], normalize(-thisView.xyz)));
-
     float3 nr = NormalRoughnessTexture.SampleLevel(samplerPointClamp, uv * FrameBuffer::DynamicResolutionParams1.xy, 0);
     float3 normalVS = GBuffer::DecodeNormal(nr.xy);
-    float roughness = 1.0 - nr.z;
     float3 normalWS = normalize(mul((float3x3)FrameBuffer::CameraViewInverse[eyeIndex], normalVS));
 
-    float3 giLinear = NRD_SG_ResolveDiffuse(sg, normalWS, V, roughness);
+    float3 giLinear = NRD_SH_ResolveDiffuse(sg, normalWS);
     float3 albedo = Color::IrradianceToLinear(AlbedoTexture.SampleLevel(samplerPointClamp, uv * FrameBuffer::DynamicResolutionParams1.xy, 0));
     float3 contribution = Color::IrradianceToGamma(giLinear * albedo);
 

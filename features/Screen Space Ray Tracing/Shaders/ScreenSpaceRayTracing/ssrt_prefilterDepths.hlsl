@@ -14,7 +14,7 @@ cbuffer SSRTCB : register(b1)
     float NormalBias;
     float BRDFBias;
     float OcclusionStrength;
-    float CubemapNormalization;
+    float _pad0;
 
     float2 TexDim;
     float2 RcpTexDim;
