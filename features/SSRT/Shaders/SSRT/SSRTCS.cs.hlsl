@@ -20,8 +20,7 @@ Texture2D<float2> srcNormal : register(t1);
 Texture2D<float3> srcRadiance : register(t2);
 
 RWTexture2D<float4> outGIOcclusion : register(u0);
-RWTexture2D<float4> outSH0 : register(u1);
-RWTexture2D<float4> outSH1 : register(u2);
+RWTexture2D<float4> outNRDDiffuse : register(u1);
 
 #define TILE_SIZE 8
 
@@ -134,7 +133,6 @@ inline uint ComputeOccludedBitfield(float minHorizon, float maxHorizon, inout ui
 struct HorizonResult
 {
 	float3 color;
-	float3 weightedDir;
 	float weightedDist;
 	float totalWeight;
 };
@@ -153,7 +151,6 @@ inline HorizonResult HorizonSampling(
 	float radiusVS = max(1, float(StepCount - 1)) * stepRadius;
 	float samplingDirection = directionIsRight ? 1 : -1;
 	float3 col = 0;
-	float3 weightedDir = 0;
 	float weightedDist = 0;
 	float totalWeight = 0;
 	float3 lastSamplePosVS = posVS;
@@ -211,7 +208,6 @@ inline HorizonResult HorizonSampling(
 
 					float w = (float(numOccludedZones) / float(MAX_RAY)) * normalDotLightDirection * lightNormalDotLightDirection;
 					col.xyz += w * lightColor;
-					weightedDir += w * lightDirectionVS;
 					weightedDist += w * length(samplePosVS - posVS);
 					totalWeight += w;
 				}
@@ -223,7 +219,6 @@ inline HorizonResult HorizonSampling(
 
 	HorizonResult result;
 	result.color = col;
-	result.weightedDir = weightedDir;
 	result.weightedDist = weightedDist;
 	result.totalWeight = totalWeight;
 	return result;
@@ -253,7 +248,6 @@ inline HorizonResult HorizonSampling(
 
 	float ao = 0;
 	float3 col = 0;
-	float3 accumDir = 0;
 	float accumDist = 0;
 	float accumWeight = 0;
 
@@ -279,7 +273,6 @@ inline HorizonResult HorizonSampling(
 			uv, viewDir, normalVS, n, globalOccludedBitfield, planeNormal);
 
 		col += rRight.color + rLeft.color;
-		accumDir += rRight.weightedDir + rLeft.weightedDir;
 		accumDist += rRight.weightedDist + rLeft.weightedDist;
 		accumWeight += rRight.totalWeight + rLeft.totalWeight;
 
@@ -301,14 +294,9 @@ inline HorizonResult HorizonSampling(
 
 	outGIOcclusion[pxCoord] = float4(col, ao);
 
-	// NRD SH output
-	float3 dominantDir = accumWeight > 0.001 ? normalize(accumDir) : normalVS;
+	// NRD REBLUR_DIFFUSE: pack as YCoCg + normHitDist
 	float avgHitDist = accumWeight > 0.001 ? accumDist / accumWeight : Radius;
 	float viewZ = posVS.z;
 	float normHitDist = REBLUR_FrontEnd_GetNormHitDist(avgHitDist, viewZ, float4(HitDistA, HitDistB, HitDistC, HitDistD));
-
-	float4 sh1;
-	float4 sh0 = REBLUR_FrontEnd_PackSh(col, normHitDist, dominantDir, sh1, true);
-	outSH0[pxCoord] = sh0;
-	outSH1[pxCoord] = sh1;
+	outNRDDiffuse[pxCoord] = REBLUR_FrontEnd_PackRadianceAndNormHitDist(col, normHitDist, true);
 }

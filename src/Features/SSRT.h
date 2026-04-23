@@ -68,17 +68,19 @@ public:
 		float AOIntensity = 1.f;
 		float Thickness = 1.f;
 		bool LinearThickness = false;
-		// NRD REBLUR
+		// NRD REBLUR (performance-tuned defaults)
 		bool EnableNRD = true;
 		float HitDistA = 210.f;
 		float HitDistB = 0.1f;
 		float HitDistC = 20.f;
 		float HitDistD = -25.f;
-		uint MaxAccumulatedFrameNum = 30;
-		uint MaxFastAccumulatedFrameNum = 6;
-		float DiffusePrepassBlurRadius = 30.f;
-		float MinBlurRadius = 1.f;
-		float MaxBlurRadius = 35.f;
+		uint MaxAccumulatedFrameNum = 20;
+		uint MaxFastAccumulatedFrameNum = 4;
+		uint MaxStabilizedFrameNum = 0;
+		uint HistoryFixFrameNum = 0;
+		float DiffusePrepassBlurRadius = 0.f;
+		float MinBlurRadius = 0.5f;
+		float MaxBlurRadius = 15.f;
 		bool EnableAntiFirefly = false;
 	} settings;
 
@@ -134,10 +136,8 @@ public:
 	// NRD textures
 	eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDNormalRoughness = nullptr;
-	eastl::unique_ptr<Texture2D> texNRDInputSH0 = nullptr;
-	eastl::unique_ptr<Texture2D> texNRDInputSH1 = nullptr;
-	eastl::unique_ptr<Texture2D> texNRDOutputSH0 = nullptr;
-	eastl::unique_ptr<Texture2D> texNRDOutputSH1 = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDInputDiffuse = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDOutputDiffuse = nullptr;
 
 	NRDReblurIntegration nrdReblur;
 	nrd::ReblurSettings reblurSettings{};

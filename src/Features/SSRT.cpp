@@ -27,6 +27,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HitDistD,
 	MaxAccumulatedFrameNum,
 	MaxFastAccumulatedFrameNum,
+	MaxStabilizedFrameNum,
+	HistoryFixFrameNum,
 	DiffusePrepassBlurRadius,
 	MinBlurRadius,
 	MaxBlurRadius,
@@ -203,8 +205,25 @@ void SSRT::DrawSettings()
 			if (ImGui::SliderInt("Max Fast Accumulated Frames", &v, 1, (int)settings.MaxAccumulatedFrameNum))
 				settings.MaxFastAccumulatedFrameNum = (uint)v;
 		}
+		{
+			int v = (int)settings.MaxStabilizedFrameNum;
+			if (ImGui::SliderInt("Max Stabilized Frames", &v, 0, (int)nrd::REBLUR_MAX_HISTORY_FRAME_NUM))
+				settings.MaxStabilizedFrameNum = (uint)v;
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("0 disables the stabilization pass (saves GPU time).");
+		}
+		{
+			int v = (int)settings.HistoryFixFrameNum;
+			if (ImGui::SliderInt("History Fix Frames", &v, 0, (int)settings.MaxFastAccumulatedFrameNum))
+				settings.HistoryFixFrameNum = (uint)v;
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("0 disables history reconstruction (saves GPU time).");
+		}
 
 		ImGui::SliderFloat("Prepass Blur Radius", &settings.DiffusePrepassBlurRadius, 0.f, 75.f, "%.1f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("0 disables the prepass spatial reuse (saves GPU time).");
+
 		ImGui::SliderFloat("Min Blur Radius", &settings.MinBlurRadius, 0.f, 10.f, "%.1f");
 		ImGui::SliderFloat("Max Blur Radius", &settings.MaxBlurRadius, 0.f, 100.f, "%.1f");
 		ImGui::Checkbox("Anti-Firefly", &settings.EnableAntiFirefly);
@@ -223,10 +242,8 @@ void SSRT::DrawSettings()
 		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDViewZ, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDNormalRoughness, debugRescale)
-		BUFFER_VIEWER_NODE(texNRDInputSH0, debugRescale)
-		BUFFER_VIEWER_NODE(texNRDInputSH1, debugRescale)
-		BUFFER_VIEWER_NODE(texNRDOutputSH0, debugRescale)
-		BUFFER_VIEWER_NODE(texNRDOutputSH1, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDInputDiffuse, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDOutputDiffuse, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -330,24 +347,16 @@ void SSRT::SetupResources()
 		}
 
 		// NRD textures (full-res, single mip)
-		// NRD SH textures (RGBA16F)
+		// NRD diffuse radiance+hitdist (RGBA16F: YCoCg + normHitDist)
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		{
-			texNRDInputSH0 = eastl::make_unique<Texture2D>(texDesc);
-			texNRDInputSH0->CreateSRV(srvDesc);
-			texNRDInputSH0->CreateUAV(uavDesc);
+			texNRDInputDiffuse = eastl::make_unique<Texture2D>(texDesc);
+			texNRDInputDiffuse->CreateSRV(srvDesc);
+			texNRDInputDiffuse->CreateUAV(uavDesc);
 
-			texNRDInputSH1 = eastl::make_unique<Texture2D>(texDesc);
-			texNRDInputSH1->CreateSRV(srvDesc);
-			texNRDInputSH1->CreateUAV(uavDesc);
-
-			texNRDOutputSH0 = eastl::make_unique<Texture2D>(texDesc);
-			texNRDOutputSH0->CreateSRV(srvDesc);
-			texNRDOutputSH0->CreateUAV(uavDesc);
-
-			texNRDOutputSH1 = eastl::make_unique<Texture2D>(texDesc);
-			texNRDOutputSH1->CreateSRV(srvDesc);
-			texNRDOutputSH1->CreateUAV(uavDesc);
+			texNRDOutputDiffuse = eastl::make_unique<Texture2D>(texDesc);
+			texNRDOutputDiffuse->CreateSRV(srvDesc);
+			texNRDOutputDiffuse->CreateUAV(uavDesc);
 		}
 
 		// NRD ViewZ (R32F)
@@ -370,7 +379,7 @@ void SSRT::SetupResources()
 		{
 			uint32_t fullW = texDesc.Width;
 			uint32_t fullH = texDesc.Height;
-			nrdReblur.Init(fullW, fullH, nrd::Denoiser::REBLUR_DIFFUSE_SH, 0);
+			nrdReblur.Init(fullW, fullH, nrd::Denoiser::REBLUR_DIFFUSE, 0);
 		}
 	}
 
@@ -619,10 +628,9 @@ void SSRT::DrawSSRT()
 		srvs.at(1) = texNormals->srv.get();
 		srvs.at(2) = texRadiance->srv.get();
 
-		std::array<ID3D11UnorderedAccessView*, 3> mainUavs = {
+		std::array<ID3D11UnorderedAccessView*, 2> mainUavs = {
 			texGIOcclusion->uav.get(),
-			texNRDInputSH0->uav.get(),
-			texNRDInputSH1->uav.get()
+			texNRDInputDiffuse->uav.get()
 		};
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
@@ -669,8 +677,8 @@ void SSRT::DrawSSRT()
 				uint16_t fw = (uint16_t)resolution[0];
 				uint16_t fh = (uint16_t)resolution[1];
 
-				commonSettings.resourceSize[0] = (uint16_t)texNRDInputSH0->desc.Width;
-				commonSettings.resourceSize[1] = (uint16_t)texNRDInputSH0->desc.Height;
+				commonSettings.resourceSize[0] = (uint16_t)texNRDInputDiffuse->desc.Width;
+				commonSettings.resourceSize[1] = (uint16_t)texNRDInputDiffuse->desc.Height;
 				commonSettings.resourceSizePrev[0] = commonSettings.resourceSize[0];
 				commonSettings.resourceSizePrev[1] = commonSettings.resourceSize[1];
 				commonSettings.rectSize[0] = fw;
@@ -701,6 +709,10 @@ void SSRT::DrawSSRT()
 			{
 				reblurSettings.maxAccumulatedFrameNum = std::min(settings.MaxAccumulatedFrameNum, (uint)nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
 				reblurSettings.maxFastAccumulatedFrameNum = std::min(settings.MaxFastAccumulatedFrameNum, reblurSettings.maxAccumulatedFrameNum);
+				reblurSettings.maxStabilizedFrameNum = std::min(settings.MaxStabilizedFrameNum, reblurSettings.maxAccumulatedFrameNum);
+				reblurSettings.historyFixFrameNum = reblurSettings.maxFastAccumulatedFrameNum > 0
+					? std::min(settings.HistoryFixFrameNum, reblurSettings.maxFastAccumulatedFrameNum - 1)
+					: 0;
 				reblurSettings.diffusePrepassBlurRadius = std::max(settings.DiffusePrepassBlurRadius, 0.0f);
 				reblurSettings.minBlurRadius = std::max(settings.MinBlurRadius, 0.0f);
 				reblurSettings.maxBlurRadius = std::max(settings.MaxBlurRadius, reblurSettings.minBlurRadius);
@@ -715,12 +727,9 @@ void SSRT::DrawSSRT()
 			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV, motion.SRV);
 			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS, texNRDNormalRoughness->srv.get());
 			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_VIEWZ, texNRDViewZ->srv.get());
-			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH0, texNRDInputSH0->srv.get());
-			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH1, texNRDInputSH1->srv.get());
-			nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->srv.get());
-			nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->srv.get());
-			nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->uav.get());
-			nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->uav.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, texNRDInputDiffuse->srv.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, texNRDOutputDiffuse->srv.get());
+			nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, texNRDOutputDiffuse->uav.get());
 
 			nrdReblur.Dispatch();
 		}
@@ -730,11 +739,8 @@ void SSRT::DrawSSRT()
 			TracyD3D11Zone(globals::state->tracyCtx, "SSRT - NRD Resolve");
 
 			resetViews();
-			std::array<ID3D11ShaderResourceView*, 4> resolveSRVs = {
-				texNRDOutputSH0->srv.get(),
-				texNRDOutputSH1->srv.get(),
-				rts[deferred->normalRoughnessRT].SRV,
-				texWorkingDepth->srv.get()
+			std::array<ID3D11ShaderResourceView*, 1> resolveSRVs = {
+				texNRDOutputDiffuse->srv.get()
 			};
 			std::array<ID3D11UnorderedAccessView*, 1> resolveUAVs = { texGIOcclusion->uav.get() };
 
