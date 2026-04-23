@@ -19,7 +19,18 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	NormalApproximation,
 	AOIntensity,
 	Thickness,
-	LinearThickness)
+	LinearThickness,
+	EnableNRD,
+	HitDistA,
+	HitDistB,
+	HitDistC,
+	HitDistD,
+	MaxAccumulatedFrameNum,
+	MaxFastAccumulatedFrameNum,
+	DiffusePrepassBlurRadius,
+	MinBlurRadius,
+	MaxBlurRadius,
+	EnableAntiFirefly)
 
 ////////////////////////////////////////////////////////////////////////////////////
 
@@ -163,6 +174,43 @@ void SSRT::DrawSettings()
 	}
 
 	///////////////////////////////
+	ImGui::SeparatorText("NRD REBLUR");
+
+	{
+		auto nrdGuard = Util::DisableGuard(!settings.Enabled);
+
+		ImGui::Checkbox("Enable NRD", &settings.EnableNRD);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Use NVIDIA Real-time Denoiser (REBLUR) for temporal denoising of GI.");
+
+		auto nrdSettingsGuard = Util::DisableGuard(!settings.EnableNRD);
+
+		ImGui::SliderFloat("Hit Dist A", &settings.HitDistA, 1.f, 500.f, "%.1f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Typical hit distance in Skyrim units.");
+
+		ImGui::SliderFloat("Hit Dist B", &settings.HitDistB, 0.01f, 1.f, "%.3f");
+		ImGui::SliderFloat("Hit Dist C", &settings.HitDistC, 1.f, 100.f, "%.1f");
+		ImGui::SliderFloat("Hit Dist D", &settings.HitDistD, -50.f, 0.f, "%.1f");
+
+		{
+			int v = (int)settings.MaxAccumulatedFrameNum;
+			if (ImGui::SliderInt("Max Accumulated Frames", &v, 1, (int)nrd::REBLUR_MAX_HISTORY_FRAME_NUM))
+				settings.MaxAccumulatedFrameNum = (uint)v;
+		}
+		{
+			int v = (int)settings.MaxFastAccumulatedFrameNum;
+			if (ImGui::SliderInt("Max Fast Accumulated Frames", &v, 1, (int)settings.MaxAccumulatedFrameNum))
+				settings.MaxFastAccumulatedFrameNum = (uint)v;
+		}
+
+		ImGui::SliderFloat("Prepass Blur Radius", &settings.DiffusePrepassBlurRadius, 0.f, 75.f, "%.1f");
+		ImGui::SliderFloat("Min Blur Radius", &settings.MinBlurRadius, 0.f, 10.f, "%.1f");
+		ImGui::SliderFloat("Max Blur Radius", &settings.MaxBlurRadius, 0.f, 100.f, "%.1f");
+		ImGui::Checkbox("Anti-Firefly", &settings.EnableAntiFirefly);
+	}
+
+	///////////////////////////////
 	ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Buffer Viewer")) {
@@ -173,6 +221,12 @@ void SSRT::DrawSettings()
 		BUFFER_VIEWER_NODE(texWorkingDepth, debugRescale)
 		BUFFER_VIEWER_NODE(texNormals, debugRescale)
 		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDViewZ, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDNormalRoughness, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDInputSH0, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDInputSH1, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDOutputSH0, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDOutputSH1, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -274,6 +328,50 @@ void SSRT::SetupResources()
 			texGIOcclusion->CreateSRV(srvDesc);
 			texGIOcclusion->CreateUAV(uavDesc);
 		}
+
+		// NRD textures (full-res, single mip)
+		// NRD SH textures (RGBA16F)
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		{
+			texNRDInputSH0 = eastl::make_unique<Texture2D>(texDesc);
+			texNRDInputSH0->CreateSRV(srvDesc);
+			texNRDInputSH0->CreateUAV(uavDesc);
+
+			texNRDInputSH1 = eastl::make_unique<Texture2D>(texDesc);
+			texNRDInputSH1->CreateSRV(srvDesc);
+			texNRDInputSH1->CreateUAV(uavDesc);
+
+			texNRDOutputSH0 = eastl::make_unique<Texture2D>(texDesc);
+			texNRDOutputSH0->CreateSRV(srvDesc);
+			texNRDOutputSH0->CreateUAV(uavDesc);
+
+			texNRDOutputSH1 = eastl::make_unique<Texture2D>(texDesc);
+			texNRDOutputSH1->CreateSRV(srvDesc);
+			texNRDOutputSH1->CreateUAV(uavDesc);
+		}
+
+		// NRD ViewZ (R32F)
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		{
+			texNRDViewZ = eastl::make_unique<Texture2D>(texDesc);
+			texNRDViewZ->CreateSRV(srvDesc);
+			texNRDViewZ->CreateUAV(uavDesc);
+		}
+
+		// NRD NormalRoughness (R8G8B8A8_UNORM)
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		{
+			texNRDNormalRoughness = eastl::make_unique<Texture2D>(texDesc);
+			texNRDNormalRoughness->CreateSRV(srvDesc);
+			texNRDNormalRoughness->CreateUAV(uavDesc);
+		}
+
+		// Initialize NRD REBLUR
+		{
+			uint32_t fullW = texDesc.Width;
+			uint32_t fullH = texDesc.Height;
+			nrdReblur.Init(fullW, fullH, nrd::Denoiser::REBLUR_DIFFUSE_SH, 0);
+		}
 	}
 
 	logger::debug("Creating samplers...");
@@ -299,7 +397,8 @@ void SSRT::SetupResources()
 void SSRT::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&prefilterDepthsCompute, &prefilterRadianceCompute, &prefilterNormalsCompute, &ssrtCSCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &prefilterNormalsCompute, &ssrtCSCompute,
+		&prepareNRDGuidesCompute, &resolveNRDCompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -323,6 +422,8 @@ void SSRT::CompileComputeShaders()
 			{ &prefilterRadianceCompute, "prefilterRadiance.cs.hlsl", {} },
 			{ &prefilterNormalsCompute, "prefilterNormals.cs.hlsl", {} },
 			{ &ssrtCSCompute, "SSRTCS.cs.hlsl", {} },
+			{ &prepareNRDGuidesCompute, "prepareNRDGuides.cs.hlsl", {} },
+			{ &resolveNRDCompute, "resolveNRD.cs.hlsl", {} },
 		};
 
 	if (settings.NormalApproximation)
@@ -339,7 +440,7 @@ void SSRT::CompileComputeShaders()
 
 bool SSRT::ShadersOK()
 {
-	return prefilterDepthsCompute && prefilterRadianceCompute && prefilterNormalsCompute && ssrtCSCompute;
+	return prefilterDepthsCompute && prefilterRadianceCompute && prefilterNormalsCompute && ssrtCSCompute && prepareNRDGuidesCompute && resolveNRDCompute;
 }
 
 void SSRT::UpdateCB()
@@ -400,6 +501,12 @@ void SSRT::UpdateCB()
 
 		data.TemporalOffsets = temporalOffset;
 		data.TemporalDirections = temporalRotation / 360.0f;
+		data.pad0 = 0.f;
+
+		data.HitDistA = settings.HitDistA;
+		data.HitDistB = settings.HitDistB;
+		data.HitDistC = settings.HitDistC;
+		data.HitDistD = settings.HitDistD;
 	}
 
 	ssrtCB->Update(data);
@@ -512,12 +619,130 @@ void SSRT::DrawSSRT()
 		srvs.at(1) = texNormals->srv.get();
 		srvs.at(2) = texRadiance->srv.get();
 
-		std::array<ID3D11UnorderedAccessView*, 1> mainUavs = { texGIOcclusion->uav.get() };
+		std::array<ID3D11UnorderedAccessView*, 3> mainUavs = {
+			texGIOcclusion->uav.get(),
+			texNRDInputSH0->uav.get(),
+			texNRDInputSH1->uav.get()
+		};
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)mainUavs.size(), mainUavs.data(), nullptr);
 		context->CSSetShader(ssrtCSCompute.get(), nullptr, 0);
 		context->Dispatch((resolution[0] + 7u) >> 3, (resolution[1] + 7u) >> 3, 1);
+	}
+
+	// NRD path
+	if (settings.EnableNRD && nrdReblur.IsValid() && prepareNRDGuidesCompute && resolveNRDCompute) {
+		auto depth = Util::GetCurrentSceneDepthSRV();
+
+		// NRD guide preprocess
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "SSRT - NRD Guide Preprocess");
+
+			resetViews();
+			std::array<ID3D11ShaderResourceView*, 2> guideSRVs = {
+				depth,
+				rts[deferred->normalRoughnessRT].SRV
+			};
+			std::array<ID3D11UnorderedAccessView*, 2> guideUAVs = {
+				texNRDViewZ->uav.get(),
+				texNRDNormalRoughness->uav.get()
+			};
+
+			context->CSSetShaderResources(0, (uint)guideSRVs.size(), guideSRVs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)guideUAVs.size(), guideUAVs.data(), nullptr);
+			context->CSSetShader(prepareNRDGuidesCompute.get(), nullptr, 0);
+			context->Dispatch((resolution[0] + 7u) >> 3, (resolution[1] + 7u) >> 3, 1);
+
+			std::array<ID3D11ShaderResourceView*, 2> nullGuideSRVs = { nullptr };
+			std::array<ID3D11UnorderedAccessView*, 2> nullGuideUAVs = { nullptr };
+			context->CSSetShaderResources(0, (uint)nullGuideSRVs.size(), nullGuideSRVs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)nullGuideUAVs.size(), nullGuideUAVs.data(), nullptr);
+		}
+
+		// NRD REBLUR dispatch
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "SSRT - REBLUR");
+
+			nrd::CommonSettings commonSettings{};
+			{
+				uint16_t fw = (uint16_t)resolution[0];
+				uint16_t fh = (uint16_t)resolution[1];
+
+				commonSettings.resourceSize[0] = (uint16_t)texNRDInputSH0->desc.Width;
+				commonSettings.resourceSize[1] = (uint16_t)texNRDInputSH0->desc.Height;
+				commonSettings.resourceSizePrev[0] = commonSettings.resourceSize[0];
+				commonSettings.resourceSizePrev[1] = commonSettings.resourceSize[1];
+				commonSettings.rectSize[0] = fw;
+				commonSettings.rectSize[1] = fh;
+				commonSettings.rectSizePrev[0] = fw;
+				commonSettings.rectSizePrev[1] = fh;
+
+				auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
+				auto projMat = globals::game::frameBufferCached.GetCameraProj(0).Transpose();
+
+				memcpy(commonSettings.viewToClipMatrix, &projMat, sizeof(float) * 16);
+				memcpy(commonSettings.viewToClipMatrixPrev, &prevProjMatrix, sizeof(float) * 16);
+				memcpy(commonSettings.worldToViewMatrix, &viewMat, sizeof(float) * 16);
+				memcpy(commonSettings.worldToViewMatrixPrev, &prevViewMatrix, sizeof(float) * 16);
+
+				prevViewMatrix = viewMat;
+				prevProjMatrix = projMat;
+
+				commonSettings.motionVectorScale[0] = 1.0f;
+				commonSettings.motionVectorScale[1] = 1.0f;
+				commonSettings.motionVectorScale[2] = 0.0f;
+				commonSettings.isMotionVectorInWorldSpace = false;
+
+				commonSettings.frameIndex = nrdFrameIndex++;
+			}
+			nrdReblur.SetCommonSettings(commonSettings);
+
+			{
+				reblurSettings.maxAccumulatedFrameNum = std::min(settings.MaxAccumulatedFrameNum, (uint)nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+				reblurSettings.maxFastAccumulatedFrameNum = std::min(settings.MaxFastAccumulatedFrameNum, reblurSettings.maxAccumulatedFrameNum);
+				reblurSettings.diffusePrepassBlurRadius = std::max(settings.DiffusePrepassBlurRadius, 0.0f);
+				reblurSettings.minBlurRadius = std::max(settings.MinBlurRadius, 0.0f);
+				reblurSettings.maxBlurRadius = std::max(settings.MaxBlurRadius, reblurSettings.minBlurRadius);
+				reblurSettings.enableAntiFirefly = settings.EnableAntiFirefly;
+				reblurSettings.hitDistanceParameters.A = settings.HitDistA;
+				reblurSettings.hitDistanceParameters.B = settings.HitDistB;
+				reblurSettings.hitDistanceParameters.C = settings.HitDistC;
+			}
+			nrdReblur.SetDenoiserSettings(&reblurSettings);
+
+			auto& motion = rts[RE::RENDER_TARGETS::kMOTION_VECTOR];
+			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV, motion.SRV);
+			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS, texNRDNormalRoughness->srv.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_VIEWZ, texNRDViewZ->srv.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH0, texNRDInputSH0->srv.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH1, texNRDInputSH1->srv.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->srv.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->srv.get());
+			nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->uav.get());
+			nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->uav.get());
+
+			nrdReblur.Dispatch();
+		}
+
+		// Resolve NRD SH back to GI color
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "SSRT - NRD Resolve");
+
+			resetViews();
+			std::array<ID3D11ShaderResourceView*, 4> resolveSRVs = {
+				texNRDOutputSH0->srv.get(),
+				texNRDOutputSH1->srv.get(),
+				rts[deferred->normalRoughnessRT].SRV,
+				texWorkingDepth->srv.get()
+			};
+			std::array<ID3D11UnorderedAccessView*, 1> resolveUAVs = { texGIOcclusion->uav.get() };
+
+			context->CSSetShaderResources(0, (uint)resolveSRVs.size(), resolveSRVs.data());
+			context->CSSetUnorderedAccessViews(0, (uint)resolveUAVs.size(), resolveUAVs.data(), nullptr);
+			context->CSSetShader(resolveNRDCompute.get(), nullptr, 0);
+			context->Dispatch((resolution[0] + 7u) >> 3, (resolution[1] + 7u) >> 3, 1);
+		}
 	}
 
 	// cleanup

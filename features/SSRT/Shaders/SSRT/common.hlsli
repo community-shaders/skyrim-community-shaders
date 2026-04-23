@@ -33,6 +33,11 @@ cbuffer SSRTCB : register(b1)
 	float TemporalOffsets;
 	float TemporalDirections;
 	float pad0;
+
+	float HitDistA;
+	float HitDistB;
+	float HitDistC;
+	float HitDistD;
 };
 
 SamplerState samplerPointClamp : register(s0);

@@ -96,6 +96,16 @@ find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
 include(FidelityFX-SDK)
 
+# NRD — NVIDIA Real-time Denoisers (DX11 via embedded DXBC shaders, no NRI)
+set(NRD_STATIC_LIBRARY ON CACHE BOOL "" FORCE)
+set(NRD_NRI OFF CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_SPIRV_SHADERS OFF CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_DXIL_SHADERS OFF CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_DXBC_SHADERS ON CACHE BOOL "" FORCE)
+set(NRD_NORMAL_ENCODING "2" CACHE STRING "" FORCE)
+set(NRD_ROUGHNESS_ENCODING "1" CACHE STRING "" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/extern/NRD EXCLUDE_FROM_ALL)
+
 target_compile_definitions(
     ${PROJECT_NAME}
     PRIVATE "$<$<BOOL:${TRACY_SUPPORT}>:TRACY_SUPPORT>"
@@ -121,6 +131,7 @@ target_include_directories(
         ${CLIB_UTIL_INCLUDE_DIRS}
         "${CMAKE_SOURCE_DIR}/package/Shaders"
         ${DETOURS_INCLUDE_DIRS}
+        "${CMAKE_SOURCE_DIR}/extern/NRD/Include"
 )
 
 target_link_libraries(
@@ -142,6 +153,7 @@ target_link_libraries(
         d3d12.lib
         Microsoft::DirectX-Headers
         ${DETOURS_LIBRARY}
+        NRD
 )
 
 # Some third-party libs (e.g. FFX backend) are built with /GL.

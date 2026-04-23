@@ -11,6 +11,7 @@
 #include "Common/GBuffer.hlsli"
 #include "Common/VR.hlsli"
 #include "SSRT/common.hlsli"
+#include "NRD/NRDReblurSH.hlsli"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -19,6 +20,8 @@ Texture2D<float2> srcNormal : register(t1);
 Texture2D<float3> srcRadiance : register(t2);
 
 RWTexture2D<float4> outGIOcclusion : register(u0);
+RWTexture2D<float4> outSH0 : register(u1);
+RWTexture2D<float4> outSH1 : register(u2);
 
 #define TILE_SIZE 8
 
@@ -128,7 +131,15 @@ inline uint ComputeOccludedBitfield(float minHorizon, float maxHorizon, inout ui
 	return currentOccludedBitfield;
 }
 
-inline float3 HorizonSampling(
+struct HorizonResult
+{
+	float3 color;
+	float3 weightedDir;
+	float weightedDist;
+	float totalWeight;
+};
+
+inline HorizonResult HorizonSampling(
 	bool directionIsRight, float3 posVS, float2 slideDir_TexelSize, float initialRayStep,
 	float2 uv, float3 viewDir, float3 normalVS, float n, inout uint globalOccludedBitfield,
 	float3 planeNormal)
@@ -142,6 +153,9 @@ inline float3 HorizonSampling(
 	float radiusVS = max(1, float(StepCount - 1)) * stepRadius;
 	float samplingDirection = directionIsRight ? 1 : -1;
 	float3 col = 0;
+	float3 weightedDir = 0;
+	float weightedDist = 0;
+	float totalWeight = 0;
 	float3 lastSamplePosVS = posVS;
 
 	[loop] for (uint j = 0; j < StepCount; j++)
@@ -195,7 +209,11 @@ inline float3 HorizonSampling(
 
 					float lightNormalDotLightDirection = saturate(dot(lightNormalVS, -lightDirectionVS));
 
-					col.xyz += (float(numOccludedZones) / float(MAX_RAY)) * lightColor * normalDotLightDirection * lightNormalDotLightDirection;
+					float w = (float(numOccludedZones) / float(MAX_RAY)) * normalDotLightDirection * lightNormalDotLightDirection;
+					col.xyz += w * lightColor;
+					weightedDir += w * lightDirectionVS;
+					weightedDist += w * length(samplePosVS - posVS);
+					totalWeight += w;
 				}
 			}
 		}
@@ -203,7 +221,12 @@ inline float3 HorizonSampling(
 		lastSamplePosVS = samplePosVS;
 	}
 
-	return col;
+	HorizonResult result;
+	result.color = col;
+	result.weightedDir = weightedDir;
+	result.weightedDist = weightedDist;
+	result.totalWeight = totalWeight;
+	return result;
 }
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)] void main(const uint2 dtid : SV_DispatchThreadID) {
@@ -230,6 +253,9 @@ inline float3 HorizonSampling(
 
 	float ao = 0;
 	float3 col = 0;
+	float3 accumDir = 0;
+	float accumDist = 0;
+	float accumWeight = 0;
 
 	[loop] for (uint i = 0; i < RotationCount; i++)
 	{
@@ -247,10 +273,15 @@ inline float3 HorizonSampling(
 		float cos_n = clamp(dot(projectedNormalNormalized, viewDir), -1, 1);
 		float n = -sign(dot(projectedNormal, tangent)) * acos(cos_n);
 
-		col += HorizonSampling(true, posVS, slideDir_TexelSize, initialRayStep,
+		HorizonResult rRight = HorizonSampling(true, posVS, slideDir_TexelSize, initialRayStep,
 			uv, viewDir, normalVS, n, globalOccludedBitfield, planeNormal);
-		col += HorizonSampling(false, posVS, slideDir_TexelSize, initialRayStep,
+		HorizonResult rLeft = HorizonSampling(false, posVS, slideDir_TexelSize, initialRayStep,
 			uv, viewDir, normalVS, n, globalOccludedBitfield, planeNormal);
+
+		col += rRight.color + rLeft.color;
+		accumDir += rRight.weightedDir + rLeft.weightedDir;
+		accumDist += rRight.weightedDist + rLeft.weightedDist;
+		accumWeight += rRight.totalWeight + rLeft.totalWeight;
 
 		ao += float(countbits(globalOccludedBitfield)) / float(MAX_RAY);
 	}
@@ -269,4 +300,15 @@ inline float3 HorizonSampling(
 	col = HsvToRgb(col);
 
 	outGIOcclusion[pxCoord] = float4(col, ao);
+
+	// NRD SH output
+	float3 dominantDir = accumWeight > 0.001 ? normalize(accumDir) : normalVS;
+	float avgHitDist = accumWeight > 0.001 ? accumDist / accumWeight : Radius;
+	float viewZ = posVS.z;
+	float normHitDist = REBLUR_FrontEnd_GetNormHitDist(avgHitDist, viewZ, float4(HitDistA, HitDistB, HitDistC, HitDistD));
+
+	float4 sh1;
+	float4 sh0 = REBLUR_FrontEnd_PackSh(col, normHitDist, dominantDir, sh1, true);
+	outSH0[pxCoord] = sh0;
+	outSH1[pxCoord] = sh1;
 }

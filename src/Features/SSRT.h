@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Buffer.h"
+#include "NRDReblurIntegration.h"
+#include <NRDSettings.h>
 
 struct SSRT : Feature
 {
@@ -66,6 +68,18 @@ public:
 		float AOIntensity = 1.f;
 		float Thickness = 1.f;
 		bool LinearThickness = false;
+		// NRD REBLUR
+		bool EnableNRD = true;
+		float HitDistA = 210.f;
+		float HitDistB = 0.1f;
+		float HitDistC = 20.f;
+		float HitDistD = -25.f;
+		uint MaxAccumulatedFrameNum = 30;
+		uint MaxFastAccumulatedFrameNum = 6;
+		float DiffusePrepassBlurRadius = 30.f;
+		float MinBlurRadius = 1.f;
+		float MaxBlurRadius = 35.f;
+		bool EnableAntiFirefly = false;
 	} settings;
 
 	struct alignas(16) SSRTCB
@@ -97,6 +111,11 @@ public:
 		float TemporalOffsets;
 		float TemporalDirections;
 		float pad0;
+
+		float HitDistA;
+		float HitDistB;
+		float HitDistC;
+		float HitDistD;
 	};
 	STATIC_ASSERT_ALIGNAS_16(SSRTCB);
 	eastl::unique_ptr<ConstantBuffer> ssrtCB;
@@ -112,11 +131,25 @@ public:
 	eastl::unique_ptr<Texture2D> texNormals = nullptr;
 	winrt::com_ptr<ID3D11UnorderedAccessView> uavNormals[5] = { nullptr };
 
+	// NRD textures
+	eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDNormalRoughness = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDInputSH0 = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDInputSH1 = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDOutputSH0 = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDOutputSH1 = nullptr;
+
+	NRDReblurIntegration nrdReblur;
+	nrd::ReblurSettings reblurSettings{};
+	uint32_t nrdFrameIndex = 0;
+	Matrix prevViewMatrix{};
+	Matrix prevProjMatrix{};
+
 	inline ID3D11ShaderResourceView* GetOutputTexture()
 	{
-		return (loaded && settings.Enabled) ?
-		           texGIOcclusion->srv.get() :
-		           (ID3D11ShaderResourceView*)nullptr;
+		if (!loaded || !settings.Enabled)
+			return nullptr;
+		return texGIOcclusion->srv.get();
 	}
 
 	winrt::com_ptr<ID3D11SamplerState> linearClampSampler = nullptr;
@@ -126,4 +159,6 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> prefilterNormalsCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> ssrtCSCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> prepareNRDGuidesCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> resolveNRDCompute = nullptr;
 };
