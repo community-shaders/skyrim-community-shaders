@@ -197,7 +197,7 @@ bool SSRT_AdvanceRay(float3       origin,
 }
 
 // Requires origin and direction of the ray to be in screen space [0, 1] x [0, 1]
-float3 SSRT_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mirror, float2 screen_size, int most_detailed_mip, float roughness, float thickness,
+float3 SSRT_HierarchicalRaymarch(float3 origin, float3 direction, float2 screen_size, int most_detailed_mip, float roughness, float thickness,
                                      uint max_traversal_intersections, out bool valid_hit, out uint _num_iters) {
     const float3 inv_direction = abs(direction) > float(1.0e-12) ? float(1.0) / direction : SSRT_FLOAT_MAX;
 
@@ -519,7 +519,6 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     float thickness = Thickness + roughness * 10.0;
     float3 hit = SSRT_HierarchicalRaymarch(screen_uv_space_ray_origin,
                                             screen_space_ray_direction,
-                                            is_mirror,
                                             depth_screen_size,
                                             most_detailed_mip,
                                             roughness,
