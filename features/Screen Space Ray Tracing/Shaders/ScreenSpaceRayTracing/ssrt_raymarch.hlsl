@@ -425,15 +425,9 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
                                 uint3 DTid : SV_DispatchThreadID)
 {
     uint2 screen_size = SharedData::BufferDim.xy;
-    // texDepth Hi-Z pyramid base is full-res
     const float2 depth_screen_size = float2(screen_size);
-    uint2 coords = DTid.xy;        // full-res pixel position
-    uint2 fullResCoords = coords;  // dispatch is full-res, no 2× expansion
-
-    float3 debug;
-
-    float4 outColor = float4(0, 0, 0, 0);
-    float4 outPDF = float4(0, 0, 0, 0);
+    uint2 coords = DTid.xy;
+    uint2 fullResCoords = coords;
 
     float2 uv = float2(fullResCoords + 0.5) * SharedData::BufferDim.zw * FrameBuffer::DynamicResolutionParams2.xy;
     uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
@@ -443,11 +437,10 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     GetNormalRoughness(fullResCoords, normalVS, roughness);
     roughness = clamp(roughness, 0.02f, 1.0f);
 
-    // Tracing mode determines which lanes own this pixel and where in the NRD output it gets written.
+    // [Fix #4] Determine pixel ownership before expensive ray setup.
     bool isMyPixel;
     uint2 outPixelPos;
     if (TracingMode == TRACING_MODE_HALF) {
-        // Checkerboard: diffuse = WHITE (even sum), specular = BLACK (odd sum); data packed to left half.
         uint checker = (coords.x + coords.y + FrameIndex) & 1;
 #if defined(SSRT_SPECULAR)
         isMyPixel = (checker == 1);
@@ -456,8 +449,6 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #endif
         outPixelPos = uint2(coords.x >> 1, coords.y);
     } else if (TracingMode == TRACING_MODE_FULL_PROBABILISTIC) {
-        // Roughness-weighted 1-ray-per-pixel split. Both diffuse and specular passes compute the same
-        // decision from identical inputs so exactly one writes each pixel; NRD AREA_3X3 fills the gaps.
         float diffuseProbability = clamp(roughness, 0.25, 0.75);
         uint hash = Random::pcg3d(uint3(coords, FrameIndex)).x;
         float rnd = float(hash) * (1.0 / 4294967296.0);
@@ -469,9 +460,28 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #endif
         outPixelPos = coords;
     } else {
-        // FULL: every pixel traces both diffuse and specular in their respective dispatches.
         isMyPixel = true;
         outPixelPos = coords;
+    }
+
+    if (!isMyPixel)
+        return;
+
+    float depth = DepthTexture[fullResCoords].x;
+
+#if SSRT_OPTION_INVERTED_DEPTH
+    bool isSky = depth <= 1e-6;
+#else
+    bool isSky = depth >= 1.0 - 1e-6;
+#endif
+    if (isSky || any(coords >= (uint2)(screen_size * FrameBuffer::DynamicResolutionParams1.xy))) {
+#if defined(SSRT_SPECULAR)
+        OutSpecRadianceHitDist[outPixelPos] = 0;
+#else
+        OutSH0[outPixelPos] = 0;
+        OutSH1[outPixelPos] = 0;
+#endif
+        return;
     }
 
 #if !defined(SSRT_SPECULAR)
@@ -479,46 +489,44 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #endif
 
     bool is_mirror = IsMirrorReflection(roughness);
-    int most_detailed_mip = HIZ_MIN_MIP;
-    float2 mip_resolution = SSRT_GetMipResolution(depth_screen_size, most_detailed_mip);
-    float z = SSRT_LoadDepth(uv * mip_resolution * FrameBuffer::DynamicResolutionParams1.xy, most_detailed_mip);
+
+    int most_detailed_mip = is_mirror ? 0 : min(2, (int)SSRT_DEPTH_HIERARCHY_MAX_MIP);
+
+    // [Fix #6] Reuse full-res depth for mip 0; load from Hi-Z pyramid for coarser starting mips.
+    float z;
+    if (most_detailed_mip == 0) {
+        z = depth;
+    } else {
+        float2 mip_resolution = SSRT_GetMipResolution(depth_screen_size, most_detailed_mip);
+        z = SSRT_LoadDepth(uv * mip_resolution * FrameBuffer::DynamicResolutionParams1.xy, most_detailed_mip);
+    }
+
     float3 screen_uv_space_ray_origin = float3(uv, z);
     float3 view_space_ray = ScreenSpaceToViewSpace(screen_uv_space_ray_origin, FrameBuffer::CameraProjInverse[eyeIndex]);
     float3 world_space_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
     float3 view_space_surface_normal = normalVS;
     float3 view_space_ray_direction = normalize(view_space_ray);
-    float viewZ = abs(view_space_ray.z);  // save before bias for NRD hit dist normalization
+    float viewZ = abs(view_space_ray.z);
     static const float4 kHitDistParams = float4(HitDistA, HitDistB, HitDistC, HitDistD);
+
+    float3 world_space_origin = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_ray, 1)).xyz;
+
     view_space_ray += view_space_surface_normal * NormalBias * view_space_ray.z * GAME_UNIT_TO_M;
+
     float pdf;
     float3 view_space_reflected_direction = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, coords, pdf);
     screen_uv_space_ray_origin = ProjectPosition(view_space_ray, FrameBuffer::CameraProj[eyeIndex]);
     float3 screen_space_ray_direction = ProjectDirection(view_space_ray, view_space_reflected_direction, screen_uv_space_ray_origin, FrameBuffer::CameraProj[eyeIndex]);
     float3 world_space_reflected_direction = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_reflected_direction, 0)).xyz;
-    float3 world_space_origin = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_ray, 1)).xyz;
-    float world_ray_length = 0.0;
-    bool valid_ray = isMyPixel && all(coords < (uint2)(screen_size * FrameBuffer::DynamicResolutionParams1.xy));
-    uint hit_counter = 0;
-    float3 hit = float3(0.0, 0.0, 0.0);
-    float confidence = 0.0;
-    float3 world_space_hit = float3(0.0, 0.0, 0.0);
-    float3 world_space_ray = float3(0.0, 0.0, 0.0);
 
-    float depth = DepthTexture[fullResCoords].x;
-    float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
-	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
-	positionWS.xyz = positionWS.xyz / positionWS.w;
+    // Biased world-space origin for ray length computation.
+    float3 world_space_ray_origin = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_ray, 1)).xyz;
 
-    float4 sampleData = 0.f;
-    float3 sampleDirVS = 0.f;
-
-    if (valid_ray)
-    {
-        bool valid_hit;
-        bool go_through_thin = false;
-        uint numIterations;
-        float thickness  = Thickness  + roughness * 10.0;
-        hit = SSRT_HierarchicalRaymarch(screen_uv_space_ray_origin,
+    // Ray march
+    bool valid_hit;
+    uint numIterations;
+    float thickness = Thickness + roughness * 10.0;
+    float3 hit = SSRT_HierarchicalRaymarch(screen_uv_space_ray_origin,
                                             screen_space_ray_direction,
                                             is_mirror,
                                             depth_screen_size,
@@ -528,130 +536,112 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
                                             HIZ_MAX_ITERATIONS,
                                             valid_hit, numIterations);
 
-        world_space_hit  = ScreenSpaceToWorldSpace(hit, FrameBuffer::CameraViewProjInverse[eyeIndex]);
-        world_space_ray  = world_space_hit - world_space_origin.xyz;
-        world_ray_length = length(world_space_ray);
-        float occlusion;
-        bool isBackfaceHit = false;
-        confidence       = valid_hit ? SSRT_ValidateHit(hit,
-                                                      uv,
-                                                      world_space_ray,
-                                                      screen_size,
-                                                      thickness,
-                                                      eyeIndex,
-                                                      occlusion,
-                                                      isBackfaceHit
-                                                      )
-                                     : 0;
-        // Preserve before cubemap fallback overwrites. Backface hits still count as occluders
-        // for AO — their geometry is valid even if radiance from screen is not trustworthy.
-        float screenConfidence = isBackfaceHit ? 1.0 : confidence;
-        float3 sampleColor = 0;
-        if (confidence > 0.0f)
-        {
-            sampleColor = Color::IrradianceToLinear(ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz);
+    float3 world_space_hit = ScreenSpaceToWorldSpace(hit, FrameBuffer::CameraViewProjInverse[eyeIndex]);
+    float3 world_space_ray = world_space_hit - world_space_ray_origin;
+    float world_ray_length = length(world_space_ray);
+    float occlusion;
+    bool isBackfaceHit = false;
+    float confidence = valid_hit ? SSRT_ValidateHit(hit,
+                                                  uv,
+                                                  world_space_ray,
+                                                  screen_size,
+                                                  thickness,
+                                                  eyeIndex,
+                                                  occlusion,
+                                                  isBackfaceHit)
+                                 : 0;
+    float screenConfidence = isBackfaceHit ? 1.0 : confidence;
+    float3 sampleColor = 0;
+    if (confidence > 0.0f)
+    {
+        sampleColor = Color::IrradianceToLinear(ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz);
 #if !defined(SSRT_SPECULAR)
-            sampleColor *= SharedData::ssrtSettings.DiffuseMult;
+        sampleColor *= SharedData::ssrtSettings.DiffuseMult;
 #else
-            sampleColor *= SharedData::ssrtSettings.SpecularMult;
+        sampleColor *= SharedData::ssrtSettings.SpecularMult;
 #endif
-
-            outPDF.xyz += hit * confidence;
-            outPDF.w += pdf * confidence;
-        }
-        const float NdotV = saturate(dot(normalize(view_space_ray), view_space_surface_normal));
+    }
+    const float NdotV = saturate(dot(normalize(view_space_ray), view_space_surface_normal));
 #if defined(DYNAMIC_CUBEMAPS) && !SHARC_UPDATE
-        if (UseDynamicCubemapsAsFallback != 0 && (confidence < 0.999f))
-        {
-#   if defined(SSRT_SPECULAR)            
-            const uint sampleMip = 0;
+    if (UseDynamicCubemapsAsFallback != 0 && (confidence < 0.999f))
+    {
+#   if defined(SSRT_SPECULAR)
+        const uint sampleMip = 0;
 #   else
-            const uint sampleMip = 2;
+        const uint sampleMip = 2;
 #   endif
-            float directionalAmbientLuminance = Color::RGBToLuminance(max(0.0, mul(SharedData::DirectionalAmbient, float4(world_space_reflected_direction, 1.0)))) * Color::ReflectionNormalisationScale;
-            float envLuminance;
-            // Fallback to dynamic cubemaps
-            float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
+        float directionalAmbientLuminance = Color::RGBToLuminance(max(0.0, mul(SharedData::DirectionalAmbient, float4(world_space_reflected_direction, 1.0)))) * Color::ReflectionNormalisationScale;
+        float envLuminance;
+        float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
 #	if defined(SKYLIGHTING)
-            if (!SharedData::InInterior)
-            {
-                float3 positionMS = positionWS.xyz;
+        if (!SharedData::InInterior)
+        {
+            float3 positionMS = world_space_origin;
 
-                sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, fullResCoords, positionMS.xyz, world_space_reflected_direction);
-                float3 skylightingNormal = normalize(float3(world_space_normal.xy, max(0, world_space_normal.z)));
-                float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylighting, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
-                skylightingDiffuse = saturate(skylightingDiffuse);
+            sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, fullResCoords, positionMS, world_space_reflected_direction);
+            float3 skylightingNormal = normalize(float3(world_space_normal.xy, max(0, world_space_normal.z)));
+            float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylighting, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
+            skylightingDiffuse = saturate(skylightingDiffuse);
 
-                skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(positionMS.xyz));
+            skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(positionMS));
 
-                skylightingDiffuse *= 1.0 + saturate(world_space_normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+            skylightingDiffuse *= 1.0 + saturate(world_space_normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 
-                skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+            skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 #       if defined(SSRT_SPECULAR)
-                skylightingDiffuse = GetSpecularOcclusionFromAmbientOcclusion(NdotV, skylightingDiffuse, roughness);
+            skylightingDiffuse = GetSpecularOcclusionFromAmbientOcclusion(NdotV, skylightingDiffuse, roughness);
 #       endif
-                float3 envNoSkyColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
-                float3 envSkyColor = envColor;
-                float3 skyColor = max(envSkyColor - envNoSkyColor, 0);
-                envLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
-                envColor = lerp(envNoSkyColor, envNoSkyColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
-                envColor += skyColor * skylightingDiffuse;
-            } else {
-                envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
-                envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
-            }
-#   else
-            envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15).xyz);
+            float3 envNoSkyColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
+            float3 envSkyColor = envColor;
+            float3 skyColor = max(envSkyColor - envNoSkyColor, 0);
+            envLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
+            envColor = lerp(envNoSkyColor, envNoSkyColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
+            envColor += skyColor * skylightingDiffuse;
+        } else {
+            envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
             envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
+        }
+#   else
+        envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15).xyz);
+        envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
 #   endif
-            envColor = Color::IrradianceToLinear(envColor);
-            float ao = lerp(1.0, occlusion, OcclusionStrength);
+        envColor = Color::IrradianceToLinear(envColor);
+        float ao = lerp(1.0, occlusion, OcclusionStrength);
 #   if defined(SSGI)
-            ao *= 1 - saturate(SsgiAoTexture[fullResCoords].x);
+        ao *= 1 - saturate(SsgiAoTexture[fullResCoords].x);
 #   endif
 #   if defined(SSRT_SPECULAR)
-            ao = GetSpecularOcclusionFromAmbientOcclusion(NdotV, ao, roughness);
-            envColor *= ao;
+        ao = GetSpecularOcclusionFromAmbientOcclusion(NdotV, ao, roughness);
+        envColor *= ao;
 #   else
-            float3 multiBounceAO = MultiBounceAO(albedo, ao);
-            envColor *= multiBounceAO;
+        float3 multiBounceAO = MultiBounceAO(albedo, ao);
+        envColor *= multiBounceAO;
 #   endif
-            sampleColor.xyz = lerp(envColor, sampleColor.xyz, confidence);
-            confidence = 1;
-        }
-#endif
-        // Raw world-space hit distance weighted by screen-space hit validity.
-        // 0 for pure environment fallback samples. Normalized to normHitDist in output.
-        float sampleW = world_ray_length * screenConfidence;
-        sampleData = float4(sampleColor, sampleW);
-        sampleDirVS = view_space_reflected_direction * confidence;
+        sampleColor.xyz = lerp(envColor, sampleColor.xyz, confidence);
+        confidence = 1;
     }
+#endif
+
+    float sampleW = world_ray_length * screenConfidence;
 
 #if defined(SSRT_SPECULAR)
-    if (isMyPixel) {
-        float rawHitDist  = sampleData.w;  // world_ray_length * screenConfidence; 0 = env-only
-        float normHitDist = REBLUR_FrontEnd_GetNormHitDist(rawHitDist, viewZ, kHitDistParams, roughness);
-        OutSpecRadianceHitDist[outPixelPos] = REBLUR_FrontEnd_PackRadianceAndNormHitDist(
-            sampleData.xyz, normHitDist, true);
-    }
+    float normHitDist = REBLUR_FrontEnd_GetNormHitDist(sampleW, viewZ, kHitDistParams, roughness);
+    OutSpecRadianceHitDist[outPixelPos] = REBLUR_FrontEnd_PackRadianceAndNormHitDist(
+        sampleColor, normHitDist, true);
 #else
-    if (isMyPixel) {
-        float3 radiance  = sampleData.xyz;
-        float rawHitDist = sampleData.w;  // world_ray_length * screenConfidence; 0 = miss/off-screen
-        bool hitInScreen = rawHitDist > 0.0 && all(hit.xy > 0.0) && all(hit.xy < 1.0);
-        // Max out normHitDist when no screen-space hit — NRD treats 1 as "infinite distance / unoccluded"
-        float normHitDist = hitInScreen
-            ? REBLUR_FrontEnd_GetNormHitDist(rawHitDist, viewZ, kHitDistParams, 1.0)
-            : 1.0;
+    bool hitInScreen = sampleW > 0.0 && all(hit.xy > 0.0) && all(hit.xy < 1.0);
+    float normHitDist = hitInScreen
+        ? REBLUR_FrontEnd_GetNormHitDist(sampleW, viewZ, kHitDistParams, 1.0)
+        : 1.0;
 
-        float3 dirVS_norm = normalize(sampleDirVS + float3(0, 0, NRD_EPS));
-        float3 dirWS      = normalize(mul((float3x3)FrameBuffer::CameraViewInverse[eyeIndex], dirVS_norm));
+    float3 sampleDirVS = view_space_reflected_direction * confidence;
+    float3 dirVS_norm = normalize(sampleDirVS + float3(0, 0, NRD_EPS));
+    float3 dirWS = normalize(mul((float3x3)FrameBuffer::CameraViewInverse[eyeIndex], dirVS_norm));
 
-        float4 sh1;
-        float4 sh0 = REBLUR_FrontEnd_PackSh(radiance, normHitDist, dirWS, sh1, true);
+    float4 sh1;
+    float4 sh0 = REBLUR_FrontEnd_PackSh(sampleColor, normHitDist, dirWS, sh1, true);
 
-        OutSH0[outPixelPos] = sh0;
-        OutSH1[outPixelPos] = sh1;
-    }
+    OutSH0[outPixelPos] = sh0;
+    OutSH1[outPixelPos] = sh1;
 #endif
 }
