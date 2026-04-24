@@ -9,6 +9,7 @@
 
 #include "DynamicCubemaps.h"
 #include "Skylighting.h"
+#include "Upscaling.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ScreenSpaceRayTracing::REBLURSettings,
@@ -717,7 +718,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
             specCommonSettings.rectSizePrev[1] = fh;
 
             auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
-            auto projMat = globals::game::frameBufferCached.GetCameraProjUnjittered(0).Transpose();
+            auto projMat = globals::game::frameBufferCached.GetCameraProj(0).Transpose();
 
             memcpy(specCommonSettings.viewToClipMatrix,      &projMat,        sizeof(float) * 16);
             memcpy(specCommonSettings.viewToClipMatrixPrev,  &prevProjMatrix, sizeof(float) * 16);
@@ -728,6 +729,12 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
             specCommonSettings.motionVectorScale[1] = 1.0f;
             specCommonSettings.motionVectorScale[2] = 0.0f;
             specCommonSettings.isMotionVectorInWorldSpace = false;
+
+            auto jitter = globals::features::upscaling.jitter;
+			specCommonSettings.cameraJitter[0] = jitter.x;
+			specCommonSettings.cameraJitter[1] = jitter.y;
+			specCommonSettings.cameraJitterPrev[0] = prevJitter.x;
+			specCommonSettings.cameraJitterPrev[1] = prevJitter.y;
 
             // If diffuse ran first it already incremented frameIndex; use same frame value.
             specCommonSettings.frameIndex = settings.EnableDiffuse ? frameIndex - 1 : frameIndex++;
@@ -963,6 +970,14 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
             commonSettings.motionVectorScale[1] = 1.0f;
             commonSettings.motionVectorScale[2] = 0.0f;
             commonSettings.isMotionVectorInWorldSpace = false;
+
+            auto jitter = globals::features::upscaling.jitter;
+			commonSettings.cameraJitter[0] = jitter.x;
+			commonSettings.cameraJitter[1] = jitter.y;
+			commonSettings.cameraJitterPrev[0] = prevJitter.x;
+			commonSettings.cameraJitterPrev[1] = prevJitter.y;
+
+            prevJitter = jitter;
 
             commonSettings.frameIndex = frameIndex++;
             commonSettings.splitScreen = settings.Reblur.SplitScreen;

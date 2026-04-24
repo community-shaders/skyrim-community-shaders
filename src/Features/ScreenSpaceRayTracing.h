@@ -201,4 +201,5 @@ struct ScreenSpaceRayTracing : Feature
 
     Matrix prevViewMatrix{};
     Matrix prevProjMatrix{};
+	float2 prevJitter{};
 };
