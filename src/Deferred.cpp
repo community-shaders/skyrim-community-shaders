@@ -356,7 +356,6 @@ void Deferred::DeferredPasses()
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
-
 	auto& sss = globals::features::subsurfaceScattering;
 	if (sss.loaded)
 		sss.DrawSSS();
