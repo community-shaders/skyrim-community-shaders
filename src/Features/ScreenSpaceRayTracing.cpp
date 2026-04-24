@@ -738,7 +738,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 			specCommonSettings.motionVectorScale[2] = 0.0f;
 			specCommonSettings.isMotionVectorInWorldSpace = false;
 
-            auto jitter = globals::features::upscaling.jitter;
+			auto jitter = globals::features::upscaling.jitter;
 			specCommonSettings.cameraJitter[0] = jitter.x;
 			specCommonSettings.cameraJitter[1] = jitter.y;
 			specCommonSettings.cameraJitterPrev[0] = prevJitter.x;
@@ -980,7 +980,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 			commonSettings.motionVectorScale[2] = 0.0f;
 			commonSettings.isMotionVectorInWorldSpace = false;
 
-            auto jitter = globals::features::upscaling.jitter;
+			auto jitter = globals::features::upscaling.jitter;
 			commonSettings.cameraJitter[0] = jitter.x;
 			commonSettings.cameraJitter[1] = jitter.y;
 			commonSettings.cameraJitterPrev[0] = prevJitter.x;
