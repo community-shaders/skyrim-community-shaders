@@ -171,7 +171,7 @@ void WeatherWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
 			DrawProperties("Sun", { { "Sun Damage", UINT8_SLIDER } });
-			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
+			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", UINT8_SLIDER }, { "Wind Direction Range", UINT8_SLIDER } });
 			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", UINT8_SLIDER }, { "Precipitation End Fade Out", UINT8_SLIDER } });
 			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", UINT8_SLIDER }, { "Thunder Lightning End Fade Out", UINT8_SLIDER },
 											{ "Thunder Lightning Frequency", UINT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
@@ -571,7 +571,7 @@ void WeatherWidget::SetWeatherValues()
 	// Lightning
 	data.thunderLightningBeginFadeIn = (uint8_t)weatherProps["Thunder Lightning Begin Fade In"];
 	data.thunderLightningEndFadeOut = (uint8_t)weatherProps["Thunder Lightning End Fade Out"];
-	data.thunderLightningFrequency = (int8_t)weatherProps["Thunder Lightning Frequency"];
+	data.thunderLightningFrequency = static_cast<int8_t>(static_cast<uint8_t>(weatherProps["Thunder Lightning Frequency"]));
 	Float3ToColor(weatherColors["Lightning Color"], weather->data.lightningColor);
 
 	// Visual Effects
@@ -580,8 +580,8 @@ void WeatherWidget::SetWeatherValues()
 
 	// Wind
 	data.windSpeed = (uint8_t)weatherProps["Wind Speed"];
-	data.windDirection = (int8_t)weatherProps["Wind Direction"];
-	data.windDirectionRange = (int8_t)weatherProps["Wind Direction Range"];
+	data.windDirection = (uint8_t)weatherProps["Wind Direction"];
+	data.windDirectionRange = (uint8_t)weatherProps["Wind Direction Range"];
 
 	// Fog
 	fogData.dayNear = fogProperties["Day Near"];
@@ -746,7 +746,7 @@ void WeatherWidget::LoadWeatherValues()
 	// Lightning
 	weatherProps["Thunder Lightning Begin Fade In"] = data.thunderLightningBeginFadeIn;
 	weatherProps["Thunder Lightning End Fade Out"] = data.thunderLightningEndFadeOut;
-	weatherProps["Thunder Lightning Frequency"] = (uint8_t)data.thunderLightningFrequency;
+	weatherProps["Thunder Lightning Frequency"] = static_cast<uint8_t>(data.thunderLightningFrequency);
 	ColorToFloat3(data.lightningColor, weatherColors["Lightning Color"]);
 
 	// Visual Effects
