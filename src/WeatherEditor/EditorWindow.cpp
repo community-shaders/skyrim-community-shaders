@@ -1,7 +1,9 @@
 #include "EditorWindow.h"
 
+#include "Features/HDRDisplay.h"
 #include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
+#include "Globals.h"
 #include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "Menu/BackgroundBlur.h"
@@ -888,7 +890,7 @@ void EditorWindow::RenderUI()
 	float previousScale = ImGui::GetStyle().FontScaleMain;
 	ImGui::GetStyle().FontScaleMain = settings.editorUIScale;
 
-	if (settings.showViewport) {
+	if (IsViewportActive()) {
 		ImGui::GetBackgroundDrawList()->AddRectFilled({ 0, 0 }, io.DisplaySize, ImGui::GetColorU32(ImGuiCol_ModalWindowDimBg));
 	}
 
@@ -993,9 +995,17 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
+			const bool hdrActive = globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.settings.enableHDR;
+			if (hdrActive)
+				ImGui::BeginDisabled();
 			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
 				BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
 				Save();
+			}
+			if (hdrActive) {
+				ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("Viewport is unavailable when HDR Display is enabled");
 			}
 			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
 			}
@@ -1294,7 +1304,7 @@ void EditorWindow::RenderUI()
 	ImGui::SetNextWindowPos(ImVec2(pad, menuBarHeight + pad), layoutCond);
 	ShowObjectsWindow();
 
-	if (settings.showViewport) {
+	if (IsViewportActive()) {
 		// Size viewport height to match game aspect ratio so the preview fits snugly
 		const float aspectRatio = width / height;
 		const float imageHeight = viewportWidth / aspectRatio;
@@ -1393,6 +1403,11 @@ void EditorWindow::SetupResources()
 	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets);
 }
 
+bool EditorWindow::IsViewportActive() const
+{
+	return settings.showViewport && !(globals::features::hdrDisplay.loaded && globals::features::hdrDisplay.settings.enableHDR);
+}
+
 void EditorWindow::UpdateOpenState()
 {
 	static bool wasOpen = false;
@@ -1400,7 +1415,7 @@ void EditorWindow::UpdateOpenState()
 	if (open && !wasOpen) {
 		DisableVanityCamera();
 		HideGameMenus();
-		BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
+		BackgroundBlur::SetWeatherEditorActive(IsViewportActive());
 
 	} else if (!open && wasOpen) {
 		RestoreVanityCamera();
@@ -1413,6 +1428,16 @@ void EditorWindow::UpdateOpenState()
 
 void EditorWindow::Draw()
 {
+	// Keep background blur in sync when HDR toggles while the editor stays open
+	{
+		static bool prevViewportActive = false;
+		const bool viewportActive = IsViewportActive();
+		if (viewportActive != prevViewportActive) {
+			BackgroundBlur::SetWeatherEditorActive(viewportActive);
+			prevViewportActive = viewportActive;
+		}
+	}
+
 	// Re-enforce weather lock if active (handles time changes)
 	if (weatherLockActive && lockedWeather) {
 		auto sky = RE::Sky::GetSingleton();
@@ -1421,7 +1446,7 @@ void EditorWindow::Draw()
 		}
 	}
 
-	if (!settings.showViewport) {
+	if (!IsViewportActive()) {
 		delete tempTexture;
 		tempTexture = nullptr;
 	} else {

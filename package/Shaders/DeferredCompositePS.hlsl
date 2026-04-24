@@ -32,10 +32,8 @@ SamplerState LinearSampler : register(s0);
 #endif
 
 #if defined(SKYLIGHTING)
+#	define SKYLIGHTING_PROBE_REGISTER t9
 #	include "Skylighting/Skylighting.hlsli"
-
-Texture3D<sh2> SkylightingProbeArray : register(t9);
-Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t10);
 #endif
 
 
@@ -168,11 +166,8 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 positionMS = positionWS.xyz;
 #		endif
 
-		sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, pixCoord, positionMS.xyz, R);
-
-		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
-		skylightingSpecular = saturate(skylightingSpecular);
-		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, R);
+		float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe);
 #	endif
 
 #	if defined(IBL)

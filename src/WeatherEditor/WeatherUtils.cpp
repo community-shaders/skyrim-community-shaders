@@ -17,29 +17,27 @@ namespace WeatherUtils::TexturePath
 
 	bool HasDdsExtension(std::string_view path)
 	{
-		return Normalize(path).ends_with(".dds");
+		return Normalize(path).ends_with(kDdsExtension);
 	}
 
 	bool ExistsOnDisk(std::string_view path)
 	{
 		const std::string lower = Normalize(path);
-		if (!lower.ends_with(".dds"))
+		if (!lower.ends_with(kDdsExtension))
 			return false;
 
-		// Reject absolute paths
+		// Reject absolute paths and ".." traversal
 		const std::filesystem::path fsPath(lower);
 		if (fsPath.is_absolute())
 			return false;
-
-		// Reject any ".." component
 		for (const auto& part : fsPath)
 			if (part == "..")
 				return false;
 
 		const std::filesystem::path dataPath = Util::PathHelpers::GetDataPath();
-		const std::filesystem::path fullPath = lower.starts_with("textures\\") ?
+		const std::filesystem::path fullPath = lower.starts_with(kTexturePrefix) ?
 		                                           dataPath / lower :
-		                                           dataPath / "textures" / lower;
+		                                           dataPath / kTexturePrefix / lower;
 
 		std::error_code ec;
 		return std::filesystem::exists(fullPath, ec) && !ec;
@@ -47,11 +45,34 @@ namespace WeatherUtils::TexturePath
 
 	std::string BuildResourcePath(std::string_view path)
 	{
-		std::string result = "Textures\\";
+		std::string result(kResourcePrefix);
 		result.append(path);
-		if (!Normalize(result).ends_with(".dds"))
-			result += ".dds";
+		if (!Normalize(result).ends_with(kDdsExtension))
+			result += kDdsExtension;
 		return result;
+	}
+}
+
+namespace WeatherUtils
+{
+	RE::TESForm* FindFormByEditorID(std::string_view editorID, const std::vector<std::unique_ptr<Widget>>& widgets)
+	{
+		if (editorID.empty())
+			return nullptr;
+		for (const auto& w : widgets)
+			if (w->GetEditorID() == editorID)
+				return w->form;
+		return nullptr;
+	}
+
+	std::string FindEditorIDByForm(const RE::TESForm* form, const std::vector<std::unique_ptr<Widget>>& widgets)
+	{
+		if (!form)
+			return "";
+		for (const auto& w : widgets)
+			if (w->form == form)
+				return w->GetEditorID();
+		return "";
 	}
 }
 

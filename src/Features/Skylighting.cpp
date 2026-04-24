@@ -1,7 +1,5 @@
 #include "Skylighting.h"
 
-#include <DDSTextureLoader.h>
-
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -125,10 +123,6 @@ void Skylighting::SetupResources()
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, comparisonSampler.put()));
 	}
 
-	{
-		DirectX::CreateDDSTextureFromFile(device, globals::d3d::context, L"Data\\Shaders\\Skylighting\\SpatiotemporalBlueNoise\\stbn_vec3_2Dx1D_128x128x64.dds", nullptr, stbn_vec3_2Dx1D_128x128x64.put());
-	}
-
 	CompileComputeShaders();
 }
 
@@ -249,8 +243,8 @@ void Skylighting::Prepass()
 
 	// Set PS shader resources
 	{
-		ID3D11ShaderResourceView* srvs[2] = { texProbeArray->srv.get(), stbn_vec3_2Dx1D_128x128x64.get() };
-		context->PSSetShaderResources(50, 2, srvs);
+		ID3D11ShaderResourceView* srv = texProbeArray->srv.get();
+		context->PSSetShaderResources(50, 1, &srv);
 	}
 }
 
@@ -480,6 +474,7 @@ void Skylighting::SetViewFrustumVR::thunk(RE::NiCamera* a_camera, RE::NiFrustum*
 
 void Skylighting::RenderOcclusion()
 {
+	ZoneScopedS(8);
 	auto shaderCache = globals::shaderCache;
 	auto state = globals::state;
 	auto renderer = globals::game::renderer;
@@ -580,8 +575,11 @@ void Skylighting::RenderOcclusion()
 				PrecipitationShaderDirection = { PrecipitationShaderDirectionF.x, PrecipitationShaderDirectionF.y, PrecipitationShaderDirectionF.z };
 
 				static REL::Relocation<void(RE::Precipitation*, RE::NiPointer<RE::NiCamera>)> _computeProjection{ REL::RelocationID(25643, 26185) };
-				_computeProjection(precip, precip->occlusionData.camera);
-				precip->SetupMask();
+				{
+					ZoneScopedN("Skylighting - Setup Projection");
+					_computeProjection(precip, precip->occlusionData.camera);
+					precip->SetupMask();
+				}
 
 				BSParticleShaderRainEmitter* rain = new BSParticleShaderRainEmitter;
 				{
@@ -602,7 +600,10 @@ void Skylighting::RenderOcclusion()
 
 				precipitation = precipitationCopy;
 
-				_computeProjection(precip, precip->occlusionData.camera);
+				{
+					ZoneScopedN("Skylighting - Restore Projection");
+					_computeProjection(precip, precip->occlusionData.camera);
+				}
 
 				state->EndPerfEvent();
 			}

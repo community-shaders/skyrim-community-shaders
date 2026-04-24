@@ -5,7 +5,7 @@ set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 project(
     # gersemi: ignore
     CommunityShaders
-    VERSION 1.4.11
+    VERSION 1.5.0
     LANGUAGES CXX
 )
 
@@ -209,7 +209,7 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     string(STRIP "${CONFIG_VALUE}" CONFIG_VALUE)
     if(CONFIG_VALUE)
         string(
-            REGEX MATCH "Version = ([0-9]+)-([0-9]+)-([0-9]+)"
+            REGEX MATCH "[Vv]ersion = ([0-9]+)-([0-9]+)-([0-9]+)"
             _
             "${CONFIG_VALUE}"
         )
