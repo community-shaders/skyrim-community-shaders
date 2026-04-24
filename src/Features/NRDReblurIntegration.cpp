@@ -194,7 +194,8 @@ void NRDReblurIntegration::Dispatch()
 				for (uint32_t k = 0; k < range2.descriptorsNum; k++, resIdx2++) {
 					if (range2.descriptorType == nrd::DescriptorType::STORAGE_TEXTURE) {
 						auto* v = ResolveResource(dispatch.resources[resIdx2]);
-						if (!v) hasNullUAV = true;
+						if (!v)
+							hasNullUAV = true;
 					}
 				}
 			}

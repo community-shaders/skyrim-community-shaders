@@ -1,11 +1,11 @@
 #pragma once
 
+#include <EASTL/array.h>
+#include <EASTL/vector.h>
 #include <NRD.h>
 #include <d3d11.h>
-#include <wrl/client.h>
-#include <EASTL/vector.h>
-#include <EASTL/array.h>
 #include <winrt/base.h>
+#include <wrl/client.h>
 
 // Lightweight DX11-only NRD dispatcher — no NRI dependency.
 // Manages internal pool textures, pipelines (DXBC), and the constant buffer.
