@@ -403,27 +403,27 @@ void Deferred::DeferredPasses()
 
 		// SRVs
 		auto ssrtDiffuse = ssrt.GetDiffuseOutputTextures();
-		ID3D11ShaderResourceView* srvs[22]{
-			mainCopy.SRV,                                                                                           // t0  MainInputTexture
-			specular.SRV,                                                                                           // t1  SpecularTexture
-			normalRoughnessCopy.SRV,                                                                                // t2  NormalRoughnessTexture
+		ID3D11ShaderResourceView* srvs[20]{
+			mainCopy.SRV,                                                                                                  // t0  MainInputTexture
+			specular.SRV,                                                                                                  // t1  SpecularTexture
+			normalRoughnessCopy.SRV,                                                                                       // t2  NormalRoughnessTexture
 			dynamicCubemaps.loaded || REL::Module::IsVR() || ssrt.loaded ? Util::GetCurrentSceneDepthSRV(true) : nullptr,  // t3  DepthTexture
-			albedo.SRV,                                                                                             // t4  AlbedoTexture
-			masks.SRV,                                                                                              // t5  MasksTexture
-			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                                     // t6  ReflectanceTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                               // t7  EnvTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,                    // t8  EnvReflectionsTexture
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,          // t9  SkylightingProbeArray
-			nullptr,                                                                                                // t10 (unused)
-			nullptr,                                                                                                // t11 (unused)
-			nullptr,                                                                                                // t12 (unused)
-			nullptr,                                                                                                // t13 (unused)
-			nullptr,                                                                                                // t14 (unused)
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
-			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.GetSpecularOutputTexture() : nullptr,  // t17 SsrtSpecRadianceHitDist (NRD denoised)
-			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[0] : nullptr,                             // t18 SsrtDiffuseSH0 (NRD-packed)
-			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[1] : nullptr,                             // t19 SsrtDiffuseSH1 (NRD-packed)
+			albedo.SRV,                                                                                                    // t4  AlbedoTexture
+			masks.SRV,                                                                                                     // t5  MasksTexture
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                                            // t6  ReflectanceTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                                      // t7  EnvTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,                           // t8  EnvReflectionsTexture
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,                 // t9  SkylightingProbeArray
+			nullptr,                                                                                                       // t10 (reserved)
+			nullptr,                                                                                                       // t11 (reserved)
+			nullptr,                                                                                                       // t12 (reserved)
+			nullptr,                                                                                                       // t13 (reserved)
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                           // t14 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                           // t15 SkyIBLTexture
+			nullptr,                                                                                                       // t16 (reserved)
+			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.GetSpecularOutputTexture() : nullptr,                     // t17 SsrtSpecRadianceHitDist
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[0] : nullptr,                                    // t18 SsrtDiffuseSH0
+			(ssrt.loaded && ssrt.settings.EnableDiffuse) ? ssrtDiffuse.sh[1] : nullptr,                                    // t19 SsrtDiffuseSH1
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);

@@ -31,9 +31,6 @@ Texture2DArray<float> NoiseTexture : register(t6);
 #if defined(DYNAMIC_CUBEMAPS)
 TextureCube<float3> EnvTexture : register(t7);
 TextureCube<float3> EnvReflectionsTexture : register(t8);
-#   if defined(SSGI)
-Texture2D<float> SsgiAoTexture : register(t9);
-#   endif
 #   if defined(SKYLIGHTING)
 #       define SKYLIGHTING_PROBE_REGISTER t10
 #	    include "Skylighting/Skylighting.hlsli"
@@ -579,9 +576,6 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #   endif
         envColor = Color::IrradianceToLinear(envColor);
         float ao = lerp(1.0, occlusion, OcclusionStrength);
-#   if defined(SSGI)
-        ao *= 1 - saturate(SsgiAoTexture[fullResCoords].x);
-#   endif
 #   if defined(SSRT_SPECULAR)
         ao = GetSpecularOcclusionFromAmbientOcclusion(NdotV, ao, roughness);
         envColor *= ao;

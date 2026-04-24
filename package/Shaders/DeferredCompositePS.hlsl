@@ -46,7 +46,6 @@ SamplerState LinearSampler : register(s0);
 #endif
 
 #if defined(SSRT)
-#	include "Common/GBuffer.hlsli"
 #	include "NRD/NRDReblurSH.hlsli"
 
 Texture2D<float4> SSRTSpecRadianceHitDist : register(t17);  // NRD-packed OUT_SPEC_RADIANCE_HITDIST
