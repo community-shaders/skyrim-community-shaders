@@ -592,27 +592,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!SharedData::InInterior)
 		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float dirSoftShadow = 1.0;
-	float dirVSMDetailedShadow = 1.0;
-
-#			if defined(VOLUMETRIC_SHADOWS)
-	if (!SharedData::InInterior)
-		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirVSMDetailedShadow);
-#			endif
-
 	float dirDetailedShadow = 1.0;
 
-	if (!SharedData::InInterior) {
+	if (!SharedData::InInterior)
 		dirDetailedShadow *= shadowColor.x;
-
-#			if defined(VOLUMETRIC_SHADOWS)
-		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
-#			else
-		dirSoftShadow = dirDetailedShadow;
-#			endif
-	} else {
-		dirDetailedShadow = dirVSMDetailedShadow;
-	}
 
 #			if defined(SCREEN_SPACE_SHADOWS)
 	if (!SharedData::InInterior)
@@ -663,7 +646,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
 
 	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
-	float3 sss = dirLightColor * dirSoftShadow * saturate(-dirLightAngle) * Color::VanillaNormalization();
+	float3 sss = dirLightColor * dirDetailedShadow * saturate(-dirLightAngle) * Color::VanillaNormalization();
 
 	if (complex)
 		lightsSpecularColor += dirDetailedShadow * GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
