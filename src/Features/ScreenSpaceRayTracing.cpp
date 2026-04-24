@@ -986,6 +986,8 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 			commonSettings.cameraJitterPrev[0] = prevJitter.x;
 			commonSettings.cameraJitterPrev[1] = prevJitter.y;
 
+            prevJitter = jitter;
+            
 			commonSettings.frameIndex = frameIndex++;
 			commonSettings.splitScreen = settings.Reblur.SplitScreen;
 			commonSettings.enableValidation = settings.Reblur.EnableNRDValidation;
