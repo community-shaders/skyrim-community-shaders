@@ -36,7 +36,6 @@ SamplerState LinearSampler : register(s0);
 #	include "Skylighting/Skylighting.hlsli"
 #endif
 
-
 #if defined(IBL)
 #	if !defined(DYNAMIC_CUBEMAPS)
 #		undef IBL
@@ -47,26 +46,26 @@ SamplerState LinearSampler : register(s0);
 #endif
 
 #if defined(SSRT)
-#include "Common/GBuffer.hlsli"
-#include "NRD/NRDReblurSH.hlsli"
+#	include "Common/GBuffer.hlsli"
+#	include "NRD/NRDReblurSH.hlsli"
 
 Texture2D<float4> SSRTSpecRadianceHitDist : register(t17);  // NRD-packed OUT_SPEC_RADIANCE_HITDIST
-Texture2D<float4> SSRTDiffuseSH0          : register(t18);  // NRD-packed SH0 (OUT_DIFF_SH0)
-Texture2D<float4> SSRTDiffuseSH1          : register(t19);  // NRD-packed SH1 (OUT_DIFF_SH1)
+Texture2D<float4> SSRTDiffuseSH0 : register(t18);           // NRD-packed SH0 (OUT_DIFF_SH0)
+Texture2D<float4> SSRTDiffuseSH1 : register(t19);           // NRD-packed SH1 (OUT_DIFF_SH1)
 
 void SampleSSRTDiffuse(uint2 pixCoord, float3 normalWS, float3 V, float roughness, out float3 il, out float ao)
 {
-    NRD_SG sg = REBLUR_BackEnd_UnpackSh(SSRTDiffuseSH0[pixCoord], SSRTDiffuseSH1[pixCoord]);
-    il = NRD_SG_ResolveDiffuse(sg, normalWS, V, roughness);
-    ao = sg.normHitDist;
+	NRD_SG sg = REBLUR_BackEnd_UnpackSh(SSRTDiffuseSH0[pixCoord], SSRTDiffuseSH1[pixCoord]);
+	il = NRD_SG_ResolveDiffuse(sg, normalWS, V, roughness);
+	ao = sg.normHitDist;
 }
 
 float3 SampleSSRTSpecular(uint2 pixCoord)
 {
-    float3 radiance;
-    float normHitDist;
-    REBLUR_BackEnd_UnpackRadianceAndNormHitDist(SSRTSpecRadianceHitDist[pixCoord], radiance, normHitDist);
-    return radiance;
+	float3 radiance;
+	float normHitDist;
+	REBLUR_BackEnd_UnpackRadianceAndNormHitDist(SSRTSpecRadianceHitDist[pixCoord], radiance, normHitDist);
+	return radiance;
 }
 #endif
 
@@ -118,7 +117,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 albedo = AlbedoTexture[pixCoord];
 		float3 linAlbedoSSRT = Color::IrradianceToLinear(albedo);
 		float3 V = normalize(-positionWS.xyz);
-		float  roughness = 1.0 - normalGlossiness.z;
+		float roughness = 1.0 - normalGlossiness.z;
 		float3 ssrtDiffuse;
 		SampleSSRTDiffuse(pixCoord, normalWS, V, roughness, ssrtDiffuse, ssrtAo);
 
@@ -128,9 +127,12 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 directionalAmbientColor = max(0, Color::Ambient(max(0, SharedData::GetAmbient(normalWS))) * albedo);
 
 		float maxScale = 1.0;
-		if (directionalAmbientColor.x > 0.0) maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
-		if (directionalAmbientColor.y > 0.0) maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
-		if (directionalAmbientColor.z > 0.0) maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
+		if (directionalAmbientColor.x > 0.0)
+			maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
+		if (directionalAmbientColor.y > 0.0)
+			maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
+		if (directionalAmbientColor.z > 0.0)
+			maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
 		directionalAmbientColor *= maxScale;
 
 		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
@@ -280,12 +282,13 @@ PS_OUTPUT main(PS_INPUT input)
 #if defined(SSRT)
 	if (SharedData::ssrtSettings.DebugMode != 0) {
 		float3 V = normalize(-positionWS.xyz);
-		float  roughness = 1.0 - normalGlossiness.z;
+		float roughness = 1.0 - normalGlossiness.z;
 
 		if (SharedData::ssrtSettings.DebugMode == 1) {
 			color = Color::IrradianceToGamma(SampleSSRTSpecular(pixCoord));
 		} else if (SharedData::ssrtSettings.DebugMode == 2) {
-			float3 il; float ao_dbg;
+			float3 il;
+			float ao_dbg;
 			SampleSSRTDiffuse(pixCoord, normalWS, V, roughness, il, ao_dbg);
 			color = Color::IrradianceToGamma(il);
 		} else if (SharedData::ssrtSettings.DebugMode == 3) {

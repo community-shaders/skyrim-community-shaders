@@ -1,15 +1,15 @@
 #include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
-#include "Common/Game.hlsli"
 #include "Common/GBuffer.hlsli"
-#include "Common/Shading.hlsli"
-#include "Common/SharedData.hlsli"
+#include "Common/Game.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
+#include "Common/Shading.hlsli"
+#include "Common/SharedData.hlsli"
 
 #define Pow2(x) ((x) * (x))
-#define SSRT_FLOAT_MAX	3.402823466e+38
+#define SSRT_FLOAT_MAX 3.402823466e+38
 
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 
@@ -19,19 +19,19 @@ SamplerState LinearSampler : register(s0);
 float4 ImportanceSampleGGX(float2 E, float a2)
 {
 	float Phi = 2 * Math::PI * E.x;
-	float CosTheta = sqrt( (1 - E.y) / ( 1 + (a2 - 1) * E.y ) );
-	float SinTheta = sqrt( 1 - CosTheta * CosTheta );
+	float CosTheta = sqrt((1 - E.y) / (1 + (a2 - 1) * E.y));
+	float SinTheta = sqrt(1 - CosTheta * CosTheta);
 
 	float3 H;
-	H.x = SinTheta * cos( Phi );
-	H.y = SinTheta * sin( Phi );
+	H.x = SinTheta * cos(Phi);
+	H.y = SinTheta * sin(Phi);
 	H.z = CosTheta;
-	
-	float d = ( CosTheta * a2 - CosTheta ) * CosTheta + 1;
-	float D = a2 / ( Math::PI*d*d );
+
+	float d = (CosTheta * a2 - CosTheta) * CosTheta + 1;
+	float D = a2 / (Math::PI * d * d);
 	float PDF = D * CosTheta;
 
-	return float4( H, PDF );
+	return float4(H, PDF);
 }
 
 float VisibleGGXPDF_aniso(float3 V, float3 H, float2 Alpha, bool bLimitVDNFToReflection = true)
@@ -45,12 +45,11 @@ float VisibleGGXPDF_aniso(float3 V, float3 H, float2 Alpha, bool bLimitVDNFToRef
 	float D = (1.0f / Math::PI) * a2 * Pow2(a2 / S);
 	float LenV = length(float3(V.x * Alpha.x, V.y * Alpha.y, NoV));
 	float k = 1.0;
-	if (bLimitVDNFToReflection)
-	{
+	if (bLimitVDNFToReflection) {
 		float a = saturate(min(Alpha.x, Alpha.y));
 		float s = 1.0f + length(V.xy);
 		float ka2 = a * a, s2 = s * s;
-		k = (s2 - ka2 * s2) / (s2 + ka2 * V.z * V.z); // Eq. 5
+		k = (s2 - ka2 * s2) / (s2 + ka2 * V.z * V.z);  // Eq. 5
 	}
 	float Pdf = (2 * D * VoH) / (k * NoV + LenV);
 	return Pdf;
@@ -67,8 +66,7 @@ float4 ImportanceSampleVisibleGGX(float2 E, float2 Alpha, float3 V, bool bLimitV
 	// Jonathan Dupuy & Anis Benyoub - High Performance Graphics 2023
 	float Phi = (2 * Math::PI) * E.x;
 	float k = 1.0;
-	if (bLimitVDNFToReflection)
-	{
+	if (bLimitVDNFToReflection) {
 		// If we know we will be reflecting the view vector around the sampled micronormal, we can
 		// tweak the range a bit more to eliminate some of the vectors that will point below the horizon
 		float a = saturate(min(Alpha.x, Alpha.y));
@@ -95,7 +93,7 @@ float3 ConcentricDiskSamplingHelper(float2 E)
 	float2 a = abs(p);
 	float Lo = min(a.x, a.y);
 	float Hi = max(a.x, a.y);
-	float Epsilon = 5.42101086243e-20; // 2^-64 (this avoids 0/0 without changing the rest of the mapping)
+	float Epsilon = 5.42101086243e-20;  // 2^-64 (this avoids 0/0 without changing the rest of the mapping)
 	float Phi = (Math::PI / 4) * (Lo / (Hi + Epsilon) + 2 * float(a.y >= a.x));
 	float Radius = Hi;
 	// copy sign bits from p
@@ -105,7 +103,7 @@ float3 ConcentricDiskSamplingHelper(float2 E)
 	return float3(Disk, Radius);
 }
 
-float4 CosineSampleHemisphere( float2 E )
+float4 CosineSampleHemisphere(float2 E)
 {
 	float Phi = 2 * Math::PI * E.x;
 	float CosTheta = sqrt(E.y);
@@ -131,89 +129,89 @@ float4 CosineSampleHemisphereConcentric(float2 E)
 
 namespace Octahedral
 {
-    float2 Wrap(float2 v)
-    {
-        return (1.0 - abs(v.yx)) * (v.xy >= 0.0 ? 1.0 : -1.0);
-    }
+	float2 Wrap(float2 v)
+	{
+		return (1.0 - abs(v.yx)) * (v.xy >= 0.0 ? 1.0 : -1.0);
+	}
 
-    float2 Encode(float3 n)
-    {
-        n /= (abs(n.x) + abs(n.y) + abs(n.z));
-        n.xy = n.z >= 0.0 ? n.xy : Wrap(n.xy);
-        n.xy = n.xy * 0.5 + 0.5;
-        return n.xy;
-    }
+	float2 Encode(float3 n)
+	{
+		n /= (abs(n.x) + abs(n.y) + abs(n.z));
+		n.xy = n.z >= 0.0 ? n.xy : Wrap(n.xy);
+		n.xy = n.xy * 0.5 + 0.5;
+		return n.xy;
+	}
 
-    float3 Decode(float2 f)
-    {
-        f = f * 2.0 - 1.0;
-        float3 n = float3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
-        float t = saturate(-n.z);
-        n.xy += n.xy >= 0.0 ? -t : t;
-        return normalize(n);
-    }
+	float3 Decode(float2 f)
+	{
+		f = f * 2.0 - 1.0;
+		float3 n = float3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
+		float t = saturate(-n.z);
+		n.xy += n.xy >= 0.0 ? -t : t;
+		return normalize(n);
+	}
 }
 
 void GetNormalRoughness(uint2 dtid, out float3 normal, out float roughness)
 {
-    float3 normalGlossiness = NormalRoughnessTexture[dtid];
-    // Normal is in view space
-    normal = GBuffer::DecodeNormal(normalGlossiness.xy);
-    roughness = 1.0f - normalGlossiness.z;
+	float3 normalGlossiness = NormalRoughnessTexture[dtid];
+	// Normal is in view space
+	normal = GBuffer::DecodeNormal(normalGlossiness.xy);
+	roughness = 1.0f - normalGlossiness.z;
 }
 
 void GetNormalRoughness(Texture2D<float4> NormalRoughness, uint2 dtid, out float3 normal, out float roughness)
 {
-    float3 normalGlossiness = NormalRoughness[dtid].xyz;
-    // Normal is in view space
-    normal = GBuffer::DecodeNormal(normalGlossiness.xy);
-    roughness = 1.0f - normalGlossiness.z;
+	float3 normalGlossiness = NormalRoughness[dtid].xyz;
+	// Normal is in view space
+	normal = GBuffer::DecodeNormal(normalGlossiness.xy);
+	roughness = 1.0f - normalGlossiness.z;
 }
 
 void GetNormalRoughnessUV(float2 uv, out float3 normal, out float roughness)
 {
-    float3 normalGlossiness = NormalRoughnessTexture.SampleLevel(LinearSampler, uv, 0);
-    // Normal is in view space
-    normal = GBuffer::DecodeNormal(normalGlossiness.xy);
-    roughness = 1.0f - normalGlossiness.z;
+	float3 normalGlossiness = NormalRoughnessTexture.SampleLevel(LinearSampler, uv, 0);
+	// Normal is in view space
+	normal = GBuffer::DecodeNormal(normalGlossiness.xy);
+	roughness = 1.0f - normalGlossiness.z;
 }
 
 // [ Duff et al. 2017, "Building an Orthonormal Basis, Revisited" ]
-float3x3 GetTangentBasis( float3 TangentZ )
+float3x3 GetTangentBasis(float3 TangentZ)
 {
 	const float Sign = TangentZ.z >= 0 ? 1 : -1;
-	const float a = -rcp( Sign + TangentZ.z );
+	const float a = -rcp(Sign + TangentZ.z);
 	const float b = TangentZ.x * TangentZ.y * a;
-	
-	float3 TangentX = { 1 + Sign * a * Pow2( TangentZ.x ), Sign * b, -Sign * TangentZ.x };
-	float3 TangentY = { b,  Sign + a * Pow2( TangentZ.y ), -TangentZ.y };
 
-	return float3x3( TangentX, TangentY, TangentZ );
+	float3 TangentX = { 1 + Sign * a * Pow2(TangentZ.x), Sign * b, -Sign * TangentZ.x };
+	float3 TangentY = { b, Sign + a * Pow2(TangentZ.y), -TangentZ.y };
+
+	return float3x3(TangentX, TangentY, TangentZ);
 }
 
-float2 Hammersley16( uint Index, uint NumSamples, uint2 Random )
+float2 Hammersley16(uint Index, uint NumSamples, uint2 Random)
 {
-	float E1 = frac( (float)Index / NumSamples + float( Random.x ) * (1.0 / 65536.0) );
-	float E2 = float( ( reversebits(Index) >> 16 ) ^ Random.y ) * (1.0 / 65536.0);
-	return float2( E1, E2 );
+	float E1 = frac((float)Index / NumSamples + float(Random.x) * (1.0 / 65536.0));
+	float E2 = float((reversebits(Index) >> 16) ^ Random.y) * (1.0 / 65536.0);
+	return float2(E1, E2);
 }
 
 static const int2 kStackowiakSampleSet4[15] = { int2(0, 1), int2(-2, 1), int2(2, -3), int2(-3, 0), int2(1, 2), int2(-1, -2), int2(3, 0), int2(-3, 3), int2(0, -3), int2(-1, -1), int2(2, 1), int2(-2, -2), int2(1, 0), int2(0, 2), int2(3, -1) };
 
 float2 GetMotionVector(float sceneDepth, float2 screenUV, float4x4 matrix_LastViewProj, float4x4 matrix_ViewProj)
 {
-    float4 positionWS = float4(2 * float2(screenUV.x, -screenUV.y + 1) - 1, sceneDepth, 1);
+	float4 positionWS = float4(2 * float2(screenUV.x, -screenUV.y + 1) - 1, sceneDepth, 1);
 
-    float4 curClipPos = mul(matrix_ViewProj, positionWS);
-    float4 lastClipPos = mul(matrix_LastViewProj, positionWS);
+	float4 curClipPos = mul(matrix_ViewProj, positionWS);
+	float4 lastClipPos = mul(matrix_LastViewProj, positionWS);
 
-    float2 CurNDC = curClipPos.xy / curClipPos.w;
-    float2 LastNDC = lastClipPos.xy / lastClipPos.w;
+	float2 CurNDC = curClipPos.xy / curClipPos.w;
+	float2 LastNDC = lastClipPos.xy / lastClipPos.w;
 
-    float2 CurUV = CurNDC.xy * float2(0.5f, -0.5f) + 0.5;
-    float2 LastUV = LastNDC.xy * float2(0.5f, -0.5f) + 0.5;
-    
-    return CurUV - LastUV;
+	float2 CurUV = CurNDC.xy * float2(0.5f, -0.5f) + 0.5;
+	float2 LastUV = LastNDC.xy * float2(0.5f, -0.5f) + 0.5;
+
+	return CurUV - LastUV;
 }
 
 uint3 Rand3DPCG16(int3 p)
@@ -235,47 +233,48 @@ uint3 Rand3DPCG16(int3 p)
 	// a permutation function on the other parts and the key.
 	//
 	// In this case, I'm using v.x, v.y and v.z as the parts, using + instead of ^ for
-	// the combination function, and just multiplying the other two parts (no key) for 
+	// the combination function, and just multiplying the other two parts (no key) for
 	// the permutation function.
 	//
 	// That gives a simple mad per round.
-	v.x += v.y*v.z;
-	v.y += v.z*v.x;
-	v.z += v.x*v.y;
-	v.x += v.y*v.z;
-	v.y += v.z*v.x;
-	v.z += v.x*v.y;
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
 
 	// only top 16 bits are well shuffled
 	return v >> 16u;
 }
 
-float3 SampleGGXVNDF(float3 Ve, float alpha_x, float alpha_y, float U1, float U2) {
-    // Input Ve: view direction
-    // Input alpha_x, alpha_y: roughness parameters
-    // Input U1, U2: uniform random numbers
-    // Output Ne: normal sampled with PDF D_Ve(Ne) = G1(Ve) * max(0, dot(Ve, Ne)) * D(Ne) / Ve.z
-    //
-    //
-    // Section 3.2: transforming the view direction to the hemisphere configuration
-    float3 Vh = normalize(float3(alpha_x * Ve.x, alpha_y * Ve.y, Ve.z));
-    // Section 4.1: orthonormal basis (with special case if cross product is zero)
-    float  lensq = Vh.x * Vh.x + Vh.y * Vh.y;
-    float3 T1 = lensq > 0 ? float3(-Vh.y, Vh.x, 0) * rsqrt(lensq) : float3(1, 0, 0);
-    float3 T2 = cross(Vh, T1);
-    // Section 4.2: parameterization of the projected area
-    float       r = sqrt(U1);
-    const float M_PI = 3.14159265358979f;
-    float       phi = 2.0 * M_PI * U2;
-    float       t1 = r * cos(phi);
-    float       t2 = r * sin(phi);
-    float       s = 0.5 * (1.0 + Vh.z);
-    t2 = (1.0 - s) * sqrt(1.0 - t1 * t1) + s * t2;
-    // Section 4.3: reprojection onto hemisphere
-    float3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - t1 * t1 - t2 * t2)) * Vh;
-    // Section 3.4: transforming the normal back to the ellipsoid configuration
-    float3 Ne = normalize(float3(alpha_x * Nh.x, alpha_y * Nh.y, max(0.0, Nh.z)));
-    return Ne;
+float3 SampleGGXVNDF(float3 Ve, float alpha_x, float alpha_y, float U1, float U2)
+{
+	// Input Ve: view direction
+	// Input alpha_x, alpha_y: roughness parameters
+	// Input U1, U2: uniform random numbers
+	// Output Ne: normal sampled with PDF D_Ve(Ne) = G1(Ve) * max(0, dot(Ve, Ne)) * D(Ne) / Ve.z
+	//
+	//
+	// Section 3.2: transforming the view direction to the hemisphere configuration
+	float3 Vh = normalize(float3(alpha_x * Ve.x, alpha_y * Ve.y, Ve.z));
+	// Section 4.1: orthonormal basis (with special case if cross product is zero)
+	float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+	float3 T1 = lensq > 0 ? float3(-Vh.y, Vh.x, 0) * rsqrt(lensq) : float3(1, 0, 0);
+	float3 T2 = cross(Vh, T1);
+	// Section 4.2: parameterization of the projected area
+	float r = sqrt(U1);
+	const float M_PI = 3.14159265358979f;
+	float phi = 2.0 * M_PI * U2;
+	float t1 = r * cos(phi);
+	float t2 = r * sin(phi);
+	float s = 0.5 * (1.0 + Vh.z);
+	t2 = (1.0 - s) * sqrt(1.0 - t1 * t1) + s * t2;
+	// Section 4.3: reprojection onto hemisphere
+	float3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - t1 * t1 - t2 * t2)) * Vh;
+	// Section 3.4: transforming the normal back to the ellipsoid configuration
+	float3 Ne = normalize(float3(alpha_x * Nh.x, alpha_y * Nh.y, max(0.0, Nh.z)));
+	return Ne;
 }
 
 void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint eyeIndex, out float2 outPrevUV)
@@ -283,10 +282,10 @@ void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint e
 	// Camera motion for pixel (in ScreenPos space).
 	float2 thisScreen = (hitUVz.xy - 0.5f) * float2(2.0f, -2.0f);
 	float4 thisClip = float4(thisScreen, hitUVz.z, 1);
-    float4 thisView = mul(FrameBuffer::CameraProjUnjitteredInverse[eyeIndex], thisClip);
-    thisView.xyz = thisView.xyz / thisView.w;
-    float4 thisWorld = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(thisView.xyz, 1.0f));
-    thisWorld.xyz = thisWorld.xyz / thisWorld.w;
+	float4 thisView = mul(FrameBuffer::CameraProjUnjitteredInverse[eyeIndex], thisClip);
+	thisView.xyz = thisView.xyz / thisView.w;
+	float4 thisWorld = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(thisView.xyz, 1.0f));
+	thisWorld.xyz = thisWorld.xyz / thisWorld.w;
 	float4 prevClip = mul(FrameBuffer::CameraPreviousViewProjUnjittered[eyeIndex], float4(thisWorld.xyz, 1.0f));
 	float2 prevScreen = prevClip.xy / prevClip.w;
 
@@ -295,12 +294,13 @@ void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint e
 	prevScreen = thisClip.xy + velocity * float2(2.f, -2.f);
 
 	float2 prevUV = prevScreen.xy * float2(0.5f, -0.5f) + 0.5f;
-	
+
 	outPrevUV = prevUV;
 }
 
-float GetSpecularOcclusionFromAmbientOcclusion(float NdotV, float ao, float roughness) {
-    return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+float GetSpecularOcclusionFromAmbientOcclusion(float NdotV, float ao, float roughness)
+{
+	return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
 }
 
 // by Profjack
@@ -319,7 +319,7 @@ float3 filterInf(float3 v) { return float3(filterInf(v.x), filterInf(v.y), filte
 float4 filterInf(float4 v) { return float4(filterInf(v.x), filterInf(v.y), filterInf(v.z), filterInf(v.w)); }
 
 float CalculateWeight(float depthCenter, float depthP, float phiD, float3 normalCenter, float3 normalP, float phiN,
-					  float luminanceCenter, float luminanceP, float phiL)
+	float luminanceCenter, float luminanceP, float phiL)
 {
 	float epsilon = 0.0000001;
 
