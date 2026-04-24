@@ -685,7 +685,6 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
     srvs.at(8) = inInterior ? envTexture : envReflectionsTexture;
     srvs.at(9) = nullptr;  // t9 unused
     srvs.at(10) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr;
-    srvs.at(11) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr;
 
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
@@ -916,7 +915,6 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
     srvs.at(8) = inInterior ? envTexture : envReflectionsTexture;
     srvs.at(9) = nullptr;
     srvs.at(10) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr;
-    srvs.at(11) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr;
     srvs.at(12) = albedo.SRV;
 
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
