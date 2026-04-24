@@ -658,9 +658,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					endif
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	float skylightingDiffuse = Skylighting::GetVertexSkylightingDiffuse(positionMSSkylight, normal, vertexAO);
-#				endif  // SKYLIGHTING	
+#				endif  // SKYLIGHTING
 
-		float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
+	float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
 
 	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
 	float3 sss = dirLightColor * dirDetailedShadow * saturate(-dirLightAngle) * Color::VanillaNormalization();
