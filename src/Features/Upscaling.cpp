@@ -1912,9 +1912,16 @@ void Upscaling::UpscaleDepth()
 	};
 
 	{
-		// Sometimes this is not already copied e.g. map menu.
-		// Skip alias copies to reduce unnecessary copy churn.
-		copyIfNonAliased(depthCopy.texture, depth.texture);
+		// Engine copies kMAIN→kMAIN_COPY during 3D scene rendering.
+		// In non-3D contexts (map, main menu, loading, pause) the engine skips its copy.
+		auto* ui = globals::game::ui;
+		const bool inMenuContext = globals::state->isMapMenuOpen ||
+		                           globals::state->isMainMenuOpen ||
+		                           globals::state->isLoadingMenuOpen ||
+		                           (ui && ui->GameIsPaused());
+		if (inMenuContext) {
+			copyIfNonAliased(depthCopy.texture, depth.texture);
+		}
 
 		// Clear stencil to be 0xFF
 		if (globals::game::isVR) {
@@ -1989,18 +1996,13 @@ void Upscaling::ApplySharpening()
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	ID3D11Resource* mainResource = nullptr;
-	main.SRV->GetResource(&mainResource);
-
-	if (!mainResource)
+	if (!main.UAV)
 		return;
 
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 
-	rcas.ApplySharpen(main.SRV, sharpenerTexture->uav.get(), currentSharpness);
-	context->CopyResource(mainResource, sharpenerTexture->resource.get());
-
-	mainResource->Release();
+	// Zero-copy path: DLSS has already written to sharpenerTexture; sharpen directly into kMAIN.UAV.
+	rcas.ApplySharpen(sharpenerTexture->srv.get(), main.UAV, currentSharpness);
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
 }
