@@ -236,7 +236,6 @@ jobs:
         strategy:
             matrix: ${{ fromJson(needs.prepare-nexus-matrix.outputs.upload_matrix) }}
             fail-fast: false
-        continue-on-error: ${{ matrix.name != 'core' }}
         uses: alandtse/nexus-workflows/.github/workflows/upload-nexus.yml@main
         with:
             nexus_game_id: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
