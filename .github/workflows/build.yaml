@@ -86,6 +86,7 @@ jobs:
         steps:
             - name: Ensure ref is a tag
               if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+              shell: bash
               run: |
                   if [ "${{ github.ref_type }}" != "tag" ]; then
                     echo "This workflow must be run on a tag, not a branch."
