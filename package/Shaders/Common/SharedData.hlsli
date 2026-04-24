@@ -249,15 +249,15 @@ namespace SharedData
 	};
 
 	struct SSRTSettings
-    {
-        uint EnableSpecular;
-        float SpecularMult;
-        float DiffuseMult;
+	{
+		uint EnableSpecular;
+		float SpecularMult;
+		float DiffuseMult;
 		float AmbientMult;
-        uint DebugMode;    // 0=none,1=spec,2=diffuse,3=occlusion,4=depth
-        uint EnablePrevGIReprojection;
-        float2 _pad;       // pad to 32 bytes (match C++ SharedData layout)
-    };
+		uint DebugMode;  // 0=none,1=spec,2=diffuse,3=occlusion,4=depth
+		uint EnablePrevGIReprojection;
+		float2 _pad;  // pad to 32 bytes (match C++ SharedData layout)
+	};
 
 	struct ExponentialHeightFogSettings
 	{

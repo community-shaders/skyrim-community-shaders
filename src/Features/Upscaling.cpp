@@ -1461,10 +1461,8 @@ void Upscaling::PostDisplay()
 	globals::game::renderer->UpdateViewPort(0, 0, 1);
 	UpdateCameraData();
 
-	if (d3d12SwapChainActive) {
-		if (globals::features::hdrDisplay.loaded)
-			globals::features::hdrDisplay.SetUIBuffer();
-	}
+	if (d3d12SwapChainActive)
+		globals::features::hdrDisplay.SetUIBuffer();
 
 	globals::state->UpdateSharedData(false, false);
 }
@@ -1914,9 +1912,18 @@ void Upscaling::UpscaleDepth()
 	};
 
 	{
-		// Sometimes this is not already copied e.g. map menu.
-		// Skip alias copies to reduce unnecessary copy churn.
-		copyIfNonAliased(depthCopy.texture, depth.texture);
+		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Depth Upscale");
+
+		// Engine copies kMAIN→kMAIN_COPY during 3D scene rendering.
+		// In non-3D contexts (map, main menu, loading, pause) the engine skips its copy.
+		auto* ui = globals::game::ui;
+		const bool inMenuContext = globals::state->isMapMenuOpen ||
+		                           globals::state->isMainMenuOpen ||
+		                           globals::state->isLoadingMenuOpen ||
+		                           (ui && ui->GameIsPaused());
+		if (inMenuContext) {
+			copyIfNonAliased(depthCopy.texture, depth.texture);
+		}
 
 		// Clear stencil to be 0xFF
 		if (globals::game::isVR) {
@@ -1931,14 +1938,19 @@ void Upscaling::UpscaleDepth()
 		ID3D11ShaderResourceView* srvs[] = { refractionNormals.SRVCopy, depthCopy.depthSRV, depthCopy.stencilSRV };
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
-		ID3D11RenderTargetView* rtvs[] = { refractionNormals.RTV, saoCameraZ.RTV };
-		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, depth.views[0]);
+		// kSAO_CAMERAZ is at quarter-stereo resolution in VR; the full-stereo viewport would
+		// corrupt only the top-left quarter. The engine's ISSAOCameraZ pass populates it correctly.
+		ID3D11RenderTargetView* rtvs[] = { refractionNormals.RTV,
+			globals::game::isVR ? nullptr : saoCameraZ.RTV };
+		context->OMSetRenderTargets(2, rtvs, depth.views[0]);
 
 		context->PSSetShader(depthUpscalePS, nullptr, 0);
 		context->Draw(3, 0);
 	}
 
 	{
+		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Underwater Mask");
+
 		viewport.Width = screenSize.x * 0.5f;
 		viewport.Height = screenSize.y * 0.5f;
 		context->RSSetViewports(1, &viewport);
@@ -1961,6 +1973,7 @@ void Upscaling::UpscaleDepth()
 
 	// Now propagate the upscaled depth to kMAIN_COPY so downstream VR passes see it.
 	if (globals::game::isVR) {
+		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Depth VR Propagate");
 		copyIfNonAliased(depthCopy.texture, depth.texture);
 	}
 
@@ -1988,18 +2001,13 @@ void Upscaling::ApplySharpening()
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	ID3D11Resource* mainResource = nullptr;
-	main.SRV->GetResource(&mainResource);
-
-	if (!mainResource)
+	if (!main.UAV)
 		return;
 
 	context->OMSetRenderTargets(0, nullptr, nullptr);
 
-	rcas.ApplySharpen(main.SRV, sharpenerTexture->uav.get(), currentSharpness);
-	context->CopyResource(mainResource, sharpenerTexture->resource.get());
-
-	mainResource->Release();
+	// Zero-copy path: DLSS has already written to sharpenerTexture; sharpen directly into kMAIN.UAV.
+	rcas.ApplySharpen(sharpenerTexture->srv.get(), main.UAV, currentSharpness);
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
 }

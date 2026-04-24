@@ -94,7 +94,7 @@ void State::Draw()
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
 					if (volumetricShadows.loaded)
-						volumetricShadows.CopyShadowData();
+						volumetricShadows.CopyShadowLightData();
 				}
 			}
 		}
@@ -691,6 +691,9 @@ void State::SetupResources()
 	featureLevel = globals::d3d::device->GetFeatureLevel();
 
 	tracyCtx = TracyD3D11Context(globals::d3d::device, globals::d3d::context);
+#ifdef TRACY_ENABLE
+	Feature::SetTracyCtx(tracyCtx);
+#endif
 }
 
 void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor, bool a_forceDeferred)

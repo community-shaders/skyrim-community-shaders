@@ -135,8 +135,8 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 	newWeather->data.precipitationEndFadeOut = LerpUint8_t(oldWeather->data.precipitationEndFadeOut, newWeather->data.precipitationEndFadeOut, currentWeatherPct);
 
 	//// Sun
-	newWeather->data.sunDamage = LerpInt8_t(oldWeather->data.sunDamage, newWeather->data.sunDamage, currentWeatherPct);
-	newWeather->data.sunGlare = LerpInt8_t(oldWeather->data.sunGlare, newWeather->data.sunGlare, currentWeatherPct);
+	newWeather->data.sunDamage = LerpUint8_t(oldWeather->data.sunDamage, newWeather->data.sunDamage, currentWeatherPct);
+	newWeather->data.sunGlare = LerpUint8_t(oldWeather->data.sunGlare, newWeather->data.sunGlare, currentWeatherPct);
 
 	//// Lightning
 	newWeather->data.thunderLightningBeginFadeIn = LerpUint8_t(oldWeather->data.thunderLightningBeginFadeIn, newWeather->data.thunderLightningBeginFadeIn, currentWeatherPct);
@@ -685,11 +685,9 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				else
 					sky->SetWeather(selectedWeather, true, false);
 
-				// If the lock is active, retarget it to the newly chosen weather so
-				// Prepass() enforces the new choice instead of reverting it.
-				if (editorWindow->IsWeatherLocked()) {
-					editorWindow->lockedWeather = selectedWeather;
-				}
+				// Retarget the lock so Prepass() enforces the new choice instead of reverting it.
+				if (editorWindow->IsWeatherLocked())
+					editorWindow->LockWeather(selectedWeather);
 
 				Util::ClearComboSearch(kWeatherSearchId);
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
