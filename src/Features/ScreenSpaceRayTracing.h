@@ -65,15 +65,16 @@ struct ScreenSpaceRayTracing : Feature
 		bool EnableNRDValidation = false;  // NRD internal debug overlay written to output textures
 	};
 
-	// Matches NRD Sample's tracing mode enum (Shared.hlsli).
 	// FULL: every pixel traces both diffuse and specular (2 dispatches, 2 rays/pixel).
 	// FULL_PROBABILISTIC: every pixel traces ONE ray, randomly diffuse vs specular — requires NRD AREA_3X3 reconstruction.
 	// HALF: checkerboard — even pixels diffuse, odd pixels specular. ~half the ray cost.
+	// QUARTER: half checkerboard + row alternation — 1/4 pixels traced per frame. NRD reconstructs columns; temporal fills rows.
 	enum TracingMode : uint
 	{
 		TRACING_MODE_FULL = 0,
 		TRACING_MODE_FULL_PROBABILISTIC = 1,
 		TRACING_MODE_HALF = 2,
+		TRACING_MODE_QUARTER = 3,
 	};
 
 	struct Settings

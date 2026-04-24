@@ -71,6 +71,7 @@ cbuffer SSRTCB : register(b1)
 #define TRACING_MODE_FULL               0
 #define TRACING_MODE_FULL_PROBABILISTIC 1
 #define TRACING_MODE_HALF               2
+#define TRACING_MODE_QUARTER            3
 
 #define HIZ_MAX_ITERATIONS MaxSteps
 #define HIZ_MIN_MIP 0
@@ -411,14 +412,36 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 }
 #endif
 
-[numthreads(8, 8, 1)] void main(uint3 groupID : SV_GroupID,
-                                uint3 groupThreadID : SV_GroupThreadID,
-                                uint3 DTid : SV_DispatchThreadID)
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
 {
     uint2 screen_size = SharedData::BufferDim.xy;
     const float2 depth_screen_size = float2(screen_size);
-    uint2 coords = DTid.xy;
-    uint2 fullResCoords = coords;
+
+    uint2 fullResCoords;
+    uint2 outPixelPos;
+
+    if (TracingMode == TRACING_MODE_QUARTER) {
+        uint rowOffset = (FrameIndex >> 1) & 1;
+        uint fullResY = DTid.y * 2 + rowOffset;
+#if defined(SSRT_SPECULAR)
+        uint colOffset = ((fullResY + FrameIndex) & 1) ^ 1;
+#else
+        uint colOffset = (fullResY + FrameIndex) & 1;
+#endif
+        fullResCoords = uint2(DTid.x * 2 + colOffset, fullResY);
+        outPixelPos = uint2(DTid.x, fullResY);
+    } else if (TracingMode == TRACING_MODE_HALF) {
+#if defined(SSRT_SPECULAR)
+        uint colOffset = ((DTid.y + FrameIndex) & 1) ^ 1;
+#else
+        uint colOffset = (DTid.y + FrameIndex) & 1;
+#endif
+        fullResCoords = uint2(DTid.x * 2 + colOffset, DTid.y);
+        outPixelPos = DTid.xy;
+    } else {
+        fullResCoords = DTid.xy;
+        outPixelPos = DTid.xy;
+    }
 
     float2 uv = float2(fullResCoords + 0.5) * SharedData::BufferDim.zw * FrameBuffer::DynamicResolutionParams2.xy;
     uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
@@ -428,34 +451,17 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     GetNormalRoughness(fullResCoords, normalVS, roughness);
     roughness = clamp(roughness, 0.02f, 1.0f);
 
-    bool isMyPixel;
-    uint2 outPixelPos;
-    if (TracingMode == TRACING_MODE_HALF) {
-        uint checker = (coords.x + coords.y + FrameIndex) & 1;
-#if defined(SSRT_SPECULAR)
-        isMyPixel = (checker == 1);
-#else
-        isMyPixel = (checker == 0);
-#endif
-        outPixelPos = uint2(coords.x >> 1, coords.y);
-    } else if (TracingMode == TRACING_MODE_FULL_PROBABILISTIC) {
+    if (TracingMode == TRACING_MODE_FULL_PROBABILISTIC) {
         float diffuseProbability = clamp(roughness, 0.25, 0.75);
-        uint hash = Random::pcg3d(uint3(coords, FrameIndex)).x;
+        uint hash = Random::pcg3d(uint3(fullResCoords, FrameIndex)).x;
         float rnd = float(hash) * (1.0 / 4294967296.0);
         bool isDiffusePath = rnd < diffuseProbability;
 #if defined(SSRT_SPECULAR)
-        isMyPixel = !isDiffusePath;
+        if (isDiffusePath) return;
 #else
-        isMyPixel = isDiffusePath;
+        if (!isDiffusePath) return;
 #endif
-        outPixelPos = coords;
-    } else {
-        isMyPixel = true;
-        outPixelPos = coords;
     }
-
-    if (!isMyPixel)
-        return;
 
     float depth = DepthTexture[fullResCoords].x;
 
@@ -464,7 +470,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #else
     bool isSky = depth >= 1.0 - 1e-6;
 #endif
-    if (isSky || any(coords >= (uint2)(screen_size * FrameBuffer::DynamicResolutionParams1.xy))) {
+    if (isSky || any(fullResCoords >= (uint2)(screen_size * FrameBuffer::DynamicResolutionParams1.xy))) {
 #if defined(SSRT_SPECULAR)
         OutSpecRadianceHitDist[outPixelPos] = 0;
 #else
@@ -501,7 +507,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     view_space_ray += view_space_surface_normal * NormalBias * view_space_ray.z * GAME_UNIT_TO_M;
 
     float pdf;
-    float3 view_space_reflected_direction = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, coords, pdf);
+    float3 view_space_reflected_direction = SampleReflectionVector(view_space_ray_direction, view_space_surface_normal, roughness, fullResCoords, pdf);
     screen_uv_space_ray_origin = ProjectPosition(view_space_ray, FrameBuffer::CameraProj[eyeIndex]);
     float3 screen_space_ray_direction = ProjectDirection(view_space_ray, view_space_reflected_direction, screen_uv_space_ray_origin, FrameBuffer::CameraProj[eyeIndex]);
     float3 world_space_reflected_direction = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(view_space_reflected_direction, 0)).xyz;

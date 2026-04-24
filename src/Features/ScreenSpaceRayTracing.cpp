@@ -66,15 +66,16 @@ void ScreenSpaceRayTracing::DrawSettings()
 	ImGui::Checkbox("Enable Diffuse", &settings.EnableDiffuse);
 
 	{
-		static const char* modeLabels[] = { "Full", "Full (probabilistic)", "Half" };
-		int mode = (int)std::min(settings.Mode, 2u);
-		if (ImGui::Combo("Resolution", &mode, modeLabels, 3))
+		static const char* modeLabels[] = { "Full", "Full (probabilistic)", "Half", "Quarter" };
+		int mode = (int)std::min(settings.Mode, 3u);
+		if (ImGui::Combo("Resolution", &mode, modeLabels, 4))
 			settings.Mode = (uint)mode;
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
 				"Full: each pixel traces both diffuse and specular (2 rays/pixel).\n"
 				"Full (probabilistic): each pixel traces ONE ray, randomly diffuse or specular. Requires NRD AREA_3X3 hit-distance reconstruction.\n"
-				"Half: checkerboard — half the pixels trace diffuse, the other half specular (~half cost).");
+				"Half: checkerboard — half the pixels trace diffuse, the other half specular (~half cost).\n"
+				"Quarter: half checkerboard + row alternation — 1/4 of pixels traced per frame. Best performance, slight quality loss.");
 	}
 
 	ImGui::SliderInt("Max Steps", (int*)&settings.MaxSteps, 1, 256);
@@ -619,7 +620,13 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 	float2 dynres = Util::ConvertToDynamic(res);
 	dynres = { floor(dynres.x), floor(dynres.y) };
 
-	float2 dispatchCount = { (dynres.x + 7) / 8, (dynres.y + 7) / 8 };
+	float2 traceRes = dynres;
+	if (settings.Mode == TRACING_MODE_HALF || settings.Mode == TRACING_MODE_QUARTER)
+		traceRes.x = ceil(dynres.x * 0.5f);
+	if (settings.Mode == TRACING_MODE_QUARTER)
+		traceRes.y = ceil(dynres.y * 0.5f);
+
+	float2 dispatchCount = { (traceRes.x + 7) / 8, (traceRes.y + 7) / 8 };
 
 	SSRTCB ssrCBData = {};
 	{
@@ -759,14 +766,14 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 			reblurSpecularSettings.specularPrepassBlurRadius = std::max(r.DiffusePrepassBlurRadius, 0.0f);
 			auto specHitDistRecon = static_cast<nrd::HitDistanceReconstructionMode>(
 				std::min(r.HitDistanceReconstructionMode, 2u));
-			if (settings.Mode == TRACING_MODE_FULL_PROBABILISTIC &&
+			if ((settings.Mode == TRACING_MODE_FULL_PROBABILISTIC || settings.Mode == TRACING_MODE_QUARTER) &&
 				specHitDistRecon == nrd::HitDistanceReconstructionMode::OFF)
 				specHitDistRecon = nrd::HitDistanceReconstructionMode::AREA_3X3;
 			reblurSpecularSettings.hitDistanceReconstructionMode = specHitDistRecon;
 			reblurSpecularSettings.hitDistanceParameters.A = settings.HitDistA;
 			reblurSpecularSettings.hitDistanceParameters.B = settings.HitDistB;
 			reblurSpecularSettings.hitDistanceParameters.C = settings.HitDistC;
-			reblurSpecularSettings.checkerboardMode = settings.Mode == TRACING_MODE_HALF ? nrd::CheckerboardMode::BLACK : nrd::CheckerboardMode::OFF;
+			reblurSpecularSettings.checkerboardMode = (settings.Mode == TRACING_MODE_HALF || settings.Mode == TRACING_MODE_QUARTER) ? nrd::CheckerboardMode::BLACK : nrd::CheckerboardMode::OFF;
 		}
 		nrdReblurSpecular.SetDenoiserSettings(&reblurSpecularSettings);
 
@@ -813,7 +820,13 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 	float2 dynres = Util::ConvertToDynamic(res);
 	dynres = { floor(dynres.x), floor(dynres.y) };
 
-	float2 dispatchCount = { (dynres.x + 7) / 8, (dynres.y + 7) / 8 };
+	float2 traceRes = dynres;
+	if (settings.Mode == TRACING_MODE_HALF || settings.Mode == TRACING_MODE_QUARTER)
+		traceRes.x = ceil(dynres.x * 0.5f);
+	if (settings.Mode == TRACING_MODE_QUARTER)
+		traceRes.y = ceil(dynres.y * 0.5f);
+
+	float2 dispatchCount = { (traceRes.x + 7) / 8, (traceRes.y + 7) / 8 };
 
 	SSRTCB ssrCBData = {};
 	{
@@ -988,14 +1001,14 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 			reblurSettings.returnHistoryLengthInsteadOfOcclusion = r.ReturnHistoryLengthInsteadOfOcclusion;
 			auto diffHitDistRecon = static_cast<nrd::HitDistanceReconstructionMode>(
 				std::min(r.HitDistanceReconstructionMode, 2u));
-			if (settings.Mode == TRACING_MODE_FULL_PROBABILISTIC &&
+			if ((settings.Mode == TRACING_MODE_FULL_PROBABILISTIC || settings.Mode == TRACING_MODE_QUARTER) &&
 				diffHitDistRecon == nrd::HitDistanceReconstructionMode::OFF)
 				diffHitDistRecon = nrd::HitDistanceReconstructionMode::AREA_3X3;
 			reblurSettings.hitDistanceReconstructionMode = diffHitDistRecon;
 			reblurSettings.hitDistanceParameters.A = settings.HitDistA;
 			reblurSettings.hitDistanceParameters.B = settings.HitDistB;
 			reblurSettings.hitDistanceParameters.C = settings.HitDistC;
-			reblurSettings.checkerboardMode = settings.Mode == TRACING_MODE_HALF ? nrd::CheckerboardMode::WHITE : nrd::CheckerboardMode::OFF;
+			reblurSettings.checkerboardMode = (settings.Mode == TRACING_MODE_HALF || settings.Mode == TRACING_MODE_QUARTER) ? nrd::CheckerboardMode::WHITE : nrd::CheckerboardMode::OFF;
 		}
 		nrdReblur.SetDenoiserSettings(&reblurSettings);
 
