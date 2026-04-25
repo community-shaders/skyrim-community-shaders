@@ -52,6 +52,7 @@ public:
 
 	ID3D11PixelShader* GetCompositePS(bool interior);
 	ID3D11VertexShader* GetCompositeVS();
+	ID3D11ComputeShader* GetComputeMainCompositeInterior();
 
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];
@@ -61,6 +62,7 @@ public:
 	ID3D11PixelShader* compositePS = nullptr;
 	ID3D11PixelShader* compositePSInterior = nullptr;
 	ID3D11VertexShader* compositeVS = nullptr;
+	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
 	winrt::com_ptr<ID3D11BlendState> compositeBlendState;
 	winrt::com_ptr<ID3D11DepthStencilState> compositeDepthStencilState;

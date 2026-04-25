@@ -1,6 +1,5 @@
 #include "FeatureConstraints.h"
 #include "Features/DynamicCubemaps.h"
-#include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/VR.h"
 #include "Menu.h"
@@ -273,7 +272,7 @@ namespace
 		bool isDev = globals::state && globals::state->IsDeveloperMode();
 
 		if (!hasEffects && !isDev) {
-			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "No screen-space effects active (SSGI, SSR, SS Shadows).");
+			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "No screen-space effects active (SSRT, SS Shadows).");
 			ImGui::TextWrapped("Stereo blend requires at least one screen-space effect to be loaded.");
 			return;
 		}
@@ -286,7 +285,7 @@ namespace
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Post-composite depth-aware bilateral blend between eyes.\n"
-				"Reduces stereo inconsistencies from screen-space effects (SSGI, SSR, etc.).\n"
+				"Reduces stereo inconsistencies from screen-space effects (SSRT, SS Shadows, etc.).\n"
 				"Each pixel is reprojected to the other eye; blending is applied only where\n"
 				"depth agrees (same surface). Full-screen pass in VR.\n"
 				"Only use to help with stereo consistency artifacts.\n");

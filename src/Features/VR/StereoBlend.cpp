@@ -2,7 +2,6 @@
 
 #include "Deferred.h"
 #include "Features/DynamicCubemaps.h"
-#include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "State.h"
 #include "Utils/D3D.h"
@@ -19,8 +18,7 @@ void VR::ClearShaderCache()
 
 bool VR::AnyScreenSpaceEffectLoaded()
 {
-	return globals::features::screenSpaceGI.loaded ||
-	       globals::features::dynamicCubemaps.loaded ||
+	return globals::features::dynamicCubemaps.loaded ||
 	       globals::features::screenSpaceShadows.loaded;
 }
 
