@@ -587,9 +587,22 @@ struct Raytracing : public OverlayFeature
 
 	virtual bool IsInMenu() const override { return true; }
 
-	virtual bool IsOverlayVisible() const override { return settings.PerfOverlay != OverlayMode::None; };
+	virtual bool IsOverlayVisible() const override { return Active() && settings.PerfOverlay != OverlayMode::None; };
 
 	virtual void DrawOverlay() override;
+
+	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override 
+	{ 
+		if (!loaded)
+			return {};
+
+		return { 
+			{ { "UnifiedWater", "Enabled" },
+			false,
+			"Unified Water alters the behaviour of water meshes which breaks raytracing scene management",
+			true } 
+		};
+	}
 
 	bool Active() const;
 
@@ -653,6 +666,8 @@ struct Raytracing : public OverlayFeature
 	bool PositionSet = false;
 
 	bool initialized = false;
+
+	// Used when feature was force disabled, likely due to missing dll or incompatible hardware
 	bool forcedDisabled = false;
 
 	uint2 m_Resolution;
@@ -739,14 +754,16 @@ struct Raytracing : public OverlayFeature
 			{
 				auto& rt = globals::features::raytracing;
 
-				rt.UpdateFeatureData();
-				rt.SkyCubeToHemi();
+				if (rt.Active()) {
+					rt.UpdateFeatureData();
+					rt.SkyCubeToHemi();
 
-				rt.creationEngineRaytracing->UpdateCamera();
+					rt.creationEngineRaytracing->UpdateCamera();
 
-				// Executes the render graph for path tracing, no dependecy on any game render target so we start as early as possible
-				if (rt.Mode() == CreationEngineRaytracing::Mode::PathTracing) {
-					rt.creationEngineRaytracing->Execute();
+					// Executes the render graph for path tracing, no dependecy on any game render target so we start as early as possible
+					if (rt.Mode() == CreationEngineRaytracing::Mode::PathTracing) {
+						rt.creationEngineRaytracing->Execute();
+					}
 				}
 
 				func(a1);
@@ -758,12 +775,14 @@ struct Raytracing : public OverlayFeature
 		{
 			static void thunk()
 			{
-				auto* tes = RE::TES::GetSingleton();
-				if (tes->interiorCell) {
-					if (tes->interiorCell->cellFlags.none(RE::TESObjectCELL::Flag::kHasWater))
-						tes->interiorCell->cellFlags.set(true, RE::TESObjectCELL::Flag::kHasWater);
+				if (auto& rt = globals::features::raytracing; rt.loaded && !rt.forcedDisabled) {
+					auto* tes = RE::TES::GetSingleton();
+					if (tes->interiorCell) {
+						if (tes->interiorCell->cellFlags.none(RE::TESObjectCELL::Flag::kHasWater))
+							tes->interiorCell->cellFlags.set(true, RE::TESObjectCELL::Flag::kHasWater);
 
-					globals::features::raytracing.waterReflections->flags.set(true, RE::TESWaterReflections::Flags::kDirty);
+						globals::features::raytracing.waterReflections->flags.set(true, RE::TESWaterReflections::Flags::kDirty);
+					}
 				}
 
 				func();
