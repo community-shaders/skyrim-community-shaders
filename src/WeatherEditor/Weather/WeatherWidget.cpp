@@ -558,30 +558,30 @@ void WeatherWidget::SetWeatherValues()
 	auto& colorData = weather->colorData;
 	auto& fogData = weather->fogData;
 
-	weather->data.transDelta = (uint8_t)weatherProps["Trans Delta"];
+	weather->data.transDelta = static_cast<uint8_t>(weatherProps["Trans Delta"]);
 
 	// Sun
-	data.sunGlare = (uint8_t)weatherProps["Sun Glare"];
-	data.sunDamage = (uint8_t)weatherProps["Sun Damage"];
+	data.sunGlare = static_cast<uint8_t>(weatherProps["Sun Glare"]);
+	data.sunDamage = static_cast<uint8_t>(weatherProps["Sun Damage"]);
 
 	// Precipitation
-	data.precipitationBeginFadeIn = (uint8_t)weatherProps["Precipitation Begin Fade In"];
-	data.precipitationEndFadeOut = (uint8_t)weatherProps["Precipitation End Fade Out"];
+	data.precipitationBeginFadeIn = static_cast<uint8_t>(weatherProps["Precipitation Begin Fade In"]);
+	data.precipitationEndFadeOut = static_cast<uint8_t>(weatherProps["Precipitation End Fade Out"]);
 
 	// Lightning
-	data.thunderLightningBeginFadeIn = (uint8_t)weatherProps["Thunder Lightning Begin Fade In"];
-	data.thunderLightningEndFadeOut = (uint8_t)weatherProps["Thunder Lightning End Fade Out"];
+	data.thunderLightningBeginFadeIn = static_cast<uint8_t>(weatherProps["Thunder Lightning Begin Fade In"]);
+	data.thunderLightningEndFadeOut = static_cast<uint8_t>(weatherProps["Thunder Lightning End Fade Out"]);
 	data.thunderLightningFrequency = static_cast<int8_t>(static_cast<uint8_t>(weatherProps["Thunder Lightning Frequency"]));
 	Float3ToColor(weatherColors["Lightning Color"], weather->data.lightningColor);
 
 	// Visual Effects
-	data.visualEffectBegin = (uint8_t)weatherProps["Visual Effect Begin"];
-	data.visualEffectEnd = (uint8_t)weatherProps["Visual Effect End"];
+	data.visualEffectBegin = static_cast<uint8_t>(weatherProps["Visual Effect Begin"]);
+	data.visualEffectEnd = static_cast<uint8_t>(weatherProps["Visual Effect End"]);
 
 	// Wind
-	data.windSpeed = (uint8_t)weatherProps["Wind Speed"];
-	data.windDirection = (uint8_t)weatherProps["Wind Direction"];
-	data.windDirectionRange = (uint8_t)weatherProps["Wind Direction Range"];
+	data.windSpeed = static_cast<uint8_t>(weatherProps["Wind Speed"]);
+	data.windDirection = static_cast<uint8_t>(weatherProps["Wind Direction"]);
+	data.windDirectionRange = static_cast<uint8_t>(weatherProps["Wind Direction Range"]);
 
 	// Fog
 	fogData.dayNear = fogProperties["Day Near"];
@@ -624,8 +624,8 @@ void WeatherWidget::SetWeatherValues()
 	for (size_t i = 0; i < TESWeather::kTotalLayers; i++) {
 		auto& settingsCloud = settings.clouds[i];
 
-		weather->cloudLayerSpeedX[i] = (int8_t)settingsCloud.cloudLayerSpeedX;
-		weather->cloudLayerSpeedY[i] = (int8_t)settingsCloud.cloudLayerSpeedY;
+		weather->cloudLayerSpeedX[i] = static_cast<int8_t>(settingsCloud.cloudLayerSpeedX);
+		weather->cloudLayerSpeedY[i] = static_cast<int8_t>(settingsCloud.cloudLayerSpeedY);
 
 		if (!settingsCloud.enabled) {
 			disabledBits |= (1 << i);
