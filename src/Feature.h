@@ -95,6 +95,7 @@ public:
 	virtual void Load() {}  // Called during SKSE Load - earliest hook point only for critical hooks like d3d
 	virtual void DataLoaded() {}
 	virtual void PostPostLoad() {}
+	virtual void PostLoadGame() {}  // Called when a save is loaded or a new game is started
 
 	void Load(json& o_json);
 	void Save(json& o_json);
