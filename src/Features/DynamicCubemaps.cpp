@@ -243,6 +243,10 @@ void DynamicCubemaps::ClearShaderCache()
 		specularIrradianceCS->Release();
 		specularIrradianceCS = nullptr;
 	}
+	if (bc6hEncodeCS) {
+		bc6hEncodeCS->Release();
+		bc6hEncodeCS = nullptr;
+	}
 }
 
 ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderUpdate()
@@ -306,6 +310,15 @@ ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderSpecularIrradiance()
 		specularIrradianceCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DynamicCubemaps\\SpecularIrradianceCS.hlsl", {}, "cs_5_0"));
 	}
 	return specularIrradianceCS;
+}
+
+ID3D11ComputeShader* DynamicCubemaps::GetComputeShaderBC6HEncode()
+{
+	if (!bc6hEncodeCS) {
+		logger::debug("Compiling BC6HEncodeCS");
+		bc6hEncodeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DynamicCubemaps\\BC6HEncodeCS.hlsl", {}, "cs_5_0"));
+	}
+	return bc6hEncodeCS;
 }
 
 void DynamicCubemaps::UpdateCubemapCapture(bool a_reflections)
@@ -469,6 +482,62 @@ void DynamicCubemaps::Irradiance(bool a_reflections)
 	context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 }
 
+void DynamicCubemaps::CompressToBC6H(bool a_reflections)
+{
+	auto context = globals::d3d::context;
+
+	auto shader = GetComputeShaderBC6HEncode();
+	if (!shader) {
+		logger::error("BC6HEncodeCS failed to compile; BC6H compression disabled");
+		return;
+	}
+
+	auto* srcSRV = a_reflections ? envReflectionsTextureArraySRV : envTextureArraySRV;
+
+	context->CSSetShader(shader, nullptr, 0);
+	context->CSSetShaderResources(0, 1, &srcSRV);
+
+	ID3D11Buffer* cb = bc6hEncodeCB->CB();
+	context->CSSetConstantBuffers(0, 1, &cb);
+
+	std::uint32_t mipDim = std::max(envTexture->desc.Width, envTexture->desc.Height);
+
+	for (std::uint32_t level = 0; level < bc6hMipLevels; ++level) {
+		std::uint32_t srcWidth = std::max(1u, mipDim >> level);
+		std::uint32_t srcHeight = std::max(1u, mipDim >> level);
+		std::uint32_t blocksX = std::max(1u, srcWidth / 4);
+		std::uint32_t blocksY = std::max(1u, srcHeight / 4);
+
+		BC6HEncodeCB cbData{};
+		cbData.TextureSizeInBlocksX = blocksX;
+		cbData.TextureSizeInBlocksY = blocksY;
+		cbData.MipLevel = level;
+		bc6hEncodeCB->Update(cbData);
+
+		context->CSSetUnorderedAccessViews(0, 1, &bc6hScratchUAVs[level], nullptr);
+
+		std::uint32_t dispatchX = std::max(1u, (blocksX + 7) / 8);
+		std::uint32_t dispatchY = std::max(1u, (blocksY + 7) / 8);
+		context->Dispatch(dispatchX, dispatchY, 6);
+	}
+
+	{
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		ID3D11UnorderedAccessView* nullUAV = nullptr;
+		ID3D11Buffer* nullBuffer = nullptr;
+		context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+		context->CSSetShaderResources(0, 1, &nullSRV);
+		context->CSSetConstantBuffers(0, 1, &nullBuffer);
+		context->CSSetShader(nullptr, nullptr, 0);
+	}
+
+	// BC formats are bitwise-compatible with matching block-equivalent uncompressed
+	// formats for CopyResource: an R32G32B32A32_UINT (W/4 × H/4) resource maps 1:1
+	// to a BC6H_UF16 (W × H) resource because each block is 16 bytes either way.
+	auto dst = a_reflections ? envReflectionsTextureBC6H : envTextureBC6H;
+	context->CopyResource(dst->resource.get(), bc6hScratchTexture->resource.get());
+}
+
 void DynamicCubemaps::UpdateCubemap()
 {
 	ZoneScoped;
@@ -507,11 +576,16 @@ void DynamicCubemaps::UpdateCubemap()
 		break;
 
 	case NextTask::kIrradiance:
+		nextTask = NextTask::kBC6HCompress;
+		Irradiance(false);
+		break;
+
+	case NextTask::kBC6HCompress:
 		if (activeReflections)
 			nextTask = NextTask::kCapture2;
 		else
 			nextTask = NextTask::kCapture;
-		Irradiance(false);
+		CompressToBC6H(false);
 		break;
 
 	case NextTask::kCapture2:
@@ -525,8 +599,13 @@ void DynamicCubemaps::UpdateCubemap()
 		break;
 
 	case NextTask::kIrradiance2:
-		nextTask = NextTask::kCapture;
+		nextTask = NextTask::kBC6HCompress2;
 		Irradiance(true);
+		break;
+
+	case NextTask::kBC6HCompress2:
+		nextTask = NextTask::kCapture;
+		CompressToBC6H(true);
 		break;
 	}
 }
@@ -535,7 +614,10 @@ void DynamicCubemaps::PostDeferred()
 {
 	auto context = globals::d3d::context;
 
-	ID3D11ShaderResourceView* views[2] = { (activeReflections ? envReflectionsTexture : envTexture)->srv.get(), envTexture->srv.get() };
+	ID3D11ShaderResourceView* views[2] = {
+		(activeReflections ? envReflectionsTextureBC6H : envTextureBC6H)->srv.get(),
+		envTextureBC6H->srv.get()
+	};
 	context->PSSetShaderResources(30, 2, views);
 }
 
@@ -546,6 +628,7 @@ void DynamicCubemaps::SetupResources()
 	GetComputeShaderInferrence();
 	GetComputeShaderInferrenceReflections();
 	GetComputeShaderSpecularIrradiance();
+	GetComputeShaderBC6HEncode();
 
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
@@ -622,11 +705,89 @@ void DynamicCubemaps::SetupResources()
 		envReflectionsTexture->CreateSRV(srvDesc);
 		envReflectionsTexture->CreateUAV(uavDesc);
 
+		// Texture2DArray SRVs used by BC6H encoder (Load() requires array dimension, not TextureCube)
+		{
+			D3D11_SHADER_RESOURCE_VIEW_DESC arraySRVDesc = {};
+			arraySRVDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+			arraySRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+			arraySRVDesc.Texture2DArray.FirstArraySlice = 0;
+			arraySRVDesc.Texture2DArray.ArraySize = 6;
+			arraySRVDesc.Texture2DArray.MostDetailedMip = 0;
+			arraySRVDesc.Texture2DArray.MipLevels = MIPLEVELS;
+			DX::ThrowIfFailed(device->CreateShaderResourceView(envTexture->resource.get(), &arraySRVDesc, &envTextureArraySRV));
+			DX::ThrowIfFailed(device->CreateShaderResourceView(envReflectionsTexture->resource.get(), &arraySRVDesc, &envReflectionsTextureArraySRV));
+		}
+
 		envInferredTexture = new Texture2D(texDesc);
 		envInferredTexture->CreateSRV(srvDesc);
 		envInferredTexture->CreateUAV(uavDesc);
 
+		// BC6H scratch: R32G32B32A32_UINT at quarter-resolution, 6-face array.
+		// Encoded directly into here via UAV, then CopyResource'd to the BC6H texture.
+		// Mip count must match the BC6H target so block-equivalent dimensions align.
+		{
+			std::uint32_t scratchBase = std::max(1u, texDesc.Width / 4);
+			bc6hMipLevels = 0;
+			for (std::uint32_t d = scratchBase; d > 0; d >>= 1)
+				++bc6hMipLevels;
+			// Clamp: must not exceed envTexture's mip count (source reads) or the UAV array size.
+			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, MIPLEVELS);
+			bc6hMipLevels = std::min<std::uint32_t>(bc6hMipLevels, 8u);
+
+			D3D11_TEXTURE2D_DESC scratchDesc = {};
+			scratchDesc.Width = scratchBase;
+			scratchDesc.Height = std::max(1u, texDesc.Height / 4);
+			scratchDesc.MipLevels = bc6hMipLevels;
+			scratchDesc.ArraySize = 6;
+			scratchDesc.Format = DXGI_FORMAT_R32G32B32A32_UINT;
+			scratchDesc.SampleDesc.Count = 1;
+			scratchDesc.Usage = D3D11_USAGE_DEFAULT;
+			scratchDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+			scratchDesc.MiscFlags = 0;
+			bc6hScratchTexture = new Texture2D(scratchDesc);
+
+			D3D11_UNORDERED_ACCESS_VIEW_DESC scratchUAVDesc = {};
+			scratchUAVDesc.Format = DXGI_FORMAT_R32G32B32A32_UINT;
+			scratchUAVDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
+			scratchUAVDesc.Texture2DArray.FirstArraySlice = 0;
+			scratchUAVDesc.Texture2DArray.ArraySize = 6;
+			for (std::uint32_t level = 0; level < bc6hMipLevels; ++level) {
+				scratchUAVDesc.Texture2DArray.MipSlice = level;
+				DX::ThrowIfFailed(device->CreateUnorderedAccessView(bc6hScratchTexture->resource.get(), &scratchUAVDesc, &bc6hScratchUAVs[level]));
+			}
+		}
+
+		// BC6H compressed cubemap textures (shader-read-only).
+		{
+			D3D11_TEXTURE2D_DESC bc6hDesc = {};
+			bc6hDesc.Width = texDesc.Width;
+			bc6hDesc.Height = texDesc.Height;
+			bc6hDesc.MipLevels = bc6hMipLevels;
+			bc6hDesc.ArraySize = 6;
+			bc6hDesc.Format = DXGI_FORMAT_BC6H_UF16;
+			bc6hDesc.SampleDesc.Count = 1;
+			bc6hDesc.Usage = D3D11_USAGE_DEFAULT;
+			bc6hDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+			bc6hDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+
+			D3D11_SHADER_RESOURCE_VIEW_DESC bc6hSRVDesc = {};
+			bc6hSRVDesc.Format = DXGI_FORMAT_BC6H_UF16;
+			bc6hSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+			bc6hSRVDesc.TextureCube.MostDetailedMip = 0;
+			bc6hSRVDesc.TextureCube.MipLevels = bc6hMipLevels;
+
+			envTextureBC6H = new Texture2D(bc6hDesc);
+			envTextureBC6H->CreateSRV(bc6hSRVDesc);
+
+			envReflectionsTextureBC6H = new Texture2D(bc6hDesc);
+			envReflectionsTextureBC6H->CreateSRV(bc6hSRVDesc);
+		}
+
 		updateCubemapCB = new ConstantBuffer(ConstantBufferDesc<UpdateCubemapCB>());
+	}
+
+	{
+		bc6hEncodeCB = new ConstantBuffer(ConstantBufferDesc<BC6HEncodeCB>());
 	}
 
 	{

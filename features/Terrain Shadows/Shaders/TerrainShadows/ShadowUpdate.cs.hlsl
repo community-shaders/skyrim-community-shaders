@@ -63,8 +63,15 @@ float2 GetInterpolatedHeightRW(float2 pxCoord, bool isVertical)
 groupshared float2 g_shadowHeight[NTHREADS];
 
 [numthreads(NTHREADS, 1, 1)] void main(const uint gtid : SV_GroupThreadID, const uint gid : SV_GroupID) {
-	uint2 dims;
-	TexHeight.GetDimensions(dims.x, dims.y);
+	// Two independent coordinate spaces are used here: the heightmap sampling
+	// space (TexHeight) and the shadow-pixel space (RWTexShadowHeights). The
+	// CPU path may resize the height texture independently of the shadow
+	// resolution, so sampling and resizing can be done separately for each
+	// space. LightPxDir and PxSize are expressed in shadow-pixel units.
+	uint2 heightDims;
+	TexHeight.GetDimensions(heightDims.x, heightDims.y);
+	uint2 shadowDims;
+	RWTexShadowHeights.GetDimensions(shadowDims.x, shadowDims.y);
 
 	bool isVertical = abs(LightPxDir.y) > abs(LightPxDir.x);
 	float2 lightUVDir = LightPxDir * PxSize;
@@ -77,18 +84,19 @@ groupshared float2 g_shadowHeight[NTHREADS];
 	bool isValid = isVertical ? isUVinRange.y : isUVinRange.x;
 
 	float2 threadUV = rawThreadUV - floor(rawThreadUV);  // wraparound
-	float2 threadPxCoord = threadUV * dims;
+	float2 heightPxCoord = threadUV * heightDims;
+	float2 shadowPxCoord = threadUV * shadowDims;
 
 	float2 pastHeights = 0.0;
 	if (isValid) {
-		pastHeights = RWTexShadowHeights[uint2(threadPxCoord)];
+		pastHeights = RWTexShadowHeights[uint2(shadowPxCoord)];
 
 		// bifilter
-		float2 heights = GetInterpolatedHeight(threadPxCoord, isVertical).xx;
+		float2 heights = GetInterpolatedHeight(heightPxCoord, isVertical).xx;
 
 		// fetch last dispatch
 		if (gtid == 0 && all(floor(rawThreadUV - lightUVDir) == floor(rawThreadUV))) {
-			float2 sampleHeights = GetInterpolatedHeightRW(threadPxCoord - LightPxDir, isVertical) + LightDeltaZ;
+			float2 sampleHeights = GetInterpolatedHeightRW(shadowPxCoord - LightPxDir, isVertical) + LightDeltaZ;
 			heights = heights.x > sampleHeights.x ? heights : sampleHeights;
 		}
 
@@ -113,6 +121,6 @@ groupshared float2 g_shadowHeight[NTHREADS];
 
 	// save
 	if (isValid) {
-		RWTexShadowHeights[uint2(threadPxCoord)] = lerp(pastHeights, g_shadowHeight[gtid], 0.5f);
+		RWTexShadowHeights[uint2(shadowPxCoord)] = lerp(pastHeights, g_shadowHeight[gtid], 0.5f);
 	}
 }
