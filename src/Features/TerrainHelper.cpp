@@ -229,9 +229,9 @@ struct TH_BSLightingShader_SetupMaterial
 
 void TerrainHelper::PostPostLoad()
 {
-	logger::info("Hooking TESObjectLAND (TerrainHelper)");
+	logger::info("[Terrain Helper] Hooking TESObjectLAND");
 	stl::detour_thunk<TH_TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
 
-	logger::info("Hooking BSLightingShader::SetupMaterial (TerrainHelper)");
+	logger::info("[Terrain Helper] Hooking BSLightingShader::SetupMaterial");
 	stl::write_vfunc<0x4, TH_BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 }

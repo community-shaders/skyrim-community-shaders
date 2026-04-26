@@ -1471,19 +1471,19 @@ struct PBR_BSLightingShader_SetupMaterial
 
 void TruePBR::PostPostLoad()
 {
-	logger::info("Hooking BGSTextureSet");
+	logger::info("[TruePBR] Hooking BGSTextureSet");
 	stl::detour_thunk<BGSTextureSet_ToShaderTextureSet>(REL::RelocationID(20905, 21361));
 
-	logger::info("Hooking BSLightingShaderProperty");
+	logger::info("[TruePBR] Hooking BSLightingShaderProperty");
 	stl::write_vfunc<0x18, BSLightingShaderProperty_LoadBinary>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::write_vfunc<0x2A, BSLightingShaderProperty_GetRenderPasses>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::detour_thunk<BSLightingShaderProperty_OnLoadTextureSet>(REL::RelocationID(99865, 106510));
 
-	logger::info("Hooking BSLightingShader");
+	logger::info("[TruePBR] Hooking BSLightingShader");
 	stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
 	stl::detour_thunk_ignore_func<BSLightingShader_GetPixelTechnique>(REL::RelocationID(101633, 108700));
 
-	logger::info("Hooking TESLandTexture");
+	logger::info("[TruePBR] Hooking TESLandTexture");
 	stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
 	stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
 	stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_BGSTextureSet[0]);
@@ -1495,19 +1495,19 @@ void TruePBR::PostPostLoad()
 	stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESWeather[0]);
 	stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESWeather[0]);
 
-	logger::info("Hooking BSTempEffectSimpleDecal");
+	logger::info("[TruePBR] Hooking BSTempEffectSimpleDecal");
 	stl::detour_thunk<BSTempEffectSimpleDecal_SetupGeometry>(REL::RelocationID(29253, 30108));
 
-	logger::info("Hooking BSTempEffectGeometryDecal");
+	logger::info("[TruePBR] Hooking BSTempEffectGeometryDecal");
 	stl::write_vfunc<0x25, BSTempEffectGeometryDecal_Initialize>(RE::VTABLE_BSTempEffectGeometryDecal[0]);
 
-	logger::info("Hooking TESObjectSTAT");
+	logger::info("[TruePBR] Hooking TESObjectSTAT");
 	stl::write_vfunc<0x4A, TESBoundObject_Clone3D>(RE::VTABLE_TESObjectSTAT[0]);
 
-	logger::info("Hooking TESObjectLAND");
+	logger::info("[TruePBR] Hooking TESObjectLAND");
 	stl::detour_thunk<PBR_TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
 
-	logger::info("Hooking BSLightingShader::SetupMaterial");
+	logger::info("[TruePBR] Hooking BSLightingShader::SetupMaterial");
 	stl::write_vfunc<0x4, PBR_BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 }
 
