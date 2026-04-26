@@ -37,7 +37,6 @@ public:
 		};
 	}
 
-	virtual void DataLoaded() override;
 	virtual void DrawSettings() override;
 	virtual void Prepass() override;
 
@@ -132,6 +131,7 @@ private:
 
 	// Static state for weather picker and data
 	static inline bool s_weathersLoaded = false;
+	static inline bool s_resourcesInitialized = false;
 	static inline std::vector<RE::TESWeather*> s_allWeathers;
 	static inline std::vector<RE::TESWeather*> s_filteredWeathers;
 	static inline int s_selectedWeatherIdx = -1;
@@ -162,6 +162,7 @@ private:
 	static void DisplayWindInfo(RE::TESWeather* weather);
 
 	// Helper functions
+	static void EnsureDataLoaded();
 	static void LoadAllWeathers();
 	static void UpdateFilteredWeathers();
 	static int FindWeatherIndex(RE::TESWeather* targetWeather);
