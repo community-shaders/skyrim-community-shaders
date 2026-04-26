@@ -49,14 +49,6 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 			ImGui::EndTabItem();
 		}
 
-		// PBR Settings Tab
-		if (MenuFonts::BeginTabItemWithFont("PBR Settings", Menu::FontRole::Subheading)) {
-			if (ImGui::BeginChild("##PBRSettingsContent", ImVec2(0, 0), false)) {
-				RenderPBRSection();
-			}
-			ImGui::EndChild();
-			ImGui::EndTabItem();
-		}
 		// Shader Debug Tab
 		if (MenuFonts::BeginTabItemWithFont("Shader Debug", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##ShaderDebugContent", ImVec2(0, 0), false)) {
@@ -509,13 +501,6 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		strncpy_s(filterText, filterState.filterText.c_str(), sizeof(filterText) - 1);
 		filterText[sizeof(filterText) - 1] = '\0';
 		searchColumn = filterState.searchColumn;
-	}
-}
-
-void AdvancedSettingsRenderer::RenderPBRSection()
-{
-	if (auto* pbr = Feature::FindFeatureByShortName("TruePBR")) {
-		pbr->DrawSettings();
 	}
 }
 

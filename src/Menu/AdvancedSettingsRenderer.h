@@ -15,7 +15,6 @@ public:
 private:
 	static void RenderLoggingSection();
 	static void RenderShaderDebugSection();
-	static void RenderPBRSection();
 	static void RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings);
 	static void RenderDeveloperSection();
 	static void RenderTestingSection();

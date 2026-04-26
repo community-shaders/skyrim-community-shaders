@@ -19,7 +19,7 @@ public:
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
 	virtual bool IsCore() const override { return true; }
 	virtual bool SupportsVR() override { return true; }
-	virtual bool IsInMenu() const override { return false; }
+	virtual bool IsInMenu() const override { return true; }
 	virtual bool DrawFailLoadMessage() const override { return false; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
