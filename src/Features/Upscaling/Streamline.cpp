@@ -640,6 +640,9 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		sl::Extent perEyeIn{ 0, 0, eyeWidthIn, eyeHeightIn };
 		sl::Extent perEyeOut{ 0, 0, eyeWidthOut, eyeHeightOut };
 
+		// Both flags track the same creation pool (EnsureVRIntermediateTextures creates all
+		// intermediates atomically), so in practice eye0Ready == eye1Ready. The separate checks
+		// are kept for null-safety and to document which resources each eye path actually uses.
 		bool eye0Ready = upscaling.vrIntermediateColorIn[0] &&
 		                 upscaling.vrIntermediateMotionVectors[0] && upscaling.vrIntermediateReactiveMask[0] && upscaling.vrIntermediateTransparencyMask[0];
 		bool eye1Ready = upscaling.vrIntermediateColorIn[1] && upscaling.vrIntermediateColorOut[1] &&

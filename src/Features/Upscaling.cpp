@@ -941,6 +941,31 @@ eastl::unique_ptr<Texture2D> Upscaling::CreateTextureFromSource(ID3D11Resource* 
 void Upscaling::CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight, uint32_t outWidth, uint32_t outHeight,
 	ID3D11Resource* colorSrc, ID3D11Resource* mvecSrc, ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc)
 {
+	// Right-eye-only depth intermediate for DLSS. Streamline.Upscale copies the right-eye depth
+	// slice here before evaluating DLSS eye 1; eye 0 reads the combined stereo depth directly at
+	// zero offset. R24G8_TYPELESS matches the game's D24S8_TYPELESS cast group — R32_TYPELESS is
+	// a different cast group and produces silent zero-copy failures.
+	{
+		D3D11_TEXTURE2D_DESC depthDesc = {};
+		depthDesc.Width = inWidth;
+		depthDesc.Height = inHeight;
+		depthDesc.MipLevels = 1;
+		depthDesc.ArraySize = 1;
+		depthDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
+		depthDesc.SampleDesc.Count = 1;
+		depthDesc.Usage = D3D11_USAGE_DEFAULT;
+		depthDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		vrIntermediateDepth = eastl::make_unique<Texture2D>(depthDesc);
+
+		Util::SetResourceName(vrIntermediateDepth->resource.get(), "Upscale_Depth_Right");
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = 1;
+		vrIntermediateDepth->CreateSRV(srvDesc);
+	}
+
 	// All buffers are per-eye: Streamline validates all extents against the input color texture
 	// dimensions, so every tagged resource must be isolated per-eye at {0,0}.
 	for (int i = 0; i < 2; i++) {
@@ -948,31 +973,6 @@ void Upscaling::CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight
 
 		vrIntermediateColorIn[i] = CreateTextureFromSource(colorSrc, inWidth, inHeight, false, true, true, ("Upscale_ColorIn_" + suffix).c_str());
 		vrIntermediateColorOut[i] = CreateTextureFromSource(colorSrc, outWidth, outHeight, false, true, false, ("Upscale_ColorOut_" + suffix).c_str());
-
-		// Right-eye only: Streamline.Upscale copies the right-eye depth slice here before DLSS eye 1.
-		// DLSS eye 0 reads the stereo depth directly (zero offset). R24G8_TYPELESS matches the
-		// game's D24S8_TYPELESS cast group — R32_TYPELESS is a different cast group and produces
-		// silent zero-copy failures. Only allocate once (i == 1).
-		if (i == 1) {
-			D3D11_TEXTURE2D_DESC depthDesc = {};
-			depthDesc.Width = inWidth;
-			depthDesc.Height = inHeight;
-			depthDesc.MipLevels = 1;
-			depthDesc.ArraySize = 1;
-			depthDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
-			depthDesc.SampleDesc.Count = 1;
-			depthDesc.Usage = D3D11_USAGE_DEFAULT;
-			depthDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-			vrIntermediateDepth = eastl::make_unique<Texture2D>(depthDesc);
-
-			Util::SetResourceName(vrIntermediateDepth->resource.get(), "Upscale_Depth_Right");
-
-			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-			srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-			srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-			srvDesc.Texture2D.MipLevels = 1;
-			vrIntermediateDepth->CreateSRV(srvDesc);
-		}
 
 		// Linear depth: R32_FLOAT so FSR's GetFfxResourceDescriptionDX11() returns a valid format.
 		// EncodeTexturesCS writes the non-linear depth as R32_FLOAT for FSR. Kept separate from
