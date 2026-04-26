@@ -18,7 +18,7 @@ namespace globals::game
  @result The a_value will be set as a variable in the current namespace. (e.g., auto& renderTargets = state->renderTargets;)
  */
 #define GET_INSTANCE_MEMBER(a_value, a_source) \
-	auto& a_value = !REL::Module::IsVR() ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value;
+	auto& a_value = !globals::game::isVR ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value;
 
 /**
  @def GET_INSTANCE_MEMBER_PTR
@@ -31,7 +31,7 @@ namespace globals::game
  @result The a_value will be returned as a refptr. (e.g., &state->renderTargets;)
  */
 #define GET_INSTANCE_MEMBER_PTR(a_value, a_source) \
-	&(!REL::Module::IsVR() ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value)
+	&(!globals::game::isVR ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value)
 
 /**
  @def GET_SHADER_PARTICLE_SETTING
