@@ -151,7 +151,7 @@ public:
 	// Owned here so both Streamline (DLSS) and FidelityFX (FSR) can use them.
 	eastl::unique_ptr<Texture2D> vrIntermediateColorIn[2];           // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateColorOut[2];          // per-eye output resolution
-	eastl::unique_ptr<Texture2D> vrIntermediateDepth[2];             // per-eye render resolution (R24G8_TYPELESS, for DLSS)
+	eastl::unique_ptr<Texture2D> vrIntermediateDepth;                // right-eye render resolution (R24G8_TYPELESS, DLSS only)
 	eastl::unique_ptr<Texture2D> vrIntermediateLinearDepth[2];       // per-eye render resolution (R32_FLOAT, for FSR)
 	eastl::unique_ptr<Texture2D> vrIntermediateMotionVectors[2];     // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateReactiveMask[2];      // per-eye render resolution
@@ -171,10 +171,10 @@ public:
 	/// Must be called before any per-eye EncodeTexturesCS dispatch or PreparePerEyeInputs.
 	void EnsureVRIntermediateTextures();
 
-	/// Splits the combined stereo color/depth buffers into per-eye intermediates, copies motion
-	/// vectors for non-DLSS paths, and clears the HMD hidden area.
+	/// Splits the combined stereo color buffer into per-eye intermediates, copies raw
+	/// motion vectors, and clears the HMD hidden area. FSR-only.
 	/// Reactive/transparency masks are written by EncodeTexturesCS.
-	void PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* depthSrc);
+	void PreparePerEyeInputs(ID3D11Resource* colorSrc);
 	void FinalizePerEyeOutputs(ID3D11Resource* colorDst);
 
 	void ConfigureTAA();
