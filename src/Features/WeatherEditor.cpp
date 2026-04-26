@@ -36,11 +36,6 @@ void WeatherEditor::EnsureDataLoaded()
 	LoadAllWeathers();
 }
 
-void WeatherEditor::PostLoadGame()
-{
-	EnsureDataLoaded();
-}
-
 int8_t LerpInt8_t(const int8_t oldValue, const int8_t newVal, const float lerpValue)
 {
 	int lerpedValue = (int)std::lerp(oldValue, newVal, lerpValue);
@@ -79,6 +74,7 @@ void LerpDirectional(RE::BGSDirectionalAmbientLightingColors::Directional& oldCo
 
 void WeatherEditor::DrawSettings()
 {
+	EnsureDataLoaded();
 	bool canOpen = EditorWindow::CanBeOpen();
 	ImGui::BeginDisabled(!canOpen);
 	if (ImGui::Button("Open Editor", { -1, 0 }))
