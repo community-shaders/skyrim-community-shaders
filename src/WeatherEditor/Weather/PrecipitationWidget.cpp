@@ -208,18 +208,30 @@ void PrecipitationWidget::ApplyChanges()
 
 	using DataID = RE::BGSShaderParticleGeometryData::DataID;
 
-	precipitation->GetSettingRef(DataID::kGravityVelocity).f = settings.gravityVelocity;
-	precipitation->GetSettingRef(DataID::kRotationVelocity).f = settings.rotationVelocity;
-	precipitation->GetSettingRef(DataID::kParticleSizeX).f = settings.particleSizeX;
-	precipitation->GetSettingRef(DataID::kParticleSizeY).f = settings.particleSizeY;
-	precipitation->GetSettingRef(DataID::kCenterOffsetMin).f = settings.centerOffsetMin;
-	precipitation->GetSettingRef(DataID::kCenterOffsetMax).f = settings.centerOffsetMax;
-	precipitation->GetSettingRef(DataID::kStartRotationRange).f = settings.startRotationRange;
-	precipitation->GetSettingRef(DataID::kNumSubtexturesX).i = settings.numSubtexturesX;
-	precipitation->GetSettingRef(DataID::kNumSubtexturesY).i = settings.numSubtexturesY;
-	precipitation->GetSettingRef(DataID::kParticleType).i = settings.particleType;
-	precipitation->GetSettingRef(DataID::kBoxSize).f = settings.boxSize;
-	precipitation->GetSettingRef(DataID::kParticleDensity).f = settings.particleDensity;
+	GET_SHADER_PARTICLE_SETTING(gravityVelocity, precipitation, DataID::kGravityVelocity)
+	gravityVelocity.f = settings.gravityVelocity;
+	GET_SHADER_PARTICLE_SETTING(rotationVelocity, precipitation, DataID::kRotationVelocity)
+	rotationVelocity.f = settings.rotationVelocity;
+	GET_SHADER_PARTICLE_SETTING(particleSizeX, precipitation, DataID::kParticleSizeX)
+	particleSizeX.f = settings.particleSizeX;
+	GET_SHADER_PARTICLE_SETTING(particleSizeY, precipitation, DataID::kParticleSizeY)
+	particleSizeY.f = settings.particleSizeY;
+	GET_SHADER_PARTICLE_SETTING(centerOffsetMin, precipitation, DataID::kCenterOffsetMin)
+	centerOffsetMin.f = settings.centerOffsetMin;
+	GET_SHADER_PARTICLE_SETTING(centerOffsetMax, precipitation, DataID::kCenterOffsetMax)
+	centerOffsetMax.f = settings.centerOffsetMax;
+	GET_SHADER_PARTICLE_SETTING(startRotationRange, precipitation, DataID::kStartRotationRange)
+	startRotationRange.f = settings.startRotationRange;
+	GET_SHADER_PARTICLE_SETTING(numSubtexturesX, precipitation, DataID::kNumSubtexturesX)
+	numSubtexturesX.i = settings.numSubtexturesX;
+	GET_SHADER_PARTICLE_SETTING(numSubtexturesY, precipitation, DataID::kNumSubtexturesY)
+	numSubtexturesY.i = settings.numSubtexturesY;
+	GET_SHADER_PARTICLE_SETTING(particleType, precipitation, DataID::kParticleType)
+	particleType.i = settings.particleType;
+	GET_SHADER_PARTICLE_SETTING(boxSize, precipitation, DataID::kBoxSize)
+	boxSize.f = settings.boxSize;
+	GET_SHADER_PARTICLE_SETTING(particleDensity, precipitation, DataID::kParticleDensity)
+	particleDensity.f = settings.particleDensity;
 	GET_INSTANCE_MEMBER(particleTexture, precipitation)
 	particleTexture.textureName = settings.particleTexture.c_str();
 	ApplyLiveParticleTexture(settings.particleTexture);
