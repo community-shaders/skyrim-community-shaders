@@ -276,6 +276,20 @@ bool Widget::BeginWidgetWindow()
 	return result;
 }
 
+void Widget::ForceWeatherReinit(RE::TESWeather* weather)
+{
+	auto* sky = globals::game::sky;
+	if (weather && sky && sky->currentWeather == weather)
+		sky->ForceWeather(weather, true);
+}
+
+void Widget::ForceCurrentWeatherReinit()
+{
+	auto* sky = globals::game::sky;
+	if (sky && sky->currentWeather)
+		sky->ForceWeather(sky->currentWeather, true);
+}
+
 void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather)
 {
 	auto editorWindow = EditorWindow::GetSingleton();
@@ -348,8 +362,17 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		};
 
 		// Apply button
-		if (showApply && !editorWindow->settings.autoApplyChanges)
-			iconButton("_Apply", menu->uiIcons.applyToGame.texture, "Apply changes to the game", [&]() { ApplyChanges(); });
+		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
+			if (menu->uiIcons.applyToGame.texture) {
+				iconButton("_Apply", menu->uiIcons.applyToGame.texture, "Apply changes to the game", [&]() { ApplyChanges(); });
+			} else {
+				ImGui::SameLine();
+				if (ImGui::Button("Apply"))
+					ApplyChanges();
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Apply changes to the game");
+			}
+		}
 
 		// Save/Load/Revert/Delete group
 		if (showSaveLoadRevert) {
@@ -415,7 +438,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		};
 
 		// Apply button
-		if (showApply && !editorWindow->settings.autoApplyChanges)
+		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply()))
 			styledTextButton("Apply", palette.SuccessColor, "Apply changes to the game", [&]() { ApplyChanges(); });
 
 		// Save/Load/Revert/Delete group
@@ -432,6 +455,13 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	}
 
 	DrawDeleteConfirmationModal();
+
+	if (showApply && RequiresManualApply() && editorWindow->settings.autoApplyChanges && menu) {
+		ImGui::SameLine();
+		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(Changes require manual apply)");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("This form type is only re-read by the engine on weather reinit.\nAuto-apply is disabled - use the Apply button.");
+	}
 
 	ImGui::Separator();
 }

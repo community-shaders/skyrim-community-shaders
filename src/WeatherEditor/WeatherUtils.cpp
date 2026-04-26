@@ -162,9 +162,9 @@ void Float3ToColor(const float3& f3, RE::Color& color)
 
 void Float3ToColor(const float3& f3, RE::TESWeather::Data::Color3& color)
 {
-	color.red = FloatToInt8(f3.x);
-	color.green = FloatToInt8(f3.y);
-	color.blue = FloatToInt8(f3.z);
+	color.red = FloatToUint8(f3.x);
+	color.green = FloatToUint8(f3.y);
+	color.blue = FloatToUint8(f3.z);
 }
 
 void ColorToFloat3(const RE::Color& color, float3& f3)
@@ -176,9 +176,9 @@ void ColorToFloat3(const RE::Color& color, float3& f3)
 
 void ColorToFloat3(const RE::TESWeather::Data::Color3& color, float3& f3)
 {
-	f3.x = Int8ToFloat(color.red);
-	f3.y = Int8ToFloat(color.green);
-	f3.z = Int8ToFloat(color.blue);
+	f3.x = Uint8ToFloat(color.red);
+	f3.y = Uint8ToFloat(color.green);
+	f3.z = Uint8ToFloat(color.blue);
 }
 
 std::string ColorTimeLabel(const int i)

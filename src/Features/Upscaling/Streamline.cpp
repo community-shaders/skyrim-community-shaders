@@ -612,11 +612,16 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto screenSize = state->screenSize;
 	auto renderSize = Util::ConvertToDynamic(screenSize);
 
+	// When RCAS sharpening is active, direct DLSS output to sharpenerTexture so RCAS can
+	// sharpen directly into kMAIN.UAV without a CopyResource round-trip.
+	auto& upscaling = globals::features::upscaling;
+	ID3D11Resource* colorOut =
+		(upscaling.settings.sharpnessDLSS > 0.0f && upscaling.sharpenerTexture) ? upscaling.sharpenerTexture->resource.get() : a_upscalingTexture;
+
 	// VR: Combined-buffer mode with extent offsets causes temporal ghosting on the right eye
 	// because DLSS's internal history buffers use extent offsets as indices.
 	// Per-eye isolation with extents at {0,0} is required.
 	if (globals::game::isVR) {
-		auto& upscaling = globals::features::upscaling;
 		uint32_t eyeWidthOut = (uint32_t)(screenSize.x / 2);
 		uint32_t eyeHeightOut = (uint32_t)screenSize.y;
 		uint32_t eyeWidthIn = (uint32_t)(renderSize.x / 2);
@@ -636,14 +641,14 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 				extentIn, extentOut, eyeWidthOut);
 		}
 
-		upscaling.FinalizePerEyeOutputs(a_upscalingTexture);
+		upscaling.FinalizePerEyeOutputs(colorOut);
 	} else {
-		// Non-VR: Simple full-texture upscale
+		// Non-VR: Simple full-texture upscale.
 		sl::Extent extentIn{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
 		sl::Extent extentOut{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
 		EvaluateDLSS(viewport, 0,
-			a_upscalingTexture, a_upscalingTexture,
+			a_upscalingTexture, colorOut,
 			depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask,
 			extentIn, extentOut, (uint)screenSize.x);
 	}
