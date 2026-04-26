@@ -6,6 +6,7 @@
 #include "State.h"
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
+#include "Utils/UI.h"
 
 #include <imgui.h>
 
@@ -42,40 +43,35 @@ void VRStereoOptimizations::SaveSettings(json& o_json)
 
 void VRStereoOptimizations::LoadSettings(json& o_json)
 {
+	auto loadClampedFloat = [&](const char* key, float& dst, float lo, float hi) {
+		if (auto it = o_json.find(key); it != o_json.end() && it->is_number())
+			dst = std::clamp(it->get<float>(), lo, hi);
+	};
+	auto loadBool = [&](const char* key, bool& dst) {
+		if (auto it = o_json.find(key); it != o_json.end() && it->is_boolean())
+			dst = it->get<bool>();
+	};
+
 	if (o_json.contains("StereoMode"))
 		settings.stereoMode = o_json["StereoMode"].get<StereoMode>();
-	if (auto it = o_json.find("DisocclusionDepthThreshold"); it != o_json.end() && it->is_number())
-		settings.disocclusionDepthThreshold = std::clamp(it->get<float>(), 0.001f, 0.1f);
-	if (auto it = o_json.find("QualityJitterOffset"); it != o_json.end() && it->is_number())
-		settings.qualityJitterOffset = std::clamp(it->get<float>(), 0.0f, 1.0f);
-	if (auto it = o_json.find("FoveatedRegionRadius"); it != o_json.end() && it->is_number())
-		settings.foveatedRegionRadius = std::clamp(it->get<float>(), 0.0f, 1.0f);
-	if (auto it = o_json.find("FoveatedRegionCenterX"); it != o_json.end() && it->is_number())
-		settings.foveatedRegionCenterX = std::clamp(it->get<float>(), 0.0f, 1.0f);
-	if (auto it = o_json.find("FoveatedRegionCenterY"); it != o_json.end() && it->is_number())
-		settings.foveatedRegionCenterY = std::clamp(it->get<float>(), 0.0f, 1.0f);
-	if (auto it = o_json.find("UseEyeTracking"); it != o_json.end() && it->is_boolean())
-		settings.useEyeTracking = it->get<bool>();
-	if (auto it = o_json.find("DebugVisualization"); it != o_json.end() && it->is_boolean())
-		settings.debugVisualization = it->get<bool>();
-	if (auto it = o_json.find("DebugSkipMerge"); it != o_json.end() && it->is_boolean())
-		settings.debugSkipMerge = it->get<bool>();
-	if (auto it = o_json.find("DebugForceAllStencil"); it != o_json.end() && it->is_boolean())
-		settings.debugForceAllStencil = it->get<bool>();
-	if (auto it = o_json.find("DebugForceAllReprojectCS"); it != o_json.end() && it->is_boolean())
-		settings.debugForceAllReprojectCS = it->get<bool>();
-	if (auto it = o_json.find("DebugDepthMap"); it != o_json.end() && it->is_boolean())
-		settings.debugDepthMap = it->get<bool>();
-	if (auto it = o_json.find("DebugFullBlendDepth"); it != o_json.end() && it->is_boolean())
-		settings.debugFullBlendDepth = it->get<bool>();
-	if (auto it = o_json.find("DebugPOMDepth"); it != o_json.end() && it->is_boolean())
-		settings.debugPOMDepth = it->get<bool>();
-	if (auto it = o_json.find("FullBlendDistance"); it != o_json.end() && it->is_number())
-		settings.fullBlendDistance = std::clamp(it->get<float>(), 0.0f, 50000.0f);
-	if (auto it = o_json.find("POMDepthScale"); it != o_json.end() && it->is_number())
-		settings.pomDepthScale = std::clamp(it->get<float>(), 0.0f, 500.0f);
-	if (auto it = o_json.find("ForwardOcclusionScale"); it != o_json.end() && it->is_number())
-		settings.forwardOcclusionScale = std::clamp(it->get<float>(), 0.0f, 10.0f);
+
+	loadClampedFloat("DisocclusionDepthThreshold", settings.disocclusionDepthThreshold, 0.001f, 0.1f);
+	loadClampedFloat("QualityJitterOffset", settings.qualityJitterOffset, 0.0f, 1.0f);
+	loadClampedFloat("FoveatedRegionRadius", settings.foveatedRegionRadius, 0.0f, 1.0f);
+	loadClampedFloat("FoveatedRegionCenterX", settings.foveatedRegionCenterX, 0.0f, 1.0f);
+	loadClampedFloat("FoveatedRegionCenterY", settings.foveatedRegionCenterY, 0.0f, 1.0f);
+	loadClampedFloat("FullBlendDistance", settings.fullBlendDistance, 0.0f, 50000.0f);
+	loadClampedFloat("POMDepthScale", settings.pomDepthScale, 0.0f, 500.0f);
+	loadClampedFloat("ForwardOcclusionScale", settings.forwardOcclusionScale, 0.0f, 10.0f);
+
+	loadBool("UseEyeTracking", settings.useEyeTracking);
+	loadBool("DebugVisualization", settings.debugVisualization);
+	loadBool("DebugSkipMerge", settings.debugSkipMerge);
+	loadBool("DebugForceAllStencil", settings.debugForceAllStencil);
+	loadBool("DebugForceAllReprojectCS", settings.debugForceAllReprojectCS);
+	loadBool("DebugDepthMap", settings.debugDepthMap);
+	loadBool("DebugFullBlendDepth", settings.debugFullBlendDepth);
+	loadBool("DebugPOMDepth", settings.debugPOMDepth);
 }
 
 void VRStereoOptimizations::RestoreDefaultSettings()
@@ -261,8 +257,7 @@ void VRStereoOptimizations::DrawSettings()
 	int currentMode = static_cast<int>(settings.stereoMode);
 	if (ImGui::Combo("Enable Stereo Reprojection", &currentMode, modeNames, IM_ARRAYSIZE(modeNames)))
 		settings.stereoMode = static_cast<StereoMode>(currentMode);
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Reprojects Eye 0 (left) pixels into Eye 1 (right) using depth and motion data,\nskipping redundant full shading where the views overlap.\nReduces GPU cost in VR by shading each pixel fewer times per frame.");
+	Util::AddTooltip("Reprojects Eye 0 (left) pixels into Eye 1 (right) using depth and motion data,\nskipping redundant full shading where the views overlap.\nReduces GPU cost in VR by shading each pixel fewer times per frame.");
 
 	if (globals::game::isVR && settings.stereoMode == StereoMode::Enable && !loaded) {
 		const auto& themeSettings = Menu::GetSingleton()->GetTheme();
@@ -275,18 +270,15 @@ void VRStereoOptimizations::DrawSettings()
 	ImGui::SliderFloat("Disocclusion Depth Threshold", &settings.disocclusionDepthThreshold, 0.001f, 0.1f, "%.4f");
 
 	ImGui::SliderFloat("Forward Occlusion Scale", &settings.forwardOcclusionScale, 0.0f, 1.0f, "%.2f");
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Prevents Eye 0 silhouette edges from bleeding onto Eye 1 backgrounds.\nFires when Eye 0 depth is within this fraction of Eye 1 depth (e.g. 0.5 = Eye 0 less than 2x Eye 1 depth).\nLower = more aggressive. 0 = disabled.");
+	Util::AddTooltip("Prevents Eye 0 silhouette edges from bleeding onto Eye 1 backgrounds.\nFires when Eye 0 depth is within this fraction of Eye 1 depth (e.g. 0.5 = Eye 0 less than 2x Eye 1 depth).\nLower = more aggressive. 0 = disabled.");
 
 	if (globals::state->IsDeveloperMode()) {
 		if (ImGui::TreeNode("Debug")) {
 			ImGui::SliderFloat("Full Blend Distance", &settings.fullBlendDistance, 0.0f, 10000.0f, "%.0f");
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Geometry closer than this distance (game units) is fully shaded in both eyes and bilaterally blended for 2x supersampling. 0 = disabled.");
+			Util::AddTooltip("Geometry closer than this distance (game units) is fully shaded in both eyes and bilaterally blended for 2x supersampling. 0 = disabled.");
 
 			ImGui::SliderFloat("POM Depth Scale", &settings.pomDepthScale, 0.0f, 500.0f, "%.1f");
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Scale factor for POM depth correction in stereo reprojection.\n1.0 = physical scale. Increase for more visible POM stereo depth.");
+			Util::AddTooltip("Scale factor for POM depth correction in stereo reprojection.\n1.0 = physical scale. Increase for more visible POM stereo depth.");
 			ImGui::Checkbox("Skip Pixel Reprojection", &settings.debugSkipMerge);
 			ImGui::Checkbox("Full Blend Depth View", &settings.debugFullBlendDepth);
 			ImGui::Checkbox("Debug POM Depth", &settings.debugPOMDepth);

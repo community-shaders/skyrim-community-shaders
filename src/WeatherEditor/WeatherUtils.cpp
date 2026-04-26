@@ -559,8 +559,7 @@ namespace TOD
 				s_todSliderTracker.OnValueChanged(valueName, values[i], currentTime);
 			}
 
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%.0f%%", factors[i] * 100.0f);
+			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
 			ImGui::PopItemWidth();
 
 			if (!isActive)
@@ -695,8 +694,7 @@ namespace TOD
 
 			wasPopupOpen[id] = isPopupOpen;
 
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s - %.0f%%", GetPeriodName(i), factors[i] * 100.0f);
+			Util::AddTooltip(std::format("{} - {:.0f}%", GetPeriodName(i), factors[i] * 100.0f).c_str());
 
 			ImGui::EndChild();
 		}
@@ -744,8 +742,7 @@ namespace TOD
 						changed = true;
 					}
 				}
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Inherit from parent");
+				Util::AddTooltip("Inherit from parent");
 				ImGui::PopStyleVar();
 				ImGui::SameLine(0, 2 * scale);
 			}
@@ -782,8 +779,7 @@ namespace TOD
 
 			ImGui::EndDisabled();
 
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%.0f%%", factors[i] * 100.0f);
+			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
 			ImGui::PopItemWidth();
 
 			if (!isActive || (inheritFlags && inheritFlags[i]))
@@ -845,9 +841,7 @@ namespace TOD
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Inherit from parent weather");
-			}
+			Util::AddTooltip("Inherit from parent weather");
 		}
 
 		if (!anyActive)
@@ -1041,9 +1035,7 @@ namespace TOD
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Inherit from parent weather");
-			}
+			Util::AddTooltip("Inherit from parent weather");
 		}
 
 		ImGui::TableSetColumnIndex(1);
@@ -1101,8 +1093,7 @@ namespace TOD
 			if (ImGui::SliderInt(id.c_str(), &values[i], -127, 127))
 				changed = true;
 
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%.0f%%", factors[i] * 100.0f);
+			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
 
 			ImGui::PopItemWidth();
 
