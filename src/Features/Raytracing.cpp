@@ -169,6 +169,13 @@ void Raytracing::DrawSettings()
 		}
 	}
 
+	// Accumulation only works in Path Tracing mode
+	if (settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser == CreationEngineRaytracing::Denoiser::Accumulation) {
+		if (settings.CreationEngineRaytracingSettings.GeneralSettings.Mode != CreationEngineRaytracing::Mode::PathTracing) {
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Accumulation is only available in Path Tracing mode.");
+		}
+	}
+
 	bool ptMode = settings.CreationEngineRaytracingSettings.GeneralSettings.Mode == CreationEngineRaytracing::Mode::PathTracing;
 
 	if (ptMode)
@@ -213,7 +220,6 @@ void Raytracing::UpdateSettings()
 
 	creationEngineRaytracing->UpdateSettings(GetSettings());
 }
-
 
 void Raytracing::DrawGeneralSettings()
 {
@@ -625,6 +631,13 @@ void Raytracing::DrawOverlay()
 		DrawRow("Total", totalTime);
 
 		ImGui::EndTable();
+	}
+
+	// Display accumulated frame count when using Accumulation denoiser
+	if (settings.CreationEngineRaytracingSettings.GeneralSettings.Denoiser == CreationEngineRaytracing::Denoiser::Accumulation &&
+		creationEngineRaytracing && creationEngineRaytracing->GetAccumulatedFrameCount) {
+		uint32_t accumulatedFrames = creationEngineRaytracing->GetAccumulatedFrameCount();
+		ImGui::Text("Accumulated Frames: %u", accumulatedFrames);
 	}
 
 	/*ImGui::Text("Textures %zu", instances);
