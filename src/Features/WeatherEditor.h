@@ -38,6 +38,7 @@ public:
 	}
 
 	virtual void DrawSettings() override;
+	virtual void DataLoaded() override;
 	virtual void Prepass() override;
 
 	void LerpWeather(RE::TESWeather*, RE::TESWeather*, float);
@@ -130,6 +131,7 @@ private:
 	static constexpr uint32_t UNCLASSIFIED_FLAG = 0x40;  // Bit 6 only
 
 	// Static state for weather picker and data
+	static inline bool s_dataAvailable = false;
 	static inline bool s_weathersLoaded = false;
 	static inline bool s_resourcesInitialized = false;
 	static inline std::vector<RE::TESWeather*> s_allWeathers;

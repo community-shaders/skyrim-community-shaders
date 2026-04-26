@@ -19,8 +19,16 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Position,
 	PositionSet)
 
+void WeatherEditor::DataLoaded()
+{
+	s_dataAvailable = true;
+}
+
 void WeatherEditor::EnsureDataLoaded()
 {
+	if (!s_dataAvailable)
+		return;
+
 	if (!s_resourcesInitialized) {
 		EditorWindow::GetSingleton()->SetupResources();
 		s_resourcesInitialized = true;
