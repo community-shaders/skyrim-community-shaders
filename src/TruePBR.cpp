@@ -310,6 +310,8 @@ void TruePBR::SetupResources()
 
 void TruePBR::Prepass()
 {
+	SetupDefaultPBRLandTextureSet();
+
 	auto context = globals::d3d::context;
 	if (!glintsNoiseTexture)
 		SetupGlintsTexture();
@@ -393,11 +395,6 @@ void TruePBR::SetupGlintsTexture()
 	}
 
 	noiseGenProgram->Release();
-}
-
-void TruePBR::SetupFrame()
-{
-	SetupDefaultPBRLandTextureSet();
 }
 
 void TruePBR::SetupTextureSetData()
@@ -1444,6 +1441,34 @@ struct BSLightingShaderProperty_OnLoadTextureSet
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
+struct PBR_TESObjectLAND_SetupMaterial
+{
+	static bool thunk(RE::TESObjectLAND* land)
+	{
+		bool vanillaResult = func(land);
+
+		if (globals::features::truePBR.TESObjectLAND_SetupMaterial(land)) {
+			return true;
+		}
+
+		return vanillaResult;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct PBR_BSLightingShader_SetupMaterial
+{
+	static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
+	{
+		if (globals::features::truePBR.BSLightingShader_SetupMaterial(shader, material)) {
+			return;
+		}
+
+		func(shader, material);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 void TruePBR::PostPostLoad()
 {
 	logger::info("Hooking BGSTextureSet");
@@ -1478,6 +1503,12 @@ void TruePBR::PostPostLoad()
 
 	logger::info("Hooking TESObjectSTAT");
 	stl::write_vfunc<0x4A, TESBoundObject_Clone3D>(RE::VTABLE_TESObjectSTAT[0]);
+
+	logger::info("Hooking TESObjectLAND");
+	stl::detour_thunk<PBR_TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
+
+	logger::info("Hooking BSLightingShader::SetupMaterial");
+	stl::write_vfunc<0x4, PBR_BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 }
 
 void TruePBR::DataLoaded()

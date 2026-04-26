@@ -4,7 +4,6 @@
 
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
 #include "Utils/D3D.h"
 
 #include "Features/DynamicCubemaps.h"
@@ -767,6 +766,4 @@ void Deferred::Hooks::Renderer_ResetState::thunk(void* This)
 	ID3D11Buffer* buffers[3] = { state->permutationCB->CB(), state->sharedDataCB->CB(), state->featureDataCB->CB() };
 	context->PSSetConstantBuffers(4, 3, buffers);
 	context->CSSetConstantBuffers(5, 2, buffers + 1);
-
-	globals::features::truePBR.SetupFrame();
 }

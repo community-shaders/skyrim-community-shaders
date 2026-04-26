@@ -48,7 +48,7 @@ public:
 	bool BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material);
 
 	void SetShaderResouces(ID3D11DeviceContext* a_context);
-	void GenerateShaderPermutations(RE::BSShader* shader);
+	virtual void GenerateShaderPermutations(RE::BSShader* shader) override;
 
 	void SetupGlintsTexture();
 	eastl::unique_ptr<Texture2D> glintsNoiseTexture = nullptr;
@@ -75,8 +75,6 @@ public:
 
 		GlintParameters glintParameters;
 	};
-
-	void SetupFrame();
 
 	void SetupTextureSetData();
 	void ReloadTextureSetData();
