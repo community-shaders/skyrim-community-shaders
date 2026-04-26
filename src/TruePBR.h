@@ -37,8 +37,6 @@ public:
 				"Full landscape and decal PBR support" });
 	}
 
-	virtual void Load(json&) override { loaded = true; }
-
 	virtual void DrawSettings() override;
 	virtual void SetupResources() override;
 	virtual void Prepass() override;
