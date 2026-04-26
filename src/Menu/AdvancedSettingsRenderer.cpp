@@ -13,13 +13,11 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
 #include "Util.h"
 #include "Utils/Format.h"
 #include "Utils/UI.h"
 
 void AdvancedSettingsRenderer::RenderAdvancedSettings(
-	const std::function<void()>& drawTruePBRSettings,
 	const std::function<void()>& drawDisableAtBootSettings)
 {
 	// Use TabBar system - tabs sorted alphabetically
@@ -54,7 +52,7 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 		// PBR Settings Tab
 		if (MenuFonts::BeginTabItemWithFont("PBR Settings", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##PBRSettingsContent", ImVec2(0, 0), false)) {
-				RenderPBRSection(drawTruePBRSettings);
+				RenderPBRSection();
 			}
 			ImGui::EndChild();
 			ImGui::EndTabItem();
@@ -514,9 +512,11 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 	}
 }
 
-void AdvancedSettingsRenderer::RenderPBRSection(const std::function<void()>& drawTruePBRSettings)
+void AdvancedSettingsRenderer::RenderPBRSection()
 {
-	drawTruePBRSettings();
+	if (auto* pbr = Feature::FindFeatureByShortName("TruePBR")) {
+		pbr->DrawSettings();
+	}
 }
 
 void AdvancedSettingsRenderer::RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings)

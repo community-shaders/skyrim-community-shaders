@@ -99,7 +99,7 @@ public:
 	virtual void DataLoaded() {}
 	virtual void PostPostLoad() {}
 
-	void Load(json& o_json);
+	virtual void Load(json& o_json);
 	void Save(json& o_json);
 
 	virtual void SaveSettings(json&) {}

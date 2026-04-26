@@ -217,7 +217,6 @@ void Deferred::PrepassPasses()
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
-	globals::truePBR->PrePass();
 	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); }, true);
 }
 
@@ -769,6 +768,5 @@ void Deferred::Hooks::Renderer_ResetState::thunk(void* This)
 	context->PSSetConstantBuffers(4, 3, buffers);
 	context->CSSetConstantBuffers(5, 2, buffers + 1);
 
-	auto* singleton = globals::truePBR;
-	singleton->SetupFrame();
+	globals::features::truePBR.SetupFrame();
 }
