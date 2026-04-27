@@ -153,7 +153,7 @@ void TerrainShadows::SetupResources()
 
 	logger::debug("Creating constant buffers...");
 	{
-		shadowUpdateCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<ShadowUpdateCB>());
+		shadowUpdateCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<ShadowUpdateCB>(), "TerrainShadows::UpdateCB");
 	}
 
 	CompileComputeShaders();
@@ -241,7 +241,7 @@ void TerrainShadows::LoadHeightmap()
 		}
 
 		texHeightMap.release();
-		texHeightMap = std::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+		texHeightMap = std::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "TerrainShadows::HeightMap");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texHeightMap->desc.Format,
@@ -299,7 +299,7 @@ void TerrainShadows::Precompute()
 			.Texture2D = { .MipSlice = 0 }
 		};
 
-		texShadowHeight = std::make_unique<Texture2D>(texDesc);
+		texShadowHeight = std::make_unique<Texture2D>(texDesc, "TerrainShadows::ShadowHeight");
 		texShadowHeight->CreateSRV(srvDesc);
 		texShadowHeight->CreateUAV(uavDesc);
 	}

@@ -131,9 +131,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		ImGui::PopStyleColor(3);
 		ImGui::PopStyleVar();
 
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Join Community Shaders Discord Server");
-		}
+		Util::AddTooltip("Join Community Shaders Discord Server");
 	} else {
 		// Fallback button when Discord icon is not available
 		float buttonWidth = DISCORD_BANNER_MIN_WIDTH * scale;
@@ -141,9 +139,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		if (ImGui::Button("Join Discord Server", ImVec2(buttonWidth, 0))) {
 			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
 		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Join Community Shaders Discord Server");
-		}
+		Util::AddTooltip("Join Community Shaders Discord Server");
 	}
 
 	ImGui::PopStyleVar();

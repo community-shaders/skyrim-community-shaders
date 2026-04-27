@@ -162,9 +162,9 @@ void Float3ToColor(const float3& f3, RE::Color& color)
 
 void Float3ToColor(const float3& f3, RE::TESWeather::Data::Color3& color)
 {
-	color.red = FloatToInt8(f3.x);
-	color.green = FloatToInt8(f3.y);
-	color.blue = FloatToInt8(f3.z);
+	color.red = FloatToUint8(f3.x);
+	color.green = FloatToUint8(f3.y);
+	color.blue = FloatToUint8(f3.z);
 }
 
 void ColorToFloat3(const RE::Color& color, float3& f3)
@@ -176,9 +176,9 @@ void ColorToFloat3(const RE::Color& color, float3& f3)
 
 void ColorToFloat3(const RE::TESWeather::Data::Color3& color, float3& f3)
 {
-	f3.x = Int8ToFloat(color.red);
-	f3.y = Int8ToFloat(color.green);
-	f3.z = Int8ToFloat(color.blue);
+	f3.x = Uint8ToFloat(color.red);
+	f3.y = Uint8ToFloat(color.green);
+	f3.z = Uint8ToFloat(color.blue);
 }
 
 std::string ColorTimeLabel(const int i)
@@ -559,8 +559,7 @@ namespace TOD
 				s_todSliderTracker.OnValueChanged(valueName, values[i], currentTime);
 			}
 
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%.0f%%", factors[i] * 100.0f);
+			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
 			ImGui::PopItemWidth();
 
 			if (!isActive)
@@ -695,8 +694,7 @@ namespace TOD
 
 			wasPopupOpen[id] = isPopupOpen;
 
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s - %.0f%%", GetPeriodName(i), factors[i] * 100.0f);
+			Util::AddTooltip(std::format("{} - {:.0f}%", GetPeriodName(i), factors[i] * 100.0f).c_str());
 
 			ImGui::EndChild();
 		}
@@ -744,8 +742,7 @@ namespace TOD
 						changed = true;
 					}
 				}
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Inherit from parent");
+				Util::AddTooltip("Inherit from parent");
 				ImGui::PopStyleVar();
 				ImGui::SameLine(0, 2 * scale);
 			}
@@ -782,8 +779,7 @@ namespace TOD
 
 			ImGui::EndDisabled();
 
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%.0f%%", factors[i] * 100.0f);
+			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
 			ImGui::PopItemWidth();
 
 			if (!isActive || (inheritFlags && inheritFlags[i]))
@@ -845,9 +841,7 @@ namespace TOD
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Inherit from parent weather");
-			}
+			Util::AddTooltip("Inherit from parent weather");
 		}
 
 		if (!anyActive)
@@ -1041,9 +1035,7 @@ namespace TOD
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Inherit from parent weather");
-			}
+			Util::AddTooltip("Inherit from parent weather");
 		}
 
 		ImGui::TableSetColumnIndex(1);
@@ -1101,8 +1093,7 @@ namespace TOD
 			if (ImGui::SliderInt(id.c_str(), &values[i], -127, 127))
 				changed = true;
 
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%.0f%%", factors[i] * 100.0f);
+			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
 
 			ImGui::PopItemWidth();
 

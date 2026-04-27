@@ -5,6 +5,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
+#include "Utils/D3D.h"
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
@@ -106,8 +107,6 @@ void Deferred::SetupResources()
 		SetupRenderTarget(SPECULAR, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Reflectance
 		SetupRenderTarget(REFLECTANCE, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
-		// Normal + Roughness
-		SetupRenderTarget(normalRoughnessRT, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 
@@ -128,9 +127,11 @@ void Deferred::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
+		Util::SetResourceName(linearSampler, "Deferred::LinearSampler");
 
 		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointSampler));
+		Util::SetResourceName(pointSampler, "Deferred::PointSampler");
 	}
 
 	{
@@ -141,6 +142,7 @@ void Deferred::SetupResources()
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_BLUE;
 		DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, compositeBlendState.put()));
+		Util::SetResourceName(compositeBlendState.get(), "Deferred::CompositeBlendState");
 
 		D3D11_DEPTH_STENCIL_DESC dsDesc{};
 		dsDesc.DepthEnable = TRUE;
@@ -148,6 +150,7 @@ void Deferred::SetupResources()
 		dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 		dsDesc.StencilEnable = FALSE;
 		DX::ThrowIfFailed(device->CreateDepthStencilState(&dsDesc, compositeDepthStencilState.put()));
+		Util::SetResourceName(compositeDepthStencilState.get(), "Deferred::CompositeDepthStencilState");
 
 		D3D11_DEPTH_STENCIL_DESC stencilDsDesc{};
 		stencilDsDesc.DepthEnable = TRUE;
@@ -162,12 +165,36 @@ void Deferred::SetupResources()
 		stencilDsDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
 		stencilDsDesc.BackFace = stencilDsDesc.FrontFace;
 		DX::ThrowIfFailed(device->CreateDepthStencilState(&stencilDsDesc, compositeStencilDSState.put()));
+		Util::SetResourceName(compositeStencilDSState.get(), "Deferred::CompositeStencilDSState");
 
 		D3D11_RASTERIZER_DESC rsDesc{};
 		rsDesc.FillMode = D3D11_FILL_SOLID;
 		rsDesc.CullMode = D3D11_CULL_NONE;
 		rsDesc.DepthClipEnable = FALSE;
 		DX::ThrowIfFailed(device->CreateRasterizerState(&rsDesc, compositeRasterizerState.put()));
+		Util::SetResourceName(compositeRasterizerState.get(), "Deferred::CompositeRasterizerState");
+	}
+
+	// Directional shadow structured buffer (t98): CPU-written each frame, read-only on GPU.
+	// One element holds the sun cascade data uploaded from BSShadowDirectionalLight.
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(DirectionalShadowLightData);
+		sbDesc.ByteWidth = sizeof(DirectionalShadowLightData);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 1;
+
+		delete directionalShadowLights;
+		directionalShadowLights = new Buffer(sbDesc, nullptr, "Deferred::DirectionalShadowLights");
+		directionalShadowLights->CreateSRV(srvDesc);
 	}
 }
 
@@ -191,9 +218,7 @@ void Deferred::ReflectionsPrepasses()
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) {
-		feature->ReflectionsPrepass();
-	});
+	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) { feature->ReflectionsPrepass(); }, true);
 }
 
 void Deferred::EarlyPrepasses()
@@ -213,9 +238,10 @@ void Deferred::EarlyPrepasses()
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) {
-		feature->EarlyPrepass();
-	});
+	// Shadow maps have just been rendered — upload BSShadowDirectionalLight data to t98.
+	CopyShadowLightData();
+
+	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) { feature->EarlyPrepass(); }, true);
 }
 
 void Deferred::PrepassPasses()
@@ -232,9 +258,7 @@ void Deferred::PrepassPasses()
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::truePBR->PrePass();
-	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) {
-		feature->Prepass();
-	});
+	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); }, true);
 }
 
 void Deferred::StartDeferred()
@@ -361,8 +385,11 @@ void Deferred::DeferredPasses()
 		auto& normalRoughnessCopy = renderer->GetRuntimeData().renderTargets[normalRoughnessCopyRT];
 		float2 resolution = Util::ConvertToDynamic(globals::state->screenSize);
 		D3D11_BOX srcBox = { 0, 0, 0, (UINT)resolution.x, (UINT)resolution.y, 1 };
-		context->CopySubresourceRegion(mainCopy.texture, 0, 0, 0, 0, main.texture, 0, &srcBox);
-		context->CopySubresourceRegion(normalRoughnessCopy.texture, 0, 0, 0, 0, normalRoughness.texture, 0, &srcBox);
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite - Copies");
+			context->CopySubresourceRegion(mainCopy.texture, 0, 0, 0, 0, main.texture, 0, &srcBox);
+			context->CopySubresourceRegion(normalRoughnessCopy.texture, 0, 0, 0, 0, normalRoughness.texture, 0, &srcBox);
+		}
 
 		// Constant buffers
 		{
@@ -378,24 +405,23 @@ void Deferred::DeferredPasses()
 		}
 
 		// SRVs
-		ID3D11ShaderResourceView* srvs[17]{
-			mainCopy.SRV,                                                                                           // t0  MainInputTexture
-			specular.SRV,                                                                                           // t1  SpecularTexture
-			normalRoughnessCopy.SRV,                                                                                // t2  NormalRoughnessTexture
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,          // t3  DepthTexture
-			albedo.SRV,                                                                                             // t4  AlbedoTexture
-			masks.SRV,                                                                                              // t5  MasksTexture
-			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                                     // t6  ReflectanceTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                               // t7  EnvTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,                    // t8  EnvReflectionsTexture
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,          // t9  SkylightingProbeArray
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr,  // t10 stbn
-			ssgi_ao,                                                                                                // t11 SsgiAoTexture
-			ssgi_hq_spec ? nullptr : ssgi_y,                                                                        // t12 SsgiYTexture
-			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                                     // t13 SsgiCoCgTexture
-			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                                  // t14 SsgiSpecularTexture
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
+		ID3D11ShaderResourceView* srvs[16]{
+			mainCopy.SRV,                                                                                   // t0  MainInputTexture
+			specular.SRV,                                                                                   // t1  SpecularTexture
+			normalRoughnessCopy.SRV,                                                                        // t2  NormalRoughnessTexture
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,  // t3  DepthTexture
+			albedo.SRV,                                                                                     // t4  AlbedoTexture
+			masks.SRV,                                                                                      // t5  MasksTexture
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                             // t6  ReflectanceTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                       // t7  EnvTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,            // t8  EnvReflectionsTexture
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,  // t9  SkylightingProbeArray
+			ssgi_ao,                                                                                        // t10 SsgiAoTexture
+			ssgi_hq_spec ? nullptr : ssgi_y,                                                                // t11 SsgiYTexture
+			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                             // t12 SsgiCoCgTexture
+			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                          // t13 SsgiSpecularTexture
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                            // t14 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                            // t15 SkyIBLTexture
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
@@ -427,7 +453,10 @@ void Deferred::DeferredPasses()
 		context->IASetInputLayout(nullptr);
 		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		context->Draw(3, 0);
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite - Draw");
+			context->Draw(3, 0);
+		}
 
 		stateBackup.Restore(context);
 	}
@@ -570,6 +599,53 @@ void Deferred::ResetBlendStates()
 	}
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
+}
+
+template <typename T>
+void Deferred::SetShadowCascadeParameters(T& lightData, DirectionalShadowLightData& dd)
+{
+	const auto count = std::min(lightData.shadowmapDescriptors.size(), static_cast<uint32_t>(std::size(dd.ShadowProj)));
+	for (uint32_t i = 0; i < count; i++) {
+		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
+		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
+
+		DirectX::XMMATRIX invProj = DirectX::XMMatrixInverse(nullptr, proj);
+		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], invProj);
+	}
+}
+
+void Deferred::CopyShadowLightData()
+{
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowLightData");
+
+	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
+	if (!shadowSceneNode)
+		return;
+
+	auto* sunShadowLight = shadowSceneNode->GetRuntimeData().sunShadowDirLight;
+	if (!sunShadowLight)
+		return;
+
+	DirectionalShadowLightData dd{};
+	auto context = globals::d3d::context;
+
+	auto& dirData = sunShadowLight->GetShadowDirectionalLightRuntimeData();
+	dd.EndSplitDistances = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
+	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
+
+	if (globals::game::isVR)
+		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), dd);
+	else
+		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
+
+	D3D11_MAPPED_SUBRESOURCE mapped{};
+	DX::ThrowIfFailed(context->Map(directionalShadowLights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+	memcpy(mapped.pData, &dd, sizeof(DirectionalShadowLightData));
+	context->Unmap(directionalShadowLights->resource.get(), 0);
+
+	ID3D11ShaderResourceView* srv = directionalShadowLights->srv.get();
+	context->PSSetShaderResources(98, 1, &srv);
 }
 
 void Deferred::ClearShaderCache()

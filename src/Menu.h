@@ -411,11 +411,13 @@ public:
 		bool AutoHideFeatureList = false;                                                   // Auto-hide left feature list panel, show on hover
 		bool SkipConstraintWarning = false;                                                 // Skip popup when a setting change creates new constraints
 		bool RequireShiftToDock = true;                                                     // Require holding Shift to dock windows
+		bool UseResolutionFont = true;                                                      // When true, runtime font size scales with screen resolution; when persisted to theme files, FontSize is zeroed for backward compatibility
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};
-	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
-	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components
+	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
+	Settings& GetSettings() { return settings; }                      // Provide access to settings for other components
+	const Settings& GetSettings() const { return settings; }
 	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
 	ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
 	const ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) const { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
