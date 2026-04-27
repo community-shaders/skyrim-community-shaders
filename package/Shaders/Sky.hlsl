@@ -228,8 +228,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		ifdef HDR_OUTPUT
 	float hdrSunGain = HDRSun::GetHdrSunGain(
 		input.TexCoord0.xy,
-		baseColor
-	);
+		baseColor);
 	baseColor.xyz *= hdrSunGain;
 	if (HDRSun::IsHdrSunActive()) {
 		// Dither bright output to reduce banding in high-boost sun path.
