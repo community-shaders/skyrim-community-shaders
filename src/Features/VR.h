@@ -126,6 +126,7 @@ public:
 
 	// Stereo bilateral blend pass - called from Deferred::DeferredPasses after composite
 	void DrawStereoBlend();
+	void CompileStereoBlendShaders();
 	bool IsStereoOptimizationCullingReady() const
 	{
 		return REL::Module::IsVR() &&
@@ -134,6 +135,7 @@ public:
 		       stereoBlendCopyTex &&
 		       stereoBlendCB;
 	}
+	bool HasOverwriteVisualization() const { return stereoBlendOverwriteCS && stereoBlendCopyTex && stereoBlendCB; }
 	static bool AnyScreenSpaceEffectLoaded();
 
 	virtual void LoadSettings(json& o_json) override;
