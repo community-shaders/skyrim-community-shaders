@@ -625,6 +625,17 @@ namespace ExtendedMaterials
 #	endif
 	}
 
+	inline float TerrainMaxWeightedHeightScale(PS_INPUT input, DisplacementParams params[6])
+	{
+#	if defined(TRUE_PBR)
+		return max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
+																																			 max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
+#	else
+		return max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
+																																			 max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
+#	endif
+	}
+
 	inline uint TerrainDirectionalShadowTapCount(float quality)
 	{
 		// Directional terrain shadows are capped to reduce cost:
@@ -666,8 +677,7 @@ namespace ExtendedMaterials
 			float2 rayDir = L.xy * 0.1;
 
 #	if defined(TRUE_PBR)
-			float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
-																																			max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
+			float scale = TerrainMaxWeightedHeightScale(input, params);
 			if (scale < 0.01)
 				return 1.0;
 			rayDir *= scale;
@@ -713,8 +723,7 @@ namespace ExtendedMaterials
 		float2 rayDir = lightDirection.xy * 0.1;
 
 #	if defined(TRUE_PBR)
-		float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
-																																			max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
+		float scale = TerrainMaxWeightedHeightScale(input, params);
 		if (scale < 0.01)
 			return 1.0;
 		rayDir *= scale;

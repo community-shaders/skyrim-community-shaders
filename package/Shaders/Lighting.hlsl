@@ -2046,9 +2046,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float3 dirLightDirectionTS = mul(refractedDirLightDirection, tbn).xyz;
 #		if defined(LANDSCAPE)
 #			if defined(TRUE_PBR)
-		if (SharedData::extendedMaterialSettings.EnableParallax) {
+		if (SharedData::extendedMaterialSettings.EnableParallax && dirLightAngle > 0.0) {
 #			else
-		if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
+		if ((SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) && dirLightAngle > 0.0) {
 #			endif
 			if (hasCachedDirectionalTerrainParallaxShadow) {
 				dirDetailedShadow *= cachedDirectionalTerrainParallaxShadow;
@@ -2263,19 +2263,27 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					endif
 			{
 				// Aggressive, cheap distance-only gate for terrain point-light parallax shadows.
-				const float TERRAIN_POINT_SHADOW_NEAR = 256.0;
-				const float TERRAIN_POINT_SHADOW_FAR = 896.0;
+				const float TERRAIN_POINT_SHADOW_NEAR = 192.0;
+				const float TERRAIN_POINT_SHADOW_FAR = 640.0;
 				float terrainPointShadowQuality = 1.0 - saturate((lightDist - TERRAIN_POINT_SHADOW_NEAR) / (TERRAIN_POINT_SHADOW_FAR - TERRAIN_POINT_SHADOW_NEAR));
-				if (terrainPointShadowQuality > 0.0) {
-					// Stochastic update: evaluate a subset per frame (more samples near lights).
-					float updateProbability = lerp(0.2, 1.0, terrainPointShadowQuality);
-					float temporalJitter = frac(screenNoise + (float(lightIndex) * 0.6180339) + (float(SharedData::FrameCount & 7u) * 0.1732051));
-					if (temporalJitter < updateProbability) {
-#					if defined(TERRAIN_VARIATION)
-						parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, terrainPointShadowQuality, screenNoise, displacementParams, sharedOffset);
+				if (terrainPointShadowQuality > 0.0 && ExtendedMaterials::TerrainHasSignificantBlend(input.LandBlendWeights1, input.LandBlendWeights2.xy) && ExtendedMaterials::TerrainHasAnyDisplacement()) {
+#					if defined(TRUE_PBR)
+					float terrainHeightScale = ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams);
 #					else
-						parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, terrainPointShadowQuality, screenNoise, displacementParams);
+					float terrainHeightScale = ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams);
 #					endif
+					if (terrainHeightScale > 0.01) {
+						// Stochastic update: evaluate a subset per frame (more samples near lights).
+						float updateProbability = lerp(0.1, 1.0, terrainPointShadowQuality);
+						float temporalJitter = frac(screenNoise + (float(lightIndex) * 0.6180339) + (float(SharedData::FrameCount & 7u) * 0.1732051));
+						if (temporalJitter < updateProbability) {
+							float3 lightDirectionTS = normalize(mul(refractedLightDirection, tbn).xyz);
+#					if defined(TERRAIN_VARIATION)
+							parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, terrainPointShadowQuality, screenNoise, displacementParams, sharedOffset);
+#					else
+							parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, terrainPointShadowQuality, screenNoise, displacementParams);
+#					endif
+						}
 					}
 				}
 			}
