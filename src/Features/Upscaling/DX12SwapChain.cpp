@@ -195,16 +195,6 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	}
 
 	bool fgUIWillComposite = upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused();
-	{
-		static int sPrevDecision = -1;
-		int curDecision = fgUIWillComposite ? 1 : 0;
-		if (curDecision != sPrevDecision) {
-			logger::info("[Diag/DX12Present] fgUIWillComposite={} (settings.frameGenerationMode={} paused={} hdrLoaded={} isHDR={})",
-				fgUIWillComposite, static_cast<int>(upscaling.settings.frameGenerationMode),
-				globals::game::ui->GameIsPaused(), globals::features::hdrDisplay.loaded, isHDR);
-			sPrevDecision = curDecision;
-		}
-	}
 	globals::features::upscaling.fidelityFX.Present(fgUIWillComposite, isHDR);
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
