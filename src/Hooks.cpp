@@ -261,23 +261,6 @@ struct IDXGISwapChain_Present
 		//       scene + vanilla UI + ImGui when ApplyHDR reads it at the end of this hook.
 		// - Non-VR HDR: uiTexture (ApplyHDR composites separately for precise UI brightness)
 		// - Vanilla/no-HDR: kFRAMEBUFFER directly (is the swap chain back buffer pre-upgrade)
-		{
-			enum DiagPath { kFG = 0, kHDR = 1, kVanilla = 2 };
-			int curPath = frameGenActive ? kFG : (hdrReady && !globals::game::isVR ? kHDR : kVanilla);
-			static int sPrevPath = -1;
-			static bool sPrevHdrReady = !hdrReady;
-			static bool sPrevFrameGen = !frameGenActive;
-			if (curPath != sPrevPath || hdrReady != sPrevHdrReady || frameGenActive != sPrevFrameGen) {
-				auto& fbDiag = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-				logger::info("[Diag/Present] ImGui path={} (frameGenActive={} hdrReady={} hdrLoaded={} enableHDR={}) fb.RTV={}",
-					curPath, frameGenActive, hdrReady, hdr != nullptr,
-					hdr ? hdr->settings.enableHDR : false, static_cast<void*>(fbDiag.RTV));
-				sPrevPath = curPath;
-				sPrevHdrReady = hdrReady;
-				sPrevFrameGen = frameGenActive;
-			}
-		}
-
 		if (frameGenActive) {
 			// FG path: render ImGui alongside vanilla UI in uiBufferWrapped
 			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];

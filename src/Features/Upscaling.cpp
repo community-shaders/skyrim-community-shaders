@@ -66,8 +66,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	if (upscaling.IsBackendInitialized())
 		upscaling.CheckBackendFeatures(pAdapter);
 
-	// Use better swap effect to prevent tearing and improve performance.
-	// FLIP_DISCARD requires BufferCount >= 2 and a flip-model-compatible format.
+	// FLIP_DISCARD requires BufferCount >= 2 and a flip-model-compatible (non-sRGB) format.
 	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	if (pSwapChainDesc->BufferCount < 2)
 		pSwapChainDesc->BufferCount = 2;
@@ -75,14 +74,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	if (globals::features::hdrDisplay.loaded) {
 		logger::info("[Upscaling] Upgrading swap chain format from {} to R10G10B10A2_UNORM for HDR", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
 		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
-	} else if (pSwapChainDesc->BufferDesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
-	           pSwapChainDesc->BufferDesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
-		// sRGB formats are not allowed with flip-model; coerce to the linear UNORM equivalent.
-		auto oldFormat = pSwapChainDesc->BufferDesc.Format;
-		pSwapChainDesc->BufferDesc.Format =
-			(oldFormat == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM;
-		logger::info("[Upscaling] Coerced swap chain format from {} to {} for FLIP_DISCARD compatibility",
-			static_cast<int>(oldFormat), static_cast<int>(pSwapChainDesc->BufferDesc.Format));
+	} else if (pSwapChainDesc->BufferDesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) {
+		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	} else if (pSwapChainDesc->BufferDesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
+		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	}
 
 	bool shouldProxy = !globals::game::isVR;
@@ -1473,23 +1468,8 @@ void Upscaling::PostDisplay()
 	globals::game::renderer->UpdateViewPort(0, 0, 1);
 	UpdateCameraData();
 
-	if (d3d12SwapChainActive) {
-		auto* gameUi = globals::game::ui;
-		bool curHdrLoaded = globals::features::hdrDisplay.loaded;
-		int curFgMode = static_cast<int>(settings.frameGenerationMode);
-		bool curPaused = gameUi && gameUi->GameIsPaused();
-		static bool sPrevHdrLoaded = !curHdrLoaded;
-		static int sPrevFgMode = -1;
-		static bool sPrevPaused = !curPaused;
-		if (curHdrLoaded != sPrevHdrLoaded || curFgMode != sPrevFgMode || curPaused != sPrevPaused) {
-			logger::info("[Diag/PostDisplay] hdrLoaded={} fgMode={} paused={} d3d12Proxy=true (calling SetUIBuffer)",
-				curHdrLoaded, curFgMode, curPaused);
-			sPrevHdrLoaded = curHdrLoaded;
-			sPrevFgMode = curFgMode;
-			sPrevPaused = curPaused;
-		}
+	if (d3d12SwapChainActive)
 		globals::features::hdrDisplay.SetUIBuffer();
-	}
 
 	globals::state->UpdateSharedData(false, false);
 }

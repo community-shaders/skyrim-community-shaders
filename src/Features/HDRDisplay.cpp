@@ -844,22 +844,10 @@ void HDRDisplay::SetUIBuffer()
 
 	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
-	// Handle Frame Generation case - redirect UI rendering to FG's UI buffer
-	// when a compositor will actually read it back this frame, otherwise route
-	// UI straight into the wrapped back buffer so it survives Present.
-	//
-	// Compositors of uiBufferWrapped:
-	//   - HDRDisplay::ApplyHDR — runs every frame when HDR feature is loaded
-	//     (gated on enableHDR || frameGenActive; frameGenActive is always true
-	//     here since d3d12SwapChainActive == true).
-	//   - FFX FG UI composition — runs only when frameGenerationMode is on AND
-	//     game is not paused (matches the gate in DX12SwapChain::Present).
-	//
-	// With HDR unloaded and FFX skipping (paused, FG mode off, loading screens),
-	// neither compositor runs. PR #2195 always redirected to uiBufferWrapped to
-	// fix UI ghosting when FG is interpolating, but stranded the UI in those
-	// no-compositor states. The fix: same redirect when a compositor will
-	// consume the buffer; restore to the wrapped back buffer otherwise.
+	// D3D12 swap chain path: route UI to uiBufferWrapped only when a compositor
+	// (ApplyHDR or FFX FG UI composition) will read it; otherwise render UI
+	// directly into the wrapped back buffer so it survives Present when both
+	// compositors are skipped (HDR unloaded + FG off/paused).
 	if (globals::features::upscaling.d3d12SwapChainActive) {
 		auto& upscaling = globals::features::upscaling;
 		if (!upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->rtv)
