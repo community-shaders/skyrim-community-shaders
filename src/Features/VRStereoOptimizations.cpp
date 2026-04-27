@@ -359,18 +359,28 @@ void VRStereoOptimizations::DispatchStencil()
 	// Input: t0 = depth, b1 = params CB
 	// Output: u0 = per-pixel mode texture
 	{
-		ID3D11ShaderResourceView* srvs[1]{ depthSRV };
-		ID3D11UnorderedAccessView* uavs[1]{ texPerPixelMode->uav.get() };
+		TracyD3D11Zone(globals::state->tracyCtx, "StereoOpt - Mode Classify");
 
-		context->CSSetConstantBuffers(1, 1, &cbPtr);
-		context->CSSetShaderResources(0, 1, srvs);
-		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-		auto* activeStencilCS = (settings.debugDepthMap && stencilDebugDepthMapCS) ? stencilDebugDepthMapCS.get() : stencilCS.get();
-		context->CSSetShader(activeStencilCS, nullptr, 0);
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "StereoOpt - Mode Classify Bind");
 
-		uint32_t fullWidth = texPerPixelMode->desc.Width;
-		uint32_t fullHeight = texPerPixelMode->desc.Height;
-		context->Dispatch((fullWidth + 7) / 8, (fullHeight + 7) / 8, 1);
+			ID3D11ShaderResourceView* srvs[1]{ depthSRV };
+			ID3D11UnorderedAccessView* uavs[1]{ texPerPixelMode->uav.get() };
+
+			context->CSSetConstantBuffers(1, 1, &cbPtr);
+			context->CSSetShaderResources(0, 1, srvs);
+			context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+			auto* activeStencilCS = (settings.debugDepthMap && stencilDebugDepthMapCS) ? stencilDebugDepthMapCS.get() : stencilCS.get();
+			context->CSSetShader(activeStencilCS, nullptr, 0);
+		}
+
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "StereoOpt - Mode Classify Dispatch");
+
+			uint32_t fullWidth = texPerPixelMode->desc.Width;
+			uint32_t fullHeight = texPerPixelMode->desc.Height;
+			context->Dispatch((fullWidth + 7) / 8, (fullHeight + 7) / 8, 1);
+		}
 
 		// Cleanup CS bindings
 		ID3D11ShaderResourceView* nullSRV = nullptr;
@@ -383,7 +393,10 @@ void VRStereoOptimizations::DispatchStencil()
 	}
 
 	// Transfer classification to hardware stencil buffer
-	ExecuteStencilWritePass();
+	{
+		TracyD3D11Zone(globals::state->tracyCtx, "StereoOpt - Stencil Write");
+		ExecuteStencilWritePass();
+	}
 
 	stencilActive = true;
 	stencilSwapCount = 0;

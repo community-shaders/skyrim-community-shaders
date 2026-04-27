@@ -150,7 +150,13 @@ void VR::DrawStereoBlend()
 	}
 
 	context->CSSetShader(activeCS, nullptr, 0);
-	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	if (isOverwriteMode) {
+		TracyD3D11Zone(globals::state->tracyCtx, "StereoBlend - Overwrite");
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	} else {
+		TracyD3D11Zone(globals::state->tracyCtx, "StereoBlend - Bilateral");
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	}
 
 	// Cleanup
 	ID3D11ShaderResourceView* nullSRVs[4] = {};
