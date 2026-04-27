@@ -870,10 +870,11 @@ void HDRDisplay::SetUIBuffer()
 			return;
 
 		bool ffxWillComposite = IsFGCompositingThisFrame();
-		bool hdrShaderAvailable = GetHDROutputCS() != nullptr;
-		bool hdrWillComposite = loaded && hdrDataCB && outputTexture && hdrShaderAvailable;
+		bool hdrReady = loaded && hdrDataCB && outputTexture;
+		bool hdrShaderAvailable = hdrReady && GetHDROutputCS() != nullptr;
+		bool hdrWillComposite = hdrReady && hdrShaderAvailable;
 		bool needsUIBuffer = hdrWillComposite || ffxWillComposite;
-		bool hdrWillFallbackCopy = loaded && hdrDataCB && outputTexture && !hdrShaderAvailable;
+		bool hdrWillFallbackCopy = hdrReady && !hdrShaderAvailable;
 
 		if (needsUIBuffer && (!upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->rtv))
 			return;
