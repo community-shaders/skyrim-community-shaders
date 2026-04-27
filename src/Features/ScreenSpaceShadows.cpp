@@ -248,15 +248,15 @@ void ScreenSpaceShadows::DrawShadows()
 		if (blurCS) {
 			if (state->frameAnnotations)
 				state->BeginPerfEvent(std::format("SSS - Blur Mip{}", mip));
-			auto* inSRV = blurInTex->srv.get();
+			ID3D11ShaderResourceView* blurSRVs[2] = { blurInTex->srv.get(), texDepthMip[mip]->srv.get() };
 			auto* outUAV = blurOutTex->uav.get();
-			context->CSSetShaderResources(0, 1, &inSRV);
+			context->CSSetShaderResources(0, 2, blurSRVs);
 			context->CSSetUnorderedAccessViews(0, 1, &outUAV, nullptr);
 			context->CSSetShader(blurCS.get(), nullptr, 0);
 			context->Dispatch((mipW + 7u) >> 3, (mipH + 7u) >> 3, 1);
-			ID3D11ShaderResourceView* nullSRV = nullptr;
+			ID3D11ShaderResourceView* nullSRVs2[2] = { nullptr, nullptr };
 			ID3D11UnorderedAccessView* nullUAV = nullptr;
-			context->CSSetShaderResources(0, 1, &nullSRV);
+			context->CSSetShaderResources(0, 2, nullSRVs2);
 			context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 			if (state->frameAnnotations)
 				state->EndPerfEvent();
@@ -292,16 +292,16 @@ void ScreenSpaceShadows::DrawShadows()
 
 		if (state->frameAnnotations)
 			state->BeginPerfEvent("SSS - Blur Mip0");
-		// texShadowWork[0] holds the upscale output (or falls back to the mip 0 march).
-		auto* inSRV = texShadowWork[0] ? texShadowWork[0]->srv.get() : texShadowMip[0]->srv.get();
+		auto* shadowSrc = texShadowWork[0] ? texShadowWork[0]->srv.get() : texShadowMip[0]->srv.get();
+		ID3D11ShaderResourceView* finalBlurSRVs[2] = { shadowSrc, texDepthMip[0]->srv.get() };
 		auto* outUAV = screenSpaceShadowsTexture->uav.get();
-		context->CSSetShaderResources(0, 1, &inSRV);
+		context->CSSetShaderResources(0, 2, finalBlurSRVs);
 		context->CSSetUnorderedAccessViews(0, 1, &outUAV, nullptr);
 		context->CSSetShader(blurCS.get(), nullptr, 0);
 		context->Dispatch((uint(renderSize.x) + 7u) >> 3, (uint(renderSize.y) + 7u) >> 3, 1);
-		ID3D11ShaderResourceView* nullSRV = nullptr;
+		ID3D11ShaderResourceView* nullSRVs2[2] = { nullptr, nullptr };
 		ID3D11UnorderedAccessView* nullUAV = nullptr;
-		context->CSSetShaderResources(0, 1, &nullSRV);
+		context->CSSetShaderResources(0, 2, nullSRVs2);
 		context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 		if (state->frameAnnotations)
 			state->EndPerfEvent();

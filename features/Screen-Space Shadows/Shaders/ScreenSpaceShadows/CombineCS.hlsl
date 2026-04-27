@@ -5,6 +5,7 @@ Texture2D<float> shadow0 : register(t0);
 Texture2D<float> shadow1 : register(t1);
 Texture2D<float> shadow2 : register(t2);
 Texture2D<float> shadow3 : register(t3);
+RWTexture2D<unorm float> combinedOut : register(u0);
 
 cbuffer SSSCB : register(b1)
 {
