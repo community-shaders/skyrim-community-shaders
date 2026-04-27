@@ -1,19 +1,20 @@
 #ifdef HDR_OUTPUT
 
-#	include "Common/Random.hlsli"
+#	include "Common/Math.hlsli"
 
 namespace HDRSun
 {
 	// SharedData::HDRData units used here:
 	// .x - HDR enabled flag (0/1)
+	// .y - paper white in nits
 	// .z - display peak luminance in nits
 	// .w - menu-state blend amount (>0 means menu/pause/map is active)
-	// 203 nits ref for sun math only (not the paper-white UI slider).
-	static const float kReferencePaperWhiteNits = 203.0f;
 	// Menu / pause / map: HDRData.w > 0 — scale sun toward this nit level vs peak.
 	static const float kMenuSunNits = 100.0f;
 	// Keep a floor to avoid dimming below SDR behavior.
 	static const float kMinHdrSunBoost = 1.0f;
+	// Normalizes distance from UV center to corner into [0..1] over a unit square.
+	static const float kUvCornerDistanceScale = 1.41421356f;  // sqrt(2)
 
 	inline bool IsHdrSunActive()
 	{
@@ -32,9 +33,10 @@ namespace HDRSun
 			return 1.0f;
 
 		// --- Max linear multiplier for this display ---
-		// Scene target: peak/203, menu target: 100/peak (via kMenuSunNits).
-		float peakNits = max(SharedData::HDRData.z, kReferencePaperWhiteNits + 1.0f);
-		float peakRatio = peakNits / kReferencePaperWhiteNits;
+		// Scene target: peak/paperWhite, menu target: 100/peak (via kMenuSunNits).
+		float paperWhiteNits = max(SharedData::HDRData.y, 1.0f);
+		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0f);
+		float peakRatio = peakNits / paperWhiteNits;
 		float menuSunMul = (SharedData::HDRData.w > 1e-3f) ? (kMenuSunNits / peakNits) : 1.0f;
 		float maxBoost = max(kMinHdrSunBoost, peakRatio * menuSunMul);
 
@@ -47,36 +49,31 @@ namespace HDRSun
 		float radialWeight = 1.0f;
 #	if defined(TEX)
 		float2 uv = saturate(texCoord0_xy);
-		float r = saturate(length(uv - 0.5f) * 1.41421356f);
+		float r = saturate(length(uv - 0.5f) * kUvCornerDistanceScale);
 		radialWeight = saturate(1.0f - r);
 #	endif
 
 		float weight = saturate(highlight * alphaWeight * radialWeight);
 
-		// Wider footprint for a lower-frequency reference (~+1 mip) without SampleLevel(..., lod+2),
-		// which snaps to tiny mips and makes Lc / mipQuell (and thus gain) look blocky on the disc.
+		// Compare fine vs coarse sun energy and suppress boost when they are similar.
+		// This avoids over-boosting broad/soft regions while preserving concentrated highlights.
 		float2 uvGradX = ddx(texCoord0_xy);
 		float2 uvGradY = ddy(texCoord0_xy);
 		const float kCoarseSunFootprint = 2.0f;
 		float4 coarseS = sunTex.SampleGrad(samp, texCoord0_xy, uvGradX * kCoarseSunFootprint, uvGradY * kCoarseSunFootprint);
 		float3 coarseRgb = Color::Sky(coarseS.rgb);
-		float Lc = max(Color::RGBToLuminance(coarseRgb), 1e-4f);
-		float lac = Lc * saturate(coarseS.w * alphaPostScale);  // alphaPostScale = TEXFADE factor from Sky, else 1
-		float laf = L * a;
-
-		float mipQuell = 1.0f;
-		if (L >= Lc) {
-			float relL = (L - Lc) / max(Lc, 1e-4f);
-			float relA = (laf - lac) / max(lac, 1e-4f);
-			float spike = relL + relA;
-			mipQuell = saturate(1.0f - exp(-spike));
-		}
-		weight *= max(mipQuell, saturate(L));
+		float coarseLum = max(Color::RGBToLuminance(coarseRgb), EPSILON_DIVISION);
+		float fineEnergy = L * a;
+		float coarseEnergy = coarseLum * saturate(coarseS.w * alphaPostScale);  // alphaPostScale = TEXFADE from Sky, else 1
+		float detailExcess = max(fineEnergy - coarseEnergy, 0.0f);
+		float detailFactor = saturate(detailExcess / max(coarseEnergy, EPSILON_DIVISION));
+		float suppression = lerp(saturate(L), 1.0f, detailFactor);
+		weight *= suppression;
 
 		// pow(maxBoost, weight) grows the boosted footprint as maxBoost rises (same weight → more
 		// gain → sun reads larger). Tighten with wCurve = weight^sharpen; sharpen == 1 when
 		// maxBoost == kMinHdrSunBoost so low-boost paths match plain pow(maxBoost, weight).
-		float boostForPow = max(maxBoost, 1e-6f);
+		float boostForPow = max(maxBoost, EPSILON_DIVISION);
 		float sharpen = max(1.0f, 1.0f + log2(boostForPow / kMinHdrSunBoost));
 		float wCurve = pow(saturate(weight), sharpen);
 
