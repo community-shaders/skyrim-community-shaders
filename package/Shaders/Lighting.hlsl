@@ -1023,10 +1023,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(EMAT)
 	float parallaxShadowQuality = sqrt(1.0 - saturate(viewPosition.z / 2048.0));
+	float terrainDirectionalShadowQuality = sqrt(1.0 - saturate(viewPosition.z / 1536.0));
+#		if defined(TERRAIN_VARIATION)
+#			define COMPUTE_TERRAIN_SHADOW_BASE(OUT_SH0) ExtendedMaterials::ComputeTerrainParallaxShadowBaseHeight(input, uv, mipLevels, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset, OUT_SH0)
+#			define EVAL_TERRAIN_DIR_SHADOW(BASE_SH0, DIR_TS) ExtendedMaterials::EvaluateTerrainDirectionalParallaxShadowMultiplier(input, uv, mipLevels, DIR_TS, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset, BASE_SH0)
+#		else
+#			define COMPUTE_TERRAIN_SHADOW_BASE(OUT_SH0) ExtendedMaterials::ComputeTerrainParallaxShadowBaseHeight(input, uv, mipLevels, terrainDirectionalShadowQuality, screenNoise, displacementParams, OUT_SH0)
+#			define EVAL_TERRAIN_DIR_SHADOW(BASE_SH0, DIR_TS) ExtendedMaterials::EvaluateTerrainDirectionalParallaxShadowMultiplier(input, uv, mipLevels, DIR_TS, terrainDirectionalShadowQuality, screenNoise, displacementParams, BASE_SH0)
+#		endif
 #	endif
 
 #	if defined(LANDSCAPE)
 	float mipLevels[6];
+#		if defined(EMAT)
+	float cachedDirectionalTerrainParallaxShadow = 1.0;
+	bool hasCachedDirectionalTerrainParallaxShadow = false;
+	bool hasCachedTerrainShadowBaseHeight = false;
+#		endif
 #	else
 	float mipLevel = 0;
 #	endif  // LANDSCAPE
@@ -1283,12 +1296,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			input.LandBlendWeights2.y = weights[5];
 		}
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows)) {
-#			if defined(TERRAIN_VARIATION)
-			float shadowMultiplier = ExtendedMaterials::EvaluateTerrainParallaxShadowMultiplier(input, uv, mipLevels, DirLightDirection, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, sh0);
-#			else
-			float shadowMultiplier = ExtendedMaterials::EvaluateTerrainParallaxShadowMultiplier(input, uv, mipLevels, DirLightDirection, parallaxShadowQuality, screenNoise, displacementParams, sh0);
-#			endif
-			sh0 *= shadowMultiplier;
+			float3 dirLightDirectionTS = mul(DirLightDirection, tbn).xyz;
+			hasCachedTerrainShadowBaseHeight = COMPUTE_TERRAIN_SHADOW_BASE(sh0);
+			if (hasCachedTerrainShadowBaseHeight)
+				cachedDirectionalTerrainParallaxShadow = EVAL_TERRAIN_DIR_SHADOW(sh0, dirLightDirectionTS);
+			hasCachedDirectionalTerrainParallaxShadow = hasCachedTerrainShadowBaseHeight;
 		}
 	}
 	else {
@@ -2038,12 +2050,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 		if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
 #			endif
-			float sh0;
-#			if defined(TERRAIN_VARIATION)
-			dirDetailedShadow *= ExtendedMaterials::EvaluateTerrainParallaxShadowMultiplier(input, uv, mipLevels, dirLightDirectionTS, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, sh0);
-#			else
-			dirDetailedShadow *= ExtendedMaterials::EvaluateTerrainParallaxShadowMultiplier(input, uv, mipLevels, dirLightDirectionTS, parallaxShadowQuality, screenNoise, displacementParams, sh0);
-#			endif
+			if (hasCachedDirectionalTerrainParallaxShadow) {
+				dirDetailedShadow *= cachedDirectionalTerrainParallaxShadow;
+			} else {
+				float sh0;
+				bool hasShadowBase = COMPUTE_TERRAIN_SHADOW_BASE(sh0);
+				if (hasShadowBase)
+					dirDetailedShadow *= EVAL_TERRAIN_DIR_SHADOW(sh0, dirLightDirectionTS);
+			}
 		}
 #		elif defined(PARALLAX)
 		[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
@@ -2247,11 +2261,24 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					else
 			if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement))
 #					endif
+			{
+				// Aggressive, cheap distance-only gate for terrain point-light parallax shadows.
+				const float TERRAIN_POINT_SHADOW_NEAR = 256.0;
+				const float TERRAIN_POINT_SHADOW_FAR = 896.0;
+				float terrainPointShadowQuality = 1.0 - saturate((lightDist - TERRAIN_POINT_SHADOW_NEAR) / (TERRAIN_POINT_SHADOW_FAR - TERRAIN_POINT_SHADOW_NEAR));
+				if (terrainPointShadowQuality > 0.0) {
+					// Stochastic update: evaluate a subset per frame (more samples near lights).
+					float updateProbability = lerp(0.2, 1.0, terrainPointShadowQuality);
+					float temporalJitter = frac(screenNoise + (float(lightIndex) * 0.6180339) + (float(SharedData::FrameCount & 7u) * 0.1732051));
+					if (temporalJitter < updateProbability) {
 #					if defined(TERRAIN_VARIATION)
-				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset);
+						parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, terrainPointShadowQuality, screenNoise, displacementParams, sharedOffset);
 #					else
-				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams);
+						parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, terrainPointShadowQuality, screenNoise, displacementParams);
 #					endif
+					}
+				}
+			}
 #				elif defined(EMAT_ENVMAP)
 			[branch] if (complexMaterialParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, screenNoise, displacementParams);
@@ -2802,6 +2829,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {
 		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
+#	endif
+
+#	if defined(EMAT)
+#		undef COMPUTE_TERRAIN_SHADOW_BASE
+#		undef EVAL_TERRAIN_DIR_SHADOW
 #	endif
 
 	return psout;

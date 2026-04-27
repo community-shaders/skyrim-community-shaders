@@ -388,7 +388,7 @@ namespace ExtendedMaterials
 #	endif
 		{
 #endif
-			const float maxSteps = 12;
+			const float maxSteps = 4;
 			uint numSteps = uint((maxSteps * (1.0 - nearBlendToFar)) + 0.5);
 			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxSteps)));
 			numSteps = (numSteps + 2) & ~3;
@@ -600,6 +600,59 @@ namespace ExtendedMaterials
 	}
 
 #if defined(LANDSCAPE)
+#	if defined(TRUE_PBR)
+	static const uint TERRAIN_DISPLACEMENT_MASK = (1u << 6u) | (1u << 7u) | (1u << 8u) | (1u << 9u) | (1u << 10u) | (1u << 11u);
+#	endif
+#	if defined(TERRAIN_VARIATION)
+#		define TERRAIN_HEIGHT_AT(COORDS, MIP, QUALITY, WEIGHTS) \
+			GetTerrainHeight(noise, input, COORDS, MIP, params, QUALITY, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, WEIGHTS)
+#	else
+#		define TERRAIN_HEIGHT_AT(COORDS, MIP, QUALITY, WEIGHTS) \
+			GetTerrainHeight(noise, input, COORDS, MIP, params, QUALITY, input.LandBlendWeights1, input.LandBlendWeights2.xy, WEIGHTS)
+#	endif
+
+	inline bool TerrainHasSignificantBlend(float4 w1, float2 w2)
+	{
+		return (w1.x + w1.y + w1.z + w1.w + w2.x + w2.y) > 0.01;
+	}
+
+	inline bool TerrainHasAnyDisplacement()
+	{
+#	if defined(TRUE_PBR)
+		return (PBRFlags & TERRAIN_DISPLACEMENT_MASK) != 0;
+#	else
+		return (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement) != 0;
+#	endif
+	}
+
+	inline uint TerrainDirectionalShadowTapCount(float quality)
+	{
+		// Directional terrain shadows are capped to reduce cost:
+		// near: 2 taps, mid: 1 tap, far: 0 taps.
+		if (quality > 0.7)
+			return 2;
+		if (quality > 0.3)
+			return 1;
+		return 0;
+	}
+
+#	if defined(TERRAIN_VARIATION)
+	bool ComputeTerrainParallaxShadowBaseHeight(PS_INPUT input, float2 coords, float mipLevels[6], float quality, float noise, DisplacementParams params[6], StochasticOffsets sharedOffset, out float sh0)
+#	else
+	bool ComputeTerrainParallaxShadowBaseHeight(PS_INPUT input, float2 coords, float mipLevels[6], float quality, float noise, DisplacementParams params[6], out float sh0)
+#	endif
+	{
+		sh0 = 0.0;
+		if (!TerrainHasSignificantBlend(input.LandBlendWeights1, input.LandBlendWeights2.xy))
+			return false;
+		if (!TerrainHasAnyDisplacement())
+			return false;
+
+		float weights[6] = { 0, 0, 0, 0, 0, 0 };
+		sh0 = TERRAIN_HEIGHT_AT(coords, mipLevels, quality, weights);
+		return true;
+	}
+
 #	if defined(TERRAIN_VARIATION)
 	float GetParallaxSoftShadowMultiplierTerrain(PS_INPUT input, float2 coords, float mipLevel[6], float3 L, float sh0, float quality, float noise, DisplacementParams params[6], StochasticOffsets sharedOffset)
 #	else
@@ -618,43 +671,24 @@ namespace ExtendedMaterials
 			if (scale < 0.01)
 				return 1.0;
 			rayDir *= scale;
-
-#		if defined(TERRAIN_VARIATION)
-			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, heights);
+#	endif
+			sh = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.x, mipLevel, quality, heights);
 			if (quality > 0.25)
-				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, heights);
+				sh.y = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.y, mipLevel, quality, heights);
 			if (quality > 0.5)
-				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, heights);
+				sh.z = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.z, mipLevel, quality, heights);
 			if (quality > 0.75)
-				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, heights);
-#		else
-			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.25)
-				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.5)
-				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.75)
-				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-#		endif
+				sh.w = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.w, mipLevel, quality, heights);
+#	if defined(TRUE_PBR)
 			return 1.0 - saturate(dot(max(0, sh - sh0) / scale, ShadowIntensity)) * quality;
 #	else
-#		if defined(TERRAIN_VARIATION)
-			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, heights);
+			sh = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.x, mipLevel, quality, heights);
 			if (quality > 0.25)
-				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, heights);
+				sh.y = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.y, mipLevel, quality, heights);
 			if (quality > 0.5)
-				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, heights);
+				sh.z = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.z, mipLevel, quality, heights);
 			if (quality > 0.75)
-				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, heights);
-#		else
-			sh = GetTerrainHeight(noise, input, coords + rayDir * multipliers.x, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.25)
-				sh.y = GetTerrainHeight(noise, input, coords + rayDir * multipliers.y, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.5)
-				sh.z = GetTerrainHeight(noise, input, coords + rayDir * multipliers.z, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-			if (quality > 0.75)
-				sh.w = GetTerrainHeight(noise, input, coords + rayDir * multipliers.w, mipLevel, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, heights);
-#		endif
+				sh.w = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.w, mipLevel, quality, heights);
 			return 1.0 - saturate(dot(max(0, sh - sh0), ShadowIntensity)) * quality;
 #	endif
 		}
@@ -662,20 +696,58 @@ namespace ExtendedMaterials
 	}
 
 #	if defined(TERRAIN_VARIATION)
+	float EvaluateTerrainDirectionalParallaxShadowMultiplier(PS_INPUT input, float2 coords, float mipLevels[6], float3 lightDirection, float quality, float noise, DisplacementParams params[6], StochasticOffsets sharedOffset, float sh0)
+#	else
+	float EvaluateTerrainDirectionalParallaxShadowMultiplier(PS_INPUT input, float2 coords, float mipLevels[6], float3 lightDirection, float quality, float noise, DisplacementParams params[6], float sh0)
+#	endif
+	{
+		uint tapCount = TerrainDirectionalShadowTapCount(quality);
+		if (tapCount == 0)
+			return 1.0;
+		if (!TerrainHasSignificantBlend(input.LandBlendWeights1, input.LandBlendWeights2.xy))
+			return 1.0;
+
+		float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
+		float4 sh = sh0.xxxx;
+		float heights[6] = { 0, 0, 0, 0, 0, 0 };
+		float2 rayDir = lightDirection.xy * 0.1;
+
+#	if defined(TRUE_PBR)
+		float scale = max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
+																																			max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
+		if (scale < 0.01)
+			return 1.0;
+		rayDir *= scale;
+#	endif
+
+		sh.x = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.x, mipLevels, quality, heights);
+		if (tapCount > 1)
+			sh.y = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.y, mipLevels, quality, heights);
+
+		float qualityWeight = tapCount > 1 ? 1.0 : 0.6;
+#	if defined(TRUE_PBR)
+		return 1.0 - saturate(dot(max(0, sh - sh0) / scale, ShadowIntensity)) * qualityWeight;
+#	else
+		return 1.0 - saturate(dot(max(0, sh - sh0), ShadowIntensity)) * qualityWeight;
+#	endif
+	}
+
+#	if defined(TERRAIN_VARIATION)
 	float EvaluateTerrainParallaxShadowMultiplier(PS_INPUT input, float2 coords, float mipLevels[6], float3 lightDirection, float quality, float noise, DisplacementParams params[6], StochasticOffsets sharedOffset, out float sh0)
 	{
-		float weights[6] = { 0, 0, 0, 0, 0, 0 };
-		sh0 = GetTerrainHeight(noise, input, coords, mipLevels, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, weights);
+		if (!ComputeTerrainParallaxShadowBaseHeight(input, coords, mipLevels, quality, noise, params, sharedOffset, sh0))
+			return 1.0;
 		return GetParallaxSoftShadowMultiplierTerrain(input, coords, mipLevels, lightDirection, sh0, quality, noise, params, sharedOffset);
 	}
 #	else
 	float EvaluateTerrainParallaxShadowMultiplier(PS_INPUT input, float2 coords, float mipLevels[6], float3 lightDirection, float quality, float noise, DisplacementParams params[6], out float sh0)
 	{
-		float weights[6] = { 0, 0, 0, 0, 0, 0 };
-		sh0 = GetTerrainHeight(noise, input, coords, mipLevels, params, quality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
+		if (!ComputeTerrainParallaxShadowBaseHeight(input, coords, mipLevels, quality, noise, params, sh0))
+			return 1.0;
 		return GetParallaxSoftShadowMultiplierTerrain(input, coords, mipLevels, lightDirection, sh0, quality, noise, params);
 	}
 #	endif
 
+#	undef TERRAIN_HEIGHT_AT
 #endif  // defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
 }
