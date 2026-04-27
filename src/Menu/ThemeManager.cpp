@@ -791,15 +791,16 @@ bool ThemeManager::ValidateThemeData(const json& themeData) const
 
 float ThemeManager::ResolveFontSize(const Menu& menu)
 {
-	const auto& themeSettings = menu.GetTheme();
-	float configured = themeSettings.FontSize;
+	const auto& settings = menu.GetSettings();
 
-	// If user configured a positive size, use it (clamped)
-	if (std::round(configured) > 0) {
-		return std::clamp(configured, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
+	// When resolution-based font is disabled, use the theme's fixed size directly
+	if (!settings.UseResolutionFont) {
+		float configured = settings.Theme.FontSize;
+		if (std::round(configured) > 0)
+			return std::clamp(configured, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 	}
 
-	// Otherwise, compute dynamic default based on current screen resolution
+	// Compute dynamic size from screen resolution
 	float dynamicSize;
 	if (globals::game::isVR) {
 		// VR: use overlay height

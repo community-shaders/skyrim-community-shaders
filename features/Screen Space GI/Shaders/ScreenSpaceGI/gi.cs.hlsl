@@ -34,8 +34,6 @@
 #include "Common/VR.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
-#define RCP_PI (0.31830988618)
-
 Texture2D<float> srcWorkingDepth : register(t0);
 Texture2D<float4> srcNormalRoughness : register(t1);
 Texture2D<float3> srcRadiance : register(t2);  // maybe half-res
@@ -45,6 +43,7 @@ Texture2D<float> srcPrevAo : register(t5);             // maybe half-res
 Texture2D<float4> srcPrevY : register(t6);             // maybe half-res
 Texture2D<float2> srcPrevCoCg : register(t7);          // maybe half-res
 Texture2D<float4> srcPrevGISpecular : register(t8);    // maybe half-res
+Texture2D<float2> srcNormal : register(t9);
 
 RWTexture2D<unorm float> outAo : register(u0);
 RWTexture2D<float4> outY : register(u1);
@@ -206,14 +205,16 @@ void CalculateGI(
 				float SZ = srcWorkingDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, mipLevel);
 
 				// Reconstruct sample in current eye's viewspace for correct horizon angles.
+				float3 samplePos = ScreenToViewPosition(sampleScreenPos, SZ, sampleEyeIndex);
 				// For cross-eye samples, reject if the depth differs too much from the
 				// center pixel -- the other eye may see a different surface due to occlusion.
-				float3 samplePos = ScreenToViewPosition(sampleScreenPos, SZ, sampleEyeIndex);
+#if defined(VR)
 				if (sampleEyeIndex != eyeIndex) {
 					if (abs(SZ - viewspaceZ) > viewspaceZ * 0.1)
 						continue;
 					samplePos = FrameBuffer::WorldToView(FrameBuffer::ViewToWorld(samplePos, true, sampleEyeIndex), true, eyeIndex);
 				}
+#endif
 				float3 sampleDelta = samplePos - pixCenterPos;
 				float3 sampleHorizonVec = normalize(sampleDelta);
 
@@ -225,7 +226,7 @@ void CalculateGI(
 				float2 angleRange = -sideSign * (sideSign == -1 ? float2(angleFront, angleBack) : float2(angleBack, angleFront));
 				// The math: https://www.desmos.com/calculator/je4y5ved2j
 				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
-				angleRange = smoothstep(0, 1, (angleRange + n) * RCP_PI + .5);
+				angleRange = smoothstep(0, 1, (angleRange + n) * Math::INV_PI + .5);
 
 				uint2 bitsRange = uint2(round(angleRange.x * 32u), round((angleRange.y - angleRange.x) * 32u));
 				uint maskedBits = s < AORadius ? ((1 << bitsRange.y) - 1) << bitsRange.x : 0;
@@ -246,7 +247,7 @@ void CalculateGI(
 
 				// The math: https://www.desmos.com/calculator/je4y5ved2j
 				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
-				angleRangeGI = smoothstep(0, 1, (angleRangeGI + n) * RCP_PI + .5);
+				angleRangeGI = smoothstep(0, 1, (angleRangeGI + n) * Math::INV_PI + .5);
 
 				uint2 bitsRangeGI = uint2(round(angleRangeGI.x * 32u), round((angleRangeGI.y - angleRangeGI.x) * 32u));
 				uint maskedBitsGI = s < GIRadius ? ((1 << bitsRangeGI.y) - 1) << bitsRangeGI.x : 0;
@@ -263,7 +264,7 @@ void CalculateGI(
 					float giBoost = 4.0 * Math::PI * (1 + GIDistanceCompensation * smoothstep(0, GICompensationMaxDist, s * EffectRadius));
 
 					// IL
-					float3 normalSample = GBuffer::DecodeNormal(srcNormalRoughness.SampleLevel(samplerPointClamp, sampleUV * frameScale, 0).xy);
+					float3 normalSample = GBuffer::DecodeNormal(srcNormal.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance));
 					if (dot(samplePos, normalSample) > 0)
 						normalSample = -normalSample;
 					float frontBackMult = -dot(normalSample, sampleHorizonVec);
@@ -345,7 +346,7 @@ void CalculateGI(
 
 	float viewspaceZ = READ_DEPTH(srcWorkingDepth, pxCoord);
 
-	float2 normalSample = FULLRES_LOAD(srcNormalRoughness, pxCoord, uv * frameScale, samplerLinearClamp).xy;
+	float2 normalSample = FULLRES_LOAD(srcNormal, pxCoord, uv * OUT_FRAME_SCALE, samplerLinearClamp);
 	float3 viewspaceNormal = GBuffer::DecodeNormal(normalSample);
 
 	half2 encodedWorldNormal = GBuffer::EncodeNormal(ViewToWorldVector(viewspaceNormal, FrameBuffer::CameraViewInverse[eyeIndex]));

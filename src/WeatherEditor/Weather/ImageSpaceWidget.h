@@ -24,6 +24,7 @@ public:
 	{
 		// HDR Settings
 		float hdrEyeAdaptSpeed = 0.0f;
+		float hdrEyeAdaptStrength = 0.0f;
 		float hdrBloomBlurRadius = 0.0f;
 		float hdrBloomThreshold = 0.0f;
 		float hdrBloomScale = 0.0f;

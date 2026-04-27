@@ -1,6 +1,7 @@
 #include "UI.h"
 
 #include "../WeatherEditor/EditorWindow.h"
+#include "D3D.h"
 #include "FileSystem.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
@@ -1784,6 +1785,8 @@ namespace Util
 		};
 
 		HRESULT hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+		if (SUCCEEDED(hr) && *out_srv)
+			Util::SetResourceName(*out_srv, "UI::DDS:%s", filename);
 		pTexture->Release();
 
 		if (FAILED(hr) || !*out_srv) {

@@ -17,14 +17,14 @@ bool Widget::MatchesSearch(const std::string& text) const
 void Widget::Save()
 {
 	SaveSettings();
-	const std::string filePath = std::format("{}\\{}", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName());
-	const std::string file = std::format("{}\\{}.json", filePath, GetEditorID());
+	const auto file = GetSaveFilePath();
+	const auto filePath = std::filesystem::path(file).parent_path();
 
 	if (!std::filesystem::exists(filePath) || !std::filesystem::is_directory(filePath)) {
 		try {
 			std::filesystem::create_directories(filePath);
 		} catch (const std::filesystem::filesystem_error& e) {
-			logger::warn("Error creating directory during Save ({}) : {}\n", filePath, e.what());
+			logger::warn("Error creating directory during Save ({}) : {}\n", filePath.string(), e.what());
 			return;
 		}
 	}
@@ -72,7 +72,7 @@ void Widget::Save()
 
 void Widget::Load()
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
+	std::string filePath = GetSaveFilePath();
 
 	if (!std::filesystem::exists(filePath)) {
 		js = json();
@@ -146,7 +146,7 @@ void Widget::Load()
 
 void Widget::Delete()
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
+	std::string filePath = GetSaveFilePath();
 
 	if (!std::filesystem::exists(filePath)) {
 		return;
@@ -176,8 +176,7 @@ void Widget::Delete()
 
 bool Widget::HasSavedFile() const
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), const_cast<Widget*>(this)->GetFolderName(), GetEditorID());
-	return std::filesystem::exists(filePath);
+	return std::filesystem::exists(GetSaveFilePath());
 }
 
 void Widget::DrawMenu()
@@ -242,7 +241,12 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 	}
 }
 
-std::string Widget::GetFolderName()
+std::string Widget::GetSaveFilePath() const
+{
+	return std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetSaveKey());
+}
+
+std::string Widget::GetFolderName() const
 {
 	switch (form->GetFormType()) {
 	case RE::FormType::Weather:
@@ -270,6 +274,20 @@ bool Widget::BeginWidgetWindow()
 	bool result = Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags);
 	UpdateWidgetTypeSize(GetWidgetTypeName());
 	return result;
+}
+
+void Widget::ForceWeatherReinit(RE::TESWeather* weather)
+{
+	auto* sky = globals::game::sky;
+	if (weather && sky && sky->currentWeather == weather)
+		sky->ForceWeather(weather, true);
+}
+
+void Widget::ForceCurrentWeatherReinit()
+{
+	auto* sky = globals::game::sky;
+	if (sky && sky->currentWeather)
+		sky->ForceWeather(sky->currentWeather, true);
 }
 
 void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather)
@@ -306,8 +324,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		}
 		if (isLocked)
 			ImGui::PopStyleColor(2);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
+		Util::AddTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
 	};
 
 	auto drawUnsavedIndicator = [&]() {
@@ -315,8 +332,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			return;
 		ImGui::SameLine();
 		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES)");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Unsaved changes - click save to keep");
+		Util::AddTooltip("Unsaved changes - click save to keep");
 	};
 
 	if (useIcons) {
@@ -339,13 +355,20 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			ImGui::SameLine();
 			if (ImGui::ImageButton((std::string(searchId) + suffix).c_str(), texture, buttonSize))
 				callback();
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", tooltip);
+			Util::AddTooltip(tooltip);
 		};
 
 		// Apply button
-		if (showApply && !editorWindow->settings.autoApplyChanges)
-			iconButton("_Apply", menu->uiIcons.applyToGame.texture, "Apply changes to the game", [&]() { ApplyChanges(); });
+		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
+			if (menu->uiIcons.applyToGame.texture) {
+				iconButton("_Apply", menu->uiIcons.applyToGame.texture, "Apply changes to the game", [&]() { ApplyChanges(); });
+			} else {
+				ImGui::SameLine();
+				if (ImGui::Button("Apply"))
+					ApplyChanges();
+				Util::AddTooltip("Apply changes to the game");
+			}
+		}
 
 		// Save/Load/Revert/Delete group
 		if (showSaveLoadRevert) {
@@ -360,8 +383,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 					if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
 						ImGui::OpenPopup("DeleteConfirmation");
 				}
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Delete saved file");
+				Util::AddTooltip("Delete saved file");
 			}
 		}
 
@@ -395,8 +417,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				if (ImGui::Button(label, size))
 					callback();
 			}
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", tooltip);
+			Util::AddTooltip(tooltip);
 		};
 
 		auto textButton = [&](const char* label, const char* tooltip, auto callback) {
@@ -406,12 +427,11 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			size.y = buttonHeight;
 			if (Util::ButtonWithFlash(label, size))
 				callback();
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", tooltip);
+			Util::AddTooltip(tooltip);
 		};
 
 		// Apply button
-		if (showApply && !editorWindow->settings.autoApplyChanges)
+		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply()))
 			styledTextButton("Apply", palette.SuccessColor, "Apply changes to the game", [&]() { ApplyChanges(); });
 
 		// Save/Load/Revert/Delete group
@@ -428,6 +448,12 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	}
 
 	DrawDeleteConfirmationModal();
+
+	if (showApply && RequiresManualApply() && editorWindow->settings.autoApplyChanges && menu) {
+		ImGui::SameLine();
+		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(Changes require manual apply)");
+		Util::AddTooltip("This form type is only re-read by the engine on weather reinit.\nAuto-apply is disabled - use the Apply button.");
+	}
 
 	ImGui::Separator();
 }

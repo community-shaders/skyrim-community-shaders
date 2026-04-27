@@ -1,6 +1,7 @@
 #include "ScreenSpaceShadows.h"
 
 #include "State.h"
+#include "Utils/D3D.h"
 
 #pragma warning(push)
 #pragma warning(disable: 4838 4244)
@@ -124,7 +125,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 
 void ScreenSpaceShadows::DrawShadows()
 {
-	ZoneScoped;
+	ZoneScopedS(8);
 	auto state = globals::state;
 	TracyD3D11Zone(state->tracyCtx, "Screen Space Shadows");
 
@@ -187,32 +188,37 @@ void ScreenSpaceShadows::DrawShadows()
 		auto dispatchList = Bend::BuildDispatchList(const_cast<float*>(lightProj), viewportSize, minRenderBounds, maxRenderBounds);
 
 		for (int i = 0; i < dispatchList.DispatchCount; i++) {
-			TracyD3D11Zone(globals::state->tracyCtx, "SSS - Ray March");
-
 			auto dispatchData = dispatchList.Dispatch[i];
 
-			RaymarchCB data{};
-			data.LightCoordinate[0] = dispatchList.LightCoordinate_Shader[0];
-			data.LightCoordinate[1] = dispatchList.LightCoordinate_Shader[1];
-			data.LightCoordinate[2] = dispatchList.LightCoordinate_Shader[2];
-			data.LightCoordinate[3] = dispatchList.LightCoordinate_Shader[3];
+			{
+				TracyD3D11Zone(globals::state->tracyCtx, "SSS - DispatchEye CB");
 
-			data.WaveOffset[0] = dispatchData.WaveOffset_Shader[0];
-			data.WaveOffset[1] = dispatchData.WaveOffset_Shader[1];
+				RaymarchCB data{};
+				data.LightCoordinate[0] = dispatchList.LightCoordinate_Shader[0];
+				data.LightCoordinate[1] = dispatchList.LightCoordinate_Shader[1];
+				data.LightCoordinate[2] = dispatchList.LightCoordinate_Shader[2];
+				data.LightCoordinate[3] = dispatchList.LightCoordinate_Shader[3];
 
-			data.FarDepthValue = 1.0f;
-			data.NearDepthValue = 0.0f;
+				data.WaveOffset[0] = dispatchData.WaveOffset_Shader[0];
+				data.WaveOffset[1] = dispatchData.WaveOffset_Shader[1];
 
-			data.DynamicRes = dynamicRes;
+				data.FarDepthValue = 1.0f;
+				data.NearDepthValue = 0.0f;
 
-			data.InvDepthTextureSize[0] = invTexSizeX;
-			data.InvDepthTextureSize[1] = invTexSizeY;
+				data.DynamicRes = dynamicRes;
 
-			data.settings = bendSettings;
+				data.InvDepthTextureSize[0] = invTexSizeX;
+				data.InvDepthTextureSize[1] = invTexSizeY;
 
-			raymarchCB->Update(data);
+				data.settings = bendSettings;
 
-			context->Dispatch(dispatchData.WaveCount[0], dispatchData.WaveCount[1], dispatchData.WaveCount[2]);
+				raymarchCB->Update(data);
+			}
+
+			{
+				TracyD3D11Zone(globals::state->tracyCtx, "SSS - DispatchEye Sweep");
+				context->Dispatch(dispatchData.WaveCount[0], dispatchData.WaveCount[1], dispatchData.WaveCount[2]);
+			}
 		}
 
 		if (globals::state->frameAnnotations) {
@@ -226,11 +232,17 @@ void ScreenSpaceShadows::DrawShadows()
 	if (!globals::game::isVR) {
 		DispatchEye(nullptr, GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
 	} else {
-		DispatchEye("Left Eye", GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "SSS - Left Eye");
+			DispatchEye("Left Eye", GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
+		}
 
 		// Calculate light projection for right eye
 		auto lightProjectionRightF = CalculateLightProjection(1);
-		DispatchEye("Right Eye", GetComputeRaymarchRight(), lightProjectionRightF.data(), InvTexSizeX, InvTexSizeY);
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "SSS - Right Eye");
+			DispatchEye("Right Eye", GetComputeRaymarchRight(), lightProjectionRightF.data(), InvTexSizeX, InvTexSizeY);
+		}
 	}
 
 	ID3D11ShaderResourceView* views[1]{ nullptr };
@@ -345,10 +357,10 @@ bool ScreenSpaceShadows::HasShaderDefine(RE::BSShader::Type)
 
 void ScreenSpaceShadows::SetupResources()
 {
-	raymarchCB = new ConstantBuffer(ConstantBufferDesc<RaymarchCB>());
+	raymarchCB = new ConstantBuffer(ConstantBufferDesc<RaymarchCB>(), "SSS::RaymarchCB");
 
 	if (globals::game::isVR) {
-		stereoSyncCB = new ConstantBuffer(ConstantBufferDesc<StereoSyncCB>());
+		stereoSyncCB = new ConstantBuffer(ConstantBufferDesc<StereoSyncCB>(), "SSS::StereoSyncCB");
 	}
 
 	{
@@ -367,6 +379,7 @@ void ScreenSpaceShadows::SetupResources()
 		samplerDesc.BorderColor[2] = 1.0f;
 		samplerDesc.BorderColor[3] = 1.0f;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointBorderSampler));
+		Util::SetResourceName(pointBorderSampler, "SSS::PointBorderSampler");
 	}
 
 	{
@@ -389,12 +402,12 @@ void ScreenSpaceShadows::SetupResources()
 			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
 			.Texture2D = { .MipSlice = 0 }
 		};
-		screenSpaceShadowsTexture = new Texture2D(texDesc);
+		screenSpaceShadowsTexture = new Texture2D(texDesc, "SSS::ShadowTexture");
 		screenSpaceShadowsTexture->CreateSRV(srvDesc);
 		screenSpaceShadowsTexture->CreateUAV(uavDesc);
 
 		if (globals::game::isVR) {
-			stereoSyncCopyTex = new Texture2D(texDesc);
+			stereoSyncCopyTex = new Texture2D(texDesc, "SSS::StereoSyncCopy");
 			stereoSyncCopyTex->CreateSRV(srvDesc);
 		}
 	}

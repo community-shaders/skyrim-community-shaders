@@ -143,13 +143,20 @@ void VR::DrawStereoBlend()
 			sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
 			sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 			globals::d3d::device->CreateSamplerState(&sampDesc, stereoBlendLinearSampler.put());
+			Util::SetResourceName(stereoBlendLinearSampler.get(), "VR::StereoBlendLinearSampler");
 		}
 		ID3D11SamplerState* samplers[] = { stereoBlendLinearSampler.get() };
 		context->CSSetSamplers(0, 1, samplers);
 	}
 
 	context->CSSetShader(activeCS, nullptr, 0);
-	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	if (isOverwriteMode) {
+		TracyD3D11Zone(globals::state->tracyCtx, "StereoBlend - Overwrite");
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	} else {
+		TracyD3D11Zone(globals::state->tracyCtx, "StereoBlend - Bilateral");
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	}
 
 	// Cleanup
 	ID3D11ShaderResourceView* nullSRVs[4] = {};

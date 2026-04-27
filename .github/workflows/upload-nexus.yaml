@@ -29,6 +29,41 @@ on:
             changelog:
                 description: "Optional release notes or changelog for Nexus"
                 required: false
+    workflow_call:
+        inputs:
+            tag:
+                description: "Release tag to upload to Nexus"
+                required: true
+                type: string
+            nexus_game_id:
+                required: false
+                type: string
+                default: "skyrimspecialedition"
+            nexus_mod_id:
+                required: false
+                type: string
+                default: "86492"
+            artifact_pattern:
+                required: false
+                type: string
+                default: "CommunityShaders-*.7z"
+            mod_filename:
+                required: false
+                type: string
+                default: "Community Shaders"
+            dry_run:
+                required: false
+                type: string
+                default: "true"
+            changelog:
+                required: false
+                type: string
+                default: ""
+        secrets:
+            UNEX_NEXUSMODS_SESSION_COOKIE:
+                required: false
+            UNEX_APIKEY:
+                required: false
 
 jobs:
     prepare-nexus-matrix:
@@ -59,11 +94,15 @@ jobs:
                     echo 'No tag provided for Nexus upload' >&2
                     exit 1
                   fi
+                  if [[ "$TAG" == *-* ]]; then
+                    echo "ERROR: '$TAG' is a pre-release tag. Only stable releases are uploaded to Nexus." >&2
+                    exit 1
+                  fi
                   VERSION="${TAG#v}"
                   echo "tag=$TAG" >> $GITHUB_OUTPUT
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
               env:
-                  INPUT_TAG: ${{ github.event.inputs.tag || '' }}
+                  INPUT_TAG: ${{ inputs.tag || '' }}
 
             - name: Compute dry-run mode
               id: dryrun
@@ -74,7 +113,7 @@ jobs:
                     echo "dry_run=true" >> $GITHUB_OUTPUT
                   fi
               env:
-                  INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || '' }}
+                  INPUT_DRY_RUN: ${{ inputs.dry_run || '' }}
 
             - name: Generate Nexus upload matrix
               id: generate
@@ -120,9 +159,9 @@ jobs:
                   echo "has_uploads=$(python -c \"import json; print('true' if json.load(open('nexus-upload-state.json')).get('has_uploads') else 'false')\")" >> $GITHUB_OUTPUT
               env:
                   RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
-                  INPUT_NEXUS_MOD_ID: ${{ github.event.inputs.nexus_mod_id || '' }}
-                  INPUT_MOD_FILENAME: ${{ github.event.inputs.mod_filename || '' }}
-                  INPUT_ARTIFACT_PATTERN: ${{ github.event.inputs.artifact_pattern || '' }}
+                  INPUT_NEXUS_MOD_ID: ${{ inputs.nexus_mod_id || '' }}
+                  INPUT_MOD_FILENAME: ${{ inputs.mod_filename || '' }}
+                  INPUT_ARTIFACT_PATTERN: ${{ inputs.artifact_pattern || '' }}
 
     prepare-artifacts:
         needs: prepare-nexus-matrix
@@ -197,16 +236,15 @@ jobs:
         strategy:
             matrix: ${{ fromJson(needs.prepare-nexus-matrix.outputs.upload_matrix) }}
             fail-fast: false
-        continue-on-error: ${{ matrix.name != 'core' }}
         uses: alandtse/nexus-workflows/.github/workflows/upload-nexus.yml@main
         with:
-            nexus_game_id: ${{ github.event.inputs.nexus_game_id || 'skyrimspecialedition' }}
+            nexus_game_id: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
             nexus_mod_id: ${{ matrix.nexus_mod_id }}
             artifact_name: nexus-upload-${{ matrix.name }}
             tag_name: ${{ needs.prepare-nexus-matrix.outputs.tag }}
             mod_version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
             mod_filename: ${{ matrix.mod_filename }}
-            changelog: ${{ github.event.inputs.changelog || '' }}
+            changelog: ${{ inputs.changelog || '' }}
         secrets:
             UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
             UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
