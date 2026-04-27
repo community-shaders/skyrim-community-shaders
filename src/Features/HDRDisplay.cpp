@@ -861,22 +861,26 @@ void HDRDisplay::SetUIBuffer()
 	// D3D12 swap chain path: route UI to uiBufferWrapped only when a compositor
 	// (ApplyHDR or FFX FG UI composition) will read it; otherwise render UI
 	// directly into the wrapped back buffer so it survives Present when both
-	// compositors are skipped (HDR unloaded + FG off/paused).
+	// compositors are skipped (HDR unloaded + FG off/paused). If HDR is loaded
+	// but the shader is missing, keep UI in kFRAMEBUFFER so the ApplyHDR
+	// fallback copy carries it to the wrapped back buffer.
 	if (globals::features::upscaling.d3d12SwapChainActive) {
 		auto& upscaling = globals::features::upscaling;
 		if (!upscaling.dx12SwapChain.swapChainBufferWrapped || !upscaling.dx12SwapChain.swapChainBufferWrapped->rtv)
 			return;
 
 		bool ffxWillComposite = IsFGCompositingThisFrame();
-		bool hdrWillComposite = loaded && hdrDataCB && outputTexture;
+		bool hdrShaderAvailable = GetHDROutputCS() != nullptr;
+		bool hdrWillComposite = loaded && hdrDataCB && outputTexture && hdrShaderAvailable;
 		bool needsUIBuffer = hdrWillComposite || ffxWillComposite;
+		bool hdrWillFallbackCopy = loaded && hdrDataCB && outputTexture && !hdrShaderAvailable;
 
 		if (needsUIBuffer && (!upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->rtv))
 			return;
 
 		ID3D11RenderTargetView* targetRTV = needsUIBuffer ?
 		                                        upscaling.dx12SwapChain.uiBufferWrapped->rtv :
-		                                        upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
+		                                        hdrWillFallbackCopy ? fb.RTV : upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
 
 		if (needsUIBuffer) {
 			float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -1013,7 +1017,8 @@ void HDRDisplay::ApplyHDR()
 
 			// Copy kFRAMEBUFFER directly to destination (bypassing HDR processing)
 			if (upscaling.d3d12SwapChainActive) {
-				// Frame Gen path: copy to D3D12 swap chain wrapped buffer
+				// SetUIBuffer keeps non-FG fallback UI in kFRAMEBUFFER; FG keeps using
+				// uiBufferWrapped for FidelityFX UI composition.
 				context->CopyResource(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11, framebufferRT.texture);
 			} else {
 				// Normal path: copy directly to swap chain back buffer
