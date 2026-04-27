@@ -388,7 +388,7 @@ namespace ExtendedMaterials
 #	endif
 		{
 #endif
-			const float maxSteps = 16;
+			const float maxSteps = 12;
 			uint numSteps = uint((maxSteps * (1.0 - nearBlendToFar)) + 0.5);
 			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxSteps)));
 			numSteps = (numSteps + 2) & ~3;
@@ -499,9 +499,13 @@ namespace ExtendedMaterials
 				float hFar = pt2.y;
 				float fFar = hFar - tFar;
 
-				const uint secantIterations = 3;
-				[unroll] for (uint i = 0; i < secantIterations; i++)
+				// Fewer secant refinements as we approach far-blended POM, where precision matters less.
+				uint secantIterations = nearBlendToFar > 0.6 ? 1 : (nearBlendToFar > 0.25 ? 2 : 3);
+				[unroll] for (uint i = 0; i < 3; i++)
 				{
+					if (i >= secantIterations)
+						break;
+
 					float denominator = fNear - fFar;
 					float r = abs(denominator) > EPSILON_DIVISION ? saturate(fNear / denominator) : 0.5;
 					float tSecant = lerp(tNear, tFar, r);
