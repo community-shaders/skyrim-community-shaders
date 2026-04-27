@@ -37,7 +37,7 @@ public:
 		uint32_t enableLODTerrainTilingFix = 1;
 		uint32_t pad[2]{};
 	};
-	
+
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;

@@ -1302,8 +1302,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				cachedDirectionalTerrainParallaxShadow = EVAL_TERRAIN_DIR_SHADOW(sh0, dirLightDirectionTS);
 			hasCachedDirectionalTerrainParallaxShadow = hasCachedTerrainShadowBaseHeight;
 		}
-	}
-	else {
+	} else {
 		// Calculate proper mip levels for terrain variation when parallax is disabled but EMAT is available
 #			if defined(TERRAIN_VARIATION)
 		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
@@ -1388,7 +1387,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	baseColor.xyz = pow(abs(baseColor.xyz), SharedData::lodBlendingSettings.LODObjectGamma) * SharedData::lodBlendingSettings.LODObjectBrightness;
 #		elif defined(LODLANDSCAPE)
 #			if defined(TERRAIN_VARIATION)
-	[branch] if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+	[branch] if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
+	{
 		StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
 		float4 lodStochasticColor = StochasticSampleLOD(StochasticSampleLODJitter(screenNoise), TexColorSampler, SampColorSampler, uv, lodOffset);
 		baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
@@ -1489,10 +1489,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(TERRAIN_VARIATION)
 	float2 blendColorUV = input.TexCoord0.zw;
-	[branch] if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+	[branch] if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
+	{
 		StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
 		lodLandColor = StochasticSampleLOD(StochasticSampleLODJitter(screenNoise), TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset);
-	} else {
+	}
+	else
+	{
 		lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, blendColorUV);
 	}
 #		else

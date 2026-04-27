@@ -146,7 +146,6 @@ inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState sam
 	return lerp(s2, s1, offsetsLOD.weights.x);
 }
 
-
 // 2-sample height-blended stochastic sampling — branchless, no wavefront divergence.
 // Sorting in ComputeStochasticOffsets guarantees offset1/offset2 are the two
 // highest-weight barycentric vertices, so dropping offset3 loses minimal quality.
@@ -176,7 +175,6 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
-
 // 2-sample parallax sampling — uses heightmap (alpha) only for blend weights.
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
 {
@@ -199,7 +197,6 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 
 	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
-
 
 inline float4 SampleTerrain(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float extraLandMipBias)
 {
