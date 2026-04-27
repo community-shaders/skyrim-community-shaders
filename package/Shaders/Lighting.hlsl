@@ -1375,12 +1375,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(LODOBJECTS) || defined(LODOBJECTSHD)
 	baseColor.xyz = pow(abs(baseColor.xyz), SharedData::lodBlendingSettings.LODObjectGamma) * SharedData::lodBlendingSettings.LODObjectBrightness;
 #		elif defined(LODLANDSCAPE)
-// Apply TV as a single-path runtime blend to avoid duplicated branches.
 #			if defined(TERRAIN_VARIATION)
-	StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
-	float4 lodStochasticColor = StochasticSampleLOD(StochasticSampleLODJitter(screenNoise), TexColorSampler, SampColorSampler, uv, lodOffset);
-	float tvLodEnable = SharedData::terrainVariationSettings.enableLODTerrainTilingFix ? 1.0 : 0.0;
-	baseColor.xyz = lerp(baseColor.xyz, Color::Diffuse(lodStochasticColor.rgb), tvLodEnable);
+	[branch] if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+		StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
+		float4 lodStochasticColor = StochasticSampleLOD(StochasticSampleLODJitter(screenNoise), TexColorSampler, SampColorSampler, uv, lodOffset);
+		baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
+	}
 #			endif
 	baseColor.xyz = pow(abs(baseColor.xyz), SharedData::lodBlendingSettings.LODTerrainGamma) * SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif
@@ -1477,8 +1477,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(TERRAIN_VARIATION)
 	float2 blendColorUV = input.TexCoord0.zw;
-	StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
-	lodLandColor = StochasticSampleLOD(StochasticSampleLODJitter(screenNoise), TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset);
+	[branch] if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+		StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
+		lodLandColor = StochasticSampleLOD(StochasticSampleLODJitter(screenNoise), TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset);
+	} else {
+		lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, blendColorUV);
+	}
 #		else
 	lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 #		endif
