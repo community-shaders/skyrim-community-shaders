@@ -856,7 +856,8 @@ void HDRDisplay::SetUIBuffer()
 			return;
 
 		auto* gameUi = globals::game::ui;
-		bool ffxWillComposite = upscaling.settings.frameGenerationMode && gameUi && !gameUi->GameIsPaused();
+		bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
+		bool ffxWillComposite = upscaling.settings.frameGenerationMode && gameUi && !gameUi->GameIsPaused() && !isMainOrLoadingMenu;
 		bool hdrWillComposite = loaded && hdrDataCB && outputTexture;
 		bool needsUIBuffer = hdrWillComposite || ffxWillComposite;
 
