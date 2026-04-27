@@ -3,43 +3,31 @@
 #include "State.h"
 #include "Utils/D3D.h"
 
-#pragma warning(push)
-#pragma warning(disable: 4838 4244)
-#include "ScreenSpaceShadows/bend_sss_cpu.h"
-#pragma warning(pop)
-
-using RE::RENDER_TARGETS;
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	ScreenSpaceShadows::BendSettings,
-	Enable,
-	SampleCount,
+	ScreenSpaceShadows::Settings,
+	Enabled,
 	SurfaceThickness,
-	BilinearThreshold,
-	ShadowContrast)
+	ShadowContrast,
+	RayLength)
 
 void ScreenSpaceShadows::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("General", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Enable", (bool*)&bendSettings.Enable);
+		ImGui::Checkbox("Enable", &settings.Enabled);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Enable screen-space contact shadows from the sun/moon direction.");
 
-		ImGui::SliderInt("Sample Count Multiplier", (int*)&bendSettings.SampleCount, 1, 4);
+		ImGui::SliderFloat("Surface Thickness", &settings.SurfaceThickness, 0.1f, 20.0f);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Multiplier for shadow ray sample count. Higher values increase shadow reach at the cost of performance. Adapts to render resolution.");
+			ImGui::Text("Assumed surface thickness for the occlusion test, in view-space world units.");
 
-		ImGui::SliderFloat("Surface Thickness", &bendSettings.SurfaceThickness, 0.005f, 0.05f);
+		ImGui::SliderFloat("Shadow Contrast", &settings.ShadowContrast, 0.0f, 4.0f);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Assumed thickness of surfaces for shadow detection. Lower values produce thinner, more precise shadows.");
+			ImGui::Text("Contrast boost for the shadow transition. Higher values produce harder edges.");
 
-		ImGui::SliderFloat("Bilinear Threshold", &bendSettings.BilinearThreshold, 0.02f, 1.0f);
+		ImGui::SliderFloat("Ray Length", &settings.RayLength, 1.0f, 2000.0f);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Depth threshold for edge detection during bilinear interpolation. Higher values smooth more aggressively across edges.");
-
-		ImGui::SliderFloat("Shadow Contrast", &bendSettings.ShadowContrast, 0.0f, 4.0f);
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Contrast boost for the shadow transition. Higher values produce harder shadow edges.");
+			ImGui::Text("World-space distance the shadow ray travels. Controls shadow reach.");
 
 		if (globals::game::isVR && globals::state->IsDeveloperMode()) {
 			ImGui::Checkbox("VR Stereo Sync", &enableStereoSync);
@@ -47,80 +35,71 @@ void ScreenSpaceShadows::DrawSettings()
 				ImGui::Text(
 					"Synchronizes shadow data between left and right eyes via bilateral reprojection "
 					"and applies a depth-weighted blur to reduce per-eye noise. "
-					"Uses min-blend so if either eye detects an occluder, the shadow is preserved. ");
+					"Uses min-blend so if either eye detects an occluder, the shadow is preserved.");
 		}
 
 		ImGui::Spacing();
 		ImGui::Spacing();
 		ImGui::TreePop();
 	}
-}
 
-void ScreenSpaceShadows::InvalidateRaymarchShaders()
-{
-	if (raymarchCS) {
-		raymarchCS->Release();
-		raymarchCS = nullptr;
-	}
-	if (raymarchRightCS) {
-		raymarchRightCS->Release();
-		raymarchRightCS = nullptr;
+	if (ImGui::TreeNode("Buffer Viewer")) {
+		static float debugRescale = 0.3f;
+		ImGui::SliderFloat("View Resize", &debugRescale, 0.0f, 1.0f);
+
+		static const char* mipTitles[] = {
+			"Shadow Mip 0 - Full res",
+			"Shadow Mip 1 - Half res",
+			"Shadow Mip 2 - Quarter res",
+			"Shadow Mip 3 - Eighth res"
+		};
+		for (int i = 0; i < 4; ++i)
+			BUFFER_VIEWER_NODE_TITLE(texShadowMip[i], mipTitles[i], debugRescale)
+		BUFFER_VIEWER_NODE_TITLE(screenSpaceShadowsTexture, "Shadow Final (blurred)", debugRescale)
+
+		ImGui::TreePop();
 	}
 }
 
 void ScreenSpaceShadows::ClearShaderCache()
 {
-	InvalidateRaymarchShaders();
-	if (stereoSyncCS) {
-		stereoSyncCS->Release();
-		stereoSyncCS = nullptr;
-	}
+	prefilterDepthsCS = nullptr;
+	shadowsCS = nullptr;
+	shadowsRightCS = nullptr;
+	upscaleCS = nullptr;
+	blurCS = nullptr;
+	stereoSyncCS = nullptr;
+	CompileComputeShaders();
 }
 
-uint ScreenSpaceShadows::GetScaledSampleCount()
+void ScreenSpaceShadows::CompileComputeShaders()
 {
-	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+	std::vector<std::pair<const char*, const char*>> baseDefines;
+	if (REL::Module::IsVR())
+		baseDefines.push_back({ "VR", "" });
 
-	// In VR, renderSize covers both eyes side-by-side; raymarch dispatches per-eye
-	if (globals::game::isVR)
-		renderSize.x /= 2.0f;
+	auto compile = [&](std::wstring_view path, std::vector<std::pair<const char*, const char*>> defines) -> ID3D11ComputeShader* {
+		return reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.data(), defines, "cs_5_0"));
+	};
 
-	// Scale sample count based on both dimensions relative to 1920x1080 reference
-	float2 referenceRes = { 1920.0f, 1080.0f };
-	float referenceArea = referenceRes.x * referenceRes.y;
-	float currentArea = renderSize.x * renderSize.y;
-	float areaScale = std::sqrt(currentArea / referenceArea);
-	uint scaledSampleCount = static_cast<uint>(std::round(bendSettings.SampleCount * 60 * areaScale));
+	if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\PrefilterDepthsCS.hlsl", baseDefines))
+		prefilterDepthsCS.attach(cs);
 
-	// Quantize to steps of 8 to prevent frequent recompilation from small DRS oscillations
-	scaledSampleCount = ((scaledSampleCount + 7u) / 8u) * 8u;
-	scaledSampleCount = std::max(scaledSampleCount, 8u);
+	if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\ShadowsCS.hlsl", baseDefines))
+		shadowsCS.attach(cs);
 
-	return scaledSampleCount;
-}
-
-ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
-{
-	uint scaledSampleCount = GetScaledSampleCount();
-
-	if (scaledSampleCount != lastCompiledSampleCount) {
-		lastCompiledSampleCount = scaledSampleCount;
-		InvalidateRaymarchShaders();
+	if (REL::Module::IsVR()) {
+		auto rightDefines = baseDefines;
+		rightDefines.push_back({ "RIGHT", "" });
+		if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\ShadowsCS.hlsl", rightDefines))
+			shadowsRightCS.attach(cs);
 	}
 
-	if (!raymarchCS) {
-		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() } }, "cs_5_0");
-	}
-	return raymarchCS;
-}
+	if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\UpscaleCS.hlsl", {}))
+		upscaleCS.attach(cs);
 
-ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
-{
-	if (!raymarchRightCS) {
-		uint scaledSampleCount = GetScaledSampleCount();
-		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() }, { "RIGHT", "" } }, "cs_5_0");
-	}
-	return raymarchRightCS;
+	if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\BlurCS.hlsl", {}))
+		blurCS.attach(cs);
 }
 
 void ScreenSpaceShadows::DrawShadows()
@@ -137,127 +116,204 @@ void ScreenSpaceShadows::DrawShadows()
 	auto& directionNi = dirLight->GetWorldDirection();
 	float3 light = { directionNi.x, directionNi.y, directionNi.z };
 	light.Normalize();
-	float4 lightProjection = float4(-light.x, -light.y, -light.z, 0.0f);
-
-	// Helper lambda to calculate light projection for a given eye
-	auto CalculateLightProjection = [&](uint32_t eyeIndex = 0) -> std::array<float, 4> {
-		auto viewProjMat = globals::game::frameBufferCached.GetCameraViewProj(eyeIndex).Transpose();
-		auto projectedLight = DirectX::SimpleMath::Vector4::Transform(lightProjection, viewProjMat);
-		return { projectedLight.x, projectedLight.y, projectedLight.z, projectedLight.w };
-	};
-
-	auto lightProjectionF = CalculateLightProjection(0);
 
 	float2 renderSize = Util::ConvertToDynamic(state->screenSize);
-	int viewportSize[2] = { (int)renderSize.x, (int)renderSize.y };
+	float2 texDim = { (float)texShadowMip[0]->desc.Width, (float)texShadowMip[0]->desc.Height };
 
-	if (globals::game::isVR)
-		viewportSize[0] /= 2;
+	SSSCB cbData{};
+	cbData.FrameDim = renderSize;
+	cbData.RcpTexDim = { 1.0f / texDim.x, 1.0f / texDim.y };
+	cbData.TexDim = texDim;
+	cbData.DynamicRes = { renderSize.x / texDim.x, renderSize.y / texDim.y };
+	cbData.SurfaceThickness = settings.SurfaceThickness;
+	cbData.ShadowContrast = settings.ShadowContrast;
+	cbData.RayLength = settings.RayLength;
+	cbData.LightWorldDir = { -light.x, -light.y, -light.z };
 
-	int minRenderBounds[2] = { 0, 0 };
-	int maxRenderBounds[2] = { viewportSize[0], viewportSize[1] };
+	auto* cbPtr = sssCB->CB();
+	context->CSSetConstantBuffers(1, 1, &cbPtr);
 
-	// Setup common render state
-	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
-	context->CSSetShaderResources(0, 1, &depthSRV);
+	ID3D11SamplerState* samplers[2] = { linearClampSampler.get(), pointClampSampler.get() };
+	context->CSSetSamplers(0, 2, samplers);
 
-	auto uav = screenSpaceShadowsTexture->uav.get();
-	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	// Copy game's PerFrame cbuffer (b12) to CS stage for FrameBuffer matrices.
+	{
+		ID3D11Buffer* perFrameCB = nullptr;
+		context->VSGetConstantBuffers(12, 1, &perFrameCB);
+		context->CSSetConstantBuffers(12, 1, &perFrameCB);
+		if (perFrameCB)
+			perFrameCB->Release();
+	}
 
-	context->CSSetSamplers(0, 1, &pointBorderSampler);
+	// === Depth pyramid — prefilter game depth into 4 mip levels ===
+	if (prefilterDepthsCS) {
+		if (state->frameAnnotations)
+			state->BeginPerfEvent("SSS - Prefilter Depths");
 
-	auto buffer = raymarchCB->CB();
-	context->CSSetConstantBuffers(1, 1, &buffer);
+		auto* srcDepthSRV = Util::GetCurrentSceneDepthSRV();
+		ID3D11UnorderedAccessView* depthUAVs[4] = {
+			texDepthMip[0]->uav.get(),
+			texDepthMip[1]->uav.get(),
+			texDepthMip[2]->uav.get(),
+			texDepthMip[3]->uav.get()
+		};
+		context->CSSetShaderResources(0, 1, &srcDepthSRV);
+		context->CSSetUnorderedAccessViews(0, 4, depthUAVs, nullptr);
+		context->CSSetShader(prefilterDepthsCS.get(), nullptr, 0);
+		// Each thread handles a 2x2 full-res block, so dispatch at half resolution.
+		uint pfW = (texDepthMip[0]->desc.Width / 2 + 7) / 8;
+		uint pfH = (texDepthMip[0]->desc.Height / 2 + 7) / 8;
+		context->Dispatch(pfW, pfH, 1);
 
-	auto viewport = globals::game::graphicsState;
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		ID3D11UnorderedAccessView* nullUAVs[4] = { nullptr, nullptr, nullptr, nullptr };
+		context->CSSetShaderResources(0, 1, &nullSRV);
+		context->CSSetUnorderedAccessViews(0, 4, nullUAVs, nullptr);
 
-	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
+		if (state->frameAnnotations)
+			state->EndPerfEvent();
+	}
 
-	// Shared dispatch logic for both VR and non-VR
-	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
-						   float invTexSizeX, float invTexSizeY) {
-		if (globals::state->frameAnnotations && eyeName) {
-			std::string eventName = std::format("SSS - Ray March ({})", eyeName);
-			globals::state->BeginPerfEvent(eventName);
-		} else if (globals::state->frameAnnotations) {
-			globals::state->BeginPerfEvent("SSS - Ray March");
-		}
+	// === Shadow marching — 4 mip levels ===
+	{
+		for (uint mip = 0; mip < 4u; ++mip) {
+			uint mipW = std::max(1u, uint(renderSize.x) >> mip);
+			uint mipH = std::max(1u, uint(renderSize.y) >> mip);
 
-		context->CSSetShader(shader, nullptr, 0);
+			cbData.CurrentMip = mip;
+			sssCB->Update(cbData);
 
-		auto dispatchList = Bend::BuildDispatchList(const_cast<float*>(lightProj), viewportSize, minRenderBounds, maxRenderBounds);
+			auto* depthSRV = texDepthMip[mip]->srv.get();
+			context->CSSetShaderResources(0, 1, &depthSRV);
 
-		for (int i = 0; i < dispatchList.DispatchCount; i++) {
-			auto dispatchData = dispatchList.Dispatch[i];
+			auto* shadowUAV = texShadowMip[mip]->uav.get();
+			context->CSSetUnorderedAccessViews(0, 1, &shadowUAV, nullptr);
 
-			{
-				TracyD3D11Zone(globals::state->tracyCtx, "SSS - DispatchEye CB");
-
-				RaymarchCB data{};
-				data.LightCoordinate[0] = dispatchList.LightCoordinate_Shader[0];
-				data.LightCoordinate[1] = dispatchList.LightCoordinate_Shader[1];
-				data.LightCoordinate[2] = dispatchList.LightCoordinate_Shader[2];
-				data.LightCoordinate[3] = dispatchList.LightCoordinate_Shader[3];
-
-				data.WaveOffset[0] = dispatchData.WaveOffset_Shader[0];
-				data.WaveOffset[1] = dispatchData.WaveOffset_Shader[1];
-
-				data.FarDepthValue = 1.0f;
-				data.NearDepthValue = 0.0f;
-
-				data.DynamicRes = dynamicRes;
-
-				data.InvDepthTextureSize[0] = invTexSizeX;
-				data.InvDepthTextureSize[1] = invTexSizeY;
-
-				data.settings = bendSettings;
-
-				raymarchCB->Update(data);
+			if (!globals::game::isVR) {
+				if (state->frameAnnotations)
+					state->BeginPerfEvent(std::format("SSS - Shadows Mip{}", mip));
+				context->CSSetShader(shadowsCS.get(), nullptr, 0);
+				context->Dispatch((mipW + 7u) >> 3, (mipH + 7u) >> 3, 1);
+				if (state->frameAnnotations)
+					state->EndPerfEvent();
+			} else {
+				uint perEyeW = std::max(1u, uint(renderSize.x) / 2u >> mip);
+				{
+					TracyD3D11Zone(state->tracyCtx, "SSS - Left Eye");
+					if (state->frameAnnotations)
+						state->BeginPerfEvent(std::format("SSS - Shadows Mip{} Left", mip));
+					context->CSSetShader(shadowsCS.get(), nullptr, 0);
+					context->Dispatch((perEyeW + 7u) >> 3, (mipH + 7u) >> 3, 1);
+					if (state->frameAnnotations)
+						state->EndPerfEvent();
+				}
+				{
+					TracyD3D11Zone(state->tracyCtx, "SSS - Right Eye");
+					if (state->frameAnnotations)
+						state->BeginPerfEvent(std::format("SSS - Shadows Mip{} Right", mip));
+					context->CSSetShader(shadowsRightCS.get(), nullptr, 0);
+					context->Dispatch((perEyeW + 7u) >> 3, (mipH + 7u) >> 3, 1);
+					if (state->frameAnnotations)
+						state->EndPerfEvent();
+				}
 			}
-
-			{
-				TracyD3D11Zone(globals::state->tracyCtx, "SSS - DispatchEye Sweep");
-				context->Dispatch(dispatchData.WaveCount[0], dispatchData.WaveCount[1], dispatchData.WaveCount[2]);
-			}
 		}
 
-		if (globals::state->frameAnnotations) {
-			globals::state->EndPerfEvent();
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		ID3D11UnorderedAccessView* nullUAV = nullptr;
+		context->CSSetShaderResources(0, 1, &nullSRV);
+		context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+	}
+
+	// === Cascaded blur → upscale chain (mip 3 down to 1, then final blur at mip 0) ===
+	// Pipeline per iteration: blur mip N → upscale+min-combine into mip N-1.
+	// Blur ping-pongs between texShadowWork and texShadowMip to avoid SRV/UAV hazards:
+	//   mip 3: blurIn=texShadowMip[3], blurOut=texShadowWork[3]
+	//   mip 2: blurIn=texShadowWork[2] (upscale output), blurOut=texShadowMip[2] (repurposed)
+	//   mip 1: blurIn=texShadowWork[1], blurOut=texShadowMip[1] (repurposed)
+	for (int mip = 3; mip >= 1; --mip) {
+		uint mipW = std::max(1u, uint(renderSize.x) >> mip);
+		uint mipH = std::max(1u, uint(renderSize.y) >> mip);
+		uint outW = std::max(1u, uint(renderSize.x) >> (mip - 1));
+		uint outH = std::max(1u, uint(renderSize.y) >> (mip - 1));
+
+		cbData.CurrentMip = (uint)mip;
+		sssCB->Update(cbData);
+
+		// For mip 3 the march output is in texShadowMip; for mip < 3 the upscale wrote texShadowWork.
+		Texture2D* blurInTex = (mip == 3) ? texShadowMip[mip].get() : texShadowWork[mip].get();
+		// Blur output ping-pong: mip 3 → texShadowWork[3]; mip < 3 → repurpose texShadowMip[mip].
+		Texture2D* blurOutTex = (mip == 3) ? texShadowWork[mip].get() : texShadowMip[mip].get();
+
+		if (blurCS) {
+			if (state->frameAnnotations)
+				state->BeginPerfEvent(std::format("SSS - Blur Mip{}", mip));
+			auto* inSRV = blurInTex->srv.get();
+			auto* outUAV = blurOutTex->uav.get();
+			context->CSSetShaderResources(0, 1, &inSRV);
+			context->CSSetUnorderedAccessViews(0, 1, &outUAV, nullptr);
+			context->CSSetShader(blurCS.get(), nullptr, 0);
+			context->Dispatch((mipW + 7u) >> 3, (mipH + 7u) >> 3, 1);
+			ID3D11ShaderResourceView* nullSRV = nullptr;
+			ID3D11UnorderedAccessView* nullUAV = nullptr;
+			context->CSSetShaderResources(0, 1, &nullSRV);
+			context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+			if (state->frameAnnotations)
+				state->EndPerfEvent();
 		}
-	};
 
-	float InvTexSizeX = 1.0f / (float)viewportSize[0];
-	float InvTexSizeY = 1.0f / (float)viewportSize[1];
-
-	if (!globals::game::isVR) {
-		DispatchEye(nullptr, GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
-	} else {
-		{
-			TracyD3D11Zone(globals::state->tracyCtx, "SSS - Left Eye");
-			DispatchEye("Left Eye", GetComputeRaymarch(), lightProjectionF.data(), InvTexSizeX, InvTexSizeY);
-		}
-
-		// Calculate light projection for right eye
-		auto lightProjectionRightF = CalculateLightProjection(1);
-		{
-			TracyD3D11Zone(globals::state->tracyCtx, "SSS - Right Eye");
-			DispatchEye("Right Eye", GetComputeRaymarchRight(), lightProjectionRightF.data(), InvTexSizeX, InvTexSizeY);
+		if (upscaleCS) {
+			if (state->frameAnnotations)
+				state->BeginPerfEvent(std::format("SSS - Upscale Mip{}→{}", mip, mip - 1));
+			ID3D11ShaderResourceView* srvs[4] = {
+				blurOutTex->srv.get(),               // t0: blurred shadow at CurrentMip
+				texDepthMip[mip]->srv.get(),          // t1: depth at CurrentMip
+				texShadowMip[mip - 1]->srv.get(),     // t2: marched shadow at CurrentMip-1
+				texDepthMip[mip - 1]->srv.get(),      // t3: depth at CurrentMip-1
+			};
+			context->CSSetShaderResources(0, 4, srvs);
+			auto* outUAV = texShadowWork[mip - 1]->uav.get();
+			context->CSSetUnorderedAccessViews(0, 1, &outUAV, nullptr);
+			context->CSSetShader(upscaleCS.get(), nullptr, 0);
+			context->Dispatch((outW + 7u) >> 3, (outH + 7u) >> 3, 1);
+			ID3D11ShaderResourceView* nullSRVs[4] = { nullptr, nullptr, nullptr, nullptr };
+			ID3D11UnorderedAccessView* nullUAV = nullptr;
+			context->CSSetShaderResources(0, 4, nullSRVs);
+			context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+			if (state->frameAnnotations)
+				state->EndPerfEvent();
 		}
 	}
 
-	ID3D11ShaderResourceView* views[1]{ nullptr };
-	context->CSSetShaderResources(0, 1, views);
+	// === Final blur at mip 0 (full resolution) ===
+	{
+		cbData.CurrentMip = 0;
+		sssCB->Update(cbData);
 
-	ID3D11UnorderedAccessView* uavs[1]{ nullptr };
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+		if (state->frameAnnotations)
+			state->BeginPerfEvent("SSS - Blur Mip0");
+		// texShadowWork[0] holds the upscale output (or falls back to the mip 0 march).
+		auto* inSRV = texShadowWork[0] ? texShadowWork[0]->srv.get() : texShadowMip[0]->srv.get();
+		auto* outUAV = screenSpaceShadowsTexture->uav.get();
+		context->CSSetShaderResources(0, 1, &inSRV);
+		context->CSSetUnorderedAccessViews(0, 1, &outUAV, nullptr);
+		context->CSSetShader(blurCS.get(), nullptr, 0);
+		context->Dispatch((uint(renderSize.x) + 7u) >> 3, (uint(renderSize.y) + 7u) >> 3, 1);
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		ID3D11UnorderedAccessView* nullUAV = nullptr;
+		context->CSSetShaderResources(0, 1, &nullSRV);
+		context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+		if (state->frameAnnotations)
+			state->EndPerfEvent();
+	}
 
+	// Clean up
+	ID3D11SamplerState* nullSamplers[2] = { nullptr, nullptr };
+	ID3D11Buffer* nullCB = nullptr;
+	context->CSSetSamplers(0, 2, nullSamplers);
+	context->CSSetConstantBuffers(1, 1, &nullCB);
+	context->CSSetConstantBuffers(12, 1, &nullCB);
 	context->CSSetShader(nullptr, nullptr, 0);
-
-	ID3D11SamplerState* sampler = nullptr;
-	context->CSSetSamplers(0, 1, &sampler);
-
-	buffer = nullptr;
-	context->CSSetConstantBuffers(1, 1, &buffer);
 }
 
 void ScreenSpaceShadows::DrawStereoSync()
@@ -266,7 +322,7 @@ void ScreenSpaceShadows::DrawStereoSync()
 		return;
 
 	if (!stereoSyncCS)
-		stereoSyncCS = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\StereoSyncCS.hlsl", { { "VR", "" }, { "FRAMEBUFFER", "" } }, "cs_5_0"));
+		stereoSyncCS.attach(reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\StereoSyncCS.hlsl", { { "VR", "" }, { "FRAMEBUFFER", "" } }, "cs_5_0")));
 	if (!stereoSyncCS)
 		return;
 
@@ -289,7 +345,7 @@ void ScreenSpaceShadows::DrawStereoSync()
 	cbData.RcpFrameDim[1] = 1.0f / resolution.y;
 
 	stereoSyncCB->Update(cbData);
-	auto cbPtr = stereoSyncCB->CB();
+	auto* cbPtr = stereoSyncCB->CB();
 
 	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
 	ID3D11ShaderResourceView* srvs[2]{ depthSRV, stereoSyncCopyTex->srv.get() };
@@ -300,18 +356,18 @@ void ScreenSpaceShadows::DrawStereoSync()
 	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
 	context->CSSetShaderResources(0, 2, srvs);
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-	context->CSSetShader(stereoSyncCS, nullptr, 0);
+	context->CSSetShader(stereoSyncCS.get(), nullptr, 0);
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-	srvs[0] = nullptr;
-	srvs[1] = nullptr;
-	uavs[0] = nullptr;
-	cbPtr = nullptr;
-	context->CSSetShaderResources(0, 2, srvs);
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-	context->CSSetConstantBuffers(1, 1, &cbPtr);
+	ID3D11ShaderResourceView* nullSRVs[2]{ nullptr, nullptr };
+	ID3D11UnorderedAccessView* nullUAV = nullptr;
+	ID3D11Buffer* nullCB = nullptr;
+	context->CSSetShaderResources(0, 2, nullSRVs);
+	context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+	context->CSSetConstantBuffers(1, 1, &nullCB);
+	context->CSSetConstantBuffers(5, 1, &nullCB);
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	if (globals::state->frameAnnotations)
@@ -323,31 +379,39 @@ void ScreenSpaceShadows::Prepass()
 	auto context = globals::d3d::context;
 
 	float white[4] = { 1, 1, 1, 1 };
+	for (int i = 0; i < 4; ++i)
+		context->ClearUnorderedAccessViewFloat(texShadowMip[i]->uav.get(), white);
+	for (int i = 0; i < 4; ++i)
+		context->ClearUnorderedAccessViewFloat(texShadowWork[i]->uav.get(), white);
 	context->ClearUnorderedAccessViewFloat(screenSpaceShadowsTexture->uav.get(), white);
 
 	if (auto sky = globals::game::sky)
-		if (bendSettings.Enable && sky->mode.get() == RE::Sky::Mode::kFull) {
+		if (settings.Enabled && sky->mode.get() == RE::Sky::Mode::kFull) {
 			DrawShadows();
 			DrawStereoSync();
 		}
 
-	auto view = screenSpaceShadowsTexture->srv.get();
+	auto* view = screenSpaceShadowsTexture->srv.get();
 	context->PSSetShaderResources(45, 1, &view);
 }
 
 void ScreenSpaceShadows::LoadSettings(json& o_json)
 {
-	bendSettings = o_json;
+	settings = o_json;
 }
 
 void ScreenSpaceShadows::SaveSettings(json& o_json)
 {
-	o_json = bendSettings;
+	o_json = settings;
 }
 
 void ScreenSpaceShadows::RestoreDefaultSettings()
 {
-	bendSettings = {};
+	settings = {};
+	if (globals::game::isVR) {
+		settings.SurfaceThickness = 1.0f;
+		settings.ShadowContrast = 4.0f;
+	}
 }
 
 bool ScreenSpaceShadows::HasShaderDefine(RE::BSShader::Type)
@@ -357,58 +421,115 @@ bool ScreenSpaceShadows::HasShaderDefine(RE::BSShader::Type)
 
 void ScreenSpaceShadows::SetupResources()
 {
-	raymarchCB = new ConstantBuffer(ConstantBufferDesc<RaymarchCB>(), "SSS::RaymarchCB");
+	auto device = globals::d3d::device;
+	auto renderer = globals::game::renderer;
 
-	if (globals::game::isVR) {
-		stereoSyncCB = new ConstantBuffer(ConstantBufferDesc<StereoSyncCB>(), "SSS::StereoSyncCB");
+	sssCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSSCB>(), "SSS::CB");
+
+	if (globals::game::isVR)
+		stereoSyncCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<StereoSyncCB>(), "SSS::StereoSyncCB");
+
+	{
+		D3D11_SAMPLER_DESC samplerDesc = {
+			.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT,
+			.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.MaxAnisotropy = 1,
+			.MinLOD = 0,
+			.MaxLOD = D3D11_FLOAT32_MAX
+		};
+		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, pointClampSampler.put()));
+		Util::SetResourceName(pointClampSampler.get(), "SSS::PointClampSampler");
+
+		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearClampSampler.put()));
+		Util::SetResourceName(linearClampSampler.get(), "SSS::LinearClampSampler");
 	}
 
 	{
-		auto device = globals::d3d::device;
-
-		D3D11_SAMPLER_DESC samplerDesc = {};
-		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
-		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
-		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
-		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
-		samplerDesc.MaxAnisotropy = 1;
-		samplerDesc.MinLOD = 0;
-		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
-		samplerDesc.BorderColor[0] = 1.0f;
-		samplerDesc.BorderColor[1] = 1.0f;
-		samplerDesc.BorderColor[2] = 1.0f;
-		samplerDesc.BorderColor[3] = 1.0f;
-		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointBorderSampler));
-		Util::SetResourceName(pointBorderSampler, "SSS::PointBorderSampler");
-	}
-
-	{
-		auto renderer = globals::game::renderer;
 		auto shadowMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kSHADOW_MASK];
 
 		D3D11_TEXTURE2D_DESC texDesc{};
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-
 		shadowMask.texture->GetDesc(&texDesc);
-		shadowMask.SRV->GetDesc(&srvDesc);
-
-		texDesc.Format = DXGI_FORMAT_R8_UNORM;
+		texDesc.MipLevels = 1;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		texDesc.MiscFlags = 0;
 
-		srvDesc.Format = texDesc.Format;
+		UINT baseWidth = texDesc.Width;
+		UINT baseHeight = texDesc.Height;
 
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-		screenSpaceShadowsTexture = new Texture2D(texDesc, "SSS::ShadowTexture");
-		screenSpaceShadowsTexture->CreateSRV(srvDesc);
-		screenSpaceShadowsTexture->CreateUAV(uavDesc);
+		// Depth mip pyramid — R32_FLOAT at progressively halved resolutions.
+		{
+			texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+				.Format = texDesc.Format,
+				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+				.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+			};
+			D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+				.Format = texDesc.Format,
+				.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+				.Texture2D = { .MipSlice = 0 }
+			};
+			for (int i = 0; i < 4; ++i) {
+				texDesc.Width = std::max(1u, baseWidth >> i);
+				texDesc.Height = std::max(1u, baseHeight >> i);
+				char name[64];
+				snprintf(name, sizeof(name), "SSS::DepthMip%d", i);
+				texDepthMip[i] = eastl::make_unique<Texture2D>(texDesc, name);
+				texDepthMip[i]->CreateSRV(srvDesc);
+				texDepthMip[i]->CreateUAV(uavDesc);
+			}
+		}
 
-		if (globals::game::isVR) {
-			stereoSyncCopyTex = new Texture2D(texDesc, "SSS::StereoSyncCopy");
-			stereoSyncCopyTex->CreateSRV(srvDesc);
+		// Shadow mip textures — R8_UNORM.
+		{
+			texDesc.Format = DXGI_FORMAT_R8_UNORM;
+			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+				.Format = texDesc.Format,
+				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+				.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+			};
+			D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+				.Format = texDesc.Format,
+				.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+				.Texture2D = { .MipSlice = 0 }
+			};
+			for (int i = 0; i < 4; ++i) {
+				texDesc.Width = std::max(1u, baseWidth >> i);
+				texDesc.Height = std::max(1u, baseHeight >> i);
+				char name[64];
+				snprintf(name, sizeof(name), "SSS::ShadowMip%d", i);
+				texShadowMip[i] = eastl::make_unique<Texture2D>(texDesc, name);
+				texShadowMip[i]->CreateSRV(srvDesc);
+				texShadowMip[i]->CreateUAV(uavDesc);
+			}
+
+			// Working textures — same format, one per mip (0-3).
+			for (int i = 0; i < 4; ++i) {
+				texDesc.Width = std::max(1u, baseWidth >> i);
+				texDesc.Height = std::max(1u, baseHeight >> i);
+				char name[64];
+				snprintf(name, sizeof(name), "SSS::ShadowWork%d", i);
+				texShadowWork[i] = eastl::make_unique<Texture2D>(texDesc, name);
+				texShadowWork[i]->CreateSRV(srvDesc);
+				texShadowWork[i]->CreateUAV(uavDesc);
+			}
+
+			texDesc.Width = baseWidth;
+			texDesc.Height = baseHeight;
+
+			screenSpaceShadowsTexture = eastl::make_unique<Texture2D>(texDesc, "SSS::ShadowTexture");
+			screenSpaceShadowsTexture->CreateSRV(srvDesc);
+			screenSpaceShadowsTexture->CreateUAV(uavDesc);
+
+			if (globals::game::isVR) {
+				stereoSyncCopyTex = eastl::make_unique<Texture2D>(texDesc, "SSS::StereoSyncCopy");
+				stereoSyncCopyTex->CreateSRV(srvDesc);
+			}
 		}
 	}
+
+	CompileComputeShaders();
 }
