@@ -1,6 +1,7 @@
-#ifdef HDR_OUTPUT
+// Provides a boost to the nits of the sun irrespective of weather mod or sun texture, designed to push the sun
+// to the peak nits set by the slider, without changing the look of the sun.
 
-#	include "Common/Math.hlsli"
+#ifdef HDR_OUTPUT
 
 namespace HDRSun
 {
@@ -24,10 +25,7 @@ namespace HDRSun
 	// Returns an HDR sun gain in normalized linear space. Caller owns all sampling/tint/noise output logic.
 	float GetHdrSunGain(
 		float2 texCoord0_xy,
-		float4 baseColor,
-		Texture2D<float4> sunTex,
-		SamplerState samp,
-		float alphaPostScale)
+		float4 baseColor)
 	{
 		if (!IsHdrSunActive())
 			return 1.0f;
@@ -41,7 +39,7 @@ namespace HDRSun
 		float menuSunMul = lerp(1.0f, kMenuSunNits / peakNits, menuBlend);
 		float maxBoost = max(kMinHdrSunBoost, peakRatio * menuSunMul);
 
-		// --- weight 0..1: local brightness / alpha / UV rim, then damp if fine ≈ widened-filter sample (soft corona) ---
+		// --- weight 0..1: local brightness / alpha / UV rim ---
 		float L = max(Color::RGBToLuminance(baseColor.xyz), 0.0f);
 		float highlight = max(1.0f - exp(-L), saturate(L));
 		float a = saturate(baseColor.w);
@@ -59,11 +57,10 @@ namespace HDRSun
 		// pow(maxBoost, weight) grows the boosted footprint as maxBoost rises (same weight → more
 		// gain → sun reads larger). Tighten with wCurve = weight^sharpen; sharpen == 1 when
 		// maxBoost == kMinHdrSunBoost so low-boost paths match plain pow(maxBoost, weight).
-		float boostForPow = max(maxBoost, EPSILON_DIVISION);
-		float sharpen = max(1.0f, 1.0f + log2(boostForPow / kMinHdrSunBoost));
+		float sharpen = max(1.0f, 1.0f + log2(maxBoost / kMinHdrSunBoost));
 		float wCurve = pow(saturate(weight), sharpen);
 
-		return pow(boostForPow, wCurve);
+		return pow(maxBoost, wCurve);
 	}
 }
 

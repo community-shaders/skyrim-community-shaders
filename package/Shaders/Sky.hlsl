@@ -228,14 +228,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		ifdef HDR_OUTPUT
 	float hdrSunGain = HDRSun::GetHdrSunGain(
 		input.TexCoord0.xy,
-		baseColor,
-		TexBaseSampler,
-		SampBaseSampler,
-#			if !defined(TEXLERP) && defined(TEXFADE)
-		PParams.x
-#			else
-		1.0
-#			endif
+		baseColor
 	);
 	baseColor.xyz *= hdrSunGain;
 	if (HDRSun::IsHdrSunActive()) {
