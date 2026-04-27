@@ -226,12 +226,6 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		// Interpolation should only occur on the minor axis of the ray - major axis coordinates should be at pixel centers
 		half2 read_xy = floor(pixel_xy);
 
-		read_xy *= inParameters.DynamicRes;
-
-#if defined(VR)
-		read_xy *= half2(0.5, 1.0);
-#endif
-
 		half minor_axis = x_axis_major ? pixel_xy.y : pixel_xy.x;
 
 		// If a pixel has been detected as an edge, then optionally (inParameters.IgnoreEdgePixels) don't include it in the shadow
@@ -249,23 +243,33 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 		// HLSL enforces that a pixel offset is a compile-time constant, which isn't strictly required (and can sometimes be a bit faster)
 		// So this fallback will use a manual uv offset instead
-		half2 coord = read_xy * inParameters.InvDepthTextureSize;
-		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize;
+		// Apply DynamicRes after offset_xy addition so the bilinear neighbour samples exactly 1 texel away.
+		half2 coord = read_xy * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
+		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize * inParameters.DynamicRes;
 
 #if defined(VR)
+		// VR side-by-side: halve x to map stereo pixel coords to texture UV.
+		coord *= half2(0.5, 1.0);
+		coord_with_offset *= half2(0.5, 1.0);
+
 #	if defined(RIGHT)
-		// Right eye: valid UV range is [0.5, 1.0]
+		// Right eye: valid UV range is [0.5*DynRes.x, DynRes.x]
 		bool coord_out_of_eye = coord.x < 0.5 * inParameters.DynamicRes.x;
 		bool coord_offset_out_of_eye = coord_with_offset.x < 0.5 * inParameters.DynamicRes.x;
 #	else
-		// Left eye: valid UV range is [0.0, 0.5)
+		// Left eye: valid UV range is [0.0, 0.5*DynRes.x)
 		bool coord_out_of_eye = coord.x >= 0.5 * inParameters.DynamicRes.x;
 		bool coord_offset_out_of_eye = coord_with_offset.x >= 0.5 * inParameters.DynamicRes.x;
 #	endif
 
+		// Clamp cross-eye depth reads to FarDepthValue (1.0) so rays near the SBS center
+		// seam see no occluder at the boundary. Shadow weakens by ~1 pixel at the seam but
+		// stays temporally stable across camera movement.
 		depths.x = coord_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
 		depths.y = coord_offset_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0);
 
+		// HMD mask: depth==0 is outside the visible lens area. Remap to FarDepthValue so
+		// mask pixels do not cast false shadows.
 		depths.x = lerp(depths.x, 1.0, (float)(depths.x == 0));  // Stencil area
 		depths.y = lerp(depths.y, 1.0, (float)(depths.y == 0));  // Stencil area
 #else
@@ -274,7 +278,8 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 #endif
 
 		// Depth thresholds (bilinear/shadow thickness) are based on a fractional ratio of the difference between sampled depth and the far clip depth
-		depth_thickness_scale[i] = abs(inParameters.FarDepthValue - depths.x);
+		static const half kDepthThicknessFloor = 1e-4h;  // Prevents division by zero in depth_scale when depth is at the far clip plane
+		depth_thickness_scale[i] = max(abs(inParameters.FarDepthValue - depths.x), kDepthThicknessFloor);
 
 		// If depth variance is more than a specific threshold, then just use point filtering
 		bool use_point_filter = abs(depths.x - depths.y) > depth_thickness_scale[i] * inParameters.BilinearThreshold;

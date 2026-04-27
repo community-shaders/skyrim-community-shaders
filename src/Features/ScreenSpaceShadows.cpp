@@ -79,11 +79,14 @@ void ScreenSpaceShadows::ClearShaderCache()
 
 uint ScreenSpaceShadows::GetScaledSampleCount()
 {
-	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+	if (globals::game::isVR) {
+		// In VR, SAMPLE_COUNT is a pixel-space ray length that is FOV-driven, not resolution-driven.
+		// Resolution-scaling produced 2-8x excess samples at VR resolutions with no quality benefit.
+		// WAVE_SIZE (64) alignment is required for correct Bend READ_COUNT computation.
+		return bendSettings.SampleCount * 64;
+	}
 
-	// In VR, renderSize covers both eyes side-by-side; raymarch dispatches per-eye
-	if (globals::game::isVR)
-		renderSize.x /= 2.0f;
+	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 
 	// Scale sample count based on both dimensions relative to 1920x1080 reference
 	float2 referenceRes = { 1920.0f, 1080.0f };
