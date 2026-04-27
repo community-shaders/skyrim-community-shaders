@@ -35,8 +35,7 @@ namespace HDRSun
 		float paperWhiteNits = max(SharedData::HDRData.y, 1.0f);
 		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0f);
 		float peakRatio = peakNits / paperWhiteNits;
-		float menuBlend = saturate(SharedData::HDRData.w);
-		float menuSunMul = lerp(1.0f, kMenuSunNits / peakNits, menuBlend);
+		float menuSunMul = (SharedData::HDRData.w > 1e-3f) ? (kMenuSunNits / peakNits) : 1.0f;
 		float maxBoost = max(kMinHdrSunBoost, peakRatio * menuSunMul);
 
 		// --- weight 0..1: local brightness / alpha / UV rim ---
