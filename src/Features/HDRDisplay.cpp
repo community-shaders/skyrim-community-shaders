@@ -857,7 +857,8 @@ void HDRDisplay::SetUIBuffer()
 
 		auto* gameUi = globals::game::ui;
 		bool ffxWillComposite = upscaling.settings.frameGenerationMode && gameUi && !gameUi->GameIsPaused();
-		bool needsUIBuffer = loaded || ffxWillComposite;
+		bool hdrWillComposite = loaded && hdrDataCB && outputTexture;
+		bool needsUIBuffer = hdrWillComposite || ffxWillComposite;
 
 		ID3D11RenderTargetView* targetRTV = needsUIBuffer ?
 			upscaling.dx12SwapChain.uiBufferWrapped->rtv :
