@@ -1239,7 +1239,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
 #			endif
 #			if defined(TERRAIN_VARIATION)
-		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels, sharedOffset);
+		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
 #			else
 		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
 #			endif
@@ -1294,7 +1294,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	else {
 		// Calculate proper mip levels for terrain variation when parallax is disabled but EMAT is available
 #			if defined(TERRAIN_VARIATION)
-		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels, sharedOffset);
+		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
 #			else
 		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
 #			endif

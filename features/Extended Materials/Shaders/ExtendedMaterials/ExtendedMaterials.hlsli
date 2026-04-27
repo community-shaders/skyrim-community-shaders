@@ -80,11 +80,7 @@ namespace ExtendedMaterials
 	}
 
 #if defined(LANDSCAPE)
-#	if defined(TERRAIN_VARIATION)
-	void InitializeTerrainMipLevels(float2 coords, float screenNoise, out float mipLevels[6], StochasticOffsets sharedOffset)
-#	else
 	void InitializeTerrainMipLevels(float2 coords, float screenNoise, out float mipLevels[6])
-#	endif
 	{
 		mipLevels[0] = GetMipLevel(coords, TexColorSampler, screenNoise);
 		mipLevels[1] = GetMipLevel(coords, TexLandColor2Sampler, screenNoise);
@@ -365,17 +361,14 @@ namespace ExtendedMaterials
 		float nearBlendToFar = smoothstep(1024.0 * 1024.0, 2048.0 * 2048.0, distSq);
 
 #if defined(LANDSCAPE)
-#	if defined(TRUE_PBR)
 		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? sqrt(saturate(1 - nearBlendToFar)) : 0;
 		float4 w1 = lerp(input.LandBlendWeights1, smoothstep(0, 1, input.LandBlendWeights1), blendFactor);
 		float2 w2 = lerp(input.LandBlendWeights2.xy, smoothstep(0, 1, input.LandBlendWeights2.xy), blendFactor);
+#	if defined(TRUE_PBR)
 		float scale = max(params[0].HeightScale * w1.x, max(params[1].HeightScale * w1.y, max(params[2].HeightScale * w1.z, max(params[3].HeightScale * w1.w, max(params[4].HeightScale * w2.x, params[5].HeightScale * w2.y)))));
 		float scalercp = rcp(scale);
 		float maxHeight = 0.1 * scale;
 #	else
-		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? sqrt(saturate(1 - nearBlendToFar)) : 0;
-		float4 w1 = lerp(input.LandBlendWeights1, smoothstep(0, 1, input.LandBlendWeights1), blendFactor);
-		float2 w2 = lerp(input.LandBlendWeights2.xy, smoothstep(0, 1, input.LandBlendWeights2.xy), blendFactor);
 		float scale = 1;
 		float maxHeight = 0.1 * scale;
 #	endif
@@ -410,9 +403,7 @@ namespace ExtendedMaterials
 
 			float2 pt1 = 0;
 			float2 pt2 = 0;
-
-			uint numStepsTemp = numSteps;
-			bool contactRefinement = false;
+			bool intersectionFound = false;
 
 			[loop] while (numSteps > 0)
 			{
@@ -461,6 +452,7 @@ namespace ExtendedMaterials
 				[branch] if (any(testResult))
 				{
 					float2 outOffset = 0;
+					intersectionFound = true;
 					[flatten] if (testResult.w)
 					{
 						outOffset = currentOffset[1].xy;
@@ -485,17 +477,8 @@ namespace ExtendedMaterials
 						pt1 = float2(currentBound.x, currHeight.x);
 						pt2 = float2(prevBound, prevHeight);
 					}
-					if (contactRefinement) {
-						break;
-					} else {
-						contactRefinement = true;
-						prevOffset = outOffset;
-						prevBound = pt2.x;
-						numSteps = numStepsTemp;
-						stepSize /= (float)numSteps;
-						offsetPerStep /= (float)numSteps;
-						continue;
-					}
+					prevOffset = outOffset;
+					break;
 				}
 
 				prevOffset = currentOffset[1].zw;
@@ -504,18 +487,64 @@ namespace ExtendedMaterials
 				numSteps -= 4;
 			}
 
-			float delta2 = pt2.x - pt2.y;
-			float delta1 = pt1.x - pt1.y;
-			float denominator = delta2 - delta1;
-
 			float parallaxAmount = 0.0;
-			[flatten] if (denominator == 0.0)
+			[branch] if (intersectionFound)
 			{
-				parallaxAmount = 0.0;
-			}
-			else
-			{
-				parallaxAmount = (pt1.x * delta2 - pt2.x * delta1) / denominator;
+				// Refine coarse hit interval with secant iterations:
+				// f(t) = sampledHeight(t) - t, t in [0,1] where t is ray depth bound.
+				float tNear = pt1.x;
+				float hNear = pt1.y;
+				float fNear = hNear - tNear;
+				float tFar = pt2.x;
+				float hFar = pt2.y;
+				float fFar = hFar - tFar;
+
+				const uint secantIterations = 3;
+				[unroll] for (uint i = 0; i < secantIterations; i++)
+				{
+					float denominator = fNear - fFar;
+					float r = abs(denominator) > EPSILON_DIVISION ? saturate(fNear / denominator) : 0.5;
+					float tSecant = lerp(tNear, tFar, r);
+					float2 secantCoords = coords.xy + viewDirTS.xy * (((1.0 - tSecant) * -maxHeight) + minHeight);
+
+					float hSecant;
+#if defined(LANDSCAPE)
+#	if defined(TRUE_PBR)
+#		if defined(TERRAIN_VARIATION)
+					hSecant = GetTerrainHeight(noise, input, secantCoords, mipLevels, params, blendFactor, w1, w2, sharedOffset, weights) * scalercp + 0.5;
+#		else
+					hSecant = GetTerrainHeight(noise, input, secantCoords, mipLevels, params, blendFactor, w1, w2, weights) * scalercp + 0.5;
+#		endif
+#	else
+#		if defined(TERRAIN_VARIATION)
+					hSecant = GetTerrainHeight(noise, input, secantCoords, mipLevels, params, blendFactor, w1, w2, sharedOffset, weights) + 0.5;
+#		else
+					hSecant = GetTerrainHeight(noise, input, secantCoords, mipLevels, params, blendFactor, w1, w2, weights) + 0.5;
+#		endif
+#	endif
+#else
+					hSecant = tex.SampleLevel(texSampler, secantCoords, mipLevel)[channel];
+					hSecant = AdjustDisplacementNormalized(hSecant, params);
+#endif
+
+					float fSecant = hSecant - tSecant;
+					[branch] if (fSecant >= 0.0)
+					{
+						tNear = tSecant;
+						hNear = hSecant;
+						fNear = fSecant;
+					}
+					else
+					{
+						tFar = tSecant;
+						hFar = hSecant;
+						fFar = fSecant;
+					}
+				}
+
+				float denominator = fNear - fFar;
+				float r = abs(denominator) > EPSILON_DIVISION ? saturate(fNear / denominator) : 0.5;
+				parallaxAmount = lerp(tNear, tFar, r);
 			}
 
 #if defined(TRUE_PBR)
