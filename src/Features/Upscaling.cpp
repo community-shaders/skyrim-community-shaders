@@ -1473,8 +1473,23 @@ void Upscaling::PostDisplay()
 	globals::game::renderer->UpdateViewPort(0, 0, 1);
 	UpdateCameraData();
 
-	if (d3d12SwapChainActive)
+	if (d3d12SwapChainActive) {
+		auto* gameUi = globals::game::ui;
+		bool curHdrLoaded = globals::features::hdrDisplay.loaded;
+		int curFgMode = static_cast<int>(settings.frameGenerationMode);
+		bool curPaused = gameUi && gameUi->GameIsPaused();
+		static bool sPrevHdrLoaded = !curHdrLoaded;
+		static int sPrevFgMode = -1;
+		static bool sPrevPaused = !curPaused;
+		if (curHdrLoaded != sPrevHdrLoaded || curFgMode != sPrevFgMode || curPaused != sPrevPaused) {
+			logger::info("[Diag/PostDisplay] hdrLoaded={} fgMode={} paused={} d3d12Proxy=true (calling SetUIBuffer)",
+				curHdrLoaded, curFgMode, curPaused);
+			sPrevHdrLoaded = curHdrLoaded;
+			sPrevFgMode = curFgMode;
+			sPrevPaused = curPaused;
+		}
 		globals::features::hdrDisplay.SetUIBuffer();
+	}
 
 	globals::state->UpdateSharedData(false, false);
 }

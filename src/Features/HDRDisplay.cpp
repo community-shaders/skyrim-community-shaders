@@ -847,13 +847,30 @@ void HDRDisplay::SetUIBuffer()
 	// Handle Frame Generation case - redirect to FG's UI buffer
 	if (globals::features::upscaling.d3d12SwapChainActive) {
 		auto& upscaling = globals::features::upscaling;
-		if (!upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->rtv)
+		if (!upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->rtv) {
+			static bool sLogged = false;
+			if (!sLogged) {
+				logger::warn("[Diag/SetUIBuffer] FG branch: uiBufferWrapped or its RTV is null, skipping redirect");
+				sLogged = true;
+			}
 			return;
+		}
+
+		auto* targetRTV = upscaling.dx12SwapChain.uiBufferWrapped->rtv;
+		ID3D11RenderTargetView* preRTV = fb.RTV;
+		static ID3D11RenderTargetView* sLastPreRTV = nullptr;
+		static ID3D11RenderTargetView* sLastTargetRTV = nullptr;
+		if (preRTV != sLastPreRTV || targetRTV != sLastTargetRTV) {
+			logger::info("[Diag/SetUIBuffer] FG branch: fb.RTV was {} → uiBufferWrapped->rtv {} (loaded={} enableHDR={})",
+				static_cast<void*>(preRTV), static_cast<void*>(targetRTV), loaded, settings.enableHDR);
+			sLastPreRTV = preRTV;
+			sLastTargetRTV = targetRTV;
+		}
 
 		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		globals::d3d::context->ClearRenderTargetView(upscaling.dx12SwapChain.uiBufferWrapped->rtv, clearColor);
+		globals::d3d::context->ClearRenderTargetView(targetRTV, clearColor);
 
-		fb.RTV = upscaling.dx12SwapChain.uiBufferWrapped->rtv;
+		fb.RTV = targetRTV;
 		globals::d3d::context->OMSetRenderTargets(1, &fb.RTV, nullptr);
 		return;
 	}
