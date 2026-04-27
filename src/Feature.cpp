@@ -334,6 +334,106 @@ bool Feature::ReapplyOverrideSettings()
 	return false;
 }
 
+void Feature::DrawSimpleSettings()
+{
+	bool* runtimeEnabled = GetEnabledFlag();
+	auto presets = GetQualityPresets();
+	const std::string shortName = GetShortName();
+
+	// On/off uses the runtime flag when available, otherwise the boot-toggle (every
+	// feature supports it). Boot path requires a restart; only mark it as such once
+	// the user actually flips it from the value captured at first render.
+	const bool runtimeAvailable = runtimeEnabled != nullptr;
+	const bool currentlyOn = runtimeAvailable ?
+	                             *runtimeEnabled :
+	                             !globals::state->IsFeatureDisabled(shortName);
+
+	if (!runtimeAvailable && !simpleModeBootCaptured) {
+		simpleModeBootInitial = globals::state->IsFeatureDisabled(shortName);
+		simpleModeBootCaptured = true;
+	}
+	const bool restartPending = !runtimeAvailable &&
+	                            globals::state->IsFeatureDisabled(shortName) != simpleModeBootInitial;
+
+	const auto& palette = globals::menu->GetTheme().StatusPalette;
+	if (restartPending)
+		ImGui::PushStyleColor(ImGuiCol_Text, palette.RestartNeeded);
+
+	// Slider label includes the version (e.g. "Screen Space GI v2.1.0").
+	std::string label = GetName();
+	if (!version.empty()) {
+		label += " v";
+		label += version;
+	}
+
+	const int n = static_cast<int>(presets.size());
+	const int sliderMax = std::max(1, n);
+	int currentValue;
+	std::string overlay;
+	if (!currentlyOn) {
+		currentValue = 0;
+		overlay = "Off";
+	} else if (n == 0) {
+		currentValue = 1;
+		overlay = "On";
+	} else if (lastAppliedQualityIdx >= 0 && lastAppliedQualityIdx < n) {
+		currentValue = lastAppliedQualityIdx + 1;
+		overlay.assign(presets[lastAppliedQualityIdx].label.data(), presets[lastAppliedQualityIdx].label.size());
+	} else {
+		currentValue = 1;
+		overlay = "Custom";
+	}
+
+	int v = currentValue;
+	if (ImGui::SliderInt(label.c_str(), &v, 0, sliderMax, overlay.c_str(), ImGuiSliderFlags_AlwaysClamp)) {
+		const bool wantOn = v >= 1;
+		if (currentlyOn != wantOn) {
+			if (runtimeAvailable)
+				*runtimeEnabled = wantOn;
+			else
+				ToggleAtBootSetting();
+		}
+		if (wantOn && n > 0) {
+			const int idx = v - 1;
+			if (idx >= 0 && idx < n) {
+				ApplyPreset(this, presets[idx]);
+				lastAppliedQualityIdx = idx;
+			}
+		} else if (!wantOn) {
+			lastAppliedQualityIdx = -1;
+		}
+	}
+
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		auto [description, keyFeatures] = GetFeatureSummary();
+		if (!description.empty())
+			ImGui::TextWrapped("%s", description.c_str());
+		if (!keyFeatures.empty()) {
+			if (!description.empty())
+				ImGui::Spacing();
+			ImGui::TextUnformatted("Key features:");
+			for (const auto& k : keyFeatures)
+				ImGui::BulletText("%s", k.c_str());
+		}
+		if (currentValue >= 1 && n > 0) {
+			const auto& desc = presets[currentValue - 1].description;
+			if (!desc.empty()) {
+				ImGui::Separator();
+				ImGui::TextWrapped("%s: %.*s", overlay.c_str(),
+					static_cast<int>(desc.size()), desc.data());
+			}
+		}
+		if (!runtimeAvailable) {
+			ImGui::Separator();
+			ImGui::TextColored(palette.RestartNeeded,
+				"Toggling Off/On for this feature requires a game restart.");
+		}
+	}
+
+	if (restartPending)
+		ImGui::PopStyleColor();
+}
+
 void Feature::DrawUnloadedUI()
 {
 	// Prioritize detailed failure message if available

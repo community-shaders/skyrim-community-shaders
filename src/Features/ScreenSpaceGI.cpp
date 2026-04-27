@@ -40,6 +40,49 @@ void ScreenSpaceGI::RestoreDefaultSettings()
 	recompileFlag = true;
 }
 
+namespace
+{
+	// Per-tier values applied by ApplyTier.
+	struct QualityTier
+	{
+		uint numSlices;
+		uint numSteps;
+		int resolutionMode;
+		bool enableGI;
+	};
+
+	void ApplyTier(Feature* f, const QualityTier& q)
+	{
+		auto* ssgi = static_cast<ScreenSpaceGI*>(f);
+		ssgi->settings.Enabled = true;
+		ssgi->settings.NumSlices = q.numSlices;
+		ssgi->settings.NumSteps = q.numSteps;
+		ssgi->settings.ResolutionMode = q.resolutionMode;
+		ssgi->settings.EnableBlur = true;
+		ssgi->settings.EnableGI = q.enableGI;
+		ssgi->recompileFlag = true;
+	}
+
+	// VR variants force AO-only (EnableGI=false) for performance; vrApply is null where
+	// the SE/AE tuning is acceptable on VR and ApplyPreset falls back to apply.
+	static constexpr std::array<Feature::QualityPreset, 3> kQualityPresets = { {
+		{ Feature::QualityLevel::Low, "Low", "Quarter resolution, blurred. AO + basic GI.",
+			[](Feature* f, Feature::QualityLevel) { ApplyTier(f, { 10, 12, 2, true }); },
+			[](Feature* f, Feature::QualityLevel) { ApplyTier(f, { 1, 6, 2, false }); } },
+		{ Feature::QualityLevel::Medium, "Medium", "Half resolution, balanced quality and performance.",
+			[](Feature* f, Feature::QualityLevel) { ApplyTier(f, { 4, 8, 1, true }); },
+			[](Feature* f, Feature::QualityLevel) { ApplyTier(f, { 3, 8, 1, false }); } },
+		{ Feature::QualityLevel::High, "High", "Full resolution, clean output with full GI.",
+			[](Feature* f, Feature::QualityLevel) { ApplyTier(f, { 4, 8, 0, true }); },
+			nullptr },
+	} };
+}
+
+std::span<const Feature::QualityPreset> ScreenSpaceGI::GetQualityPresets() const
+{
+	return kQualityPresets;
+}
+
 void ScreenSpaceGI::DrawSettings()
 {
 	static bool showAdvanced;

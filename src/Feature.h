@@ -10,6 +10,60 @@
 
 struct Feature
 {
+	// Generic named-preset entry. The enum type E is feature-specific; the surrounding
+	// shape is shared so SSGI's QualityPreset and WetnessEffects::ClimatePreset use
+	// the same dispatch.
+	template <typename E>
+	struct Preset
+	{
+		E id;
+		std::string_view label;
+		std::string_view description;
+		// apply receives the preset id so one shared thunk can dispatch all entries
+		// of an enum. nullptr apply is a no-op (e.g. a "Custom" sentinel).
+		void (*apply)(Feature*, E) = nullptr;
+		// Optional VR variant; falls back to apply when null.
+		void (*vrApply)(Feature*, E) = nullptr;
+	};
+
+	// Quality tiers for the simple menu. Authors declare a sparse subset; missing
+	// tiers don't appear in the UI.
+	enum class QualityLevel : uint8_t
+	{
+		Low,
+		Medium,
+		High,
+		Ultra
+	};
+	using QualityPreset = Preset<QualityLevel>;
+
+	// Apply a preset, picking vrApply on VR when available.
+	template <typename E>
+	static void ApplyPreset(Feature* feature, const Preset<E>& preset)
+	{
+		if (preset.vrApply && REL::Module::IsVR())
+			preset.vrApply(feature, preset.id);
+		else if (preset.apply)
+			preset.apply(feature, preset.id);
+	}
+
+	// Apply a quality tier without going through ImGui (controller menu, scripts).
+	// Returns false if the feature does not expose that tier.
+	bool ApplyQualityPreset(QualityLevel level)
+	{
+		auto presets = GetQualityPresets();
+		for (size_t i = 0; i < presets.size(); ++i) {
+			if (presets[i].id == level) {
+				ApplyPreset(this, presets[i]);
+				if (auto* en = GetEnabledFlag())
+					*en = true;
+				lastAppliedQualityIdx = static_cast<int>(i);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	// For global settings search
 	struct SettingSearchEntry
 	{
@@ -24,6 +78,13 @@ struct Feature
 	// Nexus Mods base URL for Skyrim Special Edition
 	static constexpr std::string_view NEXUS_BASE_URL = "https://www.nexusmods.com/skyrimspecialedition/mods/";
 	bool loaded = false;
+	// The two simple-mode bools fit in the natural padding between `loaded` and
+	// `lastAppliedQualityIdx`; the int then fills the remaining padding before the
+	// 8-byte-aligned std::string. Reordering this group triggers C4324 in alignas(16)
+	// derived classes.
+	bool simpleModeBootCaptured = false;
+	bool simpleModeBootInitial = false;  // snapshot of IsFeatureDisabled at first render
+	int lastAppliedQualityIdx = -1;      // -1 = unknown/Custom
 	std::string version;
 	std::string failedLoadedMessage;
 
@@ -90,6 +151,26 @@ public:
 	virtual void Reset() {}
 	virtual void DrawSettings() {}
 	virtual void DrawUnloadedUI();
+
+	/**
+	 * Quality preset list for the global Simple menu.
+	 * Default: empty — feature renders just an Enable toggle (or nothing if no enable flag).
+	 * Override and return a span over a `static constexpr std::array<QualityPreset, N>` to
+	 * expose Off/Low/Medium/High etc. Missing tiers are skipped gracefully.
+	 */
+	virtual std::span<const QualityPreset> GetQualityPresets() const { return {}; }
+
+	/**
+	 * Pointer to the feature's `Enabled` bool, used by the Simple menu's Off button.
+	 * Return nullptr if the feature has no enable toggle (in which case Off is hidden).
+	 */
+	virtual bool* GetEnabledFlag() { return nullptr; }
+
+	/**
+	 * Render the Simple-mode settings UI: Off button + quality preset row.
+	 * Implemented in Feature.cpp; features generally do not need to override.
+	 */
+	void DrawSimpleSettings();
 
 	virtual void ReflectionsPrepass() {};
 	virtual void Prepass() {}

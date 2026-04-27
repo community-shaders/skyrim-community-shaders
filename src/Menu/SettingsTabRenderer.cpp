@@ -444,6 +444,13 @@ void SettingsTabRenderer::RenderBehaviorTab()
 			ImGui::Text("Automatically hides the left feature list panel. Move cursor to the left edge to show it.");
 		}
 
+		ImGui::Checkbox("Simple Mode", &globals::menu->GetSettings().SimpleMode);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Show a simplified Off / quality-preset UI for each feature instead of the full advanced settings.\n"
+				"Features without quality presets fall back to a single Enable toggle.");
+		}
+
 		if (ImGui::Checkbox("Require Shift to Dock", &globals::menu->GetSettings().RequireShiftToDock)) {
 			ImGui::GetIO().ConfigDockingWithShift = globals::menu->GetSettings().RequireShiftToDock;
 		}

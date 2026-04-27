@@ -219,6 +219,76 @@ namespace
 	bool g_dontShowAgainCheckbox = false;
 }
 
+// Single scrollable page of all in-menu features. Loaded features with simple-mode
+// controls render their slider/toggle inline; remaining features appear as labeled
+// rows so users can see what's installed.
+static void RenderSimpleModePage()
+{
+	bool& simpleMode = globals::menu->GetSettings().SimpleMode;
+	ImGui::Checkbox("Simple Mode", &simpleMode);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::TextUnformatted("Turn off to return to the full advanced settings menu.");
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	std::vector<Feature*> sorted;
+	for (auto* f : Feature::GetFeatureList()) {
+		if (f->IsInMenu())
+			sorted.push_back(f);
+	}
+	std::ranges::sort(sorted, [](Feature* a, Feature* b) { return a->GetName() < b->GetName(); });
+
+	// Every loaded feature gets an inline control via DrawSimpleSettings (boot-toggle
+	// fallback when no runtime enable flag); only features that failed to load drop
+	// into the issues list.
+	std::vector<Feature*> issues;
+	for (auto* feat : sorted) {
+		if (feat->loaded) {
+			ImGui::PushID(feat);
+			feat->DrawSimpleSettings();
+			ImGui::PopID();
+		} else {
+			issues.push_back(feat);
+		}
+	}
+
+	if (issues.empty())
+		return;
+
+	ImGui::Spacing();
+	ImGui::SeparatorText("Installation Issues");
+
+	const auto& palette = globals::menu->GetTheme().StatusPalette;
+	for (auto* feat : issues) {
+		ImGui::PushID(feat);
+		std::string row = feat->GetName();
+		if (!feat->version.empty())
+			row += " v" + feat->version;
+		ImGui::TextColored(palette.Error, "%s", row.c_str());
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextColored(palette.Error, "%s",
+				feat->failedLoadedMessage.empty() ?
+					"This feature failed to load." :
+					feat->failedLoadedMessage.c_str());
+			auto [description, keyFeatures] = feat->GetFeatureSummary();
+			if (!description.empty()) {
+				ImGui::Separator();
+				ImGui::TextWrapped("%s", description.c_str());
+			}
+			if (!keyFeatures.empty()) {
+				if (description.empty())
+					ImGui::Separator();
+				else
+					ImGui::Spacing();
+				ImGui::TextUnformatted("Key features:");
+				for (const auto& k : keyFeatures)
+					ImGui::BulletText("%s", k.c_str());
+			}
+		}
+		ImGui::PopID();
+	}
+}
+
 void FeatureListRenderer::RenderFeatureList(
 	float footerHeight,
 	size_t& selectedMenu,
@@ -228,6 +298,14 @@ void FeatureListRenderer::RenderFeatureList(
 	const std::function<void()>& drawGeneralSettings,
 	const std::function<void()>& drawAdvancedSettings)
 {
+	// Simple mode: hide tabs/category list entirely and render a single page.
+	if (globals::menu->GetSettings().SimpleMode) {
+		ImGui::BeginChild("SimpleModePage", ImVec2(0, -footerHeight));
+		RenderSimpleModePage();
+		ImGui::EndChild();
+		return;
+	}
+
 	ImGui::BeginChild("Menus Table", ImVec2(0, -footerHeight));
 
 	auto menuList = BuildMenuList(featureSearch, categoryExpansionStates, drawGeneralSettings, drawAdvancedSettings);
@@ -750,7 +828,10 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 				ImGui::BeginDisabled();
 
 			ImVec2 cursorPosBefore = ImGui::GetCursorPos();
-			feat->DrawSettings();
+			if (globals::menu->GetSettings().SimpleMode)
+				feat->DrawSimpleSettings();
+			else
+				feat->DrawSettings();
 			ImVec2 cursorPosAfter = ImGui::GetCursorPos();
 
 			if (sceneControlled)

@@ -409,6 +409,7 @@ public:
 		bool FirstTimeSetupCompleted = false;                                               // Track if first-time setup has been completed
 		bool SkipClearCacheConfirmation = false;                                            // Skip confirmation dialog when clearing shader cache
 		bool AutoHideFeatureList = false;                                                   // Auto-hide left feature list panel, show on hover
+		bool SimpleMode = false;                                                            // Render features' simplified Off/quality-preset UI instead of full advanced settings
 		bool SkipConstraintWarning = false;                                                 // Skip popup when a setting change creates new constraints
 		bool RequireShiftToDock = true;                                                     // Require holding Shift to dock windows
 		bool UseResolutionFont = true;                                                      // When true, runtime font size scales with screen resolution; when persisted to theme files, FontSize is zeroed for backward compatibility

@@ -45,10 +45,17 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 // Climate preset data - defines regional weather characteristics
 // Precipitation rates calculated from actual shader mechanics: grid size, interval, and raindrop chance
 
+// Shared dispatch for all CLIMATE_PRESET_INFO entries.
+static void ClimateApplyThunk(Feature* f, WetnessEffects::ClimatePreset id)
+{
+	static_cast<WetnessEffects*>(f)->ApplyClimatePreset(id);
+}
+
+// Embeds Feature::Preset<E> for shared label/description/apply, alongside
+// Wetness-specific rich metadata used by the climate analysis UI.
 struct ClimatePresetInfo
 {
-	const char* name;
-	const char* shortDescription;
+	Feature::Preset<WetnessEffects::ClimatePreset> preset;
 	const char* const* detailedDescription;
 	const char* const* effectDescription;
 	WetnessEffects::ClimateSettings settings;
@@ -137,48 +144,33 @@ static constexpr const char* MONSOON_EFFECTS[] = {
 	nullptr
 };
 
-static constexpr std::array<ClimatePresetInfo, 6> CLIMATE_PRESET_INFO = {
-	{ { "Custom",
-		  "User-defined custom settings",
-		  nullptr,
-		  nullptr,
-		  { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f } },
-		// Legacy (Original Skyrim)
-		{
-			"Legacy",
-			"Original rain effect values (very light)",
-			LEGACY_DETAILED,
-			LEGACY_EFFECTS,
-			{ 1.0f, 1.0f, 1.0f, 0.3f, 4.0f, 0.5f } },
-		// Nordic Standard
-		{
-			"Nordic (Default)",
-			"Balanced Nordic climate (moderate rain)",
-			NORDIC_DETAILED,
-			NORDIC_EFFECTS,
-			{ 1.0f, 1.0f, 1.0f, 1.0f, 3.0f, 1.0f } },
-		// Arctic Tundra
-		{
-			"Arctic Tundra",
-			"Cold, dry Arctic climate (light rain)",
-			ARCTIC_DETAILED,
-			ARCTIC_EFFECTS,
-			{ 0.5f, 0.3f, 0.5f, 0.3f, 3.5f, 0.4f } },
-		// Temperate Coastal
-		{
-			"Temperate Coastal",
-			"Maritime climate (heavy rain)",
-			COASTAL_DETAILED,
-			COASTAL_EFFECTS,
-			{ 1.5f, 1.7f, 1.7f, 0.8f, 2.5f, 0.25f } },
-		// Monsoon/Extreme
-		{
-			"Monsoon/Extreme",
-			"Extreme monsoon climate (extreme rain)",
-			MONSOON_DETAILED,
-			MONSOON_EFFECTS,
-			{ 2.0f, 2.5f, 2.0f, 1.0f, 2.0f, 0.2f } } }
-};
+static constexpr std::array<ClimatePresetInfo, 6> CLIMATE_PRESET_INFO = { {
+	// Custom is a sentinel — apply=nullptr means "no-op" (user has customized values)
+	{ { WetnessEffects::ClimatePreset::Custom, "Custom", "User-defined custom settings", nullptr, nullptr },
+		nullptr,
+		nullptr,
+		{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f } },
+	{ { WetnessEffects::ClimatePreset::Legacy, "Legacy", "Original rain effect values (very light)", &ClimateApplyThunk, nullptr },
+		LEGACY_DETAILED,
+		LEGACY_EFFECTS,
+		{ 1.0f, 1.0f, 1.0f, 0.3f, 4.0f, 0.5f } },
+	{ { WetnessEffects::ClimatePreset::NordicStandard, "Nordic (Default)", "Balanced Nordic climate (moderate rain)", &ClimateApplyThunk, nullptr },
+		NORDIC_DETAILED,
+		NORDIC_EFFECTS,
+		{ 1.0f, 1.0f, 1.0f, 1.0f, 3.0f, 1.0f } },
+	{ { WetnessEffects::ClimatePreset::ArcticTundra, "Arctic Tundra", "Cold, dry Arctic climate (light rain)", &ClimateApplyThunk, nullptr },
+		ARCTIC_DETAILED,
+		ARCTIC_EFFECTS,
+		{ 0.5f, 0.3f, 0.5f, 0.3f, 3.5f, 0.4f } },
+	{ { WetnessEffects::ClimatePreset::TemperateCoastal, "Temperate Coastal", "Maritime climate (heavy rain)", &ClimateApplyThunk, nullptr },
+		COASTAL_DETAILED,
+		COASTAL_EFFECTS,
+		{ 1.5f, 1.7f, 1.7f, 0.8f, 2.5f, 0.25f } },
+	{ { WetnessEffects::ClimatePreset::MonsoonExtreme, "Monsoon/Extreme", "Extreme monsoon climate (extreme rain)", &ClimateApplyThunk, nullptr },
+		MONSOON_DETAILED,
+		MONSOON_EFFECTS,
+		{ 2.0f, 2.5f, 2.0f, 1.0f, 2.0f, 0.2f } },
+} };
 
 // Extract just the settings for the actual climate preset array
 static const std::array<WetnessEffects::ClimateSettings, 6> CLIMATE_PRESETS = { {
@@ -257,10 +249,10 @@ void WetnessEffects::DrawSettings()
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.3f, 0.4f, 0.6f));    // Subtle blue background
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.35f, 0.45f, 0.8f));  // Slightly darker for button
 
-	// Extract names for combo box
+	// Extract names for combo box. Labels come from string literals so .data() is null-terminated.
 	const char* presetNames[CLIMATE_PRESET_INFO.size()];
 	for (size_t i = 0; i < CLIMATE_PRESET_INFO.size(); ++i) {
-		presetNames[i] = CLIMATE_PRESET_INFO[i].name;
+		presetNames[i] = CLIMATE_PRESET_INFO[i].preset.label.data();
 	}
 	// Map preset enum to combo index (Custom=0, Legacy=1, Nordic=2, Arctic=3, Coastal=4, Monsoon=5)
 	int currentComboIndex = static_cast<int>(climatePreset);
@@ -272,10 +264,8 @@ void WetnessEffects::DrawSettings()
 		// Update the preset selection
 		climatePreset = newPreset;
 
-		// Apply preset settings (but not for Custom, which just means user-modified)
-		if (newPreset != ClimatePreset::Custom) {
-			ApplyClimatePreset(newPreset);
-		}
+		// Route through shared dispatch — Custom's apply is null and becomes a no-op.
+		Feature::ApplyPreset(this, CLIMATE_PRESET_INFO[static_cast<size_t>(newPreset)].preset);
 	}
 
 	ImGui::PopStyleColor(2);  // Pop both style colors
@@ -290,7 +280,7 @@ void WetnessEffects::DrawSettings()
 			} else {
 				// Build combined description lines for actual presets
 				std::vector<const char*> tooltipLines;
-				tooltipLines.push_back(info.shortDescription);
+				tooltipLines.push_back(info.preset.description.data());
 				// Add detailed description
 				for (const char* const* line = info.detailedDescription; *line != nullptr; ++line) {
 					tooltipLines.push_back(*line);
@@ -875,9 +865,9 @@ void WetnessEffects::DrawWeatherAnalysis() const
 			// const auto& climate = GetClimateSettings(climatePreset); // Unused, remove to fix warning treated as error
 			const auto& presetInfo = CLIMATE_PRESET_INFO[static_cast<size_t>(climatePreset)];
 
-			ImGui::Text("Active Preset: %s", presetInfo.name);
+			ImGui::Text("Active Preset: %s", presetInfo.preset.label.data());
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("%s", presetInfo.shortDescription);
+				ImGui::Text("%s", presetInfo.preset.description.data());
 			}
 
 			ImGui::Text("Precipitation Rate Calculation");
