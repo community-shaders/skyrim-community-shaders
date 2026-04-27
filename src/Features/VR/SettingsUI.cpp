@@ -323,48 +323,50 @@ namespace
 			}
 		}
 
-		ImGui::Separator();
+		if (hasEffects || isDev) {
+			ImGui::Separator();
 
-		// Auto-enable required feature when a debug mode is selected; restore on Off.
-		// Tracks what we toggled so user-initiated changes aren't clobbered.
-		static bool s_weEnabledStereoBlend = false;
-		static bool s_weEnabledReproj = false;
+			// Auto-enable required feature when a debug mode is selected; restore on Off.
+			// Tracks what we toggled so user-initiated changes aren't clobbered.
+			static bool s_weEnabledStereoBlend = false;
+			static bool s_weEnabledReproj = false;
 
-		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection", "Overwrite", "Overwrite Eye1" };
-		if (ImGui::Combo("Debug View", &settings.StereoBlendDebugMode, debugModes, IM_ARRAYSIZE(debugModes))) {
-			int newMode = settings.StereoBlendDebugMode;
-			bool needsBlend = (newMode >= 1 && newMode <= 3);
-			bool needsReproj = (newMode == 4 || newMode == 5);
+			const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection", "Overwrite", "Overwrite Eye1" };
+			if (ImGui::Combo("Debug View", &settings.StereoBlendDebugMode, debugModes, IM_ARRAYSIZE(debugModes))) {
+				int newMode = settings.StereoBlendDebugMode;
+				bool needsBlend = (newMode >= 1 && newMode <= 3);
+				bool needsReproj = (newMode == 4 || newMode == 5);
 
-			// Auto-enable Stereo Blend for modes 1-3 (runtime-toggleable)
-			if (needsBlend && !settings.EnableStereoBlend) {
-				settings.EnableStereoBlend = true;
-				s_weEnabledStereoBlend = true;
-			} else if (!needsBlend && s_weEnabledStereoBlend) {
-				settings.EnableStereoBlend = false;
-				s_weEnabledStereoBlend = false;
+				// Auto-enable Stereo Blend for modes 1-3 (runtime-toggleable)
+				if (needsBlend && !settings.EnableStereoBlend) {
+					settings.EnableStereoBlend = true;
+					s_weEnabledStereoBlend = true;
+				} else if (!needsBlend && s_weEnabledStereoBlend) {
+					settings.EnableStereoBlend = false;
+					s_weEnabledStereoBlend = false;
+				}
+
+				// Auto-enable Reprojection for modes 4-5 (note: takes effect after restart)
+				auto& sm = vr.stereoOpt.settings.stereoMode;
+				if (needsReproj && sm == VRStereoOptimizations::StereoMode::Off) {
+					sm = VRStereoOptimizations::StereoMode::Enable;
+					s_weEnabledReproj = true;
+				} else if (!needsReproj && s_weEnabledReproj) {
+					sm = VRStereoOptimizations::StereoMode::Off;
+					s_weEnabledReproj = false;
+				}
 			}
-
-			// Auto-enable Reprojection for modes 4-5 (note: takes effect after restart)
-			auto& sm = vr.stereoOpt.settings.stereoMode;
-			if (needsReproj && sm == VRStereoOptimizations::StereoMode::Off) {
-				sm = VRStereoOptimizations::StereoMode::Enable;
-				s_weEnabledReproj = true;
-			} else if (!needsReproj && s_weEnabledReproj) {
-				sm = VRStereoOptimizations::StereoMode::Off;
-				s_weEnabledReproj = false;
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Selecting a debug mode auto-enables the required feature; setting back to Off restores it.\n\n"
+					"Off: Normal rendering\n"
+					"Back-Check: Round-trip reprojection validation (auto-enables Stereo Blend)\n"
+					"Blend Weight: Heatmap of bilateral blend intensity (auto-enables Stereo Blend)\n"
+					"Edge Detection: Highlights depth discontinuities (auto-enables Stereo Blend)\n"
+					"Overwrite: Mode texture classification (auto-enables Reprojection -- restart required)\n"
+					"  Green=edge  Pink=edge neighbour  Blue=disoccluded  Orange=full blend\n"
+					"Overwrite Eye1: POM depth heatmap for Eye 1 (auto-enables Reprojection -- restart required)");
 			}
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Selecting a debug mode auto-enables the required feature; setting back to Off restores it.\n\n"
-				"Off: Normal rendering\n"
-				"Back-Check: Round-trip reprojection validation (auto-enables Stereo Blend)\n"
-				"Blend Weight: Heatmap of bilateral blend intensity (auto-enables Stereo Blend)\n"
-				"Edge Detection: Highlights depth discontinuities (auto-enables Stereo Blend)\n"
-				"Overwrite: Mode texture classification (auto-enables Reprojection -- restart required)\n"
-				"  Green=edge  Pink=edge neighbour  Blue=disoccluded  Orange=full blend\n"
-				"Overwrite Eye1: POM depth heatmap for Eye 1 (auto-enables Reprojection -- restart required)");
 		}
 	}
 
