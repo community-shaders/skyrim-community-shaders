@@ -862,8 +862,8 @@ void HDRDisplay::SetUIBuffer()
 		bool needsUIBuffer = hdrWillComposite || ffxWillComposite;
 
 		ID3D11RenderTargetView* targetRTV = needsUIBuffer ?
-			upscaling.dx12SwapChain.uiBufferWrapped->rtv :
-			upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
+		                                        upscaling.dx12SwapChain.uiBufferWrapped->rtv :
+		                                        upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
 
 		if (needsUIBuffer) {
 			float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
