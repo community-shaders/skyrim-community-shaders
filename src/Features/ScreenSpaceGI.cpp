@@ -83,6 +83,28 @@ std::span<const Feature::QualityPreset> ScreenSpaceGI::GetQualityPresets() const
 	return kQualityPresets;
 }
 
+int ScreenSpaceGI::DetectCurrentQuality() const
+{
+	// SSGI tiers vary by platform — VR uses AO-only variants. Each tier matches when
+	// its critical knobs (slices, steps, resolution mode, GI on/off) all match.
+	const bool isVR = REL::Module::IsVR();
+	static constexpr std::array<std::pair<QualityTier, QualityTier>, 3> tiers = { {
+		{ { 10, 12, 2, true }, { 1, 6, 2, false } },  // Low (flat / VR)
+		{ { 4, 8, 1, true }, { 3, 8, 1, false } },    // Medium
+		{ { 4, 8, 0, true }, { 4, 8, 0, true } },     // High (no VR variant — uses flat)
+	} };
+	for (size_t i = 0; i < tiers.size(); ++i) {
+		const auto& q = isVR ? tiers[i].second : tiers[i].first;
+		if (settings.NumSlices == q.numSlices &&
+			settings.NumSteps == q.numSteps &&
+			settings.ResolutionMode == q.resolutionMode &&
+			settings.EnableGI == q.enableGI &&
+			settings.EnableBlur)
+			return static_cast<int>(i);
+	}
+	return -1;
+}
+
 void ScreenSpaceGI::DrawSettings()
 {
 	static bool showAdvanced;

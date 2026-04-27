@@ -42,6 +42,7 @@ public:
 
 	virtual std::span<const QualityPreset> GetQualityPresets() const override;
 	virtual bool* GetEnabledFlag() override { return &settings.Enabled; }
+	virtual int DetectCurrentQuality() const override;
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;

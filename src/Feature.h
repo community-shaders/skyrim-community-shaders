@@ -3,6 +3,7 @@
 #include "FeatureCategories.h"
 #include "FeatureConstraints.h"
 #include "FeatureVersions.h"
+#include <span>  // GetQualityPresets() return type
 #ifdef TRACY_ENABLE
 #	include <Tracy/Tracy.hpp>
 #	include <Tracy/TracyD3D11.hpp>
@@ -165,6 +166,15 @@ public:
 	 * Return nullptr if the feature has no enable toggle (in which case Off is hidden).
 	 */
 	virtual bool* GetEnabledFlag() { return nullptr; }
+
+	/**
+	 * Returns the index into GetQualityPresets() that matches the feature's current
+	 * settings, or -1 when the settings don't match any preset (Custom). Used by the
+	 * Simple menu to position the slider correctly on first render after a JSON load.
+	 * Default returns -1; features that can compare their settings to their tiers
+	 * should override.
+	 */
+	virtual int DetectCurrentQuality() const { return -1; }
 
 	/**
 	 * Render the Simple-mode settings UI: Off button + quality preset row.

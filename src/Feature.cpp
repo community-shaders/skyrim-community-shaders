@@ -367,7 +367,20 @@ void Feature::DrawSimpleSettings()
 	}
 
 	const int n = static_cast<int>(presets.size());
-	const int sliderMax = std::max(1, n);
+
+	// Resolve "Custom" on first render by asking the feature to match its settings
+	// against its presets; saves the user from a "Custom" label when settings still
+	// match a preset (e.g. after JSON load).
+	if (currentlyOn && n > 0 && lastAppliedQualityIdx < 0)
+		lastAppliedQualityIdx = DetectCurrentQuality();
+
+	// When in Custom state with presets available, give the slider an extra stop at
+	// n+1 so dragging back to position 1 still fires SliderInt's change event and
+	// applies the first preset. Without this, Custom and "preset 0" would share
+	// position 1 and clicking 1 would be a no-op.
+	const bool inCustom = currentlyOn && n > 0 && (lastAppliedQualityIdx < 0 || lastAppliedQualityIdx >= n);
+	const int sliderMax = inCustom ? n + 1 : std::max(1, n);
+
 	int currentValue;
 	std::string overlay;
 	if (!currentlyOn) {
@@ -376,12 +389,12 @@ void Feature::DrawSimpleSettings()
 	} else if (n == 0) {
 		currentValue = 1;
 		overlay = "On";
-	} else if (lastAppliedQualityIdx >= 0 && lastAppliedQualityIdx < n) {
+	} else if (inCustom) {
+		currentValue = n + 1;
+		overlay = "Custom";
+	} else {
 		currentValue = lastAppliedQualityIdx + 1;
 		overlay.assign(presets[lastAppliedQualityIdx].label.data(), presets[lastAppliedQualityIdx].label.size());
-	} else {
-		currentValue = 1;
-		overlay = "Custom";
 	}
 
 	int v = currentValue;
@@ -393,15 +406,14 @@ void Feature::DrawSimpleSettings()
 			else
 				ToggleAtBootSetting();
 		}
-		if (wantOn && n > 0) {
+		if (wantOn && n > 0 && v <= n) {
 			const int idx = v - 1;
-			if (idx >= 0 && idx < n) {
-				ApplyPreset(this, presets[idx]);
-				lastAppliedQualityIdx = idx;
-			}
+			ApplyPreset(this, presets[idx]);
+			lastAppliedQualityIdx = idx;
 		} else if (!wantOn) {
 			lastAppliedQualityIdx = -1;
 		}
+		// v == n+1 (Custom slot): leave lastAppliedQualityIdx as-is.
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {

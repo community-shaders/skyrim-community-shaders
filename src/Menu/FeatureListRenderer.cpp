@@ -239,15 +239,17 @@ static void RenderSimpleModePage()
 	std::ranges::sort(sorted, [](Feature* a, Feature* b) { return a->GetName() < b->GetName(); });
 
 	// Every loaded feature gets an inline control via DrawSimpleSettings (boot-toggle
-	// fallback when no runtime enable flag); only features that failed to load drop
-	// into the issues list.
+	// fallback when no runtime enable flag). Unloaded features go to the issues list,
+	// except obsolete ones with their INI removed — those are silently dropped to
+	// match the advanced menu's filtering, surfaced again in developer mode.
+	const bool devMode = globals::state->IsDeveloperMode();
 	std::vector<Feature*> issues;
 	for (auto* feat : sorted) {
 		if (feat->loaded) {
 			ImGui::PushID(feat);
 			feat->DrawSimpleSettings();
 			ImGui::PopID();
-		} else {
+		} else if (devMode || !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 			issues.push_back(feat);
 		}
 	}
