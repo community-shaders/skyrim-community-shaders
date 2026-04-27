@@ -1,7 +1,4 @@
 #include "TerrainVariation.h"
-#include "../FeatureBuffer.h"
-#include "../Globals.h"
-#include "../State.h"
 #include "../Util.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -11,12 +8,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void TerrainVariation::DrawSettings()
 {
-	bool oldEnabled = settings.enableTilingFix;
-	ImGui::Checkbox("Enable Terrain Tiling Fix", (bool*)&settings.enableTilingFix);
-	if (oldEnabled != (bool)settings.enableTilingFix) {
-		// Update the shader settings when the checkbox is toggled
-		UpdateShaderSettings();
-		logger::info("TerrainVariation setting changed to: {}", settings.enableTilingFix);
+	bool tilingFix = settings.enableTilingFix != 0;
+	if (ImGui::Checkbox("Enable Terrain Tiling Fix", &tilingFix)) {
+		settings.enableTilingFix = tilingFix ? 1u : 0u;
+		logger::info("TerrainVariation setting changed to: {}", settings.enableTilingFix != 0);
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
@@ -26,11 +21,10 @@ void TerrainVariation::DrawSettings()
 
 	ImGui::Separator();
 
-	bool oldLODEnabled = settings.enableLODTerrainTilingFix;
-	ImGui::Checkbox("Apply to LOD Terrain", (bool*)&settings.enableLODTerrainTilingFix);
-	if (oldLODEnabled != (bool)settings.enableLODTerrainTilingFix) {
-		UpdateShaderSettings();
-		logger::info("TerrainVariation LOD setting changed to: {}", settings.enableLODTerrainTilingFix);
+	bool lodTilingFix = settings.enableLODTerrainTilingFix != 0;
+	if (ImGui::Checkbox("Apply to LOD Terrain", &lodTilingFix)) {
+		settings.enableLODTerrainTilingFix = lodTilingFix ? 1u : 0u;
+		logger::info("TerrainVariation LOD setting changed to: {}", settings.enableLODTerrainTilingFix != 0);
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
@@ -39,28 +33,14 @@ void TerrainVariation::DrawSettings()
 	}
 }
 
-void TerrainVariation::UpdateShaderSettings()
-{
-	if (!globals::state) {
-		return;
-	}
-
-	// Mark the vertex descriptor as dirty to trigger an update
-	if (globals::game::stateUpdateFlags) {
-		globals::game::stateUpdateFlags->set(RE::BSGraphics::DIRTY_VERTEX_DESC);
-	}
-}
-
 void TerrainVariation::PostPostLoad()
 {
 	logger::info("TerrainVariation: Feature initialized");
-	UpdateShaderSettings();
 }
 
 void TerrainVariation::LoadSettings(json& o_json)
 {
 	settings = o_json;
-	UpdateShaderSettings();
 }
 
 void TerrainVariation::SaveSettings(json& o_json)
