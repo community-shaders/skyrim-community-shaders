@@ -833,6 +833,20 @@ void HDRDisplay::RestoreFramebuffer()
 	framebufferRedirected = false;
 }
 
+bool HDRDisplay::IsFGCompositingThisFrame() const
+{
+	// FG compositing is skipped in menus and loading screens to avoid ghosting / brightness issues,
+	// when the game is paused (UI stays gamma — HDROutputCS must composite instead), and in VR.
+	auto& upscaling = globals::features::upscaling;
+	auto* ui = globals::game::ui;
+	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
+	return upscaling.d3d12SwapChainActive &&
+	       upscaling.settings.frameGenerationMode &&
+	       ui && !ui->GameIsPaused() &&
+	       !isMainOrLoadingMenu &&
+	       !globals::game::isVR;
+}
+
 void HDRDisplay::SetUIBuffer()
 {
 	// VR: ISCopy reads kFRAMEBUFFER.SRV to distribute the frame to the HMD and
@@ -850,16 +864,15 @@ void HDRDisplay::SetUIBuffer()
 	// compositors are skipped (HDR unloaded + FG off/paused).
 	if (globals::features::upscaling.d3d12SwapChainActive) {
 		auto& upscaling = globals::features::upscaling;
-		if (!upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->rtv)
-			return;
 		if (!upscaling.dx12SwapChain.swapChainBufferWrapped || !upscaling.dx12SwapChain.swapChainBufferWrapped->rtv)
 			return;
 
-		auto* gameUi = globals::game::ui;
-		bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
-		bool ffxWillComposite = upscaling.settings.frameGenerationMode && gameUi && !gameUi->GameIsPaused() && !isMainOrLoadingMenu;
+		bool ffxWillComposite = IsFGCompositingThisFrame();
 		bool hdrWillComposite = loaded && hdrDataCB && outputTexture;
 		bool needsUIBuffer = hdrWillComposite || ffxWillComposite;
+
+		if (needsUIBuffer && (!upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->rtv))
+			return;
 
 		ID3D11RenderTargetView* targetRTV = needsUIBuffer ?
 		                                        upscaling.dx12SwapChain.uiBufferWrapped->rtv :
@@ -1223,16 +1236,8 @@ void HDRDisplay::ScaleUIBrightnessForFG()
 	TracyD3D11Zone(globals::state->tracyCtx, "UI Brightness Scale");
 
 	auto& upscaling = globals::features::upscaling;
-	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
-
-	auto* ui = globals::game::ui;
 	// FG merges PQ UI from this pass; when paused, UI stays gamma — HDROutput must composite (skipUIComposite stays 0).
-	bool fgCompositing = upscaling.d3d12SwapChainActive &&
-	                     upscaling.settings.frameGenerationMode &&
-	                     ui && !ui->GameIsPaused() &&
-	                     !isMainOrLoadingMenu &&
-	                     !globals::game::isVR;
-	if (!fgCompositing)
+	if (!IsFGCompositingThisFrame())
 		return;
 
 	if (!settings.enableHDR)
@@ -1324,18 +1329,9 @@ void HDRDisplay::UpdateHDRData() const
 	if (!hdrDataCB)
 		return;
 
-	auto& upscaling = globals::features::upscaling;
-
-	// Don't skip UI composite in main menu or loading screens - causes ghosting and brightness issues
 	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
-
 	auto* ui = globals::game::ui;
-	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
-	                         upscaling.settings.frameGenerationMode &&
-	                         ui && !ui->GameIsPaused() &&
-	                         !isMainOrLoadingMenu &&
-	                         !globals::game::isVR;
-	bool skipUIComposite = fgActiveThisFrame;
+	bool skipUIComposite = IsFGCompositingThisFrame();
 
 	// Linear Lighting keeps the pipeline linear throughout.
 	// Without it, ISHDR gamma-encodes its output even in HDR mode.
