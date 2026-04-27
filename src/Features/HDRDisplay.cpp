@@ -880,7 +880,8 @@ void HDRDisplay::SetUIBuffer()
 
 		ID3D11RenderTargetView* targetRTV = needsUIBuffer ?
 		                                        upscaling.dx12SwapChain.uiBufferWrapped->rtv :
-		                                        hdrWillFallbackCopy ? fb.RTV : upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
+		                                    hdrWillFallbackCopy ? fb.RTV :
+		                                                          upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
 
 		if (needsUIBuffer) {
 			float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
