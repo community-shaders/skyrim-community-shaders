@@ -37,7 +37,8 @@ namespace HDRSun
 		float paperWhiteNits = max(SharedData::HDRData.y, 1.0f);
 		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0f);
 		float peakRatio = peakNits / paperWhiteNits;
-		float menuSunMul = (SharedData::HDRData.w > 1e-3f) ? (kMenuSunNits / peakNits) : 1.0f;
+		float menuBlend = saturate(SharedData::HDRData.w);
+		float menuSunMul = lerp(1.0f, kMenuSunNits / peakNits, menuBlend);
 		float maxBoost = max(kMinHdrSunBoost, peakRatio * menuSunMul);
 
 		// --- weight 0..1: local brightness / alpha / UV rim, then damp if fine ≈ widened-filter sample (soft corona) ---
@@ -54,21 +55,6 @@ namespace HDRSun
 #	endif
 
 		float weight = saturate(highlight * alphaWeight * radialWeight);
-
-		// Compare fine vs coarse sun energy and suppress boost when they are similar.
-		// This avoids over-boosting broad/soft regions while preserving concentrated highlights.
-		float2 uvGradX = ddx(texCoord0_xy);
-		float2 uvGradY = ddy(texCoord0_xy);
-		const float kCoarseSunFootprint = 2.0f;
-		float4 coarseS = sunTex.SampleGrad(samp, texCoord0_xy, uvGradX * kCoarseSunFootprint, uvGradY * kCoarseSunFootprint);
-		float3 coarseRgb = Color::Sky(coarseS.rgb);
-		float coarseLum = max(Color::RGBToLuminance(coarseRgb), EPSILON_DIVISION);
-		float fineEnergy = L * a;
-		float coarseEnergy = coarseLum * saturate(coarseS.w * alphaPostScale);  // alphaPostScale = TEXFADE from Sky, else 1
-		float detailExcess = max(fineEnergy - coarseEnergy, 0.0f);
-		float detailFactor = saturate(detailExcess / max(coarseEnergy, EPSILON_DIVISION));
-		float suppression = lerp(saturate(L), 1.0f, detailFactor);
-		weight *= suppression;
 
 		// pow(maxBoost, weight) grows the boosted footprint as maxBoost rises (same weight → more
 		// gain → sun reads larger). Tighten with wCurve = weight^sharpen; sharpen == 1 when
