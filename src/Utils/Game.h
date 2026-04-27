@@ -2,11 +2,6 @@
 
 #pragma once
 
-namespace globals::game
-{
-	extern bool isVR;
-}
-
 /**
  @def GET_INSTANCE_MEMBER
  @brief Set variable in current namespace based on instance member from GetRuntimeData or GetVRRuntimeData.
@@ -18,7 +13,7 @@ namespace globals::game
  @result The a_value will be set as a variable in the current namespace. (e.g., auto& renderTargets = state->renderTargets;)
  */
 #define GET_INSTANCE_MEMBER(a_value, a_source) \
-	auto& a_value = !globals::game::isVR ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value;
+	auto& a_value = !REL::Module::IsVR() ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value;
 
 /**
  @def GET_INSTANCE_MEMBER_PTR
@@ -31,22 +26,7 @@ namespace globals::game
  @result The a_value will be returned as a refptr. (e.g., &state->renderTargets;)
  */
 #define GET_INSTANCE_MEMBER_PTR(a_value, a_source) \
-	&(!globals::game::isVR ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value)
-
-/**
- @def GET_SHADER_PARTICLE_SETTING
- @brief Set variable in current namespace to a shader particle setting, using the correct flat/VR storage.
-
- @warning Only for RE::BGSShaderParticleGeometryData. In VR, particle settings are stored in
-          data[id].value instead of directly in data[id].
-
- @param a_value The local variable name to create.
- @param a_source The BGSShaderParticleGeometryData instance.
- @param a_id The BGSShaderParticleGeometryData::DataID setting.
- @result The a_value will be set as a variable in the current namespace.
- */
-#define GET_SHADER_PARTICLE_SETTING(a_value, a_source, a_id) \
-	auto& a_value = !globals::game::isVR ? (a_source)->GetRuntimeData().data[static_cast<uint32_t>(a_id)] : (a_source)->GetVRRuntimeData().data[static_cast<uint32_t>(a_id)].value;
+	&(!REL::Module::IsVR() ? a_source->GetRuntimeData().a_value : a_source->GetVRRuntimeData().a_value)
 
 namespace Util
 {
