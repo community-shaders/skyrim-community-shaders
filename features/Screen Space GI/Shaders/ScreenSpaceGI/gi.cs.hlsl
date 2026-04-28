@@ -145,13 +145,18 @@ void CalculateGI(
 		// convert to px units for later use
 		float2 omega = float2(directionVec.x, -directionVec.y) * screenspaceRadius;
 
+		// Per-slice constant for per-step mip selection: log2(length(s * omega)) decomposes
+		// to log2(s) + logLenOmega for s >= 0. 0.5 * log2(dot) folds length() into a single log2.
+		const float logLenOmega = 0.5 * log2(max(dot(omega, omega), EPSILON_LENGTH_SQ));
+
 		const float3 orthoDirectionVec = directionVec - (dot(directionVec, viewVec) * viewVec);
 		const float3 axisVec = normalize(cross(orthoDirectionVec, viewVec));
 
 		float3 projectedNormalVec = viewspaceNormal - axisVec * dot(viewspaceNormal, axisVec);
-		float projectedNormalVecLength = length(projectedNormalVec);
+		// 1/length(v) == rsqrt(dot(v,v)). max() guards against a zero-length projection.
+		float rcpProjectedNormalVecLength = rsqrt(max(dot(projectedNormalVec, projectedNormalVec), EPSILON_LENGTH_SQ));
 		float signNorm = sign(dot(orthoDirectionVec, projectedNormalVec));
-		float cosNorm = saturate(dot(projectedNormalVec, viewVec) / projectedNormalVecLength);
+		float cosNorm = saturate(dot(projectedNormalVec, viewVec) * rcpProjectedNormalVecLength);
 
 		float n = signNorm * FastMath::ACos(cosNorm);
 
@@ -189,8 +194,9 @@ void CalculateGI(
 				float2 sampleScreenPos = Stereo::ConvertFromStereoUV(sampleUV, sampleEyeIndex);
 				[branch] if (any(sampleScreenPos > 1.0) || any(sampleScreenPos < 0.0)) continue;
 
-				float sampleOffsetLength = length(sampleOffset);
-				float mipLevel = clamp(log2(sampleOffsetLength) - 3.3, 0, 5);
+				// Mip level grows with pixel-space distance from the centre.
+				// logLenOmega is the per-slice log2 of |omega|. s > 0 since s += minS > 0.
+				float mipLevel = clamp(log2(s) + logLenOmega - 3.3, 0, 5);
 				float mipLevelRadiance = mipLevel;
 #if defined(HALF_RES)
 				mipLevel = max(mipLevel, 1);
@@ -218,8 +224,8 @@ void CalculateGI(
 				float3 sampleDelta = samplePos - pixCenterPos;
 				float3 sampleHorizonVec = normalize(sampleDelta);
 
-				float3 sampleBackPos = samplePos - viewVec * Thickness;
-				float3 sampleBackHorizonVec = normalize(sampleBackPos - pixCenterPos);
+				// Back-side horizon vector for the surface-thickness offset.
+				float3 sampleBackHorizonVec = normalize(sampleDelta - viewVec * Thickness);
 
 				float angleFront = FastMath::ACos(dot(sampleHorizonVec, viewVec));  // either clamp or use float version for whatever reason
 				float angleBack = FastMath::ACos(dot(sampleBackHorizonVec, viewVec));
@@ -232,8 +238,8 @@ void CalculateGI(
 				uint maskedBits = s < AORadius ? ((1 << bitsRange.y) - 1) << bitsRange.x : 0;
 
 #ifdef GI
-				float3 sampleBackPosGI = samplePos - viewVec * 300;
-				float3 sampleBackHorizonVecGI = normalize(sampleBackPosGI - pixCenterPos);
+				// Back-side horizon vector for GI-radius sampling depth (~300 units).
+				float3 sampleBackHorizonVecGI = normalize(sampleDelta - viewVec * 300);
 				float angleBackGI = FastMath::ACos(dot(sampleBackHorizonVecGI, viewVec));
 				float2 angleRangeGI = -sideSign * (sideSign == -1 ? float2(angleFront, angleBackGI) : float2(angleBackGI, angleFront));
 
