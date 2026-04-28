@@ -511,14 +511,18 @@ namespace Util
 		}
 	}
 
-	namespace
+	namespace ButtonHelpers
 	{
-		ImVec4 BrightenButtonColor(const ImVec4& color, float amount)
+		ImVec4 AdjustButtonColor(const ImVec4& color, float amount)
 		{
+			const float maxChannel = std::max({ color.x, color.y, color.z });
+			const float minChannel = ThemeManager::Constants::BUTTON_MIN_COLOR_CHANNEL;
+			const float maxColorChannel = ThemeManager::Constants::BUTTON_MAX_COLOR_CHANNEL;
+			const float adjustment = maxChannel <= (maxColorChannel - amount) ? amount : -amount;
 			return ImVec4(
-				std::min(color.x + amount, 1.0f),
-				std::min(color.y + amount, 1.0f),
-				std::min(color.z + amount, 1.0f),
+				std::clamp(color.x + adjustment, minChannel, maxColorChannel),
+				std::clamp(color.y + adjustment, minChannel, maxColorChannel),
+				std::clamp(color.z + adjustment, minChannel, maxColorChannel),
 				color.w);
 		}
 
@@ -537,8 +541,8 @@ namespace Util
 
 	StyledButtonWrapper StatusButtonStyle(const ImVec4& color)
 	{
-		auto hover = BrightenButtonColor(color, ThemeManager::Constants::BUTTON_HOVER_BRIGHTEN);
-		auto active = BrightenButtonColor(color, ThemeManager::Constants::BUTTON_ACTIVE_BRIGHTEN);
+		auto hover = ButtonHelpers::AdjustButtonColor(color, ThemeManager::Constants::BUTTON_HOVER_BRIGHTEN);
+		auto active = ButtonHelpers::AdjustButtonColor(color, ThemeManager::Constants::BUTTON_ACTIVE_BRIGHTEN);
 		return StyledButtonWrapper(color, hover, active);
 	}
 
@@ -549,17 +553,19 @@ namespace Util
 
 	bool ErrorButton(const char* label, const ImVec2& size)
 	{
-		return InvokeStyledButton(DestructiveButtonStyle, [&] { return ImGui::Button(label, size); });
+		return ButtonHelpers::InvokeStyledButton(DestructiveButtonStyle, [&] { return ImGui::Button(label, size); });
 	}
 
 	bool ErrorButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
 	{
-		return InvokeStyledButton(DestructiveButtonStyle, [&] { return ButtonWithFlash(label, size, flashDurationMs); });
+		return ButtonHelpers::InvokeStyledButton(DestructiveButtonStyle, [&] { return ButtonWithFlash(label, size, flashDurationMs); });
 	}
 
 	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color)
 	{
-		return StyledButtonWrapper(color, WithAlpha(color, 0.8f), WithAlpha(color, 1.0f));
+		return StyledButtonWrapper(color,
+			ButtonHelpers::WithAlpha(color, ThemeManager::Constants::BUTTON_STATUS_TEXT_HOVER_ALPHA),
+			ButtonHelpers::WithAlpha(color, ThemeManager::Constants::BUTTON_STATUS_TEXT_ACTIVE_ALPHA));
 	}
 
 	StyledButtonWrapper SuccessButtonStyle()
@@ -574,17 +580,17 @@ namespace Util
 
 	bool SuccessButton(const char* label, const ImVec2& size)
 	{
-		return InvokeStyledButton(SuccessButtonStyle, [&] { return ImGui::Button(label, size); });
+		return ButtonHelpers::InvokeStyledButton(SuccessButtonStyle, [&] { return ImGui::Button(label, size); });
 	}
 
 	bool WarningButton(const char* label, const ImVec2& size)
 	{
-		return InvokeStyledButton(WarningButtonStyle, [&] { return ImGui::Button(label, size); });
+		return ButtonHelpers::InvokeStyledButton(WarningButtonStyle, [&] { return ImGui::Button(label, size); });
 	}
 
 	bool ErrorTextButton(const char* label, const ImVec2& size)
 	{
-		return InvokeStyledButton(
+		return ButtonHelpers::InvokeStyledButton(
 			[] { return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error); },
 			[&] { return ImGui::Button(label, size); });
 	}

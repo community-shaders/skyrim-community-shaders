@@ -216,12 +216,15 @@ namespace Util
 	};
 
 	/**
-	 * Creates a StyledButtonWrapper using a status color with the shared hover/active brightness.
-	 * Prefer the named helpers below for semantic UI actions.
+	 * Creates a StyledButtonWrapper using a status color with shared hover/active adjustment.
+	 * Use when a caller needs a custom status color instead of one of the semantic helpers below.
 	 */
 	StyledButtonWrapper StatusButtonStyle(const ImVec4& color);
 
-	/** Use for destructive or critical actions such as Delete, Clear, Remove, or irreversible confirms (including irreversible resets). */
+	/**
+	 * Style for destructive or critical actions such as Delete, Clear, Remove, or irreversible confirms.
+	 * Uses the theme error color as the button fill and adjusts hover/active brightness for contrast.
+	 */
 	StyledButtonWrapper DestructiveButtonStyle();
 
 	/**
@@ -231,12 +234,16 @@ namespace Util
 	 */
 	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color);
 
-	/** Use for confirmatory or positive actions such as Apply, Confirm, or Accept. */
+	/** Style for confirmatory or positive actions such as Apply, Confirm, or Accept. */
 	StyledButtonWrapper SuccessButtonStyle();
+
+	/** Draws a theme success-colored button for confirmatory or positive actions. */
 	bool SuccessButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 
-	/** Use for cautionary or reversible actions such as Revert, Undo, or Reset (reversible/to-saved). */
+	/** Style for cautionary or reversible actions such as Revert, Undo, or Reset to saved values. */
 	StyledButtonWrapper WarningButtonStyle();
+
+	/** Draws a theme warning-colored button for cautionary or reversible actions. */
 	bool WarningButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 
 	/**
@@ -245,8 +252,15 @@ namespace Util
 	 * prefer ErrorButton which uses the brightness-based DestructiveButtonStyle.
 	 */
 	bool ErrorTextButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/** Draws a destructive theme error-colored button for delete, clear, remove, or irreversible actions. */
 	bool ErrorButton(const char* label, const ImVec2& size = ImVec2(0, 0));
-	/** id must be unique per ImGui element to prevent ID collisions. */
+
+	/**
+	 * Draws a destructive icon/image button using the theme error color for button chrome.
+	 * Use for destructive image-only controls such as delete icons.
+	 * id must be unique per ImGui element to prevent ID collisions.
+	 */
 	template <class TextureID>
 	bool ErrorImageButton(
 		const char* id,
@@ -260,6 +274,8 @@ namespace Util
 		auto _style = DestructiveButtonStyle();
 		return ImGui::ImageButton(id, textureId, imageSize, uv0, uv1, bgCol, tintCol);
 	}
+
+	/** Draws a destructive button with ButtonWithFlash click feedback. */
 	bool ErrorButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
 	/**
