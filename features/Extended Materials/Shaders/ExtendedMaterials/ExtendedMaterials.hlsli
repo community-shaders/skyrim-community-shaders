@@ -106,6 +106,25 @@ namespace ExtendedMaterials
 		[unroll] for (int i = 0; i < 6; i++)
 		{
 			totalHeight += heights[i] * weights[i];
+		}
+
+		if (heightBlend <= 1.0) {
+			float wsum = 0;
+			[unroll] for (int j = 0; j < 6; j++)
+			{
+				wsum += weights[j];
+			}
+
+			float invwsum = rcp(wsum);
+			[unroll] for (int k = 0; k < 6; k++)
+			{
+				weights[k] *= invwsum;
+			}
+			return;
+		}
+
+		[unroll] for (int i = 0; i < 6; i++)
+		{
 			weights[i] *= pow(heightBlend, HEIGHT_MULT * heights[i]);
 		}
 
@@ -366,7 +385,7 @@ namespace ExtendedMaterials
 		float2 w2 = lerp(input.LandBlendWeights2.xy, smoothstep(0, 1, input.LandBlendWeights2.xy), blendFactor);
 #	if defined(TRUE_PBR)
 		float scale = max(params[0].HeightScale * w1.x, max(params[1].HeightScale * w1.y, max(params[2].HeightScale * w1.z, max(params[3].HeightScale * w1.w, max(params[4].HeightScale * w2.x, params[5].HeightScale * w2.y)))));
-		float scalercp = rcp(scale);
+		float scalercp = rcp(max(scale, 1e-4));
 		float maxHeight = 0.1 * scale;
 #	else
 		float scale = 1;
@@ -379,7 +398,36 @@ namespace ExtendedMaterials
 		float minHeight = maxHeight * 0.5;
 
 #if defined(LANDSCAPE)
-		if (nearBlendToFar < 1.0) {
+		if (nearBlendToFar < 1.0 && scale > 0.001) {
+			float terrainWeights0[6] = { 0, 0, 0, 0, 0, 0 };
+#	if defined(TRUE_PBR)
+#		if defined(TERRAIN_VARIATION)
+#			define LANDSCAPE_RELIEF_HEIGHT_AT(COORDS, OUT_WEIGHTS) (GetTerrainHeight(noise, input, COORDS, mipLevels, params, blendFactor, w1, w2, sharedOffset, OUT_WEIGHTS) * scalercp + 0.5)
+#		else
+#			define LANDSCAPE_RELIEF_HEIGHT_AT(COORDS, OUT_WEIGHTS) (GetTerrainHeight(noise, input, COORDS, mipLevels, params, blendFactor, w1, w2, OUT_WEIGHTS) * scalercp + 0.5)
+#		endif
+#	else
+#		if defined(TERRAIN_VARIATION)
+#			define LANDSCAPE_RELIEF_HEIGHT_AT(COORDS, OUT_WEIGHTS) (GetTerrainHeight(noise, input, COORDS, mipLevels, params, blendFactor, w1, w2, sharedOffset, OUT_WEIGHTS) + 0.5)
+#		else
+#			define LANDSCAPE_RELIEF_HEIGHT_AT(COORDS, OUT_WEIGHTS) (GetTerrainHeight(noise, input, COORDS, mipLevels, params, blendFactor, w1, w2, OUT_WEIGHTS) + 0.5)
+#		endif
+#	endif
+			float height0 = saturate(LANDSCAPE_RELIEF_HEIGHT_AT(coords, terrainWeights0));
+			float offset0 = (1.0 - height0) * -maxHeight + minHeight;
+			float2 refinedCoords = coords.xy + viewDirTS.xy * offset0;
+			float height1 = saturate(LANDSCAPE_RELIEF_HEIGHT_AT(refinedCoords, weights));
+#	undef LANDSCAPE_RELIEF_HEIGHT_AT
+
+			float height = lerp(height0, height1, 0.75);
+			nearBlendToFar *= nearBlendToFar;
+			float offset = (1.0 - height) * -maxHeight + minHeight;
+			pixelOffset = saturate(lerp(height, 0.5, nearBlendToFar));
+#	if defined(VR_STEREO_OPT)
+			hasPOM = true;
+#	endif
+			return lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
+		}
 #else
 #	if defined(TRUE_PBR)
 		if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0 || nearBlendToFar < 1.0)
@@ -387,7 +435,6 @@ namespace ExtendedMaterials
 		if (nearBlendToFar < 1.0)
 #	endif
 		{
-#endif
 			const float maxSteps = 4;
 			uint numSteps = uint((maxSteps * (1.0 - nearBlendToFar)) + 0.5);
 			numSteps = clamp(numSteps, 4, max(4, uint(scale * maxSteps)));
@@ -564,6 +611,7 @@ namespace ExtendedMaterials
 #endif
 			return lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
 		}
+#endif
 
 #if defined(LANDSCAPE)
 		weights[0] = input.LandBlendWeights1.x;
@@ -627,13 +675,8 @@ namespace ExtendedMaterials
 
 	inline float TerrainMaxWeightedHeightScale(PS_INPUT input, DisplacementParams params[6])
 	{
-#	if defined(TRUE_PBR)
 		return max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
 																																 max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
-#	else
-		return max(params[0].HeightScale * input.LandBlendWeights1.x, max(params[1].HeightScale * input.LandBlendWeights1.y, max(params[2].HeightScale * input.LandBlendWeights1.z,
-																																 max(params[3].HeightScale * input.LandBlendWeights1.w, max(params[4].HeightScale * input.LandBlendWeights2.x, params[5].HeightScale * input.LandBlendWeights2.y)))));
-#	endif
 	}
 
 	inline uint TerrainDirectionalShadowTapCount(float quality)
@@ -692,13 +735,6 @@ namespace ExtendedMaterials
 #	if defined(TRUE_PBR)
 			return 1.0 - saturate(dot(max(0, sh - sh0) / scale, ShadowIntensity)) * quality;
 #	else
-			sh = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.x, mipLevel, quality, heights);
-			if (quality > 0.25)
-				sh.y = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.y, mipLevel, quality, heights);
-			if (quality > 0.5)
-				sh.z = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.z, mipLevel, quality, heights);
-			if (quality > 0.75)
-				sh.w = TERRAIN_HEIGHT_AT(coords + rayDir * multipliers.w, mipLevel, quality, heights);
 			return 1.0 - saturate(dot(max(0, sh - sh0), ShadowIntensity)) * quality;
 #	endif
 		}

@@ -1031,6 +1031,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			define COMPUTE_TERRAIN_SHADOW_BASE(OUT_SH0) ExtendedMaterials::ComputeTerrainParallaxShadowBaseHeight(input, uv, mipLevels, terrainDirectionalShadowQuality, screenNoise, displacementParams, OUT_SH0)
 #			define EVAL_TERRAIN_DIR_SHADOW(BASE_SH0, DIR_TS) ExtendedMaterials::EvaluateTerrainDirectionalParallaxShadowMultiplier(input, uv, mipLevels, DIR_TS, terrainDirectionalShadowQuality, screenNoise, displacementParams, BASE_SH0)
 #		endif
+#		if defined(LANDSCAPE)
+#			if defined(TRUE_PBR)
+#				define LANDSCAPE_PARALLAX_ENABLED (SharedData::extendedMaterialSettings.EnableParallax)
+#			else
+#				define LANDSCAPE_PARALLAX_ENABLED \
+					(SharedData::extendedMaterialSettings.EnableTerrainParallax || \
+						(SharedData::extendedMaterialSettings.EnableParallax && ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement) != 0)))
+#			endif
+#		endif
 #	endif
 
 #	if defined(LANDSCAPE)
@@ -1073,7 +1082,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 vertexNormal = tbnTr[2];
 #		if defined(EMAT)
 
-	if (SharedData::extendedMaterialSettings.EnableParallaxWarpingFix) {
+	if (SharedData::extendedMaterialSettings.EnableParallaxWarpingFix
+#			if defined(LANDSCAPE)
+		&& LANDSCAPE_PARALLAX_ENABLED
+#			endif
+	) {
 		float3 ndx = ddx(vertexNormal);
 		float3 ndy = ddy(vertexNormal);
 		float3 fdx = ddx(input.WorldPosition.xyz);
@@ -1246,16 +1259,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 #		if defined(EMAT)
-#			if defined(TRUE_PBR)
-	if (SharedData::extendedMaterialSettings.EnableParallax) {
-#			else
-	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
-#			endif
-#			if defined(TERRAIN_VARIATION)
+	if (LANDSCAPE_PARALLAX_ENABLED) {
 		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
-#			else
-		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
-#			endif
 
 		displacementParams[1] = displacementParams[0];
 		displacementParams[2] = displacementParams[0];
@@ -1302,13 +1307,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				cachedDirectionalTerrainParallaxShadow = EVAL_TERRAIN_DIR_SHADOW(sh0, dirLightDirectionTS);
 			hasCachedDirectionalTerrainParallaxShadow = hasCachedTerrainShadowBaseHeight;
 		}
-	} else {
-		// Calculate proper mip levels for terrain variation when parallax is disabled but EMAT is available
-#			if defined(TERRAIN_VARIATION)
-		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
-#			else
-		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
-#			endif
 	}
 #		else
 	// Initialize mip levels for non-EMAT case
@@ -2048,11 +2046,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		float3 dirLightDirectionTS = mul(refractedDirLightDirection, tbn).xyz;
 #		if defined(LANDSCAPE)
-#			if defined(TRUE_PBR)
-		if (SharedData::extendedMaterialSettings.EnableParallax && dirLightAngle > 0.0) {
-#			else
-		if ((SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) && dirLightAngle > 0.0) {
-#			endif
+		if (LANDSCAPE_PARALLAX_ENABLED && dirLightAngle > 0.0) {
 			if (hasCachedDirectionalTerrainParallaxShadow) {
 				dirDetailedShadow *= cachedDirectionalTerrainParallaxShadow;
 			} else {
@@ -2259,22 +2253,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #				elif defined(LANDSCAPE)
-#					if defined(TRUE_PBR)
-			if (SharedData::extendedMaterialSettings.EnableParallax)
-#					else
-			if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement))
-#					endif
+			if (LANDSCAPE_PARALLAX_ENABLED)
 			{
 				// Aggressive, cheap distance-only gate for terrain point-light parallax shadows.
 				const float TERRAIN_POINT_SHADOW_NEAR = 192.0;
 				const float TERRAIN_POINT_SHADOW_FAR = 640.0;
 				float terrainPointShadowQuality = 1.0 - saturate((lightDist - TERRAIN_POINT_SHADOW_NEAR) / (TERRAIN_POINT_SHADOW_FAR - TERRAIN_POINT_SHADOW_NEAR));
 				if (terrainPointShadowQuality > 0.0 && ExtendedMaterials::TerrainHasSignificantBlend(input.LandBlendWeights1, input.LandBlendWeights2.xy) && ExtendedMaterials::TerrainHasAnyDisplacement()) {
-#					if defined(TRUE_PBR)
 					float terrainHeightScale = ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams);
-#					else
-					float terrainHeightScale = ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams);
-#					endif
 					if (terrainHeightScale > 0.01) {
 						// Stochastic update: evaluate a subset per frame (more samples near lights).
 						float updateProbability = lerp(0.1, 1.0, terrainPointShadowQuality);
@@ -2845,6 +2831,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(EMAT)
 #		undef COMPUTE_TERRAIN_SHADOW_BASE
 #		undef EVAL_TERRAIN_DIR_SHADOW
+#		undef LANDSCAPE_PARALLAX_ENABLED
 #	endif
 
 	return psout;
