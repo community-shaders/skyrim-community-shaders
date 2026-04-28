@@ -216,9 +216,50 @@ namespace Util
 	};
 
 	/**
-	 * Creates a StyledButtonWrapper using the theme's error color with auto-derived hover/active variants.
+	 * Creates a StyledButtonWrapper using a status color with the shared hover/active brightness.
+	 * Prefer the named helpers below for semantic UI actions.
 	 */
-	StyledButtonWrapper ErrorButtonStyle();
+	StyledButtonWrapper StatusButtonStyle(const ImVec4& color);
+
+	/** Use for destructive or critical actions such as Delete, Clear, Remove, Reset, or irreversible confirms. */
+	StyledButtonWrapper DestructiveButtonStyle();
+
+	/**
+	 * Creates a StyledButtonWrapper using alpha-based hover/active transitions.
+	 * Used for status text buttons where the color itself communicates intent.
+	 * Prefer the named helpers below.
+	 */
+	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color);
+
+	/** Use for confirmatory or positive actions such as Apply, Confirm, or Accept. */
+	StyledButtonWrapper SuccessButtonStyle();
+	bool SuccessButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/** Use for cautionary or reversible actions such as Revert, Reset, or Undo. */
+	StyledButtonWrapper WarningButtonStyle();
+	bool WarningButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/**
+	 * Alpha-based error-color button — use in toolbar rows alongside SuccessButton/WarningButton
+	 * for visual consistency. For standalone destructive actions (delete icons, close buttons),
+	 * prefer ErrorButton which uses the brightness-based DestructiveButtonStyle.
+	 */
+	bool ErrorTextButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+	bool ErrorButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+	template <class TextureID>
+	bool ErrorImageButton(
+		const char* id,
+		TextureID textureId,
+		const ImVec2& imageSize,
+		const ImVec2& uv0 = ImVec2(0, 0),
+		const ImVec2& uv1 = ImVec2(1, 1),
+		const ImVec4& bgCol = ImVec4(0, 0, 0, 0),
+		const ImVec4& tintCol = ImVec4(1, 1, 1, 1))
+	{
+		auto _style = DestructiveButtonStyle();
+		return ImGui::ImageButton(id, textureId, imageSize, uv0, uv1, bgCol, tintCol);
+	}
+	bool ErrorButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
 	/**
 	 * Creates a transparent button with theme text color hover. Caller must push/pop FrameBorderSize=0 separately.

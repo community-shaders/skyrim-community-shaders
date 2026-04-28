@@ -511,14 +511,81 @@ namespace Util
 		}
 	}
 
-	StyledButtonWrapper ErrorButtonStyle()
+	namespace
 	{
 		constexpr float kHoverBrighten = 0.2f;
 		constexpr float kActiveBrighten = 0.3f;
-		auto color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-		auto hover = ImVec4(std::min(color.x + kHoverBrighten, 1.0f), std::min(color.y + kHoverBrighten, 1.0f), std::min(color.z + kHoverBrighten, 1.0f), color.w);
-		auto active = ImVec4(std::min(color.x + kActiveBrighten, 1.0f), std::min(color.y + kActiveBrighten, 1.0f), std::min(color.z + kActiveBrighten, 1.0f), color.w);
+
+		ImVec4 BrightenButtonColor(const ImVec4& color, float amount)
+		{
+			return ImVec4(
+				std::min(color.x + amount, 1.0f),
+				std::min(color.y + amount, 1.0f),
+				std::min(color.z + amount, 1.0f),
+				color.w);
+		}
+
+		ImVec4 WithAlpha(const ImVec4& color, float alpha)
+		{
+			return ImVec4(color.x, color.y, color.z, alpha);
+		}
+	}
+
+	StyledButtonWrapper StatusButtonStyle(const ImVec4& color)
+	{
+		auto hover = BrightenButtonColor(color, kHoverBrighten);
+		auto active = BrightenButtonColor(color, kActiveBrighten);
 		return StyledButtonWrapper(color, hover, active);
+	}
+
+	StyledButtonWrapper DestructiveButtonStyle()
+	{
+		return StatusButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error);
+	}
+
+	bool ErrorButton(const char* label, const ImVec2& size)
+	{
+		auto _style = DestructiveButtonStyle();
+		return ImGui::Button(label, size);
+	}
+
+	bool ErrorButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
+	{
+		auto _style = DestructiveButtonStyle();
+		return ButtonWithFlash(label, size, flashDurationMs);
+	}
+
+	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color)
+	{
+		return StyledButtonWrapper(color, WithAlpha(color, 0.8f), WithAlpha(color, 1.0f));
+	}
+
+	StyledButtonWrapper SuccessButtonStyle()
+	{
+		return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor);
+	}
+
+	StyledButtonWrapper WarningButtonStyle()
+	{
+		return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Warning);
+	}
+
+	bool SuccessButton(const char* label, const ImVec2& size)
+	{
+		auto _style = SuccessButtonStyle();
+		return ImGui::Button(label, size);
+	}
+
+	bool WarningButton(const char* label, const ImVec2& size)
+	{
+		auto _style = WarningButtonStyle();
+		return ImGui::Button(label, size);
+	}
+
+	bool ErrorTextButton(const char* label, const ImVec2& size)
+	{
+		auto _style = StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error);
+		return ImGui::Button(label, size);
 	}
 
 	StyledButtonWrapper TransparentIconButtonStyle()
