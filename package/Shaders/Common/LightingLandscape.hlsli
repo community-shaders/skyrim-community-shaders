@@ -64,7 +64,8 @@ namespace LandscapeLayers
 // ---------------------------------------------------------------------------
 #	if defined(TRUE_PBR)
 #		define LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_PBR(TILE, COLOR_TEX, COLOR_SAMP, NORM_TEX, NORM_SAMP, RMAOS_TEX, RMAOS_SAMP, PBR_PARAMS3, GLINT_PARAMS, WEIGHT) \
-			[branch] if ((WEIGHT) > 0.01) {                                                                                                                        \
+			[branch] if ((WEIGHT) > 0.01)                                                                                                                          \
+			{                                                                                                                                                      \
 				float weight = WEIGHT;                                                                                                                             \
 				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias);                                                 \
 				float3 landColorRGB = landColor.rgb;                                                                                                               \
@@ -80,7 +81,8 @@ namespace LandscapeLayers
 				[branch] if (LandscapeLayers::PbrTileUsesFullPBR(TILE))                                                                                            \
 				{                                                                                                                                                  \
 					landRMAOS = SampleTerrain(RMAOS_TEX, RMAOS_SAMP, uv, sharedOffset, landDistanceTexMipBias) * float4((PBR_PARAMS3).x, 1, 1, (PBR_PARAMS3).z);   \
-					[branch] if (LandscapeLayers::PbrTileHasGlint(TILE)) {                                                                                         \
+					[branch] if (LandscapeLayers::PbrTileHasGlint(TILE))                                                                                           \
+					{                                                                                                                                              \
 						glintParameters += weight * (GLINT_PARAMS);                                                                                                \
 					}                                                                                                                                              \
 				}                                                                                                                                                  \
@@ -102,7 +104,8 @@ namespace LandscapeLayers
 #			define LIGHTING_LAND_SNOW_ACCUM(SNOW_COMPONENT)
 #		endif
 #		define LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(COLOR_TEX, COLOR_SAMP, NORM_TEX, NORM_SAMP, WEIGHT, SNOW_COMPONENT) \
-			[branch] if ((WEIGHT) > 0.01) {                                                                            \
+			[branch] if ((WEIGHT) > 0.01)                                                                              \
+			{                                                                                                          \
 				float weight = WEIGHT;                                                                                 \
 				float4 landColor = SampleTerrain(COLOR_TEX, COLOR_SAMP, uv, sharedOffset, landDistanceTexMipBias);     \
 				float3 landColorRGB = landColor.rgb;                                                                   \

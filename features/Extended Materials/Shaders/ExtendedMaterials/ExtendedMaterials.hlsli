@@ -448,16 +448,16 @@ namespace ExtendedMaterials
 			float height = lerp(lerp(height0, height1, 0.5), 0.5, (1.0 - heightStability) * 0.35);
 			float offset = (1.0 - height) * -maxHeight + minHeight;
 			pixelOffset = saturate(height);
-#	if defined(VR_STEREO_OPT)
+#if defined(VR_STEREO_OPT)
 			hasPOM = true;
-#	endif
+#endif
 			return viewDirTS.xy * offset + coords.xy;
 		}
-#	if defined(TRUE_PBR)
+#if defined(TRUE_PBR)
 		if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0 || !useCheapParallax)
-#	else
+#else
 		if (!useCheapParallax)
-#	endif
+#endif
 		{
 			const float maxSteps = 4;
 			uint numSteps = max(4, uint(scale * maxSteps));

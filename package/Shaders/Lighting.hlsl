@@ -1022,9 +1022,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 uvOriginal = uv;
 
 #	if defined(EMAT)
-	float parallaxShadowQuality = viewPosition.z < ExtendedMaterials::ParallaxCheapDistance
-		? ExtendedMaterials::ParallaxNearShadowQuality
-		: ExtendedMaterials::ParallaxFarShadowQuality;
+	float parallaxShadowQuality = viewPosition.z < ExtendedMaterials::ParallaxCheapDistance ? ExtendedMaterials::ParallaxNearShadowQuality : ExtendedMaterials::ParallaxFarShadowQuality;
 	float terrainDirectionalShadowQuality = parallaxShadowQuality;
 #		if defined(LANDSCAPE)
 	terrainDirectionalShadowQuality = ExtendedMaterials::ParallaxNearShadowQuality;
@@ -1040,7 +1038,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(TRUE_PBR)
 #				define LANDSCAPE_PARALLAX_ENABLED (SharedData::extendedMaterialSettings.EnableParallax)
 #			else
-#				define LANDSCAPE_PARALLAX_ENABLED \
+#				define LANDSCAPE_PARALLAX_ENABLED                                 \
 					(SharedData::extendedMaterialSettings.EnableTerrainParallax || \
 						(SharedData::extendedMaterialSettings.EnableParallax && ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement) != 0)))
 #			endif
@@ -2263,8 +2261,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #				elif defined(LANDSCAPE)
-			if (LANDSCAPE_PARALLAX_ENABLED)
-			{
+			if (LANDSCAPE_PARALLAX_ENABLED) {
 				if (ExtendedMaterials::TerrainHasSignificantBlend(input.LandBlendWeights1, input.LandBlendWeights2.xy) && ExtendedMaterials::TerrainHasAnyDisplacement()) {
 					float terrainHeightScale = ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams);
 					if (terrainHeightScale > 0.01) {
