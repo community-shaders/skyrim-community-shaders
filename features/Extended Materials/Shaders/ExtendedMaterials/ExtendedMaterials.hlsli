@@ -22,7 +22,8 @@ namespace ExtendedMaterials
 	static const float ShadowIntensity = 2.0;
 	static const float ParallaxCheapDistance = 512.0;
 	static const float ParallaxNearShadowQuality = 1.0;
-	static const float ParallaxFarShadowQuality = 0.25;
+	static const float ParallaxFarShadowQuality = 0.5;
+	static const float TerrainParallaxShadowMaxMipLevel = 1.0;
 
 	inline uint ParallaxShadowTapCount(float quality)
 	{
@@ -681,7 +682,10 @@ namespace ExtendedMaterials
 #	if defined(TRUE_PBR)
 		return (PBRFlags & TERRAIN_DISPLACEMENT_MASK) != 0;
 #	else
-		return (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement) != 0;
+		// Some distant landscape permutations can lose THLandHasDisplacement even though
+		// legacy terrain parallax still uses alpha-based displacement.
+		return SharedData::extendedMaterialSettings.EnableTerrainParallax ||
+		       (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement) != 0;
 #	endif
 	}
 

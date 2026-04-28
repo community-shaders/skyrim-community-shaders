@@ -7,7 +7,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableTerrain,
 	EnableHeightBlending,
 	EnableShadows,
-	ExtendShadows,
 	EnableParallaxWarpingFix)
 
 void ExtendedMaterials::DataLoaded()
