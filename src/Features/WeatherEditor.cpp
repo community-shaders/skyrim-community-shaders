@@ -21,7 +21,18 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void WeatherEditor::DataLoaded()
 {
-	EditorWindow::GetSingleton()->SetupResources();
+	s_dataAvailable = true;
+}
+
+void WeatherEditor::EnsureDataLoaded()
+{
+	if (!s_dataAvailable)
+		return;
+
+	if (!s_resourcesInitialized) {
+		EditorWindow::GetSingleton()->SetupResources();
+		s_resourcesInitialized = true;
+	}
 	LoadAllWeathers();
 }
 
@@ -63,6 +74,7 @@ void LerpDirectional(RE::BGSDirectionalAmbientLightingColors::Directional& oldCo
 
 void WeatherEditor::DrawSettings()
 {
+	EnsureDataLoaded();
 	bool canOpen = EditorWindow::CanBeOpen();
 	ImGui::BeginDisabled(!canOpen);
 	if (ImGui::Button("Open Editor", { -1, 0 }))

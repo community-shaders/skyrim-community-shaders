@@ -324,8 +324,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		}
 		if (isLocked)
 			ImGui::PopStyleColor(2);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
+		Util::AddTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
 	};
 
 	auto drawUnsavedIndicator = [&]() {
@@ -333,8 +332,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			return;
 		ImGui::SameLine();
 		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES)");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Unsaved changes - click save to keep");
+		Util::AddTooltip("Unsaved changes - click save to keep");
 	};
 
 	if (useIcons) {
@@ -357,8 +355,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			ImGui::SameLine();
 			if (ImGui::ImageButton((std::string(searchId) + suffix).c_str(), texture, buttonSize))
 				callback();
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", tooltip);
+			Util::AddTooltip(tooltip);
 		};
 
 		// Apply button
@@ -369,8 +366,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				ImGui::SameLine();
 				if (ImGui::Button("Apply"))
 					ApplyChanges();
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Apply changes to the game");
+				Util::AddTooltip("Apply changes to the game");
 			}
 		}
 
@@ -387,8 +383,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 					if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
 						ImGui::OpenPopup("DeleteConfirmation");
 				}
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Delete saved file");
+				Util::AddTooltip("Delete saved file");
 			}
 		}
 
@@ -422,8 +417,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 				if (ImGui::Button(label, size))
 					callback();
 			}
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", tooltip);
+			Util::AddTooltip(tooltip);
 		};
 
 		auto textButton = [&](const char* label, const char* tooltip, auto callback) {
@@ -433,8 +427,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			size.y = buttonHeight;
 			if (Util::ButtonWithFlash(label, size))
 				callback();
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", tooltip);
+			Util::AddTooltip(tooltip);
 		};
 
 		// Apply button
@@ -459,8 +452,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	if (showApply && RequiresManualApply() && editorWindow->settings.autoApplyChanges && menu) {
 		ImGui::SameLine();
 		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(Changes require manual apply)");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("This form type is only re-read by the engine on weather reinit.\nAuto-apply is disabled - use the Apply button.");
+		Util::AddTooltip("This form type is only re-read by the engine on weather reinit.\nAuto-apply is disabled - use the Apply button.");
 	}
 
 	ImGui::Separator();

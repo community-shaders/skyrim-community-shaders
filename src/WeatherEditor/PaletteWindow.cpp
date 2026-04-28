@@ -86,9 +86,7 @@ void PaletteWindow::DrawColorsTab()
 				ImGui::EndPopup();
 			}
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("RGB: %.3f, %.3f, %.3f\nClick to copy\nRight-click to clear", color.x, color.y, color.z);
-			}
+			Util::AddTooltip(std::format("RGB: {:.3f}, {:.3f}, {:.3f}\nClick to copy\nRight-click to clear", color.x, color.y, color.z).c_str());
 		} else {
 			// Show empty favorite slot with star
 			ImVec4 emptyColor(0.2f, 0.2f, 0.2f, 1.0f);
@@ -105,9 +103,7 @@ void PaletteWindow::DrawColorsTab()
 
 			DrawIconStar(center, starSize, starColor, false);
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Drag a colour here to add to favourites");
-			}
+			Util::AddTooltip("Drag a colour here to add to favourites");
 		}
 
 		// Drag-and-drop target
@@ -152,10 +148,9 @@ void PaletteWindow::DrawColorsTab()
 				ImGui::EndDragDropSource();
 			}
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("RGB: %.3f, %.3f, %.3f\nUsed %d times\nClick to copy",
-					entry->color.x, entry->color.y, entry->color.z, entry->useCount);
-			}
+			Util::AddTooltip(std::format("RGB: {:.3f}, {:.3f}, {:.3f}\nUsed {} times\nClick to copy",
+				entry->color.x, entry->color.y, entry->color.z, entry->useCount)
+					.c_str());
 		}
 	}
 	ImGui::Spacing();
@@ -208,10 +203,9 @@ void PaletteWindow::DrawColorsTab()
 				ImGui::EndPopup();
 			}
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("RGB: %.3f, %.3f, %.3f\nUsed %d times\nClick to copy\nRight-click to remove",
-					entry->color.x, entry->color.y, entry->color.z, entry->useCount);
-			}
+			Util::AddTooltip(std::format("RGB: {:.3f}, {:.3f}, {:.3f}\nUsed {} times\nClick to copy\nRight-click to remove",
+				entry->color.x, entry->color.y, entry->color.z, entry->useCount)
+					.c_str());
 
 			colorIndex++;
 		}
@@ -235,9 +229,7 @@ void PaletteWindow::DrawValuesTab()
 				ImGui::SetClipboardText(std::to_string(entry->value).c_str());
 			}
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Used %d times\nClick to copy", entry->useCount);
-			}
+			Util::AddTooltip(std::format("Used {} times\nClick to copy", entry->useCount).c_str());
 		}
 	}
 	ImGui::Spacing();
@@ -277,9 +269,7 @@ void PaletteWindow::DrawValuesTab()
 				ImGui::EndPopup();
 			}
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Used %d times\nClick to copy\nRight-click to remove", entry->useCount);
-			}
+			Util::AddTooltip(std::format("Used {} times\nClick to copy\nRight-click to remove", entry->useCount).c_str());
 		}
 	}
 }

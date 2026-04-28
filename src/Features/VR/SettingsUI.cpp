@@ -264,79 +264,110 @@ namespace
 		}
 	}
 
-	void DrawStereoBlendSettings()
+	void DrawStereoSettings()
 	{
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 
+		if (ImGui::CollapsingHeader("Stereo Reprojection", ImGuiTreeNodeFlags_DefaultOpen))
+			vr.stereoOpt.DrawSettings();
+
 		bool hasEffects = VR::AnyScreenSpaceEffectLoaded();
 		bool isDev = globals::state && globals::state->IsDeveloperMode();
 
-		if (!hasEffects && !isDev) {
-			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "No screen-space effects active (SSGI, SSR, SS Shadows).");
-			ImGui::TextWrapped("Stereo blend requires at least one screen-space effect to be loaded.");
-			return;
+		if (ImGui::CollapsingHeader("Stereo Blend", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (!hasEffects && !isDev) {
+				ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "Requires an active screen-space effect (SSGI, SS Shadows, SSR).");
+			} else {
+				if (!hasEffects)
+					ImGui::TextColored(ImVec4(0.6f, 0.6f, 1.0f, 1.0f), "Developer mode: no screen-space effects active.");
+
+				ImGui::Checkbox("Enable Stereo Blend", &settings.EnableStereoBlend);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text(
+						"Post-composite depth-aware bilateral blend between eyes.\n"
+						"Reduces stereo inconsistencies from screen-space effects (SSGI, SSR, etc.).\n"
+						"Each pixel is reprojected to the other eye; blending is applied only where\n"
+						"depth agrees (same surface). Full-screen pass in VR.");
+				}
+
+				ImGui::BeginDisabled(!settings.EnableStereoBlend);
+
+				ImGui::SliderFloat("Depth Sigma", &settings.StereoBlendDepthSigma, 0.001f, 0.1f, "%.4f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text(
+						"Depth sensitivity for the bilateral weight.\n"
+						"Lower values are stricter -- only blend when depths match very closely.\n"
+						"Higher values allow blending across slight depth differences.\n"
+						"Default: 0.01");
+				}
+
+				ImGui::SliderFloat("Max Blend Factor", &settings.StereoBlendMaxFactor, 0.0f, 0.5f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text(
+						"Maximum blend strength between the two eyes.\n"
+						"Higher values reduce screen-space effect flicker but destroy stereo depth.\n"
+						"Keep below ~0.15 to preserve 3D parallax.\n"
+						"Default: 0.1");
+				}
+
+				ImGui::SliderFloat("Color Difference Threshold", &settings.StereoBlendColorThreshold, 0.0f, 0.2f, "%.3f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text(
+						"Minimum luminance difference between eyes to trigger blending.\n"
+						"Set to 0 to blend everywhere. Higher = more selective.\n"
+						"Default: 0.02");
+				}
+
+				ImGui::EndDisabled();
+			}
 		}
 
-		if (!hasEffects && isDev) {
-			ImGui::TextColored(ImVec4(0.6f, 0.6f, 1.0f, 1.0f), "Developer mode: no screen-space effects active, but controls are available.");
+		if (hasEffects || isDev) {
+			ImGui::Separator();
+
+			// Auto-enable required feature when a debug mode is selected; restore on Off.
+			// Tracks what we toggled so user-initiated changes aren't clobbered.
+			static bool s_weEnabledStereoBlend = false;
+			static bool s_weEnabledReproj = false;
+
+			const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection", "Overwrite", "Overwrite Eye1" };
+			if (ImGui::Combo("Debug View", &settings.StereoBlendDebugMode, debugModes, IM_ARRAYSIZE(debugModes))) {
+				int newMode = settings.StereoBlendDebugMode;
+				bool needsBlend = (newMode >= 1 && newMode <= 3);
+				bool needsReproj = (newMode == 4 || newMode == 5);
+
+				// Auto-enable Stereo Blend for modes 1-3 (runtime-toggleable)
+				if (needsBlend && !settings.EnableStereoBlend) {
+					settings.EnableStereoBlend = true;
+					s_weEnabledStereoBlend = true;
+				} else if (!needsBlend && s_weEnabledStereoBlend) {
+					settings.EnableStereoBlend = false;
+					s_weEnabledStereoBlend = false;
+				}
+
+				// Auto-enable Reprojection for modes 4-5 (note: takes effect after restart)
+				auto& sm = vr.stereoOpt.settings.stereoMode;
+				if (needsReproj && sm == VRStereoOptimizations::StereoMode::Off) {
+					sm = VRStereoOptimizations::StereoMode::Enable;
+					s_weEnabledReproj = true;
+				} else if (!needsReproj && s_weEnabledReproj) {
+					sm = VRStereoOptimizations::StereoMode::Off;
+					s_weEnabledReproj = false;
+				}
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Selecting a debug mode auto-enables the required feature; setting back to Off restores it.\n\n"
+					"Off: Normal rendering\n"
+					"Back-Check: Round-trip reprojection validation (auto-enables Stereo Blend)\n"
+					"Blend Weight: Heatmap of bilateral blend intensity (auto-enables Stereo Blend)\n"
+					"Edge Detection: Highlights depth discontinuities (auto-enables Stereo Blend)\n"
+					"Overwrite: Mode texture classification (auto-enables Reprojection -- restart required)\n"
+					"  Green=edge  Pink=edge neighbour  Blue=disoccluded  Orange=full blend\n"
+					"Overwrite Eye1: POM depth heatmap for Eye 1 (auto-enables Reprojection -- restart required)");
+			}
 		}
-
-		ImGui::Checkbox("Enable Stereo Blend", &settings.EnableStereoBlend);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Post-composite depth-aware bilateral blend between eyes.\n"
-				"Reduces stereo inconsistencies from screen-space effects (SSGI, SSR, etc.).\n"
-				"Each pixel is reprojected to the other eye; blending is applied only where\n"
-				"depth agrees (same surface). Full-screen pass in VR.\n"
-				"Only use to help with stereo consistency artifacts.\n");
-		}
-
-		ImGui::BeginDisabled(!settings.EnableStereoBlend);
-
-		ImGui::SliderFloat("Depth Sigma", &settings.StereoBlendDepthSigma, 0.001f, 0.1f, "%.4f");
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Depth sensitivity for the bilateral weight.\n"
-				"Lower values are stricter -- only blend when depths match very closely.\n"
-				"Higher values allow blending across slight depth differences.\n"
-				"Default: 0.01");
-		}
-
-		ImGui::SliderFloat("Max Blend Factor", &settings.StereoBlendMaxFactor, 0.0f, 0.5f, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Maximum blend strength between the two eyes.\n"
-				"Higher values reduce screen-space effect flicker but destroy stereo depth.\n"
-				"Keep below ~0.15 to preserve 3D parallax. Above ~0.3 causes flat 'cardboard cutout' depth.\n"
-				"Default: 0.1");
-		}
-
-		ImGui::SliderFloat("Color Difference Threshold", &settings.StereoBlendColorThreshold, 0.0f, 0.2f, "%.3f");
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Minimum luminance difference between eyes to trigger blending.\n"
-				"Pixels where both eyes already agree are left untouched, preserving stereo parallax.\n"
-				"Only areas with visible screen-space effect inconsistencies get corrected.\n"
-				"Set to 0 to blend everywhere. Higher = more selective.\n"
-				"Default: 0.02");
-		}
-
-		ImGui::Separator();
-
-		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection", "Overwrite", "Overwrite Eye1" };
-		ImGui::Combo("Debug View", &settings.StereoBlendDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Stereo blend debug visualization modes:");
-			ImGui::Text("  Off: Normal rendering");
-			ImGui::Text("  Back-Check: Shows round-trip reprojection validation");
-			ImGui::Text("  Blend Weight: Heatmap of bilateral blend intensity");
-			ImGui::Text("  Edge Detection: Highlights depth discontinuities");
-			ImGui::Text("  Overwrite: Shows stereo reprojection mode classification");
-			ImGui::Text("    (Eye 0 = left eye, fully shaded; Eye 1 = right eye, reprojected)");
-		}
-
-		ImGui::EndDisabled();
 	}
 
 	void DrawGeneralVRSettings()
@@ -960,10 +991,7 @@ void VR::DrawSettings()
 
 		if (BeginTabItemWithFont("Stereo", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##VRStereoFrame", { 0, 0 }, true)) {
-				DrawStereoBlendSettings();
-				if (ImGui::CollapsingHeader("Stereo Optimizations", ImGuiTreeNodeFlags_DefaultOpen)) {
-					stereoOpt.DrawSettings();
-				}
+				DrawStereoSettings();
 			}
 			ImGui::EndChild();
 			ImGui::EndTabItem();

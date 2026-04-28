@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/Permutation.hlsli"
+#include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
 
@@ -270,7 +271,7 @@ PS_OUTPUT main(PS_INPUT input)
 		baseColor.xyz *= discScale;
 
 		// Tiny dither to reduce visible banding on bright gradients.
-		float ign = frac(52.9829189 * frac(dot(floor(input.Position.xy), float2(0.06711056, 0.00583715))));
+		float ign = Random::InterleavedGradientNoise(floor(input.Position.xy));
 		baseColor.xyz += (ign - 0.5) * (discScale / 255.0);
 
 		yyy = 0.0;

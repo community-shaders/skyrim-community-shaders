@@ -655,14 +655,17 @@ void TerrainBlending::SetupResources()
 		D3D11_TEXTURE2D_DESC texDesc;
 		mainDepth.texture->GetDesc(&texDesc);
 		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, NULL, &terrainDepth.texture));
+		Util::SetResourceName(terrainDepth.texture, "TerrainBlending::TerrainDepth");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
 		mainDepth.depthSRV->GetDesc(&srvDesc);
 		DX::ThrowIfFailed(device->CreateShaderResourceView(terrainDepth.texture, &srvDesc, &terrainDepth.depthSRV));
+		Util::SetResourceName(terrainDepth.depthSRV, "TerrainBlending::TerrainDepth SRV");
 
 		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
 		mainDepth.views[0]->GetDesc(&dsvDesc);
 		DX::ThrowIfFailed(device->CreateDepthStencilView(terrainDepth.texture, &dsvDesc, &terrainDepth.views[0]));
+		Util::SetResourceName(terrainDepth.views[0], "TerrainBlending::TerrainDepth DSV");
 	}
 
 	{
@@ -673,7 +676,7 @@ void TerrainBlending::SetupResources()
 		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
-		blendedDepthTexture = new Texture2D(texDesc);
+		blendedDepthTexture = new Texture2D(texDesc, "TerrainBlending::BlendedDepth");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		main.SRV->GetDesc(&srvDesc);
@@ -689,7 +692,7 @@ void TerrainBlending::SetupResources()
 		srvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
 
-		blendedDepthTexture16 = new Texture2D(texDesc);
+		blendedDepthTexture16 = new Texture2D(texDesc, "TerrainBlending::BlendedDepth16");
 		blendedDepthTexture16->CreateSRV(srvDesc);
 		blendedDepthTexture16->CreateUAV(uavDesc);
 
@@ -699,7 +702,7 @@ void TerrainBlending::SetupResources()
 		srvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
 
-		mainDepthCopy = new Texture2D(texDesc);
+		mainDepthCopy = new Texture2D(texDesc, "TerrainBlending::MainDepthCopy");
 		mainDepthCopy->CreateSRV(srvDesc);
 		mainDepthCopy->CreateUAV(uavDesc);
 
@@ -717,6 +720,7 @@ void TerrainBlending::SetupResources()
 		depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilDesc.StencilEnable = false;
 		DX::ThrowIfFailed(device->CreateDepthStencilState(&depthStencilDesc, &terrainDepthStencilState));
+		Util::SetResourceName(terrainDepthStencilState, "TerrainBlending::DepthStencilState");
 	}
 }
 

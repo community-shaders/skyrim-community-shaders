@@ -2,6 +2,7 @@
 
 #include "State.h"
 #include "Utils/ActorUtils.h"
+#include "Utils/D3D.h"
 
 static const uint MAX_BOUNDING_BOXES = 64;
 static const uint MAX_COLLISIONS_PER_BOUNDING_BOX = 64;
@@ -275,7 +276,7 @@ void GrassCollision::SetupResources()
 		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 		sbDesc.StructureByteStride = sizeof(BoundingBoxPacked);
 		sbDesc.ByteWidth = sizeof(BoundingBoxPacked) * MAX_BOUNDING_BOXES;
-		collisionBoundingBoxes = eastl::make_unique<Buffer>(sbDesc);
+		collisionBoundingBoxes = eastl::make_unique<Buffer>(sbDesc, nullptr, "GrassCollision::BoundingBoxes");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
@@ -293,7 +294,7 @@ void GrassCollision::SetupResources()
 		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 		sbDesc.StructureByteStride = sizeof(float4);
 		sbDesc.ByteWidth = sizeof(float4) * MAX_COLLISIONS;
-		collisionInstances = eastl::make_unique<Buffer>(sbDesc);
+		collisionInstances = eastl::make_unique<Buffer>(sbDesc, nullptr, "GrassCollision::Instances");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;

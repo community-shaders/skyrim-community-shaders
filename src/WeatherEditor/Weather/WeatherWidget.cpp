@@ -141,9 +141,7 @@ void WeatherWidget::DrawWidget()
 				if (Util::ButtonWithFlash("Inherit All")) {
 					InheritAllFromParent();
 				}
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Copy all parameter values from parent weather");
-				}
+				Util::AddTooltip("Copy all parameter values from parent weather");
 
 				if (!parent->IsOpen()) {
 					ImGui::SameLine();
@@ -248,9 +246,7 @@ void WeatherWidget::DrawWidget()
 								pendingReinit = true;
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-						}
+						Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 						ImGui::SameLine();
 					}
 
@@ -269,9 +265,7 @@ void WeatherWidget::DrawWidget()
 								}
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("Open this ImageSpace for editing");
-						}
+						Util::AddTooltip("Open this ImageSpace for editing");
 					}
 
 					ImGui::PopID();
@@ -296,9 +290,7 @@ void WeatherWidget::DrawWidget()
 								pendingReinit = true;
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-						}
+						Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 						ImGui::SameLine();
 					}
 
@@ -317,9 +309,7 @@ void WeatherWidget::DrawWidget()
 								}
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("Open this Volumetric Lighting for editing");
-						}
+						Util::AddTooltip("Open this Volumetric Lighting for editing");
 					}
 
 					ImGui::PopID();
@@ -339,9 +329,7 @@ void WeatherWidget::DrawWidget()
 							pendingReinit = true;
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-					}
+					Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 					ImGui::SameLine();
 				}
 
@@ -360,9 +348,7 @@ void WeatherWidget::DrawWidget()
 							}
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("Open this Precipitation for editing");
-					}
+					Util::AddTooltip("Open this Precipitation for editing");
 				}
 
 				ImGui::Spacing();
@@ -380,9 +366,7 @@ void WeatherWidget::DrawWidget()
 							pendingReinit = true;
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-					}
+					Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 					ImGui::SameLine();
 				}
 
@@ -401,9 +385,7 @@ void WeatherWidget::DrawWidget()
 							}
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("Open this Visual Effect for editing");
-					}
+					Util::AddTooltip("Open this Visual Effect for editing");
 				}
 
 				ImGui::Spacing();
@@ -1391,9 +1373,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 					changed = true;
 				}
 			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-			}
+			Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 			ImGui::SameLine();
 		}
 

@@ -674,7 +674,7 @@ void HDRDisplay::SetupResources()
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	hdrTexture = new Texture2D(texDesc);
+	hdrTexture = new Texture2D(texDesc, "HDR::HdrTexture");
 	hdrTexture->CreateSRV(srvDesc);
 	hdrTexture->CreateUAV(uavDesc);
 
@@ -691,7 +691,7 @@ void HDRDisplay::SetupResources()
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	outputTexture = new Texture2D(texDesc);
+	outputTexture = new Texture2D(texDesc, "HDR::OutputTexture");
 	outputTexture->CreateSRV(srvDesc);
 	outputTexture->CreateUAV(uavDesc);
 
@@ -708,7 +708,7 @@ void HDRDisplay::SetupResources()
 	D3D11_UNORDERED_ACCESS_VIEW_DESC uiUavDesc = uavDesc;
 	uiUavDesc.Format = uiTexDesc.Format;
 
-	uiTexture = new Texture2D(uiTexDesc);
+	uiTexture = new Texture2D(uiTexDesc, "HDR::UiTexture");
 	uiTexture->CreateSRV(uiSrvDesc);
 	uiTexture->CreateUAV(uiUavDesc);
 
@@ -719,7 +719,7 @@ void HDRDisplay::SetupResources()
 	rtvDesc.Texture2D.MipSlice = 0;
 	uiTexture->CreateRTV(rtvDesc);
 
-	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
+	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>(), "HDR::DataCB");
 
 	UpdateHDRData();
 

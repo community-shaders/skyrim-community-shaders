@@ -7,6 +7,8 @@
 // ambient occlusion" https://eprints.whiterose.ac.uk/id/eprint/187713/
 
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Math.hlsli"
+#include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
 
@@ -33,8 +35,8 @@ static const int kEdgeMargin = 2;               // Neighbor offset (pixels) for 
 float BlurShadow(int2 dtid, float centerDepth)
 {
 	// Per-pixel rotation from interleaved gradient noise
-	float noise = frac(52.9829189 * frac(0.06711056 * dtid.x + 0.00583715 * dtid.y));
-	float angle = noise * 6.28318530718;
+	float noise = Random::InterleavedGradientNoise(float2(dtid));
+	float angle = noise * Math::TAU;
 	float sn, cs;
 	sincos(angle, sn, cs);
 	float2x2 rot = float2x2(cs, sn, -sn, cs);

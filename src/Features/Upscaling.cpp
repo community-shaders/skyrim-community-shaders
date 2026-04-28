@@ -432,15 +432,23 @@ void Upscaling::DrawSettings()
 			ImGui::SliderFloat("View Resize", &debugRescale, 0.05f, 1.f);
 
 			if (ImGui::TreeNode("Upscaling Intermediates")) {
-				if (vrIntermediateColorIn[0] && vrIntermediateColorOut[0]) {
-					BUFFER_VIEWER_NODE_TITLE(vrIntermediateColorIn[0], "Left Eye In", debugRescale)
-					BUFFER_VIEWER_NODE_TITLE(vrIntermediateColorIn[1], "Right Eye In", debugRescale)
-					BUFFER_VIEWER_NODE_TITLE(vrIntermediateColorOut[0], "Left Eye Out", debugRescale)
-					BUFFER_VIEWER_NODE_TITLE(vrIntermediateColorOut[1], "Right Eye Out", debugRescale)
+				if (vrIntermediateMotionVectors[0]) {
+					bool isDLSS = GetUpscaleMethod() == UpscaleMethod::kDLSS;
+					if (vrIntermediateColorIn[0] && vrIntermediateColorOut[0]) {
+						BUFFER_VIEWER_NODE_TITLE(vrIntermediateColorIn[0], "Left Eye In", debugRescale)
+						BUFFER_VIEWER_NODE_TITLE(vrIntermediateColorIn[1], "Right Eye In", debugRescale)
+						if (!isDLSS)
+							BUFFER_VIEWER_NODE_TITLE(vrIntermediateColorOut[0], "Left Eye Out", debugRescale)
+						BUFFER_VIEWER_NODE_TITLE(vrIntermediateColorOut[1], "Right Eye Out", debugRescale)
+					}
 					BUFFER_VIEWER_NODE_TITLE(vrIntermediateMotionVectors[0], "Left Eye MVec", debugRescale)
 					BUFFER_VIEWER_NODE_TITLE(vrIntermediateMotionVectors[1], "Right Eye MVec", debugRescale)
 					BUFFER_VIEWER_NODE_TITLE(vrIntermediateReactiveMask[0], "Left Eye Reactive", debugRescale)
 					BUFFER_VIEWER_NODE_TITLE(vrIntermediateReactiveMask[1], "Right Eye Reactive", debugRescale)
+					if (vrIntermediateTransparencyMask[0]) {
+						BUFFER_VIEWER_NODE_TITLE(vrIntermediateTransparencyMask[0], "Left Eye Transparency", debugRescale)
+						BUFFER_VIEWER_NODE_TITLE(vrIntermediateTransparencyMask[1], "Right Eye Transparency", debugRescale)
+					}
 				} else {
 					ImGui::TextDisabled("VR intermediates not yet created (enter game world)");
 				}
@@ -790,12 +798,12 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 					for (int i = 0; i < 2; i++) {
 						vrIntermediateColorIn[i].reset();
 						vrIntermediateColorOut[i].reset();
-						vrIntermediateDepth[i].reset();
 						vrIntermediateLinearDepth[i].reset();
 						vrIntermediateMotionVectors[i].reset();
 						vrIntermediateReactiveMask[i].reset();
 						vrIntermediateTransparencyMask[i].reset();
 					}
+					vrIntermediateDepth.reset();
 				}
 			}
 			if (a_upscalemethod == UpscaleMethod::kFSR)
@@ -933,6 +941,31 @@ eastl::unique_ptr<Texture2D> Upscaling::CreateTextureFromSource(ID3D11Resource* 
 void Upscaling::CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight, uint32_t outWidth, uint32_t outHeight,
 	ID3D11Resource* colorSrc, ID3D11Resource* mvecSrc, ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc)
 {
+	// Right-eye-only depth intermediate for DLSS. Streamline.Upscale copies the right-eye depth
+	// slice here before evaluating DLSS eye 1; eye 0 reads the combined stereo depth directly at
+	// zero offset. R24G8_TYPELESS matches the game's D24S8_TYPELESS cast group — R32_TYPELESS is
+	// a different cast group and produces silent zero-copy failures.
+	{
+		D3D11_TEXTURE2D_DESC depthDesc = {};
+		depthDesc.Width = inWidth;
+		depthDesc.Height = inHeight;
+		depthDesc.MipLevels = 1;
+		depthDesc.ArraySize = 1;
+		depthDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
+		depthDesc.SampleDesc.Count = 1;
+		depthDesc.Usage = D3D11_USAGE_DEFAULT;
+		depthDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		vrIntermediateDepth = eastl::make_unique<Texture2D>(depthDesc);
+
+		Util::SetResourceName(vrIntermediateDepth->resource.get(), "Upscale_Depth_Right");
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = 1;
+		vrIntermediateDepth->CreateSRV(srvDesc);
+	}
+
 	// All buffers are per-eye: Streamline validates all extents against the input color texture
 	// dimensions, so every tagged resource must be isolated per-eye at {0,0}.
 	for (int i = 0; i < 2; i++) {
@@ -941,34 +974,9 @@ void Upscaling::CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight
 		vrIntermediateColorIn[i] = CreateTextureFromSource(colorSrc, inWidth, inHeight, false, true, true, ("Upscale_ColorIn_" + suffix).c_str());
 		vrIntermediateColorOut[i] = CreateTextureFromSource(colorSrc, outWidth, outHeight, false, true, false, ("Upscale_ColorOut_" + suffix).c_str());
 
-		// Depth: R24G8_TYPELESS matches the game's D24S8_TYPELESS cast group so that
-		// CopySubresourceRegion can copy from the game depth buffer without format errors.
-		// R32_TYPELESS is a different cast group and produces silent zero-copy failures.
-		{
-			D3D11_TEXTURE2D_DESC depthDesc = {};
-			depthDesc.Width = inWidth;
-			depthDesc.Height = inHeight;
-			depthDesc.MipLevels = 1;
-			depthDesc.ArraySize = 1;
-			depthDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
-			depthDesc.SampleDesc.Count = 1;
-			depthDesc.Usage = D3D11_USAGE_DEFAULT;
-			depthDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-			vrIntermediateDepth[i] = eastl::make_unique<Texture2D>(depthDesc);
-
-			Util::SetResourceName(vrIntermediateDepth[i]->resource.get(), ("Upscale_Depth_" + suffix).c_str());
-
-			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-			srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-			srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-			srvDesc.Texture2D.MipLevels = 1;
-			vrIntermediateDepth[i]->CreateSRV(srvDesc);
-		}
-
 		// Linear depth: R32_FLOAT so FSR's GetFfxResourceDescriptionDX11() returns a valid format.
-		// EncodeTexturesCS reads from the raw per-eye depth (via vrIntermediateDepth SRV) and
-		// writes the same non-linear value as R32_FLOAT. Kept separate from vrIntermediateDepth
-		// so DLSS can continue using the R24G8_TYPELESS copy via Streamline.
+		// EncodeTexturesCS writes the non-linear depth as R32_FLOAT for FSR. Kept separate from
+		// vrIntermediateDepth (R24G8_TYPELESS) which Streamline copies into for DLSS right eye.
 		{
 			D3D11_TEXTURE2D_DESC ldDesc = {};
 			ldDesc.Width = inWidth;
@@ -1036,7 +1044,7 @@ void Upscaling::EnsureVRIntermediateTextures()
 	}
 }
 
-void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* depthSrc)
+void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc)
 {
 	if (!globals::game::isVR)
 		return;
@@ -1063,14 +1071,7 @@ void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 		D3D11_BOX srcBox = { offsetXIn, 0, 0, offsetXIn + eyeWidthIn, eyeHeightIn, 1 };
 
 		context->CopySubresourceRegion(vrIntermediateColorIn[i]->resource.get(), 0, 0, 0, 0, colorSrc, 0, &srcBox);
-		// Depth copy keeps vrIntermediateDepth populated for DLSS (Streamline handles R24G8_TYPELESS).
-		// FSR uses vrIntermediateLinearDepth (R32_FLOAT) written by EncodeTexturesCS instead.
-		if (GetUpscaleMethod() == UpscaleMethod::kDLSS)
-			context->CopySubresourceRegion(vrIntermediateDepth[i]->resource.get(), 0, 0, 0, 0, depthSrc, 0, &srcBox);
-		// DLSS motion vectors are written per-eye by EncodeTexturesCS with 5x5 dilation.
-		// FSR uses a raw copy here since it does not use the dilated output.
-		if (GetUpscaleMethod() != UpscaleMethod::kDLSS)
-			context->CopySubresourceRegion(vrIntermediateMotionVectors[i]->resource.get(), 0, 0, 0, 0, motionVectorRT.texture, 0, &srcBox);
+		context->CopySubresourceRegion(vrIntermediateMotionVectors[i]->resource.get(), 0, 0, 0, 0, motionVectorRT.texture, 0, &srcBox);
 
 		uint32_t depthOffset = (i == 1) ? eyeWidthIn : 0;
 		ClearHMDMask(vrIntermediateColorIn[i]->uav.get(), depthTexture.depthSRV,
@@ -1742,7 +1743,7 @@ void Upscaling::Upscale()
 
 			// u2 (MotionVectorOutput): DLSS only — 5x5 dilated MVec for ghosting reduction.
 			// u3 (DepthOutput): VR FSR only — converts R24G8_TYPELESS to R32_FLOAT so
-			//   GetFfxResourceDescriptionDX11() returns a valid format. DLSS uses vrIntermediateDepth.
+			//   GetFfxResourceDescriptionDX11() returns a valid format. DLSS depth is copied in Streamline.cpp.
 			ID3D11UnorderedAccessView* uavs[4] = {
 				globals::game::isVR ? vrIntermediateReactiveMask[i]->uav.get() : reactiveMaskTexture->uav.get(),
 				globals::game::isVR ? vrIntermediateTransparencyMask[i]->uav.get() : transparencyCompositionMaskTexture->uav.get(),

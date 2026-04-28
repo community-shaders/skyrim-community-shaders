@@ -364,7 +364,7 @@ void ScreenSpaceGI::SetupResources()
 
 	logger::debug("Creating buffers...");
 	{
-		ssgiCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSGICB>());
+		ssgiCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSGICB>(), "SSGI::CB");
 	}
 
 	logger::debug("Creating textures...");
@@ -401,7 +401,7 @@ void ScreenSpaceGI::SetupResources()
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 5;
 
 		{
-			texRadiance = eastl::make_unique<Texture2D>(texDesc);
+			texRadiance = eastl::make_unique<Texture2D>(texDesc, "SSGI::Radiance");
 			texRadiance->CreateSRV(srvDesc);
 			// No default UAV needed: prefilterRadiance binds per-mip UAVs via uavRadiance[].
 
@@ -413,6 +413,7 @@ void ScreenSpaceGI::SetupResources()
 					.Texture2D = { .MipSlice = i }
 				};
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texRadiance->resource.get(), &mipUavDesc, uavRadiance[i].put()));
+				Util::SetResourceName(uavRadiance[i].get(), "SSGI::Radiance UAV mip%u", i);
 			}
 
 			// Staging texture for mip 0 radiance. radianceDisocc writes it directly,
@@ -436,7 +437,7 @@ void ScreenSpaceGI::SetupResources()
 				.Texture2D = { .MipSlice = 0 }
 			};
 
-			texRadianceTemp = eastl::make_unique<Texture2D>(tempTexDesc);
+			texRadianceTemp = eastl::make_unique<Texture2D>(tempTexDesc, "SSGI::RadianceTemp");
 			texRadianceTemp->CreateSRV(tempSrvDesc);
 			texRadianceTemp->CreateUAV(tempUavDesc);
 		}
@@ -446,21 +447,23 @@ void ScreenSpaceGI::SetupResources()
 		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16_FLOAT;
 
 		{
-			texWorkingDepth = eastl::make_unique<Texture2D>(texDesc);
+			texWorkingDepth = eastl::make_unique<Texture2D>(texDesc, "SSGI::WorkingDepth");
 			texWorkingDepth->CreateSRV(srvDesc);
 			for (int i = 0; i < 5; ++i) {
 				uavDesc.Texture2D.MipSlice = i;
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texWorkingDepth->resource.get(), &uavDesc, uavWorkingDepth[i].put()));
+				Util::SetResourceName(uavWorkingDepth[i].get(), "SSGI::WorkingDepth UAV mip%d", i);
 			}
 		}
 
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8G8_UNORM;
 		{
-			texNormal = eastl::make_unique<Texture2D>(texDesc);
+			texNormal = eastl::make_unique<Texture2D>(texDesc, "SSGI::Normal");
 			texNormal->CreateSRV(srvDesc);
 			for (uint i = 0; i < 5; ++i) {
 				uavDesc.Texture2D.MipSlice = i;
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texNormal->resource.get(), &uavDesc, uavNormal[i].put()));
+				Util::SetResourceName(uavNormal[i].get(), "SSGI::Normal UAV mip%u", i);
 			}
 		}
 
@@ -468,55 +471,55 @@ void ScreenSpaceGI::SetupResources()
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		{
-			texIlY[0] = eastl::make_unique<Texture2D>(texDesc);
+			texIlY[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlY[0]");
 			texIlY[0]->CreateSRV(srvDesc);
 			texIlY[0]->CreateUAV(uavDesc);
 
-			texIlY[1] = eastl::make_unique<Texture2D>(texDesc);
+			texIlY[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlY[1]");
 			texIlY[1]->CreateSRV(srvDesc);
 			texIlY[1]->CreateUAV(uavDesc);
 
-			texGiSpecular[0] = eastl::make_unique<Texture2D>(texDesc);
+			texGiSpecular[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::GiSpecular[0]");
 			texGiSpecular[0]->CreateSRV(srvDesc);
 			texGiSpecular[0]->CreateUAV(uavDesc);
 
-			texGiSpecular[1] = eastl::make_unique<Texture2D>(texDesc);
+			texGiSpecular[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::GiSpecular[1]");
 			texGiSpecular[1]->CreateSRV(srvDesc);
 			texGiSpecular[1]->CreateUAV(uavDesc);
 		}
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
 		{
-			texIlCoCg[0] = eastl::make_unique<Texture2D>(texDesc);
+			texIlCoCg[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlCoCg[0]");
 			texIlCoCg[0]->CreateSRV(srvDesc);
 			texIlCoCg[0]->CreateUAV(uavDesc);
 
-			texIlCoCg[1] = eastl::make_unique<Texture2D>(texDesc);
+			texIlCoCg[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlCoCg[1]");
 			texIlCoCg[1]->CreateSRV(srvDesc);
 			texIlCoCg[1]->CreateUAV(uavDesc);
 		}
 
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8_UNORM;
 		{
-			texAo[0] = eastl::make_unique<Texture2D>(texDesc);
+			texAo[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AO[0]");
 			texAo[0]->CreateSRV(srvDesc);
 			texAo[0]->CreateUAV(uavDesc);
 
-			texAo[1] = eastl::make_unique<Texture2D>(texDesc);
+			texAo[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AO[1]");
 			texAo[1]->CreateSRV(srvDesc);
 			texAo[1]->CreateUAV(uavDesc);
 
-			texAccumFrames[0] = eastl::make_unique<Texture2D>(texDesc);
+			texAccumFrames[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AccumFrames[0]");
 			texAccumFrames[0]->CreateSRV(srvDesc);
 			texAccumFrames[0]->CreateUAV(uavDesc);
 
-			texAccumFrames[1] = eastl::make_unique<Texture2D>(texDesc);
+			texAccumFrames[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AccumFrames[1]");
 			texAccumFrames[1]->CreateSRV(srvDesc);
 			texAccumFrames[1]->CreateUAV(uavDesc);
 		}
 
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
 		{
-			texPrevGeo = eastl::make_unique<Texture2D>(texDesc);
+			texPrevGeo = eastl::make_unique<Texture2D>(texDesc, "SSGI::PrevGeo");
 			texPrevGeo->CreateSRV(srvDesc);
 			texPrevGeo->CreateUAV(uavDesc);
 		}
@@ -544,7 +547,7 @@ void ScreenSpaceGI::SetupResources()
 			return;
 		}
 
-		texNoise = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+		texNoise = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "SSGI::Noise");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texNoise->desc.Format,
@@ -568,9 +571,11 @@ void ScreenSpaceGI::SetupResources()
 			.MaxLOD = D3D11_FLOAT32_MAX
 		};
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearClampSampler.put()));
+		Util::SetResourceName(linearClampSampler.get(), "SSGI::LinearClampSampler");
 
 		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, pointClampSampler.put()));
+		Util::SetResourceName(pointClampSampler.get(), "SSGI::PointClampSampler");
 	}
 
 	CompileComputeShaders();

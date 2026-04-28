@@ -1,6 +1,7 @@
 #include "VolumetricShadows.h"
 
 #include "State.h"
+#include "Utils/D3D.h"
 
 void VolumetricShadows::SetupResources()
 {
@@ -17,6 +18,7 @@ void VolumetricShadows::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
+		Util::SetResourceName(linearSampler, "VolumetricShadows::LinearSampler");
 	}
 
 	// Compile compute shaders
@@ -102,6 +104,7 @@ void VolumetricShadows::CopyShadowLightData()
 
 				auto device = globals::d3d::device;
 				DX::ThrowIfFailed(device->CreateTexture2D(&copyDesc, nullptr, &shadowCopyTexture));
+				Util::SetResourceName(shadowCopyTexture, "VolumetricShadows::ShadowCopy");
 
 				D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 				srvDesc.Format = copyDesc.Format;
@@ -109,42 +112,52 @@ void VolumetricShadows::CopyShadowLightData()
 				srvDesc.Texture2D.MostDetailedMip = 0;
 				srvDesc.Texture2D.MipLevels = 2;
 				DX::ThrowIfFailed(device->CreateShaderResourceView(shadowCopyTexture, &srvDesc, &shadowCopySRV));
+				Util::SetResourceName(shadowCopySRV, "VolumetricShadows::ShadowCopy SRV");
 
 				// Create mip-specific SRVs for blur passes
 				srvDesc.Texture2D.MostDetailedMip = 0;
 				srvDesc.Texture2D.MipLevels = 1;
 				DX::ThrowIfFailed(device->CreateShaderResourceView(shadowCopyTexture, &srvDesc, &shadowCopyMip0SRV));
+				Util::SetResourceName(shadowCopyMip0SRV, "VolumetricShadows::ShadowCopy SRV mip0");
 
 				srvDesc.Texture2D.MostDetailedMip = 1;
 				srvDesc.Texture2D.MipLevels = 1;
 				DX::ThrowIfFailed(device->CreateShaderResourceView(shadowCopyTexture, &srvDesc, &shadowCopyMip1SRV));
+				Util::SetResourceName(shadowCopyMip1SRV, "VolumetricShadows::ShadowCopy SRV mip1");
 
 				D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
 				uavDesc.Format = copyDesc.Format;
 				uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
 				uavDesc.Texture2D.MipSlice = 0;
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip0UAV));
+				Util::SetResourceName(shadowCopyMip0UAV, "VolumetricShadows::ShadowCopy UAV mip0");
 
 				uavDesc.Texture2D.MipSlice = 1;
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip1UAV));
+				Util::SetResourceName(shadowCopyMip1UAV, "VolumetricShadows::ShadowCopy UAV mip1");
 
 				// Create temporary texture for blur intermediate result
 				DX::ThrowIfFailed(device->CreateTexture2D(&copyDesc, nullptr, &shadowBlurTempTexture));
+				Util::SetResourceName(shadowBlurTempTexture, "VolumetricShadows::ShadowBlurTemp");
 
 				// Create mip-specific SRVs for blur temp texture
 				srvDesc.Texture2D.MostDetailedMip = 0;
 				srvDesc.Texture2D.MipLevels = 1;
 				DX::ThrowIfFailed(device->CreateShaderResourceView(shadowBlurTempTexture, &srvDesc, &shadowBlurTempMip0SRV));
+				Util::SetResourceName(shadowBlurTempMip0SRV, "VolumetricShadows::ShadowBlurTemp SRV mip0");
 
 				srvDesc.Texture2D.MostDetailedMip = 1;
 				srvDesc.Texture2D.MipLevels = 1;
 				DX::ThrowIfFailed(device->CreateShaderResourceView(shadowBlurTempTexture, &srvDesc, &shadowBlurTempMip1SRV));
+				Util::SetResourceName(shadowBlurTempMip1SRV, "VolumetricShadows::ShadowBlurTemp SRV mip1");
 
 				uavDesc.Texture2D.MipSlice = 0;
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowBlurTempTexture, &uavDesc, &shadowBlurTempMip0UAV));
+				Util::SetResourceName(shadowBlurTempMip0UAV, "VolumetricShadows::ShadowBlurTemp UAV mip0");
 
 				uavDesc.Texture2D.MipSlice = 1;
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowBlurTempTexture, &uavDesc, &shadowBlurTempMip1UAV));
+				Util::SetResourceName(shadowBlurTempMip1UAV, "VolumetricShadows::ShadowBlurTemp UAV mip1");
 			}
 
 			// Get input dimensions for dispatch sizing

@@ -126,6 +126,7 @@ public:
 
 	// Stereo bilateral blend pass - called from Deferred::DeferredPasses after composite
 	void DrawStereoBlend();
+	void CompileStereoBlendShaders();
 	bool IsStereoOptimizationCullingReady() const
 	{
 		return REL::Module::IsVR() &&

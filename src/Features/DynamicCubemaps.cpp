@@ -5,6 +5,7 @@
 
 #include "ShaderCache.h"
 #include "State.h"
+#include "Utils/D3D.h"
 
 constexpr auto MIPLEVELS = 8;
 
@@ -643,6 +644,7 @@ void DynamicCubemaps::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &computeSampler));
+		Util::SetResourceName(computeSampler, "DynamicCubemaps::ComputeSampler");
 	}
 
 	auto& cubemap = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS];
@@ -715,10 +717,12 @@ void DynamicCubemaps::SetupResources()
 			arraySRVDesc.Texture2DArray.MostDetailedMip = 0;
 			arraySRVDesc.Texture2DArray.MipLevels = MIPLEVELS;
 			DX::ThrowIfFailed(device->CreateShaderResourceView(envTexture->resource.get(), &arraySRVDesc, &envTextureArraySRV));
+			Util::SetResourceName(envTextureArraySRV, "DynamicCubemaps::EnvTexture ArraySRV");
 			DX::ThrowIfFailed(device->CreateShaderResourceView(envReflectionsTexture->resource.get(), &arraySRVDesc, &envReflectionsTextureArraySRV));
+			Util::SetResourceName(envReflectionsTextureArraySRV, "DynamicCubemaps::EnvReflections ArraySRV");
 		}
 
-		envInferredTexture = new Texture2D(texDesc);
+		envInferredTexture = new Texture2D(texDesc, "DynamicCubemaps::EnvInferred");
 		envInferredTexture->CreateSRV(srvDesc);
 		envInferredTexture->CreateUAV(uavDesc);
 
@@ -744,7 +748,7 @@ void DynamicCubemaps::SetupResources()
 			scratchDesc.Usage = D3D11_USAGE_DEFAULT;
 			scratchDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
 			scratchDesc.MiscFlags = 0;
-			bc6hScratchTexture = new Texture2D(scratchDesc);
+			bc6hScratchTexture = new Texture2D(scratchDesc, "DynamicCubemaps::BC6HScratch");
 
 			D3D11_UNORDERED_ACCESS_VIEW_DESC scratchUAVDesc = {};
 			scratchUAVDesc.Format = DXGI_FORMAT_R32G32B32A32_UINT;
@@ -754,6 +758,7 @@ void DynamicCubemaps::SetupResources()
 			for (std::uint32_t level = 0; level < bc6hMipLevels; ++level) {
 				scratchUAVDesc.Texture2DArray.MipSlice = level;
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(bc6hScratchTexture->resource.get(), &scratchUAVDesc, &bc6hScratchUAVs[level]));
+				Util::SetResourceName(bc6hScratchUAVs[level], "DynamicCubemaps::BC6HScratch UAV mip%u", level);
 			}
 		}
 
@@ -776,22 +781,22 @@ void DynamicCubemaps::SetupResources()
 			bc6hSRVDesc.TextureCube.MostDetailedMip = 0;
 			bc6hSRVDesc.TextureCube.MipLevels = bc6hMipLevels;
 
-			envTextureBC6H = new Texture2D(bc6hDesc);
+			envTextureBC6H = new Texture2D(bc6hDesc, "DynamicCubemaps::EnvTextureBC6H");
 			envTextureBC6H->CreateSRV(bc6hSRVDesc);
 
-			envReflectionsTextureBC6H = new Texture2D(bc6hDesc);
+			envReflectionsTextureBC6H = new Texture2D(bc6hDesc, "DynamicCubemaps::EnvReflectionsBC6H");
 			envReflectionsTextureBC6H->CreateSRV(bc6hSRVDesc);
 		}
 
-		updateCubemapCB = new ConstantBuffer(ConstantBufferDesc<UpdateCubemapCB>());
+		updateCubemapCB = new ConstantBuffer(ConstantBufferDesc<UpdateCubemapCB>(), "DynamicCubemaps::UpdateCubemapCB");
 	}
 
 	{
-		bc6hEncodeCB = new ConstantBuffer(ConstantBufferDesc<BC6HEncodeCB>());
+		bc6hEncodeCB = new ConstantBuffer(ConstantBufferDesc<BC6HEncodeCB>(), "DynamicCubemaps::BC6HEncodeCB");
 	}
 
 	{
-		spmapCB = new ConstantBuffer(ConstantBufferDesc<SpecularMapFilterSettingsCB>());
+		spmapCB = new ConstantBuffer(ConstantBufferDesc<SpecularMapFilterSettingsCB>(), "DynamicCubemaps::SpmapCB");
 	}
 
 	{
@@ -805,11 +810,13 @@ void DynamicCubemaps::SetupResources()
 		for (std::uint32_t level = 1; level < MIPLEVELS; ++level) {
 			uavDesc.Texture2DArray.MipSlice = level;
 			DX::ThrowIfFailed(device->CreateUnorderedAccessView(envTexture->resource.get(), &uavDesc, &uavArray[level - 1]));
+			Util::SetResourceName(uavArray[level - 1], "DynamicCubemaps::EnvTexture UAV mip%u", level);
 		}
 
 		for (std::uint32_t level = 1; level < MIPLEVELS; ++level) {
 			uavDesc.Texture2DArray.MipSlice = level;
 			DX::ThrowIfFailed(device->CreateUnorderedAccessView(envReflectionsTexture->resource.get(), &uavDesc, &uavReflectionsArray[level - 1]));
+			Util::SetResourceName(uavReflectionsArray[level - 1], "DynamicCubemaps::EnvReflections UAV mip%u", level);
 		}
 	}
 

@@ -5,6 +5,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
+#include "Utils/D3D.h"
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
@@ -126,9 +127,11 @@ void Deferred::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
+		Util::SetResourceName(linearSampler, "Deferred::LinearSampler");
 
 		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointSampler));
+		Util::SetResourceName(pointSampler, "Deferred::PointSampler");
 	}
 
 	{
@@ -139,6 +142,7 @@ void Deferred::SetupResources()
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_BLUE;
 		DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, compositeBlendState.put()));
+		Util::SetResourceName(compositeBlendState.get(), "Deferred::CompositeBlendState");
 
 		D3D11_DEPTH_STENCIL_DESC dsDesc{};
 		dsDesc.DepthEnable = TRUE;
@@ -146,6 +150,7 @@ void Deferred::SetupResources()
 		dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 		dsDesc.StencilEnable = FALSE;
 		DX::ThrowIfFailed(device->CreateDepthStencilState(&dsDesc, compositeDepthStencilState.put()));
+		Util::SetResourceName(compositeDepthStencilState.get(), "Deferred::CompositeDepthStencilState");
 
 		D3D11_DEPTH_STENCIL_DESC stencilDsDesc{};
 		stencilDsDesc.DepthEnable = TRUE;
@@ -160,12 +165,14 @@ void Deferred::SetupResources()
 		stencilDsDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
 		stencilDsDesc.BackFace = stencilDsDesc.FrontFace;
 		DX::ThrowIfFailed(device->CreateDepthStencilState(&stencilDsDesc, compositeStencilDSState.put()));
+		Util::SetResourceName(compositeStencilDSState.get(), "Deferred::CompositeStencilDSState");
 
 		D3D11_RASTERIZER_DESC rsDesc{};
 		rsDesc.FillMode = D3D11_FILL_SOLID;
 		rsDesc.CullMode = D3D11_CULL_NONE;
 		rsDesc.DepthClipEnable = FALSE;
 		DX::ThrowIfFailed(device->CreateRasterizerState(&rsDesc, compositeRasterizerState.put()));
+		Util::SetResourceName(compositeRasterizerState.get(), "Deferred::CompositeRasterizerState");
 	}
 
 	// Directional shadow structured buffer (t98): CPU-written each frame, read-only on GPU.
@@ -186,7 +193,7 @@ void Deferred::SetupResources()
 		srvDesc.Buffer.NumElements = 1;
 
 		delete directionalShadowLights;
-		directionalShadowLights = new Buffer(sbDesc);
+		directionalShadowLights = new Buffer(sbDesc, nullptr, "Deferred::DirectionalShadowLights");
 		directionalShadowLights->CreateSRV(srvDesc);
 	}
 }
