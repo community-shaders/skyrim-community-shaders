@@ -6,9 +6,11 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ScreenSpaceShadows::Settings,
 	Enabled,
+	BlurDepthPyramid,
 	SurfaceThickness,
 	ShadowContrast,
-	RayLength)
+	RayLength,
+	SampleCount)
 
 void ScreenSpaceShadows::DrawSettings()
 {
@@ -29,6 +31,19 @@ void ScreenSpaceShadows::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("World-space distance the shadow ray travels. Controls shadow reach.");
 
+		ImGui::SliderInt("Sample Count", &settings.SampleCount, kMinMip0Samples, kMaxMip0Samples);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
+				"Mip 0 ray-march sample count at the reference Ray Length (100). Scales linearly with "
+				"Ray Length to keep world-space sample density constant. Lower mips take half the "
+				"samples each (mip 1 = N/2, mip 2 = N/4, mip 3 = N/8).");
+
+		ImGui::Checkbox("Blur Depth Pyramid", &settings.BlurDepthPyramid);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
+				"Apply a Gaussian blur to each mip of the depth pyramid after the full chain is built. "
+				"Smooths depth discontinuities sampled during the ray-march at a small extra GPU cost.");
+
 		if (globals::game::isVR && globals::state->IsDeveloperMode()) {
 			ImGui::Checkbox("VR Stereo Sync", &enableStereoSync);
 			if (auto _tt = Util::HoverTooltipWrapper())
@@ -47,15 +62,33 @@ void ScreenSpaceShadows::DrawSettings()
 		static float debugRescale = 0.3f;
 		ImGui::SliderFloat("View Resize", &debugRescale, 0.0f, 1.0f);
 
-		static const char* mipTitles[] = {
-			"Shadow Mip 0 - Full res",
-			"Shadow Mip 1 - Half res",
-			"Shadow Mip 2 - Quarter res",
-			"Shadow Mip 3 - Eighth res"
+		static const char* mipSuffix[] = {
+			" Mip 0 - Full res",
+			" Mip 1 - Half res",
+			" Mip 2 - Quarter res",
+			" Mip 3 - Eighth res"
 		};
-		for (int i = 0; i < 4; ++i)
-			BUFFER_VIEWER_NODE_TITLE(texShadowMip[i], mipTitles[i], debugRescale)
+
+		for (int i = 0; i < 4; ++i) {
+			std::string title = std::string("Depth Prefiltered") + mipSuffix[i];
+			BUFFER_VIEWER_NODE_TITLE(texDepthMipPrefiltered[i], title.c_str(), debugRescale)
+		}
+		for (int i = 0; i < 4; ++i) {
+			std::string title = std::string("Depth Blurred") + mipSuffix[i];
+			BUFFER_VIEWER_NODE_TITLE(texDepthMip[i], title.c_str(), debugRescale)
+		}
+		for (int i = 0; i < 4; ++i) {
+			std::string title = std::string("Shadow Marched") + mipSuffix[i];
+			BUFFER_VIEWER_NODE_TITLE(texShadowMip[i], title.c_str(), debugRescale)
+		}
+		for (int i = 0; i < 4; ++i) {
+			std::string title = std::string("Shadow Work") + mipSuffix[i];
+			BUFFER_VIEWER_NODE_TITLE(texShadowWork[i], title.c_str(), debugRescale)
+		}
 		BUFFER_VIEWER_NODE_TITLE(screenSpaceShadowsTexture, "Shadow Final (blurred)", debugRescale)
+		if (globals::game::isVR && stereoSyncCopyTex) {
+			BUFFER_VIEWER_NODE_TITLE(stereoSyncCopyTex, "Stereo Sync Copy", debugRescale)
+		}
 
 		ImGui::TreePop();
 	}
@@ -64,11 +97,13 @@ void ScreenSpaceShadows::DrawSettings()
 void ScreenSpaceShadows::ClearShaderCache()
 {
 	prefilterDepthsCS = nullptr;
+	blurDepthCS = nullptr;
 	shadowsCS = nullptr;
 	shadowsRightCS = nullptr;
 	upscaleCS = nullptr;
 	blurCS = nullptr;
 	stereoSyncCS = nullptr;
+	compiledMip0SampleCount = -1;
 	CompileComputeShaders();
 }
 
@@ -85,21 +120,50 @@ void ScreenSpaceShadows::CompileComputeShaders()
 	if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\PrefilterDepthsCS.hlsl", baseDefines))
 		prefilterDepthsCS.attach(cs);
 
-	if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\ShadowsCS.hlsl", baseDefines))
-		shadowsCS.attach(cs);
+	if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\BlurDepthCS.hlsl", {}))
+		blurDepthCS.attach(cs);
 
-	if (REL::Module::IsVR()) {
-		auto rightDefines = baseDefines;
-		rightDefines.push_back({ "RIGHT", "" });
-		if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\ShadowsCS.hlsl", rightDefines))
-			shadowsRightCS.attach(cs);
-	}
+	// ShadowsCS is compiled lazily via CompileShadowsCS() so the MIP0_SAMPLE_COUNT
+	// define matches the current settings.
 
 	if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\UpscaleCS.hlsl", {}))
 		upscaleCS.attach(cs);
 
 	if (auto* cs = compile(L"Data\\Shaders\\ScreenSpaceShadows\\BlurCS.hlsl", {}))
 		blurCS.attach(cs);
+}
+
+void ScreenSpaceShadows::CompileShadowsCS(int mip0SampleCount)
+{
+	if (mip0SampleCount == compiledMip0SampleCount && shadowsCS)
+		return;
+
+	std::vector<std::pair<const char*, const char*>> baseDefines;
+	if (REL::Module::IsVR())
+		baseDefines.push_back({ "VR", "" });
+
+	char sampleCountStr[16];
+	snprintf(sampleCountStr, sizeof(sampleCountStr), "%d", mip0SampleCount);
+	baseDefines.push_back({ "MIP0_SAMPLE_COUNT", sampleCountStr });
+
+	auto compile = [&](std::vector<std::pair<const char*, const char*>> defines) -> ID3D11ComputeShader* {
+		return reinterpret_cast<ID3D11ComputeShader*>(
+			Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\ShadowsCS.hlsl", defines, "cs_5_0"));
+	};
+
+	shadowsCS = nullptr;
+	if (auto* cs = compile(baseDefines))
+		shadowsCS.attach(cs);
+
+	if (REL::Module::IsVR()) {
+		shadowsRightCS = nullptr;
+		auto rightDefines = baseDefines;
+		rightDefines.push_back({ "RIGHT", "" });
+		if (auto* cs = compile(rightDefines))
+			shadowsRightCS.attach(cs);
+	}
+
+	compiledMip0SampleCount = mip0SampleCount;
 }
 
 void ScreenSpaceShadows::DrawShadows()
@@ -130,6 +194,15 @@ void ScreenSpaceShadows::DrawShadows()
 	cbData.RayLength = settings.RayLength;
 	cbData.LightWorldDir = { -light.x, -light.y, -light.z };
 
+	// Scale mip 0's sample count linearly with ray length, holding world-space density
+	// constant.  Clamp to keep mip 3 (count >> 3) ≥ 1 and avoid runaway costs.
+	const float scaled = settings.SampleCount * settings.RayLength / kReferenceRayLength;
+	const int mip0Count = std::clamp(static_cast<int>(std::round(scaled)), kMinMip0Samples, kMaxMip0Samples);
+	// MIP0_SAMPLE_COUNT is a compile-time define — recompile ShadowsCS if it changed.
+	CompileShadowsCS(mip0Count);
+	if (!shadowsCS)
+		return;
+
 	auto* cbPtr = sssCB->CB();
 	context->CSSetConstantBuffers(1, 1, &cbPtr);
 
@@ -152,23 +225,56 @@ void ScreenSpaceShadows::DrawShadows()
 
 		auto* srcDepthSRV = Util::GetCurrentSceneDepthSRV();
 		ID3D11UnorderedAccessView* depthUAVs[4] = {
-			texDepthMip[0]->uav.get(),
-			texDepthMip[1]->uav.get(),
-			texDepthMip[2]->uav.get(),
-			texDepthMip[3]->uav.get()
+			texDepthMipPrefiltered[0]->uav.get(),
+			texDepthMipPrefiltered[1]->uav.get(),
+			texDepthMipPrefiltered[2]->uav.get(),
+			texDepthMipPrefiltered[3]->uav.get()
 		};
 		context->CSSetShaderResources(0, 1, &srcDepthSRV);
 		context->CSSetUnorderedAccessViews(0, 4, depthUAVs, nullptr);
 		context->CSSetShader(prefilterDepthsCS.get(), nullptr, 0);
 		// Each thread handles a 2x2 full-res block, so dispatch at half resolution.
-		uint pfW = (texDepthMip[0]->desc.Width / 2 + 7) / 8;
-		uint pfH = (texDepthMip[0]->desc.Height / 2 + 7) / 8;
+		uint pfW = (texDepthMipPrefiltered[0]->desc.Width / 2 + 7) / 8;
+		uint pfH = (texDepthMipPrefiltered[0]->desc.Height / 2 + 7) / 8;
 		context->Dispatch(pfW, pfH, 1);
 
 		ID3D11ShaderResourceView* nullSRV = nullptr;
 		ID3D11UnorderedAccessView* nullUAVs[4] = { nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, 1, &nullSRV);
 		context->CSSetUnorderedAccessViews(0, 4, nullUAVs, nullptr);
+
+		if (state->frameAnnotations)
+			state->EndPerfEvent();
+	}
+
+	// === Optional depth pyramid smoothing — blur each mip after the full chain is built. ===
+	// PrefilterDepthsCS has already produced all 4 mip levels; we now blur each independently.
+	if (settings.BlurDepthPyramid && blurDepthCS) {
+		auto runBlurDepthCS = [&](Texture2D* src, Texture2D* dst, uint mip) {
+			cbData.CurrentMip = mip;
+			sssCB->Update(cbData);
+			ID3D11ShaderResourceView* srv = src->srv.get();
+			ID3D11UnorderedAccessView* uav = dst->uav.get();
+			context->CSSetShaderResources(0, 1, &srv);
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+			context->CSSetShader(blurDepthCS.get(), nullptr, 0);
+			uint w = std::max(1u, uint(renderSize.x) >> mip);
+			uint h = std::max(1u, uint(renderSize.y) >> mip);
+			context->Dispatch((w + 7u) >> 3, (h + 7u) >> 3, 1);
+			ID3D11ShaderResourceView* nullSRV2 = nullptr;
+			ID3D11UnorderedAccessView* nullUAV = nullptr;
+			context->CSSetShaderResources(0, 1, &nullSRV2);
+			context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+		};
+
+		if (state->frameAnnotations)
+			state->BeginPerfEvent("SSS - Depth Pyramid Blur");
+
+		// BlurDepthCS reads the raw prefiltered depth and writes the blurred copy
+		// into texDepthMip; no ping-pong needed since the source is preserved.
+		for (uint i = 0; i < 4u; ++i) {
+			runBlurDepthCS(texDepthMipPrefiltered[i].get(), texDepthMip[i].get(), i);
+		}
 
 		if (state->frameAnnotations)
 			state->EndPerfEvent();
@@ -183,8 +289,18 @@ void ScreenSpaceShadows::DrawShadows()
 			cbData.CurrentMip = mip;
 			sssCB->Update(cbData);
 
-			auto* depthSRV = texDepthMip[mip]->srv.get();
-			context->CSSetShaderResources(0, 1, &depthSRV);
+			// t0 = depth used for VSM samples along the ray (blurred when enabled,
+			//      otherwise the raw prefiltered values).
+			// t1 = raw prefiltered depth — always used for accurate per-pixel
+			//      view-space position reconstruction at the receiver.
+			auto* sampleDepthSRV = settings.BlurDepthPyramid
+			                           ? texDepthMip[mip]->srv.get()
+			                           : texDepthMipPrefiltered[mip]->srv.get();
+			ID3D11ShaderResourceView* depthSRVs[2] = {
+				sampleDepthSRV,
+				texDepthMipPrefiltered[mip]->srv.get()
+			};
+			context->CSSetShaderResources(0, 2, depthSRVs);
 
 			auto* shadowUAV = texShadowMip[mip]->uav.get();
 			context->CSSetUnorderedAccessViews(0, 1, &shadowUAV, nullptr);
@@ -219,9 +335,9 @@ void ScreenSpaceShadows::DrawShadows()
 			}
 		}
 
-		ID3D11ShaderResourceView* nullSRV = nullptr;
+		ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
 		ID3D11UnorderedAccessView* nullUAV = nullptr;
-		context->CSSetShaderResources(0, 1, &nullSRV);
+		context->CSSetShaderResources(0, 2, nullSRVs);
 		context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 	}
 
@@ -248,7 +364,7 @@ void ScreenSpaceShadows::DrawShadows()
 		if (blurCS) {
 			if (state->frameAnnotations)
 				state->BeginPerfEvent(std::format("SSS - Blur Mip{}", mip));
-			ID3D11ShaderResourceView* blurSRVs[2] = { blurInTex->srv.get(), texDepthMip[mip]->srv.get() };
+			ID3D11ShaderResourceView* blurSRVs[2] = { blurInTex->srv.get(), texDepthMipPrefiltered[mip]->srv.get() };
 			auto* outUAV = blurOutTex->uav.get();
 			context->CSSetShaderResources(0, 2, blurSRVs);
 			context->CSSetUnorderedAccessViews(0, 1, &outUAV, nullptr);
@@ -266,10 +382,10 @@ void ScreenSpaceShadows::DrawShadows()
 			if (state->frameAnnotations)
 				state->BeginPerfEvent(std::format("SSS - Upscale Mip{}→{}", mip, mip - 1));
 			ID3D11ShaderResourceView* srvs[4] = {
-				blurOutTex->srv.get(),               // t0: blurred shadow at CurrentMip
-				texDepthMip[mip]->srv.get(),          // t1: depth at CurrentMip
-				texShadowMip[mip - 1]->srv.get(),     // t2: marched shadow at CurrentMip-1
-				texDepthMip[mip - 1]->srv.get(),      // t3: depth at CurrentMip-1
+				blurOutTex->srv.get(),                       // t0: blurred shadow at CurrentMip
+				texDepthMipPrefiltered[mip]->srv.get(),       // t1: depth at CurrentMip (unused)
+				texShadowMip[mip - 1]->srv.get(),             // t2: marched shadow at CurrentMip-1
+				texDepthMipPrefiltered[mip - 1]->srv.get(),   // t3: depth at CurrentMip-1 (unused)
 			};
 			context->CSSetShaderResources(0, 4, srvs);
 			auto* outUAV = texShadowWork[mip - 1]->uav.get();
@@ -285,15 +401,14 @@ void ScreenSpaceShadows::DrawShadows()
 		}
 	}
 
-	// === Final blur at mip 0 (full resolution) ===
+	// === Final blur at mip 0 (full resolution) — writes the final shadow mask. ===
 	{
 		cbData.CurrentMip = 0;
 		sssCB->Update(cbData);
 
 		if (state->frameAnnotations)
 			state->BeginPerfEvent("SSS - Blur Mip0");
-		auto* shadowSrc = texShadowWork[0] ? texShadowWork[0]->srv.get() : texShadowMip[0]->srv.get();
-		ID3D11ShaderResourceView* finalBlurSRVs[2] = { shadowSrc, texDepthMip[0]->srv.get() };
+		ID3D11ShaderResourceView* finalBlurSRVs[2] = { texShadowWork[0]->srv.get(), texDepthMipPrefiltered[0]->srv.get() };
 		auto* outUAV = screenSpaceShadowsTexture->uav.get();
 		context->CSSetShaderResources(0, 2, finalBlurSRVs);
 		context->CSSetUnorderedAccessViews(0, 1, &outUAV, nullptr);
@@ -459,9 +574,10 @@ void ScreenSpaceShadows::SetupResources()
 		UINT baseWidth = texDesc.Width;
 		UINT baseHeight = texDesc.Height;
 
-		// Depth mip pyramid — R32_FLOAT at progressively halved resolutions.
+		// Depth mip pyramid — R32G32_FLOAT (linearZ, linearZ²) for VSM queries.
+		// Scratch siblings are allocated alongside for in-place blur ping-pong.
 		{
-			texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+			texDesc.Format = DXGI_FORMAT_R32G32_FLOAT;
 			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 				.Format = texDesc.Format,
 				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
@@ -476,6 +592,11 @@ void ScreenSpaceShadows::SetupResources()
 				texDesc.Width = std::max(1u, baseWidth >> i);
 				texDesc.Height = std::max(1u, baseHeight >> i);
 				char name[64];
+				snprintf(name, sizeof(name), "SSS::DepthMipPrefiltered%d", i);
+				texDepthMipPrefiltered[i] = eastl::make_unique<Texture2D>(texDesc, name);
+				texDepthMipPrefiltered[i]->CreateSRV(srvDesc);
+				texDepthMipPrefiltered[i]->CreateUAV(uavDesc);
+
 				snprintf(name, sizeof(name), "SSS::DepthMip%d", i);
 				texDepthMip[i] = eastl::make_unique<Texture2D>(texDesc, name);
 				texDepthMip[i]->CreateSRV(srvDesc);
@@ -483,7 +604,9 @@ void ScreenSpaceShadows::SetupResources()
 			}
 		}
 
-		// Shadow mip textures — R8_UNORM.
+		// Shadow textures — R8_UNORM.  ShadowsCS does its own moments+Chebyshev
+		// resolution per ray, so downstream blur/upscale and the final shadow
+		// mask all carry plain visibility values.
 		{
 			texDesc.Format = DXGI_FORMAT_R8_UNORM;
 			D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {

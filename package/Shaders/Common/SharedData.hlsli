@@ -315,6 +315,17 @@ namespace SharedData
 		return GetScreenDepth(depth);
 	}
 
+	// Inverse of GetScreenDepth: linear view-space Z back to raw [0,1] NDC depth.
+	float GetNormalisedDepth(float linearDepth)
+	{
+		return (CameraData.x * linearDepth - CameraData.w) / (CameraData.z * linearDepth);
+	}
+
+	float4 GetNormalisedDepths(float4 linearDepths)
+	{
+		return (CameraData.x * linearDepths - CameraData.w) / (CameraData.z * linearDepths);
+	}
+
 	// Returns water data for the tile containing worldPosition (camera-relative XY).
 	// The .w component (water surface height) is stored in C++ as camera-relative Z of
 	// eye 0 (left eye).  Pass eyeIndex to have .w corrected into the current eye's
