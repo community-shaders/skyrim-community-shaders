@@ -864,11 +864,10 @@ void ScreenSpaceGI::DrawSSGI()
 		srvs.at(2) = texRadiance->srv.get();
 		srvs.at(3) = texNoise->srv.get();
 		srvs.at(4) = texAccumFrames[lastFrameAccumTexIdx]->srv.get();
-		srvs.at(5) = texAo[inputAoTexIdx]->srv.get();
-		srvs.at(6) = texIlY[inputGITexIdx]->srv.get();
-		srvs.at(7) = texIlCoCg[inputGITexIdx]->srv.get();
-		srvs.at(8) = texGiSpecular[inputAoTexIdx]->srv.get();
-		srvs.at(9) = texNormal->srv.get();
+		srvs.at(5) = texIlY[inputGITexIdx]->srv.get();
+		srvs.at(6) = texIlCoCg[inputGITexIdx]->srv.get();
+		srvs.at(7) = texGiSpecular[inputAoTexIdx]->srv.get();
+		srvs.at(8) = texNormal->srv.get();
 
 		uavs.at(0) = texAo[!inputAoTexIdx]->uav.get();
 		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();
