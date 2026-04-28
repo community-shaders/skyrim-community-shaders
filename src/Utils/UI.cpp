@@ -513,9 +513,6 @@ namespace Util
 
 	namespace
 	{
-		constexpr float kHoverBrighten = 0.2f;
-		constexpr float kActiveBrighten = 0.3f;
-
 		ImVec4 BrightenButtonColor(const ImVec4& color, float amount)
 		{
 			return ImVec4(
@@ -533,8 +530,8 @@ namespace Util
 
 	StyledButtonWrapper StatusButtonStyle(const ImVec4& color)
 	{
-		auto hover = BrightenButtonColor(color, kHoverBrighten);
-		auto active = BrightenButtonColor(color, kActiveBrighten);
+		auto hover = BrightenButtonColor(color, ThemeManager::Constants::BUTTON_HOVER_BRIGHTEN);
+		auto active = BrightenButtonColor(color, ThemeManager::Constants::BUTTON_ACTIVE_BRIGHTEN);
 		return StyledButtonWrapper(color, hover, active);
 	}
 

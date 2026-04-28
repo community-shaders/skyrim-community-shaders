@@ -210,6 +210,10 @@ public:
 		static constexpr float OVERLAP_FADEIN_SPEED = 8.0f;     // Fade-in speed (units/sec)
 		static constexpr float OVERLAP_FADEOUT_SPEED = 4.0f;    // Fade-out speed (units/sec)
 		static constexpr float OVERLAP_ALPHA_EPSILON = 0.005f;  // Below this alpha is clamped to zero
+
+		// Status button brightness offsets (brightness-based hover/active style)
+		static constexpr float BUTTON_HOVER_BRIGHTEN = 0.2f;
+		static constexpr float BUTTON_ACTIVE_BRIGHTEN = 0.3f;
 	};
 
 	static ThemeManager* GetSingleton()

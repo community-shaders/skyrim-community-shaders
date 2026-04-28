@@ -221,7 +221,7 @@ namespace Util
 	 */
 	StyledButtonWrapper StatusButtonStyle(const ImVec4& color);
 
-	/** Use for destructive or critical actions such as Delete, Clear, Remove, Reset, or irreversible confirms. */
+	/** Use for destructive or critical actions such as Delete, Clear, Remove, or irreversible confirms (including irreversible resets). */
 	StyledButtonWrapper DestructiveButtonStyle();
 
 	/**
@@ -235,7 +235,7 @@ namespace Util
 	StyledButtonWrapper SuccessButtonStyle();
 	bool SuccessButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 
-	/** Use for cautionary or reversible actions such as Revert, Reset, or Undo. */
+	/** Use for cautionary or reversible actions such as Revert, Undo, or Reset (reversible/to-saved). */
 	StyledButtonWrapper WarningButtonStyle();
 	bool WarningButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 
