@@ -55,11 +55,11 @@ public:
 
 		float SurfaceThickness;
 		float ShadowContrast;
-		float RayLength;
+		float SegmentStart;  // world units along the ray where this dispatch's segment begins
 		uint CurrentMip;
 
 		float3 LightWorldDir;
-		float _pad;  // explicit pad to keep struct size a multiple of 16 without relying on alignas (silences C4324)
+		float SegmentLength;  // world units length of this dispatch's segment
 	};
 	STATIC_ASSERT_ALIGNAS_16(SSSCB);
 
@@ -87,10 +87,13 @@ public:
 
 	winrt::com_ptr<ID3D11ComputeShader> prefilterDepthsCS;
 	winrt::com_ptr<ID3D11ComputeShader> blurDepthCS;
-	winrt::com_ptr<ID3D11ComputeShader> shadowsCS;
-	winrt::com_ptr<ID3D11ComputeShader> shadowsRightCS;
-	int compiledMip0SampleCount = -1;
-	void CompileShadowsCS(int mip0SampleCount);
+	// One ShadowsCS variant per mip — each compiled with its own MIP_SAMPLE_COUNT
+	// define so the loop bound is a constant the compiler can unroll.  Mip 3 has
+	// the highest sample count; each step toward mip 0 halves the count.
+	winrt::com_ptr<ID3D11ComputeShader> shadowsCS[4];
+	winrt::com_ptr<ID3D11ComputeShader> shadowsRightCS[4];
+	int compiledBaseSampleCount = -1;
+	void CompileShadowsCS(int baseSampleCount);
 	winrt::com_ptr<ID3D11ComputeShader> upscaleCS;
 	winrt::com_ptr<ID3D11ComputeShader> blurCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoSyncCS;

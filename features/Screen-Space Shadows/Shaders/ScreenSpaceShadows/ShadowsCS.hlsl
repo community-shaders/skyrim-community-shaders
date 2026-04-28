@@ -25,11 +25,10 @@ SamplerState samplerLinearClamp : register(s0);
 SamplerState samplerPointClamp  : register(s1);
 
 // Sample count is a compile-time define so the loop bound is a constant
-// (the compiler can fold/unroll) and we sidestep the float3+uint cbuffer
-// packing pitfall that produced random sample counts.  C++ recompiles this
-// shader whenever the sample count derived from settings changes.
-#ifndef MIP0_SAMPLE_COUNT
-#	define MIP0_SAMPLE_COUNT 16
+// (the compiler can fold/unroll).  C++ compiles 4 variants — one per mip —
+// each with the appropriate count for its segment of the cascaded ray.
+#ifndef MIP_SAMPLE_COUNT
+#	define MIP_SAMPLE_COUNT 16
 #endif
 
 cbuffer SSSCB : register(b1)
@@ -42,10 +41,11 @@ cbuffer SSSCB : register(b1)
 
 	float SurfaceThickness;
 	float ShadowContrast;
-	float RayLength;
+	float SegmentStart;  // world units along the ray where this dispatch's segment begins
 	uint CurrentMip;
 
 	float3 LightWorldDir;
+	float SegmentLength;  // world units length of this dispatch's segment
 };
 
 // Reconstruct view-space position from texUV in [0, DynamicRes] space and linear depth.
@@ -129,7 +129,7 @@ float ComputeVSM_Lower(float2 moments, float depth)
 	
 	// Use the raw prefiltered depth here so the receiver's view-space position
 	// is reconstructed from its actual per-pixel depth, not a blurred neighbour.
-	float2 startMoment = srcDepthPrefiltered.SampleLevel(samplerPointClamp, startUV, CurrentMip);
+	float2 startMoment = srcDepth.SampleLevel(samplerPointClamp, startUV, CurrentMip);
 	float startDepth = startMoment.x;
 
 	float shadow = 1.0;
@@ -139,29 +139,30 @@ float ComputeVSM_Lower(float2 moments, float depth)
 		float3 startPosVS = ScreenToViewPos(startUV, startDepth, eyeIndex);
 		float3 lightViewDir = normalize(mul((float3x3)FrameBuffer::CameraView[eyeIndex], LightWorldDir));
 
-		float mipRayLength = RayLength * float(1u << CurrentMip);
-		float3 endPosVS = startPosVS + lightViewDir * mipRayLength;
-		float2 endUV = ViewPosToTexUV(endPosVS, eyeIndex);
+		// March the slice of the ray assigned to this dispatch:
+		//   [SegmentStart, SegmentStart + SegmentLength] world units from the receiver.
+		// CPU drives the cascade — mip 3 covers the longest segment closest to the receiver,
+		// each subsequent mip halves both the segment length and the sample count.
+		float3 segBeginVS = startPosVS + lightViewDir * SegmentStart;
+		float3 segEndVS   = startPosVS + lightViewDir * (SegmentStart + SegmentLength);
+		float2 segBeginUV = ViewPosToTexUV(segBeginVS, eyeIndex);
+		float2 segEndUV   = ViewPosToTexUV(segEndVS,   eyeIndex);
 
 		float jitter = InterleavedGradientNoise(float2(actualDtid));
 
-		uint numSamples = uint(16) << CurrentMip;                          // 4, 8, 16, 32, 64
+		const uint numSamples = uint(MIP_SAMPLE_COUNT);
 
-		[loop] for (uint i = 1; i <= numSamples; i++)
+		[unroll] for (uint i = 1; i <= numSamples; i++)
 		{
-			float t = float(i + jitter) / float(numSamples);
-			float2 sampleUV = lerp(startUV, endUV, t);
-			float3 rayPosVS = lerp(startPosVS, endPosVS, t);
+			float t = float(i + jitter * 2.0 - 1.0) / float(numSamples);
+			float2 sampleUV = lerp(segBeginUV, segEndUV, t);
+			float3 rayPosVS = lerp(segBeginVS, segEndVS, t);
 
 			if (saturate(sampleUV.x) == sampleUV.x && saturate(sampleUV.y) == sampleUV.y)
 			{
-				float2 moments = srcDepth.SampleLevel(samplerPointClamp, sampleUV, CurrentMip);	
-
+				float2 moments = srcDepth.SampleLevel(samplerLinearClamp, sampleUV, CurrentMip);
 				float shadowFront = ComputeVSM(moments.xy, rayPosVS.z);
 				float shadowBack  = ComputeVSM_Lower(moments.xy, rayPosVS.z - SurfaceThickness);
-
-				// Lit if either: occluder is behind receiver (shadowFront high)
-				//             or occluder is in front of back plane (shadowBack high)
 				shadow *= 1.0 - (1.0 - shadowFront) * (1.0 - shadowBack);
 			}
 		}

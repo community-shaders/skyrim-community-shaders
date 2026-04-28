@@ -98,12 +98,14 @@ void ScreenSpaceShadows::ClearShaderCache()
 {
 	prefilterDepthsCS = nullptr;
 	blurDepthCS = nullptr;
-	shadowsCS = nullptr;
-	shadowsRightCS = nullptr;
+	for (int i = 0; i < 4; ++i) {
+		shadowsCS[i] = nullptr;
+		shadowsRightCS[i] = nullptr;
+	}
 	upscaleCS = nullptr;
 	blurCS = nullptr;
 	stereoSyncCS = nullptr;
-	compiledMip0SampleCount = -1;
+	compiledBaseSampleCount = -1;
 	CompileComputeShaders();
 }
 
@@ -133,37 +135,44 @@ void ScreenSpaceShadows::CompileComputeShaders()
 		blurCS.attach(cs);
 }
 
-void ScreenSpaceShadows::CompileShadowsCS(int mip0SampleCount)
+void ScreenSpaceShadows::CompileShadowsCS(int baseSampleCount)
 {
-	if (mip0SampleCount == compiledMip0SampleCount && shadowsCS)
+	if (baseSampleCount == compiledBaseSampleCount && shadowsCS[3])
 		return;
 
 	std::vector<std::pair<const char*, const char*>> baseDefines;
 	if (REL::Module::IsVR())
 		baseDefines.push_back({ "VR", "" });
 
-	char sampleCountStr[16];
-	snprintf(sampleCountStr, sizeof(sampleCountStr), "%d", mip0SampleCount);
-	baseDefines.push_back({ "MIP0_SAMPLE_COUNT", sampleCountStr });
-
 	auto compile = [&](std::vector<std::pair<const char*, const char*>> defines) -> ID3D11ComputeShader* {
 		return reinterpret_cast<ID3D11ComputeShader*>(
 			Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\ShadowsCS.hlsl", defines, "cs_5_0"));
 	};
 
-	shadowsCS = nullptr;
-	if (auto* cs = compile(baseDefines))
-		shadowsCS.attach(cs);
+	// Mip 3 carries the base sample count; each step toward mip 0 halves it.
+	for (int mip = 0; mip < 4; ++mip) {
+		int samples = std::max(1, baseSampleCount >> (3 - mip));
 
-	if (REL::Module::IsVR()) {
-		shadowsRightCS = nullptr;
-		auto rightDefines = baseDefines;
-		rightDefines.push_back({ "RIGHT", "" });
-		if (auto* cs = compile(rightDefines))
-			shadowsRightCS.attach(cs);
+		char sampleCountStr[16];
+		snprintf(sampleCountStr, sizeof(sampleCountStr), "%d", samples);
+
+		auto defines = baseDefines;
+		defines.push_back({ "MIP_SAMPLE_COUNT", sampleCountStr });
+
+		shadowsCS[mip] = nullptr;
+		if (auto* cs = compile(defines))
+			shadowsCS[mip].attach(cs);
+
+		if (REL::Module::IsVR()) {
+			shadowsRightCS[mip] = nullptr;
+			auto rightDefines = defines;
+			rightDefines.push_back({ "RIGHT", "" });
+			if (auto* cs = compile(rightDefines))
+				shadowsRightCS[mip].attach(cs);
+		}
 	}
 
-	compiledMip0SampleCount = mip0SampleCount;
+	compiledBaseSampleCount = baseSampleCount;
 }
 
 void ScreenSpaceShadows::DrawShadows()
@@ -191,16 +200,15 @@ void ScreenSpaceShadows::DrawShadows()
 	cbData.DynamicRes = { renderSize.x / texDim.x, renderSize.y / texDim.y };
 	cbData.SurfaceThickness = settings.SurfaceThickness;
 	cbData.ShadowContrast = settings.ShadowContrast;
-	cbData.RayLength = settings.RayLength;
 	cbData.LightWorldDir = { -light.x, -light.y, -light.z };
 
-	// Scale mip 0's sample count linearly with ray length, holding world-space density
-	// constant.  Clamp to keep mip 3 (count >> 3) ≥ 1 and avoid runaway costs.
+	// Mip 3 carries the highest sample count; mip 0 the lowest.  Scale by ray length
+	// to hold sample density (samples per world unit) roughly constant.
 	const float scaled = settings.SampleCount * settings.RayLength / kReferenceRayLength;
-	const int mip0Count = std::clamp(static_cast<int>(std::round(scaled)), kMinMip0Samples, kMaxMip0Samples);
-	// MIP0_SAMPLE_COUNT is a compile-time define — recompile ShadowsCS if it changed.
-	CompileShadowsCS(mip0Count);
-	if (!shadowsCS)
+	const int baseSampleCount = std::clamp(static_cast<int>(std::round(scaled)), kMinMip0Samples, kMaxMip0Samples);
+	// MIP_SAMPLE_COUNT is a compile-time define — recompile ShadowsCS variants if it changed.
+	CompileShadowsCS(baseSampleCount);
+	if (!shadowsCS[3])
 		return;
 
 	auto* cbPtr = sssCB->CB();
@@ -280,19 +288,29 @@ void ScreenSpaceShadows::DrawShadows()
 			state->EndPerfEvent();
 	}
 
-	// === Shadow marching — 4 mip levels ===
+	// === Shadow marching — cascaded ray segments along a single ray per pixel ===
+	// CPU drives the cascade.  Mip 3 marches the segment farthest from the receiver
+	// (closest to the light) at low res with the most samples.  Each step toward
+	// mip 0 walks back along the ray toward the receiver, halving both segment
+	// length and sample count.  Coarse depth ends up near the light end of the ray
+	// where fine detail isn't needed, and the receiver-side contact shadow is
+	// computed at full res.
+	// Total ray reach = RayLength * (1 + 1/2 + 1/4 + 1/8) = RayLength * 1.875.
 	{
-		for (uint mip = 0; mip < 4u; ++mip) {
+		const float totalLength = settings.RayLength * 1.875f;
+		float segmentEnd = totalLength;
+		for (int mip = 3; mip >= 0; --mip) {
+			float segmentLength = settings.RayLength / float(1 << (3 - mip));
+			float segmentStart = segmentEnd - segmentLength;
+
 			uint mipW = std::max(1u, uint(renderSize.x) >> mip);
 			uint mipH = std::max(1u, uint(renderSize.y) >> mip);
 
-			cbData.CurrentMip = mip;
+			cbData.CurrentMip = (uint)mip;
+			cbData.SegmentStart = segmentStart;
+			cbData.SegmentLength = segmentLength;
 			sssCB->Update(cbData);
 
-			// t0 = depth used for VSM samples along the ray (blurred when enabled,
-			//      otherwise the raw prefiltered values).
-			// t1 = raw prefiltered depth — always used for accurate per-pixel
-			//      view-space position reconstruction at the receiver.
 			auto* sampleDepthSRV = settings.BlurDepthPyramid
 			                           ? texDepthMip[mip]->srv.get()
 			                           : texDepthMipPrefiltered[mip]->srv.get();
@@ -308,7 +326,7 @@ void ScreenSpaceShadows::DrawShadows()
 			if (!globals::game::isVR) {
 				if (state->frameAnnotations)
 					state->BeginPerfEvent(std::format("SSS - Shadows Mip{}", mip));
-				context->CSSetShader(shadowsCS.get(), nullptr, 0);
+				context->CSSetShader(shadowsCS[mip].get(), nullptr, 0);
 				context->Dispatch((mipW + 7u) >> 3, (mipH + 7u) >> 3, 1);
 				if (state->frameAnnotations)
 					state->EndPerfEvent();
@@ -318,7 +336,7 @@ void ScreenSpaceShadows::DrawShadows()
 					TracyD3D11Zone(state->tracyCtx, "SSS - Left Eye");
 					if (state->frameAnnotations)
 						state->BeginPerfEvent(std::format("SSS - Shadows Mip{} Left", mip));
-					context->CSSetShader(shadowsCS.get(), nullptr, 0);
+					context->CSSetShader(shadowsCS[mip].get(), nullptr, 0);
 					context->Dispatch((perEyeW + 7u) >> 3, (mipH + 7u) >> 3, 1);
 					if (state->frameAnnotations)
 						state->EndPerfEvent();
@@ -327,12 +345,14 @@ void ScreenSpaceShadows::DrawShadows()
 					TracyD3D11Zone(state->tracyCtx, "SSS - Right Eye");
 					if (state->frameAnnotations)
 						state->BeginPerfEvent(std::format("SSS - Shadows Mip{} Right", mip));
-					context->CSSetShader(shadowsRightCS.get(), nullptr, 0);
+					context->CSSetShader(shadowsRightCS[mip].get(), nullptr, 0);
 					context->Dispatch((perEyeW + 7u) >> 3, (mipH + 7u) >> 3, 1);
 					if (state->frameAnnotations)
 						state->EndPerfEvent();
 				}
 			}
+
+			segmentEnd = segmentStart;
 		}
 
 		ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
