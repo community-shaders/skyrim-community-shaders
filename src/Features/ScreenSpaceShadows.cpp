@@ -289,19 +289,16 @@ void ScreenSpaceShadows::DrawShadows()
 	}
 
 	// === Shadow marching — cascaded ray segments along a single ray per pixel ===
-	// CPU drives the cascade.  Mip 3 marches the segment farthest from the receiver
-	// (closest to the light) at low res with the most samples.  Each step toward
-	// mip 0 walks back along the ray toward the receiver, halving both segment
-	// length and sample count.  Coarse depth ends up near the light end of the ray
-	// where fine detail isn't needed, and the receiver-side contact shadow is
-	// computed at full res.
-	// Total ray reach = RayLength * (1 + 1/2 + 1/4 + 1/8) = RayLength * 1.875.
+	// CPU drives the cascade.  Mip 0 dispatches first and marches the segment at
+	// the start position (the receiver) with the fewest samples.  Each step toward
+	// mip 3 walks farther along the ray toward the light, doubling both segment
+	// length and sample count, so mip 3 covers the largest stretch near the light
+	// end.  Sample density (samples / length) stays constant across mips.
+	// Total ray reach = RayLength * (1/8 + 1/4 + 1/2 + 1) = RayLength * 1.875.
 	{
-		const float totalLength = settings.RayLength * 1.875f;
-		float segmentEnd = totalLength;
-		for (int mip = 3; mip >= 0; --mip) {
+		float segmentStart = 0.0f;
+		for (int mip = 0; mip < 4; ++mip) {
 			float segmentLength = settings.RayLength / float(1 << (3 - mip));
-			float segmentStart = segmentEnd - segmentLength;
 
 			uint mipW = std::max(1u, uint(renderSize.x) >> mip);
 			uint mipH = std::max(1u, uint(renderSize.y) >> mip);
@@ -352,7 +349,7 @@ void ScreenSpaceShadows::DrawShadows()
 				}
 			}
 
-			segmentEnd = segmentStart;
+			segmentStart += segmentLength;
 		}
 
 		ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
