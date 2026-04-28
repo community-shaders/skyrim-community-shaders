@@ -75,11 +75,6 @@ void ExtendedMaterials::DrawSettings()
 				"Enables cheap soft shadows when using parallax. "
 				"This applies to all directional and point lights. ");
 		}
-		ImGui::Checkbox("Extend Shadows", (bool*)&settings.ExtendShadows);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Extends parallax shadows beyond the range of parallax. Small performance impact.");
-		}
 
 		ImGui::Spacing();
 		ImGui::Spacing();
