@@ -197,7 +197,7 @@ PS_OUTPUT main(PS_INPUT input)
 		fogFactor = exponentialHeightFog.w;
 	}
 	if (depth < 0.999999 || SharedData::exponentialHeightFogSettings.enabled) {
-		composedColor.xyz = (SharedData::exponentialHeightFogSettings.enabled ? 1.0 : FogNearColor.w) * lerp(composedColor.xyz, fogColor, fogFactor);
+		composedColor.xyz = FogNearColor.w * lerp(composedColor.xyz, fogColor, fogFactor);
 	}
 #		else
 	if (depth < 0.999999) {
