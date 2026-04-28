@@ -246,6 +246,7 @@ namespace Util
 	 */
 	bool ErrorTextButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 	bool ErrorButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+	/** id must be unique per ImGui element to prevent ID collisions. */
 	template <class TextureID>
 	bool ErrorImageButton(
 		const char* id,

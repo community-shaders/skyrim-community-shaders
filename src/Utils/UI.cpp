@@ -526,6 +526,13 @@ namespace Util
 		{
 			return ImVec4(color.x, color.y, color.z, alpha);
 		}
+
+		template <typename StyleFn, typename ButtonFn>
+		bool InvokeStyledButton(StyleFn styleProvider, ButtonFn buttonCall)
+		{
+			auto _style = styleProvider();
+			return buttonCall();
+		}
 	}
 
 	StyledButtonWrapper StatusButtonStyle(const ImVec4& color)
@@ -542,14 +549,12 @@ namespace Util
 
 	bool ErrorButton(const char* label, const ImVec2& size)
 	{
-		auto _style = DestructiveButtonStyle();
-		return ImGui::Button(label, size);
+		return InvokeStyledButton(DestructiveButtonStyle, [&] { return ImGui::Button(label, size); });
 	}
 
 	bool ErrorButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
 	{
-		auto _style = DestructiveButtonStyle();
-		return ButtonWithFlash(label, size, flashDurationMs);
+		return InvokeStyledButton(DestructiveButtonStyle, [&] { return ButtonWithFlash(label, size, flashDurationMs); });
 	}
 
 	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color)
@@ -569,20 +574,19 @@ namespace Util
 
 	bool SuccessButton(const char* label, const ImVec2& size)
 	{
-		auto _style = SuccessButtonStyle();
-		return ImGui::Button(label, size);
+		return InvokeStyledButton(SuccessButtonStyle, [&] { return ImGui::Button(label, size); });
 	}
 
 	bool WarningButton(const char* label, const ImVec2& size)
 	{
-		auto _style = WarningButtonStyle();
-		return ImGui::Button(label, size);
+		return InvokeStyledButton(WarningButtonStyle, [&] { return ImGui::Button(label, size); });
 	}
 
 	bool ErrorTextButton(const char* label, const ImVec2& size)
 	{
-		auto _style = StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error);
-		return ImGui::Button(label, size);
+		return InvokeStyledButton(
+			[] { return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error); },
+			[&] { return ImGui::Button(label, size); });
 	}
 
 	StyledButtonWrapper TransparentIconButtonStyle()
