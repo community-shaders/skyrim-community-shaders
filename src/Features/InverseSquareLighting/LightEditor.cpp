@@ -1,4 +1,4 @@
-#include "Features/InverseSquareLighting/LightEditor.h"
+﻿#include "Features/InverseSquareLighting/LightEditor.h"
 #include "Features/InverseSquareLighting.h"
 #include "Features/LightLimitFix.h"
 #include "Menu.h"
