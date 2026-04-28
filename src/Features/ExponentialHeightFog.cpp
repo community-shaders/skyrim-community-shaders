@@ -13,7 +13,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	directionalInscatteringMultiplier,
 	directionalInscatteringExponent,
 	inscatteringTint,
-	cubemapMipLevel)
+	cubemapMipLevel,
+	respectVanillaFogFade)
 
 void ExponentialHeightFog::RestoreDefaultSettings()
 {
@@ -39,6 +40,10 @@ void ExponentialHeightFog::DrawSettings()
 	Util::WeatherUI::SliderFloat("Fog Density", this, "fogDensity", &settings.fogDensity, 0.0f, 1.0f, "%.3f");
 	Util::WeatherUI::SliderFloat("Directional Light Inscattering Multiplier", this, "directionalInscatteringMultiplier", &settings.directionalInscatteringMultiplier, 0.0f, 10.0f, "%.2f");
 	Util::WeatherUI::SliderFloat("Directional Light Inscattering Exponent", this, "directionalInscatteringExponent", &settings.directionalInscatteringExponent, 1.0f, 128.0f, "%.2f");
+	Util::WeatherUI::Checkbox("Apply Vanilla Fade", this, "respectVanillaFogFade", (bool*)&settings.respectVanillaFogFade);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Applies vanilla fade brightness to exponential height fog.");
+	}
 	ImGui::Checkbox("Use Dynamic Cubemaps for Inscattering", (bool*)&settings.useDynamicCubemaps);
 	Util::WeatherUI::ColorEdit4("Inscattering Cubemap Tint", this, "inscatteringTint", (float*)&settings.inscatteringTint);
 	ImGui::SliderFloat("Cubemap Mip Level", &settings.cubemapMipLevel, 1.0f, 7.0f, "%.1f");
@@ -101,4 +106,14 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"RGB tint for the inscattering cubemap with alpha for intensity",
 		&settings.inscatteringTint,
 		float4{ 1.0f, 1.0f, 1.0f, 1.0f }));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::WeatherVariable<bool>>(
+		"respectVanillaFogFade",
+		"Apply Vanilla Fade",
+		"Apply vanilla fade brightness to exponential height fog",
+		(bool*)&settings.respectVanillaFogFade,
+		false,
+		[](const bool& from, const bool& to, float factor) {
+			return factor > 0.5f ? to : from;
+		}));
 }
