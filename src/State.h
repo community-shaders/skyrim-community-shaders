@@ -145,7 +145,7 @@ public:
 	// mostly belt-and-braces in SM5, but it lets the compiler downgrade unmarked float
 	// ops to FP16 where it can prove safety. On by default; toggle off when reversing
 	// shaders or chasing a precision bug.
-	bool enablePartialPrecision = true;
+	bool enablePartialPrecision = false;
 
 	// Pass D3DCOMPILE_AVOID_FLOW_CONTROL to fxc. Forces the compiler to flatten branches
 	// into predicated ops instead of using dynamic flow control. Can win on uniform-branch
