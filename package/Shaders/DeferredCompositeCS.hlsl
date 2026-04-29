@@ -3,40 +3,37 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/MotionBlur.hlsli"
 #include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #include "Common/VR.hlsli"
 
-Texture2D<float4> MainInputTexture : register(t0);
-Texture2D<float3> SpecularTexture : register(t1);
+Texture2D<float3> SpecularTexture : register(t0);
+Texture2D<unorm float3> AlbedoTexture : register(t1);
+Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
+Texture2D<float3> MasksTexture : register(t3);
 
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS) || defined(DEBUG)
-Texture2D<float4> NormalRoughnessTexture : register(t2);
-#endif
+RWTexture2D<float4> MainRW : register(u0);
+RWTexture2D<float4> NormalTAAMaskSpecularMaskRW : register(u1);
+RWTexture2D<float2> MotionVectorsRW : register(u2);
+Texture2D<float> DepthTexture : register(t4);
 
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
-Texture2D<float> DepthTexture : register(t3);
-#endif
-
-#if defined(SSGI) || defined(DEBUG)
-Texture2D<float3> AlbedoTexture : register(t4);
-#endif
-
-#if defined(SSGI)
-Texture2D<float3> MasksTexture : register(t5);
+#if defined(VR_STEREO_OPT)
+#	include "VRStereoOptimizations/modes.hlsli"
+Texture2D<uint> StereoOptModeTexture : register(t16);
 #endif
 
 #if defined(DYNAMIC_CUBEMAPS)
-Texture2D<float3> ReflectanceTexture : register(t6);
-TextureCube<float3> EnvTexture : register(t7);
-TextureCube<float3> EnvReflectionsTexture : register(t8);
+Texture2D<float3> ReflectanceTexture : register(t5);
+TextureCube<float3> EnvTexture : register(t6);
+TextureCube<float3> EnvReflectionsTexture : register(t7);
 
 SamplerState LinearSampler : register(s0);
 #endif
 
 #if defined(SKYLIGHTING)
-#	define SKYLIGHTING_PROBE_REGISTER t9
+#	define SKYLIGHTING_PROBE_REGISTER t8
 #	include "Skylighting/Skylighting.hlsli"
 #endif
 
@@ -88,54 +85,52 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #	endif
 #endif
 
-struct PS_INPUT
-{
-	float4 Position: SV_Position;
-	float2 TexCoord: TEXCOORD0;
-};
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
+	// Early exit if dispatch thread is outside screen bounds
+	if (any(dispatchID.xy >= uint2(SharedData::BufferDim.xy)))
+		return;
 
-struct PS_OUTPUT
-{
-	float4 Main: SV_Target0;
-	float4 NormalRoughness: SV_Target1;
-};
-
-PS_OUTPUT main(PS_INPUT input)
-{
-	uint2 pixCoord = uint2(input.Position.xy);
-
-	float2 uv = float2(pixCoord + 0.5) * SharedData::BufferDim.zw;
+	float2 uv = float2(dispatchID.xy + 0.5) * SharedData::BufferDim.zw;
 	uv *= FrameBuffer::DynamicResolutionParams2.xy;  // adjust for dynamic res
 
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 
+#if defined(VR_STEREO_OPT)
+	if (eyeIndex == 1) {
+		uint mode = StereoOptModeTexture[uint2(dispatchID.xy)] & 0x0F;
+		if (mode == MODE_MAIN) {  // stencil-culled in Eye 1, filled by ReprojectionCS
+			return;
+		}
+	}
+#endif
+
 	uv = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
-	float3 diffuseColor = MainInputTexture[pixCoord].xyz;
-	float3 specularColor = SpecularTexture[pixCoord];
-	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
-
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
-	float3 normalGlossiness = NormalRoughnessTexture[pixCoord].xyz;
+	float3 normalGlossiness = NormalRoughnessTexture[dispatchID.xy];
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
-	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
-	float depth = DepthTexture[pixCoord];
+	float3 diffuseColor = MainRW[dispatchID.xy].xyz;
+	float3 specularColor = SpecularTexture[dispatchID.xy];
+	float3 albedo = AlbedoTexture[dispatchID.xy];
+
+	float depth = DepthTexture[dispatchID.xy];
 	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
-#endif
 
-#if defined(DYNAMIC_CUBEMAPS)
+	if (depth == 1.0)
+		MotionVectorsRW[dispatchID.xy] = MotionBlur::GetSSMotionVector(positionWS, positionWS, eyeIndex);  // Apply sky motion vectors
+
 	float glossiness = normalGlossiness.z;
-#endif
+
+	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
+	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
 #if defined(SSGI)
-	float3 albedo = AlbedoTexture[pixCoord];
 
 	float ssgiAo;
 	float3 ssgiIl;
-	SampleSSGI(pixCoord, normalWS, ssgiAo, ssgiIl);
+	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
 
 	float3 linAlbedo = Color::IrradianceToLinear(albedo / Color::PBRLightingScale);
 	float3 multiBounceSSGIAo = MultiBounceAO(linAlbedo, ssgiAo);
@@ -160,7 +155,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 		directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-		directionalAmbientColor.x = MasksTexture[pixCoord].z;
+		directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
 		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
 		directionalAmbientColor = max(0, directionalAmbientColor);
 	} else
@@ -170,7 +165,7 @@ PS_OUTPUT main(PS_INPUT input)
 		directionalAmbientColor *= albedo;
 
 		directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-		directionalAmbientColor.x = MasksTexture[pixCoord].z;
+		directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
 		directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
 		directionalAmbientColor = max(0, directionalAmbientColor);
 	}
@@ -200,7 +195,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #if defined(DYNAMIC_CUBEMAPS)
 
-	float3 reflectance = ReflectanceTexture[pixCoord];
+	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
 	if (any(reflectance > 0.0)) {
 		float3 V = -normalize(positionWS.xyz);
@@ -292,7 +287,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if defined(SSGI)
 		float3 ssgiIlSpecular;
-		SampleSSGISpecular(pixCoord, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
+		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
 
 		finalIrradiance = (finalIrradiance * ssgiAo);
 
@@ -311,22 +306,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 #if defined(DEBUG)
 
-#	if !defined(SSGI) && !defined(DYNAMIC_CUBEMAPS)
-	float3 normalGlossiness = NormalRoughnessTexture[pixCoord];
-	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
-#	endif
-
-#	if !defined(SSGI)
-	float3 albedo = AlbedoTexture[pixCoord];
-#	endif
-
-#	if !defined(DYNAMIC_CUBEMAPS)
-	float glossiness = normalGlossiness.z;
-#	endif
-
 #	if defined(VR)
 	uv.x += (eyeIndex ? 0.1 : -0.1);
-#	endif
+#	endif  // VR
 
 	if (uv.x < 0.5 && uv.y < 0.5) {
 		color = color;
@@ -340,8 +322,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 #endif
 
-	PS_OUTPUT output;
-	output.Main = float4(color, 1.0);
-	output.NormalRoughness = 0;
-	return output;
+	MainRW[dispatchID.xy] = float4(color, 1.0);
+	NormalTAAMaskSpecularMaskRW[dispatchID.xy] = float4(GBuffer::EncodeNormalVanilla(normalVS), 0.0, 0.0);
 }
