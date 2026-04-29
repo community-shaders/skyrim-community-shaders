@@ -193,6 +193,15 @@ namespace Util
 
 		// Compiler setup
 		uint32_t flags = !globals::state->IsDeveloperMode() ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
+		if (globals::state->enablePartialPrecision)
+			flags |= D3DCOMPILE_PARTIAL_PRECISION;
+		if (globals::state->enableAvoidFlowControl)
+			flags |= D3DCOMPILE_AVOID_FLOW_CONTROL;
+		// Disk cache on = user is running shipped, known-good shaders — skip the fxc
+		// validation pass to trim compile time. Disk cache off = dev workflow, keep
+		// validation so malformed source produces a clean error instead of UB.
+		if (globals::shaderCache->IsDiskCache())
+			flags |= D3DCOMPILE_SKIP_VALIDATION;
 
 		ID3DBlob* shaderBlob;
 		ID3DBlob* shaderErrors;
