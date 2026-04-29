@@ -33,6 +33,17 @@ namespace
 
 	bool IsMainWindow(ImGuiWindow* win) { return win->Name && strncmp(win->Name, MAIN_WINDOW_PREFIX, strlen(MAIN_WINDOW_PREFIX)) == 0; }
 
+	void DrawShaderCompilationFailures(uint64_t failed, const Menu::ThemeSettings& themeSettings)
+	{
+		ImGui::TextColored(themeSettings.StatusPalette.Error,
+			"ERROR: %llu shaders failed to compile. Check installation and CommunityShaders.log",
+			static_cast<unsigned long long>(failed));
+
+		if (FeatureIssues::HasPotentialShaderModifyingFeatures()) {
+			ImGui::TextColored(themeSettings.StatusPalette.Error, "Features that may have modified shaders detected. Check Feature Issues in the Menu.");
+		}
+	}
+
 	bool IsVisibleRootWindow(ImGuiWindow* win)
 	{
 		if (!win || !win->WasActive || win->Hidden)
@@ -292,11 +303,15 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			ImGui::TextUnformatted(skipShadersText.c_str());
 			ImGui::TextUnformatted("WARNING: Uncompiled shaders will have visual errors or cause stuttering when loading.");
 		}
+		if (failed && !hide) {
+			DrawShaderCompilationFailures(failed, themeSettings);
+		}
 
 		if (renderDocAvailable)
 			ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
 
 		ImGui::End();
+		return;
 	}
 
 	if (failed) {
@@ -307,12 +322,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 				return;
 			}
 
-			ImGui::TextColored(themeSettings.StatusPalette.Error, "ERROR: %d shaders failed to compile. Check installation and CommunityShaders.log", failed, totalShaders);
-
-			// Check for features that may cause shader compilation issues
-			if (FeatureIssues::HasPotentialShaderModifyingFeatures()) {
-				ImGui::TextColored(themeSettings.StatusPalette.Error, "Features that may have modified shaders detected. Check Feature Issues in the Menu.");
-			}
+			DrawShaderCompilationFailures(failed, themeSettings);
 
 			if (renderDocAvailable)
 				ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
