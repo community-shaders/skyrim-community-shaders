@@ -97,7 +97,7 @@ struct PS_INPUT
 struct PS_OUTPUT
 {
 	float4 Main: SV_Target0;
-	float4 NormalRoughness: SV_Target1;
+	float4 Normal: SV_Target1;
 };
 
 PS_OUTPUT main(PS_INPUT input)
@@ -115,9 +115,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 specularColor = SpecularTexture[pixCoord];
 	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 
-#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
 	float3 normalGlossiness = NormalRoughnessTexture[pixCoord].xyz;
 	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
+
+#if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
 	float depth = DepthTexture[pixCoord];
@@ -311,11 +312,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 #if defined(DEBUG)
 
-#	if !defined(SSGI) && !defined(DYNAMIC_CUBEMAPS)
-	float3 normalGlossiness = NormalRoughnessTexture[pixCoord];
-	float3 normalVS = GBuffer::DecodeNormal(normalGlossiness.xy);
-#	endif
-
 #	if !defined(SSGI)
 	float3 albedo = AlbedoTexture[pixCoord];
 #	endif
@@ -342,6 +338,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	PS_OUTPUT output;
 	output.Main = float4(color, 1.0);
-	output.NormalRoughness = 0;
+	output.Normal = float4(GBuffer::EncodeNormalVanilla(normalVS), 0.0, 0.0);
 	return output;
 }

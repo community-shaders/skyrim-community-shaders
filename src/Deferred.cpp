@@ -140,7 +140,7 @@ void Deferred::SetupResources()
 		D3D11_BLEND_DESC blendDesc{};
 		blendDesc.IndependentBlendEnable = TRUE;
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_BLUE;
+		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, compositeBlendState.put()));
 		Util::SetResourceName(compositeBlendState.get(), "Deferred::CompositeBlendState");
 
