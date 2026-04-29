@@ -40,7 +40,7 @@ cbuffer SSSCB : register(b1)
 	float2 DynamicRes;
 
 	float SurfaceThickness;
-	float ShadowContrast;
+	float MaxThicknessDistance;  // world units; thickness saturates to SurfaceThickness at this distance from the receiver
 	float SegmentStart;  // world units along the ray where this dispatch's segment begins
 	uint CurrentMip;
 
@@ -125,11 +125,13 @@ float ComputeVSM_Lower(float2 moments, float depth)
 		return;
 #endif
 
-	float2 startUV = (float2(actualDtid) + 0.5) * RcpTexDim * float(mipScale);
-	
-	// Use the raw prefiltered depth here so the receiver's view-space position
-	// is reconstructed from its actual per-pixel depth, not a blurred neighbour.
-	float2 startMoment = srcDepth.SampleLevel(samplerPointClamp, startUV, CurrentMip);
+	// Anchor each mip's ray to the upper-left full-res pixel of its block, and
+	// reconstruct from mip 0 of the prefiltered pyramid.  Without this, every mip
+	// would start from its own block-centre at a heavily averaged depth, so the
+	// four cascade segments wouldn't line up — they'd be parallel-translated rays
+	// per mip rather than one continuous ray per output pixel.
+	float2 startUV = (float2(actualDtid) * float(mipScale) + 0.5) * RcpTexDim;
+	float2 startMoment = srcDepthPrefiltered.SampleLevel(samplerPointClamp, startUV, 0);
 	float startDepth = startMoment.x;
 
 	float shadow = 1.0;
@@ -161,8 +163,14 @@ float ComputeVSM_Lower(float2 moments, float depth)
 			if (saturate(sampleUV.x) == sampleUV.x && saturate(sampleUV.y) == sampleUV.y)
 			{
 				float2 moments = srcDepth.SampleLevel(samplerLinearClamp, sampleUV, CurrentMip);
+				// Thickness grows quadratically with distance along the ray (slow near
+				// the receiver, fast toward the far end), reaching SurfaceThickness at
+				// MaxThicknessDistance (= end of mip 3, the far tip of the cascade).
+				float distFromReceiver = SegmentStart + t * SegmentLength;
+				float thicknessScale = saturate(distFromReceiver / MaxThicknessDistance);
+				float thickness = SurfaceThickness * thicknessScale * thicknessScale;
 				float shadowFront = ComputeVSM(moments.xy, rayPosVS.z);
-				float shadowBack  = ComputeVSM_Lower(moments.xy, rayPosVS.z - SurfaceThickness);
+				float shadowBack  = ComputeVSM_Lower(moments.xy, rayPosVS.z - thickness);
 				shadow *= 1.0 - (1.0 - shadowFront) * (1.0 - shadowBack);
 			}
 		}

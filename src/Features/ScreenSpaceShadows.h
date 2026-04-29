@@ -54,7 +54,7 @@ public:
 		float2 DynamicRes;
 
 		float SurfaceThickness;
-		float ShadowContrast;
+		float MaxThicknessDistance;  // world units; thickness scales linearly from 0 at the receiver to SurfaceThickness at this distance
 		float SegmentStart;  // world units along the ray where this dispatch's segment begins
 		uint CurrentMip;
 

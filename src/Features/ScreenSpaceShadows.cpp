@@ -199,7 +199,9 @@ void ScreenSpaceShadows::DrawShadows()
 	cbData.TexDim = texDim;
 	cbData.DynamicRes = { renderSize.x / texDim.x, renderSize.y / texDim.y };
 	cbData.SurfaceThickness = settings.SurfaceThickness;
-	cbData.ShadowContrast = settings.ShadowContrast;
+	// Thickness keeps growing across the whole cascade and reaches the max at the
+	// very last sample — the end of mip 3.  Total reach = RayLength * (1/8 + 1/4 + 1/2 + 1).
+	cbData.MaxThicknessDistance = settings.RayLength * 15.0f / 8.0f;
 	cbData.LightWorldDir = { -light.x, -light.y, -light.z };
 
 	// Mip 3 carries the highest sample count; mip 0 the lowest.  Scale by ray length
