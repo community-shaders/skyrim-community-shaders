@@ -1,6 +1,7 @@
 #include "D3D.h"
 
 #include "Features/TerrainBlending.h"
+#include "ShaderCache.h"
 #include "State.h"
 #include "Utils/Format.h"
 #include <DDSTextureLoader.h>
