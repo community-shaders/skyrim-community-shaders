@@ -131,6 +131,13 @@ public:
 	void ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_targetIndex, RE::BSGraphics::RenderTargetProperties* a_properties);
 
 	void SetupResources();
+
+	/// @brief Log per-format support for D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD.
+	///        We perform typed UAV loads on a number of non-guaranteed formats; on GPUs
+	///        that lack TypedUAVLoadAdditionalFormats those reads return undefined data.
+	///        Called once at startup; emits one info line per supported format and one
+	///        warn line per unsupported format with the feature that needs it.
+	void CheckTypedUAVLoadSupport();
 	void ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor, bool a_forceDeferred = false);
 
 	void BeginPerfEvent(std::string_view title);

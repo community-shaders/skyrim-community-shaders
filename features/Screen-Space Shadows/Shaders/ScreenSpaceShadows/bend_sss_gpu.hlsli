@@ -113,8 +113,14 @@ struct DispatchParameters
 								// If 'PointBorderSampler' is an Unnormalized sampler, then this value can be hard-coded to 1.
 								// The 'USE_HALF_PIXEL_OFFSET' macro might need to be defined if sampling at exact pixel coordinates isn't precise (e.g., if odd patterns appear in the shadow).
 
-	Texture2D<unorm half> DepthTexture;     // Depth Buffer Texture (rasterized non-linear depth)
-	RWTexture2D<unorm half> OutputTexture;  // Output screen-space shadow buffer (typically single-channel, 8bit)
+	// TERRAIN_BLENDING ON  -> bound to TerrainBlending::blendedDepthTexture (R32_FLOAT) — must NOT be unorm.
+	// TERRAIN_BLENDING OFF -> bound to game's kPOST_ZPREPASS_COPY (R24_UNORM_X8_TYPELESS) — unorm.
+#if defined(TERRAIN_BLENDING)
+	Texture2D<float> DepthTexture;          // Depth Buffer Texture (rasterized non-linear depth, R32_FLOAT)
+#else
+	Texture2D<unorm float> DepthTexture;    // Depth Buffer Texture (rasterized non-linear depth, R24_UNORM_X8_TYPELESS)
+#endif
+	RWTexture2D<unorm float> OutputTexture;  // Output screen-space shadow buffer (typically single-channel, 8bit)
 
 	SamplerState PointBorderSampler;  // A point sampler, with Wrap Mode set to Clamp-To-Border-Color (D3D12_TEXTURE_ADDRESS_MODE_BORDER), and Border Color set to "FarDepthValue" (typically zero), or some other far-depth value out of DepthBounds.
 									  // If you have issues where invalid shadows are appearing from off-screen, it is likely that this sampler is not correctly setup

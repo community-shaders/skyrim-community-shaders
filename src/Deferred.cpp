@@ -409,7 +409,7 @@ void Deferred::DeferredPasses()
 			mainCopy.SRV,                                                                                   // t0  MainInputTexture
 			specular.SRV,                                                                                   // t1  SpecularTexture
 			normalRoughnessCopy.SRV,                                                                        // t2  NormalRoughnessTexture
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,  // t3  DepthTexture
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(false) : nullptr,  // t3  DepthTexture (24/32-bit; HLSL type baked at compile via TERRAIN_BLENDING)
 			albedo.SRV,                                                                                     // t4  AlbedoTexture
 			masks.SRV,                                                                                      // t5  MasksTexture
 			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                             // t6  ReflectanceTexture
@@ -700,6 +700,11 @@ ID3D11PixelShader* Deferred::GetCompositePS(bool interior)
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
+
+		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
+		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
+		if (globals::features::terrainBlending.loaded)
+			defines.push_back({ "TERRAIN_BLENDING", nullptr });
 
 		cached = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositePS.hlsl", defines, "ps_5_0"));
 	}

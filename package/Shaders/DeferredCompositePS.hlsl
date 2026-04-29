@@ -16,7 +16,13 @@ Texture2D<float4> NormalRoughnessTexture : register(t2);
 #endif
 
 #if defined(SSGI) || defined(DYNAMIC_CUBEMAPS)
+// 24/32-bit depth: TerrainBlending ON -> R32_FLOAT (no unorm),
+// OFF -> R24_UNORM_X8_TYPELESS game depth (unorm).
+#	if defined(TERRAIN_BLENDING)
 Texture2D<float> DepthTexture : register(t3);
+#	else
+Texture2D<unorm float> DepthTexture : register(t3);
+#	endif
 #endif
 
 #if defined(SSGI) || defined(DEBUG)
