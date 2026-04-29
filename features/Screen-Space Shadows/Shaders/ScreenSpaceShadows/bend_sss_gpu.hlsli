@@ -116,9 +116,9 @@ struct DispatchParameters
 	// TERRAIN_BLENDING ON  -> bound to TerrainBlending::blendedDepthTexture (R32_FLOAT) — must NOT be unorm.
 	// TERRAIN_BLENDING OFF -> bound to game's kPOST_ZPREPASS_COPY (R24_UNORM_X8_TYPELESS) — unorm.
 #if defined(TERRAIN_BLENDING)
-	Texture2D<float> DepthTexture;          // Depth Buffer Texture (rasterized non-linear depth, R32_FLOAT)
+	Texture2D<float> DepthTexture;  // Depth Buffer Texture (rasterized non-linear depth, R32_FLOAT)
 #else
-	Texture2D<unorm float> DepthTexture;    // Depth Buffer Texture (rasterized non-linear depth, R24_UNORM_X8_TYPELESS)
+	Texture2D<unorm float> DepthTexture;  // Depth Buffer Texture (rasterized non-linear depth, R24_UNORM_X8_TYPELESS)
 #endif
 	RWTexture2D<unorm float> OutputTexture;  // Output screen-space shadow buffer (typically single-channel, 8bit)
 

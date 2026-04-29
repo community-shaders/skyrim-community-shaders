@@ -406,22 +406,22 @@ void Deferred::DeferredPasses()
 
 		// SRVs
 		ID3D11ShaderResourceView* srvs[16]{
-			mainCopy.SRV,                                                                                   // t0  MainInputTexture
-			specular.SRV,                                                                                   // t1  SpecularTexture
-			normalRoughnessCopy.SRV,                                                                        // t2  NormalRoughnessTexture
+			mainCopy.SRV,                                                                                    // t0  MainInputTexture
+			specular.SRV,                                                                                    // t1  SpecularTexture
+			normalRoughnessCopy.SRV,                                                                         // t2  NormalRoughnessTexture
 			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(false) : nullptr,  // t3  DepthTexture (24/32-bit; HLSL type baked at compile via TERRAIN_BLENDING)
-			albedo.SRV,                                                                                     // t4  AlbedoTexture
-			masks.SRV,                                                                                      // t5  MasksTexture
-			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                             // t6  ReflectanceTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                       // t7  EnvTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,            // t8  EnvReflectionsTexture
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,  // t9  SkylightingProbeArray
-			ssgi_ao,                                                                                        // t10 SsgiAoTexture
-			ssgi_hq_spec ? nullptr : ssgi_y,                                                                // t11 SsgiYTexture
-			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                             // t12 SsgiCoCgTexture
-			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                          // t13 SsgiSpecularTexture
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                            // t14 EnvIBLTexture
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                            // t15 SkyIBLTexture
+			albedo.SRV,                                                                                      // t4  AlbedoTexture
+			masks.SRV,                                                                                       // t5  MasksTexture
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                              // t6  ReflectanceTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                        // t7  EnvTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,             // t8  EnvReflectionsTexture
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,   // t9  SkylightingProbeArray
+			ssgi_ao,                                                                                         // t10 SsgiAoTexture
+			ssgi_hq_spec ? nullptr : ssgi_y,                                                                 // t11 SsgiYTexture
+			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                              // t12 SsgiCoCgTexture
+			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                           // t13 SsgiSpecularTexture
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t14 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t15 SkyIBLTexture
 		};
 
 		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
