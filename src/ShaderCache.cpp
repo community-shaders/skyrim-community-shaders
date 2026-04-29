@@ -2286,22 +2286,6 @@ namespace SIE
 		return compilationSet.GetStatsString(a_timeOnly, a_elapsedOnly);
 	}
 
-	inline bool ShaderCache::IsShaderSourceAvailable(const RE::BSShader& shader)
-	{
-		const std::wstring path = SIE::SShaderCache::GetShaderPath(shader.fxpFilename);
-
-		std::string strPath;
-		std::transform(path.begin(), path.end(), std::back_inserter(strPath), [](wchar_t c) {
-			return (char)c;
-		});
-		try {
-			return std::filesystem::exists(path);
-		} catch (const std::filesystem::filesystem_error& e) {
-			logger::warn("Error accessing {} : {}", strPath, e.what());
-			return false;
-		}
-	}
-
 	bool ShaderCache::IsCompiling()
 	{
 		return compilationSet.totalTasks && compilationSet.completedTasks + compilationSet.failedTasks < compilationSet.totalTasks;
