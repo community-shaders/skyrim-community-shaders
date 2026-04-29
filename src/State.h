@@ -154,7 +154,6 @@ public:
 	// right setting depends on the current scene/work, not the user.
 	bool enableAvoidFlowControl = false;
 
-
 	uint lastVertexDescriptor = 0;
 	uint lastPixelDescriptor = 0;
 	uint modifiedVertexDescriptor = 0;
