@@ -5,6 +5,7 @@
 #include <Tracy/TracyD3D11.hpp>
 
 #include <Buffer.h>
+#include <atomic>
 #include <mutex>
 #include <nlohmann/json.hpp>
 
@@ -145,14 +146,16 @@ public:
 	// mostly belt-and-braces in SM5, but it lets the compiler downgrade unmarked float
 	// ops to FP16 where it can prove safety. On by default; toggle off when reversing
 	// shaders or chasing a precision bug.
-	bool enablePartialPrecision = false;
+	// Atomic: written from the UI thread, read from compilation pool workers.
+	std::atomic_bool enablePartialPrecision{ false };
 
 	// Pass D3DCOMPILE_AVOID_FLOW_CONTROL to fxc. Forces the compiler to flatten branches
 	// into predicated ops instead of using dynamic flow control. Can win on uniform-branch
 	// or short-body branches; can lose on long divergent branches that vanilla flow
 	// control would skip. Transient (session-only); not saved to config because the
 	// right setting depends on the current scene/work, not the user.
-	bool enableAvoidFlowControl = false;
+	// Atomic: written from the UI thread, read from compilation pool workers.
+	std::atomic_bool enableAvoidFlowControl{ false };
 
 	uint lastVertexDescriptor = 0;
 	uint lastPixelDescriptor = 0;

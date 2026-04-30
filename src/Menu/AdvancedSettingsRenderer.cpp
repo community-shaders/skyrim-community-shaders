@@ -660,7 +660,9 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	}
 
 	// Half-precision (partial precision) shader compile flag
-	if (ImGui::Checkbox("Half Precision (Partial Precision)", &globals::state->enablePartialPrecision)) {
+	bool partialPrecision = globals::state->enablePartialPrecision.load(std::memory_order_relaxed);
+	if (ImGui::Checkbox("Half Precision (Partial Precision)", &partialPrecision)) {
+		globals::state->enablePartialPrecision.store(partialPrecision, std::memory_order_relaxed);
 		// Force a recompile so the flag actually takes effect on subsequent shader builds.
 		globals::shaderCache->Clear();
 	}
@@ -677,7 +679,9 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 
 	// Avoid flow control compiler flag (transient — not saved to config because the
 	// right setting depends on the current scene, not the user).
-	if (ImGui::Checkbox("Avoid Flow Control", &globals::state->enableAvoidFlowControl)) {
+	bool avoidFlowControl = globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed);
+	if (ImGui::Checkbox("Avoid Flow Control", &avoidFlowControl)) {
+		globals::state->enableAvoidFlowControl.store(avoidFlowControl, std::memory_order_relaxed);
 		// Force a recompile so the flag actually takes effect on subsequent shader builds.
 		globals::shaderCache->Clear();
 	}
