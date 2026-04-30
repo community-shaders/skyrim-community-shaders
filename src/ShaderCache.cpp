@@ -107,6 +107,55 @@ namespace SIE
 		constexpr const char* PixelShaderProfile = "ps_5_0";
 		constexpr const char* ComputeShaderProfile = "cs_5_0";
 
+		static uint32_t GetTechnique(uint32_t descriptor)
+		{
+			return 0x3F & (descriptor >> 24);
+		}
+
+		static std::string GetLightingShaderName(const std::string& fxpFilename, uint32_t descriptor)
+		{
+			const auto& technique = static_cast<ShaderCache::LightingShaderTechniques>(GetTechnique(descriptor));
+
+			std::string suffix = "";
+
+			switch (technique) {
+			case SIE::ShaderCache::LightingShaderTechniques::Envmap:
+			case SIE::ShaderCache::LightingShaderTechniques::MultilayerParallax:
+			case SIE::ShaderCache::LightingShaderTechniques::Eye:
+				suffix = "EnvMap";
+				break;
+			case SIE::ShaderCache::LightingShaderTechniques::MTLand:
+			case SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend:
+				suffix = "Land";
+				break;
+			case SIE::ShaderCache::LightingShaderTechniques::LODLand:
+			case SIE::ShaderCache::LightingShaderTechniques::LODObjects:
+			case SIE::ShaderCache::LightingShaderTechniques::LODObjectHD:
+			case SIE::ShaderCache::LightingShaderTechniques::LODLandNoise:
+				suffix = "LOD";
+				break;
+			case SIE::ShaderCache::LightingShaderTechniques::TreeAnim:
+				suffix = "TreeAnim";
+				break;
+			default:
+				return fxpFilename;
+			}
+
+			return std::format("{}.{}", fxpFilename, suffix);
+		}
+
+		static std::string GetShaderName(const RE::BSShader& shader, uint32_t descriptor)
+		{
+			switch (shader.shaderType.get()) {
+			case RE::BSShader::Type::ImageSpace:
+				return static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName;
+			case RE::BSShader::Type::Lighting:
+				return GetLightingShaderName(shader.fxpFilename, descriptor);
+			default:
+				return shader.fxpFilename;
+			}
+		}
+
 		static std::wstring GetShaderPath(const std::string_view& name)
 		{
 			return std::format(L"Data/Shaders/{}.hlsl", std::wstring(name.begin(), name.end()));
@@ -123,11 +172,6 @@ namespace SIE
 				return ComputeShaderProfile;
 			}
 			return nullptr;
-		}
-
-		uint32_t GetTechnique(uint32_t descriptor)
-		{
-			return 0x3F & (descriptor >> 24);
 		}
 
 		static void GetLightingShaderDefines(uint32_t descriptor, std::span<D3D_SHADER_MACRO> defines)
@@ -1381,10 +1425,8 @@ namespace SIE
 					if (ec) {
 						logger::debug("Failed to read disk cache mtime for {}: {}", Util::WStringToString(diskPath), ec.message());
 					} else {
-						const std::wstring shaderSourcePath = GetShaderPath(
-							shader.shaderType == RE::BSShader::Type::ImageSpace ?
-								static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName :
-								shader.fxpFilename);
+						const std::string shaderSourceName = GetShaderName(shader, descriptor);
+						const std::wstring shaderSourcePath = GetShaderPath(shaderSourceName);
 						if (std::filesystem::exists(shaderSourcePath)) {
 							const auto sourceTime = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(shaderSourcePath, ec));
 							if (ec) {
@@ -1436,10 +1478,12 @@ namespace SIE
 			defines[lastIndex] = { nullptr, nullptr };  // do final entry
 			GetShaderDefines(shader, descriptor, std::span{ defines }.subspan(lastIndex));
 
-			const std::wstring path = GetShaderPath(
-				shader.shaderType == RE::BSShader::Type::ImageSpace ?
-					static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName :
-					shader.fxpFilename);
+			const std::string name = GetShaderName(shader, descriptor);
+
+			if (shader.shaderType == RE::BSShader::Type::Lighting)
+				logger::info("SIE::SShaderCache::CompileShader - {}: {}", name, SIE::SShaderCache::MergeDefinesString(defines, true));
+
+			const std::wstring path = GetShaderPath(name);
 			auto pathString = Util::WStringToString(path);
 			if (!std::filesystem::exists(path)) {
 				logger::error("Failed to compile {} shader {}::{:X}: {} does not exist", magic_enum::enum_name(shaderClass), magic_enum::enum_name(type), descriptor, pathString);
@@ -2147,10 +2191,8 @@ namespace SIE
 			shaderMap.insert_or_assign(key, ShaderCacheResult{ a_blob, status, system_clock::now(), fromDisk });
 		}
 		mapCV.notify_all();  // wake threads waiting on a Pending→Completed/Failed transition
-		const std::wstring path = SIE::SShaderCache::GetShaderPath(
-			shader.shaderType == RE::BSShader::Type::ImageSpace ?
-				static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName :
-				shader.fxpFilename);
+		const std::string name = SIE::SShaderCache::GetShaderName(shader, descriptor);
+		const std::wstring path = SIE::SShaderCache::GetShaderPath(name);
 		auto pathString = Util::WStringToString(path);
 		// Always create or update an hlsl->shader record so failing compiles are
 		// trackable and can be invalidated by the file watcher. This allows

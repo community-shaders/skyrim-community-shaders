@@ -13,27 +13,22 @@
 #include "Common/Triplanar.hlsli"
 #include "Common/VR.hlsli"
 
-#if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
-#	define SKIN
-#endif
 
 #if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
 #	undef IBL
 #endif
 
+#if (defined(TREE_ANIM)) && !defined(VC)
+#	define VC
+#endif  // TREE_ANIM || LANDSCAPE || !VC
 
-#if defined(WORLD_MAP)
-#	define LOD
-#endif
 
 struct VS_INPUT
 {
 	float4 Position: POSITION0;
 	float2 TexCoord0: TEXCOORD0;
-#if !defined(MODELSPACENORMALS)
 	float4 Normal: NORMAL0;
 	float4 Bitangent: BINORMAL0;
-#endif  // !MODELSPACENORMALS
 
 #if defined(VC)
 	float4 Color: COLOR0;
@@ -54,15 +49,10 @@ struct VS_OUTPUT
 #endif  // (defined (PROJECTED_UV) && !defined(SKINNED)) || defined(LANDSCAPE)
 		TexCoord0: TEXCOORD0;
 
-#if defined(WORLD_MAP)
-	float3 InputPosition: TEXCOORD4;
-#endif
 
-#if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3 TBN0: TEXCOORD1;
 	float3 TBN1: TEXCOORD2;
 	float3 TBN2: TEXCOORD3;
-#endif  // defined(SKINNED) || !defined(MODELSPACENORMALS)
 #if defined(PROJECTED_UV) && !defined(SKINNED)
 	float3 TexProj: TEXCOORD7;
 #endif  // EYE
@@ -115,6 +105,16 @@ cbuffer VS_PerFrame : register(b12)
 #		endif  // SKINNED
 };
 
+#	if defined(TREE_ANIM)
+float2 GetTreeShiftVector(float4 position, float4 color)
+{
+	precise float4 tmp1 = (TreeParams.w * TreeParams.y).xxxx * WindTimers.xxyy;
+	precise float4 tmp2 = float4(0.1, 0.25, 0.1, 0.25) * tmp1 + dot(position.xyz, 1.0.xxx).xxxx;
+	precise float4 tmp3 = abs(-1.0.xxxx + 2.0.xxxx * frac(0.5.xxxx + tmp2.xyzw));
+	precise float4 tmp4 = (tmp3 * tmp3) * (3.0.xxxx - 2.0.xxxx * tmp3);
+	return (tmp4.xz + 0.1.xx * tmp4.yw) * (TreeParams.z * color.w).xx;
+}
+#	endif  // TREE_ANIM
 
 VS_OUTPUT main(VS_INPUT input)
 {
@@ -127,6 +127,13 @@ VS_OUTPUT main(VS_INPUT input)
 
 	precise float4 previousInputPosition = inputPosition;
 
+#	if defined(TREE_ANIM)
+	precise float2 treeShiftVector = GetTreeShiftVector(input.Position, input.Color);
+	float3 normal = -1.0.xxx + 2.0.xxx * input.Normal.xyz;
+
+	inputPosition.xyz += normal.xyz * treeShiftVector.x;
+	previousInputPosition.xyz += normal.xyz * treeShiftVector.y;
+#	endif
 
 #	if defined(SKINNED)
 	precise int4 actualIndices = 765.01.xxxx * input.BoneIndices.xyzw;
@@ -158,15 +165,11 @@ VS_OUTPUT main(VS_INPUT input)
 #	endif
 	vsout.TexCoord0.xy = uv;
 
-#	if defined(WORLD_MAP)
-	vsout.InputPosition.xyz = WorldMapOverlayParameters.xyz + worldPosition.xyz;
-#	endif
 
 #	if defined(SKINNED)
 	float3x3 boneRSMatrix = Skinned::GetBoneRSMatrix(Bones, actualIndices, input.BoneWeights);
 #	endif
 
-#	if !defined(MODELSPACENORMALS)
 	float3x3 tbn = float3x3(
 		float3(input.Position.w, input.Normal.w * 2 - 1, input.Bitangent.w * 2 - 1),
 		input.Bitangent.xyz * 2.0.xxx + -1.0.xxx,
@@ -196,15 +199,6 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.TBN1.xyz = tempTbnTr[1];
 	vsout.TBN2.xyz = tempTbnTr[2];
 #		endif
-#	elif defined(SKINNED)
-	float3x3 boneRSMatrixTr = transpose(boneRSMatrix);
-	float3x3 worldTbnTr = transpose(float3x3(normalize(boneRSMatrixTr[0]),
-		normalize(boneRSMatrixTr[1]), normalize(boneRSMatrixTr[2])));
-
-	vsout.TBN0.xyz = worldTbnTr[0];
-	vsout.TBN1.xyz = worldTbnTr[1];
-	vsout.TBN2.xyz = worldTbnTr[2];
-#	endif
 
 #	if defined(PROJECTED_UV) && !defined(SKINNED)
 	float3x3 texProjWorld3x3 = float3x3(World[eyeIndex][0].xyz, World[eyeIndex][1].xyz, World[eyeIndex][2].xyz);
@@ -267,20 +261,12 @@ SamplerState SampColorSampler : register(s0);
 
 #		define SampNormalSampler SampColorSampler
 
-#		if defined(MODELSPACENORMALS)
-SamplerState SampSpecularSampler : register(s2);
-#		endif
-#		if defined(FACEGEN)
-SamplerState SampTintSampler : register(s3);
-SamplerState SampDetailSampler : register(s4);
-#		elif defined(PARALLAX)
-SamplerState SampParallaxSampler : register(s3);
-#		elif defined(PROJECTED_UV) && !defined(SPARKLE)
+#		if defined(PROJECTED_UV)
 SamplerState SampProjDiffuseSampler : register(s3);
 #		endif
 
 
-#		if defined(TRUE_PBR) && !defined(FACEGEN)
+#		if defined(TRUE_PBR)
 SamplerState SampParallaxSampler : register(s4);
 #		endif
 #		if defined(TRUE_PBR)
@@ -289,7 +275,7 @@ SamplerState SampRMAOSSampler : register(s5);
 
 SamplerState SampGlowSampler : register(s6);
 
-#		if defined(PROJECTED_UV) && !defined(SPARKLE)
+#		if defined(PROJECTED_UV)
 SamplerState SampProjNormalSampler : register(s8);
 #		endif
 
@@ -311,20 +297,12 @@ SamplerState SampShadowMaskSampler : register(s14);
 Texture2D<float4> TexColorSampler : register(t0);
 Texture2D<float4> TexNormalSampler : register(t1);  // normal in xyz, glossiness in w if not modelspacenormal
 
-#		if defined(MODELSPACENORMALS)
-Texture2D<float4> TexSpecularSampler : register(t2);
-#		endif
-#		if defined(FACEGEN)
-Texture2D<float4> TexTintSampler : register(t3);
-Texture2D<float4> TexDetailSampler : register(t4);
-#		elif defined(PARALLAX)
-Texture2D<float4> TexParallaxSampler : register(t3);
-#		elif defined(PROJECTED_UV) && !defined(SPARKLE)
+#		if defined(PROJECTED_UV)
 Texture2D<float4> TexProjDiffuseSampler : register(t3);
 #		endif
 
 
-#		if defined(TRUE_PBR) && !defined(FACEGEN)
+#		if defined(TRUE_PBR)
 Texture2D<float4> TexParallaxSampler : register(t4);
 #		endif
 #		if defined(TRUE_PBR)
@@ -333,7 +311,7 @@ Texture2D<float4> TexRMAOSSampler : register(t5);
 
 Texture2D<float4> TexGlowSampler : register(t6);
 
-#		if defined(PROJECTED_UV) && !defined(SPARKLE)
+#		if defined(PROJECTED_UV)
 Texture2D<float4> TexProjNormalSampler : register(t8);
 #		endif
 
@@ -444,9 +422,7 @@ float GetLodLandBlendParameter(float3 color)
 {
 	float result = saturate(1.6666666 * (dot(color, 0.55.xxx) - 0.4));
 	result = ((result * result) * (3 - result * 2));
-#	if !defined(WORLD_MAP)
 	result *= 0.8;
-#	endif
 	return result;
 }
 
@@ -471,60 +447,8 @@ float3 GetLandNormal(float landSnowMask, float3 normal, float2 uv, SamplerState 
 }
 
 
-#	if defined(FACEGEN)
-float3 GetFacegenBaseColor(float3 rawBaseColor, float2 uv)
-{
-	float3 detailColor = TexDetailSampler.Sample(SampDetailSampler, uv).xyz;
-	detailColor = float3(3.984375, 3.984375, 3.984375) * (float3(0.00392156886, 0, 0.00392156886) + detailColor);
-	float3 tintColor = TexTintSampler.Sample(SampTintSampler, uv).xyz;
-	tintColor = tintColor * rawBaseColor * 2.0.xxx;
-	tintColor = tintColor - tintColor * rawBaseColor;
-	return (rawBaseColor * rawBaseColor + tintColor) * detailColor;
-}
-#	endif
 
-#	if defined(FACEGEN_RGB_TINT)
-float3 GetFacegenRGBTintBaseColor(float3 rawBaseColor, float2 uv)
-{
-	float3 tintColor = TintColor.xyz * rawBaseColor * 2.0.xxx;
-	tintColor = tintColor - tintColor * rawBaseColor;
-	return float3(1.01171875, 0.99609375, 1.01171875) * (rawBaseColor * rawBaseColor + tintColor);
-}
-#	endif
 
-#	if defined(WORLD_MAP)
-float3 GetWorldMapNormal(PS_INPUT input, float3 rawNormal, float3 baseColor)
-{
-	float3 normal = normalize(rawNormal);
-#		if defined(MODELSPACENORMALS)
-	float3 worldMapNormalSrc = normal.xyz;
-#		else
-	float3 worldMapNormalSrc = float3(input.TBN0.z, input.TBN1.z, input.TBN2.z);
-#		endif
-	float3 worldMapNormal = 7.0.xxx * (-0.2.xxx + abs(normalize(worldMapNormalSrc)));
-	worldMapNormal = max(0.01.xxx, worldMapNormal * worldMapNormal * worldMapNormal);
-	worldMapNormal /= dot(worldMapNormal, 1.0.xxx);
-	float3 worldMapColor1 = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, WorldMapOverlayParametersPS.xx * input.InputPosition.yz).xyz;
-	float3 worldMapColor2 = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, WorldMapOverlayParametersPS.xx * input.InputPosition.xz).xyz;
-	float3 worldMapColor3 = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, WorldMapOverlayParametersPS.xx * input.InputPosition.xy).xyz;
-	float3 worldMapColor = worldMapNormal.xxx * worldMapColor1 + worldMapNormal.yyy * worldMapColor2 + worldMapNormal.zzz * worldMapColor3;
-	worldMapColor = normalize(2.0.xxx * (-0.5.xxx + (worldMapColor)));
-	normal.xyz = normalize(
-		WorldMapOverlayParametersPS.zzz * (rawNormal.xyz - worldMapColor.xyz) + worldMapColor.xyz);
-	return normal;
-}
-
-float3 GetWorldMapBaseColor(float3 originalBaseColor, float3 rawBaseColor, float texProjTmp)
-{
-	float lodMultiplier = 1;
-	float4 lodColorMul = lodMultiplier.xxxx * float4(0.199999988, 0.441000015, 0.269999981, 0.281000018) + float4(0.300000012, 0.465000004, 0.0780000091, 0.09799999);
-	float3 lodColor = lodColorMul.zwy * 2.0.xxx;
-	lodColor.xyz = Color::Diffuse(lodColor.xyz);
-	lodColor.xy = max(lodColor.xy, rawBaseColor.xy);
-	lodColor.z = lodColorMul.y > 0.5 ? max((lodMultiplier * 0.441 + -0.0349999964) * 2, rawBaseColor.z) : min(lodColor.z, rawBaseColor.z);
-	return lodColorMul.xxx * (lodColor - rawBaseColor.xyz) + rawBaseColor;
-}
-#	endif
 
 float GetSnowParameterY(float texProjTmp, float alpha)
 {
@@ -535,10 +459,6 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 }
 
 
-#	if defined(WORLD_MAP)
-#		undef CLOUD_SHADOWS
-#		undef SKYLIGHTING
-#	endif
 
 #	include "Common/LightingCommon.hlsli"
 
@@ -547,7 +467,7 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #	endif
 
 
-#	if defined(EXTENDED_MATERIALS) && (defined(PARALLAX) || defined(TRUE_PBR))
+#	if defined(EXTENDED_MATERIALS) && (defined(TRUE_PBR))
 #		define EMAT
 #	endif
 
@@ -570,6 +490,9 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "InverseSquareLighting/InverseSquareLighting.hlsli"
 #	endif
 
+#	if defined(TREE_ANIM)
+#		undef WETNESS_EFFECTS
+#	endif
 
 #	if defined(WETNESS_EFFECTS)
 #		include "WetnessEffects/WetnessEffects.hlsli"
@@ -584,15 +507,12 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "Skylighting/Skylighting.hlsli"
 #	endif
 
-#	if defined(HAIR) && defined(CS_HAIR)
-#		include "Hair/Hair.hlsli"
-#	endif
 
 #	if defined(TERRAIN_VARIATION)
 #		include "TerrainVariation/TerrainVariation.hlsli"
 #	endif
 
-#	if defined(EXTENDED_TRANSLUCENCY) && !(defined(HAIR) || defined(DEPTH_WRITE_DECALS))
+#	if defined(EXTENDED_TRANSLUCENCY) && !(defined(TREE_ANIM))
 #		include "ExtendedTranslucency/ExtendedTranslucency.hlsli"
 #		define ANISOTROPIC_ALPHA
 #	endif
@@ -631,10 +551,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, viewPosition.z);
 
-#	if defined(SKINNED) || !defined(MODELSPACENORMALS)
 	float3x3 tbn = float3x3(input.TBN0.xyz, input.TBN1.xyz, input.TBN2.xyz);
 
-#		if 1 && 1
+#		if !defined(TREE_ANIM)
 	// Fix incorrect vertex normals on double-sided meshes
 	if (!frontFace)
 		tbn = lerp(tbn, -tbn, nearFactor);
@@ -648,7 +567,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	tbn = transpose(tbnTr);
 
-#	endif  // defined (SKINNED) || !defined (MODELSPACENORMALS)
 
 #	if !defined(TRUE_PBR)
 #		if defined(SPECULAR)
@@ -686,9 +604,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float curvature = 0;
 	float normalSmoothness = 0;
 
-#	if !defined(MODELSPACENORMALS)
 	float3 vertexNormal = tbnTr[2];
-#	endif
 
 	float3 entryNormal = 0;
 	float3 entryNormalTS = 0;
@@ -700,7 +616,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	bool useSnowSpecular = false;
 
-#	if defined(SPARKLE) || !defined(PROJECTED_UV)
+#	if 0 || !defined(PROJECTED_UV)
 	bool useSnowDecalSpecular = true;
 #	else
 	bool useSnowDecalSpecular = false;
@@ -708,16 +624,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float2 diffuseUv = uv;
 
-#	if defined(SPARKLE)
-	diffuseUv = ProjectedUVParams2.yy * input.TexCoord0.zw;
-#	endif  // SPARKLE
 
 
-#	if defined(SPARKLE)
-	diffuseUv = ProjectedUVParams2.yy * (input.TexCoord0.zw + (uv - uvOriginal));
-#	else
 	diffuseUv = uv;
-#	endif  // SPARKLE
 
 	float4 baseColor = 0;
 	float4 normal = 0;
@@ -744,87 +653,26 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float landSnowMask1 = GetLandSnowMaskValue(baseColor.w);
 
-#	if defined(MODELSPACENORMALS)
-	normal.xyz = normal.xzy * 2.0.xxx + -1.0.xxx;
-	normal.w = 1;
-	glossiness = TexSpecularSampler.Sample(SampSpecularSampler, uv).x;
-#	else
 	normal.xyz = TransformNormal(normal.xyz);
 	glossiness = normal.w;
-#	endif  // MODELSPACENORMALS
-
-#	if defined(WORLD_MAP)
-	normal.xyz = GetWorldMapNormal(input, normal.xyz, rawBaseColor.xyz);
-#	endif  // WORLD_MAP
 
 
 
-#	if defined(FACEGEN)
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		baseColor.xyz = GetFacegenBaseColor(baseColor.xyz, uv);
-	} else {
-		baseColor.xyz = Color::SkyrimGammaToLinear(GetFacegenBaseColor(Color::LinearToSkyrimGamma(baseColor.xyz), uv));
-	}
-#	elif defined(FACEGEN_RGB_TINT)
-	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		baseColor.xyz = GetFacegenRGBTintBaseColor(baseColor.xyz, uv);
-	} else {
-		baseColor.xyz = Color::SkyrimGammaToLinear(GetFacegenRGBTintBaseColor(Color::LinearToSkyrimGamma(baseColor.xyz), uv));
-	}
-#	endif  // FACEGEN
-
-#	if defined(HAIR) && defined(CS_HAIR)
-	float3 hairTint = 0;
-
-	if (SharedData::hairSpecularSettings.Enabled) {
-		hairTint = lerp(1, Color::Diffuse(TintColor.xyz), Color::ColorToLinear(input.Color.y));
-		baseColor.xyz *= hairTint;
-		baseColor.xyz = Hair::Saturation(baseColor.xyz, SharedData::hairSpecularSettings.HairSaturation);
-		baseColor.xyz *= SharedData::hairSpecularSettings.BaseColorMult;
-		baseColor.xyz = SharedData::hairSpecularSettings.HairMode == 1 ? baseColor.xyz * baseColor.xyz : baseColor.xyz;  // To match color for Marschner
-	}
-
-	float3 sampledHairFlow = 0;
-	bool useHairFlowMap = false;
-#		if defined(BACK_LIGHTING)
-	if (SharedData::hairSpecularSettings.Enabled) {
-		uint2 hairFlowDimensions = uint2(0, 0);
-		sampledHairFlow = float3(TexBackLightSampler.Sample(SampBackLightSampler, uv).xy, 0.5f);
-		TexBackLightSampler.GetDimensions(hairFlowDimensions.x, hairFlowDimensions.y);
-		useHairFlowMap = (sampledHairFlow.x > 0.0 || sampledHairFlow.y > 0.0) && hairFlowDimensions.x > 32 && hairFlowDimensions.y > 32;
-		sampledHairFlow = useHairFlowMap ? sampledHairFlow * 2.0f - 1.0f : float3(0.5f, 0.5f, 0.5f);
-	}
-#		endif
-#	endif
 
 
 
-#	if defined(BACK_LIGHTING)
-	float4 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
-#		if defined(HAIR) && defined(CS_HAIR)
-	if (useHairFlowMap) {
-		backLightColor = 0.0f;
-	}
-#		endif
-#	endif  // BACK_LIGHTING
 
-#	if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING))
+
+
+#	if (defined(SOFT_LIGHTING))
 	float4 rimSoftLightColor = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
 #	endif  // RIM_LIGHTING || SOFT_LIGHTING
 
 	uint numLights = min(7, uint(NumLightNumShadowLight.x));
 	uint numShadowLights = min(4, uint(NumLightNumShadowLight.y));
 
-#	if defined(MODELSPACENORMALS) && !defined(SKINNED)
-	float3 worldNormal = normal.xyz;
-	float3x3 tbnTr = ReconstructTBN(input.WorldPosition.xyz, worldNormal, screenUV);
-#	else
 	float3 worldNormal = normalize(mul(tbn, normal.xyz));
 
-#		if defined(SPARKLE)
-	float3 projectedNormal = normalize(mul(tbn, float3(ProjectedUVParams2.xx * normal.xy, normal.z)));
-#		endif  // SPARKLE
-#	endif      // defined (MODELSPACENORMALS) && !defined (SKINNED)
 
 	float2 baseShadowUV = 1.0.xx;
 	float4 shadowColor = 1.0;
@@ -845,16 +693,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 triWeights = Triplanar::GetWeights(tbnTr[2], triFaceNormal);
 	float projNoise = Triplanar::Sample(TexCharacterLightProjNoiseSampler, SampCharacterLightProjNoiseSampler, projWorldPos, triWeights, ProjectedUVParams.z).x;
 	float3 texProj = normalize(input.TexProj);
+#		if defined(TREE_ANIM)
+	float vertexAlpha = 1;
+#		else
 	float vertexAlpha = input.Color.w;
+#		endif  // defined (TREE_ANIM) || defined (LODOBJECTSHD)
 	projWeight = -ProjectedUVParams.x * projNoise + (dot(worldNormal.xyz, texProj) * vertexAlpha - ProjectedUVParams.w);
-#		if defined(SPARKLE)
-	if (projWeight < 0)
-		discard;
-
-	rawBaseColor = Triplanar::SampleStochasticBias(TexColorSampler, SampColorSampler, projWorldPos, triWeights, ProjectedUVParams2.y, SharedData::MipBias, screenNoise);
-	baseColor = float4(Color::Diffuse(rawBaseColor.rgb), rawBaseColor.a);
-	worldNormal.xyz = projectedNormal;
-#		elif !defined(FACEGEN) && !defined(PARALLAX) && !defined(SPARKLE)
+#		if 1 && 1 && 1 && 1
 	if (ProjectedUVParams3.w > 0.5) {
 		float diffuseNormalScale = ProjectedUVParams3.x * ProjectedUVParams.z;
 		float3 projNormal = TransformNormal(Triplanar::SampleStochastic(TexProjNormalSampler, SampProjNormalSampler, projWorldPos, triWeights, diffuseNormalScale, screenNoise).xyz);
@@ -891,33 +736,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	endif      // SNOW
 
-#	if defined(WORLD_MAP)
-	baseColor.xyz = GetWorldMapBaseColor(rawBaseColor.xyz, baseColor.xyz, projWeight);
-#	endif  // WORLD_MAP
 
-#	if defined(MODELSPACENORMALS)
-	float3 vertexNormal = worldNormal;
-#	endif
 
 	float3 screenSpaceNormal = normalize(FrameBuffer::WorldToView(worldNormal, false, eyeIndex));
 
-#	if defined(HAIR) && defined(CS_HAIR)
-	float3 Bitangent = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
-	float3 hairT = 0;
-#		if defined(BACK_LIGHTING)
-	hairT = useHairFlowMap ? normalize(mul(tbn, sampledHairFlow)) : Bitangent;
-#		else
-	hairT = Bitangent;
-#		endif
-	hairT = Hair::ReorientTangent(hairT, worldNormal);
-
-	if (SharedData::hairSpecularSettings.Enabled) {
-		if (SharedData::hairSpecularSettings.EnableTangentShift && SharedData::hairSpecularSettings.HairMode != 1) {
-			float3 shiftedNormal = Hair::ShiftWorldNormal(hairT, worldNormal, 0, uv);
-			screenSpaceNormal = normalize(FrameBuffer::WorldToView(shiftedNormal, false, eyeIndex));
-		}
-	}
-#	endif
 
 	MaterialProperties material = (MaterialProperties)0;
 
@@ -1030,25 +852,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.Glossiness = 0;
 	material.SpecularColor = 0;
 #		endif
-#		if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING))
+#		if (defined(SOFT_LIGHTING))
 	material.rimSoftLightColor = rimSoftLightColor.xyz;
-#		endif
-#		if defined(BACK_LIGHTING)
-	material.backLightColor = backLightColor.xyz;
 #		endif
 #	endif  // TRUE_PBR
 
-#	if defined(CS_HAIR) && defined(HAIR)
-	if (SharedData::hairSpecularSettings.Enabled) {
-		material.Shininess = SharedData::hairSpecularSettings.HairGlossiness;
-		material.F0 = Hair::HairF0();
-		if (SharedData::hairSpecularSettings.HairMode == 1) {
-			material.Roughness = 1;
-		} else {
-			material.Roughness = ShininessToRoughness(material.Shininess * 0.75);
-		}
-	}
-#	endif
 
 	bool dynamicCubemap = false;
 
@@ -1111,9 +919,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float rainWetness = SharedData::wetnessEffectsSettings.Wetness * minWetnessAngle * SharedData::wetnessEffectsSettings.MaxRainWetness;
 	rainWetness = max(rainWetness, raindropInfo.w);
 
-#		if defined(HAIR)
-	rainWetness = SharedData::wetnessEffectsSettings.SkinWetness * SharedData::wetnessEffectsSettings.Wetness;
-#		endif
 
 	float shoreWetness = shoreFactor * SharedData::wetnessEffectsSettings.MaxShoreWetness;
 	wetness = max(shoreWetness, rainWetness);
@@ -1204,12 +1009,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 
 
-#	if defined(CS_HAIR) && defined(HAIR)
-	if (SharedData::hairSpecularSettings.Enabled) {
-		vertexNormal.xyz = worldNormal.xyz;
-		worldNormal.xyz = hairT;
-	}
-#	endif
 
 	float3 diffuseColor = 0.0.xxx;
 	float3 specularColor = 0.0.xxx;
@@ -1228,12 +1027,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, coatWorldNormal, vertexNormal.xyz, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, dirLightColor, dirDetailedShadow, dirSoftShadow);
 #	else
 	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, DirLightDirection, dirLightColor, dirDetailedShadow, dirSoftShadow);
-#		if defined(HAIR) && defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled) {
-		float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, DirLightDirection, screenNoise, eyeIndex);
-		dirLightContext.hairShadow = hairShadow;
-	}
-#		endif
 #	endif
 
 	float2 uvOriginal_ddx = ddx(uvOriginal);
@@ -1287,12 +1080,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #			else
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, normalizedLightDirection, lightColor, lightShadow, lightShadow);
-#				if defined(HAIR) && defined(CS_HAIR)
-		if (SharedData::hairSpecularSettings.Enabled) {
-			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
-			pointLightContext.hairShadow = hairShadow;
-		}
-#				endif
 #			endif
 		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, pointLightOutput);
 #			if defined(WETNESS_EFFECTS)
@@ -1380,12 +1167,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, coatWorldNormal, vertexNormal.xyz, refractedViewDirection, viewDirection, refractedLightDirection, normalizedLightDirection, lightColor, pointLightShadow, pointLightShadow);
 #			else
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, normalizedLightDirection, lightColor, pointLightShadow, pointLightShadow);
-#				if defined(HAIR) && defined(CS_HAIR)
-		if (SharedData::hairSpecularSettings.Enabled) {
-			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
-			pointLightContext.hairShadow = hairShadow;
-		}
-#				endif
 #			endif
 		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, pointLightOutput);
 #			if defined(WETNESS_EFFECTS)
@@ -1455,15 +1236,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	IndirectLobeWeights indirectLobeWeights;
 
 	float3 ambientNormal = worldNormal.xyz;
-#	if defined(HAIR) && defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled) {
-		if (SharedData::hairSpecularSettings.HairMode == 1)
-			ambientNormal = normalize(viewDirection - hairT * dot(viewDirection, hairT));
-		else
-			ambientNormal = vertexNormal.xyz;
-		screenSpaceNormal = normalize(FrameBuffer::WorldToView(ambientNormal, false, eyeIndex));
-	}
-#	endif
 
 	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(ambientNormal)));
 
@@ -1484,13 +1256,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-#	if defined(HAIR)
-	float3 vertexColor = lerp(1, Color::ColorToLinear(TintColor.xyz), Color::ColorToLinear(input.Color.y));
-#		if defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled)
-		vertexColor = 1;
-#		endif
-#	elif defined(SKYLIGHTING)
+#	if defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
@@ -1524,7 +1290,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 
 #	if defined(WETNESS_EFFECTS)
-#		if !(defined(FACEGEN) || defined(FACEGEN_RGB_TINT)) || 0
+#		if !(0 || 0 || 0) || defined(TREE_ANIM)
 #			if defined(TRUE_PBR)
 	[branch] if ((PBRFlags & PBR::Flags::TwoLayer) != 0)
 	{
@@ -1692,16 +1458,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		alpha *= MaterialData.z;
 	}
-#		if !(0 || 0 || 0)
+#		if !(defined(TREE_ANIM))
 	alpha *= input.Color.w;
 #		endif  // !(defined(TREE_ANIM) || defined(LODOBJECTSHD) || defined(LODOBJECTS))
 #		if defined(DO_ALPHA_TEST)
-#			if defined(DEPTH_WRITE_DECALS)
-	if (alpha - 0.0156862754 < 0) {
-		discard;
-	}
-	alpha = saturate(1.05 * alpha);
-#			endif  // DEPTH_WRITE_DECALS
 	if (alpha - AlphaTestRefRS < 0) {
 		discard;
 	}
