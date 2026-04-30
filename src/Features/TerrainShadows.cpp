@@ -197,7 +197,9 @@ TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
 
 void TerrainShadows::LoadHeightmap()
 {
-	static auto tes = RE::TES::GetSingleton();
+	auto tes = RE::TES::GetSingleton();
+	if (!tes)
+		return;
 
 	auto worldspace = tes->GetRuntimeData2().worldSpace;
 	while (worldspace && worldspace->parentWorld && worldspace->parentUseFlags.any(RE::TESWorldSpace::ParentUseFlag::kUseLandData))
@@ -327,7 +329,10 @@ void TerrainShadows::UpdateShadow()
 	}
 
 	auto accumulator = *globals::game::currentAccumulator.get();
-	auto sunLight = skyrim_cast<RE::NiDirectionalLight*>(accumulator->GetRuntimeData().activeShadowSceneNode->GetRuntimeData().sunLight->light.get());
+	auto shadowSceneNode = accumulator->GetRuntimeData().activeShadowSceneNode;
+	if (!shadowSceneNode)
+		return;
+	auto sunLight = skyrim_cast<RE::NiDirectionalLight*>(shadowSceneNode->GetRuntimeData().sunLight->light.get());
 	if (!sunLight)
 		return;
 	TracyD3D11Zone(globals::state->tracyCtx, "Terrain Occlusion - Update Shadows");
