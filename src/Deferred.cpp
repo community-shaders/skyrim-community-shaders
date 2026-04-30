@@ -8,6 +8,7 @@
 #include "Utils/D3D.h"
 
 #include "Features/DynamicCubemaps.h"
+#include "Features/SDFGI.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
@@ -331,6 +332,10 @@ void Deferred::DeferredPasses()
 
 	auto& skylighting = globals::features::skylighting;
 
+	auto& sdfgi = globals::features::sdfgi;
+	if (sdfgi.loaded)
+		sdfgi.DrawSDFGI();
+
 	auto& ssgi = globals::features::screenSpaceGI;
 	if (ssgi.loaded)
 		ssgi.DrawSSGI();
@@ -363,7 +368,7 @@ void Deferred::DeferredPasses()
 			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                        // t6  EnvTexture
 			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,             // t7  EnvReflectionsTexture
 			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,   // t8  SkylightingProbeArray
-			nullptr,                                                                                         // t9  unused
+			sdfgi.loaded ? sdfgi.GetOutputSRV() : nullptr,                                                       // t9  SDFGITexture
 			ssgi_ao,                                                                                         // t10 SsgiAoTexture
 			ssgi_hq_spec ? nullptr : ssgi_y,                                                                 // t11 SsgiYTexture
 			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                              // t12 SsgiCoCgTexture
