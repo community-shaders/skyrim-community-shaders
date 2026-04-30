@@ -1120,7 +1120,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(EMAT)
 #		if defined(PARALLAX)
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
-		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
+		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, input.WorldPosition.xyz);
 		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
 #			if defined(VR_STEREO_OPT) && !defined(SNOW)
 			,
@@ -1153,7 +1153,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (complexMaterial) {
 			if (envMaskSample.w > kMaskEpsilon) {
 				complexMaterialParallax = true;
-				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, screenNoise);
+				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, input.WorldPosition.xyz);
 				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset
 #			if defined(VR_STEREO_OPT) && !defined(SNOW)
 					,
@@ -1205,7 +1205,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		{
 			displacementParams.HeightScale *= PBRParams1.y;
 		}
-		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
+		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, input.WorldPosition.xyz);
 		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
 #				if defined(VR_STEREO_OPT) && !defined(SNOW)
 			,
@@ -1264,7 +1264,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(EMAT)
 	if (LANDSCAPE_PARALLAX_ENABLED) {
-		ExtendedMaterials::InitializeTerrainMipLevels(uv, screenNoise, mipLevels);
+		ExtendedMaterials::InitializeTerrainMipLevels(uv, input.WorldPosition.xyz, mipLevels);
 		[unroll] for (uint terrainMipIndex = 0; terrainMipIndex < 6; terrainMipIndex++)
 		{
 			terrainShadowMipLevels[terrainMipIndex] = min(mipLevels[terrainMipIndex], ExtendedMaterials::TerrainParallaxShadowMaxMipLevel);

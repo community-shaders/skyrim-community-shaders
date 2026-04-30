@@ -24,6 +24,7 @@ namespace ExtendedMaterials
 	static const float ParallaxNearShadowQuality = 1.0;
 	static const float ParallaxFarShadowQuality = 0.5;
 	static const float TerrainParallaxShadowMaxMipLevel = 1.0;
+	static const float TargetTexelDensity = 4.0;
 
 	inline uint ParallaxShadowTapCount(float quality)
 	{
@@ -52,58 +53,34 @@ namespace ExtendedMaterials
 		return float4(AdjustDisplacementNormalized(displacement.x, params), AdjustDisplacementNormalized(displacement.y, params), AdjustDisplacementNormalized(displacement.z, params), AdjustDisplacementNormalized(displacement.w, params));
 	}
 
-	float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
+	float GetMipLevel(float2 coords, Texture2D<float4> tex, float3 worldPos)
 	{
-		// Compute the current gradients:
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
 
-#if !defined(PARALLAX) && !defined(TRUE_PBR)
-		textureDims /= 2.0;
-#endif
+		float2 dxUV = ddx(coords);
+		float2 dyUV = ddy(coords);
+		float3 dxWorld = ddx(worldPos);
+		float3 dyWorld = ddy(worldPos);
 
-#if defined(VR)
-		textureDims /= 2.0;
-#endif
+		float ratioX = dot(dxUV, dxUV) / max(dot(dxWorld, dxWorld), EPSILON_DIVISION);
+		float ratioY = dot(dyUV, dyUV) / max(dot(dyWorld, dyWorld), EPSILON_DIVISION);
 
-		float2 texCoordsPerSize = coords * textureDims;
-
-		float2 dxSize = ddx(texCoordsPerSize);
-		float2 dySize = ddy(texCoordsPerSize);
-
-		// Find min of change in u and v across quad: compute du and dv magnitude across quad
-		//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
-
-		// Standard mipmapping uses max here
-		float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
-
-		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
-		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
-
-#if !defined(PARALLAX) && !defined(TRUE_PBR)
-		mipLevel++;
-#endif
-
-// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
-#if defined(VR)
-		mipLevel++;
-#endif
-
-		// Stochastic mip selection: use screen noise to select between adjacent mip levels
-		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
+		float mipLevel = 0.5 * log2(min(ratioX, ratioY)) + log2(max(textureDims.x, textureDims.y) / EPSILON_DIVISION);
+		mipLevel = max(mipLevel, 0);
 
 		return mipLevel;
 	}
 
 #if defined(LANDSCAPE)
-	void InitializeTerrainMipLevels(float2 coords, float screenNoise, out float mipLevels[6])
+	void InitializeTerrainMipLevels(float2 coords, float3 worldPos, out float mipLevels[6])
 	{
-		mipLevels[0] = GetMipLevel(coords, TexColorSampler, screenNoise);
-		mipLevels[1] = GetMipLevel(coords, TexLandColor2Sampler, screenNoise);
-		mipLevels[2] = GetMipLevel(coords, TexLandColor3Sampler, screenNoise);
-		mipLevels[3] = GetMipLevel(coords, TexLandColor4Sampler, screenNoise);
-		mipLevels[4] = GetMipLevel(coords, TexLandColor5Sampler, screenNoise);
-		mipLevels[5] = GetMipLevel(coords, TexLandColor6Sampler, screenNoise);
+		mipLevels[0] = GetMipLevel(coords, TexColorSampler, worldPos);
+		mipLevels[1] = GetMipLevel(coords, TexLandColor2Sampler, worldPos);
+		mipLevels[2] = GetMipLevel(coords, TexLandColor3Sampler, worldPos);
+		mipLevels[3] = GetMipLevel(coords, TexLandColor4Sampler, worldPos);
+		mipLevels[4] = GetMipLevel(coords, TexLandColor5Sampler, worldPos);
+		mipLevels[5] = GetMipLevel(coords, TexLandColor6Sampler, worldPos);
 	}
 
 #	define HEIGHT_POWER 2
