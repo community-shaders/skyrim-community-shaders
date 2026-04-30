@@ -133,7 +133,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID,
 	int3 pos = int3(dispatchThreadID);
 	int3 localPos = int3(groupThreadID);
 	int3 groupBase = int3(groupID) * BLOCK_SIZE;
-	int halfSizeI = HALF_CASCADE_SIZE;
+	int halfSizeI = HalfSize ? HALF_CASCADE_SIZE : CASCADE_SIZE;
 
 	// Load shared memory: each thread loads its own cell + 1 border offset
 	int3 sharedIdx = localPos + int3(1, 1, 1);

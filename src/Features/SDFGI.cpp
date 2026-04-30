@@ -1,8 +1,12 @@
 #include "SDFGI.h"
 
+#include <d3dcompiler.h>
+
 #include "Deferred.h"
 #include "State.h"
 #include "Util.h"
+
+using namespace DirectX;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SDFGI::Settings,
@@ -536,7 +540,11 @@ void SDFGI::SetupResources()
 		Util::SetResourceName(linearClampSampler.get(), "SDFGI::LinearClampSampler");
 	}
 
+	logger::debug("SDFGI: Creating voxelization resources...");
+	CreateVoxelizeResources();
+
 	CompileComputeShaders();
+	CompileVoxelizeShaders();
 }
 
 void SDFGI::ClearShaderCache()
@@ -549,10 +557,14 @@ void SDFGI::ClearShaderCache()
 	integrateStoreCS = nullptr;
 	integrateScrollCS = nullptr;
 	integrateScrollStoreCS = nullptr;
+	voxelizeVS = nullptr;
+	voxelizePS = nullptr;
+	voxelizeInputLayout = nullptr;
 	sampleCS = nullptr;
 	debugCS = nullptr;
 
 	CompileComputeShaders();
+	CompileVoxelizeShaders();
 }
 
 void SDFGI::CompileComputeShaders()
@@ -657,7 +669,7 @@ void SDFGI::CompileComputeShaders()
 
 bool SDFGI::ShadersOK()
 {
-	if (!sampleCS)
+	if (!sampleCS || !voxelizeVS || !voxelizePS)
 		return false;
 	for (auto& cs : preprocessCS)
 		if (!cs)
@@ -670,23 +682,332 @@ ID3D11ShaderResourceView* SDFGI::GetOutputSRV()
 	return (loaded && settings.Enabled && giOutput) ? giOutput->srv.get() : nullptr;
 }
 
+void SDFGI::CompileVoxelizeShaders()
+{
+	auto device = globals::d3d::device;
+	auto shaderPath = std::filesystem::path("Data\\Shaders\\SDFGI\\voxelize.hlsl");
+
+	if (!std::filesystem::exists(shaderPath)) {
+		logger::error("SDFGI: voxelize.hlsl not found at {}", shaderPath.string());
+		return;
+	}
+
+	auto wpath = shaderPath.wstring();
+	uint32_t flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3;
+
+	D3D_SHADER_MACRO macrosVS[] = {
+		{ "VERTEXSHADER", "" },
+		{ "WINPC", "" },
+		{ "DX11", "" },
+		{ nullptr, nullptr }
+	};
+	D3D_SHADER_MACRO macrosPS[] = {
+		{ "PIXELSHADER", "" },
+		{ "WINPC", "" },
+		{ "DX11", "" },
+		{ nullptr, nullptr }
+	};
+
+	ID3DBlob* vsBlob = nullptr;
+	ID3DBlob* psBlob = nullptr;
+	ID3DBlob* errorBlob = nullptr;
+
+	if (FAILED(D3DCompileFromFile(wpath.c_str(), macrosVS, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+			"main", "vs_5_0", flags, 0, &vsBlob, &errorBlob))) {
+		if (errorBlob) {
+			logger::error("SDFGI voxelize VS compile error: {}", (char*)errorBlob->GetBufferPointer());
+			errorBlob->Release();
+		}
+		return;
+	}
+	if (errorBlob) {
+		errorBlob->Release();
+		errorBlob = nullptr;
+	}
+
+	if (FAILED(D3DCompileFromFile(wpath.c_str(), macrosPS, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+			"main", "ps_5_0", flags, 0, &psBlob, &errorBlob))) {
+		if (errorBlob) {
+			logger::error("SDFGI voxelize PS compile error: {}", (char*)errorBlob->GetBufferPointer());
+			errorBlob->Release();
+		}
+		vsBlob->Release();
+		return;
+	}
+	if (errorBlob) {
+		errorBlob->Release();
+		errorBlob = nullptr;
+	}
+
+	ID3D11VertexShader* vs = nullptr;
+	ID3D11PixelShader* ps = nullptr;
+	if (FAILED(device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &vs)) ||
+		FAILED(device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &ps))) {
+		logger::error("SDFGI: Failed to create voxelize shader objects");
+		if (vs)
+			vs->Release();
+		if (ps)
+			ps->Release();
+		vsBlob->Release();
+		psBlob->Release();
+		return;
+	}
+
+	voxelizeVS.attach(vs);
+	voxelizePS.attach(ps);
+	psBlob->Release();
+
+	D3D11_INPUT_ELEMENT_DESC layout[] = {
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	};
+
+	if (FAILED(device->CreateInputLayout(layout, 3, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), voxelizeInputLayout.put()))) {
+		logger::error("SDFGI: Failed to create voxelize input layout");
+		vsBlob->Release();
+		return;
+	}
+	Util::SetResourceName(voxelizeInputLayout.get(), "SDFGI::VoxelizeInputLayout");
+
+	vsBlob->Release();
+	logger::debug("SDFGI: Voxelize VS/PS compiled successfully");
+}
+
+void SDFGI::CreateVoxelizeResources()
+{
+	auto device = globals::d3d::device;
+
+	{
+		D3D11_RASTERIZER_DESC desc = {};
+		desc.FillMode = D3D11_FILL_SOLID;
+		desc.CullMode = D3D11_CULL_NONE;
+		desc.FrontCounterClockwise = FALSE;
+		desc.DepthClipEnable = FALSE;
+		DX::ThrowIfFailed(device->CreateRasterizerState(&desc, voxelizeRasterState.put()));
+		Util::SetResourceName(voxelizeRasterState.get(), "SDFGI::VoxelizeRasterState");
+	}
+
+	{
+		D3D11_DEPTH_STENCIL_DESC desc = {};
+		desc.DepthEnable = FALSE;
+		desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+		DX::ThrowIfFailed(device->CreateDepthStencilState(&desc, voxelizeDepthState.put()));
+		Util::SetResourceName(voxelizeDepthState.get(), "SDFGI::VoxelizeDepthState");
+	}
+
+	{
+		D3D11_BLEND_DESC desc = {};
+		desc.RenderTarget[0].BlendEnable = FALSE;
+		desc.RenderTarget[0].RenderTargetWriteMask = 0;
+		DX::ThrowIfFailed(device->CreateBlendState(&desc, voxelizeBlendState.put()));
+		Util::SetResourceName(voxelizeBlendState.get(), "SDFGI::VoxelizeBlendState");
+	}
+
+	{
+		D3D11_TEXTURE2D_DESC texDesc = {};
+		texDesc.Width = CASCADE_SIZE;
+		texDesc.Height = CASCADE_SIZE;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R8_UNORM;
+		texDesc.SampleDesc = { 1, 0 };
+		texDesc.Usage = D3D11_USAGE_DEFAULT;
+		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, voxelizeDummyTex.put()));
+		Util::SetResourceName(voxelizeDummyTex.get(), "SDFGI::VoxelizeDummyRT");
+
+		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.Format = DXGI_FORMAT_R8_UNORM;
+		rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+		DX::ThrowIfFailed(device->CreateRenderTargetView(voxelizeDummyTex.get(), &rtvDesc, voxelizeDummyRTV.put()));
+		Util::SetResourceName(voxelizeDummyRTV.get(), "SDFGI::VoxelizeDummyRT RTV");
+	}
+
+	voxelizeCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<VoxelizeCBData>(), "SDFGI::VoxelizeCB");
+
+	// Stub geometry: ground plane + test box
+	// Vertex layout: float3 position, float3 normal, float4 color = 10 floats per vertex
+	{
+		float groundSize = CASCADE_SIZE * settings.MinCellSize * (float)(1u << (settings.NumCascades - 1));
+
+		float vertices[] = {
+			// Ground plane at y=0 (grass green, alpha=0 means no emission)
+			-groundSize, 0, -groundSize, 0, 1, 0, 0.35f, 0.55f, 0.25f, 0,
+			-groundSize, 0, groundSize, 0, 1, 0, 0.35f, 0.55f, 0.25f, 0,
+			groundSize, 0, groundSize, 0, 1, 0, 0.35f, 0.55f, 0.25f, 0,
+			groundSize, 0, -groundSize, 0, 1, 0, 0.35f, 0.55f, 0.25f, 0,
+			// Box +X face (stone color)
+			600.f, 0.f, -25.f, 1, 0, 0, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 0.f, 25.f, 1, 0, 0, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 200.f, 25.f, 1, 0, 0, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 200.f, -25.f, 1, 0, 0, 0.6f, 0.55f, 0.45f, 0,
+			// Box -X face
+			400.f, 0.f, 25.f, -1, 0, 0, 0.6f, 0.55f, 0.45f, 0,
+			400.f, 0.f, -25.f, -1, 0, 0, 0.6f, 0.55f, 0.45f, 0,
+			400.f, 200.f, -25.f, -1, 0, 0, 0.6f, 0.55f, 0.45f, 0,
+			400.f, 200.f, 25.f, -1, 0, 0, 0.6f, 0.55f, 0.45f, 0,
+			// Box +Y face
+			400.f, 200.f, -25.f, 0, 1, 0, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 200.f, -25.f, 0, 1, 0, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 200.f, 25.f, 0, 1, 0, 0.6f, 0.55f, 0.45f, 0,
+			400.f, 200.f, 25.f, 0, 1, 0, 0.6f, 0.55f, 0.45f, 0,
+			// Box -Y face
+			400.f, 0.f, 25.f, 0, -1, 0, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 0.f, 25.f, 0, -1, 0, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 0.f, -25.f, 0, -1, 0, 0.6f, 0.55f, 0.45f, 0,
+			400.f, 0.f, -25.f, 0, -1, 0, 0.6f, 0.55f, 0.45f, 0,
+			// Box +Z face
+			400.f, 0.f, 25.f, 0, 0, 1, 0.6f, 0.55f, 0.45f, 0,
+			400.f, 200.f, 25.f, 0, 0, 1, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 200.f, 25.f, 0, 0, 1, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 0.f, 25.f, 0, 0, 1, 0.6f, 0.55f, 0.45f, 0,
+			// Box -Z face
+			600.f, 0.f, -25.f, 0, 0, -1, 0.6f, 0.55f, 0.45f, 0,
+			600.f, 200.f, -25.f, 0, 0, -1, 0.6f, 0.55f, 0.45f, 0,
+			400.f, 200.f, -25.f, 0, 0, -1, 0.6f, 0.55f, 0.45f, 0,
+			400.f, 0.f, -25.f, 0, 0, -1, 0.6f, 0.55f, 0.45f, 0,
+		};
+
+		uint32_t indices[] = {
+			0, 1, 2, 0, 2, 3,
+			4, 5, 6, 4, 6, 7,
+			8, 9, 10, 8, 10, 11,
+			12, 13, 14, 12, 14, 15,
+			16, 17, 18, 16, 18, 19,
+			20, 21, 22, 20, 22, 23,
+			24, 25, 26, 24, 26, 27,
+		};
+
+		voxelizeIndexCount = sizeof(indices) / sizeof(indices[0]);
+
+		D3D11_BUFFER_DESC vbDesc = {};
+		vbDesc.Usage = D3D11_USAGE_DEFAULT;
+		vbDesc.ByteWidth = sizeof(vertices);
+		vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+		D3D11_SUBRESOURCE_DATA vbData = { .pSysMem = vertices };
+		DX::ThrowIfFailed(device->CreateBuffer(&vbDesc, &vbData, voxelizeVB.put()));
+		Util::SetResourceName(voxelizeVB.get(), "SDFGI::VoxelizeVB");
+
+		D3D11_BUFFER_DESC ibDesc = {};
+		ibDesc.Usage = D3D11_USAGE_DEFAULT;
+		ibDesc.ByteWidth = sizeof(indices);
+		ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+		D3D11_SUBRESOURCE_DATA ibData = { .pSysMem = indices };
+		DX::ThrowIfFailed(device->CreateBuffer(&ibDesc, &ibData, voxelizeIB.put()));
+		Util::SetResourceName(voxelizeIB.get(), "SDFGI::VoxelizeIB");
+	}
+}
+
 void SDFGI::StubVoxelizeRegion(uint cascade)
 {
 	auto context = globals::d3d::context;
 
-	// Stub: clear voxelization textures to produce a test scene
-	// Generate a procedural sphere at the cascade center
-	FLOAT zeros[4] = { 0, 0, 0, 0 };
+	if (!voxelizeVS || !voxelizePS || !voxelizeInputLayout)
+		return;
+
+	// Clear voxelization textures
 	UINT uzeros[4] = { 0, 0, 0, 0 };
 	context->ClearUnorderedAccessViewUint(renderAlbedo->uav.get(), uzeros);
 	context->ClearUnorderedAccessViewUint(renderEmission->uav.get(), uzeros);
 	context->ClearUnorderedAccessViewUint(renderGeomFacing->uav.get(), uzeros);
 
-	// The preprocess shaders will handle the rest using the voxel data.
-	// For now, we leave the volumes empty - the JFA will produce an empty SDF,
-	// and no solid cells will be generated. This is correct for a stub:
-	// the pipeline runs end-to-end but produces no GI output.
-	(void)cascade;
+	// Set voxelization pipeline state
+	context->RSSetState(voxelizeRasterState.get());
+	context->OMSetDepthStencilState(voxelizeDepthState.get(), 0);
+	context->OMSetBlendState(voxelizeBlendState.get(), nullptr, 0xFFFFFFFF);
+	context->VSSetShader(voxelizeVS.get(), nullptr, 0);
+	context->PSSetShader(voxelizePS.get(), nullptr, 0);
+	context->IASetInputLayout(voxelizeInputLayout.get());
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	UINT stride = 10 * sizeof(float);
+	UINT vbOffset = 0;
+	auto vb = voxelizeVB.get();
+	context->IASetVertexBuffers(0, 1, &vb, &stride, &vbOffset);
+	context->IASetIndexBuffer(voxelizeIB.get(), DXGI_FORMAT_R32_UINT, 0);
+
+	D3D11_VIEWPORT vp = {};
+	vp.Width = (float)CASCADE_SIZE;
+	vp.Height = (float)CASCADE_SIZE;
+	vp.MinDepth = 0.0f;
+	vp.MaxDepth = 1.0f;
+	context->RSSetViewports(1, &vp);
+
+	// Bind dummy RT + UAVs for PS writes to 3D textures
+	auto rtv = voxelizeDummyRTV.get();
+	ID3D11UnorderedAccessView* uavs[] = {
+		renderAlbedo->uav.get(),
+		renderEmission->uav.get(),
+		renderGeomFacing->uav.get()
+	};
+	context->OMSetRenderTargetsAndUnorderedAccessViews(1, &rtv, nullptr, 1, 3, uavs, nullptr);
+
+	// Cascade bounds in world space
+	auto& c = cascades[cascade];
+	float cellSize = c.cellSize;
+	float extent = CASCADE_SIZE * cellSize;
+	float cascMin[3] = {
+		c.position[0] * cellSize - (CASCADE_SIZE / 2.0f) * cellSize,
+		c.position[1] * cellSize - (CASCADE_SIZE / 2.0f) * cellSize,
+		c.position[2] * cellSize - (CASCADE_SIZE / 2.0f) * cellSize,
+	};
+
+	// Rasterize geometry from 3 orthographic axes
+	for (uint axis = 0; axis < 3; ++axis) {
+		float cx = cascMin[0] + extent * 0.5f;
+		float cy = cascMin[1] + extent * 0.5f;
+		float cz = cascMin[2] + extent * 0.5f;
+
+		XMVECTOR eye, target, up;
+		switch (axis) {
+		case 0:
+			eye = XMVectorSet(cascMin[0], cy, cz, 0);
+			target = XMVectorSet(cascMin[0] + extent, cy, cz, 0);
+			up = XMVectorSet(0, 1, 0, 0);
+			break;
+		case 1:
+			eye = XMVectorSet(cx, cascMin[1], cz, 0);
+			target = XMVectorSet(cx, cascMin[1] + extent, cz, 0);
+			up = XMVectorSet(0, 0, 1, 0);
+			break;
+		case 2:
+		default:
+			eye = XMVectorSet(cx, cy, cascMin[2], 0);
+			target = XMVectorSet(cx, cy, cascMin[2] + extent, 0);
+			up = XMVectorSet(0, 1, 0, 0);
+			break;
+		}
+
+		XMMATRIX view = XMMatrixLookAtLH(eye, target, up);
+		XMMATRIX proj = XMMatrixOrthographicLH(extent, extent, 0, extent);
+		XMMATRIX viewProj = XMMatrixTranspose(XMMatrixMultiply(view, proj));
+		XMMATRIX world = XMMatrixTranspose(XMMatrixIdentity());
+
+		VoxelizeCBData cb = {};
+		XMStoreFloat4x4(&cb.ViewProj, viewProj);
+		XMStoreFloat4x4(&cb.World, world);
+		cb.CascadeOffset[0] = cascMin[0];
+		cb.CascadeOffset[1] = cascMin[1];
+		cb.CascadeOffset[2] = cascMin[2];
+		cb.CascadeToCell = 1.0f / cellSize;
+		cb.GridSizeF[0] = cb.GridSizeF[1] = cb.GridSizeF[2] = (float)CASCADE_SIZE;
+
+		voxelizeCB->Update(cb);
+		auto cbuf = voxelizeCB->CB();
+		context->VSSetConstantBuffers(0, 1, &cbuf);
+		context->PSSetConstantBuffers(0, 1, &cbuf);
+
+		context->DrawIndexed(voxelizeIndexCount, 0, 0);
+	}
+
+	// Unbind OM UAVs so subsequent CS passes can read these textures as SRVs
+	ID3D11RenderTargetView* nullRTV = nullptr;
+	ID3D11UnorderedAccessView* nullUAVs[3] = {};
+	context->OMSetRenderTargetsAndUnorderedAccessViews(1, &nullRTV, nullptr, 1, 3, nullUAVs, nullptr);
+
+	context->VSSetShader(nullptr, nullptr, 0);
+	context->PSSetShader(nullptr, nullptr, 0);
 }
 
 void SDFGI::StubGatherLights(std::vector<SDFGILight>& lights)

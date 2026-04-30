@@ -151,6 +151,17 @@ public:
 		float radius;
 	};
 
+	struct alignas(16) VoxelizeCBData
+	{
+		DirectX::XMFLOAT4X4 ViewProj;
+		DirectX::XMFLOAT4X4 World;
+		float CascadeOffset[3];
+		float CascadeToCell;
+		float GridSizeF[3];
+		uint pad0;
+	};
+	STATIC_ASSERT_ALIGNAS_16(VoxelizeCBData);
+
 	struct ProcessVoxel
 	{
 		uint position;
@@ -230,6 +241,20 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> integrateScrollCS;
 	winrt::com_ptr<ID3D11ComputeShader> integrateScrollStoreCS;
 
+	// Voxelization rasterization pipeline (3-axis orthographic)
+	winrt::com_ptr<ID3D11VertexShader> voxelizeVS;
+	winrt::com_ptr<ID3D11PixelShader> voxelizePS;
+	winrt::com_ptr<ID3D11InputLayout> voxelizeInputLayout;
+	winrt::com_ptr<ID3D11RasterizerState> voxelizeRasterState;
+	winrt::com_ptr<ID3D11DepthStencilState> voxelizeDepthState;
+	winrt::com_ptr<ID3D11BlendState> voxelizeBlendState;
+	winrt::com_ptr<ID3D11Buffer> voxelizeVB;
+	winrt::com_ptr<ID3D11Buffer> voxelizeIB;
+	uint voxelizeIndexCount = 0;
+	eastl::unique_ptr<ConstantBuffer> voxelizeCB;
+	winrt::com_ptr<ID3D11Texture2D> voxelizeDummyTex;
+	winrt::com_ptr<ID3D11RenderTargetView> voxelizeDummyRTV;
+
 	winrt::com_ptr<ID3D11ComputeShader> sampleCS;
 	winrt::com_ptr<ID3D11ComputeShader> debugCS;
 
@@ -245,6 +270,8 @@ private:
 	void DispatchIntegrate(uint cascade);
 	void DispatchSample();
 
+	void CompileVoxelizeShaders();
+	void CreateVoxelizeResources();
 	void StubVoxelizeRegion(uint cascade);
 	void StubGatherLights(std::vector<SDFGILight>& lights);
 
