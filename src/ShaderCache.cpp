@@ -75,7 +75,7 @@ namespace SIE
 
 	namespace SShaderCache
 	{
-		static void GetShaderDefines(const RE::BSShader&, uint32_t, D3D_SHADER_MACRO*);
+		static bool GetShaderDefines(const RE::BSShader&, uint32_t, std::span<D3D_SHADER_MACRO>);
 		static std::string GetShaderString(ShaderClass, const RE::BSShader&, uint32_t, bool = false);
 		/**
 		 * @brief Resolve image-space shader descriptor when applicable.
@@ -130,12 +130,18 @@ namespace SIE
 			return 0x3F & (descriptor >> 24);
 		}
 
-		static void GetLightingShaderDefines(uint32_t descriptor, std::span<D3D_SHADER_MACRO> defines)
+		static bool GetLightingShaderDefines(uint32_t descriptor, std::span<D3D_SHADER_MACRO> defines)
 		{
 			static REL::Relocation<void(uint32_t, D3D_SHADER_MACRO*)> VanillaGetLightingShaderDefines(RELOCATION_ID(101631, 108698));
 			VanillaGetLightingShaderDefines(descriptor, defines.data());
 
 			size_t lastIndex = std::ranges::find_if(defines, [](const D3D_SHADER_MACRO& macro) { return macro.Name == nullptr; }) - defines.begin();
+
+			if (lastIndex == 0) {
+				// The vanilla function produced no defines for this descriptor.
+				// This indicates an invalid or unknown descriptor that should not be compiled.
+				return false;
+			}
 
 			if (descriptor & static_cast<uint32_t>(ShaderCache::LightingShaderFlags::Deferred)) {
 				defines[lastIndex++] = { "DEFERRED", nullptr };
@@ -154,6 +160,7 @@ namespace SIE
 			}
 
 			defines[lastIndex] = { nullptr, nullptr };
+			return true;
 		}
 
 		static void GetBloodSplaterShaderDefines(uint32_t descriptor, std::span<D3D_SHADER_MACRO> defines)
@@ -670,7 +677,7 @@ namespace SIE
 			return;
 		}
 
-		static void GetShaderDefines(const RE::BSShader& shader, uint32_t descriptor, std::span<D3D_SHADER_MACRO> defines)
+		static bool GetShaderDefines(const RE::BSShader& shader, uint32_t descriptor, std::span<D3D_SHADER_MACRO> defines)
 		{
 			switch (shader.shaderType.get()) {
 			case RE::BSShader::Type::Grass:
@@ -689,8 +696,7 @@ namespace SIE
 				GetImagespaceShaderDefines(shader, defines);
 				break;
 			case RE::BSShader::Type::Lighting:
-				GetLightingShaderDefines(descriptor, defines);
-				break;
+				return GetLightingShaderDefines(descriptor, defines);
 			case RE::BSShader::Type::DistantTree:
 				GetDistantTreeShaderDefines(descriptor, defines);
 				break;
@@ -704,6 +710,7 @@ namespace SIE
 				GetUtilityShaderDefines(descriptor, defines);
 				break;
 			}
+			return true;
 		}
 
 		static std::array<std::array<std::unordered_map<std::string, int32_t>,
@@ -1434,7 +1441,12 @@ namespace SIE
 					defines[lastIndex++] = { shaderDefines->at(i).first.c_str(), shaderDefines->at(i).second.c_str() };
 			}
 			defines[lastIndex] = { nullptr, nullptr };  // do final entry
-			GetShaderDefines(shader, descriptor, std::span{ defines }.subspan(lastIndex));
+			if (!GetShaderDefines(shader, descriptor, std::span{ defines }.subspan(lastIndex))) {
+				logger::warn("Skipping {} shader {}::{:X}: empty defines from invalid descriptor",
+					magic_enum::enum_name(shaderClass), magic_enum::enum_name(type), descriptor);
+				cache.AddCompletedShader(shaderClass, shader, descriptor, nullptr);
+				return nullptr;
+			}
 
 			const std::wstring path = GetShaderPath(
 				shader.shaderType == RE::BSShader::Type::ImageSpace ?
