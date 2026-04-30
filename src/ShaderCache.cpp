@@ -1479,10 +1479,6 @@ namespace SIE
 			GetShaderDefines(shader, descriptor, std::span{ defines }.subspan(lastIndex));
 
 			const std::string name = GetShaderName(shader, descriptor);
-
-			if (shader.shaderType == RE::BSShader::Type::Lighting)
-				logger::info("SIE::SShaderCache::CompileShader - {}: {}", name, SIE::SShaderCache::MergeDefinesString(defines, true));
-
 			const std::wstring path = GetShaderPath(name);
 			auto pathString = Util::WStringToString(path);
 			if (!std::filesystem::exists(path)) {
