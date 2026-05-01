@@ -98,11 +98,18 @@ jobs:
                     echo "ERROR: '$TAG' is a pre-release tag. Only stable releases are uploaded to Nexus." >&2
                     exit 1
                   fi
+                  DRAFT=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+                    --jq ".[] | select(.tag_name == \"$TAG\") | .draft" 2>/dev/null | head -1)
+                  if [ "$DRAFT" != "false" ]; then
+                    echo "ERROR: Release '$TAG' is not published. Publish the GitHub release before uploading to Nexus." >&2
+                    exit 1
+                  fi
                   VERSION="${TAG#v}"
                   echo "tag=$TAG" >> $GITHUB_OUTPUT
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
               env:
                   INPUT_TAG: ${{ inputs.tag || '' }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Compute dry-run mode
               id: dryrun
@@ -120,6 +127,7 @@ jobs:
               run: |
                   ARGS=( --export-nexus-matrix --matrix-output nexus-matrix-raw.json )
                   PREVIOUS_TAG=$(git tag --merged "$RELEASE_TAG" --list 'v*.*.*' --sort=-v:refname 2>/dev/null \
+                    | grep -v -- '-' \
                     | awk -v current="$RELEASE_TAG" '$0 != current { print; exit }')
                   if [ -n "$PREVIOUS_TAG" ]; then
                     ARGS+=( --base "$PREVIOUS_TAG" )
