@@ -162,10 +162,10 @@ jobs:
                   {
                     printf 'matrix<<%s\n' "$DELIM"
                     cat nexus-matrix.json
-                    printf '%s\n' "$DELIM"
+                    printf '\n%s\n' "$DELIM"
                     printf 'upload_matrix<<%s\n' "$DELIM"
                     cat nexus-upload-matrix.json
-                    printf '%s\n' "$DELIM"
+                    printf '\n%s\n' "$DELIM"
                   } >> "$GITHUB_OUTPUT"
                   HAS_UPLOADS=$(python -c 'import json; d=json.load(open("nexus-upload-state.json")); print("true" if d.get("has_uploads") else "false")')
                   echo "has_uploads=${HAS_UPLOADS}" >> "$GITHUB_OUTPUT"
