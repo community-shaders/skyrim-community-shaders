@@ -50,7 +50,7 @@ on:
 jobs:
     cpp-build:
         name: Build plugin and addons (${{ matrix.compiler.name }})
-        if: inputs.run-cpp && (matrix.compiler.name != 'vs2022' || inputs.run-vs2022)
+        if: inputs.run-cpp
         runs-on: windows-2025
         permissions:
             contents: read
@@ -67,6 +67,9 @@ jobs:
                       vs-version: "2022"
                       cmake-preset: ALL-VS2022
                       build-dir: build/ALL-VS2022
+                exclude:
+                    - compiler:
+                          name: ${{ !inputs.run-vs2022 && 'vs2022' || '' }}
             fail-fast: false
         steps:
             - name: Checkout code
