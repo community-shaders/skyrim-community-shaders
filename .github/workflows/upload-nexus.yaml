@@ -144,6 +144,26 @@ jobs:
                     ARGS+=( --core-artifact-pattern "$INPUT_ARTIFACT_PATTERN" )
                   fi
                   python tools/feature_version_audit.py "${ARGS[@]}"
+
+                  # Inject GitHub release body as the core changelog.
+                  # The jq filter returns the body as a JSON string (newlines preserved),
+                  # which Python reads via json.load so special characters are handled safely.
+                  gh api "repos/$GITHUB_REPOSITORY/releases" \
+                    --jq "[.[] | select(.tag_name == \"$RELEASE_TAG\") | .body][0] // \"\"" \
+                    2>/dev/null > core-body.json || echo '""' > core-body.json
+                  python -c "
+                  import json
+                  body = json.load(open('core-body.json')) or ''
+                  with open('nexus-matrix-raw.json') as f:
+                      data = json.load(f)
+                  for row in data:
+                      if row.get('name') == 'core':
+                          row['changelog'] = body
+                          break
+                  with open('nexus-matrix-raw.json', 'w') as f:
+                      json.dump(data, f)
+                  "
+
                   python -c "
                   import json
                   with open('nexus-matrix-raw.json') as f:
@@ -162,10 +182,10 @@ jobs:
                   {
                     printf 'matrix<<%s\n' "$DELIM"
                     cat nexus-matrix.json
-                    printf '%s\n' "$DELIM"
+                    printf '\n%s\n' "$DELIM"
                     printf 'upload_matrix<<%s\n' "$DELIM"
                     cat nexus-upload-matrix.json
-                    printf '%s\n' "$DELIM"
+                    printf '\n%s\n' "$DELIM"
                   } >> "$GITHUB_OUTPUT"
                   HAS_UPLOADS=$(python -c 'import json; d=json.load(open("nexus-upload-state.json")); print("true" if d.get("has_uploads") else "false")')
                   echo "has_uploads=${HAS_UPLOADS}" >> "$GITHUB_OUTPUT"
@@ -174,6 +194,7 @@ jobs:
                   INPUT_NEXUS_MOD_ID: ${{ inputs.nexus_mod_id || '' }}
                   INPUT_MOD_FILENAME: ${{ inputs.mod_filename || '' }}
                   INPUT_ARTIFACT_PATTERN: ${{ inputs.artifact_pattern || '' }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     prepare-artifacts:
         needs: prepare-nexus-matrix
@@ -256,7 +277,7 @@ jobs:
             tag_name: ${{ needs.prepare-nexus-matrix.outputs.tag }}
             mod_version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
             mod_filename: ${{ matrix.mod_filename }}
-            changelog: ${{ inputs.changelog || '' }}
+            changelog: ${{ matrix.changelog || inputs.changelog || '' }}
         secrets:
             UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
             UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
