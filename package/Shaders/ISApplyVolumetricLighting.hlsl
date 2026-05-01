@@ -34,7 +34,6 @@ cbuffer PerGeometry : register(b2)
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	static const float kVLThresholdBias = 1.0 / 128.0;
 
 	float2 screenPosition = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 	float depth = DepthTex.Sample(DepthSampler, screenPosition).x;
@@ -46,12 +45,11 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 	float repartition = clamp(RepartitionTex.SampleLevel(RepartitionSampler, depth, 0).x, 0, 0.9999);
-	float vlSample = min(VLTex.SampleLevel(VLSampler, float3(input.TexCoord, repartition), 0).x, 1.0);
-	float vl = min(g_IntensityX_TemporalY.x * vlSample, 1.0);
+	float vl = g_IntensityX_TemporalY.x * VLTex.SampleLevel(VLSampler, float3(input.TexCoord, repartition), 0).x;
 
 	float noiseGrad = 0.03125 * NoiseGradSamplerTex.Sample(NoiseGradSamplerSampler, 0.125 * input.Position.xy).x;
 
-	float adjustedVl = saturate(noiseGrad + vl - kVLThresholdBias);
+	float adjustedVl = max(0, noiseGrad + vl - 0.0078125);
 
 	if (0.001 < g_IntensityX_TemporalY.y) {
 		float2 motionVector = MotionVectorsTex.Sample(MotionVectorsSampler, screenPosition).xy;
@@ -84,9 +82,9 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 		float temporalContribution = g_IntensityX_TemporalY.y * (1 - smoothstep(0, 1, min(1, 100 * abs(depth - previousDepth))));
-		psout.VL = min(lerp(adjustedVl, previousVl, temporalContribution * isValid), 1.0);
+		psout.VL = lerp(adjustedVl, previousVl, temporalContribution * isValid);
 	} else {
-		psout.VL = min(adjustedVl, 1.0);
+		psout.VL = adjustedVl;
 	}
 
 	return psout;
