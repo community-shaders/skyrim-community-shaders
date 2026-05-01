@@ -11,8 +11,7 @@ public:
 	struct alignas(16) Settings
 	{
 		float Opacity = 0.8f;
-		float Validity = 1.0f;
-		float pad[2];
+		float pad[3];
 	};
 
 	Settings settings;
@@ -45,7 +44,7 @@ public:
 	UINT cubemapMipLevels = 1;
 	int currentLayerForDraw = 0;
 
-	int lastLayerPerFace[6] = {};
+	uint32_t renderedLayersMask[6] = {};
 	int previouslyRenderedSide = -1;
 
 	ID3D11BlendState* cloudShadowBlendState = nullptr;

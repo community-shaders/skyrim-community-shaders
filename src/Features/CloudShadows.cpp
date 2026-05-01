@@ -45,12 +45,16 @@ void CloudShadows::CheckResourcesSide(int side)
 
 	float black[4] = { 0, 0, 0, 0 };
 	context->ClearRenderTargetView(cloudShadowLayerRTVs[0][side], black);
-	lastLayerPerFace[side] = -1;
+	renderedLayersMask[side] = 0;
 }
 
 void CloudShadows::PropagateToCompletion(int side)
 {
-	int fromLayer = std::max(lastLayerPerFace[side], 0);
+	uint32_t mask = renderedLayersMask[side];
+	unsigned long highBit;
+	int fromLayer = _BitScanReverse(&highBit, mask) ? static_cast<int>(highBit) : 0;
+	if (fromLayer >= kMaxCloudLayers - 1)
+		return;
 	UINT subresource = D3D11CalcSubresource(0, side, cubemapMipLevels);
 	auto context = globals::d3d::context;
 	for (int i = fromLayer + 1; i < kMaxCloudLayers; i++) {
@@ -84,7 +88,9 @@ void CloudShadows::SkyShaderHacks()
 		CheckResourcesSide(side);
 
 		int layer = currentLayerForDraw;
-		int prevLayer = lastLayerPerFace[side];
+
+		unsigned long highBit;
+		int prevLayer = _BitScanReverse(&highBit, renderedLayersMask[side]) ? static_cast<int>(highBit) : -1;
 
 		UINT subresource = D3D11CalcSubresource(0, side, cubemapMipLevels);
 
@@ -125,7 +131,7 @@ void CloudShadows::SkyShaderHacks()
 		if (dsv)
 			dsv->Release();
 
-		lastLayerPerFace[side] = layer;
+		renderedLayersMask[side] |= (1u << layer);
 
 		overrideSky = false;
 	}
@@ -199,17 +205,6 @@ void CloudShadows::EarlyPrepass()
 		previouslyRenderedSide = -1;
 	}
 
-	settings.Validity = 1.0f;
-
-	if ((globals::game::sky->mode.get() != RE::Sky::Mode::kFull) ||
-		!globals::game::sky->currentClimate)
-		return;
-
-	auto context = globals::d3d::context;
-
-	ID3D11ShaderResourceView* srv = texCloudShadowLayers[kMaxCloudLayers - 1]->srv.get();
-	context->PSSetShaderResources(25, 1, &srv);
-	context->CSSetShaderResources(25, 1, &srv);
 }
 
 void CloudShadows::SetupResources()
