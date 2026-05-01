@@ -40,6 +40,7 @@ jobs:
             run-shader-validation: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
             run-shader-tests: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
             cache-key-suffix: ${{ inputs.cache-key-suffix || '' }}
+            run-vs2022: ${{ github.event_name == 'workflow_dispatch' && github.ref_type != 'tag' }}
 
     feature-audit:
         name: Feature Version Audit (Release)
@@ -48,7 +49,7 @@ jobs:
         continue-on-error: true
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   fetch-depth: 0
                   submodules: recursive
@@ -64,7 +65,7 @@ jobs:
                   cat feature-version-audit-latest.md
 
             - name: Upload feature audit markdown
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: feature-version-audit
                   path: feature-version-audit-latest.md
@@ -94,14 +95,14 @@ jobs:
                   fi
 
             - name: Download dist artifacts
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v7
               with:
                   name: dist-artifacts
                   path: dist/
 
             - name: Download feature audit artifact
               continue-on-error: true
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v7
               with:
                   name: feature-version-audit
                   path: .

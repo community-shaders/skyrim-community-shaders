@@ -98,11 +98,18 @@ jobs:
                     echo "ERROR: '$TAG' is a pre-release tag. Only stable releases are uploaded to Nexus." >&2
                     exit 1
                   fi
+                  DRAFT=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+                    --jq ".[] | select(.tag_name == \"$TAG\") | .draft" 2>/dev/null | head -1)
+                  if [ "$DRAFT" != "false" ]; then
+                    echo "ERROR: Release '$TAG' is not published. Publish the GitHub release before uploading to Nexus." >&2
+                    exit 1
+                  fi
                   VERSION="${TAG#v}"
                   echo "tag=$TAG" >> $GITHUB_OUTPUT
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
               env:
                   INPUT_TAG: ${{ inputs.tag || '' }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Compute dry-run mode
               id: dryrun
@@ -120,6 +127,7 @@ jobs:
               run: |
                   ARGS=( --export-nexus-matrix --matrix-output nexus-matrix-raw.json )
                   PREVIOUS_TAG=$(git tag --merged "$RELEASE_TAG" --list 'v*.*.*' --sort=-v:refname 2>/dev/null \
+                    | grep -v -- '-' \
                     | awk -v current="$RELEASE_TAG" '$0 != current { print; exit }')
                   if [ -n "$PREVIOUS_TAG" ]; then
                     ARGS+=( --base "$PREVIOUS_TAG" )
@@ -136,6 +144,26 @@ jobs:
                     ARGS+=( --core-artifact-pattern "$INPUT_ARTIFACT_PATTERN" )
                   fi
                   python tools/feature_version_audit.py "${ARGS[@]}"
+
+                  # Inject GitHub release body as the core changelog.
+                  # The jq filter returns the body as a JSON string (newlines preserved),
+                  # which Python reads via json.load so special characters are handled safely.
+                  gh api "repos/$GITHUB_REPOSITORY/releases" \
+                    --jq "[.[] | select(.tag_name == \"$RELEASE_TAG\") | .body][0] // \"\"" \
+                    2>/dev/null > core-body.json || echo '""' > core-body.json
+                  python -c "
+                  import json
+                  body = json.load(open('core-body.json')) or ''
+                  with open('nexus-matrix-raw.json') as f:
+                      data = json.load(f)
+                  for row in data:
+                      if row.get('name') == 'core':
+                          row['changelog'] = body
+                          break
+                  with open('nexus-matrix-raw.json', 'w') as f:
+                      json.dump(data, f)
+                  "
+
                   python -c "
                   import json
                   with open('nexus-matrix-raw.json') as f:
@@ -150,18 +178,23 @@ jobs:
                   with open('nexus-upload-state.json', 'w') as f:
                       json.dump({'has_uploads': has_uploads}, f)
                   "
-                  echo "matrix<<EOF" >> $GITHUB_OUTPUT
-                  cat nexus-matrix.json >> $GITHUB_OUTPUT
-                  echo "EOF" >> $GITHUB_OUTPUT
-                  echo "upload_matrix<<EOF" >> $GITHUB_OUTPUT
-                  cat nexus-upload-matrix.json >> $GITHUB_OUTPUT
-                  echo "EOF" >> $GITHUB_OUTPUT
-                  echo "has_uploads=$(python -c \"import json; print('true' if json.load(open('nexus-upload-state.json')).get('has_uploads') else 'false')\")" >> $GITHUB_OUTPUT
+                  DELIM=$(openssl rand -hex 8)
+                  {
+                    printf 'matrix<<%s\n' "$DELIM"
+                    cat nexus-matrix.json
+                    printf '\n%s\n' "$DELIM"
+                    printf 'upload_matrix<<%s\n' "$DELIM"
+                    cat nexus-upload-matrix.json
+                    printf '\n%s\n' "$DELIM"
+                  } >> "$GITHUB_OUTPUT"
+                  HAS_UPLOADS=$(python -c 'import json; d=json.load(open("nexus-upload-state.json")); print("true" if d.get("has_uploads") else "false")')
+                  echo "has_uploads=${HAS_UPLOADS}" >> "$GITHUB_OUTPUT"
               env:
                   RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
                   INPUT_NEXUS_MOD_ID: ${{ inputs.nexus_mod_id || '' }}
                   INPUT_MOD_FILENAME: ${{ inputs.mod_filename || '' }}
                   INPUT_ARTIFACT_PATTERN: ${{ inputs.artifact_pattern || '' }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     prepare-artifacts:
         needs: prepare-nexus-matrix
@@ -244,7 +277,7 @@ jobs:
             tag_name: ${{ needs.prepare-nexus-matrix.outputs.tag }}
             mod_version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
             mod_filename: ${{ matrix.mod_filename }}
-            changelog: ${{ inputs.changelog || '' }}
+            changelog: ${{ matrix.changelog || inputs.changelog || '' }}
         secrets:
             UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
             UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}

@@ -148,4 +148,7 @@ struct HDRDisplay : public Feature
 private:
 	bool showHDRWarningPopup = false;
 	bool pendingHDREnable = false;
+
+	// True when FFX frame generation is actively compositing UI this frame.
+	bool IsFGCompositingThisFrame() const;
 };

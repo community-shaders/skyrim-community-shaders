@@ -317,6 +317,44 @@ def get_commit_author(commit_hash):
     except Exception:
         return None
 
+def get_feature_changelog(feature_dir, feature_info, base_ref):
+    """Return bullet-point changelog of user-facing commits since base_ref.
+
+    Includes feat, fix, perf, and breaking-change commits only.
+    Deduplicates by subject line and preserves commit order (newest first).
+    """
+    if not base_ref:
+        return ""
+    paths = [str(feature_dir).replace("\\", "/")]
+    if feature_info:
+        name = feature_info.get('name', '')
+        for suffix in ('.h', '.cpp'):
+            p = DEFAULT_FEATURE_HEADERS_DIR / (name + suffix)
+            if p.exists():
+                paths.append(str(p).replace("\\", "/"))
+        src_dir = DEFAULT_FEATURE_HEADERS_DIR / name
+        if src_dir.exists() and src_dir.is_dir():
+            paths.append(str(src_dir).replace("\\", "/"))
+    try:
+        raw = subprocess.check_output(
+            ["git", "log", f"{base_ref}..{HEAD_REF}", "--pretty=%s", "--"] + paths,
+            cwd=str(PROJECT_ROOT),
+            stderr=subprocess.DEVNULL,
+        ).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+    seen = set()
+    lines = []
+    for msg in raw.splitlines():
+        msg = msg.strip()
+        if not msg or msg in seen:
+            continue
+        seen.add(msg)
+        if (RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or
+                RE_COMMIT_PERF.match(msg) or RE_COMMIT_BREAKING.search(msg)):
+            lines.append(f"- {msg}")
+    return "\n".join(lines)
+
 def apply_version_bump(ini_path, proposed_ver_str):
     try:
         with open(ini_path, "r", encoding="utf-8") as f:
@@ -875,7 +913,7 @@ def format_metadata_summary(feature_metadata):
     return lines, metadata_issues
 
 
-def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core_artifact_pattern):
+def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core_artifact_pattern, base_ref=None):
     rows = [
         {
             'name': 'core',
@@ -883,6 +921,7 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
             'artifact_name': 'nexus-upload-core',
             'nexus_mod_id': core_mod_id,
             'mod_filename': core_filename,
+            'changelog': '',  # filled by workflow from GitHub release body
         }
     ]
     def sanitize_name(name):
@@ -923,6 +962,11 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
         }
         if mod_version:
             row['mod_version'] = mod_version
+        if base_ref:
+            feature_dir = FEATURES_DIR / name
+            changelog = get_feature_changelog(feature_dir, info, base_ref)
+            if changelog:
+                row['changelog'] = changelog
 
         rows.append(row)
     return rows
@@ -1129,6 +1173,7 @@ def main():
             args.core_mod_id,
             args.core_filename,
             args.core_artifact_pattern,
+            base_ref=base_ref,
         )
         output_path = args.matrix_output
         with open(output_path, 'w', encoding='utf-8') as f:

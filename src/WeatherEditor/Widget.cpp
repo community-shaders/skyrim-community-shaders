@@ -378,11 +378,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 			if (HasSavedFile() && menu->uiIcons.deleteSettings.texture) {
 				ImGui::SameLine();
-				{
-					auto _style = Util::ErrorButtonStyle();
-					if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
-						ImGui::OpenPopup("DeleteConfirmation");
-				}
+				if (Util::ErrorImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
+					ImGui::OpenPopup("DeleteConfirmation");
 				Util::AddTooltip("Delete saved file");
 			}
 		}
@@ -391,57 +388,45 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		ImGui::PopStyleColor(2);
 		ImGui::PopStyleVar(2);
 	} else {
-		const float buttonHeight = ImGui::GetFrameHeight();
 		if (!menu) {
 			drawSearchBar();
 			drawForceWeatherButton();
 			ImGui::Separator();
 			return;
 		}
-		const auto& palette = menu->GetTheme().StatusPalette;
-
 		drawSearchBar();
 		drawForceWeatherButton();
 
-		auto styledTextButton = [&](const char* label, const ImVec4& color, const char* tooltip, auto callback) {
-			ImGui::SameLine();
-			ImVec2 size = ImGui::CalcTextSize(label);
-			size.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			size.y = buttonHeight;
-			auto hover = color;
-			hover.w = 0.8f;
-			auto active = color;
-			active.w = 1.0f;
-			{
-				auto styledButton = Util::StyledButtonWrapper(color, hover, active);
-				if (ImGui::Button(label, size))
-					callback();
-			}
-			Util::AddTooltip(tooltip);
-		};
-
 		auto textButton = [&](const char* label, const char* tooltip, auto callback) {
 			ImGui::SameLine();
-			ImVec2 size = ImGui::CalcTextSize(label);
-			size.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			size.y = buttonHeight;
-			if (Util::ButtonWithFlash(label, size))
+			if (Util::ButtonWithFlash(label))
 				callback();
 			Util::AddTooltip(tooltip);
 		};
 
 		// Apply button
-		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply()))
-			styledTextButton("Apply", palette.SuccessColor, "Apply changes to the game", [&]() { ApplyChanges(); });
+		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
+			ImGui::SameLine();
+			if (Util::SuccessButton("Apply"))
+				ApplyChanges();
+			Util::AddTooltip("Apply changes to the game");
+		}
 
 		// Save/Load/Revert/Delete group
 		if (showSaveLoadRevert) {
 			textButton("Save", "Save to file", [&]() { Save(); });
 			textButton("Load", "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
-			styledTextButton("Revert", palette.Warning, "Revert to original game values", [&]() { RevertChanges(); });
+			ImGui::SameLine();
+			if (Util::WarningButton("Revert"))
+				RevertChanges();
+			Util::AddTooltip("Revert to original game values");
 
-			if (HasSavedFile())
-				styledTextButton("Delete", palette.Error, "Delete saved file", [&]() { ImGui::OpenPopup("DeleteConfirmation"); });
+			if (HasSavedFile()) {
+				ImGui::SameLine();
+				if (Util::ErrorTextButton("Delete"))
+					ImGui::OpenPopup("DeleteConfirmation");
+				Util::AddTooltip("Delete saved file");
+			}
 		}
 
 		drawUnsavedIndicator();

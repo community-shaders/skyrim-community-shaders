@@ -1,5 +1,6 @@
 #include "ScreenSpaceShadows.h"
 
+#include "Features/TerrainBlending.h"
 #include "State.h"
 #include "Utils/D3D.h"
 
@@ -79,11 +80,14 @@ void ScreenSpaceShadows::ClearShaderCache()
 
 uint ScreenSpaceShadows::GetScaledSampleCount()
 {
-	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+	if (globals::game::isVR) {
+		// In VR, SAMPLE_COUNT is a pixel-space ray length that is FOV-driven, not resolution-driven.
+		// Resolution-scaling produced 2-8x excess samples at VR resolutions with no quality benefit.
+		// WAVE_SIZE (64) alignment is required for correct Bend READ_COUNT computation.
+		return bendSettings.SampleCount * 64;
+	}
 
-	// In VR, renderSize covers both eyes side-by-side; raymarch dispatches per-eye
-	if (globals::game::isVR)
-		renderSize.x /= 2.0f;
+	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 
 	// Scale sample count based on both dimensions relative to 1920x1080 reference
 	float2 referenceRes = { 1920.0f, 1080.0f };
@@ -109,7 +113,13 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 	}
 
 	if (!raymarchCS) {
-		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() } }, "cs_5_0");
+		auto sampleCount = std::format("{}", scaledSampleCount);
+		std::vector<std::pair<const char*, const char*>> defines{ { "SAMPLE_COUNT", sampleCount.c_str() } };
+		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
+		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
+		if (globals::features::terrainBlending.loaded)
+			defines.push_back({ "TERRAIN_BLENDING", "" });
+		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", defines, "cs_5_0");
 	}
 	return raymarchCS;
 }
@@ -118,7 +128,11 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 {
 	if (!raymarchRightCS) {
 		uint scaledSampleCount = GetScaledSampleCount();
-		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() }, { "RIGHT", "" } }, "cs_5_0");
+		auto sampleCount = std::format("{}", scaledSampleCount);
+		std::vector<std::pair<const char*, const char*>> defines{ { "SAMPLE_COUNT", sampleCount.c_str() }, { "RIGHT", "" } };
+		if (globals::features::terrainBlending.loaded)
+			defines.push_back({ "TERRAIN_BLENDING", "" });
+		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", defines, "cs_5_0");
 	}
 	return raymarchRightCS;
 }
@@ -157,8 +171,13 @@ void ScreenSpaceShadows::DrawShadows()
 	int minRenderBounds[2] = { 0, 0 };
 	int maxRenderBounds[2] = { viewportSize[0], viewportSize[1] };
 
-	// Setup common render state
-	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
+	// Setup common render state.
+	// SSS always uses 24/32-bit depth, never the R16_UNORM half-precision path.
+	// With TerrainBlending loaded the SRV is R32_FLOAT (blendedDepthTexture);
+	// without it, the game's kPOST_ZPREPASS_COPY (R24_UNORM_X8_TYPELESS).
+	// The shader's DepthTexture declaration is conditional on TERRAIN_BLENDING:
+	// `<float>` for the R32_FLOAT path, `<unorm float>` for the R24_UNORM path.
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV(false);
 	context->CSSetShaderResources(0, 1, &depthSRV);
 
 	auto uav = screenSpaceShadowsTexture->uav.get();
@@ -265,8 +284,12 @@ void ScreenSpaceShadows::DrawStereoSync()
 	if (!globals::game::isVR || !enableStereoSync || !stereoSyncCopyTex || !stereoSyncCB)
 		return;
 
-	if (!stereoSyncCS)
-		stereoSyncCS = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\StereoSyncCS.hlsl", { { "VR", "" }, { "FRAMEBUFFER", "" } }, "cs_5_0"));
+	if (!stereoSyncCS) {
+		std::vector<std::pair<const char*, const char*>> defines{ { "VR", "" }, { "FRAMEBUFFER", "" } };
+		if (globals::features::terrainBlending.loaded)
+			defines.push_back({ "TERRAIN_BLENDING", "" });
+		stereoSyncCS = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\StereoSyncCS.hlsl", defines, "cs_5_0"));
+	}
 	if (!stereoSyncCS)
 		return;
 
@@ -291,7 +314,9 @@ void ScreenSpaceShadows::DrawStereoSync()
 	stereoSyncCB->Update(cbData);
 	auto cbPtr = stereoSyncCB->CB();
 
-	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
+	// Same 24/32-bit depth path as the raymarch — SrcDepthTexture's HLSL type is
+	// conditional on TERRAIN_BLENDING via the define passed at compile time below.
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV(false);
 	ID3D11ShaderResourceView* srvs[2]{ depthSRV, stereoSyncCopyTex->srv.get() };
 	ID3D11UnorderedAccessView* uavs[1]{ screenSpaceShadowsTexture->uav.get() };
 
