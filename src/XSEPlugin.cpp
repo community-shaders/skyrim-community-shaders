@@ -212,6 +212,7 @@ bool Load()
 		}
 	}
 
+	// Empty RequiredDLLs array, if necessary we can add a dll here in the future without needing to modify the plugin loading logic.
 	const std::array<LPCWSTR, 0> requiredDLLs{};
 
 	for (const auto dll : requiredDLLs) {
