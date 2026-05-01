@@ -73,7 +73,7 @@ jobs:
             fail-fast: false
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   ref: ${{ inputs.ref }}
                   repository: ${{ inputs.repository }}
@@ -129,7 +129,7 @@ jobs:
 
             - name: Upload dist artifacts
               if: success() && matrix.compiler.name == 'vs2026'
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: dist-artifacts
                   path: dist/
@@ -151,7 +151,7 @@ jobs:
             fail-fast: false
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   ref: ${{ inputs.ref }}
                   repository: ${{ inputs.repository }}
@@ -212,7 +212,7 @@ jobs:
 
             - name: Upload shader validation logs
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: shader-validation-logs-${{ matrix.config.name }}
                   path: |
@@ -229,7 +229,7 @@ jobs:
             contents: read
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   ref: ${{ inputs.ref }}
                   repository: ${{ inputs.repository }}
@@ -266,7 +266,7 @@ jobs:
 
             - name: Upload test results on failure
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: shader-test-results
                   path: |
