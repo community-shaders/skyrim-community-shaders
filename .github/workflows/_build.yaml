@@ -35,6 +35,10 @@ on:
                 description: "Optional suffix to invalidate the build cache"
                 type: string
                 default: ""
+            run-vs2022:
+                description: "Include vs2022 in the build matrix; set false for release builds where only vs2026 artifacts are shipped"
+                type: boolean
+                default: true
         outputs:
             version:
                 description: "CMake project version extracted from the build"
@@ -63,10 +67,13 @@ jobs:
                       vs-version: "2022"
                       cmake-preset: ALL-VS2022
                       build-dir: build/ALL-VS2022
+                exclude:
+                    - compiler:
+                          name: ${{ !inputs.run-vs2022 && 'vs2022' || '' }}
             fail-fast: false
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   ref: ${{ inputs.ref }}
                   repository: ${{ inputs.repository }}
@@ -122,7 +129,7 @@ jobs:
 
             - name: Upload dist artifacts
               if: success() && matrix.compiler.name == 'vs2026'
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: dist-artifacts
                   path: dist/
@@ -144,7 +151,7 @@ jobs:
             fail-fast: false
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   ref: ${{ inputs.ref }}
                   repository: ${{ inputs.repository }}
@@ -205,7 +212,7 @@ jobs:
 
             - name: Upload shader validation logs
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: shader-validation-logs-${{ matrix.config.name }}
                   path: |
@@ -222,7 +229,7 @@ jobs:
             contents: read
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   ref: ${{ inputs.ref }}
                   repository: ${{ inputs.repository }}
@@ -259,7 +266,7 @@ jobs:
 
             - name: Upload test results on failure
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: shader-test-results
                   path: |
