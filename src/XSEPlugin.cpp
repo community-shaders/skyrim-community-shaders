@@ -182,9 +182,9 @@ bool Load()
 		L"Data/SKSE/Plugins/EVLaS.dll",
 		L"Data/SKSE/Plugins/AELAS.dll",
 		L"Data/SKSE/Plugins/SSEReShadeHelper.dll",
-		L"Data/SKSE/Plugins/trainwreck.dll",
 		L"Data/SKSE/Plugins/TAASharpen.dll",
-		L"Data/SKSE/Plugins/NVIDIA_Reflex.dll"
+		L"Data/SKSE/Plugins/NVIDIA_Reflex.dll",
+		L"Data/SKSE/Plugins/MARA.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {
@@ -212,9 +212,7 @@ bool Load()
 		}
 	}
 
-	const std::array requiredDLLs = {
-		L"Data/SKSE/Plugins/CrashLogger.dll"
-	};
+	const std::array<LPCWSTR, 0> requiredDLLs{};
 
 	for (const auto dll : requiredDLLs) {
 		if (!LoadLibrary(dll)) {
