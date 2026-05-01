@@ -33,7 +33,7 @@ module.exports = {
     [
       '@semantic-release/github',
       {
-        draft: true,
+        draftRelease: true,
         assets: [],
         successComment: false,
         failComment: false,
