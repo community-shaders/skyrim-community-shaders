@@ -1,24 +1,18 @@
 name: Nexus Upload (Post Release)
 
 on:
-    workflow_run:
-        workflows: ["Build Community Shaders and addons"]
-        types: [completed]
-        branches:
-            - "v[0-9]*.[0-9]*.[0-9]*"
+    release:
+        types: [published]
 
 jobs:
     nexus-upload:
         name: Nexus Upload (dry run)
-        # workflow_run always runs in the base repo context, so secrets are available
-        # regardless of whether the triggering PR/push came from a fork.
-        # head_branch for a tag-triggered workflow_run is the tag name (e.g. v1.2.3).
+        # Fires when a draft release is published. Only stable tags (no '-') are uploaded.
         if: >
-            github.event.workflow_run.conclusion == 'success' &&
-            !contains(github.event.workflow_run.head_branch, '-')
+            !contains(github.event.release.tag_name, '-')
         uses: ./.github/workflows/upload-nexus.yaml
         with:
-            tag: ${{ github.event.workflow_run.head_branch }}
+            tag: ${{ github.event.release.tag_name }}
             artifact_pattern: "CommunityShaders-*.7z"
             dry_run: "true"
         secrets:
