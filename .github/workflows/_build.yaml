@@ -35,6 +35,10 @@ on:
                 description: "Optional suffix to invalidate the build cache"
                 type: string
                 default: ""
+            run-vs2022:
+                description: "Include vs2022 in the build matrix; set false for release builds where only vs2026 artifacts are shipped"
+                type: boolean
+                default: true
         outputs:
             version:
                 description: "CMake project version extracted from the build"
@@ -46,7 +50,7 @@ on:
 jobs:
     cpp-build:
         name: Build plugin and addons (${{ matrix.compiler.name }})
-        if: inputs.run-cpp
+        if: inputs.run-cpp && (matrix.compiler.name != 'vs2022' || inputs.run-vs2022)
         runs-on: windows-2025
         permissions:
             contents: read

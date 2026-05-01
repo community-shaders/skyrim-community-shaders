@@ -150,13 +150,17 @@ jobs:
                   with open('nexus-upload-state.json', 'w') as f:
                       json.dump({'has_uploads': has_uploads}, f)
                   "
-                  echo "matrix<<EOF" >> $GITHUB_OUTPUT
-                  cat nexus-matrix.json >> $GITHUB_OUTPUT
-                  echo "EOF" >> $GITHUB_OUTPUT
-                  echo "upload_matrix<<EOF" >> $GITHUB_OUTPUT
-                  cat nexus-upload-matrix.json >> $GITHUB_OUTPUT
-                  echo "EOF" >> $GITHUB_OUTPUT
-                  echo "has_uploads=$(python -c \"import json; print('true' if json.load(open('nexus-upload-state.json')).get('has_uploads') else 'false')\")" >> $GITHUB_OUTPUT
+                  DELIM=$(openssl rand -hex 8)
+                  {
+                    printf 'matrix<<%s\n' "$DELIM"
+                    cat nexus-matrix.json
+                    printf '%s\n' "$DELIM"
+                    printf 'upload_matrix<<%s\n' "$DELIM"
+                    cat nexus-upload-matrix.json
+                    printf '%s\n' "$DELIM"
+                  } >> "$GITHUB_OUTPUT"
+                  HAS_UPLOADS=$(python -c 'import json; d=json.load(open("nexus-upload-state.json")); print("true" if d.get("has_uploads") else "false")')
+                  echo "has_uploads=${HAS_UPLOADS}" >> "$GITHUB_OUTPUT"
               env:
                   RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
                   INPUT_NEXUS_MOD_ID: ${{ inputs.nexus_mod_id || '' }}
