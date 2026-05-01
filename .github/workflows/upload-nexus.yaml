@@ -120,6 +120,7 @@ jobs:
               run: |
                   ARGS=( --export-nexus-matrix --matrix-output nexus-matrix-raw.json )
                   PREVIOUS_TAG=$(git tag --merged "$RELEASE_TAG" --list 'v*.*.*' --sort=-v:refname 2>/dev/null \
+                    | grep -v -- '-' \
                     | awk -v current="$RELEASE_TAG" '$0 != current { print; exit }')
                   if [ -n "$PREVIOUS_TAG" ]; then
                     ARGS+=( --base "$PREVIOUS_TAG" )
