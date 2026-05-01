@@ -40,6 +40,7 @@ jobs:
             run-shader-validation: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
             run-shader-tests: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
             cache-key-suffix: ${{ inputs.cache-key-suffix || '' }}
+            run-vs2022: false
 
     feature-audit:
         name: Feature Version Audit (Release)
@@ -129,7 +130,7 @@ jobs:
               uses: ncipollo/release-action@v1
               with:
                   name: "Community Shaders ${{ steps.combined_notes.outputs.release_tag }}"
-                  draft: true
+                  draft: ${{ contains(steps.combined_notes.outputs.release_tag, '-') }}
                   tag: ${{ steps.combined_notes.outputs.release_tag }}
                   artifacts: "${{ github.workspace }}/dist/*.7z"
                   bodyFile: ${{ steps.combined_notes.outputs.body_file }}
