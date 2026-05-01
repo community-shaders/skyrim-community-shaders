@@ -38,6 +38,7 @@ jobs:
                   extra_plugins: |
                       @google/semantic-release-replace-plugin
                       @semantic-release/git
+                      @semantic-release/github
                   tag_format: "v${version}"
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
