@@ -252,7 +252,7 @@ void SubsurfaceScattering::DrawSSS()
 	{
 		ID3D11Buffer* buffer[1] = { blurCB->CB() };
 		context->CSSetConstantBuffers(1, 1, buffer);
-		context->CSSetSamplers(0, 1, &globals::deferred->linearSampler);
+		context->CSSetSamplers(0, 1, &globals::deferred->pointSampler);
 
 		auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 

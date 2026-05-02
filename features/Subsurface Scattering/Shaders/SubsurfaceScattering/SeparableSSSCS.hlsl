@@ -6,7 +6,7 @@ Texture2D<float4> MaskTexture : register(t2);
 Texture2D<float4> AlbedoTexture : register(t3);
 Texture2D<float4> NormalTexture : register(t4);
 
-SamplerState LinearSampler : register(s0);
+SamplerState PointSampler : register(s0);
 
 #include "Common/Color.hlsli"
 #include "Common/Random.hlsli"
