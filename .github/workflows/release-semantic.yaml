@@ -4,9 +4,13 @@ on:
     workflow_dispatch:
         inputs:
             release_type:
-                description: "Release type: rc or stable"
+                description: "Release type"
                 required: true
+                type: choice
                 default: "rc"
+                options:
+                    - rc
+                    - stable
 
 permissions:
     contents: write
