@@ -438,8 +438,10 @@ jobs:
                       try:
                           with urllib.request.urlopen(req, timeout=15) as resp:
                               files = json.load(resp).get('files', [])
+                          main = [f for f in files if f.get('category_name') == 'MAIN']
+                          check = main if main else files
                           seen = []
-                          for f in files:
+                          for f in check:
                               v = f.get('version', '')
                               if v and v not in seen:
                                   seen.append(v)
@@ -447,7 +449,7 @@ jobs:
                       except Exception:
                           return None
 
-                  succeeded, failed = [], []
+                  succeeded, failed, unknowns = [], [], []
                   rows_status = []
                   for row in rows:
                       name = row.get('name', '')
@@ -459,6 +461,7 @@ jobs:
                       versions = nexus_versions(mod_id)
                       if versions is None:
                           status, icon = 'unknown', '❓'
+                          unknowns.append(label)
                       elif planned in versions:
                           status, icon = 'uploaded', '✅'
                           succeeded.append(label)
@@ -467,17 +470,22 @@ jobs:
                           failed.append(label)
                       rows_status.append((icon, label, planned, url, artifact, status))
 
-                  if failed:
-                      w(f'⚠️ {len(failed)} upload(s) failed, {len(succeeded)} succeeded')
+                  if failed or unknowns:
+                      parts = []
+                      if failed:
+                          parts.append(f'{len(failed)} failed')
+                      if unknowns:
+                          parts.append(f'{len(unknowns)} unknown')
+                      w(f'⚠️ {", ".join(parts)} — {len(succeeded)} succeeded')
                   else:
                       w(f'✅ All {len(succeeded)} Nexus upload(s) completed successfully')
                   w()
                   w('| Status | Feature | Version | Nexus | Artifact |')
                   w('|--------|---------|---------|-------|----------|')
                   for icon, label, planned, url, artifact, status in rows_status:
-                      art = f'`{artifact}`' if status == 'failed' else '—'
+                      art = f'`{artifact}`' if status in ('failed', 'unknown') else '—'
                       w(f'| {icon} | [{label}]({url}) | `{planned}` | [View]({url}) | {art} |')
-                  if failed:
+                  if failed or unknowns:
                       w()
                       w('Re-run is safe: already-uploaded versions will be automatically skipped.')
 
