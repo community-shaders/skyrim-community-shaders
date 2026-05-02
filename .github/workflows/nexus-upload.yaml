@@ -1,4 +1,4 @@
-name: Upload Nexus Release
+name: "Nexus: Upload Release"
 
 on:
     workflow_dispatch:
@@ -25,7 +25,11 @@ on:
             dry_run:
                 description: "If true, do not upload to Nexus; only report the planned upload"
                 required: false
+                type: choice
                 default: "true"
+                options:
+                    - "true"
+                    - "false"
             changelog:
                 description: "Optional release notes or changelog for Nexus"
                 required: false
@@ -82,7 +86,7 @@ jobs:
                   fetch-depth: 0
 
             - name: Setup Python
-              uses: actions/setup-python@v5
+              uses: actions/setup-python@v6
               with:
                   python-version: "3.11"
 
