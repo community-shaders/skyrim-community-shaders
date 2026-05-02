@@ -1,4 +1,4 @@
-name: Build Community Shaders and addons
+name: "Release: Build Artifacts"
 
 on:
     push:
@@ -32,7 +32,7 @@ concurrency:
 jobs:
     build:
         name: Build
-        uses: ./.github/workflows/_build.yaml
+        uses: ./.github/workflows/_shared-build.yaml
         with:
             ref: ${{ github.ref }}
             repository: ${{ github.repository }}
@@ -55,7 +55,7 @@ jobs:
                   submodules: recursive
 
             - name: Setup Python
-              uses: actions/setup-python@v5
+              uses: actions/setup-python@v6
               with:
                   python-version: "3.11"
 
