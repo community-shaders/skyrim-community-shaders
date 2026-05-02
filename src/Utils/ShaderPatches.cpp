@@ -15,7 +15,7 @@ namespace Util::ShaderPatches
 		entries.clear();
 		loaded = true;
 
-		std::filesystem::path path = "Data\\Shaders\\ShaderPatches.json";
+		std::filesystem::path path = "Data\\Shaders\\Effect11\\ShaderPatches.json";
 		std::ifstream ifs(path);
 		if (!ifs.is_open())
 			return;

@@ -7,6 +7,8 @@
 #include "WeatherManager.h"
 
 #include <d3dcompiler.h>
+#include <filesystem>
+#include <fstream>
 #include <vector>
 
 EffectManager& EffectManager::GetSingleton()
@@ -404,6 +406,16 @@ void EffectManager::ExecuteEffects()
 	}
 }
 
+std::string EffectManager::LoadShaderFile(const char* path)
+{
+	std::ifstream ifs(path, std::ios::binary);
+	if (!ifs.is_open()) {
+		logger::error("[ENBPP] Failed to open shader file: {}", path);
+		return {};
+	}
+	return { std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>() };
+}
+
 void EffectManager::CreateCommonResources()
 {
 	CreateQuadGeometry();
@@ -445,22 +457,14 @@ void EffectManager::CreateQuadGeometry()
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
-	// Create a simple vertex shader for the input layout
-	winrt::com_ptr<ID3DBlob> vertexShaderBlob;
-	const char* vertexShaderSource = R"(
-        struct VS_INPUT_POST { float3 pos : POSITION; float2 txcoord : TEXCOORD0; };
-        struct VS_OUTPUT_POST { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
-        VS_OUTPUT_POST VS_Draw(VS_INPUT_POST IN) {
-            VS_OUTPUT_POST OUT;
-            OUT.pos = float4(IN.pos, 1.0);
-            OUT.txcoord0 = IN.txcoord;
-            return OUT;
-        }
-    )";
+	auto vertexShaderSource = LoadShaderFile("Data\\Shaders\\Effect11\\QuadVS.hlsl");
+	if (vertexShaderSource.empty())
+		return;
 
+	winrt::com_ptr<ID3DBlob> vertexShaderBlob;
 	winrt::com_ptr<ID3DBlob> errorBlob;
-	HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr,
-		"VS_Draw", "vs_4_0", 0, 0, vertexShaderBlob.put(), errorBlob.put());
+	HRESULT hr = D3DCompile(vertexShaderSource.data(), vertexShaderSource.size(), "QuadVS.hlsl", nullptr, nullptr,
+		"main", "vs_4_0", 0, 0, vertexShaderBlob.put(), errorBlob.put());
 
 	if (FAILED(hr)) {
 		if (errorBlob) {
@@ -507,21 +511,12 @@ void EffectManager::CreateRenderStates()
 
 void EffectManager::CreateCopyShaders()
 {
-	// Compile vertex shader for texture copy
-	const char* vertexShaderSource = R"(
-		struct VS_INPUT { float3 pos : POSITION; float2 txcoord : TEXCOORD0; };
-		struct VS_OUTPUT { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
-
-		VS_OUTPUT main(VS_INPUT input) {
-			VS_OUTPUT output;
-			output.pos = float4(input.pos, 1.0);
-			output.txcoord0 = input.txcoord;
-			return output;
-		}
-	)";
+	auto vertexShaderSource = LoadShaderFile("Data\\Shaders\\Effect11\\QuadVS.hlsl");
+	if (vertexShaderSource.empty())
+		return;
 
 	winrt::com_ptr<ID3DBlob> vsBlob, errorBlob;
-	HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr,
+	HRESULT hr = D3DCompile(vertexShaderSource.data(), vertexShaderSource.size(), "QuadVS.hlsl", nullptr, nullptr,
 		"main", "vs_4_0", 0, 0, vsBlob.put(), errorBlob.put());
 
 	if (FAILED(hr)) {
@@ -537,19 +532,12 @@ void EffectManager::CreateCopyShaders()
 		return;
 	}
 
-	// Compile pixel shader for texture copy
-	const char* pixelShaderSource = R"(
-		Texture2D SourceTexture : register(t0);
-
-		struct PS_INPUT { float4 pos : SV_POSITION; float2 txcoord0 : TEXCOORD0; };
-
-		float4 main(PS_INPUT input) : SV_TARGET {
-			return SourceTexture.Load(int3(input.pos.xy, 0));
-		}
-	)";
+	auto pixelShaderSource = LoadShaderFile("Data\\Shaders\\Effect11\\CopyPS.hlsl");
+	if (pixelShaderSource.empty())
+		return;
 
 	winrt::com_ptr<ID3DBlob> psBlob;
-	hr = D3DCompile(pixelShaderSource, strlen(pixelShaderSource), nullptr, nullptr, nullptr,
+	hr = D3DCompile(pixelShaderSource.data(), pixelShaderSource.size(), "CopyPS.hlsl", nullptr, nullptr,
 		"main", "ps_4_0", 0, 0, psBlob.put(), errorBlob.put());
 
 	if (FAILED(hr)) {
@@ -570,34 +558,12 @@ void EffectManager::CreateCopyShaders()
 
 void EffectManager::CreateColorCorrectionShader()
 {
-	// Compile compute shader for color correction
-	const char* computeShaderSource = R"(
-		cbuffer ColorCorrectionParams : register(b0)
-		{
-			float Brightness;
-			float GammaCurve;
-		};
-
-		RWTexture2D<float4> OutputTexture : register(u0);
-
-		[numthreads(8, 8, 1)]
-		void main(uint3 id : SV_DispatchThreadID)
-		{
-			uint width, height;
-			OutputTexture.GetDimensions(width, height);
-			if (id.x >= width || id.y >= height) {
-				return;
-			}
-
-			float4 color = OutputTexture[id.xy];
-			color.rgb = pow(color.rgb, GammaCurve);
-			color.rgb *= Brightness;
-			OutputTexture[id.xy] = max(0, color);
-		}
-	)";
+	auto computeShaderSource = LoadShaderFile("Data\\Shaders\\Effect11\\ColorCorrectionCS.hlsl");
+	if (computeShaderSource.empty())
+		return;
 
 	winrt::com_ptr<ID3DBlob> csBlob, errorBlob;
-	HRESULT hr = D3DCompile(computeShaderSource, strlen(computeShaderSource), nullptr, nullptr, nullptr,
+	HRESULT hr = D3DCompile(computeShaderSource.data(), computeShaderSource.size(), "ColorCorrectionCS.hlsl", nullptr, nullptr,
 		"main", "cs_5_0", 0, 0, csBlob.put(), errorBlob.put());
 
 	if (FAILED(hr)) {
