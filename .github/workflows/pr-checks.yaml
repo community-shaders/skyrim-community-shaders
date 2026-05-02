@@ -1,4 +1,4 @@
-name: PR Checks
+name: "PR: Checks"
 
 on:
     pull_request_target:
@@ -95,7 +95,7 @@ jobs:
                   sha: ${{ github.event.pull_request.head.sha }}
 
     # Security: this job compiles untrusted fork code.
-    # It uses _build.yaml which enforces permissions: contents: read and receives NO secrets.
+    # It uses _shared-build.yaml which enforces permissions: contents: read and receives NO secrets.
     # The absence of a `secrets:` block here is intentional — passing secrets to a reusable
     # workflow from pull_request_target triggered by a fork causes GitHub to reject the
     # entire workflow file at parse time (0 jobs, "workflow file issue").
@@ -105,7 +105,7 @@ jobs:
         if: >
             always() && !cancelled() &&
             !github.event.pull_request.draft
-        uses: ./.github/workflows/_build.yaml
+        uses: ./.github/workflows/_shared-build.yaml
         with:
             ref: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
@@ -219,7 +219,7 @@ jobs:
                   submodules: recursive
 
             - name: Setup Python
-              uses: actions/setup-python@v5
+              uses: actions/setup-python@v6
               with:
                   python-version: "3.11"
 
