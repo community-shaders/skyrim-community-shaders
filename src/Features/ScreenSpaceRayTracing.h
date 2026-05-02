@@ -198,7 +198,8 @@ struct ScreenSpaceRayTracing : Feature
 	nrd::ReblurSettings reblurSpecularSettings{};
 	uint32_t frameIndex = 0;
 
-	Matrix prevViewMatrix{};
+	Matrix worldToViewMat{};
+	Matrix prevWorldToViewMat{};
 	Matrix prevProjMatrix{};
 	float2 prevJitter{};
 };

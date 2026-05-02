@@ -725,13 +725,14 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 			specCommonSettings.rectSizePrev[0] = fw;
 			specCommonSettings.rectSizePrev[1] = fh;
 
-			auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
+			// NRD wants column-major matrices; game stores row-major — transpose to convert.
+			// Use jittered projection to match jittered depth.
 			auto projMat = globals::game::frameBufferCached.GetCameraProj(0).Transpose();
 
 			memcpy(specCommonSettings.viewToClipMatrix, &projMat, sizeof(float) * 16);
 			memcpy(specCommonSettings.viewToClipMatrixPrev, &prevProjMatrix, sizeof(float) * 16);
-			memcpy(specCommonSettings.worldToViewMatrix, &viewMat, sizeof(float) * 16);
-			memcpy(specCommonSettings.worldToViewMatrixPrev, &prevViewMatrix, sizeof(float) * 16);
+			memcpy(specCommonSettings.worldToViewMatrix, &worldToViewMat, sizeof(float) * 16);
+			memcpy(specCommonSettings.worldToViewMatrixPrev, &prevWorldToViewMat, sizeof(float) * 16);
 
 			specCommonSettings.motionVectorScale[0] = 1.0f;
 			specCommonSettings.motionVectorScale[1] = 1.0f;
@@ -749,6 +750,11 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 			specCommonSettings.denoisingRange = 1e6f;
 			specCommonSettings.splitScreen = settings.Reblur.SplitScreen;
 			specCommonSettings.enableValidation = settings.Reblur.EnableNRDValidation;
+
+			// Update previous values
+			prevWorldToViewMat = worldToViewMat;
+			prevProjMatrix = projMat;
+			prevJitter = jitter;
 		}
 		nrdReblurSpecular.SetCommonSettings(specCommonSettings);
 
@@ -962,17 +968,25 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 			commonSettings.rectSizePrev[1] = fh;
 
 			// NRD wants column-major matrices; game stores row-major — transpose to convert.
-			// Use unjittered projection to avoid NRD temporal artifacts.
+			// Use jittered projection to match jittered depth.
 			auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
 			auto projMat = globals::game::frameBufferCached.GetCameraProj(0).Transpose();
 
+			// Get camera's world position
+			float3 cameraWorldPos = float3(globals::game::frameBufferCached.GetCameraPosAdjust(0));
+
+			// Create a translation matrix for the inverse of the camera's world position
+			DirectX::XMMATRIX translationMat = DirectX::XMMatrixTranslation(-cameraWorldPos.x, -cameraWorldPos.y, -cameraWorldPos.z);
+
+			// Combine view rotation with translation to get the full world-to-view matrix
+			// NRD expects worldToViewMatrix to transform from world space to camera space, including translation.
+			// So, V_full = ViewRotationMatrix * TranslationMatrix(-CameraWorldPosition)
+			worldToViewMat = DirectX::XMMatrixMultiply(translationMat, viewMat);
+
 			memcpy(commonSettings.viewToClipMatrix, &projMat, sizeof(float) * 16);
 			memcpy(commonSettings.viewToClipMatrixPrev, &prevProjMatrix, sizeof(float) * 16);
-			memcpy(commonSettings.worldToViewMatrix, &viewMat, sizeof(float) * 16);
-			memcpy(commonSettings.worldToViewMatrixPrev, &prevViewMatrix, sizeof(float) * 16);
-
-			prevViewMatrix = viewMat;
-			prevProjMatrix = projMat;
+			memcpy(commonSettings.worldToViewMatrix, &worldToViewMat, sizeof(float) * 16);
+			memcpy(commonSettings.worldToViewMatrixPrev, &prevWorldToViewMat, sizeof(float) * 16);
 
 			// 2D screen-space motion vectors (pixelUvPrev = pixelUv + mv)
 			commonSettings.motionVectorScale[0] = 1.0f;
@@ -986,11 +1000,17 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 			commonSettings.cameraJitterPrev[0] = prevJitter.x;
 			commonSettings.cameraJitterPrev[1] = prevJitter.y;
 
-			prevJitter = jitter;
-
 			commonSettings.frameIndex = frameIndex++;
 			commonSettings.splitScreen = settings.Reblur.SplitScreen;
 			commonSettings.enableValidation = settings.Reblur.EnableNRDValidation;
+
+			// Update previous values only after they have been consumed by either passes
+			if (!settings.EnableSpecular) {
+				prevWorldToViewMat = worldToViewMat;
+				prevProjMatrix = projMat;
+				prevJitter = jitter;
+			}
+
 		}
 		nrdReblur.SetCommonSettings(commonSettings);
 
