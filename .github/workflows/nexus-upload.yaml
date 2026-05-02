@@ -25,7 +25,11 @@ on:
             dry_run:
                 description: "If true, do not upload to Nexus; only report the planned upload"
                 required: false
+                type: choice
                 default: "true"
+                options:
+                    - "true"
+                    - "false"
             changelog:
                 description: "Optional release notes or changelog for Nexus"
                 required: false
