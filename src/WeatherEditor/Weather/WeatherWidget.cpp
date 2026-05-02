@@ -863,20 +863,18 @@ void WeatherWidget::DrawDALCSettings()
 
 		// Draw with per-parameter inheritance
 		auto drawDalcColor = [&](const char* settingId, const char* label, float3 (&values)[4], bool* inheritFlag = nullptr, float3* parentValues = nullptr) {
-			if (!MatchesSearch(settingId))
-				return false;
-			const bool rowChanged = inheritFlag ?
-				TOD::DrawTODColorRow(label, values, *inheritFlag, parentValues) :
-				TOD::DrawTODColorRow(label, values);
-			return rowChanged;
+			return DrawIfMatchesSearch(settingId, [&](const char*) {
+				return inheritFlag ?
+					TOD::DrawTODColorRow(label, values, *inheritFlag, parentValues) :
+					TOD::DrawTODColorRow(label, values);
+			});
 		};
 		auto drawDalcFloat = [&](const char* settingId, const char* label, float (&values)[4], bool* inheritFlag = nullptr, float* parentValues = nullptr) {
-			if (!MatchesSearch(settingId))
-				return false;
-			const bool rowChanged = inheritFlag ?
-				TOD::DrawTODFloatRow(label, values, *inheritFlag, parentValues, 0.0f, 10.0f) :
-				TOD::DrawTODFloatRow(label, values, 0.0f, 10.0f);
-			return rowChanged;
+			return DrawIfMatchesSearch(settingId, [&](const char*) {
+				return inheritFlag ?
+					TOD::DrawTODFloatRow(label, values, *inheritFlag, parentValues, 0.0f, 10.0f) :
+					TOD::DrawTODFloatRow(label, values, 0.0f, 10.0f);
+			});
 		};
 
 		if (hasParent) {
@@ -1026,23 +1024,22 @@ void WeatherWidget::DrawWeatherColorSettings()
 			int i = displayOrder[idx];
 			std::string colorTypeLabel = ColorTypeLabel(i);
 
-			if (!MatchesSearch(colorTypeLabel))
-				continue;
+			DrawSearchSectionIfMatches(colorTypeLabel, [&](const char* label) {
+				if (hasParent) {
+					float3 parentColors[4];
+					for (int j = 0; j < 4; j++)
+						parentColors[j] = parentWidget->settings.atmosphereColors[i].colorTimes[j];
 
-			if (hasParent) {
-				float3 parentColors[4];
-				for (int j = 0; j < 4; j++)
-					parentColors[j] = parentWidget->settings.atmosphereColors[i].colorTimes[j];
-
-				std::string inheritKey = "Atmosphere_" + colorTypeLabel;
-				if (TOD::DrawTODColorRow(colorTypeLabel.c_str(), settings.atmosphereColors[i].colorTimes, settings.inheritFlags[inheritKey], parentColors)) {
-					changed = true;
+					std::string inheritKey = "Atmosphere_" + colorTypeLabel;
+					if (TOD::DrawTODColorRow(label, settings.atmosphereColors[i].colorTimes, settings.inheritFlags[inheritKey], parentColors)) {
+						changed = true;
+					}
+				} else {
+					if (TOD::DrawTODColorRow(label, settings.atmosphereColors[i].colorTimes)) {
+						changed = true;
+					}
 				}
-			} else {
-				if (TOD::DrawTODColorRow(colorTypeLabel.c_str(), settings.atmosphereColors[i].colorTimes)) {
-					changed = true;
-				}
-			}
+			});
 		}
 
 		TOD::EndTODTable();
@@ -1070,8 +1067,10 @@ void WeatherWidget::DrawCloudSettings()
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
 		std::string layerId = std::format("Cloud {}", layer);
+		bool layerMatchesSearch = false;
+		DrawSearchSectionIfMatches(layerId, [&](const char*) { layerMatchesSearch = true; });
 
-		if (!MatchesSearch(layerId))
+		if (!layerMatchesSearch)
 			continue;
 
 		bool layerEnabled = settings.clouds[i].enabled;
@@ -1408,10 +1407,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	// Only show category if any property matches search
 	bool anyCategoryMatches = false;
 	for (const auto& p : properties) {
-		if (MatchesSearch(p.first)) {
-			anyCategoryMatches = true;
-			break;
-		}
+		DrawSearchSectionIfMatches(p.first, [&](const char*) { anyCategoryMatches = true; });
 	}
 	if (!anyCategoryMatches)
 		return;
@@ -1425,42 +1421,41 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * WidgetDefaults::kSliderWidthRatio);
 
 	for (auto& p : properties) {
-		if (!MatchesSearch(p.first))
-			continue;
-
-		// Inherit checkbox
-		if (hasParent) {
-			bool& inheritFlag = settings.inheritFlags[p.first];
-			if (ImGui::Checkbox(("##inherit_" + p.first).c_str(), &inheritFlag)) {
-				if (inheritFlag) {
-					InheritFromParent(p.first);
-					changed = true;
+		DrawSearchSectionIfMatches(p.first, [&](const char*) {
+			// Inherit checkbox
+			if (hasParent) {
+				bool& inheritFlag = settings.inheritFlags[p.first];
+				if (ImGui::Checkbox(("##inherit_" + p.first).c_str(), &inheritFlag)) {
+					if (inheritFlag) {
+						InheritFromParent(p.first);
+						changed = true;
+					}
 				}
+				Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
+				ImGui::SameLine();
 			}
-			Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-			ImGui::SameLine();
-		}
 
-		switch (p.second) {
-		case 0:
-			if (WeatherUtils::DrawSliderInt8(p.first, settings.weatherProperties[p.first]))
-				changed = true;
-			break;
-		case 1:
-			if (WeatherUtils::DrawColorEdit(p.first, settings.weatherColors[p.first]))
-				changed = true;
-			break;
-		case 2:
-			if (WeatherUtils::DrawSliderUint8(p.first, settings.weatherProperties[p.first]))
-				changed = true;
-			break;
-		case 3:
-			if (WeatherUtils::DrawSliderFloat(p.first, settings.fogProperties[p.first]))
-				changed = true;
-			break;
-		default:
-			break;
-		}
+			switch (p.second) {
+			case 0:
+				if (WeatherUtils::DrawSliderInt8(p.first, settings.weatherProperties[p.first]))
+					changed = true;
+				break;
+			case 1:
+				if (WeatherUtils::DrawColorEdit(p.first, settings.weatherColors[p.first]))
+					changed = true;
+				break;
+			case 2:
+				if (WeatherUtils::DrawSliderUint8(p.first, settings.weatherProperties[p.first]))
+					changed = true;
+				break;
+			case 3:
+				if (WeatherUtils::DrawSliderFloat(p.first, settings.fogProperties[p.first]))
+					changed = true;
+				break;
+			default:
+				break;
+			}
+		});
 	}
 
 	ImGui::PopItemWidth();

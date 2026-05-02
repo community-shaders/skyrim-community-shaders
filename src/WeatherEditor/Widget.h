@@ -194,10 +194,23 @@ public:
 	}
 
 	template <class DrawFn>
+	bool DrawIfMatchesSearch(const std::string& settingId, DrawFn draw)
+	{
+		return MatchesSearch(settingId) && draw(settingId.c_str());
+	}
+
+	template <class DrawFn>
 	void DrawSearchSectionIfMatches(const char* settingId, DrawFn draw)
 	{
 		if (MatchesSearch(settingId))
 			draw(settingId);
+	}
+
+	template <class DrawFn>
+	void DrawSearchSectionIfMatches(const std::string& settingId, DrawFn draw)
+	{
+		if (MatchesSearch(settingId))
+			draw(settingId.c_str());
 	}
 
 	// True if the given id matches the currently highlighted setting within the

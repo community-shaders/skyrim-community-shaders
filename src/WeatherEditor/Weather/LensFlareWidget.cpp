@@ -20,17 +20,19 @@ void LensFlareWidget::DrawWidget()
 	BeginScrollableContent("##LFScroll");
 	{
 		bool changed = false;
+		auto drawSlider = [&](const char* settingId, float& value) {
+			if (DrawIfMatchesSearch(settingId, [&](const char* label) { return ImGui::SliderFloat(label, &value, 0.0f, 1.0f); }))
+				changed = true;
+		};
 
-		if (DrawIfMatchesSearch(LensFlareSetting::kFadeDistRadiusScale, [&](const char* label) {
+		DrawSearchSectionIfMatches(LensFlareSetting::kFadeDistRadiusScale, [&](const char*) {
 			ImGui::SeparatorText("Fade Distance");
-			return ImGui::SliderFloat(label, &settings.fadeDistRadiusScale, 0.0f, 1.0f);
-		}))
-			changed = true;
-		if (DrawIfMatchesSearch(LensFlareSetting::kColorInfluence, [&](const char* label) {
+			drawSlider(LensFlareSetting::kFadeDistRadiusScale, settings.fadeDistRadiusScale);
+		});
+		DrawSearchSectionIfMatches(LensFlareSetting::kColorInfluence, [&](const char*) {
 			ImGui::SeparatorText("Color");
-			return ImGui::SliderFloat(label, &settings.colorInfluence, 0.0f, 1.0f);
-		}))
-			changed = true;
+			drawSlider(LensFlareSetting::kColorInfluence, settings.colorInfluence);
+		});
 
 		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 			ApplyChanges();
