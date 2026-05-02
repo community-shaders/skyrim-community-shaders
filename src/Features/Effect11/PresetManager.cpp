@@ -25,42 +25,15 @@ void PresetManager::DiscoverPresets()
 	presets.clear();
 	activePresetIndex = -1;
 
-	// Check root enbseries/ folder
-	std::filesystem::path rootPath = "enbseries";
-	if (std::filesystem::exists(rootPath) && std::filesystem::is_directory(rootPath)) {
-		bool hasContent = false;
-		for (auto& entry : std::filesystem::directory_iterator(rootPath)) {
-			auto ext = entry.path().extension().string();
-			std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-			if (ext == ".fx" || ext == ".hlsl" || ext == ".hlsli" || ext == ".ini") {
-				hasContent = true;
-				break;
-			}
-		}
-
-		if (hasContent) {
-			PresetInfo root;
-			root.folderName = "";
-			root.displayName = "Root (enbseries)";
-			root.basePath = "";
-			root.isRoot = true;
-			LoadPresetMetadata(root);
-			LoadThumbnail(root);
-			presets.push_back(std::move(root));
-		}
-	}
-
-	// Scan Data/enbpresets/
+	// 1. Scan Data\enbpresets\ subfolders (highest priority)
 	std::filesystem::path presetsDir = "Data\\enbpresets";
 	if (std::filesystem::exists(presetsDir) && std::filesystem::is_directory(presetsDir)) {
 		std::vector<std::string> folders;
 		for (auto& entry : std::filesystem::directory_iterator(presetsDir)) {
 			if (!entry.is_directory())
 				continue;
-			auto subEnb = entry.path() / "enbseries";
-			if (std::filesystem::exists(subEnb) && std::filesystem::is_directory(subEnb)) {
+			if (std::filesystem::exists(entry.path() / "enbseries.ini"))
 				folders.push_back(entry.path().filename().string());
-			}
 		}
 
 		std::sort(folders.begin(), folders.end(), [](const std::string& a, const std::string& b) {
@@ -80,6 +53,26 @@ void PresetManager::DiscoverPresets()
 			LoadThumbnail(info);
 			presets.push_back(std::move(info));
 		}
+	}
+
+	// 2. Check Data folder (enbseries.ini in Data\)
+	if (std::filesystem::exists("Data\\enbseries.ini")) {
+		PresetInfo data;
+		data.folderName = "__data__";
+		data.displayName = "Data (enbseries)";
+		data.basePath = "Data";
+		data.isRoot = false;
+		presets.push_back(std::move(data));
+	}
+
+	// 3. Check root folder (enbseries.ini in game root, lowest priority)
+	if (std::filesystem::exists("enbseries.ini")) {
+		PresetInfo root;
+		root.folderName = "";
+		root.displayName = "Root (enbseries)";
+		root.basePath = "";
+		root.isRoot = true;
+		presets.push_back(std::move(root));
 	}
 
 	if (presets.empty()) {
