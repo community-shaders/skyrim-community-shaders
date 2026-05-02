@@ -868,6 +868,9 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	if defined(EYE)
 #		undef WETNESS_EFFECTS
+#		undef SOFT_LIGHTING
+#		undef BACK_LIGHTING
+#		undef RIM_LIGHTING
 #	endif
 
 #	if defined(EXTENDED_MATERIALS) && !defined(LOD) && (defined(PARALLAX) || defined(LANDSCAPE) || defined(ENVMAP) || defined(TRUE_PBR))
