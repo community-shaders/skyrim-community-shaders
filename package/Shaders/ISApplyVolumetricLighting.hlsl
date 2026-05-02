@@ -50,7 +50,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float noiseGrad = 0.03125 * NoiseGradSamplerTex.Sample(NoiseGradSamplerSampler, 0.125 * input.Position.xy).x;
 
-	float adjustedVl = max(0, noiseGrad + vl - kVLThresholdBias);
+	float adjustedVl = max(0.0, noiseGrad + vl - kVLThresholdBias);
 
 	if (0.001 < g_IntensityX_TemporalY.y) {
 		float2 motionVector = MotionVectorsTex.Sample(MotionVectorsSampler, screenPosition).xy;
