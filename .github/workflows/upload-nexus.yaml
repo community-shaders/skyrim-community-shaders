@@ -145,20 +145,17 @@ jobs:
                   fi
                   python tools/feature_version_audit.py "${ARGS[@]}"
 
-                  # Inject GitHub release body as the core changelog.
-                  # Fetch releases list as raw JSON and let Python search it — avoids
-                  # jq version quirks where array[0] on an empty array produces no output
-                  # instead of null, leaving the file empty and breaking json.load.
-                  gh api "repos/$GITHUB_REPOSITORY/releases" \
-                    2>/dev/null > releases.json || echo '[]' > releases.json
+                  # Fetch the specific release by tag — avoids pagination issues with
+                  # the releases list endpoint (default page size is 30).
+                  gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+                    2>/dev/null > release.json || echo '{}' > release.json
                   python -c "
                   import json, os
-                  with open('releases.json') as f:
-                      releases = json.load(f)
-                  if not isinstance(releases, list):
-                      releases = []
-                  tag = os.environ.get('RELEASE_TAG', '')
-                  body = next((r.get('body') or '' for r in releases if r.get('tag_name') == tag), '')
+                  with open('release.json') as f:
+                      release = json.load(f)
+                  if not isinstance(release, dict):
+                      release = {}
+                  body = release.get('body') or ''
                   with open('nexus-matrix-raw.json') as f:
                       data = json.load(f)
                   for row in data:
@@ -173,21 +170,17 @@ jobs:
                   import json, os, fnmatch
                   with open('nexus-matrix-raw.json') as f:
                       data = json.load(f)
-                  # Load asset names from the release so we can skip uploads where
-                  # the standalone artifact was not actually included in the release.
+                  # Load asset names from the release to skip uploads where the
+                  # artifact was not included — applies to all rows including core.
                   try:
-                      with open('releases.json') as f:
-                          releases = json.load(f)
-                      if not isinstance(releases, list):
-                          releases = []
+                      with open('release.json') as f:
+                          release = json.load(f)
+                      if not isinstance(release, dict):
+                          release = {}
                   except Exception:
-                      releases = []
-                  tag = os.environ.get('RELEASE_TAG', '')
-                  release = next((r for r in releases if r.get('tag_name') == tag), None)
-                  asset_names = [a['name'] for a in (release.get('assets', []) if release else [])]
+                      release = {}
+                  asset_names = [a['name'] for a in release.get('assets', [])]
                   def artifact_in_release(row):
-                      if row.get('name') == 'core':
-                          return True
                       pat = row.get('artifact_pattern', '')
                       return bool(pat) and any(fnmatch.fnmatch(n, pat) for n in asset_names)
                   # Full matrix for artifact prep; upload matrix excludes auto_upload=false
