@@ -21,7 +21,18 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void WeatherEditor::DataLoaded()
 {
-	EditorWindow::GetSingleton()->SetupResources();
+	s_dataAvailable = true;
+}
+
+void WeatherEditor::EnsureDataLoaded()
+{
+	if (!s_dataAvailable)
+		return;
+
+	if (!s_resourcesInitialized) {
+		EditorWindow::GetSingleton()->SetupResources();
+		s_resourcesInitialized = true;
+	}
 	LoadAllWeathers();
 }
 
@@ -63,6 +74,7 @@ void LerpDirectional(RE::BGSDirectionalAmbientLightingColors::Directional& oldCo
 
 void WeatherEditor::DrawSettings()
 {
+	EnsureDataLoaded();
 	bool canOpen = EditorWindow::CanBeOpen();
 	ImGui::BeginDisabled(!canOpen);
 	if (ImGui::Button("Open Editor", { -1, 0 }))
@@ -135,8 +147,8 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 	newWeather->data.precipitationEndFadeOut = LerpUint8_t(oldWeather->data.precipitationEndFadeOut, newWeather->data.precipitationEndFadeOut, currentWeatherPct);
 
 	//// Sun
-	newWeather->data.sunDamage = LerpInt8_t(oldWeather->data.sunDamage, newWeather->data.sunDamage, currentWeatherPct);
-	newWeather->data.sunGlare = LerpInt8_t(oldWeather->data.sunGlare, newWeather->data.sunGlare, currentWeatherPct);
+	newWeather->data.sunDamage = LerpUint8_t(oldWeather->data.sunDamage, newWeather->data.sunDamage, currentWeatherPct);
+	newWeather->data.sunGlare = LerpUint8_t(oldWeather->data.sunGlare, newWeather->data.sunGlare, currentWeatherPct);
 
 	//// Lightning
 	newWeather->data.thunderLightningBeginFadeIn = LerpUint8_t(oldWeather->data.thunderLightningBeginFadeIn, newWeather->data.thunderLightningBeginFadeIn, currentWeatherPct);
@@ -152,8 +164,8 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 	newWeather->data.visualEffectEnd = LerpUint8_t(oldWeather->data.visualEffectEnd, newWeather->data.visualEffectEnd, currentWeatherPct);
 
 	//// Wind
-	newWeather->data.windDirection = LerpInt8_t(oldWeather->data.windDirection, newWeather->data.windDirection, currentWeatherPct);
-	newWeather->data.windDirectionRange = LerpInt8_t(oldWeather->data.windDirectionRange, newWeather->data.windDirectionRange, currentWeatherPct);
+	newWeather->data.windDirection = LerpUint8_t(oldWeather->data.windDirection, newWeather->data.windDirection, currentWeatherPct);
+	newWeather->data.windDirectionRange = LerpUint8_t(oldWeather->data.windDirectionRange, newWeather->data.windDirectionRange, currentWeatherPct);
 	newWeather->data.windSpeed = LerpUint8_t(oldWeather->data.windSpeed, newWeather->data.windSpeed, currentWeatherPct);
 
 	//// Fog
@@ -685,11 +697,9 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				else
 					sky->SetWeather(selectedWeather, true, false);
 
-				// If the lock is active, retarget it to the newly chosen weather so
-				// Prepass() enforces the new choice instead of reverting it.
-				if (editorWindow->IsWeatherLocked()) {
-					editorWindow->lockedWeather = selectedWeather;
-				}
+				// Retarget the lock so Prepass() enforces the new choice instead of reverting it.
+				if (editorWindow->IsWeatherLocked())
+					editorWindow->LockWeather(selectedWeather);
 
 				Util::ClearComboSearch(kWeatherSearchId);
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));

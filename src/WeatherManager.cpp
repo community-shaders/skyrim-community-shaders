@@ -1,6 +1,7 @@
 #include "WeatherManager.h"
 
 #include "State.h"
+#include "Utils/Form.h"
 
 namespace
 {
@@ -294,17 +295,7 @@ bool WeatherManager::LoadSettingsFromWeather(RE::TESWeather* weather, const std:
 
 std::string WeatherManager::GetWeatherKey(RE::TESWeather* weather)
 {
-	if (!weather) {
-		return "None";
-	}
-
-	const char* editorID = weather->GetFormEditorID();
-	if (editorID && editorID[0] != '\0') {
-		return std::string(editorID);
-	}
-
-	// Fallback to FormID if no EditorID
-	return std::format("{:08X}", weather->GetFormID());
+	return Util::GetFormFileKey(weather);
 }
 
 bool WeatherManager::HasWeatherSettings(RE::TESWeather* weather) const

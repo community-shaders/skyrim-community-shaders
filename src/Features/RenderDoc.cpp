@@ -186,9 +186,7 @@ void RenderDoc::DrawSettings()
 				static char commentsBuffer[kCommentsBufferSize] = { 0 };
 
 				ImGui::InputTextWithHint("##CaptureComments", "Additional comments for next capture (optional)", commentsBuffer, sizeof(commentsBuffer));
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Additional comments will be appended to automatic metadata and embedded in the .rdc file");
-				}
+				Util::AddTooltip("Additional comments will be appended to automatic metadata and embedded in the .rdc file");
 
 				if (ImGui::Button("Create Capture")) {
 					// Check available disk space before allowing capture
@@ -245,9 +243,7 @@ void RenderDoc::DrawSettings()
 				}
 
 				ImGui::TextDisabled("Capture Directory: %s", GetCapturesDirectory().c_str());
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Right-click to copy the directory path.");
-				}
+				Util::AddTooltip("Right-click to copy the directory path.");
 
 				if (ImGui::BeginPopupContextItem()) {
 					if (ImGui::MenuItem("Copy Directory Path")) {

@@ -9,6 +9,7 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImageSpaceWidget::Settings,
 	hdrEyeAdaptSpeed,
+	hdrEyeAdaptStrength,
 	hdrBloomBlurRadius,
 	hdrBloomThreshold,
 	hdrBloomScale,
@@ -41,8 +42,9 @@ void ImageSpaceWidget::DrawWidget()
 	{
 		if (PropertyDrawer::BeginTable("ImageSpaceSettings")) {
 			bool changed = false;
-			const bool showHdr = MatchesSearch("Eye Adapt Speed") || MatchesSearch("Bloom Blur Radius") || MatchesSearch("Bloom Threshold") ||
-			                     MatchesSearch("Bloom Scale") || MatchesSearch("White") || MatchesSearch("Sunlight Scale") || MatchesSearch("Sky Scale");
+			const bool showHdr = MatchesSearch("Eye Adapt Speed") || MatchesSearch("Eye Adapt Strength") || MatchesSearch("Bloom Blur Radius") ||
+			                     MatchesSearch("Bloom Threshold") || MatchesSearch("Bloom Scale") || MatchesSearch("White") ||
+			                     MatchesSearch("Sunlight Scale") || MatchesSearch("Sky Scale");
 			const bool showCinematic = MatchesSearch("Saturation") || MatchesSearch("Brightness") || MatchesSearch("Contrast");
 			const bool showTint = MatchesSearch("Tint Color") || MatchesSearch("Tint Amount");
 			const bool showDOF = MatchesSearch("DOF Strength") || MatchesSearch("DOF Distance") || MatchesSearch("DOF Range");
@@ -50,29 +52,31 @@ void ImageSpaceWidget::DrawWidget()
 			// HDR Settings
 			if (MatchesSearch("Eye Adapt Speed"))
 				changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 100.0f);
+			if (MatchesSearch("Eye Adapt Strength"))
+				changed |= PropertyDrawer::DrawFloat("Eye Adapt Strength", settings.hdrEyeAdaptStrength, 0.0f, 50.0f);
 			if (MatchesSearch("Bloom Blur Radius"))
 				changed |= PropertyDrawer::DrawFloat("Bloom Blur Radius", settings.hdrBloomBlurRadius, 0.0f, 10.0f);
 			if (MatchesSearch("Bloom Threshold"))
 				changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f);
 			if (MatchesSearch("Bloom Scale"))
-				changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 10.0f);
+				changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 30.0f);
 			if (MatchesSearch("White"))
-				changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 10.0f);
+				changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 30.0f);
 			if (MatchesSearch("Sunlight Scale"))
 				changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 50.0f);
 			if (MatchesSearch("Sky Scale"))
-				changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f);
+				changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 30.0f);
 
 			if (showHdr && (showCinematic || showTint || showDOF))
 				PropertyDrawer::DrawSeparator();
 
 			// Cinematic Settings
 			if (MatchesSearch("Saturation"))
-				changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 2.0f);
+				changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 10.0f);
 			if (MatchesSearch("Brightness"))
-				changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 2.0f);
+				changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 10.0f);
 			if (MatchesSearch("Contrast"))
-				changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 2.0f);
+				changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 10.0f);
 
 			if (showCinematic && (showTint || showDOF))
 				PropertyDrawer::DrawSeparator();
@@ -91,7 +95,7 @@ void ImageSpaceWidget::DrawWidget()
 
 			// Depth of Field
 			if (MatchesSearch("DOF Strength"))
-				changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 10.0f);
+				changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 1.0f);
 			if (MatchesSearch("DOF Distance"))
 				changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 50000.0f, "%.1f");
 			if (MatchesSearch("DOF Range"))
@@ -139,6 +143,7 @@ void ImageSpaceWidget::SetImageSpaceValues()
 
 	// HDR
 	data.hdr.eyeAdaptSpeed = settings.hdrEyeAdaptSpeed;
+	data.hdr.eyeAdaptStrength = settings.hdrEyeAdaptStrength;
 	data.hdr.bloomBlurRadius = settings.hdrBloomBlurRadius;
 	data.hdr.bloomThreshold = settings.hdrBloomThreshold;
 	data.hdr.bloomScale = settings.hdrBloomScale;
@@ -172,6 +177,7 @@ void ImageSpaceWidget::LoadImageSpaceValues()
 
 	// HDR
 	settings.hdrEyeAdaptSpeed = data.hdr.eyeAdaptSpeed;
+	settings.hdrEyeAdaptStrength = data.hdr.eyeAdaptStrength;
 	settings.hdrBloomBlurRadius = data.hdr.bloomBlurRadius;
 	settings.hdrBloomThreshold = data.hdr.bloomThreshold;
 	settings.hdrBloomScale = data.hdr.bloomScale;
@@ -220,7 +226,7 @@ bool ImageSpaceWidget::HasUnsavedChanges() const
 std::vector<Widget::SearchResult> ImageSpaceWidget::CollectSearchableSettings() const
 {
 	const std::vector<std::string> names = {
-		"Eye Adapt Speed", "Bloom Blur Radius", "Bloom Threshold", "Bloom Scale",
+		"Eye Adapt Speed", "Eye Adapt Strength", "Bloom Blur Radius", "Bloom Threshold", "Bloom Scale",
 		"White", "Sunlight Scale", "Sky Scale",
 		"Saturation", "Brightness", "Contrast",
 		"Tint Color", "Tint Amount",

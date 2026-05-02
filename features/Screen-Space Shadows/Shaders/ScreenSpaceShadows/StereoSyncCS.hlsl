@@ -7,15 +7,23 @@
 // ambient occlusion" https://eprints.whiterose.ac.uk/id/eprint/187713/
 
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Math.hlsli"
+#include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
 
 #ifdef VR
 
+// Match the C++ depth binding format for strict typing.
+// TERRAIN_BLENDING ON  -> R32_FLOAT (no unorm). OFF -> R24_UNORM_X8_TYPELESS (unorm).
+#	if defined(TERRAIN_BLENDING)
 Texture2D<float> SrcDepthTexture : register(t0);
-Texture2D<unorm half> SrcShadowTexture : register(t1);
+#	else
+Texture2D<unorm float> SrcDepthTexture : register(t0);
+#	endif
+Texture2D<unorm float> SrcShadowTexture : register(t1);
 
-RWTexture2D<unorm half> OutShadowTexture : register(u0);
+RWTexture2D<unorm float> OutShadowTexture : register(u0);
 
 cbuffer StereoSyncCB : register(b1)
 {
@@ -33,8 +41,8 @@ static const int kEdgeMargin = 2;               // Neighbor offset (pixels) for 
 float BlurShadow(int2 dtid, float centerDepth)
 {
 	// Per-pixel rotation from interleaved gradient noise
-	float noise = frac(52.9829189 * frac(0.06711056 * dtid.x + 0.00583715 * dtid.y));
-	float angle = noise * 6.28318530718;
+	float noise = Random::InterleavedGradientNoise(float2(dtid));
+	float angle = noise * Math::TAU;
 	float sn, cs;
 	sincos(angle, sn, cs);
 	float2x2 rot = float2x2(cs, sn, -sn, cs);

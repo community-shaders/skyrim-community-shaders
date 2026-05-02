@@ -134,14 +134,17 @@ namespace BackgroundBlur
 				logger::error("Failed to create {} texture", name);
 				return false;
 			}
+			Util::SetResourceName(tex.get(), "BackgroundBlur::%s", name);
 			if (FAILED(device->CreateRenderTargetView(tex.get(), nullptr, rtv.put()))) {
 				logger::error("Failed to create {} RTV", name);
 				return false;
 			}
+			Util::SetResourceName(rtv.get(), "BackgroundBlur::%s RTV", name);
 			if (FAILED(device->CreateShaderResourceView(tex.get(), nullptr, srv.put()))) {
 				logger::error("Failed to create {} SRV", name);
 				return false;
 			}
+			Util::SetResourceName(srv.get(), "BackgroundBlur::%s SRV", name);
 			return true;
 		}
 
@@ -196,10 +199,12 @@ namespace BackgroundBlur
 		cbDesc.ByteWidth = sizeof(BlurConstants);
 		if (!checkCreate(device->CreateBuffer(&cbDesc, nullptr, constantBuffer.put()), "blur constant buffer"))
 			return false;
+		Util::SetResourceName(constantBuffer.get(), "BackgroundBlur::BlurCB");
 
 		cbDesc.ByteWidth = sizeof(WindowConstants);
 		if (!checkCreate(device->CreateBuffer(&cbDesc, nullptr, windowConstantBuffer.put()), "window constant buffer"))
 			return false;
+		Util::SetResourceName(windowConstantBuffer.get(), "BackgroundBlur::WindowCB");
 
 		// Create sampler state
 		D3D11_SAMPLER_DESC samplerDesc = {};
@@ -212,6 +217,7 @@ namespace BackgroundBlur
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		if (!checkCreate(device->CreateSamplerState(&samplerDesc, samplerState.put()), "blur sampler state"))
 			return false;
+		Util::SetResourceName(samplerState.get(), "BackgroundBlur::Sampler");
 
 		// Create blend states
 		D3D11_BLEND_DESC blendDesc = {};
@@ -225,12 +231,14 @@ namespace BackgroundBlur
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		if (!checkCreate(device->CreateBlendState(&blendDesc, blendState.put()), "blur blend state"))
 			return false;
+		Util::SetResourceName(blendState.get(), "BackgroundBlur::BlendState");
 
 		// Composite: pre-multiplied alpha (SrcBlend=ONE, DestBlendAlpha=INV_SRC_ALPHA)
 		blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
 		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 		if (!checkCreate(device->CreateBlendState(&blendDesc, compositeBlendState.put()), "composite blend state"))
 			return false;
+		Util::SetResourceName(compositeBlendState.get(), "BackgroundBlur::CompositeBlendState");
 
 		// Create scissor-enabled rasterizer state
 		D3D11_RASTERIZER_DESC rsDesc = {};
@@ -241,6 +249,7 @@ namespace BackgroundBlur
 		rsDesc.ScissorEnable = TRUE;
 		if (!checkCreate(device->CreateRasterizerState(&rsDesc, scissorRasterizerState.put()), "scissor rasterizer state"))
 			return false;
+		Util::SetResourceName(scissorRasterizerState.get(), "BackgroundBlur::ScissorRasterizerState");
 
 		initialized = true;
 		return true;

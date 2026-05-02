@@ -65,7 +65,7 @@ void VolumetricLightingWidget::DrawWidget()
 				ImGui::SeparatorText("Phase Function");
 				if (MatchesSearch("Contribution") && WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
 					changed = true;
-				if (MatchesSearch("Scattering") && WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
+				if (MatchesSearch("Scattering") && WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, -1.0f, 1.0f))
 					changed = true;
 			}
 			if (MatchesSearch("Range Factor")) {

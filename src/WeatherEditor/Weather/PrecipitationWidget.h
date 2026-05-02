@@ -21,6 +21,7 @@ public:
 
 	void DrawWidget() override;
 	const char* GetWidgetTypeName() const override { return "Precipitation"; }
+	bool RequiresManualApply() const override { return true; }
 	void LoadSettings() override;
 	void SaveSettings() override;
 	void ApplyChanges() override;

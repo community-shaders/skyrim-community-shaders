@@ -131,6 +131,8 @@ void ReferenceEffectWidget::ApplyChanges()
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kAttachToCamera);
 	if (settings.inheritRotation)
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kInheritRotation);
+
+	Widget::ForceCurrentWeatherReinit();
 }
 
 void ReferenceEffectWidget::RevertChanges()

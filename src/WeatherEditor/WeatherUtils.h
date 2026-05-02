@@ -347,6 +347,10 @@ namespace WeatherUtils
 	// Texture path helpers shared by precipitation and cloud layer widgets.
 	namespace TexturePath
 	{
+		inline constexpr std::string_view kTexturePrefix = "textures\\";
+		inline constexpr std::string_view kResourcePrefix = "Textures\\";
+		inline constexpr std::string_view kDdsExtension = ".dds";
+
 		// Lowercase + convert forward slashes to backslashes.
 		std::string Normalize(std::string_view path);
 
@@ -359,6 +363,10 @@ namespace WeatherUtils
 		// Build a BSA-style resource path ("Textures\\<path>" with .dds appended if missing).
 		std::string BuildResourcePath(std::string_view path);
 	}
+
+	// Lookup helpers for form↔widget ref serialization (load-order independent).
+	RE::TESForm* FindFormByEditorID(std::string_view editorID, const std::vector<std::unique_ptr<Widget>>& widgets);
+	std::string FindEditorIDByForm(const RE::TESForm* form, const std::vector<std::unique_ptr<Widget>>& widgets);
 
 	// Set the current widget for undo tracking (should be called at start of widget Draw())
 	void SetCurrentWidget(Widget* widget);

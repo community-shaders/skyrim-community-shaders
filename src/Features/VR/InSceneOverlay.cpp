@@ -222,6 +222,7 @@ void VR::InitInSceneResources()
 		logger::error("VR: Failed to create sampler state");
 		return;
 	}
+	Util::SetResourceName(temp.sampler.get(), "VR::InSceneOverlaySampler");
 
 	inSceneResources = std::move(temp);
 	inSceneResources.initialized = true;
