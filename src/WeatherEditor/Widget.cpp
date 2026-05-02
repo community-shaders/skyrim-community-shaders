@@ -70,7 +70,7 @@ void Widget::Save()
 	}
 }
 
-void Widget::Load()
+void Widget::Load(bool showNotification)
 {
 	std::string filePath = GetSaveFilePath();
 
@@ -78,10 +78,12 @@ void Widget::Load()
 		js = json();
 		LoadSettings();
 
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("No saved file - reset {} to vanilla values", GetEditorID()),
-			ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("No saved file - reset {} to vanilla values", GetEditorID()),
+				ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
+				3.0f);
+		}
 		return;
 	}
 
@@ -115,10 +117,12 @@ void Widget::Load()
 
 		LoadSettings();
 
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Loaded saved settings for {}", GetEditorID()),
-			ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Loaded saved settings for {}", GetEditorID()),
+				ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
+				3.0f);
+		}
 
 	} catch (const nlohmann::json::parse_error& e) {
 		logger::error("Error parsing settings for file ({}) : {}\n", filePath, e.what());

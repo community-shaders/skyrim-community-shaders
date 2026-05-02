@@ -136,7 +136,7 @@ public:
 	}
 
 	void Save();
-	void Load();
+	void Load(bool showNotification = true);
 	bool HasSavedFile() const;
 
 	virtual void Delete();
