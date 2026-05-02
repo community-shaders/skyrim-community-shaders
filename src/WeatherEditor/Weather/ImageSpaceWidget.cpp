@@ -4,7 +4,65 @@
 #include "../WeatherUtils.h"
 #include "Util.h"
 
+#include <algorithm>
+#include <array>
 #include <filesystem>
+
+namespace
+{
+	enum class ImageSpaceSection
+	{
+		Hdr,
+		Cinematic,
+		Tint,
+		DepthOfField
+	};
+
+	struct ImageSpaceSettingEntry
+	{
+		const char* label;
+		ImageSpaceSection section;
+	};
+
+	namespace ImageSpaceSetting
+	{
+		constexpr const char* kEyeAdaptSpeed = "Eye Adapt Speed";
+		constexpr const char* kEyeAdaptStrength = "Eye Adapt Strength";
+		constexpr const char* kBloomBlurRadius = "Bloom Blur Radius";
+		constexpr const char* kBloomThreshold = "Bloom Threshold";
+		constexpr const char* kBloomScale = "Bloom Scale";
+		constexpr const char* kWhite = "White";
+		constexpr const char* kSunlightScale = "Sunlight Scale";
+		constexpr const char* kSkyScale = "Sky Scale";
+		constexpr const char* kSaturation = "Saturation";
+		constexpr const char* kBrightness = "Brightness";
+		constexpr const char* kContrast = "Contrast";
+		constexpr const char* kTintColor = "Tint Color";
+		constexpr const char* kTintAmount = "Tint Amount";
+		constexpr const char* kDofStrength = "DOF Strength";
+		constexpr const char* kDofDistance = "DOF Distance";
+		constexpr const char* kDofRange = "DOF Range";
+	}
+
+	constexpr std::array<ImageSpaceSettingEntry, 16> kImageSpaceSettings = { {
+		{ ImageSpaceSetting::kEyeAdaptSpeed, ImageSpaceSection::Hdr },
+		{ ImageSpaceSetting::kEyeAdaptStrength, ImageSpaceSection::Hdr },
+		{ ImageSpaceSetting::kBloomBlurRadius, ImageSpaceSection::Hdr },
+		{ ImageSpaceSetting::kBloomThreshold, ImageSpaceSection::Hdr },
+		{ ImageSpaceSetting::kBloomScale, ImageSpaceSection::Hdr },
+		{ ImageSpaceSetting::kWhite, ImageSpaceSection::Hdr },
+		{ ImageSpaceSetting::kSunlightScale, ImageSpaceSection::Hdr },
+		{ ImageSpaceSetting::kSkyScale, ImageSpaceSection::Hdr },
+		{ ImageSpaceSetting::kSaturation, ImageSpaceSection::Cinematic },
+		{ ImageSpaceSetting::kBrightness, ImageSpaceSection::Cinematic },
+		{ ImageSpaceSetting::kContrast, ImageSpaceSection::Cinematic },
+		{ ImageSpaceSetting::kTintColor, ImageSpaceSection::Tint },
+		{ ImageSpaceSetting::kTintAmount, ImageSpaceSection::Tint },
+		{ ImageSpaceSetting::kDofStrength, ImageSpaceSection::DepthOfField },
+		{ ImageSpaceSetting::kDofDistance, ImageSpaceSection::DepthOfField },
+		{ ImageSpaceSetting::kDofRange, ImageSpaceSection::DepthOfField },
+	} };
+}
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImageSpaceWidget::Settings,
@@ -42,64 +100,57 @@ void ImageSpaceWidget::DrawWidget()
 	{
 		if (PropertyDrawer::BeginTable("ImageSpaceSettings")) {
 			bool changed = false;
-			const bool showHdr = MatchesSearch("Eye Adapt Speed") || MatchesSearch("Eye Adapt Strength") || MatchesSearch("Bloom Blur Radius") ||
-			                     MatchesSearch("Bloom Threshold") || MatchesSearch("Bloom Scale") || MatchesSearch("White") ||
-			                     MatchesSearch("Sunlight Scale") || MatchesSearch("Sky Scale");
-			const bool showCinematic = MatchesSearch("Saturation") || MatchesSearch("Brightness") || MatchesSearch("Contrast");
-			const bool showTint = MatchesSearch("Tint Color") || MatchesSearch("Tint Amount");
-			const bool showDOF = MatchesSearch("DOF Strength") || MatchesSearch("DOF Distance") || MatchesSearch("DOF Range");
+			auto sectionMatches = [&](ImageSpaceSection section) {
+				return std::any_of(kImageSpaceSettings.begin(), kImageSpaceSettings.end(), [&](const ImageSpaceSettingEntry& setting) {
+					return setting.section == section && MatchesSearch(setting.label);
+				});
+			};
+			auto drawFloat = [&](const char* settingId, float& value, float minVal, float maxVal, const char* format = "%.3f") {
+				changed |= DrawIfMatchesSearch(settingId, [&](const char* label) {
+					return PropertyDrawer::DrawFloat(label, value, minVal, maxVal, format);
+				});
+			};
+			const bool showHdr = sectionMatches(ImageSpaceSection::Hdr);
+			const bool showCinematic = sectionMatches(ImageSpaceSection::Cinematic);
+			const bool showTint = sectionMatches(ImageSpaceSection::Tint);
+			const bool showDOF = sectionMatches(ImageSpaceSection::DepthOfField);
 
 			// HDR Settings
-			if (MatchesSearch("Eye Adapt Speed"))
-				changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 100.0f);
-			if (MatchesSearch("Eye Adapt Strength"))
-				changed |= PropertyDrawer::DrawFloat("Eye Adapt Strength", settings.hdrEyeAdaptStrength, 0.0f, 50.0f);
-			if (MatchesSearch("Bloom Blur Radius"))
-				changed |= PropertyDrawer::DrawFloat("Bloom Blur Radius", settings.hdrBloomBlurRadius, 0.0f, 10.0f);
-			if (MatchesSearch("Bloom Threshold"))
-				changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f);
-			if (MatchesSearch("Bloom Scale"))
-				changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 30.0f);
-			if (MatchesSearch("White"))
-				changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 30.0f);
-			if (MatchesSearch("Sunlight Scale"))
-				changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 50.0f);
-			if (MatchesSearch("Sky Scale"))
-				changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 30.0f);
+			drawFloat(ImageSpaceSetting::kEyeAdaptSpeed, settings.hdrEyeAdaptSpeed, 0.0f, 100.0f);
+			drawFloat(ImageSpaceSetting::kEyeAdaptStrength, settings.hdrEyeAdaptStrength, 0.0f, 50.0f);
+			drawFloat(ImageSpaceSetting::kBloomBlurRadius, settings.hdrBloomBlurRadius, 0.0f, 10.0f);
+			drawFloat(ImageSpaceSetting::kBloomThreshold, settings.hdrBloomThreshold, 0.0f, 10.0f);
+			drawFloat(ImageSpaceSetting::kBloomScale, settings.hdrBloomScale, 0.0f, 30.0f);
+			drawFloat(ImageSpaceSetting::kWhite, settings.hdrWhite, 0.0f, 30.0f);
+			drawFloat(ImageSpaceSetting::kSunlightScale, settings.hdrSunlightScale, 0.0f, 50.0f);
+			drawFloat(ImageSpaceSetting::kSkyScale, settings.hdrSkyScale, 0.0f, 30.0f);
 
 			if (showHdr && (showCinematic || showTint || showDOF))
 				PropertyDrawer::DrawSeparator();
 
 			// Cinematic Settings
-			if (MatchesSearch("Saturation"))
-				changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 10.0f);
-			if (MatchesSearch("Brightness"))
-				changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 10.0f);
-			if (MatchesSearch("Contrast"))
-				changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 10.0f);
+			drawFloat(ImageSpaceSetting::kSaturation, settings.cinematicSaturation, 0.0f, 10.0f);
+			drawFloat(ImageSpaceSetting::kBrightness, settings.cinematicBrightness, 0.0f, 10.0f);
+			drawFloat(ImageSpaceSetting::kContrast, settings.cinematicContrast, 0.0f, 10.0f);
 
 			if (showCinematic && (showTint || showDOF))
 				PropertyDrawer::DrawSeparator();
 
 			// Tint Settings
 			float3 tintColor{ settings.tintColor.x, settings.tintColor.y, settings.tintColor.z };
-			if (MatchesSearch("Tint Color") && PropertyDrawer::DrawColor("Tint Color", tintColor)) {
+			if (DrawIfMatchesSearch(ImageSpaceSetting::kTintColor, [&](const char* label) { return PropertyDrawer::DrawColor(label, tintColor); })) {
 				settings.tintColor = tintColor;
 				changed = true;
 			}
-			if (MatchesSearch("Tint Amount"))
-				changed |= PropertyDrawer::DrawFloat("Tint Amount", settings.tintAmount, 0.0f, 1.0f);
+			drawFloat(ImageSpaceSetting::kTintAmount, settings.tintAmount, 0.0f, 1.0f);
 
 			if (showTint && showDOF)
 				PropertyDrawer::DrawSeparator();
 
 			// Depth of Field
-			if (MatchesSearch("DOF Strength"))
-				changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 1.0f);
-			if (MatchesSearch("DOF Distance"))
-				changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 50000.0f, "%.1f");
-			if (MatchesSearch("DOF Range"))
-				changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 50000.0f, "%.1f");
+			drawFloat(ImageSpaceSetting::kDofStrength, settings.dofStrength, 0.0f, 1.0f);
+			drawFloat(ImageSpaceSetting::kDofDistance, settings.dofDistance, 0.0f, 50000.0f, "%.1f");
+			drawFloat(ImageSpaceSetting::kDofRange, settings.dofRange, 0.0f, 50000.0f, "%.1f");
 
 			PropertyDrawer::EndTable();
 
@@ -225,18 +276,10 @@ bool ImageSpaceWidget::HasUnsavedChanges() const
 
 std::vector<Widget::SearchResult> ImageSpaceWidget::CollectSearchableSettings() const
 {
-	const std::vector<std::string> names = {
-		"Eye Adapt Speed", "Eye Adapt Strength", "Bloom Blur Radius", "Bloom Threshold", "Bloom Scale",
-		"White", "Sunlight Scale", "Sky Scale",
-		"Saturation", "Brightness", "Contrast",
-		"Tint Color", "Tint Amount",
-		"DOF Strength", "DOF Distance", "DOF Range"
-	};
-
 	std::vector<SearchResult> results;
-	results.reserve(names.size());
-	for (const auto& name : names) {
-		results.push_back({ name, "", name });
+	results.reserve(kImageSpaceSettings.size());
+	for (const auto& setting : kImageSpaceSettings) {
+		results.push_back({ setting.label, "", setting.label });
 	}
 	return results;
 }

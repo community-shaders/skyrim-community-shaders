@@ -395,45 +395,44 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		if (!menu) {
 			drawSearchBar();
 			drawForceWeatherButton();
-			ImGui::Separator();
-			return;
-		}
-		drawSearchBar();
-		drawForceWeatherButton();
+		} else {
+			drawSearchBar();
+			drawForceWeatherButton();
 
-		auto textButton = [&](const char* label, const char* tooltip, auto callback) {
-			ImGui::SameLine();
-			if (Util::ButtonWithFlash(label))
-				callback();
-			Util::AddTooltip(tooltip);
-		};
-
-		// Apply button
-		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
-			ImGui::SameLine();
-			if (Util::SuccessButton("Apply"))
-				ApplyChanges();
-			Util::AddTooltip("Apply changes to the game");
-		}
-
-		// Save/Load/Revert/Delete group
-		if (showSaveLoadRevert) {
-			textButton("Save", "Save to file", [&]() { Save(); });
-			textButton("Load", "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
-			ImGui::SameLine();
-			if (Util::WarningButton("Revert"))
-				RevertChanges();
-			Util::AddTooltip("Revert to original game values");
-
-			if (HasSavedFile()) {
+			auto textButton = [&](const char* label, const char* tooltip, auto callback) {
 				ImGui::SameLine();
-				if (Util::ErrorTextButton("Delete"))
-					ImGui::OpenPopup("DeleteConfirmation");
-				Util::AddTooltip("Delete saved file");
-			}
-		}
+				if (Util::ButtonWithFlash(label))
+					callback();
+				Util::AddTooltip(tooltip);
+			};
 
-		drawUnsavedIndicator();
+			// Apply button
+			if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
+				ImGui::SameLine();
+				if (Util::SuccessButton("Apply"))
+					ApplyChanges();
+				Util::AddTooltip("Apply changes to the game");
+			}
+
+			// Save/Load/Revert/Delete group
+			if (showSaveLoadRevert) {
+				textButton("Save", "Save to file", [&]() { Save(); });
+				textButton("Load", "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
+				ImGui::SameLine();
+				if (Util::WarningButton("Revert"))
+					RevertChanges();
+				Util::AddTooltip("Revert to original game values");
+
+				if (HasSavedFile()) {
+					ImGui::SameLine();
+					if (Util::ErrorTextButton("Delete"))
+						ImGui::OpenPopup("DeleteConfirmation");
+					Util::AddTooltip("Delete saved file");
+				}
+			}
+
+			drawUnsavedIndicator();
+		}
 	}
 
 	DrawDeleteConfirmationModal();
@@ -532,6 +531,13 @@ bool Widget::MatchesSearch(const std::string& settingId) const
 		return true;
 	return std::any_of(searchResults.begin(), searchResults.end(),
 		[&](const SearchResult& r) { return r.settingId == settingId; });
+}
+
+bool Widget::MatchesAnySearch(std::initializer_list<const char*> settingIds) const
+{
+	return std::any_of(settingIds.begin(), settingIds.end(), [&](const char* settingId) {
+		return MatchesSearch(settingId);
+	});
 }
 
 bool Widget::IsHighlighted(const std::string& settingId) const

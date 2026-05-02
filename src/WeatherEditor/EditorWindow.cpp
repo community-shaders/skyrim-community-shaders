@@ -241,9 +241,11 @@ void EditorWindow::ShowObjectsWindow()
 				// Add button to open the current weather
 				ImGui::SameLine();
 				if (ImGui::SmallButton("Open##CurrentWeather")) {
+					const auto currentWeatherFormID = currentWeather->GetFormID();
 					for (auto& widget : weatherWidgets) {
-						if (widget->form == currentWeather) {
+						if (widget->form == currentWeather || (widget->form && widget->form->GetFormID() == currentWeatherFormID)) {
 							widget->SetOpen(true);
+							ImGui::SetWindowFocus(widget->GetWindowTitle().c_str());
 							break;
 						}
 					}

@@ -4,6 +4,8 @@
 #include "Util.h"
 #include "Utils/Form.h"
 
+#include <initializer_list>
+
 class WidgetSharedData
 {
 private:
@@ -181,8 +183,22 @@ public:
 
 	// True if the setting matches the current search query or no search is active.
 	// Returns true when no search is active, or when settingId appears in the
-	// current filtered results. Wrap each control in: if (MatchesSearch("Label")) { ... }
+	// current filtered results. Use DrawIfMatchesSearch() for simple controls.
 	bool MatchesSearch(const std::string& settingId) const;
+	bool MatchesAnySearch(std::initializer_list<const char*> settingIds) const;
+
+	template <class DrawFn>
+	bool DrawIfMatchesSearch(const char* settingId, DrawFn draw)
+	{
+		return MatchesSearch(settingId) && draw(settingId);
+	}
+
+	template <class DrawFn>
+	void DrawSearchSectionIfMatches(const char* settingId, DrawFn draw)
+	{
+		if (MatchesSearch(settingId))
+			draw(settingId);
+	}
 
 	// True if the given id matches the currently highlighted setting within the
 	// animated highlight window.

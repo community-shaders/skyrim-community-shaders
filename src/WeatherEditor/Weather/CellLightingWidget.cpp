@@ -2,6 +2,55 @@
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
 
+namespace
+{
+	namespace CellLightingTab
+	{
+		constexpr const char* kColors = "Colors";
+		constexpr const char* kFog = "Fog";
+		constexpr const char* kDirectionalAmbient = "Directional Ambient";
+		constexpr const char* kAdvanced = "Advanced";
+		constexpr const char* kInheritance = "Inheritance";
+	}
+
+	namespace CellLightingSetting
+	{
+		constexpr const char* kAmbientColor = "Ambient Color";
+		constexpr const char* kDirectionalColor = "Directional Color";
+		constexpr const char* kDirectionalFade = "Directional Fade";
+		constexpr const char* kFogNearColor = "Fog Near Color";
+		constexpr const char* kFogFarColor = "Fog Far Color";
+		constexpr const char* kFogNear = "Fog Near";
+		constexpr const char* kFogFar = "Fog Far";
+		constexpr const char* kFogPower = "Fog Power";
+		constexpr const char* kFogClampMax = "Fog Clamp (Max)";
+		constexpr const char* kXPlus = "X+ (Right)";
+		constexpr const char* kXMinus = "X- (Left)";
+		constexpr const char* kYPlus = "Y+ (Front)";
+		constexpr const char* kYMinus = "Y- (Back)";
+		constexpr const char* kZPlus = "Z+ (Up)";
+		constexpr const char* kZMinus = "Z- (Down)";
+		constexpr const char* kSpecular = "Specular";
+		constexpr const char* kFresnelPower = "Fresnel Power";
+		constexpr const char* kLightFadeStart = "Light Fade Start";
+		constexpr const char* kLightFadeEnd = "Light Fade End";
+		constexpr const char* kClipDistance = "Clip Distance";
+		constexpr const char* kXYRotation = "XY Rotation";
+		constexpr const char* kZRotation = "Z Rotation";
+		constexpr const char* kInheritAmbientColor = "Inherit Ambient Color";
+		constexpr const char* kInheritDirectionalColor = "Inherit Directional Color";
+		constexpr const char* kInheritFogColor = "Inherit Fog Color";
+		constexpr const char* kInheritFogNear = "Inherit Fog Near";
+		constexpr const char* kInheritFogFar = "Inherit Fog Far";
+		constexpr const char* kInheritDirectionalRotation = "Inherit Directional Rotation";
+		constexpr const char* kInheritDirectionalFade = "Inherit Directional Fade";
+		constexpr const char* kInheritClipDistance = "Inherit Clip Distance";
+		constexpr const char* kInheritFogPower = "Inherit Fog Power";
+		constexpr const char* kInheritFogMaxClamp = "Inherit Fog Max (Clamp)";
+		constexpr const char* kInheritLightFadeDistances = "Inherit Light Fade Distances";
+	}
+}
+
 void CellLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
@@ -19,97 +68,89 @@ void CellLightingWidget::DrawWidget()
 		bool changed = false;
 
 		if (ImGui::BeginTabBar("CellLightingTabs")) {
-			const ImGuiTabItemFlags colorsFlags = GetTabFlagsForOverride("Colors");
-			const ImGuiTabItemFlags fogFlags = GetTabFlagsForOverride("Fog");
-			const ImGuiTabItemFlags dalcFlags = GetTabFlagsForOverride("Directional Ambient");
-			const ImGuiTabItemFlags advancedFlags = GetTabFlagsForOverride("Advanced");
-			const ImGuiTabItemFlags inheritFlags = GetTabFlagsForOverride("Inheritance");
+			const ImGuiTabItemFlags colorsFlags = GetTabFlagsForOverride(CellLightingTab::kColors);
+			const ImGuiTabItemFlags fogFlags = GetTabFlagsForOverride(CellLightingTab::kFog);
+			const ImGuiTabItemFlags dalcFlags = GetTabFlagsForOverride(CellLightingTab::kDirectionalAmbient);
+			const ImGuiTabItemFlags advancedFlags = GetTabFlagsForOverride(CellLightingTab::kAdvanced);
+			const ImGuiTabItemFlags inheritFlags = GetTabFlagsForOverride(CellLightingTab::kInheritance);
+			auto drawColor = [&](const char* settingId, float3& value) {
+				if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawColorEdit(label, value); }))
+					changed = true;
+			};
+			auto drawSlider = [&](const char* settingId, float& value, float minVal, float maxVal) {
+				if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawSliderFloat(label, value, minVal, maxVal); }))
+					changed = true;
+			};
+			auto drawCheckbox = [&](const char* settingId, bool& value) {
+				if (DrawIfMatchesSearch(settingId, [&](const char* label) { return ImGui::Checkbox(label, &value); }))
+					changed = true;
+			};
 
-			if (ImGui::BeginTabItem("Colors", nullptr, colorsFlags)) {
+			if (ImGui::BeginTabItem(CellLightingTab::kColors, nullptr, colorsFlags)) {
 				BeginScrollableContent("##ColorsScroll");
-				if (MatchesSearch("Ambient Color") || MatchesSearch("Directional Color") || MatchesSearch("Directional Fade")) {
+				if (MatchesAnySearch({ CellLightingSetting::kAmbientColor, CellLightingSetting::kDirectionalColor, CellLightingSetting::kDirectionalFade })) {
 					ImGui::SeparatorText("Ambient & Directional");
-					if (MatchesSearch("Ambient Color") && WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient))
-						changed = true;
-					if (MatchesSearch("Directional Color") && WeatherUtils::DrawColorEdit("Directional Color", settings.directional))
-						changed = true;
-					if (MatchesSearch("Directional Fade") && WeatherUtils::DrawSliderFloat("Directional Fade", settings.directionalFade, 0.0f, 1.0f))
-						changed = true;
+					drawColor(CellLightingSetting::kAmbientColor, settings.ambient);
+					drawColor(CellLightingSetting::kDirectionalColor, settings.directional);
+					drawSlider(CellLightingSetting::kDirectionalFade, settings.directionalFade, 0.0f, 1.0f);
 				}
-				if (MatchesSearch("Fog Near Color") || MatchesSearch("Fog Far Color")) {
+				if (MatchesAnySearch({ CellLightingSetting::kFogNearColor, CellLightingSetting::kFogFarColor })) {
 					ImGui::SeparatorText("Fog Colors");
-					if (MatchesSearch("Fog Near Color") && WeatherUtils::DrawColorEdit("Fog Near Color", settings.fogColorNear))
-						changed = true;
-					if (MatchesSearch("Fog Far Color") && WeatherUtils::DrawColorEdit("Fog Far Color", settings.fogColorFar))
-						changed = true;
+					drawColor(CellLightingSetting::kFogNearColor, settings.fogColorNear);
+					drawColor(CellLightingSetting::kFogFarColor, settings.fogColorFar);
 				}
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Fog", nullptr, fogFlags)) {
+			if (ImGui::BeginTabItem(CellLightingTab::kFog, nullptr, fogFlags)) {
 				BeginScrollableContent("##FogScroll");
-				if (MatchesSearch("Fog Near") || MatchesSearch("Fog Far")) {
+				if (MatchesAnySearch({ CellLightingSetting::kFogNear, CellLightingSetting::kFogFar })) {
 					ImGui::SeparatorText("Fog Distance");
-					if (MatchesSearch("Fog Near") && WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 163840.0f))
-						changed = true;
-					if (MatchesSearch("Fog Far") && WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 163840.0f))
-						changed = true;
+					drawSlider(CellLightingSetting::kFogNear, settings.fogNear, 0.0f, 163840.0f);
+					drawSlider(CellLightingSetting::kFogFar, settings.fogFar, 0.0f, 163840.0f);
 				}
-				if (MatchesSearch("Fog Power") || MatchesSearch("Fog Clamp (Max)")) {
+				if (MatchesAnySearch({ CellLightingSetting::kFogPower, CellLightingSetting::kFogClampMax })) {
 					ImGui::SeparatorText("Fog Properties");
-					if (MatchesSearch("Fog Power") && WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower, 0.0f, 10.0f))
-						changed = true;
-					if (MatchesSearch("Fog Clamp (Max)") && WeatherUtils::DrawSliderFloat("Fog Clamp (Max)", settings.fogClamp, 0.0f, 1.0f))
-						changed = true;
+					drawSlider(CellLightingSetting::kFogPower, settings.fogPower, 0.0f, 10.0f);
+					drawSlider(CellLightingSetting::kFogClampMax, settings.fogClamp, 0.0f, 1.0f);
 				}
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Directional Ambient", nullptr, dalcFlags)) {
+			if (ImGui::BeginTabItem(CellLightingTab::kDirectionalAmbient, nullptr, dalcFlags)) {
 				BeginScrollableContent("##DAmbientScroll");
 				ImGui::SeparatorText("Directional Ambient Lighting (DALC)");
-				if (MatchesSearch("X+ (Right)") && WeatherUtils::DrawColorEdit("X+ (Right)", settings.directionalXPlus))
-					changed = true;
-				if (MatchesSearch("X- (Left)") && WeatherUtils::DrawColorEdit("X- (Left)", settings.directionalXMinus))
-					changed = true;
-				if (MatchesSearch("Y+ (Front)") && WeatherUtils::DrawColorEdit("Y+ (Front)", settings.directionalYPlus))
-					changed = true;
-				if (MatchesSearch("Y- (Back)") && WeatherUtils::DrawColorEdit("Y- (Back)", settings.directionalYMinus))
-					changed = true;
-				if (MatchesSearch("Z+ (Up)") && WeatherUtils::DrawColorEdit("Z+ (Up)", settings.directionalZPlus))
-					changed = true;
-				if (MatchesSearch("Z- (Down)") && WeatherUtils::DrawColorEdit("Z- (Down)", settings.directionalZMinus))
-					changed = true;
-				if (MatchesSearch("Specular") && WeatherUtils::DrawColorEdit("Specular", settings.directionalSpecular))
-					changed = true;
-				if (MatchesSearch("Fresnel Power") && WeatherUtils::DrawSliderFloat("Fresnel Power", settings.fresnelPower, 0.0f, 10.0f))
-					changed = true;
+				drawColor(CellLightingSetting::kXPlus, settings.directionalXPlus);
+				drawColor(CellLightingSetting::kXMinus, settings.directionalXMinus);
+				drawColor(CellLightingSetting::kYPlus, settings.directionalYPlus);
+				drawColor(CellLightingSetting::kYMinus, settings.directionalYMinus);
+				drawColor(CellLightingSetting::kZPlus, settings.directionalZPlus);
+				drawColor(CellLightingSetting::kZMinus, settings.directionalZMinus);
+				drawColor(CellLightingSetting::kSpecular, settings.directionalSpecular);
+				drawSlider(CellLightingSetting::kFresnelPower, settings.fresnelPower, 0.0f, 10.0f);
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Advanced", nullptr, advancedFlags)) {
+			if (ImGui::BeginTabItem(CellLightingTab::kAdvanced, nullptr, advancedFlags)) {
 				BeginScrollableContent("##AdvancedScroll");
-				if (MatchesSearch("Light Fade Start") || MatchesSearch("Light Fade End") || MatchesSearch("Clip Distance")) {
+				if (MatchesAnySearch({ CellLightingSetting::kLightFadeStart, CellLightingSetting::kLightFadeEnd, CellLightingSetting::kClipDistance })) {
 					ImGui::SeparatorText("Light Fade Distances");
-					if (MatchesSearch("Light Fade Start") && WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 163840.0f))
-						changed = true;
-					if (MatchesSearch("Light Fade End") && WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd, 0.0f, 163840.0f))
-						changed = true;
-					if (MatchesSearch("Clip Distance") && WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist, 0.0f, 163840.0f))
-						changed = true;
+					drawSlider(CellLightingSetting::kLightFadeStart, settings.lightFadeStart, 0.0f, 163840.0f);
+					drawSlider(CellLightingSetting::kLightFadeEnd, settings.lightFadeEnd, 0.0f, 163840.0f);
+					drawSlider(CellLightingSetting::kClipDistance, settings.clipDist, 0.0f, 163840.0f);
 				}
-				if (MatchesSearch("XY Rotation") || MatchesSearch("Z Rotation")) {
+				if (MatchesAnySearch({ CellLightingSetting::kXYRotation, CellLightingSetting::kZRotation })) {
 					ImGui::SeparatorText("Directional Rotation");
 					int xyDegrees = settings.directionalXY;
 					int zDegrees = settings.directionalZ;
-					if (MatchesSearch("XY Rotation") && ImGui::SliderInt("XY Rotation", &xyDegrees, 0, 360)) {
+					if (DrawIfMatchesSearch(CellLightingSetting::kXYRotation, [&](const char* label) { return ImGui::SliderInt(label, &xyDegrees, 0, 360); })) {
 						settings.directionalXY = static_cast<uint32_t>(xyDegrees);
 						changed = true;
 					}
-					if (MatchesSearch("Z Rotation") && ImGui::SliderInt("Z Rotation", &zDegrees, 0, 360)) {
+					if (DrawIfMatchesSearch(CellLightingSetting::kZRotation, [&](const char* label) { return ImGui::SliderInt(label, &zDegrees, 0, 360); })) {
 						settings.directionalZ = static_cast<uint32_t>(zDegrees);
 						changed = true;
 					}
@@ -118,32 +159,21 @@ void CellLightingWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("Inheritance", nullptr, inheritFlags)) {
+			if (ImGui::BeginTabItem(CellLightingTab::kInheritance, nullptr, inheritFlags)) {
 				BeginScrollableContent("##InheritanceScroll");
 				ImGui::TextWrapped("These flags control which lighting properties are inherited from the cell's lighting template.");
 				ImGui::Separator();
-				if (MatchesSearch("Inherit Ambient Color") && ImGui::Checkbox("Inherit Ambient Color", &settings.inheritAmbientColor))
-					changed = true;
-				if (MatchesSearch("Inherit Directional Color") && ImGui::Checkbox("Inherit Directional Color", &settings.inheritDirectionalColor))
-					changed = true;
-				if (MatchesSearch("Inherit Fog Color") && ImGui::Checkbox("Inherit Fog Color", &settings.inheritFogColor))
-					changed = true;
-				if (MatchesSearch("Inherit Fog Near") && ImGui::Checkbox("Inherit Fog Near", &settings.inheritFogNear))
-					changed = true;
-				if (MatchesSearch("Inherit Fog Far") && ImGui::Checkbox("Inherit Fog Far", &settings.inheritFogFar))
-					changed = true;
-				if (MatchesSearch("Inherit Directional Rotation") && ImGui::Checkbox("Inherit Directional Rotation", &settings.inheritDirectionalRotation))
-					changed = true;
-				if (MatchesSearch("Inherit Directional Fade") && ImGui::Checkbox("Inherit Directional Fade", &settings.inheritDirectionalFade))
-					changed = true;
-				if (MatchesSearch("Inherit Clip Distance") && ImGui::Checkbox("Inherit Clip Distance", &settings.inheritClipDistance))
-					changed = true;
-				if (MatchesSearch("Inherit Fog Power") && ImGui::Checkbox("Inherit Fog Power", &settings.inheritFogPower))
-					changed = true;
-				if (MatchesSearch("Inherit Fog Max (Clamp)") && ImGui::Checkbox("Inherit Fog Max (Clamp)", &settings.inheritFogMax))
-					changed = true;
-				if (MatchesSearch("Inherit Light Fade Distances") && ImGui::Checkbox("Inherit Light Fade Distances", &settings.inheritLightFadeDistances))
-					changed = true;
+				drawCheckbox(CellLightingSetting::kInheritAmbientColor, settings.inheritAmbientColor);
+				drawCheckbox(CellLightingSetting::kInheritDirectionalColor, settings.inheritDirectionalColor);
+				drawCheckbox(CellLightingSetting::kInheritFogColor, settings.inheritFogColor);
+				drawCheckbox(CellLightingSetting::kInheritFogNear, settings.inheritFogNear);
+				drawCheckbox(CellLightingSetting::kInheritFogFar, settings.inheritFogFar);
+				drawCheckbox(CellLightingSetting::kInheritDirectionalRotation, settings.inheritDirectionalRotation);
+				drawCheckbox(CellLightingSetting::kInheritDirectionalFade, settings.inheritDirectionalFade);
+				drawCheckbox(CellLightingSetting::kInheritClipDistance, settings.inheritClipDistance);
+				drawCheckbox(CellLightingSetting::kInheritFogPower, settings.inheritFogPower);
+				drawCheckbox(CellLightingSetting::kInheritFogMaxClamp, settings.inheritFogMax);
+				drawCheckbox(CellLightingSetting::kInheritLightFadeDistances, settings.inheritLightFadeDistances);
 				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
@@ -451,14 +481,17 @@ bool CellLightingWidget::HasUnsavedChanges() const
 std::vector<Widget::SearchResult> CellLightingWidget::CollectSearchableSettings() const
 {
 	const std::vector<std::pair<std::string, std::vector<std::string>>> entries = {
-		{ "Colors", { "Ambient Color", "Directional Color", "Directional Fade", "Fog Near Color", "Fog Far Color" } },
-		{ "Fog", { "Fog Near", "Fog Far", "Fog Power", "Fog Clamp (Max)" } },
-		{ "Directional Ambient", { "X+ (Right)", "X- (Left)", "Y+ (Front)", "Y- (Back)", "Z+ (Up)", "Z- (Down)", "Specular", "Fresnel Power" } },
-		{ "Advanced", { "Light Fade Start", "Light Fade End", "Clip Distance", "XY Rotation", "Z Rotation" } },
-		{ "Inheritance", { "Inherit Ambient Color", "Inherit Directional Color", "Inherit Fog Color",
-							 "Inherit Fog Near", "Inherit Fog Far", "Inherit Directional Rotation",
-							 "Inherit Directional Fade", "Inherit Clip Distance", "Inherit Fog Power",
-							 "Inherit Fog Max (Clamp)", "Inherit Light Fade Distances" } },
+		{ CellLightingTab::kColors, { CellLightingSetting::kAmbientColor, CellLightingSetting::kDirectionalColor, CellLightingSetting::kDirectionalFade,
+										 CellLightingSetting::kFogNearColor, CellLightingSetting::kFogFarColor } },
+		{ CellLightingTab::kFog, { CellLightingSetting::kFogNear, CellLightingSetting::kFogFar, CellLightingSetting::kFogPower, CellLightingSetting::kFogClampMax } },
+		{ CellLightingTab::kDirectionalAmbient, { CellLightingSetting::kXPlus, CellLightingSetting::kXMinus, CellLightingSetting::kYPlus, CellLightingSetting::kYMinus,
+													CellLightingSetting::kZPlus, CellLightingSetting::kZMinus, CellLightingSetting::kSpecular, CellLightingSetting::kFresnelPower } },
+		{ CellLightingTab::kAdvanced, { CellLightingSetting::kLightFadeStart, CellLightingSetting::kLightFadeEnd, CellLightingSetting::kClipDistance,
+										   CellLightingSetting::kXYRotation, CellLightingSetting::kZRotation } },
+		{ CellLightingTab::kInheritance, { CellLightingSetting::kInheritAmbientColor, CellLightingSetting::kInheritDirectionalColor, CellLightingSetting::kInheritFogColor,
+											  CellLightingSetting::kInheritFogNear, CellLightingSetting::kInheritFogFar, CellLightingSetting::kInheritDirectionalRotation,
+											  CellLightingSetting::kInheritDirectionalFade, CellLightingSetting::kInheritClipDistance, CellLightingSetting::kInheritFogPower,
+											  CellLightingSetting::kInheritFogMaxClamp, CellLightingSetting::kInheritLightFadeDistances } },
 	};
 
 	std::vector<SearchResult> results;

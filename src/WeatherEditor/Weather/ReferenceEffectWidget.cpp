@@ -2,6 +2,18 @@
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
 
+namespace
+{
+	namespace ReferenceEffectSetting
+	{
+		constexpr const char* kArtObject = "Art Object";
+		constexpr const char* kEffectShader = "Effect Shader";
+		constexpr const char* kFaceTarget = "Face Target";
+		constexpr const char* kAttachToCamera = "Attach To Camera";
+		constexpr const char* kInheritRotation = "Inherit Rotation";
+	}
+}
+
 void ReferenceEffectWidget::DrawWidget()
 {
 	if (BeginWidgetWindow()) {
@@ -13,31 +25,31 @@ void ReferenceEffectWidget::DrawWidget()
 
 			auto editorWindow = EditorWindow::GetSingleton();
 
-			if (MatchesSearch("Art Object")) {
-				ImGui::SeparatorText("Art Object");
-				if (editorWindow->artObjectWidgets.empty()) {
-					ImGui::TextDisabled("No Art Objects available");
-				} else {
-					if (WeatherUtils::DrawFormPickerCached("Art Object", settings.artObject, editorWindow->artObjectWidgets, false, true))
-						changed = true;
-				}
-			}
-			if (MatchesSearch("Effect Shader")) {
-				ImGui::SeparatorText("Effect Shader");
-				if (editorWindow->effectShaderWidgets.empty()) {
-					ImGui::TextDisabled("No Effect Shaders available");
-				} else {
-					if (WeatherUtils::DrawFormPickerCached("Effect Shader", settings.effectShader, editorWindow->effectShaderWidgets, false, true))
-						changed = true;
-				}
-			}
-			if (MatchesSearch("Face Target") || MatchesSearch("Attach To Camera") || MatchesSearch("Inherit Rotation")) {
+			if (DrawIfMatchesSearch(ReferenceEffectSetting::kArtObject, [&](const char* label) {
+					ImGui::SeparatorText(label);
+					if (editorWindow->artObjectWidgets.empty()) {
+						ImGui::TextDisabled("No Art Objects available");
+						return false;
+					}
+					return WeatherUtils::DrawFormPickerCached(label, settings.artObject, editorWindow->artObjectWidgets, false, true);
+				}))
+				changed = true;
+			if (DrawIfMatchesSearch(ReferenceEffectSetting::kEffectShader, [&](const char* label) {
+					ImGui::SeparatorText(label);
+					if (editorWindow->effectShaderWidgets.empty()) {
+						ImGui::TextDisabled("No Effect Shaders available");
+						return false;
+					}
+					return WeatherUtils::DrawFormPickerCached(label, settings.effectShader, editorWindow->effectShaderWidgets, false, true);
+				}))
+				changed = true;
+			if (MatchesAnySearch({ ReferenceEffectSetting::kFaceTarget, ReferenceEffectSetting::kAttachToCamera, ReferenceEffectSetting::kInheritRotation })) {
 				ImGui::SeparatorText("Flags");
-				if (MatchesSearch("Face Target") && ImGui::Checkbox("Face Target", &settings.faceTarget))
+				if (DrawIfMatchesSearch(ReferenceEffectSetting::kFaceTarget, [&](const char* label) { return ImGui::Checkbox(label, &settings.faceTarget); }))
 					changed = true;
-				if (MatchesSearch("Attach To Camera") && ImGui::Checkbox("Attach To Camera", &settings.attachToCamera))
+				if (DrawIfMatchesSearch(ReferenceEffectSetting::kAttachToCamera, [&](const char* label) { return ImGui::Checkbox(label, &settings.attachToCamera); }))
 					changed = true;
-				if (MatchesSearch("Inherit Rotation") && ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
+				if (DrawIfMatchesSearch(ReferenceEffectSetting::kInheritRotation, [&](const char* label) { return ImGui::Checkbox(label, &settings.inheritRotation); }))
 					changed = true;
 			}
 
@@ -149,10 +161,10 @@ bool ReferenceEffectWidget::HasUnsavedChanges() const
 std::vector<Widget::SearchResult> ReferenceEffectWidget::CollectSearchableSettings() const
 {
 	return {
-		{ "Art Object", "", "Art Object" },
-		{ "Effect Shader", "", "Effect Shader" },
-		{ "Face Target", "", "Face Target" },
-		{ "Attach To Camera", "", "Attach To Camera" },
-		{ "Inherit Rotation", "", "Inherit Rotation" },
+		{ ReferenceEffectSetting::kArtObject, "", ReferenceEffectSetting::kArtObject },
+		{ ReferenceEffectSetting::kEffectShader, "", ReferenceEffectSetting::kEffectShader },
+		{ ReferenceEffectSetting::kFaceTarget, "", ReferenceEffectSetting::kFaceTarget },
+		{ ReferenceEffectSetting::kAttachToCamera, "", ReferenceEffectSetting::kAttachToCamera },
+		{ ReferenceEffectSetting::kInheritRotation, "", ReferenceEffectSetting::kInheritRotation },
 	};
 }

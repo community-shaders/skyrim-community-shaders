@@ -16,6 +16,62 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DirectionalColor, max, min)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DALC, specular, fresnelPower, directional)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Cloud, cloudLayerSpeedY, cloudLayerSpeedX, color, cloudAlpha, enabled, texturePath)
 
+namespace
+{
+	namespace WeatherTab
+	{
+		constexpr const char* kBasic = "Basic";
+		constexpr const char* kFog = "Fog";
+		constexpr const char* kDalc = "Lighting (DALC)";
+	}
+
+	namespace WeatherSetting
+	{
+		constexpr const char* kSpecular = "Specular";
+		constexpr const char* kFresnelPower = "Fresnel Power";
+		constexpr const char* kDirectionalXMax = "Directional X Max";
+		constexpr const char* kDirectionalXMin = "Directional X Min";
+		constexpr const char* kDirectionalYMax = "Directional Y Max";
+		constexpr const char* kDirectionalYMin = "Directional Y Min";
+		constexpr const char* kDirectionalZMax = "Directional Z Max";
+		constexpr const char* kDirectionalZMin = "Directional Z Min";
+		constexpr const char* kDayNear = "Day Near";
+		constexpr const char* kDayFar = "Day Far";
+		constexpr const char* kDayPower = "Day Power";
+		constexpr const char* kDayMax = "Day Max";
+		constexpr const char* kNightNear = "Night Near";
+		constexpr const char* kNightFar = "Night Far";
+		constexpr const char* kNightPower = "Night Power";
+		constexpr const char* kNightMax = "Night Max";
+	}
+
+	namespace WeatherDisplay
+	{
+		constexpr const char* kDirectionalXMax = "Directional +X";
+		constexpr const char* kDirectionalXMin = "Directional -X";
+		constexpr const char* kDirectionalYMax = "Directional +Y";
+		constexpr const char* kDirectionalYMin = "Directional -Y";
+		constexpr const char* kDirectionalZMax = "Directional +Z";
+		constexpr const char* kDirectionalZMin = "Directional -Z";
+	}
+
+	namespace WeatherInherit
+	{
+		constexpr const char* kDalcSpecular = "DALC_Specular";
+		constexpr const char* kDalcFresnel = "DALC_Fresnel";
+		constexpr const char* kDalcDirXMax = "DALC_DirXMax";
+		constexpr const char* kDalcDirXMin = "DALC_DirXMin";
+		constexpr const char* kDalcDirYMax = "DALC_DirYMax";
+		constexpr const char* kDalcDirYMin = "DALC_DirYMin";
+		constexpr const char* kDalcDirZMax = "DALC_DirZMax";
+		constexpr const char* kDalcDirZMin = "DALC_DirZMin";
+		constexpr const char* kFogNear = "Fog_Near";
+		constexpr const char* kFogFar = "Fog_Far";
+		constexpr const char* kFogPower = "Fog_Power";
+		constexpr const char* kFogMax = "Fog_Max";
+	}
+}
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
 	parent,
 	inheritFlags,
@@ -614,18 +670,18 @@ void WeatherWidget::InitializeInheritFlags()
 	static const char* kFixedKeys[] = {
 		"Precipitation",
 		"ReferenceEffect",
-		"DALC_Specular",
-		"DALC_Fresnel",
-		"DALC_DirXMax",
-		"DALC_DirXMin",
-		"DALC_DirYMax",
-		"DALC_DirYMin",
-		"DALC_DirZMax",
-		"DALC_DirZMin",
-		"Fog_Near",
-		"Fog_Far",
-		"Fog_Power",
-		"Fog_Max",
+		WeatherInherit::kDalcSpecular,
+		WeatherInherit::kDalcFresnel,
+		WeatherInherit::kDalcDirXMax,
+		WeatherInherit::kDalcDirXMin,
+		WeatherInherit::kDalcDirYMax,
+		WeatherInherit::kDalcDirYMin,
+		WeatherInherit::kDalcDirZMax,
+		WeatherInherit::kDalcDirZMin,
+		WeatherInherit::kFogNear,
+		WeatherInherit::kFogFar,
+		WeatherInherit::kFogPower,
+		WeatherInherit::kFogMax,
 		"Sun Damage",
 		"Wind Speed",
 		"Wind Direction",
@@ -806,26 +862,43 @@ void WeatherWidget::DrawDALCSettings()
 		}
 
 		// Draw with per-parameter inheritance
+		auto drawDalcColor = [&](const char* settingId, const char* label, float3 (&values)[4], bool* inheritFlag = nullptr, float3* parentValues = nullptr) {
+			if (!MatchesSearch(settingId))
+				return false;
+			const bool rowChanged = inheritFlag ?
+				TOD::DrawTODColorRow(label, values, *inheritFlag, parentValues) :
+				TOD::DrawTODColorRow(label, values);
+			return rowChanged;
+		};
+		auto drawDalcFloat = [&](const char* settingId, const char* label, float (&values)[4], bool* inheritFlag = nullptr, float* parentValues = nullptr) {
+			if (!MatchesSearch(settingId))
+				return false;
+			const bool rowChanged = inheritFlag ?
+				TOD::DrawTODFloatRow(label, values, *inheritFlag, parentValues, 0.0f, 10.0f) :
+				TOD::DrawTODFloatRow(label, values, 0.0f, 10.0f);
+			return rowChanged;
+		};
+
 		if (hasParent) {
-			if (MatchesSearch("Specular") && TOD::DrawTODColorRow("Specular", specularColors, settings.inheritFlags["DALC_Specular"], parentSpecular)) {
+			if (drawDalcColor(WeatherSetting::kSpecular, WeatherSetting::kSpecular, specularColors, &settings.inheritFlags[WeatherInherit::kDalcSpecular], parentSpecular)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].specular = specularColors[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Fresnel Power") && TOD::DrawTODFloatRow("Fresnel Power", fresnelPowers, settings.inheritFlags["DALC_Fresnel"], parentFresnel, 0.0f, 10.0f)) {
+			if (drawDalcFloat(WeatherSetting::kFresnelPower, WeatherSetting::kFresnelPower, fresnelPowers, &settings.inheritFlags[WeatherInherit::kDalcFresnel], parentFresnel)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].fresnelPower = fresnelPowers[i];
 				changed = true;
 			}
 		} else {
-			if (MatchesSearch("Specular") && TOD::DrawTODColorRow("Specular", specularColors)) {
+			if (drawDalcColor(WeatherSetting::kSpecular, WeatherSetting::kSpecular, specularColors)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].specular = specularColors[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Fresnel Power") && TOD::DrawTODFloatRow("Fresnel Power", fresnelPowers, 0.0f, 10.0f)) {
+			if (drawDalcFloat(WeatherSetting::kFresnelPower, WeatherSetting::kFresnelPower, fresnelPowers)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].fresnelPower = fresnelPowers[i];
 				changed = true;
@@ -836,73 +909,73 @@ void WeatherWidget::DrawDALCSettings()
 
 		// Directional colors with per-parameter inheritance
 		if (hasParent) {
-			if (MatchesSearch("Directional X Max") && TOD::DrawTODColorRow("Directional +X", directionalXMax, settings.inheritFlags["DALC_DirXMax"], parentDirXMax)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalXMax, WeatherDisplay::kDirectionalXMax, directionalXMax, &settings.inheritFlags[WeatherInherit::kDalcDirXMax], parentDirXMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].max = directionalXMax[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional X Min") && TOD::DrawTODColorRow("Directional -X", directionalXMin, settings.inheritFlags["DALC_DirXMin"], parentDirXMin)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalXMin, WeatherDisplay::kDirectionalXMin, directionalXMin, &settings.inheritFlags[WeatherInherit::kDalcDirXMin], parentDirXMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].min = directionalXMin[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional Y Max") && TOD::DrawTODColorRow("Directional +Y", directionalYMax, settings.inheritFlags["DALC_DirYMax"], parentDirYMax)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalYMax, WeatherDisplay::kDirectionalYMax, directionalYMax, &settings.inheritFlags[WeatherInherit::kDalcDirYMax], parentDirYMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].max = directionalYMax[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional Y Min") && TOD::DrawTODColorRow("Directional -Y", directionalYMin, settings.inheritFlags["DALC_DirYMin"], parentDirYMin)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalYMin, WeatherDisplay::kDirectionalYMin, directionalYMin, &settings.inheritFlags[WeatherInherit::kDalcDirYMin], parentDirYMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].min = directionalYMin[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional Z Max") && TOD::DrawTODColorRow("Directional +Z", directionalZMax, settings.inheritFlags["DALC_DirZMax"], parentDirZMax)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalZMax, WeatherDisplay::kDirectionalZMax, directionalZMax, &settings.inheritFlags[WeatherInherit::kDalcDirZMax], parentDirZMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].max = directionalZMax[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional Z Min") && TOD::DrawTODColorRow("Directional -Z", directionalZMin, settings.inheritFlags["DALC_DirZMin"], parentDirZMin)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalZMin, WeatherDisplay::kDirectionalZMin, directionalZMin, &settings.inheritFlags[WeatherInherit::kDalcDirZMin], parentDirZMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].min = directionalZMin[i];
 				changed = true;
 			}
 		} else {
-			if (MatchesSearch("Directional X Max") && TOD::DrawTODColorRow("Directional +X", directionalXMax)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalXMax, WeatherDisplay::kDirectionalXMax, directionalXMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].max = directionalXMax[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional X Min") && TOD::DrawTODColorRow("Directional -X", directionalXMin)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalXMin, WeatherDisplay::kDirectionalXMin, directionalXMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].min = directionalXMin[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional Y Max") && TOD::DrawTODColorRow("Directional +Y", directionalYMax)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalYMax, WeatherDisplay::kDirectionalYMax, directionalYMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].max = directionalYMax[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional Y Min") && TOD::DrawTODColorRow("Directional -Y", directionalYMin)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalYMin, WeatherDisplay::kDirectionalYMin, directionalYMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].min = directionalYMin[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional Z Max") && TOD::DrawTODColorRow("Directional +Z", directionalZMax)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalZMax, WeatherDisplay::kDirectionalZMax, directionalZMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].max = directionalZMax[i];
 				changed = true;
 			}
 
-			if (MatchesSearch("Directional Z Min") && TOD::DrawTODColorRow("Directional -Z", directionalZMin)) {
+			if (drawDalcColor(WeatherSetting::kDirectionalZMin, WeatherDisplay::kDirectionalZMin, directionalZMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].min = directionalZMin[i];
 				changed = true;
@@ -1149,10 +1222,10 @@ void WeatherWidget::DrawFogSettings()
 	WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 
 	bool changed = false;
-	const bool nearMatches = MatchesSearch("Day Near") || MatchesSearch("Night Near");
-	const bool farMatches = MatchesSearch("Day Far") || MatchesSearch("Night Far");
-	const bool powerMatches = MatchesSearch("Day Power") || MatchesSearch("Night Power");
-	const bool maxMatches = MatchesSearch("Day Max") || MatchesSearch("Night Max");
+	const bool nearMatches = MatchesAnySearch({ WeatherSetting::kDayNear, WeatherSetting::kNightNear });
+	const bool farMatches = MatchesAnySearch({ WeatherSetting::kDayFar, WeatherSetting::kNightFar });
+	const bool powerMatches = MatchesAnySearch({ WeatherSetting::kDayPower, WeatherSetting::kNightPower });
+	const bool maxMatches = MatchesAnySearch({ WeatherSetting::kDayMax, WeatherSetting::kNightMax });
 	const bool anyFogMatches = nearMatches || farMatches || powerMatches || maxMatches;
 	if (!anyFogMatches)
 		return;
@@ -1171,6 +1244,19 @@ void WeatherWidget::DrawFogSettings()
 	auto popFogRowHighlight = [&](const char* highlightId) {
 		if (highlightId)
 			PopHighlightStyle(highlightId);
+	};
+	auto inheritFogPair = [&](const char* inheritKey, const char* dayKey, const char* nightKey) {
+		if (!settings.inheritFlags[inheritKey])
+			return;
+
+		const float parentDay = parentWidget->settings.fogProperties[dayKey];
+		const float parentNight = parentWidget->settings.fogProperties[nightKey];
+		if (settings.fogProperties[dayKey] == parentDay && settings.fogProperties[nightKey] == parentNight)
+			return;
+
+		settings.fogProperties[dayKey] = parentDay;
+		settings.fogProperties[nightKey] = parentNight;
+		changed = true;
 	};
 
 	const float scale = Util::GetUIScale();
@@ -1199,19 +1285,15 @@ void WeatherWidget::DrawFogSettings()
 
 		// Near
 		if (nearMatches) {
-			const char* highlightId = pushFogRowHighlight("Day Near", "Night Near");
+			const char* highlightId = pushFogRowHighlight(WeatherSetting::kDayNear, WeatherSetting::kNightNear);
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			if (hasParent) {
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
-				ImGui::Checkbox("##FogNear", &settings.inheritFlags["Fog_Near"]);
-				if (settings.inheritFlags["Fog_Near"]) {
-					settings.fogProperties["Day Near"] = parentWidget->settings.fogProperties["Day Near"];
-					settings.fogProperties["Night Near"] = parentWidget->settings.fogProperties["Night Near"];
-					changed = true;
-				}
+				ImGui::Checkbox("##FogNear", &settings.inheritFlags[WeatherInherit::kFogNear]);
+				inheritFogPair(WeatherInherit::kFogNear, WeatherSetting::kDayNear, WeatherSetting::kNightNear);
 				ImGui::PopStyleVar();
 				ImGui::PopStyleColor(2);
 				ImGui::SameLine();
@@ -1220,30 +1302,26 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::Text("Near");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1);
-			if (WeatherUtils::DrawSliderFloat("##Day Near", settings.fogProperties["Day Near"], 0.0f, 1000000.0f, nullptr, "%.0f"))
+			if (WeatherUtils::DrawSliderFloat("##Day Near", settings.fogProperties[WeatherSetting::kDayNear], 0.0f, 1000000.0f, nullptr, "%.0f"))
 				changed = true;
 			ImGui::TableSetColumnIndex(2);
 			ImGui::SetNextItemWidth(-1);
-			if (WeatherUtils::DrawSliderFloat("##Night Near", settings.fogProperties["Night Near"], 0.0f, 1000000.0f, nullptr, "%.0f"))
+			if (WeatherUtils::DrawSliderFloat("##Night Near", settings.fogProperties[WeatherSetting::kNightNear], 0.0f, 1000000.0f, nullptr, "%.0f"))
 				changed = true;
 			popFogRowHighlight(highlightId);
 		}
 
 		// Far
 		if (farMatches) {
-			const char* highlightId = pushFogRowHighlight("Day Far", "Night Far");
+			const char* highlightId = pushFogRowHighlight(WeatherSetting::kDayFar, WeatherSetting::kNightFar);
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			if (hasParent) {
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
-				ImGui::Checkbox("##FogFar", &settings.inheritFlags["Fog_Far"]);
-				if (settings.inheritFlags["Fog_Far"]) {
-					settings.fogProperties["Day Far"] = parentWidget->settings.fogProperties["Day Far"];
-					settings.fogProperties["Night Far"] = parentWidget->settings.fogProperties["Night Far"];
-					changed = true;
-				}
+				ImGui::Checkbox("##FogFar", &settings.inheritFlags[WeatherInherit::kFogFar]);
+				inheritFogPair(WeatherInherit::kFogFar, WeatherSetting::kDayFar, WeatherSetting::kNightFar);
 				ImGui::PopStyleVar();
 				ImGui::PopStyleColor(2);
 				ImGui::SameLine();
@@ -1252,30 +1330,26 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::Text("Far");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1);
-			if (WeatherUtils::DrawSliderFloat("##Day Far", settings.fogProperties["Day Far"], 0.0f, 1000000.0f, nullptr, "%.0f"))
+			if (WeatherUtils::DrawSliderFloat("##Day Far", settings.fogProperties[WeatherSetting::kDayFar], 0.0f, 1000000.0f, nullptr, "%.0f"))
 				changed = true;
 			ImGui::TableSetColumnIndex(2);
 			ImGui::SetNextItemWidth(-1);
-			if (WeatherUtils::DrawSliderFloat("##Night Far", settings.fogProperties["Night Far"], 0.0f, 1000000.0f, nullptr, "%.0f"))
+			if (WeatherUtils::DrawSliderFloat("##Night Far", settings.fogProperties[WeatherSetting::kNightFar], 0.0f, 1000000.0f, nullptr, "%.0f"))
 				changed = true;
 			popFogRowHighlight(highlightId);
 		}
 
 		// Power
 		if (powerMatches) {
-			const char* highlightId = pushFogRowHighlight("Day Power", "Night Power");
+			const char* highlightId = pushFogRowHighlight(WeatherSetting::kDayPower, WeatherSetting::kNightPower);
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			if (hasParent) {
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
-				ImGui::Checkbox("##FogPower", &settings.inheritFlags["Fog_Power"]);
-				if (settings.inheritFlags["Fog_Power"]) {
-					settings.fogProperties["Day Power"] = parentWidget->settings.fogProperties["Day Power"];
-					settings.fogProperties["Night Power"] = parentWidget->settings.fogProperties["Night Power"];
-					changed = true;
-				}
+				ImGui::Checkbox("##FogPower", &settings.inheritFlags[WeatherInherit::kFogPower]);
+				inheritFogPair(WeatherInherit::kFogPower, WeatherSetting::kDayPower, WeatherSetting::kNightPower);
 				ImGui::PopStyleVar();
 				ImGui::PopStyleColor(2);
 				ImGui::SameLine();
@@ -1284,30 +1358,26 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::Text("Power");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1);
-			if (WeatherUtils::DrawSliderFloat("##Day Power", settings.fogProperties["Day Power"], 0.0f, 10.0f, nullptr, "%.3f"))
+			if (WeatherUtils::DrawSliderFloat("##Day Power", settings.fogProperties[WeatherSetting::kDayPower], 0.0f, 10.0f, nullptr, "%.3f"))
 				changed = true;
 			ImGui::TableSetColumnIndex(2);
 			ImGui::SetNextItemWidth(-1);
-			if (WeatherUtils::DrawSliderFloat("##Night Power", settings.fogProperties["Night Power"], 0.0f, 10.0f, nullptr, "%.3f"))
+			if (WeatherUtils::DrawSliderFloat("##Night Power", settings.fogProperties[WeatherSetting::kNightPower], 0.0f, 10.0f, nullptr, "%.3f"))
 				changed = true;
 			popFogRowHighlight(highlightId);
 		}
 
 		// Max
 		if (maxMatches) {
-			const char* highlightId = pushFogRowHighlight("Day Max", "Night Max");
+			const char* highlightId = pushFogRowHighlight(WeatherSetting::kDayMax, WeatherSetting::kNightMax);
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			if (hasParent) {
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
-				ImGui::Checkbox("##FogMax", &settings.inheritFlags["Fog_Max"]);
-				if (settings.inheritFlags["Fog_Max"]) {
-					settings.fogProperties["Day Max"] = parentWidget->settings.fogProperties["Day Max"];
-					settings.fogProperties["Night Max"] = parentWidget->settings.fogProperties["Night Max"];
-					changed = true;
-				}
+				ImGui::Checkbox("##FogMax", &settings.inheritFlags[WeatherInherit::kFogMax]);
+				inheritFogPair(WeatherInherit::kFogMax, WeatherSetting::kDayMax, WeatherSetting::kNightMax);
 				ImGui::PopStyleVar();
 				ImGui::PopStyleColor(2);
 				ImGui::SameLine();
@@ -1316,11 +1386,11 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::Text("Max");
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-1);
-			if (WeatherUtils::DrawSliderFloat("##Day Max", settings.fogProperties["Day Max"], 0.0f, 1.0f, nullptr, "%.3f"))
+			if (WeatherUtils::DrawSliderFloat("##Day Max", settings.fogProperties[WeatherSetting::kDayMax], 0.0f, 1.0f, nullptr, "%.3f"))
 				changed = true;
 			ImGui::TableSetColumnIndex(2);
 			ImGui::SetNextItemWidth(-1);
-			if (WeatherUtils::DrawSliderFloat("##Night Max", settings.fogProperties["Night Max"], 0.0f, 1.0f, nullptr, "%.3f"))
+			if (WeatherUtils::DrawSliderFloat("##Night Max", settings.fogProperties[WeatherSetting::kNightMax], 0.0f, 1.0f, nullptr, "%.3f"))
 				changed = true;
 			popFogRowHighlight(highlightId);
 		}
@@ -1470,19 +1540,19 @@ void WeatherWidget::InheritAllFromParent()
 	settings.referenceEffect = parentWidget->settings.referenceEffect;
 
 	// Set all inherit flags to true
-	settings.inheritFlags["DALC_Specular"] = true;
-	settings.inheritFlags["DALC_Fresnel"] = true;
-	settings.inheritFlags["DALC_DirXMax"] = true;
-	settings.inheritFlags["DALC_DirXMin"] = true;
-	settings.inheritFlags["DALC_DirYMax"] = true;
-	settings.inheritFlags["DALC_DirYMin"] = true;
-	settings.inheritFlags["DALC_DirZMax"] = true;
-	settings.inheritFlags["DALC_DirZMin"] = true;
+	settings.inheritFlags[WeatherInherit::kDalcSpecular] = true;
+	settings.inheritFlags[WeatherInherit::kDalcFresnel] = true;
+	settings.inheritFlags[WeatherInherit::kDalcDirXMax] = true;
+	settings.inheritFlags[WeatherInherit::kDalcDirXMin] = true;
+	settings.inheritFlags[WeatherInherit::kDalcDirYMax] = true;
+	settings.inheritFlags[WeatherInherit::kDalcDirYMin] = true;
+	settings.inheritFlags[WeatherInherit::kDalcDirZMax] = true;
+	settings.inheritFlags[WeatherInherit::kDalcDirZMin] = true;
 
-	settings.inheritFlags["Fog_Near"] = true;
-	settings.inheritFlags["Fog_Far"] = true;
-	settings.inheritFlags["Fog_Power"] = true;
-	settings.inheritFlags["Fog_Max"] = true;
+	settings.inheritFlags[WeatherInherit::kFogNear] = true;
+	settings.inheritFlags[WeatherInherit::kFogFar] = true;
+	settings.inheritFlags[WeatherInherit::kFogPower] = true;
+	settings.inheritFlags[WeatherInherit::kFogMax] = true;
 
 	// Atmosphere colors
 	static const int displayOrder[] = { 0, 7, 8, 1, 12, 3, 4, 5, 6, 9, 10, 11, 13, 14, 15, 16, 2 };
@@ -1965,13 +2035,13 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 	std::vector<SearchResult> results;
 
 	const std::vector<std::pair<std::string, std::vector<std::string>>> tabEntries = {
-		{ "Basic", { "Sun Damage", "Wind Speed", "Wind Direction", "Wind Direction Range",
+		{ WeatherTab::kBasic, { "Sun Damage", "Wind Speed", "Wind Direction", "Wind Direction Range",
 					   "Precipitation Begin Fade In", "Precipitation End Fade Out",
 					   "Thunder Lightning Begin Fade In", "Thunder Lightning End Fade Out",
 					   "Thunder Lightning Frequency", "Lightning Color",
 					   "Visual Effect Begin", "Visual Effect End", "Trans Delta" } },
-		{ "Fog", { "Day Near", "Day Far", "Day Power", "Day Max",
-					 "Night Near", "Night Far", "Night Power", "Night Max" } },
+		{ WeatherTab::kFog, { WeatherSetting::kDayNear, WeatherSetting::kDayFar, WeatherSetting::kDayPower, WeatherSetting::kDayMax,
+								 WeatherSetting::kNightNear, WeatherSetting::kNightFar, WeatherSetting::kNightPower, WeatherSetting::kNightMax } },
 	};
 
 	for (const auto& [tab, names] : tabEntries) {
@@ -1980,14 +2050,14 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 		}
 	}
 
-	results.push_back({ "Fresnel Power", "Lighting (DALC)", "Fresnel Power" });
-	results.push_back({ "Specular", "Lighting (DALC)", "Specular" });
-	results.push_back({ "Directional +X", "Lighting (DALC)", "Directional X Max" });
-	results.push_back({ "Directional -X", "Lighting (DALC)", "Directional X Min" });
-	results.push_back({ "Directional +Y", "Lighting (DALC)", "Directional Y Max" });
-	results.push_back({ "Directional -Y", "Lighting (DALC)", "Directional Y Min" });
-	results.push_back({ "Directional +Z", "Lighting (DALC)", "Directional Z Max" });
-	results.push_back({ "Directional -Z", "Lighting (DALC)", "Directional Z Min" });
+	results.push_back({ WeatherSetting::kFresnelPower, WeatherTab::kDalc, WeatherSetting::kFresnelPower });
+	results.push_back({ WeatherSetting::kSpecular, WeatherTab::kDalc, WeatherSetting::kSpecular });
+	results.push_back({ WeatherDisplay::kDirectionalXMax, WeatherTab::kDalc, WeatherSetting::kDirectionalXMax });
+	results.push_back({ WeatherDisplay::kDirectionalXMin, WeatherTab::kDalc, WeatherSetting::kDirectionalXMin });
+	results.push_back({ WeatherDisplay::kDirectionalYMax, WeatherTab::kDalc, WeatherSetting::kDirectionalYMax });
+	results.push_back({ WeatherDisplay::kDirectionalYMin, WeatherTab::kDalc, WeatherSetting::kDirectionalYMin });
+	results.push_back({ WeatherDisplay::kDirectionalZMax, WeatherTab::kDalc, WeatherSetting::kDirectionalZMax });
+	results.push_back({ WeatherDisplay::kDirectionalZMin, WeatherTab::kDalc, WeatherSetting::kDirectionalZMin });
 
 	for (int i = 0; i < ColorTypes::kTotal; i++) {
 		std::string colorType = ColorTypeLabel(i);

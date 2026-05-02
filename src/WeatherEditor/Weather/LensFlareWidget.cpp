@@ -2,6 +2,15 @@
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
 
+namespace
+{
+	namespace LensFlareSetting
+	{
+		constexpr const char* kFadeDistRadiusScale = "Fade Dist Radius Scale";
+		constexpr const char* kColorInfluence = "Color Influence";
+	}
+}
+
 void LensFlareWidget::DrawWidget()
 {
 	if (BeginWidgetWindow()) {
@@ -12,16 +21,16 @@ void LensFlareWidget::DrawWidget()
 	{
 		bool changed = false;
 
-		if (MatchesSearch("Fade Dist Radius Scale")) {
+		if (DrawIfMatchesSearch(LensFlareSetting::kFadeDistRadiusScale, [&](const char* label) {
 			ImGui::SeparatorText("Fade Distance");
-			if (ImGui::SliderFloat("Fade Dist Radius Scale", &settings.fadeDistRadiusScale, 0.0f, 1.0f))
-				changed = true;
-		}
-		if (MatchesSearch("Color Influence")) {
+			return ImGui::SliderFloat(label, &settings.fadeDistRadiusScale, 0.0f, 1.0f);
+		}))
+			changed = true;
+		if (DrawIfMatchesSearch(LensFlareSetting::kColorInfluence, [&](const char* label) {
 			ImGui::SeparatorText("Color");
-			if (ImGui::SliderFloat("Color Influence", &settings.colorInfluence, 0.0f, 1.0f))
-				changed = true;
-		}
+			return ImGui::SliderFloat(label, &settings.colorInfluence, 0.0f, 1.0f);
+		}))
+			changed = true;
 
 		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 			ApplyChanges();
@@ -92,7 +101,7 @@ bool LensFlareWidget::HasUnsavedChanges() const
 std::vector<Widget::SearchResult> LensFlareWidget::CollectSearchableSettings() const
 {
 	return {
-		{ "Fade Dist Radius Scale", "", "Fade Dist Radius Scale" },
-		{ "Color Influence", "", "Color Influence" },
+		{ LensFlareSetting::kFadeDistRadiusScale, "", LensFlareSetting::kFadeDistRadiusScale },
+		{ LensFlareSetting::kColorInfluence, "", LensFlareSetting::kColorInfluence },
 	};
 }
