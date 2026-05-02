@@ -34,12 +34,15 @@ runs:
               $installerUrl = "https://aka.ms/vs/stable/vs_BuildTools.exe"
               $installerPath = "$env:TEMP\vs_buildtools.exe"
               Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
-              Start-Process -FilePath $installerPath -ArgumentList `
+              $proc = Start-Process -FilePath $installerPath -ArgumentList `
                   "--quiet", "--wait", "--norestart", "--nocache", `
                   "--add", "Microsoft.VisualStudio.Workload.VCTools", `
                   "--add", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", `
                   "--add", "Microsoft.VisualStudio.Component.Windows11SDK.26100" `
-                  -Wait -NoNewWindow
+                  -Wait -NoNewWindow -PassThru
+              if ($proc.ExitCode -ne 0) {
+                  throw "Visual Studio Build Tools installer failed with exit code $($proc.ExitCode)."
+              }
               Remove-Item $installerPath -ErrorAction SilentlyContinue
 
         - name: Setup MSVC environment
