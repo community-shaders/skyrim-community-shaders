@@ -494,6 +494,16 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             ${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake
     )
 
+    # If AIO was manually (or programmatically) deleted, the stamp is stale —
+    # clear it so cmake --build re-runs PREPARE_AIO to recreate the directory.
+    if(NOT EXISTS "${AIO_DIR}")
+        file(
+            REMOVE
+            "${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp"
+            "${CMAKE_CURRENT_BINARY_DIR}/copy_shaders.stamp"
+        )
+    endif()
+
     add_custom_target(
         PREPARE_AIO
         ALL
@@ -592,6 +602,58 @@ endif()
 
 # Automatic deployment to CommunityShaders output directory.
 if(AUTO_PLUGIN_DEPLOYMENT)
+    # Detect git HEAD changes (branch switch or new commit) and invalidate stale
+    # deploy state. BuildRelease.bat always reconfigures, so this runs on every
+    # build invocation. When HEAD changes we:
+    #   1. Touch all AIO files so robocopy /XO sees them as newer than any
+    #      previously-deployed files (including manual package installs).
+    #   2. Delete deploy stamps so CMake re-runs the robocopy commands.
+    # Files the user intentionally edited in-game remain protected by /XO on
+    # subsequent builds (same HEAD = no touch, same stamp file exists).
+    execute_process(
+        COMMAND git rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE _git_head
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(_git_head)
+        set(_git_head_stamp "${CMAKE_BINARY_DIR}/git-head.stamp")
+        set(_prev_git_head "")
+        if(EXISTS "${_git_head_stamp}")
+            file(READ "${_git_head_stamp}" _prev_git_head)
+            string(STRIP "${_prev_git_head}" _prev_git_head)
+        endif()
+        if(NOT "${_git_head}" STREQUAL "${_prev_git_head}")
+            message(
+                STATUS
+                "Git HEAD changed (${_prev_git_head} -> ${_git_head}): clearing AIO shaders and deploy stamps for full redeploy"
+            )
+            # Delete the entire AIO directory so PREPARE_AIO re-copies everything
+            # with fresh timestamps. Without this, copy_if_different skips
+            # content-identical files (shaders, textures, configs, etc.) and
+            # leaves them with old timestamps that deployed files (e.g. from a
+            # manual package install) may beat under /XO. The DLL is always
+            # rebuilt fresh by the C++ compile step so it doesn't need special
+            # handling.
+            file(REMOVE_RECURSE "${AIO_DIR}")
+            # Also clear the PREPARE_AIO / COPY_SHADERS stamps so cmake --build
+            # actually re-runs those targets.
+            file(
+                GLOB _build_stamps
+                "${CMAKE_BINARY_DIR}/*_deploy.stamp"
+                "${CMAKE_BINARY_DIR}/*_shaders_full.stamp"
+                "${CMAKE_BINARY_DIR}/*_shaders_only.stamp"
+                "${CMAKE_BINARY_DIR}/prepare_aio.stamp"
+                "${CMAKE_BINARY_DIR}/copy_shaders.stamp"
+            )
+            foreach(_stamp IN LISTS _build_stamps)
+                file(REMOVE "${_stamp}")
+            endforeach()
+        endif()
+        file(WRITE "${_git_head_stamp}" "${_git_head}")
+    endif()
+
     set(DEPLOY_TARGET_HASHES)
     if(WIN32)
         foreach(DEPLOY_TARGET $ENV{CommunityShadersOutputDir})

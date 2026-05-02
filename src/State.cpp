@@ -207,6 +207,11 @@ void State::Setup()
 {
 	globals::truePBR->SetupResources();
 	SetupResources();
+
+	// Probe typed UAV load support before features set up their resources, so any
+	// gating logic that wants to read the log can run during feature SetupResources.
+	CheckTypedUAVLoadSupport();
+
 	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 	globals::deferred->SetupResources();
 
@@ -437,6 +442,7 @@ void State::SaveToJson(nlohmann::json& settings)
 	advanced["Background Compiler Threads"] = shaderCache->backgroundCompilationThreadCount;
 	advanced["Use FileWatcher"] = shaderCache->UseFileWatcher();
 	advanced["Frame Annotations"] = frameAnnotations;
+	advanced["Partial Precision"] = enablePartialPrecision.load(std::memory_order_relaxed);
 	settings["Advanced"] = advanced;
 
 	json general;
@@ -511,6 +517,8 @@ void State::LoadFromJson(nlohmann::json& settings)
 			shaderCache->SetFileWatcher(advanced["Use FileWatcher"]);
 		if (advanced.contains("Frame Annotations") && advanced["Frame Annotations"].is_boolean())
 			frameAnnotations = advanced["Frame Annotations"];
+		if (advanced.contains("Partial Precision") && advanced["Partial Precision"].is_boolean())
+			enablePartialPrecision.store(advanced["Partial Precision"].get<bool>(), std::memory_order_relaxed);
 	}
 
 	if (settings.contains("General") && settings["General"].is_object()) {
@@ -656,6 +664,64 @@ void State::ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::B
 {
 	a_properties->supportUnorderedAccess = true;
 	logger::debug("Adding UAV access to {}", magic_enum::enum_name(a_target));
+}
+
+void State::CheckTypedUAVLoadSupport()
+{
+	auto device = globals::d3d::device;
+	if (!device) {
+		logger::warn("[TypedUAVLoad] Device unavailable; skipping format support probe.");
+		return;
+	}
+
+	// Formats this codebase does typed UAV loads on (RWTexture<T> read via subscript).
+	// Identified by static analysis; keep in sync with new typed reads.
+	// All require the optional D3D11 feature D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD —
+	// guaranteed only for R32_FLOAT/R32_UINT/R32_SINT, otherwise gated by
+	// D3D11_FEATURE_DATA_D3D11_OPTIONS2.TypedUAVLoadAdditionalFormats (FL12+).
+	struct FormatEntry
+	{
+		DXGI_FORMAT format;
+		const char* name;
+		const char* usage;
+	};
+	static const FormatEntry kFormats[] = {
+		{ DXGI_FORMAT_R11G11B10_FLOAT, "R11G11B10_FLOAT", "Dynamic Cubemaps (envCapture/Raw/Position) — non-HDR" },
+		{ DXGI_FORMAT_R16G16B16A16_FLOAT, "R16G16B16A16_FLOAT", "Dynamic Cubemaps (HDR), Skylighting outProbeArray" },
+		{ DXGI_FORMAT_R16G16B16A16_UNORM, "R16G16B16A16_UNORM", "Grass Collision (collisionTexture)" },
+		{ DXGI_FORMAT_R16G16_UNORM, "R16G16_UNORM", "Terrain Shadows (RWTexShadowHeights)" },
+		{ DXGI_FORMAT_R16G16_FLOAT, "R16G16_FLOAT", "VR Stereo Blend (kMOTION_VECTOR reprojection)" },
+		{ DXGI_FORMAT_R8G8B8A8_UNORM, "R8G8B8A8_UNORM", "HDR Display UI brightness (uiTexture)" },
+		{ DXGI_FORMAT_R8_UINT, "R8_UINT", "Skylighting accumulation frames (outAccumFramesArray)" },
+		{ DXGI_FORMAT_R16_FLOAT, "R16_FLOAT", "Vanilla volumetric lighting density (DensityRW)" },
+	};
+
+	bool anyUnsupported = false;
+	logger::info("[TypedUAVLoad] Probing per-format UAV typed-load support:");
+	for (const auto& entry : kFormats) {
+		D3D11_FEATURE_DATA_FORMAT_SUPPORT2 support2{};
+		support2.InFormat = entry.format;
+		HRESULT hr = device->CheckFeatureSupport(D3D11_FEATURE_FORMAT_SUPPORT2, &support2, sizeof(support2));
+		if (FAILED(hr)) {
+			logger::warn("[TypedUAVLoad] {} ({}): CheckFeatureSupport failed (hr=0x{:08x})", entry.name, entry.usage, static_cast<uint32_t>(hr));
+			anyUnsupported = true;
+			continue;
+		}
+		const bool supported = (support2.OutFormatSupport2 & D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0;
+		if (supported) {
+			logger::info("[TypedUAVLoad] {} — supported ({})", entry.name, entry.usage);
+		} else {
+			logger::warn("[TypedUAVLoad] {} — UNSUPPORTED ({})", entry.name, entry.usage);
+			anyUnsupported = true;
+		}
+	}
+
+	if (anyUnsupported) {
+		logger::warn(
+			"[TypedUAVLoad] One or more required formats lack typed-UAV-load support on this GPU. "
+			"Affected features will read undefined data and may produce visual artifacts. "
+			"Consider disabling: Dynamic Cubemaps, Grass Collision, Terrain Shadows, Skylighting, HDR Display, VR Stereo Optimisations.");
+	}
 }
 
 void State::SetupResources()

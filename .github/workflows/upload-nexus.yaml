@@ -98,11 +98,18 @@ jobs:
                     echo "ERROR: '$TAG' is a pre-release tag. Only stable releases are uploaded to Nexus." >&2
                     exit 1
                   fi
+                  DRAFT=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+                    --jq ".[] | select(.tag_name == \"$TAG\") | .draft" 2>/dev/null | head -1)
+                  if [ "$DRAFT" != "false" ]; then
+                    echo "ERROR: Release '$TAG' is not published. Publish the GitHub release before uploading to Nexus." >&2
+                    exit 1
+                  fi
                   VERSION="${TAG#v}"
                   echo "tag=$TAG" >> $GITHUB_OUTPUT
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
               env:
                   INPUT_TAG: ${{ inputs.tag || '' }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Compute dry-run mode
               id: dryrun
@@ -120,6 +127,7 @@ jobs:
               run: |
                   ARGS=( --export-nexus-matrix --matrix-output nexus-matrix-raw.json )
                   PREVIOUS_TAG=$(git tag --merged "$RELEASE_TAG" --list 'v*.*.*' --sort=-v:refname 2>/dev/null \
+                    | grep -v -- '-' \
                     | awk -v current="$RELEASE_TAG" '$0 != current { print; exit }')
                   if [ -n "$PREVIOUS_TAG" ]; then
                     ARGS+=( --base "$PREVIOUS_TAG" )
@@ -136,12 +144,49 @@ jobs:
                     ARGS+=( --core-artifact-pattern "$INPUT_ARTIFACT_PATTERN" )
                   fi
                   python tools/feature_version_audit.py "${ARGS[@]}"
+
+                  # Fetch the specific release by tag — avoids pagination issues with
+                  # the releases list endpoint (default page size is 30).
+                  gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+                    2>/dev/null > release.json || echo '{}' > release.json
                   python -c "
-                  import json
+                  import json, os
+                  with open('release.json') as f:
+                      release = json.load(f)
+                  if not isinstance(release, dict):
+                      release = {}
+                  body = release.get('body') or ''
                   with open('nexus-matrix-raw.json') as f:
                       data = json.load(f)
+                  for row in data:
+                      if row.get('name') == 'core':
+                          row['changelog'] = body
+                          break
+                  with open('nexus-matrix-raw.json', 'w') as f:
+                      json.dump(data, f)
+                  "
+
+                  python -c "
+                  import json, os, fnmatch
+                  with open('nexus-matrix-raw.json') as f:
+                      data = json.load(f)
+                  # Load asset names from the release to skip uploads where the
+                  # artifact was not included — applies to all rows including core.
+                  try:
+                      with open('release.json') as f:
+                          release = json.load(f)
+                      if not isinstance(release, dict):
+                          release = {}
+                  except Exception:
+                      release = {}
+                  asset_names = [a['name'] for a in release.get('assets', [])]
+                  def artifact_in_release(row):
+                      pat = row.get('artifact_pattern', '')
+                      return bool(pat) and any(fnmatch.fnmatch(n, pat) for n in asset_names)
                   # Full matrix for artifact prep; upload matrix excludes auto_upload=false
-                  upload_data = [row for row in data if row.get('auto_upload', True)]
+                  # and features whose standalone artifact is absent from the release.
+                  upload_data = [row for row in data
+                                 if row.get('auto_upload', True) and artifact_in_release(row)]
                   has_uploads = bool(upload_data)
                   with open('nexus-matrix.json', 'w') as f:
                       json.dump({'include': data}, f)
@@ -150,18 +195,23 @@ jobs:
                   with open('nexus-upload-state.json', 'w') as f:
                       json.dump({'has_uploads': has_uploads}, f)
                   "
-                  echo "matrix<<EOF" >> $GITHUB_OUTPUT
-                  cat nexus-matrix.json >> $GITHUB_OUTPUT
-                  echo "EOF" >> $GITHUB_OUTPUT
-                  echo "upload_matrix<<EOF" >> $GITHUB_OUTPUT
-                  cat nexus-upload-matrix.json >> $GITHUB_OUTPUT
-                  echo "EOF" >> $GITHUB_OUTPUT
-                  echo "has_uploads=$(python -c \"import json; print('true' if json.load(open('nexus-upload-state.json')).get('has_uploads') else 'false')\")" >> $GITHUB_OUTPUT
+                  DELIM=$(openssl rand -hex 8)
+                  {
+                    printf 'matrix<<%s\n' "$DELIM"
+                    cat nexus-matrix.json
+                    printf '\n%s\n' "$DELIM"
+                    printf 'upload_matrix<<%s\n' "$DELIM"
+                    cat nexus-upload-matrix.json
+                    printf '\n%s\n' "$DELIM"
+                  } >> "$GITHUB_OUTPUT"
+                  HAS_UPLOADS=$(python -c 'import json; d=json.load(open("nexus-upload-state.json")); print("true" if d.get("has_uploads") else "false")')
+                  echo "has_uploads=${HAS_UPLOADS}" >> "$GITHUB_OUTPUT"
               env:
                   RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
                   INPUT_NEXUS_MOD_ID: ${{ inputs.nexus_mod_id || '' }}
                   INPUT_MOD_FILENAME: ${{ inputs.mod_filename || '' }}
                   INPUT_ARTIFACT_PATTERN: ${{ inputs.artifact_pattern || '' }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     prepare-artifacts:
         needs: prepare-nexus-matrix
@@ -173,7 +223,7 @@ jobs:
             - name: Download GitHub release assets
               run: |
                   mkdir -p release-assets
-                  gh release download "${{ needs.prepare-nexus-matrix.outputs.tag }}" --pattern "*.7z" --dir release-assets
+                  gh release download "${{ needs.prepare-nexus-matrix.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --pattern "*.7z" --dir release-assets
                   ls -lah release-assets
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -216,13 +266,99 @@ jobs:
                     echo "  Nexus mod ID: ${{ matrix.nexus_mod_id }}"
                     echo "  Artifact name: nexus-upload-${{ matrix.name }}"
                     echo "  Release tag: ${{ needs.prepare-nexus-matrix.outputs.tag }}"
-                    echo "  Version: ${{ needs.prepare-nexus-matrix.outputs.version }}"
+                    echo "  Version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}"
                     echo "  Mod filename: ${{ matrix.mod_filename }}"
                     echo "  Auto upload: ${{ matrix.auto_upload }}"
                     if [ "$DRY_RUN" = "true" ]; then
                       echo "Dry run enabled: skipping actual Nexus upload."
                     fi
                   fi
+
+    check-nexus-versions:
+        name: Dry Run — Check Nexus Versions
+        needs: prepare-nexus-matrix
+        if: >
+            needs.prepare-nexus-matrix.outputs.dry_run == 'true' &&
+            needs.prepare-nexus-matrix.outputs.has_uploads == 'true'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Query Nexus for existing versions
+              run: |
+                  python3 << 'PYEOF'
+                  import json, os, urllib.request, urllib.error
+
+                  rows = json.loads(os.environ['UPLOAD_MATRIX']).get('include', [])
+                  rows = [r for r in rows if not r.get('skip')]
+                  version = os.environ.get('VERSION', '')
+                  game_id = os.environ.get('NEXUS_GAME_ID', 'skyrimspecialedition')
+                  api_key = os.environ.get('UNEX_APIKEY', '')
+                  summary = open(os.environ['GITHUB_STEP_SUMMARY'], 'a')
+
+                  def w(line=''):
+                      print(line)
+                      summary.write(line + '\n')
+
+                  w('## Dry Run — Nexus Version Check')
+                  w()
+                  if not api_key:
+                      w('> **Warning:** UNEX_APIKEY is not set — cannot query Nexus.')
+                      w()
+                  w('| Feature | Planned | Status | Versions on Nexus |')
+                  w('|---------|---------|--------|-------------------|')
+
+                  api_ok = False
+                  for row in rows:
+                      name = row.get('name', '')
+                      mod_id = str(row.get('nexus_mod_id', ''))
+                      planned = row.get('mod_version') or version
+                      label = row.get('mod_filename', name)
+                      url = f'https://www.nexusmods.com/{game_id}/mods/{mod_id}'
+                      link = f'[{label}]({url})'
+
+                      if not api_key or not mod_id:
+                          w(f'| {link} | `{planned}` | ⚠️ skipped | — |')
+                          continue
+
+                      api_url = f'https://api.nexusmods.com/v1/games/{game_id}/mods/{mod_id}/files.json'
+                      req = urllib.request.Request(api_url, headers={
+                          'apikey': api_key,
+                          'User-Agent': 'community-shaders-ci/1.0',
+                          'Accept': 'application/json',
+                      })
+                      try:
+                          with urllib.request.urlopen(req, timeout=15) as resp:
+                              data = json.load(resp)
+                          api_ok = True
+                          files = data.get('files', [])
+                          main = [f for f in files if f.get('category_name') == 'MAIN']
+                          check = main if main else files
+                          seen = []
+                          for f in check:
+                              v = f.get('version', '')
+                              if v and v not in seen:
+                                  seen.append(v)
+                          versions_str = ', '.join(f'`{v}`' for v in seen[-5:]) or '—'
+                          status = '✅ exists' if planned in seen else '🆕 new'
+                          w(f'| {link} | `{planned}` | {status} | {versions_str} |')
+                      except urllib.error.HTTPError as e:
+                          err = {401: '❌ auth failed', 403: '❌ forbidden'}.get(e.code, f'❌ HTTP {e.code}')
+                          w(f'| {link} | `{planned}` | {err} | — |')
+                      except Exception:
+                          w(f'| {link} | `{planned}` | ❌ error | — |')
+
+                  w()
+                  if api_key:
+                      if api_ok:
+                          w('> ✓ UNEX_APIKEY validated.')
+                      else:
+                          w('> ⚠️ UNEX_APIKEY may be invalid — all API calls failed.')
+                  summary.close()
+                  PYEOF
+              env:
+                  UPLOAD_MATRIX: ${{ needs.prepare-nexus-matrix.outputs.upload_matrix }}
+                  VERSION: ${{ needs.prepare-nexus-matrix.outputs.version }}
+                  NEXUS_GAME_ID: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
+                  UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
 
     upload-to-nexus:
         # Reusable workflow call: runs-on is intentionally omitted (runner is defined by the
@@ -244,7 +380,8 @@ jobs:
             tag_name: ${{ needs.prepare-nexus-matrix.outputs.tag }}
             mod_version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
             mod_filename: ${{ matrix.mod_filename }}
-            changelog: ${{ inputs.changelog || '' }}
+            changelog: ${{ inputs.changelog || matrix.changelog || '' }}
+            check_existing: true
         secrets:
             UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
             UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
@@ -252,7 +389,7 @@ jobs:
     upload-summary:
         name: Upload Summary
         runs-on: ubuntu-latest
-        needs: [prepare-nexus-matrix, prepare-artifacts, upload-to-nexus]
+        needs: [prepare-nexus-matrix, prepare-artifacts, upload-to-nexus, check-nexus-versions]
         if: always() && needs.prepare-nexus-matrix.result == 'success'
         steps:
             - name: Check upload status
@@ -276,17 +413,86 @@ jobs:
             - name: Report upload result
               if: needs.prepare-nexus-matrix.outputs.dry_run != 'true' && needs.prepare-nexus-matrix.outputs.has_uploads == 'true'
               run: |
-                  RESULT="${{ needs.upload-to-nexus.result }}"
-                  if [ "$RESULT" = "success" ]; then
-                    echo "✓ All Nexus uploads completed successfully" >> $GITHUB_STEP_SUMMARY
-                    echo "" >> $GITHUB_STEP_SUMMARY
-                    echo "- [Community Shaders](https://www.nexusmods.com/skyrimspecialedition/mods/86492)" >> $GITHUB_STEP_SUMMARY
-                  else
-                    echo "⚠️ Some uploads failed or were skipped (result: $RESULT)" >> $GITHUB_STEP_SUMMARY
-                    echo "" >> $GITHUB_STEP_SUMMARY
-                    echo "**Recovery steps:**" >> $GITHUB_STEP_SUMMARY
-                    echo "1. Check the upload-to-nexus job logs for details" >> $GITHUB_STEP_SUMMARY
-                    echo "2. Verify credentials: UNEX_NEXUSMODS_SESSION_COOKIE, UNEX_APIKEY" >> $GITHUB_STEP_SUMMARY
-                    echo "3. Download failed artifacts from this workflow run and upload manually" >> $GITHUB_STEP_SUMMARY
-                    echo "4. Or re-run this workflow with the same tag to retry" >> $GITHUB_STEP_SUMMARY
-                  fi
+                  python3 << 'PYEOF'
+                  import json, os, urllib.request, urllib.error
+
+                  rows = json.loads(os.environ['UPLOAD_MATRIX']).get('include', [])
+                  rows = [r for r in rows if not r.get('skip')]
+                  version = os.environ.get('VERSION', '')
+                  game_id = os.environ.get('NEXUS_GAME_ID', 'skyrimspecialedition')
+                  api_key = os.environ.get('UNEX_APIKEY', '')
+                  summary = open(os.environ['GITHUB_STEP_SUMMARY'], 'a')
+
+                  def w(line=''):
+                      summary.write(line + '\n')
+
+                  def nexus_versions(mod_id):
+                      if not api_key or not mod_id:
+                          return None
+                      url = f'https://api.nexusmods.com/v1/games/{game_id}/mods/{mod_id}/files.json'
+                      req = urllib.request.Request(url, headers={
+                          'apikey': api_key,
+                          'User-Agent': 'community-shaders-ci/1.0',
+                          'Accept': 'application/json',
+                      })
+                      try:
+                          with urllib.request.urlopen(req, timeout=15) as resp:
+                              files = json.load(resp).get('files', [])
+                          main = [f for f in files if f.get('category_name') == 'MAIN']
+                          check = main if main else files
+                          seen = []
+                          for f in check:
+                              v = f.get('version', '')
+                              if v and v not in seen:
+                                  seen.append(v)
+                          return seen
+                      except Exception:
+                          return None
+
+                  succeeded, failed, unknowns = [], [], []
+                  rows_status = []
+                  for row in rows:
+                      name = row.get('name', '')
+                      mod_id = str(row.get('nexus_mod_id', ''))
+                      planned = row.get('mod_version') or version
+                      label = row.get('mod_filename', name)
+                      url = f'https://www.nexusmods.com/{game_id}/mods/{mod_id}'
+                      artifact = f'nexus-upload-{name}'
+                      versions = nexus_versions(mod_id)
+                      if versions is None:
+                          status, icon = 'unknown', '❓'
+                          unknowns.append(label)
+                      elif planned in versions:
+                          status, icon = 'uploaded', '✅'
+                          succeeded.append(label)
+                      else:
+                          status, icon = 'failed', '❌'
+                          failed.append(label)
+                      rows_status.append((icon, label, planned, url, artifact, status))
+
+                  if failed or unknowns:
+                      parts = []
+                      if failed:
+                          parts.append(f'{len(failed)} failed')
+                      if unknowns:
+                          parts.append(f'{len(unknowns)} unknown')
+                      w(f'⚠️ {", ".join(parts)} — {len(succeeded)} succeeded')
+                  else:
+                      w(f'✅ All {len(succeeded)} Nexus upload(s) completed successfully')
+                  w()
+                  w('| Status | Feature | Version | Nexus | Artifact |')
+                  w('|--------|---------|---------|-------|----------|')
+                  for icon, label, planned, url, artifact, status in rows_status:
+                      art = f'`{artifact}`' if status in ('failed', 'unknown') else '—'
+                      w(f'| {icon} | [{label}]({url}) | `{planned}` | [View]({url}) | {art} |')
+                  if failed or unknowns:
+                      w()
+                      w('Re-run is safe: already-uploaded versions will be automatically skipped.')
+
+                  summary.close()
+                  PYEOF
+              env:
+                  UPLOAD_MATRIX: ${{ needs.prepare-nexus-matrix.outputs.upload_matrix }}
+                  VERSION: ${{ needs.prepare-nexus-matrix.outputs.version }}
+                  NEXUS_GAME_ID: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
+                  UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
