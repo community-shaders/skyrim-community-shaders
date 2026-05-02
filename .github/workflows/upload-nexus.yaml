@@ -266,7 +266,7 @@ jobs:
                     echo "  Nexus mod ID: ${{ matrix.nexus_mod_id }}"
                     echo "  Artifact name: nexus-upload-${{ matrix.name }}"
                     echo "  Release tag: ${{ needs.prepare-nexus-matrix.outputs.tag }}"
-                    echo "  Version: ${{ needs.prepare-nexus-matrix.outputs.version }}"
+                    echo "  Version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}"
                     echo "  Mod filename: ${{ matrix.mod_filename }}"
                     echo "  Auto upload: ${{ matrix.auto_upload }}"
                     if [ "$DRY_RUN" = "true" ]; then
