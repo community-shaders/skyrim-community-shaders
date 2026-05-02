@@ -146,14 +146,19 @@ jobs:
                   python tools/feature_version_audit.py "${ARGS[@]}"
 
                   # Inject GitHub release body as the core changelog.
-                  # The jq filter returns the body as a JSON string (newlines preserved),
-                  # which Python reads via json.load so special characters are handled safely.
+                  # Fetch releases list as raw JSON and let Python search it — avoids
+                  # jq version quirks where array[0] on an empty array produces no output
+                  # instead of null, leaving the file empty and breaking json.load.
                   gh api "repos/$GITHUB_REPOSITORY/releases" \
-                    --jq "[.[] | select(.tag_name == \"$RELEASE_TAG\") | .body][0] // \"\"" \
-                    2>/dev/null > core-body.json || echo '""' > core-body.json
+                    2>/dev/null > releases.json || echo '[]' > releases.json
                   python -c "
-                  import json
-                  body = json.load(open('core-body.json')) or ''
+                  import json, os
+                  with open('releases.json') as f:
+                      releases = json.load(f)
+                  if not isinstance(releases, list):
+                      releases = []
+                  tag = os.environ.get('RELEASE_TAG', '')
+                  body = next((r.get('body') or '' for r in releases if r.get('tag_name') == tag), '')
                   with open('nexus-matrix-raw.json') as f:
                       data = json.load(f)
                   for row in data:
