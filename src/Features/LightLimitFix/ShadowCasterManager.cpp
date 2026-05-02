@@ -1068,6 +1068,17 @@ namespace ShadowCasterManager
 
 	static void ScheduleShadowCasters()
 	{
+		// VR renders both eyes per frame, so the game calls CalculateAndDrawShadowCasterLights
+		// twice. Block the second call: s_lights is not thread-safe and a re-entrant call
+		// would null out entries the first call is still iterating over.
+		static std::atomic<bool> s_inSchedule{ false };
+		if (s_inSchedule.exchange(true, std::memory_order_acquire))
+			return;
+		struct Guard
+		{
+			~Guard() { s_inSchedule.store(false, std::memory_order_release); }
+		} guard;
+
 		// VR display guard: skip scheduling when the HMD display is not active.
 		if (REL::Module::IsVR() && !GetVRDrawShadows())
 			return;
@@ -1487,6 +1498,11 @@ namespace ShadowCasterManager
 					EnableLight(e.Light, camera, ssn, i);
 					s_budget.EndLight(e.Light, 0);
 
+					// e.Light may have been cleared by EnableLight callbacks or re-entrant
+					// scheduling; bail before touching it again.
+					if (!e.Light)
+						continue;
+
 					// Record position so displacement-based redraw priority is correct next cycle.
 					if (auto* nilight = e.Light->light.get())
 						e.lastRenderedPos = nilight->world.translate;
@@ -1507,6 +1523,8 @@ namespace ShadowCasterManager
 				auto& e = s_lights.Lights[i];
 				if (e.Light && (!e.RedrawFrame || i >= s_settings.ShadowLightCount)) {
 					GameSetShadowCasterSlot(ssn, e.Light, endIdx, 1);
+					if (!e.Light)
+						continue;
 					endIdx += e.Light->shadowMapCount;
 					ShadowField(e.Light, maskIndex) = static_cast<uint32_t>(i);
 
