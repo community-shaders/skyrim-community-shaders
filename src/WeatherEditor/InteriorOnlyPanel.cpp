@@ -198,20 +198,17 @@ namespace InteriorOnlyPanel
 
 		// Delete button
 		ImGui::SameLine();
-		{
-			auto styledButton = Util::ErrorButtonStyle();
-			if (ImGui::Button("X", ImVec2(C::SCENE_DELETE_BUTTON_WIDTH * scale, 0))) {
-				if (entry.source == EntrySource::Overwrite) {
-					pendingDeleteIndex = index;
-					deleteSingleOverwritePopup.message = std::format(
-						"Delete overwrite file '{}'?\nThis will permanently remove the file from disk.",
-						entry.sourceFilename);
-					deleteSingleOverwritePopup.Request();
-				} else {
-					manager->RemoveSetting(kSceneType, index);
-					ImGui::PopID();
-					return;
-				}
+		if (Util::ErrorButton("X", ImVec2(C::SCENE_DELETE_BUTTON_WIDTH * scale, 0))) {
+			if (entry.source == EntrySource::Overwrite) {
+				pendingDeleteIndex = index;
+				deleteSingleOverwritePopup.message = std::format(
+					"Delete overwrite file '{}'?\nThis will permanently remove the file from disk.",
+					entry.sourceFilename);
+				deleteSingleOverwritePopup.Request();
+			} else {
+				manager->RemoveSetting(kSceneType, index);
+				ImGui::PopID();
+				return;
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper())

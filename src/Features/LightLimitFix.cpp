@@ -115,7 +115,7 @@ void LightLimitFix::SetupResources()
 
 		sbDesc.StructureByteStride = sizeof(ClusterAABB);
 		sbDesc.ByteWidth = sizeof(ClusterAABB) * numElements;
-		clusters = eastl::make_unique<Buffer>(sbDesc);
+		clusters = eastl::make_unique<Buffer>(sbDesc, nullptr, "LLF::Clusters");
 		srvDesc.Buffer.NumElements = numElements;
 		clusters->CreateSRV(srvDesc);
 		uavDesc.Buffer.NumElements = numElements;
@@ -124,7 +124,7 @@ void LightLimitFix::SetupResources()
 		numElements = 1;
 		sbDesc.StructureByteStride = sizeof(uint32_t);
 		sbDesc.ByteWidth = sizeof(uint32_t) * numElements;
-		lightIndexCounter = eastl::make_unique<Buffer>(sbDesc);
+		lightIndexCounter = eastl::make_unique<Buffer>(sbDesc, nullptr, "LLF::LightIndexCounter");
 		srvDesc.Buffer.NumElements = numElements;
 		lightIndexCounter->CreateSRV(srvDesc);
 		uavDesc.Buffer.NumElements = numElements;
@@ -133,7 +133,7 @@ void LightLimitFix::SetupResources()
 		numElements = clusterCount * CLUSTER_MAX_LIGHTS;
 		sbDesc.StructureByteStride = sizeof(uint32_t);
 		sbDesc.ByteWidth = sizeof(uint32_t) * numElements;
-		lightIndexList = eastl::make_unique<Buffer>(sbDesc);
+		lightIndexList = eastl::make_unique<Buffer>(sbDesc, nullptr, "LLF::LightIndexList");
 		srvDesc.Buffer.NumElements = numElements;
 		lightIndexList->CreateSRV(srvDesc);
 		uavDesc.Buffer.NumElements = numElements;
@@ -142,7 +142,7 @@ void LightLimitFix::SetupResources()
 		numElements = clusterCount;
 		sbDesc.StructureByteStride = sizeof(LightGrid);
 		sbDesc.ByteWidth = sizeof(LightGrid) * numElements;
-		lightGrid = eastl::make_unique<Buffer>(sbDesc);
+		lightGrid = eastl::make_unique<Buffer>(sbDesc, nullptr, "LLF::LightGrid");
 		srvDesc.Buffer.NumElements = numElements;
 		lightGrid->CreateSRV(srvDesc);
 		uavDesc.Buffer.NumElements = numElements;
@@ -157,7 +157,7 @@ void LightLimitFix::SetupResources()
 		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 		sbDesc.StructureByteStride = sizeof(LightData);
 		sbDesc.ByteWidth = sizeof(LightData) * MAX_LIGHTS;
-		lights = eastl::make_unique<Buffer>(sbDesc);
+		lights = eastl::make_unique<Buffer>(sbDesc, nullptr, "LLF::Lights");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;

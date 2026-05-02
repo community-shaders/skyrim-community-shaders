@@ -153,7 +153,7 @@ void TerrainShadows::SetupResources()
 
 	logger::debug("Creating constant buffers...");
 	{
-		shadowUpdateCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<ShadowUpdateCB>());
+		shadowUpdateCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<ShadowUpdateCB>(), "TerrainShadows::UpdateCB");
 	}
 
 	CompileComputeShaders();
@@ -197,7 +197,9 @@ TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
 
 void TerrainShadows::LoadHeightmap()
 {
-	static auto tes = RE::TES::GetSingleton();
+	auto tes = globals::game::tes;
+	if (!tes)
+		return;
 
 	auto worldspace = tes->GetRuntimeData2().worldSpace;
 	while (worldspace && worldspace->parentWorld && worldspace->parentUseFlags.any(RE::TESWorldSpace::ParentUseFlag::kUseLandData))
@@ -241,7 +243,7 @@ void TerrainShadows::LoadHeightmap()
 		}
 
 		texHeightMap.release();
-		texHeightMap = std::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+		texHeightMap = std::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "TerrainShadows::HeightMap");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texHeightMap->desc.Format,
@@ -299,7 +301,7 @@ void TerrainShadows::Precompute()
 			.Texture2D = { .MipSlice = 0 }
 		};
 
-		texShadowHeight = std::make_unique<Texture2D>(texDesc);
+		texShadowHeight = std::make_unique<Texture2D>(texDesc, "TerrainShadows::ShadowHeight");
 		texShadowHeight->CreateSRV(srvDesc);
 		texShadowHeight->CreateUAV(uavDesc);
 	}
@@ -327,7 +329,10 @@ void TerrainShadows::UpdateShadow()
 	}
 
 	auto accumulator = *globals::game::currentAccumulator.get();
-	auto sunLight = skyrim_cast<RE::NiDirectionalLight*>(accumulator->GetRuntimeData().activeShadowSceneNode->GetRuntimeData().sunLight->light.get());
+	auto shadowSceneNode = accumulator->GetRuntimeData().activeShadowSceneNode;
+	if (!shadowSceneNode)
+		return;
+	auto sunLight = skyrim_cast<RE::NiDirectionalLight*>(shadowSceneNode->GetRuntimeData().sunLight->light.get());
 	if (!sunLight)
 		return;
 	TracyD3D11Zone(globals::state->tracyCtx, "Terrain Occlusion - Update Shadows");

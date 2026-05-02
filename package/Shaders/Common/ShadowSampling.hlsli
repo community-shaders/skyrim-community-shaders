@@ -21,6 +21,19 @@
 #	include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #endif
 
+// Populated once per frame by Deferred::CopyShadowLightData from BSShadowDirectionalLight.
+// Column-major float4x4 projections so HLSL `mul(proj, float4(pos, 1))` matches the
+// XMMATRIX layout written by XMStoreFloat4x4 on the C++ side.
+struct DirectionalShadowLightData
+{
+	column_major float4x4 ShadowProj[2];
+	column_major float4x4 InvShadowProj[2];
+	float2 EndSplitDistances;
+	float2 StartSplitDistances;
+};
+
+StructuredBuffer<DirectionalShadowLightData> DirectionalShadowLights : register(t98);
+
 #if defined(VOLUMETRIC_SHADOWS)
 #	include "VolumetricShadows/VolumetricShadows.hlsli"
 #endif

@@ -238,14 +238,10 @@ void IBL::ReflectionsPrepass()
 
 void IBL::Prepass()
 {
-	ZoneScoped;
-	TracyD3D11Zone(globals::state->tracyCtx, "IBL");
-
 	if (settings.DisableInInteriors && Util::IsInterior())
 		return;
 
 	auto context = globals::d3d::context;
-	auto state = globals::state;
 
 	auto& dynamicCubemaps = globals::features::dynamicCubemaps;
 
@@ -257,7 +253,6 @@ void IBL::Prepass()
 		context->PSSetShaderResources(76, 2, views);
 	}
 
-	state->BeginPerfEvent("IBL");
 	std::array<ID3D11ShaderResourceView*, 1> srvs = { (dynamicCubemaps.loaded && envTexture) ? envTexture->srv.get() : nullptr };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { envIBLTexture->uav.get() };
 	std::array<ID3D11SamplerState*, 1> samplers = { Deferred::GetSingleton()->linearSampler };
@@ -300,7 +295,6 @@ void IBL::Prepass()
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 		context->CSSetShader(nullptr, nullptr, 0);
 	}
-	state->EndPerfEvent();
 
 	// Set PS shader resource
 	{
@@ -371,7 +365,7 @@ void IBL::SetupResources()
 			return;
 		}
 
-		staticDiffuseIBLTexture = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+		staticDiffuseIBLTexture = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "IBL::StaticDiffuse");
 
 		staticDiffuseIBLTexture->desc.MiscFlags |= D3D11_RESOURCE_MISC_TEXTURECUBE;
 
@@ -407,7 +401,7 @@ void IBL::SetupResources()
 			return;
 		}
 
-		staticSpecularIBLTexture = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+		staticSpecularIBLTexture = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "IBL::StaticSpecular");
 
 		staticSpecularIBLTexture->desc.MiscFlags |= D3D11_RESOURCE_MISC_TEXTURECUBE;
 

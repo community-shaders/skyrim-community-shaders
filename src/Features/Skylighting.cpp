@@ -2,6 +2,7 @@
 
 #include "ShaderCache.h"
 #include "State.h"
+#include "Utils/D3D.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Skylighting::Settings,
@@ -67,7 +68,7 @@ void Skylighting::SetupResources()
 		precipitationOcclusion.depthSRV->GetDesc(&srvDesc);
 		precipitationOcclusion.views[0]->GetDesc(&dsvDesc);
 
-		texOcclusion = new Texture2D(texDesc);
+		texOcclusion = new Texture2D(texDesc, "Skylighting::Occlusion");
 		texOcclusion->CreateSRV(srvDesc);
 		texOcclusion->CreateDSV(dsvDesc);
 	}
@@ -100,13 +101,13 @@ void Skylighting::SetupResources()
 				.WSize = texDesc.Depth }
 		};
 
-		texProbeArray = new Texture3D(texDesc);
+		texProbeArray = new Texture3D(texDesc, "Skylighting::ProbeArray");
 		texProbeArray->CreateSRV(srvDesc);
 		texProbeArray->CreateUAV(uavDesc);
 
 		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R8_UINT;
 
-		texAccumFramesArray = new Texture3D(texDesc);
+		texAccumFramesArray = new Texture3D(texDesc, "Skylighting::AccumFramesArray");
 		texAccumFramesArray->CreateSRV(srvDesc);
 		texAccumFramesArray->CreateUAV(uavDesc);
 	}
@@ -121,6 +122,7 @@ void Skylighting::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, comparisonSampler.put()));
+		Util::SetResourceName(comparisonSampler.get(), "Skylighting::ComparisonSampler");
 	}
 
 	CompileComputeShaders();
@@ -474,6 +476,7 @@ void Skylighting::SetViewFrustumVR::thunk(RE::NiCamera* a_camera, RE::NiFrustum*
 
 void Skylighting::RenderOcclusion()
 {
+	ZoneScopedS(8);
 	auto shaderCache = globals::shaderCache;
 	auto state = globals::state;
 	auto renderer = globals::game::renderer;
@@ -574,8 +577,11 @@ void Skylighting::RenderOcclusion()
 				PrecipitationShaderDirection = { PrecipitationShaderDirectionF.x, PrecipitationShaderDirectionF.y, PrecipitationShaderDirectionF.z };
 
 				static REL::Relocation<void(RE::Precipitation*, RE::NiPointer<RE::NiCamera>)> _computeProjection{ REL::RelocationID(25643, 26185) };
-				_computeProjection(precip, precip->occlusionData.camera);
-				precip->SetupMask();
+				{
+					ZoneScopedN("Skylighting - Setup Projection");
+					_computeProjection(precip, precip->occlusionData.camera);
+					precip->SetupMask();
+				}
 
 				BSParticleShaderRainEmitter* rain = new BSParticleShaderRainEmitter;
 				{
@@ -596,7 +602,10 @@ void Skylighting::RenderOcclusion()
 
 				precipitation = precipitationCopy;
 
-				_computeProjection(precip, precip->occlusionData.camera);
+				{
+					ZoneScopedN("Skylighting - Restore Projection");
+					_computeProjection(precip, precip->occlusionData.camera);
+				}
 
 				state->EndPerfEvent();
 			}

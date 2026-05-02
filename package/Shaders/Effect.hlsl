@@ -541,11 +541,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 #			endif
 
 	sh2 skylightingSH = Skylighting::SampleNoBias(positionMSSkylight);
-
-	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-	skylightingDiffuse = saturate(skylightingDiffuse);
-	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::GetFadeOutFactor(worldPosition));
-	skylightingDiffuse = Skylighting::MixDiffuse(skylightingDiffuse);
+	float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(positionMSSkylight));
 #		endif
 
 	float3 dirColor;

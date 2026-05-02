@@ -1,0 +1,20 @@
+name: Nexus Upload (Post Release)
+
+on:
+    release:
+        types: [published]
+
+jobs:
+    nexus-upload:
+        name: Nexus Upload (dry run)
+        # Fires when a draft release is published. Only stable tags (no '-') are uploaded.
+        if: >
+            !contains(github.event.release.tag_name, '-')
+        uses: ./.github/workflows/upload-nexus.yaml
+        with:
+            tag: ${{ github.event.release.tag_name }}
+            artifact_pattern: "CommunityShaders-*.7z"
+            dry_run: "true"
+        secrets:
+            UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
+            UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}

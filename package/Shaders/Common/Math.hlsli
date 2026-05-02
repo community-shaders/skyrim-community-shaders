@@ -7,6 +7,7 @@
 #define EPSILON_DIVISION 1e-6f     // For division to avoid division by zero
 #define EPSILON_GLINTS 1e-8f       // For glints calculations
 #define EPSILON_WEIGHT_SUM 1e-10f  // For weight normalization
+#define EPSILON_LENGTH_SQ 1e-20f   // Minimum dot(v,v) before rsqrt to avoid inf on degenerate vectors
 
 #define DEPTH_SKY_SENTINEL 999999.0f  // Linearized depth sentinel for sky/unmapped pixels (beyond any real geometry)
 
@@ -26,6 +27,7 @@ namespace Math
 	static const float PI = 3.1415926535897932384626433832795f;  // PI
 	static const float HALF_PI = PI * 0.5f;                      // PI / 2
 	static const float TAU = PI * 2.0f;                          // PI * 2
+	static const float INV_PI = 1.0f / PI;                       // 1 / PI
 }
 
 #endif  //__MATH_DEPENDENCY_HLSL__

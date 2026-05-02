@@ -498,6 +498,13 @@ Follow conventional commit format for consistency:
 -   **Single Responsibility**: Each feature class should handle one graphics technique only
 -   **Function Complexity**: Keep rendering functions focused; extract complex GPU operations into separate methods
 -   **Resource Management**: Always pair graphics resource creation with proper cleanup (RAII)
+-   **D3D11 Resource Naming**: Every D3D11 resource must be named for RenderDoc debuggability. Use
+    `Util::SetResourceName(ptr, "Feature::ResourceDescription")` after raw `device->Create*` calls.
+    For wrapper types (`Texture2D`, `Buffer`, `ConstantBuffer`, etc. in `Buffer.h`), pass the name
+    to the constructor and views are named automatically. Convention: `"Feature::Name"` for the
+    resource, `"Feature::Name SRV"` / `"Feature::Name UAV"` etc. for views (handled automatically
+    by the wrappers). The canonical implementation lives in `Util::SetResourceName` (`Utils/D3D.cpp`);
+    never duplicate the GUID or re-implement the call inline.
 
 ### Common Pitfalls to Avoid
 
@@ -509,3 +516,4 @@ Follow conventional commit format for consistency:
 -   **Buffer Conflicts**: Check hlslkit buffer scanning to avoid GPU register conflicts that cause rendering issues
 -   **Graphics State Corruption**: Minimize DirectX state changes; restore state after modifications
 -   **Thread Safety**: Graphics operations must consider Skyrim's rendering thread vs game logic thread
+-   **DRY Violations in Cross-Cutting Refactors**: When adding a utility pattern across many files (e.g., resource naming, debug hooks), check whether the implementation exists in multiple places before writing a new one. For example, `Buffer.h` helper classes and raw `device->Create*` callsites both need `SetResourceName` — ensure they share a single implementation, not duplicate GUID definitions or parallel helper functions. Use a forward declaration in headers to delegate to the canonical implementation in `Utils/D3D.cpp` rather than re-implementing inline.
