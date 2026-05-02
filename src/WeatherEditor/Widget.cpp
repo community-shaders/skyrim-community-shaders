@@ -262,21 +262,21 @@ std::string Widget::GetFolderName() const
 {
 	switch (form->GetFormType()) {
 	case RE::FormType::Weather:
-		return "Weathers";
+		return std::string(kWeatherFolderName);
 	case RE::FormType::LightingMaster:
-		return "Lighting Templates";
+		return std::string(kLightingTemplateFolderName);
 	case RE::FormType::ImageSpace:
-		return "ImageSpaces";
+		return std::string(kImageSpaceFolderName);
 	case RE::FormType::VolumetricLighting:
-		return "Volumetric Lighting";
+		return std::string(kVolumetricLightingFolderName);
 	case RE::FormType::ShaderParticleGeometryData:
-		return "Precipitation";
+		return std::string(kPrecipitationFolderName);
 	case RE::FormType::ReferenceEffect:
-		return "Visual Effects";
+		return std::string(kVisualEffectsFolderName);
 	case RE::FormType::Cell:
-		return "Cell Lighting";
+		return std::string(kCellLightingFolderName);
 	default:
-		return "Other Editor Widgets";
+		return std::string(kOtherEditorWidgetsFolderName);
 	}
 }
 
