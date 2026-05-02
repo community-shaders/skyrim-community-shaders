@@ -380,7 +380,7 @@ jobs:
             tag_name: ${{ needs.prepare-nexus-matrix.outputs.tag }}
             mod_version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
             mod_filename: ${{ matrix.mod_filename }}
-            changelog: ${{ matrix.changelog || inputs.changelog || '' }}
+            changelog: ${{ inputs.changelog || matrix.changelog || '' }}
             check_existing: true
         secrets:
             UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
