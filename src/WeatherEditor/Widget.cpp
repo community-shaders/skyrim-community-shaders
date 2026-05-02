@@ -92,10 +92,12 @@ void Widget::Load(bool showNotification)
 
 	if (!settingsFile.good() || !settingsFile.is_open()) {
 		logger::warn("Failed to open settings file: {}", filePath);
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Failed to open file for {}", GetEditorID()),
-			ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Failed to open file for {}", GetEditorID()),
+				ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+				3.0f);
+		}
 		return;
 	}
 
@@ -106,10 +108,12 @@ void Widget::Load(bool showNotification)
 		// Validate that we loaded valid JSON
 		if (js.is_null()) {
 			logger::warn("{}: Loaded JSON is null, file may be empty or invalid", filePath);
-			EditorWindow::GetSingleton()->ShowNotification(
-				std::format("Invalid file for {} - resetting to vanilla", GetEditorID()),
-				ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-				3.0f);
+			if (showNotification) {
+				EditorWindow::GetSingleton()->ShowNotification(
+					std::format("Invalid file for {} - resetting to vanilla", GetEditorID()),
+					ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+					3.0f);
+			}
 			js = json();
 			LoadSettings();
 			return;
@@ -128,20 +132,24 @@ void Widget::Load(bool showNotification)
 		logger::error("Error parsing settings for file ({}) : {}\n", filePath, e.what());
 		logger::error("Parse error at byte {}: {}", e.byte, e.what());
 		settingsFile.close();
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Parse error for {} - resetting to vanilla", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Parse error for {} - resetting to vanilla", GetEditorID()),
+				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				3.0f);
+		}
 		js = json();
 		LoadSettings();
 		return;
 	} catch (const std::exception& e) {
 		logger::error("Unexpected error loading settings file ({}) : {}\n", filePath, e.what());
 		settingsFile.close();
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Error loading {} - resetting to vanilla", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Error loading {} - resetting to vanilla", GetEditorID()),
+				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				3.0f);
+		}
 		js = json();
 		LoadSettings();
 		return;
