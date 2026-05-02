@@ -71,6 +71,7 @@ namespace LightLimitFix
 
 	StructuredBuffer<ShadowLightData> ShadowsLights : register(t100);
 	Texture2DArray<float> ShadowMaps : register(t101);
+	Texture2DArray<float> DirectionalShadowCascades : register(t99);
 
 	float GetDirectionalShadow(float3 worldPosition, float3 worldPositionWS, float2x2 rotationMatrix, uint eyeIndex)
 	{

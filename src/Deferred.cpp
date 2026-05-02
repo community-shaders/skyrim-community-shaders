@@ -620,6 +620,10 @@ void Deferred::CopyShadowLightData()
 
 	ID3D11ShaderResourceView* srv = directionalShadowLights->srv.get();
 	context->PSSetShaderResources(98, 1, &srv);
+
+	// t99: cascade depth array used by LightLimitFix::GetDirectionalShadow for PCF sampling.
+	ID3D11ShaderResourceView* cascadeSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS_ESRAM].depthSRV;
+	context->PSSetShaderResources(99, 1, &cascadeSRV);
 }
 
 void Deferred::ClearShaderCache()
