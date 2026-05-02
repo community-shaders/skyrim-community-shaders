@@ -1,5 +1,4 @@
 #include "Deferred.h"
-#include "Features/WeatherEditor.h"
 #include "Features/Upscaling.h"
 #include "FrameAnnotations.h"
 #include "Globals.h"
@@ -137,14 +136,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				Feature::ForEachLoadedFeature("DataLoaded", [](Feature* feature) { feature->DataLoaded(); });
 			}
 
-			break;
-		}
-	case SKSE::MessagingInterface::kNewGame:
-	case SKSE::MessagingInterface::kPostLoadGame:
-		{
-			if (errors.empty()) {
-				WeatherEditor::EnsureDataLoaded();
-			}
 			break;
 		}
 	}

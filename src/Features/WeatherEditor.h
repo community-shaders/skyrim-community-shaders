@@ -41,8 +41,6 @@ public:
 	virtual void DataLoaded() override;
 	virtual void Prepass() override;
 
-	static void EnsureDataLoaded();
-
 	void LerpWeather(RE::TESWeather*, RE::TESWeather*, float);
 
 	/**
@@ -166,6 +164,7 @@ private:
 	static void DisplayWindInfo(RE::TESWeather* weather);
 
 	// Helper functions
+	static void EnsureDataLoaded();
 	static void LoadAllWeathers();
 	static void UpdateFilteredWeathers();
 	static int FindWeatherIndex(RE::TESWeather* targetWeather);

@@ -93,7 +93,7 @@ void WeatherEditor::DrawSettings()
 
 void WeatherEditor::Prepass()
 {
-	if (!s_resourcesInitialized && EditorWindow::CanBeOpen()) {
+	if (s_dataAvailable && !s_resourcesInitialized && EditorWindow::CanBeOpen()) {
 		EnsureDataLoaded();
 	}
 
