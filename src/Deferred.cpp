@@ -15,6 +15,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
+#include "Features/VRS.h"
 #include "Features/WeatherEditor.h"
 
 #include "Hooks.h"
@@ -717,7 +718,9 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 		auto& terrainBlending = globals::features::terrainBlending;
 		// Defer terrain rendering until after everything else
 		if (terrainBlending.loaded && terrainBlending.settings.Enabled) {
+			globals::features::vrs.SuspendVRS();
 			terrainBlending.RenderTerrainBlendingPasses();
+			globals::features::vrs.ResumeVRS();
 		}
 	}
 
