@@ -324,7 +324,7 @@ void Effect11::CheckCommonData()
 
 		auto& settingManager = SettingManager::GetSingleton();
 		auto ui = globals::game::ui;
-		bool isMenuOpen = ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
+		bool isMenuOpen = ui->IsMenuOpen(RE::MapMenu::MENU_NAME);
 		enableEffect = !isMenuOpen && settingManager.GetValue<bool>("UseEffect", "GLOBAL");
 
 		auto& effectManager = EffectManager::GetSingleton();

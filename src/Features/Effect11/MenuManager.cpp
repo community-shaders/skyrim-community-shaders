@@ -3,6 +3,7 @@
 #include "EffectManager.h"
 #include "PresetManager.h"
 #include "SettingManager.h"
+#include "Utils/ShaderPatches.h"
 
 static const char* const timeOfDayNames[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "InteriorDay", "InteriorNight" };
 
@@ -46,6 +47,7 @@ void MenuManager::RenderSettingsPanel()
 	auto& effectManager = EffectManager::GetSingleton();
 
 	if (ImGui::Button("Apply")) {
+		Util::ShaderPatches::Load();
 		settingManager.Load();
 		effectManager.Apply();
 	}
