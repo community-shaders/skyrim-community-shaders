@@ -465,16 +465,14 @@ void EditorWindow::ShowObjectsWindow()
 						auto* menu = globals::menu;
 						if (menu && menu->uiIcons.deleteSettings.texture) {
 							const float iconSize = ImGui::GetFrameHeight() * 0.85f;
-							auto _style = Util::ErrorButtonStyle();
 							ImGui::SetNextItemAllowOverlap();
 							char idBuf[32];
 							snprintf(idBuf, sizeof(idBuf), "##jsondel_%s", widget->GetFormID().c_str());
-							if (ImGui::ImageButton(idBuf, menu->uiIcons.deleteSettings.texture, { iconSize, iconSize })) {
+							if (Util::ErrorImageButton(idBuf, menu->uiIcons.deleteSettings.texture, { iconSize, iconSize })) {
 								pendingDeleteWidget = widget;
 								pendingDeletePopupRequested = true;
 							}
-							if (ImGui::IsItemHovered())
-								ImGui::SetTooltip("Delete JSON file");
+							Util::AddTooltip("Delete JSON file");
 						}
 					}
 				};
@@ -972,9 +970,7 @@ void EditorWindow::RenderUI()
 				ImGui::BeginDisabled();
 				ImGui::MenuItem("Edit Current Cell Lighting");
 				ImGui::EndDisabled();
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::SetTooltip("Only available in interior cells");
-				}
+				Util::AddTooltip("Only available in interior cells", ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
 			}
 
 			ImGui::Separator();
@@ -982,16 +978,12 @@ void EditorWindow::RenderUI()
 			if (ImGui::Checkbox("Auto-Apply Changes", &settings.autoApplyChanges)) {
 				Save();
 			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Automatically apply weather changes to the game as you edit");
-			}
+			Util::AddTooltip("Automatically apply weather changes to the game as you edit");
 
 			if (ImGui::Checkbox("Enable Inherit From Parent", &settings.enableInheritFromParent)) {
 				Save();
 			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Show inherit from parent options in weather widgets");
-			}
+			Util::AddTooltip("Show inherit from parent options in weather widgets");
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
@@ -1004,8 +996,7 @@ void EditorWindow::RenderUI()
 			}
 			if (hdrActive) {
 				ImGui::EndDisabled();
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-					ImGui::SetTooltip("Viewport is unavailable when HDR Display is enabled");
+				Util::AddTooltip("Viewport is unavailable when HDR Display is enabled", ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
 			}
 			if (ImGui::Checkbox("Palette", &PaletteWindow::GetSingleton()->open)) {
 			}
@@ -1089,8 +1080,7 @@ void EditorWindow::RenderUI()
 				ImGui::PopStyleColor();
 			}
 			ImGui::PopStyleVar(2);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip(canUndo ? "Undo (Ctrl+Z) - %d states" : "Undo (Ctrl+Z) - No changes to undo", (int)undoStack.size());
+			Util::AddTooltip(canUndo ? std::format("Undo (Ctrl+Z) - {} states", (int)undoStack.size()).c_str() : "Undo (Ctrl+Z) - No changes to undo");
 		}
 
 		// Right-aligned items — use SetCursorScreenPos to bypass menu bar GroupOffset
@@ -1229,23 +1219,20 @@ void EditorWindow::RenderUI()
 			bool isActive = previewMode == PreviewMode::FreeCamera || previewMode == PreviewMode::FreeCameraLocked;
 			if (DrawToggleIconButton("##FreeCamera", menu->uiIcons.freeCamera.texture, isActive, freeCameraX))
 				EnterPreviewMode(PreviewMode::FreeCamera);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip(isActive ? "Exit Free Camera" : "Free Camera (scroll to adjust speed)");
+			Util::AddTooltip(isActive ? "Exit Free Camera" : "Free Camera (scroll to adjust speed)");
 		}
 		if (hasPlayMode) {
 			bool isActive = previewMode == PreviewMode::PlayMode;
 			if (DrawToggleIconButton("##PlayMode", menu->uiIcons.playMode.texture, isActive, playModeX))
 				EnterPreviewMode(PreviewMode::PlayMode);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip(isActive ? "Exit Play Mode" : "Play Mode - Walk around normally");
+			Util::AddTooltip(isActive ? "Exit Play Mode" : "Play Mode - Walk around normally");
 		}
 
 		if (hasPauseButton) {
 			bool isPaused = IsTimePaused();
 			if (DrawToggleIconButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, isPaused, pauseButtonX))
 				TogglePause();
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
+			Util::AddTooltip(isPaused ? "Resume Time" : "Pause Time");
 		}
 
 		// Period text and time slider
@@ -1260,15 +1247,9 @@ void EditorWindow::RenderUI()
 
 		// Close button
 		ImGui::SetCursorScreenPos(ImVec2(xButtonX, cursorY));
-		{
-			auto _style = Util::ErrorButtonStyle();
-			if (ImGui::Button("X", ImVec2(closeButtonSize, closeButtonSize))) {
-				open = false;
-			}
-		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Close Weather Editor (Esc)");
-		}
+		if (Util::ErrorButton("X", ImVec2(closeButtonSize, closeButtonSize)))
+			open = false;
+		Util::AddTooltip("Close Weather Editor (Esc)");
 
 		ImGui::PopClipRect();  // End bottom-border clip rect
 

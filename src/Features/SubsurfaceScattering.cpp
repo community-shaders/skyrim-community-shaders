@@ -233,7 +233,7 @@ void SubsurfaceScattering::DrawSSS()
 
 		auto mask = renderer->GetRuntimeData().renderTargets[MASKS];
 		auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
-		auto normal = renderer->GetRuntimeData().renderTargets[globals::deferred->normalRoughnessRT];
+		auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
 
 		ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);

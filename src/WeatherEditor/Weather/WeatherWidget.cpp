@@ -141,9 +141,7 @@ void WeatherWidget::DrawWidget()
 				if (Util::ButtonWithFlash("Inherit All")) {
 					InheritAllFromParent();
 				}
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Copy all parameter values from parent weather");
-				}
+				Util::AddTooltip("Copy all parameter values from parent weather");
 
 				if (!parent->IsOpen()) {
 					ImGui::SameLine();
@@ -171,7 +169,7 @@ void WeatherWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
 			DrawProperties("Sun", { { "Sun Damage", UINT8_SLIDER } });
-			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
+			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", UINT8_SLIDER }, { "Wind Direction Range", UINT8_SLIDER } });
 			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", UINT8_SLIDER }, { "Precipitation End Fade Out", UINT8_SLIDER } });
 			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", UINT8_SLIDER }, { "Thunder Lightning End Fade Out", UINT8_SLIDER },
 											{ "Thunder Lightning Frequency", UINT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
@@ -247,9 +245,7 @@ void WeatherWidget::DrawWidget()
 								pendingReinit = true;
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-						}
+						Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 						ImGui::SameLine();
 					}
 
@@ -268,9 +264,7 @@ void WeatherWidget::DrawWidget()
 								}
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("Open this ImageSpace for editing");
-						}
+						Util::AddTooltip("Open this ImageSpace for editing");
 					}
 
 					ImGui::PopID();
@@ -295,9 +289,7 @@ void WeatherWidget::DrawWidget()
 								pendingReinit = true;
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-						}
+						Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 						ImGui::SameLine();
 					}
 
@@ -316,9 +308,7 @@ void WeatherWidget::DrawWidget()
 								}
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("Open this Volumetric Lighting for editing");
-						}
+						Util::AddTooltip("Open this Volumetric Lighting for editing");
 					}
 
 					ImGui::PopID();
@@ -338,9 +328,7 @@ void WeatherWidget::DrawWidget()
 							pendingReinit = true;
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-					}
+					Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 					ImGui::SameLine();
 				}
 
@@ -359,9 +347,7 @@ void WeatherWidget::DrawWidget()
 							}
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("Open this Precipitation for editing");
-					}
+					Util::AddTooltip("Open this Precipitation for editing");
 				}
 
 				ImGui::Spacing();
@@ -379,9 +365,7 @@ void WeatherWidget::DrawWidget()
 							pendingReinit = true;
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-					}
+					Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 					ImGui::SameLine();
 				}
 
@@ -400,9 +384,7 @@ void WeatherWidget::DrawWidget()
 							}
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("Open this Visual Effect for editing");
-					}
+					Util::AddTooltip("Open this Visual Effect for editing");
 				}
 
 				ImGui::Spacing();
@@ -558,30 +540,30 @@ void WeatherWidget::SetWeatherValues()
 	auto& colorData = weather->colorData;
 	auto& fogData = weather->fogData;
 
-	weather->data.transDelta = (uint8_t)weatherProps["Trans Delta"];
+	weather->data.transDelta = static_cast<uint8_t>(weatherProps["Trans Delta"]);
 
 	// Sun
-	data.sunGlare = (uint8_t)weatherProps["Sun Glare"];
-	data.sunDamage = (uint8_t)weatherProps["Sun Damage"];
+	data.sunGlare = static_cast<uint8_t>(weatherProps["Sun Glare"]);
+	data.sunDamage = static_cast<uint8_t>(weatherProps["Sun Damage"]);
 
 	// Precipitation
-	data.precipitationBeginFadeIn = (uint8_t)weatherProps["Precipitation Begin Fade In"];
-	data.precipitationEndFadeOut = (uint8_t)weatherProps["Precipitation End Fade Out"];
+	data.precipitationBeginFadeIn = static_cast<uint8_t>(weatherProps["Precipitation Begin Fade In"]);
+	data.precipitationEndFadeOut = static_cast<uint8_t>(weatherProps["Precipitation End Fade Out"]);
 
 	// Lightning
-	data.thunderLightningBeginFadeIn = (uint8_t)weatherProps["Thunder Lightning Begin Fade In"];
-	data.thunderLightningEndFadeOut = (uint8_t)weatherProps["Thunder Lightning End Fade Out"];
-	data.thunderLightningFrequency = (int8_t)weatherProps["Thunder Lightning Frequency"];
+	data.thunderLightningBeginFadeIn = static_cast<uint8_t>(weatherProps["Thunder Lightning Begin Fade In"]);
+	data.thunderLightningEndFadeOut = static_cast<uint8_t>(weatherProps["Thunder Lightning End Fade Out"]);
+	data.thunderLightningFrequency = static_cast<int8_t>(static_cast<uint8_t>(weatherProps["Thunder Lightning Frequency"]));
 	Float3ToColor(weatherColors["Lightning Color"], weather->data.lightningColor);
 
 	// Visual Effects
-	data.visualEffectBegin = (uint8_t)weatherProps["Visual Effect Begin"];
-	data.visualEffectEnd = (uint8_t)weatherProps["Visual Effect End"];
+	data.visualEffectBegin = static_cast<uint8_t>(weatherProps["Visual Effect Begin"]);
+	data.visualEffectEnd = static_cast<uint8_t>(weatherProps["Visual Effect End"]);
 
 	// Wind
-	data.windSpeed = (uint8_t)weatherProps["Wind Speed"];
-	data.windDirection = (int8_t)weatherProps["Wind Direction"];
-	data.windDirectionRange = (int8_t)weatherProps["Wind Direction Range"];
+	data.windSpeed = static_cast<uint8_t>(weatherProps["Wind Speed"]);
+	data.windDirection = static_cast<uint8_t>(weatherProps["Wind Direction"]);
+	data.windDirectionRange = static_cast<uint8_t>(weatherProps["Wind Direction Range"]);
 
 	// Fog
 	fogData.dayNear = fogProperties["Day Near"];
@@ -624,8 +606,8 @@ void WeatherWidget::SetWeatherValues()
 	for (size_t i = 0; i < TESWeather::kTotalLayers; i++) {
 		auto& settingsCloud = settings.clouds[i];
 
-		weather->cloudLayerSpeedX[i] = (int8_t)settingsCloud.cloudLayerSpeedX;
-		weather->cloudLayerSpeedY[i] = (int8_t)settingsCloud.cloudLayerSpeedY;
+		weather->cloudLayerSpeedX[i] = static_cast<int8_t>(settingsCloud.cloudLayerSpeedX);
+		weather->cloudLayerSpeedY[i] = static_cast<int8_t>(settingsCloud.cloudLayerSpeedY);
 
 		if (!settingsCloud.enabled) {
 			disabledBits |= (1 << i);
@@ -746,7 +728,7 @@ void WeatherWidget::LoadWeatherValues()
 	// Lightning
 	weatherProps["Thunder Lightning Begin Fade In"] = data.thunderLightningBeginFadeIn;
 	weatherProps["Thunder Lightning End Fade Out"] = data.thunderLightningEndFadeOut;
-	weatherProps["Thunder Lightning Frequency"] = (uint8_t)data.thunderLightningFrequency;
+	weatherProps["Thunder Lightning Frequency"] = static_cast<uint8_t>(data.thunderLightningFrequency);
 	ColorToFloat3(data.lightningColor, weatherColors["Lightning Color"]);
 
 	// Visual Effects
@@ -1386,9 +1368,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 					changed = true;
 				}
 			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-			}
+			Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 			ImGui::SameLine();
 		}
 

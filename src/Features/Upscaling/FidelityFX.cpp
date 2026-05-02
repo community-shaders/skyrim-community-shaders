@@ -413,7 +413,7 @@ void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 
 	if (globals::game::isVR) {
 		// Prepare per-eye inputs and clear mask
-		upscaling.PreparePerEyeInputs(a_upscalingTexture, depthTexture.texture);
+		upscaling.PreparePerEyeInputs(a_upscalingTexture);
 
 		uint32_t numViews = 2;
 		uint32_t eyeWidth = (uint32_t)(renderSize.x / 2);

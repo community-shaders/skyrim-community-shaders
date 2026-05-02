@@ -1110,13 +1110,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 positionMSSkylight = input.WPosition.xyz;
 #				endif
 
-	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+	sh2 skylightingSH = Skylighting::SampleNoBias(positionMSSkylight);
 	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
 
-	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-	skylightingDiffuse = saturate(skylightingDiffuse);
-	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
-	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+	float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(input.WPosition.xyz));
 
 	wetnessOcclusion = inWorld ? pow(saturate(skylighting), 2) : 0;
 #			endif
@@ -1131,9 +1128,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			if defined(SKYLIGHTING)
 	sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
-	float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
-	skylightingSpecular = saturate(skylightingSpecular);
-	skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+	float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe, Skylighting::GetFadeOutFactor(input.WPosition.xyz));
 #			endif
 
 	float fresnel = GetFresnelValue(normal, viewDirection);

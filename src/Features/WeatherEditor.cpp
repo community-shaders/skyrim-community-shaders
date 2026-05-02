@@ -21,7 +21,18 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void WeatherEditor::DataLoaded()
 {
-	EditorWindow::GetSingleton()->SetupResources();
+	s_dataAvailable = true;
+}
+
+void WeatherEditor::EnsureDataLoaded()
+{
+	if (!s_dataAvailable)
+		return;
+
+	if (!s_resourcesInitialized) {
+		EditorWindow::GetSingleton()->SetupResources();
+		s_resourcesInitialized = true;
+	}
 	LoadAllWeathers();
 }
 
@@ -63,6 +74,7 @@ void LerpDirectional(RE::BGSDirectionalAmbientLightingColors::Directional& oldCo
 
 void WeatherEditor::DrawSettings()
 {
+	EnsureDataLoaded();
 	bool canOpen = EditorWindow::CanBeOpen();
 	ImGui::BeginDisabled(!canOpen);
 	if (ImGui::Button("Open Editor", { -1, 0 }))
@@ -152,8 +164,8 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 	newWeather->data.visualEffectEnd = LerpUint8_t(oldWeather->data.visualEffectEnd, newWeather->data.visualEffectEnd, currentWeatherPct);
 
 	//// Wind
-	newWeather->data.windDirection = LerpInt8_t(oldWeather->data.windDirection, newWeather->data.windDirection, currentWeatherPct);
-	newWeather->data.windDirectionRange = LerpInt8_t(oldWeather->data.windDirectionRange, newWeather->data.windDirectionRange, currentWeatherPct);
+	newWeather->data.windDirection = LerpUint8_t(oldWeather->data.windDirection, newWeather->data.windDirection, currentWeatherPct);
+	newWeather->data.windDirectionRange = LerpUint8_t(oldWeather->data.windDirectionRange, newWeather->data.windDirectionRange, currentWeatherPct);
 	newWeather->data.windSpeed = LerpUint8_t(oldWeather->data.windSpeed, newWeather->data.windSpeed, currentWeatherPct);
 
 	//// Fog

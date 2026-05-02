@@ -5,6 +5,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
+#include "Utils/D3D.h"
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
@@ -17,7 +18,6 @@
 #include "Features/WeatherEditor.h"
 
 #include "Hooks.h"
-#include "Utils/D3DStateBackup.h"
 
 struct DepthStates
 {
@@ -106,6 +106,8 @@ void Deferred::SetupResources()
 		SetupRenderTarget(SPECULAR, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Reflectance
 		SetupRenderTarget(REFLECTANCE, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		// Normal + Roughness
+		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 
@@ -126,46 +128,33 @@ void Deferred::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
+		Util::SetResourceName(linearSampler, "Deferred::LinearSampler");
 
 		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointSampler));
+		Util::SetResourceName(pointSampler, "Deferred::PointSampler");
 	}
 
+	// Directional shadow structured buffer (t98): CPU-written each frame, read-only on GPU.
+	// One element holds the sun cascade data uploaded from BSShadowDirectionalLight.
 	{
-		auto device = globals::d3d::device;
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(DirectionalShadowLightData);
+		sbDesc.ByteWidth = sizeof(DirectionalShadowLightData);
 
-		D3D11_BLEND_DESC blendDesc{};
-		blendDesc.IndependentBlendEnable = TRUE;
-		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-		blendDesc.RenderTarget[1].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_BLUE;
-		DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, compositeBlendState.put()));
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 1;
 
-		D3D11_DEPTH_STENCIL_DESC dsDesc{};
-		dsDesc.DepthEnable = TRUE;
-		dsDesc.DepthFunc = D3D11_COMPARISON_GREATER;
-		dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-		dsDesc.StencilEnable = FALSE;
-		DX::ThrowIfFailed(device->CreateDepthStencilState(&dsDesc, compositeDepthStencilState.put()));
-
-		D3D11_DEPTH_STENCIL_DESC stencilDsDesc{};
-		stencilDsDesc.DepthEnable = TRUE;
-		stencilDsDesc.DepthFunc = D3D11_COMPARISON_GREATER;
-		stencilDsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-		stencilDsDesc.StencilEnable = TRUE;
-		stencilDsDesc.StencilReadMask = 0xFF;
-		stencilDsDesc.StencilWriteMask = 0x00;
-		stencilDsDesc.FrontFace.StencilFunc = D3D11_COMPARISON_NOT_EQUAL;
-		stencilDsDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
-		stencilDsDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
-		stencilDsDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
-		stencilDsDesc.BackFace = stencilDsDesc.FrontFace;
-		DX::ThrowIfFailed(device->CreateDepthStencilState(&stencilDsDesc, compositeStencilDSState.put()));
-
-		D3D11_RASTERIZER_DESC rsDesc{};
-		rsDesc.FillMode = D3D11_FILL_SOLID;
-		rsDesc.CullMode = D3D11_CULL_NONE;
-		rsDesc.DepthClipEnable = FALSE;
-		DX::ThrowIfFailed(device->CreateRasterizerState(&rsDesc, compositeRasterizerState.put()));
+		delete directionalShadowLights;
+		directionalShadowLights = new Buffer(sbDesc, nullptr, "Deferred::DirectionalShadowLights");
+		directionalShadowLights->CreateSRV(srvDesc);
 	}
 }
 
@@ -189,9 +178,7 @@ void Deferred::ReflectionsPrepasses()
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) {
-		feature->ReflectionsPrepass();
-	});
+	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) { feature->ReflectionsPrepass(); }, true);
 }
 
 void Deferred::EarlyPrepasses()
@@ -211,9 +198,10 @@ void Deferred::EarlyPrepasses()
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) {
-		feature->EarlyPrepass();
-	});
+	// Shadow maps have just been rendered — upload BSShadowDirectionalLight data to t98.
+	CopyShadowLightData();
+
+	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) { feature->EarlyPrepass(); }, true);
 }
 
 void Deferred::PrepassPasses()
@@ -230,9 +218,7 @@ void Deferred::PrepassPasses()
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::truePBR->PrePass();
-	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) {
-		feature->Prepass();
-	});
+	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); }, true);
 }
 
 void Deferred::StartDeferred()
@@ -251,12 +237,10 @@ void Deferred::StartDeferred()
 		forwardRenderTargets[i] = renderTargets[i];
 	}
 
-	normalRoughnessRT = forwardRenderTargets[2];
-
 	RE::RENDER_TARGET targets[8]{
 		RE::RENDER_TARGET::kMAIN,
 		RE::RENDER_TARGET::kMOTION_VECTOR,
-		normalRoughnessRT,
+		NORMALROUGHNESS,
 		ALBEDO,
 		SPECULAR,
 		REFLECTANCE,
@@ -289,12 +273,9 @@ void Deferred::StartDeferred()
 			vrBuffer = *VRValues.get();
 		}
 		if (vrBuffer) {
-			context->PSSetConstantBuffers(12, 1, buffers);
-			context->PSSetConstantBuffers(13, 1, &vrBuffer);
 			context->CSSetConstantBuffers(12, 1, buffers);
 			context->CSSetConstantBuffers(13, 1, &vrBuffer);
 		} else {
-			context->PSSetConstantBuffers(12, 1, buffers);
 			context->CSSetConstantBuffers(12, 1, buffers);
 		}
 	}
@@ -318,14 +299,33 @@ void Deferred::DeferredPasses()
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
+	{
+		ID3D11Buffer* buffers[1] = { *globals::game::perFrame };
+		ID3D11Buffer* vrBuffer = nullptr;
+
+		if (REL::Module::IsVR()) {
+			static REL::Relocation<ID3D11Buffer**> VRValues{ REL::Offset(0x3180688) };
+			vrBuffer = *VRValues.get();
+		}
+		if (vrBuffer) {
+			context->CSSetConstantBuffers(12, 1, buffers);
+			context->CSSetConstantBuffers(13, 1, &vrBuffer);
+		} else {
+			context->CSSetConstantBuffers(12, 1, buffers);
+		}
+	}
+
 	auto specular = renderer->GetRuntimeData().renderTargets[SPECULAR];
 	auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
-	auto normalRoughness = renderer->GetRuntimeData().renderTargets[normalRoughnessRT];
+	auto normalRoughness = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
 	auto masks = renderer->GetRuntimeData().renderTargets[MASKS];
 
 	auto main = renderer->GetRuntimeData().renderTargets[forwardRenderTargets[0]];
+	auto normals = renderer->GetRuntimeData().renderTargets[forwardRenderTargets[2]];
 	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	auto reflectance = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
+
+	auto motionVectors = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	bool interior = Util::IsInterior();
 
@@ -336,6 +336,8 @@ void Deferred::DeferredPasses()
 		ssgi.DrawSSGI();
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
+
+	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
 	auto& sss = globals::features::subsurfaceScattering;
 	if (sss.loaded)
@@ -351,83 +353,52 @@ void Deferred::DeferredPasses()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		Util::D3DStateBackup stateBackup;
-		stateBackup.Backup(context);
-
-		auto& mainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-		auto normalRoughnessCopyRT = (normalRoughnessRT == RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK) ? RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK_SWAP : RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK;
-		auto& normalRoughnessCopy = renderer->GetRuntimeData().renderTargets[normalRoughnessCopyRT];
-		float2 resolution = Util::ConvertToDynamic(globals::state->screenSize);
-		D3D11_BOX srcBox = { 0, 0, 0, (UINT)resolution.x, (UINT)resolution.y, 1 };
-		context->CopySubresourceRegion(mainCopy.texture, 0, 0, 0, 0, main.texture, 0, &srcBox);
-		context->CopySubresourceRegion(normalRoughnessCopy.texture, 0, 0, 0, 0, normalRoughness.texture, 0, &srcBox);
-
-		// Constant buffers
-		{
-			ID3D11Buffer* buffers[1] = { *globals::game::perFrame };
-			context->PSSetConstantBuffers(12, 1, buffers);
-
-			if (REL::Module::IsVR()) {
-				static REL::Relocation<ID3D11Buffer**> VRValues{ REL::Offset(0x3180688) };
-				ID3D11Buffer* vrBuffer = *VRValues.get();
-				if (vrBuffer)
-					context->PSSetConstantBuffers(13, 1, &vrBuffer);
-			}
-		}
-
-		// SRVs
-		ID3D11ShaderResourceView* srvs[17]{
-			mainCopy.SRV,                                                                                           // t0  MainInputTexture
-			specular.SRV,                                                                                           // t1  SpecularTexture
-			normalRoughnessCopy.SRV,                                                                                // t2  NormalRoughnessTexture
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,          // t3  DepthTexture
-			albedo.SRV,                                                                                             // t4  AlbedoTexture
-			masks.SRV,                                                                                              // t5  MasksTexture
-			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                                     // t6  ReflectanceTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                               // t7  EnvTexture
-			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,                    // t8  EnvReflectionsTexture
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,          // t9  SkylightingProbeArray
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr,  // t10 stbn
-			ssgi_ao,                                                                                                // t11 SsgiAoTexture
-			ssgi_hq_spec ? nullptr : ssgi_y,                                                                        // t12 SsgiYTexture
-			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                                     // t13 SsgiCoCgTexture
-			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                                  // t14 SsgiSpecularTexture
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                                    // t15 EnvIBLTexture
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                                    // t16 SkyIBLTexture
+		ID3D11ShaderResourceView* srvs[16]{
+			specular.SRV,                                                                                    // t0  SpecularTexture
+			albedo.SRV,                                                                                      // t1  AlbedoTexture
+			normalRoughness.SRV,                                                                             // t2  NormalRoughnessTexture
+			masks.SRV,                                                                                       // t3  MasksTexture
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(false) : nullptr,  // t4  DepthTexture (24/32-bit; HLSL type baked at compile via TERRAIN_BLENDING)
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                              // t5  ReflectanceTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                        // t6  EnvTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,             // t7  EnvReflectionsTexture
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,   // t8  SkylightingProbeArray
+			nullptr,                                                                                         // t9  unused
+			ssgi_ao,                                                                                         // t10 SsgiAoTexture
+			ssgi_hq_spec ? nullptr : ssgi_y,                                                                 // t11 SsgiYTexture
+			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                              // t12 SsgiCoCgTexture
+			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                           // t13 SsgiSpecularTexture
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t14 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t15 SkyIBLTexture
 		};
 
-		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-
 		if (dynamicCubemaps.loaded)
-			context->PSSetSamplers(0, 1, &linearSampler);
+			context->CSSetSamplers(0, 1, &linearSampler);
 
-		// Render targets + stencil test for VR stereo culling
-		bool useStencil = globals::game::isVR && globals::features::vr.stereoOpt.IsStencilActive();
-		ID3D11RenderTargetView* rtvs[2]{ main.RTV, normalRoughness.RTV };
-		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, depth.views[0]);
-		context->OMSetBlendState(compositeBlendState.get(), nullptr, 0xFFFFFFFF);
-		context->OMSetDepthStencilState(useStencil ? compositeStencilDSState.get() : compositeDepthStencilState.get(), 1);
+		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
-		// Viewport
-		D3D11_VIEWPORT vp{};
-		vp.Width = resolution.x;
-		vp.Height = resolution.y;
-		vp.MinDepth = 0.0f;
-		vp.MaxDepth = 1.0f;
-		context->RSSetViewports(1, &vp);
-		context->RSSetState(compositeRasterizerState.get());
+		// Bind VRStereoOptimizations mode texture for Eye 1 skip.
+		// Bind null when disabled so stale mode data doesn't cause incorrect early-exits
+		// in DeferredCompositeCS (null SRV reads return 0 = MODE_DISOCCLUDED, all pixels composite normally).
+		auto& vrStereoOpt = globals::features::vr.stereoOpt;
+		bool stereoCullingReady = globals::features::vr.IsStereoOptimizationCullingReady();
+		ID3D11ShaderResourceView* modeSRV = stereoCullingReady ? vrStereoOpt.GetModeTextureSRV() : nullptr;
+		context->CSSetShaderResources(16, 1, &modeSRV);
 
-		// Shaders and draw
-		context->VSSetShader(GetCompositeVS(), nullptr, 0);
-		context->PSSetShader(GetCompositePS(interior), nullptr, 0);
-		context->GSSetShader(nullptr, nullptr, 0);
+		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
-		context->IASetInputLayout(nullptr);
-		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		auto shader = interior ? GetComputeMainCompositeInterior() : GetComputeMainComposite();
+		context->CSSetShader(shader, nullptr, 0);
 
-		context->Draw(3, 0);
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite - Dispatch");
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		}
 
-		stateBackup.Restore(context);
+		// Unbind mode texture SRV
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		context->CSSetShaderResources(16, 1, &nullSRV);
 	}
 
 	// VR: Deactivate stencil culling now that geometry rendering is complete.
@@ -443,6 +414,20 @@ void Deferred::DeferredPasses()
 	// so that ISReflectionsRayTracing sees valid pixels in both eyes.
 	if (globals::game::isVR) {
 		globals::features::vr.DrawStereoBlend();
+	}
+
+	// Clear
+	{
+		ID3D11ShaderResourceView* views[16]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+		ID3D11Buffer* buffers[1] = { nullptr };
+		context->CSSetConstantBuffers(12, 1, buffers);
+
+		context->CSSetShader(nullptr, nullptr, 0);
 	}
 
 	if (dynamicCubemaps.loaded)
@@ -570,48 +555,76 @@ void Deferred::ResetBlendStates()
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 }
 
+template <typename T>
+void Deferred::SetShadowCascadeParameters(T& lightData, DirectionalShadowLightData& dd)
+{
+	const auto count = std::min(lightData.shadowmapDescriptors.size(), static_cast<uint32_t>(std::size(dd.ShadowProj)));
+	for (uint32_t i = 0; i < count; i++) {
+		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
+		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
+
+		DirectX::XMMATRIX invProj = DirectX::XMMatrixInverse(nullptr, proj);
+		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], invProj);
+	}
+}
+
+void Deferred::CopyShadowLightData()
+{
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowLightData");
+
+	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
+	if (!shadowSceneNode)
+		return;
+
+	auto* sunShadowLight = shadowSceneNode->GetRuntimeData().sunShadowDirLight;
+	if (!sunShadowLight)
+		return;
+
+	DirectionalShadowLightData dd{};
+	auto context = globals::d3d::context;
+
+	auto& dirData = sunShadowLight->GetShadowDirectionalLightRuntimeData();
+	dd.EndSplitDistances = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
+	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
+
+	if (globals::game::isVR)
+		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), dd);
+	else
+		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
+
+	D3D11_MAPPED_SUBRESOURCE mapped{};
+	DX::ThrowIfFailed(context->Map(directionalShadowLights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+	memcpy(mapped.pData, &dd, sizeof(DirectionalShadowLightData));
+	context->Unmap(directionalShadowLights->resource.get(), 0);
+
+	ID3D11ShaderResourceView* srv = directionalShadowLights->srv.get();
+	context->PSSetShaderResources(98, 1, &srv);
+}
+
 void Deferred::ClearShaderCache()
 {
-	if (compositePS) {
-		compositePS->Release();
-		compositePS = nullptr;
+	if (mainCompositeCS) {
+		mainCompositeCS->Release();
+		mainCompositeCS = nullptr;
 	}
-	if (compositePSInterior) {
-		compositePSInterior->Release();
-		compositePSInterior = nullptr;
-	}
-	if (compositeVS) {
-		compositeVS->Release();
-		compositeVS = nullptr;
+	if (mainCompositeInteriorCS) {
+		mainCompositeInteriorCS->Release();
+		mainCompositeInteriorCS = nullptr;
 	}
 }
 
-ID3D11VertexShader* Deferred::GetCompositeVS()
+ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 {
-	if (!compositeVS) {
-		logger::debug("Compiling DeferredCompositeVS");
+	if (!mainCompositeCS) {
+		logger::debug("Compiling DeferredCompositeCS");
 
 		std::vector<std::pair<const char*, const char*>> defines;
-		compositeVS = static_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeVS.hlsl", defines, "vs_5_0"));
-	}
-	return compositeVS;
-}
-
-ID3D11PixelShader* Deferred::GetCompositePS(bool interior)
-{
-	auto& cached = interior ? compositePSInterior : compositePS;
-	if (!cached) {
-		logger::debug("Compiling DeferredCompositePS {}", interior ? "INTERIOR" : "");
-
-		std::vector<std::pair<const char*, const char*>> defines;
-
-		if (interior)
-			defines.push_back({ "INTERIOR", nullptr });
 
 		if (globals::features::dynamicCubemaps.loaded)
 			defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
 
-		if (!interior && globals::features::skylighting.loaded)
+		if (globals::features::skylighting.loaded)
 			defines.push_back({ "SKYLIGHTING", nullptr });
 
 		if (globals::features::screenSpaceGI.loaded)
@@ -623,9 +636,50 @@ ID3D11PixelShader* Deferred::GetCompositePS(bool interior)
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
-		cached = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositePS.hlsl", defines, "ps_5_0"));
+		if (REL::Module::IsVR())
+			defines.push_back({ "VR_STEREO_OPT", nullptr });
+
+		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
+		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
+		if (globals::features::terrainBlending.loaded)
+			defines.push_back({ "TERRAIN_BLENDING", nullptr });
+
+		mainCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
-	return cached;
+	return mainCompositeCS;
+}
+
+ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
+{
+	if (!mainCompositeInteriorCS) {
+		logger::debug("Compiling DeferredCompositeCS INTERIOR");
+
+		std::vector<std::pair<const char*, const char*>> defines;
+		defines.push_back({ "INTERIOR", nullptr });
+
+		if (globals::features::dynamicCubemaps.loaded)
+			defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
+
+		if (globals::features::screenSpaceGI.loaded)
+			defines.push_back({ "SSGI", nullptr });
+
+		if (globals::features::ibl.loaded)
+			defines.push_back({ "IBL", nullptr });
+
+		if (REL::Module::IsVR())
+			defines.push_back({ "FRAMEBUFFER", nullptr });
+
+		if (REL::Module::IsVR())
+			defines.push_back({ "VR_STEREO_OPT", nullptr });
+
+		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
+		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
+		if (globals::features::terrainBlending.loaded)
+			defines.push_back({ "TERRAIN_BLENDING", nullptr });
+
+		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
+	}
+	return mainCompositeInteriorCS;
 }
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()
