@@ -934,9 +934,8 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
         if not mod_id:
             continue
         name = info['name']
-        artifact_pattern = info.get('artifact_pattern') or f'{name}-*.7z'
 
-        # Read INI metadata (version, filename, etc.)
+        # Read INI metadata first — mod_filename is needed to derive artifact_pattern.
         ini_path = get_feature_ini(name)  # Pass name as string for fuzzy matching
         ini_metadata = {}
         mod_version = None
@@ -948,6 +947,13 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
 
         # Use mod_filename from INI if available, else from feature metadata, else use name
         mod_filename = ini_metadata.get('mod_filename') or info.get('mod_filename') or name
+
+        # artifact_pattern: explicit INI value takes precedence; fallback derives the
+        # pattern from the display name using the cmake convention of replacing spaces
+        # with dots — e.g. "Cloud Shadows" → "Cloud.Shadows-*.7z".
+        artifact_pattern = (ini_metadata.get('artifact_pattern')
+                            or info.get('artifact_pattern')
+                            or f"{mod_filename.replace(' ', '.')}-*.7z")
 
         # Auto-upload is opt-in; missing metadata should not enable uploads.
         auto_upload = ini_metadata.get('auto_upload', False)

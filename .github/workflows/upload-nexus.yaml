@@ -170,11 +170,30 @@ jobs:
                   "
 
                   python -c "
-                  import json
+                  import json, os, fnmatch
                   with open('nexus-matrix-raw.json') as f:
                       data = json.load(f)
+                  # Load asset names from the release so we can skip uploads where
+                  # the standalone artifact was not actually included in the release.
+                  try:
+                      with open('releases.json') as f:
+                          releases = json.load(f)
+                      if not isinstance(releases, list):
+                          releases = []
+                  except Exception:
+                      releases = []
+                  tag = os.environ.get('RELEASE_TAG', '')
+                  release = next((r for r in releases if r.get('tag_name') == tag), None)
+                  asset_names = [a['name'] for a in (release.get('assets', []) if release else [])]
+                  def artifact_in_release(row):
+                      if row.get('name') == 'core':
+                          return True
+                      pat = row.get('artifact_pattern', '')
+                      return bool(pat) and any(fnmatch.fnmatch(n, pat) for n in asset_names)
                   # Full matrix for artifact prep; upload matrix excludes auto_upload=false
-                  upload_data = [row for row in data if row.get('auto_upload', True)]
+                  # and features whose standalone artifact is absent from the release.
+                  upload_data = [row for row in data
+                                 if row.get('auto_upload', True) and artifact_in_release(row)]
                   has_uploads = bool(upload_data)
                   with open('nexus-matrix.json', 'w') as f:
                       json.dump({'include': data}, f)
