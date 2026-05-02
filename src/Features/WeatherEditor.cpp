@@ -36,25 +36,38 @@ bool WeatherEditor::HasWidgetJsonFiles()
 	if (s_checkedWidgetJsonFiles)
 		return s_hasWidgetJsonFiles;
 
-	s_checkedWidgetJsonFiles = true;
 	const auto communityShaderPath = Util::PathHelpers::GetCommunityShaderPath();
 	for (const auto folderName : Widget::kSaveFolderNames) {
 		const auto widgetSettingsPath = communityShaderPath / std::filesystem::path(folderName);
 		std::error_code ec;
-		if (!std::filesystem::is_directory(widgetSettingsPath, ec))
+		const bool isDirectory = std::filesystem::is_directory(widgetSettingsPath, ec);
+		if (ec) {
+			logger::warn("[WeatherEditor] Failed to inspect widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
+			return false;
+		}
+		if (!isDirectory)
 			continue;
 
 		for (std::filesystem::directory_iterator it(widgetSettingsPath, ec), end; !ec && it != end; it.increment(ec)) {
 			std::error_code entryEc;
-			if (it->is_regular_file(entryEc) && _stricmp(it->path().extension().string().c_str(), kJsonExtension) == 0) {
+			const bool isRegularFile = it->is_regular_file(entryEc);
+			if (entryEc) {
+				logger::warn("[WeatherEditor] Failed to inspect widget settings file '{}': {}", it->path().string(), entryEc.message());
+				return false;
+			}
+			if (isRegularFile && _stricmp(it->path().extension().string().c_str(), kJsonExtension) == 0) {
 				s_hasWidgetJsonFiles = true;
+				s_checkedWidgetJsonFiles = true;
 				return true;
 			}
 		}
-		if (ec)
+		if (ec) {
 			logger::warn("[WeatherEditor] Failed to scan widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
+			return false;
+		}
 	}
 
+	s_checkedWidgetJsonFiles = true;
 	return false;
 }
 
