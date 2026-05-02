@@ -93,6 +93,10 @@ void WeatherEditor::DrawSettings()
 
 void WeatherEditor::Prepass()
 {
+	if (!s_resourcesInitialized && EditorWindow::CanBeOpen()) {
+		EnsureDataLoaded();
+	}
+
 	// Re-enforce weather lock if active (handles time changes)
 	auto editorWindow = EditorWindow::GetSingleton();
 	if (editorWindow->IsWeatherLocked()) {
