@@ -40,7 +40,6 @@ jobs:
             run-shader-validation: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
             run-shader-tests: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
             cache-key-suffix: ${{ inputs.cache-key-suffix || '' }}
-            run-vs2022: ${{ github.ref_type != 'tag' }}
 
     feature-audit:
         name: Feature Version Audit (Release)
