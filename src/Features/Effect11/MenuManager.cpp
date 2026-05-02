@@ -254,16 +254,10 @@ float MenuManager::GetTimeOfDayBlendFactor(int timeIndex) const
 		return commonData.timeOfDay2[0];  // Dusk
 	case 5:
 		return commonData.timeOfDay2[1];  // Night
-	case 6:                               // InteriorDay - calculate from interior blend
-	case 7:                               // InteriorNight - calculate from interior blend
-		{
-			if (commonData.eInteriorFactor > 0.5f) {
-				float dayNightFactor = (commonData.timeOfDay1[2] + commonData.timeOfDay1[1] +
-										commonData.timeOfDay1[0] * 0.5f + commonData.timeOfDay1[3] * 0.5f);
-				return (timeIndex == 6) ? dayNightFactor : (1.0f - dayNightFactor);
-			}
-			return 0.0f;
-		}
+	case 6:
+		return commonData.timeOfDay2[2];  // InteriorDay
+	case 7:
+		return commonData.timeOfDay2[3];  // InteriorNight
 	default:
 		return 0.0f;
 	}
