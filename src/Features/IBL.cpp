@@ -207,6 +207,7 @@ IBL::Settings IBL::GetCommonBufferData() const
 				data.EnvIBLSaturation = 2.0f;
 				data.SkyIBLSaturation = 2.0f;
 				data.DALCMode = 3;
+				data.EnableFogIBL = 0;
 			}
 		}
 	}

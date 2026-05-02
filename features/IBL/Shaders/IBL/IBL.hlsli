@@ -165,6 +165,10 @@ namespace ImageBasedLighting
 
 	float3 GetFogIBLColor(float3 fogColor)
 	{
+		if (SharedData::iblSettings.EnableFogIBL == 0) {
+			return fogColor;
+		}
+
 		float3 iblColor;
 		if (SharedData::iblSettings.DALCMode >= 2) {
 			float3 dalc0 = Color::Ambient(SharedData::GetAmbient(0.f));
