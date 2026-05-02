@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <fstream>
 
+#include <DirectXTex.h>
 #include <nlohmann/json.hpp>
-#include <stb_image.h>
 
 #include "Globals.h"
 
@@ -127,6 +127,9 @@ void PresetManager::LoadPresetMetadata(PresetInfo& preset)
 	}
 }
 
+static constexpr size_t THUMBNAIL_MAX_WIDTH = 385;
+static constexpr size_t THUMBNAIL_MAX_HEIGHT = 216;
+
 void PresetManager::LoadThumbnail(PresetInfo& preset)
 {
 	if (preset.thumbnailPath.empty())
@@ -135,43 +138,33 @@ void PresetManager::LoadThumbnail(PresetInfo& preset)
 	if (!std::filesystem::exists(preset.thumbnailPath))
 		return;
 
-	int width = 0, height = 0;
-	unsigned char* data = stbi_load(preset.thumbnailPath.c_str(), &width, &height, nullptr, 4);
-	if (!data)
-		return;
+	std::wstring widePath(preset.thumbnailPath.begin(), preset.thumbnailPath.end());
 
-	auto* device = globals::d3d::device;
-
-	D3D11_TEXTURE2D_DESC desc = {};
-	desc.Width = width;
-	desc.Height = height;
-	desc.MipLevels = 1;
-	desc.ArraySize = 1;
-	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	desc.SampleDesc.Count = 1;
-	desc.Usage = D3D11_USAGE_DEFAULT;
-	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-	D3D11_SUBRESOURCE_DATA initData = {};
-	initData.pSysMem = data;
-	initData.SysMemPitch = width * 4;
-
-	winrt::com_ptr<ID3D11Texture2D> texture;
-	HRESULT hr = device->CreateTexture2D(&desc, &initData, texture.put());
-	stbi_image_free(data);
-
+	DirectX::ScratchImage image;
+	HRESULT hr = DirectX::LoadFromWICFile(widePath.c_str(), DirectX::WIC_FLAGS_NONE, nullptr, image);
 	if (FAILED(hr))
 		return;
 
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Format = desc.Format;
-	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MipLevels = 1;
+	const auto& meta = image.GetMetadata();
+	if (meta.width > THUMBNAIL_MAX_WIDTH || meta.height > THUMBNAIL_MAX_HEIGHT) {
+		float scale = std::min(static_cast<float>(THUMBNAIL_MAX_WIDTH) / meta.width, static_cast<float>(THUMBNAIL_MAX_HEIGHT) / meta.height);
+		size_t newWidth = std::max<size_t>(1, static_cast<size_t>(meta.width * scale));
+		size_t newHeight = std::max<size_t>(1, static_cast<size_t>(meta.height * scale));
 
-	hr = device->CreateShaderResourceView(texture.get(), &srvDesc, preset.thumbnailSRV.put());
+		DirectX::ScratchImage resized;
+		hr = DirectX::Resize(image.GetImages(), image.GetImageCount(), meta, newWidth, newHeight, DirectX::TEX_FILTER_LINEAR, resized);
+		if (FAILED(hr))
+			return;
+		image = std::move(resized);
+	}
+
+	auto* device = globals::d3d::device;
+	winrt::com_ptr<ID3D11ShaderResourceView> srv;
+	hr = DirectX::CreateShaderResourceView(device, image.GetImages(), image.GetImageCount(), image.GetMetadata(), srv.put());
 	if (SUCCEEDED(hr)) {
-		preset.thumbnailWidth = static_cast<float>(width);
-		preset.thumbnailHeight = static_cast<float>(height);
+		preset.thumbnailSRV = std::move(srv);
+		preset.thumbnailWidth = static_cast<float>(image.GetMetadata().width);
+		preset.thumbnailHeight = static_cast<float>(image.GetMetadata().height);
 		logger::debug("[PresetManager] Loaded thumbnail: {}", preset.thumbnailPath);
 	}
 }
