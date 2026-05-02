@@ -56,7 +56,6 @@ jobs:
             matrix:
                 compiler:
                     - name: vs2026
-                      vs-version: "2026"
                       cmake-preset: ALL
                       build-dir: build/ALL
             fail-fast: false
@@ -73,7 +72,6 @@ jobs:
               uses: ./.github/actions/setup-build-environment
               with:
                   cache-key-suffix: "cpp-${{ matrix.compiler.name }}${{ inputs.cache-key-suffix }}"
-                  vs-version: ${{ matrix.compiler.vs-version }}
                   cmake-preset: ${{ matrix.compiler.cmake-preset }}
                   build-dir: ${{ matrix.compiler.build-dir }}
 
@@ -235,7 +233,6 @@ jobs:
               uses: ./.github/actions/setup-build-environment
               with:
                   cache-key-suffix: "tests${{ inputs.cache-key-suffix }}"
-                  vs-version: "2026"
                   cmake-preset: "ALL"
                   build-dir: "build/ALL"
 
