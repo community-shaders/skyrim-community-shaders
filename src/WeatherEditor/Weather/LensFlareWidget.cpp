@@ -20,19 +20,18 @@ void LensFlareWidget::DrawWidget()
 	BeginScrollableContent("##LFScroll");
 	{
 		bool changed = false;
-		auto drawSlider = [&](const char* settingId, float& value) {
-			if (DrawIfMatchesSearch(settingId, [&](const char* label) { return ImGui::SliderFloat(label, &value, 0.0f, 1.0f); }))
+		auto drawSection = [&](const char* settingId, const char* sectionLabel, float& value) {
+			if (!MatchesSearch(settingId))
+				return;
+			ImGui::SeparatorText(sectionLabel);
+			PushHighlightStyle(settingId);
+			if (ImGui::SliderFloat(settingId, &value, 0.0f, 1.0f))
 				changed = true;
+			PopHighlightStyle(settingId);
 		};
 
-		DrawSearchSectionIfMatches(LensFlareSetting::kFadeDistRadiusScale, [&](const char*) {
-			ImGui::SeparatorText("Fade Distance");
-			drawSlider(LensFlareSetting::kFadeDistRadiusScale, settings.fadeDistRadiusScale);
-		});
-		DrawSearchSectionIfMatches(LensFlareSetting::kColorInfluence, [&](const char*) {
-			ImGui::SeparatorText("Color");
-			drawSlider(LensFlareSetting::kColorInfluence, settings.colorInfluence);
-		});
+		drawSection(LensFlareSetting::kFadeDistRadiusScale, "Fade Distance", settings.fadeDistRadiusScale);
+		drawSection(LensFlareSetting::kColorInfluence, "Color", settings.colorInfluence);
 
 		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 			ApplyChanges();

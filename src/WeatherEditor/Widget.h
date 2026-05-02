@@ -6,23 +6,27 @@
 
 #include <initializer_list>
 
-class WidgetSharedData
+namespace WidgetUI
 {
-private:
-	int uniqueID = 0;
+	// Search bar / dropdown
+	constexpr int kSearchBufferSize = 256;
+	constexpr float kSearchBarWidth = 200.0f;
+	constexpr float kSearchDropdownWidth = 300.0f;
+	constexpr size_t kSearchDropdownMaxResults = 5;
+	constexpr float kSearchDropdownBgGray = 0.16f;
 
-public:
-	static WidgetSharedData* GetSingleton()
-	{
-		static WidgetSharedData sharedData;
-		return &sharedData;
-	}
+	// Search-result highlight pulse
+	constexpr float kHighlightDurationSeconds = 2.0f;
+	constexpr float kHighlightMaxAlpha = 0.3f;
 
-	int GetNewID()
-	{
-		return -uniqueID++;
-	}
-};
+	// "Force Weather" lock button colors
+	constexpr ImVec4 kLockButtonColor = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+	constexpr ImVec4 kLockButtonHoverColor = ImVec4(0.3f, 0.9f, 0.3f, 1.0f);
+
+	// Icon button spacing
+	constexpr float kIconButtonSpacing = 4.0f;
+	constexpr float kIconButtonSizeRatio = 0.85f;
+}
 
 class Widget
 {
@@ -160,7 +164,7 @@ public:
 	void DrawWidgetHeader(const char* searchId, bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
 
 	// Search functionality
-	char searchBuffer[256] = "";
+	char searchBuffer[WidgetUI::kSearchBufferSize] = "";
 	int deleteConfirmationFrame = -1;
 
 	// Unified search dropdown + tab navigation + highlight helpers.
@@ -245,6 +249,13 @@ protected:
 	std::string highlightedDisplaySetting;
 	float highlightStartTime = 0.0f;
 	bool scrollToHighlighted = false;
+
+	// Cache the last query searchResults was built for, so per-frame work is skipped
+	// while the buffer is unchanged.
+	std::string searchResultsForQuery;
+	// True when the search input owned focus this frame; used to suppress the
+	// dropdown's click-outside dismissal while the user interacts with the input.
+	bool searchInputActive = false;
 
 	void NavigateToSearchResult(const SearchResult& result);
 };

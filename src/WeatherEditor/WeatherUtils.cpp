@@ -4,6 +4,8 @@
 #include "Utils/FileSystem.h"
 #include "Utils/UI.h"
 
+#include <cassert>
+
 namespace WeatherUtils::TexturePath
 {
 	std::string Normalize(std::string_view path)
@@ -78,6 +80,23 @@ namespace WeatherUtils
 
 // Global widget context for undo tracking
 static Widget* g_currentWidget = nullptr;
+
+// Compose a per-widget-scoped key so global static maps in this file
+// (color caches, popup-open trackers, debounced trackers) don't collide
+// when two widgets share a label string (e.g. "Specular", "Fresnel Power").
+constexpr std::string_view kScopeSep = "::";
+
+static std::string ScopedKey(std::string_view label)
+{
+	return std::format("{}{}{}", static_cast<const void*>(g_currentWidget), kScopeSep, label);
+}
+
+// Recover the original label from a scoped key for use as a palette/UI key.
+static std::string_view UnscopeKey(std::string_view key)
+{
+	const auto pos = key.find(kScopeSep);
+	return pos == std::string_view::npos ? key : key.substr(pos + kScopeSep.size());
+}
 
 // Per-widget-type window sizes — shared across all instances of the same widget type
 static std::unordered_map<std::string, ImVec2> s_widgetTypeSizes;
@@ -287,21 +306,23 @@ namespace WeatherUtils
 			g_currentWidget->PopHighlightStyle(label);
 		bool isNowActive = ImGui::IsItemActive();
 
+		const std::string trackerKey = ScopedKey(label);
+
 		// Push undo state when slider becomes active
-		if (s_int8Tracker.UpdateActiveState(label, isNowActive, currentTime, debounceDelay)) {
+		if (s_int8Tracker.UpdateActiveState(trackerKey, isNowActive, currentTime, debounceDelay)) {
 			if (g_currentWidget) {
 				EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
 			}
 		}
 
 		if (changed) {
-			s_int8Tracker.OnValueChanged(label, property, currentTime);
+			s_int8Tracker.OnValueChanged(trackerKey, property, currentTime);
 		}
 
-		// Track completed values to palette
+		// Track completed values to palette (strip widget prefix from palette key)
 		auto completed = s_int8Tracker.GetCompletedEntries(currentTime, debounceDelay);
 		for (const auto& [key, value] : completed) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(key, static_cast<float>(value));
+			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), static_cast<float>(value));
 		}
 
 		return changed;
@@ -313,7 +334,10 @@ namespace WeatherUtils
 		static std::string activeColorId;
 		static std::map<std::string, bool> wasPickerOpen;
 
-		std::string cacheId = l;
+		Widget* effectiveWidget = widget ? widget : g_currentWidget;
+		const std::string cacheId = effectiveWidget ?
+		                                std::format("{}{}{}", static_cast<const void*>(effectiveWidget), kScopeSep, l) :
+		                                l;
 		bool isActive = ImGui::IsPopupOpen(l.c_str(), ImGuiPopupFlags_AnyPopupId);
 		bool wasActive = wasPickerOpen[cacheId];
 
@@ -321,10 +345,9 @@ namespace WeatherUtils
 		if (isActive && activeColorId != cacheId) {
 			colorCache[cacheId] = property;
 			activeColorId = cacheId;
-			// Push undo state before change (prefer parameter, fallback to global)
-			Widget* w = widget ? widget : g_currentWidget;
-			if (w) {
-				EditorWindow::GetSingleton()->PushUndoState(w);
+			// Push undo state before change
+			if (effectiveWidget) {
+				EditorWindow::GetSingleton()->PushUndoState(effectiveWidget);
 			}
 		} else if (!isActive && activeColorId == cacheId) {
 			activeColorId.clear();
@@ -339,12 +362,11 @@ namespace WeatherUtils
 			}
 		}
 
-		Widget* w = widget ? widget : g_currentWidget;
-		if (w)
-			w->PushHighlightStyle(l);
+		if (effectiveWidget)
+			effectiveWidget->PushHighlightStyle(l);
 		bool changed = ImGui::ColorEdit3(l.c_str(), (float*)&property);
-		if (w)
-			w->PopHighlightStyle(l);
+		if (effectiveWidget)
+			effectiveWidget->PopHighlightStyle(l);
 
 		// Track color usage only when picker closes
 		if (wasActive && !isActive) {
@@ -400,21 +422,25 @@ namespace WeatherUtils
 			w->PopHighlightStyle(hid);
 		bool isNowActive = ImGui::IsItemActive();
 
+		const std::string trackerKey = w ?
+		                                   std::format("{}{}{}", static_cast<const void*>(w), kScopeSep, label) :
+		                                   label;
+
 		// Push undo state when slider becomes active
-		if (s_floatTracker.UpdateActiveState(label, isNowActive, currentTime, debounceDelay)) {
+		if (s_floatTracker.UpdateActiveState(trackerKey, isNowActive, currentTime, debounceDelay)) {
 			if (w) {
 				EditorWindow::GetSingleton()->PushUndoState(w);
 			}
 		}
 
 		if (changed) {
-			s_floatTracker.OnValueChanged(label, property, currentTime);
+			s_floatTracker.OnValueChanged(trackerKey, property, currentTime);
 		}
 
-		// Track completed values to palette
+		// Track completed values to palette (strip widget prefix from palette key)
 		auto completed = s_floatTracker.GetCompletedEntries(currentTime, debounceDelay);
 		for (const auto& [key, value] : completed) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(key, value);
+			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), value);
 		}
 
 		return changed;
@@ -573,10 +599,11 @@ namespace TOD
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
 			std::string valueName = std::string(label) + " " + GetPeriodName(i);
+			std::string trackerKey = ScopedKey(valueName);
 
 			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
 				changed = true;
-				s_todSliderTracker.OnValueChanged(valueName, values[i], currentTime);
+				s_todSliderTracker.OnValueChanged(trackerKey, values[i], currentTime);
 			}
 
 			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
@@ -588,7 +615,7 @@ namespace TOD
 
 		// Track completed entries to palette
 		for (const auto& [key, value] : s_todSliderTracker.GetCompletedEntries(currentTime, debounceDelay)) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(key, value);
+			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), value);
 		}
 
 		return changed;
@@ -645,6 +672,7 @@ namespace TOD
 				ImGui::SetCursorPosX(centerOffset);
 
 			std::string id = std::string("##") + label + std::to_string(i);
+			std::string scopedId = ScopedKey(id);
 			ImVec4 color = ImVec4(colors[i].x, colors[i].y, colors[i].z, 1.0f);
 
 			static std::map<std::string, float3> colorCache;
@@ -652,8 +680,8 @@ namespace TOD
 
 			// Use ColorButton with fixed size - no alpha styling on the button itself
 			if (ImGui::ColorButton(id.c_str(), color, ImGuiColorEditFlags_NoAlpha, ImVec2(buttonSize, buttonSize))) {
-				colorCache[id] = colors[i];
-				activeColorId = id;
+				colorCache[scopedId] = colors[i];
+				activeColorId = scopedId;
 				ImGui::OpenPopup(id.c_str());
 			}
 
@@ -679,7 +707,7 @@ namespace TOD
 			// Color picker popup
 			static std::map<std::string, bool> wasPopupOpen;
 			bool isPopupOpen = ImGui::BeginPopup(id.c_str());
-			bool wasOpen = wasPopupOpen[id];
+			bool wasOpen = wasPopupOpen[scopedId];
 
 			// Push undo state when popup first opens
 			if (isPopupOpen && !wasOpen) {
@@ -691,21 +719,21 @@ namespace TOD
 			if (isPopupOpen) {
 				// Check for Ctrl+Z while picker is active
 				if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_Z)) {
-					if (colorCache.contains(id)) {
-						colors[i] = colorCache[id];
+					if (colorCache.contains(scopedId)) {
+						colors[i] = colorCache[scopedId];
 						changed = true;
 					}
 				}
 
 				// Use ColorPicker4 with ref_col to show original color preview
 				float col4[4] = { colors[i].x, colors[i].y, colors[i].z, 1.0f };
-				float refCol[4] = { colorCache[id].x, colorCache[id].y, colorCache[id].z, 1.0f };
+				float refCol[4] = { colorCache[scopedId].x, colorCache[scopedId].y, colorCache[scopedId].z, 1.0f };
 				if (ImGui::ColorPicker4((id + "_picker").c_str(), col4, ImGuiColorEditFlags_NoAlpha, refCol)) {
 					colors[i] = { col4[0], col4[1], col4[2] };
 					changed = true;
 				}
 				ImGui::EndPopup();
-			} else if (activeColorId == id) {
+			} else if (activeColorId == scopedId) {
 				activeColorId.clear();
 			}
 
@@ -714,7 +742,7 @@ namespace TOD
 				PaletteWindow::GetSingleton()->TrackColorUsage(colors[i]);
 			}
 
-			wasPopupOpen[id] = isPopupOpen;
+			wasPopupOpen[scopedId] = isPopupOpen;
 
 			Util::AddTooltip(std::format("{} - {:.0f}%", GetPeriodName(i), factors[i] * 100.0f).c_str());
 
@@ -782,14 +810,14 @@ namespace TOD
 
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
-			std::string itemKey = std::string(label) + "_slider_" + std::to_string(i);
+			std::string itemKey = ScopedKey(std::string(label) + "_slider_" + std::to_string(i));
 
 			ImGui::BeginDisabled(inheritFlags && inheritFlags[i]);
 			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
 				changed = true;
 				if (inheritFlags)
 					inheritFlags[i] = false;
-				std::string valueName = std::string(label) + " " + GetPeriodName(i);
+				std::string valueName = ScopedKey(std::string(label) + " " + GetPeriodName(i));
 				s_todSliderInheritTracker.OnValueChanged(valueName, values[i], currentTime);
 			}
 
@@ -814,7 +842,7 @@ namespace TOD
 
 		// Track completed entries to palette
 		for (const auto& [key, value] : s_todSliderInheritTracker.GetCompletedEntries(currentTime, debounceDelay)) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(key, value);
+			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), value);
 		}
 
 		return changed;
@@ -898,6 +926,7 @@ namespace TOD
 			}
 
 			std::string id = std::string("##") + label + std::to_string(i);
+			std::string scopedId = ScopedKey(id);
 			ImVec4 color = ImVec4(colors[i].x, colors[i].y, colors[i].z, 1.0f);
 
 			static std::map<std::string, float3> colorCache;
@@ -907,9 +936,9 @@ namespace TOD
 			// Disable editing when inherited
 			ImGui::BeginDisabled(inheritFlag);
 			if (ImGui::ColorButton(id.c_str(), color, ImGuiColorEditFlags_NoAlpha, ImVec2(buttonSize, buttonSize))) {
-				colorCache[id] = colors[i];
-				originalColorCache[id] = colors[i];
-				activeColorId = id;
+				colorCache[scopedId] = colors[i];
+				originalColorCache[scopedId] = colors[i];
+				activeColorId = scopedId;
 				ImGui::OpenPopup(id.c_str());
 			}
 
@@ -937,7 +966,7 @@ namespace TOD
 			// Color picker popup
 			static std::map<std::string, bool> wasPopupOpenInherit;
 			bool isPopupOpen = ImGui::BeginPopup(id.c_str());
-			bool wasOpen = wasPopupOpenInherit[id];
+			bool wasOpen = wasPopupOpenInherit[scopedId];
 
 			// Push undo state when popup first opens
 			if (isPopupOpen && !wasOpen) {
@@ -947,34 +976,32 @@ namespace TOD
 			}
 
 			if (isPopupOpen) {
-				if (colorCache.find(id) == colorCache.end()) {
-					colorCache[id] = colors[i];
+				if (colorCache.find(scopedId) == colorCache.end()) {
+					colorCache[scopedId] = colors[i];
 				}
-				if (originalColorCache.find(id) == originalColorCache.end()) {
-					originalColorCache[id] = colors[i];
+				if (originalColorCache.find(scopedId) == originalColorCache.end()) {
+					originalColorCache[scopedId] = colors[i];
 				}
 
-				float3& cachedColor = colorCache[id];
-				bool colorChanged = false;
+				float3& cachedColor = colorCache[scopedId];
 
 				// Use ColorPicker4 with ref_col to show original color preview
 				float col4[4] = { cachedColor.x, cachedColor.y, cachedColor.z, 1.0f };
-				float refCol[4] = { originalColorCache[id].x, originalColorCache[id].y, originalColorCache[id].z, 1.0f };
+				float refCol[4] = { originalColorCache[scopedId].x, originalColorCache[scopedId].y, originalColorCache[scopedId].z, 1.0f };
 				if (ImGui::ColorPicker4("##picker", col4, ImGuiColorEditFlags_NoAlpha, refCol)) {
 					cachedColor = { col4[0], col4[1], col4[2] };
 					colors[i] = cachedColor;
-					colorChanged = true;
 					changed = true;
 				}
 
 				ImGui::EndPopup();
 
-				if (!ImGui::IsPopupOpen(id.c_str()) && activeColorId == id) {
+				if (!ImGui::IsPopupOpen(id.c_str()) && activeColorId == scopedId) {
 					activeColorId = "";
 				}
 			}
 
-			wasPopupOpenInherit[id] = isPopupOpen;
+			wasPopupOpenInherit[scopedId] = isPopupOpen;
 			ImGui::EndDisabled();
 
 			ImGui::EndChild();
@@ -992,9 +1019,6 @@ namespace TOD
 	{
 		const double debounceDelay = 2.0;
 		double currentTime = ImGui::GetTime();
-
-		float factors[4];
-		GetTimeOfDayFactors(factors);
 		bool changed = false;
 
 		if (g_currentWidget)
@@ -1013,7 +1037,7 @@ namespace TOD
 				ImGui::SameLine();
 			ImGui::PushID(i);
 
-			std::string itemId = std::string(label) + "_" + std::to_string(i);
+			std::string itemId = ScopedKey(std::string(label) + "_" + std::to_string(i));
 
 			ImGui::SetNextItemWidth(columnWidth);
 			if (ImGui::SliderFloat("##value", &values[i], minValue, maxValue, format)) {
@@ -1039,8 +1063,6 @@ namespace TOD
 	bool DrawTODFloatRow(const char* label, float values[4], bool& inheritFlag, const float parentValues[4], float minValue, float maxValue, const char* format)
 	{
 		const float scale = Util::GetUIScale();
-		float factors[4];
-		GetTimeOfDayFactors(factors);
 		bool changed = false;
 
 		ImGui::TableNextRow();
@@ -1205,48 +1227,44 @@ namespace PropertyDrawer
 
 	bool DrawFloat(const char* label, float& value, float minVal, float maxVal, const char* format)
 	{
+		assert(g_currentWidget && "PropertyDrawer requires WeatherUtils::SetCurrentWidget(this) at start of DrawWidget()");
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
+		g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
+		g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
 	bool DrawInt(const char* label, int& value, int minVal, int maxVal)
 	{
+		assert(g_currentWidget && "PropertyDrawer requires WeatherUtils::SetCurrentWidget(this) at start of DrawWidget()");
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
+		g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
+		g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
 	bool DrawColor(const char* label, float3& value)
 	{
+		assert(g_currentWidget && "PropertyDrawer requires WeatherUtils::SetCurrentWidget(this) at start of DrawWidget()");
 		DrawLabel(label);
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
+		g_currentWidget->PushHighlightStyle(label);
 		bool changed = WeatherUtils::DrawColorEdit(label, value);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
+		g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
 	bool DrawCheckbox(const char* label, bool& value)
 	{
+		assert(g_currentWidget && "PropertyDrawer requires WeatherUtils::SetCurrentWidget(this) at start of DrawWidget()");
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
+		g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::Checkbox(id.c_str(), &value);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
+		g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 }  // namespace PropertyDrawer

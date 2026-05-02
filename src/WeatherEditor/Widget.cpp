@@ -1,7 +1,6 @@
 #include "Widget.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <format>
 
 #include "EditorWindow.h"
@@ -295,18 +294,20 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	const float scale = Util::GetUIScale();
 
 	auto drawSearchBar = [&]() {
-		ImGui::SetNextItemWidth(200.0f * scale);
+		ImGui::SetNextItemWidth(WidgetUI::kSearchBarWidth * scale);
 		bool ctrlF = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
 		             ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
 		if (ctrlF) {
 			searchBuffer[0] = '\0';
 			searchResults.clear();
+			searchResultsForQuery.clear();
 			dropdownVisible = false;
 			ImGui::SetKeyboardFocusHere();
 		}
 		ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer));
 		if (ImGui::IsItemEdited())
 			dropdownVisible = true;
+		searchInputActive = ImGui::IsItemActive() || ImGui::IsItemFocused();
 	};
 
 	auto drawForceWeatherButton = [&]() {
@@ -317,8 +318,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
 
 		if (isLocked) {
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_Button, WidgetUI::kLockButtonColor);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, WidgetUI::kLockButtonHoverColor);
 		}
 		if (ImGui::Button(lockLabel)) {
 			if (isLocked)
@@ -340,10 +341,10 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	};
 
 	if (useIcons) {
-		const float iconSize = ImGui::GetFrameHeight() * 0.85f;
+		const float iconSize = ImGui::GetFrameHeight() * WidgetUI::kIconButtonSizeRatio;
 		const ImVec2 buttonSize(iconSize, iconSize);
 
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, ImGui::GetStyle().ItemSpacing.y));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(WidgetUI::kIconButtonSpacing * scale, ImGui::GetStyle().ItemSpacing.y));
 
 		drawSearchBar();
 		drawForceWeatherButton();
@@ -449,16 +450,21 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	// (called after this function) can anchor itself below the search bar.
 	searchDropdownAnchor = ImGui::GetCursorScreenPos();
 
-	// Rebuild match list while a query is active.
+	// Rebuild match list only when the query changed; this gates per-frame
+	// CollectSearchableSettings() walks plus three case-insensitive searches per entry.
 	if (searchBuffer[0] != '\0') {
-		searchResults = CollectSearchableSettings();
-		std::erase_if(searchResults, [&](const SearchResult& r) {
-			return !ContainsStringIgnoreCase(r.displayName, searchBuffer) &&
-			       !ContainsStringIgnoreCase(r.tabName, searchBuffer) &&
-			       !ContainsStringIgnoreCase(r.settingId, searchBuffer);
-		});
+		if (searchResultsForQuery != searchBuffer) {
+			searchResults = CollectSearchableSettings();
+			std::erase_if(searchResults, [&](const SearchResult& r) {
+				return !ContainsStringIgnoreCase(r.displayName, searchBuffer) &&
+				       !ContainsStringIgnoreCase(r.tabName, searchBuffer) &&
+				       !ContainsStringIgnoreCase(r.settingId, searchBuffer);
+			});
+			searchResultsForQuery = searchBuffer;
+		}
 	} else {
 		searchResults.clear();
+		searchResultsForQuery.clear();
 		dropdownVisible = false;
 	}
 }
@@ -470,21 +476,26 @@ void Widget::DrawSearchDropdown()
 
 	const float scale = Util::GetUIScale();
 	ImGui::SetNextWindowPos(searchDropdownAnchor, ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(300.0f * scale, 0));
+	ImGui::SetNextWindowSize(ImVec2(WidgetUI::kSearchDropdownWidth * scale, 0));
 	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
-	const std::string dropdownWindowId = std::format("##SearchDropdown_{:X}", reinterpret_cast<std::uintptr_t>(this));
+	const ImVec4 dropdownBg(WidgetUI::kSearchDropdownBgGray, WidgetUI::kSearchDropdownBgGray, WidgetUI::kSearchDropdownBgGray, 1.0f);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, dropdownBg);
+	const std::string dropdownWindowId = std::format("##SearchDropdown_{}", static_cast<const void*>(this));
 	if (ImGui::Begin(dropdownWindowId.c_str(), nullptr,
 			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
 				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
 				ImGuiWindowFlags_NoFocusOnAppearing)) {
 		ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
 
-		bool clickedOutside = ImGui::GetIO().MouseClicked[0] && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+		// Treat clicks on the search input itself as "inside" so typing/cursor
+		// positioning in the input doesn't dismiss the dropdown.
+		const bool clickedOutside = ImGui::GetIO().MouseClicked[0] &&
+		                            !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+		                            !searchInputActive;
 		if (clickedOutside || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 			dropdownVisible = false;
 		} else {
-			const size_t shown = std::min(size_t(5), searchResults.size());
+			const size_t shown = std::min(WidgetUI::kSearchDropdownMaxResults, searchResults.size());
 			for (size_t i = 0; i < shown; ++i) {
 				const auto& result = searchResults[i];
 				std::string label = result.tabName.empty() ? result.displayName : std::format("{} ({})", result.displayName, result.tabName);
@@ -493,13 +504,14 @@ void Widget::DrawSearchDropdown()
 					NavigateToSearchResult(result);
 					searchBuffer[0] = '\0';
 					searchResults.clear();
+					searchResultsForQuery.clear();
 					dropdownVisible = false;
 				}
 			}
 
-			if (searchResults.size() > 5) {
+			if (searchResults.size() > WidgetUI::kSearchDropdownMaxResults) {
 				ImGui::Separator();
-				ImGui::TextDisabled("... %zu more results", searchResults.size() - 5);
+				ImGui::TextDisabled("... %zu more results", searchResults.size() - WidgetUI::kSearchDropdownMaxResults);
 			}
 		}
 	}
@@ -545,7 +557,7 @@ bool Widget::IsHighlighted(const std::string& settingId) const
 	if (highlightedSetting != settingId && highlightedDisplaySetting != settingId)
 		return false;
 	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
-	return elapsed < 2.0f;
+	return elapsed < WidgetUI::kHighlightDurationSeconds;
 }
 
 void Widget::PushHighlightStyle(const std::string& settingId)
@@ -553,11 +565,9 @@ void Widget::PushHighlightStyle(const std::string& settingId)
 	if (!IsHighlighted(settingId))
 		return;
 	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
-	constexpr float kHighlightDuration = 2.0f;
-	constexpr float kMaxAlpha = 0.3f;
-	const float normalized = std::clamp(elapsed / kHighlightDuration, 0.0f, 1.0f);
+	const float normalized = std::clamp(elapsed / WidgetUI::kHighlightDurationSeconds, 0.0f, 1.0f);
 	const float triangularFade = 1.0f - std::abs(normalized * 2.0f - 1.0f);
-	const float alpha = std::clamp(kMaxAlpha * triangularFade, 0.0f, kMaxAlpha);
+	const float alpha = std::clamp(WidgetUI::kHighlightMaxAlpha * triangularFade, 0.0f, WidgetUI::kHighlightMaxAlpha);
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.6f, 1.0f, alpha));
 	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.7f, 1.0f, alpha));
 }

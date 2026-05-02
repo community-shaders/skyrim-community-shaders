@@ -1067,10 +1067,7 @@ void WeatherWidget::DrawCloudSettings()
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
 		std::string layerId = std::format("Cloud {}", layer);
-		bool layerMatchesSearch = false;
-		DrawSearchSectionIfMatches(layerId, [&](const char*) { layerMatchesSearch = true; });
-
-		if (!layerMatchesSearch)
+		if (!MatchesSearch(layerId))
 			continue;
 
 		bool layerEnabled = settings.clouds[i].enabled;
@@ -1405,11 +1402,7 @@ void WeatherWidget::DrawFogSettings()
 void WeatherWidget::DrawProperties(std::string category, std::map<std::string, int> properties)
 {
 	// Only show category if any property matches search
-	bool anyCategoryMatches = false;
-	for (const auto& p : properties) {
-		DrawSearchSectionIfMatches(p.first, [&](const char*) { anyCategoryMatches = true; });
-	}
-	if (!anyCategoryMatches)
+	if (std::ranges::none_of(properties, [&](const auto& p) { return MatchesSearch(p.first); }))
 		return;
 
 	ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", category.c_str());
