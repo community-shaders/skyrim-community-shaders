@@ -325,10 +325,6 @@ public:
 		});
 	}
 
-	// Features that are more special then others
-	std::unordered_map<std::string, bool> specialFeatures = {
-		{ "TruePBR", false }
-	};
 	std::unordered_map<std::string, bool> disabledFeatures;
 	std::mutex m_mutex;
 
