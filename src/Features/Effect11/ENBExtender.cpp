@@ -54,7 +54,7 @@ namespace ENBExtender
 		return sep;
 	}
 
-	static int SafeStoi(const std::string& s, int fallback = 0)
+	int SafeStoi(const std::string& s, int fallback)
 	{
 		try {
 			return std::stoi(s);
@@ -65,7 +65,7 @@ namespace ENBExtender
 		}
 	}
 
-	static float SafeStof(const std::string& s, float fallback = 0.0f)
+	float SafeStof(const std::string& s, float fallback)
 	{
 		try {
 			return std::stof(s);
@@ -1428,5 +1428,37 @@ namespace ENBExtender
 					ImGui::TextWrapped("%s", err.c_str());
 			}
 		}
+	}
+
+	void RenderStandaloneEffect(Effect& effect)
+	{
+		Effect* ptr = &effect;
+
+		std::unordered_map<std::string, VarRef> uniqueNameMap;
+		BuildUniqueNameMap(&ptr, 1, uniqueNameMap);
+
+		GroupNode root;
+		MergedGroupMeta meta;
+		BuildMergedTree(&ptr, 1, root, meta);
+		SortMergedTree(root, meta);
+
+		auto separatorsBeforeGroup = MapRootSeparators(&ptr, 1, root);
+
+		std::unordered_set<Effect*> changedEffects;
+		RenderContext ctx{ uniqueNameMap, changedEffects, meta, separatorsBeforeGroup };
+
+		std::vector<std::pair<Effect*, std::string>> techDropdowns;
+		if (effect.IsCompiled() && effect.uiTechniques.size() > 1 && effect.techniqueDropdownVisible)
+			techDropdowns.push_back({ &effect, effect.techniqueDropdownGroup });
+
+		for (auto& [e, group] : techDropdowns) {
+			if (e->techniqueDropdownTopLevel || group.empty())
+				RenderTechDropdown(e, changedEffects);
+		}
+
+		RenderGroupNode(root, ctx, techDropdowns);
+
+		for (auto* e : changedEffects)
+			e->UpdateUIVariables();
 	}
 }

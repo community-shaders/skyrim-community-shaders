@@ -25,6 +25,10 @@ namespace ENBExtender
 		int ordering = 0;
 	};
 
+	// Shared helpers
+	int SafeStoi(const std::string& s, int fallback = 0);
+	float SafeStof(const std::string& s, float fallback = 0.0f);
+
 	// KIEFX encoding
 	bool IsKIEFX(const std::string& content);
 	std::string DecodeKIEFX(const std::string& content);
@@ -41,6 +45,7 @@ namespace ENBExtender
 	void InsertUIDefines(Effect& effect);
 	void ParseTimePeriod(Effect::UIVariable& uiVar);
 
-	// Merged UI rendering
+	// UI rendering
 	void RenderMergedEffectsList(Effect* effects[], int effectCount);
+	void RenderStandaloneEffect(Effect& effect);
 }

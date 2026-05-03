@@ -2,7 +2,6 @@
 #include <d3dcompiler.h>
 #include <fstream>
 #include <sstream>
-#include <unordered_set>
 
 #include <DirectXTK/DDSTextureLoader.h>
 #include <DirectXTK/WICTextureLoader.h>
@@ -223,17 +222,14 @@ namespace
 
 bool Effect::Load()
 {
-	// Create ini file path based on effect name
 	std::filesystem::path iniPath = PresetManager::GetSingleton().GetENBSeriesPath();
 	iniPath /= GetName() + ".ini";
 
-	// Check if file exists
 	if (!std::filesystem::exists(iniPath)) {
 		logger::info("[ENBPP] Could not find ini file '{}' for effect '{}', using defaults", iniPath.string(), GetName());
 		return true;  // Not an error, just use defaults
 	}
 
-	// Skip reload if the file has not changed since last load
 	auto writeTime = std::filesystem::last_write_time(iniPath);
 	if (writeTime == lastIniWriteTime) {
 		logger::info("[ENBPP] Skipping unchanged ini file '{}' for effect '{}'", iniPath.string(), GetName());
@@ -241,7 +237,6 @@ bool Effect::Load()
 	}
 	lastIniWriteTime = writeTime;
 
-	// Prepare section name
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
 
@@ -257,10 +252,8 @@ bool Effect::Load()
 		}
 	}
 
-	// Load technique index (stored as 1-indexed in .ini, convert to 0-indexed)
 	if (!uiTechniques.empty()) {
 		uint32_t techniqueFromIni = static_cast<uint32_t>(GetPrivateProfileIntA(section.c_str(), "TECHNIQUE", selectedTechniqueIndex + 1, iniPath.string().c_str()));
-		// Convert from 1-indexed to 0-indexed and clamp to valid range
 		if (techniqueFromIni > 0) {
 			uint32_t maxIndex = static_cast<uint32_t>(uiTechniques.size() - 1);
 			selectedTechniqueIndex = (techniqueFromIni - 1 < maxIndex) ? (techniqueFromIni - 1) : maxIndex;
@@ -275,11 +268,9 @@ bool Effect::Load()
 
 void Effect::Save()
 {
-	// Create ini file path based on effect name
 	std::filesystem::path iniPath = PresetManager::GetSingleton().GetENBSeriesPath();
 	iniPath /= GetName() + ".ini";
 
-	// Prepare section name
 	std::string section = GetName();
 	std::transform(section.begin(), section.end(), section.begin(), ::toupper);
 
@@ -593,7 +584,6 @@ bool Effect::LoadFXFile()
 		}
 	}
 
-	// Common textures and variables are now managed by EffectManager
 	EnumerateAllVariables();
 
 	SetupCustomTextures();
@@ -1018,12 +1008,8 @@ void Effect::LoadUITechniques()
 			if (!dropTopLevel.empty())
 				techniqueDropdownTopLevel = (dropTopLevel != "0" && dropTopLevel != "false");
 			std::string dropOrdering = GetTechniqueAnnotation(firstTech, "UIDropdownOrdering");
-			if (!dropOrdering.empty()) {
-				try {
-					techniqueDropdownOrdering = std::stoi(dropOrdering);
-				} catch (...) {
-				}
-			}
+			if (!dropOrdering.empty())
+				techniqueDropdownOrdering = ENBExtender::SafeStoi(dropOrdering, techniqueDropdownOrdering);
 		}
 	}
 
@@ -1193,38 +1179,33 @@ void Effect::LoadUIVariables()
 		std::string widgetStr = GetUIAnnotation(variable, "UIWidget");
 		uiVar.widgetType = ParseWidgetType(widgetStr);
 
-		// Parse UI properties based on type
-		try {
-			if (uiVar.type == UIVariableType::Float) {
-				std::string minStr = GetUIAnnotation(variable, "UIMin");
-				std::string maxStr = GetUIAnnotation(variable, "UIMax");
-				std::string stepStr = GetUIAnnotation(variable, "UIStep");
-				if (!minStr.empty())
-					uiVar.floatMin = std::stof(minStr);
-				if (!maxStr.empty())
-					uiVar.floatMax = std::stof(maxStr);
-				if (!stepStr.empty())
-					uiVar.floatStep = std::stof(stepStr);
-			} else if (uiVar.type == UIVariableType::Int) {
-				std::string minStr = GetUIAnnotation(variable, "UIMin");
-				std::string maxStr = GetUIAnnotation(variable, "UIMax");
-				if (!minStr.empty())
-					uiVar.intMin = std::stoi(minStr);
-				if (!maxStr.empty())
-					uiVar.intMax = std::stoi(maxStr);
+		if (uiVar.type == UIVariableType::Float) {
+			std::string minStr = GetUIAnnotation(variable, "UIMin");
+			std::string maxStr = GetUIAnnotation(variable, "UIMax");
+			std::string stepStr = GetUIAnnotation(variable, "UIStep");
+			if (!minStr.empty())
+				uiVar.floatMin = ENBExtender::SafeStof(minStr, uiVar.floatMin);
+			if (!maxStr.empty())
+				uiVar.floatMax = ENBExtender::SafeStof(maxStr, uiVar.floatMax);
+			if (!stepStr.empty())
+				uiVar.floatStep = ENBExtender::SafeStof(stepStr, uiVar.floatStep);
+		} else if (uiVar.type == UIVariableType::Int) {
+			std::string minStr = GetUIAnnotation(variable, "UIMin");
+			std::string maxStr = GetUIAnnotation(variable, "UIMax");
+			if (!minStr.empty())
+				uiVar.intMin = ENBExtender::SafeStoi(minStr, uiVar.intMin);
+			if (!maxStr.empty())
+				uiVar.intMax = ENBExtender::SafeStoi(maxStr, uiVar.intMax);
 
-				if (uiVar.widgetType == UIWidgetType::Dropdown) {
-					std::string listStr = GetUIAnnotation(variable, "UIList");
-					if (!listStr.empty())
-						uiVar.dropdownItems = ParseDropdownList(listStr);
-				} else if (uiVar.widgetType == UIWidgetType::Quality) {
-					uiVar.dropdownItems = { "Very High", "High", "Medium", "Low", "Very Low" };
-					uiVar.intMin = -1;
-					uiVar.intMax = 3;
-				}
+			if (uiVar.widgetType == UIWidgetType::Dropdown) {
+				std::string listStr = GetUIAnnotation(variable, "UIList");
+				if (!listStr.empty())
+					uiVar.dropdownItems = ParseDropdownList(listStr);
+			} else if (uiVar.widgetType == UIWidgetType::Quality) {
+				uiVar.dropdownItems = { "Very High", "High", "Medium", "Low", "Very Low" };
+				uiVar.intMin = -1;
+				uiVar.intMax = 3;
 			}
-		} catch (const std::exception& e) {
-			logger::warn("[ENBPP] Failed to parse UI annotations for variable '{}': {}", uiVar.name, e.what());
 		}
 
 		LoadUIVariableValue(uiVar);
@@ -1713,330 +1694,7 @@ void Effect::UpdateUIVariables()
 
 void Effect::RenderImGui()
 {
-	if (ImGui::CollapsingHeader(GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-		bool valuesChanged = false;
-
-		// Build unique name lookup for UIBinding evaluation
-		auto computeUniqueName = [](const UIVariable& var) -> std::string {
-			if (!var.uniqueName.empty())
-				return var.uniqueName;
-			if (!var.group.empty())
-				return var.group + "." + var.displayName;
-			return var.displayName;
-		};
-
-		std::unordered_map<std::string, int> uniqueNameMap;
-		for (int i = 0; i < static_cast<int>(uiVariables.size()); ++i) {
-			if (!uiVariables[i].isSeparator)
-				uniqueNameMap[computeUniqueName(uiVariables[i])] = i;
-		}
-
-		auto evaluateBinding = [&](const UIVariable& var) -> std::pair<bool, bool> {
-			bool visible = true;
-			bool readOnly = var.isReadOnly;
-
-			if (var.uiBinding.empty())
-				return { visible, readOnly };
-
-			auto it = uniqueNameMap.find(var.uiBinding);
-			if (it == uniqueNameMap.end())
-				return { visible, readOnly };
-
-			const auto& boundVar = uiVariables[it->second];
-			float boundValue = 0.0f;
-			switch (boundVar.type) {
-			case UIVariableType::Float:
-				boundValue = boundVar.floatValue;
-				break;
-			case UIVariableType::Int:
-				boundValue = static_cast<float>(boundVar.intValue);
-				break;
-			case UIVariableType::Bool:
-				boundValue = boundVar.boolValue ? 1.0f : 0.0f;
-				break;
-			default:
-				break;
-			}
-
-			bool conditionMet = false;
-			if (var.uiBindingCondition.empty()) {
-				conditionMet = (boundValue != 0.0f);
-			} else {
-				std::string cond = var.uiBindingCondition;
-				std::string op;
-				float comparand = 0.0f;
-
-				if (cond.size() >= 2 && (cond.substr(0, 2) == "==" || cond.substr(0, 2) == "!=" ||
-											cond.substr(0, 2) == "<=" || cond.substr(0, 2) == ">=" ||
-											cond.substr(0, 2) == "=<" || cond.substr(0, 2) == "=>")) {
-					op = cond.substr(0, 2);
-					try {
-						comparand = std::stof(cond.substr(2));
-					} catch (...) {
-					}
-				} else if (!cond.empty() && (cond[0] == '<' || cond[0] == '>')) {
-					op = cond.substr(0, 1);
-					try {
-						comparand = std::stof(cond.substr(1));
-					} catch (...) {
-					}
-				}
-
-				if (op == "==")
-					conditionMet = (boundValue == comparand);
-				else if (op == "!=")
-					conditionMet = (boundValue != comparand);
-				else if (op == "<")
-					conditionMet = (boundValue < comparand);
-				else if (op == ">")
-					conditionMet = (boundValue > comparand);
-				else if (op == "<=" || op == "=<")
-					conditionMet = (boundValue <= comparand);
-				else if (op == ">=" || op == "=>")
-					conditionMet = (boundValue >= comparand);
-			}
-
-			std::string prop = var.uiBindingProperty;
-			std::transform(prop.begin(), prop.end(), prop.begin(), ::tolower);
-
-			if (prop == "hidden")
-				visible = !conditionMet;
-			else if (prop == "visible")
-				visible = conditionMet;
-			else if (prop == "readonly")
-				readOnly = conditionMet;
-			else if (prop == "readwrite")
-				readOnly = !conditionMet;
-
-			return { visible, readOnly };
-		};
-
-		// Technique dropdown
-		if (uiTechniques.size() > 1 && techniqueDropdownVisible) {
-			ImGui::Text("%s", techniqueDropdownName.c_str());
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(-1);
-			const char* currentDisplayName = uiTechniques[selectedTechniqueIndex].displayName.c_str();
-			if (ImGui::BeginCombo(("##TECHNIQUE_" + GetName()).c_str(), currentDisplayName)) {
-				for (uint32_t i = 0; i < uiTechniques.size(); ++i) {
-					const bool isSelected = (selectedTechniqueIndex == i);
-					if (ImGui::Selectable(uiTechniques[i].displayName.c_str(), isSelected)) {
-						selectedTechniqueIndex = i;
-						valuesChanged = true;
-					}
-					if (isSelected)
-						ImGui::SetItemDefaultFocus();
-				}
-				ImGui::EndCombo();
-			}
-		}
-
-		// Build nested group tree
-		struct GroupNode
-		{
-			std::string name;
-			std::string fullPath;
-			std::vector<int> varIndices;
-			std::vector<std::unique_ptr<GroupNode>> children;
-		};
-		GroupNode root;
-
-		for (int i = 0; i < static_cast<int>(uiVariables.size()); ++i) {
-			GroupNode* node = &root;
-			const std::string& groupPath = uiVariables[i].group;
-
-			if (!uiVariables[i].isTopLevel && !groupPath.empty()) {
-				std::istringstream ss(groupPath);
-				std::string segment;
-				std::string builtPath;
-				while (std::getline(ss, segment, '.')) {
-					if (!builtPath.empty())
-						builtPath += ".";
-					builtPath += segment;
-
-					GroupNode* child = nullptr;
-					for (auto& c : node->children) {
-						if (c->name == segment) {
-							child = c.get();
-							break;
-						}
-					}
-					if (!child) {
-						auto newChild = std::make_unique<GroupNode>();
-						newChild->name = segment;
-						newChild->fullPath = builtPath;
-						child = newChild.get();
-						node->children.push_back(std::move(newChild));
-					}
-					node = child;
-				}
-			}
-
-			node->varIndices.push_back(i);
-		}
-
-		// Sort variables within each node by UIOrdering (higher values first)
-		std::function<void(GroupNode&)> sortNode = [&](GroupNode& node) {
-			std::stable_sort(node.varIndices.begin(), node.varIndices.end(), [this](int a, int b) {
-				return uiVariables[a].ordering > uiVariables[b].ordering;
-			});
-			std::stable_sort(node.children.begin(), node.children.end(), [this](const std::unique_ptr<GroupNode>& a, const std::unique_ptr<GroupNode>& b) {
-				int orderA = 0, orderB = 0;
-				auto itA = groupOrdering.find(a->fullPath);
-				if (itA != groupOrdering.end())
-					orderA = itA->second;
-				auto itB = groupOrdering.find(b->fullPath);
-				if (itB != groupOrdering.end())
-					orderB = itB->second;
-				return orderA > orderB;
-			});
-			for (auto& child : node.children)
-				sortNode(*child);
-		};
-		sortNode(root);
-
-		// Helper to render a single widget row (reusable for main and weather-separated values)
-		auto renderWidget = [&](const std::string& label, const std::string& id, UIVariable& uiVar, UIVariableType type, UIWidgetType widget,
-								float* floatVal, int* intVal, bool* boolVal, float* colorVal,
-								bool readOnly) {
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-
-			if (readOnly)
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-
-			ImGui::Text("%s", label.c_str());
-
-			bool isLabelOnly = ((type == UIVariableType::Float && uiVar.floatMin == 0 && uiVar.floatMax == 0) ||
-								(type == UIVariableType::Int && uiVar.intMin == 0 && uiVar.intMax == 0));
-
-			if (!isLabelOnly) {
-				ImGui::TableSetColumnIndex(1);
-
-				if (readOnly)
-					ImGui::BeginDisabled();
-
-				switch (type) {
-				case UIVariableType::Float:
-					if (ImGui::SliderFloat(id.c_str(), floatVal, uiVar.floatMin, uiVar.floatMax, "%.3f"))
-						valuesChanged = true;
-					break;
-				case UIVariableType::Int:
-					if ((widget == UIWidgetType::Dropdown || widget == UIWidgetType::Quality) && !uiVar.dropdownItems.empty()) {
-						int displayIndex = *intVal;
-						if (widget == UIWidgetType::Quality)
-							displayIndex = *intVal + 1;
-						const char* currentItem = (displayIndex >= 0 && displayIndex < (int)uiVar.dropdownItems.size()) ? uiVar.dropdownItems[displayIndex].c_str() : "";
-						if (ImGui::BeginCombo(id.c_str(), currentItem)) {
-							for (int j = 0; j < static_cast<int>(uiVar.dropdownItems.size()); ++j) {
-								int itemValue = (widget == UIWidgetType::Quality) ? (j - 1) : j;
-								if (ImGui::Selectable(uiVar.dropdownItems[j].c_str(), *intVal == itemValue)) {
-									*intVal = itemValue;
-									valuesChanged = true;
-								}
-							}
-							ImGui::EndCombo();
-						}
-					} else {
-						if (ImGui::SliderInt(id.c_str(), intVal, uiVar.intMin, uiVar.intMax))
-							valuesChanged = true;
-					}
-					break;
-				case UIVariableType::Bool:
-					if (ImGui::Checkbox(id.c_str(), boolVal))
-						valuesChanged = true;
-					break;
-				case UIVariableType::Color3:
-					if (widget == UIWidgetType::Vector) {
-						if (ImGui::SliderFloat3(id.c_str(), colorVal, -1.0f, 1.0f, "%.3f"))
-							valuesChanged = true;
-					} else {
-						if (ImGui::ColorEdit3(id.c_str(), colorVal))
-							valuesChanged = true;
-					}
-					break;
-				case UIVariableType::Color4:
-					if (ImGui::ColorEdit4(id.c_str(), colorVal))
-						valuesChanged = true;
-					break;
-				}
-
-				if (readOnly)
-					ImGui::EndDisabled();
-			}
-
-			if (readOnly)
-				ImGui::PopStyleColor();
-		};
-
-		auto renderVariable = [&](int varIdx) {
-			auto& uiVar = uiVariables[varIdx];
-
-			if (uiVar.isSeparator) {
-				ImGui::Separator();
-				return;
-			}
-
-			if (uiVar.displayName.empty())
-				return;
-
-			auto [bindVisible, bindReadOnly] = evaluateBinding(uiVar);
-			if (!bindVisible)
-				return;
-
-			std::string baseId = "##" + std::to_string(varIdx) + "_" + GetName();
-
-			// Render main variable
-			renderWidget(uiVar.displayName, baseId, uiVar, uiVar.type, uiVar.widgetType,
-				&uiVar.floatValue, &uiVar.intValue, &uiVar.boolValue, uiVar.colorValue,
-				bindReadOnly);
-		};
-
-		int tableCounter = 0;
-		std::function<void(GroupNode&)> renderGroup = [&](GroupNode& node) {
-			if (!node.varIndices.empty()) {
-				std::string tableId = "##et_" + GetName() + "_" + std::to_string(tableCounter++);
-				if (ImGui::BeginTable(tableId.c_str(), 2, ImGuiTableFlags_SizingFixedFit)) {
-					float availWidth = ImGui::GetContentRegionAvail().x;
-					ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, availWidth * 0.45f);
-					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, availWidth * 0.55f);
-
-					for (int idx : node.varIndices)
-						renderVariable(idx);
-
-					ImGui::EndTable();
-				}
-			}
-
-			for (auto& child : node.children) {
-				std::string displayName = child->name;
-				auto nameIt = groupDisplayNames.find(child->fullPath);
-				if (nameIt != groupDisplayNames.end())
-					displayName = nameIt->second;
-
-				ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
-				auto openIt = groupDefaultOpen.find(child->fullPath);
-				if (openIt == groupDefaultOpen.end() || openIt->second)
-					flags |= ImGuiTreeNodeFlags_DefaultOpen;
-
-				std::string nodeLabel = displayName + "###grp_" + GetName() + "_" + child->fullPath;
-				if (ImGui::TreeNodeEx(nodeLabel.c_str(), flags)) {
-					renderGroup(*child);
-					ImGui::TreePop();
-				}
-			}
-		};
-
-		renderGroup(root);
-
-		if (valuesChanged)
-			UpdateUIVariables();
-
-		if (!errors.empty()) {
-			for (const auto& error : errors)
-				ImGui::TextWrapped("%s", error.c_str());
-		}
-	}
+	ENBExtender::RenderStandaloneEffect(*this);
 }
 
 void Effect::EnumerateAllVariables()
