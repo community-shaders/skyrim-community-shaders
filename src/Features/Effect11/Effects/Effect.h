@@ -149,6 +149,9 @@ public:
 	// Error tracking
 	std::vector<std::string> errors;
 
+	// Whether the source file was KIEFX-encoded (determines merged vs standalone UI)
+	bool isKIEFX = false;
+
 	// Pre-compiled group map from source preprocessing (variable name → group path)
 	std::unordered_map<std::string, std::string> sourceGroupMap;
 	// Source declaration order (variable name → declaration index)
@@ -187,6 +190,11 @@ public:
 
 	static void UpdateSizeVariables(ID3DX11Effect* effect, uint32_t outputWidth, uint32_t outputHeight);
 
+	// UI Variable helpers (public for ENBExtender access)
+	std::string GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName);
+	UIWidgetType ParseWidgetType(const std::string& widget);
+	std::vector<std::string> ParseDropdownList(const std::string& list);
+
 protected:
 	ID3DX11EffectVariable* GetCachedVariable(const std::string& name);
 	TextureManager::Texture* GetCachedCommonTexture(const std::string& name);
@@ -199,7 +207,6 @@ private:
 	std::unordered_map<std::string, TextureManager::Texture*> commonTexturePointerCache;
 
 	void EnumerateAllVariables();
-	void ParseSourceGroupScopes(const std::string& preprocessedSource);
 
 	void SetupCustomTextures();
 	ID3D11ShaderResourceView* LoadTextureFromFile(const std::string& filename);
@@ -214,10 +221,7 @@ private:
 	TextureManager::Texture* GetEffectTexture(const std::string& name);
 	ID3D11RenderTargetView* GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback);
 
-	// UI Variable helpers
-	std::string GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName);
-	UIWidgetType ParseWidgetType(const std::string& widget);
-	std::vector<std::string> ParseDropdownList(const std::string& list);
+	// UI Variable helpers (private)
 	void LoadUIVariableValue(UIVariable& uiVar);
 	void LoadVariableFromString(UIVariable& uiVar, const std::string& value);
 };

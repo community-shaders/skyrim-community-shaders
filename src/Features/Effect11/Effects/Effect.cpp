@@ -7,6 +7,7 @@
 #include <DirectXTK/DDSTextureLoader.h>
 #include <DirectXTK/WICTextureLoader.h>
 
+#include "../ENBExtender.h"
 #include "../PresetManager.h"
 #include "../TextureManager.h"
 #include "State.h"
@@ -131,8 +132,8 @@ namespace
 		if (!file.read(content.data(), size))
 			return "";
 
-		content = Util::ShaderPatches::DecodeENBSource(content);
-		Util::ShaderPatches::ConvertExtenderSyntax(content, basePath, iniPath, iniSection);
+		content = ENBExtender::DecodeKIEFX(content);
+		ENBExtender::ConvertExtenderSyntax(content, basePath, iniPath, iniSection);
 		Util::ShaderPatches::Apply(fullPath.filename().string().c_str(), content);
 
 		auto parentDir = fullPath.parent_path();
@@ -191,8 +192,8 @@ namespace
 			if (!file.read(content.data(), size))
 				return E_FAIL;
 
-			content = Util::ShaderPatches::DecodeENBSource(content);
-			Util::ShaderPatches::ConvertExtenderSyntax(content, basePath, iniPath, iniSection);
+			content = ENBExtender::DecodeKIEFX(content);
+			ENBExtender::ConvertExtenderSyntax(content, basePath, iniPath, iniSection);
 			Util::ShaderPatches::Apply(pFileName, content);
 
 			auto parentDir = fullPath.parent_path();
@@ -222,22 +223,20 @@ namespace
 
 bool Effect::Load()
 {
-	logger::debug("[ENBPP] Loading settings for effect '{}'", GetName());
-
 	// Create ini file path based on effect name
 	std::filesystem::path iniPath = PresetManager::GetSingleton().GetENBSeriesPath();
 	iniPath /= GetName() + ".ini";
 
 	// Check if file exists
 	if (!std::filesystem::exists(iniPath)) {
-		logger::debug("[ENBPP] Could not find ini file '{}' for effect '{}', using defaults", iniPath.string(), GetName());
+		logger::info("[ENBPP] Could not find ini file '{}' for effect '{}', using defaults", iniPath.string(), GetName());
 		return true;  // Not an error, just use defaults
 	}
 
 	// Skip reload if the file has not changed since last load
 	auto writeTime = std::filesystem::last_write_time(iniPath);
 	if (writeTime == lastIniWriteTime) {
-		logger::debug("[ENBPP] Skipping unchanged ini file '{}' for effect '{}'", iniPath.string(), GetName());
+		logger::info("[ENBPP] Skipping unchanged ini file '{}' for effect '{}'", iniPath.string(), GetName());
 		return true;
 	}
 	lastIniWriteTime = writeTime;
@@ -276,8 +275,6 @@ bool Effect::Load()
 
 void Effect::Save()
 {
-	logger::debug("[ENBPP] Saving settings for effect '{}'", GetName());
-
 	// Create ini file path based on effect name
 	std::filesystem::path iniPath = PresetManager::GetSingleton().GetENBSeriesPath();
 	iniPath /= GetName() + ".ini";
@@ -357,7 +354,7 @@ bool Effect::Apply()
 	// Call virtual texture creation function
 	CreateEffectTextures();
 
-	logger::debug("[ENBPP] Successfully applied effect '{}'", GetName());
+	logger::info("[ENBPP] Successfully applied effect '{}'", GetName());
 	return true;
 }
 
@@ -390,7 +387,7 @@ void Effect::Unload()
 	// Reset write time so the next Load() after Apply() always reads fresh values
 	lastIniWriteTime = {};
 
-	logger::debug("[ENBPP] Unloaded effect '{}'", GetName());
+	logger::info("[ENBPP] Unloaded effect '{}'", GetName());
 }
 
 bool Effect::LoadFXFile()
@@ -421,7 +418,8 @@ bool Effect::LoadFXFile()
 	}
 	mainFile.close();
 
-	sourceCode = Util::ShaderPatches::DecodeENBSource(sourceCode);
+	isKIEFX = ENBExtender::IsKIEFX(sourceCode);
+	sourceCode = ENBExtender::DecodeKIEFX(sourceCode);
 
 	auto enbseriesPath = filePath.parent_path();
 	auto iniFilePath = enbseriesPath / (GetName() + ".ini");
@@ -429,7 +427,7 @@ bool Effect::LoadFXFile()
 	std::string iniSection = GetName();
 	std::transform(iniSection.begin(), iniSection.end(), iniSection.begin(), ::toupper);
 
-	Util::ShaderPatches::ConvertExtenderSyntax(sourceCode, enbseriesPath, iniPathStr, iniSection);
+	ENBExtender::ConvertExtenderSyntax(sourceCode, enbseriesPath, iniPathStr, iniSection);
 	Util::ShaderPatches::Apply(GetName().c_str(), sourceCode);
 
 	// Try to preprocess first for group scope analysis.
@@ -454,10 +452,10 @@ bool Effect::LoadFXFile()
 				static_cast<const char*>(preprocessedBlob->GetBufferPointer()),
 				preprocessedBlob->GetBufferSize());
 
-			ParseSourceGroupScopes(preprocessedSource);
+			ENBExtender::ParseSourceGroupScopes(preprocessedSource, *this);
 
 			StripLineDirectives(preprocessedSource);
-			Util::ShaderPatches::ConvertFxGroups(preprocessedSource);
+			ENBExtender::ConvertFxGroups(preprocessedSource);
 
 			winrt::com_ptr<ID3DBlob> compiledShader;
 			winrt::com_ptr<ID3DBlob> errorBlob;
@@ -510,12 +508,11 @@ bool Effect::LoadFXFile()
 			winrt::com_ptr<ID3DBlob> ppErr2;
 			HRESULT ppHr2 = D3DPreprocess(inlinedSource.c_str(), inlinedSource.size(), filePath.string().c_str(), nullptr, nullptr, ppBlob2.put(), ppErr2.put());
 			if (SUCCEEDED(ppHr2) && ppBlob2) {
-				logger::debug("[ENBPP] InlineIncludes+D3DPreprocess succeeded for '{}'", filePath.string());
 				std::string ppSource2(static_cast<const char*>(ppBlob2->GetBufferPointer()), ppBlob2->GetBufferSize());
-				ParseSourceGroupScopes(ppSource2);
+				ENBExtender::ParseSourceGroupScopes(ppSource2, *this);
 
 				StripLineDirectives(ppSource2);
-				Util::ShaderPatches::ConvertFxGroups(ppSource2);
+				ENBExtender::ConvertFxGroups(ppSource2);
 
 				winrt::com_ptr<ID3DBlob> compiledShader2;
 				winrt::com_ptr<ID3DBlob> errorBlob2;
@@ -524,7 +521,6 @@ bool Effect::LoadFXFile()
 					HRESULT effectHr2 = D3DX11CreateEffectFromMemory(compiledShader2->GetBufferPointer(), compiledShader2->GetBufferSize(), 0, globals::d3d::device, effect.put());
 					if (SUCCEEDED(effectHr2)) {
 						usedPreprocessing = true;
-						logger::debug("[ENBPP] InlineIncludes fallback compiled successfully for '{}'", filePath.string());
 					} else {
 						logger::warn("[ENBPP] InlineIncludes fallback: D3DX11CreateEffectFromMemory failed for '{}' (0x{:08X})", filePath.string(), static_cast<unsigned int>(effectHr2));
 					}
@@ -544,7 +540,7 @@ bool Effect::LoadFXFile()
 		}
 
 		if (!usedPreprocessing) {
-			Util::ShaderPatches::ConvertFxGroups(sourceCode);
+			ENBExtender::ConvertFxGroups(sourceCode);
 			PresetInclude includeHandler(enbseriesPath, iniPathStr, iniSection);
 			winrt::com_ptr<ID3DBlob> compiledShader;
 			winrt::com_ptr<ID3DBlob> errorBlob;
@@ -604,7 +600,7 @@ bool Effect::LoadFXFile()
 	LoadTechniques();
 	LoadUITechniques();
 
-	logger::debug("[ENBPP] Effect '{}' compiled successfully with {} UI techniques", GetName(), uiTechniques.size());
+	logger::info("[ENBPP] Effect '{}' compiled successfully with {} UI techniques", GetName(), uiTechniques.size());
 
 	// Populate available techniques for UI selection
 	availableTechniques = GetBaseTechniqueNames();
@@ -673,11 +669,11 @@ bool Effect::LoadFXFile()
 				}
 			}
 			if (recovered > 0)
-				logger::debug("[ENBPP] Recovered {} group assignments from INI for ungrouped variables", recovered);
+				logger::info("[ENBPP] Recovered {} group assignments from INI for ungrouped variables", recovered);
 		}
 	}
 
-	logger::debug("[ENBPP] Successfully loaded FX file: {}", filePath.string());
+	logger::info("[ENBPP] Successfully loaded FX file: {}", filePath.string());
 	return true;
 }
 
@@ -969,7 +965,7 @@ static void ForEachTechniqueSequence(ID3DX11Effect* effect, Callback&& callback)
 
 void Effect::LoadTechniques()
 {
-	ForEachTechniqueSequence(effect.get(), [this](ID3DX11EffectTechnique* technique, const std::string& baseName, const std::string& techniqueName, int sequenceNumber) {
+	ForEachTechniqueSequence(effect.get(), [this](ID3DX11EffectTechnique* technique, const std::string& baseName, [[maybe_unused]] const std::string& techniqueName, int sequenceNumber) {
 		std::string renderTargetName = GetRenderTargetFromTechnique(technique);
 
 		if (techniques[baseName].size() <= static_cast<size_t>(sequenceNumber))
@@ -980,12 +976,7 @@ void Effect::LoadTechniques()
 		techInfo.renderTargetName = renderTargetName;
 		techniques[baseName][sequenceNumber] = std::move(techInfo);
 
-		logger::debug("[ENBPP] Loaded technique '{}' as base '{}' sequence {}", techniqueName, baseName, sequenceNumber);
 	});
-
-	for (const auto& [baseName, sequence] : techniques) {
-		logger::debug("[ENBPP] Technique sequence '{}' has {} techniques", baseName, sequence.size());
-	}
 }
 
 std::vector<std::string> Effect::GetBaseTechniqueNames()
@@ -1051,10 +1042,7 @@ void Effect::LoadUITechniques()
 		uiTech.displayName = uiName;
 		uiTechniques.push_back(uiTech);
 
-		logger::debug("[ENBPP] Added UI technique '{}' with display name '{}'", baseName, uiName);
 	});
-
-	logger::debug("[ENBPP] Loaded {} UI techniques", uiTechniques.size());
 }
 
 static std::string GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, const char* annotationName)
@@ -1153,171 +1141,7 @@ void Effect::LoadUIVariables()
 
 		// Handle string variables for UIGroupBegin/UIGroupEnd/UISeparator
 		if (typeDesc.Class == D3D_SVC_OBJECT && typeDesc.Type == D3D_SVT_STRING) {
-			std::string groupBegin = GetUIAnnotation(variable, "UIGroupBegin");
-			if (!groupBegin.empty() && groupBegin != "0" && groupBegin != "false") {
-				std::string groupName = GetUIAnnotation(variable, "UIGroup");
-				if (groupName.empty()) {
-					auto strVar = variable->AsString();
-					if (strVar && strVar->IsValid()) {
-						LPCSTR val = nullptr;
-						if (SUCCEEDED(strVar->GetString(&val)) && val)
-							groupName = val;
-					}
-				}
-				logger::debug("[ENBPP] UIGroupBegin: '{}' groupName='{}' stackDepth={}", varDesc.Name, groupName, groupStack.size());
-				if (!groupName.empty()) {
-					groupStack.push_back(groupName);
-					std::string fullPath;
-					for (size_t g = 0; g < groupStack.size(); ++g) {
-						if (g > 0)
-							fullPath += ".";
-						fullPath += groupStack[g];
-					}
-					if (groupOrdering.find(fullPath) == groupOrdering.end())
-						groupOrdering[fullPath] = 0;
-					std::string gDisplayName = GetUIAnnotation(variable, "UIGroupName");
-					if (!gDisplayName.empty())
-						groupDisplayNames[fullPath] = gDisplayName;
-					std::string gOpen = GetUIAnnotation(variable, "UIGroupOpen");
-					if (!gOpen.empty())
-						groupDefaultOpen[fullPath] = (gOpen != "0" && gOpen != "false");
-					std::string gOrder = GetUIAnnotation(variable, "UIOrdering");
-					if (!gOrder.empty()) {
-						try {
-							groupOrdering[fullPath] = std::stoi(gOrder);
-						} catch (...) {
-						}
-					}
-					logger::debug("[ENBPP] Group '{}' ordering={}", fullPath, groupOrdering[fullPath]);
-				}
-				continue;
-			}
-
-			std::string groupEnd = GetUIAnnotation(variable, "UIGroupEnd");
-			if (!groupEnd.empty() && groupEnd != "0" && groupEnd != "false" && !groupStack.empty()) {
-				logger::debug("[ENBPP] UIGroupEnd: '{}' popping group, stackDepth before={}", varDesc.Name, groupStack.size());
-				groupStack.pop_back();
-				continue;
-			}
-
-			// UISeparator creates a visual divider
-			std::string separator = GetUIAnnotation(variable, "UISeparator");
-			if (!separator.empty() && separator != "0" && separator != "false") {
-				UIVariable sepVar = {};
-				sepVar.isSeparator = true;
-				sepVar.name = varDesc.Name;
-				sepVar.group = GetUIAnnotation(variable, "UIGroup");
-				if (sepVar.group.empty() && !groupStack.empty()) {
-					for (size_t g = 0; g < groupStack.size(); ++g) {
-						if (g > 0)
-							sepVar.group += ".";
-						sepVar.group += groupStack[g];
-					}
-				}
-				if (sepVar.group.empty()) {
-					auto it = sourceGroupMap.find(varDesc.Name);
-					if (it != sourceGroupMap.end())
-						sepVar.group = it->second;
-				}
-				auto orderIt = sourceOrderMap.find(varDesc.Name);
-				if (orderIt != sourceOrderMap.end())
-					sepVar.sourceOrder = orderIt->second;
-				logger::debug("[ENBPP] Separator '{}' group='{}' sourceOrder={}", varDesc.Name, sepVar.group, sepVar.sourceOrder);
-				uiVariables.push_back(sepVar);
-				continue;
-			}
-
-			// Render non-separator strings as labels if they have UIName or are in a group scope
-			{
-				std::string uiNameStr = GetUIAnnotation(variable, "UIName");
-				std::string labelText;
-				if (!uiNameStr.empty()) {
-					labelText = uiNameStr;
-				} else {
-					auto strVar = variable->AsString();
-					if (strVar && strVar->IsValid()) {
-						LPCSTR val = nullptr;
-						if (SUCCEEDED(strVar->GetString(&val)) && val && val[0] != '\0')
-							labelText = val;
-					}
-				}
-
-				// Pipe character strings are separators (ENB Primer convention)
-				if (labelText == "|") {
-					UIVariable sepVar = {};
-					sepVar.isSeparator = true;
-					sepVar.name = varDesc.Name;
-					if (!groupStack.empty()) {
-						for (size_t g = 0; g < groupStack.size(); ++g) {
-							if (g > 0)
-								sepVar.group += ".";
-							sepVar.group += groupStack[g];
-						}
-					}
-					if (sepVar.group.empty()) {
-						auto it = sourceGroupMap.find(varDesc.Name);
-						if (it != sourceGroupMap.end())
-							sepVar.group = it->second;
-					}
-					auto orderIt = sourceOrderMap.find(varDesc.Name);
-					if (orderIt != sourceOrderMap.end())
-						sepVar.sourceOrder = orderIt->second;
-					logger::debug("[ENBPP] Pipe separator '{}' group='{}' sourceOrder={}", varDesc.Name, sepVar.group, sepVar.sourceOrder);
-					uiVariables.push_back(sepVar);
-					continue;
-				}
-
-				if (!labelText.empty()) {
-					// Check if hidden
-					std::string hiddenStr = GetUIAnnotation(variable, "UIHidden");
-					std::string visibleStr = GetUIAnnotation(variable, "UIVisible");
-					if ((hiddenStr == "1" || hiddenStr == "true") || (visibleStr == "0" || visibleStr == "false")) {
-						continue;
-					}
-
-					UIVariable labelVar = {};
-					labelVar.name = varDesc.Name;
-					labelVar.displayName = labelText;
-					labelVar.type = UIVariableType::Float;
-					labelVar.floatMin = 0.0f;
-					labelVar.floatMax = 0.0f;
-					labelVar.isReadOnly = true;
-					labelVar.group = GetUIAnnotation(variable, "UIGroup");
-					if (labelVar.group.empty() && !groupStack.empty()) {
-						for (size_t g = 0; g < groupStack.size(); ++g) {
-							if (g > 0)
-								labelVar.group += ".";
-							labelVar.group += groupStack[g];
-						}
-					}
-					if (labelVar.group.empty()) {
-						auto it = sourceGroupMap.find(varDesc.Name);
-						if (it != sourceGroupMap.end())
-							labelVar.group = it->second;
-					}
-					auto orderIt = sourceOrderMap.find(varDesc.Name);
-					if (orderIt != sourceOrderMap.end())
-						labelVar.sourceOrder = orderIt->second;
-
-					std::string orderStr = GetUIAnnotation(variable, "UIOrdering");
-					if (!orderStr.empty()) {
-						try {
-							labelVar.ordering = std::stoi(orderStr);
-						} catch (...) {
-						}
-					}
-
-					labelVar.separation = GetUIAnnotation(variable, "Separation");
-					labelVar.uniqueName = GetUIAnnotation(variable, "UniqueName");
-					labelVar.uiBinding = GetUIAnnotation(variable, "UIBinding");
-					labelVar.uiBindingProperty = GetUIAnnotation(variable, "UIBindingProperty");
-					labelVar.uiBindingCondition = GetUIAnnotation(variable, "UIBindingCondition");
-
-					logger::debug("[ENBPP] String label '{}' text='{}' group='{}' sourceOrder={}", varDesc.Name, labelText, labelVar.group, labelVar.sourceOrder);
-					uiVariables.push_back(labelVar);
-				}
-			}
-
+			ENBExtender::ProcessExtenderStringVariable(variable, varDesc, groupStack, *this);
 			continue;
 		}
 
@@ -1335,80 +1159,9 @@ void Effect::LoadUIVariables()
 		uiVar.displayName = uiName;
 		uiVar.effectVariable.copy_from(variable);
 
-		// Assign group: explicit UIGroup takes priority, then scope, then sourceGroupMap
-		uiVar.group = GetUIAnnotation(variable, "UIGroup");
-		if (uiVar.group.empty() && !groupStack.empty()) {
-			for (size_t g = 0; g < groupStack.size(); ++g) {
-				if (g > 0)
-					uiVar.group += ".";
-				uiVar.group += groupStack[g];
-			}
-		}
-		if (uiVar.group.empty()) {
-			auto it = sourceGroupMap.find(varDesc.Name);
-			if (it != sourceGroupMap.end())
-				uiVar.group = it->second;
-		}
-
-		// Read UIOrdering
-		std::string orderStr = GetUIAnnotation(variable, "UIOrdering");
-		if (!orderStr.empty()) {
-			try {
-				uiVar.ordering = std::stoi(orderStr);
-			} catch (...) {
-			}
-		}
-
-		// Assign source declaration order
-		{
-			auto orderIt = sourceOrderMap.find(varDesc.Name);
-			if (orderIt != sourceOrderMap.end())
-				uiVar.sourceOrder = orderIt->second;
-		}
-
-		logger::debug("[ENBPP] UI var '{}' UIName='{}' UIGroup='{}' sourceOrder={} ordering={} sep='{}'",
-			varDesc.Name, uiName, uiVar.group, uiVar.sourceOrder, uiVar.ordering,
-			GetUIAnnotation(variable, "Separation"));
-
-		// Read UIReadOnly
-		std::string readOnlyStr = GetUIAnnotation(variable, "UIReadOnly");
-		uiVar.isReadOnly = (readOnlyStr == "1" || readOnlyStr == "true");
-
-		// Read UIHidden
-		std::string hiddenStr = GetUIAnnotation(variable, "UIHidden");
-		uiVar.isHidden = (hiddenStr == "1" || hiddenStr == "true");
+		ENBExtender::ApplyExtenderAnnotations(uiVar, variable, groupStack, *this);
 		if (uiVar.isHidden)
 			continue;
-
-		// Read UITopLevel
-		std::string topLevelStr = GetUIAnnotation(variable, "UITopLevel");
-		uiVar.isTopLevel = (topLevelStr == "1" || topLevelStr == "true");
-		if (uiVar.isTopLevel)
-			uiVar.group.clear();
-
-		// Read UniqueName
-		uiVar.uniqueName = GetUIAnnotation(variable, "UniqueName");
-
-		// Read UIBinding
-		uiVar.uiBinding = GetUIAnnotation(variable, "UIBinding");
-		uiVar.uiBindingProperty = GetUIAnnotation(variable, "UIBindingProperty");
-		uiVar.uiBindingCondition = GetUIAnnotation(variable, "UIBindingCondition");
-
-		// Read Separation
-		uiVar.separation = GetUIAnnotation(variable, "Separation");
-
-		// Track group metadata from first variable defining each group
-		if (!uiVar.group.empty() && groupOrdering.find(uiVar.group) == groupOrdering.end()) {
-			groupOrdering[uiVar.group] = 0;
-			std::string gDisplayName = GetUIAnnotation(variable, "UIGroupName");
-			if (!gDisplayName.empty())
-				groupDisplayNames[uiVar.group] = gDisplayName;
-			std::string gOpen = GetUIAnnotation(variable, "UIGroupOpen");
-			if (!gOpen.empty())
-				groupDefaultOpen[uiVar.group] = (gOpen != "0" && gOpen != "false");
-			if (uiVar.ordering != 0)
-				groupOrdering[uiVar.group] = uiVar.ordering;
-		}
 
 		// Determine variable type
 		if (typeDesc.Class == D3D_SVC_SCALAR) {
@@ -1475,66 +1228,14 @@ void Effect::LoadUIVariables()
 		}
 
 		LoadUIVariableValue(uiVar);
-
-		// Parse time period from display name (e.g. "|- Dawn - Brightness" -> "Dawn")
-		if (!uiVar.separation.empty() && uiVar.separation != "None") {
-			static const char* periods[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "Interior" };
-			for (const auto& period : periods) {
-				std::string withIndent = std::string("|- ") + period + " - ";
-				if (uiVar.displayName.size() >= withIndent.size() && uiVar.displayName.substr(0, withIndent.size()) == withIndent) {
-					uiVar.timePeriod = period;
-					break;
-				}
-				std::string plain = std::string(period) + " - ";
-				if (uiVar.displayName.size() >= plain.size() && uiVar.displayName.substr(0, plain.size()) == plain) {
-					uiVar.timePeriod = period;
-					break;
-				}
-			}
-		}
+		ENBExtender::ParseTimePeriod(uiVar);
 
 		uiVariables.push_back(uiVar);
 	}
 
-	// Insert uidefine entries from ShaderPatches (compile-time settings shown in UI)
-	auto& uiDefines = Util::ShaderPatches::GetLastUIDefines();
-	for (const auto& def : uiDefines) {
-		UIVariable uiVar = {};
-		uiVar.name = def.defineName;
-		uiVar.displayName = def.displayName;
-		uiVar.group = def.group;
-		uiVar.ordering = def.ordering;
-		uiVar.isReadOnly = true;
+	ENBExtender::InsertUIDefines(*this);
 
-		if (def.type == "bool") {
-			uiVar.type = UIVariableType::Bool;
-			uiVar.boolValue = (def.value != "0");
-		} else if (def.type == "int") {
-			uiVar.type = UIVariableType::Int;
-			try {
-				uiVar.intValue = std::stoi(def.value);
-			} catch (...) {
-			}
-			uiVar.intMin = def.intMin;
-			uiVar.intMax = def.intMax;
-			uiVar.widgetType = ParseWidgetType(def.widget);
-			if (uiVar.widgetType == UIWidgetType::Dropdown && !def.list.empty())
-				uiVar.dropdownItems = ParseDropdownList(def.list);
-		} else {
-			uiVar.type = UIVariableType::Float;
-			try {
-				uiVar.floatValue = std::stof(def.value);
-			} catch (...) {
-			}
-			uiVar.floatMin = def.floatMin;
-			uiVar.floatMax = def.floatMax;
-			uiVar.floatStep = def.floatStep;
-		}
-
-		uiVariables.push_back(uiVar);
-	}
-
-	logger::debug("[ENBPP] Loaded {} UI variables ({} from uidefines)", uiVariables.size(), uiDefines.size());
+	logger::info("[ENBPP] Loaded {} UI variables for effect '{}'", uiVariables.size(), GetName());
 }
 
 std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName)
@@ -2369,114 +2070,9 @@ void Effect::EnumerateAllVariables()
 		std::string varName = varDesc.Name;
 		variables[varName].copy_from(variable);
 
-		logger::debug("[ENBPP] Enumerated variable: {}", varName);
 	}
 
-	logger::debug("[ENBPP] Enumerated {} effect variables", variables.size());
-}
-
-void Effect::ParseSourceGroupScopes(const std::string& preprocessedSource)
-{
-	sourceGroupMap.clear();
-	sourceOrderMap.clear();
-	std::vector<std::string> groupStack;
-
-	int totalLines = 0;
-	int uiGroupBeginCount = 0;
-	int declarationIndex = 0;
-
-	std::istringstream stream(preprocessedSource);
-	std::string line;
-
-	while (std::getline(stream, line)) {
-		totalLines++;
-		size_t firstNonSpace = line.find_first_not_of(" \t");
-		if (firstNonSpace == std::string::npos || line[firstNonSpace] == '#')
-			continue;
-
-		size_t beginPos = line.find("UIGroupBegin");
-		if (beginPos != std::string::npos) {
-			uiGroupBeginCount++;
-			// Extract UIGroup value (not UIGroupBegin/End/Name/Open)
-			std::string groupName;
-			size_t searchPos = 0;
-			while (searchPos < line.size()) {
-				size_t ugPos = line.find("UIGroup", searchPos);
-				if (ugPos == std::string::npos)
-					break;
-				size_t afterUG = ugPos + 7;
-				if (afterUG < line.size() && line[afterUG] != 'B' && line[afterUG] != 'E' && line[afterUG] != 'N' && line[afterUG] != 'O') {
-					size_t eqPos = line.find('=', afterUG);
-					if (eqPos != std::string::npos) {
-						size_t q1 = line.find('"', eqPos + 1);
-						size_t q2 = (q1 != std::string::npos) ? line.find('"', q1 + 1) : std::string::npos;
-						if (q1 != std::string::npos && q2 != std::string::npos)
-							groupName = line.substr(q1 + 1, q2 - q1 - 1);
-					}
-					break;
-				}
-				searchPos = afterUG;
-			}
-
-			if (groupName.empty()) {
-				// Fallback: extract from string value (last = "..." pattern after annotation block)
-				size_t angleClose = line.rfind('>');
-				if (angleClose != std::string::npos) {
-					size_t eqPos = line.find('=', angleClose);
-					if (eqPos != std::string::npos) {
-						size_t q1 = line.find('"', eqPos + 1);
-						size_t q2 = (q1 != std::string::npos) ? line.find('"', q1 + 1) : std::string::npos;
-						if (q1 != std::string::npos && q2 != std::string::npos)
-							groupName = line.substr(q1 + 1, q2 - q1 - 1);
-					}
-				}
-			}
-
-			if (!groupName.empty())
-				groupStack.push_back(groupName);
-			continue;
-		}
-
-		if (line.find("UIGroupEnd") != std::string::npos) {
-			if (!groupStack.empty())
-				groupStack.pop_back();
-			continue;
-		}
-
-		// Look for variable declaration: type varname (track order for ALL variables)
-		std::string trimmed = line.substr(firstNonSpace);
-		static const std::string types[] = { "float4 ", "float3 ", "float2 ", "float ", "int ", "bool ", "string " };
-
-		for (const auto& type : types) {
-			if (trimmed.size() >= type.size() && trimmed.compare(0, type.size(), type) == 0) {
-				size_t nameStart = type.size();
-				while (nameStart < trimmed.size() && (trimmed[nameStart] == ' ' || trimmed[nameStart] == '\t'))
-					nameStart++;
-				size_t nameEnd = nameStart;
-				while (nameEnd < trimmed.size() && (std::isalnum(static_cast<unsigned char>(trimmed[nameEnd])) || trimmed[nameEnd] == '_'))
-					nameEnd++;
-
-				if (nameEnd > nameStart) {
-					std::string varName = trimmed.substr(nameStart, nameEnd - nameStart);
-					if (varName.find("UIGroupBegin") == std::string::npos && varName.find("UIGroupEnd") == std::string::npos) {
-						sourceOrderMap[varName] = declarationIndex++;
-						if (!groupStack.empty()) {
-							std::string fullPath;
-							for (size_t i = 0; i < groupStack.size(); ++i) {
-								if (i > 0)
-									fullPath += ".";
-								fullPath += groupStack[i];
-							}
-							sourceGroupMap[varName] = fullPath;
-						}
-					}
-				}
-				break;
-			}
-		}
-	}
-
-	logger::debug("[ENBPP] ParseSourceGroupScopes: {} lines, {} UIGroupBegin found, {} variable group assignments", totalLines, uiGroupBeginCount, sourceGroupMap.size());
+	logger::info("[ENBPP] Enumerated {} effect variables", variables.size());
 }
 
 ID3DX11EffectVariable* Effect::GetCachedVariable(const std::string& name)
