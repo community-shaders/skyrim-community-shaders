@@ -43,7 +43,7 @@ bool WeatherEditor::HasWidgetJsonFiles()
 		const bool isDirectory = std::filesystem::is_directory(widgetSettingsPath, ec);
 		if (ec) {
 			logger::warn("[WeatherEditor] Failed to inspect widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
-			return false;
+			continue;
 		}
 		if (!isDirectory)
 			continue;
@@ -53,7 +53,7 @@ bool WeatherEditor::HasWidgetJsonFiles()
 			const bool isRegularFile = it->is_regular_file(entryEc);
 			if (entryEc) {
 				logger::warn("[WeatherEditor] Failed to inspect widget settings file '{}': {}", it->path().string(), entryEc.message());
-				return false;
+				continue;
 			}
 			if (isRegularFile && _stricmp(it->path().extension().string().c_str(), kJsonExtension) == 0) {
 				s_hasWidgetJsonFiles = true;
@@ -63,7 +63,7 @@ bool WeatherEditor::HasWidgetJsonFiles()
 		}
 		if (ec) {
 			logger::warn("[WeatherEditor] Failed to scan widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
-			return false;
+			continue;
 		}
 	}
 
