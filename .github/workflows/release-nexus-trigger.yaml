@@ -10,7 +10,7 @@ jobs:
         # Fires when a draft release is published. Only stable tags (no '-') are uploaded.
         if: >
             !contains(github.event.release.tag_name, '-')
-        uses: ./.github/workflows/upload-nexus.yaml
+        uses: ./.github/workflows/nexus-upload.yaml
         with:
             tag: ${{ github.event.release.tag_name }}
             artifact_pattern: "CommunityShaders-*.7z"
