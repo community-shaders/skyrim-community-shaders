@@ -169,6 +169,7 @@ jobs:
               with:
                   name: "Community Shaders ${{ steps.combined_notes.outputs.release_tag }}"
                   draft: true
+                  omitDraftDuringUpdate: true
                   tag: ${{ steps.combined_notes.outputs.release_tag }}
                   artifacts: "${{ github.workspace }}/dist/*.7z"
                   bodyFile: ${{ steps.combined_notes.outputs.body_file }}
