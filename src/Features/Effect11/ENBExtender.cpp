@@ -867,7 +867,7 @@ namespace ENBExtender
 		}
 	}
 
-	// ── RenderMergedEffectsList ─────────────────────────────────────────
+	// ── RenderUI ────────────────────────────────────────────────────────
 
 	struct VarRef
 	{
@@ -974,10 +974,10 @@ namespace ENBExtender
 
 	// Tree construction
 
-	static void BuildUniqueNameMap(Effect* effects[], int effectCount,
+	static void BuildUniqueNameMap(std::span<Effect*> effects,
 		std::unordered_map<std::string, VarRef>& uniqueNameMap)
 	{
-		for (int e = 0; e < effectCount; ++e) {
+		for (size_t e = 0; e < effects.size(); ++e) {
 			auto* effect = effects[e];
 			if (!effect->IsCompiled())
 				continue;
@@ -1010,11 +1010,11 @@ namespace ENBExtender
 		std::unordered_map<std::string, int> ordering;
 	};
 
-	static void BuildMergedTree(Effect* effects[], int effectCount, GroupNode& root, MergedGroupMeta& meta)
+	static void BuildMergedTree(std::span<Effect*> effects, GroupNode& root, MergedGroupMeta& meta)
 	{
 		std::unordered_set<std::string> rootDisplayNames;
 
-		for (int e = 0; e < effectCount; ++e) {
+		for (size_t e = 0; e < effects.size(); ++e) {
 			auto* effect = effects[e];
 			if (!effect->IsCompiled())
 				continue;
@@ -1094,7 +1094,7 @@ namespace ENBExtender
 	}
 
 	static std::unordered_set<std::string> MapRootSeparators(
-		Effect* effects[], int effectCount, const GroupNode& root)
+		std::span<Effect*> effects, const GroupNode& root)
 	{
 		// Precompute min source order per effect per root child
 		struct ChildInfo
@@ -1112,7 +1112,7 @@ namespace ENBExtender
 		}
 
 		std::unordered_set<std::string> result;
-		for (int e = 0; e < effectCount; ++e) {
+		for (size_t e = 0; e < effects.size(); ++e) {
 			auto* effect = effects[e];
 			if (!effect->IsCompiled())
 				continue;
@@ -1321,24 +1321,24 @@ namespace ENBExtender
 		}
 	}
 
-	void RenderMergedEffectsList(Effect* effects[], int effectCount)
+	void RenderUI(std::span<Effect*> effects)
 	{
 		std::unordered_map<std::string, VarRef> uniqueNameMap;
-		BuildUniqueNameMap(effects, effectCount, uniqueNameMap);
+		BuildUniqueNameMap(effects, uniqueNameMap);
 
 		GroupNode root;
 		MergedGroupMeta meta;
-		BuildMergedTree(effects, effectCount, root, meta);
+		BuildMergedTree(effects, root, meta);
 		SortMergedTree(root, meta);
 
-		auto separatorsBeforeGroup = MapRootSeparators(effects, effectCount, root);
+		auto separatorsBeforeGroup = MapRootSeparators(effects, root);
 
 		std::unordered_set<Effect*> changedEffects;
 		RenderContext ctx{ uniqueNameMap, changedEffects, meta, separatorsBeforeGroup };
 
 		// Collect technique dropdowns
 		std::vector<std::pair<Effect*, std::string>> techDropdowns;
-		for (int e = 0; e < effectCount; ++e) {
+		for (size_t e = 0; e < effects.size(); ++e) {
 			auto* effect = effects[e];
 			if (effect->IsCompiled() && effect->uiTechniques.size() > 1 && effect->techniqueDropdownVisible)
 				techDropdowns.push_back({ effect, effect->techniqueDropdownGroup });
@@ -1355,7 +1355,7 @@ namespace ENBExtender
 		for (auto* effect : changedEffects)
 			effect->UpdateUIVariables();
 
-		for (int e = 0; e < effectCount; ++e) {
+		for (size_t e = 0; e < effects.size(); ++e) {
 			auto* effect = effects[e];
 			if (!effect->GetErrors().empty()) {
 				ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s:", effect->GetName().c_str());
@@ -1363,6 +1363,12 @@ namespace ENBExtender
 					ImGui::TextWrapped("%s", err.c_str());
 			}
 		}
+	}
+
+	void RenderUI(Effect& effect)
+	{
+		Effect* ptr = &effect;
+		RenderUI({ &ptr, 1 });
 	}
 
 	// ── Post-load processing ─────────────────────────────────────────────

@@ -952,13 +952,13 @@ void EffectManager::RenderEffectsList()
 	}
 
 	if (!mergedEffects.empty())
-		ENBExtender::RenderMergedEffectsList(mergedEffects.data(), static_cast<int>(mergedEffects.size()));
+		ENBExtender::RenderUI(mergedEffects);
 
 	for (auto* effect : standaloneEffects) {
 		if (effect->IsCompiled()) {
 			ImGui::Separator();
 			if (ImGui::TreeNodeEx(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				ENBExtender::RenderMergedEffectsList(&effect, 1);
+				effect->RenderImGui();
 				ImGui::TreePop();
 			}
 		} else if (!effect->GetErrors().empty()) {

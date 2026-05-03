@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -33,5 +34,6 @@ namespace ENBExtender
 	void ApplyTimeOfDayInterpolation(Effect& effect);
 
 	// UI rendering
-	void RenderMergedEffectsList(Effect* effects[], int effectCount);
+	void RenderUI(std::span<Effect*> effects);
+	void RenderUI(Effect& effect);
 }
