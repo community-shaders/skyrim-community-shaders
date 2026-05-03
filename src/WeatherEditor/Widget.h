@@ -3,6 +3,8 @@
 
 #include "Util.h"
 #include "Utils/Form.h"
+#include <array>
+#include <string_view>
 
 class WidgetSharedData
 {
@@ -28,6 +30,26 @@ public:
 	RE::TESForm* form = nullptr;
 
 	virtual ~Widget() {};
+
+	static constexpr std::string_view kWeatherFolderName = "Weathers";
+	static constexpr std::string_view kLightingTemplateFolderName = "Lighting Templates";
+	static constexpr std::string_view kImageSpaceFolderName = "ImageSpaces";
+	static constexpr std::string_view kVolumetricLightingFolderName = "Volumetric Lighting";
+	static constexpr std::string_view kPrecipitationFolderName = "Precipitation";
+	static constexpr std::string_view kVisualEffectsFolderName = "Visual Effects";
+	static constexpr std::string_view kCellLightingFolderName = "Cell Lighting";
+	static constexpr std::string_view kOtherEditorWidgetsFolderName = "Other Editor Widgets";
+
+	static constexpr std::array kSaveFolderNames = {
+		kWeatherFolderName,
+		kLightingTemplateFolderName,
+		kImageSpaceFolderName,
+		kVolumetricLightingFolderName,
+		kPrecipitationFolderName,
+		kVisualEffectsFolderName,
+		kCellLightingFolderName,
+		kOtherEditorWidgetsFolderName
+	};
 
 	virtual std::string GetEditorID() const
 	{
@@ -136,7 +158,7 @@ public:
 	}
 
 	void Save();
-	void Load();
+	void Load(bool showNotification = true);
 	bool HasSavedFile() const;
 
 	virtual void Delete();

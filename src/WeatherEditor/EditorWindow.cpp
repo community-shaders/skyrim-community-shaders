@@ -4,7 +4,6 @@
 #include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
 #include "Globals.h"
-#include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
@@ -462,11 +461,10 @@ void EditorWindow::ShowObjectsWindow()
 						auto* menu = globals::menu;
 						if (menu && menu->uiIcons.deleteSettings.texture) {
 							const float iconSize = ImGui::GetFrameHeight() * 0.85f;
-							auto _style = Util::ErrorButtonStyle();
 							ImGui::SetNextItemAllowOverlap();
 							char idBuf[32];
 							snprintf(idBuf, sizeof(idBuf), "##jsondel_%s", widget->GetFormID().c_str());
-							if (ImGui::ImageButton(idBuf, menu->uiIcons.deleteSettings.texture, { iconSize, iconSize })) {
+							if (Util::ErrorImageButton(idBuf, menu->uiIcons.deleteSettings.texture, { iconSize, iconSize })) {
 								pendingDeleteWidget = widget;
 								pendingDeletePopupRequested = true;
 							}
@@ -1245,12 +1243,8 @@ void EditorWindow::RenderUI()
 
 		// Close button
 		ImGui::SetCursorScreenPos(ImVec2(xButtonX, cursorY));
-		{
-			auto _style = Util::ErrorButtonStyle();
-			if (ImGui::Button("X", ImVec2(closeButtonSize, closeButtonSize))) {
-				open = false;
-			}
-		}
+		if (Util::ErrorButton("X", ImVec2(closeButtonSize, closeButtonSize)))
+			open = false;
 		Util::AddTooltip("Close Weather Editor (Esc)");
 
 		ImGui::PopClipRect();  // End bottom-border clip rect

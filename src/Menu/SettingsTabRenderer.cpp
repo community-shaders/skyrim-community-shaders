@@ -675,8 +675,7 @@ void SettingsTabRenderer::RenderThemesTab()
 
 		if (!isPreset && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
 			ImGui::SameLine();
-			auto _style = Util::ErrorButtonStyle();
-			if (Util::ButtonWithFlash("Delete")) {
+			if (Util::ErrorButtonWithFlash("Delete")) {
 				deleteThemePopup.message =
 					"Are you sure you want to delete the theme '" +
 					(currentThemeInfo->displayName.empty() ? currentThemePreset : currentThemeInfo->displayName) +

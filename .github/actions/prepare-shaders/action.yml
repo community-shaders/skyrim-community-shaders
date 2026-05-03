@@ -3,7 +3,7 @@ description: "Prepare shaders for validation or analysis (requires setup-build-e
 
 inputs:
     cmake-preset:
-        description: "The CMake configure/build preset to use (e.g. ALL, ALL-VS2022)."
+        description: "The CMake configure/build preset to use."
         required: false
         default: "ALL"
 

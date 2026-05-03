@@ -70,7 +70,7 @@ void Widget::Save()
 	}
 }
 
-void Widget::Load()
+void Widget::Load(bool showNotification)
 {
 	std::string filePath = GetSaveFilePath();
 
@@ -78,10 +78,12 @@ void Widget::Load()
 		js = json();
 		LoadSettings();
 
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("No saved file - reset {} to vanilla values", GetEditorID()),
-			ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("No saved file - reset {} to vanilla values", GetEditorID()),
+				ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
+				3.0f);
+		}
 		return;
 	}
 
@@ -90,10 +92,12 @@ void Widget::Load()
 
 	if (!settingsFile.good() || !settingsFile.is_open()) {
 		logger::warn("Failed to open settings file: {}", filePath);
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Failed to open file for {}", GetEditorID()),
-			ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Failed to open file for {}", GetEditorID()),
+				ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+				3.0f);
+		}
 		return;
 	}
 
@@ -104,10 +108,12 @@ void Widget::Load()
 		// Validate that we loaded valid JSON
 		if (js.is_null()) {
 			logger::warn("{}: Loaded JSON is null, file may be empty or invalid", filePath);
-			EditorWindow::GetSingleton()->ShowNotification(
-				std::format("Invalid file for {} - resetting to vanilla", GetEditorID()),
-				ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-				3.0f);
+			if (showNotification) {
+				EditorWindow::GetSingleton()->ShowNotification(
+					std::format("Invalid file for {} - resetting to vanilla", GetEditorID()),
+					ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+					3.0f);
+			}
 			js = json();
 			LoadSettings();
 			return;
@@ -115,29 +121,35 @@ void Widget::Load()
 
 		LoadSettings();
 
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Loaded saved settings for {}", GetEditorID()),
-			ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Loaded saved settings for {}", GetEditorID()),
+				ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
+				3.0f);
+		}
 
 	} catch (const nlohmann::json::parse_error& e) {
 		logger::error("Error parsing settings for file ({}) : {}\n", filePath, e.what());
 		logger::error("Parse error at byte {}: {}", e.byte, e.what());
 		settingsFile.close();
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Parse error for {} - resetting to vanilla", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Parse error for {} - resetting to vanilla", GetEditorID()),
+				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				3.0f);
+		}
 		js = json();
 		LoadSettings();
 		return;
 	} catch (const std::exception& e) {
 		logger::error("Unexpected error loading settings file ({}) : {}\n", filePath, e.what());
 		settingsFile.close();
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Error loading {} - resetting to vanilla", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Error loading {} - resetting to vanilla", GetEditorID()),
+				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				3.0f);
+		}
 		js = json();
 		LoadSettings();
 		return;
@@ -250,21 +262,21 @@ std::string Widget::GetFolderName() const
 {
 	switch (form->GetFormType()) {
 	case RE::FormType::Weather:
-		return "Weathers";
+		return std::string(kWeatherFolderName);
 	case RE::FormType::LightingMaster:
-		return "Lighting Templates";
+		return std::string(kLightingTemplateFolderName);
 	case RE::FormType::ImageSpace:
-		return "ImageSpaces";
+		return std::string(kImageSpaceFolderName);
 	case RE::FormType::VolumetricLighting:
-		return "Volumetric Lighting";
+		return std::string(kVolumetricLightingFolderName);
 	case RE::FormType::ShaderParticleGeometryData:
-		return "Precipitation";
+		return std::string(kPrecipitationFolderName);
 	case RE::FormType::ReferenceEffect:
-		return "Visual Effects";
+		return std::string(kVisualEffectsFolderName);
 	case RE::FormType::Cell:
-		return "Cell Lighting";
+		return std::string(kCellLightingFolderName);
 	default:
-		return "Other Editor Widgets";
+		return std::string(kOtherEditorWidgetsFolderName);
 	}
 }
 
@@ -378,11 +390,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 			if (HasSavedFile() && menu->uiIcons.deleteSettings.texture) {
 				ImGui::SameLine();
-				{
-					auto _style = Util::ErrorButtonStyle();
-					if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
-						ImGui::OpenPopup("DeleteConfirmation");
-				}
+				if (Util::ErrorImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
+					ImGui::OpenPopup("DeleteConfirmation");
 				Util::AddTooltip("Delete saved file");
 			}
 		}
@@ -391,57 +400,45 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		ImGui::PopStyleColor(2);
 		ImGui::PopStyleVar(2);
 	} else {
-		const float buttonHeight = ImGui::GetFrameHeight();
 		if (!menu) {
 			drawSearchBar();
 			drawForceWeatherButton();
 			ImGui::Separator();
 			return;
 		}
-		const auto& palette = menu->GetTheme().StatusPalette;
-
 		drawSearchBar();
 		drawForceWeatherButton();
 
-		auto styledTextButton = [&](const char* label, const ImVec4& color, const char* tooltip, auto callback) {
-			ImGui::SameLine();
-			ImVec2 size = ImGui::CalcTextSize(label);
-			size.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			size.y = buttonHeight;
-			auto hover = color;
-			hover.w = 0.8f;
-			auto active = color;
-			active.w = 1.0f;
-			{
-				auto styledButton = Util::StyledButtonWrapper(color, hover, active);
-				if (ImGui::Button(label, size))
-					callback();
-			}
-			Util::AddTooltip(tooltip);
-		};
-
 		auto textButton = [&](const char* label, const char* tooltip, auto callback) {
 			ImGui::SameLine();
-			ImVec2 size = ImGui::CalcTextSize(label);
-			size.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			size.y = buttonHeight;
-			if (Util::ButtonWithFlash(label, size))
+			if (Util::ButtonWithFlash(label))
 				callback();
 			Util::AddTooltip(tooltip);
 		};
 
 		// Apply button
-		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply()))
-			styledTextButton("Apply", palette.SuccessColor, "Apply changes to the game", [&]() { ApplyChanges(); });
+		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
+			ImGui::SameLine();
+			if (Util::SuccessButton("Apply"))
+				ApplyChanges();
+			Util::AddTooltip("Apply changes to the game");
+		}
 
 		// Save/Load/Revert/Delete group
 		if (showSaveLoadRevert) {
 			textButton("Save", "Save to file", [&]() { Save(); });
 			textButton("Load", "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
-			styledTextButton("Revert", palette.Warning, "Revert to original game values", [&]() { RevertChanges(); });
+			ImGui::SameLine();
+			if (Util::WarningButton("Revert"))
+				RevertChanges();
+			Util::AddTooltip("Revert to original game values");
 
-			if (HasSavedFile())
-				styledTextButton("Delete", palette.Error, "Delete saved file", [&]() { ImGui::OpenPopup("DeleteConfirmation"); });
+			if (HasSavedFile()) {
+				ImGui::SameLine();
+				if (Util::ErrorTextButton("Delete"))
+					ImGui::OpenPopup("DeleteConfirmation");
+				Util::AddTooltip("Delete saved file");
+			}
 		}
 
 		drawUnsavedIndicator();
