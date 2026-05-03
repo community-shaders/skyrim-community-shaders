@@ -210,14 +210,7 @@ namespace ENBExtender
 		}
 	}
 
-	// ── UIDefine storage ──────────────────��─────────────────────────────
-
-	static std::vector<UIDefineInfo> lastUIDefines;
-
-	const std::vector<UIDefineInfo>& GetLastUIDefines()
-	{
-		return lastUIDefines;
-	}
+	// ── ConvertFxGroups helpers ──────────────────────────────────────────
 
 	// ── ConvertFxGroups ─────────────────────────────────────────────────
 
@@ -470,7 +463,7 @@ namespace ENBExtender
 	}
 
 	static bool HandlePragmaUIDefine(std::string& line, std::istringstream& stream,
-		const std::string& iniPath, const std::string& iniSection, std::string& result)
+		const std::string& iniPath, const std::string& iniSection, std::string& result, std::vector<Effect::UIDefineInfo>& uiDefines)
 	{
 		size_t pragmaPos = line.find("pragma");
 		if (pragmaPos == std::string::npos)
@@ -547,7 +540,7 @@ namespace ENBExtender
 		}
 
 		if (!uiName.empty()) {
-			UIDefineInfo info;
+			Effect::UIDefineInfo info;
 			info.defineName = defineName;
 			info.displayName = uiName;
 			info.group = uiGroup;
@@ -578,16 +571,15 @@ namespace ENBExtender
 			if (!orderStr.empty())
 				info.ordering = SafeStoi(orderStr, info.ordering);
 
-			lastUIDefines.push_back(std::move(info));
+			uiDefines.push_back(std::move(info));
 		}
 
 		result += "#define " + defineName + " " + finalVal + "\n";
 		return true;
 	}
 
-	void ConvertExtenderSyntax(std::string& content, const std::filesystem::path& enbseriesPath, const std::string& iniPath, const std::string& iniSection)
+	void ConvertExtenderSyntax(std::string& content, const std::filesystem::path& enbseriesPath, std::vector<Effect::UIDefineInfo>& uiDefines, const std::string& iniPath, const std::string& iniSection)
 	{
-		lastUIDefines.clear();
 
 		std::string result;
 		result.reserve(content.size());
@@ -600,7 +592,7 @@ namespace ENBExtender
 				continue;
 			if (HandlePragmaExists(line, enbseriesPath, result))
 				continue;
-			if (HandlePragmaUIDefine(line, stream, iniPath, iniSection, result))
+			if (HandlePragmaUIDefine(line, stream, iniPath, iniSection, result, uiDefines))
 				continue;
 			result += line + "\n";
 		}
@@ -676,6 +668,23 @@ namespace ENBExtender
 
 	// ── ProcessExtenderStringVariable ────────────────────────────────────
 
+	static void TrackGroupMetadata(const std::string& groupPath, ID3DX11EffectVariable* variable, Effect& effect)
+	{
+		if (groupPath.empty() || effect.groupOrdering.find(groupPath) != effect.groupOrdering.end())
+			return;
+
+		effect.groupOrdering[groupPath] = 0;
+		std::string displayName = effect.GetUIAnnotation(variable, "UIGroupName");
+		if (!displayName.empty())
+			effect.groupDisplayNames[groupPath] = displayName;
+		std::string openStr = effect.GetUIAnnotation(variable, "UIGroupOpen");
+		if (!openStr.empty())
+			effect.groupDefaultOpen[groupPath] = IsTruthy(openStr);
+		std::string orderStr = effect.GetUIAnnotation(variable, "UIOrdering");
+		if (!orderStr.empty())
+			effect.groupOrdering[groupPath] = SafeStoi(orderStr);
+	}
+
 	static bool HandleGroupBegin(ID3DX11EffectVariable* variable, std::vector<std::string>& groupStack, Effect& effect)
 	{
 		if (!IsTruthy(effect.GetUIAnnotation(variable, "UIGroupBegin")))
@@ -694,23 +703,7 @@ namespace ENBExtender
 			return true;
 
 		groupStack.push_back(groupName);
-		std::string fullPath = BuildGroupPath(groupStack);
-
-		if (effect.groupOrdering.find(fullPath) == effect.groupOrdering.end())
-			effect.groupOrdering[fullPath] = 0;
-
-		std::string displayName = effect.GetUIAnnotation(variable, "UIGroupName");
-		if (!displayName.empty())
-			effect.groupDisplayNames[fullPath] = displayName;
-
-		std::string openStr = effect.GetUIAnnotation(variable, "UIGroupOpen");
-		if (!openStr.empty())
-			effect.groupDefaultOpen[fullPath] = IsTruthy(openStr);
-
-		std::string orderStr = effect.GetUIAnnotation(variable, "UIOrdering");
-		if (!orderStr.empty())
-			effect.groupOrdering[fullPath] = SafeStoi(orderStr);
-
+		TrackGroupMetadata(BuildGroupPath(groupStack), variable, effect);
 		return true;
 	}
 
@@ -805,22 +798,6 @@ namespace ENBExtender
 
 	// ── ApplyExtenderAnnotations ───────────────��────────────────────────
 
-	static void TrackGroupMetadata(const Effect::UIVariable& uiVar, ID3DX11EffectVariable* variable, Effect& effect)
-	{
-		if (uiVar.group.empty() || effect.groupOrdering.find(uiVar.group) != effect.groupOrdering.end())
-			return;
-
-		effect.groupOrdering[uiVar.group] = 0;
-		std::string displayName = effect.GetUIAnnotation(variable, "UIGroupName");
-		if (!displayName.empty())
-			effect.groupDisplayNames[uiVar.group] = displayName;
-		std::string openStr = effect.GetUIAnnotation(variable, "UIGroupOpen");
-		if (!openStr.empty())
-			effect.groupDefaultOpen[uiVar.group] = IsTruthy(openStr);
-		if (uiVar.ordering != 0)
-			effect.groupOrdering[uiVar.group] = uiVar.ordering;
-	}
-
 	void ApplyExtenderAnnotations(Effect::UIVariable& uiVar, ID3DX11EffectVariable* variable,
 		const std::vector<std::string>& groupStack, Effect& effect)
 	{
@@ -848,15 +825,14 @@ namespace ENBExtender
 		uiVar.uiBindingCondition = effect.GetUIAnnotation(variable, "UIBindingCondition");
 		uiVar.separation = effect.GetUIAnnotation(variable, "Separation");
 
-		TrackGroupMetadata(uiVar, variable, effect);
+		TrackGroupMetadata(uiVar.group, variable, effect);
 	}
 
 	// ── InsertUIDefines ─────────────��─────────────────────��─────────────
 
 	void InsertUIDefines(Effect& effect)
 	{
-		auto& uiDefines = GetLastUIDefines();
-		for (const auto& def : uiDefines) {
+		for (const auto& def : effect.uiDefines) {
 			Effect::UIVariable uiVar = {};
 			uiVar.name = def.defineName;
 			uiVar.displayName = def.displayName;

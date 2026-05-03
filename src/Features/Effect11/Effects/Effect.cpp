@@ -42,6 +42,7 @@ namespace
 		const std::string& iniSection,
 		std::vector<std::filesystem::path>& includeDirs,
 		std::unordered_set<std::string>& visited,
+		std::vector<Effect::UIDefineInfo>& uiDefines,
 		int depth);
 
 	std::string InlineIncludes(const std::string& source,
@@ -50,6 +51,7 @@ namespace
 		const std::string& iniSection,
 		std::vector<std::filesystem::path>& includeDirs,
 		std::unordered_set<std::string>& visited,
+		std::vector<Effect::UIDefineInfo>& uiDefines,
 		int depth = 0)
 	{
 		if (depth > 20)
@@ -94,7 +96,7 @@ namespace
 							continue;
 						}
 
-						std::string expanded = ReadAndProcessInclude(fullPath, basePath, iniPath, iniSection, includeDirs, visited, depth + 1);
+						std::string expanded = ReadAndProcessInclude(fullPath, basePath, iniPath, iniSection, includeDirs, visited, uiDefines, depth + 1);
 						result += expanded;
 						result += "\n";
 						continue;
@@ -113,6 +115,7 @@ namespace
 		const std::string& iniSection,
 		std::vector<std::filesystem::path>& includeDirs,
 		std::unordered_set<std::string>& visited,
+		std::vector<Effect::UIDefineInfo>& uiDefines,
 		int depth)
 	{
 		std::string canonical = fullPath.string();
@@ -132,21 +135,21 @@ namespace
 			return "";
 
 		content = ENBExtender::DecodeKIEFX(content);
-		ENBExtender::ConvertExtenderSyntax(content, basePath, iniPath, iniSection);
+		ENBExtender::ConvertExtenderSyntax(content, basePath, uiDefines, iniPath, iniSection);
 		Util::ShaderPatches::Apply(fullPath.filename().string().c_str(), content);
 
 		auto parentDir = fullPath.parent_path();
 		if (std::find(includeDirs.begin(), includeDirs.end(), parentDir) == includeDirs.end())
 			includeDirs.push_back(parentDir);
 
-		return InlineIncludes(content, basePath, iniPath, iniSection, includeDirs, visited, depth);
+		return InlineIncludes(content, basePath, iniPath, iniSection, includeDirs, visited, uiDefines, depth);
 	}
 
 	class PresetInclude : public ID3DInclude
 	{
 	public:
-		PresetInclude(const std::filesystem::path& a_basePath, const std::string& a_iniPath = "", const std::string& a_iniSection = "") :
-			basePath(a_basePath), iniPath(a_iniPath), iniSection(a_iniSection) {}
+		PresetInclude(const std::filesystem::path& a_basePath, std::vector<Effect::UIDefineInfo>& a_uiDefines, const std::string& a_iniPath = "", const std::string& a_iniSection = "") :
+			basePath(a_basePath), uiDefines(a_uiDefines), iniPath(a_iniPath), iniSection(a_iniSection) {}
 
 		HRESULT __stdcall Open(D3D_INCLUDE_TYPE, LPCSTR pFileName, LPCVOID, LPCVOID* ppData, UINT* pBytes) override
 		{
@@ -192,7 +195,7 @@ namespace
 				return E_FAIL;
 
 			content = ENBExtender::DecodeKIEFX(content);
-			ENBExtender::ConvertExtenderSyntax(content, basePath, iniPath, iniSection);
+			ENBExtender::ConvertExtenderSyntax(content, basePath, uiDefines, iniPath, iniSection);
 			Util::ShaderPatches::Apply(pFileName, content);
 
 			auto parentDir = fullPath.parent_path();
@@ -214,6 +217,7 @@ namespace
 
 	private:
 		std::filesystem::path basePath;
+		std::vector<Effect::UIDefineInfo>& uiDefines;
 		std::string iniPath;
 		std::string iniSection;
 		std::vector<std::filesystem::path> includeDirs;
@@ -418,14 +422,15 @@ bool Effect::LoadFXFile()
 	std::string iniSection = GetName();
 	std::transform(iniSection.begin(), iniSection.end(), iniSection.begin(), ::toupper);
 
-	ENBExtender::ConvertExtenderSyntax(sourceCode, enbseriesPath, iniPathStr, iniSection);
+	uiDefines.clear();
+	ENBExtender::ConvertExtenderSyntax(sourceCode, enbseriesPath, uiDefines, iniPathStr, iniSection);
 	Util::ShaderPatches::Apply(GetName().c_str(), sourceCode);
 
 	// Try to preprocess first for group scope analysis.
 	// If preprocessing fails, fall back to direct compilation.
 	bool usedPreprocessing = false;
 	{
-		PresetInclude ppInclude(enbseriesPath, iniPathStr, iniSection);
+		PresetInclude ppInclude(enbseriesPath, uiDefines, iniPathStr, iniSection);
 		winrt::com_ptr<ID3DBlob> preprocessedBlob;
 		winrt::com_ptr<ID3DBlob> preprocessErrors;
 
@@ -493,7 +498,7 @@ bool Effect::LoadFXFile()
 		{
 			std::vector<std::filesystem::path> inlineDirs = { enbseriesPath };
 			std::unordered_set<std::string> visited;
-			std::string inlinedSource = InlineIncludes(sourceCode, enbseriesPath, iniPathStr, iniSection, inlineDirs, visited);
+			std::string inlinedSource = InlineIncludes(sourceCode, enbseriesPath, iniPathStr, iniSection, inlineDirs, visited, uiDefines);
 
 			winrt::com_ptr<ID3DBlob> ppBlob2;
 			winrt::com_ptr<ID3DBlob> ppErr2;
@@ -532,7 +537,7 @@ bool Effect::LoadFXFile()
 
 		if (!usedPreprocessing) {
 			ENBExtender::ConvertFxGroups(sourceCode);
-			PresetInclude includeHandler(enbseriesPath, iniPathStr, iniSection);
+			PresetInclude includeHandler(enbseriesPath, uiDefines, iniPathStr, iniSection);
 			winrt::com_ptr<ID3DBlob> compiledShader;
 			winrt::com_ptr<ID3DBlob> errorBlob;
 

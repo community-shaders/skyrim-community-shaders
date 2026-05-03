@@ -8,23 +8,6 @@
 
 namespace ENBExtender
 {
-	struct UIDefineInfo
-	{
-		std::string defineName;
-		std::string displayName;
-		std::string group;
-		std::string type;
-		std::string value;
-		std::string widget;
-		std::string list;
-		int intMin = 0;
-		int intMax = 100;
-		float floatMin = 0.0f;
-		float floatMax = 1.0f;
-		float floatStep = 0.01f;
-		int ordering = 0;
-	};
-
 	// Shared helpers
 	int SafeStoi(const std::string& s, int fallback = 0);
 	float SafeStof(const std::string& s, float fallback = 0.0f);
@@ -34,9 +17,8 @@ namespace ENBExtender
 	std::string DecodeKIEFX(const std::string& content);
 
 	// Source preprocessing
-	void ConvertExtenderSyntax(std::string& content, const std::filesystem::path& enbseriesPath, const std::string& iniPath = "", const std::string& iniSection = "");
+	void ConvertExtenderSyntax(std::string& content, const std::filesystem::path& enbseriesPath, std::vector<Effect::UIDefineInfo>& uiDefines, const std::string& iniPath = "", const std::string& iniSection = "");
 	void ConvertFxGroups(std::string& content);
-	const std::vector<UIDefineInfo>& GetLastUIDefines();
 
 	// UI variable processing
 	void ParseSourceGroupScopes(const std::string& preprocessedSource, Effect& effect);
