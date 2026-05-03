@@ -131,10 +131,14 @@ public:
 
 	std::vector<UIVariable> uiVariables;
 
-	// Group metadata (from first variable defining each group)
-	std::unordered_map<std::string, std::string> groupDisplayNames;
-	std::unordered_map<std::string, bool> groupDefaultOpen;
-	std::unordered_map<std::string, int> groupOrdering;
+	struct GroupMeta
+	{
+		std::string displayName;
+		int ordering = 0;
+		bool defaultOpen = true;
+		bool hasOrdering = false;
+	};
+	std::unordered_map<std::string, GroupMeta> groupMeta;
 
 	// Technique dropdown metadata (from first technique's annotations)
 	std::string techniqueDropdownName = "Technique";

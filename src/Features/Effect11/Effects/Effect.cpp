@@ -365,9 +365,7 @@ void Effect::Unload()
 	effectTextureCache.clear();
 	uiTechniques.clear();
 	selectedTechniqueIndex = 0;
-	groupDisplayNames.clear();
-	groupDefaultOpen.clear();
-	groupOrdering.clear();
+	groupMeta.clear();
 	techniqueDropdownName = "Technique";
 	techniqueDropdownGroup.clear();
 	techniqueDropdownVisible = true;

@@ -607,6 +607,12 @@ namespace ENBExtender
 
 	// ── ParseSourceGroupScopes ──────────────────────────────────────────
 
+	static bool IsHLSLType(const std::string& s)
+	{
+		static const std::unordered_set<std::string> types = { "float", "float2", "float3", "float4", "int", "bool", "string" };
+		return types.count(s) > 0;
+	}
+
 	void ParseSourceGroupScopes(const std::string& preprocessedSource, Effect& effect)
 	{
 		effect.sourceGroupMap.clear();
@@ -633,13 +639,13 @@ namespace ENBExtender
 							groupName = line.substr(q1 + 1, q2 - q1 - 1);
 					}
 				}
-
 				if (!groupName.empty()) {
 					groupStack.push_back(groupName);
 					std::string orderStr = ExtractAnnotation(line, "UIOrdering");
 					if (!orderStr.empty()) {
-						std::string groupPath = BuildGroupPath(groupStack);
-						effect.groupOrdering[groupPath] = SafeStoi(orderStr);
+						auto& gm = effect.groupMeta[BuildGroupPath(groupStack)];
+						gm.ordering = SafeStoi(orderStr);
+						gm.hasOrdering = true;
 					}
 				}
 				continue;
@@ -655,9 +661,7 @@ namespace ENBExtender
 			size_t spacePos = trimmed.find_first_of(" \t");
 			if (spacePos == std::string::npos)
 				continue;
-			std::string typePart = trimmed.substr(0, spacePos);
-			if (typePart != "float" && typePart != "float2" && typePart != "float3" && typePart != "float4" &&
-				typePart != "int" && typePart != "bool" && typePart != "string")
+			if (!IsHLSLType(trimmed.substr(0, spacePos)))
 				continue;
 
 			size_t nameStart = trimmed.find_first_not_of(" \t", spacePos);
@@ -678,80 +682,67 @@ namespace ENBExtender
 		}
 	}
 
-	// ── ProcessExtenderStringVariable ────────────────────────────────────
+	// ── Group metadata tracking ─────────────────────────────────────────
 
-	static void TrackGroupMetadata(const std::string& groupPath, ID3DX11EffectVariable* variable, Effect& effect)
+	static void TrackGroupMeta(const std::string& groupPath, ID3DX11EffectVariable* variable, Effect& effect)
 	{
 		if (groupPath.empty())
 			return;
 
-		bool isNew = effect.groupOrdering.find(groupPath) == effect.groupOrdering.end();
-		if (isNew)
-			effect.groupOrdering[groupPath] = 0;
+		auto [it, inserted] = effect.groupMeta.try_emplace(groupPath);
+		if (!inserted)
+			return;
 
 		std::string displayName = effect.GetUIAnnotation(variable, "UIGroupName");
 		if (!displayName.empty())
-			effect.groupDisplayNames.try_emplace(groupPath, displayName);
+			it->second.displayName = displayName;
 		std::string openStr = effect.GetUIAnnotation(variable, "UIGroupOpen");
 		if (!openStr.empty())
-			effect.groupDefaultOpen.try_emplace(groupPath, IsTruthy(openStr));
-
-		if (isNew) {
-			std::string orderStr = effect.GetUIAnnotation(variable, "UIOrdering");
-			if (!orderStr.empty())
-				effect.groupOrdering[groupPath] = SafeStoi(orderStr);
+			it->second.defaultOpen = IsTruthy(openStr);
+		std::string orderStr = effect.GetUIAnnotation(variable, "UIOrdering");
+		if (!orderStr.empty()) {
+			it->second.ordering = SafeStoi(orderStr);
+			it->second.hasOrdering = true;
 		}
-		logger::debug("[ENBExtender] TrackGroupMetadata: group='{}' ordering={} isNew={}", groupPath, effect.groupOrdering[groupPath], isNew);
 	}
 
-	static bool HandleGroupBegin(ID3DX11EffectVariable* variable, std::vector<std::string>& groupStack, Effect& effect)
-	{
-		if (!IsTruthy(effect.GetUIAnnotation(variable, "UIGroupBegin")))
-			return false;
+	// ── ProcessExtenderStringVariable ───────────────────────────────────
 
-		std::string groupName = effect.GetUIAnnotation(variable, "UIGroup");
-		if (groupName.empty()) {
-			auto strVar = variable->AsString();
-			if (strVar && strVar->IsValid()) {
-				LPCSTR val = nullptr;
-				if (SUCCEEDED(strVar->GetString(&val)) && val)
-					groupName = val;
+	bool ProcessExtenderStringVariable(ID3DX11EffectVariable* variable, const D3DX11_EFFECT_VARIABLE_DESC& varDesc,
+		std::vector<std::string>& groupStack, Effect& effect)
+	{
+		if (IsTruthy(effect.GetUIAnnotation(variable, "UIGroupBegin"))) {
+			std::string groupName = effect.GetUIAnnotation(variable, "UIGroup");
+			if (groupName.empty()) {
+				auto strVar = variable->AsString();
+				if (strVar && strVar->IsValid()) {
+					LPCSTR val = nullptr;
+					if (SUCCEEDED(strVar->GetString(&val)) && val)
+						groupName = val;
+				}
 			}
-		}
-		if (groupName.empty())
+			if (!groupName.empty()) {
+				groupStack.push_back(groupName);
+				TrackGroupMeta(BuildGroupPath(groupStack), variable, effect);
+			}
 			return true;
-		groupStack.push_back(groupName);
-		TrackGroupMetadata(BuildGroupPath(groupStack), variable, effect);
-		return true;
-	}
+		}
 
-	static bool HandleGroupEnd(ID3DX11EffectVariable* variable, std::vector<std::string>& groupStack, Effect& effect)
-	{
-		if (!IsTruthy(effect.GetUIAnnotation(variable, "UIGroupEnd")))
-			return false;
+		if (IsTruthy(effect.GetUIAnnotation(variable, "UIGroupEnd"))) {
+			if (!groupStack.empty())
+				groupStack.pop_back();
+			return true;
+		}
 
-		if (!groupStack.empty())
-			groupStack.pop_back();
-		return true;
-	}
+		if (IsTruthy(effect.GetUIAnnotation(variable, "UISeparator"))) {
+			auto sep = MakeSeparator(varDesc.Name, groupStack, effect);
+			std::string explicitGroup = effect.GetUIAnnotation(variable, "UIGroup");
+			if (!explicitGroup.empty())
+				sep.group = explicitGroup;
+			effect.uiVariables.push_back(sep);
+			return true;
+		}
 
-	static bool HandleSeparatorAnnotation(ID3DX11EffectVariable* variable, const D3DX11_EFFECT_VARIABLE_DESC& varDesc,
-		const std::vector<std::string>& groupStack, Effect& effect)
-	{
-		if (!IsTruthy(effect.GetUIAnnotation(variable, "UISeparator")))
-			return false;
-
-		auto sep = MakeSeparator(varDesc.Name, groupStack, effect);
-		std::string explicitGroup = effect.GetUIAnnotation(variable, "UIGroup");
-		if (!explicitGroup.empty())
-			sep.group = explicitGroup;
-		effect.uiVariables.push_back(sep);
-		return true;
-	}
-
-	static bool HandleStringLabel(ID3DX11EffectVariable* variable, const D3DX11_EFFECT_VARIABLE_DESC& varDesc,
-		const std::vector<std::string>& groupStack, Effect& effect)
-	{
 		std::string labelText = effect.GetUIAnnotation(variable, "UIName");
 		if (labelText.empty()) {
 			auto strVar = variable->AsString();
@@ -761,9 +752,8 @@ namespace ENBExtender
 					labelText = val;
 			}
 		}
-
 		if (labelText.empty())
-			return false;
+			return true;
 
 		if (labelText == "|") {
 			effect.uiVariables.push_back(MakeSeparator(varDesc.Name, groupStack, effect));
@@ -774,32 +764,14 @@ namespace ENBExtender
 		labelVar.name = varDesc.Name;
 		labelVar.displayName = labelText;
 		labelVar.type = Effect::UIVariableType::Float;
-		labelVar.floatMin = 0.0f;
-		labelVar.floatMax = 0.0f;
 		labelVar.isReadOnly = true;
 		ApplyExtenderAnnotations(labelVar, variable, groupStack, effect);
-
-		if (labelVar.isHidden)
-			return true;
-
-		effect.uiVariables.push_back(labelVar);
+		if (!labelVar.isHidden)
+			effect.uiVariables.push_back(labelVar);
 		return true;
 	}
 
-	bool ProcessExtenderStringVariable(ID3DX11EffectVariable* variable, const D3DX11_EFFECT_VARIABLE_DESC& varDesc,
-		std::vector<std::string>& groupStack, Effect& effect)
-	{
-		if (HandleGroupBegin(variable, groupStack, effect))
-			return true;
-		if (HandleGroupEnd(variable, groupStack, effect))
-			return true;
-		if (HandleSeparatorAnnotation(variable, varDesc, groupStack, effect))
-			return true;
-		HandleStringLabel(variable, varDesc, groupStack, effect);
-		return true;
-	}
-
-	// ── ApplyExtenderAnnotations ───────────────��────────────────────────
+	// ── ApplyExtenderAnnotations ────────────────────────────────────────
 
 	void ApplyExtenderAnnotations(Effect::UIVariable& uiVar, ID3DX11EffectVariable* variable,
 		const std::vector<std::string>& groupStack, Effect& effect)
@@ -811,7 +783,6 @@ namespace ENBExtender
 			uiVar.ordering = SafeStoi(orderStr);
 
 		uiVar.sourceOrder = GetSourceOrder(uiVar.name, effect);
-
 		uiVar.isReadOnly = IsTruthy(effect.GetUIAnnotation(variable, "UIReadOnly"));
 
 		std::string hiddenStr = effect.GetUIAnnotation(variable, "UIHidden");
@@ -832,10 +803,10 @@ namespace ENBExtender
 		uiVar.isWeatherOnlyString = IsTruthy(effect.GetUIAnnotation(variable, "UIWeatherOnlyString"));
 		uiVar.separation = effect.GetUIAnnotation(variable, "Separation");
 
-		TrackGroupMetadata(uiVar.group, variable, effect);
+		TrackGroupMeta(uiVar.group, variable, effect);
 	}
 
-	// ── InsertUIDefines ─────────────��─────────────────────��─────────────
+	// ── InsertUIDefines ─────────────────────────────────────────────────
 
 	void InsertUIDefines(Effect& effect)
 	{
@@ -867,15 +838,15 @@ namespace ENBExtender
 			}
 
 			if (!def.group.empty() && def.hasExplicitOrdering) {
-				auto [it, inserted] = effect.groupOrdering.try_emplace(def.group, def.ordering);
-				logger::debug("[ENBExtender] InsertUIDefines: group='{}' ordering={} inserted={}", def.group, def.ordering, inserted);
+				auto& gm = effect.groupMeta[def.group];
+				if (!gm.hasOrdering) {
+					gm.ordering = def.ordering;
+					gm.hasOrdering = true;
+				}
 			}
 
 			effect.uiVariables.push_back(uiVar);
 		}
-
-		if (!effect.uiDefines.empty())
-			logger::info("[ENBExtender] Inserted {} UI defines", effect.uiDefines.size());
 	}
 
 	// ── ParseTimePeriod ────────────────────────────────���────────────────
@@ -1054,12 +1025,7 @@ namespace ENBExtender
 		return ptr;
 	}
 
-	struct MergedGroupMeta
-	{
-		std::unordered_map<std::string, std::string> displayNames;
-		std::unordered_map<std::string, bool> defaultOpen;
-		std::unordered_map<std::string, int> ordering;
-	};
+	using MergedGroupMeta = std::unordered_map<std::string, Effect::GroupMeta>;
 
 	static void BuildMergedTree(std::span<Effect*> effects, GroupNode& root, MergedGroupMeta& meta)
 	{
@@ -1070,15 +1036,8 @@ namespace ENBExtender
 			if (!effect->IsCompiled())
 				continue;
 
-			for (auto& [path, name] : effect->groupDisplayNames)
-				meta.displayNames.try_emplace(path, name);
-			for (auto& [path, open] : effect->groupDefaultOpen)
-				meta.defaultOpen.try_emplace(path, open);
-			for (auto& [path, order] : effect->groupOrdering) {
-				auto [it, inserted] = meta.ordering.try_emplace(path, order);
-				if (inserted)
-					logger::debug("[ENBExtender] BuildMergedTree: group='{}' ordering={} from effect '{}'", path, order, effect->GetName());
-			}
+			for (auto& [path, gm] : effect->groupMeta)
+				meta.try_emplace(path, gm);
 
 			for (int i = 0; i < static_cast<int>(effect->uiVariables.size()); ++i) {
 				auto& var = effect->uiVariables[i];
@@ -1116,16 +1075,18 @@ namespace ENBExtender
 		for (auto& child : node.children) {
 			PropagateGroupOrdering(*child, meta);
 
-			auto it = meta.ordering.find(child->fullPath);
-			if (it != meta.ordering.end() && it->second == 0 && !child->children.empty()) {
+			auto it = meta.find(child->fullPath);
+			if (it != meta.end() && !it->second.hasOrdering && !child->children.empty()) {
 				int maxChildOrder = 0;
 				for (auto& grandchild : child->children) {
-					auto gcIt = meta.ordering.find(grandchild->fullPath);
-					if (gcIt != meta.ordering.end() && gcIt->second > maxChildOrder)
-						maxChildOrder = gcIt->second;
+					auto gcIt = meta.find(grandchild->fullPath);
+					if (gcIt != meta.end() && gcIt->second.ordering > maxChildOrder)
+						maxChildOrder = gcIt->second.ordering;
 				}
-				if (maxChildOrder > 0)
-					it->second = maxChildOrder;
+				if (maxChildOrder > 0) {
+					it->second.ordering = maxChildOrder;
+					it->second.hasOrdering = true;
+				}
 			}
 		}
 	}
@@ -1142,13 +1103,10 @@ namespace ENBExtender
 			return false;
 		});
 		std::stable_sort(node.children.begin(), node.children.end(), [&](const auto& a, const auto& b) {
-			int oA = 0, oB = 0;
-			auto itA = meta.ordering.find(a->fullPath);
-			if (itA != meta.ordering.end())
-				oA = itA->second;
-			auto itB = meta.ordering.find(b->fullPath);
-			if (itB != meta.ordering.end())
-				oB = itB->second;
+			auto itA = meta.find(a->fullPath);
+			auto itB = meta.find(b->fullPath);
+			int oA = (itA != meta.end()) ? itA->second.ordering : 0;
+			int oB = (itB != meta.end()) ? itB->second.ordering : 0;
 			return oA > oB;
 		});
 		for (auto& child : node.children)
@@ -1398,14 +1356,16 @@ namespace ENBExtender
 				ImGui::Separator();
 
 			std::string displayName = child->name;
-			auto nameIt = ctx.meta.displayNames.find(child->fullPath);
-			if (nameIt != ctx.meta.displayNames.end())
-				displayName = nameIt->second;
-
 			ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
-			auto openIt = ctx.meta.defaultOpen.find(child->fullPath);
-			if (openIt == ctx.meta.defaultOpen.end() || openIt->second)
+			auto metaIt = ctx.meta.find(child->fullPath);
+			if (metaIt != ctx.meta.end()) {
+				if (!metaIt->second.displayName.empty())
+					displayName = metaIt->second.displayName;
+				if (metaIt->second.defaultOpen)
+					flags |= ImGuiTreeNodeFlags_DefaultOpen;
+			} else {
 				flags |= ImGuiTreeNodeFlags_DefaultOpen;
+			}
 
 			if (ImGui::TreeNodeEx((displayName + "###ugrp_" + child->fullPath).c_str(), flags)) {
 				RenderGroupNode(*child, ctx, techDropdowns);
@@ -1426,9 +1386,6 @@ namespace ENBExtender
 		PropagateGroupOrdering(root, meta);
 		SortMergedTree(root, meta);
 
-		for (auto& child : root.children)
-			logger::debug("[ENBExtender] RenderUI sorted root child: '{}' ordering={}", child->fullPath, meta.ordering.count(child->fullPath) ? meta.ordering[child->fullPath] : -999);
-
 		auto separatorsBeforeGroup = MapRootSeparators(effects, root);
 
 		std::unordered_set<Effect*> changedEffects;
@@ -1443,10 +1400,13 @@ namespace ENBExtender
 				continue;
 			techDropdowns.push_back({ effect, effect->techniqueDropdownGroup });
 			if (!effect->techniqueDropdownGroup.empty()) {
-				if (!effect->techniqueDropdownGroupName.empty())
-					meta.displayNames.try_emplace(effect->techniqueDropdownGroup, effect->techniqueDropdownGroupName);
-				meta.defaultOpen.try_emplace(effect->techniqueDropdownGroup, effect->techniqueDropdownGroupOpen);
-				meta.ordering.try_emplace(effect->techniqueDropdownGroup, effect->techniqueDropdownOrdering);
+				auto [it, inserted] = meta.try_emplace(effect->techniqueDropdownGroup);
+				if (inserted) {
+					it->second.displayName = effect->techniqueDropdownGroupName;
+					it->second.defaultOpen = effect->techniqueDropdownGroupOpen;
+					it->second.ordering = effect->techniqueDropdownOrdering;
+					it->second.hasOrdering = true;
+				}
 
 				// Ensure the dropdown's target group exists in the tree
 				std::istringstream ss(effect->techniqueDropdownGroup);
