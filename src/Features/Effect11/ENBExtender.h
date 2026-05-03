@@ -45,6 +45,11 @@ namespace ENBExtender
 	void InsertUIDefines(Effect& effect);
 	void ParseTimePeriod(Effect::UIVariable& uiVar);
 
+	// Post-load processing
+	void RecoverGroupsFromINI(Effect& effect, const std::filesystem::path& enbseriesPath);
+	void LoadTechniqueDropdownMetadata(Effect& effect);
+	void ApplyTimeOfDayInterpolation(Effect& effect);
+
 	// UI rendering
 	void RenderMergedEffectsList(Effect* effects[], int effectCount);
 	void RenderStandaloneEffect(Effect& effect);

@@ -4,6 +4,8 @@
 #include <sstream>
 #include <unordered_set>
 
+#include "EffectManager.h"
+
 namespace ENBExtender
 {
 	// ── Shared helpers ────────────────���─────────────────────────────────
@@ -1426,6 +1428,252 @@ namespace ENBExtender
 				ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s:", effect->GetName().c_str());
 				for (const auto& err : effect->GetErrors())
 					ImGui::TextWrapped("%s", err.c_str());
+			}
+		}
+	}
+
+	// ── Post-load processing ─────────────────────────────────────────────
+
+	void RecoverGroupsFromINI(Effect& effect, const std::filesystem::path& enbseriesPath)
+	{
+		bool hasUngrouped = false;
+		for (auto& v : effect.uiVariables) {
+			if (!v.isSeparator && !v.isHidden && v.group.empty() && !v.isTopLevel && !v.displayName.empty()) {
+				hasUngrouped = true;
+				break;
+			}
+		}
+
+		if (!hasUngrouped)
+			return;
+
+		auto groupIniPath = enbseriesPath / (effect.GetName() + ".ini");
+		if (!std::filesystem::exists(groupIniPath))
+			return;
+
+		std::string section = effect.GetName();
+		std::transform(section.begin(), section.end(), section.begin(), ::toupper);
+
+		std::vector<char> keysBuf(32768);
+		DWORD keysLen = GetPrivateProfileStringA(section.c_str(), nullptr, "", keysBuf.data(), static_cast<DWORD>(keysBuf.size()), groupIniPath.string().c_str());
+
+		struct IniEntry
+		{
+			std::string displayName;
+			std::string group;
+			bool consumed = false;
+		};
+		std::vector<IniEntry> iniEntries;
+
+		const char* key = keysBuf.data();
+		while (key < keysBuf.data() + keysLen && *key) {
+			std::string fullKey(key);
+			key += fullKey.size() + 1;
+
+			size_t lastDot = fullKey.rfind('.');
+			if (lastDot != std::string::npos && lastDot > 0) {
+				std::string groupPath = fullKey.substr(0, lastDot);
+				std::string displayName = fullKey.substr(lastDot + 1);
+				if (!displayName.empty())
+					iniEntries.push_back({ displayName, groupPath, false });
+			}
+		}
+
+		int recovered = 0;
+		for (auto& v : effect.uiVariables) {
+			if (!v.isSeparator && v.group.empty() && !v.isTopLevel && !v.displayName.empty()) {
+				for (auto& entry : iniEntries) {
+					if (!entry.consumed && entry.displayName == v.displayName) {
+						v.group = entry.group;
+						entry.consumed = true;
+						if (effect.groupOrdering.find(v.group) == effect.groupOrdering.end())
+							effect.groupOrdering[v.group] = 0;
+						++recovered;
+						break;
+					}
+				}
+			}
+		}
+		if (recovered > 0)
+			logger::info("[ENBPP] Recovered {} group assignments from INI for ungrouped variables", recovered);
+	}
+
+	static std::string GetTechAnnotation(ID3DX11EffectTechnique* technique, const char* annotationName)
+	{
+		if (!technique)
+			return "";
+
+		D3DX11_TECHNIQUE_DESC techDesc;
+		if (FAILED(technique->GetDesc(&techDesc)))
+			return "";
+
+		for (UINT i = 0; i < techDesc.Annotations; ++i) {
+			auto annotation = technique->GetAnnotationByIndex(i);
+			if (!annotation || !annotation->IsValid())
+				continue;
+
+			D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
+			if (FAILED(annotation->GetDesc(&annotationDesc)))
+				continue;
+
+			if (std::string(annotationDesc.Name) == annotationName) {
+				auto stringVar = annotation->AsString();
+				if (stringVar && stringVar->IsValid()) {
+					LPCSTR value = nullptr;
+					if (SUCCEEDED(stringVar->GetString(&value)) && value)
+						return std::string(value);
+				}
+			}
+		}
+		return "";
+	}
+
+	void LoadTechniqueDropdownMetadata(Effect& effect)
+	{
+		if (!effect.IsCompiled())
+			return;
+
+		auto* fx = effect.GetEffect();
+		if (!fx)
+			return;
+
+		D3DX11_EFFECT_DESC effectDesc;
+		if (FAILED(fx->GetDesc(&effectDesc)) || effectDesc.Techniques == 0)
+			return;
+
+		auto firstTech = fx->GetTechniqueByIndex(0);
+		if (!firstTech || !firstTech->IsValid())
+			return;
+
+		std::string dropName = GetTechAnnotation(firstTech, "UIDropdownName");
+		if (!dropName.empty())
+			effect.techniqueDropdownName = dropName;
+		std::string dropGroup = GetTechAnnotation(firstTech, "UIDropdownGroup");
+		if (!dropGroup.empty())
+			effect.techniqueDropdownGroup = dropGroup;
+		std::string dropVisible = GetTechAnnotation(firstTech, "UIDropdownVisible");
+		if (!dropVisible.empty())
+			effect.techniqueDropdownVisible = (dropVisible != "0" && dropVisible != "false");
+		std::string dropTopLevel = GetTechAnnotation(firstTech, "UIDropdownTopLevel");
+		if (!dropTopLevel.empty())
+			effect.techniqueDropdownTopLevel = (dropTopLevel != "0" && dropTopLevel != "false");
+		std::string dropOrdering = GetTechAnnotation(firstTech, "UIDropdownOrdering");
+		if (!dropOrdering.empty())
+			effect.techniqueDropdownOrdering = SafeStoi(dropOrdering, effect.techniqueDropdownOrdering);
+	}
+
+	static float GetPeriodWeight(const std::string& period, const EffectManager::CommonVariableData& cd)
+	{
+		if (period == "Dawn")
+			return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Dawn)];
+		if (period == "Sunrise")
+			return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunrise)];
+		if (period == "Day")
+			return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Day)];
+		if (period == "Sunset")
+			return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunset)];
+		if (period == "Dusk")
+			return cd.timeOfDay2[static_cast<int>(TimeOfDay2Index::Dusk)];
+		if (period == "Night")
+			return cd.timeOfDay2[static_cast<int>(TimeOfDay2Index::Night)];
+		if (period == "Interior")
+			return cd.eInteriorFactor;
+		return 0.0f;
+	}
+
+	static void SetBaseVariable(ID3DX11EffectVariable* baseVar, const Effect::UIVariable& uiVar)
+	{
+		switch (uiVar.type) {
+		case Effect::UIVariableType::Float:
+			baseVar->AsScalar()->SetFloat(uiVar.floatValue);
+			break;
+		case Effect::UIVariableType::Int:
+			baseVar->AsScalar()->SetInt(uiVar.intValue);
+			break;
+		case Effect::UIVariableType::Bool:
+			baseVar->AsScalar()->SetBool(uiVar.boolValue);
+			break;
+		case Effect::UIVariableType::Color3:
+		case Effect::UIVariableType::Color4:
+			baseVar->AsVector()->SetFloatVector(const_cast<float*>(uiVar.colorValue));
+			break;
+		}
+	}
+
+	void ApplyTimeOfDayInterpolation(Effect& effect)
+	{
+		struct PeriodVar
+		{
+			size_t index;
+			float weight;
+		};
+		std::unordered_map<std::string, std::vector<PeriodVar>> baseGroups;
+
+		auto& cd = EffectManager::GetSingleton().commonData;
+
+		for (size_t i = 0; i < effect.uiVariables.size(); ++i) {
+			auto& uiVar = effect.uiVariables[i];
+			if (uiVar.timePeriod.empty() || uiVar.isSeparator || !uiVar.effectVariable)
+				continue;
+
+			std::string baseName;
+			if (uiVar.name.size() > uiVar.timePeriod.size() &&
+				uiVar.name.compare(uiVar.name.size() - uiVar.timePeriod.size(), uiVar.timePeriod.size(), uiVar.timePeriod) == 0)
+				baseName = uiVar.name.substr(0, uiVar.name.size() - uiVar.timePeriod.size());
+			else
+				continue;
+
+			float w = GetPeriodWeight(uiVar.timePeriod, cd);
+			baseGroups[baseName].push_back({ i, w });
+		}
+
+		for (auto& [baseName, entries] : baseGroups) {
+			auto baseVarIt = effect.variables.find(baseName);
+			if (baseVarIt == effect.variables.end())
+				continue;
+
+			auto* baseVar = baseVarIt->second.get();
+			if (!baseVar || !baseVar->IsValid())
+				continue;
+
+			float totalWeight = 0.0f;
+			for (auto& e : entries)
+				totalWeight += e.weight;
+
+			if (totalWeight <= 0.0f)
+				continue;
+
+			auto& firstVar = effect.uiVariables[entries[0].index];
+
+			// For discrete types, pick the period with the highest weight
+			if (firstVar.type == Effect::UIVariableType::Int || firstVar.type == Effect::UIVariableType::Bool) {
+				size_t bestIdx = entries[0].index;
+				float bestWeight = entries[0].weight;
+				for (size_t i = 1; i < entries.size(); ++i) {
+					if (entries[i].weight > bestWeight) {
+						bestWeight = entries[i].weight;
+						bestIdx = entries[i].index;
+					}
+				}
+				SetBaseVariable(baseVar, effect.uiVariables[bestIdx]);
+				continue;
+			}
+
+			// For continuous types (Float, Color), weighted blend
+			if (firstVar.type == Effect::UIVariableType::Float) {
+				float result = 0.0f;
+				for (auto& e : entries)
+					result += effect.uiVariables[e.index].floatValue * (e.weight / totalWeight);
+				baseVar->AsScalar()->SetFloat(result);
+			} else {
+				int comps = (firstVar.type == Effect::UIVariableType::Color3) ? 3 : 4;
+				float result[4] = {};
+				for (auto& e : entries) {
+					float w = e.weight / totalWeight;
+					for (int c = 0; c < comps; ++c)
+						result[c] += effect.uiVariables[e.index].colorValue[c] * w;
+				}
+				baseVar->AsVector()->SetFloatVector(result);
 			}
 		}
 	}
