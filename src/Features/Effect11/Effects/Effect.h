@@ -135,7 +135,7 @@ public:
 	{
 		std::string displayName;
 		int ordering = 0;
-		bool defaultOpen = true;
+		bool defaultOpen = false;
 		bool hasOrdering = false;
 	};
 	std::unordered_map<std::string, GroupMeta> groupMeta;
@@ -144,7 +144,7 @@ public:
 	std::string techniqueDropdownName = "Technique";
 	std::string techniqueDropdownGroup;
 	std::string techniqueDropdownGroupName;
-	bool techniqueDropdownGroupOpen = true;
+	bool techniqueDropdownGroupOpen = false;
 	bool techniqueDropdownVisible = true;
 	bool techniqueDropdownTopLevel = false;
 	int techniqueDropdownOrdering = 1;
