@@ -736,7 +736,6 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 			specCommonSettings.rectSizePrev[0] = fw;
 			specCommonSettings.rectSizePrev[1] = fh;
 
-
 			memcpy(specCommonSettings.viewToClipMatrix, &projMat, sizeof(float) * 16);
 			memcpy(specCommonSettings.viewToClipMatrixPrev, &prevProjMatrix, sizeof(float) * 16);
 			memcpy(specCommonSettings.worldToViewMatrix, &worldToViewMat, sizeof(float) * 16);
