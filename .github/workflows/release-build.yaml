@@ -5,7 +5,10 @@ on:
         tags:
             - "v*"
     release:
-        types: [created]
+        # 'published' covers semantic-release's draft → human publish path
+        # (drafts do not fire the 'created' event in practice). 'created'
+        # remains for non-draft releases authored directly via the UI/API.
+        types: [created, published]
     workflow_dispatch:
         inputs:
             cache-key-suffix:
@@ -137,3 +140,26 @@ jobs:
                   replacesArtifacts: true
                   removeArtifacts: true
                   allowUpdates: true
+
+    nexus-dry-run:
+        # Chained from `release` to avoid the artifact-attachment race a
+        # parallel `release: published` trigger on a separate workflow had:
+        # the prior release-nexus-trigger.yaml fired in parallel with this
+        # build and tried to download artifacts before they existed.
+        # Stable tags only (no '-' in the tag name).
+        name: Nexus Upload (dry run)
+        needs: [release]
+        if: >
+            always() && !cancelled() &&
+            needs.release.result == 'success' &&
+            github.event_name == 'release' &&
+            github.event.action == 'published' &&
+            !contains(github.event.release.tag_name, '-')
+        uses: ./.github/workflows/nexus-upload.yaml
+        with:
+            tag: ${{ github.event.release.tag_name }}
+            artifact_pattern: "CommunityShaders-*.7z"
+            dry_run: "true"
+        secrets:
+            UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
+            UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
