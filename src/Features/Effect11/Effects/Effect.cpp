@@ -948,7 +948,7 @@ void Effect::LoadUITechniques()
 	});
 }
 
-static std::string GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, const char* annotationName)
+std::string Effect::GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, const std::string& annotationName)
 {
 	if (!technique)
 		return "";
@@ -966,7 +966,7 @@ static std::string GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, con
 		if (FAILED(annotation->GetDesc(&annotationDesc)))
 			continue;
 
-		if (std::string(annotationDesc.Name) == annotationName) {
+		if (annotationDesc.Name == annotationName) {
 			auto stringVar = annotation->AsString();
 			if (stringVar && stringVar->IsValid()) {
 				LPCSTR value = nullptr;

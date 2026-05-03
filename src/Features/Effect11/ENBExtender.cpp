@@ -621,36 +621,14 @@ namespace ENBExtender
 				continue;
 
 			if (line.find("UIGroupBegin") != std::string::npos) {
-				std::string groupName;
-				size_t searchPos = 0;
-				while (searchPos < line.size()) {
-					size_t ugPos = line.find("UIGroup", searchPos);
-					if (ugPos == std::string::npos)
-						break;
-					size_t afterUG = ugPos + 7;
-					if (afterUG < line.size() && line[afterUG] != 'B' && line[afterUG] != 'E' && line[afterUG] != 'N' && line[afterUG] != 'O') {
-						size_t eqPos = line.find('=', afterUG);
-						if (eqPos != std::string::npos) {
-							size_t q1 = line.find('"', eqPos + 1);
-							size_t q2 = (q1 != std::string::npos) ? line.find('"', q1 + 1) : std::string::npos;
-							if (q1 != std::string::npos && q2 != std::string::npos)
-								groupName = line.substr(q1 + 1, q2 - q1 - 1);
-						}
-						break;
-					}
-					searchPos = afterUG;
-				}
-
+				std::string groupName = ExtractAnnotation(line, "UIGroup");
 				if (groupName.empty()) {
 					size_t angleClose = line.rfind('>');
 					if (angleClose != std::string::npos) {
-						size_t eqPos = line.find('=', angleClose);
-						if (eqPos != std::string::npos) {
-							size_t q1 = line.find('"', eqPos + 1);
-							size_t q2 = (q1 != std::string::npos) ? line.find('"', q1 + 1) : std::string::npos;
-							if (q1 != std::string::npos && q2 != std::string::npos)
-								groupName = line.substr(q1 + 1, q2 - q1 - 1);
-						}
+						size_t q1 = line.find('"', angleClose);
+						size_t q2 = (q1 != std::string::npos) ? line.find('"', q1 + 1) : std::string::npos;
+						if (q1 != std::string::npos && q2 != std::string::npos)
+							groupName = line.substr(q1 + 1, q2 - q1 - 1);
 					}
 				}
 
@@ -778,8 +756,9 @@ namespace ENBExtender
 			return true;
 		}
 
+		std::string visibleStr = effect.GetUIAnnotation(variable, "UIVisible");
 		if (IsTruthy(effect.GetUIAnnotation(variable, "UIHidden")) ||
-			!IsTruthy(effect.GetUIAnnotation(variable, "UIVisible").empty() ? "1" : effect.GetUIAnnotation(variable, "UIVisible")))
+			(!visibleStr.empty() && !IsTruthy(visibleStr)))
 			return true;
 
 		Effect::UIVariable labelVar = {};
@@ -1457,75 +1436,30 @@ namespace ENBExtender
 		std::vector<char> keysBuf(32768);
 		DWORD keysLen = GetPrivateProfileStringA(section.c_str(), nullptr, "", keysBuf.data(), static_cast<DWORD>(keysBuf.size()), groupIniPath.string().c_str());
 
-		struct IniEntry
-		{
-			std::string displayName;
-			std::string group;
-			bool consumed = false;
-		};
-		std::vector<IniEntry> iniEntries;
-
+		std::unordered_map<std::string, std::string> displayNameToGroup;
 		const char* key = keysBuf.data();
 		while (key < keysBuf.data() + keysLen && *key) {
 			std::string fullKey(key);
 			key += fullKey.size() + 1;
 
 			size_t lastDot = fullKey.rfind('.');
-			if (lastDot != std::string::npos && lastDot > 0) {
-				std::string groupPath = fullKey.substr(0, lastDot);
-				std::string displayName = fullKey.substr(lastDot + 1);
-				if (!displayName.empty())
-					iniEntries.push_back({ displayName, groupPath, false });
-			}
+			if (lastDot != std::string::npos && lastDot > 0)
+				displayNameToGroup.try_emplace(fullKey.substr(lastDot + 1), fullKey.substr(0, lastDot));
 		}
 
 		int recovered = 0;
 		for (auto& v : effect.uiVariables) {
-			if (!v.isSeparator && v.group.empty() && !v.isTopLevel && !v.displayName.empty()) {
-				for (auto& entry : iniEntries) {
-					if (!entry.consumed && entry.displayName == v.displayName) {
-						v.group = entry.group;
-						entry.consumed = true;
-						if (effect.groupOrdering.find(v.group) == effect.groupOrdering.end())
-							effect.groupOrdering[v.group] = 0;
-						++recovered;
-						break;
-					}
-				}
+			if (v.isSeparator || !v.group.empty() || v.isTopLevel || v.displayName.empty())
+				continue;
+			auto it = displayNameToGroup.find(v.displayName);
+			if (it != displayNameToGroup.end()) {
+				v.group = it->second;
+				effect.groupOrdering.try_emplace(v.group, 0);
+				++recovered;
 			}
 		}
 		if (recovered > 0)
 			logger::info("[ENBPP] Recovered {} group assignments from INI for ungrouped variables", recovered);
-	}
-
-	static std::string GetTechAnnotation(ID3DX11EffectTechnique* technique, const char* annotationName)
-	{
-		if (!technique)
-			return "";
-
-		D3DX11_TECHNIQUE_DESC techDesc;
-		if (FAILED(technique->GetDesc(&techDesc)))
-			return "";
-
-		for (UINT i = 0; i < techDesc.Annotations; ++i) {
-			auto annotation = technique->GetAnnotationByIndex(i);
-			if (!annotation || !annotation->IsValid())
-				continue;
-
-			D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
-			if (FAILED(annotation->GetDesc(&annotationDesc)))
-				continue;
-
-			if (std::string(annotationDesc.Name) == annotationName) {
-				auto stringVar = annotation->AsString();
-				if (stringVar && stringVar->IsValid()) {
-					LPCSTR value = nullptr;
-					if (SUCCEEDED(stringVar->GetString(&value)) && value)
-						return std::string(value);
-				}
-			}
-		}
-		return "";
 	}
 
 	void LoadTechniqueDropdownMetadata(Effect& effect)
@@ -1545,19 +1479,19 @@ namespace ENBExtender
 		if (!firstTech || !firstTech->IsValid())
 			return;
 
-		std::string dropName = GetTechAnnotation(firstTech, "UIDropdownName");
+		std::string dropName = Effect::GetTechniqueAnnotation(firstTech, "UIDropdownName");
 		if (!dropName.empty())
 			effect.techniqueDropdownName = dropName;
-		std::string dropGroup = GetTechAnnotation(firstTech, "UIDropdownGroup");
+		std::string dropGroup = Effect::GetTechniqueAnnotation(firstTech, "UIDropdownGroup");
 		if (!dropGroup.empty())
 			effect.techniqueDropdownGroup = dropGroup;
-		std::string dropVisible = GetTechAnnotation(firstTech, "UIDropdownVisible");
+		std::string dropVisible = Effect::GetTechniqueAnnotation(firstTech, "UIDropdownVisible");
 		if (!dropVisible.empty())
 			effect.techniqueDropdownVisible = (dropVisible != "0" && dropVisible != "false");
-		std::string dropTopLevel = GetTechAnnotation(firstTech, "UIDropdownTopLevel");
+		std::string dropTopLevel = Effect::GetTechniqueAnnotation(firstTech, "UIDropdownTopLevel");
 		if (!dropTopLevel.empty())
 			effect.techniqueDropdownTopLevel = (dropTopLevel != "0" && dropTopLevel != "false");
-		std::string dropOrdering = GetTechAnnotation(firstTech, "UIDropdownOrdering");
+		std::string dropOrdering = Effect::GetTechniqueAnnotation(firstTech, "UIDropdownOrdering");
 		if (!dropOrdering.empty())
 			effect.techniqueDropdownOrdering = SafeStoi(dropOrdering, effect.techniqueDropdownOrdering);
 	}
@@ -1681,32 +1615,6 @@ namespace ENBExtender
 	void RenderStandaloneEffect(Effect& effect)
 	{
 		Effect* ptr = &effect;
-
-		std::unordered_map<std::string, VarRef> uniqueNameMap;
-		BuildUniqueNameMap(&ptr, 1, uniqueNameMap);
-
-		GroupNode root;
-		MergedGroupMeta meta;
-		BuildMergedTree(&ptr, 1, root, meta);
-		SortMergedTree(root, meta);
-
-		auto separatorsBeforeGroup = MapRootSeparators(&ptr, 1, root);
-
-		std::unordered_set<Effect*> changedEffects;
-		RenderContext ctx{ uniqueNameMap, changedEffects, meta, separatorsBeforeGroup };
-
-		std::vector<std::pair<Effect*, std::string>> techDropdowns;
-		if (effect.IsCompiled() && effect.uiTechniques.size() > 1 && effect.techniqueDropdownVisible)
-			techDropdowns.push_back({ &effect, effect.techniqueDropdownGroup });
-
-		for (auto& [e, group] : techDropdowns) {
-			if (e->techniqueDropdownTopLevel || group.empty())
-				RenderTechDropdown(e, changedEffects);
-		}
-
-		RenderGroupNode(root, ctx, techDropdowns);
-
-		for (auto* e : changedEffects)
-			e->UpdateUIVariables();
+		RenderMergedEffectsList(&ptr, 1);
 	}
 }

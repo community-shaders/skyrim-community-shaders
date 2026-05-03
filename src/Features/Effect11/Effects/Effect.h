@@ -190,8 +190,9 @@ public:
 
 	static void UpdateSizeVariables(ID3DX11Effect* effect, uint32_t outputWidth, uint32_t outputHeight);
 
-	// UI Variable helpers (public for ENBExtender access)
+	// UI annotation helpers (public for ENBExtender access)
 	std::string GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName);
+	static std::string GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, const std::string& annotationName);
 	UIWidgetType ParseWidgetType(const std::string& widget);
 	std::vector<std::string> ParseDropdownList(const std::string& list);
 
