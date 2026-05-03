@@ -5,7 +5,7 @@ set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 project(
     # gersemi: ignore
     CommunityShaders
-    VERSION 1.5.0
+    VERSION 1.5.1
     LANGUAGES CXX
 )
 
@@ -225,6 +225,17 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
             "Feature config file '${FEATURE_PATH}' is empty or contains only whitespace. Skipping version detection for this feature."
         )
     endif()
+
+    # Detect core features by checking for the CORE marker file in the
+    # feature root (features/<Folder>/CORE). FEATURE_PATH is
+    # features/<Folder>/Shaders/Features/<ShortName>.ini, so the feature
+    # root is three directories up.
+    get_filename_component(_FEATURE_DIR "${FEATURE_PATH}" DIRECTORY)
+    get_filename_component(_FEATURE_DIR "${_FEATURE_DIR}" DIRECTORY)
+    get_filename_component(_FEATURE_DIR "${_FEATURE_DIR}" DIRECTORY)
+    if(EXISTS "${_FEATURE_DIR}/CORE")
+        list(APPEND FEATURE_CORE_NAMES "\t\t\"${FEATURE}\"sv")
+    endif()
 endforeach()
 
 set_property(
@@ -234,6 +245,7 @@ set_property(
 )
 
 string(REPLACE ";" ",\n" FEATURE_VERSIONS "${FEATURE_VERSIONS}")
+string(REPLACE ";" ",\n" FEATURE_CORE_NAMES "${FEATURE_CORE_NAMES}")
 
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FeatureVersions.h.in

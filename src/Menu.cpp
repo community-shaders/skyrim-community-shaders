@@ -1055,8 +1055,8 @@ void Menu::ProcessInputEventQueue()
 							 } else if (ew->IsInPreviewMode()) {
 								 // Locked or PlayMode → fully exit preview
 								 ew->ExitPreviewMode();
-							 } else if (EditorWindow::CanBeOpen()) {
-								 ew->open = !ew->open;
+							 } else {
+								 WeatherEditor::ToggleEditorWindow();
 							 }
 						 } },
 					};

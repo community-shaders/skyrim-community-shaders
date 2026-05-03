@@ -186,7 +186,7 @@ namespace WidgetFactory
 			if (form) {
 				auto widget = std::make_unique<WidgetType>(form);
 				widget->CacheFormData();
-				widget->Load();
+				widget->Load(false);
 				widgets.push_back(std::move(widget));
 			}
 		}

@@ -66,7 +66,7 @@ void Widget::Save()
 	}
 }
 
-void Widget::Load()
+void Widget::Load(bool showNotification)
 {
 	std::string filePath = GetSaveFilePath();
 
@@ -74,10 +74,12 @@ void Widget::Load()
 		js = json();
 		LoadSettings();
 
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("No saved file - reset {} to vanilla values", GetEditorID()),
-			ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("No saved file - reset {} to vanilla values", GetEditorID()),
+				ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
+				3.0f);
+		}
 		return;
 	}
 
@@ -86,10 +88,12 @@ void Widget::Load()
 
 	if (!settingsFile.good() || !settingsFile.is_open()) {
 		logger::warn("Failed to open settings file: {}", filePath);
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Failed to open file for {}", GetEditorID()),
-			ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Failed to open file for {}", GetEditorID()),
+				ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+				3.0f);
+		}
 		return;
 	}
 
@@ -100,10 +104,12 @@ void Widget::Load()
 		// Validate that we loaded valid JSON
 		if (js.is_null()) {
 			logger::warn("{}: Loaded JSON is null, file may be empty or invalid", filePath);
-			EditorWindow::GetSingleton()->ShowNotification(
-				std::format("Invalid file for {} - resetting to vanilla", GetEditorID()),
-				ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-				3.0f);
+			if (showNotification) {
+				EditorWindow::GetSingleton()->ShowNotification(
+					std::format("Invalid file for {} - resetting to vanilla", GetEditorID()),
+					ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+					3.0f);
+			}
 			js = json();
 			LoadSettings();
 			return;
@@ -111,29 +117,35 @@ void Widget::Load()
 
 		LoadSettings();
 
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Loaded saved settings for {}", GetEditorID()),
-			ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Loaded saved settings for {}", GetEditorID()),
+				ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
+				3.0f);
+		}
 
 	} catch (const nlohmann::json::parse_error& e) {
 		logger::error("Error parsing settings for file ({}) : {}\n", filePath, e.what());
 		logger::error("Parse error at byte {}: {}", e.byte, e.what());
 		settingsFile.close();
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Parse error for {} - resetting to vanilla", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Parse error for {} - resetting to vanilla", GetEditorID()),
+				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				3.0f);
+		}
 		js = json();
 		LoadSettings();
 		return;
 	} catch (const std::exception& e) {
 		logger::error("Unexpected error loading settings file ({}) : {}\n", filePath, e.what());
 		settingsFile.close();
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Error loading {} - resetting to vanilla", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Error loading {} - resetting to vanilla", GetEditorID()),
+				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				3.0f);
+		}
 		js = json();
 		LoadSettings();
 		return;
@@ -246,21 +258,21 @@ std::string Widget::GetFolderName() const
 {
 	switch (form->GetFormType()) {
 	case RE::FormType::Weather:
-		return "Weathers";
+		return std::string(kWeatherFolderName);
 	case RE::FormType::LightingMaster:
-		return "Lighting Templates";
+		return std::string(kLightingTemplateFolderName);
 	case RE::FormType::ImageSpace:
-		return "ImageSpaces";
+		return std::string(kImageSpaceFolderName);
 	case RE::FormType::VolumetricLighting:
-		return "Volumetric Lighting";
+		return std::string(kVolumetricLightingFolderName);
 	case RE::FormType::ShaderParticleGeometryData:
-		return "Precipitation";
+		return std::string(kPrecipitationFolderName);
 	case RE::FormType::ReferenceEffect:
-		return "Visual Effects";
+		return std::string(kVisualEffectsFolderName);
 	case RE::FormType::Cell:
-		return "Cell Lighting";
+		return std::string(kCellLightingFolderName);
 	default:
-		return "Other Editor Widgets";
+		return std::string(kOtherEditorWidgetsFolderName);
 	}
 }
 
