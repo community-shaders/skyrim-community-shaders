@@ -444,7 +444,6 @@ struct PS_OUTPUT
 	float2 MotionVectors: SV_Target1;
 	float4 ScreenSpaceNormals: SV_Target2;
 #	else
-	float4 Normal: SV_Target1;
 	float4 Color2: SV_Target2;
 #	endif
 };
@@ -541,12 +540,8 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	float3 positionMSSkylight = worldPosition;
 #			endif
 
-	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
-
-	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-	skylightingDiffuse = saturate(skylightingDiffuse);
-	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
-	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+	sh2 skylightingSH = Skylighting::SampleNoBias(positionMSSkylight);
+	float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(positionMSSkylight));
 #		endif
 
 	float3 dirColor;
@@ -957,13 +952,14 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.ScreenSpaceNormals.xy = screenSpaceNormal.xy + 0.5.xx;
 	psout.ScreenSpaceNormals.zw = 0.0.xx;
 #	else
-	psout.Normal = float4(shadowVariance, 0, 0, finalColor.w);
 	psout.Color2 = finalColor;
 #	endif
 
+#	if !defined(HDR_OUTPUT)
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) && SharedData::linearLightingSettings.enableLinearLighting) {
 		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
+#	endif
 	return psout;
 }
 #endif

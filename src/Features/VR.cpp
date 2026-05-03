@@ -6,6 +6,7 @@
 #include "VR/OpenVRDetection.h"
 
 #include "State.h"
+#include "Utils/D3D.h"
 #include "Utils/VRUtils.h"
 
 #include <d3d11.h>
@@ -44,7 +45,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableStereoBlend,
 	StereoBlendDepthSigma,
 	StereoBlendMaxFactor,
-	StereoBlendColorThreshold)
+	StereoBlendColorThreshold,
+	StereoBlendDebugMode)
 
 //=============================================================================
 // FEATURE BASE CLASS OVERRIDES
@@ -54,39 +56,31 @@ void VR::LoadSettings(json& o_json)
 {
 	settings = o_json.get<Settings>();
 	settings.ClampToValidRanges();
+	if (o_json.contains("StereoOptimizations")) {
+		json stereoOptJson = o_json["StereoOptimizations"];
+		stereoOpt.LoadSettings(stereoOptJson);
+	}
 }
 
 void VR::SaveSettings(json& o_json)
 {
 	o_json = settings;
+	{
+		json stereoOptJson;
+		stereoOpt.SaveSettings(stereoOptJson);
+		o_json["StereoOptimizations"] = stereoOptJson;
+	}
 }
 
 void VR::RestoreDefaultSettings()
 {
 	settings = {};
+	stereoOpt.RestoreDefaultSettings();
 }
 
 void VR::SetupResources()
 {
-	// Compile stereo blend compute shader and create copy texture
-	std::vector<std::pair<const char*, const char*>> defines = { { "VR", "" }, { "FRAMEBUFFER", "" } };
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", defines, "cs_5_0")))
-		stereoBlendCS.attach(rawPtr);
-
-	auto backCheckDefines = defines;
-	backCheckDefines.push_back({ "DEBUG_BACKCHECK", "" });
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", backCheckDefines, "cs_5_0")))
-		stereoBlendDebugBackCheckCS.attach(rawPtr);
-
-	auto blendWeightDefines = defines;
-	blendWeightDefines.push_back({ "DEBUG_BLEND_WEIGHT", "" });
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", blendWeightDefines, "cs_5_0")))
-		stereoBlendDebugBlendWeightCS.attach(rawPtr);
-
-	auto edgeDetectionDefines = defines;
-	edgeDetectionDefines.push_back({ "DEBUG_EDGE_DETECTION", "" });
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", edgeDetectionDefines, "cs_5_0")))
-		stereoBlendDebugEdgeDetectionCS.attach(rawPtr);
+	CompileStereoBlendShaders();
 
 	auto renderer = globals::game::renderer;
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -94,14 +88,24 @@ void VR::SetupResources()
 	mainTex.texture->GetDesc(&mainDesc);
 	mainDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 	mainDesc.MiscFlags = 0;
-	stereoBlendCopyTex = eastl::make_unique<Texture2D>(mainDesc);
+	stereoBlendCopyTex = eastl::make_unique<Texture2D>(mainDesc, "VR::StereoBlendCopyTex");
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 		.Format = mainDesc.Format,
 		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
 		.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
 	};
 	stereoBlendCopyTex->CreateSRV(srvDesc);
-	stereoBlendCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<StereoBlendCB>());
+	stereoBlendCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<StereoBlendCB>(), "VR::StereoBlendCB");
+
+	if (globals::game::isVR && stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off) {
+		stereoOpt.SetupResources();
+		stereoOpt.loaded =
+			stereoOpt.GetModeTextureSRV() != nullptr &&
+			stereoOpt.GetPomOffsetSRV() != nullptr &&
+			stereoOpt.GetPomOffsetUAV() != nullptr;
+	} else {
+		stereoOpt.loaded = false;
+	}
 
 	DetectOpenVRInfo();
 
@@ -194,6 +198,15 @@ void VR::RecreateOverlayTexturesIfNeeded()
 	Util::CreateOverlayTextureAndRTV(globals::d3d::device, Config::kOverlayWidth, Config::kOverlayHeight, menuTexture.put(), menuRTV.put());
 }
 
+bool VR::IsWelcomeOverlayVisible() const
+{
+	return settings.kAutoHideSeconds > 0 &&
+	       globals::game::ui &&
+	       globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) &&
+	       globals::menu &&
+	       !globals::menu->IsEnabled;
+}
+
 void VR::SubmitOverlayFrame()
 {
 	InstallSubmitHook();
@@ -206,7 +219,7 @@ void VR::SubmitOverlayFrame()
 	auto& enabled = globals::menu->IsEnabled;
 	auto& overlayVisible = globals::menu->overlayVisible;
 
-	if ((enabled || overlayVisible || settings.kAutoHideSeconds > 0) && menuTexture.get() && menuRTV.get()) {
+	if ((enabled || overlayVisible || IsWelcomeOverlayVisible()) && menuTexture.get() && menuRTV.get()) {
 		UpdateFixedWorldPositioning();
 		UpdateOverlayDrag();
 
@@ -273,4 +286,9 @@ void VR::DetectOpenVRInfo()
 bool VR::IsOpenVRCompatible() const
 {
 	return globals::game::isVR && openVRInfo.isCompatible;
+}
+
+void VR::Reset()
+{
+	stereoOpt.Reset();
 }

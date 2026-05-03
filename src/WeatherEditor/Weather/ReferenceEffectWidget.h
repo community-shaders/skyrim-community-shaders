@@ -19,6 +19,8 @@ public:
 	~ReferenceEffectWidget() override = default;
 
 	void DrawWidget() override;
+	const char* GetWidgetTypeName() const override { return "Visual Effect"; }
+	bool RequiresManualApply() const override { return true; }
 	void LoadSettings() override;
 	void SaveSettings() override;
 	void ApplyChanges() override;

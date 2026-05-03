@@ -11,6 +11,7 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
 #include "Common/Triplanar.hlsli"
+#include "Common/VR.hlsli"
 
 #if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
 #	define SKIN
@@ -357,6 +358,13 @@ struct PS_OUTPUT
 
 #ifdef PSHADER
 
+#	if defined(VR_STEREO_OPT) && !defined(SNOW)
+// POM depth offset UAV — written per-pixel for StereoBlendCS depth-aware reprojection.
+// Bound at u7 (after the 7 deferred MRT slots 0-6) via OMSetRenderTargetsAndUnorderedAccessViews.
+// -1.0 = no POM (sentinel, matches ClearPomOffsetTexture); >= 0 = POM ran (StereoBlendCS checks >= 0).
+RWTexture2D<float> PomOffsetTex : register(u7);
+#	endif
+
 SamplerState SampTerrainParallaxSampler : register(s1);
 
 #	if defined(LANDSCAPE)
@@ -404,8 +412,10 @@ SamplerState SampEnvSampler : register(s4);
 SamplerState SampEnvMaskSampler : register(s5);
 #		endif
 
-#		if defined(TRUE_PBR)
+#		if defined(TRUE_PBR) && !defined(FACEGEN)
 SamplerState SampParallaxSampler : register(s4);
+#		endif
+#		if defined(TRUE_PBR)
 SamplerState SampRMAOSSampler : register(s5);
 #		endif
 
@@ -503,8 +513,10 @@ TextureCube<float4> TexEnvSampler : register(t4);
 Texture2D<float4> TexEnvMaskSampler : register(t5);
 #		endif
 
-#		if defined(TRUE_PBR)
+#		if defined(TRUE_PBR) && !defined(FACEGEN)
 Texture2D<float4> TexParallaxSampler : register(t4);
+#		endif
+#		if defined(TRUE_PBR)
 Texture2D<float4> TexRMAOSSampler : register(t5);
 #		endif
 
@@ -1016,6 +1028,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // LANDSCAPE
 	float sh0 = 0;
 	float pixelOffset = 0;
+#	if defined(VR_STEREO_OPT) && !defined(SNOW)
+	bool hasPOM = false;
+#	endif
 
 #	if defined(EMAT)
 #		if defined(LANDSCAPE)
@@ -1067,39 +1082,59 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 refractedViewDirection = viewDirection;
 	float4 sampledCoatColor = PBRParams2;
 	float3 complexSpecular = 1.0;  // Declare complexSpecular at a higher scope so it's available throughout the shader (NEEDED FOR STOCH. FIX)
+
 #	if defined(EMAT)
-#		if defined(PARALLAX)
+#		if defined(PARALLAX) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
 		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
-		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset);
+		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
+#			if defined(VR_STEREO_OPT) && !defined(SNOW)
+			,
+			hasPOM
+#			endif
+		);
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
-#		endif  // PARALLAX
+#		endif  // defined(PARALLAX) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 
 	bool complexMaterial = false;
 	bool complexMaterialParallax = false;
 	float4 complexMaterialColor = 1.0;
 
-#		if defined(EMAT_ENVMAP)
-
+#		if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
+	float4 envMaskSample = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+	float envMaskBase = envMaskSample.x;
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial) {
-		float envMaskTest = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, 15).w;
-		complexMaterial = envMaskTest < (1.0 - (4.0 / 255.0));
+		const float kMaskEpsilon = (4.0 / 255.0);
+
+		complexMaterial = envMaskSample.w < (1.0 - kMaskEpsilon);
+
+		// Detect texture saved in the wrong format
+		if ((abs(envMaskSample.x - envMaskSample.y) < kMaskEpsilon) &&
+			(abs(envMaskSample.x - envMaskSample.z) < kMaskEpsilon) &&
+			(abs(envMaskSample.y - envMaskSample.z) < kMaskEpsilon))
+			complexMaterial = false;
 
 		if (complexMaterial) {
-			if (envMaskTest > (4.0 / 255.0)) {
+			if (envMaskSample.w > kMaskEpsilon) {
 				complexMaterialParallax = true;
 				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, screenNoise);
-				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset);
+				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset
+#			if defined(VR_STEREO_OPT) && !defined(SNOW)
+					,
+					hasPOM
+#			endif
+				);
 				if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 					sh0 = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, mipLevel).w;
+				complexMaterialColor = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+			} else {
+				complexMaterialColor = envMaskSample;
 			}
-
-			complexMaterialColor = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
+			envMaskBase = complexMaterialColor.x;
 		}
 	}
-
 #		endif  // ENVMAP
 
 #		if defined(TRUE_PBR) && !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
@@ -1110,6 +1145,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		sampledCoatColor.rgb *= Color::Diffuse(sampledCoatProperties.rgb);
 		sampledCoatColor.a *= sampledCoatProperties.a;
 	}
+#			if !defined(FACEGEN)
 	[branch] if (SharedData::extendedMaterialSettings.EnableParallax && (PBRFlags & PBR::Flags::HasDisplacement) != 0)
 	{
 		PBRParallax = true;
@@ -1136,12 +1172,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			displacementParams.HeightScale *= PBRParams1.y;
 		}
 		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
-		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset);
+		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
+#				if defined(VR_STEREO_OPT) && !defined(SNOW)
+			,
+			hasPOM
+#				endif
+		);
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
-#		endif  // TRUE_PBR
+#			endif  // !FACEGEN
+#		endif      // TRUE_PBR
 
+#	elif defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
+	float envMaskBase = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
 #	endif  // EMAT
 
 #	if defined(SNOW)
@@ -1228,9 +1272,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		// Initialize weights array
 		weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
 #			if defined(TERRAIN_VARIATION)
-		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset, weights);
+		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset,
+#				if defined(VR_STEREO_OPT) && !defined(SNOW)
+			hasPOM,
+#				endif
+			weights);
 #			else
-		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset, weights);
+		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset,
+#				if defined(VR_STEREO_OPT) && !defined(SNOW)
+			hasPOM,
+#				endif
+			weights);
 #			endif
 		if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
 			input.LandBlendWeights1.x = weights[0];
@@ -2012,7 +2064,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float3 projBaseColor = Color::ColorToLinear(Triplanar::SampleStochastic(TexProjDiffuseSampler, SampProjDiffuseSampler, projWorldPos, triWeights, diffuseNormalScale, screenNoise).xyz) * Color::ColorToLinear(ProjectedUVParams2.xyz);
 		projectedMaterialWeight = smoothstep(0, 1, 5 * (0.1 + projWeight));
 #			if defined(TRUE_PBR)
-		projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
+		projBaseColor = max(0, EnvmapData.x * projBaseColor);
 		rawRMAOS.xyw = lerp(rawRMAOS.xyw, float3(ParallaxOccData.x, 0, ParallaxOccData.y), projectedMaterialWeight);
 		float4 projectedGlintParameters = 0;
 		if ((PBRFlags & PBR::Flags::ProjectedGlint) != 0) {
@@ -2099,9 +2151,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.Metallic = saturate(rawRMAOS.y);
 	material.AO = rawRMAOS.z;
 
+	// Apply vertex color to base color so PBR metals use it
+	float3 pbrVertexColor = Color::SrgbToLinear(input.Color.xyz);
+
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		material.F0 = lerp(rawRMAOS.w, Color::SrgbToLinear(baseColor.xyz), material.Metallic);
+		baseColor.xyz = Color::SrgbToLinear(baseColor.xyz) * pbrVertexColor;
+		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
+		baseColor.xyz = Color::LinearToSrgb(baseColor.xyz);
 	} else {
+		baseColor.xyz *= pbrVertexColor;
 		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
 	}
 
@@ -2129,7 +2187,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		[branch] if ((PBRFlags & PBR::Flags::HasFeatureTexture0) != 0)
 		{
 			float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
+
+			// If LL is off, Diffuse returns sRGB
 			material.SubsurfaceColor *= Color::Diffuse(sampledSubsurfaceProperties.xyz);
+
+			if (!SharedData::linearLightingSettings.enableLinearLighting) {
+				material.SubsurfaceColor = Color::LinearToSrgb(
+					Color::SrgbToLinear(material.SubsurfaceColor) * pbrVertexColor);
+			} else {
+				material.SubsurfaceColor *= pbrVertexColor;
+			}
+
 			material.Thickness *= sampledSubsurfaceProperties.w;
 		}
 		material.Thickness = lerp(material.Thickness, 1, projectedMaterialWeight);
@@ -2212,7 +2280,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	if (envMask > 0.0) {
 		if (EnvmapData.y) {
-			envMask *= TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
+			envMask *= envMaskBase;
 		} else {
 			envMask *= glossiness;
 		}
@@ -2292,14 +2360,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 #		endif
 #		if defined(DEFERRED)
-	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.Position.xy, positionMSSkylight, worldNormal);
+	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, worldNormal);
 #		else
-	sh2 skylightingSH = inWorld ? Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.Position.xy, positionMSSkylight, worldNormal) : float4(sqrt(4.0 * Math::PI), 0, 0, 0);
+	sh2 skylightingSH = inWorld ? Skylighting::Sample(positionMSSkylight, worldNormal) : Skylighting::UNIT_SH;
 #		endif
 
 #	endif
 
-	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
+	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz, eyeIndex);
 	float waterHeight = waterData.w;
 
 	float waterRoughnessSpecular = 1;
@@ -2470,7 +2538,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		elif defined(EMAT_ENVMAP)
 		[branch] if (complexMaterialParallax)
 			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, lerp(parallaxShadowQuality, 1.0, SharedData::extendedMaterialSettings.ExtendShadows), screenNoise, displacementParams);
-#		elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
+#		elif defined(TRUE_PBR) && !defined(LODLANDSCAPE) && !defined(FACEGEN)
 		[branch] if (PBRParallax)
 			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, lerp(parallaxShadowQuality, 1.0, SharedData::extendedMaterialSettings.ExtendShadows), screenNoise, displacementParams);
 #		endif  // LANDSCAPE
@@ -2509,7 +2577,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif
 
-	EvaluateLighting(dirLightContext, material, tbnTr, uvOriginal, dirLightOutput);
+	float2 uvOriginal_ddx = ddx(uvOriginal);
+	float2 uvOriginal_ddy = ddy(uvOriginal);
+	EvaluateLighting(dirLightContext, material, tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, dirLightOutput);
 #	if defined(WETNESS_EFFECTS)
 	if (waterRoughnessSpecular < 1)
 		EvaluateWetnessLighting(wetnessNormal, dirLightContext, waterRoughnessSpecular, dirLightOutput);
@@ -2569,7 +2639,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #				endif
 #			endif
-		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, pointLightOutput);
+		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, pointLightOutput);
 #			if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1)
 			EvaluateWetnessLighting(wetnessNormal, pointLightContext, waterRoughnessSpecular, pointLightOutput);
@@ -2672,7 +2742,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				elif defined(EMAT_ENVMAP)
 			[branch] if (complexMaterialParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, screenNoise, displacementParams);
-#				elif defined(TRUE_PBR) && !defined(LODLANDSCAPE)
+#				elif defined(TRUE_PBR) && !defined(LODLANDSCAPE) && !defined(FACEGEN)
 			[branch] if (PBRParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #				endif
@@ -2693,7 +2763,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #				endif
 #			endif
-		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, pointLightOutput);
+		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, uvOriginal_ddx, uvOriginal_ddy, pointLightOutput);
 #			if defined(WETNESS_EFFECTS)
 		if (waterRoughnessSpecular < 1)
 			EvaluateWetnessLighting(wetnessNormal, pointLightContext, waterRoughnessSpecular, pointLightOutput);
@@ -2724,6 +2794,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	worldNormal.xyz = input.EyeNormal;
 #	endif  // EYE
 
+	// sRGB by default, linear if LL on
 	float3 emitColor = Color::EmitColor(EmitColor);
 #	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	bool hasEmissive = (0x3F & (Permutation::PixelShaderDescriptor >> 24)) == Permutation::LightingTechnique::Glowmap;
@@ -2732,8 +2803,29 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	[branch] if (hasEmissive)
 	{
+		// Input TexGlowSampler = linear by default, but Color::Glowmap returns in sRGB if LL disabled
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
-		emitColor *= glowColor;
+
+#		if defined(TRUE_PBR)
+		float3 vertexColor = Color::SrgbToLinear(input.Color.xyz);
+
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			emitColor = Color::SrgbToLinear(emitColor);
+			glowColor = Color::SrgbToLinear(glowColor);
+			emitColor *= glowColor;
+			emitColor *= vertexColor;
+			emitColor = Color::LinearToSrgb(emitColor);
+		} else {
+			emitColor *= glowColor;
+			emitColor *= vertexColor;
+		}
+#		else
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			emitColor = Color::LinearToSrgb(Color::SrgbToLinear(emitColor) * Color::SrgbToLinear(glowColor));
+		} else {
+			emitColor *= glowColor;
+		}
+#		endif  // TRUE_PBR
 	}
 #	endif
 
@@ -2769,28 +2861,41 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float skylightingDiffuse = 1;
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
-		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
-		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(ambientNormal)) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);
-		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
-		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+		skylightingFadeOutFactor = Skylighting::GetFadeOutFactor(input.WorldPosition.xyz);
+		skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, ambientNormal, skylightingFadeOutFactor);
 	}
 #	endif
 
+#	if defined(HAIR)
+	float3 vertexColor = lerp(1, Color::ColorToLinear(TintColor.xyz), Color::ColorToLinear(input.Color.y));
+#		if defined(CS_HAIR)
+	if (SharedData::hairSpecularSettings.Enabled)
+		vertexColor = 1;
+#		endif
+#	elif defined(SKYLIGHTING)
+	float3 vertexColor = input.Color.xyz;
+	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
+	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
+	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+#		if defined(TRUE_PBR)
+	vertexColor = 1;
+#		endif
+#	else
+#		if defined(TRUE_PBR)
+	float3 vertexColor = 1;
+#		else
+	float3 vertexColor = input.Color.xyz;
+#		endif
+#	endif  // defined (HAIR)
+
 #	if defined(IBL)
-	float3 envIBLColor = 0;
 	if (SharedData::iblSettings.EnableIBL) {
 		if (!(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {
-			if (SharedData::iblSettings.DALCMode == 2) {
-				// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
-				envIBLColor = directionalAmbientColor * SharedData::iblSettings.DALCAmount;
-				directionalAmbientColor = envIBLColor + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-ambientNormal));
-			} else {
-				// Mode 0/1: replace with IBL ratio
-				envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(-ambientNormal));
-				float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-ambientNormal));
-				directionalAmbientColor = envIBLColor + skyIBLColor;
-			}
+#		if defined(SKYLIGHTING)
+			directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(directionalAmbientColor, -ambientNormal, skylightingDiffuse);
+#		else
+			directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -ambientNormal);
+#		endif
 		}
 	}
 #	endif
@@ -2823,21 +2928,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.BaseColor = lerp(material.BaseColor, pow(abs(material.BaseColor), 1.0 + wetnessDarkeningAmount), 0.5);
 #		endif
 #	endif
-
-#	if defined(HAIR)
-	float3 vertexColor = lerp(1, Color::ColorToLinear(TintColor.xyz), Color::ColorToLinear(input.Color.y));
-#		if defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled)
-		vertexColor = 1;
-#		endif
-#	elif defined(SKYLIGHTING)
-	float3 vertexColor = input.Color.xyz;
-	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
-	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
-	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
-#	else
-	float3 vertexColor = input.Color.xyz;
-#	endif  // defined (HAIR)
 
 	float4 color = 0;
 
@@ -2945,18 +3035,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
 
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= envIBLColor;
-#	endif
-
 	directionalAmbientColor *= outputAlbedo;
 
 #	if defined(SKYLIGHTING)
-	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
-#	endif
-
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += envIBLColor * outputAlbedo;
+#		if defined(IBL)
+	if (!SharedData::iblSettings.EnableIBL)
+#		endif
+	{
+		Skylighting::ApplySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
+	}
 #	endif
 
 #	if !defined(DEFERRED)
@@ -3169,6 +3256,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
 
+#		if defined(VR_STEREO_OPT) && !defined(SNOW)
+	// VR stereo reprojection: write POM depth offset to dedicated texture (u7) for StereoBlendCS.
+	// hasPOM disambiguates "POM ran at geometry plane (pixelOffset=0.5)" from "POM did not run".
+	// -1.0 is the explicit no-POM sentinel (R16_FLOAT supports negatives); StereoBlendCS checks >= 0.
+	PomOffsetTex[uint2(input.Position.xy)] = hasPOM ? pixelOffset : Stereo::POM_NO_DATA;
+#		endif
+
 #		if defined(SNOW)
 #			if defined(TRUE_PBR)
 	psout.Parameters.x = Color::RGBToLuminanceAlternative(specularColor);
@@ -3179,19 +3273,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Parameters.w = psout.Diffuse.w;
 #		endif
 
+	float masksZ = Color::RGBToYCoCg(directionalAmbientColor).x;
+
 #		if defined(SSS) && defined(SKIN)
-	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), Color::RGBToYCoCg(directionalAmbientColor).x, psout.Diffuse.w);
+	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), masksZ, psout.Diffuse.w);
 #		else
-	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, psout.Diffuse.w);
+	psout.Masks = float4(0, 0, masksZ, psout.Diffuse.w);
 #		endif
 
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
 #	endif
 
+#	if !defined(HDR_OUTPUT)  // Do not apply gamma correction before we pass to ISHDR.
 	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {
 		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
+#	endif
 
 	return psout;
 }

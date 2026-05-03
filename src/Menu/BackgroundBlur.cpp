@@ -3,6 +3,7 @@
 // License: MIT License
 
 #include "BackgroundBlur.h"
+#include "../Features/HDRDisplay.h"
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
 #include "../ShaderCache.h"
@@ -46,6 +47,7 @@ namespace BackgroundBlur
 	{
 		std::mutex resourceMutex;
 		bool enabled = false;
+		bool weatherEditorActive = false;
 
 		// DirectX resources (RAII managed)
 		winrt::com_ptr<ID3D11VertexShader> vertexShader;
@@ -83,6 +85,7 @@ namespace BackgroundBlur
 		UINT textureHeight = 0;
 		UINT downsampledWidth = 0;
 		UINT downsampledHeight = 0;
+		DXGI_FORMAT textureFormat = DXGI_FORMAT_UNKNOWN;
 
 		bool initialized = false;
 		bool initializationFailed = false;
@@ -117,6 +120,7 @@ namespace BackgroundBlur
 			textureHeight = 0;
 			downsampledWidth = 0;
 			downsampledHeight = 0;
+			textureFormat = DXGI_FORMAT_UNKNOWN;
 		}
 
 		// Create a Texture2D with associated RTV and SRV
@@ -130,14 +134,17 @@ namespace BackgroundBlur
 				logger::error("Failed to create {} texture", name);
 				return false;
 			}
+			Util::SetResourceName(tex.get(), "BackgroundBlur::%s", name);
 			if (FAILED(device->CreateRenderTargetView(tex.get(), nullptr, rtv.put()))) {
 				logger::error("Failed to create {} RTV", name);
 				return false;
 			}
+			Util::SetResourceName(rtv.get(), "BackgroundBlur::%s RTV", name);
 			if (FAILED(device->CreateShaderResourceView(tex.get(), nullptr, srv.put()))) {
 				logger::error("Failed to create {} SRV", name);
 				return false;
 			}
+			Util::SetResourceName(srv.get(), "BackgroundBlur::%s SRV", name);
 			return true;
 		}
 
@@ -192,10 +199,12 @@ namespace BackgroundBlur
 		cbDesc.ByteWidth = sizeof(BlurConstants);
 		if (!checkCreate(device->CreateBuffer(&cbDesc, nullptr, constantBuffer.put()), "blur constant buffer"))
 			return false;
+		Util::SetResourceName(constantBuffer.get(), "BackgroundBlur::BlurCB");
 
 		cbDesc.ByteWidth = sizeof(WindowConstants);
 		if (!checkCreate(device->CreateBuffer(&cbDesc, nullptr, windowConstantBuffer.put()), "window constant buffer"))
 			return false;
+		Util::SetResourceName(windowConstantBuffer.get(), "BackgroundBlur::WindowCB");
 
 		// Create sampler state
 		D3D11_SAMPLER_DESC samplerDesc = {};
@@ -208,6 +217,7 @@ namespace BackgroundBlur
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		if (!checkCreate(device->CreateSamplerState(&samplerDesc, samplerState.put()), "blur sampler state"))
 			return false;
+		Util::SetResourceName(samplerState.get(), "BackgroundBlur::Sampler");
 
 		// Create blend states
 		D3D11_BLEND_DESC blendDesc = {};
@@ -221,12 +231,14 @@ namespace BackgroundBlur
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 		if (!checkCreate(device->CreateBlendState(&blendDesc, blendState.put()), "blur blend state"))
 			return false;
+		Util::SetResourceName(blendState.get(), "BackgroundBlur::BlendState");
 
 		// Composite: pre-multiplied alpha (SrcBlend=ONE, DestBlendAlpha=INV_SRC_ALPHA)
 		blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
 		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 		if (!checkCreate(device->CreateBlendState(&blendDesc, compositeBlendState.put()), "composite blend state"))
 			return false;
+		Util::SetResourceName(compositeBlendState.get(), "BackgroundBlur::CompositeBlendState");
 
 		// Create scissor-enabled rasterizer state
 		D3D11_RASTERIZER_DESC rsDesc = {};
@@ -237,6 +249,7 @@ namespace BackgroundBlur
 		rsDesc.ScissorEnable = TRUE;
 		if (!checkCreate(device->CreateRasterizerState(&rsDesc, scissorRasterizerState.put()), "scissor rasterizer state"))
 			return false;
+		Util::SetResourceName(scissorRasterizerState.get(), "BackgroundBlur::ScissorRasterizerState");
 
 		initialized = true;
 		return true;
@@ -246,7 +259,7 @@ namespace BackgroundBlur
 	{
 		std::lock_guard<std::mutex> lock(resourceMutex);
 
-		if (width == textureWidth && height == textureHeight && blurTexture1 && blurTexture2) {
+		if (width == textureWidth && height == textureHeight && format == textureFormat && blurTexture1 && blurTexture2) {
 			return;
 		}
 
@@ -281,6 +294,7 @@ namespace BackgroundBlur
 		textureHeight = height;
 		downsampledWidth = dsWidth;
 		downsampledHeight = dsHeight;
+		textureFormat = format;
 	}
 
 	void PerformBlur(ID3D11Texture2D* sourceTexture, ID3D11ShaderResourceView* sourceSRV, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax, float cornerRadius, ID3D11ShaderResourceView* uiBufferSRV = nullptr, ID3D11RenderTargetView* uiBufferRTV = nullptr)
@@ -411,7 +425,7 @@ namespace BackgroundBlur
 			windowConstants.windowParams[0] = cornerRadius;
 			windowConstants.windowParams[1] = static_cast<float>(sourceDesc.Width);
 			windowConstants.windowParams[2] = static_cast<float>(sourceDesc.Height);
-			windowConstants.windowParams[3] = 0.0f;
+			windowConstants.windowParams[3] = weatherEditorActive ? 1.0f : 0.0f;
 			context->UpdateSubresource(windowConstantBuffer.get(), 0, nullptr, &windowConstants, 0, 0);
 			auto windowConstantBufferPtr = windowConstantBuffer.get();
 			context->PSSetConstantBuffers(1, 1, &windowConstantBufferPtr);
@@ -484,6 +498,16 @@ namespace BackgroundBlur
 		enabled = enable;
 	}
 
+	void SetWeatherEditorActive(bool active)
+	{
+		weatherEditorActive = active;
+	}
+
+	bool IsWeatherEditorActive()
+	{
+		return weatherEditorActive;
+	}
+
 	void RenderBackgroundBlur()
 	{
 		if (!enabled) {
@@ -504,6 +528,11 @@ namespace BackgroundBlur
 		auto& upscaling = globals::features::upscaling;
 		bool useUpscalingBackbuffer = upscaling.d3d12SwapChainActive;
 
+		auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
+		bool hdrActive = hdr &&
+		                 hdr->settings.enableHDR && hdr->hdrDataCB && hdr->outputTexture &&
+		                 hdr->hdrTexture && hdr->hdrTexture->resource && hdr->hdrTexture->srv && hdr->hdrTexture->rtv;
+
 		// Back buffer is black on main/loading menu during shader compilation without upscaling
 		if (!useUpscalingBackbuffer && !(upscaling.loaded && upscaling.IsUpscalingActive())) {
 			bool isMainOrLoading = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
@@ -519,7 +548,22 @@ namespace BackgroundBlur
 		ID3D11ShaderResourceView* uiBufferSRV = nullptr;
 		ID3D11RenderTargetView* uiBufferRTV = nullptr;
 
-		if (useUpscalingBackbuffer) {
+		if (hdrActive) {
+			// HDR (any FG state): blur hdrTexture in-place before ApplyHDR composites UI.
+			// No color space conversion needed - blur operates directly in PQ BT.2020 space.
+			// ApplyHDR will then composite vanilla UI + ImGui on top of the blurred scene.
+			currentTexture = hdr->hdrTexture->resource;
+			sourceSRV = hdr->hdrTexture->srv.get();
+			currentRTV = hdr->hdrTexture->rtv;
+
+			// Vanilla UI is in a separate texture in HDR mode (SetUIBuffer redirect).
+			// Composite it into the blur so HUD elements appear blurred behind the menu,
+			// and clear the blur region from uiTexture to prevent double-compositing.
+			if (hdr->uiTexture && hdr->uiTexture->srv && hdr->uiTexture->rtv) {
+				uiBufferSRV = hdr->uiTexture->srv.get();
+				uiBufferRTV = hdr->uiTexture->rtv.get();
+			}
+		} else if (useUpscalingBackbuffer) {
 			// When D3D12 swap chain is active, get all resources in one call
 			auto res = upscaling.GetBlurResources();
 			if (!res.backbufferTex || !res.backbufferRTV || !res.backbufferSRV) {
@@ -570,9 +614,17 @@ namespace BackgroundBlur
 		D3D11_TEXTURE2D_DESC texDesc;
 		currentTexture->GetDesc(&texDesc);
 
-		// Create blur textures if needed
-		if (textureWidth != texDesc.Width || textureHeight != texDesc.Height) {
+		// Create blur textures if needed (check format too for HDR toggle)
+		if (textureWidth != texDesc.Width || textureHeight != texDesc.Height || textureFormat != texDesc.Format) {
 			CreateBlurTextures(texDesc.Width, texDesc.Height, texDesc.Format);
+		}
+
+		// Weather editor mode: single fullscreen blur pass (better perf than per-window)
+		if (weatherEditorActive) {
+			ImVec2 screenMin = { 0, 0 };
+			ImVec2 screenMax = { static_cast<float>(texDesc.Width), static_cast<float>(texDesc.Height) };
+			PerformBlur(currentTexture.get(), sourceSRV, currentRTV.get(), screenMin, screenMax, 0.0f, uiBufferSRV, uiBufferRTV);
+			return;
 		}
 
 		// Find ImGui windows that need blur
@@ -584,8 +636,8 @@ namespace BackgroundBlur
 		// Apply blur behind each visible ImGui window
 		for (int i = 0; i < ctx->Windows.Size; i++) {
 			ImGuiWindow* window = ctx->Windows[i];
-			// Don't check Hidden - it causes a 1-frame blur delay when windows reappear
-			if (!window || !window->WasActive || window->SkipItems) {
+			// Use Active (still true after Render) instead of WasActive (stale until next NewFrame)
+			if (!window || !window->Active || window->SkipItems) {
 				continue;
 			}
 

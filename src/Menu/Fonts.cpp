@@ -129,7 +129,7 @@ namespace MenuFonts
 		if (menuInstance) {
 			font_ = menuInstance->GetFont(role);
 			if (font_) {
-				ImGui::PushFont(font_);
+				ImGui::PushFont(font_, font_->LegacySize);
 			}
 		}
 	}
@@ -148,7 +148,7 @@ namespace MenuFonts
 		ImFont* bodyFont = globals::menu->GetFont(FontRole::Body);
 
 		if (tabFont && bodyFont) {
-			float fontScale = tabFont->FontSize / bodyFont->FontSize;
+			float fontScale = tabFont->LegacySize / bodyFont->LegacySize;
 
 			// Only scale if the tab font is noticeably larger
 			if (fontScale > 1.05f) {

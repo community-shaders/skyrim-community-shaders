@@ -143,9 +143,9 @@ SH2 SphericalHarmonics::Product(SH2 shL, SH2 shR)
 	const float factor = 1.0f / (2.0f * sqrt(3.14159265358979323846f));
 	SH2 result;
 	result.c0 = factor * Dot(shL, shR);
-	result.c1[0] = factor * (shL.c1[0] * shR.c1[2] + shL.c1[2] * shR.c1[0]);
-	result.c1[1] = factor * (shL.c1[1] * shR.c1[2] + shL.c1[2] * shR.c1[1]);
-	result.c1[2] = factor * (shL.c1[2] * shR.c1[2] + shL.c1[2] * shR.c1[2]);
+	result.c1[0] = factor * (shL.c0 * shR.c1[0] + shL.c1[0] * shR.c0);
+	result.c1[1] = factor * (shL.c0 * shR.c1[1] + shL.c1[1] * shR.c0);
+	result.c1[2] = factor * (shL.c0 * shR.c1[2] + shL.c1[2] * shR.c0);
 	return result;
 }
 
@@ -234,7 +234,7 @@ SH2 SphericalHarmonics::FauxSpecularLobe(float3 N, float3 V, float roughness)
 	float halfAngle = std::clamp(4.1679f * roughness2 * roughness2 - 9.0127f * roughness2 * roughness + 4.6161f * roughness2 + 1.7048f * roughness + 0.1f, 0.0f, 3.14159265358979323846f / 2.0f);
 	float lerpFactor = halfAngle / (3.14159265358979323846f / 2.0f);
 	SH2 directional = Evaluate(dominantDir);
-	SH2 cosineLobe = Scale(EvaluateCosineLobe(dominantDir), 1.0 / 3.14159265358979323846f);
+	SH2 cosineLobe = Scale(EvaluateCosineLobe(dominantDir), 1.0f / 3.14159265358979323846f);
 	return Add(Scale(directional, lerpFactor), Scale(cosineLobe, 1.0f - lerpFactor));
 }
 

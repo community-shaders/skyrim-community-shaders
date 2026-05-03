@@ -1,7 +1,7 @@
 
 namespace ScreenSpaceShadows
 {
-	Texture2D<unorm half> ScreenSpaceShadowsTexture : register(t45);
+	Texture2D<unorm float> ScreenSpaceShadowsTexture : register(t45);
 
 	float GetScreenSpaceShadow(float3 screenPosition, float2 uv, float noise, uint eyeIndex)
 	{

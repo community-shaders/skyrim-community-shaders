@@ -320,11 +320,24 @@ namespace ExtendedMaterials
 #	if defined(TERRAIN_VARIATION)
 		StochasticOffsets sharedOffset, float2 dx, float2 dy,
 #	endif
-		out float pixelOffset, out float weights[6])
+		out float pixelOffset,
+#	if defined(VR_STEREO_OPT)
+		out bool hasPOM,
+#	endif
+		out float weights[6])
 #else
-	float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, out float pixelOffset)
+	float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, out float pixelOffset
+#	if defined(VR_STEREO_OPT)
+		,
+		out bool hasPOM
+#	endif
+	)
 #endif
 	{
+		pixelOffset = 0.0;
+#if defined(VR_STEREO_OPT)
+		hasPOM = false;
+#endif
 		float3 viewDirTS = normalize(mul(tbn, viewDir));
 #if defined(LANDSCAPE)
 		viewDirTS.xy /= viewDirTS.z * 0.7 + 0.3 + params[0].FlattenAmount;  // Fix for objects at extreme viewing angles
@@ -496,7 +509,10 @@ namespace ExtendedMaterials
 #endif
 				nearBlendToFar *= nearBlendToFar;
 			float offset = (1.0 - parallaxAmount) * -maxHeight + minHeight;
-			pixelOffset = lerp(parallaxAmount * scale, 0, nearBlendToFar);
+			pixelOffset = saturate(lerp(parallaxAmount, 0.5, nearBlendToFar));
+#if defined(VR_STEREO_OPT)
+			hasPOM = true;
+#endif
 			return lerp(viewDirTS.xy * offset + coords.xy, coords, nearBlendToFar);
 		}
 
@@ -509,7 +525,7 @@ namespace ExtendedMaterials
 		weights[5] = input.LandBlendWeights2.y;
 #endif
 
-		pixelOffset = 0;
+		pixelOffset = 0.0;
 		return coords;
 	}
 

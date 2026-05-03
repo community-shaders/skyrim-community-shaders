@@ -1,5 +1,8 @@
 #include "CloudShadows.h"
 
+#include "State.h"
+#include "Utils/D3D.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CloudShadows::Settings,
 	Opacity)
@@ -151,22 +154,24 @@ void CloudShadows::SetupResources()
 
 		texDesc.Format = srvDesc.Format = DXGI_FORMAT_R8_UNORM;
 
-		texCubemapCloudOcc = new Texture2D(texDesc);
+		texCubemapCloudOcc = new Texture2D(texDesc, "CloudShadows::CubemapCloudOcc");
 		texCubemapCloudOcc->CreateSRV(srvDesc);
 
 		for (int i = 0; i < 6; ++i) {
 			reflections.cubeSideRTV[i]->GetDesc(&rtvDesc);
 			rtvDesc.Format = texDesc.Format;
 			DX::ThrowIfFailed(device->CreateRenderTargetView(texCubemapCloudOcc->resource.get(), &rtvDesc, cubemapCloudOccRTVs + i));
+			Util::SetResourceName(cubemapCloudOccRTVs[i], "CloudShadows::CubemapCloudOcc RTV[%d]", i);
 		}
 
-		texCubemapCloudOccCopy = new Texture2D(texDesc);
+		texCubemapCloudOccCopy = new Texture2D(texDesc, "CloudShadows::CubemapCloudOccCopy");
 		texCubemapCloudOccCopy->CreateSRV(srvDesc);
 
 		for (int i = 0; i < 6; ++i) {
 			reflections.cubeSideRTV[i]->GetDesc(&rtvDesc);
 			rtvDesc.Format = texDesc.Format;
 			DX::ThrowIfFailed(device->CreateRenderTargetView(texCubemapCloudOccCopy->resource.get(), &rtvDesc, cubemapCloudOccCopyRTVs + i));
+			Util::SetResourceName(cubemapCloudOccCopyRTVs[i], "CloudShadows::CubemapCloudOccCopy RTV[%d]", i);
 		}
 	}
 	{
@@ -184,11 +189,13 @@ void CloudShadows::SetupResources()
 		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
 		DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &cloudShadowBlendState));
+		Util::SetResourceName(cloudShadowBlendState, "CloudShadows::BlendState");
 	}
 }
 
 void CloudShadows::Hooks::BSSkyShader_SetupMaterial::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
+	globals::state->UpdateSkyShaderPermutation(Pass);
 	globals::features::cloudShadows.ModifySky(Pass);
 	func(This, Pass, RenderFlags);
 }

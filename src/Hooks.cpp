@@ -10,6 +10,7 @@
 #include "TruePBR.h"
 #include "Util.h"
 
+#include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
 #include "Features/TerrainHelper.h"
@@ -175,6 +176,19 @@ namespace EffectExtensions
 	};
 }
 
+namespace SkyExtensions
+{
+	struct BSSkyShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+		{
+			globals::state->UpdateSkyShaderPermutation(pass);
+			func(shader, pass, renderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+}
+
 namespace GrassExtensions
 {
 	struct BSGrassShaderProperty_ctor
@@ -223,7 +237,87 @@ struct IDXGISwapChain_Present
 		auto state = globals::state;
 		auto menu = globals::menu;
 		state->Reset();
+
+		auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
+		auto& upscaling = globals::features::upscaling;
+
+		bool frameGenActive = upscaling.d3d12SwapChainActive;
+
+		// HDR pipeline runs when:
+		// 1. HDR Display loaded + enableHDR=true + resources ready (full HDR processing)
+		// 2. Frame Gen active (needs ScaleUIBrightnessForFG to premultiply UI even in SDR mode)
+		bool hdrReady = hdr && hdr->hdrDataCB && hdr->outputTexture &&
+		                (hdr->settings.enableHDR || frameGenActive);
+
+		// Save original viewport to restore after UI rendering
+		D3D11_VIEWPORT savedViewport = {};
+		UINT viewportCount = 1;
+		globals::d3d::context->RSGetViewports(&viewportCount, &savedViewport);
+
+		// ImGui render target selection:
+		// - FG: kFRAMEBUFFER (FidelityFX composites afterwards)
+		// - VR: kFRAMEBUFFER — SetUIBuffer skips VR, so vanilla UI is already baked into
+		//       kFRAMEBUFFER. Rendering ImGui here too means kFRAMEBUFFER.SRV has
+		//       scene + vanilla UI + ImGui when ApplyHDR reads it at the end of this hook.
+		// - Non-VR HDR: uiTexture (ApplyHDR composites separately for precise UI brightness)
+		// - Vanilla/no-HDR: kFRAMEBUFFER directly (is the swap chain back buffer pre-upgrade)
+		if (frameGenActive) {
+			// FG path: render ImGui alongside vanilla UI in uiBufferWrapped
+			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+		} else if (hdrReady && !globals::game::isVR) {
+			// Non-VR HDR path: render ImGui to uiTexture for compositing in ApplyHDR
+			ID3D11RenderTargetView* uiRTV = nullptr;
+			D3D11_TEXTURE2D_DESC texDesc = {};
+
+			if (hdr->uiTexture && hdr->uiTexture->rtv && hdr->uiTexture->resource) {
+				uiRTV = hdr->uiTexture->rtv.get();
+				hdr->uiTexture->resource->GetDesc(&texDesc);
+			}
+
+			if (uiRTV && texDesc.Width > 0) {
+				globals::d3d::context->OMSetRenderTargets(1, &uiRTV, nullptr);
+
+				// Set UI-sized viewport for this render target
+				D3D11_VIEWPORT uiViewport = {};
+				uiViewport.Width = static_cast<float>(texDesc.Width);
+				uiViewport.Height = static_cast<float>(texDesc.Height);
+				uiViewport.MinDepth = 0.0f;
+				uiViewport.MaxDepth = 1.0f;
+				globals::d3d::context->RSSetViewports(1, &uiViewport);
+			}
+		} else {
+			// Vanilla path: render ImGui directly to kFRAMEBUFFER (swap chain backbuffer)
+			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+		}
+
 		menu->DrawOverlay();
+
+		// Restore original viewport before HDR processing
+		globals::d3d::context->RSSetViewports(1, &savedViewport);
+
+		if (hdrReady) {
+			// Unbind render target before ApplyHDR to avoid resource hazard
+			ID3D11RenderTargetView* nullRTV = nullptr;
+			globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
+
+			// Apply HDR processing - handles both HDR10 and SDR output based on shader/display availability
+			// When FG is active, FidelityFX handles the final output
+			// When FG is NOT active, this composites UI and writes to the D3D11 swap chain
+			hdr->ApplyHDR();
+		}
+
+		// Restore the backbuffer as the active render target before calling into the next
+		// Present hook in the chain. Mods like SmoothCam hook Present and immediately call
+		// OMGetRenderTargets to find a target to render overlays into. Without this, they
+		// get nullptr (we unbound everything for the ApplyHDR resource hazard) and their
+		// UI elements are invisible.
+		if (hdrReady && !frameGenActive) {
+			hdr->ClearUIBuffer();  // restores kFRAMEBUFFER.RTV to original backbuffer RTV
+			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+		}
 
 		HRESULT retval = func(This, SyncInterval, Flags);
 
@@ -263,6 +357,19 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
+	DXGI_SWAP_CHAIN_DESC modifiedDesc = *pSwapChainDesc;
+
+	if (globals::features::hdrDisplay.loaded) {
+		modifiedDesc.BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+		modifiedDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+		if (modifiedDesc.BufferCount < 2)
+			modifiedDesc.BufferCount = 2;
+
+		HDRDisplay::wasExclusiveFullscreen = !modifiedDesc.Windowed;
+
+		logger::info("[HDR] Upgraded swap chain: R10G10B10A2_UNORM + FLIP_DISCARD");
+	}
+
 	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
 		DriverType,
 		Software,
@@ -270,7 +377,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		&featureLevel,
 		1,
 		SDKVersion,
-		pSwapChainDesc,
+		&modifiedDesc,
 		ppSwapChain,
 		ppDevice,
 		pFeatureLevel,
@@ -479,6 +586,11 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	// kNORMAL_TAAMASK_SSRMASK and its swap need UAV bind because DeferredCompositeCS
+	// writes vanilla-encoded normals through UAV1 (`normals.UAV` in Deferred::DeferredPasses),
+	// which feeds the post-pass vanilla SSAO chain (ISSAORawAO -> ISSAOComposite). Without
+	// these hooks the UAV is null, the CS write is silently dropped, and vanilla SSAO reads
+	// uninitialized data and produces hard wedge-shaped shadow artifacts.
 	struct CreateRenderTarget_Normals
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
@@ -894,6 +1006,7 @@ namespace Hooks
 
 		logger::info("Installing SetupGeometry hooks");
 		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
+		stl::write_vfunc<0x6, SkyExtensions::BSSkyShader_SetupGeometry>(RE::VTABLE_BSSkyShader[0]);
 		stl::write_thunk_call<GrassExtensions::BSGrassShaderProperty_ctor>(REL::RelocationID(15214, 15383).address() + REL::Relocate(0x45B, 0x4F5));
 		stl::write_vfunc<0x6, GrassExtensions::BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
 

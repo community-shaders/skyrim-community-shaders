@@ -612,38 +612,89 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto screenSize = state->screenSize;
 	auto renderSize = Util::ConvertToDynamic(screenSize);
 
-	// VR: Combined-buffer mode with extent offsets causes temporal ghosting on the right eye
-	// because DLSS's internal history buffers use extent offsets as indices.
-	// Per-eye isolation with extents at {0,0} is required.
+	// When RCAS sharpening is active, direct DLSS output to sharpenerTexture so RCAS can
+	// sharpen directly into kMAIN.UAV without a CopyResource round-trip.
+	auto& upscaling = globals::features::upscaling;
+	ID3D11Resource* colorOut =
+		(upscaling.settings.sharpnessDLSS > 0.0f && upscaling.sharpenerTexture) ? upscaling.sharpenerTexture->resource.get() : a_upscalingTexture;
+
+	// VR stereo DLSS: NGX D3D11 only accepts zero-offset subrects. Non-zero offsets return
+	// FAIL_InvalidParameter because Streamline's dlssEntry.cpp never sets
+	// NVSDK_NGX_Parameter_DLSS_Enable_Output_Subrects during context creation.
+	//
+	// Both eyes copy their color slice into per-eye intermediates so ClearHMDMask can zero
+	// outside-mask regions before DLSS sees them (prevents temporal bleed into visible pixels).
+	// Eye 0 outputs directly to colorOut (zero-offset) — no intermediate output buffer needed.
+	// Eye 1 outputs to vrIntermediateColorOut[1] then copies back to kMAIN at eyeWidthOut.
+	//
+	// Eye 1 is pre-copied before eye 0 runs: at non-DLAA scales eye 0's upscaled output
+	// extends past eyeWidthIn into eye 1's input region of kMAIN.
 	if (globals::game::isVR) {
-		auto& upscaling = globals::features::upscaling;
+		auto context = globals::d3d::context;
+
 		uint32_t eyeWidthOut = (uint32_t)(screenSize.x / 2);
 		uint32_t eyeHeightOut = (uint32_t)screenSize.y;
 		uint32_t eyeWidthIn = (uint32_t)(renderSize.x / 2);
 		uint32_t eyeHeightIn = (uint32_t)renderSize.y;
 
-		upscaling.PreparePerEyeInputs(a_upscalingTexture, depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask);
+		sl::Extent perEyeIn{ 0, 0, eyeWidthIn, eyeHeightIn };
+		sl::Extent perEyeOut{ 0, 0, eyeWidthOut, eyeHeightOut };
 
-		for (uint32_t i = 0; i < 2; ++i) {
-			sl::ViewportHandle vp = (i == 1) ? viewportRight : viewport;
-			sl::Extent extentIn{ 0, 0, eyeWidthIn, eyeHeightIn };
-			sl::Extent extentOut{ 0, 0, eyeWidthOut, eyeHeightOut };
+		// Both flags track the same creation pool (EnsureVRIntermediateTextures creates all
+		// intermediates atomically), so in practice eye0Ready == eye1Ready. The separate checks
+		// are kept for null-safety and to document which resources each eye path actually uses.
+		bool eye0Ready = upscaling.vrIntermediateColorIn[0] &&
+		                 upscaling.vrIntermediateMotionVectors[0] && upscaling.vrIntermediateReactiveMask[0] && upscaling.vrIntermediateTransparencyMask[0];
+		bool eye1Ready = upscaling.vrIntermediateColorIn[1] && upscaling.vrIntermediateColorOut[1] &&
+		                 upscaling.vrIntermediateDepth && upscaling.vrIntermediateMotionVectors[1] &&
+		                 upscaling.vrIntermediateReactiveMask[1] && upscaling.vrIntermediateTransparencyMask[1];
 
-			EvaluateDLSS(vp, i,
-				upscaling.vrIntermediateColorIn[i]->resource.get(), upscaling.vrIntermediateColorOut[i]->resource.get(),
-				upscaling.vrIntermediateDepth[i]->resource.get(), upscaling.vrIntermediateMotionVectors[i]->resource.get(),
-				upscaling.vrIntermediateReactiveMask[i]->resource.get(), upscaling.vrIntermediateTransparencyMask[i]->resource.get(),
-				extentIn, extentOut, eyeWidthOut);
+		// Pre-copy eye 1 before eye 0 runs (overlap hazard), then clear HMD mask.
+		if (eye1Ready) {
+			D3D11_BOX rightIn = { eyeWidthIn, 0, 0, eyeWidthIn * 2, eyeHeightIn, 1 };
+			context->CopySubresourceRegion(upscaling.vrIntermediateColorIn[1]->resource.get(), 0, 0, 0, 0, a_upscalingTexture, 0, &rightIn);
+			context->CopySubresourceRegion(upscaling.vrIntermediateDepth->resource.get(), 0, 0, 0, 0, depthTexture.texture, 0, &rightIn);
+			upscaling.ClearHMDMask(upscaling.vrIntermediateColorIn[1]->uav.get(), depthTexture.depthSRV,
+				eyeWidthIn, eyeHeightIn, eyeWidthIn, 0);
 		}
 
-		upscaling.FinalizePerEyeOutputs(a_upscalingTexture);
+		// Eye 0: copy left-eye slice, clear HMD mask, output directly to colorOut at offset 0.
+		if (eye0Ready) {
+			D3D11_BOX leftIn = { 0, 0, 0, eyeWidthIn, eyeHeightIn, 1 };
+			context->CopySubresourceRegion(upscaling.vrIntermediateColorIn[0]->resource.get(), 0, 0, 0, 0, a_upscalingTexture, 0, &leftIn);
+			upscaling.ClearHMDMask(upscaling.vrIntermediateColorIn[0]->uav.get(), depthTexture.depthSRV,
+				eyeWidthIn, eyeHeightIn, 0, 0);
+
+			EvaluateDLSS(viewport, 0,
+				upscaling.vrIntermediateColorIn[0]->resource.get(), colorOut,
+				depthTexture.texture,
+				upscaling.vrIntermediateMotionVectors[0]->resource.get(),
+				upscaling.vrIntermediateReactiveMask[0]->resource.get(),
+				upscaling.vrIntermediateTransparencyMask[0]->resource.get(),
+				perEyeIn, perEyeOut, eyeWidthOut);
+		}
+
+		// Eye 1: evaluate into intermediate, then copy upscaled result to kMAIN right-eye position.
+		if (eye1Ready) {
+			EvaluateDLSS(viewportRight, 1,
+				upscaling.vrIntermediateColorIn[1]->resource.get(),
+				upscaling.vrIntermediateColorOut[1]->resource.get(),
+				upscaling.vrIntermediateDepth->resource.get(),
+				upscaling.vrIntermediateMotionVectors[1]->resource.get(),
+				upscaling.vrIntermediateReactiveMask[1]->resource.get(),
+				upscaling.vrIntermediateTransparencyMask[1]->resource.get(),
+				perEyeIn, perEyeOut, eyeWidthOut);
+
+			D3D11_BOX rightOut = { 0, 0, 0, eyeWidthOut, eyeHeightOut, 1 };
+			context->CopySubresourceRegion(colorOut, 0, eyeWidthOut, 0, 0, upscaling.vrIntermediateColorOut[1]->resource.get(), 0, &rightOut);
+		}
 	} else {
-		// Non-VR: Simple full-texture upscale
+		// Non-VR: Simple full-texture upscale.
 		sl::Extent extentIn{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
 		sl::Extent extentOut{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
 		EvaluateDLSS(viewport, 0,
-			a_upscalingTexture, a_upscalingTexture,
+			a_upscalingTexture, colorOut,
 			depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask,
 			extentIn, extentOut, (uint)screenSize.x);
 	}

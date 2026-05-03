@@ -37,6 +37,10 @@ public:
 	{
 		TruePBR::PBRTextureSetData* textureSetData = nullptr;
 		TruePBR::PBRMaterialObjectData* materialObjectData = nullptr;
+		/// FormID of the TESObjectREFR whose Clone3D call last wrote MATO data to this
+		/// material.  Used by the fork-before-write check to detect when a pooled material
+		/// instance would be overwritten by a different ref, triggering a clone instead.
+		RE::FormID lastOwnerRefFormID = 0;
 	};
 
 	inline static constexpr auto FEATURE = static_cast<RE::BSShaderMaterial::Feature>(32);
@@ -50,6 +54,10 @@ public:
 	~BSLightingShaderMaterialPBR();
 
 	// override (BSLightingShaderMaterialBase)
+	// Called by BSShaderMaterialHashMap::Link to produce the heap-allocated canonical copy.
+	// MUST use regular heap (new), NOT Make()/scrap heap. BSLightingShaderProperty::LinkObject
+	// calls ScrapHeap::Free() immediately after Link — a scrap-heap canonical would be popped
+	// off the stack and freed while property->material still points to it (use-after-free).
 	RE::BSShaderMaterial* Create() override;                                                                                      // 01
 	void CopyMembers(RE::BSShaderMaterial* that) override;                                                                        // 02
 	std::uint32_t ComputeCRC32(uint32_t srcHash) override;                                                                        // 04
@@ -60,10 +68,18 @@ public:
 	uint32_t GetTextures(RE::NiSourceTexture** textures) override;                                                                // 0B
 	void LoadBinary(RE::NiStream& stream) override;                                                                               // 0D
 
+	// Allocates a scrap-heap temp for use during BSLightingShaderProperty::LoadBinary.
+	// The temp is direct-assigned to property->material so that BSLightingShaderProperty::LinkObject
+	// (NiStream link phase) can find it, call BSShaderMaterialHashMap::Link to produce the canonical,
+	// then ScrapHeap::Free() to pop this temp. Never use Make() as the Create() implementation.
 	static BSLightingShaderMaterialPBR* Make();
 
 	void ApplyTextureSetData(const TruePBR::PBRTextureSetData& textureSetData);
 	void ApplyMaterialObjectData(const TruePBR::PBRMaterialObjectData& materialObjectData);
+	/// Resets all projected-material fields to their default values.
+	/// Called on references that carry no MATO (or no PBR config for their MATO) to
+	/// prevent stale data copied in by CopyMembers from persisting on the material.
+	void ClearMaterialObjectData();
 
 	float GetRoughnessScale() const;
 	float GetSpecularLevel() const;

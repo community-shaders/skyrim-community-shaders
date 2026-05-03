@@ -24,6 +24,105 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/VR.h"
 
+namespace
+{
+	std::unordered_map<ImGuiID, float> s_windowOverlapAlpha;
+
+	constexpr ImGuiWindowFlags SKIP_WINDOW_FLAGS = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove;
+	constexpr const char* MAIN_WINDOW_PREFIX = "Community Shaders";
+
+	bool IsMainWindow(ImGuiWindow* win) { return win->Name && strncmp(win->Name, MAIN_WINDOW_PREFIX, strlen(MAIN_WINDOW_PREFIX)) == 0; }
+
+	void DrawShaderCompilationFailures(uint64_t failed, const Menu::ThemeSettings& themeSettings)
+	{
+		ImGui::TextColored(themeSettings.StatusPalette.Error,
+			"ERROR: %llu shaders failed to compile. Check installation and CommunityShaders.log",
+			static_cast<unsigned long long>(failed));
+
+		if (FeatureIssues::HasPotentialShaderModifyingFeatures()) {
+			ImGui::TextColored(themeSettings.StatusPalette.Error, "Features that may have modified shaders detected. Check Feature Issues in the Menu.");
+		}
+	}
+
+	bool IsVisibleRootWindow(ImGuiWindow* win)
+	{
+		if (!win || !win->WasActive || win->Hidden)
+			return false;
+		return !(win->ParentWindow && !win->DockIsActive) && !(win->Flags & SKIP_WINDOW_FLAGS);
+	}
+
+	// Patches DrawList background vertices for windows involved in overlap.
+	void PatchOverlappingWindowBackgrounds()
+	{
+		auto* ctx = ImGui::GetCurrentContext();
+		if (!ctx)
+			return;
+
+		using C = ThemeManager::Constants;
+		const float dt = ImGui::GetIO().DeltaTime;
+
+		struct WinInfo
+		{
+			ImGuiWindow* win;
+			ImRect rect;
+		};
+		std::vector<WinInfo> windows;
+		for (int i = 0; i < ctx->Windows.Size; i++) {
+			auto* win = ctx->Windows[i];
+			if (IsVisibleRootWindow(win))
+				windows.push_back({ win, win->Rect() });
+		}
+
+		std::unordered_set<ImGuiID> overlapping;
+		for (size_t i = 0; i < windows.size(); i++)
+			for (size_t j = i + 1; j < windows.size(); j++)
+				if (windows[i].rect.Overlaps(windows[j].rect)) {
+					auto* a = windows[i].win;
+					auto* b = windows[j].win;
+					// Main CS window never dims; other windows yield to it
+					if (IsMainWindow(a))
+						overlapping.insert(b->ID);
+					else if (IsMainWindow(b))
+						overlapping.insert(a->ID);
+					else
+						overlapping.insert(a->FocusOrder > b->FocusOrder ? a->ID : b->ID);
+				}
+
+		const ImU32 bgRGB = ImGui::GetColorU32(ImGuiCol_WindowBg) & ~IM_COL32_A_MASK;
+
+		for (auto& [win, rect] : windows) {
+			const float target = overlapping.count(win->ID) ? C::OVERLAP_MIN_ALPHA : 0.0f;
+			float& alpha = s_windowOverlapAlpha[win->ID];
+			const float speed = (target > alpha) ? C::OVERLAP_FADEIN_SPEED : C::OVERLAP_FADEOUT_SPEED;
+			alpha += (target - alpha) * (std::min)(1.0f, dt * speed);
+
+			if (alpha < C::OVERLAP_ALPHA_EPSILON) {
+				alpha = 0.0f;
+				continue;
+			}
+
+			auto* dl = win->DrawList;
+			if (!dl || dl->VtxBuffer.Size == 0)
+				continue;
+
+			// Clamp background rect vertex alpha (contiguous bgRGB block at start of DrawList)
+			const ImU32 minA = static_cast<ImU32>(alpha * 255.0f);
+			for (int v = 0; v < dl->VtxBuffer.Size; v++) {
+				auto& vtx = dl->VtxBuffer[v];
+				if ((vtx.col & ~IM_COL32_A_MASK) != bgRGB)
+					break;
+				ImU32 a = (vtx.col >> IM_COL32_A_SHIFT) & 0xFF;
+				if (a > 0 && a < minA)
+					vtx.col = bgRGB | (minA << IM_COL32_A_SHIFT);
+			}
+		}
+
+		// Prune stale entries
+		for (auto it = s_windowOverlapAlpha.begin(); it != s_windowOverlapAlpha.end();)
+			it->second < C::OVERLAP_ALPHA_EPSILON ? it = s_windowOverlapAlpha.erase(it) : ++it;
+	}
+}  // namespace
+
 void OverlayRenderer::RenderOverlay(
 	Menu& menu,
 	const std::function<void()>& processInputEventQueue,
@@ -43,6 +142,7 @@ void OverlayRenderer::RenderOverlay(
 		auto& io = ImGui::GetIO();
 		io.ClearInputKeys();
 		io.ClearEventsQueue();
+		s_windowOverlapAlpha.clear();
 		return;
 	}
 
@@ -52,15 +152,13 @@ void OverlayRenderer::RenderOverlay(
 	RenderShaderCompilationStatus(keyIdToString);
 	RenderShaderBlockingStatus();
 
-	// Draw weather editor independently of main menu state
-	// Auto-close editor if player leaves valid game space (e.g., loading screen)
 	auto* editorWindow = EditorWindow::GetSingleton();
-	auto player = RE::PlayerCharacter::GetSingleton();
-	if (editorWindow->open && !(player && player->parentCell)) {
+	if (editorWindow->open && !EditorWindow::CanBeOpen()) {
 		editorWindow->open = false;
 		if (editorWindow->IsInPreviewMode())
 			editorWindow->ExitPreviewMode();
 	}
+	editorWindow->UpdateOpenState();
 	if (editorWindow->open) {
 		bool flying = editorWindow->IsPreviewFlying();
 		auto& io = ImGui::GetIO();
@@ -80,6 +178,7 @@ void OverlayRenderer::RenderOverlay(
 	RenderFeatureOverlays();
 	RenderFirstTimeSetupOverlay();
 	HandleABTesting();
+	PatchOverlappingWindowBackgrounds();
 	FinalizeImGuiFrame();
 }
 
@@ -129,12 +228,22 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
-	Util::UpdateImGuiInput(
-		desc.OutputWindow,
-		static_cast<float>(desc.BufferDesc.Width),
-		static_cast<float>(desc.BufferDesc.Height));
+	const float displayW = static_cast<float>(desc.BufferDesc.Width);
+	const float displayH = static_cast<float>(desc.BufferDesc.Height);
+	Util::UpdateImGuiInput(desc.OutputWindow, displayW, displayH);
 
 	ImGui::NewFrame();
+
+	// Detect display size change (cross-session via ini handler, mid-session via member)
+	const float2 currentDisplaySize{ displayW, displayH };
+	if (menu.lastDisplaySize.x > 0.f && menu.lastDisplaySize != currentDisplaySize) {
+		logger::info("Display size changed: {}x{} -> {}x{}, resetting window layout",
+			menu.lastDisplaySize.x, menu.lastDisplaySize.y, currentDisplaySize.x, currentDisplaySize.y);
+		menu.resetLayout = true;
+		EditorWindow::GetSingleton()->resetLayout = true;
+	}
+	menu.lastDisplaySize = currentDisplaySize;
+
 	ThemeManager::SetupImGuiStyle(menu);
 }
 
@@ -170,6 +279,23 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 		}
 		ImGui::TextUnformatted(progressTitle.c_str());
 		ImGui::ProgressBar(percent, ImVec2(0.0f, 0.0f), progressOverlay.c_str());
+		if (state->IsDeveloperMode()) {
+			int32_t threadLimit = shaderCache->backgroundCompilation ? shaderCache->backgroundCompilationThreadCount : shaderCache->compilationThreadCount;
+			int compilationRunning = (int)shaderCache->compilationPool.get_tasks_running();
+			int heavyInFlight = shaderCache->GetHeavyTasksInFlight();
+			int heavyLimit = static_cast<int>(Util::GetPerformanceCoreCount());
+			uint64_t slow = shaderCache->GetSlowTasks();
+			uint64_t verySlow = shaderCache->GetVerySlowTasks();
+			ImGui::Text("Threads: %d / %d limit | Heavy: %d / %d P-cores | %d workers",
+				compilationRunning,
+				threadLimit,
+				heavyInFlight,
+				heavyLimit,
+				(int)shaderCache->compilationPool.get_thread_count());
+			if (slow > 0) {
+				ImGui::Text("Slow shaders: %llu (very slow: %llu)", slow, verySlow);
+			}
+		}
 		if (!shaderCache->backgroundCompilation && shaderCache->menuLoaded) {
 			auto skipShadersText = fmt::format(
 				"Press {} to proceed without completing shader compilation. ",
@@ -177,12 +303,18 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			ImGui::TextUnformatted(skipShadersText.c_str());
 			ImGui::TextUnformatted("WARNING: Uncompiled shaders will have visual errors or cause stuttering when loading.");
 		}
+		if (failed && !hide) {
+			DrawShaderCompilationFailures(failed, themeSettings);
+		}
 
 		if (renderDocAvailable)
 			ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
 
 		ImGui::End();
-	} else if (failed) {
+		return;
+	}
+
+	if (failed) {
 		if (!hide) {
 			ImGui::SetNextWindowPos(ImVec2(pos, pos));
 			if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
@@ -190,12 +322,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 				return;
 			}
 
-			ImGui::TextColored(themeSettings.StatusPalette.Error, "ERROR: %d shaders failed to compile. Check installation and CommunityShaders.log", failed, totalShaders);
-
-			// Check for features that may cause shader compilation issues
-			if (FeatureIssues::HasPotentialShaderModifyingFeatures()) {
-				ImGui::TextColored(themeSettings.StatusPalette.Error, "Features that may have modified shaders detected. Check Feature Issues in the Menu.");
-			}
+			DrawShaderCompilationFailures(failed, themeSettings);
 
 			if (renderDocAvailable)
 				ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());

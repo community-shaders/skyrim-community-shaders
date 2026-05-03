@@ -16,7 +16,23 @@
 
 #if defined(IBL)
 #	include "IBL/IBL.hlsli"
+#elif defined(SKYLIGHTING)
+// sh2 type is needed for the ExtractLighting overload that accepts a visibility SH
+#	include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #endif
+
+// Populated once per frame by Deferred::CopyShadowLightData from BSShadowDirectionalLight.
+// Column-major float4x4 projections so HLSL `mul(proj, float4(pos, 1))` matches the
+// XMMATRIX layout written by XMStoreFloat4x4 on the C++ side.
+struct DirectionalShadowLightData
+{
+	column_major float4x4 ShadowProj[2];
+	column_major float4x4 InvShadowProj[2];
+	float2 EndSplitDistances;
+	float2 StartSplitDistances;
+};
+
+StructuredBuffer<DirectionalShadowLightData> DirectionalShadowLights : register(t98);
 
 #if defined(VOLUMETRIC_SHADOWS)
 #	include "VolumetricShadows/VolumetricShadows.hlsli"
@@ -111,14 +127,11 @@ namespace ShadowSampling
 
 #if defined(IBL)
 		if (SharedData::iblSettings.EnableIBL) {
-			if (SharedData::iblSettings.DALCMode == 2) {
-				// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
-				ambientColorAmb = ambientColorAmb * SharedData::iblSettings.DALCAmount + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));
-			} else {
-				float3 envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(float3(0, 0, -1)));
-				float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));
-				ambientColorAmb = envIBLColor + skyIBLColor;
-			}
+#	if defined(SKYLIGHTING) && !defined(INTERIOR)
+			ambientColorAmb = ImageBasedLighting::GetDiffuseIBLOccluded(ambientColorAmb, float3(0, 0, -1), skylightingDiffuse);
+#	else
+			ambientColorAmb = ImageBasedLighting::GetDiffuseIBL(ambientColorAmb, float3(0, 0, -1));
+#	endif
 		}
 #endif
 

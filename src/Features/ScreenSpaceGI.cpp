@@ -364,7 +364,7 @@ void ScreenSpaceGI::SetupResources()
 
 	logger::debug("Creating buffers...");
 	{
-		ssgiCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSGICB>());
+		ssgiCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSGICB>(), "SSGI::CB");
 	}
 
 	logger::debug("Creating textures...");
@@ -401,9 +401,9 @@ void ScreenSpaceGI::SetupResources()
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 5;
 
 		{
-			texRadiance = eastl::make_unique<Texture2D>(texDesc);
+			texRadiance = eastl::make_unique<Texture2D>(texDesc, "SSGI::Radiance");
 			texRadiance->CreateSRV(srvDesc);
-			texRadiance->CreateUAV(uavDesc);  // Create default UAV for mip 0
+			// No default UAV needed: prefilterRadiance binds per-mip UAVs via uavRadiance[].
 
 			// Create individual UAVs for each mip level for prefiltering
 			for (uint i = 0; i < 5; ++i) {
@@ -413,12 +413,15 @@ void ScreenSpaceGI::SetupResources()
 					.Texture2D = { .MipSlice = i }
 				};
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texRadiance->resource.get(), &mipUavDesc, uavRadiance[i].put()));
+				Util::SetResourceName(uavRadiance[i].get(), "SSGI::Radiance UAV mip%u", i);
 			}
 
-			// Create temporary texture for prefiltering (single mip level, used as SRV input)
+			// Staging texture for mip 0 radiance. radianceDisocc writes it directly,
+			// prefilterRadiance reads it as SRV and writes the mip chain back to texRadiance.
+			// Avoids a full-texture CopySubresourceRegion each frame.
 			D3D11_TEXTURE2D_DESC tempTexDesc = texDesc;
 			tempTexDesc.MipLevels = 1;
-			tempTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+			tempTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 			D3D11_SHADER_RESOURCE_VIEW_DESC tempSrvDesc = {
 				.Format = DXGI_FORMAT_R11G11B10_FLOAT,
@@ -428,8 +431,15 @@ void ScreenSpaceGI::SetupResources()
 					.MipLevels = 1 }
 			};
 
-			texRadianceTemp = eastl::make_unique<Texture2D>(tempTexDesc);
+			D3D11_UNORDERED_ACCESS_VIEW_DESC tempUavDesc = {
+				.Format = DXGI_FORMAT_R11G11B10_FLOAT,
+				.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+				.Texture2D = { .MipSlice = 0 }
+			};
+
+			texRadianceTemp = eastl::make_unique<Texture2D>(tempTexDesc, "SSGI::RadianceTemp");
 			texRadianceTemp->CreateSRV(tempSrvDesc);
+			texRadianceTemp->CreateUAV(tempUavDesc);
 		}
 
 		texDesc.BindFlags &= ~D3D11_BIND_RENDER_TARGET;
@@ -437,11 +447,23 @@ void ScreenSpaceGI::SetupResources()
 		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16_FLOAT;
 
 		{
-			texWorkingDepth = eastl::make_unique<Texture2D>(texDesc);
+			texWorkingDepth = eastl::make_unique<Texture2D>(texDesc, "SSGI::WorkingDepth");
 			texWorkingDepth->CreateSRV(srvDesc);
 			for (int i = 0; i < 5; ++i) {
 				uavDesc.Texture2D.MipSlice = i;
 				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texWorkingDepth->resource.get(), &uavDesc, uavWorkingDepth[i].put()));
+				Util::SetResourceName(uavWorkingDepth[i].get(), "SSGI::WorkingDepth UAV mip%d", i);
+			}
+		}
+
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8G8_UNORM;
+		{
+			texNormal = eastl::make_unique<Texture2D>(texDesc, "SSGI::Normal");
+			texNormal->CreateSRV(srvDesc);
+			for (uint i = 0; i < 5; ++i) {
+				uavDesc.Texture2D.MipSlice = i;
+				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texNormal->resource.get(), &uavDesc, uavNormal[i].put()));
+				Util::SetResourceName(uavNormal[i].get(), "SSGI::Normal UAV mip%u", i);
 			}
 		}
 
@@ -449,55 +471,55 @@ void ScreenSpaceGI::SetupResources()
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		{
-			texIlY[0] = eastl::make_unique<Texture2D>(texDesc);
+			texIlY[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlY[0]");
 			texIlY[0]->CreateSRV(srvDesc);
 			texIlY[0]->CreateUAV(uavDesc);
 
-			texIlY[1] = eastl::make_unique<Texture2D>(texDesc);
+			texIlY[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlY[1]");
 			texIlY[1]->CreateSRV(srvDesc);
 			texIlY[1]->CreateUAV(uavDesc);
 
-			texGiSpecular[0] = eastl::make_unique<Texture2D>(texDesc);
+			texGiSpecular[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::GiSpecular[0]");
 			texGiSpecular[0]->CreateSRV(srvDesc);
 			texGiSpecular[0]->CreateUAV(uavDesc);
 
-			texGiSpecular[1] = eastl::make_unique<Texture2D>(texDesc);
+			texGiSpecular[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::GiSpecular[1]");
 			texGiSpecular[1]->CreateSRV(srvDesc);
 			texGiSpecular[1]->CreateUAV(uavDesc);
 		}
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
 		{
-			texIlCoCg[0] = eastl::make_unique<Texture2D>(texDesc);
+			texIlCoCg[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlCoCg[0]");
 			texIlCoCg[0]->CreateSRV(srvDesc);
 			texIlCoCg[0]->CreateUAV(uavDesc);
 
-			texIlCoCg[1] = eastl::make_unique<Texture2D>(texDesc);
+			texIlCoCg[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlCoCg[1]");
 			texIlCoCg[1]->CreateSRV(srvDesc);
 			texIlCoCg[1]->CreateUAV(uavDesc);
 		}
 
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8_UNORM;
 		{
-			texAo[0] = eastl::make_unique<Texture2D>(texDesc);
+			texAo[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AO[0]");
 			texAo[0]->CreateSRV(srvDesc);
 			texAo[0]->CreateUAV(uavDesc);
 
-			texAo[1] = eastl::make_unique<Texture2D>(texDesc);
+			texAo[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AO[1]");
 			texAo[1]->CreateSRV(srvDesc);
 			texAo[1]->CreateUAV(uavDesc);
 
-			texAccumFrames[0] = eastl::make_unique<Texture2D>(texDesc);
+			texAccumFrames[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AccumFrames[0]");
 			texAccumFrames[0]->CreateSRV(srvDesc);
 			texAccumFrames[0]->CreateUAV(uavDesc);
 
-			texAccumFrames[1] = eastl::make_unique<Texture2D>(texDesc);
+			texAccumFrames[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AccumFrames[1]");
 			texAccumFrames[1]->CreateSRV(srvDesc);
 			texAccumFrames[1]->CreateUAV(uavDesc);
 		}
 
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
 		{
-			texPrevGeo = eastl::make_unique<Texture2D>(texDesc);
+			texPrevGeo = eastl::make_unique<Texture2D>(texDesc, "SSGI::PrevGeo");
 			texPrevGeo->CreateSRV(srvDesc);
 			texPrevGeo->CreateUAV(uavDesc);
 		}
@@ -525,7 +547,7 @@ void ScreenSpaceGI::SetupResources()
 			return;
 		}
 
-		texNoise = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+		texNoise = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "SSGI::Noise");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texNoise->desc.Format,
@@ -549,9 +571,11 @@ void ScreenSpaceGI::SetupResources()
 			.MaxLOD = D3D11_FLOAT32_MAX
 		};
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearClampSampler.put()));
+		Util::SetResourceName(linearClampSampler.get(), "SSGI::LinearClampSampler");
 
 		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, pointClampSampler.put()));
+		Util::SetResourceName(pointClampSampler.get(), "SSGI::PointClampSampler");
 	}
 
 	CompileComputeShaders();
@@ -560,7 +584,7 @@ void ScreenSpaceGI::SetupResources()
 void ScreenSpaceGI::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&prefilterDepthsCompute, &prefilterRadianceCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &stereoSyncCompute, &upsampleCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &prefilterNormalCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &stereoSyncCompute, &upsampleCompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -582,6 +606,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 		shaderInfos = {
 			{ &prefilterDepthsCompute, "prefilterDepths.cs.hlsl", { { "LINEAR_FILTER", "" } } },
 			{ &prefilterRadianceCompute, "prefilterRadiance.cs.hlsl", {} },
+			{ &prefilterNormalCompute, "prefilterNormal.cs.hlsl", {} },
 			{ &radianceDisoccCompute, "radianceDisocc.cs.hlsl", {} },
 			{ &giCompute, "gi.cs.hlsl", {} },
 			{ &blurCompute, "blur.cs.hlsl", {} },
@@ -616,7 +641,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 
 bool ScreenSpaceGI::ShadersOK()
 {
-	return texNoise && prefilterDepthsCompute && prefilterRadianceCompute && radianceDisoccCompute && giCompute && blurCompute && upsampleCompute;
+	return texNoise && prefilterDepthsCompute && prefilterRadianceCompute && prefilterNormalCompute && radianceDisoccCompute && giCompute && blurCompute && upsampleCompute;
 }
 
 void ScreenSpaceGI::UpdateSB()
@@ -774,7 +799,7 @@ void ScreenSpaceGI::DrawSSGI()
 		srvs.at(9) = texGiSpecular[inputAoTexIdx]->srv.get();
 		srvs.at(10) = nullptr;
 
-		uavs.at(0) = texRadiance->uav.get();
+		uavs.at(0) = texRadianceTemp->uav.get();
 		uavs.at(1) = texAccumFrames[!lastFrameAccumTexIdx]->uav.get();
 		uavs.at(2) = texAo[!inputAoTexIdx]->uav.get();
 		uavs.at(3) = texIlY[!inputGITexIdx]->uav.get();
@@ -786,22 +811,19 @@ void ScreenSpaceGI::DrawSSGI()
 		context->CSSetShader(radianceDisoccCompute.get(), nullptr, 0);
 		context->Dispatch((internalRes[0] + 7u) >> 3, (internalRes[1] + 7u) >> 3, 1);
 
-		// Prefilter radiance texture instead of using GenerateMips for proper dynamic resolution handling
+		// Prefilter radiance texture instead of using GenerateMips for proper dynamic resolution handling.
+		// radianceDisocc wrote mip 0 directly to texRadianceTemp above, so we can bind it
+		// as SRV input here without an intermediate CopySubresourceRegion.
 		{
 			TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Radiance");
 
-			// First copy mip 0 from radiance to temporary texture to avoid read/write conflict
-			context->CopySubresourceRegion(
-				texRadianceTemp->resource.get(), 0, 0, 0, 0,
-				texRadiance->resource.get(), 0, nullptr);
-
 			resetViews();
-			srvs.at(0) = texRadianceTemp->srv.get();  // Use temporary texture as input
-			uavs.at(0) = uavRadiance[0].get();        // Mip 0
-			uavs.at(1) = uavRadiance[1].get();        // Mip 1
-			uavs.at(2) = uavRadiance[2].get();        // Mip 2
-			uavs.at(3) = uavRadiance[3].get();        // Mip 3
-			uavs.at(4) = uavRadiance[4].get();        // Mip 4
+			srvs.at(0) = texRadianceTemp->srv.get();
+			uavs.at(0) = uavRadiance[0].get();  // Mip 0
+			uavs.at(1) = uavRadiance[1].get();  // Mip 1
+			uavs.at(2) = uavRadiance[2].get();  // Mip 2
+			uavs.at(3) = uavRadiance[3].get();  // Mip 3
+			uavs.at(4) = uavRadiance[4].get();  // Mip 4
 
 			context->CSSetShaderResources(0, 1, srvs.data());
 			context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
@@ -814,6 +836,24 @@ void ScreenSpaceGI::DrawSSGI()
 		lastFrameAccumTexIdx = !lastFrameAccumTexIdx;
 	}
 
+	// Prefilter normals
+	{
+		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Normals");
+
+		resetViews();
+		srvs.at(0) = rts[NORMALROUGHNESS].SRV;
+		uavs.at(0) = uavNormal[0].get();
+		uavs.at(1) = uavNormal[1].get();
+		uavs.at(2) = uavNormal[2].get();
+		uavs.at(3) = uavNormal[3].get();
+		uavs.at(4) = uavNormal[4].get();
+
+		context->CSSetShaderResources(0, 1, srvs.data());
+		context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
+		context->CSSetShader(prefilterNormalCompute.get(), nullptr, 0);
+		context->Dispatch((internalRes[0] + 15u) >> 4, (internalRes[1] + 15u) >> 4, 1);
+	}
+
 	// GI
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - GI");
@@ -824,10 +864,10 @@ void ScreenSpaceGI::DrawSSGI()
 		srvs.at(2) = texRadiance->srv.get();
 		srvs.at(3) = texNoise->srv.get();
 		srvs.at(4) = texAccumFrames[lastFrameAccumTexIdx]->srv.get();
-		srvs.at(5) = texAo[inputAoTexIdx]->srv.get();
-		srvs.at(6) = texIlY[inputGITexIdx]->srv.get();
-		srvs.at(7) = texIlCoCg[inputGITexIdx]->srv.get();
-		srvs.at(8) = texGiSpecular[inputAoTexIdx]->srv.get();
+		srvs.at(5) = texIlY[inputGITexIdx]->srv.get();
+		srvs.at(6) = texIlCoCg[inputGITexIdx]->srv.get();
+		srvs.at(7) = texGiSpecular[inputAoTexIdx]->srv.get();
+		srvs.at(8) = texNormal->srv.get();
 
 		uavs.at(0) = texAo[!inputAoTexIdx]->uav.get();
 		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();

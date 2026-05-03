@@ -122,8 +122,22 @@ namespace WidgetDefaults
 }
 
 /// Apply standard DPI-scaled size constraints and initial size for widget windows. Call before ImGui::Begin().
+/// Uses per-widget-type size tracking so all instances of a widget type share window dimensions.
 /// Respects EditorWindow::resetLayout to re-apply defaults on demand.
-void SetupWidgetWindowDefaults();
+void SetupWidgetWindowDefaults(const char* widgetType);
+
+/// Update stored per-widget-type size from the current ImGui window. Call after ImGui::Begin().
+/// Only updates when the window is focused so resize applies to future windows of the same type.
+void UpdateWidgetTypeSize(const char* widgetType);
+
+/// Reset all per-widget-type sizes to defaults. Called when resetLayout is triggered.
+void ResetWidgetTypeSizes();
+
+/// Serialize per-widget-type sizes into a JSON object for persistence.
+json GetWidgetTypeSizesJson();
+
+/// Restore per-widget-type sizes from a previously serialized JSON object.
+void SetWidgetTypeSizesFromJson(const json& j);
 
 // ============================================================================
 // PropertyDrawer - Unified table-based property drawing with search support
@@ -178,7 +192,7 @@ namespace WidgetFactory
 			if (form) {
 				auto widget = std::make_unique<WidgetType>(form);
 				widget->CacheFormData();
-				widget->Load();
+				widget->Load(false);
 				widgets.push_back(std::move(widget));
 			}
 		}
@@ -216,6 +230,46 @@ namespace WidgetFactory
 					lastFocusedWidget = widget.get();
 				}
 			}
+		}
+	}
+
+	// Draw menu items for open widgets in a container using widget type name. Returns updated open count.
+	template <typename Container>
+	int DrawOpenWidgetMenuItems(const Container& widgets, int count)
+	{
+		for (auto& widget : widgets) {
+			if (widget->IsOpen()) {
+				++count;
+				if (ImGui::MenuItem(std::format("{}: {}", widget->GetWidgetTypeName(), widget->GetEditorID()).c_str()))
+					ImGui::SetWindowFocus(widget->GetWindowTitle().c_str());
+			}
+		}
+		return count;
+	}
+
+	// Draw save menu items for open widgets in a container. Returns true if any open widget exists.
+	template <typename Container>
+	bool DrawSaveWidgetMenuItems(Container& widgets, bool hasOpen = false)
+	{
+		for (auto& widget : widgets) {
+			if (widget->IsOpen()) {
+				hasOpen = true;
+				if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str()))
+					widget->Save();
+			}
+		}
+		return hasOpen;
+	}
+
+	// Draw "Close All <Type> Widgets" menu item for a widget container.
+	template <typename Container>
+	void DrawCloseAllMenuItem(Container& widgets)
+	{
+		if (widgets.empty())
+			return;
+		if (ImGui::MenuItem(std::format("Close All {} Widgets", widgets[0]->GetWidgetTypeName()).c_str())) {
+			for (auto& widget : widgets)
+				widget->SetOpen(false);
 		}
 	}
 }  // namespace WidgetFactory
@@ -300,6 +354,30 @@ void EndWidgetSearchBar();
 
 namespace WeatherUtils
 {
+	// Texture path helpers shared by precipitation and cloud layer widgets.
+	namespace TexturePath
+	{
+		inline constexpr std::string_view kTexturePrefix = "textures\\";
+		inline constexpr std::string_view kResourcePrefix = "Textures\\";
+		inline constexpr std::string_view kDdsExtension = ".dds";
+
+		// Lowercase + convert forward slashes to backslashes.
+		std::string Normalize(std::string_view path);
+
+		// True if the normalized path ends with ".dds".
+		bool HasDdsExtension(std::string_view path);
+
+		// True if the file exists under Data/textures/ (accepts paths with or without the leading "textures\").
+		bool ExistsOnDisk(std::string_view path);
+
+		// Build a BSA-style resource path ("Textures\\<path>" with .dds appended if missing).
+		std::string BuildResourcePath(std::string_view path);
+	}
+
+	// Lookup helpers for form↔widget ref serialization (load-order independent).
+	RE::TESForm* FindFormByEditorID(std::string_view editorID, const std::vector<std::unique_ptr<Widget>>& widgets);
+	std::string FindEditorIDByForm(const RE::TESForm* form, const std::vector<std::unique_ptr<Widget>>& widgets);
+
 	// Set the current widget for undo tracking (should be called at start of widget Draw())
 	void SetCurrentWidget(Widget* widget);
 

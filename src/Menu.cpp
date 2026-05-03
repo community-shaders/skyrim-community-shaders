@@ -109,11 +109,22 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GrabMinSize,
 	GrabRounding,
 	LogSliderDeadzone,
+	ImageRounding,
+	ImageBorderSize,
 	TabRounding,
 	TabBorderSize,
-	TabMinWidthForCloseButton,
+	TabCloseButtonMinWidthSelected,
+	TabCloseButtonMinWidthUnselected,
 	TabBarBorderSize,
+	TabBarOverlineSize,
 	TableAngledHeadersAngle,
+	TableAngledHeadersTextAlign,
+	TreeLinesSize,
+	TreeLinesRounding,
+	DragDropTargetRounding,
+	DragDropTargetBorderSize,
+	DragDropTargetPadding,
+	ColorMarkerSize,
 	ColorButtonPosition,
 	ButtonTextAlign,
 	SelectableTextAlign,
@@ -141,8 +152,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Palette,
 	StatusPalette,
 	FeatureHeading,
-	Style,
-	FullPalette)
+	Style)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::Settings,
@@ -159,6 +169,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	AutoHideFeatureList,
 	SkipConstraintWarning,
 	RequireShiftToDock,
+	UseResolutionFont,
 	Theme,
 	SelectedThemePreset)
 
@@ -179,6 +190,71 @@ static void SanitizeFontRolesJson(json& themeJson)
 		auto defaults = Menu::ThemeSettings{}.FontRoles;
 		for (size_t i = fontRoles.size(); i < expected; ++i) {
 			fontRoles.push_back(defaults[i]);
+		}
+	}
+}
+
+// Serialize palette as named color map. Resilient to ImGui enum reordering.
+void Menu::PaletteToJson(json& themeJson, const std::array<ImVec4, ImGuiCol_COUNT>& palette)
+{
+	json colors = json::object();
+	for (int i = 0; i < ImGuiCol_COUNT; i++)
+		colors[ImGui::GetStyleColorName(i)] = palette[i];
+	themeJson["Colors"] = colors;
+}
+
+// Deserialize palette from named color map (preferred) or legacy positional array.
+void Menu::PaletteFromJson(const json& themeJson, std::array<ImVec4, ImGuiCol_COUNT>& palette)
+{
+	ThemeSettings defaults;
+	palette = defaults.FullPalette;
+
+	auto loadVec4 = [](const json& c) -> ImVec4 {
+		if (c.is_array() && c.size() >= 4)
+			return c.get<ImVec4>();
+		return ImVec4(0, 0, 0, 0);
+	};
+
+	if (themeJson.contains("Colors") && themeJson["Colors"].is_object()) {
+		// Named color map: look up each color by ImGui's style color name
+		const auto& colors = themeJson["Colors"];
+		for (int i = 0; i < ImGuiCol_COUNT; i++) {
+			const char* name = ImGui::GetStyleColorName(i);
+			if (colors.contains(name) && colors[name].is_array())
+				palette[i] = loadVec4(colors[name]);
+		}
+	} else if (themeJson.contains("FullPalette") && themeJson["FullPalette"].is_array()) {
+		// Legacy positional array
+		const auto& arr = themeJson["FullPalette"];
+
+		if (arr.size() == 55) {
+			// Migrate from ImGui 1.90 (55 entries) to 1.92+ (62 entries).
+			// Tab/TabHovered swapped, 7 new slots inserted mid-enum.
+			for (int i = 0; i <= 32; i++)
+				palette[i] = loadVec4(arr[i]);
+			// [33] InputTextCursor: stays default
+			palette[34] = loadVec4(arr[34]);  // old TabHovered → TabHovered
+			palette[35] = loadVec4(arr[33]);  // old Tab → Tab (swapped)
+			palette[36] = loadVec4(arr[35]);  // old TabActive → TabSelected
+			// [37] TabSelectedOverline: stays default
+			palette[38] = loadVec4(arr[36]);  // old TabUnfocused → TabDimmed
+			palette[39] = loadVec4(arr[37]);  // old TabUnfocusedActive → TabDimmedSelected
+			// [40] TabDimmedSelectedOverline: stays default
+			for (int i = 38; i <= 48; i++)
+				palette[i + 3] = loadVec4(arr[i]);
+			// [52] TextLink: stays default
+			palette[53] = loadVec4(arr[49]);  // TextSelectedBg
+			// [54] TreeLines: stays default
+			palette[55] = loadVec4(arr[50]);  // DragDropTarget
+			// [56] DragDropTargetBg: stays default
+			// [57] UnsavedMarker: stays default
+			for (int i = 51; i <= 54; i++)
+				palette[i + 7] = loadVec4(arr[i]);
+		} else {
+			// Direct positional load (matching or close size)
+			size_t count = std::min(arr.size(), static_cast<size_t>(ImGuiCol_COUNT));
+			for (size_t i = 0; i < count; i++)
+				palette[i] = loadVec4(arr[i]);
 		}
 	}
 }
@@ -292,6 +368,7 @@ void Menu::Load(json& o_json)
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
 		SanitizeFontRolesJson(o_json["Theme"]);
 		settings.Theme = o_json["Theme"];
+		PaletteFromJson(o_json["Theme"], settings.Theme.FullPalette);
 		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 
 		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
@@ -357,6 +434,7 @@ void Menu::LoadTheme(json& o_json)
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
 		SanitizeFontRolesJson(o_json["Theme"]);
 		settings.Theme = o_json["Theme"];
+		PaletteFromJson(o_json["Theme"], settings.Theme.FullPalette);
 		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 
 		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
@@ -385,6 +463,7 @@ void Menu::SaveTheme(json& o_json)
 	}
 
 	o_json["Theme"] = settings.Theme;
+	PaletteToJson(o_json["Theme"], settings.Theme.FullPalette);
 }
 
 std::vector<std::string> Menu::DiscoverThemes()
@@ -411,131 +490,13 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
 		// Create a backup of current theme in case loading fails
 		ThemeSettings backupTheme = settings.Theme;
-		ThemeSettings defaultTheme;  // For fallback values
 		bool hasFontRoles = themeSettings.contains("FontRoles");
 
+		SanitizeFontRolesJson(themeSettings);
+
 		try {
-			// Attempt to load theme with protection against malformed data
-			try {
-				settings.Theme = themeSettings;
-			} catch (const json::out_of_range& e) {
-				// Most likely FullPalette array size mismatch
-				logger::warn("Theme '{}' has incomplete data ({}). Loading with defaults for missing fields.", themeName, e.what());
-
-				// Manually load fields that exist, use defaults for missing ones
-				if (themeSettings.contains("FontSize")) {
-					try {
-						settings.Theme.FontSize = themeSettings["FontSize"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("FontName")) {
-					try {
-						settings.Theme.FontName = themeSettings["FontName"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("GlobalScale")) {
-					try {
-						settings.Theme.GlobalScale = themeSettings["GlobalScale"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("FontRoles")) {
-					try {
-						SanitizeFontRolesJson(themeSettings);
-						settings.Theme.FontRoles = themeSettings["FontRoles"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("ShowActionIcons")) {
-					try {
-						settings.Theme.ShowActionIcons = themeSettings["ShowActionIcons"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("UseMonochromeIcons")) {
-					try {
-						settings.Theme.UseMonochromeIcons = themeSettings["UseMonochromeIcons"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("UseMonochromeLogo")) {
-					try {
-						settings.Theme.UseMonochromeLogo = themeSettings["UseMonochromeLogo"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("TooltipHoverDelay")) {
-					try {
-						settings.Theme.TooltipHoverDelay = themeSettings["TooltipHoverDelay"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("BackgroundBlurEnabled")) {
-					try {
-						settings.Theme.BackgroundBlurEnabled = themeSettings["BackgroundBlurEnabled"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("ScrollbarOpacity")) {
-					try {
-						settings.Theme.ScrollbarOpacity = themeSettings["ScrollbarOpacity"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("Palette")) {
-					try {
-						settings.Theme.Palette = themeSettings["Palette"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("StatusPalette")) {
-					try {
-						settings.Theme.StatusPalette = themeSettings["StatusPalette"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("FeatureHeading")) {
-					try {
-						settings.Theme.FeatureHeading = themeSettings["FeatureHeading"];
-					} catch (...) {}
-				}
-				if (themeSettings.contains("Style")) {
-					try {
-						settings.Theme.Style = themeSettings["Style"];
-					} catch (...) {}
-				}
-
-				// Handle FullPalette with extra care
-				if (themeSettings.contains("FullPalette") && themeSettings["FullPalette"].is_array()) {
-					const auto& paletteJson = themeSettings["FullPalette"];
-					size_t jsonSize = paletteJson.size();
-					size_t requiredSize = settings.Theme.FullPalette.size();  // Should be ImGuiCol_COUNT (55)
-
-					if (jsonSize < requiredSize) {
-						logger::warn("Theme '{}' FullPalette has {} elements, expected {}. Using defaults for missing colors.",
-							themeName, jsonSize, requiredSize);
-					}
-
-					// Load colors that exist, use defaults for the rest
-					for (size_t i = 0; i < requiredSize; ++i) {
-						if (i < jsonSize) {
-							try {
-								if (paletteJson[i].is_array() && paletteJson[i].size() >= 4) {
-									settings.Theme.FullPalette[i] = ImVec4(
-										paletteJson[i][0].get<float>(),
-										paletteJson[i][1].get<float>(),
-										paletteJson[i][2].get<float>(),
-										paletteJson[i][3].get<float>());
-								} else {
-									settings.Theme.FullPalette[i] = defaultTheme.FullPalette[i];
-								}
-							} catch (...) {
-								settings.Theme.FullPalette[i] = defaultTheme.FullPalette[i];
-							}
-						} else {
-							settings.Theme.FullPalette[i] = defaultTheme.FullPalette[i];
-						}
-					}
-				} else {
-					// FullPalette missing, use all defaults
-					logger::warn("Theme '{}' missing FullPalette array, using defaults", themeName);
-					settings.Theme.FullPalette = defaultTheme.FullPalette;
-				}
-			} catch (const std::exception& e) {
-				logger::error("Error loading theme '{}': {}. Using previous theme.", themeName, e.what());
-				settings.Theme = backupTheme;
-				return false;
-			}
+			settings.Theme = themeSettings;
+			PaletteFromJson(themeSettings, settings.Theme.FullPalette);
 
 			MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 			auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
@@ -564,7 +525,6 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 			return true;
 		} catch (const std::exception& e) {
 			logger::warn("Error loading theme '{}': {}", themeName, e.what());
-			// Restore backup to maintain UI consistency
 			settings.Theme = backupTheme;
 			return false;
 		}
@@ -624,6 +584,23 @@ void Menu::Init()
 	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
 	imgui_io.IniFilename = cachedIniPath.c_str();
 
+	// Register settings handler to persist display size for cross-session resolution change detection
+	ImGuiSettingsHandler handler{};
+	handler.TypeName = "CommunityShaders";
+	handler.TypeHash = ImHashStr("CommunityShaders");
+	handler.UserData = &lastDisplaySize;
+	handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler*, const char*) -> void* { return (void*)1; };
+	handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler* h, void*, const char* line) {
+		float w, ht;
+		if (sscanf(line, "DisplaySize=%f,%f", &w, &ht) == 2)
+			*static_cast<float2*>(h->UserData) = { w, ht };
+	};
+	handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* h, ImGuiTextBuffer* buf) {
+		auto& ds = ImGui::GetIO().DisplaySize;
+		buf->appendf("[%s][Data]\nDisplaySize=%g,%g\n\n", h->TypeName, ds.x, ds.y);
+	};
+	ImGui::GetCurrentContext()->SettingsHandlers.push_back(handler);
+
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
@@ -680,11 +657,17 @@ void Menu::DrawSettings()
 	// Apply theme styling with universal contrast enhancement
 	ThemeManager::SetupImGuiStyle(*this);
 
-	ImGui::DockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode);
+	ImGui::DockSpaceOverViewport(0, NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
-	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
-	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
+	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), layoutCond, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), layoutCond);
+	resetLayout = false;
+	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
+	auto expectedTag = std::format("v{}", versionStr);
+	auto displayTitle = Plugin::BUILD_DESCRIBE == expectedTag ? std::format("Community Shaders {}", versionStr) : std::format("Community Shaders {} [{}]", versionStr, Plugin::BUILD_DESCRIBE);
+	// Use ### to keep a stable window ID regardless of build suffix, preserving docking state
+	auto title = std::format("{}###CommunityShaders", displayTitle);
 
 	// Determine window flags based on docking state
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
@@ -870,7 +853,7 @@ void Menu::DrawOverlay()
 {
 	// Only process reloads when ImGui is NOT in an active frame
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
-	bool canReload = ctx && !ctx->WithinFrameScope && !ctx->WithinEndChild;
+	bool canReload = ctx && !ctx->WithinFrameScope && ctx->WithinEndChildID == 0;
 
 	// Process deferred font reload BEFORE any ImGui operations
 	// This is the safest place to do font atlas modifications
@@ -972,6 +955,10 @@ void Menu::ProcessInputEventQueue()
 			logger::trace("Detected key code {} ({})", event.keyCode, key);
 			if (key == event.keyCode)
 				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
+
+			const bool wasCapturingHotkey = IsCapturingHotkeyInput();
+			const bool allowSetupCloseKey = wasCapturingHotkey && HomePageRenderer::ShouldShowFirstTimeSetup() &&
+			                                (key == VK_RETURN || key == VK_ESCAPE);
 			if (!event.IsPressed()) {
 				// Skip key release if it was used to close the first-time setup dialog
 				if (HomePageRenderer::ShouldSkipKeyRelease(key)) {
@@ -1046,8 +1033,14 @@ void Menu::ProcessInputEventQueue()
 						std::function<void()> action;
 					};
 					KeyAction keyActions[] = {
-						{ settings.ToggleKey, [this]() { if (!HomePageRenderer::ShouldShowFirstTimeSetup()) IsEnabled = !IsEnabled; } },
-						{ settings.SkipCompilationKey, [shaderCache]() { shaderCache->backgroundCompilation = true; } },
+						{ settings.ToggleKey, [this]() {
+							 if (!HomePageRenderer::ShouldShowFirstTimeSetup()) {
+								 IsEnabled = !IsEnabled;
+								 if (IsEnabled)
+									 ImGui::GetIO().ClearInputKeys();  // Prevent toggle key from remaining "held" in ImGui after open.
+							 }
+						 } },
+						{ settings.SkipCompilationKey, [this, shaderCache]() { if (!ShouldSwallowInput() && shaderCache->IsCompiling()) shaderCache->backgroundCompilation = true; } },
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
@@ -1063,43 +1056,14 @@ void Menu::ProcessInputEventQueue()
 								 // Locked or PlayMode → fully exit preview
 								 ew->ExitPreviewMode();
 							 } else {
-								 auto p = RE::PlayerCharacter::GetSingleton();
-								 if (p && p->parentCell)
-									 ew->open = !ew->open;
+								 WeatherEditor::ToggleEditorWindow();
 							 }
 						 } },
 					};
 					for (const auto& ka : keyActions) {
-						// Check if key matches last key in combo and all modifiers are held (exact match)
-						if (!ka.settingKey.empty() &&
-							ka.settingKey.back().GetKey() == key &&
-							ka.settingKey.back().GetDevice() == InputDeviceType::Keyboard) {
-							// Build set of required modifiers from combo
-							bool requiresCtrl = false, requiresShift = false, requiresAlt = false;
-							for (size_t i = 0; i < ka.settingKey.size() - 1; ++i) {
-								uint32_t modKey = ka.settingKey[i].GetKey();
-								if (modKey == VK_CONTROL || modKey == VK_LCONTROL || modKey == VK_RCONTROL)
-									requiresCtrl = true;
-								else if (modKey == VK_SHIFT || modKey == VK_LSHIFT || modKey == VK_RSHIFT)
-									requiresShift = true;
-								else if (modKey == VK_MENU || modKey == VK_LMENU || modKey == VK_RMENU)
-									requiresAlt = true;
-							}
-
-							// Check current modifier state
-							bool ctrlHeld = (GetAsyncKeyState(VK_CONTROL) & Constants::KEY_PRESSED_MASK) != 0;
-							bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & Constants::KEY_PRESSED_MASK) != 0;
-							bool altHeld = (GetAsyncKeyState(VK_MENU) & Constants::KEY_PRESSED_MASK) != 0;
-
-							// Exact match: required modifiers must be held, and no extra modifiers
-							bool exactMatch = (requiresCtrl == ctrlHeld) &&
-							                  (requiresShift == shiftHeld) &&
-							                  (requiresAlt == altHeld);
-
-							if (exactMatch) {
-								ka.action();
-								break;
-							}
+						if (InputCombo::MatchesKeyboardCombo(ka.settingKey, key)) {
+							ka.action();
+							break;
 						}
 					}
 				}
@@ -1117,20 +1081,42 @@ void Menu::ProcessInputEventQueue()
 				}
 			}
 
-			// DirectInput loses key-up events after alt-tab; validate against OS state.
-			bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
-			io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
+			// Don't forward hotkey events to ImGui when input is captured (prevents e.g. End key scrolling the feature list)
+			// SkipCompilationKey (ESC) is excluded — ESC must reach ImGui for menu/dialog close.
+			const std::vector<InputCombo>* hotkeys[] = {
+				&settings.ToggleKey, &settings.EffectToggleKey,
+				&settings.OverlayToggleKey, &settings.ShaderBlockPrevKey, &settings.ShaderBlockNextKey,
+				&settings.WeatherEditorToggleKey
+			};
+			bool isHotkey = ShouldSwallowInput() && std::any_of(std::begin(hotkeys), std::end(hotkeys),
+														[key](const auto* combo) { return InputCombo::MatchesKeyboardCombo(*combo, key); });
 
-			if (key == VK_LCONTROL || key == VK_RCONTROL)
-				io.AddKeyEvent(ImGuiMod_Ctrl, pressed);
-			else if (key == VK_LSHIFT || key == VK_RSHIFT)
-				io.AddKeyEvent(ImGuiMod_Shift, pressed);
-			else if (key == VK_LMENU || key == VK_RMENU)
-				io.AddKeyEvent(ImGuiMod_Alt, pressed);
+			// Always forward key-up events. Suppress key-down during active hotkeys,
+			// and during hotkey capture except setup close keys (Enter/Escape).
+			const bool isKeyDown = event.IsPressed();
+			const bool suppressForwarding = isKeyDown && (isHotkey || (wasCapturingHotkey && !allowSetupCloseKey));
+			if (!suppressForwarding) {
+				// DirectInput loses key-up events after alt-tab; validate against OS state.
+				bool pressed = isKeyDown && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
+				io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
+
+				if (key == VK_LCONTROL || key == VK_RCONTROL)
+					io.AddKeyEvent(ImGuiMod_Ctrl, pressed);
+				else if (key == VK_LSHIFT || key == VK_RSHIFT)
+					io.AddKeyEvent(ImGuiMod_Shift, pressed);
+				else if (key == VK_LMENU || key == VK_RMENU)
+					io.AddKeyEvent(ImGuiMod_Alt, pressed);
+			}
 		}
 	}
 
 	_keyEventQueue.clear();
+}
+
+bool Menu::IsCapturingHotkeyInput() const
+{
+	return settingToggleKey || settingSkipCompilationKey || settingsEffectsToggle ||
+	       settingOverlayToggleKey || settingShaderBlockPrevKey || settingShaderBlockNextKey || settingWeatherEditorToggleKey;
 }
 
 void Menu::addToEventQueue(KeyEvent e)

@@ -222,6 +222,7 @@ void VR::InitInSceneResources()
 		logger::error("VR: Failed to create sampler state");
 		return;
 	}
+	Util::SetResourceName(temp.sampler.get(), "VR::InSceneOverlaySampler");
 
 	inSceneResources = std::move(temp);
 	inSceneResources.initialized = true;
@@ -230,6 +231,10 @@ void VR::InitInSceneResources()
 
 void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, const vr::VRTextureBounds_t* bounds)
 {
+	if (!globals::menu || !(globals::menu->IsEnabled || globals::menu->overlayVisible || IsWelcomeOverlayVisible()) || settings.attachMode == AttachMode::None || !menuTexture) {
+		return;
+	}
+
 	auto context = globals::d3d::context;
 	winrt::com_ptr<ID3DUserDefinedAnnotation> perf;
 	context->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), perf.put_void());
@@ -241,25 +246,6 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 	if (!inSceneResources.initialized)
 		InitInSceneResources();
 	if (!inSceneResources.initialized) {
-		if (perf)
-			perf->EndEvent();
-		return;
-	}
-
-	// Only render if overlay should be visible
-	if (!globals::menu || !(globals::menu->IsEnabled || globals::menu->overlayVisible || settings.kAutoHideSeconds > 0)) {
-		if (perf)
-			perf->EndEvent();
-		return;
-	}
-	if (!menuTexture) {
-		if (perf)
-			perf->EndEvent();
-		return;
-	}
-
-	// Skip rendering when attach mode is None (disabled)
-	if (settings.attachMode == AttachMode::None) {
 		if (perf)
 			perf->EndEvent();
 		return;
@@ -320,7 +306,8 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 	// World-space VP (for controller attach and fixed world position modes)
 	if (hmdPose.bPoseIsValid) {
 		hmdWorld = Util::HmdMatrix34ToMatrix(hmdPose.mDeviceToAbsoluteTracking);
-		Matrix eyeToWorld = hmdWorld * eyeToHead;
+		// Transform chain: eye → head → world (row-vector: left-to-right composition)
+		Matrix eyeToWorld = eyeToHead * hmdWorld;
 		vpWorldSpace = eyeToWorld.Invert() * proj;
 	}
 
@@ -516,7 +503,7 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 				Matrix overlayTransform = offset * controllerWorld;
 				Vector3 overlayNormal(overlayTransform._31, overlayTransform._32, overlayTransform._33);
 				overlayNormal.Normalize();
-				Matrix eyeWorld = hmdWorld * eyeToHead;
+				Matrix eyeWorld = eyeToHead * hmdWorld;
 				Vector3 eyePos = eyeWorld.Translation();
 				Vector3 overlayPos = overlayTransform.Translation();
 				Vector3 toEye = eyePos - overlayPos;
