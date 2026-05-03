@@ -74,7 +74,10 @@ public:
 	{
 		Default,
 		Spinner,
-		Dropdown
+		Dropdown,
+		Vector,
+		Quality,
+		Color
 	};
 
 	struct UIVariable
@@ -83,6 +86,7 @@ public:
 		UIWidgetType widgetType;
 		std::string name;
 		std::string displayName;
+		std::string group;
 		winrt::com_ptr<ID3DX11EffectVariable> effectVariable;
 
 		// Value storage
@@ -102,10 +106,38 @@ public:
 		float floatStep = 0.01f;
 		int intMin = 0;
 		int intMax = 100;
+		int ordering = 0;
+		int sourceOrder = INT_MAX;
+		bool isSeparator = false;
+		bool isReadOnly = false;
+		bool isTopLevel = false;
+		bool isHidden = false;
+		std::string uniqueName;
+		std::string uiBinding;
+		std::string uiBindingProperty;
+		std::string uiBindingCondition;
+
+		// Weather separation ("ExteriorWeather" or "Weather")
+		std::string separation;
+		// Parsed time period from UIName (e.g. "Dawn", "Day", "Night", "Interior")
+		std::string timePeriod;
+
 		std::vector<std::string> dropdownItems;
 	};
 
 	std::vector<UIVariable> uiVariables;
+
+	// Group metadata (from first variable defining each group)
+	std::unordered_map<std::string, std::string> groupDisplayNames;
+	std::unordered_map<std::string, bool> groupDefaultOpen;
+	std::unordered_map<std::string, int> groupOrdering;
+
+	// Technique dropdown metadata (from first technique's annotations)
+	std::string techniqueDropdownName = "Technique";
+	std::string techniqueDropdownGroup;
+	bool techniqueDropdownVisible = true;
+	bool techniqueDropdownTopLevel = false;
+	int techniqueDropdownOrdering = 1;
 
 	// Technique selection (legacy)
 	std::vector<std::string> availableTechniques;
@@ -116,6 +148,11 @@ public:
 
 	// Error tracking
 	std::vector<std::string> errors;
+
+	// Pre-compiled group map from source preprocessing (variable name → group path)
+	std::unordered_map<std::string, std::string> sourceGroupMap;
+	// Source declaration order (variable name → declaration index)
+	std::unordered_map<std::string, int> sourceOrderMap;
 
 	// INI file modification time tracking to skip redundant reloads
 	std::filesystem::file_time_type lastIniWriteTime{};
@@ -162,6 +199,7 @@ private:
 	std::unordered_map<std::string, TextureManager::Texture*> commonTexturePointerCache;
 
 	void EnumerateAllVariables();
+	void ParseSourceGroupScopes(const std::string& preprocessedSource);
 
 	void SetupCustomTextures();
 	ID3D11ShaderResourceView* LoadTextureFromFile(const std::string& filename);
