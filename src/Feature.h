@@ -56,10 +56,13 @@ public:
 	/**
 	 * Whether the feature is a CORE feature
 	 * This will place it under "Core Features" in UI
-	 * Also need to create a file named "CORE" in the root of the feature folder
-	 * if it should be merged into main cs zip file
+	 * If "CORE" file is present in the root of the feature folder,
+	 * it will be merged into main cs zip file and automatically considered core
 	 */
-	virtual bool IsCore() const { return false; }
+	virtual bool IsCore() const
+	{
+		return FeatureVersions::FEATURE_CORE_NAMES.contains(const_cast<Feature*>(this)->GetShortName());
+	}
 
 	/**
 	 * Get the category for UI grouping (e.g., "Terrain", "Lighting", "Characters", etc.)
