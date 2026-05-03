@@ -1359,24 +1359,17 @@ void Effect::LoadUIVariableValue(UIVariable& uiVar)
 {
 	switch (uiVar.type) {
 	case UIVariableType::Float:
-		if (SUCCEEDED(uiVar.effectVariable->AsScalar()->GetFloat(&uiVar.floatValue))) {
-			// Successfully loaded float value
-		}
+		uiVar.effectVariable->AsScalar()->GetFloat(&uiVar.floatValue);
 		break;
 	case UIVariableType::Int:
-		if (SUCCEEDED(uiVar.effectVariable->AsScalar()->GetInt(&uiVar.intValue))) {
-			// Successfully loaded int value
-		}
+		uiVar.effectVariable->AsScalar()->GetInt(&uiVar.intValue);
 		break;
 	case UIVariableType::Bool:
-		if (SUCCEEDED(uiVar.effectVariable->AsScalar()->GetBool(&uiVar.boolValue))) {
-			// Successfully loaded bool value
-		}
+		uiVar.effectVariable->AsScalar()->GetBool(&uiVar.boolValue);
 		break;
 	case UIVariableType::Color3:
 	case UIVariableType::Color4:
-		if (SUCCEEDED(uiVar.effectVariable->AsVector()->GetFloatVector(uiVar.colorValue))) {
-		}
+		uiVar.effectVariable->AsVector()->GetFloatVector(uiVar.colorValue);
 		break;
 	}
 }

@@ -71,11 +71,12 @@ void EffectManager::Apply()
 
 void EffectManager::Load()
 {
-	enbBloom.Load();
-	enbLens.Load();
-	enbAdaptation.Load();
-	enbEffect.Load();
-	enbEffectPostPass.Load();
+	Effect* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
+	for (auto* effect : allEffects) {
+		effect->lastIniWriteTime = {};
+		effect->Load();
+		effect->UpdateUIVariables();
+	}
 }
 
 void EffectManager::Save()

@@ -966,6 +966,10 @@ void SettingManager::SetIgnoreWeatherSystemInterior(const std::string& category,
 
 void SettingManager::Load()
 {
+	{
+		std::unique_lock lock(mutex);
+		lastMainIniWriteTime = {};
+	}
 	LoadFromFile(PresetManager::GetSingleton().GetENBSeriesIniPath().string());
 	ReloadAllWeatherSettings();
 }
