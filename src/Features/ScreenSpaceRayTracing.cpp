@@ -21,6 +21,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HistoryFixAlternatePixelStride,
 	FastHistoryClampingSigmaScale,
 	DiffusePrepassBlurRadius,
+	SpecularPrepassBlurRadius,
 	MinHitDistanceWeight,
 	MinBlurRadius,
 	MaxBlurRadius,
@@ -169,6 +170,10 @@ void ScreenSpaceRayTracing::DrawSettings()
 			ImGui::SliderFloat("Min Blur Radius", &r.MinBlurRadius, 0.0f, 10.0f, "%.1f px");
 			ImGui::SliderFloat("Max Blur Radius", &r.MaxBlurRadius, 0.0f, 60.0f, "%.1f px");
 			ImGui::SliderFloat("Diffuse Prepass Blur Radius", &r.DiffusePrepassBlurRadius, 0.0f, 60.0f, "%.1f px");
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Spatial blur before temporal accumulation. Helps with very noisy input.");
+
+			ImGui::SliderFloat("Specular Prepass Blur Radius", &r.SpecularPrepassBlurRadius, 0.0f, 60.0f, "%.1f px");
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("Spatial blur before temporal accumulation. Helps with very noisy input.");
 
@@ -324,6 +329,12 @@ void ScreenSpaceRayTracing::SetupResources()
 		texNRDOutputSH1 = eastl::make_unique<Texture2D>(texDesc);
 		texNRDOutputSH1->CreateSRV(srvDesc);
 		texNRDOutputSH1->CreateUAV(uavDesc);
+
+		// NRD MV (MotionVector), we need a copy because it is used as a scratch texture between passes
+		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+		texNRDMV = eastl::make_unique<Texture2D>(texDesc);
+		texNRDMV->CreateSRV(srvDesc);
+		texNRDMV->CreateUAV(uavDesc);
 
 		// NRD ViewZ (R32F, full-res) — avoids needing viewZScale for FP16 range compression
 		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
@@ -725,10 +736,6 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 			specCommonSettings.rectSizePrev[0] = fw;
 			specCommonSettings.rectSizePrev[1] = fh;
 
-			// NRD wants column-major matrices; game stores row-major — transpose to convert.
-			// Use jittered projection to match jittered depth.
-			auto projMat = globals::game::frameBufferCached.GetCameraProj(0).Transpose();
-
 			memcpy(specCommonSettings.viewToClipMatrix, &projMat, sizeof(float) * 16);
 			memcpy(specCommonSettings.viewToClipMatrixPrev, &prevProjMatrix, sizeof(float) * 16);
 			memcpy(specCommonSettings.worldToViewMatrix, &worldToViewMat, sizeof(float) * 16);
@@ -776,7 +783,7 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 			reblurSpecularSettings.fireflySuppressorMinRelativeScale = std::clamp(r.FireflySuppressorMinRelativeScale, 1.0f, 3.0f);
 			reblurSpecularSettings.enableAntiFirefly = r.EnableAntiFirefly;
 			reblurSpecularSettings.returnHistoryLengthInsteadOfOcclusion = r.ReturnHistoryLengthInsteadOfOcclusion;
-			reblurSpecularSettings.specularPrepassBlurRadius = std::max(r.DiffusePrepassBlurRadius, 0.0f);
+			reblurSpecularSettings.specularPrepassBlurRadius = std::max(r.SpecularPrepassBlurRadius, 0.0f);
 			auto specHitDistRecon = static_cast<nrd::HitDistanceReconstructionMode>(
 				std::min(r.HitDistanceReconstructionMode, 2u));
 			if ((settings.Mode == TRACING_MODE_FULL_PROBABILISTIC || settings.Mode == TRACING_MODE_QUARTER) &&
@@ -790,7 +797,12 @@ void ScreenSpaceRayTracing::DrawSSRTSpecular()
 		}
 		nrdReblurSpecular.SetDenoiserSettings(&reblurSpecularSettings);
 
-		nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_MV, motion.SRV);
+		// Motion Vector is used as both SRV and as UAV, copy the original over before dispatching
+		context->CopyResource(texNRDMV->resource.get(), motion.texture);
+	
+		// Bind named resources
+		nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_MV, texNRDMV->srv.get());
+		nrdReblurSpecular.SetNamedUAV(nrd::ResourceType::IN_MV, texNRDMV->uav.get());
 		nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS, texNRDNormalRoughness->srv.get());
 		nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_VIEWZ, texNRDViewZ->srv.get());
 		nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_SPEC_RADIANCE_HITDIST, texNRDInputSpecRadianceHitDist->srv.get());
@@ -969,8 +981,7 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 
 			// NRD wants column-major matrices; game stores row-major — transpose to convert.
 			// Use jittered projection to match jittered depth.
-			auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
-			auto projMat = globals::game::frameBufferCached.GetCameraProj(0).Transpose();
+			projMat = globals::game::frameBufferCached.GetCameraProj(0).Transpose();
 
 			// Get camera's world position
 			float3 cameraWorldPos = float3(globals::game::frameBufferCached.GetCameraPosAdjust(0));
@@ -981,8 +992,8 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 			// Combine view rotation with translation to get the full world-to-view matrix
 			// NRD expects worldToViewMatrix to transform from world space to camera space, including translation.
 			// So, V_full = ViewRotationMatrix * TranslationMatrix(-CameraWorldPosition)
-			worldToViewMat = DirectX::XMMatrixMultiply(translationMat, viewMat);
-
+			worldToViewMat = DirectX::XMMatrixMultiply(translationMat, globals::game::frameBufferCached.GetCameraView(0).Transpose());
+	
 			memcpy(commonSettings.viewToClipMatrix, &projMat, sizeof(float) * 16);
 			memcpy(commonSettings.viewToClipMatrixPrev, &prevProjMatrix, sizeof(float) * 16);
 			memcpy(commonSettings.worldToViewMatrix, &worldToViewMat, sizeof(float) * 16);
@@ -1047,8 +1058,12 @@ void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 		}
 		nrdReblur.SetDenoiserSettings(&reblurSettings);
 
+		// Motion Vector is used as both SRV and as UAV, copy the original over before dispatching
+		context->CopyResource(texNRDMV->resource.get(), motion.texture);
+
 		// Bind named resources
-		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV, motion.SRV);
+		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV, texNRDMV->srv.get());
+		nrdReblur.SetNamedUAV(nrd::ResourceType::IN_MV, texNRDMV->uav.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS, texNRDNormalRoughness->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_VIEWZ, texNRDViewZ->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH0, texNRDInputSH0->srv.get());

@@ -50,6 +50,7 @@ struct ScreenSpaceRayTracing : Feature
 		uint32_t HistoryFixAlternatePixelStride = 1;
 		float FastHistoryClampingSigmaScale = 2.0f;
 		float DiffusePrepassBlurRadius = 30.0f;
+		float SpecularPrepassBlurRadius = 30.0f;
 		float MinHitDistanceWeight = 0.1f;
 		float MinBlurRadius = 1.0f;
 		float MaxBlurRadius = 35.0f;
@@ -171,6 +172,7 @@ struct ScreenSpaceRayTracing : Feature
 	eastl::unique_ptr<Texture2D> texNRDOutputSH1 = nullptr;  // OUT_DIFF_SH1
 
 	// NRD guide textures (full-res)
+	eastl::unique_ptr<Texture2D> texNRDMV = nullptr;			   // IN_MV (RG16)
 	eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;            // IN_VIEWZ (R32F)
 	eastl::unique_ptr<Texture2D> texNRDNormalRoughness = nullptr;  // IN_NORMAL_ROUGHNESS (R8G8B8A8)
 
@@ -198,6 +200,7 @@ struct ScreenSpaceRayTracing : Feature
 	nrd::ReblurSettings reblurSpecularSettings{};
 	uint32_t frameIndex = 0;
 
+	Matrix projMat{};
 	Matrix worldToViewMat{};
 	Matrix prevWorldToViewMat{};
 	Matrix prevProjMatrix{};
