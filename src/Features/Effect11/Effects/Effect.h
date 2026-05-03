@@ -178,6 +178,7 @@ public:
 		float floatMax = 1.0f;
 		float floatStep = 0.01f;
 		int ordering = 0;
+		bool hasExplicitOrdering = false;
 	};
 
 	std::vector<UIDefineInfo> uiDefines;

@@ -186,6 +186,12 @@ namespace ENBExtender
 				continue;
 			}
 
+			size_t afterEnd = pos + name.size();
+			if (afterEnd < annotations.size() && (std::isalnum(static_cast<unsigned char>(annotations[afterEnd])) || annotations[afterEnd] == '_')) {
+				pos = afterEnd;
+				continue;
+			}
+
 			size_t eq = annotations.find('=', pos + name.size());
 			if (eq == std::string::npos)
 				return {};
@@ -566,8 +572,10 @@ namespace ENBExtender
 			}
 			if (!stepStr.empty())
 				info.floatStep = SafeStof(stepStr, info.floatStep);
-			if (!orderStr.empty())
+			if (!orderStr.empty()) {
 				info.ordering = SafeStoi(orderStr, info.ordering);
+				info.hasExplicitOrdering = true;
+			}
 
 			uiDefines.push_back(std::move(info));
 		}
@@ -626,8 +634,14 @@ namespace ENBExtender
 					}
 				}
 
-				if (!groupName.empty())
+				if (!groupName.empty()) {
 					groupStack.push_back(groupName);
+					std::string orderStr = ExtractAnnotation(line, "UIOrdering");
+					if (!orderStr.empty()) {
+						std::string groupPath = BuildGroupPath(groupStack);
+						effect.groupOrdering[groupPath] = SafeStoi(orderStr);
+					}
+				}
 				continue;
 			}
 
@@ -668,19 +682,26 @@ namespace ENBExtender
 
 	static void TrackGroupMetadata(const std::string& groupPath, ID3DX11EffectVariable* variable, Effect& effect)
 	{
-		if (groupPath.empty() || effect.groupOrdering.find(groupPath) != effect.groupOrdering.end())
+		if (groupPath.empty())
 			return;
 
-		effect.groupOrdering[groupPath] = 0;
+		bool isNew = effect.groupOrdering.find(groupPath) == effect.groupOrdering.end();
+		if (isNew)
+			effect.groupOrdering[groupPath] = 0;
+
 		std::string displayName = effect.GetUIAnnotation(variable, "UIGroupName");
 		if (!displayName.empty())
-			effect.groupDisplayNames[groupPath] = displayName;
+			effect.groupDisplayNames.try_emplace(groupPath, displayName);
 		std::string openStr = effect.GetUIAnnotation(variable, "UIGroupOpen");
 		if (!openStr.empty())
-			effect.groupDefaultOpen[groupPath] = IsTruthy(openStr);
-		std::string orderStr = effect.GetUIAnnotation(variable, "UIOrdering");
-		if (!orderStr.empty())
-			effect.groupOrdering[groupPath] = SafeStoi(orderStr);
+			effect.groupDefaultOpen.try_emplace(groupPath, IsTruthy(openStr));
+
+		if (isNew) {
+			std::string orderStr = effect.GetUIAnnotation(variable, "UIOrdering");
+			if (!orderStr.empty())
+				effect.groupOrdering[groupPath] = SafeStoi(orderStr);
+		}
+		logger::debug("[ENBExtender] TrackGroupMetadata: group='{}' ordering={} isNew={}", groupPath, effect.groupOrdering[groupPath], isNew);
 	}
 
 	static bool HandleGroupBegin(ID3DX11EffectVariable* variable, std::vector<std::string>& groupStack, Effect& effect)
@@ -699,7 +720,6 @@ namespace ENBExtender
 		}
 		if (groupName.empty())
 			return true;
-
 		groupStack.push_back(groupName);
 		TrackGroupMetadata(BuildGroupPath(groupStack), variable, effect);
 		return true;
@@ -709,6 +729,7 @@ namespace ENBExtender
 	{
 		if (!IsTruthy(effect.GetUIAnnotation(variable, "UIGroupEnd")))
 			return false;
+
 		if (!groupStack.empty())
 			groupStack.pop_back();
 		return true;
@@ -843,6 +864,11 @@ namespace ENBExtender
 				uiVar.floatMin = def.floatMin;
 				uiVar.floatMax = def.floatMax;
 				uiVar.floatStep = def.floatStep;
+			}
+
+			if (!def.group.empty() && def.hasExplicitOrdering) {
+				auto [it, inserted] = effect.groupOrdering.try_emplace(def.group, def.ordering);
+				logger::debug("[ENBExtender] InsertUIDefines: group='{}' ordering={} inserted={}", def.group, def.ordering, inserted);
 			}
 
 			effect.uiVariables.push_back(uiVar);
@@ -1037,7 +1063,7 @@ namespace ENBExtender
 
 	static void BuildMergedTree(std::span<Effect*> effects, GroupNode& root, MergedGroupMeta& meta)
 	{
-		std::unordered_set<std::string> rootDisplayNames;
+		std::unordered_map<GroupNode*, std::unordered_set<std::string>> seenDisplayNames;
 
 		for (size_t e = 0; e < effects.size(); ++e) {
 			auto* effect = effects[e];
@@ -1048,8 +1074,11 @@ namespace ENBExtender
 				meta.displayNames.try_emplace(path, name);
 			for (auto& [path, open] : effect->groupDefaultOpen)
 				meta.defaultOpen.try_emplace(path, open);
-			for (auto& [path, order] : effect->groupOrdering)
-				meta.ordering.try_emplace(path, order);
+			for (auto& [path, order] : effect->groupOrdering) {
+				auto [it, inserted] = meta.ordering.try_emplace(path, order);
+				if (inserted)
+					logger::debug("[ENBExtender] BuildMergedTree: group='{}' ordering={} from effect '{}'", path, order, effect->GetName());
+			}
 
 			for (int i = 0; i < static_cast<int>(effect->uiVariables.size()); ++i) {
 				auto& var = effect->uiVariables[i];
@@ -1067,14 +1096,36 @@ namespace ENBExtender
 					}
 				}
 
-				if (node == &root) {
-					if (var.isSeparator)
+				if (var.isSeparator) {
+					if (node == &root)
 						continue;
-					if (!var.displayName.empty() && !rootDisplayNames.insert(var.displayName).second)
-						continue;
+					node->vars.push_back({ effect, i });
+					continue;
 				}
 
+				if (!var.displayName.empty() && !seenDisplayNames[node].insert(var.displayName).second)
+					continue;
+
 				node->vars.push_back({ effect, i });
+			}
+		}
+	}
+
+	static void PropagateGroupOrdering(GroupNode& node, MergedGroupMeta& meta)
+	{
+		for (auto& child : node.children) {
+			PropagateGroupOrdering(*child, meta);
+
+			auto it = meta.ordering.find(child->fullPath);
+			if (it != meta.ordering.end() && it->second == 0 && !child->children.empty()) {
+				int maxChildOrder = 0;
+				for (auto& grandchild : child->children) {
+					auto gcIt = meta.ordering.find(grandchild->fullPath);
+					if (gcIt != meta.ordering.end() && gcIt->second > maxChildOrder)
+						maxChildOrder = gcIt->second;
+				}
+				if (maxChildOrder > 0)
+					it->second = maxChildOrder;
 			}
 		}
 	}
@@ -1146,16 +1197,19 @@ namespace ENBExtender
 					continue;
 				int bestMinSO = INT_MAX;
 				int bestIdx = -1;
+				bool hasGroupBefore = false;
 				for (size_t ci = 0; ci < childInfos.size(); ++ci) {
 					auto it = childInfos[ci].minOrders.find(effect);
 					if (it == childInfos[ci].minOrders.end())
 						continue;
+					if (it->second <= var.sourceOrder)
+						hasGroupBefore = true;
 					if (it->second > var.sourceOrder && it->second < bestMinSO) {
 						bestMinSO = it->second;
 						bestIdx = static_cast<int>(ci);
 					}
 				}
-				if (bestIdx >= 0)
+				if (bestIdx >= 0 && hasGroupBefore)
 					result.insert(childInfos[bestIdx].fullPath);
 			}
 		}
@@ -1251,16 +1305,19 @@ namespace ENBExtender
 			ImGui::PopStyleColor();
 	}
 
-	static void RenderVar(VarRef& ref, bool& inTable, RenderContext& ctx)
+	static void RenderVar(VarRef& ref, bool& inTable, bool& lastWasSeparator, RenderContext& ctx)
 	{
 		auto& uiVar = ref.effect->uiVariables[ref.index];
 
 		if (uiVar.isSeparator) {
-			if (inTable) {
-				ImGui::EndTable();
-				inTable = false;
+			if (!lastWasSeparator) {
+				if (inTable) {
+					ImGui::EndTable();
+					inTable = false;
+				}
+				ImGui::Separator();
+				lastWasSeparator = true;
 			}
-			ImGui::Separator();
 			return;
 		}
 
@@ -1276,6 +1333,8 @@ namespace ENBExtender
 		auto [bindVisible, bindReadOnly] = EvaluateBinding(uiVar, ctx.uniqueNameMap, ctx.fileUniqueNameMap);
 		if (!bindVisible)
 			return;
+
+		lastWasSeparator = false;
 
 		if (IsLabelOnly(uiVar)) {
 			if (inTable) {
@@ -1327,8 +1386,9 @@ namespace ENBExtender
 
 		if (!node.vars.empty()) {
 			bool inTable = false;
+			bool lastWasSeparator = false;
 			for (auto& ref : node.vars)
-				RenderVar(ref, inTable, ctx);
+				RenderVar(ref, inTable, lastWasSeparator, ctx);
 			if (inTable)
 				ImGui::EndTable();
 		}
@@ -1363,7 +1423,11 @@ namespace ENBExtender
 		GroupNode root;
 		MergedGroupMeta meta;
 		BuildMergedTree(effects, root, meta);
+		PropagateGroupOrdering(root, meta);
 		SortMergedTree(root, meta);
+
+		for (auto& child : root.children)
+			logger::debug("[ENBExtender] RenderUI sorted root child: '{}' ordering={}", child->fullPath, meta.ordering.count(child->fullPath) ? meta.ordering[child->fullPath] : -999);
 
 		auto separatorsBeforeGroup = MapRootSeparators(effects, root);
 
@@ -1426,55 +1490,6 @@ namespace ENBExtender
 	}
 
 	// ── Post-load processing ─────────────────────────────────────────────
-
-	void RecoverGroupsFromINI(Effect& effect, const std::filesystem::path& enbseriesPath)
-	{
-		bool hasUngrouped = false;
-		for (auto& v : effect.uiVariables) {
-			if (!v.isSeparator && !v.isHidden && v.group.empty() && !v.isTopLevel && !v.displayName.empty()) {
-				hasUngrouped = true;
-				break;
-			}
-		}
-
-		if (!hasUngrouped)
-			return;
-
-		auto groupIniPath = enbseriesPath / (effect.GetName() + ".ini");
-		if (!std::filesystem::exists(groupIniPath))
-			return;
-
-		std::string section = effect.GetName();
-		std::transform(section.begin(), section.end(), section.begin(), ::toupper);
-
-		std::vector<char> keysBuf(32768);
-		DWORD keysLen = GetPrivateProfileStringA(section.c_str(), nullptr, "", keysBuf.data(), static_cast<DWORD>(keysBuf.size()), groupIniPath.string().c_str());
-
-		std::unordered_map<std::string, std::string> displayNameToGroup;
-		const char* key = keysBuf.data();
-		while (key < keysBuf.data() + keysLen && *key) {
-			std::string fullKey(key);
-			key += fullKey.size() + 1;
-
-			size_t lastDot = fullKey.rfind('.');
-			if (lastDot != std::string::npos && lastDot > 0)
-				displayNameToGroup.try_emplace(fullKey.substr(lastDot + 1), fullKey.substr(0, lastDot));
-		}
-
-		int recovered = 0;
-		for (auto& v : effect.uiVariables) {
-			if (v.isSeparator || !v.group.empty() || v.isTopLevel || v.displayName.empty())
-				continue;
-			auto it = displayNameToGroup.find(v.displayName);
-			if (it != displayNameToGroup.end()) {
-				v.group = it->second;
-				effect.groupOrdering.try_emplace(v.group, 0);
-				++recovered;
-			}
-		}
-		if (recovered > 0)
-			logger::info("[ENBPP] Recovered {} group assignments from INI for ungrouped variables", recovered);
-	}
 
 	void LoadTechniqueDropdownMetadata(Effect& effect)
 	{

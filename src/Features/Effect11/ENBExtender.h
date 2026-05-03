@@ -29,7 +29,6 @@ namespace ENBExtender
 	void ParseTimePeriod(Effect::UIVariable& uiVar);
 
 	// Post-load processing
-	void RecoverGroupsFromINI(Effect& effect, const std::filesystem::path& enbseriesPath);
 	void LoadTechniqueDropdownMetadata(Effect& effect);
 	void ApplyTimeOfDayInterpolation(Effect& effect);
 
