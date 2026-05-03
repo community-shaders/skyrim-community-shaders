@@ -1,4 +1,4 @@
-﻿#include "Effect.h"
+#include "Effect.h"
 #include <d3dcompiler.h>
 #include <fstream>
 #include <sstream>
@@ -160,7 +160,6 @@ namespace
 			std::filesystem::path fullPath;
 			bool found = false;
 
-			// Try each known include directory
 			for (auto& dir : includeDirs) {
 				auto candidate = dir / name;
 				if (std::filesystem::exists(candidate)) {
@@ -231,7 +230,7 @@ bool Effect::Load()
 
 	if (!std::filesystem::exists(iniPath)) {
 		logger::info("[ENBPP] Could not find ini file '{}' for effect '{}', using defaults", iniPath.string(), GetName());
-		return true;  // Not an error, just use defaults
+		return true;
 	}
 
 	auto writeTime = std::filesystem::last_write_time(iniPath);
@@ -322,7 +321,6 @@ void Effect::Save()
 		logger::warn("[ENBPP] Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
 	}
 
-	// Flush Windows .ini cache to disk to ensure Load() reads fresh data
 	WritePrivateProfileStringA(NULL, NULL, NULL, iniPath.string().c_str());
 
 	logger::info("[ENBPP] Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
@@ -346,7 +344,6 @@ bool Effect::Apply()
 		return false;
 	}
 
-	// Call virtual texture creation function
 	CreateEffectTextures();
 
 	logger::info("[ENBPP] Successfully applied effect '{}'", GetName());
@@ -361,23 +358,17 @@ void Effect::Unload()
 	variables.clear();
 	customTextureCache.clear();
 	uiVariables.clear();
-	availableTechniques.clear();
 	effectTextureCache.clear();
 	uiTechniques.clear();
 	selectedTechniqueIndex = 0;
 	groupMeta.clear();
-	techniqueDropdownName = "Technique";
-	techniqueDropdownGroup.clear();
-	techniqueDropdownVisible = true;
-	techniqueDropdownTopLevel = false;
-	techniqueDropdownOrdering = 1;
+	techniqueDropdown = {};
 	sourceGroupMap.clear();
 
 	ClearVariableCache();
 
 	errors.clear();
 
-	// Reset write time so the next Load() after Apply() always reads fresh values
 	lastIniWriteTime = {};
 
 	logger::info("[ENBPP] Unloaded effect '{}'", GetName());
@@ -388,25 +379,21 @@ bool Effect::LoadFXFile()
 	auto filePath = PresetManager::GetSingleton().GetENBSeriesPath();
 	filePath /= GetName();
 
-	// Read main effect file
 	std::ifstream mainFile(filePath, std::ios::binary | std::ios::ate);
 	if (!mainFile.is_open()) {
 		errors.push_back("Failed to open effect file: " + filePath.string());
-		logger::error("[ENBPP] Failed to open effect file: {}", filePath.string());
 		return false;
 	}
 
 	std::streamsize size = mainFile.tellg();
 	if (size < 0) {
 		errors.push_back("Failed to determine size of effect file: " + filePath.string());
-		logger::error("[ENBPP] Failed to determine size of effect file: {}", filePath.string());
 		return false;
 	}
 	mainFile.seekg(0, std::ios::beg);
 	std::string sourceCode(size, '\0');
 	if (!mainFile.read(sourceCode.data(), size)) {
 		errors.push_back("Failed to read effect file: " + filePath.string());
-		logger::error("[ENBPP] Failed to read effect file: {}", filePath.string());
 		return false;
 	}
 	mainFile.close();
@@ -424,215 +411,112 @@ bool Effect::LoadFXFile()
 	ENBExtender::ConvertExtenderSyntax(sourceCode, enbseriesPath, uiDefines, iniPathStr, iniSection);
 	Util::ShaderPatches::Apply(GetName().c_str(), sourceCode);
 
-	// Try to preprocess first for group scope analysis.
-	// If preprocessing fails, fall back to direct compilation.
-	bool usedPreprocessing = false;
+	auto filePathStr = filePath.string();
+
+	auto compile = [&](const std::string& source, ID3DInclude* include) -> bool {
+		winrt::com_ptr<ID3DBlob> compiled, err;
+		HRESULT hr = D3DCompile(source.c_str(), source.size(), filePathStr.c_str(),
+			nullptr, include, nullptr, "fx_5_0", 0, 0, compiled.put(), err.put());
+		if (FAILED(hr)) {
+			if (err)
+				logger::warn("[ENBPP] D3DCompile failed for '{}': {}", filePathStr,
+					std::string(static_cast<const char*>(err->GetBufferPointer()), err->GetBufferSize()));
+			return false;
+		}
+		return SUCCEEDED(D3DX11CreateEffectFromMemory(compiled->GetBufferPointer(),
+			compiled->GetBufferSize(), 0, globals::d3d::device, effect.put()));
+	};
+
+	auto preprocess = [&](const std::string& source, ID3DInclude* include) -> std::string {
+		winrt::com_ptr<ID3DBlob> blob, err;
+		if (FAILED(D3DPreprocess(source.c_str(), source.size(), filePathStr.c_str(),
+				nullptr, include, blob.put(), err.put())) || !blob)
+			return {};
+		return { static_cast<const char*>(blob->GetBufferPointer()), blob->GetBufferSize() };
+	};
+
+	auto tryPreprocessAndCompile = [&](const std::string& source, ID3DInclude* include) -> bool {
+		auto pp = preprocess(source, include);
+		if (pp.empty())
+			return false;
+		ENBExtender::ParseSourceGroupScopes(pp, *this);
+		StripLineDirectives(pp);
+		ENBExtender::ConvertFxGroups(pp);
+		return compile(pp, nullptr);
+	};
+
+	bool compiled = false;
+
 	{
 		PresetInclude ppInclude(enbseriesPath, uiDefines, iniPathStr, iniSection);
-		winrt::com_ptr<ID3DBlob> preprocessedBlob;
-		winrt::com_ptr<ID3DBlob> preprocessErrors;
-
-		HRESULT ppHr = D3DPreprocess(
-			sourceCode.c_str(),
-			sourceCode.size(),
-			filePath.string().c_str(),
-			nullptr,
-			&ppInclude,
-			preprocessedBlob.put(),
-			preprocessErrors.put());
-
-		if (SUCCEEDED(ppHr) && preprocessedBlob) {
-			std::string preprocessedSource(
-				static_cast<const char*>(preprocessedBlob->GetBufferPointer()),
-				preprocessedBlob->GetBufferSize());
-
-			ENBExtender::ParseSourceGroupScopes(preprocessedSource, *this);
-
-			StripLineDirectives(preprocessedSource);
-			ENBExtender::ConvertFxGroups(preprocessedSource);
-
-			winrt::com_ptr<ID3DBlob> compiledShader;
-			winrt::com_ptr<ID3DBlob> errorBlob;
-
-			HRESULT hr = D3DCompile(
-				preprocessedSource.c_str(),
-				preprocessedSource.size(),
-				filePath.string().c_str(),
-				nullptr,
-				nullptr,
-				nullptr,
-				"fx_5_0",
-				0,
-				0,
-				compiledShader.put(),
-				errorBlob.put());
-
-			if (SUCCEEDED(hr)) {
-				HRESULT effectHr = D3DX11CreateEffectFromMemory(
-					compiledShader->GetBufferPointer(),
-					compiledShader->GetBufferSize(),
-					0,
-					globals::d3d::device,
-					effect.put());
-
-				if (SUCCEEDED(effectHr)) {
-					usedPreprocessing = true;
-				} else {
-					logger::warn("[ENBPP] Preprocessed compilation created effect but D3DX11CreateEffectFromMemory failed for '{}', falling back", filePath.string());
-				}
-			} else {
-				logger::warn("[ENBPP] Preprocessed source failed to compile for '{}', falling back to direct compilation", filePath.string());
-			}
-		} else {
-			std::string ppMsg;
-			if (preprocessErrors && preprocessErrors->GetBufferSize() > 0)
-				ppMsg = std::string(static_cast<const char*>(preprocessErrors->GetBufferPointer()), preprocessErrors->GetBufferSize());
-			logger::warn("[ENBPP] D3DPreprocess failed for '{}' (HRESULT 0x{:08X}), falling back: {}", filePath.string(), static_cast<unsigned int>(ppHr), ppMsg);
-		}
+		compiled = tryPreprocessAndCompile(sourceCode, &ppInclude);
 	}
 
-	// Fallback: direct compilation with include handler
-	if (!usedPreprocessing) {
-		{
-			std::vector<std::filesystem::path> inlineDirs = { enbseriesPath };
-			std::unordered_set<std::string> visited;
-			std::string inlinedSource = InlineIncludes(sourceCode, enbseriesPath, iniPathStr, iniSection, inlineDirs, visited, uiDefines);
+	if (!compiled) {
+		std::vector<std::filesystem::path> dirs = { enbseriesPath };
+		std::unordered_set<std::string> visited;
+		auto inlined = InlineIncludes(sourceCode, enbseriesPath, iniPathStr, iniSection, dirs, visited, uiDefines);
+		compiled = tryPreprocessAndCompile(inlined, nullptr);
+	}
 
-			winrt::com_ptr<ID3DBlob> ppBlob2;
-			winrt::com_ptr<ID3DBlob> ppErr2;
-			HRESULT ppHr2 = D3DPreprocess(inlinedSource.c_str(), inlinedSource.size(), filePath.string().c_str(), nullptr, nullptr, ppBlob2.put(), ppErr2.put());
-			if (SUCCEEDED(ppHr2) && ppBlob2) {
-				std::string ppSource2(static_cast<const char*>(ppBlob2->GetBufferPointer()), ppBlob2->GetBufferSize());
-				ENBExtender::ParseSourceGroupScopes(ppSource2, *this);
-
-				StripLineDirectives(ppSource2);
-				ENBExtender::ConvertFxGroups(ppSource2);
-
-				winrt::com_ptr<ID3DBlob> compiledShader2;
-				winrt::com_ptr<ID3DBlob> errorBlob2;
-				HRESULT hr2 = D3DCompile(ppSource2.c_str(), ppSource2.size(), filePath.string().c_str(), nullptr, nullptr, nullptr, "fx_5_0", 0, 0, compiledShader2.put(), errorBlob2.put());
-				if (SUCCEEDED(hr2)) {
-					HRESULT effectHr2 = D3DX11CreateEffectFromMemory(compiledShader2->GetBufferPointer(), compiledShader2->GetBufferSize(), 0, globals::d3d::device, effect.put());
-					if (SUCCEEDED(effectHr2)) {
-						usedPreprocessing = true;
-					} else {
-						logger::warn("[ENBPP] InlineIncludes fallback: D3DX11CreateEffectFromMemory failed for '{}' (0x{:08X})", filePath.string(), static_cast<unsigned int>(effectHr2));
-					}
-				} else {
-					std::string errMsg;
-					if (errorBlob2 && errorBlob2->GetBufferSize() > 0)
-						errMsg = std::string(static_cast<const char*>(errorBlob2->GetBufferPointer()), errorBlob2->GetBufferSize());
-					logger::warn("[ENBPP] InlineIncludes fallback: D3DCompile failed for '{}': {}", filePath.string(), errMsg);
-				}
-			} else {
-				std::string ppMsg2;
-				if (ppErr2 && ppErr2->GetBufferSize() > 0)
-					ppMsg2 = std::string(static_cast<const char*>(ppErr2->GetBufferPointer()), ppErr2->GetBufferSize());
-				logger::warn("[ENBPP] InlineIncludes+D3DPreprocess also failed for '{}' (HRESULT 0x{:08X}): {}", filePath.string(), static_cast<unsigned int>(ppHr2), ppMsg2);
+	if (!compiled) {
+		ENBExtender::ConvertFxGroups(sourceCode);
+		PresetInclude includeHandler(enbseriesPath, uiDefines, iniPathStr, iniSection);
+		winrt::com_ptr<ID3DBlob> compiledShader, errorBlob;
+		HRESULT hr = D3DCompile(sourceCode.c_str(), sourceCode.size(), filePathStr.c_str(),
+			nullptr, &includeHandler, nullptr, "fx_5_0", 0, 0, compiledShader.put(), errorBlob.put());
+		if (FAILED(hr)) {
+			std::string errorMsg = "Compilation failed";
+			if (errorBlob) {
+				errorMsg = std::string(static_cast<const char*>(errorBlob->GetBufferPointer()), errorBlob->GetBufferSize());
+				logger::error("[ENBPP] Effect compilation failed for '{}'", filePathStr);
+				std::istringstream errorStream(errorMsg);
+				std::string errorLine;
+				while (std::getline(errorStream, errorLine))
+					if (!errorLine.empty())
+						logger::error("[ENBPP]   {}", errorLine);
 			}
-
+			errors.push_back(errorMsg);
+			return false;
 		}
-
-		if (!usedPreprocessing) {
-			ENBExtender::ConvertFxGroups(sourceCode);
-			PresetInclude includeHandler(enbseriesPath, uiDefines, iniPathStr, iniSection);
-			winrt::com_ptr<ID3DBlob> compiledShader;
-			winrt::com_ptr<ID3DBlob> errorBlob;
-
-			HRESULT hr = D3DCompile(
-				sourceCode.c_str(),
-				sourceCode.size(),
-				filePath.string().c_str(),
-				nullptr,
-				&includeHandler,
-				nullptr,
-				"fx_5_0",
-				0,
-				0,
-				compiledShader.put(),
-				errorBlob.put());
-
-			if (FAILED(hr)) {
-				std::string errorMsg = "Compilation failed";
-				if (errorBlob) {
-					errorMsg = std::string(static_cast<const char*>(errorBlob->GetBufferPointer()), errorBlob->GetBufferSize());
-					logger::error("[ENBPP] Effect compilation failed for '{}'", filePath.string());
-					std::istringstream errorStream(errorMsg);
-					std::string errorLine;
-					while (std::getline(errorStream, errorLine)) {
-						if (!errorLine.empty()) {
-							logger::error("[ENBPP]   {}", errorLine);
-						}
-					}
-				} else {
-					logger::error("[ENBPP] Effect compilation failed for '{}': HRESULT 0x{:08X}", filePath.string(), static_cast<unsigned int>(hr));
-				}
-				errors.push_back(errorMsg);
-				return false;
-			}
-
-			HRESULT effectHr = D3DX11CreateEffectFromMemory(
-				compiledShader->GetBufferPointer(),
-				compiledShader->GetBufferSize(),
-				0,
-				globals::d3d::device,
-				effect.put());
-
-			if (FAILED(effectHr)) {
-				std::string errorMsg = "Failed to create effect from compiled shader";
-				logger::error("[ENBPP] {} for '{}': HRESULT 0x{:08X}", errorMsg, filePath.string(), static_cast<unsigned int>(effectHr));
-				errors.push_back(errorMsg);
-				return false;
-			}
+		if (FAILED(D3DX11CreateEffectFromMemory(compiledShader->GetBufferPointer(),
+				compiledShader->GetBufferSize(), 0, globals::d3d::device, effect.put()))) {
+			errors.push_back("Failed to create effect from compiled shader");
+			return false;
 		}
 	}
 
 	EnumerateAllVariables();
-
 	SetupCustomTextures();
 	LoadTechniques();
 	LoadUITechniques();
-
-	logger::info("[ENBPP] Effect '{}' compiled successfully with {} UI techniques", GetName(), uiTechniques.size());
-
-	// Populate available techniques for UI selection
-	availableTechniques = GetBaseTechniqueNames();
-
 	LoadUIVariables();
 
-	logger::info("[ENBPP] Successfully loaded FX file: {}", filePath.string());
+	logger::info("[ENBPP] Successfully loaded FX file: {}", filePathStr);
 	return true;
 }
 
 Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID3D11ShaderResourceView* a_input, TextureManager::Texture& a_output, TextureManager::Texture& a_temp)
 {
-	if (!IsCompiled() || !effect) {
+	if (!IsCompiled() || !effect)
 		return {};
-	}
 
 	auto context = globals::d3d::context;
 
-	if (a_baseTechniqueName.empty()) {
+	if (a_baseTechniqueName.empty())
 		return {};
-	}
 
-	// Check if the technique sequence exists
 	auto sequenceIt = techniques.find(a_baseTechniqueName);
-	if (sequenceIt == techniques.end()) {
-		logger::debug("[ENBPP] Technique sequence '{}' not found", a_baseTechniqueName);
+	if (sequenceIt == techniques.end())
 		return {};
-	}
 
 	const auto& sequence = sequenceIt->second;
-
-	if (sequence.empty()) {
-		logger::debug("[ENBPP] Technique sequence '{}' is empty", a_baseTechniqueName);
+	if (sequence.empty())
 		return {};
-	}
 
 	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
 
-	uint32_t swapCounter = 0;  // Track swap count for ping-ponging between output and temp
+	uint32_t swapCounter = 0;
 	bool targetInOutput = false;
 
 	ID3D11ShaderResourceView* inputSRV = nullptr;
@@ -641,67 +525,41 @@ Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::stri
 	for (size_t i = 0; i < sequence.size(); ++i) {
 		auto& techniqueInfo = sequence[i];
 
-		if (!techniqueInfo.technique) {
-			logger::warn("[ENBPP] Technique {} in sequence '{}' is null, skipping", i, a_baseTechniqueName);
+		if (!techniqueInfo.technique)
 			continue;
-		}
 
 		D3DX11_TECHNIQUE_DESC techDesc;
 		techniqueInfo.technique->GetDesc(&techDesc);
 
-		// Determine input and output for this technique
 		if (sequence.size() == 1 || swapCounter == 0) {
-			// Single technique or first pass: input -> output
 			inputSRV = a_input;
 			outputRTV = a_output.rtv.get();
 		} else {
-			// Subsequent passes: ping-pong between output and temp
-			bool useTemp = (swapCounter & 1) == 0;  // Use counter LSB for swap determination
+			bool useTemp = (swapCounter & 1) == 0;
 			if (useTemp) {
-				// Read from temp, write to output
 				inputSRV = a_temp.srv.get();
 				outputRTV = a_output.rtv.get();
 			} else {
-				// Read from output, write to temp
 				inputSRV = a_output.srv.get();
 				outputRTV = a_temp.rtv.get();
 			}
 		}
 
-		// Handle custom render target if specified
 		if (!techniqueInfo.renderTargetName.empty()) {
 			outputRTV = GetRenderTargetView(techniqueInfo.renderTargetName, outputRTV);
 		} else {
-			swapCounter++;  // Increment counter for next iteration
+			swapCounter++;
 		}
 
 		targetInOutput = (outputRTV == a_output.rtv.get());
 
-		if (sourceTexture && sourceTexture->IsValid()) {
+		if (sourceTexture && sourceTexture->IsValid())
 			sourceTexture->AsShaderResource()->SetResource(inputSRV);
-		}
 
 		context->OMSetRenderTargets(1, &outputRTV, nullptr);
 
-		// Get input and output dimensions for Size variables
-		uint32_t inputWidth = 0, inputHeight = 0;
 		uint32_t outputWidth = 0, outputHeight = 0;
 
-		// Get input dimensions from SRV
-		winrt::com_ptr<ID3D11Resource> inputResource;
-		inputSRV->GetResource(inputResource.put());
-		winrt::com_ptr<ID3D11Texture2D> inputTexture;
-		if (inputResource) {
-			inputResource.try_as(inputTexture);
-			if (inputTexture) {
-				D3D11_TEXTURE2D_DESC inputDesc;
-				inputTexture->GetDesc(&inputDesc);
-				inputWidth = inputDesc.Width;
-				inputHeight = inputDesc.Height;
-			}
-		}
-
-		// Get output dimensions from RTV
 		winrt::com_ptr<ID3D11Resource> outputResource;
 		outputRTV->GetResource(outputResource.put());
 		winrt::com_ptr<ID3D11Texture2D> outputTexture;
@@ -715,16 +573,11 @@ Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::stri
 			}
 		}
 
-		// Update ScreenSize in shader
 		UpdateSizeVariables(effect.get(), outputWidth, outputHeight);
 
-		// Set viewport based on render target description
 		D3D11_VIEWPORT viewport = {};
-		viewport.TopLeftX = 0.0f;
-		viewport.TopLeftY = 0.0f;
 		viewport.Width = static_cast<float>(outputWidth);
 		viewport.Height = static_cast<float>(outputHeight);
-		viewport.MinDepth = 0.0f;
 		viewport.MaxDepth = 1.0f;
 		context->RSSetViewports(1, &viewport);
 
@@ -739,37 +592,27 @@ Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::stri
 
 void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::Texture& output)
 {
-	if (!IsCompiled() || !effect) {
+	if (!IsCompiled() || !effect)
 		return;
-	}
 
 	auto context = globals::d3d::context;
 
-	// Find the technique
 	auto technique = effect->GetTechniqueByName(techniqueName.c_str());
-	if (!technique || !technique->IsValid()) {
-		logger::debug("[ENBPP] Technique '{}' not found or invalid", techniqueName);
+	if (!technique || !technique->IsValid())
 		return;
-	}
 
-	// Set output render target
 	ID3D11RenderTargetView* rtvArray[] = { output.rtv.get() };
 	context->OMSetRenderTargets(1, rtvArray, nullptr);
 
-	// Set viewport based on render target description
 	D3D11_TEXTURE2D_DESC texDesc;
 	output.texture->GetDesc(&texDesc);
 
 	D3D11_VIEWPORT viewport = {};
-	viewport.TopLeftX = 0.0f;
-	viewport.TopLeftY = 0.0f;
 	viewport.Width = static_cast<float>(texDesc.Width);
 	viewport.Height = static_cast<float>(texDesc.Height);
-	viewport.MinDepth = 0.0f;
 	viewport.MaxDepth = 1.0f;
 	context->RSSetViewports(1, &viewport);
 
-	// Execute technique
 	D3DX11_TECHNIQUE_DESC techDesc;
 	technique->GetDesc(&techDesc);
 
@@ -781,26 +624,16 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::
 
 void Effect::SetupCustomTextures()
 {
-	// Iterate through all variables to find texture variables with ResourceName annotations
 	for (auto& [varName, effectVar] : variables) {
-		// Get ResourceName annotation
-		std::string resourceName = GetResourceNameFromVariable(effectVar.get());
+		std::string resourceName = GetUIAnnotation(effectVar.get(), "ResourceName");
+		if (resourceName.empty())
+			continue;
 
-		if (!resourceName.empty()) {
-			logger::debug("[ENBPP] Loading texture for variable '{}': {}", varName, resourceName);
-
-			// Load the texture
-			auto srv = LoadTextureFromFile(resourceName);
-			if (srv) {
-				// Set the texture on the variable
-				auto shaderResourceVar = effectVar->AsShaderResource();
-				if (shaderResourceVar && shaderResourceVar->IsValid()) {
-					shaderResourceVar->SetResource(srv);
-					logger::debug("[ENBPP] Successfully bound texture '{}' to variable '{}'", resourceName, varName);
-				}
-			} else {
-				logger::warn("[ENBPP] Failed to load texture '{}' for variable '{}'", resourceName, varName);
-			}
+		auto srv = LoadTextureFromFile(resourceName);
+		if (srv) {
+			auto shaderResourceVar = effectVar->AsShaderResource();
+			if (shaderResourceVar && shaderResourceVar->IsValid())
+				shaderResourceVar->SetResource(srv);
 		}
 	}
 }
@@ -809,11 +642,9 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 {
 	auto device = globals::d3d::device;
 
-	// Check cache first
 	auto cacheIt = customTextureCache.find(filename);
-	if (cacheIt != customTextureCache.end()) {
+	if (cacheIt != customTextureCache.end())
 		return cacheIt->second.get();
-	}
 
 	std::filesystem::path filepath = PresetManager::GetSingleton().GetENBSeriesPath() / filename;
 
@@ -821,29 +652,16 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 	winrt::com_ptr<ID3D11ShaderResourceView> srv;
 
 	HRESULT hr = DirectX::CreateDDSTextureFromFile(device, filepath.c_str(), texture.put(), srv.put());
-
-	if (FAILED(hr)) {
-		// Try loading as other format (PNG, BMP, etc.)
+	if (FAILED(hr))
 		hr = DirectX::CreateWICTextureFromFile(device, filepath.c_str(), texture.put(), srv.put());
-	}
-
-	auto fileString = filepath.string();
 
 	if (FAILED(hr)) {
-		logger::error("[ENBPP] Failed to load texture file: {} (HRESULT: 0x{:08X})", fileString, static_cast<uint32_t>(hr));
+		logger::error("[ENBPP] Failed to load texture file: {} (HRESULT: 0x{:08X})", filepath.string(), static_cast<uint32_t>(hr));
 		return nullptr;
 	}
 
-	// Cache the loaded texture
 	customTextureCache[filename] = srv;
-
-	logger::debug("[ENBPP] Successfully loaded texture: {}", fileString);
 	return srv.get();
-}
-
-std::string Effect::GetResourceNameFromVariable(ID3DX11EffectVariable* variable)
-{
-	return GetUIAnnotation(variable, "ResourceName");
 }
 
 template <typename Callback>
@@ -893,7 +711,7 @@ static void ForEachTechniqueSequence(ID3DX11Effect* effect, Callback&& callback)
 void Effect::LoadTechniques()
 {
 	ForEachTechniqueSequence(effect.get(), [this](ID3DX11EffectTechnique* technique, const std::string& baseName, [[maybe_unused]] const std::string& techniqueName, int sequenceNumber) {
-		std::string renderTargetName = GetRenderTargetFromTechnique(technique);
+		std::string renderTargetName = GetTechniqueAnnotation(technique, "RenderTarget");
 
 		if (techniques[baseName].size() <= static_cast<size_t>(sequenceNumber))
 			techniques[baseName].resize(sequenceNumber + 1);
@@ -902,22 +720,7 @@ void Effect::LoadTechniques()
 		techInfo.technique.copy_from(technique);
 		techInfo.renderTargetName = renderTargetName;
 		techniques[baseName][sequenceNumber] = std::move(techInfo);
-
 	});
-}
-
-std::vector<std::string> Effect::GetBaseTechniqueNames()
-{
-	std::vector<std::string> baseNames;
-	baseNames.reserve(techniques.size());
-
-	for (const auto& [baseName, sequence] : techniques) {
-		if (!sequence.empty() && sequence[0].technique) {
-			baseNames.push_back(baseName);
-		}
-	}
-
-	return baseNames;
 }
 
 void Effect::LoadUITechniques()
@@ -929,107 +732,49 @@ void Effect::LoadUITechniques()
 
 	uint32_t defaultIndex = 0;
 	ForEachTechniqueSequence(effect.get(), [this, &defaultIndex](ID3DX11EffectTechnique* technique, const std::string& baseName, [[maybe_unused]] const std::string& techniqueName, [[maybe_unused]] int sequenceNumber) {
-		std::string uiName = GetUINameFromTechnique(technique);
+		std::string uiName = GetTechniqueAnnotation(technique, "UIName");
 		if (uiName.empty())
 			return;
 
-		for (const auto& existing : uiTechniques) {
+		for (const auto& existing : uiTechniques)
 			if (existing.techniqueName == baseName)
 				return;
-		}
 
 		std::string isDefault = GetTechniqueAnnotation(technique, "UIDefault");
 		if (!isDefault.empty() && isDefault != "0" && isDefault != "false")
 			defaultIndex = static_cast<uint32_t>(uiTechniques.size());
 
-		UITechnique uiTech;
-		uiTech.techniqueName = baseName;
-		uiTech.displayName = uiName;
-		uiTechniques.push_back(uiTech);
+		uiTechniques.push_back({ baseName, uiName });
 	});
 
 	if (defaultIndex < uiTechniques.size())
 		selectedTechniqueIndex = defaultIndex;
 }
 
-std::string Effect::GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, const std::string& annotationName)
-{
-	if (!technique)
-		return "";
-
-	D3DX11_TECHNIQUE_DESC techDesc;
-	if (FAILED(technique->GetDesc(&techDesc)))
-		return "";
-
-	for (UINT i = 0; i < techDesc.Annotations; ++i) {
-		auto annotation = technique->GetAnnotationByIndex(i);
-		if (!annotation || !annotation->IsValid())
-			continue;
-
-		D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
-		if (FAILED(annotation->GetDesc(&annotationDesc)))
-			continue;
-
-		if (annotationDesc.Name == annotationName) {
-			auto stringVar = annotation->AsString();
-			if (stringVar && stringVar->IsValid()) {
-				LPCSTR value = nullptr;
-				if (SUCCEEDED(stringVar->GetString(&value)) && value)
-					return std::string(value);
-			}
-		}
-	}
-	return "";
-}
-
-std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
-{
-	return GetTechniqueAnnotation(technique, "RenderTarget");
-}
-
-std::string Effect::GetUINameFromTechnique(ID3DX11EffectTechnique* technique)
-{
-	return GetTechniqueAnnotation(technique, "UIName");
-}
-
-TextureManager::Texture* Effect::GetEffectTexture(const std::string& name)
-{
-	auto it = effectTextureCache.find(name);
-	if (it != effectTextureCache.end()) {
-		return &it->second;
-	}
-	return nullptr;
-}
-
 ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback)
 {
-	if (renderTargetName.empty()) {
+	if (renderTargetName.empty())
 		return fallback;
-	}
 
-	auto* texture = GetEffectTexture(renderTargetName);
+	auto it = effectTextureCache.find(renderTargetName);
+	if (it != effectTextureCache.end() && it->second.rtv)
+		return it->second.rtv.get();
+
+	auto* texture = GetCachedCommonTexture(renderTargetName);
 	if (texture && texture->rtv)
 		return texture->rtv.get();
 
-	// Get render target from EffectManager's common texture cache (using our pointer cache)
-	texture = GetCachedCommonTexture(renderTargetName);
-	if (texture && texture->rtv)
-		return texture->rtv.get();
-
-	logger::warn("[ENBPP] Render target '{}' not found in cache, using fallback", renderTargetName);
 	return fallback;
 }
 
 void Effect::LoadUIVariables()
 {
 	D3DX11_EFFECT_DESC effectDesc;
-	if (FAILED(effect->GetDesc(&effectDesc))) {
+	if (FAILED(effect->GetDesc(&effectDesc)))
 		return;
-	}
 
 	uiVariables.clear();
 
-	// First pass: process UIGroupBegin/UIGroupEnd scope and collect UI variables
 	std::vector<std::string> groupStack;
 
 	for (UINT i = 0; i < effectDesc.GlobalVariables; ++i) {
@@ -1046,93 +791,16 @@ void Effect::LoadUIVariables()
 		if (FAILED(effectType->GetDesc(&typeDesc)))
 			continue;
 
-		// Handle string variables for UIGroupBegin/UIGroupEnd/UISeparator
 		if (typeDesc.Class == D3D_SVC_OBJECT && typeDesc.Type == D3D_SVT_STRING) {
 			ENBExtender::ProcessExtenderStringVariable(variable, varDesc, groupStack, *this);
 			continue;
 		}
 
-		std::string uiName = GetUIAnnotation(variable, "UIName");
-		if (uiName.empty())
-			continue;
-
-		// Check UIVisible
-		std::string visibleStr = GetUIAnnotation(variable, "UIVisible");
-		if (visibleStr == "0" || visibleStr == "false")
-			continue;
-
 		UIVariable uiVar = {};
-		uiVar.name = varDesc.Name;
-		uiVar.displayName = uiName;
-		uiVar.effectVariable.copy_from(variable);
-
-		ENBExtender::ApplyExtenderAnnotations(uiVar, variable, groupStack, *this);
-		if (uiVar.isHidden)
-			continue;
-
-		// Determine variable type
-		if (typeDesc.Class == D3D_SVC_SCALAR) {
-			switch (typeDesc.Type) {
-			case D3D_SVT_FLOAT:
-				uiVar.type = UIVariableType::Float;
-				break;
-			case D3D_SVT_INT:
-				uiVar.type = UIVariableType::Int;
-				break;
-			case D3D_SVT_BOOL:
-				uiVar.type = UIVariableType::Bool;
-				break;
-			default:
-				continue;
-			}
-		} else if (typeDesc.Class == D3D_SVC_VECTOR && typeDesc.Type == D3D_SVT_FLOAT && typeDesc.Elements == 0) {
-			if (typeDesc.Columns == 3)
-				uiVar.type = UIVariableType::Color3;
-			else if (typeDesc.Columns == 4)
-				uiVar.type = UIVariableType::Color4;
-			else
-				continue;
-		} else {
-			continue;
+		if (ENBExtender::CreateUIVariable(uiVar, variable, varDesc, typeDesc, groupStack, *this)) {
+			LoadUIVariableValue(uiVar);
+			uiVariables.push_back(std::move(uiVar));
 		}
-
-		// Parse UI widget type
-		std::string widgetStr = GetUIAnnotation(variable, "UIWidget");
-		uiVar.widgetType = ParseWidgetType(widgetStr);
-
-		if (uiVar.type == UIVariableType::Float) {
-			std::string minStr = GetUIAnnotation(variable, "UIMin");
-			std::string maxStr = GetUIAnnotation(variable, "UIMax");
-			std::string stepStr = GetUIAnnotation(variable, "UIStep");
-			if (!minStr.empty())
-				uiVar.floatMin = ENBExtender::SafeStof(minStr, uiVar.floatMin);
-			if (!maxStr.empty())
-				uiVar.floatMax = ENBExtender::SafeStof(maxStr, uiVar.floatMax);
-			if (!stepStr.empty())
-				uiVar.floatStep = ENBExtender::SafeStof(stepStr, uiVar.floatStep);
-		} else if (uiVar.type == UIVariableType::Int) {
-			std::string minStr = GetUIAnnotation(variable, "UIMin");
-			std::string maxStr = GetUIAnnotation(variable, "UIMax");
-			if (!minStr.empty())
-				uiVar.intMin = ENBExtender::SafeStoi(minStr, uiVar.intMin);
-			if (!maxStr.empty())
-				uiVar.intMax = ENBExtender::SafeStoi(maxStr, uiVar.intMax);
-
-			if (uiVar.widgetType == UIWidgetType::Dropdown) {
-				std::string listStr = GetUIAnnotation(variable, "UIList");
-				if (!listStr.empty())
-					uiVar.dropdownItems = ParseDropdownList(listStr);
-			} else if (uiVar.widgetType == UIWidgetType::Quality) {
-				uiVar.dropdownItems = { "Very High", "High", "Medium", "Low", "Very Low" };
-				uiVar.intMin = -1;
-				uiVar.intMax = 3;
-			}
-		}
-
-		LoadUIVariableValue(uiVar);
-		ENBExtender::ParseTimePeriod(uiVar);
-
-		uiVariables.push_back(uiVar);
 	}
 
 	ENBExtender::InsertUIDefines(*this);
@@ -1149,7 +817,6 @@ std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::
 	if (FAILED(variable->GetDesc(&varDesc)))
 		return "";
 
-	// Try by name first (Effects11 supports case-insensitive lookup)
 	auto annotation = variable->GetAnnotationByName(annotationName.c_str());
 	auto readAnnotationValue = [](ID3DX11EffectVariable* ann) -> std::string {
 		auto stringVar = ann->AsString();
@@ -1203,7 +870,6 @@ std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::
 			return result;
 	}
 
-	// Fallback: iterate and do case-insensitive comparison
 	for (UINT i = 0; i < varDesc.Annotations; ++i) {
 		auto ann = variable->GetAnnotationByIndex(i);
 		if (!ann || !ann->IsValid())
@@ -1223,38 +889,34 @@ std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::
 	return "";
 }
 
-Effect::UIWidgetType Effect::ParseWidgetType(const std::string& widget)
+std::string Effect::GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, const std::string& annotationName)
 {
-	std::string lowerWidget = widget;
-	std::transform(lowerWidget.begin(), lowerWidget.end(), lowerWidget.begin(), ::tolower);
+	if (!technique)
+		return "";
 
-	if (lowerWidget == "spinner")
-		return UIWidgetType::Spinner;
-	if (lowerWidget == "dropdown")
-		return UIWidgetType::Dropdown;
-	if (lowerWidget == "vector")
-		return UIWidgetType::Vector;
-	if (lowerWidget == "quality")
-		return UIWidgetType::Quality;
-	if (lowerWidget == "color")
-		return UIWidgetType::Color;
-	return UIWidgetType::Default;
-}
+	D3DX11_TECHNIQUE_DESC techDesc;
+	if (FAILED(technique->GetDesc(&techDesc)))
+		return "";
 
-std::vector<std::string> Effect::ParseDropdownList(const std::string& list)
-{
-	std::vector<std::string> items;
-	std::stringstream ss(list);
-	std::string item;
+	for (UINT i = 0; i < techDesc.Annotations; ++i) {
+		auto annotation = technique->GetAnnotationByIndex(i);
+		if (!annotation || !annotation->IsValid())
+			continue;
 
-	while (std::getline(ss, item, ',')) {
-		// Trim whitespace
-		item.erase(0, item.find_first_not_of(" \t"));
-		item.erase(item.find_last_not_of(" \t") + 1);
-		items.push_back(item);
+		D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
+		if (FAILED(annotation->GetDesc(&annotationDesc)))
+			continue;
+
+		if (annotationDesc.Name == annotationName) {
+			auto stringVar = annotation->AsString();
+			if (stringVar && stringVar->IsValid()) {
+				LPCSTR value = nullptr;
+				if (SUCCEEDED(stringVar->GetString(&value)) && value)
+					return std::string(value);
+			}
+		}
 	}
-
-	return items;
+	return "";
 }
 
 void Effect::LoadUIVariableValue(UIVariable& uiVar)
@@ -1281,28 +943,23 @@ void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 	try {
 		switch (uiVar.type) {
 		case UIVariableType::Float:
-			{
-				uiVar.floatValue = std::stof(value);
-				uiVar.effectVariable->AsScalar()->SetFloat(uiVar.floatValue);
-			}
+			uiVar.floatValue = std::stof(value);
+			uiVar.effectVariable->AsScalar()->SetFloat(uiVar.floatValue);
 			break;
 		case UIVariableType::Int:
-			{
-				uiVar.intValue = std::stoi(value);
-				uiVar.effectVariable->AsScalar()->SetInt(uiVar.intValue);
-			}
+			uiVar.intValue = std::stoi(value);
+			uiVar.effectVariable->AsScalar()->SetInt(uiVar.intValue);
 			break;
 		case UIVariableType::Bool:
 			{
 				std::string lowerValue = value;
 				std::transform(lowerValue.begin(), lowerValue.end(), lowerValue.begin(), ::tolower);
-				if (lowerValue == "true" || lowerValue == "1" || lowerValue == "yes" || lowerValue == "on") {
+				if (lowerValue == "true" || lowerValue == "1" || lowerValue == "yes" || lowerValue == "on")
 					uiVar.boolValue = true;
-				} else if (lowerValue == "false" || lowerValue == "0" || lowerValue == "no" || lowerValue == "off") {
+				else if (lowerValue == "false" || lowerValue == "0" || lowerValue == "no" || lowerValue == "off")
 					uiVar.boolValue = false;
-				} else {
+				else
 					uiVar.boolValue = std::stoi(value) != 0;
-				}
 				uiVar.effectVariable->AsScalar()->SetBool(uiVar.boolValue);
 			}
 			break;
@@ -1314,9 +971,8 @@ void Effect::LoadVariableFromString(UIVariable& uiVar, const std::string& value)
 				for (int i = 0; i < numComponents; ++i) {
 					char sep;
 					ss >> uiVar.colorValue[i];
-					if (ss.peek() == ',') {
+					if (ss.peek() == ',')
 						ss >> sep;
-					}
 				}
 				uiVar.effectVariable->AsVector()->SetFloatVector(uiVar.colorValue);
 			}
@@ -1361,30 +1017,22 @@ void Effect::RenderImGui()
 void Effect::EnumerateAllVariables()
 {
 	D3DX11_EFFECT_DESC effectDesc;
-	if (FAILED(effect->GetDesc(&effectDesc))) {
+	if (FAILED(effect->GetDesc(&effectDesc)))
 		return;
-	}
 
 	variables.clear();
 
-	// Iterate through all global variables in the effect
 	for (UINT i = 0; i < effectDesc.GlobalVariables; ++i) {
 		auto variable = effect->GetVariableByIndex(i);
-		if (!variable || !variable->IsValid()) {
+		if (!variable || !variable->IsValid())
 			continue;
-		}
 
 		D3DX11_EFFECT_VARIABLE_DESC varDesc;
-		if (FAILED(variable->GetDesc(&varDesc))) {
+		if (FAILED(variable->GetDesc(&varDesc)))
 			continue;
-		}
 
-		std::string varName = varDesc.Name;
-		variables[varName].copy_from(variable);
-
+		variables[varDesc.Name].copy_from(variable);
 	}
-
-	logger::info("[ENBPP] Enumerated {} effect variables", variables.size());
 }
 
 ID3DX11EffectVariable* Effect::GetCachedVariable(const std::string& name)
@@ -1393,9 +1041,8 @@ ID3DX11EffectVariable* Effect::GetCachedVariable(const std::string& name)
 		return nullptr;
 
 	auto it = variableCache.find(name);
-	if (it != variableCache.end()) {
+	if (it != variableCache.end())
 		return it->second;
-	}
 
 	auto variable = effect->GetVariableByName(name.c_str());
 	variableCache[name] = variable;
@@ -1405,9 +1052,8 @@ ID3DX11EffectVariable* Effect::GetCachedVariable(const std::string& name)
 TextureManager::Texture* Effect::GetCachedCommonTexture(const std::string& name)
 {
 	auto it = commonTexturePointerCache.find(name);
-	if (it != commonTexturePointerCache.end()) {
+	if (it != commonTexturePointerCache.end())
 		return it->second;
-	}
 
 	auto* texture = TextureManager::GetSingleton().GetCommonTexture(name);
 	commonTexturePointerCache[name] = texture;
@@ -1480,11 +1126,8 @@ TextureManager::Texture Effect::CreateTexture(uint32_t width, uint32_t height, D
 	texDesc.ArraySize = 1;
 	texDesc.Format = format;
 	texDesc.SampleDesc.Count = 1;
-	texDesc.SampleDesc.Quality = 0;
 	texDesc.Usage = D3D11_USAGE_DEFAULT;
 	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-	texDesc.CPUAccessFlags = 0;
-	texDesc.MiscFlags = 0;
 
 	TextureManager::Texture texture{};
 	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, texture.texture.put()));
@@ -1502,31 +1145,19 @@ TextureManager::Texture Effect::CreateTexture(uint32_t width, uint32_t height, D
 
 std::string Effect::GetSelectedTechnique() const
 {
-	if (selectedTechniqueIndex < uiTechniques.size()) {
+	if (selectedTechniqueIndex < uiTechniques.size())
 		return uiTechniques[selectedTechniqueIndex].techniqueName;
-	} else if (selectedTechniqueIndex < availableTechniques.size()) {
-		return availableTechniques[selectedTechniqueIndex];
-	}
-	// Fall back to first available technique
-	if (!techniques.empty()) {
+	if (!techniques.empty())
 		return techniques.begin()->first;
-	}
 	return "";
 }
 
 void Effect::UpdateSizeVariables(ID3DX11Effect* effect, uint32_t outputWidth, uint32_t outputHeight)
 {
-	if (!effect)
+	if (!effect || outputWidth == 0 || outputHeight == 0)
 		return;
 
-	// Update ScreenSize (output)
-	if (outputWidth > 0 && outputHeight > 0) {
-		float screenSize[4];
-		float aspect = static_cast<float>(outputWidth) / static_cast<float>(outputHeight);
-		screenSize[0] = static_cast<float>(outputWidth);
-		screenSize[1] = 1.0f / screenSize[0];
-		screenSize[2] = aspect;
-		screenSize[3] = 1.0f / aspect;
-		SetVectorVariable(effect, "ScreenSize", screenSize, sizeof(screenSize));
-	}
+	float aspect = static_cast<float>(outputWidth) / static_cast<float>(outputHeight);
+	float screenSize[4] = { static_cast<float>(outputWidth), 1.0f / outputWidth, aspect, 1.0f / aspect };
+	SetVectorVariable(effect, "ScreenSize", screenSize, sizeof(screenSize));
 }

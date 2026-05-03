@@ -109,6 +109,7 @@ public:
 		int ordering = 0;
 		int sourceOrder = INT_MAX;
 		bool isSeparator = false;
+		bool isLabel = false;
 		bool isReadOnly = false;
 		bool isTopLevel = false;
 		bool isHidden = false;
@@ -118,7 +119,6 @@ public:
 		std::string uiBindingProperty;
 		std::string uiBindingCondition;
 		bool ignorePerfMode = false;
-		bool isWeatherString = false;
 		bool isWeatherOnlyString = false;
 
 		// Weather separation ("ExteriorWeather" or "Weather")
@@ -140,17 +140,17 @@ public:
 	};
 	std::unordered_map<std::string, GroupMeta> groupMeta;
 
-	// Technique dropdown metadata (from first technique's annotations)
-	std::string techniqueDropdownName = "Technique";
-	std::string techniqueDropdownGroup;
-	std::string techniqueDropdownGroupName;
-	bool techniqueDropdownGroupOpen = false;
-	bool techniqueDropdownVisible = true;
-	bool techniqueDropdownTopLevel = false;
-	int techniqueDropdownOrdering = 1;
-
-	// Technique selection (legacy)
-	std::vector<std::string> availableTechniques;
+	struct TechniqueDropdownMeta
+	{
+		std::string name = "Technique";
+		std::string group;
+		std::string groupName;
+		bool groupOpen = false;
+		bool visible = true;
+		bool topLevel = false;
+		int ordering = 1;
+	};
+	TechniqueDropdownMeta techniqueDropdown;
 
 	// UI technique selection (indexed by uint, only includes annotated techniques)
 	std::vector<UITechnique> uiTechniques;
@@ -223,8 +223,6 @@ public:
 	// UI annotation helpers (public for ENBExtender access)
 	std::string GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName);
 	static std::string GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, const std::string& annotationName);
-	UIWidgetType ParseWidgetType(const std::string& widget);
-	std::vector<std::string> ParseDropdownList(const std::string& list);
 
 protected:
 	ID3DX11EffectVariable* GetCachedVariable(const std::string& name);
@@ -241,15 +239,9 @@ private:
 
 	void SetupCustomTextures();
 	ID3D11ShaderResourceView* LoadTextureFromFile(const std::string& filename);
-	std::string GetResourceNameFromVariable(ID3DX11EffectVariable* variable);
 
 	void LoadTechniques();
-	std::vector<std::string> GetBaseTechniqueNames();
-
-	std::string GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique);
-	std::string GetUINameFromTechnique(ID3DX11EffectTechnique* technique);
 	void LoadUITechniques();
-	TextureManager::Texture* GetEffectTexture(const std::string& name);
 	ID3D11RenderTargetView* GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback);
 
 	// UI Variable helpers (private)
