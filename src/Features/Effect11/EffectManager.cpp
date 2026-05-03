@@ -958,11 +958,10 @@ void EffectManager::RenderEffectsList()
 		if (effect->IsCompiled()) {
 			ImGui::Separator();
 			if (ImGui::TreeNodeEx(effect->GetName().c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-				effect->RenderImGui();
+				ENBExtender::RenderMergedEffectsList(&effect, 1);
 				ImGui::TreePop();
 			}
-		}
-		if (!effect->GetErrors().empty()) {
+		} else if (!effect->GetErrors().empty()) {
 			ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s:", effect->GetName().c_str());
 			for (const auto& err : effect->GetErrors())
 				ImGui::TextWrapped("%s", err.c_str());

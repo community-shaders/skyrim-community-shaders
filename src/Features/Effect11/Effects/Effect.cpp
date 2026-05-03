@@ -1356,7 +1356,8 @@ void Effect::UpdateUIVariables()
 
 void Effect::RenderImGui()
 {
-	ENBExtender::RenderStandaloneEffect(*this);
+	Effect* ptr = this;
+	ENBExtender::RenderMergedEffectsList(&ptr, 1);
 }
 
 void Effect::EnumerateAllVariables()

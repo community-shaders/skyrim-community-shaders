@@ -34,5 +34,4 @@ namespace ENBExtender
 
 	// UI rendering
 	void RenderMergedEffectsList(Effect* effects[], int effectCount);
-	void RenderStandaloneEffect(Effect& effect);
 }

@@ -210,8 +210,6 @@ namespace ENBExtender
 		}
 	}
 
-	// ── ConvertFxGroups helpers ──────────────────────────────────────────
-
 	// ── ConvertFxGroups ─────────────────────────────────────────────────
 
 	static bool IsInsidePreprocessorDirective(const std::string& content, size_t pos)
@@ -580,7 +578,6 @@ namespace ENBExtender
 
 	void ConvertExtenderSyntax(std::string& content, const std::filesystem::path& enbseriesPath, std::vector<Effect::UIDefineInfo>& uiDefines, const std::string& iniPath, const std::string& iniSection)
 	{
-
 		std::string result;
 		result.reserve(content.size());
 
@@ -641,26 +638,27 @@ namespace ENBExtender
 			}
 
 			std::string trimmed = line.substr(firstNonSpace);
-			static const std::string types[] = { "float4 ", "float3 ", "float2 ", "float ", "int ", "bool ", "string " };
+			size_t spacePos = trimmed.find_first_of(" \t");
+			if (spacePos == std::string::npos)
+				continue;
+			std::string typePart = trimmed.substr(0, spacePos);
+			if (typePart != "float" && typePart != "float2" && typePart != "float3" && typePart != "float4" &&
+				typePart != "int" && typePart != "bool" && typePart != "string")
+				continue;
 
-			for (const auto& type : types) {
-				if (trimmed.size() >= type.size() && trimmed.compare(0, type.size(), type) == 0) {
-					size_t nameStart = trimmed.find_first_not_of(" \t", type.size());
-					if (nameStart == std::string::npos)
-						break;
-					size_t nameEnd = nameStart;
-					while (nameEnd < trimmed.size() && (std::isalnum(static_cast<unsigned char>(trimmed[nameEnd])) || trimmed[nameEnd] == '_'))
-						nameEnd++;
+			size_t nameStart = trimmed.find_first_not_of(" \t", spacePos);
+			if (nameStart == std::string::npos)
+				continue;
+			size_t nameEnd = nameStart;
+			while (nameEnd < trimmed.size() && (std::isalnum(static_cast<unsigned char>(trimmed[nameEnd])) || trimmed[nameEnd] == '_'))
+				nameEnd++;
 
-					if (nameEnd > nameStart) {
-						std::string varName = trimmed.substr(nameStart, nameEnd - nameStart);
-						if (varName.find("UIGroupBegin") == std::string::npos && varName.find("UIGroupEnd") == std::string::npos) {
-							effect.sourceOrderMap[varName] = declarationIndex++;
-							if (!groupStack.empty())
-								effect.sourceGroupMap[varName] = BuildGroupPath(groupStack);
-						}
-					}
-					break;
+			if (nameEnd > nameStart) {
+				std::string varName = trimmed.substr(nameStart, nameEnd - nameStart);
+				if (varName.find("UIGroupBegin") == std::string::npos && varName.find("UIGroupEnd") == std::string::npos) {
+					effect.sourceOrderMap[varName] = declarationIndex++;
+					if (!groupStack.empty())
+						effect.sourceGroupMap[varName] = BuildGroupPath(groupStack);
 				}
 			}
 		}
@@ -733,11 +731,8 @@ namespace ENBExtender
 	static bool HandleStringLabel(ID3DX11EffectVariable* variable, const D3DX11_EFFECT_VARIABLE_DESC& varDesc,
 		const std::vector<std::string>& groupStack, Effect& effect)
 	{
-		std::string uiNameStr = effect.GetUIAnnotation(variable, "UIName");
-		std::string labelText;
-		if (!uiNameStr.empty()) {
-			labelText = uiNameStr;
-		} else {
+		std::string labelText = effect.GetUIAnnotation(variable, "UIName");
+		if (labelText.empty()) {
 			auto strVar = variable->AsString();
 			if (strVar && strVar->IsValid()) {
 				LPCSTR val = nullptr;
@@ -754,11 +749,6 @@ namespace ENBExtender
 			return true;
 		}
 
-		std::string visibleStr = effect.GetUIAnnotation(variable, "UIVisible");
-		if (IsTruthy(effect.GetUIAnnotation(variable, "UIHidden")) ||
-			(!visibleStr.empty() && !IsTruthy(visibleStr)))
-			return true;
-
 		Effect::UIVariable labelVar = {};
 		labelVar.name = varDesc.Name;
 		labelVar.displayName = labelText;
@@ -766,18 +756,10 @@ namespace ENBExtender
 		labelVar.floatMin = 0.0f;
 		labelVar.floatMax = 0.0f;
 		labelVar.isReadOnly = true;
-		labelVar.group = ResolveGroup(varDesc.Name, effect.GetUIAnnotation(variable, "UIGroup"), groupStack, effect);
-		labelVar.sourceOrder = GetSourceOrder(varDesc.Name, effect);
+		ApplyExtenderAnnotations(labelVar, variable, groupStack, effect);
 
-		std::string orderStr = effect.GetUIAnnotation(variable, "UIOrdering");
-		if (!orderStr.empty())
-			labelVar.ordering = SafeStoi(orderStr);
-
-		labelVar.separation = effect.GetUIAnnotation(variable, "Separation");
-		labelVar.uniqueName = effect.GetUIAnnotation(variable, "UniqueName");
-		labelVar.uiBinding = effect.GetUIAnnotation(variable, "UIBinding");
-		labelVar.uiBindingProperty = effect.GetUIAnnotation(variable, "UIBindingProperty");
-		labelVar.uiBindingCondition = effect.GetUIAnnotation(variable, "UIBindingCondition");
+		if (labelVar.isHidden)
+			return true;
 
 		effect.uiVariables.push_back(labelVar);
 		return true;
@@ -862,8 +844,8 @@ namespace ENBExtender
 			effect.uiVariables.push_back(uiVar);
 		}
 
-		if (!uiDefines.empty())
-			logger::info("[ENBExtender] Inserted {} UI defines", uiDefines.size());
+		if (!effect.uiDefines.empty())
+			logger::info("[ENBExtender] Inserted {} UI defines", effect.uiDefines.size());
 	}
 
 	// ── ParseTimePeriod ────────────────────────────────���────────────────
@@ -929,38 +911,26 @@ namespace ENBExtender
 		if (condStr.empty())
 			return boundValue != 0.0f;
 
-		std::string op;
 		size_t valueStart = 0;
-
-		if (condStr.size() >= 2) {
-			std::string twoChar = condStr.substr(0, 2);
-			if (twoChar == "==" || twoChar == "!=" || twoChar == "<=" || twoChar == ">=" ||
-				twoChar == "=<" || twoChar == "=>") {
-				op = twoChar;
-				valueStart = 2;
-			}
-		}
-		if (op.empty() && !condStr.empty() && (condStr[0] == '<' || condStr[0] == '>')) {
-			op = condStr.substr(0, 1);
+		if (condStr.size() >= 2 && !std::isdigit(static_cast<unsigned char>(condStr[1])) && condStr[1] != '-')
+			valueStart = 2;
+		else if (!condStr.empty() && (condStr[0] == '<' || condStr[0] == '>'))
 			valueStart = 1;
-		}
-		if (op.empty())
+		else
 			return boundValue != 0.0f;
 
 		float comparand = SafeStof(condStr.substr(valueStart));
+		char c0 = condStr[0];
+		char c1 = (condStr.size() >= 2) ? condStr[1] : '\0';
 
-		if (op == "==")
-			return boundValue == comparand;
-		if (op == "!=")
-			return boundValue != comparand;
-		if (op == "<")
-			return boundValue < comparand;
-		if (op == ">")
-			return boundValue > comparand;
-		if (op == "<=" || op == "=<")
-			return boundValue <= comparand;
-		if (op == ">=" || op == "=>")
-			return boundValue >= comparand;
+		if (c0 == '=' && c1 == '=') return boundValue == comparand;
+		if (c0 == '!' && c1 == '=') return boundValue != comparand;
+		if (c0 == '<' && c1 == '=') return boundValue <= comparand;
+		if (c0 == '>' && c1 == '=') return boundValue >= comparand;
+		if (c0 == '=' && c1 == '<') return boundValue <= comparand;
+		if (c0 == '=' && c1 == '>') return boundValue >= comparand;
+		if (c0 == '<') return boundValue < comparand;
+		if (c0 == '>') return boundValue > comparand;
 		return false;
 	}
 
@@ -1111,26 +1081,37 @@ namespace ENBExtender
 
 	// Root separator mapping
 
-	static int GetMinSourceOrderForEffect(const GroupNode& node, const Effect* effect)
+	static void CollectMinSourceOrder(const GroupNode& node, std::unordered_map<const Effect*, int>& out)
 	{
-		int minOrder = INT_MAX;
 		for (auto& ref : node.vars) {
-			if (ref.effect == effect && ref.effect->uiVariables[ref.index].sourceOrder < minOrder)
-				minOrder = ref.effect->uiVariables[ref.index].sourceOrder;
+			int so = ref.effect->uiVariables[ref.index].sourceOrder;
+			auto [it, inserted] = out.try_emplace(ref.effect, so);
+			if (!inserted && so < it->second)
+				it->second = so;
 		}
-		for (auto& child : node.children) {
-			int childOrder = GetMinSourceOrderForEffect(*child, effect);
-			if (childOrder < minOrder)
-				minOrder = childOrder;
-		}
-		return minOrder;
+		for (auto& child : node.children)
+			CollectMinSourceOrder(*child, out);
 	}
 
 	static std::unordered_set<std::string> MapRootSeparators(
 		Effect* effects[], int effectCount, const GroupNode& root)
 	{
-		std::unordered_set<std::string> result;
+		// Precompute min source order per effect per root child
+		struct ChildInfo
+		{
+			std::string fullPath;
+			std::unordered_map<const Effect*, int> minOrders;
+		};
+		std::vector<ChildInfo> childInfos;
+		childInfos.reserve(root.children.size());
+		for (auto& child : root.children) {
+			ChildInfo ci;
+			ci.fullPath = child->fullPath;
+			CollectMinSourceOrder(*child, ci.minOrders);
+			childInfos.push_back(std::move(ci));
+		}
 
+		std::unordered_set<std::string> result;
 		for (int e = 0; e < effectCount; ++e) {
 			auto* effect = effects[e];
 			if (!effect->IsCompiled())
@@ -1140,15 +1121,17 @@ namespace ENBExtender
 					continue;
 				int bestMinSO = INT_MAX;
 				int bestIdx = -1;
-				for (size_t ci = 0; ci < root.children.size(); ++ci) {
-					int minSO = GetMinSourceOrderForEffect(*root.children[ci], effect);
-					if (minSO > var.sourceOrder && minSO < bestMinSO) {
-						bestMinSO = minSO;
+				for (size_t ci = 0; ci < childInfos.size(); ++ci) {
+					auto it = childInfos[ci].minOrders.find(effect);
+					if (it == childInfos[ci].minOrders.end())
+						continue;
+					if (it->second > var.sourceOrder && it->second < bestMinSO) {
+						bestMinSO = it->second;
 						bestIdx = static_cast<int>(ci);
 					}
 				}
 				if (bestIdx >= 0)
-					result.insert(root.children[bestIdx]->fullPath);
+					result.insert(childInfos[bestIdx].fullPath);
 			}
 		}
 		return result;
@@ -1583,9 +1566,4 @@ namespace ENBExtender
 		}
 	}
 
-	void RenderStandaloneEffect(Effect& effect)
-	{
-		Effect* ptr = &effect;
-		RenderMergedEffectsList(&ptr, 1);
-	}
 }
