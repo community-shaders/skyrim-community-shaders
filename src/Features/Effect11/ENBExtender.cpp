@@ -8,11 +8,20 @@
 
 namespace ENBExtender
 {
-	// ── Shared helpers ────────────────���─────────────────────────────────
-
 	static bool IsTruthy(const std::string& s)
 	{
 		return !s.empty() && s != "0" && s != "false";
+	}
+
+	static bool IsIdentChar(char c)
+	{
+		return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+	}
+
+	static void Trim(std::string& s, const char* chars = " \t")
+	{
+		s.erase(0, s.find_first_not_of(chars));
+		s.erase(s.find_last_not_of(chars) + 1);
 	}
 
 	static std::string BuildGroupPath(const std::vector<std::string>& stack)
@@ -34,9 +43,7 @@ namespace ENBExtender
 		if (!groupStack.empty())
 			return BuildGroupPath(groupStack);
 		auto it = effect.sourceGroupMap.find(varName);
-		if (it != effect.sourceGroupMap.end())
-			return it->second;
-		return {};
+		return (it != effect.sourceGroupMap.end()) ? it->second : std::string{};
 	}
 
 	static int GetSourceOrder(const std::string& varName, const Effect& effect)
@@ -67,17 +74,6 @@ namespace ENBExtender
 		return sep;
 	}
 
-	static bool IsIdentChar(char c)
-	{
-		return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
-	}
-
-	static void Trim(std::string& s, const char* chars = " \t")
-	{
-		s.erase(0, s.find_first_not_of(chars));
-		s.erase(s.find_last_not_of(chars) + 1);
-	}
-
 	int SafeStoi(const std::string& s, int fallback)
 	{
 		try {
@@ -100,7 +96,7 @@ namespace ENBExtender
 		}
 	}
 
-	// ── KIEFX encoding ─────────────────────────────────────────────────
+	// KIEFX
 
 	static constexpr uint8_t kiefxMagic[] = { 0x4B, 0x49, 0x45, 0x46, 0x58, 0x00, 0x01 };
 	static constexpr uint8_t kiefxKey[] = { 0xD8, 0x29, 0x09, 0x12, 0x64, 0x96, 0x6E, 0x2C };
@@ -115,7 +111,6 @@ namespace ENBExtender
 	{
 		if (!IsKIEFX(content))
 			return content;
-
 		std::string decoded;
 		decoded.reserve(content.size() - sizeof(kiefxMagic));
 		for (size_t i = sizeof(kiefxMagic); i < content.size(); ++i)
@@ -123,60 +118,22 @@ namespace ENBExtender
 		return decoded;
 	}
 
-	// ── Text parsing helpers ────────────────��───────────────────────────
+	// Text parsing
 
 	static size_t FindMatchingBrace(const std::string& text, size_t openPos)
 	{
 		int depth = 1;
-		bool inLineComment = false;
-		bool inBlockComment = false;
-		bool inString = false;
-
+		bool inLineComment = false, inBlockComment = false, inString = false;
 		for (size_t i = openPos + 1; i < text.size(); ++i) {
-			char c = text[i];
-			char next = (i + 1 < text.size()) ? text[i + 1] : '\0';
-
-			if (inLineComment) {
-				if (c == '\n')
-					inLineComment = false;
-				continue;
-			}
-			if (inBlockComment) {
-				if (c == '*' && next == '/') {
-					inBlockComment = false;
-					++i;
-				}
-				continue;
-			}
-			if (inString) {
-				if (c == '\\')
-					++i;
-				else if (c == '"')
-					inString = false;
-				continue;
-			}
-
-			if (c == '/' && next == '/') {
-				inLineComment = true;
-				++i;
-				continue;
-			}
-			if (c == '/' && next == '*') {
-				inBlockComment = true;
-				++i;
-				continue;
-			}
-			if (c == '"') {
-				inString = true;
-				continue;
-			}
-
-			if (c == '{')
-				++depth;
-			else if (c == '}') {
-				if (--depth == 0)
-					return i;
-			}
+			char c = text[i], next = (i + 1 < text.size()) ? text[i + 1] : '\0';
+			if (inLineComment) { if (c == '\n') inLineComment = false; continue; }
+			if (inBlockComment) { if (c == '*' && next == '/') { inBlockComment = false; ++i; } continue; }
+			if (inString) { if (c == '\\') ++i; else if (c == '"') inString = false; continue; }
+			if (c == '/' && next == '/') { inLineComment = true; ++i; continue; }
+			if (c == '/' && next == '*') { inBlockComment = true; ++i; continue; }
+			if (c == '"') { inString = true; continue; }
+			if (c == '{') ++depth;
+			else if (c == '}' && --depth == 0) return i;
 		}
 		return std::string::npos;
 	}
@@ -185,14 +142,21 @@ namespace ENBExtender
 	{
 		int depth = 1;
 		for (size_t i = openPos + 1; i < text.size(); ++i) {
-			if (text[i] == '<')
-				++depth;
-			else if (text[i] == '>') {
-				if (--depth == 0)
-					return i;
-			}
+			if (text[i] == '<') ++depth;
+			else if (text[i] == '>' && --depth == 0) return i;
 		}
 		return std::string::npos;
+	}
+
+	static std::pair<std::string, size_t> ParseAngleBrackets(const std::string& text, size_t from)
+	{
+		size_t open = text.find_first_not_of(" \t\r\n", from);
+		if (open == std::string::npos || text[open] != '<')
+			return { {}, std::string::npos };
+		size_t close = FindMatchingAngleBracket(text, open);
+		if (close == std::string::npos)
+			return { {}, std::string::npos };
+		return { text.substr(open + 1, close - open - 1), close };
 	}
 
 	static std::string ExtractAnnotation(const std::string& annotations, const std::string& name)
@@ -207,7 +171,6 @@ namespace ENBExtender
 				pos = end;
 				continue;
 			}
-
 			size_t eq = annotations.find('=', end);
 			if (eq == std::string::npos)
 				return {};
@@ -225,46 +188,20 @@ namespace ENBExtender
 		}
 	}
 
-	// ── ConvertFxGroups ─────────────────────────────────────────────────
-
-	static bool IsInsidePreprocessorDirective(const std::string& content, size_t pos)
-	{
-		size_t lineStart = content.rfind('\n', pos);
-		lineStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
-		size_t firstChar = content.find_first_not_of(" \t", lineStart);
-		if (firstChar != std::string::npos && content[firstChar] == '#')
-			return true;
-		if (lineStart >= 2) {
-			size_t prev = lineStart - 1;
-			if (prev > 0 && content[prev - 1] == '\r')
-				prev--;
-			if (prev > 0 && content[prev - 1] == '\\')
-				return true;
-		}
-		return false;
-	}
-
 	static bool IsWordBoundary(const std::string& text, size_t pos)
 	{
 		return pos == 0 || !IsIdentChar(text[pos - 1]);
 	}
 
-	struct ParsedAnnotationBlock
+	static bool IsOnPreprocessorLine(const std::string& content, size_t pos)
 	{
-		std::string content;
-		size_t closePos = std::string::npos;
-	};
-
-	static ParsedAnnotationBlock ParseAngleBracketBlock(const std::string& text, size_t searchFrom)
-	{
-		size_t open = text.find_first_not_of(" \t\r\n", searchFrom);
-		if (open == std::string::npos || text[open] != '<')
-			return {};
-		size_t close = FindMatchingAngleBracket(text, open);
-		if (close == std::string::npos)
-			return {};
-		return { text.substr(open + 1, close - open - 1), close };
+		size_t lineStart = content.rfind('\n', pos);
+		lineStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
+		size_t firstChar = content.find_first_not_of(" \t", lineStart);
+		return firstChar != std::string::npos && content[firstChar] == '#';
 	}
+
+	// ConvertFxGroups
 
 	struct ParsedBlock
 	{
@@ -278,7 +215,6 @@ namespace ENBExtender
 		size_t pos = text.find_first_not_of(" \t\r\n", afterKeyword);
 		if (pos == std::string::npos)
 			return {};
-
 		ParsedBlock result;
 		if (text[pos] != '<' && text[pos] != '{') {
 			pos = text.find_first_of("<{", pos);
@@ -286,11 +222,11 @@ namespace ENBExtender
 				return {};
 		}
 		if (text[pos] == '<') {
-			auto anno = ParseAngleBracketBlock(text, pos);
-			if (anno.closePos == std::string::npos)
+			auto [anno, closePos] = ParseAngleBrackets(text, pos);
+			if (closePos == std::string::npos)
 				return {};
-			result.annotations = anno.content;
-			pos = text.find_first_not_of(" \t\r\n", anno.closePos + 1);
+			result.annotations = anno;
+			pos = text.find_first_not_of(" \t\r\n", closePos + 1);
 			if (pos == std::string::npos)
 				return {};
 		}
@@ -317,7 +253,7 @@ namespace ENBExtender
 				break;
 			searchStart = fxPos + 7;
 
-			if (!IsWordBoundary(content, fxPos) || IsInsidePreprocessorDirective(content, fxPos))
+			if (!IsWordBoundary(content, fxPos) || IsOnPreprocessorLine(content, fxPos))
 				continue;
 
 			size_t nameStart = content.find_first_not_of(" \t", fxPos + 7);
@@ -330,10 +266,10 @@ namespace ENBExtender
 
 			std::string groupAnnotations;
 			size_t bodySearchFrom = nameEnd;
-			auto groupAnno = ParseAngleBracketBlock(content, nameEnd);
-			if (groupAnno.closePos != std::string::npos) {
-				groupAnnotations = groupAnno.content;
-				bodySearchFrom = groupAnno.closePos + 1;
+			auto [ga, gaClose] = ParseAngleBrackets(content, nameEnd);
+			if (gaClose != std::string::npos) {
+				groupAnnotations = ga;
+				bodySearchFrom = gaClose + 1;
 			}
 
 			size_t bodyOpen = content.find('{', bodySearchFrom);
@@ -350,15 +286,9 @@ namespace ENBExtender
 				size_t tp = body.find("technique11", ts);
 				if (tp == std::string::npos)
 					break;
-				if (!IsWordBoundary(body, tp)) {
-					ts = tp + 11;
-					continue;
-				}
+				if (!IsWordBoundary(body, tp)) { ts = tp + 11; continue; }
 				auto parsed = ParseKeywordBlock(body, tp + 11);
-				if (parsed.endPos == std::string::npos) {
-					ts = tp + 11;
-					continue;
-				}
+				if (parsed.endPos == std::string::npos) { ts = tp + 11; continue; }
 				ts = parsed.endPos + 1;
 				techniques.push_back(std::move(parsed));
 			}
@@ -384,55 +314,7 @@ namespace ENBExtender
 			logger::debug("[ENBExtender] Converted {} fxgroup(s)", convertedCount);
 	}
 
-	// ── ConvertExtenderSyntax ─────────────────���─────────────────────────
-
-	static std::string NormalizeBoolString(const std::string& val)
-	{
-		if (val == "false")
-			return "0";
-		if (val == "true")
-			return "1";
-		return val;
-	}
-
-	static bool HandleErrorDirective(const std::string& line, std::string& result)
-	{
-		size_t pos = line.find_first_not_of(" \t#");
-		if (pos == std::string::npos || line.compare(pos, 5, "error") != 0)
-			return false;
-		size_t hashPos = line.find('#');
-		if (hashPos == std::string::npos || hashPos >= pos)
-			return false;
-		result += "\n";
-		return true;
-	}
-
-	static bool HandlePragmaExists(const std::string& line, const std::filesystem::path& enbseriesPath, std::string& result)
-	{
-		size_t pragmaPos = line.find("#pragma");
-		if (pragmaPos == std::string::npos)
-			return false;
-		size_t existsPos = line.find("exists", pragmaPos + 7);
-		if (existsPos == std::string::npos)
-			return false;
-		size_t openParen = line.find('(', existsPos);
-		size_t closeParen = line.rfind(')');
-		if (openParen == std::string::npos || closeParen == std::string::npos || closeParen <= openParen)
-			return false;
-
-		std::string args = line.substr(openParen + 1, closeParen - openParen - 1);
-		size_t q1 = args.find('"');
-		size_t q2 = (q1 != std::string::npos) ? args.find('"', q1 + 1) : std::string::npos;
-		size_t comma = (q2 != std::string::npos) ? args.find(',', q2 + 1) : std::string::npos;
-		if (q1 == std::string::npos || q2 == std::string::npos || comma == std::string::npos)
-			return false;
-
-		std::string defineName = args.substr(comma + 1);
-		Trim(defineName);
-		bool exists = std::filesystem::exists(enbseriesPath / args.substr(q1 + 1, q2 - q1 - 1));
-		result += "#define " + defineName + (exists ? " 1" : " 0") + "\n";
-		return true;
-	}
+	// ConvertExtenderSyntax
 
 	static bool HandlePragmaUIDefine(std::string& line, std::istringstream& stream,
 		const std::string& iniPath, const std::string& iniSection, std::string& result, std::vector<Effect::UIDefineInfo>& uiDefines)
@@ -485,7 +367,8 @@ namespace ENBExtender
 		if (equalsPos != std::string::npos) {
 			defaultVal = inner.substr(equalsPos + 1);
 			Trim(defaultVal, " \t;");
-			defaultVal = NormalizeBoolString(defaultVal);
+			if (defaultVal == "false") defaultVal = "0";
+			else if (defaultVal == "true") defaultVal = "1";
 		}
 
 		auto ann = [&](const char* name) { return ExtractAnnotation(annotations, name); };
@@ -499,7 +382,9 @@ namespace ENBExtender
 			if (GetPrivateProfileStringA(iniSection.c_str(), iniKey.c_str(), "", buf, sizeof(buf), iniPath.c_str()) > 0) {
 				std::string iniVal(buf);
 				Trim(iniVal);
-				finalVal = NormalizeBoolString(iniVal);
+				if (iniVal == "false") iniVal = "0";
+				else if (iniVal == "true") iniVal = "1";
+				finalVal = iniVal;
 			}
 		}
 
@@ -536,15 +421,39 @@ namespace ENBExtender
 	{
 		std::string result;
 		result.reserve(content.size());
-
 		std::istringstream stream(content);
 		std::string line;
 
 		while (std::getline(stream, line)) {
-			if (HandleErrorDirective(line, result))
+			// Strip #error directives
+			size_t errPos = line.find_first_not_of(" \t#");
+			if (errPos != std::string::npos && line.compare(errPos, 5, "error") == 0 && line.find('#') < errPos) {
+				result += "\n";
 				continue;
-			if (HandlePragmaExists(line, enbseriesPath, result))
-				continue;
+			}
+
+			// Handle #pragma exists("file", DEFINE)
+			size_t pragmaPos = line.find("#pragma");
+			if (pragmaPos != std::string::npos) {
+				size_t existsPos = line.find("exists", pragmaPos + 7);
+				if (existsPos != std::string::npos) {
+					size_t op = line.find('(', existsPos), cp = line.rfind(')');
+					if (op != std::string::npos && cp != std::string::npos && cp > op) {
+						std::string args = line.substr(op + 1, cp - op - 1);
+						size_t q1 = args.find('"');
+						size_t q2 = (q1 != std::string::npos) ? args.find('"', q1 + 1) : std::string::npos;
+						size_t comma = (q2 != std::string::npos) ? args.find(',', q2 + 1) : std::string::npos;
+						if (q1 != std::string::npos && q2 != std::string::npos && comma != std::string::npos) {
+							std::string defName = args.substr(comma + 1);
+							Trim(defName);
+							bool exists = std::filesystem::exists(enbseriesPath / args.substr(q1 + 1, q2 - q1 - 1));
+							result += "#define " + defName + (exists ? " 1" : " 0") + "\n";
+							continue;
+						}
+					}
+				}
+			}
+
 			if (HandlePragmaUIDefine(line, stream, iniPath, iniSection, result, uiDefines))
 				continue;
 			result += line + "\n";
@@ -553,7 +462,7 @@ namespace ENBExtender
 		content = std::move(result);
 	}
 
-	// ── ParseSourceGroupScopes ──────────────────────────────────────────
+	// ParseSourceGroupScopes
 
 	static bool IsHLSLType(const std::string& s)
 	{
@@ -605,16 +514,14 @@ namespace ENBExtender
 
 			std::string trimmed = line.substr(firstNonSpace);
 			size_t spacePos = trimmed.find_first_of(" \t");
-			if (spacePos == std::string::npos)
-				continue;
-			if (!IsHLSLType(trimmed.substr(0, spacePos)))
+			if (spacePos == std::string::npos || !IsHLSLType(trimmed.substr(0, spacePos)))
 				continue;
 
 			size_t nameStart = trimmed.find_first_not_of(" \t", spacePos);
 			if (nameStart == std::string::npos)
 				continue;
 			size_t nameEnd = nameStart;
-			while (nameEnd < trimmed.size() && (std::isalnum(static_cast<unsigned char>(trimmed[nameEnd])) || trimmed[nameEnd] == '_'))
+			while (nameEnd < trimmed.size() && IsIdentChar(trimmed[nameEnd]))
 				nameEnd++;
 
 			if (nameEnd > nameStart) {
@@ -628,7 +535,7 @@ namespace ENBExtender
 		}
 	}
 
-	// ── Group metadata tracking ─────────────────────────────────────────
+	// Group metadata tracking
 
 	static void TrackGroupMeta(const std::string& groupPath, ID3DX11EffectVariable* variable, Effect& effect)
 	{
@@ -651,7 +558,7 @@ namespace ENBExtender
 		}
 	}
 
-	// ── ProcessExtenderStringVariable ───────────────────────────────────
+	// ProcessExtenderStringVariable
 
 	bool ProcessExtenderStringVariable(ID3DX11EffectVariable* variable, const D3DX11_EFFECT_VARIABLE_DESC& varDesc,
 		std::vector<std::string>& groupStack, Effect& effect)
@@ -706,7 +613,7 @@ namespace ENBExtender
 		return true;
 	}
 
-	// ── ApplyExtenderAnnotations ────────────────────────────────────────
+	// ApplyExtenderAnnotations
 
 	void ApplyExtenderAnnotations(Effect::UIVariable& uiVar, ID3DX11EffectVariable* variable,
 		const std::vector<std::string>& groupStack, Effect& effect)
@@ -721,8 +628,7 @@ namespace ENBExtender
 			uiVar.ordering = SafeStoi(orderStr);
 
 		uiVar.isReadOnly = IsTruthy(get("UIReadOnly"));
-		auto hiddenStr = get("UIHidden");
-		auto visibleStr = get("UIVisible");
+		auto hiddenStr = get("UIHidden"), visibleStr = get("UIVisible");
 		uiVar.isHidden = IsTruthy(hiddenStr) || (!visibleStr.empty() && !IsTruthy(visibleStr));
 
 		uiVar.isTopLevel = IsTruthy(get("UITopLevel"));
@@ -742,7 +648,7 @@ namespace ENBExtender
 		TrackGroupMeta(uiVar.group, variable, effect);
 	}
 
-	// ── InsertUIDefines ─────────────────────────────────────────────────
+	// InsertUIDefines
 
 	void InsertUIDefines(Effect& effect)
 	{
@@ -785,25 +691,22 @@ namespace ENBExtender
 		}
 	}
 
-	// ── ParseTimePeriod ────────────────────────────────���────────────────
-
 	void ParseTimePeriod(Effect::UIVariable& uiVar)
 	{
 		if (uiVar.separation.empty() || uiVar.separation == "None")
 			return;
 		static const std::string_view periods[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night", "Interior" };
-		const auto& name = uiVar.displayName;
 		for (auto period : periods) {
 			auto suffix = std::string(period) + " - ";
-			if (name.compare(0, 3 + suffix.size(), "|- " + suffix) == 0 ||
-				name.compare(0, suffix.size(), suffix) == 0) {
+			if (uiVar.displayName.compare(0, 3 + suffix.size(), "|- " + suffix) == 0 ||
+				uiVar.displayName.compare(0, suffix.size(), suffix) == 0) {
 				uiVar.timePeriod = period;
 				return;
 			}
 		}
 	}
 
-	// ── RenderUI ────────────────────────────────────────────────────────
+	// UI tree and rendering
 
 	struct VarRef
 	{
@@ -819,54 +722,27 @@ namespace ENBExtender
 		std::vector<std::unique_ptr<GroupNode>> children;
 	};
 
-	static std::string ComputeUniqueName(const Effect::UIVariable& var)
-	{
-		if (!var.uniqueName.empty())
-			return var.uniqueName;
-		if (!var.group.empty())
-			return var.group + "." + var.displayName;
-		return var.displayName;
-	}
-
-	static float GetBoundValue(const Effect::UIVariable& var)
-	{
-		switch (var.type) {
-		case Effect::UIVariableType::Float:
-			return var.floatValue;
-		case Effect::UIVariableType::Int:
-			return static_cast<float>(var.intValue);
-		case Effect::UIVariableType::Bool:
-			return var.boolValue ? 1.0f : 0.0f;
-		default:
-			return 0.0f;
-		}
-	}
-
 	static bool EvaluateCondition(const std::string& condStr, float boundValue)
 	{
 		if (condStr.empty())
 			return boundValue != 0.0f;
-
 		size_t valueStart = 0;
 		if (condStr.size() >= 2 && !std::isdigit(static_cast<unsigned char>(condStr[1])) && condStr[1] != '-')
 			valueStart = 2;
-		else if (!condStr.empty() && (condStr[0] == '<' || condStr[0] == '>'))
+		else if (condStr[0] == '<' || condStr[0] == '>')
 			valueStart = 1;
 		else
 			return boundValue != 0.0f;
-
-		float comparand = SafeStof(condStr.substr(valueStart));
-		char c0 = condStr[0];
-		char c1 = (condStr.size() >= 2) ? condStr[1] : '\0';
-
-		if (c0 == '=' && c1 == '=') return boundValue == comparand;
-		if (c0 == '!' && c1 == '=') return boundValue != comparand;
-		if (c0 == '<' && c1 == '=') return boundValue <= comparand;
-		if (c0 == '>' && c1 == '=') return boundValue >= comparand;
-		if (c0 == '=' && c1 == '<') return boundValue <= comparand;
-		if (c0 == '=' && c1 == '>') return boundValue >= comparand;
-		if (c0 == '<') return boundValue < comparand;
-		if (c0 == '>') return boundValue > comparand;
+		float cmp = SafeStof(condStr.substr(valueStart));
+		char c0 = condStr[0], c1 = (condStr.size() >= 2) ? condStr[1] : '\0';
+		if (c0 == '=' && c1 == '=') return boundValue == cmp;
+		if (c0 == '!' && c1 == '=') return boundValue != cmp;
+		if (c0 == '<' && c1 == '=') return boundValue <= cmp;
+		if (c0 == '>' && c1 == '=') return boundValue >= cmp;
+		if (c0 == '=' && c1 == '<') return boundValue <= cmp;
+		if (c0 == '=' && c1 == '>') return boundValue >= cmp;
+		if (c0 == '<') return boundValue < cmp;
+		if (c0 == '>') return boundValue > cmp;
 		return false;
 	}
 
@@ -876,8 +752,7 @@ namespace ENBExtender
 		const std::unordered_map<std::string, VarRef>& uniqueNameMap,
 		const FileUniqueNameMap& fileUniqueNameMap)
 	{
-		bool visible = true;
-		bool readOnly = var.isReadOnly;
+		bool visible = true, readOnly = var.isReadOnly;
 		if (var.uiBinding.empty())
 			return { visible, readOnly };
 
@@ -898,20 +773,22 @@ namespace ENBExtender
 		if (!boundRef)
 			return { visible, readOnly };
 
-		const auto& boundVar = boundRef->effect->uiVariables[boundRef->index];
-		bool conditionMet = EvaluateCondition(var.uiBindingCondition, GetBoundValue(boundVar));
+		const auto& bv = boundRef->effect->uiVariables[boundRef->index];
+		float val = 0.0f;
+		switch (bv.type) {
+		case Effect::UIVariableType::Float: val = bv.floatValue; break;
+		case Effect::UIVariableType::Int: val = static_cast<float>(bv.intValue); break;
+		case Effect::UIVariableType::Bool: val = bv.boolValue ? 1.0f : 0.0f; break;
+		default: break;
+		}
+		bool cond = EvaluateCondition(var.uiBindingCondition, val);
 
 		std::string prop = var.uiBindingProperty;
 		std::transform(prop.begin(), prop.end(), prop.begin(), ::tolower);
-
-		if (prop == "hidden")
-			visible = !conditionMet;
-		else if (prop == "visible")
-			visible = conditionMet;
-		else if (prop == "readonly")
-			readOnly = conditionMet;
-		else if (prop == "readwrite")
-			readOnly = !conditionMet;
+		if (prop == "hidden") visible = !cond;
+		else if (prop == "visible") visible = cond;
+		else if (prop == "readonly") readOnly = cond;
+		else if (prop == "readwrite") readOnly = !cond;
 
 		return { visible, readOnly };
 	}
@@ -938,7 +815,9 @@ namespace ENBExtender
 			for (int i = 0; i < static_cast<int>(effect->uiVariables.size()); ++i) {
 				auto& var = effect->uiVariables[i];
 				if (!var.isSeparator) {
-					std::string uname = ComputeUniqueName(var);
+					std::string uname = !var.uniqueName.empty() ? var.uniqueName
+					                    : !var.group.empty()    ? var.group + "." + var.displayName
+					                                            : var.displayName;
 					uniqueNameMap[uname] = { effect, i };
 					fileMap[uname] = { effect, i };
 				}
@@ -948,10 +827,9 @@ namespace ENBExtender
 
 	static GroupNode* FindOrCreateChild(GroupNode& parent, const std::string& segment, const std::string& fullPath)
 	{
-		for (auto& c : parent.children) {
+		for (auto& c : parent.children)
 			if (c->name == segment)
 				return c.get();
-		}
 		auto nc = std::make_unique<GroupNode>();
 		nc->name = segment;
 		nc->fullPath = fullPath;
@@ -970,9 +848,7 @@ namespace ENBExtender
 			size_t dot = groupPath.find('.', start);
 			if (dot == std::string::npos)
 				dot = groupPath.size();
-			std::string segment = groupPath.substr(start, dot - start);
-			std::string fullPath = groupPath.substr(0, dot);
-			node = FindOrCreateChild(*node, segment, fullPath);
+			node = FindOrCreateChild(*node, groupPath.substr(start, dot - start), groupPath.substr(0, dot));
 			start = dot + 1;
 		}
 		return node;
@@ -999,10 +875,8 @@ namespace ENBExtender
 						node->vars.push_back({ effect, i });
 					continue;
 				}
-
 				if (!var.displayName.empty() && !seenDisplayNames[node].insert(var.displayName).second)
 					continue;
-
 				node->vars.push_back({ effect, i });
 			}
 		}
@@ -1012,12 +886,11 @@ namespace ENBExtender
 	{
 		for (auto& child : node.children) {
 			PropagateGroupOrdering(*child, meta);
-
 			auto it = meta.find(child->fullPath);
 			if (it != meta.end() && !it->second.hasOrdering && !child->children.empty()) {
 				int maxChildOrder = 0;
-				for (auto& grandchild : child->children) {
-					auto gcIt = meta.find(grandchild->fullPath);
+				for (auto& gc : child->children) {
+					auto gcIt = meta.find(gc->fullPath);
 					if (gcIt != meta.end() && gcIt->second.ordering > maxChildOrder)
 						maxChildOrder = gcIt->second.ordering;
 				}
@@ -1034,15 +907,12 @@ namespace ENBExtender
 		std::stable_sort(node.vars.begin(), node.vars.end(), [](const VarRef& a, const VarRef& b) {
 			auto& va = a.effect->uiVariables[a.index];
 			auto& vb = b.effect->uiVariables[b.index];
-			if (va.ordering != vb.ordering)
-				return va.ordering > vb.ordering;
-			if (va.sourceOrder != vb.sourceOrder)
-				return va.sourceOrder < vb.sourceOrder;
+			if (va.ordering != vb.ordering) return va.ordering > vb.ordering;
+			if (va.sourceOrder != vb.sourceOrder) return va.sourceOrder < vb.sourceOrder;
 			return false;
 		});
 		std::stable_sort(node.children.begin(), node.children.end(), [&](const auto& a, const auto& b) {
-			auto itA = meta.find(a->fullPath);
-			auto itB = meta.find(b->fullPath);
+			auto itA = meta.find(a->fullPath), itB = meta.find(b->fullPath);
 			int oA = (itA != meta.end()) ? itA->second.ordering : 0;
 			int oB = (itB != meta.end()) ? itB->second.ordering : 0;
 			return oA > oB;
@@ -1053,22 +923,8 @@ namespace ENBExtender
 
 	// Root separator mapping
 
-	static void CollectMinSourceOrder(const GroupNode& node, std::unordered_map<const Effect*, int>& out)
+	static std::unordered_set<std::string> MapRootSeparators(std::span<Effect*> effects, const GroupNode& root)
 	{
-		for (auto& ref : node.vars) {
-			int so = ref.effect->uiVariables[ref.index].sourceOrder;
-			auto [it, inserted] = out.try_emplace(ref.effect, so);
-			if (!inserted && so < it->second)
-				it->second = so;
-		}
-		for (auto& child : node.children)
-			CollectMinSourceOrder(*child, out);
-	}
-
-	static std::unordered_set<std::string> MapRootSeparators(
-		std::span<Effect*> effects, const GroupNode& root)
-	{
-		// Precompute min source order per effect per root child
 		struct ChildInfo
 		{
 			std::string fullPath;
@@ -1079,13 +935,22 @@ namespace ENBExtender
 		for (auto& child : root.children) {
 			ChildInfo ci;
 			ci.fullPath = child->fullPath;
-			CollectMinSourceOrder(*child, ci.minOrders);
+			std::function<void(const GroupNode&)> collect = [&](const GroupNode& n) {
+				for (auto& ref : n.vars) {
+					int so = ref.effect->uiVariables[ref.index].sourceOrder;
+					auto [it, ins] = ci.minOrders.try_emplace(ref.effect, so);
+					if (!ins && so < it->second)
+						it->second = so;
+				}
+				for (auto& c : n.children)
+					collect(*c);
+			};
+			collect(*child);
 			childInfos.push_back(std::move(ci));
 		}
 
 		std::unordered_set<std::string> result;
-		for (size_t e = 0; e < effects.size(); ++e) {
-			auto* effect = effects[e];
+		for (auto* effect : effects) {
 			if (!effect->IsCompiled())
 				continue;
 			for (auto& var : effect->uiVariables) {
@@ -1128,9 +993,9 @@ namespace ENBExtender
 		{
 			std::string tableId = "##ut_" + std::to_string(tableCounter++);
 			if (ImGui::BeginTable(tableId.c_str(), 2, ImGuiTableFlags_SizingFixedFit)) {
-				float availWidth = ImGui::GetContentRegionAvail().x;
-				ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, availWidth * 0.45f);
-				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, availWidth * 0.55f);
+				float w = ImGui::GetContentRegionAvail().x;
+				ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, w * 0.45f);
+				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, w * 0.55f);
 				return true;
 			}
 			return false;
@@ -1143,17 +1008,14 @@ namespace ENBExtender
 	{
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-
 		if (readOnly)
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-
 		ImGui::Text("%s", label.c_str());
 
 		if (!IsLabelOnly(uiVar)) {
 			ImGui::TableSetColumnIndex(1);
 			if (readOnly)
 				ImGui::BeginDisabled();
-
 			bool changed = false;
 			switch (uiVar.type) {
 			case Effect::UIVariableType::Float:
@@ -1161,13 +1023,13 @@ namespace ENBExtender
 				break;
 			case Effect::UIVariableType::Int:
 				if ((uiVar.widgetType == Effect::UIWidgetType::Dropdown || uiVar.widgetType == Effect::UIWidgetType::Quality) && !uiVar.dropdownItems.empty()) {
-					int displayIndex = (uiVar.widgetType == Effect::UIWidgetType::Quality) ? uiVar.intValue + 1 : uiVar.intValue;
-					const char* currentItem = (displayIndex >= 0 && displayIndex < static_cast<int>(uiVar.dropdownItems.size())) ? uiVar.dropdownItems[displayIndex].c_str() : "";
-					if (ImGui::BeginCombo(id.c_str(), currentItem)) {
+					int di = (uiVar.widgetType == Effect::UIWidgetType::Quality) ? uiVar.intValue + 1 : uiVar.intValue;
+					const char* cur = (di >= 0 && di < static_cast<int>(uiVar.dropdownItems.size())) ? uiVar.dropdownItems[di].c_str() : "";
+					if (ImGui::BeginCombo(id.c_str(), cur)) {
 						for (int j = 0; j < static_cast<int>(uiVar.dropdownItems.size()); ++j) {
-							int itemValue = (uiVar.widgetType == Effect::UIWidgetType::Quality) ? (j - 1) : j;
-							if (ImGui::Selectable(uiVar.dropdownItems[j].c_str(), uiVar.intValue == itemValue)) {
-								uiVar.intValue = itemValue;
+							int iv = (uiVar.widgetType == Effect::UIWidgetType::Quality) ? (j - 1) : j;
+							if (ImGui::Selectable(uiVar.dropdownItems[j].c_str(), uiVar.intValue == iv)) {
+								uiVar.intValue = iv;
 								changed = true;
 							}
 						}
@@ -1181,16 +1043,14 @@ namespace ENBExtender
 				changed = ImGui::Checkbox(id.c_str(), &uiVar.boolValue);
 				break;
 			case Effect::UIVariableType::Color3:
-				if (uiVar.widgetType == Effect::UIWidgetType::Vector)
-					changed = ImGui::SliderFloat3(id.c_str(), uiVar.colorValue, -1.0f, 1.0f, "%.3f");
-				else
-					changed = ImGui::ColorEdit3(id.c_str(), uiVar.colorValue);
+				changed = (uiVar.widgetType == Effect::UIWidgetType::Vector)
+				              ? ImGui::SliderFloat3(id.c_str(), uiVar.colorValue, -1.0f, 1.0f, "%.3f")
+				              : ImGui::ColorEdit3(id.c_str(), uiVar.colorValue);
 				break;
 			case Effect::UIVariableType::Color4:
 				changed = ImGui::ColorEdit4(id.c_str(), uiVar.colorValue);
 				break;
 			}
-
 			if (changed)
 				changedEffects.insert(effect);
 			if (readOnly)
@@ -1207,22 +1067,15 @@ namespace ENBExtender
 
 		if (uiVar.isSeparator) {
 			if (!lastWasSeparator) {
-				if (inTable) {
-					ImGui::EndTable();
-					inTable = false;
-				}
+				if (inTable) { ImGui::EndTable(); inTable = false; }
 				ImGui::Separator();
 				lastWasSeparator = true;
 			}
 			return;
 		}
 
-		if (uiVar.displayName.empty() || uiVar.isHidden)
+		if (uiVar.displayName.empty() || uiVar.isHidden || uiVar.isWeatherOnlyString)
 			return;
-
-		if (uiVar.isWeatherOnlyString)
-			return;
-
 		if (ctx.performanceMode && !uiVar.ignorePerfMode)
 			return;
 
@@ -1233,10 +1086,7 @@ namespace ENBExtender
 		lastWasSeparator = false;
 
 		if (IsLabelOnly(uiVar)) {
-			if (inTable) {
-				ImGui::EndTable();
-				inTable = false;
-			}
+			if (inTable) { ImGui::EndTable(); inTable = false; }
 			if (uiVar.isReadOnly)
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
 			ImGui::TextWrapped("%s", uiVar.displayName.c_str());
@@ -1248,8 +1098,8 @@ namespace ENBExtender
 					return;
 				inTable = true;
 			}
-			std::string baseId = "##uv_" + std::to_string(ref.index) + "_" + ref.effect->GetName();
-			RenderWidget(uiVar.displayName, baseId, uiVar, bindReadOnly, ref.effect, ctx.changedEffects);
+			RenderWidget(uiVar.displayName, "##uv_" + std::to_string(ref.index) + "_" + ref.effect->GetName(),
+				uiVar, bindReadOnly, ref.effect, ctx.changedEffects);
 		}
 	}
 
@@ -1275,14 +1125,12 @@ namespace ENBExtender
 	static void RenderGroupNode(GroupNode& node, RenderContext& ctx,
 		const std::vector<std::pair<Effect*, std::string>>& techDropdowns)
 	{
-		for (auto& [effect, group] : techDropdowns) {
+		for (auto& [effect, group] : techDropdowns)
 			if (!group.empty() && group == node.fullPath)
 				RenderTechDropdown(effect, ctx.changedEffects);
-		}
 
 		if (!node.vars.empty()) {
-			bool inTable = false;
-			bool lastWasSeparator = false;
+			bool inTable = false, lastWasSeparator = false;
 			for (auto& ref : node.vars)
 				RenderVar(ref, inTable, lastWasSeparator, ctx);
 			if (inTable)
@@ -1292,19 +1140,15 @@ namespace ENBExtender
 		for (auto& child : node.children) {
 			if (ctx.separatorsBeforeGroup.count(child->fullPath))
 				ImGui::Separator();
-
 			std::string displayName = child->name;
-			ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
+			ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen;
 			auto metaIt = ctx.meta.find(child->fullPath);
 			if (metaIt != ctx.meta.end()) {
 				if (!metaIt->second.displayName.empty())
 					displayName = metaIt->second.displayName;
-				if (metaIt->second.defaultOpen)
-					flags |= ImGuiTreeNodeFlags_DefaultOpen;
-			} else {
-				flags |= ImGuiTreeNodeFlags_DefaultOpen;
+				if (!metaIt->second.defaultOpen)
+					flags = ImGuiTreeNodeFlags_None;
 			}
-
 			if (ImGui::TreeNodeEx((displayName + "###ugrp_" + child->fullPath).c_str(), flags)) {
 				RenderGroupNode(*child, ctx, techDropdowns);
 				ImGui::TreePop();
@@ -1323,17 +1167,14 @@ namespace ENBExtender
 		BuildMergedTree(effects, root, meta);
 		PropagateGroupOrdering(root, meta);
 		SortMergedTree(root, meta);
-
 		auto separatorsBeforeGroup = MapRootSeparators(effects, root);
 
 		std::unordered_set<Effect*> changedEffects;
-		bool perfMode = EffectManager::GetSingleton().performanceMode;
-		RenderContext ctx{ uniqueNameMap, fileUniqueNameMap, changedEffects, meta, separatorsBeforeGroup, perfMode };
+		RenderContext ctx{ uniqueNameMap, fileUniqueNameMap, changedEffects, meta, separatorsBeforeGroup,
+			EffectManager::GetSingleton().performanceMode };
 
-		// Collect technique dropdowns and inject dropdown group metadata
 		std::vector<std::pair<Effect*, std::string>> techDropdowns;
-		for (size_t e = 0; e < effects.size(); ++e) {
-			auto* effect = effects[e];
+		for (auto* effect : effects) {
 			if (!effect->IsCompiled() || effect->uiTechniques.size() <= 1 || !effect->techniqueDropdownVisible)
 				continue;
 			techDropdowns.push_back({ effect, effect->techniqueDropdownGroup });
@@ -1349,19 +1190,16 @@ namespace ENBExtender
 			}
 		}
 
-		// Render top-level technique dropdowns
-		for (auto& [effect, group] : techDropdowns) {
+		for (auto& [effect, group] : techDropdowns)
 			if (effect->techniqueDropdownTopLevel || group.empty())
 				RenderTechDropdown(effect, changedEffects);
-		}
 
 		RenderGroupNode(root, ctx, techDropdowns);
 
 		for (auto* effect : changedEffects)
 			effect->UpdateUIVariables();
 
-		for (size_t e = 0; e < effects.size(); ++e) {
-			auto* effect = effects[e];
+		for (auto* effect : effects) {
 			if (!effect->GetErrors().empty()) {
 				ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s:", effect->GetName().c_str());
 				for (const auto& err : effect->GetErrors())
@@ -1376,7 +1214,7 @@ namespace ENBExtender
 		RenderUI({ &ptr, 1 });
 	}
 
-	// ── Post-load processing ─────────────────────────────────────────────
+	// Post-load processing
 
 	void LoadTechniqueDropdownMetadata(Effect& effect)
 	{
@@ -1393,76 +1231,39 @@ namespace ENBExtender
 			return;
 
 		auto get = [&](const char* name) { return Effect::GetTechniqueAnnotation(tech, name); };
-
 		auto s = get("UIDropdownName");
-		if (!s.empty())
-			effect.techniqueDropdownName = s;
+		if (!s.empty()) effect.techniqueDropdownName = s;
 		s = get("UIDropdownGroup");
-		if (!s.empty())
-			effect.techniqueDropdownGroup = s;
+		if (!s.empty()) effect.techniqueDropdownGroup = s;
 		s = get("UIDropdownGroupName");
-		if (!s.empty())
-			effect.techniqueDropdownGroupName = s;
+		if (!s.empty()) effect.techniqueDropdownGroupName = s;
 		s = get("UIDropdownGroupOpen");
-		if (!s.empty())
-			effect.techniqueDropdownGroupOpen = IsTruthy(s);
+		if (!s.empty()) effect.techniqueDropdownGroupOpen = IsTruthy(s);
 		s = get("UIDropdownVisible");
-		if (!s.empty())
-			effect.techniqueDropdownVisible = IsTruthy(s);
+		if (!s.empty()) effect.techniqueDropdownVisible = IsTruthy(s);
 		s = get("UIDropdownTopLevel");
-		if (!s.empty())
-			effect.techniqueDropdownTopLevel = IsTruthy(s);
+		if (!s.empty()) effect.techniqueDropdownTopLevel = IsTruthy(s);
 		s = get("UIDropdownOrdering");
-		if (!s.empty())
-			effect.techniqueDropdownOrdering = SafeStoi(s, effect.techniqueDropdownOrdering);
+		if (!s.empty()) effect.techniqueDropdownOrdering = SafeStoi(s, effect.techniqueDropdownOrdering);
 	}
+
+	// Time-of-day interpolation
 
 	static float GetPeriodWeight(const std::string& period, const EffectManager::CommonVariableData& cd)
 	{
-		using T1 = TimeOfDay1Index;
-		using T2 = TimeOfDay2Index;
-		struct Entry { const char* name; float (*get)(const EffectManager::CommonVariableData&); };
-		static const Entry table[] = {
-			{ "Dawn", [](const auto& c) { return c.timeOfDay1[(int)T1::Dawn]; } },
-			{ "Sunrise", [](const auto& c) { return c.timeOfDay1[(int)T1::Sunrise]; } },
-			{ "Day", [](const auto& c) { return c.timeOfDay1[(int)T1::Day]; } },
-			{ "Sunset", [](const auto& c) { return c.timeOfDay1[(int)T1::Sunset]; } },
-			{ "Dusk", [](const auto& c) { return c.timeOfDay2[(int)T2::Dusk]; } },
-			{ "Night", [](const auto& c) { return c.timeOfDay2[(int)T2::Night]; } },
-			{ "Interior", [](const auto& c) { return c.eInteriorFactor; } },
-		};
-		for (auto& [name, get] : table)
-			if (period == name)
-				return get(cd);
+		if (period == "Dawn") return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Dawn)];
+		if (period == "Sunrise") return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunrise)];
+		if (period == "Day") return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Day)];
+		if (period == "Sunset") return cd.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunset)];
+		if (period == "Dusk") return cd.timeOfDay2[static_cast<int>(TimeOfDay2Index::Dusk)];
+		if (period == "Night") return cd.timeOfDay2[static_cast<int>(TimeOfDay2Index::Night)];
+		if (period == "Interior") return cd.eInteriorFactor;
 		return 0.0f;
-	}
-
-	static void SetBaseVariable(ID3DX11EffectVariable* baseVar, const Effect::UIVariable& uiVar)
-	{
-		switch (uiVar.type) {
-		case Effect::UIVariableType::Float:
-			baseVar->AsScalar()->SetFloat(uiVar.floatValue);
-			break;
-		case Effect::UIVariableType::Int:
-			baseVar->AsScalar()->SetInt(uiVar.intValue);
-			break;
-		case Effect::UIVariableType::Bool:
-			baseVar->AsScalar()->SetBool(uiVar.boolValue);
-			break;
-		case Effect::UIVariableType::Color3:
-		case Effect::UIVariableType::Color4:
-			baseVar->AsVector()->SetFloatVector(const_cast<float*>(uiVar.colorValue));
-			break;
-		}
 	}
 
 	void ApplyTimeOfDayInterpolation(Effect& effect)
 	{
-		struct PeriodVar
-		{
-			size_t index;
-			float weight;
-		};
+		struct PeriodVar { size_t index; float weight; };
 		std::unordered_map<std::string, std::vector<PeriodVar>> baseGroups;
 		auto& cd = EffectManager::GetSingleton().commonData;
 
@@ -1481,7 +1282,6 @@ namespace ENBExtender
 			auto baseVarIt = effect.variables.find(baseName);
 			if (baseVarIt == effect.variables.end())
 				continue;
-
 			auto* baseVar = baseVarIt->second.get();
 			if (!baseVar || !baseVar->IsValid())
 				continue;
@@ -1489,27 +1289,25 @@ namespace ENBExtender
 			float totalWeight = 0.0f;
 			for (auto& e : entries)
 				totalWeight += e.weight;
-
 			if (totalWeight <= 0.0f)
 				continue;
 
 			auto& firstVar = effect.uiVariables[entries[0].index];
 
-			// For discrete types, pick the period with the highest weight
 			if (firstVar.type == Effect::UIVariableType::Int || firstVar.type == Effect::UIVariableType::Bool) {
 				size_t bestIdx = entries[0].index;
 				float bestWeight = entries[0].weight;
-				for (size_t i = 1; i < entries.size(); ++i) {
-					if (entries[i].weight > bestWeight) {
-						bestWeight = entries[i].weight;
-						bestIdx = entries[i].index;
-					}
+				for (size_t i = 1; i < entries.size(); ++i)
+					if (entries[i].weight > bestWeight) { bestWeight = entries[i].weight; bestIdx = entries[i].index; }
+				auto& best = effect.uiVariables[bestIdx];
+				switch (best.type) {
+				case Effect::UIVariableType::Int: baseVar->AsScalar()->SetInt(best.intValue); break;
+				case Effect::UIVariableType::Bool: baseVar->AsScalar()->SetBool(best.boolValue); break;
+				default: break;
 				}
-				SetBaseVariable(baseVar, effect.uiVariables[bestIdx]);
 				continue;
 			}
 
-			// For continuous types (Float, Color), weighted blend
 			if (firstVar.type == Effect::UIVariableType::Float) {
 				float result = 0.0f;
 				for (auto& e : entries)
