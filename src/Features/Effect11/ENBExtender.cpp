@@ -429,7 +429,8 @@ namespace ENBExtender
 	{
 		auto get = [&](const char* name) { return effect.GetUIAnnotation(variable, name); };
 
-		uiVar.group = ResolveGroup(uiVar.name, get("UIGroup"), groupStack, effect);
+		auto explicitGroup = get("UIGroup");
+		uiVar.group = ResolveGroup(uiVar.name, explicitGroup, groupStack, effect);
 		uiVar.sourceOrder = GetSourceOrder(uiVar.name, effect);
 
 		auto orderStr = get("UIOrdering");
@@ -441,7 +442,7 @@ namespace ENBExtender
 		uiVar.isHidden = IsTruthy(hiddenStr) || (!visibleStr.empty() && !IsTruthy(visibleStr));
 
 		CollectGroupMeta(uiVar.group, variable, effect);
-		if (IsTruthy(get("UITopLevel")))
+		if (IsTruthy(get("UITopLevel")) && explicitGroup.empty())
 			uiVar.group.clear();
 
 		uiVar.uniqueName = get("UniqueName");
@@ -590,9 +591,6 @@ namespace ENBExtender
 	void InsertUIDefines(Effect& effect)
 	{
 		for (const auto& def : effect.uiDefines) {
-			if (!def.group.empty() && effect.groupMeta.find(def.group) == effect.groupMeta.end())
-				continue;
-
 			Effect::UIVariable uiVar = {};
 			uiVar.name = def.defineName;
 			uiVar.displayName = def.displayName;
@@ -611,6 +609,11 @@ namespace ENBExtender
 				uiVar.widgetType = ParseWidgetType(def.widget);
 				if (uiVar.widgetType == Effect::UIWidgetType::Dropdown && !def.list.empty())
 					uiVar.dropdownItems = ParseDropdownList(def.list);
+				else if (uiVar.widgetType == Effect::UIWidgetType::Quality) {
+					uiVar.dropdownItems = { "Very High", "High", "Medium", "Low", "Very Low" };
+					uiVar.intMin = -1;
+					uiVar.intMax = 3;
+				}
 			} else {
 				uiVar.type = Effect::UIVariableType::Float;
 				uiVar.floatValue = SafeStof(def.value);
