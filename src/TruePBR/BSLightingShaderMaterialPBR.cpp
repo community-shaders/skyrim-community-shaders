@@ -185,12 +185,12 @@ void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTex
 			textureSet->SetTexture(FeaturesTexture0, featuresTexture0);
 			textureSet->SetTexture(FeaturesTexture1, featuresTexture1);
 
-			auto* bgsTextureSet = globals::truePBR->currentTextureSet;
+			auto* bgsTextureSet = globals::features::truePBR.currentTextureSet;
 			if (bgsTextureSet == nullptr) {
 				bgsTextureSet = skyrim_cast<RE::BGSTextureSet*>(inTextureSet);
 			}
 			if (bgsTextureSet) {
-				if (auto* textureSetData = globals::truePBR->GetPBRTextureSetData(bgsTextureSet)) {
+				if (auto* textureSetData = globals::features::truePBR.GetPBRTextureSetData(bgsTextureSet)) {
 					ApplyTextureSetData(*textureSetData);
 					All[this].textureSetData = textureSetData;
 				}
