@@ -103,14 +103,6 @@ void LightingTemplateWidget::DrawWidget()
 void LightingTemplateWidget::DrawBasicSettings()
 {
 	bool changed = false;
-	auto drawColor = [&](const char* settingId, float3& value) {
-		if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawColorEdit(label, value); }))
-			changed = true;
-	};
-	auto drawSlider = [&](const char* settingId, float& value, float minVal, float maxVal) {
-		if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawSliderFloat(label, value, minVal, maxVal); }))
-			changed = true;
-	};
 	auto drawMatchedHeader = [&](bool matches, const char* label, auto draw) {
 		if (!matches)
 			return;
@@ -124,28 +116,28 @@ void LightingTemplateWidget::DrawBasicSettings()
 	};
 
 	drawMatchedHeader(MatchesAnySearch({ LightingTemplateSetting::kAmbientColor, LightingTemplateSetting::kDirectionalColor }), "Ambient & Directional", [&]() {
-		drawColor(LightingTemplateSetting::kAmbientColor, settings.ambient);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kAmbientColor, settings.ambient);
 		ImGui::Spacing();
-		drawColor(LightingTemplateSetting::kDirectionalColor, settings.directional);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kDirectionalColor, settings.directional);
 	});
 
 	drawMatchedHeader(MatchesAnySearch({ LightingTemplateSetting::kDirectionalXY, LightingTemplateSetting::kDirectionalZ, LightingTemplateSetting::kDirectionalFade }), "Directional Settings", [&]() {
-		drawSlider(LightingTemplateSetting::kDirectionalXY, settings.directionalXY, 0.0f, 360.0f);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kDirectionalXY, settings.directionalXY, 0.0f, 360.0f);
 		ImGui::Spacing();
-		drawSlider(LightingTemplateSetting::kDirectionalZ, settings.directionalZ, 0.0f, 360.0f);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kDirectionalZ, settings.directionalZ, 0.0f, 360.0f);
 		ImGui::Spacing();
-		drawSlider(LightingTemplateSetting::kDirectionalFade, settings.directionalFade, 0.0f, 10.0f);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kDirectionalFade, settings.directionalFade, 0.0f, 10.0f);
 	});
 
 	drawMatchedHeader(MatchesAnySearch({ LightingTemplateSetting::kLightFadeStart, LightingTemplateSetting::kLightFadeEnd }), "Light Fade", [&]() {
-		drawSlider(LightingTemplateSetting::kLightFadeStart, settings.lightFadeStart, 0.0f, 163840.0f);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kLightFadeStart, settings.lightFadeStart, 0.0f, 163840.0f);
 		ImGui::Spacing();
-		drawSlider(LightingTemplateSetting::kLightFadeEnd, settings.lightFadeEnd, 0.0f, 163840.0f);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kLightFadeEnd, settings.lightFadeEnd, 0.0f, 163840.0f);
 	});
 
 	DrawSearchSectionIfMatches(LightingTemplateSetting::kClipDistance, [&](const char*) {
 		drawMatchedHeader(true, "Other", [&]() {
-			drawSlider(LightingTemplateSetting::kClipDistance, settings.clipDist, 0.0f, 163840.0f);
+			changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kClipDistance, settings.clipDist, 0.0f, 163840.0f);
 		});
 	});
 
@@ -157,43 +149,35 @@ void LightingTemplateWidget::DrawBasicSettings()
 void LightingTemplateWidget::DrawFogSettings()
 {
 	bool changed = false;
-	auto drawColor = [&](const char* settingId, float3& value) {
-		if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawColorEdit(label, value); }))
-			changed = true;
-	};
-	auto drawSlider = [&](const char* settingId, float& value, float minVal, float maxVal) {
-		if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawSliderFloat(label, value, minVal, maxVal); }))
-			changed = true;
-	};
 
 	DrawSearchSectionIfMatches(LightingTemplateSetting::kFogColorNear, [&](const char*) {
 		ImGui::Spacing();
-		drawColor(LightingTemplateSetting::kFogColorNear, settings.fogColorNear);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kFogColorNear, settings.fogColorNear);
 	});
 
 	DrawSearchSectionIfMatches(LightingTemplateSetting::kFogColorFar, [&](const char*) {
 		ImGui::Spacing();
-		drawColor(LightingTemplateSetting::kFogColorFar, settings.fogColorFar);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kFogColorFar, settings.fogColorFar);
 	});
 
 	DrawSearchSectionIfMatches(LightingTemplateSetting::kFogNear, [&](const char*) {
 		ImGui::Spacing();
-		drawSlider(LightingTemplateSetting::kFogNear, settings.fogNear, 0.0f, 163840.0f);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kFogNear, settings.fogNear, 0.0f, 163840.0f);
 	});
 
 	DrawSearchSectionIfMatches(LightingTemplateSetting::kFogFar, [&](const char*) {
 		ImGui::Spacing();
-		drawSlider(LightingTemplateSetting::kFogFar, settings.fogFar, 0.0f, 163840.0f);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kFogFar, settings.fogFar, 0.0f, 163840.0f);
 	});
 
 	DrawSearchSectionIfMatches(LightingTemplateSetting::kFogPower, [&](const char*) {
 		ImGui::Spacing();
-		drawSlider(LightingTemplateSetting::kFogPower, settings.fogPower, 0.0f, 10.0f);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kFogPower, settings.fogPower, 0.0f, 10.0f);
 	});
 
 	DrawSearchSectionIfMatches(LightingTemplateSetting::kFogClamp, [&](const char*) {
 		ImGui::Spacing();
-		drawSlider(LightingTemplateSetting::kFogClamp, settings.fogClamp, 0.0f, 1.0f);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kFogClamp, settings.fogClamp, 0.0f, 1.0f);
 	});
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
@@ -204,30 +188,22 @@ void LightingTemplateWidget::DrawFogSettings()
 void LightingTemplateWidget::DrawDALCSettings()
 {
 	bool changed = false;
-	auto drawColor = [&](const char* settingId, float3& value) {
-		if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawColorEdit(label, value); }))
-			changed = true;
-	};
-	auto drawSlider = [&](const char* settingId, float& value, float minVal, float maxVal) {
-		if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawSliderFloat(label, value, minVal, maxVal); }))
-			changed = true;
-	};
 
 	if (MatchesAnySearch({ LightingTemplateSetting::kSpecular, LightingTemplateSetting::kFresnelPower })) {
 		ImGui::SeparatorText("Directional Ambient Lighting (DALC)");
-		drawColor(LightingTemplateSetting::kSpecular, settings.dalc.specular);
-		drawSlider(LightingTemplateSetting::kFresnelPower, settings.dalc.fresnelPower, 0.0f, 10.0f);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kSpecular, settings.dalc.specular);
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kFresnelPower, settings.dalc.fresnelPower, 0.0f, 10.0f);
 	}
 
 	if (MatchesAnySearch({ LightingTemplateSetting::kXPlus, LightingTemplateSetting::kXMinus, LightingTemplateSetting::kYPlus,
 			LightingTemplateSetting::kYMinus, LightingTemplateSetting::kZPlus, LightingTemplateSetting::kZMinus })) {
 		ImGui::SeparatorText("Directional Colors");
-		drawColor(LightingTemplateSetting::kXPlus, settings.dalc.directional[0].max);
-		drawColor(LightingTemplateSetting::kXMinus, settings.dalc.directional[0].min);
-		drawColor(LightingTemplateSetting::kYPlus, settings.dalc.directional[1].max);
-		drawColor(LightingTemplateSetting::kYMinus, settings.dalc.directional[1].min);
-		drawColor(LightingTemplateSetting::kZPlus, settings.dalc.directional[2].max);
-		drawColor(LightingTemplateSetting::kZMinus, settings.dalc.directional[2].min);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kXPlus, settings.dalc.directional[0].max);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kXMinus, settings.dalc.directional[0].min);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kYPlus, settings.dalc.directional[1].max);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kYMinus, settings.dalc.directional[1].min);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kZPlus, settings.dalc.directional[2].max);
+		changed |= WeatherUtils::DrawColorEdit(LightingTemplateSetting::kZMinus, settings.dalc.directional[2].min);
 	}
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {

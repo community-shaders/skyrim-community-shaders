@@ -4,6 +4,8 @@
 #include "Utils/FileSystem.h"
 #include "Utils/UI.h"
 
+#include <cassert>
+
 namespace WeatherUtils::TexturePath
 {
 	std::string Normalize(std::string_view path)
@@ -340,6 +342,9 @@ namespace WeatherUtils
 		const std::string hid = l.starts_with("##") ? l.substr(2) : l;
 
 		Widget* effectiveWidget = widget ? widget : g_currentWidget;
+		if (effectiveWidget && !effectiveWidget->MatchesSearch(hid))
+			return false;
+
 		const std::string cacheId = effectiveWidget ?
 		                                std::format("{}{}{}", static_cast<const void*>(effectiveWidget), kScopeSep, hid) :
 		                                hid;
@@ -416,6 +421,9 @@ namespace WeatherUtils
 		// Strip leading "##" so hidden-label sliders still match highlight/search ids.
 		std::string hid = label.starts_with("##") ? label.substr(2) : label;
 		Widget* w = widget ? widget : g_currentWidget;
+		if (w && !w->MatchesSearch(hid))
+			return false;
+
 		bool changed = DrawWithWidgetHighlight(w, hid, [&]() {
 			return ImGui::SliderFloat(label.c_str(), &property, min, max, format);
 		});
@@ -448,7 +456,11 @@ namespace WeatherUtils
 	bool DrawCheckbox(const std::string& label, bool& value, Widget* widget)
 	{
 		Widget* w = widget ? widget : g_currentWidget;
-		return DrawWithWidgetHighlight(w, label, [&]() {
+		const std::string hid = label.starts_with("##") ? label.substr(2) : label;
+		if (w && !w->MatchesSearch(hid))
+			return false;
+
+		return DrawWithWidgetHighlight(w, hid, [&]() {
 			return ImGui::Checkbox(label.c_str(), &value);
 		});
 	}
@@ -1210,6 +1222,12 @@ namespace TOD
 // ============================================================================
 namespace PropertyDrawer
 {
+	bool MatchesCurrentWidgetSearch(const char* label)
+	{
+		assert(label);
+		return !g_currentWidget || g_currentWidget->MatchesSearch(label);
+	}
+
 	bool BeginTable(const char* tableId, float labelWidth)
 	{
 		if (ImGui::BeginTable(tableId, 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
@@ -1246,6 +1264,8 @@ namespace PropertyDrawer
 
 	bool DrawFloat(const char* label, float& value, float minVal, float maxVal, const char* format)
 	{
+		if (!MatchesCurrentWidgetSearch(label))
+			return false;
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
 		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
@@ -1255,6 +1275,8 @@ namespace PropertyDrawer
 
 	bool DrawInt(const char* label, int& value, int minVal, int maxVal)
 	{
+		if (!MatchesCurrentWidgetSearch(label))
+			return false;
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
 		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
@@ -1264,12 +1286,16 @@ namespace PropertyDrawer
 
 	bool DrawColor(const char* label, float3& value)
 	{
+		if (!MatchesCurrentWidgetSearch(label))
+			return false;
 		DrawLabel(label);
 		return WeatherUtils::DrawColorEdit(std::string("##") + label, value);
 	}
 
 	bool DrawCheckbox(const char* label, bool& value)
 	{
+		if (!MatchesCurrentWidgetSearch(label))
+			return false;
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
 		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {

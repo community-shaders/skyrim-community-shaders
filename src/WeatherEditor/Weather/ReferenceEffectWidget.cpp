@@ -51,11 +51,11 @@ void ReferenceEffectWidget::DrawWidget()
 				changed = true;
 			if (MatchesAnySearch({ ReferenceEffectSetting::kFaceTarget, ReferenceEffectSetting::kAttachToCamera, ReferenceEffectSetting::kInheritRotation })) {
 				ImGui::SeparatorText("Flags");
-				if (DrawIfMatchesSearch(ReferenceEffectSetting::kFaceTarget, [&](const char* label) { return WeatherUtils::DrawCheckbox(label, settings.faceTarget); }))
+				if (WeatherUtils::DrawCheckbox(ReferenceEffectSetting::kFaceTarget, settings.faceTarget))
 					changed = true;
-				if (DrawIfMatchesSearch(ReferenceEffectSetting::kAttachToCamera, [&](const char* label) { return WeatherUtils::DrawCheckbox(label, settings.attachToCamera); }))
+				if (WeatherUtils::DrawCheckbox(ReferenceEffectSetting::kAttachToCamera, settings.attachToCamera))
 					changed = true;
-				if (DrawIfMatchesSearch(ReferenceEffectSetting::kInheritRotation, [&](const char* label) { return WeatherUtils::DrawCheckbox(label, settings.inheritRotation); }))
+				if (WeatherUtils::DrawCheckbox(ReferenceEffectSetting::kInheritRotation, settings.inheritRotation))
 					changed = true;
 			}
 

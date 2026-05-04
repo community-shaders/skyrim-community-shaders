@@ -46,10 +46,6 @@ void PrecipitationWidget::DrawWidget()
 			const ImGuiTabItemFlags particleFlags = GetTabFlagsForOverride(PrecipitationTab::kParticle);
 			const ImGuiTabItemFlags positionFlags = GetTabFlagsForOverride(PrecipitationTab::kPosition);
 			const ImGuiTabItemFlags textureFlags = GetTabFlagsForOverride(PrecipitationTab::kTexture);
-			auto drawSlider = [&](const char* settingId, float& value, float minVal, float maxVal) {
-				if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawSliderFloat(label, value, minVal, maxVal); }))
-					changed = true;
-			};
 
 			if (ImGui::BeginTabItem(PrecipitationTab::kParticle, nullptr, particleFlags)) {
 				BeginScrollableContent("##ParticleScroll");
@@ -69,13 +65,13 @@ void PrecipitationWidget::DrawWidget()
 					changed = true;
 				if (MatchesAnySearch({ PrecipitationSetting::kSizeX, PrecipitationSetting::kSizeY })) {
 					ImGui::SeparatorText("Particle Size");
-					drawSlider(PrecipitationSetting::kSizeX, settings.particleSizeX, 0.0f, 200.0f);
-					drawSlider(PrecipitationSetting::kSizeY, settings.particleSizeY, 0.0f, 200.0f);
+					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kSizeX, settings.particleSizeX, 0.0f, 200.0f);
+					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kSizeY, settings.particleSizeY, 0.0f, 200.0f);
 				}
 				if (MatchesAnySearch({ PrecipitationSetting::kGravityVelocity, PrecipitationSetting::kRotationVelocity })) {
 					ImGui::SeparatorText("Velocity");
-					drawSlider(PrecipitationSetting::kGravityVelocity, settings.gravityVelocity, 0.0f, 10000.0f);
-					drawSlider(PrecipitationSetting::kRotationVelocity, settings.rotationVelocity, 0.0f, 10000.0f);
+					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kGravityVelocity, settings.gravityVelocity, 0.0f, 10000.0f);
+					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kRotationVelocity, settings.rotationVelocity, 0.0f, 10000.0f);
 				}
 				EndScrollableContent();
 				ImGui::EndTabItem();
@@ -85,14 +81,14 @@ void PrecipitationWidget::DrawWidget()
 				BeginScrollableContent("##PositionScroll");
 				if (MatchesAnySearch({ PrecipitationSetting::kCenterOffsetMin, PrecipitationSetting::kCenterOffsetMax, PrecipitationSetting::kStartRotationRange })) {
 					ImGui::SeparatorText("Offset");
-					drawSlider(PrecipitationSetting::kCenterOffsetMin, settings.centerOffsetMin, 0.0f, 200.0f);
-					drawSlider(PrecipitationSetting::kCenterOffsetMax, settings.centerOffsetMax, 0.0f, 200.0f);
-					drawSlider(PrecipitationSetting::kStartRotationRange, settings.startRotationRange, 0.0f, 360.0f);
+					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kCenterOffsetMin, settings.centerOffsetMin, 0.0f, 200.0f);
+					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kCenterOffsetMax, settings.centerOffsetMax, 0.0f, 200.0f);
+					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kStartRotationRange, settings.startRotationRange, 0.0f, 360.0f);
 				}
 				if (MatchesAnySearch({ PrecipitationSetting::kBoxSize, PrecipitationSetting::kParticleDensity })) {
 					ImGui::SeparatorText("Volume");
-					drawSlider(PrecipitationSetting::kBoxSize, settings.boxSize, 0.0f, 1000.0f);
-					drawSlider(PrecipitationSetting::kParticleDensity, settings.particleDensity, 0.0f, 1000.0f);
+					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kBoxSize, settings.boxSize, 0.0f, 1000.0f);
+					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kParticleDensity, settings.particleDensity, 0.0f, 1000.0f);
 				}
 				EndScrollableContent();
 				ImGui::EndTabItem();

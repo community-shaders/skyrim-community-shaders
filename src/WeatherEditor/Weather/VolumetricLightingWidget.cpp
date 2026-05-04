@@ -37,10 +37,6 @@ void VolumetricLightingWidget::DrawWidget()
 		const ImGuiTabItemFlags basicFlags = GetTabFlagsForOverride(VolumetricLightingTab::kBasic);
 		const ImGuiTabItemFlags densityFlags = GetTabFlagsForOverride(VolumetricLightingTab::kDensity);
 		const ImGuiTabItemFlags advancedFlags = GetTabFlagsForOverride(VolumetricLightingTab::kAdvanced);
-		auto drawSlider = [&](const char* settingId, float& value, float minVal, float maxVal) {
-			if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawSliderFloat(label, value, minVal, maxVal); }))
-				changed = true;
-		};
 		auto drawSection = [&](const char* settingId, const char* heading, auto draw) {
 			DrawSearchSectionIfMatches(settingId, [&](const char*) {
 				ImGui::SeparatorText(heading);
@@ -51,14 +47,14 @@ void VolumetricLightingWidget::DrawWidget()
 		if (ImGui::BeginTabItem(VolumetricLightingTab::kBasic, nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
 			drawSection(VolumetricLightingSetting::kIntensity, "Intensity", [&]() {
-				drawSlider(VolumetricLightingSetting::kIntensity, settings.intensity, 0.0f, 50.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kIntensity, settings.intensity, 0.0f, 50.0f);
 			});
 			drawSection(VolumetricLightingSetting::kContribution, "Custom Color", [&]() {
-				drawSlider(VolumetricLightingSetting::kContribution, settings.customColorContribution, 0.0f, 1.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kContribution, settings.customColorContribution, 0.0f, 1.0f);
 			});
 			drawSection(VolumetricLightingSetting::kColor, "RGB Color", [&]() {
 				float3 rgbColor{ settings.red, settings.green, settings.blue };
-				if (DrawIfMatchesSearch(VolumetricLightingSetting::kColor, [&](const char* label) { return WeatherUtils::DrawColorEdit(label, rgbColor); })) {
+				if (WeatherUtils::DrawColorEdit(VolumetricLightingSetting::kColor, rgbColor)) {
 					settings.red = rgbColor.x;
 					settings.green = rgbColor.y;
 					settings.blue = rgbColor.z;
@@ -73,10 +69,10 @@ void VolumetricLightingWidget::DrawWidget()
 			BeginScrollableContent("##DensityScroll");
 			if (MatchesAnySearch({ VolumetricLightingSetting::kContribution, VolumetricLightingSetting::kSize, VolumetricLightingSetting::kWindSpeed, VolumetricLightingSetting::kFallingSpeed })) {
 				ImGui::SeparatorText("Density Settings");
-				drawSlider(VolumetricLightingSetting::kContribution, settings.densityContribution, 0.0f, 1.0f);
-				drawSlider(VolumetricLightingSetting::kSize, settings.densitySize, 0.1f, 10000.0f);
-				drawSlider(VolumetricLightingSetting::kWindSpeed, settings.densityWindSpeed, 0.0f, 100.0f);
-				drawSlider(VolumetricLightingSetting::kFallingSpeed, settings.densityFallingSpeed, 0.0f, 100.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kContribution, settings.densityContribution, 0.0f, 1.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kSize, settings.densitySize, 0.1f, 10000.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kWindSpeed, settings.densityWindSpeed, 0.0f, 100.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kFallingSpeed, settings.densityFallingSpeed, 0.0f, 100.0f);
 			}
 			EndScrollableContent();
 			ImGui::EndTabItem();
@@ -86,11 +82,11 @@ void VolumetricLightingWidget::DrawWidget()
 			BeginScrollableContent("##AdvancedScroll");
 			if (MatchesAnySearch({ VolumetricLightingSetting::kContribution, VolumetricLightingSetting::kScattering })) {
 				ImGui::SeparatorText("Phase Function");
-				drawSlider(VolumetricLightingSetting::kContribution, settings.phaseFunctionContribution, 0.0f, 1.0f);
-				drawSlider(VolumetricLightingSetting::kScattering, settings.phaseFunctionScattering, -1.0f, 1.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kContribution, settings.phaseFunctionContribution, 0.0f, 1.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kScattering, settings.phaseFunctionScattering, -1.0f, 1.0f);
 			}
 			drawSection(VolumetricLightingSetting::kRangeFactor, "Sampling", [&]() {
-				drawSlider(VolumetricLightingSetting::kRangeFactor, settings.samplingRangeFactor, 0.0f, 160.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kRangeFactor, settings.samplingRangeFactor, 0.0f, 160.0f);
 			});
 			EndScrollableContent();
 			ImGui::EndTabItem();

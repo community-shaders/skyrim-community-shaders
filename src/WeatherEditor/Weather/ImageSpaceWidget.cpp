@@ -105,33 +105,28 @@ void ImageSpaceWidget::DrawWidget()
 					return setting.section == section && MatchesSearch(setting.label);
 				});
 			};
-			auto drawFloat = [&](const char* settingId, float& value, float minVal, float maxVal, const char* format = "%.3f") {
-				changed |= DrawIfMatchesSearch(settingId, [&](const char* label) {
-					return PropertyDrawer::DrawFloat(label, value, minVal, maxVal, format);
-				});
-			};
 			const bool showHdr = sectionMatches(ImageSpaceSection::Hdr);
 			const bool showCinematic = sectionMatches(ImageSpaceSection::Cinematic);
 			const bool showTint = sectionMatches(ImageSpaceSection::Tint);
 			const bool showDOF = sectionMatches(ImageSpaceSection::DepthOfField);
 
 			// HDR Settings
-			drawFloat(ImageSpaceSetting::kEyeAdaptSpeed, settings.hdrEyeAdaptSpeed, 0.0f, 100.0f);
-			drawFloat(ImageSpaceSetting::kEyeAdaptStrength, settings.hdrEyeAdaptStrength, 0.0f, 50.0f);
-			drawFloat(ImageSpaceSetting::kBloomBlurRadius, settings.hdrBloomBlurRadius, 0.0f, 10.0f);
-			drawFloat(ImageSpaceSetting::kBloomThreshold, settings.hdrBloomThreshold, 0.0f, 10.0f);
-			drawFloat(ImageSpaceSetting::kBloomScale, settings.hdrBloomScale, 0.0f, 30.0f);
-			drawFloat(ImageSpaceSetting::kWhite, settings.hdrWhite, 0.0f, 30.0f);
-			drawFloat(ImageSpaceSetting::kSunlightScale, settings.hdrSunlightScale, 0.0f, 50.0f);
-			drawFloat(ImageSpaceSetting::kSkyScale, settings.hdrSkyScale, 0.0f, 30.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kEyeAdaptSpeed, settings.hdrEyeAdaptSpeed, 0.0f, 100.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kEyeAdaptStrength, settings.hdrEyeAdaptStrength, 0.0f, 50.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kBloomBlurRadius, settings.hdrBloomBlurRadius, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kBloomThreshold, settings.hdrBloomThreshold, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kBloomScale, settings.hdrBloomScale, 0.0f, 30.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kWhite, settings.hdrWhite, 0.0f, 30.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kSunlightScale, settings.hdrSunlightScale, 0.0f, 50.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kSkyScale, settings.hdrSkyScale, 0.0f, 30.0f);
 
 			if (showHdr && (showCinematic || showTint || showDOF))
 				PropertyDrawer::DrawSeparator();
 
 			// Cinematic Settings
-			drawFloat(ImageSpaceSetting::kSaturation, settings.cinematicSaturation, 0.0f, 10.0f);
-			drawFloat(ImageSpaceSetting::kBrightness, settings.cinematicBrightness, 0.0f, 10.0f);
-			drawFloat(ImageSpaceSetting::kContrast, settings.cinematicContrast, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kSaturation, settings.cinematicSaturation, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kBrightness, settings.cinematicBrightness, 0.0f, 10.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kContrast, settings.cinematicContrast, 0.0f, 10.0f);
 
 			if (showCinematic && (showTint || showDOF))
 				PropertyDrawer::DrawSeparator();
@@ -142,15 +137,15 @@ void ImageSpaceWidget::DrawWidget()
 				settings.tintColor = tintColor;
 				changed = true;
 			}
-			drawFloat(ImageSpaceSetting::kTintAmount, settings.tintAmount, 0.0f, 1.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kTintAmount, settings.tintAmount, 0.0f, 1.0f);
 
 			if (showTint && showDOF)
 				PropertyDrawer::DrawSeparator();
 
 			// Depth of Field
-			drawFloat(ImageSpaceSetting::kDofStrength, settings.dofStrength, 0.0f, 1.0f);
-			drawFloat(ImageSpaceSetting::kDofDistance, settings.dofDistance, 0.0f, 50000.0f, "%.1f");
-			drawFloat(ImageSpaceSetting::kDofRange, settings.dofRange, 0.0f, 50000.0f, "%.1f");
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kDofStrength, settings.dofStrength, 0.0f, 1.0f);
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kDofDistance, settings.dofDistance, 0.0f, 50000.0f, "%.1f");
+			changed |= PropertyDrawer::DrawFloat(ImageSpaceSetting::kDofRange, settings.dofRange, 0.0f, 50000.0f, "%.1f");
 
 			PropertyDrawer::EndTable();
 
