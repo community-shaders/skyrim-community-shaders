@@ -1022,7 +1022,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 uvOriginal = uv;
 
 #	if defined(EMAT)
-	float parallaxShadowQuality = viewPosition.z < ExtendedMaterials::ParallaxCheapDistance ? ExtendedMaterials::ParallaxNearShadowQuality : ExtendedMaterials::ParallaxFarShadowQuality;
+	float parallaxShadowQuality = ExtendedMaterials::ParallaxNearShadowQuality;
 	float terrainDirectionalShadowQuality = parallaxShadowQuality;
 #		if defined(LANDSCAPE)
 	terrainDirectionalShadowQuality = ExtendedMaterials::ParallaxNearShadowQuality;

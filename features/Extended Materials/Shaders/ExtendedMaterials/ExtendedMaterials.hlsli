@@ -20,10 +20,13 @@ struct DisplacementParams
 namespace ExtendedMaterials
 {
 	static const float ShadowIntensity = 2.0;
-	static const float ParallaxCheapDistance = 512.0;
 	static const float ParallaxNearShadowQuality = 1.0;
-	static const float ParallaxFarShadowQuality = 0.5;
-	static const float TerrainParallaxShadowMaxMipLevel = 1.0;
+	static const float TerrainParallaxShadowMaxMipLevel = 8.0;
+
+	static const uint ParallaxRayStepsScale = 32;
+	static const uint ParallaxRayStepsMin = 16;
+	static const uint ParallaxRayStepsMax = 96;
+	static const uint ParallaxSecantIterations = 8;
 
 	inline uint ParallaxShadowTapCount(float quality)
 	{
@@ -370,11 +373,6 @@ namespace ExtendedMaterials
 		viewDirTS.xy /= viewDirTS.z * 0.7 + 0.3 + params.FlattenAmount;  // Fix for objects at extreme viewing angles
 #endif
 
-		bool useCheapParallax = distance >= ParallaxCheapDistance;
-#if defined(LANDSCAPE) && defined(LANDSCAPE_HEIGHT_APPROX)
-		useCheapParallax = true;
-#endif
-
 #if defined(LANDSCAPE)
 		float blendFactor = SharedData::extendedMaterialSettings.EnableHeightBlending ? 1.0 : 0.0;
 		float4 w1 = lerp(input.LandBlendWeights1, smoothstep(0, 1, input.LandBlendWeights1), blendFactor);
@@ -393,53 +391,10 @@ namespace ExtendedMaterials
 #endif
 		float minHeight = maxHeight * 0.5;
 
-		if (useCheapParallax && scale > 0.001) {
-#if defined(LANDSCAPE)
-			float terrainWeights0[6] = { 0, 0, 0, 0, 0, 0 };
-#	if defined(TRUE_PBR)
-#		if defined(TERRAIN_VARIATION)
-#			define LANDSCAPE_HEIGHT_AT(COORDS, OUT_WEIGHTS) (GetTerrainHeight(noise, input, COORDS, mipLevels, params, blendFactor, w1, w2, sharedOffset, OUT_WEIGHTS) * scalercp + 0.5)
-#		else
-#			define LANDSCAPE_HEIGHT_AT(COORDS, OUT_WEIGHTS) (GetTerrainHeight(noise, input, COORDS, mipLevels, params, blendFactor, w1, w2, OUT_WEIGHTS) * scalercp + 0.5)
-#		endif
-#	else
-#		if defined(TERRAIN_VARIATION)
-#			define LANDSCAPE_HEIGHT_AT(COORDS, OUT_WEIGHTS) (GetTerrainHeight(noise, input, COORDS, mipLevels, params, blendFactor, w1, w2, sharedOffset, OUT_WEIGHTS) + 0.5)
-#		else
-#			define LANDSCAPE_HEIGHT_AT(COORDS, OUT_WEIGHTS) (GetTerrainHeight(noise, input, COORDS, mipLevels, params, blendFactor, w1, w2, OUT_WEIGHTS) + 0.5)
-#		endif
-#	endif
-			float height0 = saturate(LANDSCAPE_HEIGHT_AT(coords, terrainWeights0));
-			float offset0 = (1.0 - height0) * -maxHeight + minHeight;
-			float2 refinedCoords = coords.xy + viewDirTS.xy * offset0;
-			float height1 = saturate(LANDSCAPE_HEIGHT_AT(refinedCoords, weights));
-#	undef LANDSCAPE_HEIGHT_AT
-#else
-			float height0 = saturate(AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords, mipLevel)[channel], params));
-			float offset0 = (1.0 - height0) * -maxHeight + minHeight;
-			float2 refinedCoords = coords.xy + viewDirTS.xy * offset0;
-			float height1 = saturate(AdjustDisplacementNormalized(tex.SampleLevel(texSampler, refinedCoords, mipLevel)[channel], params));
-#endif
-
-			float heightDelta = abs(height1 - height0);
-			float heightStability = saturate(1.0 - heightDelta * 2.0);
-			float height = lerp(lerp(height0, height1, 0.5), 0.5, (1.0 - heightStability) * 0.35);
-			float offset = (1.0 - height) * -maxHeight + minHeight;
-			pixelOffset = saturate(height);
-#if defined(VR_STEREO_OPT)
-			hasPOM = true;
-#endif
-			return viewDirTS.xy * offset + coords.xy;
-		}
-#if defined(TRUE_PBR)
-		if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0 || !useCheapParallax)
-#else
-		if (!useCheapParallax)
-#endif
 		{
-			const float maxSteps = 4;
-			uint numSteps = max(4, uint(scale * maxSteps));
-			numSteps = (numSteps + 2) & ~3;
+			uint numSteps = min(ParallaxRayStepsMax,
+				max(ParallaxRayStepsMin, uint(scale * float(ParallaxRayStepsScale))));
+			numSteps = (numSteps + 2u) & ~3u;
 
 			float stepSize = rcp(numSteps);
 
@@ -547,7 +502,7 @@ namespace ExtendedMaterials
 				float hFar = pt2.y;
 				float fFar = hFar - tFar;
 
-				[unroll] for (uint i = 0; i < 3; i++)
+				[unroll] for (uint i = 0; i < ParallaxSecantIterations; i++)
 				{
 					float denominator = fNear - fFar;
 					float r = abs(denominator) > EPSILON_DIVISION ? saturate(fNear / denominator) : 0.5;
@@ -601,18 +556,6 @@ namespace ExtendedMaterials
 #endif
 			return viewDirTS.xy * offset + coords.xy;
 		}
-
-#if defined(LANDSCAPE)
-		weights[0] = input.LandBlendWeights1.x;
-		weights[1] = input.LandBlendWeights1.y;
-		weights[2] = input.LandBlendWeights1.z;
-		weights[3] = input.LandBlendWeights1.w;
-		weights[4] = input.LandBlendWeights2.x;
-		weights[5] = input.LandBlendWeights2.y;
-#endif
-
-		pixelOffset = 0.0;
-		return coords;
 	}
 
 	// https://advances.realtimerendering.com/s2006/Tatarchuk-POM.pdf
@@ -675,11 +618,12 @@ namespace ExtendedMaterials
 
 	inline uint TerrainDirectionalShadowTapCount(float quality)
 	{
-		// Directional terrain shadows are capped to reduce cost.
 		if (quality > 0.7)
-			return 2;
+			return 4;
+		if (quality > 0.25)
+			return 3;
 		if (quality > 0.0)
-			return 1;
+			return 2;
 		return 0;
 	}
 
