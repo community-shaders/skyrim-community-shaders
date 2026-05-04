@@ -270,7 +270,7 @@ namespace ENBExtender
 		return true;
 	}
 
-	void ConvertExtenderSyntax(std::string& content, const std::filesystem::path& enbseriesPath, std::vector<Effect::UIDefineInfo>& uiDefines, const std::string& iniPath, const std::string& iniSection)
+	void ConvertExtenderSyntax(std::string& content, std::vector<Effect::UIDefineInfo>& uiDefines, const std::string& iniPath, const std::string& iniSection)
 	{
 		std::string result;
 		result.reserve(content.size());
@@ -278,33 +278,6 @@ namespace ENBExtender
 		std::string line;
 
 		while (std::getline(stream, line)) {
-			size_t errPos = line.find_first_not_of(" \t#");
-			if (errPos != std::string::npos && line.compare(errPos, 5, "error") == 0 && line.find('#') < errPos) {
-				result += "\n";
-				continue;
-			}
-
-			size_t pragmaPos = line.find("#pragma");
-			if (pragmaPos != std::string::npos) {
-				size_t existsPos = line.find("exists", pragmaPos + 7);
-				if (existsPos != std::string::npos) {
-					size_t op = line.find('(', existsPos), cp = line.rfind(')');
-					if (op != std::string::npos && cp != std::string::npos && cp > op) {
-						std::string args = line.substr(op + 1, cp - op - 1);
-						size_t q1 = args.find('"');
-						size_t q2 = (q1 != std::string::npos) ? args.find('"', q1 + 1) : std::string::npos;
-						size_t comma = (q2 != std::string::npos) ? args.find(',', q2 + 1) : std::string::npos;
-						if (q1 != std::string::npos && q2 != std::string::npos && comma != std::string::npos) {
-							std::string defName = args.substr(comma + 1);
-							Trim(defName);
-							bool exists = std::filesystem::exists(enbseriesPath / args.substr(q1 + 1, q2 - q1 - 1));
-							result += "#define " + defName + (exists ? " 1" : " 0") + "\n";
-							continue;
-						}
-					}
-				}
-			}
-
 			if (HandlePragmaUIDefine(line, stream, iniPath, iniSection, result, uiDefines))
 				continue;
 			result += line + "\n";
@@ -570,11 +543,6 @@ namespace ENBExtender
 		Trim(labelText);
 		if (labelText.empty())
 			return true;
-
-		if (labelText == "|") {
-			effect.uiVariables.push_back(MakeSeparator(varDesc.Name, groupStack, effect));
-			return true;
-		}
 
 		Effect::UIVariable labelVar = {};
 		labelVar.name = varDesc.Name;

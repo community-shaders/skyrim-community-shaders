@@ -135,7 +135,7 @@ namespace
 			return "";
 
 		content = ENBExtender::DecodeKIEFX(content);
-		ENBExtender::ConvertExtenderSyntax(content, basePath, uiDefines, iniPath, iniSection);
+		ENBExtender::ConvertExtenderSyntax(content, uiDefines, iniPath, iniSection);
 		Util::ShaderPatches::Apply(fullPath.filename().string().c_str(), content);
 
 		auto parentDir = fullPath.parent_path();
@@ -194,7 +194,7 @@ namespace
 				return E_FAIL;
 
 			content = ENBExtender::DecodeKIEFX(content);
-			ENBExtender::ConvertExtenderSyntax(content, basePath, uiDefines, iniPath, iniSection);
+			ENBExtender::ConvertExtenderSyntax(content, uiDefines, iniPath, iniSection);
 			Util::ShaderPatches::Apply(pFileName, content);
 
 			auto parentDir = fullPath.parent_path();
@@ -421,7 +421,7 @@ bool Effect::LoadFXFile()
 	std::transform(iniSection.begin(), iniSection.end(), iniSection.begin(), ::toupper);
 
 	uiDefines.clear();
-	ENBExtender::ConvertExtenderSyntax(sourceCode, enbseriesPath, uiDefines, iniPathStr, iniSection);
+	ENBExtender::ConvertExtenderSyntax(sourceCode, uiDefines, iniPathStr, iniSection);
 	Util::ShaderPatches::Apply(GetName().c_str(), sourceCode);
 
 	auto filePathStr = filePath.string();
