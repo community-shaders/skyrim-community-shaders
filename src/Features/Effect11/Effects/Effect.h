@@ -166,12 +166,11 @@ public:
 	// Whether the source file was KIEFX-encoded (determines merged vs standalone UI)
 	bool isKIEFX = false;
 
-	// Pre-compiled group map from source preprocessing (variable name → group path)
+	// Source-parsed group map and declaration order (compiled effect reorders variable types)
 	std::unordered_map<std::string, std::string> sourceGroupMap;
-	// Source declaration order (variable name → declaration index)
 	std::unordered_map<std::string, int> sourceOrderMap;
 
-	// Stored preprocessed source for unified KIEFX parsing (cleared after use)
+	// Stored preprocessed source for KIEFX cross-file parsing (cleared after use)
 	std::string preprocessedSource;
 
 	struct UIDefineInfo

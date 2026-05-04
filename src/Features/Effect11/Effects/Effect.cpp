@@ -695,54 +695,23 @@ void Effect::LoadTechniques()
 		if (FAILED(group->GetDesc(&groupDesc)))
 			continue;
 
-		std::string groupName = groupDesc.Name ? groupDesc.Name : "";
+		bool isNamedGroup = groupDesc.Name && groupDesc.Name[0];
 
-		if (groupName.empty()) {
-			// Null group: standalone techniques use name-suffix convention for sequences
-			std::string currentBase;
-			int currentIndex = 0;
+		for (UINT t = 0; t < groupDesc.Techniques; ++t) {
+			auto technique = group->GetTechniqueByIndex(t);
+			if (!technique || !technique->IsValid())
+				continue;
 
-			for (UINT t = 0; t < groupDesc.Techniques; ++t) {
-				auto technique = group->GetTechniqueByIndex(t);
-				if (!technique || !technique->IsValid())
-					continue;
-				D3DX11_TECHNIQUE_DESC techDesc;
-				if (FAILED(technique->GetDesc(&techDesc)))
-					continue;
+			D3DX11_TECHNIQUE_DESC techDesc;
+			if (FAILED(technique->GetDesc(&techDesc)))
+				continue;
 
-				std::string techName = techDesc.Name ? techDesc.Name : ("technique" + std::to_string(t));
-				std::string baseName;
-				int seqNum = 0;
+			std::string key = isNamedGroup ? std::string(groupDesc.Name) : (techDesc.Name ? std::string(techDesc.Name) : ("technique" + std::to_string(t)));
 
-				if (!currentBase.empty() && techName == currentBase + std::to_string(currentIndex + 1)) {
-					baseName = currentBase;
-					seqNum = ++currentIndex;
-				} else {
-					baseName = techName;
-					currentBase = techName;
-					currentIndex = 0;
-				}
-
-				TechniqueInfo info;
-				info.technique.copy_from(technique);
-				info.renderTargetName = GetTechniqueAnnotation(technique, "RenderTarget");
-				auto& seq = techniques[baseName];
-				if (seq.size() <= static_cast<size_t>(seqNum))
-					seq.resize(seqNum + 1);
-				seq[seqNum] = std::move(info);
-			}
-		} else {
-			// Named group: techniques form a sequence keyed by group name
-			for (UINT t = 0; t < groupDesc.Techniques; ++t) {
-				auto technique = group->GetTechniqueByIndex(t);
-				if (!technique || !technique->IsValid())
-					continue;
-
-				TechniqueInfo info;
-				info.technique.copy_from(technique);
-				info.renderTargetName = GetTechniqueAnnotation(technique, "RenderTarget");
-				techniques[groupName].push_back(std::move(info));
-			}
+			TechniqueInfo info;
+			info.technique.copy_from(technique);
+			info.renderTargetName = GetTechniqueAnnotation(technique, "RenderTarget");
+			techniques[key].push_back(std::move(info));
 		}
 	}
 }
@@ -769,10 +738,9 @@ void Effect::LoadUITechniques()
 		if (FAILED(group->GetDesc(&groupDesc)))
 			continue;
 
-		std::string groupName = groupDesc.Name ? groupDesc.Name : "";
+		bool isNamedGroup = groupDesc.Name && groupDesc.Name[0];
 
-		if (!groupName.empty()) {
-			// Named group: UIName/UIDefault come from group annotations
+		if (isNamedGroup) {
 			std::string uiName = GetGroupAnnotation(group, "UIName");
 			if (uiName.empty())
 				continue;
@@ -781,47 +749,28 @@ void Effect::LoadUITechniques()
 			if (!isDefault.empty() && isDefault != "0" && isDefault != "false")
 				defaultIndex = static_cast<uint32_t>(uiTechniques.size());
 
-			uiTechniques.push_back({ groupName, uiName });
+			uiTechniques.push_back({ std::string(groupDesc.Name), uiName });
 		} else {
-			// Null group: standalone techniques, UIName on first technique of each sequence
-			std::string currentBase;
-			int currentIndex = 0;
-
 			for (UINT t = 0; t < groupDesc.Techniques; ++t) {
 				auto technique = group->GetTechniqueByIndex(t);
 				if (!technique || !technique->IsValid())
 					continue;
+
 				D3DX11_TECHNIQUE_DESC techDesc;
 				if (FAILED(technique->GetDesc(&techDesc)))
 					continue;
-
-				std::string techName = techDesc.Name ? techDesc.Name : "";
-				std::string baseName;
-
-				if (!currentBase.empty() && techName == currentBase + std::to_string(currentIndex + 1)) {
-					currentIndex++;
-					continue;
-				}
-				baseName = techName;
-				currentBase = techName;
-				currentIndex = 0;
 
 				std::string uiName = GetTechniqueAnnotation(technique, "UIName");
 				if (uiName.empty())
 					continue;
 
-				for (const auto& existing : uiTechniques)
-					if (existing.techniqueName == baseName)
-						goto next_technique;
+				std::string techName = techDesc.Name ? std::string(techDesc.Name) : "";
 
-				{
-					std::string isDefault = GetTechniqueAnnotation(technique, "UIDefault");
-					if (!isDefault.empty() && isDefault != "0" && isDefault != "false")
-						defaultIndex = static_cast<uint32_t>(uiTechniques.size());
+				std::string isDefault = GetTechniqueAnnotation(technique, "UIDefault");
+				if (!isDefault.empty() && isDefault != "0" && isDefault != "false")
+					defaultIndex = static_cast<uint32_t>(uiTechniques.size());
 
-					uiTechniques.push_back({ baseName, uiName });
-				}
-				next_technique:;
+				uiTechniques.push_back({ techName, uiName });
 			}
 		}
 	}
@@ -887,84 +836,62 @@ void Effect::LoadUIVariables()
 	logger::info("[ENBPP] Loaded {} UI variables for effect '{}'", uiVariables.size(), GetName());
 }
 
+static std::string ReadAnnotationValue(ID3DX11EffectVariable* annotation)
+{
+	if (!annotation || !annotation->IsValid())
+		return "";
+
+	auto stringVar = annotation->AsString();
+	if (stringVar && stringVar->IsValid()) {
+		LPCSTR value = nullptr;
+		if (SUCCEEDED(stringVar->GetString(&value)) && value)
+			return std::string(value);
+	}
+
+	auto scalarVar = annotation->AsScalar();
+	if (scalarVar && scalarVar->IsValid()) {
+		auto annType = annotation->GetType();
+		D3DX11_EFFECT_TYPE_DESC typeDesc;
+		if (annType && SUCCEEDED(annType->GetDesc(&typeDesc))) {
+			switch (typeDesc.Type) {
+			case D3D_SVT_INT: { int v; if (SUCCEEDED(scalarVar->GetInt(&v))) return std::to_string(v); break; }
+			case D3D_SVT_FLOAT: { float v; if (SUCCEEDED(scalarVar->GetFloat(&v))) return std::to_string(v); break; }
+			case D3D_SVT_BOOL: { bool v; if (SUCCEEDED(scalarVar->GetBool(&v))) return std::to_string(v ? 1 : 0); break; }
+			default: break;
+			}
+		}
+		int intValue;
+		if (SUCCEEDED(scalarVar->GetInt(&intValue)))
+			return std::to_string(intValue);
+	}
+	return "";
+}
+
 std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName)
 {
 	if (!variable)
 		return "";
 
-	D3DX11_EFFECT_VARIABLE_DESC varDesc;
-	if (FAILED(variable->GetDesc(&varDesc)))
-		return "";
-
 	auto annotation = variable->GetAnnotationByName(annotationName.c_str());
-	auto readAnnotationValue = [](ID3DX11EffectVariable* ann) -> std::string {
-		auto stringVar = ann->AsString();
-		if (stringVar && stringVar->IsValid()) {
-			LPCSTR value = nullptr;
-			if (SUCCEEDED(stringVar->GetString(&value)) && value)
-				return std::string(value);
-		}
-
-		auto scalarVar = ann->AsScalar();
-		if (scalarVar && scalarVar->IsValid()) {
-			auto annType = ann->GetType();
-			D3DX11_EFFECT_TYPE_DESC annTypeDesc;
-			if (annType && SUCCEEDED(annType->GetDesc(&annTypeDesc))) {
-				switch (annTypeDesc.Type) {
-				case D3D_SVT_INT: {
-					int intValue;
-					if (SUCCEEDED(scalarVar->GetInt(&intValue)))
-						return std::to_string(intValue);
-					break;
-				}
-				case D3D_SVT_FLOAT: {
-					float floatValue;
-					if (SUCCEEDED(scalarVar->GetFloat(&floatValue)))
-						return std::to_string(floatValue);
-					break;
-				}
-				case D3D_SVT_BOOL: {
-					bool boolValue;
-					if (SUCCEEDED(scalarVar->GetBool(&boolValue)))
-						return std::to_string(boolValue ? 1 : 0);
-					break;
-				}
-				default:
-					break;
-				}
-			}
-			int intValue;
-			if (SUCCEEDED(scalarVar->GetInt(&intValue)))
-				return std::to_string(intValue);
-			float floatValue;
-			if (SUCCEEDED(scalarVar->GetFloat(&floatValue)))
-				return std::to_string(floatValue);
-		}
-		return "";
-	};
-
 	if (annotation && annotation->IsValid()) {
-		std::string result = readAnnotationValue(annotation);
+		auto result = ReadAnnotationValue(annotation);
 		if (!result.empty())
 			return result;
 	}
 
+	D3DX11_EFFECT_VARIABLE_DESC varDesc;
+	if (FAILED(variable->GetDesc(&varDesc)))
+		return "";
 	for (UINT i = 0; i < varDesc.Annotations; ++i) {
 		auto ann = variable->GetAnnotationByIndex(i);
 		if (!ann || !ann->IsValid())
 			continue;
-
-		D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
-		if (FAILED(ann->GetDesc(&annotationDesc)))
+		D3DX11_EFFECT_VARIABLE_DESC annDesc;
+		if (FAILED(ann->GetDesc(&annDesc)))
 			continue;
-
-		if (_stricmp(annotationDesc.Name, annotationName.c_str()) == 0) {
-			std::string result = readAnnotationValue(ann);
-			if (!result.empty())
-				return result;
-		}
+		if (_stricmp(annDesc.Name, annotationName.c_str()) == 0)
+			return ReadAnnotationValue(ann);
 	}
-
 	return "";
 }
 
@@ -972,66 +899,16 @@ std::string Effect::GetTechniqueAnnotation(ID3DX11EffectTechnique* technique, co
 {
 	if (!technique)
 		return "";
-
-	D3DX11_TECHNIQUE_DESC techDesc;
-	if (FAILED(technique->GetDesc(&techDesc)))
-		return "";
-
-	for (UINT i = 0; i < techDesc.Annotations; ++i) {
-		auto annotation = technique->GetAnnotationByIndex(i);
-		if (!annotation || !annotation->IsValid())
-			continue;
-
-		D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
-		if (FAILED(annotation->GetDesc(&annotationDesc)))
-			continue;
-
-		if (annotationDesc.Name == annotationName) {
-			auto stringVar = annotation->AsString();
-			if (stringVar && stringVar->IsValid()) {
-				LPCSTR value = nullptr;
-				if (SUCCEEDED(stringVar->GetString(&value)) && value)
-					return std::string(value);
-			}
-		}
-	}
-	return "";
+	auto annotation = technique->GetAnnotationByName(annotationName.c_str());
+	return ReadAnnotationValue(annotation);
 }
 
 std::string Effect::GetGroupAnnotation(ID3DX11EffectGroup* group, const std::string& annotationName)
 {
 	if (!group)
 		return "";
-
-	D3DX11_GROUP_DESC groupDesc;
-	if (FAILED(group->GetDesc(&groupDesc)))
-		return "";
-
-	for (UINT i = 0; i < groupDesc.Annotations; ++i) {
-		auto annotation = group->GetAnnotationByIndex(i);
-		if (!annotation || !annotation->IsValid())
-			continue;
-
-		D3DX11_EFFECT_VARIABLE_DESC annotationDesc;
-		if (FAILED(annotation->GetDesc(&annotationDesc)))
-			continue;
-
-		if (annotationDesc.Name == annotationName) {
-			auto stringVar = annotation->AsString();
-			if (stringVar && stringVar->IsValid()) {
-				LPCSTR value = nullptr;
-				if (SUCCEEDED(stringVar->GetString(&value)) && value)
-					return std::string(value);
-			}
-			auto scalarVar = annotation->AsScalar();
-			if (scalarVar && scalarVar->IsValid()) {
-				int intValue;
-				if (SUCCEEDED(scalarVar->GetInt(&intValue)))
-					return std::to_string(intValue);
-			}
-		}
-	}
-	return "";
+	auto annotation = group->GetAnnotationByName(annotationName.c_str());
+	return ReadAnnotationValue(annotation);
 }
 
 std::string Effect::GetVariableIniKey(const UIVariable& uiVar)

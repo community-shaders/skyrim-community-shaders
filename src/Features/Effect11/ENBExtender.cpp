@@ -317,7 +317,7 @@ namespace ENBExtender
 		content = std::move(result);
 	}
 
-	// ParseSourceGroupScopes
+	// Source-based group scoping (compiled effect reorders variable types, so source text is the ground truth for declaration order)
 
 	static bool IsHLSLType(const std::string& s)
 	{
@@ -1159,7 +1159,6 @@ namespace ENBExtender
 		if (FAILED(fx->GetDesc(&effectDesc)))
 			return;
 
-		// Try named groups first (fxgroup annotations), fall back to first technique
 		std::function<std::string(const char*)> get;
 
 		for (UINT g = 0; g < effectDesc.Groups; ++g) {
@@ -1167,20 +1166,22 @@ namespace ENBExtender
 			if (!group || !group->IsValid())
 				continue;
 			D3DX11_GROUP_DESC groupDesc;
-			if (FAILED(group->GetDesc(&groupDesc)) || !groupDesc.Name)
+			if (FAILED(group->GetDesc(&groupDesc)))
 				continue;
-			get = [group](const char* name) { return Effect::GetGroupAnnotation(group, name); };
-			break;
+
+			if (groupDesc.Name && groupDesc.Name[0]) {
+				get = [group](const char* name) { return Effect::GetGroupAnnotation(group, name); };
+			} else if (groupDesc.Techniques > 0) {
+				auto* tech = group->GetTechniqueByIndex(0);
+				if (tech && tech->IsValid())
+					get = [tech](const char* name) { return Effect::GetTechniqueAnnotation(tech, name); };
+			}
+			if (get)
+				break;
 		}
 
-		if (!get) {
-			if (effectDesc.Techniques == 0)
-				return;
-			auto* tech = fx->GetTechniqueByIndex(0);
-			if (!tech || !tech->IsValid())
-				return;
-			get = [tech](const char* name) { return Effect::GetTechniqueAnnotation(tech, name); };
-		}
+		if (!get)
+			return;
 
 		auto str = [&](const char* name, std::string& out) { auto s = get(name); if (!s.empty()) out = s; };
 		auto flag = [&](const char* name, bool& out) { auto s = get(name); if (!s.empty()) out = IsTruthy(s); };
