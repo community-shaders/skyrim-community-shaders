@@ -20,13 +20,10 @@ struct DisplacementParams
 namespace ExtendedMaterials
 {
 	static const float ShadowIntensity = 2.0;
+	static const float ParallaxCheapDistance = 512.0;
 	static const float ParallaxNearShadowQuality = 1.0;
-	static const float TerrainParallaxShadowMaxMipLevel = 8.0;
-
-	static const uint ParallaxRayStepsScale = 32;
-	static const uint ParallaxRayStepsMin = 16;
-	static const uint ParallaxRayStepsMax = 96;
-	static const uint ParallaxSecantIterations = 8;
+	static const float ParallaxFarShadowQuality = 0.5;
+	static const float TerrainParallaxShadowMaxMipLevel = 1.0;
 
 	inline uint ParallaxShadowTapCount(float quality)
 	{
@@ -55,7 +52,7 @@ namespace ExtendedMaterials
 		return float4(AdjustDisplacementNormalized(displacement.x, params), AdjustDisplacementNormalized(displacement.y, params), AdjustDisplacementNormalized(displacement.z, params), AdjustDisplacementNormalized(displacement.w, params));
 	}
 
-	float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
+	float GetMipLevel(float2 coords, Texture2D<float4> tex)
 	{
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
@@ -85,20 +82,18 @@ namespace ExtendedMaterials
 		mipLevel++;
 #endif
 
-		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
-
-		return mipLevel;
+		return floor(mipLevel);
 	}
 
 #if defined(LANDSCAPE)
-	void InitializeTerrainMipLevels(float2 coords, float screenNoise, out float mipLevels[6])
+	void InitializeTerrainMipLevels(float2 coords, out float mipLevels[6])
 	{
-		mipLevels[0] = GetMipLevel(coords, TexColorSampler, screenNoise);
-		mipLevels[1] = GetMipLevel(coords, TexLandColor2Sampler, screenNoise);
-		mipLevels[2] = GetMipLevel(coords, TexLandColor3Sampler, screenNoise);
-		mipLevels[3] = GetMipLevel(coords, TexLandColor4Sampler, screenNoise);
-		mipLevels[4] = GetMipLevel(coords, TexLandColor5Sampler, screenNoise);
-		mipLevels[5] = GetMipLevel(coords, TexLandColor6Sampler, screenNoise);
+		mipLevels[0] = GetMipLevel(coords, TexColorSampler);
+		mipLevels[1] = GetMipLevel(coords, TexLandColor2Sampler);
+		mipLevels[2] = GetMipLevel(coords, TexLandColor3Sampler);
+		mipLevels[3] = GetMipLevel(coords, TexLandColor4Sampler);
+		mipLevels[4] = GetMipLevel(coords, TexLandColor5Sampler);
+		mipLevels[5] = GetMipLevel(coords, TexLandColor6Sampler);
 	}
 
 #	define HEIGHT_POWER 2
@@ -344,7 +339,7 @@ namespace ExtendedMaterials
 #endif
 
 #if defined(LANDSCAPE)
-	float2 GetParallaxCoords(PS_INPUT input, float distance, float2 coords, float mipLevels[6], float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6],
+	float2 GetParallaxCoords(PS_INPUT input, float2 coords, float mipLevels[6], float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6],
 #	if defined(TERRAIN_VARIATION)
 		StochasticOffsets sharedOffset,
 #	endif
@@ -354,7 +349,7 @@ namespace ExtendedMaterials
 #	endif
 		out float weights[6])
 #else
-	float2 GetParallaxCoords(float distance, float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, out float pixelOffset
+	float2 GetParallaxCoords(float2 coords, float mipLevel, float3 viewDir, float3x3 tbn, float noise, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params, out float pixelOffset
 #	if defined(VR_STEREO_OPT)
 		,
 		out bool hasPOM
@@ -391,10 +386,30 @@ namespace ExtendedMaterials
 #endif
 		float minHeight = maxHeight * 0.5;
 
+#if defined(LANDSCAPE)
+#	if defined(TRUE_PBR)
+		if (scale <= 0.001) {
+			weights[0] = input.LandBlendWeights1.x;
+			weights[1] = input.LandBlendWeights1.y;
+			weights[2] = input.LandBlendWeights1.z;
+			weights[3] = input.LandBlendWeights1.w;
+			weights[4] = input.LandBlendWeights2.x;
+			weights[5] = input.LandBlendWeights2.y;
+			pixelOffset = 0.0;
+			return coords;
+		}
+#	endif
+#else
+		if (scale <= 0.001) {
+			pixelOffset = 0.0;
+			return coords;
+		}
+#endif
+
 		{
-			uint numSteps = min(ParallaxRayStepsMax,
-				max(ParallaxRayStepsMin, uint(scale * float(ParallaxRayStepsScale))));
-			numSteps = (numSteps + 2u) & ~3u;
+			const float maxSteps = 4;
+			uint numSteps = max(4, uint(scale * maxSteps));
+			numSteps = (numSteps + 2) & ~3;
 
 			float stepSize = rcp(numSteps);
 
@@ -502,7 +517,7 @@ namespace ExtendedMaterials
 				float hFar = pt2.y;
 				float fFar = hFar - tFar;
 
-				[unroll] for (uint i = 0; i < ParallaxSecantIterations; i++)
+				[unroll] for (uint i = 0; i < 3; i++)
 				{
 					float denominator = fNear - fFar;
 					float r = abs(denominator) > EPSILON_DIVISION ? saturate(fNear / denominator) : 0.5;
@@ -618,12 +633,11 @@ namespace ExtendedMaterials
 
 	inline uint TerrainDirectionalShadowTapCount(float quality)
 	{
+		// Directional terrain shadows are capped to reduce cost.
 		if (quality > 0.7)
-			return 4;
-		if (quality > 0.25)
-			return 3;
-		if (quality > 0.0)
 			return 2;
+		if (quality > 0.0)
+			return 1;
 		return 0;
 	}
 
