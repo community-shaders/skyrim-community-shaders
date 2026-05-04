@@ -1027,13 +1027,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(LANDSCAPE)
 	terrainDirectionalShadowQuality = ExtendedMaterials::ParallaxNearShadowQuality;
 #		endif
-#		if defined(TERRAIN_VARIATION)
-#			define COMPUTE_TERRAIN_SHADOW_BASE(OUT_SH0) ExtendedMaterials::ComputeTerrainParallaxShadowBaseHeight(input, uv, terrainShadowMipLevels, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset, OUT_SH0)
-#			define EVAL_TERRAIN_DIR_SHADOW(BASE_SH0, DIR_TS) ExtendedMaterials::EvaluateTerrainDirectionalParallaxShadowMultiplier(input, uv, terrainShadowMipLevels, DIR_TS, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset, BASE_SH0)
-#		else
-#			define COMPUTE_TERRAIN_SHADOW_BASE(OUT_SH0) ExtendedMaterials::ComputeTerrainParallaxShadowBaseHeight(input, uv, terrainShadowMipLevels, terrainDirectionalShadowQuality, screenNoise, displacementParams, OUT_SH0)
-#			define EVAL_TERRAIN_DIR_SHADOW(BASE_SH0, DIR_TS) ExtendedMaterials::EvaluateTerrainDirectionalParallaxShadowMultiplier(input, uv, terrainShadowMipLevels, DIR_TS, terrainDirectionalShadowQuality, screenNoise, displacementParams, BASE_SH0)
-#		endif
+#		define COMPUTE_TERRAIN_SHADOW_BASE(OUT_SH0) ExtendedMaterials::ComputeTerrainParallaxShadowBaseHeight(input, uv, terrainShadowMipLevels, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset, OUT_SH0)
+#		define EVAL_TERRAIN_DIR_SHADOW(BASE_SH0, DIR_TS) ExtendedMaterials::EvaluateTerrainDirectionalParallaxShadowMultiplier(input, uv, terrainShadowMipLevels, DIR_TS, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset, BASE_SH0)
 #		if defined(LANDSCAPE)
 #			if defined(TRUE_PBR)
 #				define LANDSCAPE_PARALLAX_ENABLED (SharedData::extendedMaterialSettings.EnableParallax)
@@ -1049,6 +1044,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float mipLevels[6];
 #		if defined(EMAT)
 	float terrainShadowMipLevels[6];
+#			if defined(TERRAIN_VARIATION)
+	StochasticOffsets sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
+#			else
+	StochasticOffsets sharedOffset = (StochasticOffsets)0;
+#			endif
 	float cachedDirectionalTerrainParallaxShadow = 1.0;
 	bool hasCachedDirectionalTerrainParallaxShadow = false;
 	bool hasCachedTerrainShadowBaseHeight = false;
@@ -1257,15 +1257,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float4 blendedRMAOS = 0;
 #		endif
 
-	// Terrain Variation data is optional and only exists when plugin shaders are installed.
-#		if defined(TERRAIN_VARIATION)
-	StochasticOffsets sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
-#		endif
-
 #		if defined(EMAT)
 	if (LANDSCAPE_PARALLAX_ENABLED) {
 		ExtendedMaterials::InitializeTerrainMipLevels(uv, mipLevels);
-		[unroll] for (uint terrainMipIndex = 0; terrainMipIndex < 6; terrainMipIndex++)
+		[loop] for (uint terrainMipIndex = 0; terrainMipIndex < 6; terrainMipIndex++)
 		{
 			terrainShadowMipLevels[terrainMipIndex] = min(mipLevels[terrainMipIndex], ExtendedMaterials::TerrainParallaxShadowMaxMipLevel);
 		}
@@ -1287,19 +1282,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float weights[6];
 		// Initialize weights array
 		weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
-#			if defined(TERRAIN_VARIATION)
 		uv = ExtendedMaterials::GetParallaxCoords(input, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, pixelOffset,
 #				if defined(VR_STEREO_OPT) && !defined(SNOW)
 			hasPOM,
 #				endif
 			weights);
-#			else
-		uv = ExtendedMaterials::GetParallaxCoords(input, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset,
-#				if defined(VR_STEREO_OPT) && !defined(SNOW)
-			hasPOM,
-#				endif
-			weights);
-#			endif
 		if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
 			input.LandBlendWeights1.x = weights[0];
 			input.LandBlendWeights1.y = weights[1];
@@ -2259,11 +2246,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 					float terrainHeightScale = ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams);
 					if (terrainHeightScale > 0.01) {
 						float3 lightDirectionTS = normalize(mul(refractedLightDirection, tbn).xyz);
-#					if defined(TERRAIN_VARIATION)
 						parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, terrainShadowMipLevels, lightDirectionTS, sh0, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset);
-#					else
-						parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, terrainShadowMipLevels, lightDirectionTS, sh0, terrainDirectionalShadowQuality, screenNoise, displacementParams);
-#					endif
 					}
 				}
 			}
