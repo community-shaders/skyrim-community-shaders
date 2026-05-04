@@ -440,9 +440,8 @@ namespace ENBExtender
 		auto hiddenStr = get("UIHidden"), visibleStr = get("UIVisible");
 		uiVar.isHidden = IsTruthy(hiddenStr) || (!visibleStr.empty() && !IsTruthy(visibleStr));
 
-		uiVar.isTopLevel = IsTruthy(get("UITopLevel"));
 		CollectGroupMeta(uiVar.group, variable, effect);
-		if (uiVar.isTopLevel)
+		if (IsTruthy(get("UITopLevel")))
 			uiVar.group.clear();
 
 		uiVar.uniqueName = get("UniqueName");
@@ -792,7 +791,7 @@ namespace ENBExtender
 					fileMap[uname] = { effect, i };
 				}
 
-				GroupNode* node = (!var.isTopLevel && !var.group.empty()) ? TraverseGroupPath(root, var.group, meta) : &root;
+				GroupNode* node = !var.group.empty() ? TraverseGroupPath(root, var.group, meta) : &root;
 
 				if (var.isSeparator) {
 					if (seenSepOrders[node].insert(var.sourceOrder).second)

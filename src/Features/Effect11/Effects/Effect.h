@@ -97,7 +97,6 @@ public:
 			bool boolValue;
 		};
 
-		// Color value storage
 		float vectorValue[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 		// UI properties
@@ -111,7 +110,6 @@ public:
 		bool isLabel = false;
 		bool isReadOnly = false;
 		bool isDefine = false;
-		bool isTopLevel = false;
 		bool isHidden = false;
 		std::string uniqueName;
 		std::string uiBinding;
