@@ -716,6 +716,15 @@ void Raytracing::CompileShaders()
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\GICompositeCS.hlsl", {}, "cs_5_0")); rawPtr)
 		giCompositeCS.attach(rawPtr);
+
+	// Depth/MV Copy
+	{
+		if (auto rawPtr = reinterpret_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CopyDepthMotionVector.hlsl", {}, "vs_5_0", "MainVS")); rawPtr)
+			copyDMVVS.attach(rawPtr);
+
+		if (auto rawPtr = reinterpret_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CopyDepthMotionVector.hlsl", {}, "ps_5_0", "MainPS")); rawPtr)
+			copyDMVPS.attach(rawPtr);
+	}
 }
 
 void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue)
@@ -846,6 +855,15 @@ void Raytracing::SetupResources()
 			.MaxLOD = D3D11_FLOAT32_MAX
 		};
 		DX::ThrowIfFailed(d3d11Device->CreateSamplerState(&samplerDesc, samplerState.put()));
+	}
+
+	{
+		D3D11_DEPTH_STENCIL_DESC dsDesc = {};
+		dsDesc.DepthEnable = TRUE;
+		dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+		dsDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
+
+		d3d11Device->CreateDepthStencilState(&dsDesc, depthStencilState.put());	
 	}
 
 	// Sky Hemisphere
@@ -1060,7 +1078,9 @@ void Raytracing::DeferredPasses()
 
 	auto renderer = globals::game::renderer;
 
-	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto renderTargets = renderer->GetRuntimeData().renderTargets;
+
+	auto& main = renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	if (mode == CreationEngineRaytracing::Mode::GlobalIllumination) {
 		// Add GI result to kMain
@@ -1104,7 +1124,36 @@ void Raytracing::DeferredPasses()
 		// Clear Specular RT
 		{
 			float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-			context->ClearRenderTargetView(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
+			context->ClearRenderTargetView(renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
+		}
+
+		// Copy Depth and Motion Vectors if culling is enabled
+		if (settings.CreationEngineRaytracingSettings.ExperimentalSettings.PathTracingCull) {
+			context->OMSetRenderTargets(1, 
+				&renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].RTV, 
+				renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].views[0]
+			);
+
+			context->OMSetDepthStencilState(depthStencilState.get(), 0);
+
+			D3D11_VIEWPORT vp = {};
+			vp.Width = screenSize.x;
+			vp.Height = screenSize.y;
+			vp.MinDepth = 0.0f;
+			vp.MaxDepth = 1.0f;
+
+			context->RSSetViewports(1, &vp);
+
+			context->IASetInputLayout(nullptr);
+			context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+			context->VSSetShader(copyDMVVS.get(), nullptr, 0);
+			context->PSSetShader(copyDMVPS.get(), nullptr, 0);
+
+			context->PSSetShaderResources(0, 1, &ptDepthTexture->srv);
+			context->PSSetShaderResources(1, 1, &ptMotionVectorsTexture->srv);
+
+			context->Draw(3, 0);
 		}
 	}
 
