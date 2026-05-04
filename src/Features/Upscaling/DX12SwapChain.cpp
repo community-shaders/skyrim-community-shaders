@@ -194,7 +194,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused(), isHDR);
+	globals::features::upscaling.fidelityFX.Present(upscaling.ShouldUseFrameGeneration(), isHDR);
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 

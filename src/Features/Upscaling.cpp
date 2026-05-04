@@ -23,6 +23,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
+	frameGenerationAllowInMenus,
 	streamlineLogLevel,
 	sharpnessFSR,
 	sharpnessDLSS,
@@ -327,6 +328,12 @@ void Upscaling::DrawSettings()
 
 			ImGui::TextWrapped("Allows frame generation to function on low refresh rate monitors. Detected: %.2f Hz", refreshRate);
 			ImGui::SliderInt("Force Enable Frame Generation", (int*)&settings.frameGenerationForceEnable, 0, 1, std::format("{}", toggleModes[settings.frameGenerationForceEnable]).c_str());
+
+			ImGui::Checkbox("Frame Generation in Menus", &settings.frameGenerationAllowInMenus);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::TextUnformatted("Keeps frame generation active while game menus are open.");
+				ImGui::TextUnformatted("May feel smoother, but can increase menu input latency.");
+			}
 
 			ImGui::TreePop();
 		}
@@ -1520,7 +1527,7 @@ void Upscaling::FrameLimiter()
 		if (settings.frameLimitMode) {
 			// Fall back to the original timing method
 			// Use integer arithmetic for more precise timing
-			int64_t targetFrameTimeNS = int64_t(1000000000.0 / (refreshRate * (settings.frameGenerationMode && !globals::game::ui->GameIsPaused() ? 0.5 : 1.0)));
+			int64_t targetFrameTimeNS = int64_t(1000000000.0 / (refreshRate * (ShouldUseFrameGeneration() ? 0.5 : 1.0)));
 			int64_t targetFrameTicks = (targetFrameTimeNS * qpf.QuadPart) / 1000000000LL;
 
 			static LARGE_INTEGER lastFrame = {};
@@ -1603,6 +1610,12 @@ bool Upscaling::IsFrameGenerationDx12PathActive() const
 bool Upscaling::IsFrameGenerationActive() const
 {
 	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && fidelityFX.isFrameGenActive;
+}
+
+bool Upscaling::ShouldUseFrameGeneration() const
+{
+	auto* ui = globals::game::ui;
+	return settings.frameGenerationMode && (settings.frameGenerationAllowInMenus || !ui || !ui->GameIsPaused());
 }
 
 bool Upscaling::IsUpscalingActive() const
