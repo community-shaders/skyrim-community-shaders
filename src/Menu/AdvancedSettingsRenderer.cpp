@@ -13,13 +13,11 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
 #include "Util.h"
 #include "Utils/Format.h"
 #include "Utils/UI.h"
 
 void AdvancedSettingsRenderer::RenderAdvancedSettings(
-	const std::function<void()>& drawTruePBRSettings,
 	const std::function<void()>& drawDisableAtBootSettings)
 {
 	// Use TabBar system - tabs sorted alphabetically
@@ -51,14 +49,6 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 			ImGui::EndTabItem();
 		}
 
-		// PBR Settings Tab
-		if (MenuFonts::BeginTabItemWithFont("PBR Settings", Menu::FontRole::Subheading)) {
-			if (ImGui::BeginChild("##PBRSettingsContent", ImVec2(0, 0), false)) {
-				RenderPBRSection(drawTruePBRSettings);
-			}
-			ImGui::EndChild();
-			ImGui::EndTabItem();
-		}
 		// Shader Debug Tab
 		if (MenuFonts::BeginTabItemWithFont("Shader Debug", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##ShaderDebugContent", ImVec2(0, 0), false)) {
@@ -512,11 +502,6 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		filterText[sizeof(filterText) - 1] = '\0';
 		searchColumn = filterState.searchColumn;
 	}
-}
-
-void AdvancedSettingsRenderer::RenderPBRSection(const std::function<void()>& drawTruePBRSettings)
-{
-	drawTruePBRSettings();
 }
 
 void AdvancedSettingsRenderer::RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings)
