@@ -12,8 +12,8 @@ public:
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_VARIATION"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override
 	{
-		return (shaderType == RE::BSShader::Type::Lighting);
 		return loaded && shaderType == RE::BSShader::Type::Lighting;
+	}
 	}
 	virtual bool RefineShaderDefineForDescriptor(RE::BSShader::Type shaderType, uint32_t descriptor) override;
 	virtual bool IsCore() const override { return false; };
