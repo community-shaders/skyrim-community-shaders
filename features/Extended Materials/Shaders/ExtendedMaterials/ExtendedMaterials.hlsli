@@ -38,10 +38,10 @@ struct DisplacementParams
 namespace ExtendedMaterials
 {
 	static const float ShadowIntensity = 2.0;
-	static const float ParallaxCheapDistance = 512.0;
+	static const float ParallaxCheapDistance = 1024.0;
 	static const float ParallaxNearShadowQuality = 1.0;
-	static const float ParallaxFarShadowQuality = 0.5;
-	static const float TerrainParallaxShadowMaxMipLevel = 1.0;
+	static const float ParallaxFarShadowQuality = 0.76;
+	static const float TerrainParallaxShadowMaxMipLevel = 0.5;
 
 	inline uint ParallaxShadowTapCount(float quality)
 	{

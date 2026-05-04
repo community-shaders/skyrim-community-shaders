@@ -72,7 +72,7 @@
 #endif
 
 		{
-			const float maxSteps = 4;
+			const float maxSteps = 8;
 			uint numSteps = max(4, uint(scale * maxSteps));
 			numSteps = (numSteps + 2) & ~3;
 
@@ -158,7 +158,7 @@
 				float hFar = pt2.y;
 				float fFar = hFar - tFar;
 
-				[loop] for (uint i = 0; i < 3; i++)
+				[loop] for (uint i = 0; i < 5; i++)
 				{
 					float denominator = fNear - fFar;
 					float r = abs(denominator) > EPSILON_DIVISION ? saturate(fNear / denominator) : 0.5;
