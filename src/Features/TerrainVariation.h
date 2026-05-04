@@ -13,7 +13,9 @@ public:
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override
 	{
 		return (shaderType == RE::BSShader::Type::Lighting);
+		return loaded && shaderType == RE::BSShader::Type::Lighting;
 	}
+	virtual bool RefineShaderDefineForDescriptor(RE::BSShader::Type shaderType, uint32_t descriptor) override;
 	virtual bool IsCore() const override { return false; };
 	virtual bool SupportsVR() override { return true; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }

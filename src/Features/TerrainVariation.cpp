@@ -3,6 +3,7 @@
 #include "../Globals.h"
 #include "../State.h"
 #include "../Util.h"
+#include "ShaderCache.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainVariation::Settings,
@@ -55,6 +56,22 @@ void TerrainVariation::PostPostLoad()
 {
 	logger::info("TerrainVariation: Feature initialized");
 	UpdateShaderSettings();
+}
+
+bool TerrainVariation::RefineShaderDefineForDescriptor(RE::BSShader::Type shaderType, uint32_t descriptor)
+{
+	if (shaderType != RE::BSShader::Type::Lighting) {
+		return true;
+	}
+	const auto technique = static_cast<SIE::ShaderCache::LightingShaderTechniques>(0x3F & (descriptor >> 24));
+	switch (technique) {
+	case SIE::ShaderCache::LightingShaderTechniques::MTLand:
+	case SIE::ShaderCache::LightingShaderTechniques::MTLandLODBlend:
+	case SIE::ShaderCache::LightingShaderTechniques::LODLand:
+		return true;
+	default:
+		return false;
+	}
 }
 
 void TerrainVariation::LoadSettings(json& o_json)

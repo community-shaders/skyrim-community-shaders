@@ -46,6 +46,13 @@ protected:
 
 public:
 	virtual bool HasShaderDefine(RE::BSShader::Type) { return false; }
+
+	/**
+	 * Optional refinement for shader permutation defines by BSShader descriptor.
+	 * Used when building macro lists (e.g. Lighting). If true (along with loaded &&
+	 * HasShaderDefine(shaderType)), this feature's shader define is appended for this permutation.
+	 */
+	virtual bool RefineShaderDefineForDescriptor(RE::BSShader::Type /*shaderType*/, uint32_t /*descriptor*/) { return true; }
 	/**
 	 * Whether the feature supports VR.
 	 *
