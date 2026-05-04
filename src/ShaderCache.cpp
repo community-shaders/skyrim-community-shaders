@@ -1457,7 +1457,7 @@ namespace SIE
 			if (globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed)) {
 				flags |= D3DCOMPILE_AVOID_FLOW_CONTROL;
 			}
-			if (cache.IsDiskCache()) {
+			if (useDiskCache) {
 				flags |= D3DCOMPILE_SKIP_VALIDATION;
 			}
 
