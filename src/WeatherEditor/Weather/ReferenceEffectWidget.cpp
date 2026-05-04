@@ -16,6 +16,7 @@ namespace
 
 void ReferenceEffectWidget::DrawWidget()
 {
+	WeatherUtils::SetCurrentWidget(this);
 	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##ReferenceEffectSearch", true, true);
 		DrawSearchDropdown();

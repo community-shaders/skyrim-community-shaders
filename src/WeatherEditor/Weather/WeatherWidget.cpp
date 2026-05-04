@@ -21,8 +21,10 @@ namespace
 	namespace WeatherTab
 	{
 		constexpr const char* kBasic = "Basic";
-		constexpr const char* kFog = "Fog";
 		constexpr const char* kDalc = "Lighting (DALC)";
+		constexpr const char* kAtmosphere = "Atmosphere Colors";
+		constexpr const char* kClouds = "Clouds";
+		constexpr const char* kFog = "Fog";
 		constexpr const char* kRecords = "Records";
 	}
 
@@ -169,15 +171,15 @@ void WeatherWidget::DrawWidget()
 
 	// Tab bar for organizing settings
 	if (ImGui::BeginTabBar("WeatherSettingsTabs", ImGuiTabBarFlags_None)) {
-		const ImGuiTabItemFlags basicFlags = GetTabFlagsForOverride("Basic");
-		const ImGuiTabItemFlags dalcFlags = GetTabFlagsForOverride("Lighting (DALC)");
-		const ImGuiTabItemFlags atmosphereFlags = GetTabFlagsForOverride("Atmosphere Colors");
-		const ImGuiTabItemFlags cloudsFlags = GetTabFlagsForOverride("Clouds");
-		const ImGuiTabItemFlags fogFlags = GetTabFlagsForOverride("Fog");
+		const ImGuiTabItemFlags basicFlags = GetTabFlagsForOverride(WeatherTab::kBasic);
+		const ImGuiTabItemFlags dalcFlags = GetTabFlagsForOverride(WeatherTab::kDalc);
+		const ImGuiTabItemFlags atmosphereFlags = GetTabFlagsForOverride(WeatherTab::kAtmosphere);
+		const ImGuiTabItemFlags cloudsFlags = GetTabFlagsForOverride(WeatherTab::kClouds);
+		const ImGuiTabItemFlags fogFlags = GetTabFlagsForOverride(WeatherTab::kFog);
 		const ImGuiTabItemFlags featuresFlags = GetTabFlagsForOverride("Features");
-		const ImGuiTabItemFlags recordsFlags = GetTabFlagsForOverride("Records");
+		const ImGuiTabItemFlags recordsFlags = GetTabFlagsForOverride(WeatherTab::kRecords);
 
-		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
+		if (ImGui::BeginTabItem(WeatherTab::kBasic, nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
 			DrawProperties("Sun", { { "Sun Damage", UINT8_SLIDER } });
 			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", UINT8_SLIDER }, { "Wind Direction Range", UINT8_SLIDER } });
@@ -189,28 +191,28 @@ void WeatherWidget::DrawWidget()
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
-		if (ImGui::BeginTabItem("Lighting (DALC)", nullptr, dalcFlags)) {
+		if (ImGui::BeginTabItem(WeatherTab::kDalc, nullptr, dalcFlags)) {
 			BeginScrollableContent("##DALCScroll");
 			DrawDALCSettings();
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem("Atmosphere Colors", nullptr, atmosphereFlags)) {
+		if (ImGui::BeginTabItem(WeatherTab::kAtmosphere, nullptr, atmosphereFlags)) {
 			BeginScrollableContent("##AtmosphereScroll");
 			DrawWeatherColorSettings();
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem("Clouds", nullptr, cloudsFlags)) {
+		if (ImGui::BeginTabItem(WeatherTab::kClouds, nullptr, cloudsFlags)) {
 			BeginScrollableContent("##CloudsScroll");
 			DrawCloudSettings();
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem("Fog", nullptr, fogFlags)) {
+		if (ImGui::BeginTabItem(WeatherTab::kFog, nullptr, fogFlags)) {
 			BeginScrollableContent("##FogScroll");
 			DrawFogSettings();
 			EndScrollableContent();
@@ -224,7 +226,7 @@ void WeatherWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem("Records", nullptr, recordsFlags)) {
+		if (ImGui::BeginTabItem(WeatherTab::kRecords, nullptr, recordsFlags)) {
 			BeginScrollableContent("##RecordsScroll");
 			ImGui::Spacing();
 			ImGui::TextWrapped("Form record references used by this weather.");
@@ -2051,12 +2053,12 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 
 	for (int i = 0; i < ColorTypes::kTotal; i++) {
 		std::string colorType = ColorTypeLabel(i);
-		results.push_back({ colorType, "Atmosphere Colors", colorType });
+		results.push_back({ colorType, WeatherTab::kAtmosphere, colorType });
 	}
 
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layerId = std::format("Cloud Layer {}", i);
-		results.push_back({ layerId, "Clouds", layerId });
+		results.push_back({ layerId, WeatherTab::kClouds, layerId });
 	}
 
 	// Records tab: one entry per time-of-day slot for each form-picker section
