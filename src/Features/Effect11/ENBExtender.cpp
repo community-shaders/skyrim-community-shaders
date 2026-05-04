@@ -902,7 +902,7 @@ namespace ENBExtender
 		return ptr;
 	}
 
-	using MergedGroupMeta = std::unordered_map<std::string, Effect::GroupMeta>;
+	using GroupMetaMap = std::unordered_map<std::string, Effect::GroupMeta>;
 
 	static GroupNode* TraverseGroupPath(GroupNode& root, const std::string& groupPath)
 	{
@@ -918,7 +918,7 @@ namespace ENBExtender
 		return node;
 	}
 
-	static void BuildMergedTree(std::span<Effect*> effects, GroupNode& root, MergedGroupMeta& meta,
+	static void BuildUITree(std::span<Effect*> effects, GroupNode& root, GroupMetaMap& meta,
 		std::unordered_map<std::string, VarRef>& uniqueNameMap, FileUniqueNameMap& fileUniqueNameMap)
 	{
 		std::unordered_map<GroupNode*, std::unordered_set<std::string>> seenDisplayNames;
@@ -969,10 +969,10 @@ namespace ENBExtender
 		}
 	}
 
-	static void PropagateGroupOrdering(GroupNode& node, MergedGroupMeta& meta)
+	static void InheritChildOrdering(GroupNode& node, GroupMetaMap& meta)
 	{
 		for (auto& child : node.children) {
-			PropagateGroupOrdering(*child, meta);
+			InheritChildOrdering(*child, meta);
 			auto it = meta.find(child->fullPath);
 			if (it != meta.end() && !it->second.hasOrdering && !child->children.empty()) {
 				int maxChildOrder = 0;
@@ -989,7 +989,7 @@ namespace ENBExtender
 		}
 	}
 
-	static void SortMergedTree(GroupNode& node, const MergedGroupMeta& meta)
+	static void ApplyUIOrdering(GroupNode& node, const GroupMetaMap& meta)
 	{
 		std::stable_sort(node.vars.begin(), node.vars.end(), [](const VarRef& a, const VarRef& b) {
 			auto& va = a.effect->uiVariables[a.index];
@@ -1005,7 +1005,7 @@ namespace ENBExtender
 			return oA > oB;
 		});
 		for (auto& child : node.children)
-			SortMergedTree(*child, meta);
+			ApplyUIOrdering(*child, meta);
 	}
 
 	// UI rendering
@@ -1031,7 +1031,7 @@ namespace ENBExtender
 		std::unordered_map<std::string, VarRef>& uniqueNameMap;
 		FileUniqueNameMap& fileUniqueNameMap;
 		std::unordered_set<Effect*>& changedEffects;
-		MergedGroupMeta& meta;
+		GroupMetaMap& meta;
 		bool performanceMode = false;
 		int tableCounter = 0;
 
@@ -1246,8 +1246,8 @@ namespace ENBExtender
 		FileUniqueNameMap fileUniqueNameMap;
 
 		GroupNode root;
-		MergedGroupMeta meta;
-		BuildMergedTree(effects, root, meta, uniqueNameMap, fileUniqueNameMap);
+		GroupMetaMap meta;
+		BuildUITree(effects, root, meta, uniqueNameMap, fileUniqueNameMap);
 
 		std::vector<std::pair<Effect*, std::string>> techDropdowns;
 		for (auto* effect : effects) {
@@ -1266,8 +1266,8 @@ namespace ENBExtender
 			}
 		}
 
-		PropagateGroupOrdering(root, meta);
-		SortMergedTree(root, meta);
+		InheritChildOrdering(root, meta);
+		ApplyUIOrdering(root, meta);
 
 		std::unordered_set<Effect*> changedEffects;
 		RenderContext ctx{ uniqueNameMap, fileUniqueNameMap, changedEffects, meta,

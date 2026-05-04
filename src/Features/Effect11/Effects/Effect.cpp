@@ -443,8 +443,10 @@ bool Effect::LoadFXFile()
 		auto pp = preprocess(source, include);
 		if (pp.empty())
 			return false;
-		preprocessedSource = pp;
-		ENBExtender::ParseSourceGroupScopes(pp, *this);
+		if (isKIEFX)
+			preprocessedSource = pp;
+		else
+			ENBExtender::ParseSourceGroupScopes(pp, *this);
 		StripLineDirectives(pp);
 		ENBExtender::ConvertFxGroups(pp);
 		return compile(pp, nullptr);
@@ -496,10 +498,8 @@ bool Effect::LoadFXFile()
 	LoadTechniques();
 	LoadUITechniques();
 
-	if (!isKIEFX) {
+	if (!isKIEFX)
 		LoadUIVariables();
-		preprocessedSource.clear();
-	}
 
 	logger::info("[ENBPP] Successfully loaded FX file: {}", filePathStr);
 	return true;
