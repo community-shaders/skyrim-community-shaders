@@ -131,7 +131,7 @@ void PrecipitationWidget::DrawWidget()
 						lastCheckedBuffer = std::string(buf);
 						lastCheckedExists = WeatherUtils::TexturePath::ExistsOnDisk(buf);
 					}
-					if (inputChanged && lastCheckedExists) {
+					if (inputChanged && WeatherUtils::TexturePath::HasDdsExtension(buf) && lastCheckedExists) {
 						settings.particleTexture = lastCheckedBuffer;
 						changed = true;
 					}

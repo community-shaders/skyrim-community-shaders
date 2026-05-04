@@ -8,6 +8,7 @@
 
 #include <initializer_list>
 #include <type_traits>
+#include <vector>
 
 namespace WidgetUI
 {
@@ -245,6 +246,8 @@ public:
 			draw(settingId.c_str());
 	}
 
+	bool ShouldOpenSearchSection() const { return searchBuffer[0] != '\0' || navigatedFromSearch; }
+
 	// True if the given id matches the currently highlighted setting within the
 	// animated highlight window.
 	bool IsHighlighted(const std::string& settingId) const;
@@ -294,6 +297,8 @@ protected:
 
 	// Cached dropdown position from DrawWidgetHeader so DrawSearchDropdown() can anchor below the search bar.
 	ImVec2 searchDropdownAnchor{ 0.0f, 0.0f };
+	ImVec2 searchInputMin{ 0.0f, 0.0f };
+	ImVec2 searchInputMax{ 0.0f, 0.0f };
 
 	// Whether the search result dropdown is currently visible.
 	bool dropdownVisible = false;
@@ -305,16 +310,14 @@ protected:
 	std::string highlightedDisplaySetting;
 	float highlightStartTime = 0.0f;
 	bool scrollToHighlighted = false;
+	bool navigatedFromSearch = false;
 
 	// Cache the last query searchResults was built for, so per-frame work is skipped
 	// while the buffer is unchanged.
 	std::string searchResultsForQuery;
-	// True when the search input owned focus this frame; used to suppress the
-	// dropdown's click-outside dismissal while the user interacts with the input.
-	bool searchInputActive = false;
-
 	bool m_pendingFocus = false;
 
+	void ClearSearchState(bool clearBuffer);
 	void NavigateToSearchResult(const SearchResult& result);
 };
 

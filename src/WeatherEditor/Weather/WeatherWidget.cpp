@@ -63,7 +63,7 @@ namespace
 		constexpr const char* kImageSpace = "ImageSpace";
 		constexpr const char* kVolumetricLighting = "Volumetric Lighting";
 		constexpr const char* kPrecipitation = "Precipitation";
-		constexpr const char* kReferenceEffect = "Reference Effect";
+		constexpr const char* kVisualEffect = "Visual Effect";
 		constexpr int kImageSpaceIdOffset = 0;
 		constexpr int kVolumetricLightingIdOffset = 100;
 	}
@@ -292,7 +292,7 @@ void WeatherWidget::DrawWidget()
 			auto drawTimeRecordSection = [&](const char* sectionLabel, int idOffset, const char* inheritPrefix, auto& recordRefs, auto& parentRefs, auto& widgets, const char* pickerId, const char* openTooltip) {
 				if (!anyTimeRecordMatches(sectionLabel))
 					return;
-				if (searchBuffer[0] != '\0')
+				if (ShouldOpenSearchSection())
 					ImGui::SetNextItemOpen(true, ImGuiCond_Always);
 				if (!ImGui::CollapsingHeader(sectionLabel, ImGuiTreeNodeFlags_DefaultOpen))
 					return;
@@ -323,7 +323,7 @@ void WeatherWidget::DrawWidget()
 			auto drawSingleRecordSection = [&](const char* sectionLabel, const char* recordId, const char* inheritKey, const char* valueLabel, const char* pickerId, auto& recordRef, auto& parentRef, auto& widgets, const char* buttonId, const char* openTooltip) {
 				if (!MatchesSearch(recordId))
 					return;
-				if (searchBuffer[0] != '\0')
+				if (ShouldOpenSearchSection())
 					ImGui::SetNextItemOpen(true, ImGuiCond_Always);
 				if (!ImGui::CollapsingHeader(sectionLabel, ImGuiTreeNodeFlags_DefaultOpen))
 					return;
@@ -349,7 +349,7 @@ void WeatherWidget::DrawWidget()
 			drawTimeRecordSection(WeatherRecord::kImageSpace, WeatherRecord::kImageSpaceIdOffset, WeatherRecord::kImageSpace, settings.imageSpaceRefs, parentImageSpaceRefs, editorWindow->imageSpaceWidgets, "##ImageSpace", "Open this ImageSpace for editing");
 			drawTimeRecordSection(WeatherRecord::kVolumetricLighting, WeatherRecord::kVolumetricLightingIdOffset, "VolumetricLighting", settings.volumetricLightingRefs, parentVolumetricLightingRefs, editorWindow->volumetricLightingWidgets, "##VolumetricLighting", "Open this Volumetric Lighting for editing");
 			drawSingleRecordSection(WeatherRecord::kPrecipitation, WeatherRecord::kPrecipitation, WeatherRecord::kPrecipitation, "Particle Shader", "##Precipitation", settings.precipitationData, parentPrecipitationData, editorWindow->precipitationWidgets, "Open##Precip", "Open this Precipitation for editing");
-			drawSingleRecordSection("Visual Effect", WeatherRecord::kReferenceEffect, "ReferenceEffect", WeatherRecord::kReferenceEffect, "##ReferenceEffect", settings.referenceEffect, parentReferenceEffect, editorWindow->referenceEffectWidgets, "Open##RefEffect", "Open this Visual Effect for editing");
+			drawSingleRecordSection(WeatherRecord::kVisualEffect, WeatherRecord::kVisualEffect, "ReferenceEffect", WeatherRecord::kVisualEffect, "##ReferenceEffect", settings.referenceEffect, parentReferenceEffect, editorWindow->referenceEffectWidgets, "Open##RefEffect", "Open this Visual Effect for editing");
 
 			if (pendingReinit) {
 				ApplyChanges();
@@ -980,19 +980,19 @@ void WeatherWidget::DrawWeatherColorSettings()
 			std::string colorTypeLabel = ColorTypeLabel(i);
 
 			DrawSearchSectionIfMatches(colorTypeLabel, [&](const char* label) {
-				if (hasParent && parentWidget) {
-					float3 parentColors[4];
-					for (int j = 0; j < 4; j++)
-						parentColors[j] = parentWidget->settings.atmosphereColors[i].colorTimes[j];
+				if (DrawWithHighlight(label, [&]() {
+						if (hasParent && parentWidget) {
+							float3 parentColors[4];
+							for (int j = 0; j < 4; j++)
+								parentColors[j] = parentWidget->settings.atmosphereColors[i].colorTimes[j];
 
-					std::string inheritKey = "Atmosphere_" + colorTypeLabel;
-					if (TOD::DrawTODColorRow(label, settings.atmosphereColors[i].colorTimes, settings.inheritFlags[inheritKey], parentColors)) {
-						changed = true;
-					}
-				} else {
-					if (TOD::DrawTODColorRow(label, settings.atmosphereColors[i].colorTimes)) {
-						changed = true;
-					}
+							std::string inheritKey = "Atmosphere_" + colorTypeLabel;
+							return TOD::DrawTODColorRow(label, settings.atmosphereColors[i].colorTimes, settings.inheritFlags[inheritKey], parentColors);
+						} else {
+							return TOD::DrawTODColorRow(label, settings.atmosphereColors[i].colorTimes);
+						}
+					})) {
+					changed = true;
 				}
 			});
 		}
@@ -2032,7 +2032,7 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 		results.push_back({ label, WeatherTab::kRecords, label });
 	}
 	results.push_back({ WeatherRecord::kPrecipitation, WeatherTab::kRecords, WeatherRecord::kPrecipitation });
-	results.push_back({ WeatherRecord::kReferenceEffect, WeatherTab::kRecords, WeatherRecord::kReferenceEffect });
+	results.push_back({ WeatherRecord::kVisualEffect, WeatherTab::kRecords, WeatherRecord::kVisualEffect });
 
 	return results;
 }

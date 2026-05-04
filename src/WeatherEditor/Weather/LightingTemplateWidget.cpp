@@ -114,7 +114,7 @@ void LightingTemplateWidget::DrawBasicSettings()
 	auto drawMatchedHeader = [&](bool matches, const char* label, auto draw) {
 		if (!matches)
 			return;
-		if (searchBuffer[0] != '\0')
+		if (ShouldOpenSearchSection())
 			ImGui::SetNextItemOpen(true, ImGuiCond_Always);
 		if (ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Spacing();

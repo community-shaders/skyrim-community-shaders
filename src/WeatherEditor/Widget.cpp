@@ -308,22 +308,24 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	auto menu = globals::menu;
 	bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons;
 	const float scale = Util::GetUIScale();
+	if (navigatedFromSearch) {
+		ClearSearchState(true);
+		navigatedFromSearch = false;
+	}
 
 	auto drawSearchBar = [&]() {
 		ImGui::SetNextItemWidth(WidgetUI::kSearchBarWidth * scale);
 		bool ctrlF = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
 		             ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
 		if (ctrlF) {
-			searchBuffer[0] = '\0';
-			searchResults.clear();
-			searchResultsForQuery.clear();
-			dropdownVisible = false;
+			ClearSearchState(true);
 			ImGui::SetKeyboardFocusHere();
 		}
 		ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer));
+		searchInputMin = ImGui::GetItemRectMin();
+		searchInputMax = ImGui::GetItemRectMax();
 		if (ImGui::IsItemEdited())
 			dropdownVisible = true;
-		searchInputActive = ImGui::IsItemActive() || ImGui::IsItemFocused();
 	};
 
 	auto drawForceWeatherButton = [&]() {
@@ -479,9 +481,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			searchResultsForQuery = searchBuffer;
 		}
 	} else {
-		searchResults.clear();
-		searchResultsForQuery.clear();
-		dropdownVisible = false;
+		ClearSearchState(false);
 	}
 }
 
@@ -505,9 +505,10 @@ void Widget::DrawSearchDropdown()
 
 		// Treat clicks on the search input itself as "inside" so typing/cursor
 		// positioning in the input doesn't dismiss the dropdown.
+		const ImRect searchInputRect(searchInputMin, searchInputMax);
 		const bool clickedOutside = ImGui::GetIO().MouseClicked[0] &&
 		                            !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
-		                            !searchInputActive;
+		                            !searchInputRect.Contains(ImGui::GetIO().MousePos);
 		if (clickedOutside || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 			dropdownVisible = false;
 		} else {
@@ -519,10 +520,7 @@ void Widget::DrawSearchDropdown()
 				ImGui::PushID(static_cast<int>(i));
 				if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
 					NavigateToSearchResult(result);
-					searchBuffer[0] = '\0';
-					searchResults.clear();
-					searchResultsForQuery.clear();
-					dropdownVisible = false;
+					navigatedFromSearch = true;
 				}
 				ImGui::PopID();
 			}
@@ -536,6 +534,15 @@ void Widget::DrawSearchDropdown()
 	ImGui::End();
 	ImGui::PopStyleColor();
 	ImGui::PopStyleVar();
+}
+
+void Widget::ClearSearchState(bool clearBuffer)
+{
+	if (clearBuffer)
+		searchBuffer[0] = '\0';
+	searchResults.clear();
+	searchResultsForQuery.clear();
+	dropdownVisible = false;
 }
 
 void Widget::NavigateToSearchResult(const SearchResult& result)
