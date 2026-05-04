@@ -135,10 +135,8 @@ void LightingTemplateWidget::DrawBasicSettings()
 		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kLightFadeEnd, settings.lightFadeEnd, 0.0f, 163840.0f);
 	});
 
-	DrawSearchSectionIfMatches(LightingTemplateSetting::kClipDistance, [&](const char*) {
-		drawMatchedHeader(true, "Other", [&]() {
-			changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kClipDistance, settings.clipDist, 0.0f, 163840.0f);
-		});
+	drawMatchedHeader(MatchesAnySearch({ LightingTemplateSetting::kClipDistance }), "Other", [&]() {
+		changed |= WeatherUtils::DrawSliderFloat(LightingTemplateSetting::kClipDistance, settings.clipDist, 0.0f, 163840.0f);
 	});
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
