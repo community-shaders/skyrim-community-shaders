@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include <initializer_list>
+#include <type_traits>
 
 namespace WidgetUI
 {
@@ -20,6 +21,8 @@ namespace WidgetUI
 	// Search-result highlight pulse
 	constexpr float kHighlightDurationSeconds = 2.0f;
 	constexpr float kHighlightMaxAlpha = 0.3f;
+	constexpr ImVec4 kHighlightFrameBg = ImVec4(0.3f, 0.6f, 1.0f, 1.0f);
+	constexpr ImVec4 kHighlightFrameBgHovered = ImVec4(0.4f, 0.7f, 1.0f, 1.0f);
 
 	// "Force Weather" lock button colors
 	constexpr ImVec4 kLockButtonColor = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
@@ -249,6 +252,34 @@ public:
 	// Pushes a pulsing highlight style for the next widget; call PopHighlightStyle() after.
 	void PushHighlightStyle(const std::string& settingId);
 	void PopHighlightStyle(const std::string& settingId);
+
+	bool PushHighlightIfNeeded(const std::string& settingId)
+	{
+		if (!IsHighlighted(settingId))
+			return false;
+		PushHighlightStyle(settingId);
+		return true;
+	}
+
+	void PopHighlightIfNeeded(const std::string& settingId, bool pushed)
+	{
+		if (pushed)
+			PopHighlightStyle(settingId);
+	}
+
+	template <class DrawFn>
+	auto DrawWithHighlight(const std::string& settingId, DrawFn draw)
+	{
+		const bool highlighted = PushHighlightIfNeeded(settingId);
+		if constexpr (std::is_void_v<std::invoke_result_t<DrawFn>>) {
+			draw();
+			PopHighlightIfNeeded(settingId, highlighted);
+		} else {
+			auto result = draw();
+			PopHighlightIfNeeded(settingId, highlighted);
+			return result;
+		}
+	}
 
 	void DrawDeleteConfirmationModal(const char* popupId = "DeleteConfirmation");
 

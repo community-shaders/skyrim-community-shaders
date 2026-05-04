@@ -22,13 +22,11 @@ void LensFlareWidget::DrawWidget()
 	{
 		bool changed = false;
 		auto drawSection = [&](const char* settingId, const char* sectionLabel, float& value) {
-			if (!MatchesSearch(settingId))
-				return;
-			ImGui::SeparatorText(sectionLabel);
-			PushHighlightStyle(settingId);
-			if (ImGui::SliderFloat(settingId, &value, 0.0f, 1.0f))
-				changed = true;
-			PopHighlightStyle(settingId);
+			DrawSearchSectionIfMatches(settingId, [&](const char* label) {
+				ImGui::SeparatorText(sectionLabel);
+				if (WeatherUtils::DrawSliderFloat(label, value, 0.0f, 1.0f))
+					changed = true;
+			});
 		};
 
 		drawSection(LensFlareSetting::kFadeDistRadiusScale, "Fade Distance", settings.fadeDistRadiusScale);

@@ -4,8 +4,6 @@
 #include "Utils/FileSystem.h"
 #include "Utils/UI.h"
 
-#include <cassert>
-
 namespace WeatherUtils::TexturePath
 {
 	std::string Normalize(std::string_view path)
@@ -80,6 +78,12 @@ namespace WeatherUtils
 
 // Global widget context for undo tracking
 static Widget* g_currentWidget = nullptr;
+
+template <class DrawFn>
+auto DrawWithWidgetHighlight(Widget* widget, const std::string& settingId, DrawFn draw)
+{
+	return widget ? widget->DrawWithHighlight(settingId, draw) : draw();
+}
 
 // Compose a per-widget-scoped key so global static maps in this file
 // (color caches, popup-open trackers, debounced trackers) don't collide
@@ -299,11 +303,9 @@ namespace WeatherUtils
 		const double debounceDelay = 2.0;
 		double currentTime = ImGui::GetTime();
 
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
-		bool changed = ImGui::SliderInt(label.c_str(), &property, -127, 127);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
+		bool changed = DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
+			return ImGui::SliderInt(label.c_str(), &property, -127, 127);
+		});
 		bool isNowActive = ImGui::IsItemActive();
 
 		const std::string trackerKey = ScopedKey(label);
@@ -365,11 +367,9 @@ namespace WeatherUtils
 			}
 		}
 
-		if (effectiveWidget)
-			effectiveWidget->PushHighlightStyle(hid);
-		bool changed = ImGui::ColorEdit3(l.c_str(), (float*)&property);
-		if (effectiveWidget)
-			effectiveWidget->PopHighlightStyle(hid);
+		bool changed = DrawWithWidgetHighlight(effectiveWidget, hid, [&]() {
+			return ImGui::ColorEdit3(l.c_str(), (float*)&property);
+		});
 
 		// Track color usage only when picker closes
 		if (wasActive && !isActive) {
@@ -402,11 +402,9 @@ namespace WeatherUtils
 
 	bool DrawSliderUint8(const std::string& label, int& property)
 	{
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
-		bool changed = ImGui::SliderInt(label.c_str(), &property, 0, 255);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
+		bool changed = DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
+			return ImGui::SliderInt(label.c_str(), &property, 0, 255);
+		});
 		return changed;
 	}
 
@@ -418,11 +416,9 @@ namespace WeatherUtils
 		// Strip leading "##" so hidden-label sliders still match highlight/search ids.
 		std::string hid = label.starts_with("##") ? label.substr(2) : label;
 		Widget* w = widget ? widget : g_currentWidget;
-		if (w)
-			w->PushHighlightStyle(hid);
-		bool changed = ImGui::SliderFloat(label.c_str(), &property, min, max, format);
-		if (w)
-			w->PopHighlightStyle(hid);
+		bool changed = DrawWithWidgetHighlight(w, hid, [&]() {
+			return ImGui::SliderFloat(label.c_str(), &property, min, max, format);
+		});
 		bool isNowActive = ImGui::IsItemActive();
 
 		const std::string trackerKey = w ?
@@ -452,12 +448,9 @@ namespace WeatherUtils
 	bool DrawCheckbox(const std::string& label, bool& value, Widget* widget)
 	{
 		Widget* w = widget ? widget : g_currentWidget;
-		if (w)
-			w->PushHighlightStyle(label);
-		bool changed = ImGui::Checkbox(label.c_str(), &value);
-		if (w)
-			w->PopHighlightStyle(label);
-		return changed;
+		return DrawWithWidgetHighlight(w, label, [&]() {
+			return ImGui::Checkbox(label.c_str(), &value);
+		});
 	}
 }
 
@@ -585,6 +578,17 @@ namespace TOD
 		ImGui::Text("%s", label);
 	}
 
+	static bool PushTODHighlight(const char* label)
+	{
+		return g_currentWidget && g_currentWidget->PushHighlightIfNeeded(label);
+	}
+
+	static void PopTODHighlight(const char* label, bool pushed)
+	{
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightIfNeeded(label, pushed);
+	}
+
 	bool DrawTODSliderRow(const char* label, float values[4], float minValue, float maxValue, const char* format)
 	{
 		const double debounceDelay = 2.0;
@@ -593,6 +597,7 @@ namespace TOD
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
+		const bool highlighted = PushTODHighlight(label);
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
@@ -632,6 +637,7 @@ namespace TOD
 			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), value);
 		}
 
+		PopTODHighlight(label, highlighted);
 		return changed;
 	}
 
@@ -640,9 +646,8 @@ namespace TOD
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
+		const bool highlighted = PushTODHighlight(label);
 
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 
@@ -763,8 +768,7 @@ namespace TOD
 			ImGui::EndChild();
 		}
 
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
+		PopTODHighlight(label, highlighted);
 		return changed;
 	}
 
@@ -779,6 +783,7 @@ namespace TOD
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
+		const bool highlighted = PushTODHighlight(label);
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
@@ -859,6 +864,7 @@ namespace TOD
 			PaletteWindow::GetSingleton()->TrackValueUsage(std::string(UnscopeKey(key)), value);
 		}
 
+		PopTODHighlight(label, highlighted);
 		return changed;
 	}
 
@@ -868,9 +874,7 @@ namespace TOD
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
-
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
+		const bool highlighted = PushTODHighlight(label);
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
@@ -1021,8 +1025,7 @@ namespace TOD
 			ImGui::EndChild();
 		}
 
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
+		PopTODHighlight(label, highlighted);
 		return changed;
 	}
 
@@ -1034,9 +1037,8 @@ namespace TOD
 		const double debounceDelay = 2.0;
 		double currentTime = ImGui::GetTime();
 		bool changed = false;
+		const bool highlighted = PushTODHighlight(label);
 
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 		DrawCenteredLabel(label);
@@ -1069,8 +1071,7 @@ namespace TOD
 			ImGui::PopID();
 		}
 
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
+		PopTODHighlight(label, highlighted);
 		return changed;
 	}
 
@@ -1078,6 +1079,7 @@ namespace TOD
 	{
 		const float scale = Util::GetUIScale();
 		bool changed = false;
+		const bool highlighted = PushTODHighlight(label);
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
@@ -1132,6 +1134,7 @@ namespace TOD
 		}
 		ImGui::EndDisabled();
 
+		PopTODHighlight(label, highlighted);
 		return changed;
 	}
 
@@ -1140,6 +1143,7 @@ namespace TOD
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
+		const bool highlighted = PushTODHighlight(label);
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
@@ -1170,6 +1174,7 @@ namespace TOD
 				ImGui::PopStyleVar();
 		}
 
+		PopTODHighlight(label, highlighted);
 		return changed;
 	}
 
@@ -1243,24 +1248,18 @@ namespace PropertyDrawer
 	{
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
-		bool changed = ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
-		return changed;
+		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
+			return ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
+		});
 	}
 
 	bool DrawInt(const char* label, int& value, int minVal, int maxVal)
 	{
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
-		bool changed = ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
-		return changed;
+		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
+			return ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
+		});
 	}
 
 	bool DrawColor(const char* label, float3& value)
@@ -1273,11 +1272,8 @@ namespace PropertyDrawer
 	{
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
-		bool changed = ImGui::Checkbox(id.c_str(), &value);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
-		return changed;
+		return DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
+			return ImGui::Checkbox(id.c_str(), &value);
+		});
 	}
 }  // namespace PropertyDrawer

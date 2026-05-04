@@ -147,19 +147,17 @@ void CellLightingWidget::DrawWidget()
 					int xyDegrees = settings.directionalXY;
 					int zDegrees = settings.directionalZ;
 					if (DrawIfMatchesSearch(CellLightingSetting::kXYRotation, [&](const char* label) {
-						    PushHighlightStyle(label);
-						    bool r = ImGui::SliderInt(label, &xyDegrees, 0, 360);
-						    PopHighlightStyle(label);
-						    return r;
+						    return DrawWithHighlight(label, [&]() {
+							    return ImGui::SliderInt(label, &xyDegrees, 0, 360);
+						    });
 					    })) {
 						settings.directionalXY = static_cast<uint32_t>(xyDegrees);
 						changed = true;
 					}
 					if (DrawIfMatchesSearch(CellLightingSetting::kZRotation, [&](const char* label) {
-						    PushHighlightStyle(label);
-						    bool r = ImGui::SliderInt(label, &zDegrees, 0, 360);
-						    PopHighlightStyle(label);
-						    return r;
+						    return DrawWithHighlight(label, [&]() {
+							    return ImGui::SliderInt(label, &zDegrees, 0, 360);
+						    });
 					    })) {
 						settings.directionalZ = static_cast<uint32_t>(zDegrees);
 						changed = true;

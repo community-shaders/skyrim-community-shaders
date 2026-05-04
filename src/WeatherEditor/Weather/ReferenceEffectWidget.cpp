@@ -25,6 +25,11 @@ void ReferenceEffectWidget::DrawWidget()
 			bool changed = false;
 
 			auto editorWindow = EditorWindow::GetSingleton();
+			auto drawFormPicker = [&](const char* label, auto& currentForm, const auto& widgets) {
+				return DrawWithHighlight(label, [&]() {
+					return WeatherUtils::DrawFormPickerCached(label, currentForm, widgets, false, true);
+				});
+			};
 
 			if (DrawIfMatchesSearch(ReferenceEffectSetting::kArtObject, [&](const char* label) {
 					ImGui::SeparatorText(label);
@@ -32,7 +37,7 @@ void ReferenceEffectWidget::DrawWidget()
 						ImGui::TextDisabled("No Art Objects available");
 						return false;
 					}
-					return WeatherUtils::DrawFormPickerCached(label, settings.artObject, editorWindow->artObjectWidgets, false, true);
+					return drawFormPicker(label, settings.artObject, editorWindow->artObjectWidgets);
 				}))
 				changed = true;
 			if (DrawIfMatchesSearch(ReferenceEffectSetting::kEffectShader, [&](const char* label) {
@@ -41,7 +46,7 @@ void ReferenceEffectWidget::DrawWidget()
 						ImGui::TextDisabled("No Effect Shaders available");
 						return false;
 					}
-					return WeatherUtils::DrawFormPickerCached(label, settings.effectShader, editorWindow->effectShaderWidgets, false, true);
+					return drawFormPicker(label, settings.effectShader, editorWindow->effectShaderWidgets);
 				}))
 				changed = true;
 			if (MatchesAnySearch({ ReferenceEffectSetting::kFaceTarget, ReferenceEffectSetting::kAttachToCamera, ReferenceEffectSetting::kInheritRotation })) {

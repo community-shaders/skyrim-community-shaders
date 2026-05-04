@@ -1349,7 +1349,7 @@ void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std:
 			weatherWidget->NavigateToFeatureSetting(featureName, settingName);
 
 			// Focus the widget window
-			ImGui::SetWindowFocus(weatherWidget->GetWindowTitle().c_str());
+			weatherWidget->RequestFocus();
 			break;
 		}
 	}

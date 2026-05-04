@@ -586,8 +586,12 @@ void Widget::PushHighlightStyle(const std::string& settingId)
 	const float normalized = std::clamp(elapsed / WidgetUI::kHighlightDurationSeconds, 0.0f, 1.0f);
 	const float triangularFade = 1.0f - std::abs(normalized * 2.0f - 1.0f);
 	const float alpha = std::clamp(WidgetUI::kHighlightMaxAlpha * triangularFade, 0.0f, WidgetUI::kHighlightMaxAlpha);
-	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.6f, 1.0f, alpha));
-	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.7f, 1.0f, alpha));
+	ImVec4 frameBg = WidgetUI::kHighlightFrameBg;
+	ImVec4 frameBgHovered = WidgetUI::kHighlightFrameBgHovered;
+	frameBg.w = alpha;
+	frameBgHovered.w = alpha;
+	ImGui::PushStyleColor(ImGuiCol_FrameBg, frameBg);
+	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, frameBgHovered);
 }
 
 void Widget::PopHighlightStyle(const std::string& settingId)

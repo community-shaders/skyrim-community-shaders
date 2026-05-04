@@ -261,10 +261,7 @@ void WeatherWidget::DrawWidget()
 				return false;
 			};
 			auto pushRecordHighlight = [&](const std::string& recordId) {
-				if (!IsHighlighted(recordId))
-					return false;
-				PushHighlightStyle(recordId);
-				return true;
+				return PushHighlightIfNeeded(recordId);
 			};
 			auto drawOpenButton = [](auto& recordRef, auto& widgets, const std::string& buttonId, const char* tooltip) {
 				if (!recordRef)
@@ -318,7 +315,7 @@ void WeatherWidget::DrawWidget()
 					drawOpenButton(recordRefs[i], widgets, std::format("Open##{}", i), openTooltip);
 
 					if (recordHighlighted)
-						PopHighlightStyle(rowId);
+						PopHighlightIfNeeded(rowId, recordHighlighted);
 					ImGui::PopID();
 				}
 				ImGui::Spacing();
@@ -341,7 +338,7 @@ void WeatherWidget::DrawWidget()
 				drawOpenButton(recordRef, widgets, buttonId, openTooltip);
 
 				if (recordHighlighted)
-					PopHighlightStyle(recordId);
+					PopHighlightIfNeeded(recordId, recordHighlighted);
 				ImGui::Spacing();
 			};
 
@@ -818,26 +815,24 @@ void WeatherWidget::DrawDALCSettings()
 		// Draw with per-parameter inheritance
 		auto drawDalcColor = [&](const char* settingId, const char* label, float3 (&values)[4], bool* inheritFlag = nullptr, float3* parentValues = nullptr) {
 			return DrawIfMatchesSearch(settingId, [&](const char*) {
-				PushHighlightStyle(settingId);
-				const bool rowChanged = inheritFlag ?
-					TOD::DrawTODColorRow(label, values, *inheritFlag, parentValues) :
-					TOD::DrawTODColorRow(label, values);
-				PopHighlightStyle(settingId);
-				return rowChanged;
+				return DrawWithHighlight(settingId, [&]() {
+					return inheritFlag ?
+						TOD::DrawTODColorRow(label, values, *inheritFlag, parentValues) :
+						TOD::DrawTODColorRow(label, values);
+				});
 			});
 		};
 		auto drawDalcFloat = [&](const char* settingId, const char* label, float (&values)[4], bool* inheritFlag = nullptr, float* parentValues = nullptr) {
 			return DrawIfMatchesSearch(settingId, [&](const char*) {
-				PushHighlightStyle(settingId);
-				const bool rowChanged = inheritFlag ?
-					TOD::DrawTODFloatRow(label, values, *inheritFlag, parentValues, 0.0f, 10.0f) :
-					TOD::DrawTODFloatRow(label, values, 0.0f, 10.0f);
-				PopHighlightStyle(settingId);
-				return rowChanged;
+				return DrawWithHighlight(settingId, [&]() {
+					return inheritFlag ?
+						TOD::DrawTODFloatRow(label, values, *inheritFlag, parentValues, 0.0f, 10.0f) :
+						TOD::DrawTODFloatRow(label, values, 0.0f, 10.0f);
+				});
 			});
 		};
 
-		if (hasParent) {
+		if (hasParent && parentWidget) {
 			if (drawDalcColor(WeatherSetting::kSpecular, WeatherSetting::kSpecular, specularColors, &settings.inheritFlags[WeatherInherit::kDalcSpecular], parentSpecular)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].specular = specularColors[i];
@@ -866,7 +861,7 @@ void WeatherWidget::DrawDALCSettings()
 		TOD::DrawTODSeparator();
 
 		// Directional colors with per-parameter inheritance
-		if (hasParent) {
+		if (hasParent && parentWidget) {
 			if (drawDalcColor(WeatherSetting::kDirectionalXMax, WeatherDisplay::kDirectionalXMax, directionalXMax, &settings.inheritFlags[WeatherInherit::kDalcDirXMax], parentDirXMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].max = directionalXMax[i];
@@ -985,7 +980,6 @@ void WeatherWidget::DrawWeatherColorSettings()
 			std::string colorTypeLabel = ColorTypeLabel(i);
 
 			DrawSearchSectionIfMatches(colorTypeLabel, [&](const char* label) {
-				PushHighlightStyle(colorTypeLabel);
 				if (hasParent && parentWidget) {
 					float3 parentColors[4];
 					for (int j = 0; j < 4; j++)
@@ -1000,7 +994,6 @@ void WeatherWidget::DrawWeatherColorSettings()
 						changed = true;
 					}
 				}
-				PopHighlightStyle(colorTypeLabel);
 			});
 		}
 
@@ -1127,11 +1120,9 @@ void WeatherWidget::DrawCloudSettings()
 				TOD::RenderTODHeader();
 				TOD::DrawTODSeparator();
 				auto drawCloudTODRows = [&](auto drawRows) {
-					if (isTarget)
-						PushHighlightStyle(layerId);
-					drawRows();
-					if (isTarget)
-						PopHighlightStyle(layerId);
+					DrawWithHighlight(layerId, [&]() {
+						drawRows();
+					});
 				};
 
 				if (hasParent && parentWidget) {
@@ -1200,19 +1191,17 @@ void WeatherWidget::DrawFogSettings()
 		return;
 
 	auto pushFogRowHighlight = [&](const char* dayId, const char* nightId) -> const char* {
-		if (IsHighlighted(dayId)) {
-			PushHighlightStyle(dayId);
+		if (PushHighlightIfNeeded(dayId)) {
 			return dayId;
 		}
-		if (IsHighlighted(nightId)) {
-			PushHighlightStyle(nightId);
+		if (PushHighlightIfNeeded(nightId)) {
 			return nightId;
 		}
 		return nullptr;
 	};
 	auto popFogRowHighlight = [&](const char* highlightId) {
 		if (highlightId)
-			PopHighlightStyle(highlightId);
+			PopHighlightIfNeeded(highlightId, true);
 	};
 	auto inheritFogPair = [&](const char* inheritKey, const char* dayKey, const char* nightKey) {
 		if (!parentWidget)
@@ -1393,12 +1382,9 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 			// Inherit checkbox
 			if (hasParent) {
 				bool& inheritFlag = settings.inheritFlags[p.first];
-				const bool highlighted = IsHighlighted(p.first);
-				if (highlighted)
-					PushHighlightStyle(p.first);
-				bool inheritChanged = ImGui::Checkbox(("##inherit_" + p.first).c_str(), &inheritFlag);
-				if (highlighted)
-					PopHighlightStyle(p.first);
+				bool inheritChanged = DrawWithHighlight(p.first, [&]() {
+					return ImGui::Checkbox(("##inherit_" + p.first).c_str(), &inheritFlag);
+				});
 				if (inheritChanged && inheritFlag) {
 					InheritFromParent(p.first);
 					changed = true;
