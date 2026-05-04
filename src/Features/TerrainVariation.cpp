@@ -1,25 +1,21 @@
 #include "TerrainVariation.h"
-#include "../Util.h"
+#include "Menu.h"
+#include "Menu/Fonts.h"
+#include "Util.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainVariation::Settings,
-	enableTilingFix,
 	enableLODTerrainTilingFix)
 
 void TerrainVariation::DrawSettings()
 {
-	bool tilingFix = settings.enableTilingFix != 0;
-	if (ImGui::Checkbox("Enable Terrain Tiling Fix", &tilingFix)) {
-		settings.enableTilingFix = tilingFix ? 1u : 0u;
-		logger::info("TerrainVariation setting changed to: {}", settings.enableTilingFix != 0);
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Reduces the repeating pattern effect on terrain textures.\n"
-			"This technique creates more natural-looking terrain by adding variation to texture sampling.");
+	{
+		MenuFonts::FontRoleGuard bodyGuard(Menu::FontRole::Body);
+		ImGui::TextWrapped(
+			"Terrain variation is always enabled when installed. Use disable at boot to turn off.");
 	}
 
-	ImGui::Separator();
+	ImGui::Spacing();
 
 	bool lodTilingFix = settings.enableLODTerrainTilingFix != 0;
 	if (ImGui::Checkbox("Apply to LOD Terrain", &lodTilingFix)) {

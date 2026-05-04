@@ -24,7 +24,6 @@ namespace ExtendedMaterials
 	static const float ParallaxNearShadowQuality = 1.0;
 	static const float ParallaxFarShadowQuality = 0.5;
 	static const float TerrainParallaxShadowMaxMipLevel = 1.0;
-	static const float TargetTexelDensity = 4.0;
 
 	inline uint ParallaxShadowTapCount(float quality)
 	{
@@ -53,34 +52,50 @@ namespace ExtendedMaterials
 		return float4(AdjustDisplacementNormalized(displacement.x, params), AdjustDisplacementNormalized(displacement.y, params), AdjustDisplacementNormalized(displacement.z, params), AdjustDisplacementNormalized(displacement.w, params));
 	}
 
-	float GetMipLevel(float2 coords, Texture2D<float4> tex, float3 worldPos)
+	float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
 	{
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
 
-		float2 dxUV = ddx(coords);
-		float2 dyUV = ddy(coords);
-		float3 dxWorld = ddx(worldPos);
-		float3 dyWorld = ddy(worldPos);
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
+		textureDims /= 2.0;
+#endif
 
-		float ratioX = dot(dxUV, dxUV) / max(dot(dxWorld, dxWorld), EPSILON_DIVISION);
-		float ratioY = dot(dyUV, dyUV) / max(dot(dyWorld, dyWorld), EPSILON_DIVISION);
+#if defined(VR)
+		textureDims /= 2.0;
+#endif
 
-		float mipLevel = 0.5 * log2(min(ratioX, ratioY)) + log2(max(textureDims.x, textureDims.y) / EPSILON_DIVISION);
-		mipLevel = max(mipLevel, 0);
+		float2 texCoordsPerSize = coords * textureDims;
+
+		float2 dxSize = ddx(texCoordsPerSize);
+		float2 dySize = ddy(texCoordsPerSize);
+
+		float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
+
+		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
+		mipLevel++;
+#endif
+
+#if defined(VR)
+		mipLevel++;
+#endif
+
+		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
 
 		return mipLevel;
 	}
 
 #if defined(LANDSCAPE)
-	void InitializeTerrainMipLevels(float2 coords, float3 worldPos, out float mipLevels[6])
+	void InitializeTerrainMipLevels(float2 coords, float screenNoise, out float mipLevels[6])
 	{
-		mipLevels[0] = GetMipLevel(coords, TexColorSampler, worldPos);
-		mipLevels[1] = GetMipLevel(coords, TexLandColor2Sampler, worldPos);
-		mipLevels[2] = GetMipLevel(coords, TexLandColor3Sampler, worldPos);
-		mipLevels[3] = GetMipLevel(coords, TexLandColor4Sampler, worldPos);
-		mipLevels[4] = GetMipLevel(coords, TexLandColor5Sampler, worldPos);
-		mipLevels[5] = GetMipLevel(coords, TexLandColor6Sampler, worldPos);
+		mipLevels[0] = GetMipLevel(coords, TexColorSampler, screenNoise);
+		mipLevels[1] = GetMipLevel(coords, TexLandColor2Sampler, screenNoise);
+		mipLevels[2] = GetMipLevel(coords, TexLandColor3Sampler, screenNoise);
+		mipLevels[3] = GetMipLevel(coords, TexLandColor4Sampler, screenNoise);
+		mipLevels[4] = GetMipLevel(coords, TexLandColor5Sampler, screenNoise);
+		mipLevels[5] = GetMipLevel(coords, TexLandColor6Sampler, screenNoise);
 	}
 
 #	define HEIGHT_POWER 2
@@ -200,13 +215,6 @@ namespace ExtendedMaterials
 
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
-#		if defined(TERRAIN_VARIATION)
-		// Boost height by 30% when terrain variation is enabled to enhance depth perception
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-		{
-			total *= 1.3;
-		}
-#		endif
 		return total;
 	}
 
@@ -325,13 +333,6 @@ namespace ExtendedMaterials
 
 		float total;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
-#		if defined(TERRAIN_VARIATION)
-		// Boost height by 30% when terrain variation is enabled to enhance depth perception
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
-		{
-			total *= 1.3;
-		}
-#		endif
 		return total;
 	}
 

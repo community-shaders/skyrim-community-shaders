@@ -56,9 +56,6 @@ inline float2 hashLOD(float2 p)
 // --------------------- COMPUTE FUNCTIONS --------------------- //
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 {
-	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return (StochasticOffsets)0;
-
 	float2 skewUV = mul(SKEW_MATRIX, landscapeUV * WORLD_SCALE);
 	float2 vxID = floor(skewUV);
 	float2 f = frac(skewUV);
@@ -138,12 +135,13 @@ inline float StochasticHeightFadeFromMip(float mipLevel)
 // LOD terrain stochastic sampling — 2 SampleBias, fixed blend (pass jitter from StochasticSampleLODJitter(screenNoise)).
 inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD)
 {
-	if (!SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
-		return tex.SampleBias(samp, uv, SharedData::MipBias);
-
-	float4 s1 = tex.SampleBias(samp, uv + (offsetsLOD.offset1 + jitter) * 0.01, SharedData::MipBias);
-	float4 s2 = tex.SampleBias(samp, uv + (offsetsLOD.offset2 + float2(jitter.y, -jitter.x)) * 0.01, SharedData::MipBias);
-	return lerp(s2, s1, offsetsLOD.weights.x);
+	float lodOn = SharedData::terrainVariationSettings.enableLODTerrainTilingFix ? 1.0 : 0.0;
+	float2 j1 = (offsetsLOD.offset1 + jitter) * 0.01;
+	float2 j2 = (offsetsLOD.offset2 + float2(jitter.y, -jitter.x)) * 0.01;
+	float4 s1 = tex.SampleBias(samp, uv + j1 * lodOn, SharedData::MipBias);
+	float4 s2 = tex.SampleBias(samp, uv + j2 * lodOn, SharedData::MipBias);
+	float blendW = lerp(0.5, offsetsLOD.weights.x, lodOn);
+	return lerp(s2, s1, blendW);
 }
 
 // 2-sample height-blended stochastic sampling — branchless, no wavefront divergence.
@@ -151,9 +149,6 @@ inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState sam
 // highest-weight barycentric vertices, so dropping offset3 loses minimal quality.
 inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float extraLandMipBias)
 {
-	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return tex.SampleBias(samp, uv, SharedData::MipBias + extraLandMipBias);
-
 	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias + extraLandMipBias;
 	// Far/minified: skip TV blending math + second sample.
 	if (mipLevel >= TV_SINGLE_SAMPLE_MIP_START)
@@ -178,8 +173,6 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 // 2-sample parallax sampling — uses heightmap (alpha) only for blend weights.
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
 {
-	if (!SharedData::terrainVariationSettings.enableTilingFix)
-		return tex.SampleLevel(samp, uv, mipLevel);
 	// Keep parallax height active, but cut TV to one sample once heavily minified.
 	if (mipLevel >= TV_SINGLE_SAMPLE_PARALLAX_MIP_START)
 		return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);

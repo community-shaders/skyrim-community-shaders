@@ -12,7 +12,7 @@ public:
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_VARIATION"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override
 	{
-		// Always compile the TERRAIN_VARIATION path when the feature is loaded; runtime on/off uses FeatureData (b6).
+		// Always compile the TERRAIN_VARIATION path when the feature is loaded; LOD terrain variation remains configurable via enableLODTerrainTilingFix.
 		return loaded && shaderType == RE::BSShader::Type::Lighting;
 	}
 	virtual bool IsCore() const override { return false; };
@@ -33,9 +33,8 @@ public:
 
 	struct alignas(16) Settings
 	{
-		uint32_t enableTilingFix = 1;
 		uint32_t enableLODTerrainTilingFix = 1;
-		uint32_t pad[2]{};
+		uint32_t pad[3]{};
 	};
 
 	STATIC_ASSERT_ALIGNAS_16(Settings);
