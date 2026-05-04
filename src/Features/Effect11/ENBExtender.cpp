@@ -1018,7 +1018,7 @@ namespace ENBExtender
 		const std::vector<std::pair<Effect*, std::string>>& techDropdowns)
 	{
 		for (auto& [effect, group] : techDropdowns)
-			if (!group.empty() && group == node.fullPath)
+			if (!group.empty() && group == node.fullPath && !effect->techniqueDropdown.topLevel)
 				RenderTechniqueDropdown(effect, ctx.changedEffects);
 
 		int firstChildMinSO = INT_MAX;
@@ -1172,12 +1172,10 @@ namespace ENBExtender
 			if (groupDesc.Name && groupDesc.Name[0]) {
 				annotationGroup = group;
 				break;
-			} else if (groupDesc.Techniques > 0) {
+			} else if (!annotationTechnique && groupDesc.Techniques > 0) {
 				auto* tech = group->GetTechniqueByIndex(0);
-				if (tech && tech->IsValid()) {
+				if (tech && tech->IsValid())
 					annotationTechnique = tech;
-					break;
-				}
 			}
 		}
 
