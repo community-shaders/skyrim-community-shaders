@@ -27,9 +27,9 @@ namespace WaterEffects
 			float2 causticsUV2 = PanCausticsUV(causticsUV, 1.0 * 0.2, -0.5);
 
 			float causticsHigh = 1.0;
-
-			if (causticsFade > 0.0)
+			if (causticsFade > 0.0) {
 				causticsHigh = min(SampleCaustics(causticsUV1), SampleCaustics(causticsUV2)) * 4.0;
+			}
 
 			causticsUV *= 0.5;
 
@@ -37,12 +37,11 @@ namespace WaterEffects
 			causticsUV2 = PanCausticsUV(causticsUV, 1.0 * 0.1, -0.5);
 
 			float causticsLow = 1.0;
-
-			if (causticsFade < 1.0)
+			if (causticsFade < 1.0) {
 				causticsLow = min(SampleCaustics(causticsUV1), SampleCaustics(causticsUV2)) * 4.0;
+			}
 
-			float caustics = lerp(causticsLow, causticsHigh, causticsFade);
-
+			const float caustics = lerp(causticsLow, causticsHigh, causticsFade);
 			return lerp(1.0, caustics, shoreFactorCaustics);
 		}
 
