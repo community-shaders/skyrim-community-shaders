@@ -14,7 +14,6 @@ public:
 	{
 		return loaded && shaderType == RE::BSShader::Type::Lighting;
 	}
-	}
 	virtual bool RefineShaderDefineForDescriptor(RE::BSShader::Type shaderType, uint32_t descriptor) override;
 	virtual bool IsCore() const override { return false; };
 	virtual bool SupportsVR() override { return true; }
