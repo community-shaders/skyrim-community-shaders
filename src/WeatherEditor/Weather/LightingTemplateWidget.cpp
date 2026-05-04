@@ -111,45 +111,42 @@ void LightingTemplateWidget::DrawBasicSettings()
 		if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawSliderFloat(label, value, minVal, maxVal); }))
 			changed = true;
 	};
-
-	if (MatchesAnySearch({ LightingTemplateSetting::kAmbientColor, LightingTemplateSetting::kDirectionalColor })) {
-		if (ImGui::CollapsingHeader("Ambient & Directional", ImGuiTreeNodeFlags_DefaultOpen)) {
+	auto drawMatchedHeader = [&](bool matches, const char* label, auto draw) {
+		if (!matches)
+			return;
+		if (searchBuffer[0] != '\0')
+			ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+		if (ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Spacing();
-			drawColor(LightingTemplateSetting::kAmbientColor, settings.ambient);
-			ImGui::Spacing();
-			drawColor(LightingTemplateSetting::kDirectionalColor, settings.directional);
-			ImGui::Spacing();
-		}
-	}
-
-	if (MatchesAnySearch({ LightingTemplateSetting::kDirectionalXY, LightingTemplateSetting::kDirectionalZ, LightingTemplateSetting::kDirectionalFade })) {
-		if (ImGui::CollapsingHeader("Directional Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Spacing();
-			drawSlider(LightingTemplateSetting::kDirectionalXY, settings.directionalXY, 0.0f, 360.0f);
-			ImGui::Spacing();
-			drawSlider(LightingTemplateSetting::kDirectionalZ, settings.directionalZ, 0.0f, 360.0f);
-			ImGui::Spacing();
-			drawSlider(LightingTemplateSetting::kDirectionalFade, settings.directionalFade, 0.0f, 10.0f);
+			draw();
 			ImGui::Spacing();
 		}
-	}
+	};
 
-	if (MatchesAnySearch({ LightingTemplateSetting::kLightFadeStart, LightingTemplateSetting::kLightFadeEnd })) {
-		if (ImGui::CollapsingHeader("Light Fade", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Spacing();
-			drawSlider(LightingTemplateSetting::kLightFadeStart, settings.lightFadeStart, 0.0f, 163840.0f);
-			ImGui::Spacing();
-			drawSlider(LightingTemplateSetting::kLightFadeEnd, settings.lightFadeEnd, 0.0f, 163840.0f);
-			ImGui::Spacing();
-		}
-	}
+	drawMatchedHeader(MatchesAnySearch({ LightingTemplateSetting::kAmbientColor, LightingTemplateSetting::kDirectionalColor }), "Ambient & Directional", [&]() {
+		drawColor(LightingTemplateSetting::kAmbientColor, settings.ambient);
+		ImGui::Spacing();
+		drawColor(LightingTemplateSetting::kDirectionalColor, settings.directional);
+	});
+
+	drawMatchedHeader(MatchesAnySearch({ LightingTemplateSetting::kDirectionalXY, LightingTemplateSetting::kDirectionalZ, LightingTemplateSetting::kDirectionalFade }), "Directional Settings", [&]() {
+		drawSlider(LightingTemplateSetting::kDirectionalXY, settings.directionalXY, 0.0f, 360.0f);
+		ImGui::Spacing();
+		drawSlider(LightingTemplateSetting::kDirectionalZ, settings.directionalZ, 0.0f, 360.0f);
+		ImGui::Spacing();
+		drawSlider(LightingTemplateSetting::kDirectionalFade, settings.directionalFade, 0.0f, 10.0f);
+	});
+
+	drawMatchedHeader(MatchesAnySearch({ LightingTemplateSetting::kLightFadeStart, LightingTemplateSetting::kLightFadeEnd }), "Light Fade", [&]() {
+		drawSlider(LightingTemplateSetting::kLightFadeStart, settings.lightFadeStart, 0.0f, 163840.0f);
+		ImGui::Spacing();
+		drawSlider(LightingTemplateSetting::kLightFadeEnd, settings.lightFadeEnd, 0.0f, 163840.0f);
+	});
 
 	DrawSearchSectionIfMatches(LightingTemplateSetting::kClipDistance, [&](const char*) {
-		if (ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Spacing();
+		drawMatchedHeader(true, "Other", [&]() {
 			drawSlider(LightingTemplateSetting::kClipDistance, settings.clipDist, 0.0f, 163840.0f);
-			ImGui::Spacing();
-		}
+		});
 	});
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {

@@ -293,7 +293,11 @@ void WeatherWidget::DrawWidget()
 				ImGui::SameLine();
 			};
 			auto drawTimeRecordSection = [&](const char* sectionLabel, int idOffset, const char* inheritPrefix, auto& recordRefs, auto& parentRefs, auto& widgets, const char* pickerId, const char* openTooltip) {
-				if (!anyTimeRecordMatches(sectionLabel) || !ImGui::CollapsingHeader(sectionLabel, ImGuiTreeNodeFlags_DefaultOpen))
+				if (!anyTimeRecordMatches(sectionLabel))
+					return;
+				if (searchBuffer[0] != '\0')
+					ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+				if (!ImGui::CollapsingHeader(sectionLabel, ImGuiTreeNodeFlags_DefaultOpen))
 					return;
 				for (int i = 0; i < ColorTimes::kTotal; i++) {
 					std::string rowId = makeTimeRecordLabel(sectionLabel, i);
@@ -320,7 +324,11 @@ void WeatherWidget::DrawWidget()
 				ImGui::Spacing();
 			};
 			auto drawSingleRecordSection = [&](const char* sectionLabel, const char* recordId, const char* inheritKey, const char* valueLabel, const char* pickerId, auto& recordRef, auto& parentRef, auto& widgets, const char* buttonId, const char* openTooltip) {
-				if (!MatchesSearch(recordId) || !ImGui::CollapsingHeader(sectionLabel, ImGuiTreeNodeFlags_DefaultOpen))
+				if (!MatchesSearch(recordId))
+					return;
+				if (searchBuffer[0] != '\0')
+					ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+				if (!ImGui::CollapsingHeader(sectionLabel, ImGuiTreeNodeFlags_DefaultOpen))
 					return;
 				const bool recordHighlighted = pushRecordHighlight(recordId);
 
@@ -810,16 +818,22 @@ void WeatherWidget::DrawDALCSettings()
 		// Draw with per-parameter inheritance
 		auto drawDalcColor = [&](const char* settingId, const char* label, float3 (&values)[4], bool* inheritFlag = nullptr, float3* parentValues = nullptr) {
 			return DrawIfMatchesSearch(settingId, [&](const char*) {
-				return inheritFlag ?
+				PushHighlightStyle(settingId);
+				const bool rowChanged = inheritFlag ?
 					TOD::DrawTODColorRow(label, values, *inheritFlag, parentValues) :
 					TOD::DrawTODColorRow(label, values);
+				PopHighlightStyle(settingId);
+				return rowChanged;
 			});
 		};
 		auto drawDalcFloat = [&](const char* settingId, const char* label, float (&values)[4], bool* inheritFlag = nullptr, float* parentValues = nullptr) {
 			return DrawIfMatchesSearch(settingId, [&](const char*) {
-				return inheritFlag ?
+				PushHighlightStyle(settingId);
+				const bool rowChanged = inheritFlag ?
 					TOD::DrawTODFloatRow(label, values, *inheritFlag, parentValues, 0.0f, 10.0f) :
 					TOD::DrawTODFloatRow(label, values, 0.0f, 10.0f);
+				PopHighlightStyle(settingId);
+				return rowChanged;
 			});
 		};
 
@@ -971,6 +985,7 @@ void WeatherWidget::DrawWeatherColorSettings()
 			std::string colorTypeLabel = ColorTypeLabel(i);
 
 			DrawSearchSectionIfMatches(colorTypeLabel, [&](const char* label) {
+				PushHighlightStyle(colorTypeLabel);
 				if (hasParent && parentWidget) {
 					float3 parentColors[4];
 					for (int j = 0; j < 4; j++)
@@ -985,6 +1000,7 @@ void WeatherWidget::DrawWeatherColorSettings()
 						changed = true;
 					}
 				}
+				PopHighlightStyle(colorTypeLabel);
 			});
 		}
 
@@ -1110,6 +1126,13 @@ void WeatherWidget::DrawCloudSettings()
 			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str(), 120.0f)) {
 				TOD::RenderTODHeader();
 				TOD::DrawTODSeparator();
+				auto drawCloudTODRows = [&](auto drawRows) {
+					if (isTarget)
+						PushHighlightStyle(layerId);
+					drawRows();
+					if (isTarget)
+						PopHighlightStyle(layerId);
+				};
 
 				if (hasParent && parentWidget) {
 					float3 parentColors[4];
@@ -1122,21 +1145,25 @@ void WeatherWidget::DrawCloudSettings()
 					std::string colorKey = std::format("Cloud{}_Color", i);
 					std::string alphaKey = std::format("Cloud{}_Alpha", i);
 
-					if (TOD::DrawTODColorRow("Cloud Color", settings.clouds[i].color, settings.inheritFlags[colorKey], parentColors)) {
-						changed = true;
-					}
+					drawCloudTODRows([&]() {
+						if (TOD::DrawTODColorRow("Cloud Color", settings.clouds[i].color, settings.inheritFlags[colorKey], parentColors)) {
+							changed = true;
+						}
 
-					if (TOD::DrawTODFloatRow("Cloud Alpha", settings.clouds[i].cloudAlpha, settings.inheritFlags[alphaKey], parentAlphas, 0.0f, 1.0f)) {
-						changed = true;
-					}
+						if (TOD::DrawTODFloatRow("Cloud Alpha", settings.clouds[i].cloudAlpha, settings.inheritFlags[alphaKey], parentAlphas, 0.0f, 1.0f)) {
+							changed = true;
+						}
+					});
 				} else {
-					if (TOD::DrawTODColorRow("Cloud Color", settings.clouds[i].color)) {
-						changed = true;
-					}
+					drawCloudTODRows([&]() {
+						if (TOD::DrawTODColorRow("Cloud Color", settings.clouds[i].color)) {
+							changed = true;
+						}
 
-					if (TOD::DrawTODFloatRow("Cloud Alpha", settings.clouds[i].cloudAlpha, 0.0f, 1.0f)) {
-						changed = true;
-					}
+						if (TOD::DrawTODFloatRow("Cloud Alpha", settings.clouds[i].cloudAlpha, 0.0f, 1.0f)) {
+							changed = true;
+						}
+					});
 				}
 
 				TOD::EndTODTable();
