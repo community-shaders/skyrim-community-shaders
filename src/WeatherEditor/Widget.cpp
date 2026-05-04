@@ -516,6 +516,7 @@ void Widget::DrawSearchDropdown()
 				const auto& result = searchResults[i];
 				std::string label = result.tabName.empty() ? result.displayName : std::format("{} ({})", result.displayName, result.tabName);
 
+				ImGui::PushID(static_cast<int>(i));
 				if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
 					NavigateToSearchResult(result);
 					searchBuffer[0] = '\0';
@@ -523,6 +524,7 @@ void Widget::DrawSearchDropdown()
 					searchResultsForQuery.clear();
 					dropdownVisible = false;
 				}
+				ImGui::PopID();
 			}
 
 			if (searchResults.size() > WidgetUI::kSearchDropdownMaxResults) {

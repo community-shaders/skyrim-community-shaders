@@ -23,6 +23,7 @@ namespace
 		constexpr const char* kBasic = "Basic";
 		constexpr const char* kFog = "Fog";
 		constexpr const char* kDalc = "Lighting (DALC)";
+		constexpr const char* kRecords = "Records";
 	}
 
 	namespace WeatherSetting
@@ -2057,6 +2058,18 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 		std::string layerId = std::format("Cloud Layer {}", i);
 		results.push_back({ layerId, "Clouds", layerId });
 	}
+
+	// Records tab: one entry per time-of-day slot for each form-picker section
+	for (int i = 0; i < ColorTimes::kTotal; i++) {
+		std::string label = std::format("ImageSpace {}", ColorTimeLabel(i));
+		results.push_back({ label, WeatherTab::kRecords, label });
+	}
+	for (int i = 0; i < ColorTimes::kTotal; i++) {
+		std::string label = std::format("Volumetric Lighting {}", ColorTimeLabel(i));
+		results.push_back({ label, WeatherTab::kRecords, label });
+	}
+	results.push_back({ "Precipitation", WeatherTab::kRecords, "Precipitation" });
+	results.push_back({ "Reference Effect", WeatherTab::kRecords, "Reference Effect" });
 
 	return results;
 }

@@ -334,10 +334,13 @@ namespace WeatherUtils
 		static std::string activeColorId;
 		static std::map<std::string, bool> wasPickerOpen;
 
+		// Strip leading "##" so hidden-id callers still match highlight/search ids.
+		const std::string hid = l.starts_with("##") ? l.substr(2) : l;
+
 		Widget* effectiveWidget = widget ? widget : g_currentWidget;
 		const std::string cacheId = effectiveWidget ?
-		                                std::format("{}{}{}", static_cast<const void*>(effectiveWidget), kScopeSep, l) :
-		                                l;
+		                                std::format("{}{}{}", static_cast<const void*>(effectiveWidget), kScopeSep, hid) :
+		                                hid;
 		bool isActive = ImGui::IsPopupOpen(l.c_str(), ImGuiPopupFlags_AnyPopupId);
 		bool wasActive = wasPickerOpen[cacheId];
 
@@ -363,10 +366,10 @@ namespace WeatherUtils
 		}
 
 		if (effectiveWidget)
-			effectiveWidget->PushHighlightStyle(l);
+			effectiveWidget->PushHighlightStyle(hid);
 		bool changed = ImGui::ColorEdit3(l.c_str(), (float*)&property);
 		if (effectiveWidget)
-			effectiveWidget->PopHighlightStyle(l);
+			effectiveWidget->PopHighlightStyle(hid);
 
 		// Track color usage only when picker closes
 		if (wasActive && !isActive) {
@@ -423,8 +426,8 @@ namespace WeatherUtils
 		bool isNowActive = ImGui::IsItemActive();
 
 		const std::string trackerKey = w ?
-		                                   std::format("{}{}{}", static_cast<const void*>(w), kScopeSep, label) :
-		                                   label;
+		                                   std::format("{}{}{}", static_cast<const void*>(w), kScopeSep, hid) :
+		                                   hid;
 
 		// Push undo state when slider becomes active
 		if (s_floatTracker.UpdateActiveState(trackerKey, isNowActive, currentTime, debounceDelay)) {
@@ -1263,12 +1266,7 @@ namespace PropertyDrawer
 	bool DrawColor(const char* label, float3& value)
 	{
 		DrawLabel(label);
-		if (g_currentWidget)
-			g_currentWidget->PushHighlightStyle(label);
-		bool changed = WeatherUtils::DrawColorEdit(label, value);
-		if (g_currentWidget)
-			g_currentWidget->PopHighlightStyle(label);
-		return changed;
+		return WeatherUtils::DrawColorEdit(std::string("##") + label, value);
 	}
 
 	bool DrawCheckbox(const char* label, bool& value)
