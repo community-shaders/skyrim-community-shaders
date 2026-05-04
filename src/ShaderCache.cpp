@@ -2971,7 +2971,10 @@ namespace SIE
 		const uint64_t total = compilationSet.totalTasks.load(std::memory_order_relaxed);
 		const uint64_t done = compilationSet.completedTasks.load(std::memory_order_relaxed) +
 		                     compilationSet.failedTasks.load(std::memory_order_relaxed);
-		const uint64_t remaining = (total > done) ? (total - done) : 0;
+		// This task has already finished running, but Complete(task) has not yet updated the counters.
+		// Include the current task in the local progress snapshot so the logged remaining count is accurate.
+		const uint64_t doneIncludingCurrent = (done < total) ? (done + 1) : total;
+		const uint64_t remaining = (total > doneIncludingCurrent) ? (total - doneIncludingCurrent) : 0;
 
 		// Proxy for permutation complexity: descriptor low 32 bits from GetId(); popcount = active defines.
 		// Shader file size provides a secondary signal for source complexity.
