@@ -57,7 +57,10 @@ void PrecipitationWidget::DrawWidget()
 					ImGui::SeparatorText("Particle Type");
 					const char* types[] = { "Rain", "Snow" };
 					int currentType = static_cast<int>(settings.particleType);
-					if (ImGui::Combo(label, &currentType, types, IM_ARRAYSIZE(types))) {
+					PushHighlightStyle(label);
+					bool comboChanged = ImGui::Combo(label, &currentType, types, IM_ARRAYSIZE(types));
+					PopHighlightStyle(label);
+					if (comboChanged) {
 						settings.particleType = static_cast<uint32_t>(currentType);
 						return true;
 					}
@@ -101,18 +104,30 @@ void PrecipitationWidget::DrawWidget()
 					ImGui::SeparatorText("Subtextures");
 					int numX = static_cast<int>(settings.numSubtexturesX);
 					int numY = static_cast<int>(settings.numSubtexturesY);
-					if (DrawIfMatchesSearch(PrecipitationSetting::kNumSubtexturesX, [&](const char* label) { return ImGui::InputInt(label, &numX); })) {
+					if (DrawIfMatchesSearch(PrecipitationSetting::kNumSubtexturesX, [&](const char* label) {
+						    PushHighlightStyle(label);
+						    bool r = ImGui::InputInt(label, &numX);
+						    PopHighlightStyle(label);
+						    return r;
+					    })) {
 						settings.numSubtexturesX = std::max(1, numX);
 						changed = true;
 					}
-					if (DrawIfMatchesSearch(PrecipitationSetting::kNumSubtexturesY, [&](const char* label) { return ImGui::InputInt(label, &numY); })) {
+					if (DrawIfMatchesSearch(PrecipitationSetting::kNumSubtexturesY, [&](const char* label) {
+						    PushHighlightStyle(label);
+						    bool r = ImGui::InputInt(label, &numY);
+						    PopHighlightStyle(label);
+						    return r;
+					    })) {
 						settings.numSubtexturesY = std::max(1, numY);
 						changed = true;
 					}
 				}
 				DrawSearchSectionIfMatches(PrecipitationSetting::kParticleTexture, [&](const char* label) {
 					ImGui::SeparatorText("Texture Path");
+					PushHighlightStyle(label);
 					const bool inputChanged = ImGui::InputText(label, textureBuffer, sizeof(textureBuffer));
+					PopHighlightStyle(label);
 					std::string_view buf(textureBuffer);
 					if (buf != lastCheckedBuffer) {
 						lastCheckedBuffer = std::string(buf);

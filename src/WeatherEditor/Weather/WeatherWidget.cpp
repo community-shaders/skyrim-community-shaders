@@ -1418,11 +1418,12 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 			// Inherit checkbox
 			if (hasParent) {
 				bool& inheritFlag = settings.inheritFlags[p.first];
-				if (ImGui::Checkbox(("##inherit_" + p.first).c_str(), &inheritFlag)) {
-					if (inheritFlag) {
-						InheritFromParent(p.first);
-						changed = true;
-					}
+				PushHighlightStyle(p.first);
+				bool inheritChanged = ImGui::Checkbox(("##inherit_" + p.first).c_str(), &inheritFlag);
+				PopHighlightStyle(p.first);
+				if (inheritChanged && inheritFlag) {
+					InheritFromParent(p.first);
+					changed = true;
 				}
 				Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 				ImGui::SameLine();

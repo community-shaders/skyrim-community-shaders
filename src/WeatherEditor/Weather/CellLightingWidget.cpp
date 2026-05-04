@@ -82,7 +82,7 @@ void CellLightingWidget::DrawWidget()
 					changed = true;
 			};
 			auto drawCheckbox = [&](const char* settingId, bool& value) {
-				if (DrawIfMatchesSearch(settingId, [&](const char* label) { return ImGui::Checkbox(label, &value); }))
+				if (DrawIfMatchesSearch(settingId, [&](const char* label) { return WeatherUtils::DrawCheckbox(label, value); }))
 					changed = true;
 			};
 
@@ -146,11 +146,21 @@ void CellLightingWidget::DrawWidget()
 					ImGui::SeparatorText("Directional Rotation");
 					int xyDegrees = settings.directionalXY;
 					int zDegrees = settings.directionalZ;
-					if (DrawIfMatchesSearch(CellLightingSetting::kXYRotation, [&](const char* label) { return ImGui::SliderInt(label, &xyDegrees, 0, 360); })) {
+					if (DrawIfMatchesSearch(CellLightingSetting::kXYRotation, [&](const char* label) {
+						    PushHighlightStyle(label);
+						    bool r = ImGui::SliderInt(label, &xyDegrees, 0, 360);
+						    PopHighlightStyle(label);
+						    return r;
+					    })) {
 						settings.directionalXY = static_cast<uint32_t>(xyDegrees);
 						changed = true;
 					}
-					if (DrawIfMatchesSearch(CellLightingSetting::kZRotation, [&](const char* label) { return ImGui::SliderInt(label, &zDegrees, 0, 360); })) {
+					if (DrawIfMatchesSearch(CellLightingSetting::kZRotation, [&](const char* label) {
+						    PushHighlightStyle(label);
+						    bool r = ImGui::SliderInt(label, &zDegrees, 0, 360);
+						    PopHighlightStyle(label);
+						    return r;
+					    })) {
 						settings.directionalZ = static_cast<uint32_t>(zDegrees);
 						changed = true;
 					}

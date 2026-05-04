@@ -245,7 +245,7 @@ void EditorWindow::ShowObjectsWindow()
 					for (auto& widget : weatherWidgets) {
 						if (widget->form == currentWeather || (widget->form && widget->form->GetFormID() == currentWeatherFormID)) {
 							widget->SetOpen(true);
-							ImGui::SetWindowFocus(widget->GetWindowTitle().c_str());
+							widget->RequestFocus();
 							break;
 						}
 					}

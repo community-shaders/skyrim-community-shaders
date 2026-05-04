@@ -145,6 +145,9 @@ public:
 	/// Call instead of SetupWidgetWindowDefaults + ImGui::Begin. Tracks per-type window size.
 	bool BeginWidgetWindow();
 
+	/// Queue focus for the next BeginWidgetWindow call (use instead of SetWindowFocus on a not-yet-drawn window).
+	void RequestFocus() { m_pendingFocus = true; }
+
 	bool open = false;
 
 	bool IsOpen() const
@@ -278,6 +281,8 @@ protected:
 	// True when the search input owned focus this frame; used to suppress the
 	// dropdown's click-outside dismissal while the user interacts with the input.
 	bool searchInputActive = false;
+
+	bool m_pendingFocus = false;
 
 	void NavigateToSearchResult(const SearchResult& result);
 };

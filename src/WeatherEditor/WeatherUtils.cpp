@@ -445,6 +445,17 @@ namespace WeatherUtils
 
 		return changed;
 	}
+
+	bool DrawCheckbox(const std::string& label, bool& value, Widget* widget)
+	{
+		Widget* w = widget ? widget : g_currentWidget;
+		if (w)
+			w->PushHighlightStyle(label);
+		bool changed = ImGui::Checkbox(label.c_str(), &value);
+		if (w)
+			w->PopHighlightStyle(label);
+		return changed;
+	}
 }
 
 // Time of Day (TOD) helper implementation
@@ -1227,44 +1238,48 @@ namespace PropertyDrawer
 
 	bool DrawFloat(const char* label, float& value, float minVal, float maxVal, const char* format)
 	{
-		assert(g_currentWidget && "PropertyDrawer requires WeatherUtils::SetCurrentWidget(this) at start of DrawWidget()");
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
-		g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
 	bool DrawInt(const char* label, int& value, int minVal, int maxVal)
 	{
-		assert(g_currentWidget && "PropertyDrawer requires WeatherUtils::SetCurrentWidget(this) at start of DrawWidget()");
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
-		g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
 	bool DrawColor(const char* label, float3& value)
 	{
-		assert(g_currentWidget && "PropertyDrawer requires WeatherUtils::SetCurrentWidget(this) at start of DrawWidget()");
 		DrawLabel(label);
-		g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = WeatherUtils::DrawColorEdit(label, value);
-		g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 
 	bool DrawCheckbox(const char* label, bool& value)
 	{
-		assert(g_currentWidget && "PropertyDrawer requires WeatherUtils::SetCurrentWidget(this) at start of DrawWidget()");
 		DrawLabel(label);
 		std::string id = std::string("##") + label;
-		g_currentWidget->PushHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PushHighlightStyle(label);
 		bool changed = ImGui::Checkbox(id.c_str(), &value);
-		g_currentWidget->PopHighlightStyle(label);
+		if (g_currentWidget)
+			g_currentWidget->PopHighlightStyle(label);
 		return changed;
 	}
 }  // namespace PropertyDrawer

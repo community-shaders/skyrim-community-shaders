@@ -279,6 +279,10 @@ std::string Widget::GetFolderName() const
 bool Widget::BeginWidgetWindow()
 {
 	SetupWidgetWindowDefaults(GetWidgetTypeName());
+	if (m_pendingFocus) {
+		ImGui::SetNextWindowFocus();
+		m_pendingFocus = false;
+	}
 	bool result = Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags);
 	UpdateWidgetTypeSize(GetWidgetTypeName());
 	return result;
