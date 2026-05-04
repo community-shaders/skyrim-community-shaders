@@ -58,6 +58,16 @@ namespace
 		constexpr const char* kDirectionalZMin = "Directional -Z";
 	}
 
+	namespace WeatherRecord
+	{
+		constexpr const char* kImageSpace = "ImageSpace";
+		constexpr const char* kVolumetricLighting = "Volumetric Lighting";
+		constexpr const char* kPrecipitation = "Precipitation";
+		constexpr const char* kReferenceEffect = "Reference Effect";
+		constexpr int kImageSpaceIdOffset = 0;
+		constexpr int kVolumetricLightingIdOffset = 100;
+	}
+
 	namespace WeatherInherit
 	{
 		constexpr const char* kDalcSpecular = "DALC_Specular";
@@ -240,168 +250,101 @@ void WeatherWidget::DrawWidget()
 			const float todLabelOffset = (hasParent ? 120.0f : 100.0f) * scale;
 			const float formLabelOffset = (hasParent ? 170.0f : 150.0f) * scale;
 			const float pickerWidth = 225.0f * scale;
-
-			// ImageSpace Records (per time of day)
-			if (ImGui::CollapsingHeader("ImageSpace", ImGuiTreeNodeFlags_DefaultOpen)) {
+			auto makeTimeRecordLabel = [](const char* recordType, int colorTime) {
+				return std::format("{} {}", recordType, ColorTimeLabel(colorTime));
+			};
+			auto anyTimeRecordMatches = [&](const char* recordType) {
 				for (int i = 0; i < ColorTimes::kTotal; i++) {
-					ImGui::PushID(i);
-					std::string label = ColorTimeLabel(i);
-					std::string inheritKey = "ImageSpace_" + std::to_string(i);
-
-					// Inherit checkbox
-					if (hasParent) {
-						bool& inheritFlag = settings.inheritFlags[inheritKey];
-						ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag);
-						if (inheritFlag && parentWidget) {
-							if (settings.imageSpaceRefs[i] != parentWidget->settings.imageSpaceRefs[i]) {
-								settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
-								pendingReinit = true;
-							}
+					if (MatchesSearch(makeTimeRecordLabel(recordType, i)))
+						return true;
+				}
+				return false;
+			};
+			auto pushRecordHighlight = [&](const std::string& recordId) {
+				if (!IsHighlighted(recordId))
+					return false;
+				PushHighlightStyle(recordId);
+				return true;
+			};
+			auto drawOpenButton = [](auto& recordRef, auto& widgets, const std::string& buttonId, const char* tooltip) {
+				if (!recordRef)
+					return;
+				ImGui::SameLine();
+				if (ImGui::SmallButton(buttonId.c_str())) {
+					for (auto& widget : widgets) {
+						if (widget->form == recordRef) {
+							widget->SetOpen(true);
+							break;
 						}
-						Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-						ImGui::SameLine();
 					}
+				}
+				Util::AddTooltip(tooltip);
+			};
+			auto drawInheritCheckbox = [&](const std::string& inheritKey, auto& recordRef, auto& parentRef) {
+				if (!hasParent)
+					return;
+				bool& inheritFlag = settings.inheritFlags[inheritKey];
+				ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag);
+				if (inheritFlag && parentWidget && recordRef != parentRef) {
+					recordRef = parentRef;
+					pendingReinit = true;
+				}
+				Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
+				ImGui::SameLine();
+			};
+			auto drawTimeRecordSection = [&](const char* sectionLabel, int idOffset, const char* inheritPrefix, auto& recordRefs, auto& parentRefs, auto& widgets, const char* pickerId, const char* openTooltip) {
+				if (!anyTimeRecordMatches(sectionLabel) || !ImGui::CollapsingHeader(sectionLabel, ImGuiTreeNodeFlags_DefaultOpen))
+					return;
+				for (int i = 0; i < ColorTimes::kTotal; i++) {
+					std::string rowId = makeTimeRecordLabel(sectionLabel, i);
+					if (!MatchesSearch(rowId))
+						continue;
 
+					ImGui::PushID(idOffset + i);
+					std::string label = ColorTimeLabel(i);
+					std::string inheritKey = std::format("{}_{}", inheritPrefix, i);
+					const bool recordHighlighted = pushRecordHighlight(rowId);
+
+					drawInheritCheckbox(inheritKey, recordRefs[i], parentRefs[i]);
 					ImGui::Text("%s:", label.c_str());
 					ImGui::SameLine(todLabelOffset);
-					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
+					if (WeatherUtils::DrawFormPickerCached(pickerId, recordRefs[i], widgets, false, true, pickerWidth)) {
 						pendingReinit = true;
-					}  // Add "Open" button
-					if (settings.imageSpaceRefs[i]) {
-						ImGui::SameLine();
-						if (ImGui::SmallButton(std::format("Open##{}", i).c_str())) {
-							for (auto& widget : editorWindow->imageSpaceWidgets) {
-								if (widget->form == settings.imageSpaceRefs[i]) {
-									widget->SetOpen(true);
-									break;
-								}
-							}
-						}
-						Util::AddTooltip("Open this ImageSpace for editing");
 					}
+					drawOpenButton(recordRefs[i], widgets, std::format("Open##{}", i), openTooltip);
 
+					if (recordHighlighted)
+						PopHighlightStyle(rowId);
 					ImGui::PopID();
 				}
 				ImGui::Spacing();
-			}
+			};
+			auto drawSingleRecordSection = [&](const char* sectionLabel, const char* recordId, const char* inheritKey, const char* valueLabel, const char* pickerId, auto& recordRef, auto& parentRef, auto& widgets, const char* buttonId, const char* openTooltip) {
+				if (!MatchesSearch(recordId) || !ImGui::CollapsingHeader(sectionLabel, ImGuiTreeNodeFlags_DefaultOpen))
+					return;
+				const bool recordHighlighted = pushRecordHighlight(recordId);
 
-			// Volumetric Lighting Records (per time of day)
-			if (ImGui::CollapsingHeader("Volumetric Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
-				for (int i = 0; i < ColorTimes::kTotal; i++) {
-					ImGui::PushID(100 + i);
-					std::string label = ColorTimeLabel(i);
-					std::string inheritKey = "VolumetricLighting_" + std::to_string(i);
-
-					// Inherit checkbox
-					if (hasParent) {
-						bool& inheritFlag = settings.inheritFlags[inheritKey];
-						ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag);
-						if (inheritFlag && parentWidget) {
-							if (settings.volumetricLightingRefs[i] != parentWidget->settings.volumetricLightingRefs[i]) {
-								settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
-								pendingReinit = true;
-							}
-						}
-						Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-						ImGui::SameLine();
-					}
-
-					ImGui::Text("%s:", label.c_str());
-					ImGui::SameLine(todLabelOffset);
-					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
-						pendingReinit = true;
-					}  // Add "Open" button
-					if (settings.volumetricLightingRefs[i]) {
-						ImGui::SameLine();
-						if (ImGui::SmallButton(std::format("Open##{}", i).c_str())) {
-							for (auto& widget : editorWindow->volumetricLightingWidgets) {
-								if (widget->form == settings.volumetricLightingRefs[i]) {
-									widget->SetOpen(true);
-									break;
-								}
-							}
-						}
-						Util::AddTooltip("Open this Volumetric Lighting for editing");
-					}
-
-					ImGui::PopID();
-				}
-				ImGui::Spacing();
-			}
-
-			// Precipitation Data
-			if (ImGui::CollapsingHeader("Precipitation", ImGuiTreeNodeFlags_DefaultOpen)) {
-				// Inherit checkbox
-				if (hasParent) {
-					bool& inheritFlag = settings.inheritFlags["Precipitation"];
-					ImGui::Checkbox("##inherit_Precipitation", &inheritFlag);
-					if (inheritFlag && parentWidget) {
-						if (settings.precipitationData != parentWidget->settings.precipitationData) {
-							settings.precipitationData = parentWidget->settings.precipitationData;
-							pendingReinit = true;
-						}
-					}
-					Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-					ImGui::SameLine();
-				}
-
-				ImGui::Text("Particle Shader:");
+				drawInheritCheckbox(inheritKey, recordRef, parentRef);
+				ImGui::Text("%s:", valueLabel);
 				ImGui::SameLine(formLabelOffset);
-				if (WeatherUtils::DrawFormPickerCached("##Precipitation", settings.precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
+				if (WeatherUtils::DrawFormPickerCached(pickerId, recordRef, widgets, false, true, pickerWidth)) {
 					pendingReinit = true;
-				}  // Add "Open" button
-				if (settings.precipitationData) {
-					ImGui::SameLine();
-					if (ImGui::SmallButton("Open##Precip")) {
-						for (auto& widget : editorWindow->precipitationWidgets) {
-							if (widget->form == settings.precipitationData) {
-								widget->SetOpen(true);
-								break;
-							}
-						}
-					}
-					Util::AddTooltip("Open this Precipitation for editing");
 				}
+				drawOpenButton(recordRef, widgets, buttonId, openTooltip);
 
+				if (recordHighlighted)
+					PopHighlightStyle(recordId);
 				ImGui::Spacing();
-			}
+			};
 
-			// Visual Effect (Reference Effect)
-			if (ImGui::CollapsingHeader("Visual Effect", ImGuiTreeNodeFlags_DefaultOpen)) {
-				// Inherit checkbox
-				if (hasParent) {
-					bool& inheritFlag = settings.inheritFlags["ReferenceEffect"];
-					ImGui::Checkbox("##inherit_ReferenceEffect", &inheritFlag);
-					if (inheritFlag && parentWidget) {
-						if (settings.referenceEffect != parentWidget->settings.referenceEffect) {
-							settings.referenceEffect = parentWidget->settings.referenceEffect;
-							pendingReinit = true;
-						}
-					}
-					Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-					ImGui::SameLine();
-				}
-
-				ImGui::Text("Reference Effect:");
-				ImGui::SameLine(formLabelOffset);
-				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", settings.referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
-					pendingReinit = true;
-				}  // Add "Open" button
-				if (settings.referenceEffect) {
-					ImGui::SameLine();
-					if (ImGui::SmallButton("Open##RefEffect")) {
-						for (auto& widget : editorWindow->referenceEffectWidgets) {
-							if (widget->form == settings.referenceEffect) {
-								widget->SetOpen(true);
-								break;
-							}
-						}
-					}
-					Util::AddTooltip("Open this Visual Effect for editing");
-				}
-
-				ImGui::Spacing();
-			}
+			auto* parentImageSpaceRefs = parentWidget ? parentWidget->settings.imageSpaceRefs : settings.imageSpaceRefs;
+			auto* parentVolumetricLightingRefs = parentWidget ? parentWidget->settings.volumetricLightingRefs : settings.volumetricLightingRefs;
+			auto* parentPrecipitationData = parentWidget ? parentWidget->settings.precipitationData : settings.precipitationData;
+			auto* parentReferenceEffect = parentWidget ? parentWidget->settings.referenceEffect : settings.referenceEffect;
+			drawTimeRecordSection(WeatherRecord::kImageSpace, WeatherRecord::kImageSpaceIdOffset, WeatherRecord::kImageSpace, settings.imageSpaceRefs, parentImageSpaceRefs, editorWindow->imageSpaceWidgets, "##ImageSpace", "Open this ImageSpace for editing");
+			drawTimeRecordSection(WeatherRecord::kVolumetricLighting, WeatherRecord::kVolumetricLightingIdOffset, "VolumetricLighting", settings.volumetricLightingRefs, parentVolumetricLightingRefs, editorWindow->volumetricLightingWidgets, "##VolumetricLighting", "Open this Volumetric Lighting for editing");
+			drawSingleRecordSection(WeatherRecord::kPrecipitation, WeatherRecord::kPrecipitation, WeatherRecord::kPrecipitation, "Particle Shader", "##Precipitation", settings.precipitationData, parentPrecipitationData, editorWindow->precipitationWidgets, "Open##Precip", "Open this Precipitation for editing");
+			drawSingleRecordSection("Visual Effect", WeatherRecord::kReferenceEffect, "ReferenceEffect", WeatherRecord::kReferenceEffect, "##ReferenceEffect", settings.referenceEffect, parentReferenceEffect, editorWindow->referenceEffectWidgets, "Open##RefEffect", "Open this Visual Effect for editing");
 
 			if (pendingReinit) {
 				ApplyChanges();
@@ -1028,7 +971,7 @@ void WeatherWidget::DrawWeatherColorSettings()
 			std::string colorTypeLabel = ColorTypeLabel(i);
 
 			DrawSearchSectionIfMatches(colorTypeLabel, [&](const char* label) {
-				if (hasParent) {
+				if (hasParent && parentWidget) {
 					float3 parentColors[4];
 					for (int j = 0; j < 4; j++)
 						parentColors[j] = parentWidget->settings.atmosphereColors[i].colorTimes[j];
@@ -1168,7 +1111,7 @@ void WeatherWidget::DrawCloudSettings()
 				TOD::RenderTODHeader();
 				TOD::DrawTODSeparator();
 
-				if (hasParent) {
+				if (hasParent && parentWidget) {
 					float3 parentColors[4];
 					float parentAlphas[4];
 					for (int j = 0; j < 4; j++) {
@@ -1245,6 +1188,8 @@ void WeatherWidget::DrawFogSettings()
 			PopHighlightStyle(highlightId);
 	};
 	auto inheritFogPair = [&](const char* inheritKey, const char* dayKey, const char* nightKey) {
+		if (!parentWidget)
+			return;
 		if (!settings.inheritFlags[inheritKey])
 			return;
 
@@ -1421,9 +1366,12 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 			// Inherit checkbox
 			if (hasParent) {
 				bool& inheritFlag = settings.inheritFlags[p.first];
-				PushHighlightStyle(p.first);
+				const bool highlighted = IsHighlighted(p.first);
+				if (highlighted)
+					PushHighlightStyle(p.first);
 				bool inheritChanged = ImGui::Checkbox(("##inherit_" + p.first).c_str(), &inheritFlag);
-				PopHighlightStyle(p.first);
+				if (highlighted)
+					PopHighlightStyle(p.first);
 				if (inheritChanged && inheritFlag) {
 					InheritFromParent(p.first);
 					changed = true;
@@ -2063,15 +2011,15 @@ std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() con
 
 	// Records tab: one entry per time-of-day slot for each form-picker section
 	for (int i = 0; i < ColorTimes::kTotal; i++) {
-		std::string label = std::format("ImageSpace {}", ColorTimeLabel(i));
+		std::string label = std::format("{} {}", WeatherRecord::kImageSpace, ColorTimeLabel(i));
 		results.push_back({ label, WeatherTab::kRecords, label });
 	}
 	for (int i = 0; i < ColorTimes::kTotal; i++) {
-		std::string label = std::format("Volumetric Lighting {}", ColorTimeLabel(i));
+		std::string label = std::format("{} {}", WeatherRecord::kVolumetricLighting, ColorTimeLabel(i));
 		results.push_back({ label, WeatherTab::kRecords, label });
 	}
-	results.push_back({ "Precipitation", WeatherTab::kRecords, "Precipitation" });
-	results.push_back({ "Reference Effect", WeatherTab::kRecords, "Reference Effect" });
+	results.push_back({ WeatherRecord::kPrecipitation, WeatherTab::kRecords, WeatherRecord::kPrecipitation });
+	results.push_back({ WeatherRecord::kReferenceEffect, WeatherTab::kRecords, WeatherRecord::kReferenceEffect });
 
 	return results;
 }
