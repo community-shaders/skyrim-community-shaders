@@ -110,10 +110,9 @@ namespace BackgroundBlur
 			ID3D11RenderTargetView* rtv = nullptr;
 		};
 
-		bool ShouldUseD3D12UIBufferForBlur(HDRDisplay* hdr)
+		bool ShouldUseD3D12UIBufferForBlur()
 		{
-			auto* ui = globals::game::ui;
-			return hdr ? hdr->ShouldUseD3D12UIBuffer() : (ui && !ui->GameIsPaused());
+			return globals::features::hdrDisplay.ShouldUseD3D12UIBuffer();
 		}
 
 		UIBufferViews GetD3D12UIBufferViews(const DX12SwapChain::BlurResources& res)
@@ -123,7 +122,7 @@ namespace BackgroundBlur
 
 		UIBufferViews GetHDRUIBufferViews(HDRDisplay& hdr, Upscaling& upscaling)
 		{
-			if (upscaling.d3d12SwapChainActive && ShouldUseD3D12UIBufferForBlur(&hdr))
+			if (upscaling.d3d12SwapChainActive && ShouldUseD3D12UIBufferForBlur())
 				return GetD3D12UIBufferViews(upscaling.GetBlurResources());
 
 			if (hdr.uiTexture && hdr.uiTexture->srv && hdr.uiTexture->rtv)
@@ -613,7 +612,7 @@ namespace BackgroundBlur
 			sourceSRV = res.backbufferSRV;
 
 			// D3D12 HDR/FG can route vanilla UI into a separate buffer.
-			if (ShouldUseD3D12UIBufferForBlur(hdr))
+			if (ShouldUseD3D12UIBufferForBlur())
 				uiBuffer = GetD3D12UIBufferViews(res);
 		} else {
 			// Normal path: get current render target
