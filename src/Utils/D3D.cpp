@@ -1,6 +1,7 @@
 #include "D3D.h"
 
 #include "Features/TerrainBlending.h"
+#include "ShaderCache.h"
 #include "State.h"
 #include "Utils/Format.h"
 #include <DDSTextureLoader.h>
@@ -193,6 +194,15 @@ namespace Util
 
 		// Compiler setup
 		uint32_t flags = !globals::state->IsDeveloperMode() ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
+		if (globals::state->enablePartialPrecision.load(std::memory_order_relaxed))
+			flags |= D3DCOMPILE_PARTIAL_PRECISION;
+		if (globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed))
+			flags |= D3DCOMPILE_AVOID_FLOW_CONTROL;
+		// Disk cache on = user is running shipped, known-good shaders — skip the fxc
+		// validation pass to trim compile time. Disk cache off = dev workflow, keep
+		// validation so malformed source produces a clean error instead of UB.
+		if (globals::shaderCache->IsDiskCache())
+			flags |= D3DCOMPILE_SKIP_VALIDATION;
 
 		ID3DBlob* shaderBlob;
 		ID3DBlob* shaderErrors;
@@ -210,19 +220,19 @@ namespace Util
 			logger::debug("Shader logs:\n{}", static_cast<char*>(shaderErrors->GetBufferPointer()));
 		if (!_stricmp(ProgramType, "ps_5_0")) {
 			ID3D11PixelShader* regShader;
-			device->CreatePixelShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
+			DX::ThrowIfFailed(device->CreatePixelShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
 			return regShader;
 		} else if (!_stricmp(ProgramType, "vs_5_0")) {
 			ID3D11VertexShader* regShader;
-			device->CreateVertexShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
+			DX::ThrowIfFailed(device->CreateVertexShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
 			return regShader;
 		} else if (!_stricmp(ProgramType, "hs_5_0")) {
 			ID3D11HullShader* regShader;
-			device->CreateHullShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
+			DX::ThrowIfFailed(device->CreateHullShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
 			return regShader;
 		} else if (!_stricmp(ProgramType, "ds_5_0")) {
 			ID3D11DomainShader* regShader;
-			device->CreateDomainShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
+			DX::ThrowIfFailed(device->CreateDomainShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
 			return regShader;
 		} else if (!_stricmp(ProgramType, "cs_5_0")) {
 			ID3D11ComputeShader* regShader;

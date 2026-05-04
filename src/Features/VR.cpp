@@ -80,31 +80,7 @@ void VR::RestoreDefaultSettings()
 
 void VR::SetupResources()
 {
-	// Compile stereo blend compute shader and create copy texture
-	std::vector<std::pair<const char*, const char*>> defines = { { "VR", "" }, { "FRAMEBUFFER", "" } };
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", defines, "cs_5_0")))
-		stereoBlendCS.attach(rawPtr);
-
-	auto backCheckDefines = defines;
-	backCheckDefines.push_back({ "DEBUG_BACKCHECK", "" });
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", backCheckDefines, "cs_5_0")))
-		stereoBlendDebugBackCheckCS.attach(rawPtr);
-
-	auto blendWeightDefines = defines;
-	blendWeightDefines.push_back({ "DEBUG_BLEND_WEIGHT", "" });
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", blendWeightDefines, "cs_5_0")))
-		stereoBlendDebugBlendWeightCS.attach(rawPtr);
-
-	auto edgeDetectionDefines = defines;
-	edgeDetectionDefines.push_back({ "DEBUG_EDGE_DETECTION", "" });
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", edgeDetectionDefines, "cs_5_0")))
-		stereoBlendDebugEdgeDetectionCS.attach(rawPtr);
-
-	// Overwrite mode: direct replacement instead of blend (for stencil culling)
-	auto overwriteDefines = defines;
-	overwriteDefines.push_back({ "STEREO_OVERWRITE", "" });
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", overwriteDefines, "cs_5_0")))
-		stereoBlendOverwriteCS.attach(rawPtr);
+	CompileStereoBlendShaders();
 
 	auto renderer = globals::game::renderer;
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];

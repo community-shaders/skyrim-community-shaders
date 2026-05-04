@@ -4,11 +4,11 @@
 
 #include "Buffer.h"
 #include "RE/B/BSShadowDirectionalLight.h"
-#include <winrt/base.h>
 
 #define ALBEDO RE::RENDER_TARGETS::kINDIRECT
 #define SPECULAR RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED
 #define REFLECTANCE RE::RENDER_TARGETS::kRAWINDIRECT
+#define NORMALROUGHNESS RE::RENDER_TARGETS::kRAWINDIRECT_DOWNSCALED
 #define MASKS RE::RENDER_TARGETS::kRAWINDIRECT_PREVIOUS
 #define MASKS2 RE::RENDER_TARGETS::kRAWINDIRECT_PREVIOUS_DOWNSCALED
 
@@ -43,6 +43,9 @@ public:
 
 	void ClearShaderCache();
 
+	ID3D11ComputeShader* GetComputeMainComposite();
+	ID3D11ComputeShader* GetComputeMainCompositeInterior();
+
 	// Reads directional shadow parameters from BSShadowDirectionalLight and uploads
 	// to the structured buffer at t98 (DirectionalShadowLightData — cascade splits +
 	// world-to-shadow projections). Called during EarlyPrepasses once shadow maps
@@ -50,24 +53,13 @@ public:
 	// constant-buffer fields into a UAV.
 	void CopyShadowLightData();
 
-	ID3D11PixelShader* GetCompositePS(bool interior);
-	ID3D11VertexShader* GetCompositeVS();
-
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];
 
 	RE::RENDER_TARGET forwardRenderTargets[4];
 
-	ID3D11PixelShader* compositePS = nullptr;
-	ID3D11PixelShader* compositePSInterior = nullptr;
-	ID3D11VertexShader* compositeVS = nullptr;
-
-	winrt::com_ptr<ID3D11BlendState> compositeBlendState;
-	winrt::com_ptr<ID3D11DepthStencilState> compositeDepthStencilState;
-	winrt::com_ptr<ID3D11DepthStencilState> compositeStencilDSState;
-	winrt::com_ptr<ID3D11RasterizerState> compositeRasterizerState;
-
-	RE::RENDER_TARGET normalRoughnessRT = RE::RENDER_TARGETS::kNORMAL_TAAMASK_SSRMASK;
+	ID3D11ComputeShader* mainCompositeCS = nullptr;
+	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
 	// Directional shadow structured buffer (t98): cascade splits and projections.
 	Buffer* directionalShadowLights = nullptr;

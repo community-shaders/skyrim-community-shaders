@@ -66,12 +66,18 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	if (upscaling.IsBackendInitialized())
 		upscaling.CheckBackendFeatures(pAdapter);
 
-	// Use better swap effect to prevent tearing and improve performance
+	// FLIP_DISCARD requires BufferCount >= 2 and a flip-model-compatible (non-sRGB) format.
 	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	if (pSwapChainDesc->BufferCount < 2)
+		pSwapChainDesc->BufferCount = 2;
 
 	if (globals::features::hdrDisplay.loaded) {
 		logger::info("[Upscaling] Upgrading swap chain format from {} to R10G10B10A2_UNORM for HDR", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
 		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	} else if (pSwapChainDesc->BufferDesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) {
+		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	} else if (pSwapChainDesc->BufferDesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) {
+		pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	}
 
 	bool shouldProxy = !globals::game::isVR;
@@ -592,6 +598,32 @@ void Upscaling::DataLoaded()
 	// The game defaults this to a non-zero value
 	static auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
 	fDRClampOffset->data.f = 0.0f;
+
+	// VR + DLSS workaround: rebuild the DLSS feature on cell/worldspace transitions to
+	// clear a persistent post-load GPU-time regression (see pendingDLSSReset comment).
+	if (globals::game::isVR)
+		MenuOpenCloseEventHandler::Register();
+}
+
+RE::BSEventNotifyControl Upscaling::MenuOpenCloseEventHandler::ProcessEvent(
+	const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
+{
+	if (a_event && a_event->menuName == RE::LoadingMenu::MENU_NAME && !a_event->opening)
+		globals::features::upscaling.pendingDLSSReset.store(true, std::memory_order_relaxed);
+	return RE::BSEventNotifyControl::kContinue;
+}
+
+bool Upscaling::MenuOpenCloseEventHandler::Register()
+{
+	static MenuOpenCloseEventHandler singleton;
+	auto ui = globals::game::ui;
+	if (!ui) {
+		logger::error("[Upscaling] UI event source not found; DLSS reset-on-load disabled");
+		return false;
+	}
+	ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(&singleton);
+	logger::info("[Upscaling] Registered MenuOpenCloseEventHandler for DLSS reset-on-load");
+	return true;
 }
 
 void Upscaling::Load()
@@ -1775,6 +1807,14 @@ void Upscaling::Upscale()
 		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling Dispatch");
 
 		if (upscaleMethod == UpscaleMethod::kDLSS) {
+			// VR-only workaround: a worldspace/cell transition causes ~2-3ms persistent GPU-time
+			// regression in the DLSS feature that only clears on a manual mode/preset toggle.
+			// Mirror that toggle by tearing down the DLSS feature on LoadingMenu close — the next
+			// SetDLSSOptions/slEvaluateFeature call below recreates it with current per-eye extents.
+			if (globals::game::isVR && pendingDLSSReset.exchange(false, std::memory_order_relaxed)) {
+				logger::debug("[Upscaling] LoadingMenu close detected — rebuilding DLSS feature");
+				streamline.DestroyDLSSResources();
+			}
 			streamline.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVectorCopyTexture->resource.get());
 		} else if (upscaleMethod == UpscaleMethod::kFSR) {
 			fidelityFX.Upscale(main.texture, reactiveMaskTexture->resource.get(), transparencyCompositionMaskTexture->resource.get(), motionVector.texture, settings.sharpnessFSR);

@@ -206,6 +206,13 @@ public:
 	bool previousUpscalingWasActive = false;
 	bool depthUpscaleUseWideKernel = false;
 
+	/// Set by MenuOpenCloseEventHandler when LoadingMenu closes (cell/worldspace transitions,
+	/// initial load). Consumed at the start of Upscale() to force a one-frame DLSS feature
+	/// rebuild — works around a VR-only persistent ~2-3ms GPU regression after worldspace
+	/// loads that otherwise only clears when the user manually toggles DLSS/preset. VR+DLSS
+	/// only; flat has no repro and per-eye extent asymmetry doesn't apply.
+	std::atomic<bool> pendingDLSSReset{ false };
+
 	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();
@@ -286,5 +293,12 @@ private:
 	{
 		static void thunk();
 		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+		static bool Register();
 	};
 };
