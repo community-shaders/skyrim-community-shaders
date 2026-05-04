@@ -147,7 +147,10 @@ namespace DynamicCubemaps
 #		endif
 
 #		if defined(SKYLIGHTING)
-		const float skylightingSpecular = SharedData::InInterior ? 0.0 : Skylighting::EvaluateSpecular(skylighting, SphericalHarmonics::FauxSpecularLobe(N, V, roughness));
+		float skylightingSpecular = 0.0;
+		if (!SharedData::InInterior) {
+			skylightingSpecular = Skylighting::EvaluateSpecular(skylighting, SphericalHarmonics::FauxSpecularLobe(N, V, roughness));
+		}
 #		endif
 
 #		if defined(IBL)
