@@ -1615,7 +1615,12 @@ bool Upscaling::IsFrameGenerationActive() const
 bool Upscaling::ShouldUseFrameGeneration() const
 {
 	auto* ui = globals::game::ui;
-	return settings.frameGenerationMode && (settings.frameGenerationAllowInMenus || !ui || !ui->GameIsPaused());
+	auto* state = globals::state;
+	const bool menuOpen =
+		(state && (state->isMapMenuOpen || state->isMainMenuOpen || state->isLoadingMenuOpen)) ||
+		(ui && ui->GameIsPaused());
+
+	return settings.frameGenerationMode && (settings.frameGenerationAllowInMenus || !menuOpen);
 }
 
 bool Upscaling::IsUpscalingActive() const
