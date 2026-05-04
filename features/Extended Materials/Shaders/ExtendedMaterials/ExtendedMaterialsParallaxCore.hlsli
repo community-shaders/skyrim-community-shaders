@@ -71,6 +71,16 @@
 		}
 #endif
 
+#if defined(LANDSCAPE)
+		// Default out weights for static analysis; ray-march / secant paths overwrite.
+		weights[0] = input.LandBlendWeights1.x;
+		weights[1] = input.LandBlendWeights1.y;
+		weights[2] = input.LandBlendWeights1.z;
+		weights[3] = input.LandBlendWeights1.w;
+		weights[4] = input.LandBlendWeights2.x;
+		weights[5] = input.LandBlendWeights2.y;
+#endif
+
 		{
 			const float maxSteps = 8;
 			uint numSteps = max(4, uint(scale * maxSteps));
@@ -110,31 +120,32 @@
 				bool4 testResult = currHeight >= currentBound;
 				[branch] if (any(testResult))
 				{
-					float2 outOffset = 0;
 					intersectionFound = true;
-					[flatten] if (testResult.w)
+					// Priority matches former [flatten] chain: x overwrites y overwrites z overwrites w.
+					float2 outOffset;
+					[branch] if (testResult.x)
 					{
-						outOffset = currentOffset[1].xy;
-						pt1 = float2(currentBound.w, currHeight.w);
-						pt2 = float2(currentBound.z, currHeight.z);
+						outOffset = prevOffset;
+						pt1 = float2(currentBound.x, currHeight.x);
+						pt2 = float2(prevBound, prevHeight);
 					}
-					[flatten] if (testResult.z)
-					{
-						outOffset = currentOffset[0].zw;
-						pt1 = float2(currentBound.z, currHeight.z);
-						pt2 = float2(currentBound.y, currHeight.y);
-					}
-					[flatten] if (testResult.y)
+					else if (testResult.y)
 					{
 						outOffset = currentOffset[0].xy;
 						pt1 = float2(currentBound.y, currHeight.y);
 						pt2 = float2(currentBound.x, currHeight.x);
 					}
-					[flatten] if (testResult.x)
+					else if (testResult.z)
 					{
-						outOffset = prevOffset;
-						pt1 = float2(currentBound.x, currHeight.x);
-						pt2 = float2(prevBound, prevHeight);
+						outOffset = currentOffset[0].zw;
+						pt1 = float2(currentBound.z, currHeight.z);
+						pt2 = float2(currentBound.y, currHeight.y);
+					}
+					else
+					{
+						outOffset = currentOffset[1].xy;
+						pt1 = float2(currentBound.w, currHeight.w);
+						pt2 = float2(currentBound.z, currHeight.z);
 					}
 					prevOffset = outOffset;
 					break;
@@ -165,7 +176,7 @@
 					float tSecant = lerp(tNear, tFar, r);
 					float2 secantCoords = coords.xy + viewDirTS.xy * (((1.0 - tSecant) * -maxHeight) + minHeight);
 
-					float hSecant;
+					float hSecant = 0.0;
 #if defined(LANDSCAPE)
 					hSecant = GetTerrainHeight(noise, input, secantCoords, mipLevels, params, blendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
 #else

@@ -85,7 +85,7 @@
 		float qh0[6], float qh1[6], float qh2[6], float qh3[6], out float weights[6])
 	{
 		float wTmp[6];
-		float t0, t1, t2, t3;
+		float t0 = 0.0, t1 = 0.0, t2 = 0.0, t3 = 0.0;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, qh0, wTmp, t0);
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, qh1, wTmp, t1);
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, qh2, wTmp, t2);
@@ -126,7 +126,7 @@
 
 		EM_PBR_DISP_FOREACH(EM_PBR_DISP_LAYER_SCALAR)
 
-		float total;
+		float total = 0.0;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 		return total;
 	}
@@ -218,7 +218,7 @@
 		EM_LEGACY_LAYER345_SCALAR(4, Permutation::ExtraFeatureFlags::THLand4HasDisplacement, TexLandTHDisp4Sampler, TexLandColor5Sampler, w2.x, w2.x)
 		EM_LEGACY_LAYER345_SCALAR(5, Permutation::ExtraFeatureFlags::THLand5HasDisplacement, TexLandTHDisp5Sampler, TexLandColor6Sampler, w2.y, w2.y)
 
-		float total;
+		float total = 0.0;
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 		return total;
 	}
