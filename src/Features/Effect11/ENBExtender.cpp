@@ -274,6 +274,7 @@ namespace ENBExtender
 	{
 		std::string result;
 		result.reserve(content.size());
+		result += "#define ENB_EXT_VER 1\n";
 		std::istringstream stream(content);
 		std::string line;
 
