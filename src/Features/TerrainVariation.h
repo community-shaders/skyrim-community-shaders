@@ -1,5 +1,9 @@
 #pragma once
 
+#include <shared_mutex>
+#include <unordered_set>
+#include <vector>
+
 struct TerrainVariation : Feature
 {
 private:
@@ -34,12 +38,26 @@ public:
 	struct alignas(16) Settings
 	{
 		uint32_t enableLODTerrainTilingFix = 1;
-		uint32_t pad[3]{};
+		float meshUvScale = 24.0f;
+		float meshVariationStrength = 1.0f;
+		float meshParallaxShadowStrength = 1.0f;
 	};
 
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;
+	std::vector<std::string> pbrTextureOptInIds{};
+	mutable std::shared_mutex textureIdMutex;
+	std::unordered_set<std::string> pbrTextureOptInSet{};
+	std::unordered_set<std::string> pbrObservedTextureSet{};
+	std::vector<std::string> pbrObservedTextureIds{};
+
+	static std::string CanonicalizeTextureIdentity(std::string_view identity);
+	void RebuildOptInSet();
+
+public:
+	void RegisterObservedPBRTextureIdentity(std::string_view identity);
+	bool IsPBRTextureIdentityOptedIn(std::string_view identity) const;
 
 	virtual void DrawSettings() override;
 	virtual bool DrawFailLoadMessage() const override;

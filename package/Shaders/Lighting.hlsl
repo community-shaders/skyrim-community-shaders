@@ -1363,9 +1363,28 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	rawRMAOS = blendedRMAOS;
 #		endif
 #	else  // Non-landscape code
-	float4 rawBaseColor = TexColorSampler.SampleBias(SampColorSampler, diffuseUv, SharedData::MipBias);
+	float4 rawBaseColor;
+#		if defined(TERRAIN_VARIATION)
+	const bool applyPBRTextureTV = (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::TVPBRTextureOptIn) != 0;
+	if (applyPBRTextureTV) {
+		StochasticOffsets meshOffset = ComputeStochasticOffsets(input.TexCoord0.xy);
+		rawBaseColor = StochasticEffect(TexColorSampler, SampColorSampler, diffuseUv, meshOffset, 0.0);
+	} else
+#		endif
+	{
+		rawBaseColor = TexColorSampler.SampleBias(SampColorSampler, diffuseUv, SharedData::MipBias);
+	}
 	baseColor = float4(Color::Diffuse(rawBaseColor.rgb), rawBaseColor.a);
-	float4 normalColor = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
+	float4 normalColor;
+#		if defined(TERRAIN_VARIATION)
+	if (applyPBRTextureTV) {
+		StochasticOffsets meshOffset = ComputeStochasticOffsets(input.TexCoord0.xy);
+		normalColor = StochasticEffect(TexNormalSampler, SampNormalSampler, uv, meshOffset, 0.0);
+	} else
+#		endif
+	{
+		normalColor = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
+	}
 	normal = normalColor;
 #		if defined(TRUE_PBR)
 	rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, diffuseUv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
