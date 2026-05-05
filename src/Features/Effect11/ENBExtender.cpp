@@ -594,12 +594,14 @@ namespace ENBExtender
 
 	void InsertUIDefines(Effect& effect)
 	{
+		int defineSourceOrder = -static_cast<int>(effect.uiDefines.size());
 		for (const auto& def : effect.uiDefines) {
 			Effect::UIVariable uiVar = {};
 			uiVar.name = def.defineName;
 			uiVar.displayName = def.displayName;
 			uiVar.group = def.group;
 			uiVar.ordering = def.ordering;
+			uiVar.sourceOrder = defineSourceOrder++;
 			uiVar.isDefine = true;
 
 			if (def.type == "bool") {
