@@ -439,8 +439,6 @@ void Raytracing::DrawAdvancedSettings()
 
 	DrawEnumCombo("Diffuse BRDF", advSettings.DiffuseBRDF);
 
-	ImGui::Checkbox("Enable Water", &settings.CreationEngineRaytracingSettings.AdvancedSettings.EnableWater);
-
 	ImGui::Checkbox("Stable Planes", &settings.CreationEngineRaytracingSettings.AdvancedSettings.StablePlanes);
 
 	ImGui::PopID();
@@ -1129,9 +1127,12 @@ void Raytracing::DeferredPasses()
 
 		// Copy Depth and Motion Vectors if culling is enabled
 		if (settings.CreationEngineRaytracingSettings.ExperimentalSettings.PathTracingCull) {
+			auto depthStencils = renderer->GetDepthStencilData().depthStencils;
+			auto& mainDepth = depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+
 			context->OMSetRenderTargets(1, 
 				&renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].RTV, 
-				renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].views[0]
+				mainDepth.views[0]
 			);
 
 			context->OMSetDepthStencilState(depthStencilState.get(), 0);
@@ -1154,6 +1155,9 @@ void Raytracing::DeferredPasses()
 			context->PSSetShaderResources(1, 1, &ptMotionVectorsTexture->srv);
 
 			context->Draw(3, 0);
+
+			context->CopyResource(depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY].texture, mainDepth.texture);
+			context->CopyResource(depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].texture, mainDepth.texture);
 		}
 	}
 
