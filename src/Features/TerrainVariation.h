@@ -38,9 +38,7 @@ public:
 	struct alignas(16) Settings
 	{
 		uint32_t enableLODTerrainTilingFix = 1;
-		float meshUvScale = 24.0f;
-		float meshVariationStrength = 1.0f;
-		float meshParallaxShadowStrength = 1.0f;
+		uint32_t pad[3]{};
 	};
 
 	STATIC_ASSERT_ALIGNAS_16(Settings);

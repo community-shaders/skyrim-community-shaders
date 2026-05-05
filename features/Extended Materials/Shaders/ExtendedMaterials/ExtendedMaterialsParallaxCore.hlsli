@@ -3,6 +3,21 @@
 
 // Body included inside `namespace ExtendedMaterials` from ExtendedMaterials.hlsli.
 
+#if !defined(LANDSCAPE)
+	float SampleParallaxHeight(float2 coords, float mipLevel, Texture2D<float4> tex, SamplerState texSampler, uint channel, DisplacementParams params)
+	{
+#if defined(TERRAIN_VARIATION)
+		const bool applyPBRTextureTV = (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::TVPBRTextureOptIn) != 0;
+		if (applyPBRTextureTV) {
+			StochasticOffsets meshOffset = ComputeStochasticOffsetsMesh(coords);
+			float h = StochasticEffectParallaxMesh(tex, texSampler, coords, mipLevel, meshOffset)[channel];
+			return AdjustDisplacementNormalized(h, params);
+		}
+#endif
+		return AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords, mipLevel)[channel], params);
+	}
+#endif
+
 #if defined(LANDSCAPE)
 	float2 GetParallaxCoords(PS_INPUT input, float2 coords, float mipLevels[6], float3 viewDir, float3x3 tbn, float noise, DisplacementParams params[6],
 		StochasticOffsets sharedOffset,
@@ -109,12 +124,10 @@
 #if defined(LANDSCAPE)
 				currHeight = GetTerrainHeightQuadRayMarch(noise, input, currentOffset[0].xy, currentOffset[0].zw, currentOffset[1].xy, currentOffset[1].zw, mipLevels, params, blendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
 #else
-				currHeight.x = tex.SampleLevel(texSampler, currentOffset[0].xy, mipLevel)[channel];
-				currHeight.y = tex.SampleLevel(texSampler, currentOffset[0].zw, mipLevel)[channel];
-				currHeight.z = tex.SampleLevel(texSampler, currentOffset[1].xy, mipLevel)[channel];
-				currHeight.w = tex.SampleLevel(texSampler, currentOffset[1].zw, mipLevel)[channel];
-
-				currHeight = AdjustDisplacementNormalized(currHeight, params);
+				currHeight.x = SampleParallaxHeight(currentOffset[0].xy, mipLevel, tex, texSampler, channel, params);
+				currHeight.y = SampleParallaxHeight(currentOffset[0].zw, mipLevel, tex, texSampler, channel, params);
+				currHeight.z = SampleParallaxHeight(currentOffset[1].xy, mipLevel, tex, texSampler, channel, params);
+				currHeight.w = SampleParallaxHeight(currentOffset[1].zw, mipLevel, tex, texSampler, channel, params);
 #endif
 
 				bool4 testResult = currHeight >= currentBound;
@@ -180,8 +193,7 @@
 #if defined(LANDSCAPE)
 					hSecant = GetTerrainHeight(noise, input, secantCoords, mipLevels, params, blendFactor, w1, w2, sharedOffset, weights) * terrainHeightNormMul + 0.5;
 #else
-					hSecant = tex.SampleLevel(texSampler, secantCoords, mipLevel)[channel];
-					hSecant = AdjustDisplacementNormalized(hSecant, params);
+					hSecant = SampleParallaxHeight(secantCoords, mipLevel, tex, texSampler, channel, params);
 #endif
 
 					float fSecant = hSecant - tSecant;
@@ -225,13 +237,13 @@
 			float2 rayDir = L.xy * 0.1 * params.HeightScale;
 			float4 multipliers = rcp((float4(1, 2, 3, 4) + noise));
 			float4 sh = sh0.xxxx;
-			sh.x = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.x, mipLevel)[channel], params);
+			sh.x = SampleParallaxHeight(coords + rayDir * multipliers.x, mipLevel, tex, texSampler, channel, params);
 			if (quality > 0.25)
-				sh.y = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.y, mipLevel)[channel], params);
+				sh.y = SampleParallaxHeight(coords + rayDir * multipliers.y, mipLevel, tex, texSampler, channel, params);
 			if (quality > 0.5)
-				sh.z = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.z, mipLevel)[channel], params);
+				sh.z = SampleParallaxHeight(coords + rayDir * multipliers.z, mipLevel, tex, texSampler, channel, params);
 			if (quality > 0.75)
-				sh.w = AdjustDisplacementNormalized(tex.SampleLevel(texSampler, coords + rayDir * multipliers.w, mipLevel)[channel], params);
+				sh.w = SampleParallaxHeight(coords + rayDir * multipliers.w, mipLevel, tex, texSampler, channel, params);
 			return 1.0 - saturate(dot(max(0, sh - sh0), shadowStrength));
 		}
 		return 1.0;

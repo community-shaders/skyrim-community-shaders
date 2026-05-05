@@ -8,10 +8,7 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainVariation::Settings,
-	enableLODTerrainTilingFix,
-	meshUvScale,
-	meshVariationStrength,
-	meshParallaxShadowStrength)
+	enableLODTerrainTilingFix)
 
 std::string TerrainVariation::CanonicalizeTextureIdentity(std::string_view identity)
 {
@@ -80,27 +77,6 @@ void TerrainVariation::DrawSettings()
 			"This helps reduce the visible tiling effect on distant terrain.");
 	}
 
-	if (ImGui::SliderFloat("Mesh UV Scale", &settings.meshUvScale, 1.0f, 256.0f, "%.2f")) {
-		settings.meshUvScale = std::max(settings.meshUvScale, 0.001f);
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls stochastic cell size on non-landscape PBR meshes.");
-	}
-
-	if (ImGui::SliderFloat("Mesh Variation Strength", &settings.meshVariationStrength, 0.0f, 2.0f, "%.2f")) {
-		settings.meshVariationStrength = std::clamp(settings.meshVariationStrength, 0.0f, 2.0f);
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Blends between vanilla sampling (0) and full stochastic sampling (1).");
-	}
-
-	if (ImGui::SliderFloat("Mesh Parallax Shadow Strength", &settings.meshParallaxShadowStrength, 0.0f, 2.0f, "%.2f")) {
-		settings.meshParallaxShadowStrength = std::clamp(settings.meshParallaxShadowStrength, 0.0f, 2.0f);
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls stochastic influence on parallax height/shadow sampling for opted-in meshes.");
-	}
-
 	ImGui::Spacing();
 	ImGui::SeparatorText("PBR Mesh Texture Opt-In");
 	ImGui::TextWrapped("This list controls non-landscape PBR meshes only. Landscape TV behavior is unchanged.");
@@ -109,19 +85,18 @@ void TerrainVariation::DrawSettings()
 		ImGui::Text("Move texture identities into TV ON to apply TV on PBR meshes that use them.");
 	}
 
-	std::vector<std::string> tvOff;
-	std::vector<std::string> tvOn;
+	std::vector<std::string> allIds;
+	std::unordered_set<std::string> optedInSetCopy;
 	{
 		const std::shared_lock lock(textureIdMutex);
-		tvOn.assign(pbrTextureOptInSet.begin(), pbrTextureOptInSet.end());
+		optedInSetCopy = pbrTextureOptInSet;
+		std::unordered_set<std::string> allSet = pbrTextureOptInSet;
 		for (const auto& id : pbrObservedTextureIds) {
-			if (!pbrTextureOptInSet.contains(id)) {
-				tvOff.push_back(id);
-			}
+			allSet.insert(id);
 		}
+		allIds.assign(allSet.begin(), allSet.end());
 	}
-	std::sort(tvOff.begin(), tvOff.end());
-	std::sort(tvOn.begin(), tvOn.end());
+	std::sort(allIds.begin(), allIds.end());
 
 	ImGui::PushID("TVPBRTextureOptInTable");
 	if (ImGui::BeginTable("TVPBRTextureOptInTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp, ImVec2(0.0f, 300.0f))) {
@@ -129,17 +104,17 @@ void TerrainVariation::DrawSettings()
 		ImGui::TableSetupColumn("TV ON");
 		ImGui::TableHeadersRow();
 
-		const int maxRows = std::max(static_cast<int>(tvOff.size()), static_cast<int>(tvOn.size()));
-		for (int i = 0; i < maxRows; ++i) {
+		for (int i = 0; i < static_cast<int>(allIds.size()); ++i) {
 			ImGui::TableNextRow();
+			const auto& id = allIds[i];
+			const bool isOn = optedInSetCopy.contains(id);
 
 			ImGui::TableSetColumnIndex(0);
-			if (i < static_cast<int>(tvOff.size())) {
-				if (ImGui::Selectable(std::format("{}##off{}", tvOff[i], i).c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+			if (!isOn) {
+				if (ImGui::Selectable(std::format("{}##off{}", id, i).c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
 					const std::unique_lock lock(textureIdMutex);
-					const auto& selectedId = tvOff[i];
-					if (pbrTextureOptInSet.insert(selectedId).second) {
-						pbrTextureOptInIds.push_back(selectedId);
+					if (pbrTextureOptInSet.insert(id).second) {
+						pbrTextureOptInIds.push_back(id);
 						std::sort(pbrTextureOptInIds.begin(), pbrTextureOptInIds.end());
 						pbrTextureOptInIds.erase(std::unique(pbrTextureOptInIds.begin(), pbrTextureOptInIds.end()), pbrTextureOptInIds.end());
 					}
@@ -147,13 +122,12 @@ void TerrainVariation::DrawSettings()
 			}
 
 			ImGui::TableSetColumnIndex(1);
-			if (i < static_cast<int>(tvOn.size())) {
-				if (ImGui::Selectable(std::format("{}##on{}", tvOn[i], i).c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+			if (isOn) {
+				if (ImGui::Selectable(std::format("{}##on{}", id, i).c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
 					const std::unique_lock lock(textureIdMutex);
-					const auto& removeId = tvOn[i];
-					pbrTextureOptInSet.erase(removeId);
+					pbrTextureOptInSet.erase(id);
 					pbrTextureOptInIds.erase(
-						std::remove(pbrTextureOptInIds.begin(), pbrTextureOptInIds.end(), removeId),
+						std::remove(pbrTextureOptInIds.begin(), pbrTextureOptInIds.end(), id),
 						pbrTextureOptInIds.end());
 				}
 			}

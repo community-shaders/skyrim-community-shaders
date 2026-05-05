@@ -434,6 +434,7 @@ void TruePBR::SetupTextureSetData()
 	PNState::ReadPBRRecordConfigs("Data\\PBRTextureSets", [this](const std::string& editorId, const json& config) {
 		try {
 			pbrTextureSets.insert_or_assign(editorId, config);
+			globals::features::terrainVariation.RegisterObservedPBRTextureIdentity(editorId);
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 		}
@@ -449,6 +450,7 @@ void TruePBR::ReloadTextureSetData()
 			if (auto it = pbrTextureSets.find(editorId); it != pbrTextureSets.cend()) {
 				it->second = config;
 			}
+			globals::features::terrainVariation.RegisterObservedPBRTextureIdentity(editorId);
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 		}

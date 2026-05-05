@@ -932,6 +932,9 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	if defined(TERRAIN_VARIATION)
 #		include "TerrainVariation/TerrainVariation.hlsli"
+#		if !defined(LANDSCAPE)
+#			include "TerrainVariation/MeshVariation.hlsli"
+#		endif
 #	endif
 
 #	if defined(EXTENDED_TRANSLUCENCY) && !(defined(LOD) || defined(SKIN) || defined(HAIR) || defined(EYE) || defined(TREE_ANIM) || defined(LODOBJECTSHD) || defined(LODOBJECTS) || defined(DEPTH_WRITE_DECALS))
@@ -1020,6 +1023,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float2 uv = input.TexCoord0.xy;
 	float2 uvOriginal = uv;
+
+#	if defined(TERRAIN_VARIATION) && !defined(LANDSCAPE)
+	const bool applyPBRTextureTV = (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::TVPBRTextureOptIn) != 0;
+	StochasticOffsets meshOffset = (StochasticOffsets)0;
+	if (applyPBRTextureTV) {
+		meshOffset = ComputeStochasticOffsetsMesh(uvOriginal);
+	}
+#	endif
 
 #	if defined(EMAT)
 	float parallaxShadowQuality = viewPosition.z < ExtendedMaterials::ParallaxCheapDistance ? ExtendedMaterials::ParallaxNearShadowQuality : ExtendedMaterials::ParallaxFarShadowQuality;
@@ -1128,7 +1139,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 		);
 		if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0)
-			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
+			sh0 = ExtendedMaterials::SampleParallaxHeight(uv, mipLevel, TexParallaxSampler, SampParallaxSampler, 0, displacementParams);
 	}
 #		endif  // defined(PARALLAX) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 
@@ -1213,7 +1224,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif
 		);
 		if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0)
-			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
+			sh0 = ExtendedMaterials::SampleParallaxHeight(uv, mipLevel, TexParallaxSampler, SampParallaxSampler, 0, displacementParams);
 	}
 #			endif  // !FACEGEN
 #		endif      // TRUE_PBR
@@ -1365,10 +1376,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	else  // Non-landscape code
 	float4 rawBaseColor;
 #		if defined(TERRAIN_VARIATION)
-	const bool applyPBRTextureTV = (Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::TVPBRTextureOptIn) != 0;
 	if (applyPBRTextureTV) {
-		StochasticOffsets meshOffset = ComputeStochasticOffsets(input.TexCoord0.xy);
-		rawBaseColor = StochasticEffect(TexColorSampler, SampColorSampler, diffuseUv, meshOffset, 0.0);
+		rawBaseColor = StochasticEffectMesh(TexColorSampler, SampColorSampler, diffuseUv, meshOffset);
 	} else
 #		endif
 	{
@@ -1378,8 +1387,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float4 normalColor;
 #		if defined(TERRAIN_VARIATION)
 	if (applyPBRTextureTV) {
-		StochasticOffsets meshOffset = ComputeStochasticOffsets(input.TexCoord0.xy);
-		normalColor = StochasticEffect(TexNormalSampler, SampNormalSampler, uv, meshOffset, 0.0);
+		normalColor = StochasticEffectMesh(TexNormalSampler, SampNormalSampler, uv, meshOffset);
 	} else
 #		endif
 	{
@@ -1387,7 +1395,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 	normal = normalColor;
 #		if defined(TRUE_PBR)
-	rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, diffuseUv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
+	rawRMAOS =
+#			if defined(TERRAIN_VARIATION)
+		(applyPBRTextureTV ? StochasticEffectMesh(TexRMAOSSampler, SampRMAOSSampler, diffuseUv, meshOffset) :
+#			endif
+			TexRMAOSSampler.SampleBias(SampRMAOSSampler, diffuseUv, SharedData::MipBias)
+#			if defined(TERRAIN_VARIATION)
+		)
+#			endif
+		* float4(PBRParams1.x, 1, 1, PBRParams1.z);
 	if ((PBRFlags & PBR::Flags::Glint) != 0) {
 		glintParameters = MultiLayerParallaxData;
 	}

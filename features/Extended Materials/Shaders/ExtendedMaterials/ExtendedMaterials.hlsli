@@ -11,12 +11,14 @@
 #ifndef EXTENDED_MATERIALS_HLSLI
 #define EXTENDED_MATERIALS_HLSLI
 
-// Terrain variation: optional feature pack — include only when macro + headers ship together.
-// When absent, stub `StochasticOffsets` so EMAT terrain APIs stay unified (offsets ignored on SampleLevel path).
-#	if defined(LANDSCAPE)
-#		if defined(TERRAIN_VARIATION)
-#			include "TerrainVariation/TerrainVariation.hlsli"
-#		else
+// Terrain variation: optional feature pack used by landscape and mesh EMAT parallax paths.
+// When absent, stub `StochasticOffsets` so EMAT APIs stay unified.
+#	if defined(TERRAIN_VARIATION)
+#		include "TerrainVariation/TerrainVariation.hlsli"
+#		if !defined(LANDSCAPE)
+#			include "TerrainVariation/MeshVariation.hlsli"
+#		endif
+#	else
 struct StochasticOffsets
 {
 	float2 offset1;
@@ -24,7 +26,6 @@ struct StochasticOffsets
 	float2 offset3;
 	float3 weights;
 };
-#		endif
 #	endif
 
 struct DisplacementParams
