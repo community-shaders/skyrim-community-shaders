@@ -251,11 +251,30 @@ bool Effect::Load()
 		std::string iniKey = GetVariableIniKey(uiVar);
 		if (iniKey.empty())
 			continue;
-		std::vector<char> valueBuffer(1024);
-		DWORD result = GetPrivateProfileStringA(section.c_str(), iniKey.c_str(), "", valueBuffer.data(), 1024, iniPath.string().c_str());
-		if (result > 0) {
-			std::string value(valueBuffer.data());
-			LoadVariableFromString(uiVar, value);
+
+		bool isPerComponent = IsPerComponentVector(uiVar);
+		if (isPerComponent) {
+			static const char* suffixes[] = { "X", "Y", "Z", "W" };
+			int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
+			for (int i = 0; i < numComponents; ++i) {
+				std::string compKey = iniKey + suffixes[i];
+				std::vector<char> valueBuffer(1024);
+				DWORD result = GetPrivateProfileStringA(section.c_str(), compKey.c_str(), "", valueBuffer.data(), 1024, iniPath.string().c_str());
+				if (result > 0) {
+					try {
+						uiVar.vectorValue[i] = std::stof(std::string(valueBuffer.data()));
+					} catch (...) {}
+				}
+			}
+			if (uiVar.effectVariable)
+				uiVar.effectVariable->AsVector()->SetFloatVector(uiVar.vectorValue);
+		} else {
+			std::vector<char> valueBuffer(1024);
+			DWORD result = GetPrivateProfileStringA(section.c_str(), iniKey.c_str(), "", valueBuffer.data(), 1024, iniPath.string().c_str());
+			if (result > 0) {
+				std::string value(valueBuffer.data());
+				LoadVariableFromString(uiVar, value);
+			}
 		}
 	}
 
@@ -305,7 +324,18 @@ void Effect::Save()
 		case UIVariableType::Float2:
 		case UIVariableType::Float3:
 		case UIVariableType::Float4:
-			{
+			if (IsPerComponentVector(uiVar)) {
+				static const char* suffixes[] = { "X", "Y", "Z", "W" };
+				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
+				for (int i = 0; i < numComponents; ++i) {
+					std::string compKey = iniKey + suffixes[i];
+					std::string compValue = std::to_string(uiVar.vectorValue[i]);
+					BOOL compResult = WritePrivateProfileStringA(section.c_str(), compKey.c_str(), compValue.c_str(), iniPath.string().c_str());
+					if (!compResult)
+						logger::warn("[ENBPP] Failed to write key '{}' to ini file '{}'", compKey, iniPath.string());
+				}
+				continue;
+			} else {
 				std::ostringstream oss;
 				int numComponents = (uiVar.type == UIVariableType::Float2) ? 2 : (uiVar.type == UIVariableType::Float3) ? 3 : 4;
 
@@ -856,6 +886,12 @@ std::string Effect::GetGroupAnnotation(ID3DX11EffectGroup* group, const std::str
 		return "";
 	auto annotation = group->GetAnnotationByName(annotationName.c_str());
 	return ReadAnnotationValue(annotation);
+}
+
+bool Effect::IsPerComponentVector(const UIVariable& uiVar)
+{
+	return (uiVar.type == UIVariableType::Float2 || uiVar.type == UIVariableType::Float3 || uiVar.type == UIVariableType::Float4) &&
+		uiVar.widgetType != UIWidgetType::Color;
 }
 
 std::string Effect::GetVariableIniKey(const UIVariable& uiVar)
