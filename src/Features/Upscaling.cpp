@@ -1525,10 +1525,11 @@ void Upscaling::FrameLimiter()
 		WaitForSingleObject(waitableObject, INFINITE);
 
 		if (settings.frameLimitMode) {
-			// Fall back to the original timing method
-			// Use integer arithmetic for more precise timing
-			int64_t targetFrameTimeNS = int64_t(1000000000.0 / (refreshRate * (ShouldUseFrameGeneration() ? 0.5 : 1.0)));
-			int64_t targetFrameTicks = (targetFrameTimeNS * qpf.QuadPart) / 1000000000LL;
+			static constexpr int64_t kNanosecondsPerSecond = 1000000000LL;
+			static constexpr double kFrameGenerationRateScale = 0.5;
+			const double frameRateScale = ShouldUseFrameGenerationThisFrame() ? kFrameGenerationRateScale : 1.0;
+			int64_t targetFrameTimeNS = int64_t(static_cast<double>(kNanosecondsPerSecond) / (refreshRate * frameRateScale));
+			int64_t targetFrameTicks = (targetFrameTimeNS * qpf.QuadPart) / kNanosecondsPerSecond;
 
 			static LARGE_INTEGER lastFrame = {};
 			LARGE_INTEGER timeNow;
@@ -1612,7 +1613,7 @@ bool Upscaling::IsFrameGenerationActive() const
 	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && fidelityFX.isFrameGenActive;
 }
 
-bool Upscaling::ShouldUseFrameGeneration() const
+bool Upscaling::ShouldUseFrameGenerationThisFrame() const
 {
 	auto* ui = globals::game::ui;
 	auto* state = globals::state;
@@ -1620,7 +1621,7 @@ bool Upscaling::ShouldUseFrameGeneration() const
 		(state && (state->isMapMenuOpen || state->isMainMenuOpen || state->isLoadingMenuOpen)) ||
 		(ui && ui->GameIsPaused());
 
-	return settings.frameGenerationMode && (settings.frameGenerationAllowInMenus || !menuOpen);
+	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && (settings.frameGenerationAllowInMenus || !menuOpen);
 }
 
 bool Upscaling::IsUpscalingActive() const
@@ -2098,7 +2099,7 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	auto& upscaling = globals::features::upscaling;
 	auto upscaleMethod = upscaling.GetUpscaleMethod();
 
-	if (upscaling.d3d12SwapChainActive && upscaling.settings.frameGenerationMode)
+	if (upscaling.ShouldUseFrameGenerationThisFrame())
 		upscaling.CopySharedD3D12Resources();
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA)
