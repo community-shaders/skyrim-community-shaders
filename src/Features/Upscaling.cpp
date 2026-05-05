@@ -332,7 +332,7 @@ void Upscaling::DrawSettings()
 			ImGui::Checkbox("Frame Generation in Menus", &settings.frameGenerationAllowInMenus);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::TextUnformatted("Keeps frame generation active while game menus are open.");
-				ImGui::TextUnformatted("May feel smoother, but can increase menu input latency.");
+				ImGui::TextUnformatted("May feel smoother, but increases menu input latency.");
 			}
 
 			ImGui::TreePop();
