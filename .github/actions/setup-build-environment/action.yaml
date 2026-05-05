@@ -46,10 +46,13 @@ runs:
               Remove-Item $installerPath -ErrorAction SilentlyContinue
 
         - name: Setup MSVC environment
-          uses: ilammy/msvc-dev-cmd@v1
+          # Swapped from ilammy/msvc-dev-cmd@v1 (node20, deprecated) to
+          # TheMrMilchmann/setup-msvc-dev@v4 (node24). The new action has no
+          # `vsversion` input — the prior step installs only VS Build Tools
+          # 2026, so default detection picks it up.
+          uses: TheMrMilchmann/setup-msvc-dev@v4.0.0
           with:
               arch: x64
-              vsversion: "18.0"
 
         - name: Get MSVC version
           id: msvc_version
@@ -85,12 +88,12 @@ runs:
               Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
 
         - name: Setup vcpkg
-          uses: lukka/run-vcpkg@v11.5
+          uses: lukka/run-vcpkg@v11.6
           with:
               vcpkgJsonGlob: vcpkg.json
 
         - name: Cache CMake build output
-          uses: actions/cache@v4
+          uses: actions/cache@v5
           with:
               path: ${{ inputs.build-dir }}
               key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
