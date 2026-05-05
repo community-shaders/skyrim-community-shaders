@@ -517,8 +517,6 @@ Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::stri
 	if (!IsCompiled() || !effect)
 		return {};
 
-	auto context = globals::d3d::context;
-
 	if (a_baseTechniqueName.empty())
 		return {};
 
@@ -543,9 +541,6 @@ Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::stri
 
 		if (!techniqueInfo.technique)
 			continue;
-
-		D3DX11_TECHNIQUE_DESC techDesc;
-		techniqueInfo.technique->GetDesc(&techDesc);
 
 		if (sequence.size() == 1 || swapCounter == 0) {
 			inputSRV = a_input;
@@ -572,35 +567,7 @@ Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::stri
 		if (sourceTexture && sourceTexture->IsValid())
 			sourceTexture->AsShaderResource()->SetResource(inputSRV);
 
-		context->OMSetRenderTargets(1, &outputRTV, nullptr);
-
-		uint32_t outputWidth = 0, outputHeight = 0;
-
-		winrt::com_ptr<ID3D11Resource> outputResource;
-		outputRTV->GetResource(outputResource.put());
-		winrt::com_ptr<ID3D11Texture2D> outputTexture;
-		if (outputResource) {
-			outputResource.try_as(outputTexture);
-			if (outputTexture) {
-				D3D11_TEXTURE2D_DESC outputDesc;
-				outputTexture->GetDesc(&outputDesc);
-				outputWidth = outputDesc.Width;
-				outputHeight = outputDesc.Height;
-			}
-		}
-
-		UpdateSizeVariables(effect.get(), outputWidth, outputHeight);
-
-		D3D11_VIEWPORT viewport = {};
-		viewport.Width = static_cast<float>(outputWidth);
-		viewport.Height = static_cast<float>(outputHeight);
-		viewport.MaxDepth = 1.0f;
-		context->RSSetViewports(1, &viewport);
-
-		for (UINT p = 0; p < techDesc.Passes; p++) {
-			techniqueInfo.technique->GetPassByIndex(p)->Apply(0, context);
-			context->Draw(4, 0);
-		}
+		RenderPasses(techniqueInfo.technique.get(), outputRTV);
 	}
 
 	return { true, targetInOutput };
@@ -611,31 +578,11 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::
 	if (!IsCompiled() || !effect)
 		return;
 
-	auto context = globals::d3d::context;
-
 	auto technique = effect->GetTechniqueByName(techniqueName.c_str());
 	if (!technique || !technique->IsValid())
 		return;
 
-	ID3D11RenderTargetView* rtvArray[] = { output.rtv.get() };
-	context->OMSetRenderTargets(1, rtvArray, nullptr);
-
-	D3D11_TEXTURE2D_DESC texDesc;
-	output.texture->GetDesc(&texDesc);
-
-	D3D11_VIEWPORT viewport = {};
-	viewport.Width = static_cast<float>(texDesc.Width);
-	viewport.Height = static_cast<float>(texDesc.Height);
-	viewport.MaxDepth = 1.0f;
-	context->RSSetViewports(1, &viewport);
-
-	D3DX11_TECHNIQUE_DESC techDesc;
-	technique->GetDesc(&techDesc);
-
-	for (UINT p = 0; p < techDesc.Passes; p++) {
-		technique->GetPassByIndex(p)->Apply(0, context);
-		context->Draw(4, 0);
-	}
+	RenderPasses(technique, output.rtv.get());
 }
 
 void Effect::SetupCustomTextures()
@@ -1158,12 +1105,47 @@ std::string Effect::GetSelectedTechnique() const
 	return "";
 }
 
-void Effect::UpdateSizeVariables(ID3DX11Effect* effect, uint32_t outputWidth, uint32_t outputHeight)
+void Effect::RenderPasses(ID3DX11EffectTechnique* technique, ID3D11RenderTargetView* outputRTV)
 {
-	if (!effect || outputWidth == 0 || outputHeight == 0)
+	if (!technique || !outputRTV || !effect)
+		return;
+
+	auto context = globals::d3d::context;
+
+	context->OMSetRenderTargets(1, &outputRTV, nullptr);
+
+	uint32_t outputWidth = 0, outputHeight = 0;
+	winrt::com_ptr<ID3D11Resource> outputResource;
+	outputRTV->GetResource(outputResource.put());
+	winrt::com_ptr<ID3D11Texture2D> outputTexture;
+	if (outputResource) {
+		outputResource.try_as(outputTexture);
+		if (outputTexture) {
+			D3D11_TEXTURE2D_DESC outputDesc;
+			outputTexture->GetDesc(&outputDesc);
+			outputWidth = outputDesc.Width;
+			outputHeight = outputDesc.Height;
+		}
+	}
+
+	if (outputWidth == 0 || outputHeight == 0)
 		return;
 
 	float aspect = static_cast<float>(outputWidth) / static_cast<float>(outputHeight);
 	float screenSize[4] = { static_cast<float>(outputWidth), 1.0f / outputWidth, aspect, 1.0f / aspect };
-	SetVectorVariable(effect, "ScreenSize", screenSize, sizeof(screenSize));
+	SetVectorVariable(effect.get(), "ScreenSize", screenSize, sizeof(screenSize));
+
+	D3D11_VIEWPORT viewport = {};
+	viewport.Width = static_cast<float>(outputWidth);
+	viewport.Height = static_cast<float>(outputHeight);
+	viewport.MaxDepth = 1.0f;
+	context->RSSetViewports(1, &viewport);
+
+	D3DX11_TECHNIQUE_DESC techDesc;
+	technique->GetDesc(&techDesc);
+
+	for (UINT p = 0; p < techDesc.Passes; p++) {
+		technique->GetPassByIndex(p)->Apply(0, context);
+		context->Draw(4, 0);
+	}
 }

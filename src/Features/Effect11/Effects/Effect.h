@@ -218,7 +218,7 @@ public:
 	// Helper function for safe vector variable access
 	bool SetVectorVariable(const std::string& variableName, const void* data, uint32_t size);
 
-	static void UpdateSizeVariables(ID3DX11Effect* effect, uint32_t outputWidth, uint32_t outputHeight);
+	void RenderPasses(ID3DX11EffectTechnique* technique, ID3D11RenderTargetView* outputRTV);
 
 	// UI annotation helpers (public for ENBExtender access)
 	std::string GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName);

@@ -53,16 +53,11 @@ private:
 	// Downsampling resources
 	winrt::com_ptr<ID3D11VertexShader> downsampleVS;
 	winrt::com_ptr<ID3D11PixelShader> downsamplePS;
+	winrt::com_ptr<ID3D11PixelShader> blurPS;
 
 	winrt::com_ptr<ID3D11SamplerState> linearSampler;
 	DownsampleTexture sharedDownsampleTexture;
-
-	struct DownsampleCB
-	{
-		float sourceTexelSizeX;
-		float sourceTexelSizeY;
-		float padding[2];
-	};
+	Texture downsampleTempTexture;
 
 	// Frame-based state
 	uint32_t textureSwap = 0;

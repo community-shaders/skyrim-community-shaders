@@ -2,6 +2,7 @@
 
 #include <d3dcompiler.h>
 
+#include "EffectManager.h"
 #include "State.h"
 
 TextureManager& TextureManager::GetSingleton()
@@ -134,37 +135,18 @@ void TextureManager::CreateDownsampleResources()
 
 	DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.put()));
 
-	// Create downsample vertex shader (fullscreen triangle)
-	const char* downsampleVertexShaderSource = R"HLSL(
-	struct VS_INPUT_POST
-	{
-		float3 pos		: POSITION;
-		float2 txcoord	: TEXCOORD0;
-	};
-	struct VS_OUTPUT_POST
-	{
-		float4 pos		: SV_POSITION;
-		float2 txcoord0	: TEXCOORD0;
-	};
-	VS_OUTPUT_POST	main(VS_INPUT_POST IN)
-	{
-		VS_OUTPUT_POST	OUT;
-		float4	pos;
-		pos.xyz=IN.pos.xyz;
-		pos.w=1.0;
-		OUT.pos=pos;
-		OUT.txcoord0.xy=IN.txcoord.xy;
-		return OUT;
-	}
-	)HLSL";
+	// Create downsample vertex shader
+	auto vertexShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effect11\\QuadVS.hlsl");
+	if (vertexShaderSource.empty())
+		return;
 
 	winrt::com_ptr<ID3DBlob> vertexShaderBlob;
 	winrt::com_ptr<ID3DBlob> vertexErrorBlob;
 
 	HRESULT vsResult = D3DCompile(
-		downsampleVertexShaderSource,
-		strlen(downsampleVertexShaderSource),
-		nullptr,
+		vertexShaderSource.data(),
+		vertexShaderSource.size(),
+		"QuadVS.hlsl",
 		nullptr,
 		nullptr,
 		"main",
@@ -189,29 +171,17 @@ void TextureManager::CreateDownsampleResources()
 		downsampleVS.put()));
 
 	// Create downsample pixel shader
-	const char* downsamplePixelShaderSource = R"HLSL(
-Texture2D<float4> SourceTexture : register(t0);
-SamplerState LinearSampler : register(s0);
-
-struct VS_OUTPUT_POST
-{
-	float4 pos		: SV_POSITION;
-	float2 txcoord0	: TEXCOORD0;
-};
-
-float4 main(VS_OUTPUT_POST IN) : SV_Target
-{
-	return SourceTexture.SampleLevel(LinearSampler, IN.txcoord0.xy, 0);
-}
-)HLSL";
+	auto pixelShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effect11\\DownsamplePS.hlsl");
+	if (pixelShaderSource.empty())
+		return;
 
 	winrt::com_ptr<ID3DBlob> pixelShaderBlob;
 	winrt::com_ptr<ID3DBlob> errorBlob;
 
 	HRESULT result = D3DCompile(
-		downsamplePixelShaderSource,
-		strlen(downsamplePixelShaderSource),
-		nullptr,
+		pixelShaderSource.data(),
+		pixelShaderSource.size(),
+		"DownsamplePS.hlsl",
 		nullptr,
 		nullptr,
 		"main",
@@ -235,8 +205,46 @@ float4 main(VS_OUTPUT_POST IN) : SV_Target
 		nullptr,
 		downsamplePS.put()));
 
+	// Create box blur pixel shader (1px radius)
+	auto blurPixelShaderSource = EffectManager::LoadShaderFile("Data\\Shaders\\Effect11\\BoxBlurPS.hlsl");
+	if (blurPixelShaderSource.empty())
+		return;
+
+	winrt::com_ptr<ID3DBlob> blurShaderBlob;
+	winrt::com_ptr<ID3DBlob> blurErrorBlob;
+
+	HRESULT blurResult = D3DCompile(
+		blurPixelShaderSource.data(),
+		blurPixelShaderSource.size(),
+		"BoxBlurPS.hlsl",
+		nullptr,
+		nullptr,
+		"main",
+		"ps_5_0",
+		0,
+		0,
+		blurShaderBlob.put(),
+		blurErrorBlob.put());
+
+	if (FAILED(blurResult)) {
+		if (blurErrorBlob) {
+			logger::error("[TextureManager] Blur shader compilation failed: {}",
+				static_cast<const char*>(blurErrorBlob->GetBufferPointer()));
+		}
+		return;
+	}
+
+	DX::ThrowIfFailed(device->CreatePixelShader(
+		blurShaderBlob->GetBufferPointer(),
+		blurShaderBlob->GetBufferSize(),
+		nullptr,
+		blurPS.put()));
+
 	// Create shared downsample texture
 	sharedDownsampleTexture = CreateDownsampleTexture(DXGI_FORMAT_R11G11B10_FLOAT);
+
+	// Create temp texture for pre-blur downsample
+	downsampleTempTexture = CreateTexture(1024, 1024, DXGI_FORMAT_R11G11B10_FLOAT, "TextureManager::DownsampleTemp");
 }
 
 TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_FORMAT format)
@@ -294,52 +302,41 @@ TextureManager::DownsampleTexture TextureManager::CreateDownsampleTexture(DXGI_F
 
 void TextureManager::DownsampleToFixed(ID3D11ShaderResourceView* source, DownsampleTexture& texture)
 {
-	if (!source || !texture.rtv || !downsampleVS || !downsamplePS || !linearSampler || !texture.srvChain) {
+	if (!source || !texture.rtv || !downsampleVS || !downsamplePS || !blurPS || !linearSampler || !texture.srvChain || !downsampleTempTexture.rtv) {
 		return;
 	}
 
 	auto context = globals::d3d::context;
 
-	// Get source texture description for calculating texel size
-	winrt::com_ptr<ID3D11Resource> sourceResource;
-	source->GetResource(sourceResource.put());
-	if (!sourceResource) {
-		return;
-	}
-
-	winrt::com_ptr<ID3D11Texture2D> sourceTexture;
-	sourceResource.try_as(sourceTexture);
-	if (!sourceTexture) {
-		return;
-	}
-
-	D3D11_TEXTURE2D_DESC sourceDesc;
-	sourceTexture->GetDesc(&sourceDesc);
-
-	DownsampleCB constants{};
-	constants.sourceTexelSizeX = 1.0f / static_cast<float>(sourceDesc.Width);
-	constants.sourceTexelSizeY = 1.0f / static_cast<float>(sourceDesc.Height);
-
-	// Set up render state for downsampling
 	D3D11_VIEWPORT viewport = {};
 	viewport.Width = 1024.0f;
 	viewport.Height = 1024.0f;
 	viewport.MinDepth = 0.0f;
 	viewport.MaxDepth = 1.0f;
-
 	context->RSSetViewports(1, &viewport);
-	ID3D11RenderTargetView* rtvArray[] = { texture.rtv.get() };
-
-	context->OMSetRenderTargets(1, rtvArray, nullptr);
 
 	context->VSSetShader(downsampleVS.get(), nullptr, 0);
-	context->PSSetShaderResources(0, 1, &source);
 
 	ID3D11SamplerState* samplerArray[] = { linearSampler.get() };
 	context->PSSetSamplers(0, 1, samplerArray);
 
+	// Pass 1: Downsample source into temp texture
+	ID3D11RenderTargetView* tempRTV[] = { downsampleTempTexture.rtv.get() };
+	context->OMSetRenderTargets(1, tempRTV, nullptr);
+	context->PSSetShaderResources(0, 1, &source);
 	context->PSSetShader(downsamplePS.get(), nullptr, 0);
+	context->Draw(4, 0);
 
+	// Pass 2: Box blur from temp into final texture
+	ID3D11ShaderResourceView* nullSRV[] = { nullptr };
+	context->PSSetShaderResources(0, 1, nullSRV);
+
+	ID3D11RenderTargetView* finalRTV[] = { texture.rtv.get() };
+	context->OMSetRenderTargets(1, finalRTV, nullptr);
+
+	ID3D11ShaderResourceView* tempSRV[] = { downsampleTempTexture.srv.get() };
+	context->PSSetShaderResources(0, 1, tempSRV);
+	context->PSSetShader(blurPS.get(), nullptr, 0);
 	context->Draw(4, 0);
 
 	context->GenerateMips(texture.srvChain.get());
