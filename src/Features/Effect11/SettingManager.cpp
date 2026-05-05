@@ -198,7 +198,8 @@ T SettingManager::GetValueInternal(uint32_t id, bool rawValue) const
 	const auto& categorySettings = categories.at(setting.category);
 
 	if (setting.hasWeatherSupport) {
-		bool shouldIgnoreWeather = (interiorFactor > 0.5f) ?
+		bool isInterior = (timeOfDay2[2] + timeOfDay2[3]) > 0.5f;
+		bool shouldIgnoreWeather = isInterior ?
 		                               categorySettings.ignoreWeatherSystemInterior :
 		                               categorySettings.ignoreWeatherSystem;
 
@@ -261,7 +262,8 @@ void SettingManager::SetValueInternal(uint32_t id, const T& value)
 	const auto& categorySettings = categories.at(setting.category);
 
 	if (setting.hasWeatherSupport) {
-		bool shouldIgnoreWeather = (interiorFactor > 0.5f) ?
+		bool isInterior = (timeOfDay2[2] + timeOfDay2[3]) > 0.5f;
+		bool shouldIgnoreWeather = isInterior ?
 		                               categorySettings.ignoreWeatherSystemInterior :
 		                               categorySettings.ignoreWeatherSystem;
 
@@ -537,13 +539,11 @@ void SettingManager::ReloadAllWeatherSettings()
 	weatherManager.Initialize();
 }
 
-void SettingManager::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4], float newInteriorFactor, float newNightDayFactor)
+void SettingManager::SetTimeOfDayData(const float newTimeOfDay1[4], const float newTimeOfDay2[4])
 {
 	std::unique_lock lock(mutex);
 	memcpy(timeOfDay1, newTimeOfDay1, sizeof(timeOfDay1));
 	memcpy(timeOfDay2, newTimeOfDay2, sizeof(timeOfDay2));
-	interiorFactor = newInteriorFactor;
-	nightDayFactor = newNightDayFactor;
 }
 
 void SettingManager::LoadFromFile(const std::string& filePath)
@@ -724,33 +724,26 @@ SettingValue SettingManager::InterpolateValues(const SettingValue& a, const Sett
 
 float SettingManager::ComputeTimeOfDayInterpolation(const TimeOfDayValue& value) const
 {
-	if (interiorFactor > 0.5f) {
-		return value.values[TimeOfDayValue::InteriorNight] + nightDayFactor *
-		                                                         (value.values[TimeOfDayValue::InteriorDay] - value.values[TimeOfDayValue::InteriorNight]);
-	}
-
 	return timeOfDay1[0] * value.values[TimeOfDayValue::Dawn] +
 	       timeOfDay1[1] * value.values[TimeOfDayValue::Sunrise] +
 	       timeOfDay1[2] * value.values[TimeOfDayValue::Day] +
 	       timeOfDay1[3] * value.values[TimeOfDayValue::Sunset] +
 	       timeOfDay2[0] * value.values[TimeOfDayValue::Dusk] +
-	       timeOfDay2[1] * value.values[TimeOfDayValue::Night];
+	       timeOfDay2[1] * value.values[TimeOfDayValue::Night] +
+	       timeOfDay2[2] * value.values[TimeOfDayValue::InteriorDay] +
+	       timeOfDay2[3] * value.values[TimeOfDayValue::InteriorNight];
 }
 
 float3 SettingManager::ComputeColorTimeOfDayInterpolation(const ColorTimeOfDayValue& value) const
 {
-	if (interiorFactor > 0.5f) {
-		float3 interiorNight = value.values[ColorTimeOfDayValue::InteriorNight];
-		float3 interiorDay = value.values[ColorTimeOfDayValue::InteriorDay];
-		return interiorNight + nightDayFactor * (interiorDay - interiorNight);
-	}
-
 	return timeOfDay1[0] * value.values[ColorTimeOfDayValue::Dawn] +
 	       timeOfDay1[1] * value.values[ColorTimeOfDayValue::Sunrise] +
 	       timeOfDay1[2] * value.values[ColorTimeOfDayValue::Day] +
 	       timeOfDay1[3] * value.values[ColorTimeOfDayValue::Sunset] +
 	       timeOfDay2[0] * value.values[ColorTimeOfDayValue::Dusk] +
-	       timeOfDay2[1] * value.values[ColorTimeOfDayValue::Night];
+	       timeOfDay2[1] * value.values[ColorTimeOfDayValue::Night] +
+	       timeOfDay2[2] * value.values[ColorTimeOfDayValue::InteriorDay] +
+	       timeOfDay2[3] * value.values[ColorTimeOfDayValue::InteriorNight];
 }
 
 void SettingManager::LoadSettingFromFile(const std::string& filePath, const std::string& section, const std::string& key, Setting& setting)

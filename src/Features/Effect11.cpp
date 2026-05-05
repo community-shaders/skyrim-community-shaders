@@ -333,7 +333,7 @@ void Effect11::CheckCommonData()
 		effectManager.UpdateCommonData();
 
 		const auto& commonData = effectManager.GetCommonData();
-		settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor, commonData.eNightDayFactor);
+		settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2);
 
 		uint32_t currentWeatherID = weatherManager.GetEffectiveWeatherID(static_cast<uint32_t>(commonData.weather[0]));
 		uint32_t lastWeatherID = weatherManager.GetEffectiveWeatherID(static_cast<uint32_t>(commonData.weather[1]));

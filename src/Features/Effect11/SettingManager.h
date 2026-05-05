@@ -180,7 +180,7 @@ public:
 	void SetIgnoreWeatherSystemInterior(const std::string& category, bool ignore);
 
 	// Time of day interpolation data
-	void SetTimeOfDayData(const float timeOfDay1[4], const float timeOfDay2[4], float interiorFactor, float nightDayFactor);
+	void SetTimeOfDayData(const float timeOfDay1[4], const float timeOfDay2[4]);
 
 private:
 	struct CategorySettings
@@ -205,8 +205,6 @@ private:
 
 	float timeOfDay1[4] = { 0, 0, 0, 0 };
 	float timeOfDay2[4] = { 0, 0, 0, 0 };
-	float interiorFactor = 0.0f;
-	float nightDayFactor = 0.0f;
 
 	// INI file modification time tracking to skip redundant reloads
 	std::filesystem::file_time_type lastMainIniWriteTime{};
