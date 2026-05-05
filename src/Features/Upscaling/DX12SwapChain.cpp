@@ -194,7 +194,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	globals::features::upscaling.fidelityFX.Present(upscaling.ShouldUseFrameGeneration(), isHDR);
+	upscaling.fidelityFX.Present(upscaling.ShouldUseFrameGenerationThisFrame(), isHDR);
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 
