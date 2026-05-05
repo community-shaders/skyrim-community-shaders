@@ -160,8 +160,18 @@ namespace ENBExtender
 			if (vs == std::string::npos)
 				return {};
 			if (annotations[vs] == '"') {
-				size_t qe = annotations.find('"', vs + 1);
-				return (qe != std::string::npos) ? annotations.substr(vs + 1, qe - vs - 1) : std::string{};
+				std::string combined;
+				size_t cur = vs;
+				while (cur < annotations.size() && annotations[cur] == '"') {
+					size_t qe = annotations.find('"', cur + 1);
+					if (qe == std::string::npos)
+						return combined;
+					combined += annotations.substr(cur + 1, qe - cur - 1);
+					cur = qe + 1;
+					while (cur < annotations.size() && (annotations[cur] == ' ' || annotations[cur] == '\t'))
+						++cur;
+				}
+				return combined;
 			}
 			size_t ve = annotations.find_first_of(";>", vs);
 			std::string val = (ve != std::string::npos) ? annotations.substr(vs, ve - vs) : annotations.substr(vs);
@@ -245,25 +255,29 @@ namespace ENBExtender
 		}
 
 		if (!uiName.empty()) {
-			bool isInt = (typeName == "int");
-			Effect::UIDefineInfo info;
-			info.defineName = defineName;
-			info.displayName = uiName;
-			info.group = uiGroup;
-			info.type = typeName;
-			info.value = finalVal;
-			info.widget = ann("UIWidget");
-			info.list = ann("UIList");
+			bool alreadyExists = std::any_of(uiDefines.begin(), uiDefines.end(),
+				[&](const Effect::UIDefineInfo& existing) { return existing.defineName == defineName; });
+			if (!alreadyExists) {
+				bool isInt = (typeName == "int");
+				Effect::UIDefineInfo info;
+				info.defineName = defineName;
+				info.displayName = uiName;
+				info.group = uiGroup;
+				info.type = typeName;
+				info.value = finalVal;
+				info.widget = ann("UIWidget");
+				info.list = ann("UIList");
 
-			auto minStr = ann("UIMin"), maxStr = ann("UIMax");
-			if (!minStr.empty()) { if (isInt) info.intMin = SafeStoi(minStr); else info.floatMin = SafeStof(minStr); }
-			if (!maxStr.empty()) { if (isInt) info.intMax = SafeStoi(maxStr); else info.floatMax = SafeStof(maxStr); }
-			auto orderStr = ann("UIOrdering");
-			if (!orderStr.empty()) {
-				info.ordering = SafeStoi(orderStr);
-				info.hasExplicitOrdering = true;
+				auto minStr = ann("UIMin"), maxStr = ann("UIMax");
+				if (!minStr.empty()) { if (isInt) info.intMin = SafeStoi(minStr); else info.floatMin = SafeStof(minStr); }
+				if (!maxStr.empty()) { if (isInt) info.intMax = SafeStoi(maxStr); else info.floatMax = SafeStof(maxStr); }
+				auto orderStr = ann("UIOrdering");
+				if (!orderStr.empty()) {
+					info.ordering = SafeStoi(orderStr);
+					info.hasExplicitOrdering = true;
+				}
+				uiDefines.push_back(std::move(info));
 			}
-			uiDefines.push_back(std::move(info));
 		}
 
 		result += "#define " + defineName + " " + finalVal + "\n";

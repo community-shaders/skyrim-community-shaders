@@ -46,6 +46,19 @@ void MenuManager::RenderSettingsPanel()
 	auto& settingManager = SettingManager::GetSingleton();
 	auto& effectManager = EffectManager::GetSingleton();
 
+	if (ImGui::Button("Save & Apply")) {
+		settingManager.Save();
+		effectManager.Save();
+		Util::ShaderPatches::Load();
+		settingManager.Load();
+		effectManager.Apply();
+	}
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Save all settings, then reload and recompile shaders");
+	}
+
+	ImGui::SameLine();
+
 	if (ImGui::Button("Apply")) {
 		Util::ShaderPatches::Load();
 		settingManager.Load();
