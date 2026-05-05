@@ -644,9 +644,13 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 	winrt::com_ptr<ID3D11Resource> texture;
 	winrt::com_ptr<ID3D11ShaderResourceView> srv;
 
-	HRESULT hr = DirectX::CreateDDSTextureFromFile(device, filepath.c_str(), texture.put(), srv.put());
+	HRESULT hr = DirectX::CreateDDSTextureFromFileEx(device, filepath.c_str(),
+		0, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, 0,
+		DirectX::DDS_LOADER_IGNORE_SRGB, texture.put(), srv.put());
 	if (FAILED(hr))
-		hr = DirectX::CreateWICTextureFromFile(device, filepath.c_str(), texture.put(), srv.put());
+		hr = DirectX::CreateWICTextureFromFileEx(device, filepath.c_str(),
+			0, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, 0,
+			DirectX::WIC_LOADER_IGNORE_SRGB, texture.put(), srv.put());
 
 	if (FAILED(hr)) {
 		logger::error("[ENBPP] Failed to load texture file: {} (HRESULT: 0x{:08X})", filepath.string(), static_cast<uint32_t>(hr));
