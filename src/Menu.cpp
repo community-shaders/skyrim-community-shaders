@@ -35,7 +35,6 @@
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
 #include "Util.h"
 #include "Utils/UI.h"
 
@@ -771,9 +770,7 @@ void Menu::DrawGeneralSettings()
  */
 void Menu::DrawAdvancedSettings()
 {
-	// Render advanced settings using extracted component
 	AdvancedSettingsRenderer::RenderAdvancedSettings(
-		[this]() { globals::truePBR->DrawSettings(); },
 		[this]() { DrawDisableAtBootSettings(); });
 }
 
@@ -788,27 +785,6 @@ void Menu::DrawDisableAtBootSettings()
 		"Restart will be required to reenable.");
 
 	ImGui::Spacing();
-
-	if (ImGui::CollapsingHeader("Special Features", ImGuiTreeNodeFlags_DefaultOpen)) {
-		// Prepare a sorted list of special feature names
-		std::vector<std::string> specialFeatureNames;
-		for (const auto& [featureName, _] : state->specialFeatures) {
-			specialFeatureNames.push_back(featureName);
-		}
-		std::sort(specialFeatureNames.begin(), specialFeatureNames.end());
-
-		// Display sorted special features
-		for (const auto& featureName : specialFeatureNames) {
-			// Check if the feature is currently disabled
-			bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
-
-			// Create a checkbox for each feature
-			if (ImGui::Checkbox(featureName.c_str(), &isDisabled)) {
-				// Update the disabledFeatures map based on user interaction
-				disabledFeatures[featureName] = isDisabled;
-			}
-		}
-	}
 
 	if (ImGui::CollapsingHeader("Features", ImGuiTreeNodeFlags_DefaultOpen)) {
 		// Prepare a sorted list of feature pointers
@@ -1055,8 +1031,8 @@ void Menu::ProcessInputEventQueue()
 							 } else if (ew->IsInPreviewMode()) {
 								 // Locked or PlayMode → fully exit preview
 								 ew->ExitPreviewMode();
-							 } else if (EditorWindow::CanBeOpen()) {
-								 ew->open = !ew->open;
+							 } else {
+								 WeatherEditor::ToggleEditorWindow();
 							 }
 						 } },
 					};

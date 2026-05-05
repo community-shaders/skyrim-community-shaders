@@ -249,7 +249,7 @@ void FidelityFX::CreateFSRResources()
 		return;
 	}
 
-	auto fsrDevice = ffxGetDeviceDX11(globals::d3d::device);
+	auto fsrDevice = ffxGetDeviceDX11_Fsr31(globals::d3d::device);
 
 	uint32_t numContexts = globals::game::isVR ? 2 : 1;
 	size_t scratchBufferSize = ffxGetScratchMemorySizeDX11(numContexts);

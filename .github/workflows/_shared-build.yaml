@@ -35,10 +35,6 @@ on:
                 description: "Optional suffix to invalidate the build cache"
                 type: string
                 default: ""
-            run-vs2022:
-                description: "Include vs2022 in the build matrix; set false for release builds where only vs2026 artifacts are shipped"
-                type: boolean
-                default: true
         outputs:
             version:
                 description: "CMake project version extracted from the build"
@@ -60,16 +56,8 @@ jobs:
             matrix:
                 compiler:
                     - name: vs2026
-                      vs-version: "2026"
                       cmake-preset: ALL
                       build-dir: build/ALL
-                    - name: vs2022
-                      vs-version: "2022"
-                      cmake-preset: ALL-VS2022
-                      build-dir: build/ALL-VS2022
-                exclude:
-                    - compiler:
-                          name: ${{ !inputs.run-vs2022 && 'vs2022' || '' }}
             fail-fast: false
         steps:
             - name: Checkout code
@@ -84,7 +72,6 @@ jobs:
               uses: ./.github/actions/setup-build-environment
               with:
                   cache-key-suffix: "cpp-${{ matrix.compiler.name }}${{ inputs.cache-key-suffix }}"
-                  vs-version: ${{ matrix.compiler.vs-version }}
                   cmake-preset: ${{ matrix.compiler.cmake-preset }}
                   build-dir: ${{ matrix.compiler.build-dir }}
 
@@ -246,23 +233,22 @@ jobs:
               uses: ./.github/actions/setup-build-environment
               with:
                   cache-key-suffix: "tests${{ inputs.cache-key-suffix }}"
-                  vs-version: "2022"
-                  cmake-preset: "ALL-VS2022"
-                  build-dir: "build/ALL-VS2022"
+                  cmake-preset: "ALL"
+                  build-dir: "build/ALL"
 
             - name: Build shader tests
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: lukka/run-cmake@v10
               with:
-                  configurePreset: ALL-VS2022
+                  configurePreset: ALL
                   configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=ON']"
-                  buildPreset: ALL-VS2022
+                  buildPreset: ALL
                   buildPresetAdditionalArgs: "['--target shader_tests']"
 
             - name: Run shader unit tests
               if: steps.check-hlsl.outputs.skip != 'true'
               run: |
-                  ctest --test-dir build/ALL-VS2022 -C Release --output-on-failure -R ShaderTests --timeout 300
+                  ctest --test-dir build/ALL -C Release --output-on-failure -R ShaderTests --timeout 300
 
             - name: Upload test results on failure
               if: failure() && steps.check-hlsl.outputs.skip != 'true'
@@ -270,6 +256,6 @@ jobs:
               with:
                   name: shader-test-results
                   path: |
-                      build/ALL-VS2022/Testing/**
+                      build/ALL/Testing/**
                   retention-days: 7
                   if-no-files-found: ignore

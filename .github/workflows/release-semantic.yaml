@@ -23,6 +23,7 @@ jobs:
               uses: actions/checkout@v6
               with:
                   fetch-depth: 0
+                  persist-credentials: false
 
             - name: Configure git identity
               run: |
@@ -45,5 +46,10 @@ jobs:
                       @semantic-release/github
                   tag_format: "v${version}"
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  # RELEASE_PAT required for two reasons:
+                  # 1. Allows pushing the version commit and tag to the protected
+                  #    dev branch (GITHUB_TOKEN cannot bypass branch protection).
+                  # 2. A PAT-sourced tag push triggers downstream workflows
+                  #    (release-build.yaml); GITHUB_TOKEN pushes do not.
+                  GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
                   RELEASE_TYPE: ${{ github.event.inputs.release_type }}

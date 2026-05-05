@@ -52,7 +52,7 @@ void State::Draw()
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
 	auto& weatherEditor = globals::features::weatherEditor;
-	auto truePBR = globals::truePBR;
+	auto& truePBR = globals::features::truePBR;
 	auto context = globals::d3d::context;
 	auto& volumetricShadows = globals::features::volumetricShadows;
 
@@ -80,9 +80,9 @@ void State::Draw()
 			terrainHelper.SetShaderResouces(context);
 		}
 
-		{
+		if (truePBR.loaded) {
 			ZoneScopedN("TruePBR::SetShaderResouces");
-			truePBR->SetShaderResouces(context);
+			truePBR.SetShaderResouces(context);
 		}
 
 		if (permutationData != permutationDataPrevious) {
@@ -354,11 +354,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				disabledFeatures[featureName] = featureStatus.get<bool>();
 			} else {
 				logger::warn("Invalid entry for feature '{}' in 'Disable at Boot', expected boolean.", featureName);
-			}
-		}
-		for (const auto& [featureName, _] : specialFeatures) {
-			if (IsFeatureDisabled(featureName)) {
-				logger::info("Special Feature '{}' disabled at boot", featureName);
 			}
 		}
 		for (auto* feature : Feature::GetFeatureList()) {

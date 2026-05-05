@@ -4,16 +4,12 @@ inputs:
     cache-key-suffix:
         description: "A suffix to make the cache key unique (e.g., validation, tests)"
         required: true
-    vs-version:
-        description: "Visual Studio version to use ('2022' or '2026'). Defaults to '2026'."
-        required: false
-        default: "2026"
     cmake-preset:
-        description: "The CMake configure preset name (e.g. ALL, ALL-VS2022). Used to resolve the expected generator for cache validation."
+        description: "The CMake configure preset name. Used to resolve the expected generator for cache validation."
         required: false
         default: "ALL"
     build-dir:
-        description: "The CMake binary directory to cache (e.g. build/ALL, build/ALL-VS2022)."
+        description: "The CMake binary directory to cache."
         required: false
         default: "build/ALL"
 outputs:
@@ -33,25 +29,30 @@ runs:
               cmakeVersion: "~4.2.0"
 
         - name: Install Visual Studio 2026 Build Tools
-          if: inputs.vs-version == '2026'
           shell: pwsh
           run: |
               $installerUrl = "https://aka.ms/vs/stable/vs_BuildTools.exe"
               $installerPath = "$env:TEMP\vs_buildtools.exe"
               Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
-              Start-Process -FilePath $installerPath -ArgumentList `
+              $proc = Start-Process -FilePath $installerPath -ArgumentList `
                   "--quiet", "--wait", "--norestart", "--nocache", `
                   "--add", "Microsoft.VisualStudio.Workload.VCTools", `
                   "--add", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", `
                   "--add", "Microsoft.VisualStudio.Component.Windows11SDK.26100" `
-                  -Wait -NoNewWindow
+                  -Wait -NoNewWindow -PassThru
+              if ($proc.ExitCode -ne 0) {
+                  throw "Visual Studio Build Tools installer failed with exit code $($proc.ExitCode)."
+              }
               Remove-Item $installerPath -ErrorAction SilentlyContinue
 
         - name: Setup MSVC environment
-          uses: ilammy/msvc-dev-cmd@v1
+          # Swapped from ilammy/msvc-dev-cmd@v1 (node20, deprecated) to
+          # TheMrMilchmann/setup-msvc-dev@v4 (node24). The new action has no
+          # `vsversion` input — the prior step installs only VS Build Tools
+          # 2026, so default detection picks it up.
+          uses: TheMrMilchmann/setup-msvc-dev@v4.0.0
           with:
               arch: x64
-              vsversion: ${{ inputs.vs-version == '2026' && '18.0' || '17.0' }}
 
         - name: Get MSVC version
           id: msvc_version
@@ -87,12 +88,12 @@ runs:
               Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
 
         - name: Setup vcpkg
-          uses: lukka/run-vcpkg@v11.5
+          uses: lukka/run-vcpkg@v11.6
           with:
               vcpkgJsonGlob: vcpkg.json
 
         - name: Cache CMake build output
-          uses: actions/cache@v4
+          uses: actions/cache@v5
           with:
               path: ${{ inputs.build-dir }}
               key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
@@ -119,8 +120,7 @@ runs:
                 }
 
                 # Check generator mismatch — resolve the expected generator from the
-                # configure preset, following the inherits chain, so VS2022 and VS2026
-                # presets each validate against their own generator string.
+                # configure preset, following the inherits chain.
                 if ($content -match 'CMAKE_GENERATOR:INTERNAL=(.+)') {
                   $cachedGenerator = $Matches[1].Trim()
                   $allPresets = (Get-Content "CMakePresets.json" -Raw | ConvertFrom-Json).configurePresets

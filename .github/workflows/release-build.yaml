@@ -5,7 +5,10 @@ on:
         tags:
             - "v*"
     release:
-        types: [created]
+        # 'published' covers semantic-release's draft → human publish path
+        # (drafts do not fire the 'created' event in practice). 'created'
+        # remains for non-draft releases authored directly via the UI/API.
+        types: [created, published]
     workflow_dispatch:
         inputs:
             cache-key-suffix:
@@ -40,7 +43,6 @@ jobs:
             run-shader-validation: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
             run-shader-tests: ${{ github.event_name != 'workflow_dispatch' || inputs.validate-shaders == true }}
             cache-key-suffix: ${{ inputs.cache-key-suffix || '' }}
-            run-vs2022: ${{ github.ref_type != 'tag' }}
 
     feature-audit:
         name: Feature Version Audit (Release)
@@ -110,15 +112,51 @@ jobs:
             - name: Generate combined release notes
               id: combined_notes
               shell: bash
+              # GH_TOKEN is required for `gh release view` — without it the
+              # call silently failed and the `||` fallback wrote an empty
+              # file, which then clobbered the existing release body when
+              # ncipollo updated it (this happened on v1.5.1).
+              env:
+                  GH_TOKEN: ${{ github.token }}
               run: |
+                  set -euo pipefail
+
                   if [ "${{ github.event_name }}" = "release" ]; then
                     RELEASE_TAG="${{ github.event.release.tag_name }}"
                   else
                     RELEASE_TAG="${{ github.ref_name }}"
                   fi
 
-                  gh release view $RELEASE_TAG --json body -q .body > auto-release-notes.md || echo '' > auto-release-notes.md
+                  # Fetch existing body. If the release does not exist yet
+                  # (e.g. tag-push trigger before any release was created),
+                  # treat empty as acceptable. Any other failure is fatal so
+                  # we never clobber a real body with empty content.
+                  if gh release view "$RELEASE_TAG" --json body -q .body > auto-release-notes.md 2>/tmp/gh-err; then
+                    :
+                  else
+                    if grep -q 'release not found' /tmp/gh-err; then
+                      echo "Release $RELEASE_TAG does not exist yet; starting with empty body."
+                      : > auto-release-notes.md
+                    else
+                      echo "::error::Failed to fetch release body for $RELEASE_TAG:"
+                      cat /tmp/gh-err
+                      exit 1
+                    fi
+                  fi
+
                   if [ -f feature-version-audit-latest.md ]; then
+                    # Strip any prior audit section so re-runs don't duplicate
+                    # it. Find the first "# Feature Version Audit" heading and
+                    # drop everything from the preceding "---" separator
+                    # onward.
+                    audit_line=$(grep -nx '# Feature Version Audit' auto-release-notes.md | head -1 | cut -d: -f1 || true)
+                    if [ -n "${audit_line:-}" ]; then
+                      sep_line=$(awk -v target="$audit_line" 'NR < target && /^---$/ { last = NR } END { print last }' auto-release-notes.md)
+                      if [ -n "${sep_line:-}" ]; then
+                        head -n $((sep_line - 1)) auto-release-notes.md > auto-release-notes.tmp
+                        mv auto-release-notes.tmp auto-release-notes.md
+                      fi
+                    fi
                     echo -e "\n---\n\n" >> auto-release-notes.md
                     cat feature-version-audit-latest.md >> auto-release-notes.md
                   fi
@@ -131,6 +169,7 @@ jobs:
               with:
                   name: "Community Shaders ${{ steps.combined_notes.outputs.release_tag }}"
                   draft: true
+                  omitDraftDuringUpdate: true
                   tag: ${{ steps.combined_notes.outputs.release_tag }}
                   artifacts: "${{ github.workspace }}/dist/*.7z"
                   bodyFile: ${{ steps.combined_notes.outputs.body_file }}
@@ -138,3 +177,26 @@ jobs:
                   replacesArtifacts: true
                   removeArtifacts: true
                   allowUpdates: true
+
+    nexus-dry-run:
+        # Chained from `release` to avoid the artifact-attachment race a
+        # parallel `release: published` trigger on a separate workflow had:
+        # the prior release-nexus-trigger.yaml fired in parallel with this
+        # build and tried to download artifacts before they existed.
+        # Stable tags only (no '-' in the tag name).
+        name: Nexus Upload (dry run)
+        needs: [release]
+        if: >
+            always() && !cancelled() &&
+            needs.release.result == 'success' &&
+            github.event_name == 'release' &&
+            github.event.action == 'published' &&
+            !contains(github.event.release.tag_name, '-')
+        uses: ./.github/workflows/nexus-upload.yaml
+        with:
+            tag: ${{ github.event.release.tag_name }}
+            artifact_pattern: "CommunityShaders-*.7z"
+            dry_run: "true"
+        secrets:
+            UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
+            UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
