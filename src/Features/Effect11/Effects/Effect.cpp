@@ -12,217 +12,6 @@
 #include "State.h"
 #include "Utils/ShaderPatches.h"
 
-namespace
-{
-	void StripLineDirectives(std::string& source)
-	{
-		std::string result;
-		result.reserve(source.size());
-		std::istringstream stream(source);
-		std::string line;
-		while (std::getline(stream, line)) {
-			size_t firstNonSpace = line.find_first_not_of(" \t");
-			if (firstNonSpace != std::string::npos && line[firstNonSpace] == '#') {
-				auto directive = line.substr(firstNonSpace + 1);
-				size_t dirStart = directive.find_first_not_of(" \t");
-				if (dirStart != std::string::npos && directive.compare(dirStart, 4, "line") == 0) {
-					result += "\n";
-					continue;
-				}
-			}
-			result += line;
-			result += "\n";
-		}
-		source = std::move(result);
-	}
-
-	std::string ReadAndProcessInclude(const std::filesystem::path& fullPath,
-		const std::filesystem::path& basePath,
-		const std::string& iniPath,
-		const std::string& iniSection,
-		std::vector<std::filesystem::path>& includeDirs,
-		std::unordered_set<std::string>& visited,
-		std::vector<Effect::UIDefineInfo>& uiDefines,
-		int depth);
-
-	std::string InlineIncludes(const std::string& source,
-		const std::filesystem::path& basePath,
-		const std::string& iniPath,
-		const std::string& iniSection,
-		std::vector<std::filesystem::path>& includeDirs,
-		std::unordered_set<std::string>& visited,
-		std::vector<Effect::UIDefineInfo>& uiDefines,
-		int depth = 0)
-	{
-		if (depth > 20)
-			return source;
-
-		std::string result;
-		result.reserve(source.size());
-		std::istringstream stream(source);
-		std::string line;
-		while (std::getline(stream, line)) {
-			size_t firstNonSpace = line.find_first_not_of(" \t");
-			if (firstNonSpace != std::string::npos && line[firstNonSpace] == '#') {
-				auto rest = line.substr(firstNonSpace + 1);
-				size_t dirStart = rest.find_first_not_of(" \t");
-				if (dirStart != std::string::npos && rest.compare(dirStart, 7, "include") == 0) {
-					size_t q1 = rest.find('"', dirStart + 7);
-					size_t q2 = (q1 != std::string::npos) ? rest.find('"', q1 + 1) : std::string::npos;
-					if (q1 != std::string::npos && q2 != std::string::npos) {
-						std::string includeName = rest.substr(q1 + 1, q2 - q1 - 1);
-
-						std::string_view nameView(includeName);
-						while (!nameView.empty() && (nameView.front() == '/' || nameView.front() == '\\'))
-							nameView.remove_prefix(1);
-						includeName = std::string(nameView);
-
-						std::filesystem::path fullPath;
-						bool found = false;
-						for (auto& dir : includeDirs) {
-							auto candidate = dir / includeName;
-							if (std::filesystem::exists(candidate)) {
-								fullPath = candidate;
-								found = true;
-								break;
-							}
-						}
-						if (!found)
-							fullPath = basePath / includeName;
-
-						std::string canonical = fullPath.string();
-						if (visited.count(canonical)) {
-							result += "\n";
-							continue;
-						}
-
-						std::string expanded = ReadAndProcessInclude(fullPath, basePath, iniPath, iniSection, includeDirs, visited, uiDefines, depth + 1);
-						result += expanded;
-						result += "\n";
-						continue;
-					}
-				}
-			}
-			result += line;
-			result += "\n";
-		}
-		return result;
-	}
-
-	std::string ReadAndProcessInclude(const std::filesystem::path& fullPath,
-		const std::filesystem::path& basePath,
-		const std::string& iniPath,
-		const std::string& iniSection,
-		std::vector<std::filesystem::path>& includeDirs,
-		std::unordered_set<std::string>& visited,
-		std::vector<Effect::UIDefineInfo>& uiDefines,
-		int depth)
-	{
-		std::string canonical = fullPath.string();
-		visited.insert(canonical);
-
-		std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
-		if (!file.is_open())
-			return "";
-
-		auto size = file.tellg();
-		if (size < 0)
-			return "";
-		file.seekg(0, std::ios::beg);
-
-		std::string content(static_cast<size_t>(size), '\0');
-		if (!file.read(content.data(), size))
-			return "";
-
-		content = ENBExtender::DecodeKIEFX(content);
-		ENBExtender::ConvertExtenderSyntax(content, basePath, uiDefines, iniPath, iniSection);
-		Util::ShaderPatches::Apply(fullPath.filename().string().c_str(), content);
-
-		auto parentDir = fullPath.parent_path();
-		if (std::find(includeDirs.begin(), includeDirs.end(), parentDir) == includeDirs.end())
-			includeDirs.push_back(parentDir);
-
-		return InlineIncludes(content, basePath, iniPath, iniSection, includeDirs, visited, uiDefines, depth);
-	}
-
-	class PresetInclude : public ID3DInclude
-	{
-	public:
-		PresetInclude(const std::filesystem::path& a_basePath, std::vector<Effect::UIDefineInfo>& a_uiDefines, const std::string& a_iniPath = "", const std::string& a_iniSection = "") :
-			basePath(a_basePath), uiDefines(a_uiDefines), iniPath(a_iniPath), iniSection(a_iniSection) {}
-
-		HRESULT __stdcall Open(D3D_INCLUDE_TYPE, LPCSTR pFileName, LPCVOID, LPCVOID* ppData, UINT* pBytes) override
-		{
-			std::string_view name(pFileName);
-			while (!name.empty() && (name.front() == '/' || name.front() == '\\'))
-				name.remove_prefix(1);
-
-			std::filesystem::path fullPath;
-			bool found = false;
-
-			for (auto& dir : includeDirs) {
-				auto candidate = dir / name;
-				if (std::filesystem::exists(candidate)) {
-					fullPath = candidate;
-					found = true;
-					break;
-				}
-			}
-
-			if (!found) {
-				fullPath = basePath / name;
-			}
-
-			std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
-			if (!file.is_open()) {
-				logger::debug("[ENBPP] Include file not found: '{}' (resolved: '{}')", std::string(name), fullPath.string());
-				static const char emptyContent[] = "\n";
-				auto* buf = new char[1];
-				buf[0] = '\n';
-				*ppData = buf;
-				*pBytes = 1;
-				return S_OK;
-			}
-
-			auto size = file.tellg();
-			if (size < 0)
-				return E_FAIL;
-			file.seekg(0, std::ios::beg);
-
-			std::string content(static_cast<size_t>(size), '\0');
-			if (!file.read(content.data(), size))
-				return E_FAIL;
-
-			content = ENBExtender::DecodeKIEFX(content);
-			ENBExtender::ConvertExtenderSyntax(content, basePath, uiDefines, iniPath, iniSection);
-			Util::ShaderPatches::Apply(pFileName, content);
-
-			auto parentDir = fullPath.parent_path();
-			if (std::find(includeDirs.begin(), includeDirs.end(), parentDir) == includeDirs.end())
-				includeDirs.push_back(parentDir);
-
-			auto* buf = new char[content.size()];
-			memcpy(buf, content.data(), content.size());
-			*ppData = buf;
-			*pBytes = static_cast<UINT>(content.size());
-			return S_OK;
-		}
-
-		HRESULT __stdcall Close(LPCVOID pData) override
-		{
-			delete[] static_cast<const char*>(pData);
-			return S_OK;
-		}
-
-	private:
-		std::filesystem::path basePath;
-		std::vector<Effect::UIDefineInfo>& uiDefines;
-		std::string iniPath;
-		std::string iniSection;
-		std::vector<std::filesystem::path> includeDirs;
-	};
-}
-
 bool Effect::Load()
 {
 	std::filesystem::path iniPath = PresetManager::GetSingleton().GetENBSeriesPath();
@@ -486,26 +275,26 @@ bool Effect::LoadFXFile()
 			preprocessedSource = pp;
 		else
 			ENBExtender::ParseSourceGroupScopes(pp, *this);
-		StripLineDirectives(pp);
+		ENBExtender::StripLineDirectives(pp);
 		return compile(pp, nullptr);
 	};
 
 	bool compiled = false;
 
 	{
-		PresetInclude ppInclude(enbseriesPath, uiDefines, iniPathStr, iniSection);
+		ENBExtender::PresetInclude ppInclude(enbseriesPath, uiDefines, iniPathStr, iniSection);
 		compiled = tryPreprocessAndCompile(sourceCode, &ppInclude);
 	}
 
 	if (!compiled) {
 		std::vector<std::filesystem::path> dirs = { enbseriesPath };
 		std::unordered_set<std::string> visited;
-		auto inlined = InlineIncludes(sourceCode, enbseriesPath, iniPathStr, iniSection, dirs, visited, uiDefines);
+		auto inlined = ENBExtender::InlineIncludes(sourceCode, enbseriesPath, iniPathStr, iniSection, dirs, visited, uiDefines);
 		compiled = tryPreprocessAndCompile(inlined, nullptr);
 	}
 
 	if (!compiled) {
-		PresetInclude includeHandler(enbseriesPath, uiDefines, iniPathStr, iniSection);
+		ENBExtender::PresetInclude includeHandler(enbseriesPath, uiDefines, iniPathStr, iniSection);
 		winrt::com_ptr<ID3DBlob> compiledShader, errorBlob;
 		HRESULT hr = D3DCompile(sourceCode.c_str(), sourceCode.size(), filePathStr.c_str(),
 			nullptr, &includeHandler, nullptr, "fx_5_0", 0, 0, compiledShader.put(), errorBlob.put());
