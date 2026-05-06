@@ -238,14 +238,14 @@ static void RenderSimpleModePage()
 	}
 	std::ranges::sort(sorted, [](Feature* a, Feature* b) { return a->GetName() < b->GetName(); });
 
-	// Every loaded feature gets an inline control via DrawSimpleSettings (boot-toggle
-	// fallback when no runtime enable flag). Unloaded features go to the issues list,
-	// except obsolete ones with their INI removed — those are silently dropped to
-	// match the advanced menu's filtering, surfaced again in developer mode.
+	// Loaded features and features intentionally disabled at boot both get a slider
+	// (the latter shows as Off). Only genuinely failed/missing features go to issues,
+	// except obsolete ones — those are silently dropped unless developer mode is on.
 	const bool devMode = globals::state->IsDeveloperMode();
 	std::vector<Feature*> issues;
 	for (auto* feat : sorted) {
-		if (feat->loaded) {
+		const bool bootDisabled = globals::state->IsFeatureDisabled(feat->GetShortName());
+		if (feat->loaded || bootDisabled) {
 			ImGui::PushID(feat);
 			feat->DrawSimpleSettings();
 			ImGui::PopID();

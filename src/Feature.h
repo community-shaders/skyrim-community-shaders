@@ -79,13 +79,7 @@ struct Feature
 	// Nexus Mods base URL for Skyrim Special Edition
 	static constexpr std::string_view NEXUS_BASE_URL = "https://www.nexusmods.com/skyrimspecialedition/mods/";
 	bool loaded = false;
-	// The two simple-mode bools fit in the natural padding between `loaded` and
-	// `lastAppliedQualityIdx`; the int then fills the remaining padding before the
-	// 8-byte-aligned std::string. Reordering this group triggers C4324 in alignas(16)
-	// derived classes.
-	bool simpleModeBootCaptured = false;
-	bool simpleModeBootInitial = false;  // snapshot of IsFeatureDisabled at first render
-	int lastAppliedQualityIdx = -1;      // -1 = unknown/Custom
+	int lastAppliedQualityIdx = -1;  // -1 = unknown/Custom
 	std::string version;
 	std::string failedLoadedMessage;
 

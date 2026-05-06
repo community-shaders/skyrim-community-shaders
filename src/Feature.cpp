@@ -348,12 +348,9 @@ void Feature::DrawSimpleSettings()
 	                             *runtimeEnabled :
 	                             !globals::state->IsFeatureDisabled(shortName);
 
-	if (!runtimeAvailable && !simpleModeBootCaptured) {
-		simpleModeBootInitial = globals::state->IsFeatureDisabled(shortName);
-		simpleModeBootCaptured = true;
-	}
-	const bool restartPending = !runtimeAvailable &&
-	                            globals::state->IsFeatureDisabled(shortName) != simpleModeBootInitial;
+	// Loaded features were enabled at boot by definition; a restart is needed only
+	// if the user has since toggled the boot setting to disabled.
+	const bool restartPending = !runtimeAvailable && globals::state->IsFeatureDisabled(shortName);
 
 	const auto& palette = globals::menu->GetTheme().StatusPalette;
 	if (restartPending)

@@ -173,36 +173,21 @@ void ScreenSpaceGI::DrawSettings()
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Low", { -1, 0 })) {
-				settings.NumSlices = 10;
-				settings.NumSteps = 12;
-				settings.ResolutionMode = 2;
-				settings.EnableBlur = true;
-				settings.EnableGI = true;
-				recompileFlag = true;
+				ApplyTier(this, kTierValues[0].first);
 			}
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("Quarter res and blurry.");
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Standard", { -1, 0 })) {
-				settings.NumSlices = 4;
-				settings.NumSteps = 8;
-				settings.ResolutionMode = 1;
-				settings.EnableBlur = true;
-				settings.EnableGI = true;
-				recompileFlag = true;
+				ApplyTier(this, kTierValues[1].first);
 			}
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("Half res and somewhat stable.");
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Extreme", { -1, 0 })) {
-				settings.NumSlices = 4;
-				settings.NumSteps = 8;
-				settings.ResolutionMode = 0;
-				settings.EnableBlur = true;
-				settings.EnableGI = true;
-				recompileFlag = true;
+				ApplyTier(this, kTierValues[2].first);
 			}
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("Full res and clean.");
