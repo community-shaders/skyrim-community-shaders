@@ -397,34 +397,23 @@ void Feature::DrawSimpleSettings()
 		overlay.assign(presets[lastAppliedQualityIdx].label.data(), presets[lastAppliedQualityIdx].label.size());
 	}
 
-	if (n == 0) {
-		// No quality presets — render as a simple on/off checkbox.
-		bool isOn = currentlyOn;
-		if (ImGui::Checkbox(label.c_str(), &isOn) && currentlyOn != isOn) {
+	int v = currentValue;
+	if (ImGui::SliderInt(label.c_str(), &v, 0, sliderMax, overlay.c_str(), ImGuiSliderFlags_AlwaysClamp)) {
+		const bool wantOn = v >= 1;
+		if (currentlyOn != wantOn) {
 			if (runtimeAvailable)
-				*runtimeEnabled = isOn;
+				*runtimeEnabled = wantOn;
 			else
 				ToggleAtBootSetting();
 		}
-	} else {
-		int v = currentValue;
-		if (ImGui::SliderInt(label.c_str(), &v, 0, sliderMax, overlay.c_str(), ImGuiSliderFlags_AlwaysClamp)) {
-			const bool wantOn = v >= 1;
-			if (currentlyOn != wantOn) {
-				if (runtimeAvailable)
-					*runtimeEnabled = wantOn;
-				else
-					ToggleAtBootSetting();
-			}
-			if (wantOn && v <= n) {
-				const int idx = v - 1;
-				ApplyPreset(this, presets[idx]);
-				lastAppliedQualityIdx = idx;
-			} else if (!wantOn) {
-				lastAppliedQualityIdx = -1;
-			}
-			// v == n+1 (Custom slot): leave lastAppliedQualityIdx as-is.
+		if (wantOn && n > 0 && v <= n) {
+			const int idx = v - 1;
+			ApplyPreset(this, presets[idx]);
+			lastAppliedQualityIdx = idx;
+		} else if (!wantOn) {
+			lastAppliedQualityIdx = -1;
 		}
+		// v == n+1 (Custom slot): leave lastAppliedQualityIdx as-is.
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
