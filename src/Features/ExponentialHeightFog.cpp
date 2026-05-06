@@ -11,7 +11,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	directionalInscatteringMultiplier,
 	directionalInscatteringExponent,
 	inscatteringTint,
-	cubemapMipLevel)
+	cubemapMipLevel,
+	respectVanillaFogFade)
 
 void ExponentialHeightFog::RestoreDefaultSettings()
 {
@@ -37,6 +38,10 @@ void ExponentialHeightFog::DrawSettings()
 	ImGui::SliderFloat("Fog Density", &settings.fogDensity, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat("Directional Light Inscattering Multiplier", &settings.directionalInscatteringMultiplier, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Directional Light Inscattering Exponent", &settings.directionalInscatteringExponent, 1.0f, 128.0f, "%.2f");
+	ImGui::Checkbox("Apply Vanilla Fade", (bool*)&settings.respectVanillaFogFade);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Applies vanilla fade brightness to exponential height fog.");
+	}
 	ImGui::Checkbox("Use Dynamic Cubemaps for Inscattering", (bool*)&settings.useDynamicCubemaps);
 	ImGui::ColorEdit4("Inscattering Cubemap Tint", (float*)&settings.inscatteringTint);
 	ImGui::SliderFloat("Cubemap Mip Level", &settings.cubemapMipLevel, 1.0f, 7.0f, "%.1f");

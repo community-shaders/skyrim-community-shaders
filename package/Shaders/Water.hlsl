@@ -437,6 +437,16 @@ float CalculateDepthMultFromUV(float2 uv, float depth, uint eyeIndex = 0)
 #		include "Common/ShadowSampling.hlsli"
 
 #		if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
+float GetWaterFogFade(uint eyeIndex)
+{
+#			if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		return ExponentialHeightFog::GetVanillaFogFade(PosAdjust[eyeIndex].w);
+	}
+#			endif
+	return PosAdjust[eyeIndex].w;
+}
+
 #			if defined(FLOWMAP)
 
 /**
@@ -1271,9 +1281,9 @@ PS_OUTPUT main(PS_INPUT input)
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
 		fogColor = exponentialHeightFog.xyz;
 		fogDistanceFactor = exponentialHeightFog.w;
-	} else
+	}
 #						endif
-		fogColor *= PosAdjust[eyeIndex].w;
+	fogColor *= GetWaterFogFade(eyeIndex);
 
 	float3 finalColor = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
 
@@ -1309,9 +1319,9 @@ PS_OUTPUT main(PS_INPUT input)
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, preFogColor);
 		preFogColor = exponentialHeightFog.xyz;
 		fogDistanceFactor = exponentialHeightFog.w;
-	} else
+	}
 #						endif
-		preFogColor *= PosAdjust[eyeIndex].w;
+	preFogColor *= GetWaterFogFade(eyeIndex);
 
 	finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
 
