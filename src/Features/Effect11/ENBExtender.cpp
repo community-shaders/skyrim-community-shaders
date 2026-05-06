@@ -516,7 +516,11 @@ namespace ENBExtender
 		uiVar.uiBindingProperty = get("UIBindingProperty");
 		uiVar.uiBindingCondition = get("UIBindingCondition");
 		uiVar.ignorePerfMode = IsTruthy(get("UIIgnorePerfMode"));
+		if (IsTruthy(get("UIWeatherString")))
+			logger::info("[ENBExtender] UIWeatherString on '{}' (not yet implemented)", uiVar.name);
 		uiVar.isWeatherOnlyString = IsTruthy(get("UIWeatherOnlyString"));
+		if (uiVar.isWeatherOnlyString)
+			logger::info("[ENBExtender] UIWeatherOnlyString on '{}' — hidden from main UI", uiVar.name);
 		if (uiVar.type == Effect::UIVariableType::Float || uiVar.type == Effect::UIVariableType::Float2 ||
 			uiVar.type == Effect::UIVariableType::Float3 || uiVar.type == Effect::UIVariableType::Float4)
 			uiVar.separation = get("Separation");

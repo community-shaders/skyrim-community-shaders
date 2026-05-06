@@ -608,6 +608,13 @@ void Effect::LoadUIVariables()
 			continue;
 		}
 
+		auto externBinding = GetUIAnnotation(variable, "ExternBinding");
+		if (!externBinding.empty()) {
+			logger::info("[ENBPP] ExternBinding '{}' requested by variable '{}' in '{}' (not yet implemented)",
+				externBinding, varDesc.Name, GetName());
+			continue;
+		}
+
 		UIVariable uiVar = {};
 		if (ENBExtender::CreateUIVariable(uiVar, variable, varDesc, typeDesc, groupStack, *this)) {
 			LoadUIVariableValue(uiVar);
