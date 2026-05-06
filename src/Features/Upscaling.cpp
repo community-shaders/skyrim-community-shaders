@@ -23,6 +23,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
+	frameGenerationAllowInMenus,
 	streamlineLogLevel,
 	sharpnessFSR,
 	sharpnessDLSS,
@@ -327,6 +328,12 @@ void Upscaling::DrawSettings()
 
 			ImGui::TextWrapped("Allows frame generation to function on low refresh rate monitors. Detected: %.2f Hz", refreshRate);
 			ImGui::SliderInt("Force Enable Frame Generation", (int*)&settings.frameGenerationForceEnable, 0, 1, std::format("{}", toggleModes[settings.frameGenerationForceEnable]).c_str());
+
+			ImGui::Checkbox("Frame Generation in Menus", &settings.frameGenerationAllowInMenus);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::TextUnformatted("Keeps frame generation active while game menus are open.");
+				ImGui::TextUnformatted("May feel smoother, but increases menu input latency.");
+			}
 
 			ImGui::TreePop();
 		}
@@ -1609,10 +1616,9 @@ bool Upscaling::IsFrameGenerationActive() const
 bool Upscaling::ShouldUseFrameGenerationThisFrame() const
 {
 	auto* ui = globals::game::ui;
-	return IsFrameGenerationDx12PathActive() &&
-	       settings.frameGenerationMode &&
-	       ui && !ui->GameIsPaused() &&
-	       !globals::state->IsMainOrLoadingMenuOpen(ui);
+	auto* state = globals::state;
+	const bool menuOpen = (ui && ui->GameIsPaused()) || (state && state->IsMainOrLoadingMenuOpen(ui));
+	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && (settings.frameGenerationAllowInMenus || !menuOpen);
 }
 
 bool Upscaling::IsUpscalingActive() const
