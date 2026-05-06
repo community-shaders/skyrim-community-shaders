@@ -501,38 +501,8 @@ void Upscaling::DrawSettings()
 		}
 
 		ImGui::Separator();
-		// FidelityFX section
-		if (ImGui::Selectable("AMD FidelityFX DLLs (click to open folder)")) {
-			ShellExecuteW(nullptr, L"open", FidelityFX::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
-		}
-		std::vector<std::string> headers = { "DLL Name", "Version" };
-		std::vector<std::vector<std::string>> ffRows;
-		for (const auto& [name, dllVersion] : FidelityFX::dllVersions)
-			ffRows.push_back({ name, dllVersion });
-		std::vector<Util::TableSortFunc> ffSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTableStrings(
-			"ffx_dll_versions",
-			headers,
-			ffRows,
-			0,
-			true,
-			ffSorters);
-
-		// Streamline section
-		if (ImGui::Selectable("NVIDIA Streamline DLLs (click to open folder)")) {
-			ShellExecuteW(nullptr, L"open", Streamline::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
-		}
-		std::vector<std::vector<std::string>> slRows;
-		for (const auto& [name, dllVersion] : Streamline::dllVersions)
-			slRows.push_back({ name, dllVersion });
-		std::vector<Util::TableSortFunc> slSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTableStrings(
-			"sl_dll_versions",
-			headers,
-			slRows,
-			0,
-			true,
-			slSorters);
+		Util::DrawDllVersionTable("AMD FidelityFX DLLs (click to open folder)", FidelityFX::PluginDir, FidelityFX::dllVersions, "ffx_dll_versions");
+		Util::DrawDllVersionTable("NVIDIA Streamline DLLs (click to open folder)", Streamline::PluginDir, Streamline::dllVersions, "sl_dll_versions");
 		ImGui::TreePop();
 	}
 }
