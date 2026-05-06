@@ -33,11 +33,17 @@ groupshared sh2 sharedB[TOTAL_SAMPLES];
 	float2 sampleCoord = (float2(az, ze) + 0.5) * rcpAxisSampleCount;
 	float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
 
-	// Sample cubemap with optimized direction
-	float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+	// Sample cubemap
+	float3 sampleDir = -rayDir;
 
-	if (SharedData::enbSettings.Enable)
-		color *= saturate(-rayDir.z * 0.65 + 0.35);
+	if (SharedData::enbSettings.Enable){
+		sampleDir.z = sampleDir.z * 0.65 + 0.35;
+		float horizScale = sqrt(1.0 - sampleDir.z * sampleDir.z);
+		float horizLen = length(sampleDir.xy);
+		sampleDir.xy = horizLen > 1e-6 ? sampleDir.xy * (horizScale / horizLen) : float2(0, 0);
+	}
+
+	float3 color = EnvTexture.SampleLevel(LinearSampler, sampleDir, 0).xyz;
 
 	// Compute spherical harmonics basis for this direction
 	sh2 sh = SphericalHarmonics::Evaluate(rayDir);

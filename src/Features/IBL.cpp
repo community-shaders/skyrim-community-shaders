@@ -204,8 +204,8 @@ IBL::Settings IBL::GetCommonBufferData() const
 				data.EnvIBLScale = 0.0f;
 				data.SkyIBLScale = settingManager.GetInterpolatedTimeOfDayValue("MultiplicativeAmount", "IMAGEBASEDLIGHTING");
 				data.DALCAmount = 1.0f;
-				data.EnvIBLSaturation = 1.5f;
-				data.SkyIBLSaturation = 1.5f;
+				data.EnvIBLSaturation = 1.0f;
+				data.SkyIBLSaturation = 1.0f;
 				data.DALCMode = 3;
 				data.FogAmount = 0.0f;
 			}

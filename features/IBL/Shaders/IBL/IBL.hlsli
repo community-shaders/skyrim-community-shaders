@@ -29,9 +29,9 @@ namespace ImageBasedLighting
 		sh2 shR = EnvIBLTexture.Load(int3(0, 0, 0));
 		sh2 shG = EnvIBLTexture.Load(int3(1, 0, 0));
 		sh2 shB = EnvIBLTexture.Load(int3(2, 0, 0));
-		float colorR = SphericalHarmonics::Unproject(shR, rayDir);
-		float colorG = SphericalHarmonics::Unproject(shG, rayDir);
-		float colorB = SphericalHarmonics::Unproject(shB, rayDir);
+		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
+		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
+		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
 		return float3(colorR, colorG, colorB) / Math::PI;
 	}
 
@@ -41,9 +41,9 @@ namespace ImageBasedLighting
 		sh2 shR = SkyIBLTexture.Load(int3(0, 0, 0));
 		sh2 shG = SkyIBLTexture.Load(int3(1, 0, 0));
 		sh2 shB = SkyIBLTexture.Load(int3(2, 0, 0));
-		float colorR = SphericalHarmonics::Unproject(shR, rayDir);
-		float colorG = SphericalHarmonics::Unproject(shG, rayDir);
-		float colorB = SphericalHarmonics::Unproject(shB, rayDir);
+		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
+		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
+		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
 		return max(0, float3(colorR, colorG, colorB) / Math::PI);
 	}
 
@@ -65,9 +65,9 @@ namespace ImageBasedLighting
 		sh2 iblSHG = EnvIBLTexture.Load(int3(1, 0, 0));
 		sh2 iblSHB = EnvIBLTexture.Load(int3(2, 0, 0));
 
-		float colorR = SphericalHarmonics::Unproject(iblSHR, float3(0, 0, 0));
-		float colorG = SphericalHarmonics::Unproject(iblSHG, float3(0, 0, 0));
-		float colorB = SphericalHarmonics::Unproject(iblSHB, float3(0, 0, 0));
+		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHR, float3(0, 0, 0));
+		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHG, float3(0, 0, 0));
+		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHB, float3(0, 0, 0));
 		float3 ibl0 = max(0, float3(colorR, colorG, colorB) / Math::PI);
 
 		if (SharedData::iblSettings.DALCMode == 1) {
@@ -110,13 +110,13 @@ namespace ImageBasedLighting
 	{
 		float3 linEnv, linSky;
 		if (SharedData::iblSettings.DALCMode >= 2) {
-			linEnv = Color::IrradianceToLinear(vanillaDALC * SharedData::iblSettings.DALCAmount);
+			linEnv = vanillaDALC * SharedData::iblSettings.DALCAmount;
 			linSky = GetSkyIBLColor(rayDir);
 		} else {
 			linEnv = GetEnvIBLColor(rayDir);
 			linSky = GetSkyIBLColor(rayDir);
 		}
-		return Color::IrradianceToGamma(linEnv + linSky);
+		return linEnv + linSky;
 	}
 
 	/// Compute diffuse IBL ambient (gamma-space) with visibility applied per DALCMode.
@@ -126,18 +126,22 @@ namespace ImageBasedLighting
 		float3 linEnv, linSky;
 		if (SharedData::iblSettings.DALCMode == 3) {
 			// Mode 3: Skylighting dims both DALC and sky
-			linEnv = Color::IrradianceToLinear(vanillaDALC * SharedData::iblSettings.DALCAmount) * visibility;
+			linEnv = vanillaDALC * SharedData::iblSettings.DALCAmount * visibility;
 			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
 		} else if (SharedData::iblSettings.DALCMode == 2) {
 			// Mode 2: Skylighting only dims sky, DALC unaffected
-			linEnv = Color::IrradianceToLinear(vanillaDALC * SharedData::iblSettings.DALCAmount);
+			linEnv = vanillaDALC * SharedData::iblSettings.DALCAmount;
 			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
 		} else {
 			// Mode 0/1: Skylighting only dims sky, env IBL unaffected
 			linEnv = GetEnvIBLColor(rayDir);
 			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
 		}
-		return Color::IrradianceToGamma(linEnv + linSky);
+
+		if (SharedData::enbSettings.Enable)
+			linSky *= saturate(-rayDir.z * 0.5 + 0.5);
+
+		return linEnv + linSky;
 	}
 
 	// ============================================================================
@@ -166,7 +170,7 @@ namespace ImageBasedLighting
 		float3 iblColor;
 		if (SharedData::iblSettings.DALCMode >= 2) {
 			float3 dalc0 = Color::Ambient(SharedData::GetAmbient(0.f));
-			iblColor = Color::IrradianceToLinear(dalc0 * SharedData::iblSettings.DALCAmount) + GetSkyIBLColor(float3(0, 0, 0));
+			iblColor = dalc0 * SharedData::iblSettings.DALCAmount + GetSkyIBLColor(float3(0, 0, 0));
 		} else {
 			iblColor = GetEnvIBLColor(float3(0, 0, 0)) + GetSkyIBLColor(float3(0, 0, 0));
 		}
