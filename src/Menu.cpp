@@ -22,6 +22,7 @@
 #include "Feature.h"
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Features/RenderDoc.h"
 #include "Features/Upscaling.h"
 #include "Menu/AdvancedSettingsRenderer.h"
 #include "Menu/BackgroundBlur.h"
@@ -1072,10 +1073,12 @@ void Menu::ProcessInputEventQueue()
 								 globals::features::screenshotFeature.captureRequested = true;
 						 } },
 					};
-					for (const auto& ka : keyActions) {
-						if (InputCombo::MatchesKeyboardCombo(ka.settingKey, key)) {
-							ka.action();
-							break;
+					if (!RenderDoc::GetSingleton()->HandleCaptureHotkey(key)) {
+						for (const auto& ka : keyActions) {
+							if (InputCombo::MatchesKeyboardCombo(ka.settingKey, key)) {
+								ka.action();
+								break;
+							}
 						}
 					}
 				}
