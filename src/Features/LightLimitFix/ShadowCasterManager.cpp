@@ -2811,6 +2811,13 @@ namespace ShadowCasterManager
 			ImGui::Text("  Important       : %u / %u (near camera or player)", s_highImportanceLightCount, shadowLightCount);
 		else
 			ImGui::Text("  Important       : none");
+
+		// Diagnostic: how many lights are currently in the shadow→normal converted pool.
+		// If ConvertExcessToNormal is on and this stays at 0 even when shadow lights are
+		// over budget, the conversion path isn't running. If it climbs but the cluster
+		// light count doesn't reflect it, the converted lights aren't reaching activeLights
+		// or are being filtered out before clustering.
+		ImGui::Text("Converted to NS  : %zu (in s_normalConvert pool)", s_normalConvert.size());
 	}
 
 	void DrawOverlayShadowModeInfo(uint32_t mode, uint32_t shadowUnshadowedLightCount, uint32_t totalLightCount)
