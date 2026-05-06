@@ -13,7 +13,7 @@ public:
 	virtual inline std::string GetShortName() override { return "TerrainShadows"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_SHADOWS"; }
-	virtual std::string_view GetCategory() const override { return "Landscape & Textures"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {

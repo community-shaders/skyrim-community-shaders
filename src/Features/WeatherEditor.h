@@ -17,7 +17,7 @@ public:
 	virtual inline std::string GetName() override { return "Weather Editor"; }
 	virtual inline std::string GetShortName() override { return "WeatherEditor"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "WEATHER"; }
-	virtual inline std::string_view GetCategory() const override { return "Utility"; }
+	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
 	virtual bool IsInMenu() const override { return true; }
@@ -37,9 +37,12 @@ public:
 		};
 	}
 
-	virtual void DataLoaded() override;
 	virtual void DrawSettings() override;
+	virtual void DataLoaded() override;
 	virtual void Prepass() override;
+
+	static void OpenEditorWindow();
+	static void ToggleEditorWindow();
 
 	void LerpWeather(RE::TESWeather*, RE::TESWeather*, float);
 
@@ -131,7 +134,11 @@ private:
 	static constexpr uint32_t UNCLASSIFIED_FLAG = 0x40;  // Bit 6 only
 
 	// Static state for weather picker and data
+	static inline bool s_dataAvailable = false;
 	static inline bool s_weathersLoaded = false;
+	static inline bool s_resourcesInitialized = false;
+	static inline bool s_checkedWidgetJsonFiles = false;
+	static inline bool s_hasWidgetJsonFiles = false;
 	static inline std::vector<RE::TESWeather*> s_allWeathers;
 	static inline std::vector<RE::TESWeather*> s_filteredWeathers;
 	static inline int s_selectedWeatherIdx = -1;
@@ -162,6 +169,10 @@ private:
 	static void DisplayWindInfo(RE::TESWeather* weather);
 
 	// Helper functions
+	static bool HasWidgetJsonFiles();
+	static bool ShouldPreloadEditorResources();
+	static void EnsureWeatherListLoaded();
+	static void EnsureDataLoaded();
 	static void LoadAllWeathers();
 	static void UpdateFilteredWeathers();
 	static int FindWeatherIndex(RE::TESWeather* targetWeather);

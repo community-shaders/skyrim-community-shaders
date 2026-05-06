@@ -1,7 +1,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/doodlum/skyrim-community-shaders)](https://github.com/doodlum/skyrim-community-shaders/releases)
 [![License](https://img.shields.io/github/license/doodlum/skyrim-community-shaders)](./LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/doodlum/skyrim-community-shaders)](https://github.com/doodlum/skyrim-community-shaders/commits)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/doodlum/skyrim-community-shaders/build.yaml?branch=dev)](https://github.com/doodlum/skyrim-community-shaders/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/doodlum/skyrim-community-shaders/release-build.yaml?branch=dev)](https://github.com/doodlum/skyrim-community-shaders/actions)
 [![Discord](https://img.shields.io/discord/1080142797870485606?label=discord&logo=discord&color=5865F2)](https://discord.com/invite/nkrQybAsyy)
 [![Open Issues](https://img.shields.io/github/issues/doodlum/skyrim-community-shaders)](https://github.com/doodlum/skyrim-community-shaders/issues)
 [![Contributors](https://img.shields.io/github/contributors/doodlum/skyrim-community-shaders)](https://github.com/doodlum/skyrim-community-shaders/graphs/contributors)
@@ -22,7 +22,7 @@ SKSE core plugin for community-driven advanced graphics modifications.
 ## Requirements
 
 -   Any terminal of your choice (e.g., PowerShell)
--   [Visual Studio Community 2022](https://visualstudio.microsoft.com/)
+-   [Visual Studio Community 2026](https://visualstudio.microsoft.com/)
     -   Desktop development with C++
     -   CMake Tools for Windows
     -   HLSL Tools
@@ -38,7 +38,7 @@ Install them manually only if you want them in everywhere.
 
 -   [CMake](https://cmake.org/)
     -   No need to install manually if you have Visual Studio CMake Tools installed
-    -   CMake 4.0+ is **not** supported right now
+    -   CMake 4.2+ is **required** now
     -   Edit the `PATH` environment variable and add the cmake.exe install path as a new value
     -   Instructions for finding and editing the `PATH` environment variable can be found [here](https://www.java.com/en/download/help/path.html)
 -   [Vcpkg](https://github.com/microsoft/vcpkg)
@@ -78,7 +78,7 @@ Right click on the target and select `Build` to create the zip package in `./dis
 
 ### Advanced build with CMake in command line
 
-Open the "Developer PowerShell for VS 2022" or the "x64 Native Tools Command Prompt" (these set up the Visual Studio toolchain for you).
+Open the "Developer PowerShell for VS 2026" or the "x64 Native Tools Command Prompt" (these set up the Visual Studio toolchain for you).
 
 Then from the repository root run:
 

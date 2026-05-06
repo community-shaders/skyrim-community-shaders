@@ -1,9 +1,9 @@
 #pragma once
-#include "FeatureConstraints.h"
 #include "Menu.h"
 #include "OverlayFeature.h"
 #include "Utils/Input.h"
 #include "VR/OpenVRDetection.h"  // In Features/VR/
+#include "VRStereoOptimizations.h"
 #include <algorithm>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
@@ -110,6 +110,9 @@ public:
 		};
 	}
 
+	virtual inline std::string_view GetShaderDefineName() override { return "VR_STEREO_OPT"; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return stereoOpt.CanDispatchStencil() && (t == RE::BSShader::Type::Utility || t == RE::BSShader::Type::Lighting); }
+	virtual void Reset() override;
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 	virtual bool SupportsVR() override { return true; }
@@ -119,10 +122,19 @@ public:
 	virtual void DataLoaded() override;
 	virtual void EarlyPrepass() override;
 
-	void UpdateDepthBufferCulling(bool desired, const FeatureConstraints::SettingId& settingId);
+	void UpdateDepthBufferCulling();
 
 	// Stereo bilateral blend pass - called from Deferred::DeferredPasses after composite
 	void DrawStereoBlend();
+	void CompileStereoBlendShaders();
+	bool IsStereoOptimizationCullingReady() const
+	{
+		return REL::Module::IsVR() &&
+		       stereoOpt.CanDispatchStencil() &&
+		       stereoBlendOverwriteCS &&
+		       stereoBlendCopyTex &&
+		       stereoBlendCB;
+	}
 	static bool AnyScreenSpaceEffectLoaded();
 
 	virtual void LoadSettings(json& o_json) override;
@@ -131,7 +143,7 @@ public:
 
 	virtual void DrawSettings() override;
 
-	virtual std::string_view GetCategory() const override { return "Utility"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 
 	//=============================================================================
 	// OVERLAY FEATURE OVERRIDES
@@ -156,15 +168,15 @@ public:
 	{
 		// Performance optimization settings
 		bool EnableDepthBufferCullingExterior = true;  ///< Enable depth buffer culling for VR performance
-		bool EnableDepthBufferCullingInterior = false;
+		bool EnableDepthBufferCullingInterior = true;
 		float MinOccludeeBoxExtent = 10.0f;  ///< Minimum bounding box size for occlusion culling
 
 		// Stereo consistency blend pass (post-composite safety net)
-		bool EnableStereoBlend = true;            ///< Enable depth-aware bilateral blend between eyes
+		bool EnableStereoBlend = false;           ///< Enable depth-aware bilateral blend between eyes
 		float StereoBlendDepthSigma = 0.01f;      ///< Depth sensitivity for bilateral weight (lower = stricter)
 		float StereoBlendMaxFactor = 0.1f;        ///< Maximum blend factor; keep low to preserve stereo parallax
 		float StereoBlendColorThreshold = 0.02f;  ///< Minimum color difference to trigger blending (luminance)
-		int StereoBlendDebugMode = 0;             ///< 0=off, 1=back-check, 2=blend weight
+		int StereoBlendDebugMode = 0;             ///< 0=off, 1=back-check, 2=blend weight, 3=edge detection, 4=overwrite, 5=overwrite Eye1
 
 		// VR Menu Overlay positioning settings
 		float VRMenuScale = Config::kDefaultMenuScale;  ///< Scale factor for overlay UI (0.5-2.0)
@@ -261,7 +273,7 @@ public:
 			StereoBlendDepthSigma = std::clamp(StereoBlendDepthSigma, 0.001f, 0.1f);
 			StereoBlendMaxFactor = std::clamp(StereoBlendMaxFactor, 0.0f, 0.5f);
 			StereoBlendColorThreshold = std::clamp(StereoBlendColorThreshold, 0.0f, 0.2f);
-			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 2);
+			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 5);
 		}
 	};
 
@@ -290,6 +302,7 @@ public:
 
 	void RecreateOverlayTexturesIfNeeded();
 	void SubmitOverlayFrame();
+	bool IsWelcomeOverlayVisible() const;
 
 	/**
 	 * @brief Context for rendering VR overlays with render target management
@@ -358,8 +371,13 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBackCheckCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBlendWeightCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugEdgeDetectionCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendOverwriteCS;
 	eastl::unique_ptr<Texture2D> stereoBlendCopyTex;
 	eastl::unique_ptr<ConstantBuffer> stereoBlendCB;
+	winrt::com_ptr<ID3D11SamplerState> stereoBlendLinearSampler;
+
+	VRStereoOptimizations stereoOpt;
 
 	struct alignas(16) StereoBlendCB
 	{
@@ -368,7 +386,11 @@ public:
 		float DepthSigma;
 		float MaxBlendFactor;
 		float ColorDiffThreshold;
-		float pad;
+		float DebugEdgeTint;
+		uint32_t DebugMode;
+		float FullBlendDistance;
+		float POMDepthScale;
+		float _pad;
 	};
 
 	// Engine hook integration points

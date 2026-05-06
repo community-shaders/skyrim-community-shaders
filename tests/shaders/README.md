@@ -130,7 +130,7 @@ These tests run automatically in GitHub Actions on:
 -   Pushes to tags starting with `v`
 -   Manual workflow dispatches
 
-See the `shader-unit-tests` job in `.github/workflows/build.yaml` for CI integration.
+See the `shader-unit-tests` job in `.github/workflows/_shared-build.yaml` for CI integration.
 
 ## Troubleshooting
 
@@ -181,7 +181,7 @@ cmake --preset ALL
 **Linker errors:**
 
 -   Ensure you're building on Windows with D3D12 support
--   Verify Visual Studio 2022 is installed with C++ development tools
+-   Verify Visual Studio 2026 is installed with C++ development tools
 
 **CMake 4.0 Compatibility:**
 

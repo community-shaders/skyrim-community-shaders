@@ -8,7 +8,6 @@
 #include "SceneSettingsManager.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
 
 #include "ENB/ENBSeriesAPI.h"
 
@@ -54,6 +53,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	InitializeLog();
 	logger::info("Loaded {} {}", Plugin::NAME, Plugin::VERSION.string());
 	SKSE::Init(a_skse);
+	SKSE::AllocTrampoline(1 << 10);
 	return Load();
 }
 
@@ -81,7 +81,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 		{
 			if (errors.empty()) {
 				Deferred::Hooks::Install();
-				globals::truePBR->PostPostLoad();
 				Hooks::Install();
 				EngineFix::InstallOnPostPostLoadFixes();
 				FrameAnnotations::OnPostPostLoad();
@@ -131,7 +130,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 					shaderCache->WriteDiskCacheInfo();
 				}
 
-				globals::truePBR->DataLoaded();
 				Feature::ForEachLoadedFeature("DataLoaded", [](Feature* feature) { feature->DataLoaded(); });
 			}
 
@@ -148,7 +146,7 @@ bool Load()
 	}
 
 	if (REL::Module::IsVR()) {
-		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.200.0", true);
+		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.207.0", true);
 	}
 
 	auto privateProfileRedirectorVersion = Util::GetDllVersion(L"Data/SKSE/Plugins/PrivateProfileRedirector.dll");
@@ -181,8 +179,9 @@ bool Load()
 		L"Data/SKSE/Plugins/EVLaS.dll",
 		L"Data/SKSE/Plugins/AELAS.dll",
 		L"Data/SKSE/Plugins/SSEReShadeHelper.dll",
-		L"Data/SKSE/Plugins/trainwreck.dll",
-		L"Data/SKSE/Plugins/TAASharpen.dll"
+		L"Data/SKSE/Plugins/TAASharpen.dll",
+		L"Data/SKSE/Plugins/NVIDIA_Reflex.dll",
+		L"Data/SKSE/Plugins/MARA.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {
@@ -193,16 +192,29 @@ bool Load()
 		}
 	}
 
-	const std::array requiredDLLs = {
-		REL::Module::IsVR() ? L"Data/SKSE/Plugins/EngineFixesVR.dll" : L"Data/SKSE/Plugins/EngineFixes.dll",
-		L"Data/SKSE/Plugins/CrashLogger.dll"
+	auto pushMissingDllError = [&](std::string_view dllName) {
+		auto errorMessage = std::format("Required DLL {} was missing", dllName);
+		logger::error("{}", errorMessage);
+		errors.push_back(errorMessage);
 	};
+
+	// Engine Fixes: VR accepts either EngineFixesVR.dll or the EngineFixes.dll NG
+	if (REL::Module::IsVR()) {
+		if (!LoadLibrary(L"Data/SKSE/Plugins/EngineFixesVR.dll") && !LoadLibrary(L"Data/SKSE/Plugins/EngineFixes.dll")) {
+			pushMissingDllError("EngineFixesVR.dll or EngineFixes.dll");
+		}
+	} else {
+		if (!LoadLibrary(L"Data/SKSE/Plugins/EngineFixes.dll")) {
+			pushMissingDllError(stl::utf16_to_utf8(L"Data/SKSE/Plugins/EngineFixes.dll").value_or("<unicode conversion error>"s));
+		}
+	}
+
+	// Empty RequiredDLLs array, if necessary we can add a dll here in the future without needing to modify the plugin loading logic.
+	const std::array<LPCWSTR, 0> requiredDLLs{};
 
 	for (const auto dll : requiredDLLs) {
 		if (!LoadLibrary(dll)) {
-			auto errorMessage = std::format("Required DLL {} was missing", stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
-			logger::error("{}", errorMessage);
-			errors.push_back(errorMessage);
+			pushMissingDllError(stl::utf16_to_utf8(dll).value_or("<unicode conversion error>"s));
 		}
 	}
 

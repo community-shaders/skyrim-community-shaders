@@ -27,4 +27,8 @@ namespace BackgroundBlur
 
 	void SetEnabled(bool enable);
 
+	/// When true, a single fullscreen blur replaces per-window blur (weather editor mode)
+	void SetWeatherEditorActive(bool active);
+	bool IsWeatherEditorActive();
+
 }  // namespace BackgroundBlur

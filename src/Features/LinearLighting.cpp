@@ -1,5 +1,7 @@
 #include "LinearLighting.h"
 
+#include "State.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LinearLighting::Settings,
 	enableLinearLighting,
@@ -105,7 +107,7 @@ void LinearLighting::SetupResources()
 
 void LinearLighting::Prepass()
 {
-	bool isMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	bool isMainLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 	dirLightMult = 1.0f;
 	if (!settings.enableLinearLighting || isMainLoadingMenu)
 		return;
@@ -148,7 +150,7 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 		data.enableLinearLighting = false;
 		return data;
 	}
-	bool isMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	bool isMainLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 	auto data = PerFrameData{};
 	data.enableLinearLighting = settings.enableLinearLighting && !isMainLoadingMenu;
 	data.enableGammaCorrection = settings.enableGammaCorrection;
@@ -192,7 +194,7 @@ RE::NiColor LinearLighting::ColorToLinear(RE::NiColor inColor, float gamma)
 
 void LinearLighting::BSLightingShader_SetupGeometry(RE::BSRenderPass* a_pass)
 {
-	auto& property1 = a_pass->geometry->GetGeometryRuntimeData().properties[1];
+	auto& property1 = a_pass->geometry->GetGeometryRuntimeData().shaderProperty;
 	auto lightProperty = property1 && property1->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(property1.get()) : nullptr;
 
 	if (lightProperty != nullptr) {

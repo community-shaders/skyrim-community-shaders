@@ -13,7 +13,7 @@ public:
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
-	virtual std::string_view GetCategory() const override { return "Lighting"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -139,6 +139,8 @@ public:
 	eastl::unique_ptr<Texture2D> texRadiance = nullptr;
 	eastl::unique_ptr<Texture2D> texRadianceTemp = nullptr;
 	winrt::com_ptr<ID3D11UnorderedAccessView> uavRadiance[5] = { nullptr };
+	eastl::unique_ptr<Texture2D> texNormal = nullptr;
+	winrt::com_ptr<ID3D11UnorderedAccessView> uavNormal[5] = { nullptr };
 	eastl::unique_ptr<Texture2D> texAccumFrames[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texAo[2] = { nullptr };
 	eastl::unique_ptr<Texture2D> texIlY[2] = { nullptr };
@@ -161,6 +163,7 @@ public:
 
 	winrt::com_ptr<ID3D11ComputeShader> prefilterDepthsCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> prefilterRadianceCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> prefilterNormalCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> radianceDisoccCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> giCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> blurCompute = nullptr;

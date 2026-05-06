@@ -5,8 +5,7 @@
 void VolumetricLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##VolumetricLightingSearch", true, true);
 	}
 	bool changed = false;
@@ -56,7 +55,7 @@ void VolumetricLightingWidget::DrawWidget()
 			ImGui::SeparatorText("Phase Function");
 			if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
 				changed = true;
-			if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
+			if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, -1.0f, 1.0f))
 				changed = true;
 
 			ImGui::SeparatorText("Sampling");

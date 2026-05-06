@@ -16,7 +16,23 @@
 
 #if defined(IBL)
 #	include "IBL/IBL.hlsli"
+#elif defined(SKYLIGHTING)
+// sh2 type is needed for the ExtractLighting overload that accepts a visibility SH
+#	include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #endif
+
+// Populated once per frame by Deferred::CopyShadowLightData from BSShadowDirectionalLight.
+// Column-major float4x4 projections so HLSL `mul(proj, float4(pos, 1))` matches the
+// XMMATRIX layout written by XMStoreFloat4x4 on the C++ side.
+struct DirectionalShadowLightData
+{
+	column_major float4x4 ShadowProj[2];
+	column_major float4x4 InvShadowProj[2];
+	float2 EndSplitDistances;
+	float2 StartSplitDistances;
+};
+
+StructuredBuffer<DirectionalShadowLightData> DirectionalShadowLights : register(t98);
 
 #if defined(VOLUMETRIC_SHADOWS)
 #	include "VolumetricShadows/VolumetricShadows.hlsli"
@@ -107,17 +123,15 @@ namespace ShadowSampling
 	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
 #endif
 	{
-		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
+		float3 ambientColorAmb = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 
 #if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-			ambientColorAmb *= SharedData::iblSettings.DALCAmount;
+		if (SharedData::iblSettings.EnableIBL) {
 #	if defined(SKYLIGHTING) && !defined(INTERIOR)
-			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+			ambientColorAmb = ImageBasedLighting::GetDiffuseIBLOccluded(ambientColorAmb, float3(0, 0, -1), skylightingDiffuse);
 #	else
-			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+			ambientColorAmb = ImageBasedLighting::GetDiffuseIBL(ambientColorAmb, float3(0, 0, -1));
 #	endif
-			ambientColorAmb += Color::IrradianceToGamma(iblColor);
 		}
 #endif
 

@@ -5,8 +5,7 @@
 void CellLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##CellLightingSearch", true, true);
 	}
 
@@ -42,9 +41,9 @@ void CellLightingWidget::DrawWidget()
 			if (ImGui::BeginTabItem("Fog")) {
 				BeginScrollableContent("##FogScroll");
 				ImGui::SeparatorText("Fog Distance");
-				if (WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 10000.0f))
+				if (WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 163840.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 50000.0f))
+				if (WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 163840.0f))
 					changed = true;
 
 				ImGui::SeparatorText("Fog Properties");
@@ -85,11 +84,11 @@ void CellLightingWidget::DrawWidget()
 			if (ImGui::BeginTabItem("Advanced")) {
 				BeginScrollableContent("##AdvancedScroll");
 				ImGui::SeparatorText("Light Fade Distances");
-				if (WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 10000.0f))
+				if (WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 163840.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd, 0.0f, 20000.0f))
+				if (WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd, 0.0f, 163840.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist, 0.0f, 50000.0f))
+				if (WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist, 0.0f, 163840.0f))
 					changed = true;
 
 				ImGui::SeparatorText("Directional Rotation");

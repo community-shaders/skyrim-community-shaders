@@ -49,7 +49,7 @@ IndirectContext CreateIndirectLightingContext(float3 worldNormal, float3 vertexN
 	return context;
 }
 
-float3 VanillaSpecular(DirectContext context, float shininess, float2 uv)
+float3 VanillaSpecular(DirectContext context, float shininess, float2 uv, float2 uv_ddx, float2 uv_ddy)
 {
 	const float3 N = context.worldNormal;
 	const float3 G = context.vertexNormal;
@@ -82,9 +82,9 @@ float3 VanillaSpecular(DirectContext context, float shininess, float2 uv)
 #if defined(SPARKLE) && !defined(SNOW)
 	float3 sparkleUvScale = exp2(float3(1.3, 1.6, 1.9) * log2(abs(SparkleParams.x)).xxx);
 
-	float sparkleColor1 = TexProjDetail.Sample(SampProjDetailSampler, uv * sparkleUvScale.xx).z;
-	float sparkleColor2 = TexProjDetail.Sample(SampProjDetailSampler, uv * sparkleUvScale.yy).z;
-	float sparkleColor3 = TexProjDetail.Sample(SampProjDetailSampler, uv * sparkleUvScale.zz).z;
+	float sparkleColor1 = TexProjDetail.SampleGrad(SampProjDetailSampler, uv * sparkleUvScale.xx, uv_ddx * sparkleUvScale.x, uv_ddy * sparkleUvScale.x).z;
+	float sparkleColor2 = TexProjDetail.SampleGrad(SampProjDetailSampler, uv * sparkleUvScale.yy, uv_ddx * sparkleUvScale.y, uv_ddy * sparkleUvScale.y).z;
+	float sparkleColor3 = TexProjDetail.SampleGrad(SampProjDetailSampler, uv * sparkleUvScale.zz, uv_ddx * sparkleUvScale.z, uv_ddy * sparkleUvScale.z).z;
 	float sparkleColor = ProcessSparkleColor(sparkleColor1) + ProcessSparkleColor(sparkleColor2) + ProcessSparkleColor(sparkleColor3);
 	float VdotN = dot(V, N);
 	V += N * -(2 * VdotN);
@@ -114,7 +114,7 @@ float3 MicrofacetSpecular(DirectContext context, float3 F0, float roughness)
 	return D * G * F * NdotL;
 }
 
-void EvaluateLighting(DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv, out DirectLightingOutput lightingOutput)
+void EvaluateLighting(DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv, float2 uv_ddx, float2 uv_ddy, out DirectLightingOutput lightingOutput)
 {
 	lightingOutput = (DirectLightingOutput)0;
 #if defined(TRUE_PBR)
@@ -152,7 +152,7 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	}
 #	endif
 
-	lightingOutput.specular = diffuseLightColor * VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * Color::VanillaNormalization();
+	lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv, uv_ddx, uv_ddy) * material.SpecularColor * material.Glossiness * diffuseLightColor * Color::VanillaNormalization();
 #endif
 }
 
@@ -170,7 +170,7 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 #	endif
 	lobeWeights.diffuse = material.BaseColor;
 #	if defined(DYNAMIC_CUBEMAPS)
-	if (any(material.F0 > 0)) {
+	if (any(material.F0 > 0.0)) {
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
 		const float3 VN = context.vertexNormal;
@@ -179,14 +179,6 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 
 		float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
 		lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
-		lobeWeights.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
-
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		lobeWeights.specular *= horizon;
 	}
 #	endif
 #endif
@@ -218,16 +210,17 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 	float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
 	float3 F = BRDF::F_Schlick(wetnessF0, VdotH);
 
-	F *= wetnessStrength;
+	// Separate physical Fresnel from effective contribution weighted by strength
+	float3 wetnessF = F * wetnessStrength;
 
-	float3 wetnessSpecular = D * G * F * NdotL * lightColor;
+	float3 wetnessSpecular = D * G * wetnessF * NdotL * lightColor;
 
 #	if !defined(TRUE_PBR)
 	wetnessSpecular *= Color::PBRLightingCompensation * Color::PBRLightingScale;  // Compensate for GGX on traditional specular
 #	endif
 
-	lightingOutput.diffuse *= 1 - F;
-	lightingOutput.specular *= 1 - F;
+	lightingOutput.diffuse *= 1 - wetnessF;
+	lightingOutput.specular *= 1 - wetnessF;
 	lightingOutput.specular += wetnessSpecular;
 }
 
@@ -238,7 +231,6 @@ float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, floa
 
 	const float3 N = wetnessNormal;
 	const float3 V = context.viewDir;
-	const float3 VN = context.vertexNormal;
 
 	float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
 	float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
@@ -248,13 +240,6 @@ float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, floa
 
 	lobeWeights.diffuse *= 1 - specularLobeWeight;
 	lobeWeights.specular *= 1 - specularLobeWeight;
-
-	// Horizon specular occlusion
-	// https://marmosetco.tumblr.com/post/81245981087
-	float3 R = reflect(-V, N);
-	float horizon = min(1.0 + dot(R, VN), 1.0);
-	horizon = horizon * horizon;
-	specularLobeWeight *= horizon;
 
 	return specularLobeWeight;
 }

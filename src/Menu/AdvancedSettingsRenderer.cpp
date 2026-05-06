@@ -13,13 +13,11 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
 #include "Util.h"
 #include "Utils/Format.h"
 #include "Utils/UI.h"
 
 void AdvancedSettingsRenderer::RenderAdvancedSettings(
-	const std::function<void()>& drawTruePBRSettings,
 	const std::function<void()>& drawDisableAtBootSettings)
 {
 	// Use TabBar system - tabs sorted alphabetically
@@ -51,14 +49,6 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 			ImGui::EndTabItem();
 		}
 
-		// PBR Settings Tab
-		if (MenuFonts::BeginTabItemWithFont("PBR Settings", Menu::FontRole::Subheading)) {
-			if (ImGui::BeginChild("##PBRSettingsContent", ImVec2(0, 0), false)) {
-				RenderPBRSection(drawTruePBRSettings);
-			}
-			ImGui::EndChild();
-			ImGui::EndTabItem();
-		}
 		// Shader Debug Tab
 		if (MenuFonts::BeginTabItemWithFont("Shader Debug", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##ShaderDebugContent", ImVec2(0, 0), false)) {
@@ -111,8 +101,8 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 		globals::state->SetDefines(shaderDefines);
 	}
 	if (ImGui::IsItemDeactivatedAfterEdit() || (ImGui::IsItemActive() &&
-												   (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) ||
-													   ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))))) {
+												   (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+													   ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)))) {
 		globals::state->SetDefines(shaderDefines);
 		shaderCache->Clear();
 	}
@@ -126,21 +116,34 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 	ImGui::SliderInt("Compiler Threads", &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Number of threads to use to compile shaders. "
-			"The more threads the faster compilation will finish but may make the system unresponsive. ");
+			"Number of threads used to compile shaders at startup. "
+			"Defaults to all logical cores minus one for OS headroom (E-cores included). "
+			"Higher values finish compilation faster but may make the system less responsive.");
 	}
 	ImGui::SliderInt("Background Compiler Threads", &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Number of threads to use to compile shaders while playing game. "
-			"This is activated if the startup compilation is skipped. "
-			"The more threads the faster compilation will finish but may make the system unresponsive. ");
+			"Number of threads used to compile shaders during gameplay. "
+			"Defaults to half of performance cores to avoid impacting the render thread. "
+			"Higher values finish compilation faster but may cause stuttering.");
 	}
+
+	ImGui::Columns(2, nullptr, false);
 
 	// Dump Ini Settings button
 	if (ImGui::Button("Dump Ini Settings", { -1, 0 })) {
 		Util::DumpSettingsOptions();
 	}
+
+	ImGui::NextColumn();
+
+	// Open Logs button
+	std::filesystem::path logPath = Util::PathHelpers::GetLogPath();
+	if (!logPath.empty() && ImGui::Button("Open Logs", { -1, 0 })) {
+		ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+	}
+
+	ImGui::Columns(1);
 }
 
 void AdvancedSettingsRenderer::RenderShaderDebugSection()
@@ -223,8 +226,9 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 	// Show blocked shader status as a regular section
 	if (!shaderCache->blockedKey.empty()) {
 		// Create a visually distinct box for the blocked shader info with rounded corners and border
-		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0f);
+		const float scale = Util::GetUIScale();
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f * scale);
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, ImGui::GetStyle().WindowBorderSize);
 		ImVec4 blockedBgColor = Util::Colors::GetError();
 		blockedBgColor.w = 0.15f;  // Semi-transparent background
 		ImGui::PushStyleColor(ImGuiCol_ChildBg, blockedBgColor);
@@ -500,11 +504,6 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 	}
 }
 
-void AdvancedSettingsRenderer::RenderPBRSection(const std::function<void()>& drawTruePBRSettings)
-{
-	drawTruePBRSettings();
-}
-
 void AdvancedSettingsRenderer::RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings)
 {
 	drawDisableAtBootSettings();
@@ -539,6 +538,103 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	// Statistics section (moved from Advanced/Logging)
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Shader Compiler : {}", shaderCache->GetShaderStatsString()).c_str());
+
+		// Derived parallelism metrics are computed lazily on demand and only shown
+		// once compilation has completed to avoid per-frame analysis while compiling.
+		if (!shaderCache->IsCompiling()) {
+			auto parallelism = shaderCache->GetParallelismStats();
+			if (parallelism.has_value()) {
+				const auto& p = parallelism.value();
+				ImGui::Spacing();
+				ImGui::TextDisabled("Parallelism (derived from %zu compiled tasks)", p.sampleCount);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Computed lazily from the last completed build.");
+					ImGui::Text("Only evaluated when this Statistics section is open.");
+				}
+				ImGui::Text("Work (W, sum of task wall times): %s", Util::FormatDuration(p.workMs).c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Total compile work: sum of all per-shader wall-clock compile times.");
+					ImGui::Text("This is not CPU time; it is accumulated task elapsed time.");
+					ImGui::Text("Equivalent serial time on one worker if overhead stayed the same.");
+				}
+				ImGui::Text("Span (S, longest): %s", Util::FormatDuration(p.spanMs).c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Critical-path lower bound, approximated by the single slowest shader.");
+					ImGui::Text("Even infinite cores cannot finish faster than this.");
+				}
+				ImGui::Text("Makespan (T_p): %s", Util::FormatDuration(p.makespanMs).c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Observed wall-clock duration for the full shader build.");
+				}
+				ImGui::Text("Queue wait (avg/max): %s / %s",
+					Util::FormatDuration(p.avgQueueWaitMs).c_str(),
+					Util::FormatDuration(p.maxQueueWaitMs).c_str());
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Time spent waiting in the ready queue before a worker started compilation.");
+					ImGui::Text("Useful for identifying scheduler-induced delay separate from compile cost.");
+				}
+				ImGui::Text("Average parallelism (W/S): %.2fx", p.avgParallelism);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Average useful concurrency in this workload.");
+					ImGui::Text("Roughly the worker count where adding more cores gives diminishing returns.");
+				}
+				ImGui::Text("Infinite-core efficiency (S/T_p): %.1f%%", 100.0 * p.infiniteCoreEfficiency);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("How close runtime is to the infinite-core lower bound.");
+					ImGui::Text("100%% means T_p == S.");
+				}
+				ImGui::Text("Infinite-core gap: %.1f%%", p.infiniteCoreGapPercent);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Distance from ideal infinite-core time.");
+					ImGui::Text("Defined as 100 * (1 - S / T_p). Lower is better.");
+				}
+
+				ImGui::Spacing();
+				ImGui::TextDisabled("Infinite-core efficiency");
+				float efficiency = static_cast<float>(std::clamp(p.infiniteCoreEfficiency, 0.0, 1.0));
+				ImGui::ProgressBar(efficiency, ImVec2(-1.0f, 0.0f), std::format("{:.1f}% efficient / {:.1f}% gap", 100.0 * p.infiniteCoreEfficiency, p.infiniteCoreGapPercent).c_str());
+
+				ImGui::Spacing();
+				ImGui::TextDisabled("Relative durations (normalized)");
+				double maxMs = std::max({ p.workMs, p.spanMs, p.makespanMs, 1.0 });
+				auto drawRelativeBar = [maxMs](const char* label, double value) {
+					float ratio = static_cast<float>(std::clamp(value / maxMs, 0.0, 1.0));
+					ImGui::TextUnformatted(label);
+					ImGui::SameLine();
+					ImGui::ProgressBar(ratio, ImVec2(-1.0f, 0.0f), std::format("{} ({:.1f}%)", Util::FormatDuration(value), 100.0 * ratio).c_str());
+				};
+				drawRelativeBar("Span (S)", p.spanMs);
+				drawRelativeBar("Makespan (T_p)", p.makespanMs);
+				drawRelativeBar("Work (W)", p.workMs);
+			}
+		}
+
+		// Top-3 slowest shaders from the last build
+		auto topSlow = shaderCache->GetTopSlowTasks(3);
+		if (!topSlow.empty()) {
+			ImGui::Spacing();
+			ImGui::TextDisabled("Top %zu Slowest Shaders (last build)", topSlow.size());
+			for (size_t i = 0; i < topSlow.size(); ++i) {
+				const auto& rec = topSlow[i];
+				ImGui::Text("#%zu  %s  (weight %d)", i + 1,
+					Util::FormatDuration(rec.elapsedMs).c_str(), rec.priority);
+				ImGui::SameLine();
+				ImGui::TextDisabled("%s", rec.key.c_str());
+				if (ImGui::IsItemHovered()) {
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("%s", rec.key.c_str());
+					}
+				}
+				// Allow copying the full key with a right-click
+				if (ImGui::BeginPopupContextItem(std::format("##slowcopy{}", i).c_str())) {
+					if (ImGui::MenuItem("Copy key")) {
+						ImGui::SetClipboardText(rec.key.c_str());
+					}
+					ImGui::EndPopup();
+				}
+			}
+		}
+
 		ImGui::TreePop();
 	}
 
@@ -546,6 +642,43 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable detailed frame annotations for debugging render passes and draw calls.");
+	}
+
+	// Half-precision (partial precision) shader compile flag
+	bool partialPrecision = globals::state->enablePartialPrecision.load(std::memory_order_relaxed);
+	if (ImGui::Checkbox("Half Precision (Partial Precision)", &partialPrecision)) {
+		globals::state->enablePartialPrecision.store(partialPrecision, std::memory_order_relaxed);
+		// Force a recompile so the flag actually takes effect on subsequent shader builds.
+		globals::shaderCache->Clear();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Adds D3DCOMPILE_PARTIAL_PRECISION to the shader compiler flags.\n"
+			"Lets fxc downgrade unmarked float ops to FP16 where it can prove safety, "
+			"on top of the existing min16float type hints.\n"
+			"On FP16-capable GPUs (Pascal+ / GCN+ / Skylake+) this can halve register "
+			"pressure and double ALU throughput, but it can also introduce minor visual "
+			"differences in shaders that haven't been audited for precision sensitivity.\n"
+			"Toggling this clears the shader cache and triggers a full recompile.");
+	}
+
+	// Avoid flow control compiler flag (transient — not saved to config because the
+	// right setting depends on the current scene, not the user).
+	bool avoidFlowControl = globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed);
+	if (ImGui::Checkbox("Avoid Flow Control", &avoidFlowControl)) {
+		globals::state->enableAvoidFlowControl.store(avoidFlowControl, std::memory_order_relaxed);
+		// Force a recompile so the flag actually takes effect on subsequent shader builds.
+		globals::shaderCache->Clear();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Adds D3DCOMPILE_AVOID_FLOW_CONTROL to the shader compiler flags.\n"
+			"Forces fxc to flatten branches into predicated ops rather than emitting "
+			"dynamic flow control. Often a win for short branch bodies and uniformly-"
+			"taken branches; usually a loss for long divergent branches that vanilla "
+			"flow control would skip entirely.\n"
+			"Resets every launch. Toggling this clears the shader cache and triggers a "
+			"full recompile.");
 	}
 
 	ImGui::Spacing();

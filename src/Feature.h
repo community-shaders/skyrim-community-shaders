@@ -1,9 +1,11 @@
 #pragma once
 
+#include "FeatureCategories.h"
 #include "FeatureConstraints.h"
 #include "FeatureVersions.h"
 #ifdef TRACY_ENABLE
 #	include <Tracy/Tracy.hpp>
+#	include <Tracy/TracyD3D11.hpp>
 #endif
 
 struct Feature
@@ -54,16 +56,19 @@ public:
 	/**
 	 * Whether the feature is a CORE feature
 	 * This will place it under "Core Features" in UI
-	 * Also need to create a file named "CORE" in the root of the feature folder
-	 * if it should be merged into main cs zip file
+	 * If "CORE" file is present in the root of the feature folder,
+	 * it will be merged into main cs zip file and automatically considered core
 	 */
-	virtual bool IsCore() const { return false; }
+	virtual bool IsCore() const
+	{
+		return FeatureVersions::FEATURE_CORE_NAMES.contains(const_cast<Feature*>(this)->GetShortName());
+	}
 
 	/**
 	 * Get the category for UI grouping (e.g., "Terrain", "Lighting", "Characters", etc.)
 	 * Core features will be distributed to their respective categories
 	 */
-	virtual std::string_view GetCategory() const { return "Other"; }
+	virtual std::string_view GetCategory() const { return FeatureCategories::kOther; }
 
 	/**
 	 * Whether the feature will show up in the GUI menu
@@ -89,6 +94,18 @@ public:
 	virtual void ReflectionsPrepass() {};
 	virtual void Prepass() {}
 	virtual void EarlyPrepass() {}
+
+	/**
+	 * @brief Called during disk-cache shader loading to generate additional shader permutations.
+	 *
+	 * Invoked once per BSShader load when the shader cache is in disk-cache mode.
+	 * Features can override this to inject custom permutation descriptors into the
+	 * shader cache so that feature-specific technique variants are compiled and stored.
+	 * This is a cold path (disk I/O, not per-frame); performance is not critical here.
+	 *
+	 * @param shader The BSShader being loaded.
+	 */
+	virtual void GenerateShaderPermutations(RE::BSShader*) {}
 
 	virtual void Load() {}  // Called during SKSE Load - earliest hook point only for critical hooks like d3d
 	virtual void DataLoaded() {}
@@ -202,7 +219,7 @@ public:
 	 * @brief Execute a callable for each loaded feature with optional Tracy CPU profiling
 	 *
 	 * Iterates through all loaded features and calls the provided function with automatic
-	 * CPU profiling zones (ZoneScoped/ZoneText via Tracy) when TRACY_ENABLE is defined.
+	 * CPU profiling zones (ZoneScoped/ZoneName via Tracy) when TRACY_ENABLE is defined.
 	 * Thread-local string formatting is used to minimize per-call overhead.
 	 *
 	 * Usage:
@@ -212,18 +229,28 @@ public:
 	 * @param methodName Name of the method being called (used for Tracy zone naming)
 	 * @param callback Callable that receives (Feature*) and performs the operation
 	 */
+	// Called once from State after TracyD3D11Context is created so ForEachLoadedFeature
+	// can emit GPU timer zones without pulling in State headers here.
+#ifdef TRACY_ENABLE
+	inline static TracyD3D11Ctx s_tracyCtx = nullptr;
+	static void SetTracyCtx(TracyD3D11Ctx ctx) noexcept { s_tracyCtx = ctx; }
+#endif
+
 	template <typename Func>
-	static inline void ForEachLoadedFeature(std::string_view methodName, Func&& callback)
+	static inline void ForEachLoadedFeature(std::string_view methodName, Func&& callback, bool emitGpuZone = false)
 	{
 		for (auto* feature : GetFeatureList()) {
 			if (feature->loaded) {
 #ifdef TRACY_ENABLE
 				{
-					ZoneScoped;
-					static thread_local std::string zoneName;
-					zoneName = std::format("{}::{}", feature->GetShortName(), methodName);
-					ZoneText(zoneName.c_str(), zoneName.size());
-					callback(feature);
+					const auto zoneName = std::format("{}::{}", feature->GetShortName(), methodName);
+					ZoneTransientN(___tracy_feature_zone, zoneName.c_str(), true);
+					if (emitGpuZone) {
+						TracyD3D11ZoneTransientS(s_tracyCtx, ___tracy_d3d11_feature_zone, zoneName.c_str(), 0, s_tracyCtx != nullptr);
+						callback(feature);
+					} else {
+						callback(feature);
+					}
 				}
 #else
 				callback(feature);

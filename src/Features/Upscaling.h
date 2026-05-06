@@ -23,7 +23,7 @@ public:
 	virtual inline std::string GetShortName() override { return "Upscaling"; }
 	virtual inline bool SupportsVR() override { return true; }
 	virtual inline bool IsCore() const override { return false; }
-	virtual inline std::string_view GetCategory() const override { return "Display"; }
+	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kDisplay; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -35,8 +35,6 @@ public:
 				"Frame generation for supported systems" }
 		};
 	}
-
-	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
 
 	float2 jitter = { 0, 0 };
 
@@ -60,6 +58,11 @@ public:
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
 		uint presetDLSS = 0;  // 0=Default, 1=J, 2=K, 3=L, 4=M
+		bool reflexLowLatencyMode = false;
+		bool reflexLowLatencyBoost = false;
+		bool reflexUseMarkersToOptimize = false;
+		bool reflexUseFPSLimit = false;
+		float reflexFPSLimit = 60.0f;
 	};
 
 	Settings settings;
@@ -67,13 +70,15 @@ public:
 	struct JitterCB
 	{
 		float2 jitter;
-		float2 pad0;
+		float useWideKernel;
+		float pad0;
 	};
 
 	struct UpscalingDataCB
 	{
-		float2 trueSamplingDim;  // BufferDim.xy * ResolutionScale
-		float2 pad0;
+		float2 trueSamplingDim;  // per-eye render dim in VR, full render dim otherwise
+		uint eyeOffsetX;         // X offset into stereo source buffers; 0 for non-VR / left eye
+		uint pad0;
 	};
 
 	ConstantBuffer* jitterCB = nullptr;
@@ -91,7 +96,9 @@ public:
 	LARGE_INTEGER qpf;
 
 	// FG FPS Measurement for Overlay
+	bool IsFrameGenerationDx12PathActive() const;
 	bool IsFrameGenerationActive() const;
+	bool ShouldUseFrameGenerationThisFrame() const;
 	float GetFrameGenerationFrameTime() const;
 	bool IsUpscalingActive() const;
 
@@ -117,7 +124,8 @@ public:
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 	void DestroyUpscalingTextureResources(UpscaleMethod a_upscalemethod);
 
-	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5];  // One for each UpscaleMethod
+	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCS[5];          // One for each UpscaleMethod
+	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCSDepthOutput;  // FSR + VR: converts R24G8_TYPELESS depth to R32_FLOAT
 	ID3D11ComputeShader* GetEncodeTexturesCS();
 
 	winrt::com_ptr<ID3D11PixelShader> depthRefractionUpscalePS;
@@ -144,7 +152,8 @@ public:
 	// Owned here so both Streamline (DLSS) and FidelityFX (FSR) can use them.
 	eastl::unique_ptr<Texture2D> vrIntermediateColorIn[2];           // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateColorOut[2];          // per-eye output resolution
-	eastl::unique_ptr<Texture2D> vrIntermediateDepth[2];             // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateDepth;                // right-eye render resolution (R24G8_TYPELESS, DLSS only)
+	eastl::unique_ptr<Texture2D> vrIntermediateLinearDepth[2];       // per-eye render resolution (R32_FLOAT, for FSR)
 	eastl::unique_ptr<Texture2D> vrIntermediateMotionVectors[2];     // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateReactiveMask[2];      // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateTransparencyMask[2];  // per-eye render resolution
@@ -158,8 +167,15 @@ public:
 		bool copyBindFlags = false, bool createSRV = false, bool createUAV = false, const char* name = nullptr);
 
 	// Shared Pipeline Steps
-	void PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* depthSrc, ID3D11Resource* mvecSrc,
-		ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc);
+
+	/// Ensures VR per-eye intermediate textures exist at the correct resolution.
+	/// Must be called before any per-eye EncodeTexturesCS dispatch or PreparePerEyeInputs.
+	void EnsureVRIntermediateTextures();
+
+	/// Splits the combined stereo color buffer into per-eye intermediates, copies raw
+	/// motion vectors, and clears the HMD hidden area. FSR-only.
+	/// Reactive/transparency masks are written by EncodeTexturesCS.
+	void PreparePerEyeInputs(ID3D11Resource* colorSrc);
 	void FinalizePerEyeOutputs(ID3D11Resource* colorDst);
 
 	void ConfigureTAA();
@@ -189,6 +205,14 @@ public:
 	float dynamicResolutionHeightRatio = 1.0f;
 
 	bool previousUpscalingWasActive = false;
+	bool depthUpscaleUseWideKernel = false;
+
+	/// Set by MenuOpenCloseEventHandler when LoadingMenu closes (cell/worldspace transitions,
+	/// initial load). Consumed at the start of Upscale() to force a one-frame DLSS feature
+	/// rebuild — works around a VR-only persistent ~2-3ms GPU regression after worldspace
+	/// loads that otherwise only clears when the user manually toggles DLSS/preset. VR+DLSS
+	/// only; flat has no repro and per-eye extent asymmetry doesn't apply.
+	std::atomic<bool> pendingDLSSReset{ false };
 
 	void CopySharedD3D12Resources();
 	void PostDisplay();
@@ -210,7 +234,6 @@ public:
 
 	// Unified interface methods - external code should use these instead of direct access
 	void LoadUpscalingSDKs();  // Loads all SDKs at once
-	void SetUIBuffer();
 	HANDLE GetFrameLatencyWaitableObject() const;
 	float GetFrameTime() const;
 
@@ -271,5 +294,12 @@ private:
 	{
 		static void thunk();
 		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+		static bool Register();
 	};
 };

@@ -3,12 +3,14 @@
 #include "UnifiedWater/Flowmap.h"
 #include "UnifiedWater/WaterCache.h"
 
+#include <atomic>
+
 struct UnifiedWater : OverlayFeature
 {
 	virtual inline std::string GetName() override { return "Unified Water"; }
 	virtual inline std::string GetShortName() override { return "UnifiedWater"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "UNIFIED_WATER"; }
-	virtual std::string_view GetCategory() const override { return "Water"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kWater; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
@@ -110,6 +112,13 @@ private:
 	float4* gDisplacementCellTexCoordOffset = nullptr;
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
+
+	std::atomic<RE::TESWorldSpace*> currentPlayerWorldSpace{ nullptr };
+	std::atomic<bool> pendingChildWsCull{ false };
+	// Game-thread TES snapshot used by deferred child-worldspace cull fallbacks.
+	std::atomic<RE::TES*> cachedTes{ nullptr };
+
+	void TryCompleteDeferredChildWorldspaceCull(RE::TES* tes = nullptr);
 
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();

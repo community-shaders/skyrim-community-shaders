@@ -43,7 +43,8 @@ void HomePageRenderer::RenderHomePage()
 
 void HomePageRenderer::RenderWelcomeSection()
 {
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+	float scale = Util::GetUIScale();
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8 * scale, 8 * scale));
 
 	// Main title - centered with safe font handling
 	ImGuiIO& io = ImGui::GetIO();
@@ -59,11 +60,13 @@ void HomePageRenderer::RenderWelcomeSection()
 
 	// Only push font if we have a valid one, otherwise use default scaled
 	if (titleFont) {
-		ImGui::PushFont(titleFont);
+		ImGui::PushFont(titleFont, titleFont->LegacySize);
 	}
 
 	ImVec2 windowSize = ImGui::GetWindowSize();
-	std::string titleWithVersion = "Welcome to Community Shaders " + Util::GetFormattedVersion(Plugin::VERSION);
+	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
+	auto expectedTag = std::format("v{}", versionStr);
+	std::string titleWithVersion = Plugin::BUILD_DESCRIBE == expectedTag ? std::format("Welcome to Community Shaders {}", versionStr) : std::format("Welcome to Community Shaders {} [{}]", versionStr, Plugin::BUILD_DESCRIBE);
 	ImVec2 titleSize = ImGui::CalcTextSize(titleWithVersion.c_str());
 	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
 	ImGui::Text("%s", titleWithVersion.c_str());
@@ -128,19 +131,15 @@ void HomePageRenderer::RenderWelcomeSection()
 		ImGui::PopStyleColor(3);
 		ImGui::PopStyleVar();
 
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Join Community Shaders Discord Server");
-		}
+		Util::AddTooltip("Join Community Shaders Discord Server");
 	} else {
-		// Fallback centered button when Discord icon is not available
-		float buttonWidth = 200.0f;
+		// Fallback button when Discord icon is not available
+		float buttonWidth = DISCORD_BANNER_MIN_WIDTH * scale;
 		ImGui::SetCursorPosX((windowSize.x - buttonWidth) * 0.5f);
 		if (ImGui::Button("Join Discord Server", ImVec2(buttonWidth, 0))) {
 			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
 		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Join Community Shaders Discord Server - Icon not found, using fallback button");
-		}
+		Util::AddTooltip("Join Community Shaders Discord Server");
 	}
 
 	ImGui::PopStyleVar();
@@ -154,25 +153,29 @@ void HomePageRenderer::RenderQuickLinksSection()
 	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
 	ImGui::Text("Quick Links");
 
-	// Center the button layout
-	float buttonWidth = QUICK_LINKS_BUTTON_WIDTH;
-	float totalWidth = buttonWidth * 3 + ImGui::GetStyle().ItemSpacing.x * 2;  // 3 buttons with spacing
-	ImGui::SetCursorPosX((windowSize.x - totalWidth) * 0.5f);
+	ImGui::Columns(4, nullptr, false);
 
 	// External links in a row
-	if (ImGui::Button("Nexus Mods", ImVec2(buttonWidth, 0))) {
+	if (ImGui::Button("Nexus Mods", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://www.nexusmods.com/skyrimspecialedition/mods/86492", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("GitHub Repository", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("GitHub", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("GitHub Wiki", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("Wiki", ImVec2(-1, 0))) {
+		ShellExecuteA(NULL, "open", "https://modding.wiki/en/skyrim/developers/community-shaders", NULL, NULL, SW_SHOWNORMAL);
+	}
+
+	ImGui::NextColumn();
+	if (ImGui::Button("Developer Wiki", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders/wiki", NULL, NULL, SW_SHOWNORMAL);
 	}
+
+	ImGui::Columns(1);
 }
 
 void HomePageRenderer::RenderFAQSection()
@@ -209,18 +212,8 @@ void HomePageRenderer::RenderFAQSection()
 	if (ImGui::CollapsingHeader("I have \"Failed Shaders\" when compiling?")) {
 		ImGui::TextWrapped(
 			"Failed shaders are usually caused by mixed file versions. Ensure all features are up to date "
-			"and avoid mixing files from test builds or outdated versions.");
-		ImGui::Spacing();
-		ImGui::Text("Remove these outdated pre-1.0 CS features:");
-		ImGui::BulletText("Vanilla HDR");
-		ImGui::BulletText("Tree LOD Lighting");
-		ImGui::BulletText("Complex Parallax Materials");
-		ImGui::BulletText("Water Blending");
-		ImGui::BulletText("Water Caustics");
-		ImGui::BulletText("Water Parallax");
-		ImGui::BulletText("Dynamic Cubemaps");
-		ImGui::Spacing();
-		ImGui::TextWrapped("Note: All of these features are now included in the base Community Shaders install.");
+			"and avoid mixing files from test builds or outdated versions. Please review the 'Feature Issues' tab "
+			"and/or Wiki for more information. Update your features and remove any obsolete features.");
 	}
 
 	if (ImGui::CollapsingHeader("How do I improve performance?")) {
@@ -382,34 +375,29 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	io.WantCaptureKeyboard = true;
 	io.MouseDrawCursor = true;  // Show ImGui cursor
 
-	// Draw semi-transparent dark overlay behind the dialog for depth
-	Util::DrawModalBackground();
-
-	// Center the window properly with rounded corners and thin border
+	float uiScale = Util::GetUIScale();
 	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	// Set a minimum width for better layout, but allow auto-sizing for height
-	ImGui::SetNextWindowSizeConstraints(ImVec2(500, 0), ImVec2(600, FLT_MAX));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(DIALOG_MIN_WIDTH * uiScale, 0), ImVec2(DIALOG_MAX_WIDTH * uiScale, FLT_MAX));
+	ImGui::SetNextWindowFocus();
 
-	// Style for rounded window with thin border
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DIALOG_CORNER_ROUNDING * uiScale);
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
 	                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
 	                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize;
 
 	if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
-		ImGui::PopStyleVar(2);
+		ImGui::PopStyleVar();
 		ImGui::End();
 		return;
 	}
 
-	// Set absolute font size for better readability in this welcome dialog
-	float targetFontSize = 27.0f;
-	float currentFontSize = io.FontDefault ? io.FontDefault->FontSize : io.FontGlobalScale * 13.0f;
-	float fontScale = targetFontSize / currentFontSize;
-	ImGui::SetWindowFontScale(fontScale);
+	// Fullscreen fade on the dialog's draw list — covers all windows beneath at the dialog's z-position
+	auto* drawList = ImGui::GetWindowDrawList();
+	drawList->PushClipRectFullScreen();
+	drawList->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, MODAL_OVERLAY_ALPHA));
+	drawList->PopClipRect();
 
 	auto menu = Menu::GetSingleton();
 
@@ -423,7 +411,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		float aspectRatio = textureSize.x / textureSize.y;
 
 		// Set desired height and calculate width to maintain aspect ratio
-		float logoHeight = LOGO_WATERMARK_HEIGHT;
+		float logoHeight = LOGO_WATERMARK_HEIGHT * uiScale;
 		float logoWidth = logoHeight * aspectRatio;
 
 		ImVec2 logoMin(windowPos.x + (windowSize.x - logoWidth) * 0.5f,
@@ -460,7 +448,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	centerText(versionLine1);
 	ImGui::Text("%s", versionLine1);
-	ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
+	ImGui::SetCursorPosY(ImGui::GetCursorPosY() - DIALOG_LINE_TIGHTEN * uiScale);
 	centerText(versionLine2);
 	ImGui::Text("%s", versionLine2);
 
@@ -477,7 +465,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	bool isCapturing = menu->settingToggleKey;
 
 	// Increase font size for hotkey text - bigger when capturing
-	ImGui::SetWindowFontScale(fontScale * (isCapturing ? HOTKEY_TEXT_SCALE_CAPTURING : HOTKEY_TEXT_SCALE));
+	ImGui::SetWindowFontScale(isCapturing ? HOTKEY_TEXT_SCALE_CAPTURING : HOTKEY_TEXT_SCALE);
 
 	// Format hotkey with brackets to make it look like a button
 	std::string hotkeyStr;
@@ -518,8 +506,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGui::TextColored(hotkeyColor, "%s", hotkeyStr.c_str());
 
-	// Reset font scale
-	ImGui::SetWindowFontScale(fontScale);
+	ImGui::SetWindowFontScale(1.0f);
 
 	// Handle click to start hotkey capture
 	if (clicked && !isCapturing) {
@@ -553,15 +540,14 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Help text with breathing animation
 	const char* helpText = "Press Escape or Enter to continue";
 
-	ImGui::SetWindowFontScale(fontScale * HELP_TEXT_SCALE);
+	ImGui::SetWindowFontScale(HELP_TEXT_SCALE);
 	centerText(helpText);
 	Util::DrawBreathingText(helpText);
 
-	// Reset font scale
-	ImGui::SetWindowFontScale(fontScale);
+	ImGui::SetWindowFontScale(1.0f);
 
 	ImGui::End();
-	ImGui::PopStyleVar(2);
+	ImGui::PopStyleVar();
 }
 
 bool HomePageRenderer::ShouldShowFirstTimeSetup()

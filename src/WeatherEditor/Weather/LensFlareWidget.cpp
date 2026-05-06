@@ -4,8 +4,7 @@
 
 void LensFlareWidget::DrawWidget()
 {
-	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##LensFlareSearch", true, true);
 	}
 	BeginScrollableContent("##LFScroll");
@@ -13,7 +12,7 @@ void LensFlareWidget::DrawWidget()
 		bool changed = false;
 
 		ImGui::SeparatorText("Fade Distance");
-		if (ImGui::SliderFloat("Fade Dist Radius Scale", &settings.fadeDistRadiusScale, 0.0f, 10.0f))
+		if (ImGui::SliderFloat("Fade Dist Radius Scale", &settings.fadeDistRadiusScale, 0.0f, 1.0f))
 			changed = true;
 
 		ImGui::SeparatorText("Color");

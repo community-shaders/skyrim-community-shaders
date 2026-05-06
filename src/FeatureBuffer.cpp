@@ -18,8 +18,6 @@
 #include "Features/VanillaFresnel.h"
 #include "Features/WetnessEffects.h"
 
-#include "TruePBR.h"
-
 template <class... Ts>
 std::pair<unsigned char*, size_t> _GetFeatureBufferData(Ts... feat_datas)
 {
@@ -50,7 +48,7 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::lodBlending.settings,
 		globals::features::hairSpecular.settings,
 		globals::features::terrainVariation.settings,
-		globals::features::ibl.settings,
+		globals::features::ibl.GetCommonBufferData(),
 		globals::features::extendedTranslucency.GetCommonBufferData(),
 		globals::features::vanillaFresnel.settings,
 		globals::features::linearLighting.GetCommonBufferData(),

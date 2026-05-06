@@ -1,8 +1,8 @@
 {
     "version": 3,
     "cmakeMinimumRequired": {
-        "major": 3,
-        "minor": 21,
+        "major": 4,
+        "minor": 2,
         "patch": 0
     },
     "configurePresets": [
@@ -37,7 +37,7 @@
             "cacheVariables": {
                 "CMAKE_CXX_FLAGS": "/EHsc /MP /W4 /WX $penv{CXXFLAGS}"
             },
-            "generator": "Visual Studio 17 2022",
+            "generator": "Visual Studio 18 2026",
             "vendor": {
                 "microsoft.com/VisualStudioSettings/CMake/1.0": {
                     "intelliSenseMode": "windows-msvc-x64",
@@ -60,6 +60,17 @@
                 "AUTO_PLUGIN_DEPLOYMENT": "OFF"
             },
             "inherits": "skyrim"
+        },
+        {
+            "name": "ALL-VS2022",
+            "generator": "Visual Studio 17 2022",
+            "cacheVariables": {
+                "ENABLE_SKYRIM_AE": "ON",
+                "ENABLE_SKYRIM_SE": "ON",
+                "ENABLE_SKYRIM_VR": "ON",
+                "AUTO_PLUGIN_DEPLOYMENT": "OFF"
+            },
+            "inherits": "skyrim"
         }
     ],
     "buildPresets": [
@@ -74,6 +85,13 @@
             "name": "ALL",
             "description": "(Deprecated), kept for for CI, use Package instead",
             "configurePreset": "ALL",
+            "configuration": "Release",
+            "targets": ["CommunityShaders", "Package-AIO-Manual"]
+        },
+        {
+            "name": "ALL-VS2022",
+            "description": "Same as ALL but using Visual Studio 17 2022 toolchain",
+            "configurePreset": "ALL-VS2022",
             "configuration": "Release",
             "targets": ["CommunityShaders", "Package-AIO-Manual"]
         },

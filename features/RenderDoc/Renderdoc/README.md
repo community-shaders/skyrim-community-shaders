@@ -4,15 +4,19 @@ This directory contains the RenderDoc runtime library for frame capture function
 
 ## Version
 
-Current version: **1.40**
+Current version: **1.43**
 
 ## Source
 
-The `renderdoc.dll` file must be manually obtained from official RenderDoc releases:
+The `renderdoc.dll` file must be obtained from official RenderDoc releases.
 
--   Website: https://renderdoc.org/builds
--   Direct download (MSI): https://renderdoc.org/stable/
--   GitHub releases: https://github.com/baldurk/renderdoc/releases/tag/
+For stable Windows builds, the runtime package uses this pattern:
+
+-   `https://renderdoc.org/stable/${VERSION}/RenderDoc_${VERSION}_64.zip`
+
+For example, for v1.43:
+
+-   `https://renderdoc.org/stable/1.43/RenderDoc_1.43_64.zip`
 
 ## Installation Steps
 

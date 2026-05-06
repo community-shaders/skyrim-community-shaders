@@ -75,12 +75,38 @@ public:
 		kCapture,
 		kInferrence,
 		kIrradiance,
+		kBC6HCompress,
 		kCapture2,
 		kInferrence2,
-		kIrradiance2
+		kIrradiance2,
+		kBC6HCompress2
 	};
 
 	NextTask nextTask = NextTask::kCapture;
+
+	// BC6H compression
+	struct alignas(16) BC6HEncodeCB
+	{
+		uint TextureSizeInBlocksX;
+		uint TextureSizeInBlocksY;
+		uint MipLevel;
+		uint pad;
+	};
+	STATIC_ASSERT_ALIGNAS_16(BC6HEncodeCB);
+
+	ID3D11ComputeShader* bc6hEncodeCS = nullptr;
+	ConstantBuffer* bc6hEncodeCB = nullptr;
+
+	ID3D11ShaderResourceView* envTextureArraySRV = nullptr;
+	ID3D11ShaderResourceView* envReflectionsTextureArraySRV = nullptr;
+
+	Texture2D* envTextureBC6H = nullptr;
+	Texture2D* envReflectionsTextureBC6H = nullptr;
+	Texture2D* bc6hScratchTexture = nullptr;
+
+	uint32_t bc6hMipLevels = 0;
+
+	ID3D11UnorderedAccessView* bc6hScratchUAVs[8] = {};
 
 	// Editor window
 
@@ -101,7 +127,7 @@ public:
 	virtual inline std::string GetName() override { return "Dynamic Cubemaps"; }
 	virtual inline std::string GetShortName() override { return "DynamicCubemaps"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "DYNAMIC_CUBEMAPS"; }
-	virtual std::string_view GetCategory() const override { return "Materials"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
@@ -157,6 +183,10 @@ public:
 	void Inferrence(bool a_reflections);
 
 	void Irradiance(bool a_reflections);
+
+	void CompressToBC6H(bool a_reflections);
+
+	ID3D11ComputeShader* GetComputeShaderBC6HEncode();
 
 	virtual bool SupportsVR() override { return true; };
 	virtual bool IsCore() const override { return true; };

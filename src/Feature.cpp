@@ -9,6 +9,7 @@
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/HDRDisplay.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
 #include "Features/InteriorSun.h"
@@ -43,6 +44,7 @@
 #include "WeatherVariableRegistry.h"
 
 #include "State.h"
+#include "TruePBR.h"
 
 void Feature::Load(json& o_json)
 {
@@ -209,6 +211,7 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 const std::vector<Feature*>& Feature::GetFeatureList()
 {
 	static std::vector<Feature*> features = {
+		&globals::features::truePBR,
 		&globals::features::volumetricShadows,
 		&globals::features::grassLighting,
 		&globals::features::grassCollision,
@@ -242,6 +245,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::linearLighting,
 		&globals::features::unifiedWater,
 		&globals::features::exponentialHeightFog,
+		&globals::features::hdrDisplay
 	};
 
 	if (REL::Module::IsVR()) {

@@ -2,6 +2,9 @@
 #pragma once
 
 #include "Util.h"
+#include "Utils/Form.h"
+#include <array>
+#include <string_view>
 
 class WidgetSharedData
 {
@@ -28,18 +31,48 @@ public:
 
 	virtual ~Widget() {};
 
+	static constexpr std::string_view kWeatherFolderName = "Weathers";
+	static constexpr std::string_view kLightingTemplateFolderName = "Lighting Templates";
+	static constexpr std::string_view kImageSpaceFolderName = "ImageSpaces";
+	static constexpr std::string_view kVolumetricLightingFolderName = "Volumetric Lighting";
+	static constexpr std::string_view kPrecipitationFolderName = "Precipitation";
+	static constexpr std::string_view kVisualEffectsFolderName = "Visual Effects";
+	static constexpr std::string_view kCellLightingFolderName = "Cell Lighting";
+	static constexpr std::string_view kOtherEditorWidgetsFolderName = "Other Editor Widgets";
+
+	static constexpr std::array kSaveFolderNames = {
+		kWeatherFolderName,
+		kLightingTemplateFolderName,
+		kImageSpaceFolderName,
+		kVolumetricLightingFolderName,
+		kPrecipitationFolderName,
+		kVisualEffectsFolderName,
+		kCellLightingFolderName,
+		kOtherEditorWidgetsFolderName
+	};
+
 	virtual std::string GetEditorID() const
 	{
-		// If cachedEditorID looks like a fallback ID, try to get the real one
-		if (cachedEditorID.find("VolumetricLighting_") == 0 && form) {
+		// If using a fallback ID, retry getting the real EditorID
+		if (isFallbackEditorID && form) {
 			const char* editorID = form->GetFormEditorID();
 			if (editorID && editorID[0] != '\0') {
-				const_cast<Widget*>(this)->cachedEditorID = editorID;
+				cachedEditorID = editorID;
+				isFallbackEditorID = false;
 				return editorID;
 			}
 		}
 		return cachedEditorID;
 	}
+
+	/// SPID-based key for file save/load operations (load-order-portable).
+	std::string GetSaveKey() const
+	{
+		return cachedSaveKey;
+	}
+
+	/// Full path to this widget's save file.
+	std::string GetSaveFilePath() const;
 
 	virtual std::string GetFormID() const
 	{
@@ -61,53 +94,50 @@ public:
 	{
 		if (!form) {
 			cachedEditorID = "Invalid";
+			cachedSaveKey = "Invalid";
+			isFallbackEditorID = false;
 			return;
 		}
 
-		// Try GetFormEditorID first
-		const char* editorID = form->GetFormEditorID();
-		if (editorID && editorID[0] != '\0') {
-			cachedEditorID = editorID;
+		// Cache the SPID-based save key (always load-order-portable)
+		cachedSaveKey = Util::GetFormFileKey(form);
+
+		// Try to resolve EditorID via shared utility
+		std::string editorId = Util::GetFormEditorID(form);
+		if (!editorId.empty()) {
+			cachedEditorID = editorId;
+			isFallbackEditorID = false;
 			return;
 		}
 
-		// Search the global EditorID map
-		auto [map, lock] = RE::TESForm::GetAllFormsByEditorID();
-		if (map) {
-			RE::BSReadLockGuard locker(lock);
-			for (const auto& [name, f] : *map) {
-				if (f == form) {
-					cachedEditorID = std::string(name.c_str());
-					return;
-				}
+		// Fallback: type prefix + SPID key
+		const char* prefix = [&]() -> const char* {
+			switch (form->GetFormType()) {
+			case RE::FormType::ImageSpace:
+				return "IS";
+			case RE::FormType::VolumetricLighting:
+				return "VL";
+			case RE::FormType::ShaderParticleGeometryData:
+				return "Particle";
+			case RE::FormType::LensFlare:
+				return "LensFlare";
+			case RE::FormType::ReferenceEffect:
+				return "VisualEffect";
+			default:
+				return "Form";
 			}
-		}
-
-		// Fallback to FormID-based names
-		auto formType = form->GetFormType();
-		switch (formType) {
-		case RE::FormType::ImageSpace:
-			cachedEditorID = std::format("ImageSpace_{:08X}", form->GetFormID());
-			break;
-		case RE::FormType::VolumetricLighting:
-			cachedEditorID = std::format("VolumetricLighting_{:08X}", form->GetFormID());
-			break;
-		case RE::FormType::ShaderParticleGeometryData:
-			cachedEditorID = std::format("ShaderParticleGeometry_{:08X}", form->GetFormID());
-			break;
-		case RE::FormType::LensFlare:
-			cachedEditorID = std::format("LensFlare_{:08X}", form->GetFormID());
-			break;
-		case RE::FormType::ReferenceEffect:
-			cachedEditorID = std::format("VisualEffect_{:08X}", form->GetFormID());
-			break;
-		default:
-			cachedEditorID = std::format("Form_{:08X}", form->GetFormID());
-			break;
-		}
+		}();
+		cachedEditorID = std::format("{}_{}", prefix, cachedSaveKey);
+		isFallbackEditorID = true;
 	}
 
 	virtual void DrawWidget() = 0;
+
+	/// Type name for widget-type-level state sharing (window size, etc.).
+	virtual const char* GetWidgetTypeName() const = 0;
+
+	/// Call instead of SetupWidgetWindowDefaults + ImGui::Begin. Tracks per-type window size.
+	bool BeginWidgetWindow();
 
 	bool open = false;
 
@@ -121,8 +151,14 @@ public:
 		open = state;
 	}
 
+	/// Returns a window title with unique ImGui ID: "EditorID###FormID"
+	std::string GetWindowTitle() const
+	{
+		return std::format("{}###{}", GetEditorID(), GetFormID());
+	}
+
 	void Save();
-	void Load();
+	void Load(bool showNotification = true);
 	bool HasSavedFile() const;
 
 	virtual void Delete();
@@ -131,6 +167,14 @@ public:
 	virtual void ApplyChanges() = 0;
 	virtual void RevertChanges() { LoadSettings(); }
 	virtual bool HasUnsavedChanges() const { return false; }
+
+	// Reinitialize weather to apply form refs that are only read at load time.
+	static void ForceWeatherReinit(RE::TESWeather* weather);
+	// Reinitialize the current sky weather (use when the specific weather is unknown).
+	static void ForceCurrentWeatherReinit();
+
+	// Override to suppress per-frame auto-apply and show a manual-apply warning in the header.
+	virtual bool RequiresManualApply() const { return false; }
 
 	// Draw common header with search bar and action buttons
 	void DrawWidgetHeader(const char* searchId, bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
@@ -147,9 +191,11 @@ public:
 	json js = json();
 
 protected:
-	std::string cachedEditorID;
+	mutable std::string cachedEditorID;
+	mutable std::string cachedSaveKey;
+	mutable bool isFallbackEditorID = false;
 	virtual void DrawMenu();
-	std::string GetFolderName();
+	std::string GetFolderName() const;
 };
 
 // Simple widget for caching form data without full widget functionality
@@ -157,6 +203,7 @@ class SimpleFormWidget : public Widget
 {
 public:
 	void DrawWidget() override {}
+	const char* GetWidgetTypeName() const override { return ""; }
 	void LoadSettings() override {}
 	void SaveSettings() override {}
 	void ApplyChanges() override {}

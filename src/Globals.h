@@ -35,6 +35,7 @@ struct ExtendedTranslucency;
 struct Upscaling;
 struct WeatherEditor;
 struct ExponentialHeightFog;
+struct HDRDisplay;
 
 class State;
 class Deferred;
@@ -90,9 +91,11 @@ namespace globals
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
+		extern HDRDisplay hdrDisplay;
 		extern RenderDoc renderDoc;
 		extern WeatherEditor weatherEditor;
 		extern ExponentialHeightFog exponentialHeightFog;
+		extern TruePBR truePBR;
 
 		namespace llf
 		{
@@ -213,16 +216,17 @@ namespace globals
 		extern RE::BSGraphics::Renderer* renderer;
 		extern RE::BSShaderManager::State* smState;
 		extern RE::TES* tes;
+		extern RE::TESWaterSystem* waterSystem;
 		extern bool isVR;
 		extern RE::MemoryManager* memoryManager;
 		extern RE::INISettingCollection* iniSettingCollection;
 		extern RE::INIPrefSettingCollection* iniPrefSettingCollection;
 		extern RE::GameSettingCollection* gameSettingCollection;
-		extern RE::TES* tes;
 		extern float* cameraNear;
 		extern float* cameraFar;
 		extern float* deltaTime;
 		extern RE::BSUtilityShader* utilityShader;
+		extern RE::PlayerCharacter* player;
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
 		extern RE::Calendar* calendar;
@@ -256,7 +260,6 @@ namespace globals
 
 	extern State* state;
 	extern Deferred* deferred;
-	extern TruePBR* truePBR;
 	extern Menu* menu;
 	extern SIE::ShaderCache* shaderCache;
 

@@ -566,14 +566,21 @@ static void DrawRainTypeLabel(const char* prefix, float rate)
 // Weather/Precipitation Analysis Helpers
 // =====================
 
+static float linearstep(float edge0, float edge1, float x)
+{
+	if (edge0 >= edge1)
+		return x >= edge1 ? 1.0f : 0.0f;
+	return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+}
+
 float WetnessEffects::GetRainIntensity(RE::NiPointer<RE::BSGeometry> precipObject, RE::TESWeather* weather)
 {
 	if (!precipObject || !weather || !weather->precipitationData) {
 		return 0.0f;
 	}
 
-	auto& effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
-	auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
+	auto& effect = precipObject->GetGeometryRuntimeData().shaderProperty;
+	auto shaderProp = effect.get();
 	auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
 
 	if (!particleShaderProperty || !particleShaderProperty->particleEmitter) {
@@ -598,10 +605,6 @@ WetnessEffects::WeatherWetnessResult WetnessEffects::CalculateWeatherWetness(RE:
 	if (!weather || !weather->precipitationData || !weather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
 		return result;
 	}
-
-	auto linearstep = [](float edge0, float edge1, float x) {
-		return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-	};
 
 	if (isCurrentWeather) {
 		// Current weather uses fade-in logic
@@ -713,8 +716,8 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 							precipObject = precip->lastPrecip;
 						}
 						if (precipObject) {
-							auto& effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
-							auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
+							auto& effect = precipObject->GetGeometryRuntimeData().shaderProperty;
+							auto shaderProp = effect.get();
 							auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
 							auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
 							data.OcclusionViewProj = rain->occlusionProjection;
@@ -733,10 +736,22 @@ WetnessEffects::PerFrame WetnessEffects::GetCommonBufferData() const
 						lastRaining = GetRainIntensity(precip->lastPrecip, sky->lastWeather);
 					}
 
-					// Use weighted average based on weather transition percentage instead of additive
-					// This prevents unrealistic rain intensity spikes during transitions
-					float currentWeight = sky->currentWeatherPct;
-					float lastWeight = 1.0f - sky->currentWeatherPct;
+					// Apply the same fade-in/fade-out thresholds the game uses in
+					// Sky::IsRaining() to prevent CS effects appearing before the
+					// game's own rain particles become visible, with a smooth ramp
+					// from the threshold to full intensity.
+					float currentWeight = 0.0f;
+					if (sky->currentWeather && sky->currentWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
+						float fadeInThreshold = sky->currentWeather->data.precipitationBeginFadeIn * (1.0f / 255.0f);
+						currentWeight = linearstep(fadeInThreshold, 1.0f, sky->currentWeatherPct);
+					}
+
+					float lastWeight = 0.0f;
+					if (sky->lastWeather && sky->lastWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kRainy)) {
+						float fadeOutThreshold = sky->lastWeather->data.precipitationEndFadeOut * (1.0f / 255.0f);
+						lastWeight = 1.0f - linearstep(0.0f, fadeOutThreshold, sky->currentWeatherPct);
+					}
+
 					data.Raining = (currentRaining * currentWeight) + (lastRaining * lastWeight);
 				}
 

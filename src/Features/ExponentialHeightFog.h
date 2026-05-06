@@ -6,7 +6,7 @@ struct ExponentialHeightFog : Feature
 	virtual inline std::string GetName() override { return "Exponential Height Fog"; }
 	virtual inline std::string GetShortName() override { return "ExponentialHeightFog"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL("999999"); }
-	virtual std::string_view GetCategory() const override { return "Lighting"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -33,7 +33,7 @@ struct ExponentialHeightFog : Feature
 
 	struct alignas(16) Settings
 	{
-		uint enabled = 1;
+		uint enabled = 0;
 		uint useDynamicCubemaps = 0;
 		float startDistance = 0.0f;
 		float fogHeight = 0.0f;

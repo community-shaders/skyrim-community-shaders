@@ -11,6 +11,7 @@
 #include "IconLoader.h"
 #include "Menu.h"
 #include "ShaderCache.h"
+#include "State.h"
 #include "ThemeManager.h"
 #include "Util.h"
 
@@ -90,16 +91,22 @@ namespace
 			return "Resize Grip (Hovered)";
 		case ImGuiCol_ResizeGripActive:
 			return "Resize Grip (Active)";
+		case ImGuiCol_InputTextCursor:
+			return "Input Text Cursor";
 		case ImGuiCol_Tab:
 			return "Tab";
 		case ImGuiCol_TabHovered:
 			return "Tab (Hovered)";
-		case ImGuiCol_TabActive:
-			return "Tab (Active)";
-		case ImGuiCol_TabUnfocused:
-			return "Tab (Unfocused)";
-		case ImGuiCol_TabUnfocusedActive:
-			return "Tab (Unfocused Active)";
+		case ImGuiCol_TabSelected:
+			return "Tab (Selected)";
+		case ImGuiCol_TabSelectedOverline:
+			return "Tab Selected Overline";
+		case ImGuiCol_TabDimmed:
+			return "Tab (Dimmed)";
+		case ImGuiCol_TabDimmedSelected:
+			return "Tab (Dimmed Selected)";
+		case ImGuiCol_TabDimmedSelectedOverline:
+			return "Tab Dimmed Selected Overline";
 		case ImGuiCol_DockingPreview:
 			return "Docking Preview";
 		case ImGuiCol_DockingEmptyBg:
@@ -122,12 +129,20 @@ namespace
 			return "Table Row Background";
 		case ImGuiCol_TableRowBgAlt:
 			return "Table Row Background (Alternate)";
+		case ImGuiCol_TextLink:
+			return "Text Link";
 		case ImGuiCol_TextSelectedBg:
 			return "Text Selection Background";
+		case ImGuiCol_TreeLines:
+			return "Tree Lines";
 		case ImGuiCol_DragDropTarget:
 			return "Drag & Drop Target";
-		case ImGuiCol_NavHighlight:
-			return "Navigation Highlight";
+		case ImGuiCol_DragDropTargetBg:
+			return "Drag & Drop Target Background";
+		case ImGuiCol_UnsavedMarker:
+			return "Unsaved Marker";
+		case ImGuiCol_NavCursor:
+			return "Navigation Cursor";
 		case ImGuiCol_NavWindowingHighlight:
 			return "Window Navigation Highlight";
 		case ImGuiCol_NavWindowingDimBg:
@@ -209,6 +224,22 @@ void SettingsTabRenderer::RenderShadersTab()
 			ImGui::Text("Disables loading shaders from disk and prevents saving compiled shaders to disk cache.");
 		}
 
+		bool skipUnchanged = shaderCache->IsSkipUnchangedShaders();
+		ImGui::BeginDisabled(!useDiskCache);
+		if (ImGui::Checkbox("Skip Unchanged Shaders", &skipUnchanged)) {
+			shaderCache->SetSkipUnchangedShaders(skipUnchanged);
+		}
+		ImGui::EndDisabled();
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"When enabled, each shader is recompiled from source only if its .hlsl file "
+				"is newer than the cached .bin on disk. "
+				"Shaders whose source has not changed are loaded directly from the disk cache, "
+				"avoiding the full startup compilation cost. "
+				"Useful for iterative testing: change a shader file and only that shader is rebuilt. "
+				"Requires 'Enable Disk Cache' to be active.");
+		}
+
 		bool useAsync = shaderCache->IsAsync();
 		if (ImGui::Checkbox("Enable Async", &useAsync)) {
 			shaderCache->SetAsync(useAsync);
@@ -230,6 +261,79 @@ void SettingsTabRenderer::RenderShadersTab()
 		if (shaderCache->GetTotalTasks() > 0) {
 			ImGui::Text("Last shader cache build duration: %s",
 				shaderCache->GetShaderStatsString(true, true).c_str());
+
+			// Stacked bar showing compilation breakdown
+			{
+				uint64_t total = shaderCache->GetTotalTasks();
+				uint64_t completed = shaderCache->GetCompletedTasks();
+				uint64_t failed = shaderCache->GetFailedTasks();
+				uint64_t cacheHits = shaderCache->GetCachedHitTasks();
+				uint64_t diskHits = shaderCache->GetDiskHitTasks();
+				uint64_t slow = shaderCache->GetSlowTasks();
+				uint64_t verySlow = shaderCache->GetVerySlowTasks();
+				// Compiled = tasks that actually went through compilation (excluding disk hits).
+				// Cache hits are separate (returned early without queueing).
+				uint64_t compiled = completed > diskHits ? completed - diskHits : 0;
+				uint64_t fast = compiled > slow ? compiled - slow : 0;
+				uint64_t medium = slow > verySlow ? slow - verySlow : 0;  // 2-8s
+
+				struct Segment
+				{
+					uint64_t count;
+					ImU32 color;
+					const char* label;
+				};
+				Segment segments[] = {
+					{ cacheHits, IM_COL32(120, 120, 120, 255), "Deduplicated" },
+					{ diskHits, IM_COL32(70, 130, 200, 255), "Disk cache" },
+					{ fast, IM_COL32(80, 180, 80, 255), "Fast (<2s)" },
+					{ medium, IM_COL32(220, 180, 50, 255), "Slow (2-8s)" },
+					{ verySlow, IM_COL32(220, 60, 60, 255), "Very slow (>=8s)" },
+					{ failed, IM_COL32(160, 30, 30, 255), "Failed" },
+				};
+
+				float barHeight = 14.0f * Util::GetUIScale();
+				float barWidth = ImGui::GetContentRegionAvail().x;
+				ImVec2 cursor = ImGui::GetCursorScreenPos();
+				ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+				// Background
+				drawList->AddRectFilled(cursor, ImVec2(cursor.x + barWidth, cursor.y + barHeight), IM_COL32(40, 40, 40, 255));
+
+				// Draw segments
+				float x = cursor.x;
+				for (auto& seg : segments) {
+					if (seg.count == 0 || total == 0)
+						continue;
+					float segWidth = (static_cast<float>(seg.count) / static_cast<float>(total)) * barWidth;
+					if (segWidth < 1.0f)
+						segWidth = 1.0f;
+					drawList->AddRectFilled(ImVec2(x, cursor.y), ImVec2(x + segWidth, cursor.y + barHeight), seg.color);
+					x += segWidth;
+				}
+
+				// Reserve space and handle tooltip
+				ImGui::Dummy(ImVec2(barWidth, barHeight));
+				if (ImGui::IsItemHovered()) {
+					ImGui::BeginTooltip();
+					for (auto& seg : segments) {
+						if (seg.count == 0)
+							continue;
+						float pct = total > 0 ? 100.0f * static_cast<float>(seg.count) / static_cast<float>(total) : 0.0f;
+						ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(seg.color), "%s: %llu (%.1f%%)", seg.label, seg.count, pct);
+					}
+					ImGui::EndTooltip();
+				}
+			}
+
+			auto state = globals::state;
+			if (state->IsDeveloperMode()) {
+				ImGui::Text("Threads: %d compile, %d background, %d pool | P-cores: %d",
+					(int)shaderCache->compilationThreadCount,
+					(int)shaderCache->backgroundCompilationThreadCount,
+					(int)shaderCache->compilationPool.get_thread_count(),
+					(int)Util::GetPerformanceCoreCount());
+			}
 		}
 
 		ImGui::EndTabItem();
@@ -340,6 +444,13 @@ void SettingsTabRenderer::RenderBehaviorTab()
 			ImGui::Text("Automatically hides the left feature list panel. Move cursor to the left edge to show it.");
 		}
 
+		if (ImGui::Checkbox("Require Shift to Dock", &globals::menu->GetSettings().RequireShiftToDock)) {
+			ImGui::GetIO().ConfigDockingWithShift = globals::menu->GetSettings().RequireShiftToDock;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("When enabled, you must hold Shift while dragging to dock/snap windows. Prevents accidental docking.");
+		}
+
 		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
@@ -364,6 +475,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 
 		// Static variables for popup state and new theme creation
+		static Util::ConfirmationPopup deleteThemePopup("Delete Theme", "", "Delete", "Cancel");
 		static bool showCreateThemePopup = false;
 		static char newThemeName[128] = "";
 		static char newThemeDisplayName[128] = "";
@@ -476,7 +588,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::Spacing();
 			const auto& selectedTheme = themes[currentItem];
 			ImGui::Text("Selected Theme: ");
-			ImGui::SameLine();
+			ImGui::SameLine(0, 0);
 			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "%s", selectedTheme.displayName.c_str());
 			if (!selectedTheme.description.empty()) {
 				ImGui::TextWrapped("%s", selectedTheme.description.c_str());
@@ -485,10 +597,10 @@ void SettingsTabRenderer::RenderThemesTab()
 		ImGui::Spacing();
 
 		const bool isPreset = IsPresetThemeSelected();
+		const auto* currentThemeInfo = themeManager->GetThemeInfo(currentThemePreset);
 
 		if (!isPreset) {
 			if (Util::ButtonWithFlash("Save")) {
-				const auto* currentThemeInfo = themeManager->GetThemeInfo(currentThemePreset);
 				if (currentThemeInfo) {
 					// Get current settings
 					json currentThemeJson;
@@ -559,6 +671,21 @@ void SettingsTabRenderer::RenderThemesTab()
 			memset(newThemeDisplayName, 0, sizeof(newThemeDisplayName));
 			memset(newThemeDescription, 0, sizeof(newThemeDescription));
 			showValidationError = false;
+		}
+
+		if (!isPreset && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
+			ImGui::SameLine();
+			if (Util::ErrorButtonWithFlash("Delete")) {
+				deleteThemePopup.message =
+					"Are you sure you want to delete the theme '" +
+					(currentThemeInfo->displayName.empty() ? currentThemePreset : currentThemeInfo->displayName) +
+					"'?\n\nThis will permanently remove the theme file. This cannot be undone.";
+				deleteThemePopup.Request();
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Delete the theme file for '%s'. This cannot be undone.",
+					(currentThemeInfo->displayName.empty() ? currentThemePreset : currentThemeInfo->displayName).c_str());
+			}
 		}
 
 		// Display update feedback below the buttons
@@ -653,7 +780,10 @@ void SettingsTabRenderer::RenderThemesTab()
 				ImGui::Text("Human-readable name shown in the dropdown");
 			}
 
-			ImGui::InputTextMultiline("Description", newThemeDescription, sizeof(newThemeDescription), ImVec2(400, 80));
+			{
+				float scale = Util::GetUIScale();
+				ImGui::InputTextMultiline("Description", newThemeDescription, sizeof(newThemeDescription), ImVec2(400 * scale, 80 * scale));
+			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Optional description for the theme");
 			}
@@ -701,6 +831,17 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::EndPopup();
 		}
 
+		if (deleteThemePopup.Draw() && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
+			auto result = Util::FileHelpers::SafeDelete(currentThemeInfo->filePath, "Theme '" + currentThemePreset + "'");
+			if (result.success) {
+				themeManager->RefreshThemes();
+				globals::menu->LoadThemePreset("Default");
+				currentThemePreset = "Default";
+			} else {
+				logger::warn("Failed to delete theme '{}': {}", currentThemePreset, result.errorMessage);
+			}
+		}
+
 		ImGui::EndTabItem();
 	}
 }
@@ -714,11 +855,10 @@ void SettingsTabRenderer::RenderFontsTab()
 
 		SeparatorTextWithFont("Font", Menu::FontRole::Subheading);
 
-		bool useAutoFont = (themeSettings.FontSize <= 0.0f);
+		bool& useAutoFont = menuInstance->GetSettings().UseResolutionFont;
 		if (ImGui::Checkbox("Use resolution-based font size", &useAutoFont)) {
-			if (useAutoFont) {
-				themeSettings.FontSize = 0.0f;
-			} else {
+			if (!useAutoFont) {
+				// Seed the fixed-size slider with the current effective size so it doesn't jump
 				float effective = ThemeManager::ResolveFontSize(*menuInstance);
 				themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 			}
@@ -910,8 +1050,7 @@ void SettingsTabRenderer::RenderStylingTab()
 		if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
 			float trueScale = exp2(themeSettings.GlobalScale);
 
-			auto& io = ImGui::GetIO();
-			io.FontGlobalScale = trueScale;
+			ImGui::GetStyle().FontScaleMain = trueScale;
 		}
 
 		SeparatorTextWithFont("Layout", Menu::FontRole::Subheading);
@@ -999,12 +1138,13 @@ void SettingsTabRenderer::RenderColorsTab()
 		float frameHeight = ImGui::GetFrameHeight();
 
 		// Custom style for filter with icon space
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
+		float scale = Util::GetUIScale();
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f * scale));
 		colorFilter.Draw("Filter colors", availableWidth);
 		ImGui::PopStyleVar();
 
 		// Draw search icon
-		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
+		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f * scale, cursorPos.y + (frameHeight - iconSize) * 0.5f);
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
 		float radius = iconSize * 0.3f;

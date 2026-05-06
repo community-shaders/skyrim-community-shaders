@@ -12,7 +12,7 @@ public:
 	virtual inline std::string GetShortName() override { return "Skylighting"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SKYLIGHTING"; }
-	virtual std::string_view GetCategory() const override { return "Lighting"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
@@ -75,11 +75,10 @@ public:
 	Texture3D* texAccumFramesArray = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> probeUpdateCompute = nullptr;
-	winrt::com_ptr<ID3D11ShaderResourceView> stbn_vec3_2Dx1D_128x128x64;
 
 	// misc parameters
 	uint probeArrayDims[3] = { 256, 256, 128 };
-	float occlusionDistance = 4096.f * 2.5f;  // 5 ugrids
+	float occlusionDistance = 10000.f;
 
 	// cached variables
 	bool queuedResetSkylighting = true;
@@ -97,7 +96,7 @@ public:
 	// Hooks
 	struct BSLightingShaderProperty_GetPrecipitationOcclusionMapRenderPassesImpl
 	{
-		static RE::BSLightingShaderProperty::Data* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, uint32_t renderMode, RE::BSGraphics::BSShaderAccumulator* accumulator);
+		static RE::BSShaderProperty::RenderPassArray* thunk(RE::BSLightingShaderProperty* property, RE::BSGeometry* geometry, uint32_t renderMode, RE::BSGraphics::BSShaderAccumulator* accumulator);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 

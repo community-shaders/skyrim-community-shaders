@@ -17,14 +17,14 @@ bool Widget::MatchesSearch(const std::string& text) const
 void Widget::Save()
 {
 	SaveSettings();
-	const std::string filePath = std::format("{}\\{}", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName());
-	const std::string file = std::format("{}\\{}.json", filePath, GetEditorID());
+	const auto file = GetSaveFilePath();
+	const auto filePath = std::filesystem::path(file).parent_path();
 
 	if (!std::filesystem::exists(filePath) || !std::filesystem::is_directory(filePath)) {
 		try {
 			std::filesystem::create_directories(filePath);
 		} catch (const std::filesystem::filesystem_error& e) {
-			logger::warn("Error creating directory during Save ({}) : {}\n", filePath, e.what());
+			logger::warn("Error creating directory during Save ({}) : {}\n", filePath.string(), e.what());
 			return;
 		}
 	}
@@ -70,18 +70,20 @@ void Widget::Save()
 	}
 }
 
-void Widget::Load()
+void Widget::Load(bool showNotification)
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
+	std::string filePath = GetSaveFilePath();
 
 	if (!std::filesystem::exists(filePath)) {
 		js = json();
 		LoadSettings();
 
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("No saved file - reset {} to vanilla values", GetEditorID()),
-			ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("No saved file - reset {} to vanilla values", GetEditorID()),
+				ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
+				3.0f);
+		}
 		return;
 	}
 
@@ -90,10 +92,12 @@ void Widget::Load()
 
 	if (!settingsFile.good() || !settingsFile.is_open()) {
 		logger::warn("Failed to open settings file: {}", filePath);
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Failed to open file for {}", GetEditorID()),
-			ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Failed to open file for {}", GetEditorID()),
+				ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+				3.0f);
+		}
 		return;
 	}
 
@@ -104,10 +108,12 @@ void Widget::Load()
 		// Validate that we loaded valid JSON
 		if (js.is_null()) {
 			logger::warn("{}: Loaded JSON is null, file may be empty or invalid", filePath);
-			EditorWindow::GetSingleton()->ShowNotification(
-				std::format("Invalid file for {} - resetting to vanilla", GetEditorID()),
-				ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
-				3.0f);
+			if (showNotification) {
+				EditorWindow::GetSingleton()->ShowNotification(
+					std::format("Invalid file for {} - resetting to vanilla", GetEditorID()),
+					ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+					3.0f);
+			}
 			js = json();
 			LoadSettings();
 			return;
@@ -115,29 +121,35 @@ void Widget::Load()
 
 		LoadSettings();
 
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Loaded saved settings for {}", GetEditorID()),
-			ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Loaded saved settings for {}", GetEditorID()),
+				ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
+				3.0f);
+		}
 
 	} catch (const nlohmann::json::parse_error& e) {
 		logger::error("Error parsing settings for file ({}) : {}\n", filePath, e.what());
 		logger::error("Parse error at byte {}: {}", e.byte, e.what());
 		settingsFile.close();
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Parse error for {} - resetting to vanilla", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Parse error for {} - resetting to vanilla", GetEditorID()),
+				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				3.0f);
+		}
 		js = json();
 		LoadSettings();
 		return;
 	} catch (const std::exception& e) {
 		logger::error("Unexpected error loading settings file ({}) : {}\n", filePath, e.what());
 		settingsFile.close();
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Error loading {} - resetting to vanilla", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-			3.0f);
+		if (showNotification) {
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Error loading {} - resetting to vanilla", GetEditorID()),
+				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				3.0f);
+		}
 		js = json();
 		LoadSettings();
 		return;
@@ -146,7 +158,7 @@ void Widget::Load()
 
 void Widget::Delete()
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
+	std::string filePath = GetSaveFilePath();
 
 	if (!std::filesystem::exists(filePath)) {
 		return;
@@ -176,8 +188,7 @@ void Widget::Delete()
 
 bool Widget::HasSavedFile() const
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), const_cast<Widget*>(this)->GetFolderName(), GetEditorID());
-	return std::filesystem::exists(filePath);
+	return std::filesystem::exists(GetSaveFilePath());
 }
 
 void Widget::DrawMenu()
@@ -219,7 +230,8 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 		ImGui::Separator();
 		ImGui::Spacing();
 
-		const float buttonWidth = 120.0f;
+		const float scale = Util::GetUIScale();
+		const float buttonWidth = 120.0f * scale;
 		const float spacing = ImGui::GetStyle().ItemSpacing.x;
 		const float totalWidth = (buttonWidth * 2) + spacing;
 		const float cursorX = (ImGui::GetWindowWidth() - totalWidth) / 2.0f;
@@ -241,26 +253,53 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 	}
 }
 
-std::string Widget::GetFolderName()
+std::string Widget::GetSaveFilePath() const
+{
+	return std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetSaveKey());
+}
+
+std::string Widget::GetFolderName() const
 {
 	switch (form->GetFormType()) {
 	case RE::FormType::Weather:
-		return "Weathers";
+		return std::string(kWeatherFolderName);
 	case RE::FormType::LightingMaster:
-		return "Lighting Templates";
+		return std::string(kLightingTemplateFolderName);
 	case RE::FormType::ImageSpace:
-		return "ImageSpaces";
+		return std::string(kImageSpaceFolderName);
 	case RE::FormType::VolumetricLighting:
-		return "Volumetric Lighting";
+		return std::string(kVolumetricLightingFolderName);
 	case RE::FormType::ShaderParticleGeometryData:
-		return "Precipitation";
+		return std::string(kPrecipitationFolderName);
 	case RE::FormType::ReferenceEffect:
-		return "Visual Effects";
+		return std::string(kVisualEffectsFolderName);
 	case RE::FormType::Cell:
-		return "Cell Lighting";
+		return std::string(kCellLightingFolderName);
 	default:
-		return "Other Editor Widgets";
+		return std::string(kOtherEditorWidgetsFolderName);
 	}
+}
+
+bool Widget::BeginWidgetWindow()
+{
+	SetupWidgetWindowDefaults(GetWidgetTypeName());
+	bool result = Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags);
+	UpdateWidgetTypeSize(GetWidgetTypeName());
+	return result;
+}
+
+void Widget::ForceWeatherReinit(RE::TESWeather* weather)
+{
+	auto* sky = globals::game::sky;
+	if (weather && sky && sky->currentWeather == weather)
+		sky->ForceWeather(weather, true);
+}
+
+void Widget::ForceCurrentWeatherReinit()
+{
+	auto* sky = globals::game::sky;
+	if (sky && sky->currentWeather)
+		sky->ForceWeather(sky->currentWeather, true);
 }
 
 void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSaveLoadRevert, bool showForceWeather, RE::TESWeather* weather)
@@ -268,30 +307,28 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	auto editorWindow = EditorWindow::GetSingleton();
 	auto menu = globals::menu;
 	bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons;
+	const float scale = Util::GetUIScale();
 
 	auto drawSearchBar = [&]() {
-		ImGui::SetNextItemWidth(200.0f);
+		ImGui::SetNextItemWidth(200.0f * scale);
 		if (ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer)))
 			searchActive = searchBuffer[0] != '\0';
 		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false))
 			ImGui::SetKeyboardFocusHere(-1);
 	};
 
-	auto drawForceWeatherButton = [&](float height) {
+	auto drawForceWeatherButton = [&]() {
 		if (!showForceWeather || !weather)
 			return;
 		ImGui::SameLine();
 		bool isLocked = editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather;
 		const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
-		ImVec2 lockSize = ImGui::CalcTextSize(lockLabel);
-		lockSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-		lockSize.y = height;
 
 		if (isLocked) {
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
 		}
-		if (ImGui::Button(lockLabel, lockSize)) {
+		if (ImGui::Button(lockLabel)) {
 			if (isLocked)
 				editorWindow->UnlockWeather();
 			else
@@ -299,8 +336,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		}
 		if (isLocked)
 			ImGui::PopStyleColor(2);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
+		Util::AddTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
 	};
 
 	auto drawUnsavedIndicator = [&]() {
@@ -308,18 +344,17 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			return;
 		ImGui::SameLine();
 		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES)");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Unsaved changes - click save to keep");
+		Util::AddTooltip("Unsaved changes - click save to keep");
 	};
 
 	if (useIcons) {
 		const float iconSize = ImGui::GetFrameHeight() * 0.85f;
 		const ImVec2 buttonSize(iconSize, iconSize);
 
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, ImGui::GetStyle().ItemSpacing.y));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, ImGui::GetStyle().ItemSpacing.y));
 
 		drawSearchBar();
-		drawForceWeatherButton(iconSize);
+		drawForceWeatherButton();
 
 		// Transparent icon button style
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
@@ -332,13 +367,20 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			ImGui::SameLine();
 			if (ImGui::ImageButton((std::string(searchId) + suffix).c_str(), texture, buttonSize))
 				callback();
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", tooltip);
+			Util::AddTooltip(tooltip);
 		};
 
 		// Apply button
-		if (showApply && !editorWindow->settings.autoApplyChanges)
-			iconButton("_Apply", menu->uiIcons.applyToGame.texture, "Apply changes to the game", [&]() { ApplyChanges(); });
+		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
+			if (menu->uiIcons.applyToGame.texture) {
+				iconButton("_Apply", menu->uiIcons.applyToGame.texture, "Apply changes to the game", [&]() { ApplyChanges(); });
+			} else {
+				ImGui::SameLine();
+				if (ImGui::Button("Apply"))
+					ApplyChanges();
+				Util::AddTooltip("Apply changes to the game");
+			}
+		}
 
 		// Save/Load/Revert/Delete group
 		if (showSaveLoadRevert) {
@@ -348,13 +390,9 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 			if (HasSavedFile() && menu->uiIcons.deleteSettings.texture) {
 				ImGui::SameLine();
-				{
-					auto _style = Util::ErrorButtonStyle();
-					if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
-						ImGui::OpenPopup("DeleteConfirmation");
-				}
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Delete saved file");
+				if (Util::ErrorImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
+					ImGui::OpenPopup("DeleteConfirmation");
+				Util::AddTooltip("Delete saved file");
 			}
 		}
 
@@ -362,65 +400,57 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		ImGui::PopStyleColor(2);
 		ImGui::PopStyleVar(2);
 	} else {
-		const float buttonHeight = ImGui::GetFrameHeight();
 		if (!menu) {
 			drawSearchBar();
-			drawForceWeatherButton(buttonHeight);
+			drawForceWeatherButton();
 			ImGui::Separator();
 			return;
 		}
-		const auto& palette = menu->GetTheme().StatusPalette;
-
 		drawSearchBar();
-		drawForceWeatherButton(buttonHeight);
-
-		auto styledTextButton = [&](const char* label, const ImVec4& color, const char* tooltip, auto callback) {
-			ImGui::SameLine();
-			ImVec2 size = ImGui::CalcTextSize(label);
-			size.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			size.y = buttonHeight;
-			auto hover = color;
-			hover.w = 0.8f;
-			auto active = color;
-			active.w = 1.0f;
-			{
-				auto styledButton = Util::StyledButtonWrapper(color, hover, active);
-				if (ImGui::Button(label, size))
-					callback();
-			}
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", tooltip);
-		};
+		drawForceWeatherButton();
 
 		auto textButton = [&](const char* label, const char* tooltip, auto callback) {
 			ImGui::SameLine();
-			ImVec2 size = ImGui::CalcTextSize(label);
-			size.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-			size.y = buttonHeight;
-			if (Util::ButtonWithFlash(label, size))
+			if (Util::ButtonWithFlash(label))
 				callback();
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", tooltip);
+			Util::AddTooltip(tooltip);
 		};
 
 		// Apply button
-		if (showApply && !editorWindow->settings.autoApplyChanges)
-			styledTextButton("Apply", palette.SuccessColor, "Apply changes to the game", [&]() { ApplyChanges(); });
+		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
+			ImGui::SameLine();
+			if (Util::SuccessButton("Apply"))
+				ApplyChanges();
+			Util::AddTooltip("Apply changes to the game");
+		}
 
 		// Save/Load/Revert/Delete group
 		if (showSaveLoadRevert) {
 			textButton("Save", "Save to file", [&]() { Save(); });
 			textButton("Load", "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
-			styledTextButton("Revert", palette.Warning, "Revert to original game values", [&]() { RevertChanges(); });
+			ImGui::SameLine();
+			if (Util::WarningButton("Revert"))
+				RevertChanges();
+			Util::AddTooltip("Revert to original game values");
 
-			if (HasSavedFile())
-				styledTextButton("Delete", palette.Error, "Delete saved file", [&]() { ImGui::OpenPopup("DeleteConfirmation"); });
+			if (HasSavedFile()) {
+				ImGui::SameLine();
+				if (Util::ErrorTextButton("Delete"))
+					ImGui::OpenPopup("DeleteConfirmation");
+				Util::AddTooltip("Delete saved file");
+			}
 		}
 
 		drawUnsavedIndicator();
 	}
 
 	DrawDeleteConfirmationModal();
+
+	if (showApply && RequiresManualApply() && editorWindow->settings.autoApplyChanges && menu) {
+		ImGui::SameLine();
+		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(Changes require manual apply)");
+		Util::AddTooltip("This form type is only re-read by the engine on weather reinit.\nAuto-apply is disabled - use the Apply button.");
+	}
 
 	ImGui::Separator();
 }

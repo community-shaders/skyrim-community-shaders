@@ -106,145 +106,197 @@ void SetupPBRLandscapeTextureParameters(BSLightingShaderMaterialPBRLandscape& ma
 
 void TruePBR::DrawSettings()
 {
-	if (ImGui::CollapsingHeader("PBR", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		if (ImGui::TreeNodeEx("Texture Set Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			if (Util::SearchableCombo("Texture Set", selectedPbrTextureSetName, pbrTextureSets)) {
-				selectedPbrTextureSet = &pbrTextureSets[selectedPbrTextureSetName];
-			}
+	if (ImGui::TreeNodeEx("Texture Set Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (Util::SearchableCombo("Texture Set", selectedPbrTextureSetName, pbrTextureSets)) {
+			selectedPbrTextureSet = &pbrTextureSets[selectedPbrTextureSetName];
+		}
 
+		if (selectedPbrTextureSet != nullptr) {
+			bool wasEdited = false;
+			if (ImGui::SliderFloat("Displacement Scale", &selectedPbrTextureSet->displacementScale, 0.f, 3.f, "%.3f")) {
+				wasEdited = true;
+			}
+			if (ImGui::SliderFloat("Roughness Scale", &selectedPbrTextureSet->roughnessScale, 0.f, 3.f, "%.3f")) {
+				wasEdited = true;
+			}
+			if (ImGui::SliderFloat("Specular Level", &selectedPbrTextureSet->specularLevel, 0.f, 3.f, "%.3f")) {
+				wasEdited = true;
+			}
+			if (ImGui::TreeNodeEx("Subsurface")) {
+				if (ImGui::ColorPicker3("Subsurface Color", &selectedPbrTextureSet->subsurfaceColor.red)) {
+					wasEdited = true;
+				}
+				if (ImGui::SliderFloat("Subsurface Opacity", &selectedPbrTextureSet->subsurfaceOpacity, 0.f, 1.f, "%.3f")) {
+					wasEdited = true;
+				}
+
+				ImGui::TreePop();
+			}
+			if (ImGui::TreeNodeEx("Coat")) {
+				if (ImGui::ColorPicker3("Coat Color", &selectedPbrTextureSet->coatColor.red)) {
+					wasEdited = true;
+				}
+				if (ImGui::SliderFloat("Coat Strength", &selectedPbrTextureSet->coatStrength, 0.f, 1.f, "%.3f")) {
+					wasEdited = true;
+				}
+				if (ImGui::SliderFloat("Coat Roughness", &selectedPbrTextureSet->coatRoughness, 0.f, 1.f, "%.3f")) {
+					wasEdited = true;
+				}
+				if (ImGui::SliderFloat("Coat Specular Level", &selectedPbrTextureSet->coatSpecularLevel, 0.f, 1.f, "%.3f")) {
+					wasEdited = true;
+				}
+				if (ImGui::SliderFloat("Inner Layer Displacement Offset", &selectedPbrTextureSet->innerLayerDisplacementOffset, 0.f, 3.f, "%.3f")) {
+					wasEdited = true;
+				}
+				ImGui::TreePop();
+			}
+			if (ImGui::TreeNodeEx("Glint")) {
+				if (ImGui::Checkbox("Enabled", &selectedPbrTextureSet->glintParameters.enabled)) {
+					wasEdited = true;
+				}
+				if (selectedPbrTextureSet->glintParameters.enabled) {
+					if (ImGui::SliderFloat("Screenspace Scale", &selectedPbrTextureSet->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
+						wasEdited = true;
+					}
+					if (ImGui::SliderFloat("Log Microfacet Density", &selectedPbrTextureSet->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
+						wasEdited = true;
+					}
+					if (ImGui::SliderFloat("Microfacet Roughness", &selectedPbrTextureSet->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
+						wasEdited = true;
+					}
+					if (ImGui::SliderFloat("Density Randomization", &selectedPbrTextureSet->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
+						wasEdited = true;
+					}
+				}
+				ImGui::TreePop();
+			}
+			if (wasEdited) {
+				for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
+					if (extensions.textureSetData == selectedPbrTextureSet) {
+						material->ApplyTextureSetData(*extensions.textureSetData);
+					}
+				}
+				for (auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
+					for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
+						if (textureSets[textureSetIndex] == selectedPbrTextureSet) {
+							SetupPBRLandscapeTextureParameters(*material, *textureSets[textureSetIndex], textureSetIndex);
+						}
+					}
+				}
+			}
 			if (selectedPbrTextureSet != nullptr) {
-				bool wasEdited = false;
-				if (ImGui::SliderFloat("Displacement Scale", &selectedPbrTextureSet->displacementScale, 0.f, 3.f, "%.3f")) {
-					wasEdited = true;
-				}
-				if (ImGui::SliderFloat("Roughness Scale", &selectedPbrTextureSet->roughnessScale, 0.f, 3.f, "%.3f")) {
-					wasEdited = true;
-				}
-				if (ImGui::SliderFloat("Specular Level", &selectedPbrTextureSet->specularLevel, 0.f, 3.f, "%.3f")) {
-					wasEdited = true;
-				}
-				if (ImGui::TreeNodeEx("Subsurface")) {
-					if (ImGui::ColorPicker3("Subsurface Color", &selectedPbrTextureSet->subsurfaceColor.red)) {
-						wasEdited = true;
-					}
-					if (ImGui::SliderFloat("Subsurface Opacity", &selectedPbrTextureSet->subsurfaceOpacity, 0.f, 1.f, "%.3f")) {
-						wasEdited = true;
-					}
-
-					ImGui::TreePop();
-				}
-				if (ImGui::TreeNodeEx("Coat")) {
-					if (ImGui::ColorPicker3("Coat Color", &selectedPbrTextureSet->coatColor.red)) {
-						wasEdited = true;
-					}
-					if (ImGui::SliderFloat("Coat Strength", &selectedPbrTextureSet->coatStrength, 0.f, 1.f, "%.3f")) {
-						wasEdited = true;
-					}
-					if (ImGui::SliderFloat("Coat Roughness", &selectedPbrTextureSet->coatRoughness, 0.f, 1.f, "%.3f")) {
-						wasEdited = true;
-					}
-					if (ImGui::SliderFloat("Coat Specular Level", &selectedPbrTextureSet->coatSpecularLevel, 0.f, 1.f, "%.3f")) {
-						wasEdited = true;
-					}
-					if (ImGui::SliderFloat("Inner Layer Displacement Offset", &selectedPbrTextureSet->innerLayerDisplacementOffset, 0.f, 3.f, "%.3f")) {
-						wasEdited = true;
-					}
-					ImGui::TreePop();
-				}
-				if (ImGui::TreeNodeEx("Glint")) {
-					if (ImGui::Checkbox("Enabled", &selectedPbrTextureSet->glintParameters.enabled)) {
-						wasEdited = true;
-					}
-					if (selectedPbrTextureSet->glintParameters.enabled) {
-						if (ImGui::SliderFloat("Screenspace Scale", &selectedPbrTextureSet->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Log Microfacet Density", &selectedPbrTextureSet->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Microfacet Roughness", &selectedPbrTextureSet->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Density Randomization", &selectedPbrTextureSet->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
-							wasEdited = true;
-						}
-					}
-					ImGui::TreePop();
-				}
-				if (wasEdited) {
-					for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
-						if (extensions.textureSetData == selectedPbrTextureSet) {
-							material->ApplyTextureSetData(*extensions.textureSetData);
-						}
-					}
-					for (auto& [material, textureSets] : BSLightingShaderMaterialPBRLandscape::All) {
-						for (uint32_t textureSetIndex = 0; textureSetIndex < BSLightingShaderMaterialPBRLandscape::NumTiles; ++textureSetIndex) {
-							if (textureSets[textureSetIndex] == selectedPbrTextureSet) {
-								SetupPBRLandscapeTextureParameters(*material, *textureSets[textureSetIndex], textureSetIndex);
-							}
-						}
-					}
-				}
-				if (selectedPbrTextureSet != nullptr) {
-					if (ImGui::Button("Save")) {
-						PNState::SavePBRRecordConfig("Data\\PBRTextureSets", selectedPbrTextureSetName, *selectedPbrTextureSet);
-					}
+				if (ImGui::Button("Save")) {
+					PNState::SavePBRRecordConfig("Data\\PBRTextureSets", selectedPbrTextureSetName, *selectedPbrTextureSet);
 				}
 			}
-			ImGui::TreePop();
+		}
+		ImGui::TreePop();
+	}
+
+	if (ImGui::TreeNodeEx("Material Object Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (Util::SearchableCombo("Material Object", selectedPbrMaterialObjectName, pbrMaterialObjects)) {
+			selectedPbrMaterialObject = &pbrMaterialObjects[selectedPbrMaterialObjectName];
 		}
 
-		if (ImGui::TreeNodeEx("Material Object Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			if (Util::SearchableCombo("Material Object", selectedPbrMaterialObjectName, pbrMaterialObjects)) {
-				selectedPbrMaterialObject = &pbrMaterialObjects[selectedPbrMaterialObjectName];
-			}
+		if (selectedPbrMaterialObject != nullptr) {
+			bool wasEdited = false;
+			if (ImGui::TreeNodeEx("Base Color Scale", ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (ImGui::Button("Reset to 1.0##BaseColorScale")) {
+					selectedPbrMaterialObject->baseColorScale = { 1.f, 1.f, 1.f };
+					wasEdited = true;
+				}
 
+				const float indent = ImGui::GetCursorPosX();
+				const float defaultItemWidth = ImGui::CalcItemWidth();
+				const float letterColWidth = ImGui::CalcTextSize("Green").x + ImGui::GetStyle().ItemSpacing.x;
+				const float sliderStartX = indent + letterColWidth;
+				const float sliderWidth = defaultItemWidth - (sliderStartX - ImGui::GetStyle().ItemSpacing.x);
+				const float colorLabelStartX = sliderStartX - ImGui::GetStyle().ItemSpacing.x - letterColWidth;
+
+				ImGui::AlignTextToFramePadding();
+				ImGui::SetCursorPosX(colorLabelStartX);
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+				ImGui::Text("Red");
+				ImGui::PopStyleColor();
+				ImGui::SameLine(sliderStartX);
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.4f, 0.1f, 0.1f, 0.6f));
+				ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+				ImGui::SetNextItemWidth(sliderWidth);
+				if (ImGui::SliderFloat("##BaseColorScaleR", &selectedPbrMaterialObject->baseColorScale[0], 0.f, 10.f, "%.3f")) {
+					wasEdited = true;
+				}
+				ImGui::PopStyleColor(2);
+
+				ImGui::AlignTextToFramePadding();
+				ImGui::SetCursorPosX(colorLabelStartX);
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+				ImGui::Text("Green");
+				ImGui::PopStyleColor();
+				ImGui::SameLine(sliderStartX);
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.1f, 0.4f, 0.1f, 0.6f));
+				ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+				ImGui::SetNextItemWidth(sliderWidth);
+				if (ImGui::SliderFloat("##BaseColorScaleG", &selectedPbrMaterialObject->baseColorScale[1], 0.f, 10.f, "%.3f")) {
+					wasEdited = true;
+				}
+				ImGui::PopStyleColor(2);
+
+				ImGui::AlignTextToFramePadding();
+				ImGui::SetCursorPosX(colorLabelStartX);
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.3f, 0.9f, 1.0f));
+				ImGui::Text("Blue");
+				ImGui::PopStyleColor();
+				ImGui::SameLine(sliderStartX);
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.1f, 0.1f, 0.4f, 0.6f));
+				ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.3f, 0.3f, 0.9f, 1.0f));
+				ImGui::SetNextItemWidth(sliderWidth);
+				if (ImGui::SliderFloat("##BaseColorScaleB", &selectedPbrMaterialObject->baseColorScale[2], 0.f, 10.f, "%.3f")) {
+					wasEdited = true;
+				}
+				ImGui::PopStyleColor(2);
+
+				ImGui::TreePop();
+			}
+			if (ImGui::SliderFloat("Roughness", &selectedPbrMaterialObject->roughness, 0.f, 1.f, "%.3f")) {
+				wasEdited = true;
+			}
+			if (ImGui::SliderFloat("Specular Level", &selectedPbrMaterialObject->specularLevel, 0.f, 1.f, "%.3f")) {
+				wasEdited = true;
+			}
+			if (ImGui::TreeNodeEx("Glint")) {
+				if (ImGui::Checkbox("Enabled", &selectedPbrMaterialObject->glintParameters.enabled)) {
+					wasEdited = true;
+				}
+				if (selectedPbrMaterialObject->glintParameters.enabled) {
+					if (ImGui::SliderFloat("Screenspace Scale", &selectedPbrMaterialObject->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
+						wasEdited = true;
+					}
+					if (ImGui::SliderFloat("Log Microfacet Density", &selectedPbrMaterialObject->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
+						wasEdited = true;
+					}
+					if (ImGui::SliderFloat("Microfacet Roughness", &selectedPbrMaterialObject->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
+						wasEdited = true;
+					}
+					if (ImGui::SliderFloat("Density Randomization", &selectedPbrMaterialObject->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
+						wasEdited = true;
+					}
+				}
+				ImGui::TreePop();
+			}
+			if (wasEdited) {
+				for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
+					if (extensions.materialObjectData == selectedPbrMaterialObject) {
+						material->ApplyMaterialObjectData(*extensions.materialObjectData);
+					}
+				}
+			}
 			if (selectedPbrMaterialObject != nullptr) {
-				bool wasEdited = false;
-				if (ImGui::SliderFloat3("Base Color Scale", selectedPbrMaterialObject->baseColorScale.data(), 0.f, 10.f, "%.3f")) {
-					wasEdited = true;
-				}
-				if (ImGui::SliderFloat("Roughness", &selectedPbrMaterialObject->roughness, 0.f, 1.f, "%.3f")) {
-					wasEdited = true;
-				}
-				if (ImGui::SliderFloat("Specular Level", &selectedPbrMaterialObject->specularLevel, 0.f, 1.f, "%.3f")) {
-					wasEdited = true;
-				}
-				if (ImGui::TreeNodeEx("Glint")) {
-					if (ImGui::Checkbox("Enabled", &selectedPbrMaterialObject->glintParameters.enabled)) {
-						wasEdited = true;
-					}
-					if (selectedPbrMaterialObject->glintParameters.enabled) {
-						if (ImGui::SliderFloat("Screenspace Scale", &selectedPbrMaterialObject->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Log Microfacet Density", &selectedPbrMaterialObject->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Microfacet Roughness", &selectedPbrMaterialObject->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
-							wasEdited = true;
-						}
-						if (ImGui::SliderFloat("Density Randomization", &selectedPbrMaterialObject->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
-							wasEdited = true;
-						}
-					}
-					ImGui::TreePop();
-				}
-				if (wasEdited) {
-					for (auto& [material, extensions] : BSLightingShaderMaterialPBR::All) {
-						if (extensions.materialObjectData == selectedPbrMaterialObject) {
-							material->ApplyMaterialObjectData(*extensions.materialObjectData);
-						}
-					}
-				}
-				if (selectedPbrMaterialObject != nullptr) {
-					if (ImGui::Button("Save")) {
-						PNState::SavePBRRecordConfig("Data\\PBRMaterialObjects", selectedPbrMaterialObjectName, *selectedPbrMaterialObject);
-					}
+				if (ImGui::Button("Save")) {
+					PNState::SavePBRRecordConfig("Data\\PBRMaterialObjects", selectedPbrMaterialObjectName, *selectedPbrMaterialObject);
 				}
 			}
-			ImGui::TreePop();
 		}
+		ImGui::TreePop();
 	}
 }
 
@@ -254,8 +306,10 @@ void TruePBR::SetupResources()
 	SetupMaterialObjectData();
 }
 
-void TruePBR::PrePass()
+void TruePBR::Prepass()
 {
+	SetupDefaultPBRLandTextureSet();
+
 	auto context = globals::d3d::context;
 	if (!glintsNoiseTexture)
 		SetupGlintsTexture();
@@ -339,11 +393,6 @@ void TruePBR::SetupGlintsTexture()
 	}
 
 	noiseGenProgram->Release();
-}
-
-void TruePBR::SetupFrame()
-{
-	SetupDefaultPBRLandTextureSet();
 }
 
 void TruePBR::SetupTextureSetData()
@@ -567,7 +616,7 @@ struct BSLightingShaderProperty_LoadBinary
 			} else {
 				material = RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
 			}
-			property->LinkMaterial(nullptr, false);
+			property->SetMaterial(nullptr, false);
 			property->material = material;
 		}
 
@@ -1037,7 +1086,7 @@ void SetupLandscapeTexture(BSLightingShaderMaterialPBRLandscape& material, RE::T
 		return;
 	}
 
-	auto truePBR = globals::truePBR;
+	auto truePBR = &globals::features::truePBR;
 	auto* textureSetData = truePBR->GetPBRTextureSetData(textureSet);
 	const bool isPbr = textureSetData != nullptr;
 
@@ -1070,7 +1119,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 		return false;
 	}
 
-	auto singleton = globals::truePBR;
+	auto singleton = &globals::features::truePBR;
 
 	bool isPbr = false;
 	if (land->loadedData != nullptr) {
@@ -1108,7 +1157,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 
 			{
 				BSLightingShaderMaterialPBRLandscape srcMaterial;
-				shaderProperty->LinkMaterial(&srcMaterial, true);
+				shaderProperty->SetMaterial(&srcMaterial, true);
 			}
 
 			auto material = static_cast<BSLightingShaderMaterialPBRLandscape*>(shaderProperty->material);
@@ -1158,7 +1207,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 			auto geometry = children.empty() ? nullptr : static_cast<RE::BSGeometry*>(children[0].get());
 			shaderProperty->SetupGeometry(geometry);
 			if (geometry != nullptr) {
-				geometry->GetGeometryRuntimeData().properties[1] = RE::NiPointer(shaderProperty);
+				geometry->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
 			}
 
 			globals::game::smState->shadowSceneNode[0]->AttachObject(geometry);
@@ -1174,7 +1223,7 @@ struct TESForm_GetFormEditorID
 {
 	static const char* thunk(const RE::TESForm* form)
 	{
-		auto* singleton = globals::truePBR;
+		auto* singleton = &globals::features::truePBR;
 		auto it = singleton->editorIDs.find(form->GetFormID());
 		if (it == singleton->editorIDs.cend()) {
 			return "";
@@ -1188,7 +1237,7 @@ struct TESForm_SetFormEditorID
 {
 	static bool thunk(RE::TESForm* form, const char* editorId)
 	{
-		auto* singleton = globals::truePBR;
+		auto* singleton = &globals::features::truePBR;
 		singleton->editorIDs[form->GetFormID()] = editorId;
 		return true;
 	}
@@ -1200,13 +1249,13 @@ struct BSTempEffectSimpleDecal_SetupGeometry
 	static void thunk(RE::BSTempEffectSimpleDecal* decal, RE::BSGeometry* geometry, RE::BGSTextureSet* textureSet, bool blended)
 	{
 		func(decal, geometry, textureSet, blended);
-		auto* singleton = globals::truePBR;
-		auto unknownProperty = geometry->GetGeometryRuntimeData().properties[1].get();
+		auto* singleton = &globals::features::truePBR;
+		auto unknownProperty = geometry->GetGeometryRuntimeData().shaderProperty.get();
 		if (auto shaderProperty = unknownProperty->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(unknownProperty) : nullptr;
 			shaderProperty != nullptr && singleton->IsPBRTextureSet(textureSet)) {
 			{
 				BSLightingShaderMaterialPBR srcMaterial;
-				shaderProperty->LinkMaterial(&srcMaterial, true);
+				shaderProperty->SetMaterial(&srcMaterial, true);
 			}
 
 			auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
@@ -1237,7 +1286,7 @@ struct BSTempEffectGeometryDecal_Initialize
 	static void thunk(RE::BSTempEffectGeometryDecal* decal)
 	{
 		func(decal);
-		auto* singleton = globals::truePBR;
+		auto* singleton = &globals::features::truePBR;
 
 		if (decal->decal != nullptr && singleton->IsPBRTextureSet(decal->texSet)) {
 			auto shaderProperty = static_cast<RE::BSLightingShaderProperty*>(RE::MemoryManager::GetSingleton()->Allocate(sizeof(RE::BSLightingShaderProperty), 0, false));
@@ -1245,7 +1294,7 @@ struct BSTempEffectGeometryDecal_Initialize
 
 			{
 				BSLightingShaderMaterialPBR srcMaterial;
-				shaderProperty->LinkMaterial(&srcMaterial, true);
+				shaderProperty->SetMaterial(&srcMaterial, true);
 			}
 
 			auto pbrMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material);
@@ -1267,12 +1316,12 @@ struct BSTempEffectGeometryDecal_Initialize
 				shaderProperty->SetFlags(kVertexLighting, true);
 			}
 
-			if (auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(decal->decal->GetGeometryRuntimeData().properties[0].get())) {
+			if (auto* alphaProperty = static_cast<RE::NiAlphaProperty*>(decal->decal->GetGeometryRuntimeData().alphaProperty.get())) {
 				alphaProperty->alphaFlags = (alphaProperty->alphaFlags & ~0x1FE) | 0xED;
 			}
 
 			shaderProperty->SetupGeometry(decal->decal.get());
-			decal->decal->GetGeometryRuntimeData().properties[1] = RE::NiPointer(shaderProperty);
+			decal->decal->GetGeometryRuntimeData().shaderProperty = RE::NiPointer(shaderProperty);
 		}
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
@@ -1282,26 +1331,83 @@ struct TESBoundObject_Clone3D
 {
 	static RE::NiAVObject* thunk(RE::TESBoundObject* object, RE::TESObjectREFR* ref, bool arg3)
 	{
-		auto truePBR = globals::truePBR;
+		auto truePBR = &globals::features::truePBR;
 		auto* result = func(object, ref, arg3);
 		if (result != nullptr && ref != nullptr && ref->data.objectReference != nullptr && ref->data.objectReference->formType == RE::FormType::Static) {
 			auto* stat = static_cast<RE::TESObjectSTAT*>(ref->data.objectReference);
-			if (stat->data.materialObj != nullptr && stat->data.materialObj->directionalData.singlePass) {
-				if (auto* pbrData = truePBR->GetPBRMaterialObjectData(stat->data.materialObj)) {
-					RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData](RE::BSGeometry* geometry) {
-						if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get())) {
-							if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
-								shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
-								if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
-									material->ApplyMaterialObjectData(*pbrData);
-									BSLightingShaderMaterialPBR::All[material].materialObjectData = pbrData;
+			RE::BGSMaterialObject* currentMato = stat->data.materialObj;
+
+			// Resolve PBR MATO data for the three-way condition as a single pointer:
+			//   non-null  -> apply MATO to geometries
+			//   null      -> clear any previously applied MATO from geometries
+			// This covers all negative cases (currentMato == nullptr, singlePass ==
+			// false, or no matching PBR entry) with one branch so the clear path is
+			// never silently skipped.
+			auto* pbrData = (currentMato != nullptr && currentMato->directionalData.singlePass) ? truePBR->GetPBRMaterialObjectData(currentMato) : nullptr;
+
+			if (pbrData != nullptr) {
+				RE::BSVisit::TraverseScenegraphGeometries(result, [pbrData, ref](RE::BSGeometry* geometry) {
+					if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
+						if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
+							shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
+							if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
+								auto& ext = BSLightingShaderMaterialPBR::All[material];
+								const auto prevOwnerRefID = ext.lastOwnerRefFormID;
+
+								// Fork-before-write: if this material instance is already owned
+								// by a different ref whose MATO payload differs from the incoming
+								// one, clone it so we don't contaminate the previous owner's
+								// geometry.  Use pointer identity: GetPBRMaterialObjectData
+								// returns stable addresses into pbrMaterialObjects, so two
+								// different MATOs always produce different pointers regardless of
+								// whether their individual fields (baseColorScale, roughness,
+								// specularLevel, glint) happen to match.
+								const bool wouldContaminate =
+									(prevOwnerRefID != 0) &&
+									(prevOwnerRefID != ref->GetFormID()) &&
+									(ext.materialObjectData != pbrData);
+
+								BSLightingShaderMaterialPBR* targetMat = material;
+
+								if (wouldContaminate) {
+									auto* freshMat = BSLightingShaderMaterialPBR::Make();
+									if (freshMat) {
+										freshMat->CopyMembers(material);
+										shaderProperty->material = freshMat;
+										targetMat = freshMat;
+									} else {
+										logger::warn("[TruePBR] failed to clone PBR material for ref {:08X}; skipping to avoid contamination", ref->GetFormID());
+										return RE::BSVisit::BSVisitControl::kContinue;
+									}
+								}
+
+								targetMat->ApplyMaterialObjectData(*pbrData);
+								auto& targetExt = BSLightingShaderMaterialPBR::All[targetMat];
+								targetExt.materialObjectData = pbrData;
+								targetExt.lastOwnerRefFormID = ref->GetFormID();
+							}
+						}
+					}
+
+					return RE::BSVisit::BSVisitControl::kContinue;
+				});
+			} else {
+				RE::BSVisit::TraverseScenegraphGeometries(result, [](RE::BSGeometry* geometry) {
+					if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
+						if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
+							shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
+							if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
+								auto& ext = BSLightingShaderMaterialPBR::All[material];
+								if (ext.materialObjectData != nullptr) {
+									material->ClearMaterialObjectData();
+									ext.materialObjectData = nullptr;
+									ext.lastOwnerRefFormID = 0;
 								}
 							}
 						}
-
-						return RE::BSVisit::BSVisitControl::kContinue;
-					});
-				}
+					}
+					return RE::BSVisit::BSVisitControl::kContinue;
+				});
 			}
 		}
 		return result;
@@ -1313,7 +1419,7 @@ struct BGSTextureSet_ToShaderTextureSet
 {
 	static RE::BSShaderTextureSet* thunk(RE::BGSTextureSet* textureSet)
 	{
-		auto truePBR = globals::truePBR;
+		auto truePBR = &globals::features::truePBR;
 		truePBR->currentTextureSet = textureSet;
 
 		return func(textureSet);
@@ -1327,27 +1433,55 @@ struct BSLightingShaderProperty_OnLoadTextureSet
 	{
 		func(property, a2);
 
-		auto truePBR = globals::truePBR;
+		auto truePBR = &globals::features::truePBR;
 		truePBR->currentTextureSet = nullptr;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct PBR_TESObjectLAND_SetupMaterial
+{
+	static bool thunk(RE::TESObjectLAND* land)
+	{
+		bool vanillaResult = func(land);
+
+		if (globals::features::truePBR.TESObjectLAND_SetupMaterial(land)) {
+			return true;
+		}
+
+		return vanillaResult;
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct PBR_BSLightingShader_SetupMaterial
+{
+	static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
+	{
+		if (globals::features::truePBR.BSLightingShader_SetupMaterial(shader, material)) {
+			return;
+		}
+
+		func(shader, material);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
 void TruePBR::PostPostLoad()
 {
-	logger::info("Hooking BGSTextureSet");
+	logger::info("[TruePBR] Hooking BGSTextureSet");
 	stl::detour_thunk<BGSTextureSet_ToShaderTextureSet>(REL::RelocationID(20905, 21361));
 
-	logger::info("Hooking BSLightingShaderProperty");
+	logger::info("[TruePBR] Hooking BSLightingShaderProperty");
 	stl::write_vfunc<0x18, BSLightingShaderProperty_LoadBinary>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::write_vfunc<0x2A, BSLightingShaderProperty_GetRenderPasses>(RE::VTABLE_BSLightingShaderProperty[0]);
 	stl::detour_thunk<BSLightingShaderProperty_OnLoadTextureSet>(REL::RelocationID(99865, 106510));
 
-	logger::info("Hooking BSLightingShader");
+	logger::info("[TruePBR] Hooking BSLightingShader");
 	stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
 	stl::detour_thunk_ignore_func<BSLightingShader_GetPixelTechnique>(REL::RelocationID(101633, 108700));
 
-	logger::info("Hooking TESLandTexture");
+	logger::info("[TruePBR] Hooking TESLandTexture");
 	stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
 	stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESLandTexture[0]);
 	stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_BGSTextureSet[0]);
@@ -1359,14 +1493,20 @@ void TruePBR::PostPostLoad()
 	stl::write_vfunc<0x32, TESForm_GetFormEditorID>(RE::VTABLE_TESWeather[0]);
 	stl::write_vfunc<0x33, TESForm_SetFormEditorID>(RE::VTABLE_TESWeather[0]);
 
-	logger::info("Hooking BSTempEffectSimpleDecal");
+	logger::info("[TruePBR] Hooking BSTempEffectSimpleDecal");
 	stl::detour_thunk<BSTempEffectSimpleDecal_SetupGeometry>(REL::RelocationID(29253, 30108));
 
-	logger::info("Hooking BSTempEffectGeometryDecal");
+	logger::info("[TruePBR] Hooking BSTempEffectGeometryDecal");
 	stl::write_vfunc<0x25, BSTempEffectGeometryDecal_Initialize>(RE::VTABLE_BSTempEffectGeometryDecal[0]);
 
-	logger::info("Hooking TESObjectSTAT");
+	logger::info("[TruePBR] Hooking TESObjectSTAT");
 	stl::write_vfunc<0x4A, TESBoundObject_Clone3D>(RE::VTABLE_TESObjectSTAT[0]);
+
+	logger::info("[TruePBR] Hooking TESObjectLAND");
+	stl::detour_thunk<PBR_TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
+
+	logger::info("[TruePBR] Hooking BSLightingShader::SetupMaterial");
+	stl::write_vfunc<0x4, PBR_BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 }
 
 void TruePBR::DataLoaded()

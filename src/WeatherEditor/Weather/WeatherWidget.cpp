@@ -2,6 +2,8 @@
 
 #include <format>
 
+#include "imgui_internal.h"
+
 #include "../EditorWindow.h"
 #include "FeatureIssues.h"
 #include "State.h"
@@ -14,22 +16,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DirectionalColor, max, min)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DALC, specular, fresnelPower, directional)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Cloud, cloudLayerSpeedY, cloudLayerSpeedX, color, cloudAlpha, enabled, texturePath)
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::ImageSpaceSettings,
-	hdrEyeAdaptSpeed,
-	hdrBloomBlurRadius,
-	hdrBloomThreshold,
-	hdrBloomScale,
-	hdrSunlightScale,
-	hdrSkyScale,
-	cinematicSaturation,
-	cinematicBrightness,
-	cinematicContrast,
-	tintColor,
-	tintAmount,
-	dofStrength,
-	dofDistance,
-	dofRange)
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
 	parent,
 	inheritFlags,
@@ -39,7 +25,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
 	atmosphereColors,
 	dalc,
 	clouds,
-	imageSpaces,
 	featureSettings)
 
 WeatherWidget::~WeatherWidget()
@@ -55,10 +40,11 @@ WeatherWidget::~WeatherWidget()
 void WeatherWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
-	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	const float scale = Util::GetUIScale();
+	if (BeginWidgetWindow()) {
 		// Draw header with search and all buttons
 		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
+		const ImVec2 searchDropdownPos = ImGui::GetCursorScreenPos();
 
 		// Update search results when search buffer changes
 		if (searchActive) {
@@ -67,20 +53,20 @@ void WeatherWidget::DrawWidget()
 
 		// Show search results dropdown
 		if (searchBuffer[0] != '\0' && !searchResults.empty()) {
-			// Find the search input position for dropdown placement
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y));
-			ImGui::SetNextWindowSize(ImVec2(200.0f * 1.5f, 0));
-			ImGui::SetNextWindowFocus();
+			ImGui::SetNextWindowPos(searchDropdownPos, ImGuiCond_Always);
+			ImGui::SetNextWindowSize(ImVec2(300.0f * Util::GetUIScale(), 0));
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
 			ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
 			if (ImGui::Begin("##SearchDropdown", nullptr,
 					ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-						ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+						ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+						ImGuiWindowFlags_NoFocusOnAppearing)) {
+				ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
 				for (size_t i = 0; i < std::min(size_t(5), searchResults.size()); ++i) {
 					const auto& result = searchResults[i];
 					std::string label = std::format("{} ({})", result.displayName, result.tabName);
 
-					if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_DontClosePopups)) {
+					if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
 						NavigateToSetting(result);
 						searchBuffer[0] = '\0';
 						searchResults.clear();
@@ -92,8 +78,7 @@ void WeatherWidget::DrawWidget()
 					ImGui::TextDisabled("... %zu more results", searchResults.size() - 5);
 				}
 
-				// Close dropdown if clicking outside or pressing Escape
-				if (!ImGui::IsWindowFocused() || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+				if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 					searchBuffer[0] = '\0';
 					searchResults.clear();
 				}
@@ -156,9 +141,7 @@ void WeatherWidget::DrawWidget()
 				if (Util::ButtonWithFlash("Inherit All")) {
 					InheritAllFromParent();
 				}
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("Copy all parameter values from parent weather");
-				}
+				Util::AddTooltip("Copy all parameter values from parent weather");
 
 				if (!parent->IsOpen()) {
 					ImGui::SameLine();
@@ -185,13 +168,13 @@ void WeatherWidget::DrawWidget()
 
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
-			DrawProperties("Sun", { { "Sun Damage", INT8_SLIDER } });
-			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
-			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation End Fade Out", INT8_SLIDER } });
-			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", INT8_SLIDER }, { "Thunder Lightning End Fade Out", INT8_SLIDER },
-											{ "Thunder Lightning Frequency", INT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
-			DrawProperties("Visual Effects", { { "Visual Effect Begin", INT8_SLIDER }, { "Visual Effect End", INT8_SLIDER } });
-			DrawProperties("Weather Transition", { { "Trans Delta", INT8_SLIDER } });
+			DrawProperties("Sun", { { "Sun Damage", UINT8_SLIDER } });
+			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", UINT8_SLIDER }, { "Wind Direction Range", UINT8_SLIDER } });
+			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", UINT8_SLIDER }, { "Precipitation End Fade Out", UINT8_SLIDER } });
+			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", UINT8_SLIDER }, { "Thunder Lightning End Fade Out", UINT8_SLIDER },
+											{ "Thunder Lightning Frequency", UINT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
+			DrawProperties("Visual Effects", { { "Visual Effect Begin", UINT8_SLIDER }, { "Visual Effect End", UINT8_SLIDER } });
+			DrawProperties("Weather Transition", { { "Trans Delta", UINT8_SLIDER } });
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
@@ -239,9 +222,11 @@ void WeatherWidget::DrawWidget()
 			ImGui::Spacing();
 			auto* editorWindow = EditorWindow::GetSingleton();
 
-			bool recordChanged = false;
 			bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
 			WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
+			const float todLabelOffset = (hasParent ? 120.0f : 100.0f) * scale;
+			const float formLabelOffset = (hasParent ? 170.0f : 150.0f) * scale;
+			const float pickerWidth = 225.0f * scale;
 
 			// ImageSpace Records (per time of day)
 			if (ImGui::CollapsingHeader("ImageSpace", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -253,36 +238,33 @@ void WeatherWidget::DrawWidget()
 					// Inherit checkbox
 					if (hasParent) {
 						bool& inheritFlag = settings.inheritFlags[inheritKey];
-						if (ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag)) {
-							if (inheritFlag && parentWidget) {
-								weather->imageSpaces[i] = parentWidget->weather->imageSpaces[i];
-								recordChanged = true;
+						ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag);
+						if (inheritFlag && parentWidget) {
+							if (settings.imageSpaceRefs[i] != parentWidget->settings.imageSpaceRefs[i]) {
+								settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
+								pendingReinit = true;
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-						}
+						Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 						ImGui::SameLine();
 					}
 
 					ImGui::Text("%s:", label.c_str());
-					ImGui::SameLine(hasParent ? 120.0f : 100.0f);
-					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", weather->imageSpaces[i], editorWindow->imageSpaceWidgets, false, true)) {
-						recordChanged = true;
+					ImGui::SameLine(todLabelOffset);
+					if (WeatherUtils::DrawFormPickerCached("##ImageSpace", settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets, false, true, pickerWidth)) {
+						pendingReinit = true;
 					}  // Add "Open" button
-					if (weather->imageSpaces[i]) {
+					if (settings.imageSpaceRefs[i]) {
 						ImGui::SameLine();
 						if (ImGui::SmallButton(std::format("Open##{}", i).c_str())) {
 							for (auto& widget : editorWindow->imageSpaceWidgets) {
-								if (widget->form == weather->imageSpaces[i]) {
+								if (widget->form == settings.imageSpaceRefs[i]) {
 									widget->SetOpen(true);
 									break;
 								}
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("Open this ImageSpace for editing");
-						}
+						Util::AddTooltip("Open this ImageSpace for editing");
 					}
 
 					ImGui::PopID();
@@ -300,36 +282,33 @@ void WeatherWidget::DrawWidget()
 					// Inherit checkbox
 					if (hasParent) {
 						bool& inheritFlag = settings.inheritFlags[inheritKey];
-						if (ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag)) {
-							if (inheritFlag && parentWidget) {
-								weather->volumetricLighting[i] = parentWidget->weather->volumetricLighting[i];
-								recordChanged = true;
+						ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag);
+						if (inheritFlag && parentWidget) {
+							if (settings.volumetricLightingRefs[i] != parentWidget->settings.volumetricLightingRefs[i]) {
+								settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
+								pendingReinit = true;
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-						}
+						Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 						ImGui::SameLine();
 					}
 
 					ImGui::Text("%s:", label.c_str());
-					ImGui::SameLine(hasParent ? 120.0f : 100.0f);
-					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", weather->volumetricLighting[i], editorWindow->volumetricLightingWidgets, false, true)) {
-						recordChanged = true;
+					ImGui::SameLine(todLabelOffset);
+					if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets, false, true, pickerWidth)) {
+						pendingReinit = true;
 					}  // Add "Open" button
-					if (weather->volumetricLighting[i]) {
+					if (settings.volumetricLightingRefs[i]) {
 						ImGui::SameLine();
 						if (ImGui::SmallButton(std::format("Open##{}", i).c_str())) {
 							for (auto& widget : editorWindow->volumetricLightingWidgets) {
-								if (widget->form == weather->volumetricLighting[i]) {
+								if (widget->form == settings.volumetricLightingRefs[i]) {
 									widget->SetOpen(true);
 									break;
 								}
 							}
 						}
-						if (ImGui::IsItemHovered()) {
-							ImGui::SetTooltip("Open this Volumetric Lighting for editing");
-						}
+						Util::AddTooltip("Open this Volumetric Lighting for editing");
 					}
 
 					ImGui::PopID();
@@ -342,36 +321,33 @@ void WeatherWidget::DrawWidget()
 				// Inherit checkbox
 				if (hasParent) {
 					bool& inheritFlag = settings.inheritFlags["Precipitation"];
-					if (ImGui::Checkbox("##inherit_Precipitation", &inheritFlag)) {
-						if (inheritFlag && parentWidget) {
-							weather->precipitationData = parentWidget->weather->precipitationData;
-							recordChanged = true;
+					ImGui::Checkbox("##inherit_Precipitation", &inheritFlag);
+					if (inheritFlag && parentWidget) {
+						if (settings.precipitationData != parentWidget->settings.precipitationData) {
+							settings.precipitationData = parentWidget->settings.precipitationData;
+							pendingReinit = true;
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-					}
+					Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 					ImGui::SameLine();
 				}
 
 				ImGui::Text("Particle Shader:");
-				ImGui::SameLine(hasParent ? 170.0f : 150.0f);
-				if (WeatherUtils::DrawFormPickerCached("##Precipitation", weather->precipitationData, editorWindow->precipitationWidgets, false, true)) {
-					recordChanged = true;
+				ImGui::SameLine(formLabelOffset);
+				if (WeatherUtils::DrawFormPickerCached("##Precipitation", settings.precipitationData, editorWindow->precipitationWidgets, false, true, pickerWidth)) {
+					pendingReinit = true;
 				}  // Add "Open" button
-				if (weather->precipitationData) {
+				if (settings.precipitationData) {
 					ImGui::SameLine();
 					if (ImGui::SmallButton("Open##Precip")) {
 						for (auto& widget : editorWindow->precipitationWidgets) {
-							if (widget->form == weather->precipitationData) {
+							if (widget->form == settings.precipitationData) {
 								widget->SetOpen(true);
 								break;
 							}
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("Open this Precipitation for editing");
-					}
+					Util::AddTooltip("Open this Precipitation for editing");
 				}
 
 				ImGui::Spacing();
@@ -382,42 +358,39 @@ void WeatherWidget::DrawWidget()
 				// Inherit checkbox
 				if (hasParent) {
 					bool& inheritFlag = settings.inheritFlags["ReferenceEffect"];
-					if (ImGui::Checkbox("##inherit_ReferenceEffect", &inheritFlag)) {
-						if (inheritFlag && parentWidget) {
-							weather->referenceEffect = parentWidget->weather->referenceEffect;
-							recordChanged = true;
+					ImGui::Checkbox("##inherit_ReferenceEffect", &inheritFlag);
+					if (inheritFlag && parentWidget) {
+						if (settings.referenceEffect != parentWidget->settings.referenceEffect) {
+							settings.referenceEffect = parentWidget->settings.referenceEffect;
+							pendingReinit = true;
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-					}
+					Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 					ImGui::SameLine();
 				}
 
 				ImGui::Text("Reference Effect:");
-				ImGui::SameLine(hasParent ? 170.0f : 150.0f);
-				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", weather->referenceEffect, editorWindow->referenceEffectWidgets, false, true)) {
-					recordChanged = true;
+				ImGui::SameLine(formLabelOffset);
+				if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", settings.referenceEffect, editorWindow->referenceEffectWidgets, false, true, pickerWidth)) {
+					pendingReinit = true;
 				}  // Add "Open" button
-				if (weather->referenceEffect) {
+				if (settings.referenceEffect) {
 					ImGui::SameLine();
 					if (ImGui::SmallButton("Open##RefEffect")) {
 						for (auto& widget : editorWindow->referenceEffectWidgets) {
-							if (widget->form == weather->referenceEffect) {
+							if (widget->form == settings.referenceEffect) {
 								widget->SetOpen(true);
 								break;
 							}
 						}
 					}
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("Open this Visual Effect for editing");
-					}
+					Util::AddTooltip("Open this Visual Effect for editing");
 				}
 
 				ImGui::Spacing();
 			}
 
-			if (recordChanged && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+			if (pendingReinit) {
 				ApplyChanges();
 			}
 
@@ -466,6 +439,25 @@ void WeatherWidget::LoadSettings()
 					settings.fogProperties.size());
 			}
 
+			// Record form references (resolved by matching widget EditorID)
+			// Three cases: key missing -> vanilla, key present with "" -> explicit None (nullptr), key present with id -> lookup form
+			auto* editorWindow = EditorWindow::GetSingleton();
+			auto loadRef = [&]<typename T>(const std::string& key, const std::vector<std::unique_ptr<Widget>>& widgets, T* vanillaValue) -> T* {
+				if (!js.contains(key) || !js[key].is_string())
+					return vanillaValue;
+				const std::string id = js[key].get<std::string>();
+				if (id.empty())
+					return nullptr;
+				auto* f = WeatherUtils::FindFormByEditorID(id, widgets);
+				return f ? static_cast<T*>(f) : vanillaValue;
+			};
+			for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+				settings.imageSpaceRefs[i] = loadRef(std::format("imageSpaceRef_{}", i), editorWindow->imageSpaceWidgets, vanillaSettings.imageSpaceRefs[i]);
+				settings.volumetricLightingRefs[i] = loadRef(std::format("volumetricLightingRef_{}", i), editorWindow->volumetricLightingWidgets, vanillaSettings.volumetricLightingRefs[i]);
+			}
+			settings.precipitationData = loadRef("precipitationDataRef", editorWindow->precipitationWidgets, vanillaSettings.precipitationData);
+			settings.referenceEffect = loadRef("referenceEffectRef", editorWindow->referenceEffectWidgets, vanillaSettings.referenceEffect);
+
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
 			// Fallback to vanilla/game values on exception
@@ -484,6 +476,7 @@ void WeatherWidget::LoadSettings()
 		LoadFeatureSettings();
 	}
 	originalSettings = settings;
+	pendingReinit = true;
 	ApplyChanges();
 }
 
@@ -493,6 +486,15 @@ void WeatherWidget::SaveSettings()
 
 	try {
 		js = settings;
+
+		// Record form references (serialized as widget EditorIDs for load-order independence)
+		auto* editorWindow = EditorWindow::GetSingleton();
+		for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+			js[std::format("imageSpaceRef_{}", i)] = WeatherUtils::FindEditorIDByForm(settings.imageSpaceRefs[i], editorWindow->imageSpaceWidgets);
+			js[std::format("volumetricLightingRef_{}", i)] = WeatherUtils::FindEditorIDByForm(settings.volumetricLightingRefs[i], editorWindow->volumetricLightingWidgets);
+		}
+		js["precipitationDataRef"] = WeatherUtils::FindEditorIDByForm(settings.precipitationData, editorWindow->precipitationWidgets);
+		js["referenceEffectRef"] = WeatherUtils::FindEditorIDByForm(settings.referenceEffect, editorWindow->referenceEffectWidgets);
 
 		if (js.is_null()) {
 			logger::error("Weather {}: Serialization produced null JSON!", GetEditorID());
@@ -538,30 +540,30 @@ void WeatherWidget::SetWeatherValues()
 	auto& colorData = weather->colorData;
 	auto& fogData = weather->fogData;
 
-	weather->data.transDelta = (int8_t)weatherProps["Trans Delta"];
+	weather->data.transDelta = static_cast<uint8_t>(weatherProps["Trans Delta"]);
 
 	// Sun
-	data.sunGlare = (int8_t)weatherProps["Sun Glare"];
-	data.sunDamage = (int8_t)weatherProps["Sun Damage"];
+	data.sunGlare = static_cast<uint8_t>(weatherProps["Sun Glare"]);
+	data.sunDamage = static_cast<uint8_t>(weatherProps["Sun Damage"]);
 
 	// Precipitation
-	data.precipitationBeginFadeIn = (int8_t)weatherProps["Precipitation Begin Fade In"];
-	data.precipitationEndFadeOut = (int8_t)weatherProps["Precipitation End Fade Out"];
+	data.precipitationBeginFadeIn = static_cast<uint8_t>(weatherProps["Precipitation Begin Fade In"]);
+	data.precipitationEndFadeOut = static_cast<uint8_t>(weatherProps["Precipitation End Fade Out"]);
 
 	// Lightning
-	data.thunderLightningBeginFadeIn = (int8_t)weatherProps["Thunder Lightning Begin Fade In"];
-	data.thunderLightningEndFadeOut = (int8_t)weatherProps["Thunder Lightning End Fade Out"];
-	data.thunderLightningFrequency = (int8_t)weatherProps["Thunder Lightning Frequency"];
+	data.thunderLightningBeginFadeIn = static_cast<uint8_t>(weatherProps["Thunder Lightning Begin Fade In"]);
+	data.thunderLightningEndFadeOut = static_cast<uint8_t>(weatherProps["Thunder Lightning End Fade Out"]);
+	data.thunderLightningFrequency = static_cast<int8_t>(static_cast<uint8_t>(weatherProps["Thunder Lightning Frequency"]));
 	Float3ToColor(weatherColors["Lightning Color"], weather->data.lightningColor);
 
 	// Visual Effects
-	data.visualEffectBegin = (int8_t)weatherProps["Visual Effect Begin"];
-	data.visualEffectEnd = (int8_t)weatherProps["Visual Effect End"];
+	data.visualEffectBegin = static_cast<uint8_t>(weatherProps["Visual Effect Begin"]);
+	data.visualEffectEnd = static_cast<uint8_t>(weatherProps["Visual Effect End"]);
 
 	// Wind
-	data.windSpeed = (uint8_t)weatherProps["Wind Speed"];
-	data.windDirection = (int8_t)weatherProps["Wind Direction"];
-	data.windDirectionRange = (int8_t)weatherProps["Wind Direction Range"];
+	data.windSpeed = static_cast<uint8_t>(weatherProps["Wind Speed"]);
+	data.windDirection = static_cast<uint8_t>(weatherProps["Wind Direction"]);
+	data.windDirectionRange = static_cast<uint8_t>(weatherProps["Wind Direction Range"]);
 
 	// Fog
 	fogData.dayNear = fogProperties["Day Near"];
@@ -604,8 +606,8 @@ void WeatherWidget::SetWeatherValues()
 	for (size_t i = 0; i < TESWeather::kTotalLayers; i++) {
 		auto& settingsCloud = settings.clouds[i];
 
-		weather->cloudLayerSpeedX[i] = (int8_t)settingsCloud.cloudLayerSpeedX;
-		weather->cloudLayerSpeedY[i] = (int8_t)settingsCloud.cloudLayerSpeedY;
+		weather->cloudLayerSpeedX[i] = static_cast<int8_t>(settingsCloud.cloudLayerSpeedX);
+		weather->cloudLayerSpeedY[i] = static_cast<int8_t>(settingsCloud.cloudLayerSpeedY);
 
 		if (!settingsCloud.enabled) {
 			disabledBits |= (1 << i);
@@ -620,6 +622,14 @@ void WeatherWidget::SetWeatherValues()
 		}
 	}
 	weather->cloudLayerDisabledBits = disabledBits;
+
+	// Record form references
+	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+		weather->imageSpaces[i] = settings.imageSpaceRefs[i];
+		weather->volumetricLighting[i] = settings.volumetricLightingRefs[i];
+	}
+	weather->precipitationData = settings.precipitationData;
+	weather->referenceEffect = settings.referenceEffect;
 
 	// If this weather is currently active, immediately apply feature settings to game memory
 	auto* weatherManager = WeatherManager::GetSingleton();
@@ -718,7 +728,7 @@ void WeatherWidget::LoadWeatherValues()
 	// Lightning
 	weatherProps["Thunder Lightning Begin Fade In"] = data.thunderLightningBeginFadeIn;
 	weatherProps["Thunder Lightning End Fade Out"] = data.thunderLightningEndFadeOut;
-	weatherProps["Thunder Lightning Frequency"] = data.thunderLightningFrequency;
+	weatherProps["Thunder Lightning Frequency"] = static_cast<uint8_t>(data.thunderLightningFrequency);
 	ColorToFloat3(data.lightningColor, weatherColors["Lightning Color"]);
 
 	// Visual Effects
@@ -783,6 +793,14 @@ void WeatherWidget::LoadWeatherValues()
 			ColorToFloat3(cloudColors[j], settingsCloud.color[j]);
 		}
 	}
+
+	// Record form references
+	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+		settings.imageSpaceRefs[i] = weather->imageSpaces[i];
+		settings.volumetricLightingRefs[i] = weather->volumetricLighting[i];
+	}
+	settings.precipitationData = weather->precipitationData;
+	settings.referenceEffect = weather->referenceEffect;
 }
 
 void WeatherWidget::DrawDALCSettings()
@@ -1040,15 +1058,17 @@ void WeatherWidget::DrawCloudSettings()
 		if (layerEnabled) {
 			const ImVec2 badgeSize = ImGui::CalcTextSize(kEnabledBadge);
 			const float headerHeight = ImGui::GetFrameHeight();
+			const float badgePadding = ImGui::GetStyle().FramePadding.x;
 			const ImVec2 badgePos = {
-				ImGui::GetWindowPos().x + ImGui::GetContentRegionMax().x - badgeSize.x,
+				ImGui::GetWindowPos().x + ImGui::GetWindowSize().x - ImGui::GetStyle().WindowPadding.x - badgeSize.x - badgePadding,
 				headerScreenY + (headerHeight - badgeSize.y) * 0.5f
 			};
 			ImGui::GetWindowDrawList()->AddText(badgePos, ImGui::GetColorU32(ImGuiCol_CheckMark), kEnabledBadge);
 		}
 
 		if (layerOpen) {
-			ImGui::Indent(10.0f);
+			const float scale = Util::GetUIScale();
+			ImGui::Indent(10.0f * scale);
 			ImGui::Spacing();
 
 			// Begin horizontal layout for enable checkbox and sliders on left, texture on right
@@ -1063,8 +1083,7 @@ void WeatherWidget::DrawCloudSettings()
 			ImGui::Spacing();
 			ImGui::Spacing();
 
-			// Make sliders 1/3 width
-			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.4f);
+			ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.3f);
 			if (WeatherUtils::DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY))
 				changed = true;
 			ImGui::Spacing();
@@ -1074,15 +1093,17 @@ void WeatherWidget::DrawCloudSettings()
 
 			ImGui::EndGroup();
 
-			// Draw texture in upper right if available
+			// Draw texture centered in remaining space to the right of the controls
 			if (!settings.clouds[i].texturePath.empty()) {
 				auto* texture = GetCloudTexture(i);
 				if (texture) {
-					ImGui::SameLine(0.0f, 20.0f);
+					float textureSize = 128.0f * scale;
+					float groupEndX = ImGui::GetItemRectMax().x;
+					float availRight = ImGui::GetWindowPos().x + ImGui::GetWindowSize().x - ImGui::GetStyle().WindowPadding.x - groupEndX;
+					float offset = std::max(20.0f * scale, (availRight - textureSize) * 0.5f);
+					ImGui::SameLine(0.0f, offset);
 					ImGui::BeginGroup();
-					float textureSize = 128.0f;
 					ImGui::Image((void*)texture, ImVec2(textureSize, textureSize));
-					// Small grey subtext below image, clamped to texture width
 					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 					ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textureSize);
 					ImGui::TextWrapped("%s", settings.clouds[i].texturePath.c_str());
@@ -1094,7 +1115,7 @@ void WeatherWidget::DrawCloudSettings()
 
 			ImGui::Spacing();
 			ImGui::Spacing();
-			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str())) {
+			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str(), 120.0f)) {
 				TOD::RenderTODHeader();
 				TOD::DrawTODSeparator();
 
@@ -1130,18 +1151,14 @@ void WeatherWidget::DrawCloudSettings()
 			}
 
 			ImGui::Spacing();
-			ImGui::Unindent(10.0f);
+			ImGui::Unindent(10.0f * scale);
 		}
 	}
 	if (enableChanged) {
 		// Apply enable/disable immediately for instant feedback, regardless of autoApplyChanges.
 		editorWindow->PushUndoState(this);
+		pendingReinit = true;
 		ApplyChanges();
-		if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
-			if (auto sky = RE::Sky::GetSingleton()) {
-				sky->ForceWeather(weather, true);  // override=true for immediate application; matches "instant feedback" intent above
-			}
-		}
 	} else if (changed && editorWindow->settings.autoApplyChanges) {
 		editorWindow->PushUndoState(this);
 		ApplyChanges();
@@ -1156,17 +1173,20 @@ void WeatherWidget::DrawFogSettings()
 
 	bool changed = false;
 
-	if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit)) {
-		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-		ImGui::TableSetupColumn("Day", ImGuiTableColumnFlags_WidthFixed, 250.0f);
-		ImGui::TableSetupColumn("Night", ImGuiTableColumnFlags_WidthFixed, 250.0f);
+	const float scale = Util::GetUIScale();
+	if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
+		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 80.0f * scale);
+		ImGui::TableSetupColumn("Day", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+		ImGui::TableSetupColumn("Night", ImGuiTableColumnFlags_WidthStretch, 1.0f);
 
 		// Header row
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
 		ImGui::TableSetColumnIndex(1);
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Day");
 		ImGui::TableSetColumnIndex(2);
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Night");
 
 		ImGui::TableNextRow();
@@ -1183,7 +1203,7 @@ void WeatherWidget::DrawFogSettings()
 		if (hasParent) {
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 			ImGui::Checkbox("##FogNear", &settings.inheritFlags["Fog_Near"]);
 			if (settings.inheritFlags["Fog_Near"]) {
 				settings.fogProperties["Day Near"] = parentWidget->settings.fogProperties["Day Near"];
@@ -1194,14 +1214,15 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine();
 		}
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Near");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 		ImGui::TableSetColumnIndex(2);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 
 		// Far
@@ -1210,7 +1231,7 @@ void WeatherWidget::DrawFogSettings()
 		if (hasParent) {
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 			ImGui::Checkbox("##FogFar", &settings.inheritFlags["Fog_Far"]);
 			if (settings.inheritFlags["Fog_Far"]) {
 				settings.fogProperties["Day Far"] = parentWidget->settings.fogProperties["Day Far"];
@@ -1221,14 +1242,15 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine();
 		}
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Far");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 		ImGui::TableSetColumnIndex(2);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 1000000.0f, "%.0f"))
+		if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 350000.0f, "%.0f"))
 			changed = true;
 
 		// Power
@@ -1237,7 +1259,7 @@ void WeatherWidget::DrawFogSettings()
 		if (hasParent) {
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 			ImGui::Checkbox("##FogPower", &settings.inheritFlags["Fog_Power"]);
 			if (settings.inheritFlags["Fog_Power"]) {
 				settings.fogProperties["Day Power"] = parentWidget->settings.fogProperties["Day Power"];
@@ -1248,6 +1270,7 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine();
 		}
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Power");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
@@ -1264,7 +1287,7 @@ void WeatherWidget::DrawFogSettings()
 		if (hasParent) {
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 			ImGui::Checkbox("##FogMax", &settings.inheritFlags["Fog_Max"]);
 			if (settings.inheritFlags["Fog_Max"]) {
 				settings.fogProperties["Day Max"] = parentWidget->settings.fogProperties["Day Max"];
@@ -1275,6 +1298,7 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::PopStyleColor(2);
 			ImGui::SameLine();
 		}
+		ImGui::AlignTextToFramePadding();
 		ImGui::Text("Max");
 		ImGui::TableSetColumnIndex(1);
 		ImGui::SetNextItemWidth(-1);
@@ -1319,6 +1343,8 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	auto* editorWindow = EditorWindow::GetSingleton();
 	bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
 
+	ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * WidgetDefaults::kSliderWidthRatio);
+
 	for (auto& p : properties) {
 		// Filter individual properties based on search
 		if (searchBuffer[0] != '\0' && !MatchesSearch(p.first)) {
@@ -1342,9 +1368,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 					changed = true;
 				}
 			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
-			}
+			Util::AddTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
 			ImGui::SameLine();
 		}
 
@@ -1373,6 +1397,8 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 			ImGui::PopStyleColor(2);
 		}
 	}
+
+	ImGui::PopItemWidth();
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();
@@ -1440,6 +1466,14 @@ void WeatherWidget::InheritAllFromParent()
 		settings.clouds[i] = parentWidget->settings.clouds[i];
 	}
 
+	// Copy records (form references)
+	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+		settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
+		settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
+	}
+	settings.precipitationData = parentWidget->settings.precipitationData;
+	settings.referenceEffect = parentWidget->settings.referenceEffect;
+
 	// Set all inherit flags to true
 	settings.inheritFlags["DALC_Specular"] = true;
 	settings.inheritFlags["DALC_Fresnel"] = true;
@@ -1469,7 +1503,16 @@ void WeatherWidget::InheritAllFromParent()
 		settings.inheritFlags[std::format("Cloud{}_Alpha", i)] = true;
 	}
 
-	// Apply the changes
+	// Records
+	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+		settings.inheritFlags["ImageSpace_" + std::to_string(i)] = true;
+		settings.inheritFlags["VolumetricLighting_" + std::to_string(i)] = true;
+	}
+	settings.inheritFlags["Precipitation"] = true;
+	settings.inheritFlags["ReferenceEffect"] = true;
+
+	// Apply the changes — form references require a weather reinit to propagate
+	pendingReinit = true;
 	if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();
 	}
@@ -1591,6 +1634,10 @@ void WeatherWidget::LoadFeatureSettings()
 void WeatherWidget::ApplyChanges()
 {
 	SetWeatherValues();
+	if (pendingReinit) {
+		Widget::ForceWeatherReinit(weather);
+		pendingReinit = false;
+	}
 }
 
 void WeatherWidget::RevertChanges()
@@ -1618,6 +1665,7 @@ void WeatherWidget::RevertChanges()
 
 	weatherManager->ClearAllFeatureSettingsForWeather(weather);
 	settings = vanillaSettings;
+	pendingReinit = true;
 	ApplyChanges();
 }
 
@@ -1641,7 +1689,10 @@ bool WeatherWidget::Settings::operator==(const Settings& o) const
 	       std::equal(std::begin(atmosphereColors), std::end(atmosphereColors), std::begin(o.atmosphereColors)) &&
 	       std::equal(std::begin(dalc), std::end(dalc), std::begin(o.dalc)) &&
 	       std::equal(std::begin(clouds), std::end(clouds), std::begin(o.clouds)) &&
-	       std::equal(std::begin(imageSpaces), std::end(imageSpaces), std::begin(o.imageSpaces)) &&
+	       std::equal(std::begin(imageSpaceRefs), std::end(imageSpaceRefs), std::begin(o.imageSpaceRefs)) &&
+	       std::equal(std::begin(volumetricLightingRefs), std::end(volumetricLightingRefs), std::begin(o.volumetricLightingRefs)) &&
+	       precipitationData == o.precipitationData &&
+	       referenceEffect == o.referenceEffect &&
 	       featureSettings == o.featureSettings;
 }
 
@@ -2011,14 +2062,7 @@ ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)
 		return nullptr;
 	}
 
-	// Build resource path for BSA loading: Textures\path (relative to Data folder)
-	// Note: Skyrim texture paths don't include .dds extension, so we add it
-	std::string resourcePath = std::string("Textures\\") + texturePath;
-
-	// Add .dds extension if not present
-	if (resourcePath.size() < 4 || resourcePath.substr(resourcePath.size() - 4) != ".dds") {
-		resourcePath += ".dds";
-	}
+	std::string resourcePath = WeatherUtils::TexturePath::BuildResourcePath(texturePath);
 
 	ID3D11ShaderResourceView* srv = nullptr;
 	ImVec2 textureSize;

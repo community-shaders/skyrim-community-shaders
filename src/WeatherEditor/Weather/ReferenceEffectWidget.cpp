@@ -4,8 +4,7 @@
 
 void ReferenceEffectWidget::DrawWidget()
 {
-	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##ReferenceEffectSearch", true, true);
 		BeginScrollableContent("##REScroll");
 		{
@@ -36,11 +35,6 @@ void ReferenceEffectWidget::DrawWidget()
 				changed = true;
 			if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
 				changed = true;
-
-			if (changed && editorWindow->settings.autoApplyChanges) {
-				editorWindow->PushUndoState(this);
-				ApplyChanges();
-			}
 		}
 		EndScrollableContent();
 	}
@@ -127,6 +121,8 @@ void ReferenceEffectWidget::ApplyChanges()
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kAttachToCamera);
 	if (settings.inheritRotation)
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kInheritRotation);
+
+	Widget::ForceCurrentWeatherReinit();
 }
 
 void ReferenceEffectWidget::RevertChanges()

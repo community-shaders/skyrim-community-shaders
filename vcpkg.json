@@ -34,7 +34,12 @@
     "overrides": [
         {
             "name": "bshoshany-thread-pool",
-            "version": "3.5.0"
+            "version": "5.1.0"
+        },
+        {
+            "name": "detours",
+            "version": "4.0.1",
+            "port-version": 8
         },
         {
             "name": "eabase",
@@ -46,7 +51,7 @@
         },
         {
             "name": "imgui",
-            "version": "1.90"
+            "version": "1.92.6"
         },
         {
             "name": "tracy",
@@ -54,8 +59,8 @@
         },
         {
             "name": "directx-headers",
-            "version": "1.606.4"
+            "version": "1.614.1"
         }
     ],
-    "builtin-baseline": "7a6bb52bfd8eba088f8bf5cae70ca8d81503e42e"
+    "builtin-baseline": "dddca6fa87f177e0678e2545c4b4636a44aa05bd"
 }

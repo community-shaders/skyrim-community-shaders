@@ -1,9 +1,8 @@
 #include "Skylighting.h"
 
-#include <DDSTextureLoader.h>
-
 #include "ShaderCache.h"
 #include "State.h"
+#include "Utils/D3D.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Skylighting::Settings,
@@ -69,7 +68,7 @@ void Skylighting::SetupResources()
 		precipitationOcclusion.depthSRV->GetDesc(&srvDesc);
 		precipitationOcclusion.views[0]->GetDesc(&dsvDesc);
 
-		texOcclusion = new Texture2D(texDesc);
+		texOcclusion = new Texture2D(texDesc, "Skylighting::Occlusion");
 		texOcclusion->CreateSRV(srvDesc);
 		texOcclusion->CreateDSV(dsvDesc);
 	}
@@ -102,13 +101,13 @@ void Skylighting::SetupResources()
 				.WSize = texDesc.Depth }
 		};
 
-		texProbeArray = new Texture3D(texDesc);
+		texProbeArray = new Texture3D(texDesc, "Skylighting::ProbeArray");
 		texProbeArray->CreateSRV(srvDesc);
 		texProbeArray->CreateUAV(uavDesc);
 
 		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R8_UINT;
 
-		texAccumFramesArray = new Texture3D(texDesc);
+		texAccumFramesArray = new Texture3D(texDesc, "Skylighting::AccumFramesArray");
 		texAccumFramesArray->CreateSRV(srvDesc);
 		texAccumFramesArray->CreateUAV(uavDesc);
 	}
@@ -123,10 +122,7 @@ void Skylighting::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, comparisonSampler.put()));
-	}
-
-	{
-		DirectX::CreateDDSTextureFromFile(device, globals::d3d::context, L"Data\\Shaders\\Skylighting\\SpatiotemporalBlueNoise\\stbn_vec3_2Dx1D_128x128x64.dds", nullptr, stbn_vec3_2Dx1D_128x128x64.put());
+		Util::SetResourceName(comparisonSampler.get(), "Skylighting::ComparisonSampler");
 	}
 
 	CompileComputeShaders();
@@ -170,9 +166,8 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 	if (!a_inWorld)
 		return Skylighting::SkylightingCB{};
 
-	if (auto ui = globals::game::ui)
-		if (ui->IsMenuOpen(RE::MapMenu::MENU_NAME))
-			return Skylighting::SkylightingCB{};
+	if (globals::state->isMapMenuOpen)
+		return Skylighting::SkylightingCB{};
 
 	static float3 prevCellID = { 0, 0, 0 };
 
@@ -206,9 +201,8 @@ Skylighting::SkylightingCB Skylighting::GetCommonBufferData(bool a_inWorld)
 
 void Skylighting::Prepass()
 {
-	if (auto ui = globals::game::ui)
-		if (ui->IsMenuOpen(RE::MapMenu::MENU_NAME))
-			return;
+	if (globals::state->isMapMenuOpen)
+		return;
 
 	bool interior = true;
 
@@ -251,8 +245,8 @@ void Skylighting::Prepass()
 
 	// Set PS shader resources
 	{
-		ID3D11ShaderResourceView* srvs[2] = { texProbeArray->srv.get(), stbn_vec3_2Dx1D_128x128x64.get() };
-		context->PSSetShaderResources(50, 2, srvs);
+		ID3D11ShaderResourceView* srv = texProbeArray->srv.get();
+		context->PSSetShaderResources(50, 1, &srv);
 	}
 }
 
@@ -347,7 +341,7 @@ enum class ShaderTechnique
 
 //////////////////////////////////////////////////////////////
 
-RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPrecipitationOcclusionMapRenderPassesImpl::thunk(
+RE::BSShaderProperty::RenderPassArray* Skylighting::BSLightingShaderProperty_GetPrecipitationOcclusionMapRenderPassesImpl::thunk(
 	RE::BSLightingShaderProperty* property,
 	RE::BSGeometry* geometry,
 	[[maybe_unused]] uint32_t renderMode,
@@ -361,7 +355,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 	using enum RE::BSShaderProperty::EShaderPropertyFlag;
 	using enum RE::BSUtilityShader::Flags;
 
-	auto* precipitationOcclusionMapRenderPassList = &property->unk0C8;
+	auto* precipitationOcclusionMapRenderPassList = &property->occlusionPasses;
 
 	precipitationOcclusionMapRenderPassList->Clear();
 	if (skylighting.inOcclusion) {
@@ -420,7 +414,7 @@ RE::BSLightingShaderProperty::Data* Skylighting::BSLightingShaderProperty_GetPre
 				technique.set(Vc);
 			}
 
-			const auto alphaProperty = static_cast<RE::NiAlphaProperty*>(geometry->GetGeometryRuntimeData().properties[0].get());
+			const auto alphaProperty = static_cast<RE::NiAlphaProperty*>(geometry->GetGeometryRuntimeData().alphaProperty.get());
 			if (alphaProperty && alphaProperty->GetAlphaTesting()) {
 				technique.set(Texture);
 				technique.set(AlphaTest);
@@ -482,12 +476,14 @@ void Skylighting::SetViewFrustumVR::thunk(RE::NiCamera* a_camera, RE::NiFrustum*
 
 void Skylighting::RenderOcclusion()
 {
+	ZoneScopedS(8);
 	auto shaderCache = globals::shaderCache;
 	auto state = globals::state;
 	auto renderer = globals::game::renderer;
 	auto sky = globals::game::sky;
 
 	if (!shaderCache->IsEnabled()) {
+		TracyD3D11Zone(globals::state->tracyCtx, "Precipitation Mask");
 		state->BeginPerfEvent("Precipitation Mask");
 		Main_Precipitation_RenderOcclusion::func();
 		state->EndPerfEvent();
@@ -501,6 +497,7 @@ void Skylighting::RenderOcclusion()
 			auto precip = sky->precip;
 
 			{
+				TracyD3D11Zone(globals::state->tracyCtx, "Precipitation Mask");
 				state->BeginPerfEvent("Precipitation Mask");
 
 				doPrecip = false;
@@ -511,8 +508,8 @@ void Skylighting::RenderOcclusion()
 				}
 				if (precipObject) {
 					precip->SetupMask();
-					auto effect = precipObject->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect];
-					auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect.get());
+					auto& effect = precipObject->GetGeometryRuntimeData().shaderProperty;
+					auto shaderProp = effect.get();
 					auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
 					auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
 
@@ -523,6 +520,7 @@ void Skylighting::RenderOcclusion()
 			}
 
 			{
+				TracyD3D11Zone(globals::state->tracyCtx, "Skylighting Mask");
 				state->BeginPerfEvent("Skylighting Mask");
 
 				if (queuedResetSkylighting)
@@ -579,8 +577,11 @@ void Skylighting::RenderOcclusion()
 				PrecipitationShaderDirection = { PrecipitationShaderDirectionF.x, PrecipitationShaderDirectionF.y, PrecipitationShaderDirectionF.z };
 
 				static REL::Relocation<void(RE::Precipitation*, RE::NiPointer<RE::NiCamera>)> _computeProjection{ REL::RelocationID(25643, 26185) };
-				_computeProjection(precip, precip->occlusionData.camera);
-				precip->SetupMask();
+				{
+					ZoneScopedN("Skylighting - Setup Projection");
+					_computeProjection(precip, precip->occlusionData.camera);
+					precip->SetupMask();
+				}
 
 				BSParticleShaderRainEmitter* rain = new BSParticleShaderRainEmitter;
 				{
@@ -601,7 +602,10 @@ void Skylighting::RenderOcclusion()
 
 				precipitation = precipitationCopy;
 
-				_computeProjection(precip, precip->occlusionData.camera);
+				{
+					ZoneScopedN("Skylighting - Restore Projection");
+					_computeProjection(precip, precip->occlusionData.camera);
+				}
 
 				state->EndPerfEvent();
 			}
