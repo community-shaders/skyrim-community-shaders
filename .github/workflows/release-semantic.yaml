@@ -1,0 +1,55 @@
+name: Semantic Release
+
+on:
+    workflow_dispatch:
+        inputs:
+            release_type:
+                description: "Release type"
+                required: true
+                type: choice
+                default: "rc"
+                options:
+                    - rc
+                    - stable
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Configure git identity
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+            - name: Apply feature version bumps
+              run: |
+                  python tools/feature_version_audit.py \
+                    --apply-bumps \
+                    --output /tmp/feature-version-audit.txt
+
+            - name: Semantic Release
+              id: semantic
+              uses: cycjimmy/semantic-release-action@v6
+              with:
+                  extra_plugins: |
+                      @google/semantic-release-replace-plugin
+                      @semantic-release/git
+                      @semantic-release/github
+                  tag_format: "v${version}"
+              env:
+                  # RELEASE_PAT required for two reasons:
+                  # 1. Allows pushing the version commit and tag to the protected
+                  #    dev branch (GITHUB_TOKEN cannot bypass branch protection).
+                  # 2. A PAT-sourced tag push triggers downstream workflows
+                  #    (release-build.yaml); GITHUB_TOKEN pushes do not.
+                  GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+                  RELEASE_TYPE: ${{ github.event.inputs.release_type }}

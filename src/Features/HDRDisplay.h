@@ -78,8 +78,9 @@ struct HDRDisplay : public Feature
 	void SetUIBuffer();
 	void ClearUIBuffer();
 
-	// Scale UI brightness in uiBufferWrapped for SDR Frame Gen
+	// Scale UI brightness in uiBufferWrapped for Frame Gen.
 	void ScaleUIBrightnessForFG();
+	bool ShouldUseD3D12UIBuffer();
 
 	void ApplyHDR();
 
@@ -141,6 +142,7 @@ struct HDRDisplay : public Feature
 		ID3D11Texture2D* texture = nullptr;
 		ID3D11RenderTargetView* RTV = nullptr;
 		ID3D11ShaderResourceView* SRV = nullptr;
+		ID3D11UnorderedAccessView* UAV = nullptr;
 	};
 
 	std::vector<std::pair<RE::RENDER_TARGETS::RENDER_TARGET, SavedRenderTarget>> savedLDRTargets;
@@ -148,6 +150,14 @@ struct HDRDisplay : public Feature
 private:
 	bool showHDRWarningPopup = false;
 	bool pendingHDREnable = false;
+
+	struct D3D12UIBufferMode
+	{
+		bool useUIBuffer = false;
+		bool useFallbackCopy = false;
+	};
+
+	D3D12UIBufferMode GetD3D12UIBufferMode();
 
 	// True when FFX frame generation is actively compositing UI this frame.
 	bool IsFGCompositingThisFrame() const;

@@ -90,24 +90,9 @@ void Streamline::LoadInterposer()
 
 	// Dynamically log all DLL versions in the Streamline plugin directory
 	std::filesystem::path pluginDir = std::filesystem::path(Streamline::PluginDir);
-	Streamline::dllVersions.clear();
-	if (std::filesystem::exists(pluginDir)) {
-		for (const auto& entry : std::filesystem::directory_iterator(pluginDir)) {
-			if (entry.is_regular_file() && entry.path().extension() == L".dll") {
-				const auto& path = entry.path();
-				auto version = Util::GetDllVersion(path.c_str());
-				auto name = path.filename().string();
-				std::string versionStr = version ? Util::GetFormattedVersion(*version) : "Unknown";
-				Streamline::dllVersions.emplace_back(name, versionStr);
-				if (version)
-					logger::info("[Streamline] {} version: {}", name, versionStr);
-				else
-					logger::info("[Streamline] {} version: Unknown", name);
-			}
-		}
-	} else {
-		logger::warn("[Streamline] Plugin directory not found: {}", std::filesystem::absolute(pluginDir).string());
-	}
+	Streamline::dllVersions = Util::EnumerateDllVersions(pluginDir);
+	for (const auto& [name, versionStr] : Streamline::dllVersions)
+		logger::info("[Streamline] {} version: {}", name, versionStr);
 
 	logger::info("[Streamline] Initializing Streamline");
 

@@ -336,23 +336,28 @@ def get_feature_changelog(feature_dir, feature_info, base_ref):
         if src_dir.exists() and src_dir.is_dir():
             paths.append(str(src_dir).replace("\\", "/"))
     try:
+        # Use ASCII unit-separator (0x1f) between subject and body so BREAKING
+        # CHANGE footers are detected even when the subject lacks the '!' marker.
+        # Null bytes are not used because Windows subprocess rejects them.
         raw = subprocess.check_output(
-            ["git", "log", f"{base_ref}..{HEAD_REF}", "--pretty=%s", "--"] + paths,
+            ["git", "log", f"{base_ref}..{HEAD_REF}", "--pretty=format:%s\x1f%b\x1f", "--"] + paths,
             cwd=str(PROJECT_ROOT),
             stderr=subprocess.DEVNULL,
         ).decode("utf-8", errors="replace")
     except Exception:
         return ""
+    parts = raw.split("\x1f")
     seen = set()
     lines = []
-    for msg in raw.splitlines():
-        msg = msg.strip()
-        if not msg or msg in seen:
+    for subject, body in zip(parts[::2], parts[1::2]):
+        subject = subject.strip()
+        if not subject or subject in seen:
             continue
-        seen.add(msg)
-        if (RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or
-                RE_COMMIT_PERF.match(msg) or RE_COMMIT_BREAKING.search(msg)):
-            lines.append(f"- {msg}")
+        seen.add(subject)
+        full = subject + "\n" + body
+        if (RE_COMMIT_FEAT.match(subject) or RE_COMMIT_FIX.match(subject) or
+                RE_COMMIT_PERF.match(subject) or RE_COMMIT_BREAKING.search(full)):
+            lines.append(f"- {subject}")
     return "\n".join(lines)
 
 def apply_version_bump(ini_path, proposed_ver_str):
@@ -934,9 +939,8 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
         if not mod_id:
             continue
         name = info['name']
-        artifact_pattern = info.get('artifact_pattern') or f'{name}-*.7z'
 
-        # Read INI metadata (version, filename, etc.)
+        # Read INI metadata first — mod_filename is needed to derive artifact_pattern.
         ini_path = get_feature_ini(name)  # Pass name as string for fuzzy matching
         ini_metadata = {}
         mod_version = None
@@ -948,6 +952,13 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
 
         # Use mod_filename from INI if available, else from feature metadata, else use name
         mod_filename = ini_metadata.get('mod_filename') or info.get('mod_filename') or name
+
+        # artifact_pattern: explicit INI value takes precedence; fallback derives the
+        # pattern from the display name using the cmake convention of replacing spaces
+        # with dots — e.g. "Cloud Shadows" → "Cloud.Shadows-*.7z".
+        artifact_pattern = (ini_metadata.get('artifact_pattern')
+                            or info.get('artifact_pattern')
+                            or f"{mod_filename.replace(' ', '.')}-*.7z")
 
         # Auto-upload is opt-in; missing metadata should not enable uploads.
         auto_upload = ini_metadata.get('auto_upload', False)
@@ -963,7 +974,7 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
         if mod_version:
             row['mod_version'] = mod_version
         if base_ref:
-            feature_dir = FEATURES_DIR / name
+            feature_dir = find_feature_dir(name) or FEATURES_DIR / name
             changelog = get_feature_changelog(feature_dir, info, base_ref)
             if changelog:
                 row['changelog'] = changelog

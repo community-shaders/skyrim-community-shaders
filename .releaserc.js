@@ -1,11 +1,22 @@
 const isRC = (process.env.RELEASE_TYPE || 'rc') === 'rc';
 
 module.exports = {
-  // RC: needs 'main' as non-prerelease anchor (semantic-release v25 requires >= 1).
-  // Stable: 'dev' is the release branch directly.
+  // RC:     'main' is the non-prerelease anchor required by semantic-release v25.
+  //         'dev' produces rc pre-releases.
+  // Stable: 'dev' is the primary release branch.
+  //         'hotfix/N.N.x' maintenance branches allow patch releases from a
+  //         tagged stable baseline without carrying unreleased dev work.
+  //         Branch naming: hotfix/1.5.x (the x.y maintenance line, not a specific patch).
   branches: isRC
     ? ['main', { name: 'dev', prerelease: 'rc' }]
-    : ['dev'],
+    : [
+        'dev',
+        {
+          name: 'hotfix/+([0-9])?(.{+([0-9]),x}).x',
+          range: '${name.split("/")[1]}',
+          channel: '${name.split("/")[1]}',
+        },
+      ],
   plugins: [
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',

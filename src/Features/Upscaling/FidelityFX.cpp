@@ -28,6 +28,8 @@ void FidelityFX::LoadFFX()
 	// Cache all DLL versions in the FidelityFX directory
 	std::filesystem::path pluginDir = std::filesystem::path(FidelityFX::PluginDir);
 	FidelityFX::dllVersions = Util::EnumerateDllVersions(pluginDir);
+	for (const auto& [name, versionStr] : FidelityFX::dllVersions)
+		logger::info("[FidelityFX] {} version: {}", name, versionStr);
 
 	if (module) {
 		logger::info("[FidelityFX] Loader DLL loaded successfully from plugin directory");
@@ -249,7 +251,7 @@ void FidelityFX::CreateFSRResources()
 		return;
 	}
 
-	auto fsrDevice = ffxGetDeviceDX11(globals::d3d::device);
+	auto fsrDevice = ffxGetDeviceDX11_Fsr31(globals::d3d::device);
 
 	uint32_t numContexts = globals::game::isVR ? 2 : 1;
 	size_t scratchBufferSize = ffxGetScratchMemorySizeDX11(numContexts);
