@@ -919,19 +919,8 @@ namespace ShadowCasterManager
 
 	// Activates a light as a normal (non-shadow) light by inserting it into
 	// the scene's active-light list without allocating a shadow slot.
-	//
-	// Lifetime note: ReturnShadowmaps() releases the light's reference held by
-	// the scene's activeShadowLights list. If no other strong reference exists
-	// (no NiPointer<>, no other engine list referencing it), the BSShadowLight
-	// is freed immediately and tbbmalloc/EngineFixes zeroes the memory block.
-	// We must hold a strong reference across the ReturnShadowmaps -> push_back
-	// -> GameEnableLight sequence; otherwise s_normalConvert ends up holding a
-	// dangling pointer and GameEnableLight dereferences freed memory.
 	static void ConvertLight(RE::BSShadowLight* light, RE::ShadowSceneNode* ssn, bool isNS)
 	{
-		if (!light || !ssn)
-			return;
-
 		// Already converted: just re-enable so geometry picks it up this frame.
 		for (auto& c : s_normalConvert) {
 			if (c.light == light) {
@@ -939,12 +928,6 @@ namespace ShadowCasterManager
 				return;
 			}
 		}
-
-		// Take a strong reference so ReturnShadowmaps can't free us out from
-		// under. Released when this function returns; by then GameEnableLight
-		// has inserted the light into the scene's normal-light list which
-		// keeps it alive for subsequent frames.
-		RE::NiPointer<RE::BSShadowLight> keepalive(light);
 
 		// Prepass: release shadow resources.
 		auto* cull = GetLightCullingProcess(light);
@@ -1192,12 +1175,6 @@ namespace ShadowCasterManager
 			if (wantCount < s_settings.ShadowLightCount) {
 				c.chosen = true;
 				wantCount++;
-			} else if (s_settings.ConvertExcessToNormal) {
-				// Excess candidates: keep them lighting the scene as normal
-				// (non-shadow) lights instead of dropping them entirely.
-				// Matches the original Intellightent behaviour of preserving
-				// diffuse contribution even when a shadow slot is unavailable.
-				ConvertLight(l, ssn, false);
 			} else {
 				DisableLight(l);
 			}
