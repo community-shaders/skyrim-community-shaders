@@ -2723,7 +2723,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(LLFDEBUG)
 		uint llfShadowType = (light.lightFlags & LightLimitFix::LightFlags::Shadow &&
 								 light.shadowMapIndex < SharedData::lightLimitFixSettings.ShadowMapSlots) ?
-		                         (uint)Shadows[light.shadowMapIndex].ShadowParam.x :
+		                         (uint)LightLimitFix::Shadows[light.shadowMapIndex].ShadowLightParam.x :
 		                         0;
 		LightLimitFix::LLFDebugAccumulate(llfDebug, light, shadowComponent, shadowCoverage, llfShadowType);
 #			endif

@@ -64,9 +64,9 @@ struct LLFDebugInfo
 	uint OverflowCount;      // shadow lights whose slot index exceeded ShadowMapSlots
 	uint FirstShadowIndex;   // shadowMapIndex of first valid shadow light
 	bool HasFirstShadow;
-	uint SpotCount;  // ShadowParam.x == 0
-	uint HemiCount;  // ShadowParam.x == 1
-	uint OmniCount;  // ShadowParam.x == 2
+	uint SpotCount;  // ShadowLightParam.x == 0
+	uint HemiCount;  // ShadowLightParam.x == 1
+	uint OmniCount;  // ShadowLightParam.x == 2
 };
 
 LLFDebugInfo LLFDebugInfoInit()
@@ -86,8 +86,8 @@ LLFDebugInfo LLFDebugInfoInit()
 
 // Call once per clustered/strict light after sampling its shadow.
 // shadowCoverage should be the hasCoverage output from GetShadowLightShadow.
-// shadowType should be (uint)Shadows[light.shadowMapIndex].ShadowParam.x when
-// light.shadowMapIndex < ShadowMapSlots, or any value otherwise (it won't be read).
+// shadowType should be (uint)LightLimitFix::Shadows[light.shadowMapIndex].ShadowLightParam.x
+// when light.shadowMapIndex < ShadowMapSlots, or any value otherwise (it won't be read).
 void LLFDebugAccumulate(inout LLFDebugInfo di, Light light, float shadowComponent, bool shadowCoverage,
 	uint shadowType)
 {

@@ -69,7 +69,7 @@ namespace LightLimitFix
 		float4 ShadowLightParam;
 	};
 
-	StructuredBuffer<ShadowLightData> ShadowsLights : register(t100);
+	StructuredBuffer<ShadowLightData> Shadows : register(t100);
 	Texture2DArray<float> ShadowMaps : register(t101);
 	Texture2DArray<float> DirectionalShadowCascades : register(t99);
 
@@ -204,7 +204,7 @@ namespace LightLimitFix
 	{
 		hasCoverage = true;  // default: paraboloid lights always sample
 
-		ShadowLightData shadowLightData = ShadowsLights[shadowIndex];
+		ShadowLightData shadowLightData = Shadows[shadowIndex];
 
 		[flatten] if (shadowLightData.ShadowLightParam.y == 0) return 1.0;
 		[flatten] if (shadowLightData.ShadowLightParam.y < 0) return 0.0;
