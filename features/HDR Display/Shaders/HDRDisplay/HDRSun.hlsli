@@ -14,9 +14,6 @@ namespace HDRSun
 	static const float kMenuSunNits = 100.0f;
 	// Keep a floor to avoid dimming below SDR behavior.
 	static const float kMinHdrSunBoost = 1.0f;
-	// Normalizes distance from UV center to corner into [0..1] over a unit square.
-	static const float kUvCornerDistanceScale = 1.41421356f;  // sqrt(2)
-
 	inline bool IsHdrSunActive()
 	{
 		return SharedData::HDRData.x > 0.5f && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun);
@@ -47,7 +44,7 @@ namespace HDRSun
 		float radialWeight = 1.0f;
 #	if defined(TEX)
 		float2 uv = saturate(texCoord0_xy);
-		float r = saturate(length(uv - 0.5f) * kUvCornerDistanceScale);
+		float r = saturate(length(uv - 0.5f) * sqrt(2.0f));
 		radialWeight = saturate(1.0f - r);
 #	endif
 
