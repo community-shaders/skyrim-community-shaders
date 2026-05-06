@@ -1349,6 +1349,25 @@ namespace Util
 		}
 	}
 
+	void DrawDllVersionTable(
+		const char* label,
+		const wchar_t* pluginDir,
+		const std::vector<std::pair<std::string, std::string>>& dllVersions,
+		const char* tableId)
+	{
+		if (ImGui::Selectable(label)) {
+			auto realPath = Util::PathHelpers::GetRealPathFromDataRelative(pluginDir);
+			ShellExecuteW(nullptr, L"open", realPath.empty() ? pluginDir : realPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+		}
+		std::vector<std::string> headers = { "DLL Name", "Version" };
+		std::vector<std::vector<std::string>> rows;
+		rows.reserve(dllVersions.size());
+		for (const auto& [name, version] : dllVersions)
+			rows.push_back({ name, version });
+		std::vector<TableSortFunc> sorters = { nullptr, VersionSortComparator };
+		ShowSortedStringTableStrings(tableId, headers, rows, 0, true, sorters);
+	}
+
 	// Theme-aware color accessor functions
 	namespace Colors
 	{
