@@ -1168,19 +1168,18 @@ namespace ShadowCasterManager
 				c.invalid = true;
 				continue;
 			}
-			auto* cull = GetLightCullingProcess(l);
-			if (!cull) {
-				c.invalid = true;
-				continue;
-			}
 			// Portal culling only applies in interior cells where a portal graph exists.
-			// Exterior lights (portal == nullptr) are unconditionally visible; skip the check.
-			auto* portal = reinterpret_cast<RE::BSPortalGraphEntry*>(cull->portalGraphEntry);
-			if (portal) {
-				auto* gPortal = globalCull ? reinterpret_cast<RE::BSPortalGraphEntry*>(globalCull->portalGraphEntry) : nullptr;
-				if (gPortal && !GamePortalHasSharedVisibility(gPortal, portal)) {
-					c.invalid = true;
-					continue;
+			// Lights with no culling process (e.g. WSU spotlights outside cell bounds)
+			// or no portal are unconditionally visible; skip the check for them.
+			auto* cull = GetLightCullingProcess(l);
+			if (cull) {
+				auto* portal = reinterpret_cast<RE::BSPortalGraphEntry*>(cull->portalGraphEntry);
+				if (portal) {
+					auto* gPortal = globalCull ? reinterpret_cast<RE::BSPortalGraphEntry*>(globalCull->portalGraphEntry) : nullptr;
+					if (gPortal && !GamePortalHasSharedVisibility(gPortal, portal)) {
+						c.invalid = true;
+						continue;
+					}
 				}
 			}
 
@@ -1614,13 +1613,14 @@ namespace ShadowCasterManager
 
 					ShadowField(e.Light, maskIndex) = static_cast<uint32_t>(slot);
 					doneLightCount++;
-				} else {
-					// Cached-shadow path: DisableLight here, GameSetShadowCasterSlot
-					// in Phase 7 re-adds at endIdx.  Matches the old activation-loop
-					// else branch + cached-slot loop pairing.
-					if (e.Light && isAliveNow(e.Light))
-						DisableLight(e.Light);
 				}
+				// Cached-shadow path (chosen + !RedrawFrame, or i >= ShadowLightCount):
+				// do nothing here. The non-redrawn light keeps its stale shadow map and
+				// is re-inserted by the GameSetShadowCasterSlot loop below at endIdx.
+				// Calling DisableLight here would invoke ReturnShadowmaps, releasing the
+				// cached shadow data for one frame and producing visible flicker that
+				// worsens as the budget gets more constrained.
+				// Restored from 8176f95e2 (lost in May-1 reset).
 				continue;
 			}
 
