@@ -29,9 +29,9 @@ namespace ImageBasedLighting
 		sh2 shR = EnvIBLTexture.Load(int3(0, 0, 0));
 		sh2 shG = EnvIBLTexture.Load(int3(1, 0, 0));
 		sh2 shB = EnvIBLTexture.Load(int3(2, 0, 0));
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
+		float colorR = SphericalHarmonics::Unproject(shR, rayDir);
+		float colorG = SphericalHarmonics::Unproject(shG, rayDir);
+		float colorB = SphericalHarmonics::Unproject(shB, rayDir);
 		return float3(colorR, colorG, colorB) / Math::PI;
 	}
 
@@ -41,9 +41,9 @@ namespace ImageBasedLighting
 		sh2 shR = SkyIBLTexture.Load(int3(0, 0, 0));
 		sh2 shG = SkyIBLTexture.Load(int3(1, 0, 0));
 		sh2 shB = SkyIBLTexture.Load(int3(2, 0, 0));
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
+		float colorR = SphericalHarmonics::Unproject(shR, rayDir);
+		float colorG = SphericalHarmonics::Unproject(shG, rayDir);
+		float colorB = SphericalHarmonics::Unproject(shB, rayDir);
 		return max(0, float3(colorR, colorG, colorB) / Math::PI);
 	}
 
@@ -65,9 +65,9 @@ namespace ImageBasedLighting
 		sh2 iblSHG = EnvIBLTexture.Load(int3(1, 0, 0));
 		sh2 iblSHB = EnvIBLTexture.Load(int3(2, 0, 0));
 
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHR, float3(0, 0, 0));
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHG, float3(0, 0, 0));
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHB, float3(0, 0, 0));
+		float colorR = SphericalHarmonics::Unproject(iblSHR, float3(0, 0, 0));
+		float colorG = SphericalHarmonics::Unproject(iblSHG, float3(0, 0, 0));
+		float colorB = SphericalHarmonics::Unproject(iblSHB, float3(0, 0, 0));
 		float3 ibl0 = max(0, float3(colorR, colorG, colorB) / Math::PI);
 
 		if (SharedData::iblSettings.DALCMode == 1) {
@@ -137,8 +137,6 @@ namespace ImageBasedLighting
 			linEnv = GetEnvIBLColor(rayDir);
 			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
 		}
-		if (SharedData::enbSettings.Enable)
-			linSky *= (-rayDir.z * 0.65 + 0.35);
 		return Color::IrradianceToGamma(linEnv + linSky);
 	}
 
