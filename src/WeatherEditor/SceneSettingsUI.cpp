@@ -4,6 +4,7 @@
 #include <cmath>
 #include <map>
 #include <set>
+#include <tuple>
 
 #include "../Globals.h"
 #include "../Menu.h"
@@ -42,18 +43,6 @@ namespace SceneSettingsUI
 		return group;
 	}
 
-	void DrawGroupSeparator(bool& firstGroup)
-	{
-		if (!firstGroup) {
-			auto sepColor = ImGui::GetStyleColorVec4(ImGuiCol_Separator);
-			sepColor.w *= C::SCENE_GROUP_SEPARATOR_ALPHA;
-			ImGui::PushStyleColor(ImGuiCol_Separator, sepColor);
-			ImGui::Separator();
-			ImGui::PopStyleColor();
-		}
-		firstGroup = false;
-	}
-
 	void SplitBySource(const std::vector<SceneSettingsManager::SettingEntry>& entries,
 		std::vector<size_t>& overwriteOut, std::vector<size_t>& userOut)
 	{
@@ -67,6 +56,35 @@ namespace SceneSettingsUI
 		std::sort(sorted.begin(), sorted.end(), std::greater<>());
 		for (auto idx : sorted)
 			removeFn(idx);
+	}
+
+	using SettingEntry = SceneSettingsManager::SettingEntry;
+	using OverrideKey = std::tuple<std::string, std::string, int>;
+
+	static OverrideKey MakeOverrideKey(const SettingEntry& entry)
+	{
+		return { entry.featureShortName, entry.settingKey, static_cast<int>(entry.period) };
+	}
+
+	static std::set<OverrideKey> BuildActiveOverrideSet(const std::vector<SettingEntry>& entries)
+	{
+		std::set<OverrideKey> overrides;
+		for (const auto& entry : entries)
+			if (entry.source == EntrySource::Overwrite && !entry.paused)
+				overrides.insert(MakeOverrideKey(entry));
+		return overrides;
+	}
+
+	static bool IsOverridden(const std::set<OverrideKey>& overrides, const SettingEntry& entry)
+	{
+		return !overrides.empty() && overrides.contains(MakeOverrideKey(entry));
+	}
+
+	static bool HasOverriddenUserEntries(const std::vector<SettingEntry>& entries)
+	{
+		auto overrides = BuildActiveOverrideSet(entries);
+		return std::any_of(entries.begin(), entries.end(),
+			[&](const auto& entry) { return entry.source == EntrySource::User && IsOverridden(overrides, entry); });
 	}
 
 	/// Request a confirmation popup for deleting overwrite entries by indices.
@@ -124,7 +142,6 @@ namespace SceneSettingsUI
 
 	// Core add-setting dialog: renders UI and delegates data ops to callbacks.
 	static void DrawAddDialogCore(AddSettingState& state, Period period, bool addToAllPeriods,
-		std::function<std::vector<std::string>()> featureNamesFn,
 		std::function<std::vector<std::string>(const std::string&)> settingKeysFn,
 		std::function<bool(const std::string&, const std::string&, Period)> isAddedFn,
 		std::function<void(const std::string&, const std::string&, const json&, Period)> addFn)
@@ -132,17 +149,14 @@ namespace SceneSettingsUI
 		if (!state.dialogOpen)
 			return;
 
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowPos(ImGui::GetMousePos(), ImGuiCond_Appearing);
 		ImGui::SetNextWindowSize(ImVec2(C::Em(C::SCENE_ADD_DIALOG_WIDTH_EM), 0));
+		auto windowTitle = std::format("Add Feature Settings##{:x}", reinterpret_cast<uintptr_t>(&state));
 
-		if (!Util::BeginWithRoundedClose("Add Feature Settings", &state.dialogOpen, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (!Util::BeginWithRoundedClose(windowTitle.c_str(), &state.dialogOpen, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::End();
 			return;
 		}
-
-		if (state.cachedFeatureNames.empty())
-			state.cachedFeatureNames = featureNamesFn();
 
 		auto displayName = (state.selectedFeatureIdx >= 0 &&
 							   state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size())) ?
@@ -235,7 +249,6 @@ namespace SceneSettingsUI
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
 		DrawAddDialogCore(state, period, addToAllPeriods,
-			[type]() { return GetFeatureNamesForType(type); },
 			[type](const std::string& feat) { return (type == SceneType::TimeOfDay) ? SceneSettingsManager::GetTransitionableSettingKeys(feat) : SceneSettingsManager::GetFeatureSettingKeys(feat); },
 			[type](const std::string& feat, const std::string& key, Period p) { return IsAlreadyAdded(type, feat, key, p); },
 			[=](const std::string& feat, const std::string& key, const json& val, Period p) { manager->AddSetting(type, feat, key, val, p); });
@@ -245,7 +258,6 @@ namespace SceneSettingsUI
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
 		DrawAddDialogCore(state, period, addToAllPeriods,
-			[]() { return SceneSettingsManager::GetExteriorRelevantFeatureNames(); },
 			[](const std::string& feat) { return SceneSettingsManager::GetTransitionableSettingKeys(feat); },
 			[=](const std::string& feat, const std::string& key, Period p) { return manager->HasWeatherEntryForPeriod(weatherId, feat, key, p); },
 			[=](const std::string& feat, const std::string& key, const json& val, Period p) { manager->AddWeatherSetting(weatherId, feat, key, val, p); });
@@ -471,13 +483,16 @@ namespace SceneSettingsUI
 
 			for (int i = 0; i < numValueColumns; ++i) {
 				ImGui::TableSetColumnIndex(1 + i);
+				ImVec2 cellMin = ImGui::GetCursorScreenPos();
+				float colW = ImGui::GetContentRegionAvail().x;
 				ImGui::Text("%s", SceneSettingsManager::kPeriodNames[i]);
+				ImVec2 cellMax(cellMin.x + colW, ImGui::GetItemRectMax().y);
 
 				const auto& indices = perColumn[i];
 				if (!indices.empty()) {
 					ImGui::PushID(i);
 					ImGuiID colId = ImGui::GetID("##colFlyout");
-					if (Util::BeginFlyout(flyout.col, colId)) {
+					if (Util::BeginFlyout(flyout.col, colId, cellMin, cellMax)) {
 						bool allPaused = std::all_of(indices.begin(), indices.end(),
 							[&](size_t idx) { return idx < entries.size() && entries[idx].paused; });
 						auto result = DrawFlyoutControls(allPaused, true, isOverwrite);
@@ -507,6 +522,8 @@ namespace SceneSettingsUI
 		// Data rows
 		auto& theme = globals::menu->GetSettings().Theme;
 		std::string lastFeature;
+
+		auto overrideSet = (source == EntrySource::User) ? BuildActiveOverrideSet(entries) : std::set<OverrideKey>{};
 
 		for (const auto& sid : group.order) {
 			// Feature header
@@ -541,6 +558,7 @@ namespace SceneSettingsUI
 			ImGui::TableSetColumnIndex(0);
 			ImVec2 cellStart = ImGui::GetCursorScreenPos();
 			float cellWidth = ImGui::GetContentRegionAvail().x;
+			const float labelRowStartY = ImGui::GetCursorPosY();
 
 			ImGui::PushID(sid.key.c_str());
 			ImGui::PushID(sid.feature.c_str());
@@ -582,6 +600,7 @@ namespace SceneSettingsUI
 			}
 
 			ImGui::SetWindowFontScale(1.0f);
+			const float labelContentH = ImGui::GetCursorPosY() - labelRowStartY;
 
 			// Row-level flyout (only for multi-column to avoid duplicate controls)
 			if (multiColumn) {
@@ -617,8 +636,6 @@ namespace SceneSettingsUI
 			}
 
 			ImGui::Unindent(C::Em(C::SCENE_ENTRY_INDENT_EM));
-			ImGui::PopID();
-			ImGui::PopID();
 
 			// Value columns
 			if (multiColumn) {
@@ -627,7 +644,22 @@ namespace SceneSettingsUI
 					size_t entryIndex = perKey[p];
 
 					if (entryIndex == SIZE_MAX) {
-						ImGui::TextDisabled("--");
+						if (source == EntrySource::User && cb.onAddPeriod) {
+							ImGui::PushID(p);
+							const float btnSz = C::Em(C::SCENE_ADD_PERIOD_BTN_EM);
+							const float cellW = ImGui::GetContentRegionAvail().x;
+							const float visualH = labelContentH - ImGui::GetStyle().ItemSpacing.y;
+							ImGui::SetCursorPos(ImVec2(
+								ImGui::GetCursorPosX() + std::max(0.f, (cellW - btnSz) * 0.5f),
+								ImGui::GetCursorPosY() + std::max(0.f, (visualH - btnSz) * 0.5f)));
+							ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.f, 0.f));
+							if (ImGui::Button("+", ImVec2(btnSz, btnSz)))
+								cb.onAddPeriod(sid.feature, sid.key, p);
+							ImGui::PopStyleVar();
+							ImGui::PopID();
+						} else {
+							ImGui::TextDisabled("--");
+						}
 						continue;
 					}
 
@@ -637,7 +669,17 @@ namespace SceneSettingsUI
 					if (entry.paused)
 						ImGui::BeginDisabled();
 
+					bool isOverridden = IsOverridden(overrideSet, entry);
+					if (isOverridden) {
+						const auto& ec = theme.StatusPalette.Error;
+						ImGui::PushStyleColor(ImGuiCol_Text, ec);
+						ImGui::PushStyleColor(ImGuiCol_CheckMark, ec);
+					}
+
 					cb.drawEditor(entryIndex, ImGui::GetContentRegionAvail().x, entry.source == EntrySource::Overwrite);
+
+					if (isOverridden)
+						ImGui::PopStyleColor(2);
 
 					if (entry.paused)
 						ImGui::EndDisabled();
@@ -682,13 +724,25 @@ namespace SceneSettingsUI
 
 					ImGui::PushID(static_cast<int>(displayIndex));
 
+					bool isOverridden = std::any_of(rowIndices.begin(), rowIndices.end(),
+						[&](size_t i) { return i < entries.size() && IsOverridden(overrideSet, entries[i]); });
+
 					if (anyPaused)
 						ImGui::BeginDisabled();
+
+					if (isOverridden) {
+						const auto& ec = theme.StatusPalette.Error;
+						ImGui::PushStyleColor(ImGuiCol_Text, ec);
+						ImGui::PushStyleColor(ImGuiCol_CheckMark, ec);
+					}
 
 					if (cb.drawEditorMulti)
 						cb.drawEditorMulti(rowIndices, ImGui::GetContentRegionAvail().x, isOverwrite);
 					else
 						cb.drawEditor(displayIndex, ImGui::GetContentRegionAvail().x, isOverwrite);
+
+					if (isOverridden)
+						ImGui::PopStyleColor(2);
 
 					if (anyPaused)
 						ImGui::EndDisabled();
@@ -721,6 +775,13 @@ namespace SceneSettingsUI
 					ImGui::PopID();
 				}
 			}
+
+			// Suppress row flyout when a cell flyout is active to prevent accidental whole-row deletion
+			if (flyout.cell.isOpen && !flyout.cell.closing && flyout.row.isOpen && !flyout.row.flyoutHovered)
+				flyout.row.closing = true;
+
+			ImGui::PopID();
+			ImGui::PopID();
 		}
 
 		ImGui::EndTable();
@@ -744,7 +805,7 @@ namespace SceneSettingsUI
 
 	bool DrawSectionHeader(const char* label, const char* idSuffix,
 		bool allPaused, std::function<void()> onTogglePause, std::function<void()> onDeleteAll,
-		int numValueColumns, std::function<void()> onExportAll)
+		int numValueColumns, std::function<void()> onExportAll, bool hasActiveOverrides)
 	{
 		ImGui::Spacing();
 		float w = GetSectionWidth(numValueColumns);
@@ -753,6 +814,12 @@ namespace SceneSettingsUI
 		bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 
 		if (open) {
+			if (hasActiveOverrides) {
+				auto& theme = globals::menu->GetSettings().Theme;
+				ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
+				ImGui::TextWrapped("Feature values are being overridden. Pause overwrites to see changes.");
+				ImGui::PopStyleColor();
+			}
 			if (onExportAll) {
 				if (ImGui::SmallButton(std::format("Export All{}", idSuffix).c_str()))
 					onExportAll();
@@ -767,6 +834,15 @@ namespace SceneSettingsUI
 		return open;
 	}
 
+	static bool DrawSelectedCheckbox(const std::string& label, uint8_t& selected)
+	{
+		bool checked = selected != 0;
+		if (!ImGui::Checkbox(label.c_str(), &checked))
+			return false;
+		selected = checked ? 1 : 0;
+		return true;
+	}
+
 	void EndSection()
 	{
 		ImGui::EndChild();
@@ -777,7 +853,8 @@ namespace SceneSettingsUI
 		const char* popupId,
 		const std::vector<SceneSettingsManager::SettingEntry>& entries,
 		ExportAllPopupState& state,
-		std::function<void(const std::vector<size_t>&)> exportFn)
+		std::function<void(const std::vector<size_t>&)> exportFn,
+		bool showPeriod = true)
 	{
 		if (!state.dialogOpen)
 			return;
@@ -803,17 +880,36 @@ namespace SceneSettingsUI
 
 		ImGui::Spacing();
 		if (ImGui::BeginChild("##ExportList", ImVec2(-FLT_MIN, C::Em(C::SCENE_ADD_LIST_HEIGHT_EM)), ImGuiChildFlags_Borders)) {
-			for (size_t i = 0; i < state.userIndices.size(); ++i) {
-				auto idx = state.userIndices[i];
-				if (idx >= entries.size())
-					continue;
-				const auto& e = entries[idx];
-				auto label = e.period != SceneSettingsManager::TimeOfDayPeriod::Count
-					? std::format("{} — {} ({})", SceneSettingsManager::GetFeatureDisplayName(e.featureShortName),
-						Util::PrettifyIdentifier(e.settingKey), SceneSettingsManager::GetPeriodName(e.period))
-					: std::format("{} — {}", SceneSettingsManager::GetFeatureDisplayName(e.featureShortName),
-						Util::PrettifyIdentifier(e.settingKey));
-				ImGui::Checkbox(std::format("{}##exp{}", label, i).c_str(), reinterpret_cast<bool*>(&state.selected[i]));
+			if (showPeriod) {
+				for (size_t i = 0; i < state.userIndices.size(); ++i) {
+					auto idx = state.userIndices[i];
+					if (idx >= entries.size())
+						continue;
+					const auto& e = entries[idx];
+					auto label = e.period != SceneSettingsManager::TimeOfDayPeriod::Count
+						? std::format("{} \u2014 {} ({})", SceneSettingsManager::GetFeatureDisplayName(e.featureShortName),
+							Util::PrettifyIdentifier(e.settingKey), SceneSettingsManager::GetPeriodName(e.period))
+						: std::format("{} \u2014 {}", SceneSettingsManager::GetFeatureDisplayName(e.featureShortName),
+							Util::PrettifyIdentifier(e.settingKey));
+					DrawSelectedCheckbox(std::format("{}##exp{}", label, i), state.selected[i]);
+				}
+			} else {
+				using GroupKey = std::pair<std::string, std::string>;
+				std::map<GroupKey, std::vector<size_t>> groups;
+				for (size_t i = 0; i < state.userIndices.size(); ++i) {
+					auto idx = state.userIndices[i];
+					if (idx < entries.size())
+						groups[{ entries[idx].featureShortName, entries[idx].settingKey }].push_back(i);
+				}
+				for (auto& [gk, stateIs] : groups) {
+					bool checked = std::all_of(stateIs.begin(), stateIs.end(), [&](size_t i) { return state.selected[i]; });
+					auto label = std::format("{} \u2014 {}##expg{}{}",
+						SceneSettingsManager::GetFeatureDisplayName(gk.first), Util::PrettifyIdentifier(gk.second),
+						gk.first, gk.second);
+					if (ImGui::Checkbox(label.c_str(), &checked))
+						for (auto i : stateIs)
+							state.selected[i] = checked ? 1 : 0;
+				}
 			}
 		}
 		ImGui::EndChild();
@@ -845,13 +941,13 @@ namespace SceneSettingsUI
 			});
 	}
 
-	void DrawWeatherExportAllPopup(RE::FormID weatherId, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state)
+	void DrawWeatherExportAllPopup(RE::FormID weatherId, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state, bool showTod)
 	{
 		auto popupId = std::format("Export User Settings##wx{:08X}", weatherId);
 		DrawExportPopupCore(popupId.c_str(), entries, state,
 			[weatherId](const std::vector<size_t>& indices) {
 				SceneSettingsManager::GetSingleton()->ExportWeatherUserSettingsToOverwrites(weatherId, indices);
-			});
+			}, showTod);
 	}
 
 	bool DrawCategoryPanel(const char* category, const std::string& selected, void (*drawFn)())
@@ -937,7 +1033,7 @@ namespace SceneSettingsUI
 			if (DrawSectionHeader("User Settings", "##iusr", manager->AreAllUserPaused(SceneType::InteriorOnly),
 					[&] { manager->SetAllUserPaused(SceneType::InteriorOnly, !manager->AreAllUserPaused(SceneType::InteriorOnly)); },
 					[&] { s_interiorPopups.deleteAllUser.Request(); }, 1,
-					[&] { s_interiorExportState.Open(userIndices); }))
+					[&] { s_interiorExportState.Open(userIndices); }, HasOverriddenUserEntries(entries)))
 				DrawSourceTable(userGroup, entries, "##InteriorUsr", EntrySource::User, 1, &s_interiorPopups, s_interiorTableFlyout, cb);
 			EndSection();
 		}
@@ -1010,7 +1106,11 @@ namespace SceneSettingsUI
 			nullptr,
 			[](size_t idx) { SceneSettingsManager::GetSingleton()->TogglePauseEntry(SceneType::TimeOfDay, idx); },
 			[](size_t idx) { SceneSettingsManager::GetSingleton()->RevertEntryToDefault(SceneType::TimeOfDay, idx); },
-			[](size_t idx) { SceneSettingsManager::GetSingleton()->RemoveSetting(SceneType::TimeOfDay, idx); }
+			[](size_t idx) { SceneSettingsManager::GetSingleton()->RemoveSetting(SceneType::TimeOfDay, idx); },
+			[](const std::string& feat, const std::string& key, int p) {
+				SceneSettingsManager::GetSingleton()->AddSetting(SceneType::TimeOfDay, feat, key,
+					SceneSettingsManager::GetFeatureSettingValue(feat, key), static_cast<Period>(p));
+			}
 		};
 
 		auto overwriteGroup = BuildSourceGroup(entries, EntrySource::Overwrite);
@@ -1028,7 +1128,7 @@ namespace SceneSettingsUI
 			if (DrawSectionHeader("User Settings", "##tusr", manager->AreAllUserPaused(SceneType::TimeOfDay),
 					[&] { manager->SetAllUserPaused(SceneType::TimeOfDay, !manager->AreAllUserPaused(SceneType::TimeOfDay)); },
 					[&] { s_todPopups.deleteAllUser.Request(); }, kPeriodCount,
-					[&] { s_todExportState.Open(userIndices); }))
+					[&] { s_todExportState.Open(userIndices); }, HasOverriddenUserEntries(entries)))
 				DrawSourceTable(userGroup, entries, "##TODUser", EntrySource::User, kPeriodCount, &s_todPopups, s_todTableFlyout, cb);
 			EndSection();
 		}
@@ -1057,12 +1157,17 @@ namespace SceneSettingsUI
 			       nullptr,
 			[weatherId](size_t idx) { SceneSettingsManager::GetSingleton()->TogglePauseWeatherEntry(weatherId, idx); },
 			[weatherId](size_t idx) { SceneSettingsManager::GetSingleton()->RevertWeatherEntryToDefault(weatherId, idx); },
-			[weatherId](size_t idx) { SceneSettingsManager::GetSingleton()->RemoveWeatherSetting(weatherId, idx); }
+			[weatherId](size_t idx) { SceneSettingsManager::GetSingleton()->RemoveWeatherSetting(weatherId, idx); },
+			[weatherId](const std::string& feat, const std::string& key, int p) {
+				SceneSettingsManager::GetSingleton()->AddWeatherSetting(weatherId, feat, key,
+					SceneSettingsManager::GetFeatureSettingValue(feat, key), static_cast<Period>(p));
+			}
 		};
 	}
 
 	static void DrawWeatherSections(RE::FormID weatherId, WeatherPanelState& state, int numValueColumns)
 	{
+		bool showTod = numValueColumns > 1;
 		auto* manager = SceneSettingsManager::GetSingleton();
 		const auto& entries = manager->GetWeatherConfig(weatherId).entries;
 		auto cb = MakeWeatherCallbacks(weatherId, numValueColumns == 1);
@@ -1092,11 +1197,11 @@ namespace SceneSettingsUI
 					[&] { for (auto idx : userIndices) if (entries[idx].paused == allPaused) manager->TogglePauseWeatherEntry(weatherId, idx); },
 					[&] { RemoveIndicesReversed(userIndices, [&](size_t idx) { manager->RemoveWeatherSetting(weatherId, idx); }); },
 					numValueColumns,
-					[&] { state.exportState.Open(userIndices); }))
+					[&] { state.exportState.Open(userIndices); }, HasOverriddenUserEntries(entries)))
 				DrawSourceTable(group, entries, "##WxUser", EntrySource::User, numValueColumns, nullptr, state.tableFlyout, cb);
 			EndSection();
 		}
-		DrawWeatherExportAllPopup(weatherId, entries, state.exportState);
+		DrawWeatherExportAllPopup(weatherId, entries, state.exportState, showTod);
 	}
 
 	void DrawWeatherScenePanel(RE::FormID weatherId)

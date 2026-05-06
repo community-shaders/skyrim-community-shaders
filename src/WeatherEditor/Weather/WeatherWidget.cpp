@@ -160,7 +160,6 @@ void WeatherWidget::DrawWidget()
 		ImGuiTabItemFlags atmosphereFlags = (activeTabOverride == "Atmosphere Colors") ? ImGuiTabItemFlags_SetSelected : 0;
 		ImGuiTabItemFlags cloudsFlags = (activeTabOverride == "Clouds") ? ImGuiTabItemFlags_SetSelected : 0;
 		ImGuiTabItemFlags fogFlags = (activeTabOverride == "Fog") ? ImGuiTabItemFlags_SetSelected : 0;
-		ImGuiTabItemFlags featuresFlags = (activeTabOverride == "Features") ? ImGuiTabItemFlags_SetSelected : 0;
 		ImGuiTabItemFlags recordsFlags = (activeTabOverride == "Records") ? ImGuiTabItemFlags_SetSelected : 0;
 		ImGuiTabItemFlags sceneFlags = (activeTabOverride == "Scene Settings") ? ImGuiTabItemFlags_SetSelected : 0;
 		if (!activeTabOverride.empty()) {
@@ -203,13 +202,6 @@ void WeatherWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Fog", nullptr, fogFlags)) {
 			BeginScrollableContent("##FogScroll");
 			DrawFogSettings();
-			EndScrollableContent();
-			ImGui::EndTabItem();
-		}
-
-		if (ImGui::BeginTabItem("Features", nullptr, featuresFlags)) {
-			BeginScrollableContent("##FeaturesScroll");
-			DrawFeatureSettings();
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
@@ -1847,12 +1839,9 @@ void WeatherWidget::DrawFeatureSettings()
 
 void WeatherWidget::NavigateToFeatureSetting(const std::string& featureName, const std::string& settingName)
 {
-	// Store the navigation request
 	pendingFeatureNavigation = featureName;
 	pendingSettingHighlight = settingName;
-
-	// Switch to Features tab
-	activeTabOverride = "Features";
+	activeTabOverride = "Scene Settings";
 }
 
 void WeatherWidget::UpdateSearchResults()

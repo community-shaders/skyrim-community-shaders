@@ -204,9 +204,8 @@ public:
 		static constexpr float SCENE_TOD_FEATURE_TEXT_SCALE = 0.85f;   // Smaller text scale for feature names in TOD table
 		static constexpr float SCENE_SETTING_MAX_LINES = 2;            // Max visible lines for setting names in table rows
 		static constexpr float SCENE_SECTION_HEADER_TARGET_COLS = 4.3f; // Header extends as if this many value columns exist
-		static constexpr float SCENE_GROUP_SEPARATOR_ALPHA = 0.4f;     // Alpha for light separators between feature groups
+		static constexpr float SCENE_ADD_PERIOD_BTN_EM = 1.2f;          // Size of + button in empty period cells
 		static constexpr float SCENE_ADD_DIALOG_WIDTH_EM = 22.0f;      // Width of add-setting dialog
-		static constexpr float SCENE_ADD_DIALOG_HEIGHT_EM = 20.0f;     // Max height of add-setting dialog
 		static constexpr float SCENE_ADD_LIST_HEIGHT_EM = 12.0f;       // Height of scrollable setting list in dialog
 		static constexpr float FLYOUT_BUTTON_SCALE = 0.8f;            // Button size relative to frame height
 		static constexpr float FLYOUT_TOGGLE_SCALE = 0.7f;            // Toggle icon scale within flyout

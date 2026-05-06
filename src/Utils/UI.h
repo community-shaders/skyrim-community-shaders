@@ -1444,6 +1444,8 @@ namespace Util
 		float openProgress = 0.f;  // Slide animation progress (0..1)
 		ImVec2 sourceMin{};      // Source item rect min (for hover tracking)
 		ImVec2 sourceMax{};      // Source item rect max (for hover tracking)
+		ImVec2 lastSize{};       // Flyout window size from previous frame, used to clamp position
+		bool draggedFromFlyout = false;  // True while a drag that started inside the flyout is active
 	};
 
 	/// Begin a flyout below the last item. Returns true if the flyout is visible.

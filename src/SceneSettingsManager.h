@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <map>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -140,7 +141,6 @@ public:
 
 	void SetAllOverwritesPaused(SceneType type, bool paused);
 	bool AreAllOverwritesPaused(SceneType type) const;
-	bool HasOverwriteEntries(SceneType type) const;
 	void DeleteAllOverwrites(SceneType type);
 
 	void SetAllUserPaused(SceneType type, bool paused);
@@ -158,9 +158,6 @@ public:
 
 	/// Called by MenuOpenCloseEventHandler when a cell transition is detected.
 	void OnCellTransition();
-
-	/// Check if a specific feature+setting is currently being overridden by any active scene setting
-	bool IsSettingControlled(const std::string& featureShortName, const std::string& settingKey) const;
 
 	/// Check if any scene settings are active for a given feature
 	bool HasActiveSettingsForFeature(const std::string& featureShortName) const;
@@ -258,7 +255,8 @@ public:
 	void DeleteAllWeatherSettings(RE::FormID weatherId);
 
 	bool HasWeatherEntryForPeriod(RE::FormID weatherId, const std::string& featureShortName,
-		const std::string& settingKey, TimeOfDayPeriod period) const;
+		const std::string& settingKey, TimeOfDayPeriod period,
+		std::optional<EntrySource> source = std::nullopt) const;
 
 	/// Weather UI preference: show TOD table vs flat view (view-only, data is always per-period).
 	bool IsWeatherShowTimeOfDay(RE::FormID weatherId) const;
@@ -332,6 +330,7 @@ private:
 	RE::FormID lastCurrentWeatherId = 0;
 	RE::FormID lastLastWeatherId = 0;
 	float lastWeatherLerp = -1.0f;
+	float lastBlendedWeatherHour = -1.0f;
 	bool isWeatherSceneActive = false;
 
 	// --- Per-Weather helpers ---
@@ -345,8 +344,10 @@ private:
 	/// Compute a single float override for a feature+key across two transitioning weathers.
 	/// Returns true if an override was computed, with the result in outValue.
 	bool ComputeWeatherBlendedFloat(const std::string& shortName, const std::string& key,
-		RE::FormID currentId, RE::FormID lastId, float weatherLerp,
-		float gameHour, float& outValue);
+		RE::FormID currentId, RE::FormID lastId, float weatherLerp, float& outValue);
+	bool IsActiveWeatherSetting(const std::string& shortName, const std::string& key) const;
+	float GetTimeOfDayPeriodFallbackFloat(float baseVal, const std::string& shortName,
+		const std::string& key, int periodIdx) const;
 
 	// --- Helpers ---
 	std::vector<SettingEntry>& GetEntriesMut(SceneType type);
@@ -357,6 +358,8 @@ private:
 
 	void ReapplyIfActive();
 	void ApplySettings(SceneType type);
+	void SaveBaselineForKeys(const std::map<std::string, std::set<std::string>>& keysToSave,
+		std::map<std::string, json>& outBaseline);
 	void SavePartialBaseline(SceneType type, std::map<std::string, json>& outBaseline);
 	void RevertFromBaseline(std::map<std::string, json>& baseline);
 	void RevertToExteriorSettings();
@@ -388,6 +391,8 @@ private:
 	/// Compute a weighted blend of float values across active TOD periods.
 	/// Uncovered periods fall back to @p baseVal so the sum is always complete.
 	float BlendFloatForPeriods(float baseVal, const std::vector<PeriodRef>& periodRefs,
+		const float* factors, const std::string& shortName, const std::string& key) const;
+	float BlendFloatForWeatherPeriods(float baseVal, const std::vector<PeriodRef>& periodRefs,
 		const float* factors, const std::string& shortName, const std::string& key) const;
 
 	/// Select the non-float value from the dominant period with type validation.

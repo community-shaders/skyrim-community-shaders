@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <tuple>
 
 #include "SceneSettingsManager.h"
 #include "Utils/UI.h"
@@ -31,9 +32,6 @@ namespace SceneSettingsUI
 	/// Build a SourceGroup from entries, optionally filtered to a single source.
 	SourceGroup BuildSourceGroup(const std::vector<SceneSettingsManager::SettingEntry>& entries,
 		EntrySource sourceFilter, bool filterBySource = true);
-
-	/// Draw a light separator between feature groups (skips the first call).
-	void DrawGroupSeparator(bool& firstGroup);
 
 	/// Split entry indices by source (Overwrite vs User).
 	void SplitBySource(const std::vector<SceneSettingsManager::SettingEntry>& entries,
@@ -111,10 +109,12 @@ namespace SceneSettingsUI
 		std::function<void(size_t idx)> togglePause;
 		std::function<void(size_t idx)> revert;
 		std::function<void(size_t idx)> remove;
+		// Optional: called when user clicks + in an empty period cell (multi-column only)
+		std::function<void(const std::string& feature, const std::string& key, int period)> onAddPeriod;
 	};
 
 	/// Draw flyout controls (toggle + revert + delete). Works for both single and group.
-	FlyoutResult DrawFlyoutControls(bool paused, bool isGroup = false);
+	FlyoutResult DrawFlyoutControls(bool paused, bool isGroup, bool isOverwrite);
 
 	void DrawValueEditor(SceneType type, size_t index, float inputWidth, bool readOnly = false);
 	void DrawWeatherValueEditor(RE::FormID weatherId, size_t index, float inputWidth, bool readOnly = false);
@@ -123,7 +123,8 @@ namespace SceneSettingsUI
 
 	bool DrawSectionHeader(const char* label, const char* idSuffix,
 		bool allPaused, std::function<void()> onTogglePause, std::function<void()> onDeleteAll,
-		int numValueColumns, std::function<void()> onExportAll = nullptr);
+		int numValueColumns, std::function<void()> onExportAll = nullptr,
+		bool hasActiveOverrides = false);
 
 	/// State for the export-to-overwrites selection popup.
 	struct ExportAllPopupState
@@ -141,7 +142,7 @@ namespace SceneSettingsUI
 	};
 
 	void DrawExportAllPopup(SceneType type, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state);
-	void DrawWeatherExportAllPopup(RE::FormID weatherId, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state);
+	void DrawWeatherExportAllPopup(RE::FormID weatherId, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state, bool showTod);
 
 	/// Draw a source table with feature-grouped rows and per-cell value editing.
 	/// @param numValueColumns 1 for single-value (Interior), kPeriodCount for TOD.

@@ -2170,7 +2170,82 @@ namespace Util
 	static constexpr float kFlyoutSlideCloseSpeed = 14.0f; // progress/sec (1→0 in ~0.07s)
 	static constexpr float kFlyoutSlideDistance = 6.0f;    // unscaled px of slide offset
 	static constexpr float kFlyoutLeftOffset = 8.0f;       // shift below-flyout left by this many unscaled px
+	static constexpr float kFlyoutGap = 2.0f;
+	static constexpr float kFlyoutAlphaScale = 4.0f;
+	static constexpr float kFlyoutWindowAlpha = 0.95f;
+	static constexpr float kFlyoutPaddingX = 6.0f;
+	static constexpr float kFlyoutPaddingY = 2.0f;
 	static constexpr float kIconShrink = 0.15f;            // shrink icon within button by this fraction
+
+	static void ResetFlyout(FlyoutState& state) noexcept
+	{
+		state.isOpen = false;
+		state.closing = false;
+		state.activeId = 0;
+		state.openProgress = 0.0f;
+		state.draggedFromFlyout = false;
+	}
+
+	static bool ContainsPoint(const ImVec2& min, const ImVec2& max, const ImVec2& point)
+	{
+		return point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y;
+	}
+
+	static ImRect GetFlyoutWindowRect()
+	{
+		auto* viewport = ImGui::GetMainViewport();
+		auto* window = ImGui::GetCurrentWindow();
+		auto* rootWin = window->RootWindow;
+
+		return ImRect(
+			ImVec2(std::max(viewport->Pos.x, rootWin->Pos.x), std::max(viewport->Pos.y, rootWin->Pos.y)),
+			ImVec2(std::min(viewport->Pos.x + viewport->Size.x, rootWin->Pos.x + rootWin->Size.x),
+				std::min(viewport->Pos.y + viewport->Size.y, rootWin->Pos.y + rootWin->Size.y)));
+	}
+
+	static bool IsRectFullyVisible(const ImVec2& min, const ImVec2& max, const ImRect& visible)
+	{
+		constexpr float edgeTolerance = 0.5f;
+		return min.x >= visible.Min.x - edgeTolerance &&
+		       min.y >= visible.Min.y - edgeTolerance &&
+		       max.x <= visible.Max.x + edgeTolerance &&
+		       max.y <= visible.Max.y + edgeTolerance;
+	}
+
+	static float ClampVisible(float value, float min, float max)
+	{
+		return std::clamp(value, min, std::max(min, max));
+	}
+
+	static bool IsFlyoutSourceHovered(const ImVec2& min, const ImVec2& max)
+	{
+		constexpr auto popupFlags = ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel;
+		return ContainsPoint(min, max, ImGui::GetIO().MousePos) &&
+		       !ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
+		       !ImGui::IsPopupOpen(nullptr, popupFlags) &&
+		       ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+	}
+
+	static ImVec2 GetFlyoutPos(FlyoutState& state, const ImVec2& hoverMin, const ImVec2& anchorMax,
+		float slideOffset, float scale, const ImRect& visible, bool& canOpen)
+	{
+		const float gap = kFlyoutGap * scale;
+		ImVec2 pos;
+
+		if (state.slideRight) {
+			pos = ImVec2(anchorMax.x + gap - slideOffset, hoverMin.y);
+			pos.y = ClampVisible(pos.y, visible.Min.y, visible.Max.y - state.lastSize.y);
+		} else {
+			pos = ImVec2(hoverMin.x - kFlyoutLeftOffset * scale, anchorMax.y + gap - slideOffset);
+			canOpen = state.lastSize.y <= 0.0f || anchorMax.y + gap + state.lastSize.y <= visible.Max.y;
+			if (state.lastSize.x > 0.0f && pos.x < visible.Min.x)
+				pos.x = visible.Min.x;
+		}
+
+		pos.x = std::floor(pos.x + 0.5f);
+		pos.y = std::floor(pos.y + 0.5f);
+		return pos;
+	}
 
 	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, bool slideRight)
 	{
@@ -2179,24 +2254,29 @@ namespace Util
 
 	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax, const ImVec2& anchorMax, bool slideRight)
 	{
-		// Use hoverMin/hoverMax for mouse detection, but anchorMax for flyout positioning
-		float dt = ImGui::GetIO().DeltaTime;
-		ImVec2 mousePos = ImGui::GetIO().MousePos;
-		bool hovered = mousePos.x >= hoverMin.x && mousePos.x <= hoverMax.x &&
-		               mousePos.y >= hoverMin.y && mousePos.y <= hoverMax.y;
+		if (slideRight && !IsRectFullyVisible(hoverMin, hoverMax, ImGui::GetCurrentWindow()->ClipRect)) {
+			ResetFlyout(state);
+			return false;
+		}
 
+		float dt = ImGui::GetIO().DeltaTime;
+		bool hovered = IsFlyoutSourceHovered(hoverMin, hoverMax);
+
+		// Open flyout: only reset openProgress if this is a fresh open (not already open on same item)
 		if (hovered && (!state.isOpen || (state.activeId != itemId && !state.flyoutHovered))) {
+			const bool freshOpen = !state.isOpen || state.activeId != itemId;
 			state.activeId = itemId;
 			state.isOpen = true;
 			state.closing = false;
-			state.closeTimer = 0.f;
-			state.openProgress = 0.f;
+			state.closeTimer = 0.0f;
+			if (freshOpen)
+				state.openProgress = 0.0f;
 			state.slideRight = slideRight;
 		}
 
 		if (hovered && state.closing && state.activeId == itemId) {
 			state.closing = false;
-			state.closeTimer = 0.f;
+			state.closeTimer = 0.0f;
 		}
 
 		if (!state.isOpen || state.activeId != itemId)
@@ -2210,33 +2290,31 @@ namespace Util
 		state.sourceMax = hoverMax;
 
 		float scale = GetUIScale();
-		float gap = 2.0f * scale;
 		float p = state.openProgress;
 		float eased = 1.0f - (1.0f - p) * (1.0f - p);
 		float slideOffset = (1.0f - eased) * kFlyoutSlideDistance * scale;
-		float alpha = std::min(p * 4.0f, 1.0f);
-
-		// Position flyout using anchorMax instead of hoverMax
-		ImVec2 flyoutPos;
-		if (state.slideRight) {
-			flyoutPos = ImVec2(anchorMax.x + gap - slideOffset, hoverMin.y);
-		} else {
-			flyoutPos = ImVec2(hoverMin.x - kFlyoutLeftOffset * scale, anchorMax.y + gap - slideOffset);
+		float alpha = std::min(p * kFlyoutAlphaScale, 1.0f);
+		bool canOpen = true;
+		ImVec2 flyoutPos = GetFlyoutPos(state, hoverMin, anchorMax, slideOffset, scale, GetFlyoutWindowRect(), canOpen);
+		if (!canOpen) {
+			ResetFlyout(state);
+			return false;
 		}
 
 		ImGui::SetNextWindowPos(flyoutPos, ImGuiCond_Always);
-		ImGui::SetNextWindowBgAlpha(0.95f * alpha);
+		ImGui::SetNextWindowBgAlpha(kFlyoutWindowAlpha * alpha);
 
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
 		                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
 
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kFlyoutRounding * scale);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale, 2.0f * scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kFlyoutPaddingX * scale, kFlyoutPaddingY * scale));
 		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
 
 		auto flyoutLabel = std::format("##flyout_{}", itemId);
 		bool visible = ImGui::Begin(flyoutLabel.c_str(), nullptr, flags);
+		state.lastSize = ImGui::GetWindowSize();
 
 		if (visible)
 			ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
@@ -2253,120 +2331,51 @@ namespace Util
 
 	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax, bool slideRight)
 	{
-		float dt = ImGui::GetIO().DeltaTime;
-		ImVec2 mousePos = ImGui::GetIO().MousePos;
-		bool hovered = mousePos.x >= hoverMin.x && mousePos.x <= hoverMax.x &&
-		               mousePos.y >= hoverMin.y && mousePos.y <= hoverMax.y;
-
-		// Open on hover, or switch to new item if different item hovered
-		// But don't steal the flyout if the mouse is currently over the open flyout window
-		if (hovered && (!state.isOpen || (state.activeId != itemId && !state.flyoutHovered))) {
-			state.activeId = itemId;
-			state.isOpen = true;
-			state.closing = false;
-			state.closeTimer = 0.f;
-			state.openProgress = 0.f;
-			state.slideRight = slideRight;
-		}
-
-		// Re-hover cancels close animation
-		if (hovered && state.closing && state.activeId == itemId) {
-			state.closing = false;
-			state.closeTimer = 0.f;
-		}
-
-		if (!state.isOpen || state.activeId != itemId)
-			return false;
-
-		// Only increase progress when opening, not when closing
-		if (!state.closing)
-			state.openProgress = std::min(state.openProgress + kFlyoutSlideOpenSpeed * dt, 1.0f);
-
-		// Track source item rect for hover checking in EndFlyout
-		state.sourceMin = hoverMin;
-		state.sourceMax = hoverMax;
-
-		// Slide animation: ease-out quadratic
-		float scale = GetUIScale();
-		float gap = 2.0f * scale;
-		float p = state.openProgress;
-		float eased = 1.0f - (1.0f - p) * (1.0f - p);
-		float slideOffset = (1.0f - eased) * kFlyoutSlideDistance * scale;
-		float alpha = std::min(p * 4.0f, 1.0f);  // full opacity by 25% progress, fades last 25% on close
-
-		ImVec2 flyoutPos;
-		if (state.slideRight) {
-			// Flyout appears to the right of the hovered item, slides left-to-right
-			flyoutPos = ImVec2(hoverMax.x + gap - slideOffset, hoverMin.y);
-		} else {
-			// Flyout appears below the hovered item, slides top-to-bottom, shifted left
-			flyoutPos = ImVec2(hoverMin.x - kFlyoutLeftOffset * scale, hoverMax.y + gap - slideOffset);
-		}
-
-		ImGui::SetNextWindowPos(flyoutPos, ImGuiCond_Always);
-		ImGui::SetNextWindowBgAlpha(0.95f * alpha);
-
-		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-		                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-		                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
-
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kFlyoutRounding * scale);
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale, 2.0f * scale));
-		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-
-		auto flyoutLabel = std::format("##flyout_{}", itemId);
-		bool visible = ImGui::Begin(flyoutLabel.c_str(), nullptr, flags);
-
-		// Bring flyout to front so it renders above other windows
-		if (visible)
-			ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
-
-		ImGui::PopStyleVar(3);
-
-		// If Begin returned false, close the window and return false
-		if (!visible) {
-			ImGui::End();
-			return false;
-		}
-
-		return true;
+		return BeginFlyout(state, itemId, hoverMin, hoverMax, hoverMax, slideRight);
 	}
 
 	void EndFlyout(FlyoutState& state)
 	{
 		bool flyoutHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem | ImGuiHoveredFlags_RootAndChildWindows);
 		state.flyoutHovered = flyoutHovered;
+		// Track drags that start inside the flyout so we don't close while a widget is being dragged
+		if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && flyoutHovered)
+			state.draggedFromFlyout = true;
+		else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+			state.draggedFromFlyout = false;
 		ImGui::End();
+
+		// Force-close on click outside flyout, but not when clicking the source item itself
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		bool overSource = ContainsPoint(state.sourceMin, state.sourceMax, mousePos);
+		if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !flyoutHovered && !overSource) {
+			ResetFlyout(state);
+			return;
+		}
 
 		// Check if mouse is over the source item or the gap between source and flyout
 		float dt = ImGui::GetIO().DeltaTime;
-		ImVec2 mousePos = ImGui::GetIO().MousePos;
 		float scale = GetUIScale();
-		float gap = 2.0f * scale;
+		float gap = kFlyoutGap * scale;
+		bool mouseDragging = ImGui::IsMouseDragging(ImGuiMouseButton_Left);
 		bool itemHovered;
 		if (state.slideRight) {
 			// Cover source item and the horizontal gap to the right
-			itemHovered = mousePos.x >= state.sourceMin.x && mousePos.x <= (state.sourceMax.x + gap) &&
-			              mousePos.y >= state.sourceMin.y && mousePos.y <= state.sourceMax.y;
+			itemHovered = ContainsPoint(state.sourceMin, ImVec2(state.sourceMax.x + gap, state.sourceMax.y), mousePos);
 		} else {
 			// Cover source item (with left offset) and the vertical gap below
 			float leftOffset = kFlyoutLeftOffset * scale;
-			itemHovered = mousePos.x >= (state.sourceMin.x - leftOffset) && mousePos.x <= state.sourceMax.x &&
-			              mousePos.y >= state.sourceMin.y && mousePos.y <= (state.sourceMax.y + gap);
+			itemHovered = ContainsPoint(ImVec2(state.sourceMin.x - leftOffset, state.sourceMin.y),
+				ImVec2(state.sourceMax.x, state.sourceMax.y + gap), mousePos);
 		}
 
 		// Once close animation has started, commit to it — only BeginFlyout
-		// re-hover on the source item can cancel. This prevents oscillation
-		// from the flyout sliding into the cursor during the animation.
+		// re-hover on the source item can cancel slide-into-cursor oscillation.
 		if (state.closing) {
 			state.openProgress = std::max(state.openProgress - kFlyoutSlideCloseSpeed * dt, 0.0f);
-			if (state.openProgress <= 0.0f) {
-				state.isOpen = false;
-				state.closing = false;
-				state.activeId = 0;
-				state.openProgress = 0.f;
-			}
-		} else if (flyoutHovered || itemHovered) {
+			if (state.openProgress <= 0.0f)
+				ResetFlyout(state);
+		} else if (flyoutHovered || itemHovered || state.draggedFromFlyout || mouseDragging) {
 			state.closeTimer = 0.f;
 		} else {
 			state.closeTimer += dt;
