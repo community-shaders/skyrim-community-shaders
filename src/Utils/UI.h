@@ -1469,4 +1469,23 @@ namespace Util
 		std::vector<InputCombo>& combo,
 		bool& isRecording,
 		const char* recordingLabel);
+
+	/**
+	 * @brief Displays a DLL version information table with a clickable folder link.
+	 *
+	 * Shows a selectable label that opens the given directory when clicked,
+	 * followed by a sortable table of DLL names and their versions.
+	 * This is a general-purpose utility for any feature that distributes DLLs
+	 * and wants to expose their versions in the settings UI.
+	 *
+	 * @param label  Display label for the clickable folder link.
+	 * @param pluginDir  Wide string path to the plugin directory (opened on click).
+	 * @param dllVersions  Vector of (name, version) pairs to display.
+	 * @param tableId  Unique ImGui table identifier.
+	 */
+	void DrawDllVersionTable(
+		const char* label,
+		const wchar_t* pluginDir,
+		const std::vector<std::pair<std::string, std::string>>& dllVersions,
+		const char* tableId);
 }  // namespace Util
