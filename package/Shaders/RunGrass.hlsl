@@ -682,8 +682,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float lightShadow = 1.0;
 
 				float shadowComponent = 1.0;
+				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = shadowColor[light.shadowLightIndex];
+					// Per-pixel PCF rotation + world-space position for new SLF shadow API.
+					// Replaces the old shadowColor[light.shadowLightIndex] vanilla path which
+					// referenced a now-renamed Light field (shadowLightIndex -> shadowMapIndex)
+					// and bypassed the SLF shadow infrastructure.
+					float2 rotation;
+					sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+					float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+					float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+					shadowComponent = LightLimitFix::GetShadowLightShadow(light.shadowMapIndex, worldPositionWS, rotationMatrix, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
 
@@ -881,8 +890,15 @@ PS_OUTPUT main(PS_INPUT input)
 				float lightShadow = 1.0;
 
 				float shadowComponent = 1.0;
+				bool shadowCoverage = false;
 				if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					shadowComponent = shadowColor[light.shadowLightIndex];
+					// Per-pixel PCF rotation + world-space position for new SLF shadow API.
+					// Replaces the old shadowColor[light.shadowLightIndex] vanilla path.
+					float2 rotation;
+					sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+					float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+					float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+					shadowComponent = LightLimitFix::GetShadowLightShadow(light.shadowMapIndex, worldPositionWS, rotationMatrix, shadowCoverage);
 					lightShadow *= shadowComponent;
 				}
 
