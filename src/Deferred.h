@@ -1,6 +1,9 @@
 #pragma once
 
+#include <DirectXMath.h>
+
 #include "Buffer.h"
+#include "RE/B/BSShadowDirectionalLight.h"
 
 #define ALBEDO RE::RENDER_TARGETS::kINDIRECT
 #define SPECULAR RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED
@@ -18,6 +21,15 @@ public:
 		return &singleton;
 	}
 
+	struct alignas(16) DirectionalShadowLightData
+	{
+		float4x4 ShadowProj[2];
+		float4x4 InvShadowProj[2];
+		float2 EndSplitDistances;
+		float2 StartSplitDistances;
+	};
+	STATIC_ASSERT_ALIGNAS_16(DirectionalShadowLightData);
+
 	void SetupResources();
 	void ReflectionsPrepasses();
 	void EarlyPrepasses();
@@ -34,6 +46,13 @@ public:
 	ID3D11ComputeShader* GetComputeMainComposite();
 	ID3D11ComputeShader* GetComputeMainCompositeInterior();
 
+	// Reads directional shadow parameters from BSShadowDirectionalLight and uploads
+	// to the structured buffer at t98 (DirectionalShadowLightData — cascade splits +
+	// world-to-shadow projections). Called during EarlyPrepasses once shadow maps
+	// have been rendered. Replaces the previous compute-shader dispatch that copied
+	// constant-buffer fields into a UAV.
+	void CopyShadowLightData();
+
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];
 
@@ -42,11 +61,19 @@ public:
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
+	// Directional shadow structured buffer (t98): cascade splits and projections.
+	Buffer* directionalShadowLights = nullptr;
+
 	bool deferredPass = false;
 
 	ID3D11SamplerState* linearSampler = nullptr;
 	ID3D11SamplerState* pointSampler = nullptr;
 
+private:
+	template <typename T>
+	void SetShadowCascadeParameters(T& lightData, DirectionalShadowLightData& dd);
+
+public:
 	struct Hooks
 	{
 		struct Main_RenderShadowMaps

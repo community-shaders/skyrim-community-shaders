@@ -1084,7 +1084,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 complexSpecular = 1.0;  // Declare complexSpecular at a higher scope so it's available throughout the shader (NEEDED FOR STOCH. FIX)
 
 #	if defined(EMAT)
-#		if defined(PARALLAX)
+#		if defined(PARALLAX) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
 		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
 		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
@@ -1096,7 +1096,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
-#		endif  // PARALLAX
+#		endif  // defined(PARALLAX) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 
 	bool complexMaterial = false;
 	bool complexMaterialParallax = false;
@@ -2152,11 +2152,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.AO = rawRMAOS.z;
 
 	// Apply vertex color to base color so PBR metals use it
-	baseColor.xyz *= input.Color.xyz;
+	float3 pbrVertexColor = Color::SrgbToLinear(input.Color.xyz);
 
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
-		material.F0 = lerp(rawRMAOS.w, Color::SrgbToLinear(baseColor.xyz), material.Metallic);
+		baseColor.xyz = Color::SrgbToLinear(baseColor.xyz) * pbrVertexColor;
+		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
+		baseColor.xyz = Color::LinearToSrgb(baseColor.xyz);
 	} else {
+		baseColor.xyz *= pbrVertexColor;
 		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
 	}
 
@@ -2184,7 +2187,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		[branch] if ((PBRFlags & PBR::Flags::HasFeatureTexture0) != 0)
 		{
 			float4 sampledSubsurfaceProperties = TexRimSoftLightWorldMapOverlaySampler.Sample(SampRimSoftLightWorldMapOverlaySampler, uv);
+
+			// If LL is off, Diffuse returns sRGB
 			material.SubsurfaceColor *= Color::Diffuse(sampledSubsurfaceProperties.xyz);
+
+			if (!SharedData::linearLightingSettings.enableLinearLighting) {
+				material.SubsurfaceColor = Color::LinearToSrgb(
+					Color::SrgbToLinear(material.SubsurfaceColor) * pbrVertexColor);
+			} else {
+				material.SubsurfaceColor *= pbrVertexColor;
+			}
+
 			material.Thickness *= sampledSubsurfaceProperties.w;
 		}
 		material.Thickness = lerp(material.Thickness, 1, projectedMaterialWeight);
@@ -2347,9 +2360,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 positionMSSkylight = input.WorldPosition.xyz;
 #		endif
 #		if defined(DEFERRED)
-	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.Position.xy, positionMSSkylight, worldNormal);
+	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, worldNormal);
 #		else
-	sh2 skylightingSH = inWorld ? Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.Position.xy, positionMSSkylight, worldNormal) : float4(sqrt(4.0 * Math::PI), 0, 0, 0);
+	sh2 skylightingSH = inWorld ? Skylighting::Sample(positionMSSkylight, worldNormal) : Skylighting::UNIT_SH;
 #		endif
 
 #	endif
@@ -2440,7 +2453,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 rippleNormal = normalize(lerp(float3(0, 0, 1), raindropInfo.xyz, lerp(flatnessAmount, 1.0, 0.5)));
 	wetnessNormal = WetnessEffects::ReorientNormal(rippleNormal, wetnessNormal);
 
-	waterRoughnessSpecular = saturate(1.0 - wetnessGlossinessSpecular);
+	// Minimum roughness prevents an extreme retroreflective peak (NdotH→1) for near-zero
+	// roughness puddles. Real water has ripples and surface tension that keep it from being
+	// optically perfect; the ripple normal map adds micro-variation but GGX still peaks
+	// sharply without this floor.
+	static const float wetnessMinPuddleRoughness = 0.05;
+	waterRoughnessSpecular = max(saturate(1.0 - wetnessGlossinessSpecular), wetnessMinPuddleRoughness);
 #	endif
 
 	float llDirLightMult = SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear && (inWorld || inReflection) && !SharedData::InInterior ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
@@ -2781,6 +2799,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	worldNormal.xyz = input.EyeNormal;
 #	endif  // EYE
 
+	// sRGB by default, linear if LL on
 	float3 emitColor = Color::EmitColor(EmitColor);
 #	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	bool hasEmissive = (0x3F & (Permutation::PixelShaderDescriptor >> 24)) == Permutation::LightingTechnique::Glowmap;
@@ -2789,14 +2808,29 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	[branch] if (hasEmissive)
 	{
+		// Input TexGlowSampler = linear by default, but Color::Glowmap returns in sRGB if LL disabled
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
-		emitColor *= glowColor;
+
 #		if defined(TRUE_PBR)
-		// TRUE_PBR sets vertexColor=1 and adds emitColor directly to color (see below),
-		// so vertex tint must be applied here. Non-PBR folds emitColor into diffuseColor
-		// and the global color.xyz *= vertexColor (line 2918) already covers it.
-		emitColor *= input.Color.xyz;
-#		endif
+		float3 vertexColor = Color::SrgbToLinear(input.Color.xyz);
+
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			emitColor = Color::SrgbToLinear(emitColor);
+			glowColor = Color::SrgbToLinear(glowColor);
+			emitColor *= glowColor;
+			emitColor *= vertexColor;
+			emitColor = Color::LinearToSrgb(emitColor);
+		} else {
+			emitColor *= glowColor;
+			emitColor *= vertexColor;
+		}
+#		else
+		if (!SharedData::linearLightingSettings.enableLinearLighting) {
+			emitColor = Color::LinearToSrgb(Color::SrgbToLinear(emitColor) * Color::SrgbToLinear(glowColor));
+		} else {
+			emitColor *= glowColor;
+		}
+#		endif  // TRUE_PBR
 	}
 #	endif
 
@@ -2832,28 +2866,41 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float skylightingDiffuse = 1;
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
-		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
-		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(ambientNormal)) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);
-		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
-		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+		skylightingFadeOutFactor = Skylighting::GetFadeOutFactor(input.WorldPosition.xyz);
+		skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, ambientNormal, skylightingFadeOutFactor);
 	}
 #	endif
 
+#	if defined(HAIR)
+	float3 vertexColor = lerp(1, Color::ColorToLinear(TintColor.xyz), Color::ColorToLinear(input.Color.y));
+#		if defined(CS_HAIR)
+	if (SharedData::hairSpecularSettings.Enabled)
+		vertexColor = 1;
+#		endif
+#	elif defined(SKYLIGHTING)
+	float3 vertexColor = input.Color.xyz;
+	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
+	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
+	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+#		if defined(TRUE_PBR)
+	vertexColor = 1;
+#		endif
+#	else
+#		if defined(TRUE_PBR)
+	float3 vertexColor = 1;
+#		else
+	float3 vertexColor = input.Color.xyz;
+#		endif
+#	endif  // defined (HAIR)
+
 #	if defined(IBL)
-	float3 envIBLColor = 0;
 	if (SharedData::iblSettings.EnableIBL) {
 		if (!(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {
-			if (SharedData::iblSettings.DALCMode == 2) {
-				// Mode 2: keep vanilla DALC scaled by DALCAmount, add sky IBL overlay
-				envIBLColor = directionalAmbientColor * SharedData::iblSettings.DALCAmount;
-				directionalAmbientColor = envIBLColor + Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-ambientNormal));
-			} else {
-				// Mode 0/1: replace with IBL ratio
-				envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(-ambientNormal));
-				float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-ambientNormal));
-				directionalAmbientColor = envIBLColor + skyIBLColor;
-			}
+#		if defined(SKYLIGHTING)
+			directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(directionalAmbientColor, -ambientNormal, skylightingDiffuse);
+#		else
+			directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -ambientNormal);
+#		endif
 		}
 	}
 #	endif
@@ -2886,28 +2933,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.BaseColor = lerp(material.BaseColor, pow(abs(material.BaseColor), 1.0 + wetnessDarkeningAmount), 0.5);
 #		endif
 #	endif
-
-#	if defined(HAIR)
-	float3 vertexColor = lerp(1, Color::ColorToLinear(TintColor.xyz), Color::ColorToLinear(input.Color.y));
-#		if defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled)
-		vertexColor = 1;
-#		endif
-#	elif defined(SKYLIGHTING)
-	float3 vertexColor = input.Color.xyz;
-	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
-	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
-	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
-#		if defined(TRUE_PBR)
-	vertexColor = 1;
-#		endif
-#	else
-#		if defined(TRUE_PBR)
-	float3 vertexColor = 1;
-#		else
-	float3 vertexColor = input.Color.xyz;
-#		endif
-#	endif  // defined (HAIR)
 
 	float4 color = 0;
 
@@ -3015,18 +3040,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
 
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= envIBLColor;
-#	endif
-
 	directionalAmbientColor *= outputAlbedo;
 
 #	if defined(SKYLIGHTING)
-	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
-#	endif
-
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += envIBLColor * outputAlbedo;
+#		if defined(IBL)
+	if (!SharedData::iblSettings.EnableIBL)
+#		endif
+	{
+		Skylighting::ApplySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
+	}
 #	endif
 
 #	if !defined(DEFERRED)
@@ -3231,8 +3253,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(WETNESS_EFFECTS)
 	indirectLobeWeights.specular += wetnessReflectance;
 	if (waterRoughnessSpecular < 1) {
-		screenSpaceNormal = lerp(screenSpaceNormal, normalize(FrameBuffer::WorldToView(wetnessNormal, false, eyeIndex)), saturate(wetnessGlossinessSpecular));
-		material.Roughness = lerp(material.Roughness, waterRoughnessSpecular, wetnessGlossinessSpecular);
+		// Reflection is from the water film surface; wetnessReflectance scales intensity by wetness amount.
+		screenSpaceNormal = normalize(FrameBuffer::WorldToView(wetnessNormal, false, eyeIndex));
+		material.Roughness = waterRoughnessSpecular;
 	}
 #		endif
 
@@ -3256,10 +3279,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Parameters.w = psout.Diffuse.w;
 #		endif
 
+	float masksZ = Color::RGBToYCoCg(directionalAmbientColor).x;
+
 #		if defined(SSS) && defined(SKIN)
-	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), Color::RGBToYCoCg(directionalAmbientColor).x, psout.Diffuse.w);
+	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), masksZ, psout.Diffuse.w);
 #		else
-	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, psout.Diffuse.w);
+	psout.Masks = float4(0, 0, masksZ, psout.Diffuse.w);
 #		endif
 
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;

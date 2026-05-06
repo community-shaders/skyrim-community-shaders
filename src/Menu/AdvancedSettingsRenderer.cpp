@@ -13,13 +13,11 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
 #include "Util.h"
 #include "Utils/Format.h"
 #include "Utils/UI.h"
 
 void AdvancedSettingsRenderer::RenderAdvancedSettings(
-	const std::function<void()>& drawTruePBRSettings,
 	const std::function<void()>& drawDisableAtBootSettings)
 {
 	// Use TabBar system - tabs sorted alphabetically
@@ -51,14 +49,6 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 			ImGui::EndTabItem();
 		}
 
-		// PBR Settings Tab
-		if (MenuFonts::BeginTabItemWithFont("PBR Settings", Menu::FontRole::Subheading)) {
-			if (ImGui::BeginChild("##PBRSettingsContent", ImVec2(0, 0), false)) {
-				RenderPBRSection(drawTruePBRSettings);
-			}
-			ImGui::EndChild();
-			ImGui::EndTabItem();
-		}
 		// Shader Debug Tab
 		if (MenuFonts::BeginTabItemWithFont("Shader Debug", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##ShaderDebugContent", ImVec2(0, 0), false)) {
@@ -514,11 +504,6 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 	}
 }
 
-void AdvancedSettingsRenderer::RenderPBRSection(const std::function<void()>& drawTruePBRSettings)
-{
-	drawTruePBRSettings();
-}
-
 void AdvancedSettingsRenderer::RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings)
 {
 	drawDisableAtBootSettings();
@@ -657,6 +642,43 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable detailed frame annotations for debugging render passes and draw calls.");
+	}
+
+	// Half-precision (partial precision) shader compile flag
+	bool partialPrecision = globals::state->enablePartialPrecision.load(std::memory_order_relaxed);
+	if (ImGui::Checkbox("Half Precision (Partial Precision)", &partialPrecision)) {
+		globals::state->enablePartialPrecision.store(partialPrecision, std::memory_order_relaxed);
+		// Force a recompile so the flag actually takes effect on subsequent shader builds.
+		globals::shaderCache->Clear();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Adds D3DCOMPILE_PARTIAL_PRECISION to the shader compiler flags.\n"
+			"Lets fxc downgrade unmarked float ops to FP16 where it can prove safety, "
+			"on top of the existing min16float type hints.\n"
+			"On FP16-capable GPUs (Pascal+ / GCN+ / Skylake+) this can halve register "
+			"pressure and double ALU throughput, but it can also introduce minor visual "
+			"differences in shaders that haven't been audited for precision sensitivity.\n"
+			"Toggling this clears the shader cache and triggers a full recompile.");
+	}
+
+	// Avoid flow control compiler flag (transient — not saved to config because the
+	// right setting depends on the current scene, not the user).
+	bool avoidFlowControl = globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed);
+	if (ImGui::Checkbox("Avoid Flow Control", &avoidFlowControl)) {
+		globals::state->enableAvoidFlowControl.store(avoidFlowControl, std::memory_order_relaxed);
+		// Force a recompile so the flag actually takes effect on subsequent shader builds.
+		globals::shaderCache->Clear();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Adds D3DCOMPILE_AVOID_FLOW_CONTROL to the shader compiler flags.\n"
+			"Forces fxc to flatten branches into predicated ops rather than emitting "
+			"dynamic flow control. Often a win for short branch bodies and uniformly-"
+			"taken branches; usually a loss for long divergent branches that vanilla "
+			"flow control would skip entirely.\n"
+			"Resets every launch. Toggling this clears the shader cache and triggers a "
+			"full recompile.");
 	}
 
 	ImGui::Spacing();

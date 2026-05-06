@@ -13,22 +13,15 @@
 #include <dxgi1_6.h>
 #include <imgui.h>
 
-#ifndef NTDDI_WIN11_GE
-#	define NTDDI_WIN11_GE 0x0A000010
-#endif
-
-// Win11 24H2 structures - define if SDK doesn't have them
-#ifndef DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2
-#	define DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2 ((DISPLAYCONFIG_DEVICE_INFO_TYPE)13)
-
+// Win11 24H2 display config types. Compat_ prefix avoids collision with SDK enum members.
 typedef enum
 {
-	DISPLAYCONFIG_ADVANCED_COLOR_MODE_SDR = 0,
-	DISPLAYCONFIG_ADVANCED_COLOR_MODE_WCG = 1,
-	DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR = 2
-} DISPLAYCONFIG_ADVANCED_COLOR_MODE;
+	Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_SDR = 0,
+	Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_WCG = 1,
+	Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR = 2
+} Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE;
 
-typedef struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
+typedef struct Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
 {
 	DISPLAYCONFIG_DEVICE_INFO_HEADER header;
 	union
@@ -41,161 +34,180 @@ typedef struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
 			UINT32 advancedColorLimitedByPolicy: 1;
 			UINT32 highDynamicRangeSupported: 1;
 			UINT32 highDynamicRangeUserEnabled: 1;
-			UINT32 wideColorEnforced: 1;
-			UINT32 reserved: 25;
+			UINT32 wideColorSupported: 1;
+			UINT32 wideColorUserEnabled: 1;
+			UINT32 reserved: 24;
 		};
 		UINT32 value;
 	};
 	DISPLAYCONFIG_COLOR_ENCODING colorEncoding;
 	UINT32 bitsPerColorChannel;
-	DISPLAYCONFIG_ADVANCED_COLOR_MODE activeColorMode;
-} DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2;
-#endif
+	Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE activeColorMode;
+} Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2;
+
+static constexpr DISPLAYCONFIG_DEVICE_INFO_TYPE kDisplayConfigGetAdvancedColorInfo2 =
+	static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(15);
 
 // HDR display detection
 // Credits: Luma Framework by Filippo Tarpini (MIT License)
 // https://github.com/Filoppi/Luma-Framework/blob/f1fbc2a36f2d24fd551721ce90f26821a8e754c1/Source/Core/utils/display.hpp
 namespace
 {
-	bool GetDisplayConfigPathInfo(HWND hwnd, DISPLAYCONFIG_PATH_INFO& outPathInfo)
+	// Returns the GDI device name for the swap chain's output via GetContainingOutput.
+	// Returns false if the output cannot be determined (e.g. Streamline wraps the swap chain).
+	bool GetSwapChainOutputDeviceName(IDXGISwapChain* swapChain, WCHAR (&outDeviceName)[32])
 	{
+		winrt::com_ptr<IDXGIOutput> output;
+		if (FAILED(swapChain->GetContainingOutput(output.put())))
+			return false;
+		DXGI_OUTPUT_DESC desc{};
+		if (FAILED(output->GetDesc(&desc)))
+			return false;
+		wcsncpy_s(outDeviceName, desc.DeviceName, _TRUNCATE);
+		// DeviceName is ASCII (e.g. "\\.\DISPLAY1") — safe to log as narrow string
+		char narrowName[32]{};
+		WideCharToMultiByte(CP_UTF8, 0, desc.DeviceName, -1, narrowName, sizeof(narrowName), nullptr, nullptr);
+		logger::debug("[HDR] Swap chain output device: {}", narrowName);
+		return true;
+	}
+
+	bool GetDisplayConfigPathInfo(IDXGISwapChain* swapChain, DISPLAYCONFIG_PATH_INFO& outPathInfo)
+	{
+		WCHAR deviceName[32]{};
+		if (!GetSwapChainOutputDeviceName(swapChain, deviceName))
+			return false;
+
 		uint32_t pathCount, modeCount;
-		if (ERROR_SUCCESS != GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount))
+		if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
 			return false;
 
 		std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
 		std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
-		if (ERROR_SUCCESS != QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr))
+		if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr) != ERROR_SUCCESS)
 			return false;
 
-		const HMONITOR monitorFromWindow = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
 		for (auto& pathInfo : paths) {
-			if (pathInfo.flags & DISPLAYCONFIG_PATH_ACTIVE && pathInfo.sourceInfo.statusFlags & DISPLAYCONFIG_SOURCE_IN_USE) {
-				const bool bVirtual = pathInfo.flags & DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE;
-				const uint32_t modeIndex = bVirtual ? pathInfo.sourceInfo.sourceModeInfoIdx : pathInfo.sourceInfo.modeInfoIdx;
-				if (modeIndex == DISPLAYCONFIG_PATH_MODE_IDX_INVALID || modeIndex >= modeCount)
-					continue;
-				const DISPLAYCONFIG_SOURCE_MODE& sourceMode = modes[modeIndex].sourceMode;
+			// DISPLAYCONFIG_SOURCE_IN_USE skips inactive sources (disconnected displays)
+			if (!(pathInfo.flags & DISPLAYCONFIG_PATH_ACTIVE) ||
+				!(pathInfo.sourceInfo.statusFlags & DISPLAYCONFIG_SOURCE_IN_USE))
+				continue;
 
-				RECT rect{ sourceMode.position.x, sourceMode.position.y, sourceMode.position.x + (LONG)sourceMode.width, sourceMode.position.y + (LONG)sourceMode.height };
-				if (!IsRectEmpty(&rect)) {
-					const HMONITOR monitorFromMode = MonitorFromRect(&rect, MONITOR_DEFAULTTONULL);
-					if (monitorFromMode != nullptr && monitorFromMode == monitorFromWindow) {
-						outPathInfo = pathInfo;
-						return true;
-					}
+			// QDC_ONLY_ACTIVE_PATHS excludes virtual-mode paths; no index selection needed
+			DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName{};
+			sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+			sourceName.header.size = sizeof(sourceName);
+			sourceName.header.adapterId = pathInfo.sourceInfo.adapterId;
+			sourceName.header.id = pathInfo.sourceInfo.id;
+			if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS) {
+				if (wcscmp(sourceName.viewGdiDeviceName, deviceName) == 0) {
+					outPathInfo = pathInfo;
+					return true;
 				}
 			}
 		}
 		return false;
 	}
 
-	bool GetAdvancedColorInfo(HWND hwnd, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO& outColorInfo)
-	{
-		DISPLAYCONFIG_PATH_INFO pathInfo{};
-		if (GetDisplayConfigPathInfo(hwnd, pathInfo)) {
-			DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo{};
-			colorInfo.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
-			colorInfo.header.size = sizeof(colorInfo);
-			colorInfo.header.adapterId = pathInfo.targetInfo.adapterId;
-			colorInfo.header.id = pathInfo.targetInfo.id;
-			if (ERROR_SUCCESS == DisplayConfigGetDeviceInfo(&colorInfo.header)) {
-				outColorInfo = colorInfo;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	// Win11 24H2+ API - uses runtime detection, will fail gracefully on older Windows
-	bool GetAdvancedColorInfo2(HWND hwnd, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2& outColorInfo2)
-	{
-		DISPLAYCONFIG_PATH_INFO pathInfo{};
-		if (GetDisplayConfigPathInfo(hwnd, pathInfo)) {
-			DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
-			colorInfo2.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2;
-			colorInfo2.header.size = sizeof(colorInfo2);
-			colorInfo2.header.adapterId = pathInfo.targetInfo.adapterId;
-			colorInfo2.header.id = pathInfo.targetInfo.id;
-			// This will fail on older Windows versions that don't support the API
-			if (ERROR_SUCCESS == DisplayConfigGetDeviceInfo(&colorInfo2.header)) {
-				outColorInfo2 = colorInfo2;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool CheckSwapChainHDRSupport(IDXGISwapChain* swapChain, bool& supported, bool& enabled)
-	{
-		winrt::com_ptr<IDXGIOutput> output;
-		if (SUCCEEDED(swapChain->GetContainingOutput(output.put()))) {
-			winrt::com_ptr<IDXGIOutput6> output6;
-			if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
-				DXGI_OUTPUT_DESC1 desc1;
-				if (SUCCEEDED(output6->GetDesc1(&desc1))) {
-					enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ||
-					          desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
-					supported |= enabled;
-					logger::debug("[HDR] DXGI output detection: colorSpace={}, maxLuminance={}", static_cast<int>(desc1.ColorSpace), desc1.MaxLuminance);
-				}
-			}
-		}
-
-		winrt::com_ptr<IDXGISwapChain3> swapChain3;
-		if (SUCCEEDED(swapChain->QueryInterface(IID_PPV_ARGS(swapChain3.put())))) {
-			UINT colorSpaceSupported = 0;
-			if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, &colorSpaceSupported))) {
-				supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
-			}
-			if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709, &colorSpaceSupported))) {
-				supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
-			}
-		}
-		return true;
-	}
-
-	bool IsHDRSupportedAndEnabled(HWND hwnd, bool& supported, bool& enabled, IDXGISwapChain* swapChain = nullptr)
+	bool IsHDRSupportedAndEnabled(IDXGISwapChain* swapChain, bool& supported, bool& enabled)
 	{
 		supported = false;
 		enabled = false;
 
-		// Try Windows 11 24H2+ API first - distinguishes HDR from WCG
-		DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
-		if (GetAdvancedColorInfo2(hwnd, colorInfo2)) {
-			// WCG (Wide Color Gamut) allows wider color range without higher brightness peak
-			// We only consider true HDR mode, not WCG
-			enabled = colorInfo2.activeColorMode == DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR;
-			supported = enabled || (colorInfo2.highDynamicRangeSupported && !colorInfo2.advancedColorLimitedByPolicy);
-			// Copy bitfield members to avoid non-const reference binding issues
+		DISPLAYCONFIG_PATH_INFO pathInfo{};
+		if (!GetDisplayConfigPathInfo(swapChain, pathInfo)) {
+			// GetContainingOutput fails under frame-gen wrappers. Fall back to enumerating
+			// the device adapter's outputs by HMONITOR. Only detects active HDR, not capable.
+			HWND outputWindow = nullptr;
+			DXGI_SWAP_CHAIN_DESC scDescFull{};
+			if (SUCCEEDED(swapChain->GetDesc(&scDescFull)))
+				outputWindow = scDescFull.OutputWindow;
+
+			HMONITOR hMonitor = outputWindow ? MonitorFromWindow(outputWindow, MONITOR_DEFAULTTONEAREST) : nullptr;
+			if (!hMonitor) {
+				logger::warn("[HDR] HDR detection failed - cannot determine monitor from swap chain OutputWindow");
+				return false;
+			}
+
+			// Enumerate outputs on the device's own adapter; avoids touching other GPUs.
+			winrt::com_ptr<IDXGIDevice> dxgiDevice;
+			winrt::com_ptr<IDXGIAdapter> adapter;
+			if (globals::d3d::device &&
+				SUCCEEDED(globals::d3d::device->QueryInterface(IID_PPV_ARGS(dxgiDevice.put()))) &&
+				SUCCEEDED(dxgiDevice->GetAdapter(adapter.put()))) {
+				for (UINT oi = 0;; ++oi) {
+					winrt::com_ptr<IDXGIOutput> out;
+					HRESULT hr = adapter->EnumOutputs(oi, out.put());
+					if (hr == DXGI_ERROR_NOT_FOUND)
+						break;
+					if (FAILED(hr)) {
+						logger::debug("[HDR] EnumOutputs failed: hr=0x{:08X}", static_cast<unsigned>(hr));
+						break;
+					}
+					DXGI_OUTPUT_DESC outDesc{};
+					if (FAILED(out->GetDesc(&outDesc)) || outDesc.Monitor != hMonitor)
+						continue;
+					winrt::com_ptr<IDXGIOutput6> out6;
+					if (SUCCEEDED(out->QueryInterface(IID_PPV_ARGS(out6.put())))) {
+						DXGI_OUTPUT_DESC1 desc1{};
+						if (SUCCEEDED(out6->GetDesc1(&desc1))) {
+							enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+							supported = enabled;
+							logger::debug("[HDR] DXGI fallback detection: colorSpace={}", static_cast<int>(desc1.ColorSpace));
+							return true;
+						}
+					}
+				}
+			}
+			logger::warn("[HDR] HDR detection failed - cannot determine monitor (Streamline/frame-gen?)");
+			return false;
+		}
+
+		// Try Windows 11 24H2+ API first - directly reports HDR hardware capability
+		// Credits: renodx by clshortfuse (MIT License)
+		// https://github.com/clshortfuse/renodx/blob/01f3739685ba8f850d82fb1a11a5ec1104e6b1b8/src/games/hollowknight-silksong/addon.cpp#L545
+		Compat_DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
+		colorInfo2.header.type = kDisplayConfigGetAdvancedColorInfo2;
+		colorInfo2.header.size = sizeof(colorInfo2);
+		colorInfo2.header.adapterId = pathInfo.targetInfo.adapterId;
+		colorInfo2.header.id = pathInfo.targetInfo.id;
+		if (DisplayConfigGetDeviceInfo(&colorInfo2.header) == ERROR_SUCCESS) {
+			supported = colorInfo2.highDynamicRangeSupported != 0;
+			enabled = colorInfo2.activeColorMode == Compat_DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR;
 			UINT32 hdrSupported = colorInfo2.highDynamicRangeSupported;
-			UINT32 limitedByPolicy = colorInfo2.advancedColorLimitedByPolicy;
-			logger::debug("[HDR] Win11 24H2 detection: activeColorMode={}, hdrSupported={}, limitedByPolicy={}",
-				static_cast<int>(colorInfo2.activeColorMode), hdrSupported, limitedByPolicy);
+			UINT32 activeMode = static_cast<UINT32>(colorInfo2.activeColorMode);
+			logger::debug("[HDR] Win11 24H2 detection: highDynamicRangeSupported={}, activeColorMode={}", hdrSupported, activeMode);
 			return true;
 		}
 
 		// Fallback for older Windows versions
 		DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo{};
-		if (GetAdvancedColorInfo(hwnd, colorInfo)) {
-			enabled = colorInfo.advancedColorEnabled;
-			supported = enabled || (colorInfo.advancedColorSupported && !colorInfo.advancedColorForceDisabled);
-			// Copy bitfield members to avoid non-const reference binding issues
-			UINT32 advancedEnabled = colorInfo.advancedColorEnabled;
-			UINT32 advancedSupported = colorInfo.advancedColorSupported;
-			UINT32 forceDisabled = colorInfo.advancedColorForceDisabled;
-			logger::debug("[HDR] Legacy detection: advancedColorEnabled={}, advancedColorSupported={}, forceDisabled={}",
-				advancedEnabled, advancedSupported, forceDisabled);
-			return true;
-		}
+		colorInfo.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+		colorInfo.header.size = sizeof(colorInfo);
+		colorInfo.header.adapterId = pathInfo.targetInfo.adapterId;
+		colorInfo.header.id = pathInfo.targetInfo.id;
+		if (DisplayConfigGetDeviceInfo(&colorInfo.header) == ERROR_SUCCESS) {
+			supported = colorInfo.advancedColorSupported != 0;
 
-		// Last resort: check swap chain color space support
-		if (swapChain) {
-			__try {
-				CheckSwapChainHDRSupport(swapChain, supported, enabled);
-			} __except (EXCEPTION_EXECUTE_HANDLER) {
-				logger::warn("[HDR] Exception during swap chain HDR detection (possibly due to Streamline interposer), skipping swap chain queries");
+			DXGI_COLOR_SPACE_TYPE swapChainOutputColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+			{
+				winrt::com_ptr<IDXGIOutput> containingOutput;
+				if (SUCCEEDED(swapChain->GetContainingOutput(containingOutput.put()))) {
+					winrt::com_ptr<IDXGIOutput6> out6;
+					if (SUCCEEDED(containingOutput->QueryInterface(IID_PPV_ARGS(out6.put())))) {
+						DXGI_OUTPUT_DESC1 desc1{};
+						if (SUCCEEDED(out6->GetDesc1(&desc1)))
+							swapChainOutputColorSpace = desc1.ColorSpace;
+					}
+				}
 			}
+
+			enabled = (colorInfo.advancedColorEnabled != 0) && (swapChainOutputColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+			UINT32 advancedSupported = colorInfo.advancedColorSupported;
+			UINT32 advancedEnabled = colorInfo.advancedColorEnabled;
+			int colorSpaceInt = static_cast<int>(swapChainOutputColorSpace);
+			logger::debug("[HDR] Legacy detection: advancedColorSupported={}, advancedColorEnabled={}, swapChainColorSpace={}, enabled={}",
+				advancedSupported, advancedEnabled, colorSpaceInt, enabled);
+			return true;
 		}
 
 		return false;
@@ -248,18 +260,26 @@ namespace
 }
 
 bool HDRDisplay::isHDRMonitor = false;
+bool HDRDisplay::isHDRCapableMonitor = false;
+bool HDRDisplay::wasExclusiveFullscreen = false;
 
 bool HDRDisplay::DetectHDR()
 {
+	if (!globals::d3d::swapChain) {
+		isHDRMonitor = false;
+		isHDRCapableMonitor = false;
+		return false;
+	}
+
 	bool hdrSupported = false;
 	bool hdrEnabled = false;
 
-	HWND hwnd = reinterpret_cast<HWND>(RE::BSGraphics::Renderer::GetSingleton()->GetCurrentRenderWindow());
-	IsHDRSupportedAndEnabled(hwnd, hdrSupported, hdrEnabled, globals::d3d::swapChain);
+	IsHDRSupportedAndEnabled(globals::d3d::swapChain, hdrSupported, hdrEnabled);
 
-	isHDRMonitor = hdrSupported;
+	isHDRMonitor = hdrEnabled;
+	isHDRCapableMonitor = hdrSupported;
 	logger::info("[HDR] HDR display detection: supported={}, enabled={}", hdrSupported, hdrEnabled);
-	return hdrSupported;
+	return hdrEnabled;
 }
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -275,9 +295,27 @@ void HDRDisplay::DrawSettings()
 {
 	if (isHDRMonitor) {
 		ImGui::TextColored(Util::Colors::GetSuccess(), "HDR Display Detected");
+	} else if (isHDRCapableMonitor) {
+		ImGui::TextColored(Util::Colors::GetWarning(), "HDR Capable Display (Windows HDR is off)");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Your monitor supports HDR, but Windows HDR is currently disabled.");
+			ImGui::Text("Enable HDR in Windows Display Settings to allow auto-detection.");
+		}
 	} else {
 		ImGui::TextColored(Util::Colors::GetWarning(), "SDR Display (HDR not detected)");
 	}
+
+	const bool isExclusiveFullscreen = globals::features::upscaling.loaded ? !globals::features::upscaling.isWindowed : wasExclusiveFullscreen;
+
+	if (isExclusiveFullscreen) {
+		ImGui::Spacing();
+		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+		ImGui::TextWrapped("WARNING: Exclusive Fullscreen detected.");
+		ImGui::TextWrapped("HDR is not compatible with Exclusive Fullscreen and may not work correctly. Switch to Borderless Windowed mode for proper HDR support.");
+		ImGui::PopStyleColor();
+		ImGui::Spacing();
+	}
+
 	ImGui::Spacing();
 
 	// Gate HDR checkbox behind monitor detection
@@ -318,12 +356,14 @@ void HDRDisplay::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		if (isHDRMonitor) {
 			ImGui::Text("Enable HDR output. Matches vanilla visuals with extended dynamic range.");
+		} else if (isHDRCapableMonitor) {
+			ImGui::Text("Monitor supports HDR but Windows HDR is off. Enable HDR in Windows Display Settings, then restart the game.");
 		} else {
 			ImGui::Text("HDR display not detected. Use Advanced button to override.");
 		}
 	}
 
-	// Advanced override button for SDR monitors
+	// Advanced override button — shown when HDR is neither active nor auto-detected
 	if (!isHDRMonitor && !oldEnableHDR) {
 		ImGui::SameLine();
 		if (ImGui::Button("Advanced")) {
@@ -348,7 +388,11 @@ void HDRDisplay::DrawSettings()
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Force enable HDR even without detection (not recommended).");
+			if (isHDRCapableMonitor) {
+				ImGui::Text("Enable Windows HDR instead of forcing it here.");
+			} else {
+				ImGui::Text("Force enable HDR even without detection (not recommended).");
+			}
 		}
 	}
 
@@ -528,8 +572,8 @@ void HDRDisplay::LoadSettings(json& o_json)
 
 	settings = o_json;
 
-	// Defer auto-detection to SetupResources where the renderer is available.
-	// DetectHDR() needs a valid HWND which doesn't exist during early plugin init.
+	// Defer auto-detection to SetupResources where the swap chain is available.
+	// DetectHDR() needs globals::d3d::swapChain which isn't valid during early plugin init.
 	// hdrAutoDetected starts false in defaults and is only set true after auto-detect
 	// completes in SetupResources, so this correctly triggers on first launch even
 	// when the default config was auto-generated with enableHDR: false.
@@ -630,7 +674,7 @@ void HDRDisplay::SetupResources()
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	hdrTexture = new Texture2D(texDesc);
+	hdrTexture = new Texture2D(texDesc, "HDR::HdrTexture");
 	hdrTexture->CreateSRV(srvDesc);
 	hdrTexture->CreateUAV(uavDesc);
 
@@ -647,7 +691,7 @@ void HDRDisplay::SetupResources()
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
-	outputTexture = new Texture2D(texDesc);
+	outputTexture = new Texture2D(texDesc, "HDR::OutputTexture");
 	outputTexture->CreateSRV(srvDesc);
 	outputTexture->CreateUAV(uavDesc);
 
@@ -664,7 +708,7 @@ void HDRDisplay::SetupResources()
 	D3D11_UNORDERED_ACCESS_VIEW_DESC uiUavDesc = uavDesc;
 	uiUavDesc.Format = uiTexDesc.Format;
 
-	uiTexture = new Texture2D(uiTexDesc);
+	uiTexture = new Texture2D(uiTexDesc, "HDR::UiTexture");
 	uiTexture->CreateSRV(uiSrvDesc);
 	uiTexture->CreateUAV(uiUavDesc);
 
@@ -675,7 +719,7 @@ void HDRDisplay::SetupResources()
 	rtvDesc.Texture2D.MipSlice = 0;
 	uiTexture->CreateRTV(rtvDesc);
 
-	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
+	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>(), "HDR::DataCB");
 
 	UpdateHDRData();
 
@@ -789,6 +833,30 @@ void HDRDisplay::RestoreFramebuffer()
 	framebufferRedirected = false;
 }
 
+bool HDRDisplay::IsFGCompositingThisFrame() const
+{
+	return globals::features::upscaling.ShouldUseFrameGenerationThisFrame();
+}
+
+HDRDisplay::D3D12UIBufferMode HDRDisplay::GetD3D12UIBufferMode()
+{
+	D3D12UIBufferMode mode;
+	if (!globals::features::upscaling.d3d12SwapChainActive)
+		return mode;
+
+	const bool hdrReady = loaded && hdrDataCB && outputTexture;
+	const bool hdrShaderAvailable = hdrReady && GetHDROutputCS() != nullptr;
+
+	mode.useUIBuffer = hdrShaderAvailable || IsFGCompositingThisFrame();
+	mode.useFallbackCopy = hdrReady && !hdrShaderAvailable;
+	return mode;
+}
+
+bool HDRDisplay::ShouldUseD3D12UIBuffer()
+{
+	return GetD3D12UIBufferMode().useUIBuffer;
+}
+
 void HDRDisplay::SetUIBuffer()
 {
 	// VR: ISCopy reads kFRAMEBUFFER.SRV to distribute the frame to the HMD and
@@ -800,16 +868,33 @@ void HDRDisplay::SetUIBuffer()
 
 	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
-	// Handle Frame Generation case - redirect to FG's UI buffer
+	// D3D12 swap chain path: route UI to uiBufferWrapped only when a compositor
+	// (ApplyHDR or FFX FG UI composition) will read it; otherwise render UI
+	// directly into the wrapped back buffer so it survives Present when both
+	// compositors are skipped (HDR unloaded + FG off/paused). If HDR is loaded
+	// but the shader is missing, keep UI in kFRAMEBUFFER so the ApplyHDR
+	// fallback copy carries it to the wrapped back buffer.
 	if (globals::features::upscaling.d3d12SwapChainActive) {
 		auto& upscaling = globals::features::upscaling;
-		if (!upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->rtv)
+		if (!upscaling.dx12SwapChain.swapChainBufferWrapped || !upscaling.dx12SwapChain.swapChainBufferWrapped->rtv)
 			return;
 
-		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		globals::d3d::context->ClearRenderTargetView(upscaling.dx12SwapChain.uiBufferWrapped->rtv, clearColor);
+		const auto uiBufferMode = GetD3D12UIBufferMode();
 
-		fb.RTV = upscaling.dx12SwapChain.uiBufferWrapped->rtv;
+		if (uiBufferMode.useUIBuffer && (!upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->rtv))
+			return;
+
+		ID3D11RenderTargetView* targetRTV = uiBufferMode.useUIBuffer ?
+		                                        upscaling.dx12SwapChain.uiBufferWrapped->rtv :
+		                                    uiBufferMode.useFallbackCopy ? fb.RTV :
+		                                                                  upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
+
+		if (uiBufferMode.useUIBuffer) {
+			float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+			globals::d3d::context->ClearRenderTargetView(targetRTV, clearColor);
+		}
+
+		fb.RTV = targetRTV;
 		globals::d3d::context->OMSetRenderTargets(1, &fb.RTV, nullptr);
 		return;
 	}
@@ -863,6 +948,9 @@ void HDRDisplay::ClearUIBuffer()
 
 void HDRDisplay::ApplyHDR()
 {
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "HDR Processing");
+
 	std::lock_guard<std::mutex> lock(settingsMutex);
 
 	if (!hdrDataCB || !hdrTexture || !outputTexture)
@@ -936,7 +1024,8 @@ void HDRDisplay::ApplyHDR()
 
 			// Copy kFRAMEBUFFER directly to destination (bypassing HDR processing)
 			if (upscaling.d3d12SwapChainActive) {
-				// Frame Gen path: copy to D3D12 swap chain wrapped buffer
+				// SetUIBuffer keeps non-FG fallback UI in kFRAMEBUFFER; FG keeps using
+				// uiBufferWrapped for FidelityFX UI composition.
 				context->CopyResource(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11, framebufferRT.texture);
 			} else {
 				// Normal path: copy directly to swap chain back buffer
@@ -1057,6 +1146,7 @@ void HDRDisplay::UpgradeLDRRenderTargets()
 		saved.texture = rt.texture;
 		saved.RTV = rt.RTV;
 		saved.SRV = rt.SRV;
+		saved.UAV = rt.UAV;
 
 		D3D11_TEXTURE2D_DESC newDesc = origDesc;
 		newDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -1087,9 +1177,24 @@ void HDRDisplay::UpgradeLDRRenderTargets()
 			continue;
 		}
 
+		ID3D11UnorderedAccessView* newUAV = nullptr;
+		if (rt.UAV) {
+			D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+			rt.UAV->GetDesc(&uavDesc);
+			uavDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+			if (FAILED(device->CreateUnorderedAccessView(newTexture, &uavDesc, &newUAV))) {
+				newSRV->Release();
+				newRTV->Release();
+				newTexture->Release();
+				continue;
+			}
+		}
+
 		rt.texture = newTexture;
 		rt.RTV = newRTV;
 		rt.SRV = newSRV;
+		rt.UAV = newUAV;
 
 		savedLDRTargets.push_back({ targetId, saved });
 		logger::info("[HDR] Upgraded render target {} to R16G16B16A16_FLOAT (was format {})", static_cast<int>(targetId), static_cast<int>(origDesc.Format));
@@ -1109,10 +1214,13 @@ void HDRDisplay::RestoreLDRRenderTargets()
 			rt.RTV->Release();
 		if (rt.SRV)
 			rt.SRV->Release();
+		if (rt.UAV)
+			rt.UAV->Release();
 
 		rt.texture = saved.texture;
 		rt.RTV = saved.RTV;
 		rt.SRV = saved.SRV;
+		rt.UAV = saved.UAV;
 	}
 	savedLDRTargets.clear();
 }
@@ -1155,17 +1263,12 @@ ID3D11ComputeShader* HDRDisplay::GetUIBrightnessCS()
 
 void HDRDisplay::ScaleUIBrightnessForFG()
 {
-	auto& upscaling = globals::features::upscaling;
-	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "UI Brightness Scale");
 
-	auto* ui = globals::game::ui;
-	// FG merges PQ UI from this pass; when paused, UI stays gamma — HDROutput must composite (skipUIComposite stays 0).
-	bool fgCompositing = upscaling.d3d12SwapChainActive &&
-	                     upscaling.settings.frameGenerationMode &&
-	                     ui && !ui->GameIsPaused() &&
-	                     !isMainOrLoadingMenu &&
-	                     !globals::game::isVR;
-	if (!fgCompositing)
+	auto& upscaling = globals::features::upscaling;
+	// FG merges PQ UI from this pass; paused UI stays gamma for HDROutput.
+	if (!IsFGCompositingThisFrame())
 		return;
 
 	if (!settings.enableHDR)
@@ -1257,18 +1360,9 @@ void HDRDisplay::UpdateHDRData() const
 	if (!hdrDataCB)
 		return;
 
-	auto& upscaling = globals::features::upscaling;
-
-	// Don't skip UI composite in main menu or loading screens - causes ghosting and brightness issues
 	bool isMainOrLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
-
 	auto* ui = globals::game::ui;
-	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
-	                         upscaling.settings.frameGenerationMode &&
-	                         ui && !ui->GameIsPaused() &&
-	                         !isMainOrLoadingMenu &&
-	                         !globals::game::isVR;
-	bool skipUIComposite = fgActiveThisFrame;
+	bool skipUIComposite = IsFGCompositingThisFrame();
 
 	// Linear Lighting keeps the pipeline linear throughout.
 	// Without it, ISHDR gamma-encodes its output even in HDR mode.

@@ -9,6 +9,7 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImageSpaceWidget::Settings,
 	hdrEyeAdaptSpeed,
+	hdrEyeAdaptStrength,
 	hdrBloomBlurRadius,
 	hdrBloomThreshold,
 	hdrBloomScale,
@@ -43,20 +44,21 @@ void ImageSpaceWidget::DrawWidget()
 			const char* search = searchBuffer[0] ? searchBuffer : nullptr;
 
 			// HDR Settings
-			changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 100.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Eye Adapt Strength", settings.hdrEyeAdaptStrength, 0.0f, 50.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Bloom Blur Radius", settings.hdrBloomBlurRadius, 0.0f, 10.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 30.0f, search);
+			changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 30.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 50.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 30.0f, search);
 
 			PropertyDrawer::DrawSeparator();
 
 			// Cinematic Settings
-			changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 2.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 2.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 2.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 10.0f, search);
 
 			PropertyDrawer::DrawSeparator();
 
@@ -71,9 +73,9 @@ void ImageSpaceWidget::DrawWidget()
 			PropertyDrawer::DrawSeparator();
 
 			// Depth of Field
-			changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 10000.0f, search, "%.1f");
-			changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 10000.0f, search, "%.1f");
+			changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 1.0f, search);
+			changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 50000.0f, search, "%.1f");
+			changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 50000.0f, search, "%.1f");
 
 			PropertyDrawer::EndTable();
 
@@ -117,6 +119,7 @@ void ImageSpaceWidget::SetImageSpaceValues()
 
 	// HDR
 	data.hdr.eyeAdaptSpeed = settings.hdrEyeAdaptSpeed;
+	data.hdr.eyeAdaptStrength = settings.hdrEyeAdaptStrength;
 	data.hdr.bloomBlurRadius = settings.hdrBloomBlurRadius;
 	data.hdr.bloomThreshold = settings.hdrBloomThreshold;
 	data.hdr.bloomScale = settings.hdrBloomScale;
@@ -150,6 +153,7 @@ void ImageSpaceWidget::LoadImageSpaceValues()
 
 	// HDR
 	settings.hdrEyeAdaptSpeed = data.hdr.eyeAdaptSpeed;
+	settings.hdrEyeAdaptStrength = data.hdr.eyeAdaptStrength;
 	settings.hdrBloomBlurRadius = data.hdr.bloomBlurRadius;
 	settings.hdrBloomThreshold = data.hdr.bloomThreshold;
 	settings.hdrBloomScale = data.hdr.bloomScale;

@@ -5,7 +5,7 @@ set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 project(
     # gersemi: ignore
     CommunityShaders
-    VERSION 1.4.11
+    VERSION 1.5.1
     LANGUAGES CXX
 )
 
@@ -49,6 +49,23 @@ message("\tZip to dist: ${ZIP_TO_DIST}")
 message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
 message("\tTracy profiler: ${TRACY_SUPPORT}")
 message("\tShader tests: ${BUILD_SHADER_TESTS}")
+
+# #######################################################################################################################
+# # Build version info from git
+# #######################################################################################################################
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_DESCRIBE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+else()
+    set(GIT_DESCRIBE "unknown")
+endif()
+message("\tBuild version: ${GIT_DESCRIBE}")
 
 # #######################################################################################################################
 # # Add CMake features
@@ -180,7 +197,7 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     string(STRIP "${CONFIG_VALUE}" CONFIG_VALUE)
     if(CONFIG_VALUE)
         string(
-            REGEX MATCH "Version = ([0-9]+)-([0-9]+)-([0-9]+)"
+            REGEX MATCH "[Vv]ersion = ([0-9]+)-([0-9]+)-([0-9]+)"
             _
             "${CONFIG_VALUE}"
         )
@@ -208,6 +225,17 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
             "Feature config file '${FEATURE_PATH}' is empty or contains only whitespace. Skipping version detection for this feature."
         )
     endif()
+
+    # Detect core features by checking for the CORE marker file in the
+    # feature root (features/<Folder>/CORE). FEATURE_PATH is
+    # features/<Folder>/Shaders/Features/<ShortName>.ini, so the feature
+    # root is three directories up.
+    get_filename_component(_FEATURE_DIR "${FEATURE_PATH}" DIRECTORY)
+    get_filename_component(_FEATURE_DIR "${_FEATURE_DIR}" DIRECTORY)
+    get_filename_component(_FEATURE_DIR "${_FEATURE_DIR}" DIRECTORY)
+    if(EXISTS "${_FEATURE_DIR}/CORE")
+        list(APPEND FEATURE_CORE_NAMES "\t\t\"${FEATURE}\"sv")
+    endif()
 endforeach()
 
 set_property(
@@ -217,6 +245,7 @@ set_property(
 )
 
 string(REPLACE ";" ",\n" FEATURE_VERSIONS "${FEATURE_VERSIONS}")
+string(REPLACE ";" ",\n" FEATURE_CORE_NAMES "${FEATURE_CORE_NAMES}")
 
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FeatureVersions.h.in
@@ -477,6 +506,16 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             ${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake
     )
 
+    # If AIO was manually (or programmatically) deleted, the stamp is stale —
+    # clear it so cmake --build re-runs PREPARE_AIO to recreate the directory.
+    if(NOT EXISTS "${AIO_DIR}")
+        file(
+            REMOVE
+            "${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp"
+            "${CMAKE_CURRENT_BINARY_DIR}/copy_shaders.stamp"
+        )
+    endif()
+
     add_custom_target(
         PREPARE_AIO
         ALL
@@ -575,6 +614,58 @@ endif()
 
 # Automatic deployment to CommunityShaders output directory.
 if(AUTO_PLUGIN_DEPLOYMENT)
+    # Detect git HEAD changes (branch switch or new commit) and invalidate stale
+    # deploy state. BuildRelease.bat always reconfigures, so this runs on every
+    # build invocation. When HEAD changes we:
+    #   1. Touch all AIO files so robocopy /XO sees them as newer than any
+    #      previously-deployed files (including manual package installs).
+    #   2. Delete deploy stamps so CMake re-runs the robocopy commands.
+    # Files the user intentionally edited in-game remain protected by /XO on
+    # subsequent builds (same HEAD = no touch, same stamp file exists).
+    execute_process(
+        COMMAND git rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE _git_head
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(_git_head)
+        set(_git_head_stamp "${CMAKE_BINARY_DIR}/git-head.stamp")
+        set(_prev_git_head "")
+        if(EXISTS "${_git_head_stamp}")
+            file(READ "${_git_head_stamp}" _prev_git_head)
+            string(STRIP "${_prev_git_head}" _prev_git_head)
+        endif()
+        if(NOT "${_git_head}" STREQUAL "${_prev_git_head}")
+            message(
+                STATUS
+                "Git HEAD changed (${_prev_git_head} -> ${_git_head}): clearing AIO shaders and deploy stamps for full redeploy"
+            )
+            # Delete the entire AIO directory so PREPARE_AIO re-copies everything
+            # with fresh timestamps. Without this, copy_if_different skips
+            # content-identical files (shaders, textures, configs, etc.) and
+            # leaves them with old timestamps that deployed files (e.g. from a
+            # manual package install) may beat under /XO. The DLL is always
+            # rebuilt fresh by the C++ compile step so it doesn't need special
+            # handling.
+            file(REMOVE_RECURSE "${AIO_DIR}")
+            # Also clear the PREPARE_AIO / COPY_SHADERS stamps so cmake --build
+            # actually re-runs those targets.
+            file(
+                GLOB _build_stamps
+                "${CMAKE_BINARY_DIR}/*_deploy.stamp"
+                "${CMAKE_BINARY_DIR}/*_shaders_full.stamp"
+                "${CMAKE_BINARY_DIR}/*_shaders_only.stamp"
+                "${CMAKE_BINARY_DIR}/prepare_aio.stamp"
+                "${CMAKE_BINARY_DIR}/copy_shaders.stamp"
+            )
+            foreach(_stamp IN LISTS _build_stamps)
+                file(REMOVE "${_stamp}")
+            endforeach()
+        endif()
+        file(WRITE "${_git_head_stamp}" "${_git_head}")
+    endif()
+
     set(DEPLOY_TARGET_HASHES)
     if(WIN32)
         foreach(DEPLOY_TARGET $ENV{CommunityShadersOutputDir})

@@ -1,5 +1,6 @@
 #include "HairSpecular.h"
 
+#include "Utils/D3D.h"
 #include <DirectXTex.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -113,7 +114,7 @@ void HairSpecular::SetupResources()
 			return;
 		}
 
-		texTangentShift = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource));
+		texTangentShift = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "HairSpecular::TangentShift");
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texTangentShift->desc.Format,

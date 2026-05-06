@@ -64,7 +64,9 @@ void HomePageRenderer::RenderWelcomeSection()
 	}
 
 	ImVec2 windowSize = ImGui::GetWindowSize();
-	std::string titleWithVersion = "Welcome to Community Shaders " + Util::GetFormattedVersion(Plugin::VERSION);
+	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
+	auto expectedTag = std::format("v{}", versionStr);
+	std::string titleWithVersion = Plugin::BUILD_DESCRIBE == expectedTag ? std::format("Welcome to Community Shaders {}", versionStr) : std::format("Welcome to Community Shaders {} [{}]", versionStr, Plugin::BUILD_DESCRIBE);
 	ImVec2 titleSize = ImGui::CalcTextSize(titleWithVersion.c_str());
 	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
 	ImGui::Text("%s", titleWithVersion.c_str());
@@ -129,9 +131,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		ImGui::PopStyleColor(3);
 		ImGui::PopStyleVar();
 
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Join Community Shaders Discord Server");
-		}
+		Util::AddTooltip("Join Community Shaders Discord Server");
 	} else {
 		// Fallback button when Discord icon is not available
 		float buttonWidth = DISCORD_BANNER_MIN_WIDTH * scale;
@@ -139,9 +139,7 @@ void HomePageRenderer::RenderWelcomeSection()
 		if (ImGui::Button("Join Discord Server", ImVec2(buttonWidth, 0))) {
 			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
 		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Join Community Shaders Discord Server");
-		}
+		Util::AddTooltip("Join Community Shaders Discord Server");
 	}
 
 	ImGui::PopStyleVar();

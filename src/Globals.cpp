@@ -87,6 +87,7 @@ namespace globals
 		RenderDoc renderDoc{};
 		WeatherEditor weatherEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
+		TruePBR truePBR{};
 		PostProcessing postProcessing{};
 
 		namespace llf
@@ -146,7 +147,6 @@ namespace globals
 
 	State* state = nullptr;
 	Deferred* deferred = nullptr;
-	TruePBR* truePBR = nullptr;
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
 
@@ -156,7 +156,6 @@ namespace globals
 		state = State::GetSingleton();
 		menu = Menu::GetSingleton();
 		deferred = Deferred::GetSingleton();
-		truePBR = TruePBR::GetSingleton();
 	}
 
 	void ReInit()

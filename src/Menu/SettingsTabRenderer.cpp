@@ -675,8 +675,7 @@ void SettingsTabRenderer::RenderThemesTab()
 
 		if (!isPreset && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
 			ImGui::SameLine();
-			auto _style = Util::ErrorButtonStyle();
-			if (Util::ButtonWithFlash("Delete")) {
+			if (Util::ErrorButtonWithFlash("Delete")) {
 				deleteThemePopup.message =
 					"Are you sure you want to delete the theme '" +
 					(currentThemeInfo->displayName.empty() ? currentThemePreset : currentThemeInfo->displayName) +
@@ -856,11 +855,10 @@ void SettingsTabRenderer::RenderFontsTab()
 
 		SeparatorTextWithFont("Font", Menu::FontRole::Subheading);
 
-		bool useAutoFont = (themeSettings.FontSize <= 0.0f);
+		bool& useAutoFont = menuInstance->GetSettings().UseResolutionFont;
 		if (ImGui::Checkbox("Use resolution-based font size", &useAutoFont)) {
-			if (useAutoFont) {
-				themeSettings.FontSize = 0.0f;
-			} else {
+			if (!useAutoFont) {
+				// Seed the fixed-size slider with the current effective size so it doesn't jump
 				float effective = ThemeManager::ResolveFontSize(*menuInstance);
 				themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 			}

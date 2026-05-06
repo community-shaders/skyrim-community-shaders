@@ -1,6 +1,7 @@
 #include "UI.h"
 
 #include "../WeatherEditor/EditorWindow.h"
+#include "D3D.h"
 #include "FileSystem.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
@@ -510,14 +511,88 @@ namespace Util
 		}
 	}
 
-	StyledButtonWrapper ErrorButtonStyle()
+	namespace ButtonHelpers
 	{
-		constexpr float kHoverBrighten = 0.2f;
-		constexpr float kActiveBrighten = 0.3f;
-		auto color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-		auto hover = ImVec4(std::min(color.x + kHoverBrighten, 1.0f), std::min(color.y + kHoverBrighten, 1.0f), std::min(color.z + kHoverBrighten, 1.0f), color.w);
-		auto active = ImVec4(std::min(color.x + kActiveBrighten, 1.0f), std::min(color.y + kActiveBrighten, 1.0f), std::min(color.z + kActiveBrighten, 1.0f), color.w);
+		ImVec4 AdjustButtonColor(const ImVec4& color, float amount)
+		{
+			const float maxChannel = std::max({ color.x, color.y, color.z });
+			const float minChannel = ThemeManager::Constants::BUTTON_MIN_COLOR_CHANNEL;
+			const float maxColorChannel = ThemeManager::Constants::BUTTON_MAX_COLOR_CHANNEL;
+			const float adjustment = maxChannel <= (maxColorChannel - amount) ? amount : -amount;
+			return ImVec4(
+				std::clamp(color.x + adjustment, minChannel, maxColorChannel),
+				std::clamp(color.y + adjustment, minChannel, maxColorChannel),
+				std::clamp(color.z + adjustment, minChannel, maxColorChannel),
+				color.w);
+		}
+
+		ImVec4 WithAlpha(const ImVec4& color, float alpha)
+		{
+			return ImVec4(color.x, color.y, color.z, alpha);
+		}
+
+		template <typename StyleFn, typename ButtonFn>
+		bool InvokeStyledButton(StyleFn styleProvider, ButtonFn buttonCall)
+		{
+			auto _style = styleProvider();
+			return buttonCall();
+		}
+	}
+
+	StyledButtonWrapper StatusButtonStyle(const ImVec4& color)
+	{
+		auto hover = ButtonHelpers::AdjustButtonColor(color, ThemeManager::Constants::BUTTON_HOVER_BRIGHTEN);
+		auto active = ButtonHelpers::AdjustButtonColor(color, ThemeManager::Constants::BUTTON_ACTIVE_BRIGHTEN);
 		return StyledButtonWrapper(color, hover, active);
+	}
+
+	StyledButtonWrapper DestructiveButtonStyle()
+	{
+		return StatusButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error);
+	}
+
+	bool ErrorButton(const char* label, const ImVec2& size)
+	{
+		return ButtonHelpers::InvokeStyledButton(DestructiveButtonStyle, [&] { return ImGui::Button(label, size); });
+	}
+
+	bool ErrorButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
+	{
+		return ButtonHelpers::InvokeStyledButton(DestructiveButtonStyle, [&] { return ButtonWithFlash(label, size, flashDurationMs); });
+	}
+
+	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color)
+	{
+		return StyledButtonWrapper(color,
+			ButtonHelpers::WithAlpha(color, ThemeManager::Constants::BUTTON_STATUS_TEXT_HOVER_ALPHA),
+			ButtonHelpers::WithAlpha(color, ThemeManager::Constants::BUTTON_STATUS_TEXT_ACTIVE_ALPHA));
+	}
+
+	StyledButtonWrapper SuccessButtonStyle()
+	{
+		return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor);
+	}
+
+	StyledButtonWrapper WarningButtonStyle()
+	{
+		return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Warning);
+	}
+
+	bool SuccessButton(const char* label, const ImVec2& size)
+	{
+		return ButtonHelpers::InvokeStyledButton(SuccessButtonStyle, [&] { return ImGui::Button(label, size); });
+	}
+
+	bool WarningButton(const char* label, const ImVec2& size)
+	{
+		return ButtonHelpers::InvokeStyledButton(WarningButtonStyle, [&] { return ImGui::Button(label, size); });
+	}
+
+	bool ErrorTextButton(const char* label, const ImVec2& size)
+	{
+		return ButtonHelpers::InvokeStyledButton(
+			[] { return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error); },
+			[&] { return ImGui::Button(label, size); });
 	}
 
 	StyledButtonWrapper TransparentIconButtonStyle()
@@ -1784,6 +1859,8 @@ namespace Util
 		};
 
 		HRESULT hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+		if (SUCCEEDED(hr) && *out_srv)
+			Util::SetResourceName(*out_srv, "UI::DDS:%s", filename);
 		pTexture->Release();
 
 		if (FAILED(hr) || !*out_srv) {

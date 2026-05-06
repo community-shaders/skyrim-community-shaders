@@ -35,7 +35,6 @@
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
 #include "Util.h"
 #include "Utils/UI.h"
 
@@ -169,6 +168,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	AutoHideFeatureList,
 	SkipConstraintWarning,
 	RequireShiftToDock,
+	UseResolutionFont,
 	Theme,
 	SelectedThemePreset)
 
@@ -662,7 +662,11 @@ void Menu::DrawSettings()
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), layoutCond, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), layoutCond);
 	resetLayout = false;
-	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
+	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
+	auto expectedTag = std::format("v{}", versionStr);
+	auto displayTitle = Plugin::BUILD_DESCRIBE == expectedTag ? std::format("Community Shaders {}", versionStr) : std::format("Community Shaders {} [{}]", versionStr, Plugin::BUILD_DESCRIBE);
+	// Use ### to keep a stable window ID regardless of build suffix, preserving docking state
+	auto title = std::format("{}###CommunityShaders", displayTitle);
 
 	// Determine window flags based on docking state
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
@@ -766,9 +770,7 @@ void Menu::DrawGeneralSettings()
  */
 void Menu::DrawAdvancedSettings()
 {
-	// Render advanced settings using extracted component
 	AdvancedSettingsRenderer::RenderAdvancedSettings(
-		[this]() { globals::truePBR->DrawSettings(); },
 		[this]() { DrawDisableAtBootSettings(); });
 }
 
@@ -783,27 +785,6 @@ void Menu::DrawDisableAtBootSettings()
 		"Restart will be required to reenable.");
 
 	ImGui::Spacing();
-
-	if (ImGui::CollapsingHeader("Special Features", ImGuiTreeNodeFlags_DefaultOpen)) {
-		// Prepare a sorted list of special feature names
-		std::vector<std::string> specialFeatureNames;
-		for (const auto& [featureName, _] : state->specialFeatures) {
-			specialFeatureNames.push_back(featureName);
-		}
-		std::sort(specialFeatureNames.begin(), specialFeatureNames.end());
-
-		// Display sorted special features
-		for (const auto& featureName : specialFeatureNames) {
-			// Check if the feature is currently disabled
-			bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
-
-			// Create a checkbox for each feature
-			if (ImGui::Checkbox(featureName.c_str(), &isDisabled)) {
-				// Update the disabledFeatures map based on user interaction
-				disabledFeatures[featureName] = isDisabled;
-			}
-		}
-	}
 
 	if (ImGui::CollapsingHeader("Features", ImGuiTreeNodeFlags_DefaultOpen)) {
 		// Prepare a sorted list of feature pointers
@@ -950,6 +931,10 @@ void Menu::ProcessInputEventQueue()
 			logger::trace("Detected key code {} ({})", event.keyCode, key);
 			if (key == event.keyCode)
 				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
+
+			const bool wasCapturingHotkey = IsCapturingHotkeyInput();
+			const bool allowSetupCloseKey = wasCapturingHotkey && HomePageRenderer::ShouldShowFirstTimeSetup() &&
+			                                (key == VK_RETURN || key == VK_ESCAPE);
 			if (!event.IsPressed()) {
 				// Skip key release if it was used to close the first-time setup dialog
 				if (HomePageRenderer::ShouldSkipKeyRelease(key)) {
@@ -1024,7 +1009,13 @@ void Menu::ProcessInputEventQueue()
 						std::function<void()> action;
 					};
 					KeyAction keyActions[] = {
-						{ settings.ToggleKey, [this]() { if (!HomePageRenderer::ShouldShowFirstTimeSetup()) IsEnabled = !IsEnabled; } },
+						{ settings.ToggleKey, [this]() {
+							 if (!HomePageRenderer::ShouldShowFirstTimeSetup()) {
+								 IsEnabled = !IsEnabled;
+								 if (IsEnabled)
+									 ImGui::GetIO().ClearInputKeys();  // Prevent toggle key from remaining "held" in ImGui after open.
+							 }
+						 } },
 						{ settings.SkipCompilationKey, [this, shaderCache]() { if (!ShouldSwallowInput() && shaderCache->IsCompiling()) shaderCache->backgroundCompilation = true; } },
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
@@ -1040,8 +1031,8 @@ void Menu::ProcessInputEventQueue()
 							 } else if (ew->IsInPreviewMode()) {
 								 // Locked or PlayMode → fully exit preview
 								 ew->ExitPreviewMode();
-							 } else if (EditorWindow::CanBeOpen()) {
-								 ew->open = !ew->open;
+							 } else {
+								 WeatherEditor::ToggleEditorWindow();
 							 }
 						 } },
 					};
@@ -1076,9 +1067,13 @@ void Menu::ProcessInputEventQueue()
 			bool isHotkey = ShouldSwallowInput() && std::any_of(std::begin(hotkeys), std::end(hotkeys),
 														[key](const auto* combo) { return InputCombo::MatchesKeyboardCombo(*combo, key); });
 
-			if (!isHotkey) {
+			// Always forward key-up events. Suppress key-down during active hotkeys,
+			// and during hotkey capture except setup close keys (Enter/Escape).
+			const bool isKeyDown = event.IsPressed();
+			const bool suppressForwarding = isKeyDown && (isHotkey || (wasCapturingHotkey && !allowSetupCloseKey));
+			if (!suppressForwarding) {
 				// DirectInput loses key-up events after alt-tab; validate against OS state.
-				bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
+				bool pressed = isKeyDown && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
 				io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
 
 				if (key == VK_LCONTROL || key == VK_RCONTROL)
@@ -1092,6 +1087,12 @@ void Menu::ProcessInputEventQueue()
 	}
 
 	_keyEventQueue.clear();
+}
+
+bool Menu::IsCapturingHotkeyInput() const
+{
+	return settingToggleKey || settingSkipCompilationKey || settingsEffectsToggle ||
+	       settingOverlayToggleKey || settingShaderBlockPrevKey || settingShaderBlockNextKey || settingWeatherEditorToggleKey;
 }
 
 void Menu::addToEventQueue(KeyEvent e)

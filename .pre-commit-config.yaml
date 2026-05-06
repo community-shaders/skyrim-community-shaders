@@ -9,7 +9,7 @@ repos:
           - id: check-yaml
 
     - repo: https://github.com/pre-commit/mirrors-clang-format
-      rev: v22.1.2
+      rev: v22.1.4
       hooks:
           - id: clang-format
             args: [--style=file]

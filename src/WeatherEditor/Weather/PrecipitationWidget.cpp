@@ -1,6 +1,10 @@
 #include "PrecipitationWidget.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
+#include "Globals.h"
+#include "RE/B/BSShaderManager.h"
+#include "RE/N/NiSourceTexture.h"
+#include "Utils/Game.h"
 
 void PrecipitationWidget::DrawWidget()
 {
@@ -22,15 +26,15 @@ void PrecipitationWidget::DrawWidget()
 				}
 
 				ImGui::SeparatorText("Particle Size");
-				if (WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 200.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 200.0f))
 					changed = true;
 
 				ImGui::SeparatorText("Velocity");
-				if (WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, -100.0f, 100.0f))
+				if (WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, 0.0f, 10000.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, -360.0f, 360.0f))
+				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, 0.0f, 10000.0f))
 					changed = true;
 
 				EndScrollableContent();
@@ -40,17 +44,17 @@ void PrecipitationWidget::DrawWidget()
 			if (ImGui::BeginTabItem("Position")) {
 				BeginScrollableContent("##PositionScroll");
 				ImGui::SeparatorText("Offset");
-				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, -1000.0f, 1000.0f))
+				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, 0.0f, 200.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, -1000.0f, 1000.0f))
+				if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, 0.0f, 200.0f))
 					changed = true;
 				if (WeatherUtils::DrawSliderFloat("Start Rotation Range", settings.startRotationRange, 0.0f, 360.0f))
 					changed = true;
 
 				ImGui::SeparatorText("Volume");
-				if (WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 10000.0f))
+				if (WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 1000.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 1000.0f))
 					changed = true;
 
 				EndScrollableContent();
@@ -72,9 +76,21 @@ void PrecipitationWidget::DrawWidget()
 				}
 
 				ImGui::SeparatorText("Texture Path");
-				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
-					settings.particleTexture = textureBuffer;
+				const bool inputChanged = ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer));
+				std::string_view buf(textureBuffer);
+				if (buf != lastCheckedBuffer) {
+					lastCheckedBuffer = std::string(buf);
+					lastCheckedExists = WeatherUtils::TexturePath::ExistsOnDisk(buf);
+				}
+				if (inputChanged && lastCheckedExists) {
+					settings.particleTexture = lastCheckedBuffer;
 					changed = true;
+				}
+				if (settings.particleTexture != buf && !buf.empty()) {
+					if (!WeatherUtils::TexturePath::HasDdsExtension(buf))
+						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must end with '.dds'");
+					else if (!lastCheckedExists)
+						ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/textures/.");
 				}
 
 				EndScrollableContent();
@@ -82,10 +98,6 @@ void PrecipitationWidget::DrawWidget()
 			}
 
 			ImGui::EndTabBar();
-		}
-
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
 		}
 	}
 	ImGui::End();
@@ -123,8 +135,20 @@ void PrecipitationWidget::LoadSettings()
 				settings.boxSize = js["boxSize"];
 			if (js.contains("particleDensity"))
 				settings.particleDensity = js["particleDensity"];
-			if (js.contains("particleTexture"))
-				settings.particleTexture = js["particleTexture"].get<std::string>();
+			if (js.contains("particleTexture")) {
+				if (!js["particleTexture"].is_string()) {
+					logger::warn("Precipitation {}: particleTexture is not a string, skipping", GetEditorID());
+				} else {
+					auto texPath = js["particleTexture"].get<std::string>();
+					if (!WeatherUtils::TexturePath::HasDdsExtension(texPath)) {
+						logger::warn("Precipitation {}: ignoring malformed texture path '{}'", GetEditorID(), texPath);
+					} else {
+						settings.particleTexture = texPath;
+						if (!WeatherUtils::TexturePath::ExistsOnDisk(texPath))
+							logger::warn("Precipitation {}: saved texture path '{}' not found on disk", GetEditorID(), texPath);
+					}
+				}
+			}
 		} catch (const std::exception& e) {
 			logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 			settings = vanillaSettings;
@@ -143,8 +167,6 @@ void PrecipitationWidget::LoadFromGameSettings()
 	if (!precipitation)
 		return;
 
-	auto& runtime = precipitation->GetRuntimeData();
-
 	settings.gravityVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
 	settings.rotationVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kRotationVelocity).f;
 	settings.particleSizeX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeX).f;
@@ -157,7 +179,8 @@ void PrecipitationWidget::LoadFromGameSettings()
 	settings.particleType = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleType).i;
 	settings.boxSize = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kBoxSize).f;
 	settings.particleDensity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
-	settings.particleTexture = runtime.particleTexture.textureName.c_str();
+	GET_INSTANCE_MEMBER(particleTexture, precipitation)
+	settings.particleTexture = particleTexture.textureName.c_str();
 }
 
 void PrecipitationWidget::SaveSettings()
@@ -183,27 +206,77 @@ void PrecipitationWidget::ApplyChanges()
 	if (!precipitation)
 		return;
 
-	auto& runtime = precipitation->GetRuntimeData();
+	using DataID = RE::BGSShaderParticleGeometryData::DataID;
 
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity].f = settings.gravityVelocity;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kRotationVelocity].f = settings.rotationVelocity;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleSizeX].f = settings.particleSizeX;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleSizeY].f = settings.particleSizeY;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMin].f = settings.centerOffsetMin;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMax].f = settings.centerOffsetMax;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kStartRotationRange].f = settings.startRotationRange;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesX].i = settings.numSubtexturesX;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesY].i = settings.numSubtexturesY;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleType].i = settings.particleType;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kBoxSize].f = settings.boxSize;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleDensity].f = settings.particleDensity;
-	runtime.particleTexture.textureName = settings.particleTexture.c_str();
+	precipitation->GetSettingRef(DataID::kGravityVelocity).f = settings.gravityVelocity;
+	precipitation->GetSettingRef(DataID::kRotationVelocity).f = settings.rotationVelocity;
+	precipitation->GetSettingRef(DataID::kParticleSizeX).f = settings.particleSizeX;
+	precipitation->GetSettingRef(DataID::kParticleSizeY).f = settings.particleSizeY;
+	precipitation->GetSettingRef(DataID::kCenterOffsetMin).f = settings.centerOffsetMin;
+	precipitation->GetSettingRef(DataID::kCenterOffsetMax).f = settings.centerOffsetMax;
+	precipitation->GetSettingRef(DataID::kStartRotationRange).f = settings.startRotationRange;
+	precipitation->GetSettingRef(DataID::kNumSubtexturesX).i = settings.numSubtexturesX;
+	precipitation->GetSettingRef(DataID::kNumSubtexturesY).i = settings.numSubtexturesY;
+	precipitation->GetSettingRef(DataID::kParticleType).i = settings.particleType;
+	precipitation->GetSettingRef(DataID::kBoxSize).f = settings.boxSize;
+	precipitation->GetSettingRef(DataID::kParticleDensity).f = settings.particleDensity;
+	GET_INSTANCE_MEMBER(particleTexture, precipitation)
+	particleTexture.textureName = settings.particleTexture.c_str();
+	ApplyLiveParticleTexture(settings.particleTexture);
+	Widget::ForceCurrentWeatherReinit();
+}
+
+void PrecipitationWidget::ApplyLiveParticleTexture(const std::string& path)
+{
+	if (path.empty())
+		return;
+	if (!WeatherUtils::TexturePath::ExistsOnDisk(path)) {
+		if (path != lastInvalidTexture) {
+			logger::warn("Precipitation {}: invalid texture path '{}', must end with '.dds'", GetEditorID(), path);
+			lastInvalidTexture = path;
+		}
+		return;
+	}
+
+	auto* sky = globals::game::sky;
+	if (!sky || !sky->precip)
+		return;
+
+	if (path == lastAppliedTexture &&
+		sky->precip->currentPrecip == lastAppliedPrecip &&
+		sky->precip->lastPrecip == lastAppliedPrecip)
+		return;
+
+	RE::NiPointer<RE::NiTexture> tex;
+	RE::BSShaderManager::GetTexture(path.c_str(), true, tex, false);
+	if (!tex || tex->GetRTTI() != globals::rtti::NiSourceTextureRTTI.get())
+		return;
+
+	auto* sourceTex = static_cast<RE::NiSourceTexture*>(tex.get());
+	if (!sourceTex->rendererTexture || !sourceTex->rendererTexture->texture)
+		return;
+
+	RE::BSGeometry* precipObjects[] = { sky->precip->currentPrecip.get(), sky->precip->lastPrecip.get() };
+	for (auto* precipObject : precipObjects) {
+		if (!precipObject)
+			continue;
+		if (auto* shaderProp = netimmerse_cast<RE::BSParticleShaderProperty*>(precipObject->GetGeometryRuntimeData().shaderProperty.get()))
+			shaderProp->particleShaderTexture = RE::NiPointer(sourceTex);
+	}
+
+	lastAppliedTexture = path;
+	lastAppliedPrecip = sky->precip->currentPrecip;
 }
 
 void PrecipitationWidget::RevertChanges()
 {
 	settings = vanillaSettings;
 	strncpy_s(textureBuffer, sizeof(textureBuffer), settings.particleTexture.c_str(), _TRUNCATE);
+	lastAppliedTexture.clear();
+	lastAppliedPrecip.reset();
+	lastInvalidTexture.clear();
+	lastCheckedBuffer.clear();
+	lastCheckedExists = false;
 	ApplyChanges();
 }
 
