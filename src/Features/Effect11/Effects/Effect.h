@@ -47,10 +47,17 @@ public:
 	// Pure virtual methods for derived classes to implement
 	virtual std::string GetName() const = 0;
 
+	struct TechniqueBinding
+	{
+		std::string variableName;
+		bool inverted = false;
+	};
+
 	struct TechniqueInfo
 	{
 		winrt::com_ptr<ID3DX11EffectTechnique> technique;
 		std::string renderTargetName;
+		std::vector<TechniqueBinding> bindings;
 	};
 
 	winrt::com_ptr<ID3DX11Effect> effect;

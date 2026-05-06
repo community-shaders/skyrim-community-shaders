@@ -336,6 +336,7 @@ namespace ENBExtender
 		}
 
 		result += "#define " + defineName + " " + finalVal + "\n";
+		result += "string __uidef_" + defineName + ";\n";
 		return true;
 	}
 
@@ -649,15 +650,17 @@ namespace ENBExtender
 
 	void InsertUIDefines(Effect& effect)
 	{
-		int defineSourceOrder = -static_cast<int>(effect.uiDefines.size());
+		int fallbackOrder = -static_cast<int>(effect.uiDefines.size());
 		for (const auto& def : effect.uiDefines) {
 			Effect::UIVariable uiVar = {};
 			uiVar.name = def.defineName;
 			uiVar.displayName = def.displayName;
 			uiVar.group = def.group;
 			uiVar.ordering = def.ordering;
-			uiVar.sourceOrder = defineSourceOrder++;
 			uiVar.isDefine = true;
+
+			auto it = effect.sourceOrderMap.find("__uidef_" + def.defineName);
+			uiVar.sourceOrder = (it != effect.sourceOrderMap.end()) ? it->second : fallbackOrder++;
 
 			if (def.type == "bool") {
 				uiVar.type = Effect::UIVariableType::Bool;
@@ -1099,71 +1102,65 @@ namespace ENBExtender
 			if (!group.empty() && group == node.fullPath && !effect->techniqueDropdown.topLevel)
 				RenderTechniqueDropdown(effect, ctx.changedEffects);
 
-		int firstChildMinSO = INT_MAX;
+		struct RenderItem
+		{
+			int ordering;
+			int sourceOrder;
+			VarRef* var = nullptr;
+			GroupNode* child = nullptr;
+		};
+
+		std::vector<RenderItem> items;
+		items.reserve(node.vars.size() + node.children.size());
+
+		for (auto& ref : node.vars) {
+			auto& uiVar = ref.effect->uiVariables[ref.index];
+			items.push_back({ uiVar.ordering, uiVar.sourceOrder, &ref, nullptr });
+		}
+
 		for (auto& child : node.children) {
-			int cso = ComputeMinSourceOrder(*child);
-			if (cso < firstChildMinSO)
-				firstChildMinSO = cso;
+			auto metaIt = ctx.meta.find(child->fullPath);
+			int ordering = (metaIt != ctx.meta.end()) ? metaIt->second.ordering : 0;
+			items.push_back({ ordering, ComputeMinSourceOrder(*child), nullptr, child.get() });
 		}
 
-		std::vector<VarRef*> interGroupSeps;
-		bool lastWasSeparator = false;
-
-		if (!node.vars.empty()) {
-			bool inTable = false;
-			for (auto& ref : node.vars) {
-				auto& var = ref.effect->uiVariables[ref.index];
-				if (var.isSeparator && var.sourceOrder >= firstChildMinSO) {
-					interGroupSeps.push_back(&ref);
-					continue;
-				}
-				RenderVar(ref, inTable, lastWasSeparator, ctx);
-			}
-			if (inTable)
-				ImGui::EndTable();
-		}
-
-		std::sort(interGroupSeps.begin(), interGroupSeps.end(), [](const VarRef* a, const VarRef* b) {
-			return a->effect->uiVariables[a->index].sourceOrder < b->effect->uiVariables[b->index].sourceOrder;
+		std::stable_sort(items.begin(), items.end(), [](const RenderItem& a, const RenderItem& b) {
+			if (a.ordering != b.ordering)
+				return a.ordering > b.ordering;
+			return a.sourceOrder < b.sourceOrder;
 		});
 
-		size_t sepIdx = 0;
-		for (auto& child : node.children) {
-			int childMinSO = ComputeMinSourceOrder(*child);
-			while (sepIdx < interGroupSeps.size()) {
-				int sepSO = interGroupSeps[sepIdx]->effect->uiVariables[interGroupSeps[sepIdx]->index].sourceOrder;
-				if (sepSO < childMinSO) {
-					if (!lastWasSeparator)
-						ImGui::Separator();
-					lastWasSeparator = true;
-					sepIdx++;
-				} else {
-					break;
+		bool inTable = false;
+		bool lastWasSeparator = false;
+
+		for (auto& item : items) {
+			if (item.var) {
+				RenderVar(*item.var, inTable, lastWasSeparator, ctx);
+			} else {
+				if (inTable) {
+					ImGui::EndTable();
+					inTable = false;
+				}
+				lastWasSeparator = false;
+
+				std::string displayName = item.child->name;
+				ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
+				auto metaIt = ctx.meta.find(item.child->fullPath);
+				if (metaIt != ctx.meta.end()) {
+					if (!metaIt->second.displayName.empty())
+						displayName = metaIt->second.displayName;
+					if (metaIt->second.defaultOpen)
+						flags = ImGuiTreeNodeFlags_DefaultOpen;
+				}
+				if (ImGui::TreeNodeEx((displayName + "###ugrp_" + item.child->fullPath).c_str(), flags)) {
+					RenderGroupNode(*item.child, ctx, techDropdowns);
+					ImGui::TreePop();
 				}
 			}
-			lastWasSeparator = false;
-
-			std::string displayName = child->name;
-			ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;
-			auto metaIt = ctx.meta.find(child->fullPath);
-			if (metaIt != ctx.meta.end()) {
-				if (!metaIt->second.displayName.empty())
-					displayName = metaIt->second.displayName;
-				if (metaIt->second.defaultOpen)
-					flags = ImGuiTreeNodeFlags_DefaultOpen;
-			}
-			if (ImGui::TreeNodeEx((displayName + "###ugrp_" + child->fullPath).c_str(), flags)) {
-				RenderGroupNode(*child, ctx, techDropdowns);
-				ImGui::TreePop();
-			}
 		}
 
-		while (sepIdx < interGroupSeps.size()) {
-			if (!lastWasSeparator)
-				ImGui::Separator();
-			lastWasSeparator = true;
-			sepIdx++;
-		}
+		if (inTable)
+			ImGui::EndTable();
 	}
 
 	void RenderUI(std::span<Effect*> effects)
@@ -1221,6 +1218,37 @@ namespace ENBExtender
 	{
 		Effect* ptr = &effect;
 		RenderUI({ &ptr, 1 });
+	}
+
+	// Technique evaluation
+
+	bool IsTechniqueEnabled(const Effect::TechniqueInfo& info, const Effect& effect)
+	{
+		for (auto& binding : info.bindings) {
+			bool found = false;
+			bool val = false;
+			for (auto& uiVar : effect.uiVariables) {
+				std::string uname = !uiVar.uniqueName.empty() ? uiVar.uniqueName
+				                    : !uiVar.group.empty()    ? uiVar.group + "." + uiVar.displayName
+				                                              : uiVar.displayName;
+				if (uname == binding.variableName) {
+					found = true;
+					switch (uiVar.type) {
+					case Effect::UIVariableType::Bool: val = uiVar.boolValue; break;
+					case Effect::UIVariableType::Int: val = uiVar.intValue != 0; break;
+					case Effect::UIVariableType::Float: val = uiVar.floatValue != 0.0f; break;
+					default: val = true; break;
+					}
+					break;
+				}
+			}
+			if (!found)
+				continue;
+			bool enabled = binding.inverted ? !val : val;
+			if (!enabled)
+				return false;
+		}
+		return true;
 	}
 
 	// Post-load processing

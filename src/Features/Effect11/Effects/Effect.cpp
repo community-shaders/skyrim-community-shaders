@@ -3,8 +3,7 @@
 #include <fstream>
 #include <sstream>
 
-#include <DirectXTK/DDSTextureLoader.h>
-#include <DirectXTK/WICTextureLoader.h>
+#include <DirectXTex.h>
 
 #include "../ENBExtender.h"
 #include "../PresetManager.h"
@@ -361,6 +360,9 @@ Effect::TechniqueSequenceResult Effect::ExecuteTechniqueSequence(const std::stri
 		if (!techniqueInfo.technique)
 			continue;
 
+		if (!ENBExtender::IsTechniqueEnabled(techniqueInfo, *this))
+			continue;
+
 		if (sequence.size() == 1 || swapCounter == 0) {
 			inputSRV = a_input;
 			outputRTV = a_output.rtv.get();
@@ -430,16 +432,14 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 
 	std::filesystem::path filepath = PresetManager::GetSingleton().GetENBSeriesPath() / filename;
 
-	winrt::com_ptr<ID3D11Resource> texture;
 	winrt::com_ptr<ID3D11ShaderResourceView> srv;
 
-	HRESULT hr = DirectX::CreateDDSTextureFromFileEx(device, filepath.c_str(),
-		0, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, 0,
-		DirectX::DDS_LOADER_IGNORE_SRGB, texture.put(), srv.put());
+	DirectX::ScratchImage image;
+	HRESULT hr = DirectX::LoadFromDDSFile(filepath.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
 	if (FAILED(hr))
-		hr = DirectX::CreateWICTextureFromFileEx(device, filepath.c_str(),
-			0, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, 0,
-			DirectX::WIC_LOADER_IGNORE_SRGB, texture.put(), srv.put());
+		hr = DirectX::LoadFromWICFile(filepath.c_str(), DirectX::WIC_FLAGS_IGNORE_SRGB, nullptr, image);
+	if (SUCCEEDED(hr))
+		hr = DirectX::CreateShaderResourceView(device, image.GetImages(), image.GetImageCount(), image.GetMetadata(), srv.put());
 
 	if (FAILED(hr)) {
 		logger::error("[ENBPP] Failed to load texture file: {} (HRESULT: 0x{:08X})", filepath.string(), static_cast<uint32_t>(hr));
@@ -481,6 +481,16 @@ void Effect::LoadTechniques()
 			TechniqueInfo info;
 			info.technique.copy_from(technique);
 			info.renderTargetName = GetTechniqueAnnotation(technique, "RenderTarget");
+
+			for (int bi = 0; bi < 16; ++bi) {
+				std::string bindVal = GetTechniqueAnnotation(technique, "UIBinding" + std::to_string(bi));
+				if (!bindVal.empty())
+					info.bindings.push_back({ bindVal, false });
+				std::string invVal = GetTechniqueAnnotation(technique, "UIInvBinding" + std::to_string(bi));
+				if (!invVal.empty())
+					info.bindings.push_back({ invVal, true });
+			}
+
 			techniques[key].push_back(std::move(info));
 		}
 	}
@@ -548,6 +558,7 @@ void Effect::LoadUITechniques()
 	if (defaultIndex < uiTechniques.size())
 		selectedTechniqueIndex = defaultIndex;
 }
+
 
 ID3D11RenderTargetView* Effect::GetRenderTargetView(const std::string& renderTargetName, ID3D11RenderTargetView* fallback)
 {
