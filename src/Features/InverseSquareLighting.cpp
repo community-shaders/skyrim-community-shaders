@@ -66,7 +66,13 @@ void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BS
 
 	if (bsLight->pointLight && isInvSq) {
 		const float intensity = runtimeData->fade * 4;
-		light.radius = CalculateRadius(intensity, bsLight->IsShadowLight(), runtimeData->cutoffOverride, runtimeData->size);
+		// Use the type-based helper rather than the virtual IsShadowLight():
+		// SCM's Hook_IsShadowLight reports false for shadow lights converted
+		// to normal-light overflow handling (issue #2121 #3). If we followed
+		// that hook here the cutoff would flip from DefaultShadowCasterCutoff
+		// (0.022) to DefaultCutoff (0.05) when a light is converted, shrinking
+		// its effective radius by ~33% and visibly reducing its lit area.
+		light.radius = CalculateRadius(intensity, ShadowCasterManager::IsShadowLightType(bsLight), runtimeData->cutoffOverride, runtimeData->size);
 		runtimeData->radius = light.radius;
 		light.invRadius = 1.f / light.radius;
 		light.fadeZone = 1.f / (light.radius * std::clamp(FadeZoneBase * light.invRadius, 0.f, 1.f));

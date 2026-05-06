@@ -25,6 +25,28 @@ struct ImVec4;
 namespace ShadowCasterManager
 {
 	// -------------------------------------------------------------------------
+	// Type-vs-state shadow-caster check
+	//
+	// Use this when the answer should reflect a light's intrinsic type rather
+	// than its current frame-by-frame shadow-casting state. SCM installs a
+	// vtable hook (Hook_IsShadowLight) that makes BSShadowLight::IsShadowLight()
+	// return false for shadow lights converted to normal-light overflow
+	// handling (issue #2121 #3, ConvertExcessToNormal). The engine's geometry
+	// / stencil shadow-masking pass and other state-aware callers correctly
+	// see those lights as non-shadow via the hooked virtual.
+	//
+	// Some callers (e.g. InverseSquareLighting's cutoff selection) want the
+	// stable type-based answer instead — the radius shouldn't oscillate as a
+	// light flips in and out of conversion. For those, query the underlying
+	// BSLight type via RTTI (skyrim_cast), which bypasses the vtable hook.
+	//
+	// Cost: one vtable-pointer compare. Cheap enough to call per-light per-frame.
+	inline bool IsShadowLightType(RE::BSLight* bsLight)
+	{
+		return skyrim_cast<RE::BSShadowLight*>(bsLight) != nullptr;
+	}
+
+	// -------------------------------------------------------------------------
 	// shadowLightsAccum iterator
 	//
 	// shadowLightsAccum is a flat slot array where a dual-paraboloid (DP) light
