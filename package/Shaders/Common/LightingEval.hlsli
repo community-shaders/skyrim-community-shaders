@@ -67,8 +67,6 @@ float3 VanillaSpecular(DirectContext context, float shininess, float2 uv, float2
 #endif
 
 #if defined(SPECULAR)
-	if (SharedData::enbSettings.Enable)
-		shininess *= SharedData::enbSettings.ColorPow;
 	float lightColorMultiplier = exp2(shininess * log2(HdotN));
 
 #elif defined(SPARKLE)
