@@ -1356,7 +1356,8 @@ namespace Util
 		const char* tableId)
 	{
 		if (ImGui::Selectable(label)) {
-			ShellExecuteW(nullptr, L"open", pluginDir, nullptr, nullptr, SW_SHOWNORMAL);
+			auto realPath = Util::PathHelpers::GetRealPathFromDataRelative(pluginDir);
+			ShellExecuteW(nullptr, L"open", realPath.empty() ? pluginDir : realPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 		}
 		std::vector<std::string> headers = { "DLL Name", "Version" };
 		std::vector<std::vector<std::string>> rows;
