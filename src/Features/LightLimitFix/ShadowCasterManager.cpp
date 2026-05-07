@@ -2676,46 +2676,62 @@ namespace ShadowCasterManager
 
 		// -- Group toggle buttons ------------------------------------------
 		// green = at least one unsuppressed; grey = all suppressed; click flips.
+		// Predicate-based so we can mix type filters (Spot/Hemi/Omni) with state
+		// filters (Conv = converted-to-normal lights).
 		{
-			auto allSuppressedOfType = [&](int type) {
+			using RowPred = std::function<bool(const SlotRow&)>;
+			auto allSuppressedMatching = [&](const RowPred& pred) {
+				bool sawAny = false;
 				for (auto& r : rows) {
-					if (type >= 0 && static_cast<int>(r.info.type) != type)
+					if (!pred(r))
 						continue;
+					sawAny = true;
 					if (!s_suppressedLights.count(r.info.lightKey))
 						return false;
 				}
-				return true;
+				// If nothing matches, treat as "all suppressed" so the button shows
+				// grey/disabled (clicking a no-op button does nothing).
+				return sawAny;
 			};
-			auto toggleType = [&](int type) {
-				if (allSuppressedOfType(type)) {
+			auto toggleMatching = [&](const RowPred& pred) {
+				if (allSuppressedMatching(pred)) {
 					for (auto& r : rows)
-						if (type < 0 || static_cast<int>(r.info.type) == type)
+						if (pred(r))
 							s_suppressedLights.erase(r.info.lightKey);
 				} else {
 					for (auto& r : rows)
-						if (type < 0 || static_cast<int>(r.info.type) == type)
+						if (pred(r))
 							s_suppressedLights.insert(r.info.lightKey);
 				}
 			};
-			auto typeButton = [&](const char* label, int type, const char* tooltip) {
-				bool allOff = allSuppressedOfType(type);
+			auto groupButton = [&](const char* label, const RowPred& pred, const char* tooltip) {
+				bool allOff = allSuppressedMatching(pred);
 				ImGui::PushStyleColor(ImGuiCol_Button,
 					allOff ? ImVec4(0.35f, 0.35f, 0.35f, 1) : ImVec4(0.15f, 0.5f, 0.15f, 1));
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
 					allOff ? ImVec4(0.5f, 0.5f, 0.5f, 1) : ImVec4(0.2f, 0.7f, 0.2f, 1));
 				if (ImGui::SmallButton(label))
-					toggleType(type);
+					toggleMatching(pred);
 				ImGui::PopStyleColor(2);
 				if (tooltip && ImGui::IsItemHovered())
 					ImGui::SetTooltip("%s", tooltip);
 			};
-			typeButton("All", -1, nullptr);
+			auto typePred = [](uint32_t type) {
+				return [type](const SlotRow& r) { return r.info.type == type; };
+			};
+			groupButton(
+				"All", [](const SlotRow&) { return true; }, nullptr);
 			ImGui::SameLine();
-			typeButton("Spot", 0, "Toggle all spot/frustum shadow lights");
+			groupButton("Spot", typePred(0), "Toggle all spot/frustum shadow lights");
 			ImGui::SameLine();
-			typeButton("Hemi", 1, "Toggle all hemisphere shadow lights");
+			groupButton("Hemi", typePred(1), "Toggle all hemisphere shadow lights");
 			ImGui::SameLine();
-			typeButton("Omni", 2, "Toggle all omni (paraboloid) shadow lights");
+			groupButton("Omni", typePred(2), "Toggle all omni (paraboloid) shadow lights");
+			ImGui::SameLine();
+			groupButton(
+				"Conv", [](const SlotRow& r) { return r.converted; },
+				"Toggle all lights currently demoted from shadow to normal\n"
+				"(ConvertExcessToNormal). Hides their cluster-light contribution.");
 		}
 
 		// -- Filter input --------------------------------------------------
