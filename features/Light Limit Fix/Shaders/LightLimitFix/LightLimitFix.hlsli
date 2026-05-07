@@ -161,7 +161,15 @@ namespace LightLimitFix
 		return shadow / 8.0;
 	}
 
-	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth, float2x2 rotationMatrix)
+	// PCF sample around a paraboloid UV.
+	//   isDualParaboloid = true  : the slice contains two stacked paraboloids
+	//                              (omni: upper in y∈[0,0.5], lower in y∈[0.5,1]).
+	//                              Clamp PCF samples to the originating half so we
+	//                              don't bleed across the seam.
+	//   isDualParaboloid = false : the slice contains a single paraboloid filling
+	//                              the whole y∈[0,1] (hemi). No clamping needed —
+	//                              the entire slice is valid shadow data.
+	float SampleParaboloidShadow(uint shadowIndex, float2 sampleUV, float depth, float2x2 rotationMatrix, bool isDualParaboloid)
 	{
 		float shadow = 0.0;
 
@@ -170,8 +178,10 @@ namespace LightLimitFix
 			float2 offset = mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * PCFRadius2D;
 			float2 uv = sampleUV + offset;
 
-			// Clamp to the correct paraboloid half
-			uv.y = (sampleUV.y >= 0.5) ? max(uv.y, 0.5) : min(uv.y, 0.5);
+			if (isDualParaboloid) {
+				// Clamp PCF samples to the originating paraboloid half.
+				uv.y = (sampleUV.y >= 0.5) ? max(uv.y, 0.5) : min(uv.y, 0.5);
+			}
 
 			shadow += SampleShadowGather(shadowIndex, uv, depth);
 		}
@@ -181,10 +191,24 @@ namespace LightLimitFix
 
 	float GetOmnidirectionalShadow(ShadowLightData shadowLightData, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
 	{
+		// ShadowLightParam.x:
+		//   0 = spot/frustum (handled in GetShadowLightShadow before reaching here)
+		//   1 = hemisphere   — engine renders ONE paraboloid filling the slice
+		//   2 = omnidirectional (dual paraboloid) — TWO paraboloids stacked in slice
+		//
+		// Verified against kSHADOWMAPS slice contents in RenderDoc: hemi slices show
+		// a single continuous depth gradient across y=0.5 with no seam, while omni
+		// slices show two distinct paraboloid renderings stacked. Treating hemi
+		// like omni applies a Y-axis compression / mirror that visibly distorts
+		// (the "inverted or rotated 90°" symptom).
+		const bool isOmni = (shadowLightData.ShadowLightParam.x == 2);
+
 		bool lowerHalf = positionLS.z < 0;
 
-		// Hemisphere-only early out
-		if (!lowerHalf && positionLS.z <= 0)
+		// Hemi only renders the +Z paraboloid; behind the light has no shadow data.
+		// Returning 1.0 (fully lit) lets the light's own attenuation handle falloff
+		// for points the engine never wrote shadow data for.
+		if (!isOmni && lowerHalf)
 			return 1.0;
 
 		positionLS.xyz /= positionLS.w;
@@ -192,12 +216,16 @@ namespace LightLimitFix
 		float3 posOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
 		float3 lightDirection = normalize(normalize(positionLS.xyz) + posOffset);
 		float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
-		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
+
+		// Y compression only applies to omni's dual layout. Hemi fills the whole
+		// slice so its sampleUV.y stays in [0, 1] directly.
+		if (isOmni)
+			sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
 		float depth = saturate(length(positionLS.xyz) / shadowLightData.ShadowLightParam.y);
 		depth -= shadowLightData.ShadowLightParam.z;
 
-		return SampleParaboloidShadow(shadowIndex, sampleUV, depth, rotationMatrix);
+		return SampleParaboloidShadow(shadowIndex, sampleUV, depth, rotationMatrix, isOmni);
 	}
 
 	float GetShadowLightShadow(uint shadowIndex, float3 worldPositionWS, float2x2 rotationMatrix, out bool hasCoverage)
