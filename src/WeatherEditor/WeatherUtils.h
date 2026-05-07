@@ -154,21 +154,15 @@ namespace PropertyDrawer
 	// Draw a vertically-centered label in the first table column. Call between TableNextRow and drawing the value.
 	void DrawLabel(const char* label);
 
-	// Draw properties with optional search filtering.
-	// searchBuffer can be nullptr to skip search filtering.
 	// Returns true if value was changed.
 	bool DrawFloat(const char* label, float& value, float minVal, float maxVal,
-		const char* searchBuffer = nullptr, const char* format = "%.3f");
+		const char* format = "%.3f");
 
-	bool DrawInt(const char* label, int& value, int minVal, int maxVal,
-		const char* searchBuffer = nullptr);
+	bool DrawInt(const char* label, int& value, int minVal, int maxVal);
 
-	bool DrawColor(const char* label, float3& value, const char* searchBuffer = nullptr);
+	bool DrawColor(const char* label, float3& value);
 
-	bool DrawCheckbox(const char* label, bool& value, const char* searchBuffer = nullptr);
-
-	// Check if a label matches the current search (convenience wrapper)
-	bool MatchesSearch(const char* label, const char* searchBuffer);
+	bool DrawCheckbox(const char* label, bool& value);
 }  // namespace PropertyDrawer
 
 // ============================================================================
@@ -348,10 +342,6 @@ namespace TOD
 	void DrawTODSeparator();
 }  // namespace TOD
 
-// Widget search bar helpers
-bool BeginWidgetSearchBar(char* searchBuffer, size_t bufferSize, bool& searchActive);
-void EndWidgetSearchBar();
-
 namespace WeatherUtils
 {
 	// Texture path helpers shared by precipitation and cloud layer widgets.
@@ -385,137 +375,102 @@ namespace WeatherUtils
 	bool DrawSliderInt8(const std::string& label, int& property);
 	bool DrawColorEdit(const std::string& l, float3& property, Widget* widget = nullptr);
 	bool DrawSliderUint8(const std::string& label, int& property);
-	bool DrawSliderFloat(const std::string& label, float& property, float min = 0.0f, float max = 1.0f, Widget* widget = nullptr);
+	bool DrawSliderFloat(const std::string& label, float& property, float min = 0.0f, float max = 1.0f, Widget* widget = nullptr, const char* format = "%.3f");
+	bool DrawCheckbox(const std::string& label, bool& value, Widget* widget = nullptr);
+
+	namespace detail
+	{
+		// Shared body for form-picker combo boxes. ForEachEntry receives a callback
+		// invoked with (T* form, std::string editorID) for each enumerable entry.
+		template <typename T, typename ForEachEntry>
+		bool DrawFormComboBody(const char* label, T*& currentForm, const std::string& currentEditorID,
+			bool showFormID, bool allowNone, float width, ForEachEntry forEachEntry)
+		{
+			bool changed = false;
+
+			std::string previewText;
+			if (currentForm) {
+				const std::string& effectiveID = currentEditorID.empty() ?
+				                                     std::format("{:08X}", currentForm->GetFormID()) :
+				                                     currentEditorID;
+				previewText = showFormID ?
+				                  std::format("{} (0x{:08X})", effectiveID, currentForm->GetFormID()) :
+				                  effectiveID;
+			} else {
+				previewText = "None";
+			}
+
+			if (width > 0.0f)
+				ImGui::SetNextItemWidth(width);
+
+			if (ImGui::BeginCombo(label, previewText.c_str())) {
+				if (allowNone && ImGui::Selectable("None", currentForm == nullptr)) {
+					currentForm = nullptr;
+					changed = true;
+				}
+
+				forEachEntry([&](T* form, const std::string& editorID) {
+					std::string comboLabel = showFormID ?
+					                             std::format("{} (0x{:08X})", editorID, form->GetFormID()) :
+					                             editorID;
+					bool isSelected = (currentForm == form);
+					if (ImGui::Selectable(comboLabel.c_str(), isSelected)) {
+						currentForm = form;
+						changed = true;
+					}
+					if (isSelected)
+						ImGui::SetItemDefaultFocus();
+				});
+				ImGui::EndCombo();
+			}
+
+			return changed;
+		}
+	}
 
 	// Generic form picker combo box using cached widget EditorIDs for performance
 	// Returns true if selection changed
 	template <typename T, typename WidgetContainer>
 	bool DrawFormPickerCached(const char* label, T*& currentForm, const WidgetContainer& widgets, bool showFormID = true, bool allowNone = true, float width = 450.0f)
 	{
-		bool changed = false;
-
-		std::string previewText;
+		std::string currentEditorID;
 		if (currentForm) {
-			// Find the widget for current form
-			std::string editorID;
 			for (const auto& widget : widgets) {
 				if (widget->form == currentForm) {
-					editorID = widget->GetEditorID();
+					currentEditorID = widget->GetEditorID();
 					break;
 				}
 			}
-			if (editorID.empty()) {
-				editorID = std::format("{:08X}", currentForm->GetFormID());
-			}
-
-			if (showFormID) {
-				previewText = std::format("{} (0x{:08X})", editorID, currentForm->GetFormID());
-			} else {
-				previewText = editorID;
-			}
-		} else {
-			previewText = "None";
 		}
 
-		if (width > 0.0f) {
-			ImGui::SetNextItemWidth(width);
-		}
-
-		if (ImGui::BeginCombo(label, previewText.c_str())) {
-			if (allowNone && ImGui::Selectable("None", currentForm == nullptr)) {
-				currentForm = nullptr;
-				changed = true;
-			}
-
-			for (const auto& widget : widgets) {
-				if (widget && widget->form) {
-					T* form = static_cast<T*>(widget->form);
-					std::string editorID = widget->GetEditorID();
-					std::string comboLabel;
-					if (showFormID) {
-						comboLabel = std::format("{} (0x{:08X})", editorID, form->GetFormID());
-					} else {
-						comboLabel = editorID;
-					}
-
-					bool isSelected = (currentForm == form);
-					if (ImGui::Selectable(comboLabel.c_str(), isSelected)) {
-						currentForm = form;
-						changed = true;
-					}
-					if (isSelected) {
-						ImGui::SetItemDefaultFocus();
-					}
+		return detail::DrawFormComboBody<T>(label, currentForm, currentEditorID, showFormID, allowNone, width,
+			[&](auto&& visit) {
+				for (const auto& widget : widgets) {
+					if (widget && widget->form)
+						visit(static_cast<T*>(widget->form), widget->GetEditorID());
 				}
-			}
-			ImGui::EndCombo();
-		}
-
-		return changed;
+			});
 	}
 
 	// Legacy form picker (slow - only use if widgets not available)
 	template <typename T, typename Container>
 	bool DrawFormPicker(const char* label, T*& currentForm, const Container& formArray, bool showFormID = true, bool allowNone = true, float width = 450.0f)
 	{
-		bool changed = false;
-
-		auto GetFormEditorIDSafe = [](T* form) -> std::string {
+		auto getEditorID = [](T* form) -> std::string {
 			if (!form)
 				return "";
-
 			const char* editorID = form->GetFormEditorID();
 			if (editorID && editorID[0] != '\0')
 				return std::string(editorID);
-
 			return std::format("{:08X}", form->GetFormID());
 		};
 
-		std::string previewText;
-		if (currentForm) {
-			std::string editorID = GetFormEditorIDSafe(currentForm);
-			if (showFormID) {
-				previewText = std::format("{} (0x{:08X})", editorID, currentForm->GetFormID());
-			} else {
-				previewText = editorID;
-			}
-		} else {
-			previewText = "None";
-		}
-
-		if (width > 0.0f) {
-			ImGui::SetNextItemWidth(width);
-		}
-
-		if (ImGui::BeginCombo(label, previewText.c_str())) {
-			if (allowNone && ImGui::Selectable("None", currentForm == nullptr)) {
-				currentForm = nullptr;
-				changed = true;
-			}
-
-			for (auto form : formArray) {
-				if (form) {
-					std::string editorID = GetFormEditorIDSafe(form);
-					std::string comboLabel;
-					if (showFormID) {
-						comboLabel = std::format("{} (0x{:08X})", editorID, form->GetFormID());
-					} else {
-						comboLabel = editorID;
-					}
-
-					bool isSelected = (currentForm == form);
-					if (ImGui::Selectable(comboLabel.c_str(), isSelected)) {
-						currentForm = form;
-						changed = true;
-					}
-					if (isSelected) {
-						ImGui::SetItemDefaultFocus();
-					}
+		return detail::DrawFormComboBody<T>(label, currentForm, getEditorID(currentForm), showFormID, allowNone, width,
+			[&](auto&& visit) {
+				for (auto form : formArray) {
+					if (form)
+						visit(form, getEditorID(form));
 				}
-			}
-			ImGui::EndCombo();
-		}
-
-		return changed;
+			});
 	}
 }

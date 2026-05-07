@@ -27,6 +27,7 @@ public:
 	void ApplyChanges() override;
 	void RevertChanges() override;
 	bool HasUnsavedChanges() const override;
+	std::vector<SearchResult> CollectSearchableSettings() const override;
 
 	RE::BGSShaderParticleGeometryData* precipitation = nullptr;
 

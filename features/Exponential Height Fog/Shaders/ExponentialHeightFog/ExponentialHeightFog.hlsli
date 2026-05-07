@@ -9,6 +9,11 @@
 
 namespace ExponentialHeightFog
 {
+	float GetVanillaFogFade(float vanillaFogFade)
+	{
+		return SharedData::exponentialHeightFogSettings.respectVanillaFogFade != 0 ? vanillaFogFade : 1.0f;
+	}
+
 	float4 GetExponentialHeightFog(float3 positionWS, float3 cameraWS, float3 fogColor)
 	{
 		float fogHeightFalloff = SharedData::exponentialHeightFogSettings.fogHeightFalloff * 0.001f;
