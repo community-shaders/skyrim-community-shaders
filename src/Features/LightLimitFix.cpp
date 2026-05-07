@@ -621,6 +621,13 @@ void LightLimitFix::UpdateLights()
 	context->Unmap(lights->resource.get(), 0);
 
 	UpdateStructure();
+
+	// Single-shot consumption: clear the hover key after the cluster has read it.
+	// The table re-sets it every frame the cursor is hovering a row with Shift
+	// held, so the pulse continues smoothly while hovering. As soon as the menu
+	// closes (or the cursor leaves the table, or Shift is released), the table
+	// stops re-setting the key and the pulse vanishes on the next frame.
+	ShadowCasterManager::SetHoveredLight(0);
 }
 
 void LightLimitFix::UpdateStructure()

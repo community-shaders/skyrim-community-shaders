@@ -2764,6 +2764,23 @@ namespace ShadowCasterManager
 						"  - clear solo\n"
 						"Returns the table to scheduler-auto behaviour.");
 			}
+
+			// Help marker: explains the per-row debug controls so users aren't
+			// surprised by states / pulses they didn't know they could trigger.
+			ImGui::SameLine();
+			Util::HelpMarker(
+				"Per-row controls:\n"
+				"  *  Cycle button (col 1): click to rotate this light through\n"
+				"     Auto -> Shadow pin (S) -> Convert pin (C) -> Suppress (X) -> Auto.\n"
+				"  *  Solo button (col 2): isolate this light against a black scene.\n"
+				"     Click again to clear; only one light may be soloed at a time.\n"
+				"  *  Hold Shift while hovering a row to highlight that light in the\n"
+				"     world with a pulsing magenta tint. Release Shift or move the\n"
+				"     cursor away to stop. Useful when you can't tell which entry\n"
+				"     corresponds to which physical light. Does not affect rendering\n"
+				"     when Shift is not held.\n\n"
+				"Group buttons toggle suppression for every matching row at once.\n"
+				"Clear All appears when any override is active and resets everything.");
 		}
 
 		// -- Filter input --------------------------------------------------
@@ -2881,12 +2898,16 @@ namespace ShadowCasterManager
 				const bool pinConvert = s_pinConvert.count(key) > 0;
 				const bool isSolo = (s_soloLight == key && key != 0);
 
-				// Helper: any item rendered for this row that's hovered marks
-				// this row as the hover-pulse target. Setting on every IsItemHovered()
-				// in this row is cheap and means the pulse activates whether the
-				// user lands on the cycle button, address cell, or any other column.
+				// Helper: shift-gated debug pulse. Setting s_hoverLightKey makes
+				// the cluster light builder replace this light's colour with a
+				// 1Hz magenta pulse — useful for finding which light a row
+				// corresponds to in 3D, but visually startling if it triggered
+				// every time the cursor crossed a cell. Requiring Shift+hover
+				// means a user clicking through the cycle/solo buttons doesn't
+				// see lights randomly turn purple, while debugging is one
+				// modifier away.
 				auto noteHover = [&]() {
-					if (ImGui::IsItemHovered())
+					if (ImGui::IsItemHovered() && ImGui::GetIO().KeyShift)
 						s_hoverLightKey = key;
 				};
 
