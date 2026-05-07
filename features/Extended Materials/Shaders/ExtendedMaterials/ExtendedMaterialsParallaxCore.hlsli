@@ -82,8 +82,21 @@
 #endif
 
 		{
-			const float maxSteps = 8;
-			uint numSteps = max(4, uint(scale * maxSteps));
+			// Step count scales with height scale *and* viewing angle.
+			// Keep it extremely cheap: use TS normal (0,0,1) so N·V is just Vz after renormalization.
+			const float baseMaxSteps = 8;
+			const uint minSteps = 4;
+			const uint maxStepsCap = 32;
+
+			float invViewLen = rsqrt(max(dot(viewDirTS, viewDirTS), 1e-6));
+			float ndotv = saturate(viewDirTS.z * invViewLen);          // 1 = looking "down", 0 = grazing
+			float grazing = 1.0 - ndotv;
+			float grazing2 = grazing * grazing;                        // bias towards keeping steps low until fairly grazing
+
+			// Straight down: ~0.5x (-> typically clamps to 4). Grazing: up to ~2x.
+			float angleStepMul = lerp(0.5, 2.0, grazing2);
+			uint numSteps = max(minSteps, (uint)(scale * baseMaxSteps * angleStepMul));
+			numSteps = min(numSteps, maxStepsCap);
 			numSteps = (numSteps + 2) & ~3;
 
 			float stepSize = rcp(numSteps);
