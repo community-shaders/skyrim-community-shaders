@@ -241,9 +241,11 @@ void EditorWindow::ShowObjectsWindow()
 				// Add button to open the current weather
 				ImGui::SameLine();
 				if (ImGui::SmallButton("Open##CurrentWeather")) {
+					const auto currentWeatherFormID = currentWeather->GetFormID();
 					for (auto& widget : weatherWidgets) {
-						if (widget->form == currentWeather) {
+						if (widget->form == currentWeather || (widget->form && widget->form->GetFormID() == currentWeatherFormID)) {
 							widget->SetOpen(true);
+							widget->RequestFocus();
 							break;
 						}
 					}
@@ -1347,7 +1349,7 @@ void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std:
 			weatherWidget->NavigateToFeatureSetting(featureName, settingName);
 
 			// Focus the widget window
-			ImGui::SetWindowFocus(weatherWidget->GetWindowTitle().c_str());
+			weatherWidget->RequestFocus();
 			break;
 		}
 	}

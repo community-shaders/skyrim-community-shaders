@@ -135,20 +135,8 @@ private:
 	// Cloud texture loading
 	ID3D11ShaderResourceView* GetCloudTexture(int layerIndex);
 
-	// Search functionality
-	struct SearchResult
-	{
-		std::string displayName;
-		std::string tabName;
-		std::string settingId;
-	};
-	std::vector<SearchResult> searchResults;
-	std::string activeTabOverride = "";
-	std::string highlightedSetting = "";
-	float highlightStartTime = 0.0f;
-	void UpdateSearchResults();
-	void NavigateToSetting(const SearchResult& result);
-	bool ShouldHighlight(const std::string& settingId) const;
+	// Search: supply searchable entries; dropdown + tab navigation + highlight live on base Widget.
+	std::vector<SearchResult> CollectSearchableSettings() const override;
 	void DrawProperties(std::string category, std::map<std::string, int> properties);
 	void InheritFromParent(const std::string& property);
 	void InheritAllFromParent();
