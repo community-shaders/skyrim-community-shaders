@@ -579,6 +579,12 @@ void LightLimitFix::UpdateLights()
 		auto* asBs = static_cast<RE::BSLight*>(light);
 		if (shadowLightPtrs.count(asBs))
 			return;  // simultaneously a shadow caster this frame; already added
+		// Honour the user's suppression toggle in the shadow caster table:
+		// converted lights share the same lightKey suppression set as shadow
+		// lights, so suppressing one in the table hides it whether it's
+		// rendering as a shadow caster or demoted to non-shadow.
+		if (ShadowCasterManager::IsSuppressed(reinterpret_cast<uintptr_t>(light)))
+			return;
 		addLight(RE::NiPointer<RE::BSLight>(asBs));
 	});
 

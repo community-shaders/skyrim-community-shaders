@@ -2567,8 +2567,9 @@ namespace ShadowCasterManager
 	{
 		struct SlotRow
 		{
-			uint32_t idx;  // shadow slot index; only meaningful when inScene=true
-			bool inScene;  // currently occupies a shadow slot this frame
+			uint32_t idx;    // shadow slot index; only meaningful when inScene=true
+			bool inScene;    // currently occupies a shadow slot this frame
+			bool converted;  // demoted to non-shadow rendering via ConvertExcessToNormal
 			ShadowSlotInfo info;
 			float importance{ 0.0f };  // contribution-weighted importance (luminance × fade × attenuation²)
 			bool highImp{ false };     // importance > 0.1 — light meaningfully illuminates the viewer area
@@ -2599,30 +2600,62 @@ namespace ShadowCasterManager
 			}
 		};
 
+		// Build set of converted-light keys (shadow lights demoted to non-shadow
+		// rendering via ConvertExcessToNormal). These don't occupy a shadow slot
+		// this frame but are still active in the scene as normal lights — we want
+		// them visible in the table with a "Conv" indicator and the same suppress
+		// toggle so users can hide them like any other shadow caster.
+		static std::unordered_set<uintptr_t> convertedKeys;
+		convertedKeys.clear();
+		ForEachConvertedLight([&](RE::BSShadowLight* light) {
+			convertedKeys.insert(reinterpret_cast<uintptr_t>(light));
+		});
+
 		// Build row list.
 		static std::vector<SlotRow> rows;
 		rows.clear();
-		if (sceneOnly) {
-			rows.reserve(sceneSlot.size());
-			for (auto& [key, idx] : sceneSlot) {
-				SlotRow r{ idx, true, s_shadowSlotInfos[idx] };
-				applyEntryDebug(r);
-				rows.push_back(r);
-			}
-		} else {
-			// All scene lights first, then suppressed lights not currently in scene.
-			rows.reserve(sceneSlot.size() + s_suppressedLights.size());
-			for (auto& [key, idx] : sceneSlot) {
-				SlotRow r{ idx, true, s_shadowSlotInfos[idx] };
-				applyEntryDebug(r);
-				rows.push_back(r);
-			}
-			for (uintptr_t key : s_suppressedLights) {
+		auto addConvertedRows = [&]() {
+			for (uintptr_t key : convertedKeys) {
 				if (sceneSlot.count(key))
+					continue;  // simultaneously a shadow caster this frame
+				SlotRow r{ 0, false, true, {} };
+				auto it = s_knownLights.find(key);
+				if (it != s_knownLights.end()) {
+					r.info = it->second;
+					r.info.valid = false;  // no shadow slot this frame
+				} else {
+					// First-frame convert: no cached metadata yet. Surface a minimal
+					// row so the user can still toggle suppression by address.
+					r.info.lightKey = key;
+				}
+				applyEntryDebug(r);
+				rows.push_back(r);
+			}
+		};
+		if (sceneOnly) {
+			rows.reserve(sceneSlot.size() + convertedKeys.size());
+			for (auto& [key, idx] : sceneSlot) {
+				SlotRow r{ idx, true, false, s_shadowSlotInfos[idx] };
+				applyEntryDebug(r);
+				rows.push_back(r);
+			}
+			addConvertedRows();
+		} else {
+			// All scene lights first, then converted lights, then suppressed lights
+			// not currently in scene at all.
+			rows.reserve(sceneSlot.size() + convertedKeys.size() + s_suppressedLights.size());
+			for (auto& [key, idx] : sceneSlot) {
+				SlotRow r{ idx, true, false, s_shadowSlotInfos[idx] };
+				applyEntryDebug(r);
+				rows.push_back(r);
+			}
+			addConvertedRows();
+			for (uintptr_t key : s_suppressedLights) {
+				if (sceneSlot.count(key) || convertedKeys.count(key))
 					continue;
 				auto it = s_knownLights.find(key);
 				if (it != s_knownLights.end()) {
-					SlotRow r{ 0, false, it->second };
+					SlotRow r{ 0, false, false, it->second };
 					applyEntryDebug(r);
 					rows.push_back(r);
 				}
@@ -2694,7 +2727,7 @@ namespace ShadowCasterManager
 			if (ImGui::InputText("##slotfilter", buf, sizeof(buf)))
 				s_filterText = buf;
 			ImGui::SameLine();
-			ImGui::TextDisabled(sceneOnly ? "filter (type/range/addr)" : "filter (yes/no/type/range/addr)");
+			ImGui::TextDisabled(sceneOnly ? "filter (yes/conv/type/range/addr)" : "filter (yes/conv/no/type/range/addr)");
 		}
 
 		// Apply filter.
@@ -2714,11 +2747,11 @@ namespace ShadowCasterManager
 				snprintf(rangeBuf, sizeof(rangeBuf), "%.0f %.0f",
 					r.info.range, Util::Units::GameUnitsToMeters(r.info.range));
 				snprintf(addrBuf, sizeof(addrBuf), "%08x", static_cast<uint32_t>(r.info.lightKey & 0xFFFFFFFF));
-				const char* statusStr = r.inScene ? "yes" : "no";
+				const char* statusStr = r.inScene ? "yes" : (r.converted ? "conv" : "no");
 				if (typeName.find(lower) != std::string::npos ||
 					std::string(rangeBuf).find(lower) != std::string::npos ||
 					std::string(addrBuf).find(lower) != std::string::npos ||
-					(!sceneOnly && lower == statusStr))
+					lower == statusStr)
 					filteredRows.push_back(r);
 			}
 		}
@@ -2757,9 +2790,13 @@ namespace ShadowCasterManager
 			};
 		}
 		sorts[slotColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
-			// Out-of-scene rows (inScene=false) sort after in-scene rows.
-			if (a.inScene != b.inScene)
-				return a.inScene > b.inScene;
+			// Order: in-scene shadow casters → converted (non-shadow) → fully out-of-scene.
+			auto rank = [](const SlotRow& r) -> int {
+				return r.inScene ? 0 : (r.converted ? 1 : 2);
+			};
+			int ra = rank(a), rb = rank(b);
+			if (ra != rb)
+				return ra < rb;
 			return asc ? a.idx < b.idx : a.idx > b.idx;
 		};
 		sorts[addrColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
@@ -2790,9 +2827,13 @@ namespace ShadowCasterManager
 			sorts,
 			[&](int /*rowIdx*/, int col, const SlotRow& row) {
 				bool suppressed = s_suppressedLights.count(row.info.lightKey) > 0;
+				// Active when the light is doing something this frame: holding a
+				// shadow slot OR rendering as a converted normal light. Suppression
+				// is meaningful in both cases.
+				const bool active = row.inScene || row.converted;
 				if (col == 0) {
 					ImGui::PushID(static_cast<int>(row.info.lightKey & 0xFFFFFFFF));
-					if (!row.inScene)
+					if (!active)
 						ImGui::BeginDisabled();
 					ImGui::PushStyleColor(ImGuiCol_Button,
 						suppressed ? ImVec4(0.35f, 0.35f, 0.35f, 1) : ImVec4(0.15f, 0.6f, 0.15f, 1));
@@ -2801,22 +2842,39 @@ namespace ShadowCasterManager
 					if (ImGui::SmallButton(suppressed ? "o" : "*"))
 						suppressed ? (void)s_suppressedLights.erase(row.info.lightKey) : (void)s_suppressedLights.insert(row.info.lightKey);
 					ImGui::PopStyleColor(2);
-					if (!row.inScene)
+					if (!active)
 						ImGui::EndDisabled();
-					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip(row.inScene ? (suppressed ? "Re-enable" : "Suppress (hides this light's shadows)") : "Light is not currently in the scene");
+					if (ImGui::IsItemHovered()) {
+						const char* tip = "Light is not currently in the scene";
+						if (row.inScene)
+							tip = suppressed ? "Re-enable" : "Suppress (hides this light's shadows)";
+						else if (row.converted)
+							tip = suppressed ? "Re-enable" : "Suppress (hides this converted light from cluster lighting)";
+						ImGui::SetTooltip("%s", tip);
+					}
 					ImGui::PopID();
 					return;
 				}
 				if (suppressed)
 					ImGui::BeginDisabled();
 				if (showStatus && col == 1) {
-					ImGui::TextUnformatted(row.inScene ? "Yes" : "No");
-					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip(row.inScene ? "In scene this frame" : "Not in scene");
+					const char* status = row.inScene ? "Yes" : (row.converted ? "Conv" : "No");
+					if (row.converted)
+						ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.25f, 1), "%s", status);
+					else
+						ImGui::TextUnformatted(status);
+					if (ImGui::IsItemHovered()) {
+						const char* tip = row.inScene ?
+					                          "In scene this frame (shadow caster)" :
+					                          (row.converted ? "Converted to normal light (no shadow this frame)\nRenders via cluster lighting; no shadow map cost" :
+															   "Not in scene");
+						ImGui::SetTooltip("%s", tip);
+					}
 				} else if (col == slotColIdx) {
 					if (row.inScene) {
 						ImGui::Text("%u", row.idx);
+					} else if (row.converted) {
+						ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.25f, 1), "Conv");
 					} else
 						ImGui::TextDisabled("--");
 				} else if (col == addrColIdx) {
