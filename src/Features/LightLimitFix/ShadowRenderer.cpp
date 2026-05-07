@@ -172,11 +172,19 @@ std::string LightLimitFix::BuildShadowSlotColorLegend() const
 
 void LightLimitFix::DrawOverlay()
 {
-	// Overlay shows when visualization is active OR when slots are suppressed
-	// (so the suppression list stays visible without the debug visualizer running).
+	// Overlay shows when:
+	//   - visualisation modes are active (debug heatmaps), OR
+	//   - any light is suppressed (so the suppression list stays accessible), OR
+	//   - any debug override is in effect (pin shadow / pin convert / solo) so
+	//     users can find what they pinned without remembering to toggle anything, OR
+	//   - the user explicitly opted in via Show Shadow Overlay (lets the table's
+	//     debug controls — cycle button, solo, hover-pulse — be reachable in
+	//     the default state without first triggering a side-effect).
 	bool vizOn = settings.EnableLightsVisualisation;
 	bool hasSuppressed = ShadowCasterManager::HasSuppressedLights();
-	if (!vizOn && !hasSuppressed)
+	bool hasOverrides = ShadowCasterManager::HasAnyOverrides();
+	bool showOverlay = settings.ShowShadowOverlay;
+	if (!vizOn && !hasSuppressed && !hasOverrides && !showOverlay)
 		return;
 
 	// When the CS menu is open, show a draggable/resizable window so the user can

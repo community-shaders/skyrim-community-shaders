@@ -9,6 +9,7 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LightLimitFix::Settings,
+	ShowShadowOverlay,
 	ShadowSettings)
 
 void LightLimitFix::DrawSettings()
@@ -31,6 +32,15 @@ void LightLimitFix::DrawSettings()
 	ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Light Limit Visualization")) {
+		ImGui::Checkbox("Show Shadow Overlay", &settings.ShowShadowOverlay);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Always-visible overlay window with the shadow caster table.\n"
+				"Without this, the overlay only appears when a light is suppressed\n"
+				"or a visualisation mode is active. Enable to access the table's\n"
+				"debug controls (cycle button, solo, Shift+hover pulse) any time.");
+		}
+
 		ImGui::Checkbox("Enable Lights Visualisation", &settings.EnableLightsVisualisation);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Enables visualization of the light limit\n");

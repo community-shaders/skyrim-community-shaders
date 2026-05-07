@@ -176,7 +176,11 @@ public:
 
 	virtual void DrawSettings() override;
 	virtual void DrawOverlay() override;
-	virtual bool IsOverlayVisible() const override { return settings.EnableLightsVisualisation; }
+	virtual bool IsOverlayVisible() const override
+	{
+		return settings.EnableLightsVisualisation || settings.ShowShadowOverlay ||
+		       ShadowCasterManager::HasSuppressedLights() || ShadowCasterManager::HasAnyOverrides();
+	}
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
@@ -201,6 +205,13 @@ public:
 		// Debug (last)
 		bool EnableLightsVisualisation = false;
 		uint LightsVisualisationMode = 0;
+
+		/// Show the shadow caster overlay (suppression / debug-override table)
+		/// independently of the visualization mode and suppression state.
+		/// Without this, the overlay only appeared when a light was suppressed
+		/// or visualisation was active — making it hard to access the overlay's
+		/// debug controls (cycle button, solo, hover-pulse) in the default state.
+		bool ShowShadowOverlay = false;
 
 		// Shadow caster scheduling (ShadowCasterManager)
 		ShadowCasterManager::Settings ShadowSettings;

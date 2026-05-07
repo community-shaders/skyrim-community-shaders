@@ -387,6 +387,12 @@ namespace ShadowCasterManager
 	/// Returns true if any lights are currently suppressed (explicit or via solo).
 	bool HasSuppressedLights();
 
+	/// Returns true if any debug override is active (suppress / pin shadow /
+	/// pin convert / solo). Used by the LLF overlay's visibility gate so the
+	/// overlay stays available while users have any override in effect, even
+	/// without the visualisation modes or the explicit ShowShadowOverlay toggle.
+	bool HasAnyOverrides();
+
 	// -------------------------------------------------------------------------
 	// Debugging override API
 	//

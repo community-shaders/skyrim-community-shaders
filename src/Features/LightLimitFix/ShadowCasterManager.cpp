@@ -2525,7 +2525,7 @@ namespace ShadowCasterManager
 		// Hover key is transient (per-draw); not part of "overrides".
 	}
 
-	static bool HasAnyOverrides()
+	bool HasAnyOverrides()
 	{
 		return !s_suppressedLights.empty() || !s_pinShadow.empty() ||
 		       !s_pinConvert.empty() || s_soloLight != 0;
