@@ -384,10 +384,51 @@ namespace ShadowCasterManager
 	void RecordSlot(uint32_t depthSlot, const ShadowSlotInfo& info);
 
 	/// Returns true if the light with this pointer key has been suppressed by the user.
+	/// Includes implicit suppression from solo mode (every key except the soloed one).
 	bool IsSuppressed(uintptr_t lightKey);
 
-	/// Returns true if any lights are currently suppressed.
+	/// Returns true if any lights are currently suppressed (explicit or via solo).
 	bool HasSuppressedLights();
+
+	// -------------------------------------------------------------------------
+	// Debugging override API
+	//
+	// Per-light state pins (Shadow / Convert) override the scheduler's automatic
+	// chosen/excess decision. Useful for isolating a single light's behaviour
+	// when chasing scheduler / cluster pipeline regressions:
+	//   - Pin Shadow: bias scoring so the light is forced into the chosen pool
+	//     (gets a real shadow slot up to ShadowLightCount).
+	//   - Pin Convert: bias scoring to the bottom and force ConvertLight in the
+	//     excess branch regardless of the ConvertExcessToNormal user setting
+	//     (still honours the spot-gate -- spots that can't safely convert are
+	//     disabled instead).
+	//   - Suppress: existing behaviour (ShadowParam.y = -1 for casters; cluster
+	//     filter for converted / non-shadow lights via solo).
+	//   - Solo: when set, every key OTHER than the soloed one is reported as
+	//     suppressed via IsSuppressed(). Lets you isolate one light's
+	//     contribution against a black scene.
+	// -------------------------------------------------------------------------
+	bool IsPinnedShadow(uintptr_t lightKey);
+	bool IsPinnedConvert(uintptr_t lightKey);
+
+	void SetPinnedShadow(uintptr_t lightKey, bool pinned);
+	void SetPinnedConvert(uintptr_t lightKey, bool pinned);
+
+	uintptr_t GetSoloLight();
+	void SetSoloLight(uintptr_t lightKey);  // 0 clears solo
+
+	/// Mouse-hover key for the per-frame debug pulse. Set per row by the table
+	/// when the row is hovered; reset to 0 when the table redraws or the cursor
+	/// leaves the table. The cluster light builder (LightLimitFix::UpdateLights)
+	/// reads this to apply a magenta pulse to the matching light, making it
+	/// visible in 3D against the rest of the scene.
+	uintptr_t GetHoveredLight();
+	void SetHoveredLight(uintptr_t lightKey);
+
+	/// Drops every override (suppress / pin shadow / pin convert / solo).
+	/// Useful when a debugging session has accumulated state and lights are
+	/// mysteriously hidden — one click resets to the scheduler's auto behaviour.
+	void ClearAllOverrides();
 
 	/// Returns the number of shadow slots consumed this frame.
 	uint32_t GetSlotUsage();

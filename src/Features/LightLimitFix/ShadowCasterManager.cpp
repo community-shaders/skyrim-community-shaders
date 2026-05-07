@@ -235,6 +235,20 @@ namespace ShadowCasterManager
 	static std::vector<ConvertedLight> s_normalConvert;
 	static std::set<RE::NiLight*> s_shadowConvert;
 
+	// User suppression set (lightKey = BSShadowLight pointer cast to uintptr_t).
+	// Persisted across light lifetimes so suppressing a torch survives the player
+	// leaving and returning to a cell.
+	static std::unordered_set<uintptr_t> s_suppressedLights;
+
+	// Debugging overrides — see header docs for ClearAllOverrides / SetPinnedShadow / etc.
+	// Declared up here (rather than next to s_shadowSlotInfos) because the scheduler
+	// reads s_pinShadow / s_pinConvert to bias candidate scoring, and that's compiled
+	// long before the table-rendering code.
+	static std::unordered_set<uintptr_t> s_pinShadow;   ///< force chosen (top of score sort)
+	static std::unordered_set<uintptr_t> s_pinConvert;  ///< force excess + ConvertLight
+	static uintptr_t s_soloLight = 0;                   ///< 0 = no solo
+	static uintptr_t s_hoverLightKey = 0;               ///< transient (per table draw)
+
 	// =========================================================================
 	// Helpers for depth-target index globals
 	// SE: 14304EEE8 / AE: n/a (adjacent) / VR: 143180df0
@@ -1137,6 +1151,21 @@ namespace ShadowCasterManager
 			c.score = CalculateLightScore(l, camera, tmpIndex++);
 		}
 
+		// Apply debug pins: bias scoring so pinned-shadow lights sort to the
+		// top (forced into the chosen pool up to ShadowLightCount) and
+		// pinned-convert lights sort to the bottom (forced into the excess pool
+		// where ConvertLight runs unconditionally — see c.excess branch below).
+		// Pin sets are mutually exclusive (SetPinned* enforces that), but if a
+		// stale entry slips through, pin-shadow wins because the bias is checked
+		// first.
+		for (auto& c : candidates) {
+			auto key = reinterpret_cast<uintptr_t>(c.light);
+			if (s_pinShadow.count(key))
+				c.score += 1e15;
+			else if (s_pinConvert.count(key))
+				c.score -= 1e15;
+		}
+
 		// Sort descending by score (highest priority first); sun always first.
 		std::sort(candidates.begin(), candidates.end(),
 			[](const CandidateLight& a, const CandidateLight& b) {
@@ -1680,8 +1709,13 @@ namespace ShadowCasterManager
 				// the cluster `LightData` and apply cone falloff in our cluster
 				// shader; until then, dropping spot excess is the honest answer.
 				const bool isSpotShadow = c.light->GetIsFrustumLight();
+				// Debug pin override: pin-convert forces conversion regardless
+				// of the user's ConvertExcessToNormal setting. Spot gate still
+				// applies — pin-converting a spot still falls through to
+				// DisableLight, since there's no NiSpotLight equivalent.
+				const bool forceConvert = s_pinConvert.count(reinterpret_cast<uintptr_t>(c.light)) > 0;
 
-				if (s_settings.ConvertExcessToNormal && !isSpotShadow) {
+				if ((s_settings.ConvertExcessToNormal || forceConvert) && !isSpotShadow) {
 					// Atomic ordering: by the time we reach excess (rank
 					// >= ShadowLightCount), all chosen lights (rank <
 					// ShadowLightCount) have completed their Begin/EnableLight/
@@ -2483,7 +2517,6 @@ namespace ShadowCasterManager
 
 	static std::vector<ShadowSlotInfo> s_shadowSlotInfos;
 	static uint32_t s_shadowSlotUsage = 0;
-	static std::unordered_set<uintptr_t> s_suppressedLights;
 	// Persists last-seen ShadowSlotInfo for every light ever recorded this session,
 	// so suppressed lights that leave the active slots still have metadata for the settings table.
 	static std::unordered_map<uintptr_t, ShadowSlotInfo> s_knownLights;
@@ -2522,7 +2555,58 @@ namespace ShadowCasterManager
 
 	bool IsSuppressed(uintptr_t lightKey)
 	{
-		return s_suppressedLights.count(lightKey) > 0;
+		if (s_suppressedLights.count(lightKey))
+			return true;
+		// Solo: every key except the soloed one is implicitly suppressed.
+		if (s_soloLight != 0 && s_soloLight != lightKey)
+			return true;
+		return false;
+	}
+
+	bool IsPinnedShadow(uintptr_t lightKey) { return s_pinShadow.count(lightKey) > 0; }
+	bool IsPinnedConvert(uintptr_t lightKey) { return s_pinConvert.count(lightKey) > 0; }
+
+	void SetPinnedShadow(uintptr_t lightKey, bool pinned)
+	{
+		if (pinned) {
+			s_pinShadow.insert(lightKey);
+			s_pinConvert.erase(lightKey);  // mutually exclusive
+			s_suppressedLights.erase(lightKey);
+		} else {
+			s_pinShadow.erase(lightKey);
+		}
+	}
+
+	void SetPinnedConvert(uintptr_t lightKey, bool pinned)
+	{
+		if (pinned) {
+			s_pinConvert.insert(lightKey);
+			s_pinShadow.erase(lightKey);
+			s_suppressedLights.erase(lightKey);
+		} else {
+			s_pinConvert.erase(lightKey);
+		}
+	}
+
+	uintptr_t GetSoloLight() { return s_soloLight; }
+	void SetSoloLight(uintptr_t lightKey) { s_soloLight = lightKey; }
+
+	uintptr_t GetHoveredLight() { return s_hoverLightKey; }
+	void SetHoveredLight(uintptr_t lightKey) { s_hoverLightKey = lightKey; }
+
+	void ClearAllOverrides()
+	{
+		s_suppressedLights.clear();
+		s_pinShadow.clear();
+		s_pinConvert.clear();
+		s_soloLight = 0;
+		// Hover key is transient (per-draw); not part of "overrides".
+	}
+
+	static bool HasAnyOverrides()
+	{
+		return !s_suppressedLights.empty() || !s_pinShadow.empty() ||
+		       !s_pinConvert.empty() || s_soloLight != 0;
 	}
 
 	bool HasSuppressedLights()
@@ -2565,6 +2649,12 @@ namespace ShadowCasterManager
 
 	void DrawShadowLightTable(bool compact, bool showColor, bool sceneOnly)
 	{
+		// Hover key is set per-row inside this function and consumed by the
+		// cluster light builder (LightLimitFix::UpdateLights addLight) for the
+		// debug pulse. Reset it each draw so the pulse stops as soon as the
+		// cursor leaves the table or moves between rows.
+		s_hoverLightKey = 0;
+
 		struct SlotRow
 		{
 			uint32_t idx;    // shadow slot index; only meaningful when inScene=true
@@ -2732,6 +2822,26 @@ namespace ShadowCasterManager
 				"Conv", [](const SlotRow& r) { return r.converted; },
 				"Toggle all lights currently demoted from shadow to normal\n"
 				"(ConvertExcessToNormal). Hides their cluster-light contribution.");
+
+			// "Clear All": resets every debug override (suppress / pin shadow /
+			// pin convert / solo) so the table returns to scheduler-auto. Only
+			// shown when overrides are active so it doesn't take up space when
+			// there's nothing to reset.
+			if (HasAnyOverrides()) {
+				ImGui::SameLine();
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.25f, 0.25f, 1));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75f, 0.35f, 0.35f, 1));
+				if (ImGui::SmallButton("Clear All"))
+					ClearAllOverrides();
+				ImGui::PopStyleColor(2);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip(
+						"Reset every debug override:\n"
+						"  - clear suppression\n"
+						"  - clear shadow / convert pins\n"
+						"  - clear solo\n"
+						"Returns the table to scheduler-auto behaviour.");
+			}
 		}
 
 		// -- Filter input --------------------------------------------------
@@ -2773,17 +2883,18 @@ namespace ShadowCasterManager
 		}
 
 		// -- Column layout -------------------------------------------------
-		// Settings (sceneOnly=false): [toggle] [Status] [Slot] [Addr] [Color?] [Type] [Range] [Centr.] [Pri]
-		// Overlay  (sceneOnly=true):  [toggle]          [Slot] [Addr] [Color?] [Type] [Range] [Centr.] [Pri]
+		// Settings (sceneOnly=false): [cycle] [Solo] [Status] [Slot] [Addr] [Color?] [Type] [Range] [Imp] [Hi]
+		// Overlay  (sceneOnly=true):  [cycle] [Solo]          [Slot] [Addr] [Color?] [Type] [Range] [Imp] [Hi]
 		const bool showStatus = !sceneOnly;
-		const int slotColIdx = showStatus ? 2 : 1;
+		const int soloColIdx = 1;
+		const int slotColIdx = showStatus ? 3 : 2;
 		const int addrColIdx = slotColIdx + 1;
 		const int typeColIdx = addrColIdx + (showColor ? 2 : 1);
 		const int radColIdx = typeColIdx + 1;
 		const int centrColIdx = radColIdx + 1;
 		const int priColIdx = centrColIdx + 1;
 
-		std::vector<std::string> headers = { "" };
+		std::vector<std::string> headers = { "", "" };  // [cycle, solo]
 		if (showStatus)
 			headers.push_back("In Scene");
 		headers.push_back("Slot");
@@ -2798,7 +2909,7 @@ namespace ShadowCasterManager
 		using SortFn = std::function<bool(const SlotRow&, const SlotRow&, bool)>;
 		std::vector<SortFn> sorts(headers.size(), nullptr);
 		if (showStatus) {
-			sorts[1] = [](const SlotRow& a, const SlotRow& b, bool asc) {
+			sorts[2] = [](const SlotRow& a, const SlotRow& b, bool asc) {
 				// Active (not suppressed) sorts before Disabled.
 				bool sa = s_suppressedLights.count(a.info.lightKey) > 0;
 				bool sb = s_suppressedLights.count(b.info.lightKey) > 0;
@@ -2842,38 +2953,96 @@ namespace ShadowCasterManager
 			true,        // ascending
 			sorts,
 			[&](int /*rowIdx*/, int col, const SlotRow& row) {
-				bool suppressed = s_suppressedLights.count(row.info.lightKey) > 0;
-				// Active when the light is doing something this frame: holding a
-				// shadow slot OR rendering as a converted normal light. Suppression
-				// is meaningful in both cases.
-				const bool active = row.inScene || row.converted;
+				const uintptr_t key = row.info.lightKey;
+				const bool suppressed = s_suppressedLights.count(key) > 0;
+				const bool pinShadow = s_pinShadow.count(key) > 0;
+				const bool pinConvert = s_pinConvert.count(key) > 0;
+				const bool isSolo = (s_soloLight == key && key != 0);
+
+				// Helper: any item rendered for this row that's hovered marks
+				// this row as the hover-pulse target. Setting on every IsItemHovered()
+				// in this row is cheap and means the pulse activates whether the
+				// user lands on the cycle button, address cell, or any other column.
+				auto noteHover = [&]() {
+					if (ImGui::IsItemHovered())
+						s_hoverLightKey = key;
+				};
+
+				// === col 0: state cycle button =============================
+				// Cycle: Auto (·) -> PinShadow (S) -> PinConvert (C) -> Suppress (X) -> Auto
+				// Mutually exclusive (SetPinned* / suppressed.erase enforce that).
 				if (col == 0) {
-					ImGui::PushID(static_cast<int>(row.info.lightKey & 0xFFFFFFFF));
-					if (!active)
-						ImGui::BeginDisabled();
-					ImGui::PushStyleColor(ImGuiCol_Button,
-						suppressed ? ImVec4(0.35f, 0.35f, 0.35f, 1) : ImVec4(0.15f, 0.6f, 0.15f, 1));
-					ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-						suppressed ? ImVec4(0.5f, 0.5f, 0.5f, 1) : ImVec4(0.2f, 0.75f, 0.2f, 1));
-					if (ImGui::SmallButton(suppressed ? "o" : "*"))
-						suppressed ? (void)s_suppressedLights.erase(row.info.lightKey) : (void)s_suppressedLights.insert(row.info.lightKey);
-					ImGui::PopStyleColor(2);
-					if (!active)
-						ImGui::EndDisabled();
-					if (ImGui::IsItemHovered()) {
-						const char* tip = "Light is not currently in the scene";
-						if (row.inScene)
-							tip = suppressed ? "Re-enable" : "Suppress (hides this light's shadows)";
-						else if (row.converted)
-							tip = suppressed ? "Re-enable" : "Suppress (hides this converted light from cluster lighting)";
-						ImGui::SetTooltip("%s", tip);
+					ImGui::PushID(static_cast<int>(key & 0xFFFFFFFF));
+					const char* label = "·";
+					ImVec4 col4 = ImVec4(0.15f, 0.6f, 0.15f, 1);  // green = auto/active
+					ImVec4 colH = ImVec4(0.2f, 0.75f, 0.2f, 1);
+					const char* tip = "Auto (scheduler decides)\nClick: pin as shadow caster";
+					if (pinShadow) {
+						label = "S";
+						col4 = ImVec4(0.20f, 0.40f, 0.85f, 1);  // blue
+						colH = ImVec4(0.30f, 0.55f, 1.0f, 1);
+						tip = "Pinned: forced shadow caster\nClick: pin as converted (non-shadow)";
+					} else if (pinConvert) {
+						label = "C";
+						col4 = ImVec4(0.85f, 0.55f, 0.15f, 1);  // amber
+						colH = ImVec4(1.0f, 0.7f, 0.25f, 1);
+						tip = "Pinned: forced converted (non-shadow)\nClick: suppress entirely";
+					} else if (suppressed) {
+						label = "X";
+						col4 = ImVec4(0.45f, 0.25f, 0.25f, 1);  // dim red
+						colH = ImVec4(0.6f, 0.35f, 0.35f, 1);
+						tip = "Suppressed (hidden)\nClick: return to auto";
 					}
+					ImGui::PushStyleColor(ImGuiCol_Button, col4);
+					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colH);
+					if (ImGui::SmallButton(label)) {
+						// Cycle to next state.
+						if (pinShadow) {
+							SetPinnedShadow(key, false);
+							SetPinnedConvert(key, true);
+						} else if (pinConvert) {
+							SetPinnedConvert(key, false);
+							s_suppressedLights.insert(key);
+						} else if (suppressed) {
+							s_suppressedLights.erase(key);
+						} else {
+							SetPinnedShadow(key, true);
+						}
+					}
+					ImGui::PopStyleColor(2);
+					noteHover();
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("%s", tip);
 					ImGui::PopID();
 					return;
 				}
-				if (suppressed)
+
+				// === col 1: solo button ====================================
+				if (col == soloColIdx) {
+					ImGui::PushID(static_cast<int>((key & 0xFFFFFFFF) ^ 0xA1));
+					ImVec4 col4 = isSolo ?
+				                      ImVec4(0.85f, 0.7f, 0.15f, 1) :  // bright yellow when active
+				                      ImVec4(0.30f, 0.30f, 0.30f, 1);
+					ImVec4 colH = isSolo ? ImVec4(1.0f, 0.85f, 0.25f, 1) : ImVec4(0.45f, 0.45f, 0.45f, 1);
+					ImGui::PushStyleColor(ImGuiCol_Button, col4);
+					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colH);
+					if (ImGui::SmallButton(isSolo ? "!" : "·"))
+						SetSoloLight(isSolo ? 0 : key);
+					ImGui::PopStyleColor(2);
+					noteHover();
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("%s",
+							isSolo ?
+								"Solo: this light is shown alone\nClick: clear solo" :
+								"Solo this light\n(suppresses every other light\nuntil cleared)");
+					ImGui::PopID();
+					return;
+				}
+
+				if (suppressed || (s_soloLight != 0 && !isSolo))
 					ImGui::BeginDisabled();
-				if (showStatus && col == 1) {
+				bool dimmed = suppressed || (s_soloLight != 0 && !isSolo);
+				if (showStatus && col == 2) {
 					const char* status = row.inScene ? "Yes" : (row.converted ? "Conv" : "No");
 					if (row.converted)
 						ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.25f, 1), "%s", status);
@@ -2899,6 +3068,7 @@ namespace ShadowCasterManager
 					ImGui::Selectable(addrFull + 10, false, ImGuiSelectableFlags_None);
 					if (ImGui::IsItemClicked())
 						ImGui::SetClipboardText(addrFull);
+					noteHover();
 					if (ImGui::IsItemHovered())
 						ImGui::SetTooltip("Click to copy: %s", addrFull);
 				} else if (showColor && col == addrColIdx + 1) {
@@ -2912,8 +3082,10 @@ namespace ShadowCasterManager
 						ImGui::SetTooltip("#%02X%02X%02X", ri, gi, bi);
 				} else if (col == typeColIdx) {
 					ImGui::TextUnformatted(kShadowTypeNames[std::min(row.info.type, 2u)]);
+					noteHover();
 				} else if (col == radColIdx) {
 					ImGui::Text("%.0f u", row.info.range);
+					noteHover();
 					if (ImGui::IsItemHovered())
 						ImGui::SetTooltip("%s", Util::Units::FormatDistance(row.info.range).c_str());
 				} else if (col == centrColIdx) {
@@ -2945,7 +3117,7 @@ namespace ShadowCasterManager
 						ImGui::TextDisabled("-");
 					}
 				}
-				if (suppressed)
+				if (dimmed)
 					ImGui::EndDisabled();
 			},
 			{},
