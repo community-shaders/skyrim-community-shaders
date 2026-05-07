@@ -59,12 +59,12 @@
 
 		[loop] for (int hbIdx = 0; hbIdx < 6; hbIdx++)
 		{
-			weights[hbIdx] *= pow(heightBlend, HEIGHT_MULT * heights[hbIdx]);
+			weights[hbIdx] *= pow(max(abs(heightBlend), 0.0001), HEIGHT_MULT * heights[hbIdx]);
 		}
 
 		[loop] for (int j = 0; j < 6; j++)
 		{
-			weights[j] = min(100, pow(abs(weights[j]), heightBlend));
+			weights[j] = min(100, pow(abs(weights[j]), max(abs(heightBlend), 0.0001)));
 		}
 
 		float wsum = 0;
