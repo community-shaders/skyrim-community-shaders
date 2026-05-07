@@ -154,9 +154,9 @@ namespace ShadowCasterManager
 	// -------------------------------------------------------------------------
 	enum class BudgetModeEnum : int32_t
 	{
-		Auto = 0,     ///< DRS-style adaptive controller
+		Auto = 0,     ///< DEPRECATED: kept only for save-file backward compat. Migrated to Formula at load.
 		Manual = 1,   ///< Fixed slider value
-		Formula = 2,  ///< User-editable exprtk expression
+		Formula = 2,  ///< User-editable exprtk expression (default)
 	};
 
 	// -------------------------------------------------------------------------
@@ -190,12 +190,10 @@ namespace ShadowCasterManager
 		int32_t MaxRedrawPerFrame = 16;
 
 		/// How the per-frame shadow redraw budget is determined.
-		BudgetModeEnum BudgetMode = BudgetModeEnum::Auto;
-
-		/// Target FPS for the auto-budget controller.
-		/// 0 = auto-detect from monitor refresh rate.
-		/// Any positive value overrides the auto-detected target.
-		float AutoTargetFPS = 0.0f;
+		/// Default Formula: the default RedrawBudgetFormula expresses the same intent
+		/// the old Auto controller had (grow when frametime is below the 90th-pct target,
+		/// scale by stableframes), without the surprise of an opaque DRS controller.
+		BudgetModeEnum BudgetMode = BudgetModeEnum::Formula;
 
 		/// Per-frame time budget for shadow re-renders (milliseconds).
 		/// Used in Manual mode.  Lights whose estimated GPU cost would exceed this
@@ -252,7 +250,6 @@ namespace ShadowCasterManager
 		AllowDrawNewLight,
 		MaxRedrawPerFrame,
 		BudgetMode,
-		AutoTargetFPS,
 		RedrawBudgetMs,
 		ConvertExcessToNormal,
 		PromoteNormalToShadow,

@@ -167,37 +167,22 @@ namespace ShadowCasterManager
 	static int32_t s_budgetHistoryPos = 0;
 	static int64_t s_budgetSum = 0;
 
-	// Frame-time tracking (shared by all budget modes for formula params and UI).
-	static constexpr int kAutoFrameWindow = 120;  // ~2 s at 60 fps
-	static float s_ftRing[kAutoFrameWindow]{};
+	// Frame-time tracking — used by Formula's frametime/frametarget/stableframes
+	// formula params, the shared frame-state diagnostic block, and stats UI.
+	// Persists in both Manual and Formula modes; the cost is one float per frame.
+	static constexpr int kFrameWindow = 120;  // ~2 s at 60 fps
+	static float s_ftRing[kFrameWindow]{};
 	static int s_ftHead = 0;
 	static int s_ftCount = 0;
 	static float s_ftEMA = 0.0f;
 	static int s_stableFrames = 0;
 	static float s_autoBudgetMs = 0.0f;  // last computed budget; used by UI, scheduling, and stats
 
-	// ---- DRS-style proportional controller for Auto budget mode ----
-	// Inspired by industry DRS implementations (Intel, Valve, Martin Fuller).
-	// Uses a fixed target frame time derived from monitor refresh rate,
-	// proportional error-driven adjustment, asymmetric rates, and a
-	// hysteresis dead zone to prevent oscillation.
-	// A hard floor ensures the budget never falls below the cost of
-	// kVanillaMinLights redraws (matching Skyrim's original 4-caster behaviour)
-	// even when the game is running below the FPS target.
-	static float s_autoTargetMs = 0.0f;        // target frame time (ms); 0 = not yet initialised
-	static float s_adaptiveBudgetMs = 2.0f;    // current adaptive budget (ms); seeded high so first frames aren't starved
-	static float s_actualShadowCostMs = 0.0f;  // EMA-smoothed actual shadow GPU cost (ms)
-	static float s_utilizationRatio = 0.0f;    // EMA-smoothed budget utilization (0..1+)
-
-	// Controller tuning constants.
-	static constexpr float kAutoMinBudget = 0.1f;           // floor (ms) — overridden by vanilla guarantee below
-	static constexpr float kAutoMaxBudget = 16.0f;          // ceiling (ms)
-	static constexpr int kVanillaMinLights = 4;             // Skyrim's original simultaneous shadow caster count
-	static constexpr float kAutoIncreaseRate = 0.08f;       // proportional gain for increasing budget (slow)
-	static constexpr float kAutoDecreaseRate = 0.3f;        // proportional gain for decreasing budget (fast, ~4x increase)
-	static constexpr float kAutoDeadZoneMs = 0.3f;          // hysteresis: don't adjust if |error| < this
-	static constexpr float kAutoSafetyMs = 0.5f;            // headroom reserved so shadows never eat the last 0.5 ms
-	static constexpr float kAutoTargetFallbackMs = 16.67f;  // 60 FPS fallback if refresh rate unknown
+	// "Steady" state thresholds for the shared frame-state diagnostic.
+	// Mirror the old Auto-mode hysteresis values so the indicator behaves the
+	// same way users grew used to, just informational rather than driving control.
+	static constexpr float kFrameHeadroomDeadZoneMs = 0.3f;  // |headroom| below this = "steady"
+	static constexpr float kFrameHeadroomSafetyMs = 0.5f;    // headroom must clear this before "growing"
 
 	// Budget tracking for UI display
 	static int32_t s_redrawnLightsThisFrame = 0;
@@ -209,8 +194,8 @@ namespace ShadowCasterManager
 	{
 		if (s_ftCount == 0)
 			return 16.67f;  // fallback: 60 fps target
-		const int n = std::min(s_ftCount, kAutoFrameWindow);
-		float tmp[kAutoFrameWindow];
+		const int n = std::min(s_ftCount, kFrameWindow);
+		float tmp[kFrameWindow];
 		std::copy(s_ftRing, s_ftRing + n, tmp);
 		const int idx = static_cast<int>(n * 0.9f);
 		std::nth_element(tmp, tmp + idx, tmp + n);
@@ -1295,8 +1280,8 @@ namespace ShadowCasterManager
 			{
 				const float dtMs = *globals::game::deltaTime * 1000.0f;
 				s_ftRing[s_ftHead] = dtMs;
-				s_ftHead = (s_ftHead + 1) % kAutoFrameWindow;
-				if (s_ftCount < kAutoFrameWindow)
+				s_ftHead = (s_ftHead + 1) % kFrameWindow;
+				if (s_ftCount < kFrameWindow)
 					++s_ftCount;
 				s_ftEMA = (s_ftCount == 1) ? dtMs : 0.1f * dtMs + 0.9f * s_ftEMA;
 
@@ -1312,77 +1297,14 @@ namespace ShadowCasterManager
 			}
 
 			// Evaluate the budget for the whole frame.
-			//   Mode 0 (Auto):    DRS-style proportional controller.
-			//   Mode 1 (Manual):  fixed slider value (RedrawBudgetMs).
-			//   Mode 2 (Formula): user-editable exprtk expression.
+			//   Manual:  fixed slider value (RedrawBudgetMs).
+			//   Formula: user-editable exprtk expression.
+			// (Auto was a DRS-style controller — removed; the default Formula mirrors
+			// what the controller did, expressed transparently as a frametime expression.)
 			double budget = s_settings.RedrawBudgetMs;
-			if (s_settings.BudgetMode == BudgetModeEnum::Auto) {
-				// ---- DRS-style auto budget ----
-				// Derive target frame time: user override > monitor refresh rate > fallback.
-				// Always re-derive in auto mode so changes to refresh rate are picked up
-				// immediately and the slider stays consistent with the active target.
-				if (s_settings.AutoTargetFPS > 0.0f) {
-					s_autoTargetMs = 1000.0f / s_settings.AutoTargetFPS;
-				} else {
-					double hz = globals::game::isVR ? globals::features::vr.GetHMDRefreshRate() : globals::features::upscaling.refreshRate;
-					s_autoTargetMs = (hz > 1.0) ? static_cast<float>(1000.0 / hz) : kAutoTargetFallbackMs;
-				}
-
-				// Never target a frame time faster than the game is actually achieving.
-				// Without this, high refresh rate monitors (e.g. 240 Hz → 4.17 ms target)
-				// create massive negative headroom when the game runs at 60 fps (16.67 ms),
-				// slamming the budget to the floor and starving shadow redraws.
-				// Clamping to s_ftEMA keeps headroom at zero when the game can't reach the
-				// monitor target, so the budget holds steady rather than collapsing.
-				s_autoTargetMs = std::max(s_autoTargetMs, s_ftEMA);
-
-				// Smooth actual shadow cost from consumed budget history (us -> ms).
-				const float avgConsumedMs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize) / 1000.0f;
-				s_actualShadowCostMs = 0.9f * s_actualShadowCostMs + 0.1f * avgConsumedMs;
-
-				// Smooth utilization ratio.
-				const float rawUtil = s_adaptiveBudgetMs > 0.01f ? s_actualShadowCostMs / s_adaptiveBudgetMs : 0.0f;
-				s_utilizationRatio = 0.9f * s_utilizationRatio + 0.1f * rawUtil;
-
-				// Asymmetric DRS controller:
-				//   Grow:   raw headroom must exceed safety margin + dead zone.
-				//   Shrink: raw headroom is actually negative past dead zone.
-				// This prevents a permanent throttle state when actual FPS == target FPS,
-				// which would otherwise cause headroom = -kAutoSafetyMs < -kAutoDeadZoneMs.
-				const float rawHeadroom = s_autoTargetMs - s_ftEMA;
-
-				if (rawHeadroom > kAutoSafetyMs + kAutoDeadZoneMs) {
-					// Under target with safety margin to spare: grow budget.
-					// Scale by utilization -- grow fast only if we're using what we have.
-					float utilFactor = std::clamp(s_utilizationRatio, 0.2f, 1.0f);
-					float delta = kAutoIncreaseRate * ((rawHeadroom - kAutoSafetyMs) / s_autoTargetMs) * utilFactor;
-					s_adaptiveBudgetMs += delta;
-				} else if (rawHeadroom < -kAutoDeadZoneMs) {
-					// Over target: shrink budget proportionally to overshoot (fast).
-					float delta = kAutoDecreaseRate * (-rawHeadroom / s_autoTargetMs);
-					s_adaptiveBudgetMs -= delta;
-				}
-				// Inside dead zone: hold steady (hysteresis).
-
-				s_adaptiveBudgetMs = std::clamp(s_adaptiveBudgetMs, kAutoMinBudget, kAutoMaxBudget);
-
-				// Raise the floor to cover at least kVanillaMinLights redraws so the
-				// adaptive controller can never throttle below Skyrim's original behaviour.
-				// Uses the observed average per-light cost so the floor tracks real GPU cost
-				// rather than a hard-coded guess.  Falls back to kAutoMinBudget on cold start
-				// (GetAverageCostUs == 0) until enough measurements are available.
-				int32_t avgCostUs = s_budget.GetAverageCostUs();
-				if (avgCostUs > 0) {
-					float vanillaFloorMs = static_cast<float>(avgCostUs * kVanillaMinLights) / 1000.0f;
-					s_adaptiveBudgetMs = std::max(s_adaptiveBudgetMs, vanillaFloorMs);
-				}
-
-				budget = s_adaptiveBudgetMs;
-			} else if (s_settings.BudgetMode == BudgetModeEnum::Formula && s_formulaRedrawBudget) {
-				// --- Formula mode ---
+			if (s_settings.BudgetMode == BudgetModeEnum::Formula && s_formulaRedrawBudget) {
 				budget = s_formulaRedrawBudget->Calculate();
 			}
-			// Mode 1 (Manual): budget stays as s_settings.RedrawBudgetMs.
 			s_autoBudgetMs = static_cast<float>(budget);
 
 			// Reset redraw counter (will be updated at end of scheduling)
@@ -3272,71 +3194,63 @@ namespace ShadowCasterManager
 
 		// ---- Temporal budget (dynamic) ------------------------------------
 
-		// Budget mode selector.
-		static constexpr int32_t kAutoRecommendedShadowCount = 32;
-		static const char* budgetModeNames[] = { "Auto", "Manual", "Formula" };
-		int budgetMode = magic_enum::enum_integer(settings.BudgetMode);
-		ImGui::Combo("Budget Mode", &budgetMode, budgetModeNames, 3);
-		settings.BudgetMode = magic_enum::enum_cast<BudgetModeEnum>(budgetMode).value_or(BudgetModeEnum::Auto);
+		// Migrate legacy Auto saves silently. The default Formula expression was
+		// designed to mirror the old DRS controller's intent (grow when frametime
+		// is below the 90th-percentile target, scale by stableframes), so users
+		// who had Auto selected get the closest equivalent without surprises.
+		if (settings.BudgetMode == BudgetModeEnum::Auto)
+			settings.BudgetMode = BudgetModeEnum::Formula;
+
+		// Budget mode selector — Manual or Formula. Auto was removed: it was an
+		// opaque DRS controller that confused users when the budget moved without
+		// a visible cause. The default Formula expresses the same behaviour
+		// transparently and stays editable.
+		static constexpr int32_t kRecommendedShadowCount = 32;
+		static const char* budgetModeNames[] = { "Manual", "Formula" };
+		int budgetModeIdx = (settings.BudgetMode == BudgetModeEnum::Manual) ? 0 : 1;
+		if (ImGui::Combo("Budget Mode", &budgetModeIdx, budgetModeNames, 2))
+			settings.BudgetMode = (budgetModeIdx == 0) ? BudgetModeEnum::Manual : BudgetModeEnum::Formula;
 		if (ImGui::IsItemHovered()) {
-			if (budgetMode == 0)
-				ImGui::SetTooltip(
-					"Auto: grows shadow quality when FPS is above the target, throttles when it drops.\n"
-					"A minimum floor ensures at least %d lights always redraw per frame (vanilla parity),\n"
-					"even when FPS is below the target — preventing a regression from base game behaviour.\n"
-					"Target is auto-detected from monitor refresh rate or set manually below.\n"
-					"Recommendation: increase Shadow Light Count to 32+ for best results (requires restart).",
-					kVanillaMinLights);
-			else if (budgetMode == 1)
+			if (budgetModeIdx == 0)
 				ImGui::SetTooltip(
 					"Manual: fixed per-frame GPU time budget for shadow re-renders.\n"
 					"Adjust the slider to trade FPS for shadow quality.");
 			else
 				ImGui::SetTooltip(
 					"Formula: user-editable exprtk expression for per-frame budget.\n"
-					"Power-user mode. Edit in the Advanced section below.");
+					"Default formula grows the budget when frametime is comfortably\n"
+					"below the 90th-percentile target and shrinks it under stress.\n"
+					"Edit the expression in the Advanced section below.");
 		}
-		if (budgetMode == 0 && settings.ShadowLightCount < kAutoRecommendedShadowCount) {
+		if (settings.ShadowLightCount < kRecommendedShadowCount) {
 			ImGui::SameLine();
 			if (ImGui::Button("Apply Recommendations")) {
-				settings.ShadowLightCount = kAutoRecommendedShadowCount;
+				settings.ShadowLightCount = kRecommendedShadowCount;
 				settings.MaxRedrawPerFrame = 32;
 			}
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
 					"Sets Shadow Light Count to %d and Max Redraws Per Frame to 32.\n"
 					"Shadow Light Count change requires a game restart.",
-					kAutoRecommendedShadowCount);
+					kRecommendedShadowCount);
 		}
 
-		// Auto mode: FPS target slider.
-		if (budgetMode == 0) {
-			float detectedHz = static_cast<float>(globals::game::isVR ? globals::features::vr.GetHMDRefreshRate() : globals::features::upscaling.refreshRate);
-			float detectedFPS = detectedHz > 1.0f ? detectedHz : 60.0f;
-			float displayFPS = settings.AutoTargetFPS > 0.0f ? settings.AutoTargetFPS : detectedFPS;
-
-			if (ImGui::SliderFloat("Target FPS", &displayFPS, 15.0f, 300.0f, "%.0f FPS")) {
-				settings.AutoTargetFPS = displayFPS;
-			}
+		// Per-mode controls.
+		if (budgetModeIdx == 0) {
+			ImGui::SliderFloat("Redraw Budget (ms)", &settings.RedrawBudgetMs, 0.1f, 8.0f, "%.2f ms");
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
-					"FPS target for the auto budget controller.\n"
-					"Shadows grow to fill spare frame time below this target.\n"
-					"Detected refresh rate: %.0f Hz",
-					detectedFPS);
-
-			// Reset button to return to auto-detect.
-			if (settings.AutoTargetFPS > 0.0f) {
-				ImGui::SameLine();
-				if (ImGui::Button("Auto")) {
-					settings.AutoTargetFPS = 0.0f;
-				}
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Reset to auto-detect from monitor refresh rate (%.0f Hz).", detectedFPS);
-			}
+					"Per-frame GPU time budget for shadow re-renders (milliseconds).\n"
+					"Lights whose estimated render cost exceeds the remaining budget are deferred.\n"
+					"The first eligible light always renders regardless of budget (starvation prevention).\n"
+					"Typical values: 1.0 ms exterior, 2.0 ms interior.");
+		} else {
+			ImGui::Text("Budget from formula: %.2f ms", s_autoBudgetMs);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Edit the Redraw Budget formula in the Advanced section below.");
 		}
 
-		// Budget progress bar -- always visible.
+		// Budget progress bar — always visible.
 		{
 			const float effectiveBudgetMs = s_autoBudgetMs;
 			const float avgConsumedUs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize);
@@ -3347,75 +3261,57 @@ namespace ShadowCasterManager
 			ImGui::ProgressBar(std::min(fraction, 1.0f), ImVec2(-1.0f, 0.0f), overlay);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
-					"Estimated GPU shadow budget consumed this frame vs. effective budget.\n"
-					"In Auto mode the budget floor is raised to cover at least %d lights (vanilla parity),\n"
-					"so this value may exceed what the FPS controller alone would allocate.",
-					kVanillaMinLights);
+					"Estimated GPU shadow budget consumed this frame vs. effective budget.");
 		}
 
-		if (budgetMode == 0) {
-			// --- Auto mode display ---
-			int32_t renderedDisplay = (int32_t)(s_redrawnLightsSmoothed + 0.5f);
-			int32_t droppedLights = s_totalShadowLightsThisFrame - renderedDisplay;
-			float currentFrameMs = *globals::game::deltaTime * 1000.0f;
-			float currentFPS = 1000.0f / std::max(currentFrameMs, 1.0f);
-			float utilPct = std::min(s_utilizationRatio * 100.0f, 999.0f);
-			float rawHeadroom = s_autoTargetMs - s_ftEMA;
-			float headroomMs = rawHeadroom - kAutoSafetyMs;  // net headroom above safety floor
-			float targetFPS = s_autoTargetMs > 0.0f ? 1000.0f / s_autoTargetMs : 0.0f;
-			float freeMs = std::max(0.0f, s_autoBudgetMs - s_actualShadowCostMs);
-			int32_t avgCostUs = s_budget.GetAverageCostUs();
-			int32_t couldFitMore = avgCostUs > 0 ? static_cast<int32_t>(freeMs * 1000.0f / avgCostUs) : 0;
+		// ---- Shared frame-state diagnostic --------------------------------
+		// Migrated from the old Auto-mode display: state indicator (steady /
+		// growing / throttling), headroom vs target frametime, and the
+		// "could fit more lights" estimate. Useful in Manual and Formula
+		// modes alike — the user wants to know whether they have headroom
+		// to spend without having to switch tools or guess.
+		{
+			const float currentFrameMs = *globals::game::deltaTime * 1000.0f;
+			const float currentFPS = 1000.0f / std::max(currentFrameMs, 1.0f);
+			const float targetMs = ComputeFrameTimePercentile90();  // formula's frametarget
+			const float targetFPS = targetMs > 0.0f ? 1000.0f / targetMs : 0.0f;
+			const float rawHeadroom = targetMs - s_ftEMA;
+			const float headroomMs = rawHeadroom - kFrameHeadroomSafetyMs;
 
-			// Detect when the vanilla floor is the active constraint.
-			float vanillaFloorMs = avgCostUs > 0 ? static_cast<float>(avgCostUs * kVanillaMinLights) / 1000.0f : 0.0f;
-			bool atVanillaFloor = vanillaFloorMs > 0.0f && (s_autoBudgetMs <= vanillaFloorMs + 0.01f);
+			const float avgConsumedMs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize) / 1000.0f;
+			const float freeMs = std::max(0.0f, s_autoBudgetMs - avgConsumedMs);
+			const int32_t avgCostUs = s_budget.GetAverageCostUs();
+			const int32_t couldFitMore = avgCostUs > 0 ? static_cast<int32_t>(freeMs * 1000.0f / avgCostUs) : 0;
 
-			if (droppedLights > 0)
-				ImGui::Text("Budget: %.2f ms (%.0f%% used) | %d rendered, %d deferred", s_autoBudgetMs, utilPct, renderedDisplay, droppedLights);
-			else
-				ImGui::Text("Budget: %.2f ms (%.0f%% used) | all %d rendered", s_autoBudgetMs, utilPct, renderedDisplay);
+			const int32_t renderedDisplay = (int32_t)(s_redrawnLightsSmoothed + 0.5f);
+			const int32_t droppedLights = std::max(0, s_totalShadowLightsThisFrame - renderedDisplay);
 
 			const char* state = "steady";
-			if (atVanillaFloor)
-				state = "vanilla floor";
-			else if (rawHeadroom > kAutoSafetyMs + kAutoDeadZoneMs)
+			if (rawHeadroom > kFrameHeadroomSafetyMs + kFrameHeadroomDeadZoneMs)
 				state = "growing";
-			else if (rawHeadroom < -kAutoDeadZoneMs)
+			else if (rawHeadroom < -kFrameHeadroomDeadZoneMs)
 				state = "throttling";
-			ImGui::Text("Target: %.0f FPS (%.1f ms) | headroom: %.1f ms | %s", targetFPS, s_autoTargetMs, headroomMs, state);
-			ImGui::Text("Current: %.1f FPS (%.1f ms)", currentFPS, currentFrameMs);
 
-			if (couldFitMore > 0 && droppedLights > 0)
-				ImGui::Text("%.1f ms free -- could fit ~%d more lights", freeMs, couldFitMore);
-		} else if (budgetMode == 1) {
-			// --- Manual mode ---
-			ImGui::SliderFloat("Redraw Budget (ms)", &settings.RedrawBudgetMs, 0.1f, 8.0f, "%.2f ms");
+			ImGui::Text("Frame: %.1f FPS (%.1f ms) | target: %.0f FPS (%.1f ms) | headroom: %+.1f ms | %s",
+				currentFPS, currentFrameMs, targetFPS, targetMs, headroomMs, state);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
-					"Per-frame GPU time budget for shadow re-renders (milliseconds).\n"
-					"Lights whose estimated render cost exceeds the remaining budget are deferred.\n"
-					"The first eligible light always renders regardless of budget (starvation prevention).\n"
-					"Typical values: 1.0 ms exterior, 2.0 ms interior.");
+					"Frame timing relative to the 90th-percentile target (used by the\n"
+					"default Formula expression as `frametarget`).\n"
+					"  steady     — within ±%.1f ms of target\n"
+					"  growing    — frametime well below target; budget can expand\n"
+					"  throttling — frametime over target; reduce budget to recover",
+					kFrameHeadroomDeadZoneMs);
 
-			// Actionable recommendations
-			{
-				const float avgConsumedMs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize) / 1000.0f;
-				float manualUtilPct = settings.RedrawBudgetMs > 0.01f ? (avgConsumedMs / settings.RedrawBudgetMs) * 100.0f : 0.0f;
-				float freeMs = std::max(0.0f, settings.RedrawBudgetMs - avgConsumedMs);
-				int32_t avgCostUs = s_budget.GetAverageCostUs();
-				int32_t couldFitMore = avgCostUs > 0 ? static_cast<int32_t>(freeMs * 1000.0f / avgCostUs) : 0;
+			if (droppedLights > 0)
+				ImGui::Text("Lights: %d rendered, %d deferred", renderedDisplay, droppedLights);
+			else
+				ImGui::Text("Lights: all %d rendered", renderedDisplay);
 
-				if (manualUtilPct < 50.0f && freeMs > 0.1f)
-					ImGui::Text("Could reduce to %.1f ms or fit ~%d more lights", avgConsumedMs + 0.5f, couldFitMore);
-				else if (manualUtilPct > 95.0f)
-					ImGui::Text("Budget saturated -- increase to render more lights");
-			}
-		} else {
-			// --- Formula mode ---
-			ImGui::Text("Budget from formula: %.2f ms", s_autoBudgetMs);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Edit the Redraw Budget formula in the Advanced section below.");
+			if (couldFitMore > 0)
+				ImGui::Text("%.1f ms free — could fit ~%d more lights", freeMs, couldFitMore);
+			else if (avgCostUs > 0 && freeMs <= 0.0f)
+				ImGui::Text("Budget saturated — raise budget or lower MaxRedrawPerFrame to recover frametime");
 		}
 		{
 			// Use ShadowLightCount as the slider upper bound when the scheduler hasn't
