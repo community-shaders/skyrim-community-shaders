@@ -114,9 +114,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				EngineFix::InstallOnDataLoadedFixes();
 				FrameAnnotations::OnDataLoaded();
 
-				// Load weather data now that TESDataHandler is available for SPID resolution
-				SceneSettingsManager::GetSingleton()->LoadWeatherData();
-
 				auto shaderCache = globals::shaderCache;
 				shaderCache->menuLoaded = true;
 

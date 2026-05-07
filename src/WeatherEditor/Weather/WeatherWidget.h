@@ -119,9 +119,6 @@ public:
 	void SaveFeatureSettings();
 	void LoadFeatureSettings();
 
-	// Navigation state for opening specific features
-	std::string pendingFeatureNavigation = "";
-	std::string pendingSettingHighlight = "";
 	void NavigateToFeatureSetting(const std::string& featureName, const std::string& settingName);
 
 private:
@@ -130,7 +127,6 @@ private:
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();
 	void DrawFogSettings();
-	void DrawFeatureSettings();
 
 	// Cloud texture loading
 	ID3D11ShaderResourceView* GetCloudTexture(int layerIndex);

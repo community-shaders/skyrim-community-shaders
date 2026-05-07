@@ -285,13 +285,17 @@ namespace Util
 		std::string result;
 		result.reserve(id.size() + id.size() / 4);
 
+		auto appendSpaceIfNeeded = [&]() {
+			if (!result.empty() && result.back() != ' ')
+				result += ' ';
+		};
+
 		for (size_t i = 0; i < id.size(); ++i) {
 			char c = id[i];
 
 			// Replace underscores and dashes with spaces
 			if (c == '_' || c == '-') {
-				if (!result.empty() && result.back() != ' ')
-					result += ' ';
+				appendSpaceIfNeeded();
 				continue;
 			}
 
@@ -302,13 +306,11 @@ namespace Util
 
 				if (!prevUpper && !prevSep) {
 					// lowercase->UPPER: "ambientM" -> "ambient M"
-					if (!result.empty() && result.back() != ' ')
-						result += ' ';
+					appendSpaceIfNeeded();
 				} else if (prevUpper && i + 1 < id.size() &&
 				           std::islower(static_cast<unsigned char>(id[i + 1]))) {
 					// End of acronym run: "XMLParser" at 'P' -> "XML Parser"
-					if (!result.empty() && result.back() != ' ')
-						result += ' ';
+					appendSpaceIfNeeded();
 				}
 			}
 

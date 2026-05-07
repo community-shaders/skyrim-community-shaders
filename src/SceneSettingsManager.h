@@ -179,9 +179,6 @@ public:
 	/// Load non-weather scene types (overwrites + user settings). Called early from Setup().
 	void LoadAll();
 
-	/// Load weather overwrites and weather user settings. Requires TESDataHandler (call after kDataLoaded).
-	void LoadWeatherData();
-
 	// --- Path Resolution ---
 
 	static std::string GetSceneTypeName(SceneType type);
@@ -242,8 +239,8 @@ public:
 		std::vector<SettingEntry> entries;
 	};
 
-	const WeatherSceneConfig& GetWeatherConfig(RE::FormID weatherId) const;
-	bool HasWeatherConfig(RE::FormID weatherId) const;
+	const WeatherSceneConfig& GetWeatherConfig(RE::FormID weatherId);
+	bool HasWeatherConfig(RE::FormID weatherId);
 
 	/// Add a weather setting.  Requires a valid period (all entries are per-period).
 	void AddWeatherSetting(RE::FormID weatherId, const std::string& featureShortName,
@@ -256,10 +253,10 @@ public:
 
 	bool HasWeatherEntryForPeriod(RE::FormID weatherId, const std::string& featureShortName,
 		const std::string& settingKey, TimeOfDayPeriod period,
-		std::optional<EntrySource> source = std::nullopt) const;
+		std::optional<EntrySource> source = std::nullopt);
 
 	/// Weather UI preference: show TOD table vs flat view (view-only, data is always per-period).
-	bool IsWeatherShowTimeOfDay(RE::FormID weatherId) const;
+	bool IsWeatherShowTimeOfDay(RE::FormID weatherId);
 	void SetWeatherShowTimeOfDay(RE::FormID weatherId, bool show);
 
 	static std::filesystem::path GetWeatherOverwritesDir();
@@ -332,8 +329,12 @@ private:
 	float lastWeatherLerp = -1.0f;
 	float lastBlendedWeatherHour = -1.0f;
 	bool isWeatherSceneActive = false;
+	bool weatherDataLoaded = false;
 
 	// --- Per-Weather helpers ---
+	/// Load weather overwrites/user settings once game data is available for SPID resolution.
+	bool TryEnsureWeatherDataLoaded();
+	void LoadWeatherData();
 	WeatherSceneConfig& GetWeatherConfigMut(RE::FormID weatherId);
 	void UpdateWeatherScene();
 	void ActivateWeatherScene();
@@ -345,7 +346,7 @@ private:
 	/// Returns true if an override was computed, with the result in outValue.
 	bool ComputeWeatherBlendedFloat(const std::string& shortName, const std::string& key,
 		RE::FormID currentId, RE::FormID lastId, float weatherLerp, float& outValue);
-	bool IsActiveWeatherSetting(const std::string& shortName, const std::string& key) const;
+	bool IsActiveWeatherSetting(const std::string& shortName, const std::string& key);
 	float GetTimeOfDayPeriodFallbackFloat(float baseVal, const std::string& shortName,
 		const std::string& key, int periodIdx) const;
 

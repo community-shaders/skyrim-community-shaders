@@ -2195,6 +2195,7 @@ namespace Util
 	static constexpr float kFlyoutPaddingX = 6.0f;
 	static constexpr float kFlyoutPaddingY = 2.0f;
 	static constexpr float kIconShrink = 0.15f;            // shrink icon within button by this fraction
+	static constexpr float kFlyoutEdgeTolerance = 0.5f;
 
 	static void ResetFlyout(FlyoutState& state) noexcept
 	{
@@ -2224,11 +2225,10 @@ namespace Util
 
 	static bool IsRectFullyVisible(const ImVec2& min, const ImVec2& max, const ImRect& visible)
 	{
-		constexpr float edgeTolerance = 0.5f;
-		return min.x >= visible.Min.x - edgeTolerance &&
-		       min.y >= visible.Min.y - edgeTolerance &&
-		       max.x <= visible.Max.x + edgeTolerance &&
-		       max.y <= visible.Max.y + edgeTolerance;
+		return min.x >= visible.Min.x - kFlyoutEdgeTolerance &&
+		       min.y >= visible.Min.y - kFlyoutEdgeTolerance &&
+		       max.x <= visible.Max.x + kFlyoutEdgeTolerance &&
+		       max.y <= visible.Max.y + kFlyoutEdgeTolerance;
 	}
 
 	static float ClampVisible(float value, float min, float max)

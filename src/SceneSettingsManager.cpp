@@ -567,6 +567,9 @@ void SceneSettingsManager::ExportUserSettingsToOverwrites(SceneType type, const 
 
 void SceneSettingsManager::ExportWeatherUserSettingsToOverwrites(RE::FormID weatherId, const std::vector<size_t>& indices)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return;
+
 	auto& vec = GetWeatherConfigMut(weatherId).entries;
 	auto baseDir = GetWeatherOverwritesDir() / Util::FormIdToSpid(weatherId);
 	for (auto idx : indices) {
@@ -1172,15 +1175,26 @@ static json UserEntriesToArray(const std::vector<SceneSettingsManager::SettingEn
 
 void SceneSettingsManager::SaveAllUserSettings()
 {
+	const bool weatherLoaded = TryEnsureWeatherDataLoaded();
+
 	auto path = GetUserSettingsFilePath();
 	Util::FileHelpers::EnsureDirectoryExists(path.parent_path());
 
-	json data;
+	json data = json::object();
+	if (!weatherLoaded) {
+		std::ifstream existingFile(path);
+		if (existingFile.is_open()) {
+			auto existingData = json::parse(existingFile, nullptr, false);
+			if (existingData.is_object() && existingData.contains("weather"))
+				data["weather"] = existingData["weather"];
+		}
+	}
+
 	data["interiorOnly"] = UserEntriesToArray(GetEntries(SceneType::InteriorOnly));
 	data["timeOfDay"] = UserEntriesToArray(GetEntries(SceneType::TimeOfDay));
 
 	// Weather entries (keyed by SPID)
-	{
+	if (weatherLoaded) {
 		json weatherObj = json::object();
 		for (const auto& [weatherId, config] : weatherSceneConfigs) {
 			bool hasUserEntries = std::any_of(config.entries.begin(), config.entries.end(),
@@ -1200,6 +1214,8 @@ void SceneSettingsManager::SaveAllUserSettings()
 			weatherObj[spid] = std::move(weatherEntry);
 		}
 		data["weather"] = std::move(weatherObj);
+	} else if (!data.contains("weather")) {
+		data["weather"] = json::object();
 	}
 
 	try {
@@ -1321,7 +1337,7 @@ void SceneSettingsManager::LoadAllUserSettings()
 				logger::info("[SceneSettings] Loaded {} TimeOfDay user settings", loaded);
 		}
 
-		// Weather is loaded separately in LoadWeatherUserSettings() after kDataLoaded
+		// Weather is loaded lazily once game data is available for SPID resolution.
 
 		logger::info("[SceneSettings] Loaded SceneManager.json (non-weather)");
 	} catch (const std::exception& e) {
@@ -1527,6 +1543,18 @@ void SceneSettingsManager::LoadAll()
 	LoadAllUserSettings();
 }
 
+bool SceneSettingsManager::TryEnsureWeatherDataLoaded()
+{
+	if (weatherDataLoaded)
+		return true;
+	if (!globals::game::sky || !RE::TESDataHandler::GetSingleton())
+		return false;
+
+	weatherDataLoaded = true;
+	LoadWeatherData();
+	return true;
+}
+
 void SceneSettingsManager::LoadWeatherData()
 {
 	DiscoverWeatherOverwrites();
@@ -1537,8 +1565,11 @@ void SceneSettingsManager::LoadWeatherData()
 
 const SceneSettingsManager::WeatherSceneConfig SceneSettingsManager::kEmptyWeatherConfig{};
 
-const SceneSettingsManager::WeatherSceneConfig& SceneSettingsManager::GetWeatherConfig(RE::FormID weatherId) const
+const SceneSettingsManager::WeatherSceneConfig& SceneSettingsManager::GetWeatherConfig(RE::FormID weatherId)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return kEmptyWeatherConfig;
+
 	auto it = weatherSceneConfigs.find(weatherId);
 	return (it != weatherSceneConfigs.end()) ? it->second : kEmptyWeatherConfig;
 }
@@ -1548,8 +1579,11 @@ SceneSettingsManager::WeatherSceneConfig& SceneSettingsManager::GetWeatherConfig
 	return weatherSceneConfigs[weatherId];
 }
 
-bool SceneSettingsManager::HasWeatherConfig(RE::FormID weatherId) const
+bool SceneSettingsManager::HasWeatherConfig(RE::FormID weatherId)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return false;
+
 	auto it = weatherSceneConfigs.find(weatherId);
 	return it != weatherSceneConfigs.end() && !it->second.entries.empty();
 }
@@ -1557,6 +1591,9 @@ bool SceneSettingsManager::HasWeatherConfig(RE::FormID weatherId) const
 void SceneSettingsManager::AddWeatherSetting(RE::FormID weatherId, const std::string& featureShortName,
 	const std::string& settingKey, const json& value, TimeOfDayPeriod period)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return;
+
 	// All weather entries are per-period
 	if (period == TimeOfDayPeriod::Count || static_cast<int>(period) < 0 || static_cast<int>(period) >= kPeriodCount)
 		return;
@@ -1582,6 +1619,9 @@ void SceneSettingsManager::AddWeatherSetting(RE::FormID weatherId, const std::st
 
 void SceneSettingsManager::RemoveWeatherSetting(RE::FormID weatherId, size_t index)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return;
+
 	auto it = weatherSceneConfigs.find(weatherId);
 	if (it == weatherSceneConfigs.end() || index >= it->second.entries.size())
 		return;
@@ -1591,6 +1631,9 @@ void SceneSettingsManager::RemoveWeatherSetting(RE::FormID weatherId, size_t ind
 
 void SceneSettingsManager::TogglePauseWeatherEntry(RE::FormID weatherId, size_t index)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return;
+
 	auto it = weatherSceneConfigs.find(weatherId);
 	if (it == weatherSceneConfigs.end() || index >= it->second.entries.size())
 		return;
@@ -1600,6 +1643,9 @@ void SceneSettingsManager::TogglePauseWeatherEntry(RE::FormID weatherId, size_t 
 
 void SceneSettingsManager::UpdateWeatherEntryValue(RE::FormID weatherId, size_t index, const json& newValue, bool deferSave)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return;
+
 	auto it = weatherSceneConfigs.find(weatherId);
 	if (it == weatherSceneConfigs.end() || index >= it->second.entries.size())
 		return;
@@ -1610,6 +1656,9 @@ void SceneSettingsManager::UpdateWeatherEntryValue(RE::FormID weatherId, size_t 
 
 void SceneSettingsManager::RevertWeatherEntryToDefault(RE::FormID weatherId, size_t index)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return;
+
 	auto it = weatherSceneConfigs.find(weatherId);
 	if (it == weatherSceneConfigs.end() || index >= it->second.entries.size())
 		return;
@@ -1620,6 +1669,9 @@ void SceneSettingsManager::RevertWeatherEntryToDefault(RE::FormID weatherId, siz
 
 void SceneSettingsManager::DeleteAllWeatherSettings(RE::FormID weatherId)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return;
+
 	auto it = weatherSceneConfigs.find(weatherId);
 	if (it != weatherSceneConfigs.end()) {
 		it->second.entries.clear();
@@ -1628,8 +1680,11 @@ void SceneSettingsManager::DeleteAllWeatherSettings(RE::FormID weatherId)
 }
 
 bool SceneSettingsManager::HasWeatherEntryForPeriod(RE::FormID weatherId, const std::string& featureShortName,
-	const std::string& settingKey, TimeOfDayPeriod period, std::optional<EntrySource> source) const
+	const std::string& settingKey, TimeOfDayPeriod period, std::optional<EntrySource> source)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return false;
+
 	auto it = weatherSceneConfigs.find(weatherId);
 	if (it == weatherSceneConfigs.end())
 		return false;
@@ -1642,14 +1697,20 @@ bool SceneSettingsManager::HasWeatherEntryForPeriod(RE::FormID weatherId, const 
 
 // --- Per-Weather Persistence ---
 
-bool SceneSettingsManager::IsWeatherShowTimeOfDay(RE::FormID weatherId) const
+bool SceneSettingsManager::IsWeatherShowTimeOfDay(RE::FormID weatherId)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return false;
+
 	auto it = weatherShowTimeOfDay_.find(weatherId);
 	return it != weatherShowTimeOfDay_.end() && it->second;
 }
 
 void SceneSettingsManager::SetWeatherShowTimeOfDay(RE::FormID weatherId, bool show)
 {
+	if (!TryEnsureWeatherDataLoaded())
+		return;
+
 	weatherShowTimeOfDay_[weatherId] = show;
 	SaveAllUserSettings();
 }
@@ -1788,8 +1849,15 @@ void SceneSettingsManager::DeactivateWeatherScene()
 	logger::info("[SceneSettings] Weather scene deactivated");
 }
 
-bool SceneSettingsManager::IsActiveWeatherSetting(const std::string& shortName, const std::string& key) const
+bool SceneSettingsManager::IsActiveWeatherSetting(const std::string& shortName, const std::string& key)
 {
+	auto sky = globals::game::sky;
+	if (!sky || !sky->currentWeather)
+		return false;
+
+	if (!TryEnsureWeatherDataLoaded())
+		return false;
+
 	auto hasEntry = [&](RE::FormID weatherId) {
 		auto it = weatherSceneConfigs.find(weatherId);
 		if (it == weatherSceneConfigs.end())
@@ -1798,10 +1866,6 @@ bool SceneSettingsManager::IsActiveWeatherSetting(const std::string& shortName, 
 			return !entry.paused && entry.featureShortName == shortName && entry.settingKey == key;
 		});
 	};
-
-	auto sky = RE::Sky::GetSingleton();
-	if (!sky || !sky->currentWeather)
-		return false;
 
 	return hasEntry(sky->currentWeather->GetFormID()) ||
 	       (sky->lastWeather && hasEntry(sky->lastWeather->GetFormID()));
@@ -1906,8 +1970,11 @@ bool SceneSettingsManager::ComputeWeatherBlendedFloat(const std::string& shortNa
 
 void SceneSettingsManager::UpdateWeatherScene()
 {
-	auto sky = RE::Sky::GetSingleton();
+	auto sky = globals::game::sky;
 	if (!sky || !sky->currentWeather)
+		return;
+
+	if (!TryEnsureWeatherDataLoaded())
 		return;
 
 	RE::FormID currentId = sky->currentWeather->GetFormID();
