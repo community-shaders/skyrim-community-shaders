@@ -40,11 +40,12 @@ struct ExponentialHeightFog : Feature
 		float fogHeightFalloff = 0.2f;
 		float fogDensity = 0.02f;
 		float directionalInscatteringMultiplier = 1.0f;
-		float directionalInscatteringExponent = 4.0f;
+		float directionalInscatteringAnisotropy = 0.7f;
 		float4 inscatteringTint = { 1.0f, 1.0f, 1.0f, 1.0f };
 		float cubemapMipLevel = 3.0f;
 		uint respectVanillaFogFade = 0;
-		float pad[2];
+		uint disableVanillaFog = 0;
+		float pad;
 	} settings;
 	static_assert(sizeof(Settings) == sizeof(float4) * 4, "Settings must match HLSL ExponentialHeightFogSettings.");
 };

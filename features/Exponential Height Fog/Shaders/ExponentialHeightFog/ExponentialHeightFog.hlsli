@@ -14,6 +14,20 @@ namespace ExponentialHeightFog
 		return SharedData::exponentialHeightFogSettings.respectVanillaFogFade != 0 ? vanillaFogFade : 1.0f;
 	}
 
+	bool ShouldDisableVanillaFog()
+	{
+		return SharedData::exponentialHeightFogSettings.enabled && SharedData::exponentialHeightFogSettings.disableVanillaFog != 0;
+	}
+
+	// Henyey-Greenstein phase function for physically-based inscattering.
+	// g: asymmetry parameter [-1, 1]. Positive = forward scattering, 0 = isotropic.
+	float HenyeyGreenstein(float cosTheta, float g)
+	{
+		float g2 = g * g;
+		float denom = 1.0f + g2 - 2.0f * g * cosTheta;
+		return (1.0f - g2) / (4.0f * Math::PI * pow(max(denom, 1e-5f), 1.5f));
+	}
+
 	float4 GetExponentialHeightFog(float3 positionWS, float3 cameraWS, float3 fogColor)
 	{
 		float fogHeightFalloff = SharedData::exponentialHeightFogSettings.fogHeightFalloff * 0.001f;
@@ -57,9 +71,11 @@ namespace ExponentialHeightFog
 
 		float3 directionalInscattering = 0;
 
-		// Calculate directional light inscattering
+		// Calculate directional light inscattering using Henyey-Greenstein phase function
 		if (SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier > 0) {
-			float3 directionalLightInscattering = SharedData::DirLightColor.xyz * pow(saturate(dot(normalize(positionWS), SharedData::DirLightDirection.xyz)), SharedData::exponentialHeightFogSettings.directionalInscatteringExponent) / (2 * Math::TAU);
+			float cosTheta = dot(normalize(positionWS), SharedData::DirLightDirection.xyz);
+			float phase = HenyeyGreenstein(cosTheta, SharedData::exponentialHeightFogSettings.directionalInscatteringAnisotropy);
+			float3 directionalLightInscattering = SharedData::DirLightColor.xyz * phase;
 			float dirExponentialHeightLineIntegral = exponentialHeightLineIntegralCalc * max(rayLength - SharedData::exponentialHeightFogSettings.startDistance, 0);
 			float dirExpFogFactor = saturate(exp2(-dirExponentialHeightLineIntegral));
 			directionalInscattering = directionalLightInscattering * (1 - dirExpFogFactor) * SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier;

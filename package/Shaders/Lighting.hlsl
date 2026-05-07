@@ -3087,14 +3087,28 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #		endif
 #		if defined(EXP_HEIGHT_FOG)
+	float3 vanillaFogColor = fogColor;
+	float vanillaFogFactor = fogFactor;
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
 	}
 #		endif
-	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
+	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z) {
+#		if defined(EXP_HEIGHT_FOG)
+		if (SharedData::exponentialHeightFogSettings.enabled) {
+			if (!ExponentialHeightFog::ShouldDisableVanillaFog()) {
+				color.xyz = lerp(color.xyz, vanillaFogColor, vanillaFogFactor);
+			}
+			color.xyz = lerp(color.xyz, fogColor, fogFactor);
+		} else {
+			color.xyz = lerp(color.xyz, fogColor, fogFactor);
+		}
+#		else
 		color.xyz = lerp(color.xyz, fogColor, fogFactor);
+#		endif
+	}
 #	endif
 
 #	if defined(TESTCUBEMAP) && defined(ENVMAP) && defined(DYNAMIC_CUBEMAPS)

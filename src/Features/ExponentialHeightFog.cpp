@@ -11,10 +11,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	fogHeightFalloff,
 	fogDensity,
 	directionalInscatteringMultiplier,
-	directionalInscatteringExponent,
+	directionalInscatteringAnisotropy,
 	inscatteringTint,
 	cubemapMipLevel,
-	respectVanillaFogFade)
+	respectVanillaFogFade,
+	disableVanillaFog)
 
 void ExponentialHeightFog::RestoreDefaultSettings()
 {
@@ -39,7 +40,17 @@ void ExponentialHeightFog::DrawSettings()
 	Util::WeatherUI::SliderFloat("Fog Height Falloff", this, "fogHeightFalloff", &settings.fogHeightFalloff, 0.001f, 2.0f, "%.3f");
 	Util::WeatherUI::SliderFloat("Fog Density", this, "fogDensity", &settings.fogDensity, 0.0f, 1.0f, "%.3f");
 	Util::WeatherUI::SliderFloat("Directional Light Inscattering Multiplier", this, "directionalInscatteringMultiplier", &settings.directionalInscatteringMultiplier, 0.0f, 10.0f, "%.2f");
-	Util::WeatherUI::SliderFloat("Directional Light Inscattering Exponent", this, "directionalInscatteringExponent", &settings.directionalInscatteringExponent, 1.0f, 128.0f, "%.2f");
+	Util::WeatherUI::SliderFloat("Directional Light Inscattering Anisotropy", this, "directionalInscatteringAnisotropy", &settings.directionalInscatteringAnisotropy, -0.99f, 0.99f, "%.3f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Controls the asymmetry of inscattering via the Henyey-Greenstein phase function.\n"
+			"Positive values produce forward scattering (glow around sun).\n"
+			"Zero is isotropic. Negative values produce back scattering.");
+	}
+	ImGui::Checkbox("Disable Vanilla Fog", (bool*)&settings.disableVanillaFog);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Disables the vanilla fog entirely. Only exponential height fog will be applied.");
+	}
 	Util::WeatherUI::Checkbox("Apply Vanilla Fade", this, "respectVanillaFogFade", (bool*)&settings.respectVanillaFogFade);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Applies vanilla fade brightness to exponential height fog.");
@@ -93,12 +104,12 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		0.0f, 10.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"Directional Inscattering Exponent",
-		"directionalInscatteringExponent",
-		"Controls the size of the directional inscattering cone",
-		&settings.directionalInscatteringExponent,
-		4.0f,
-		1.0f, 128.0f));
+		"Directional Inscattering Anisotropy",
+		"directionalInscatteringAnisotropy",
+		"Henyey-Greenstein asymmetry parameter. Positive = forward scattering, 0 = isotropic, negative = back scattering.",
+		&settings.directionalInscatteringAnisotropy,
+		0.7f,
+		-0.99f, 0.99f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
 		"Inscattering Cubemap Tint",
@@ -112,6 +123,16 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"Apply Vanilla Fade",
 		"Apply vanilla fade brightness to exponential height fog",
 		(bool*)&settings.respectVanillaFogFade,
+		false,
+		[](const bool& from, const bool& to, float factor) {
+			return factor > 0.5f ? to : from;
+		}));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::WeatherVariable<bool>>(
+		"disableVanillaFog",
+		"Disable Vanilla Fog",
+		"Disables vanilla fog entirely, only exponential height fog is applied",
+		(bool*)&settings.disableVanillaFog,
 		false,
 		[](const bool& from, const bool& to, float factor) {
 			return factor > 0.5f ? to : from;

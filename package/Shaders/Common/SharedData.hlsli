@@ -257,11 +257,12 @@ namespace SharedData
 		float fogHeightFalloff;
 		float fogDensity;
 		float directionalInscatteringMultiplier;
-		float directionalInscatteringExponent;
+		float directionalInscatteringAnisotropy;
 		float4 inscatteringTint;
 		float cubemapMipLevel;
 		uint respectVanillaFogFade;
-		float2 pad;
+		uint disableVanillaFog;
+		float pad;
 	};
 
 	cbuffer FeatureData : register(b6)
