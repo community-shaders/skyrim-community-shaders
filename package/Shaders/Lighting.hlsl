@@ -2264,14 +2264,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	const bool enableVanillaFresnel = SharedData::vanillaFresnelSettings.Enable;
 	material.F0 = enableVanillaFresnel ? SharedData::vanillaFresnelSettings.MinF0 : 0.0;
 #			if defined(EYE)
-	if (enableVanillaFresnel) {
+	if (enableVanillaFresnel && SharedData::vanillaFresnelSettings.EnableEyeSpecialHandling) {
 		material.F0 = 0.027;
 		material.Roughness = 0.1;
 	}
 #			elif defined(SPECULAR)
 	if (enableVanillaFresnel) {
 		material.F0 = saturate(glossiness * SpecularColor.xyz / Math::PI);
-		material.Roughness = ShininessToRoughness(material.Shininess);
+		float roughnessFromSpecular = (1.0 - glossiness) * (1.0 - glossiness);
+		float roughnessFromShininess = ShininessToRoughness(material.Shininess);
+		material.Roughness = lerp(roughnessFromShininess, roughnessFromSpecular, SharedData::vanillaFresnelSettings.SpecularRoughnessBlend * (1.0 - glossiness));
 	}
 #			endif
 	material.F0 = max((enableVanillaFresnel ? SharedData::vanillaFresnelSettings.MinF0 : 0.0), material.F0 * SharedData::vanillaFresnelSettings.BaseF0Multiplier);
@@ -2398,8 +2400,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(VANILLA_FRESNEL) && !defined(TRUE_PBR)
 		if (enableVanillaFresnel) {
 #			if defined(EYE)
-			material.F0 = 0.027;
-			material.Roughness = 0.1;
+			if (SharedData::vanillaFresnelSettings.EnableEyeSpecialHandling) {
+				material.F0 = 0.027;
+				material.Roughness = 0.1;
+			}
 #			endif
 			material.Roughness = clamp(material.Roughness * SharedData::vanillaFresnelSettings.RoughnessMultiplier, 0.04, 1.0);
 		}

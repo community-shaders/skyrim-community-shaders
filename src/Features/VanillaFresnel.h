@@ -12,12 +12,10 @@ struct VanillaFresnel : public Feature
 	{
 		return {
 			"Add realistic environmental reflections to vanilla materials.",
-            {
-                "Add environmental reflections to all materials",
-                "Supports vanilla and complex materials",
-                "Optionally turn vanilla phong specular into GGX",
-                "Optionally turn static cubemaps into dynamic reflections"
-            }
+			{ "Add environmental reflections to all materials",
+				"Supports vanilla and complex materials",
+				"Optionally turn vanilla phong specular into GGX",
+				"Optionally turn static cubemaps into dynamic reflections" }
 		};
 	}
 
@@ -35,14 +33,16 @@ struct VanillaFresnel : public Feature
 	struct alignas(16) Settings
 	{
 		uint Enable = true;
-        uint EnableGGX = false;
-        uint EnableGGXOnGrass = false;
-        uint EnableDynamicCubemapsConversion = false;
-        float RoughnessMultiplier = 1.0f;
-        float BaseF0Multiplier = 0.32f;
-        float MinF0 = 0.02f;
-        float CubemapToF0Multiplier = 1.0f;
-        float ComplexMaterialF0Multiplier = 1.0f;
-        float pad[3];
+		uint EnableGGX = false;
+		uint EnableGGXOnGrass = false;
+		uint EnableDynamicCubemapsConversion = false;
+		uint EnableEyeSpecialHandling = true;
+		float RoughnessMultiplier = 1.0f;
+		float SpecularRoughnessBlend = 1.0f;
+		float BaseF0Multiplier = 0.32f;
+		float MinF0 = 0.02f;
+		float CubemapToF0Multiplier = 1.0f;
+		float ComplexMaterialF0Multiplier = 1.0f;
+		float pad;
 	} settings;
 };

@@ -1,16 +1,18 @@
 #include "VanillaFresnel.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    VanillaFresnel::Settings,
-    Enable,
-    EnableGGX,
-    EnableGGXOnGrass,
-    EnableDynamicCubemapsConversion,
-    RoughnessMultiplier,
-    BaseF0Multiplier,
-    MinF0,
-    CubemapToF0Multiplier,
-    ComplexMaterialF0Multiplier)
+	VanillaFresnel::Settings,
+	Enable,
+	EnableGGX,
+	EnableGGXOnGrass,
+	EnableDynamicCubemapsConversion,
+	EnableEyeSpecialHandling,
+	RoughnessMultiplier,
+	SpecularRoughnessBlend,
+	BaseF0Multiplier,
+	MinF0,
+	CubemapToF0Multiplier,
+	ComplexMaterialF0Multiplier)
 
 void VanillaFresnel::RestoreDefaultSettings()
 {
@@ -19,24 +21,26 @@ void VanillaFresnel::RestoreDefaultSettings()
 
 void VanillaFresnel::LoadSettings(json& o_json)
 {
-    settings = o_json;
+	settings = o_json;
 }
 
 void VanillaFresnel::SaveSettings(json& o_json)
 {
-    o_json = settings;
+	o_json = settings;
 }
 
 void VanillaFresnel::DrawSettings()
 {
-    ImGui::Checkbox("Enable Vanilla Fresnel", reinterpret_cast<bool*>(&settings.Enable));
-    ImGui::Checkbox("Enable Phong to GGX", reinterpret_cast<bool*>(&settings.EnableGGX));
-    ImGui::Checkbox("Enable Phong to GGX on Grass", reinterpret_cast<bool*>(&settings.EnableGGXOnGrass));
-    ImGui::Checkbox("Enable Auto Cubemaps Conversion", reinterpret_cast<bool*>(&settings.EnableDynamicCubemapsConversion));
+	ImGui::Checkbox("Enable Vanilla Fresnel", reinterpret_cast<bool*>(&settings.Enable));
+	ImGui::Checkbox("Enable Phong to GGX", reinterpret_cast<bool*>(&settings.EnableGGX));
+	ImGui::Checkbox("Enable Phong to GGX on Grass", reinterpret_cast<bool*>(&settings.EnableGGXOnGrass));
+	ImGui::Checkbox("Enable Auto Cubemaps Conversion", reinterpret_cast<bool*>(&settings.EnableDynamicCubemapsConversion));
+	ImGui::Checkbox("Enable Eye Special Handling", reinterpret_cast<bool*>(&settings.EnableEyeSpecialHandling));
 
-    ImGui::SliderFloat("Roughness Multiplier", &settings.RoughnessMultiplier, 0.0f, 10.0f, "%.2f");
-    ImGui::SliderFloat("Base F0 Multiplier", &settings.BaseF0Multiplier, 0.0f, 10.0f, "%.2f");
-    ImGui::SliderFloat("Min F0", &settings.MinF0, 0.0f, 0.04f, "%.3f");
-    ImGui::SliderFloat("Cubemap to F0 Multiplier", &settings.CubemapToF0Multiplier, 0.0f, 10.0f, "%.2f");
-    ImGui::SliderFloat("Complex Material Env F0 Multiplier", &settings.ComplexMaterialF0Multiplier, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Roughness Multiplier", &settings.RoughnessMultiplier, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Specular Roughness Blend", &settings.SpecularRoughnessBlend, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat("Base F0 Multiplier", &settings.BaseF0Multiplier, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Min F0", &settings.MinF0, 0.0f, 0.04f, "%.3f");
+	ImGui::SliderFloat("Cubemap to F0 Multiplier", &settings.CubemapToF0Multiplier, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Complex Material Env F0 Multiplier", &settings.ComplexMaterialF0Multiplier, 0.0f, 10.0f, "%.2f");
 }
