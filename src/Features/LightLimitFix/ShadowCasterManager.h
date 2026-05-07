@@ -190,15 +190,18 @@ namespace ShadowCasterManager
 		int32_t MaxRedrawPerFrame = 16;
 
 		/// How the per-frame shadow redraw budget is determined.
-		/// Default Formula: the default RedrawBudgetFormula expresses the same intent
-		/// the old Auto controller had (grow when frametime is below the 90th-pct target,
-		/// scale by stableframes), without the surprise of an opaque DRS controller.
-		BudgetModeEnum BudgetMode = BudgetModeEnum::Formula;
+		/// Manual is the default — predictable, doesn't ping-pong, and matches
+		/// the spirit of Intellightent's original behaviour. Formula is available
+		/// for power users who want adaptive logic, with the caveat that any
+		/// formula referencing `frametime` will tend to oscillate (rendering
+		/// shadows raises frametime, which removes the headroom that allowed
+		/// the budget — classic feedback loop without hysteresis).
+		BudgetModeEnum BudgetMode = BudgetModeEnum::Manual;
 
 		/// Per-frame time budget for shadow re-renders (milliseconds).
 		/// Used in Manual mode.  Lights whose estimated GPU cost would exceed this
 		/// are deferred to a later frame.
-		float RedrawBudgetMs = 2.0f;
+		float RedrawBudgetMs = 5.0f;
 
 		/// Demote shadow lights that exceed the active caster limit to normal (non-shadow) lights
 		/// so they still contribute diffuse lighting without a shadow-map cost.
@@ -223,8 +226,23 @@ namespace ShadowCasterManager
 		std::string RedrawIntervalFormula = "min(10, (max(0, min(lightdistance, playerlightdistance) - lightradius * 0.5) / 500) / max(0.5, lightintensity)) * (lightconverted * 5 + 1) - min(lightdisplacement / 5, 10)";
 
 		/// Redraw budget formula (per frame, in ms).  Used in Formula mode.
-		/// Key variables: frametime (smoothed ms), frametarget (90th-pct ms), stableframes.
-		std::string RedrawBudgetFormula = "max(0, frametarget - frametime - 0.5) * min(stableframes, 45) / 45";
+		/// Default mirrors Intellightent's original behaviour: a flat 1 ms outdoors
+		/// (`isinterior` = 0) and 2 ms indoors (`isinterior` = 1). Predictable and
+		/// doesn't oscillate.
+		///
+		/// Available variables: frametime (smoothed ms), frametarget (90th-pct ms),
+		/// stableframes, isinterior, plus the per-light variables (used by ScoreFormula
+		/// and RedrawIntervalFormula but evaluated to last-light values here).
+		///
+		/// Caveat — adaptive variants ping-pong: any formula that subtracts
+		/// shadow GPU cost from frametime headroom (e.g.
+		/// `max(0, frametarget - frametime - 0.5) * min(stableframes, 45) / 45`)
+		/// will oscillate between 0 and a positive value frame-to-frame, because
+		/// rendering shadows raises frametime, which zeroes the budget, which
+		/// drops frametime, which restores the budget. exprtk has no hysteresis
+		/// state, so adaptive control needs the C++ DRS controller (removed)
+		/// to work cleanly. Stick to static expressions like the default.
+		std::string RedrawBudgetFormula = "1 + isinterior";
 
 		// --- Importance scheduling curve ---
 

@@ -3215,12 +3215,12 @@ namespace ShadowCasterManager
 
 		// ---- Temporal budget (dynamic) ------------------------------------
 
-		// Migrate legacy Auto saves silently. The default Formula expression was
-		// designed to mirror the old DRS controller's intent (grow when frametime
-		// is below the 90th-percentile target, scale by stableframes), so users
-		// who had Auto selected get the closest equivalent without surprises.
+		// Migrate legacy Auto saves silently. Manual is now the default and the
+		// closest match in spirit to what most users actually wanted from Auto:
+		// a predictable budget that doesn't ping-pong. Power users can switch
+		// back to Formula manually if they want the adaptive default expression.
 		if (settings.BudgetMode == BudgetModeEnum::Auto)
-			settings.BudgetMode = BudgetModeEnum::Formula;
+			settings.BudgetMode = BudgetModeEnum::Manual;
 
 		// Budget mode selector — Manual or Formula. Auto was removed: it was an
 		// opaque DRS controller that confused users when the budget moved without
@@ -3234,14 +3234,19 @@ namespace ShadowCasterManager
 		if (ImGui::IsItemHovered()) {
 			if (budgetModeIdx == 0)
 				ImGui::SetTooltip(
-					"Manual: fixed per-frame GPU time budget for shadow re-renders.\n"
-					"Adjust the slider to trade FPS for shadow quality.");
+					"Manual (default): fixed per-frame GPU time budget for shadow re-renders.\n"
+					"Predictable; doesn't oscillate. Adjust the slider to trade FPS for shadow quality.");
 			else
 				ImGui::SetTooltip(
 					"Formula: user-editable exprtk expression for per-frame budget.\n"
-					"Default formula grows the budget when frametime is comfortably\n"
-					"below the 90th-percentile target and shrinks it under stress.\n"
-					"Edit the expression in the Advanced section below.");
+					"Default expression matches Intellightent's original behaviour\n"
+					"(1 ms outdoors, 2 ms indoors). Edit the expression in the\n"
+					"Advanced section below.\n"
+					"\n"
+					"Caveat: adaptive expressions referencing `frametime` tend to\n"
+					"ping-pong because rendering shadows raises frametime, removing\n"
+					"the headroom that allowed the budget. Stick to static or\n"
+					"slowly-varying inputs (`isinterior`, `frametarget`).");
 		}
 		if (settings.ShadowLightCount < kRecommendedShadowCount) {
 			ImGui::SameLine();
@@ -3258,13 +3263,22 @@ namespace ShadowCasterManager
 
 		// Per-mode controls.
 		if (budgetModeIdx == 0) {
-			ImGui::SliderFloat("Redraw Budget (ms)", &settings.RedrawBudgetMs, 0.1f, 8.0f, "%.2f ms");
+			ImGui::SliderFloat("Redraw Budget (ms)", &settings.RedrawBudgetMs, 0.1f, 32.0f, "%.2f ms");
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
 					"Per-frame GPU time budget for shadow re-renders (milliseconds).\n"
 					"Lights whose estimated render cost exceeds the remaining budget are deferred.\n"
 					"The first eligible light always renders regardless of budget (starvation prevention).\n"
-					"Typical values: 1.0 ms exterior, 2.0 ms interior.");
+					"\n"
+					"Reference points:\n"
+					"  1-2 ms: Intellightent's original (1 outdoors, 2 indoors)\n"
+					"  5 ms : default — comfortable for typical scenes (~5-8 lights at ~1 ms each)\n"
+					"  16 ms: full 60 fps frame; shadows can saturate the frame here\n"
+					"  32 ms: extreme — only useful for very high light counts on fast GPUs\n"
+					"\n"
+					"Higher = more shadow lights redraw per frame, fewer stale shadow maps,\n"
+					"at the cost of frametime. The 'could fit ~N more lights' line below\n"
+					"shows how much headroom is left at the current setting.");
 		} else {
 			ImGui::Text("Budget from formula: %.2f ms", s_autoBudgetMs);
 			if (ImGui::IsItemHovered())
