@@ -114,6 +114,24 @@ namespace Util
 		}
 	}
 
+	CenteredPopupModal::CenteredPopupModal(const char* name, bool* p_open, ImGuiWindowFlags flags, ImVec2 pos, ImVec2 pivot)
+	{
+		if (pos.x == -FLT_MAX && pos.y == -FLT_MAX)
+			pos = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(pos, ImGuiCond_Always, pivot);
+		// Fix first-frame vertical stretch: AlwaysAutoResize resets width to 0 on the hidden
+		// measurement frame, causing TextWrapped to wrap at 0px and produce an enormous height.
+		// Setting an initial width gives TextWrapped a sensible wrap column on that frame.
+		ImGui::SetNextWindowSize(ImVec2(400.0f * GetUIScale(), 0.0f), ImGuiCond_Appearing);
+		isOpen = ImGui::BeginPopupModal(name, p_open, flags | ImGuiWindowFlags_NoSavedSettings);
+	}
+
+	CenteredPopupModal::~CenteredPopupModal()
+	{
+		if (isOpen)
+			ImGui::EndPopup();
+	}
+
 	DisableGuard::DisableGuard(bool disable) :
 		disable(disable)
 	{
@@ -262,11 +280,7 @@ namespace Util
 
 		ImGui::OpenPopup("Clear Shader Cache?");
 
-		// Center the popup
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-
-		if (ImGui::BeginPopupModal("Clear Shader Cache?", &showClearCacheConfirmation, ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (auto popup = CenteredPopupModal("Clear Shader Cache?", &showClearCacheConfirmation)) {
 			ImGui::Text("Are you sure you want to clear the shader cache?");
 			ImGui::Spacing();
 			ImGui::Spacing();
@@ -310,8 +324,6 @@ namespace Util
 				showClearCacheConfirmation = false;
 				ImGui::CloseCurrentPopup();
 			}
-
-			ImGui::EndPopup();
 		}
 	}
 
@@ -338,11 +350,9 @@ namespace Util
 			return false;
 
 		ImGui::OpenPopup(title.c_str());
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
 		bool result = false;
-		if (ImGui::BeginPopupModal(title.c_str(), &show, ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (auto popup = CenteredPopupModal(title.c_str(), &show)) {
 			ImGui::TextWrapped("%s", message.c_str());
 			ImGui::Spacing();
 			ImGui::Separator();
@@ -372,8 +382,6 @@ namespace Util
 				show = false;
 				ImGui::CloseCurrentPopup();
 			}
-
-			ImGui::EndPopup();
 		}
 		return result;
 	}
@@ -1413,6 +1421,53 @@ namespace Util
 		{
 			return globals::menu->GetTheme().StatusPalette.Disable;
 		}
+
+	}
+
+	namespace Text
+	{
+		static void ColoredTextV(ImVec4 color, const char* fmt, va_list args)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
+			ImGui::TextV(fmt, args);
+			ImGui::PopStyleColor();
+		}
+
+		static void ColoredTextWrappedV(ImVec4 color, const char* fmt, va_list args)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
+			ImGui::TextWrappedV(fmt, args);
+			ImGui::PopStyleColor();
+		}
+
+#define UTIL_TEXT(Name, ColorFn)                              \
+	void Name(const char* fmt, ...) {                         \
+		va_list args;                                         \
+		va_start(args, fmt);                                  \
+		ColoredTextV(Colors::ColorFn(), fmt, args);           \
+		va_end(args);                                         \
+	}
+#define UTIL_TEXT_WRAPPED(Name, ColorFn)                      \
+	void Name(const char* fmt, ...) {                         \
+		va_list args;                                         \
+		va_start(args, fmt);                                  \
+		ColoredTextWrappedV(Colors::ColorFn(), fmt, args);    \
+		va_end(args);                                         \
+	}
+
+		UTIL_TEXT(Warning, GetWarning)
+		UTIL_TEXT_WRAPPED(WrappedWarning, GetWarning)
+		UTIL_TEXT(Error, GetError)
+		UTIL_TEXT_WRAPPED(WrappedError, GetError)
+		UTIL_TEXT(Success, GetSuccess)
+		UTIL_TEXT_WRAPPED(WrappedSuccess, GetSuccess)
+		UTIL_TEXT(Info, GetInfo)
+		UTIL_TEXT_WRAPPED(WrappedInfo, GetInfo)
+		UTIL_TEXT(Disabled, GetDisabled)
+		UTIL_TEXT_WRAPPED(WrappedDisabled, GetDisabled)
+
+#undef UTIL_TEXT
+#undef UTIL_TEXT_WRAPPED
 	}
 
 	namespace Input
