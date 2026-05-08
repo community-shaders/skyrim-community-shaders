@@ -576,11 +576,16 @@ void LightLimitFix::UpdateLights()
 	ShadowCasterManager::ForEachShadowLight(shadowSceneNode->GetRuntimeData().shadowLightsAccum,
 		[&](RE::BSShadowLight* light) {
 			shadowLightPtrs.insert(light);
-			// Use stable slot from s_lights pool — avoids reading the descriptor field
-			// which may be corrupted by ReturnShadowmaps() before UpdateLights() runs.
-			// Only set Shadow flag for lights with a valid slot index.
+			// GetShadowSlot returns the kSHADOWMAPS texture slot:
+			//   -1 : sun (no kSHADOWMAPS slice — sun shadows live in kSHADOWMAPS_ESRAM
+			//        and are sampled via the directional cascade path, not the cluster
+			//        loop). Skip cluster injection entirely. The sun stays in
+			//        shadowLightPtrs so the activeLights loop below doesn't re-add it.
+			//   >=0: kSHADOWMAPS slice index (0..ShadowMapSlots-1) post-reclaim.
 			int32_t stableSlot = ShadowCasterManager::GetShadowSlot(light);
-			bool castsShadow = stableSlot >= 0 && static_cast<uint32_t>(stableSlot) < globals::deferred->shadowMapSlots;
+			if (stableSlot < 0)
+				return;
+			bool castsShadow = static_cast<uint32_t>(stableSlot) < globals::deferred->shadowMapSlots;
 			addShadowLight(light, castsShadow, castsShadow ? static_cast<uint32_t>(stableSlot) : 0u);
 		});
 

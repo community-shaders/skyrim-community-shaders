@@ -397,7 +397,9 @@ namespace ShadowCasterManager
 		auto* light = reinterpret_cast<RE::BSShadowLight*>(REL::Relocate(ctx.R15, ctx.R15, ctx.R14));
 		int32_t idx = s_lights.FindLight(light, s_settings.ShadowLightCount);
 		if (idx < 0)
-			idx = 0;  // should not happen; fail safe to slot 0
+			idx = 0;  // should not happen; fail-safe to slot 0
+		// Sun (pool[0] when Sun=true) writes 0 here too — harmless since sun's
+		// descriptor.shadowmapIndex is unused (sun renders to kSHADOWMAPS_ESRAM).
 
 		if (REL::Module::IsVR())
 			ctx.Rdx = static_cast<DWORD64>(idx);
@@ -430,12 +432,16 @@ namespace ShadowCasterManager
 
 	int32_t LightContainer::FindFreeIndex(bool shadowSlot, int32_t shadowCount, int32_t convertCount) const
 	{
+		// Pool layout when Sun=true:  [0]=sun, [1..shadowCount]=point lights, [shadowCount+1..]=converted
+		//                  Sun=false: [0..shadowCount-1]=point lights,        [shadowCount..]=converted
+		const int32_t sunOff = Sun ? 1 : 0;
 		if (shadowSlot) {
-			for (int i = 1; i <= shadowCount; i++)  // i=1: slot 0 is always the sun
+			for (int i = sunOff; i < sunOff + shadowCount; i++)
 				if (!Lights[i].Light)
 					return i;
 		} else {
-			for (int i = shadowCount + 1; i <= shadowCount + convertCount; i++)
+			const int32_t base = sunOff + shadowCount;
+			for (int i = base; i < base + convertCount; i++)
 				if (!Lights[i].Light)
 					return i;
 		}
@@ -444,7 +450,16 @@ namespace ShadowCasterManager
 
 	int32_t LightContainer::FindLight(RE::BSShadowLight* light, int32_t shadowCount) const
 	{
-		for (int i = 0; i < shadowCount; i++)
+		// Search both the sun slot (when Sun=true) and the point-light range.
+		// Hook_OverwriteShadowMapIndex is called for the sun too, so it must
+		// be findable here. Range matches FindFreeIndex's allocation range to
+		// fix a long-standing off-by-one (FindFreeIndex assigned to slots
+		// 1..shadowCount but FindLight searched 0..shadowCount-1, so a light
+		// at slot shadowCount was unfindable and its shadowmapIndex fell back
+		// to 0, corrupting the sun's slot).
+		const int32_t sunOff = Sun ? 1 : 0;
+		const int32_t maxIdx = sunOff + shadowCount;
+		for (int i = 0; i < maxIdx; i++)
 			if (Lights[i].Light == light)
 				return i;
 		return -1;
@@ -690,6 +705,22 @@ namespace ShadowCasterManager
 		func(ssn, light, index, unk);
 	}
 
+	// Per-frame reset for shadowLightsAccum (BSTArray<BSShadowLight*> at scn+0x230).
+	// Engine's vanilla CalculateAndDrawShadowCasterLights calls this at the very top
+	// to null every entry and set each light's maskIndex=0xFF. Verified via Ghidra
+	// against AE 1.6.1170 (function at 0x1414a4030, SE addr 0x1412bc7f0).
+	// Our ScheduleShadowCasters thunks the entire engine function, so we must call
+	// this ourselves — otherwise stale entries from previous frames persist and the
+	// engine's render-shadow-maps phase keeps drawing them. Symptom: shadows for
+	// lights no longer in the camera's view, suppression toggle not working
+	// (the suppressed slot still has a stale-frame entry that gets rendered).
+	static void GameClearShadowCasterArray(RE::ShadowSceneNode* ssn)
+	{
+		using F = void (*)(RE::ShadowSceneNode*);
+		static REL::Relocation<F> func{ REL::RelocationID(99730, 106367) };
+		func(ssn);
+	}
+
 	static void GameClearPortalVisibility(RE::BSPortalGraphEntry* entry)
 	{
 		using F = void (*)(RE::BSPortalGraphEntry*);
@@ -813,7 +844,7 @@ namespace ShadowCasterManager
 
 		// Chosen-last-frame bonus
 		double chosenLastFrame = 0.0;
-		for (int i = 0; i < s_settings.ShadowLightCount; i++) {
+		for (int i = s_lights.PointLightFirst(); i < s_lights.PointLightEnd(s_settings.ShadowLightCount); i++) {
 			if (s_lights.Lights[i].Light == light) {
 				chosenLastFrame = 1.0;
 				break;
@@ -1023,8 +1054,20 @@ namespace ShadowCasterManager
 			*GetAccumLightSlot() += light->shadowMapCount;
 		}
 
-		// Extended mode: pre-set kNONE renderTarget so RenderCascade uses our slot index
-		// instead of the global counter (which would corrupt all lights to slot 0).
+		// Extended mode: pre-set kNONE renderTarget so RenderCascade re-runs its
+		// slot-allocation block (where Hook_OverwriteShadowMapIndex overrides
+		// the global counter with our slot index). Without this, RenderCascade
+		// keeps the slot from a prior frame and lights not redrawn this frame
+		// would corrupt another light's shadow map.
+		//
+		// History note: a slot-reclaim attempt subtracted PointLightFirst() so
+		// pool[1..N] (Sun=true) would remap to texture[0..N-1], freeing slice 0
+		// for an extra point light. RenderDoc consistently showed slice 0 empty
+		// regardless of the pre-set / hook strategy — descriptor values were
+		// being overwritten somewhere between the pre-set and render dispatch
+		// that we couldn't trace via Ghidra. Reverted to identity (pool index
+		// = texture slot); slice 0 stays unused (the same as the pre-reclaim
+		// status quo).
 		if (s_settings.ShadowLightCount > 4) {
 			int32_t idx = s_lights.FindLight(light, s_settings.ShadowLightCount);
 			if (idx < 0)
@@ -1091,6 +1134,25 @@ namespace ShadowCasterManager
 		auto* camera = GetWorldCamera();
 		if (!ssn || !camera)
 			return;
+
+		// ---- Per-frame resets (mirror engine's CalculateAndDrawShadowCasterLights) ----
+		//
+		// The engine's vanilla CalculateAndDrawShadowCasterLights starts with two
+		// resets that we replaced when we thunked the entire function. Without them,
+		// shadowLightsAccum and the slot counter accumulate stale entries from
+		// previous frames, and the engine's render-shadow-maps phase keeps drawing
+		// them — producing shadows for lights long out of view, and breaking
+		// per-slot suppression because ShadowParam.y=-1 written to the slot we
+		// "think" the light occupies doesn't reach the stale entry at a different
+		// slot rendering the same light.
+		//
+		// Verified via Ghidra against AE 1.6.1170:
+		//   - ShadowSceneNode::ClearShadowCasterArray (0x1414a4030 / SE 0x1412bc7f0)
+		//     nulls every shadowLightsAccum entry and sets each light->maskIndex=0xFF.
+		//   - _gLastFrameEnabledShadowCasterLightCount (REL 528091/415036) is the
+		//     slot counter our scheduler reads/writes via GetAccumLightSlot().
+		GameClearShadowCasterArray(ssn);
+		*GetAccumLightSlot() = 0;
 
 		s_budget.Begin(0);
 
@@ -1178,6 +1240,21 @@ namespace ShadowCasterManager
 
 		for (auto& c : candidates) {
 			auto* l = c.light;
+			// UpdateCamera (vfunc 16, +0x80) is the engine's type-aware visibility
+			// test and rejects lights that can't contribute to any visible pixel:
+			//   - BSShadowParabolicLight: BSMultiBoundSphere::Func41 — sphere vs
+			//     camera frustum (verified via Ghidra at 0x14151b620 / AE 1.6.1170)
+			//   - BSShadowFrustumLight:   FUN_14150aba0 (cone vs camera frustum)
+			//     -- cone-aware so a spot light positioned off-screen but pointing
+			//     INTO the camera frustum is correctly kept (sphere test would
+			//     wrongly reject such a spot since its bounding sphere stays
+			//     centered on the off-screen origin).
+			//   - BSShadowDirectionalLight: cascades, separate code path.
+			// Trusting UpdateCamera's verdict reuses the engine's own culling math
+			// per light type. An earlier revision added a redundant sphere test
+			// here via RE::NiCamera::BoundInFrustum — that under-approximated the
+			// reach of spots and produced regressions where off-screen-but-cone-in-
+			// frustum spots flickered on/off as the camera moved.
 			if (!l->UpdateCamera(camera)) {
 				c.invalid = true;
 				continue;
@@ -1316,7 +1393,11 @@ namespace ShadowCasterManager
 			bool isFirst = true;
 			int32_t now = *globals::game::frameCounter;
 
-			for (int i = s_settings.ShadowLightCount; i < s_lights.Size; i++)
+			// Clear RedrawFrame on slots OUTSIDE the point-light range (converted /
+			// otherwise-allocated). Note PointLightEnd accounts for the sun
+			// bookkeeping slot when Sun=true, so a converted-slot light at
+			// pool[ShadowLightCount + 1] correctly gets cleared.
+			for (int i = s_lights.PointLightEnd(s_settings.ShadowLightCount); i < s_lights.Size; i++)
 				s_lights.Lights[i].RedrawFrame = false;
 
 			for (int i = 0; i < s_lights.Size; i++) {
@@ -1350,7 +1431,8 @@ namespace ShadowCasterManager
 					double interval = 0.0;
 					if (s_formulaRedrawInterval) {
 						SetupLightFormula(e->Light, camera, 0);
-						if (e->Index >= s_settings.ShadowLightCount)
+						// e->Index is the pool index. Beyond PointLightEnd are converted slots.
+						if (e->Index >= s_lights.PointLightEnd(s_settings.ShadowLightCount))
 							FormulaHelper::SetParam(kFormulaParam_LightConverted, 1.0);
 
 						// Compute how far the light has moved since its last shadow map render.
@@ -1465,9 +1547,10 @@ namespace ShadowCasterManager
 			}
 		}
 
-		// Count how many shadow lights are scheduled to redraw this frame
+		// Count how many shadow lights are scheduled to redraw this frame.
+		// Iterate the point-light range (sun-aware: skips pool[0] when Sun=true).
 		s_redrawnLightsThisFrame = 0;
-		for (int j = 0; j < s_settings.ShadowLightCount; j++) {
+		for (int j = s_lights.PointLightFirst(); j < s_lights.PointLightEnd(s_settings.ShadowLightCount); j++) {
 			if (s_lights.Lights[j].RedrawFrame)
 				++s_redrawnLightsThisFrame;
 		}
@@ -1567,7 +1650,11 @@ namespace ShadowCasterManager
 
 				auto& e = s_lights.Lights[slot];
 
-				if (e.RedrawFrame && slot < s_settings.ShadowLightCount) {
+				// Render-this-frame path is reserved for chosen point-light slots
+				// (excludes converted slots which start at PointLightEnd). Use
+				// the sun-aware bound so pool[ShadowLightCount] (the highest
+				// point-light slot when Sun=true) is included.
+				if (e.RedrawFrame && slot < s_lights.PointLightEnd(s_settings.ShadowLightCount)) {
 					// Render-this-frame path. A previous iteration's EnableLight
 					// may have transitively freed this light via game-side scene
 					// mutations (membership change OR tbbmalloc-zeroed memory),
@@ -1677,7 +1764,11 @@ namespace ShadowCasterManager
 
 			for (int i = 0; i < s_lights.Size; i++) {
 				auto& e = s_lights.Lights[i];
-				if (e.Light && (!e.RedrawFrame || i >= s_settings.ShadowLightCount)) {
+				// Re-insert (without rendering) every chosen+!RedrawFrame light
+				// AND every converted-slot light (i >= PointLightEnd). The
+				// PointLightEnd bound is sun-aware so converted slots correctly
+				// start one slot later when Sun=true.
+				if (e.Light && (!e.RedrawFrame || i >= s_lights.PointLightEnd(s_settings.ShadowLightCount))) {
 					// Membership check uses the snapshot built above (a
 					// game-mutation in the atomic loop may have invalidated
 					// pointers; aliveAfterAtomic captures the current scene
@@ -1709,7 +1800,17 @@ namespace ShadowCasterManager
 					//     a single atlas slice via UV splitting in GetOmnidirectionalShadow,
 					//     so all descriptors should also point to i.
 					// Restore shadowmapIndex = i for every non-redrawn shadow-slot light.
-					if (s_settings.ShadowLightCount > 4 && i < s_settings.ShadowLightCount) {
+					// Only restore shadowmapIndex for point-light slots (skip converted).
+					// PointLightEnd accounts for sun bookkeeping so the highest point-light
+					// slot (Sun=true: pool[ShadowLightCount]) is included.
+					if (s_settings.ShadowLightCount > 4 && i < s_lights.PointLightEnd(s_settings.ShadowLightCount)) {
+						// Restore descriptor.shadowmapIndex for cached (non-redrawn)
+						// chosen lights so RenderCascade samples their preserved
+						// depth slice. Sun (pool[0] when Sun=true) is skipped —
+						// it renders via the directional cascade path, not
+						// kSHADOWMAPS, so its descriptor.shadowmapIndex is unused.
+						if (s_lights.Sun && i == 0)
+							continue;
 						if (REL::Module::IsVR()) {
 							for (auto& desc : e.Light->GetVRRuntimeData().shadowmapDescriptors)
 								desc.shadowmapIndex = static_cast<uint32_t>(i);
@@ -1768,7 +1869,11 @@ namespace ShadowCasterManager
 		s_budget.Begin(1);
 
 		uint32_t tmp = 0;
-		for (int i = 0; i < s_settings.ShadowLightCount; i++) {
+		// Render every chosen+RedrawFrame point light. PointLightFirst skips the
+		// sun bookkeeping slot (sun renders separately via the directional
+		// cascade path), and PointLightEnd includes the highest point-light
+		// slot when Sun=true.
+		for (int i = s_lights.PointLightFirst(); i < s_lights.PointLightEnd(s_settings.ShadowLightCount); i++) {
 			auto& e = s_lights.Lights[i];
 			if (!e.Light || !e.RedrawFrame)
 				continue;
@@ -1862,7 +1967,10 @@ namespace ShadowCasterManager
 			// Step 2: extended pool lights not covered by the vanilla mask.
 			// Only inject lights that are present in this scene's caster array
 			// (prevents world lights leaking into menu / special scenes).
-			for (int i = 0; i < s_settings.ShadowLightCount && added < maxCount; i++) {
+			// Iterate the point-light range (sun-aware via PointLightFirst /
+			// PointLightEnd; pre-helper loops missed pool[ShadowLightCount]
+			// when Sun=true, dropping one shadow caster from per-surface lists).
+			for (int i = s_lights.PointLightFirst(); i < s_lights.PointLightEnd(s_settings.ShadowLightCount) && added < maxCount; i++) {
 				auto& e = s_lights.Lights[i];
 				if (!e.Light || reinterpret_cast<RE::BSLight*>(e.Light) == sunLight)
 					continue;
@@ -2420,7 +2528,17 @@ namespace ShadowCasterManager
 
 	int32_t GetShadowSlot(RE::BSShadowLight* light)
 	{
-		return s_lights.FindLight(light, s_settings.ShadowLightCount);
+		// Returns the kSHADOWMAPS texture-array slot for `light`, or -1 if the
+		// light has no kSHADOWMAPS slice. Pool index == texture slot for point
+		// lights (1:1). Sun's pool slot returns -1 since the sun renders to
+		// kSHADOWMAPS_ESRAM (a separate texture) — callers in ShadowRenderer
+		// upload and LightLimitFix cluster builder must skip it.
+		const int32_t poolIdx = s_lights.FindLight(light, s_settings.ShadowLightCount);
+		if (poolIdx < 0)
+			return -1;
+		if (s_lights.Sun && poolIdx == 0)
+			return -1;  // sun
+		return poolIdx;
 	}
 
 	void ForEachConvertedLight(const std::function<void(RE::BSShadowLight*)>& visitor)

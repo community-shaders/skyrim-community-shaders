@@ -335,6 +335,22 @@ namespace ShadowCasterManager
 
 		/// Returns the index of a light pointer in the shadow-caster range, or -1.
 		int32_t FindLight(RE::BSShadowLight* light, int32_t shadowCount) const;
+
+		/// First pool index of the point-light range. Equals 1 when Sun=true
+		/// (slot 0 reserved for sun bookkeeping), 0 when Sun=false.
+		int32_t PointLightFirst() const { return Sun ? 1 : 0; }
+
+		/// One-past-last pool index of the point-light range, given the
+		/// configured ShadowLightCount. Use as the exclusive upper bound for
+		/// `for (i = PointLightFirst(); i < PointLightEnd(N); ++i)` iteration
+		/// over chosen+candidate point lights (excludes converted slots which
+		/// follow at [PointLightEnd..PointLightEnd + ConvertedShadowSlots)).
+		///
+		/// Off-by-one history: pre-this-helper, code iterated [0, shadowCount),
+		/// which missed pool[shadowCount] when Sun=true. The highest point-light
+		/// slot was then unfindable / unrendered / un-redrawn — silent loss of
+		/// one shadow caster slot when a sun is present.
+		int32_t PointLightEnd(int32_t shadowCount) const { return PointLightFirst() + shadowCount; }
 	};
 
 	// -------------------------------------------------------------------------
