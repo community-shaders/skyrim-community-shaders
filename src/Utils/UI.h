@@ -937,6 +937,22 @@ namespace Util
 		ImVec4 GetError();     // Red - error/negative (from theme Error)
 		ImVec4 GetInfo();      // Blue - informational (from theme InfoColor)
 		ImVec4 GetDisabled();  // Gray - disabled items (from theme Disable)
+
+	}
+
+	/** Theme-colored text rendering — self-contained push/text/pop per call. */
+	namespace Text
+	{
+		void Warning(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedWarning(const char* fmt, ...) IM_FMTARGS(1);
+		void Error(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedError(const char* fmt, ...) IM_FMTARGS(1);
+		void Success(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedSuccess(const char* fmt, ...) IM_FMTARGS(1);
+		void Info(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedInfo(const char* fmt, ...) IM_FMTARGS(1);
+		void Disabled(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedDisabled(const char* fmt, ...) IM_FMTARGS(1);
 	}
 
 	/**

@@ -1423,6 +1423,53 @@ namespace Util
 		{
 			return globals::menu->GetTheme().StatusPalette.Disable;
 		}
+
+	}
+
+	namespace Text
+	{
+		static void ColoredTextV(ImVec4 color, const char* fmt, va_list args)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
+			ImGui::TextV(fmt, args);
+			ImGui::PopStyleColor();
+		}
+
+		static void ColoredTextWrappedV(ImVec4 color, const char* fmt, va_list args)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
+			ImGui::TextWrappedV(fmt, args);
+			ImGui::PopStyleColor();
+		}
+
+#define UTIL_TEXT(Name, ColorFn)                              \
+	void Name(const char* fmt, ...) {                         \
+		va_list args;                                         \
+		va_start(args, fmt);                                  \
+		ColoredTextV(Colors::ColorFn(), fmt, args);           \
+		va_end(args);                                         \
+	}
+#define UTIL_TEXT_WRAPPED(Name, ColorFn)                      \
+	void Name(const char* fmt, ...) {                         \
+		va_list args;                                         \
+		va_start(args, fmt);                                  \
+		ColoredTextWrappedV(Colors::ColorFn(), fmt, args);    \
+		va_end(args);                                         \
+	}
+
+		UTIL_TEXT(Warning, GetWarning)
+		UTIL_TEXT_WRAPPED(WrappedWarning, GetWarning)
+		UTIL_TEXT(Error, GetError)
+		UTIL_TEXT_WRAPPED(WrappedError, GetError)
+		UTIL_TEXT(Success, GetSuccess)
+		UTIL_TEXT_WRAPPED(WrappedSuccess, GetSuccess)
+		UTIL_TEXT(Info, GetInfo)
+		UTIL_TEXT_WRAPPED(WrappedInfo, GetInfo)
+		UTIL_TEXT(Disabled, GetDisabled)
+		UTIL_TEXT_WRAPPED(WrappedDisabled, GetDisabled)
+
+#undef UTIL_TEXT
+#undef UTIL_TEXT_WRAPPED
 	}
 
 	namespace Input
