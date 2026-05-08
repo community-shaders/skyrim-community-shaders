@@ -294,25 +294,23 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void HDRDisplay::DrawSettings()
 {
 	if (isHDRMonitor) {
-		ImGui::TextColored(Util::Colors::GetSuccess(), "HDR Display Detected");
+		Util::Text::Success("HDR Display Detected");
 	} else if (isHDRCapableMonitor) {
-		ImGui::TextColored(Util::Colors::GetWarning(), "HDR Capable Display (Windows HDR is off)");
+		Util::Text::Warning("HDR Capable Display (Windows HDR is off)");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Your monitor supports HDR, but Windows HDR is currently disabled.");
 			ImGui::Text("Enable HDR in Windows Display Settings to allow auto-detection.");
 		}
 	} else {
-		ImGui::TextColored(Util::Colors::GetWarning(), "SDR Display (HDR not detected)");
+		Util::Text::Warning("SDR Display (HDR not detected)");
 	}
 
 	const bool isExclusiveFullscreen = globals::features::upscaling.loaded ? !globals::features::upscaling.isWindowed : wasExclusiveFullscreen;
 
 	if (isExclusiveFullscreen) {
 		ImGui::Spacing();
-		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-		ImGui::TextWrapped("WARNING: Exclusive Fullscreen detected.");
-		ImGui::TextWrapped("HDR is not compatible with Exclusive Fullscreen and may not work correctly. Switch to Borderless Windowed mode for proper HDR support.");
-		ImGui::PopStyleColor();
+		Util::Text::WrappedWarning("WARNING: Exclusive Fullscreen detected.");
+		Util::Text::WrappedWarning("HDR is not compatible with Exclusive Fullscreen and may not work correctly. Switch to Borderless Windowed mode for proper HDR support.");
 		ImGui::Spacing();
 	}
 
@@ -401,9 +399,7 @@ void HDRDisplay::DrawSettings()
 		std::lock_guard<std::mutex> lock(settingsMutex);
 		if (!isHDRMonitor && settings.enableHDR) {
 			ImGui::Spacing();
-			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-			ImGui::TextWrapped("HDR is enabled but no HDR display was detected.");
-			ImGui::PopStyleColor();
+			Util::Text::WrappedWarning("HDR is enabled but no HDR display was detected.");
 		}
 	}
 
@@ -411,13 +407,11 @@ void HDRDisplay::DrawSettings()
 		// Prevent background dimming by pushing lower modal dimming
 		ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
 
-		ImGui::TextColored(Util::Colors::GetWarning(), "WARNING: Force Enable HDR");
+		Util::Text::Warning("WARNING: Force Enable HDR");
 		ImGui::Separator();
 		ImGui::Spacing();
-		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-		ImGui::TextWrapped("HDR was not detected on your monitor.");
-		ImGui::TextWrapped("The game will look VERY WRONG on an SDR (standard) display.");
-		ImGui::PopStyleColor();
+		Util::Text::WrappedWarning("HDR was not detected on your monitor.");
+		Util::Text::WrappedWarning("The game will look VERY WRONG on an SDR (standard) display.");
 		ImGui::Spacing();
 		ImGui::TextWrapped("Only proceed if you have an HDR-capable display that was not detected correctly.");
 		ImGui::Spacing();

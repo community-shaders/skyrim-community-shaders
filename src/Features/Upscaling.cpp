@@ -210,11 +210,9 @@ void Upscaling::DrawSettings()
 	if (!globals::game::isVR && upscaleMethod == UpscaleMethod::kDLSS) {
 		auto screenSize = globals::state->screenSize;
 		if (screenSize.x > streamline.MAX_RESOLUTION || screenSize.y > streamline.MAX_RESOLUTION) {
-			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-			ImGui::Text("Warning: Requested resolution %.0f x %.0f exceeds maximum supported resolution %d x %d for DLSS.",
+			Util::Text::Warning("Warning: Requested resolution %.0f x %.0f exceeds maximum supported resolution %d x %d for DLSS.",
 				screenSize.x, screenSize.y, streamline.MAX_RESOLUTION, streamline.MAX_RESOLUTION);
-			ImGui::Text("DLSS will not function. Lower your resolution or select a different upscaling method.");
-			ImGui::PopStyleColor();
+			Util::Text::Warning("DLSS will not function. Lower your resolution or select a different upscaling method.");
 		}
 	}
 
@@ -276,40 +274,28 @@ void Upscaling::DrawSettings()
 			bool onlyRequiresRestart = true;
 
 			if (!isWindowed) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: Requires windowed mode");
-				ImGui::PopStyleColor();
+				Util::Text::Warning("Warning: Requires windowed mode");
 
 				onlyRequiresRestart = false;
 			}
 
 			if (lowRefreshRate && !settings.frameGenerationForceEnable) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
-				ImGui::PopStyleColor();
+				Util::Text::Warning("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
 
 				onlyRequiresRestart = false;
 			}
 
 			if (fidelityFXMissing) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: FidelityFX DLLs are not loaded");
-				ImGui::PopStyleColor();
+				Util::Text::Warning("Warning: FidelityFX DLLs are not loaded");
 
 				onlyRequiresRestart = false;
 			}
 
-			if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: Requires restart");
-				ImGui::PopStyleColor();
-			}
+			if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive)
+				Util::Text::Warning("Warning: Requires restart");
 
-			if (!settings.frameGenerationMode && frameGenerationDx12PathActive) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: Requires restart");
-				ImGui::PopStyleColor();
-			}
+			if (!settings.frameGenerationMode && frameGenerationDx12PathActive)
+				Util::Text::Warning("Warning: Requires restart");
 
 			bool fgEnabled = settings.frameGenerationMode != 0;
 			if (ImGui::Checkbox("Frame Generation", &fgEnabled))
