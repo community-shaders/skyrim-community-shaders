@@ -1,9 +1,6 @@
 #pragma once
 
-namespace RE
-{
-	class BSRenderPass;
-}
+#include <RE/B/BSRenderPass.h>
 
 namespace ExternalEmittance
 {
