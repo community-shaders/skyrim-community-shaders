@@ -168,7 +168,12 @@ PS_OUTPUT main(PS_INPUT input)
 		float mappedMax = GetTonemapFactorReinhard(maxCol, isHDR).x;
 		float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
 		blendedColor = compressedHuePreserving;
-		blendedColor += saturate(Param.x - (1.0 - exp2(-blendedColor))) * bloomColor;
+		// SDR uses a hard cutoff (Param.x - blendedColor) so legacy weather mods that tuned
+		// bloom intensity against this shoulder don't get blown-out highlights. HDR keeps the
+		// soft-saturation form (1 - exp2(-x)) which bleeds bloom into specular peaks intentionally.
+		float3 bloomMask = isHDR ? saturate(Param.x - (1.0 - exp2(-blendedColor)))
+		                         : saturate(Param.x - blendedColor);
+		blendedColor += bloomMask * bloomColor;
 	}
 
 	float blendedLuminance = Color::RGBToLuminance(blendedColor);
