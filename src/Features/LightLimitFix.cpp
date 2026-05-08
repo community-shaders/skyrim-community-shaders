@@ -3,7 +3,7 @@
 #include "LinearLighting.h"
 
 #include "Menu/ThemeManager.h"
-#include "ShaderTools/ExternalEmittance.h"
+#include "Utils/ExternalEmittance.h"
 #include "Shadercache.h"
 #include "State.h"
 #include "Util.h"

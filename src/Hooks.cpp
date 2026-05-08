@@ -1,7 +1,7 @@
 #include "Hooks.h"
 
 #include "ShaderTools/BSShaderHooks.h"
-#include "ShaderTools/ExternalEmittance.h"
+#include "Utils/ExternalEmittance.h"
 
 #include "Feature.h"
 #include "Globals.h"
