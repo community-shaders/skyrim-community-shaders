@@ -8,6 +8,7 @@ static constexpr uint MAX_BOUNDING_BOXES = 64;
 static constexpr uint MAX_COLLISIONS_PER_BOUNDING_BOX = 64;
 static constexpr uint MAX_COLLISIONS = MAX_BOUNDING_BOXES * MAX_COLLISIONS_PER_BOUNDING_BOX;
 static constexpr float MAX_ACTOR_DISTANCE = 2048.0f;
+static constexpr float MAX_ACTOR_SQ_DISTANCE = MAX_ACTOR_DISTANCE * MAX_ACTOR_DISTANCE;
 static constexpr float MIN_COLLISION_RADIUS_DISTANCE_SCALE = 0.001f;
 
 struct GrassCollisionActorCandidate
@@ -37,19 +38,17 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 	auto addActorCandidate = [&](RE::ActorHandle a_handle) {
 		auto actor = a_handle.get();
 		if (actor && actor->Is3DLoaded()) {
-			actorCandidates.push_back({ a_handle, cameraPosition.GetSquaredDistance(actor->GetPosition()) });
+			float sqDistance = cameraPosition.GetSquaredDistance(actor->GetPosition());
+			if (sqDistance <= MAX_ACTOR_SQ_DISTANCE)
+				actorCandidates.push_back({ a_handle, sqDistance });
 		}
 	};
 
 	// Actor query code from po3 under MIT
 	// https://github.com/powerof3/PapyrusExtenderSSE/blob/7a73b47bc87331bec4e16f5f42f2dbc98b66c3a7/include/Papyrus/Functions/Faction.h#L24C7-L46
 	if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
-		std::vector<RE::BSTArray<RE::ActorHandle>*> actors;
-		actors.push_back(&processLists->highActorHandles);  // High actors are in combat or doing something interesting
-		for (auto array : actors) {
-			for (auto& actorHandle : *array) {
-				addActorCandidate(actorHandle);
-			}
+		for (auto& actorHandle : processLists->highActorHandles) {
+			addActorCandidate(actorHandle);
 		}
 	}
 
@@ -76,9 +75,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 			if (!root)
 				continue;
 
-			float distance = cameraPosition.GetDistance(actor->GetPosition());
-			if (distance > MAX_ACTOR_DISTANCE)
-				continue;
+			float distance = std::sqrt(actorCandidate.sqDistance);
 
 			eastl::vector<float4> collisionShapes{};
 
