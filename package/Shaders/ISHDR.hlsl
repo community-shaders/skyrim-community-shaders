@@ -168,7 +168,9 @@ PS_OUTPUT main(PS_INPUT input)
 		float mappedMax = GetTonemapFactorReinhard(maxCol, isHDR).x;
 		float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
 		blendedColor = compressedHuePreserving;
-		blendedColor += saturate(Param.x - (1.0 - exp2(-blendedColor))) * bloomColor;
+		float3 bloomMask = isHDR ? saturate(Param.x - (1.0 - exp2(-blendedColor)))
+		                         : saturate(Param.x - blendedColor);
+		blendedColor += bloomMask * bloomColor;
 	}
 
 	float blendedLuminance = Color::RGBToLuminance(blendedColor);
