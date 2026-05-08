@@ -202,18 +202,21 @@ void LightLimitFix::DrawOverlay()
 	// it as a compact pinned overlay (no title bar, no chrome).
 	bool menuOpen = globals::menu->IsEnabled;
 	const float pos = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * Util::GetUIScale();
-	if (menuOpen) {
-		ImGui::SetNextWindowPos(ImVec2(pos, pos), ImGuiCond_Appearing);
-		ImGui::SetNextWindowSize(ImVec2(320, 500), ImGuiCond_Appearing);
-		ImGui::SetNextWindowSizeConstraints(ImVec2(240, 150), ImVec2(800, 1200));
-		ImGui::Begin("LLF Shadow Slots", nullptr, ImGuiWindowFlags_NoSavedSettings);
-	} else {
-		ImGui::SetNextWindowPos(ImVec2(pos, pos), ImGuiCond_Always);
-		ImGui::SetNextWindowSizeConstraints(ImVec2(280, 0), ImVec2(540, 640));
-		ImGui::Begin("##LLFDebug", nullptr,
-			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize |
-				ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
-	}
+
+	// Single unified window: same ImGui ID across menu open/closed so the
+	// user's resize persists. Title bar and Move are toggled via flags --
+	// hidden when the menu is closed (pinned debug overlay) and shown when
+	// the menu is open (so the user can drag/resize via the title bar).
+	// We deliberately don't pass NoSavedSettings so ImGui retains the size
+	// the user picked across sessions.
+	ImGuiWindowFlags flags = ImGuiWindowFlags_None;
+	if (!menuOpen)
+		flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove;
+
+	ImGui::SetNextWindowPos(ImVec2(pos, pos), menuOpen ? ImGuiCond_Appearing : ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(340, 480), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(280, 200), ImVec2(800, 1200));
+	ImGui::Begin("LLF Shadow Slots", nullptr, flags);
 
 	if (vizOn) {
 		static const char* kVizNames[] = {
@@ -230,34 +233,42 @@ void LightLimitFix::DrawOverlay()
 	ImGui::Separator();
 
 	uint32_t mode = vizOn ? settings.LightsVisualisationMode : UINT32_MAX;
-	const uint32_t slotUsage = ShadowCasterManager::GetSlotUsage();
 
-	// ── Per-mode informational panels (visualization only) ──────────────────
+	// ── All stats grouped above the table (same order as menu) ─────────
+	// Summary always visible. Scheduler stats only when not in a viz mode
+	// that has its own legend competing for the same space.
+	ShadowCasterManager::DrawShadowSummary(lightCount, MAX_LIGHTS, shadowUnshadowedLightCount);
+	if (!vizOn)
+		ShadowCasterManager::DrawShadowSchedulerStats();
+
+	// ── Per-mode informational panels (visualization-mode-specific only) ──
 	if (vizOn) {
-		if (mode <= 1) {
-			ImGui::Text("Clustered lights : %u / %u", lightCount, MAX_LIGHTS);
-			ImGui::Text("Shadow lights    : %u / %u slots", slotUsage, globals::deferred->shadowMapSlots);
-			if (shadowUnshadowedLightCount > 0)
-				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Dropped (overflow): %u", shadowUnshadowedLightCount);
-		} else if (mode == 2) {
-			if (lightCount >= MAX_LIGHTS)
-				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Clustered lights : %u / %u  OVERFLOW", lightCount, MAX_LIGHTS);
-			else
-				ImGui::Text("Clustered lights : %u / %u  (%.0f%%)", lightCount, MAX_LIGHTS, 100.f * lightCount / MAX_LIGHTS);
+		if (mode == 2) {
 			uint32_t cx = clusterSize[0], cy = clusterSize[1], cz = clusterSize[2];
-			ImGui::Text("Cluster grid     : %ux%ux%u  (%u total)", cx, cy, cz, cx * cy * cz);
-			ImGui::Text("Max lights/cluster: %u", CLUSTER_MAX_LIGHTS);
-		} else
+			ImGui::Text("Cluster grid       : %ux%ux%u  (%u total)", cx, cy, cz, cx * cy * cz);
+			ImGui::Text("Max lights/cluster : %u", CLUSTER_MAX_LIGHTS);
+		} else if (mode >= 3) {
 			ShadowCasterManager::DrawOverlayShadowModeInfo(mode, shadowUnshadowedLightCount, lightCount);
+		}
 	}
 
 	// ── Shadow slot toggle table ─────────────────────────────────────
 	// Show when in a shadow-related viz mode, or when lights are suppressed.
+	// readOnly=true when the menu is closed -- the overlay isn't interactive
+	// then, so the per-row Mode/Solo buttons would be dead pixels. readOnly
+	// also bounds the table height so the stats above stay visible even
+	// when many lights are present (the table scrolls internally instead
+	// of pushing the window past its max-height constraint).
 	bool shadowRelatedMode = !vizOn || (mode >= 4);
 	if (hasSuppressed || shadowRelatedMode) {
-		if (vizOn)
-			ImGui::Separator();
-		ShadowCasterManager::DrawShadowLightTable(!menuOpen, vizOn && (mode == 8), true);
+		ImGui::Separator();
+		// compact=false in the overlay: the table fills the remaining
+		// content region of the user-sized window and scrolls internally
+		// (ScrollY in Util::ShowSortedStringTableCustom). Stats above stay
+		// visible regardless of how many lights exist or how the user has
+		// resized the window. readOnly is still true when the menu is
+		// closed -- buttons would be dead pixels.
+		ShadowCasterManager::DrawShadowLightTable(false, vizOn && (mode == 8), true, !menuOpen);
 	}
 
 	ImGui::End();

@@ -2687,13 +2687,20 @@ namespace ShadowCasterManager
 	// showColor     -> adds a golden-ratio hue swatch column (visualization mode 8)
 	// =========================================================================
 
-	void DrawShadowLightTable(bool compact, bool showColor, bool sceneOnly)
+	void DrawShadowLightTable(bool compact, bool showColor, bool sceneOnly, bool readOnly)
 	{
 		// Hover key is set per-row inside this function and consumed by the
 		// cluster light builder (LightLimitFix::UpdateLights addLight) for the
-		// debug pulse. Reset it each draw so the pulse stops as soon as the
-		// cursor leaves the table or moves between rows.
-		s_hoverLightKey = 0;
+		// debug pulse. The consume call at the end of UpdateLights clears it
+		// each frame, so when this function runs again next frame the key
+		// starts at 0 and only gets re-set if a row is currently Shift-hovered.
+		// We deliberately do NOT reset at the top here -- when both the
+		// settings-menu table and the overlay table render in the same frame
+		// (overlay-window open while settings-menu is also open), a reset here
+		// would let the second-drawn table clobber the hover set by the first.
+		// Letting both calls coexist means hovering in either one fires the
+		// pulse (only one row can be hovered at a time, so the writes never
+		// fight).
 
 		struct SlotRow
 		{
@@ -2940,47 +2947,51 @@ namespace ShadowCasterManager
 		}
 
 		// -- Column layout -------------------------------------------------
-		// Settings (sceneOnly=false): [cycle] [Solo] [Status] [Slot] [Addr] [Color?] [Type] [Range] [Imp] [Hi]
-		// Overlay  (sceneOnly=true):  [cycle] [Solo]          [Slot] [Addr] [Color?] [Type] [Range] [Imp] [Hi]
-		const bool showStatus = !sceneOnly;
-		const int soloColIdx = 1;
-		const int slotColIdx = showStatus ? 3 : 2;
-		const int addrColIdx = slotColIdx + 1;
+		// Interactive (settings menu, or overlay with menu open):
+		//     [Mode] [Solo] [Status] [Address] [Color?] [Type] [Range] [Imp]
+		// Read-only (overlay with menu closed -- buttons would be dead pixels):
+		//                   [Status] [Address] [Color?] [Type] [Range] [Imp]
+		//
+		// Status merges the old "In Scene" + "Slot" columns into one cell
+		// showing one of: "Slot N" / "Conv" / "Out" / "Suppr". The old "Hi"
+		// boolean column is gone -- highImp now tints the row instead, which
+		// is what the column was being used for visually.
+		const bool showButtons = !readOnly;
+		const int modeColIdx = showButtons ? 0 : -1;
+		const int soloColIdx = showButtons ? 1 : -1;
+		const int statusColIdx = showButtons ? 2 : 0;
+		const int addrColIdx = statusColIdx + 1;
 		const int typeColIdx = addrColIdx + (showColor ? 2 : 1);
 		const int radColIdx = typeColIdx + 1;
 		const int centrColIdx = radColIdx + 1;
-		const int priColIdx = centrColIdx + 1;
 
-		std::vector<std::string> headers = { "", "" };  // [cycle, solo]
-		if (showStatus)
-			headers.push_back("In Scene");
-		headers.push_back("Slot");
+		std::vector<std::string> headers;
+		if (showButtons) {
+			headers.push_back("Mode");  // cycle: Auto / Pin-S / Pin-C / Suppress
+			headers.push_back("Solo");
+		}
+		headers.push_back("Status");
 		headers.push_back("Address");
 		if (showColor)
 			headers.push_back("Color");
 		headers.push_back("Type");
 		headers.push_back("Range");
 		headers.push_back("Imp");
-		headers.push_back("Hi");
 
 		using SortFn = std::function<bool(const SlotRow&, const SlotRow&, bool)>;
 		std::vector<SortFn> sorts(headers.size(), nullptr);
-		if (showStatus) {
-			sorts[2] = [](const SlotRow& a, const SlotRow& b, bool asc) {
-				// Active (not suppressed) sorts before Disabled.
-				bool sa = s_suppressedLights.count(a.info.lightKey) > 0;
-				bool sb = s_suppressedLights.count(b.info.lightKey) > 0;
-				return asc ? sa < sb : sa > sb;
-			};
-		}
-		sorts[slotColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
-			// Order: in-scene shadow casters → converted (non-shadow) → fully out-of-scene.
+		// Status sort: in-scene shadow casters → converted → out-of-scene.
+		// Suppressed lights sort to the end (treated as worst rank).
+		sorts[statusColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
 			auto rank = [](const SlotRow& r) -> int {
+				bool sup = s_suppressedLights.count(r.info.lightKey) > 0;
+				if (sup)
+					return 3;
 				return r.inScene ? 0 : (r.converted ? 1 : 2);
 			};
 			int ra = rank(a), rb = rank(b);
 			if (ra != rb)
-				return ra < rb;
+				return asc ? ra < rb : ra > rb;
 			return asc ? a.idx < b.idx : a.idx > b.idx;
 		};
 		sorts[addrColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
@@ -2995,19 +3006,26 @@ namespace ShadowCasterManager
 		sorts[centrColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
 			return asc ? a.importance < b.importance : a.importance > b.importance;
 		};
-		sorts[priColIdx] = [](const SlotRow& a, const SlotRow& b, bool asc) {
-			// high-importance lights sort first when ascending
-			return asc ? (int)a.highImp > (int)b.highImp : (int)a.highImp < (int)b.highImp;
-		};
 
+		// outerSize logic:
+		//   * compact      auto-size up to 15 rows (handled by
+		//                  ShowSortedStringTableCustom when y==0). Used in
+		//                  the menu's Active Casters block where the table
+		//                  is one of several elements in a long settings
+		//                  list and shouldn't grab unbounded vertical space.
+		//   * non-compact  fill remaining vertical space. The table itself
+		//                  scrolls internally (ScrollY flag in the shared
+		//                  helper) so summary stats above stay visible
+		//                  regardless of how many lights exist or how the
+		//                  user has sized the host window.
 		ImVec2 outerSize = compact ? ImVec2(0, 0) : ImVec2(0, ImGui::GetContentRegionAvail().y);
 
 		Util::ShowSortedStringTableCustom<SlotRow>(
 			"##ShadowLightTbl",
 			headers,
 			filteredRows,
-			slotColIdx,  // default sort: Slot
-			true,        // ascending
+			static_cast<size_t>(statusColIdx),  // default sort: Status
+			true,                               // ascending
 			sorts,
 			[&](int /*rowIdx*/, int col, const SlotRow& row) {
 				const uintptr_t key = row.info.lightKey;
@@ -3029,10 +3047,20 @@ namespace ShadowCasterManager
 						s_hoverLightKey = key;
 				};
 
-				// === col 0: state cycle button =============================
+				// Row tint: highImp lights get a subtle yellow background so
+				// the eye can pick out the lights actually contributing to the
+				// frame at a glance. Replaces the dropped "Hi" column. Set on
+				// col 0 so it applies to the whole row.
+				if (col == 0 && row.highImp) {
+					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
+						ImGui::GetColorU32(ImVec4(0.30f, 0.30f, 0.10f, 0.35f)));
+				}
+
+				// === Mode column: state cycle button =======================
 				// Cycle: Auto (·) -> PinShadow (S) -> PinConvert (C) -> Suppress (X) -> Auto
 				// Mutually exclusive (SetPinned* / suppressed.erase enforce that).
-				if (col == 0) {
+				// Hidden in readOnly mode (overlay with menu closed).
+				if (showButtons && col == modeColIdx) {
 					ImGui::PushID(static_cast<int>(key & 0xFFFFFFFF));
 					const char* label = "·";
 					ImVec4 col4 = ImVec4(0.15f, 0.6f, 0.15f, 1);  // green = auto/active
@@ -3078,8 +3106,9 @@ namespace ShadowCasterManager
 					return;
 				}
 
-				// === col 1: solo button ====================================
-				if (col == soloColIdx) {
+				// === Solo column ==========================================
+				// Hidden in readOnly mode.
+				if (showButtons && col == soloColIdx) {
 					ImGui::PushID(static_cast<int>((key & 0xFFFFFFFF) ^ 0xA1));
 					ImVec4 col4 = isSolo ?
 				                      ImVec4(0.85f, 0.7f, 0.15f, 1) :  // bright yellow when active
@@ -3103,26 +3132,28 @@ namespace ShadowCasterManager
 				if (suppressed || (s_soloLight != 0 && !isSolo))
 					ImGui::BeginDisabled();
 				bool dimmed = suppressed || (s_soloLight != 0 && !isSolo);
-				if (showStatus && col == 2) {
-					const char* status = row.inScene ? "Yes" : (row.converted ? "Conv" : "No");
-					if (row.converted)
-						ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.25f, 1), "%s", status);
-					else
-						ImGui::TextUnformatted(status);
-					if (ImGui::IsItemHovered()) {
-						const char* tip = row.inScene ?
-					                          "In scene this frame (shadow caster)" :
-					                          (row.converted ? "Converted to normal light (no shadow this frame)\nRenders via cluster lighting; no shadow map cost" :
-															   "Not in scene");
-						ImGui::SetTooltip("%s", tip);
-					}
-				} else if (col == slotColIdx) {
-					if (row.inScene) {
-						ImGui::Text("%u", row.idx);
+				if (col == statusColIdx) {
+					// Merged "In Scene" + "Slot" column. Four mutually-exclusive
+					// states; suppressed wins because the user explicitly hid it.
+					if (suppressed) {
+						ImGui::TextColored(ImVec4(0.85f, 0.35f, 0.35f, 1), "Suppr");
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Suppressed by debug override.\nClick the Mode button to clear.");
+					} else if (row.inScene) {
+						ImGui::Text("Slot %u", row.idx);
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Casting shadows this frame in slot %u.", row.idx);
 					} else if (row.converted) {
 						ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.25f, 1), "Conv");
-					} else
-						ImGui::TextDisabled("--");
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip(
+								"Demoted to a normal (non-shadow) light this frame.\n"
+								"Cluster lighting still illuminates it; no shadow-map cost.");
+					} else {
+						ImGui::TextDisabled("Out");
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("Out of range / not active in the current frame.");
+					}
 				} else if (col == addrColIdx) {
 					char addrFull[20];
 					snprintf(addrFull, sizeof(addrFull), "0x%016llX", static_cast<unsigned long long>(row.info.lightKey));
@@ -3164,20 +3195,14 @@ namespace ShadowCasterManager
 							"  where att = (1 - (dist/radius)^2)^2\n\n"
 							"Higher = light strongly illuminates the viewer area.\n"
 							"Drives interval multiplier (configurable in Advanced settings).\n"
-							"Default: 0 => x2.0, 0.5 => x0.32, 1 => x0.05");
-				} else if (col == priColIdx) {
-					if (row.highImp) {
-						ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "*");
-						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip(
-								"High-importance light (importance > 0.1).\n"
-								"This light delivers meaningful illumination at the\n"
-								"camera or player position and gets accelerated\n"
-								"shadow redraw scheduling.");
-					} else {
-						ImGui::TextDisabled("-");
-					}
+							"Default: 0 => x2.0, 0.5 => x0.32, 1 => x0.05\n\n"
+							"Rows tinted yellow are high-importance (>0.1)\n"
+							"-- they deliver meaningful illumination near the camera\n"
+							"or player and receive accelerated shadow redraw scheduling.");
 				}
+				// Hi column dropped -- highImp now tints the row background
+				// (see TableSetBgColor at the top of this lambda) so the visual
+				// signal is preserved without consuming a column.
 				if (dimmed)
 					ImGui::EndDisabled();
 			},
@@ -3185,52 +3210,143 @@ namespace ShadowCasterManager
 			outerSize);
 	}
 
-	void DrawShadowStats(uint32_t shadowLightCount, uint32_t shadowUnshadowedLightCount)
+	void DrawShadowSummary(uint32_t clusterCount, uint32_t clusterMax, uint32_t shadowUnshadowedLightCount)
 	{
-		uint32_t shadowSlots = globals::deferred->shadowMapSlots;
-		if (shadowUnshadowedLightCount > 0)
-			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Shadow Lights    : %u lights, %u / %u slots (%u dropped)", shadowLightCount, s_shadowSlotUsage, shadowSlots, shadowUnshadowedLightCount);
-		else
-			ImGui::Text("Shadow Lights    : %u lights, %u / %u slots", shadowLightCount, s_shadowSlotUsage, shadowSlots);
-
-		if (s_highImportanceLightCount > 0)
-			ImGui::Text("  Important       : %u / %u (near camera or player)", s_highImportanceLightCount, shadowLightCount);
-		else
-			ImGui::Text("  Important       : none");
-
-		// Diagnostic: how many lights are currently in the shadow→normal converted pool.
-		// If ConvertExcessToNormal is on and this stays at 0 even when shadow lights are
-		// over budget, the conversion path isn't running. If it climbs but the cluster
-		// light count doesn't reflect it, the converted lights aren't reaching activeLights
-		// or are being filtered out before clustering.
-		ImGui::Text("Converted to NS  : %zu (in s_normalConvert pool)", s_normalConvert.size());
-	}
-
-	void DrawOverlayShadowModeInfo(uint32_t mode, uint32_t shadowUnshadowedLightCount, uint32_t totalLightCount)
-	{
+		// Canonical "where are we vs the limits" panel. Used by both the menu's
+		// Active Casters block and the overlay header so testers see the same
+		// numbers in the same format regardless of which view they're in.
 		const uint32_t slotUsage = s_shadowSlotUsage;
 		const uint32_t slots = globals::deferred->shadowMapSlots;
+		// "Wanted" = total shadow-eligible demand this frame (active + dropped).
+		// We don't track demand separately, but slotUsage + dropped is the
+		// observable proxy that matches the user-visible "X dropped" signal.
+		const uint32_t requested = slotUsage + shadowUnshadowedLightCount;
+
+		if (clusterCount >= clusterMax)
+			ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Cluster lights : %u / %u (overflow)", clusterCount, clusterMax);
+		else
+			ImGui::Text("Cluster lights : %u / %u", clusterCount, clusterMax);
+
+		// "lights" rather than "slots" matches the Shadow Light Count
+		// setting name -- users think in lights, the engine thinks in
+		// texture slots, so we use the user's word.
+		if (shadowUnshadowedLightCount > 0)
+			ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1),
+				"Shadow lights  : %u / %u  (%u wanted, %u dropped, %zu converted)",
+				slotUsage, slots, requested, shadowUnshadowedLightCount, s_normalConvert.size());
+		else
+			ImGui::Text("Shadow lights  : %u / %u  (%u wanted, 0 dropped, %zu converted)",
+				slotUsage, slots, requested, s_normalConvert.size());
+
+		if (s_highImportanceLightCount > 0 && ImGui::IsItemHovered())
+			ImGui::SetTooltip("%u high-importance (near camera/player).",
+				s_highImportanceLightCount);
+	}
+
+	void DrawShadowSchedulerStats()
+	{
+		// Avg redraws/frame: rolling average of how many shadow casters per frame
+		// the scheduler decided to (re)render. Bounded by MaxRedrawPerFrame.
+		float avgRedraws = static_cast<float>(s_redrawSum) / static_cast<float>(kRedrawHistorySize);
+		ImGui::Text("Avg redraws/frame : %.1f  (cap: %d)", avgRedraws, s_settings.MaxRedrawPerFrame);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Rolling average over the last %d frames.", kRedrawHistorySize);
+
+		// Avg per-light cost: budget tracker's measured GPU cost per shadow caster.
+		// Used by the formula budget mode to decide how many casters fit in the
+		// per-frame time budget.
+		int32_t avgCost = s_budget.GetAverageCostUs();
+		if (avgCost > 0)
+			ImGui::Text("Avg light cost    : %.2f ms", avgCost / 1000.0f);
+
+		// ---- Budget verdict ---------------------------------------------
+		// Cross-checks measured shadow cost against the user-chosen budget
+		// to surface "is your setup actually working?" without making the
+		// user math it out themselves. We compare measured shadow time to
+		// the user's chosen shadow budget -- not to total frame time -- so
+		// this is "are we honouring your settings?" not "are your settings
+		// right for your hardware?". The latter genuinely needs data we
+		// don't own (frame target, GPU headroom, async overlap).
+		const float budgetMs = s_autoBudgetMs;  // active budget (Manual = slider, Formula = computed)
+		const float costMs = avgCost / 1000.0f;
+		const float usedMs = avgRedraws * costMs;
+		const int32_t cap = s_settings.MaxRedrawPerFrame;
+		const bool capLimited = avgCost > 0 && avgRedraws >= static_cast<float>(cap) * 0.95f;
+		const bool slotLimited = (s_shadowSlotUsage + 0u) >= globals::deferred->shadowMapSlots;
+		const bool overBudget = avgCost > 0 && budgetMs > 0.0f && usedMs > budgetMs * 1.0f;
+		const bool headroom = avgCost > 0 && budgetMs > 0.0f && usedMs < budgetMs * 0.5f && !capLimited;
+
+		if (avgCost <= 0 || budgetMs <= 0.0f) {
+			ImGui::TextDisabled("Budget usage      : (warming up)");
+			return;
+		}
+
+		// Verdicts named after the user-visible settings, not internal
+		// engineering terms. Tooltips kept to one short line each so the
+		// hover doesn't grow into a wall of text.
+		ImVec4 col;
+		const char* verdict;
+		const char* tip;
+		if (overBudget) {
+			col = ImVec4(0.95f, 0.35f, 0.35f, 1);
+			verdict = "OVER BUDGET";
+			tip = "Shadow time exceeds Redraw Budget. Lower Max Redraws or raise Redraw Budget.";
+		} else if (capLimited && slotLimited) {
+			col = ImVec4(0.95f, 0.65f, 0.25f, 1);
+			verdict = "AT LIMITS";
+			tip = "Both Max Redraws and Shadow Light Count are full. Enable Convert to Normal or raise Shadow Light Count.";
+		} else if (slotLimited) {
+			col = ImVec4(0.95f, 0.65f, 0.25f, 1);
+			verdict = "LIGHT LIMITED";
+			tip = "Shadow Light Count is full. Enable Convert to Normal or raise Shadow Light Count.";
+		} else if (capLimited) {
+			col = ImVec4(0.95f, 0.85f, 0.25f, 1);
+			verdict = "REDRAW LIMITED";
+			tip = "Hitting Max Redraws Per Frame. Raise it to spend the unused Redraw Budget.";
+		} else if (headroom) {
+			col = ImVec4(0.55f, 0.85f, 0.55f, 1);
+			verdict = "HEADROOM";
+			tip = "Under half the Redraw Budget is being used. Raise Max Redraws or accept the slack.";
+		} else {
+			col = ImVec4(0.55f, 0.85f, 0.55f, 1);
+			verdict = "OK";
+			tip = "Within Redraw Budget; no limits hit.";
+		}
+		// Budget gauge: progress bar tinted by the verdict colour so the
+		// state is readable at a glance, with the numeric reading and
+		// verdict label inside the bar. One widget replaces the old
+		// separate progress bar (in SCM settings) + verdict text line.
+		const float fraction = std::min(usedMs / budgetMs, 1.0f);
+		char overlay[80];
+		snprintf(overlay, sizeof(overlay), "%.2f / %.2f ms  -  %s", usedMs, budgetMs, verdict);
+		ImGui::PushStyleColor(ImGuiCol_PlotHistogram, col);
+		ImGui::Text("Budget usage      :");
+		ImGui::SameLine();
+		ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), overlay);
+		ImGui::PopStyleColor();
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("%s", tip);
+	}
+
+	void DrawOverlayShadowModeInfo(uint32_t mode, uint32_t /*shadowUnshadowedLightCount*/, uint32_t /*totalLightCount*/)
+	{
+		// Cluster light count, slot usage, requested/dropped/converted are all
+		// covered by DrawShadowSummary above this in the overlay header. This
+		// function now carries only mode-specific information that wouldn't be
+		// meaningful elsewhere -- channel meanings, heatmap legends, etc.
 		if (mode == 3) {
 			ImGui::Text("R channel  = directional soft shadow");
 			ImGui::Text("G channel  = directional detailed shadow");
 			ImGui::TextDisabled("(B = unused)");
-			ImGui::Spacing();
-			ImGui::Text("Shadow slots     : %u / %u", slotUsage, slots);
-		} else if (mode >= 4 && mode <= 6) {
-			ImGui::Text("Shadow lights    : %u valid,  %u dropped", slotUsage, shadowUnshadowedLightCount);
-			ImGui::Text("Total clustered  : %u", totalLightCount);
-			if (mode == 4)
-				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red");
-			else if (mode == 5)
-				ImGui::TextDisabled("White = fully lit,  black = fully in shadow");
-			else
-				ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red (lights without shadow maps)");
+		} else if (mode == 4) {
+			ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red");
+		} else if (mode == 5) {
+			ImGui::TextDisabled("White = fully lit,  black = fully in shadow");
+		} else if (mode == 6) {
+			ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red (lights without shadow maps)");
 		} else if (mode == 7) {
-			ImGui::Text("Slots used / total : %u / %u", slotUsage, slots);
-			if (shadowUnshadowedLightCount > 0)
-				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "Overflow (red)     : %u lights", shadowUnshadowedLightCount);
 			ImGui::TextDisabled("Cool  Turbo[0.0-0.3] = 1-4 shadows");
-			ImGui::TextDisabled("Warm  Turbo[0.3-0.8] = 5-%u shadows", slots);
+			ImGui::TextDisabled("Warm  Turbo[0.3-0.8] = 5-%u shadows", globals::deferred->shadowMapSlots);
 			ImGui::TextDisabled("Red                  = overflow");
 		} else if (mode == 9) {
 			uint32_t spotC = 0, hemiC = 0, omniC = 0;
@@ -3247,9 +3363,6 @@ namespace ShadowCasterManager
 			ImGui::Text("R  Spot (frustum)   : %u", spotC);
 			ImGui::Text("G  Hemisphere       : %u", hemiC);
 			ImGui::Text("B  Omni (paraboloid): %u", omniC);
-			ImGui::Text("   Unshadowed        : %u", shadowUnshadowedLightCount);
-			if (shadowUnshadowedLightCount > 0)
-				ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "   Overflow (red)    : %u", shadowUnshadowedLightCount);
 		}
 	}
 
@@ -3344,7 +3457,6 @@ namespace ShadowCasterManager
 		// opaque DRS controller that confused users when the budget moved without
 		// a visible cause. The default Formula expresses the same behaviour
 		// transparently and stays editable.
-		static constexpr int32_t kRecommendedShadowCount = 32;
 		static const char* budgetModeNames[] = { "Manual", "Formula" };
 		int budgetModeIdx = (settings.BudgetMode == BudgetModeEnum::Manual) ? 0 : 1;
 		if (ImGui::Combo("Budget Mode", &budgetModeIdx, budgetModeNames, 2))
@@ -3366,18 +3478,6 @@ namespace ShadowCasterManager
 					"the headroom that allowed the budget. Stick to static or\n"
 					"slowly-varying inputs (`isinterior`, `frametarget`).");
 		}
-		if (settings.ShadowLightCount < kRecommendedShadowCount) {
-			ImGui::SameLine();
-			if (ImGui::Button("Apply Recommendations")) {
-				settings.ShadowLightCount = kRecommendedShadowCount;
-				settings.MaxRedrawPerFrame = 32;
-			}
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip(
-					"Sets Shadow Light Count to %d and Max Redraws Per Frame to 32.\n"
-					"Shadow Light Count change requires a game restart.",
-					kRecommendedShadowCount);
-		}
 
 		// Per-mode controls.
 		if (budgetModeIdx == 0) {
@@ -3395,49 +3495,35 @@ namespace ShadowCasterManager
 					"  32 ms: extreme — only useful for very high light counts on fast GPUs\n"
 					"\n"
 					"Higher = more shadow lights redraw per frame, fewer stale shadow maps,\n"
-					"at the cost of frametime. The 'could fit ~N more lights' line below\n"
-					"shows how much headroom is left at the current setting.");
+					"at the cost of frametime. The Budget verdict in the Active Casters\n"
+					"section shows whether the current setting has headroom to spare.");
 		} else {
 			ImGui::Text("Budget from formula: %.2f ms", s_autoBudgetMs);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("Edit the Redraw Budget formula in the Advanced section below.");
 		}
 
-		// Budget progress bar — always visible.
-		{
-			const float effectiveBudgetMs = s_autoBudgetMs;
-			const float avgConsumedUs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize);
-			const float budgetUs = effectiveBudgetMs * 1000.0f;
-			const float fraction = budgetUs > 0.0f ? avgConsumedUs / budgetUs : 0.0f;
-			char overlay[64];
-			snprintf(overlay, sizeof(overlay), "%.2f / %.2f ms", avgConsumedUs / 1000.0f, effectiveBudgetMs);
-			ImGui::ProgressBar(std::min(fraction, 1.0f), ImVec2(-1.0f, 0.0f), overlay);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip(
-					"Estimated GPU shadow budget consumed this frame vs. effective budget.");
-		}
+		// Budget consumption visualisation lives in the Active Casters block
+		// (DrawShadowSchedulerStats) alongside the verdict, so the bar, the
+		// numeric reading and the actionable state appear in one place
+		// instead of being split between two sections.
 
-		// ---- Shared frame-state diagnostic --------------------------------
-		// Migrated from the old Auto-mode display: state indicator (steady /
-		// growing / throttling), headroom vs target frametime, and the
-		// "could fit more lights" estimate. Useful in Manual and Formula
-		// modes alike — the user wants to know whether they have headroom
-		// to spend without having to switch tools or guess.
-		{
+		// ---- Frame-target diagnostic (Formula mode only) ------------------
+		// `frametarget` is an exprtk variable available to the Redraw Budget
+		// formula -- in Formula mode the user needs to see what it evaluates
+		// to in order to write/debug expressions that reference it. In Manual
+		// mode the user's chosen RedrawBudgetMs has nothing to do with frame
+		// timing, so this block would just be noise -- the new Budget verdict
+		// (in the Active Casters block) covers the "headroom / saturated"
+		// signal more actionably for both modes, and DrawShadowSummary covers
+		// the rendered/dropped lights count without duplication.
+		if (settings.BudgetMode == BudgetModeEnum::Formula) {
 			const float currentFrameMs = *globals::game::deltaTime * 1000.0f;
 			const float currentFPS = 1000.0f / std::max(currentFrameMs, 1.0f);
-			const float targetMs = ComputeFrameTimePercentile90();  // formula's frametarget
+			const float targetMs = ComputeFrameTimePercentile90();
 			const float targetFPS = targetMs > 0.0f ? 1000.0f / targetMs : 0.0f;
 			const float rawHeadroom = targetMs - s_ftEMA;
 			const float headroomMs = rawHeadroom - kFrameHeadroomSafetyMs;
-
-			const float avgConsumedMs = static_cast<float>(s_budgetSum) / static_cast<float>(kRedrawHistorySize) / 1000.0f;
-			const float freeMs = std::max(0.0f, s_autoBudgetMs - avgConsumedMs);
-			const int32_t avgCostUs = s_budget.GetAverageCostUs();
-			const int32_t couldFitMore = avgCostUs > 0 ? static_cast<int32_t>(freeMs * 1000.0f / avgCostUs) : 0;
-
-			const int32_t renderedDisplay = (int32_t)(s_redrawnLightsSmoothed + 0.5f);
-			const int32_t droppedLights = std::max(0, s_totalShadowLightsThisFrame - renderedDisplay);
 
 			const char* state = "steady";
 			if (rawHeadroom > kFrameHeadroomSafetyMs + kFrameHeadroomDeadZoneMs)
@@ -3445,26 +3531,19 @@ namespace ShadowCasterManager
 			else if (rawHeadroom < -kFrameHeadroomDeadZoneMs)
 				state = "throttling";
 
-			ImGui::Text("Frame: %.1f FPS (%.1f ms) | target: %.0f FPS (%.1f ms) | headroom: %+.1f ms | %s",
+			ImGui::Text("Frame: %.1f FPS (%.1f ms) | frametarget: %.0f FPS (%.1f ms) | headroom: %+.1f ms | %s",
 				currentFPS, currentFrameMs, targetFPS, targetMs, headroomMs, state);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
-					"Frame timing relative to the 90th-percentile target (used by the\n"
-					"default Formula expression as `frametarget`).\n"
-					"  steady     — within ±%.1f ms of target\n"
-					"  growing    — frametime well below target; budget can expand\n"
-					"  throttling — frametime over target; reduce budget to recover",
+					"Live values of the exprtk variables exposed to the Redraw\n"
+					"Budget formula. `frametarget` is the rolling 90th-percentile\n"
+					"frame time, used as a self-measured ceiling -- not a vsync\n"
+					"target. State indicator:\n"
+					"  steady     -- within +/-%.1f ms of target\n"
+					"  growing    -- frametime well below target; headroom available\n"
+					"  throttling -- frametime over target; expressions returning\n"
+					"                 nonzero values here will keep frametime high",
 					kFrameHeadroomDeadZoneMs);
-
-			if (droppedLights > 0)
-				ImGui::Text("Lights: %d rendered, %d deferred", renderedDisplay, droppedLights);
-			else
-				ImGui::Text("Lights: all %d rendered", renderedDisplay);
-
-			if (couldFitMore > 0)
-				ImGui::Text("%.1f ms free — could fit ~%d more lights", freeMs, couldFitMore);
-			else if (avgCostUs > 0 && freeMs <= 0.0f)
-				ImGui::Text("Budget saturated — raise budget or lower MaxRedrawPerFrame to recover frametime");
 		}
 		{
 			// Use ShadowLightCount as the slider upper bound when the scheduler hasn't
@@ -3629,21 +3708,10 @@ namespace ShadowCasterManager
 			ImGui::TreePop();
 		}
 
-		// ---- Active shadow casters table --------------------------------
-		ImGui::SeparatorText("Shadow Limit Fix -- Active Casters");
-		DrawShadowLightTable(true, false);
-
-		// Redraws/frame and per-light cost -- always visible alongside the budget bar above.
-		{
-			float avgRedraws = static_cast<float>(s_redrawSum) / static_cast<float>(kRedrawHistorySize);
-			ImGui::Text("Avg redraws/frame : %.1f  (cap: %d)", avgRedraws, s_settings.MaxRedrawPerFrame);
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Rolling average over the last %d frames.", kRedrawHistorySize);
-
-			int32_t avgCost = s_budget.GetAverageCostUs();
-			if (avgCost > 0)
-				ImGui::Text("Avg light cost    : %.2f ms", avgCost / 1000.0f);
-		}
+		// Active casters table + scheduler stats are rendered by LightLimitFix
+		// alongside its own quick-stats line, so the table area has full
+		// testing context (cluster light count, shadow slot usage, etc.) in
+		// one place. See LightLimitFix::DrawSettings.
 
 		if (!settings.Enabled)
 			ImGui::EndDisabled();

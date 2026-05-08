@@ -487,7 +487,15 @@ namespace ShadowCasterManager
 	/// Draw the interactive shadow caster table (suppress/filter/sort).
 	/// compact=true caps height; showColor adds a hue swatch column (viz mode 8).
 	/// sceneOnly=true shows only lights currently in the scene (overlay); false shows all known lights including disabled ones (settings).
-	void DrawShadowLightTable(bool compact, bool showColor, bool sceneOnly = false);
+	/// readOnly hides the per-row Mode/Solo buttons (overlay when the menu is
+	/// closed isn't interactive anyway, so the buttons just take up space).
+	void DrawShadowLightTable(bool compact, bool showColor, bool sceneOnly = false, bool readOnly = false);
+
+	/// Canonical one-place "where are we vs the limits" summary. Used by both
+	/// the menu's Active Casters block and the overlay header so the same
+	/// numbers appear identically in both views. clusterCount/clusterMax come
+	/// from LightLimitFix; the rest is read from SCM internal state.
+	void DrawShadowSummary(uint32_t clusterCount, uint32_t clusterMax, uint32_t shadowUnshadowedLightCount);
 
 	// -------------------------------------------------------------------------
 	// Public API
@@ -522,10 +530,10 @@ namespace ShadowCasterManager
 	/// the duration of the call (no concurrent scheduler mutation).
 	void ForEachConvertedLight(const std::function<void(RE::BSShadowLight*)>& visitor);
 
-	/// Draw shadow-specific statistics lines (slot usage, importance count).
-	/// Call from LightLimitFix::DrawSettings() inside its Statistics tree node.
-	/// shadowLightCount / shadowUnshadowedLightCount are owned by LightLimitFix.
-	void DrawShadowStats(uint32_t shadowLightCount, uint32_t shadowUnshadowedLightCount);
+	/// Draw scheduler stats (avg redraws/frame and avg per-light cost).
+	/// Reads internal SCM state so the caller doesn't need accessors. Intended
+	/// to render directly under DrawShadowLightTable for testing context.
+	void DrawShadowSchedulerStats();
 
 	/// Draw per-mode overlay info for shadow-related visualisation modes (3-9).
 	/// Call from LightLimitFix::DrawOverlay() inside the vizOn block for modes >= 3.

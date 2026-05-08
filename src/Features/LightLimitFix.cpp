@@ -16,31 +16,33 @@ void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
 
-	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (lightCount >= MAX_LIGHTS)
-			ImGui::TextColored({ 1, 0.3f, 0.3f, 1 }, "Clustered Lights : %u / %u (overflow!)", lightCount, MAX_LIGHTS);
-		else
-			ImGui::Text("Clustered Lights : %u / %u", lightCount, MAX_LIGHTS);
+	ShadowCasterManager::DrawSettings(settings.ShadowSettings);
 
-		ShadowCasterManager::DrawShadowStats(shadowLightCount, shadowUnshadowedLightCount);
+	// ---- Active Shadow Casters --------------------------------------
+	// One cohesive section: overlay toggle, then ALL the stats grouped
+	// together (summary + scheduler stats + budget verdict), then the
+	// table below. Same layout as the overlay so testers see the same
+	// thing in both views with the stats above the (potentially long)
+	// table -- no scrolling required to find the headline numbers.
+	ImGui::SeparatorText("Shadow Limit Fix -- Active Casters");
 
-		ImGui::TreePop();
+	ImGui::Checkbox("Show Shadow Overlay", &settings.ShowShadowOverlay);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Pop out an always-visible overlay window with the shadow caster table.\n"
+			"Without this, the overlay only appears when a light is suppressed\n"
+			"or a visualisation mode is active. Enable to access the table's\n"
+			"debug controls (cycle button, solo, Shift+hover pulse) any time.");
 	}
 
-	ShadowCasterManager::DrawSettings(settings.ShadowSettings);
+	ShadowCasterManager::DrawShadowSummary(lightCount, MAX_LIGHTS, shadowUnshadowedLightCount);
+	ShadowCasterManager::DrawShadowSchedulerStats();
+	ImGui::Separator();
+	ShadowCasterManager::DrawShadowLightTable(true, false);
 
 	ImGui::SeparatorText("Debug");
 
 	if (ImGui::TreeNode("Light Limit Visualization")) {
-		ImGui::Checkbox("Show Shadow Overlay", &settings.ShowShadowOverlay);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Always-visible overlay window with the shadow caster table.\n"
-				"Without this, the overlay only appears when a light is suppressed\n"
-				"or a visualisation mode is active. Enable to access the table's\n"
-				"debug controls (cycle button, solo, Shift+hover pulse) any time.");
-		}
-
 		ImGui::Checkbox("Enable Lights Visualisation", &settings.EnableLightsVisualisation);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Enables visualization of the light limit\n");
