@@ -14,6 +14,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	directionalInscatteringAnisotropy,
 	inscatteringTint,
 	cubemapMipLevel,
+	sunlightAttenuationAmount,
 	respectVanillaFogFade,
 	disableVanillaFog)
 
@@ -40,6 +41,7 @@ void ExponentialHeightFog::DrawSettings()
 	Util::WeatherUI::SliderFloat("Fog Height Falloff", this, "fogHeightFalloff", &settings.fogHeightFalloff, 0.001f, 2.0f, "%.3f");
 	Util::WeatherUI::SliderFloat("Fog Density", this, "fogDensity", &settings.fogDensity, 0.0f, 1.0f, "%.3f");
 	Util::WeatherUI::SliderFloat("Directional Light Inscattering Multiplier", this, "directionalInscatteringMultiplier", &settings.directionalInscatteringMultiplier, 0.0f, 10.0f, "%.2f");
+	Util::WeatherUI::SliderFloat("Sunlight Attenuation Amount", this, "sunlightAttenuationAmount", &settings.sunlightAttenuationAmount, 0.0f, 1.0f, "%.2f");
 	Util::WeatherUI::SliderFloat("Directional Light Inscattering Anisotropy", this, "directionalInscatteringAnisotropy", &settings.directionalInscatteringAnisotropy, -0.99f, 0.99f, "%.3f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
@@ -102,6 +104,14 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		&settings.directionalInscatteringMultiplier,
 		1.0f,
 		0.0f, 10.0f));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"Sunlight Attenuation Amount",
+		"sunlightAttenuationAmount",
+		"Amount of fog attenuation applied to direct sunlight",
+		&settings.sunlightAttenuationAmount,
+		1.0f,
+		0.0f, 1.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"Directional Inscattering Anisotropy",

@@ -260,9 +260,9 @@ namespace SharedData
 		float directionalInscatteringAnisotropy;
 		float4 inscatteringTint;
 		float cubemapMipLevel;
+		float sunlightAttenuationAmount;
 		uint respectVanillaFogFade;
 		uint disableVanillaFog;
-		float pad;
 	};
 
 	cbuffer FeatureData : register(b6)

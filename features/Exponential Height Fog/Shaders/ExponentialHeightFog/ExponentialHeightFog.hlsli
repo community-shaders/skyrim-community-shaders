@@ -99,17 +99,16 @@ namespace ExponentialHeightFog
 		float3 lightDir = SharedData::DirLightDirection.xyz;
 		float lightDirZ = lightDir.z;
 
-		float exponentialHeightLineIntegral = 0.0f;
+		float sunlightFogAttenuation = 0.0f;
 
 		// Integral = Density * (1 - exp2(-slope * inf)) / slope
 		if (lightDirZ > 0.001f) {
 			float slope = max(fogHeightFalloff * lightDirZ, 1e-8f);
-			exponentialHeightLineIntegral = localDensity / slope;
-		} else {
-			return 0.0f;
+			float exponentialHeightLineIntegral = localDensity / slope;
+			sunlightFogAttenuation = saturate(exp2(-exponentialHeightLineIntegral));
 		}
 
-		return saturate(exp2(-exponentialHeightLineIntegral));
+		return lerp(1.0f, sunlightFogAttenuation, SharedData::exponentialHeightFogSettings.sunlightAttenuationAmount);
 	}
 }
 #endif

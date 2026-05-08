@@ -43,9 +43,9 @@ struct ExponentialHeightFog : Feature
 		float directionalInscatteringAnisotropy = 0.7f;
 		float4 inscatteringTint = { 1.0f, 1.0f, 1.0f, 1.0f };
 		float cubemapMipLevel = 3.0f;
+		float sunlightAttenuationAmount = 1.0f;
 		uint respectVanillaFogFade = 0;
 		uint disableVanillaFog = 0;
-		float pad;
 	} settings;
 	static_assert(sizeof(Settings) == sizeof(float4) * 4, "Settings must match HLSL ExponentialHeightFogSettings.");
 };
