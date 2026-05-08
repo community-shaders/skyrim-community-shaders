@@ -219,7 +219,7 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 	if (deleteConfirmationFrame == ImGui::GetFrameCount())
 		return;
 
-	if (ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (auto popup = Util::CenteredPopupModal(popupId)) {
 		deleteConfirmationFrame = ImGui::GetFrameCount();
 		ImGui::Text("Are you sure you want to delete the saved settings file?");
 		ImGui::Spacing();
@@ -244,8 +244,6 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
-
-		ImGui::EndPopup();
 	}
 }
 

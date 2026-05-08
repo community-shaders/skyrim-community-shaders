@@ -92,6 +92,39 @@ namespace Util
 	};
 
 	/**
+	 * RAII wrapper for centered popup modals. Positions the window before BeginPopupModal
+	 * (prevents first-frame stretch) and calls EndPopup() automatically on destruction.
+	 *
+	 * By default centers to the viewport center. Pass an explicit pos/pivot to override.
+	 * Pass kPopupCenter as pos to use the default viewport-center behavior.
+	 *
+	 * Usage:
+	 * // Centered (default):
+	 * if (auto popup = Util::CenteredPopupModal("Title")) { ... }
+	 *
+	 * // Custom position:
+	 * if (auto popup = Util::CenteredPopupModal("Title", nullptr, ImGuiWindowFlags_AlwaysAutoResize,
+	 *                                            ImVec2(x, y), ImVec2(0.0f, 0.0f))) { ... }
+	 */
+	class CenteredPopupModal
+	{
+	public:
+		static constexpr ImVec2 kPopupCenter{ -FLT_MAX, -FLT_MAX };
+
+		CenteredPopupModal(const char* name, bool* p_open = nullptr, ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize, ImVec2 pos = kPopupCenter, ImVec2 pivot = ImVec2(0.5f, 0.5f));
+		~CenteredPopupModal();
+		operator bool() const { return isOpen; }
+
+		CenteredPopupModal(const CenteredPopupModal&) = delete;
+		CenteredPopupModal& operator=(const CenteredPopupModal&) = delete;
+		CenteredPopupModal(CenteredPopupModal&&) = delete;
+		CenteredPopupModal& operator=(CenteredPopupModal&&) = delete;
+
+	private:
+		bool isOpen;
+	};
+
+	/**
 	 * Usage:
 	 * {
 	 *      auto _ = DisableGuard(disableThis);

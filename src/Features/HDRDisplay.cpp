@@ -407,11 +407,7 @@ void HDRDisplay::DrawSettings()
 		}
 	}
 
-	if (ImGui::BeginPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
-		// Center popup on screen
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
+	if (auto popup = Util::CenteredPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
 		// Prevent background dimming by pushing lower modal dimming
 		ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
 
@@ -471,7 +467,6 @@ void HDRDisplay::DrawSettings()
 		ImGui::PopStyleVar();
 
 		ImGui::PopStyleVar();
-		ImGui::EndPopup();
 	}
 
 	// HDR settings sliders

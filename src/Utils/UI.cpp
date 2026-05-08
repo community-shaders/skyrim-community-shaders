@@ -116,6 +116,24 @@ namespace Util
 		}
 	}
 
+	CenteredPopupModal::CenteredPopupModal(const char* name, bool* p_open, ImGuiWindowFlags flags, ImVec2 pos, ImVec2 pivot)
+	{
+		if (pos.x == -FLT_MAX && pos.y == -FLT_MAX)
+			pos = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(pos, ImGuiCond_Always, pivot);
+		// Fix first-frame vertical stretch: AlwaysAutoResize resets width to 0 on the hidden
+		// measurement frame, causing TextWrapped to wrap at 0px and produce an enormous height.
+		// Setting an initial width gives TextWrapped a sensible wrap column on that frame.
+		ImGui::SetNextWindowSize(ImVec2(400.0f * GetUIScale(), 0.0f), ImGuiCond_Appearing);
+		isOpen = ImGui::BeginPopupModal(name, p_open, flags | ImGuiWindowFlags_NoSavedSettings);
+	}
+
+	CenteredPopupModal::~CenteredPopupModal()
+	{
+		if (isOpen)
+			ImGui::EndPopup();
+	}
+
 	DisableGuard::DisableGuard(bool disable) :
 		disable(disable)
 	{
@@ -264,11 +282,7 @@ namespace Util
 
 		ImGui::OpenPopup("Clear Shader Cache?");
 
-		// Center the popup
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-
-		if (ImGui::BeginPopupModal("Clear Shader Cache?", &showClearCacheConfirmation, ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (auto popup = CenteredPopupModal("Clear Shader Cache?", &showClearCacheConfirmation)) {
 			ImGui::Text("Are you sure you want to clear the shader cache?");
 			ImGui::Spacing();
 			ImGui::Spacing();
@@ -312,8 +326,6 @@ namespace Util
 				showClearCacheConfirmation = false;
 				ImGui::CloseCurrentPopup();
 			}
-
-			ImGui::EndPopup();
 		}
 	}
 
@@ -340,11 +352,9 @@ namespace Util
 			return false;
 
 		ImGui::OpenPopup(title.c_str());
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
 		bool result = false;
-		if (ImGui::BeginPopupModal(title.c_str(), &show, ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (auto popup = CenteredPopupModal(title.c_str(), &show)) {
 			ImGui::TextWrapped("%s", message.c_str());
 			ImGui::Spacing();
 			ImGui::Separator();
@@ -374,8 +384,6 @@ namespace Util
 				show = false;
 				ImGui::CloseCurrentPopup();
 			}
-
-			ImGui::EndPopup();
 		}
 		return result;
 	}
