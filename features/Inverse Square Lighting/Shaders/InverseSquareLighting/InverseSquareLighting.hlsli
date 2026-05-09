@@ -1,9 +1,9 @@
+#include "Common/Game.hlsli"
 #include "Common/SharedData.hlsli"
 
 namespace InverseSquareLighting
 {
 	static const float SCALE = 0.8f;
-	static const float METRES_TO_UNITS = 70.f;
 	static const float METRES_TO_UNITS_SQ = METRES_TO_UNITS * METRES_TO_UNITS;
 	static const float SCALED_UNITS_SQ = SCALE * METRES_TO_UNITS_SQ;
 
