@@ -61,13 +61,17 @@ namespace ExponentialHeightFog
 
 		float expFogFactor = saturate(exp2(-exponentialHeightLineIntegral));
 
+		float3 fogInscatteringColor = fogColor * SharedData::exponentialHeightFogSettings.originalFogColorAmount;
+		fogInscatteringColor += SharedData::exponentialHeightFogSettings.fogInscatteringColor.rgb * SharedData::exponentialHeightFogSettings.fogInscatteringColor.a;
+
 #if defined(DYNAMIC_CUBEMAPS)
 		if (SharedData::exponentialHeightFogSettings.useDynamicCubemaps > 0) {
-			float3 tintColor = lerp(fogColor, SharedData::exponentialHeightFogSettings.inscatteringTint.xyz, SharedData::exponentialHeightFogSettings.inscatteringTint.w);
 			float3 cubemapColor = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampColorSampler, normalize(lerp(positionWS, float3(0, 0, 1), saturate((SharedData::exponentialHeightFogSettings.cubemapMipLevel + 1) / 8))), SharedData::exponentialHeightFogSettings.cubemapMipLevel).xyz;
-			fogColor = tintColor * cubemapColor * (1.0f - expFogFactor);
+			fogInscatteringColor += cubemapColor * SharedData::exponentialHeightFogSettings.inscatteringTint.rgb * SharedData::exponentialHeightFogSettings.inscatteringTint.a;
 		}
 #endif
+
+		fogColor = fogInscatteringColor * (1.0f - expFogFactor);
 
 		float3 directionalInscattering = 0;
 

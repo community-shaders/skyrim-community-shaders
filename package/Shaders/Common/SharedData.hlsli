@@ -263,6 +263,9 @@ namespace SharedData
 		float sunlightAttenuationAmount;
 		uint respectVanillaFogFade;
 		uint disableVanillaFog;
+		float4 fogInscatteringColor;
+		float originalFogColorAmount;
+		float3 pad;
 	};
 
 	cbuffer FeatureData : register(b6)

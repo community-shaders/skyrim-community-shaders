@@ -16,7 +16,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	cubemapMipLevel,
 	sunlightAttenuationAmount,
 	respectVanillaFogFade,
-	disableVanillaFog)
+	disableVanillaFog,
+	fogInscatteringColor,
+	originalFogColorAmount)
 
 void ExponentialHeightFog::RestoreDefaultSettings()
 {
@@ -39,6 +41,8 @@ void ExponentialHeightFog::DrawSettings()
 	Util::WeatherUI::SliderFloat("Start Distance", this, "startDistance", &settings.startDistance, 0.0f, 100000.0f, "%.1f");
 	Util::WeatherUI::SliderFloat("Fog Height", this, "fogHeight", &settings.fogHeight, -22000.0f, 22000.0f, "%.1f");
 	Util::WeatherUI::SliderFloat("Fog Height Falloff", this, "fogHeightFalloff", &settings.fogHeightFalloff, 0.001f, 2.0f, "%.3f");
+	Util::WeatherUI::ColorEdit4("Fog Inscattering Color", this, "fogInscatteringColor", (float*)&settings.fogInscatteringColor);
+	Util::WeatherUI::SliderFloat("Original Fog Color Amount", this, "originalFogColorAmount", &settings.originalFogColorAmount, 0.0f, 1.0f, "%.2f");
 	Util::WeatherUI::SliderFloat("Fog Density", this, "fogDensity", &settings.fogDensity, 0.0f, 1.0f, "%.3f");
 	Util::WeatherUI::SliderFloat("Directional Light Inscattering Multiplier", this, "directionalInscatteringMultiplier", &settings.directionalInscatteringMultiplier, 0.0f, 10.0f, "%.2f");
 	Util::WeatherUI::SliderFloat("Sunlight Attenuation Amount", this, "sunlightAttenuationAmount", &settings.sunlightAttenuationAmount, 0.0f, 1.0f, "%.2f");
@@ -88,6 +92,21 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		&settings.fogHeightFalloff,
 		0.2f,
 		0.001f, 2.0f));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
+		"Fog Inscattering Color",
+		"fogInscatteringColor",
+		"Color added to the fog inscattering contribution",
+		&settings.fogInscatteringColor,
+		float4{ 0.0f, 0.0f, 0.0f, 1.0f }));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"Original Fog Color Amount",
+		"originalFogColorAmount",
+		"Amount of the original fog color added to fog inscattering",
+		&settings.originalFogColorAmount,
+		1.0f,
+		0.0f, 1.0f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"Fog Density",
