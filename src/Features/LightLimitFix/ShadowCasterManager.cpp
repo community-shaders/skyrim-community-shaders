@@ -725,22 +725,6 @@ namespace ShadowCasterManager
 		func(ssn, light, index, unk);
 	}
 
-	// Per-frame reset for shadowLightsAccum (BSTArray<BSShadowLight*> at scn+0x230).
-	// Engine's vanilla CalculateAndDrawShadowCasterLights calls this at the very top
-	// to null every entry and set each light's maskIndex=0xFF. Verified via Ghidra
-	// against AE 1.6.1170 (function at 0x1414a4030, SE addr 0x1412bc7f0).
-	// Our ScheduleShadowCasters thunks the entire engine function, so we must call
-	// this ourselves — otherwise stale entries from previous frames persist and the
-	// engine's render-shadow-maps phase keeps drawing them. Symptom: shadows for
-	// lights no longer in the camera's view, suppression toggle not working
-	// (the suppressed slot still has a stale-frame entry that gets rendered).
-	static void GameClearShadowCasterArray(RE::ShadowSceneNode* ssn)
-	{
-		using F = void (*)(RE::ShadowSceneNode*);
-		static REL::Relocation<F> func{ REL::RelocationID(99730, 106367) };
-		func(ssn);
-	}
-
 	static void GameClearPortalVisibility(RE::BSPortalGraphEntry* entry)
 	{
 		using F = void (*)(RE::BSPortalGraphEntry*);
@@ -1156,24 +1140,13 @@ namespace ShadowCasterManager
 		if (!ssn || !camera)
 			return;
 
-		// ---- Per-frame resets (mirror engine's CalculateAndDrawShadowCasterLights) ----
-		//
-		// The engine's vanilla CalculateAndDrawShadowCasterLights starts with two
-		// resets that we replaced when we thunked the entire function. Without them,
-		// shadowLightsAccum and the slot counter accumulate stale entries from
-		// previous frames, and the engine's render-shadow-maps phase keeps drawing
-		// them — producing shadows for lights long out of view, and breaking
-		// per-slot suppression because ShadowParam.y=-1 written to the slot we
-		// "think" the light occupies doesn't reach the stale entry at a different
-		// slot rendering the same light.
-		//
-		// Verified via Ghidra against AE 1.6.1170:
-		//   - ShadowSceneNode::ClearShadowCasterArray (0x1414a4030 / SE 0x1412bc7f0)
-		//     nulls every shadowLightsAccum entry and sets each light->maskIndex=0xFF.
-		//   - _gLastFrameEnabledShadowCasterLightCount (REL 528091/415036) is the
-		//     slot counter our scheduler reads/writes via GetAccumLightSlot().
-		GameClearShadowCasterArray(ssn);
-		*GetAccumLightSlot() = 0;
+		// Do NOT clear shadowLightsAccum or reset the slot counter here. The
+		// outer CalculateAndDrawShadowCasterLights calls ResetCalculatedShadow-
+		// CasterLights before our hook fires, and that function clears the
+		// array, resets the counter, AND installs the sun at slot 0. Re-
+		// clearing here wipes the sun (sun->Accumulate is the focus vfunc,
+		// not a slot allocator) and the engine then skips the directional
+		// cascade pass entirely.
 
 		s_budget.Begin(0);
 
@@ -1899,10 +1872,22 @@ namespace ShadowCasterManager
 		s_budget.Begin(1);
 
 		uint32_t tmp = 0;
-		// Render every chosen+RedrawFrame point light. PointLightFirst skips the
-		// sun bookkeeping slot (sun renders separately via the directional
-		// cascade path), and PointLightEnd includes the highest point-light
-		// slot when Sun=true.
+		// Sun first: BSShadowDirectionalLight::Render emits the "Directional
+		// Light Shadowmaps" marker and writes the cascade depth maps to
+		// kSHADOWMAPS_ESRAM. The engine's vanilla RenderActiveShadowCasterLights
+		// dispatches this via the same vtable walk it uses for point lights;
+		// we replaced that walk with this loop, so we need to call sun.Render
+		// explicitly. Without this, the directional cascade pass is skipped
+		// and exterior scenes render with no sun shadow.
+		if (s_lights.Sun && s_lights.Lights[0].Light) {
+			s_budget.BeginLight(s_lights.Lights[0].Light, 1);
+			s_lights.Lights[0].Light->Render(tmp);
+			s_budget.EndLight(s_lights.Lights[0].Light, 1);
+		}
+
+		// Point lights from PointLightFirst onwards. PointLightFirst skips
+		// slot 0 (handled above when Sun=true). PointLightEnd includes the
+		// highest point-light slot when Sun=true.
 		for (int i = s_lights.PointLightFirst(); i < s_lights.PointLightEnd(s_settings.ShadowLightCount); i++) {
 			auto& e = s_lights.Lights[i];
 			if (!e.Light || !e.RedrawFrame)
