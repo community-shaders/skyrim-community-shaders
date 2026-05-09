@@ -47,6 +47,13 @@ permissions:
     contents: write
     pull-requests: write
 
+concurrency:
+    # Serialize runs targeting the same line so PR-close + branch-delete + push
+    # cannot race against each other. `cancel-in-progress: false` queues instead
+    # of cancelling — half-finished cherry-pick state is worse than waiting.
+    group: hotfix-release-${{ inputs.release_line || 'auto' }}
+    cancel-in-progress: false
+
 jobs:
     hotfix:
         runs-on: ubuntu-latest
@@ -69,10 +76,12 @@ jobs:
                   RELEASE_LINE: ${{ inputs.release_line }}
               run: |
                   set -euo pipefail
+                  # `|| true` so a no-match grep doesn't abort under set -e —
+                  # let the explicit empty-BASE_TAG check below report the error.
                   if [[ -z "${RELEASE_LINE}" ]]; then
-                    BASE_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -Ev -- '-(rc|pr|alpha|beta)' | head -1)
+                    BASE_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -Ev -- '-(rc|pr|alpha|beta)' | head -1 || true)
                   else
-                    BASE_TAG=$(git tag -l "v${RELEASE_LINE}.*" --sort=-v:refname | grep -Ev -- '-(rc|pr|alpha|beta)' | head -1)
+                    BASE_TAG=$(git tag -l "v${RELEASE_LINE}.*" --sort=-v:refname | grep -Ev -- '-(rc|pr|alpha|beta)' | head -1 || true)
                   fi
                   if [[ -z "${BASE_TAG}" ]]; then
                     echo "::error::No stable tag found for line '${RELEASE_LINE:-<latest>}'"
@@ -111,9 +120,34 @@ jobs:
                   STAGING='${{ steps.plan.outputs.staging_branch }}'
                   git checkout -b "${STAGING}" "${HOTFIX}"
 
+                  # Breaking-change filter: applies to both explicit and
+                  # discovered paths. Catches `type!:` in subject AND a
+                  # `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer.
+                  is_breaking() {
+                    local sha=$1
+                    local subject body
+                    subject=$(git log -1 --format=%s "${sha}")
+                    body=$(git log -1 --format=%B "${sha}")
+                    [[ "${subject}" =~ ^[a-zA-Z]+(\([^)]+\))?! ]] && return 0
+                    grep -qE '(^|[[:space:]])BREAKING[ -]CHANGE:' <<<"${body}" && return 0
+                    return 1
+                  }
+
+                  : > /tmp/skipped.md
+                  SKIPPED_BREAKING=0
+
                   if [[ -n "${EXPLICIT_COMMITS}" ]]; then
-                    mapfile -t CANDIDATES < <(echo "${EXPLICIT_COMMITS}" | tr ',' ' ' | xargs -n1)
-                    SOURCE_DESC="explicit list (${#CANDIDATES[@]} commits)"
+                    mapfile -t RAW < <(echo "${EXPLICIT_COMMITS}" | tr ',' ' ' | xargs -n1)
+                    CANDIDATES=()
+                    for sha in "${RAW[@]}"; do
+                      if is_breaking "${sha}"; then
+                        SKIPPED_BREAKING=$((SKIPPED_BREAKING+1))
+                        echo "- \`${sha:0:9}\` $(git log -1 --format=%s ${sha} 2>/dev/null) — breaking change" >> /tmp/skipped.md
+                      else
+                        CANDIDATES+=("${sha}")
+                      fi
+                    done
+                    SOURCE_DESC="explicit list (${#RAW[@]} requested, ${#CANDIDATES[@]} after breaking-change filter)"
                   else
                     case "${SCOPE}" in
                       fix-only)        TYPES='fix' ;;
@@ -122,23 +156,37 @@ jobs:
                       *) echo "::error::Unknown scope ${SCOPE}"; exit 1 ;;
                     esac
                     TYPE_RE="^(${TYPES})(\([^)]+\))?:"
+                    # `git cherry` patch-id-dedups commits already on HOTFIX.
                     mapfile -t UNMERGED < <(git cherry "${HOTFIX}" origin/dev | awk '/^\+/ {print $2}')
                     CANDIDATES=()
                     for sha in "${UNMERGED[@]}"; do
                       SUBJECT=$(git log -1 --format=%s "${sha}")
-                      [[ "${SUBJECT}" =~ ${TYPE_RE} ]] && CANDIDATES+=("${sha}")
+                      [[ "${SUBJECT}" =~ ${TYPE_RE} ]] || continue
+                      if is_breaking "${sha}"; then
+                        SKIPPED_BREAKING=$((SKIPPED_BREAKING+1))
+                        echo "- \`${sha:0:9}\` ${SUBJECT} — breaking change" >> /tmp/skipped.md
+                        continue
+                      fi
+                      CANDIDATES+=("${sha}")
                     done
                     SOURCE_DESC="scope=\`${SCOPE}\` since \`${{ steps.plan.outputs.base_tag }}\`"
                   fi
 
                   : > /tmp/picked.md
+                  : > /tmp/dedup.md
                   : > /tmp/conflicts.md
-                  PICKED=0; CONFLICTS=0
+                  PICKED=0; DEDUP=0; CONFLICTS=0
                   for sha in "${CANDIDATES[@]}"; do
                     SUBJECT=$(git log -1 --format=%s "${sha}" 2>/dev/null || echo '<unknown>')
-                    if git cherry-pick -x "${sha}"; then
+                    if git cherry-pick -x "${sha}" 2>/tmp/cp.err; then
                       PICKED=$((PICKED+1))
                       echo "- \`${sha:0:9}\` ${SUBJECT}" >> /tmp/picked.md
+                    elif grep -qE 'previous cherry-pick is now empty|nothing to commit|allow-empty' /tmp/cp.err; then
+                      # Patch already on HOTFIX — common for explicit SHAs that
+                      # were also detected by the scope path on a prior run.
+                      DEDUP=$((DEDUP+1))
+                      echo "- \`${sha:0:9}\` ${SUBJECT} — already applied" >> /tmp/dedup.md
+                      git cherry-pick --skip 2>/dev/null || git cherry-pick --abort 2>/dev/null || true
                     else
                       CONFLICTS=$((CONFLICTS+1))
                       echo "- \`${sha:0:9}\` ${SUBJECT}" >> /tmp/conflicts.md
@@ -146,9 +194,11 @@ jobs:
                     fi
                   done
 
-                  echo "picked_count=${PICKED}"     >> "$GITHUB_OUTPUT"
-                  echo "conflict_count=${CONFLICTS}" >> "$GITHUB_OUTPUT"
-                  echo "source_desc=${SOURCE_DESC}"  >> "$GITHUB_OUTPUT"
+                  echo "picked_count=${PICKED}"           >> "$GITHUB_OUTPUT"
+                  echo "dedup_count=${DEDUP}"             >> "$GITHUB_OUTPUT"
+                  echo "conflict_count=${CONFLICTS}"      >> "$GITHUB_OUTPUT"
+                  echo "skipped_breaking=${SKIPPED_BREAKING}" >> "$GITHUB_OUTPUT"
+                  echo "source_desc=${SOURCE_DESC}"       >> "$GITHUB_OUTPUT"
 
                   {
                     echo "## Hotfix candidate plan"
@@ -161,13 +211,13 @@ jobs:
                     echo "| Source | ${SOURCE_DESC} |"
                     echo "| Candidates | ${#CANDIDATES[@]} |"
                     echo "| Cherry-picked | ${PICKED} |"
+                    echo "| Already applied (skipped) | ${DEDUP} |"
+                    echo "| Breaking changes (skipped) | ${SKIPPED_BREAKING} |"
                     echo "| Conflicts (skipped) | ${CONFLICTS} |"
-                    if (( PICKED > 0 )); then
-                      echo ""; echo "### Picked"; cat /tmp/picked.md
-                    fi
-                    if (( CONFLICTS > 0 )); then
-                      echo ""; echo "### Conflicts — resolve manually"; cat /tmp/conflicts.md
-                    fi
+                    if (( PICKED > 0 ));    then echo ""; echo "### Picked"; cat /tmp/picked.md; fi
+                    if (( DEDUP > 0 ));     then echo ""; echo "### Already applied"; cat /tmp/dedup.md; fi
+                    if (( SKIPPED_BREAKING > 0 )); then echo ""; echo "### Skipped breaking changes"; cat /tmp/skipped.md; fi
+                    if (( CONFLICTS > 0 )); then echo ""; echo "### Conflicts — resolve manually"; cat /tmp/conflicts.md; fi
                   } >> "$GITHUB_STEP_SUMMARY"
 
             - name: Close superseded staging PRs and branches
@@ -212,15 +262,17 @@ jobs:
                   STAGING='${{ steps.plan.outputs.staging_branch }}'
                   BASE='${{ steps.plan.outputs.base_tag }}'
                   PICKED='${{ steps.cherry.outputs.picked_count }}'
+                  DEDUP='${{ steps.cherry.outputs.dedup_count }}'
                   CONFLICTS='${{ steps.cherry.outputs.conflict_count }}'
+                  SKIPPED_BREAKING='${{ steps.cherry.outputs.skipped_breaking }}'
 
                   {
                     echo "Automated hotfix candidate built off \`${BASE}\`."
                     echo ""
                     echo "- **${PICKED}** commit(s) cherry-picked from \`dev\` (${{ steps.cherry.outputs.source_desc }})"
-                    if [[ "${CONFLICTS}" != "0" ]]; then
-                      echo "- ⚠️ **${CONFLICTS}** commit(s) failed to cherry-pick (see below)"
-                    fi
+                    [[ "${DEDUP}" != "0" ]] && echo "- ${DEDUP} already applied to \`${HOTFIX}\` (skipped, see below)"
+                    [[ "${SKIPPED_BREAKING}" != "0" ]] && echo "- ${SKIPPED_BREAKING} breaking change(s) skipped (see below)"
+                    [[ "${CONFLICTS}" != "0" ]] && echo "- ⚠️ **${CONFLICTS}** commit(s) failed to cherry-pick (see below)"
                     echo ""
                     echo "### How to use this PR"
                     echo ""
@@ -232,6 +284,16 @@ jobs:
                     echo ""
                     echo "### Picked commits"
                     cat /tmp/picked.md
+                    if [[ "${DEDUP}" != "0" ]]; then
+                      echo ""
+                      echo "### Already applied to \`${HOTFIX}\` (skipped)"
+                      cat /tmp/dedup.md
+                    fi
+                    if [[ "${SKIPPED_BREAKING}" != "0" ]]; then
+                      echo ""
+                      echo "### Breaking changes (skipped)"
+                      cat /tmp/skipped.md
+                    fi
                     if [[ "${CONFLICTS}" != "0" ]]; then
                       echo ""
                       echo "### Conflicts (skipped)"
