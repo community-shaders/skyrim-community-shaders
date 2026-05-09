@@ -22,15 +22,13 @@ void WeatherManager::Initialize()
 void WeatherManager::LoadWeatherList()
 {
 	std::filesystem::path weatherListPath = PresetManager::GetSingleton().GetENBSeriesPath() / "_weatherlist.ini";
+	weatherEntries.clear();
+	weatherIDMap.clear();
 
 	if (!std::filesystem::exists(weatherListPath)) {
 		logger::warn("[WeatherManager] _weatherlist.ini not found at {}", weatherListPath.string());
 		return;
 	}
-
-	// Clear existing data
-	weatherEntries.clear();
-	weatherIDMap.clear();
 
 	// Use GetPrivateProfileString to enumerate sections
 	std::string weatherListPathStr = weatherListPath.string();
