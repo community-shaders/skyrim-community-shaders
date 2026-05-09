@@ -1,11 +1,11 @@
-#include "Utils/Subrect/Subrect.h"
+#include "Utils/Subrect.h"
 
 #include <algorithm>
 #include <imgui.h>
 
 namespace
 {
-	Subrect::UVRegion ClampUV(Subrect::UVRegion uv)
+	Util::Subrect::UVRegion ClampUV(Util::Subrect::UVRegion uv)
 	{
 		uv.x = std::clamp(uv.x, 0.0f, 1.0f);
 		uv.y = std::clamp(uv.y, 0.0f, 1.0f);
@@ -22,14 +22,14 @@ namespace
 		return uv;
 	}
 
-	Subrect::UVRegion DefaultUV()
+	Util::Subrect::UVRegion DefaultUV()
 	{
 		return {};
 	}
 
-	Subrect::UVRegion LoadUVFromJson(const json& value, const char* legacyKey = nullptr)
+	Util::Subrect::UVRegion LoadUVFromJson(const json& value, const char* legacyKey = nullptr)
 	{
-		Subrect::UVRegion uv = DefaultUV();
+		Util::Subrect::UVRegion uv = DefaultUV();
 		if (value.is_array() && value.size() == 4) {
 			uv.x = value[0];
 			uv.y = value[1];
@@ -44,14 +44,14 @@ namespace
 		return ClampUV(uv);
 	}
 
-	json SaveUVToJson(const Subrect::UVRegion& uv)
+	json SaveUVToJson(const Util::Subrect::UVRegion& uv)
 	{
 		return { uv.x, uv.y, uv.w, uv.h };
 	}
 
-	Subrect::PixelRegion UVToPixelRegion(const Subrect::UVRegion& uv, uint32_t eyeWidth, uint32_t eyeHeight)
+	Util::Subrect::PixelRegion UVToPixelRegion(const Util::Subrect::UVRegion& uv, uint32_t eyeWidth, uint32_t eyeHeight)
 	{
-		Subrect::PixelRegion result;
+		Util::Subrect::PixelRegion result;
 		result.x = std::min<uint32_t>(eyeWidth - 1, static_cast<uint32_t>(uv.x * eyeWidth));
 		result.y = std::min<uint32_t>(eyeHeight - 1, static_cast<uint32_t>(uv.y * eyeHeight));
 		result.w = std::max<uint32_t>(1, static_cast<uint32_t>(uv.w * eyeWidth));
@@ -62,7 +62,7 @@ namespace
 	}
 }
 
-namespace Subrect
+namespace Util::Subrect
 {
 	void Controller::LoadSettings(const json& a_json)
 	{
@@ -312,4 +312,4 @@ namespace Subrect
 		currentRightEyeUV = presets[selectedPresetIndex].rightEye;
 		ClampCurrentUV();
 	}
-}
+}  // namespace Util::Subrect

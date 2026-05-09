@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace Subrect
+namespace Util::Subrect
 {
 	struct UVRegion
 	{
@@ -62,4 +62,4 @@ namespace Subrect
 		void ClampCurrentUV();
 		void ApplyPreset(int index);
 	};
-}
+}  // namespace Util::Subrect

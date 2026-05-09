@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Feature.h"
-#include "Utils/Subrect/Subrect.h"
+#include "Utils/Subrect.h"
 #include <atomic>
 #include <condition_variable>
 #include <filesystem>
@@ -47,7 +47,7 @@ private:
 	std::queue<PendingScreenshot> screenshotQueue;
 	std::thread screenshotWorker;
 	bool screenshotWorkerRunning = false;
-	Subrect::Controller subrect;
+	Util::Subrect::Controller subrect;
 	winrt::com_ptr<ID3D11ShaderResourceView> previewSRV;
 	ID3D11Texture2D* previewTexture = nullptr;
 
