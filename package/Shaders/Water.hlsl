@@ -1279,13 +1279,26 @@ PS_OUTPUT main(PS_INPUT input)
 #						if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
-		fogColor = exponentialHeightFog.xyz;
-		fogDistanceFactor = exponentialHeightFog.w;
+		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
+			fogColor = exponentialHeightFog.xyz;
+			fogColor *= GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, fogColor, exponentialHeightFog.w);
+		} else {
+			fogColor *= GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
+			float3 expFogColor = exponentialHeightFog.xyz * GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, expFogColor, exponentialHeightFog.w);
+		}
+	} else {
+		fogColor *= GetWaterFogFade(eyeIndex);
+		finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
 	}
-#						endif
+#						else
 	fogColor *= GetWaterFogFade(eyeIndex);
+	finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
+#						endif
 
-	float3 finalColor = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
+	float3 finalColor = finalColorPreFog;
 
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
@@ -1317,20 +1330,32 @@ PS_OUTPUT main(PS_INPUT input)
 #						if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, preFogColor);
-		preFogColor = exponentialHeightFog.xyz;
-		fogDistanceFactor = exponentialHeightFog.w;
+		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
+			preFogColor = exponentialHeightFog.xyz;
+			preFogColor *= GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, preFogColor, exponentialHeightFog.w);
+		} else {
+			preFogColor *= GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
+			float3 expFogColor = exponentialHeightFog.xyz * GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, expFogColor, exponentialHeightFog.w);
+		}
+	} else {
+		preFogColor *= GetWaterFogFade(eyeIndex);
+		finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
 	}
-#						endif
+#						else
 	preFogColor *= GetWaterFogFade(eyeIndex);
 
 	finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
+#						endif
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
 	float3 fogColor = Color::Fog(lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor));
 #						if defined(EXP_HEIGHT_FOG)
-	if (SharedData::exponentialHeightFogSettings.enabled) {
+	if (SharedData::exponentialHeightFogSettings.enabled && ExponentialHeightFog::ShouldDisableVanillaFog()) {
 		fogFactor = 0;
 	}
 #						endif

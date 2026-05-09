@@ -14,6 +14,20 @@ namespace ExponentialHeightFog
 		return SharedData::exponentialHeightFogSettings.respectVanillaFogFade != 0 ? vanillaFogFade : 1.0f;
 	}
 
+	bool ShouldDisableVanillaFog()
+	{
+		return SharedData::exponentialHeightFogSettings.enabled && SharedData::exponentialHeightFogSettings.disableVanillaFog != 0;
+	}
+
+	// Henyey-Greenstein phase function for physically-based inscattering.
+	// g: asymmetry parameter [-1, 1]. Positive = forward scattering, 0 = isotropic.
+	float HenyeyGreenstein(float cosTheta, float g)
+	{
+		float g2 = g * g;
+		float denom = 1.0f + g2 - 2.0f * g * cosTheta;
+		return (1.0f - g2) / (4.0f * Math::PI * pow(max(denom, 1e-5f), 1.5f));
+	}
+
 	float4 GetExponentialHeightFog(float3 positionWS, float3 cameraWS, float3 fogColor)
 	{
 		float fogHeightFalloff = SharedData::exponentialHeightFogSettings.fogHeightFalloff * 0.001f;
@@ -47,19 +61,25 @@ namespace ExponentialHeightFog
 
 		float expFogFactor = saturate(exp2(-exponentialHeightLineIntegral));
 
+		float3 fogInscatteringColor = fogColor * SharedData::exponentialHeightFogSettings.originalFogColorAmount;
+		fogInscatteringColor += SharedData::exponentialHeightFogSettings.fogInscatteringColor.rgb * SharedData::exponentialHeightFogSettings.fogInscatteringColor.a;
+
 #if defined(DYNAMIC_CUBEMAPS)
 		if (SharedData::exponentialHeightFogSettings.useDynamicCubemaps > 0) {
-			float3 tintColor = lerp(fogColor, SharedData::exponentialHeightFogSettings.inscatteringTint.xyz, SharedData::exponentialHeightFogSettings.inscatteringTint.w);
 			float3 cubemapColor = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampColorSampler, normalize(lerp(positionWS, float3(0, 0, 1), saturate((SharedData::exponentialHeightFogSettings.cubemapMipLevel + 1) / 8))), SharedData::exponentialHeightFogSettings.cubemapMipLevel).xyz;
-			fogColor = tintColor * cubemapColor * (1.0f - expFogFactor);
+			fogInscatteringColor += cubemapColor * SharedData::exponentialHeightFogSettings.inscatteringTint.rgb * SharedData::exponentialHeightFogSettings.inscatteringTint.a;
 		}
 #endif
 
+		fogColor = fogInscatteringColor * (1.0f - expFogFactor);
+
 		float3 directionalInscattering = 0;
 
-		// Calculate directional light inscattering
+		// Calculate directional light inscattering using Henyey-Greenstein phase function
 		if (SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier > 0) {
-			float3 directionalLightInscattering = SharedData::DirLightColor.xyz * pow(saturate(dot(normalize(positionWS), SharedData::DirLightDirection.xyz)), SharedData::exponentialHeightFogSettings.directionalInscatteringExponent) / (2 * Math::TAU);
+			float cosTheta = dot(normalize(positionWS), SharedData::DirLightDirection.xyz);
+			float phase = HenyeyGreenstein(cosTheta, SharedData::exponentialHeightFogSettings.directionalInscatteringAnisotropy);
+			float3 directionalLightInscattering = SharedData::DirLightColor.xyz * phase;
 			float dirExponentialHeightLineIntegral = exponentialHeightLineIntegralCalc * max(rayLength - SharedData::exponentialHeightFogSettings.startDistance, 0);
 			float dirExpFogFactor = saturate(exp2(-dirExponentialHeightLineIntegral));
 			directionalInscattering = directionalLightInscattering * (1 - dirExpFogFactor) * SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier;
@@ -83,17 +103,16 @@ namespace ExponentialHeightFog
 		float3 lightDir = SharedData::DirLightDirection.xyz;
 		float lightDirZ = lightDir.z;
 
-		float exponentialHeightLineIntegral = 0.0f;
+		float sunlightFogAttenuation = 0.0f;
 
 		// Integral = Density * (1 - exp2(-slope * inf)) / slope
 		if (lightDirZ > 0.001f) {
 			float slope = max(fogHeightFalloff * lightDirZ, 1e-8f);
-			exponentialHeightLineIntegral = localDensity / slope;
-		} else {
-			return 0.0f;
+			float exponentialHeightLineIntegral = localDensity / slope;
+			sunlightFogAttenuation = saturate(exp2(-exponentialHeightLineIntegral));
 		}
 
-		return saturate(exp2(-exponentialHeightLineIntegral));
+		return lerp(1.0f, sunlightFogAttenuation, SharedData::exponentialHeightFogSettings.sunlightAttenuationAmount);
 	}
 }
 #endif
