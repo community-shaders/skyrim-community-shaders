@@ -8,6 +8,7 @@
 #include "Features/ScreenshotFeature.h"
 #include "Globals.h"
 #include "Menu.h"
+#include "Utils/FileSystem.h"
 #include <DirectXTex.h>
 #include <PCH.h>
 #include <algorithm>
@@ -18,6 +19,13 @@
 
 namespace
 {
+	// In VR, the renderer exposes additional render targets beyond RE::RENDER_TARGETS::kTOTAL.
+	// kTOTAL (==114) doubles as the first VR-specific side-by-side render target — the post-composite
+	// stereo image we want to capture. Using the kTOTAL enumerator directly is misleading because
+	// it reads as "count of standard targets". Wrap it in a named constant so the intent is obvious.
+	// This index is only valid in VR builds.
+	constexpr auto kVRSideBySideTarget = RE::RENDER_TARGETS::kTOTAL;
+
 	struct D3D11MultithreadGuard
 	{
 		winrt::com_ptr<REX::W32::ID3D11Multithread> multithread;
@@ -138,6 +146,11 @@ ScreenshotFeature::~ScreenshotFeature()
 	StopWorkerThread();
 }
 
+bool ScreenshotFeature::IsInMenu() const
+{
+	return globals::game::isVR;
+}
+
 void ScreenshotFeature::LoadSettings(json& a_json)
 {
 	if (a_json.contains("ScreenshotPath"))
@@ -156,7 +169,7 @@ void ScreenshotFeature::SaveSettings(json& a_json)
 
 void ScreenshotFeature::DrawSettings()
 {
-	if (!REL::Module::IsVR()) {
+	if (!globals::game::isVR) {
 		return;
 	}
 
@@ -180,7 +193,7 @@ void ScreenshotFeature::DrawSettings()
 	}
 	ImGui::SameLine();
 	ImGui::Checkbox("Apply Crop to Screenshot", &applyCropToScreenshot);
-	ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Capture and saving run asynchronously with no frame stall.");
+	Util::Text::Disabled("Capture and saving run asynchronously with no frame stall.");
 
 	ImGui::Spacing();
 	ImGui::Separator();
@@ -189,8 +202,7 @@ void ScreenshotFeature::DrawSettings()
 	auto renderer = globals::game::renderer;
 	if (renderer) {
 		auto& targets = renderer->GetRuntimeData().renderTargets;
-		RE::RENDER_TARGETS::RENDER_TARGET targetIndex = RE::RENDER_TARGETS::kTOTAL;
-		auto& mainTarget = targets[targetIndex];
+		auto& mainTarget = targets[kVRSideBySideTarget];
 
 		ID3D11ShaderResourceView* previewView = mainTarget.SRV;
 		if (mainTarget.texture) {
@@ -289,12 +301,7 @@ void ScreenshotFeature::ScreenshotWorkerLoop()
 			continue;
 		}
 
-		try {
-			std::filesystem::create_directories(screenshot.outputPath.parent_path());
-		} catch (const std::exception& e) {
-			logger::error("Failed to create screenshot directory: {}", e.what());
-			continue;
-		}
+		Util::FileHelpers::EnsureDirectoryExists(screenshot.outputPath.parent_path());
 
 		HRESULT hr = DirectX::SaveToWICFile(
 			*saveImage,
@@ -323,20 +330,18 @@ void ScreenshotFeature::Capture()
 
 	auto renderer = globals::game::renderer;
 	if (renderer) {
-		RE::RENDER_TARGETS::RENDER_TARGET targetIndex = RE::RENDER_TARGETS::kTOTAL;
-		logger::debug("VR Detected: Selecting Capture Target Index kTOTAL ({})", (int)targetIndex);
+		logger::debug("VR Detected: Selecting capture target VRSideBySide ({})", static_cast<int>(kVRSideBySideTarget));
 
 		auto& targets = renderer->GetRuntimeData().renderTargets;
-		auto& mainTarget = targets[targetIndex];
+		auto& mainTarget = targets[kVRSideBySideTarget];
 
 		if (mainTarget.texture) {
 			sourceTexture = mainTarget.texture;
-			logger::debug("Capturing from BSGraphics::Renderer Index {}", (int)targetIndex);
 		}
 	}
 
 	if (!sourceTexture) {
-		logger::error("Failed to acquire screenshot source texture from kTOTAL.");
+		logger::error("Failed to acquire screenshot source texture from VR side-by-side render target.");
 		return;
 	}
 

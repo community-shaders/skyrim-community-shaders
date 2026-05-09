@@ -377,7 +377,7 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 			state.settingWeatherEditorToggleKey,
 			"Change##WeatherEditorToggle");
 
-		if (REL::Module::IsVR()) {
+		if (globals::game::isVR) {
 			Util::InputComboWidget(
 				"Screenshot Key:",
 				settings.ScreenshotKey,
