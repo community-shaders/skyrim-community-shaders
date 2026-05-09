@@ -123,12 +123,15 @@ jobs:
                   # Breaking-change filter: applies to both explicit and
                   # discovered paths. Catches `type!:` in subject AND a
                   # `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer.
+                  # Bash 5.2 (ubuntu-latest) refuses inline regex with
+                  # `(\(...\))` — the pattern must come from a variable.
+                  BREAKING_SUBJECT_RE='^[a-zA-Z]+(\([^)]+\))?!'
                   is_breaking() {
                     local sha=$1
                     local subject body
                     subject=$(git log -1 --format=%s "${sha}")
                     body=$(git log -1 --format=%B "${sha}")
-                    [[ "${subject}" =~ ^[a-zA-Z]+(\([^)]+\))?! ]] && return 0
+                    [[ "${subject}" =~ ${BREAKING_SUBJECT_RE} ]] && return 0
                     grep -qE '(^|[[:space:]])BREAKING[ -]CHANGE:' <<<"${body}" && return 0
                     return 1
                   }
