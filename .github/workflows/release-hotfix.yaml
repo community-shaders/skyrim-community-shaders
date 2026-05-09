@@ -1,4 +1,4 @@
-name: Hotfix Release
+name: "Release: Hotfix Candidate"
 
 # Stage 1 of the hotfix pipeline. Builds a maintenance candidate by
 # cherry-picking eligible commits from `dev` onto a staging branch and opening
@@ -280,7 +280,7 @@ jobs:
                     echo "### How to use this PR"
                     echo ""
                     echo "1. PR checks will build this branch and publish a \`${BASE}-prNNNN\` prerelease — install and verify."
-                    echo "2. If the candidate is bad, **close this PR** and re-run the *Hotfix Release* workflow (it auto-supersedes)."
+                    echo "2. If the candidate is bad, **close this PR** and re-run the *Release: Hotfix Candidate* workflow (it auto-supersedes)."
                     echo "3. If extra fixes are needed, land them on \`dev\` first then re-run, or push directly to \`${STAGING}\`."
                     echo "4. When verified, merge this PR, then dispatch **Release: Semantic Version** with \`release_type=stable\` on \`${HOTFIX}\` to cut the patch."
                     echo "5. Standard release pipeline (build → publish → Nexus dry-run → Nexus upload) takes over from there."
