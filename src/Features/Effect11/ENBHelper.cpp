@@ -74,11 +74,17 @@ namespace ENBHelper
 
 			if (const auto* parentCell = player->GetParentCell()) {
 				cachedLocation.isInterior = parentCell->IsInteriorCell();
-				if (cachedLocation.isInterior) {
+				if (!cachedLocation.isInterior) {
+					if (const auto* worldSpace = player->GetWorldspace()) {
+						cachedLocation.worldSpaceFormID = worldSpace->formID;
+					} else {
+						cachedLocation.worldSpaceFormID = 0;
+					}
+				} else {
 					cachedLocation.worldSpaceFormID = 0;
-				} else if (const auto* worldSpace = player->GetWorldspace()) {
-					cachedLocation.worldSpaceFormID = worldSpace->formID;
 				}
+			} else {
+				cachedLocation.worldSpaceFormID = 0;
 			}
 		}
 

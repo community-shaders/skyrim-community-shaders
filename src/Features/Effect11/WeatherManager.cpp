@@ -143,13 +143,12 @@ uint32_t WeatherManager::ParseHexID(const std::string& hexStr)
 void WeatherManager::LoadLocationWeather()
 {
 	std::filesystem::path locationWeatherPath = PresetManager::GetSingleton().GetENBSeriesPath() / "_locationweather.ini";
+	locationWeatherMap.clear();
 
 	if (!std::filesystem::exists(locationWeatherPath)) {
 		logger::info("[WeatherManager] _locationweather.ini not found, location weather disabled");
 		return;
 	}
-
-	locationWeatherMap.clear();
 
 	std::string pathStr = locationWeatherPath.string();
 

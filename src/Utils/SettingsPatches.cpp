@@ -74,34 +74,48 @@ namespace Util::SettingsPatches
 					if (GetUniqueKey(uiVar) != patch.variable)
 						continue;
 
+					bool patched = false;
 					switch (uiVar.type) {
 					case Effect::UIVariableType::Float:
-						try { uiVar.floatValue = std::stof(patch.value); } catch (...) {}
-						if (uiVar.effectVariable)
-							uiVar.effectVariable->AsScalar()->SetFloat(uiVar.floatValue);
+						try {
+							float val = std::stof(patch.value);
+							if (uiVar.effectVariable && SUCCEEDED(uiVar.effectVariable->AsScalar()->SetFloat(val))) {
+								uiVar.floatValue = val;
+								patched = true;
+							}
+						} catch (...) {}
 						break;
 					case Effect::UIVariableType::Int:
-						try { uiVar.intValue = std::stoi(patch.value); } catch (...) {}
-						if (uiVar.effectVariable)
-							uiVar.effectVariable->AsScalar()->SetInt(uiVar.intValue);
+						try {
+							int val = std::stoi(patch.value);
+							if (uiVar.effectVariable && SUCCEEDED(uiVar.effectVariable->AsScalar()->SetInt(val))) {
+								uiVar.intValue = val;
+								patched = true;
+							}
+						} catch (...) {}
 						break;
 					case Effect::UIVariableType::Bool:
 						{
 							std::string lv = patch.value;
 							std::transform(lv.begin(), lv.end(), lv.begin(), ::tolower);
-							uiVar.boolValue = (lv == "true" || lv == "1");
-							if (uiVar.effectVariable)
-								uiVar.effectVariable->AsScalar()->SetBool(uiVar.boolValue);
+							if (lv == "true" || lv == "1" || lv == "false" || lv == "0") {
+								bool val = (lv == "true" || lv == "1");
+								if (uiVar.effectVariable && SUCCEEDED(uiVar.effectVariable->AsScalar()->SetBool(val))) {
+									uiVar.boolValue = val;
+									patched = true;
+								}
+							}
 						}
 						break;
 					default:
 						break;
 					}
 
-					uiVar.isReadOnly = true;
-
-					logger::debug("[SettingsPatches] Patched '{}' in '{}' to '{}'",
-						patch.variable, effect.GetName(), patch.value);
+					if (patched) {
+						uiVar.isReadOnly = true;
+						logger::debug("[SettingsPatches] Patched '{}' in '{}' to '{}'",
+							patch.variable, effect.GetName(), patch.value);
+					}
 					break;
 				}
 			}

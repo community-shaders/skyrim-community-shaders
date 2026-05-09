@@ -108,11 +108,21 @@ void PresetManager::LoadPresetMetadata(PresetInfo& preset)
 			preset.description = root["description"].get<std::string>();
 
 		if (root.contains("thumbnail") && root["thumbnail"].is_string()) {
-			std::string thumb = root["thumbnail"].get<std::string>();
-			if (preset.isRoot) {
-				preset.thumbnailPath = (std::filesystem::path("enbseries") / thumb).string();
+			std::filesystem::path thumbPath(root["thumbnail"].get<std::string>());
+			if (!thumbPath.is_absolute()) {
+				thumbPath = thumbPath.lexically_normal();
+				auto baseDir = preset.isRoot ? std::filesystem::path("enbseries") : preset.basePath;
+				auto candidate = (baseDir / thumbPath).lexically_normal();
+				auto baseNormal = baseDir.lexically_normal();
+				auto candidateStr = candidate.generic_string();
+				auto baseStr = baseNormal.generic_string();
+				if (candidateStr.starts_with(baseStr)) {
+					preset.thumbnailPath = candidate.string();
+				} else {
+					logger::warn("[PresetManager] Thumbnail path escapes base directory: {}", thumbPath.string());
+				}
 			} else {
-				preset.thumbnailPath = (preset.basePath / thumb).string();
+				logger::warn("[PresetManager] Rejecting absolute thumbnail path: {}", thumbPath.string());
 			}
 		}
 
@@ -196,7 +206,13 @@ void PresetManager::LoadPersistedChoice()
 
 	// Default: root preset if present, otherwise first alphabetically
 	activePresetIndex = 0;
-	logger::info("[PresetManager] Defaulting to preset: {}", presets[0].displayName);
+	for (int i = 0; i < static_cast<int>(presets.size()); ++i) {
+		if (presets[i].isRoot) {
+			activePresetIndex = i;
+			break;
+		}
+	}
+	logger::info("[PresetManager] Defaulting to preset: {}", presets[activePresetIndex].displayName);
 }
 
 void PresetManager::SavePersistedChoice()

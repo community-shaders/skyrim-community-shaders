@@ -560,7 +560,7 @@ void MenuManager::RenderPresetsTab()
 		return;
 	}
 
-	ImGui::Text("Active: %s", activeIndex >= 0 ? presets[activeIndex].displayName.c_str() : "None");
+	ImGui::Text("Active: %s", (activeIndex >= 0 && activeIndex < static_cast<int>(presets.size())) ? presets[activeIndex].displayName.c_str() : "None");
 	ImGui::Text("Path: %s", presetManager.GetENBSeriesPath().generic_string().c_str());
 	ImGui::Separator();
 
@@ -632,6 +632,7 @@ void MenuManager::RenderPresetsTab()
 
 					auto& settingManager = SettingManager::GetSingleton();
 					auto& effectManager = EffectManager::GetSingleton();
+					Util::ShaderPatches::Load();
 					settingManager.Load();
 					effectManager.Apply();
 				}
