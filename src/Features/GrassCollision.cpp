@@ -188,7 +188,9 @@ void GrassCollision::Update()
 
 		perFrameData.BoundingBoxCount = std::min((uint)queuedBoundingBoxes.size(), MAX_BOUNDING_BOXES);
 
-		auto context = globals::d3d::context;
+		if (!queuedCollisions.empty()) {
+			auto context = globals::d3d::context;
+			D3D11_MAPPED_SUBRESOURCE mapped;
 
 		if (!queuedCollisions.empty()) {
 			D3D11_MAPPED_SUBRESOURCE mapped;
