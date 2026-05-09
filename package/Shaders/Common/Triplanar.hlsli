@@ -32,7 +32,8 @@ namespace Triplanar
 	/// Stochastic triplanar: select one projection plane via noise, reducing 3 texture reads to 1.
 	float4 SampleStochastic(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float noise)
 	{
-		float3 dPdx, dPdy;
+		float3 dPdx = 0.0;
+		float3 dPdy = 0.0;
 		ComputeGradients(worldPos, scale, dPdx, dPdy);
 
 		if (noise < weights.x)
@@ -45,7 +46,8 @@ namespace Triplanar
 	/// Stochastic triplanar with mip bias via gradient scaling.
 	float4 SampleStochasticBias(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float bias, float noise)
 	{
-		float3 dPdx, dPdy;
+		float3 dPdx = 0.0;
+		float3 dPdy = 0.0;
 		ComputeGradients(worldPos, scale, dPdx, dPdy);
 		float biasScale = exp2(bias);
 		dPdx *= biasScale;

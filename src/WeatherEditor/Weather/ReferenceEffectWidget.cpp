@@ -2,39 +2,67 @@
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
 
+namespace
+{
+	namespace ReferenceEffectSetting
+	{
+		constexpr const char* kArtObject = "Art Object";
+		constexpr const char* kEffectShader = "Effect Shader";
+		constexpr const char* kFaceTarget = "Face Target";
+		constexpr const char* kAttachToCamera = "Attach To Camera";
+		constexpr const char* kInheritRotation = "Inherit Rotation";
+	}
+}
+
 void ReferenceEffectWidget::DrawWidget()
 {
+	WeatherUtils::SetCurrentWidget(this);
 	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##ReferenceEffectSearch", true, true);
+		DrawSearchDropdown();
 		BeginScrollableContent("##REScroll");
 		{
 			bool changed = false;
 
 			auto editorWindow = EditorWindow::GetSingleton();
+			auto drawFormPicker = [&](const char* label, auto& currentForm, const auto& widgets) {
+				return DrawWithHighlight(label, [&]() {
+					return WeatherUtils::DrawFormPickerCached(label, currentForm, widgets, false, true);
+				});
+			};
 
-			ImGui::SeparatorText("Art Object");
-			if (editorWindow->artObjectWidgets.empty()) {
-				ImGui::TextDisabled("No Art Objects available");
-			} else {
-				if (WeatherUtils::DrawFormPickerCached("Art Object", settings.artObject, editorWindow->artObjectWidgets, false, true))
+			if (DrawIfMatchesSearch(ReferenceEffectSetting::kArtObject, [&](const char* label) {
+					ImGui::SeparatorText(label);
+					if (editorWindow->artObjectWidgets.empty()) {
+						ImGui::TextDisabled("No Art Objects available");
+						return false;
+					}
+					return drawFormPicker(label, settings.artObject, editorWindow->artObjectWidgets);
+				}))
+				changed = true;
+			if (DrawIfMatchesSearch(ReferenceEffectSetting::kEffectShader, [&](const char* label) {
+					ImGui::SeparatorText(label);
+					if (editorWindow->effectShaderWidgets.empty()) {
+						ImGui::TextDisabled("No Effect Shaders available");
+						return false;
+					}
+					return drawFormPicker(label, settings.effectShader, editorWindow->effectShaderWidgets);
+				}))
+				changed = true;
+			if (MatchesAnySearch({ ReferenceEffectSetting::kFaceTarget, ReferenceEffectSetting::kAttachToCamera, ReferenceEffectSetting::kInheritRotation })) {
+				ImGui::SeparatorText("Flags");
+				if (WeatherUtils::DrawCheckbox(ReferenceEffectSetting::kFaceTarget, settings.faceTarget))
+					changed = true;
+				if (WeatherUtils::DrawCheckbox(ReferenceEffectSetting::kAttachToCamera, settings.attachToCamera))
+					changed = true;
+				if (WeatherUtils::DrawCheckbox(ReferenceEffectSetting::kInheritRotation, settings.inheritRotation))
 					changed = true;
 			}
 
-			ImGui::SeparatorText("Effect Shader");
-			if (editorWindow->effectShaderWidgets.empty()) {
-				ImGui::TextDisabled("No Effect Shaders available");
-			} else {
-				if (WeatherUtils::DrawFormPickerCached("Effect Shader", settings.effectShader, editorWindow->effectShaderWidgets, false, true))
-					changed = true;
+			if (changed && editorWindow->settings.autoApplyChanges) {
+				editorWindow->PushUndoState(this);
+				ApplyChanges();
 			}
-
-			ImGui::SeparatorText("Flags");
-			if (ImGui::Checkbox("Face Target", &settings.faceTarget))
-				changed = true;
-			if (ImGui::Checkbox("Attach To Camera", &settings.attachToCamera))
-				changed = true;
-			if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
-				changed = true;
 		}
 		EndScrollableContent();
 	}
@@ -134,4 +162,15 @@ void ReferenceEffectWidget::RevertChanges()
 bool ReferenceEffectWidget::HasUnsavedChanges() const
 {
 	return !(settings == originalSettings);
+}
+
+std::vector<Widget::SearchResult> ReferenceEffectWidget::CollectSearchableSettings() const
+{
+	return {
+		{ ReferenceEffectSetting::kArtObject, "", ReferenceEffectSetting::kArtObject },
+		{ ReferenceEffectSetting::kEffectShader, "", ReferenceEffectSetting::kEffectShader },
+		{ ReferenceEffectSetting::kFaceTarget, "", ReferenceEffectSetting::kFaceTarget },
+		{ ReferenceEffectSetting::kAttachToCamera, "", ReferenceEffectSetting::kAttachToCamera },
+		{ ReferenceEffectSetting::kInheritRotation, "", ReferenceEffectSetting::kInheritRotation },
+	};
 }

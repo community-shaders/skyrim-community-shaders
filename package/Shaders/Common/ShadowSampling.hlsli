@@ -40,6 +40,10 @@ StructuredBuffer<DirectionalShadowLightData> DirectionalShadowLights : register(
 
 namespace ShadowSampling
 {
+	static const float MinDirectionalLightMultiplier = 1e-5;
+	static const float3 LightingSampleNormal = float3(0, 0, 1);
+	static const float3 ImageBasedLightingNormal = float3(0, 0, -1);
+
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
 	{
 		if (SharedData::InInterior || SharedData::HideSky || SharedData::InMapMenu)
@@ -117,26 +121,63 @@ namespace ShadowSampling
 #endif
 	}
 
+	float3 GetRawAmbientLighting(float3 normal)
+	{
+		return max(0, SharedData::GetAmbient(normal));
+	}
+
+	float3 GetAmbientLighting(float3 normal)
+	{
+		float3 ambientColor = GetRawAmbientLighting(normal);
+
+#if defined(IBL)
+		if (SharedData::iblSettings.EnableIBL) {
+			ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, ImageBasedLightingNormal);
+		}
+#endif
+
+		return ambientColor;
+	}
+
+#if defined(SKYLIGHTING) && !defined(INTERIOR)
+	float3 GetAmbientLighting(float3 normal, float skylightingDiffuse)
+	{
+		float3 ambientColor = GetRawAmbientLighting(normal);
+
+#	if defined(IBL)
+		if (SharedData::iblSettings.EnableIBL) {
+			ambientColor = ImageBasedLighting::GetDiffuseIBLOccluded(ambientColor, ImageBasedLightingNormal, skylightingDiffuse);
+		}
+#	endif
+
+		return ambientColor;
+	}
+#endif
+
+	float3 GetDirectionalLighting()
+	{
+		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+		return Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, MinDirectionalLightMultiplier), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+	}
+
+	float3 GetSceneLightingColor()
+	{
+		return GetAmbientLighting(LightingSampleNormal) + GetDirectionalLighting();
+	}
+
 #if defined(SKYLIGHTING) && !defined(INTERIOR)
 	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse)
 #else
 	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
 #endif
 	{
-		float3 ambientColorAmb = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
-
-#if defined(IBL)
-		if (SharedData::iblSettings.EnableIBL) {
-#	if defined(SKYLIGHTING) && !defined(INTERIOR)
-			ambientColorAmb = ImageBasedLighting::GetDiffuseIBLOccluded(ambientColorAmb, float3(0, 0, -1), skylightingDiffuse);
-#	else
-			ambientColorAmb = ImageBasedLighting::GetDiffuseIBL(ambientColorAmb, float3(0, 0, -1));
-#	endif
-		}
+#if defined(SKYLIGHTING) && !defined(INTERIOR)
+		float3 ambientColorAmb = GetAmbientLighting(LightingSampleNormal, skylightingDiffuse);
+#else
+		float3 ambientColorAmb = GetAmbientLighting(LightingSampleNormal);
 #endif
 
-		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+		float3 dirLightColorDir = GetDirectionalLighting();
 
 		float inputLuma = Color::RGBToLuminance(inputColor);
 		float ambientLuma = Color::RGBToLuminance(ambientColorAmb);
