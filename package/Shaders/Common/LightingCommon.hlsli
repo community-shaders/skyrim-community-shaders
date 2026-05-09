@@ -20,6 +20,9 @@ struct DirectContext
 #elif defined(HAIR) && defined(CS_HAIR)
 	float hairShadow;
 #endif
+#if defined(TREE_ANIM)
+	float wrapAmount;
+#endif
 };
 
 struct IndirectContext

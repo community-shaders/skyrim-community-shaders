@@ -110,7 +110,12 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	const float NdotL = dot(context.worldNormal, context.lightDir);
 	float3 diffuseLightColor = context.lightColor * context.detailedShadow;
 	float3 softLightColor = context.lightColor * context.softShadow;
+#	if defined(TREE_ANIM)
+	float wrappedNdotL = saturate(NdotL + context.wrapAmount) / (1.0 + context.wrapAmount);
+	lightingOutput.diffuse = wrappedNdotL * diffuseLightColor * Color::VanillaNormalization();
+#	else
 	lightingOutput.diffuse = saturate(NdotL) * diffuseLightColor * Color::VanillaNormalization();
+#	endif
 #	if defined(SOFT_LIGHTING)
 	lightingOutput.diffuse += softLightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor * Color::VanillaNormalization();
 #	endif
