@@ -32,7 +32,7 @@ public:
 	{
 		float Glossiness = 20.0f;
 		float SpecularStrength = 0.5f;
-		float SubsurfaceScatteringAmount = 0.5f;
+		float SubsurfaceScatteringAmount = 1.0f;
 		uint OverrideComplexGrassSettings = false;
 		float BasicGrassBrightness = 1.0f;
 		float ComplexGrassThreshold = 0.03f;
