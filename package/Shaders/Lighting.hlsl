@@ -2900,6 +2900,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif  // defined (HAIR)
 
+#	if defined(LANDSCAPE)
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		vertexColor = 1;
+	else
+		vertexColor /= max(max(max(vertexColor.r, vertexColor.g), vertexColor.b), EPSILON_DIVISION);
+#	endif
+
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
 		if (!(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {

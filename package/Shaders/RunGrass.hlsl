@@ -622,6 +622,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(wrappedDirLight) * Color::VanillaNormalization();
 
 	float3 vertexColor = Color::ColorToLinear(input.VertexColor.xyz);
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		vertexColor = 1;
+	else
+		vertexColor /= max(max(max(vertexColor.r, vertexColor.g), vertexColor.b), EPSILON_DIVISION);
 
 #				if defined(SKYLIGHTING)
 #					if defined(VR)
@@ -887,6 +891,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 normal = -normalize(cross(ddx, ddy));
 
 	float3 vertexColor = Color::ColorToLinear(input.VertexColor.xyz);
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		vertexColor = 1;
+	else
+		vertexColor /= max(max(max(vertexColor.r, vertexColor.g), vertexColor.b), EPSILON_DIVISION);
 
 #			if defined(SKYLIGHTING)
 #				if defined(VR)
