@@ -924,7 +924,7 @@ if(AIO_ZIP_TO_DIST)
         COMMAND ${CMAKE_COMMAND} -E tar cf ${AIO_ARCHIVE} --format=7zip -- .
         COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
         WORKING_DIRECTORY ${AIO_DIR}
-        DEPENDS PREPARE_AIO
+        DEPENDS PREPARE_AIO ${CMAKE_CURRENT_BINARY_DIR}/copy_shaders.stamp
         COMMENT "Creating AIO archive ${AIO_ARCHIVE}"
     )
 
