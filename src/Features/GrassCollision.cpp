@@ -257,7 +257,7 @@ void GrassCollision::SetupResources()
 			.Height = 512,
 			.MipLevels = 1,
 			.ArraySize = 1,
-			.Format = DXGI_FORMAT_R32G32B32A32_FLOAT,
+			.Format = DXGI_FORMAT_R16G16B16A16_FLOAT,
 			.SampleDesc = { .Count = 1 },
 			.Usage = D3D11_USAGE_DEFAULT,
 			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS
