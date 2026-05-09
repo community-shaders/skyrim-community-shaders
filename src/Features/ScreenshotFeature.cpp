@@ -6,6 +6,7 @@
 // support is planned.
 
 #include "Features/ScreenshotFeature.h"
+#include "Features/HDRDisplay.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "Utils/FileSystem.h"
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <imgui.h>
 #include <thread>
 
@@ -31,13 +33,15 @@ namespace
 	// upstream lands; this constant is the local stopgap.
 	constexpr auto kVRFramebufferTarget = RE::RENDER_TARGETS::kTOTAL;
 
-	// Picks the runtime-appropriate post-composite, post-UI render target.
-	// Flat: kFRAMEBUFFER (aliases the swapchain backbuffer).
-	// VR:   the SBS framebuffer staged for HMD compositor submission.
-	RE::RENDER_TARGETS::RENDER_TARGET CaptureTarget()
+	// Describes the chosen capture source. SRV is non-owning; texture lifetime is
+	// either tied to the renderer slot it lives in, or to a com_ptr the caller holds.
+	struct CaptureSource
 	{
-		return globals::game::isVR ? kVRFramebufferTarget : RE::RENDER_TARGETS::kFRAMEBUFFER;
-	}
+		ID3D11Texture2D* texture = nullptr;
+		ID3D11ShaderResourceView* srv = nullptr;
+		bool isHDREncoded = false;  // true when source carries 10/16-bit HDR values
+		const char* description = "(none)";
+	};
 
 	struct D3D11MultithreadGuard
 	{
@@ -126,6 +130,17 @@ namespace
 
 	const DirectX::Image* PrepareBmpImage(const DirectX::ScratchImage& sourceImage, DirectX::ScratchImage& convertedImage)
 	{
+		// TODO: HDR-aware capture. When the HDRDisplay feature is active and the
+		// swapchain backbuffer is R10G10B10A2_UNORM (PQ) or R16G16B16A16_FLOAT
+		// (scRGB linear), the values aren't gamma-encoded the way an 8-bit sRGB
+		// BMP needs - DirectX::Convert truncates the high bits without applying
+		// any tonemap, producing a washed-out / clipped image. Options:
+		//   1. Detect HDR formats here and apply Reinhard/ACES on the CPU before
+		//      converting to B8G8R8X8_UNORM.
+		//   2. In Capture(), source from a known-SDR texture (e.g. HDR::UiTexture
+		//      or HDR::HdrTexture pre-encoding) when HDRDisplay is active.
+		//   3. Write PNG-16 / EXR for HDR sources so all bits are preserved.
+		// SDR captures (R8G8B8A8_UNORM / _SRGB) round-trip fine through this path.
 		const auto metadata = sourceImage.GetMetadata();
 		if (SUCCEEDED(DirectX::Convert(
 				sourceImage.GetImages(),
@@ -171,6 +186,55 @@ namespace
 			return tex;
 		}
 		return resolveFromView(slot.RTV);
+	}
+
+	// Picks the best capture source for the current runtime:
+	//  - VR:                       SBS framebuffer (slot 114, kVRFramebufferTarget).
+	//  - Flat + HDRDisplay loaded: HDR::OutputTexture - the actual final composite that
+	//                              HDRDisplay copies to the swapchain. In SDR display mode
+	//                              it's an 8-bit sRGB texture that BMPs cleanly. In HDR
+	//                              display mode it's 10-bit PQ or float scRGB; we still
+	//                              capture it but flag isHDREncoded so the user knows
+	//                              their BMP will look washed out (the screen content is
+	//                              correct, the SDR encoding isn't).
+	//  - Flat without HDRDisplay:  vanilla kFRAMEBUFFER, resolved via SRV/RTV when the
+	//                              slot's .texture pointer is null.
+	// `holder` is a keep-alive com_ptr for the kFRAMEBUFFER fallback path (where we
+	// QueryInterface the texture out of an SRV) - it must outlive any use of the returned
+	// texture. For VR/HDRDisplay paths the texture is owned elsewhere and `holder` stays
+	// empty.
+	CaptureSource SelectCaptureSource(winrt::com_ptr<ID3D11Texture2D>& holder)
+	{
+		CaptureSource src;
+		auto* renderer = globals::game::renderer;
+		if (!renderer) {
+			return src;
+		}
+
+		if (globals::game::isVR) {
+			auto& slot = renderer->GetRuntimeData().renderTargets[kVRFramebufferTarget];
+			src.texture = ResolveSlotTexture(slot, holder);
+			src.srv = slot.SRV;
+			src.description = "VR SBS framebuffer";
+			return src;
+		}
+
+		auto& hdr = globals::features::hdrDisplay;
+		if (hdr.loaded && hdr.outputTexture && hdr.outputTexture->resource) {
+			src.texture = hdr.outputTexture->resource.get();
+			src.srv = hdr.outputTexture->srv.get();
+			src.isHDREncoded = hdr.settings.enableHDR;
+			src.description = src.isHDREncoded ?
+			                      "HDR::OutputTexture (HDR display)" :
+			                      "HDR::OutputTexture (SDR)";
+			return src;
+		}
+
+		auto& slot = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+		src.texture = ResolveSlotTexture(slot, holder);
+		src.srv = slot.SRV;
+		src.description = "kFRAMEBUFFER";
+		return src;
 	}
 
 	std::filesystem::path BuildScreenshotPath(const std::string& screenshotPath)
@@ -243,33 +307,23 @@ void ScreenshotFeature::DrawSettings()
 	// VR's source target packs both eyes side-by-side; only show the left half in the preview.
 	const float previewVisibleWidth = globals::game::isVR ? 0.5f : 1.0f;
 
-	auto renderer = globals::game::renderer;
-	if (renderer) {
-		auto& targets = renderer->GetRuntimeData().renderTargets;
-		auto& mainTarget = targets[CaptureTarget()];
+	// Same selection logic as Capture(); preview always reflects what would be saved.
+	winrt::com_ptr<ID3D11Texture2D> previewTextureKeepAlive;
+	const auto src = SelectCaptureSource(previewTextureKeepAlive);
 
-		// Resolve via SRV/RTV when the slot's .texture is null (kFRAMEBUFFER on flat).
-		// The keep-alive com_ptr stays in scope until DrawEditor returns, holding the
-		// QueryInterface'd texture alive while ImGui samples its SRV.
-		winrt::com_ptr<ID3D11Texture2D> previewTextureKeepAlive;
-		ID3D11Texture2D* slotTexture = ResolveSlotTexture(mainTarget, previewTextureKeepAlive);
-
-		ID3D11ShaderResourceView* previewView = mainTarget.SRV;
-		if (slotTexture) {
-			if (previewTexture != slotTexture) {
-				previewSRV = nullptr;
-				previewTexture = slotTexture;
-				globals::d3d::device->CreateShaderResourceView(slotTexture, nullptr, previewSRV.put());
-			}
-			if (previewSRV) {
-				previewView = previewSRV.get();
-			}
+	ID3D11ShaderResourceView* previewView = src.srv;
+	if (src.texture) {
+		if (previewTexture != src.texture) {
+			previewSRV = nullptr;
+			previewTexture = src.texture;
+			globals::d3d::device->CreateShaderResourceView(src.texture, nullptr, previewSRV.put());
 		}
-
-		subrect.DrawEditor(previewView, slotTexture, previewVisibleWidth);
-	} else {
-		subrect.DrawEditor(nullptr, nullptr, previewVisibleWidth);
+		if (previewSRV) {
+			previewView = previewSRV.get();
+		}
 	}
+
+	subrect.DrawEditor(previewView, src.texture, previewVisibleWidth);
 }
 
 void ScreenshotFeature::Reset()
@@ -361,11 +415,30 @@ void ScreenshotFeature::ScreenshotWorkerLoop()
 
 		if (FAILED(hr)) {
 			logger::error("Failed to save screenshot: {:x}", static_cast<unsigned int>(hr));
+			ShowInGameNotification("Screenshot failed - see CommunityShaders.log");
 		} else {
 			logger::info("Saved screenshot to {}", screenshot.outputPath.string());
+			const auto filename = screenshot.outputPath.filename().string();
+			ShowInGameNotification(screenshot.sourceWasHDREncoded ?
+									   std::format("Screenshot saved (HDR encoded - may look washed out): {}", filename) :
+									   std::format("Screenshot saved: {}", filename));
 		}
 	}
 	CoUninitialize();
+}
+
+void ScreenshotFeature::ShowInGameNotification(std::string message)
+{
+	// RE::SendHUDMessage::ShowHUDMessage must run on the game's main thread; the
+	// worker thread dispatches via SKSE's task interface. Capture by value because
+	// the worker has long since moved past the queued message by the time the task
+	// fires. Third arg `cancelIfAlreadyQueued` true dedupes if the player spam-takes
+	// captures - they get one toast at a time, not a stack.
+	if (auto* taskInterface = SKSE::GetTaskInterface()) {
+		taskInterface->AddTask([msg = std::move(message)]() {
+			RE::SendHUDMessage::ShowHUDMessage(msg.c_str(), nullptr, true);
+		});
+	}
 }
 
 void ScreenshotFeature::Capture()
@@ -376,22 +449,21 @@ void ScreenshotFeature::Capture()
 	if (!device || !context)
 		return;
 
-	ID3D11Texture2D* sourceTexture = nullptr;
 	winrt::com_ptr<ID3D11Texture2D> sourceTextureKeepAlive;
+	const auto src = SelectCaptureSource(sourceTextureKeepAlive);
+	logger::debug("Capturing from {}", src.description);
 
-	const auto targetIndex = CaptureTarget();
-	auto renderer = globals::game::renderer;
-	if (renderer) {
-		logger::debug("Selecting capture target index {}", static_cast<int>(targetIndex));
-		auto& targets = renderer->GetRuntimeData().renderTargets;
-		auto& mainTarget = targets[targetIndex];
-		sourceTexture = ResolveSlotTexture(mainTarget, sourceTextureKeepAlive);
-	}
-
-	if (!sourceTexture) {
-		logger::error("Failed to acquire screenshot source texture (target {}).", static_cast<int>(targetIndex));
+	if (!src.texture) {
+		logger::error("Failed to acquire screenshot source texture ({}).", src.description);
 		return;
 	}
+	if (src.isHDREncoded) {
+		// Captured texture carries HDR-encoded bytes (PQ or scRGB); BMP encoding
+		// truncates them without a tonemap so the saved file looks washed out.
+		// In-game toast lets the user know the file isn't a faithful screen grab.
+		logger::warn("HDR display active - BMP will be HDR-encoded; consider disabling HDR Display before screenshotting until tonemap-on-capture lands.");
+	}
+	ID3D11Texture2D* sourceTexture = src.texture;
 
 	D3D11_TEXTURE2D_DESC srcDesc{};
 	sourceTexture->GetDesc(&srcDesc);
@@ -449,5 +521,6 @@ void ScreenshotFeature::Capture()
 	screenshot.width = copyW;
 	screenshot.height = copyH;
 	screenshot.outputPath = BuildScreenshotPath(screenshotPath);
+	screenshot.sourceWasHDREncoded = src.isHDREncoded;
 	EnqueueScreenshot(std::move(screenshot));
 }

@@ -40,6 +40,10 @@ private:
 		uint32_t width = 0;
 		uint32_t height = 0;
 		std::filesystem::path outputPath;
+		// True when source was HDR display output (PQ-encoded R10G10B10A2 or scRGB
+		// R16F). The BMP save path doesn't tonemap so the file looks washed out;
+		// the worker surfaces this in the in-game toast.
+		bool sourceWasHDREncoded = false;
 	};
 
 	std::mutex screenshotQueueMutex;
@@ -55,4 +59,7 @@ private:
 	void StopWorkerThread();
 	void EnqueueScreenshot(PendingScreenshot&& screenshot);
 	void ScreenshotWorkerLoop();
+	// Posts a non-modal in-game HUD toast via SKSE's task interface so the call
+	// is marshalled to the game's main thread.
+	static void ShowInGameNotification(std::string message);
 };
