@@ -36,7 +36,7 @@ struct VS_INPUT
 struct VS_OUTPUT
 {
 	float4 HPosition: SV_POSITION0;
-	float4 VertexColor: COLOR0;
+	float4 Color: COLOR0;
 	float VertexMult: COLOR1;
 	float3 TexCoord: TEXCOORD0;
 	float3 ViewSpacePosition:
@@ -65,7 +65,7 @@ struct VS_OUTPUT
 struct VS_OUTPUT
 {
 	float4 HPosition: SV_POSITION0;
-	float4 VertexColor: COLOR0;
+	float4 Color: COLOR0;
 	float VertexMult: COLOR1;
 	float3 TexCoord: TEXCOORD0;
 	float4 AmbientColor: TEXCOORD1;
@@ -228,8 +228,8 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif
 
 	// Note: input.Color.w is used for wind speed
-	vsout.VertexColor.xyz = input.Color.xyz;
-	vsout.VertexColor.w = distanceFade * perInstanceFade;
+	vsout.Color.xyz = input.Color.xyz;
+	vsout.Color.w = distanceFade * perInstanceFade;
 	vsout.VertexMult = input.InstanceData1.w;
 
 	vsout.TexCoord.xy = input.TexCoord.xy;
@@ -305,8 +305,8 @@ VS_OUTPUT main(VS_INPUT input)
 	float distanceFade = 1 - saturate((length(projSpacePosition.xyz) - AlphaParam1) / AlphaParam2);
 #		endif
 
-	vsout.VertexColor.xyz = input.Color.xyz;
-	vsout.VertexColor.w = distanceFade * perInstanceFade;
+	vsout.Color.xyz = input.Color.xyz;
+	vsout.Color.w = distanceFade * perInstanceFade;
 	vsout.VertexMult = input.InstanceData1.w;
 
 	vsout.TexCoord.xy = input.TexCoord.xy;
@@ -502,7 +502,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	baseColor.xyz = Color::Diffuse(baseColor.xyz);
 
 #		if defined(RENDER_DEPTH)
-	float diffuseAlpha = input.VertexColor.w * baseColor.w;
+	float diffuseAlpha = input.Color.w * baseColor.w;
 	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
 		discard;
 	}
@@ -513,6 +513,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.PS.xyz = input.Depth.xxx / input.Depth.yyy;
 	psout.PS.w = diffuseAlpha;
 #		else
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		input.Color.xyz = 1;
+
 #			if !defined(TRUE_PBR)
 	float4 specColor = complex ? TexBaseSampler.SampleBias(SampBaseSampler, float2(input.TexCoord.x, 0.5 + input.TexCoord.y * 0.5), SharedData::MipBias) : 1;
 #			else
@@ -629,11 +632,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(dirLightAngle) * Color::VanillaNormalization();
 
-	float3 vertexColor = Color::ColorToLinear(input.VertexColor.xyz);
-	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
-		vertexColor = 1;
-	else
-		vertexColor /= max(max(max(vertexColor.r, vertexColor.g), vertexColor.b), EPSILON_DIVISION);
+	float3 vertexColor = Color::ColorToLinear(input.Color.xyz);
+	vertexColor /= max(max(max(vertexColor.r, vertexColor.g), vertexColor.b), EPSILON_DIVISION);
 
 #				if defined(SKYLIGHTING)
 #					if defined(VR)
@@ -806,7 +806,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
 
 #		if defined(RENDER_DEPTH)
-	float diffuseAlpha = input.VertexColor.w * baseColor.w;
+	float diffuseAlpha = input.Color.w * baseColor.w;
 	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
 		discard;
 	}
@@ -817,6 +817,8 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.PS.xyz = input.Depth.xxx / input.Depth.yyy;
 	psout.PS.w = diffuseAlpha;
 #		else
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		input.Color.xyz = 1;
 
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 
@@ -897,11 +899,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 ddy = ddy_coarse(input.WorldPosition);
 	float3 normal = -normalize(cross(ddx, ddy));
 
-	float3 vertexColor = Color::ColorToLinear(input.VertexColor.xyz);
-	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
-		vertexColor = 1;
-	else
-		vertexColor /= max(max(max(vertexColor.r, vertexColor.g), vertexColor.b), EPSILON_DIVISION);
+	float3 vertexColor = Color::ColorToLinear(input.Color.xyz);
+	vertexColor /= max(max(max(vertexColor.r, vertexColor.g), vertexColor.b), EPSILON_DIVISION);
 
 #			if defined(SKYLIGHTING)
 #				if defined(VR)

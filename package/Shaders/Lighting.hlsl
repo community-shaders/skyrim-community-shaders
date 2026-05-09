@@ -2871,6 +2871,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
+#	if defined(LANDSCAPE)
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		input.Color.xyz = 1;
+	else
+		input.Color.xyz /= max(max(max(input.Color.x, input.Color.y), input.Color.z), EPSILON_DIVISION);
+#	endif
+
 #	if defined(HAIR)
 	float3 vertexColor = lerp(1, Color::ColorToLinear(TintColor.xyz), Color::ColorToLinear(input.Color.y));
 #		if defined(CS_HAIR)
@@ -2892,13 +2899,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 vertexColor = input.Color.xyz;
 #		endif
 #	endif  // defined (HAIR)
-
-#	if defined(LANDSCAPE)
-	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
-		vertexColor = 1;
-	else
-		vertexColor /= max(max(max(vertexColor.r, vertexColor.g), vertexColor.b), EPSILON_DIVISION);
-#	endif
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
