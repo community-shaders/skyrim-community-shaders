@@ -64,17 +64,27 @@ namespace ShadowCasterManager
 	//   ShadowCasterManager::ForEachShadowLight(ssn->GetRuntimeData().shadowLightsAccum,
 	//       [](RE::BSShadowLight* light) { ... });
 	// -------------------------------------------------------------------------
+	/// Conservative upper bound on shadowLightsAccum iteration index, derived
+	/// from the active scheduler settings (ShadowLightCount + sun cascades).
+	/// Used by ForEachShadowLight as a setting-aware safety cap so corrupt
+	/// / non-null-terminated arrays can't loop forever, while still allowing
+	/// iteration past BSTArray's static _capacity.
+	std::uint32_t MaxShadowAccumIterationBound();
+
 	template <typename Fn>
 	inline void ForEachShadowLight(const RE::BSTArray<RE::BSShadowLight*>& accum, Fn&& fn)
 	{
-		// Engine convention is "walk until null", but shadowLightsAccum can
-		// contain non-null garbage if some other hook corrupts the array
-		// between our prepass and this read. Bail on: out-of-capacity index,
-		// non-user-mode or unaligned ptr, zero step (spin), wraparound step
-		// (use uint64 advance).
-		const std::uint32_t capacity = accum.capacity();
+		// Engine convention is "walk until null". The engine writes via
+		// SetShadowCasterLightArrayEntry which bypasses BSTArray::push_back,
+		// so _capacity stays at the initial preallocation -- using capacity
+		// as the bound silently caps SLF at vanilla shadow counts. We use
+		// the null sentinel instead, with a setting-derived safety cap
+		// (ShadowLightCount + sun cascades, with a small margin). Per-pointer
+		// plausibility (alignment + user-mode range) handles non-null
+		// garbage between our prepass and this read.
+		const std::uint32_t maxIdx = MaxShadowAccumIterationBound();
 		std::uint32_t idx = 0;
-		while (idx < capacity) {
+		while (idx < maxIdx) {
 			RE::BSShadowLight* light = accum[idx];
 			if (!light)
 				break;
@@ -86,7 +96,7 @@ namespace ShadowCasterManager
 			if (step == 0)
 				break;
 			const std::uint64_t next = static_cast<std::uint64_t>(idx) + step;
-			if (next >= capacity)
+			if (next >= maxIdx)
 				break;
 			idx = static_cast<std::uint32_t>(next);
 		}

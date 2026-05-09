@@ -465,6 +465,22 @@ namespace ShadowCasterManager
 		return -1;
 	}
 
+	std::uint32_t MaxShadowAccumIterationBound()
+	{
+		// Each entry advances idx by its shadowMapCount. The widest type is
+		// BSShadowDirectionalLight (4 cascades). With ShadowLightCount user-
+		// capped at 64 and one sun bookkeeping slot, the realistic walked
+		// index never exceeds (1 + 64) * 4 = 260. Add a small margin so a
+		// transient mismatch between live settings and the engine's already-
+		// populated array doesn't tripwire iteration. If settings haven't
+		// initialised yet (s_settings is the default-constructed value with
+		// ShadowLightCount=16), the bound is still generous.
+		constexpr std::uint32_t kCascadesPerLight = 4;
+		constexpr std::uint32_t kMargin = 16;
+		const std::uint32_t lights = static_cast<std::uint32_t>(std::max(1, s_settings.ShadowLightCount));
+		return (lights + 1) * kCascadesPerLight + kMargin;
+	}
+
 	// =========================================================================
 	// BudgetEntry / BudgetTracker methods
 	// =========================================================================
@@ -1349,7 +1365,14 @@ namespace ShadowCasterManager
 			}
 			s_lights.Sun = true;
 		} else {
-			s_lights.Lights[0].Clear();
+			// Sun is gone. If slot 0 was tracking the sun, clear the stale
+			// pointer. If Sun was already false coming in, slot 0 holds a
+			// regular point light (sun-aware FindFreeIndex allocates point
+			// lights to slot 0 when Sun=false) -- do NOT wipe it. This
+			// matches Intellightent's reference behaviour (no unconditional
+			// slot-0 clear in the no-sun branch).
+			if (s_lights.Sun)
+				s_lights.Lights[0].Clear();
 			s_lights.Sun = false;
 		}
 
