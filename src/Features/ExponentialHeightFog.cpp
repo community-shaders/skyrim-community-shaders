@@ -1,5 +1,7 @@
 #include "ExponentialHeightFog.h"
 
+#include "Effect11.h"
+#include "Effect11/SettingManager.h"
 #include "WeatherVariableRegistry.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -35,8 +37,49 @@ void ExponentialHeightFog::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
+ExponentialHeightFog::Settings ExponentialHeightFog::GetCommonBufferData() const
+{
+	Settings data = settings;
+
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
+		if (enb.enableEffect) {
+			auto& settingManager = SettingManager::GetSingleton();
+			if (settingManager.GetValue<bool>("EnableVolumetricRays", "EFFECT")) {
+				data.enabled = 1;
+				data.useDynamicCubemaps = 0;
+				data.startDistance = 0.0f;
+				data.fogHeight = 0.0f;
+				data.fogHeightFalloff = 0.2f;
+				data.fogDensity = 0.01f / std::max(settingManager.GetInterpolatedTimeOfDayValue("Density", "VOLUMETRICRAYS"), 0.1f);
+				data.directionalInscatteringMultiplier = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICRAYS");
+				data.directionalInscatteringAnisotropy = 0.7f;
+				data.inscatteringTint = { 1.0f, 1.0f, 1.0f, 1.0f };
+				data.sunlightAttenuationAmount = 0.0f;
+				data.respectVanillaFogFade = 0;
+				data.disableVanillaFog = 0;
+				data.fogInscatteringColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+				data.originalFogColorAmount = 1.0f;
+			}
+		}
+	}
+
+	return data;
+}
+
 void ExponentialHeightFog::DrawSettings()
 {
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
+		if (enb.enableEffect) {
+			auto& settingManager = SettingManager::GetSingleton();
+			if (settingManager.GetValue<bool>("EnableVolumetricRays", "EFFECT")) {
+				ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Settings are currently managed by ENB.");
+				return;
+			}
+		}
+	}
+
 	ImGui::Checkbox("Enable Exponential Height Fog", (bool*)&settings.enabled);
 	Util::WeatherUI::SliderFloat("Start Distance", this, "startDistance", &settings.startDistance, 0.0f, 100000.0f, "%.1f");
 	Util::WeatherUI::SliderFloat("Fog Height", this, "fogHeight", &settings.fogHeight, -22000.0f, 22000.0f, "%.1f");
@@ -68,6 +111,16 @@ void ExponentialHeightFog::DrawSettings()
 
 void ExponentialHeightFog::RegisterWeatherVariables()
 {
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
+		if (enb.enableEffect) {
+			auto& settingManager = SettingManager::GetSingleton();
+			if (settingManager.GetValue<bool>("EnableVolumetricRays", "EFFECT")) {
+				return;
+			}
+		}
+	}
+
 	auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()->GetOrCreateFeatureRegistry(GetShortName());
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"Start Distance",

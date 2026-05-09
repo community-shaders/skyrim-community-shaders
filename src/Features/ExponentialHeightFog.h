@@ -23,14 +23,6 @@ struct ExponentialHeightFog : Feature
 	virtual inline std::string_view GetShaderDefineName() override { return "EXP_HEIGHT_FOG"; }
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
-	virtual void DrawSettings() override;
-
-	virtual void RestoreDefaultSettings() override;
-	virtual void LoadSettings(json& o_json) override;
-	virtual void SaveSettings(json& o_json) override;
-
-	void RegisterWeatherVariables() override;
-
 	struct alignas(16) Settings
 	{
 		uint enabled = 0;
@@ -51,4 +43,14 @@ struct ExponentialHeightFog : Feature
 		float3 pad;
 	} settings;
 	static_assert(sizeof(Settings) == sizeof(float4) * 6, "Settings must match HLSL ExponentialHeightFogSettings.");
+
+	virtual void DrawSettings() override;
+
+	Settings GetCommonBufferData() const;
+
+	virtual void RestoreDefaultSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+
+	void RegisterWeatherVariables() override;
 };

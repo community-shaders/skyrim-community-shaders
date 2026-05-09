@@ -149,6 +149,7 @@ void EffectManager::RegisterSettings()
 
 	settingManager.RegisterBoolSetting("EnableCloudShadows", "EFFECT", true, false);
 	settingManager.RegisterBoolSetting("EnableImageBasedLighting", "EFFECT", true, false);
+	settingManager.RegisterBoolSetting("EnableVolumetricRays", "EFFECT", false, false);
 
 	// ADAPTATION
 	settingManager.RegisterFloatSetting("AdaptationSensitivity", "ADAPTATION", 1.0f, 0.0f, 1.0f, 0.01f, false);
@@ -246,6 +247,11 @@ void EffectManager::RegisterSettings()
 
 	// LIGHTSPRITE
 	settingManager.RegisterTimeOfDaySetting("Intensity", "LIGHTSPRITE", 1.0f, 0.0f, 30000.0f, 0.01f, true);
+
+	// VOLUMETRICRAYS
+	settingManager.RegisterTimeOfDaySetting("Intensity", "VOLUMETRICRAYS", 1.0f, 0.0f, 10.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("Density", "VOLUMETRICRAYS", 1.0f, 0.1f, 10.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("SkyColorAmount", "VOLUMETRICRAYS", 1.0f, 0.0f, 1.0f, 0.01f, true);
 
 	// GAMEVOLUMETRICRAYS
 	settingManager.RegisterTimeOfDaySetting("Intensity", "GAMEVOLUMETRICRAYS", 1.0f, 0.0f, 1000.0f, 0.01f, true);
