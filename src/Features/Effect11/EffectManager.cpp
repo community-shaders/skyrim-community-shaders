@@ -518,6 +518,9 @@ void EffectManager::RegisterSettings()
 
 	// PARTICLE
 	settingManager.RegisterTimeOfDaySetting("Intensity", "PARTICLE", 1.0f, 0.0f, 30000.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("LightingInfluence", "PARTICLE", 0.5f, 0.0f, 10.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("AmbientInfluence", "PARTICLE", 1.0f, 0.0f, 10.0f, 0.01f, true);
+	settingManager.RegisterTimeOfDaySetting("PointLightingInfluence", "PARTICLE", 1.0f, 0.0f, 10.0f, 0.01f, true);
 
 	// LIGHTSPRITE
 	settingManager.RegisterTimeOfDaySetting("Intensity", "LIGHTSPRITE", 1.0f, 0.0f, 30000.0f, 0.01f, true);

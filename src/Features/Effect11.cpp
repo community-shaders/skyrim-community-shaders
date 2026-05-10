@@ -34,6 +34,11 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 
 	data.LightSpriteIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "LIGHTSPRITE");
 
+	data.ParticleIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "PARTICLE");
+	data.ParticleLightingInfluence = settingManager.GetInterpolatedTimeOfDayValue("LightingInfluence", "PARTICLE");
+	data.ParticleAmbientInfluence = settingManager.GetInterpolatedTimeOfDayValue("AmbientInfluence", "PARTICLE");
+	data.ParticlePointLightingInfluence = settingManager.GetInterpolatedTimeOfDayValue("PointLightingInfluence", "PARTICLE");
+
 	return data;
 }
 
@@ -194,13 +199,6 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 
 		a_sky->fogNear /= fogAmountMultiplier;
 		a_sky->fogFar /= fogAmountMultiplier;
-	}
-
-	{
-		auto& effectLightingColor = colors[(uint)RE::TESWeather::ColorTypes::kEffectLighting];
-		auto effectLightingColorF3 = NiToF3(effectLightingColor);
-		effectLightingColorF3 = Intensity(effectLightingColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "PARTICLE"));
-		effectLightingColor = F3ToNi(effectLightingColorF3);
 	}
 
 	const bool enableSky = enableEffect && settingManager.GetValue<bool>("Enable", "SKY");
