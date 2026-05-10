@@ -254,6 +254,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 #		endif
 
+#		if defined(TEX)
 	if (SharedData::enbSettings.EnableProceduralSun && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
 		float3 viewDir = normalize(input.WorldPosition.xyz);
 		float cosAngle = dot(viewDir, SharedData::SunDirection.xyz);
@@ -276,6 +277,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		baseColor = sun;
 	}
+#		endif
 
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
