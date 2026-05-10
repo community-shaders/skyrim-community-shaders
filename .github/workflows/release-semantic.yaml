@@ -1,4 +1,4 @@
-name: Semantic Release
+name: "Release: Semantic Version"
 
 on:
     workflow_dispatch:

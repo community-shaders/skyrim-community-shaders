@@ -1,0 +1,322 @@
+name: "Release: Hotfix Candidate"
+
+# Stage 1 of the hotfix pipeline. Builds a maintenance candidate by
+# cherry-picking eligible commits from `dev` onto a staging branch and opening
+# a PR against `hotfix/X.Y.x` (created from the latest stable tag if needed).
+#
+# Pipeline (mirrors the wiki's standard release flow from step 4 onward):
+#   1. This workflow         — prepare + open hotfix candidate PR
+#   2. pr-checks.yaml        — auto-build PR, publish vX.Y.Z-prNNNN prerelease
+#   3. Human                 — install prerelease, verify, merge PR
+#   4. Release: Semantic Version (manual dispatch on hotfix/X.Y.x, stable)
+#   5. release-build.yaml    — auto-build on tag, create draft release
+#   6. Human                 — review + publish draft
+#   7. nexus-upload.yaml     — auto dry-run on publish
+#   8. Human                 — Nexus: Upload Release with dry_run=false
+#
+# Re-running this workflow before the candidate PR is merged is safe: prior
+# open hotfix-staging PRs for the same line are auto-closed and their staging
+# branches deleted, so only one candidate is in flight at a time.
+
+on:
+    workflow_dispatch:
+        inputs:
+            release_line:
+                description: "Release line, e.g. 1.5. Leave empty to auto-detect the latest stable tag."
+                required: false
+                default: ""
+            scope:
+                description: "Which conventional-commit types to cherry-pick (breaking changes are always excluded)"
+                required: true
+                type: choice
+                default: fix-only
+                options:
+                    - fix-only
+                    - fix+perf
+                    - fix+perf+chore
+            commits:
+                description: "Optional space- or comma-separated SHAs to cherry-pick instead of the scope filter."
+                required: false
+                default: ""
+            dry_run:
+                description: "Plan only — do not push branches or open a PR."
+                type: boolean
+                default: true
+
+permissions:
+    contents: write
+    pull-requests: write
+
+concurrency:
+    # Serialize runs targeting the same line so PR-close + branch-delete + push
+    # cannot race against each other. `cancel-in-progress: false` queues instead
+    # of cancelling — half-finished cherry-pick state is worse than waiting.
+    group: hotfix-release-${{ inputs.release_line || 'auto' }}
+    cancel-in-progress: false
+
+jobs:
+    hotfix:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+                  token: ${{ secrets.RELEASE_PAT }}
+
+            - name: Configure git identity
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+            - name: Determine base tag and branch names
+              id: plan
+              env:
+                  RELEASE_LINE: ${{ inputs.release_line }}
+              run: |
+                  set -euo pipefail
+                  # `|| true` so a no-match grep doesn't abort under set -e —
+                  # let the explicit empty-BASE_TAG check below report the error.
+                  if [[ -z "${RELEASE_LINE}" ]]; then
+                    BASE_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -Ev -- '-(rc|pr|alpha|beta)' | head -1 || true)
+                  else
+                    BASE_TAG=$(git tag -l "v${RELEASE_LINE}.*" --sort=-v:refname | grep -Ev -- '-(rc|pr|alpha|beta)' | head -1 || true)
+                  fi
+                  if [[ -z "${BASE_TAG}" ]]; then
+                    echo "::error::No stable tag found for line '${RELEASE_LINE:-<latest>}'"
+                    exit 1
+                  fi
+                  MAJ_MIN=$(echo "${BASE_TAG}" | sed -E 's/^v([0-9]+\.[0-9]+)\..*/\1/')
+                  HOTFIX_BRANCH="hotfix/${MAJ_MIN}.x"
+                  STAGING_BRANCH="hotfix-staging/${MAJ_MIN}.x-${{ github.run_id }}"
+                  echo "base_tag=${BASE_TAG}"             >> "$GITHUB_OUTPUT"
+                  echo "maj_min=${MAJ_MIN}"               >> "$GITHUB_OUTPUT"
+                  echo "hotfix_branch=${HOTFIX_BRANCH}"   >> "$GITHUB_OUTPUT"
+                  echo "staging_branch=${STAGING_BRANCH}" >> "$GITHUB_OUTPUT"
+
+            - name: Prepare maintenance branch locally
+              id: ensure_hotfix
+              run: |
+                  set -euo pipefail
+                  BRANCH='${{ steps.plan.outputs.hotfix_branch }}'
+                  BASE='${{ steps.plan.outputs.base_tag }}'
+                  if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1; then
+                    git fetch origin "${BRANCH}:${BRANCH}"
+                    echo "remote_exists=true" >> "$GITHUB_OUTPUT"
+                  else
+                    git branch "${BRANCH}" "${BASE}"
+                    echo "remote_exists=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Build staging branch with cherry-picks
+              id: cherry
+              env:
+                  SCOPE: ${{ inputs.scope }}
+                  EXPLICIT_COMMITS: ${{ inputs.commits }}
+              run: |
+                  set -euo pipefail
+                  HOTFIX='${{ steps.plan.outputs.hotfix_branch }}'
+                  STAGING='${{ steps.plan.outputs.staging_branch }}'
+                  git checkout -b "${STAGING}" "${HOTFIX}"
+
+                  # Breaking-change filter: applies to both explicit and
+                  # discovered paths. Catches `type!:` in subject AND a
+                  # `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer.
+                  # Bash 5.2 (ubuntu-latest) refuses inline regex with
+                  # `(\(...\))` — the pattern must come from a variable.
+                  BREAKING_SUBJECT_RE='^[a-zA-Z]+(\([^)]+\))?!'
+                  is_breaking() {
+                    local sha=$1
+                    local subject body
+                    subject=$(git log -1 --format=%s "${sha}")
+                    body=$(git log -1 --format=%B "${sha}")
+                    [[ "${subject}" =~ ${BREAKING_SUBJECT_RE} ]] && return 0
+                    grep -qE '(^|[[:space:]])BREAKING[ -]CHANGE:' <<<"${body}" && return 0
+                    return 1
+                  }
+
+                  : > /tmp/skipped.md
+                  SKIPPED_BREAKING=0
+
+                  if [[ -n "${EXPLICIT_COMMITS}" ]]; then
+                    mapfile -t RAW < <(echo "${EXPLICIT_COMMITS}" | tr ',' ' ' | xargs -n1)
+                    CANDIDATES=()
+                    for sha in "${RAW[@]}"; do
+                      if is_breaking "${sha}"; then
+                        SKIPPED_BREAKING=$((SKIPPED_BREAKING+1))
+                        echo "- \`${sha:0:9}\` $(git log -1 --format=%s ${sha} 2>/dev/null) — breaking change" >> /tmp/skipped.md
+                      else
+                        CANDIDATES+=("${sha}")
+                      fi
+                    done
+                    SOURCE_DESC="explicit list (${#RAW[@]} requested, ${#CANDIDATES[@]} after breaking-change filter)"
+                  else
+                    case "${SCOPE}" in
+                      fix-only)        TYPES='fix' ;;
+                      fix+perf)        TYPES='fix|perf' ;;
+                      fix+perf+chore)  TYPES='fix|perf|chore' ;;
+                      *) echo "::error::Unknown scope ${SCOPE}"; exit 1 ;;
+                    esac
+                    TYPE_RE="^(${TYPES})(\([^)]+\))?:"
+                    # `git cherry` patch-id-dedups commits already on HOTFIX.
+                    mapfile -t UNMERGED < <(git cherry "${HOTFIX}" origin/dev | awk '/^\+/ {print $2}')
+                    CANDIDATES=()
+                    for sha in "${UNMERGED[@]}"; do
+                      SUBJECT=$(git log -1 --format=%s "${sha}")
+                      [[ "${SUBJECT}" =~ ${TYPE_RE} ]] || continue
+                      if is_breaking "${sha}"; then
+                        SKIPPED_BREAKING=$((SKIPPED_BREAKING+1))
+                        echo "- \`${sha:0:9}\` ${SUBJECT} — breaking change" >> /tmp/skipped.md
+                        continue
+                      fi
+                      CANDIDATES+=("${sha}")
+                    done
+                    SOURCE_DESC="scope=\`${SCOPE}\` since \`${{ steps.plan.outputs.base_tag }}\`"
+                  fi
+
+                  : > /tmp/picked.md
+                  : > /tmp/dedup.md
+                  : > /tmp/conflicts.md
+                  PICKED=0; DEDUP=0; CONFLICTS=0
+                  for sha in "${CANDIDATES[@]}"; do
+                    SUBJECT=$(git log -1 --format=%s "${sha}" 2>/dev/null || echo '<unknown>')
+                    if git cherry-pick -x "${sha}" 2>/tmp/cp.err; then
+                      PICKED=$((PICKED+1))
+                      echo "- \`${sha:0:9}\` ${SUBJECT}" >> /tmp/picked.md
+                    elif grep -qE 'previous cherry-pick is now empty|nothing to commit|allow-empty' /tmp/cp.err; then
+                      # Patch already on HOTFIX — common for explicit SHAs that
+                      # were also detected by the scope path on a prior run.
+                      DEDUP=$((DEDUP+1))
+                      echo "- \`${sha:0:9}\` ${SUBJECT} — already applied" >> /tmp/dedup.md
+                      git cherry-pick --skip 2>/dev/null || git cherry-pick --abort 2>/dev/null || true
+                    else
+                      CONFLICTS=$((CONFLICTS+1))
+                      echo "- \`${sha:0:9}\` ${SUBJECT}" >> /tmp/conflicts.md
+                      git cherry-pick --abort
+                    fi
+                  done
+
+                  echo "picked_count=${PICKED}"           >> "$GITHUB_OUTPUT"
+                  echo "dedup_count=${DEDUP}"             >> "$GITHUB_OUTPUT"
+                  echo "conflict_count=${CONFLICTS}"      >> "$GITHUB_OUTPUT"
+                  echo "skipped_breaking=${SKIPPED_BREAKING}" >> "$GITHUB_OUTPUT"
+                  echo "source_desc=${SOURCE_DESC}"       >> "$GITHUB_OUTPUT"
+
+                  {
+                    echo "## Hotfix candidate plan"
+                    echo ""
+                    echo "| | |"
+                    echo "|-|-|"
+                    echo "| Base tag | \`${{ steps.plan.outputs.base_tag }}\` |"
+                    echo "| Maintenance branch | \`${HOTFIX}\` (${{ steps.ensure_hotfix.outputs.remote_exists == 'true' && 'existing' || 'new' }}) |"
+                    echo "| Staging branch | \`${STAGING}\` |"
+                    echo "| Source | ${SOURCE_DESC} |"
+                    echo "| Candidates | ${#CANDIDATES[@]} |"
+                    echo "| Cherry-picked | ${PICKED} |"
+                    echo "| Already applied (skipped) | ${DEDUP} |"
+                    echo "| Breaking changes (skipped) | ${SKIPPED_BREAKING} |"
+                    echo "| Conflicts (skipped) | ${CONFLICTS} |"
+                    if (( PICKED > 0 ));    then echo ""; echo "### Picked"; cat /tmp/picked.md; fi
+                    if (( DEDUP > 0 ));     then echo ""; echo "### Already applied"; cat /tmp/dedup.md; fi
+                    if (( SKIPPED_BREAKING > 0 )); then echo ""; echo "### Skipped breaking changes"; cat /tmp/skipped.md; fi
+                    if (( CONFLICTS > 0 )); then echo ""; echo "### Conflicts — resolve manually"; cat /tmp/conflicts.md; fi
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Close superseded staging PRs and branches
+              if: ${{ !inputs.dry_run && steps.cherry.outputs.picked_count != '0' }}
+              env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+              run: |
+                  set -euo pipefail
+                  HOTFIX='${{ steps.plan.outputs.hotfix_branch }}'
+                  MAJ_MIN='${{ steps.plan.outputs.maj_min }}'
+                  STAGING_PREFIX="hotfix-staging/${MAJ_MIN}.x-"
+
+                  # Close any open PR whose head matches the staging prefix and base is the hotfix branch.
+                  PRS=$(gh pr list --repo '${{ github.repository }}' --base "${HOTFIX}" --state open \
+                        --json number,headRefName --jq \
+                        ".[] | select(.headRefName | startswith(\"${STAGING_PREFIX}\")) | .number")
+                  for n in ${PRS}; do
+                    echo "Closing superseded PR #${n}"
+                    gh pr close "${n}" --repo '${{ github.repository }}' --delete-branch \
+                      --comment "Superseded by a fresh hotfix candidate from workflow run ${{ github.run_id }}." || true
+                  done
+
+            - name: Push maintenance branch (if new) and staging branch
+              if: ${{ !inputs.dry_run && steps.cherry.outputs.picked_count != '0' }}
+              env:
+                  GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+              run: |
+                  set -euo pipefail
+                  REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+                  if [[ '${{ steps.ensure_hotfix.outputs.remote_exists }}' != 'true' ]]; then
+                    git push "${REMOTE}" '${{ steps.plan.outputs.hotfix_branch }}:${{ steps.plan.outputs.hotfix_branch }}'
+                  fi
+                  git push -u "${REMOTE}" '${{ steps.plan.outputs.staging_branch }}'
+
+            - name: Open PR against hotfix branch
+              if: ${{ !inputs.dry_run && steps.cherry.outputs.picked_count != '0' }}
+              env:
+                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+              run: |
+                  set -euo pipefail
+                  HOTFIX='${{ steps.plan.outputs.hotfix_branch }}'
+                  STAGING='${{ steps.plan.outputs.staging_branch }}'
+                  BASE='${{ steps.plan.outputs.base_tag }}'
+                  PICKED='${{ steps.cherry.outputs.picked_count }}'
+                  DEDUP='${{ steps.cherry.outputs.dedup_count }}'
+                  CONFLICTS='${{ steps.cherry.outputs.conflict_count }}'
+                  SKIPPED_BREAKING='${{ steps.cherry.outputs.skipped_breaking }}'
+
+                  {
+                    echo "Automated hotfix candidate built off \`${BASE}\`."
+                    echo ""
+                    echo "- **${PICKED}** commit(s) cherry-picked from \`dev\` (${{ steps.cherry.outputs.source_desc }})"
+                    [[ "${DEDUP}" != "0" ]] && echo "- ${DEDUP} already applied to \`${HOTFIX}\` (skipped, see below)"
+                    [[ "${SKIPPED_BREAKING}" != "0" ]] && echo "- ${SKIPPED_BREAKING} breaking change(s) skipped (see below)"
+                    [[ "${CONFLICTS}" != "0" ]] && echo "- ⚠️ **${CONFLICTS}** commit(s) failed to cherry-pick (see below)"
+                    echo ""
+                    echo "### How to use this PR"
+                    echo ""
+                    echo "1. PR checks will build this branch and publish a \`${BASE}-prNNNN\` prerelease — install and verify."
+                    echo "2. If the candidate is bad, **close this PR** and re-run the *Release: Hotfix Candidate* workflow (it auto-supersedes)."
+                    echo "3. If extra fixes are needed, land them on \`dev\` first then re-run, or push directly to \`${STAGING}\`."
+                    echo "4. When verified, merge this PR, then dispatch **Release: Semantic Version** with \`release_type=stable\` on \`${HOTFIX}\` to cut the patch."
+                    echo "5. Standard release pipeline (build → publish → Nexus dry-run → Nexus upload) takes over from there."
+                    echo ""
+                    echo "### Picked commits"
+                    cat /tmp/picked.md
+                    if [[ "${DEDUP}" != "0" ]]; then
+                      echo ""
+                      echo "### Already applied to \`${HOTFIX}\` (skipped)"
+                      cat /tmp/dedup.md
+                    fi
+                    if [[ "${SKIPPED_BREAKING}" != "0" ]]; then
+                      echo ""
+                      echo "### Breaking changes (skipped)"
+                      cat /tmp/skipped.md
+                    fi
+                    if [[ "${CONFLICTS}" != "0" ]]; then
+                      echo ""
+                      echo "### Conflicts (skipped)"
+                      cat /tmp/conflicts.md
+                      echo ""
+                      echo "Resolve by checking out \`${STAGING}\` locally, cherry-picking the conflicted commits manually, and pushing."
+                    fi
+                    echo ""
+                    echo "See: [Hotfix Release Process](https://github.com/${{ github.repository }}/wiki/Developers#hotfix-release-process)"
+                  } > /tmp/pr-body.md
+
+                  gh pr create \
+                    --repo '${{ github.repository }}' \
+                    --base "${HOTFIX}" \
+                    --head "${STAGING}" \
+                    --title "hotfix(${{ steps.plan.outputs.maj_min }}): ${PICKED} fix(es) on top of ${BASE}" \
+                    --body-file /tmp/pr-body.md \
+                    --label hotfix
+
+            - name: Note when no commits were picked
+              if: ${{ steps.cherry.outputs.picked_count == '0' }}
+              run: |
+                  echo "::notice::No eligible commits cherry-picked. No PR opened, no branches pushed."
