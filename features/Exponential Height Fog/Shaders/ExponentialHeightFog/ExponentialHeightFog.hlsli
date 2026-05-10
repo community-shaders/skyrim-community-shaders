@@ -71,7 +71,6 @@ namespace ExponentialHeightFog
 				fogInscatteringColor += cubemapColor * SharedData::exponentialHeightFogSettings.inscatteringTint.rgb * SharedData::exponentialHeightFogSettings.inscatteringTint.a;
 			}
 #endif
-		}
 
 		fogColor = fogInscatteringColor * (1.0f - expFogFactor);
 
