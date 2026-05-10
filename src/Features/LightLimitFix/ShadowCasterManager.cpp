@@ -1128,9 +1128,17 @@ namespace ShadowCasterManager
 		RE::BSShadowLight* light{ nullptr };
 		double score{ 0.0 };
 		bool sun{ false };
-		bool chosen{ false };   // valid + within ShadowLightCount budget
-		bool excess{ false };   // valid but over budget (convert or disable)
-		bool invalid{ false };  // failed UpdateCamera / culling / portal
+		bool chosen{ false };         // valid + within ShadowLightCount budget
+		bool excess{ false };         // valid but over budget (convert or disable)
+		bool invalid{ false };        // shorthand: invalidCamera || invalidPortal
+		bool invalidCamera{ false };  // UpdateCamera returned false (frustum/LOD).
+									  // Light may still be visible far away --
+									  // safe to demote to non-shadow cluster light.
+		bool invalidPortal{ false };  // portal cull says light's cell is not visible
+									  // from the camera's cell. Must DisableLight
+									  // entirely; converting routes through cluster
+									  // lighting which has no portal awareness and
+									  // would bleed light through walls.
 	};
 
 	static void ScheduleShadowCasters()
@@ -1274,6 +1282,7 @@ namespace ShadowCasterManager
 			// reach of spots and produced regressions where off-screen-but-cone-in-
 			// frustum spots flickered on/off as the camera moved.
 			if (!l->UpdateCamera(camera)) {
+				c.invalidCamera = true;
 				c.invalid = true;
 				continue;
 			}
@@ -1286,6 +1295,7 @@ namespace ShadowCasterManager
 				if (portal) {
 					auto* gPortal = globalCull ? reinterpret_cast<RE::BSPortalGraphEntry*>(globalCull->portalGraphEntry) : nullptr;
 					if (gPortal && !GamePortalHasSharedVisibility(gPortal, portal)) {
+						c.invalidPortal = true;
 						c.invalid = true;
 						continue;
 					}
@@ -1658,12 +1668,56 @@ namespace ShadowCasterManager
 
 		for (auto& c : candidates) {
 			if (c.invalid) {
-				// DisableLight only needs membership; it calls ReturnShadowmaps
-				// which is well-behaved on already-dereferenced objects. Skip
-				// the vtable check here so we don't drop work for objects whose
-				// vtable was zeroed mid-frame (rare but observed under EngineFixes).
-				if (isAliveNow(c.light))
+				if (!isAliveNow(c.light))
+					continue;
+
+				// Camera-fail invalid (UpdateCamera returned false) covers two
+				// cases: (1) light fully outside the camera frustum -- cluster
+				// builder will reject it anyway; (2) LOD-faded -- engine
+				// considers it too far for useful shadow rendering, but the
+				// light is still visible and should still illuminate via the
+				// cluster path. So for omnis (BSShadowParabolicLight), demote
+				// to non-shadow when ConvertExcessToNormal is on, mirroring
+				// excess-handling. Spot lights (BSShadowFrustumLight) drop
+				// because the engine has no NiSpotLight equivalent -- omni
+				// conversion would make them spherical and bleed light
+				// through walls behind the original cone direction.
+				//
+				// Portal-fail invalid always drops: the cluster lighting path
+				// has no portal-graph awareness, so converting a portal-culled
+				// light routes it through cluster lighting and the light bleeds
+				// into the camera's cell from a cell that should be invisible.
+				// User reports of "distant LightPlacer lights turn off instead
+				// of converting" track to camera-fail (LOD); this fix recovers
+				// their diffuse contribution.
+				const bool isSpotShadow = c.light->GetIsFrustumLight();
+				const bool forceConvert = s_pinConvert.count(reinterpret_cast<uintptr_t>(c.light)) > 0;
+				if (c.invalidCamera && !isSpotShadow &&
+					(s_settings.ConvertExcessToNormal || forceConvert) &&
+					isUsableLight(c.light)) {
+					// Same atomic ordering as the excess path: chosen lights
+					// have completed their Begin/EnableLight/End sequence by
+					// the time we reach invalid candidates, so ConvertLight's
+					// ReturnShadowmaps side effect can only touch pointers we
+					// are no longer walking.
+					ConvertLight(c.light, ssn, false);
+					// UpdateCamera (called in the validation pass above)
+					// zeros lodDimmer when LOD fade fires (engine sets
+					// lodDimmer=0 alongside frustrumCull=0xff). The cluster
+					// lighting builder multiplies light.fade by lodDimmer
+					// (LightLimitFix.cpp:497) and drops the light from
+					// lightsData if the product falls below 1e-4. So a
+					// LOD-faded light that we convert to non-shadow still
+					// disappears from cluster lighting. Restore lodDimmer
+					// to 1 so the converted light contributes its full
+					// non-shadow diffuse to clusters; the engine will set
+					// it back to 0 next frame if the light remains LOD-
+					// faded, and we'll restore again -- self-correcting
+					// across frames as the camera moves.
+					c.light->lodDimmer = 1.0f;
+				} else {
 					DisableLight(c.light);
+				}
 				continue;
 			}
 
