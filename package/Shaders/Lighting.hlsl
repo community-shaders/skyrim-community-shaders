@@ -2899,12 +2899,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
 		if (!(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {
-#		if defined(SKYLIGHTING)
-			directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(directionalAmbientColor, -ambientNormal, skylightingDiffuse);
-#		else
 			directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -ambientNormal);
-#		endif
 		}
+	}
+#	endif
+
+#	if defined(SKYLIGHTING)
+#		if defined(IBL)
+	if (!SharedData::iblSettings.EnableIBL)
+#		endif
+	{
+		directionalAmbientColor *= MultiBounceAO(baseColor.xyz, skylightingDiffuse);
 	}
 #	endif
 
@@ -2996,11 +3001,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float mlpBlendFactor = saturate(viewNormalAngle) * (1.0 - baseColor.w);
 
-#		if defined(SKYLIGHTING)
-	color.xyz = lerp(color.xyz, (diffuseColor + directionalAmbientColor * skylightingDiffuse) * vertexColor * layerColor, mlpBlendFactor);
-#		else
 	color.xyz = lerp(color.xyz, (diffuseColor + directionalAmbientColor) * vertexColor * layerColor, mlpBlendFactor);
-#		endif
 
 	indirectLobeWeights.diffuse *= 1.0 - mlpBlendFactor;
 #	endif  // MULTI_LAYER_PARALLAX
@@ -3046,15 +3047,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
 
 	directionalAmbientColor *= outputAlbedo;
-
-#	if defined(SKYLIGHTING)
-#		if defined(IBL)
-	if (!SharedData::iblSettings.EnableIBL)
-#		endif
-	{
-		Skylighting::ApplySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
-	}
-#	endif
 
 #	if !defined(DEFERRED)
 	color.xyz = Color::IrradianceToLinear(color.xyz);

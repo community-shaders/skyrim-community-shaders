@@ -119,31 +119,6 @@ namespace ImageBasedLighting
 		return linEnv + linSky;
 	}
 
-	/// Compute diffuse IBL ambient (gamma-space) with visibility applied per DALCMode.
-	/// visibility: scalar skylighting factor (already computed in Lighting.hlsl).
-	float3 GetDiffuseIBLOccluded(float3 vanillaDALC, float3 rayDir, float visibility)
-	{
-		float3 linEnv, linSky;
-		if (SharedData::iblSettings.DALCMode == 3) {
-			// Mode 3: Skylighting dims both DALC and sky
-			linEnv = vanillaDALC * SharedData::iblSettings.DALCAmount * visibility;
-			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
-		} else if (SharedData::iblSettings.DALCMode == 2) {
-			// Mode 2: Skylighting only dims sky, DALC unaffected
-			linEnv = vanillaDALC * SharedData::iblSettings.DALCAmount;
-			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
-		} else {
-			// Mode 0/1: Skylighting only dims sky, env IBL unaffected
-			linEnv = GetEnvIBLColor(rayDir);
-			linSky = GetSkyIBLColorOccluded(rayDir, visibility);
-		}
-
-		if (SharedData::enbSettings.Enable)
-			linSky *= saturate(-rayDir.z * 0.5 + 0.5);
-
-		return linEnv + linSky;
-	}
-
 	// ============================================================================
 	// Convenience: combined IBL (for simple contexts)
 	// ============================================================================

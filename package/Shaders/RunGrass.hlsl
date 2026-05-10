@@ -738,11 +738,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #				if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-#					if defined(SKYLIGHTING)
-		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(directionalAmbientColor, -normal, skylightingDiffuse);
-#					else
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
+	}
+#				endif
+
+#				if defined(SKYLIGHTING)
+#					if defined(IBL)
+	if (!SharedData::iblSettings.EnableIBL)
 #					endif
+	{
+		directionalAmbientColor *= MultiBounceAO(albedo, skylightingDiffuse);
 	}
 #				endif
 
@@ -751,15 +756,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor *= albedo;
 
 	directionalAmbientColor *= albedo;
-
-#				if defined(SKYLIGHTING)
-#					if defined(IBL)
-	if (!SharedData::iblSettings.EnableIBL)
-#					endif
-	{
-		Skylighting::ApplySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
-	}
-#				endif
 
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
@@ -913,11 +909,17 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			if defined(IBL)
 	if (SharedData::iblSettings.EnableIBL) {
-#				if defined(SKYLIGHTING)
-		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(directionalAmbientColor, -normal, skylightingDiffuse);
-#				else
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
+	}
+#			endif
+
+#			if defined(SKYLIGHTING)
+#				if defined(IBL)
+	if (!SharedData::iblSettings.EnableIBL)
 #				endif
+	{
+		float3 albedo = baseColor.xyz * vertexColor;
+		directionalAmbientColor *= MultiBounceAO(albedo, skylightingDiffuse);
 	}
 #			endif
 
@@ -927,15 +929,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	diffuseColor *= albedo;
 	directionalAmbientColor *= albedo;
-
-#			if defined(SKYLIGHTING)
-#				if defined(IBL)
-	if (!SharedData::iblSettings.EnableIBL)
-#				endif
-	{
-		Skylighting::ApplySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
-	}
-#			endif
 
 	psout.Diffuse.xyz = diffuseColor;
 
