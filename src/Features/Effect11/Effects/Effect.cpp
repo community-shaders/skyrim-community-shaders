@@ -479,7 +479,22 @@ void Effect::LoadTechniques()
 			if (FAILED(technique->GetDesc(&techDesc)))
 				continue;
 
-			std::string key = isNamedGroup ? std::string(groupDesc.Name) : (techDesc.Name ? std::string(techDesc.Name) : ("technique" + std::to_string(t)));
+			std::string key;
+			if (isNamedGroup) {
+				key = std::string(groupDesc.Name);
+			} else {
+				std::string techName = techDesc.Name ? std::string(techDesc.Name) : ("technique" + std::to_string(t));
+
+				// ENB convention: numbered follow-up techniques (Name1, Name2, ...) belong to the base technique (Name)
+				std::string baseName = techName;
+				while (!baseName.empty() && std::isdigit(static_cast<unsigned char>(baseName.back())))
+					baseName.pop_back();
+
+				if (!baseName.empty() && baseName != techName && techniques.contains(baseName))
+					key = baseName;
+				else
+					key = techName;
+			}
 
 			TechniqueInfo info;
 			info.technique.copy_from(technique);
