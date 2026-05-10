@@ -1,47 +1,10 @@
 [
 	{
-		"file": "enbeffectpostpass.fx",
-		"patches": [
-			{
-				"find": "if (ENABLE_BLURRING==false)",
-				"replace": "if (true)"
-			},
-			{
-				"find": "if (ENABLE_SHARPENING==false)",
-				"replace": "if (true)"
-			},
-			{
-				"find": "if (ENABLE_LETTERBOX==true)",
-				"replace": "if (false)"
-			}
-		]
-	},
-	{
 		"file": "enbeffect.fx",
 		"patches": [
 			{
 				"find": "lerp( TOD(a), a##_Interior, EInteriorFactor )",
 				"replace": "(EInteriorFactor ? a##_Interior : TOD(a))"
-			},
-			{
-				"find": "if (iSharpStyle == 1)",
-				"replace": "if (false)"
-			},
-			{
-				"find": "else if (iSharpStyle == 2)",
-				"replace": "else if (false)"
-			},
-			{
-				"find": "else if (iSharpStyle == 3)",
-				"replace": "else if (false)"
-			},
-			{
-				"find": "if (border_ratio>0.0)",
-				"replace": "if (false)"
-			},
-			{
-				"find": "res.xyz = lerp(lerp(4.0,3.0,EInteriorFactor), 0.0f, closeDepth) * centercolor.xyz * diffgray + centercolor.xyz;",
-				"replace": "res.xyz = centercolor.xyz;"
 			}
 		]
 	}
