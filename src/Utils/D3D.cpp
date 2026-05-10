@@ -26,20 +26,6 @@ namespace Util
 		return nullptr;
 	}
 
-	ID3D11ShaderResourceView* GetPostUpscaleDepthSRV()
-	{
-		auto& tb = globals::features::terrainBlending;
-		if (tb.loaded && tb.settings.Enabled && tb.depthSRVBackup) {
-			return tb.depthSRVBackup;
-		}
-
-		auto renderer = globals::game::renderer;
-		if (renderer) {
-			return renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
-		}
-		return nullptr;
-	}
-
 	ID3D11ShaderResourceView* GetSRVFromRTV(const ID3D11RenderTargetView* a_rtv)
 	{
 		if (a_rtv) {

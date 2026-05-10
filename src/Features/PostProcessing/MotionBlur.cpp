@@ -202,7 +202,7 @@ void MotionBlur::Draw(TextureInfo& inout_tex)
 
 		// First validate that motion vector and post-upscale depth resources exist and are valid
 		auto& motionVectorTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-		auto* depthSRV = Util::GetPostUpscaleDepthSRV();
+		auto* depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
 
 		// Check that the required resources are valid
 		if (!motionVectorTex.texture || !motionVectorTex.SRV) {
@@ -612,7 +612,7 @@ void MotionBlur::ExecuteBlurPass(TextureInfo& inout_tex)
 
 	// Get engine resources
 	auto& motionVectorTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	auto* depthSRV = Util::GetPostUpscaleDepthSRV();
+	auto* depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
 
 	// Validate resources
 	if (!motionVectorTex.texture || !motionVectorTex.SRV) {

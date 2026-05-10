@@ -186,7 +186,7 @@ void Border::Draw(TextureInfo& inout_tex)
 	};
 	borderCB->Update(data);
 
-	auto* depthSRV = Util::GetPostUpscaleDepthSRV();
+	auto* depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
 	if (!depthSRV) {
 		return;
 	}

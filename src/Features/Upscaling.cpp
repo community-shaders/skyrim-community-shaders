@@ -1967,16 +1967,10 @@ void Upscaling::UpscaleDepth()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Depth Upscale");
 
-		// Engine copies kMAIN→kMAIN_COPY during 3D scene rendering.
-		// In non-3D contexts (map, main menu, loading, pause) the engine skips its copy.
-		auto* ui = globals::game::ui;
-		const bool inMenuContext = globals::state->isMapMenuOpen ||
-		                           globals::state->isMainMenuOpen ||
-		                           globals::state->isLoadingMenuOpen ||
-		                           (ui && ui->GameIsPaused());
-		if (inMenuContext) {
-			copyIfNonAliased(depthCopy.texture, depth.texture);
-		}
+		// Keep the depth-upscale source current. The vanilla copy is not reliable
+		// on every image-space path; paused menus such as the console used to mask
+		// this by forcing a copy only in menu contexts.
+		copyIfNonAliased(depthCopy.texture, depth.texture);
 
 		// Clear stencil to be 0xFF
 		if (globals::game::isVR) {
