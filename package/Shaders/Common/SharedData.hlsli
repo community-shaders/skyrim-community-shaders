@@ -43,9 +43,8 @@ namespace SharedData
 		bool OverrideComplexGrassSettings;
 
 		float BasicGrassBrightness;
-		bool EnableWrappedLighting;
 		float ComplexGrassThreshold;
-		float1 pad0;
+		float2 pad0;
 	};
 
 	struct CPMSettings
@@ -217,7 +216,6 @@ namespace SharedData
 	struct LinearLightingSettings
 	{
 		uint enableLinearLighting;
-		uint enableGammaCorrection;
 		uint isDirLightLinear;
 		float dirLightMult;
 		float lightGamma;
@@ -244,6 +242,7 @@ namespace SharedData
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
+		uint pad0;
 	};
 
 	struct ENBSettings

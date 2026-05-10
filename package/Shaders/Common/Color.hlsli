@@ -221,14 +221,14 @@ namespace Color
 
 	float3 DirectionalLight(float3 color, bool isLinear = false)
 	{
-		float3 result = Light(color, isLinear) * ((ENABLE_LL && !isLinear) ? SharedData::linearLightingSettings.directionalLightMult : 1.0f);
-		return (ENABLE_LL && !isLinear) ? result * Math::PI : result;
+		return Light(color, isLinear) *
+		       ((ENABLE_LL && !isLinear) ? Math::PI * SharedData::linearLightingSettings.directionalLightMult : 1.0f);
 	}
 
 	float3 PointLight(float3 color, bool isLinear = false)
 	{
-		float3 result = Light(color, isLinear) * ((ENABLE_LL && !isLinear) ? SharedData::linearLightingSettings.pointLightMult : 1.0f);
-		return (ENABLE_LL && !isLinear) ? result * Math::PI : result;
+		return Light(color, isLinear) *
+		       ((ENABLE_LL && !isLinear) ? Math::PI * SharedData::linearLightingSettings.pointLightMult : 1.0f);
 	}
 #	if defined(LIGHTING)
 	float3 EmitColor(float3 color)

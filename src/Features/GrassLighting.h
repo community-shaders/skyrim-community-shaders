@@ -32,12 +32,11 @@ public:
 	{
 		float Glossiness = 20.0f;
 		float SpecularStrength = 0.5f;
-		float SubsurfaceScatteringAmount = 0.5f;
+		float SubsurfaceScatteringAmount = 1.0f;
 		uint OverrideComplexGrassSettings = false;
-		float BasicGrassBrightness = 1.0f;  // Match brightness of ENB
-		uint EnableWrappedLighting = false;
+		float BasicGrassBrightness = 1.0f;
 		float ComplexGrassThreshold = 0.03f;
-		uint pad1;
+		float2 pad0;
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
