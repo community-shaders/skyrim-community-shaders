@@ -30,11 +30,6 @@ struct ScreenshotFeature : public Feature
 	void Capture();
 	bool applyCropToScreenshot = true;
 
-	// When true, suppress Skyrim's built-in default-path screenshot save (the keypress
-	// path that writes Screenshot<N>.png into the game install directory). Explicit-path
-	// callers (Papyrus Debug.TakeScreenshot, modder code) still pass through.
-	bool suppressVanillaScreenshot = true;
-
 	// Settings
 	std::string screenshotPath = "Screenshots";
 
@@ -48,10 +43,6 @@ private:
 		uint32_t width = 0;
 		uint32_t height = 0;
 		std::filesystem::path outputPath;
-		// True when source was HDR display output (PQ-encoded R10G10B10A2 or scRGB
-		// R16F). The BMP save path doesn't tonemap so the file looks washed out;
-		// the worker surfaces this in the in-game toast.
-		bool sourceWasHDREncoded = false;
 	};
 
 	std::mutex screenshotQueueMutex;

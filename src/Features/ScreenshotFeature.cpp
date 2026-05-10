@@ -37,7 +37,6 @@ namespace
 	{
 		ID3D11Texture2D* texture = nullptr;
 		ID3D11ShaderResourceView* srv = nullptr;
-		bool isHDREncoded = false;  // true when source carries 10/16-bit HDR values
 		// When true, the preview path must copy through the SRV-readable cache instead of
 		// using slot.SRV directly. The kFRAMEBUFFER fallback sets this because the slot's
 		// SRV (when one exists) is for the swap-chain backbuffer, which ImGui's DX11
@@ -132,24 +131,60 @@ namespace
 		}
 	}
 
-	const DirectX::Image* PrepareBmpImage(const DirectX::ScratchImage& sourceImage, DirectX::ScratchImage& convertedImage)
+	// Tonemaps an FP16 linear scene-referred ScratchImage in-place using Reinhard
+	// (c / (1 + c)) plus an sRGB-curve encode. Reinhard is the cheap-and-correct
+	// fit here: it always lands in [0,1] regardless of input peak luminance, runs
+	// in three FLOPs per channel, and gives a result close enough to HDRDisplay's
+	// on-screen output for screenshot purposes. Caller passes the result of
+	// PopulateScratchImageFromStagingTexture; we overwrite the pixels in-place.
+	void TonemapHdrToSrgb(DirectX::ScratchImage& image)
 	{
-		// TODO: HDR-aware capture. When the HDRDisplay feature is active and the
-		// swapchain backbuffer is R10G10B10A2_UNORM (PQ) or R16G16B16A16_FLOAT
-		// (scRGB linear), the values aren't gamma-encoded the way an 8-bit sRGB
-		// BMP needs - DirectX::Convert truncates the high bits without applying
-		// any tonemap, producing a washed-out / clipped image. Options:
-		//   1. Detect HDR formats here and apply Reinhard/ACES on the CPU before
-		//      converting to B8G8R8X8_UNORM.
-		//   2. In Capture(), source from a known-SDR texture (e.g. HDR::UiTexture
-		//      or HDR::HdrTexture pre-encoding) when HDRDisplay is active.
-		//   3. Write PNG-16 / EXR for HDR sources so all bits are preserved.
-		// SDR captures (R8G8B8A8_UNORM / _SRGB) round-trip fine through this path.
+		using namespace DirectX;
+		DirectX::ScratchImage tonemapped;
+		const HRESULT hr = TransformImage(
+			image.GetImages(),
+			image.GetImageCount(),
+			image.GetMetadata(),
+			[](XMVECTOR* outPixels, const XMVECTOR* inPixels, size_t width, size_t /*y*/) {
+				const XMVECTOR one = XMVectorSplatOne();
+				// Standard sRGB encode: linear -> 1.055 * pow(c, 1/2.4) - 0.055 above
+				// the linear segment threshold of 0.0031308. We use the gamma-2.2
+				// approximation (XMVectorPow with 1/2.2) - visually indistinguishable
+				// for screenshot use and avoids the per-channel branch.
+				const XMVECTOR invGamma = XMVectorReplicate(1.0f / 2.2f);
+				for (size_t i = 0; i < width; ++i) {
+					XMVECTOR c = inPixels[i];
+					// Clamp negatives to zero - some shaders write tiny sub-zero values
+					// from float math that pow() would NaN on.
+					c = XMVectorMax(c, XMVectorZero());
+					// Reinhard tonemap on RGB; preserve alpha.
+					const XMVECTOR rgb = XMVectorDivide(c, XMVectorAdd(c, one));
+					const XMVECTOR gammaCorrected = XMVectorPow(rgb, invGamma);
+					// Re-pack with original alpha.
+					outPixels[i] = XMVectorSelect(gammaCorrected, c, g_XMSelect1110);
+				}
+			},
+			tonemapped);
+		if (SUCCEEDED(hr)) {
+			image = std::move(tonemapped);
+		}
+	}
+
+	const DirectX::Image* PrepareBmpImage(DirectX::ScratchImage& sourceImage, DirectX::ScratchImage& convertedImage)
+	{
+		// HDR display mode produces FP16 linear scene-referred values (peak >> 1.0)
+		// that BMP can't represent. Tonemap to [0,1] and gamma-encode before the
+		// 8-bit format conversion. SDR captures (8-bit sRGB / 10-bit PQ outputs we
+		// no longer source) skip this step entirely.
 		const auto metadata = sourceImage.GetMetadata();
+		if (metadata.format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+			TonemapHdrToSrgb(sourceImage);
+		}
+
 		if (SUCCEEDED(DirectX::Convert(
 				sourceImage.GetImages(),
 				sourceImage.GetImageCount(),
-				metadata,
+				sourceImage.GetMetadata(),
 				DXGI_FORMAT_B8G8R8X8_UNORM,
 				DirectX::TEX_FILTER_DEFAULT,
 				0.0f,
@@ -192,20 +227,31 @@ namespace
 		return resolveFromView(slot.RTV);
 	}
 
-	// Picks the best capture source for the current runtime:
-	//  - VR:                       SBS framebuffer (slot 114, kVRFramebufferTarget).
-	//  - Flat + HDRDisplay loaded: HDR::OutputTexture - the actual final composite that
-	//                              HDRDisplay copies to the swapchain. In SDR display mode
-	//                              it's an 8-bit sRGB texture that BMPs cleanly. In HDR
-	//                              display mode it's 10-bit PQ or float scRGB; we still
-	//                              capture it but flag isHDREncoded so the user knows
-	//                              their BMP will look washed out (the screen content is
-	//                              correct, the SDR encoding isn't).
-	//  - Flat without HDRDisplay:  vanilla kFRAMEBUFFER, resolved via SRV/RTV when the
-	//                              slot's .texture pointer is null.
+	// Picks the best capture source for the current runtime. The decision tree
+	// follows where ISHDR actually wrote the scene this frame, NOT where it would
+	// be displayed:
+	//
+	//  - VR:                              SBS framebuffer (slot 114, kVRFramebufferTarget).
+	//  - Flat + HDRDisplay::enableHDR=ON: HDR::HdrTexture - ISHDR was redirected here
+	//                                     and wrote FP16 linear scene-referred values
+	//                                     (peak >> 1.0). PrepareBmpImage runs a Reinhard
+	//                                     tonemap + gamma encode so the BMP matches what
+	//                                     the user sees on their HDR monitor.
+	//  - Flat + HDRDisplay loaded but
+	//    enableHDR=OFF, OR HDRDisplay
+	//    not loaded:                      vanilla kFRAMEBUFFER - ISHDR wrote tonemapped
+	//                                     UNORM values 0-1 directly here. Already SDR,
+	//                                     BMPs cleanly, no tonemap needed.
+	//
+	// We deliberately never source HDR::OutputTexture: when the swap chain is HDR10
+	// (R10G10B10A2 PQ) and the monitor is HDR-capable, OutputTexture holds PQ-encoded
+	// values regardless of the enableHDR toggle - HDRDisplay's compute shader still
+	// runs and PQ-encodes the SDR scene for the swap chain. Saving those PQ bytes as
+	// BMP without a color transform produces washed-out files.
+	//
 	// `holder` is a keep-alive com_ptr for the kFRAMEBUFFER fallback path (where we
 	// QueryInterface the texture out of an SRV) - it must outlive any use of the returned
-	// texture. For VR/HDRDisplay paths the texture is owned elsewhere and `holder` stays
+	// texture. For VR/HdrTexture paths the texture is owned elsewhere and `holder` stays
 	// empty.
 	CaptureSource SelectCaptureSource(winrt::com_ptr<ID3D11Texture2D>& holder)
 	{
@@ -224,16 +270,16 @@ namespace
 		}
 
 		auto& hdr = globals::features::hdrDisplay;
-		if (hdr.loaded && hdr.outputTexture && hdr.outputTexture->resource) {
-			src.texture = hdr.outputTexture->resource.get();
-			src.srv = hdr.outputTexture->srv.get();
-			src.isHDREncoded = hdr.settings.enableHDR;
-			src.description = src.isHDREncoded ?
-			                      "HDR::OutputTexture (HDR display)" :
-			                      "HDR::OutputTexture (SDR)";
+		if (hdr.loaded && hdr.settings.enableHDR && hdr.hdrTexture && hdr.hdrTexture->resource) {
+			src.texture = hdr.hdrTexture->resource.get();
+			src.srv = hdr.hdrTexture->srv.get();
+			src.description = "HDR::HdrTexture (FP16 linear, will tonemap)";
 			return src;
 		}
 
+		// Either HDRDisplay isn't loaded, or it's loaded but enableHDR is off. In
+		// both cases ISHDR wrote tonemapped UNORM values to kFRAMEBUFFER, so saving
+		// it directly produces a correct SDR BMP without any color transform.
 		auto& slot = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 		src.texture = ResolveSlotTexture(slot, holder);
 		src.srv = slot.SRV;
@@ -253,15 +299,29 @@ namespace
 	//   AE 1.6.1170  id 36853   RVA      0x653240
 	//   VR           via SE id  vr_addr  0x1405c8b30 (status 3 in database.csv)
 	//
-	// We pass through whenever an explicit path is provided (Papyrus's
-	// Debug.TakeScreenshot(filename) and modder code), so only the keypress-
-	// driven default-path save is suppressed when the user opts in.
+	// True when the user's screenshot hotkey is the single key vanilla Skyrim binds
+	// to its built-in PrintScreen save. Anything else (a different key, a chord,
+	// an unbound combo) means the user can have both: ours on their hotkey,
+	// vanilla on PrintScreen.
+	bool HotkeyCollidesWithVanilla()
+	{
+		const auto& combo = Menu::GetSingleton()->GetSettings().ScreenshotKey;
+		return combo.size() == 1 &&
+		       combo[0].GetDevice() == InputDeviceType::Keyboard &&
+		       combo[0].GetKey() == VK_SNAPSHOT;
+	}
+
+	// Pass through whenever an explicit path is provided (Papyrus's
+	// Debug.TakeScreenshot(filename) and modder code) so scripts and mods that
+	// take programmatic screenshots keep working. The keypress-driven default-
+	// path save is suppressed only when our hotkey collides with vanilla's
+	// PrintScreen - otherwise the user gets both saves on the same key, which
+	// is just clutter. With separate hotkeys both paths run independently.
 	struct VanillaScreenshotHook
 	{
 		static void thunk(char* a_explicitPath, int a_format)
 		{
-			if (a_explicitPath == nullptr &&
-				globals::features::screenshotFeature.suppressVanillaScreenshot) {
+			if (a_explicitPath == nullptr && HotkeyCollidesWithVanilla()) {
 				return;
 			}
 			func(a_explicitPath, a_format);
@@ -307,8 +367,6 @@ void ScreenshotFeature::LoadSettings(json& a_json)
 		screenshotPath = a_json["ScreenshotPath"];
 	if (a_json.contains("ApplyCropToScreenshot"))
 		applyCropToScreenshot = a_json["ApplyCropToScreenshot"];
-	if (a_json.contains("SuppressVanillaScreenshot"))
-		suppressVanillaScreenshot = a_json["SuppressVanillaScreenshot"];
 	subrect.LoadSettings(a_json);
 }
 
@@ -316,7 +374,6 @@ void ScreenshotFeature::SaveSettings(json& a_json)
 {
 	a_json["ScreenshotPath"] = screenshotPath;
 	a_json["ApplyCropToScreenshot"] = applyCropToScreenshot;
-	a_json["SuppressVanillaScreenshot"] = suppressVanillaScreenshot;
 	subrect.SaveSettings(a_json);
 }
 
@@ -324,6 +381,10 @@ void ScreenshotFeature::DrawSettings()
 {
 	// Description first so users know what the feature does before they hit the button.
 	Util::Text::Disabled("Capture and save run asynchronously - no frame stall.");
+	Util::Text::Disabled(
+		"Saves SDR .bmp files. HDR scenes are tonemapped (Reinhard) so the saved\n"
+		"image matches what's on screen. For true HDR files with HDR10 metadata,\n"
+		"use Xbox Game Bar (Win+G) or your GPU vendor's overlay (saves .jxr).");
 
 	// Top-level actions
 	if (ImGui::Button("Take Screenshot Now")) {
@@ -335,12 +396,6 @@ void ScreenshotFeature::DrawSettings()
 	// Output section
 	ImGui::SeparatorText("Output");
 
-	// Plain text input for the screenshot folder. We tried adding a native folder
-	// picker (IFileOpenDialog) but couldn't get it interactive from inside Skyrim:
-	// the engine's input thread fights both ShowCursor and MenuCursor state every
-	// frame, the dialog never claimed focus reliably, and a worker-thread variant
-	// hit cross-thread SetForegroundWindow restrictions. Open opens Explorer at
-	// the configured path so users can copy a path from the address bar.
 	char buf[260];
 	strncpy_s(buf, sizeof(buf), screenshotPath.c_str(), _TRUNCATE);
 	ImGui::PushItemWidth(-FLT_MIN - 120.0f);  // leave room for Open button + label
@@ -372,13 +427,12 @@ void ScreenshotFeature::DrawSettings()
 		Menu::GetSingleton()->settingScreenshotKey,
 		"Change##ScreenshotFeature");
 
-	ImGui::Checkbox("Suppress vanilla screenshot key", &suppressVanillaScreenshot);
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip(
-			"When enabled, Skyrim's built-in screenshot save (Screenshot<N>.png in the\n"
-			"game install dir, fired by PrintScreen) is suppressed.\n"
-			"Papyrus Debug.TakeScreenshot(filename) and modder code that pass an\n"
-			"explicit path still work.");
+	// Status: explain what happens to the vanilla PrintScreen save based on
+	// whether the user's hotkey collides with it. Mirrors VanillaScreenshotHook.
+	if (HotkeyCollidesWithVanilla()) {
+		Util::Text::Disabled("Vanilla PrintScreen save suppressed (this hotkey owns it).");
+	} else {
+		Util::Text::Disabled("Vanilla PrintScreen save still works alongside this hotkey.");
 	}
 
 	// Crop section (Subrect renders preset combo, Save/Delete/Reset buttons,
@@ -543,11 +597,8 @@ void ScreenshotFeature::ScreenshotWorkerLoop()
 			ShowInGameNotification("Screenshot failed - see CommunityShaders.log");
 		} else {
 			logger::info("Saved screenshot to {}", screenshot.outputPath.string());
-			const auto* hdrSuffix = screenshot.sourceWasHDREncoded ?
-			                            " (HDR encoded - may look washed out)" :
-			                            "";
-			ShowInGameNotification(std::format("Screenshot saved{}: {}",
-				hdrSuffix, screenshot.outputPath.filename().string()));
+			ShowInGameNotification(std::format("Screenshot saved: {}",
+				screenshot.outputPath.filename().string()));
 		}
 	}
 	CoUninitialize();
@@ -582,12 +633,6 @@ void ScreenshotFeature::Capture()
 	if (!src.texture) {
 		logger::error("Failed to acquire screenshot source texture ({}).", src.description);
 		return;
-	}
-	if (src.isHDREncoded) {
-		// Captured texture carries HDR-encoded bytes (PQ or scRGB); BMP encoding
-		// truncates them without a tonemap so the saved file looks washed out.
-		// In-game toast lets the user know the file isn't a faithful screen grab.
-		logger::warn("HDR display active - BMP will be HDR-encoded; consider disabling HDR Display before screenshotting until tonemap-on-capture lands.");
 	}
 	ID3D11Texture2D* sourceTexture = src.texture;
 
@@ -647,6 +692,5 @@ void ScreenshotFeature::Capture()
 	screenshot.width = copyW;
 	screenshot.height = copyH;
 	screenshot.outputPath = BuildScreenshotPath(screenshotPath);
-	screenshot.sourceWasHDREncoded = src.isHDREncoded;
 	EnqueueScreenshot(std::move(screenshot));
 }
