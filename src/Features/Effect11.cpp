@@ -38,7 +38,6 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	data.ProceduralSunSize = settingManager.GetValue<float>("Size", "PROCEDURALSUN");
 	data.ProceduralSunEdgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
 	data.ProceduralSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN");
-	data.ProceduralSunGlowCurve = std::max(FLT_MIN, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
 
 	return data;
 }

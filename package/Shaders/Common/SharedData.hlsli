@@ -267,8 +267,7 @@ namespace SharedData
 
 		float ProceduralSunEdgeSoftness;
 		float ProceduralSunGlowIntensity;
-		float ProceduralSunGlowCurve;
-		float pad0;
+		float2 pad0;
 	};
 	struct TerrainBlendingSettings
 	{
