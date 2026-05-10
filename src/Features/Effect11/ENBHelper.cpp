@@ -56,12 +56,22 @@ namespace ENBHelper
 
 			cachedWeather.weatherTransition = sky->currentWeatherPct;
 			cachedTime.skyMode = sky->mode.underlying();
+		} else {
+			cachedWeather.currentWeatherFormID = 0;
+			cachedWeather.currentClassification = -1;
+			cachedWeather.outgoingWeatherFormID = 0;
+			cachedWeather.outgoingClassification = -1;
+			cachedWeather.weatherTransition = 0.0f;
+			cachedTime.skyMode = 0;
 		}
 
 		// Update time info
 		if (const auto* calendar = RE::Calendar::GetSingleton()) {
 			cachedTime.gameHour = calendar->GetHour();
 			cachedTime.dayOfYear = calendar->GetDay() + (calendar->GetMonth() - 1) * 30.0f;  // Approximate (GetDayOfYear() is not available)
+		} else {
+			cachedTime.gameHour = 12.0f;
+			cachedTime.dayOfYear = 0.0f;
 		}
 
 		// Update location info
@@ -84,8 +94,13 @@ namespace ENBHelper
 					cachedLocation.worldSpaceFormID = 0;
 				}
 			} else {
+				cachedLocation.isInterior = false;
 				cachedLocation.worldSpaceFormID = 0;
 			}
+		} else {
+			cachedLocation.locationFormID = 0;
+			cachedLocation.isInterior = false;
+			cachedLocation.worldSpaceFormID = 0;
 		}
 
 		// Update camera info
