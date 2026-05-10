@@ -171,8 +171,7 @@ PS_OUTPUT main(PS_INPUT input)
 		// SDR uses a hard cutoff (Param.x - blendedColor) so legacy weather mods that tuned
 		// bloom intensity against this shoulder don't get blown-out highlights. HDR keeps the
 		// soft-saturation form (1 - exp2(-x)) which bleeds bloom into specular peaks intentionally.
-		float3 bloomMask = isHDR ? saturate(Param.x - (1.0 - exp2(-blendedColor)))
-		                         : saturate(Param.x - blendedColor);
+		float3 bloomMask = isHDR ? saturate(Param.x - (1.0 - exp2(-blendedColor))) : saturate(Param.x - blendedColor);
 		blendedColor += bloomMask * bloomColor;
 	}
 
@@ -190,10 +189,6 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(FADE)
 	outputColor = lerp(outputColor, Fade.xyz, Fade.w);
 #		endif
-
-	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
-		outputColor = Color::GammaToLinearSafe(outputColor);
-	}
 
 	if (isHDR) {
 		if (!ENABLE_LL)
