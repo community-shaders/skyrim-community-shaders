@@ -37,11 +37,6 @@ public:
 
 		uint UseProceduralGradientWeights;
 		float ProceduralGradientWeightCurve;
-		float ParticleIntensity;
-		float ParticleLightingInfluence;
-
-		float ParticleAmbientInfluence;
-		float ParticlePointLightingInfluence;
 		float2 pad0;
 	};
 
