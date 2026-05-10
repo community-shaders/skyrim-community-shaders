@@ -19,12 +19,25 @@
 
 namespace
 {
-	// In VR, the renderer exposes additional render targets beyond RE::RENDER_TARGETS::kTOTAL.
-	// kTOTAL (==114) doubles as the first VR-specific side-by-side render target — the post-composite
-	// stereo image we want to capture. Using the kTOTAL enumerator directly is misleading because
-	// it reads as "count of standard targets". Wrap it in a named constant so the intent is obvious.
-	// This index is only valid in VR builds.
-	constexpr auto kVRSideBySideTarget = RE::RENDER_TARGETS::kTOTAL;
+	// VR analog of kFRAMEBUFFER. CommonLib reuses RE::RENDER_TARGETS::kTOTAL (==114) as the index
+	// of this slot in the renderTargets array — confusing because kTOTAL primarily means "count of
+	// standard targets". RenderDoc capture audit (2026-05-09) shows this slot:
+	//   - Receives Skyrim's final ISCopy draw (input: kMENUBG, the post-UI SBS composite).
+	//   - Is then CopySubresourceRegion'd into two DXGI-shared per-eye R8G8B8A8_SRGB textures
+	//     that SteamVR/OpenVR's compositor consumes.
+	// So functionally it is the side-by-side framebuffer headed to the HMD — the VR equivalent of
+	// the swapchain backbuffer that kFRAMEBUFFER aliases on flat.
+	// TODO: replace with a properly named CommonLibSSE-NG enumerator (e.g. kFRAMEBUFFER_VR) once
+	// upstream lands; this constant is the local stopgap.
+	constexpr auto kVRFramebufferTarget = RE::RENDER_TARGETS::kTOTAL;
+
+	// Picks the runtime-appropriate post-composite, post-UI render target.
+	// Flat: kFRAMEBUFFER (aliases the swapchain backbuffer).
+	// VR:   the SBS framebuffer staged for HMD compositor submission.
+	RE::RENDER_TARGETS::RENDER_TARGET CaptureTarget()
+	{
+		return globals::game::isVR ? kVRFramebufferTarget : RE::RENDER_TARGETS::kFRAMEBUFFER;
+	}
 
 	struct D3D11MultithreadGuard
 	{
@@ -128,6 +141,38 @@ namespace
 		return sourceImage.GetImage(0, 0, 0);
 	}
 
+	// Resolves the underlying ID3D11Texture2D from a renderer slot. Some slots (notably
+	// kFRAMEBUFFER on flat, which aliases the swapchain backbuffer) populate the view
+	// pointers but leave .texture null - HDRDisplay accesses the slot via .SRV/.RTV.
+	// Pull the texture out of the view so a single capture path works for every slot.
+	// The com_ptr `holder` keeps the QueryInterface refcount alive across the call site.
+	ID3D11Texture2D* ResolveSlotTexture(
+		const RE::BSGraphics::RenderTargetData& slot,
+		winrt::com_ptr<ID3D11Texture2D>& holder)
+	{
+		if (slot.texture) {
+			return slot.texture;
+		}
+		auto resolveFromView = [&](ID3D11View* view) -> ID3D11Texture2D* {
+			if (!view) {
+				return nullptr;
+			}
+			winrt::com_ptr<ID3D11Resource> resource;
+			view->GetResource(resource.put());
+			if (!resource) {
+				return nullptr;
+			}
+			if (FAILED(resource->QueryInterface(__uuidof(ID3D11Texture2D), holder.put_void()))) {
+				return nullptr;
+			}
+			return holder.get();
+		};
+		if (auto* tex = resolveFromView(slot.SRV)) {
+			return tex;
+		}
+		return resolveFromView(slot.RTV);
+	}
+
 	std::filesystem::path BuildScreenshotPath(const std::string& screenshotPath)
 	{
 		SYSTEMTIME st;
@@ -148,7 +193,7 @@ ScreenshotFeature::~ScreenshotFeature()
 
 bool ScreenshotFeature::IsInMenu() const
 {
-	return globals::game::isVR;
+	return true;
 }
 
 void ScreenshotFeature::LoadSettings(json& a_json)
@@ -169,10 +214,6 @@ void ScreenshotFeature::SaveSettings(json& a_json)
 
 void ScreenshotFeature::DrawSettings()
 {
-	if (!globals::game::isVR) {
-		return;
-	}
-
 	ImGui::Text("=== Screenshot Settings ===");
 
 	char buf[256];
@@ -199,26 +240,35 @@ void ScreenshotFeature::DrawSettings()
 	ImGui::Separator();
 	ImGui::Spacing();
 
+	// VR's source target packs both eyes side-by-side; only show the left half in the preview.
+	const float previewVisibleWidth = globals::game::isVR ? 0.5f : 1.0f;
+
 	auto renderer = globals::game::renderer;
 	if (renderer) {
 		auto& targets = renderer->GetRuntimeData().renderTargets;
-		auto& mainTarget = targets[kVRSideBySideTarget];
+		auto& mainTarget = targets[CaptureTarget()];
+
+		// Resolve via SRV/RTV when the slot's .texture is null (kFRAMEBUFFER on flat).
+		// The keep-alive com_ptr stays in scope until DrawEditor returns, holding the
+		// QueryInterface'd texture alive while ImGui samples its SRV.
+		winrt::com_ptr<ID3D11Texture2D> previewTextureKeepAlive;
+		ID3D11Texture2D* slotTexture = ResolveSlotTexture(mainTarget, previewTextureKeepAlive);
 
 		ID3D11ShaderResourceView* previewView = mainTarget.SRV;
-		if (mainTarget.texture) {
-			if (previewTexture != mainTarget.texture) {
+		if (slotTexture) {
+			if (previewTexture != slotTexture) {
 				previewSRV = nullptr;
-				previewTexture = mainTarget.texture;
-				globals::d3d::device->CreateShaderResourceView(mainTarget.texture, nullptr, previewSRV.put());
+				previewTexture = slotTexture;
+				globals::d3d::device->CreateShaderResourceView(slotTexture, nullptr, previewSRV.put());
 			}
 			if (previewSRV) {
 				previewView = previewSRV.get();
 			}
 		}
 
-		subrect.DrawEditor(previewView, mainTarget.texture, 0.5f);
+		subrect.DrawEditor(previewView, slotTexture, previewVisibleWidth);
 	} else {
-		subrect.DrawEditor(nullptr, nullptr, 0.5f);
+		subrect.DrawEditor(nullptr, nullptr, previewVisibleWidth);
 	}
 }
 
@@ -327,40 +377,41 @@ void ScreenshotFeature::Capture()
 		return;
 
 	ID3D11Texture2D* sourceTexture = nullptr;
+	winrt::com_ptr<ID3D11Texture2D> sourceTextureKeepAlive;
 
+	const auto targetIndex = CaptureTarget();
 	auto renderer = globals::game::renderer;
 	if (renderer) {
-		logger::debug("VR Detected: Selecting capture target VRSideBySide ({})", static_cast<int>(kVRSideBySideTarget));
-
+		logger::debug("Selecting capture target index {}", static_cast<int>(targetIndex));
 		auto& targets = renderer->GetRuntimeData().renderTargets;
-		auto& mainTarget = targets[kVRSideBySideTarget];
-
-		if (mainTarget.texture) {
-			sourceTexture = mainTarget.texture;
-		}
+		auto& mainTarget = targets[targetIndex];
+		sourceTexture = ResolveSlotTexture(mainTarget, sourceTextureKeepAlive);
 	}
 
 	if (!sourceTexture) {
-		logger::error("Failed to acquire screenshot source texture from VR side-by-side render target.");
+		logger::error("Failed to acquire screenshot source texture (target {}).", static_cast<int>(targetIndex));
 		return;
 	}
 
 	D3D11_TEXTURE2D_DESC srcDesc{};
 	sourceTexture->GetDesc(&srcDesc);
 
+	// VR's side-by-side source packs both eyes; flat is a single image.
+	// Treating one eye's pixel width as the canonical crop space unifies both paths.
+	const uint32_t eyeWidth = globals::game::isVR ? srcDesc.Width / 2 : srcDesc.Width;
+	const uint32_t eyeHeight = srcDesc.Height;
+
 	uint32_t copyX = 0;
 	uint32_t copyY = 0;
-	uint32_t copyW = srcDesc.Width;
-	uint32_t copyH = srcDesc.Height;
+	uint32_t copyW = eyeWidth;
+	uint32_t copyH = eyeHeight;
 
 	if (applyCropToScreenshot) {
-		auto leftEyeRegion = subrect.GetLeftEyePixelRegion(srcDesc.Width, srcDesc.Height);
-		copyX = leftEyeRegion.x;
-		copyY = leftEyeRegion.y;
-		copyW = leftEyeRegion.w;
-		copyH = leftEyeRegion.h;
-	} else {
-		copyW = srcDesc.Width / 2;
+		auto region = subrect.GetPixelRegion(eyeWidth, eyeHeight);
+		copyX = region.x;
+		copyY = region.y;
+		copyW = region.w;
+		copyH = region.h;
 	}
 
 	D3D11_TEXTURE2D_DESC stagingDesc = srcDesc;

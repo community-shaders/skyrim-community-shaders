@@ -20,45 +20,40 @@ namespace Util::Subrect
 		uint32_t h = 1;
 	};
 
-	struct StereoPixelRegions
-	{
-		PixelRegion leftEye;
-		PixelRegion rightEye;
-	};
-
 	struct Preset
 	{
 		std::string name;
-		UVRegion leftEye;
-		UVRegion rightEye;
+		UVRegion uv;
 	};
 
+	// Stateful component for "user picks a sub-rectangle of an image". Stereo-agnostic;
+	// callers pass per-eye dimensions if their source is a side-by-side stereo image.
 	class Controller
 	{
 	public:
 		void LoadSettings(const json& a_json);
 		void SaveSettings(json& a_json) const;
-		void DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture, float eyeRatio);
+		// previewSrv/previewTexture: optional — when provided, draws a clickable thumbnail
+		// the user can drag on. uvVisibleWidth: fraction of the texture width to show
+		// (e.g. 0.5 to display only the left eye of an SBS stereo source).
+		void DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture, float uvVisibleWidth);
 
-		PixelRegion GetLeftEyePixelRegion(uint32_t fullTextureWidth, uint32_t fullTextureHeight) const;
-		StereoPixelRegions GetStereoPixelRegions(uint32_t fullTextureWidth, uint32_t fullTextureHeight) const;
+		// Resolves the current crop UV against an arbitrary pixel size.
+		PixelRegion GetPixelRegion(uint32_t width, uint32_t height) const;
 
-		const UVRegion& GetLeftEyeUV() const { return currentLeftEyeUV; }
-		const UVRegion& GetRightEyeUV() const { return currentRightEyeUV; }
+		const UVRegion& GetUV() const { return currentUV; }
 
 	private:
 		std::vector<Preset> presets;
 		int selectedPresetIndex = 0;
 		char newPresetName[64] = "";
 
-		UVRegion currentLeftEyeUV{};
-		UVRegion currentRightEyeUV{};
+		UVRegion currentUV{};
 
 		bool isDraggingCrop = false;
 		float dragStartUV[2] = { 0.0f, 0.0f };
 
 		void EnsureDefaultPreset();
-		void SyncRightEyeUV();
 		void ClampCurrentUV();
 		void ApplyPreset(int index);
 	};

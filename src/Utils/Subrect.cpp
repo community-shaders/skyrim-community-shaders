@@ -49,15 +49,15 @@ namespace
 		return { uv.x, uv.y, uv.w, uv.h };
 	}
 
-	Util::Subrect::PixelRegion UVToPixelRegion(const Util::Subrect::UVRegion& uv, uint32_t eyeWidth, uint32_t eyeHeight)
+	Util::Subrect::PixelRegion UVToPixelRegion(const Util::Subrect::UVRegion& uv, uint32_t width, uint32_t height)
 	{
 		Util::Subrect::PixelRegion result;
-		result.x = std::min<uint32_t>(eyeWidth - 1, static_cast<uint32_t>(uv.x * eyeWidth));
-		result.y = std::min<uint32_t>(eyeHeight - 1, static_cast<uint32_t>(uv.y * eyeHeight));
-		result.w = std::max<uint32_t>(1, static_cast<uint32_t>(uv.w * eyeWidth));
-		result.h = std::max<uint32_t>(1, static_cast<uint32_t>(uv.h * eyeHeight));
-		result.w = std::min<uint32_t>(result.w, eyeWidth - result.x);
-		result.h = std::min<uint32_t>(result.h, eyeHeight - result.y);
+		result.x = std::min<uint32_t>(width - 1, static_cast<uint32_t>(uv.x * width));
+		result.y = std::min<uint32_t>(height - 1, static_cast<uint32_t>(uv.y * height));
+		result.w = std::max<uint32_t>(1, static_cast<uint32_t>(uv.w * width));
+		result.h = std::max<uint32_t>(1, static_cast<uint32_t>(uv.h * height));
+		result.w = std::min<uint32_t>(result.w, width - result.x);
+		result.h = std::min<uint32_t>(result.h, height - result.y);
 		return result;
 	}
 }
@@ -67,22 +67,13 @@ namespace Util::Subrect
 	void Controller::LoadSettings(const json& a_json)
 	{
 		if (a_json.contains("CropX"))
-			currentLeftEyeUV.x = a_json["CropX"];
+			currentUV.x = a_json["CropX"];
 		if (a_json.contains("CropY"))
-			currentLeftEyeUV.y = a_json["CropY"];
+			currentUV.y = a_json["CropY"];
 		if (a_json.contains("CropW"))
-			currentLeftEyeUV.w = a_json["CropW"];
+			currentUV.w = a_json["CropW"];
 		if (a_json.contains("CropH"))
-			currentLeftEyeUV.h = a_json["CropH"];
-
-		if (a_json.contains("CropRightX"))
-			currentRightEyeUV.x = a_json["CropRightX"];
-		if (a_json.contains("CropRightY"))
-			currentRightEyeUV.y = a_json["CropRightY"];
-		if (a_json.contains("CropRightW"))
-			currentRightEyeUV.w = a_json["CropRightW"];
-		if (a_json.contains("CropRightH"))
-			currentRightEyeUV.h = a_json["CropRightH"];
+			currentUV.h = a_json["CropH"];
 
 		if (a_json.contains("CropPresets") && a_json["CropPresets"].is_array()) {
 			presets.clear();
@@ -90,26 +81,17 @@ namespace Util::Subrect
 				Preset preset;
 				preset.name = entry.value("name", "Unknown");
 				if (entry.contains("left_uv")) {
-					preset.leftEye = LoadUVFromJson(entry["left_uv"]);
+					// Backwards compat with the legacy stereo schema; mirror right-eye is discarded.
+					preset.uv = LoadUVFromJson(entry["left_uv"]);
 				} else {
-					preset.leftEye = LoadUVFromJson(entry, "uv");
+					preset.uv = LoadUVFromJson(entry, "uv");
 				}
-
-				if (entry.contains("right_uv")) {
-					preset.rightEye = LoadUVFromJson(entry["right_uv"]);
-				} else {
-					preset.rightEye = preset.leftEye;
-				}
-
 				presets.push_back(std::move(preset));
 			}
 		}
 
 		EnsureDefaultPreset();
 		ClampCurrentUV();
-		if (!a_json.contains("CropRightX") && !a_json.contains("CropRightY") && !a_json.contains("CropRightW") && !a_json.contains("CropRightH")) {
-			SyncRightEyeUV();
-		}
 
 		if (a_json.contains("SelectedPresetIndex")) {
 			selectedPresetIndex = a_json["SelectedPresetIndex"];
@@ -123,31 +105,25 @@ namespace Util::Subrect
 
 	void Controller::SaveSettings(json& a_json) const
 	{
-		a_json["CropX"] = currentLeftEyeUV.x;
-		a_json["CropY"] = currentLeftEyeUV.y;
-		a_json["CropW"] = currentLeftEyeUV.w;
-		a_json["CropH"] = currentLeftEyeUV.h;
-		a_json["CropRightX"] = currentRightEyeUV.x;
-		a_json["CropRightY"] = currentRightEyeUV.y;
-		a_json["CropRightW"] = currentRightEyeUV.w;
-		a_json["CropRightH"] = currentRightEyeUV.h;
+		a_json["CropX"] = currentUV.x;
+		a_json["CropY"] = currentUV.y;
+		a_json["CropW"] = currentUV.w;
+		a_json["CropH"] = currentUV.h;
 
 		json presetsJson = json::array();
 		for (const auto& preset : presets) {
 			json entry;
 			entry["name"] = preset.name;
-			entry["uv"] = SaveUVToJson(preset.leftEye);
-			entry["left_uv"] = SaveUVToJson(preset.leftEye);
-			entry["right_uv"] = SaveUVToJson(preset.rightEye);
+			entry["uv"] = SaveUVToJson(preset.uv);
 			presetsJson.push_back(std::move(entry));
 		}
 		a_json["CropPresets"] = presetsJson;
 		a_json["SelectedPresetIndex"] = selectedPresetIndex;
 	}
 
-	void Controller::DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture, float eyeRatio)
+	void Controller::DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture, float uvVisibleWidth)
 	{
-		ImGui::Text("=== VR Capture Cropping (Left Eye Relative) ===");
+		ImGui::Text("=== Capture Cropping ===");
 
 		std::string currentPreview =
 			(selectedPresetIndex >= 0 && selectedPresetIndex < static_cast<int>(presets.size())) ? presets[selectedPresetIndex].name : "(Custom)";
@@ -170,11 +146,7 @@ namespace Util::Subrect
 		if (ImGui::Button("Save Preset")) {
 			std::string presetName = newPresetName;
 			if (!presetName.empty()) {
-				presets.push_back(Preset{
-					.name = presetName,
-					.leftEye = currentLeftEyeUV,
-					.rightEye = currentRightEyeUV,
-				});
+				presets.push_back(Preset{ .name = presetName, .uv = currentUV });
 				selectedPresetIndex = static_cast<int>(presets.size()) - 1;
 				newPresetName[0] = '\0';
 			}
@@ -191,18 +163,16 @@ namespace Util::Subrect
 		ImGui::Spacing();
 		ImGui::PushItemWidth(250.0f);
 		bool changed = false;
-		changed |= ImGui::SliderFloat2("Position UV (X, Y)", &currentLeftEyeUV.x, 0.0f, 1.0f, "%.3f");
-		changed |= ImGui::SliderFloat2("Size UV (W, H)", &currentLeftEyeUV.w, 0.01f, 1.0f, "%.3f");
+		changed |= ImGui::SliderFloat2("Position UV (X, Y)", &currentUV.x, 0.0f, 1.0f, "%.3f");
+		changed |= ImGui::SliderFloat2("Size UV (W, H)", &currentUV.w, 0.01f, 1.0f, "%.3f");
 		ImGui::PopItemWidth();
 
 		if (changed) {
 			selectedPresetIndex = -1;
 			ClampCurrentUV();
-			SyncRightEyeUV();
 		}
 
 		ImGui::Spacing();
-		ImGui::TextDisabled("Right eye UV mirrors the left-eye preset.");
 		ImGui::Text("Interactive Cropping (Drag on the image to select)");
 
 		if (!previewSrv || !previewTexture) {
@@ -213,11 +183,11 @@ namespace Util::Subrect
 		D3D11_TEXTURE2D_DESC desc{};
 		previewTexture->GetDesc(&desc);
 		float maxWidth = std::min(400.0f, ImGui::GetContentRegionAvail().x);
-		float aspectRatio = (static_cast<float>(desc.Width) * eyeRatio) / static_cast<float>(desc.Height);
+		float aspectRatio = (static_cast<float>(desc.Width) * uvVisibleWidth) / static_cast<float>(desc.Height);
 		ImVec2 imageSize(maxWidth, maxWidth / aspectRatio);
 		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 
-		ImGui::Image(reinterpret_cast<ImTextureID>(previewSrv), imageSize, ImVec2(0.0f, 0.0f), ImVec2(eyeRatio, 1.0f));
+		ImGui::Image(reinterpret_cast<ImTextureID>(previewSrv), imageSize, ImVec2(0.0f, 0.0f), ImVec2(uvVisibleWidth, 1.0f));
 
 		ImGui::SetCursorScreenPos(cursorPos);
 		ImGui::SetNextItemAllowOverlap();
@@ -233,10 +203,10 @@ namespace Util::Subrect
 			selectedPresetIndex = -1;
 			dragStartUV[0] = mouseUVX;
 			dragStartUV[1] = mouseUVY;
-			currentLeftEyeUV.x = mouseUVX;
-			currentLeftEyeUV.y = mouseUVY;
-			currentLeftEyeUV.w = 0.0f;
-			currentLeftEyeUV.h = 0.0f;
+			currentUV.x = mouseUVX;
+			currentUV.y = mouseUVY;
+			currentUV.w = 0.0f;
+			currentUV.h = 0.0f;
 		}
 
 		if (isDraggingCrop) {
@@ -245,12 +215,11 @@ namespace Util::Subrect
 			float maxX = std::max(dragStartUV[0], mouseUVX);
 			float maxY = std::max(dragStartUV[1], mouseUVY);
 
-			currentLeftEyeUV.x = minX;
-			currentLeftEyeUV.y = minY;
-			currentLeftEyeUV.w = maxX - minX;
-			currentLeftEyeUV.h = maxY - minY;
+			currentUV.x = minX;
+			currentUV.y = minY;
+			currentUV.w = maxX - minX;
+			currentUV.h = maxY - minY;
 			ClampCurrentUV();
-			SyncRightEyeUV();
 
 			if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
 				isDraggingCrop = false;
@@ -258,58 +227,34 @@ namespace Util::Subrect
 		}
 
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		ImVec2 pMin(cursorPos.x + currentLeftEyeUV.x * imageSize.x, cursorPos.y + currentLeftEyeUV.y * imageSize.y);
-		ImVec2 pMax(cursorPos.x + (currentLeftEyeUV.x + currentLeftEyeUV.w) * imageSize.x,
-			cursorPos.y + (currentLeftEyeUV.y + currentLeftEyeUV.h) * imageSize.y);
+		ImVec2 pMin(cursorPos.x + currentUV.x * imageSize.x, cursorPos.y + currentUV.y * imageSize.y);
+		ImVec2 pMax(cursorPos.x + (currentUV.x + currentUV.w) * imageSize.x,
+			cursorPos.y + (currentUV.y + currentUV.h) * imageSize.y);
 		drawList->AddRect(pMin, pMax, IM_COL32(0, 255, 0, 255), 0.0f, 0, 2.0f);
 	}
 
-	PixelRegion Controller::GetLeftEyePixelRegion(uint32_t fullTextureWidth, uint32_t fullTextureHeight) const
+	PixelRegion Controller::GetPixelRegion(uint32_t width, uint32_t height) const
 	{
-		return UVToPixelRegion(currentLeftEyeUV, fullTextureWidth / 2, fullTextureHeight);
-	}
-
-	StereoPixelRegions Controller::GetStereoPixelRegions(uint32_t fullTextureWidth, uint32_t fullTextureHeight) const
-	{
-		StereoPixelRegions regions;
-		regions.leftEye = UVToPixelRegion(currentLeftEyeUV, fullTextureWidth / 2, fullTextureHeight);
-		regions.rightEye = UVToPixelRegion(currentRightEyeUV, fullTextureWidth / 2, fullTextureHeight);
-		return regions;
+		return UVToPixelRegion(currentUV, width, height);
 	}
 
 	void Controller::EnsureDefaultPreset()
 	{
 		if (presets.empty()) {
-			Preset preset;
-			preset.name = "Full Left Eye";
-			preset.leftEye = DefaultUV();
-			preset.rightEye = DefaultUV();
-			presets.push_back(std::move(preset));
+			presets.push_back(Preset{ .name = "Full Frame", .uv = DefaultUV() });
 		}
-	}
-
-	void Controller::SyncRightEyeUV()
-	{
-		// Mirror horizontally: left-eye overlap is toward the nose (right),
-		// right-eye overlap is toward the nose (left).
-		currentRightEyeUV.y = currentLeftEyeUV.y;
-		currentRightEyeUV.w = currentLeftEyeUV.w;
-		currentRightEyeUV.h = currentLeftEyeUV.h;
-		currentRightEyeUV.x = 1.0f - currentLeftEyeUV.x - currentLeftEyeUV.w;
 	}
 
 	void Controller::ClampCurrentUV()
 	{
-		currentLeftEyeUV = ClampUV(currentLeftEyeUV);
-		currentRightEyeUV = ClampUV(currentRightEyeUV);
+		currentUV = ClampUV(currentUV);
 	}
 
 	void Controller::ApplyPreset(int index)
 	{
 		EnsureDefaultPreset();
 		selectedPresetIndex = std::clamp(index, 0, static_cast<int>(presets.size()) - 1);
-		currentLeftEyeUV = presets[selectedPresetIndex].leftEye;
-		currentRightEyeUV = presets[selectedPresetIndex].rightEye;
+		currentUV = presets[selectedPresetIndex].uv;
 		ClampCurrentUV();
 	}
 }  // namespace Util::Subrect
