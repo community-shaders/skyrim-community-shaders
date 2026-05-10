@@ -299,29 +299,15 @@ namespace
 	//   AE 1.6.1170  id 36853   RVA      0x653240
 	//   VR           via SE id  vr_addr  0x1405c8b30 (status 3 in database.csv)
 	//
-	// True when the user's screenshot hotkey is the single key vanilla Skyrim binds
-	// to its built-in PrintScreen save. Anything else (a different key, a chord,
-	// an unbound combo) means the user can have both: ours on their hotkey,
-	// vanilla on PrintScreen.
-	bool HotkeyCollidesWithVanilla()
-	{
-		const auto& combo = Menu::GetSingleton()->GetSettings().ScreenshotKey;
-		return combo.size() == 1 &&
-		       combo[0].GetDevice() == InputDeviceType::Keyboard &&
-		       combo[0].GetKey() == VK_SNAPSHOT;
-	}
-
-	// Pass through whenever an explicit path is provided (Papyrus's
-	// Debug.TakeScreenshot(filename) and modder code) so scripts and mods that
-	// take programmatic screenshots keep working. The keypress-driven default-
-	// path save is suppressed only when our hotkey collides with vanilla's
-	// PrintScreen - otherwise the user gets both saves on the same key, which
-	// is just clutter. With separate hotkeys both paths run independently.
+	// We pass through whenever an explicit path is provided (Papyrus's
+	// Debug.TakeScreenshot(filename) and modder code), so only the keypress-
+	// driven default-path save is suppressed when the user opts in.
 	struct VanillaScreenshotHook
 	{
 		static void thunk(char* a_explicitPath, int a_format)
 		{
-			if (a_explicitPath == nullptr && HotkeyCollidesWithVanilla()) {
+			if (a_explicitPath == nullptr &&
+				globals::features::screenshotFeature.suppressVanillaScreenshot) {
 				return;
 			}
 			func(a_explicitPath, a_format);
@@ -367,6 +353,8 @@ void ScreenshotFeature::LoadSettings(json& a_json)
 		screenshotPath = a_json["ScreenshotPath"];
 	if (a_json.contains("ApplyCropToScreenshot"))
 		applyCropToScreenshot = a_json["ApplyCropToScreenshot"];
+	if (a_json.contains("SuppressVanillaScreenshot"))
+		suppressVanillaScreenshot = a_json["SuppressVanillaScreenshot"];
 	subrect.LoadSettings(a_json);
 }
 
@@ -374,6 +362,7 @@ void ScreenshotFeature::SaveSettings(json& a_json)
 {
 	a_json["ScreenshotPath"] = screenshotPath;
 	a_json["ApplyCropToScreenshot"] = applyCropToScreenshot;
+	a_json["SuppressVanillaScreenshot"] = suppressVanillaScreenshot;
 	subrect.SaveSettings(a_json);
 }
 
@@ -427,12 +416,13 @@ void ScreenshotFeature::DrawSettings()
 		Menu::GetSingleton()->settingScreenshotKey,
 		"Change##ScreenshotFeature");
 
-	// Status: explain what happens to the vanilla PrintScreen save based on
-	// whether the user's hotkey collides with it. Mirrors VanillaScreenshotHook.
-	if (HotkeyCollidesWithVanilla()) {
-		Util::Text::Disabled("Vanilla PrintScreen save suppressed (this hotkey owns it).");
-	} else {
-		Util::Text::Disabled("Vanilla PrintScreen save still works alongside this hotkey.");
+	ImGui::Checkbox("Suppress vanilla screenshot key", &suppressVanillaScreenshot);
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip(
+			"When enabled, Skyrim's built-in screenshot save (Screenshot<N>.png in the\n"
+			"game install dir, fired by PrintScreen) is suppressed.\n"
+			"Papyrus Debug.TakeScreenshot(filename) and modder code that pass an\n"
+			"explicit path still work.");
 	}
 
 	// Crop section (Subrect renders preset combo, Save/Delete/Reset buttons,

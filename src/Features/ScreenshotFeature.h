@@ -30,6 +30,11 @@ struct ScreenshotFeature : public Feature
 	void Capture();
 	bool applyCropToScreenshot = true;
 
+	// When true, suppress Skyrim's built-in default-path screenshot save (the keypress
+	// path that writes Screenshot<N>.png into the game install directory). Explicit-path
+	// callers (Papyrus Debug.TakeScreenshot, modder code) still pass through.
+	bool suppressVanillaScreenshot = true;
+
 	// Settings
 	std::string screenshotPath = "Screenshots";
 
