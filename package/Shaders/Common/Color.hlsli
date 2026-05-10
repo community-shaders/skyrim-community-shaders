@@ -347,6 +347,11 @@ namespace Color
 		return ENABLE_LL ? GamutTransform(pow(abs(color), SharedData::linearLightingSettings.colorGamma)) : color;
 	}
 
+	float ColorToLinear(float color)
+	{
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.colorGamma) : color;
+	}
+
 	float3 RadianceToLinear(float3 color)
 	{
 		return ENABLE_LL ? color : SkyrimGammaToLinear(color);
