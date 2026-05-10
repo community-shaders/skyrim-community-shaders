@@ -301,8 +301,6 @@ namespace Color
 
 	float3 Water(float3 color)
 	{
-		if (SharedData::enbSettings.Enable)
-			color = pow(abs(color), SharedData::enbSettings.ColorPow);
 		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.waterGamma) : color;
 	}
 
