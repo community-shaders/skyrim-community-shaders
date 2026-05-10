@@ -88,7 +88,7 @@ struct LinearLighting : Feature
 		float otherEffectMult;
 		uint pad0;
 	};
-	static_assert(sizeof(PerFrameData) % 16 == 0);
+	STATIC_ASSERT_ALIGNAS_16(PerFrameData);
 
 	struct alignas(16) PerGeometryData
 	{
