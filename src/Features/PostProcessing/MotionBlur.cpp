@@ -1,5 +1,6 @@
 #include "MotionBlur.h"
 #include "ShaderCache.h"
+#include "Util.h"
 
 #pragma warning(disable: 4324)
 
@@ -201,7 +202,7 @@ void MotionBlur::Draw(TextureInfo& inout_tex)
 
 		// First validate that motion vector and depth resources exist and are valid
 		auto& motionVectorTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-		auto& depthData = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+		auto* depthSRV = Util::GetCurrentSceneDepthSRV(false);
 
 		// Check that the required resources are valid
 		if (!motionVectorTex.texture || !motionVectorTex.SRV) {
@@ -209,7 +210,7 @@ void MotionBlur::Draw(TextureInfo& inout_tex)
 			return;
 		}
 
-		if (!depthData.texture || !depthData.depthSRV) {
+		if (!depthSRV) {
 			logger::error("Motion blur error: Depth texture is invalid");
 			return;
 		}
@@ -611,7 +612,7 @@ void MotionBlur::ExecuteBlurPass(TextureInfo& inout_tex)
 
 	// Get engine resources
 	auto& motionVectorTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	auto& depthData = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV(false);
 
 	// Validate resources
 	if (!motionVectorTex.texture || !motionVectorTex.SRV) {
@@ -619,7 +620,7 @@ void MotionBlur::ExecuteBlurPass(TextureInfo& inout_tex)
 		return;
 	}
 
-	if (!depthData.texture || !depthData.depthSRV) {
+	if (!depthSRV) {
 		logger::error("Motion blur error: Depth texture is invalid in blur pass");
 		return;
 	}
@@ -640,7 +641,6 @@ void MotionBlur::ExecuteBlurPass(TextureInfo& inout_tex)
 	}
 
 	ID3D11ShaderResourceView* velocitySRV = motionVectorTex.SRV;
-	ID3D11ShaderResourceView* depthSRV = depthData.depthSRV;
 
 	// Set samplers
 	if (!linearSampler || !pointSampler) {

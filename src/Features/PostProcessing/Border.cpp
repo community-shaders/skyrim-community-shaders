@@ -140,7 +140,10 @@ void Border::ClearMotionVectorsForFrameGen()
 	};
 	borderCB->Update(data);
 
-	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV(false);
+	if (!depthSRV) {
+		return;
+	}
 	auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	// Bind SharedData (b5) and FrameBuffer (b12) for CS stage — shader needs
@@ -150,7 +153,7 @@ void Border::ClearMotionVectorsForFrameGen()
 	ID3D11Buffer* perFrameBuf = *globals::game::perFrame.get();
 	context->CSSetConstantBuffers(12, 1, &perFrameBuf);
 
-	ID3D11ShaderResourceView* srvs[1] = { depth.depthSRV };
+	ID3D11ShaderResourceView* srvs[1] = { depthSRV };
 	context->CSSetShaderResources(0, 1, srvs);
 	ID3D11UnorderedAccessView* uavs[1] = { motion.UAV };
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
@@ -183,9 +186,12 @@ void Border::Draw(TextureInfo& inout_tex)
 	};
 	borderCB->Update(data);
 
-	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV(false);
+	if (!depthSRV) {
+		return;
+	}
 	auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-	ID3D11ShaderResourceView* srvs[2] = { inout_tex.srv, depth.depthSRV };
+	ID3D11ShaderResourceView* srvs[2] = { inout_tex.srv, depthSRV };
 	context->CSSetShaderResources(0, 2, srvs);
 	ID3D11UnorderedAccessView* uavs[2] = { texOutput->uav.get(), motion.UAV };
 	context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
