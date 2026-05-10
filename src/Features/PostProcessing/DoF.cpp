@@ -350,7 +350,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 {
 	auto state = globals::state;
 	auto context = globals::d3d::context;
-	auto* depthSRV = Util::GetCurrentSceneDepthSRV(false);
+	auto* depthSRV = Util::GetPostUpscaleDepthSRV();
 	if (!depthSRV) {
 		return;
 	}

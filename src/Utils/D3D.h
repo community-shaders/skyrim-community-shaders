@@ -37,4 +37,9 @@ namespace Util
 	// prefer16bit = false (default): R32_FLOAT  -- for compute shaders doing arithmetic on depth
 	// prefer16bit = true:            R16_UNORM  -- for pixel shaders via slot 17 / SharedData::GetDepth
 	ID3D11ShaderResourceView* GetCurrentSceneDepthSRV(bool prefer16bit = false);
+
+	// Returns the real kMAIN depth SRV for passes that run after depth upscaling.
+	// This bypasses Terrain Blending's kMAIN.depthSRV replacement, which points at
+	// the render-resolution blended depth texture.
+	ID3D11ShaderResourceView* GetPostUpscaleDepthSRV();
 }  // namespace Util

@@ -186,7 +186,7 @@ void Border::Draw(TextureInfo& inout_tex)
 	};
 	borderCB->Update(data);
 
-	auto* depthSRV = Util::GetCurrentSceneDepthSRV(false);
+	auto* depthSRV = Util::GetPostUpscaleDepthSRV();
 	if (!depthSRV) {
 		return;
 	}
