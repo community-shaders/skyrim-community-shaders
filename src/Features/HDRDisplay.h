@@ -9,8 +9,13 @@
 
 struct HDRDisplay : public Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "179371";
+
+public:
 	virtual inline std::string GetName() override { return "HDR Display"; }
 	virtual inline std::string GetShortName() override { return "HDRDisplay"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetCategory() const override { return "Display"; }
 	virtual inline bool SupportsVR() override { return false; }
 	virtual inline bool IsCore() const override { return false; }
@@ -18,7 +23,7 @@ struct HDRDisplay : public Feature
 	virtual inline std::string_view GetShaderDefineName() override { return "HDR_OUTPUT"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override
 	{
-		return shaderType == RE::BSShader::Type::ImageSpace;
+		return shaderType == RE::BSShader::Type::ImageSpace || shaderType == RE::BSShader::Type::Sky;
 	}
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
@@ -43,7 +48,7 @@ struct HDRDisplay : public Feature
 		bool hdrAutoDetected = false;     // Has auto-detection run at least once?
 	};
 
-	// SharedData::HDRData fourth component: menu/scene path for ISHDR + sun scale (HLSL must match).
+	// SharedData::HDRData.w: menu/scene path for ISHDR; HDRSun uses w>0 to scale sun toward kMenuSunNits (see HDRSun.hlsli).
 	static constexpr float kHdrMenuSceneGameplay = 0.f;
 	static constexpr float kHdrMenuScenePauseOrMap = 0.58f;
 	static constexpr float kHdrMenuSceneMainOrLoading = 1.f;

@@ -213,7 +213,6 @@ namespace SharedData
 	struct LinearLightingSettings
 	{
 		uint enableLinearLighting;
-		uint enableGammaCorrection;
 		uint enableACEScg;
 		uint isDirLightLinear;
 		float dirLightMult;
@@ -241,9 +240,6 @@ namespace SharedData
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		float _pad0;
-		float _pad1;
-		float _pad2;
 	};
 
 	struct TerrainBlendingSettings
@@ -261,9 +257,14 @@ namespace SharedData
 		float fogHeightFalloff;
 		float fogDensity;
 		float directionalInscatteringMultiplier;
-		float directionalInscatteringExponent;
+		float directionalInscatteringAnisotropy;
 		float4 inscatteringTint;
 		float cubemapMipLevel;
+		float sunlightAttenuationAmount;
+		uint respectVanillaFogFade;
+		uint disableVanillaFog;
+		float4 fogInscatteringColor;
+		float originalFogColorAmount;
 		float3 pad;
 	};
 

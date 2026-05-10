@@ -4,9 +4,18 @@
 #include "Utils/ActorUtils.h"
 #include "Utils/D3D.h"
 
-static const uint MAX_BOUNDING_BOXES = 64;
-static const uint MAX_COLLISIONS_PER_BOUNDING_BOX = 64;
-static const uint MAX_COLLISIONS = MAX_BOUNDING_BOXES * MAX_COLLISIONS_PER_BOUNDING_BOX;
+static constexpr uint MAX_BOUNDING_BOXES = 64;
+static constexpr uint MAX_COLLISIONS_PER_BOUNDING_BOX = 64;
+static constexpr uint MAX_COLLISIONS = MAX_BOUNDING_BOXES * MAX_COLLISIONS_PER_BOUNDING_BOX;
+static constexpr float MAX_ACTOR_DISTANCE = 2048.0f;
+static constexpr float MAX_ACTOR_SQ_DISTANCE = MAX_ACTOR_DISTANCE * MAX_ACTOR_DISTANCE;
+static constexpr float MIN_COLLISION_RADIUS_DISTANCE_SCALE = 0.001f;
+
+struct GrassCollisionActorCandidate
+{
+	RE::ActorHandle handle;
+	float sqDistance;
+};
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GrassCollision::Settings,
@@ -23,33 +32,32 @@ void GrassCollision::DrawSettings()
 
 void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 {
-	eastl::vector<RE::ActorPtr> actorList{};
+	eastl::vector<GrassCollisionActorCandidate> actorCandidates{};
+	RE::NiPoint3 cameraPosition = Util::GetEyePosition(0);
+
+	auto addActorCandidate = [&](RE::ActorHandle a_handle) {
+		auto actor = a_handle.get();
+		if (actor && actor->Is3DLoaded()) {
+			float sqDistance = cameraPosition.GetSquaredDistance(actor->GetPosition());
+			if (sqDistance <= MAX_ACTOR_SQ_DISTANCE)
+				actorCandidates.push_back({ a_handle, sqDistance });
+		}
+	};
 
 	// Actor query code from po3 under MIT
 	// https://github.com/powerof3/PapyrusExtenderSSE/blob/7a73b47bc87331bec4e16f5f42f2dbc98b66c3a7/include/Papyrus/Functions/Faction.h#L24C7-L46
 	if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
-		std::vector<RE::BSTArray<RE::ActorHandle>*> actors;
-		actors.push_back(&processLists->highActorHandles);  // High actors are in combat or doing something interesting
-		for (auto array : actors) {
-			for (auto& actorHandle : *array) {
-				auto actorPtr = actorHandle.get();
-				if (actorPtr && actorPtr.get() && actorPtr->Is3DLoaded()) {
-					actorList.push_back(actorPtr);
-				}
-			}
+		for (auto& actorHandle : processLists->highActorHandles) {
+			addActorCandidate(actorHandle);
 		}
 	}
 
-	if (auto player = RE::PlayerCharacter::GetSingleton())
-		actorList.push_back(player->GetHandle().get());
+	if (auto player = RE::PlayerCharacter::GetSingleton()) {
+		addActorCandidate(player->GetHandle());
+	}
 
-	RE::NiPoint3 cameraPosition = Util::GetEyePosition(0);
-
-	// Sort actors by distance to eye, closest first
-	std::sort(actorList.begin(), actorList.end(), [&cameraPosition](RE::ActorPtr a, RE::ActorPtr b) {
-		float distA = cameraPosition.GetSquaredDistance(a->GetPosition());
-		float distB = cameraPosition.GetSquaredDistance(b->GetPosition());
-		return distA < distB;
+	std::sort(actorCandidates.begin(), actorCandidates.end(), [](const GrassCollisionActorCandidate& a, const GrassCollisionActorCandidate& b) {
+		return a.sqDistance < b.sqDistance;
 	});
 
 	eastl::vector<BoundingBoxPacked> boundingBoxData{};
@@ -60,15 +68,14 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 
 	uint collisionIndexExtent = 0;
 
-	for (const auto& actor : actorList) {
+	for (const auto& actorCandidate : actorCandidates) {
+		auto actor = actorCandidate.handle.get();
 		if (actor && actor->Is3DLoaded()) {
 			auto root = actor->Get3D(false);
 			if (!root)
 				continue;
 
-			float distance = cameraPosition.GetDistance(actor->GetPosition());
-			if (distance > 2048.0f)
-				continue;
+			float distance = std::sqrt(actorCandidate.sqDistance);
 
 			eastl::vector<float4> collisionShapes{};
 
@@ -77,7 +84,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 				float radius;
 				if (Util::GetShapeBound(a_object, centerPos, radius)) {
 					// Cull extremely small collisions
-					if (radius < distance * 0.001f)
+					if (radius < distance * MIN_COLLISION_RADIUS_DISTANCE_SCALE)
 						return RE::BSVisit::BSVisitControl::kContinue;
 
 					centerPos -= cameraPosition;
@@ -124,10 +131,12 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 					break;
 			}
 
-			if (boundingBox.IndexStart != boundingBox.IndexEnd)
+			if (boundingBox.IndexStart != boundingBox.IndexEnd) {
 				boundingBoxData.push_back(boundingBox);
-
-			collisionIndexExtent = boundingBox.IndexEnd;
+				collisionIndexExtent = boundingBox.IndexEnd;
+				if (boundingBoxData.size() == MAX_BOUNDING_BOXES)
+					break;
+			}
 		}
 	}
 

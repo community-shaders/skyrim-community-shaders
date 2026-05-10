@@ -3,6 +3,7 @@
 #include "LinearLighting.h"
 
 #include "Menu/ThemeManager.h"
+#include "Utils/ExternalEmittance.h"
 #include "Shadercache.h"
 #include "State.h"
 #include "Util.h"
@@ -564,6 +565,7 @@ void LightLimitFix::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* T
 void LightLimitFix::Hooks::BSEffectShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
 	func(This, Pass, RenderFlags);
+	ExternalEmittance::UpdatePermutation(Pass);
 	auto& singleton = globals::features::lightLimitFix;
 	singleton.BSLightingShader_SetupGeometry_Before(Pass);
 	singleton.BSLightingShader_SetupGeometry_After(Pass);

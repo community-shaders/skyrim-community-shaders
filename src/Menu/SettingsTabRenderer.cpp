@@ -717,7 +717,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		}
 
 		// Popup modal for creating new theme
-		if (ImGui::BeginPopupModal("Create New Theme", &showCreateThemePopup, ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (auto popup = Util::CenteredPopupModal("Create New Theme", &showCreateThemePopup)) {
 			ImGui::Text("Create a new theme with your current settings:");
 			ImGui::Separator();
 
@@ -827,8 +827,6 @@ void SettingsTabRenderer::RenderThemesTab()
 				showCreateThemePopup = false;
 				ImGui::CloseCurrentPopup();
 			}
-
-			ImGui::EndPopup();
 		}
 
 		if (deleteThemePopup.Draw() && currentThemeInfo && !currentThemeInfo->filePath.empty()) {

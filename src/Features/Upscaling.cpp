@@ -25,6 +25,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameLimitMode,
 	frameGenerationMode,
 	frameGenerationForceEnable,
+	frameGenerationAllowInMenus,
 	streamlineLogLevel,
 	sharpnessFSR,
 	sharpnessDLSS,
@@ -197,11 +198,11 @@ void Upscaling::DrawSettings()
 	else
 		currentUpscaleMode = &settings.upscaleMethodNoDLSS;
 
-	// Slider for method selection
-	// Clamp the index used to read from the built label vector to avoid OOB if the stored value is stale
-	uint32_t modeLabelIndex = std::min(*currentUpscaleMode, static_cast<uint32_t>(upscaleModes.size() - 1));
-	std::string currentLabel = upscaleModes[modeLabelIndex];
-	ImGui::SliderInt("Method", (int*)currentUpscaleMode, 0, availableModes, currentLabel.c_str());
+	// Dropdown for method selection
+	std::vector<const char*> modeLabels;
+	for (uint32_t i = 0; i <= availableModes; ++i)
+		modeLabels.push_back(upscaleModes[i].c_str());
+	ImGui::Combo("Method", (int*)currentUpscaleMode, modeLabels.data(), (int)modeLabels.size());
 
 	*currentUpscaleMode = std::min(availableModes, *currentUpscaleMode);
 
@@ -212,11 +213,9 @@ void Upscaling::DrawSettings()
 	if (!globals::game::isVR && upscaleMethod == UpscaleMethod::kDLSS) {
 		auto screenSize = globals::state->screenSize;
 		if (screenSize.x > streamline.MAX_RESOLUTION || screenSize.y > streamline.MAX_RESOLUTION) {
-			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-			ImGui::Text("Warning: Requested resolution %.0f x %.0f exceeds maximum supported resolution %d x %d for DLSS.",
+			Util::Text::Warning("Warning: Requested resolution %.0f x %.0f exceeds maximum supported resolution %d x %d for DLSS.",
 				screenSize.x, screenSize.y, streamline.MAX_RESOLUTION, streamline.MAX_RESOLUTION);
-			ImGui::Text("DLSS will not function. Lower your resolution or select a different upscaling method.");
-			ImGui::PopStyleColor();
+			Util::Text::Warning("DLSS will not function. Lower your resolution or select a different upscaling method.");
 		}
 	}
 
@@ -278,57 +277,53 @@ void Upscaling::DrawSettings()
 			bool onlyRequiresRestart = true;
 
 			if (!isWindowed) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: Requires windowed mode");
-				ImGui::PopStyleColor();
+				Util::Text::Warning("Warning: Requires windowed mode");
 
 				onlyRequiresRestart = false;
 			}
 
 			if (lowRefreshRate && !settings.frameGenerationForceEnable) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
-				ImGui::PopStyleColor();
+				Util::Text::Warning("Warning: Requires a high refresh rate monitor or Force Enable Frame Generation");
 
 				onlyRequiresRestart = false;
 			}
 
 			if (fidelityFXMissing) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: FidelityFX DLLs are not loaded");
-				ImGui::PopStyleColor();
+				Util::Text::Warning("Warning: FidelityFX DLLs are not loaded");
 
 				onlyRequiresRestart = false;
 			}
 
-			if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: Requires restart");
-				ImGui::PopStyleColor();
-			}
+			if (onlyRequiresRestart && settings.frameGenerationMode && !frameGenerationDx12PathActive)
+				Util::Text::Warning("Warning: Requires restart");
 
-			if (!settings.frameGenerationMode && frameGenerationDx12PathActive) {
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::Text("Warning: Requires restart");
-				ImGui::PopStyleColor();
-			}
+			if (!settings.frameGenerationMode && frameGenerationDx12PathActive)
+				Util::Text::Warning("Warning: Requires restart");
 
-			std::string enabledLabel = "Enabled";
-			const char* toggleModes[] = { "Disabled", "Enabled" };
-			const char* toggleModesFG[] = { "Disabled", enabledLabel.c_str() };
-
-			ImGui::SliderInt("Frame Generation", (int*)&settings.frameGenerationMode, 0, 1, toggleModesFG[settings.frameGenerationMode]);
+			bool fgEnabled = settings.frameGenerationMode != 0;
+			if (ImGui::Checkbox("Frame Generation", &fgEnabled))
+				settings.frameGenerationMode = fgEnabled ? 1 : 0;
 
 			if (!frameGenerationDx12PathActive)
 				ImGui::BeginDisabled();
 
-			ImGui::SliderInt("Frame Limit (Variable Refresh Rate)", (int*)&settings.frameLimitMode, 0, 1, std::format("{}", toggleModes[settings.frameLimitMode]).c_str());
+			bool flEnabled = settings.frameLimitMode != 0;
+			if (ImGui::Checkbox("Frame Limit (Variable Refresh Rate)", &flEnabled))
+				settings.frameLimitMode = flEnabled ? 1 : 0;
 
 			if (!frameGenerationDx12PathActive)
 				ImGui::EndDisabled();
 
 			ImGui::TextWrapped("Allows frame generation to function on low refresh rate monitors. Detected: %.2f Hz", refreshRate);
-			ImGui::SliderInt("Force Enable Frame Generation", (int*)&settings.frameGenerationForceEnable, 0, 1, std::format("{}", toggleModes[settings.frameGenerationForceEnable]).c_str());
+			bool fgForce = settings.frameGenerationForceEnable != 0;
+			if (ImGui::Checkbox("Force Enable Frame Generation", &fgForce))
+				settings.frameGenerationForceEnable = fgForce ? 1 : 0;
+
+			ImGui::Checkbox("Frame Generation in Menus", &settings.frameGenerationAllowInMenus);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::TextUnformatted("Keeps frame generation active while game menus are open.");
+				ImGui::TextUnformatted("May feel smoother, but increases menu input latency.");
+			}
 
 			ImGui::TreePop();
 		}
@@ -339,8 +334,6 @@ void Upscaling::DrawSettings()
 		const bool reflexAvailable = streamline.initialized && streamline.featureReflex;
 		const bool reflexControlsAvailable = reflexAvailable && !reflexBlockedByFrameGeneration;
 		const bool markerOptimizationAvailable = reflexControlsAvailable && streamline.featurePCL;
-		const char* toggleModes[] = { "Disabled", "Enabled" };
-
 		if (reflexBlockedByFrameGeneration) {
 			ImGui::TextDisabled("Reflex is unavailable while the DX12 frame-generation swapchain is active.");
 		}
@@ -352,38 +345,29 @@ void Upscaling::DrawSettings()
 		if (!reflexControlsAvailable)
 			ImGui::BeginDisabled();
 
-		int lowLatencyMode = settings.reflexLowLatencyMode ? 1 : 0;
-		ImGui::SliderInt("Low Latency Mode", &lowLatencyMode, 0, 1, toggleModes[lowLatencyMode]);
+		ImGui::Checkbox("Low Latency Mode", &settings.reflexLowLatencyMode);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted("Cuts input delay by syncing CPU work closer to the GPU.");
 			ImGui::TextUnformatted("Can reduce max FPS a little, but usually feels more responsive.");
 		}
-		settings.reflexLowLatencyMode = lowLatencyMode > 0;
 
 		if (!settings.reflexLowLatencyMode)
 			ImGui::BeginDisabled();
 
-		int lowLatencyBoost = settings.reflexLowLatencyBoost ? 1 : 0;
-		ImGui::SliderInt("Low Latency Boost", &lowLatencyBoost, 0, 1, toggleModes[lowLatencyBoost]);
+		ImGui::Checkbox("Low Latency Boost", &settings.reflexLowLatencyBoost);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted("Keeps GPU clocks higher to avoid latency spikes at low GPU load.");
 			ImGui::TextUnformatted("Useful if frametime jumps; costs extra power and heat.");
 		}
-		settings.reflexLowLatencyBoost = lowLatencyBoost > 0;
-
-		if (!settings.reflexLowLatencyMode)
-			ImGui::EndDisabled();
 
 		if (!markerOptimizationAvailable)
 			ImGui::BeginDisabled();
 
-		int markersToOptimize = settings.reflexUseMarkersToOptimize ? 1 : 0;
-		ImGui::SliderInt("Use Markers To Optimize", &markersToOptimize, 0, 1, toggleModes[markersToOptimize]);
+		ImGui::Checkbox("Use Markers To Optimize", &settings.reflexUseMarkersToOptimize);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted("Uses frame markers for tighter Reflex timing.");
 			ImGui::TextUnformatted("Try On first; turn Off if it causes stutter on your setup.");
 		}
-		settings.reflexUseMarkersToOptimize = markersToOptimize > 0;
 
 		if (!markerOptimizationAvailable)
 			ImGui::EndDisabled();
@@ -392,13 +376,14 @@ void Upscaling::DrawSettings()
 			ImGui::TextDisabled("Marker optimization unavailable (PCL not loaded).");
 		}
 
-		int useFPSLimit = settings.reflexUseFPSLimit ? 1 : 0;
-		ImGui::SliderInt("Use FPS Limit", &useFPSLimit, 0, 1, toggleModes[useFPSLimit]);
+		ImGui::Checkbox("Use FPS Limit", &settings.reflexUseFPSLimit);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted("Uses Reflex's internal FPS cap for steadier frametimes.");
 			ImGui::TextUnformatted("Can lower latency versus uncapped rendering.");
 		}
-		settings.reflexUseFPSLimit = useFPSLimit > 0;
+
+		if (!settings.reflexLowLatencyMode)
+			ImGui::EndDisabled();
 
 		if (!settings.reflexUseFPSLimit)
 			ImGui::BeginDisabled();
@@ -496,38 +481,8 @@ void Upscaling::DrawSettings()
 		}
 
 		ImGui::Separator();
-		// FidelityFX section
-		if (ImGui::Selectable("AMD FidelityFX DLLs (click to open folder)")) {
-			ShellExecuteW(nullptr, L"open", FidelityFX::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
-		}
-		std::vector<std::string> headers = { "DLL Name", "Version" };
-		std::vector<std::vector<std::string>> ffRows;
-		for (const auto& [name, dllVersion] : FidelityFX::dllVersions)
-			ffRows.push_back({ name, dllVersion });
-		std::vector<Util::TableSortFunc> ffSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTableStrings(
-			"ffx_dll_versions",
-			headers,
-			ffRows,
-			0,
-			true,
-			ffSorters);
-
-		// Streamline section
-		if (ImGui::Selectable("NVIDIA Streamline DLLs (click to open folder)")) {
-			ShellExecuteW(nullptr, L"open", Streamline::PluginDir, nullptr, nullptr, SW_SHOWNORMAL);
-		}
-		std::vector<std::vector<std::string>> slRows;
-		for (const auto& [name, dllVersion] : Streamline::dllVersions)
-			slRows.push_back({ name, dllVersion });
-		std::vector<Util::TableSortFunc> slSorters = { nullptr, Util::VersionSortComparator };
-		Util::ShowSortedStringTableStrings(
-			"sl_dll_versions",
-			headers,
-			slRows,
-			0,
-			true,
-			slSorters);
+		Util::DrawDllVersionTable("AMD FidelityFX DLLs (click to open folder)", FidelityFX::PluginDir, FidelityFX::dllVersions, "ffx_dll_versions");
+		Util::DrawDllVersionTable("NVIDIA Streamline DLLs (click to open folder)", Streamline::PluginDir, Streamline::dllVersions, "sl_dll_versions");
 		ImGui::TreePop();
 	}
 }
@@ -1611,10 +1566,9 @@ bool Upscaling::IsFrameGenerationActive() const
 bool Upscaling::ShouldUseFrameGenerationThisFrame() const
 {
 	auto* ui = globals::game::ui;
-	return IsFrameGenerationDx12PathActive() &&
-	       settings.frameGenerationMode &&
-	       ui && !ui->GameIsPaused() &&
-	       !globals::state->IsMainOrLoadingMenuOpen(ui);
+	auto* state = globals::state;
+	const bool menuOpen = (ui && ui->GameIsPaused()) || (state && state->IsMainOrLoadingMenuOpen(ui));
+	return IsFrameGenerationDx12PathActive() && settings.frameGenerationMode && (settings.frameGenerationAllowInMenus || !menuOpen);
 }
 
 bool Upscaling::IsUpscalingActive() const
@@ -1967,9 +1921,8 @@ void Upscaling::UpscaleDepth()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Depth Upscale");
 
-		// Keep the depth-upscale source current. The vanilla copy is not reliable
-		// on every image-space path; paused menus such as the console used to mask
-		// this by forcing a copy only in menu contexts.
+		// Sometimes this is not already copied e.g. map menu.
+		// Skip alias copies to reduce unnecessary copy churn.
 		copyIfNonAliased(depthCopy.texture, depth.texture);
 
 		// Clear stencil to be 0xFF
