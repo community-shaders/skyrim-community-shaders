@@ -7,16 +7,14 @@
 
 #include "Features/ScreenshotFeature.h"
 #include "Globals.h"
-#include <RE/B/ButtonEvent.h>
-#include <RE/I/InputEvent.h>
+#include "Menu.h"
 #include <DirectXTex.h>
+#include <PCH.h>
+#include <algorithm>
+#include <cstring>
 #include <filesystem>
-#include <ctime>
 #include <imgui.h>
 #include <thread>
-#include <cstring>
-#include <algorithm>
-#include <PCH.h> 
 
 namespace
 {
@@ -124,12 +122,14 @@ namespace
 
 	std::filesystem::path BuildScreenshotPath(const std::string& screenshotPath)
 	{
-		std::time_t t = std::time(nullptr);
-		struct tm localTime{};
-		localtime_s(&localTime, &t);
-		char buf[64];
-		std::strftime(buf, sizeof(buf), "%Y-%m-%d_%H-%M-%S", &localTime);
-		return std::filesystem::path(screenshotPath) / (std::string("CS_") + buf + ".bmp");
+		SYSTEMTIME st;
+		GetLocalTime(&st);
+		char buf[80];
+		snprintf(buf, sizeof(buf), "CS_%04d-%02d-%02d_%02d-%02d-%02d_%03d.bmp",
+			st.wYear, st.wMonth, st.wDay,
+			st.wHour, st.wMinute, st.wSecond,
+			st.wMilliseconds);
+		return std::filesystem::path(screenshotPath) / buf;
 	}
 }
 
@@ -140,15 +140,15 @@ ScreenshotFeature::~ScreenshotFeature()
 
 void ScreenshotFeature::LoadSettings(json& a_json)
 {
-	if (a_json.contains("ScreenshotKey")) screenshotKey = a_json["ScreenshotKey"];
-	if (a_json.contains("ScreenshotPath")) screenshotPath = a_json["ScreenshotPath"];
-	if (a_json.contains("ApplyCropToScreenshot")) applyCropToScreenshot = a_json["ApplyCropToScreenshot"];
+	if (a_json.contains("ScreenshotPath"))
+		screenshotPath = a_json["ScreenshotPath"];
+	if (a_json.contains("ApplyCropToScreenshot"))
+		applyCropToScreenshot = a_json["ApplyCropToScreenshot"];
 	subrect.LoadSettings(a_json);
 }
 
 void ScreenshotFeature::SaveSettings(json& a_json)
 {
-	a_json["ScreenshotKey"] = screenshotKey;
 	a_json["ScreenshotPath"] = screenshotPath;
 	a_json["ApplyCropToScreenshot"] = applyCropToScreenshot;
 	subrect.SaveSettings(a_json);
@@ -163,23 +163,17 @@ void ScreenshotFeature::DrawSettings()
 	ImGui::Text("=== Screenshot Settings ===");
 
 	char buf[256];
-	strncpy_s(buf, screenshotPath.c_str(), sizeof(buf));
+	strncpy_s(buf, sizeof(buf), screenshotPath.c_str(), _TRUNCATE);
 	if (ImGui::InputText("Screenshot Folder", buf, sizeof(buf))) {
 		screenshotPath = buf;
 	}
 
-	if (waitingForHotkey) {
-		ImGui::Button("Waiting for input... (ESC to cancel)");
-	} else {
-		const std::string hotkeyLabel = "Bind Screenshot Hotkey (ID: " + std::to_string(screenshotKey) + ")";
-		if (ImGui::Button(hotkeyLabel.c_str())) {
-			waitingForHotkey = true;
-			justPressed = true;  // block until next key-up cycle
-		}
-	}
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("Click and press any key to bind.\nCurrent: %d (ScanCode/ID)", screenshotKey);
-	}
+	auto& menuSettings = Menu::GetSingleton()->GetSettings();
+	Util::InputComboWidget(
+		"Screenshot Key:",
+		menuSettings.ScreenshotKey,
+		Menu::GetSingleton()->settingScreenshotKey,
+		"Change##ScreenshotFeature");
 
 	if (ImGui::Button("Take Screenshot Now")) {
 		Capture();
@@ -192,7 +186,7 @@ void ScreenshotFeature::DrawSettings()
 	ImGui::Separator();
 	ImGui::Spacing();
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
 	if (renderer) {
 		auto& targets = renderer->GetRuntimeData().renderTargets;
 		RE::RENDER_TARGETS::RENDER_TARGET targetIndex = RE::RENDER_TARGETS::kTOTAL;
@@ -216,52 +210,11 @@ void ScreenshotFeature::DrawSettings()
 	}
 }
 
-void ScreenshotFeature::ProcessInput(RE::InputEvent* const* a_events)
+void ScreenshotFeature::Reset()
 {
-	if (!a_events) return;
-
-	for (RE::InputEvent* event = *a_events; event; event = event->next) {
-		if (event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton) {
-			auto buttonEvent = event->AsButtonEvent();
-			if (!buttonEvent) continue;
-			int key = buttonEvent->GetIDCode();
-
-			if (waitingForHotkey) {
-				if (buttonEvent->IsDown()) {
-					if (key == 1 /* Esc */) {
-						waitingForHotkey = false;
-						justPressed = false;
-					} else {
-						screenshotKey = key;
-						waitingForHotkey = false;
-						justPressed = false;
-						logger::info("Bound screenshot key: {}", key);
-					}
-				}
-				return;
-			}
-			if (key == screenshotKey) {
-				if (buttonEvent->IsDown() && !justPressed) {
-					justPressed = true;
-				} else if (buttonEvent->IsUp()) {
-					if (justPressed) {
-						captureRequested = true;
-					}
-					justPressed = false;
-				}
-			}
-		}
+	if (captureRequested.exchange(false)) {
+		Capture();
 	}
-}
-
-void ScreenshotFeature::ProcessPendingCapture()
-{
-	if (!captureRequested) {
-		return;
-	}
-
-	captureRequested = false;
-	Capture();
 }
 
 void ScreenshotFeature::EnsureWorkerThread()
@@ -298,6 +251,7 @@ void ScreenshotFeature::EnqueueScreenshot(PendingScreenshot&& screenshot)
 
 void ScreenshotFeature::ScreenshotWorkerLoop()
 {
+	CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 	auto* context = globals::d3d::context;
 	while (true) {
 		PendingScreenshot screenshot;
@@ -317,12 +271,12 @@ void ScreenshotFeature::ScreenshotWorkerLoop()
 
 		DirectX::ScratchImage image;
 		if (!PopulateScratchImageFromStagingTexture(
-			context,
-			screenshot.stagingTexture.get(),
-			screenshot.format,
-			screenshot.width,
-			screenshot.height,
-			image)) {
+				context,
+				screenshot.stagingTexture.get(),
+				screenshot.format,
+				screenshot.width,
+				screenshot.height,
+				image)) {
 			logger::error("Failed to map screenshot staging texture.");
 			continue;
 		}
@@ -354,6 +308,7 @@ void ScreenshotFeature::ScreenshotWorkerLoop()
 			logger::info("Saved screenshot to {}", screenshot.outputPath.string());
 		}
 	}
+	CoUninitialize();
 }
 
 void ScreenshotFeature::Capture()
@@ -366,14 +321,14 @@ void ScreenshotFeature::Capture()
 
 	ID3D11Texture2D* sourceTexture = nullptr;
 
-	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
+	auto renderer = globals::game::renderer;
 	if (renderer) {
 		RE::RENDER_TARGETS::RENDER_TARGET targetIndex = RE::RENDER_TARGETS::kTOTAL;
 		logger::debug("VR Detected: Selecting Capture Target Index kTOTAL ({})", (int)targetIndex);
 
 		auto& targets = renderer->GetRuntimeData().renderTargets;
 		auto& mainTarget = targets[targetIndex];
-		
+
 		if (mainTarget.texture) {
 			sourceTexture = mainTarget.texture;
 			logger::debug("Capturing from BSGraphics::Renderer Index {}", (int)targetIndex);

@@ -16,7 +16,6 @@
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
-#include "Features/ScreenshotFeature.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 
@@ -238,10 +237,6 @@ struct IDXGISwapChain_Present
 		auto state = globals::state;
 		auto menu = globals::menu;
 		state->Reset();
-
-		if (globals::game::isVR) {
-			globals::features::screenshotFeature.ProcessPendingCapture();
-		}
 
 		auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
 		auto& upscaling = globals::features::upscaling;
@@ -474,9 +469,6 @@ struct BSInputDeviceManager_PollInputDevices
 
 		if (a_events) {
 			menu->ProcessInputEvents(a_events);
-			if (globals::game::isVR) {
-				globals::features::screenshotFeature.ProcessInput(a_events);
-			}
 
 			if (*a_events) {
 				if (auto device = (*a_events)->GetDevice()) {
