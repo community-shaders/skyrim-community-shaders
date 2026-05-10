@@ -6,6 +6,7 @@
 #include "Effect11/PresetManager.h"
 #include "Effect11/SettingManager.h"
 #include "Effect11/WeatherManager.h"
+#include "WeatherColorPrediction.h"
 
 #include "State.h"
 
@@ -132,18 +133,114 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 
 	auto& colors = a_sky->skyColor;
 
+	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+	if (!imageSpaceManager) {
+		return;
+	}
+
+	GET_INSTANCE_MEMBER(data, imageSpaceManager);
+	float sunlightScale = std::max(data.baseData.hdr.sunlightScale, FLT_MIN);
+
+	{
+		using namespace WeatherColorPrediction;
+
+		float input[N_INPUTS];
+		int idx = 0;
+
+		float normalizedSunlightScale = sunlightScale / SUNLIGHT_SCALE_NORM;
+
+		for (int i = 0; i < N_BASE_COLORS; i++) {
+			auto& c = colors[BASE_COLOR_TYPES[i]];
+			input[idx++] = c.red;
+			input[idx++] = c.green;
+			input[idx++] = c.blue;
+		}
+
+		int sunlightBase = SUNLIGHT_BASE_INDEX * 3;
+		input[sunlightBase + 0] *= normalizedSunlightScale;
+		input[sunlightBase + 1] *= normalizedSunlightScale;
+		input[sunlightBase + 2] *= normalizedSunlightScale;
+
+		for (int axis = 0; axis < 3; axis++) {
+			auto& pos = a_sky->directionalAmbientColors[axis][0];
+			input[idx++] = pos.red;
+			input[idx++] = pos.green;
+			input[idx++] = pos.blue;
+			auto& neg = a_sky->directionalAmbientColors[axis][1];
+			input[idx++] = neg.red;
+			input[idx++] = neg.green;
+			input[idx++] = neg.blue;
+		}
+
+		if (auto clouds = a_sky->clouds) {
+			for (int i = 0; i < 32; i++)
+				input[idx++] = (i < clouds->numLayers) ? clouds->alphas[i] : 0.0f;
+			for (int i = 0; i < 32; i++) {
+				if (i < clouds->numLayers) {
+					auto& cc = clouds->colors[i];
+					input[idx++] = cc.red * 0.299f + cc.green * 0.587f + cc.blue * 0.114f;
+				} else {
+					input[idx++] = 0.0f;
+				}
+			}
+		} else {
+			for (int i = 0; i < 64; i++)
+				input[idx++] = 0.0f;
+		}
+
+		input[idx++] = std::min(a_sky->fogNear, FOG_NEAR_NORM) / FOG_NEAR_NORM;
+		input[idx++] = std::min(a_sky->fogFar, FOG_FAR_NORM) / FOG_FAR_NORM;
+		input[idx++] = a_sky->fogPower;
+		input[idx++] = a_sky->fogClamp;
+
+		input[idx++] = a_sky->windSpeed;
+
+		auto curWeather = a_sky->currentWeather;
+		auto lastWeather = a_sky->lastWeather;
+		float pct = a_sky->currentWeatherPct;
+
+		auto getFlag = [](RE::TESWeather* w, RE::TESWeather::WeatherDataFlag flag) -> float {
+			return (w && w->data.flags.any(flag)) ? 1.0f : 0.0f;
+		};
+
+		auto lerpFlag = [&](RE::TESWeather::WeatherDataFlag flag) -> float {
+			float cur = getFlag(curWeather, flag);
+			float last = getFlag(lastWeather, flag);
+			return last + (cur - last) * pct;
+		};
+
+		input[idx++] = lerpFlag(RE::TESWeather::WeatherDataFlag::kPleasant);
+		input[idx++] = lerpFlag(RE::TESWeather::WeatherDataFlag::kCloudy);
+		input[idx++] = lerpFlag(RE::TESWeather::WeatherDataFlag::kRainy);
+		input[idx++] = lerpFlag(RE::TESWeather::WeatherDataFlag::kSnow);
+
+		for (int t = 0; t < N_TARGETS; t++) {
+			float output[3];
+			Predict(*MODELS[t], input, output);
+			auto& target = colors[TARGET_COLOR_TYPES[t]];
+			target.red = output[0];
+			target.green = output[1];
+			target.blue = output[2];
+		}
+
+		static int dbgFrame = 0;
+		if (dbgFrame++ % 600 == 0) {
+			logger::info("WCP idx={} sunScale={:.3f} skyUpper=({:.3f},{:.3f},{:.3f}) sunlight=({:.3f},{:.3f},{:.3f})",
+				idx, sunlightScale,
+				input[0], input[1], input[2],
+				input[6], input[7], input[8]);
+			logger::info("WCP effectLit=({:.3f},{:.3f},{:.3f}) skyStat=({:.3f},{:.3f},{:.3f}) waterMul=({:.3f},{:.3f},{:.3f})",
+				colors[TARGET_COLOR_TYPES[0]].red, colors[TARGET_COLOR_TYPES[0]].green, colors[TARGET_COLOR_TYPES[0]].blue,
+				colors[TARGET_COLOR_TYPES[1]].red, colors[TARGET_COLOR_TYPES[1]].green, colors[TARGET_COLOR_TYPES[1]].blue,
+				colors[TARGET_COLOR_TYPES[2]].red, colors[TARGET_COLOR_TYPES[2]].green, colors[TARGET_COLOR_TYPES[2]].blue);
+		}
+	}
+
 	{
 		auto& dirLightColor = colors[(uint)RE::TESWeather::ColorTypes::kSunlight];
 
 		auto dirLightColorF3 = NiToF3(dirLightColor);
 
-		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		if (!imageSpaceManager) {
-			return;
-		}
-
-		GET_INSTANCE_MEMBER(data, imageSpaceManager);
-		float sunlightScale = std::max(data.baseData.hdr.sunlightScale, FLT_MIN);
 		dirLightColorF3 *= sunlightScale;
 
 		dirLightColorF3 = Curve(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingCurve", "ENVIRONMENT"));
@@ -196,12 +293,6 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 		a_sky->fogFar /= fogAmountMultiplier;
 	}
 
-	{
-		auto& effectLightingColor = colors[(uint)RE::TESWeather::ColorTypes::kEffectLighting];
-		auto effectLightingColorF3 = NiToF3(effectLightingColor);
-		effectLightingColorF3 = Intensity(effectLightingColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "PARTICLE"));
-		effectLightingColor = F3ToNi(effectLightingColorF3);
-	}
 
 	const bool enableSky = enableEffect && settingManager.GetValue<bool>("Enable", "SKY");
 
@@ -250,16 +341,6 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 			sunGlareColor = F3ToNi(sunGlareColorF3);
 		}
 
-		{
-			auto& skyStaticsColor = colors[(uint)RE::TESWeather::ColorTypes::kSkyStatics];
-
-			auto skyStaticsColorF3 = NiToF3(skyStaticsColor);
-
-			skyStaticsColorF3 = ColorFilter(skyStaticsColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "VOLUMETRICFOG"), 0.0f);
-			skyStaticsColorF3 = Intensity(skyStaticsColorF3, settingManager.GetInterpolatedTimeOfDayValue("Intensity", "VOLUMETRICFOG"));
-
-			skyStaticsColor = F3ToNi(skyStaticsColorF3);
-		}
 
 		float gradientIntensity = settingManager.GetInterpolatedTimeOfDayValue("GradientIntensity", "SKY");
 		float gradientDesaturation = settingManager.GetInterpolatedTimeOfDayValue("GradientDesaturation", "SKY");
