@@ -147,19 +147,12 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 		float input[N_INPUTS];
 		int idx = 0;
 
-		float normalizedSunlightScale = sunlightScale / SUNLIGHT_SCALE_NORM;
-
 		for (int i = 0; i < N_BASE_COLORS; i++) {
 			auto& c = colors[BASE_COLOR_TYPES[i]];
 			input[idx++] = c.red;
 			input[idx++] = c.green;
 			input[idx++] = c.blue;
 		}
-
-		int sunlightBase = SUNLIGHT_BASE_INDEX * 3;
-		input[sunlightBase + 0] *= normalizedSunlightScale;
-		input[sunlightBase + 1] *= normalizedSunlightScale;
-		input[sunlightBase + 2] *= normalizedSunlightScale;
 
 		for (int axis = 0; axis < 3; axis++) {
 			auto& pos = a_sky->directionalAmbientColors[axis][0];
@@ -191,28 +184,6 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 		input[idx++] = std::min(a_sky->fogNear, FOG_NEAR_NORM) / FOG_NEAR_NORM;
 		input[idx++] = std::min(a_sky->fogFar, FOG_FAR_NORM) / FOG_FAR_NORM;
 		input[idx++] = a_sky->fogPower;
-		input[idx++] = a_sky->fogClamp;
-
-		input[idx++] = a_sky->windSpeed;
-
-		auto curWeather = a_sky->currentWeather;
-		auto lastWeather = a_sky->lastWeather;
-		float pct = a_sky->currentWeatherPct;
-
-		auto getFlag = [](RE::TESWeather* w, RE::TESWeather::WeatherDataFlag flag) -> float {
-			return (w && w->data.flags.any(flag)) ? 1.0f : 0.0f;
-		};
-
-		auto lerpFlag = [&](RE::TESWeather::WeatherDataFlag flag) -> float {
-			float cur = getFlag(curWeather, flag);
-			float last = getFlag(lastWeather, flag);
-			return last + (cur - last) * pct;
-		};
-
-		input[idx++] = lerpFlag(RE::TESWeather::WeatherDataFlag::kPleasant);
-		input[idx++] = lerpFlag(RE::TESWeather::WeatherDataFlag::kCloudy);
-		input[idx++] = lerpFlag(RE::TESWeather::WeatherDataFlag::kRainy);
-		input[idx++] = lerpFlag(RE::TESWeather::WeatherDataFlag::kSnow);
 
 		for (int t = 0; t < N_TARGETS; t++) {
 			float output[3];
@@ -225,10 +196,10 @@ void Effect11::OverrideWeather(RE::Sky* a_sky)
 
 		static int dbgFrame = 0;
 		if (dbgFrame++ % 600 == 0) {
-			logger::info("WCP idx={} sunScale={:.3f} skyUpper=({:.3f},{:.3f},{:.3f}) sunlight=({:.3f},{:.3f},{:.3f})",
-				idx, sunlightScale,
+			logger::info("WCP idx={} skyUpper=({:.3f},{:.3f},{:.3f}) fogNear=({:.3f},{:.3f},{:.3f})",
+				idx,
 				input[0], input[1], input[2],
-				input[6], input[7], input[8]);
+				input[3], input[4], input[5]);
 			logger::info("WCP effectLit=({:.3f},{:.3f},{:.3f}) skyStat=({:.3f},{:.3f},{:.3f}) waterMul=({:.3f},{:.3f},{:.3f})",
 				colors[TARGET_COLOR_TYPES[0]].red, colors[TARGET_COLOR_TYPES[0]].green, colors[TARGET_COLOR_TYPES[0]].blue,
 				colors[TARGET_COLOR_TYPES[1]].red, colors[TARGET_COLOR_TYPES[1]].green, colors[TARGET_COLOR_TYPES[1]].blue,
