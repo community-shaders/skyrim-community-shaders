@@ -123,7 +123,15 @@ namespace Util::Subrect
 
 	void Controller::DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture, float uvVisibleWidth)
 	{
-		ImGui::Text("=== Capture Cropping ===");
+		// Make sure the default preset exists before we read presets[selectedPresetIndex].
+		// EnsureDefaultPreset is also called from LoadSettings/ApplyPreset, but features
+		// that draw their settings without going through LoadSettings (or before it) would
+		// otherwise see an empty presets vector and the combo would label the selection
+		// "(Custom)" even though no edits have happened.
+		EnsureDefaultPreset();
+		if (selectedPresetIndex < 0 || selectedPresetIndex >= static_cast<int>(presets.size())) {
+			selectedPresetIndex = 0;
+		}
 
 		std::string currentPreview =
 			(selectedPresetIndex >= 0 && selectedPresetIndex < static_cast<int>(presets.size())) ? presets[selectedPresetIndex].name : "(Custom)";
@@ -158,6 +166,13 @@ namespace Util::Subrect
 				presets.erase(presets.begin() + selectedPresetIndex);
 				ApplyPreset(0);
 			}
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Reset Crop")) {
+			// Snap back to the built-in default ("Full Frame", uv = {0,0,1,1}).
+			// EnsureDefaultPreset above guarantees presets[0] exists.
+			ApplyPreset(0);
 		}
 
 		ImGui::Spacing();

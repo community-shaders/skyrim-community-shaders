@@ -1,9 +1,8 @@
 // Screenshot Feature
-// Lossless, non-blocking VR screenshot tool.
+// Lossless, non-blocking screenshot tool for both flat (SE/AE) and VR.
 // GPU copy is issued on the render thread; encoding and disk I/O run on a
 // dedicated worker thread, so capturing does not stall the frame.
-// Currently VR-only (no SE/AE test client available). Lossless recording
-// support is planned.
+// Lossless recording support is planned.
 
 #include "Features/ScreenshotFeature.h"
 #include "Features/HDRDisplay.h"
@@ -12,7 +11,6 @@
 #include "Utils/FileSystem.h"
 #include <DirectXTex.h>
 #include <PCH.h>
-#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <format>
@@ -244,6 +242,33 @@ namespace
 		return src;
 	}
 
+	// Detour for Skyrim's built-in screenshot save function. Symbol is named
+	// "po3tweaks::ScreenshotToConsole::DebugNotification" in the Address Library
+	// (despite the name, this is the function the keypress handler and Papyrus
+	// Debug.TakeScreenshot call to actually write Screenshot<N>.png to the game
+	// directory and post the in-game "ScreenShot: File '%s' created." toast).
+	//
+	// Address Library ids covering all editions:
+	//   SE 1.5.97    id 35882   sse_addr 0x1405c0610
+	//   AE 1.6.1170  id 36853   RVA      0x653240
+	//   VR           via SE id  vr_addr  0x1405c8b30 (status 3 in database.csv)
+	//
+	// We pass through whenever an explicit path is provided (Papyrus's
+	// Debug.TakeScreenshot(filename) and modder code), so only the keypress-
+	// driven default-path save is suppressed when the user opts in.
+	struct VanillaScreenshotHook
+	{
+		static void thunk(char* a_explicitPath, int a_format)
+		{
+			if (a_explicitPath == nullptr &&
+				globals::features::screenshotFeature.suppressVanillaScreenshot) {
+				return;
+			}
+			func(a_explicitPath, a_format);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	std::filesystem::path BuildScreenshotPath(const std::string& screenshotPath)
 	{
 		SYSTEMTIME st;
@@ -255,6 +280,7 @@ namespace
 			st.wMilliseconds);
 		return std::filesystem::path(screenshotPath) / buf;
 	}
+
 }
 
 ScreenshotFeature::~ScreenshotFeature()
@@ -267,12 +293,22 @@ bool ScreenshotFeature::IsInMenu() const
 	return true;
 }
 
+void ScreenshotFeature::PostPostLoad()
+{
+	// Address ids and pass-through behavior documented on VanillaScreenshotHook.
+	stl::write_thunk_jmp<VanillaScreenshotHook>(
+		REL::RelocationID(35882, 36853).address());
+	logger::info("Installed vanilla screenshot detour");
+}
+
 void ScreenshotFeature::LoadSettings(json& a_json)
 {
 	if (a_json.contains("ScreenshotPath"))
 		screenshotPath = a_json["ScreenshotPath"];
 	if (a_json.contains("ApplyCropToScreenshot"))
 		applyCropToScreenshot = a_json["ApplyCropToScreenshot"];
+	if (a_json.contains("SuppressVanillaScreenshot"))
+		suppressVanillaScreenshot = a_json["SuppressVanillaScreenshot"];
 	subrect.LoadSettings(a_json);
 }
 
@@ -280,46 +316,82 @@ void ScreenshotFeature::SaveSettings(json& a_json)
 {
 	a_json["ScreenshotPath"] = screenshotPath;
 	a_json["ApplyCropToScreenshot"] = applyCropToScreenshot;
+	a_json["SuppressVanillaScreenshot"] = suppressVanillaScreenshot;
 	subrect.SaveSettings(a_json);
 }
 
 void ScreenshotFeature::DrawSettings()
 {
-	ImGui::Text("=== Screenshot Settings ===");
+	// Description first so users know what the feature does before they hit the button.
+	Util::Text::Disabled("Capture and save run asynchronously - no frame stall.");
 
-	char buf[256];
-	strncpy_s(buf, sizeof(buf), screenshotPath.c_str(), _TRUNCATE);
-	if (ImGui::InputText("Screenshot Folder", buf, sizeof(buf))) {
-		screenshotPath = buf;
-	}
-
-	auto& menuSettings = Menu::GetSingleton()->GetSettings();
-	Util::InputComboWidget(
-		"Screenshot Key:",
-		menuSettings.ScreenshotKey,
-		Menu::GetSingleton()->settingScreenshotKey,
-		"Change##ScreenshotFeature");
-
+	// Top-level actions
 	if (ImGui::Button("Take Screenshot Now")) {
 		Capture();
 	}
 	ImGui::SameLine();
-	ImGui::Checkbox("Apply Crop to Screenshot", &applyCropToScreenshot);
-	Util::Text::Disabled("Capture and saving run asynchronously with no frame stall.");
+	ImGui::Checkbox("Apply crop", &applyCropToScreenshot);
 
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
+	// Output section
+	ImGui::SeparatorText("Output");
+
+	// Plain text input for the screenshot folder. We tried adding a native folder
+	// picker (IFileOpenDialog) but couldn't get it interactive from inside Skyrim:
+	// the engine's input thread fights both ShowCursor and MenuCursor state every
+	// frame, the dialog never claimed focus reliably, and a worker-thread variant
+	// hit cross-thread SetForegroundWindow restrictions. Open opens Explorer at
+	// the configured path so users can copy a path from the address bar.
+	char buf[260];
+	strncpy_s(buf, sizeof(buf), screenshotPath.c_str(), _TRUNCATE);
+	ImGui::PushItemWidth(-FLT_MIN - 120.0f);  // leave room for Open button + label
+	if (ImGui::InputText("##ScreenshotFolder", buf, sizeof(buf))) {
+		screenshotPath = buf;
+	}
+	ImGui::PopItemWidth();
+	ImGui::SameLine();
+	const bool canOpen = !screenshotPath.empty();
+	ImGui::BeginDisabled(!canOpen);
+	if (ImGui::Button("Open")) {
+		std::error_code ec;
+		std::filesystem::create_directories(screenshotPath, ec);
+		ShellExecuteA(nullptr, "open", screenshotPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+	}
+	ImGui::EndDisabled();
+	ImGui::SameLine();
+	ImGui::Text("Folder");
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip(
+			"Relative paths resolve against the Skyrim install dir.\n"
+			"Absolute paths (e.g. D:\\Captures) save there directly.");
+	}
+
+	auto& menuSettings = Menu::GetSingleton()->GetSettings();
+	Util::InputComboWidget(
+		"Hotkey",
+		menuSettings.ScreenshotKey,
+		Menu::GetSingleton()->settingScreenshotKey,
+		"Change##ScreenshotFeature");
+
+	ImGui::Checkbox("Suppress vanilla screenshot key", &suppressVanillaScreenshot);
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip(
+			"When enabled, Skyrim's built-in screenshot save (Screenshot<N>.png in the\n"
+			"game install dir, fired by PrintScreen) is suppressed.\n"
+			"Papyrus Debug.TakeScreenshot(filename) and modder code that pass an\n"
+			"explicit path still work.");
+	}
+
+	// Crop section (Subrect renders preset combo, Save/Delete/Reset buttons,
+	// UV sliders, and the live drag-crop preview).
+	ImGui::SeparatorText("Crop");
 
 	// VR's source target packs both eyes side-by-side; only show the left half in the preview.
 	const float previewVisibleWidth = globals::game::isVR ? 0.5f : 1.0f;
 
 	// Same selection logic as Capture(); preview always reflects what would be saved.
-	// Prefer the slot's native SRV when available (HDRDisplay::outputTexture and the VR
-	// SBS slot both expose one). When the native SRV is null - kFRAMEBUFFER on flat with
-	// HDRDisplay not loaded, where the underlying swap-chain backbuffer lacks
-	// D3D11_BIND_SHADER_RESOURCE - fall back to copying the source into a cached
-	// SRV-readable texture and previewing from that.
+	// kFRAMEBUFFER's slot.SRV (when present) is for the swap-chain backbuffer and ImGui
+	// can't sample it correctly, so SelectCaptureSource flags that path as
+	// needsPreviewCache=true and we copy through an SRV-readable cache instead.
 	winrt::com_ptr<ID3D11Texture2D> previewTextureKeepAlive;
 	const auto src = SelectCaptureSource(previewTextureKeepAlive);
 
@@ -471,10 +543,11 @@ void ScreenshotFeature::ScreenshotWorkerLoop()
 			ShowInGameNotification("Screenshot failed - see CommunityShaders.log");
 		} else {
 			logger::info("Saved screenshot to {}", screenshot.outputPath.string());
-			const auto filename = screenshot.outputPath.filename().string();
-			ShowInGameNotification(screenshot.sourceWasHDREncoded ?
-									   std::format("Screenshot saved (HDR encoded - may look washed out): {}", filename) :
-									   std::format("Screenshot saved: {}", filename));
+			const auto* hdrSuffix = screenshot.sourceWasHDREncoded ?
+			                            " (HDR encoded - may look washed out)" :
+			                            "";
+			ShowInGameNotification(std::format("Screenshot saved{}: {}",
+				hdrSuffix, screenshot.outputPath.filename().string()));
 		}
 	}
 	CoUninitialize();

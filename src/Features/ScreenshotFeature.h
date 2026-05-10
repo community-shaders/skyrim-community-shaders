@@ -6,7 +6,9 @@
 #include <condition_variable>
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <queue>
+#include <string>
 #include <thread>
 
 struct ScreenshotFeature : public Feature
@@ -14,7 +16,7 @@ struct ScreenshotFeature : public Feature
 	virtual ~ScreenshotFeature();
 	virtual std::string GetName() override { return "Screenshot"; }
 	virtual std::string GetShortName() override { return "Screenshot"; }
-	virtual std::string_view GetCategory() const override { return "Tools"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsInMenu() const override;
@@ -23,9 +25,15 @@ struct ScreenshotFeature : public Feature
 	virtual void LoadSettings(json& a_json) override;
 	virtual void SaveSettings(json& a_json) override;
 	virtual void Reset() override;
+	virtual void PostPostLoad() override;  // installs vanilla-screenshot detour
 
 	void Capture();
 	bool applyCropToScreenshot = true;
+
+	// When true, suppress Skyrim's built-in default-path screenshot save (the keypress
+	// path that writes Screenshot<N>.png into the game install directory). Explicit-path
+	// callers (Papyrus Debug.TakeScreenshot, modder code) still pass through.
+	bool suppressVanillaScreenshot = true;
 
 	// Settings
 	std::string screenshotPath = "Screenshots";
