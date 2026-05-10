@@ -55,7 +55,7 @@ void ENBAdaptation::UpdateEffectVariables()
 	adaptationParameters.x = !forceMinMaxValues ? 0.0f : settingManager.GetValue<float>("AdaptationMin", "ADAPTATION");
 	adaptationParameters.y = !forceMinMaxValues ? 65535.0f : settingManager.GetValue<float>("AdaptationMax", "ADAPTATION");
 	adaptationParameters.z = settingManager.GetValue<float>("AdaptationSensitivity", "ADAPTATION");
-	adaptationParameters.w = (adaptationTime > 0.0f) ? (deltaTime / adaptationTime) : 1.0f;
+	adaptationParameters.w = std::clamp((adaptationTime > 0.0f) ? (deltaTime / adaptationTime) : 1.0f, 0.0f, 1.0f);
 
 	SetVectorVariable("AdaptationParameters", &adaptationParameters, sizeof(adaptationParameters));
 }
