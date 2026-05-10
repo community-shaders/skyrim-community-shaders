@@ -47,11 +47,6 @@ namespace ImageBasedLighting
 		return max(0, float3(colorR, colorG, colorB) / Math::PI);
 	}
 
-	float3 GetSkyIBLOccluded(float3 rayDir, float visibility)
-	{
-		return GetSkyIBL(rayDir) * visibility;
-	}
-
 	// ============================================================================
 	// Ratio / settings helpers
 	// ============================================================================
@@ -96,11 +91,6 @@ namespace ImageBasedLighting
 		return Color::Saturation(GetSkyIBL(rayDir), SharedData::iblSettings.SkyIBLSaturation) * SharedData::iblSettings.SkyIBLScale;
 	}
 
-	float3 GetSkyIBLColorOccluded(float3 rayDir, float visibility)
-	{
-		return Color::Saturation(GetSkyIBLOccluded(rayDir, visibility), SharedData::iblSettings.SkyIBLSaturation) * SharedData::iblSettings.SkyIBLScale;
-	}
-
 	// ============================================================================
 	// High-level: compute the full diffuse ambient replacement
 	// ============================================================================
@@ -117,20 +107,6 @@ namespace ImageBasedLighting
 			linSky = GetSkyIBLColor(rayDir);
 		}
 		return linEnv + linSky;
-	}
-
-	// ============================================================================
-	// Convenience: combined IBL (for simple contexts)
-	// ============================================================================
-
-	float3 GetIBLColor(float3 rayDir)
-	{
-		return GetEnvIBLColor(rayDir) + GetSkyIBLColor(rayDir);
-	}
-
-	float3 GetIBLColorOccluded(float3 rayDir, float visibility)
-	{
-		return GetEnvIBLColor(rayDir) + GetSkyIBLColorOccluded(rayDir, visibility);
 	}
 
 #if defined(LIGHTING)
