@@ -40,6 +40,12 @@ namespace
 		ID3D11Texture2D* texture = nullptr;
 		ID3D11ShaderResourceView* srv = nullptr;
 		bool isHDREncoded = false;  // true when source carries 10/16-bit HDR values
+		// When true, the preview path must copy through the SRV-readable cache instead of
+		// using slot.SRV directly. The kFRAMEBUFFER fallback sets this because the slot's
+		// SRV (when one exists) is for the swap-chain backbuffer, which ImGui's DX11
+		// backend can't sample correctly even when the pointer is non-null. VR's SBS slot
+		// and HDRDisplay::OutputTexture have known-good shader-readable SRVs and don't.
+		bool needsPreviewCache = false;
 		const char* description = "(none)";
 	};
 
@@ -233,6 +239,7 @@ namespace
 		auto& slot = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 		src.texture = ResolveSlotTexture(slot, holder);
 		src.srv = slot.SRV;
+		src.needsPreviewCache = true;
 		src.description = "kFRAMEBUFFER";
 		return src;
 	}
@@ -308,22 +315,68 @@ void ScreenshotFeature::DrawSettings()
 	const float previewVisibleWidth = globals::game::isVR ? 0.5f : 1.0f;
 
 	// Same selection logic as Capture(); preview always reflects what would be saved.
+	// Prefer the slot's native SRV when available (HDRDisplay::outputTexture and the VR
+	// SBS slot both expose one). When the native SRV is null - kFRAMEBUFFER on flat with
+	// HDRDisplay not loaded, where the underlying swap-chain backbuffer lacks
+	// D3D11_BIND_SHADER_RESOURCE - fall back to copying the source into a cached
+	// SRV-readable texture and previewing from that.
 	winrt::com_ptr<ID3D11Texture2D> previewTextureKeepAlive;
 	const auto src = SelectCaptureSource(previewTextureKeepAlive);
 
 	ID3D11ShaderResourceView* previewView = src.srv;
-	if (src.texture) {
-		if (previewTexture != src.texture) {
-			previewSRV = nullptr;
-			previewTexture = src.texture;
-			globals::d3d::device->CreateShaderResourceView(src.texture, nullptr, previewSRV.put());
-		}
-		if (previewSRV) {
-			previewView = previewSRV.get();
+	if (src.texture && (src.needsPreviewCache || !previewView)) {
+		EnsurePreviewCache(src.texture);
+		if (previewCacheSRV && previewCacheTexture) {
+			globals::d3d::context->CopySubresourceRegion(
+				previewCacheTexture.get(), 0, 0, 0, 0, src.texture, 0, nullptr);
+			previewView = previewCacheSRV.get();
 		}
 	}
 
 	subrect.DrawEditor(previewView, src.texture, previewVisibleWidth);
+}
+
+void ScreenshotFeature::EnsurePreviewCache(ID3D11Texture2D* sourceTexture)
+{
+	if (!sourceTexture) {
+		return;
+	}
+	D3D11_TEXTURE2D_DESC srcDesc{};
+	sourceTexture->GetDesc(&srcDesc);
+
+	// Reuse the cache when the source dimensions/format haven't changed.
+	if (previewCacheTexture) {
+		D3D11_TEXTURE2D_DESC cacheDesc{};
+		previewCacheTexture->GetDesc(&cacheDesc);
+		if (cacheDesc.Width == srcDesc.Width &&
+			cacheDesc.Height == srcDesc.Height &&
+			cacheDesc.Format == srcDesc.Format) {
+			return;
+		}
+		previewCacheSRV = nullptr;
+		previewCacheTexture = nullptr;
+	}
+
+	// SRV-readable copy. Match source format for CopySubresourceRegion compatibility.
+	D3D11_TEXTURE2D_DESC cacheDesc = srcDesc;
+	cacheDesc.MipLevels = 1;
+	cacheDesc.ArraySize = 1;
+	cacheDesc.SampleDesc.Count = 1;
+	cacheDesc.SampleDesc.Quality = 0;
+	cacheDesc.Usage = D3D11_USAGE_DEFAULT;
+	cacheDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	cacheDesc.CPUAccessFlags = 0;
+	cacheDesc.MiscFlags = 0;
+
+	if (FAILED(globals::d3d::device->CreateTexture2D(&cacheDesc, nullptr, previewCacheTexture.put()))) {
+		previewCacheTexture = nullptr;
+		return;
+	}
+	if (FAILED(globals::d3d::device->CreateShaderResourceView(
+			previewCacheTexture.get(), nullptr, previewCacheSRV.put()))) {
+		previewCacheSRV = nullptr;
+		previewCacheTexture = nullptr;
+	}
 }
 
 void ScreenshotFeature::Reset()

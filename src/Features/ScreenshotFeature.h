@@ -52,13 +52,22 @@ private:
 	std::thread screenshotWorker;
 	bool screenshotWorkerRunning = false;
 	Util::Subrect::Controller subrect;
-	winrt::com_ptr<ID3D11ShaderResourceView> previewSRV;
-	ID3D11Texture2D* previewTexture = nullptr;
+
+	// Lazy SRV-readable copy of the capture source, kept alive across frames.
+	// Used when the source slot exposes no native SRV that ImGui can sample - in
+	// particular kFRAMEBUFFER on flat with HDRDisplay not loaded, where the
+	// underlying swap-chain backbuffer lacks D3D11_BIND_SHADER_RESOURCE.
+	winrt::com_ptr<ID3D11Texture2D> previewCacheTexture;
+	winrt::com_ptr<ID3D11ShaderResourceView> previewCacheSRV;
 
 	void EnsureWorkerThread();
 	void StopWorkerThread();
 	void EnqueueScreenshot(PendingScreenshot&& screenshot);
 	void ScreenshotWorkerLoop();
+	// (Re)allocates the SRV-readable preview cache to match the given source texture's
+	// dimensions and format. Used to give the live preview a sampleable view when the
+	// chosen capture source's slot doesn't expose one (kFRAMEBUFFER on flat, etc.).
+	void EnsurePreviewCache(ID3D11Texture2D* sourceTexture);
 	// Posts a non-modal in-game HUD toast via SKSE's task interface so the call
 	// is marshalled to the game's main thread.
 	static void ShowInGameNotification(std::string message);
