@@ -2882,7 +2882,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 vertexColor = input.Color.xyz;
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
-	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, EPSILON_DIVISION));
 #		if defined(TRUE_PBR)
 	vertexColor = 1;
 #		endif

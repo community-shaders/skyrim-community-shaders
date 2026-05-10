@@ -120,7 +120,7 @@ namespace Skylighting
 		sh2 skylightingSH = Sample(positionMS, normalWS);
 		float skylightingDiffuse = EvaluateDiffuse(skylightingSH, biasedNormal, fadeOutFactor);
 
-		return saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+		return saturate(skylightingDiffuse / max(vertexAO, EPSILON_DIVISION));
 	}
 
 	sh2 SampleNoBias(float3 positionMS)
