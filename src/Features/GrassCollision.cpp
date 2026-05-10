@@ -30,8 +30,11 @@ void GrassCollision::DrawSettings()
 	}
 }
 
-void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
+void GrassCollision::QueueCollisions()
 {
+	if (!settings.EnableGrassCollision)
+		return;
+
 	eastl::vector<GrassCollisionActorCandidate> actorCandidates{};
 	RE::NiPoint3 cameraPosition = Util::GetEyePosition(0);
 
@@ -83,7 +86,6 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 				RE::NiPoint3 centerPos;
 				float radius;
 				if (Util::GetShapeBound(a_object, centerPos, radius)) {
-					// Cull extremely small collisions
 					if (radius < distance * MIN_COLLISION_RADIUS_DISTANCE_SCALE)
 						return RE::BSVisit::BSVisitControl::kContinue;
 
@@ -140,25 +142,8 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 		}
 	}
 
-	perFrameData.BoundingBoxCount = std::min((uint)boundingBoxData.size(), MAX_BOUNDING_BOXES);
-
-	auto context = globals::d3d::context;
-
-	if (collisionIndexExtent > 0) {
-		D3D11_MAPPED_SUBRESOURCE mapped;
-		DX::ThrowIfFailed(context->Map(collisionInstances->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		size_t bytes = sizeof(float4) * collisionIndexExtent;
-		memcpy_s(mapped.pData, bytes, collisionsData.data(), bytes);
-		context->Unmap(collisionInstances->resource.get(), 0);
-	}
-
-	if (perFrameData.BoundingBoxCount > 0) {
-		D3D11_MAPPED_SUBRESOURCE mapped;
-		DX::ThrowIfFailed(context->Map(collisionBoundingBoxes->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		size_t bytes = sizeof(BoundingBoxPacked) * perFrameData.BoundingBoxCount;
-		memcpy_s(mapped.pData, bytes, boundingBoxData.data(), bytes);
-		context->Unmap(collisionBoundingBoxes->resource.get(), 0);
-	}
+	queuedBoundingBoxes = std::move(boundingBoxData);
+	queuedCollisions = std::move(collisionsData);
 }
 
 void GrassCollision::Update()
@@ -201,8 +186,28 @@ void GrassCollision::Update()
 
 		perFrameData.CameraHeightDelta = prevEyePosNI.z - eyePosNI.z;
 
-		if (settings.EnableGrassCollision)
-			UpdateCollisions(perFrameData);
+		perFrameData.BoundingBoxCount = std::min((uint)queuedBoundingBoxes.size(), MAX_BOUNDING_BOXES);
+
+		auto context = globals::d3d::context;
+
+		if (!queuedCollisions.empty()) {
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			DX::ThrowIfFailed(context->Map(collisionInstances->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+			size_t bytes = sizeof(float4) * queuedCollisions.size();
+			memcpy_s(mapped.pData, bytes, queuedCollisions.data(), bytes);
+			context->Unmap(collisionInstances->resource.get(), 0);
+		}
+
+		if (perFrameData.BoundingBoxCount > 0) {
+			D3D11_MAPPED_SUBRESOURCE mapped;
+			DX::ThrowIfFailed(context->Map(collisionBoundingBoxes->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+			size_t bytes = sizeof(BoundingBoxPacked) * perFrameData.BoundingBoxCount;
+			memcpy_s(mapped.pData, bytes, queuedBoundingBoxes.data(), bytes);
+			context->Unmap(collisionBoundingBoxes->resource.get(), 0);
+		}
+
+		queuedBoundingBoxes.clear();
+		queuedCollisions.clear();
 
 		perFrame->Update(perFrameData);
 
@@ -210,8 +215,6 @@ void GrassCollision::Update()
 
 		prevCellID = cellID;
 		prevEyePosNI = eyePosNI;
-
-		auto context = globals::d3d::context;
 
 		ID3D11Buffer* buffers[1];
 		buffers[0] = perFrame->CB();
@@ -252,7 +255,7 @@ void GrassCollision::SetupResources()
 			.Height = 512,
 			.MipLevels = 1,
 			.ArraySize = 1,
-			.Format = DXGI_FORMAT_R16G16B16A16_UNORM,
+			.Format = DXGI_FORMAT_R16G16B16A16_FLOAT,
 			.SampleDesc = { .Count = 1 },
 			.Usage = D3D11_USAGE_DEFAULT,
 			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS
@@ -322,6 +325,12 @@ bool GrassCollision::HasShaderDefine(RE::BSShader::Type shaderType)
 	default:
 		return false;
 	}
+}
+
+void GrassCollision::Hooks::MainUpdate_QueueCollisions::thunk()
+{
+	func();
+	globals::features::grassCollision.QueueCollisions();
 }
 
 void GrassCollision::Hooks::BSGrassShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
