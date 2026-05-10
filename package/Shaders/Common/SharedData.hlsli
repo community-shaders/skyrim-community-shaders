@@ -266,7 +266,21 @@ namespace SharedData
 		uint disableVanillaFog;
 		float4 fogInscatteringColor;
 		float originalFogColorAmount;
-		float3 pad;
+		uint volumetricFogEnabled;
+		uint volumetricGridPixelSize;
+		uint volumetricGridSizeZ;
+		float volumetricFogDistance;
+		float volumetricFogStartDistance;
+		float volumetricFogNearFadeInDistance;
+		float volumetricFogExtinctionScale;
+		float volumetricFogScatteringDistribution;
+		float3 volumetricPad0;
+		float4 volumetricFogAlbedo;
+		float4 volumetricFogEmissive;
+		float volumetricDirectionalScatteringIntensity;
+		float volumetricShadowBias;
+		float volumetricDepthDistributionScale;
+		uint pad;
 	};
 
 	cbuffer FeatureData : register(b6)

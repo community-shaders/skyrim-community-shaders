@@ -1,5 +1,9 @@
 #include "ExponentialHeightFog.h"
 
+#include "Deferred.h"
+#include "State.h"
+#include "Utils/D3D.h"
+#include "Utils/Game.h"
 #include "WeatherVariableRegistry.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -18,7 +22,20 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	respectVanillaFogFade,
 	disableVanillaFog,
 	fogInscatteringColor,
-	originalFogColorAmount)
+	originalFogColorAmount,
+	volumetricFogEnabled,
+	volumetricGridPixelSize,
+	volumetricGridSizeZ,
+	volumetricFogDistance,
+	volumetricFogStartDistance,
+	volumetricFogNearFadeInDistance,
+	volumetricFogExtinctionScale,
+	volumetricFogScatteringDistribution,
+	volumetricFogAlbedo,
+	volumetricFogEmissive,
+	volumetricDirectionalScatteringIntensity,
+	volumetricShadowBias,
+	volumetricDepthDistributionScale)
 
 void ExponentialHeightFog::RestoreDefaultSettings()
 {
@@ -64,6 +81,239 @@ void ExponentialHeightFog::DrawSettings()
 	ImGui::Checkbox("Use Dynamic Cubemaps for Inscattering", (bool*)&settings.useDynamicCubemaps);
 	Util::WeatherUI::ColorEdit4("Inscattering Cubemap Tint", this, "inscatteringTint", (float*)&settings.inscatteringTint);
 	ImGui::SliderFloat("Cubemap Mip Level", &settings.cubemapMipLevel, 1.0f, 7.0f, "%.1f");
+
+	ImGui::SeparatorText("Volumetric Fog");
+	Util::WeatherUI::Checkbox("Enable Volumetric Fog", this, "volumetricFogEnabled", (bool*)&settings.volumetricFogEnabled);
+	if (settings.volumetricFogEnabled) {
+		uint32_t minGridPixelSize = 4;
+		uint32_t maxGridPixelSize = 64;
+		uint32_t minGridSizeZ = 16;
+		uint32_t maxGridSizeZ = 160;
+		ImGui::SliderScalar("Grid Pixel Size", ImGuiDataType_U32, &settings.volumetricGridPixelSize, &minGridPixelSize, &maxGridPixelSize, "%u", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderScalar("Grid Depth Slices", ImGuiDataType_U32, &settings.volumetricGridSizeZ, &minGridSizeZ, &maxGridSizeZ, "%u", ImGuiSliderFlags_AlwaysClamp);
+		Util::WeatherUI::SliderFloat("Volumetric View Distance", this, "volumetricFogDistance", &settings.volumetricFogDistance, 1000.0f, 200000.0f, "%.0f");
+		Util::WeatherUI::SliderFloat("Volumetric Start Distance", this, "volumetricFogStartDistance", &settings.volumetricFogStartDistance, 0.0f, 20000.0f, "%.0f");
+		Util::WeatherUI::SliderFloat("Near Fade In Distance", this, "volumetricFogNearFadeInDistance", &settings.volumetricFogNearFadeInDistance, 0.0f, 20000.0f, "%.0f");
+		Util::WeatherUI::SliderFloat("Volumetric Extinction Scale", this, "volumetricFogExtinctionScale", &settings.volumetricFogExtinctionScale, 0.0f, 10.0f, "%.2f");
+		Util::WeatherUI::SliderFloat("Volumetric Scattering Distribution", this, "volumetricFogScatteringDistribution", &settings.volumetricFogScatteringDistribution, -0.9f, 0.9f, "%.2f");
+		Util::WeatherUI::ColorEdit4("Volumetric Albedo", this, "volumetricFogAlbedo", (float*)&settings.volumetricFogAlbedo);
+		Util::WeatherUI::ColorEdit4("Volumetric Emissive", this, "volumetricFogEmissive", (float*)&settings.volumetricFogEmissive);
+		Util::WeatherUI::SliderFloat("Directional Scattering Intensity", this, "volumetricDirectionalScatteringIntensity", &settings.volumetricDirectionalScatteringIntensity, 0.0f, 10.0f, "%.2f");
+		Util::WeatherUI::SliderFloat("Directional Shadow Bias", this, "volumetricShadowBias", &settings.volumetricShadowBias, 0.0f, 0.05f, "%.4f");
+		Util::WeatherUI::SliderFloat("Depth Distribution Scale", this, "volumetricDepthDistributionScale", &settings.volumetricDepthDistributionScale, 0.25f, 4.0f, "%.2f");
+	}
+}
+
+void ExponentialHeightFog::SetupResources()
+{
+	D3D11_SAMPLER_DESC samplerDesc = {};
+	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	samplerDesc.MaxAnisotropy = 1;
+	samplerDesc.MinLOD = 0;
+	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	DX::ThrowIfFailed(globals::d3d::device->CreateSamplerState(&samplerDesc, linearSampler.put()));
+	Util::SetResourceName(linearSampler.get(), "ExponentialHeightFog::LinearSampler");
+
+	volumetricFogCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<VolumetricFogCB>(), "ExponentialHeightFog::VolumetricFogCB");
+}
+
+void ExponentialHeightFog::ClearShaderCache()
+{
+	if (materialSetupCS) {
+		materialSetupCS->Release();
+		materialSetupCS = nullptr;
+	}
+	if (lightScatteringCS) {
+		lightScatteringCS->Release();
+		lightScatteringCS = nullptr;
+	}
+	if (integrationCS) {
+		integrationCS->Release();
+		integrationCS = nullptr;
+	}
+}
+
+void ExponentialHeightFog::CaptureDirectionalShadowMap()
+{
+	ID3D11ShaderResourceView* shadowMap = nullptr;
+	globals::d3d::context->PSGetShaderResources(4, 1, &shadowMap);
+	directionalShadowMap.copy_from(shadowMap);
+	if (shadowMap)
+		shadowMap->Release();
+}
+
+void ExponentialHeightFog::EnsureVolumetricResources()
+{
+	const uint32_t pixelSize = std::clamp(settings.volumetricGridPixelSize, 4u, 64u);
+	const uint32_t gridZ = std::clamp(settings.volumetricGridSizeZ, 16u, 160u);
+	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+
+	UInt4 gridSize{
+		std::max(1u, static_cast<uint32_t>(std::ceil(renderSize.x / static_cast<float>(pixelSize)))),
+		std::max(1u, static_cast<uint32_t>(std::ceil(renderSize.y / static_cast<float>(pixelSize)))),
+		gridZ,
+		0u
+	};
+
+	if (vBufferA && currentGridSize.x == gridSize.x && currentGridSize.y == gridSize.y && currentGridSize.z == gridSize.z)
+		return;
+
+	currentGridSize = gridSize;
+
+	D3D11_TEXTURE3D_DESC texDesc{};
+	texDesc.Width = gridSize.x;
+	texDesc.Height = gridSize.y;
+	texDesc.Depth = gridSize.z;
+	texDesc.MipLevels = 1;
+	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	texDesc.Usage = D3D11_USAGE_DEFAULT;
+	texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+	srvDesc.Format = texDesc.Format;
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+	srvDesc.Texture3D.MipLevels = 1;
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+	uavDesc.Format = texDesc.Format;
+	uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D;
+	uavDesc.Texture3D.WSize = gridSize.z;
+
+	vBufferA = std::make_unique<Texture3D>(texDesc, "ExponentialHeightFog::VBufferA");
+	vBufferA->CreateSRV(srvDesc);
+	vBufferA->CreateUAV(uavDesc);
+
+	lightScattering = std::make_unique<Texture3D>(texDesc, "ExponentialHeightFog::LightScattering");
+	lightScattering->CreateSRV(srvDesc);
+	lightScattering->CreateUAV(uavDesc);
+
+	integratedLightScattering = std::make_unique<Texture3D>(texDesc, "ExponentialHeightFog::IntegratedLightScattering");
+	integratedLightScattering->CreateSRV(srvDesc);
+	integratedLightScattering->CreateUAV(uavDesc);
+}
+
+void ExponentialHeightFog::ReleaseVolumetricResources()
+{
+	vBufferA.reset();
+	lightScattering.reset();
+	integratedLightScattering.reset();
+	currentGridSize = {};
+	ID3D11ShaderResourceView* nullSRV = nullptr;
+	globals::d3d::context->PSSetShaderResources(19, 1, &nullSRV);
+}
+
+void ExponentialHeightFog::BindIntegratedLightScattering()
+{
+	ID3D11ShaderResourceView* srv = integratedLightScattering ? integratedLightScattering->srv.get() : nullptr;
+	globals::d3d::context->PSSetShaderResources(19, 1, &srv);
+}
+
+ID3D11ComputeShader* ExponentialHeightFog::GetMaterialSetupCS()
+{
+	if (!materialSetupCS)
+		materialSetupCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogMaterialCS.hlsl", {}, "cs_5_0"));
+	return materialSetupCS;
+}
+
+ID3D11ComputeShader* ExponentialHeightFog::GetLightScatteringCS()
+{
+	if (!lightScatteringCS)
+		lightScatteringCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogLightScatteringCS.hlsl", {}, "cs_5_0"));
+	return lightScatteringCS;
+}
+
+ID3D11ComputeShader* ExponentialHeightFog::GetIntegrationCS()
+{
+	if (!integrationCS)
+		integrationCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogIntegrationCS.hlsl", {}, "cs_5_0"));
+	return integrationCS;
+}
+
+void ExponentialHeightFog::Prepass()
+{
+	if (!settings.enabled || !settings.volumetricFogEnabled || settings.fogDensity <= 0.0f || settings.volumetricFogExtinctionScale <= 0.0f) {
+		ReleaseVolumetricResources();
+		return;
+	}
+
+	EnsureVolumetricResources();
+
+	ID3D11ShaderResourceView* directionalShadowLightData = globals::deferred && globals::deferred->directionalShadowLights ? globals::deferred->directionalShadowLights->srv.get() : nullptr;
+
+	VolumetricFogCB cb{};
+	cb.gridSizeAndFlags = {
+		currentGridSize.x,
+		currentGridSize.y,
+		currentGridSize.z,
+		directionalShadowMap && directionalShadowLightData ? 1u : 0u
+	};
+	cb.invGridSizeAndNearFade = {
+		1.0f / static_cast<float>(currentGridSize.x),
+		1.0f / static_cast<float>(currentGridSize.y),
+		1.0f / static_cast<float>(currentGridSize.z),
+		settings.volumetricFogNearFadeInDistance > 0.0f ? 1.0f / settings.volumetricFogNearFadeInDistance : 100000000.0f
+	};
+	volumetricFogCB->Update(cb);
+
+	auto context = globals::d3d::context;
+	ID3D11Buffer* cbuffers[1]{ volumetricFogCB->CB() };
+	context->CSSetConstantBuffers(0, 1, cbuffers);
+
+	ID3D11Buffer* frameBuffers[1]{ *globals::game::perFrame.get() };
+	context->CSSetConstantBuffers(12, 1, frameBuffers);
+
+	ID3D11SamplerState* samplers[1]{ linearSampler.get() };
+	context->CSSetSamplers(0, 1, samplers);
+
+	const uint32_t groupX = (currentGridSize.x + 7) / 8;
+	const uint32_t groupY = (currentGridSize.y + 7) / 8;
+	const uint32_t groupZ = (currentGridSize.z + 3) / 4;
+
+	{
+		ID3D11UnorderedAccessView* uavs[1]{ vBufferA->uav.get() };
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+		context->CSSetShader(GetMaterialSetupCS(), nullptr, 0);
+		context->Dispatch(groupX, groupY, groupZ);
+		uavs[0] = nullptr;
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	}
+
+	{
+		ID3D11ShaderResourceView* srvs[2]{ vBufferA->srv.get(), directionalShadowMap.get() };
+		ID3D11UnorderedAccessView* uavs[1]{ lightScattering->uav.get() };
+		context->CSSetShaderResources(0, 2, srvs);
+		context->CSSetShaderResources(98, 1, &directionalShadowLightData);
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+		context->CSSetShader(GetLightScatteringCS(), nullptr, 0);
+		context->Dispatch(groupX, groupY, groupZ);
+		uavs[0] = nullptr;
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	}
+
+	{
+		ID3D11ShaderResourceView* srvs[1]{ lightScattering->srv.get() };
+		ID3D11UnorderedAccessView* uavs[1]{ integratedLightScattering->uav.get() };
+		context->CSSetShaderResources(0, 1, srvs);
+		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+		context->CSSetShader(GetIntegrationCS(), nullptr, 0);
+		context->Dispatch(groupX, groupY, 1);
+	}
+
+	ID3D11ShaderResourceView* nullSrvs[2]{ nullptr, nullptr };
+	ID3D11UnorderedAccessView* nullUav[1]{ nullptr };
+	ID3D11SamplerState* nullSampler[1]{ nullptr };
+	ID3D11Buffer* nullCb[1]{ nullptr };
+	context->CSSetShaderResources(0, 2, nullSrvs);
+	context->CSSetShaderResources(98, 1, nullSrvs);
+	context->CSSetUnorderedAccessViews(0, 1, nullUav, nullptr);
+	context->CSSetSamplers(0, 1, nullSampler);
+	context->CSSetConstantBuffers(0, 1, nullCb);
+	context->CSSetShader(nullptr, nullptr, 0);
+
+	BindIntegratedLightScattering();
 }
 
 void ExponentialHeightFog::RegisterWeatherVariables()
@@ -166,4 +416,52 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		[](const bool& from, const bool& to, float factor) {
 			return factor > 0.5f ? to : from;
 		}));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::WeatherVariable<bool>>(
+		"volumetricFogEnabled",
+		"Enable Volumetric Fog",
+		"Enables froxel-based volumetric fog for exponential height fog",
+		(bool*)&settings.volumetricFogEnabled,
+		false,
+		[](const bool& from, const bool& to, float factor) {
+			return factor > 0.5f ? to : from;
+		}));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"Volumetric View Distance",
+		"volumetricFogDistance",
+		"Maximum distance covered by exponential height volumetric fog",
+		&settings.volumetricFogDistance,
+		60000.0f,
+		1000.0f, 200000.0f));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"Volumetric Extinction Scale",
+		"volumetricFogExtinctionScale",
+		"Scale applied to volumetric fog extinction",
+		&settings.volumetricFogExtinctionScale,
+		1.0f,
+		0.0f, 10.0f));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"Volumetric Scattering Distribution",
+		"volumetricFogScatteringDistribution",
+		"Henyey-Greenstein scattering distribution for volumetric fog",
+		&settings.volumetricFogScatteringDistribution,
+		0.2f,
+		-0.9f, 0.9f));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
+		"Volumetric Albedo",
+		"volumetricFogAlbedo",
+		"Volumetric fog albedo color",
+		&settings.volumetricFogAlbedo,
+		float4{ 1.0f, 1.0f, 1.0f, 1.0f }));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
+		"Volumetric Emissive",
+		"volumetricFogEmissive",
+		"Volumetric fog emissive color",
+		&settings.volumetricFogEmissive,
+		float4{ 0.0f, 0.0f, 0.0f, 0.0f }));
 }

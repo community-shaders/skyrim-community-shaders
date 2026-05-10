@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Buffer.h"
+
 struct ExponentialHeightFog : Feature
 {
 	virtual bool SupportsVR() override { return true; };
@@ -24,14 +26,27 @@ struct ExponentialHeightFog : Feature
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
 	virtual void DrawSettings() override;
+	virtual void SetupResources() override;
+	virtual void ClearShaderCache() override;
+	virtual void Prepass() override;
 
 	virtual void RestoreDefaultSettings() override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
 	void RegisterWeatherVariables() override;
+	void CaptureDirectionalShadowMap();
 
-	struct alignas(16) Settings
+	struct UInt4
+	{
+		uint32_t x = 0;
+		uint32_t y = 0;
+		uint32_t z = 0;
+		uint32_t w = 0;
+	};
+	STATIC_ASSERT_ALIGNAS_16(UInt4);
+
+	struct Settings
 	{
 		uint enabled = 0;
 		uint useDynamicCubemaps = 0;
@@ -48,7 +63,47 @@ struct ExponentialHeightFog : Feature
 		uint disableVanillaFog = 0;
 		float4 fogInscatteringColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 		float originalFogColorAmount = 1.0f;
-		float3 pad;
+		uint volumetricFogEnabled = 0;
+		uint volumetricGridPixelSize = 16;
+		uint volumetricGridSizeZ = 64;
+		float volumetricFogDistance = 60000.0f;
+		float volumetricFogStartDistance = 0.0f;
+		float volumetricFogNearFadeInDistance = 1000.0f;
+		float volumetricFogExtinctionScale = 1.0f;
+		float volumetricFogScatteringDistribution = 0.2f;
+		float3 volumetricPad0;
+		float4 volumetricFogAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
+		float4 volumetricFogEmissive = { 0.0f, 0.0f, 0.0f, 0.0f };
+		float volumetricDirectionalScatteringIntensity = 1.0f;
+		float volumetricShadowBias = 0.002f;
+		float volumetricDepthDistributionScale = 1.0f;
+		uint pad;
 	} settings;
-	static_assert(sizeof(Settings) == sizeof(float4) * 6, "Settings must match HLSL ExponentialHeightFogSettings.");
+	STATIC_ASSERT_ALIGNAS_16(Settings);
+
+private:
+	struct VolumetricFogCB
+	{
+		UInt4 gridSizeAndFlags = {};
+		float4 invGridSizeAndNearFade = {};
+	};
+	STATIC_ASSERT_ALIGNAS_16(VolumetricFogCB);
+
+	void EnsureVolumetricResources();
+	void ReleaseVolumetricResources();
+	void BindIntegratedLightScattering();
+	ID3D11ComputeShader* GetMaterialSetupCS();
+	ID3D11ComputeShader* GetLightScatteringCS();
+	ID3D11ComputeShader* GetIntegrationCS();
+
+	std::unique_ptr<Texture3D> vBufferA;
+	std::unique_ptr<Texture3D> lightScattering;
+	std::unique_ptr<Texture3D> integratedLightScattering;
+	std::unique_ptr<ConstantBuffer> volumetricFogCB;
+	winrt::com_ptr<ID3D11SamplerState> linearSampler;
+	winrt::com_ptr<ID3D11ShaderResourceView> directionalShadowMap;
+	ID3D11ComputeShader* materialSetupCS = nullptr;
+	ID3D11ComputeShader* lightScatteringCS = nullptr;
+	ID3D11ComputeShader* integrationCS = nullptr;
+	UInt4 currentGridSize = {};
 };
