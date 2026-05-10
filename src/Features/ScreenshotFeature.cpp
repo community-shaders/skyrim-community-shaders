@@ -1,8 +1,7 @@
 // Screenshot Feature
-// Lossless, non-blocking screenshot tool for both flat (SE/AE) and VR.
-// GPU copy is issued on the render thread; encoding and disk I/O run on a
-// dedicated worker thread, so capturing does not stall the frame.
-// Lossless recording support is planned.
+// Non-blocking screenshot tool for flat (SE/AE) and VR. GPU copy runs on the
+// render thread; encoding and disk I/O run on a dedicated worker thread so
+// capture does not stall the frame.
 
 #include "Features/ScreenshotFeature.h"
 #include "Features/HDRDisplay.h"
@@ -19,29 +18,21 @@
 
 namespace
 {
-	// VR analog of kFRAMEBUFFER. CommonLib reuses RE::RENDER_TARGETS::kTOTAL (==114) as the index
-	// of this slot in the renderTargets array — confusing because kTOTAL primarily means "count of
-	// standard targets". RenderDoc capture audit (2026-05-09) shows this slot:
-	//   - Receives Skyrim's final ISCopy draw (input: kMENUBG, the post-UI SBS composite).
-	//   - Is then CopySubresourceRegion'd into two DXGI-shared per-eye R8G8B8A8_SRGB textures
-	//     that SteamVR/OpenVR's compositor consumes.
-	// So functionally it is the side-by-side framebuffer headed to the HMD — the VR equivalent of
-	// the swapchain backbuffer that kFRAMEBUFFER aliases on flat.
-	// TODO: replace with a properly named CommonLibSSE-NG enumerator (e.g. kFRAMEBUFFER_VR) once
-	// upstream lands; this constant is the local stopgap.
+	// VR side-by-side framebuffer headed to the HMD - the VR analog of
+	// kFRAMEBUFFER. CommonLib reuses kTOTAL as the slot index here (despite
+	// the name typically meaning "count of standard targets"); aliased for
+	// readability at call sites.
 	constexpr auto kVRFramebufferTarget = RE::RENDER_TARGETS::kTOTAL;
 
-	// Describes the chosen capture source. SRV is non-owning; texture lifetime is
-	// either tied to the renderer slot it lives in, or to a com_ptr the caller holds.
+	// Capture source for the current runtime. SRV is non-owning - the texture's
+	// lifetime is owned by the slot or a caller-held com_ptr.
 	struct CaptureSource
 	{
 		ID3D11Texture2D* texture = nullptr;
 		ID3D11ShaderResourceView* srv = nullptr;
-		// When true, the preview path must copy through the SRV-readable cache instead of
-		// using slot.SRV directly. The kFRAMEBUFFER fallback sets this because the slot's
-		// SRV (when one exists) is for the swap-chain backbuffer, which ImGui's DX11
-		// backend can't sample correctly even when the pointer is non-null. VR's SBS slot
-		// and HDRDisplay::OutputTexture have known-good shader-readable SRVs and don't.
+		// kFRAMEBUFFER's SRV aliases the swap-chain backbuffer, which ImGui's DX11
+		// backend can't sample directly. When true, the preview path copies through
+		// the SRV-readable cache instead.
 		bool needsPreviewCache = false;
 		const char* description = "(none)";
 	};
@@ -131,12 +122,9 @@ namespace
 		}
 	}
 
-	// Tonemaps an FP16 linear scene-referred ScratchImage in-place using Reinhard
-	// (c / (1 + c)) plus an sRGB-curve encode. Reinhard is the cheap-and-correct
-	// fit here: it always lands in [0,1] regardless of input peak luminance, runs
-	// in three FLOPs per channel, and gives a result close enough to HDRDisplay's
-	// on-screen output for screenshot purposes. Caller passes the result of
-	// PopulateScratchImageFromStagingTexture; we overwrite the pixels in-place.
+	// Tonemaps an FP16 linear scene-referred ScratchImage in-place: Reinhard
+	// c / (1 + c) for the luminance map, then gamma-2.2 for sRGB encoding.
+	// Approximates HDRDisplay's on-screen tonemap closely enough for SDR save.
 	void TonemapHdrToSrgb(DirectX::ScratchImage& image)
 	{
 		using namespace DirectX;
@@ -147,20 +135,12 @@ namespace
 			image.GetMetadata(),
 			[](XMVECTOR* outPixels, const XMVECTOR* inPixels, size_t width, size_t /*y*/) {
 				const XMVECTOR one = XMVectorSplatOne();
-				// Standard sRGB encode: linear -> 1.055 * pow(c, 1/2.4) - 0.055 above
-				// the linear segment threshold of 0.0031308. We use the gamma-2.2
-				// approximation (XMVectorPow with 1/2.2) - visually indistinguishable
-				// for screenshot use and avoids the per-channel branch.
 				const XMVECTOR invGamma = XMVectorReplicate(1.0f / 2.2f);
 				for (size_t i = 0; i < width; ++i) {
-					XMVECTOR c = inPixels[i];
-					// Clamp negatives to zero - some shaders write tiny sub-zero values
-					// from float math that pow() would NaN on.
-					c = XMVectorMax(c, XMVectorZero());
-					// Reinhard tonemap on RGB; preserve alpha.
+					// Clamp negatives - some shaders emit tiny sub-zero values pow() would NaN on.
+					XMVECTOR c = XMVectorMax(inPixels[i], XMVectorZero());
 					const XMVECTOR rgb = XMVectorDivide(c, XMVectorAdd(c, one));
 					const XMVECTOR gammaCorrected = XMVectorPow(rgb, invGamma);
-					// Re-pack with original alpha.
 					outPixels[i] = XMVectorSelect(gammaCorrected, c, g_XMSelect1110);
 				}
 			},
@@ -172,12 +152,9 @@ namespace
 
 	const DirectX::Image* PrepareBmpImage(DirectX::ScratchImage& sourceImage, DirectX::ScratchImage& convertedImage)
 	{
-		// HDR display mode produces FP16 linear scene-referred values (peak >> 1.0)
-		// that BMP can't represent. Tonemap to [0,1] and gamma-encode before the
-		// 8-bit format conversion. SDR captures (8-bit sRGB / 10-bit PQ outputs we
-		// no longer source) skip this step entirely.
-		const auto metadata = sourceImage.GetMetadata();
-		if (metadata.format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+		// FP16 sources carry HDR scene-referred values (peak >> 1.0) that BMP
+		// can't represent. Tonemap + gamma-encode before the 8-bit conversion.
+		if (sourceImage.GetMetadata().format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
 			TonemapHdrToSrgb(sourceImage);
 		}
 
@@ -195,11 +172,10 @@ namespace
 		return sourceImage.GetImage(0, 0, 0);
 	}
 
-	// Resolves the underlying ID3D11Texture2D from a renderer slot. Some slots (notably
-	// kFRAMEBUFFER on flat, which aliases the swapchain backbuffer) populate the view
-	// pointers but leave .texture null - HDRDisplay accesses the slot via .SRV/.RTV.
-	// Pull the texture out of the view so a single capture path works for every slot.
-	// The com_ptr `holder` keeps the QueryInterface refcount alive across the call site.
+	// Resolves the slot's underlying texture, falling back to QueryInterface on
+	// SRV/RTV when slot.texture is null (kFRAMEBUFFER on flat aliases the swap-
+	// chain backbuffer that way). `holder` keeps the QI refcount alive across
+	// the caller's use of the returned pointer.
 	ID3D11Texture2D* ResolveSlotTexture(
 		const RE::BSGraphics::RenderTargetData& slot,
 		winrt::com_ptr<ID3D11Texture2D>& holder)
@@ -227,32 +203,14 @@ namespace
 		return resolveFromView(slot.RTV);
 	}
 
-	// Picks the best capture source for the current runtime. The decision tree
-	// follows where ISHDR actually wrote the scene this frame, NOT where it would
-	// be displayed:
+	// Picks the capture source by where ISHDR wrote the scene this frame:
+	//   VR              -> kVRFramebufferTarget (SBS).
+	//   HDR enabled     -> HDR::HdrTexture (FP16 linear; PrepareBmpImage tonemaps).
+	//   otherwise       -> kFRAMEBUFFER (already tonemapped UNORM).
 	//
-	//  - VR:                              SBS framebuffer (slot 114, kVRFramebufferTarget).
-	//  - Flat + HDRDisplay::enableHDR=ON: HDR::HdrTexture - ISHDR was redirected here
-	//                                     and wrote FP16 linear scene-referred values
-	//                                     (peak >> 1.0). PrepareBmpImage runs a Reinhard
-	//                                     tonemap + gamma encode so the BMP matches what
-	//                                     the user sees on their HDR monitor.
-	//  - Flat + HDRDisplay loaded but
-	//    enableHDR=OFF, OR HDRDisplay
-	//    not loaded:                      vanilla kFRAMEBUFFER - ISHDR wrote tonemapped
-	//                                     UNORM values 0-1 directly here. Already SDR,
-	//                                     BMPs cleanly, no tonemap needed.
-	//
-	// We deliberately never source HDR::OutputTexture: when the swap chain is HDR10
-	// (R10G10B10A2 PQ) and the monitor is HDR-capable, OutputTexture holds PQ-encoded
-	// values regardless of the enableHDR toggle - HDRDisplay's compute shader still
-	// runs and PQ-encodes the SDR scene for the swap chain. Saving those PQ bytes as
-	// BMP without a color transform produces washed-out files.
-	//
-	// `holder` is a keep-alive com_ptr for the kFRAMEBUFFER fallback path (where we
-	// QueryInterface the texture out of an SRV) - it must outlive any use of the returned
-	// texture. For VR/HdrTexture paths the texture is owned elsewhere and `holder` stays
-	// empty.
+	// HDR::OutputTexture is intentionally not used: on HDR10 swap chains it
+	// holds PQ-encoded values regardless of the enableHDR toggle, which save
+	// as washed-out BMPs without a color transform.
 	CaptureSource SelectCaptureSource(winrt::com_ptr<ID3D11Texture2D>& holder)
 	{
 		CaptureSource src;
@@ -277,9 +235,6 @@ namespace
 			return src;
 		}
 
-		// Either HDRDisplay isn't loaded, or it's loaded but enableHDR is off. In
-		// both cases ISHDR wrote tonemapped UNORM values to kFRAMEBUFFER, so saving
-		// it directly produces a correct SDR BMP without any color transform.
 		auto& slot = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 		src.texture = ResolveSlotTexture(slot, holder);
 		src.srv = slot.SRV;
@@ -288,32 +243,61 @@ namespace
 		return src;
 	}
 
-	// Detour for Skyrim's built-in screenshot save function. Symbol is named
-	// "po3tweaks::ScreenshotToConsole::DebugNotification" in the Address Library
-	// (despite the name, this is the function the keypress handler and Papyrus
-	// Debug.TakeScreenshot call to actually write Screenshot<N>.png to the game
-	// directory and post the in-game "ScreenShot: File '%s' created." toast).
-	//
-	// Address Library ids covering all editions:
-	//   SE 1.5.97    id 35882   sse_addr 0x1405c0610
-	//   AE 1.6.1170  id 36853   RVA      0x653240
-	//   VR           via SE id  vr_addr  0x1405c8b30 (status 3 in database.csv)
-	//
-	// We pass through whenever an explicit path is provided (Papyrus's
-	// Debug.TakeScreenshot(filename) and modder code), so only the keypress-
-	// driven default-path save is suppressed when the user opts in.
+	// True when our hotkey is the single PrintScreen key vanilla binds. Anything
+	// else (different key, chord, modifier) means the user wants both ours and
+	// vanilla independently.
+	bool HotkeyCollidesWithVanilla()
+	{
+		const auto& combo = Menu::GetSingleton()->GetSettings().ScreenshotKey;
+		return combo.size() == 1 &&
+		       combo[0].GetDevice() == InputDeviceType::Keyboard &&
+		       combo[0].GetKey() == VK_SNAPSHOT;
+	}
+
+	// Detour on po3tweaks::ScreenshotToConsole::DebugNotification - the routine
+	// vanilla's keypress handler and Papyrus Debug.TakeScreenshot call to write
+	// Screenshot<N>.png. Suppress only when our hotkey collides with vanilla's
+	// PrintScreen so explicit-path callers (Papyrus, modders) keep working.
 	struct VanillaScreenshotHook
 	{
 		static void thunk(char* a_explicitPath, int a_format)
 		{
-			if (a_explicitPath == nullptr &&
-				globals::features::screenshotFeature.suppressVanillaScreenshot) {
+			if (a_explicitPath == nullptr && HotkeyCollidesWithVanilla()) {
 				return;
 			}
 			func(a_explicitPath, a_format);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	// Blend state used around the preview's ImGui::Image draw. Two regression
+	// risks if this is changed:
+	//   1. BlendEnable must stay FALSE - the source texture carries non-1 alpha
+	//      where Skyrim composited UI plates; default SRC_ALPHA blend lets the
+	//      host window background show through (visible on the desktop mirror).
+	//   2. WriteMask must exclude alpha (RGB only). In VR, Skyrim's menu UI
+	//      shader recomposites our menu plate over the SBS framebuffer with
+	//      alpha blending; writing texture alpha into the menu plate RT
+	//      produces a cutout visible only through the HMD. RGB-only writes
+	//      leave the plate's pre-cleared alpha=1 in place.
+	// Paired with ImDrawCallback_ResetRenderState queued by Subrect::DrawEditor
+	// immediately after the image draw.
+	void OpaquePreviewBlendCallback(const ImDrawList*, const ImDrawCmd*)
+	{
+		static winrt::com_ptr<ID3D11BlendState> opaqueBlend;
+		if (!opaqueBlend) {
+			D3D11_BLEND_DESC desc{};
+			desc.RenderTarget[0].BlendEnable = FALSE;
+			desc.RenderTarget[0].RenderTargetWriteMask =
+				D3D11_COLOR_WRITE_ENABLE_RED |
+				D3D11_COLOR_WRITE_ENABLE_GREEN |
+				D3D11_COLOR_WRITE_ENABLE_BLUE;
+			globals::d3d::device->CreateBlendState(&desc, opaqueBlend.put());
+		}
+		if (opaqueBlend) {
+			globals::d3d::context->OMSetBlendState(opaqueBlend.get(), nullptr, 0xFFFFFFFF);
+		}
+	}
 
 	std::filesystem::path BuildScreenshotPath(const std::string& screenshotPath)
 	{
@@ -341,10 +325,22 @@ bool ScreenshotFeature::IsInMenu() const
 
 void ScreenshotFeature::PostPostLoad()
 {
-	// Address ids and pass-through behavior documented on VanillaScreenshotHook.
+	// SE 35882 / AE 36853; SE id resolves to VR via Address Library.
 	stl::write_thunk_jmp<VanillaScreenshotHook>(
 		REL::RelocationID(35882, 36853).address());
 	logger::info("Installed vanilla screenshot detour");
+
+	// Seed VR-specific presets here rather than in LoadSettings: Feature::Load
+	// only dispatches to LoadSettings when the JSON already has a settings
+	// block, so a fresh install would skip a seed placed there. Left first so
+	// it's the initial selection (matches vanilla Skyrim VR's left-eye save).
+	if (REL::Module::IsVR()) {
+		subrect.SeedDefaultPresets({
+			{ .name = "Left Eye", .uv = { 0.0f, 0.0f, 0.5f, 1.0f } },
+			{ .name = "Right Eye", .uv = { 0.5f, 0.0f, 0.5f, 1.0f } },
+			{ .name = "Full Frame", .uv = { 0.0f, 0.0f, 1.0f, 1.0f } },
+		});
+	}
 }
 
 void ScreenshotFeature::LoadSettings(json& a_json)
@@ -353,8 +349,7 @@ void ScreenshotFeature::LoadSettings(json& a_json)
 		screenshotPath = a_json["ScreenshotPath"];
 	if (a_json.contains("ApplyCropToScreenshot"))
 		applyCropToScreenshot = a_json["ApplyCropToScreenshot"];
-	if (a_json.contains("SuppressVanillaScreenshot"))
-		suppressVanillaScreenshot = a_json["SuppressVanillaScreenshot"];
+
 	subrect.LoadSettings(a_json);
 }
 
@@ -362,27 +357,23 @@ void ScreenshotFeature::SaveSettings(json& a_json)
 {
 	a_json["ScreenshotPath"] = screenshotPath;
 	a_json["ApplyCropToScreenshot"] = applyCropToScreenshot;
-	a_json["SuppressVanillaScreenshot"] = suppressVanillaScreenshot;
 	subrect.SaveSettings(a_json);
 }
 
 void ScreenshotFeature::DrawSettings()
 {
-	// Description first so users know what the feature does before they hit the button.
 	Util::Text::Disabled("Capture and save run asynchronously - no frame stall.");
 	Util::Text::Disabled(
 		"Saves SDR .bmp files. HDR scenes are tonemapped (Reinhard) so the saved\n"
 		"image matches what's on screen. For true HDR files with HDR10 metadata,\n"
 		"use Xbox Game Bar (Win+G) or your GPU vendor's overlay (saves .jxr).");
 
-	// Top-level actions
 	if (ImGui::Button("Take Screenshot Now")) {
 		Capture();
 	}
 	ImGui::SameLine();
 	ImGui::Checkbox("Apply crop", &applyCropToScreenshot);
 
-	// Output section
 	ImGui::SeparatorText("Output");
 
 	char buf[260];
@@ -416,26 +407,16 @@ void ScreenshotFeature::DrawSettings()
 		Menu::GetSingleton()->settingScreenshotKey,
 		"Change##ScreenshotFeature");
 
-	ImGui::Checkbox("Suppress vanilla screenshot key", &suppressVanillaScreenshot);
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip(
-			"When enabled, Skyrim's built-in screenshot save (Screenshot<N>.png in the\n"
-			"game install dir, fired by PrintScreen) is suppressed.\n"
-			"Papyrus Debug.TakeScreenshot(filename) and modder code that pass an\n"
-			"explicit path still work.");
+	if (HotkeyCollidesWithVanilla()) {
+		Util::Text::Disabled("Vanilla PrintScreen save suppressed (this hotkey owns it).");
+	} else {
+		Util::Text::Disabled("Vanilla PrintScreen save still works alongside this hotkey.");
 	}
 
-	// Crop section (Subrect renders preset combo, Save/Delete/Reset buttons,
-	// UV sliders, and the live drag-crop preview).
 	ImGui::SeparatorText("Crop");
 
-	// VR's source target packs both eyes side-by-side; only show the left half in the preview.
-	const float previewVisibleWidth = globals::game::isVR ? 0.5f : 1.0f;
-
-	// Same selection logic as Capture(); preview always reflects what would be saved.
-	// kFRAMEBUFFER's slot.SRV (when present) is for the swap-chain backbuffer and ImGui
-	// can't sample it correctly, so SelectCaptureSource flags that path as
-	// needsPreviewCache=true and we copy through an SRV-readable cache instead.
+	// Preview reflects what Capture() would save. Full source frame so VR users
+	// can drag-crop across the eye boundary if a seeded preset doesn't fit.
 	winrt::com_ptr<ID3D11Texture2D> previewTextureKeepAlive;
 	const auto src = SelectCaptureSource(previewTextureKeepAlive);
 
@@ -449,7 +430,7 @@ void ScreenshotFeature::DrawSettings()
 		}
 	}
 
-	subrect.DrawEditor(previewView, src.texture, previewVisibleWidth);
+	subrect.DrawEditor(previewView, src.texture, 1.0f, 0.0f, OpaquePreviewBlendCallback);
 }
 
 void ScreenshotFeature::EnsurePreviewCache(ID3D11Texture2D* sourceTexture)
@@ -596,11 +577,8 @@ void ScreenshotFeature::ScreenshotWorkerLoop()
 
 void ScreenshotFeature::ShowInGameNotification(std::string message)
 {
-	// RE::SendHUDMessage::ShowHUDMessage must run on the game's main thread; the
-	// worker thread dispatches via SKSE's task interface. Capture by value because
-	// the worker has long since moved past the queued message by the time the task
-	// fires. Third arg `cancelIfAlreadyQueued` true dedupes if the player spam-takes
-	// captures - they get one toast at a time, not a stack.
+	// ShowHUDMessage must run on the game's main thread; marshall via SKSE's
+	// task interface. Third arg dedupes spam-clicks - one toast at a time.
 	if (auto* taskInterface = SKSE::GetTaskInterface()) {
 		taskInterface->AddTask([msg = std::move(message)]() {
 			RE::SendHUDMessage::ShowHUDMessage(msg.c_str(), nullptr, true);
@@ -629,18 +607,13 @@ void ScreenshotFeature::Capture()
 	D3D11_TEXTURE2D_DESC srcDesc{};
 	sourceTexture->GetDesc(&srcDesc);
 
-	// VR's side-by-side source packs both eyes; flat is a single image.
-	// Treating one eye's pixel width as the canonical crop space unifies both paths.
-	const uint32_t eyeWidth = globals::game::isVR ? srcDesc.Width / 2 : srcDesc.Width;
-	const uint32_t eyeHeight = srcDesc.Height;
-
 	uint32_t copyX = 0;
 	uint32_t copyY = 0;
-	uint32_t copyW = eyeWidth;
-	uint32_t copyH = eyeHeight;
+	uint32_t copyW = srcDesc.Width;
+	uint32_t copyH = srcDesc.Height;
 
 	if (applyCropToScreenshot) {
-		auto region = subrect.GetPixelRegion(eyeWidth, eyeHeight);
+		auto region = subrect.GetPixelRegion(srcDesc.Width, srcDesc.Height);
 		copyX = region.x;
 		copyY = region.y;
 		copyW = region.w;

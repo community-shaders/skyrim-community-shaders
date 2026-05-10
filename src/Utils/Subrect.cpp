@@ -27,19 +27,14 @@ namespace
 		return {};
 	}
 
-	Util::Subrect::UVRegion LoadUVFromJson(const json& value, const char* legacyKey = nullptr)
+	Util::Subrect::UVRegion LoadUVArray(const json& arr)
 	{
 		Util::Subrect::UVRegion uv = DefaultUV();
-		if (value.is_array() && value.size() == 4) {
-			uv.x = value[0];
-			uv.y = value[1];
-			uv.w = value[2];
-			uv.h = value[3];
-		} else if (legacyKey != nullptr && value.contains(legacyKey) && value[legacyKey].is_array() && value[legacyKey].size() == 4) {
-			uv.x = value[legacyKey][0];
-			uv.y = value[legacyKey][1];
-			uv.w = value[legacyKey][2];
-			uv.h = value[legacyKey][3];
+		if (arr.is_array() && arr.size() == 4) {
+			uv.x = arr[0];
+			uv.y = arr[1];
+			uv.w = arr[2];
+			uv.h = arr[3];
 		}
 		return ClampUV(uv);
 	}
@@ -80,11 +75,8 @@ namespace Util::Subrect
 			for (auto& entry : a_json["CropPresets"]) {
 				Preset preset;
 				preset.name = entry.value("name", "Unknown");
-				if (entry.contains("left_uv")) {
-					// Backwards compat with the legacy stereo schema; mirror right-eye is discarded.
-					preset.uv = LoadUVFromJson(entry["left_uv"]);
-				} else {
-					preset.uv = LoadUVFromJson(entry, "uv");
+				if (entry.contains("uv")) {
+					preset.uv = LoadUVArray(entry["uv"]);
 				}
 				presets.push_back(std::move(preset));
 			}
@@ -121,13 +113,15 @@ namespace Util::Subrect
 		a_json["SelectedPresetIndex"] = selectedPresetIndex;
 	}
 
-	void Controller::DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture, float uvVisibleWidth)
+	void Controller::SeedDefaultPresets(std::vector<Preset> defaults)
 	{
-		// Make sure the default preset exists before we read presets[selectedPresetIndex].
-		// EnsureDefaultPreset is also called from LoadSettings/ApplyPreset, but features
-		// that draw their settings without going through LoadSettings (or before it) would
-		// otherwise see an empty presets vector and the combo would label the selection
-		// "(Custom)" even though no edits have happened.
+		seededDefaults = std::move(defaults);
+	}
+
+	void Controller::DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture, float uvVisibleWidth, float uvStartX, ImDrawCallback imageRenderCallback)
+	{
+		// Hosts that render without first calling LoadSettings would otherwise
+		// see an empty presets vector and the combo would mislabel as "(Custom)".
 		EnsureDefaultPreset();
 		if (selectedPresetIndex < 0 || selectedPresetIndex >= static_cast<int>(presets.size())) {
 			selectedPresetIndex = 0;
@@ -170,8 +164,6 @@ namespace Util::Subrect
 
 		ImGui::SameLine();
 		if (ImGui::Button("Reset Crop")) {
-			// Snap back to the built-in default ("Full Frame", uv = {0,0,1,1}).
-			// EnsureDefaultPreset above guarantees presets[0] exists.
 			ApplyPreset(0);
 		}
 
@@ -202,7 +194,15 @@ namespace Util::Subrect
 		ImVec2 imageSize(maxWidth, maxWidth / aspectRatio);
 		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 
-		ImGui::Image(reinterpret_cast<ImTextureID>(previewSrv), imageSize, ImVec2(0.0f, 0.0f), ImVec2(uvVisibleWidth, 1.0f));
+		ImDrawList* hostDrawList = ImGui::GetWindowDrawList();
+		if (imageRenderCallback) {
+			hostDrawList->AddCallback(imageRenderCallback, nullptr);
+		}
+		ImGui::Image(reinterpret_cast<ImTextureID>(previewSrv), imageSize,
+			ImVec2(uvStartX, 0.0f), ImVec2(uvStartX + uvVisibleWidth, 1.0f));
+		if (imageRenderCallback) {
+			hostDrawList->AddCallback(ImDrawCallback_ResetRenderState, nullptr);
+		}
 
 		ImGui::SetCursorScreenPos(cursorPos);
 		ImGui::SetNextItemAllowOverlap();
@@ -255,7 +255,16 @@ namespace Util::Subrect
 
 	void Controller::EnsureDefaultPreset()
 	{
-		if (presets.empty()) {
+		if (!presets.empty()) {
+			return;
+		}
+		if (!seededDefaults.empty()) {
+			presets = seededDefaults;
+			// currentUV must match what the combo shows as selected; otherwise
+			// the first preset appears chosen but the crop region stays full-frame.
+			currentUV = presets[0].uv;
+			selectedPresetIndex = 0;
+		} else {
 			presets.push_back(Preset{ .name = "Full Frame", .uv = DefaultUV() });
 		}
 	}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <imgui.h>
 #include <vector>
 
 namespace Util::Subrect
@@ -26,25 +27,36 @@ namespace Util::Subrect
 		UVRegion uv;
 	};
 
-	// Stateful component for "user picks a sub-rectangle of an image". Stereo-agnostic;
-	// callers pass per-eye dimensions if their source is a side-by-side stereo image.
+	// "User picks a sub-rectangle of an image" controller. Crop UV is in [0,1]
+	// of the source the caller passes to GetPixelRegion(). Hosts that want
+	// preset-based eye selection seed Left/Right/Full Frame via SeedDefaultPresets.
 	class Controller
 	{
 	public:
 		void LoadSettings(const json& a_json);
 		void SaveSettings(json& a_json) const;
-		// previewSrv/previewTexture: optional — when provided, draws a clickable thumbnail
-		// the user can drag on. uvVisibleWidth: fraction of the texture width to show
-		// (e.g. 0.5 to display only the left eye of an SBS stereo source).
-		void DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture, float uvVisibleWidth);
 
-		// Resolves the current crop UV against an arbitrary pixel size.
+		// Replaces the built-in "Full Frame" placeholder used when JSON has no
+		// CropPresets entry yet. Empty-case only - user edits/deletions persist.
+		void SeedDefaultPresets(std::vector<Preset> defaults);
+
+		// uvStartX/uvVisibleWidth window the preview onto a sub-region of the
+		// texture; crop UV stays in [0,1] of that window. imageRenderCallback,
+		// when non-null, is queued via ImDrawList::AddCallback around the
+		// preview Image draw (paired with ImDrawCallback_ResetRenderState) so
+		// hosts can override blend state for the image specifically.
+		void DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture,
+			float uvVisibleWidth = 1.0f, float uvStartX = 0.0f,
+			ImDrawCallback imageRenderCallback = nullptr);
+
+		// Resolves the crop UV against an arbitrary pixel size.
 		PixelRegion GetPixelRegion(uint32_t width, uint32_t height) const;
 
 		const UVRegion& GetUV() const { return currentUV; }
 
 	private:
 		std::vector<Preset> presets;
+		std::vector<Preset> seededDefaults;
 		int selectedPresetIndex = 0;
 		char newPresetName[64] = "";
 
