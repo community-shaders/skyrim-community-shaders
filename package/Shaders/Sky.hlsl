@@ -280,8 +280,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 #		if defined(TEX)
-	if (SharedData::enbSettings.EnableProceduralSun &&
-	    (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+	if (SharedData::enbSettings.EnableProceduralSun && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
 		baseColor.xyz = ComputeProceduralSun(input.TexCoord0.xy);
 		baseColor.w  = 1.0;
 	}
@@ -294,7 +293,8 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			ifdef TEX
 	float3 sunGlareColor = Color::Sky(input.Color.xyz) * baseColor.xyz;
-	psout.Color.xyz = (sunGlareColor + skyScale * baseColor.w) + noiseGrad * baseColor.w;
+	// Dither/noise term is the legacy sky path contribution for gradient smoothing.
+	psout.Color.xyz = (sunGlareColor + skyScale) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
 	float3 skyGradientColor = input.Color.xyz;
