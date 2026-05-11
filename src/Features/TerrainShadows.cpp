@@ -197,7 +197,7 @@ TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
 
 void TerrainShadows::LoadHeightmap()
 {
-	auto tes = RE::TES::GetSingleton();
+	auto tes = globals::game::tes;
 	if (!tes)
 		return;
 
