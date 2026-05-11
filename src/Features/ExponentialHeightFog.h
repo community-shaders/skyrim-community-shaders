@@ -76,8 +76,8 @@ struct ExponentialHeightFog : Feature
 		float4 volumetricFogEmissive = { 0.0f, 0.0f, 0.0f, 0.0f };
 		float volumetricDirectionalScatteringIntensity = 1.0f;
 		float volumetricShadowBias = 0.002f;
-		float volumetricDepthDistributionScale = 1.0f;
-		uint pad;
+		float volumetricDepthDistributionScale = 32.0f;
+		float volumetricSkyLightingIntensity = 1.0f;
 	} settings;
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
@@ -86,6 +86,9 @@ private:
 	{
 		UInt4 gridSizeAndFlags = {};
 		float4 invGridSizeAndNearFade = {};
+		float4 gridZParams = {};
+		float4x4 clipToWorld[2] = {};
+		float4 frameJitterAndHistory[4] = {};
 	};
 	STATIC_ASSERT_ALIGNAS_16(VolumetricFogCB);
 
@@ -93,17 +96,25 @@ private:
 	void ReleaseVolumetricResources();
 	void BindIntegratedLightScattering();
 	ID3D11ComputeShader* GetMaterialSetupCS();
+	ID3D11ComputeShader* GetConservativeDepthCS();
 	ID3D11ComputeShader* GetLightScatteringCS();
 	ID3D11ComputeShader* GetIntegrationCS();
 
 	std::unique_ptr<Texture3D> vBufferA;
+	std::unique_ptr<Texture2D> conservativeDepth;
+	std::unique_ptr<Texture2D> conservativeDepthHistory;
 	std::unique_ptr<Texture3D> lightScattering;
+	std::unique_ptr<Texture3D> lightScatteringHistory;
 	std::unique_ptr<Texture3D> integratedLightScattering;
 	std::unique_ptr<ConstantBuffer> volumetricFogCB;
 	winrt::com_ptr<ID3D11SamplerState> linearSampler;
+	winrt::com_ptr<ID3D11SamplerState> shadowSampler;
 	winrt::com_ptr<ID3D11ShaderResourceView> directionalShadowMap;
 	ID3D11ComputeShader* materialSetupCS = nullptr;
+	ID3D11ComputeShader* conservativeDepthCS = nullptr;
 	ID3D11ComputeShader* lightScatteringCS = nullptr;
 	ID3D11ComputeShader* integrationCS = nullptr;
 	UInt4 currentGridSize = {};
+	bool hasLightScatteringHistory = false;
+	bool hasConservativeDepthHistory = false;
 };

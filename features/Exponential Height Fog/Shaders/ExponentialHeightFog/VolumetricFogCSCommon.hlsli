@@ -3,18 +3,29 @@
 
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
-#include "ExponentialHeightFog/VolumetricFogCommon.hlsli"
 
 cbuffer VolumetricFogCB : register(b0)
 {
 	uint4 VolumetricFogGridSizeAndFlags;
 	float4 VolumetricFogInvGridSizeAndNearFade;
+	float4 VolumetricFogGridZParams;
+	row_major float4x4 VolumetricFogClipToWorld[2];
+	float4 VolumetricFogFrameJitterAndHistory[4];
 };
 
 #define VolumetricFogGridSize VolumetricFogGridSizeAndFlags.xyz
-#define VolumetricFogHasDirectionalShadowMap VolumetricFogGridSizeAndFlags.w
+#define VolumetricFogHasDirectionalShadowMap ((VolumetricFogGridSizeAndFlags.w & 1u) != 0u)
+#define VolumetricFogHasConservativeDepth ((VolumetricFogGridSizeAndFlags.w & 2u) != 0u)
+#define VolumetricFogHasIBL ((VolumetricFogGridSizeAndFlags.w & 4u) != 0u)
+#define VolumetricFogHasSkylighting ((VolumetricFogGridSizeAndFlags.w & 8u) != 0u)
+#define VolumetricFogHasPrevConservativeDepth ((VolumetricFogGridSizeAndFlags.w & 16u) != 0u)
 #define VolumetricFogInvGridSize VolumetricFogInvGridSizeAndNearFade.xyz
 #define VolumetricFogNearFadeInDistanceInv VolumetricFogInvGridSizeAndNearFade.w
+#define VolumetricFogHistoryWeight VolumetricFogFrameJitterAndHistory[0].w
+
+#define EXP_HEIGHT_FOG_GRID_SIZE_Z VolumetricFogGridSizeAndFlags.z
+#define EXP_HEIGHT_FOG_GRID_Z_PARAMS VolumetricFogGridZParams.xyz
+#include "ExponentialHeightFog/VolumetricFogCommon.hlsli"
 
 namespace ExponentialHeightFog
 {
@@ -29,16 +40,12 @@ namespace ExponentialHeightFog
 		eyeIndex = Stereo::GetEyeIndexFromTexCoord(volumeUV);
 		float2 eyeUV = Stereo::ConvertFromStereoUV(volumeUV, eyeIndex);
 
-		float normalizedSlice = (float(coord.z) + cellOffset.z) * VolumetricFogInvGridSize.z;
-		viewDepth = ComputeVolumetricSliceDepth(normalizedSlice);
+		viewDepth = ComputeVolumetricSliceDepth(max(float(coord.z) + cellOffset.z, 0.0f));
 
 		float2 ndc = eyeUV * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
-		float4 farView = mul(FrameBuffer::CameraProjInverse[eyeIndex], float4(ndc, 1.0f, 1.0f));
-		farView.xyz *= rcp(max(farView.w, 1e-6f));
-
-		float viewZ = max(abs(farView.z), 1e-4f);
-		float3 viewPosition = farView.xyz * (viewDepth / viewZ);
-		return FrameBuffer::ViewToWorld(viewPosition, true, eyeIndex);
+		float deviceZ = (SharedData::CameraData.x - SharedData::CameraData.w / viewDepth) / SharedData::CameraData.z;
+		float4 worldPosition = mul(VolumetricFogClipToWorld[eyeIndex], float4(ndc, deviceZ, 1.0f));
+		return worldPosition.xyz / worldPosition.w;
 	}
 }
 

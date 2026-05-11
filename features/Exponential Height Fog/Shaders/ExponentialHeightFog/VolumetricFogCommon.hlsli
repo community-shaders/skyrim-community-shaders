@@ -15,39 +15,75 @@ namespace ExponentialHeightFog
 
 	float GetHeightFogFalloff()
 	{
-		return exponentialHeightFogSettings.fogHeightFalloff * 0.001f;
+		return SharedData::exponentialHeightFogSettings.fogHeightFalloff * 0.001f;
 	}
 
 	float GetHeightFogDensity()
 	{
-		return exponentialHeightFogSettings.fogDensity * 0.001f;
+		return SharedData::exponentialHeightFogSettings.fogDensity * 0.001f;
 	}
 
 	float GetVolumetricStartDistance()
 	{
-		return max(0.0f, exponentialHeightFogSettings.volumetricFogStartDistance);
+		return max(0.0f, SharedData::exponentialHeightFogSettings.volumetricFogStartDistance);
 	}
 
 	float GetVolumetricEndDistance()
 	{
-		return max(GetVolumetricStartDistance() + 1.0f, exponentialHeightFogSettings.volumetricFogDistance);
+		return max(GetVolumetricStartDistance() + 1.0f, SharedData::exponentialHeightFogSettings.volumetricFogDistance);
 	}
 
 	float GetVolumetricDepthDistributionScale()
 	{
-		return max(exponentialHeightFogSettings.volumetricDepthDistributionScale, 0.01f);
+		return max(SharedData::exponentialHeightFogSettings.volumetricDepthDistributionScale, 1.0f);
 	}
 
-	float ComputeVolumetricSliceDepth(float normalizedSlice)
+	float GetVolumetricGridSizeZ()
 	{
-		float sliceT = pow(saturate(normalizedSlice), GetVolumetricDepthDistributionScale());
-		return lerp(GetVolumetricStartDistance(), GetVolumetricEndDistance(), sliceT);
+#if defined(EXP_HEIGHT_FOG_GRID_SIZE_Z)
+		return clamp(float(EXP_HEIGHT_FOG_GRID_SIZE_Z), 16.0f, 160.0f);
+#else
+		return clamp(float(SharedData::exponentialHeightFogSettings.volumetricGridSizeZ), 16.0f, 160.0f);
+#endif
 	}
 
-	float ComputeVolumetricNormalizedSlice(float viewDistance)
+	float3 GetVolumetricGridZParams(float gridSizeZ)
 	{
-		float normalizedDistance = saturate((viewDistance - GetVolumetricStartDistance()) / max(GetVolumetricEndDistance() - GetVolumetricStartDistance(), 1.0f));
-		return pow(normalizedDistance, rcp(GetVolumetricDepthDistributionScale()));
+#if defined(EXP_HEIGHT_FOG_GRID_Z_PARAMS)
+		return EXP_HEIGHT_FOG_GRID_Z_PARAMS;
+#else
+		gridSizeZ = clamp(gridSizeZ, 16.0f, 160.0f);
+		float nearPlane = max(SharedData::CameraData.y, GetVolumetricStartDistance());
+		float farPlane = max(nearPlane + 1.0f, GetVolumetricEndDistance());
+		float nearWithOffset = nearPlane + 0.095f * 100.0f;
+		float farExp = exp2(gridSizeZ / GetVolumetricDepthDistributionScale());
+		float gridZOffset = (farPlane - nearWithOffset * farExp) / (farPlane - nearWithOffset);
+		float gridZScale = (1.0f - gridZOffset) / nearWithOffset;
+		return float3(gridZScale, gridZOffset, GetVolumetricDepthDistributionScale());
+#endif
+	}
+
+	float3 GetVolumetricGridZParams()
+	{
+		return GetVolumetricGridZParams(GetVolumetricGridSizeZ());
+	}
+
+	float ComputeVolumetricSliceDepth(float slice)
+	{
+		float3 gridZParams = GetVolumetricGridZParams();
+		return (exp2(slice / gridZParams.z) - gridZParams.y) / gridZParams.x;
+	}
+
+	float ComputeVolumetricNormalizedSlice(float viewDepth, float gridSizeZ)
+	{
+		gridSizeZ = clamp(gridSizeZ, 16.0f, 160.0f);
+		float3 gridZParams = GetVolumetricGridZParams(gridSizeZ);
+		return log2(max(viewDepth * gridZParams.x + gridZParams.y, 1e-6f)) * gridZParams.z / gridSizeZ;
+	}
+
+	float ComputeVolumetricNormalizedSlice(float viewDepth)
+	{
+		return ComputeVolumetricNormalizedSlice(viewDepth, GetVolumetricGridSizeZ());
 	}
 
 	float EvaluateHeightFogExtinction(float3 positionWS, float3 cameraWS)
@@ -55,9 +91,9 @@ namespace ExponentialHeightFog
 		float fogDensity = GetHeightFogDensity();
 		float fogHeightFalloff = GetHeightFogFalloff();
 		float worldHeight = positionWS.z + cameraWS.z;
-		float exponent = fogHeightFalloff * max(worldHeight - exponentialHeightFogSettings.fogHeight, 0.0f);
+		float exponent = fogHeightFalloff * max(worldHeight - SharedData::exponentialHeightFogSettings.fogHeight, 0.0f);
 		float localDensity = fogDensity * exp2(-exponent);
-		return max(localDensity * exponentialHeightFogSettings.volumetricFogExtinctionScale * 0.5f, 0.0f);
+		return max(localDensity * SharedData::exponentialHeightFogSettings.volumetricFogExtinctionScale * 0.5f, 0.0f);
 	}
 }
 
