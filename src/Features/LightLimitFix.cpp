@@ -5,9 +5,9 @@
 
 #include "Deferred.h"
 #include "Menu/ThemeManager.h"
-#include "Utils/ExternalEmittance.h"
 #include "Shadercache.h"
 #include "State.h"
+#include "Utils/ExternalEmittance.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LightLimitFix::Settings,
@@ -89,7 +89,7 @@ void LightLimitFix::DrawSettings()
 LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
 {
 	PerFrame perFrame{};
-	perFrame.ShadowMapSlots = globals::deferred->shadowMapSlots;
+	perFrame.ShadowMapSlots = ShadowCasterManager::GetInstalledSlotCount();
 	std::copy(clusterSize, clusterSize + 3, perFrame.ClusterSize);
 	perFrame.EnableLightsVisualisation = settings.EnableLightsVisualisation;
 	perFrame.LightsVisualisationMode = settings.LightsVisualisationMode;
@@ -590,7 +590,7 @@ void LightLimitFix::UpdateLights()
 			int32_t stableSlot = ShadowCasterManager::GetShadowSlot(light);
 			if (stableSlot < 0)
 				return;
-			bool castsShadow = static_cast<uint32_t>(stableSlot) < globals::deferred->shadowMapSlots;
+			bool castsShadow = static_cast<uint32_t>(stableSlot) < ShadowCasterManager::GetInstalledSlotCount();
 			addShadowLight(light, castsShadow, castsShadow ? static_cast<uint32_t>(stableSlot) : 0u);
 		});
 

@@ -71,6 +71,37 @@ namespace ShadowCasterManager
 	/// iteration past BSTArray's static _capacity.
 	std::uint32_t MaxShadowAccumIterationBound();
 
+	/// Verified kSHADOWMAPS texture-array slot count -- what the engine
+	/// actually allocated, not what SCM requested. 0 until the SRV becomes
+	/// readable (the read is lazy and self-healing across frames; the
+	/// previous Deferred-owned one-shot read raced kSHADOWMAPS creation
+	/// and silently disabled the cluster shadow pipeline when it fired
+	/// too early). Consumers in the cluster pipeline, scheduler, and UI
+	/// should call this rather than reaching into Deferred / the renderer
+	/// directly.
+	std::uint32_t GetInstalledSlotCount();
+
+	/// Live VRAM telemetry used for shadow-array sizing decisions and stats.
+	/// All values in bytes; populated from IDXGIAdapter3::QueryVideoMemoryInfo
+	/// + the kSHADOWMAPS texture's actual geometry. valid=false when the
+	/// adapter/texture aren't ready yet (e.g. before SetupResources).
+	struct VRAMInfo
+	{
+		std::uint64_t currentUsageBytes = 0;  ///< VRAM currently allocated to this process (local heap)
+		std::uint64_t budgetBytes = 0;        ///< Driver-suggested budget for this process
+		std::uint64_t shadowArrayBytes = 0;   ///< Bytes currently used by the kSHADOWMAPS texture array
+		std::uint32_t shadowWidth = 0;        ///< Per-slice width
+		std::uint32_t shadowHeight = 0;       ///< Per-slice height
+		std::uint32_t shadowSlices = 0;       ///< Current kSHADOWMAPS ArraySize
+		std::uint32_t bytesPerSlice = 0;      ///< Per-slice byte cost (width*height*format size)
+		bool valid = false;
+	};
+	VRAMInfo GetVRAMInfo();
+
+	/// Predict the kSHADOWMAPS texture-array byte size for a given slice count
+	/// using the current per-slice geometry. Returns 0 if VRAMInfo isn't valid yet.
+	std::uint64_t ProjectShadowArrayBytes(std::uint32_t sliceCount);
+
 	template <typename Fn>
 	inline void ForEachShadowLight(const RE::BSTArray<RE::BSShadowLight*>& accum, Fn&& fn)
 	{
@@ -128,6 +159,8 @@ namespace ShadowCasterManager
 		kFormulaParam_LightDisplacement,    ///< distance moved since last shadow map render (game units)
 		kFormulaParam_PlayerLightDistance,  ///< distance from the player character to the light (game units)
 		kFormulaParam_LightImportance,      ///< contribution importance: lum(diffuse*fade) * max(att_cam, att_plr); set in interval loop only
+		kFormulaParam_LightIsSpot,          ///< 1 if light is a spot (BSShadowFrustumLight), 0 otherwise
+		kFormulaParam_LightSpotVisible,     ///< 1 if a spot's cone is plausibly visible to the camera (cone-aimed-at-frustum). Always 1 for non-spots so omni-only formulas aren't affected.
 
 		kFormulaParam_CameraX,
 		kFormulaParam_CameraY,
@@ -197,8 +230,10 @@ namespace ShadowCasterManager
 		/// Number of simultaneous shadow-casting point/spot lights (NOT counting the directional sun).
 		/// 0 = scheduler active but selects no point lights (sun/directional unaffected).
 		/// 4 = vanilla point light count with intelligent selection replacing the game's default.
-		/// 5-64 = extended mode; depth buffer array is expanded beyond game's 8-slot limit
-		///   when this exceeds 8.
+		/// 5-127 = extended mode; depth buffer array is expanded beyond game's 8-slot limit
+		///   when this exceeds 8. The practical ceiling is VRAM (per-slice cost
+		///   of the kSHADOWMAPS texture array) -- the in-game settings panel
+		///   shows a live projection so users can see when a value won't fit.
 		/// Higher values allow more lights to hold stale shadow maps between redraws at
 		/// the cost of startup memory. The redraw budget and interval formula control
 		/// per-frame GPU cost independently.
@@ -236,13 +271,30 @@ namespace ShadowCasterManager
 		/// Disabled by default; experimental.
 		bool PromoteNormalToShadow = false;
 
+		/// Force-enable portal-strict on shadow casters as they're added by
+		/// the engine. Per-type because portal-strict on spotlights drops
+		/// culled-but-visible spots entirely, while on omnis/hemispheres it
+		/// usefully tightens the engine's portal-graph visibility test.
+		///
+		/// Defaults: omni + hemi enforced, spotlights left to their
+		/// engine-authored portal-strict flag.
+		bool ForceEnablePortalStrictOmni = true;
+		bool ForceEnablePortalStrictHemi = true;
+		bool ForceEnablePortalStrictSpot = false;
+
 		// --- Formula strings (exprtk expressions) ---
 
 		/// Light priority scoring formula.  Available variables:
 		/// lightindex, lightintensity, lightdistance, playerlightdistance, lightradius, lightx/y/z,
 		/// lightr/g/b, lightambientr/g/b, lightchosenlastframe, lightneverfades,
 		/// lightportalstrict, lightns, lightconverted, camerax/y/z, isinterior, timeofday
-		std::string ScoreFormula = "lightradius * lightintensity / (1 + ((1 - lightneverfades) * lightdistance) / 1000) * (1 + lightchosenlastframe * 0.3)";
+		/// Default favours spots whose cone plausibly reaches the camera
+		/// frustum. lightspotvisible is 1 for non-spots and for visible
+		/// spots; 0 for spots pointing away from the camera. The
+		/// (1 + lightisspot * lightspotvisible) term gives visible spots
+		/// a 2x score multiplier and leaves omnis at 1x, biasing the
+		/// scheduler toward keeping visible spots in the chosen pool.
+		std::string ScoreFormula = "lightradius * lightintensity / (1 + ((1 - lightneverfades) * lightdistance) / 1000) * (1 + lightchosenlastframe * 0.3) * (1 + lightisspot * lightspotvisible)";
 
 		/// Redraw interval formula (per light).  Higher = less frequent redraws.
 		/// Uses min(lightdistance, playerlightdistance) so that a light near the player
@@ -296,6 +348,9 @@ namespace ShadowCasterManager
 		RedrawBudgetMs,
 		ConvertExcessToNormal,
 		PromoteNormalToShadow,
+		ForceEnablePortalStrictOmni,
+		ForceEnablePortalStrictHemi,
+		ForceEnablePortalStrictSpot,
 		ScoreFormula,
 		RedrawIntervalFormula,
 		RedrawBudgetFormula,

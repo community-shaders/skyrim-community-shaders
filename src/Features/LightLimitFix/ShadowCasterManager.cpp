@@ -63,6 +63,8 @@ namespace ShadowCasterManager
 		{ "lightdisplacement", "distance this light moved since its last shadow map render (game units; 0 when not yet tracked or in score formula)", kFormulaParam_LightDisplacement },
 		{ "playerlightdistance", "distance from the player character to the light (game units; falls back to lightdistance when player unavailable)", kFormulaParam_PlayerLightDistance },
 		{ "lightimportance", "contribution score: lum(diffuse*fade) * max(att_cam,att_plr) where att=(1-(dist/radius)^2)^2; 0 in score formula", kFormulaParam_LightImportance },
+		{ "lightisspot", "1 if this is a spot/frustum shadow light (BSShadowFrustumLight); 0 for omni / hemi / sun", kFormulaParam_LightIsSpot },
+		{ "lightspotvisible", "1 if the spot's cone plausibly reaches the camera frustum, 0 otherwise. Always 1 for non-spot lights so existing omni-only formulas are unaffected", kFormulaParam_LightSpotVisible },
 		{ "camerax", "camera world X", kFormulaParam_CameraX },
 		{ "cameray", "camera world Y", kFormulaParam_CameraY },
 		{ "cameraz", "camera world Z", kFormulaParam_CameraZ },
@@ -203,8 +205,29 @@ namespace ShadowCasterManager
 	}
 
 	// Maximum ShadowLightCount the installed infrastructure supports.
-	// Set once by Install(); Update() clamps to this.
+	// Set once by Install() to the *requested* count; later refined by
+	// RefreshInstalledSlotCount() to reflect what the GPU actually allocated.
+	// Update() clamps the user-facing setting to this.
 	static int32_t s_installedShadowLightCount;
+
+	// What SCM asked the engine for. Equals settings.ShadowLightCount --
+	// the sun lives in a separate texture (kSHADOWMAPS_ESRAM), so there's
+	// no +1 sun cascade slice in kSHADOWMAPS. Captured at Install so the
+	// post-allocation verification can detect VRAM-exhaustion fallbacks
+	// where the actual texture ends up smaller than requested.
+	static uint32_t s_requestedSlotCount = 0;
+
+	// Total kSHADOWMAPS texture-array capacity *as actually allocated*.
+	// 0 until kSHADOWMAPS exists and we've read its real ArraySize back.
+	// Owned here (not in Deferred) because SCM is the only thing that
+	// modifies the engine's allocation request, and verification of that
+	// request is the same code path. Consumers (LLF cluster pipeline,
+	// SCM scheduler clamp, SCM UI) read via GetInstalledSlotCount().
+	static uint32_t s_installedSlotCount = 0;
+
+	// True once we've logged a verification result. Prevents spam if the
+	// SRV stays null forever (vanilla-disabled session) or oscillates.
+	static bool s_slotCountLogged = false;
 
 	// Formula instances (allocated at Init if formula strings are non-empty)
 	static std::unique_ptr<FormulaHelper> s_formulaScore;
@@ -469,8 +492,8 @@ namespace ShadowCasterManager
 	{
 		// Each entry advances idx by its shadowMapCount. The widest type is
 		// BSShadowDirectionalLight (4 cascades). With ShadowLightCount user-
-		// capped at 64 and one sun bookkeeping slot, the realistic walked
-		// index never exceeds (1 + 64) * 4 = 260. Add a small margin so a
+		// capped at 127 and one sun bookkeeping slot, the realistic walked
+		// index never exceeds (1 + 127) * 4 = 512. Add a small margin so a
 		// transient mismatch between live settings and the engine's already-
 		// populated array doesn't tripwire iteration. If settings haven't
 		// initialised yet (s_settings is the default-constructed value with
@@ -479,6 +502,221 @@ namespace ShadowCasterManager
 		constexpr std::uint32_t kMargin = 16;
 		const std::uint32_t lights = static_cast<std::uint32_t>(std::max(1, s_settings.ShadowLightCount));
 		return (lights + 1) * kCascadesPerLight + kMargin;
+	}
+
+	// Verdict for a candidate shadow-array footprint vs the DXGI budget.
+	// "tight" = free VRAM below 512 MB or shadow array > 25% of budget.
+	// "over"  = free VRAM below 128 MB or shadow array > 50% of budget.
+	// Driven by free headroom rather than shadow share because a small
+	// array next to a tight budget is just as risky as a huge one in a
+	// roomy budget.
+	struct VRAMVerdict
+	{
+		bool tight = false;
+		bool over = false;
+		ImVec4 colour{ 0.55f, 0.85f, 0.55f, 1 };  // green by default
+	};
+	static VRAMVerdict EvaluateVRAMVerdict(std::uint64_t shadowBytes, std::uint64_t freeBytes, std::uint64_t budgetBytes)
+	{
+		constexpr std::uint64_t kTightFree = 512ull * 1024 * 1024;
+		constexpr std::uint64_t kOverFree = 128ull * 1024 * 1024;
+		VRAMVerdict v;
+		v.tight = freeBytes < kTightFree || shadowBytes * 4 > budgetBytes;
+		v.over = freeBytes < kOverFree || shadowBytes * 2 > budgetBytes;
+		v.colour = v.over  ? ImVec4(0.95f, 0.35f, 0.35f, 1) :
+		           v.tight ? ImVec4(0.95f, 0.85f, 0.25f, 1) :
+		                     ImVec4(0.55f, 0.85f, 0.55f, 1);
+		return v;
+	}
+
+	// Reads kSHADOWMAPS's underlying Texture2D desc, bypassing the SRV's
+	// ViewDimension. Skyrim creates the SRV with a non-array view dimension
+	// even though the resource itself is a Texture2DArray, so reading
+	// `desc.Texture2DArray.ArraySize` from the SRV desc returns 0; only the
+	// texture's own ArraySize is reliable. Returns false on any failure
+	// stage; out param is left untouched.
+	static bool TryReadShadowTextureDesc(D3D11_TEXTURE2D_DESC& out)
+	{
+		auto* renderer = globals::game::renderer;
+		if (!renderer)
+			return false;
+		auto* srv = renderer->GetDepthStencilData()
+		                .depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS]
+		                .depthSRV;
+		if (!srv)
+			return false;
+		winrt::com_ptr<ID3D11Resource> resource;
+		srv->GetResource(resource.put());
+		if (!resource)
+			return false;
+		winrt::com_ptr<ID3D11Texture2D> tex;
+		if (FAILED(resource->QueryInterface(IID_PPV_ARGS(tex.put()))))
+			return false;
+		D3D11_TEXTURE2D_DESC desc{};
+		tex->GetDesc(&desc);
+		if (desc.ArraySize == 0)
+			return false;
+		out = desc;
+		return true;
+	}
+
+	// Lazily verifies that the engine's actual kSHADOWMAPS slice count
+	// matches what SCM patched in. Self-healing: bails until the texture
+	// is readable, then early-returns. Cross-checks against the requested
+	// count and clamps the scheduler on mismatch so out-of-bounds slice
+	// indexing can't occur after a VRAM-exhaustion fallback.
+	void RefreshInstalledSlotCount()
+	{
+		if (s_installedSlotCount > 0)
+			return;
+
+		D3D11_TEXTURE2D_DESC desc{};
+		if (!TryReadShadowTextureDesc(desc))
+			return;
+
+		uint32_t actual = desc.ArraySize;
+		s_installedSlotCount = actual;
+		if (s_slotCountLogged)
+			return;
+		s_slotCountLogged = true;
+		if (s_requestedSlotCount && actual != s_requestedSlotCount) {
+			logger::warn(
+				"[SCM] Requested {} kSHADOWMAPS slots, GPU allocated {} -- "
+				"clamping scheduler to the actual count.",
+				s_requestedSlotCount, actual);
+			s_installedShadowLightCount = std::min(s_installedShadowLightCount, static_cast<int32_t>(actual));
+		} else {
+			logger::info("[SCM] kSHADOWMAPS array verified: {} slots allocated", actual);
+		}
+	}
+
+	uint32_t GetInstalledSlotCount()
+	{
+		// Lazy-refresh; cheap once verified. Fall back to the requested
+		// count when verification can't complete -- a non-zero slot count
+		// is needed for the cluster pipeline to engage shadow handling.
+		// Out-of-bounds slice indexes are hardware-clamped in D3D11, so a
+		// transient over-estimate yields stale shadow data rather than a
+		// crash.
+		RefreshInstalledSlotCount();
+		return s_installedSlotCount > 0 ? s_installedSlotCount : s_requestedSlotCount;
+	}
+
+	// kSHADOWMAPS footprint = w*h*bytesPerPixel*ArraySize. Per-slice cost
+	// is 64 MB at 4K D32_FLOAT; arrays grow linearly with ShadowLightCount.
+	// Returned info.valid is false only when both the DXGI budget query
+	// and the texture/INI fallback fail (rare).
+	VRAMInfo GetVRAMInfo()
+	{
+		VRAMInfo info{};
+
+		// DXGI budget. Prefer Menu's cached adapter; fall back to the
+		// device-derived path before Menu::Init() has run.
+		winrt::com_ptr<IDXGIAdapter3> adapter3;
+		if (auto* menu = Menu::GetSingleton())
+			adapter3 = menu->GetDXGIAdapter3();
+		if (!adapter3 && globals::d3d::device) {
+			winrt::com_ptr<IDXGIDevice> dxgiDevice;
+			if (SUCCEEDED(globals::d3d::device->QueryInterface(dxgiDevice.put()))) {
+				winrt::com_ptr<IDXGIAdapter> dxgiAdapter;
+				if (SUCCEEDED(dxgiDevice->GetAdapter(dxgiAdapter.put())))
+					dxgiAdapter->QueryInterface(adapter3.put());
+			}
+		}
+		if (adapter3) {
+			DXGI_QUERY_VIDEO_MEMORY_INFO vmem{};
+			HRESULT hr = adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &vmem);
+			if (SUCCEEDED(hr) && vmem.Budget > 0) {
+				info.currentUsageBytes = vmem.CurrentUsage;
+				info.budgetBytes = vmem.Budget;
+			}
+		}
+
+		// kSHADOWMAPS geometry from the underlying texture (when readable).
+		D3D11_TEXTURE2D_DESC desc{};
+		if (TryReadShadowTextureDesc(desc)) {
+			info.shadowWidth = desc.Width;
+			info.shadowHeight = desc.Height;
+			info.shadowSlices = desc.ArraySize;
+			// Default to 4 B/pixel (R32_TYPELESS / D32_FLOAT — the format
+			// Skyrim ships with) and override for stencil-packed variants.
+			std::uint32_t bytesPerPixel = 4;
+			switch (desc.Format) {
+			case DXGI_FORMAT_R32G8X24_TYPELESS:
+			case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+			case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
+			case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+				bytesPerPixel = 8;
+				break;
+			case DXGI_FORMAT_R16_TYPELESS:
+			case DXGI_FORMAT_D16_UNORM:
+			case DXGI_FORMAT_R16_UNORM:
+				bytesPerPixel = 2;
+				break;
+			default:
+				break;  // 4 B fallback covers R24G8 and R32 families
+			}
+			info.bytesPerSlice = info.shadowWidth * info.shadowHeight * bytesPerPixel;
+			info.shadowArrayBytes = static_cast<std::uint64_t>(info.bytesPerSlice) * info.shadowSlices;
+		}
+
+		// INI-based fallback when the texture isn't readable yet (e.g.
+		// main menu, before BSShaderRenderTargets_Create). Resolution
+		// from SkyrimPrefs.ini, slot count from settings; assume the
+		// stock D32_FLOAT format (4 B/pixel).
+		if (info.bytesPerSlice == 0) {
+			std::uint32_t res = 4096;  // SkyrimPrefs.ini default
+			if (auto* prefColl = RE::INIPrefSettingCollection::GetSingleton()) {
+				if (auto* setting = prefColl->GetSetting("iShadowMapResolution:Display")) {
+					int v = setting->GetInteger();
+					if (v > 0)
+						res = static_cast<std::uint32_t>(v);
+				}
+			}
+			info.shadowWidth = res;
+			info.shadowHeight = res;
+			info.bytesPerSlice = info.shadowWidth * info.shadowHeight * 4;
+			info.shadowSlices = static_cast<std::uint32_t>(s_settings.ShadowLightCount);
+			info.shadowArrayBytes = static_cast<std::uint64_t>(info.bytesPerSlice) * info.shadowSlices;
+		}
+
+		// Budget and per-slice are independent so a partial answer still
+		// renders (budget alone shows VRAM headroom, per-slice alone shows
+		// projection from the INI fallback).
+		info.valid = info.budgetBytes > 0 || info.bytesPerSlice > 0;
+
+		// One-shot log on first valid observation. Any caller trips it.
+		static bool s_loggedFirstValid = false;
+		if (info.valid && !s_loggedFirstValid) {
+			s_loggedFirstValid = true;
+			const std::uint64_t freeBytes = info.budgetBytes > info.currentUsageBytes ? info.budgetBytes - info.currentUsageBytes : 0;
+			const float arrayMB = static_cast<float>(info.shadowArrayBytes) / (1024.f * 1024.f);
+			const float perSliceMB = static_cast<float>(info.bytesPerSlice) / (1024.f * 1024.f);
+			const float budgetMB = static_cast<float>(info.budgetBytes) / (1024.f * 1024.f);
+			const float usageMB = static_cast<float>(info.currentUsageBytes) / (1024.f * 1024.f);
+			logger::info(
+				"[SCM] kSHADOWMAPS {}x{} x {} slices, {:.2f} MB/slice -> {:.1f} MB "
+				"(VRAM {:.1f}/{:.1f} MB used, ShadowLightCount={})",
+				info.shadowWidth, info.shadowHeight, info.shadowSlices,
+				perSliceMB, arrayMB, usageMB, budgetMB, s_settings.ShadowLightCount);
+			if (info.shadowArrayBytes > freeBytes) {
+				logger::warn(
+					"[SCM] Shadow texture array ({:.1f} MB) exceeds remaining VRAM budget "
+					"({:.1f} MB). Lower Shadow Light Count or iShadowMapResolution if you "
+					"see stutter or driver hitches.",
+					arrayMB, static_cast<float>(freeBytes) / (1024.f * 1024.f));
+			}
+		}
+
+		return info;
+	}
+
+	std::uint64_t ProjectShadowArrayBytes(std::uint32_t sliceCount)
+	{
+		auto info = GetVRAMInfo();
+		if (!info.valid)
+			return 0;
+		return static_cast<std::uint64_t>(info.bytesPerSlice) * sliceCount;
 	}
 
 	// =========================================================================
@@ -875,6 +1113,31 @@ namespace ShadowCasterManager
 		FormulaHelper::SetParam(kFormulaParam_LightNeverFades, light->lodFade ? 0.0 : 1.0);
 		FormulaHelper::SetParam(kFormulaParam_LightPortalStrict, light->portalStrict ? 1.0 : 0.0);
 		FormulaHelper::SetParam(kFormulaParam_LightNS, 0.0);
+
+		// Spot detection + cone-aware visibility prior (option 1 from spot
+		// preservation analysis). Non-spots get spotvisible=1 so existing
+		// omni-tuned formulas are unaffected. For spots, we read last
+		// frame's UpdateCamera verdict (frustumCull / lodDimmer) -- the
+		// score runs BEFORE this frame's validation pass updates those,
+		// but cameras move continuously so last-frame's cone-vs-frustum
+		// is a strong predictor of this-frame's. Trading a one-frame lag
+		// for not double-calling UpdateCamera is a worthwhile cost since
+		// the score is a preference, not a gate.
+		const bool isSpot = (skyrim_cast<const RE::BSShadowFrustumLight*>(light) != nullptr);
+		double spotVisible = 1.0;  // default for non-spots: always "visible"
+		if (isSpot) {
+			// frustumCull == 0 means "in frustum"; engine sets 0xff when
+			// cone-vs-frustum rejects. lodDimmer > 0 means the LOD fader
+			// hasn't zeroed the light. Both must hold for a spot to count
+			// as plausibly visible.
+			// Note: the engine field is misspelled "frustrumCull" in the SDK
+			// (matches Bethesda's original symbol). 0 = visible, 0xff = culled.
+			const bool inFrustum = (light->frustrumCull == 0);
+			const bool lodLit = (light->lodDimmer > 0.0f);
+			spotVisible = (inFrustum && lodLit) ? 1.0 : 0.0;
+		}
+		FormulaHelper::SetParam(kFormulaParam_LightIsSpot, isSpot ? 1.0 : 0.0);
+		FormulaHelper::SetParam(kFormulaParam_LightSpotVisible, spotVisible);
 
 		float x, y, z;
 
@@ -2194,7 +2457,28 @@ namespace ShadowCasterManager
 			p->nearDistance = (light->GetLightRuntimeData().radius.x / 512.0f) * 219.6356f;
 			s_shadowConvert.insert(light);
 		}
-		p->portalStrict = true;
+		// Portal-strict policy by shadow type. The engine picks the concrete
+		// shadow class (BSShadowParabolicLight / BSShadowHemisphereLight /
+		// BSShadowFrustumLight) based on the FOV in LIGHT_CREATE_PARAMS:
+		//   fov >= ~2pi  -> dual-paraboloid omni
+		//   fov >= ~pi   -> hemisphere
+		//   fov <  ~pi   -> perspective spot/frustum
+		// Tightening portal-strict on omnis/hemis usefully exercises the
+		// portal-graph visibility test; doing it on spots drops culled-but-
+		// visible spots entirely (the cone test rejects spots whose origin
+		// sits behind a portal even when the cone sweeps into a visible
+		// room). Honour the per-type toggle so users can A/B easily.
+		constexpr float kFovHemiThreshold = 3.0f;  // ~pi
+		constexpr float kFovOmniThreshold = 6.0f;  // ~2pi
+		bool enforce = false;
+		if (p->fov >= kFovOmniThreshold)
+			enforce = s_settings.ForceEnablePortalStrictOmni;
+		else if (p->fov >= kFovHemiThreshold)
+			enforce = s_settings.ForceEnablePortalStrictHemi;
+		else
+			enforce = s_settings.ForceEnablePortalStrictSpot;
+		if (enforce)
+			p->portalStrict = true;
 	}
 
 	// Fires at start of BSLight::SetLight (ID 101302/108289).
@@ -2328,6 +2612,11 @@ namespace ShadowCasterManager
 	{
 		s_settings = settings;
 		s_installedShadowLightCount = settings.ShadowLightCount;
+		// kSHADOWMAPS is point/spot only -- the sun renders to a separate
+		// kSHADOWMAPS_ESRAM texture (cascade descriptors live there, not
+		// here). So the engine allocates exactly ShadowLightCount slices
+		// in kSHADOWMAPS; no +1 for the sun.
+		s_requestedSlotCount = static_cast<uint32_t>(settings.ShadowLightCount);
 
 		if (s_externalConflict)
 			return;
@@ -2347,14 +2636,19 @@ namespace ShadowCasterManager
 			globals::features::llf::readOnlyDepthBuffer = new void*[settings.ShadowLightCount + 1]();
 
 			// Patch the creation-loop count from 8 to ShadowLightCount.
-			// SE/VR: pattern "C7 44 24 68 08 00 00 00" (+4 = the immediate 0x08)
+			// SE/VR: pattern "C7 44 24 68 08 00 00 00" (+4 = the imm32 0x00000008)
 			// AE:    same pattern at different offset
+			//
+			// The instruction encodes a 32-bit immediate; we overwrite all four
+			// bytes so values >255 don't silently truncate (a single-byte write
+			// to the low byte would leave higher bytes stale, capping us at 255
+			// while making the cap silent).
 			{
 				static REL::RelocationID uid(100458, 107175);
 				uintptr_t addr = uid.address() + REL::Relocate(0xD326 - 0xC940, 0xBF6 - 0x210, 0xc91);
 				int immOff = REL::Relocate(4, 4, 3);
-				uint8_t newCount = static_cast<uint8_t>(settings.ShadowLightCount);
-				REL::safe_write(addr + immOff, &newCount, 1);
+				uint32_t newCount = static_cast<uint32_t>(settings.ShadowLightCount);
+				REL::safe_write(addr + immOff, &newCount, sizeof(newCount));
 			}
 
 			// Redirect depth-buffer pointer storage in the creation loop.
@@ -2586,6 +2880,19 @@ namespace ShadowCasterManager
 		}
 
 		logger::info("[SCM] Hooks installed (ShadowLightCount={})", settings.ShadowLightCount);
+
+		// DXGI budget snapshot at install. Per-slice geometry follows once
+		// Update() sees a non-null kSHADOWMAPS SRV.
+		if (auto* menu = Menu::GetSingleton()) {
+			if (auto adapter3 = menu->GetDXGIAdapter3()) {
+				DXGI_QUERY_VIDEO_MEMORY_INFO vmem{};
+				if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &vmem)) && vmem.Budget > 0) {
+					const float budgetMB = static_cast<float>(vmem.Budget) / (1024.f * 1024.f);
+					const float usageMB = static_cast<float>(vmem.CurrentUsage) / (1024.f * 1024.f);
+					logger::info("[SCM] VRAM at install: {:.1f}/{:.1f} MB used", usageMB, budgetMB);
+				}
+			}
+		}
 	}
 
 	void Update(const Settings& settings, RE::ShadowSceneNode* /*shadowSceneNode*/,
@@ -2594,6 +2901,13 @@ namespace ShadowCasterManager
 		ZoneScopedN("SCM::Update");
 		if (s_externalConflict)
 			return;
+
+		// Lazy verification of the kSHADOWMAPS allocation. Self-healing:
+		// retries until kSHADOWMAPS exists, then early-returns. Cheap.
+		// This must run BEFORE the clamp below so a VRAM-exhaustion
+		// fallback gets reflected in the same frame the verification
+		// succeeds.
+		RefreshInstalledSlotCount();
 
 		Settings capped = settings;
 		if (s_installedShadowLightCount > 0)
@@ -2612,6 +2926,11 @@ namespace ShadowCasterManager
 			s_lights.Size = newTotal;
 		}
 		s_settings = capped;
+
+		// Touch GetVRAMInfo here so its first-call log fires on the first
+		// scheduler tick even if the user never opens the menu. The log gate
+		// lives inside GetVRAMInfo so any caller can be the first one.
+		(void)GetVRAMInfo();
 	}
 
 	const LightContainer& GetLights()
@@ -3309,7 +3628,7 @@ namespace ShadowCasterManager
 		// Active Casters block and the overlay header so testers see the same
 		// numbers in the same format regardless of which view they're in.
 		const uint32_t slotUsage = s_shadowSlotUsage;
-		const uint32_t slots = globals::deferred->shadowMapSlots;
+		const uint32_t slots = GetInstalledSlotCount();
 		// "Wanted" = total shadow-eligible demand this frame (active + dropped).
 		// We don't track demand separately, but slotUsage + dropped is the
 		// observable proxy that matches the user-visible "X dropped" signal.
@@ -3365,7 +3684,7 @@ namespace ShadowCasterManager
 		const float usedMs = avgRedraws * costMs;
 		const int32_t cap = s_settings.MaxRedrawPerFrame;
 		const bool capLimited = avgCost > 0 && avgRedraws >= static_cast<float>(cap) * 0.95f;
-		const bool slotLimited = (s_shadowSlotUsage + 0u) >= globals::deferred->shadowMapSlots;
+		const bool slotLimited = (s_shadowSlotUsage + 0u) >= GetInstalledSlotCount();
 		const bool overBudget = avgCost > 0 && budgetMs > 0.0f && usedMs > budgetMs * 1.0f;
 		const bool headroom = avgCost > 0 && budgetMs > 0.0f && usedMs < budgetMs * 0.5f && !capLimited;
 
@@ -3419,6 +3738,53 @@ namespace ShadowCasterManager
 		ImGui::PopStyleColor();
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("%s", tip);
+
+		// ---- Shadow VRAM progress bar ----
+		// Bar fills `currentUsage / budget` (process headroom); overlay text
+		// shows the kSHADOWMAPS array's share of that. Same DXGI data source
+		// as PerformanceOverlay.
+		auto vinfo = GetVRAMInfo();
+		if (vinfo.valid && vinfo.budgetBytes > 0) {
+			const std::uint64_t freeBytes = vinfo.budgetBytes > vinfo.currentUsageBytes ? vinfo.budgetBytes - vinfo.currentUsageBytes : 0;
+			const float arrayMB = static_cast<float>(vinfo.shadowArrayBytes) / (1024.f * 1024.f);
+			const float freeMB = static_cast<float>(freeBytes) / (1024.f * 1024.f);
+			const float usageMB = static_cast<float>(vinfo.currentUsageBytes) / (1024.f * 1024.f);
+			const float budgetMBf = static_cast<float>(vinfo.budgetBytes) / (1024.f * 1024.f);
+			const float perSliceMB = static_cast<float>(vinfo.bytesPerSlice) / (1024.f * 1024.f);
+			// Disambiguated from the budget-verdict string above.
+			const VRAMVerdict vramVerdict = EvaluateVRAMVerdict(vinfo.shadowArrayBytes, freeBytes, vinfo.budgetBytes);
+			const float fillFraction = std::min(1.0f,
+				static_cast<float>(vinfo.currentUsageBytes) / static_cast<float>(vinfo.budgetBytes));
+			char overlayText[96];
+			snprintf(overlayText, sizeof(overlayText),
+				"%.0f / %.0f MB  -  shadows %.0f MB (%u slices)",
+				usageMB, budgetMBf, arrayMB, vinfo.shadowSlices);
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, vramVerdict.colour);
+			ImGui::Text("Shadow VRAM       :");
+			ImGui::SameLine();
+			ImGui::ProgressBar(fillFraction, ImVec2(-1.0f, 0.0f), overlayText);
+			ImGui::PopStyleColor();
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip(
+					"Bar fill = process VRAM usage / DXGI budget (same data the\n"
+					"performance overlay reports). Overlay text shows the shadow\n"
+					"array's contribution to that usage.\n"
+					"\n"
+					"Slices  : %u  (sun lives in its own kSHADOWMAPS_ESRAM texture)\n"
+					"Per slice : %.2f MB  (%u x %u @ %u B/pixel)\n"
+					"Shadow array : %.1f MB\n"
+					"Free in budget : %.1f MB\n"
+					"\n"
+					"Green when free VRAM and shadow share are comfortable.\n"
+					"Yellow when free < 512 MB or shadow array > 25%% of budget.\n"
+					"Red when free < 128 MB or shadow array > 50%% of budget --\n"
+					"lower Shadow Light Count or iShadowMapResolution.",
+					vinfo.shadowSlices, perSliceMB,
+					vinfo.shadowWidth, vinfo.shadowHeight,
+					vinfo.shadowWidth && vinfo.shadowHeight ? vinfo.bytesPerSlice / (vinfo.shadowWidth * vinfo.shadowHeight) : 0u,
+					arrayMB, freeMB);
+			}
+		}
 	}
 
 	void DrawOverlayShadowModeInfo(uint32_t mode, uint32_t /*shadowUnshadowedLightCount*/, uint32_t /*totalLightCount*/)
@@ -3439,7 +3805,7 @@ namespace ShadowCasterManager
 			ImGui::TextDisabled("Pixel heatmap: 0=blue  8+=red (lights without shadow maps)");
 		} else if (mode == 7) {
 			ImGui::TextDisabled("Cool  Turbo[0.0-0.3] = 1-4 shadows");
-			ImGui::TextDisabled("Warm  Turbo[0.3-0.8] = 5-%u shadows", globals::deferred->shadowMapSlots);
+			ImGui::TextDisabled("Warm  Turbo[0.3-0.8] = 5-%u shadows", GetInstalledSlotCount());
 			ImGui::TextDisabled("Red                  = overflow");
 		} else if (mode == 9) {
 			uint32_t spotC = 0, hemiC = 0, omniC = 0;
@@ -3523,14 +3889,185 @@ namespace ShadowCasterManager
 			ImGui::BeginDisabled();
 
 		// ---- Shadow Light Count (requires restart) -------------------------
-		ImGui::SliderInt("Shadow Light Count", &settings.ShadowLightCount, 0, 64);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip(
+		// Upper bound of 127: the engine refuses to render any shadow caster
+		// when ShadowLightCount >= 128 even though kSHADOWMAPS allocates
+		// successfully -- some internal limit (likely an 8-bit shadow index
+		// somewhere we haven't patched) silently disables shadow rendering.
+		// 127 is the highest value that actually works.
+		ImGui::SliderInt("Shadow Light Count", &settings.ShadowLightCount, 0, 127);
+		// Compute projected VRAM for the slider's current value so the user
+		// can see the cost of a higher count *before* committing the restart.
+		// kSHADOWMAPS holds exactly ShadowLightCount slices -- the sun lives
+		// in its own kSHADOWMAPS_ESRAM texture, so there's no +1.
+		auto sliderVram = GetVRAMInfo();
+		std::uint64_t projectedBytes = 0;
+		std::uint64_t projectedFreeBytes = 0;
+		bool projectionValid = sliderVram.valid;
+		if (projectionValid) {
+			projectedBytes = ProjectShadowArrayBytes(static_cast<std::uint32_t>(settings.ShadowLightCount));
+			std::int64_t projectedUsage = static_cast<std::int64_t>(sliderVram.currentUsageBytes) -
+			                              static_cast<std::int64_t>(sliderVram.shadowArrayBytes) +
+			                              static_cast<std::int64_t>(projectedBytes);
+			if (projectedUsage < 0)
+				projectedUsage = 0;
+			projectedFreeBytes = (static_cast<std::int64_t>(sliderVram.budgetBytes) > projectedUsage) ? static_cast<std::uint64_t>(sliderVram.budgetBytes - projectedUsage) : 0;
+		}
+		if (ImGui::IsItemHovered()) {
+			constexpr const char* kSliderBase =
 				"Maximum simultaneous shadow-casting point/spot lights (directional sun not counted).\n"
 				"  0  = scheduler runs but selects no point lights (sun/directional unaffected).\n"
 				"  4  = vanilla point light count with intelligent selection.\n"
-				"  >4 = extended mode; depth buffer expanded when >8. Max 64.\n"
-				"Requires a game restart to take effect.");
+				"  >4 = extended mode; depth buffer expanded when >8. Max 127\n"
+				"       (VRAM is the practical limit -- watch the projected-VRAM bar).\n"
+				"Requires a game restart to take effect.";
+			if (projectionValid) {
+				ImGui::SetTooltip(
+					"%s\n"
+					"\n"
+					"Projected kSHADOWMAPS array at %d slots: %.1f MB\n"
+					"Per-slice cost: %.2f MB  (%u x %u, %u B/pixel)\n"
+					"Projected free VRAM after restart: %.1f MB",
+					kSliderBase,
+					settings.ShadowLightCount,
+					static_cast<float>(projectedBytes) / (1024.f * 1024.f),
+					static_cast<float>(sliderVram.bytesPerSlice) / (1024.f * 1024.f),
+					sliderVram.shadowWidth, sliderVram.shadowHeight,
+					sliderVram.shadowWidth && sliderVram.shadowHeight ?
+						sliderVram.bytesPerSlice / (sliderVram.shadowWidth * sliderVram.shadowHeight) :
+						0u,
+					static_cast<float>(projectedFreeBytes) / (1024.f * 1024.f));
+			} else {
+				ImGui::SetTooltip("%s", kSliderBase);
+			}
+		}
+		// Custom-drawn stacked bar against DXGI budget showing non-shadow /
+		// current-shadow / projected-shadow segments. ImGui::ProgressBar
+		// can't multi-segment.
+		if (projectionValid && sliderVram.budgetBytes > 0) {
+			const VRAMVerdict verdict = EvaluateVRAMVerdict(projectedBytes, projectedFreeBytes, sliderVram.budgetBytes);
+			const float budgetMBf = static_cast<float>(sliderVram.budgetBytes) / (1024.f * 1024.f);
+			const float nonShadowMB = std::max(0.0f,
+				(static_cast<float>(sliderVram.currentUsageBytes) - static_cast<float>(sliderVram.shadowArrayBytes)) / (1024.f * 1024.f));
+			const float currentShadowMB = static_cast<float>(sliderVram.shadowArrayBytes) / (1024.f * 1024.f);
+			const float projectedShadowMB = static_cast<float>(projectedBytes) / (1024.f * 1024.f);
+
+			ImGui::Text("Projected shadow VRAM :");
+			ImGui::SameLine();
+			const ImVec2 cursor = ImGui::GetCursorScreenPos();
+			const float fullWidth = ImGui::GetContentRegionAvail().x;
+			const float barHeight = ImGui::GetFrameHeight();
+			const float scale = fullWidth / budgetMBf;
+			auto* draw = ImGui::GetWindowDrawList();
+			// Background frame, then non-shadow / current / projected segments.
+			draw->AddRectFilled(cursor, ImVec2(cursor.x + fullWidth, cursor.y + barHeight),
+				ImGui::GetColorU32(ImGuiCol_FrameBg));
+			const float nonShadowEndX = cursor.x + nonShadowMB * scale;
+			draw->AddRectFilled(cursor, ImVec2(nonShadowEndX, cursor.y + barHeight),
+				IM_COL32(120, 120, 120, 200));
+			const float currentEndX = std::min(cursor.x + fullWidth, nonShadowEndX + currentShadowMB * scale);
+			draw->AddRectFilled(ImVec2(nonShadowEndX, cursor.y),
+				ImVec2(currentEndX, cursor.y + barHeight),
+				IM_COL32(80, 130, 200, 220));
+			// Projection outline anchored at the same start as current, so
+			// the visual delta IS the difference. Solid fill for grow, dark
+			// stripe for shrink.
+			const float projectedEndX = std::min(cursor.x + fullWidth, nonShadowEndX + projectedShadowMB * scale);
+			const ImU32 verdictColU32 = ImGui::GetColorU32(verdict.colour);
+			draw->AddRect(ImVec2(nonShadowEndX, cursor.y), ImVec2(projectedEndX, cursor.y + barHeight),
+				verdictColU32, 0.0f, 0, 2.0f);
+			if (projectedShadowMB > currentShadowMB) {
+				draw->AddRectFilled(ImVec2(currentEndX, cursor.y), ImVec2(projectedEndX, cursor.y + barHeight),
+					(verdictColU32 & 0x00FFFFFFu) | 0xA0000000u);
+			} else if (projectedShadowMB < currentShadowMB) {
+				draw->AddRectFilled(ImVec2(projectedEndX, cursor.y), ImVec2(currentEndX, cursor.y + barHeight),
+					IM_COL32(80, 80, 80, 120));
+			}
+
+			char overlay[128];
+			snprintf(overlay, sizeof(overlay),
+				"shadows %.0f -> %.0f MB  (%d slots,  %.0f MB free after restart)",
+				currentShadowMB, projectedShadowMB,
+				settings.ShadowLightCount,
+				static_cast<float>(projectedFreeBytes) / (1024.f * 1024.f));
+			const ImVec2 textSize = ImGui::CalcTextSize(overlay);
+			const ImVec2 textPos(cursor.x + (fullWidth - textSize.x) * 0.5f,
+				cursor.y + (barHeight - textSize.y) * 0.5f);
+			draw->AddText(textPos, IM_COL32(240, 240, 240, 255), overlay);
+			ImGui::Dummy(ImVec2(fullWidth, barHeight));  // reserve layout space
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip(
+					"Stacked VRAM bar against DXGI budget.\n"
+					"  Grey block    : process VRAM not counted as shadow array\n"
+					"  Blue block    : current kSHADOWMAPS allocation this session\n"
+					"  Outlined block: what the slider's value would allocate\n"
+					"                  after restart (colour reflects verdict)\n"
+					"\n"
+					"Solid colour past the blue: shadow array would GROW by that\n"
+					"amount. Dark stripe inside the blue: shadow array would\n"
+					"SHRINK by that amount.\n"
+					"\n"
+					"Slots requested  : %d (sun lives in kSHADOWMAPS_ESRAM)\n"
+					"Per-slice cost   : %.2f MB  (%u x %u @ %u B/pixel)\n"
+					"Current array    : %.1f MB\n"
+					"Projected array  : %.1f MB\n"
+					"Free after restart : %.1f MB / %.0f MB budget\n"
+					"%s",
+					settings.ShadowLightCount,
+					static_cast<float>(sliderVram.bytesPerSlice) / (1024.f * 1024.f),
+					sliderVram.shadowWidth, sliderVram.shadowHeight,
+					sliderVram.shadowWidth && sliderVram.shadowHeight ?
+						sliderVram.bytesPerSlice / (sliderVram.shadowWidth * sliderVram.shadowHeight) :
+						0u,
+					currentShadowMB,
+					projectedShadowMB,
+					static_cast<float>(projectedFreeBytes) / (1024.f * 1024.f),
+					budgetMBf,
+					verdict.over ?
+						"\nRED: this projection won't fit in the current VRAM budget.\n"
+						"The driver will page or refuse the allocation, leaving the\n"
+						"shadow array smaller than requested -- shadows will silently\n"
+						"break. Lower the slot count or reduce iShadowMapResolution." :
+					verdict.tight ?
+						"\nYELLOW: tight headroom. A driver or OS spike could push\n"
+						"shadow allocation into paging. Safe for testing, risky for\n"
+						"long sessions or heavily-modded scenes." :
+						"");
+			}
+		}
+
+		// ---- Allocation mismatch banner ----
+		// Surface kSHADOWMAPS truncation visibly so users hit by a silent
+		// "shadows don't work at high slot counts" failure can see why.
+		// Reads the verified count directly (not the GetInstalledSlotCount
+		// accessor, which falls back to the requested value).
+		{
+			uint32_t installed = s_installedSlotCount;
+			uint32_t requested = s_requestedSlotCount;
+			if (installed > 0 && requested > 0 && installed < requested) {
+				ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1),
+					"VRAM exhausted: requested %u slots, GPU allocated %u.",
+					requested, installed);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip(
+						"The engine tried to create kSHADOWMAPS with %u slices but\n"
+						"the GPU / driver returned a smaller array (likely out of\n"
+						"VRAM at the configured iShadowMapResolution). The scheduler\n"
+						"has clamped itself to the actual count so the existing %u\n"
+						"slices work correctly, but to reach the requested %u you'll\n"
+						"need to free VRAM (lower resolution, other features, etc).",
+						requested, installed, requested);
+			} else if (installed == 0 && s_settings.Enabled && !s_externalConflict) {
+				ImGui::TextColored(ImVec4(0.95f, 0.85f, 0.25f, 1),
+					"Shadow array not yet verified -- load a save to confirm allocation.");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip(
+						"kSHADOWMAPS isn't readable yet (main menu / loading screen).\n"
+						"Once you reach gameplay the scheduler verifies the actual\n"
+						"slice count against your requested value. If they disagree\n"
+						"this banner turns red.");
+			}
+		}
+
 		if (settings.ShadowLightCount != s_installedShadowLightCount) {
 			const auto& theme = Menu::GetSingleton()->GetTheme();
 			ImGui::TextColored(theme.StatusPalette.RestartNeeded,
@@ -3644,7 +4181,11 @@ namespace ShadowCasterManager
 			// Never clamp the stored setting here — the scheduling code already applies
 			// the live cap.  Clamping here caused MaxRedrawPerFrame to be permanently
 			// written to 1 on the first DrawSettings call before the hook fired.
-			int maxRedraws = s_totalShadowLightsThisFrame > 0 ? std::min(s_totalShadowLightsThisFrame, 64) : std::min(settings.ShadowLightCount, 64);
+			// Track active shadow lights this frame, falling back to the
+			// configured ShadowLightCount when the scheduler hasn't run yet.
+			// No artificial 64 cap -- if the user dialled in 128 lights, the
+			// redraw cap should be allowed to follow.
+			int maxRedraws = s_totalShadowLightsThisFrame > 0 ? s_totalShadowLightsThisFrame : settings.ShadowLightCount;
 			maxRedraws = std::max(maxRedraws, 1);
 			ImGui::SliderInt("Max Redraws Per Frame", &settings.MaxRedrawPerFrame, 1, maxRedraws);
 			if (ImGui::IsItemHovered())
@@ -3666,7 +4207,11 @@ namespace ShadowCasterManager
 					"lighting at no shadow-map cost. Lights that fail culling are dropped entirely.\n"
 					"Requires a game restart to change.");
 
-			ImGui::SliderInt("Converted Shadow Slots", &settings.ConvertedShadowSlots, 0, 64);
+			// No texture-array cost -- converted lights flow through the cluster
+			// pipeline as ordinary non-shadow lights. Match the ShadowLightCount
+			// max so users can pair a large shadow pool with a matching converted
+			// pool without the slider lying about the upper bound.
+			ImGui::SliderInt("Converted Shadow Slots", &settings.ConvertedShadowSlots, 0, 127);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(
 					"Extra pool slots for lights converted to normal (unshadowed) mode.\n"
@@ -3678,6 +4223,70 @@ namespace ShadowCasterManager
 					"Experimental: elevate high-scoring unshadowed lights to shadow casters\n"
 					"when shadow slots are available.\n"
 					"Requires a game restart to change.");
+
+			ImGui::SeparatorText("Portal-Strict Enforcement");
+			// Three-way toggle plus master row. SCM forces the engine's
+			// portal-strict flag on shadow casters at creation time, gated
+			// per shadow type (FOV-derived). Defaults enforce on omni and
+			// hemisphere, leave spotlights alone -- portal-strict on spots
+			// drops culled-but-visible spots entirely (cone test rejects
+			// spots whose origin is behind a portal even when the beam
+			// sweeps into a visible room).
+			{
+				const bool allOn = settings.ForceEnablePortalStrictOmni &&
+				                   settings.ForceEnablePortalStrictHemi &&
+				                   settings.ForceEnablePortalStrictSpot;
+				const bool allOff = !settings.ForceEnablePortalStrictOmni &&
+				                    !settings.ForceEnablePortalStrictHemi &&
+				                    !settings.ForceEnablePortalStrictSpot;
+				bool master = allOn;
+				bool indeterminate = !allOn && !allOff;
+				if (indeterminate) {
+					// Render the master checkbox as visually mixed via a
+					// muted alpha so the row still functions as a "set all"
+					// control without misrepresenting state.
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.6f);
+				}
+				if (ImGui::Checkbox("Force Enable Portal Strict (All)", &master)) {
+					settings.ForceEnablePortalStrictOmni = master;
+					settings.ForceEnablePortalStrictHemi = master;
+					settings.ForceEnablePortalStrictSpot = master;
+				}
+				if (indeterminate)
+					ImGui::PopStyleVar();
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip(
+						"Master toggle for the three per-type rows below.\n"
+						"Checked when all three are enforced, unchecked when none are,\n"
+						"and rendered translucent when mixed.\n"
+						"Requires a game restart to change.");
+			}
+
+			ImGui::Indent();
+			ImGui::Checkbox("Force Portal Strict on Omni Lights", &settings.ForceEnablePortalStrictOmni);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"Force-enable portal-strict on dual-paraboloid (omnidirectional)\n"
+					"shadow casters. Recommended on -- tightens portal-graph visibility\n"
+					"culling for full-sphere shadow lights without side effects.\n"
+					"Requires a game restart to change.");
+			ImGui::Checkbox("Force Portal Strict on Hemisphere Lights", &settings.ForceEnablePortalStrictHemi);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"Force-enable portal-strict on single-paraboloid (hemisphere)\n"
+					"shadow casters. Recommended on -- behaves like the omni case\n"
+					"under portal culling.\n"
+					"Requires a game restart to change.");
+			ImGui::Checkbox("Force Portal Strict on Spot Lights", &settings.ForceEnablePortalStrictSpot);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip(
+					"Force-enable portal-strict on perspective (frustum/spot) shadow\n"
+					"casters. Off by default: the cone test rejects spots whose\n"
+					"origin sits behind a portal even when their beam sweeps into a\n"
+					"visible room, which drops culled-but-visible spots entirely.\n"
+					"Enable only for debugging.\n"
+					"Requires a game restart to change.");
+			ImGui::Unindent();
 
 			ImGui::TreePop();
 		}

@@ -42,8 +42,7 @@ void LightLimitFix::CopyShadowLightData()
 	TracyD3D11Zone(globals::state->tracyCtx, "LLF CopyShadowLightData");
 #endif
 
-	auto deferred = globals::deferred;
-	uint32_t slots = deferred->shadowMapSlots;
+	uint32_t slots = ShadowCasterManager::GetInstalledSlotCount();
 	if (slots == 0)
 		return;
 

@@ -8,6 +8,7 @@
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
+#include "Features/LightLimitFix/ShadowCasterManager.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -113,23 +114,6 @@ void Deferred::SetupResources()
 		// TAA Water Buffers
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_1, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
-	}
-
-	// kSHADOWMAPS is created by BSShaderRenderTargets_Create before SetupResources() is called,
-	// so the SRV is available here. Re-runs on resolution change (render targets recreated).
-	if (auto* shadowMapsSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV) {
-		D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
-		shadowMapsSRV->GetDesc(&desc);
-		if (desc.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2DARRAY && desc.Texture2DArray.ArraySize > 0) {
-			shadowMapSlots = desc.Texture2DArray.ArraySize;
-			logger::info("[Deferred] kSHADOWMAPS ArraySize = {}, effective shadowMapSlots = {}", desc.Texture2DArray.ArraySize, shadowMapSlots);
-		} else {
-			shadowMapSlots = 0;
-			logger::warn("[Deferred] kSHADOWMAPS SRV not a Texture2DArray or ArraySize=0; resetting shadowMapSlots to 0");
-		}
-	} else {
-		shadowMapSlots = 0;
-		logger::warn("[Deferred] kSHADOWMAPS depthSRV is null at SetupResources; resetting shadowMapSlots to 0");
 	}
 
 	{
@@ -588,7 +572,7 @@ void Deferred::CopyShadowLightData()
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowLightData");
 
-	if (shadowMapSlots == 0)
+	if (ShadowCasterManager::GetInstalledSlotCount() == 0)
 		return;
 
 	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];

@@ -71,10 +71,6 @@ public:
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
-	// Slot count derived from the kSHADOWMAPS SRV ArraySize at SetupResources; updated on resolution change.
-	// Zero until SetupResources runs; all shadow writes are gated on lightCount < shadowMapSlots.
-	uint32_t shadowMapSlots = 0;
-
 	// Directional shadow structured buffer (t98): cascade splits and projections.
 	Buffer* directionalShadowLights = nullptr;
 
