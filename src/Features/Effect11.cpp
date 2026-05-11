@@ -35,10 +35,24 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	data.LightSpriteIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "LIGHTSPRITE");
 
 	data.EnableProceduralSun = enableEffect && settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT");
-	data.ProceduralSunSize = settingManager.GetValue<float>("Size", "PROCEDURALSUN");
-	data.ProceduralSunEdgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
+
+	{
+		float size = settingManager.GetValue<float>("Size", "PROCEDURALSUN");
+		float edgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
+		float glowCurve = std::max(FLT_MIN, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
+
+		float scaledSize = size * 0.04f;
+		float diskSq = scaledSize * scaledSize;
+		float outerSpan = std::max(1.0f - diskSq, FLT_MIN);
+		float softSq = std::max(edgeSoftness * edgeSoftness, FLT_MIN);
+
+		data.ProceduralSunDiskRadiusSq = diskSq;
+		data.ProceduralSunCoronaScale = 1.0f / outerSpan;
+		data.ProceduralSunDiskEdgeScale = 1.0f / (std::max(diskSq, FLT_MIN) * softSq);
+		data.ProceduralSunCoronaFalloff = 100.0f / (outerSpan * glowCurve);
+	}
+
 	data.ProceduralSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN");
-	data.ProceduralSunGlowCurve = std::max(FLT_MIN, settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN"));
 
 	return data;
 }

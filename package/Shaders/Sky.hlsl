@@ -205,25 +205,16 @@ cbuffer AlphaTestRefCB : register(b11)
 
 Texture2D<float> TexDepthSampler : register(t17);
 
-float3 ComputeProceduralSun(float2 uv)
+float ComputeProceduralSun(float2 uv)
 {
-	const float diskSq      = pow(SharedData::enbSettings.ProceduralSunSize * 0.04, 2);
-	const float outerSpan   = max(1.0 - diskSq, EPSILON_DIVISION);
-	const float invOuterSq  = 1.0 / outerSpan;
-	const float softSq      = max(saturate(pow(SharedData::enbSettings.ProceduralSunEdgeSoftness, 2)), EPSILON_DIVISION);
-	const float invDiskSoft = 1.0 / (max(diskSq, EPSILON_DIVISION) * softSq);
-	const float k           = 100.0 / (outerSpan * max(SharedData::enbSettings.ProceduralSunGlowCurve, EPSILON_DIVISION));
+	float2 centeredUV    = uv * 2.0 - 1.0;
+	float  distFromDisk  = dot(centeredUV, centeredUV) - SharedData::enbSettings.ProceduralSunDiskRadiusSq;
 
-	float2 p      = uv * 2.0 - 1.0;
-	float  rDelta = dot(p, p) - diskSq;
+	float coronaDist = saturate(distFromDisk * SharedData::enbSettings.ProceduralSunCoronaScale);
+	float corona     = (1.0 - coronaDist) * rcp(SharedData::enbSettings.ProceduralSunCoronaFalloff * coronaDist + 1.0) * SharedData::enbSettings.ProceduralSunGlowIntensity;
 
-	// Corona
-	float x      = saturate(rDelta * invOuterSq);
-	float corona = ((1.0 - x) / (k * x + 1.0)) * SharedData::enbSettings.ProceduralSunGlowIntensity;
-
-	// Disk
-	float t    = saturate(-rDelta * invDiskSoft);
-	float disk = t * (1.0 + t * (t * t - 1.0));
+	float diskEdge = saturate(-distFromDisk * SharedData::enbSettings.ProceduralSunDiskEdgeScale);
+	float disk     = diskEdge * (1.0 + diskEdge * (diskEdge * diskEdge - 1.0));
 
 	float horizonFade = smoothstep(-0.1, 0.1, SharedData::SunDirection.z);
 

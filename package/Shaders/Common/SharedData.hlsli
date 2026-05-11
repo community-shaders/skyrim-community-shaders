@@ -263,12 +263,12 @@ namespace SharedData
 		uint UseProceduralGradientWeights;
 		float ProceduralGradientWeightCurve;
 		uint EnableProceduralSun;
-		float ProceduralSunSize;
+		float ProceduralSunDiskRadiusSq;
 
-		float ProceduralSunEdgeSoftness;
+		float ProceduralSunDiskEdgeScale;
 		float ProceduralSunGlowIntensity;
-		float ProceduralSunGlowCurve;
-		float pad0;
+		float ProceduralSunCoronaFalloff;
+		float ProceduralSunCoronaScale;
 	};
 	struct TerrainBlendingSettings
 	{
