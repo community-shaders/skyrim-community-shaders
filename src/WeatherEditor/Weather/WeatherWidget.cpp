@@ -1360,6 +1360,97 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	ImGui::Spacing();
 }
 
+void WeatherWidget::SyncInheritedValuesFromParent()
+{
+	WeatherWidget* parentWidget = GetParent();
+	if (!parentWidget)
+		return;
+
+	const auto& flags = settings.inheritFlags;
+	auto inherited = [&](const std::string& key) {
+		auto it = flags.find(key);
+		return it != flags.end() && it->second;
+	};
+	auto syncFogPair = [&](const char* flagKey, const char* dayKey, const char* nightKey) {
+		if (inherited(flagKey)) {
+			settings.fogProperties[dayKey] = parentWidget->settings.fogProperties[dayKey];
+			settings.fogProperties[nightKey] = parentWidget->settings.fogProperties[nightKey];
+		}
+	};
+	auto syncDalcTOD = [&](const char* flagKey, auto accessor) {
+		if (inherited(flagKey))
+			for (int i = 0; i < ColorTimes::kTotal; i++)
+				accessor(settings.dalc[i]) = accessor(parentWidget->settings.dalc[i]);
+	};
+	auto syncRecord = [&](const std::string& flagKey, auto& ref, const auto& parentRef) {
+		if (inherited(flagKey) && ref != parentRef) {
+			ref = parentRef;
+			pendingReinit = true;
+		}
+	};
+
+	for (auto& [key, value] : settings.weatherProperties)
+		if (inherited(key))
+			value = parentWidget->settings.weatherProperties[key];
+	for (auto& [key, value] : settings.weatherColors)
+		if (inherited(key))
+			value = parentWidget->settings.weatherColors[key];
+
+	syncFogPair(WeatherInherit::kFogNear,  WeatherSetting::kDayNear,  WeatherSetting::kNightNear);
+	syncFogPair(WeatherInherit::kFogFar,   WeatherSetting::kDayFar,   WeatherSetting::kNightFar);
+	syncFogPair(WeatherInherit::kFogPower, WeatherSetting::kDayPower, WeatherSetting::kNightPower);
+	syncFogPair(WeatherInherit::kFogMax,   WeatherSetting::kDayMax,   WeatherSetting::kNightMax);
+
+	for (int i = 0; i < ColorTypes::kTotal; i++)
+		if (inherited("Atmosphere_" + ColorTypeLabel(i)))
+			settings.atmosphereColors[i] = parentWidget->settings.atmosphereColors[i];
+
+	syncDalcTOD(WeatherInherit::kDalcSpecular, [](DALC& d) -> auto& { return d.specular; });
+	syncDalcTOD(WeatherInherit::kDalcFresnel,  [](DALC& d) -> auto& { return d.fresnelPower; });
+	syncDalcTOD(WeatherInherit::kDalcDirXMax,  [](DALC& d) -> auto& { return d.directional[0].max; });
+	syncDalcTOD(WeatherInherit::kDalcDirXMin,  [](DALC& d) -> auto& { return d.directional[0].min; });
+	syncDalcTOD(WeatherInherit::kDalcDirYMax,  [](DALC& d) -> auto& { return d.directional[1].max; });
+	syncDalcTOD(WeatherInherit::kDalcDirYMin,  [](DALC& d) -> auto& { return d.directional[1].min; });
+	syncDalcTOD(WeatherInherit::kDalcDirZMax,  [](DALC& d) -> auto& { return d.directional[2].max; });
+	syncDalcTOD(WeatherInherit::kDalcDirZMin,  [](DALC& d) -> auto& { return d.directional[2].min; });
+
+	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
+		if (inherited(std::format("Cloud{}_Color", i)))
+			for (int j = 0; j < ColorTimes::kTotal; j++)
+				settings.clouds[i].color[j] = parentWidget->settings.clouds[i].color[j];
+		if (inherited(std::format("Cloud{}_Alpha", i)))
+			for (int j = 0; j < ColorTimes::kTotal; j++)
+				settings.clouds[i].cloudAlpha[j] = parentWidget->settings.clouds[i].cloudAlpha[j];
+	}
+
+	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+		syncRecord("ImageSpace_" + std::to_string(i),         settings.imageSpaceRefs[i],         parentWidget->settings.imageSpaceRefs[i]);
+		syncRecord("VolumetricLighting_" + std::to_string(i), settings.volumetricLightingRefs[i], parentWidget->settings.volumetricLightingRefs[i]);
+	}
+	syncRecord("Precipitation",   settings.precipitationData, parentWidget->settings.precipitationData);
+	syncRecord("ReferenceEffect", settings.referenceEffect,   parentWidget->settings.referenceEffect);
+
+	ApplyChanges();
+}
+
+void WeatherWidget::PropagateToChildren()
+{
+	if (!EditorWindow::GetSingleton()->settings.enableInheritFromParent)
+		return;
+
+	const std::string myId = GetEditorID();
+	for (auto& widget : EditorWindow::GetSingleton()->weatherWidgets) {
+		auto* child = static_cast<WeatherWidget*>(widget.get());
+		if (child != this && child->settings.parent == myId) {
+			bool hasAnyInherit = false;
+			for (const auto& [key, val] : child->settings.inheritFlags)
+				if (val) { hasAnyInherit = true; break; }
+			if (hasAnyInherit)
+				child->SyncInheritedValuesFromParent();
+		}
+	}
+}
+
 void WeatherWidget::InheritFromParent(const std::string& property)
 {
 	if (!HasParent())
@@ -1596,6 +1687,7 @@ void WeatherWidget::ApplyChanges()
 		Widget::ForceWeatherReinit(weather);
 		pendingReinit = false;
 	}
+	PropagateToChildren();
 }
 
 void WeatherWidget::RevertChanges()
