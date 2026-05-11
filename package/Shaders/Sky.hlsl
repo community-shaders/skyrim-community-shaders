@@ -191,12 +191,19 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	ifdef HDR_OUTPUT
+#		include "HDRDisplay/HDRSun.hlsli"
+#		include "Common/Random.hlsli"
+#	endif
+
 Texture2D<float> TexDepthSampler : register(t17);
 
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	float3 yyy = Color::Sky(PParams.yyy);
+	// Color::Sky is float3->float3 (per-channel sky gamma). PParams.yyy broadcasts the packed
+	// scalar in PParams.y to RGB; float3 matches output .xyz where skyScale is added.
+	float3 skyScale = Color::Sky(PParams.yyy);
 #	if !defined(VR)
 	uint eyeIndex = 0;
 #	else
@@ -218,78 +225,27 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
-	// HDR-only sun path: scale glare/disc brightness using user HDR settings.
-	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		// 203 nits is the HDR reference paper white used by the rest of the HDR pipeline.
-		const float SUN_REF_PAPER_WHITE_NITS = 203.0;
-		float paperWhiteNits = max(SharedData::HDRData.y, 1.0);
-		float peakNits = max(SharedData::HDRData.z, paperWhiteNits + 1.0);
-
-		// Peak ratio drives how much brighter the sun can get vs reference HDR white.
-		float peakRatio = peakNits / SUN_REF_PAPER_WHITE_NITS;
-
-		// In LL we are already linear; non-LL needs gamma-domain scaling compensation.
-		float menuSceneEncoding = SharedData::HDRData.w;
-		static const float SUN_DIM_IN_MENU_SCENES = 0.58;  // HDRDisplay::kHdrMenuScenePauseOrMap
-		// Dim sun for pause/map/main-menu scenes to avoid UI-facing blowout.
-		float hdrSunMenuMul = (menuSceneEncoding > 1e-3) ? SUN_DIM_IN_MENU_SCENES : 1.0;
-		float hdrScale = (ENABLE_LL ? peakRatio : pow(peakRatio, rcp(2.2))) * hdrSunMenuMul;
-
-#		if defined(DITHER)
-		// DITHER path is the glare sprite-style variant.
-		float glareLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
-
-		// Keep glare energy bounded before applying HDR scale.
-		if (glareLum > 1.0)
-			baseColor.xyz *= rcp(glareLum);
-
-		baseColor.xyz *= hdrScale;
-
-		baseColor.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz;
-
-#			ifdef TEX
-		// Fade toward quad edges so the glare sprite blends smoothly.
-		float2 glareUv = saturate(input.TexCoord0.xy);
-		float glareEdge = min(min(glareUv.x, glareUv.y), min(1.0 - glareUv.x, 1.0 - glareUv.y));
-		float glareEdgeFade = smoothstep(0.0, 0.08, glareEdge);
-		baseColor.xyz *= glareEdgeFade;
-		baseColor.w *= glareEdgeFade;
-#			endif
-
-#		else
-		// Non-DITHER path is the sun disc/core variant.
-		float srcLum = max(Color::RGBToLuminance(baseColor.xyz), 1e-5);
-
-		// Clamp source before boosting the bright disc core.
-		if (srcLum > 1.0)
-			baseColor.xyz *= rcp(srcLum);
-
-		// Boost the highest-luminance region more strongly than the outer disc.
-		float sunCoreBoost = peakRatio;
-		float sunCoreMask = smoothstep(0.9, 1.0, saturate(srcLum));
-		float discScale = hdrScale * lerp(1.0, sunCoreBoost, sunCoreMask);
-		baseColor.xyz *= discScale;
-
-		// Tiny dither to reduce visible banding on bright gradients.
-		float ign = Random::InterleavedGradientNoise(floor(input.Position.xy));
-		baseColor.xyz += (ign - 0.5) * (discScale / 255.0);
-
-		yyy = 0.0;
-#		endif
-
-#		if defined(CLOUD_SHADOWS)
-		// Apply cloud transmittance in this same HDR-scaled branch so occlusion remains coherent.
-		float3 cloudSampleDir = CloudShadows::GetCloudShadowSampleDir(input.WorldPosition.xyz, SharedData::DirLightDirection.xyz);
-		float cloudCube0 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 0).x;
-		float cloudCube1 = CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, cloudSampleDir, 1).x;
-		float cloudCube = lerp(cloudCube0, cloudCube1, 0.5);
-		float cloudMult = lerp(1.0, 1.0 - cloudCube, SharedData::cloudShadowsSettings.Opacity);
-		float edgeWidth = max(fwidth(cloudMult) * 2.0, 0.02);
-		float cloudTransmit = smoothstep(0.12 - edgeWidth, 0.88 + edgeWidth, saturate(cloudMult));
-		baseColor.xyz *= cloudTransmit;
-		baseColor.w *= cloudTransmit;
-#		endif
+#		ifdef HDR_OUTPUT
+	float hdrSunGain = HDRSun::GetHdrSunGain(
+		input.TexCoord0.xy,
+		baseColor);
+	baseColor.xyz *= hdrSunGain;
+	if (HDRSun::IsHdrSunActive()) {
+		// Dither bright output to reduce banding in high-boost sun path.
+		// Same baseColor/skyScale treatment for DITHER and non-DITHER; DITHER adds noiseGrad later.
+		baseColor.xyz += (Random::InterleavedGradientNoise(input.Position.xy) - 0.5f) *
+		                 (saturate(hdrSunGain - 1.0f) / 255.0f);
+		skyScale = 0.0f;
 	}
+
+#			if defined(CLOUD_SHADOWS)
+	if (HDRSun::IsHdrSunActive()) {
+		float cloudMult = CloudShadows::GetCloudShadowMult(input.WorldPosition.xyz, SampBaseSampler);
+		baseColor.xyz *= cloudMult;
+		baseColor.w *= cloudMult;
+	}
+#			endif
+#		endif
 
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
@@ -298,15 +254,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			ifdef TEX
 	float3 sunGlareColor = Color::Sky(input.Color.xyz) * baseColor.xyz;
-	if (SharedData::HDRData.x > 0.5 && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		// HDR sun block already applied tint/scale; avoid multiplying by tint again.
-		sunGlareColor = baseColor.xyz;
-	}
 	// Dither/noise term is the legacy sky path contribution for gradient smoothing.
-	psout.Color.xyz = (sunGlareColor + yyy) + noiseGrad;
+	psout.Color.xyz = (sunGlareColor + skyScale) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	psout.Color.xyz = (yyy + Color::Sky(input.Color.xyz)) + noiseGrad;
+	psout.Color.xyz = (skyScale + Color::Sky(input.Color.xyz)) + noiseGrad;
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
@@ -318,11 +270,11 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		elif defined(HORIZFADE)
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy);
+	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else  // not DITHER, not MOONMASK, not HORIZFADE
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 #		endif
 
 #	else

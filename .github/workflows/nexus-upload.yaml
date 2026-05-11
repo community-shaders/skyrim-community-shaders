@@ -154,12 +154,15 @@ jobs:
                   gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
                     2>/dev/null > release.json || echo '{}' > release.json
                   python -c "
-                  import json, os
+                  import json, os, re
                   with open('release.json') as f:
                       release = json.load(f)
                   if not isinstance(release, dict):
                       release = {}
                   body = release.get('body') or ''
+                  # Strip feature audit appendix — Nexus changelog should only
+                  # contain human-readable release notes, not the audit table.
+                  body = re.sub(r'\n---\n+# Feature Version Audit\b.*', '', body, flags=re.DOTALL).strip()
                   with open('nexus-matrix-raw.json') as f:
                       data = json.load(f)
                   for row in data:

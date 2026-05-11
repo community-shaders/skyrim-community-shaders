@@ -1,18 +1,14 @@
 #include "Widget.h"
+
+#include <algorithm>
+#include <format>
+
 #include "EditorWindow.h"
 #include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
 #include "WeatherUtils.h"
-
-bool Widget::MatchesSearch(const std::string& text) const
-{
-	// If search is empty or inactive, match everything
-	if (searchBuffer[0] == '\0') {
-		return true;
-	}
-	return ContainsStringIgnoreCase(text, searchBuffer);
-}
+#include "imgui_internal.h"
 
 void Widget::Save()
 {
@@ -223,7 +219,7 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 	if (deleteConfirmationFrame == ImGui::GetFrameCount())
 		return;
 
-	if (ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (auto popup = Util::CenteredPopupModal(popupId)) {
 		deleteConfirmationFrame = ImGui::GetFrameCount();
 		ImGui::Text("Are you sure you want to delete the saved settings file?");
 		ImGui::Spacing();
@@ -248,8 +244,6 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
-
-		ImGui::EndPopup();
 	}
 }
 
@@ -283,6 +277,10 @@ std::string Widget::GetFolderName() const
 bool Widget::BeginWidgetWindow()
 {
 	SetupWidgetWindowDefaults(GetWidgetTypeName());
+	if (m_pendingFocus) {
+		ImGui::SetNextWindowFocus();
+		m_pendingFocus = false;
+	}
 	bool result = Util::BeginWithRoundedClose(GetWindowTitle().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags);
 	UpdateWidgetTypeSize(GetWidgetTypeName());
 	return result;
@@ -308,13 +306,24 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	auto menu = globals::menu;
 	bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons;
 	const float scale = Util::GetUIScale();
+	if (navigatedFromSearch) {
+		ClearSearchState(true);
+		navigatedFromSearch = false;
+	}
 
 	auto drawSearchBar = [&]() {
-		ImGui::SetNextItemWidth(200.0f * scale);
-		if (ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer)))
-			searchActive = searchBuffer[0] != '\0';
-		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false))
-			ImGui::SetKeyboardFocusHere(-1);
+		ImGui::SetNextItemWidth(WidgetUI::kSearchBarWidth * scale);
+		bool ctrlF = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+		             ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
+		if (ctrlF) {
+			ClearSearchState(true);
+			ImGui::SetKeyboardFocusHere();
+		}
+		ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer));
+		searchInputMin = ImGui::GetItemRectMin();
+		searchInputMax = ImGui::GetItemRectMax();
+		if (ImGui::IsItemEdited())
+			dropdownVisible = true;
 	};
 
 	auto drawForceWeatherButton = [&]() {
@@ -325,8 +334,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
 
 		if (isLocked) {
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_Button, WidgetUI::kLockButtonColor);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, WidgetUI::kLockButtonHoverColor);
 		}
 		if (ImGui::Button(lockLabel)) {
 			if (isLocked)
@@ -348,10 +357,10 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	};
 
 	if (useIcons) {
-		const float iconSize = ImGui::GetFrameHeight() * 0.85f;
+		const float iconSize = ImGui::GetFrameHeight() * WidgetUI::kIconButtonSizeRatio;
 		const ImVec2 buttonSize(iconSize, iconSize);
 
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale, ImGui::GetStyle().ItemSpacing.y));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(WidgetUI::kIconButtonSpacing * scale, ImGui::GetStyle().ItemSpacing.y));
 
 		drawSearchBar();
 		drawForceWeatherButton();
@@ -403,45 +412,44 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		if (!menu) {
 			drawSearchBar();
 			drawForceWeatherButton();
-			ImGui::Separator();
-			return;
-		}
-		drawSearchBar();
-		drawForceWeatherButton();
+		} else {
+			drawSearchBar();
+			drawForceWeatherButton();
 
-		auto textButton = [&](const char* label, const char* tooltip, auto callback) {
-			ImGui::SameLine();
-			if (Util::ButtonWithFlash(label))
-				callback();
-			Util::AddTooltip(tooltip);
-		};
-
-		// Apply button
-		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
-			ImGui::SameLine();
-			if (Util::SuccessButton("Apply"))
-				ApplyChanges();
-			Util::AddTooltip("Apply changes to the game");
-		}
-
-		// Save/Load/Revert/Delete group
-		if (showSaveLoadRevert) {
-			textButton("Save", "Save to file", [&]() { Save(); });
-			textButton("Load", "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
-			ImGui::SameLine();
-			if (Util::WarningButton("Revert"))
-				RevertChanges();
-			Util::AddTooltip("Revert to original game values");
-
-			if (HasSavedFile()) {
+			auto textButton = [&](const char* label, const char* tooltip, auto callback) {
 				ImGui::SameLine();
-				if (Util::ErrorTextButton("Delete"))
-					ImGui::OpenPopup("DeleteConfirmation");
-				Util::AddTooltip("Delete saved file");
-			}
-		}
+				if (Util::ButtonWithFlash(label))
+					callback();
+				Util::AddTooltip(tooltip);
+			};
 
-		drawUnsavedIndicator();
+			// Apply button
+			if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
+				ImGui::SameLine();
+				if (Util::SuccessButton("Apply"))
+					ApplyChanges();
+				Util::AddTooltip("Apply changes to the game");
+			}
+
+			// Save/Load/Revert/Delete group
+			if (showSaveLoadRevert) {
+				textButton("Save", "Save to file", [&]() { Save(); });
+				textButton("Load", "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
+				ImGui::SameLine();
+				if (Util::WarningButton("Revert"))
+					RevertChanges();
+				Util::AddTooltip("Revert to original game values");
+
+				if (HasSavedFile()) {
+					ImGui::SameLine();
+					if (Util::ErrorTextButton("Delete"))
+						ImGui::OpenPopup("DeleteConfirmation");
+					Util::AddTooltip("Delete saved file");
+				}
+			}
+
+			drawUnsavedIndicator();
+		}
 	}
 
 	DrawDeleteConfirmationModal();
@@ -453,4 +461,151 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	}
 
 	ImGui::Separator();
+
+	// Remember where the dropdown should appear so DrawSearchDropdown()
+	// (called after this function) can anchor itself below the search bar.
+	searchDropdownAnchor = ImGui::GetCursorScreenPos();
+
+	// Rebuild match list only when the query changed; this gates per-frame
+	// CollectSearchableSettings() walks plus three case-insensitive searches per entry.
+	if (searchBuffer[0] != '\0') {
+		if (searchResultsForQuery != searchBuffer) {
+			searchResults = CollectSearchableSettings();
+			std::erase_if(searchResults, [&](const SearchResult& r) {
+				return !ContainsStringIgnoreCase(r.displayName, searchBuffer) &&
+				       !ContainsStringIgnoreCase(r.tabName, searchBuffer) &&
+				       !ContainsStringIgnoreCase(r.settingId, searchBuffer);
+			});
+			searchResultsForQuery = searchBuffer;
+		}
+	} else {
+		ClearSearchState(false);
+	}
+}
+
+void Widget::DrawSearchDropdown()
+{
+	if (!dropdownVisible || searchResults.empty())
+		return;
+
+	const float scale = Util::GetUIScale();
+	ImGui::SetNextWindowPos(searchDropdownAnchor, ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(WidgetUI::kSearchDropdownWidth * scale, 0));
+	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
+	const ImVec4 dropdownBg(WidgetUI::kSearchDropdownBgGray, WidgetUI::kSearchDropdownBgGray, WidgetUI::kSearchDropdownBgGray, 1.0f);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, dropdownBg);
+	const std::string dropdownWindowId = std::format("##SearchDropdown_{}", static_cast<const void*>(this));
+	if (ImGui::Begin(dropdownWindowId.c_str(), nullptr,
+			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+				ImGuiWindowFlags_NoFocusOnAppearing)) {
+		ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+
+		// Treat clicks on the search input itself as "inside" so typing/cursor
+		// positioning in the input doesn't dismiss the dropdown.
+		const ImRect searchInputRect(searchInputMin, searchInputMax);
+		const bool clickedOutside = ImGui::GetIO().MouseClicked[0] &&
+		                            !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+		                            !searchInputRect.Contains(ImGui::GetIO().MousePos);
+		if (clickedOutside || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+			dropdownVisible = false;
+		} else {
+			const size_t shown = std::min(WidgetUI::kSearchDropdownMaxResults, searchResults.size());
+			for (size_t i = 0; i < shown; ++i) {
+				const auto& result = searchResults[i];
+				std::string label = result.tabName.empty() ? result.displayName : std::format("{} ({})", result.displayName, result.tabName);
+
+				ImGui::PushID(static_cast<int>(i));
+				if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
+					NavigateToSearchResult(result);
+					navigatedFromSearch = true;
+				}
+				ImGui::PopID();
+			}
+
+			if (searchResults.size() > WidgetUI::kSearchDropdownMaxResults) {
+				ImGui::Separator();
+				ImGui::TextDisabled("... %zu more results", searchResults.size() - WidgetUI::kSearchDropdownMaxResults);
+			}
+		}
+	}
+	ImGui::End();
+	ImGui::PopStyleColor();
+	ImGui::PopStyleVar();
+}
+
+void Widget::ClearSearchState(bool clearBuffer)
+{
+	if (clearBuffer)
+		searchBuffer[0] = '\0';
+	searchResults.clear();
+	searchResultsForQuery.clear();
+	dropdownVisible = false;
+}
+
+void Widget::NavigateToSearchResult(const SearchResult& result)
+{
+	activeTabOverride = result.tabName;
+	highlightedSetting = result.settingId;
+	highlightedDisplaySetting = result.displayName;
+	highlightStartTime = static_cast<float>(ImGui::GetTime());
+	scrollToHighlighted = true;
+}
+
+int Widget::GetTabFlagsForOverride(const std::string& tabName)
+{
+	if (activeTabOverride.empty() || activeTabOverride != tabName)
+		return 0;
+	activeTabOverride.clear();
+	return ImGuiTabItemFlags_SetSelected;
+}
+
+bool Widget::MatchesSearch(const std::string& settingId) const
+{
+	if (searchBuffer[0] == '\0')
+		return true;
+	return std::any_of(searchResults.begin(), searchResults.end(),
+		[&](const SearchResult& r) { return r.settingId == settingId; });
+}
+
+bool Widget::MatchesAnySearch(std::initializer_list<const char*> settingIds) const
+{
+	return std::any_of(settingIds.begin(), settingIds.end(), [&](const char* settingId) {
+		return MatchesSearch(settingId);
+	});
+}
+
+bool Widget::IsHighlighted(const std::string& settingId) const
+{
+	if (highlightedSetting != settingId && highlightedDisplaySetting != settingId)
+		return false;
+	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
+	return elapsed < WidgetUI::kHighlightDurationSeconds;
+}
+
+void Widget::PushHighlightStyle(const std::string& settingId)
+{
+	if (!IsHighlighted(settingId))
+		return;
+	const float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
+	const float normalized = std::clamp(elapsed / WidgetUI::kHighlightDurationSeconds, 0.0f, 1.0f);
+	const float triangularFade = 1.0f - std::abs(normalized * 2.0f - 1.0f);
+	const float alpha = std::clamp(WidgetUI::kHighlightMaxAlpha * triangularFade, 0.0f, WidgetUI::kHighlightMaxAlpha);
+	ImVec4 frameBg = WidgetUI::kHighlightFrameBg;
+	ImVec4 frameBgHovered = WidgetUI::kHighlightFrameBgHovered;
+	frameBg.w = alpha;
+	frameBgHovered.w = alpha;
+	ImGui::PushStyleColor(ImGuiCol_FrameBg, frameBg);
+	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, frameBgHovered);
+}
+
+void Widget::PopHighlightStyle(const std::string& settingId)
+{
+	if (!IsHighlighted(settingId))
+		return;
+	ImGui::PopStyleColor(2);
+	if (scrollToHighlighted) {
+		ImGui::SetScrollHereY(0.5f);
+		scrollToHighlighted = false;
+	}
 }

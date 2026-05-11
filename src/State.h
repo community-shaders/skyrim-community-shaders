@@ -179,7 +179,8 @@ public:
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
 		GrassSphereNormal = 1 << 3,
-		IsSun = 1 << 4
+		IsSun = 1 << 4,
+		SuppressExternalEmittance = 1 << 5
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t
@@ -202,6 +203,12 @@ public:
 	bool isMainMenuOpen = false;
 	bool isLoadingMenuOpen = false;
 	bool isMapMenuOpen = false;
+	bool IsMainOrLoadingMenuOpen() const { return isMainMenuOpen || isLoadingMenuOpen; }
+	bool IsMainOrLoadingMenuOpen(RE::UI* ui) const
+	{
+		return IsMainOrLoadingMenuOpen() ||
+		       (ui && (ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME)));
+	}
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 	void UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass);
@@ -325,10 +332,6 @@ public:
 		});
 	}
 
-	// Features that are more special then others
-	std::unordered_map<std::string, bool> specialFeatures = {
-		{ "TruePBR", false }
-	};
 	std::unordered_map<std::string, bool> disabledFeatures;
 	std::mutex m_mutex;
 

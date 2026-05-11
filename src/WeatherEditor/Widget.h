@@ -6,23 +6,33 @@
 #include <array>
 #include <string_view>
 
-class WidgetSharedData
+#include <initializer_list>
+#include <type_traits>
+#include <vector>
+
+namespace WidgetUI
 {
-private:
-	int uniqueID = 0;
+	// Search bar / dropdown
+	constexpr int kSearchBufferSize = 256;
+	constexpr float kSearchBarWidth = 200.0f;
+	constexpr float kSearchDropdownWidth = 300.0f;
+	constexpr size_t kSearchDropdownMaxResults = 5;
+	constexpr float kSearchDropdownBgGray = 0.16f;
 
-public:
-	static WidgetSharedData* GetSingleton()
-	{
-		static WidgetSharedData sharedData;
-		return &sharedData;
-	}
+	// Search-result highlight pulse
+	constexpr float kHighlightDurationSeconds = 2.0f;
+	constexpr float kHighlightMaxAlpha = 0.3f;
+	constexpr ImVec4 kHighlightFrameBg = ImVec4(0.3f, 0.6f, 1.0f, 1.0f);
+	constexpr ImVec4 kHighlightFrameBgHovered = ImVec4(0.4f, 0.7f, 1.0f, 1.0f);
 
-	int GetNewID()
-	{
-		return -uniqueID++;
-	}
-};
+	// "Force Weather" lock button colors
+	constexpr ImVec4 kLockButtonColor = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+	constexpr ImVec4 kLockButtonHoverColor = ImVec4(0.3f, 0.9f, 0.3f, 1.0f);
+
+	// Icon button spacing
+	constexpr float kIconButtonSpacing = 4.0f;
+	constexpr float kIconButtonSizeRatio = 0.85f;
+}
 
 class Widget
 {
@@ -139,6 +149,9 @@ public:
 	/// Call instead of SetupWidgetWindowDefaults + ImGui::Begin. Tracks per-type window size.
 	bool BeginWidgetWindow();
 
+	/// Queue focus for the next BeginWidgetWindow call (use instead of SetWindowFocus on a not-yet-drawn window).
+	void RequestFocus() { m_pendingFocus = true; }
+
 	bool open = false;
 
 	bool IsOpen() const
@@ -180,11 +193,96 @@ public:
 	void DrawWidgetHeader(const char* searchId, bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
 
 	// Search functionality
-	char searchBuffer[256] = "";
-	bool searchActive = false;
+	char searchBuffer[WidgetUI::kSearchBufferSize] = "";
 	int deleteConfirmationFrame = -1;
 
-	bool MatchesSearch(const std::string& text) const;
+	// Unified search dropdown + tab navigation + highlight helpers.
+	// Widgets supply searchable entries via CollectSearchableSettings(); DrawSearchDropdown()
+	// renders the matches and updates navigation state on selection.
+	struct SearchResult
+	{
+		std::string displayName;
+		std::string tabName;    // empty if widget has no tabs
+		std::string settingId;  // id used for highlight matching
+	};
+	virtual std::vector<SearchResult> CollectSearchableSettings() const { return {}; }
+
+	// Call immediately after DrawWidgetHeader() to render the search dropdown.
+	void DrawSearchDropdown();
+
+	// Returns ImGuiTabItemFlags_SetSelected if the given tab matches the pending
+	// navigation request, otherwise 0. Clears the override after the first tab is set.
+	int GetTabFlagsForOverride(const std::string& tabName);
+
+	// True if the setting matches the current search query or no search is active.
+	// Returns true when no search is active, or when settingId appears in the
+	// current filtered results. Use DrawIfMatchesSearch() for simple controls.
+	bool MatchesSearch(const std::string& settingId) const;
+	bool MatchesAnySearch(std::initializer_list<const char*> settingIds) const;
+
+	template <class DrawFn>
+	bool DrawIfMatchesSearch(const char* settingId, DrawFn draw)
+	{
+		return MatchesSearch(settingId) && draw(settingId);
+	}
+
+	template <class DrawFn>
+	bool DrawIfMatchesSearch(const std::string& settingId, DrawFn draw)
+	{
+		return MatchesSearch(settingId) && draw(settingId.c_str());
+	}
+
+	template <class DrawFn>
+	void DrawSearchSectionIfMatches(const char* settingId, DrawFn draw)
+	{
+		if (MatchesSearch(settingId))
+			draw(settingId);
+	}
+
+	template <class DrawFn>
+	void DrawSearchSectionIfMatches(const std::string& settingId, DrawFn draw)
+	{
+		if (MatchesSearch(settingId))
+			draw(settingId.c_str());
+	}
+
+	bool ShouldOpenSearchSection() const { return searchBuffer[0] != '\0' || navigatedFromSearch; }
+
+	// True if the given id matches the currently highlighted setting within the
+	// animated highlight window.
+	bool IsHighlighted(const std::string& settingId) const;
+
+	// Pushes a pulsing highlight style for the next widget; call PopHighlightStyle() after.
+	void PushHighlightStyle(const std::string& settingId);
+	void PopHighlightStyle(const std::string& settingId);
+
+	bool PushHighlightIfNeeded(const std::string& settingId)
+	{
+		if (!IsHighlighted(settingId))
+			return false;
+		PushHighlightStyle(settingId);
+		return true;
+	}
+
+	void PopHighlightIfNeeded(const std::string& settingId, bool pushed)
+	{
+		if (pushed)
+			PopHighlightStyle(settingId);
+	}
+
+	template <class DrawFn>
+	auto DrawWithHighlight(const std::string& settingId, DrawFn draw)
+	{
+		const bool highlighted = PushHighlightIfNeeded(settingId);
+		if constexpr (std::is_void_v<std::invoke_result_t<DrawFn>>) {
+			draw();
+			PopHighlightIfNeeded(settingId, highlighted);
+		} else {
+			auto result = draw();
+			PopHighlightIfNeeded(settingId, highlighted);
+			return result;
+		}
+	}
 
 	void DrawDeleteConfirmationModal(const char* popupId = "DeleteConfirmation");
 
@@ -196,6 +294,31 @@ protected:
 	mutable bool isFallbackEditorID = false;
 	virtual void DrawMenu();
 	std::string GetFolderName() const;
+
+	// Cached dropdown position from DrawWidgetHeader so DrawSearchDropdown() can anchor below the search bar.
+	ImVec2 searchDropdownAnchor{ 0.0f, 0.0f };
+	ImVec2 searchInputMin{ 0.0f, 0.0f };
+	ImVec2 searchInputMax{ 0.0f, 0.0f };
+
+	// Whether the search result dropdown is currently visible.
+	bool dropdownVisible = false;
+
+	// Navigation / highlight state shared by the search dropdown.
+	std::vector<SearchResult> searchResults;
+	std::string activeTabOverride;
+	std::string highlightedSetting;
+	std::string highlightedDisplaySetting;
+	float highlightStartTime = 0.0f;
+	bool scrollToHighlighted = false;
+	bool navigatedFromSearch = false;
+
+	// Cache the last query searchResults was built for, so per-frame work is skipped
+	// while the buffer is unchanged.
+	std::string searchResultsForQuery;
+	bool m_pendingFocus = false;
+
+	void ClearSearchState(bool clearBuffer);
+	void NavigateToSearchResult(const SearchResult& result);
 };
 
 // Simple widget for caching form data without full widget functionality

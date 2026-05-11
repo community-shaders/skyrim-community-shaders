@@ -1,6 +1,12 @@
 name: "PR: Checks"
 
 on:
+    # `paths` is restricted to files that pr-checks can actually validate on
+    # this PR. Workflow definitions (.github/workflows/**) and composite
+    # actions (.github/actions/**) resolve from the BASE branch under
+    # pull_request_target, so they can never be tested by their own PR's
+    # run — keeping them in `paths` would only fire the unconditional
+    # feature-audit job for changes that have no validatable impact.
     pull_request_target:
         types: [opened, synchronize, reopened, ready_for_review]
         paths:
@@ -22,9 +28,7 @@ on:
             - "src/Features/**"
             - "package/Shaders/**"
             - "tests/shaders/**"
-            - ".github/workflows/**"
             - ".github/configs/**"
-            - ".github/actions/**"
 
 # Least-privilege defaults; individual jobs override where needed.
 permissions:
@@ -40,9 +44,16 @@ jobs:
         name: Check for changes in PRs
         runs-on: ubuntu-latest
         outputs:
-            should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.outcome == 'failure' }}
-            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.outcome == 'failure' }}
-            shader-tests-should-build: ${{ steps.changed-files.outputs.shader_tests_any_changed == 'true' || steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.outcome == 'failure' }}
+            # `build_ci` is CI changes that can actually be validated on a PR.
+            # Under pull_request_target, workflow definitions and composite
+            # actions resolve from the BASE branch ref — so changes to
+            # pr-checks.yaml, _shared-build.yaml, or .github/actions/** are not
+            # exercised by their own PR's runs (they only take effect on the
+            # NEXT PR after merge). Only files read from the PR's checkout
+            # (shader-validation configs) genuinely benefit from a rebuild.
+            should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.outputs.build_ci_any_changed == 'true' || steps.changed-files.outcome == 'failure' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.build_ci_any_changed == 'true' || steps.changed-files.outcome == 'failure' }}
+            shader-tests-should-build: ${{ steps.changed-files.outputs.shader_tests_any_changed == 'true' || steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.build_ci_any_changed == 'true' || steps.changed-files.outcome == 'failure' }}
         steps:
             - uses: actions/checkout@v6
               with:
@@ -80,10 +91,12 @@ jobs:
                         - 'CMakeLists.txt'
                         - 'CMakePresets.json'
                         - 'cmake/**'
-                      ci:
-                        - '.github/workflows/**'
+                      # Only files read from the PR's checkout during the build
+                      # belong here. Workflow definitions and composite actions
+                      # are resolved from the base branch under pull_request_target,
+                      # so changes to them cannot be validated on the PR itself.
+                      build_ci:
                         - '.github/configs/**'
-                        - '.github/actions/**'
                       hlsl:
                         - '**.hlsl'
                         - '**.hlsli'

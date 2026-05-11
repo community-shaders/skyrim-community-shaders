@@ -104,6 +104,56 @@ namespace BackgroundBlur
 			float windowParams[4];  // x = cornerRadius, y = screenWidth, z = screenHeight, w = unused
 		};
 
+		struct UIBufferViews
+		{
+			ID3D11ShaderResourceView* srv = nullptr;
+			ID3D11RenderTargetView* rtv = nullptr;
+		};
+
+		bool ShouldUseD3D12UIBufferForBlur()
+		{
+			return globals::features::hdrDisplay.ShouldUseD3D12UIBuffer();
+		}
+
+		UIBufferViews GetD3D12UIBufferViews(const DX12SwapChain::BlurResources& res)
+		{
+			return { res.uiBufferSRV, res.uiBufferRTV };
+		}
+
+		UIBufferViews GetHDRUIBufferViews(HDRDisplay& hdr, Upscaling& upscaling)
+		{
+			if (upscaling.d3d12SwapChainActive && ShouldUseD3D12UIBufferForBlur())
+				return GetD3D12UIBufferViews(upscaling.GetBlurResources());
+
+			if (hdr.uiTexture && hdr.uiTexture->srv && hdr.uiTexture->rtv)
+				return { hdr.uiTexture->srv.get(), hdr.uiTexture->rtv.get() };
+
+			return {};
+		}
+
+		bool IsUpscalingBlurSourceActive(const Upscaling& upscaling)
+		{
+			return upscaling.d3d12SwapChainActive || (upscaling.loaded && upscaling.IsUpscalingActive());
+		}
+
+		bool IsMainOrLoadingMenuOpen()
+		{
+			auto* state = globals::state;
+			return state && state->IsMainOrLoadingMenuOpen(globals::game::ui);
+		}
+
+		bool IsStartupMenuBlurSourceReady(SIE::ShaderCache* shaderCache)
+		{
+			return !shaderCache || (shaderCache->menuLoaded && !shaderCache->IsCompiling());
+		}
+
+		bool ShouldSkipStartupMenuBlur(const Upscaling& upscaling)
+		{
+			return !IsUpscalingBlurSourceActive(upscaling) &&
+			       IsMainOrLoadingMenuOpen() &&
+			       !IsStartupMenuBlurSourceReady(globals::shaderCache);
+		}
+
 		// Release all blur texture resources; caller must hold resourceMutex
 		void ReleaseBlurTextures()
 		{
@@ -533,20 +583,14 @@ namespace BackgroundBlur
 		                 hdr->settings.enableHDR && hdr->hdrDataCB && hdr->outputTexture &&
 		                 hdr->hdrTexture && hdr->hdrTexture->resource && hdr->hdrTexture->srv && hdr->hdrTexture->rtv;
 
-		// Back buffer is black on main/loading menu during shader compilation without upscaling
-		if (!useUpscalingBackbuffer && !(upscaling.loaded && upscaling.IsUpscalingActive())) {
-			bool isMainOrLoading = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
-			auto shaderCache = globals::shaderCache;
-			if (isMainOrLoading && shaderCache && shaderCache->IsCompiling()) {
-				return;
-			}
-		}
+		// Startup main/loading back buffer can be black until DataLoaded and initial shader work finish.
+		if (ShouldSkipStartupMenuBlur(upscaling))
+			return;
 
 		winrt::com_ptr<ID3D11Texture2D> currentTexture;
 		winrt::com_ptr<ID3D11RenderTargetView> currentRTV;
 		ID3D11ShaderResourceView* sourceSRV = nullptr;  // Non-owning; lifetime managed elsewhere
-		ID3D11ShaderResourceView* uiBufferSRV = nullptr;
-		ID3D11RenderTargetView* uiBufferRTV = nullptr;
+		UIBufferViews uiBuffer;
 
 		if (hdrActive) {
 			// HDR (any FG state): blur hdrTexture in-place before ApplyHDR composites UI.
@@ -556,13 +600,7 @@ namespace BackgroundBlur
 			sourceSRV = hdr->hdrTexture->srv.get();
 			currentRTV = hdr->hdrTexture->rtv;
 
-			// Vanilla UI is in a separate texture in HDR mode (SetUIBuffer redirect).
-			// Composite it into the blur so HUD elements appear blurred behind the menu,
-			// and clear the blur region from uiTexture to prevent double-compositing.
-			if (hdr->uiTexture && hdr->uiTexture->srv && hdr->uiTexture->rtv) {
-				uiBufferSRV = hdr->uiTexture->srv.get();
-				uiBufferRTV = hdr->uiTexture->rtv.get();
-			}
+			uiBuffer = GetHDRUIBufferViews(*hdr, upscaling);
 		} else if (useUpscalingBackbuffer) {
 			// When D3D12 swap chain is active, get all resources in one call
 			auto res = upscaling.GetBlurResources();
@@ -573,12 +611,9 @@ namespace BackgroundBlur
 			currentRTV.copy_from(res.backbufferRTV);
 			sourceSRV = res.backbufferSRV;
 
-			// During gameplay (not paused), HUD is in separate UI buffer
-			auto ui = globals::game::ui;
-			if (ui && !ui->GameIsPaused()) {
-				uiBufferSRV = res.uiBufferSRV;
-				uiBufferRTV = res.uiBufferRTV;
-			}
+			// D3D12 HDR/FG can route vanilla UI into a separate buffer.
+			if (ShouldUseD3D12UIBufferForBlur())
+				uiBuffer = GetD3D12UIBufferViews(res);
 		} else {
 			// Normal path: get current render target
 			ID3D11RenderTargetView* rawRTV = nullptr;
@@ -623,7 +658,7 @@ namespace BackgroundBlur
 		if (weatherEditorActive) {
 			ImVec2 screenMin = { 0, 0 };
 			ImVec2 screenMax = { static_cast<float>(texDesc.Width), static_cast<float>(texDesc.Height) };
-			PerformBlur(currentTexture.get(), sourceSRV, currentRTV.get(), screenMin, screenMax, 0.0f, uiBufferSRV, uiBufferRTV);
+			PerformBlur(currentTexture.get(), sourceSRV, currentRTV.get(), screenMin, screenMax, 0.0f, uiBuffer.srv, uiBuffer.rtv);
 			return;
 		}
 
@@ -674,7 +709,7 @@ namespace BackgroundBlur
 
 			// Perform blur for this window area with rounded corners
 			// Pass UI buffer SRV/RTV for compositing and clearing during upscaling gameplay
-			PerformBlur(currentTexture.get(), sourceSRV, currentRTV.get(), windowMin, windowMax, cornerRadius, uiBufferSRV, uiBufferRTV);
+			PerformBlur(currentTexture.get(), sourceSRV, currentRTV.get(), windowMin, windowMax, cornerRadius, uiBuffer.srv, uiBuffer.rtv);
 		}
 	}
 

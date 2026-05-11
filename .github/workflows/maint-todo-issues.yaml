@@ -1,5 +1,5 @@
 # https://github.com/marketplace/actions/todo-to-issue#todo-to-issue-action
-name: "Run TODO to Issue"
+name: "Maint: TODO to Issue"
 on:
     push:
     workflow_dispatch:

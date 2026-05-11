@@ -532,6 +532,10 @@ cbuffer PerGeometry : register(b2)
 float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, uint eyeIndex, inout float shadowVariance)
 {
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
+	bool suppressExternalEmittance = SharedData::InInterior && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SuppressExternalEmittance);
+	if (suppressExternalEmittance) {
+		color = ShadowSampling::GetSceneLightingColor();
+	}
 
 #		if defined(SKYLIGHTING)
 #			if defined(VR)
@@ -869,8 +873,12 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #		endif
 #		if defined(EXP_HEIGHT_FOG)
+	float vanillaFogFactor = fogFactor;
+	float3 vanillaFogColor = fogColor;
+	float expFogFactor = 0;
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+		expFogFactor = exponentialHeightFog.w;
 #			if defined(ADDBLEND) || defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
@@ -878,14 +886,30 @@ PS_OUTPUT main(PS_INPUT input)
 		fogColor = lightColor;
 		alpha *= 1 - exponentialHeightFog.w;
 #			endif
+		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
+			vanillaFogFactor = 0;
+		}
 	}
 #		endif
 #		if defined(ADDBLEND)
+#			if defined(EXP_HEIGHT_FOG)
+	float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
+#			else
 	float3 blendedColor = lightColor * (1 - fogFactor);
+#			endif
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+#			if defined(EXP_HEIGHT_FOG)
+	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * vanillaFogFactor).xxx);
+	blendedColor = lerp(blendedColor, 1.0.xxx, saturate(1.5 * expFogFactor).xxx);
+#			else
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * fogFactor).xxx);
+#			endif
 #		else
+#			if defined(EXP_HEIGHT_FOG)
+	float3 blendedColor = lerp(lightColor, vanillaFogColor, vanillaFogFactor.xxx);
+#			else
 	float3 blendedColor = lerp(lightColor, fogColor, fogFactor.xxx);
+#			endif
 #		endif
 #	else
 	float3 blendedColor = lightColor.xyz;
