@@ -22,6 +22,7 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/Upscaling.h"
+#include "Features/Raytracing.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "State.h"
@@ -505,7 +506,13 @@ void PerformanceOverlay::DrawVRAM()
 
 	// Only proceed if the call succeeded and Budget is not zero
 	if (SUCCEEDED(hr) && videoMemoryInfo.Budget > 0) {
-		float currentGpuUsage = videoMemoryInfo.CurrentUsage / (1024.f * 1024.f * 1024.f);
+		uint64_t currentGpuUsageBytes = videoMemoryInfo.CurrentUsage;
+
+		auto& rt = globals::features::raytracing;
+		if (rt.loaded)
+			currentGpuUsageBytes -= rt.GetSharedVRAMOffset();
+
+		float currentGpuUsage = currentGpuUsageBytes / (1024.f * 1024.f * 1024.f);
 		float totalGpuMemory = videoMemoryInfo.Budget / (1024.f * 1024.f * 1024.f);
 		float percent = currentGpuUsage / totalGpuMemory;
 

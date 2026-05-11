@@ -788,7 +788,9 @@ void ShareTexture(ID3D11Texture2D* d3d11Texture, ID3D12Resource** d3d12Resource,
 
 	DX::ThrowIfFailed(globals::features::dx12Interop.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(d3d12Resource)));
 
-	CloseHandle(sharedHandle);
+	// Only close handle if it was created here
+	if (nt)
+		CloseHandle(sharedHandle);
 }
 
 void Raytracing::SetupResources()
@@ -1128,7 +1130,23 @@ void Raytracing::DeferredPasses()
 		// Copy Depth and Motion Vectors if culling is enabled
 		if (settings.CreationEngineRaytracingSettings.ExperimentalSettings.PathTracingCull) {
 			auto depthStencils = renderer->GetDepthStencilData().depthStencils;
+
 			auto& mainDepth = depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+			auto& mainDepthCopy = depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
+			auto& zPrePassCopy = depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+
+			context->ClearDepthStencilView(mainDepth.views[0], D3D11_CLEAR_DEPTH, 1.0f, 0u);
+			context->ClearDepthStencilView(mainDepthCopy.views[0], D3D11_CLEAR_DEPTH, 1.0f, 0u);
+			context->ClearDepthStencilView(zPrePassCopy.views[0], D3D11_CLEAR_DEPTH, 1.0f, 0u);
+
+			ID3D11DepthStencilState* oldDSS = nullptr;
+			UINT oldRef = 0;
+
+			context->OMGetDepthStencilState(&oldDSS, &oldRef);
+
+			ID3D11RenderTargetView* oldRTV;
+			ID3D11DepthStencilView* oldDSV;
+			context->OMGetRenderTargets(1, &oldRTV, &oldDSV);
 
 			context->OMSetRenderTargets(1, 
 				&renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].RTV, 
@@ -1156,8 +1174,30 @@ void Raytracing::DeferredPasses()
 
 			context->Draw(3, 0);
 
-			context->CopyResource(depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY].texture, mainDepth.texture);
-			context->CopyResource(depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY].texture, mainDepth.texture);
+			context->OMSetDepthStencilState(oldDSS, oldRef);
+
+			context->OMSetRenderTargets(1,
+				&oldRTV,
+				oldDSV
+			);
+
+			if (oldDSS) {
+				oldDSS->Release();
+				oldDSS = nullptr;
+			}
+
+			if (oldRTV) {
+				oldRTV->Release();
+				oldRTV = nullptr;
+			}
+
+			if (oldDSV) {
+				oldDSV->Release();
+				oldDSV = nullptr;
+			}
+
+			context->CopyResource(mainDepthCopy.texture, mainDepth.texture);
+			context->CopyResource(zPrePassCopy.texture, mainDepth.texture);
 		}
 	}
 

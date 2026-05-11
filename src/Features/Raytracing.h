@@ -430,7 +430,8 @@ struct CreationEngineRaytracing
 	using UpdateJitterFn = void (*)(float2);
 	using SetPTOutputTargetsFn = void (*)(ID3D12Resource*, ID3D12Resource*);
 	using GetAccumulatedFrameCountFn = uint32_t (*)();
-
+	using GetFakeDoubledVRAMUsageFn = uint64_t (*)();
+	
 	InitializeRendererFn InitializeRenderer = nullptr;
 	InitializeFn Initialize = nullptr;
 	UpdateCameraFn UpdateCamera = nullptr;
@@ -448,6 +449,7 @@ struct CreationEngineRaytracing
 	UpdateJitterFn UpdateJitter = nullptr;
 	SetPTOutputTargetsFn SetPTOutputTargets = nullptr;
 	GetAccumulatedFrameCountFn GetAccumulatedFrameCount = nullptr;
+	GetFakeDoubledVRAMUsageFn GetFakeDoubledVRAMUsage = nullptr;
 
 	CreationEngineRaytracing()
 	{
@@ -545,6 +547,11 @@ struct CreationEngineRaytracing
 
 		if (!GetAccumulatedFrameCount)
 			logger::warn("[Raytracing] 'CreationEngineRaytracing.dll' GetAccumulatedFrameCount is nullptr (older version?)");
+
+		GetFakeDoubledVRAMUsage = reinterpret_cast<GetFakeDoubledVRAMUsageFn>(GetProcAddress(handle, "GetFakeDoubledVRAMUsage"));
+
+		if (!GetFakeDoubledVRAMUsage)
+			logger::warn("[Raytracing] 'CreationEngineRaytracing.dll' GetFakeDoubledVRAMUsage is nullptr (older version?)");
 	}
 };
 
@@ -629,6 +636,11 @@ struct Raytracing : public OverlayFeature
 	void DrawDebugSettings();
 
 	void CompileShaders();
+
+	uint64_t GetSharedVRAMOffset() const
+	{
+		return loaded && initialized ? creationEngineRaytracing->GetFakeDoubledVRAMUsage() : 0;
+	}
 
 	void InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue);
 	bool UpdateResolution();
