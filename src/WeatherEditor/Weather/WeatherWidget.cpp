@@ -1478,93 +1478,66 @@ void WeatherWidget::InheritAllFromParent()
 	if (!parentWidget)
 		return;
 
-	// Copy all weather properties
+	// Basic tab — weatherProperties and weatherColors (e.g. Lightning Color)
 	for (const auto& [key, value] : parentWidget->settings.weatherProperties) {
 		settings.weatherProperties[key] = value;
+		settings.inheritFlags[key] = true;
 	}
-
-	// Copy all weather colors
 	for (const auto& [key, value] : parentWidget->settings.weatherColors) {
 		settings.weatherColors[key] = value;
+		settings.inheritFlags[key] = true;
 	}
 
-	// Copy all fog properties
-	for (const auto& [key, value] : parentWidget->settings.fogProperties) {
-		settings.fogProperties[key] = value;
-	}
+	// DALC tab
+	static constexpr const char* kDalcFlags[] = {
+		WeatherInherit::kDalcSpecular, WeatherInherit::kDalcFresnel,
+		WeatherInherit::kDalcDirXMax,  WeatherInherit::kDalcDirXMin,
+		WeatherInherit::kDalcDirYMax,  WeatherInherit::kDalcDirYMin,
+		WeatherInherit::kDalcDirZMax,  WeatherInherit::kDalcDirZMin,
+	};
+	for (int i = 0; i < ColorTimes::kTotal; i++)
+		settings.dalc[i] = parentWidget->settings.dalc[i];
+	for (const auto* key : kDalcFlags)
+		settings.inheritFlags[key] = true;
 
-	// Copy atmosphere colors
+	// Atmosphere tab
 	for (int i = 0; i < ColorTypes::kTotal; i++) {
 		settings.atmosphereColors[i] = parentWidget->settings.atmosphereColors[i];
+		settings.inheritFlags["Atmosphere_" + ColorTypeLabel(i)] = true;
 	}
 
-	// Copy DALC settings
-	for (int i = 0; i < ColorTimes::kTotal; i++) {
-		settings.dalc[i] = parentWidget->settings.dalc[i];
-	}
-
-	// Copy cloud settings
+	// Clouds tab
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		settings.clouds[i] = parentWidget->settings.clouds[i];
-	}
-
-	// Copy records (form references)
-	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
-		settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
-		settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
-	}
-	settings.precipitationData = parentWidget->settings.precipitationData;
-	settings.referenceEffect = parentWidget->settings.referenceEffect;
-
-	// Set all inherit flags to true
-
-	// Weather properties (Sun, Wind, Precipitation, Lightning, etc.)
-	for (const auto& [key, value] : parentWidget->settings.weatherProperties)
-		settings.inheritFlags[key] = true;
-	for (const auto& [key, value] : parentWidget->settings.weatherColors)
-		settings.inheritFlags[key] = true;
-
-	settings.inheritFlags[WeatherInherit::kDalcSpecular] = true;
-	settings.inheritFlags[WeatherInherit::kDalcFresnel] = true;
-	settings.inheritFlags[WeatherInherit::kDalcDirXMax] = true;
-	settings.inheritFlags[WeatherInherit::kDalcDirXMin] = true;
-	settings.inheritFlags[WeatherInherit::kDalcDirYMax] = true;
-	settings.inheritFlags[WeatherInherit::kDalcDirYMin] = true;
-	settings.inheritFlags[WeatherInherit::kDalcDirZMax] = true;
-	settings.inheritFlags[WeatherInherit::kDalcDirZMin] = true;
-
-	settings.inheritFlags[WeatherInherit::kFogNear] = true;
-	settings.inheritFlags[WeatherInherit::kFogFar] = true;
-	settings.inheritFlags[WeatherInherit::kFogPower] = true;
-	settings.inheritFlags[WeatherInherit::kFogMax] = true;
-
-	// Atmosphere colors
-	static const int displayOrder[] = { 0, 7, 8, 1, 12, 3, 4, 5, 6, 9, 10, 11, 13, 14, 15, 16, 2 };
-	for (int idx = 0; idx < ColorTypes::kTotal; idx++) {
-		int i = displayOrder[idx];
-		std::string colorTypeLabel = ColorTypeLabel(i);
-		settings.inheritFlags["Atmosphere_" + colorTypeLabel] = true;
-	}
-
-	// Cloud settings
-	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		settings.inheritFlags[std::format("Cloud{}_Color", i)] = true;
 		settings.inheritFlags[std::format("Cloud{}_Alpha", i)] = true;
 	}
 
-	// Records
+	// Fog tab
+	settings.fogProperties = parentWidget->settings.fogProperties;
+	static constexpr const char* kFogFlags[] = {
+		WeatherInherit::kFogNear, WeatherInherit::kFogFar,
+		WeatherInherit::kFogPower, WeatherInherit::kFogMax,
+	};
+	for (const auto* key : kFogFlags)
+		settings.inheritFlags[key] = true;
+
+	// Records tab
 	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
+		settings.imageSpaceRefs[i] = parentWidget->settings.imageSpaceRefs[i];
+		settings.volumetricLightingRefs[i] = parentWidget->settings.volumetricLightingRefs[i];
 		settings.inheritFlags["ImageSpace_" + std::to_string(i)] = true;
 		settings.inheritFlags["VolumetricLighting_" + std::to_string(i)] = true;
 	}
+	settings.precipitationData = parentWidget->settings.precipitationData;
+	settings.referenceEffect = parentWidget->settings.referenceEffect;
 	settings.inheritFlags["Precipitation"] = true;
 	settings.inheritFlags["ReferenceEffect"] = true;
 
-	// Apply the changes — form references require a weather reinit to propagate
+	// Form references require a weather reinit to propagate
 	pendingReinit = true;
-	if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+	if (EditorWindow::GetSingleton()->settings.autoApplyChanges)
 		ApplyChanges();
-	}
 
 	EditorWindow::GetSingleton()->ShowNotification(
 		std::format("Inherited all settings from {}", parentWidget->GetEditorID()),
