@@ -1,6 +1,7 @@
 #include "WeatherWidget.h"
 
 #include <format>
+#include <unordered_set>
 
 #include "imgui_internal.h"
 
@@ -1438,6 +1439,10 @@ void WeatherWidget::PropagateToChildren()
 	if (!EditorWindow::GetSingleton()->settings.enableInheritFromParent)
 		return;
 
+	static thread_local std::unordered_set<const WeatherWidget*> visiting;
+	if (!visiting.insert(this).second)
+		return;
+
 	const std::string myId = GetEditorID();
 	for (auto& widget : EditorWindow::GetSingleton()->weatherWidgets) {
 		auto* child = static_cast<WeatherWidget*>(widget.get());
@@ -1445,10 +1450,12 @@ void WeatherWidget::PropagateToChildren()
 			bool hasAnyInherit = false;
 			for (const auto& [key, val] : child->settings.inheritFlags)
 				if (val) { hasAnyInherit = true; break; }
-			if (hasAnyInherit)
+			if (hasAnyInherit && !visiting.contains(child))
 				child->SyncInheritedValuesFromParent();
 		}
 	}
+
+	visiting.erase(this);
 }
 
 void WeatherWidget::InheritFromParent(const std::string& property)
