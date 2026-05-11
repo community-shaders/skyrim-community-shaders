@@ -13,9 +13,11 @@
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
+#include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
+#include "TruePBR.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 
@@ -893,6 +895,50 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct TESObjectLAND_SetupMaterial
+	{
+		static bool thunk(RE::TESObjectLAND* land)
+		{
+			bool vanillaResult = func(land);
+
+			if (globals::features::truePBR.loaded) {
+				if (globals::features::truePBR.TESObjectLAND_SetupMaterial(land)) {
+					return true;
+				}
+			}
+
+			if (globals::features::terrainHelper.loaded) {
+				if (!land->data.flags.any(static_cast<RE::OBJ_LAND::Flag>(8))) {
+					if (vanillaResult) {
+						globals::features::terrainHelper.TESObjectLAND_SetupMaterial(land);
+					}
+				}
+			}
+
+			return vanillaResult;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSLightingShader_SetupMaterial
+	{
+		static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
+		{
+			if (globals::features::truePBR.loaded) {
+				if (globals::features::truePBR.BSLightingShader_SetupMaterial(shader, material)) {
+					return;
+				}
+			}
+
+			func(shader, material);
+
+			if (globals::features::terrainHelper.loaded) {
+				globals::features::terrainHelper.BSLightingShader_SetupMaterial(material);
+			}
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	/**
 	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
 	 *
@@ -904,6 +950,12 @@ namespace Hooks
 			logger::info("Hooking BSImageSpace::Init::IBLF");
 			stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
 		}
+
+		logger::info("Hooking TESObjectLAND::SetupMaterial");
+		stl::detour_thunk<TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
+
+		logger::info("Hooking BSLightingShader::SetupMaterial");
+		stl::write_vfunc<0x4, BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 
 		// This input hook also drives per-frame Reflex update (see BSInputDeviceManager_PollInputDevices::thunk).
 		logger::info("Hooking BSInputDeviceManager::PollInputDevices");
