@@ -246,10 +246,12 @@ public:
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
 		uint InInterior;
+		uint InInteriorWithSun;
 		uint InMapMenu;
 		uint HideSky;
 		float MipBias;
 		float WaterSystemHeight;  // TES::GetWaterHeight at eye-0 in camera-relative Z; -NI_INFINITY when no water body found (VR only)
+		float3 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;

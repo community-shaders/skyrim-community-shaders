@@ -8,6 +8,7 @@
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
 #include "Features/HDRDisplay.h"
+#include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
@@ -962,6 +963,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		}
 
 		data.InInterior = Util::IsInterior();
+		data.InInteriorWithSun = globals::features::interiorSun.IsActiveInteriorSun();
 
 		if (globals::game::sky)
 			data.HideSky = globals::game::sky->flags.any(RE::Sky::Flags::kHideSky);
