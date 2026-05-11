@@ -212,6 +212,7 @@ public:
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 	void UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass);
+	bool HasDirectionalShadows() const;
 
 	struct PermutationCB
 	{
@@ -246,7 +247,7 @@ public:
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
 		uint InInterior;
-		uint InInteriorWithSun;
+		uint HasDirectionalShadows;
 		uint InMapMenu;
 		uint HideSky;
 		float MipBias;

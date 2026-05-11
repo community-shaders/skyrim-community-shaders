@@ -46,7 +46,7 @@ namespace ShadowSampling
 
 	bool HasDirectionalShadows()
 	{
-		return !SharedData::InInterior || SharedData::InInteriorWithSun;
+		return SharedData::HasDirectionalShadows;
 	}
 
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)

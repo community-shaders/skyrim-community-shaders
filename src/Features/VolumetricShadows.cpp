@@ -1,6 +1,5 @@
 #include "VolumetricShadows.h"
 
-#include "InteriorSun.h"
 #include "State.h"
 #include "Utils/D3D.h"
 
@@ -80,7 +79,7 @@ void VolumetricShadows::CopyShadowLightData()
 	auto context = globals::d3d::context;
 
 	{
-		if (Util::IsInterior() && !globals::features::interiorSun.IsActiveInteriorSun()) {
+		if (!globals::state->HasDirectionalShadows()) {
 			SetSharedShadowMapSRV(context, nullptr);
 			return;
 		}

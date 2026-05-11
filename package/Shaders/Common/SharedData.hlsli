@@ -21,7 +21,7 @@ namespace SharedData
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
 		bool InInterior;          // If the current cell is an interior
-		bool InInteriorWithSun;   // Interior Sun has enabled directional lighting and shadows for this interior
+		bool HasDirectionalShadows;
 		bool InMapMenu;           // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;             // HideSky flag in WorldSpace, e.g. Blackreach
 		float MipBias;            // Offset to mip level for TAA sharpness
