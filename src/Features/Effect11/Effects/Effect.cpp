@@ -292,6 +292,7 @@ bool Effect::LoadFXFile()
 		std::vector<std::filesystem::path> dirs = { enbseriesPath };
 		std::unordered_set<std::string> visited;
 		auto inlined = ENBExtender::InlineIncludes(sourceCode, enbseriesPath, iniPathStr, iniSection, dirs, visited, uiDefines);
+		ENBExtender::ExpandStringificationMacros(inlined);
 		compiled = tryPreprocessAndCompile(inlined, nullptr);
 	}
 
