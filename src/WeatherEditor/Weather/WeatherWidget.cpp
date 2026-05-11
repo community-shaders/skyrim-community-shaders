@@ -1198,35 +1198,6 @@ void WeatherWidget::DrawFogSettings()
 	if (!anyFogMatches)
 		return;
 
-	auto pushFogRowHighlight = [&](const char* dayId, const char* nightId) -> const char* {
-		if (PushHighlightIfNeeded(dayId)) {
-			return dayId;
-		}
-		if (PushHighlightIfNeeded(nightId)) {
-			return nightId;
-		}
-		return nullptr;
-	};
-	auto popFogRowHighlight = [&](const char* highlightId) {
-		if (highlightId)
-			PopHighlightIfNeeded(highlightId, true);
-	};
-	auto inheritFogPair = [&](const char* inheritKey, const char* dayKey, const char* nightKey) {
-		if (!parentWidget)
-			return;
-		if (!settings.inheritFlags[inheritKey])
-			return;
-
-		const float parentDay = parentWidget->settings.fogProperties[dayKey];
-		const float parentNight = parentWidget->settings.fogProperties[nightKey];
-		if (settings.fogProperties[dayKey] == parentDay && settings.fogProperties[nightKey] == parentNight)
-			return;
-
-		settings.fogProperties[dayKey] = parentDay;
-		settings.fogProperties[nightKey] = parentNight;
-		changed = true;
-	};
-
 	const float scale = Util::GetUIScale();
 	if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
 		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 80.0f * scale);
@@ -1251,48 +1222,10 @@ void WeatherWidget::DrawFogSettings()
 		ImGui::TableSetColumnIndex(2);
 		ImGui::Separator();
 
-		auto drawFogSlider = [&](const char* id, float& prop, float min, float max, const char* fmt, bool& inheritRef, bool isInherited) {
-			ImGui::SetNextItemWidth(-1);
-			if (isInherited) PushInheritedStyle();
-			if (WeatherUtils::DrawSliderFloat(id, prop, min, max, nullptr, fmt)) {
-				changed = true;
-				inheritRef = false;
-			}
-			if (isInherited) { Util::AddTooltip("Inherited from parent weather"); PopInheritedStyle(); }
-		};
-
-		auto drawFogRow = [&](bool matches, const char* inheritKey, const char* label,
-			const char* dayPropKey, const char* nightPropKey, float min, float max, const char* fmt) {
-			if (!matches)
-				return;
-			const char* highlightId = pushFogRowHighlight(dayPropKey, nightPropKey);
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			if (hasParent) {
-				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-				ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
-				ImGui::Checkbox(std::format("##Fog{}", label).c_str(), &settings.inheritFlags[inheritKey]);
-				inheritFogPair(inheritKey, dayPropKey, nightPropKey);
-				ImGui::PopStyleVar();
-				ImGui::PopStyleColor(2);
-				ImGui::SameLine();
-			}
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("%s", label);
-			bool& inheritRef = settings.inheritFlags[inheritKey];
-			const bool isInherited = hasParent && inheritRef;
-			ImGui::TableSetColumnIndex(1);
-			drawFogSlider(std::format("##Day {}", label).c_str(), settings.fogProperties[dayPropKey], min, max, fmt, inheritRef, isInherited);
-			ImGui::TableSetColumnIndex(2);
-			drawFogSlider(std::format("##Night {}", label).c_str(), settings.fogProperties[nightPropKey], min, max, fmt, inheritRef, isInherited);
-			popFogRowHighlight(highlightId);
-		};
-
-		drawFogRow(nearMatches,  WeatherInherit::kFogNear,  "Near",  WeatherSetting::kDayNear,  WeatherSetting::kNightNear,  0.0f, 1000000.0f, "%.0f");
-		drawFogRow(farMatches,   WeatherInherit::kFogFar,   "Far",   WeatherSetting::kDayFar,   WeatherSetting::kNightFar,   0.0f, 1000000.0f, "%.0f");
-		drawFogRow(powerMatches, WeatherInherit::kFogPower, "Power", WeatherSetting::kDayPower, WeatherSetting::kNightPower, 0.0f, 10.0f,      "%.3f");
-		drawFogRow(maxMatches,   WeatherInherit::kFogMax,   "Max",   WeatherSetting::kDayMax,   WeatherSetting::kNightMax,   0.0f, 1.0f,       "%.3f");
+		DrawFogRow(nearMatches,  WeatherInherit::kFogNear,  "Near",  WeatherSetting::kDayNear,  WeatherSetting::kNightNear,  0.0f, 1000000.0f, "%.0f", hasParent, parentWidget, changed);
+		DrawFogRow(farMatches,   WeatherInherit::kFogFar,   "Far",   WeatherSetting::kDayFar,   WeatherSetting::kNightFar,   0.0f, 1000000.0f, "%.0f", hasParent, parentWidget, changed);
+		DrawFogRow(powerMatches, WeatherInherit::kFogPower, "Power", WeatherSetting::kDayPower, WeatherSetting::kNightPower, 0.0f, 10.0f,      "%.3f", hasParent, parentWidget, changed);
+		DrawFogRow(maxMatches,   WeatherInherit::kFogMax,   "Max",   WeatherSetting::kDayMax,   WeatherSetting::kNightMax,   0.0f, 1.0f,       "%.3f", hasParent, parentWidget, changed);
 
 		ImGui::EndTable();
 	}
@@ -1300,6 +1233,64 @@ void WeatherWidget::DrawFogSettings()
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();
 	}
+}
+
+void WeatherWidget::DrawFogSlider(const char* id, float& prop, float min, float max, const char* fmt, bool& inheritRef, bool isInherited, bool& changed)
+{
+	ImGui::SetNextItemWidth(-1);
+	if (isInherited) PushInheritedStyle();
+	if (WeatherUtils::DrawSliderFloat(id, prop, min, max, nullptr, fmt)) {
+		changed = true;
+		inheritRef = false;
+	}
+	if (isInherited) { Util::AddTooltip("Inherited from parent weather"); PopInheritedStyle(); }
+}
+
+void WeatherWidget::DrawFogRow(bool matches, const char* inheritKey, const char* label,
+	const char* dayPropKey, const char* nightPropKey, float min, float max, const char* fmt,
+	bool hasParent, WeatherWidget* parentWidget, bool& changed)
+{
+	if (!matches)
+		return;
+
+	const float scale = Util::GetUIScale();
+
+	const char* highlightId = nullptr;
+	if (PushHighlightIfNeeded(dayPropKey))
+		highlightId = dayPropKey;
+	else if (PushHighlightIfNeeded(nightPropKey))
+		highlightId = nightPropKey;
+
+	ImGui::TableNextRow();
+	ImGui::TableSetColumnIndex(0);
+	if (hasParent) {
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
+		ImGui::Checkbox(std::format("##Fog{}", label).c_str(), &settings.inheritFlags[inheritKey]);
+		if (parentWidget && settings.inheritFlags[inheritKey]) {
+			const float parentDay = parentWidget->settings.fogProperties[dayPropKey];
+			const float parentNight = parentWidget->settings.fogProperties[nightPropKey];
+			if (settings.fogProperties[dayPropKey] != parentDay || settings.fogProperties[nightPropKey] != parentNight) {
+				settings.fogProperties[dayPropKey] = parentDay;
+				settings.fogProperties[nightPropKey] = parentNight;
+				changed = true;
+			}
+		}
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor(2);
+		ImGui::SameLine();
+	}
+	ImGui::AlignTextToFramePadding();
+	ImGui::Text("%s", label);
+	bool& inheritRef = settings.inheritFlags[inheritKey];
+	const bool isInherited = hasParent && inheritRef;
+	ImGui::TableSetColumnIndex(1);
+	DrawFogSlider(std::format("##Day {}", label).c_str(), settings.fogProperties[dayPropKey], min, max, fmt, inheritRef, isInherited, changed);
+	ImGui::TableSetColumnIndex(2);
+	DrawFogSlider(std::format("##Night {}", label).c_str(), settings.fogProperties[nightPropKey], min, max, fmt, inheritRef, isInherited, changed);
+
+	if (highlightId) PopHighlightIfNeeded(highlightId, true);
 }
 
 void WeatherWidget::DrawProperties(std::string category, std::map<std::string, int> properties)

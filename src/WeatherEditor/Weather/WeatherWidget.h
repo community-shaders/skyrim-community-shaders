@@ -130,6 +130,8 @@ private:
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();
 	void DrawFogSettings();
+	void DrawFogSlider(const char* id, float& prop, float min, float max, const char* fmt, bool& inheritRef, bool isInherited, bool& changed);
+	void DrawFogRow(bool matches, const char* inheritKey, const char* label, const char* dayPropKey, const char* nightPropKey, float min, float max, const char* fmt, bool hasParent, WeatherWidget* parentWidget, bool& changed);
 	void DrawFeatureSettings();
 
 	// Cloud texture loading
