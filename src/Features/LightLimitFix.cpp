@@ -627,6 +627,16 @@ void LightLimitFix::UpdateLights()
 		// rendering as a shadow caster or demoted to non-shadow.
 		if (ShadowCasterManager::IsSuppressed(reinterpret_cast<uintptr_t>(light)))
 			return;
+		// Engine sets lodDimmer=0 on LOD-faded shadow casters so they cull
+		// from the vanilla shadow path; the cluster builder then multiplies
+		// light.fade by lodDimmer (line ~497) and drops the light at the
+		// fade > 1e-4 filter, leaving it completely dark. Converted lights
+		// are explicitly demoted to non-shadow contributors -- they should
+		// always be visible at full intensity in the cluster pipeline. The
+		// per-frame restore in SCM's atomic loop only catches the first
+		// conversion frame; on subsequent frames the light isn't in the
+		// candidates list anymore, so we restore here at the point of use.
+		light->lodDimmer = 1.0f;
 		addLight(RE::NiPointer<RE::BSLight>(asBs));
 	});
 
