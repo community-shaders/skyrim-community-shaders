@@ -879,6 +879,27 @@ void Menu::DrawOverlay()
  * @note This method contains Menu-specific logic and state management that makes it
  *       inappropriate for extraction to a utility class.
  */
+static std::vector<InputCombo> DeriveWeatherEditorKey(const std::vector<InputCombo>& menuKey)
+{
+	bool hasShift = false;
+	uint32_t baseKey = 0;
+
+	for (const auto& combo : menuKey) {
+		uint32_t vk = combo.GetKey();
+		if (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) {
+			hasShift = true;
+		} else if (vk != VK_CONTROL && vk != VK_LCONTROL && vk != VK_RCONTROL &&
+		           vk != VK_MENU && vk != VK_LMENU && vk != VK_RMENU) {
+			baseKey = vk;
+		}
+	}
+
+	if (hasShift || baseKey == 0)
+		return {};
+
+	return { InputCombo::Keyboard(VK_SHIFT), InputCombo::Keyboard(baseKey) };
+}
+
 void Menu::ProcessInputEventQueue()
 {
 	std::unique_lock<std::shared_mutex> mutex(_inputEventMutex);
@@ -950,7 +971,12 @@ void Menu::ProcessInputEventQueue()
 				};
 				auto shaderCache = globals::shaderCache;
 				HotkeyAction hotkeyActions[] = {
-					{ &settings.ToggleKey, &settingToggleKey, [this](std::vector<InputCombo> keys) { settings.ToggleKey = keys; settingToggleKey = false; } },
+					{ &settings.ToggleKey, &settingToggleKey, [this](std::vector<InputCombo> keys) {
+						settings.ToggleKey = keys;
+						settingToggleKey = false;
+						if (!settings.FirstTimeSetupCompleted)
+							settings.WeatherEditorToggleKey = DeriveWeatherEditorKey(keys);
+					} },
 					{ &settings.SkipCompilationKey, &settingSkipCompilationKey, [this](std::vector<InputCombo> keys) { settings.SkipCompilationKey = keys; settingSkipCompilationKey = false; } },
 					{ &settings.EffectToggleKey, &settingsEffectsToggle, [this](std::vector<InputCombo> keys) { settings.EffectToggleKey = keys; settingsEffectsToggle = false; } },
 					{ &settings.OverlayToggleKey, &settingOverlayToggleKey, [this](std::vector<InputCombo> keys) { settings.OverlayToggleKey = keys; settingOverlayToggleKey = false; } },

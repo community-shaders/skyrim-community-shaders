@@ -523,6 +523,20 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		ImGui::TextDisabled("%s", pressKeyText);
 	}
 
+	// Weather Editor hotkey status — updates live as user picks keys
+	{
+		auto& weatherKey = menu->GetSettings().WeatherEditorToggleKey;
+		if (weatherKey.empty()) {
+			const char* warnText = "Weather Editor hotkey unbound \xe2\x80\x94 chosen key uses Shift";
+			centerText(warnText);
+			ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.0f, 1.0f), "%s", warnText);
+		} else {
+			std::string infoStr = "Weather Editor hotkey will be: " + Util::Input::KeyIdToString(weatherKey);
+			centerText(infoStr.c_str());
+			ImGui::TextDisabled("%s", infoStr.c_str());
+		}
+	}
+
 	ImGui::Spacing();
 
 	const char* laterText = "You can change this later in General > Keybindings.";
