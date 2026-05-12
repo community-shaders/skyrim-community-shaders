@@ -167,7 +167,6 @@ bool Effect::Apply()
 			logger::info("[EFFECT11] Effect file not found for '{}', skipping", GetName());
 			return true;
 		}
-		errors.push_back("Failed to compile FX file");
 		logger::error("[EFFECT11] Failed to compile FX file for effect '{}'", GetName());
 		return false;
 	}
@@ -263,9 +262,17 @@ bool Effect::LoadFXFile()
 		HRESULT hr = D3DCompile(source.c_str(), source.size(), filePathStr.c_str(),
 			nullptr, include, nullptr, "fx_5_0", 0, 0, compiled.put(), err.put());
 		if (FAILED(hr)) {
-			if (err)
-				logger::warn("[EFFECT11] D3DCompile failed for '{}': {}", filePathStr,
-					std::string(static_cast<const char*>(err->GetBufferPointer()), err->GetBufferSize()));
+			if (err) {
+				std::string raw(static_cast<const char*>(err->GetBufferPointer()), err->GetBufferSize());
+				std::string filtered;
+				std::istringstream stream(raw);
+				std::string line;
+				while (std::getline(stream, line))
+					if (!line.empty() && line.find("warning X4717") == std::string::npos)
+						filtered += line + "\n";
+				if (!filtered.empty())
+					logger::warn("[EFFECT11] D3DCompile failed for '{}': {}", filePathStr, filtered);
+			}
 			return false;
 		}
 		return SUCCEEDED(D3DX11CreateEffectFromMemory(compiled->GetBufferPointer(),
@@ -315,13 +322,18 @@ bool Effect::LoadFXFile()
 		if (FAILED(hr)) {
 			std::string errorMsg = "Compilation failed";
 			if (errorBlob) {
-				errorMsg = std::string(static_cast<const char*>(errorBlob->GetBufferPointer()), errorBlob->GetBufferSize());
+				std::string raw(static_cast<const char*>(errorBlob->GetBufferPointer()), errorBlob->GetBufferSize());
+				errorMsg.clear();
 				logger::error("[EFFECT11] Effect compilation failed for '{}'", filePathStr);
-				std::istringstream errorStream(errorMsg);
+				std::istringstream errorStream(raw);
 				std::string errorLine;
 				while (std::getline(errorStream, errorLine))
-					if (!errorLine.empty())
+					if (!errorLine.empty() && errorLine.find("warning X4717") == std::string::npos) {
 						logger::error("[EFFECT11]   {}", errorLine);
+						errorMsg += errorLine + "\n";
+					}
+				if (errorMsg.empty())
+					errorMsg = "Compilation failed";
 			}
 			errors.push_back(errorMsg);
 			return false;

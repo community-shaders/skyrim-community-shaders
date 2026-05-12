@@ -134,6 +134,10 @@ public:
 	// Color correction using compute shader
 	void ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV);
 
+	// Error reporting for overlay display
+	uint32_t GetFailedEffectCount() const;
+	std::vector<std::string> GetAllErrors() const;
+
 private:
 	bool initialized = false;
 };

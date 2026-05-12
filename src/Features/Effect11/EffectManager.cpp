@@ -293,6 +293,27 @@ EffectManager& EffectManager::GetSingleton()
 	return instance;
 }
 
+uint32_t EffectManager::GetFailedEffectCount() const
+{
+	uint32_t count = 0;
+	const Effect* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
+	for (const auto* effect : allEffects)
+		if (effect->IsFilePresent() && !effect->GetErrors().empty())
+			count++;
+	return count;
+}
+
+std::vector<std::string> EffectManager::GetAllErrors() const
+{
+	std::vector<std::string> result;
+	const Effect* allEffects[] = { &enbBloom, &enbLens, &enbAdaptation, &enbEffect, &enbEffectPostPass };
+	for (const auto* effect : allEffects)
+		if (effect->IsFilePresent() && !effect->GetErrors().empty())
+			for (const auto& err : effect->GetErrors())
+				result.push_back(fmt::format("{}: {}", effect->GetName(), err));
+	return result;
+}
+
 void EffectManager::Initialize()
 {
 	TextureManager::GetSingleton().Initialize();
