@@ -10,6 +10,12 @@ RWTexture3D<float4> LightScattering : register(u0);
 #include "Common/Random.hlsli"
 #include "ExponentialHeightFog/VolumetricFogCSCommon.hlsli"
 #include "IBL/IBL.hlsli"
+#if defined(TERRAIN_SHADOWS)
+#	include "TerrainShadows/TerrainShadows.hlsli"
+#endif
+#if defined(CLOUD_SHADOWS)
+#	include "CloudShadows/CloudShadows.hlsli"
+#endif
 #if defined(LIGHT_LIMIT_FIX)
 #	include "LightLimitFix/LightLimitFix.hlsli"
 #	include "InverseSquareLighting/InverseSquareLighting.hlsli"
@@ -185,6 +191,21 @@ float SampleDirectionalShadow(float3 positionWS, uint eyeIndex)
 	return lerp(1.0f, shadow, fadeFactor);
 }
 
+float SampleDirectionalWorldShadow(float3 positionWS, uint eyeIndex)
+{
+	if (SharedData::InInterior || SharedData::HideSky || SharedData::InMapMenu)
+		return 1.0f;
+
+	float worldShadow = 1.0f;
+#if defined(TERRAIN_SHADOWS)
+	worldShadow *= TerrainShadows::GetTerrainShadow(positionWS + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, LinearSampler);
+#endif
+#if defined(CLOUD_SHADOWS)
+	worldShadow *= CloudShadows::GetCloudShadowMult(positionWS, LinearSampler);
+#endif
+	return worldShadow;
+}
+
 float3 ComputeSkyLightScattering(float3 positionWS, float3 viewDirection, uint eyeIndex)
 {
 	float phaseG = SharedData::exponentialHeightFogSettings.volumetricFogScatteringDistribution;
@@ -309,7 +330,8 @@ float4 ComputeLightScattering(uint3 coord, float3 cellOffset)
 		dot(normalize(SharedData::DirLightDirection.xyz), -viewDirection),
 		SharedData::exponentialHeightFogSettings.volumetricFogScatteringDistribution);
 
-	float directionalShadow = SampleDirectionalShadow(positionWS, eyeIndex);
+	float directionalShadow = SampleDirectionalShadow(positionWS, eyeIndex) *
+	                          SampleDirectionalWorldShadow(positionWS, eyeIndex);
 	float3 directionalScattering =
 		SharedData::DirLightColor.xyz *
 		SharedData::exponentialHeightFogSettings.volumetricDirectionalScatteringIntensity *

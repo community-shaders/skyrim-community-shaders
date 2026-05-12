@@ -1,9 +1,11 @@
 #include "ExponentialHeightFog.h"
 
 #include "Deferred.h"
+#include "Features/CloudShadows.h"
 #include "Features/IBL.h"
 #include "Features/LightLimitFix.h"
 #include "Features/Skylighting.h"
+#include "Features/TerrainShadows.h"
 #include "State.h"
 #include "Utils/D3D.h"
 #include "Utils/Game.h"
@@ -339,6 +341,12 @@ ID3D11ComputeShader* ExponentialHeightFog::GetLightScatteringCS()
 		std::vector<std::pair<const char*, const char*>> defines;
 		if (globals::features::lightLimitFix.loaded) {
 			defines.emplace_back("LIGHT_LIMIT_FIX", "");
+		}
+		if (globals::features::terrainShadows.loaded) {
+			defines.emplace_back("TERRAIN_SHADOWS", "");
+		}
+		if (globals::features::cloudShadows.loaded) {
+			defines.emplace_back("CLOUD_SHADOWS", "");
 		}
 
 		lightScatteringCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogLightScatteringCS.hlsl", defines, "cs_5_0"));
