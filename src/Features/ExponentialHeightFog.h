@@ -76,8 +76,11 @@ struct ExponentialHeightFog : Feature
 		float4 volumetricFogEmissive = { 0.0f, 0.0f, 0.0f, 0.0f };
 		float volumetricDirectionalScatteringIntensity = 1.0f;
 		float volumetricShadowBias = 0.002f;
-		float volumetricDepthDistributionScale = 32.0f;
+		float volumetricDepthDistributionScale = 16.0f;
 		float volumetricSkyLightingIntensity = 1.0f;
+		float volumetricHistoryWeight = 0.9f;
+		uint volumetricHistoryMissSampleCount = 4;
+		float2 volumetricPad1;
 	} settings;
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
@@ -88,7 +91,8 @@ private:
 		float4 invGridSizeAndNearFade = {};
 		float4 gridZParams = {};
 		float4x4 clipToWorld[2] = {};
-		float4 frameJitterAndHistory[4] = {};
+		float4 frameJitterOffsets[16] = {};
+		float4 historyParameters = {};
 	};
 	STATIC_ASSERT_ALIGNAS_16(VolumetricFogCB);
 
@@ -117,4 +121,5 @@ private:
 	UInt4 currentGridSize = {};
 	bool hasLightScatteringHistory = false;
 	bool hasConservativeDepthHistory = false;
+	uint32_t lastPrepassFrame = UINT32_MAX;
 };

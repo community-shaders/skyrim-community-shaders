@@ -281,6 +281,9 @@ namespace SharedData
 		float volumetricShadowBias;
 		float volumetricDepthDistributionScale;
 		float volumetricSkyLightingIntensity;
+		float volumetricHistoryWeight;
+		uint volumetricHistoryMissSampleCount;
+		float2 volumetricPad1;
 	};
 
 	cbuffer FeatureData : register(b6)

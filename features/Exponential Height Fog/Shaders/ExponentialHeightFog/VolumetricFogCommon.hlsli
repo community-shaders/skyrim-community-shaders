@@ -33,11 +33,6 @@ namespace ExponentialHeightFog
 		return max(GetVolumetricStartDistance() + 1.0f, SharedData::exponentialHeightFogSettings.volumetricFogDistance);
 	}
 
-	float GetVolumetricDepthDistributionScale()
-	{
-		return max(SharedData::exponentialHeightFogSettings.volumetricDepthDistributionScale, 1.0f);
-	}
-
 	float GetVolumetricGridSizeZ()
 	{
 #if defined(EXP_HEIGHT_FOG_GRID_SIZE_Z)
@@ -45,6 +40,11 @@ namespace ExponentialHeightFog
 #else
 		return clamp(float(SharedData::exponentialHeightFogSettings.volumetricGridSizeZ), 16.0f, 160.0f);
 #endif
+	}
+
+	float GetVolumetricDepthDistributionScale()
+	{
+		return max(SharedData::exponentialHeightFogSettings.volumetricDepthDistributionScale, GetVolumetricGridSizeZ() / 120.0f);
 	}
 
 	float3 GetVolumetricGridZParams(float gridSizeZ)
@@ -56,7 +56,7 @@ namespace ExponentialHeightFog
 		float nearPlane = max(SharedData::CameraData.y, GetVolumetricStartDistance());
 		float farPlane = max(nearPlane + 1.0f, GetVolumetricEndDistance());
 		float nearWithOffset = nearPlane + 0.095f * 100.0f;
-		float farExp = exp2(gridSizeZ / GetVolumetricDepthDistributionScale());
+		float farExp = exp2(min(gridSizeZ / GetVolumetricDepthDistributionScale(), 120.0f));
 		float gridZOffset = (farPlane - nearWithOffset * farExp) / (farPlane - nearWithOffset);
 		float gridZScale = (1.0f - gridZOffset) / nearWithOffset;
 		return float3(gridZScale, gridZOffset, GetVolumetricDepthDistributionScale());
@@ -71,7 +71,8 @@ namespace ExponentialHeightFog
 	float ComputeVolumetricSliceDepth(float slice)
 	{
 		float3 gridZParams = GetVolumetricGridZParams();
-		return (exp2(slice / gridZParams.z) - gridZParams.y) / gridZParams.x;
+		float sliceExp = exp2(min(slice / max(gridZParams.z, 1e-4f), 120.0f));
+		return (sliceExp - gridZParams.y) / max(gridZParams.x, 1e-20f);
 	}
 
 	float ComputeVolumetricNormalizedSlice(float viewDepth, float gridSizeZ)

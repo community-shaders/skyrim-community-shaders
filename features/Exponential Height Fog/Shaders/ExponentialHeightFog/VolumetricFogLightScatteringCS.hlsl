@@ -7,6 +7,7 @@ Texture2D<float> ConservativeDepthTexture : register(t3);
 Texture2D<float> PrevConservativeDepthTexture : register(t4);
 RWTexture3D<float4> LightScattering : register(u0);
 
+#include "Common/Random.hlsli"
 #include "ExponentialHeightFog/VolumetricFogCSCommon.hlsli"
 #include "IBL/IBL.hlsli"
 #define SKYLIGHTING_PROBE_REGISTER t50
@@ -99,20 +100,19 @@ float SampleDirectionalShadowPCF(float3 positionLS, uint cascadeIndex)
 	uint shadowHeight;
 	uint shadowSlices;
 	DirectionalShadowMap.GetDimensions(shadowWidth, shadowHeight, shadowSlices);
+	if (cascadeIndex >= shadowSlices)
+		return 1.0f;
 
 	float2 texelSize = rcp(float2(max(shadowWidth, 1), max(shadowHeight, 1)));
 	float compareDepth = positionLS.z - SharedData::exponentialHeightFogSettings.volumetricShadowBias;
 
 	float shadow = 0.0f;
-	[unroll] for (int y = -1; y <= 1; y++)
+	[unroll] for (int sampleIndex = 0; sampleIndex < 8; sampleIndex++)
 	{
-		[unroll] for (int x = -1; x <= 1; x++)
-		{
-			float2 uv = positionLS.xy + float2(x, y) * texelSize;
-			shadow += DirectionalShadowMap.SampleCmpLevelZero(ShadowSampler, float3(uv, cascadeIndex), compareDepth).x;
-		}
+		float2 uv = positionLS.xy + Random::SpiralSampleOffsets8[sampleIndex] * texelSize * 2.0f;
+		shadow += DirectionalShadowMap.SampleCmpLevelZero(ShadowSampler, float3(uv, cascadeIndex), compareDepth).x;
 	}
-	return shadow * rcp(9.0f);
+	return shadow * rcp(8.0f);
 }
 
 float SampleDirectionalShadow(float3 positionWS, uint eyeIndex)
@@ -128,7 +128,7 @@ float SampleDirectionalShadow(float3 positionWS, uint eyeIndex)
 		return 1.0f;
 
 	float splitDenom = max(directionalShadowLightData.EndSplitDistances.x - directionalShadowLightData.StartSplitDistances.y, 1e-4f);
-	float cascadeSelect = saturate((shadowMapDepth - directionalShadowLightData.StartSplitDistances.y) / splitDenom);
+	float cascadeSelect = smoothstep(0.0f, 1.0f, saturate((shadowMapDepth - directionalShadowLightData.StartSplitDistances.y) / splitDenom));
 	uint primaryCascade = (uint)cascadeSelect;
 
 	float3 absolutePositionWS = positionWS + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
@@ -240,21 +240,25 @@ float4 ComputeDirectionalLightScattering(uint3 coord, float3 cellOffset)
 		}
 	}
 
-	uint sampleCount = (VolumetricFogHistoryWeight > 0.0f && validHistory) ? 1u : 4u;
-	float4 scatteringAndExtinction = 0.0f.xxxx;
-	[unroll] for (uint sampleIndex = 0; sampleIndex < 4; sampleIndex++)
+	float historyAlpha = VolumetricFogHistoryWeight;
+	[flatten] if (!validHistory || any(historyUV < 0.0f) || any(historyUV >= 1.0f))
 	{
-		if (sampleIndex < sampleCount) {
-			scatteringAndExtinction += ComputeDirectionalLightScattering(dispatchID, VolumetricFogFrameJitterAndHistory[sampleIndex].xyz);
-		}
+		historyAlpha = 0.0f;
+	}
+
+	uint sampleCount = historyAlpha < 0.001f ? VolumetricFogHistoryMissSampleCount : 1u;
+	float4 scatteringAndExtinction = 0.0f.xxxx;
+	[loop] for (uint sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
+	{
+		scatteringAndExtinction += ComputeDirectionalLightScattering(dispatchID, VolumetricFogFrameJitterOffsets[sampleIndex].xyz);
 	}
 	scatteringAndExtinction *= rcp(float(sampleCount));
 
-	[branch] if (VolumetricFogHistoryWeight > 0.0f && validHistory)
+	[branch] if (historyAlpha > 0.0f)
 	{
 		float4 history = LightScatteringHistory.SampleLevel(LinearSampler, historyUV, 0);
-		scatteringAndExtinction = lerp(scatteringAndExtinction, history, VolumetricFogHistoryWeight);
+		scatteringAndExtinction = lerp(scatteringAndExtinction, history, historyAlpha);
 	}
 
-	LightScattering[dispatchID] = scatteringAndExtinction;
+	LightScattering[dispatchID] = max(scatteringAndExtinction, 0.0f.xxxx);
 }

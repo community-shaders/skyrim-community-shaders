@@ -10,7 +10,8 @@ cbuffer VolumetricFogCB : register(b0)
 	float4 VolumetricFogInvGridSizeAndNearFade;
 	float4 VolumetricFogGridZParams;
 	row_major float4x4 VolumetricFogClipToWorld[2];
-	float4 VolumetricFogFrameJitterAndHistory[4];
+	float4 VolumetricFogFrameJitterOffsets[16];
+	float4 VolumetricFogHistoryParameters;
 };
 
 #define VolumetricFogGridSize VolumetricFogGridSizeAndFlags.xyz
@@ -21,7 +22,8 @@ cbuffer VolumetricFogCB : register(b0)
 #define VolumetricFogHasPrevConservativeDepth ((VolumetricFogGridSizeAndFlags.w & 16u) != 0u)
 #define VolumetricFogInvGridSize VolumetricFogInvGridSizeAndNearFade.xyz
 #define VolumetricFogNearFadeInDistanceInv VolumetricFogInvGridSizeAndNearFade.w
-#define VolumetricFogHistoryWeight VolumetricFogFrameJitterAndHistory[0].w
+#define VolumetricFogHistoryWeight VolumetricFogHistoryParameters.x
+#define VolumetricFogHistoryMissSampleCount max(1u, min(16u, (uint)(VolumetricFogHistoryParameters.y + 0.5f)))
 
 #define EXP_HEIGHT_FOG_GRID_SIZE_Z VolumetricFogGridSizeAndFlags.z
 #define EXP_HEIGHT_FOG_GRID_Z_PARAMS VolumetricFogGridZParams.xyz
