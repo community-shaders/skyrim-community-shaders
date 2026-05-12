@@ -1,6 +1,7 @@
 #include "CellLightingWidget.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
+#include "Utils/UI.h"
 
 namespace
 {
@@ -59,10 +60,10 @@ void CellLightingWidget::DrawWidget()
 	}
 
 	if (!cell || !cell->IsInteriorCell()) {
-		ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "This cell is not an interior cell.");
+		Util::Text::Warning("This cell is not an interior cell.");
 		ImGui::TextWrapped("Cell lighting properties only apply to interior cells.");
 	} else if (!cell->GetLighting()) {
-		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "No lighting data available for this cell.");
+		Util::Text::Error("No lighting data available for this cell.");
 	} else {
 		bool changed = false;
 

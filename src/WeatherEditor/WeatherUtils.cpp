@@ -581,7 +581,7 @@ namespace TOD
 
 			bool isActive = factors[i] > 0.01f;
 			if (!isActive)
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.7f));
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetDisabled());
 
 			ImGui::Text("%s", name);
 
@@ -930,8 +930,8 @@ namespace TOD
 		// Draw inherit checkbox right under the label
 		if (parentColors) {
 			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
+			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
 
 			std::string inheritId = std::string("##inherit_") + label;
@@ -1132,8 +1132,8 @@ namespace TOD
 		// Draw inherit checkbox
 		if (parentValues) {
 			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
+			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
 
 			std::string inheritId = std::string("##inherit_") + label;

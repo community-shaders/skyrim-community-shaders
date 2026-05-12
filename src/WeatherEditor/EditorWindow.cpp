@@ -1077,7 +1077,7 @@ void EditorWindow::RenderUI()
 				if (!canUndo)
 					textColor.w = 0.5f;
 				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-				if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint) && canUndo)
+				if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), WidgetUI::kIconButtonTransparent, iconTint) && canUndo)
 					PerformUndo();
 				ImGui::PopStyleColor();
 			}
@@ -1207,10 +1207,10 @@ void EditorWindow::RenderUI()
 			} else {
 				auto hover = menu->GetTheme().Palette.Text;
 				hover.w = kInactiveHoverAlpha;
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+				ImGui::PushStyleColor(ImGuiCol_Button, WidgetUI::kIconButtonTransparent);
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
 			}
-			bool clicked = ImGui::ImageButton(id, texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
+			bool clicked = ImGui::ImageButton(id, texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), WidgetUI::kIconButtonTransparent, iconTint);
 			ImGui::PopStyleColor(2);
 			ImGui::PopStyleVar(2);
 			return clicked;
