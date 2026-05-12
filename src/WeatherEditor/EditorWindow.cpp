@@ -264,7 +264,7 @@ void EditorWindow::ShowObjectsWindow()
 				std::string label;
 				std::string suffix;
 				RE::FormID formId;
-				RE::TESForm* form;
+				std::function<void()> open;
 			};
 			std::vector<ActiveRecord> activeRecords;
 
@@ -272,37 +272,71 @@ void EditorWindow::ShowObjectsWindow()
 				auto* sky = globals::game::sky;
 				auto* weather = sky ? sky->currentWeather : nullptr;
 
+				auto openByFormId = [](RE::FormID id, const WidgetVec* widgets) -> std::function<void()> {
+					return [id, widgets]() {
+						for (const auto& widget : *widgets) {
+							if (widget->form && widget->form->GetFormID() == id) {
+								widget->SetOpen(true);
+								widget->RequestFocus();
+								break;
+							}
+						}
+					};
+				};
+
 				auto addSingle = [&](RE::TESForm* form, const WidgetVec& widgets, std::string suffix = "") {
-					if (form)
-						activeRecords.push_back({ ResolveEditorId(form, widgets), std::move(suffix), form->GetFormID(), form });
+					if (!form) return;
+					auto id = form->GetFormID();
+					activeRecords.push_back({ ResolveEditorId(form, widgets), std::move(suffix), id, openByFormId(id, &widgets) });
 				};
 
 				auto addTOD = [&](auto* (&fields)[RE::TESWeather::ColorTimes::kTotal], const WidgetVec& widgets) {
 					for (int tod = 0; tod < RE::TESWeather::ColorTimes::kTotal; ++tod) {
 						auto* form = fields[tod];
 						if (!form) continue;
+						auto id = form->GetFormID();
 						bool already = std::any_of(activeRecords.begin(), activeRecords.end(),
-							[&](const ActiveRecord& r) { return r.formId == form->GetFormID(); });
+							[&](const ActiveRecord& r) { return r.formId == id; });
 						if (!already)
-							activeRecords.push_back({ ResolveEditorId(form, widgets), TOD::GetPeriodName(tod), form->GetFormID(), form });
+							activeRecords.push_back({ ResolveEditorId(form, widgets), TOD::GetPeriodName(tod), id, openByFormId(id, &widgets) });
 					}
 				};
 
+				auto addWeather = [&](RE::TESWeather* weatherRecord, std::string suffix = "") {
+					if (!weatherRecord) return;
+					const char* editorId = weatherRecord->GetFormEditorID();
+					auto id = weatherRecord->GetFormID();
+					activeRecords.push_back({ editorId ? editorId : "", std::move(suffix), id, openByFormId(id, &weatherWidgets) });
+				};
+
 				if (m_selectedCategory == "Weather") {
-					if (weather) {
-						const char* eid = weather->GetFormEditorID();
-						activeRecords.push_back({ eid ? eid : "", "", weather->GetFormID(), weather });
-					}
-					if (sky && sky->lastWeather && sky->lastWeather != weather) {
-						const char* eid = sky->lastWeather->GetFormEditorID();
-						activeRecords.push_back({ eid ? eid : "", "transitioning", sky->lastWeather->GetFormID(), sky->lastWeather });
-					}
+					addWeather(weather);
+					if (sky && sky->lastWeather != weather)
+						addWeather(sky->lastWeather, "transitioning");
 				} else if (m_selectedCategory == "ImageSpace") {
 					if (weather) addTOD(weather->imageSpaces, imageSpaceWidgets);
 				} else if (m_selectedCategory == "Lighting Template") {
 					auto* player = RE::PlayerCharacter::GetSingleton();
 					if (player && player->parentCell)
 						addSingle(player->parentCell->GetRuntimeData().lightingTemplate, lightingTemplateWidgets);
+				} else if (m_selectedCategory == "Cell Lighting") {
+					auto* player = RE::PlayerCharacter::GetSingleton();
+					if (player && player->parentCell && player->parentCell->IsInteriorCell()) {
+						auto* cell = player->parentCell;
+						const char* cellName = cell->GetName();
+						std::string displayName = cellName && cellName[0] ? cellName : "[Unnamed Cell]";
+						activeRecords.push_back({ std::move(displayName), "", cell->GetFormID(),
+							[this, cell]() {
+								if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
+									currentCellLightingWidget->SetOpen(true);
+								} else {
+									currentCellLightingWidget = std::make_unique<CellLightingWidget>(cell);
+									currentCellLightingWidget->CacheFormData();
+									currentCellLightingWidget->Load(false);
+									currentCellLightingWidget->SetOpen(true);
+								}
+							} });
+					}
 				} else if (m_selectedCategory == "Volumetric Lighting") {
 					if (weather) addTOD(weather->volumetricLighting, volumetricLightingWidgets);
 				} else if (m_selectedCategory == "Shader Particle Geometry") {
@@ -312,6 +346,10 @@ void EditorWindow::ShowObjectsWindow()
 				} else if (m_selectedCategory == "Visual Effect") {
 					if (weather) addSingle(weather->referenceEffect, referenceEffectWidgets);
 				}
+
+				// Fall back to current weather when the active category has no active record
+				if (activeRecords.empty())
+					addWeather(weather);
 			}
 
 			if (activeRecords.size() > 4)
@@ -319,13 +357,18 @@ void EditorWindow::ShowObjectsWindow()
 
 			if (!activeRecords.empty()) {
 				const auto& theme = Menu::GetSingleton()->GetTheme();
-				const auto& catWidgets = getWidgetsForCategory(m_selectedCategory);
 
 				ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.RestartNeeded);
-				ImGui::Text("Active %s:", m_selectedCategory.c_str());
+				ImGui::Text("Active:");
 				ImGui::PopStyleColor();
+				ImGui::SameLine();
+				const float recordX = ImGui::GetCursorPosX();
 
 				for (int i = 0; i < (int)activeRecords.size(); ++i) {
+					if (i > 0) {
+						ImGui::NewLine();
+						ImGui::SameLine(recordX);
+					}
 					const auto& rec = activeRecords[i];
 					ImGui::TextColored(theme.Palette.Text, "%s", rec.label.c_str());
 					ImGui::SameLine();
@@ -337,15 +380,8 @@ void EditorWindow::ShowObjectsWindow()
 					ImGui::SameLine();
 					char btnId[32];
 					snprintf(btnId, sizeof(btnId), "Open##active_%d", i);
-					if (ImGui::SmallButton(btnId)) {
-						for (const auto& widget : catWidgets) {
-							if (widget->form && widget->form->GetFormID() == rec.formId) {
-								widget->SetOpen(true);
-								widget->RequestFocus();
-								break;
-							}
-						}
-					}
+					if (ImGui::SmallButton(btnId))
+						rec.open();
 				}
 				ImGui::Spacing();
 				ImGui::Separator();
@@ -573,7 +609,7 @@ void EditorWindow::ShowObjectsWindow()
 							// Display current cell name
 							const char* cellName = cell->GetName();
 							std::string displayName = cellName && cellName[0] ? cellName : "[Unnamed Cell]";
-							std::string label = std::format("[CURRENT CELL] {}", displayName);
+							std::string label = displayName;
 
 							// Highlight current cell (before TableRowSelectable so hover/active can override)
 							auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
@@ -639,17 +675,7 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				}
 
-				// Get current cell's lighting template for prioritization
-				RE::BGSLightingTemplate* currentCellLightingTemplate = nullptr;
-				if (m_selectedCategory == "Lighting Template") {
-					auto player = RE::PlayerCharacter::GetSingleton();
-					if (player && player->parentCell) {
-						auto& cellData = player->parentCell->GetRuntimeData();
-						currentCellLightingTemplate = cellData.lightingTemplate;
-					}
-				}
-
-				// Centralized filter check used by both display loops below.
+				// Centralized filter check used by the display loop below.
 				auto shouldShowWidget = [&](Widget* w) {
 					if (!MatchesObjectFilter(w))
 						return false;
@@ -660,100 +686,8 @@ void EditorWindow::ShowObjectsWindow()
 					return true;
 				};
 
-				// Filtered display of widgets - show current cell's lighting template first
-				if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
-					for (int i = 0; i < sortedWidgets.size(); ++i) {
-						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
-						if (!ltWidget || ltWidget->lightingTemplate != currentCellLightingTemplate)
-							continue;
-
-						if (!shouldShowWidget(sortedWidgets[i]))
-							continue;
-
-						auto editorLabel = std::format("[CURRENT] {}", sortedWidgets[i]->GetEditorID());
-						auto markedRecord = settings.markedRecords.find(sortedWidgets[i]->GetEditorID());
-						ImGui::PushID(sortedWidgets[i]->GetFormID().c_str());
-						ImGui::TableNextRow();
-
-						// Highlight current cell's lighting template
-						auto highlightColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.InfoColor;
-						highlightColor.w = 0.3f;
-						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
-						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
-
-						ImGui::TableSetColumnIndex(0);
-
-						// Favorite star
-						if (IconButton("##fav_current", IsFavorite(sortedWidgets[i]->GetEditorID()), "star")) {
-							ToggleFavorite(sortedWidgets[i]->GetEditorID());
-						}
-
-						ImGui::TableNextColumn();
-
-						// Editor ID column with [CURRENT] prefix
-						bool isSelected = sortedWidgets[i]->IsOpen();
-						if (Util::TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
-							if (ImGui::IsMouseDoubleClicked(0)) {
-								sortedWidgets[i]->SetOpen(true);
-								AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
-							}
-						}
-
-						// Enter key to open
-						if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-							sortedWidgets[i]->SetOpen(true);
-							AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
-						}
-
-						// Context menu
-						if (ImGui::BeginPopupContextItem(std::format("widget_context_menu##{}", sortedWidgets[i]->GetFormID()).c_str(), ImGuiPopupFlags_MouseButtonRight)) {
-							auto& markedRecords = settings.markedRecords;
-
-							for (auto& recordMarker : settings.recordMarkers) {
-								if (ImGui::MenuItem(recordMarker.first.c_str())) {
-									settings.markedRecords[sortedWidgets[i]->GetEditorID()] = recordMarker.first;
-									Save();
-								}
-							}
-
-							if (ImGui::MenuItem("Remove")) {
-								markedRecords.erase(sortedWidgets[i]->GetEditorID());
-								Save();
-							}
-
-							ImGui::EndPopup();
-						}
-
-						// Form ID column
-						ImGui::TableNextColumn();
-						ImGui::Text(sortedWidgets[i]->GetFormID().c_str());
-
-						// File column
-						ImGui::TableNextColumn();
-						ImGui::Text(sortedWidgets[i]->GetFilename().c_str());
-
-						// Status column
-						ImGui::TableNextColumn();
-						if (markedRecord != settings.markedRecords.end()) {
-							ImGui::Text("%s", markedRecord->second.c_str());
-						}
-
-						// json / delete column
-						drawJsonDeleteButton(sortedWidgets[i]);
-
-						ImGui::PopID();
-					}
-				}
-
-				// Filtered display of widgets - regular list
+				// Filtered display of widgets
 				for (int i = 0; i < sortedWidgets.size(); ++i) {
-					// Skip current cell's lighting template if already shown
-					if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
-						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
-						if (ltWidget && ltWidget->lightingTemplate == currentCellLightingTemplate)
-							continue;
-					}
-
 					if (!shouldShowWidget(sortedWidgets[i]))
 						continue;
 
