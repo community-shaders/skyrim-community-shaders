@@ -54,46 +54,38 @@ static void RemoveLODWater(RE::TESWaterSystem* waterSystem, RE::BSTriShape* wate
 	func(waterSystem, waterShape, lodRoot);
 }
 
-static uint32_t ClearWaterNodeChildren(RE::NiNode* node, RE::TESWaterSystem* waterSystem)
+static void ClearWaterNodeChildren(RE::NiNode* node, RE::TESWaterSystem* waterSystem)
 {
 	if (!node)
-		return 0;
+		return;
 
-	uint32_t removed = 0;
 	auto count = node->GetChildren().size();
 	while (count > 0) {
 		const auto child = node->GetChildren()[count - 1];
 		if (const auto childNode = child ? child->AsNode() : nullptr)
-			removed += ClearWaterNodeChildren(childNode, waterSystem);
+			ClearWaterNodeChildren(childNode, waterSystem);
 
 		if (child && waterSystem)
 			waterSystem->RemoveWater(child.get());
 
 		node->DetachChildAt(--count);
-		removed++;
 	}
-
-	return removed;
 }
 
-static uint32_t DetachAllChildOccurrences(RE::NiNode* node, const RE::NiAVObject* childToDetach)
+static void DetachAllChildOccurrences(RE::NiNode* node, const RE::NiAVObject* childToDetach)
 {
 	if (!node || !childToDetach)
-		return 0;
+		return;
 
-	uint32_t detached = 0;
 	auto count = node->GetChildren().size();
 	while (count > 0) {
 		const auto child = node->GetChildren()[count - 1];
 		if (child.get() == childToDetach) {
 			node->DetachChildAt(--count);
-			detached++;
 		} else {
 			count--;
 		}
 	}
-
-	return detached;
 }
 
 struct WaterPositionKey
@@ -167,10 +159,10 @@ static RE::BSTriShape* SelectDuplicateWaterSystemShapeToRemove(RE::BSTriShape* e
 	return candidate;
 }
 
-static uint32_t RemoveDuplicateWaterSystemObjects(RE::TESWaterSystem* waterSystem, RE::NiNode* lodRoot)
+static void RemoveDuplicateWaterSystemObjects(RE::TESWaterSystem* waterSystem, RE::NiNode* lodRoot)
 {
 	if (!waterSystem)
-		return 0;
+		return;
 
 	static thread_local std::unordered_map<WaterPositionKey, RE::BSTriShape*, WaterPositionKeyHash> shapeByPosition;
 	static thread_local std::vector<RE::BSTriShape*> duplicateShapes;
@@ -209,8 +201,6 @@ static uint32_t RemoveDuplicateWaterSystemObjects(RE::TESWaterSystem* waterSyste
 		shape->SetAppCulled(true);
 		waterSystem->RemoveWater(shape);
 	}
-
-	return static_cast<uint32_t>(duplicateShapes.size());
 }
 
 static void CullWaterParentByGridCells(RE::NiNode* waterParent)
@@ -229,11 +219,10 @@ static void CullWaterParentByGridCells(RE::NiNode* waterParent)
 	}
 }
 
-bool UnifiedWater::BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSystem* waterSystem, bool runOriginalAttach)
+bool UnifiedWater::BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSystem* waterSystem)
 {
 	if (!waterSystem || !waterCache || !gWaterLOD || !*gWaterLOD) {
-		if (runOriginalAttach)
-			BGSTerrainBlock_Attach::func(block);
+		BGSTerrainBlock_Attach::func(block);
 		return false;
 	}
 
@@ -241,7 +230,7 @@ bool UnifiedWater::BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSy
 	bool attaching = false;
 	RE::TESWorldSpace* worldSpace = nullptr;
 
-	if (block && block->loaded && block->chunk && block->water && (runOriginalAttach ? !block->attached : block->attached)) {
+	if (block && block->loaded && block->chunk && block->water && !block->attached) {
 		block->chunk->DetachChild2(block->water);
 		DetachAllChildOccurrences(*gWaterLOD, block->water);
 		block->water->local.translate = block->chunk->local.translate;
@@ -257,8 +246,7 @@ bool UnifiedWater::BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSy
 		const auto node = block->node;
 		worldSpace = node && node->manager ? node->manager->worldSpace : nullptr;
 		if (!node || !worldSpace) {
-			if (runOriginalAttach)
-				BGSTerrainBlock_Attach::func(block);
+			BGSTerrainBlock_Attach::func(block);
 			return false;
 		}
 
@@ -266,8 +254,7 @@ bool UnifiedWater::BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSy
 		const auto instructions = waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
 		if (!instructions) {
 			logger::warn("[Unified Water] No instructions found for {} chunk at {}, {}", worldSpace->GetFormEditorID(), node->baseCellX, node->baseCellY);
-			if (runOriginalAttach)
-				BGSTerrainBlock_Attach::func(block);
+			BGSTerrainBlock_Attach::func(block);
 			return false;
 		}
 
@@ -292,8 +279,7 @@ bool UnifiedWater::BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSy
 		}
 	}
 
-	if (runOriginalAttach)
-		BGSTerrainBlock_Attach::func(block);
+	BGSTerrainBlock_Attach::func(block);
 
 	if (!attaching || !block->waterAttached)
 		return false;
@@ -648,7 +634,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		return;
 	}
 
-	uw.BuildWaterForBlock(block, waterSystem, true);
+	uw.BuildWaterForBlock(block, waterSystem);
 }
 
 void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)

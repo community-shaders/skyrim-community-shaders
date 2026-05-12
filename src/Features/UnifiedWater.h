@@ -101,7 +101,7 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
-	bool BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSystem* waterSystem, bool runOriginalAttach);
+	bool BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSystem* waterSystem);
 
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();
