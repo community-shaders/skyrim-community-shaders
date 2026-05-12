@@ -328,11 +328,13 @@ void EditorWindow::ShowObjectsWindow()
 							[this, cell]() {
 								if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
 									currentCellLightingWidget->SetOpen(true);
+									currentCellLightingWidget->RequestFocus();
 								} else {
 									currentCellLightingWidget = std::make_unique<CellLightingWidget>(cell);
 									currentCellLightingWidget->CacheFormData();
 									currentCellLightingWidget->Load(false);
 									currentCellLightingWidget->SetOpen(true);
+									currentCellLightingWidget->RequestFocus();
 								}
 							} });
 					}
