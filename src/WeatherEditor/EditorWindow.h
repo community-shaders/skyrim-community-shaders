@@ -303,4 +303,5 @@ private:
 	FilterColumn m_currentFilterColumn = FilterColumn::All;
 	void ResetObjectsFilter();
 	bool MatchesObjectFilter(Widget* w) const;
+	static std::string ResolveEditorId(RE::TESForm* form, const WidgetVec& widgets);
 };

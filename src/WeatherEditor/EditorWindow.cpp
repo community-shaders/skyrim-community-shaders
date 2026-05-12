@@ -166,6 +166,18 @@ bool EditorWindow::MatchesObjectFilter(Widget* w) const
 	}
 }
 
+std::string EditorWindow::ResolveEditorId(RE::TESForm* form, const WidgetVec& widgets)
+{
+	if (!form)
+		return "";
+	for (const auto& widget : widgets) {
+		if (widget->form && widget->form->GetFormID() == form->GetFormID())
+			return widget->GetEditorID();
+	}
+	const char* editorid = form->GetFormEditorID();
+	return editorid ? editorid : std::format("0x{:08X}", form->GetFormID());
+}
+
 void EditorWindow::ShowObjectsWindow()
 {
 	Util::BeginWithRoundedClose("Weather and Lighting Browser", nullptr);
@@ -226,27 +238,112 @@ void EditorWindow::ShowObjectsWindow()
 				return;
 			}
 
-			// Display current active weather
-			auto sky = globals::game::sky;
-			if (sky && sky->currentWeather) {
-				auto currentWeather = sky->currentWeather;
-				ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetTheme().StatusPalette.RestartNeeded);
-				ImGui::Text("Current Active Weather:");
-				ImGui::PopStyleColor();
-				ImGui::SameLine();
-				ImGui::TextColored(Menu::GetSingleton()->GetTheme().Palette.Text, "%s", currentWeather->GetFormEditorID());
-				ImGui::SameLine();
-				ImGui::TextDisabled("(0x%08X)", currentWeather->GetFormID());
+			// Returns the widget collection for a given category; Cell Lighting and unknown
+			// categories return an empty collection since they have no standalone widget list.
+			auto getWidgetsForCategory = [&](const std::string& cat) -> const std::vector<std::unique_ptr<Widget>>& {
+				static const std::vector<std::unique_ptr<Widget>> emptyWidgets;
+				if (cat == "Weather")
+					return weatherWidgets;
+				if (cat == "Lighting Template")
+					return lightingTemplateWidgets;
+				if (cat == "ImageSpace")
+					return imageSpaceWidgets;
+				if (cat == "Volumetric Lighting")
+					return volumetricLightingWidgets;
+				if (cat == "Shader Particle Geometry")
+					return precipitationWidgets;
+				if (cat == "Lens Flare")
+					return lensFlareWidgets;
+				if (cat == "Visual Effect")
+					return referenceEffectWidgets;
+				return emptyWidgets;
+			};
 
-				// Add button to open the current weather
-				ImGui::SameLine();
-				if (ImGui::SmallButton("Open##CurrentWeather")) {
-					const auto currentWeatherFormID = currentWeather->GetFormID();
-					for (auto& widget : weatherWidgets) {
-						if (widget->form == currentWeather || (widget->form && widget->form->GetFormID() == currentWeatherFormID)) {
-							widget->SetOpen(true);
-							widget->RequestFocus();
-							break;
+			// Build active records for the current category tab
+			struct ActiveRecord {
+				std::string label;
+				std::string suffix;
+				RE::FormID formId;
+				RE::TESForm* form;
+			};
+			std::vector<ActiveRecord> activeRecords;
+
+			{
+				auto* sky = globals::game::sky;
+				auto* weather = sky ? sky->currentWeather : nullptr;
+
+				auto addSingle = [&](RE::TESForm* form, const WidgetVec& widgets, std::string suffix = "") {
+					if (form)
+						activeRecords.push_back({ ResolveEditorId(form, widgets), std::move(suffix), form->GetFormID(), form });
+				};
+
+				auto addTOD = [&](auto* (&fields)[RE::TESWeather::ColorTimes::kTotal], const WidgetVec& widgets) {
+					for (int tod = 0; tod < RE::TESWeather::ColorTimes::kTotal; ++tod) {
+						auto* form = fields[tod];
+						if (!form) continue;
+						bool already = std::any_of(activeRecords.begin(), activeRecords.end(),
+							[&](const ActiveRecord& r) { return r.formId == form->GetFormID(); });
+						if (!already)
+							activeRecords.push_back({ ResolveEditorId(form, widgets), TOD::GetPeriodName(tod), form->GetFormID(), form });
+					}
+				};
+
+				if (m_selectedCategory == "Weather") {
+					if (weather) {
+						const char* eid = weather->GetFormEditorID();
+						activeRecords.push_back({ eid ? eid : "", "", weather->GetFormID(), weather });
+					}
+					if (sky && sky->lastWeather && sky->lastWeather != weather) {
+						const char* eid = sky->lastWeather->GetFormEditorID();
+						activeRecords.push_back({ eid ? eid : "", "transitioning", sky->lastWeather->GetFormID(), sky->lastWeather });
+					}
+				} else if (m_selectedCategory == "ImageSpace") {
+					if (weather) addTOD(weather->imageSpaces, imageSpaceWidgets);
+				} else if (m_selectedCategory == "Lighting Template") {
+					auto* player = RE::PlayerCharacter::GetSingleton();
+					if (player && player->parentCell)
+						addSingle(player->parentCell->GetRuntimeData().lightingTemplate, lightingTemplateWidgets);
+				} else if (m_selectedCategory == "Volumetric Lighting") {
+					if (weather) addTOD(weather->volumetricLighting, volumetricLightingWidgets);
+				} else if (m_selectedCategory == "Shader Particle Geometry") {
+					if (weather) addSingle(weather->precipitationData, precipitationWidgets);
+				} else if (m_selectedCategory == "Lens Flare") {
+					if (weather) addSingle(weather->sunGlareLensFlare, lensFlareWidgets);
+				} else if (m_selectedCategory == "Visual Effect") {
+					if (weather) addSingle(weather->referenceEffect, referenceEffectWidgets);
+				}
+			}
+
+			if (activeRecords.size() > 4)
+				activeRecords.resize(4);
+
+			if (!activeRecords.empty()) {
+				const auto& theme = Menu::GetSingleton()->GetTheme();
+				const auto& catWidgets = getWidgetsForCategory(m_selectedCategory);
+
+				ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.RestartNeeded);
+				ImGui::Text("Active %s:", m_selectedCategory.c_str());
+				ImGui::PopStyleColor();
+
+				for (int i = 0; i < (int)activeRecords.size(); ++i) {
+					const auto& rec = activeRecords[i];
+					ImGui::TextColored(theme.Palette.Text, "%s", rec.label.c_str());
+					ImGui::SameLine();
+					if (!rec.suffix.empty()) {
+						ImGui::TextDisabled("(%s)", rec.suffix.c_str());
+						ImGui::SameLine();
+					}
+					ImGui::TextDisabled("(0x%08X)", rec.formId);
+					ImGui::SameLine();
+					char btnId[32];
+					snprintf(btnId, sizeof(btnId), "Open##active_%d", i);
+					if (ImGui::SmallButton(btnId)) {
+						for (const auto& widget : catWidgets) {
+							if (widget->form && widget->form->GetFormID() == rec.formId) {
+								widget->SetOpen(true);
+								widget->RequestFocus();
+								break;
+							}
 						}
 					}
 				}
@@ -312,27 +409,6 @@ void EditorWindow::ShowObjectsWindow()
 			}
 			ImGui::SameLine();
 			ImGui::Text("Flagged");
-
-			// Returns the widget collection for a given category; Cell Lighting and unknown
-			// categories return an empty collection since they have no standalone widget list.
-			auto getWidgetsForCategory = [&](const std::string& cat) -> const std::vector<std::unique_ptr<Widget>>& {
-				static const std::vector<std::unique_ptr<Widget>> emptyWidgets;
-				if (cat == "Weather")
-					return weatherWidgets;
-				if (cat == "Lighting Template")
-					return lightingTemplateWidgets;
-				if (cat == "ImageSpace")
-					return imageSpaceWidgets;
-				if (cat == "Volumetric Lighting")
-					return volumetricLightingWidgets;
-				if (cat == "Shader Particle Geometry")
-					return precipitationWidgets;
-				if (cat == "Lens Flare")
-					return lensFlareWidgets;
-				if (cat == "Visual Effect")
-					return referenceEffectWidgets;
-				return emptyWidgets;
-			};
 
 			// Show recent widgets section for current category
 			auto recentIt = settings.recentWidgets.find(m_selectedCategory);
@@ -724,21 +800,11 @@ void EditorWindow::ShowObjectsWindow()
 							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + pad.y * 2.0f;
 							Util::SetTooltipPositionNearMouse(estimatedTooltipHeight);
 							if (ImGui::BeginTooltip()) {
-								// Resolve ImageSpace editor ID via widget cache (GetFormEditorID() returns null at runtime)
-								auto resolveViaWidgets = [this](RE::TESForm* f, const std::vector<std::unique_ptr<Widget>>& widgets) -> std::string {
-									if (!f)
-										return "None";
-									for (const auto& w : widgets) {
-										if (w->form == f)
-											return w->GetEditorID();
-									}
-									return std::format("0x{:X}", f->GetLocalFormID());
-								};
-
 								// ImageSpace info - use widget cache for proper editor IDs
 								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
 								for (int tod = 0; tod < 4; tod++) {
-									ImGui::Text("  %s: %s", TOD::GetPeriodName(tod), resolveViaWidgets(weatherWidget->weather->imageSpaces[tod], imageSpaceWidgets).c_str());
+									auto name = ResolveEditorId(weatherWidget->weather->imageSpaces[tod], imageSpaceWidgets);
+									ImGui::Text("  %s: %s", TOD::GetPeriodName(tod), name.empty() ? "None" : name.c_str());
 								}
 
 								ImGui::Spacing();
