@@ -68,9 +68,9 @@ struct ExponentialHeightFog : Feature
 		float volumetricDepthDistributionScale = 16.0f;
 		float volumetricSkyLightingIntensity = 1.0f;
 		float volumetricFogScatteringDistribution = 0.2f;
-		float volumetricHistoryWeight = 0.96f;
+		float volumetricHistoryWeight = 0.9f;
 		uint volumetricHistoryMissSampleCount = 4;
-		float volumetricSampleJitterMultiplier = 0.5f;
+		float volumetricSampleJitterMultiplier = 0.0f;
 		float volumetricUpsampleJitterMultiplier = 0.0f;
 		float volumetricLocalLightScatteringIntensity = 1.0f;
 		float2 pad0;
