@@ -97,6 +97,7 @@ public:
 	};
 
 	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
+	bool IsActiveInteriorSun() const { return loaded && isInteriorWithSun.load(); }
 	virtual bool IsCore() const override { return true; };
 
 private:
