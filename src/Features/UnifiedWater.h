@@ -4,6 +4,7 @@
 #include "UnifiedWater/WaterCache.h"
 
 #include <atomic>
+#include <vector>
 
 struct UnifiedWater : OverlayFeature
 {
@@ -26,6 +27,7 @@ struct UnifiedWater : OverlayFeature
 	struct Settings
 	{
 		bool UseOptimisedMeshes = true;
+		bool PurgeLODWaterAfterLoad = true;
 	};
 
 	Settings settings;
@@ -84,6 +86,13 @@ struct UnifiedWater : OverlayFeature
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+		static bool Register();
+	};
+
 	virtual void DrawSettings() override;
 
 	virtual void DrawOverlay() override;
@@ -117,8 +126,19 @@ private:
 	std::atomic<bool> pendingChildWsCull{ false };
 	// Game-thread TES snapshot used by deferred child-worldspace cull fallbacks.
 	std::atomic<RE::TES*> cachedTes{ nullptr };
+	std::atomic<int32_t> pendingRestoredLODTrimFrames{ 0 };
+	std::atomic<bool> pendingRestoredLODTrimChildWorldspace{ false };
+	RE::TESWorldSpace* detachedLODWaterWorldSpace = nullptr;
+	std::vector<RE::NiPointer<RE::NiAVObject>> detachedLODWaterChildren;
 
 	void TryCompleteDeferredChildWorldspaceCull(RE::TES* tes = nullptr);
+	uint32_t PurgeLODWater();
+	uint32_t ClearDetachedLODWater();
+	uint32_t DetachLODWaterForLoad();
+	uint32_t RestoreDetachedLODWater(RE::TESWorldSpace* destinationWorldSpace);
+	void ResolveDetachedLODWaterAfterLoad(RE::TESWorldSpace* destinationWorldSpace = nullptr);
+	void TryTrimRestoredLODWater();
+	bool BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSystem* waterSystem, bool runOriginalAttach);
 
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();
