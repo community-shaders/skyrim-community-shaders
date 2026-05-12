@@ -1,19 +1,33 @@
 name: "Release: Semantic Version"
 
+# Dispatch on:
+#   - dev           → cuts vX.Y.Z-rc.N (RC channel)
+#   - main          → cuts vX.Y.Z stable (current line)
+#   - hotfix/X.Y.x  → cuts vX.Y.Z+1 on the X.Y maintenance channel
+#                     (only valid when main has shipped a higher minor/major)
+#
+# Promotion mode (dev → main):
+#   Dispatch on main with `ff_target` set to a dev SHA. The workflow
+#   fast-forwards main to that SHA, runs semantic-release to cut stable,
+#   then fast-forwards dev to absorb the chore(release) commit. One click,
+#   no PR, no merge commits, no force pushes.
+
 on:
     workflow_dispatch:
         inputs:
-            release_type:
-                description: "Release type"
-                required: true
-                type: choice
-                default: "rc"
-                options:
-                    - rc
-                    - stable
+            ff_target:
+                description: "Promotion mode: dev SHA to fast-forward main to before releasing. Leave empty for a normal release on the dispatched branch."
+                required: false
+                default: ""
 
 permissions:
     contents: write
+
+concurrency:
+    # Serialize promotions so two concurrent dispatches on main can't race
+    # against each other's FF pushes.
+    group: release-semantic-${{ github.ref_name }}
+    cancel-in-progress: false
 
 jobs:
     release:
@@ -24,11 +38,86 @@ jobs:
               with:
                   fetch-depth: 0
                   persist-credentials: false
+                  # Token used for the working checkout. The actual pushes
+                  # (FF main, semantic-release commit/tag, FF dev) all go
+                  # through RELEASE_PAT below so they can bypass branch
+                  # protection and fire downstream workflows.
+                  token: ${{ secrets.RELEASE_PAT }}
 
             - name: Configure git identity
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+            - name: Validate ff_target (promotion mode)
+              id: validate
+              if: ${{ inputs.ff_target != '' }}
+              env:
+                  FF_TARGET: ${{ inputs.ff_target }}
+              run: |
+                  set -euo pipefail
+                  if [[ '${{ github.ref_name }}' != 'main' ]]; then
+                    echo "::error::ff_target is only valid when this workflow is dispatched on 'main' (got '${{ github.ref_name }}')."
+                    exit 1
+                  fi
+                  # Fetch dev + every hotfix branch so the ancestor checks can
+                  # find ff_target regardless of which staging branch it's on.
+                  git fetch origin main dev '+refs/heads/hotfix/*:refs/remotes/origin/hotfix/*'
+                  if ! git rev-parse --verify "${FF_TARGET}^{commit}" >/dev/null 2>&1; then
+                    echo "::error::ff_target SHA ${FF_TARGET} does not exist."
+                    exit 1
+                  fi
+                  if ! git merge-base --is-ancestor origin/main "${FF_TARGET}"; then
+                    echo "::error::main is not an ancestor of ff_target ${FF_TARGET} — fast-forward is not possible."
+                    exit 1
+                  fi
+                  # Identify the source branch for the promotion. dev → reconcile
+                  # dev afterward; hotfix/* → patch-id dedup handles it at the
+                  # next dev→main promotion, no reconcile.
+                  SOURCE=""
+                  if git merge-base --is-ancestor "${FF_TARGET}" origin/dev; then
+                    SOURCE="dev"
+                  else
+                    while read -r REF; do
+                      [[ -z "${REF}" ]] && continue
+                      if git merge-base --is-ancestor "${FF_TARGET}" "${REF}"; then
+                        SOURCE="${REF#origin/}"
+                        break
+                      fi
+                    done < <(git for-each-ref --format='%(refname:short)' 'refs/remotes/origin/hotfix/*')
+                  fi
+                  if [[ -z "${SOURCE}" ]]; then
+                    echo "::error::ff_target ${FF_TARGET} is not an ancestor of dev or any origin/hotfix/* branch — refusing to promote an unreviewed SHA."
+                    exit 1
+                  fi
+                  echo "source=${SOURCE}" >> "$GITHUB_OUTPUT"
+                  {
+                    echo "## Promotion plan"
+                    echo "- Source branch: \`${SOURCE}\`"
+                    echo "- Target SHA: \`$(git rev-parse --short=9 "${FF_TARGET}")\`"
+                    PRERELEASE_TAG=$(git tag --points-at "${FF_TARGET}" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-(rc|pr)[.0-9]+$' | head -n1 || true)
+                    echo "- Prerelease tag at target: \`${PRERELEASE_TAG:-<none>}\`"
+                    echo "- Commits being promoted ($(git rev-list --count "origin/main..${FF_TARGET}")):"
+                    echo ""
+                    # 4-space indent renders the commits as a code block under the preceding list item in GitHub-flavored markdown.
+                    git log --oneline "origin/main..${FF_TARGET}" | sed 's/^/    /'
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Fast-forward main to ff_target
+              if: ${{ inputs.ff_target != '' }}
+              env:
+                  TOKEN: ${{ secrets.RELEASE_PAT }}
+                  FF_TARGET: ${{ inputs.ff_target }}
+              run: |
+                  set -euo pipefail
+                  REMOTE="https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
+                  # FF-only push: --force-with-lease guards against concurrent
+                  # changes; if main moved we abort rather than overwrite.
+                  CURRENT_MAIN=$(git rev-parse origin/main)
+                  git push --force-with-lease="main:${CURRENT_MAIN}" "${REMOTE}" "${FF_TARGET}:refs/heads/main"
+                  # Re-point our local working tree at the new main tip so
+                  # semantic-release runs against the promoted history.
+                  git checkout -B main "${FF_TARGET}"
 
             - name: Apply feature version bumps
               run: |
@@ -48,8 +137,46 @@ jobs:
               env:
                   # RELEASE_PAT required for two reasons:
                   # 1. Allows pushing the version commit and tag to the protected
-                  #    dev branch (GITHUB_TOKEN cannot bypass branch protection).
+                  #    target branch (GITHUB_TOKEN cannot bypass branch protection).
                   # 2. A PAT-sourced tag push triggers downstream workflows
                   #    (release-build.yaml); GITHUB_TOKEN pushes do not.
                   GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
-                  RELEASE_TYPE: ${{ github.event.inputs.release_type }}
+
+            - name: Reconcile dev with release commit (promotion mode, dev source only)
+              if: ${{ inputs.ff_target != '' && steps.semantic.outputs.new_release_published == 'true' && steps.validate.outputs.source == 'dev' }}
+              env:
+                  TOKEN: ${{ secrets.RELEASE_PAT }}
+              run: |
+                  set -euo pipefail
+                  git fetch origin main dev
+                  # Verify dev is still an ancestor of main — if someone pushed
+                  # to dev during the release, exit with a warning instead of
+                  # rewriting their work.
+                  if ! git merge-base --is-ancestor origin/dev origin/main; then
+                    echo "::warning::dev moved during promotion; FF-reconcile skipped."
+                    {
+                      echo ""
+                      echo "## Dev reconcile skipped"
+                      echo "Dev was pushed to during the release. To reconcile manually:"
+                      echo ""
+                      echo '```bash'
+                      echo "git fetch && git checkout dev && git merge --ff-only origin/main && git push"
+                      echo '```'
+                    } >> "$GITHUB_STEP_SUMMARY"
+                    exit 0
+                  fi
+                  NEW_MAIN=$(git rev-parse origin/main)
+                  REMOTE="https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
+                  CURRENT_DEV=$(git rev-parse origin/dev)
+                  git push --force-with-lease="dev:${CURRENT_DEV}" "${REMOTE}" "${NEW_MAIN}:refs/heads/dev"
+                  echo "::notice::Reconciled dev to main ($NEW_MAIN)."
+
+            - name: Note dev reconcile skipped (hotfix-staging source)
+              if: ${{ inputs.ff_target != '' && steps.semantic.outputs.new_release_published == 'true' && steps.validate.outputs.source != 'dev' && steps.validate.outputs.source != '' }}
+              run: |
+                  {
+                    echo ""
+                    echo "## Dev reconcile not applicable"
+                    echo "Promotion source was \`${{ steps.validate.outputs.source }}\` (hotfix staging branch). The cherry-picked commits on main have different SHAs than their originals on dev — semantic-release's patch-id-dedup will collapse the duplicates at the next dev→main promotion, so no FF-reconcile is needed (and would not be possible)."
+                  } >> "$GITHUB_STEP_SUMMARY"
+                  echo "::notice::Hotfix-staging promotion — dev reconcile not applicable."
