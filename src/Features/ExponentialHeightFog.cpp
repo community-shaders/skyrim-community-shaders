@@ -43,6 +43,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	volumetricHistoryWeight,
 	volumetricHistoryMissSampleCount,
 	volumetricSampleJitterMultiplier,
+	volumetricUpsampleJitterMultiplier,
 	volumetricLocalLightScatteringIntensity)
 
 namespace
@@ -138,6 +139,13 @@ void ExponentialHeightFog::DrawSettings()
 					"Adds per-voxel random noise on top of the Halton jitter.\n"
 					"This decorrelates the jitter pattern across voxels, reducing\n"
 					"coherent temporal flickering. 0 = UE default, 0.5 = recommended.");
+			}
+			ImGui::SliderFloat("Upsample Jitter Multiplier", &settings.volumetricUpsampleJitterMultiplier, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Matches UE's r.VolumetricFog.UpsampleJitterMultiplier.\n"
+					"Jitters the final 3D fog lookup in screen space to hide\n"
+					"low-resolution froxel pixelization. 0 = UE default.");
 			}
 			ImGui::TreePop();
 		}

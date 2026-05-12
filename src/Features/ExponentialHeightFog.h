@@ -71,8 +71,9 @@ struct ExponentialHeightFog : Feature
 		float volumetricHistoryWeight = 0.96f;
 		uint volumetricHistoryMissSampleCount = 4;
 		float volumetricSampleJitterMultiplier = 0.5f;
+		float volumetricUpsampleJitterMultiplier = 0.0f;
 		float volumetricLocalLightScatteringIntensity = 1.0f;
-		float3 pad0;
+		float2 pad0;
 	} settings;
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 

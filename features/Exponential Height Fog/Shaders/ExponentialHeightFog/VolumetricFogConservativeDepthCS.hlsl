@@ -6,8 +6,8 @@ RWTexture2D<float> ConservativeDepthTexture : register(u0);
 	if (any(dispatchID.xy >= VolumetricFogGridSize.xy))
 		return;
 
-	float2 volumeUVMin = float2(dispatchID.xy) * VolumetricFogInvGridSize.xy;
-	float2 volumeUVMax = float2(dispatchID.xy + 1u) * VolumetricFogInvGridSize.xy;
+	float2 volumeUVMin = (float2(dispatchID.xy) - 0.5f.xx) * VolumetricFogInvGridSize.xy;
+	float2 volumeUVMax = (float2(dispatchID.xy + 1u) + 0.5f.xx) * VolumetricFogInvGridSize.xy;
 	float2 volumeUVCenter = (float2(dispatchID.xy) + 0.5f.xx) * VolumetricFogInvGridSize.xy;
 
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(volumeUVCenter);

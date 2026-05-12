@@ -283,8 +283,9 @@ namespace SharedData
 		float volumetricHistoryWeight;
 		uint volumetricHistoryMissSampleCount;
 		float volumetricSampleJitterMultiplier;
+		float volumetricUpsampleJitterMultiplier;
 		float volumetricLocalLightScatteringIntensity;
-		float3 pad0;
+		float2 pad0;
 	};
 
 	cbuffer FeatureData : register(b6)
