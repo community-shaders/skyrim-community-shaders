@@ -803,6 +803,7 @@ namespace SIE
 				{ "LandscapeTexture4GlintParameters", lightingPSConstants.LandscapeTexture4GlintParameters },
 				{ "LandscapeTexture5GlintParameters", lightingPSConstants.LandscapeTexture5GlintParameters },
 				{ "LandscapeTexture6GlintParameters", lightingPSConstants.LandscapeTexture6GlintParameters },
+				{ "MaterialObjectRGBScale", lightingPSConstants.MaterialObjectRGBScale },
 			};
 
 			auto& bloodSplatterVS = result[static_cast<size_t>(RE::BSShader::Type::BloodSplatter)]
@@ -1448,9 +1449,18 @@ namespace SIE
 			}
 			logger::debug("Compiling {} {}:{}:{:X} to {}", pathString, magic_enum::enum_name(type), magic_enum::enum_name(shaderClass), descriptor, MergeDefinesString(defines));
 
-			// compile shaders
+			// compile shaders — match Utils/D3D.cpp CompileShader flag policy (strictness, optional toggles, validation).
 			ID3DBlob* errorBlob = nullptr;
-			const uint32_t flags = !globals::state->IsDeveloperMode() ? D3DCOMPILE_OPTIMIZATION_LEVEL3 : D3DCOMPILE_DEBUG;
+			uint32_t flags = !globals::state->IsDeveloperMode() ? (D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3) : D3DCOMPILE_DEBUG;
+			if (globals::state->enablePartialPrecision.load(std::memory_order_relaxed)) {
+				flags |= D3DCOMPILE_PARTIAL_PRECISION;
+			}
+			if (globals::state->enableAvoidFlowControl.load(std::memory_order_relaxed)) {
+				flags |= D3DCOMPILE_AVOID_FLOW_CONTROL;
+			}
+			if (useDiskCache) {
+				flags |= D3DCOMPILE_SKIP_VALIDATION;
+			}
 
 			// Track includes
 			TrackingIncludeHandler includeHandler(std::filesystem::path(path).parent_path());

@@ -936,7 +936,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				PBRProjectedUVParams1[0] = pbrMaterial->GetProjectedMaterialBaseColorScale()[0];
 				PBRProjectedUVParams1[1] = pbrMaterial->GetProjectedMaterialBaseColorScale()[1];
 				PBRProjectedUVParams1[2] = pbrMaterial->GetProjectedMaterialBaseColorScale()[2];
-				shadowState->SetPSConstant(PBRProjectedUVParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.EnvmapData);
+				shadowState->SetPSConstant(PBRProjectedUVParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.MaterialObjectRGBScale);
 
 				std::array<float, 4> PBRProjectedUVParams2;
 				PBRProjectedUVParams2[0] = pbrMaterial->GetProjectedMaterialRoughness();
@@ -1337,12 +1337,8 @@ struct TESBoundObject_Clone3D
 			auto* stat = static_cast<RE::TESObjectSTAT*>(ref->data.objectReference);
 			RE::BGSMaterialObject* currentMato = stat->data.materialObj;
 
-			// Resolve PBR MATO data for the three-way condition as a single pointer:
-			//   non-null  -> apply MATO to geometries
-			//   null      -> clear any previously applied MATO from geometries
-			// This covers all negative cases (currentMato == nullptr, singlePass ==
-			// false, or no matching PBR entry) with one branch so the clear path is
-			// never silently skipped.
+			// Resolve PBR MATO data: non-null applies MATO to geometries with
+			// fork-before-write protection; null means no PBR config and is a no-op.
 			auto* pbrData = (currentMato != nullptr && currentMato->directionalData.singlePass) ? truePBR->GetPBRMaterialObjectData(currentMato) : nullptr;
 
 			if (pbrData != nullptr) {
@@ -1389,23 +1385,6 @@ struct TESBoundObject_Clone3D
 						}
 					}
 
-					return RE::BSVisit::BSVisitControl::kContinue;
-				});
-			} else {
-				RE::BSVisit::TraverseScenegraphGeometries(result, [](RE::BSGeometry* geometry) {
-					if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
-						if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
-							shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
-							if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
-								auto& ext = BSLightingShaderMaterialPBR::All[material];
-								if (ext.materialObjectData != nullptr) {
-									material->ClearMaterialObjectData();
-									ext.materialObjectData = nullptr;
-									ext.lastOwnerRefFormID = 0;
-								}
-							}
-						}
-					}
 					return RE::BSVisit::BSVisitControl::kContinue;
 				});
 			}
