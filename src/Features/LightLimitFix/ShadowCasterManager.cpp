@@ -603,6 +603,16 @@ namespace ShadowCasterManager
 		return s_installedSlotCount > 0 ? s_installedSlotCount : s_requestedSlotCount;
 	}
 
+	// Resolution actually used to allocate kSHADOWMAPS this session. Captured
+	// lazily from the real D3D11 texture geometry the first time it becomes
+	// readable -- NOT from the RE::Setting at Install() time. The engine's
+	// SkyrimPrefs.ini load happens after our PostPostLoad hook, so a snapshot
+	// at Install() catches the hardcoded default (e.g. 2048) before the
+	// user's INI value (e.g. 4096) is applied. Reading from the texture is
+	// the source of truth either way -- it reflects what was actually
+	// allocated, regardless of where the setting ended up.
+	static std::int32_t s_initialShadowMapResolution = 0;
+
 	// kSHADOWMAPS footprint = w*h*bytesPerPixel*ArraySize. Per-slice cost
 	// is 64 MB at 4K D32_FLOAT; arrays grow linearly with ShadowLightCount.
 	// Returned info.valid is false only when both the DXGI budget query
@@ -639,6 +649,12 @@ namespace ShadowCasterManager
 			info.shadowWidth = desc.Width;
 			info.shadowHeight = desc.Height;
 			info.shadowSlices = desc.ArraySize;
+			// Latch the texture's allocated resolution as the canonical
+			// "what this session is using" value -- this is what the UI's
+			// restart-required indicator compares against. Once latched it
+			// doesn't move for the session (kSHADOWMAPS is allocated once).
+			if (s_initialShadowMapResolution == 0)
+				s_initialShadowMapResolution = static_cast<std::int32_t>(desc.Width);
 			// Default to 4 B/pixel (R32_TYPELESS / D32_FLOAT — the format
 			// Skyrim ships with) and override for stencil-packed variants.
 			std::uint32_t bytesPerPixel = 4;
@@ -2709,6 +2725,80 @@ namespace ShadowCasterManager
 		}
 	}
 
+	// Set by the resolution combo when the user picks a new tier. Gates the
+	// SaveINISettings write so we only touch SkyrimPrefs.ini when there's an
+	// actual change to persist -- without this, every Save Settings click
+	// would rewrite the user's prefs file even if shadow res wasn't edited.
+	static bool s_shadowResolutionDirty = false;
+
+	void LoadINISettings()
+	{
+		// No-op: the engine already loaded SkyrimPrefs.ini at startup, so the
+		// live RE::Setting reflects the user's saved value. Future overrides
+		// that need to land before SCM::Install hook here.
+	}
+
+	void SaveINISettings()
+	{
+		if (!s_shadowResolutionDirty)
+			return;
+		auto* prefColl = RE::INIPrefSettingCollection::GetSingleton();
+		if (!prefColl)
+			return;
+		auto* setting = prefColl->GetSetting("iShadowMapResolution:Display");
+		if (!setting)
+			return;
+
+		// The engine's INIPrefSettingCollection::WriteSetting requires
+		// OpenHandle to have been called first (it writes via the cached
+		// `handle` member, which is null between RefreshINI calls). Calling
+		// it directly returns true but silently no-ops -- verified by the
+		// fact that the live RE::Setting updates but SkyrimPrefs.ini's
+		// timestamp doesn't change after Save Settings.
+		//
+		// Sidestep the engine path entirely with WritePrivateProfileStringA.
+		// CommonLib stores the full path of SkyrimPrefs.ini in subKey at
+		// startup (see InitializeSkyrimINIPrefSettingCollection caller at
+		// SE 1406489e6 / AE 140648990 / VR equivalent -- it concatenates the
+		// Documents path with "SkyrimPrefs.ini"). The setting name encodes
+		// "<key>:<section>" -- "iShadowMapResolution:Display" means
+		// [Display]\niShadowMapResolution=N.
+		const char* fullName = setting->GetName();
+		const char* colon = std::strchr(fullName, ':');
+		if (!colon) {
+			logger::warn("[SCM] Setting name '{}' has no section -- cannot write to INI", fullName);
+			s_shadowResolutionDirty = false;
+			return;
+		}
+		const std::string key(fullName, colon - fullName);
+		const std::string section(colon + 1);
+		const std::string value = std::to_string(setting->GetInteger());
+
+		// subKey holds the full path to SkyrimPrefs.ini.
+		const char* iniPath = prefColl->subKey;
+		if (!iniPath || !iniPath[0]) {
+			logger::warn("[SCM] INIPrefSettingCollection subKey is empty -- cannot write to INI");
+			s_shadowResolutionDirty = false;
+			return;
+		}
+
+		if (::WritePrivateProfileStringA(section.c_str(), key.c_str(), value.c_str(), iniPath)) {
+			// Windows caches INI writes in-process; the file on disk doesn't
+			// update until the cache is flushed. Calling WritePrivateProfile
+			// with three NULL parameters forces the flush. Without this the
+			// write succeeds (returns non-zero, no error) but the file's
+			// timestamp and contents stay stale until the process exits.
+			// See KB Q104112 / MSDN remarks for WritePrivateProfileString.
+			::WritePrivateProfileStringA(nullptr, nullptr, nullptr, iniPath);
+			logger::info("[SCM] Persisted [{}]{}={} to {}", section, key, value, iniPath);
+		} else {
+			const DWORD err = ::GetLastError();
+			logger::warn("[SCM] WritePrivateProfileStringA failed (err={}) writing [{}]{}={} to {}",
+				err, section, key, value, iniPath);
+		}
+		s_shadowResolutionDirty = false;
+	}
+
 	void Install(const Settings& settings)
 	{
 		s_settings = settings;
@@ -4237,6 +4327,76 @@ namespace ShadowCasterManager
 			const auto& theme = Menu::GetSingleton()->GetTheme();
 			ImGui::TextColored(theme.StatusPalette.RestartNeeded,
 				"Restart required -- current session uses %d lights.", s_installedShadowLightCount);
+		}
+
+		// ---- Shadow Map Resolution (requires restart) ---------------------
+		// Mirrors the launcher's resolution tiers (the four power-of-two values
+		// Skyrim itself offers). Mutates the live iShadowMapResolution:Display
+		// RE::Setting immediately; persistence to SkyrimPrefs.ini happens in
+		// SCM::SaveINISettings (called from LightLimitFix::SaveSettings).
+		if (auto* prefColl = RE::INIPrefSettingCollection::GetSingleton()) {
+			if (auto* setting = prefColl->GetSetting("iShadowMapResolution:Display")) {
+				static constexpr struct
+				{
+					const char* label;
+					std::int32_t value;
+				} kResTiers[] = {
+					{ "Low (1024)", 1024 },
+					{ "Medium (2048)", 2048 },
+					{ "High (4096)", 4096 },
+					{ "Ultra (8192)", 8192 },
+				};
+				constexpr int kTierCount = static_cast<int>(sizeof(kResTiers) / sizeof(kResTiers[0]));
+
+				const std::int32_t currentRes = setting->GetInteger();
+				int tierIdx = -1;
+				for (int i = 0; i < kTierCount; ++i) {
+					if (kResTiers[i].value == currentRes) {
+						tierIdx = i;
+						break;
+					}
+				}
+				// Non-tier values (manual INI edits / third-party tools)
+				// surface as "Custom (N)" so the user sees what the engine is
+				// actually using, but we don't offer it as a selectable tier.
+				char previewBuf[32];
+				const char* preview;
+				if (tierIdx >= 0) {
+					preview = kResTiers[tierIdx].label;
+				} else {
+					snprintf(previewBuf, sizeof(previewBuf), "Custom (%d)", currentRes);
+					preview = previewBuf;
+				}
+
+				if (ImGui::BeginCombo("Shadow Map Resolution", preview)) {
+					for (int i = 0; i < kTierCount; ++i) {
+						const bool selected = (i == tierIdx);
+						if (ImGui::Selectable(kResTiers[i].label, selected) &&
+							kResTiers[i].value != currentRes) {
+							setting->SetInteger(kResTiers[i].value);
+							s_shadowResolutionDirty = true;
+						}
+						if (selected)
+							ImGui::SetItemDefaultFocus();
+					}
+					ImGui::EndCombo();
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip(
+						"Drives iShadowMapResolution:Display in SkyrimPrefs.ini.\n"
+						"Affects both omni/spot shadow slices and the sun cascade\n"
+						"texture; per-slice VRAM scales as resolution^2 * 4 bytes\n"
+						"(4 / 16 / 64 / 256 MB at 1024 / 2048 / 4096 / 8192).\n"
+						"Requires a game restart to take effect.");
+				}
+
+				if (s_initialShadowMapResolution > 0 && currentRes != s_initialShadowMapResolution) {
+					const auto& theme = Menu::GetSingleton()->GetTheme();
+					ImGui::TextColored(theme.StatusPalette.RestartNeeded,
+						"Restart required -- current session uses %d px shadow maps.",
+						s_initialShadowMapResolution);
+				}
+			}
 		}
 
 		// ---- Temporal budget (dynamic) ------------------------------------

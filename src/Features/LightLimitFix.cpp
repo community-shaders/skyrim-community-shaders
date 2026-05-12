@@ -204,11 +204,14 @@ void LightLimitFix::RestoreDefaultSettings()
 void LightLimitFix::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	// iShadowMapResolution:Display is owned by Skyrim's INI, not our JSON.
+	ShadowCasterManager::LoadINISettings();
 }
 
 void LightLimitFix::SaveSettings(json& o_json)
 {
 	o_json = settings;
+	ShadowCasterManager::SaveINISettings();
 }
 
 RE::NiNode* GetParentRoomNode(RE::NiAVObject* object)

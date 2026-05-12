@@ -643,4 +643,17 @@ namespace ShadowCasterManager
 	/// Call from LightLimitFix::DrawSettings().
 	void DrawSettings(Settings& settings);
 
+	/// Apply any Skyrim-side INI overrides SCM owns (currently just
+	/// iShadowMapResolution:Display) at LoadSettings time. The engine has
+	/// already read SkyrimPrefs.ini at startup so this is a no-op for now,
+	/// but the seam exists for future overrides that need a pre-Install
+	/// hook. Call from LightLimitFix::LoadSettings.
+	void LoadINISettings();
+
+	/// Persist any Skyrim-side INI settings SCM owns directly to the user's
+	/// SkyrimPrefs.ini in their Documents folder. Only writes when the user
+	/// actually edited a value this session. Call from
+	/// LightLimitFix::SaveSettings.
+	void SaveINISettings();
+
 }
