@@ -16,6 +16,7 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
 	PerfOverlay,
+	DisplaySceneGraphCounters,
 	CreationEngineRaytracingSettings)
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -562,6 +563,8 @@ void Raytracing::DrawDebugSettings()
 
 	DrawEnumRadio("Performance Overlay", settings.PerfOverlay);
 
+	ImGui::Checkbox("Display SceneGraph Counters", &settings.DisplaySceneGraphCounters);
+
 	ImGui::Checkbox("Show Main Texture", &settings.ShowMainTexture);
 
 	if (settings.ShowMainTexture && mainTexture)
@@ -638,9 +641,17 @@ void Raytracing::DrawOverlay()
 		ImGui::Text("Accumulated Frames: %u", accumulatedFrames);
 	}
 
-	/*ImGui::Text("Textures %zu", instances);
-	ImGui::Text("Meshes %zu", instances);
-	ImGui::Text("Instances %zu", instances);*/
+	if (settings.DisplaySceneGraphCounters && creationEngineRaytracing) {
+		uint32_t textures = 0;
+		uint32_t models = 0;
+		uint32_t instances = 0;
+
+		creationEngineRaytracing->GetSceneGraphCounters(textures, models, instances);
+
+		ImGui::Text("Textures %zu", textures);
+		ImGui::Text("Models %zu", models);
+		ImGui::Text("Instances %zu", instances);
+	}
 
 	ImGui::End();
 }

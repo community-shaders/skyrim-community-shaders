@@ -431,7 +431,8 @@ struct CreationEngineRaytracing
 	using SetPTOutputTargetsFn = void (*)(ID3D12Resource*, ID3D12Resource*);
 	using GetAccumulatedFrameCountFn = uint32_t (*)();
 	using GetFakeDoubledVRAMUsageFn = uint64_t (*)();
-	
+	using GetSceneGraphCountersFn = void (*)(uint32_t& textures, uint32_t& models, uint32_t& instances);
+
 	InitializeRendererFn InitializeRenderer = nullptr;
 	InitializeFn Initialize = nullptr;
 	UpdateCameraFn UpdateCamera = nullptr;
@@ -443,6 +444,7 @@ struct CreationEngineRaytracing
 	UpdateFeatureDataFn UpdateFeatureData = nullptr;
 	SetSkyHemisphereFn SetSkyHemisphere = nullptr;
 	GetPassTimingsFn GetPassTimings = nullptr;
+	GetSceneGraphCountersFn GetSceneGraphCounters = nullptr;
 	UpdateSettingsFn UpdateSettings = nullptr;
 	GetRRInputFn GetRRInput = nullptr;
 	SetSharedTexturesFn SetSharedTextures = nullptr;
@@ -518,6 +520,11 @@ struct CreationEngineRaytracing
 		if (!GetPassTimings)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' GetPassTimings is nullptr");
 
+		GetSceneGraphCounters = reinterpret_cast<GetSceneGraphCountersFn>(GetProcAddress(handle, "GetSceneGraphCounters"));
+
+		if (!GetSceneGraphCounters)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' GetSceneGraphCounters is nullptr");
+	
 		UpdateSettings = reinterpret_cast<UpdateSettingsFn>(GetProcAddress(handle, "UpdateSettings"));
 
 		if (!UpdateSettings)
@@ -676,6 +683,7 @@ struct Raytracing : public OverlayFeature
 	struct Settings
 	{
 		OverlayMode PerfOverlay = OverlayMode::None;
+		bool DisplaySceneGraphCounters = false;
 		bool ShowMainTexture = false;
 		CreationEngineRaytracing::Settings CreationEngineRaytracingSettings;
 	} settings;
