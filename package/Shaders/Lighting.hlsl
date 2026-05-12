@@ -2361,7 +2361,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 					material.Roughness = envColorBase.a;
 				} else {
 #			if defined(VANILLA_FRESNEL)
-					material.F0 = saturate(Color::GammaToLinear(envColorBase.rgb) * Math::PI * SharedData::vanillaFresnelSettings.CubemapToF0Multiplier);
+					material.F0 = saturate(Color::SkyrimGammaToLinear(envColorBase.rgb) * Math::PI * SharedData::vanillaFresnelSettings.CubemapToF0Multiplier);
 					material.Roughness = material.Roughness;
 #			else
 					material.F0 = 1.0;
