@@ -27,9 +27,12 @@ std::vector<std::pair<std::string_view, std::string_view>> DynamicCubemaps::GetS
 
 void DynamicCubemaps::DrawSettings()
 {
-	ImGui::SliderFloat("Native Cubemap Fallback", &settings.ReflectionFallbackAmount, kReflectionFallbackMin, kReflectionFallbackMax, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls how much the game's reflection cubemap fills missing dynamic reflection directions.");
+	if (ImGui::TreeNodeEx("Native Cubemap Fallback", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::SliderFloat("Fallback Amount", &settings.ReflectionFallbackAmount, kReflectionFallbackMin, kReflectionFallbackMax, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Controls how much the game's reflection cubemap fills missing dynamic reflection directions.");
+		}
+		ImGui::TreePop();
 	}
 
 	if (ImGui::TreeNodeEx("Screen Space Reflections", ImGuiTreeNodeFlags_DefaultOpen)) {
