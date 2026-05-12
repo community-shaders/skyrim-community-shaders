@@ -224,9 +224,7 @@ float ComputeProceduralSun(float2 uv)
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	// Color::Sky is float3->float3 (per-channel sky gamma). PParams.yyy broadcasts the packed
-	// scalar in PParams.y to RGB; float3 matches output .xyz where skyScale is added.
-	float3 skyScale = Color::Sky(PParams.yyy);
+	float skyScale = Color::Sky(PParams.yyy).x;
 #	if !defined(VR)
 	uint eyeIndex = 0;
 #	else
@@ -248,32 +246,16 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
-#		ifdef HDR_OUTPUT
-	float hdrSunGain = HDRSun::GetHdrSunGain(
-		input.TexCoord0.xy,
-		baseColor);
+#		if defined(HDR_OUTPUT)
+	float hdrSunGain = HDRSun::GetHdrSunGain(input.TexCoord0.xy, baseColor);
 	baseColor.xyz *= hdrSunGain;
-	if (HDRSun::IsHdrSunActive()) {
-		// Dither bright output to reduce banding in high-boost sun path.
-		// Same baseColor/skyScale treatment for DITHER and non-DITHER; DITHER adds noiseGrad later.
-		baseColor.xyz += (Random::InterleavedGradientNoise(input.Position.xy) - 0.5f) *
-		                 (saturate(hdrSunGain - 1.0f) / 255.0f);
-		skyScale = 0.0f;
-	}
-
-#			if defined(CLOUD_SHADOWS)
-	if (HDRSun::IsHdrSunActive()) {
-		float cloudMult = CloudShadows::GetCloudShadowMult(input.WorldPosition.xyz, SampBaseSampler);
-		baseColor.xyz *= cloudMult;
-		baseColor.w *= cloudMult;
-	}
-#			endif
 #		endif
 
 #		if defined(TEX)
 	if (SharedData::enbSettings.EnableProceduralSun && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
 		baseColor.xyz = ComputeProceduralSun(input.TexCoord0.xy);
-		baseColor.w  = 1.0;
+		baseColor.w  = input.Color.w;
+		skyScale = 0.0;
 	}
 #		endif
 
@@ -282,20 +264,17 @@ PS_OUTPUT main(PS_INPUT input)
 	float noiseGrad =
 		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
-#			ifdef TEX
-	float3 sunGlareColor = Color::Sky(input.Color.xyz) * baseColor.xyz;
-	// Dither/noise term is the legacy sky path contribution for gradient smoothing.
-	psout.Color.xyz = (sunGlareColor + skyScale) + noiseGrad;
+#			if defined(TEX)
+	psout.Color.xyz = (Color::Sky(input.Color.xyz) * baseColor.xyz) + noiseGrad + skyScale;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
 	float3 skyGradientColor = input.Color.xyz;
 	if (SharedData::enbSettings.UseProceduralGradientWeights) {
-		float3 viewDir = normalize(input.WorldPosition.xyz);
-		float t = pow(1.0 - saturate(viewDir.z), SharedData::enbSettings.ProceduralGradientWeightCurve);
-
+		float3 viewDirection = normalize(input.WorldPosition.xyz);
+		float gradientPosition = pow(1.0 - saturate(viewDirection.z), SharedData::enbSettings.ProceduralGradientWeightCurve);
 		float3 labA = Color::Correct::BT709ToOKLab(input.SkyBlendColor2.xyz);
 		float3 labB = Color::Correct::BT709ToOKLab(input.SkyBlendColor0.xyz);
-		skyGradientColor = Color::Correct::OkLabToBT709(lerp(labA, labB, t));
+		skyGradientColor = Color::Correct::OkLabToBT709(lerp(labA, labB, gradientPosition));
 	}
 	psout.Color.xyz = (skyScale + Color::Sky(skyGradientColor)) + noiseGrad;
 	psout.Color.w = input.Color.w;
