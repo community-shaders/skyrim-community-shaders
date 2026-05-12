@@ -11,8 +11,8 @@ RWTexture3D<float4> LightScattering : register(u0);
 #include "ExponentialHeightFog/VolumetricFogCSCommon.hlsli"
 #include "IBL/IBL.hlsli"
 #if defined(LIGHT_LIMIT_FIX)
-#	include "InverseSquareLighting/InverseSquareLighting.hlsli"
 #	include "LightLimitFix/LightLimitFix.hlsli"
+#	include "InverseSquareLighting/InverseSquareLighting.hlsli"
 #endif
 #define SKYLIGHTING_PROBE_REGISTER t50
 #include "Skylighting/Skylighting.hlsli"
