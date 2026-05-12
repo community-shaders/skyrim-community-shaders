@@ -75,7 +75,6 @@ struct ColorGrading : public PostProcessFeature
 		uint logType = 0;
 		bool invertLog = false;
 		bool enableTonemap = true;
-		bool enableColorSpaceTransform = true;
 		int processColorSpace = 0;
 	} settings;
 

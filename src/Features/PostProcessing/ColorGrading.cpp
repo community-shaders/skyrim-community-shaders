@@ -45,7 +45,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	logType,
 	invertLog,
 	enableTonemap,
-	enableColorSpaceTransform,
 	processColorSpace)
 
 template <int num = 3>
@@ -366,19 +365,6 @@ void ColorGrading::DrawSettings()
 		auto& hdrRef = globals::features::hdrDisplay;
 		const bool hdrActive = hdrRef.loaded && hdrRef.settings.enableHDR;
 
-		// Auto-switch to an HDR-capable tonemapper if current one doesn't support HDR
-		if (hdrActive && !tonemappers[tonemapperType].supportsHDR) {
-			for (int i = 0; i < (int)tonemappers.size(); ++i) {
-				if (tonemappers[i].supportsHDR) {
-					tonemappers[tonemapperType].cached_settings = settings.tonemapParams;
-					settings.tonemapParams = tonemappers[i].cached_settings;
-					tonemapperType = i;
-					recompileFlag = true;
-					break;
-				}
-			}
-		}
-
 		if (ImGui::BeginCombo("Tonemapper", tonemappers[tonemapperType].name.data(), ImGuiComboFlags_HeightLargest)) {
 			for (int i = 0; i < (int)tonemappers.size(); ++i) {
 				// Hide non-HDR tonemappers when HDR is active
@@ -416,8 +402,7 @@ void ColorGrading::DrawSettings()
 	ImGui::SliderFloat("Fade Blend", &settings.gameFadeBlend, 0.f, 1.f, "%.3f");
 	ImGui::SliderFloat("Tint Blend", &settings.gameTintBlend, 0.f, 1.f, "%.3f");
 	ImGui::SeparatorText("Color Space Transform");
-	ImGui::Checkbox("Enable Working Color Space Conversion", &settings.enableColorSpaceTransform);
-	if (settings.enableColorSpaceTransform) {
+	{
 		auto& spaces = getAvailableColourSpaces();
 		auto& hdr = globals::features::hdrDisplay;
 		const bool hdrEnabled = hdr.loaded && hdr.settings.enableHDR;
@@ -644,6 +629,27 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 
+	// Auto-switch to an HDR-capable tonemapper if current one doesn't support HDR.
+	// This runs every frame so the switch happens immediately when HDR is toggled,
+	// regardless of which settings page the user is viewing.
+	{
+		auto& hdrRef = globals::features::hdrDisplay;
+		const bool hdrActive = hdrRef.loaded && hdrRef.settings.enableHDR;
+		auto& tonemappers = TonemapperInfo::GetTonemappers();
+
+		if (hdrActive && !tonemappers[tonemapperType].supportsHDR) {
+			for (int i = 0; i < (int)tonemappers.size(); ++i) {
+				if (tonemappers[i].supportsHDR) {
+					tonemappers[tonemapperType].cached_settings = settings.tonemapParams;
+					settings.tonemapParams = tonemappers[i].cached_settings;
+					tonemapperType = i;
+					recompileFlag = true;
+					break;
+				}
+			}
+		}
+	}
+
 	if (recompileFlag)
 		ClearShaderCache();
 
@@ -654,18 +660,12 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	RE::ImageSpaceData imageSpaceData = pp.imageSpaceManager->gameISData;
 	auto& hdr = globals::features::hdrDisplay;
 	const bool hdrEnabled = hdr.loaded && hdr.settings.enableHDR;
-	if (settings.enableColorSpaceTransform)
-		UpdateColorSpaceTransforms(hdrEnabled);
+	UpdateColorSpaceTransforms(hdrEnabled);
 
 	// Always compute XYZ matrices for white balance
 	{
 		auto& spaces = getAvailableColourSpaces();
-		auto& llSettings = globals::features::linearLighting.settings;
-		const bool wideGamutActive = llSettings.enableACEScg && llSettings.enableLinearLighting;
-		int defaultInputIdx = wideGamutActive ? 5 : 0;  // 5 = ACEScg, 0 = sRGB
-		int wsIdx = settings.enableColorSpaceTransform ?
-		                std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1) :
-		                defaultInputIdx;
+		int wsIdx = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
 		auto storeMatrix = [](const DirectX::SimpleMath::Matrix& mat, std::array<float3, 3>& out) {
 			out = {
 				float3{ mat(0, 0), mat(0, 1), mat(0, 2) },
@@ -698,9 +698,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		.xyzToWorking = { float4{ xyzToWorkingMatrix[0].x, xyzToWorkingMatrix[0].y, xyzToWorkingMatrix[0].z, 0.f }, float4{ xyzToWorkingMatrix[1].x, xyzToWorkingMatrix[1].y, xyzToWorkingMatrix[1].z, 0.f }, float4{ xyzToWorkingMatrix[2].x, xyzToWorkingMatrix[2].y, xyzToWorkingMatrix[2].z, 0.f } },
 		.workingWhitePoint = [&]() {
 			auto& spaces = getAvailableColourSpaces();
-			int wsIdx = settings.enableColorSpaceTransform ?
-		                    std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1) :
-		                    0;
+			int wsIdx = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
 			auto wp = getWhitePoint(spaces[wsIdx]);
 			return float4{ wp.x, wp.y, 0.f, 0.f }; }(),
 		.shadowsOffset = settings.shadowsOffset,
@@ -713,7 +711,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		.skipLDR = settings.skipLDR,
 		.skipLUT = settings.skipLUT,
 		.enableTonemap = settings.enableTonemap,
-		.enableColorSpaceTransform = settings.enableColorSpaceTransform,
+		.enableColorSpaceTransform = true,
 		// Auto-populate HDR settings from HDR feature
 		.enableHDR = [&]() -> uint {
 			return hdrEnabled ? 1u : 0u;

@@ -17,7 +17,6 @@
                 [0.02217888832092285, 0.11607830226421356, 0.9410185217857361]
             ],
             "currentTonemapper": "GT7",
-            "enableColorSpaceTransform": true,
             "enableTonemap": true,
             "gameCinematicBlend": [0.0, 0.0, 0.0],
             "gameFadeBlend": 1.0,
