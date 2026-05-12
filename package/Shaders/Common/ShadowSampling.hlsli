@@ -44,6 +44,11 @@ namespace ShadowSampling
 	static const float3 LightingSampleNormal = float3(0, 0, 1);
 	static const float3 ImageBasedLightingNormal = float3(0, 0, -1);
 
+	bool HasDirectionalShadows()
+	{
+		return SharedData::HasDirectionalShadows;
+	}
+
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
 	{
 		if (SharedData::InInterior || SharedData::HideSky || SharedData::InMapMenu)
@@ -101,17 +106,26 @@ namespace ShadowSampling
 		worldShadow *= rcpSampleCount;
 
 #if defined(VOLUMETRIC_SHADOWS)
-		float vsmSurfaceShadow;
-		float shadow = VolumetricShadows::GetVSMShadow3D(startPosition, endPosition, noise, sampleCount, eyeIndex, vsmSurfaceShadow);
-		surfaceShadow *= vsmSurfaceShadow;
-		return worldShadow * shadow;
+		if (HasDirectionalShadows()) {
+			float vsmSurfaceShadow;
+			float shadow = VolumetricShadows::GetVSMShadow3D(startPosition, endPosition, noise, sampleCount, eyeIndex, vsmSurfaceShadow);
+			surfaceShadow *= vsmSurfaceShadow;
+			return worldShadow * shadow;
+		}
 #else
 		return worldShadow;
 #endif
+
+		return worldShadow;
 	}
 
 	float GetLightingShadow(float3 worldPosition, uint eyeIndex, out float detailedShadow)
 	{
+		if (!HasDirectionalShadows()) {
+			detailedShadow = 1.0;
+			return 1.0;
+		}
+
 #if defined(VOLUMETRIC_SHADOWS)
 		float shadow = VolumetricShadows::GetVSMShadow2D(worldPosition, eyeIndex, detailedShadow);
 		return shadow;
