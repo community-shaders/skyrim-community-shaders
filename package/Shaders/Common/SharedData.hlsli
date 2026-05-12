@@ -20,7 +20,7 @@ namespace SharedData
 		float Timer;
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
-		bool InInterior;          // If the current cell is an interior
+		bool InInterior;  // If the current cell is an interior
 		bool HasDirectionalShadows;
 		bool InMapMenu;           // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;             // HideSky flag in WorldSpace, e.g. Blackreach
@@ -283,6 +283,8 @@ namespace SharedData
 		float volumetricHistoryWeight;
 		uint volumetricHistoryMissSampleCount;
 		float volumetricSampleJitterMultiplier;
+		float volumetricLocalLightScatteringIntensity;
+		float3 pad0;
 	};
 
 	cbuffer FeatureData : register(b6)

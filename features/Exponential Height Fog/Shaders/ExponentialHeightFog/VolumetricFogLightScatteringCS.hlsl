@@ -10,6 +10,10 @@ RWTexture3D<float4> LightScattering : register(u0);
 #include "Common/Random.hlsli"
 #include "ExponentialHeightFog/VolumetricFogCSCommon.hlsli"
 #include "IBL/IBL.hlsli"
+#if defined(LIGHT_LIMIT_FIX)
+#	include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	include "LightLimitFix/LightLimitFix.hlsli"
+#endif
 #define SKYLIGHTING_PROBE_REGISTER t50
 #include "Skylighting/Skylighting.hlsli"
 
@@ -208,7 +212,90 @@ float3 ComputeSkyLightScattering(float3 positionWS, float3 viewDirection, uint e
 	       SharedData::exponentialHeightFogSettings.volumetricSkyLightingIntensity;
 }
 
-float4 ComputeDirectionalLightScattering(uint3 coord, float3 cellOffset)
+#if defined(LIGHT_LIMIT_FIX)
+float ComputeLocalLightAttenuation(float distanceSqr, float cellRadius, LightLimitFix::Light light)
+{
+	float distance = sqrt(max(distanceSqr, 1e-6f));
+
+	// UE biases local light integration by froxel size to avoid singular bright voxels close to the light.
+	if (light.lightFlags & LightLimitFix::LightFlags::InverseSquare) {
+		distance = sqrt(max(distanceSqr, cellRadius * cellRadius));
+	}
+
+	return InverseSquareLighting::GetAttenuation(distance, light);
+}
+
+float3 AccumulateLocalLightScattering(
+	uint3 coord,
+	float3 cellOffset,
+	float3 positionWS,
+	float viewDepth,
+	float3 viewDirection,
+	uint eyeIndex,
+	float3 materialScattering)
+{
+	if (!VolumetricFogHasLocalLights)
+		return 0.0f.xxx;
+
+	float2 volumeUV = (float2(coord.xy) + cellOffset.xy) * VolumetricFogInvGridSize.xy;
+	float2 screenUV = Stereo::ConvertFromStereoUV(volumeUV, eyeIndex);
+
+	uint clusterIndex = 0;
+	if (!LightLimitFix::GetClusterIndex(screenUV, viewDepth, clusterIndex))
+		return 0.0f.xxx;
+
+	LightLimitFix::LightGrid grid = LightLimitFix::lightGrid[clusterIndex];
+	uint lightCount = min(grid.lightCount, (uint)MAX_CLUSTER_LIGHTS);
+
+	float3 cellCornerWS = ExponentialHeightFog::ComputeCellWorldPosition(coord + uint3(1, 1, 1), cellOffset, eyeIndex, viewDepth);
+	float cellRadius = max(length(cellCornerWS - positionWS), 1.0f);
+
+	float phaseG = SharedData::exponentialHeightFogSettings.volumetricFogScatteringDistribution;
+	float3 localScattering = 0.0f.xxx;
+	[loop] for (uint lightIndex = 0; lightIndex < lightCount; lightIndex++)
+	{
+		uint clusteredLightIndex = LightLimitFix::lightList[grid.offset + lightIndex];
+		LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
+
+		if (light.lightFlags & LightLimitFix::LightFlags::Disabled)
+			continue;
+
+		float3 toLight = light.positionWS[eyeIndex].xyz - positionWS;
+		float distanceSqr = dot(toLight, toLight);
+		if (distanceSqr < 1e-6f)
+			continue;
+
+		float attenuation = ComputeLocalLightAttenuation(distanceSqr, cellRadius, light);
+		if (attenuation < 1e-5f)
+			continue;
+
+		float3 L = toLight * rsqrt(distanceSqr);
+		float phase = ExponentialHeightFog::HenyeyGreenstein(dot(L, -viewDirection), phaseG);
+
+		const bool isPointLightLinear = light.lightFlags & LightLimitFix::LightFlags::Linear;
+		float3 lightColor = Color::PointLight(light.color.xyz, isPointLightLinear) * attenuation * light.fade;
+		localScattering += lightColor * phase;
+	}
+
+	return localScattering *
+	       SharedData::exponentialHeightFogSettings.volumetricLocalLightScatteringIntensity *
+	       materialScattering;
+}
+#else
+float3 AccumulateLocalLightScattering(
+	uint3 coord,
+	float3 cellOffset,
+	float3 positionWS,
+	float viewDepth,
+	float3 viewDirection,
+	uint eyeIndex,
+	float3 materialScattering)
+{
+	return 0.0f.xxx;
+}
+#endif
+
+float4 ComputeLightScattering(uint3 coord, float3 cellOffset)
 {
 	uint eyeIndex;
 	float viewDepth;
@@ -233,11 +320,20 @@ float4 ComputeDirectionalLightScattering(uint3 coord, float3 cellOffset)
 	float3 skyScattering = ComputeSkyLightScattering(positionWS, viewDirection, eyeIndex) *
 	                       materialScatteringAndExtinction.rgb;
 
+	float3 localScattering = AccumulateLocalLightScattering(
+		coord,
+		cellOffset,
+		positionWS,
+		viewDepth,
+		viewDirection,
+		eyeIndex,
+		materialScatteringAndExtinction.rgb);
+
 	float3 emissive = SharedData::exponentialHeightFogSettings.volumetricFogEmissive.rgb *
 	                  SharedData::exponentialHeightFogSettings.volumetricFogEmissive.a *
 	                  extinction;
 
-	return float4(max(directionalScattering + skyScattering + emissive, 0.0f.xxx), extinction);
+	return float4(max(directionalScattering + skyScattering + localScattering + emissive, 0.0f.xxx), extinction);
 }
 
 [numthreads(8, 8, 4)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -285,7 +381,7 @@ float4 ComputeDirectionalLightScattering(uint3 coord, float3 cellOffset)
 		float3 Rand3D = (float3(Rand32Bits) / float(uint(0xffffffff))) * 2.0f - 1.0f;
 		float3 cellOffset = VolumetricFogFrameJitterOffsets[sampleIndex].xyz + VolumetricFogSampleJitterMultiplier * Rand3D;
 
-		scatteringAndExtinction += ComputeDirectionalLightScattering(dispatchID, cellOffset);
+		scatteringAndExtinction += ComputeLightScattering(dispatchID, cellOffset);
 	}
 	scatteringAndExtinction *= rcp(float(sampleCount));
 

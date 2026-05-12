@@ -40,7 +40,7 @@ struct ExponentialHeightFog : Feature
 	struct Settings
 	{
 		uint enabled = 0;
-		uint useDynamicCubemaps = 0;
+		uint useDynamicCubemaps = 1;
 		float startDistance = 0.0f;
 		float fogHeight = 0.0f;
 		float fogHeightFalloff = 0.2f;
@@ -48,12 +48,12 @@ struct ExponentialHeightFog : Feature
 		float directionalInscatteringMultiplier = 1.0f;
 		float directionalInscatteringAnisotropy = 0.7f;
 		float4 inscatteringTint = { 1.0f, 1.0f, 1.0f, 1.0f };
-		float cubemapMipLevel = 3.0f;
-		float sunlightAttenuationAmount = 1.0f;
+		float cubemapMipLevel = 7.0f;
+		float sunlightAttenuationAmount = 0.5f;
 		uint respectVanillaFogFade = 0;
-		uint disableVanillaFog = 0;
+		uint disableVanillaFog = 1;
 		float4 fogInscatteringColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-		float originalFogColorAmount = 1.0f;
+		float originalFogColorAmount = 0.0f;
 		uint volumetricFogEnabled = 0;
 		uint volumetricGridPixelSize = 16;
 		uint volumetricGridSizeZ = 64;
@@ -68,9 +68,11 @@ struct ExponentialHeightFog : Feature
 		float volumetricDepthDistributionScale = 16.0f;
 		float volumetricSkyLightingIntensity = 1.0f;
 		float volumetricFogScatteringDistribution = 0.2f;
-		float volumetricHistoryWeight = 0.9f;
+		float volumetricHistoryWeight = 0.96f;
 		uint volumetricHistoryMissSampleCount = 4;
 		float volumetricSampleJitterMultiplier = 0.5f;
+		float volumetricLocalLightScatteringIntensity = 1.0f;
+		float3 pad0;
 	} settings;
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 

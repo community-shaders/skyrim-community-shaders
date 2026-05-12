@@ -2,6 +2,7 @@
 
 #include "Deferred.h"
 #include "Features/IBL.h"
+#include "Features/LightLimitFix.h"
 #include "Features/Skylighting.h"
 #include "State.h"
 #include "Utils/D3D.h"
@@ -41,7 +42,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	volumetricSkyLightingIntensity,
 	volumetricHistoryWeight,
 	volumetricHistoryMissSampleCount,
-	volumetricSampleJitterMultiplier)
+	volumetricSampleJitterMultiplier,
+	volumetricLocalLightScatteringIntensity)
 
 namespace
 {
@@ -116,6 +118,7 @@ void ExponentialHeightFog::DrawSettings()
 		Util::WeatherUI::ColorEdit4("Volumetric Emissive", this, "volumetricFogEmissive", (float*)&settings.volumetricFogEmissive);
 		Util::WeatherUI::SliderFloat("Directional Scattering Intensity", this, "volumetricDirectionalScatteringIntensity", &settings.volumetricDirectionalScatteringIntensity, 0.0f, 10.0f, "%.2f");
 		Util::WeatherUI::SliderFloat("Sky Lighting Scattering Intensity", this, "volumetricSkyLightingIntensity", &settings.volumetricSkyLightingIntensity, 0.0f, 10.0f, "%.2f");
+		Util::WeatherUI::SliderFloat("Local Light Scattering Intensity", this, "volumetricLocalLightScatteringIntensity", &settings.volumetricLocalLightScatteringIntensity, 0.0f, 10.0f, "%.2f");
 		if (ImGui::TreeNode("Debug")) {
 			uint32_t minGridPixelSize = 4;
 			uint32_t maxGridPixelSize = 64;
@@ -324,8 +327,14 @@ ID3D11ComputeShader* ExponentialHeightFog::GetConservativeDepthCS()
 
 ID3D11ComputeShader* ExponentialHeightFog::GetLightScatteringCS()
 {
-	if (!lightScatteringCS)
-		lightScatteringCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogLightScatteringCS.hlsl", {}, "cs_5_0"));
+	if (!lightScatteringCS) {
+		std::vector<std::pair<const char*, const char*>> defines;
+		if (globals::features::lightLimitFix.loaded) {
+			defines.emplace_back("LIGHT_LIMIT_FIX", "");
+		}
+
+		lightScatteringCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ExponentialHeightFog\\VolumetricFogLightScatteringCS.hlsl", defines, "cs_5_0"));
+	}
 	return lightScatteringCS;
 }
 
@@ -346,6 +355,12 @@ void ExponentialHeightFog::Prepass()
 	EnsureVolumetricResources();
 
 	ID3D11ShaderResourceView* directionalShadowLightData = globals::deferred && globals::deferred->directionalShadowLights ? globals::deferred->directionalShadowLights->srv.get() : nullptr;
+	auto& lightLimitFix = globals::features::lightLimitFix;
+	const bool hasLocalLightData =
+		lightLimitFix.loaded &&
+		lightLimitFix.lights &&
+		lightLimitFix.lightIndexList &&
+		lightLimitFix.lightGrid;
 	auto* depthSrv = Util::GetCurrentSceneDepthSRV(true);
 	auto& ibl = globals::features::ibl;
 	auto& skylighting = globals::features::skylighting;
@@ -372,7 +387,8 @@ void ExponentialHeightFog::Prepass()
 			(depthSrv ? 2u : 0u) |
 			(hasIBL ? 4u : 0u) |
 			(hasSkylighting ? 8u : 0u) |
-			(depthSrv && temporalHistoryValid && hasConservativeDepthHistory ? 16u : 0u)
+			(depthSrv && temporalHistoryValid && hasConservativeDepthHistory ? 16u : 0u) |
+			(hasLocalLightData ? 32u : 0u)
 	};
 	cb.invGridSizeAndNearFade = {
 		1.0f / static_cast<float>(currentGridSize.x),
@@ -481,8 +497,14 @@ void ExponentialHeightFog::Prepass()
 			conservativeDepth->srv.get(),
 			temporalHistoryValid && hasConservativeDepthHistory ? conservativeDepthHistory->srv.get() : nullptr
 		};
+		ID3D11ShaderResourceView* localLightSrvs[3]{
+			hasLocalLightData ? lightLimitFix.lights->srv.get() : nullptr,
+			hasLocalLightData ? lightLimitFix.lightIndexList->srv.get() : nullptr,
+			hasLocalLightData ? lightLimitFix.lightGrid->srv.get() : nullptr
+		};
 		ID3D11UnorderedAccessView* uavs[1]{ lightScattering->uav.get() };
 		context->CSSetShaderResources(0, 5, srvs);
+		context->CSSetShaderResources(35, 3, localLightSrvs);
 		context->CSSetShaderResources(98, 1, &directionalShadowLightData);
 		context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 		context->CSSetShader(GetLightScatteringCS(), nullptr, 0);
@@ -507,6 +529,7 @@ void ExponentialHeightFog::Prepass()
 	ID3D11Buffer* nullCb[1]{ nullptr };
 	context->CSSetShaderResources(0, 5, nullSrvs);
 	context->CSSetShaderResources(17, 1, nullDepthSrv);
+	context->CSSetShaderResources(35, 3, nullSrvs);
 	context->CSSetShaderResources(50, 1, nullDepthSrv);
 	context->CSSetShaderResources(76, 2, nullSrvs);
 	context->CSSetShaderResources(98, 1, nullSrvs);
@@ -684,4 +707,12 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		&settings.volumetricSkyLightingIntensity,
 		1.0f,
 		0.0f, 10.0f));
+
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"Volumetric Local Light Scattering Intensity",
+		"volumetricLocalLightScatteringIntensity",
+		"Scale applied to volumetric fog local light scattering",
+		&settings.volumetricLocalLightScatteringIntensity,
+		1.0f,
+		0.0f, 100.0f));
 }
