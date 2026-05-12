@@ -216,6 +216,8 @@ PS_OUTPUT main(PS_INPUT input)
 			outputColor = Color::LinearToGammaSafe(outputColor);
 	} else {
 		outputColor = max(0, outputColor);
+		if (ENABLE_LL)
+			outputColor = Color::LinearToGammaSafe(outputColor);
 		outputColor = FrameBuffer::ToSRGBColor(outputColor);
 	}
 

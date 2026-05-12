@@ -85,7 +85,7 @@ public:
 	void Update(void const* src_data, size_t data_size)
 	{
 		auto ctx = globals::d3d::context;
-		if (desc.Usage & D3D11_USAGE_DYNAMIC) {
+		if (desc.Usage == D3D11_USAGE_DYNAMIC) {
 			D3D11_MAPPED_SUBRESOURCE mapped_buffer{};
 			ZeroMemory(&mapped_buffer, sizeof(D3D11_MAPPED_SUBRESOURCE));
 			DX::ThrowIfFailed(ctx->Map(resource.get(), 0u, D3D11_MAP_WRITE_DISCARD, 0u, &mapped_buffer));
