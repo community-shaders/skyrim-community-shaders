@@ -54,14 +54,7 @@ cbuffer SSGICB : register(b1)
 
 	float AOPower;
 	float GIStrength;
-
-	float DepthDisocclusion;
-	float NormalDisocclusion;
-	uint MaxAccumFrames;
-
-	float BlurRadius;
-	float DistanceNormalisation;
-	float2 pad;
+	float3 pad2;
 };
 
 SamplerState samplerPointClamp : register(s0);
@@ -90,28 +83,11 @@ float4 filterInf(float4 v) { return float4(filterInf(v.x), filterInf(v.y), filte
 // uv - normalised position in FrameDim, both eye
 // texCoord - texture coordinate
 
-#ifdef HALF_RES
-#	define RES_MIP 1
-#	define READ_DEPTH(tex, px) tex.Load(int3(px, RES_MIP))
-#	define FULLRES_LOAD(tex, px, texCoord, samp) tex.SampleLevel(samp, texCoord, 0)
-#	define OUT_FRAME_DIM (FrameDim * 0.5)
-#	define RCP_OUT_FRAME_DIM (RcpFrameDim * 2)
-#	define OUT_FRAME_SCALE (frameScale * 0.5)
-#elif defined(QUARTER_RES)
-#	define RES_MIP 2
-#	define READ_DEPTH(tex, px) tex.Load(int3(px, RES_MIP))
-#	define FULLRES_LOAD(tex, px, texCoord, samp) tex.SampleLevel(samp, texCoord, 0)
-#	define OUT_FRAME_DIM (FrameDim * 0.25)
-#	define RCP_OUT_FRAME_DIM (RcpFrameDim * 4)
-#	define OUT_FRAME_SCALE (frameScale * 0.25)
-#else
-#	define RES_MIP 0
-#	define READ_DEPTH(tex, px) tex[px]
-#	define FULLRES_LOAD(tex, px, texCoord, samp) tex[px]
-#	define OUT_FRAME_DIM FrameDim
-#	define RCP_OUT_FRAME_DIM RcpFrameDim
-#	define OUT_FRAME_SCALE frameScale
-#endif
+#define READ_DEPTH(tex, px) tex[px]
+#define FULLRES_LOAD(tex, px, texCoord, samp) tex[px]
+#define OUT_FRAME_DIM FrameDim
+#define RCP_OUT_FRAME_DIM RcpFrameDim
+#define OUT_FRAME_SCALE frameScale
 
 ///////////////////////////////////////////////////////////////////////////////
 

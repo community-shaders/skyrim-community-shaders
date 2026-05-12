@@ -13,9 +13,10 @@
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#include "Common/Color.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
-Texture2D<float3> srcRadiance : register(t0);
+Texture2D<float4> srcRadiance : register(t0);
 
 RWTexture2D<float3> outRadiance0 : register(u0);
 RWTexture2D<float3> outRadiance1 : register(u1);
@@ -42,10 +43,10 @@ groupshared float3 g_scratchRadiance[8][8];
 	float4 rad1 = srcRadiance.GatherGreen(samplerPointClamp, uv * frameScale);
 	float4 rad2 = srcRadiance.GatherBlue(samplerPointClamp, uv * frameScale);
 
-	float3 radiance0 = float3(rad0.w, rad1.w, rad2.w);
-	float3 radiance1 = float3(rad0.z, rad1.z, rad2.z);
-	float3 radiance2 = float3(rad0.x, rad1.x, rad2.x);
-	float3 radiance3 = float3(rad0.y, rad1.y, rad2.y);
+	float3 radiance0 = Color::RadianceToLinear(float3(rad0.w, rad1.w, rad2.w) * GIStrength);
+	float3 radiance1 = Color::RadianceToLinear(float3(rad0.z, rad1.z, rad2.z) * GIStrength);
+	float3 radiance2 = Color::RadianceToLinear(float3(rad0.x, rad1.x, rad2.x) * GIStrength);
+	float3 radiance3 = Color::RadianceToLinear(float3(rad0.y, rad1.y, rad2.y) * GIStrength);
 
 	outRadiance0[pixCoord + uint2(0, 0)] = radiance0;
 	outRadiance0[pixCoord + uint2(1, 0)] = radiance1;

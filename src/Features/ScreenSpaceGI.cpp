@@ -4,17 +4,34 @@
 
 #include "Deferred.h"
 #include "State.h"
+#include "Upscaling.h"
 #include "Util.h"
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	ScreenSpaceGI::REBLURSettings,
+	MaxAccumulatedFrameNum,
+	MaxFastAccumulatedFrameNum,
+	MaxStabilizedFrameNum,
+	HistoryFixFrameNum,
+	HistoryFixBasePixelStride,
+	HistoryFixAlternatePixelStride,
+	FastHistoryClampingSigmaScale,
+	MinHitDistanceWeight,
+	MinBlurRadius,
+	MaxBlurRadius,
+	LobeAngleFraction,
+	RoughnessFraction,
+	PlaneDistanceSensitivity,
+	SplitScreen,
+	HitDistanceReconstructionMode)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ScreenSpaceGI::Settings,
 	Enabled,
 	EnableGI,
-	EnableExperimentalSpecularGI,
 	EnableVanillaSSAO,
 	NumSlices,
 	NumSteps,
-	ResolutionMode,
 	MinScreenRadius,
 	AORadius,
 	GIRadius,
@@ -24,13 +41,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GIDistanceCompensation,
 	AOPower,
 	GIStrength,
-	EnableTemporalDenoiser,
-	EnableBlur,
-	DepthDisocclusion,
-	NormalDisocclusion,
-	MaxAccumFrames,
-	BlurRadius,
-	DistanceNormalisation)
+	EnableREBLUR,
+	Reblur)
 
 ////////////////////////////////////////////////////////////////////////////////////
 
@@ -52,7 +64,7 @@ void ScreenSpaceGI::DrawSettings()
 
 	ImGui::Checkbox("Show Advanced Options", &showAdvanced);
 
-	if (ImGui::BeginTable("Toggles", 4)) {
+	if (ImGui::BeginTable("Toggles", 3)) {
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Enabled", &settings.Enabled);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -75,12 +87,6 @@ void ScreenSpaceGI::DrawSettings()
 					ImGui::Text("Enable Skyrim's built-in SSAO. Usually disabled when using SSGI to avoid double-darkening.");
 			}
 		}
-		ImGui::TableNextColumn();
-		if (showAdvanced) {
-			recompileFlag |= ImGui::Checkbox("(Experimental) HQ Specular IL", &settings.EnableExperimentalSpecularGI);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("An experimental specular GI that is more accurate but requires more samples. Won't be blurred.");
-		}
 
 		ImGui::EndTable();
 	}
@@ -91,95 +97,47 @@ void ScreenSpaceGI::DrawSettings()
 	{
 		auto qualityGuard = Util::DisableGuard(!settings.Enabled);
 
-		if (ImGui::BeginTable("Presets", 5)) {
+		if (ImGui::BeginTable("Presets", 4)) {
 			auto select = [](auto flatVal, auto vrVal) { return globals::game::isVR ? vrVal : flatVal; };
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("AO only", { -1, 0 })) {
 				settings.NumSlices = select(1, 3);
 				settings.NumSteps = select(6, 8);
-				settings.EnableBlur = true;
 				settings.EnableGI = false;
 				recompileFlag = true;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(select("1 Slice, 6 Steps, blur enabled, no GI\n", "3 Slices, 8 Steps, blur enabled, no GI\n"));
 			}
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Low", { -1, 0 })) {
-				settings.NumSlices = 10;
-				settings.NumSteps = 12;
-				settings.ResolutionMode = 2;
-				settings.EnableBlur = true;
+				settings.NumSlices = 2;
+				settings.NumSteps = 6;
 				settings.EnableGI = true;
 				recompileFlag = true;
 			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Quarter res and blurry.");
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Standard", { -1, 0 })) {
 				settings.NumSlices = 4;
 				settings.NumSteps = 8;
-				settings.ResolutionMode = 1;
-				settings.EnableBlur = true;
 				settings.EnableGI = true;
 				recompileFlag = true;
 			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Half res and somewhat stable.");
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("Extreme", { -1, 0 })) {
-				settings.NumSlices = 4;
-				settings.NumSteps = 8;
-				settings.ResolutionMode = 0;
-				settings.EnableBlur = true;
-				settings.EnableGI = true;
-				recompileFlag = true;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Full res and clean.");
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Reference", { -1, 0 })) {
 				settings.NumSlices = 8;
 				settings.NumSteps = 10;
-				settings.ResolutionMode = 0;
-				settings.EnableBlur = true;
 				settings.EnableGI = true;
 				recompileFlag = true;
 			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Reference mode.");
 
 			ImGui::EndTable();
 		}
 
 		if (showAdvanced) {
 			ImGui::SliderInt("Slices", (int*)&settings.NumSlices, 1, 10);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(
-					"How many directions do the samples take.\n"
-					"Controls noise.");
-
 			ImGui::SliderInt("Steps Per Slice", (int*)&settings.NumSteps, 1, 20);
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(
-					"How many samples does it take in one direction.\n"
-					"Controls accuracy of lighting, and noise when effect radius is large.");
-		}
-
-		if (ImGui::BeginTable("Less Work", 3)) {
-			ImGui::TableNextColumn();
-			recompileFlag |= ImGui::RadioButton("Full Res", &settings.ResolutionMode, 0);
-			ImGui::TableNextColumn();
-			recompileFlag |= ImGui::RadioButton("Half Res", &settings.ResolutionMode, 1);
-			ImGui::TableNextColumn();
-			recompileFlag |= ImGui::RadioButton("Quarter Res", &settings.ResolutionMode, 2);
-
-			ImGui::EndTable();
 		}
 	}
 
@@ -199,55 +157,20 @@ void ScreenSpaceGI::DrawSettings()
 		ImGui::Separator();
 
 		ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 1024.0f, "%.1f units");
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			std::vector<std::string> tooltipLines = {
-				"A smaller radius produces tighter AO.",
-				Util::Units::FormatDistance(settings.AORadius)
-			};
-			Util::DrawMultiLineTooltip(tooltipLines);
-		}
-
 		{
 			auto ilRadiusGuard = Util::DisableGuard(!settings.EnableGI);
-
 			ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 1024.0f, "%.1f units");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				std::vector<std::string> tooltipLines = {
-					"A larger radius produces wider IL.",
-					Util::Units::FormatDistance(settings.GIRadius)
-				};
-				Util::DrawMultiLineTooltip(tooltipLines);
-			}
 		}
 
 		if (showAdvanced) {
 			ImGui::SliderFloat("Min Screen Radius", &settings.MinScreenRadius, 0.f, 0.05f, "%.3f");
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(
-					"The minimum screen-space effect radius as proportion of display width, to prevent far field AO being too small.");
 		}
 
 		ImGui::SliderFloat2("Depth Fade Range", &settings.DepthFadeRange.x, 1e4, 5e4, "%.0f units");
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			std::vector<std::string> tooltipLines = {
-				"Distance range where depth-based effects fade out.",
-				"Near: " + Util::Units::FormatDistance(settings.DepthFadeRange.x),
-				"Far: " + Util::Units::FormatDistance(settings.DepthFadeRange.y)
-			};
-			Util::DrawMultiLineTooltip(tooltipLines);
-		}
 
 		if (showAdvanced) {
 			ImGui::Separator();
-
 			ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 128.0f, "%.1f units");
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				std::vector<std::string> tooltipLines = {
-					"How thick the occluders are. Only affects AO.",
-					Util::Units::FormatDistance(settings.Thickness)
-				};
-				Util::DrawMultiLineTooltip(tooltipLines);
-			}
 		}
 	}
 
@@ -259,9 +182,6 @@ void ScreenSpaceGI::DrawSettings()
 
 		if (showAdvanced) {
 			ImGui::SliderFloat("IL Distance Compensation", &settings.GIDistanceCompensation, -5.0f, 5.0f, "%.1f");
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("Brighten/Dimming further radiance samples.");
-
 			ImGui::Separator();
 		}
 
@@ -269,54 +189,63 @@ void ScreenSpaceGI::DrawSettings()
 	}
 
 	///////////////////////////////
-	ImGui::SeparatorText("Denoising");
+	ImGui::SeparatorText("REBLUR Denoiser");
 
 	{
 		auto denoiseGuard = Util::DisableGuard(!settings.Enabled);
 
-		if (ImGui::BeginTable("denoisers", 2)) {
-			ImGui::TableNextColumn();
-			recompileFlag |= ImGui::Checkbox("Temporal Denoiser", &settings.EnableTemporalDenoiser);
+		ImGui::Checkbox("Enable REBLUR", &settings.EnableREBLUR);
 
-			ImGui::TableNextColumn();
-			ImGui::Checkbox("Blur", &settings.EnableBlur);
+		if (settings.EnableREBLUR) {
+			auto& r = settings.Reblur;
 
-			ImGui::EndTable();
-		}
+			if (showAdvanced) {
+				ImGui::SeparatorText("Accumulation");
+				{
+					int v = (int)r.MaxAccumulatedFrameNum;
+					if (ImGui::SliderInt("Max Accumulated Frames", &v, 1, (int)nrd::REBLUR_MAX_HISTORY_FRAME_NUM))
+						r.MaxAccumulatedFrameNum = (uint32_t)v;
 
-		if (showAdvanced) {
-			ImGui::Separator();
+					v = (int)r.MaxFastAccumulatedFrameNum;
+					if (ImGui::SliderInt("Max Fast Accumulated Frames", &v, 1, (int)r.MaxAccumulatedFrameNum))
+						r.MaxFastAccumulatedFrameNum = (uint32_t)v;
 
-			{
-				auto temporalGuard = Util::DisableGuard(!settings.EnableTemporalDenoiser);
-				ImGui::SliderInt("Max Frame Accumulation", (int*)&settings.MaxAccumFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
-				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text("How many past frames to accumulate results with. Higher values are less noisy but potentially cause ghosting.");
-			}
+					v = (int)r.MaxStabilizedFrameNum;
+					if (ImGui::SliderInt("Max Stabilized Frames", &v, 0, (int)r.MaxAccumulatedFrameNum))
+						r.MaxStabilizedFrameNum = (uint32_t)v;
+				}
 
-			ImGui::Separator();
+				ImGui::SeparatorText("Spatial Filter");
+				{
+					ImGui::SliderFloat("Min Blur Radius", &r.MinBlurRadius, 0.0f, 10.0f, "%.1f px");
+					ImGui::SliderFloat("Max Blur Radius", &r.MaxBlurRadius, 0.0f, 60.0f, "%.1f px");
+					ImGui::SliderFloat("Lobe Angle Fraction", &r.LobeAngleFraction, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Roughness Fraction", &r.RoughnessFraction, 0.0f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Plane Distance Sensitivity", &r.PlaneDistanceSensitivity, 0.0f, 0.1f, "%.4f");
+				}
 
-			{
-				auto disocclusionGuard = Util::DisableGuard(!settings.EnableTemporalDenoiser && !settings.EnableGI);
+				ImGui::SeparatorText("Quality");
+				{
+					ImGui::SliderFloat("Fast History Clamping Sigma", &r.FastHistoryClampingSigmaScale, 1.0f, 3.0f, "%.2f");
+					ImGui::SliderFloat("Min Hit Distance Weight", &r.MinHitDistanceWeight, 0.0001f, 0.2f, "%.4f");
 
-				Util::PercentageSlider("Movement Disocclusion", &settings.DepthDisocclusion, 0.f, 20.f);
-				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text(
-						"If a pixel has moved too far from the last frame, its radiance will not be carried to this frame.\n"
-						"Lower values are stricter.");
+					int v = (int)r.HistoryFixFrameNum;
+					if (ImGui::SliderInt("History Fix Frame Num", &v, 0, 4))
+						r.HistoryFixFrameNum = (uint32_t)v;
 
-				ImGui::Separator();
-			}
+					v = (int)r.HistoryFixBasePixelStride;
+					if (ImGui::SliderInt("History Fix Pixel Stride", &v, 1, 20))
+						r.HistoryFixBasePixelStride = (uint32_t)v;
+				}
 
-			{
-				auto blurGuard = Util::DisableGuard(!settings.EnableBlur);
-				ImGui::SliderFloat("Blur Radius", &settings.BlurRadius, 0.f, 30.f, "%.1f px");
+				ImGui::SeparatorText("Debug");
+				{
+					ImGui::SliderFloat("Split Screen", &r.SplitScreen, 0.0f, 1.0f, "%.2f");
 
-				if (showAdvanced) {
-					ImGui::SliderFloat("Geometry Weight", &settings.DistanceNormalisation, 0.f, 5.f, "%.2f");
-					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text(
-							"Higher value makes the blur more sensitive to differences in geometry.");
+					static const char* hitDistReconModes[] = { "OFF", "AREA_3X3", "AREA_5X5" };
+					int hdMode = (int)r.HitDistanceReconstructionMode;
+					if (ImGui::Combo("Hit Distance Reconstruction", &hdMode, hitDistReconModes, 3))
+						r.HitDistanceReconstructionMode = (uint32_t)hdMode;
 				}
 			}
 		}
@@ -333,12 +262,12 @@ void ScreenSpaceGI::DrawSettings()
 		BUFFER_VIEWER_NODE(texWorkingDepth, debugRescale)
 		BUFFER_VIEWER_NODE(texPrevGeo, debugRescale)
 		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
-		BUFFER_VIEWER_NODE(texAo[0], debugRescale)
-		BUFFER_VIEWER_NODE(texAo[1], debugRescale)
-		BUFFER_VIEWER_NODE(texIlY[0], debugRescale)
-		BUFFER_VIEWER_NODE(texIlY[1], debugRescale)
-		BUFFER_VIEWER_NODE(texIlCoCg[0], debugRescale)
-		BUFFER_VIEWER_NODE(texIlCoCg[1], debugRescale)
+		BUFFER_VIEWER_NODE(texNRDInputSH0, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDInputSH1, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDOutputSH0, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDOutputSH1, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDViewZ, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDNormalRoughness, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -347,8 +276,6 @@ void ScreenSpaceGI::DrawSettings()
 void ScreenSpaceGI::LoadSettings(json& o_json)
 {
 	settings = o_json;
-	settings.ResolutionMode = std::clamp(settings.ResolutionMode, 0, 2);
-
 	recompileFlag = true;
 }
 
@@ -400,12 +327,13 @@ void ScreenSpaceGI::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 5;
 
+		uint32_t fullW = texDesc.Width;
+		uint32_t fullH = texDesc.Height;
+
 		{
 			texRadiance = eastl::make_unique<Texture2D>(texDesc, "SSGI::Radiance");
 			texRadiance->CreateSRV(srvDesc);
-			// No default UAV needed: prefilterRadiance binds per-mip UAVs via uavRadiance[].
 
-			// Create individual UAVs for each mip level for prefiltering
 			for (uint i = 0; i < 5; ++i) {
 				D3D11_UNORDERED_ACCESS_VIEW_DESC mipUavDesc = {
 					.Format = DXGI_FORMAT_R11G11B10_FLOAT,
@@ -416,30 +344,6 @@ void ScreenSpaceGI::SetupResources()
 				Util::SetResourceName(uavRadiance[i].get(), "SSGI::Radiance UAV mip%u", i);
 			}
 
-			// Staging texture for mip 0 radiance. radianceDisocc writes it directly,
-			// prefilterRadiance reads it as SRV and writes the mip chain back to texRadiance.
-			// Avoids a full-texture CopySubresourceRegion each frame.
-			D3D11_TEXTURE2D_DESC tempTexDesc = texDesc;
-			tempTexDesc.MipLevels = 1;
-			tempTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-			D3D11_SHADER_RESOURCE_VIEW_DESC tempSrvDesc = {
-				.Format = DXGI_FORMAT_R11G11B10_FLOAT,
-				.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-				.Texture2D = {
-					.MostDetailedMip = 0,
-					.MipLevels = 1 }
-			};
-
-			D3D11_UNORDERED_ACCESS_VIEW_DESC tempUavDesc = {
-				.Format = DXGI_FORMAT_R11G11B10_FLOAT,
-				.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-				.Texture2D = { .MipSlice = 0 }
-			};
-
-			texRadianceTemp = eastl::make_unique<Texture2D>(tempTexDesc, "SSGI::RadianceTemp");
-			texRadianceTemp->CreateSRV(tempSrvDesc);
-			texRadianceTemp->CreateUAV(tempUavDesc);
 		}
 
 		texDesc.BindFlags &= ~D3D11_BIND_RENDER_TARGET;
@@ -469,53 +373,6 @@ void ScreenSpaceGI::SetupResources()
 
 		uavDesc.Texture2D.MipSlice = 0;
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		{
-			texIlY[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlY[0]");
-			texIlY[0]->CreateSRV(srvDesc);
-			texIlY[0]->CreateUAV(uavDesc);
-
-			texIlY[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlY[1]");
-			texIlY[1]->CreateSRV(srvDesc);
-			texIlY[1]->CreateUAV(uavDesc);
-
-			texGiSpecular[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::GiSpecular[0]");
-			texGiSpecular[0]->CreateSRV(srvDesc);
-			texGiSpecular[0]->CreateUAV(uavDesc);
-
-			texGiSpecular[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::GiSpecular[1]");
-			texGiSpecular[1]->CreateSRV(srvDesc);
-			texGiSpecular[1]->CreateUAV(uavDesc);
-		}
-		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
-		{
-			texIlCoCg[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlCoCg[0]");
-			texIlCoCg[0]->CreateSRV(srvDesc);
-			texIlCoCg[0]->CreateUAV(uavDesc);
-
-			texIlCoCg[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::IlCoCg[1]");
-			texIlCoCg[1]->CreateSRV(srvDesc);
-			texIlCoCg[1]->CreateUAV(uavDesc);
-		}
-
-		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R8_UNORM;
-		{
-			texAo[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AO[0]");
-			texAo[0]->CreateSRV(srvDesc);
-			texAo[0]->CreateUAV(uavDesc);
-
-			texAo[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AO[1]");
-			texAo[1]->CreateSRV(srvDesc);
-			texAo[1]->CreateUAV(uavDesc);
-
-			texAccumFrames[0] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AccumFrames[0]");
-			texAccumFrames[0]->CreateSRV(srvDesc);
-			texAccumFrames[0]->CreateUAV(uavDesc);
-
-			texAccumFrames[1] = eastl::make_unique<Texture2D>(texDesc, "SSGI::AccumFrames[1]");
-			texAccumFrames[1]->CreateSRV(srvDesc);
-			texAccumFrames[1]->CreateUAV(uavDesc);
-		}
 
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
 		{
@@ -523,6 +380,44 @@ void ScreenSpaceGI::SetupResources()
 			texPrevGeo->CreateSRV(srvDesc);
 			texPrevGeo->CreateUAV(uavDesc);
 		}
+
+		// NRD SH textures (RGBA16F, full-res)
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		{
+			texNRDInputSH0 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDInputSH0");
+			texNRDInputSH0->CreateSRV(srvDesc);
+			texNRDInputSH0->CreateUAV(uavDesc);
+
+			texNRDInputSH1 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDInputSH1");
+			texNRDInputSH1->CreateSRV(srvDesc);
+			texNRDInputSH1->CreateUAV(uavDesc);
+
+			texNRDOutputSH0 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDOutputSH0");
+			texNRDOutputSH0->CreateSRV(srvDesc);
+			texNRDOutputSH0->CreateUAV(uavDesc);
+
+			texNRDOutputSH1 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDOutputSH1");
+			texNRDOutputSH1->CreateSRV(srvDesc);
+			texNRDOutputSH1->CreateUAV(uavDesc);
+		}
+
+		// NRD ViewZ (R32F, full-res)
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		{
+			texNRDViewZ = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDViewZ");
+			texNRDViewZ->CreateSRV(srvDesc);
+			texNRDViewZ->CreateUAV(uavDesc);
+		}
+
+		// NRD NormalRoughness (R10G10B10A2_UNORM, full-res — matches NRD_NORMAL_ENCODING=2)
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+		{
+			texNRDNormalRoughness = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDNormalRoughness");
+			texNRDNormalRoughness->CreateSRV(srvDesc);
+			texNRDNormalRoughness->CreateUAV(uavDesc);
+		}
+
+		nrdReblur.Init(fullW, fullH, nrd::Denoiser::REBLUR_DIFFUSE_SH, 0);
 	}
 
 	logger::debug("Loading noise texture...");
@@ -530,7 +425,6 @@ void ScreenSpaceGI::SetupResources()
 		DirectX::ScratchImage image;
 		try {
 			std::filesystem::path path{ "Data\\Shaders\\ScreenSpaceGI\\fast_2uges.dds" };
-
 			DX::ThrowIfFailed(LoadFromDDSFile(path.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image));
 		} catch (const DX::com_exception& e) {
 			logger::error("{}", e.what());
@@ -549,14 +443,14 @@ void ScreenSpaceGI::SetupResources()
 
 		texNoise = eastl::make_unique<Texture2D>(reinterpret_cast<ID3D11Texture2D*>(pResource), "SSGI::Noise");
 
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		D3D11_SHADER_RESOURCE_VIEW_DESC noiseSrvDesc = {
 			.Format = texNoise->desc.Format,
 			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
 			.Texture2D = {
 				.MostDetailedMip = 0,
 				.MipLevels = 1 }
 		};
-		texNoise->CreateSRV(srvDesc);
+		texNoise->CreateSRV(noiseSrvDesc);
 	}
 
 	logger::debug("Creating samplers...");
@@ -584,7 +478,7 @@ void ScreenSpaceGI::SetupResources()
 void ScreenSpaceGI::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&prefilterDepthsCompute, &prefilterRadianceCompute, &prefilterNormalCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &stereoSyncCompute, &upsampleCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &prefilterNormalCompute, &giCompute, &stereoSyncCompute, &prepareNRDGuidesCompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -607,10 +501,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 			{ &prefilterDepthsCompute, "prefilterDepths.cs.hlsl", { { "LINEAR_FILTER", "" } } },
 			{ &prefilterRadianceCompute, "prefilterRadiance.cs.hlsl", {} },
 			{ &prefilterNormalCompute, "prefilterNormal.cs.hlsl", {} },
-			{ &radianceDisoccCompute, "radianceDisocc.cs.hlsl", {} },
 			{ &giCompute, "gi.cs.hlsl", {} },
-			{ &blurCompute, "blur.cs.hlsl", {} },
-			{ &upsampleCompute, "upsample.cs.hlsl", {} },
 		};
 
 	if (REL::Module::IsVR())
@@ -618,16 +509,8 @@ void ScreenSpaceGI::CompileComputeShaders()
 	for (auto& info : shaderInfos) {
 		if (REL::Module::IsVR())
 			info.defines.push_back({ "VR", "" });
-		if (settings.ResolutionMode == 1)
-			info.defines.push_back({ "HALF_RES", "" });
-		if (settings.ResolutionMode == 2)
-			info.defines.push_back({ "QUARTER_RES", "" });
-		if (settings.EnableTemporalDenoiser)
-			info.defines.push_back({ "TEMPORAL_DENOISER", "" });
 		if (settings.EnableGI)
 			info.defines.push_back({ "GI", "" });
-		if (settings.EnableExperimentalSpecularGI)
-			info.defines.push_back({ "GI_SPECULAR", "" });
 	}
 
 	for (auto& info : shaderInfos) {
@@ -636,12 +519,22 @@ void ScreenSpaceGI::CompileComputeShaders()
 			info.programPtr->attach(rawPtr);
 	}
 
+	// NRD guide prep shader (from ScreenSpaceGI directory)
+	{
+		std::vector<std::pair<const char*, const char*>> defines;
+		if (REL::Module::IsVR())
+			defines.push_back({ "VR", "" });
+		auto path = std::filesystem::path("Data\\Shaders\\ScreenSpaceGI") / "prepareNRDGuides.cs.hlsl";
+		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), defines, "cs_5_0")))
+			prepareNRDGuidesCompute.attach(rawPtr);
+	}
+
 	recompileFlag = false;
 }
 
 bool ScreenSpaceGI::ShadersOK()
 {
-	return texNoise && prefilterDepthsCompute && prefilterRadianceCompute && prefilterNormalCompute && radianceDisoccCompute && giCompute && blurCompute && upsampleCompute;
+	return texNoise && prefilterDepthsCompute && prefilterRadianceCompute && prefilterNormalCompute && giCompute;
 }
 
 void ScreenSpaceGI::UpdateSB()
@@ -689,12 +582,7 @@ void ScreenSpaceGI::UpdateSB()
 
 		data.AOPower = settings.AOPower;
 		data.GIStrength = settings.GIStrength;
-
-		data.DepthDisocclusion = settings.DepthDisocclusion;
-		data.NormalDisocclusion = settings.NormalDisocclusion;
-		data.MaxAccumFrames = settings.MaxAccumFrames;
-		data.BlurRadius = settings.BlurRadius;
-		data.DistanceNormalisation = settings.DistanceNormalisation;
+		data.pad2[0] = data.pad2[1] = data.pad2[2] = 0;
 	}
 
 	ssgiCB->Update(data);
@@ -707,26 +595,15 @@ void ScreenSpaceGI::DrawSSGI()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISSAOBlurH, imageSpaceManager);
 
-	// Toggle vanilla SSAO
 	static bool* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSAOBlurH.get()) + 0x50LL);
 	*enableSSAO = settings.EnableVanillaSSAO;
 
 	if (!(settings.Enabled && ShadersOK())) {
-		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };
-		context->ClearUnorderedAccessViewFloat(texAo[outputAoIdx]->uav.get(), clr);
-		context->ClearUnorderedAccessViewFloat(texIlY[outputIlIdx]->uav.get(), clr);
-		context->ClearUnorderedAccessViewFloat(texIlCoCg[outputIlIdx]->uav.get(), clr);
 		return;
 	}
 
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "SSGI");
-
-	static uint lastFrameAoTexIdx = 0;
-	static uint lastFrameGITexIdx = 0;
-	static uint lastFrameAccumTexIdx = 0;
-	uint inputAoTexIdx = lastFrameAoTexIdx;
-	uint inputGITexIdx = lastFrameGITexIdx;
 
 	//////////////////////////////////////////////////////
 
@@ -743,10 +620,6 @@ void ScreenSpaceGI::DrawSSGI()
 
 	float2 size = Util::ConvertToDynamic(globals::state->screenSize);
 	auto resolution = std::array{ (uint)size.x, (uint)size.y };
-	auto resChoices = std::array{
-		resolution, std::array{ resolution[0] >> 1, resolution[1] >> 1 }, std::array{ resolution[0] >> 2, resolution[1] >> 2 }
-	};
-	auto internalRes = resChoices[settings.ResolutionMode];
 
 	std::array<ID3D11ShaderResourceView*, 11> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 6> uavs = { nullptr };
@@ -768,6 +641,9 @@ void ScreenSpaceGI::DrawSSGI()
 	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 
+	float2 dynres = Util::ConvertToDynamic(globals::state->screenSize);
+	dynres = { floor(dynres.x), floor(dynres.y) };
+
 	// prefilter depths
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Depths");
@@ -782,58 +658,50 @@ void ScreenSpaceGI::DrawSSGI()
 		context->Dispatch((resolution[0] + 15) >> 4, (resolution[1] + 15) >> 4, 1);
 	}
 
-	// fetch radiance and disocclusion
+	// NRD guide textures
+	if (prepareNRDGuidesCompute && settings.EnableREBLUR) {
+		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - NRD Guide Preprocess");
+
+		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+		auto normal = rts[NORMALROUGHNESS];
+
+		resetViews();
+		std::array<ID3D11ShaderResourceView*, 2> guideSRVs = {
+			depth.depthSRV,
+			normal.SRV
+		};
+		std::array<ID3D11UnorderedAccessView*, 2> guideUAVs = {
+			texNRDViewZ->uav.get(),
+			texNRDNormalRoughness->uav.get()
+		};
+
+		context->CSSetShaderResources(0, (uint)guideSRVs.size(), guideSRVs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)guideUAVs.size(), guideUAVs.data(), nullptr);
+		context->CSSetShader(prepareNRDGuidesCompute.get(), nullptr, 0);
+		context->Dispatch(((uint)dynres.x + 7) / 8, ((uint)dynres.y + 7) / 8, 1);
+
+		std::array<ID3D11ShaderResourceView*, 2> nullSRVs = { nullptr };
+		std::array<ID3D11UnorderedAccessView*, 2> nullUAVs = { nullptr };
+		context->CSSetShaderResources(0, (uint)nullSRVs.size(), nullSRVs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)nullUAVs.size(), nullUAVs.data(), nullptr);
+	}
+
+	// Prefilter radiance mip chain (reads main RT directly)
 	{
-		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Radiance Disocc");
+		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Radiance");
 
 		resetViews();
 		srvs.at(0) = rts[deferred->forwardRenderTargets[0]].SRV;
-		srvs.at(1) = texWorkingDepth->srv.get();
-		srvs.at(2) = rts[NORMALROUGHNESS].SRV;
-		srvs.at(3) = texPrevGeo->srv.get();
-		srvs.at(4) = rts[RE::RENDER_TARGET::kMOTION_VECTOR].SRV;
-		srvs.at(5) = texAccumFrames[lastFrameAccumTexIdx]->srv.get();
-		srvs.at(6) = texAo[inputAoTexIdx]->srv.get();
-		srvs.at(7) = texIlY[inputGITexIdx]->srv.get();
-		srvs.at(8) = texIlCoCg[inputGITexIdx]->srv.get();
-		srvs.at(9) = texGiSpecular[inputAoTexIdx]->srv.get();
-		srvs.at(10) = nullptr;
+		uavs.at(0) = uavRadiance[0].get();
+		uavs.at(1) = uavRadiance[1].get();
+		uavs.at(2) = uavRadiance[2].get();
+		uavs.at(3) = uavRadiance[3].get();
+		uavs.at(4) = uavRadiance[4].get();
 
-		uavs.at(0) = texRadianceTemp->uav.get();
-		uavs.at(1) = texAccumFrames[!lastFrameAccumTexIdx]->uav.get();
-		uavs.at(2) = texAo[!inputAoTexIdx]->uav.get();
-		uavs.at(3) = texIlY[!inputGITexIdx]->uav.get();
-		uavs.at(4) = texIlCoCg[!inputGITexIdx]->uav.get();
-		uavs.at(5) = texGiSpecular[!inputAoTexIdx]->uav.get();
-
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(radianceDisoccCompute.get(), nullptr, 0);
-		context->Dispatch((internalRes[0] + 7u) >> 3, (internalRes[1] + 7u) >> 3, 1);
-
-		// Prefilter radiance texture instead of using GenerateMips for proper dynamic resolution handling.
-		// radianceDisocc wrote mip 0 directly to texRadianceTemp above, so we can bind it
-		// as SRV input here without an intermediate CopySubresourceRegion.
-		{
-			TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Radiance");
-
-			resetViews();
-			srvs.at(0) = texRadianceTemp->srv.get();
-			uavs.at(0) = uavRadiance[0].get();  // Mip 0
-			uavs.at(1) = uavRadiance[1].get();  // Mip 1
-			uavs.at(2) = uavRadiance[2].get();  // Mip 2
-			uavs.at(3) = uavRadiance[3].get();  // Mip 3
-			uavs.at(4) = uavRadiance[4].get();  // Mip 4
-
-			context->CSSetShaderResources(0, 1, srvs.data());
-			context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
-			context->CSSetShader(prefilterRadianceCompute.get(), nullptr, 0);
-			context->Dispatch((internalRes[0] + 15u) >> 4, (internalRes[1] + 15u) >> 4, 1);
-		}
-
-		inputAoTexIdx = !inputAoTexIdx;
-		inputGITexIdx = !inputGITexIdx;
-		lastFrameAccumTexIdx = !lastFrameAccumTexIdx;
+		context->CSSetShaderResources(0, 1, srvs.data());
+		context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
+		context->CSSetShader(prefilterRadianceCompute.get(), nullptr, 0);
+		context->Dispatch((resolution[0] + 15u) >> 4, (resolution[1] + 15u) >> 4, 1);
 	}
 
 	// Prefilter normals
@@ -851,121 +719,115 @@ void ScreenSpaceGI::DrawSSGI()
 		context->CSSetShaderResources(0, 1, srvs.data());
 		context->CSSetUnorderedAccessViews(0, 5, uavs.data(), nullptr);
 		context->CSSetShader(prefilterNormalCompute.get(), nullptr, 0);
-		context->Dispatch((internalRes[0] + 15u) >> 4, (internalRes[1] + 15u) >> 4, 1);
+		context->Dispatch((resolution[0] + 15u) >> 4, (resolution[1] + 15u) >> 4, 1);
 	}
 
-	// GI
+	// GI → NRD SH output
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - GI");
 
 		resetViews();
 		srvs.at(0) = texWorkingDepth->srv.get();
-		srvs.at(1) = rts[NORMALROUGHNESS].SRV;
 		srvs.at(2) = texRadiance->srv.get();
 		srvs.at(3) = texNoise->srv.get();
-		srvs.at(4) = texAccumFrames[lastFrameAccumTexIdx]->srv.get();
-		srvs.at(5) = texIlY[inputGITexIdx]->srv.get();
-		srvs.at(6) = texIlCoCg[inputGITexIdx]->srv.get();
-		srvs.at(7) = texGiSpecular[inputAoTexIdx]->srv.get();
 		srvs.at(8) = texNormal->srv.get();
 
-		uavs.at(0) = texAo[!inputAoTexIdx]->uav.get();
-		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();
-		uavs.at(2) = texIlCoCg[!inputGITexIdx]->uav.get();
-		uavs.at(3) = texGiSpecular[!inputAoTexIdx]->uav.get();
-		uavs.at(4) = texPrevGeo->uav.get();
+		uavs.at(0) = texNRDInputSH0->uav.get();
+		uavs.at(1) = texNRDInputSH1->uav.get();
+		uavs.at(2) = texPrevGeo->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 		context->CSSetShader(giCompute.get(), nullptr, 0);
-		context->Dispatch((internalRes[0] + 7u) >> 3, (internalRes[1] + 7u) >> 3, 1);
-
-		inputAoTexIdx = !inputAoTexIdx;
-		inputGITexIdx = !inputGITexIdx;
-		lastFrameGITexIdx = inputGITexIdx;
-		lastFrameAoTexIdx = inputAoTexIdx;
-	}
-
-	// blur
-	if (settings.EnableBlur) {
-		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Diffuse Blur");
-
-		resetViews();
-		srvs.at(0) = texWorkingDepth->srv.get();
-		srvs.at(1) = rts[NORMALROUGHNESS].SRV;
-		srvs.at(2) = texAccumFrames[lastFrameAccumTexIdx]->srv.get();
-		srvs.at(3) = texIlY[inputGITexIdx]->srv.get();
-		srvs.at(4) = texIlCoCg[inputGITexIdx]->srv.get();
-
-		uavs.at(0) = texAccumFrames[!lastFrameAccumTexIdx]->uav.get();
-		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();
-		uavs.at(2) = texIlCoCg[!inputGITexIdx]->uav.get();
-
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(blurCompute.get(), nullptr, 0);
-		context->Dispatch((internalRes[0] + 7u) >> 3, (internalRes[1] + 7u) >> 3, 1);
-
-		inputGITexIdx = !inputGITexIdx;
-		lastFrameGITexIdx = inputGITexIdx;
-		lastFrameAccumTexIdx = !lastFrameAccumTexIdx;
-	}
-
-	// VR stereo sync: bilateral blend of SSGI buffers between eyes
-	// Shi, Billeter, Eisemann 2022, "Stereo-consistent screen-space ambient occlusion"
-	if (REL::Module::IsVR() && stereoSyncCompute) {
-		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Stereo Sync");
-
-		if (globals::state->frameAnnotations)
-			globals::state->BeginPerfEvent("SSGI - Stereo Sync");
-
-		resetViews();
-		srvs.at(0) = texWorkingDepth->srv.get();
-		srvs.at(1) = texAo[inputAoTexIdx]->srv.get();
-		srvs.at(2) = texIlY[inputGITexIdx]->srv.get();
-		srvs.at(3) = texIlCoCg[inputGITexIdx]->srv.get();
-
-		uavs.at(0) = texAo[!inputAoTexIdx]->uav.get();
-		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();
-		uavs.at(2) = texIlCoCg[!inputGITexIdx]->uav.get();
-
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(stereoSyncCompute.get(), nullptr, 0);
-		context->Dispatch((internalRes[0] + 7u) >> 3, (internalRes[1] + 7u) >> 3, 1);
-
-		inputAoTexIdx = !inputAoTexIdx;
-		inputGITexIdx = !inputGITexIdx;
-
-		if (globals::state->frameAnnotations)
-			globals::state->EndPerfEvent();
-	}
-
-	// upsample
-	if (settings.ResolutionMode != 0) {
-		resetViews();
-		srvs.at(0) = texWorkingDepth->srv.get();
-		srvs.at(1) = texAo[inputAoTexIdx]->srv.get();
-		srvs.at(2) = texIlY[inputGITexIdx]->srv.get();
-		srvs.at(3) = texIlCoCg[inputGITexIdx]->srv.get();
-		srvs.at(4) = texGiSpecular[inputAoTexIdx]->srv.get();
-
-		uavs.at(0) = texAo[!inputAoTexIdx]->uav.get();
-		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();
-		uavs.at(2) = texIlCoCg[!inputGITexIdx]->uav.get();
-		uavs.at(3) = texGiSpecular[!inputAoTexIdx]->uav.get();
-
-		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(upsampleCompute.get(), nullptr, 0);
 		context->Dispatch((resolution[0] + 7u) >> 3, (resolution[1] + 7u) >> 3, 1);
-
-		inputAoTexIdx = !inputAoTexIdx;
-		inputGITexIdx = !inputGITexIdx;
 	}
 
-	outputAoIdx = inputAoTexIdx;
-	outputIlIdx = inputGITexIdx;
+	// REBLUR denoising
+	if (settings.EnableREBLUR && nrdReblur.IsValid()) {
+		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - REBLUR");
+
+		nrd::CommonSettings commonSettings{};
+		{
+			uint16_t fw = (uint16_t)dynres.x;
+			uint16_t fh = (uint16_t)dynres.y;
+
+			commonSettings.resourceSize[0] = (uint16_t)texNRDInputSH0->desc.Width;
+			commonSettings.resourceSize[1] = (uint16_t)texNRDInputSH0->desc.Height;
+			commonSettings.resourceSizePrev[0] = commonSettings.resourceSize[0];
+			commonSettings.resourceSizePrev[1] = commonSettings.resourceSize[1];
+			commonSettings.rectSize[0] = fw;
+			commonSettings.rectSize[1] = fh;
+			commonSettings.rectSizePrev[0] = fw;
+			commonSettings.rectSizePrev[1] = fh;
+
+			auto viewMat = globals::game::frameBufferCached.GetCameraView(0).Transpose();
+			auto projMat = globals::game::frameBufferCached.GetCameraProj(0).Transpose();
+
+			float3 cameraWorldPos = float3(globals::game::frameBufferCached.GetCameraPosAdjust(0));
+			DirectX::XMMATRIX translationMat = DirectX::XMMatrixTranslation(-cameraWorldPos.x, -cameraWorldPos.y, -cameraWorldPos.z);
+			worldToViewMat = DirectX::XMMatrixMultiply(translationMat, viewMat);
+
+			memcpy(commonSettings.viewToClipMatrix, &projMat, sizeof(float) * 16);
+			memcpy(commonSettings.viewToClipMatrixPrev, &prevProjMatrix, sizeof(float) * 16);
+			memcpy(commonSettings.worldToViewMatrix, &worldToViewMat, sizeof(float) * 16);
+			memcpy(commonSettings.worldToViewMatrixPrev, &prevWorldToViewMat, sizeof(float) * 16);
+
+			commonSettings.motionVectorScale[0] = 1.0f;
+			commonSettings.motionVectorScale[1] = 1.0f;
+			commonSettings.motionVectorScale[2] = 0.0f;
+			commonSettings.isMotionVectorInWorldSpace = false;
+
+			auto jitter = globals::features::upscaling.jitter;
+			commonSettings.cameraJitter[0] = jitter.x;
+			commonSettings.cameraJitter[1] = jitter.y;
+			commonSettings.cameraJitterPrev[0] = prevJitter.x;
+			commonSettings.cameraJitterPrev[1] = prevJitter.y;
+
+			commonSettings.frameIndex = frameIndex++;
+			commonSettings.denoisingRange = 1e6f;
+			commonSettings.splitScreen = settings.Reblur.SplitScreen;
+
+			prevWorldToViewMat = worldToViewMat;
+			prevProjMatrix = projMat;
+			prevJitter = jitter;
+		}
+		nrdReblur.SetCommonSettings(commonSettings);
+
+		{
+			const auto& r = settings.Reblur;
+			reblurSettings.maxAccumulatedFrameNum = std::min((uint32_t)r.MaxAccumulatedFrameNum, nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+			reblurSettings.maxFastAccumulatedFrameNum = std::min((uint32_t)r.MaxFastAccumulatedFrameNum, reblurSettings.maxAccumulatedFrameNum);
+			reblurSettings.maxStabilizedFrameNum = std::min((uint32_t)r.MaxStabilizedFrameNum, reblurSettings.maxAccumulatedFrameNum);
+			reblurSettings.historyFixFrameNum = reblurSettings.maxFastAccumulatedFrameNum > 0 ? std::min((uint32_t)r.HistoryFixFrameNum, reblurSettings.maxFastAccumulatedFrameNum - 1) : 0;
+			reblurSettings.historyFixBasePixelStride = std::max(r.HistoryFixBasePixelStride, 1u);
+			reblurSettings.historyFixAlternatePixelStride = std::max(r.HistoryFixAlternatePixelStride, 1u);
+			reblurSettings.fastHistoryClampingSigmaScale = std::clamp(r.FastHistoryClampingSigmaScale, 1.0f, 3.0f);
+			reblurSettings.diffusePrepassBlurRadius = 0.0f;
+			reblurSettings.minHitDistanceWeight = std::clamp(r.MinHitDistanceWeight, 0.0001f, 0.2f);
+			reblurSettings.minBlurRadius = std::max(r.MinBlurRadius, 0.0f);
+			reblurSettings.maxBlurRadius = std::max(r.MaxBlurRadius, reblurSettings.minBlurRadius);
+			reblurSettings.lobeAngleFraction = std::clamp(r.LobeAngleFraction, 0.0f, 1.0f);
+			reblurSettings.roughnessFraction = std::clamp(r.RoughnessFraction, 0.0f, 1.0f);
+			reblurSettings.planeDistanceSensitivity = std::max(r.PlaneDistanceSensitivity, 0.0f);
+			reblurSettings.enableAntiFirefly = false;
+			reblurSettings.hitDistanceReconstructionMode = static_cast<nrd::HitDistanceReconstructionMode>(std::min(r.HitDistanceReconstructionMode, 2u));
+			reblurSettings.checkerboardMode = nrd::CheckerboardMode::OFF;
+		}
+		nrdReblur.SetDenoiserSettings(&reblurSettings);
+
+		auto motion = rts[RE::RENDER_TARGETS::kMOTION_VECTOR];
+		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV, motion.SRV);
+		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS, texNRDNormalRoughness->srv.get());
+		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_VIEWZ, texNRDViewZ->srv.get());
+		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH0, texNRDInputSH0->srv.get());
+		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH1, texNRDInputSH1->srv.get());
+		nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->srv.get());
+		nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->srv.get());
+		nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->uav.get());
+		nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->uav.get());
+
+		nrdReblur.Dispatch();
+	}
 
 	// cleanup
 	resetViews();
@@ -976,4 +838,29 @@ void ScreenSpaceGI::DrawSSGI()
 	context->CSSetConstantBuffers(1, 1, &cb);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 	context->CSSetShader(nullptr, nullptr, 0);
+}
+
+ScreenSpaceGI::DiffuseOutput ScreenSpaceGI::GetDiffuseOutputTextures()
+{
+	DiffuseOutput output;
+	if (loaded && settings.Enabled && settings.EnableREBLUR && nrdReblur.IsValid()) {
+		output.sh[0] = texNRDOutputSH0->srv.get();
+		output.sh[1] = texNRDOutputSH1->srv.get();
+	} else if (loaded && settings.Enabled) {
+		output.sh[0] = texNRDInputSH0->srv.get();
+		output.sh[1] = texNRDInputSH1->srv.get();
+	} else {
+		output.sh[0] = nullptr;
+		output.sh[1] = nullptr;
+	}
+	return output;
+}
+
+ScreenSpaceGI::SharedData ScreenSpaceGI::GetCommonBufferData()
+{
+	SharedData data;
+	data.DiffuseMult = (settings.Enabled && settings.EnableGI) ? settings.GIStrength : 0.0f;
+	data.DebugMode = 0;
+	data._pad = { 0, 0 };
+	return data;
 }

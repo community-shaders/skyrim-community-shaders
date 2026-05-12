@@ -45,20 +45,21 @@ SamplerState LinearSampler : register(s0);
 #endif
 
 #if defined(SSGI)
-Texture2D<float4> SsgiAoTexture : register(t10);
-Texture2D<float4> SsgiYTexture : register(t11);
-Texture2D<float4> SsgiCoCgTexture : register(t12);
-Texture2D<float4> SsgiSpecularTexture : register(t13);
+#	include "NRD/NRDReblurSH.hlsli"
 
-void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
+Texture2D<float4> SsgiSH0Texture : register(t10);
+Texture2D<float4> SsgiSH1Texture : register(t11);
+
+void SampleSSGIDiffuse(uint2 pixCoord, float3 normalWS, float3 viewWS, out float ao, out float3 il)
 {
-	ao = 1 - SsgiAoTexture[pixCoord];
-	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	// without ZH hallucination
-	// float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS));
-	float ssgiIlY = SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
-	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
+	float4 sh0 = SsgiSH0Texture[pixCoord];
+	float4 sh1 = SsgiSH1Texture[pixCoord];
+
+	NRD_SG sg = REBLUR_BackEnd_UnpackSh(sh0, sh1);
+	ao = 1.0 - saturate(sg.normHitDist);
+
+	il = NRD_SG_ResolveDiffuse(sg, normalWS, viewWS, 1.0) * SharedData::ssgiSettings.DiffuseMult;
+	il = max(0, il);
 }
 
 void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il, in float3 normal, in float3 view, in float roughness)
@@ -67,19 +68,12 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float alpha = roughness * roughness;
 	ao = SpecularOcclusion(saturate(NdotV), alpha, ao);
 
-	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
+	float4 sh0 = SsgiSH0Texture[pixCoord];
+	float4 sh1 = SsgiSH1Texture[pixCoord];
+	NRD_SG sg = REBLUR_BackEnd_UnpackSh(sh0, sh1);
 
-	// pi to compensate for the /pi in specularLobe
-	// i don't think there really should be a 1/PI but without it the specular is too strong
-	// reflectance being ambient reflectance doesn't help either
-	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg / Math::PI)));
-
-	// HQ spec
-	float4 hq_spec = SsgiSpecularTexture[pixCoord];
-	ao *= 1 - hq_spec.a;
-	il += hq_spec.rgb;
+	il = NRD_SG_ResolveDiffuse(sg, normal, view, roughness) * SharedData::ssgiSettings.DiffuseMult;
+	il = max(0, il);
 }
 #endif
 
@@ -135,9 +129,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 
 #if defined(SSGI)
 
+	float3 V_ssgi = -normalize(positionWS.xyz);
 	float ssgiAo;
 	float3 ssgiIl;
-	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
+	SampleSSGIDiffuse(dispatchID.xy, normalWS, V_ssgi, ssgiAo, ssgiIl);
 
 	float3 linAlbedo = Color::IrradianceToLinear(albedo / Color::PBRLightingScale);
 	float3 multiBounceSSGIAo = MultiBounceAO(linAlbedo, ssgiAo);

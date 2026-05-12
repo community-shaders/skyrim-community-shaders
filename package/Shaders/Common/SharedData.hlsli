@@ -247,6 +247,13 @@ namespace SharedData
 		uint3 _padding;
 	};
 
+	struct SSGISettings
+	{
+		float DiffuseMult;
+		uint DebugMode;
+		float2 pad0;
+	};
+
 	struct ExponentialHeightFogSettings
 	{
 		uint enabled;
@@ -285,6 +292,7 @@ namespace SharedData
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
+		SSGISettings ssgiSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

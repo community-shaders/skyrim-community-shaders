@@ -332,8 +332,7 @@ void Deferred::DeferredPasses()
 	auto& ssgi = globals::features::screenSpaceGI;
 	if (ssgi.loaded)
 		ssgi.DrawSSGI();
-	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
-	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
+	auto ssgiOutput = ssgi.GetDiffuseOutputTextures();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
@@ -362,10 +361,10 @@ void Deferred::DeferredPasses()
 			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,             // t7  EnvReflectionsTexture
 			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,   // t8  SkylightingProbeArray
 			nullptr,                                                                                         // t9  unused
-			ssgi_ao,                                                                                         // t10 SsgiAoTexture
-			ssgi_hq_spec ? nullptr : ssgi_y,                                                                 // t11 SsgiYTexture
-			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                              // t12 SsgiCoCgTexture
-			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                           // t13 SsgiSpecularTexture
+			ssgiOutput.sh[0],                                                                                // t10 SsgiSH0Texture
+			ssgiOutput.sh[1],                                                                                // t11 SsgiSH1Texture
+			nullptr,                                                                                         // t12 unused
+			nullptr,                                                                                         // t13 unused
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t14 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t15 SkyIBLTexture
 		};
