@@ -33,10 +33,6 @@ struct DirectionalShadowLightData
 
 StructuredBuffer<DirectionalShadowLightData> DirectionalShadowLights : register(t98);
 
-#if defined(VOLUMETRIC_SHADOWS)
-#	include "VolumetricShadows/VolumetricShadows.hlsli"
-#endif
-
 // 4D PCG hash matching UE's Rand4DPCG32 (jcgt.org/published/0009/03/02/)
 uint4 Rand4DPCG32(int4 p)
 {
@@ -148,13 +144,19 @@ float SampleDirectionalShadowPCF(float3 positionLS, uint cascadeIndex)
 	float2 texelSize = rcp(float2(max(shadowWidth, 1), max(shadowHeight, 1)));
 	float compareDepth = positionLS.z - SharedData::exponentialHeightFogSettings.volumetricShadowBias;
 
-	float shadow = 0.0f;
-	[unroll] for (int sampleIndex = 0; sampleIndex < 8; sampleIndex++)
-	{
-		float2 uv = positionLS.xy + Random::SpiralSampleOffsets8[sampleIndex] * texelSize * 2.0f;
-		shadow += DirectionalShadowMap.SampleCmpLevelZero(ShadowSampler, float3(uv, cascadeIndex), compareDepth).x;
-	}
-	return shadow * rcp(8.0f);
+	float2 uvMin = texelSize * 1.5f;
+	float2 uvMax = 1.0f.xx - uvMin;
+	if (any(positionLS.xy < uvMin) || any(positionLS.xy > uvMax))
+		return DirectionalShadowMap.SampleCmpLevelZero(ShadowSampler, float3(saturate(positionLS.xy), cascadeIndex), compareDepth).x;
+
+	float center = DirectionalShadowMap.SampleCmpLevelZero(ShadowSampler, float3(positionLS.xy, cascadeIndex), compareDepth).x;
+	float cross =
+		DirectionalShadowMap.SampleCmpLevelZero(ShadowSampler, float3(positionLS.xy + float2(texelSize.x, 0.0f), cascadeIndex), compareDepth).x +
+		DirectionalShadowMap.SampleCmpLevelZero(ShadowSampler, float3(positionLS.xy - float2(texelSize.x, 0.0f), cascadeIndex), compareDepth).x +
+		DirectionalShadowMap.SampleCmpLevelZero(ShadowSampler, float3(positionLS.xy + float2(0.0f, texelSize.y), cascadeIndex), compareDepth).x +
+		DirectionalShadowMap.SampleCmpLevelZero(ShadowSampler, float3(positionLS.xy - float2(0.0f, texelSize.y), cascadeIndex), compareDepth).x;
+
+	return (center * 4.0f + cross) * rcp(8.0f);
 }
 
 float SampleDirectionalShadow(float3 positionWS, uint eyeIndex)
@@ -164,10 +166,6 @@ float SampleDirectionalShadow(float3 positionWS, uint eyeIndex)
 	if (!VolumetricFogHasDirectionalShadowMap)
 		return 1.0f;
 
-#if defined(VOLUMETRIC_SHADOWS)
-	float detailedShadow;
-	return VolumetricShadows::GetVSMShadow2D(positionWS, eyeIndex, detailedShadow);
-#else
 	DirectionalShadowLightData directionalShadowLightData = DirectionalShadowLights[0];
 	float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(positionWS, eyeIndex));
 	if (shadowMapDepth >= directionalShadowLightData.EndSplitDistances.y)
@@ -197,7 +195,6 @@ float SampleDirectionalShadow(float3 positionWS, uint eyeIndex)
 	float fade = saturate(shadowMapDepth / max(directionalShadowLightData.EndSplitDistances.y, 1.0f));
 	float fadeFactor = 1.0f - pow(fade * fade, 8.0f);
 	return lerp(1.0f, shadow, fadeFactor);
-#endif
 }
 
 float SampleDirectionalWorldShadow(float3 positionWS, uint eyeIndex)

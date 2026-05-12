@@ -49,7 +49,7 @@ struct ExponentialHeightFog : Feature
 		float directionalInscatteringAnisotropy = 0.7f;
 		float4 inscatteringTint = { 1.0f, 1.0f, 1.0f, 1.0f };
 		float cubemapMipLevel = 7.0f;
-		float sunlightAttenuationAmount = 0.5f;
+		float sunlightAttenuationAmount = 0.0f;
 		uint respectVanillaFogFade = 0;
 		uint disableVanillaFog = 1;
 		float4 fogInscatteringColor = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -65,13 +65,13 @@ struct ExponentialHeightFog : Feature
 		float4 volumetricFogEmissive = { 0.0f, 0.0f, 0.0f, 0.0f };
 		float volumetricDirectionalScatteringIntensity = 1.0f;
 		float volumetricShadowBias = 0.002f;
-		float volumetricDepthDistributionScale = 16.0f;
+		float volumetricDepthDistributionScale = 8.0f;
 		float volumetricSkyLightingIntensity = 1.0f;
 		float volumetricFogScatteringDistribution = 0.2f;
-		float volumetricHistoryWeight = 0.9f;
+		float volumetricHistoryWeight = 0.96f;
 		uint volumetricHistoryMissSampleCount = 4;
 		float volumetricSampleJitterMultiplier = 0.0f;
-		float volumetricUpsampleJitterMultiplier = 0.0f;
+		float volumetricUpsampleJitterMultiplier = 1.0f;
 		float volumetricLocalLightScatteringIntensity = 1.0f;
 		float2 pad0;
 	} settings;
