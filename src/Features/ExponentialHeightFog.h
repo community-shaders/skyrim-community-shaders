@@ -37,15 +37,6 @@ struct ExponentialHeightFog : Feature
 	void RegisterWeatherVariables() override;
 	void CaptureDirectionalShadowMap();
 
-	struct UInt4
-	{
-		uint32_t x = 0;
-		uint32_t y = 0;
-		uint32_t z = 0;
-		uint32_t w = 0;
-	};
-	STATIC_ASSERT_ALIGNAS_16(UInt4);
-
 	struct Settings
 	{
 		uint enabled = 0;
@@ -70,29 +61,29 @@ struct ExponentialHeightFog : Feature
 		float volumetricFogStartDistance = 0.0f;
 		float volumetricFogNearFadeInDistance = 1000.0f;
 		float volumetricFogExtinctionScale = 1.0f;
-		float volumetricFogScatteringDistribution = 0.2f;
-		float3 volumetricPad0;
 		float4 volumetricFogAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
 		float4 volumetricFogEmissive = { 0.0f, 0.0f, 0.0f, 0.0f };
 		float volumetricDirectionalScatteringIntensity = 1.0f;
 		float volumetricShadowBias = 0.002f;
 		float volumetricDepthDistributionScale = 16.0f;
 		float volumetricSkyLightingIntensity = 1.0f;
+		float volumetricFogScatteringDistribution = 0.2f;
 		float volumetricHistoryWeight = 0.9f;
 		uint volumetricHistoryMissSampleCount = 4;
-		float2 volumetricPad1;
+		float volumetricSampleJitterMultiplier = 0.5f;
 	} settings;
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 private:
 	struct VolumetricFogCB
 	{
-		UInt4 gridSizeAndFlags = {};
+		DirectX::XMUINT4 gridSizeAndFlags = {};
 		float4 invGridSizeAndNearFade = {};
 		float4 gridZParams = {};
 		float4x4 clipToWorld[2] = {};
 		float4 frameJitterOffsets[16] = {};
 		float4 historyParameters = {};
+		float4 jitterParameters = {};  // x = LightScatteringSampleJitterMultiplier, y = StateFrameIndexMod8, zw = unused
 	};
 	STATIC_ASSERT_ALIGNAS_16(VolumetricFogCB);
 
@@ -118,7 +109,7 @@ private:
 	ID3D11ComputeShader* conservativeDepthCS = nullptr;
 	ID3D11ComputeShader* lightScatteringCS = nullptr;
 	ID3D11ComputeShader* integrationCS = nullptr;
-	UInt4 currentGridSize = {};
+	DirectX::XMUINT4 currentGridSize = {};
 	bool hasLightScatteringHistory = false;
 	bool hasConservativeDepthHistory = false;
 	uint32_t lastPrepassFrame = UINT32_MAX;

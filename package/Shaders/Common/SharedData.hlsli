@@ -273,17 +273,16 @@ namespace SharedData
 		float volumetricFogStartDistance;
 		float volumetricFogNearFadeInDistance;
 		float volumetricFogExtinctionScale;
-		float volumetricFogScatteringDistribution;
-		float3 volumetricPad0;
 		float4 volumetricFogAlbedo;
 		float4 volumetricFogEmissive;
 		float volumetricDirectionalScatteringIntensity;
 		float volumetricShadowBias;
 		float volumetricDepthDistributionScale;
 		float volumetricSkyLightingIntensity;
+		float volumetricFogScatteringDistribution;
 		float volumetricHistoryWeight;
 		uint volumetricHistoryMissSampleCount;
-		float2 volumetricPad1;
+		float volumetricSampleJitterMultiplier;
 	};
 
 	cbuffer FeatureData : register(b6)

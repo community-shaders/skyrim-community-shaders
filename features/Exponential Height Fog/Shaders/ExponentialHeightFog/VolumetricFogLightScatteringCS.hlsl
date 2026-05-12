@@ -23,6 +23,34 @@ struct DirectionalShadowLightData
 
 StructuredBuffer<DirectionalShadowLightData> DirectionalShadowLights : register(t98);
 
+// 4D PCG hash matching UE's Rand4DPCG32 (jcgt.org/published/0009/03/02/)
+uint4 Rand4DPCG32(int4 p)
+{
+	uint4 v = uint4(p);
+	v = v * 1664525u + 1013904223u;
+	v.x += v.y * v.w;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	v.w += v.y * v.z;
+	v ^= (v >> 16u);
+	v.x += v.y * v.w;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	v.w += v.y * v.z;
+	return v;
+}
+
+// Matches UE's MakePositiveFinite - ensures no NaN/Inf propagates into history chain
+float4 MakePositiveFinite(float4 v)
+{
+	v = max(v, 0.0f.xxxx);
+	v.x = isfinite(v.x) ? v.x : 0.0f;
+	v.y = isfinite(v.y) ? v.y : 0.0f;
+	v.z = isfinite(v.z) ? v.z : 0.0f;
+	v.w = isfinite(v.w) ? v.w : 0.0f;
+	return v;
+}
+
 bool IsFroxelBehindSceneDepth(uint3 coord)
 {
 	float frontDepth = ExponentialHeightFog::ComputeVolumetricSliceDepth(max(float(coord.z) - 0.5f, 0.0f));
@@ -250,15 +278,24 @@ float4 ComputeDirectionalLightScattering(uint3 coord, float3 cellOffset)
 	float4 scatteringAndExtinction = 0.0f.xxxx;
 	[loop] for (uint sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
 	{
-		scatteringAndExtinction += ComputeDirectionalLightScattering(dispatchID, VolumetricFogFrameJitterOffsets[sampleIndex].xyz);
+		// Per-voxel random noise matching UE's LightScatteringCS:
+		// Rand4DPCG32(int4(GridCoordinate.xyz, StateFrameIndexMod8 + 8 * SampleIndex))
+		// This decorrelates the jitter pattern across voxels, preventing coherent temporal artifacts
+		uint3 Rand32Bits = Rand4DPCG32(int4(dispatchID.xyz, VolumetricFogStateFrameIndexMod8 + 8 * sampleIndex)).xyz;
+		float3 Rand3D = (float3(Rand32Bits) / float(uint(0xffffffff))) * 2.0f - 1.0f;
+		float3 cellOffset = VolumetricFogFrameJitterOffsets[sampleIndex].xyz + VolumetricFogSampleJitterMultiplier * Rand3D;
+
+		scatteringAndExtinction += ComputeDirectionalLightScattering(dispatchID, cellOffset);
 	}
 	scatteringAndExtinction *= rcp(float(sampleCount));
 
 	[branch] if (historyAlpha > 0.0f)
 	{
 		float4 history = LightScatteringHistory.SampleLevel(LinearSampler, historyUV, 0);
+		// Sanitize history to prevent NaN/Inf propagation in the temporal chain
+		history = MakePositiveFinite(history);
 		scatteringAndExtinction = lerp(scatteringAndExtinction, history, historyAlpha);
 	}
 
-	LightScattering[dispatchID] = max(scatteringAndExtinction, 0.0f.xxxx);
+	LightScattering[dispatchID] = MakePositiveFinite(scatteringAndExtinction);
 }

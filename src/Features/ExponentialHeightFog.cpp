@@ -40,7 +40,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	volumetricDepthDistributionScale,
 	volumetricSkyLightingIntensity,
 	volumetricHistoryWeight,
-	volumetricHistoryMissSampleCount)
+	volumetricHistoryMissSampleCount,
+	volumetricSampleJitterMultiplier)
 
 namespace
 {
@@ -128,6 +129,13 @@ void ExponentialHeightFog::DrawSettings()
 			uint32_t minHistoryMissSampleCount = 1;
 			uint32_t maxHistoryMissSampleCount = 16;
 			ImGui::SliderScalar("History Miss Samples", ImGuiDataType_U32, &settings.volumetricHistoryMissSampleCount, &minHistoryMissSampleCount, &maxHistoryMissSampleCount, "%u", ImGuiSliderFlags_AlwaysClamp);
+			ImGui::SliderFloat("Sample Jitter Multiplier", &settings.volumetricSampleJitterMultiplier, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Adds per-voxel random noise on top of the Halton jitter.\n"
+					"This decorrelates the jitter pattern across voxels, reducing\n"
+					"coherent temporal flickering. 0 = UE default, 0.5 = recommended.");
+			}
 			ImGui::TreePop();
 		}
 	}
@@ -190,14 +198,14 @@ void ExponentialHeightFog::EnsureVolumetricResources()
 	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 
 	auto getGridSize = [&renderSize, gridZ](uint32_t a_pixelSize) {
-		return UInt4{
+		return DirectX::XMUINT4{
 			std::max(1u, static_cast<uint32_t>(std::ceil(renderSize.x / static_cast<float>(a_pixelSize)))),
 			std::max(1u, static_cast<uint32_t>(std::ceil(renderSize.y / static_cast<float>(a_pixelSize)))),
 			gridZ,
 			0u
 		};
 	};
-	UInt4 gridSize = getGridSize(pixelSize);
+	DirectX::XMUINT4 gridSize = getGridSize(pixelSize);
 
 	constexpr uint64_t maxVolumeVoxels = 16ull * 1024ull * 1024ull;
 	while (pixelSize < 64u &&
@@ -410,6 +418,12 @@ void ExponentialHeightFog::Prepass()
 	cb.historyParameters = {
 		temporalHistoryValid ? std::clamp(settings.volumetricHistoryWeight, 0.0f, 0.99f) : 0.0f,
 		static_cast<float>(std::clamp(settings.volumetricHistoryMissSampleCount, 1u, 16u)),
+		0.0f,
+		0.0f
+	};
+	cb.jitterParameters = {
+		temporalReprojection ? std::max(settings.volumetricSampleJitterMultiplier, 0.0f) : 0.0f,
+		static_cast<float>(globals::state->frameCount % 8u),
 		0.0f,
 		0.0f
 	};
