@@ -304,9 +304,8 @@ void EditorWindow::ShowObjectsWindow()
 
 				auto addWeather = [&](RE::TESWeather* weatherRecord, std::string suffix = "") {
 					if (!weatherRecord) return;
-					const char* editorId = weatherRecord->GetFormEditorID();
 					auto id = weatherRecord->GetFormID();
-					activeRecords.push_back({ editorId ? editorId : "", std::move(suffix), id, openByFormId(id, &weatherWidgets) });
+					activeRecords.push_back({ ResolveEditorId(weatherRecord, weatherWidgets), std::move(suffix), id, openByFormId(id, &weatherWidgets) });
 				};
 
 				if (m_selectedCategory == "Weather") {
