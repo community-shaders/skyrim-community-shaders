@@ -12,7 +12,8 @@ constexpr auto MIPLEVELS = 8;
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	DynamicCubemaps::Settings,
 	EnabledSSR,
-	EnabledCreator);
+	EnabledCreator,
+	ReflectionFallbackAmount);
 
 std::vector<std::pair<std::string_view, std::string_view>> DynamicCubemaps::GetShaderDefineOptions()
 {
@@ -26,6 +27,11 @@ std::vector<std::pair<std::string_view, std::string_view>> DynamicCubemaps::GetS
 
 void DynamicCubemaps::DrawSettings()
 {
+	ImGui::SliderFloat("Native Cubemap Fallback", &settings.ReflectionFallbackAmount, kReflectionFallbackMin, kReflectionFallbackMax, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Controls how much the game's reflection cubemap fills missing dynamic reflection directions.");
+	}
+
 	if (ImGui::TreeNodeEx("Screen Space Reflections", ImGuiTreeNodeFlags_DefaultOpen)) {
 		recompileFlag |= ImGui::Checkbox("Enable Screen Space Reflections", reinterpret_cast<bool*>(&settings.EnabledSSR));
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -131,6 +137,7 @@ void DynamicCubemaps::DrawSettings()
 void DynamicCubemaps::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	settings.ReflectionFallbackAmount = std::clamp(settings.ReflectionFallbackAmount, kReflectionFallbackMin, kReflectionFallbackMax);
 	if (REL::Module::IsVR()) {
 		Util::LoadGameSettings(iniVRCubeMapSettings);
 	}
