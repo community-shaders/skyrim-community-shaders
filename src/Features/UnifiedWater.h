@@ -3,7 +3,6 @@
 #include "UnifiedWater/Flowmap.h"
 #include "UnifiedWater/WaterCache.h"
 
-#include <atomic>
 #include <vector>
 
 struct UnifiedWater : OverlayFeature
@@ -27,7 +26,6 @@ struct UnifiedWater : OverlayFeature
 	struct Settings
 	{
 		bool UseOptimisedMeshes = true;
-		bool PurgeLODWaterAfterLoad = true;
 	};
 
 	Settings settings;
@@ -62,18 +60,6 @@ struct UnifiedWater : OverlayFeature
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct TES_SetWorldSpace
-	{
-		static void thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct TES_DestroySkyCell
-	{
-		static void thunk(RE::TES* tes);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	struct BSWaterShader_SetupGeometry
 	{
 		static void thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass);
@@ -84,13 +70,6 @@ struct UnifiedWater : OverlayFeature
 	{
 		static void thunk(RE::TESWaterSystem* waterSystem);
 		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
-	{
-	public:
-		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
-		static bool Register();
 	};
 
 	virtual void DrawSettings() override;
@@ -122,22 +101,6 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
-	std::atomic<RE::TESWorldSpace*> currentPlayerWorldSpace{ nullptr };
-	std::atomic<bool> pendingChildWsCull{ false };
-	// Game-thread TES snapshot used by deferred child-worldspace cull fallbacks.
-	std::atomic<RE::TES*> cachedTes{ nullptr };
-	std::atomic<int32_t> pendingRestoredLODTrimFrames{ 0 };
-	std::atomic<bool> pendingRestoredLODTrimChildWorldspace{ false };
-	RE::TESWorldSpace* detachedLODWaterWorldSpace = nullptr;
-	std::vector<RE::NiPointer<RE::NiAVObject>> detachedLODWaterChildren;
-
-	void TryCompleteDeferredChildWorldspaceCull(RE::TES* tes = nullptr);
-	uint32_t PurgeLODWater();
-	uint32_t ClearDetachedLODWater();
-	uint32_t DetachLODWaterForLoad();
-	uint32_t RestoreDetachedLODWater(RE::TESWorldSpace* destinationWorldSpace);
-	void ResolveDetachedLODWaterAfterLoad(RE::TESWorldSpace* destinationWorldSpace = nullptr);
-	void TryTrimRestoredLODWater();
 	bool BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSystem* waterSystem, bool runOriginalAttach);
 
 	void SetFlowmapTex() const;
