@@ -2496,7 +2496,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float dirVSMDetailedShadow = 1.0;
 
 #	if defined(VOLUMETRIC_SHADOWS)
-	if (inWorld && !inReflection && !SharedData::InInterior)
+	if (inWorld && !inReflection && ShadowSampling::HasDirectionalShadows())
 		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirVSMDetailedShadow);
 #	endif
 

@@ -20,11 +20,13 @@ namespace SharedData
 		float Timer;
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
-		bool InInterior;          // If the area lacks a directional shadow light e.g. the sun or moon
+		bool InInterior;          // If the current cell is an interior
+		bool HasDirectionalShadows;
 		bool InMapMenu;           // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;             // HideSky flag in WorldSpace, e.g. Blackreach
 		float MipBias;            // Offset to mip level for TAA sharpness
 		float WaterSystemHeight;  // TES::GetWaterHeight at eye-0 in camera-relative Z; -FLT_MAX when no water body found (VR only)
+		float3 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;

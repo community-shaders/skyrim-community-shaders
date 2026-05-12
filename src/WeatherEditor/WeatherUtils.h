@@ -285,6 +285,11 @@ enum ControlType
 	FLOAT_SLIDER
 };
 
+// Push/pop warning-colored FrameBg + border to mark a control as inherited from a parent.
+// Call Push before drawing the control; Pop after. Always balanced (4 colors + 1 style var).
+void PushInheritedStyle();
+void PopInheritedStyle();
+
 // Time of Day (TOD) helper functions
 namespace TOD
 {
