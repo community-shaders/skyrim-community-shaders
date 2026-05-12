@@ -1629,6 +1629,35 @@ namespace ShadowCasterManager
 					s_lights.Lights[i].Clear();
 			}
 
+			// ---- Sync s_normalConvert (converted-to-non-shadow set) ----
+			//
+			// Converted lights sit in the engine's activeLights list, not
+			// activeShadowLights, so the aliveSet above doesn't cover them.
+			// Build a second set that includes both lists; any s_normalConvert
+			// entry not present in either has been removed by the engine
+			// (cell change, fast travel, etc.) and must be erased from our
+			// tracking so:
+			//   1. The UI "converted" counter reflects reality.
+			//   2. ForEachConvertedLight doesn't pass dangling pointers to
+			//      the cluster builder (which derefs them in IsValidLight /
+			//      lodDimmer restore).
+			//
+			// Hook_ConvertLights_Remove fires on individual RemoveLight calls
+			// but the engine's bulk cell-teardown path bypasses it, so this
+			// per-frame reconciliation is the safety net.
+			if (!s_normalConvert.empty()) {
+				std::unordered_set<RE::BSLight*> normalAlive;
+				normalAlive.reserve(aliveSet.size() + ssn->GetRuntimeData().activeLights.size());
+				for (auto* p : aliveSet)
+					normalAlive.insert(static_cast<RE::BSLight*>(p));
+				for (auto& sp : ssn->GetRuntimeData().activeLights)
+					if (auto* l = sp.get())
+						normalAlive.insert(l);
+				std::erase_if(s_normalConvert, [&](const ConvertedLight& c) {
+					return !c.light || normalAlive.find(static_cast<RE::BSLight*>(c.light)) == normalAlive.end();
+				});
+			}
+
 			// Drop entries no longer chosen (preserves slot stability for re-chosen lights).
 			for (int i = 0; i < s_lights.Size; i++) {
 				if (!s_lights.Lights[i].Light)
@@ -3023,8 +3052,16 @@ namespace ShadowCasterManager
 	void ForEachConvertedLight(const std::function<void(RE::BSShadowLight*)>& visitor)
 	{
 		for (auto& c : s_normalConvert) {
-			if (c.light)
-				visitor(c.light);
+			if (!c.light)
+				continue;
+			// Defensive vtable check: catches lights freed and zeroed by
+			// tbbmalloc / EngineFixes between our per-frame reconciliation
+			// in ScheduleShadowCasters and the cluster builder running. The
+			// reconciliation prunes stale pointers up-front, but a bulk
+			// engine teardown could still happen mid-frame.
+			if (*reinterpret_cast<const uintptr_t*>(c.light) == 0)
+				continue;
+			visitor(c.light);
 		}
 	}
 
