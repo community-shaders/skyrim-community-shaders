@@ -204,7 +204,7 @@ struct CreationEngineRaytracing
 	// Resampled Importance Sampling
 	struct RISSettings
 	{
-		bool Enabled = true;
+		bool Enabled = false;
 		int MaxCandidates = 4;
 
 		bool operator==(const RISSettings&) const = default;
