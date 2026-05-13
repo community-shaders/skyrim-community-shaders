@@ -2861,9 +2861,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(ambientNormal)));
 
 #	if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL)
-		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)
+	if (SharedData::iblSettings.EnableIBL) {
+		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(ambientNormal, SampColorSampler);
+		}
+	}
 #	endif
 
 #	if defined(LANDSCAPE)
@@ -2880,12 +2882,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		vertexColor = 1;
 #		endif
 #		if defined(SKYLIGHTING)
-	float skylightingDiffuse = Color::IrradianceToGamma(Skylighting::GetSkylightingDiffuse(skylightingSH, input.WorldPosition.xyz, ambientNormal));
+	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, input.WorldPosition.xyz, ambientNormal);
 #		endif
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
-	float skylightingDiffuse = Color::IrradianceToGamma(Skylighting::GetSkylightingDiffuse(skylightingSH, input.WorldPosition.xyz, ambientNormal, vertexAO));
+	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, input.WorldPosition.xyz, ambientNormal, vertexAO);
 #		if defined(TRUE_PBR)
 	vertexColor = 1;
 #		endif
@@ -2898,13 +2900,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // defined (HAIR)
 
 #	if defined(IBL)
-	if (SharedData::iblSettings.EnableIBL)
-		if (!(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection))
+	if (SharedData::iblSettings.EnableIBL) {
+		if (!(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection)) {
 			directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -ambientNormal);
-#	endif
-
-#	if defined(SKYLIGHTING)
-	directionalAmbientColor *= MultiBounceAO(baseColor.xyz, skylightingDiffuse);
+		}
+	}
 #	endif
 
 	float3 reflectionDiffuseColor = diffuseColor + directionalAmbientColor;
@@ -2996,6 +2996,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float mlpBlendFactor = saturate(viewNormalAngle) * (1.0 - baseColor.w);
 
 	color.xyz = lerp(color.xyz, (diffuseColor + directionalAmbientColor) * vertexColor * layerColor, mlpBlendFactor);
+	directionalAmbientColor = lerp(directionalAmbientColor, directionalAmbientColor * layerColor, mlpBlendFactor);
 
 	indirectLobeWeights.diffuse *= 1.0 - mlpBlendFactor;
 #	endif  // MULTI_LAYER_PARALLAX
@@ -3034,13 +3035,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	color.xyz *= Color::PBRLightingScale;
 	specularColor *= Color::PBRLightingScale;
 	indirectLobeWeights.diffuse *= Color::PBRLightingScale;
-#	else
-	specularColor = Color::IrradianceToLinear(specularColor);
 #	endif
 
 	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
 
 	directionalAmbientColor *= outputAlbedo;
+
+#	if defined(SKYLIGHTING)
+	Skylighting::ApplySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
+#	endif
 
 #	if !defined(DEFERRED)
 	color.xyz = Color::IrradianceToLinear(color.xyz);

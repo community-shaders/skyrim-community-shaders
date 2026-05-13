@@ -643,7 +643,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					endif
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, normal);
-	float skylightingDiffuse = Color::IrradianceToGamma(Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, normal, vertexAO));
+	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, normal, vertexAO);
 #				endif  // SKYLIGHTING
 
 	float3 albedo = baseColor.xyz * vertexColor;
@@ -743,19 +743,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBL(directionalAmbientColor, -normal);
 #				endif
 
-#				if defined(SKYLIGHTING)
-	directionalAmbientColor *= MultiBounceAO(albedo, skylightingDiffuse);
-#				endif
-
 	diffuseColor += directionalAmbientColor;
 	diffuseColor += subsurfaceColor * albedo;
 	diffuseColor *= albedo;
 
 	directionalAmbientColor *= albedo;
 
+#				if defined(SKYLIGHTING)
+	Skylighting::ApplySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
+#				endif
+
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
-	specularColor = Color::IrradianceToLinear(specularColor);
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
@@ -902,7 +901,7 @@ PS_OUTPUT main(PS_INPUT input)
 #				endif
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, normal);
-	float skylightingDiffuse = Color::IrradianceToGamma(Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, normal, vertexAO));
+	float skylightingDiffuse = Skylighting::GetSkylightingDiffuse(skylightingSH, positionMSSkylight, normal, vertexAO);
 #			endif  // SKYLIGHTING
 
 	float3 directionalAmbientColor = Color::Ambient(max(0, SharedData::GetAmbient(normal)));
@@ -914,14 +913,14 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 albedo = baseColor.xyz * vertexColor;
 
-#			if defined(SKYLIGHTING)
-	directionalAmbientColor *= MultiBounceAO(albedo, skylightingDiffuse);
-#			endif
-
 	diffuseColor += directionalAmbientColor;
 
 	diffuseColor *= albedo;
 	directionalAmbientColor *= albedo;
+
+#			if defined(SKYLIGHTING)
+	Skylighting::ApplySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
+#			endif
 
 	psout.Diffuse.xyz = diffuseColor;
 

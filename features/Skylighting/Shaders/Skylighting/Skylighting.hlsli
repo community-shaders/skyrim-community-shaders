@@ -52,6 +52,28 @@ namespace Skylighting
 		return MixSpecular(visibility);
 	}
 
+#if defined(PSHADER)
+	void ApplySkylighting(inout float3 diffuseColor, inout float3 directionalAmbientColor, float3 albedo, float skylightingDiffuse)
+	{
+		float maxScale = 1.0;
+		if (directionalAmbientColor.x > 0.0)
+			maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
+		if (directionalAmbientColor.y > 0.0)
+			maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
+		if (directionalAmbientColor.z > 0.0)
+			maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
+		directionalAmbientColor *= maxScale;
+
+		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
+
+		float3 linAmbient = Color::IrradianceToLinear(directionalAmbientColor);
+		float3 multiBounceSkylighting = MultiBounceAO(albedo, skylightingDiffuse);
+		directionalAmbientColor = Color::IrradianceToGamma(linAmbient * multiBounceSkylighting);
+
+		diffuseColor += directionalAmbientColor;
+	}
+#endif
+
 #if defined(PSHADER) || defined(SKYLIGHTING_PROBE_REGISTER)
 	sh2 Sample(float3 positionMS, float3 normalWS)
 	{
@@ -114,6 +136,8 @@ namespace Skylighting
 
 		return saturate(skylightingDiffuse / max(vertexAO, EPSILON_DIVISION));
 	}
+
+
 
 	sh2 SampleNoBias(float3 positionMS)
 	{
