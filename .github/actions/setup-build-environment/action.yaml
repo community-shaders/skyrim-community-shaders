@@ -40,8 +40,12 @@ runs:
                   "--add", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", `
                   "--add", "Microsoft.VisualStudio.Component.Windows11SDK.26100" `
                   -Wait -NoNewWindow -PassThru
-              if ($proc.ExitCode -ne 0) {
+              $successExitCodes = @(0, 3010) # 3010 = ERROR_SUCCESS_REBOOT_REQUIRED
+              if ($successExitCodes -notcontains $proc.ExitCode) {
                   throw "Visual Studio Build Tools installer failed with exit code $($proc.ExitCode)."
+              }
+              if ($proc.ExitCode -eq 3010) {
+                  Write-Warning "Visual Studio Build Tools installer requested a reboot; continuing on GitHub runner."
               }
               Remove-Item $installerPath -ErrorAction SilentlyContinue
 
