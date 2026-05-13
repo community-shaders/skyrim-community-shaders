@@ -20,7 +20,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void CloudShadows::DrawSettings()
 {
-	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 4.0f, "%.1f");
+	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Higher values make cloud shadows darker.");
