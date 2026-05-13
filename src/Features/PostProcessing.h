@@ -106,6 +106,13 @@ struct PostProcessing : Feature
 	void DrawBeforeUpscaling();
 	void ClearBorderMotionVectorsForFrameGen();
 
+	/// Copy lastTexColor to a render target, performing format conversion via copyCS if needed.
+	void CopyToRenderTarget(
+		RE::BSGraphics::RenderTargetData& targetRT,
+		Texture2D* convertTex,
+		ID3D11Texture2D* srcTex,
+		ID3D11ShaderResourceView* srcSRV);
+
 	/////////////////////////////////////////////////////////////////////////////////
 
 	bool bypass = false;
@@ -116,7 +123,7 @@ struct PostProcessing : Feature
 		RE::ImageSpaceData gameISData;
 	};
 
-	ImageSpaceManager* imageSpaceManager = new ImageSpaceManager();
+	std::unique_ptr<ImageSpaceManager> imageSpaceManager = std::make_unique<ImageSpaceManager>();
 
 	eastl::unique_ptr<Texture2D> texCopyMain = nullptr;
 	eastl::unique_ptr<Texture2D> texCopyMainCopy = nullptr;

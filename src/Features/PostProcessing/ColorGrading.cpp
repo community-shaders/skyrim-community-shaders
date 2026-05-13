@@ -45,7 +45,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	logType,
 	invertLog,
 	enableTonemap,
-	processColorSpace)
+	processColorSpace,
+	enableDithering)
 
 template <int num = 3>
 bool shiftSlider(const char* label, float* v, float v_min, float v_max, const char* format = "%.3f", ImGuiSliderFlags flags = 0)
@@ -259,6 +260,12 @@ struct TonemapperInfo
 
 void ColorGrading::DrawSettings()
 {
+	ImGui::Checkbox("Dithering (Anti-Banding)", &settings.enableDithering);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Applies triangle-distribution dithering to prevent 8-bit color banding.\nOnly active in SDR mode (disabled automatically for HDR).");
+
+	ImGui::Separator();
+
 	ImGui::Checkbox("Skip LDR Color Grading", &settings.skipLDR);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Skip color grading after tonemapping. This includes Lift Gamma Gain. Will be automatically skipped with HDR on.");
@@ -718,7 +725,8 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		}(),
 		.hdrPeakNits = [&]() -> float {
 			return hdrEnabled ? static_cast<float>(hdr.settings.hdrPeakNits) : 1000.f;
-		}()
+		}(),
+		.enableDithering = (settings.enableDithering && !hdrEnabled) ? 1u : 0u
 	};
 	colorCB->Update(colorCBData);
 

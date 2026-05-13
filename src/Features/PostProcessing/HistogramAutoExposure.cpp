@@ -194,14 +194,13 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 		context->CSSetShaderResources(0, (UINT)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (UINT)uavs.size(), uavs.data(), nullptr);
 
-		// Calculate histogram - optimized for 32x32 threads
-		// Reduced number of dispatches due to increased thread count and sampling optimization
+		// Calculate histogram
+		// The shader uses [32,32,1] thread groups with 8x-spaced sampling to cover the screen.
+		// First, compute base groups needed to tile the texture at 32-thread granularity,
+		// then divide by 8 because each thread samples at 8-pixel intervals.
 		context->CSSetShader(histogramCS.get(), nullptr, 0);
 		uint32_t dispatchX = ((texAdapt->desc.Width - 1) >> 5) + 1;
 		uint32_t dispatchY = ((texAdapt->desc.Height - 1) >> 5) + 1;
-
-		// Further reduce dispatches based on our sampling pattern
-		// Since we're sampling at 8x spacing, we can reduce dispatches by 8x
 		dispatchX = (dispatchX + 7) / 8;
 		dispatchY = (dispatchY + 7) / 8;
 

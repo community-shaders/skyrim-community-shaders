@@ -224,12 +224,15 @@ void MotionBlur::Draw(TextureInfo& inout_tex)
 		// Check for resize and update resources if needed
 		CheckAndResizeResources(inout_tex);
 
-		// Handle image scaling by converting to dynamic resolution if needed
-		if (lastWidth > 0 && lastHeight > 0) {
-			float2 res = { (float)lastWidth, (float)lastHeight };
+		// Compute dynamic resolution dimensions for dispatch (without overwriting lastWidth/lastHeight
+		// which are used for resource size tracking)
+		dynamicWidth = lastWidth;
+		dynamicHeight = lastHeight;
+		if (dynamicWidth > 0 && dynamicHeight > 0) {
+			float2 res = { (float)dynamicWidth, (float)dynamicHeight };
 			res = Util::ConvertToDynamic(res);
-			lastWidth = (uint32_t)res.x;
-			lastHeight = (uint32_t)res.y;
+			dynamicWidth = (uint32_t)res.x;
+			dynamicHeight = (uint32_t)res.y;
 		}
 
 		// Update constant buffers
@@ -457,44 +460,21 @@ void MotionBlur::ClearComputeResources(uint32_t srvCount)
 void MotionBlur::ExecuteVerticalPass()
 {
 	auto context = globals::d3d::context;
-	if (!context) {
-		logger::error("Motion blur error: D3D context is null in vertical pass");
-		return;
-	}
 
 	// First do horizontal reduction
 	ExecuteHorizontalPass();
 
-	// Validate resources before vertical pass
-	if (!verticalPassTexture || !verticalPassTexture->uav) {
-		logger::error("Motion blur error: Vertical pass texture is invalid");
+	if (!verticalPassTexture || !verticalPassTexture->uav || !horizontalPassTexture || !horizontalPassTexture->srv || !verticalPassShader || !reductionPassConstantBufferObj)
 		return;
-	}
-
-	if (!horizontalPassTexture || !horizontalPassTexture->srv) {
-		logger::error("Motion blur error: Horizontal pass texture is invalid in vertical pass");
-		return;
-	}
-
-	if (!verticalPassShader) {
-		logger::error("Motion blur error: Vertical pass shader is invalid");
-		return;
-	}
-
-	// Check if constant buffer is valid
-	if (!reductionPassConstantBufferObj) {
-		logger::error("Motion blur error: Reduction pass constant buffer is null in vertical pass");
-		return;
-	}
 
 	// Setup vertical pass with horizontal pass texture as input
 	ID3D11ShaderResourceView* horizontalSRV = horizontalPassTexture->srv.get();
 	ID3D11Buffer* reductionCB = reductionPassConstantBufferObj->CB();
 	SetupComputePass(verticalPassShader.get(), &horizontalSRV, 1, verticalPassTexture->uav.get(), reductionCB);
 
-	// Dispatch vertical pass
-	uint32_t dispatchX = (lastWidth + 7) / 8;
-	uint32_t dispatchY = (lastHeight + 7) / 8;
+	// Dispatch vertical pass: output is [GRID_SIZE × GRID_SIZE], so dispatch covers grid dimensions only
+	uint32_t dispatchX = (FixedGridSize + 7) / 8;
+	uint32_t dispatchY = (FixedGridSize + 7) / 8;
 	context->Dispatch(dispatchX, dispatchY, 1);
 
 	ClearComputeResources(1);
@@ -504,54 +484,24 @@ void MotionBlur::ExecuteHorizontalPass()
 {
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
-	if (!context || !renderer) {
-		logger::error("Motion blur error: D3D context or renderer is null");
+
+	if (!context || !renderer || !horizontalPassShader || !reductionPassConstantBufferObj)
 		return;
-	}
 
 	// Get motion vectors from engine
 	auto& motionVectorTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-
-	// Safety check for valid texture and SRV
-	if (!motionVectorTex.texture || !motionVectorTex.SRV) {
-		logger::error("Motion blur error: Motion vector texture is invalid in horizontal pass");
+	if (!motionVectorTex.texture || !motionVectorTex.SRV || !horizontalPassTexture || !horizontalPassTexture->uav)
 		return;
-	}
 
 	ID3D11ShaderResourceView* velocitySRV = motionVectorTex.SRV;
-
-	// Validate before use
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-	velocitySRV->GetDesc(&srvDesc);
-	if (srvDesc.ViewDimension != D3D11_SRV_DIMENSION_TEXTURE2D) {
-		logger::error("Motion blur error: Motion vector SRV has invalid dimension");
-		return;
-	}
-
-	// Validate horizontal pass texture
-	if (!horizontalPassTexture || !horizontalPassTexture->uav) {
-		logger::error("Motion blur error: Horizontal pass texture is invalid");
-		return;
-	}
-
-	// Check if constant buffer is valid
-	if (!reductionPassConstantBufferObj) {
-		logger::error("Motion blur error: Reduction pass constant buffer is null");
-		return;
-	}
-
-	if (!horizontalPassShader) {
-		logger::error("Motion blur error: Horizontal pass shader is null");
-		return;
-	}
 
 	// Setup horizontal pass
 	ID3D11Buffer* reductionCB = reductionPassConstantBufferObj->CB();
 	SetupComputePass(horizontalPassShader.get(), &velocitySRV, 1, horizontalPassTexture->uav.get(), reductionCB);
 
-	// Dispatch horizontal pass (width/8 × height/8)
-	uint32_t dispatchX = (lastWidth + 7) / 8;
-	uint32_t dispatchY = (lastHeight + 7) / 8;
+	// Dispatch horizontal pass: output is [GRID_SIZE × height], so dispatch covers grid width and full height
+	uint32_t dispatchX = (FixedGridSize + 7) / 8;
+	uint32_t dispatchY = (dynamicHeight + 7) / 8;
 	context->Dispatch(dispatchX, dispatchY, 1);
 
 	ClearComputeResources(1);
@@ -560,42 +510,18 @@ void MotionBlur::ExecuteHorizontalPass()
 void MotionBlur::ExecuteNeighborMaxPass()
 {
 	auto context = globals::d3d::context;
-	if (!context) {
-		logger::error("Motion blur error: D3D context is null in neighbor max pass");
-		return;
-	}
 
-	// Validate resources before neighbor pass
-	if (!verticalPassTexture || !verticalPassTexture->srv) {
-		logger::error("Motion blur error: Vertical pass texture is invalid in neighbor pass");
+	if (!context || !verticalPassTexture || !verticalPassTexture->srv || !neighborMaxTexture || !neighborMaxTexture->uav || !neighborMaxPassShader || !reductionPassConstantBufferObj)
 		return;
-	}
-
-	if (!neighborMaxTexture || !neighborMaxTexture->uav) {
-		logger::error("Motion blur error: Neighbor max texture is invalid");
-		return;
-	}
-
-	if (!neighborMaxPassShader) {
-		logger::error("Motion blur error: Neighbor max pass shader is invalid");
-		return;
-	}
-
-	if (!reductionPassConstantBufferObj) {
-		logger::error("Motion blur error: Reduction pass constant buffer is invalid in neighbor pass");
-		return;
-	}
 
 	// Setup neighbor pass
 	ID3D11ShaderResourceView* verticalPassSRV = verticalPassTexture->srv.get();
 	ID3D11Buffer* reductionCB = reductionPassConstantBufferObj->CB();
 	SetupComputePass(neighborMaxPassShader.get(), &verticalPassSRV, 1, neighborMaxTexture->uav.get(), reductionCB);
 
-	// Dispatch neighbor pass
-	uint32_t width = lastWidth;
-	uint32_t height = lastHeight;
-	uint32_t dispatchX = (width + 7) / 8;
-	uint32_t dispatchY = (height + 7) / 8;
+	// Dispatch neighbor pass: operates on [GRID_SIZE × GRID_SIZE] grid
+	uint32_t dispatchX = (FixedGridSize + 7) / 8;
+	uint32_t dispatchY = (FixedGridSize + 7) / 8;
 	context->Dispatch(dispatchX, dispatchY, 1);
 
 	ClearComputeResources(1);
@@ -605,74 +531,35 @@ void MotionBlur::ExecuteBlurPass(TextureInfo& inout_tex)
 {
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
-	if (!context || !renderer) {
-		logger::error("Motion blur error: D3D context or renderer is null in blur pass");
+
+	if (!context || !renderer || !blurPassShader || !blurConstantBufferObj)
 		return;
-	}
 
 	// Get engine resources
 	auto& motionVectorTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 	auto* depthSRV = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN].depthSRV;
 
-	// Validate resources
-	if (!motionVectorTex.texture || !motionVectorTex.SRV) {
-		logger::error("Motion blur error: Motion vector texture is invalid in blur pass");
+	if (!motionVectorTex.SRV || !depthSRV || !neighborMaxTexture || !neighborMaxTexture->srv || !blurOutputTexture || !blurOutputTexture->uav)
 		return;
-	}
-
-	if (!depthSRV) {
-		logger::error("Motion blur error: Depth texture is invalid in blur pass");
-		return;
-	}
-
-	if (!inout_tex.tex || !inout_tex.srv) {
-		logger::error("Motion blur error: Input texture is invalid in blur pass");
-		return;
-	}
-
-	if (!neighborMaxTexture || !neighborMaxTexture->srv) {
-		logger::error("Motion blur error: Neighborhood max texture is invalid");
-		return;
-	}
-
-	if (!blurOutputTexture || !blurOutputTexture->uav) {
-		logger::error("Motion blur error: Blur output texture is invalid");
-		return;
-	}
 
 	ID3D11ShaderResourceView* velocitySRV = motionVectorTex.SRV;
 
 	// Set samplers
-	if (!linearSampler || !pointSampler) {
-		logger::error("Motion blur error: Samplers are invalid");
+	if (!linearSampler || !pointSampler)
 		return;
-	}
 
 	ID3D11SamplerState* samplers[] = { linearSampler.get(), pointSampler.get() };
 	context->CSSetSamplers(0, 2, samplers);
-
-	// Make sure constant buffer is valid
-	if (!blurConstantBufferObj) {
-		logger::error("Motion blur error: Blur constant buffer is null");
-		return;
-	}
 
 	// Setup blur pass
 	ID3D11ShaderResourceView* srvs[] = { inout_tex.srv, velocitySRV, neighborMaxTexture->srv.get(), depthSRV };
 	ID3D11Buffer* blurCB = blurConstantBufferObj->CB();
 
-	if (!blurPassShader) {
-		logger::error("Motion blur error: Blur pass shader is invalid");
-		return;
-	}
-
 	SetupComputePass(blurPassShader.get(), srvs, 4, blurOutputTexture->uav.get(), blurCB);
 
-	// Dispatch blur pass
-	uint32_t width = lastWidth;
-	uint32_t height = lastHeight;
-	uint32_t dispatchX = (width + 7) / 8;
-	uint32_t dispatchY = (height + 7) / 8;
+	// Dispatch blur pass at dynamic resolution (full-screen blur)
+	uint32_t dispatchX = (dynamicWidth + 7) / 8;
+	uint32_t dispatchY = (dynamicHeight + 7) / 8;
 	context->Dispatch(dispatchX, dispatchY, 1);
 
 	// Cleanup
@@ -681,7 +568,7 @@ void MotionBlur::ExecuteBlurPass(TextureInfo& inout_tex)
 	context->CSSetSamplers(0, 2, nullSamplers);
 	context->CSSetShader(nullptr, nullptr, 0);
 
-	// Set output only if we have valid resources
+	// Set output
 	if (blurOutputTexture && blurOutputTexture->resource && blurOutputTexture->srv) {
 		inout_tex = { blurOutputTexture->resource.get(), blurOutputTexture->srv.get() };
 	}

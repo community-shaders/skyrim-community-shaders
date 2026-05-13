@@ -11,7 +11,7 @@ struct HistogramAutoExposure : public PostProcessFeature
 																 "Expects HDR linear RGB inputs."; }
 	virtual inline bool DisableInMainLoadingMenu() const override { return true; }
 
-	virtual bool SupportsVR() { return true; }
+	virtual bool SupportsVR() const override { return true; }
 
 	struct Settings
 	{

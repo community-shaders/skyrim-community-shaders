@@ -247,7 +247,8 @@
                 [0.0, 0.0, 0.0, 0.0]
             ],
             "useLog": true,
-            "useToDInterior": false
+            "useToDInterior": false,
+            "enableDithering": true
         }
     },
     "Depth of Field": {
