@@ -32,7 +32,7 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::Unproject(shR, rayDir);
 		float colorG = SphericalHarmonics::Unproject(shG, rayDir);
 		float colorB = SphericalHarmonics::Unproject(shB, rayDir);
-		return float3(colorR, colorG, colorB) / Math::PI;
+		return float3(colorR, colorG, colorB);
 	}
 
 	/// Get Sky-only IBL color from game's native reflections cubemap SH
@@ -44,7 +44,7 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::Unproject(shR, rayDir);
 		float colorG = SphericalHarmonics::Unproject(shG, rayDir);
 		float colorB = SphericalHarmonics::Unproject(shB, rayDir);
-		return max(0, float3(colorR, colorG, colorB) / Math::PI);
+		return max(0, float3(colorR, colorG, colorB));
 	}
 
 	// ============================================================================
@@ -63,7 +63,7 @@ namespace ImageBasedLighting
 		float colorR = SphericalHarmonics::Unproject(iblSHR, float3(0, 0, 0));
 		float colorG = SphericalHarmonics::Unproject(iblSHG, float3(0, 0, 0));
 		float colorB = SphericalHarmonics::Unproject(iblSHB, float3(0, 0, 0));
-		float3 ibl0 = max(0, float3(colorR, colorG, colorB) / Math::PI);
+		float3 ibl0 = max(0, float3(colorR, colorG, colorB));
 
 		if (SharedData::iblSettings.DALCMode == 1) {
 			float3 ratio = dalc0 / max(ibl0, 0.001);
@@ -106,6 +106,8 @@ namespace ImageBasedLighting
 			linEnv = GetEnvIBLColor(rayDir);
 			linSky = GetSkyIBLColor(rayDir);
 		}
+		if (SharedData::enbSettings.Enable)
+			linSky *= saturate(-rayDir.z * 0.65 + 0.35);
 		return linEnv + linSky;
 	}
 
