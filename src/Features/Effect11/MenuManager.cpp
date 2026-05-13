@@ -59,7 +59,7 @@ void MenuManager::RenderSettingsPanel()
 
 	ImGui::SameLine();
 
-	if (ImGui::Button("Apply")) {
+	if (ImGui::Button("Load & Apply")) {
 		Util::ShaderPatches::Load();
 		settingManager.Load();
 		effectManager.Apply();
