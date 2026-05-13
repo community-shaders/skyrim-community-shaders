@@ -49,7 +49,7 @@ public:
 
 	struct alignas(16) Settings
 	{
-		uint DisableVertexAO = false;
+		float VertexAOStrength = 1.0f;
 		uint pad[3];
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
