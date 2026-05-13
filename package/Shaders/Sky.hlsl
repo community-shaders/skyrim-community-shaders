@@ -191,6 +191,11 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	if defined(CLOUD_RELIGHT) && defined(CLOUD_SHADOWS) && defined(TEX) && defined(CLOUDS)
+#		define CR_CLOUDS
+#		include "CloudRelight/CloudRelight.hlsli"
+#	endif
+
 #	ifdef HDR_OUTPUT
 #		include "HDRDisplay/HDRSun.hlsli"
 #		include "Common/Random.hlsli"
@@ -223,6 +228,14 @@ PS_OUTPUT main(PS_INPUT input)
 	blendColor.xyz = Color::Sky(blendColor.xyz);
 	baseColor.xyz = Color::Sky(baseColor.xyz);
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
+#		endif
+
+#		if defined(CR_CLOUDS)
+	if (SharedData::cloudRelightSettings.enabled) {
+		float3 viewDir = normalize(input.WorldPosition.xyz);
+		if (CloudShadows::IntersectCloudDist(float3(0, 0, 0), viewDir) >= 0.0)
+			baseColor.rgb = CloudRelight::RelightCloud(baseColor, viewDir, SampBaseSampler);
+	}
 #		endif
 
 #		ifdef HDR_OUTPUT
