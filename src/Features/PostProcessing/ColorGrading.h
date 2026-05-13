@@ -76,7 +76,6 @@ struct ColorGrading : public PostProcessFeature
 		bool invertLog = false;
 		bool enableTonemap = true;
 		int processColorSpace = 0;
-		bool enableDithering = true;  // Dithering to prevent 8-bit banding (SDR only)
 	} settings;
 
 	// Computed matrices (not serialized)
@@ -135,9 +134,9 @@ struct ColorGrading : public PostProcessFeature
 		uint skipLUT;
 		uint enableTonemap;
 		uint enableColorSpaceTransform;
-		uint enableHDR;        // HDR display is enabled (auto-set from HDR feature)
-		float hdrPeakNits;     // Maximum display brightness in nits for HDR
-		uint enableDithering;  // Triangle-distribution dithering for 8-bit banding prevention
+		uint enableHDR;     // HDR display is enabled (auto-set from HDR feature)
+		float hdrPeakNits;  // Maximum display brightness in nits for HDR
+		uint pad;
 	};
 	std::unique_ptr<ConstantBuffer> colorCB = nullptr;
 

@@ -50,9 +50,9 @@ cbuffer ColorCB : register(b1)
 	uint skipLUT;
 	uint enableTonemap;
 	uint enableColorSpaceTransform;
-	uint enableHDR;        // HDR display is enabled (auto-set from HDR feature)
-	float hdrPeakNits;     // Maximum display brightness in nits for HDR
-	uint enableDithering;  // Triangle-distribution dithering for 8-bit banding prevention
+	uint enableHDR;     // HDR display is enabled (auto-set from HDR feature)
+	float hdrPeakNits;  // Maximum display brightness in nits for HDR
+	uint pad;
 };
 
 #include "PostProcessing/ColorGrading/GT7ToneMapping.hlsli"
@@ -579,31 +579,6 @@ float3 GT7ToneMapping(float3 color)
 
 ////////////////////////////////////////////////////////////////////////
 
-// Triangle-distribution dithering (Vlachos 2016, "Advanced VR Rendering")
-// Produces noise in [-1, 1] with triangular PDF centered at 0 — optimal for quantization error.
-// Uses interleaved gradient noise (Jimenez 2014) as the base hash.
-float InterleavedGradientNoise(float2 pos)
-{
-	return frac(52.9829189 * frac(dot(pos, float2(0.06711056, 0.00583715))));
-}
-
-float3 TriangleDither(float2 pos)
-{
-	// Two uncorrelated IGN samples offset by golden ratio
-	float3 n0 = float3(
-		InterleavedGradientNoise(pos),
-		InterleavedGradientNoise(pos + 5.329),
-		InterleavedGradientNoise(pos + 10.658));
-	float3 n1 = float3(
-		InterleavedGradientNoise(pos + 0.6180339887),
-		InterleavedGradientNoise(pos + 5.947),
-		InterleavedGradientNoise(pos + 11.276));
-	// Sum of two uniform [0,1] → triangular [0,2], remap to [-1,1]
-	return n0 + n1 - 1.0;
-}
-
-////////////////////////////////////////////////////////////////////////
-
 // Linear to Log
 float3 ACEScct(float3 linearColor, bool inverse)
 {
@@ -792,10 +767,6 @@ float3 ApplyLUT(float3 color)
 
 	// Game fade
 	color = lerp(color, fade.xyz, fade.w);
-
-	// Dithering: add triangle-distributed noise scaled to ±0.5/255 to break 8-bit banding
-	if (enableDithering)
-		color += TriangleDither(float2(DTid)) / 255.0;
 
 	RWTexOut[DTid] = float4(color, 1);
 }
