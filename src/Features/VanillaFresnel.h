@@ -21,6 +21,7 @@ struct VanillaFresnel : public Feature
 
 	// Functionality
 	virtual bool inline SupportsVR() override { return true; }
+	virtual bool inline IsCore() const override { return true; }
 	virtual inline std::string_view GetShaderDefineName() override { return "VANILLA_FRESNEL"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
