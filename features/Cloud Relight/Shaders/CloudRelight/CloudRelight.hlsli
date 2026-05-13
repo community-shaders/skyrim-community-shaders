@@ -130,12 +130,16 @@ namespace CloudRelight
 				lerp(0.25 * Math::INV_PI, Phase::ThomasSchander(cosTheta), data.silverLiningMix),
 				0.25 * Math::INV_PI) *
 			Math::TAU * data.cloudRelightMix;
+		phaseCloud = min(phaseCloud, 2.0);
 
 		float sunIntensity = saturate(dot(dirLightColor, float3(0.2126, 0.7152, 0.0722)));
 		float vanillaMix = lerp(1.0, data.cloudOriginalMix, sunIntensity);
 		float3 cloudColor = baseColor.rgb * vanillaMix;
 
-		cloudColor += baseColor.a * baseColor.rgb * phaseCloud * GetInnerShadow(viewDir, dirLightDir, textureSampler) * dirLightColor;
+		float3 relitColor = baseColor.a * baseColor.rgb * phaseCloud * GetInnerShadow(viewDir, dirLightDir, textureSampler) * dirLightColor;
+		float relitLuma = max(dot(relitColor, float3(0.2126, 0.7152, 0.0722)), 1e-5);
+		relitColor *= min(1.0, 1.5 / relitLuma);
+		cloudColor += relitColor;
 
 		return cloudColor;
 	}

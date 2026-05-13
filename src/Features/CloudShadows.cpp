@@ -49,7 +49,10 @@ CloudShadows::Settings CloudShadows::GetCommonBufferData() const
 
 bool CloudShadows::CloudRelightEnabled() const
 {
-	return globals::features::cloudRelight.loaded;
+	return globals::features::cloudRelight.loaded &&
+	       globals::features::cloudRelight.settings.enabled &&
+	       texSelfShadowCopy &&
+	       texCloudShadowLayers[0];
 }
 
 void CloudShadows::CheckResourcesSide(int side)
@@ -310,7 +313,17 @@ void CloudShadows::SetupResources()
 		texDesc.Format = srvDesc.Format = DXGI_FORMAT_R8_UNORM;
 		cubemapMipLevels = texDesc.MipLevels;
 
-		if (CloudRelightEnabled()) {
+		texCubemapCloudOcc = new Texture2D(texDesc, "CloudShadows::CubemapCloudOcc");
+		texCubemapCloudOcc->CreateSRV(srvDesc);
+
+		for (int i = 0; i < 6; ++i) {
+			reflections.cubeSideRTV[i]->GetDesc(&rtvDesc);
+			rtvDesc.Format = texDesc.Format;
+			DX::ThrowIfFailed(device->CreateRenderTargetView(texCubemapCloudOcc->resource.get(), &rtvDesc, cubemapCloudOccRTVs + i));
+			Util::SetResourceName(cubemapCloudOccRTVs[i], "CloudShadows::CubemapCloudOcc RTV[%d]", i);
+		}
+
+		if (globals::features::cloudRelight.loaded) {
 			for (int layer = 0; layer < kMaxCloudLayers; ++layer) {
 				char name[64];
 				snprintf(name, sizeof(name), "CloudShadows::Layer[%d]", layer);
@@ -324,22 +337,12 @@ void CloudShadows::SetupResources()
 					Util::SetResourceName(cloudShadowLayerRTVs[layer][face], "CloudShadows::Layer[%d] RTV[%d]", layer, face);
 				}
 			}
-		} else {
-			texCubemapCloudOcc = new Texture2D(texDesc, "CloudShadows::CubemapCloudOcc");
-			texCubemapCloudOcc->CreateSRV(srvDesc);
-
-			for (int i = 0; i < 6; ++i) {
-				reflections.cubeSideRTV[i]->GetDesc(&rtvDesc);
-				rtvDesc.Format = texDesc.Format;
-				DX::ThrowIfFailed(device->CreateRenderTargetView(texCubemapCloudOcc->resource.get(), &rtvDesc, cubemapCloudOccRTVs + i));
-				Util::SetResourceName(cubemapCloudOccRTVs[i], "CloudShadows::CubemapCloudOcc RTV[%d]", i);
-			}
 		}
 
 		texCubemapCloudOccCopy = new Texture2D(texDesc, "CloudShadows::CubemapCloudOccCopy");
 		texCubemapCloudOccCopy->CreateSRV(srvDesc);
 
-		if (CloudRelightEnabled()) {
+		if (globals::features::cloudRelight.loaded) {
 			texSelfShadowCopy = new Texture2D(texDesc, "CloudShadows::SelfShadowCopy");
 			texSelfShadowCopy->CreateSRV(srvDesc);
 		} else {
