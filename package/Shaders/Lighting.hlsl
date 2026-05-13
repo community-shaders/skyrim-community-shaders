@@ -2156,6 +2156,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	// Apply vertex color to base color so PBR metals use it
 	float3 pbrVertexColor = Color::SrgbToLinear(input.Color.xyz);
+	float pbrVertexAO = max(max(pbrVertexColor.x, pbrVertexColor.y), pbrVertexColor.z);
+	pbrVertexColor *= lerp(max(1 / pbrVertexAO, 0.001), 1, SharedData::truePBRSettings.VertexAOStrength);
 
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColor.xyz = Color::SrgbToLinear(baseColor.xyz) * pbrVertexColor;
