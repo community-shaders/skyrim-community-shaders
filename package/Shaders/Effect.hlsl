@@ -722,6 +722,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 	float shadowVariance = 1.0;
 
+	if (SharedData::enbSettings.Enable)
+		propertyColor *= SharedData::enbSettings.ParticleIntensity;
+
 #	if defined(LIGHTING)
 	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, eyeIndex, shadowVariance);
 
