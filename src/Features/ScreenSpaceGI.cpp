@@ -31,8 +31,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableGI,
 	EnableVanillaSSAO,
 	NumSteps,
-	MinScreenRadius,
-	Radius,
 	Thickness,
 	DepthFadeRange,
 	AOPower,
@@ -112,12 +110,6 @@ void ScreenSpaceGI::DrawSettings()
 		}
 
 		ImGui::Separator();
-
-		ImGui::SliderFloat("Radius", &settings.Radius, 10.f, 1024.0f, "%.1f units");
-
-		if (showAdvanced) {
-			ImGui::SliderFloat("Min Screen Radius", &settings.MinScreenRadius, 0.f, 0.05f, "%.3f");
-		}
 
 		ImGui::SliderFloat2("Depth Fade Range", &settings.DepthFadeRange.x, 1e4, 5e4, "%.0f units");
 
@@ -504,16 +496,13 @@ void ScreenSpaceGI::UpdateSB()
 		data.FrameIndex = globals::state->frameCount;
 
 		data.NumSteps = settings.NumSteps;
-		data.MinScreenRadius = settings.MinScreenRadius * dynres.x;
 
-		data.Radius = settings.Radius;
 		data.Thickness = settings.Thickness;
-		data.DepthFadeRange = settings.DepthFadeRange;
 		data.DepthFadeScaleConst = 1 / (settings.DepthFadeRange.y - settings.DepthFadeRange.x);
+		data.DepthFadeRange = settings.DepthFadeRange;
 
 		data.AOPower = settings.AOPower;
 		data.GIStrength = settings.GIStrength;
-		data.pad1[0] = data.pad1[1] = 0;
 	}
 
 	ssgiCB->Update(data);

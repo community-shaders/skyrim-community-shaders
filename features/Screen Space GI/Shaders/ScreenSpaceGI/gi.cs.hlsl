@@ -67,16 +67,6 @@ void CalculateGI(
 
 	const float rcpNumSteps = rcp((float)NumSteps);
 
-	// if the offset is under approx pixel size (pixelTooCloseThreshold), push it out to the minimum distance
-	const float pixelTooCloseThreshold = 1.3;
-	// approx viewspace pixel size at pixCoord; approximation of NDCToViewspace( uv.xy + ViewportSize.xy, pixCenterPos.z ).xy - pixCenterPos.xy;
-	const float2 pixelDirRBViewspaceSizeAtCenterZ = viewspaceZ.xx * (eyeIndex == 0 ? NDCToViewMul.xy : NDCToViewMul.zw) * RCP_OUT_FRAME_DIM;
-
-	float screenspaceRadius = Radius / pixelDirRBViewspaceSizeAtCenterZ.x;
-	screenspaceRadius = max(MinScreenRadius, screenspaceRadius);
-	// this is the min distance to start sampling from to avoid sampling from the center pixel (no useful data obtained from sampling center pixel)
-	const float minS = pixelTooCloseThreshold / screenspaceRadius;
-
 	//////////////////////////////////////////////////////////////////
 
 	// Use mono screen-space position for noise indexing so both eyes
@@ -103,12 +93,9 @@ void CalculateGI(
 		float3 directionVec = 0;
 		sincos(phi, directionVec.y, directionVec.x);
 
-		// convert to px units for later use
-		float2 omega = float2(directionVec.x, -directionVec.y) * screenspaceRadius;
-
-		// Per-slice constant for per-step mip selection: log2(length(s * omega)) decomposes
-		// to log2(s) + logLenOmega for s >= 0. 0.5 * log2(dot) folds length() into a single log2.
-		const float logLenOmega = 0.5 * log2(max(dot(omega, omega), EPSILON_LENGTH_SQ));
+		float2 omega_dir = float2(directionVec.x, -directionVec.y);
+		float2 pixPos = dtid + 0.5;
+		float2 absDir = max(abs(omega_dir), 1e-6);
 
 		const float3 orthoDirectionVec = directionVec - (dot(directionVec, viewVec) * viewVec);
 		const float3 axisVec = normalize(cross(orthoDirectionVec, viewVec));
@@ -130,26 +117,29 @@ void CalculateGI(
 
 		[unroll] for (int sideSign = -1; sideSign <= 1; sideSign += 2)
 		{
+			float2 sideDir = omega_dir * sideSign;
+			float2 edgeDist;
+			edgeDist.x = sideDir.x >= 0 ? (OUT_FRAME_DIM.x - pixPos.x) : pixPos.x;
+			edgeDist.y = sideDir.y >= 0 ? (OUT_FRAME_DIM.y - pixPos.y) : pixPos.y;
+			float screenspaceRadius = min(edgeDist.x / absDir.x, edgeDist.y / absDir.y);
+
+			float2 omega = omega_dir * screenspaceRadius;
+			float logLenOmega = 0.5 * log2(max(dot(omega, omega), EPSILON_LENGTH_SQ));
+
 			[loop] for (uint step = 0; step < NumSteps; step++)
 			{
 				float s = (step + stepNoise) * rcpNumSteps;
-				s *= s;     // default 2 is fine
-				s += minS;  // avoid sampling center pixel
+				s *= s;
 
 				float2 sampleOffset = s * omega;
 
 				float2 samplePxCoord = dtid + .5 + sampleOffset * sideSign;
 				float2 sampleUV = samplePxCoord * RCP_OUT_FRAME_DIM;
 
-				// Resolve which eye owns this sample. In VR, radial steps can cross the
-				// eye boundary in the side-by-side buffer; re-decode with the correct eye.
-				// Shi, Billeter, Eisemann 2022, "Stereo-consistent screen-space ambient occlusion"
 				uint sampleEyeIndex = Stereo::GetEyeIndexFromTexCoord(sampleUV);
 				float2 sampleScreenPos = Stereo::ConvertFromStereoUV(sampleUV, sampleEyeIndex);
 				[branch] if (any(sampleScreenPos > 1.0) || any(sampleScreenPos < 0.0)) continue;
 
-				// Mip level grows with pixel-space distance from the centre.
-				// logLenOmega is the per-slice log2 of |omega|. s > 0 since s += minS > 0.
 				float mipLevel = clamp(log2(s) + logLenOmega - 3.3, 0, 5);
 				float mipLevelRadiance = max(mipLevel, 1);
 

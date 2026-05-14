@@ -85,8 +85,6 @@ public:
 		// performance/quality
 		uint NumSteps = 32u;
 		// visual
-		float MinScreenRadius = 0.01f;
-		float Radius = 512.f;
 		float Thickness = 32.f;
 		float2 DepthFadeRange = { 4e4, 5e4 };
 		// mix
@@ -111,15 +109,12 @@ public:
 
 		uint NumSteps;
 
-		float MinScreenRadius;
-		float Radius;
 		float Thickness;
-		float2 DepthFadeRange;
 		float DepthFadeScaleConst;
+		float2 DepthFadeRange;
 
 		float AOPower;
 		float GIStrength;
-		float pad1[2];
 	};
 	STATIC_ASSERT_ALIGNAS_16(SSGICB);
 	eastl::unique_ptr<ConstantBuffer> ssgiCB;

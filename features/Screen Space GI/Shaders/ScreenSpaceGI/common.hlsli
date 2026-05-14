@@ -38,15 +38,12 @@ cbuffer SSGICB : register(b1)
 
 	uint NumSteps;
 
-	float MinScreenRadius;
-	float Radius;
 	float Thickness;
-	float2 DepthFadeRange;
 	float DepthFadeScaleConst;
+	float2 DepthFadeRange;
 
 	float AOPower;
 	float GIStrength;
-	float2 pad1;
 };
 
 SamplerState samplerPointClamp : register(s0);
