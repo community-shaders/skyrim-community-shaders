@@ -160,6 +160,7 @@ public:
 	eastl::unique_ptr<Texture2D> texNRDInputSH1 = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDOutputSH0 = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDOutputSH1 = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDMV = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDNormalRoughness = nullptr;
 

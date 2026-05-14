@@ -266,6 +266,7 @@ void ScreenSpaceGI::DrawSettings()
 		BUFFER_VIEWER_NODE(texNRDInputSH1, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDOutputSH0, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDOutputSH1, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDMV, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDViewZ, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDNormalRoughness, debugRescale)
 
@@ -399,6 +400,14 @@ void ScreenSpaceGI::SetupResources()
 			texNRDOutputSH1 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDOutputSH1");
 			texNRDOutputSH1->CreateSRV(srvDesc);
 			texNRDOutputSH1->CreateUAV(uavDesc);
+		}
+
+		// NRD MV (RG16F, full-res)
+		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+		{
+			texNRDMV = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDMV");
+			texNRDMV->CreateSRV(srvDesc);
+			texNRDMV->CreateUAV(uavDesc);
 		}
 
 		// NRD ViewZ (R32F, full-res)
@@ -664,6 +673,7 @@ void ScreenSpaceGI::DrawSSGI()
 
 		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 		auto normal = rts[NORMALROUGHNESS];
+		auto motion = rts[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 		resetViews();
 		std::array<ID3D11ShaderResourceView*, 2> guideSRVs = {
@@ -684,6 +694,9 @@ void ScreenSpaceGI::DrawSSGI()
 		std::array<ID3D11UnorderedAccessView*, 2> nullUAVs = { nullptr };
 		context->CSSetShaderResources(0, (uint)nullSRVs.size(), nullSRVs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)nullUAVs.size(), nullUAVs.data(), nullptr);
+
+		// Motion Vector is used as both SRV and as UAV, copy the original over before dispatching
+		context->CopyResource(texNRDMV->resource.get(), motion.texture);
 	}
 
 	// Prefilter radiance mip chain (reads main RT directly)
@@ -816,11 +829,12 @@ void ScreenSpaceGI::DrawSSGI()
 		nrdReblur.SetDenoiserSettings(&reblurSettings);
 
 		auto motion = rts[RE::RENDER_TARGETS::kMOTION_VECTOR];
-		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV, motion.SRV);
+		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV, texNRDMV->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS, texNRDNormalRoughness->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_VIEWZ, texNRDViewZ->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH0, texNRDInputSH0->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH1, texNRDInputSH1->srv.get());
+		nrdReblur.SetNamedUAV(nrd::ResourceType::IN_MV, texNRDMV->uav.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->srv.get());
 		nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->uav.get());
