@@ -166,7 +166,7 @@ void CalculateGI(
 				float3 sampleHorizonVec = normalize(sampleDelta);
 
 				// Back-side horizon vector for the surface-thickness offset.
-				float3 sampleBackHorizonVec = normalize(sampleDelta - viewVec * Thickness);
+				float3 sampleBackHorizonVec = normalize(sampleDelta - viewVec * Thickness * viewspaceZ);
 
 				float angleFront = FastMath::ACos(dot(sampleHorizonVec, viewVec));
 				float angleBack = FastMath::ACos(dot(sampleBackHorizonVec, viewVec));

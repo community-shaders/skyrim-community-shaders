@@ -132,7 +132,7 @@ void ScreenSpaceGI::DrawSettings()
 
 		if (showAdvanced) {
 			ImGui::Separator();
-			ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 128.0f, "%.1f units");
+			ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 0.2f, "%.3f");
 		}
 	}
 

@@ -88,7 +88,7 @@ public:
 		uint NumSteps = 8u;
 		bool HalfRes = true;
 		// visual
-		float Thickness = 32.f;
+		float Thickness = 0.1f;
 		// mix
 		float AOPower = 1.0f;
 		float GIStrength = 1.0f;
