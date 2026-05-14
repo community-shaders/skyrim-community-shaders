@@ -48,14 +48,23 @@ SamplerState LinearSampler : register(s0);
 #	include "NRD/NRDReblurSH.hlsli"
 
 Texture2D<float4> SsgiTexture : register(t9);
+#	if defined(SSGI_SH)
+Texture2D<float4> SsgiSH1Texture : register(t10);
+#	endif
 
 void SampleSSGIDiffuse(uint2 pixCoord, float3 normalWS, float3 viewWS, out float ao, out float3 il)
 {
+#	if defined(SSGI_SH)
+	NRD_SG sg = REBLUR_BackEnd_UnpackSh(SsgiTexture[pixCoord], SsgiSH1Texture[pixCoord]);
+	ao = 1.0 - saturate(sg.normHitDist);
+	float3 radiance = NRD_SG_ResolveDiffuse(sg, normalWS, viewWS, 1.0);
+#	else
 	float4 data = SsgiTexture[pixCoord];
 	float normHitDist;
 	float3 radiance;
 	REBLUR_BackEnd_UnpackRadianceAndNormHitDist(data, radiance, normHitDist);
 	ao = 1.0 - saturate(normHitDist);
+#	endif
 	il = max(0, radiance * SharedData::ssgiSettings.DiffuseMult);
 }
 
@@ -65,10 +74,15 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float alpha = roughness * roughness;
 	ao = SpecularOcclusion(saturate(NdotV), alpha, ao);
 
+#	if defined(SSGI_SH)
+	NRD_SG sg = REBLUR_BackEnd_UnpackSh(SsgiTexture[pixCoord], SsgiSH1Texture[pixCoord]);
+	float3 radiance = NRD_SG_ResolveDiffuse(sg, normal, view, roughness);
+#	else
 	float4 data = SsgiTexture[pixCoord];
 	float normHitDist;
 	float3 radiance;
 	REBLUR_BackEnd_UnpackRadianceAndNormHitDist(data, radiance, normHitDist);
+#	endif
 	il = max(0, radiance * SharedData::ssgiSettings.DiffuseMult);
 }
 #endif

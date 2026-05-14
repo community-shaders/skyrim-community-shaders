@@ -30,9 +30,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Enabled,
 	EnableGI,
 	EnableVanillaSSAO,
+	EnableSH,
 	NumSteps,
 	Thickness,
-	DepthFadeRange,
 	AOPower,
 	GIStrength,
 	EnableREBLUR,
@@ -58,7 +58,7 @@ void ScreenSpaceGI::DrawSettings()
 
 	ImGui::Checkbox("Show Advanced Options", &showAdvanced);
 
-	if (ImGui::BeginTable("Toggles", 3)) {
+	if (ImGui::BeginTable("Toggles", 4)) {
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Enabled", &settings.Enabled);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -69,6 +69,17 @@ void ScreenSpaceGI::DrawSettings()
 		{
 			auto ilToggleGuard = Util::DisableGuard(!settings.Enabled);
 			recompileFlag |= ImGui::Checkbox("Indirect Lighting (IL)", &settings.EnableGI);
+		}
+		ImGui::TableNextColumn();
+		{
+			auto shGuard = Util::DisableGuard(!settings.Enabled || !settings.EnableGI);
+			if (ImGui::Checkbox("SH Mode", &settings.EnableSH)) {
+				recompileFlag = true;
+				SetupNRDResources();
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Use Spherical Harmonics for directional GI. Higher quality but more expensive.");
+			}
 		}
 		ImGui::TableNextColumn();
 		{
@@ -110,8 +121,6 @@ void ScreenSpaceGI::DrawSettings()
 		}
 
 		ImGui::Separator();
-
-		ImGui::SliderFloat2("Depth Fade Range", &settings.DepthFadeRange.x, 1e4, 5e4, "%.0f units");
 
 		if (showAdvanced) {
 			ImGui::Separator();
@@ -195,6 +204,8 @@ void ScreenSpaceGI::DrawSettings()
 		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDInput, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDOutput, debugRescale)
+		if (texNRDInputSH1) BUFFER_VIEWER_NODE(texNRDInputSH1, debugRescale)
+		if (texNRDOutputSH1) BUFFER_VIEWER_NODE(texNRDOutputSH1, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDMV, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDViewZ, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDNormalRoughness, debugRescale)
@@ -257,9 +268,6 @@ void ScreenSpaceGI::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 5;
 
-		uint32_t fullW = texDesc.Width;
-		uint32_t fullH = texDesc.Height;
-
 		{
 			texRadiance = eastl::make_unique<Texture2D>(texDesc, "SSGI::Radiance");
 			texRadiance->CreateSRV(srvDesc);
@@ -311,43 +319,7 @@ void ScreenSpaceGI::SetupResources()
 			texPrevGeo->CreateUAV(uavDesc);
 		}
 
-		// NRD radiance+hitdist textures (RGBA16F, full-res)
-		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-		{
-			texNRDInput = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDInput");
-			texNRDInput->CreateSRV(srvDesc);
-			texNRDInput->CreateUAV(uavDesc);
-
-			texNRDOutput = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDOutput");
-			texNRDOutput->CreateSRV(srvDesc);
-			texNRDOutput->CreateUAV(uavDesc);
-		}
-
-		// NRD MV (RG16F, full-res)
-		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
-		{
-			texNRDMV = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDMV");
-			texNRDMV->CreateSRV(srvDesc);
-			texNRDMV->CreateUAV(uavDesc);
-		}
-
-		// NRD ViewZ (R32F, full-res)
-		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		{
-			texNRDViewZ = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDViewZ");
-			texNRDViewZ->CreateSRV(srvDesc);
-			texNRDViewZ->CreateUAV(uavDesc);
-		}
-
-		// NRD NormalRoughness (R10G10B10A2_UNORM, full-res — matches NRD_NORMAL_ENCODING=2)
-		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
-		{
-			texNRDNormalRoughness = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDNormalRoughness");
-			texNRDNormalRoughness->CreateSRV(srvDesc);
-			texNRDNormalRoughness->CreateUAV(uavDesc);
-		}
-
-		nrdReblur.Init(fullW, fullH, nrd::Denoiser::REBLUR_DIFFUSE, 0);
+		SetupNRDResources();
 	}
 
 	logger::debug("Loading noise texture...");
@@ -405,6 +377,95 @@ void ScreenSpaceGI::SetupResources()
 	CompileComputeShaders();
 }
 
+void ScreenSpaceGI::SetupNRDResources()
+{
+	uint32_t fullW, fullH;
+	if (texRadiance) {
+		fullW = texRadiance->desc.Width;
+		fullH = texRadiance->desc.Height;
+	} else {
+		auto renderer = globals::game::renderer;
+		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		D3D11_TEXTURE2D_DESC mainDesc;
+		mainTex.texture->GetDesc(&mainDesc);
+		fullW = mainDesc.Width;
+		fullH = mainDesc.Height;
+	}
+
+	D3D11_TEXTURE2D_DESC texDesc{
+		.Width = fullW,
+		.Height = fullH,
+		.MipLevels = 1,
+		.ArraySize = 1,
+		.Format = DXGI_FORMAT_R16G16B16A16_FLOAT,
+		.SampleDesc = { 1, 0 },
+		.Usage = D3D11_USAGE_DEFAULT,
+		.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
+	};
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		.Format = texDesc.Format,
+		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+		.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+	};
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+		.Format = texDesc.Format,
+		.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+		.Texture2D = { .MipSlice = 0 }
+	};
+
+	nrdReblur.Shutdown();
+
+	texNRDInput = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDInput");
+	texNRDInput->CreateSRV(srvDesc);
+	texNRDInput->CreateUAV(uavDesc);
+
+	texNRDOutput = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDOutput");
+	texNRDOutput->CreateSRV(srvDesc);
+	texNRDOutput->CreateUAV(uavDesc);
+
+	if (settings.EnableSH) {
+		texNRDInputSH1 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDInputSH1");
+		texNRDInputSH1->CreateSRV(srvDesc);
+		texNRDInputSH1->CreateUAV(uavDesc);
+
+		texNRDOutputSH1 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDOutputSH1");
+		texNRDOutputSH1->CreateSRV(srvDesc);
+		texNRDOutputSH1->CreateUAV(uavDesc);
+	} else {
+		texNRDInputSH1.reset();
+		texNRDOutputSH1.reset();
+	}
+
+	// NRD MV
+	if (!texNRDMV) {
+		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+		texNRDMV = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDMV");
+		texNRDMV->CreateSRV(srvDesc);
+		texNRDMV->CreateUAV(uavDesc);
+	}
+
+	// NRD ViewZ
+	if (!texNRDViewZ) {
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		texNRDViewZ = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDViewZ");
+		texNRDViewZ->CreateSRV(srvDesc);
+		texNRDViewZ->CreateUAV(uavDesc);
+	}
+
+	// NRD NormalRoughness
+	if (!texNRDNormalRoughness) {
+		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+		texNRDNormalRoughness = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDNormalRoughness");
+		texNRDNormalRoughness->CreateSRV(srvDesc);
+		texNRDNormalRoughness->CreateUAV(uavDesc);
+	}
+
+	auto denoiser = settings.EnableSH ? nrd::Denoiser::REBLUR_DIFFUSE_SH : nrd::Denoiser::REBLUR_DIFFUSE;
+	nrdReblur.Init(fullW, fullH, denoiser, 0);
+
+	globals::deferred->ClearShaderCache();
+}
+
 void ScreenSpaceGI::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
@@ -441,6 +502,8 @@ void ScreenSpaceGI::CompileComputeShaders()
 			info.defines.push_back({ "VR", "" });
 		if (settings.EnableGI)
 			info.defines.push_back({ "GI", "" });
+		if (settings.EnableSH && settings.EnableGI)
+			info.defines.push_back({ "SSGI_SH", "" });
 	}
 
 	for (auto& info : shaderInfos) {
@@ -498,9 +561,6 @@ void ScreenSpaceGI::UpdateSB()
 		data.NumSteps = settings.NumSteps;
 
 		data.Thickness = settings.Thickness;
-		data.DepthFadeScaleConst = 1 / (settings.DepthFadeRange.y - settings.DepthFadeRange.x);
-		data.DepthFadeRange = settings.DepthFadeRange;
-
 		data.AOPower = settings.AOPower;
 		data.GIStrength = settings.GIStrength;
 	}
@@ -646,7 +706,7 @@ void ScreenSpaceGI::DrawSSGI()
 		context->Dispatch((resolution[0] + 15u) >> 4, (resolution[1] + 15u) >> 4, 1);
 	}
 
-	// GI → NRD SH output
+	// GI → NRD output
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - GI");
 
@@ -658,6 +718,8 @@ void ScreenSpaceGI::DrawSSGI()
 
 		uavs.at(0) = texNRDInput->uav.get();
 		uavs.at(1) = texPrevGeo->uav.get();
+		if (settings.EnableSH && texNRDInputSH1)
+			uavs.at(2) = texNRDInputSH1->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
@@ -742,10 +804,20 @@ void ScreenSpaceGI::DrawSSGI()
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV, texNRDMV->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS, texNRDNormalRoughness->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_VIEWZ, texNRDViewZ->srv.get());
-		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, texNRDInput->srv.get());
 		nrdReblur.SetNamedUAV(nrd::ResourceType::IN_MV, texNRDMV->uav.get());
-		nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, texNRDOutput->srv.get());
-		nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, texNRDOutput->uav.get());
+
+		if (settings.EnableSH && texNRDInputSH1) {
+			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH0, texNRDInput->srv.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH1, texNRDInputSH1->srv.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutput->srv.get());
+			nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutput->uav.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->srv.get());
+			nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->uav.get());
+		} else {
+			nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, texNRDInput->srv.get());
+			nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, texNRDOutput->srv.get());
+			nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, texNRDOutput->uav.get());
+		}
 
 		nrdReblur.Dispatch();
 	}
@@ -767,6 +839,17 @@ ID3D11ShaderResourceView* ScreenSpaceGI::GetDiffuseOutputTexture()
 		return texNRDOutput->srv.get();
 	else if (loaded && settings.Enabled)
 		return texNRDInput->srv.get();
+	return nullptr;
+}
+
+ID3D11ShaderResourceView* ScreenSpaceGI::GetDiffuseSH1Texture()
+{
+	if (!loaded || !settings.Enabled || !settings.EnableSH)
+		return nullptr;
+	if (settings.EnableREBLUR && nrdReblur.IsValid() && texNRDOutputSH1)
+		return texNRDOutputSH1->srv.get();
+	else if (texNRDInputSH1)
+		return texNRDInputSH1->srv.get();
 	return nullptr;
 }
 

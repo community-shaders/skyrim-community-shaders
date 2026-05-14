@@ -10,8 +10,8 @@
 namespace ImageBasedLighting
 {
 #if defined(IBL_DEFERRED)
-	Texture2D<sh2> EnvIBLTexture : register(t10);
-	Texture2D<sh2> SkyIBLTexture : register(t11);
+	Texture2D<sh2> EnvIBLTexture : register(t11);
+	Texture2D<sh2> SkyIBLTexture : register(t12);
 #else
 	Texture2D<sh2> EnvIBLTexture : register(t76);
 	Texture2D<sh2> SkyIBLTexture : register(t77);

@@ -39,10 +39,8 @@ cbuffer SSGICB : register(b1)
 	uint NumSteps;
 
 	float Thickness;
-	float DepthFadeScaleConst;
-	float2 DepthFadeRange;
-
 	float AOPower;
+
 	float GIStrength;
 };
 

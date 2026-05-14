@@ -41,11 +41,9 @@ Texture2D<float2> srcNormal : register(t8);
 
 RWTexture2D<float4> outRadianceHitDist : register(u0);
 RWTexture2D<half3> outPrevGeo : register(u1);
-
-float GetDepthFade(float depth)
-{
-	return saturate((depth - DepthFadeRange.x) * DepthFadeScaleConst);
-}
+#ifdef SSGI_SH
+RWTexture2D<float4> outSH1 : register(u2);
+#endif
 
 // Engine-specific screen & temporal noise loader
 float2 SpatioTemporalNoise(uint2 pixCoord, uint temporalIndex)  // without TAA, temporalIndex is always 0
@@ -58,7 +56,12 @@ float2 SpatioTemporalNoise(uint2 pixCoord, uint temporalIndex)  // without TAA, 
 
 void CalculateGI(
 	uint2 dtid, float2 uv, float viewspaceZ, float3 viewspaceNormal,
-	out float o_ao, out float3 o_radiance)
+	out float o_ao, out float3 o_radiance
+#ifdef SSGI_SH
+	,
+	out float3 o_direction
+#endif
+)
 {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
@@ -87,6 +90,9 @@ void CalculateGI(
 
 	float visibility = 0;
 	float3 totalRadiance = 0;
+#ifdef SSGI_SH
+	float3 totalDirection = 0;
+#endif
 
 	{
 		float phi = Math::PI * noiseSlice;
@@ -185,6 +191,9 @@ void CalculateGI(
 						sampleRadiance = max(sampleRadiance, 0);
 
 						totalRadiance += sampleRadiance;
+#ifdef SSGI_SH
+						totalDirection += sampleHorizonVec * Color::RGBToLuminance(sampleRadiance);
+#endif
 					}
 				}
 
@@ -198,17 +207,14 @@ void CalculateGI(
 		visibility += countbits(bitmask) * 0.03125;
 	}
 
-	float depthFade = GetDepthFade(viewspaceZ);
-
-	visibility = lerp(saturate(visibility), 0, depthFade);
+	visibility = saturate(visibility);
 	visibility = 1 - pow(abs(1 - visibility), AOPower);
-
-#ifdef GI
-	totalRadiance = lerp(totalRadiance, 0, depthFade);
-#endif
 
 	o_ao = visibility;
 	o_radiance = totalRadiance;
+#ifdef SSGI_SH
+	o_direction = normalize(totalDirection + 1e-6);
+#endif
 }
 
 [numthreads(8, 8, 1)] void main(const uint2 dtid : SV_DispatchThreadID) {
@@ -227,18 +233,29 @@ void CalculateGI(
 	half2 encodedWorldNormal = GBuffer::EncodeNormal(ViewToWorldVector(viewspaceNormal, FrameBuffer::CameraViewInverse[eyeIndex]));
 	outPrevGeo[pxCoord] = half3(viewspaceZ, encodedWorldNormal);
 
-	// Move center pixel slightly towards camera to avoid imprecision artifacts due to depth buffer imprecision; offset depends on depth texture format used
-	viewspaceZ *= 0.99920h;  // this is good for FP16 depth buffer
-
 	float ao = 0;
 	float3 radiance = 0;
+#ifdef SSGI_SH
+	float3 direction = 0;
+#endif
 
-	bool needGI = viewspaceZ > FP_Z && viewspaceZ < DepthFadeRange.y;
+	bool needGI = viewspaceZ > FP_Z;
 	if (needGI) {
-		CalculateGI(pxCoord, uv, viewspaceZ, viewspaceNormal, ao, radiance);
+		CalculateGI(pxCoord, uv, viewspaceZ, viewspaceNormal, ao, radiance
+#ifdef SSGI_SH
+			,
+			direction
+#endif
+		);
 	}
 
 	radiance = filterNaN(radiance);
 
+#ifdef SSGI_SH
+	float4 sh1;
+	outRadianceHitDist[pxCoord] = REBLUR_FrontEnd_PackSh(radiance, ao, direction, sh1, true);
+	outSH1[pxCoord] = sh1;
+#else
 	outRadianceHitDist[pxCoord] = REBLUR_FrontEnd_PackRadianceAndNormHitDist(radiance, ao, true);
+#endif
 }

@@ -53,6 +53,7 @@ public:
 
 	void DrawSSGI();
 	void UpdateSB();
+	void SetupNRDResources();
 
 	//////////////////////////////////////////////////////////////////////////////////
 
@@ -82,11 +83,11 @@ public:
 		bool Enabled = true;
 		bool EnableGI = REL::Module::IsVR() ? false : true;
 		bool EnableVanillaSSAO = false;
+		bool EnableSH = false;
 		// performance/quality
 		uint NumSteps = 32u;
 		// visual
 		float Thickness = 32.f;
-		float2 DepthFadeRange = { 4e4, 5e4 };
 		// mix
 		float AOPower = 1.0f;
 		float GIStrength = 1.0f;
@@ -110,11 +111,10 @@ public:
 		uint NumSteps;
 
 		float Thickness;
-		float DepthFadeScaleConst;
-		float2 DepthFadeRange;
-
 		float AOPower;
+
 		float GIStrength;
+		float pad0[3];
 	};
 	STATIC_ASSERT_ALIGNAS_16(SSGICB);
 	eastl::unique_ptr<ConstantBuffer> ssgiCB;
@@ -140,11 +140,14 @@ public:
 	// NRD textures
 	eastl::unique_ptr<Texture2D> texNRDInput = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDOutput = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDInputSH1 = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDOutputSH1 = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDMV = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDNormalRoughness = nullptr;
 
 	ID3D11ShaderResourceView* GetDiffuseOutputTexture();
+	ID3D11ShaderResourceView* GetDiffuseSH1Texture();
 
 	winrt::com_ptr<ID3D11SamplerState> linearClampSampler = nullptr;
 	winrt::com_ptr<ID3D11SamplerState> pointClampSampler = nullptr;

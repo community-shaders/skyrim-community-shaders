@@ -333,6 +333,7 @@ void Deferred::DeferredPasses()
 	if (ssgi.loaded)
 		ssgi.DrawSSGI();
 	auto ssgiOutput = ssgi.GetDiffuseOutputTexture();
+	auto ssgiSH1Output = ssgi.GetDiffuseSH1Texture();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
@@ -350,7 +351,7 @@ void Deferred::DeferredPasses()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[12]{
+		ID3D11ShaderResourceView* srvs[13]{
 			specular.SRV,                                                                                    // t0  SpecularTexture
 			albedo.SRV,                                                                                      // t1  AlbedoTexture
 			normalRoughness.SRV,                                                                             // t2  NormalRoughnessTexture
@@ -360,9 +361,10 @@ void Deferred::DeferredPasses()
 			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                        // t6  EnvTexture
 			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,             // t7  EnvReflectionsTexture
 			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,   // t8  SkylightingProbeArray
-			ssgiOutput,                                                                                      // t9  SsgiTexture
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t10 EnvIBLTexture
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t11 SkyIBLTexture
+			ssgiOutput,                                                                                      // t9  SsgiTexture / SH0
+			ssgiSH1Output,                                                                                   // t10 SsgiSH1Texture
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t11 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t12 SkyIBLTexture
 		};
 
 		if (dynamicCubemaps.loaded)
@@ -620,8 +622,11 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::skylighting.loaded)
 			defines.push_back({ "SKYLIGHTING", nullptr });
 
-		if (globals::features::screenSpaceGI.loaded)
+		if (globals::features::screenSpaceGI.loaded) {
 			defines.push_back({ "SSGI", nullptr });
+			if (globals::features::screenSpaceGI.settings.EnableSH && globals::features::screenSpaceGI.settings.EnableGI)
+				defines.push_back({ "SSGI_SH", nullptr });
+		}
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
@@ -632,8 +637,6 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (REL::Module::IsVR())
 			defines.push_back({ "VR_STEREO_OPT", nullptr });
 
-		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
-		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
 		if (globals::features::terrainBlending.loaded)
 			defines.push_back({ "TERRAIN_BLENDING", nullptr });
 
@@ -653,8 +656,11 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		if (globals::features::dynamicCubemaps.loaded)
 			defines.push_back({ "DYNAMIC_CUBEMAPS", nullptr });
 
-		if (globals::features::screenSpaceGI.loaded)
+		if (globals::features::screenSpaceGI.loaded) {
 			defines.push_back({ "SSGI", nullptr });
+			if (globals::features::screenSpaceGI.settings.EnableSH && globals::features::screenSpaceGI.settings.EnableGI)
+				defines.push_back({ "SSGI_SH", nullptr });
+		}
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
@@ -665,8 +671,6 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		if (REL::Module::IsVR())
 			defines.push_back({ "VR_STEREO_OPT", nullptr });
 
-		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
-		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
 		if (globals::features::terrainBlending.loaded)
 			defines.push_back({ "TERRAIN_BLENDING", nullptr });
 
