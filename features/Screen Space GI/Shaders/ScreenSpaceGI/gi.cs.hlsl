@@ -39,9 +39,8 @@ Texture2D<float3> srcRadiance : register(t2);
 Texture2D<unorm float2> srcNoise : register(t3);
 Texture2D<float2> srcNormal : register(t8);
 
-RWTexture2D<float4> outSH0 : register(u0);
-RWTexture2D<float4> outSH1 : register(u1);
-RWTexture2D<half3> outPrevGeo : register(u2);
+RWTexture2D<float4> outRadianceHitDist : register(u0);
+RWTexture2D<half3> outPrevGeo : register(u1);
 
 float GetDepthFade(float depth)
 {
@@ -59,14 +58,13 @@ float2 SpatioTemporalNoise(uint2 pixCoord, uint temporalIndex)  // without TAA, 
 
 void CalculateGI(
 	uint2 dtid, float2 uv, float viewspaceZ, float3 viewspaceNormal,
-	out float o_ao, out float3 o_radiance, out float3 o_direction)
+	out float o_ao, out float3 o_radiance)
 {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 	float2 normalizedScreenPos = Stereo::ConvertFromStereoUV(uv, eyeIndex);
 
-	const float rcpNumSlices = rcp((float)NumSlices);
 	const float rcpNumSteps = rcp((float)NumSteps);
 
 	// if the offset is under approx pixel size (pixelTooCloseThreshold), push it out to the minimum distance
@@ -74,7 +72,7 @@ void CalculateGI(
 	// approx viewspace pixel size at pixCoord; approximation of NDCToViewspace( uv.xy + ViewportSize.xy, pixCenterPos.z ).xy - pixCenterPos.xy;
 	const float2 pixelDirRBViewspaceSizeAtCenterZ = viewspaceZ.xx * (eyeIndex == 0 ? NDCToViewMul.xy : NDCToViewMul.zw) * RCP_OUT_FRAME_DIM;
 
-	float screenspaceRadius = EffectRadius / pixelDirRBViewspaceSizeAtCenterZ.x;
+	float screenspaceRadius = Radius / pixelDirRBViewspaceSizeAtCenterZ.x;
 	screenspaceRadius = max(MinScreenRadius, screenspaceRadius);
 	// this is the min distance to start sampling from to avoid sampling from the center pixel (no useful data obtained from sampling center pixel)
 	const float minS = pixelTooCloseThreshold / screenspaceRadius;
@@ -99,10 +97,9 @@ void CalculateGI(
 
 	float visibility = 0;
 	float3 totalRadiance = 0;
-	float3 totalDirection = 0;
 
-	for (uint slice = 0; slice < NumSlices; slice++) {
-		float phi = (Math::PI * rcpNumSlices) * (slice + noiseSlice);
+	{
+		float phi = Math::PI * noiseSlice;
 		float3 directionVec = 0;
 		sincos(phi, directionVec.y, directionVec.x);
 
@@ -129,8 +126,7 @@ void CalculateGI(
 		uint bitmaskGI = 0;
 #endif
 
-		// R1 sequence (http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/)
-		float stepNoise = frac(noiseStep + slice * 0.6180339887498948482);
+		float stepNoise = noiseStep;
 
 		[unroll] for (int sideSign = -1; sideSign <= 1; sideSign += 2)
 		{
@@ -176,34 +172,18 @@ void CalculateGI(
 				// Back-side horizon vector for the surface-thickness offset.
 				float3 sampleBackHorizonVec = normalize(sampleDelta - viewVec * Thickness);
 
-				float angleFront = FastMath::ACos(dot(sampleHorizonVec, viewVec));  // either clamp or use float version for whatever reason
+				float angleFront = FastMath::ACos(dot(sampleHorizonVec, viewVec));
 				float angleBack = FastMath::ACos(dot(sampleBackHorizonVec, viewVec));
 				float2 angleRange = -sideSign * (sideSign == -1 ? float2(angleFront, angleBack) : float2(angleBack, angleFront));
-				// The math: https://www.desmos.com/calculator/je4y5ved2j
-				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
 				angleRange = smoothstep(0, 1, (angleRange + n) * Math::INV_PI + .5);
 
 				uint2 bitsRange = uint2(round(angleRange.x * 32u), round((angleRange.y - angleRange.x) * 32u));
-				uint maskedBits = s < AORadius ? ((1 << bitsRange.y) - 1) << bitsRange.x : 0;
+				uint maskedBits = ((1 << bitsRange.y) - 1) << bitsRange.x;
 
 #ifdef GI
-				// Back-side horizon vector for GI-radius sampling depth (~300 units).
-				float3 sampleBackHorizonVecGI = normalize(sampleDelta - viewVec * 300);
-				float angleBackGI = FastMath::ACos(dot(sampleBackHorizonVecGI, viewVec));
-				float2 angleRangeGI = -sideSign * (sideSign == -1 ? float2(angleFront, angleBackGI) : float2(angleBackGI, angleFront));
-
-				// The math: https://www.desmos.com/calculator/je4y5ved2j
-				// Using smoothstep for cos: https://discord.com/channels/586242553746030596/586245736413528082/1102228968247144570
-				angleRangeGI = smoothstep(0, 1, (angleRangeGI + n) * Math::INV_PI + .5);
-
-				uint2 bitsRangeGI = uint2(round(angleRangeGI.x * 32u), round((angleRangeGI.y - angleRangeGI.x) * 32u));
-				uint maskedBitsGI = s < GIRadius ? ((1 << bitsRangeGI.y) - 1) << bitsRangeGI.x : 0;
-
-				uint validBits = maskedBitsGI & ~bitmaskGI;
+				uint validBits = maskedBits & ~bitmaskGI;
 
 				if (validBits) {
-					float giBoost = 4.0 * Math::PI * (1 + GIDistanceCompensation * smoothstep(0, GICompensationMaxDist, s * EffectRadius));
-
 					float3 normalSample = GBuffer::DecodeNormal(srcNormal.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance));
 					if (dot(samplePos, normalSample) > 0)
 						normalSample = -normalSample;
@@ -211,21 +191,17 @@ void CalculateGI(
 					frontBackMult = frontBackMult < 0 ? 0.0 : frontBackMult;
 
 					if (frontBackMult > 0.f) {
-						float3 sampleHorizonVecWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], half4(sampleHorizonVec, 0)).xyz);
-
-						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance).rgb * frontBackMult * giBoost * countbits(validBits) * 0.03125;
+						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance).rgb * frontBackMult * 4.0 * Math::PI * countbits(validBits) * 0.03125;
 						sampleRadiance = max(sampleRadiance, 0);
 
 						totalRadiance += sampleRadiance;
-						totalDirection += sampleHorizonVecWS * Color::RGBToLuminance(sampleRadiance);
 					}
 				}
+
+				bitmaskGI |= maskedBits;
 #endif  // GI
 
 				bitmask |= maskedBits;
-#ifdef GI
-				bitmaskGI |= maskedBitsGI;
-#endif
 			}
 		}
 
@@ -234,19 +210,15 @@ void CalculateGI(
 
 	float depthFade = GetDepthFade(viewspaceZ);
 
-	visibility *= rcpNumSlices;
 	visibility = lerp(saturate(visibility), 0, depthFade);
 	visibility = 1 - pow(abs(1 - visibility), AOPower);
 
 #ifdef GI
-	totalRadiance *= rcpNumSlices;
 	totalRadiance = lerp(totalRadiance, 0, depthFade);
-	totalDirection = _NRD_SafeNormalize(totalDirection);
 #endif
 
 	o_ao = visibility;
 	o_radiance = totalRadiance;
-	o_direction = totalDirection;
 }
 
 [numthreads(8, 8, 1)] void main(const uint2 dtid : SV_DispatchThreadID) {
@@ -270,19 +242,13 @@ void CalculateGI(
 
 	float ao = 0;
 	float3 radiance = 0;
-	float3 direction = 0;
 
 	bool needGI = viewspaceZ > FP_Z && viewspaceZ < DepthFadeRange.y;
 	if (needGI) {
-		CalculateGI(pxCoord, uv, viewspaceZ, viewspaceNormal, ao, radiance, direction);
+		CalculateGI(pxCoord, uv, viewspaceZ, viewspaceNormal, ao, radiance);
 	}
 
 	radiance = filterNaN(radiance);
-	direction = filterNaN(direction);
 
-	float4 sh1;
-	float4 sh0 = REBLUR_FrontEnd_PackSh(radiance, ao, direction, sh1, true);
-
-	outSH0[pxCoord] = sh0;
-	outSH1[pxCoord] = sh1;
+	outRadianceHitDist[pxCoord] = REBLUR_FrontEnd_PackRadianceAndNormHitDist(radiance, ao, true);
 }

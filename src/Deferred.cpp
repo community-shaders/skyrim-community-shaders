@@ -332,7 +332,7 @@ void Deferred::DeferredPasses()
 	auto& ssgi = globals::features::screenSpaceGI;
 	if (ssgi.loaded)
 		ssgi.DrawSSGI();
-	auto ssgiOutput = ssgi.GetDiffuseOutputTextures();
+	auto ssgiOutput = ssgi.GetDiffuseOutputTexture();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
@@ -350,7 +350,7 @@ void Deferred::DeferredPasses()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[16]{
+		ID3D11ShaderResourceView* srvs[12]{
 			specular.SRV,                                                                                    // t0  SpecularTexture
 			albedo.SRV,                                                                                      // t1  AlbedoTexture
 			normalRoughness.SRV,                                                                             // t2  NormalRoughnessTexture
@@ -360,13 +360,9 @@ void Deferred::DeferredPasses()
 			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                        // t6  EnvTexture
 			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,             // t7  EnvReflectionsTexture
 			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,   // t8  SkylightingProbeArray
-			nullptr,                                                                                         // t9  unused
-			ssgiOutput.sh[0],                                                                                // t10 SsgiSH0Texture
-			ssgiOutput.sh[1],                                                                                // t11 SsgiSH1Texture
-			nullptr,                                                                                         // t12 unused
-			nullptr,                                                                                         // t13 unused
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t14 EnvIBLTexture
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t15 SkyIBLTexture
+			ssgiOutput,                                                                                      // t9  SsgiTexture
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t10 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t11 SkyIBLTexture
 		};
 
 		if (dynamicCubemaps.loaded)

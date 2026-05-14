@@ -30,15 +30,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Enabled,
 	EnableGI,
 	EnableVanillaSSAO,
-	NumSlices,
 	NumSteps,
 	MinScreenRadius,
-	AORadius,
-	GIRadius,
+	Radius,
 	Thickness,
 	DepthFadeRange,
-	GISaturation,
-	GIDistanceCompensation,
 	AOPower,
 	GIStrength,
 	EnableREBLUR,
@@ -97,47 +93,8 @@ void ScreenSpaceGI::DrawSettings()
 	{
 		auto qualityGuard = Util::DisableGuard(!settings.Enabled);
 
-		if (ImGui::BeginTable("Presets", 4)) {
-			auto select = [](auto flatVal, auto vrVal) { return globals::game::isVR ? vrVal : flatVal; };
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("AO only", { -1, 0 })) {
-				settings.NumSlices = select(1, 3);
-				settings.NumSteps = select(6, 8);
-				settings.EnableGI = false;
-				recompileFlag = true;
-			}
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("Low", { -1, 0 })) {
-				settings.NumSlices = 2;
-				settings.NumSteps = 6;
-				settings.EnableGI = true;
-				recompileFlag = true;
-			}
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("Standard", { -1, 0 })) {
-				settings.NumSlices = 4;
-				settings.NumSteps = 8;
-				settings.EnableGI = true;
-				recompileFlag = true;
-			}
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("Reference", { -1, 0 })) {
-				settings.NumSlices = 8;
-				settings.NumSteps = 10;
-				settings.EnableGI = true;
-				recompileFlag = true;
-			}
-
-			ImGui::EndTable();
-		}
-
 		if (showAdvanced) {
-			ImGui::SliderInt("Slices", (int*)&settings.NumSlices, 1, 10);
-			ImGui::SliderInt("Steps Per Slice", (int*)&settings.NumSteps, 1, 20);
+			ImGui::SliderInt("Steps Per Slice", (int*)&settings.NumSteps, 1, 32);
 		}
 	}
 
@@ -156,11 +113,7 @@ void ScreenSpaceGI::DrawSettings()
 
 		ImGui::Separator();
 
-		ImGui::SliderFloat("AO radius", &settings.AORadius, 10.f, 1024.0f, "%.1f units");
-		{
-			auto ilRadiusGuard = Util::DisableGuard(!settings.EnableGI);
-			ImGui::SliderFloat("IL radius", &settings.GIRadius, 10.f, 1024.0f, "%.1f units");
-		}
+		ImGui::SliderFloat("Radius", &settings.Radius, 10.f, 1024.0f, "%.1f units");
 
 		if (showAdvanced) {
 			ImGui::SliderFloat("Min Screen Radius", &settings.MinScreenRadius, 0.f, 0.05f, "%.3f");
@@ -172,20 +125,6 @@ void ScreenSpaceGI::DrawSettings()
 			ImGui::Separator();
 			ImGui::SliderFloat("Thickness", &settings.Thickness, 0.f, 128.0f, "%.1f units");
 		}
-	}
-
-	///////////////////////////////
-	ImGui::SeparatorText("Visual - IL");
-
-	{
-		auto visualILGuard = Util::DisableGuard(!settings.Enabled || !settings.EnableGI);
-
-		if (showAdvanced) {
-			ImGui::SliderFloat("IL Distance Compensation", &settings.GIDistanceCompensation, -5.0f, 5.0f, "%.1f");
-			ImGui::Separator();
-		}
-
-		Util::PercentageSlider("IL Saturation", &settings.GISaturation);
 	}
 
 	///////////////////////////////
@@ -262,10 +201,8 @@ void ScreenSpaceGI::DrawSettings()
 		BUFFER_VIEWER_NODE(texWorkingDepth, debugRescale)
 		BUFFER_VIEWER_NODE(texPrevGeo, debugRescale)
 		BUFFER_VIEWER_NODE(texRadiance, debugRescale)
-		BUFFER_VIEWER_NODE(texNRDInputSH0, debugRescale)
-		BUFFER_VIEWER_NODE(texNRDInputSH1, debugRescale)
-		BUFFER_VIEWER_NODE(texNRDOutputSH0, debugRescale)
-		BUFFER_VIEWER_NODE(texNRDOutputSH1, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDInput, debugRescale)
+		BUFFER_VIEWER_NODE(texNRDOutput, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDMV, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDViewZ, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDNormalRoughness, debugRescale)
@@ -382,24 +319,16 @@ void ScreenSpaceGI::SetupResources()
 			texPrevGeo->CreateUAV(uavDesc);
 		}
 
-		// NRD SH textures (RGBA16F, full-res)
+		// NRD radiance+hitdist textures (RGBA16F, full-res)
 		srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		{
-			texNRDInputSH0 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDInputSH0");
-			texNRDInputSH0->CreateSRV(srvDesc);
-			texNRDInputSH0->CreateUAV(uavDesc);
+			texNRDInput = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDInput");
+			texNRDInput->CreateSRV(srvDesc);
+			texNRDInput->CreateUAV(uavDesc);
 
-			texNRDInputSH1 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDInputSH1");
-			texNRDInputSH1->CreateSRV(srvDesc);
-			texNRDInputSH1->CreateUAV(uavDesc);
-
-			texNRDOutputSH0 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDOutputSH0");
-			texNRDOutputSH0->CreateSRV(srvDesc);
-			texNRDOutputSH0->CreateUAV(uavDesc);
-
-			texNRDOutputSH1 = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDOutputSH1");
-			texNRDOutputSH1->CreateSRV(srvDesc);
-			texNRDOutputSH1->CreateUAV(uavDesc);
+			texNRDOutput = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDOutput");
+			texNRDOutput->CreateSRV(srvDesc);
+			texNRDOutput->CreateUAV(uavDesc);
 		}
 
 		// NRD MV (RG16F, full-res)
@@ -426,7 +355,7 @@ void ScreenSpaceGI::SetupResources()
 			texNRDNormalRoughness->CreateUAV(uavDesc);
 		}
 
-		nrdReblur.Init(fullW, fullH, nrd::Denoiser::REBLUR_DIFFUSE_SH, 0);
+		nrdReblur.Init(fullW, fullH, nrd::Denoiser::REBLUR_DIFFUSE, 0);
 	}
 
 	logger::debug("Loading noise texture...");
@@ -574,24 +503,17 @@ void ScreenSpaceGI::UpdateSB()
 		data.RcpFrameDim = float2(1.0f) / dynres;
 		data.FrameIndex = globals::state->frameCount;
 
-		data.NumSlices = settings.NumSlices;
 		data.NumSteps = settings.NumSteps;
 		data.MinScreenRadius = settings.MinScreenRadius * dynres.x;
 
-		data.EffectRadius = std::max(settings.AORadius, settings.GIRadius);
-		data.AORadius = settings.AORadius / data.EffectRadius;
-		data.GIRadius = settings.GIRadius / data.EffectRadius;
+		data.Radius = settings.Radius;
 		data.Thickness = settings.Thickness;
 		data.DepthFadeRange = settings.DepthFadeRange;
 		data.DepthFadeScaleConst = 1 / (settings.DepthFadeRange.y - settings.DepthFadeRange.x);
 
-		data.GISaturation = settings.GISaturation;
-		data.GIDistanceCompensation = settings.GIDistanceCompensation;
-		data.GICompensationMaxDist = settings.AORadius;
-
 		data.AOPower = settings.AOPower;
 		data.GIStrength = settings.GIStrength;
-		data.pad2[0] = data.pad2[1] = data.pad2[2] = 0;
+		data.pad1[0] = data.pad1[1] = 0;
 	}
 
 	ssgiCB->Update(data);
@@ -745,9 +667,8 @@ void ScreenSpaceGI::DrawSSGI()
 		srvs.at(3) = texNoise->srv.get();
 		srvs.at(8) = texNormal->srv.get();
 
-		uavs.at(0) = texNRDInputSH0->uav.get();
-		uavs.at(1) = texNRDInputSH1->uav.get();
-		uavs.at(2) = texPrevGeo->uav.get();
+		uavs.at(0) = texNRDInput->uav.get();
+		uavs.at(1) = texPrevGeo->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
@@ -764,8 +685,8 @@ void ScreenSpaceGI::DrawSSGI()
 			uint16_t fw = (uint16_t)dynres.x;
 			uint16_t fh = (uint16_t)dynres.y;
 
-			commonSettings.resourceSize[0] = (uint16_t)texNRDInputSH0->desc.Width;
-			commonSettings.resourceSize[1] = (uint16_t)texNRDInputSH0->desc.Height;
+			commonSettings.resourceSize[0] = (uint16_t)texNRDInput->desc.Width;
+			commonSettings.resourceSize[1] = (uint16_t)texNRDInput->desc.Height;
 			commonSettings.resourceSizePrev[0] = commonSettings.resourceSize[0];
 			commonSettings.resourceSizePrev[1] = commonSettings.resourceSize[1];
 			commonSettings.rectSize[0] = fw;
@@ -832,13 +753,10 @@ void ScreenSpaceGI::DrawSSGI()
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_MV, texNRDMV->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS, texNRDNormalRoughness->srv.get());
 		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_VIEWZ, texNRDViewZ->srv.get());
-		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH0, texNRDInputSH0->srv.get());
-		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_SH1, texNRDInputSH1->srv.get());
+		nrdReblur.SetNamedSRV(nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, texNRDInput->srv.get());
 		nrdReblur.SetNamedUAV(nrd::ResourceType::IN_MV, texNRDMV->uav.get());
-		nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->srv.get());
-		nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->srv.get());
-		nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH0, texNRDOutputSH0->uav.get());
-		nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_SH1, texNRDOutputSH1->uav.get());
+		nrdReblur.SetNamedSRV(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, texNRDOutput->srv.get());
+		nrdReblur.SetNamedUAV(nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, texNRDOutput->uav.get());
 
 		nrdReblur.Dispatch();
 	}
@@ -854,20 +772,13 @@ void ScreenSpaceGI::DrawSSGI()
 	context->CSSetShader(nullptr, nullptr, 0);
 }
 
-ScreenSpaceGI::DiffuseOutput ScreenSpaceGI::GetDiffuseOutputTextures()
+ID3D11ShaderResourceView* ScreenSpaceGI::GetDiffuseOutputTexture()
 {
-	DiffuseOutput output;
-	if (loaded && settings.Enabled && settings.EnableREBLUR && nrdReblur.IsValid()) {
-		output.sh[0] = texNRDOutputSH0->srv.get();
-		output.sh[1] = texNRDOutputSH1->srv.get();
-	} else if (loaded && settings.Enabled) {
-		output.sh[0] = texNRDInputSH0->srv.get();
-		output.sh[1] = texNRDInputSH1->srv.get();
-	} else {
-		output.sh[0] = nullptr;
-		output.sh[1] = nullptr;
-	}
-	return output;
+	if (loaded && settings.Enabled && settings.EnableREBLUR && nrdReblur.IsValid())
+		return texNRDOutput->srv.get();
+	else if (loaded && settings.Enabled)
+		return texNRDInput->srv.get();
+	return nullptr;
 }
 
 ScreenSpaceGI::SharedData ScreenSpaceGI::GetCommonBufferData()

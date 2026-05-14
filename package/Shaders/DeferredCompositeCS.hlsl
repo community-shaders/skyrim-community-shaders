@@ -47,19 +47,16 @@ SamplerState LinearSampler : register(s0);
 #if defined(SSGI)
 #	include "NRD/NRDReblurSH.hlsli"
 
-Texture2D<float4> SsgiSH0Texture : register(t10);
-Texture2D<float4> SsgiSH1Texture : register(t11);
+Texture2D<float4> SsgiTexture : register(t9);
 
 void SampleSSGIDiffuse(uint2 pixCoord, float3 normalWS, float3 viewWS, out float ao, out float3 il)
 {
-	float4 sh0 = SsgiSH0Texture[pixCoord];
-	float4 sh1 = SsgiSH1Texture[pixCoord];
-
-	NRD_SG sg = REBLUR_BackEnd_UnpackSh(sh0, sh1);
-	ao = 1.0 - saturate(sg.normHitDist);
-
-	il = NRD_SG_ResolveDiffuse(sg, normalWS, viewWS, 1.0) * SharedData::ssgiSettings.DiffuseMult;
-	il = max(0, il);
+	float4 data = SsgiTexture[pixCoord];
+	float normHitDist;
+	float3 radiance;
+	REBLUR_BackEnd_UnpackRadianceAndNormHitDist(data, radiance, normHitDist);
+	ao = 1.0 - saturate(normHitDist);
+	il = max(0, radiance * SharedData::ssgiSettings.DiffuseMult);
 }
 
 void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il, in float3 normal, in float3 view, in float roughness)
@@ -68,12 +65,11 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float alpha = roughness * roughness;
 	ao = SpecularOcclusion(saturate(NdotV), alpha, ao);
 
-	float4 sh0 = SsgiSH0Texture[pixCoord];
-	float4 sh1 = SsgiSH1Texture[pixCoord];
-	NRD_SG sg = REBLUR_BackEnd_UnpackSh(sh0, sh1);
-
-	il = NRD_SG_ResolveDiffuse(sg, normal, view, roughness) * SharedData::ssgiSettings.DiffuseMult;
-	il = max(0, il);
+	float4 data = SsgiTexture[pixCoord];
+	float normHitDist;
+	float3 radiance;
+	REBLUR_BackEnd_UnpackRadianceAndNormHitDist(data, radiance, normHitDist);
+	il = max(0, radiance * SharedData::ssgiSettings.DiffuseMult);
 }
 #endif
 

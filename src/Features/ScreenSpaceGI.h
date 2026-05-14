@@ -83,17 +83,12 @@ public:
 		bool EnableGI = REL::Module::IsVR() ? false : true;
 		bool EnableVanillaSSAO = false;
 		// performance/quality
-		uint NumSlices = REL::Module::IsVR() ? 3u : 4u;
-		uint NumSteps = REL::Module::IsVR() ? 6u : 8u;
+		uint NumSteps = 32u;
 		// visual
 		float MinScreenRadius = 0.01f;
-		float AORadius = 256.f;
-		float GIRadius = 256.f;
+		float Radius = 512.f;
 		float Thickness = 32.f;
 		float2 DepthFadeRange = { 4e4, 5e4 };
-		// gi
-		float GISaturation = 0.8f;
-		float GIDistanceCompensation = 0.f;
 		// mix
 		float AOPower = 1.0f;
 		float GIStrength = 1.0f;
@@ -114,25 +109,17 @@ public:
 		float2 RcpFrameDim;
 		uint FrameIndex;
 
-		uint NumSlices;
 		uint NumSteps;
 
 		float MinScreenRadius;
-		float AORadius;
-		float GIRadius;
-		float EffectRadius;
+		float Radius;
 		float Thickness;
 		float2 DepthFadeRange;
 		float DepthFadeScaleConst;
 
-		float GISaturation;
-		float GIDistanceCompensation;
-		float GICompensationMaxDist;
-		float pad1;
-
 		float AOPower;
 		float GIStrength;
-		float pad2[3];
+		float pad1[2];
 	};
 	STATIC_ASSERT_ALIGNAS_16(SSGICB);
 	eastl::unique_ptr<ConstantBuffer> ssgiCB;
@@ -156,19 +143,13 @@ public:
 	winrt::com_ptr<ID3D11UnorderedAccessView> uavNormal[5] = { nullptr };
 
 	// NRD textures
-	eastl::unique_ptr<Texture2D> texNRDInputSH0 = nullptr;
-	eastl::unique_ptr<Texture2D> texNRDInputSH1 = nullptr;
-	eastl::unique_ptr<Texture2D> texNRDOutputSH0 = nullptr;
-	eastl::unique_ptr<Texture2D> texNRDOutputSH1 = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDInput = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDOutput = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDMV = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDViewZ = nullptr;
 	eastl::unique_ptr<Texture2D> texNRDNormalRoughness = nullptr;
 
-	struct DiffuseOutput
-	{
-		ID3D11ShaderResourceView* sh[2];
-	};
-	DiffuseOutput GetDiffuseOutputTextures();
+	ID3D11ShaderResourceView* GetDiffuseOutputTexture();
 
 	winrt::com_ptr<ID3D11SamplerState> linearClampSampler = nullptr;
 	winrt::com_ptr<ID3D11SamplerState> pointClampSampler = nullptr;
