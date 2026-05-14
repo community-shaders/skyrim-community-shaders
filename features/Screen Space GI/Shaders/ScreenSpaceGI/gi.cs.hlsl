@@ -187,12 +187,13 @@ void CalculateGI(
 					frontBackMult = frontBackMult < 0 ? 0.0 : frontBackMult;
 
 					if (frontBackMult > 0.f) {
-						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance).rgb * frontBackMult * 4.0 * Math::PI * countbits(validBits) * 0.03125;
+						float3 sampleRadiance = srcRadiance.SampleLevel(samplerPointClamp, sampleUV * OUT_FRAME_SCALE, mipLevelRadiance).rgb * frontBackMult;
 						sampleRadiance = max(sampleRadiance, 0);
 
-						totalRadiance += sampleRadiance;
+						float3 diffuseRadiance = sampleRadiance * 4.0 * Math::PI * countbits(validBits) * 0.03125;
+						totalRadiance += diffuseRadiance;
 #ifdef SSGI_SH
-						totalDirection += sampleHorizonVec * Color::RGBToLuminance(sampleRadiance);
+						totalDirection += sampleHorizonVec * Color::RGBToLuminance(diffuseRadiance);
 #endif
 					}
 				}
@@ -220,7 +221,14 @@ void CalculateGI(
 [numthreads(8, 8, 1)] void main(const uint2 dtid : SV_DispatchThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
+#if defined(SSGI_HALF)
+	uint colOffset = (dtid.y + FrameIndex) & 1;
+	uint2 pxCoord = uint2(dtid.x * 2 + colOffset, dtid.y);
+	uint2 outCoord = dtid.xy;
+#else
 	uint2 pxCoord = dtid;
+	uint2 outCoord = dtid;
+#endif
 
 	float2 uv = (pxCoord + .5) * RCP_OUT_FRAME_DIM;
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
@@ -253,9 +261,9 @@ void CalculateGI(
 
 #ifdef SSGI_SH
 	float4 sh1;
-	outRadianceHitDist[pxCoord] = REBLUR_FrontEnd_PackSh(radiance, ao, direction, sh1, true);
-	outSH1[pxCoord] = sh1;
+	outRadianceHitDist[outCoord] = REBLUR_FrontEnd_PackSh(radiance, ao, direction, sh1, true);
+	outSH1[outCoord] = sh1;
 #else
-	outRadianceHitDist[pxCoord] = REBLUR_FrontEnd_PackRadianceAndNormHitDist(radiance, ao, true);
+	outRadianceHitDist[outCoord] = REBLUR_FrontEnd_PackRadianceAndNormHitDist(radiance, ao, true);
 #endif
 }

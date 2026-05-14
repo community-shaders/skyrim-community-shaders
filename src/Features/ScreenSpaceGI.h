@@ -85,7 +85,8 @@ public:
 		bool EnableVanillaSSAO = false;
 		bool EnableSH = false;
 		// performance/quality
-		uint NumSteps = 32u;
+		uint NumSteps = 8u;
+		bool HalfRes = true;
 		// visual
 		float Thickness = 32.f;
 		// mix

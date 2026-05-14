@@ -32,6 +32,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableVanillaSSAO,
 	EnableSH,
 	NumSteps,
+	HalfRes,
 	Thickness,
 	AOPower,
 	GIStrength,
@@ -101,6 +102,13 @@ void ScreenSpaceGI::DrawSettings()
 
 	{
 		auto qualityGuard = Util::DisableGuard(!settings.Enabled);
+
+		if (ImGui::Checkbox("Half Resolution (Checkerboard)", &settings.HalfRes)) {
+			recompileFlag = true;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Trace half the columns in a checkerboard pattern. NRD reconstructs the missing pixels.");
+		}
 
 		if (showAdvanced) {
 			ImGui::SliderInt("Steps Per Slice", (int*)&settings.NumSteps, 1, 32);
@@ -504,6 +512,8 @@ void ScreenSpaceGI::CompileComputeShaders()
 			info.defines.push_back({ "GI", "" });
 		if (settings.EnableSH && settings.EnableGI)
 			info.defines.push_back({ "SSGI_SH", "" });
+		if (settings.HalfRes)
+			info.defines.push_back({ "SSGI_HALF", "" });
 	}
 
 	for (auto& info : shaderInfos) {
@@ -724,7 +734,10 @@ void ScreenSpaceGI::DrawSSGI()
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 		context->CSSetShader(giCompute.get(), nullptr, 0);
-		context->Dispatch((resolution[0] + 7u) >> 3, (resolution[1] + 7u) >> 3, 1);
+
+		uint dispatchX = settings.HalfRes ? (resolution[0] + 1) / 2 : resolution[0];
+		uint dispatchY = resolution[1];
+		context->Dispatch((dispatchX + 7u) >> 3, (dispatchY + 7u) >> 3, 1);
 	}
 
 	// REBLUR denoising
@@ -796,7 +809,7 @@ void ScreenSpaceGI::DrawSSGI()
 			reblurSettings.planeDistanceSensitivity = std::max(r.PlaneDistanceSensitivity, 0.0f);
 			reblurSettings.enableAntiFirefly = false;
 			reblurSettings.hitDistanceReconstructionMode = static_cast<nrd::HitDistanceReconstructionMode>(std::min(r.HitDistanceReconstructionMode, 2u));
-			reblurSettings.checkerboardMode = nrd::CheckerboardMode::OFF;
+			reblurSettings.checkerboardMode = settings.HalfRes ? nrd::CheckerboardMode::WHITE : nrd::CheckerboardMode::OFF;
 		}
 		nrdReblur.SetDenoiserSettings(&reblurSettings);
 
