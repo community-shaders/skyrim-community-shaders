@@ -3,6 +3,8 @@
 #include <DirectXTex.h>
 
 #include "Deferred.h"
+#include "DynamicCubemaps.h"
+#include "Skylighting.h"
 #include "State.h"
 #include "Upscaling.h"
 #include "Util.h"
@@ -36,6 +38,18 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Thickness,
 	AOPower,
 	GIStrength,
+	EnableSpecular,
+	SpecularMult,
+	SpecMaxSteps,
+	SpecThickness,
+	NormalBias,
+	BRDFBias,
+	OcclusionStrength,
+	UseDynamicCubemapsAsFallback,
+	HitDistA,
+	HitDistB,
+	HitDistC,
+	HitDistD,
 	EnableREBLUR,
 	Reblur)
 
@@ -137,6 +151,49 @@ void ScreenSpaceGI::DrawSettings()
 	}
 
 	///////////////////////////////
+	ImGui::SeparatorText("Specular (Hi-Z Ray March)");
+
+	{
+		auto specGuard = Util::DisableGuard(!settings.Enabled);
+
+		if (ImGui::Checkbox("Enable Specular", &settings.EnableSpecular)) {
+			globals::deferred->ClearShaderCache();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Screen-space specular reflections using Hi-Z hierarchical ray marching with GGX importance sampling.");
+		}
+
+		{
+			auto specActiveGuard = Util::DisableGuard(!settings.EnableSpecular);
+			ImGui::SliderFloat("Specular Multiplier", &settings.SpecularMult, 0.0f, 5.0f, "%.2f");
+			ImGui::Checkbox("Use Dynamic Cubemaps as Fallback", &settings.UseDynamicCubemapsAsFallback);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("When ray marching misses, fall back to dynamic cubemaps for reflections.");
+			}
+
+			if (showAdvanced) {
+				ImGui::SliderInt("Max Steps (Specular)", (int*)&settings.SpecMaxSteps, 1, 256);
+				ImGui::SliderFloat("Thickness (Specular)", &settings.SpecThickness, 0.0f, 50.0f, "%.2f");
+				ImGui::SliderFloat("Normal Bias", &settings.NormalBias, 0.0f, 1.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Push ray origin along surface normal to avoid self-intersection artifacts.");
+				}
+				ImGui::SliderFloat("BRDF Bias", &settings.BRDFBias, 0.0f, 1.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Higher values reduce noise but make reflections more glossy.");
+				}
+				ImGui::SliderFloat("Occlusion Strength", &settings.OcclusionStrength, 0.0f, 1.0f, "%.2f");
+
+				ImGui::SeparatorText("NRD Hit Distance Parameters");
+				ImGui::SliderFloat("Hit Dist A", &settings.HitDistA, 1.0f, 1000.0f, "%.1f");
+				ImGui::SliderFloat("Hit Dist B", &settings.HitDistB, 0.0f, 1.0f, "%.3f");
+				ImGui::SliderFloat("Hit Dist C", &settings.HitDistC, 0.0f, 200.0f, "%.1f");
+				ImGui::SliderFloat("Hit Dist D", &settings.HitDistD, -200.0f, 0.0f, "%.1f");
+			}
+		}
+	}
+
+	///////////////////////////////
 	ImGui::SeparatorText("REBLUR Denoiser");
 
 	{
@@ -217,6 +274,9 @@ void ScreenSpaceGI::DrawSettings()
 		BUFFER_VIEWER_NODE(texNRDMV, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDViewZ, debugRescale)
 		BUFFER_VIEWER_NODE(texNRDNormalRoughness, debugRescale)
+		if (texHiZDepth) BUFFER_VIEWER_NODE(texHiZDepth, debugRescale)
+		if (texNRDSpecInput) BUFFER_VIEWER_NODE(texNRDSpecInput, debugRescale)
+		if (texNRDSpecOutput) BUFFER_VIEWER_NODE(texNRDSpecOutput, debugRescale)
 
 		ImGui::TreePop();
 	}
@@ -325,6 +385,42 @@ void ScreenSpaceGI::SetupResources()
 			texPrevGeo = eastl::make_unique<Texture2D>(texDesc, "SSGI::PrevGeo");
 			texPrevGeo->CreateSRV(srvDesc);
 			texPrevGeo->CreateUAV(uavDesc);
+		}
+
+		// Hi-Z depth pyramid (R32F, raw NDC depth with min-Z mip chain)
+		{
+			uint32_t fullW = texRadiance->desc.Width;
+			uint32_t fullH = texRadiance->desc.Height;
+			uint minDim = std::min(fullW, fullH);
+			numHiZMips = 1;
+			while ((minDim >> numHiZMips) >= 16 && numHiZMips < kMaxHiZMips)
+				++numHiZMips;
+
+			srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+			texDesc.MipLevels = numHiZMips;
+			srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
+			texHiZDepth = eastl::make_unique<Texture2D>(texDesc, "SSGI::HiZDepth");
+			texHiZDepth->CreateSRV(srvDesc);
+
+			for (uint i = 0; i < numHiZMips; i++) {
+				D3D11_SHADER_RESOURCE_VIEW_DESC mipSrvDesc = {
+					.Format = texDesc.Format,
+					.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+					.Texture2D = { .MostDetailedMip = i, .MipLevels = 1 }
+				};
+				DX::ThrowIfFailed(device->CreateShaderResourceView(texHiZDepth->resource.get(), &mipSrvDesc, hiZDepthSRVs[i].put()));
+				Util::SetResourceName(hiZDepthSRVs[i].get(), "SSGI::HiZDepth SRV mip%u", i);
+
+				D3D11_UNORDERED_ACCESS_VIEW_DESC mipUavDesc = {
+					.Format = texDesc.Format,
+					.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+					.Texture2D = { .MipSlice = i }
+				};
+				DX::ThrowIfFailed(device->CreateUnorderedAccessView(texHiZDepth->resource.get(), &mipUavDesc, hiZDepthUAVs[i].put()));
+				Util::SetResourceName(hiZDepthUAVs[i].get(), "SSGI::HiZDepth UAV mip%u", i);
+			}
+
+			texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
 		}
 
 		SetupNRDResources();
@@ -471,13 +567,28 @@ void ScreenSpaceGI::SetupNRDResources()
 	auto denoiser = settings.EnableSH ? nrd::Denoiser::REBLUR_DIFFUSE_SH : nrd::Denoiser::REBLUR_DIFFUSE;
 	nrdReblur.Init(fullW, fullH, denoiser, 0);
 
+	// Specular NRD textures
+	nrdReblurSpecular.Shutdown();
+
+	srvDesc.Format = uavDesc.Format = texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	texNRDSpecInput = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDSpecInput");
+	texNRDSpecInput->CreateSRV(srvDesc);
+	texNRDSpecInput->CreateUAV(uavDesc);
+
+	texNRDSpecOutput = eastl::make_unique<Texture2D>(texDesc, "SSGI::NRDSpecOutput");
+	texNRDSpecOutput->CreateSRV(srvDesc);
+	texNRDSpecOutput->CreateUAV(uavDesc);
+
+	nrdReblurSpecular.Init(fullW, fullH, nrd::Denoiser::REBLUR_SPECULAR, 1);
+
 	globals::deferred->ClearShaderCache();
 }
 
 void ScreenSpaceGI::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&prefilterDepthsCompute, &prefilterRadianceCompute, &prefilterNormalCompute, &giCompute, &stereoSyncCompute, &prepareNRDGuidesCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &prefilterNormalCompute, &giCompute, &stereoSyncCompute, &prepareNRDGuidesCompute,
+		&prefilterHiZDepthCompute, &depthDownsampleCompute, &specularGICompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -532,6 +643,34 @@ void ScreenSpaceGI::CompileComputeShaders()
 			prepareNRDGuidesCompute.attach(rawPtr);
 	}
 
+	// Hi-Z depth prefilter and downsample (no feature defines needed)
+	{
+		auto path = std::filesystem::path("Data\\Shaders\\ScreenSpaceGI") / "prefilterHiZDepth.cs.hlsl";
+		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), {}, "cs_5_0")))
+			prefilterHiZDepthCompute.attach(rawPtr);
+	}
+	{
+		auto path = std::filesystem::path("Data\\Shaders\\ScreenSpaceGI") / "depthDownsample.cs.hlsl";
+		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), {}, "cs_5_0")))
+			depthDownsampleCompute.attach(rawPtr);
+	}
+
+	// Specular GI ray march shader
+	{
+		std::vector<std::pair<const char*, const char*>> defines;
+		if (REL::Module::IsVR())
+			defines.push_back({ "VR", "" });
+		if (settings.HalfRes)
+			defines.push_back({ "SSGI_HALF", "" });
+		if (globals::features::dynamicCubemaps.loaded)
+			defines.push_back({ "DYNAMIC_CUBEMAPS", "" });
+		if (globals::features::skylighting.loaded)
+			defines.push_back({ "SKYLIGHTING", "" });
+		auto path = std::filesystem::path("Data\\Shaders\\ScreenSpaceGI") / "specularGI.cs.hlsl";
+		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), defines, "cs_5_0")))
+			specularGICompute.attach(rawPtr);
+	}
+
 	recompileFlag = false;
 }
 
@@ -573,6 +712,18 @@ void ScreenSpaceGI::UpdateSB()
 		data.Thickness = settings.Thickness;
 		data.AOPower = settings.AOPower;
 		data.GIStrength = settings.GIStrength;
+
+		data.SpecMaxSteps = settings.SpecMaxSteps;
+		data.SpecMaxMips = std::min((uint)settings.SpecMaxSteps, numHiZMips);
+		data.SpecThickness = settings.SpecThickness;
+		data.NormalBias = settings.NormalBias;
+		data.BRDFBias = settings.BRDFBias;
+		data.OcclusionStrength = settings.OcclusionStrength;
+		data.HitDistA = settings.HitDistA;
+		data.HitDistB = settings.HitDistB;
+		data.HitDistC = settings.HitDistC;
+		data.HitDistD = settings.HitDistD;
+		data.SpecUseDynamicCubemap = (settings.UseDynamicCubemapsAsFallback && globals::features::dynamicCubemaps.loaded) ? 1u : 0u;
 	}
 
 	ssgiCB->Update(data);
@@ -680,6 +831,40 @@ void ScreenSpaceGI::DrawSSGI()
 		context->CopyResource(texNRDMV->resource.get(), motion.texture);
 	}
 
+	// Hi-Z depth pyramid for specular ray march
+	if (settings.EnableSpecular && prefilterHiZDepthCompute && depthDownsampleCompute) {
+		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Hi-Z Depth");
+
+		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+
+		// Copy NDC depth to Hi-Z mip0
+		{
+			resetViews();
+			auto srv = depth.depthSRV;
+			context->CSSetShaderResources(0, 1, &srv);
+			ID3D11UnorderedAccessView* uav = hiZDepthUAVs[0].get();
+			context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+			context->CSSetShader(prefilterHiZDepthCompute.get(), nullptr, 0);
+			context->Dispatch(((uint)dynres.x + 7) / 8, ((uint)dynres.y + 7) / 8, 1);
+		}
+
+		// Min-Z downsample mip chain
+		for (uint i = 0; i < numHiZMips - 1; ++i) {
+			uint outW = std::max(1u, (uint)size.x >> (i + 1));
+			uint outH = std::max(1u, (uint)size.y >> (i + 1));
+
+			resetViews();
+			ID3D11ShaderResourceView* inSrv = hiZDepthSRVs[i].get();
+			ID3D11UnorderedAccessView* outUav = hiZDepthUAVs[i + 1].get();
+			context->CSSetShaderResources(0, 1, &inSrv);
+			context->CSSetUnorderedAccessViews(0, 1, &outUav, nullptr);
+			context->CSSetShader(depthDownsampleCompute.get(), nullptr, 0);
+			context->Dispatch((outW + 7) / 8, (outH + 7) / 8, 1);
+		}
+
+		resetViews();
+	}
+
 	// Prefilter radiance mip chain (reads main RT directly)
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Prefilter Radiance");
@@ -738,6 +923,44 @@ void ScreenSpaceGI::DrawSSGI()
 		uint dispatchX = settings.HalfRes ? (resolution[0] + 1) / 2 : resolution[0];
 		uint dispatchY = resolution[1];
 		context->Dispatch((dispatchX + 7u) >> 3, (dispatchY + 7u) >> 3, 1);
+	}
+
+	// Specular GI ray march
+	if (settings.EnableSpecular && specularGICompute && texHiZDepth) {
+		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Specular GI");
+
+		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+		auto normal = rts[NORMALROUGHNESS];
+		auto main = rts[deferred->forwardRenderTargets[0]];
+
+		auto& dynamicCubemaps = globals::features::dynamicCubemaps;
+		auto& skylighting = globals::features::skylighting;
+
+		resetViews();
+		std::array<ID3D11ShaderResourceView*, 7> specSRVs = { nullptr };
+		specSRVs[0] = depth.depthSRV;
+		specSRVs[1] = normal.SRV;
+		specSRVs[2] = main.SRV;
+		specSRVs[3] = texHiZDepth->srv.get();
+		specSRVs[4] = dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr;
+		specSRVs[5] = dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr;
+		specSRVs[6] = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr;
+
+		ID3D11UnorderedAccessView* specUAV = texNRDSpecInput->uav.get();
+
+		context->CSSetShaderResources(0, (uint)specSRVs.size(), specSRVs.data());
+		context->CSSetUnorderedAccessViews(0, 1, &specUAV, nullptr);
+		context->CSSetShader(specularGICompute.get(), nullptr, 0);
+
+		uint specDispatchX = settings.HalfRes ? (resolution[0] + 1) / 2 : resolution[0];
+		uint specDispatchY = resolution[1];
+		context->Dispatch((specDispatchX + 7u) >> 3, (specDispatchY + 7u) >> 3, 1);
+
+		// Clear bindings
+		specSRVs.fill(nullptr);
+		specUAV = nullptr;
+		context->CSSetShaderResources(0, (uint)specSRVs.size(), specSRVs.data());
+		context->CSSetUnorderedAccessViews(0, 1, &specUAV, nullptr);
 	}
 
 	// REBLUR denoising
@@ -833,6 +1056,46 @@ void ScreenSpaceGI::DrawSSGI()
 		}
 
 		nrdReblur.Dispatch();
+
+		// Specular REBLUR denoising (shares common settings with diffuse)
+		if (settings.EnableSpecular && nrdReblurSpecular.IsValid()) {
+			TracyD3D11Zone(globals::state->tracyCtx, "SSGI - REBLUR Specular");
+
+			nrdReblurSpecular.SetCommonSettings(commonSettings);
+
+			{
+				const auto& r = settings.Reblur;
+				reblurSpecularSettings.maxAccumulatedFrameNum = std::min((uint32_t)r.MaxAccumulatedFrameNum, nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+				reblurSpecularSettings.maxFastAccumulatedFrameNum = std::min((uint32_t)r.MaxFastAccumulatedFrameNum, reblurSpecularSettings.maxAccumulatedFrameNum);
+				reblurSpecularSettings.maxStabilizedFrameNum = std::min((uint32_t)r.MaxStabilizedFrameNum, reblurSpecularSettings.maxAccumulatedFrameNum);
+				reblurSpecularSettings.historyFixFrameNum = reblurSpecularSettings.maxFastAccumulatedFrameNum > 0 ? std::min((uint32_t)r.HistoryFixFrameNum, reblurSpecularSettings.maxFastAccumulatedFrameNum - 1) : 0;
+				reblurSpecularSettings.historyFixBasePixelStride = std::max(r.HistoryFixBasePixelStride, 1u);
+				reblurSpecularSettings.historyFixAlternatePixelStride = std::max(r.HistoryFixAlternatePixelStride, 1u);
+				reblurSpecularSettings.fastHistoryClampingSigmaScale = std::clamp(r.FastHistoryClampingSigmaScale, 1.0f, 3.0f);
+				reblurSpecularSettings.minHitDistanceWeight = std::clamp(r.MinHitDistanceWeight, 0.0001f, 0.2f);
+				reblurSpecularSettings.minBlurRadius = std::max(r.MinBlurRadius, 0.0f);
+				reblurSpecularSettings.maxBlurRadius = std::max(r.MaxBlurRadius, reblurSpecularSettings.minBlurRadius);
+				reblurSpecularSettings.lobeAngleFraction = std::clamp(r.LobeAngleFraction, 0.0f, 1.0f);
+				reblurSpecularSettings.roughnessFraction = std::clamp(r.RoughnessFraction, 0.0f, 1.0f);
+				reblurSpecularSettings.planeDistanceSensitivity = std::max(r.PlaneDistanceSensitivity, 0.0f);
+				reblurSpecularSettings.enableAntiFirefly = false;
+				reblurSpecularSettings.hitDistanceReconstructionMode = static_cast<nrd::HitDistanceReconstructionMode>(std::min(r.HitDistanceReconstructionMode, 2u));
+				reblurSpecularSettings.checkerboardMode = settings.HalfRes ? nrd::CheckerboardMode::BLACK : nrd::CheckerboardMode::OFF;
+				reblurSpecularSettings.hitDistanceParameters.A = settings.HitDistA;
+				reblurSpecularSettings.hitDistanceParameters.B = settings.HitDistB;
+				reblurSpecularSettings.hitDistanceParameters.C = settings.HitDistC;
+			}
+			nrdReblurSpecular.SetDenoiserSettings(&reblurSpecularSettings);
+
+			nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_MV, texNRDMV->srv.get());
+			nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_NORMAL_ROUGHNESS, texNRDNormalRoughness->srv.get());
+			nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_VIEWZ, texNRDViewZ->srv.get());
+			nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::IN_SPEC_RADIANCE_HITDIST, texNRDSpecInput->srv.get());
+			nrdReblurSpecular.SetNamedSRV(nrd::ResourceType::OUT_SPEC_RADIANCE_HITDIST, texNRDSpecOutput->srv.get());
+			nrdReblurSpecular.SetNamedUAV(nrd::ResourceType::OUT_SPEC_RADIANCE_HITDIST, texNRDSpecOutput->uav.get());
+
+			nrdReblurSpecular.Dispatch();
+		}
 	}
 
 	// cleanup
@@ -866,11 +1129,22 @@ ID3D11ShaderResourceView* ScreenSpaceGI::GetDiffuseSH1Texture()
 	return nullptr;
 }
 
+ID3D11ShaderResourceView* ScreenSpaceGI::GetSpecularOutputTexture()
+{
+	if (loaded && settings.Enabled && settings.EnableSpecular) {
+		if (settings.EnableREBLUR && nrdReblurSpecular.IsValid())
+			return texNRDSpecOutput->srv.get();
+		return texNRDSpecInput->srv.get();
+	}
+	return nullptr;
+}
+
 ScreenSpaceGI::SharedData ScreenSpaceGI::GetCommonBufferData()
 {
 	SharedData data;
 	data.DiffuseMult = (settings.Enabled && settings.EnableGI) ? settings.GIStrength : 0.0f;
 	data.DebugMode = 0;
-	data._pad = { 0, 0 };
+	data.EnableSpecular = (settings.Enabled && settings.EnableSpecular) ? 1u : 0u;
+	data.SpecularMult = settings.SpecularMult;
 	return data;
 }

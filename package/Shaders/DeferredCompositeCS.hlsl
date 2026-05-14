@@ -85,6 +85,17 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #	endif
 	il = max(0, radiance * SharedData::ssgiSettings.DiffuseMult);
 }
+
+#	if defined(SSGI_SPECULAR)
+Texture2D<float4> SsgiSpecularTexture : register(t13);
+
+void SampleSSGITracedSpecular(uint2 pixCoord, out float3 specularRadiance, out float normHitDist)
+{
+	float4 data = SsgiSpecularTexture[pixCoord];
+	REBLUR_BackEnd_UnpackRadianceAndNormHitDist(data, specularRadiance, normHitDist);
+	specularRadiance *= SharedData::ssgiSettings.SpecularMult;
+}
+#	endif
 #endif
 
 #if defined(IBL)
@@ -298,6 +309,18 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 		}
 
 #	if defined(SSGI)
+#		if defined(SSGI_SPECULAR)
+		float3 tracedSpecular;
+		float specNormHitDist;
+		SampleSSGITracedSpecular(dispatchID.xy, tracedSpecular, specNormHitDist);
+
+		float NdotV = dot(normalWS, V);
+		float alpha = roughness * roughness;
+		float specAo = SpecularOcclusion(saturate(NdotV), alpha, ssgiAo);
+
+		finalIrradiance *= specAo;
+		finalIrradiance = lerp(finalIrradiance, tracedSpecular, specNormHitDist);
+#		else
 		float3 ssgiIlSpecular;
 		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
 
@@ -307,6 +330,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 		ssgiIlSpecular = max(0, Color::YCoCgToRGB(float3(ssgiIlSpecular.x, lerp(ssgiIlSpecular.yz, Color::RGBToYCoCg(finalIrradiance).yz, 0.5))));
 
 		finalIrradiance += ssgiIlSpecular;
+#		endif
 #	endif
 
 		color += reflectance * finalIrradiance;

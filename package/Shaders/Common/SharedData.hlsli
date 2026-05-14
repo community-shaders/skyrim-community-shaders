@@ -251,7 +251,8 @@ namespace SharedData
 	{
 		float DiffuseMult;
 		uint DebugMode;
-		float2 pad0;
+		uint EnableSpecular;
+		float SpecularMult;
 	};
 
 	struct ExponentialHeightFogSettings

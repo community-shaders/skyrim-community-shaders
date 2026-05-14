@@ -92,6 +92,19 @@ public:
 		// mix
 		float AOPower = 1.0f;
 		float GIStrength = 1.0f;
+		// specular Hi-Z ray march
+		bool EnableSpecular = true;
+		float SpecularMult = 1.0f;
+		uint SpecMaxSteps = 128;
+		float SpecThickness = 5.0f;
+		float NormalBias = 0.1f;
+		float BRDFBias = 0.25f;
+		float OcclusionStrength = 1.0f;
+		bool UseDynamicCubemapsAsFallback = true;
+		float HitDistA = 210.0f;
+		float HitDistB = 0.1f;
+		float HitDistC = 20.0f;
+		float HitDistD = -25.0f;
 		// NRD REBLUR
 		bool EnableREBLUR = true;
 		REBLURSettings Reblur;
@@ -115,7 +128,20 @@ public:
 		float AOPower;
 
 		float GIStrength;
-		float pad0[3];
+
+		uint SpecMaxSteps;
+		uint SpecMaxMips;
+		float SpecThickness;
+		float NormalBias;
+
+		float BRDFBias;
+		float OcclusionStrength;
+		float HitDistA;
+		float HitDistB;
+
+		float HitDistC;
+		float HitDistD;
+		uint SpecUseDynamicCubemap;
 	};
 	STATIC_ASSERT_ALIGNAS_16(SSGICB);
 	eastl::unique_ptr<ConstantBuffer> ssgiCB;
@@ -124,7 +150,8 @@ public:
 	{
 		float DiffuseMult;
 		uint DebugMode;
-		float2 _pad;
+		uint EnableSpecular;
+		float SpecularMult;
 	};
 
 	SharedData GetCommonBufferData();
@@ -149,6 +176,18 @@ public:
 
 	ID3D11ShaderResourceView* GetDiffuseOutputTexture();
 	ID3D11ShaderResourceView* GetDiffuseSH1Texture();
+	ID3D11ShaderResourceView* GetSpecularOutputTexture();
+
+	// Hi-Z depth pyramid (R32F, raw NDC depth with min-Z mip chain)
+	eastl::unique_ptr<Texture2D> texHiZDepth = nullptr;
+	static const uint kMaxHiZMips = 12;
+	uint numHiZMips = 1;
+	std::array<winrt::com_ptr<ID3D11ShaderResourceView>, kMaxHiZMips> hiZDepthSRVs = { nullptr };
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, kMaxHiZMips> hiZDepthUAVs = { nullptr };
+
+	// NRD specular textures (RGBA16F, full-res)
+	eastl::unique_ptr<Texture2D> texNRDSpecInput = nullptr;
+	eastl::unique_ptr<Texture2D> texNRDSpecOutput = nullptr;
 
 	winrt::com_ptr<ID3D11SamplerState> linearClampSampler = nullptr;
 	winrt::com_ptr<ID3D11SamplerState> pointClampSampler = nullptr;
@@ -159,9 +198,14 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> giCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> stereoSyncCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> prepareNRDGuidesCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> prefilterHiZDepthCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> specularGICompute = nullptr;
 
 	NRDReblurIntegration nrdReblur;
 	nrd::ReblurSettings reblurSettings{};
+	NRDReblurIntegration nrdReblurSpecular;
+	nrd::ReblurSettings reblurSpecularSettings{};
 	uint32_t frameIndex = 0;
 
 	Matrix worldToViewMat{};

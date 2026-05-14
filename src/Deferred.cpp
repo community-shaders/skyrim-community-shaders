@@ -334,6 +334,7 @@ void Deferred::DeferredPasses()
 		ssgi.DrawSSGI();
 	auto ssgiOutput = ssgi.GetDiffuseOutputTexture();
 	auto ssgiSH1Output = ssgi.GetDiffuseSH1Texture();
+	auto ssgiSpecOutput = ssgi.GetSpecularOutputTexture();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
@@ -351,7 +352,7 @@ void Deferred::DeferredPasses()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[13]{
+		ID3D11ShaderResourceView* srvs[14]{
 			specular.SRV,                                                                                    // t0  SpecularTexture
 			albedo.SRV,                                                                                      // t1  AlbedoTexture
 			normalRoughness.SRV,                                                                             // t2  NormalRoughnessTexture
@@ -365,6 +366,7 @@ void Deferred::DeferredPasses()
 			ssgiSH1Output,                                                                                   // t10 SsgiSH1Texture
 			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t11 EnvIBLTexture
 			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t12 SkyIBLTexture
+			ssgiSpecOutput,                                                                                  // t13 SsgiSpecularTexture
 		};
 
 		if (dynamicCubemaps.loaded)
@@ -626,6 +628,8 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 			defines.push_back({ "SSGI", nullptr });
 			if (globals::features::screenSpaceGI.settings.EnableSH && globals::features::screenSpaceGI.settings.EnableGI)
 				defines.push_back({ "SSGI_SH", nullptr });
+			if (globals::features::screenSpaceGI.settings.EnableSpecular)
+				defines.push_back({ "SSGI_SPECULAR", nullptr });
 		}
 
 		if (globals::features::ibl.loaded)
@@ -660,6 +664,8 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 			defines.push_back({ "SSGI", nullptr });
 			if (globals::features::screenSpaceGI.settings.EnableSH && globals::features::screenSpaceGI.settings.EnableGI)
 				defines.push_back({ "SSGI_SH", nullptr });
+			if (globals::features::screenSpaceGI.settings.EnableSpecular)
+				defines.push_back({ "SSGI_SPECULAR", nullptr });
 		}
 
 		if (globals::features::ibl.loaded)
