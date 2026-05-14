@@ -565,10 +565,28 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::Checkbox("Display SceneGraph Counters", &settings.DisplaySceneGraphCounters);
 
-	ImGui::Checkbox("Show Main Texture", &settings.ShowMainTexture);
+	if (ImGui::TreeNode("Buffer Viewer")) {
+		static float debugRescale = .3f;
+		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
 
-	if (settings.ShowMainTexture && mainTexture)
-		ImGui::Image(mainTexture->srv, { 1280, 720 });
+		if (ImGui::TreeNode("Main")) {
+			D3D11_TEXTURE2D_DESC desc;
+			mainTexture->resource11->GetDesc(&desc);
+
+			ImGui::Image(mainTexture->srv, { desc.Width * debugRescale, desc.Height * debugRescale });
+			ImGui::TreePop();
+		} 
+
+		if (ImGui::TreeNode("FlowMap")) {
+			D3D11_TEXTURE2D_DESC desc;
+			waterFlowMap->resource11->GetDesc(&desc);
+
+			ImGui::ImageWithBg(waterFlowMap->srv, { desc.Width * debugRescale, desc.Height * debugRescale }, { 0, 0 }, { 1, 1 }, {0, 0, 0, 1});
+			ImGui::TreePop();
+		}
+
+		ImGui::TreePop();
+	}
 
 	ImGui::PopID();
 
@@ -902,6 +920,24 @@ void Raytracing::SetupResources()
 		}
 
 		creationEngineRaytracing->SetSkyHemisphere(skyHemisphere->resource.get());
+	}
+
+	// Water FlowMap
+	{	
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = WATER_FLOWMAP_SIZE;
+		texDesc.Height = WATER_FLOWMAP_SIZE;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+		waterFlowMap = eastl::make_unique<WrappedResource>(texDesc);
+		DX::ThrowIfFailed(waterFlowMap->resource->SetName(L"Water FlowMap"));
+
+		creationEngineRaytracing->SetWaterFlowMap(waterFlowMap->resource.get());		
 	}
 
 	CompileShaders();
