@@ -2156,7 +2156,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Apply vertex color to base color so PBR metals use it
 	float3 pbrVertexColor = Color::SrgbToLinear(input.Color.xyz);
 	float pbrVertexAO = max(max(pbrVertexColor.x, pbrVertexColor.y), pbrVertexColor.z);
-	pbrVertexColor *= lerp(max(1 / pbrVertexAO, 0.001), 1, SharedData::truePBRSettings.VertexAOStrength);
+	pbrVertexColor = pbrVertexAO == 0.0f ? 1.0f : pbrVertexColor * lerp(1 / max(pbrVertexAO, 0.001), 1, SharedData::truePBRSettings.VertexAOStrength);
 
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		baseColor.xyz = Color::SrgbToLinear(baseColor.xyz) * pbrVertexColor;
@@ -2816,17 +2816,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
 
 #		if defined(TRUE_PBR)
-		float3 vertexColor = Color::SrgbToLinear(input.Color.xyz);
+		float3 emitVertexColor = Color::SrgbToLinear(input.Color.xyz);
+		float emitVertexAO = max(max(emitVertexColor.r, emitVertexColor.g), emitVertexColor.b);
+		emitVertexColor = emitVertexAO == 0.0f ? 1.0f : emitVertexColor * lerp(1 / max(emitVertexAO, 1e-4), 1, SharedData::truePBRSettings.VertexAOStrength);
 
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {
 			emitColor = Color::SrgbToLinear(emitColor);
 			glowColor = Color::SrgbToLinear(glowColor);
 			emitColor *= glowColor;
-			emitColor *= vertexColor;
+			emitColor *= emitVertexColor;
 			emitColor = Color::LinearToSrgb(emitColor);
 		} else {
 			emitColor *= glowColor;
-			emitColor *= vertexColor;
+			emitColor *= emitVertexColor;
 		}
 #		else
 		if (!SharedData::linearLightingSettings.enableLinearLighting) {
