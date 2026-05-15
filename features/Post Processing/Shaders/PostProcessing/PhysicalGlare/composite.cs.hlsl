@@ -156,7 +156,7 @@ float CatmullRomSample(Texture2D<float2> tex, SamplerState samp, float2 uv, floa
 	// Subtract the thresholded bright component and output the convolved
 	// (spread) result.  At Intensity = 1 total energy is redistributed,
 	// not gained.  Values != 1 allow artistic attenuation or exaggeration.
-	// This output is combined with the scene in the BloomFlareComposite pass.
+	// This output is combined with the scene in the Composite pass.
 	float3 bright = max(0, scene - Threshold);
 	float3 output = (glare - bright) * Intensity;
 

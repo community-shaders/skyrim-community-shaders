@@ -3,8 +3,6 @@
 #include "State.h"
 #include "Util.h"
 
-#include "Features/PostProcessing.h"
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HistogramAutoExposure::Settings,
 	ExposureCompensation,
@@ -66,8 +64,6 @@ void HistogramAutoExposure::SaveSettings(json& o_json)
 
 void HistogramAutoExposure::SetupResources()
 {
-	auto renderer = globals::game::renderer;
-
 	logger::debug("Creating buffers...");
 	{
 		autoExposureCB = std::make_unique<ConstantBuffer>(ConstantBufferDesc<AutoExposureCB>());
@@ -80,42 +76,13 @@ void HistogramAutoExposure::SetupResources()
 		adaptationSB->CreateUAV();
 	}
 
-	logger::debug("Creating 2D textures...");
-	{
-		// texAdapt for adaptation
-		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
-
-		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
-		};
-
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-		texDesc.MiscFlags = 0;
-
-		texAdapt = std::make_unique<Texture2D>(texDesc);
-		texAdapt->CreateSRV(srvDesc);
-		texAdapt->CreateUAV(uavDesc);
-	}
-
 	CompileComputeShaders();
 }
 
 void HistogramAutoExposure::ClearShaderCache()
 {
 	const auto shaderPtrs = std::array{
-		&histogramCS, &histogramAvgCS, &adaptCS
+		&histogramCS, &histogramAvgCS
 	};
 
 	for (auto shader : shaderPtrs)
@@ -141,7 +108,6 @@ void HistogramAutoExposure::CompileComputeShaders()
 		shaderInfos = {
 			{ &histogramCS, "histogram.cs.hlsl", {}, "CS_Histogram" },
 			{ &histogramAvgCS, "histogram.cs.hlsl", {}, "CS_Average" },
-			{ &adaptCS, "adapt.cs.hlsl", {} },
 		};
 
 	for (auto& info : shaderInfos) {
@@ -195,12 +161,15 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 		context->CSSetUnorderedAccessViews(0, (UINT)uavs.size(), uavs.data(), nullptr);
 
 		// Calculate histogram
-		// The shader uses [32,32,1] thread groups with 8x-spaced sampling to cover the screen.
-		// First, compute base groups needed to tile the texture at 32-thread granularity,
-		// then divide by 8 because each thread samples at 8-pixel intervals.
 		context->CSSetShader(histogramCS.get(), nullptr, 0);
-		uint32_t dispatchX = ((texAdapt->desc.Width - 1) >> 5) + 1;
-		uint32_t dispatchY = ((texAdapt->desc.Height - 1) >> 5) + 1;
+		uint2 texDims;
+		{
+			D3D11_TEXTURE2D_DESC desc;
+			inout_tex.tex->GetDesc(&desc);
+			texDims = { desc.Width, desc.Height };
+		}
+		uint32_t dispatchX = ((texDims.x - 1) >> 5) + 1;
+		uint32_t dispatchY = ((texDims.y - 1) >> 5) + 1;
 		dispatchX = (dispatchX + 7) / 8;
 		dispatchY = (dispatchY + 7) / 8;
 
@@ -212,31 +181,14 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 		state->EndPerfEvent();
 	}
 
-	// Adapt
-	{
-		resetViews();
-		state->BeginPerfEvent("Adapt Exposure");
-
-		srvs[0] = inout_tex.srv;
-		srvs[1] = adaptationSB->SRV();
-		uavs[0] = texAdapt->uav.get();
-
-		context->CSSetShaderResources(0, (UINT)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (UINT)uavs.size(), uavs.data(), nullptr);
-		context->CSSetShader(adaptCS.get(), nullptr, 0);
-
-		// Maintain the same number of threads for the adapt shader
-		// Since we're not changing the sampling pattern of the adapt shader
-		context->Dispatch(((texAdapt->desc.Width - 1) >> 5) + 1, ((texAdapt->desc.Height - 1) >> 5) + 1, 1);
-		state->EndPerfEvent();
-	}
-
 	// Clean up
 	resetViews();
 	cb = nullptr;
 	context->CSSetConstantBuffers(1, 1, &cb);
 	context->CSSetShader(nullptr, nullptr, 0);
 
-	inout_tex = { texAdapt->resource.get(), texAdapt->srv.get() };
+	// NOTE: We intentionally do NOT modify inout_tex here.
+	// The adaptation result is stored in adaptationSB and will be consumed
+	// by the Composite pass which applies exposure before color grading.
 	state->EndPerfEvent();
 }

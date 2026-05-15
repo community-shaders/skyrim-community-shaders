@@ -2,12 +2,12 @@
 
 #include "PostProcessing/PostProcessFeature.h"
 
-#include "PostProcessing/BloomFlareComposite.h"
 #include "PostProcessing/BokehResources.h"
 #include "PostProcessing/Border.h"
 #include "PostProcessing/CODBloom.h"
 #include "PostProcessing/Camera.h"
 #include "PostProcessing/ColorGrading.h"
+#include "PostProcessing/Composite.h"
 #include "PostProcessing/DoF.h"
 #include "PostProcessing/HistogramAutoExposure.h"
 #include "PostProcessing/LUT.h"
@@ -75,7 +75,7 @@ struct PostProcessing : Feature
 		PhysicalGlare,
 		CODBloom,
 		LensFlare,
-		BloomFlareComposite,
+		Composite,
 		ColorGrading,
 		LUT,
 		Vignette,

@@ -418,8 +418,8 @@ void PostProcessing::SetupResources()
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)].get()->enabled = true;
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)] = std::make_unique<LensFlare>();
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)].get()->enabled = false;
-		pipeline[static_cast<size_t>(FeaturePipelineIndex::BloomFlareComposite)] = std::make_unique<BloomFlareComposite>();
-		pipeline[static_cast<size_t>(FeaturePipelineIndex::BloomFlareComposite)].get()->enabled = true;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)] = std::make_unique<Composite>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)].get()->enabled = true;
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)] = std::make_unique<Vignette>();
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)].get()->enabled = true;
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)] = std::make_unique<Camera>();

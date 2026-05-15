@@ -67,7 +67,7 @@ void CODBloom::SetupResources()
 
 	logger::debug("Creating 2D textures...");
 	{
-		// texAdapt for adaptation
+		// texBloom for bloom mip chain
 		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
 
 		D3D11_TEXTURE2D_DESC texDesc;

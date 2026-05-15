@@ -4,10 +4,12 @@
 
 #include "Buffer.h"
 
-struct BloomFlareComposite : public PostProcessFeature
+struct Composite : public PostProcessFeature
 {
-	virtual inline std::string GetType() const override { return "Bloom/Flare/Glare Composite"; }
-	virtual inline std::string GetDesc() const override { return "Composites Bloom, Lens Flare, and Physical Glare results onto the main image. Automatically enabled when any of them is active."; }
+	virtual inline std::string GetType() const override { return "Composite"; }
+	virtual inline std::string GetDesc() const override { return "Composites Bloom, Lens Flare, Physical Glare, and Auto Exposure onto the main image. "
+																 "Applies exposure (SceneColor * Exposure + Bloom * Exposure) before Color Grading. "
+																 "Automatically enabled when any contributing feature is active."; }
 	virtual bool IsVisible() const override { return false; }
 	virtual bool IsAutoEnabled() const override { return true; }
 	virtual void UpdateAutoEnabled() override;
@@ -22,7 +24,8 @@ struct BloomFlareComposite : public PostProcessFeature
 		BLOOM = 1 << 0,
 		FLARE = 1 << 1,
 		GLARE = 1 << 2,
-		FLAG_COUNT = 8  // 2^3 combinations
+		EXPOSURE = 1 << 3,
+		FLAG_COUNT = 16  // 2^4 combinations
 	};
 
 	// Shader permutations indexed by composite flags (index 0 unused)
