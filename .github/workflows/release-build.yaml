@@ -116,8 +116,16 @@ jobs:
               # call silently failed and the `||` fallback wrote an empty
               # file, which then clobbered the existing release body when
               # ncipollo updated it (this happened on v1.5.1).
+              #
+              # GH_REPO is required because this job downloads artifacts but
+              # never runs actions/checkout. Without it `gh` falls back to
+              # `git remote` to infer the repo and dies with "fatal: not a
+              # git repository" — which then mismatches the `release not
+              # found` fallback grep and aborts the whole step (this
+              # happened on v1.5.2: run 25871339509).
               env:
                   GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
               run: |
                   set -euo pipefail
 

@@ -20,11 +20,13 @@ namespace SharedData
 		float Timer;
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
-		bool InInterior;          // If the area lacks a directional shadow light e.g. the sun or moon
+		bool InInterior;  // If the current cell is an interior
+		bool HasDirectionalShadows;
 		bool InMapMenu;           // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;             // HideSky flag in WorldSpace, e.g. Blackreach
 		float MipBias;            // Offset to mip level for TAA sharpness
 		float WaterSystemHeight;  // TES::GetWaterHeight at eye-0 in camera-relative Z; -FLT_MAX when no water body found (VR only)
+		float3 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;
@@ -39,9 +41,8 @@ namespace SharedData
 		bool OverrideComplexGrassSettings;
 
 		float BasicGrassBrightness;
-		bool EnableWrappedLighting;
 		float ComplexGrassThreshold;
-		float1 pad0;
+		float2 pad0;
 	};
 
 	struct CPMSettings
@@ -59,9 +60,13 @@ namespace SharedData
 	struct CubemapCreatorSettings
 	{
 		uint Enabled;
-		float3 pad0;
+		uint EnabledSSR;
+		float2 pad0;
 
 		float4 CubemapColor;
+
+		float ReflectionFallbackAmount;
+		float3 pad1;
 	};
 
 	struct TerraOccSettings
@@ -217,7 +222,6 @@ namespace SharedData
 	struct LinearLightingSettings
 	{
 		uint enableLinearLighting;
-		uint enableGammaCorrection;
 		uint isDirLightLinear;
 		float dirLightMult;
 		float lightGamma;
@@ -244,6 +248,7 @@ namespace SharedData
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
+		uint pad0;
 	};
 
 	struct TerrainBlendingSettings
@@ -261,11 +266,21 @@ namespace SharedData
 		float fogHeightFalloff;
 		float fogDensity;
 		float directionalInscatteringMultiplier;
-		float directionalInscatteringExponent;
+		float directionalInscatteringAnisotropy;
 		float4 inscatteringTint;
 		float cubemapMipLevel;
+		float sunlightAttenuationAmount;
 		uint respectVanillaFogFade;
-		float2 pad;
+		uint disableVanillaFog;
+		float4 fogInscatteringColor;
+		float originalFogColorAmount;
+		float3 pad;
+	};
+
+	struct TruePBRSettings
+	{
+		float VertexAOStrength;
+		uint3 pad;
 	};
 
 	cbuffer FeatureData : register(b6)
@@ -286,6 +301,7 @@ namespace SharedData
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
+		TruePBRSettings truePBRSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

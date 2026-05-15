@@ -79,6 +79,11 @@ void VolumetricShadows::CopyShadowLightData()
 	auto context = globals::d3d::context;
 
 	{
+		if (!globals::state->HasDirectionalShadows()) {
+			SetSharedShadowMapSRV(context, nullptr);
+			return;
+		}
+
 		context->PSGetShaderResources(4, 1, &shadowView);
 
 		// Downsample shadow texture array to fixed 512x512 (mip1: 256x256)
@@ -283,13 +288,18 @@ void VolumetricShadows::CopyShadowLightData()
 			}
 		}
 
-		ID3D11ShaderResourceView* srv = shadowView ? (shadowCopySRV ? shadowCopySRV : shadowView) : nullptr;
-		context->PSSetShaderResources(18, 1, &srv);
+		auto* srv = shadowView ? (shadowCopySRV ? shadowCopySRV : shadowView) : nullptr;
+		SetSharedShadowMapSRV(context, srv);
 
 		if (shadowView)
 			shadowView->Release();
 		shadowView = nullptr;
 	}
+}
+
+void VolumetricShadows::SetSharedShadowMapSRV(ID3D11DeviceContext* a_context, ID3D11ShaderResourceView* a_srv)
+{
+	a_context->PSSetShaderResources(kSharedShadowMapShaderSlot, 1, &a_srv);
 }
 
 void VolumetricShadows::DrawSettings()

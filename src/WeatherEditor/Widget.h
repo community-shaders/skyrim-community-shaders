@@ -29,6 +29,27 @@ namespace WidgetUI
 	constexpr ImVec4 kLockButtonColor = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
 	constexpr ImVec4 kLockButtonHoverColor = ImVec4(0.3f, 0.9f, 0.3f, 1.0f);
 
+	// Inherit checkbox styling (dark frame, grey mark)
+	constexpr ImVec4 kInheritCheckboxFrameBg = ImVec4(0.2f, 0.2f, 0.2f, 1.0f);
+	constexpr ImVec4 kInheritCheckboxMark = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+
+	// Transparent icon button styling
+	constexpr ImVec4 kIconButtonTransparent = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+	constexpr ImVec4 kIconButtonHover = ImVec4(0.8f, 0.8f, 0.8f, 0.25f);
+
+	// Category section header text (light teal-blue)
+	constexpr ImVec4 kCategoryHeaderColor = ImVec4(0.7f, 0.9f, 1.0f, 1.0f);
+
+	// Help / hint text (light grey)
+	constexpr ImVec4 kHelpTextColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
+
+	// Feature override toggle button states (enabled = green, disabled falls back to GetDisabled())
+	constexpr ImVec4 kOverrideEnabledButton = ImVec4(0.2f, 0.7f, 0.2f, 1.0f);
+	constexpr ImVec4 kOverrideEnabledButtonHovered = ImVec4(0.3f, 0.8f, 0.3f, 1.0f);
+	constexpr ImVec4 kOverrideEnabledButtonActive = ImVec4(0.1f, 0.6f, 0.1f, 1.0f);
+	constexpr ImVec4 kOverrideDisabledButtonHovered = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+	constexpr ImVec4 kOverrideDisabledButtonActive = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);
+
 	// Icon button spacing
 	constexpr float kIconButtonSpacing = 4.0f;
 	constexpr float kIconButtonSizeRatio = 0.85f;

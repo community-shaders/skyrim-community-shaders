@@ -166,6 +166,18 @@ bool EditorWindow::MatchesObjectFilter(Widget* w) const
 	}
 }
 
+std::string EditorWindow::ResolveEditorId(RE::TESForm* form, const WidgetVec& widgets)
+{
+	if (!form)
+		return "";
+	for (const auto& widget : widgets) {
+		if (widget->form && widget->form->GetFormID() == form->GetFormID())
+			return widget->GetEditorID();
+	}
+	const char* editorid = form->GetFormEditorID();
+	return editorid ? editorid : std::format("0x{:08X}", form->GetFormID());
+}
+
 void EditorWindow::ShowObjectsWindow()
 {
 	Util::BeginWithRoundedClose("Weather and Lighting Browser", nullptr);
@@ -226,29 +238,151 @@ void EditorWindow::ShowObjectsWindow()
 				return;
 			}
 
-			// Display current active weather
-			auto sky = globals::game::sky;
-			if (sky && sky->currentWeather) {
-				auto currentWeather = sky->currentWeather;
-				ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetTheme().StatusPalette.RestartNeeded);
-				ImGui::Text("Current Active Weather:");
+			// Returns the widget collection for a given category; Cell Lighting and unknown
+			// categories return an empty collection since they have no standalone widget list.
+			auto getWidgetsForCategory = [&](const std::string& cat) -> const std::vector<std::unique_ptr<Widget>>& {
+				static const std::vector<std::unique_ptr<Widget>> emptyWidgets;
+				if (cat == "Weather")
+					return weatherWidgets;
+				if (cat == "Lighting Template")
+					return lightingTemplateWidgets;
+				if (cat == "ImageSpace")
+					return imageSpaceWidgets;
+				if (cat == "Volumetric Lighting")
+					return volumetricLightingWidgets;
+				if (cat == "Shader Particle Geometry")
+					return precipitationWidgets;
+				if (cat == "Lens Flare")
+					return lensFlareWidgets;
+				if (cat == "Visual Effect")
+					return referenceEffectWidgets;
+				return emptyWidgets;
+			};
+
+			// Build active records for the current category tab
+			struct ActiveRecord {
+				std::string label;
+				std::string suffix;
+				RE::FormID formId;
+				std::function<void()> open;
+			};
+			std::vector<ActiveRecord> activeRecords;
+
+			{
+				auto* sky = globals::game::sky;
+				auto* weather = sky ? sky->currentWeather : nullptr;
+
+				auto openByFormId = [](RE::FormID id, const WidgetVec* widgets) -> std::function<void()> {
+					return [id, widgets]() {
+						for (const auto& widget : *widgets) {
+							if (widget->form && widget->form->GetFormID() == id) {
+								widget->SetOpen(true);
+								widget->RequestFocus();
+								break;
+							}
+						}
+					};
+				};
+
+				auto addSingle = [&](RE::TESForm* form, const WidgetVec& widgets, std::string suffix = "") {
+					if (!form) return;
+					auto id = form->GetFormID();
+					activeRecords.push_back({ ResolveEditorId(form, widgets), std::move(suffix), id, openByFormId(id, &widgets) });
+				};
+
+				auto addTOD = [&](auto* (&fields)[RE::TESWeather::ColorTimes::kTotal], const WidgetVec& widgets) {
+					for (int tod = 0; tod < RE::TESWeather::ColorTimes::kTotal; ++tod) {
+						auto* form = fields[tod];
+						if (!form) continue;
+						auto id = form->GetFormID();
+						bool already = std::any_of(activeRecords.begin(), activeRecords.end(),
+							[&](const ActiveRecord& r) { return r.formId == id; });
+						if (!already)
+							activeRecords.push_back({ ResolveEditorId(form, widgets), TOD::GetPeriodName(tod), id, openByFormId(id, &widgets) });
+					}
+				};
+
+				auto addWeather = [&](RE::TESWeather* weatherRecord, std::string suffix = "") {
+					if (!weatherRecord) return;
+					auto id = weatherRecord->GetFormID();
+					activeRecords.push_back({ ResolveEditorId(weatherRecord, weatherWidgets), std::move(suffix), id, openByFormId(id, &weatherWidgets) });
+				};
+
+				if (m_selectedCategory == "Weather") {
+					addWeather(weather);
+					if (sky && sky->lastWeather != weather)
+						addWeather(sky->lastWeather, "transitioning");
+				} else if (m_selectedCategory == "ImageSpace") {
+					if (weather) addTOD(weather->imageSpaces, imageSpaceWidgets);
+				} else if (m_selectedCategory == "Lighting Template") {
+					auto* player = RE::PlayerCharacter::GetSingleton();
+					if (player && player->parentCell)
+						addSingle(player->parentCell->GetRuntimeData().lightingTemplate, lightingTemplateWidgets);
+				} else if (m_selectedCategory == "Cell Lighting") {
+					auto* player = RE::PlayerCharacter::GetSingleton();
+					if (player && player->parentCell && player->parentCell->IsInteriorCell()) {
+						auto* cell = player->parentCell;
+						const char* cellName = cell->GetName();
+						std::string displayName = cellName && cellName[0] ? cellName : "[Unnamed Cell]";
+						activeRecords.push_back({ std::move(displayName), "", cell->GetFormID(),
+							[this, cell]() {
+								if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
+									currentCellLightingWidget->SetOpen(true);
+									currentCellLightingWidget->RequestFocus();
+								} else {
+									currentCellLightingWidget = std::make_unique<CellLightingWidget>(cell);
+									currentCellLightingWidget->CacheFormData();
+									currentCellLightingWidget->Load(false);
+									currentCellLightingWidget->SetOpen(true);
+									currentCellLightingWidget->RequestFocus();
+								}
+							} });
+					}
+				} else if (m_selectedCategory == "Volumetric Lighting") {
+					if (weather) addTOD(weather->volumetricLighting, volumetricLightingWidgets);
+				} else if (m_selectedCategory == "Shader Particle Geometry") {
+					if (weather) addSingle(weather->precipitationData, precipitationWidgets);
+				} else if (m_selectedCategory == "Lens Flare") {
+					if (weather) addSingle(weather->sunGlareLensFlare, lensFlareWidgets);
+				} else if (m_selectedCategory == "Visual Effect") {
+					if (weather) addSingle(weather->referenceEffect, referenceEffectWidgets);
+				}
+
+				// Fall back to current weather when the active category has no active record
+				if (activeRecords.empty())
+					addWeather(weather);
+			}
+
+			if (activeRecords.size() > 4)
+				activeRecords.resize(4);
+
+			if (!activeRecords.empty()) {
+				const auto& theme = Menu::GetSingleton()->GetTheme();
+
+				ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.RestartNeeded);
+				ImGui::Text("Active:");
 				ImGui::PopStyleColor();
 				ImGui::SameLine();
-				ImGui::TextColored(Menu::GetSingleton()->GetTheme().Palette.Text, "%s", currentWeather->GetFormEditorID());
-				ImGui::SameLine();
-				ImGui::TextDisabled("(0x%08X)", currentWeather->GetFormID());
+				const float recordX = ImGui::GetCursorPosX();
 
-				// Add button to open the current weather
-				ImGui::SameLine();
-				if (ImGui::SmallButton("Open##CurrentWeather")) {
-					const auto currentWeatherFormID = currentWeather->GetFormID();
-					for (auto& widget : weatherWidgets) {
-						if (widget->form == currentWeather || (widget->form && widget->form->GetFormID() == currentWeatherFormID)) {
-							widget->SetOpen(true);
-							widget->RequestFocus();
-							break;
-						}
+				for (int i = 0; i < (int)activeRecords.size(); ++i) {
+					if (i > 0) {
+						ImGui::NewLine();
+						ImGui::SameLine(recordX);
 					}
+					const auto& rec = activeRecords[i];
+					ImGui::TextColored(theme.Palette.Text, "%s", rec.label.c_str());
+					ImGui::SameLine();
+					if (!rec.suffix.empty()) {
+						ImGui::TextDisabled("(%s)", rec.suffix.c_str());
+						ImGui::SameLine();
+					}
+					ImGui::TextDisabled("(0x%08X)", rec.formId);
+					ImGui::SameLine();
+					char btnId[32];
+					snprintf(btnId, sizeof(btnId), "Open##active_%d", i);
+					if (ImGui::SmallButton(btnId))
+						rec.open();
 				}
 				ImGui::Spacing();
 				ImGui::Separator();
@@ -312,27 +446,6 @@ void EditorWindow::ShowObjectsWindow()
 			}
 			ImGui::SameLine();
 			ImGui::Text("Flagged");
-
-			// Returns the widget collection for a given category; Cell Lighting and unknown
-			// categories return an empty collection since they have no standalone widget list.
-			auto getWidgetsForCategory = [&](const std::string& cat) -> const std::vector<std::unique_ptr<Widget>>& {
-				static const std::vector<std::unique_ptr<Widget>> emptyWidgets;
-				if (cat == "Weather")
-					return weatherWidgets;
-				if (cat == "Lighting Template")
-					return lightingTemplateWidgets;
-				if (cat == "ImageSpace")
-					return imageSpaceWidgets;
-				if (cat == "Volumetric Lighting")
-					return volumetricLightingWidgets;
-				if (cat == "Shader Particle Geometry")
-					return precipitationWidgets;
-				if (cat == "Lens Flare")
-					return lensFlareWidgets;
-				if (cat == "Visual Effect")
-					return referenceEffectWidgets;
-				return emptyWidgets;
-			};
 
 			// Show recent widgets section for current category
 			auto recentIt = settings.recentWidgets.find(m_selectedCategory);
@@ -497,7 +610,7 @@ void EditorWindow::ShowObjectsWindow()
 							// Display current cell name
 							const char* cellName = cell->GetName();
 							std::string displayName = cellName && cellName[0] ? cellName : "[Unnamed Cell]";
-							std::string label = std::format("[CURRENT CELL] {}", displayName);
+							std::string label = displayName;
 
 							// Highlight current cell (before TableRowSelectable so hover/active can override)
 							auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
@@ -563,17 +676,7 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				}
 
-				// Get current cell's lighting template for prioritization
-				RE::BGSLightingTemplate* currentCellLightingTemplate = nullptr;
-				if (m_selectedCategory == "Lighting Template") {
-					auto player = RE::PlayerCharacter::GetSingleton();
-					if (player && player->parentCell) {
-						auto& cellData = player->parentCell->GetRuntimeData();
-						currentCellLightingTemplate = cellData.lightingTemplate;
-					}
-				}
-
-				// Centralized filter check used by both display loops below.
+				// Centralized filter check used by the display loop below.
 				auto shouldShowWidget = [&](Widget* w) {
 					if (!MatchesObjectFilter(w))
 						return false;
@@ -584,100 +687,8 @@ void EditorWindow::ShowObjectsWindow()
 					return true;
 				};
 
-				// Filtered display of widgets - show current cell's lighting template first
-				if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
-					for (int i = 0; i < sortedWidgets.size(); ++i) {
-						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
-						if (!ltWidget || ltWidget->lightingTemplate != currentCellLightingTemplate)
-							continue;
-
-						if (!shouldShowWidget(sortedWidgets[i]))
-							continue;
-
-						auto editorLabel = std::format("[CURRENT] {}", sortedWidgets[i]->GetEditorID());
-						auto markedRecord = settings.markedRecords.find(sortedWidgets[i]->GetEditorID());
-						ImGui::PushID(sortedWidgets[i]->GetFormID().c_str());
-						ImGui::TableNextRow();
-
-						// Highlight current cell's lighting template
-						auto highlightColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.InfoColor;
-						highlightColor.w = 0.3f;
-						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
-						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
-
-						ImGui::TableSetColumnIndex(0);
-
-						// Favorite star
-						if (IconButton("##fav_current", IsFavorite(sortedWidgets[i]->GetEditorID()), "star")) {
-							ToggleFavorite(sortedWidgets[i]->GetEditorID());
-						}
-
-						ImGui::TableNextColumn();
-
-						// Editor ID column with [CURRENT] prefix
-						bool isSelected = sortedWidgets[i]->IsOpen();
-						if (Util::TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
-							if (ImGui::IsMouseDoubleClicked(0)) {
-								sortedWidgets[i]->SetOpen(true);
-								AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
-							}
-						}
-
-						// Enter key to open
-						if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-							sortedWidgets[i]->SetOpen(true);
-							AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
-						}
-
-						// Context menu
-						if (ImGui::BeginPopupContextItem(std::format("widget_context_menu##{}", sortedWidgets[i]->GetFormID()).c_str(), ImGuiPopupFlags_MouseButtonRight)) {
-							auto& markedRecords = settings.markedRecords;
-
-							for (auto& recordMarker : settings.recordMarkers) {
-								if (ImGui::MenuItem(recordMarker.first.c_str())) {
-									settings.markedRecords[sortedWidgets[i]->GetEditorID()] = recordMarker.first;
-									Save();
-								}
-							}
-
-							if (ImGui::MenuItem("Remove")) {
-								markedRecords.erase(sortedWidgets[i]->GetEditorID());
-								Save();
-							}
-
-							ImGui::EndPopup();
-						}
-
-						// Form ID column
-						ImGui::TableNextColumn();
-						ImGui::Text(sortedWidgets[i]->GetFormID().c_str());
-
-						// File column
-						ImGui::TableNextColumn();
-						ImGui::Text(sortedWidgets[i]->GetFilename().c_str());
-
-						// Status column
-						ImGui::TableNextColumn();
-						if (markedRecord != settings.markedRecords.end()) {
-							ImGui::Text("%s", markedRecord->second.c_str());
-						}
-
-						// json / delete column
-						drawJsonDeleteButton(sortedWidgets[i]);
-
-						ImGui::PopID();
-					}
-				}
-
-				// Filtered display of widgets - regular list
+				// Filtered display of widgets
 				for (int i = 0; i < sortedWidgets.size(); ++i) {
-					// Skip current cell's lighting template if already shown
-					if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
-						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
-						if (ltWidget && ltWidget->lightingTemplate == currentCellLightingTemplate)
-							continue;
-					}
-
 					if (!shouldShowWidget(sortedWidgets[i]))
 						continue;
 
@@ -724,21 +735,11 @@ void EditorWindow::ShowObjectsWindow()
 							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + pad.y * 2.0f;
 							Util::SetTooltipPositionNearMouse(estimatedTooltipHeight);
 							if (ImGui::BeginTooltip()) {
-								// Resolve ImageSpace editor ID via widget cache (GetFormEditorID() returns null at runtime)
-								auto resolveViaWidgets = [this](RE::TESForm* f, const std::vector<std::unique_ptr<Widget>>& widgets) -> std::string {
-									if (!f)
-										return "None";
-									for (const auto& w : widgets) {
-										if (w->form == f)
-											return w->GetEditorID();
-									}
-									return std::format("0x{:X}", f->GetLocalFormID());
-								};
-
 								// ImageSpace info - use widget cache for proper editor IDs
 								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
 								for (int tod = 0; tod < 4; tod++) {
-									ImGui::Text("  %s: %s", TOD::GetPeriodName(tod), resolveViaWidgets(weatherWidget->weather->imageSpaces[tod], imageSpaceWidgets).c_str());
+									auto name = ResolveEditorId(weatherWidget->weather->imageSpaces[tod], imageSpaceWidgets);
+									ImGui::Text("  %s: %s", TOD::GetPeriodName(tod), name.empty() ? "None" : name.c_str());
 								}
 
 								ImGui::Spacing();
@@ -1077,7 +1078,7 @@ void EditorWindow::RenderUI()
 				if (!canUndo)
 					textColor.w = 0.5f;
 				ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-				if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint) && canUndo)
+				if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), WidgetUI::kIconButtonTransparent, iconTint) && canUndo)
 					PerformUndo();
 				ImGui::PopStyleColor();
 			}
@@ -1207,10 +1208,10 @@ void EditorWindow::RenderUI()
 			} else {
 				auto hover = menu->GetTheme().Palette.Text;
 				hover.w = kInactiveHoverAlpha;
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+				ImGui::PushStyleColor(ImGuiCol_Button, WidgetUI::kIconButtonTransparent);
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
 			}
-			bool clicked = ImGui::ImageButton(id, texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconTint);
+			bool clicked = ImGui::ImageButton(id, texture, iconButtonSize, ImVec2(0, 0), ImVec2(1, 1), WidgetUI::kIconButtonTransparent, iconTint);
 			ImGui::PopStyleColor(2);
 			ImGui::PopStyleVar(2);
 			return clicked;
