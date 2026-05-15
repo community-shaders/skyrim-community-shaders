@@ -162,14 +162,16 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 
 		// Calculate histogram
 		context->CSSetShader(histogramCS.get(), nullptr, 0);
-		uint2 texDims;
+		uint texWidth = 0;
+		uint texHeight = 0;
 		{
 			D3D11_TEXTURE2D_DESC desc;
 			inout_tex.tex->GetDesc(&desc);
-			texDims = { desc.Width, desc.Height };
+			texWidth = desc.Width;
+			texHeight = desc.Height;
 		}
-		uint32_t dispatchX = ((texDims.x - 1) >> 5) + 1;
-		uint32_t dispatchY = ((texDims.y - 1) >> 5) + 1;
+		uint32_t dispatchX = ((texWidth - 1) >> 5) + 1;
+		uint32_t dispatchY = ((texHeight - 1) >> 5) + 1;
 		dispatchX = (dispatchX + 7) / 8;
 		dispatchY = (dispatchY + 7) / 8;
 

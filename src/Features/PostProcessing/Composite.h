@@ -13,6 +13,7 @@ struct Composite : public PostProcessFeature
 	virtual bool IsVisible() const override { return false; }
 	virtual bool IsAutoEnabled() const override { return true; }
 	virtual void UpdateAutoEnabled() override;
+	virtual inline bool DisableInMainLoadingMenu() const override { return true; }
 	virtual bool WritesToMainTexture() const override { return true; }
 
 	eastl::unique_ptr<Texture2D> texOutput = nullptr;
