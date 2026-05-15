@@ -387,6 +387,19 @@ namespace ShadowCasterManager
 		/// Higher = light strongly illuminates the area around the viewer.
 		float lastImportance{ 0.0f };
 
+		/// Hash of the shadow scene at the most recent successful redraw:
+		/// light pose + radius + each caster's worldBound + identity. Compared
+		/// against the current frame's hash to detect when the cached shadow
+		/// map is still pixel-correct (no geometric change since last render).
+		/// Industry term: "cached shadow maps" (UE5, CryEngine, Frostbite).
+		/// 0 sentinel = never-rendered; treat as "needs redraw" on first frame.
+		std::uint64_t lastGeomHash{ 0 };
+
+		/// Hash computed for the current frame's scoring pass. Promoted into
+		/// lastGeomHash only when this entry actually redraws (RedrawFrame=true),
+		/// so the cache key reflects what's *in the slot*, not what we observed.
+		std::uint64_t pendingGeomHash{ 0 };
+
 		void Clear()
 		{
 			Light = nullptr;
@@ -394,6 +407,8 @@ namespace ShadowCasterManager
 			RedrawFrame = false;
 			lastRenderedPos = { 0.0f, 0.0f, 0.0f };
 			lastImportance = 0.0f;
+			lastGeomHash = 0;
+			pendingGeomHash = 0;
 		}
 	};
 

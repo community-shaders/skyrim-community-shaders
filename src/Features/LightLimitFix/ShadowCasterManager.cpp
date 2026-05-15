@@ -1252,6 +1252,102 @@ namespace ShadowCasterManager
 	}
 
 	// =========================================================================
+	// Shadow map content hash for cached-shadow-map detection
+	// =========================================================================
+
+	/// Mixes a 32-bit value into a running 64-bit hash. boost::hash_combine
+	/// constants -- the magic number 0x9e3779b9 is the golden-ratio reciprocal,
+	/// chosen for good bit distribution. Fast (a few ALU ops) and we don't
+	/// need cryptographic strength -- only that distinct inputs map to
+	/// distinct outputs with very high probability.
+	static inline std::uint64_t HashCombine(std::uint64_t h, std::uint32_t v) noexcept
+	{
+		return h ^ (static_cast<std::uint64_t>(v) + 0x9e3779b9ull + (h << 6) + (h >> 2));
+	}
+	static inline std::uint64_t HashCombineFloat(std::uint64_t h, float f) noexcept
+	{
+		return HashCombine(h, std::bit_cast<std::uint32_t>(f));
+	}
+
+	/// Hash the inputs that determine a shadow map's content. Two inputs:
+	///   (1) the light's own pose + radius -- moves/rotates/resizes the
+	///       shadow frustum, all change the rendered depths
+	///   (2) each caster's worldBound (center + radius) and identity --
+	///       worldBound is engine-maintained: it tracks rigid motion AND
+	///       BSDynamicTriShape vertex updates, so we don't need to dig
+	///       deeper into mesh data
+	///
+	/// Identical hashes across frames means the shadow map currently in the
+	/// slot is byte-for-byte what a fresh re-render would produce -- the
+	/// caller can skip the redraw and keep the cached slot intact.
+	///
+	/// Returns 0 only when `light` or its inner NiLight is null (caller
+	/// treats 0 as "never rendered"). Otherwise the hash itself almost
+	/// never lands on 0 because of how HashCombine mixes constants in.
+	/// Quantize a float to a step size before hashing. slf4.tracy showed 2.64
+	/// stale_cache_skips/frame in a completely static scene -- the camera and
+	/// all casters were motionless, but Skyrim's kFlicker / kPulse light flags
+	/// oscillate animated torches by sub-unit position/radius amounts every
+	/// frame. Bit-exact hashing on those oscillations produced a fresh hash
+	/// every frame, defeating cache validity and triggering perceptible
+	/// shadow on/off flicker. Quantizing at sub-pixel-precision thresholds
+	/// folds these imperceptible animations back into a stable hash bucket.
+	static inline float QuantizeFloat(float f, float step) noexcept
+	{
+		return std::round(f / step) * step;
+	}
+
+	static std::uint64_t ComputeShadowGeomHash(RE::BSShadowLight* light)
+	{
+		if (!light)
+			return 0;
+		auto* ni = light->light.get();
+		if (!ni)
+			return 0;
+		std::uint64_t h = 0x9e3779b97f4a7c15ull;  // arbitrary nonzero seed
+
+		// Quantization thresholds: tuned to be one to two orders of
+		// magnitude below perceptible difference in the rendered shadow.
+		//   kPosStep   = 1.0 game unit (~1.4 cm world space; sub-texel
+		//                at typical 2048 shadow res * 500 unit light radius)
+		//   kRotStep   = 0.01 in matrix entries (~0.5 degrees)
+		//   kRadiusStep = 1.0 unit (well under any visible frustum
+		//                resize from torch pulse animations)
+		constexpr float kPosStep = 1.0f;
+		constexpr float kRotStep = 0.01f;
+		constexpr float kRadiusStep = 1.0f;
+
+		// Light pose
+		const auto& t = ni->world.translate;
+		h = HashCombineFloat(h, QuantizeFloat(t.x, kPosStep));
+		h = HashCombineFloat(h, QuantizeFloat(t.y, kPosStep));
+		h = HashCombineFloat(h, QuantizeFloat(t.z, kPosStep));
+		const auto& r = ni->world.rotate;
+		for (int i = 0; i < 3; ++i)
+			for (int j = 0; j < 3; ++j)
+				h = HashCombineFloat(h, QuantizeFloat(r.entry[i][j], kRotStep));
+		// Light radius (NiPointLight uses .x; spotlights use direction in
+		// rotation matrix already hashed above).
+		const auto& rtd = ni->GetLightRuntimeData();
+		h = HashCombineFloat(h, QuantizeFloat(rtd.radius.x, kRadiusStep));
+		// Caster set + each caster's worldBound (engine-updated).
+		for (auto& nip : light->geomList) {
+			auto* ts = nip.get();
+			if (!ts)
+				continue;
+			const auto raw = reinterpret_cast<std::uintptr_t>(ts);
+			h = HashCombine(h, static_cast<std::uint32_t>(raw));
+			h = HashCombine(h, static_cast<std::uint32_t>(raw >> 32));
+			const auto& wb = ts->worldBound;
+			h = HashCombineFloat(h, QuantizeFloat(wb.center.x, kPosStep));
+			h = HashCombineFloat(h, QuantizeFloat(wb.center.y, kPosStep));
+			h = HashCombineFloat(h, QuantizeFloat(wb.center.z, kPosStep));
+			h = HashCombineFloat(h, QuantizeFloat(wb.radius, kRadiusStep));
+		}
+		return h;
+	}
+
+	// =========================================================================
 	// Light enable / disable helpers
 	// =========================================================================
 
@@ -2131,6 +2227,26 @@ namespace ShadowCasterManager
 					FormulaHelper::SetParam(kFormulaParam_LightImportance, static_cast<double>(importance));
 					e->RedrawScore = e->LastDrawnFrame + interval;
 					e->lastImportance = importance;
+
+					// Cached shadow maps: if the geometry hash matches what we
+					// rendered last time, the shadow map currently in the slot
+					// is byte-identical to what a fresh re-render would produce.
+					// No need to redraw -- push the score sky-high so this entry
+					// loses every budget contest unless literally nothing else
+					// needs redrawing (defensive: still allow eventual refresh
+					// against any hashing bugs).
+					//
+					// Industry-standard pattern: UE5 "Cached Shadow Maps",
+					// Frostbite movable-light caching. The hash captures
+					// (1) light's own pose + radius and (2) each caster's
+					// worldBound + identity -- both rigid motion and engine-
+					// updated bounds (BSDynamicTriShape vertex changes update
+					// worldBound).
+					e->pendingGeomHash = ComputeShadowGeomHash(e->Light);
+					if (e->LastDrawnFrame >= 0 && e->lastGeomHash != 0 &&
+						e->pendingGeomHash == e->lastGeomHash) {
+						e->RedrawScore += 1e15;
+					}
 				}
 
 				// Count lights meaningfully illuminating the viewer area.
@@ -2153,6 +2269,7 @@ namespace ShadowCasterManager
 						maxRedraw--;
 						e->RedrawFrame = true;
 						e->LastDrawnFrame = now;
+						e->lastGeomHash = e->pendingGeomHash;
 						isFirst = false;
 						continue;
 					}
@@ -2161,6 +2278,7 @@ namespace ShadowCasterManager
 						maxRedraw--;
 						e->RedrawFrame = true;
 						e->LastDrawnFrame = now;
+						e->lastGeomHash = e->pendingGeomHash;
 						continue;
 					}
 				}
