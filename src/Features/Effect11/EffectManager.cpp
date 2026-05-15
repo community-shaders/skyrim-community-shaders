@@ -444,6 +444,7 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterBoolSetting("EnableLens", "EFFECT", false, false);
 
 	settingManager.RegisterBoolSetting("EnableCloudShadows", "EFFECT", true, false);
+	settingManager.RegisterBoolSetting("EnableCloudsScattering", "EFFECT", true, false);
 	settingManager.RegisterBoolSetting("EnableImageBasedLighting", "EFFECT", true, false);
 	settingManager.RegisterBoolSetting("EnableProceduralSun", "EFFECT", true, false);
 

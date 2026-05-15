@@ -304,6 +304,9 @@ namespace SharedData
 		float SkyScatteringCloudsLightingSunMinIntensity;
 		float SkyScatteringCloudsLightingSunMultiplier;
 		float SkyScatteringCloudsLightingMoonIntensity;
+
+		uint EnableCloudsScattering;
+		float3 _pad0;
 	};
 	struct TerrainBlendingSettings
 	{

@@ -296,7 +296,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 
 #			if defined(CLOUDS)
-	if (SharedData::enbSettings.EnableSky) {
+	if (SharedData::enbSettings.EnableSky && SharedData::enbSettings.EnableCloudsScattering) {
 
 		float3 cloudColor = psout.Color.xyz;
 		float3 viewDirection = normalize(input.WorldPosition.xyz);
@@ -320,6 +320,7 @@ PS_OUTPUT main(PS_INPUT input)
 				sunShadow += CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, samplePosition, 0);
 			}
 			sunShadow = saturate(1.0 - sunShadow * rcpSampleCount);
+			sunShadow *= smoothstep(-0.1, 0.1, SharedData::SunDirection.z);
 		}
 
 		float masserShadow = 0.0;
@@ -329,10 +330,11 @@ PS_OUTPUT main(PS_INPUT input)
 				float3 endPosition = normalize(SharedData::MasserDirection.xyz);
 				for (uint i = 0; i < sampleCount; i++) {
 					float t = (float(i) + screenNoise) * rcpSampleCount;
-					float3 samplePosition = normalize(lerp(startPosition, endPosition, t * 0.1));
+					float3 samplePosition = normalize(lerp(startPosition, endPosition, t * 0.1));	
 					masserShadow += CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, samplePosition, 0);
 				}
 				masserShadow = saturate(1.0 - masserShadow * rcpSampleCount);
+				masserShadow *= smoothstep(-0.1, 0.1, SharedData::MasserDirection.z);
 			}
 			{
 				float3 endPosition = normalize(SharedData::SecundaDirection.xyz);
@@ -342,6 +344,7 @@ PS_OUTPUT main(PS_INPUT input)
 					secundaShadow += CloudShadows::CloudShadowsTexture.SampleLevel(SampBaseSampler, samplePosition, 0);
 				}
 				secundaShadow = saturate(1.0 - secundaShadow * rcpSampleCount);
+				secundaShadow *= smoothstep(-0.1, 0.1, SharedData::SecundaDirection.z);
 			}
 		}
 
@@ -373,11 +376,17 @@ PS_OUTPUT main(PS_INPUT input)
 
 		if (SharedData::enbSettings.CloudsEdgeIntensity > 0.0) {
 			float cloudsEdgeAlpha = saturate(1.0 - baseColor.w);
-			float3 sunPhase = pow(abs(saturate(dot(viewDirection, SharedData::SunDirection.xyz))), 10.0) * SharedData::SunColor.xyz * sunShadow;
-			float3 masserPhase = pow(abs(saturate(dot(viewDirection, SharedData::MasserDirection.xyz))), 10.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * masserShadow;
-			float3 secundaPhase = pow(abs(saturate(dot(viewDirection, SharedData::SecundaDirection.xyz))), 10.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * secundaShadow;
+			bool useScatteringShadows = SharedData::enbSettings.CalculateCloudsEdgeFromScattering && SharedData::enbSettings.EnableCloudsScattering;
 
-			float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity;
+			float sunEdge = useScatteringShadows ? sunShadow : cloudsEdgeAlpha;
+			float masserEdge = useScatteringShadows ? masserShadow : cloudsEdgeAlpha;
+			float secundaEdge = useScatteringShadows ? secundaShadow : cloudsEdgeAlpha;
+
+			float3 sunPhase = pow(abs(saturate(dot(viewDirection, SharedData::SunDirection.xyz))), 10.0) * SharedData::SunColor.xyz * sunEdge;
+			float3 masserPhase = pow(abs(saturate(dot(viewDirection, SharedData::MasserDirection.xyz))), 10.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * masserEdge;
+			float3 secundaPhase = pow(abs(saturate(dot(viewDirection, SharedData::SecundaDirection.xyz))), 10.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier * secundaEdge;
+
+			float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * SharedData::enbSettings.CloudsEdgeIntensity;
 
 			colorLit += cloudLuminance * cloudsScatter;
 		}
@@ -399,8 +408,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Normal = float4(0.5, 0.5, 0, psout.Color.w);
 
 #	if defined(CLOUD_SHADOWS) && defined(CLOUDS) && !defined(DEFERRED)
-	float cloudLuminance = dot(psout.Color.xyz, 1.0 / 3.0);
-	psout.CloudShadows = float4(cloudLuminance.xxx, psout.Color.w);
+	psout.CloudShadows = psout.Color.w;
 
 	// Keep sun behind scene depth to prevent halo leaks through geometry.
 	float depth = TexDepthSampler.Load(int3(input.Position.xy, 0));

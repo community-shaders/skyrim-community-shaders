@@ -77,6 +77,9 @@ public:
 		float SkyScatteringCloudsLightingSunMinIntensity;
 		float SkyScatteringCloudsLightingSunMultiplier;
 		float SkyScatteringCloudsLightingMoonIntensity;
+
+		uint EnableCloudsScattering;
+		float3 _pad0;
 	};
 
 	bool enableEffect = false;
