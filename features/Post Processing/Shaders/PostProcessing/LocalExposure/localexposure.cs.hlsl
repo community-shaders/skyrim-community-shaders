@@ -3,7 +3,7 @@
 /// Algorithm:
 ///   1. CSLuminance: Downsample scene to 1/4 res log-luminance
 ///   2. CSDownsample: Iterative mip chain downsample (Gaussian approximation)
-///   3. CSComputeExposure: Compare pixel luminance to local average (from mip),
+///   3. CSComputeExposure: Compare pre-exposed local base luminance to middle grey,
 ///      compute exposure multiplier with bilateral-aware upsampling
 ///
 /// Based on Bart Wronski's local tonemapping / exposure fusion technique:
@@ -20,7 +20,11 @@ cbuffer LocalExposureCB : register(b1)
 	uint2 InputDims;
 	uint2 LowResDims;
 	uint MipLevel;
-	float pad[3];
+	float2 AdaptationRange;
+	float ExposureCompensation;
+	float MiddleGrey;
+	uint UseGlobalExposure;
+	float pad[2];
 };
 
 // Shared resource declarations (register assignments are per-entry-point in practice)
@@ -31,6 +35,7 @@ cbuffer LocalExposureCB : register(b1)
 
 Texture2D<float4> TexInput0 : register(t0);  // float4 for scene, .r for luminance
 Texture2D<float> TexInput1 : register(t1);   // luminance mip chain (Pass 3)
+StructuredBuffer<float> TexAdaptation : register(t2);
 SamplerState LinearSampler : register(s0);
 RWTexture2D<float> RWTexOutput : register(u0);
 
@@ -89,7 +94,7 @@ RWTexture2D<float> RWTexOutput : register(u0);
 // ============================================================
 // Pass 3: Compute per-pixel local exposure multiplier
 // Uses guided bilateral upsampling to avoid halos
-// Input t0: Full-res scene color, t1: Luminance mip chain
+// Input t0: Full-res scene color, t1: Luminance mip chain, t2: adapted average luminance
 // Output u0: Exposure map (full res)
 // ============================================================
 [numthreads(8, 8, 1)] void CSComputeExposure(uint2 tid : SV_DispatchThreadID) {
@@ -138,30 +143,31 @@ RWTexture2D<float> RWTexOutput : register(u0);
 
 	localAvgLog /= (totalWeight + 1e-6);
 
-	// Compute local exposure adjustment
-	// Difference between pixel and local average (in log2 space = EV difference)
-	float diff = logPixelLum - localAvgLog;
+	// Match Unreal's pre-exposed local exposure shape: judge the local base
+	// luminance after global exposure, then compress/expand it around middle grey.
+	float adaptedLum = UseGlobalExposure != 0 ? TexAdaptation[0] : 1.0;
+	adaptedLum = clamp(max(adaptedLum, 1e-5), AdaptationRange.x, AdaptationRange.y);
+	float globalExposure = UseGlobalExposure != 0 ? (0.18 * ExposureCompensation / adaptedLum) : 1.0;
+	float logGlobalExposure = log2(max(globalExposure, 1e-6));
+	float logMiddleGrey = log2(max(MiddleGrey, 1e-6));
 
-	// Apply asymmetric contrast:
-	//   Positive diff (pixel brighter than average) -> compress highlights
-	//   Negative diff (pixel darker than average) -> boost shadows
-	float exposureAdjust;
-	if (diff > 0) {
-		// Highlights: reduce the difference (darken relative to local avg)
-		exposureAdjust = -diff * HighlightContrast;
-	} else {
-		// Shadows: reduce the difference (brighten relative to local avg)
-		exposureAdjust = -diff * ShadowContrast;
-	}
+	float preExposedLogPixel = logPixelLum + logGlobalExposure;
+	float preExposedBaseLog = localAvgLog + logGlobalExposure;
+	float detailLogLum = preExposedLogPixel - preExposedBaseLog;
+	float baseCentered = preExposedBaseLog - logMiddleGrey;
+	float contrastScale = baseCentered > 0 ? HighlightContrast : ShadowContrast;
+
+	float targetLogLum = logMiddleGrey + baseCentered * contrastScale + detailLogLum * DetailStrength;
+	float exposureAdjust = targetLogLum - preExposedLogPixel;
 
 	// Convert from log2 EV adjustment to linear multiplier
-	float localExposure = exp2(exposureAdjust * DetailStrength);
+	float localExposure = exp2(exposureAdjust);
 
 	// Clamp to reasonable range to avoid extreme adjustments
 	localExposure = clamp(localExposure, 0.25, 4.0);
 
 	// Smooth falloff for very dark pixels to avoid boosting noise
-	float darkFalloff = saturate(pixelLum / 0.01);
+	float darkFalloff = saturate((pixelLum * globalExposure) / 0.01);
 	localExposure = lerp(1.0, localExposure, darkFalloff * darkFalloff);
 
 	RWTexOutput[tid] = localExposure;

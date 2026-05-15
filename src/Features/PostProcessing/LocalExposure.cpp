@@ -1,5 +1,7 @@
 #include "LocalExposure.h"
 
+#include "Features/PostProcessing.h"
+#include "HistogramAutoExposure.h"
 #include "State.h"
 #include "Util.h"
 
@@ -15,11 +17,11 @@ void LocalExposure::DrawSettings()
 {
 	ImGui::SliderFloat("Highlight Contrast", &settings.HighlightContrast, 0.f, 1.5f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("How much to compress overly bright areas relative to their local neighborhood. Higher values darken local highlights more.");
+		ImGui::Text("Pre-exposed highlight contrast scale. 1 = unchanged, lower values compress bright regions more.");
 
 	ImGui::SliderFloat("Shadow Contrast", &settings.ShadowContrast, 0.f, 1.5f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("How much to boost dark areas relative to their local neighborhood. Higher values brighten local shadows more.");
+		ImGui::Text("Pre-exposed shadow contrast scale. 1 = unchanged, lower values lift dark regions more.");
 
 	ImGui::SliderFloat("Detail Strength", &settings.DetailStrength, 0.f, 2.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -220,6 +222,12 @@ void LocalExposure::Draw(TextureInfo& inout_tex)
 	uint lowH = texLuminance->desc.Height;
 
 	uint mipLevel = std::min(settings.MipBias, numMips - 1);
+	auto* exposure = owner ? owner->GetPipelineFeature<HistogramAutoExposure>(PostProcessing::FeaturePipelineIndex::AutoExposure) : nullptr;
+	bool useGlobalExposure = exposure && exposure->enabled && exposure->GetAdaptationSRV();
+	float exposureCompensation = useGlobalExposure ? exp2(exposure->settings.ExposureCompensation) : 1.f;
+	float2 adaptationRange = useGlobalExposure ?
+	                             float2{ exp2(exposure->settings.AdaptationRange.x), exp2(exposure->settings.AdaptationRange.y) } :
+	                             float2{ 1.f, 1.f };
 
 	// Update constant buffer
 	LocalExposureCB cbData = {
@@ -232,6 +240,10 @@ void LocalExposure::Draw(TextureInfo& inout_tex)
 		.LowResWidth = lowW,
 		.LowResHeight = lowH,
 		.MipLevel = mipLevel,
+		.AdaptationRange = adaptationRange,
+		.ExposureCompensation = exposureCompensation,
+		.MiddleGrey = 0.18f * exposureCompensation,
+		.UseGlobalExposure = useGlobalExposure ? 1u : 0u,
 	};
 	localExposureCB->Update(cbData);
 
@@ -292,8 +304,9 @@ void LocalExposure::Draw(TextureInfo& inout_tex)
 
 		// t0 = full res scene color (for luminance reference)
 		// t1 = luminance mip chain (with all mips, for bilinear sampling)
+		// t2 = auto exposure adaptation buffer (previous/current available frame)
 		// u0 = output exposure map
-		std::array<ID3D11ShaderResourceView*, 2> srvs = { inout_tex.srv, texLuminance->srv.get() };
+		std::array<ID3D11ShaderResourceView*, 3> srvs = { inout_tex.srv, texLuminance->srv.get(), useGlobalExposure ? exposure->GetAdaptationSRV() : nullptr };
 		ID3D11UnorderedAccessView* uav = texExposure->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());

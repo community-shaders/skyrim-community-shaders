@@ -6,7 +6,7 @@
 
 /// Local Exposure
 /// Generates a per-pixel exposure multiplier texture by comparing each pixel's luminance
-/// to its local neighborhood average (from a low-res blurred luminance mip).
+/// to a pre-exposed local neighborhood average (from a low-res blurred luminance mip).
 /// Runs BEFORE Auto Exposure and is consumed by the Composite pass.
 /// Does NOT affect the main texture directly - only produces an exposure map.
 ///
@@ -16,7 +16,7 @@
 /// Algorithm:
 ///   1. Compute log-luminance of the scene at reduced resolution (1/4 x 1/4)
 ///   2. Build a mip chain via iterative downsampling (Gaussian blur approximation)
-///   3. Compute per-pixel local exposure by comparing pixel luminance to blurred average
+///   3. Compute per-pixel local exposure around pre-exposed middle grey
 ///   4. Bilateral upsample the result to full resolution for halo-free application
 struct LocalExposure : public PostProcessFeature
 {
@@ -33,8 +33,8 @@ struct LocalExposure : public PostProcessFeature
 
 	struct Settings
 	{
-		float HighlightContrast = 0.8f;  // How much to compress highlights (0 = no effect, 1 = full)
-		float ShadowContrast = 0.8f;     // How much to boost shadows (0 = no effect, 1 = full)
+		float HighlightContrast = 0.8f;  // Pre-exposed highlight contrast scale (1 = no compression, lower = more compression)
+		float ShadowContrast = 0.8f;     // Pre-exposed shadow contrast scale (1 = no boost, lower = more boost)
 		float DetailStrength = 1.0f;     // Overall effect intensity multiplier
 		float BilateralSigma = 2.0f;     // Edge-aware sigma in EV (lower = more edge-aware, less halos)
 		uint MipBias = 5;                // Which mip level to use as "local average" (higher = larger radius)
@@ -52,7 +52,11 @@ struct LocalExposure : public PostProcessFeature
 		uint LowResWidth;
 		uint LowResHeight;
 		uint MipLevel;
-		float pad[3];
+		float2 AdaptationRange;
+		float ExposureCompensation;
+		float MiddleGrey;
+		uint UseGlobalExposure;
+		float pad[2];
 	};
 	std::unique_ptr<ConstantBuffer> localExposureCB = nullptr;
 
