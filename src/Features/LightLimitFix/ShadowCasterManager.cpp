@@ -1824,39 +1824,33 @@ namespace ShadowCasterManager
 			for (int i = s_lights.PointLightEnd(s_settings.ShadowLightCount); i < s_lights.Size; i++)
 				s_lights.Lights[i].RedrawFrame = false;
 
+			// First pass: sun only. Point-light slots fall through to the
+			// importance-scored pending loop below where new lights compete
+			// fairly with existing redraws.
+			//
+			// Previously this loop also force-rendered new lights
+			// (LastDrawnFrame < 0 && AllowDrawNewLight). When many new lights
+			// streamed in at once (player entering populated area), pool
+			// iteration order picked the first N regardless of importance --
+			// dim background lights claimed budget over bright lights right
+			// next to the player. Letting them fall through to the pending
+			// loop sorts by importance, so the budget always covers the most
+			// visible new lights first. AllowDrawNewLight is now honoured by
+			// the pending loop's filter (gates new-light pending entry).
 			for (int i = 0; i < s_lights.Size; i++) {
 				auto& e = s_lights.Lights[i];
 				if (!e.Light) {
 					e.RedrawFrame = false;
 					continue;
 				}
-				// Sun always renders (slot 0; one light, doesn't meaningfully
-				// share the point-light cap).
-				const bool isSun = (i == 0 && s_lights.Sun);
-				// New lights (LastDrawnFrame < 0) historically got a free
-				// first-render here regardless of cap or budget, which let
-				// streaming churn (player entering a populated area, many new
-				// pool entries in one frame) blow MaxRedrawPerFrame entirely.
-				// Now gated: AllowDrawNewLight only triggers a force-redraw
-				// when there's actual budget and cap headroom -- otherwise the
-				// light falls through to the pending loop below, where its
-				// LastDrawnFrame == -1 already gives it max priority. Worst
-				// case is a one-frame shadow delay for the lowest-priority
-				// new lights when many appear at once; the alternative was
-				// silently exceeding the cap by 4-5x in heavy modlists
-				// (observed: 72 renders/frame vs cap of 16 in Tracy slf8).
-				const bool wantNewLightRedraw =
-					e.LastDrawnFrame < 0 && s_settings.AllowDrawNewLight &&
-					maxRedraw > 0 && budgetRemain > 0;
-				e.RedrawFrame = isSun || wantNewLightRedraw;
+				e.RedrawFrame = (i == 0 && s_lights.Sun);
 				if (e.RedrawFrame) {
 					e.LastDrawnFrame = now;
 					isFirst = false;
 					maxRedraw--;
-					if (!isSun) {
-						int32_t estimatedBudget = s_budget.GetCost(e.Light);
-						budgetRemain -= estimatedBudget;
-					}
+					// Sun's budget cost is bookkept at 0 (different texture
+					// pipeline -- it has its own cascade buffer), so no
+					// budgetRemain decrement.
 				}
 			}
 
@@ -1865,6 +1859,12 @@ namespace ShadowCasterManager
 				for (int i = 0; i < s_lights.Size; i++) {
 					auto& e = s_lights.Lights[i];
 					if (!e.Light || e.RedrawFrame)
+						continue;
+					// Honour AllowDrawNewLight: when disabled, brand-new
+					// entries (LastDrawnFrame < 0) wait until the next frame
+					// rather than competing for this frame's budget. Existing
+					// lights re-entering view still schedule normally.
+					if (!s_settings.AllowDrawNewLight && e.LastDrawnFrame < 0)
 						continue;
 					pending.push_back(&e);
 				}
