@@ -1830,12 +1830,30 @@ namespace ShadowCasterManager
 					e.RedrawFrame = false;
 					continue;
 				}
-				e.RedrawFrame = (i == 0 && s_lights.Sun) || (e.LastDrawnFrame < 0 && s_settings.AllowDrawNewLight);
+				// Sun always renders (slot 0; one light, doesn't meaningfully
+				// share the point-light cap).
+				const bool isSun = (i == 0 && s_lights.Sun);
+				// New lights (LastDrawnFrame < 0) historically got a free
+				// first-render here regardless of cap or budget, which let
+				// streaming churn (player entering a populated area, many new
+				// pool entries in one frame) blow MaxRedrawPerFrame entirely.
+				// Now gated: AllowDrawNewLight only triggers a force-redraw
+				// when there's actual budget and cap headroom -- otherwise the
+				// light falls through to the pending loop below, where its
+				// LastDrawnFrame == -1 already gives it max priority. Worst
+				// case is a one-frame shadow delay for the lowest-priority
+				// new lights when many appear at once; the alternative was
+				// silently exceeding the cap by 4-5x in heavy modlists
+				// (observed: 72 renders/frame vs cap of 16 in Tracy slf8).
+				const bool wantNewLightRedraw =
+					e.LastDrawnFrame < 0 && s_settings.AllowDrawNewLight &&
+					maxRedraw > 0 && budgetRemain > 0;
+				e.RedrawFrame = isSun || wantNewLightRedraw;
 				if (e.RedrawFrame) {
 					e.LastDrawnFrame = now;
 					isFirst = false;
 					maxRedraw--;
-					if (i != 0 || !s_lights.Sun) {
+					if (!isSun) {
 						int32_t estimatedBudget = s_budget.GetCost(e.Light);
 						budgetRemain -= estimatedBudget;
 					}
