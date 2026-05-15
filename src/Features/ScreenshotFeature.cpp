@@ -18,12 +18,6 @@
 
 namespace
 {
-	// VR side-by-side framebuffer headed to the HMD - the VR analog of
-	// kFRAMEBUFFER. CommonLib reuses kTOTAL as the slot index here (despite
-	// the name typically meaning "count of standard targets"); aliased for
-	// readability at call sites.
-	constexpr auto kVRFramebufferTarget = RE::RENDER_TARGETS::kTOTAL;
-
 	// Capture source for the current runtime. SRV is non-owning - the texture's
 	// lifetime is owned by the slot or a caller-held com_ptr.
 	struct CaptureSource
@@ -204,7 +198,7 @@ namespace
 	}
 
 	// Picks the capture source by where ISHDR wrote the scene this frame:
-	//   VR              -> kVRFramebufferTarget (SBS).
+	//   VR              -> RE::RENDER_TARGETS::kVR_FRAMEBUFFER (SBS).
 	//   HDR enabled     -> HDR::HdrTexture (FP16 linear; PrepareBmpImage tonemaps).
 	//   otherwise       -> kFRAMEBUFFER (already tonemapped UNORM).
 	//
@@ -220,7 +214,7 @@ namespace
 		}
 
 		if (globals::game::isVR) {
-			auto& slot = renderer->GetRuntimeData().renderTargets[kVRFramebufferTarget];
+			auto& slot = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kVR_FRAMEBUFFER];
 			src.texture = ResolveSlotTexture(slot, holder);
 			src.srv = slot.SRV;
 			src.description = "VR SBS framebuffer";
