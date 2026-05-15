@@ -23,8 +23,8 @@ SamplerState PointSampler : register(s1);
 // Constants
 cbuffer MotionBlurCB : register(b0)
 {
-	float g_VelocityScale;  // Velocity multiplier (mapped from enum)
-	int g_SampleCount;      // Number of samples
+	float4 g_VelocityParams;  // x: velocity multiplier, yz: motion-vector source/display scale
+	int g_SampleCount;        // Number of samples
 }
 
 // Fixed parameters
@@ -81,6 +81,25 @@ float GetDitheredOffset(uint2 position, float sampleIndex)
 	return (-scale + 2.0f * scale * positionMod.x) * (-1.0f + 2.0f * positionMod.y);
 }
 
+float2 GetVelocityTexCoord(float2 targetTexCoord)
+{
+	uint2 targetDimensions;
+	TexColor.GetDimensions(targetDimensions.x, targetDimensions.y);
+
+	uint2 velocityDimensions;
+	TexVelocity.GetDimensions(velocityDimensions.x, velocityDimensions.y);
+
+	float2 targetToVelocityScale = g_VelocityParams.yz;
+	float2 sourceDimensions = max(float2(1.0f, 1.0f), float2(targetDimensions) * targetToVelocityScale);
+	sourceDimensions = min(sourceDimensions, float2(velocityDimensions));
+
+	float2 uvScale = sourceDimensions / float2(velocityDimensions);
+	float2 minUV = 0.5f / float2(velocityDimensions);
+	float2 maxUV = (sourceDimensions - 0.5f) / float2(velocityDimensions);
+
+	return clamp(targetTexCoord * uvScale, minUV, maxUV);
+}
+
 // Main function
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 	// Get dimensions and check bounds
@@ -96,9 +115,9 @@ float GetDitheredOffset(uint2 position, float sampleIndex)
 	float2 texCoord = (pixelPos + 0.5f) / float2(dimensions);
 	float4 centerColor = TexColor.SampleLevel(LinearSampler, texCoord, 0);
 	float centerDepth = TexDepth.SampleLevel(PointSampler, texCoord, 0);
-	float2 centerVelocity = TexVelocity.SampleLevel(PointSampler, texCoord, 0).xy;
+	float2 centerVelocity = TexVelocity.SampleLevel(PointSampler, GetVelocityTexCoord(texCoord), 0).xy;
 
-	centerVelocity *= g_VelocityScale;
+	centerVelocity *= g_VelocityParams.x;
 
 	// Calculate tile coordinates
 	uint2 gridCoord;
@@ -117,7 +136,7 @@ float GetDitheredOffset(uint2 position, float sampleIndex)
 	// Determine blur direction and length
 	float2 blurDir = length(neighborMaxVelocity) > 0.001f ? normalize(neighborMaxVelocity) : float2(0.0f, 0.0f);
 	// Scale blur length down for higher velocity scales to prevent over-blurring
-	float blurLength = min(length(neighborMaxVelocity) / sqrt(g_VelocityScale / 300.0f), g_MaxBlurRadius);
+	float blurLength = min(length(neighborMaxVelocity) / sqrt(g_VelocityParams.x / 300.0f), g_MaxBlurRadius);
 
 	// Skip if no motion
 	if (blurLength < 0.5f) {
@@ -148,11 +167,11 @@ float GetDitheredOffset(uint2 position, float sampleIndex)
 		float sampleDepthFwd = TexDepth.SampleLevel(PointSampler, sampleTexCoordsFwd, 0);
 		float sampleDepthBck = TexDepth.SampleLevel(PointSampler, sampleTexCoordsBck, 0);
 
-		float4 rawVelocityDepthFwd = TexVelocity.SampleLevel(PointSampler, sampleTexCoordsFwd, 0);
-		float4 rawVelocityDepthBck = TexVelocity.SampleLevel(PointSampler, sampleTexCoordsBck, 0);
+		float4 rawVelocityDepthFwd = TexVelocity.SampleLevel(PointSampler, GetVelocityTexCoord(sampleTexCoordsFwd), 0);
+		float4 rawVelocityDepthBck = TexVelocity.SampleLevel(PointSampler, GetVelocityTexCoord(sampleTexCoordsBck), 0);
 
-		float2 sampleVelocityFwd = rawVelocityDepthFwd.xy * g_VelocityScale;
-		float2 sampleVelocityBck = rawVelocityDepthBck.xy * g_VelocityScale;
+		float2 sampleVelocityFwd = rawVelocityDepthFwd.xy * g_VelocityParams.x;
+		float2 sampleVelocityBck = rawVelocityDepthBck.xy * g_VelocityParams.x;
 
 		float sampleVelocityLenFwd = length(sampleVelocityFwd);
 		float sampleVelocityLenBck = length(sampleVelocityBck);

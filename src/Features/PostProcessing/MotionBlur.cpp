@@ -1,4 +1,5 @@
 #include "MotionBlur.h"
+#include "Features/Upscaling.h"
 #include "ShaderCache.h"
 #include "Util.h"
 
@@ -36,12 +37,12 @@ void MotionBlur::SetupResources()
 
 	// Initialize constant buffer structs
 	motionBlurCB = {
-		.VelocityScale = GetScaleValueFromPreset(settings.ScalePreset),
+		.VelocityParams = { GetScaleValueFromPreset(settings.ScalePreset), 1.0f, 1.0f, 0.0f },
 		.SampleCount = (settings.SampleCount * 2) & ~1  // Double and ensure it's always even
 	};
 
 	reductionPassCB = {
-		.VelocityScale = GetScaleValueFromPreset(settings.ScalePreset)
+		.VelocityParams = { GetScaleValueFromPreset(settings.ScalePreset), 1.0f, 1.0f, 0.0f }
 	};
 
 	// Create the actual D3D constant buffers
@@ -392,15 +393,24 @@ bool MotionBlur::UpdateConstantBuffers()
 
 	// Get actual velocity scale value from preset
 	float velocityScale = GetScaleValueFromPreset(settings.ScalePreset);
+	float2 velocityTextureScale = { 1.0f, 1.0f };
+	float2 targetResolution = { static_cast<float>(lastWidth), static_cast<float>(lastHeight) };
+
+	auto& upscaling = globals::features::upscaling;
+	if (upscaling.loaded && upscaling.IsUpscalingActive()) {
+		velocityTextureScale.x = std::clamp(upscaling.resolutionScale.x, 0.0f, 1.0f);
+		velocityTextureScale.y = std::clamp(upscaling.resolutionScale.y, 0.0f, 1.0f);
+	}
 
 	// Set current values
 	motionBlurCB = {
-		.VelocityScale = velocityScale,
+		.VelocityParams = { velocityScale, velocityTextureScale.x, velocityTextureScale.y, 0.0f },
 		.SampleCount = (settings.SampleCount * 2) & ~1  // Double and ensure it's always even
 	};
 
 	reductionPassCB = {
-		.VelocityScale = velocityScale
+		.VelocityParams = { velocityScale, velocityTextureScale.x, velocityTextureScale.y, 0.0f },
+		.TargetResolution = { targetResolution.x, targetResolution.y, 0.0f, 0.0f }
 	};
 
 	// Update blur constant buffer if needed

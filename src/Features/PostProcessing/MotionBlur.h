@@ -98,13 +98,15 @@ struct MotionBlur : public PostProcessFeature
 	// Constant buffer structs
 	struct alignas(16) MotionBlurConstantBuffer
 	{
-		float VelocityScale;
+		float4 VelocityParams;  // x: velocity scale, yz: motion-vector source/display scale
 		int32_t SampleCount;
+		float Padding[3] = {};
 	};
 
 	struct alignas(16) ReductionPassConstantBuffer
 	{
-		float VelocityScale;
+		float4 VelocityParams;    // x: velocity scale, yz: motion-vector source/display scale
+		float4 TargetResolution;  // xy: output color resolution
 	};
 
 	// CB instances

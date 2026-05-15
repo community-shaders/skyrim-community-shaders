@@ -12,9 +12,17 @@ RWStructuredBuffer<float> RWBufferAdaptation : register(u1);
 
 Texture2D<float4> TexColor : register(t0);
 
-const static float MinLogLum = -8;    // -5 EV
-const static float LogLumRange = 21;  // -5 to 16 EV
+const static float MinLogLum = -8;
+const static float LogLumRange = 21;
 const static float RcpLogLumRange = rcp(LogLumRange);
+const static uint HistogramBins = 256;
+const static uint FirstLuminanceBin = 1;
+const static uint LastLuminanceBin = HistogramBins - 1;
+const static uint SampleStride = 8;
+const static uint HistogramWeightScale = 16;
+const static uint SampleWeight = SampleStride * SampleStride * HistogramWeightScale;
+const static float LowPercent = 0.10;
+const static float HighPercent = 0.90;
 
 // Increased thread count per group for better occupancy
 groupshared uint histogramShared[256];
@@ -48,24 +56,19 @@ float4 ComputeBoxBounds(float2 dims)
 	}
 	GroupMemoryBarrierWithGroupSync();
 
-	// Sample spacing - take fewer samples (1 out of N pixels)
-	const uint SAMPLE_SPACING = 8;  // Sample every 8th pixel for 64x reduction in samples
+	uint2 baseCoord = tid * SampleStride;
+	bool validSample = !any(baseCoord >= dims);
 
-	// Compute base pixel coordinate with spacing
-	uint2 pxCoord = tid * (2 * SAMPLE_SPACING);
-
-	// Calculate jitter offset using blue noise distribution
-	float2 jitter = hash2D(tid) * (SAMPLE_SPACING - 0.5) * 2.0;
-	int2 jitterOffset = int2(jitter);
-
-	// Optimized bounds checking
-	pxCoord = uint2(max(0, min(int2(pxCoord) + jitterOffset, int2(dims) - 1)));
+	// Jitter inside each sampled cell to reduce structured aliasing while avoiding edge duplication.
+	uint2 jitter = uint2(hash2D(tid) * SampleStride);
+	uint2 pxCoord = min(baseCoord + jitter, dims - 1);
 
 	// Precompute box bounds
 	float4 boxBounds = ComputeBoxBounds(dims);
 
 	// Optimized box check using precomputed bounds
-	bool inBox = (pxCoord.x > boxBounds.x) && (pxCoord.x < boxBounds.z) &&
+	bool inBox = validSample &&
+	             (pxCoord.x > boxBounds.x) && (pxCoord.x < boxBounds.z) &&
 	             (pxCoord.y > boxBounds.y) && (pxCoord.y < boxBounds.w);
 
 	if (inBox) {
@@ -74,9 +77,15 @@ float4 ComputeBoxBounds(float2 dims)
 
 		// Optimized bin calculation - avoid unnecessary saturate
 		if (luma > 1e-10) {
-			float logLuma = (log2(luma) - MinLogLum) * RcpLogLumRange;
-			uint bin = uint(lerp(1, 255, min(1.0, max(0.0, logLuma))));
-			InterlockedAdd(histogramShared[bin], SAMPLE_SPACING * SAMPLE_SPACING);
+			float histogramPos = saturate((log2(luma) - MinLogLum) * RcpLogLumRange);
+			float fBin = FirstLuminanceBin + histogramPos * (LastLuminanceBin - FirstLuminanceBin);
+			uint bin0 = min((uint)fBin, LastLuminanceBin);
+			uint bin1 = min(bin0 + 1, LastLuminanceBin);
+			float weight1 = frac(fBin);
+			float weight0 = 1.0 - weight1;
+
+			InterlockedAdd(histogramShared[bin0], (uint)(weight0 * SampleWeight + 0.5));
+			InterlockedAdd(histogramShared[bin1], (uint)(weight1 * SampleWeight + 0.5));
 		}
 	}
 
@@ -89,30 +98,47 @@ float4 ComputeBoxBounds(float2 dims)
 };
 
 [numthreads(256, 1, 1)] void CS_Average(uint gidx : SV_GroupIndex) {
-	uint2 dims;
-	TexColor.GetDimensions(dims.x, dims.y);
-	uint numPixels = dims.x * dims.y * AdaptArea.x * AdaptArea.y * 0.25;
-
-	// Optimized initialization
-	if (gidx < 256) {
-		uint pixelsInBin = RWBufferHistogram[gidx];
-		histogramShared[gidx] = pixelsInBin * gidx;
-		RWBufferHistogram[gidx] = 0;  // for next frame
-	}
-	GroupMemoryBarrierWithGroupSync();
-
-	// Optimized reduction using bit shifts
-	[unroll] for (uint offset = 128; offset > 0; offset >>= 1)
-	{
-		if (gidx < offset)
-			histogramShared[gidx] += histogramShared[gidx + offset];
-		GroupMemoryBarrierWithGroupSync();
-	}
-
-	// Optimized average calculation
 	if (gidx == 0) {
-		float logAvgLum = float(histogramShared[0]) / max(numPixels, 1.0) - 1.0;
-		float avgLum = exp2(((logAvgLum / 254.0) * LogLumRange) + MinLogLum);
+		float totalWeight = 0.0;
+		[unroll] for (uint i = FirstLuminanceBin; i < HistogramBins; ++i)
+		{
+			totalWeight += (float)RWBufferHistogram[i];
+		}
+
+		float avgLum = max(1e-5, RWBufferAdaptation[0]);
+		if (totalWeight > 0.0) {
+			float lowCut = totalWeight * LowPercent;
+			float highCut = totalWeight * HighPercent;
+			float weightedLogLum = 0.0;
+			float keptWeight = 0.0;
+
+			[unroll] for (uint bin = FirstLuminanceBin; bin < HistogramBins; ++bin)
+			{
+				float binWeight = (float)RWBufferHistogram[bin];
+
+				float lowDiscard = min(binWeight, lowCut);
+				binWeight -= lowDiscard;
+				lowCut -= lowDiscard;
+				highCut = max(highCut - lowDiscard, 0.0);
+
+				binWeight = min(binWeight, max(highCut, 0.0));
+				highCut -= binWeight;
+
+				float histogramPos = ((float)bin - FirstLuminanceBin) / (LastLuminanceBin - FirstLuminanceBin);
+				float logLum = histogramPos * LogLumRange + MinLogLum;
+				weightedLogLum += logLum * binWeight;
+				keptWeight += binWeight;
+			}
+
+			if (keptWeight > 0.0)
+				avgLum = exp2(weightedLogLum / keptWeight);
+		}
+
+		[unroll] for (uint clearBin = 0; clearBin < HistogramBins; ++clearBin)
+		{
+			RWBufferHistogram[clearBin] = 0;
+		}
+
 		float adaptedLum = lerp(max(1e-5, RWBufferAdaptation[0]), avgLum, AdaptLerp);
 		RWBufferAdaptation[0] = adaptedLum;
 	}

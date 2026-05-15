@@ -5,19 +5,19 @@
 #include "Buffer.h"
 
 /// Local Exposure
-/// Generates a per-pixel exposure multiplier texture by comparing each pixel's luminance
-/// to a pre-exposed local neighborhood average (from a low-res blurred luminance mip).
-/// Runs BEFORE Auto Exposure and is consumed by the Composite pass.
-/// Does NOT affect the main texture directly - only produces an exposure map.
+/// Generates a per-pixel exposure multiplier using exposure-fusion local
+/// tonemapping. Runs before Auto Exposure and is consumed by Composite.
+/// The main color texture is not modified by this pass.
 ///
-/// Based on the local tonemapping / exposure fusion technique by Bart Wronski:
+/// Reference:
 ///   https://bartwronski.com/2022/02/28/exposure-fusion-local-tonemapping-for-real-time-rendering/
 ///
 /// Algorithm:
-///   1. Compute log-luminance of the scene at reduced resolution (1/4 x 1/4)
-///   2. Build a mip chain via iterative downsampling (Gaussian blur approximation)
-///   3. Compute per-pixel local exposure around pre-exposed middle grey
-///   4. Bilateral upsample the result to full resolution for halo-free application
+///   1. Normalize raw HDR input with global exposure when available
+///   2. Compute highlight, midtone, and shadow exposure candidates
+///   3. Build luminance and weight pyramids
+///   4. Reconstruct the fused result across the configured mip range
+///   5. Guided-upsample the fused result into a full-resolution multiplier
 struct LocalExposure : public PostProcessFeature
 {
 	virtual inline std::string GetType() const override { return "Local Exposure"; }
@@ -33,39 +33,50 @@ struct LocalExposure : public PostProcessFeature
 
 	struct Settings
 	{
-		float HighlightContrast = 0.8f;  // Pre-exposed highlight contrast scale (1 = no compression, lower = more compression)
-		float ShadowContrast = 0.8f;     // Pre-exposed shadow contrast scale (1 = no boost, lower = more boost)
-		float DetailStrength = 1.0f;     // Overall effect intensity multiplier
-		float BilateralSigma = 2.0f;     // Edge-aware sigma in EV (lower = more edge-aware, less halos)
-		uint MipBias = 5;                // Which mip level to use as "local average" (higher = larger radius)
+		float Exposure = 0.7f;                 // Manual input normalization when Auto Exposure is unavailable
+		float Shadows = 1.5f;                  // Shadow recovery EV
+		float Highlights = 2.0f;               // Highlight recovery EV
+		float ExposurePreferenceSigma = 5.0f;  // Exposure selection sharpness
+		uint Mip = 6;                          // Coarsest pyramid level used for reconstruction
+		uint DisplayMip = 2;                   // Finest reconstructed level before guided upsample
+		bool BoostLocalContrast = false;       // Weight Laplacian bands by local contrast
 	} settings;
 
 	// Constant buffer for the compute shader
 	struct alignas(16) LocalExposureCB
 	{
-		float HighlightContrast;
-		float ShadowContrast;
-		float DetailStrength;
-		float BilateralSigma;
+		float ManualExposure;
+		float HighlightExposure;
+		float ShadowExposure;
+		float ExposurePreferenceSigmaSq;
 		uint InputWidth;
 		uint InputHeight;
-		uint LowResWidth;
-		uint LowResHeight;
 		uint MipLevel;
-		float2 AdaptationRange;
-		float ExposureCompensation;
-		float MiddleGrey;
+		uint DisplayMip;
+		uint CurrentMip;
+		uint HasCoarserMip;
+		uint BoostLocalContrast;
 		uint UseGlobalExposure;
-		float pad[2];
+		float ExposureCompensation;
+		float AdaptationMin;
+		float AdaptationMax;
+		float DarkThreshold;
 	};
 	std::unique_ptr<ConstantBuffer> localExposureCB = nullptr;
 
 	// Textures
-	static constexpr uint s_MaxMips = 8;
+	static constexpr uint s_MaxMips = 10;
 
-	eastl::unique_ptr<Texture2D> texLuminance = nullptr;  // R16F, 1/4 res, with mip chain
-	std::array<winrt::com_ptr<ID3D11ShaderResourceView>, s_MaxMips> lumMipSRVs = {};
-	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, s_MaxMips> lumMipUAVs = {};
+	eastl::unique_ptr<Texture2D> texExposures = nullptr;  // RGBA16F, RGB = highlights/midtones/shadows
+	eastl::unique_ptr<Texture2D> texWeights = nullptr;    // RGBA16F, normalized synthetic exposure weights
+	eastl::unique_ptr<Texture2D> texAssemble = nullptr;   // R16F, reconstructed fusion result
+
+	std::array<winrt::com_ptr<ID3D11ShaderResourceView>, s_MaxMips> exposureMipSRVs = {};
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, s_MaxMips> exposureMipUAVs = {};
+	std::array<winrt::com_ptr<ID3D11ShaderResourceView>, s_MaxMips> weightMipSRVs = {};
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, s_MaxMips> weightMipUAVs = {};
+	std::array<winrt::com_ptr<ID3D11ShaderResourceView>, s_MaxMips> assembleMipSRVs = {};
+	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, s_MaxMips> assembleMipUAVs = {};
 	uint numMips = 0;
 
 	eastl::unique_ptr<Texture2D> texExposure = nullptr;  // R16F, full res - the output exposure map
@@ -74,9 +85,10 @@ struct LocalExposure : public PostProcessFeature
 	winrt::com_ptr<ID3D11SamplerState> linearSampler = nullptr;
 
 	// Compute shaders
-	winrt::com_ptr<ID3D11ComputeShader> luminanceCS = nullptr;   // Downsample scene to 1/4 res log-luminance
+	winrt::com_ptr<ID3D11ComputeShader> setupCS = nullptr;       // Compute synthetic exposure lums and weights
 	winrt::com_ptr<ID3D11ComputeShader> downsampleCS = nullptr;  // Iterative mip downsample
-	winrt::com_ptr<ID3D11ComputeShader> computeExpCS = nullptr;  // Compute local exposure multiplier (bilateral upsample + exposure calc)
+	winrt::com_ptr<ID3D11ComputeShader> blendCS = nullptr;       // Gaussian/Laplacian exposure-fusion reconstruction
+	winrt::com_ptr<ID3D11ComputeShader> computeExpCS = nullptr;  // Guided upsample to full-res multiplier
 
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;

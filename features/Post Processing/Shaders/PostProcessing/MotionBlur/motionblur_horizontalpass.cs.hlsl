@@ -15,31 +15,43 @@ RWTexture2D<float4> RWTexHorizontal : register(u0);  // [20 x height] output
 // Constants
 cbuffer MotionBlurCB : register(b0)
 {
-	float g_VelocityScale;  // Velocity multiplier
+	float4 g_VelocityParams;    // x: velocity multiplier, yz: motion-vector source/display scale
+	float4 g_TargetResolution;  // xy: output color resolution
 }
 
 // Fixed parameters
 static const uint GRID_SIZE = 20;  // Fixed grid size
 
+uint2 GetVelocitySamplePosition(uint2 targetPixel, uint2 velocityDimensions)
+{
+	float2 velocityScale = g_VelocityParams.yz;
+	float2 sourceDimensionsF = max(float2(1.0f, 1.0f), g_TargetResolution.xy * velocityScale);
+	uint2 sourceDimensions = min(velocityDimensions, uint2(sourceDimensionsF + 0.5f));
+	uint2 sourcePixel = uint2((float2(targetPixel) + 0.5f) * velocityScale);
+	return min(sourcePixel, sourceDimensions - 1);
+}
+
 // Process horizontal strips
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 	// Get dimensions and check bounds
-	uint2 dimensions;
-	TexVelocity.GetDimensions(dimensions.x, dimensions.y);
+	uint2 velocityDimensions;
+	TexVelocity.GetDimensions(velocityDimensions.x, velocityDimensions.y);
 
-	if (DTid.y >= dimensions.y)
+	uint2 targetDimensions = uint2(max(g_TargetResolution.xy, float2(1.0f, 1.0f)) + 0.5f);
+
+	if (DTid.y >= targetDimensions.y)
 		return;
 
 	uint2 horizontalDimensions;
 	RWTexHorizontal.GetDimensions(horizontalDimensions.x, horizontalDimensions.y);
 
-	if (DTid.x >= horizontalDimensions.x)
+	if (DTid.x >= horizontalDimensions.x || DTid.y >= horizontalDimensions.y)
 		return;
 
 	// Calculate horizontal range to process
-	uint xTileSize = (dimensions.x + GRID_SIZE - 1) / GRID_SIZE;
+	uint xTileSize = (targetDimensions.x + GRID_SIZE - 1) / GRID_SIZE;
 	uint xStart = DTid.x * xTileSize;
-	uint xEnd = min(xStart + xTileSize, dimensions.x);
+	uint xEnd = min(xStart + xTileSize, targetDimensions.x);
 
 	// Track maximum velocity
 	float maxVelocityMagnitude = 0.0f;
@@ -48,10 +60,11 @@ static const uint GRID_SIZE = 20;  // Fixed grid size
 	// Process horizontal strip
 	for (uint x = xStart; x < xEnd; x++) {
 		// Get velocity from motion vector buffer
-		float2 velocity = TexVelocity[uint2(x, DTid.y)].xy;
+		uint2 velocityPixel = GetVelocitySamplePosition(uint2(x, DTid.y), velocityDimensions);
+		float2 velocity = TexVelocity[velocityPixel].xy;
 
 		// Apply velocity scale
-		velocity *= g_VelocityScale;
+		velocity *= g_VelocityParams.x;
 
 		// Keep largest velocity
 		float velocityMagnitude = length(velocity);
