@@ -248,22 +248,6 @@ namespace
 		       combo[0].GetKey() == VK_SNAPSHOT;
 	}
 
-	// Detour on po3tweaks::ScreenshotToConsole::DebugNotification - the routine
-	// vanilla's keypress handler and Papyrus Debug.TakeScreenshot call to write
-	// Screenshot<N>.png. Suppress only when our hotkey collides with vanilla's
-	// PrintScreen so explicit-path callers (Papyrus, modders) keep working.
-	struct VanillaScreenshotHook
-	{
-		static void thunk(char* a_explicitPath, int a_format)
-		{
-			if (a_explicitPath == nullptr && HotkeyCollidesWithVanilla()) {
-				return;
-			}
-			func(a_explicitPath, a_format);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	// Blend state used around the preview's ImGui::Image draw. Two regression
 	// risks if this is changed:
 	//   1. BlendEnable must stay FALSE - the source texture carries non-1 alpha
@@ -319,11 +303,6 @@ bool ScreenshotFeature::IsInMenu() const
 
 void ScreenshotFeature::PostPostLoad()
 {
-	// SE 35882 / AE 36853; SE id resolves to VR via Address Library.
-	stl::write_thunk_jmp<VanillaScreenshotHook>(
-		REL::RelocationID(35882, 36853).address());
-	logger::info("Installed vanilla screenshot detour");
-
 	// Seed VR-specific presets here rather than in LoadSettings: Feature::Load
 	// only dispatches to LoadSettings when the JSON already has a settings
 	// block, so a fresh install would skip a seed placed there. Left first so
@@ -402,9 +381,10 @@ void ScreenshotFeature::DrawSettings()
 		"Change##ScreenshotFeature");
 
 	if (HotkeyCollidesWithVanilla()) {
-		Util::Text::Disabled("Vanilla PrintScreen save suppressed (this hotkey owns it).");
-	} else {
-		Util::Text::Disabled("Vanilla PrintScreen save still works alongside this hotkey.");
+		Util::Text::Disabled(
+			"This hotkey collides with vanilla PrintScreen; both saves will fire.\n"
+			"Set bAllowScreenShot=0 in Skyrim.ini to suppress vanilla, or pick a\n"
+			"different hotkey above.");
 	}
 
 	ImGui::SeparatorText("Crop");
