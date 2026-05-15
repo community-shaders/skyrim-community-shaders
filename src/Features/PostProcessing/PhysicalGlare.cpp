@@ -7,7 +7,7 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PhysicalGlare::Settings,
-	Threshold,
+	ThresholdEV,
 	Intensity,
 	ApertureMode,
 	ApertureBlades,
@@ -51,9 +51,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void PhysicalGlare::DrawSettings()
 {
-	ImGui::SliderFloat("Threshold", &settings.Threshold, 0.f, 2.f, "%.2f");
+	ImGui::SliderFloat("Threshold", &settings.ThresholdEV, -10.f, 20.f, "%+.2f EV");
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("Per-channel brightness threshold for glare extraction. Paper default: 0.9.");
+		ImGui::Text("Per-channel brightness threshold for glare extraction in EV (0 EV = 1.0 linear).");
 
 	ImGui::SliderFloat("Intensity", &settings.Intensity, 0.f, 2.f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -532,7 +532,7 @@ void PhysicalGlare::GeneratePSF()
 
 	// Build the CB data for PSF generation
 	GlareCB cbData = {
-		.Threshold = settings.Threshold,
+		.Threshold = exp2(settings.ThresholdEV),
 		.Intensity = settings.Intensity,
 		.ScatterStrength = settings.ScatterStrength,
 		.ApertureMode = (uint)settings.ApertureMode,
@@ -723,7 +723,7 @@ void PhysicalGlare::Draw(TextureInfo& inout_tex)
 
 	// Update constant buffer
 	GlareCB cbData = {
-		.Threshold = settings.Threshold,
+		.Threshold = exp2(settings.ThresholdEV),
 		.Intensity = settings.Intensity,
 		.ScatterStrength = settings.ScatterStrength,
 		.ApertureMode = (uint)settings.ApertureMode,

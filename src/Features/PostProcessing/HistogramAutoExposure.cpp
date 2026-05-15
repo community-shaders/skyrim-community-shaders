@@ -36,10 +36,10 @@ void HistogramAutoExposure::DrawSettings()
 			"If you don't like the effect, you can set the strength to zero.");
 
 		ImGui::SliderFloat("Max Strength", &settings.PurkinjeStrength, 0.f, 5.f, "%.2f");
-		ImGui::SliderFloat("Fade In EV", &settings.PurkinjeStartEV, -10.f, 21.f, "%.2f EV");
+		ImGui::SliderFloat("Fade In EV", &settings.PurkinjeStartEV, -10.f, 0.f, "%.2f EV");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("The Purkinje effect will start to take place when the average scene luminance falls lower than this.");
-		ImGui::SliderFloat("Max Effect EV", &settings.PurkinjeMaxEV, -10.f, 21.f, "%.2f EV");
+		ImGui::SliderFloat("Max Effect EV", &settings.PurkinjeMaxEV, -10.f, 0.f, "%.2f EV");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("From this point onward, the Purkinje effect remains the greatest.");
 
@@ -127,7 +127,7 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 
 	AutoExposureCB cbData = {
 		.AdaptArea = settings.AdaptArea,
-		.AdaptationRange = { exp2(adaptationRange.x) * 0.125f, exp2(adaptationRange.y) * 0.125f },
+		.AdaptationRange = { exp2(adaptationRange.x), exp2(adaptationRange.y) },
 		.AdaptLerp = std::clamp(1.f - exp(-RE::BSTimer::GetSingleton()->realTimeDelta * settings.AdaptSpeed), 0.f, 1.f),
 		.ExposureCompensation = exp2(exposureCompensation),
 		.PurkinjeStartEV = settings.PurkinjeStartEV,

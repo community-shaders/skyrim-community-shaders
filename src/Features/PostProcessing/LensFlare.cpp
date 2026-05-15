@@ -50,9 +50,9 @@ void LensFlare::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Text("Threshold");
 	ImGui::Separator();
-	ImGui::SliderFloat("Threshold (EV)", &settings.ThresholdEV, -4.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Threshold (EV)", &settings.ThresholdEV, -10.0f, 20.0f, "%+.2f EV");
 	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Brightness threshold in EV.\nEV 0 = 1.0 linear, EV 2 = 4.0 linear");
+		ImGui::SetTooltip("Brightness threshold in EV (0 EV = 1.0 linear).");
 	ImGui::SliderFloat("Threshold Range", &settings.ThresholdRange, 0.01f, 5.0f, "%.3f");
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("Fade range for the threshold cutoff");
