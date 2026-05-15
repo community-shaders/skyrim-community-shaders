@@ -1,9 +1,9 @@
 /// Bloom/Flare/Glare/Exposure Composite pass
 /// Combines bloom, lens flare, physical glare, and auto exposure results with the main color texture.
-/// Follows UE formula: SceneColor * GlobalExposure [* LocalExposure] + Bloom * GlobalExposure
-/// Scene and Bloom paths are kept separate to allow future LocalExposure on scene only.
+/// Formula: SceneColor * GlobalExposure * LocalExposure + Bloom * GlobalExposure
+/// Scene and Bloom paths are kept separate so LocalExposure is applied on scene only.
 /// Purkinje effect is applied after compositing on the final perceived image.
-/// Uses #ifdef HAS_BLOOM / HAS_LENS_FLARE / HAS_GLARE / HAS_EXPOSURE to control behavior.
+/// Uses #ifdef HAS_BLOOM / HAS_LENS_FLARE / HAS_GLARE / HAS_EXPOSURE / HAS_LOCAL_EXPOSURE to control behavior.
 
 Texture2D<float4> TexColor : register(t0);
 
@@ -21,7 +21,13 @@ Texture2D<float4> TexGlare : register(t3);
 
 #ifdef HAS_EXPOSURE
 StructuredBuffer<float> TexAdaptation : register(t4);
+#endif
 
+#ifdef HAS_LOCAL_EXPOSURE
+Texture2D<float> TexLocalExposure : register(t5);
+#endif
+
+#ifdef HAS_EXPOSURE
 cbuffer AutoExposureCB : register(b1)
 {
 	float2 AdaptArea;
@@ -132,9 +138,13 @@ RWTexture2D<float4> RWTexOutput : register(u0);
 	float avgLuma = TexAdaptation[0];
 	float globalExposure = 0.18 * ExposureCompensation / clamp(avgLuma, AdaptationRange.x, AdaptationRange.y);
 
-	// UE formula: SceneColor * GlobalExposure * LocalExposure + Bloom * GlobalExposure
-	// LocalExposure is reserved for future implementation (defaults to 1.0)
+	// Formula: SceneColor * GlobalExposure * LocalExposure + Bloom * GlobalExposure
+	// LocalExposure multiplier from the Local Exposure pass (1.0 if not enabled)
+#	ifdef HAS_LOCAL_EXPOSURE
+	float localExposure = TexLocalExposure[tid];
+#	else
 	float localExposure = 1.0;
+#	endif
 
 	float3 result = sceneColor * globalExposure * localExposure + bloomContrib * globalExposure;
 
@@ -149,8 +159,15 @@ RWTexture2D<float4> RWTexOutput : register(u0);
 			result = PurkinjeShift(result, purkinjeMix);
 	}
 #else
-	// No exposure: simple additive composite
+	// No global exposure
+#	ifdef HAS_LOCAL_EXPOSURE
+	// Apply local exposure without global exposure
+	float localExposure = TexLocalExposure[tid];
+	float3 result = sceneColor * localExposure + bloomContrib;
+#	else
+	// No exposure at all: simple additive composite
 	float3 result = sceneColor + bloomContrib;
+#	endif
 #endif
 
 	RWTexOutput[tid] = float4(result, 1);

@@ -25,7 +25,8 @@ struct Composite : public PostProcessFeature
 		FLARE = 1 << 1,
 		GLARE = 1 << 2,
 		EXPOSURE = 1 << 3,
-		FLAG_COUNT = 16  // 2^4 combinations
+		LOCAL_EXPOSURE = 1 << 4,
+		FLAG_COUNT = 32  // 2^5 combinations
 	};
 
 	// Shader permutations indexed by composite flags (index 0 unused)
