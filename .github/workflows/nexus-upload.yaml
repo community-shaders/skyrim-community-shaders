@@ -199,6 +199,41 @@ jobs:
                   # and features whose standalone artifact is absent from the release.
                   upload_data = [row for row in data
                                  if row.get('auto_upload', True) and artifact_in_release(row)]
+                  # Drift detector: a feature opted in to auto_upload but its
+                  # artifact pattern doesn't match anything on the release.
+                  # This is almost always a metadata bug (folder name vs
+                  # nexusfilename mismatch — see HDR Display in v1.5.2).
+                  # Surface it loudly via GHA warning + step summary so it
+                  # cannot silently drop a feature from a release again.
+                  missing = [row for row in data
+                             if row.get('auto_upload') is True
+                             and not row.get('is_core')
+                             and not artifact_in_release(row)]
+                  if missing:
+                      summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+                      lines = ['## ⚠️ Auto-upload features missing artifacts', '',
+                               '| Feature | Pattern | Mod ID |',
+                               '|---------|---------|--------|']
+                      for row in missing:
+                          name = row.get('name', '?')
+                          pat = row.get('artifact_pattern', '?')
+                          mod_id = row.get('nexus_mod_id', '?')
+                          lines.append(f'| `{name}` | `{pat}` | {mod_id} |')
+                          # Annotation appears inline in the run UI.
+                          print(f'::warning title=Nexus auto-upload missing artifact::'
+                                f'{name} (mod {mod_id}) marked autoupload=true but no '
+                                f'release asset matches pattern {pat!r}. Likely cause: '
+                                f'folder name differs from nexusfilename — set '
+                                f'nexusartifactpattern explicitly in the feature .ini.')
+                      lines += ['',
+                                'These features are marked `autoupload = true` in their '
+                                '`.ini` but no release asset matched their derived '
+                                'artifact pattern. They will be skipped from this Nexus '
+                                'upload. Add `nexusartifactpattern = <Folder.Name-*.7z>` '
+                                'to the feature .ini to override the default derivation.']
+                      if summary_path:
+                          with open(summary_path, 'a') as f:
+                              f.write('\n'.join(lines) + '\n')
                   has_uploads = bool(upload_data)
                   with open('nexus-matrix.json', 'w') as f:
                       json.dump({'include': data}, f)
