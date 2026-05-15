@@ -93,7 +93,22 @@ namespace LightLimitFix
 		if (shadowMapDepth > shadowLightData.EndSplitDistances.y)
 			return engineMaskShadow;
 
-		float fadeFactor = 1.0 - pow(saturate(dot(worldPosition.xyz, worldPosition.xyz) / shadowLightData.EndSplitDistances.y), 8);
+		// Blend from LLF PCF deep in cascade 1 toward the engine mask as we
+		// approach cascade 1's far edge, avoiding a hard discontinuity at the
+		// boundary where LLF stops and engine sampling takes over.
+		//
+		// Previous formula used `dot(worldPosition, worldPosition) /
+		// EndSplitDistances.y` -- dimensionally wrong (length^2 / length)
+		// AND inverted (close pixels got engineMaskShadow, far got LLF).
+		// Because `worldPosition` is camera-relative in Skyrim's vertex
+		// output, that produced a visible ~sqrt(EndSplitDistances.y)-radius
+		// ring around the camera that moved with the player -- a clear
+		// HMD-tracked artifact in VR. Switching to linear `shadowMapDepth`
+		// and reversing the blend direction makes the handoff a smooth
+		// world-anchored transition at the cascade boundary.
+		float fadeFactor = smoothstep(shadowLightData.EndSplitDistances.y * 0.8,
+			shadowLightData.EndSplitDistances.y,
+			shadowMapDepth);
 
 		// Compute cascade blend factor
 		float cascadeSelect = smoothstep(shadowLightData.StartSplitDistances.y, shadowLightData.EndSplitDistances.x, shadowMapDepth);
