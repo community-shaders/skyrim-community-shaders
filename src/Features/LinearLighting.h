@@ -41,12 +41,12 @@ struct LinearLighting : Feature
 		float vlGamma = 1.8f;
 
 		// Lighting multipliers
-		float vanillaDiffuseColorMult = 1.5f;
+		float vanillaDiffuseColorMult = 1.0f;
 		float directionalLightMult = 1.0f;
 		float pointLightMult = 1.0f;
-		float ambientMult = 0.67f;
+		float ambientMult = 1.0f;
 		float emitColorMult = 1.0f;
-		float glowmapMult = 0.5f;
+		float glowmapMult = 0.66f;
 
 		// Effect multipliers
 		float effectLightingMult = 0.32f;

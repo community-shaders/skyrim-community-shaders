@@ -147,6 +147,11 @@ jobs:
                   if [ -n "$INPUT_ARTIFACT_PATTERN" ]; then
                     ARGS+=( --core-artifact-pattern "$INPUT_ARTIFACT_PATTERN" )
                   fi
+                  # Strip the leading 'v' so we get e.g. "1.5.2" — the value
+                  # is rendered into Nexus file descriptions, where the
+                  # bare semver is what users see in the UI.
+                  RELEASE_VER="${RELEASE_TAG#v}"
+                  ARGS+=( --release-version "$RELEASE_VER" )
                   python tools/feature_version_audit.py "${ARGS[@]}"
 
                   # Fetch the specific release by tag — avoids pagination issues with
@@ -194,6 +199,41 @@ jobs:
                   # and features whose standalone artifact is absent from the release.
                   upload_data = [row for row in data
                                  if row.get('auto_upload', True) and artifact_in_release(row)]
+                  # Drift detector: a feature opted in to auto_upload but its
+                  # artifact pattern doesn't match anything on the release.
+                  # This is almost always a metadata bug (folder name vs
+                  # nexusfilename mismatch — see HDR Display in v1.5.2).
+                  # Surface it loudly via GHA warning + step summary so it
+                  # cannot silently drop a feature from a release again.
+                  missing = [row for row in data
+                             if row.get('auto_upload') is True
+                             and not row.get('is_core')
+                             and not artifact_in_release(row)]
+                  if missing:
+                      summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+                      lines = ['## ⚠️ Auto-upload features missing artifacts', '',
+                               '| Feature | Pattern | Mod ID |',
+                               '|---------|---------|--------|']
+                      for row in missing:
+                          name = row.get('name', '?')
+                          pat = row.get('artifact_pattern', '?')
+                          mod_id = row.get('nexus_mod_id', '?')
+                          lines.append(f'| `{name}` | `{pat}` | {mod_id} |')
+                          # Annotation appears inline in the run UI.
+                          print(f'::warning title=Nexus auto-upload missing artifact::'
+                                f'{name} (mod {mod_id}) marked autoupload=true but no '
+                                f'release asset matches pattern {pat!r}. Likely cause: '
+                                f'folder name differs from nexusfilename — set '
+                                f'nexusartifactpattern explicitly in the feature .ini.')
+                      lines += ['',
+                                'These features are marked `autoupload = true` in their '
+                                '`.ini` but no release asset matched their derived '
+                                'artifact pattern. They will be skipped from this Nexus '
+                                'upload. Add `nexusartifactpattern = <Folder.Name-*.7z>` '
+                                'to the feature .ini to override the default derivation.']
+                      if summary_path:
+                          with open(summary_path, 'a') as f:
+                              f.write('\n'.join(lines) + '\n')
                   has_uploads = bool(upload_data)
                   with open('nexus-matrix.json', 'w') as f:
                       json.dump({'include': data}, f)
@@ -388,6 +428,11 @@ jobs:
             mod_version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
             mod_filename: ${{ matrix.mod_filename }}
             changelog: ${{ inputs.changelog || matrix.changelog || '' }}
+            # file_description anchors each .7z to the CS release it shipped
+            # with. Empty string falls back to the upstream default
+            # ("See mod description for details.") so non-release dispatches
+            # without an audit-tool-built matrix still work.
+            file_description: ${{ matrix.file_description || '' }}
             check_existing: true
         secrets:
             UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}

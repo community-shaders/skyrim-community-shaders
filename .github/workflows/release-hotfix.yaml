@@ -258,7 +258,19 @@ jobs:
             - name: Open PR against hotfix branch
               if: ${{ !inputs.dry_run && steps.cherry.outputs.picked_count != '0' }}
               env:
-                  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+                  # Use GITHUB_TOKEN (not RELEASE_PAT). The workflow declares
+                  # `permissions: pull-requests: write`, which is sufficient
+                  # for creating the candidate PR — no branch-protection
+                  # bypass is required here, so there's no need to spend
+                  # RELEASE_PAT's broader scope (and avoids depending on the
+                  # PAT having pull_requests:write granted, which a previous
+                  # run hit: "Resource not accessible by personal access
+                  # token (createPullRequest)").
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  # Pass via env (not ${{ }} interpolation) so the literal
+                  # backticks inside SOURCE_DESC don't get re-evaluated by
+                  # bash as command substitution.
+                  SOURCE_DESC: ${{ steps.cherry.outputs.source_desc }}
               run: |
                   set -euo pipefail
                   HOTFIX='${{ steps.plan.outputs.hotfix_branch }}'
@@ -272,7 +284,7 @@ jobs:
                   {
                     echo "Automated hotfix candidate built off \`${BASE}\`."
                     echo ""
-                    echo "- **${PICKED}** commit(s) cherry-picked from \`dev\` (${{ steps.cherry.outputs.source_desc }})"
+                    echo "- **${PICKED}** commit(s) cherry-picked from \`dev\` (${SOURCE_DESC})"
                     [[ "${DEDUP}" != "0" ]] && echo "- ${DEDUP} already applied to \`${HOTFIX}\` (skipped, see below)"
                     [[ "${SKIPPED_BREAKING}" != "0" ]] && echo "- ${SKIPPED_BREAKING} breaking change(s) skipped (see below)"
                     [[ "${CONFLICTS}" != "0" ]] && echo "- ⚠️ **${CONFLICTS}** commit(s) failed to cherry-pick (see below)"
@@ -307,6 +319,13 @@ jobs:
                     echo ""
                     echo "See: [Hotfix Release Process](https://github.com/${{ github.repository }}/wiki/Developers#hotfix-release-process)"
                   } > /tmp/pr-body.md
+
+                  # Best-effort: ensure the hotfix label exists so --label
+                  # doesn't fail the workflow on repos that haven't created it.
+                  gh label create hotfix \
+                    --repo '${{ github.repository }}' \
+                    --color ededed \
+                    --description "Hotfix candidate" 2>/dev/null || true
 
                   gh pr create \
                     --repo '${{ github.repository }}' \

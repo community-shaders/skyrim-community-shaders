@@ -147,6 +147,22 @@ void SetWidgetTypeSizesFromJson(const json& j)
 	}
 }
 
+void PushInheritedStyle()
+{
+	const auto w = Util::Colors::GetWarning();
+	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(w.x, w.y, w.z, 0.25f));
+	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(w.x, w.y, w.z, 0.35f));
+	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(w.x, w.y, w.z, 0.45f));
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+	ImGui::PushStyleColor(ImGuiCol_Border, w);
+}
+
+void PopInheritedStyle()
+{
+	ImGui::PopStyleColor(4);
+	ImGui::PopStyleVar();
+}
+
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring)
 {
 	if (a_substring.empty())
@@ -565,7 +581,7 @@ namespace TOD
 
 			bool isActive = factors[i] > 0.01f;
 			if (!isActive)
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.7f));
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetDisabled());
 
 			ImGui::Text("%s", name);
 
@@ -839,11 +855,15 @@ namespace TOD
 				values[i] = parentValues[i];
 			}
 
+			const bool isInherited = inheritFlags && inheritFlags[i];
+			if (isInherited)
+				PushInheritedStyle();
+
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
 			std::string itemKey = ScopedKey(std::string(label) + "_slider_" + std::to_string(i));
 
-			ImGui::BeginDisabled(inheritFlags && inheritFlags[i]);
+			ImGui::BeginDisabled(isInherited);
 			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
 				changed = true;
 				if (inheritFlags)
@@ -862,8 +882,11 @@ namespace TOD
 
 			ImGui::EndDisabled();
 
-			Util::AddTooltip(std::format("{:.0f}%", factors[i] * 100.0f).c_str());
+			Util::AddTooltip(isInherited ? "Inherited from parent weather" : std::format("{:.0f}%", factors[i] * 100.0f).c_str());
 			ImGui::PopItemWidth();
+
+			if (isInherited)
+				PopInheritedStyle();
 
 			if (!isActive || (inheritFlags && inheritFlags[i]))
 				ImGui::PopStyleVar();
@@ -907,8 +930,8 @@ namespace TOD
 		// Draw inherit checkbox right under the label
 		if (parentColors) {
 			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
+			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
 
 			std::string inheritId = std::string("##inherit_") + label;
@@ -962,6 +985,9 @@ namespace TOD
 			static std::map<std::string, float3> colorCache;
 			static std::map<std::string, float3> originalColorCache;
 			static std::string activeColorId;
+
+			if (inheritFlag)
+				PushInheritedStyle();
 
 			// Disable editing when inherited
 			ImGui::BeginDisabled(inheritFlag);
@@ -1034,6 +1060,11 @@ namespace TOD
 			wasPopupOpenInherit[scopedId] = isPopupOpen;
 			ImGui::EndDisabled();
 
+			if (inheritFlag) {
+				Util::AddTooltip("Inherited from parent weather");
+				PopInheritedStyle();
+			}
+
 			ImGui::EndChild();
 		}
 
@@ -1101,8 +1132,8 @@ namespace TOD
 		// Draw inherit checkbox
 		if (parentValues) {
 			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
+			ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2 * scale, 2 * scale));
 
 			std::string inheritId = std::string("##inherit_") + label;
@@ -1127,6 +1158,9 @@ namespace TOD
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
 
+		if (inheritFlag)
+			PushInheritedStyle();
+
 		ImGui::BeginDisabled(inheritFlag);
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
@@ -1142,9 +1176,14 @@ namespace TOD
 			if (ImGui::SliderFloat("##value", &values[i], minValue, maxValue, format)) {
 				changed = true;
 			}
+			if (inheritFlag)
+				Util::AddTooltip("Inherited from parent weather");
 			ImGui::PopID();
 		}
 		ImGui::EndDisabled();
+
+		if (inheritFlag)
+			PopInheritedStyle();
 
 		PopTODHighlight(label, highlighted);
 		return changed;

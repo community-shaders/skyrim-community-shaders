@@ -67,9 +67,13 @@ set_property(TARGET shader_tests PROPERTY CXX_STANDARD 23)
 set_property(TARGET shader_tests PROPERTY CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
-    # Suppress C4864 in tuplet (via ShaderTestFramework) for VS 2026 migration
     if(TARGET ShaderTestFramework)
+        # Suppress C4864 in tuplet (via ShaderTestFramework) for VS 2026 migration
         target_compile_options(ShaderTestFramework PUBLIC /wd4864)
+        # Suppress C5285 in float16_fetch (via ShaderTestFramework) - MSVC 14.51+ forbids
+        # specializing std::is_floating_point_v/is_arithmetic_v/is_signed_v per N5014,
+        # but float16_t.hpp needs these specializations for its float16_t type.
+        target_compile_options(ShaderTestFramework PUBLIC /wd5285)
     endif()
 endif()
 
