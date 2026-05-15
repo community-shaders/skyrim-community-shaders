@@ -39,6 +39,30 @@ Effect11::PerFrame Effect11::GetCommonBufferData()
 	data.ParticleAmbientInfluence = settingManager.GetInterpolatedTimeOfDayValue("AmbientInfluence", "PARTICLE");
 	data.ParticlePointLightingInfluence = settingManager.GetInterpolatedTimeOfDayValue("PointLightingInfluence", "PARTICLE");
 
+	data.CalculateCloudsEdgeFromScattering = settingManager.GetValue<bool>("CalculateCloudsEdgeFromScattering", "SKYSCATTERING");
+	data.EnableCloudsLightingFromMoon = settingManager.GetValue<bool>("EnableCloudsLightingFromMoon", "SKYSCATTERING");
+	data.ScatteringColorHDRWeighting = settingManager.GetValue<bool>("ScatteringColorHDRWeighting", "SKYSCATTERING");
+	data.SkyScatteringAtmosphereThickness = settingManager.GetInterpolatedTimeOfDayValue("AtmosphereThickness", "SKYSCATTERING");
+	data.SkyScatteringHorizonRange = settingManager.GetInterpolatedTimeOfDayValue("HorizonRange", "SKYSCATTERING");
+	data.SkyScatteringIntensity = settingManager.GetInterpolatedTimeOfDayValue("Intensity", "SKYSCATTERING");
+	data.SkyScatteringAmount = settingManager.GetInterpolatedTimeOfDayValue("Amount", "SKYSCATTERING");
+	data.SkyScatteringDustVolume = settingManager.GetInterpolatedTimeOfDayValue("DustVolume", "SKYSCATTERING");
+	data.SkyScatteringDustDensity = settingManager.GetInterpolatedTimeOfDayValue("DustDensity", "SKYSCATTERING");
+	data.SkyScatteringDustDarkening = settingManager.GetInterpolatedTimeOfDayValue("DustDarkening", "SKYSCATTERING");
+	data.SkyScatteringShadowAmount = settingManager.GetInterpolatedTimeOfDayValue("ShadowAmount", "SKYSCATTERING");
+	data.SkyScatteringColorFromSun = settingManager.GetInterpolatedTimeOfDayValue("ColorFromSun", "SKYSCATTERING");
+	auto scatteringColor = settingManager.GetInterpolatedColorTimeOfDayValue("ScatteringColor", "SKYSCATTERING");
+	data.SkyScatteringColor = { scatteringColor.x, scatteringColor.y, scatteringColor.z };
+	data.SkyScatteringAirGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("AirGlowIntensity", "SKYSCATTERING");
+	data.SkyScatteringAirGlowRange = settingManager.GetInterpolatedTimeOfDayValue("AirGlowRange", "SKYSCATTERING");
+	data.SkyScatteringSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("SunGlowIntensity", "SKYSCATTERING");
+	data.SkyScatteringSunGlowRange = settingManager.GetInterpolatedTimeOfDayValue("SunGlowRange", "SKYSCATTERING");
+	data.SkyScatteringMoonGlowAmount = settingManager.GetInterpolatedTimeOfDayValue("MoonGlowAmount", "SKYSCATTERING");
+	data.SkyScatteringMoonGlowRange = settingManager.GetInterpolatedTimeOfDayValue("MoonGlowRange", "SKYSCATTERING");
+	data.SkyScatteringCloudsLightingSunMinIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingSunMinIntensity", "SKYSCATTERING");
+	data.SkyScatteringCloudsLightingSunMultiplier = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingSunMultiplier", "SKYSCATTERING");
+	data.SkyScatteringCloudsLightingMoonIntensity = settingManager.GetInterpolatedTimeOfDayValue("CloudsLightingMoonIntensity", "SKYSCATTERING");
+
 	data.EnableProceduralSun = enableEffect && settingManager.GetValue<bool>("EnableProceduralSun", "EFFECT");
 
 	{

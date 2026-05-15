@@ -276,6 +276,34 @@ namespace SharedData
 		float ParticleLightingInfluence;
 		float ParticleAmbientInfluence;
 		float ParticlePointLightingInfluence;
+
+		uint CalculateCloudsEdgeFromScattering;
+		uint EnableCloudsLightingFromMoon;
+		uint ScatteringColorHDRWeighting;
+		float SkyScatteringAtmosphereThickness;
+
+		float SkyScatteringHorizonRange;
+		float SkyScatteringIntensity;
+		float SkyScatteringAmount;
+		float SkyScatteringDustVolume;
+
+		float SkyScatteringDustDensity;
+		float SkyScatteringDustDarkening;
+		float SkyScatteringShadowAmount;
+		float SkyScatteringColorFromSun;
+
+		float3 SkyScatteringColor;
+		float SkyScatteringAirGlowIntensity;
+
+		float SkyScatteringAirGlowRange;
+		float SkyScatteringSunGlowIntensity;
+		float SkyScatteringSunGlowRange;
+		float SkyScatteringMoonGlowAmount;
+
+		float SkyScatteringMoonGlowRange;
+		float SkyScatteringCloudsLightingSunMinIntensity;
+		float SkyScatteringCloudsLightingSunMultiplier;
+		float SkyScatteringCloudsLightingMoonIntensity;
 	};
 	struct TerrainBlendingSettings
 	{
