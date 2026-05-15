@@ -50,12 +50,14 @@ cbuffer ColorCB : register(b1)
 	uint skipLUT;
 	uint enableTonemap;
 	uint enableColorSpaceTransform;
-	uint enableHDR;     // HDR display is enabled (auto-set from HDR feature)
-	float hdrPeakNits;  // Maximum display brightness in nits for HDR
-	uint pad;
+	uint enableHDR;           // HDR display is enabled (auto-set from HDR feature)
+	float hdrPeakNits;        // Maximum display brightness in nits for HDR
+	float hdrPaperWhiteNits;  // Reference white brightness in nits for HDR
 };
 
-#include "PostProcessing/ColorGrading/GT7ToneMapping.hlsli"
+#include "PostProcessing/ColorGrading/Include/GT7ToneMapping.hlsli"
+#include "PostProcessing/ColorGrading/Include/neutwo.hlsl"
+#include "PostProcessing/ColorGrading/Include/psychov_17.hlsl"
 #include "PostProcessing/common.hlsli"
 
 namespace LogType
@@ -238,6 +240,26 @@ float3 LinearToLog(float3 linearColor)
 	return saturate(log2(linearColor) / linearRange - log2(linearGrey) / linearRange + exposureGrey / 1023.0f);
 }
 
+float HDRPaperWhiteNits()
+{
+	return max(hdrPaperWhiteNits, 1.0f);
+}
+
+float HDRPeakNits()
+{
+	return max(hdrPeakNits, HDRPaperWhiteNits());
+}
+
+float HDRPeakRatio()
+{
+	return HDRPeakNits() / HDRPaperWhiteNits();
+}
+
+float HDRPeakForReferenceWhite(float referenceWhiteNits)
+{
+	return HDRPeakRatio() * referenceWhiteNits;
+}
+
 /////////////////////////////////////////////////////////////////////////////////
 
 /*
@@ -317,7 +339,7 @@ float3 LottesFilmic(float3 val)
 
 	// In HDR mode, re-derive curve constants so f(maxHDR) = peakOutput
 	// while keeping f(midIn) = midOut (SDR midtones unchanged)
-	float peakOutput = enableHDR ? (hdrPeakNits / REFERENCE_LUMINANCE) : 1.0;
+	float peakOutput = enableHDR ? HDRPeakRatio() : 1.0;
 
 	float b = (pow(maxHDR, a) * midOut - pow(midIn, a) * peakOutput) /
 	          ((pow(maxHDR, a * d) - pow(midIn, a * d)) * midOut * peakOutput),
@@ -373,7 +395,7 @@ float3 UchimuraFilmic(float3 val)
 
 	// In HDR mode, extend the peak brightness proportionally to the display's capability
 	if (enableHDR)
-		P *= hdrPeakNits / REFERENCE_LUMINANCE;
+		P *= HDRPeakRatio();
 
 	float l0 = ((P - m) * l) / a,
 		  S0 = m + l0,
@@ -568,13 +590,35 @@ float3 KajiyaTonemap(float3 col)
 float3 GT7ToneMapping(float3 color)
 {
 	color *= tonemapParams[0].x;
-	// Use global enableHDR and hdrPeakNits from CBuffer instead of tonemapParams
-	// This allows seamless HDR when HDR Display feature is enabled
+	// Use HDR Display paper white and peak brightness for seamless HDR output.
 	if (enableHDR)
-		color = GT7ToneMappingHDR(color, hdrPeakNits);
+		color = GT7ToneMappingHDR(color, HDRPeakForReferenceWhite(REFERENCE_LUMINANCE));
 	else
 		color = GT7ToneMappingSDR(color);
 	return color;
+}
+
+float3 PsychoVTonemap(float3 color)
+{
+	color *= tonemapParams[0].x;
+
+	// PsychoV expects scene-linear BT.709 input. The surrounding Color Grading
+	// pipeline converts into this native space before invoking the tonemapper.
+	if (enableHDR)
+		return renodx::tonemap::psycho::HDR(color, HDRPeakRatio());
+	else
+		return renodx::tonemap::psycho::SDR(color);
+}
+
+float3 NeutwoTonemap(float3 color)
+{
+	color *= tonemapParams[0].x;
+
+	// Neutwo runs in scene-linear BT.709 here; the pipeline converts the result
+	// to the active output gamut after tonemapping.
+	float peak = enableHDR ? HDRPeakRatio() : 1.0f;
+	float clipPoint = max(tonemapParams[0].y, peak);
+	return renodx::tonemap::neutwo::BT709(color, peak, clipPoint);
 }
 
 ////////////////////////////////////////////////////////////////////////

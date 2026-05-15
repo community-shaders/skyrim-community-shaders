@@ -96,6 +96,7 @@ void drawHDRStatus()
 	auto& hdr = globals::features::hdrDisplay;
 	if (hdr.loaded && hdr.settings.enableHDR) {
 		ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), ICON_FA_CHECK " HDR Output Active");
+		ImGui::Text("Paper White: %.0f nits (from HDR settings)", static_cast<float>(hdr.settings.hdrPaperWhite));
 		ImGui::Text("Peak Brightness: %.0f nits (from HDR settings)", static_cast<float>(hdr.settings.hdrPeakNits));
 	} else {
 		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "SDR Output (HDR Display not enabled)");
@@ -157,7 +158,7 @@ struct TonemapperInfo
 
 			{ "Lottes Filmic/AMD Curve"sv, "LottesFilmic"sv,
 				"Filmic curve by Timothy Lottes, described in his GDC talk \"Advanced Techniques and Optimization of HDR Color Pipelines\". "
-				"Also known as the \"AMD curve\". HDR output is automatically enabled when HDR Display feature is active."sv,
+				"Also known as the \"AMD curve\"."sv,
 				0, 0, true, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
@@ -191,7 +192,7 @@ struct TonemapperInfo
 
 			{ "Uchimura/Grand Turismo Curve"sv, "UchimuraFilmic"sv,
 				"Filmic curve by Hajime Uchimura, described in his CEDEC talk \"HDR Theory and Practice\". Characterised by its middle linear section. "
-				"Also known as the \"Gran Turismo curve\". HDR output is automatically enabled when HDR Display feature is active."sv,
+				"Also known as the \"Gran Turismo curve\"."sv,
 				0, 0, true, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
@@ -227,12 +228,33 @@ struct TonemapperInfo
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "GT7"sv, "GT7ToneMapping"sv,
-				"Tonemapper designed for Gran Turismo 7. HDR output is automatically enabled when HDR Display feature is active."sv, 2, 2, true, 2,
+				"Tonemapper designed for Gran Turismo 7."sv, 2, 2, true, 2,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					drawHDRStatus();
 				},
-				{ f4{ 1.f, 0.f, 1000.f, 0.f } } }
+				{ f4{ 1.f, 0.f, 1000.f, 0.f } } },
+
+			{ "PsychoV"sv, "PsychoVTonemap"sv,
+				"RenoDX PsychoV 17 tonemapper by Carlos Lopez. Copyright (C) 2026 Carlos Lopez. SPDX-License-Identifier: MIT. "
+				"Uses bundled psychov_17.hlsl."sv,
+				0, 0, true, 0,
+				[](CTP& params) {
+					exposureSlider(&params[0].x);
+					drawHDRStatus();
+				},
+				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
+
+			{ "Neutwo"sv, "NeutwoTonemap"sv,
+				"RenoDX Neutwo tonemapper by Carlos Lopez. Copyright (C) 2026 Carlos Lopez. SPDX-License-Identifier: MIT. "
+				"Uses bundled neutwo.hlsl."sv,
+				0, 0, true, 0,
+				[](CTP& params) {
+					exposureSlider(&params[0].x);
+					ImGui::SliderFloat("Clip Point", &params[0].y, 1.f, 100.f, "%.2f");
+					drawHDRStatus();
+				},
+				{ f4{ 1.f, 100.f, 0.f, 0.f } } }
 		};
 
 		static std::once_flag flag;
@@ -718,6 +740,9 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		}(),
 		.hdrPeakNits = [&]() -> float {
 			return hdrEnabled ? static_cast<float>(hdr.settings.hdrPeakNits) : 1000.f;
+		}(),
+		.hdrPaperWhiteNits = [&]() -> float {
+			return hdrEnabled ? static_cast<float>(hdr.settings.hdrPaperWhite) : 203.f;
 		}()
 	};
 	colorCB->Update(colorCBData);
