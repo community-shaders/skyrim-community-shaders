@@ -313,8 +313,10 @@ struct IDXGISwapChain_Present
 		// OMGetRenderTargets to find a target to render overlays into. Without this, they
 		// get nullptr (we unbound everything for the ApplyHDR resource hazard) and their
 		// UI elements are invisible.
-		if (hdrReady && !frameGenActive) {
-			hdr->ClearUIBuffer();  // restores kFRAMEBUFFER.RTV to original backbuffer RTV
+		if (hdrReady) {
+			if (!frameGenActive) {
+				hdr->ClearUIBuffer();  // restores kFRAMEBUFFER.RTV to original backbuffer RTV
+			}
 			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
 		}
