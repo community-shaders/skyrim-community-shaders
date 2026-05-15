@@ -5,7 +5,8 @@
 // https://bartwronski.files.wordpress.com/2014/03/ac4_gdc.pdf
 
 // Extended Materials: split for faster compiles on non-landscape Lighting permutations.
-// - Terrain helpers: ExtendedMaterialsTerrain.hlsli (only when LANDSCAPE)
+// Lighting.hlsl includes this header only when EMAT is defined; LANDSCAPE further gates terrain-only code.
+// - Terrain helpers: ExtendedMaterialsTerrain.hlsli (EMAT implied; included only when LANDSCAPE)
 // - Parallax core: ExtendedMaterialsParallaxCore.hlsli (GetParallaxCoords + mesh soft shadows)
 
 #ifndef EXTENDED_MATERIALS_HLSLI

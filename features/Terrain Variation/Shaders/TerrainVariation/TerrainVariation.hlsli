@@ -104,7 +104,7 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 {
-	if (!SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
+	[branch] if (!SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
 		return (StochasticOffsets)0;
 
 	float2 cellID = floor(landscapeUV * 255437.0);
@@ -140,6 +140,24 @@ inline float StochasticContrastWeight(float weight)
 	return w4 * w4;
 }
 
+// Shared height-vs-stochastic weighting for diffuse + parallax (single IR body vs duplicating below).
+inline float StochasticHeightBlendInfluence(float mipLevel)
+{
+	float heightFade = StochasticHeightFadeFromMip(mipLevel);
+	return HEIGHT_INFLUENCE * (1.0 - heightFade);
+}
+
+inline float4 StochasticBlendTwoSamples(float mipLevel, float4 s1, float4 s2, float3 weights, float blendFactor1, float blendFactor2)
+{
+	float w1 = StochasticContrastWeight(weights.x);
+	float w2 = StochasticContrastWeight(weights.y);
+	float hi = StochasticHeightBlendInfluence(mipLevel);
+	w1 *= (1.0 + hi * blendFactor1);
+	w2 *= (1.0 + hi * blendFactor2);
+	float denom = max(w1 + w2, 1e-8);
+	return lerp(s2, s1, w1 / denom);
+}
+
 // LOD terrain stochastic sampling — 2 SampleBias, fixed blend (pass jitter from StochasticSampleLODJitter(screenNoise)).
 inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD)
 {
@@ -158,54 +176,30 @@ inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState sam
 inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float extraLandMipBias)
 {
 	float mipLevel = tex.CalculateLevelOfDetail(samp, uv) + SharedData::MipBias + extraLandMipBias;
-	float4 blended;
 	// Far/minified: skip TV blending math + second sample.
-	if (mipLevel >= TV_SINGLE_SAMPLE_MIP_START)
-		blended = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	else {
-		float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-		float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	[branch] if (mipLevel >= TV_SINGLE_SAMPLE_MIP_START)
+		return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 
-		float w1 = StochasticContrastWeight(offsets.weights.x);
-		float w2 = StochasticContrastWeight(offsets.weights.y);
-		float heightFade = StochasticHeightFadeFromMip(mipLevel);
-		float heightInfluence = HEIGHT_INFLUENCE * (1.0 - heightFade);
+	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 
-		float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
-		float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
+	float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
+	float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
 
-		w1 *= (1.0 + heightInfluence * h1);
-		w2 *= (1.0 + heightInfluence * h2);
-
-		float denom = max(w1 + w2, 1e-8);
-		blended = lerp(s2, s1, w1 / denom);
-	}
-	return blended;
+	return StochasticBlendTwoSamples(mipLevel, s1, s2, offsets.weights, h1, h2);
 }
 
 // 2-sample parallax sampling — uses heightmap (alpha) only for blend weights.
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
 {
-	float4 blended;
 	// Keep parallax height active, but cut TV to one sample once heavily minified.
-	if (mipLevel >= TV_SINGLE_SAMPLE_PARALLAX_MIP_START)
-		blended = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-	else {
-		float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
-		float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	[branch] if (mipLevel >= TV_SINGLE_SAMPLE_PARALLAX_MIP_START)
+		return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
 
-		float w1 = StochasticContrastWeight(offsets.weights.x);
-		float w2 = StochasticContrastWeight(offsets.weights.y);
-		float heightFade = StochasticHeightFadeFromMip(mipLevel);
-		float heightInfluence = HEIGHT_INFLUENCE * (1.0 - heightFade);
+	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
 
-		w1 *= (1.0 + heightInfluence * s1.a);
-		w2 *= (1.0 + heightInfluence * s2.a);
-
-		float denom = max(w1 + w2, 1e-8);
-		blended = lerp(s2, s1, w1 / denom);
-	}
-	return blended;
+	return StochasticBlendTwoSamples(mipLevel, s1, s2, offsets.weights, s1.a, s2.a);
 }
 
 inline float4 SampleTerrain(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float extraLandMipBias)

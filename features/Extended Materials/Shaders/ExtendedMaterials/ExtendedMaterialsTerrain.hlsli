@@ -1,7 +1,7 @@
 #ifndef EXTENDED_MATERIALS_TERRAIN_HLSLI
 #define EXTENDED_MATERIALS_TERRAIN_HLSLI
 
-// Included only for LANDSCAPE Lighting permutations (see ExtendedMaterials.hlsli).
+// Included only for LANDSCAPE Lighting permutations; parent ExtendedMaterials.hlsli is EMAT-only (see Lighting.hlsl).
 
 	void InitializeTerrainMipLevels(float2 coords, out float mipLevels[6])
 	{
