@@ -1660,20 +1660,27 @@ namespace ShadowCasterManager
 
 			// ---- Sync s_normalConvert (converted-to-non-shadow set) ----
 			//
-			// Converted lights sit in the engine's activeLights list, not
-			// activeShadowLights, so the aliveSet above doesn't cover them.
-			// Build a second set that includes both lists; any s_normalConvert
-			// entry not present in either has been removed by the engine
-			// (cell change, fast travel, etc.) and must be erased from our
-			// tracking so:
-			//   1. The UI "converted" counter reflects reality.
-			//   2. ForEachConvertedLight doesn't pass dangling pointers to
-			//      the cluster builder (which derefs them in IsValidLight /
-			//      lodDimmer restore).
+			// Two-tier filter:
 			//
-			// Hook_ConvertLights_Remove fires on individual RemoveLight calls
-			// but the engine's bulk cell-teardown path bypasses it, so this
-			// per-frame reconciliation is the safety net.
+			// Tier 1: drop entries the engine has removed from BOTH active
+			// lists. Hook_ConvertLights_Remove fires on individual RemoveLight
+			// calls but the engine's bulk cell-teardown path bypasses it, so
+			// this is our safety net for dangling pointers.
+			//
+			// Tier 2: drop entries that are functionally dead -- still in
+			// activeShadowLights / activeLights (because GameEnableLight from
+			// ConvertLight activates an entry that the engine never
+			// auto-deactivates), but with fade=0 / lodDimmer=0 / null NiLight
+			// so addLight in LightLimitFix would skip them anyway.
+			//
+			// Without tier 2 the set grows unbounded across a session: every
+			// converted light stays pinned in s_normalConvert until the engine
+			// triggers a removal we can hook. Heavy modlists hit 400+ entries,
+			// keeping freed-then-recycled BSLight memory referenced by
+			// downstream pass captures longer than necessary. The criteria
+			// mirror addLight's discard filter -- entries failing it
+			// contribute nothing to the cluster or engine lighting paths and
+			// have no business staying in our set.
 			if (!s_normalConvert.empty()) {
 				std::unordered_set<RE::BSLight*> normalAlive;
 				normalAlive.reserve(aliveSet.size() + ssn->GetRuntimeData().activeLights.size());
@@ -1682,9 +1689,33 @@ namespace ShadowCasterManager
 				for (auto& sp : ssn->GetRuntimeData().activeLights)
 					if (auto* l = sp.get())
 						normalAlive.insert(l);
+
+				const std::size_t before = s_normalConvert.size();
 				std::erase_if(s_normalConvert, [&](const ConvertedLight& c) {
-					return !c.light || normalAlive.find(static_cast<RE::BSLight*>(c.light)) == normalAlive.end();
+					// Tier 1: dangling / engine-removed.
+					if (!c.light || normalAlive.find(static_cast<RE::BSLight*>(c.light)) == normalAlive.end())
+						return true;
+					// Tier 2: functionally dead. Cheap derefs only -- no
+					// virtual calls or extra hash lookups.
+					auto* niLight = c.light->light.get();
+					if (!niLight)
+						return true;
+					const auto& rt = niLight->GetLightRuntimeData();
+					const float colorSum = rt.diffuse.red + rt.diffuse.green + rt.diffuse.blue;
+					if (colorSum * rt.fade <= 1e-4f)
+						return true;
+					if (rt.radius.x <= 1e-4f)
+						return true;
+					return false;
 				});
+				const std::size_t after = s_normalConvert.size();
+				if (before != after) {
+					static int loggedShrink = 0;
+					if (loggedShrink++ < 20 || (before - after) > 32) {
+						logger::debug("[SCM] s_normalConvert reconcile: {} -> {} ({} dropped)",
+							before, after, before - after);
+					}
+				}
 			}
 
 			// Drop entries no longer chosen (preserves slot stability for re-chosen lights).
@@ -3162,19 +3193,23 @@ namespace ShadowCasterManager
 		// MenuOpenCloseEvent for LoadingMenu opening fires before the
 		// engine starts tearing down the cell, so s_normalConvert still
 		// holds live pointers at this point.
+		std::size_t removedCount = 0;
+		std::size_t skippedCount = 0;
 		if (auto* smState = globals::game::smState) {
 			if (auto* ssn = smState->shadowSceneNode[0]) {
 				for (auto& c : s_normalConvert) {
-					// Defensive plausibility check: even though we expect
-					// live pointers here, a bug elsewhere shouldn't AV
-					// inside the engine call. NiPointer<>-managed entries
-					// are 8-byte aligned in canonical user-mode addresses.
 					const auto v = reinterpret_cast<std::uintptr_t>(c.light);
-					if (v >= 0x10000 && v < 0x800000000000ull && (v & 0x7) == 0)
+					if (v >= 0x10000 && v < 0x800000000000ull && (v & 0x7) == 0) {
 						GameRemoveLight(ssn, static_cast<RE::BSLight*>(c.light));
+						++removedCount;
+					} else {
+						++skippedCount;
+					}
 				}
 			}
 		}
+		logger::info("[SCM] Session reset: removed {} converted lights, skipped {} stale",
+			removedCount, skippedCount);
 		s_normalConvert.clear();
 		s_shadowConvert.clear();
 		s_pinShadow.clear();
@@ -3188,7 +3223,6 @@ namespace ShadowCasterManager
 				s_lights.Lights[i].Clear();
 			s_lights.Sun = false;
 		}
-		logger::info("[SCM] Session reset (LoadingMenu opening)");
 	}
 
 	class SceneTransitionEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>

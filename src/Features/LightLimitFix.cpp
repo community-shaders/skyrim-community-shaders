@@ -743,6 +743,64 @@ void LightLimitFix::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* T
 
 void LightLimitFix::Hooks::BSEffectShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
+	// Defensive pre-call guard: BSEffectShader::SetupGeometry iterates
+	// Pass->sceneLights[i] and dereferences bsLight->light->fade
+	// (BSLight+0x48 -> NiLight+0x134) with NO null check. Stale entries are
+	// possible because Pass->sceneLights[] is a raw BSLight** (not
+	// NiPointer<>): the engine's pass cache can outlive individual lights
+	// or capture them after their NiLight has been cleared. Crashes seen in
+	// the wild include garbage data (BSLight memory recycled as a string
+	// buffer) and outright NULL NiLight (engine half-destroyed the BSLight
+	// but it's still ref-counted alive in some list).
+	//
+	// Walk the array and clamp numLights to the count of entries that the
+	// engine can safely dereference. Validation:
+	//   - BSLight* is canonical, 8-byte aligned, non-null
+	//   - bsLight->light pointer is canonical, 8-byte aligned, non-null
+	// Entries failing either check stop the loop; the engine's own loop
+	// bails on the first bad entry too, so clamping matches its contract.
+	if (Pass && Pass->sceneLights && Pass->numLights > 0) {
+		const auto isPlausible = [](const void* p) {
+			const auto v = reinterpret_cast<std::uintptr_t>(p);
+			return v >= 0x10000 && v < 0x800000000000ull && (v & 0x7) == 0;
+		};
+		std::uint8_t validCount = 0;
+		for (std::uint8_t i = 0; i < Pass->numLights; ++i) {
+			RE::BSLight* bsLight = Pass->sceneLights[i];
+			if (!isPlausible(bsLight)) {
+				static int loggedBsLight = 0;
+				if (loggedBsLight++ < 10) {
+					logger::warn(
+						"[LLF] BSEffectShader_SetupGeometry: bad BSLight* at "
+						"sceneLights[{}]=0x{:x} numLights={}; clamping to {}",
+						i, reinterpret_cast<std::uintptr_t>(bsLight), Pass->numLights, validCount);
+				}
+				break;
+			}
+			RE::NiLight* niLight = bsLight->light.get();
+			if (!isPlausible(niLight)) {
+				// Catches both NULL (engine cleared the NiPointer) and
+				// garbage (BSLight memory recycled). NULL is the more common
+				// observed failure -- the engine's loop has no null check
+				// before reading [+0x134].
+				static int loggedNiLight = 0;
+				if (loggedNiLight++ < 10) {
+					logger::warn(
+						"[LLF] BSEffectShader_SetupGeometry: bad NiLight at "
+						"sceneLights[{}] (BSLight=0x{:x} NiLight=0x{:x}); clamping to {}",
+						i,
+						reinterpret_cast<std::uintptr_t>(bsLight),
+						reinterpret_cast<std::uintptr_t>(niLight),
+						validCount);
+				}
+				break;
+			}
+			++validCount;
+		}
+		if (validCount < Pass->numLights)
+			Pass->numLights = validCount;
+	}
+
 	func(This, Pass, RenderFlags);
 	ExternalEmittance::UpdatePermutation(Pass);
 	auto& singleton = globals::features::lightLimitFix;
