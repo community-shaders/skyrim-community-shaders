@@ -229,7 +229,9 @@ namespace ExponentialHeightFog
 
 		// Calculate directional light inscattering using Henyey-Greenstein phase function
 		if (SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier > 0) {
-			float cosTheta = dot(normalize(positionWS), SharedData::DirLightDirection.xyz);
+			float3 viewDirection = viewToPos * viewToPosLengthInv;
+			float3 lightDirection = normalize(SharedData::DirLightDirection.xyz);
+			float cosTheta = dot(lightDirection, -viewDirection);
 			float phase = HenyeyGreenstein(cosTheta, SharedData::exponentialHeightFogSettings.directionalInscatteringAnisotropy);
 			float3 directionalLightInscattering = SharedData::DirLightColor.xyz * phase;
 			float dirExponentialHeightLineIntegral = exponentialHeightLineIntegralCalc * max(rayLength - SharedData::exponentialHeightFogSettings.startDistance, 0);

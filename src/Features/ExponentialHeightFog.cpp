@@ -637,7 +637,7 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 		"directionalInscatteringAnisotropy",
 		"Henyey-Greenstein asymmetry parameter. Positive = forward scattering, 0 = isotropic, negative = back scattering.",
 		&settings.directionalInscatteringAnisotropy,
-		0.7f,
+		0.2f,
 		-0.99f, 0.99f));
 
 	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
