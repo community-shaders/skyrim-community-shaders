@@ -2015,6 +2015,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3x3 tbnTr = ReconstructTBN(input.WorldPosition.xyz, worldNormal, screenUV);
 #	else
 	float3 worldNormal = normalize(mul(tbn, normal.xyz));
+#		if defined(TREE_ANIM)
+	float3 viewNormal = normalize(FrameBuffer::WorldToView(worldNormal, false, eyeIndex));
+	viewNormal = float3(viewNormal.xy, -abs(viewNormal.z));
+	worldNormal = normalize(FrameBuffer::ViewToWorld(viewNormal, false, eyeIndex));
+#		endif
 
 #		if defined(SPARKLE)
 	float3 projectedNormal = normalize(mul(tbn, float3(ProjectedUVParams2.xx * normal.xy, normal.z)));
@@ -2578,7 +2583,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 
 #	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
-	if (!SharedData::InInterior)
+	if (!SharedData::InInterior && dirLightAngle >= 0.0)
 		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex);
 #	endif
 

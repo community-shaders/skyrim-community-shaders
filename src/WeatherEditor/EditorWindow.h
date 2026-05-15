@@ -178,7 +178,7 @@ public:
 	};
 	std::vector<Notification> notifications;
 
-	void ShowNotification(const std::string& message, const ImVec4& color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f), float duration = 3.0f);
+	void ShowNotification(const std::string& message, const ImVec4& color = Util::Colors::GetError(), float duration = 3.0f);
 	void RenderNotifications();
 
 	struct Settings
@@ -303,4 +303,5 @@ private:
 	FilterColumn m_currentFilterColumn = FilterColumn::All;
 	void ResetObjectsFilter();
 	bool MatchesObjectFilter(Widget* w) const;
+	static std::string ResolveEditorId(RE::TESForm* form, const WidgetVec& widgets);
 };

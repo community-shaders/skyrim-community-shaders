@@ -90,7 +90,8 @@ float3 GetSamplingVector(uint3 ThreadID, in RWTexture2DArray<float4> OutputTextu
 	}
 
 #if defined(REFLECTIONS)
-	color.rgb = lerp(color.rgb, Color::IrradianceToLinear(ReflectionsTexture.SampleLevel(LinearSampler, uv, 0.0).rgb), saturate(mipLevel / 7.0));
+	float fallbackWeight = saturate(mipLevel / 7.0) * SharedData::cubemapCreatorSettings.ReflectionFallbackAmount;
+	color.rgb = lerp(color.rgb, Color::IrradianceToLinear(ReflectionsTexture.SampleLevel(LinearSampler, uv, 0.0).rgb), fallbackWeight);
 #else
 	color.rgb = lerp(color.rgb, color.rgb * DefaultCubemap.SampleLevel(LinearSampler, uv, 0.0).xyz, saturate(mipLevel / 7.0));
 #endif
