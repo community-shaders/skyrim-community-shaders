@@ -404,7 +404,7 @@ public:
 		std::vector<InputCombo> OverlayToggleKey = { InputCombo::Keyboard(VK_F10) };        // Global overlay toggle key for all overlays
 		std::vector<InputCombo> ShaderBlockPrevKey = { InputCombo::Keyboard(VK_PRIOR) };    // Debug: cycle backward through shaders (PageUp)
 		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };     // Debug: cycle forward through shaders (PageDown)
-		std::vector<InputCombo> WeatherEditorToggleKey = { InputCombo::Keyboard(VK_F11) };  // Weather Editor toggle key
+		std::vector<InputCombo> WeatherEditorToggleKey = { InputCombo::Keyboard(VK_SHIFT), InputCombo::Keyboard(VK_END) };  // Weather Editor toggle key
 		bool EnableShaderBlocking = false;                                                  // Enable shader blocking hotkeys for debugging
 		bool FirstTimeSetupCompleted = false;                                               // Track if first-time setup has been completed
 		bool SkipClearCacheConfirmation = false;                                            // Skip confirmation dialog when clearing shader cache

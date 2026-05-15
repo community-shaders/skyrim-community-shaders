@@ -160,7 +160,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::BeginTooltip();
 				ImGui::TextUnformatted("Editor-only feature: Set a parent weather to copy settings from.");
 				ImGui::TextUnformatted("Use 'Inherit From Parent' checkboxes to copy specific values.");
-				ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "Note: This is NOT the same as cell lighting template inheritance.");
+				Util::Text::Warning("Note: This is NOT the same as cell lighting template inheritance.");
 				ImGui::EndTooltip();
 			}
 
@@ -398,7 +398,7 @@ void WeatherWidget::LoadSettings()
 				settings = vanillaSettings;
 				EditorWindow::GetSingleton()->ShowNotification(
 					std::format("Some values failed to load for {}", GetEditorID()),
-					ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+					Util::Colors::GetError(),
 					3.0f);
 			} else {
 				logger::info("Weather {}: Loaded settings - {} weather properties, {} colors, {} fog properties",
@@ -433,7 +433,7 @@ void WeatherWidget::LoadSettings()
 			settings = vanillaSettings;
 			EditorWindow::GetSingleton()->ShowNotification(
 				std::format("Some values failed to load for {}", GetEditorID()),
-				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				Util::Colors::GetError(),
 				3.0f);
 			return;
 		}
@@ -1264,8 +1264,8 @@ void WeatherWidget::DrawFogRow(bool matches, const char* inheritKey, const char*
 	ImGui::TableNextRow();
 	ImGui::TableSetColumnIndex(0);
 	if (hasParent) {
-		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, WidgetUI::kInheritCheckboxFrameBg);
+		ImGui::PushStyleColor(ImGuiCol_CheckMark, WidgetUI::kInheritCheckboxMark);
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * scale, 2.0f * scale));
 		ImGui::Checkbox(std::format("##Fog{}", label).c_str(), &settings.inheritFlags[inheritKey]);
 		if (parentWidget && settings.inheritFlags[inheritKey]) {
@@ -1299,7 +1299,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	if (std::ranges::none_of(properties, [&](const auto& p) { return MatchesSearch(p.first); }))
 		return;
 
-	ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", category.c_str());
+	ImGui::TextColored(WidgetUI::kCategoryHeaderColor, "%s", category.c_str());
 
 	bool changed = false;
 	auto* editorWindow = EditorWindow::GetSingleton();
@@ -1539,7 +1539,7 @@ void WeatherWidget::InheritAllFromParent()
 
 	EditorWindow::GetSingleton()->ShowNotification(
 		std::format("Inherited all settings from {}", parentWidget->GetEditorID()),
-		ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
+		Util::Colors::GetSuccess(),
 		3.0f);
 }
 
@@ -1608,7 +1608,7 @@ void WeatherWidget::LoadFeatureSettings()
 			// Show notification
 			EditorWindow::GetSingleton()->ShowNotification(
 				std::format("Warning: {} references missing feature(s): {}", GetEditorID(), missingList),
-				ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
+				Util::Colors::GetWarning(),
 				5.0f);
 
 			// Add to Feature Issues system for each missing feature
@@ -1762,9 +1762,9 @@ void WeatherWidget::DrawFeatureSettings()
 			bool overridesEnabled = featureJsonView ? featureJsonView->value("__enabled", false) : false;
 
 			// Weather-specific override toggle
-			ImGui::PushStyleColor(ImGuiCol_Button, overridesEnabled ? ImVec4(0.2f, 0.7f, 0.2f, 1.0f) : ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, overridesEnabled ? ImVec4(0.3f, 0.8f, 0.3f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, overridesEnabled ? ImVec4(0.1f, 0.6f, 0.1f, 1.0f) : ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_Button, overridesEnabled ? WidgetUI::kOverrideEnabledButton : Util::Colors::GetDisabled());
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, overridesEnabled ? WidgetUI::kOverrideEnabledButtonHovered : WidgetUI::kOverrideDisabledButtonHovered);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, overridesEnabled ? WidgetUI::kOverrideEnabledButtonActive : WidgetUI::kOverrideDisabledButtonActive);
 
 			bool toggleClicked = ImGui::Button(overridesEnabled ? "Using Weather-Specific Settings" : "Using Global Settings", ImVec2(-1, 0));
 
@@ -1944,7 +1944,7 @@ void WeatherWidget::DrawFeatureSettings()
 						// Generic handling for other types
 						ImGui::TextDisabled("%s: %s", varDisplayName.c_str(), currentValue.dump().c_str());
 						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Unsupported Variable Type");
+							Util::Text::Warning("Unsupported Variable Type");
 							ImGui::Text("%s", tooltip.c_str());
 							ImGui::Separator();
 							ImGui::TextWrapped("This variable type doesn't have a custom UI implementation yet. The raw JSON value is shown above.");
@@ -1962,7 +1962,7 @@ void WeatherWidget::DrawFeatureSettings()
 				}
 
 			} else {
-				ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Enable weather-specific overrides above to customize settings for this weather.");
+				ImGui::TextColored(WidgetUI::kHelpTextColor, "Enable weather-specific overrides above to customize settings for this weather.");
 			}
 
 			ImGui::TreePop();

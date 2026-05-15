@@ -40,6 +40,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	specularLevel,
 	glintParameters);
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	TruePBR::Settings,
+	VertexAOStrength);
+
 #define CHECK_PBR_TEXTURE(textureName)                                                                         \
 	if (!(pbrMaterial->textureName)) {                                                                         \
 		logger::warn("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
@@ -106,6 +110,11 @@ void SetupPBRLandscapeTextureParameters(BSLightingShaderMaterialPBRLandscape& ma
 
 void TruePBR::DrawSettings()
 {
+	if (ImGui::TreeNodeEx("Global Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::SliderFloat("Vertex AO Strength", &settings.VertexAOStrength, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::TreePop();
+	}
+
 	if (ImGui::TreeNodeEx("Texture Set Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 		if (Util::SearchableCombo("Texture Set", selectedPbrTextureSetName, pbrTextureSets)) {
 			selectedPbrTextureSet = &pbrTextureSets[selectedPbrTextureSetName];
@@ -298,6 +307,21 @@ void TruePBR::DrawSettings()
 		}
 		ImGui::TreePop();
 	}
+}
+
+void TruePBR::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
+void TruePBR::LoadSettings(json& o_json)
+{
+	settings = o_json;
+}
+
+void TruePBR::RestoreDefaultSettings()
+{
+	settings = {};
 }
 
 void TruePBR::SetupResources()
