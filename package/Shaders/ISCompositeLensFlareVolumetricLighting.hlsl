@@ -67,13 +67,14 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float3 viewDirection = normalize(positionMS.xyz);
 
-		float surfaceShadow;
-		float volumetricShadow = ShadowSampling::Get3DFilteredShadowVolumetric(positionMS.xyz, viewDirection, input.Position.xy, eyeIndex, SharedData::enbSettings.VolumetricRaysExtinction, surfaceShadow);
+		float volumetricShadow = ShadowSampling::Get3DFilteredShadowVolumetric(positionMS.xyz, viewDirection, input.Position.xy, eyeIndex, SharedData::enbSettings.VolumetricRaysExtinction);
 
 		float3 ibl = ImageBasedLighting::GetSkyIBL(float3(0, 0, -1));
 		ibl = lerp(dot(ibl, 1.0 / 3.0), ibl, 2.0);
 
-		color.xyz += volumetricShadow * (SharedData::SunColor.xyz + ibl * SharedData::enbSettings.VolumetricRaysSkyColorAmount) * SharedData::enbSettings.VolumetricRaysIntensity;
+		float phase = dot(viewDirection, SharedData::SunColor.xyz) * 0.5 + 0.5;
+
+		color.xyz += volumetricShadow * (SharedData::SunColor.xyz * phase + ibl * SharedData::enbSettings.VolumetricRaysSkyColorAmount) * SharedData::enbSettings.VolumetricRaysIntensity;
 	}
 
 	psout.Color = color;

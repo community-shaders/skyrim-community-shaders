@@ -136,12 +136,12 @@ namespace ShadowSampling
 		return worldShadow;
 	}
 
-	float Get3DFilteredShadowVolumetric(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, float extinction, out float surfaceShadow)
+	float Get3DFilteredShadowVolumetric(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, float extinction)
 	{
 		float totalRayLength = length(positionWS);
 
-		const uint sampleCount = 32;
-		const float rcpSampleCount = 1.0 / 32.0;
+		const uint sampleCount = 8;
+		const float rcpSampleCount = 1.0 / float(sampleCount);
 		float stepLength = totalRayLength * rcpSampleCount;
 
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
@@ -153,20 +153,15 @@ namespace ShadowSampling
 
 		float scattering = 0.0;
 		float transmittance = 1.0;
-		surfaceShadow = 1.0;
 
 		for (uint i = 0; i < sampleCount; i++) {
 			float t = (float(i) + noise) * rcpSampleCount;
 			float3 sampledPositionWS = positionWS * t;
 
 			float worldShadowSample = GetTrueWorldShadow(sampledPositionWS, cameraOffset, eyeIndex);
-			surfaceShadow = worldShadowSample;
 
 			scattering += worldShadowSample * stepScatterCoeff * transmittance;
 			transmittance *= stepTransmittance;
-
-			if (transmittance < 0.01)
-				break;
 		}
 
 		return scattering;
