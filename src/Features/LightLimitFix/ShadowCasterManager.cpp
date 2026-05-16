@@ -219,6 +219,7 @@ namespace ShadowCasterManager
 		int retained_excess = 0;             // c.excess path skipped because slot still held (Option A)
 		int lru_evictions = 0;               // slots evicted by LRU under chosen-slot pressure (Option A)
 		int first_render_skips = 0;          // chosen lights deferred from shadow set: no valid slice yet
+		int dropped_frustum = 0;             // c.invalidFrustum: light off-screen, no engine call (step 2)
 	};
 	static SchedDiagCounters s_schedDiag;
 
@@ -2293,6 +2294,28 @@ namespace ShadowCasterManager
 						}
 					}
 
+					// Frustum-out fast path (step 2 of architectural cleanup).
+					// slf2.tracy confirmed 100% of invalidCamera fails in the
+					// user's scene are frustum-culls (71.19/frame), 0% LOD.
+					// ConvertLight on a frustum-culled light costs ~6 us each
+					// and the engine has already determined the light is
+					// off-screen -- it contributes nothing visible via shadow
+					// OR cluster lighting. Drop: no engine call, light
+					// remains in activeShadowLights for next frame's
+					// re-evaluation (the engine itself manages cell-level
+					// membership; we leave it alone).
+					//
+					// Deliberately scoped narrow: this is the ONLY behaviour
+					// change in this commit. Step 3's activeLights snapshot
+					// is deferred -- with invalid_lod ~= 0 in real captures,
+					// it has nothing to optimise anyway. Step 5's hash
+					// caching is a separate concern.
+					if (c.invalidFrustum) {
+						s_schedDiag.dropped_frustum++;
+						continue;
+					}
+
+					// Below: LOD-faded (invalidLod) or portal-culled (invalidPortal).
 					// Camera-fail invalid (UpdateCamera returned false) covers two
 					// cases: (1) light fully outside the camera frustum -- cluster
 					// builder will reject it anyway; (2) LOD-faded -- engine
@@ -2647,6 +2670,7 @@ namespace ShadowCasterManager
 			TracyPlot("scm.retained.excess", (int64_t)s_schedDiag.retained_excess);
 			TracyPlot("scm.lru.evictions", (int64_t)s_schedDiag.lru_evictions);
 			TracyPlot("scm.first_render_skips", (int64_t)s_schedDiag.first_render_skips);
+			TracyPlot("scm.dropped_frustum", (int64_t)s_schedDiag.dropped_frustum);
 
 			// Live config plots — record the *current* settings on each frame so
 			// a single capture spanning a settings change captures both sides.
