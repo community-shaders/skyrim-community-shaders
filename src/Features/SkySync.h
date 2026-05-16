@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "RE/M/Moon.h"
 
-#include "Utils/SkyVisibility.h"
+#include "Utils/Moon.h"
 
 struct SkySync : Feature
 {
@@ -22,7 +22,7 @@ public:
 				"Smoothly switches the light source between the sun and moons based on visibility",
 				"Moon light source can be switched between Masser, Secunda, or the brightest",
 				"Automatic calculation of moon lighting intensity based on moon phase",
-				"Fixes the sun appearing higher on the horizon when the player gains altitude" }
+				"Automatic calculation of shadow lighting direction based on the brightest light source" }
 		};
 	}
 
@@ -33,11 +33,13 @@ public:
 		int32_t MoonLightSource = 0;
 		int32_t SunPath = 0;
 		float CustomAngle = -35.0f;
-		float SunriseBeginOffset = 0.0f;
-		float SunriseEndOffset = 0.0f;
-		float SunsetBeginOffset = 0.0f;
-		float SunsetEndOffset = 0.0f;
 		float MinShadowElevation = 0.25f;
+		float ShadowTransitionDuration = 100.0f;
+		float NewMoonIntensity = 0.05f;
+		float CrescentMoonIntensity = 0.25f;
+		float FullMoonIntensity = 1.0f;
+		std::array<float, 3> MasserColor = { 142.0f / 255.0f, 96.0f / 255.0f, 90.0f / 255.0f };
+		std::array<float, 3> SecundaColor = { 117.0f / 255.0f, 115.0f / 255.0f, 109.0f / 255.0f };
 	};
 
 	Settings settings;
@@ -54,12 +56,6 @@ public:
 	virtual void DataLoaded() override;
 
 	struct Sky_Update
-	{
-		static void thunk(RE::Sky* sky);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct Sky_OnNewClimate
 	{
 		static void thunk(RE::Sky* sky);
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -100,46 +96,20 @@ private:
 	const char* MoonLightSourceNames[static_cast<uint8_t>(MoonLightSource::Count)] = { "Brightest", "Masser", "Secunda" };
 	const char* SunPathNames[static_cast<uint8_t>(SunPath::Count)] = { "Southern Sky", "Northern Sky", "Vanilla", "Custom" };
 
-	struct ClimateTimings
-	{
-		float sunriseFadeOutMoonStart;
-		float sunriseBegin;
-		float sunriseFadeOutMoonEnd;
-		float sunrise;
-		float sunriseEnd;
-		float sunsetBegin;
-		float sunset;
-		float sunsetFadeInMoonStart;
-		float sunsetEnd;
-		float sunsetFadeInMoonEnd;
-
-		void Update(const RE::TESClimate* climate);
-	};
-
 	struct ShadowFader
 	{
-		enum class Phase : uint8_t
-		{
-			None,
-			FadeOut,
-			FadeIn
-		};
-
-		static constexpr float FadeTime = 100.0f;  // 5 seconds at timescale 20
-
-		Phase fadePhase = Phase::None;
-		Caster current = Caster::None;
+		RE::NiPoint3 currentDir = { 0.0f, 0.0f, 1.0f };
+		RE::NiPoint3 startDir = { 0.0f, 0.0f, 1.0f };
 		Caster target = Caster::None;
 		float fadeTimer = 0.0f;
-		float previousHoursPassed = 0.0f;
+		bool transitioning = false;
 
-		void Update(const RE::Sun* sun, RE::NiPoint3 dirs[], float intensities[], bool isDayTime);
+		void Update(const RE::Sun* sun, RE::NiPoint3 dirs[], float intensities[], float fadeDuration);
 		static void SetLighting(const RE::Sun* sun, RE::NiPoint3 dir);
 		static void ClampDirection(RE::NiPoint3& dir);
 		void Reset();
 	};
 
-	static constexpr float RenderDistance = 325000.0f;
 	static constexpr float SunHorizonDistance = 280.0f;
 	static constexpr float SunPeakDistance = 400.0f;
 	static constexpr float SouthernSunAngle = 90.0f - 35.0f;
@@ -153,10 +123,9 @@ private:
 	float sunAngle = 90.0f;
 	float currentSkyRotation = D3D11_FLOAT32_MAX;
 
-	ClimateTimings timings = {};
-
 	RE::NiPoint3 directions[3];
 	float intensities[3] = {};
+	float4 colors[3] = {};
 	ShadowFader shadowFader;
 
 	void DisableOnConflict(std::string_view conflictName);
@@ -167,17 +136,13 @@ private:
 
 	void SetSkyRotation(const RE::Sky* sky, RE::TESObjectCELL* cell);
 
-	void ProcessSun(const RE::Sun* sun, float time, float altitude);
+	void ProcessSun(const RE::Sky* sky);
 
-	void ProcessMoon(const RE::Sky* sky, Caster type, float altitude);
+	void ProcessMoon(const RE::Sky* sky, Caster type);
 
 	static void CalculateSunDirectionAndDistance(const RE::Sun* sun, RE::NiPoint3& outDir, float& outDistance);
 
 	static void CalculateAlternateSunDirectionAndDistance(RE::NiPoint3& outDir, float& outDist, float time, float sunrise, float sunset, float sunAngle);
 
-	static RE::NiPoint3 GetApparentDirection(const RE::NiPoint3& dir, float altitude);
-
 	static void SetSunPosition(const RE::Sun* sun, const RE::NiPoint3& dir, float distance);
-
-	static void SetMoonDirection(const RE::Moon* moon, const RE::NiPoint3& dir);
 };

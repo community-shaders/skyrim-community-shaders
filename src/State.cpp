@@ -7,6 +7,7 @@
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
+#include "Features/SkySync.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
@@ -1011,14 +1012,16 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 				data.SunColor = { sunColor.red * sunFade, sunColor.green * sunFade, sunColor.blue * sunFade, sunFade };
 			}
 
-			// Process moons
-			auto& moonGlareColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
-			const float4 glareColor = { moonGlareColor.red, moonGlareColor.green, moonGlareColor.blue, 0.0f };
+			// Process moons using SkySync settings for base colors and phase intensities
+			auto& skySyncSettings = globals::features::skySync.settings;
+			float4 masserBase = { skySyncSettings.MasserColor[0], skySyncSettings.MasserColor[1], skySyncSettings.MasserColor[2], 1.0f };
+			float4 secundaBase = { skySyncSettings.SecundaColor[0], skySyncSettings.SecundaColor[1], skySyncSettings.SecundaColor[2], 1.0f };
 
 			if (auto masser = sky->masser) {
-				auto [dir, color] = Util::Moon::ProcessMoon(masser, glareColor, Util::Moon::MasserBaseColor, 1.0f, moonAndStarsLoaded);
-				data.MasserDirection = dir;
+				auto dir = Util::Moon::GetDirection(masser, moonAndStarsLoaded);
+				data.MasserDirection = { dir.x, dir.y, dir.z, 0.0f };
 
+				float4 color = Util::Moon::CalculateColor(sky, true, masserBase, skySyncSettings.NewMoonIntensity, skySyncSettings.CrescentMoonIntensity, skySyncSettings.FullMoonIntensity);
 				float fade = 0.0f;
 				if (masser->moonMesh) {
 					if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(masser->moonMesh->GetGeometryRuntimeData().shaderProperty.get()))
@@ -1028,9 +1031,10 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			}
 
 			if (auto secunda = sky->secunda) {
-				auto [dir, color] = Util::Moon::ProcessMoon(secunda, glareColor, Util::Moon::SecundaBaseColor, Util::Moon::SecundaIntensityFactor, moonAndStarsLoaded);
-				data.SecundaDirection = dir;
+				auto dir = Util::Moon::GetDirection(secunda, moonAndStarsLoaded);
+				data.SecundaDirection = { dir.x, dir.y, dir.z, 0.0f };
 
+				float4 color = Util::Moon::CalculateColor(sky, false, secundaBase, skySyncSettings.NewMoonIntensity, skySyncSettings.CrescentMoonIntensity, skySyncSettings.FullMoonIntensity);
 				float fade = 0.0f;
 				if (secunda->moonMesh) {
 					if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(secunda->moonMesh->GetGeometryRuntimeData().shaderProperty.get()))

@@ -4,7 +4,6 @@
 namespace Util::Moon
 {
 	// Moon phase intensity constants
-	static constexpr float SecundaIntensityFactor = 0.67f;
 	static constexpr float NewMoonIntensityFactor = 0.05f;
 	static constexpr float CrescentMoonIntensityFactor = 0.25f;
 	static constexpr float FullMoonIntensityFactor = 1.0f;
@@ -25,32 +24,21 @@ namespace Util::Moon
 			{ "three_wax", RE::Moon::Phases::Phase::kWaxingGibbous } }
 	};
 
-	/**
-	 * @brief Get the phase-based intensity factor for a moon
-	 * @param phase The current phase of the moon
-	 * @return Intensity factor between 0.05 (new moon) and 1.0 (full moon)
-	 */
-	inline float GetPhaseIntensityFactor(RE::Moon::Phases::Phase phase)
+	inline float GetPhaseIntensityFactor(RE::Moon::Phases::Phase phase, float newMoon = NewMoonIntensityFactor, float crescent = CrescentMoonIntensityFactor, float full = FullMoonIntensityFactor)
 	{
 		if (phase == RE::Moon::Phases::Phase::kNewMoon) {
-			return NewMoonIntensityFactor;
+			return newMoon;
 		} else {
 			const float t = (abs(static_cast<float>(phase) - static_cast<float>(RE::Moon::Phases::Phase::kNewMoon)) - 1.0f) / 3.0f;
-			return std::lerp(CrescentMoonIntensityFactor, FullMoonIntensityFactor, t);
+			return std::lerp(crescent, full, t);
 		}
 	}
 
-	/**
-	 * @brief Detect moon phase from texture name
-	 * @param textureName Name of the moon texture
-	 * @return Detected phase (defaults to kFull if not found)
-	 */
 	inline RE::Moon::Phases::Phase GetPhaseFromTexture(const char* textureName)
 	{
 		if (!textureName)
 			return RE::Moon::Phases::Phase::kFull;
 
-		// Convert texture name to lowercase for phase detection
 		const size_t len = std::strlen(textureName);
 		std::string lower;
 		lower.reserve(len);
@@ -58,7 +46,6 @@ namespace Util::Moon
 			lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(textureName[i]))));
 		}
 
-		// Search for phase identifier in texture name
 		for (auto& [suffix, id] : PhaseLookup) {
 			if (lower.find(suffix) != std::string::npos) {
 				return id;
@@ -68,12 +55,6 @@ namespace Util::Moon
 		return RE::Moon::Phases::Phase::kFull;
 	}
 
-	/**
-	 * @brief Get moon direction from its rotation matrix
-	 * @param moon Pointer to the moon object
-	 * @param applyMoonAndStarsCompat Apply Moon and Stars mod compatibility adjustment
-	 * @return Normalized direction vector (Y-axis of rotation matrix)
-	 */
 	inline RE::NiPoint3 GetDirection(const RE::Moon* moon, bool applyMoonAndStarsCompat = false)
 	{
 		if (!moon || !moon->root)
@@ -82,8 +63,6 @@ namespace Util::Moon
 		auto dir = moon->root->world.rotate.GetVectorY();
 		dir.Unitize();
 
-		// Moon and Stars adjusts some intermediary rotation matrices for the moon
-		// Directly changing the directions here avoids 3 matrix multiplications and a vector rotation
 		if (applyMoonAndStarsCompat) {
 			std::swap(dir.x, dir.y);
 			dir.x = -dir.x;
@@ -92,54 +71,28 @@ namespace Util::Moon
 		return dir;
 	}
 
-	/**
-	 * @brief Calculate moon color with phase-based intensity
-	 * @param moon Pointer to the moon object
-	 * @param moonGlareColor Base moon glare color from weather
-	 * @param baseColor Moon-specific base color tint (Masser or Secunda)
-	 * @param intensityScale Additional intensity scaling factor (e.g., Secunda is dimmer)
-	 * @return Calculated moon color with all factors applied
-	 */
-	inline float4 CalculateColor(const RE::Moon* moon, const float4& moonGlareColor, const float4& baseColor, float intensityScale = 1.0f)
+	inline float4 CalculateColor(const RE::Sky* sky, bool isMasser, float4 baseColor, float newMoon = NewMoonIntensityFactor, float crescent = CrescentMoonIntensityFactor, float full = FullMoonIntensityFactor)
 	{
-		// Start with moon glare color and apply base color tint
-		float4 color = moonGlareColor * baseColor;
+		if (!sky)
+			return { 0.0f, 0.0f, 0.0f, 0.0f };
 
-		// Apply phase-based intensity if moon mesh exists
-		if (moon && moon->moonMesh && moon->moonMesh.get()) {
+		const auto moon = isMasser ? sky->masser : sky->secunda;
+		if (!moon)
+			return { 0.0f, 0.0f, 0.0f, 0.0f };
+
+		auto& glare = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
+		float4 color = { glare.red * baseColor.x, glare.green * baseColor.y, glare.blue * baseColor.z, 0.0f };
+
+		if (moon->moonMesh && moon->moonMesh.get()) {
 			if (const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get())) {
 				if (auto texture = moonShaderProperty->GetBaseTexture()) {
 					const auto phase = GetPhaseFromTexture(texture->name.c_str());
-					color *= GetPhaseIntensityFactor(phase);
+					color *= GetPhaseIntensityFactor(phase, newMoon, crescent, full);
 				}
 			}
 		}
 
-		// Apply moon-specific intensity scaling (e.g., Secunda is dimmer than Masser)
-		color *= intensityScale;
-
 		return color;
 	}
 
-	/**
-	 * @brief Process moon to get both direction and color
-	 * @param moon Pointer to the moon object
-	 * @param moonGlareColor Base moon glare color from weather
-	 * @param baseColor Moon-specific base color tint (Masser or Secunda)
-	 * @param intensityScale Additional intensity scaling factor
-	 * @param applyMoonAndStarsCompat Apply Moon and Stars mod compatibility adjustment
-	 * @return Pair of (direction as float4, color as float4)
-	 */
-	inline std::pair<float4, float4> ProcessMoon(const RE::Moon* moon, const float4& moonGlareColor, const float4& baseColor, float intensityScale = 1.0f, bool applyMoonAndStarsCompat = false)
-	{
-		if (!moon) {
-			return { { 0.0f, 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 0.0f } };
-		}
-
-		const auto dir = GetDirection(moon, applyMoonAndStarsCompat);
-		const float4 direction = { dir.x, dir.y, dir.z, 0.0f };
-		const float4 color = CalculateColor(moon, moonGlareColor, baseColor, intensityScale);
-
-		return { direction, color };
-	}
 }
