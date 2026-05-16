@@ -215,11 +215,11 @@ namespace ShadowCasterManager
 		int disabled_excess = 0;             // DisableLight from c.excess path (spot/no-convert)
 		int reconciliation_clears = 0;       // slot freed because light gone from activeShadowLights
 		int slots_in_use = 0;                // sampled at frame end
-		int retained_invalid = 0;            // c.invalid path skipped because slot still held (Option A)
-		int retained_excess = 0;             // c.excess path skipped because slot still held (Option A)
-		int lru_evictions = 0;               // slots evicted by LRU under chosen-slot pressure (Option A)
+		int retained_invalid = 0;            // c.invalid skipped: slot retained from prior frame
+		int retained_excess = 0;             // c.excess skipped: slot retained from prior frame
+		int lru_evictions = 0;               // slots evicted by LRU under chosen-slot pressure
 		int first_render_skips = 0;          // chosen lights deferred from shadow set: no valid slice yet
-		int dropped_frustum = 0;             // c.invalidFrustum: light off-screen, no engine call (step 2)
+		int dropped_frustum = 0;             // c.invalidFrustum: light off-screen, no engine call
 	};
 	static SchedDiagCounters s_schedDiag;
 
@@ -1269,6 +1269,18 @@ namespace ShadowCasterManager
 		return HashCombine(h, std::bit_cast<std::uint32_t>(f));
 	}
 
+	/// Quantize a float to a step size before hashing. Skyrim's kFlicker /
+	/// kPulse light flags oscillate animated torches by sub-unit position /
+	/// radius amounts every frame. Bit-exact hashing on those oscillations
+	/// produces a fresh hash every frame, defeating cache validity. Quantizing
+	/// at sub-pixel-precision thresholds folds imperceptible animations into
+	/// a stable hash bucket so the cached-shadow priority demotion fires
+	/// correctly for visually-unchanging lights.
+	static inline float QuantizeFloat(float f, float step) noexcept
+	{
+		return std::round(f / step) * step;
+	}
+
 	/// Hash the inputs that determine a shadow map's content. Two inputs:
 	///   (1) the light's own pose + radius -- moves/rotates/resizes the
 	///       shadow frustum, all change the rendered depths
@@ -1284,18 +1296,6 @@ namespace ShadowCasterManager
 	/// Returns 0 only when `light` or its inner NiLight is null (caller
 	/// treats 0 as "never rendered"). Otherwise the hash itself almost
 	/// never lands on 0 because of how HashCombine mixes constants in.
-	/// Quantize a float to a step size before hashing. slf4.tracy showed 2.64
-	/// stale_cache_skips/frame in a completely static scene -- the camera and
-	/// all casters were motionless, but Skyrim's kFlicker / kPulse light flags
-	/// oscillate animated torches by sub-unit position/radius amounts every
-	/// frame. Bit-exact hashing on those oscillations produced a fresh hash
-	/// every frame, defeating cache validity and triggering perceptible
-	/// shadow on/off flicker. Quantizing at sub-pixel-precision thresholds
-	/// folds these imperceptible animations back into a stable hash bucket.
-	static inline float QuantizeFloat(float f, float step) noexcept
-	{
-		return std::round(f / step) * step;
-	}
 
 	static std::uint64_t ComputeShadowGeomHash(RE::BSShadowLight* light)
 	{
@@ -1488,20 +1488,12 @@ namespace ShadowCasterManager
 			*GetAccumLightSlot() += light->shadowMapCount;
 		}
 
-		// Extended mode: pre-set kNONE renderTarget so RenderCascade re-runs its
-		// slot-allocation block (where Hook_OverwriteShadowMapIndex overrides
-		// the global counter with our slot index). Without this, RenderCascade
-		// keeps the slot from a prior frame and lights not redrawn this frame
-		// would corrupt another light's shadow map.
-		//
-		// History note: a slot-reclaim attempt subtracted PointLightFirst() so
-		// pool[1..N] (Sun=true) would remap to texture[0..N-1], freeing slice 0
-		// for an extra point light. RenderDoc consistently showed slice 0 empty
-		// regardless of the pre-set / hook strategy — descriptor values were
-		// being overwritten somewhere between the pre-set and render dispatch
-		// that we couldn't trace via Ghidra. Reverted to identity (pool index
-		// = texture slot); slice 0 stays unused (the same as the pre-reclaim
-		// status quo).
+		// Extended mode: pre-set kNONE renderTarget so RenderCascade re-runs
+		// its slot-allocation block (where Hook_OverwriteShadowMapIndex
+		// overrides the global counter with our slot index). Without this,
+		// RenderCascade keeps the slot from a prior frame and lights not
+		// redrawn this frame would corrupt another light's shadow map.
+		// Pool index maps 1:1 to texture slot; slice 0 stays unused.
 		if (s_settings.ShadowLightCount > 4) {
 			int32_t idx = s_lights.FindLight(light, s_settings.ShadowLightCount);
 			if (idx < 0)
@@ -1899,25 +1891,19 @@ namespace ShadowCasterManager
 				}
 			}
 
-			// Slot retention with on-demand LRU eviction (Option A).
+			// Slot retention with on-demand LRU eviction.
 			//
-			// Old behaviour: every slot whose light was not in c.chosen this
-			// frame got Clear()'d. A torch whose engine-side fade animation
-			// briefly dropped its rank below the chosen threshold -- or whose
-			// UpdateCamera blipped invalid for one frame -- lost its slot,
-			// causing the shadow to vanish that frame and a re-render churn
-			// the next. User report: "shadow disappears and reappears in a
-			// following frame" on flickering torches at rank << ShadowLightCount.
-			//
-			// New behaviour: the slot pool is treated as a cache. A slot is
-			// only released when (1) the engine has dropped the light from
+			// The slot pool is a cache, not a per-frame allocation. A slot is
+			// released only when (1) the engine has dropped its light from
 			// activeShadowLights (handled by the reconciliation loop above),
-			// or (2) a chosen light that doesn't already have a slot needs
-			// one AND no truly-empty slot is available -- in which case the
-			// least-recently-rendered retained slot is evicted. Retained-but-
-			// unchosen slots keep serving the cluster pipeline via their
-			// cached shadow content; the atomic mutation loop below skips
-			// convert/disable when an existing slot is held.
+			// or (2) a chosen light needs a slot AND no truly-empty slot is
+			// available -- in which case the least-recently-rendered retained
+			// slot is evicted. Retained-but-unchosen slots continue serving
+			// the cluster pipeline via their cached shadow content; the atomic
+			// mutation loop below skips convert/disable when an existing slot
+			// is held. This is what keeps flickering torches (kFlicker / kPulse
+			// animation jitters a light's rank below the chosen threshold for
+			// one frame) from churning their slot every frame.
 			{
 				// Phase 1: how many chosen lights still need slot assignment?
 				int needSlot = 0;
@@ -1986,23 +1972,16 @@ namespace ShadowCasterManager
 				if (idx < 0)
 					continue;
 				// Reset slot metadata before installing the new occupant.
-				// FindFreeIndex returns slots whose Light pointer is nullptr, but
-				// nothing guarantees the rest of the LightEntry was cleared when
-				// the previous owner was released -- several eviction paths
-				// historically did `e.Light = nullptr` without resetting
-				// LastDrawnFrame / lastGeomHash / lastRenderedPos. If we install
-				// a new light into a slot that still has the previous owner's
-				// metadata, the first_render_skips gate (which checks
-				// LastDrawnFrame < 0) will not fire on this slot, and the
-				// cluster pipeline will insert the new light with
-				// descriptor.shadowmapIndex pointing at a kSHADOWMAPS slice
-				// that still contains the previous owner's depth content --
-				// producing the wrong-shadow visual artifact reported in
-				// slf5.tracy. Clearing here is a small, scoped fix at the
-				// only place new occupants take slots; it avoids changing
-				// behaviour at any of the eviction sites (which 5da6245c4
-				// did, with disastrous consequences -- bisect confirmed
-				// that commit as the first introducer of CTDs since slf5).
+				// FindFreeIndex returns slots whose Light pointer is nullptr,
+				// but eviction paths leave the rest of the LightEntry intact
+				// (LastDrawnFrame, lastGeomHash, etc.). Without this clear the
+				// new occupant inherits the previous owner's metadata, the
+				// first_render_skips gate fails to fire (LastDrawnFrame >= 0),
+				// and the cluster pipeline samples kSHADOWMAPS[idx] -- which
+				// still holds the previous owner's depth content -- producing
+				// a wrong-shadow visual artifact. Reset at acquire only --
+				// eviction paths just null the Light pointer, letting metadata
+				// persist as a cache key until the slot is genuinely reused.
 				s_lights.Lights[idx].Clear();
 				s_lights.Lights[idx].Light = c.light;
 			}
@@ -2080,18 +2059,10 @@ namespace ShadowCasterManager
 				s_lights.Lights[i].RedrawFrame = false;
 
 			// First pass: sun only. Point-light slots fall through to the
-			// importance-scored pending loop below where new lights compete
-			// fairly with existing redraws.
-			//
-			// Previously this loop also force-rendered new lights
-			// (LastDrawnFrame < 0 && AllowDrawNewLight). When many new lights
-			// streamed in at once (player entering populated area), pool
-			// iteration order picked the first N regardless of importance --
-			// dim background lights claimed budget over bright lights right
-			// next to the player. Letting them fall through to the pending
-			// loop sorts by importance, so the budget always covers the most
-			// visible new lights first. AllowDrawNewLight is now honoured by
-			// the pending loop's filter (gates new-light pending entry).
+			// importance-scored pending loop below so new lights compete
+			// fairly with existing redraws (sorted by importance, not pool
+			// order). AllowDrawNewLight is honoured by the pending loop's
+			// filter.
 			for (int i = 0; i < s_lights.Size; i++) {
 				auto& e = s_lights.Lights[i];
 				if (!e.Light) {
@@ -2398,16 +2369,14 @@ namespace ShadowCasterManager
 					if (!isAliveNow(c.light))
 						continue;
 
-					// Slot retention (Option A): if this light still has a
-					// kSHADOWMAPS slot from a previous frame, keep it.
-					// invalidCamera blips (engine LOD-fade flicker on
-					// animated torches) used to release the slot via
-					// ConvertLight, causing a one-frame shadow disappearance
-					// that re-promoted next frame produced a re-render churn
-					// = visible shadow flicker. Holding the slot means the
-					// cluster pipeline keeps sampling the cached shadow
-					// during the invalid blip, and the next valid frame
-					// resumes normal scheduling without any state churn.
+					// Slot retention: if this light still has a kSHADOWMAPS
+					// slot from a previous frame, keep it. invalidCamera blips
+					// (engine LOD-fade flicker on animated torches) would
+					// otherwise release the slot via ConvertLight, producing a
+					// one-frame shadow disappearance and a re-render churn the
+					// next frame. Holding the slot lets the cluster pipeline
+					// keep sampling the cached shadow during the invalid blip;
+					// the next valid frame resumes normal scheduling.
 					{
 						const int retainedSlot = findSlotForLight(c.light);
 						if (retainedSlot >= 0 &&
@@ -2431,47 +2400,44 @@ namespace ShadowCasterManager
 						}
 					}
 
-					// Frustum-out fast path (step 2 of architectural cleanup).
-					// slf2.tracy confirmed 100% of invalidCamera fails in the
-					// user's scene are frustum-culls (71.19/frame), 0% LOD.
-					// ConvertLight on a frustum-culled light costs ~6 us each
-					// and the engine has already determined the light is
-					// off-screen -- it contributes nothing visible via shadow
-					// OR cluster lighting. Drop: no engine call, light
-					// remains in activeShadowLights for next frame's
-					// re-evaluation (the engine itself manages cell-level
-					// membership; we leave it alone).
+					// Frustum-out fast path.
 					//
-					// Deliberately scoped narrow: this is the ONLY behaviour
-					// change in this commit. Step 3's activeLights snapshot
-					// is deferred -- with invalid_lod ~= 0 in real captures,
-					// it has nothing to optimise anyway. Step 5's hash
-					// caching is a separate concern.
+					// UpdateCamera's three failure modes -- frustum cull, LOD
+					// fade, portal occlusion -- have different correct actions.
+					// Frustum-culled lights are off-screen by definition (the
+					// engine performs a bounding-sphere or bounding-cone test
+					// against the camera frustum), so they contribute nothing
+					// visible via either the shadow pipeline OR cluster
+					// lighting. ConvertLight on such a light is wasted work
+					// (~6 us each). Drop: no engine call, light remains in
+					// activeShadowLights for next frame's re-evaluation. The
+					// engine manages cell-level membership; we leave it alone.
+					//
+					// Captures of heavy-modlist outdoor scenes show ~70 of 71
+					// invalidCamera fails per frame are frustum-out, so this
+					// fast path captures essentially the entire convert cost
+					// at no behavioural cost.
 					if (c.invalidFrustum) {
 						s_schedDiag.dropped_frustum++;
 						continue;
 					}
 
-					// Below: LOD-faded (invalidLod) or portal-culled (invalidPortal).
-					// Camera-fail invalid (UpdateCamera returned false) covers two
-					// cases: (1) light fully outside the camera frustum -- cluster
-					// builder will reject it anyway; (2) LOD-faded -- engine
-					// considers it too far for useful shadow rendering, but the
-					// light is still visible and should still illuminate via the
-					// cluster path. So for omnis (BSShadowParabolicLight), demote
-					// to non-shadow when ConvertExcessToNormal is on, mirroring
-					// excess-handling. Spot lights (BSShadowFrustumLight) drop
-					// because the engine has no NiSpotLight equivalent -- omni
-					// conversion would make them spherical and bleed light
-					// through walls behind the original cone direction.
+					// Reachable cases at this point (frustum-out handled above):
+					//   - invalidLod: engine considers light too far for shadow
+					//     rendering, but it's still visible. For omnis,
+					//     ConvertLight demotes to non-shadow cluster light so
+					//     the diffuse contribution is preserved. Spot shadows
+					//     fall through to DisableLight (engine has no
+					//     NiSpotLight equivalent; omni conversion of a cone
+					//     would bleed light through walls).
+					//   - invalidPortal: cluster lighting has no portal-graph
+					//     awareness, so converting a portal-culled light
+					//     would bleed it across cells. Falls through to
+					//     DisableLight.
 					//
-					// Portal-fail invalid always drops: the cluster lighting path
-					// has no portal-graph awareness, so converting a portal-culled
-					// light routes it through cluster lighting and the light bleeds
-					// into the camera's cell from a cell that should be invisible.
-					// User reports of "distant LightPlacer lights turn off instead
-					// of converting" track to camera-fail (LOD); this fix recovers
-					// their diffuse contribution.
+					// User reports of "distant LightPlacer lights turn off
+					// instead of converting" track to the LOD path; the
+					// lodDimmer=1 reset below recovers their diffuse.
 					const bool isSpotShadow = c.light->GetIsFrustumLight();
 					const bool forceConvert = s_pinConvert.count(reinterpret_cast<uintptr_t>(c.light)) > 0;
 					if (c.invalidCamera && !isSpotShadow &&
@@ -2570,14 +2536,14 @@ namespace ShadowCasterManager
 					if (!isUsableLight(c.light))
 						continue;
 
-					// Slot retention (Option A): if this light already holds a
-					// kSHADOWMAPS slot (from a previous frame when it was
-					// chosen), keep it. The LRU eviction pass above only
-					// freed slots when chosen lights needed them; remaining
-					// retained slots serve their cached shadow content. The
-					// rank-drift case (importance bobs across the chosen/
-					// excess boundary from one frame to the next) used to
-					// trigger ConvertLight churn here -- now it doesn't.
+					// Slot retention: if this light already holds a kSHADOWMAPS
+					// slot (from a previous frame when it was chosen), keep
+					// it. The rank-drift case (importance bobs across the
+					// chosen / excess boundary from one frame to the next)
+					// would otherwise trigger ConvertLight churn here; the
+					// LRU eviction pass above freed only slots that chosen
+					// lights actually needed, so the remaining retained slots
+					// continue serving their cached shadow content.
 					{
 						const int retainedSlot = findSlotForLight(c.light);
 						if (retainedSlot >= 0 &&
@@ -2684,28 +2650,48 @@ namespace ShadowCasterManager
 					}
 					// First-render gate: a chosen light whose slot has never
 					// been rendered for IT (LastDrawnFrame < 0) has no valid
-					// shadow content in its kSHADOWMAPS slice. The depth
-					// content at that index is either cleared, or -- worse
-					// under Option A -- the evicted previous occupant's
-					// shadow. Inserting it as a shadow caster here would make
-					// the cluster shader sample stale depth and project a
-					// wrong shadow shape through the new light. Skip insertion
-					// this frame; the light still illuminates via cluster
-					// lighting as a non-shadow light, with no false shadow.
-					// Once the scheduler renders it (next frame or whenever
-					// it wins a redraw turn), LastDrawnFrame goes >= 0 and
-					// it joins the shadow set normally.
+					// shadow content in its kSHADOWMAPS slice -- the depth
+					// content is either cleared or carries the evicted
+					// previous occupant's shadow. Inserting the light as a
+					// shadow caster would make the cluster shader sample stale
+					// depth and project a wrong shadow shape through the new
+					// light. Skip insertion this frame; the light still
+					// illuminates via the cluster pipeline as a non-shadow
+					// light, with no false shadow. Once it wins a redraw turn
+					// LastDrawnFrame goes >= 0 and it joins the shadow set
+					// normally.
 					//
 					// Converted-slot range (i >= PointLightEnd) is unaffected:
 					// converted lights don't sample kSHADOWMAPS via this slot
-					// path; they participate via the s_normalConvert
-					// non-shadow pipeline.
+					// path; they participate via the s_normalConvert non-shadow
+					// pipeline.
 					if (i < s_lights.PointLightEnd(s_settings.ShadowLightCount) &&
 						e.LastDrawnFrame < 0 &&
 						!(s_lights.Sun && i == 0)) {
 						s_schedDiag.first_render_skips++;
 						continue;
 					}
+
+					// Cached-shadow reuse (the UE5 / CryEngine / Frostbite
+					// pattern). We unconditionally sample the cached
+					// kSHADOWMAPS slice even when the geometry hash mismatches
+					// (light or caster moved since the cached render). For
+					// small motion the staleness is sub-pixel and invisible;
+					// for large motion the shadow visibly lags the light by
+					// 1-2 frames, which is much less objectionable than the
+					// full-frame on/off flicker that hash-gated suppression
+					// produces on every animated torch. The hash-mismatch
+					// priority hint above keeps stale entries at the front of
+					// the redraw queue, so the lag self-corrects within budget
+					// cycles.
+					//
+					// The first_render_skips gate above is the only safety
+					// gate that DOES suppress insertion: a slot with no
+					// rendered content for its current owner (LastDrawnFrame
+					// < 0) has no valid cached shadow to fall back on; the
+					// GPU slice is either cleared or contains an evicted
+					// previous occupant. Hash mismatch on an existing slice
+					// is at worst a small visual lag.
 					// GameSetShadowCasterSlot calls Accumulate virtually; reuse
 					// isUsableLight's vtable guard to catch tbbmalloc-zeroed
 					// objects that are still in activeShadowLights but freed.

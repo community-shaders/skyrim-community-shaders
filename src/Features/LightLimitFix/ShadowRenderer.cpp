@@ -92,13 +92,11 @@ void LightLimitFix::CopyShadowLightData()
 			// fixed it but before this function runs.
 			int32_t stableSlot = ShadowCasterManager::GetShadowSlot(light);
 			if (stableSlot < 0) {
-				// Sun (BSShadowDirectionalLight) — no kSHADOWMAPS slice. Its shadow
-				// lives in kSHADOWMAPS_ESRAM and is sampled through a separate path
-				// (DirectionalShadowCascades at t99). Skip silently so we don't
-				// count it as an "unshadowed point light" or scribble garbage into
-				// sd[0]. Pre-reclaim, the sun was unconditionally writing to slot 0;
-				// nothing read it because the sun's shadow lookup never sampled
-				// kSHADOWMAPS slot 0, but the behaviour was untidy.
+				// Sun (BSShadowDirectionalLight) — no kSHADOWMAPS slice. Its
+				// shadow lives in kSHADOWMAPS_ESRAM and is sampled through a
+				// separate path (DirectionalShadowCascades at t99). Skip
+				// silently so we don't count it as an "unshadowed point
+				// light" or scribble garbage into sd[0].
 				return;
 			}
 			if (static_cast<uint32_t>(stableSlot) >= slots) {

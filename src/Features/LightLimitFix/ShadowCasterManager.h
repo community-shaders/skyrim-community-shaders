@@ -71,14 +71,11 @@ namespace ShadowCasterManager
 	/// iteration past BSTArray's static _capacity.
 	std::uint32_t MaxShadowAccumIterationBound();
 
-	/// Verified kSHADOWMAPS texture-array slot count -- what the engine
-	/// actually allocated, not what SCM requested. 0 until the SRV becomes
-	/// readable (the read is lazy and self-healing across frames; the
-	/// previous Deferred-owned one-shot read raced kSHADOWMAPS creation
-	/// and silently disabled the cluster shadow pipeline when it fired
-	/// too early). Consumers in the cluster pipeline, scheduler, and UI
-	/// should call this rather than reaching into Deferred / the renderer
-	/// directly.
+	/// kSHADOWMAPS texture-array slot count the engine actually allocated.
+	/// 0 until the SRV becomes readable; the read is lazy and self-healing
+	/// across frames so callers can use it without timing constraints.
+	/// Consumers in the cluster pipeline, scheduler, and UI should call
+	/// this rather than reaching into Deferred / the renderer directly.
 	std::uint32_t GetInstalledSlotCount();
 
 	/// Live VRAM telemetry used for shadow-array sizing decisions and stats.
