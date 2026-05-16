@@ -215,6 +215,7 @@ namespace ShadowCasterManager
 		int retained_invalid = 0;       // c.invalid path skipped because slot still held (Option A)
 		int retained_excess = 0;        // c.excess path skipped because slot still held (Option A)
 		int lru_evictions = 0;          // slots evicted by LRU under chosen-slot pressure (Option A)
+		int first_render_skips = 0;     // chosen lights deferred from shadow set: no valid slice yet
 	};
 	static SchedDiagCounters s_schedDiag;
 
@@ -2225,6 +2226,19 @@ namespace ShadowCasterManager
 						if (retainedSlot >= 0 &&
 							retainedSlot < s_lights.PointLightEnd(s_settings.ShadowLightCount) &&
 							!(retainedSlot == 0 && s_lights.Sun)) {
+							// Force the cached-shadow path: the scheduler may
+							// have set RedrawFrame=true intending to re-render
+							// this light, but UpdateCamera just failed so the
+							// render can't run. Clear RedrawFrame so the
+							// downstream GameSetShadowCasterSlot loop reinserts
+							// the light with its cached depth (i.e. the
+							// previous frame's content) instead of dropping
+							// it from the shadow set entirely. Without this,
+							// retained-invalid lights that won the redraw
+							// budget vanish from the shadow caster array for
+							// one frame -- visible as a single-frame shadow
+							// flicker on flickering-torch lights.
+							s_lights.Lights[retainedSlot].RedrawFrame = false;
 							s_schedDiag.retained_invalid++;
 							continue;
 						}
@@ -2360,6 +2374,15 @@ namespace ShadowCasterManager
 						if (retainedSlot >= 0 &&
 							retainedSlot < s_lights.PointLightEnd(s_settings.ShadowLightCount) &&
 							!(retainedSlot == 0 && s_lights.Sun)) {
+							// Same reasoning as the invalid retention path:
+							// force RedrawFrame=false so the cached-shadow
+							// GameSetShadowCasterSlot loop reinserts this
+							// light. Without this, an excess-retained light
+							// that won the redraw budget would vanish from
+							// the shadow set for one frame (atomic loop
+							// skipped it via this continue; cached loop
+							// excludes RedrawFrame=true).
+							s_lights.Lights[retainedSlot].RedrawFrame = false;
 							s_schedDiag.retained_excess++;
 							continue;
 						}
@@ -2448,6 +2471,30 @@ namespace ShadowCasterManager
 					if (aliveAfterAtomic.find(e.Light) == aliveAfterAtomic.end()) {
 						s_schedDiag.reconciliation_clears++;
 						e.Clear();
+						continue;
+					}
+					// First-render gate: a chosen light whose slot has never
+					// been rendered for IT (LastDrawnFrame < 0) has no valid
+					// shadow content in its kSHADOWMAPS slice. The depth
+					// content at that index is either cleared, or -- worse
+					// under Option A -- the evicted previous occupant's
+					// shadow. Inserting it as a shadow caster here would make
+					// the cluster shader sample stale depth and project a
+					// wrong shadow shape through the new light. Skip insertion
+					// this frame; the light still illuminates via cluster
+					// lighting as a non-shadow light, with no false shadow.
+					// Once the scheduler renders it (next frame or whenever
+					// it wins a redraw turn), LastDrawnFrame goes >= 0 and
+					// it joins the shadow set normally.
+					//
+					// Converted-slot range (i >= PointLightEnd) is unaffected:
+					// converted lights don't sample kSHADOWMAPS via this slot
+					// path; they participate via the s_normalConvert
+					// non-shadow pipeline.
+					if (i < s_lights.PointLightEnd(s_settings.ShadowLightCount) &&
+						e.LastDrawnFrame < 0 &&
+						!(s_lights.Sun && i == 0)) {
+						s_schedDiag.first_render_skips++;
 						continue;
 					}
 					// GameSetShadowCasterSlot calls Accumulate virtually; reuse
@@ -2547,6 +2594,7 @@ namespace ShadowCasterManager
 			TracyPlot("scm.retained.invalid", (int64_t)s_schedDiag.retained_invalid);
 			TracyPlot("scm.retained.excess", (int64_t)s_schedDiag.retained_excess);
 			TracyPlot("scm.lru.evictions", (int64_t)s_schedDiag.lru_evictions);
+			TracyPlot("scm.first_render_skips", (int64_t)s_schedDiag.first_render_skips);
 
 			// Live config plots — record the *current* settings on each frame so
 			// a single capture spanning a settings change captures both sides.
