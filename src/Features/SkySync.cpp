@@ -71,7 +71,7 @@ void SkySync::DrawSettings()
 		static constexpr const char* CasterNames[] = { "Sun", "Masser", "Secunda", "None" };
 		static constexpr const char* PhaseNames[] = { "Full", "Waning Gibbous", "Waning Quarter", "Waning Crescent", "New", "Waxing Crescent", "Waxing Quarter", "Waxing Gibbous" };
 
-		auto drawSourceEntry = [&](const char* label, Caster caster, const char* phase = nullptr) {
+		auto drawMoonEntry = [&](const char* label, Caster caster, const char* phase) {
 			const int idx = static_cast<int>(caster);
 			auto& dir = directions[idx];
 			auto& color = colors[idx];
@@ -80,10 +80,7 @@ void SkySync::DrawSettings()
 			ImVec4 swatch = { color.x, color.y, color.z, 1.0f };
 			ImGui::ColorButton(label, swatch, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker, { ImGui::GetTextLineHeight(), ImGui::GetTextLineHeight() });
 			ImGui::SameLine();
-			if (phase)
-				ImGui::Text("%s  [%s]  intensity %.4f  dir (%.2f, %.2f, %.2f)  color (%.3f, %.3f, %.3f)", label, phase, intensity, dir.x, dir.y, dir.z, color.x, color.y, color.z);
-			else
-				ImGui::Text("%s  intensity %.4f  dir (%.2f, %.2f, %.2f)  color (%.3f, %.3f, %.3f)", label, intensity, dir.x, dir.y, dir.z, color.x, color.y, color.z);
+			ImGui::Text("%s  [%s]  intensity %.4f  dir (%.2f, %.2f, %.2f)  color (%.3f, %.3f, %.3f)", label, phase, intensity, dir.x, dir.y, dir.z, color.x, color.y, color.z);
 		};
 
 		auto getPhase = [](const RE::Moon* moon) -> const char* {
@@ -96,11 +93,12 @@ void SkySync::DrawSettings()
 			return "Unknown";
 		};
 
-		drawSourceEntry("Sun", Caster::Sun);
+		auto& sunDir = directions[static_cast<int>(Caster::Sun)];
+		ImGui::Text("Sun  visibility %.4f  dir (%.2f, %.2f, %.2f)", intensities[static_cast<int>(Caster::Sun)], sunDir.x, sunDir.y, sunDir.z);
 
 		const auto sky = globals::game::sky;
-		drawSourceEntry("Masser", Caster::Masser, sky ? getPhase(sky->masser) : "Unknown");
-		drawSourceEntry("Secunda", Caster::Secunda, sky ? getPhase(sky->secunda) : "Unknown");
+		drawMoonEntry("Masser", Caster::Masser, sky ? getPhase(sky->masser) : "Unknown");
+		drawMoonEntry("Secunda", Caster::Secunda, sky ? getPhase(sky->secunda) : "Unknown");
 
 		ImGui::Spacing();
 		ImGui::Separator();
@@ -271,8 +269,6 @@ void SkySync::ProcessSun(const RE::Sky* sky)
 	if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().shaderProperty.get()))
 		sunAlpha = prop->kBlendColor.alpha;
 
-	auto& sunColor = sky->skyColor[static_cast<uint>(RE::TESWeather::ColorTypes::kSun)];
-	colors[static_cast<int>(Caster::Sun)] = { sunColor.red * sunAlpha, sunColor.green * sunAlpha, sunColor.blue * sunAlpha, sunAlpha };
 	intensities[static_cast<int>(Caster::Sun)] = sunAlpha;
 }
 
@@ -307,12 +303,16 @@ void SkySync::ProcessMoon(const RE::Sky* sky, const Caster type)
 
 	colors[idx] = { color.x * fade, color.y * fade, color.z * fade, fade };
 
+	// Only allow moons to become shadow casters after sunset has fully ended and moon is fully faded in
+	if (intensities[static_cast<int>(Caster::Sun)] > 0.0f || fade < 1.0f)
+		return;
+
 	const auto src = static_cast<MoonLightSource>(settings.MoonLightSource);
 	const bool isValidSource = src == MoonLightSource::Brightest || (src == MoonLightSource::Masser && type == Caster::Masser) || (src == MoonLightSource::Secunda && type == Caster::Secunda);
 	if (!isValidSource)
 		return;
 
-	intensities[idx] = (color.x + color.y + color.z) * (1.0f / 3.0f) * fade;
+	intensities[idx] = (color.x + color.y + color.z) * (1.0f / 3.0f);
 }
 
 inline void SkySync::CalculateSunDirectionAndDistance(const RE::Sun* sun, RE::NiPoint3& outDir, float& outDistance)

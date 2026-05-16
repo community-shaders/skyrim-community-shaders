@@ -33,7 +33,7 @@ public:
 		int32_t MoonLightSource = 0;
 		int32_t SunPath = 0;
 		float CustomAngle = -35.0f;
-		float MinShadowElevation = 0.25f;
+		float MinShadowElevation = 18.0f;
 		float ShadowTransitionDuration = 100.0f;
 		float NewMoonIntensity = 0.05f;
 		float CrescentMoonIntensity = 0.25f;
