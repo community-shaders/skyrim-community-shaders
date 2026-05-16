@@ -206,16 +206,19 @@ namespace ShadowCasterManager
 		int candidates_excess = 0;
 		int candidates_invalid_camera = 0;
 		int candidates_invalid_portal = 0;
-		int converted_invalid = 0;      // ConvertLight from c.invalidCamera path
-		int converted_excess = 0;       // ConvertLight from c.excess path
-		int disabled_invalid = 0;       // DisableLight from c.invalid path (portal/spot/no-convert)
-		int disabled_excess = 0;        // DisableLight from c.excess path (spot/no-convert)
-		int reconciliation_clears = 0;  // slot freed because light gone from activeShadowLights
-		int slots_in_use = 0;           // sampled at frame end
-		int retained_invalid = 0;       // c.invalid path skipped because slot still held (Option A)
-		int retained_excess = 0;        // c.excess path skipped because slot still held (Option A)
-		int lru_evictions = 0;          // slots evicted by LRU under chosen-slot pressure (Option A)
-		int first_render_skips = 0;     // chosen lights deferred from shadow set: no valid slice yet
+		int candidates_invalid_frustum = 0;  // sub-reason: outside camera frustum
+		int candidates_invalid_lod = 0;      // sub-reason: lodDimmer zeroed (engine LOD fade)
+		int candidates_invalid_other = 0;    // invalidCamera but neither frustum nor LOD flag
+		int converted_invalid = 0;           // ConvertLight from c.invalidCamera path
+		int converted_excess = 0;            // ConvertLight from c.excess path
+		int disabled_invalid = 0;            // DisableLight from c.invalid path (portal/spot/no-convert)
+		int disabled_excess = 0;             // DisableLight from c.excess path (spot/no-convert)
+		int reconciliation_clears = 0;       // slot freed because light gone from activeShadowLights
+		int slots_in_use = 0;                // sampled at frame end
+		int retained_invalid = 0;            // c.invalid path skipped because slot still held (Option A)
+		int retained_excess = 0;             // c.excess path skipped because slot still held (Option A)
+		int lru_evictions = 0;               // slots evicted by LRU under chosen-slot pressure (Option A)
+		int first_render_skips = 0;          // chosen lights deferred from shadow set: no valid slice yet
 	};
 	static SchedDiagCounters s_schedDiag;
 
@@ -1445,14 +1448,39 @@ namespace ShadowCasterManager
 		bool chosen{ false };         // valid + within ShadowLightCount budget
 		bool excess{ false };         // valid but over budget (convert or disable)
 		bool invalid{ false };        // shorthand: invalidCamera || invalidPortal
-		bool invalidCamera{ false };  // UpdateCamera returned false (frustum/LOD).
-									  // Light may still be visible far away --
-									  // safe to demote to non-shadow cluster light.
+		bool invalidCamera{ false };  // UpdateCamera returned false (any sub-reason).
+									  // Retained as a shorthand for downstream branches
+									  // that don't care WHY camera-validation failed.
+									  // For action selection, prefer the explicit
+									  // sub-reasons below.
 		bool invalidPortal{ false };  // portal cull says light's cell is not visible
 									  // from the camera's cell. Must DisableLight
 									  // entirely; converting routes through cluster
 									  // lighting which has no portal awareness and
 									  // would bleed light through walls.
+
+		// UpdateCamera() conflates three physically distinct fail conditions
+		// into one boolean. The engine sets two side-band flags as it walks
+		// per-light culling that let us recover the reason:
+		//
+		//   frustrumCull = 0xff -> light's bounding shape is outside the camera
+		//                          frustum (off-screen). Light contributes nothing
+		//                          visible this frame regardless of shadow state,
+		//                          so ConvertLight is wasted work -- drop instead.
+		//
+		//   lodDimmer == 0.0f  -> light is past the engine's per-light shadow LOD
+		//                          fade end distance. The light is still visible
+		//                          and *should* still illuminate via cluster
+		//                          lighting, so ConvertLight is the correct action
+		//                          (keep + reset lodDimmer so cluster picks it up).
+		//
+		// A light can hit both simultaneously (off-screen AND distant); the
+		// frustum check wins because off-screen contribution is zero.
+		//
+		// Sub-reasons are not mutually exclusive at the bit level but action
+		// selection treats frustum-out as terminal.
+		bool invalidFrustum{ false };  // engine's frustum cull failed (BSMultiBoundSphere::Func41 / cone-frustum)
+		bool invalidLod{ false };      // engine's LOD-fade zeroed lodDimmer
 	};
 
 	static void ScheduleShadowCasters()
@@ -1622,6 +1650,13 @@ namespace ShadowCasterManager
 				if (!l->UpdateCamera(camera)) {
 					c.invalidCamera = true;
 					c.invalid = true;
+					// Recover the sub-reason from the engine's side-band flags.
+					// Both can be true (a light off-screen AND LOD-faded);
+					// recorded as independent bits for analysis. Action loop
+					// below treats frustum-out as terminal (drop) and
+					// LOD-faded-in-frustum as convert.
+					c.invalidFrustum = (l->frustrumCull != 0);
+					c.invalidLod = (l->lodDimmer == 0.0f);
 					continue;
 				}
 				// Portal culling only applies in interior cells where a portal graph exists.
@@ -1661,6 +1696,20 @@ namespace ShadowCasterManager
 					s_schedDiag.candidates_invalid_camera++;
 				if (c.invalidPortal)
 					s_schedDiag.candidates_invalid_portal++;
+				// Sub-reason breakdown of invalidCamera. A single light may
+				// be both frustum-out AND LOD-faded -- both bits are counted
+				// so the sum can exceed candidates_invalid_camera. The
+				// "other" bucket catches UpdateCamera failures where the
+				// engine cleared frustrumCull and left lodDimmer > 0 (rare
+				// edge cases like internal state changes).
+				if (c.invalidCamera) {
+					if (c.invalidFrustum)
+						s_schedDiag.candidates_invalid_frustum++;
+					if (c.invalidLod)
+						s_schedDiag.candidates_invalid_lod++;
+					if (!c.invalidFrustum && !c.invalidLod)
+						s_schedDiag.candidates_invalid_other++;
+				}
 			}
 		}  // end SCM::CandidateValidation
 
@@ -2585,6 +2634,9 @@ namespace ShadowCasterManager
 			TracyPlot("scm.candidates.excess", (int64_t)s_schedDiag.candidates_excess);
 			TracyPlot("scm.candidates.invalid_camera", (int64_t)s_schedDiag.candidates_invalid_camera);
 			TracyPlot("scm.candidates.invalid_portal", (int64_t)s_schedDiag.candidates_invalid_portal);
+			TracyPlot("scm.candidates.invalid_frustum", (int64_t)s_schedDiag.candidates_invalid_frustum);
+			TracyPlot("scm.candidates.invalid_lod", (int64_t)s_schedDiag.candidates_invalid_lod);
+			TracyPlot("scm.candidates.invalid_other", (int64_t)s_schedDiag.candidates_invalid_other);
 			TracyPlot("scm.converted.invalid", (int64_t)s_schedDiag.converted_invalid);
 			TracyPlot("scm.converted.excess", (int64_t)s_schedDiag.converted_excess);
 			TracyPlot("scm.disabled.invalid", (int64_t)s_schedDiag.disabled_invalid);
