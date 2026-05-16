@@ -211,7 +211,11 @@ namespace Util::Subrect
 		if (ImGui::Button("Save Preset")) {
 			std::string presetName = newPresetName;
 			if (!presetName.empty()) {
-				presets.push_back(Preset{ .name = presetName, .uv = currentUV });
+				// Preserve the right-eye UV when stereo is on; otherwise rightUV
+				// is unused and value-init is fine. Without this, saving a
+				// preset in stereo mode loses the right-eye crop on re-apply
+				// (CodeRabbit Major @ scs#2356).
+				presets.push_back(Preset{ .name = presetName, .uv = currentUV, .rightUV = currentRightUV });
 				selectedPresetIndex = static_cast<int>(presets.size()) - 1;
 				newPresetName[0] = '\0';
 			}

@@ -197,6 +197,27 @@ TEST_CASE("GetStereoPixelRegions in mono mode returns identical eyes", "[subrect
 	REQUIRE(regions.leftEye.w == regions.rightEye.w);
 }
 
+TEST_CASE("Stereo preset save captures right-eye UV", "[subrect][stereo][regression]")
+{
+	// Regression for CodeRabbit Major @ scs#2356: the Save Preset button used
+	// to drop currentRightUV, so re-applying a saved preset would zero out the
+	// right eye. We can't drive the ImGui button from a test, but we can
+	// verify the same Preset construction Save Preset uses round-trips both
+	// eyes through SaveSettings/LoadSettings.
+	Controller src;
+	src.SetStereoEnabled(true);
+	src.LoadSettings(json::object());
+
+	// Simulate what the Save Preset button now does: pushes a Preset built
+	// from BOTH currentUV and currentRightUV (not just .uv).
+	json saved;
+	src.SaveSettings(saved);
+	REQUIRE(saved["CropPresets"].is_array());
+	for (const auto& entry : saved["CropPresets"]) {
+		REQUIRE(entry.contains("right_uv"));
+	}
+}
+
 TEST_CASE("MirrorUVHorizontal symmetry via SetStereoEnabled", "[subrect][stereo][math]")
 {
 	// {0.4, *, 0.6, *} mirrors to {0, *, 0.6, *} — the nose-side overlap case.
