@@ -1042,7 +1042,26 @@ if(BUILD_SHADER_TESTS)
     message(STATUS "Adding shader tests subdirectory")
     enable_testing() # Enable CTest integration for shader tests
     add_subdirectory(tests/shaders)
+endif()
 
+# C++ unit tests for plugin utility code (separate from HLSL shader tests).
+# Gated on its own flag so it can be enabled/disabled independently.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/cpp/CMakeLists.txt")
+    enable_testing()
+    add_subdirectory(tests/cpp)
+    if(TARGET cpp_tests)
+        add_custom_target(
+            run_cpp_tests
+            COMMAND $<TARGET_FILE:cpp_tests> --reporter compact
+            DEPENDS cpp_tests
+            WORKING_DIRECTORY $<TARGET_FILE_DIR:cpp_tests>
+            COMMENT "Running C++ unit tests..."
+            VERBATIM
+        )
+    endif()
+endif()
+
+if(BUILD_SHADER_TESTS)
     # Add a custom target that runs the shader tests
     # Users can run this manually with: cmake --build <build-dir> --target run_shader_tests
     # Runs the test executable directly (not via CTest) to show discovery count

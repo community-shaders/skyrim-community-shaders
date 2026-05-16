@@ -1,6 +1,8 @@
 #include "Utils/Subrect.h"
 
 #include <algorithm>
+#include <cmath>
+#include <d3d11.h>
 #include <imgui.h>
 
 namespace
@@ -39,6 +41,16 @@ namespace
 		return ClampUV(uv);
 	}
 
+	Util::Subrect::UVRegion MirrorUVHorizontal(const Util::Subrect::UVRegion& uv)
+	{
+		// HMD nose-side overlap: left-eye nose-side region is on the right
+		// half of the eye texture; mirror around x=0.5 maps it to the
+		// right-eye's left half.
+		Util::Subrect::UVRegion mirrored = uv;
+		mirrored.x = 1.0f - uv.x - uv.w;
+		return ClampUV(mirrored);
+	}
+
 	json SaveUVToJson(const Util::Subrect::UVRegion& uv)
 	{
 		return { uv.x, uv.y, uv.w, uv.h };
@@ -70,6 +82,21 @@ namespace Util::Subrect
 		if (a_json.contains("CropH"))
 			currentUV.h = a_json["CropH"];
 
+		const bool hasExplicitLeft =
+			a_json.contains("CropX") || a_json.contains("CropY") ||
+			a_json.contains("CropW") || a_json.contains("CropH");
+		const bool hasExplicitRight =
+			a_json.contains("CropRightX") || a_json.contains("CropRightY") ||
+			a_json.contains("CropRightW") || a_json.contains("CropRightH");
+		if (a_json.contains("CropRightX"))
+			currentRightUV.x = a_json["CropRightX"];
+		if (a_json.contains("CropRightY"))
+			currentRightUV.y = a_json["CropRightY"];
+		if (a_json.contains("CropRightW"))
+			currentRightUV.w = a_json["CropRightW"];
+		if (a_json.contains("CropRightH"))
+			currentRightUV.h = a_json["CropRightH"];
+
 		if (a_json.contains("CropPresets") && a_json["CropPresets"].is_array()) {
 			presets.clear();
 			for (auto& entry : a_json["CropPresets"]) {
@@ -78,12 +105,27 @@ namespace Util::Subrect
 				if (entry.contains("uv")) {
 					preset.uv = LoadUVArray(entry["uv"]);
 				}
+				// Right-eye UV is optional. If absent, callers in stereo mode
+				// fall back to the mirrored left-eye via ApplyPreset.
+				if (entry.contains("right_uv")) {
+					preset.rightUV = LoadUVArray(entry["right_uv"]);
+				} else {
+					preset.rightUV = MirrorUVHorizontal(preset.uv);
+				}
 				presets.push_back(std::move(preset));
 			}
 		}
 
 		EnsureDefaultPreset();
 		ClampCurrentUV();
+
+		// Legacy upgrade: if the JSON has the mono crop keys but no right-eye
+		// keys, mirror left → right so existing user settings transition
+		// cleanly. If neither side is present, leave currentRightUV alone so
+		// EnsureDefaultPreset's seeded right-eye value survives.
+		if (stereoEnabled && hasExplicitLeft && !hasExplicitRight) {
+			SyncRightUV();
+		}
 
 		if (a_json.contains("SelectedPresetIndex")) {
 			selectedPresetIndex = a_json["SelectedPresetIndex"];
@@ -102,11 +144,21 @@ namespace Util::Subrect
 		a_json["CropW"] = currentUV.w;
 		a_json["CropH"] = currentUV.h;
 
+		if (stereoEnabled) {
+			a_json["CropRightX"] = currentRightUV.x;
+			a_json["CropRightY"] = currentRightUV.y;
+			a_json["CropRightW"] = currentRightUV.w;
+			a_json["CropRightH"] = currentRightUV.h;
+		}
+
 		json presetsJson = json::array();
 		for (const auto& preset : presets) {
 			json entry;
 			entry["name"] = preset.name;
 			entry["uv"] = SaveUVToJson(preset.uv);
+			if (stereoEnabled) {
+				entry["right_uv"] = SaveUVToJson(preset.rightUV);
+			}
 			presetsJson.push_back(std::move(entry));
 		}
 		a_json["CropPresets"] = presetsJson;
@@ -116,6 +168,17 @@ namespace Util::Subrect
 	void Controller::SeedDefaultPresets(std::vector<Preset> defaults)
 	{
 		seededDefaults = std::move(defaults);
+	}
+
+	void Controller::SetStereoEnabled(bool enabled)
+	{
+		if (stereoEnabled == enabled) {
+			return;
+		}
+		stereoEnabled = enabled;
+		if (stereoEnabled) {
+			SyncRightUV();
+		}
 	}
 
 	void Controller::DrawEditor(ID3D11ShaderResourceView* previewSrv, ID3D11Texture2D* previewTexture, float uvVisibleWidth, float uvStartX, ImDrawCallback imageRenderCallback)
@@ -177,6 +240,9 @@ namespace Util::Subrect
 		if (changed) {
 			selectedPresetIndex = -1;
 			ClampCurrentUV();
+			if (stereoEnabled) {
+				SyncRightUV();
+			}
 		}
 
 		ImGui::Spacing();
@@ -235,6 +301,9 @@ namespace Util::Subrect
 			currentUV.w = maxX - minX;
 			currentUV.h = maxY - minY;
 			ClampCurrentUV();
+			if (stereoEnabled) {
+				SyncRightUV();
+			}
 
 			if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
 				isDraggingCrop = false;
@@ -253,6 +322,17 @@ namespace Util::Subrect
 		return UVToPixelRegion(currentUV, width, height);
 	}
 
+	StereoPixelRegions Controller::GetStereoPixelRegions(uint32_t fullWidth, uint32_t fullHeight) const
+	{
+		// Each eye occupies half the SBS texture width. In mono mode, both
+		// eyes report the same region so callers don't need to branch.
+		const uint32_t eyeWidth = fullWidth / 2;
+		StereoPixelRegions regions;
+		regions.leftEye = UVToPixelRegion(currentUV, eyeWidth, fullHeight);
+		regions.rightEye = UVToPixelRegion(stereoEnabled ? currentRightUV : currentUV, eyeWidth, fullHeight);
+		return regions;
+	}
+
 	void Controller::EnsureDefaultPreset()
 	{
 		if (!presets.empty()) {
@@ -263,6 +343,7 @@ namespace Util::Subrect
 			// currentUV must match what the combo shows as selected; otherwise
 			// the first preset appears chosen but the crop region stays full-frame.
 			currentUV = presets[0].uv;
+			currentRightUV = presets[0].rightUV;
 			selectedPresetIndex = 0;
 		} else {
 			presets.push_back(Preset{ .name = "Full Frame", .uv = DefaultUV() });
@@ -272,6 +353,7 @@ namespace Util::Subrect
 	void Controller::ClampCurrentUV()
 	{
 		currentUV = ClampUV(currentUV);
+		currentRightUV = ClampUV(currentRightUV);
 	}
 
 	void Controller::ApplyPreset(int index)
@@ -279,6 +361,12 @@ namespace Util::Subrect
 		EnsureDefaultPreset();
 		selectedPresetIndex = std::clamp(index, 0, static_cast<int>(presets.size()) - 1);
 		currentUV = presets[selectedPresetIndex].uv;
+		currentRightUV = presets[selectedPresetIndex].rightUV;
 		ClampCurrentUV();
+	}
+
+	void Controller::SyncRightUV()
+	{
+		currentRightUV = MirrorUVHorizontal(currentUV);
 	}
 }  // namespace Util::Subrect
