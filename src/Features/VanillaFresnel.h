@@ -7,7 +7,6 @@ struct VanillaFresnel : public Feature
 	virtual inline std::string GetName() override { return "Vanilla Fresnel"; }
 	virtual inline std::string GetShortName() override { return "VanillaFresnel"; }
 	virtual inline std::string_view GetCategory() const override { return "Lighting"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL("999999"); }
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
