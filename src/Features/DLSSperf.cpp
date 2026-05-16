@@ -1,5 +1,6 @@
 #include "DLSSperf.h"
 #include "State.h"
+#include "Upscaling.h"
 
 // Quality mode → render-scale resolution is supplied by the FFX SDK helper
 // (same one Upscaling.cpp uses at ConfigureUpscaling), avoiding a duplicate

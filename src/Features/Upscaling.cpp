@@ -1,5 +1,6 @@
 #include "Upscaling.h"
 
+#include "DLSSperf.h"
 #include "Deferred.h"
 #include "HDRDisplay.h"
 #include "Hooks.h"
@@ -32,7 +33,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	reflexLowLatencyBoost,
 	reflexUseMarkersToOptimize,
 	reflexUseFPSLimit,
-	reflexFPSLimit);
+	reflexFPSLimit,
+	enableDLSSperf);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -419,6 +421,25 @@ void Upscaling::DrawSettings()
 		ImGui::TextUnformatted("Changing this requires a restart to take effect.");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Streamline logging controls the verbosity of NVIDIA Streamline backend logs. Useful for debugging issues with DLSS/DLSS-G.");
+		}
+
+		// VR DLSSperf: opt-in performance feature. Engine renders at upscaled-
+		// render resolution instead of display resolution; the upscaler writes
+		// to a private DisplayRes texture. Saves VRAM/bandwidth proportional
+		// to the quality-mode scale ratio.
+		if (globals::game::isVR && upscaleMethod == UpscaleMethod::kDLSS) {
+			ImGui::Separator();
+			if (ImGui::Checkbox("Render engine at upscaled resolution (experimental)", &settings.enableDLSSperf)) {
+			}
+			ImGui::TextUnformatted("Changing this requires a restart to take effect.");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"VR DLSSperf: when enabled, the entire engine pipeline allocates render targets at\n"
+					"the upscaled-render resolution instead of display resolution. DLSS writes to a\n"
+					"private DisplayRes texture. Substantial VRAM and bandwidth savings, especially\n"
+					"at high HMD resolutions. Restart required.");
+			}
+			Util::Text::Warning("Warning: Requires restart");
 		}
 
 		// VR Debug visualization -- per-eye buffers and native inputs
@@ -1218,24 +1239,46 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	auto screenHeight = static_cast<int>(screenSize.y);
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-		float resolutionScaleBase = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.qualityMode);
+		// DLSSperf: when the BSOpenVR size hook is live, every engine RT was
+		// already allocated at RenderRes — so the DRS-style scale is identity.
+		// Jitter is still computed at the real DisplayRes phase ratio so DLSS
+		// has enough sub-pixel diversity for the upscale.
+		auto& dlssPerf = globals::features::dlssPerf;
+		if (dlssPerf.IsHookActive()) {
+			resolutionScale = { 1.0f, 1.0f };
 
-		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
-		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
+			auto renderWidth = static_cast<int>(dlssPerf.GetRenderEyeWidth());
+			auto displayWidth = static_cast<int>(dlssPerf.GetDisplayEyeWidth());
 
-		resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
-		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
+			auto phaseCount = GetJitterPhaseCount(renderWidth, displayWidth);
+			GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
 
-		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
+			if (globals::game::isVR)
+				a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
+			else
+				a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
 
-		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+			a_viewport->projectionPosScaleY = 2.0f * jitter.y / static_cast<int>(dlssPerf.GetRenderEyeHeight());
+		} else {
+			float resolutionScaleBase = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.qualityMode);
 
-		if (globals::game::isVR)
-			a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
-		else
-			a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
+			auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
+			auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
 
-		a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
+			resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
+			resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
+
+			auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
+
+			GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+
+			if (globals::game::isVR)
+				a_viewport->projectionPosScaleX = -jitter.x / renderWidth;
+			else
+				a_viewport->projectionPosScaleX = -2.0f * jitter.x / renderWidth;
+
+			a_viewport->projectionPosScaleY = 2.0f * jitter.y / renderHeight;
+		}
 	} else {
 		resolutionScale = { 1.0f, 1.0f };
 
@@ -2062,7 +2105,17 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	if (hdrLoaded)
 		globals::features::hdrDisplay.RedirectFramebuffer();
 
-	func(a_this, a3, a_target, a_4, a_5);
+	// DLSSperf: hybrid Post — HandlePostProcessing performs a two-layer
+	// struct swap around the engine's func() so tonemap + refraction read
+	// the DisplayRes testTexture instead of the small kMAIN. The supplied
+	// lambda is the engine call we'd normally make directly.
+	if (globals::features::dlssPerf.ShouldHandlePost()) {
+		globals::features::dlssPerf.HandlePostProcessing([&]() {
+			func(a_this, a3, a_target, a_4, a_5);
+		});
+	} else {
+		func(a_this, a3, a_target, a_4, a_5);
+	}
 
 	// Restore kFRAMEBUFFER after ISHDR — hdrTexture now has the HDR scene
 	if (hdrLoaded)

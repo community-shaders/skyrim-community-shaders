@@ -64,6 +64,13 @@ public:
 		bool reflexUseMarkersToOptimize = false;
 		bool reflexUseFPSLimit = false;
 		float reflexFPSLimit = 60.0f;
+
+		// VR DLSSperf: opt-in. When set, BSShaderRenderTargets::Create installs
+		// the BSOpenVR render-target-size hook at engine init so the entire
+		// engine pipeline allocates render targets at upscaled-render resolution
+		// instead of display resolution. Saves VRAM/bandwidth proportional to
+		// the quality-mode scale ratio. Requires a game restart to take effect.
+		bool enableDLSSperf = false;
 	};
 
 	Settings settings;
