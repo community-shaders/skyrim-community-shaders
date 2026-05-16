@@ -2,6 +2,7 @@
 
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
+#include "Features/DLSSperf.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
@@ -84,6 +85,7 @@ namespace globals
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
 		HDRDisplay hdrDisplay{};
+		DLSSperf dlssPerf{};
 		RenderDoc renderDoc{};
 		ScreenshotFeature screenshotFeature{};
 		WeatherEditor weatherEditor{};
@@ -386,6 +388,55 @@ namespace globals
 	};
 
 	/**
+	 * @brief Hooked Draw — intercepts the scene-transition fade overlay in VR DLSSperf.
+	 *
+	 * vtable index 13 for ID3D11DeviceContext::Draw.
+	 * The engine's fade-in/fade-out overlay is a Draw(30) that fires after the Post chain
+	 * and before Submit. Under DLSSperf the draw's VP/vertices are computed at renderRes
+	 * while the RT (kTOTAL) is displayRes, causing a partial-screen "black stamp".
+	 * Fix: when postChainDone is set, force RSSetViewports to displayRes right before the draw.
+	 */
+	struct ID3D11DeviceContext_Draw
+	{
+		static void thunk(ID3D11DeviceContext* This, UINT VertexCount, UINT StartVertexLocation)
+		{
+			if (VertexCount == 30 && globals::game::isVR) {
+				auto& dlssPerf = globals::features::dlssPerf;
+				if (dlssPerf.IsHookActive() && dlssPerf.IsPostChainDone()) {
+					// Save the current viewport so we can restore it after the
+					// fade-overlay draw. RSGetViewports may return numVP=0 if no
+					// viewport was previously set; zero-init defends against
+					// reading uninitialized memory in that case.
+					UINT numVP = 1;
+					D3D11_VIEWPORT savedVP{};
+					This->RSGetViewports(&numVP, &savedVP);
+
+					// Inject displayRes VP for this draw only.
+					D3D11_VIEWPORT vp{};
+					vp.TopLeftX = 0.0f;
+					vp.TopLeftY = 0.0f;
+					vp.Width = static_cast<float>(dlssPerf.GetDisplayEyeWidth() * 2);
+					vp.Height = static_cast<float>(dlssPerf.GetDisplayEyeHeight());
+					vp.MinDepth = 0.0f;
+					vp.MaxDepth = 1.0f;
+					This->RSSetViewports(1, &vp);
+
+					func(This, VertexCount, StartVertexLocation);
+
+					// Restore the original viewport only if we actually captured
+					// one — otherwise we'd push undefined state.
+					if (numVP > 0) {
+						This->RSSetViewports(1, &savedVP);
+					}
+					return;
+				}
+			}
+			func(This, VertexCount, StartVertexLocation);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	/**
  * @brief Installs hooks on the Map and Unmap methods of the provided D3D11 device context.
  *
  * This enables interception of resource mapping and unmapping operations for frame buffer caching.
@@ -401,6 +452,12 @@ namespace globals
 			stl::detour_vfunc<33, ID3D11DeviceContext_OMSetRenderTargets>(a_context);
 			stl::detour_vfunc<36, ID3D11DeviceContext_OMSetDepthStencilState>(a_context);
 			stl::detour_vfunc<53, ID3D11DeviceContext_ClearDepthStencilView>(a_context);
+		}
+
+		// DLSSperf: intercept Draw to fix scene-fade VP at displayRes.
+		// Cheap: thunk early-outs unless VertexCount==30 + DLSSperf hook live.
+		if (globals::game::isVR) {
+			stl::detour_vfunc<13, ID3D11DeviceContext_Draw>(a_context);
 		}
 	}
 }
