@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "RE/M/Moon.h"
 
+#include "Utils/SkyVisibility.h"
+
 struct SkySync : Feature
 {
 private:
@@ -145,16 +147,16 @@ private:
 	static constexpr float RenderDistance = 325000.0f;
 	static constexpr float SunHorizonDistance = 280.0f;
 	static constexpr float SunPeakDistance = 400.0f;
-	static constexpr float SunScaleFactor = 48.0f / 2048.0f;
+	static constexpr float SunScaleFactor = Util::Sky::SunScaleFactor;
 
 	static constexpr float SouthernSunAngle = 90.0f - 35.0f;
 	static constexpr float NorthernSunAngle = 90.0f + 35.0f;
 	static constexpr float VanillaSunAngle = 90.0f + 5.0f;
 
-	static constexpr float SecundaIntensityFactor = 0.67f;
-	static constexpr float NewMoonIntensityFactor = 0.05f;
-	static constexpr float CrescentMoonIntensityFactor = 0.25f;
-	static constexpr float FullMoonIntensityFactor = 1.0f;
+	static constexpr float SecundaIntensityFactor = Util::Sky::SecundaIntensityFactor;
+	static constexpr float NewMoonIntensityFactor = Util::Moon::NewMoonIntensityFactor;
+	static constexpr float CrescentMoonIntensityFactor = Util::Moon::CrescentMoonIntensityFactor;
+	static constexpr float FullMoonIntensityFactor = Util::Moon::FullMoonIntensityFactor;
 
 	inline static RE::NiPoint3* gSunPosition = nullptr;
 	inline static float* gSunGlareSize = nullptr;

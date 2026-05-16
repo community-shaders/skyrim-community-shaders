@@ -1,5 +1,7 @@
 #include "SkySync.h"
 
+#include "Utils/SkyVisibility.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkySync::Settings,
 	Enabled,
@@ -352,8 +354,7 @@ inline void SkySync::SetMoonDirection(const RE::Moon* moon, const RE::NiPoint3& 
 
 inline float SkySync::CalculateVisibility(const RE::NiPoint3& dir, const float dist, const float radius)
 {
-	const float height = dir.Dot({ 0.0f, 0.0f, 1.0f }) * dist;
-	return SmoothStep(-radius, radius, height);
+	return Util::Sky::CalculateVisibility(dir, dist, radius);
 }
 
 inline void SkySync::SetSunBaseVisibility(const RE::Sun* sun, const float visibility)
@@ -473,31 +474,20 @@ inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 
 void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 {
-	const float SunriseBeginOffset = globals::features::skySync.settings.SunriseBeginOffset;
-	const float SunriseEndOffset = globals::features::skySync.settings.SunriseEndOffset;
-	const float SunsetBeginOffset = globals::features::skySync.settings.SunsetBeginOffset;
-	const float SunsetEndOffset = globals::features::skySync.settings.SunsetEndOffset;
+	const auto& s = globals::features::skySync.settings;
+	Util::Sky::ClimateTimings shared;
+	shared.Update(climate, s.SunriseBeginOffset, s.SunriseEndOffset, s.SunsetBeginOffset, s.SunsetEndOffset);
 
-	sunriseBegin = (climate->timing.sunrise.begin / 6.0f) + SunriseBeginOffset;
-	sunriseEnd = (climate->timing.sunrise.end / 6.0f) + SunriseEndOffset;
-	sunsetBegin = (climate->timing.sunset.begin / 6.0f) + SunsetBeginOffset;
-	sunsetEnd = (climate->timing.sunset.end / 6.0f) + SunsetEndOffset;
-	// Basic ordering guarantees (prevents divide-by-zero / negative duration paths).
-	constexpr float kMinGapHours = 0.1f;
-	if (sunriseEnd <= sunriseBegin)
-		sunriseEnd = sunriseBegin + kMinGapHours;
-	if (sunsetEnd <= sunsetBegin)
-		sunsetEnd = sunsetBegin + kMinGapHours;
-	if (sunsetBegin <= sunriseEnd)
-		sunsetBegin = sunriseEnd + kMinGapHours;
-	if (sunsetEnd <= sunsetBegin)
-		sunsetEnd = sunsetBegin + kMinGapHours;
-	sunrise = (sunriseBegin + sunriseEnd) * 0.5f - 0.25f;
-	sunset = (sunsetBegin + sunsetEnd) * 0.5f + 0.25f;
-	sunriseFadeOutMoonStart = sunriseBegin - 0.5f;
-	sunriseFadeOutMoonEnd = sunriseBegin + 1.0f;
-	sunsetFadeInMoonStart = sunsetEnd - 1.0f;
-	sunsetFadeInMoonEnd = sunsetEnd + 0.5f;
+	sunriseBegin = shared.sunriseBegin;
+	sunriseEnd = shared.sunriseEnd;
+	sunsetBegin = shared.sunsetBegin;
+	sunsetEnd = shared.sunsetEnd;
+	sunrise = shared.sunrise;
+	sunset = shared.sunset;
+	sunriseFadeOutMoonStart = shared.sunriseFadeOutMoonStart;
+	sunriseFadeOutMoonEnd = shared.sunriseFadeOutMoonEnd;
+	sunsetFadeInMoonStart = shared.sunsetFadeInMoonStart;
+	sunsetFadeInMoonEnd = shared.sunsetFadeInMoonEnd;
 }
 
 void SkySync::Sky_OnNewClimate::thunk(RE::Sky* sky)
@@ -557,6 +547,5 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 
 inline float SkySync::SmoothStep(const float start, const float end, const float x)
 {
-	const float t = std::clamp((x - start) / (end - start), 0.0f, 1.0f);
-	return t * t * (3.0f - 2.0f * t);
+	return Util::Sky::SmoothStep(start, end, x);
 }
