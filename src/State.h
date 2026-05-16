@@ -284,11 +284,6 @@ public:
 	// Moon and Stars mod detection
 	inline static bool moonAndStarsLoaded = false;
 
-	// Sun/moon size globals for visibility calculation
-	inline static float* gSunGlareSize = nullptr;
-	inline static uint32_t* gMasserSize = nullptr;
-	inline static uint32_t* gSecundaSize = nullptr;
-
 	void ClearDisabledFeatures();
 	bool SetFeatureDisabled(const std::string& featureName, bool isDisabled);
 	bool IsFeatureDisabled(const std::string& featureName);

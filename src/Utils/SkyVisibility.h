@@ -21,16 +21,16 @@ namespace Util::Sky
 
 	struct ClimateTimings
 	{
-		float sunriseBegin = 6.0f;
-		float sunriseEnd = 7.0f;
-		float sunsetBegin = 17.0f;
-		float sunsetEnd = 19.0f;
-		float sunrise = 6.25f;
-		float sunset = 18.25f;
-		float sunriseFadeOutMoonStart = 5.5f;
-		float sunriseFadeOutMoonEnd = 7.0f;
-		float sunsetFadeInMoonStart = 18.0f;
-		float sunsetFadeInMoonEnd = 19.5f;
+		float sunriseBegin = 0.0f;
+		float sunriseEnd = 0.0f;
+		float sunsetBegin = 0.0f;
+		float sunsetEnd = 0.0f;
+		float sunrise = 0.0f;
+		float sunset = 0.0f;
+		float sunriseFadeOutMoonStart = 0.0f;
+		float sunriseFadeOutMoonEnd = 0.0f;
+		float sunsetFadeInMoonStart = 0.0f;
+		float sunsetFadeInMoonEnd = 0.0f;
 
 		void Update(const RE::TESClimate* climate, float sunriseBeginOffset = 0.0f, float sunriseEndOffset = 0.0f, float sunsetBeginOffset = 0.0f, float sunsetEndOffset = 0.0f)
 		{
@@ -57,20 +57,5 @@ namespace Util::Sky
 			sunsetFadeInMoonEnd = sunsetEnd + 0.5f;
 		}
 
-		bool IsDayTime(float time) const
-		{
-			return time > sunriseFadeOutMoonEnd && time < sunsetFadeInMoonStart;
-		}
-
-		float GetMoonTimeFade(float time) const
-		{
-			if (time >= sunriseFadeOutMoonStart && time <= sunriseFadeOutMoonEnd)
-				return SmoothStep(sunriseFadeOutMoonEnd, sunriseFadeOutMoonStart, time);
-			else if (time >= sunsetFadeInMoonStart && time <= sunsetFadeInMoonEnd)
-				return SmoothStep(sunsetFadeInMoonStart, sunsetFadeInMoonEnd, time);
-			else if (IsDayTime(time))
-				return 0.0f;
-			return 1.0f;
-		}
 	};
 }

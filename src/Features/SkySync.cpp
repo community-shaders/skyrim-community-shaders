@@ -236,9 +236,10 @@ void SkySync::ProcessSun(const RE::Sun* sun, const float time, const float altit
 
 	directions[static_cast<int>(Caster::Sun)] = apparentDir;
 
-	SetSunBaseVisibility(sun, isDayTime ? 1.0f : 0.0f);
+	float visibility = isDayTime ? CalculateVisibility(dir, dist, *gSunGlareSize * SunScaleFactor) : 0.0f;
+	SetSunBaseVisibility(sun, visibility);
 
-	intensities[static_cast<int>(Caster::Sun)] = isDayTime ? CalculateVisibility(dir, dist, *gSunGlareSize * SunScaleFactor) : 0.0f;
+	intensities[static_cast<int>(Caster::Sun)] = visibility;
 }
 
 void SkySync::ProcessMoon(const RE::Moon* moon, const float time, const Caster type, const float altitude, const bool isDayTime)

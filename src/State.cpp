@@ -22,7 +22,6 @@
 #include "ShaderCache.h"
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
-#include "Utils/SkyVisibility.h"
 #include "Utils/SphericalHarmonics.h"
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
@@ -212,10 +211,7 @@ void State::Setup()
 	if (moonAndStarsLoaded)
 		logger::info("Moon and Stars detected, compatibility enabled");
 
-	// Resolve sun/moon size globals for visibility calculation
-	gSunGlareSize = reinterpret_cast<float*>(REL::RelocationID(502611, 370235).address());
-	gMasserSize = reinterpret_cast<uint32_t*>(REL::RelocationID(502558, 370155).address());
-	gSecundaSize = reinterpret_cast<uint32_t*>(REL::RelocationID(502570, 370173).address());
+
 
 	globals::features::truePBR.SetupResources();
 	SetupResources();
@@ -999,13 +995,6 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		}
 
 		if (auto sky = globals::game::sky) {
-			Util::Sky::ClimateTimings timings;
-			if (auto climate = sky->currentClimate)
-				timings.Update(climate);
-
-			float time = sky->currentGameHour;
-			bool isDayTime = timings.IsDayTime(time);
-
 			// Process sun
 			if (auto sun = sky->sun; sun && sun->root && sky->root) {
 				const auto& sunPos = sun->root->world.translate;
@@ -1015,14 +1004,8 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 				data.SunDirection = { sunDirection.x, sunDirection.y, sunDirection.z, 0.0f };
 
 				float sunFade = 0.0f;
-				if (isDayTime) {
-					RE::NiPoint3 sunLocal = sun->root->local.translate;
-					float sunDist = sunLocal.Unitize();
-					if (sunDist < FLT_EPSILON)
-						sunDist = 400.0f;
-					float sunRadius = gSunGlareSize ? *gSunGlareSize * Util::Sky::SunScaleFactor : 0.01f;
-					sunFade = Util::Sky::CalculateVisibility(sunLocal, sunDist, sunRadius);
-				}
+				if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().shaderProperty.get()))
+					sunFade = prop->kBlendColor.alpha;
 
 				auto& sunColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kSun];
 				data.SunColor = { sunColor.red * sunFade, sunColor.green * sunFade, sunColor.blue * sunFade, 0.0f };
@@ -1031,30 +1014,27 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			// Process moons
 			auto& moonGlareColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
 			const float4 glareColor = { moonGlareColor.red, moonGlareColor.green, moonGlareColor.blue, 0.0f };
-			float moonTimeFade = timings.GetMoonTimeFade(time);
 
 			if (auto masser = sky->masser) {
 				auto [dir, color] = Util::Moon::ProcessMoon(masser, glareColor, Util::Moon::MasserBaseColor, 1.0f, moonAndStarsLoaded);
 				data.MasserDirection = dir;
 
 				float fade = 0.0f;
-				if (moonTimeFade > 0.0f) {
-					float moonDist = masser->moonMesh ? masser->moonMesh->local.translate.y : 0.0f;
-					float moonRadius = gMasserSize ? static_cast<float>(*gMasserSize) : 1.0f;
-					fade = Util::Sky::CalculateVisibility({ dir.x, dir.y, dir.z }, moonDist, moonRadius) * moonTimeFade;
+				if (masser->moonMesh) {
+					if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(masser->moonMesh->GetGeometryRuntimeData().shaderProperty.get()))
+						fade = prop->kBlendColor.alpha;
 				}
 				data.MasserColor = { color.x * fade, color.y * fade, color.z * fade, color.w };
 			}
 
 			if (auto secunda = sky->secunda) {
-				auto [dir, color] = Util::Moon::ProcessMoon(secunda, glareColor, Util::Moon::SecundaBaseColor, Util::Sky::SecundaIntensityFactor, moonAndStarsLoaded);
+				auto [dir, color] = Util::Moon::ProcessMoon(secunda, glareColor, Util::Moon::SecundaBaseColor, Util::Moon::SecundaIntensityFactor, moonAndStarsLoaded);
 				data.SecundaDirection = dir;
 
 				float fade = 0.0f;
-				if (moonTimeFade > 0.0f) {
-					float moonDist = secunda->moonMesh ? secunda->moonMesh->local.translate.y : 0.0f;
-					float moonRadius = gSecundaSize ? static_cast<float>(*gSecundaSize) : 1.0f;
-					fade = Util::Sky::CalculateVisibility({ dir.x, dir.y, dir.z }, moonDist, moonRadius) * moonTimeFade;
+				if (secunda->moonMesh) {
+					if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(secunda->moonMesh->GetGeometryRuntimeData().shaderProperty.get()))
+						fade = prop->kBlendColor.alpha;
 				}
 				data.SecundaColor = { color.x * fade, color.y * fade, color.z * fade, color.w };
 			}
