@@ -10,6 +10,7 @@
 #include "State.h"
 #include "Util.h"
 
+#include "Features/DLSSperf.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
@@ -434,6 +435,57 @@ struct ID3D11Device_CreateSamplerState
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
+// DLSSperf: post-correction of the engine's viewport whenever it differs from
+// our enlarged RTs. The hook is no-op unless DLSSperf's BSOpenVR size hook
+// is live (set true only in VR with the user-enabled feature).
+struct BSGraphics_Renderer_UpdateViewPort
+{
+	static void thunk(RE::BSGraphics::Renderer* a_this, uint32_t a_width, uint32_t a_height, bool a_forceMatchRT)
+	{
+		func(a_this, a_width, a_height, a_forceMatchRT);
+
+		auto& dlssPerf = globals::features::dlssPerf;
+		if (!dlssPerf.IsHookActive())
+			return;
+
+		// During Post intercept, enlarged kTEMP/kTOTAL need 3k VP from engine.
+		// func() auto-detects from enlarged RTs → VP is already displayRes.
+		if (dlssPerf.IsPostInterceptActive())
+			return;
+
+		auto* ss = globals::game::shadowState;
+		if (!ss)
+			return;
+		auto& vp = ss->GetVRRuntimeData().viewPort;
+		const uint32_t displayW = dlssPerf.GetDisplayEyeWidth() * 2;
+		const uint32_t displayH = dlssPerf.GetDisplayEyeHeight();
+		const uint32_t renderW = dlssPerf.GetRenderEyeWidth() * 2;
+		const uint32_t renderH = dlssPerf.GetRenderEyeHeight();
+
+		// After Post chain: UI + submit-prep draws target enlarged kTOTAL
+		// (displayRes). Engine may call UpdateViewPort with renderRes, causing
+		// func() to set VP = renderRes. Expand back to displayRes. Note: the
+		// fade Draw(30) bypasses this path entirely — it uses direct D3D
+		// RSSetViewports and is handled by the Draw vfunc hook in Globals.cpp.
+		if (dlssPerf.IsPostChainDone()) {
+			if (static_cast<uint32_t>(vp.Width) == renderW &&
+				static_cast<uint32_t>(vp.Height) == renderH) {
+				vp.Width = static_cast<float>(displayW);
+				vp.Height = static_cast<float>(displayH);
+			}
+			return;
+		}
+
+		// Normal world/depth draws: compress displayRes → renderRes
+		if (static_cast<uint32_t>(vp.Width) == displayW &&
+			static_cast<uint32_t>(vp.Height) == displayH) {
+			vp.Width = static_cast<float>(renderW);
+			vp.Height = static_cast<float>(renderH);
+		}
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 struct BSShaderRenderTargets_Create
 {
 	/**
@@ -445,12 +497,79 @@ struct BSShaderRenderTargets_Create
 		"Controls the number of focus shadows.",
 		REL::Relocate<uintptr_t>(0, 0, 0x1ed6368), 4, 0, 4 };
 
+	// DLSSperf: function pointer to the engine's CreateRenderTarget (set in
+	// Hooks::Install after CreateRenderTarget_Main is hooked). Used by the
+	// runtime E8 scanner that patches unhooked call sites within Create().
+	using CreateRTFn = void (*)(RE::BSGraphics::Renderer*, RE::RENDER_TARGETS::RENDER_TARGET, RE::BSGraphics::RenderTargetProperties*);
+	static inline CreateRTFn engineCreateRT = nullptr;
+
+	// Pre-creation enlargement flag and dimensions. When `s_enlargeRT` is set
+	// during the engine's BSShaderRenderTargets::Create call, every Color RT
+	// in the whitelist (kIMAGESPACE_TEMP_COPY / kTOTAL / kMENUBG) is allocated
+	// at displayRes instead of the screenSize the engine asked for.
+	static inline bool s_enlargeRT = false;
+	static inline uint32_t s_enlargeRTWidth = 0;
+	static inline uint32_t s_enlargeRTHeight = 0;
+	static inline int s_rtCallSitesPatched = 0;
+
+	// Conditionally enlarges a Color RT — whitelist of post-chain pyramids.
+	// Called by both pre-hooked CreateRenderTarget_* thunks and the runtime
+	// E8-scanned universal thunk so every call site inside Create() is covered.
+	static void DLSSperf_MaybeEnlargeRT(RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+	{
+		if (!s_enlargeRT)
+			return;
+
+		switch (a_target) {
+		case RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY:
+		case RE::RENDER_TARGETS::kTOTAL:
+		case RE::RENDER_TARGETS::kMENUBG:
+			a_properties->width = s_enlargeRTWidth;
+			a_properties->height = s_enlargeRTHeight;
+			break;
+		default:
+			break;
+		}
+	}
+
+	// Universal thunk for unhooked CreateRenderTarget call sites discovered
+	// by the E8 scanner in Hooks::Install. Mirrors what the per-site thunks do.
+	static void DLSSperf_CreateRT_Thunk(RE::BSGraphics::Renderer* a_this, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+	{
+		DLSSperf_MaybeEnlargeRT(a_target, a_properties);
+		engineCreateRT(a_this, a_target, a_properties);
+	}
+
 	static void thunk()
 	{
 		Util::SetGameSettingValue<std::int32_t>("iNumFocusShadow:Display", iNumFocusShadow, 0);
+
+		// DLSSperf: install the BSOpenVR render-target-size hook before the
+		// engine creates its render targets. This is the only place where
+		// BSOpenVR is guaranteed available AND we can still influence RT
+		// allocation. Gated on user opt-in via Upscaling::Settings.
+		if (globals::game::isVR && globals::features::upscaling.settings.enableDLSSperf) {
+			globals::features::dlssPerf.InstallRenderTargetSizeHook();
+		}
+
+		// Pre-creation Color RT enlargement gate.
+		if (globals::features::dlssPerf.IsHookActive() && engineCreateRT && s_rtCallSitesPatched > 0) {
+			s_enlargeRTWidth = globals::features::dlssPerf.GetDisplayEyeWidth() * 2;
+			s_enlargeRTHeight = globals::features::dlssPerf.GetDisplayEyeHeight();
+			s_enlargeRT = true;
+		}
+
 		func();
+		s_enlargeRT = false;
+
 		globals::ReInit();
 		globals::state->Setup();
+
+		// DLSSperf is not in the Feature list (it's a worker driven by the
+		// upscaling toggle), so SetupResources runs here directly.
+		if (globals::features::dlssPerf.IsHookActive()) {
+			globals::features::dlssPerf.SetupResources();
+		}
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -583,6 +702,7 @@ namespace Hooks
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
 			globals::state->ModifyRenderTarget(a_target, a_properties);
+			BSShaderRenderTargets_Create::DLSSperf_MaybeEnlargeRT(a_target, a_properties);
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -598,6 +718,7 @@ namespace Hooks
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
 			globals::state->ModifyRenderTarget(a_target, a_properties);
+			BSShaderRenderTargets_Create::DLSSperf_MaybeEnlargeRT(a_target, a_properties);
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -608,6 +729,7 @@ namespace Hooks
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
 			globals::state->ModifyRenderTarget(a_target, a_properties);
+			BSShaderRenderTargets_Create::DLSSperf_MaybeEnlargeRT(a_target, a_properties);
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -618,6 +740,7 @@ namespace Hooks
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
 			globals::state->ModifyRenderTarget(a_target, a_properties);
+			BSShaderRenderTargets_Create::DLSSperf_MaybeEnlargeRT(a_target, a_properties);
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -629,6 +752,7 @@ namespace Hooks
 		{
 			auto properties = *a_properties;
 			properties.copyable = true;
+			BSShaderRenderTargets_Create::DLSSperf_MaybeEnlargeRT(a_target, &properties);
 			func(This, a_target, &properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -640,6 +764,7 @@ namespace Hooks
 		{
 			auto properties = *a_properties;
 			properties.copyable = true;
+			BSShaderRenderTargets_Create::DLSSperf_MaybeEnlargeRT(a_target, &properties);
 			func(This, a_target, &properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -921,6 +1046,12 @@ namespace Hooks
 		logger::info("Hooking BSGraphics::SetDirtyStates");
 		stl::detour_thunk<BSGraphics_SetDirtyStates>(REL::RelocationID(75580, 77386));
 
+		// DLSSperf: post-correction of viewports the engine sets at renderRes
+		// when the RT is enlarged to displayRes (and vice versa). Hook is
+		// no-op until DLSSperf::InstallRenderTargetSizeHook flips IsHookActive.
+		logger::info("Hooking BSGraphics::Renderer::UpdateViewPort");
+		stl::detour_thunk<BSGraphics_Renderer_UpdateViewPort>(REL::RelocationID(75455, 77240));
+
 		logger::info("Hooking BSGraphics::Renderer::InitD3D");
 		stl::write_thunk_call<BSGraphics_Renderer_Init_InitD3D>(REL::RelocationID(75595, 77226).address() + REL::Relocate(0x50, 0x2BC));
 
@@ -932,6 +1063,11 @@ namespace Hooks
 
 		logger::info("Hooking BSShaderRenderTargets::Create::CreateRenderTarget(s)");
 		stl::write_thunk_call<CreateRenderTarget_Main>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x3F0, 0x3F3, 0x548));
+		// DLSSperf: capture the original CreateRenderTarget address from the
+		// first hooked thunk's REL::Relocation. The runtime E8 scanner below
+		// uses it both to locate unhooked call sites and as the fallback when
+		// the universal thunk dispatches through.
+		BSShaderRenderTargets_Create::engineCreateRT = reinterpret_cast<BSShaderRenderTargets_Create::CreateRTFn>(CreateRenderTarget_Main::func.address());
 		stl::write_thunk_call<CreateRenderTarget_Normals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x458, 0x45B, 0x5B0));
 		stl::write_thunk_call<CreateRenderTarget_NormalsSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x46B, 0x46E, 0x5C3));
 		stl::write_thunk_call<CreateRenderTarget_MotionVectors>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x4F0, 0x4EF, 0x64E));
@@ -942,6 +1078,34 @@ namespace Hooks
 		stl::write_thunk_call<CreateDepthStencil_PrecipitationMask>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x1245, 0x123B, 0x1917));
 		stl::write_thunk_call<CreateCubemapRenderTarget_Reflections>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xA25, 0xA25, 0xCD2));
 		stl::write_thunk_call<CreateDepthStencil_Reflections>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0xA59, 0xA59, 0xD13));
+
+		// DLSSperf: runtime scan of BSShaderRenderTargets::Create for the
+		// remaining (unhooked) CreateRenderTarget call sites. The 6 sites
+		// patched by write_thunk_call above (Main, Normals, NormalsSwap,
+		// MotionVectors, RefractionNormals, UnderwaterMask) have been
+		// redirected and won't match engineCreateRT; only unhooked sites hit.
+		// Scope: 0x2500 bytes from Create's base — empirically covers every
+		// CreateRenderTarget call. Without this, enlargement only applies to
+		// the 6 hooked targets and other RTs (kIMAGESPACE_TEMP_COPY etc.)
+		// stay at renderRes, breaking the post-chain assumption.
+		if (BSShaderRenderTargets_Create::engineCreateRT) {
+			auto funcBase = REL::RelocationID(100458, 107175).address();
+			auto createRTAddr = reinterpret_cast<uintptr_t>(BSShaderRenderTargets_Create::engineCreateRT);
+			auto& trampoline = SKSE::GetTrampoline();
+
+			for (size_t offset = 0; offset < 0x2500; offset++) {
+				auto callAddr = funcBase + offset;
+				if (*reinterpret_cast<uint8_t*>(callAddr) == 0xE8) {
+					int32_t rel = *reinterpret_cast<int32_t*>(callAddr + 1);
+					uintptr_t target = callAddr + 5 + rel;
+					if (target == createRTAddr) {
+						trampoline.write_call<5>(callAddr, BSShaderRenderTargets_Create::DLSSperf_CreateRT_Thunk);
+						BSShaderRenderTargets_Create::s_rtCallSitesPatched++;
+					}
+				}
+			}
+			BSShaderRenderTargets_Create::s_rtCallSitesPatched += 6;
+		}
 
 #ifdef TRACY_ENABLE
 		stl::write_thunk_call<Main_Update>(REL::RelocationID(35551, 36544).address() + REL::Relocate(0x11F, 0x160));
