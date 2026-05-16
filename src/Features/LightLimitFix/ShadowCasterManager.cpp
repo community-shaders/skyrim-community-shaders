@@ -193,6 +193,28 @@ namespace ShadowCasterManager
 	static uint32_t s_highImportanceLightCount = 0;
 	static float s_redrawnLightsSmoothed = 0.0f;  // EMA-smoothed for stable UI display
 
+	// Tracy diagnostic counters reset at the start of each scheduler frame.
+	// Each candidate-handling path increments its bucket; values are emitted
+	// as TracyPlot at frame end so a capture can be queried to identify
+	// which paths fire under which budget/setting combinations. Cross-
+	// reference per-action ZoneText emissions (light pointer, reason) to
+	// identify *which* lights are hitting each path.
+	struct SchedDiagCounters
+	{
+		int candidates_total = 0;
+		int candidates_chosen = 0;
+		int candidates_excess = 0;
+		int candidates_invalid_camera = 0;
+		int candidates_invalid_portal = 0;
+		int converted_invalid = 0;      // ConvertLight from c.invalidCamera path
+		int converted_excess = 0;       // ConvertLight from c.excess path
+		int disabled_invalid = 0;       // DisableLight from c.invalid path (portal/spot/no-convert)
+		int disabled_excess = 0;        // DisableLight from c.excess path (spot/no-convert)
+		int reconciliation_clears = 0;  // slot freed because light gone from activeShadowLights
+		int slots_in_use = 0;           // sampled at frame end
+	};
+	static SchedDiagCounters s_schedDiag;
+
 	static float ComputeFrameTimePercentile90()
 	{
 		if (s_ftCount == 0)
@@ -1432,6 +1454,11 @@ namespace ShadowCasterManager
 	static void ScheduleShadowCasters()
 	{
 		ZoneScopedN("SCM::ScheduleShadowCasters");
+		// Reset per-frame diagnostic counters. Each release/clear path below
+		// increments its bucket; values are emitted as TracyPlot at function
+		// exit so capture-time analysis can pinpoint which path fires under
+		// which conditions.
+		s_schedDiag = SchedDiagCounters{};
 		// VR renders both eyes per frame, so the game calls CalculateAndDrawShadowCasterLights
 		// twice. Block the second call: s_lights is not thread-safe and a re-entrant call
 		// would null out entries the first call is still iterating over.
@@ -1616,6 +1643,21 @@ namespace ShadowCasterManager
 					c.excess = true;
 				}
 			}
+
+			// Tracy candidate breakdown: emits per-frame so a capture can be
+			// queried alongside the per-action counters to verify the math
+			// (chosen + excess + invalid_camera + invalid_portal == total).
+			for (auto& c : candidates) {
+				s_schedDiag.candidates_total++;
+				if (c.chosen)
+					s_schedDiag.candidates_chosen++;
+				if (c.excess)
+					s_schedDiag.candidates_excess++;
+				if (c.invalidCamera)
+					s_schedDiag.candidates_invalid_camera++;
+				if (c.invalidPortal)
+					s_schedDiag.candidates_invalid_portal++;
+			}
 		}  // end SCM::CandidateValidation
 
 		// Pool membership update: drop expired pointers, drop unchosen,
@@ -1641,8 +1683,10 @@ namespace ShadowCasterManager
 			for (int i = 0; i < s_lights.Size; i++) {
 				if (!s_lights.Lights[i].Light)
 					continue;
-				if (aliveSet.find(s_lights.Lights[i].Light) == aliveSet.end())
+				if (aliveSet.find(s_lights.Lights[i].Light) == aliveSet.end()) {
+					s_schedDiag.reconciliation_clears++;
 					s_lights.Lights[i].Clear();
+				}
 			}
 
 			// ---- Sync s_normalConvert (converted-to-non-shadow set) ----
@@ -2139,6 +2183,7 @@ namespace ShadowCasterManager
 						// are no longer walking.
 						{
 							ZoneNamedN(zCvtInv, "SCM::Engine::ConvertLight(invalidCamera)", true);
+							s_schedDiag.converted_invalid++;
 							ConvertLight(c.light, ssn, false);
 						}
 						// UpdateCamera (called in the validation pass above)
@@ -2157,6 +2202,7 @@ namespace ShadowCasterManager
 						c.light->lodDimmer = 1.0f;
 					} else {
 						ZoneNamedN(zDisInv, "SCM::Engine::DisableLight(invalid)", true);
+						s_schedDiag.disabled_invalid++;
 						DisableLight(c.light);
 					}
 					continue;
@@ -2258,9 +2304,11 @@ namespace ShadowCasterManager
 						// activeShadowLights to pick up converted lights for the
 						// cluster pipeline (see Ghidra-confirmed comment there).
 						ZoneNamedN(zCvtEx, "SCM::Engine::ConvertLight(excess)", true);
+						s_schedDiag.converted_excess++;
 						ConvertLight(c.light, ssn, false);
 					} else {
 						ZoneNamedN(zDisEx, "SCM::Engine::DisableLight(excess)", true);
+						s_schedDiag.disabled_excess++;
 						DisableLight(c.light);
 					}
 					continue;
@@ -2302,6 +2350,7 @@ namespace ShadowCasterManager
 					// pointers; aliveAfterAtomic captures the current scene
 					// state in O(N) for O(1) membership queries here).
 					if (aliveAfterAtomic.find(e.Light) == aliveAfterAtomic.end()) {
+						s_schedDiag.reconciliation_clears++;
 						e.Clear();
 						continue;
 					}
@@ -2375,6 +2424,39 @@ namespace ShadowCasterManager
 
 		ssn->GetRuntimeData().firstPersonShadowMask = *GetShadowMask();
 		*GetFrameLightCount() = static_cast<uint32_t>(doneLightCount);
+
+		// =====================================================================
+		// Tracy per-frame plots: scheduler diagnostic counters + live config.
+		// Emitting both in the same frame lets a capture be queried for A/B
+		// behaviour without re-running the game: the cfg_* plots are the
+		// independent variables, the scm.* plots are the dependent outcomes.
+		// =====================================================================
+		{
+			// Sample slot occupancy at frame end (post-reconciliation).
+			for (int i = 0; i < s_lights.Size; i++)
+				if (s_lights.Lights[i].Light)
+					s_schedDiag.slots_in_use++;
+
+			TracyPlot("scm.candidates.total", (int64_t)s_schedDiag.candidates_total);
+			TracyPlot("scm.candidates.chosen", (int64_t)s_schedDiag.candidates_chosen);
+			TracyPlot("scm.candidates.excess", (int64_t)s_schedDiag.candidates_excess);
+			TracyPlot("scm.candidates.invalid_camera", (int64_t)s_schedDiag.candidates_invalid_camera);
+			TracyPlot("scm.candidates.invalid_portal", (int64_t)s_schedDiag.candidates_invalid_portal);
+			TracyPlot("scm.converted.invalid", (int64_t)s_schedDiag.converted_invalid);
+			TracyPlot("scm.converted.excess", (int64_t)s_schedDiag.converted_excess);
+			TracyPlot("scm.disabled.invalid", (int64_t)s_schedDiag.disabled_invalid);
+			TracyPlot("scm.disabled.excess", (int64_t)s_schedDiag.disabled_excess);
+			TracyPlot("scm.reconciliation.clears", (int64_t)s_schedDiag.reconciliation_clears);
+			TracyPlot("scm.slots.in_use", (int64_t)s_schedDiag.slots_in_use);
+
+			// Live config plots — record the *current* settings on each frame so
+			// a single capture spanning a settings change captures both sides.
+			TracyPlot("cfg.ShadowLightCount", (int64_t)s_settings.ShadowLightCount);
+			TracyPlot("cfg.MaxRedrawPerFrame", (int64_t)s_settings.MaxRedrawPerFrame);
+			TracyPlot("cfg.ConvertExcessToNormal", (int64_t)(s_settings.ConvertExcessToNormal ? 1 : 0));
+			TracyPlot("cfg.Enabled", (int64_t)(s_settings.Enabled ? 1 : 0));
+			TracyPlot("cfg.RedrawBudgetMs", (double)s_settings.RedrawBudgetMs);
+		}
 	}
 
 	// =========================================================================
