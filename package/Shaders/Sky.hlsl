@@ -207,18 +207,16 @@ Texture2D<float> TexDepthSampler : register(t17);
 
 float ComputeProceduralSun(float2 uv)
 {
-	float2 centeredUV    = uv * 2.0 - 1.0;
-	float  distFromDisk  = dot(centeredUV, centeredUV) - SharedData::enbSettings.ProceduralSunDiskRadiusSq;
+	float2 centeredUV = uv * 2.0 - 1.0;
+	float dist = dot(centeredUV, centeredUV) - SharedData::enbSettings.ProceduralSunDiskRadiusSq;
 
-	float coronaDist = saturate(distFromDisk * SharedData::enbSettings.ProceduralSunCoronaScale);
-	float corona     = (1.0 - coronaDist) * rcp(SharedData::enbSettings.ProceduralSunCoronaFalloff * coronaDist + 1.0) * SharedData::enbSettings.ProceduralSunGlowIntensity;
+	float c = saturate(dist * SharedData::enbSettings.ProceduralSunCoronaScale);
+	float corona = (1.0 - c) * rcp(SharedData::enbSettings.ProceduralSunCoronaFalloff * c + 1.0) * SharedData::enbSettings.ProceduralSunGlowIntensity;
 
-	float diskEdge = saturate(-distFromDisk * SharedData::enbSettings.ProceduralSunDiskEdgeScale);
-	float disk     = diskEdge * (1.0 + diskEdge * (diskEdge * diskEdge - 1.0));
+	float d = saturate(-dist * SharedData::enbSettings.ProceduralSunDiskEdgeScale);
+	float disk = d * d * (3.0 - 2.0 * d);
 
-	float horizonFade = smoothstep(-0.1, 0.1, SharedData::SunDirection.z);
-
-	return (corona + disk) * horizonFade;
+	return (corona + disk) * smoothstep(-0.1, 0.1, SharedData::SunDirection.z);
 }
 
 PS_OUTPUT main(PS_INPUT input)
