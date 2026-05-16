@@ -1,5 +1,6 @@
 #include "Effect11.h"
 
+#include "Effect11/D3D11StateBackup.h"
 #include "Effect11/ENBHelper.h"
 #include "Effect11/EffectManager.h"
 #include "Effect11/MenuManager.h"
@@ -7,7 +8,12 @@
 #include "Effect11/SettingManager.h"
 #include "Effect11/WeatherManager.h"
 
+#include "CloudShadows.h"
+#include "Deferred.h"
+#include "IBL.h"
 #include "State.h"
+#include "TerrainShadows.h"
+#include "Utils/D3D.h"
 
 Effect11::PerFrame Effect11::GetCommonBufferData()
 {
@@ -110,6 +116,14 @@ void Effect11::SetupResources()
 void Effect11::Reset()
 {
 	// Reset effect state if needed
+}
+
+void Effect11::ClearShaderCache()
+{
+	if (volumetricRaysPS) {
+		volumetricRaysPS->Release();
+		volumetricRaysPS = nullptr;
+	}
 }
 
 void Effect11::Prepass()
@@ -500,6 +514,98 @@ struct BSSkyShader_SetupMaterial
 
 	static inline REL::Relocation<decltype(thunk)> func;
 };
+
+void Effect11::DrawVolumetricRays()
+{
+	if (!enableEffect)
+		return;
+
+	auto& settingManager = SettingManager::GetSingleton();
+	if (!settingManager.GetValue<bool>("EnableVolumetricRays", "EFFECT"))
+		return;
+
+	auto& effectManager = EffectManager::GetSingleton();
+	if (!effectManager.IsInitialized() || !effectManager.copyVertexShader)
+		return;
+
+	if (!volumetricRaysPS) {
+		std::vector<std::pair<const char*, const char*>> defines;
+
+		if (globals::features::cloudShadows.loaded)
+			defines.push_back({ "CLOUD_SHADOWS", nullptr });
+
+		if (globals::features::terrainShadows.loaded)
+			defines.push_back({ "TERRAIN_SHADOWS", nullptr });
+
+		if (globals::features::ibl.loaded)
+			defines.push_back({ "IBL", nullptr });
+
+		if (REL::Module::IsVR())
+			defines.push_back({ "FRAMEBUFFER", nullptr });
+
+		volumetricRaysPS = static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricRaysPS.hlsl", defines, "ps_5_0"));
+		if (!volumetricRaysPS)
+			return;
+	}
+
+	if (!additiveBlendState) {
+		D3D11_BLEND_DESC blendDesc{};
+		blendDesc.RenderTarget[0].BlendEnable = TRUE;
+		blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+		blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+		blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+		blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;
+		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+		globals::d3d::device->CreateBlendState(&blendDesc, &additiveBlendState);
+	}
+
+	auto context = globals::d3d::context;
+	auto renderer = globals::game::renderer;
+	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	Effect11Util::D3D11FullStateBackup stateBackup;
+	stateBackup.Save(context);
+
+	ID3D11RenderTargetView* rtv = main.RTV;
+	context->OMSetRenderTargets(1, &rtv, nullptr);
+
+	D3D11_TEXTURE2D_DESC texDesc{};
+	main.texture->GetDesc(&texDesc);
+	D3D11_VIEWPORT viewport{ 0, 0, static_cast<float>(texDesc.Width), static_cast<float>(texDesc.Height), 0, 1 };
+	context->RSSetViewports(1, &viewport);
+
+	context->OMSetBlendState(additiveBlendState, nullptr, 0xFFFFFFFF);
+	context->RSSetState(effectManager.rasterizerState.get());
+	context->OMSetDepthStencilState(nullptr, 0);
+
+	UINT stride = 20;
+	UINT offset = 0;
+	ID3D11Buffer* vbs[] = { effectManager.quadVertexBuffer.get() };
+	context->IASetVertexBuffers(0, 1, vbs, &stride, &offset);
+	context->IASetInputLayout(effectManager.inputLayout.get());
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+	context->VSSetShader(effectManager.copyVertexShader.get(), nullptr, 0);
+	context->PSSetShader(volumetricRaysPS, nullptr, 0);
+
+	auto& ibl = globals::features::ibl;
+	ID3D11ShaderResourceView* srvs[16]{};
+	if (ibl.loaded) {
+		srvs[14] = ibl.envIBLTexture->srv.get();
+		srvs[15] = ibl.skyIBLTexture->srv.get();
+	}
+	context->PSSetShaderResources(0, 16, srvs);
+
+	ID3D11SamplerState* sampler = Deferred::GetSingleton()->linearSampler;
+	context->PSSetSamplers(0, 1, &sampler);
+
+	context->Draw(4, 0);
+
+	stateBackup.Restore(context);
+	stateBackup.Release();
+}
 
 void Effect11::PostPostLoad()
 {

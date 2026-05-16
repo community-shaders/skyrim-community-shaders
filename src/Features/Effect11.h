@@ -89,12 +89,18 @@ public:
 
 	bool enableEffect = false;
 
+	ID3D11PixelShader* volumetricRaysPS = nullptr;
+	ID3D11BlendState* additiveBlendState = nullptr;
+
 	PerFrame GetCommonBufferData();
 
 	virtual void DrawSettings() override;
 	virtual void SetupResources() override;
 	virtual void Reset() override;
 	virtual void Prepass() override;
+	virtual void ClearShaderCache() override;
+
+	void DrawVolumetricRays();
 
 	void OverrideWeather(RE::Sky* a_sky);
 	void CheckCommonData();
