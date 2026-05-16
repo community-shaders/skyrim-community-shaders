@@ -46,7 +46,10 @@ namespace renodx
 namespace ColorGradingRenoDX
 {
 	static const float ACES_REFERENCE_WHITE_NITS = 48.0f;
+	static const float ACES_SDR_MIN_NITS = 0.02f;
+	static const float ACES_SDR_MAX_NITS = 48.0f;
 	static const float ACES_MID_GRAY = 0.10f;
+	static const float ACES_DEFAULT_MID_GRAY_VALUE = 0.18f;
 	static const float ACES_MIN_NITS = 0.0001f;
 
 	float3 NeutwoBT2020(float3 color, float peak, float clipPoint)
@@ -64,13 +67,12 @@ namespace ColorGradingRenoDX
 		maxY = (peakWhite / diffuseWhite) / midGrayScale * ACES_REFERENCE_WHITE_NITS;
 	}
 
-	float3 ACESBT709(float3 color, float minNits, float peakNits, float diffuseWhiteNits, float midGrayValue)
+	float3 ACESSDRBT709(float3 color, float minNits)
 	{
-		float minY, maxY, midGrayScale;
-		GetACESDisplayRange(minNits, peakNits, diffuseWhiteNits, midGrayValue, minY, maxY, midGrayScale);
+		float minY = max(minNits, ACES_SDR_MIN_NITS);
 
-		color = renodx::tonemap::aces::RGCAndRRTAndODT(color, minY, maxY);
-		return color / ACES_REFERENCE_WHITE_NITS * midGrayScale;
+		color = renodx::tonemap::aces::RGCAndRRTAndODT(color, minY, ACES_SDR_MAX_NITS);
+		return color / ACES_SDR_MAX_NITS;
 	}
 
 	float3 ACESBT2020(float3 color, float minNits, float peakNits, float diffuseWhiteNits, float midGrayValue)

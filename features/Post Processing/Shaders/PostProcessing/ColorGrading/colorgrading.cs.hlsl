@@ -628,12 +628,11 @@ float3 ACESTonemap(float3 color)
 	float minNits = max(tonemapParams[0].y, 0.0001f);
 	float peakNits = enableHDR ? HDRPeakNits() : REFERENCE_LUMINANCE;
 	float diffuseWhiteNits = enableHDR ? HDRPaperWhiteNits() : REFERENCE_LUMINANCE;
-	static const float ACES_MID_GRAY = 0.18f;
 
 	if (enableHDR)
-		return ColorGradingRenoDX::ACESBT2020(color, minNits, peakNits, diffuseWhiteNits, ACES_MID_GRAY);
+		return ColorGradingRenoDX::ACESBT2020(color, minNits, peakNits, diffuseWhiteNits, ColorGradingRenoDX::ACES_DEFAULT_MID_GRAY_VALUE);
 	else
-		return ColorGradingRenoDX::ACESBT709(color, minNits, peakNits, diffuseWhiteNits, ACES_MID_GRAY);
+		return ColorGradingRenoDX::ACESSDRBT709(color, minNits);
 }
 
 float3 FrostbiteTonemap(float3 color)
