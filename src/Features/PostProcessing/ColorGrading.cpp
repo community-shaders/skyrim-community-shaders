@@ -112,6 +112,7 @@ struct TonemapperInfo
 	int nativeInputSpace;      // color space the tonemapper expects as input
 	int nativeOutputSpace;     // color space the tonemapper produces as output
 	bool supportsHDR;          // whether this tonemapper supports HDR output
+	int nativeInputSpaceHDR;   // input color space index when HDR is active
 	int nativeOutputSpaceHDR;  // output color space index when HDR is active
 
 	using CTP = std::array<float4, 2>;
@@ -127,14 +128,14 @@ struct TonemapperInfo
 
 		static std::vector<TonemapperInfo> tonemappers = {
 			{ "Reinhard"sv, "Reinhard"sv,
-				"Mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002."sv, 0, 0, false, 0,
+				"Mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002."sv, 0, 0, false, 0, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Reinhard Extended"sv, "ReinhardExt"sv,
 				"Extended mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002. "
 				"An additional user parameter specifies the smallest luminance that is mapped to 1, which allows high luminances to burn out."sv,
-				0, 0, false, 0,
+				0, 0, false, 0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("White Point", &params[0].y, 0.f, 10.f, "%.2f"); },
@@ -143,14 +144,14 @@ struct TonemapperInfo
 			{ "Hejl Burgess-Dawson Filmic"sv, "HejlBurgessDawsonFilmic"sv,
 				"Variation of the Hejl and Burgess-Dawson filmic curve done by Graham Aldridge. "
 				"See his blog post about \"Approximating Film with Tonemapping\"."sv,
-				0, 0, false, 0,
+				0, 0, false, 0, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Aldridge Filmic"sv, "AldridgeFilmic"sv,
 				"Variation of the Hejl and Burgess-Dawson filmic curve done by Graham Aldridge. "
 				"See his blog post about \"Approximating Film with Tonemapping\"."sv,
-				0, 0, false, 0,
+				0, 0, false, 0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Cutoff", &params[0].y, 0.f, .5f, "%.2f"); },
@@ -159,7 +160,7 @@ struct TonemapperInfo
 			{ "Lottes Filmic/AMD Curve"sv, "LottesFilmic"sv,
 				"Filmic curve by Timothy Lottes, described in his GDC talk \"Advanced Techniques and Optimization of HDR Color Pipelines\". "
 				"Also known as the \"AMD curve\"."sv,
-				0, 0, true, 0,
+				0, 0, true, 0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Contrast", &params[0].y, 1.f, 2.f, "%.2f");
@@ -173,7 +174,7 @@ struct TonemapperInfo
 			{ "Day Filmic/Insomniac Curve"sv, "DayFilmic"sv,
 				"Filmic curve by Mike Day, described in his document \"An efficient and user-friendly tone mapping operator\". "
 				"Also known as the \"Insomniac curve\"."sv,
-				0, 0, false, 0,
+				0, 0, false, 0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Black Point", &params[0].y, 0.f, 5.f, "%.2f");
@@ -193,7 +194,7 @@ struct TonemapperInfo
 			{ "Uchimura/Grand Turismo Curve"sv, "UchimuraFilmic"sv,
 				"Filmic curve by Hajime Uchimura, described in his CEDEC talk \"HDR Theory and Practice\". Characterised by its middle linear section. "
 				"Also known as the \"Gran Turismo curve\"."sv,
-				0, 0, true, 0,
+				0, 0, true, 0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Max Brightness", &params[0].y, 0.01f, 2.f, "%.2f");
@@ -208,7 +209,7 @@ struct TonemapperInfo
 			{ "AgX Minimal"sv, "AgxMinimal"sv,
 				"Minimal version of Troy Sobotka's AgX using a 6th order polynomial approximation. "
 				"Originally created by bwrensch, and improved by Troy Sobotka. Internally uses AgX input transform."sv,
-				0, 0, false, 0,
+				0, 0, false, 0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Slope", &params[0].y, 0.f, 2.f, "%.2f");
@@ -218,17 +219,17 @@ struct TonemapperInfo
 				{ f4{ 1.f, 1.f, 1.f, 0.f }, f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Melon"sv, "MelonTonemap"sv,
-				"Tonemapper designed by TripleMelon to fix the ACES issue of intense colour being shifted."sv, 0, 0, false, 0,
+				"Tonemapper designed by TripleMelon to fix the ACES issue of intense colour being shifted."sv, 0, 0, false, 0, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Kajiya"sv, "KajiyaTonemap"sv,
-				"Tonemapper designed by Tomasz Stachowiak/Embark for their real time ray tracing engine Kajiya."sv, 0, 0, false, 0,
+				"Tonemapper designed by Tomasz Stachowiak/Embark for their real time ray tracing engine Kajiya."sv, 0, 0, false, 0, 0,
 				[](CTP& params) { exposureSlider(&params[0].x); },
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "GT7"sv, "GT7ToneMapping"sv,
-				"Tonemapper designed for Gran Turismo 7."sv, 2, 2, true, 2,
+				"Tonemapper designed for Gran Turismo 7."sv, 2, 2, true, 2, 2,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					drawHDRStatus();
@@ -236,9 +237,8 @@ struct TonemapperInfo
 				{ f4{ 1.f, 0.f, 1000.f, 0.f } } },
 
 			{ "PsychoV"sv, "PsychoVTonemap"sv,
-				"RenoDX PsychoV 17 tonemapper by Carlos Lopez. Copyright (C) 2026 Carlos Lopez. SPDX-License-Identifier: MIT. "
-				"Uses bundled psychov_17.hlsl."sv,
-				0, 0, true, 0,
+				"PsychoV 17 tonemapper by Carlos Lopez, from RenoDX. Copyright (C) 2026 Carlos Lopez. SPDX-License-Identifier: MIT."sv,
+				0, 0, true, 0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					drawHDRStatus();
@@ -246,15 +246,46 @@ struct TonemapperInfo
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Neutwo"sv, "NeutwoTonemap"sv,
-				"RenoDX Neutwo tonemapper by Carlos Lopez. Copyright (C) 2026 Carlos Lopez. SPDX-License-Identifier: MIT. "
-				"Uses bundled neutwo.hlsl."sv,
-				0, 0, true, 0,
+				"Neutwo tonemapper by Carlos Lopez, from RenoDX. Copyright (C) 2026 Carlos Lopez. SPDX-License-Identifier: MIT."sv,
+				0, 0, true, 2, 2,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
 					ImGui::SliderFloat("Clip Point", &params[0].y, 1.f, 100.f, "%.2f");
 					drawHDRStatus();
 				},
-				{ f4{ 1.f, 100.f, 0.f, 0.f } } }
+				{ f4{ 1.f, 100.f, 0.f, 0.f } } },
+
+			{ "ACES"sv, "ACESTonemap"sv,
+				"ACES tonemapper from RenoDX."sv,
+				0, 0, true, 2, 2,
+				[](CTP& params) {
+					exposureSlider(&params[0].x);
+					ImGui::SliderFloat("Min Luminance", &params[0].y, 0.0001f, 1.f, "%.4f");
+					drawHDRStatus();
+				},
+				{ f4{ 1.f, 0.0001f, 0.f, 0.f } } },
+
+			{ "Frostbite"sv, "FrostbiteTonemap"sv,
+				"Frostbite tonemapper from RenoDX."sv,
+				0, 0, true, 2, 2,
+				[](CTP& params) {
+					exposureSlider(&params[0].x);
+					ImGui::SliderFloat("Rolloff Start", &params[0].y, 0.f, 1.f, "%.2f");
+					ImGui::SliderFloat("Saturation Boost", &params[0].z, 0.f, 1.f, "%.2f");
+					ImGui::SliderFloat("Hue Correction", &params[0].w, 0.f, 1.f, "%.2f");
+					drawHDRStatus();
+				},
+				{ f4{ 1.f, 0.25f, 0.3f, 0.6f } } },
+
+			{ "Hermite Spline"sv, "HermiteSplineTonemap"sv,
+				"Hermite spline tonemapper from RenoDX."sv,
+				0, 0, true, 2, 2,
+				[](CTP& params) {
+					exposureSlider(&params[0].x);
+					ImGui::SliderFloat("SDR Max White", &params[0].y, 1.f, 100.f, "%.2f");
+					drawHDRStatus();
+				},
+				{ f4{ 1.f, 20.f, 0.f, 0.f } } }
 		};
 
 		static std::once_flag flag;
@@ -502,7 +533,7 @@ void ColorGrading::UpdateColorSpaceTransforms(bool hdrEnabled)
 	constexpr int kHDRColorSpace = 2;                      // BT2020
 	constexpr int kSDRColorSpace = 0;                      // sRGB / BT709 gamut
 	const int outputColorSpace = hdrEnabled ? kHDRColorSpace : kSDRColorSpace;
-	const int tonemapInputSpace = tonemappers[tonemapperType].nativeInputSpace;
+	const int tonemapInputSpace = (hdrEnabled && tonemappers[tonemapperType].supportsHDR) ? tonemappers[tonemapperType].nativeInputSpaceHDR : tonemappers[tonemapperType].nativeInputSpace;
 	const int tonemapOutputSpace = (hdrEnabled && tonemappers[tonemapperType].supportsHDR) ? tonemappers[tonemapperType].nativeOutputSpaceHDR : tonemappers[tonemapperType].nativeOutputSpace;
 
 	auto storeMatrix = [](const DirectX::SimpleMath::Matrix& mat, std::array<float3, 3>& out) {

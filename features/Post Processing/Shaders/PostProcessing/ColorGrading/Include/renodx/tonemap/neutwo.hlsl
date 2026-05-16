@@ -1,6 +1,8 @@
 #ifndef RENODX_SHADERS_TONEMAP_NEUTWO_HLSL_
 #define RENODX_SHADERS_TONEMAP_NEUTWO_HLSL_
 
+#include "../color.hlsl"
+
 /*
  * Copyright (C) 2026 Carlos Lopez
  * SPDX-License-Identifier: MIT
@@ -8,75 +10,6 @@
 
 namespace renodx
 {
-
-	namespace math
-	{
-
-		float Max(float3 value)
-		{
-			return max(max(value.r, value.g), value.b);
-		}
-
-	}  // namespace math
-
-	namespace color
-	{
-
-		static const float3x3 NTSC_U_1953_TO_XYZ_MAT = float3x3(
-			0.60689090f, 0.17350110f, 0.20034800f,
-			0.29891640f, 0.58659900f, 0.11448450f,
-			0.00000000f, 0.06609570f, 1.11622430f);
-
-		static const float3x3 BT709_TO_XYZ_MAT = float3x3(
-			0.41239080f, 0.35758434f, 0.18048079f,
-			0.21263901f, 0.71516868f, 0.07219232f,
-			0.01933082f, 0.11919478f, 0.95053215f);
-
-		static const float3x3 BT2020_TO_XYZ_MAT = float3x3(
-			0.63695805f, 0.14461690f, 0.16888098f,
-			0.26270021f, 0.67799807f, 0.05930172f,
-			0.00000000f, 0.02807269f, 1.06098506f);
-
-		static const float3x3 AP1_TO_XYZ_MAT = float3x3(
-			0.66245418f, 0.13400421f, 0.15618769f,
-			0.27222872f, 0.67408177f, 0.05368952f,
-			-0.00557465f, 0.00406073f, 1.01033910f);
-
-		namespace y
-		{
-			namespace from
-			{
-
-				float XYZMatrix(float3 color, float3x3 toXYZMatrix)
-				{
-					return dot(color, toXYZMatrix[1].rgb);
-				}
-
-				float NTSC1953(float3 ntsc)
-				{
-					return XYZMatrix(ntsc, NTSC_U_1953_TO_XYZ_MAT);
-				}
-
-				float BT709(float3 bt709)
-				{
-					return XYZMatrix(bt709, BT709_TO_XYZ_MAT);
-				}
-
-				float BT2020(float3 bt2020)
-				{
-					return XYZMatrix(bt2020, BT2020_TO_XYZ_MAT);
-				}
-
-				float AP1(float3 ap1)
-				{
-					return XYZMatrix(ap1, AP1_TO_XYZ_MAT);
-				}
-
-			}  // namespace from
-		}  // namespace y
-
-	}  // namespace color
-
 	namespace tonemap
 	{
 

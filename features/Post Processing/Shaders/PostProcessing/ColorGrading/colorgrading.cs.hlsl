@@ -56,8 +56,7 @@ cbuffer ColorCB : register(b1)
 };
 
 #include "PostProcessing/ColorGrading/Include/GT7ToneMapping.hlsli"
-#include "PostProcessing/ColorGrading/Include/neutwo.hlsl"
-#include "PostProcessing/ColorGrading/Include/psychov_17.hlsl"
+#include "PostProcessing/ColorGrading/Include/RenoDXToneMapping.hlsli"
 #include "PostProcessing/common.hlsli"
 
 namespace LogType
@@ -614,11 +613,49 @@ float3 NeutwoTonemap(float3 color)
 {
 	color *= tonemapParams[0].x;
 
-	// Neutwo runs in scene-linear BT.709 here; the pipeline converts the result
-	// to the active output gamut after tonemapping.
 	float peak = enableHDR ? HDRPeakRatio() : 1.0f;
 	float clipPoint = max(tonemapParams[0].y, peak);
-	return renodx::tonemap::neutwo::BT709(color, peak, clipPoint);
+	if (enableHDR)
+		return ColorGradingRenoDX::NeutwoBT2020(color, peak, clipPoint);
+	else
+		return renodx::tonemap::neutwo::BT709(color, peak, clipPoint);
+}
+
+float3 ACESTonemap(float3 color)
+{
+	color = max(0.0f, color * tonemapParams[0].x);
+
+	float minY = max(tonemapParams[0].y, 0.0001f);
+	float maxY = enableHDR ? HDRPeakNits() : REFERENCE_LUMINANCE;
+	float normalizeY = enableHDR ? HDRPaperWhiteNits() : REFERENCE_LUMINANCE;
+
+	color = enableHDR ? ColorGradingRenoDX::ACESBT2020(color, minY, maxY) : renodx::tonemap::aces::RGCAndRRTAndODT(color, minY, maxY);
+	return color / normalizeY;
+}
+
+float3 FrostbiteTonemap(float3 color)
+{
+	color = max(0.0f, color * tonemapParams[0].x);
+	if (max(color.r, max(color.g, color.b)) <= 0.0f)
+		return 0.0f;
+
+	float maxValue = enableHDR ? HDRPeakRatio() : 1.0f;
+	float rolloffStart = min(tonemapParams[0].y, maxValue);
+	if (enableHDR)
+		return ColorGradingRenoDX::FrostbiteBT2020(color, maxValue, rolloffStart, tonemapParams[0].z, tonemapParams[0].w);
+	else
+		return renodx::tonemap::frostbite::BT709(color, maxValue, rolloffStart, tonemapParams[0].z, tonemapParams[0].w);
+}
+
+float3 HermiteSplineTonemap(float3 color)
+{
+	color = max(0.0f, color * tonemapParams[0].x);
+
+	float maxWhite = enableHDR ? HDRPeakRatio() : max(tonemapParams[0].y, 1.0f);
+	if (enableHDR)
+		return ColorGradingRenoDX::HermiteSplineBT2020(color, 1.0f, maxWhite, 0.0f, 0.0f, HDRPaperWhiteNits());
+	else
+		return renodx::tonemap::HermiteSplineLuminanceRolloff(color, 1.0f, maxWhite);
 }
 
 ////////////////////////////////////////////////////////////////////////
