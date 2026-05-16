@@ -1,7 +1,7 @@
 #ifndef RENODX_SHADERS_TONEMAP_NEUTWO_HLSL_
 #define RENODX_SHADERS_TONEMAP_NEUTWO_HLSL_
 
-#include "../color.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color.hlsl"
 
 /*
  * Copyright (C) 2026 Carlos Lopez

@@ -1,8 +1,8 @@
 #ifndef CASTLE_CSF_HLSL
 #define CASTLE_CSF_HLSL
 
-#include "../math.hlsl"
-#include "./rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math.hlsl"
 
 namespace renodx
 {

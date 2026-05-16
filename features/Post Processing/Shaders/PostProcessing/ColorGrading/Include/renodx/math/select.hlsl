@@ -1,7 +1,7 @@
 #ifndef SRC_SHADERS_MATH_SELECT_HLSL_
 #define SRC_SHADERS_MATH_SELECT_HLSL_
 
-#include "./cross.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math/cross.hlsl"
 
 START_NAMESPACE(renodx)
 START_NAMESPACE(math)

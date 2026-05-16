@@ -1,7 +1,15 @@
 #ifndef SRC_SHADERS_MATH_CONSTANTS_HLSL_
 #define SRC_SHADERS_MATH_CONSTANTS_HLSL_
 
-#include "./cross.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math/cross.hlsl"
+
+#ifdef FLT_MIN
+#	undef FLT_MIN
+#endif
+
+#ifdef FLT_MAX
+#	undef FLT_MAX
+#endif
 
 START_NAMESPACE(renodx)
 START_NAMESPACE(math)

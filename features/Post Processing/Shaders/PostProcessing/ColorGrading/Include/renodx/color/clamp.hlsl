@@ -1,7 +1,7 @@
 #ifndef RENODX_SHADERS_COLOR_CLAMP_HLSL
 #define RENODX_SHADERS_COLOR_CLAMP_HLSL
 
-#include "./rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/rgb.hlsl"
 
 namespace renodx
 {

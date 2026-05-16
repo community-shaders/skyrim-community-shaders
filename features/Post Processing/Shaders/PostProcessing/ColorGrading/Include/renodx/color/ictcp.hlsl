@@ -1,9 +1,9 @@
 #ifndef SRC_SHADERS_COLOR_ICTCP_HLSL_
 #define SRC_SHADERS_COLOR_ICTCP_HLSL_
 
-#include "../math.hlsl"
-#include "./pq.hlsl"
-#include "./rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/pq.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math.hlsl"
 
 namespace renodx
 {

@@ -1,8 +1,8 @@
 #ifndef SRC_SHADERS_COLOR_STOCKMAN_HLSL_
 #define SRC_SHADERS_COLOR_STOCKMAN_HLSL_
 
-#include "../math.hlsl"
-#include "./rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math.hlsl"
 
 // Deprecated (use renodx::color::lms::* directly)
 

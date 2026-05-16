@@ -1,8 +1,8 @@
 #ifndef SRC_SHADERS_COLORCORRECT_HLSL_
 #define SRC_SHADERS_COLORCORRECT_HLSL_
 
-#include "./color.hlsl"
-#include "./math.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math.hlsl"
 
 namespace renodx
 {

@@ -625,12 +625,15 @@ float3 ACESTonemap(float3 color)
 {
 	color = max(0.0f, color * tonemapParams[0].x);
 
-	float minY = max(tonemapParams[0].y, 0.0001f);
-	float maxY = enableHDR ? HDRPeakNits() : REFERENCE_LUMINANCE;
-	float normalizeY = enableHDR ? HDRPaperWhiteNits() : REFERENCE_LUMINANCE;
+	float minNits = max(tonemapParams[0].y, 0.0001f);
+	float peakNits = enableHDR ? HDRPeakNits() : REFERENCE_LUMINANCE;
+	float diffuseWhiteNits = enableHDR ? HDRPaperWhiteNits() : REFERENCE_LUMINANCE;
+	static const float ACES_MID_GRAY = 0.18f;
 
-	color = enableHDR ? ColorGradingRenoDX::ACESBT2020(color, minY, maxY) : renodx::tonemap::aces::RGCAndRRTAndODT(color, minY, maxY);
-	return color / normalizeY;
+	if (enableHDR)
+		return ColorGradingRenoDX::ACESBT2020(color, minNits, peakNits, diffuseWhiteNits, ACES_MID_GRAY);
+	else
+		return ColorGradingRenoDX::ACESBT709(color, minNits, peakNits, diffuseWhiteNits, ACES_MID_GRAY);
 }
 
 float3 FrostbiteTonemap(float3 color)
@@ -651,11 +654,12 @@ float3 HermiteSplineTonemap(float3 color)
 {
 	color = max(0.0f, color * tonemapParams[0].x);
 
-	float maxWhite = enableHDR ? HDRPeakRatio() : max(tonemapParams[0].y, 1.0f);
+	float peak = enableHDR ? HDRPeakRatio() : 1.0f;
+	float whiteClip = max(tonemapParams[0].y, peak);
 	if (enableHDR)
-		return ColorGradingRenoDX::HermiteSplineBT2020(color, 1.0f, maxWhite, 0.0f, 0.0f, HDRPaperWhiteNits());
+		return ColorGradingRenoDX::HermiteSplineBT2020(color, peak, whiteClip);
 	else
-		return renodx::tonemap::HermiteSplineLuminanceRolloff(color, 1.0f, maxWhite);
+		return renodx::tonemap::HermiteSplineLuminanceRolloff(color, peak, whiteClip);
 }
 
 ////////////////////////////////////////////////////////////////////////

@@ -1,9 +1,9 @@
 #ifndef RENODX_SHADERS_TONEMAP_HERMITE_SPLINE_HLSL_
 #define RENODX_SHADERS_TONEMAP_HERMITE_SPLINE_HLSL_
 
-#include "../color.hlsl"
-#include "../colorcorrect.hlsl"
-#include "../math.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/colorcorrect.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math.hlsl"
 
 namespace renodx
 {

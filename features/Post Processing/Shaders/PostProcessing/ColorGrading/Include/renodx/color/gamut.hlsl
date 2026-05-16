@@ -1,7 +1,7 @@
 #ifndef SRC_SHADERS_COLOR_GAMUT_HLSL_
 #define SRC_SHADERS_COLOR_GAMUT_HLSL_
 
-#include "./macleod_boynton.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/macleod_boynton.hlsl"
 
 namespace renodx
 {

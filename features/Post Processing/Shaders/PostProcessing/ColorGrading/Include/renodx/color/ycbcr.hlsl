@@ -1,7 +1,7 @@
 #ifndef RENODX_SHADERS_COLOR_YCBCR_HLSL
 #define RENODX_SHADERS_COLOR_YCBCR_HLSL
 
-#include "./rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/rgb.hlsl"
 
 namespace renodx
 {

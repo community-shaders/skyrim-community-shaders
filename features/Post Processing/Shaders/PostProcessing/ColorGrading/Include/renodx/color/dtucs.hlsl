@@ -1,8 +1,8 @@
 #ifndef RENODX_SHADERS_COLOR_DTUCS_HLSL
 #define RENODX_SHADERS_COLOR_DTUCS_HLSL
 
-#include "../math.hlsl"
-#include "./rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math.hlsl"
 
 namespace renodx
 {

@@ -1,7 +1,7 @@
 #ifndef SRC_SHADERS_COLOR_PQ_HLSL_
 #define SRC_SHADERS_COLOR_PQ_HLSL_
 
-#include "../math.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math.hlsl"
 
 namespace renodx
 {

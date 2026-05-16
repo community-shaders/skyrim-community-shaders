@@ -19,7 +19,7 @@
 //   0: Ysust, 1: RG, 2: YV, 3: Ytrans
 // (The JSON vectors are all sized for that ordering.) :contentReference[oaicite:3]{index=3}
 //
-#include "./castlecsf.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/castlecsf.hlsl"
 namespace renodx
 {
 	namespace color

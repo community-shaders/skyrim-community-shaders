@@ -1,7 +1,7 @@
 #ifndef SRC_SHADERS_COLOR_MACLEOD_BOYNTON_HLSL_
 #define SRC_SHADERS_COLOR_MACLEOD_BOYNTON_HLSL_
 
-#include "./rgb.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/color/rgb.hlsl"
 
 namespace renodx
 {

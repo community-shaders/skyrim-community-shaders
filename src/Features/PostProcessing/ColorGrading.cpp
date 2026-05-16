@@ -237,7 +237,7 @@ struct TonemapperInfo
 				{ f4{ 1.f, 0.f, 1000.f, 0.f } } },
 
 			{ "PsychoV"sv, "PsychoVTonemap"sv,
-				"PsychoV 17 tonemapper by Carlos Lopez, from RenoDX. Copyright (C) 2026 Carlos Lopez. SPDX-License-Identifier: MIT."sv,
+				"PsychoV 17 tonemapper by Carlos Lopez, from RenoDX."sv,
 				0, 0, true, 0, 0,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
@@ -246,7 +246,7 @@ struct TonemapperInfo
 				{ f4{ 1.f, 0.f, 0.f, 0.f } } },
 
 			{ "Neutwo"sv, "NeutwoTonemap"sv,
-				"Neutwo tonemapper by Carlos Lopez, from RenoDX. Copyright (C) 2026 Carlos Lopez. SPDX-License-Identifier: MIT."sv,
+				"Neutwo tonemapper by Carlos Lopez, from RenoDX."sv,
 				0, 0, true, 2, 2,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
@@ -256,7 +256,7 @@ struct TonemapperInfo
 				{ f4{ 1.f, 100.f, 0.f, 0.f } } },
 
 			{ "ACES"sv, "ACESTonemap"sv,
-				"ACES tonemapper from RenoDX."sv,
+				"ACES RRT+ODT tonemapper implementation from RenoDX."sv,
 				0, 0, true, 2, 2,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
@@ -266,7 +266,7 @@ struct TonemapperInfo
 				{ f4{ 1.f, 0.0001f, 0.f, 0.f } } },
 
 			{ "Frostbite"sv, "FrostbiteTonemap"sv,
-				"Frostbite tonemapper from RenoDX."sv,
+				"Frostbite HDR display mapping implementation from RenoDX, based on EA's Frostbite color grading and display presentation work."sv,
 				0, 0, true, 2, 2,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
@@ -278,14 +278,14 @@ struct TonemapperInfo
 				{ f4{ 1.f, 0.25f, 0.3f, 0.6f } } },
 
 			{ "Hermite Spline"sv, "HermiteSplineTonemap"sv,
-				"Hermite spline tonemapper from RenoDX."sv,
+				"Hermite spline tonemapper by Musa, from RenoDX."sv,
 				0, 0, true, 2, 2,
 				[](CTP& params) {
 					exposureSlider(&params[0].x);
-					ImGui::SliderFloat("SDR Max White", &params[0].y, 1.f, 100.f, "%.2f");
+					ImGui::SliderFloat("White Clip", &params[0].y, 1.f, 500.f, "%.2f");
 					drawHDRStatus();
 				},
-				{ f4{ 1.f, 20.f, 0.f, 0.f } } }
+				{ f4{ 1.f, 100.f, 0.f, 0.f } } }
 		};
 
 		static std::once_flag flag;

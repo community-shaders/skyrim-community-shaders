@@ -45,18 +45,45 @@ namespace renodx
 
 namespace ColorGradingRenoDX
 {
+	static const float ACES_REFERENCE_WHITE_NITS = 48.0f;
+	static const float ACES_MID_GRAY = 0.10f;
+	static const float ACES_MIN_NITS = 0.0001f;
+
 	float3 NeutwoBT2020(float3 color, float peak, float clipPoint)
 	{
 		return renodx::tonemap::neutwo::BT2020(color, peak, clipPoint);
 	}
 
-	float3 ACESBT2020(float3 color, float minY, float maxY)
+	void GetACESDisplayRange(float minNits, float peakNits, float diffuseWhiteNits, float midGrayValue, out float minY, out float maxY, out float midGrayScale)
 	{
+		float diffuseWhite = max(diffuseWhiteNits, 1.0f);
+		float peakWhite = max(peakNits, diffuseWhite);
+
+		midGrayScale = max(midGrayValue, 1e-6f) / ACES_MID_GRAY;
+		minY = (max(minNits, ACES_MIN_NITS) / diffuseWhite) / midGrayScale * ACES_REFERENCE_WHITE_NITS;
+		maxY = (peakWhite / diffuseWhite) / midGrayScale * ACES_REFERENCE_WHITE_NITS;
+	}
+
+	float3 ACESBT709(float3 color, float minNits, float peakNits, float diffuseWhiteNits, float midGrayValue)
+	{
+		float minY, maxY, midGrayScale;
+		GetACESDisplayRange(minNits, peakNits, diffuseWhiteNits, midGrayValue, minY, maxY, midGrayScale);
+
+		color = renodx::tonemap::aces::RGCAndRRTAndODT(color, minY, maxY);
+		return color / ACES_REFERENCE_WHITE_NITS * midGrayScale;
+	}
+
+	float3 ACESBT2020(float3 color, float minNits, float peakNits, float diffuseWhiteNits, float midGrayValue)
+	{
+		float minY, maxY, midGrayScale;
+		GetACESDisplayRange(minNits, peakNits, diffuseWhiteNits, midGrayValue, minY, maxY, midGrayScale);
+
 		color = mul(renodx::color::BT2020_TO_AP1_MAT, color);
 		color = renodx::tonemap::aces::GamutCompress(color);
 		color = mul(renodx::color::AP1_TO_AP0_MAT, color);
 		color = renodx::tonemap::aces::RRT(color);
-		return renodx::tonemap::aces::ODT(color, minY, maxY, renodx::color::AP1_TO_BT2020_MAT);
+		color = renodx::tonemap::aces::ODT(color, minY, maxY, renodx::color::AP1_TO_BT2020_MAT);
+		return color / ACES_REFERENCE_WHITE_NITS * midGrayScale;
 	}
 
 	float3 FrostbiteBT2020(float3 color, float maxValue, float rolloffStart, float saturationBoostAmount, float hueCorrectAmount)
@@ -79,10 +106,10 @@ namespace ColorGradingRenoDX
 		return renodx::color::bt2020::from::ICtCp(ictcpMapped);
 	}
 
-	float3 HermiteSplineBT2020(float3 color, float targetWhite, float maxWhite, float targetBlack, float minBlack, float nits)
+	float3 HermiteSplineBT2020(float3 color, float peak, float whiteClip)
 	{
 		float y = renodx::color::y::from::BT2020(color);
-		float newY = renodx::tonemap::HermiteSplineLuminanceRolloff(y, targetWhite, maxWhite, targetBlack, minBlack, nits);
+		float newY = renodx::tonemap::HermiteSplineLuminanceRolloff(y, peak, clamp(whiteClip, peak, 500.0f));
 		return renodx::color::correct::Luminance(color, y, newY);
 	}
 }

@@ -1,7 +1,7 @@
 #ifndef RENODX_SHADERS_COLOR_GAMMA_HLSL
 #define RENODX_SHADERS_COLOR_GAMMA_HLSL
 
-#include "../math.hlsl"
+#include "PostProcessing/ColorGrading/Include/renodx/math.hlsl"
 
 namespace renodx
 {
