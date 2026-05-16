@@ -5,13 +5,9 @@
 
 struct TerrainShadows : public Feature
 {
-private:
-	static constexpr std::string_view MOD_ID = "135817";
-
 public:
 	virtual inline std::string GetName() override { return "Terrain Shadows"; }
 	virtual inline std::string GetShortName() override { return "TerrainShadows"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_SHADOWS"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override

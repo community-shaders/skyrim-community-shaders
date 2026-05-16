@@ -6,9 +6,6 @@
 
 struct SubsurfaceScattering : Feature
 {
-private:
-	static constexpr std::string_view MOD_ID = "114114";
-
 public:
 	struct DiffusionProfile
 	{
@@ -70,7 +67,6 @@ public:
 
 	virtual inline std::string GetName() override { return "Subsurface Scattering"; }
 	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSS"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kCharacters; }
 

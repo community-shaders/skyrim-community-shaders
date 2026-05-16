@@ -9,6 +9,7 @@ private:
 public:
 	virtual inline std::string GetName() override { return "Sky Sync"; }
 	virtual inline std::string GetShortName() override { return "SkySync"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kSky; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
