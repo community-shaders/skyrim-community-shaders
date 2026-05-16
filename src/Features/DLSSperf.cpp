@@ -38,8 +38,19 @@ void DLSSperf::InstallRenderTargetSizeHook()
 	// snapshot the corresponding scale at install time and never re-read it —
 	// the engine's RT allocations happen once, so a later UI quality change
 	// can't shrink/grow RTs anyway. (Requires a game restart, same as DLSS.)
-	const uint32_t qualityMode = globals::features::upscaling.settings.qualityMode;
+	//
+	// Validate before division: a bad/corrupt JSON could put qualityMode
+	// outside FFX's range, returning 0/inf/NaN; that would propagate to bogus
+	// renderEye dimensions and silently mis-size every engine RT. Fail closed
+	// — leave hookActive=false so the rest of DLSSperf is dormant and DLSS
+	// runs on dev's standard path. (CodeRabbit Major @ scs#2357.)
+	const uint32_t qualityModeRaw = globals::features::upscaling.settings.qualityMode;
+	const uint32_t qualityMode = std::clamp<uint32_t>(qualityModeRaw, 0, 4);  // FfxFsr3QualityMode range
 	const float scale = ffxFsr3GetUpscaleRatioFromQualityMode(static_cast<FfxFsr3QualityMode>(qualityMode));
+	if (!std::isfinite(scale) || scale <= 0.0f) {
+		logger::error("[DLSSperf] FFX returned invalid upscale ratio {} for qualityMode {} (raw {}); hook NOT installed", scale, qualityMode, qualityModeRaw);
+		return;
+	}
 	renderEyeWidth = std::max<uint32_t>(1, (uint32_t)(w / scale));
 	renderEyeHeight = std::max<uint32_t>(1, (uint32_t)(h / scale));
 
@@ -581,6 +592,18 @@ void DLSSperf::DownscaleToKMain()
 	ID3D11RasterizerState* savedRS = nullptr;
 	context->RSGetState(&savedRS);
 
+	// VS / PS / sampler save (CodeRabbit Major @ scs#2357 — DownscaleToKMain
+	// runs immediately before enginePost(); leaving our shader/sampler bound
+	// risks subsequent engine passes silently inheriting them if those passes
+	// don't explicitly set every slot. Pattern matches VRStereoOptimizations.
+	ID3D11VertexShader* savedVS = nullptr;
+	ID3D11PixelShader* savedPS = nullptr;
+	context->VSGetShader(&savedVS, nullptr, nullptr);
+	context->PSGetShader(&savedPS, nullptr, nullptr);
+
+	ID3D11SamplerState* savedPSSampler0 = nullptr;
+	context->PSGetSamplers(0, 1, &savedPSSampler0);
+
 	// IA: fullscreen triangle (no vertex/index buffers)
 	context->IASetInputLayout(nullptr);
 	context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
@@ -628,6 +651,9 @@ void DLSSperf::DownscaleToKMain()
 	context->RSSetViewports(1, &savedVP);
 	context->OMSetBlendState(savedBlend, savedBlendFactor, savedSampleMask);
 	context->OMSetDepthStencilState(savedDSState, savedStencilRef);
+	context->VSSetShader(savedVS, nullptr, 0);
+	context->PSSetShader(savedPS, nullptr, 0);
+	context->PSSetSamplers(0, 1, &savedPSSampler0);
 	context->GSSetShader(savedGS, nullptr, 0);
 	context->HSSetShader(savedHS, nullptr, 0);
 	context->DSSetShader(savedDS, nullptr, 0);
@@ -648,6 +674,12 @@ void DLSSperf::DownscaleToKMain()
 		savedDS->Release();
 	if (savedRS)
 		savedRS->Release();
+	if (savedVS)
+		savedVS->Release();
+	if (savedPS)
+		savedPS->Release();
+	if (savedPSSampler0)
+		savedPSSampler0->Release();
 }
 
 void DLSSperf::HandlePostProcessing(const std::function<void()>& enginePost)
