@@ -9,6 +9,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CustomAngle,
 	MinShadowElevation,
 	ShadowTransitionDuration,
+	MoonPhaseDirLight,
+	MoonPhaseDirLightAmount,
+	MoonColorDirLight,
+	MoonColorDirLightAmount,
 	NewMoonIntensity,
 	CrescentMoonIntensity,
 	FullMoonIntensity,
@@ -56,6 +60,28 @@ void SkySync::DrawSettings()
 	ImGui::SliderFloat("Shadow Transition Duration", &settings.ShadowTransitionDuration, 0.0f, 500.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("How long (in game-time units) the shadow direction takes to fade between sources. 100 = ~5 seconds at timescale 20.");
+	}
+
+	ImGui::Checkbox("Moon Phase Dir Light", &settings.MoonPhaseDirLight);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::TextUnformatted("Dim directional light based on the active moon's phase.");
+	}
+	if (settings.MoonPhaseDirLight) {
+		ImGui::SliderFloat("Phase Amount", &settings.MoonPhaseDirLightAmount, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Blend between original brightness (0) and phase-dimmed brightness (1).");
+		}
+	}
+
+	ImGui::Checkbox("Moon Color Dir Light", &settings.MoonColorDirLight);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::TextUnformatted("Tint directional light with the active moon's base color.");
+	}
+	if (settings.MoonColorDirLight) {
+		ImGui::SliderFloat("Color Amount", &settings.MoonColorDirLightAmount, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Blend between original color (0) and moon-tinted color (1).");
+		}
 	}
 
 	if (ImGui::TreeNodeEx("Moon Colors", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -173,6 +199,90 @@ void SkySync::DisableOnConflict(std::string_view conflictName)
 	logger::warn("[Sky Sync] {}", failedLoadedMessage);
 }
 
+void SkySync::OnSkyUpdateColors(RE::Sky* sky)
+{
+	if (!settings.Enabled || !sky)
+		return;
+
+	if (!settings.MoonPhaseDirLight && !settings.MoonColorDirLight)
+		return;
+
+	// Only modify dir light during full nighttime (after sunset end, before sunrise begin)
+	if (!IsNight(sky))
+		return;
+
+	struct MoonData
+	{
+		float phaseFactor;
+		float3 normalizedColor;
+		bool valid;
+	};
+
+	auto getMoonData = [&](Caster source) -> MoonData {
+		if (source != Caster::Masser && source != Caster::Secunda)
+			return { 0.0f, {}, false };
+		const int idx = static_cast<int>(source);
+		auto& c = colors[idx];
+		float intensity = (c.x + c.y + c.z) * (1.0f / 3.0f);
+		if (intensity <= 0.0f)
+			return { phaseFactors[idx], { 1.0f, 1.0f, 1.0f }, true };
+		return { phaseFactors[idx], { c.x / intensity, c.y / intensity, c.z / intensity }, true };
+	};
+
+	float influence = 0.0f;
+	float phaseFactor = 1.0f;
+	float3 normalizedColor = { 1.0f, 1.0f, 1.0f };
+
+	if (shadowFader.transitioning) {
+		float t = settings.ShadowTransitionDuration > 0.0f ? shadowFader.fadeTimer / settings.ShadowTransitionDuration : 1.0f;
+
+		auto prev = getMoonData(shadowFader.previousTarget);
+		auto cur = getMoonData(shadowFader.target);
+
+		if (prev.valid && cur.valid) {
+			phaseFactor = std::lerp(prev.phaseFactor, cur.phaseFactor, t);
+			normalizedColor = { std::lerp(prev.normalizedColor.x, cur.normalizedColor.x, t), std::lerp(prev.normalizedColor.y, cur.normalizedColor.y, t), std::lerp(prev.normalizedColor.z, cur.normalizedColor.z, t) };
+			influence = 1.0f;
+		} else if (cur.valid) {
+			phaseFactor = cur.phaseFactor;
+			normalizedColor = cur.normalizedColor;
+			influence = t;
+		} else if (prev.valid) {
+			phaseFactor = prev.phaseFactor;
+			normalizedColor = prev.normalizedColor;
+			influence = 1.0f - t;
+		}
+	} else {
+		auto data = getMoonData(shadowFader.target);
+		if (data.valid) {
+			phaseFactor = data.phaseFactor;
+			normalizedColor = data.normalizedColor;
+			influence = 1.0f;
+		}
+	}
+
+	if (influence <= 0.0f)
+		return;
+
+	auto& dirLight = sky->skyColor[static_cast<uint>(RE::TESWeather::ColorTypes::kSunlight)];
+
+	// Phase dimming: scale brightness by the phase factor (1.0 = full moon, 0.05 = new moon)
+	if (settings.MoonPhaseDirLight) {
+		float amount = settings.MoonPhaseDirLightAmount * influence;
+		dirLight.red = std::lerp(dirLight.red, dirLight.red * phaseFactor, amount);
+		dirLight.green = std::lerp(dirLight.green, dirLight.green * phaseFactor, amount);
+		dirLight.blue = std::lerp(dirLight.blue, dirLight.blue * phaseFactor, amount);
+	}
+
+	// Color tinting: shift dir light toward the moon's normalized color
+	if (settings.MoonColorDirLight) {
+		float amount = settings.MoonColorDirLightAmount * influence;
+		dirLight.red = std::lerp(dirLight.red, dirLight.red * normalizedColor.x, amount);
+		dirLight.green = std::lerp(dirLight.green, dirLight.green * normalizedColor.y, amount);
+		dirLight.blue = std::lerp(dirLight.blue, dirLight.blue * normalizedColor.z, amount);
+	}
+}
+
 void SkySync::Sky_Update::thunk(RE::Sky* sky)
 {
 	func(sky);
@@ -277,6 +387,7 @@ void SkySync::ProcessMoon(const RE::Sky* sky, const Caster type)
 	const int idx = static_cast<int>(type);
 	intensities[idx] = 0.0f;
 	colors[idx] = {};
+	phaseFactors[idx] = 1.0f;
 	directions[idx] = { 0.0f, 0.0f, 1.0f };
 
 	const auto moon = type == Caster::Masser ? sky->masser : sky->secunda;
@@ -297,14 +408,19 @@ void SkySync::ProcessMoon(const RE::Sky* sky, const Caster type)
 
 	float fade = 0.0f;
 	if (moon->moonMesh) {
-		if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get()))
+		if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get())) {
 			fade = prop->kBlendColor.alpha;
+			if (auto tex = prop->GetBaseTexture()) {
+				auto phase = Util::Moon::GetPhaseFromTexture(tex->name.c_str());
+				phaseFactors[idx] = Util::Moon::GetPhaseIntensityFactor(phase, settings.NewMoonIntensity, settings.CrescentMoonIntensity, settings.FullMoonIntensity);
+			}
+		}
 	}
 
 	colors[idx] = { color.x * fade, color.y * fade, color.z * fade, fade };
 
-	// Only allow moons to become shadow casters after sunset has fully ended and moon is fully faded in
-	if (intensities[static_cast<int>(Caster::Sun)] > 0.0f || fade < 1.0f)
+	// Only allow moons to become shadow casters during full nighttime and when fully faded in
+	if (!IsNight(sky) || fade < 1.0f)
 		return;
 
 	const auto src = static_cast<MoonLightSource>(settings.MoonLightSource);
@@ -313,6 +429,17 @@ void SkySync::ProcessMoon(const RE::Sky* sky, const Caster type)
 		return;
 
 	intensities[idx] = (color.x + color.y + color.z) * (1.0f / 3.0f);
+}
+
+bool SkySync::IsNight(const RE::Sky* sky)
+{
+	if (!sky || !sky->currentClimate)
+		return false;
+	const auto& timing = sky->currentClimate->timing;
+	const float sunsetEnd = timing.sunset.end / 6.0f;
+	const float sunriseBegin = timing.sunrise.begin / 6.0f;
+	const float hour = sky->currentGameHour;
+	return hour >= sunsetEnd || hour < sunriseBegin;
 }
 
 inline void SkySync::CalculateSunDirectionAndDistance(const RE::Sun* sun, RE::NiPoint3& outDir, float& outDistance)
@@ -354,6 +481,7 @@ inline void SkySync::SetSunPosition(const RE::Sun* sun, const RE::NiPoint3& dir,
 void SkySync::ShadowFader::Reset()
 {
 	target = Caster::None;
+	previousTarget = Caster::None;
 	fadeTimer = 0.0f;
 	transitioning = false;
 }
@@ -372,6 +500,7 @@ void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[], float
 
 	// If brightest source changed, begin a new transition
 	if (best != target) {
+		previousTarget = target;
 		target = best;
 		startDir = currentDir;
 		fadeTimer = 0.0f;

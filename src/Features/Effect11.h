@@ -102,6 +102,7 @@ public:
 
 	void DrawVolumetricRays();
 
+	void OnSkyUpdateColors(RE::Sky* a_sky);
 	void OverrideWeather(RE::Sky* a_sky);
 	void CheckCommonData();
 	void OverridePointLightColor(float3& a_color);

@@ -442,18 +442,12 @@ void Effect11::OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbi
 	}
 }
 
-struct Sky_UpdateColors
+void Effect11::OnSkyUpdateColors(RE::Sky* a_sky)
 {
-	static void thunk(RE::Sky* This, float a_delta)
-	{
-		func(This, a_delta);
-		globals::features::effect11.CheckCommonData();
-		if (globals::features::effect11.enableEffect)
-			globals::features::effect11.OverrideWeather(This);
-	}
-
-	static inline REL::Relocation<decltype(thunk)> func;
-};
+	CheckCommonData();
+	if (enableEffect)
+		OverrideWeather(a_sky);
+}
 
 struct Sky_SetDirectionalAmbientColors
 {
@@ -612,8 +606,6 @@ void Effect11::PostPostLoad()
 	stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x1EA, 0x178));
 	if (REL::Module::IsSE())
 		stl::write_thunk_call<Main_HDRTonemapBlendCinematic_Render>(REL::RelocationID(99023, 105674).address() + REL::Relocate(0x230, 0x178));
-
-	stl::detour_thunk<Sky_UpdateColors>(REL::RelocationID(25686, 26233));
 
 	stl::detour_thunk<Sky_SetDirectionalAmbientColors>(REL::RelocationID(98989, 105643));
 	stl::write_vfunc<0x6, BSSkyShader_SetupMaterial>(RE::VTABLE_BSSkyShader[0]);

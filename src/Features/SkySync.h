@@ -35,6 +35,10 @@ public:
 		float CustomAngle = -35.0f;
 		float MinShadowElevation = 18.0f;
 		float ShadowTransitionDuration = 100.0f;
+		bool MoonPhaseDirLight = true;
+		float MoonPhaseDirLightAmount = 0.5f;
+		bool MoonColorDirLight = true;
+		float MoonColorDirLightAmount = 0.5f;
 		float NewMoonIntensity = 0.05f;
 		float CrescentMoonIntensity = 0.25f;
 		float FullMoonIntensity = 1.0f;
@@ -51,6 +55,8 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 	virtual bool SupportsVR() override { return true; }
+
+	void OnSkyUpdateColors(RE::Sky* sky);
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
@@ -101,6 +107,7 @@ private:
 		RE::NiPoint3 currentDir = { 0.0f, 0.0f, 1.0f };
 		RE::NiPoint3 startDir = { 0.0f, 0.0f, 1.0f };
 		Caster target = Caster::None;
+		Caster previousTarget = Caster::None;
 		float fadeTimer = 0.0f;
 		bool transitioning = false;
 
@@ -126,6 +133,7 @@ private:
 	RE::NiPoint3 directions[3];
 	float intensities[3] = {};
 	float4 colors[3] = {};
+	float phaseFactors[3] = { 1.0f, 1.0f, 1.0f };
 	ShadowFader shadowFader;
 
 	void DisableOnConflict(std::string_view conflictName);
@@ -139,6 +147,8 @@ private:
 	void ProcessSun(const RE::Sky* sky);
 
 	void ProcessMoon(const RE::Sky* sky, Caster type);
+
+	static bool IsNight(const RE::Sky* sky);
 
 	static void CalculateSunDirectionAndDistance(const RE::Sun* sun, RE::NiPoint3& outDir, float& outDistance);
 
