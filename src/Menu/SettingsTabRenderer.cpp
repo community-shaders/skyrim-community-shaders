@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include "BackgroundBlur.h"
+#include "Features/ScreenshotFeature.h"
 #include "Features/VR.h"
 #include "Fonts.h"
 #include "Globals.h"
@@ -375,6 +376,12 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 			settings.WeatherEditorToggleKey,
 			state.settingWeatherEditorToggleKey,
 			"Change##WeatherEditorToggle");
+
+		Util::InputComboWidget(
+			"Screenshot Key:",
+			settings.ScreenshotKey,
+			state.settingScreenshotKey,
+			"Change##Screenshot");
 
 		ImGui::EndTabItem();
 	}

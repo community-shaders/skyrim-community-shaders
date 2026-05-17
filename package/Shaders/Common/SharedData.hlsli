@@ -60,9 +60,13 @@ namespace SharedData
 	struct CubemapCreatorSettings
 	{
 		uint Enabled;
-		float3 pad0;
+		uint EnabledSSR;
+		float2 pad0;
 
 		float4 CubemapColor;
+
+		float ReflectionFallbackAmount;
+		float3 pad1;
 	};
 
 	struct TerraOccSettings
@@ -288,6 +292,12 @@ namespace SharedData
 		float2 pad0;
 	};
 
+	struct TruePBRSettings
+	{
+		float VertexAOStrength;
+		uint3 pad;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -306,6 +316,7 @@ namespace SharedData
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
+		TruePBRSettings truePBRSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
