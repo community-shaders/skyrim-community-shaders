@@ -815,10 +815,7 @@ namespace SceneSettingsUI
 
 		if (open) {
 			if (hasActiveOverrides) {
-				auto& theme = globals::menu->GetSettings().Theme;
-				ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
-				ImGui::TextWrapped("Feature values are being overridden. Pause overwrites to see changes.");
-				ImGui::PopStyleColor();
+				Util::Text::WrappedError("Feature values are being overridden. Pause overwrites to see changes.");
 			}
 			if (onExportAll) {
 				if (ImGui::SmallButton(std::format("Export All{}", idSuffix).c_str()))
