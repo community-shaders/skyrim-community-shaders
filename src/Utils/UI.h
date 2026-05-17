@@ -379,6 +379,31 @@ namespace Util
 	};
 
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
+
+	/**
+	 * Draws a 2-4 component float slider. Holding Shift edits all components from the first component.
+	 */
+	template <int Num = 3>
+	bool ShiftSlider(const char* label, float* v, float v_min, float v_max, const char* format = "%.3f", ImGuiSliderFlags flags = 0)
+	{
+		static_assert(Num > 1 && Num < 5);
+
+		if (ImGui::GetIO().KeyShift) {
+			auto changed = ImGui::SliderFloat(label, v, v_min, v_max, format, flags);
+			if (changed)
+				for (int i = 1; i < Num; i++)
+					v[i] = v[0];
+			return changed;
+		}
+
+		if constexpr (Num == 2)
+			return ImGui::SliderFloat2(label, v, v_min, v_max, format, flags);
+		else if constexpr (Num == 3)
+			return ImGui::SliderFloat3(label, v, v_min, v_max, format, flags);
+		else
+			return ImGui::SliderFloat4(label, v, v_min, v_max, format, flags);
+	}
+
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 
 	// Icon loading functions

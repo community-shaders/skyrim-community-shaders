@@ -42,20 +42,22 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void LensFlare::DrawSettings()
 {
+	auto tooltip = [](const char* text) {
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::TextUnformatted(text);
+	};
+
 	ImGui::SliderFloat("Intensity", &settings.Intensity, 0.0f, 1.0f, "%.3f");
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Master intensity for the entire lens flare effect");
+	tooltip("Master intensity for the entire lens flare effect");
 
 	// Threshold
 	ImGui::Spacing();
 	ImGui::Text("Threshold");
 	ImGui::Separator();
 	ImGui::SliderFloat("Threshold (EV)", &settings.ThresholdEV, -10.0f, 20.0f, "%+.2f EV");
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Brightness threshold in EV (0 EV = 1.0 linear).");
+	tooltip("Brightness threshold in EV (0 EV = 1.0 linear).");
 	ImGui::SliderFloat("Threshold Range", &settings.ThresholdRange, 0.01f, 5.0f, "%.3f");
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Fade range for the threshold cutoff");
+	tooltip("Fade range for the threshold cutoff");
 
 	// Ghost Settings
 	ImGui::Spacing();
@@ -65,23 +67,19 @@ void LensFlare::DrawSettings()
 	{
 		const char* modeNames[] = { "Fast (Procedural)", "Quality (FFT Bokeh)", "Ultra (Per-Ghost FFT)" };
 		ImGui::Combo("Ghost Mode", &settings.GhostModeInt, modeNames, 3);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Fast: procedural radial ghosts (low cost).\nQuality: FFT convolution with bokeh shape.\nUltra: per-ghost kernel sizes via multi-pass FFT (expensive).");
+		tooltip("Fast: procedural radial ghosts (low cost).\nQuality: FFT convolution with bokeh shape.\nUltra: per-ghost kernel sizes via multi-pass FFT (expensive).");
 	}
 
 	if (settings.GhostModeInt == static_cast<int>(GhostMode::Quality) || settings.GhostModeInt == static_cast<int>(GhostMode::Ultra)) {
 		// Procedural aperture settings
 		ImGui::SliderInt("Aperture Blades", &settings.ApertureBlades, 3, 10);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Number of aperture blades for the procedural bokeh shape.");
+		tooltip("Number of aperture blades for the procedural bokeh shape.");
 
 		ImGui::SliderFloat("F-Stop", &settings.FStop, 1.0f, 22.0f, "F%.1f");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Aperture f-number (e.g. F2.8). Smaller = larger aperture.\nControls the bokeh shape characteristics.");
+		tooltip("Aperture f-number (e.g. F2.8). Smaller = larger aperture.\nControls the bokeh shape characteristics.");
 
 		ImGui::SliderFloat("Aperture Rotation", &settings.ApertureRotation, -180.0f, 180.0f, "%.1f deg");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Rotation of the procedural aperture.");
+		tooltip("Rotation of the procedural aperture.");
 
 		// FFT Resolution
 		{
@@ -95,20 +93,17 @@ void LensFlare::DrawSettings()
 			if (ImGui::Combo("FFT Resolution", &curIdx, resNames, 4))
 				settings.FFTResolution = resValues[curIdx];
 
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Resolution of the FFT convolution. Higher = sharper bokeh ghost shapes but more expensive.");
+			tooltip("Resolution of the FFT convolution. Higher = sharper bokeh ghost shapes but more expensive.");
 		}
 
 		ImGui::SliderFloat("Kernel Scale", &settings.KernelScale, 0.01f, 0.5f, "%.3f");
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Base size of the bokeh kernel relative to FFT resolution.\nPer-ghost scales multiply this value in Ultra mode.");
+		tooltip("Base size of the bokeh kernel relative to FFT resolution.\nPer-ghost scales multiply this value in Ultra mode.");
 	}
 
 	ImGui::SliderFloat("Ghost Strength", &settings.GhostStrength, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat("Ghost Chroma Shift", &settings.GhostChromaShift, 0.0f, 0.1f, "%.4f");
 	ImGui::Checkbox("Non-intrusive Ghosts", &settings.GLocalMask);
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Only apply ghost flaring when looking directly at light sources");
+	tooltip("Only apply ghost flaring when looking directly at light sources");
 
 	if (ImGui::TreeNode("Custom Ghost Colors & Scales")) {
 		for (int i = 0; i < NUM_GHOSTS; i++) {
@@ -121,8 +116,7 @@ void LensFlare::DrawSettings()
 				ImGui::SliderFloat("Scale", &settings.Ghosts[i].Scale, -15.0f, 15.0f, "%.2f");
 				if (settings.GhostModeInt == static_cast<int>(GhostMode::Ultra)) {
 					ImGui::SliderFloat("Kernel Scale", &settings.Ghosts[i].KernelScale, 0.1f, 4.0f, "%.2fx");
-					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip("Multiplier on global Kernel Scale.\n1x = same as global, <1 = sharper, >1 = softer.\nEach distinct value requires a separate FFT pass.");
+					tooltip("Multiplier on global Kernel Scale.\n1x = same as global, <1 = sharper, >1 = softer.\nEach distinct value requires a separate FFT pass.");
 				}
 				ImGui::TreePop();
 			}
@@ -152,8 +146,7 @@ void LensFlare::DrawSettings()
 	ImGui::SliderFloat("Halo Radius", &settings.HaloRadius, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat("Halo Width", &settings.HaloWidth, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat("Halo Compression", &settings.HaloCompression, 0.1f, 2.0f, "%.3f");
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Fisheye distortion strength for the halo effect");
+	tooltip("Fisheye distortion strength for the halo effect");
 	ImGui::SliderFloat("Halo Chroma Shift", &settings.HaloChromaShift, 0.0f, 0.1f, "%.4f");
 
 	// Tint
@@ -161,8 +154,7 @@ void LensFlare::DrawSettings()
 	ImGui::Text("Color Tint");
 	ImGui::Separator();
 	ImGui::ColorEdit3("Tint", settings.Tint.data());
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Radial color gradient applied to the flare effect");
+	tooltip("Radial color gradient applied to the flare effect");
 
 	// Debug
 	ImGui::Spacing();
@@ -174,8 +166,7 @@ void LensFlare::DrawSettings()
 		ImGui::Checkbox("Disable Ghosts", &debugsettings.disableGhosts);
 		ImGui::Checkbox("Disable Blur", &debugsettings.disableBlur);
 		ImGui::SliderInt("Blur Iterations", &debugsettings.blurIterations, 1, 4);
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("Kawase blur cycles (down+up). 1 = sharp, 2+ = smoother");
+		tooltip("Kawase blur cycles (down+up). 1 = sharp, 2+ = smoother");
 	}
 }
 

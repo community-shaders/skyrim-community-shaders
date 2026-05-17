@@ -277,15 +277,15 @@ void PostProcessing::LoadPresetFrom(std::string a_name)
 
 void PostProcessing::SavePresetTo(std::string a_name)
 {
-	json a_presets = {};
-	SaveSettings(a_presets);
-	a_presets["preset_name"] = a_name;
-
 	// Check if the name is valid
 	if (a_name.empty()) {
 		logger::warn("Invalid preset name.");
 		return;
 	}
+
+	json a_presets = {};
+	SaveSettings(a_presets);
+	a_presets["preset_name"] = a_name;
 
 	try {
 		std::filesystem::create_directories(ppPresetPath);
@@ -296,6 +296,10 @@ void PostProcessing::SavePresetTo(std::string a_name)
 
 	std::string presetPath = std::format("{}\\{}.json", ppPresetPath, a_name);
 	std::ofstream o{ presetPath };
+	if (!o.is_open() || !o.good()) {
+		logger::warn("Failed to open preset file for writing: {}", presetPath);
+		return;
+	}
 
 	try {
 		o << std::setw(4) << a_presets;

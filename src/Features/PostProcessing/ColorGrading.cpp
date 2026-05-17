@@ -47,27 +47,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	enableTonemap,
 	processColorSpace)
 
-template <int num = 3>
-bool shiftSlider(const char* label, float* v, float v_min, float v_max, const char* format = "%.3f", ImGuiSliderFlags flags = 0)
-{
-	static_assert(num > 1 && num < 5);
-
-	if (ImGui::GetIO().KeyShift) {
-		auto changed = ImGui::SliderFloat(label, v, v_min, v_max, format, flags);
-		if (changed)
-			for (int i = 1; i < num; i++)
-				v[i] = v[0];
-		return changed;
-	} else {
-		if constexpr (num == 2)
-			return ImGui::SliderFloat2(label, v, v_min, v_max, format, flags);
-		else if constexpr (num == 3)
-			return ImGui::SliderFloat3(label, v, v_min, v_max, format, flags);
-		else if constexpr (num == 4)
-			return ImGui::SliderFloat4(label, v, v_min, v_max, format, flags);
-	}
-}
-
 template <int num = 1>
 bool exposureSlider(float* val)
 {
@@ -79,11 +58,11 @@ bool exposureSlider(float* val)
 	if constexpr (num == 1)
 		retval = ImGui::SliderFloat("Exposure", tempVal, -4.f, 4.f, "%+.2f EV");
 	else if constexpr (num == 2)
-		retval = shiftSlider<2>("Exposure", tempVal, -4.f, 4.f, "%+.2f EV");
+		retval = Util::ShiftSlider<2>("Exposure", tempVal, -4.f, 4.f, "%+.2f EV");
 	else if constexpr (num == 3)
-		retval = shiftSlider<3>("Exposure", tempVal, -4.f, 4.f, "%+.2f EV");
+		retval = Util::ShiftSlider<3>("Exposure", tempVal, -4.f, 4.f, "%+.2f EV");
 	else if constexpr (num == 4)
-		retval = shiftSlider<4>("Exposure", tempVal, -4.f, 4.f, "%+.2f EV");
+		retval = Util::ShiftSlider<4>("Exposure", tempVal, -4.f, 4.f, "%+.2f EV");
 
 	for (int i = 0; i < num; i++)
 		val[i] = exp2(tempVal[i]);
@@ -340,9 +319,9 @@ void ColorGrading::DrawSettings()
 		}
 
 		if (ImGui::TreeNode("ASC CDL")) {
-			shiftSlider("Slope", &settings.slope.x, 0.f, 2.f, "%.2f");
-			shiftSlider("Power", &settings.power.x, 0.f, 2.f, "%.2f");
-			shiftSlider("Offset", &settings.cdlOffset.x, -1.f, 1.f, "%.2f");
+			Util::ShiftSlider("Slope", &settings.slope.x, 0.f, 2.f, "%.2f");
+			Util::ShiftSlider("Power", &settings.power.x, 0.f, 2.f, "%.2f");
+			Util::ShiftSlider("Offset", &settings.cdlOffset.x, -1.f, 1.f, "%.2f");
 			ImGui::TreePop();
 		}
 
@@ -384,20 +363,20 @@ void ColorGrading::DrawSettings()
 		}
 
 		if (ImGui::TreeNode("Shadows/Midtones/Highlights")) {
-			shiftSlider("Shadows Gain", &settings.shadowsGain.x, 0.f, 2.f, "%.3f");
-			shiftSlider("Shadows Offset", &settings.shadowsOffset.x, -0.5f, 0.5f, "%.3f");
-			shiftSlider("Midtones Gain", &settings.midtonesGain.x, 0.f, 2.f, "%.3f");
-			shiftSlider("Midtones Offset", &settings.midtonesOffset.x, -0.5f, 0.5f, "%.3f");
-			shiftSlider("Highlights Gain", &settings.highlightsGain.x, 0.f, 2.f, "%.3f");
-			shiftSlider("Highlights Offset", &settings.highlightsOffset.x, -0.5f, 0.5f, "%.3f");
+			Util::ShiftSlider("Shadows Gain", &settings.shadowsGain.x, 0.f, 2.f, "%.3f");
+			Util::ShiftSlider("Shadows Offset", &settings.shadowsOffset.x, -0.5f, 0.5f, "%.3f");
+			Util::ShiftSlider("Midtones Gain", &settings.midtonesGain.x, 0.f, 2.f, "%.3f");
+			Util::ShiftSlider("Midtones Offset", &settings.midtonesOffset.x, -0.5f, 0.5f, "%.3f");
+			Util::ShiftSlider("Highlights Gain", &settings.highlightsGain.x, 0.f, 2.f, "%.3f");
+			Util::ShiftSlider("Highlights Offset", &settings.highlightsOffset.x, -0.5f, 0.5f, "%.3f");
 			ImGui::InputFloat2("Shadows Start/End", &settings.shadowsHighlightsRange.x, "%.3f");
 			ImGui::InputFloat2("Highlights Start/End", &settings.shadowsHighlightsRange.z, "%.3f");
 			ImGui::TreePop();
 		}
 
 		if (ImGui::TreeNode("Contrast")) {
-			shiftSlider("Contrast", &settings.contrast.x, 0.f, 2.f, "%.3f");
-			shiftSlider("Pivot", &settings.pivot.x, 0.f, 1.f, "%.3f");
+			Util::ShiftSlider("Contrast", &settings.contrast.x, 0.f, 2.f, "%.3f");
+			Util::ShiftSlider("Pivot", &settings.pivot.x, 0.f, 1.f, "%.3f");
 			ImGui::TreePop();
 		}
 
@@ -812,7 +791,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	cb = nullptr;
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 	context->CSSetShaderResources(0, 2, srvs.data());
-	context->CSSetConstantBuffers(0, 1, &cb);
+	context->CSSetConstantBuffers(1, 1, &cb);
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	if (saveImagesFlag) {

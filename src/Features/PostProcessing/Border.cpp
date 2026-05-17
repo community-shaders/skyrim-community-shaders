@@ -208,7 +208,7 @@ void Border::Draw(TextureInfo& inout_tex)
 	cb = nullptr;
 	context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
 	context->CSSetShaderResources(0, 2, srvs);
-	context->CSSetConstantBuffers(0, 1, &cb);
+	context->CSSetConstantBuffers(1, 1, &cb);
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	inout_tex = { texOutput->resource.get(), texOutput->srv.get() };

@@ -6,6 +6,8 @@
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 
+#include <algorithm>
+#include <cctype>
 #include <imgui_stdlib.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -30,8 +32,10 @@ void LUT::DrawSettings()
 		Clear();
 		tempPath = "";
 	}
-	ImGui::SameLine();
-	ImGui::TextColored({ 1.f, 0.f, 0.f, 1.f }, errMsg.c_str());
+	if (!errMsg.empty()) {
+		ImGui::SameLine();
+		Util::Text::Error("%s", errMsg.c_str());
+	}
 
 	if (LutType == -1)
 		ImGui::Text("Loaded Texture: None");
@@ -130,7 +134,10 @@ void LUT::ReadTexture(std::filesystem::path path)
 
 	Clear();
 
-	if (path.extension() != ".dds" && path.extension() != ".png" && path.extension() != ".bmp") {
+	auto extension = path.extension().string();
+	std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+	if (extension != ".dds" && extension != ".png" && extension != ".bmp") {
 		errMsg = std::format("Invalid extension: {}! Only dds/png/bmp are supported.", path.extension().string());
 		logger::warn("Invalid extension: {}! Only dds/png/bmp are supported.", path.extension().string());
 		return;
@@ -141,7 +148,7 @@ void LUT::ReadTexture(std::filesystem::path path)
 		return;
 	}
 
-	if (path.extension() == ".dds") {
+	if (extension == ".dds") {
 		ID3D11Resource* pRsrc = nullptr;
 		ID3D11ShaderResourceView* pSrv = nullptr;
 		try {

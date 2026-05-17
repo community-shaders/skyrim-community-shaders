@@ -1,5 +1,5 @@
 // Camera effects for Community Shaders
-// Film grain based on https://www.shadertoy.com/view/3sGSWVhttps (MIT License)
+// Film grain based on https://www.shadertoy.com/view/3sGSWV (MIT License)
 
 #include "Common/Math.hlsli"
 #include "Common/SharedData.hlsli"
