@@ -35,15 +35,10 @@ public:
 		float CustomAngle = -35.0f;
 		float MinShadowElevation = 18.0f;
 		float ShadowTransitionDuration = 100.0f;
-		bool MoonPhaseDirLight = true;
-		float MoonPhaseDirLightAmount = 0.5f;
-		bool MoonColorDirLight = true;
-		float MoonColorDirLightAmount = 0.5f;
+		bool DimSunlightUnderHorizon = true;
 		float NewMoonIntensity = 0.05f;
 		float CrescentMoonIntensity = 0.25f;
 		float FullMoonIntensity = 1.0f;
-		std::array<float, 3> MasserColor = { 142.0f / 255.0f, 96.0f / 255.0f, 90.0f / 255.0f };
-		std::array<float, 3> SecundaColor = { 117.0f / 255.0f, 115.0f / 255.0f, 109.0f / 255.0f };
 	};
 
 	Settings settings;
@@ -106,13 +101,13 @@ private:
 	{
 		RE::NiPoint3 currentDir = { 0.0f, 0.0f, 1.0f };
 		RE::NiPoint3 startDir = { 0.0f, 0.0f, 1.0f };
-		Caster target = Caster::None;
-		Caster previousTarget = Caster::None;
+		Caster target = Caster::Sun;
+		Caster previousTarget = Caster::Sun;
 		float fadeTimer = 0.0f;
 		bool transitioning = false;
 
-		void Update(const RE::Sun* sun, RE::NiPoint3 dirs[], float intensities[], float fadeDuration);
-		static void SetLighting(const RE::Sun* sun, RE::NiPoint3 dir);
+		void Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration);
+		static void SetLighting(const RE::Sky* sky, RE::NiPoint3 dir);
 		static void ClampDirection(RE::NiPoint3& dir);
 		void Reset();
 	};
@@ -130,10 +125,8 @@ private:
 	float sunAngle = 90.0f;
 	float currentSkyRotation = D3D11_FLOAT32_MAX;
 
-	RE::NiPoint3 directions[3];
-	float intensities[3] = {};
 	float4 colors[3] = {};
-	float phaseFactors[3] = { 1.0f, 1.0f, 1.0f };
+	float currentDim = 1.0f;
 	ShadowFader shadowFader;
 
 	void DisableOnConflict(std::string_view conflictName);
@@ -144,11 +137,12 @@ private:
 
 	void SetSkyRotation(const RE::Sky* sky, RE::TESObjectCELL* cell);
 
-	void ProcessSun(const RE::Sky* sky);
+	void ProcessSun(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[]);
 
-	void ProcessMoon(const RE::Sky* sky, Caster type);
+	void ProcessMoon(const RE::Sky* sky, Caster type, RE::NiPoint3 dirs[], float intensities[]);
 
 	static bool IsNight(const RE::Sky* sky);
+	static bool IsDaytime(const RE::Sky* sky);
 
 	static void CalculateSunDirectionAndDistance(const RE::Sun* sun, RE::NiPoint3& outDir, float& outDistance);
 

@@ -71,28 +71,20 @@ namespace Util::Moon
 		return dir;
 	}
 
-	inline float4 CalculateColor(const RE::Sky* sky, bool isMasser, float4 baseColor, float newMoon = NewMoonIntensityFactor, float crescent = CrescentMoonIntensityFactor, float full = FullMoonIntensityFactor)
+	inline float4 GetBlendColor(const RE::Moon* moon, const float4& baseColor, float newMoon = NewMoonIntensityFactor, float crescent = CrescentMoonIntensityFactor, float full = FullMoonIntensityFactor)
 	{
-		if (!sky)
-			return { 0.0f, 0.0f, 0.0f, 0.0f };
+		if (!moon || !moon->moonMesh)
+			return {};
 
-		const auto moon = isMasser ? sky->masser : sky->secunda;
-		if (!moon)
-			return { 0.0f, 0.0f, 0.0f, 0.0f };
+		const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get());
+		if (!prop)
+			return {};
 
-		auto& glare = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
-		float4 color = { glare.red * baseColor.x, glare.green * baseColor.y, glare.blue * baseColor.z, 0.0f };
+		float phase = 1.0f;
+		if (auto tex = prop->GetBaseTexture())
+			phase = GetPhaseIntensityFactor(GetPhaseFromTexture(tex->name.c_str()), newMoon, crescent, full);
 
-		if (moon->moonMesh && moon->moonMesh.get()) {
-			if (const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get())) {
-				if (auto texture = moonShaderProperty->GetBaseTexture()) {
-					const auto phase = GetPhaseFromTexture(texture->name.c_str());
-					color *= GetPhaseIntensityFactor(phase, newMoon, crescent, full);
-				}
-			}
-		}
-
-		return color;
+		return { prop->kBlendColor.red * baseColor.x * phase, prop->kBlendColor.green * baseColor.y * phase, prop->kBlendColor.blue * baseColor.z * phase, prop->kBlendColor.alpha * phase };
 	}
 
 }
