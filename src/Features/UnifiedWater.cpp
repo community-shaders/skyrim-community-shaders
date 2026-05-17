@@ -5,24 +5,19 @@
 #include "Util.h"
 
 #include <imgui_internal.h>
+#include <cmath>
+#include <unordered_map>
+#include <vector>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
 	UseOptimisedMeshes)
 
-static bool IsChildWorldSpace(const RE::TESWorldSpace* ws)
-{
-	return ws && ws->parentWorld &&
-	       ws->parentUseFlags.all(RE::TESWorldSpace::ParentUseFlag::kUseLODData);
-}
-
 // Engine behavior: CellState value 6 is the transition/attached state.
 static constexpr auto kTransitionAttachedCellState = static_cast<RE::TESObjectCELL::CellState>(6);
 
-static bool ShouldCullAtCell(const RE::TES* tes, int32_t cellX, int32_t cellY, bool* isInGrid = nullptr)
+static bool ShouldCullAtCell(const RE::TES* tes, int32_t cellX, int32_t cellY)
 {
-	if (isInGrid)
-		*isInGrid = false;
 	if (!tes || !tes->gridCells)
 		return false;
 
@@ -36,9 +31,6 @@ static bool ShouldCullAtCell(const RE::TES* tes, int32_t cellX, int32_t cellY, b
 	if (x < 0 || y < 0 || x >= length || y >= length)
 		return false;
 
-	if (isInGrid)
-		*isInGrid = true;
-
 	if (const auto cell = gridCells->GetCell(x, y)) {
 		return cell->cellState.any(RE::TESObjectCELL::CellState::kAttached, kTransitionAttachedCellState);
 	}
@@ -46,81 +38,278 @@ static bool ShouldCullAtCell(const RE::TES* tes, int32_t cellX, int32_t cellY, b
 	return false;
 }
 
-struct CullCompletionState
+static void AddLODWater(RE::TESWaterSystem* waterSystem, RE::BSTriShape* waterShape, RE::TESWorldSpace* worldSpace, RE::NiNode* lodRoot, RE::NiNode* waterParent)
 {
-	bool foundAttachedCell = false;
-	bool hasPotentiallyAttachableChild = false;
+	using func_t = void (*)(RE::TESWaterSystem*, RE::BSTriShape*, RE::TESWorldSpace*, RE::NiNode*, RE::NiNode*, bool);
+	static REL::Relocation<func_t> func{ REL::RelocationID(31404, 32209) };
 
-	bool IsComplete() const
+	func(waterSystem, waterShape, worldSpace, lodRoot, waterParent, true);
+}
+
+static void RemoveLODWater(RE::TESWaterSystem* waterSystem, RE::BSTriShape* waterShape, RE::NiNode* lodRoot)
+{
+	using func_t = void (*)(RE::TESWaterSystem*, RE::BSTriShape*, RE::NiNode*);
+	static REL::Relocation<func_t> func{ REL::RelocationID(31405, 32210) };
+
+	func(waterSystem, waterShape, lodRoot);
+}
+
+static void ClearWaterNodeChildren(RE::NiNode* node, RE::TESWaterSystem* waterSystem)
+{
+	if (!node)
+		return;
+
+	auto count = node->GetChildren().size();
+	while (count > 0) {
+		const auto child = node->GetChildren()[count - 1];
+		if (const auto childNode = child ? child->AsNode() : nullptr)
+			ClearWaterNodeChildren(childNode, waterSystem);
+
+		if (child && waterSystem)
+			waterSystem->RemoveWater(child.get());
+
+		node->DetachChildAt(--count);
+	}
+}
+
+static void DetachAllChildOccurrences(RE::NiNode* node, const RE::NiAVObject* childToDetach)
+{
+	if (!node || !childToDetach)
+		return;
+
+	auto count = node->GetChildren().size();
+	while (count > 0) {
+		const auto child = node->GetChildren()[count - 1];
+		if (child.get() == childToDetach) {
+			node->DetachChildAt(--count);
+		} else {
+			count--;
+		}
+	}
+}
+
+struct WaterPositionKey
+{
+	int32_t x = 0;
+	int32_t y = 0;
+	int32_t z = 0;
+	int32_t scale = 0;
+};
+
+static bool operator==(const WaterPositionKey& lhs, const WaterPositionKey& rhs)
+{
+	return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z && lhs.scale == rhs.scale;
+}
+
+struct WaterPositionKeyHash
+{
+	size_t operator()(const WaterPositionKey& key) const noexcept
 	{
-		return foundAttachedCell && !hasPotentiallyAttachableChild;
+		size_t hash = std::hash<int32_t>{}(key.x);
+		hash ^= std::hash<int32_t>{}(key.y) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+		hash ^= std::hash<int32_t>{}(key.z) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+		hash ^= std::hash<int32_t>{}(key.scale) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+		return hash;
 	}
 };
 
-// Cull waterParent children using tes->gridCells attachment state.
-// Pass tes explicitly when globals::game::tes is not ready (e.g., TES_SetWorldSpace).
-static CullCompletionState CullWaterParentByGridCells(RE::NiNode* waterParent, RE::TES* tes = nullptr)
+static int32_t QuantizeWaterPosition(float value)
 {
-	if (!tes)
-		tes = globals::game::tes;
-	if (!tes || !waterParent)
+	return static_cast<int32_t>(std::lround(value));
+}
+
+static WaterPositionKey GetWaterPositionKey(const RE::NiAVObject* object)
+{
+	if (!object)
 		return {};
 
-	CullCompletionState state;
+	return {
+		QuantizeWaterPosition(object->world.translate.x),
+		QuantizeWaterPosition(object->world.translate.y),
+		QuantizeWaterPosition(object->world.translate.z),
+		QuantizeWaterPosition(object->world.scale * 1000.0f),
+	};
+}
+
+static bool IsChildOfNode(const RE::NiAVObject* object, const RE::NiNode* root)
+{
+	if (!object || !root)
+		return false;
+
+	for (auto parent = object->parent; parent; parent = parent->parent) {
+		if (parent == root)
+			return true;
+	}
+
+	return object == root;
+}
+
+static RE::BSTriShape* SelectDuplicateWaterSystemShapeToRemove(RE::BSTriShape* existing, RE::BSTriShape* candidate, RE::NiNode* lodRoot)
+{
+	if (!existing)
+		return candidate;
+	if (!candidate)
+		return existing;
+
+	const bool existingIsLOD = IsChildOfNode(existing, lodRoot);
+	const bool candidateIsLOD = IsChildOfNode(candidate, lodRoot);
+	if (existingIsLOD != candidateIsLOD)
+		return existingIsLOD ? existing : candidate;
+
+	return candidate;
+}
+
+static void RemoveDuplicateWaterSystemObjects(RE::TESWaterSystem* waterSystem, RE::NiNode* lodRoot)
+{
+	if (!waterSystem)
+		return;
+
+	static thread_local std::unordered_map<WaterPositionKey, RE::BSTriShape*, WaterPositionKeyHash> shapeByPosition;
+	static thread_local std::vector<RE::BSTriShape*> duplicateShapes;
+
+	shapeByPosition.clear();
+	duplicateShapes.clear();
+
+	const auto objectCount = waterSystem->waterObjects.size();
+	if (shapeByPosition.bucket_count() < objectCount)
+		shapeByPosition.reserve(objectCount);
+	if (duplicateShapes.capacity() < objectCount)
+		duplicateShapes.reserve(objectCount);
+
+	for (const auto& waterObject : waterSystem->waterObjects) {
+		const auto shape = waterObject ? waterObject->shape.get() : nullptr;
+		if (!shape)
+			continue;
+
+		const auto key = GetWaterPositionKey(shape);
+		const auto [it, inserted] = shapeByPosition.try_emplace(key, shape);
+		if (inserted)
+			continue;
+
+		const auto existing = it->second;
+		const auto duplicate = SelectDuplicateWaterSystemShapeToRemove(existing, shape, lodRoot);
+		if (duplicate == existing)
+			it->second = shape;
+
+		duplicateShapes.push_back(duplicate);
+	}
+
+	for (const auto shape : duplicateShapes) {
+		if (!shape)
+			continue;
+
+		shape->SetAppCulled(true);
+		waterSystem->RemoveWater(shape);
+	}
+}
+
+static void CullWaterParentByGridCells(RE::NiNode* waterParent)
+{
+	const auto tes = globals::game::tes;
+	if (!tes || !waterParent)
+		return;
 
 	for (const auto& child : waterParent->GetChildren()) {
 		if (!child)
 			continue;
 		int32_t x, y;
 		Util::WorldToCell(child->world.translate, x, y);
-		bool isInGrid = false;
-		const bool cull = ShouldCullAtCell(tes, x, y, &isInGrid);
-		if (cull)
-			state.foundAttachedCell = true;
-		else if (isInGrid)
-			state.hasPotentiallyAttachableChild = true;
+		const bool cull = ShouldCullAtCell(tes, x, y);
 		child->SetAppCulled(cull);
 	}
-
-	return state;
 }
 
-// Cull all tiles under every water LOD parent.
-static bool CullAllWaterLODParents(RE::NiNode* waterLOD, RE::TES* tes = nullptr)
+bool UnifiedWater::BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSystem* waterSystem)
 {
-	if (!waterLOD)
+	if (!waterSystem || !waterCache || !gWaterLOD || !*gWaterLOD) {
+		BGSTerrainBlock_Attach::func(block);
 		return false;
-
-	CullCompletionState aggregate;
-
-	for (const auto& waterParentPtr : waterLOD->GetChildren()) {
-		if (!waterParentPtr)
-			continue;
-		const auto waterParent = waterParentPtr->AsNode();
-		if (!waterParent)
-			continue;
-		const auto state = CullWaterParentByGridCells(waterParent, tes);
-		aggregate.foundAttachedCell = aggregate.foundAttachedCell || state.foundAttachedCell;
-		aggregate.hasPotentiallyAttachableChild = aggregate.hasPotentiallyAttachableChild || state.hasPotentiallyAttachableChild;
 	}
 
-	return aggregate.IsComplete();
-}
+	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
+	bool attaching = false;
+	RE::TESWorldSpace* worldSpace = nullptr;
 
-void UnifiedWater::TryCompleteDeferredChildWorldspaceCull(RE::TES* tes)
-{
-	if (!pendingChildWsCull.load(std::memory_order_acquire) ||
-		!IsChildWorldSpace(currentPlayerWorldSpace.load(std::memory_order_acquire)) ||
-		!gWaterLOD || !*gWaterLOD)
-		return;
+	if (block && block->loaded && block->chunk && block->water && !block->attached) {
+		block->chunk->DetachChild2(block->water);
+		DetachAllChildOccurrences(*gWaterLOD, block->water);
+		block->water->local.translate = block->chunk->local.translate;
 
-	if (!tes)
-		tes = cachedTes.load(std::memory_order_acquire);
-	if (!tes || !tes->gridCells)
-		return;
+		RE::NiUpdateData updateData;
+		block->water->UpdateUpwardPass(updateData);
 
-	if (CullAllWaterLODParents(*gWaterLOD, tes))
-		pendingChildWsCull.store(false, std::memory_order_release);
+		ClearWaterNodeChildren(block->water, waterSystem);
+		block->waterAttached = false;
+
+		attaching = true;
+
+		const auto node = block->node;
+		worldSpace = node && node->manager ? node->manager->worldSpace : nullptr;
+		if (!node || !worldSpace) {
+			BGSTerrainBlock_Attach::func(block);
+			return false;
+		}
+
+		const auto lodLevel = node->GetLODLevel();
+		const auto instructions = waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
+		if (!instructions) {
+			logger::warn("[Unified Water] No instructions found for {} chunk at {}, {}", worldSpace->GetFormEditorID(), node->baseCellX, node->baseCellY);
+			BGSTerrainBlock_Attach::func(block);
+			return false;
+		}
+
+		for (auto& instruction : *instructions) {
+			if (!instruction.form.ptr)
+				continue;
+
+			RE::NiCloningProcess cloningProcess;
+
+			const auto targetShape = lodLevel > 4 || settings.UseOptimisedMeshes ? optimisedWaterMesh : waterMesh;
+			RE::BSTriShape* shape = targetShape->CreateClone(cloningProcess)->AsTriShape();
+
+			const auto posX = (instruction.x - node->baseCellX) * 4096.0f + instruction.size * 2048.0f;
+			const auto posY = (instruction.y - node->baseCellY) * 4096.0f + instruction.size * 2048.0f;
+			shape->local.scale = static_cast<float>(instruction.size);
+			shape->local.translate = { posX, posY, instruction.waterHeight };
+
+			block->water->AttachChild(shape, true);
+			built.emplace_back(shape, &instruction);
+
+			block->waterAttached = true;
+		}
+	}
+
+	BGSTerrainBlock_Attach::func(block);
+
+	if (!attaching || !block->waterAttached)
+		return false;
+
+	for (auto& [shape, instruction] : built) {
+		AddLODWater(waterSystem, shape, worldSpace, *gWaterLOD, block->water);
+
+		if (const auto prop = shape->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
+			REX::EnumSet waterFlags = static_cast<RE::BSWaterShaderProperty::WaterFlag>(0b10000100);
+			waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kUseCubemapReflections;
+			waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kUseReflections;
+			if (instruction->form.ptr->flags.any(RE::TESWaterForm::Flag::kEnableFlowmap))
+				waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kEnableFlowmap;
+			if (instruction->form.ptr->flags.any(RE::TESWaterForm::Flag::kBlendNormals))
+				waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kBlendNormals;
+			waterShaderProp->waterFlags = waterFlags;
+		}
+
+		// Vanilla AddLODWater routes through TESWaterSystem::AddWater and attaches
+		// the water parent to gWaterLOD. Use the matching vanilla LOD remove wrapper
+		// to unwind the water-system side state, then reattach the parent once below.
+		RemoveLODWater(waterSystem, shape, *gWaterLOD);
+	}
+
+	DetachAllChildOccurrences(*gWaterLOD, block->water);
+	(*gWaterLOD)->AttachChild(block->water, true);
+	waterSystem->Enable();
+
+	return true;
 }
 
 void UnifiedWater::LoadSettings(json& o_json)
@@ -355,9 +544,6 @@ void UnifiedWater::SetFlowmapTex() const
 
 void UnifiedWater::PostPostLoad()
 {
-	stl::detour_thunk<TES_SetWorldSpace>(REL::RelocationID(13170, 13315));
-	stl::detour_thunk<TES_DestroySkyCell>(REL::RelocationID(20029, 20463));
-
 	stl::write_thunk_call<TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams>(REL::RelocationID(31388, 32179).address() + REL::Relocate(0x360, 0x3BC, 0x35B));
 	stl::write_vfunc<0x4, BSWaterShaderMaterial_ComputeCRC32>(RE::VTABLE_BSWaterShaderMaterial[0]);
 
@@ -427,56 +613,6 @@ int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShade
 	return func(material, srcHash);
 }
 
-void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior)
-{
-	const bool enteringChild = IsChildWorldSpace(worldSpace);
-
-	// Set before func so attachment hooks fired inside func see the new worldspace.
-	auto& uw = globals::features::unifiedWater;
-	uw.currentPlayerWorldSpace.store(worldSpace, std::memory_order_release);
-	uw.cachedTes.store(tes, std::memory_order_release);
-	if (!enteringChild)
-		uw.pendingChildWsCull.store(false, std::memory_order_release);  // leaving child WS: discard any stale pending cull
-
-	func(tes, worldSpace, isExterior);
-
-	if (!uw.waterCache) {
-		uw.pendingChildWsCull.store(false, std::memory_order_release);
-		return;
-	}
-
-	uw.waterCache->SetCurrentWorldSpace(worldSpace);
-
-	if (enteringChild) {
-		// BGSTerrainBlock_Attach calls Enable() on block attach.
-		// Child-worldspace transitions can keep old LOD blocks attached, so re-enable here.
-		if (const auto waterSystem = globals::game::waterSystem)
-			waterSystem->Enable();
-
-		// Try an immediate cull with tes (globals::game::tes may still be null).
-		// Newly transitioned cells are often not attached yet, so deferred retries are still needed.
-		if (uw.gWaterLOD && *uw.gWaterLOD && tes && tes->gridCells)
-			CullAllWaterLODParents(*uw.gWaterLOD, tes);
-
-		// Keep deferred retries enabled until attached cells are observed and culled.
-		uw.pendingChildWsCull.store(true, std::memory_order_release);
-	}
-}
-
-void UnifiedWater::TES_DestroySkyCell::thunk(RE::TES* tes)
-{
-	func(tes);
-
-	auto& uw = globals::features::unifiedWater;
-	uw.currentPlayerWorldSpace.store(nullptr, std::memory_order_release);
-	uw.pendingChildWsCull.store(false, std::memory_order_release);
-	uw.cachedTes.store(nullptr, std::memory_order_release);
-	if (!uw.waterCache)
-		return;
-
-	uw.waterCache->SetCurrentWorldSpace(nullptr);
-}
-
 void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::BGSTerrainNode* node, RE::BSMultiBoundNode* waterParent)
 {
 	if (!node || !waterParent)
@@ -498,113 +634,15 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		return;
 	}
 
-	// Additional game-thread retry path for deferred child-WS cull completion.
-	uw.TryCompleteDeferredChildWorldspaceCull(uw.cachedTes.load(std::memory_order_acquire));
-
-	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
-	bool attaching = false;
-
-	if (block && block->loaded && !block->attached && block->chunk && block->water) {
-		block->chunk->DetachChild2(block->water);
-		block->water->local.translate = block->chunk->local.translate;
-
-		RE::NiUpdateData updateData;
-		block->water->UpdateUpwardPass(updateData);
-
-		const auto water = block->water;
-		for (auto& child : water->GetChildren()) {
-			if (child) {
-				waterSystem->RemoveWater(child.get());
-				water->DetachChild(child.get());
-			}
-		}
-
-		attaching = true;
-
-		const auto node = block->node;
-		const auto lodLevel = node->GetLODLevel();
-		const auto worldSpace = block->node->manager->worldSpace;
-
-		const auto instructions = uw.waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
-		if (!instructions) {
-			logger::warn("[Unified Water] No instructions found for {} chunk at {}, {}", worldSpace->GetFormEditorID(), node->baseCellX, node->baseCellY);
-			func(block);
-			return;
-		}
-
-		for (auto& instruction : *instructions) {
-			if (!instruction.form.ptr)
-				continue;
-
-			RE::NiCloningProcess cloningProcess;
-
-			const auto targetShape = lodLevel > 4 || uw.settings.UseOptimisedMeshes ? uw.optimisedWaterMesh : uw.waterMesh;
-			RE::BSTriShape* shape = targetShape->CreateClone(cloningProcess)->AsTriShape();
-
-			const auto posX = (instruction.x - node->baseCellX) * 4096.0f + instruction.size * 2048.0f;
-			const auto posY = (instruction.y - node->baseCellY) * 4096.0f + instruction.size * 2048.0f;
-			shape->local.scale = static_cast<float>(instruction.size);
-			shape->local.translate = { posX, posY, instruction.waterHeight };
-
-			water->AttachChild(shape, true);
-			built.emplace_back(shape, &instruction);
-
-			block->waterAttached = true;
-		}
-	}
-
-	func(block);
-
-	if (!attaching || !block->waterAttached)
-		return;
-
-	for (auto& [shape, instruction] : built) {
-		waterSystem->AddWater(shape, instruction->form.ptr, instruction->waterHeight, nullptr, true, false);
-
-		if (const auto prop = shape->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
-			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
-			REX::EnumSet waterFlags = static_cast<RE::BSWaterShaderProperty::WaterFlag>(0b10000100);
-			waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kUseCubemapReflections;
-			waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kUseReflections;
-			if (instruction->form.ptr->flags.any(RE::TESWaterForm::Flag::kEnableFlowmap))
-				waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kEnableFlowmap;
-			if (instruction->form.ptr->flags.any(RE::TESWaterForm::Flag::kBlendNormals))
-				waterFlags |= RE::BSWaterShaderProperty::WaterFlag::kBlendNormals;
-			waterShaderProp->waterFlags = waterFlags;
-		}
-
-		// Remove from WaterSystem, will manage it ourselves
-		if (!waterSystem->waterObjects.empty()) {
-			waterSystem->waterObjects.pop_back();
-		}
-	}
-
-	(*uw.gWaterLOD)->AttachChild(block->water, true);
-	waterSystem->Enable();
-
-	// BGSTerrainNode_UpdateWaterMeshSubVisibility never fires in child worldspaces.
-	// Cull newly built tiles here; full deferred retries are handled by
-	// TryCompleteDeferredChildWorldspaceCull().
-	if (IsChildWorldSpace(uw.currentPlayerWorldSpace.load(std::memory_order_acquire))) {
-		const auto tes = uw.cachedTes.load(std::memory_order_acquire);
-		if (tes && tes->gridCells) {
-			for (const auto& [shape, instruction] : built) {
-				const bool cull = ShouldCullAtCell(tes, instruction->x, instruction->y);
-				shape->SetAppCulled(cull);
-			}
-		}
-	}
+	uw.BuildWaterForBlock(block, waterSystem);
 }
 
 void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 {
 	auto& uw = globals::features::unifiedWater;
-	const auto water = block->water;
-	block->water = nullptr;
+	const auto water = block ? block->water : nullptr;
 
 	func(block);
-
-	block->water = water;
 
 	if (water) {
 		auto count = water->GetChildren().size();
@@ -612,7 +650,7 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 			water->DetachChildAt(--count);
 		}
 
-		(*uw.gWaterLOD)->DetachChild(water);
+		DetachAllChildOccurrences(*uw.gWaterLOD, water);
 		block->waterAttached = false;
 	}
 }
@@ -620,30 +658,6 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
 	auto& uw = globals::features::unifiedWater;
-
-	// Fix BSWaterShaderProperty.plane after interior->exterior transitions.
-	// The plane feeds ReflectPlane in the PerGeometry cbuffer. When corrupted (e.g., plane.constant = 0
-	// or garbage), the shader's refractionPlaneMul calculation produces extreme values causing flickering.
-	// This primarily affects flowmapped water because it uses more complex refraction depth calculations.
-	if (const auto prop = pass->geometry->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
-		const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
-		const float waterHeight = pass->geometry->world.translate.z;
-
-		// Validate and fix the plane if it's corrupted.
-		// A valid water plane has normal pointing up (0,0,1) and constant = water height.
-		// After interior->exterior transitions, plane.constant can be 0 or stale values.
-		const bool planeNonFinite =
-			!std::isfinite(waterShaderProp->plane.normal.x) ||
-			!std::isfinite(waterShaderProp->plane.normal.y) ||
-			!std::isfinite(waterShaderProp->plane.normal.z) ||
-			!std::isfinite(waterShaderProp->plane.constant);
-		const bool planeNormalBad = std::abs(waterShaderProp->plane.normal.x) > 0.01f || std::abs(waterShaderProp->plane.normal.y) > 0.01f || std::abs(waterShaderProp->plane.normal.z - 1.0f) > 0.01f;
-		const bool planeConstantBad = std::abs(waterShaderProp->plane.constant - waterHeight) > 1.0f;
-		if (planeNonFinite || planeNormalBad || planeConstantBad) {
-			waterShaderProp->plane.normal = { 0.0f, 0.0f, 1.0f };
-			waterShaderProp->plane.constant = waterHeight;
-		}
-	}
 
 	if (uw.flowmap) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
@@ -675,11 +689,7 @@ void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESW
 	func(waterSystem);
 
 	auto& uw = globals::features::unifiedWater;
-
-	// Game-thread fallback for deferred child-worldspace cull completion.
-	// Needed when entering child worldspaces with already-attached LOD blocks,
-	// where BGSTerrainBlock_Attach/UpdateWaterMeshSubVisibility may not run.
-	uw.TryCompleteDeferredChildWorldspaceCull(uw.cachedTes.load(std::memory_order_acquire));
+	RemoveDuplicateWaterSystemObjects(waterSystem, uw.gWaterLOD ? *uw.gWaterLOD : nullptr);
 
 	if (!uw.flowmap)
 		return;
