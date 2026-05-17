@@ -333,7 +333,7 @@ float4 ComputeLightScattering(uint3 coord, float3 cellOffset)
 
 	float3 viewDirection = normalize(positionWS);
 	float phase = ExponentialHeightFog::HenyeyGreenstein(
-		dot(normalize(SharedData::DirLightDirection.xyz), -viewDirection),
+		dot(normalize(SharedData::DirLightDirection.xyz), viewDirection),
 		SharedData::exponentialHeightFogSettings.volumetricFogScatteringDistribution);
 
 	float directionalShadow = SampleDirectionalShadow(positionWS, eyeIndex) *
