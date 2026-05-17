@@ -196,7 +196,7 @@ PS_OUTPUT main(PS_INPUT input)
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 	float4 exponentialHeightFog = (float4)0;
 	if (exponentialHeightFogEnabled) {
-		float4 fogScreenPosition = float4(monoUV * SharedData::BufferDim.xy, depth, 1.0f);
+		float4 fogScreenPosition = float4(Stereo::ConvertToStereoUV(monoUV, eyeIndex) * SharedData::BufferDim.xy, depth, 1.0f);
 		exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, fogScreenPosition);
 	}
 	if (isGeometryDepth || exponentialHeightFogEnabled) {

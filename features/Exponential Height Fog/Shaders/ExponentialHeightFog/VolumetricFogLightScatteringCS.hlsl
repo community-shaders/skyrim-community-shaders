@@ -274,7 +274,9 @@ float3 AccumulateLocalLightScattering(
 	LightLimitFix::LightGrid grid = LightLimitFix::lightGrid[clusterIndex];
 	uint lightCount = min(grid.lightCount, (uint)MAX_CLUSTER_LIGHTS);
 
-	float3 cellCornerWS = ExponentialHeightFog::ComputeCellWorldPosition(coord + uint3(1, 1, 1), cellOffset, eyeIndex, viewDepth);
+	uint cornerEyeIndex;
+	float cornerViewDepth;
+	float3 cellCornerWS = ExponentialHeightFog::ComputeCellWorldPosition(coord + uint3(1, 1, 1), cellOffset, cornerEyeIndex, cornerViewDepth);
 	float cellRadius = max(length(cellCornerWS - positionWS), 1.0f);
 
 	float phaseG = SharedData::exponentialHeightFogSettings.volumetricFogScatteringDistribution;

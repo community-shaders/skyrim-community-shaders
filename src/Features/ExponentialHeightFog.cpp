@@ -429,7 +429,7 @@ void ExponentialHeightFog::Prepass()
 		0.0f
 	};
 
-	const uint32_t eyeCount = REL::Module::IsVR() ? 2u : 1u;
+	const uint32_t eyeCount = globals::game::isVR ? 2u : 1u;
 	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
 		cb.clipToWorld[eyeIndex] = globals::game::frameBufferCached.GetCameraViewProjUnjittered(eyeIndex).Invert();
 	}

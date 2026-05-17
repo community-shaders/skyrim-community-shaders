@@ -106,7 +106,7 @@ namespace ExponentialHeightFog
 		return saturate(viewSizeSafe / physicalSize);
 	}
 
-	float4 SampleVolumetricFog(float4 screenPosition)
+	float4 SampleVolumetricFog(float4 screenPosition, uint eyeIndex)
 	{
 		if (!ShouldApplyVolumetricFog())
 			return float4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -135,8 +135,13 @@ namespace ExponentialHeightFog
 
 		float2 volumeUV = (screenPosition.xy + jitter) / (volumeSize * gridPixelSize);
 		float3 volumeTexelCenter = 0.5f / float3(volumeWidth, volumeHeight, volumeDepth);
-		float2 volumeUVMax = max(GetVolumetricFogUVMax(volumeSize, gridPixelSize), volumeTexelCenter.xy);
-		float3 volumeUVW = float3(clamp(volumeUV, volumeTexelCenter.xy, volumeUVMax), clamp(volumeZ, volumeTexelCenter.z, 1.0f - volumeTexelCenter.z));
+		float2 volumeUVMin = volumeTexelCenter.xy;
+		float2 volumeUVMax = max(GetVolumetricFogUVMax(volumeSize, gridPixelSize), volumeUVMin);
+#if defined(VR)
+		volumeUVMin.x = (eyeIndex == 0u ? 0.0f : 0.5f) + volumeTexelCenter.x;
+		volumeUVMax.x = max(volumeUVMin.x, min(volumeUVMax.x, (eyeIndex == 0u ? 0.5f : 1.0f) - volumeTexelCenter.x));
+#endif
+		float3 volumeUVW = float3(clamp(volumeUV, volumeUVMin, volumeUVMax), clamp(volumeZ, volumeTexelCenter.z, 1.0f - volumeTexelCenter.z));
 		float4 volumetricFog = ExponentialHeightFogIntegratedLightScattering.SampleLevel(SampColorSampler, volumeUVW, 0);
 		return lerp(float4(0.0f, 0.0f, 0.0f, 1.0f), volumetricFog, saturate((sceneDepth - GetVolumetricStartDistance()) * 100000000.0f));
 	}
@@ -152,9 +157,9 @@ namespace ExponentialHeightFog
 		return float4(combinedOpacity > 1e-4f ? combinedPremultiplied / combinedOpacity : float3(0.0f, 0.0f, 0.0f), combinedOpacity);
 	}
 
-	float4 CombineVolumetricFog(float4 analyticalFog, float4 screenPosition)
+	float4 CombineVolumetricFog(float4 analyticalFog, float4 screenPosition, uint eyeIndex)
 	{
-		float4 volumetricFog = SampleVolumetricFog(screenPosition);
+		float4 volumetricFog = SampleVolumetricFog(screenPosition, eyeIndex);
 		float analyticalTransmittance = 1.0f - analyticalFog.w;
 		float combinedTransmittance = volumetricFog.a * analyticalTransmittance;
 		float combinedOpacity = saturate(1.0f - combinedTransmittance);
@@ -239,7 +244,7 @@ namespace ExponentialHeightFog
 
 		fogColor += directionalInscattering;
 		float4 analyticalFog = float4(fogColor, 1.0f - expFogFactor);
-		return useScreenPosition ? CombineVolumetricFog(analyticalFog, screenPosition) : CombineVolumetricFog(analyticalFog, positionWS, eyeIndex);
+		return useScreenPosition ? CombineVolumetricFog(analyticalFog, screenPosition, eyeIndex) : CombineVolumetricFog(analyticalFog, positionWS, eyeIndex);
 	}
 
 	float4 GetExponentialHeightFog(float3 positionWS, float3 cameraWS, float3 fogColor)
