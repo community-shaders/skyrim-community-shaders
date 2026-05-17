@@ -149,6 +149,7 @@ namespace ShadowCasterManager
 		kFormulaParam_LightAmbientG,
 		kFormulaParam_LightAmbientB,
 		kFormulaParam_LightChosenLastFrame,
+		kFormulaParam_LightFramesSinceRender,  ///< frames since this light's slot was last rendered; large sentinel if never rendered or no slot
 		kFormulaParam_LightNeverFades,
 		kFormulaParam_LightPortalStrict,
 		kFormulaParam_LightNS,
@@ -291,15 +292,27 @@ namespace ShadowCasterManager
 
 		/// Light priority scoring formula.  Available variables:
 		/// lightindex, lightintensity, lightdistance, playerlightdistance, lightradius, lightx/y/z,
-		/// lightr/g/b, lightambientr/g/b, lightchosenlastframe, lightneverfades,
-		/// lightportalstrict, lightns, lightconverted, camerax/y/z, isinterior, timeofday
+		/// lightr/g/b, lightambientr/g/b, lightchosenlastframe, lightframessincerender,
+		/// lightneverfades, lightportalstrict, lightns, lightconverted, camerax/y/z,
+		/// isinterior, timeofday
+		///
 		/// Default favours spots whose cone plausibly reaches the camera
 		/// frustum. lightspotvisible is 1 for non-spots and for visible
 		/// spots; 0 for spots pointing away from the camera. The
 		/// (1 + lightisspot * lightspotvisible) term gives visible spots
-		/// a 2x score multiplier and leaves omnis at 1x, biasing the
-		/// scheduler toward keeping visible spots in the chosen pool.
-		std::string ScoreFormula = "lightradius * lightintensity / (1 + ((1 - lightneverfades) * lightdistance) / 1000) * (1 + lightchosenlastframe * 0.3) * (1 + lightisspot * lightspotvisible)";
+		/// a 2x score multiplier and leaves omnis at 1x.
+		///
+		/// The recency term `max(0, 1 - lightframessincerender / 8) * 0.4`
+		/// is a smooth temporal stickiness that decays linearly to zero
+		/// over 8 frames since the slot's last actual render. It
+		/// suppresses rank-drift churn at the chosen/excess boundary
+		/// (recently-rendered torches stay chosen across small
+		/// importance perturbations) without overriding structural
+		/// demotion -- once a light hasn't been redrawn in 8 frames the
+		/// bonus is 0 and ranking is decided purely on present merit.
+		/// This replaces the older boolean `(1 + lightchosenlastframe * 0.3)`
+		/// term; `lightchosenlastframe` remains available for custom formulas.
+		std::string ScoreFormula = "lightradius * lightintensity / (1 + ((1 - lightneverfades) * lightdistance) / 1000) * (1 + max(0, 1 - lightframessincerender / 8) * 0.4) * (1 + lightisspot * lightspotvisible)";
 
 		/// Redraw interval formula (per light).  Higher = less frequent redraws.
 		/// Uses min(lightdistance, playerlightdistance) so that a light near the player

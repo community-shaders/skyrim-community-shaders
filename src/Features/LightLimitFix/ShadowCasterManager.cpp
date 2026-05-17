@@ -57,6 +57,7 @@ namespace ShadowCasterManager
 		{ "lightambientg", "ambient green", kFormulaParam_LightAmbientG },
 		{ "lightambientb", "ambient blue", kFormulaParam_LightAmbientB },
 		{ "lightchosenlastframe", "1 if this light held a slot last frame", kFormulaParam_LightChosenLastFrame },
+		{ "lightframessincerender", "frames since this light's slot was last actually rendered into the shadow atlas; 1e6 sentinel when never rendered or unassigned", kFormulaParam_LightFramesSinceRender },
 		{ "lightneverfades", "1 if lodFade disabled (permanent light)", kFormulaParam_LightNeverFades },
 		{ "lightportalstrict", "1 if portal-strict (always 1 for shadow casters)", kFormulaParam_LightPortalStrict },
 		{ "lightns", "1 if promoted from normal light (PromoteNormalToShadow)", kFormulaParam_LightNS },
@@ -215,9 +216,6 @@ namespace ShadowCasterManager
 		int disabled_excess = 0;             // DisableLight from c.excess path (spot/no-convert)
 		int reconciliation_clears = 0;       // slot freed because light gone from activeShadowLights
 		int slots_in_use = 0;                // sampled at frame end
-		int retained_invalid = 0;            // c.invalid skipped: slot retained from prior frame
-		int retained_excess = 0;             // c.excess skipped: slot retained from prior frame
-		int lru_evictions = 0;               // slots evicted by LRU under chosen-slot pressure
 		int first_render_skips = 0;          // chosen lights deferred from shadow set: no valid slice yet
 		int dropped_frustum = 0;             // c.invalidFrustum: light off-screen, no engine call
 	};
@@ -1147,15 +1145,29 @@ namespace ShadowCasterManager
 		FormulaHelper::SetParam(kFormulaParam_PlayerLightDistance, 0.0);  // overridden below after light position is known
 		FormulaHelper::SetParam(kFormulaParam_LightImportance, 0.0);      // overridden per-entry in redraw interval loop; 0 in score formula
 
-		// Chosen-last-frame bonus
+		// Temporal stickiness signals. Both derived from the slot pool in one
+		// pass: chosenLastFrame is the boolean kept for backward-compat with
+		// user formulas; framesSinceRender is a continuous age that decays to
+		// zero stickiness once the slot has been stale long enough to no
+		// longer represent a true rank-drift case. Sentinel 1e6 covers the
+		// "no slot" and "never rendered" branches so the default formula's
+		// max(0, 1 - age/window) decay term cleanly collapses to 0.
 		double chosenLastFrame = 0.0;
-		for (int i = s_lights.PointLightFirst(); i < s_lights.PointLightEnd(s_settings.ShadowLightCount); i++) {
-			if (s_lights.Lights[i].Light == light) {
+		double framesSinceRender = 1e6;
+		{
+			const int32_t now = *globals::game::frameCounter;
+			for (int i = s_lights.PointLightFirst(); i < s_lights.PointLightEnd(s_settings.ShadowLightCount); i++) {
+				const auto& e = s_lights.Lights[i];
+				if (e.Light != light)
+					continue;
 				chosenLastFrame = 1.0;
+				if (e.LastDrawnFrame >= 0)
+					framesSinceRender = static_cast<double>(now - e.LastDrawnFrame);
 				break;
 			}
 		}
 		FormulaHelper::SetParam(kFormulaParam_LightChosenLastFrame, chosenLastFrame);
+		FormulaHelper::SetParam(kFormulaParam_LightFramesSinceRender, framesSinceRender);
 
 		FormulaHelper::SetParam(kFormulaParam_LightNeverFades, light->lodFade ? 0.0 : 1.0);
 		FormulaHelper::SetParam(kFormulaParam_LightPortalStrict, light->portalStrict ? 1.0 : 0.0);
@@ -1891,70 +1903,27 @@ namespace ShadowCasterManager
 				}
 			}
 
-			// Slot retention with on-demand LRU eviction.
-			//
-			// The slot pool is a cache, not a per-frame allocation. A slot is
-			// released only when (1) the engine has dropped its light from
-			// activeShadowLights (handled by the reconciliation loop above),
-			// or (2) a chosen light needs a slot AND no truly-empty slot is
-			// available -- in which case the least-recently-rendered retained
-			// slot is evicted. Retained-but-unchosen slots continue serving
-			// the cluster pipeline via their cached shadow content; the atomic
-			// mutation loop below skips convert/disable when an existing slot
-			// is held. This is what keeps flickering torches (kFlicker / kPulse
-			// animation jitters a light's rank below the chosen threshold for
-			// one frame) from churning their slot every frame.
-			{
-				// Phase 1: how many chosen lights still need slot assignment?
-				int needSlot = 0;
-				const int pointFirst = s_lights.PointLightFirst();
-				const int pointEnd = s_lights.PointLightEnd(s_settings.ShadowLightCount);
-				for (auto& c : candidates) {
-					if (!c.chosen)
-						continue;
-					bool hasSlot = false;
-					for (int i = pointFirst; i < pointEnd; ++i) {
-						if (s_lights.Lights[i].Light == c.light) {
-							hasSlot = true;
+			// Drop entries no longer chosen. Rank-drift suppression now lives
+			// in CalculateLightScore via the lightframessincerender decay term
+			// in the default ScoreFormula; the slot pool itself is a dumb
+			// container that follows the chosen set without policy of its own.
+			// The atomic loop's c.excess / c.invalid branches handle the
+			// engine-side ConvertLight / DisableLight call for the dropped
+			// occupants on the same frame.
+			for (int i = 0; i < s_lights.Size; i++) {
+				if (!s_lights.Lights[i].Light)
+					continue;
+				bool stillChosen = (i == 0 && s_lights.Sun);  // sun slot
+				if (!stillChosen) {
+					for (auto& c : candidates) {
+						if (c.light == s_lights.Lights[i].Light && c.chosen) {
+							stillChosen = true;
 							break;
 						}
 					}
-					if (!hasSlot)
-						++needSlot;
 				}
-
-				// Phase 2: count truly-empty slots in the point-light range.
-				int freeSlots = 0;
-				for (int i = pointFirst; i < pointEnd; ++i)
-					if (!s_lights.Lights[i].Light)
-						++freeSlots;
-
-				// Phase 3: if pressure exceeds free supply, evict LRU
-				// retained slots (those whose lights are NOT in c.chosen
-				// this frame, sorted by oldest LastDrawnFrame first).
-				const int toEvict = std::max(0, needSlot - freeSlots);
-				if (toEvict > 0) {
-					std::vector<std::pair<int32_t, int>> evictable;  // (LastDrawnFrame, slot)
-					evictable.reserve(pointEnd - pointFirst);
-					for (int i = pointFirst; i < pointEnd; ++i) {
-						if (!s_lights.Lights[i].Light)
-							continue;
-						bool inChosen = false;
-						for (auto& c : candidates) {
-							if (c.light == s_lights.Lights[i].Light && c.chosen) {
-								inChosen = true;
-								break;
-							}
-						}
-						if (!inChosen)
-							evictable.emplace_back(s_lights.Lights[i].LastDrawnFrame, i);
-					}
-					std::sort(evictable.begin(), evictable.end());
-					for (int k = 0; k < toEvict && k < static_cast<int>(evictable.size()); ++k) {
-						s_lights.Lights[evictable[k].second].Clear();
-						s_schedDiag.lru_evictions++;
-					}
-				}
+				if (!stillChosen)
+					s_lights.Lights[i].Clear();
 			}
 
 			// Add newly chosen lights (assigned to first free slot; keeps existing chosen lights in place).
@@ -2351,6 +2320,36 @@ namespace ShadowCasterManager
 			return -1;
 		};
 
+		// Single decision point for "this light won't shadow this frame --
+		// Convert (keeps diffuse via cluster pipeline) or Disable (light
+		// vanishes)?". Used by both the c.invalid and c.excess branches.
+		//
+		// Spots always Disable: the engine has no NiSpotLight equivalent, so
+		// ConvertLight on a BSShadowFrustumLight would make the cone-shaped
+		// illumination spherical and bleed through walls behind the cone.
+		// Omnis/hemis Convert when ConvertExcessToNormal is on or a debug
+		// pin-convert is set on this light. The pin override applies even
+		// when the user disabled ConvertExcessToNormal globally.
+		//
+		// allowConvert is a callsite veto -- the c.invalid path passes it
+		// false for invalidPortal (cluster has no portal-graph awareness,
+		// converting would leak light across cells) so portal-occluded
+		// lights always Disable.
+		//
+		// Returns true on Convert, false on Disable, so callers can apply
+		// path-specific follow-ups (e.g. lodDimmer=1 reset on the invalidLod
+		// path so the converted light still contributes to clusters).
+		auto convertOrDisable = [&](RE::BSShadowLight* light, bool allowConvert) -> bool {
+			const bool isSpot = light->GetIsFrustumLight();
+			const bool forceConvert = s_pinConvert.count(reinterpret_cast<uintptr_t>(light)) > 0;
+			if (allowConvert && (s_settings.ConvertExcessToNormal || forceConvert) && !isSpot) {
+				ConvertLight(light, ssn, false);
+				return true;
+			}
+			DisableLight(light);
+			return false;
+		};
+
 		// Sun slot (slot 0) is processed inline below — sun setup happened at the
 		// top of the function; we only need to mark its mask index here.
 		if (s_lights.Sun && s_lights.Lights[0].Light && s_lights.Lights[0].RedrawFrame) {
@@ -2366,111 +2365,50 @@ namespace ShadowCasterManager
 			ZoneNamedN(zoneAtomic, "SCM::AtomicMutationLoop", true);
 			for (auto& c : candidates) {
 				if (c.invalid) {
-					if (!isAliveNow(c.light))
+					// isUsableLight (membership + vtable) is the same gate the
+					// excess branch uses. Both ConvertLight and DisableLight
+					// fan into virtually-dispatched callees (ReturnShadowmaps),
+					// so a freed-but-still-canonical pointer must be skipped
+					// for either path.
+					if (!isUsableLight(c.light))
 						continue;
 
-					// Slot retention: if this light still has a kSHADOWMAPS
-					// slot from a previous frame, keep it. invalidCamera blips
-					// (engine LOD-fade flicker on animated torches) would
-					// otherwise release the slot via ConvertLight, producing a
-					// one-frame shadow disappearance and a re-render churn the
-					// next frame. Holding the slot lets the cluster pipeline
-					// keep sampling the cached shadow during the invalid blip;
-					// the next valid frame resumes normal scheduling.
-					{
-						const int retainedSlot = findSlotForLight(c.light);
-						if (retainedSlot >= 0 &&
-							retainedSlot < s_lights.PointLightEnd(s_settings.ShadowLightCount) &&
-							!(retainedSlot == 0 && s_lights.Sun)) {
-							// Force the cached-shadow path: the scheduler may
-							// have set RedrawFrame=true intending to re-render
-							// this light, but UpdateCamera just failed so the
-							// render can't run. Clear RedrawFrame so the
-							// downstream GameSetShadowCasterSlot loop reinserts
-							// the light with its cached depth (i.e. the
-							// previous frame's content) instead of dropping
-							// it from the shadow set entirely. Without this,
-							// retained-invalid lights that won the redraw
-							// budget vanish from the shadow caster array for
-							// one frame -- visible as a single-frame shadow
-							// flicker on flickering-torch lights.
-							s_lights.Lights[retainedSlot].RedrawFrame = false;
-							s_schedDiag.retained_invalid++;
-							continue;
-						}
-					}
-
-					// Frustum-out fast path.
-					//
-					// UpdateCamera's three failure modes -- frustum cull, LOD
-					// fade, portal occlusion -- have different correct actions.
-					// Frustum-culled lights are off-screen by definition (the
-					// engine performs a bounding-sphere or bounding-cone test
-					// against the camera frustum), so they contribute nothing
-					// visible via either the shadow pipeline OR cluster
-					// lighting. ConvertLight on such a light is wasted work
-					// (~6 us each). Drop: no engine call, light remains in
-					// activeShadowLights for next frame's re-evaluation. The
-					// engine manages cell-level membership; we leave it alone.
-					//
-					// Captures of heavy-modlist outdoor scenes show ~70 of 71
-					// invalidCamera fails per frame are frustum-out, so this
-					// fast path captures essentially the entire convert cost
-					// at no behavioural cost.
+					// Frustum-out fast path. UpdateCamera's bounding-sphere/
+					// cone test against the camera frustum means this light
+					// cannot contribute to any visible pixel -- not via the
+					// shadow pipeline, not via cluster lighting. ConvertLight
+					// would be wasted work (~6 us each); captures of heavy
+					// outdoor scenes show ~99% of invalidCamera fails are
+					// frustum-out. Drop: no engine call, light remains in
+					// activeShadowLights for next frame's re-evaluation.
 					if (c.invalidFrustum) {
 						s_schedDiag.dropped_frustum++;
 						continue;
 					}
 
-					// Reachable cases at this point (frustum-out handled above):
-					//   - invalidLod: engine considers light too far for shadow
-					//     rendering, but it's still visible. For omnis,
-					//     ConvertLight demotes to non-shadow cluster light so
-					//     the diffuse contribution is preserved. Spot shadows
-					//     fall through to DisableLight (engine has no
-					//     NiSpotLight equivalent; omni conversion of a cone
-					//     would bleed light through walls).
-					//   - invalidPortal: cluster lighting has no portal-graph
-					//     awareness, so converting a portal-culled light
-					//     would bleed it across cells. Falls through to
-					//     DisableLight.
-					//
-					// User reports of "distant LightPlacer lights turn off
-					// instead of converting" track to the LOD path; the
-					// lodDimmer=1 reset below recovers their diffuse.
-					const bool isSpotShadow = c.light->GetIsFrustumLight();
-					const bool forceConvert = s_pinConvert.count(reinterpret_cast<uintptr_t>(c.light)) > 0;
-					if (c.invalidCamera && !isSpotShadow &&
-						(s_settings.ConvertExcessToNormal || forceConvert) &&
-						isUsableLight(c.light)) {
-						// Same atomic ordering as the excess path: chosen lights
-						// have completed their Begin/EnableLight/End sequence by
-						// the time we reach invalid candidates, so ConvertLight's
-						// ReturnShadowmaps side effect can only touch pointers we
-						// are no longer walking.
-						{
-							ZoneNamedN(zCvtInv, "SCM::Engine::ConvertLight(invalidCamera)", true);
-							s_schedDiag.converted_invalid++;
-							ConvertLight(c.light, ssn, false);
-						}
-						// UpdateCamera (called in the validation pass above)
-						// zeros lodDimmer when LOD fade fires (engine sets
-						// lodDimmer=0 alongside frustrumCull=0xff). The cluster
-						// lighting builder multiplies light.fade by lodDimmer
-						// (LightLimitFix.cpp:497) and drops the light from
-						// lightsData if the product falls below 1e-4. So a
-						// LOD-faded light that we convert to non-shadow still
-						// disappears from cluster lighting. Restore lodDimmer
-						// to 1 so the converted light contributes its full
-						// non-shadow diffuse to clusters; the engine will set
-						// it back to 0 next frame if the light remains LOD-
-						// faded, and we'll restore again -- self-correcting
-						// across frames as the camera moves.
+					// Remaining cases: invalidLod (engine thinks too far for
+					// useful shadow rendering, but light is still visible) and
+					// invalidPortal (cluster lighting has no portal-graph
+					// awareness). Convert is allowed for invalidCamera only --
+					// portal-occluded lights would leak across cells if
+					// promoted to non-shadow.
+					ZoneNamedN(zCvt, "SCM::Engine::convertOrDisable(invalid)", true);
+					if (convertOrDisable(c.light, /*allowConvert=*/c.invalidCamera)) {
+						s_schedDiag.converted_invalid++;
+						// UpdateCamera zeros lodDimmer alongside frustrumCull
+						// when LOD fade fires. The cluster lighting builder
+						// multiplies light.fade by lodDimmer and drops the
+						// light if the product falls below 1e-4 -- so a
+						// LOD-faded light that we convert would still
+						// disappear from clusters. Restore lodDimmer to 1
+						// so the converted light contributes its full
+						// non-shadow diffuse; the engine resets it back to 0
+						// next frame if the light is still LOD-faded, and
+						// we restore again -- self-correcting as the camera
+						// moves.
 						c.light->lodDimmer = 1.0f;
 					} else {
-						ZoneNamedN(zDisInv, "SCM::Engine::DisableLight(invalid)", true);
 						s_schedDiag.disabled_invalid++;
-						DisableLight(c.light);
 					}
 					continue;
 				}
@@ -2538,82 +2476,26 @@ namespace ShadowCasterManager
 				}
 
 				if (c.excess) {
-					// ConvertLight calls virtual methods (ReturnShadowmaps) so we
-					// need the full usability check (membership + vtable). DisableLight
-					// only calls ReturnShadowmaps which is itself non-virtual but the
-					// callee chain may dispatch virtually — same guard either way.
 					if (!isUsableLight(c.light))
 						continue;
 
-					// Slot retention: if this light already holds a kSHADOWMAPS
-					// slot (from a previous frame when it was chosen), keep
-					// it. The rank-drift case (importance bobs across the
-					// chosen / excess boundary from one frame to the next)
-					// would otherwise trigger ConvertLight churn here; the
-					// LRU eviction pass above freed only slots that chosen
-					// lights actually needed, so the remaining retained slots
-					// continue serving their cached shadow content.
-					{
-						const int retainedSlot = findSlotForLight(c.light);
-						if (retainedSlot >= 0 &&
-							retainedSlot < s_lights.PointLightEnd(s_settings.ShadowLightCount) &&
-							!(retainedSlot == 0 && s_lights.Sun)) {
-							// Same reasoning as the invalid retention path:
-							// force RedrawFrame=false so the cached-shadow
-							// GameSetShadowCasterSlot loop reinserts this
-							// light. Without this, an excess-retained light
-							// that won the redraw budget would vanish from
-							// the shadow set for one frame (atomic loop
-							// skipped it via this continue; cached loop
-							// excludes RedrawFrame=true).
-							s_lights.Lights[retainedSlot].RedrawFrame = false;
-							s_schedDiag.retained_excess++;
-							continue;
-						}
-					}
-
-					// Skyrim's non-shadow light pipeline has no spot/cone primitive —
-					// `BSLight` only wraps `NiPointLight` (omni) or `NiDirectionalLight`,
-					// with no `NiSpotLight` equivalent. Converting a `BSShadowFrustumLight`
-					// (the spot-shadow class with semiWidth/semiHeight/falloff cone
-					// parameters) to "normal" via Hook_IsShadowLight makes the engine
-					// treat it as a 360° omni light, which is wrong: the cone-shaped
-					// illumination becomes spherical and bleeds through walls behind
-					// the original spot direction.
+					// Atomic ordering: by the time we reach excess (rank
+					// >= ShadowLightCount), all chosen lights have completed
+					// their Begin/EnableLight/End sequence. ConvertLight's
+					// ReturnShadowmaps side effect can only invalidate
+					// pointers we are no longer walking. LightLimitFix::
+					// UpdateLights then iterates activeShadowLights to pick
+					// up converted lights for the cluster pipeline.
 					//
-					// Only `BSShadowParabolicLight` (omni / hemi-paraboloid) converts
-					// cleanly — its illumination is already approximately spherical so
-					// the engine's omni interpretation is acceptable.
-					//
-					// Spot lights (BSShadowFrustumLight) fall back to DisableLight —
-					// vanilla SLF behaviour for excess. They vanish rather than render
-					// incorrectly. A future improvement could store cone parameters in
-					// the cluster `LightData` and apply cone falloff in our cluster
-					// shader; until then, dropping spot excess is the honest answer.
-					const bool isSpotShadow = c.light->GetIsFrustumLight();
-					// Debug pin override: pin-convert forces conversion regardless
-					// of the user's ConvertExcessToNormal setting. Spot gate still
-					// applies — pin-converting a spot still falls through to
-					// DisableLight, since there's no NiSpotLight equivalent.
-					const bool forceConvert = s_pinConvert.count(reinterpret_cast<uintptr_t>(c.light)) > 0;
-
-					if ((s_settings.ConvertExcessToNormal || forceConvert) && !isSpotShadow) {
-						// Atomic ordering: by the time we reach excess (rank
-						// >= ShadowLightCount), all chosen lights (rank <
-						// ShadowLightCount) have completed their Begin/EnableLight/
-						// End sequence. ConvertLight's ReturnShadowmaps side effect
-						// can only invalidate pointers we are no longer walking.
-						// LightLimitFix::UpdateLights then iterates the engine's
-						// activeShadowLights to pick up converted lights for the
-						// cluster pipeline (see Ghidra-confirmed comment there).
-						ZoneNamedN(zCvtEx, "SCM::Engine::ConvertLight(excess)", true);
+					// Rank-drift suppression (a torch's importance score
+					// bobbing across the chosen/excess boundary frame-to-
+					// frame) lives in the score formula via the
+					// lightframessincerender decay term, not here.
+					ZoneNamedN(zCvt, "SCM::Engine::convertOrDisable(excess)", true);
+					if (convertOrDisable(c.light, /*allowConvert=*/true))
 						s_schedDiag.converted_excess++;
-						ConvertLight(c.light, ssn, false);
-					} else {
-						ZoneNamedN(zDisEx, "SCM::Engine::DisableLight(excess)", true);
+					else
 						s_schedDiag.disabled_excess++;
-						DisableLight(c.light);
-					}
 					continue;
 				}
 			}
@@ -2801,9 +2683,6 @@ namespace ShadowCasterManager
 			TracyPlot("scm.disabled.excess", (int64_t)s_schedDiag.disabled_excess);
 			TracyPlot("scm.reconciliation.clears", (int64_t)s_schedDiag.reconciliation_clears);
 			TracyPlot("scm.slots.in_use", (int64_t)s_schedDiag.slots_in_use);
-			TracyPlot("scm.retained.invalid", (int64_t)s_schedDiag.retained_invalid);
-			TracyPlot("scm.retained.excess", (int64_t)s_schedDiag.retained_excess);
-			TracyPlot("scm.lru.evictions", (int64_t)s_schedDiag.lru_evictions);
 			TracyPlot("scm.first_render_skips", (int64_t)s_schedDiag.first_render_skips);
 			TracyPlot("scm.dropped_frustum", (int64_t)s_schedDiag.dropped_frustum);
 
