@@ -2159,7 +2159,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.AO = rawRMAOS.z;
 
 	// Apply vertex color to base color so PBR metals use it
-	float3 pbrVertexColor = Color::SrgbToLinear(input.Color.xyz);
+	float3 pbrVertexColor = Color::GamutTransform(Color::SrgbToLinear(input.Color.xyz));
 	float pbrVertexAO = max(max(pbrVertexColor.x, pbrVertexColor.y), pbrVertexColor.z);
 	pbrVertexColor = pbrVertexAO == 0.0f ? 1.0f : pbrVertexColor * lerp(1 / max(pbrVertexAO, 0.001), 1, SharedData::truePBRSettings.VertexAOStrength);
 
@@ -2896,7 +2896,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		vertexColor = 1;
 #		endif
 #	elif defined(SKYLIGHTING)
-	float3 vertexColor = input.Color.xyz;
+	float3 vertexColor = Color::ColorToLinear(input.Color.xyz);
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
 #		if defined(TRUE_PBR)
 	vertexAO = lerp(1, vertexAO, SharedData::truePBRSettings.VertexAOStrength);
@@ -2908,7 +2908,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TRUE_PBR)
 	float3 vertexColor = 1;
 #		else
-	float3 vertexColor = input.Color.xyz;
+	float3 vertexColor = Color::ColorToLinear(input.Color.xyz);
 #		endif
 #	endif  // defined (HAIR)
 
