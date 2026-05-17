@@ -4,7 +4,7 @@
 
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
+#include "Utils/D3D.h"
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
@@ -109,7 +109,7 @@ void Deferred::SetupResources()
 		// Specular
 		SetupRenderTarget(SPECULAR, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Reflectance
-		SetupRenderTarget(REFLECTANCE, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		SetupRenderTarget(REFLECTANCE, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Normal + Roughness
 		SetupRenderTarget(NORMALROUGHNESS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks
@@ -135,36 +135,41 @@ void Deferred::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
+		Util::SetResourceName(linearSampler, "Deferred::LinearSampler");
 
 		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointSampler));
+		Util::SetResourceName(pointSampler, "Deferred::PointSampler");
 	}
 
+	// Directional shadow structured buffer (t98): CPU-written each frame, read-only on GPU.
+	// One element holds the sun cascade data uploaded from BSShadowDirectionalLight.
 	{
-		D3D11_TEXTURE2D_DESC texDesc;
-		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-		mainTex.texture->GetDesc(&texDesc);
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(DirectionalShadowLightData);
+		sbDesc.ByteWidth = sizeof(DirectionalShadowLightData);
 
-		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
-		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 1;
 
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = {
-				.MostDetailedMip = 0,
-				.MipLevels = 1 }
-		};
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
+		delete directionalShadowLights;
+		directionalShadowLights = new Buffer(sbDesc, nullptr, "Deferred::DirectionalShadowLights");
+		directionalShadowLights->CreateSRV(srvDesc);
 	}
 }
 
 void Deferred::ReflectionsPrepasses()
 {
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "Reflections Prepass");
+
 	auto shaderCache = globals::shaderCache;
 
 	if (!shaderCache->IsEnabled())
@@ -175,21 +180,19 @@ void Deferred::ReflectionsPrepasses()
 	state->activeReflections = true;
 	state->UpdateSharedData(false, false);
 
-	ZoneScoped;
-	TracyD3D11Zone(globals::state->tracyCtx, "Reflections Prepass");
-
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) {
-		feature->ReflectionsPrepass();
-	});
+	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) { feature->ReflectionsPrepass(); }, true);
 }
 
 void Deferred::EarlyPrepasses()
 {
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "Early Prepass");
+
 	auto shaderCache = globals::shaderCache;
 
 	if (!shaderCache->IsEnabled())
@@ -197,17 +200,15 @@ void Deferred::EarlyPrepasses()
 
 	globals::state->UpdateSharedData(false, true);
 
-	ZoneScoped;
-	TracyD3D11Zone(globals::state->tracyCtx, "Early Prepass");
-
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) {
-		feature->EarlyPrepass();
-	});
+	// Shadow maps have just been rendered — upload BSShadowDirectionalLight data to t98.
+	CopyShadowLightData();
+
+	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) { feature->EarlyPrepass(); }, true);
 }
 
 void Deferred::PrepassPasses()
@@ -223,10 +224,7 @@ void Deferred::PrepassPasses()
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
-	globals::truePBR->PrePass();
-	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) {
-		feature->Prepass();
-	});
+	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); }, true);
 }
 
 void Deferred::StartDeferred()
@@ -268,6 +266,10 @@ void Deferred::StartDeferred()
 	{
 		auto context = globals::d3d::context;
 
+		// Clear POM offset texture to -1.0 sentinel so pixels the Lighting PS never touches read "no POM"
+		if (globals::features::vr.stereoOpt.loaded)
+			globals::features::vr.stereoOpt.ClearPomOffsetTexture();
+
 		ID3D11Buffer* buffers[1] = { *globals::game::perFrame.get() };
 
 		ID3D11Buffer* vrBuffer = nullptr;
@@ -288,8 +290,9 @@ void Deferred::StartDeferred()
 
 	OverrideBlendStates();
 
-	// VR: Classify Eye 1 pixels and write hardware stencil marks before geometry rendering
-	if (globals::game::isVR) {
+	// VR: Classify Eye 1 pixels and write hardware stencil marks before geometry rendering.
+	// Only enable stencil culling when overwrite reprojection is available for this frame.
+	if (globals::game::isVR && globals::features::vr.IsStereoOptimizationCullingReady()) {
 		globals::features::vr.stereoOpt.DispatchStencil();
 	}
 }
@@ -364,22 +367,22 @@ void Deferred::DeferredPasses()
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
 		ID3D11ShaderResourceView* srvs[16]{
-			specular.SRV,
-			albedo.SRV,
-			normalRoughness.SRV,
-			masks.SRV,
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(true) : nullptr,
-			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,
-			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,
-			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,
-			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr,
-			ssgi_ao,
-			ssgi_hq_spec ? nullptr : ssgi_y,
-			ssgi_hq_spec ? nullptr : ssgi_cocg,
-			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
-			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,
-			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,
+			specular.SRV,                                                                                    // t0  SpecularTexture
+			albedo.SRV,                                                                                      // t1  AlbedoTexture
+			normalRoughness.SRV,                                                                             // t2  NormalRoughnessTexture
+			masks.SRV,                                                                                       // t3  MasksTexture
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(false) : nullptr,  // t4  DepthTexture (24/32-bit; HLSL type baked at compile via TERRAIN_BLENDING)
+			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                              // t5  ReflectanceTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                        // t6  EnvTexture
+			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,             // t7  EnvReflectionsTexture
+			dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr,   // t8  SkylightingProbeArray
+			nullptr,                                                                                         // t9  unused
+			ssgi_ao,                                                                                         // t10 SsgiAoTexture
+			ssgi_hq_spec ? nullptr : ssgi_y,                                                                 // t11 SsgiYTexture
+			ssgi_hq_spec ? nullptr : ssgi_cocg,                                                              // t12 SsgiCoCgTexture
+			ssgi_hq_spec ? ssgi_gi_spec : nullptr,                                                           // t13 SsgiSpecularTexture
+			ibl.loaded ? ibl.envIBLTexture->srv.get() : nullptr,                                             // t14 EnvIBLTexture
+			ibl.loaded ? ibl.skyIBLTexture->srv.get() : nullptr,                                             // t15 SkyIBLTexture
 		};
 
 		if (dynamicCubemaps.loaded)
@@ -391,11 +394,9 @@ void Deferred::DeferredPasses()
 		// Bind null when disabled so stale mode data doesn't cause incorrect early-exits
 		// in DeferredCompositeCS (null SRV reads return 0 = MODE_DISOCCLUDED, all pixels composite normally).
 		auto& vrStereoOpt = globals::features::vr.stereoOpt;
-		if (vrStereoOpt.loaded) {
-			bool stereoActive = vrStereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off;
-			ID3D11ShaderResourceView* modeSRV = stereoActive ? vrStereoOpt.GetModeTextureSRV() : nullptr;
-			context->CSSetShaderResources(16, 1, &modeSRV);
-		}
+		bool stereoCullingReady = globals::features::vr.IsStereoOptimizationCullingReady();
+		ID3D11ShaderResourceView* modeSRV = stereoCullingReady ? vrStereoOpt.GetModeTextureSRV() : nullptr;
+		context->CSSetShaderResources(16, 1, &modeSRV);
 
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -403,13 +404,14 @@ void Deferred::DeferredPasses()
 		auto shader = interior ? GetComputeMainCompositeInterior() : GetComputeMainComposite();
 		context->CSSetShader(shader, nullptr, 0);
 
-		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		{
+			TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite - Dispatch");
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		}
 
 		// Unbind mode texture SRV
-		if (vrStereoOpt.loaded) {
-			ID3D11ShaderResourceView* nullSRV = nullptr;
-			context->CSSetShaderResources(16, 1, &nullSRV);
-		}
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		context->CSSetShaderResources(16, 1, &nullSRV);
 	}
 
 	// VR: Deactivate stencil culling now that geometry rendering is complete.
@@ -524,10 +526,6 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 							}
 
-							// RT[5] = REFLECTANCE: enable alpha writes for POM depth data
-							// stored in Reflectance.w, used by StereoBlendCS for depth-aware reprojection
-							blendDesc.RenderTarget[5].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-
 							DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &deferredBlendStates[a][b][c][d]));
 						} else {
 							deferredBlendStates[a][b][c][d] = nullptr;
@@ -570,6 +568,53 @@ void Deferred::ResetBlendStates()
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 }
 
+template <typename T>
+void Deferred::SetShadowCascadeParameters(T& lightData, DirectionalShadowLightData& dd)
+{
+	const auto count = std::min(lightData.shadowmapDescriptors.size(), static_cast<uint32_t>(std::size(dd.ShadowProj)));
+	for (uint32_t i = 0; i < count; i++) {
+		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
+		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
+
+		DirectX::XMMATRIX invProj = DirectX::XMMatrixInverse(nullptr, proj);
+		DirectX::XMStoreFloat4x4(&dd.InvShadowProj[i], invProj);
+	}
+}
+
+void Deferred::CopyShadowLightData()
+{
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowLightData");
+
+	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
+	if (!shadowSceneNode)
+		return;
+
+	auto* sunShadowLight = shadowSceneNode->GetRuntimeData().sunShadowDirLight;
+	if (!sunShadowLight)
+		return;
+
+	DirectionalShadowLightData dd{};
+	auto context = globals::d3d::context;
+
+	auto& dirData = sunShadowLight->GetShadowDirectionalLightRuntimeData();
+	dd.EndSplitDistances = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
+	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
+
+	if (globals::game::isVR)
+		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), dd);
+	else
+		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
+
+	D3D11_MAPPED_SUBRESOURCE mapped{};
+	DX::ThrowIfFailed(context->Map(directionalShadowLights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+	memcpy(mapped.pData, &dd, sizeof(DirectionalShadowLightData));
+	context->Unmap(directionalShadowLights->resource.get(), 0);
+
+	ID3D11ShaderResourceView* srv = directionalShadowLights->srv.get();
+	context->PSSetShaderResources(98, 1, &srv);
+}
+
 void Deferred::ClearShaderCache()
 {
 	if (mainCompositeCS) {
@@ -608,8 +653,13 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
-		if (REL::Module::IsVR() && globals::features::vr.stereoOpt.loaded)
+		if (REL::Module::IsVR())
 			defines.push_back({ "VR_STEREO_OPT", nullptr });
+
+		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
+		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
+		if (globals::features::terrainBlending.loaded)
+			defines.push_back({ "TERRAIN_BLENDING", nullptr });
 
 		mainCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
@@ -636,8 +686,13 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
-		if (REL::Module::IsVR() && globals::features::vr.stereoOpt.loaded)
+		if (REL::Module::IsVR())
 			defines.push_back({ "VR_STEREO_OPT", nullptr });
+
+		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
+		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
+		if (globals::features::terrainBlending.loaded)
+			defines.push_back({ "TERRAIN_BLENDING", nullptr });
 
 		mainCompositeInteriorCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DeferredCompositeCS.hlsl", defines, "cs_5_0"));
 	}
@@ -730,7 +785,4 @@ void Deferred::Hooks::Renderer_ResetState::thunk(void* This)
 	ID3D11Buffer* buffers[3] = { state->permutationCB->CB(), state->sharedDataCB->CB(), state->featureDataCB->CB() };
 	context->PSSetConstantBuffers(4, 3, buffers);
 	context->CSSetConstantBuffers(5, 2, buffers + 1);
-
-	auto* singleton = globals::truePBR;
-	singleton->SetupFrame();
 }

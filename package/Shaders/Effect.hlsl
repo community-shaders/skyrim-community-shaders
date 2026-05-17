@@ -532,6 +532,10 @@ cbuffer PerGeometry : register(b2)
 float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, uint eyeIndex, inout float shadowVariance)
 {
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
+	bool suppressExternalEmittance = SharedData::InInterior && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::SuppressExternalEmittance);
+	if (suppressExternalEmittance) {
+		color = ShadowSampling::GetSceneLightingColor();
+	}
 
 #		if defined(SKYLIGHTING)
 #			if defined(VR)
@@ -540,12 +544,8 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	float3 positionMSSkylight = worldPosition;
 #			endif
 
-	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
-
-	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-	skylightingDiffuse = saturate(skylightingDiffuse);
-	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
-	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+	sh2 skylightingSH = Skylighting::SampleNoBias(positionMSSkylight);
+	float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(positionMSSkylight));
 #		endif
 
 	float3 dirColor;
@@ -563,7 +563,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 
-	if (inWorld && !SharedData::InInterior)
+	if (inWorld && ShadowSampling::HasDirectionalShadows())
 		dirShadow = ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, eyeIndex, unusedSurfaceShadow);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(dirShadow)));
@@ -854,8 +854,12 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #		endif
 #		if defined(EXP_HEIGHT_FOG)
+	float vanillaFogFactor = fogFactor;
+	float3 vanillaFogColor = fogColor;
+	float expFogFactor = 0;
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+		expFogFactor = exponentialHeightFog.w;
 #			if defined(ADDBLEND) || defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
@@ -863,14 +867,30 @@ PS_OUTPUT main(PS_INPUT input)
 		fogColor = lightColor;
 		alpha *= 1 - exponentialHeightFog.w;
 #			endif
+		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
+			vanillaFogFactor = 0;
+		}
 	}
 #		endif
 #		if defined(ADDBLEND)
+#			if defined(EXP_HEIGHT_FOG)
+	float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
+#			else
 	float3 blendedColor = lightColor * (1 - fogFactor);
+#			endif
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+#			if defined(EXP_HEIGHT_FOG)
+	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * vanillaFogFactor).xxx);
+	blendedColor = lerp(blendedColor, 1.0.xxx, saturate(1.5 * expFogFactor).xxx);
+#			else
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * fogFactor).xxx);
+#			endif
 #		else
+#			if defined(EXP_HEIGHT_FOG)
+	float3 blendedColor = lerp(lightColor, vanillaFogColor, vanillaFogFactor.xxx);
+#			else
 	float3 blendedColor = lerp(lightColor, fogColor, fogFactor.xxx);
+#			endif
 #		endif
 #	else
 	float3 blendedColor = lightColor.xyz;
@@ -940,9 +960,11 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color2 = finalColor;
 #	endif
 
+#	if !defined(HDR_OUTPUT)
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) && SharedData::linearLightingSettings.enableLinearLighting) {
 		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
+#	endif
 	return psout;
 }
 #endif

@@ -75,11 +75,10 @@ public:
 	Texture3D* texAccumFramesArray = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> probeUpdateCompute = nullptr;
-	winrt::com_ptr<ID3D11ShaderResourceView> stbn_vec3_2Dx1D_128x128x64;
 
 	// misc parameters
 	uint probeArrayDims[3] = { 256, 256, 128 };
-	float occlusionDistance = 4096.f * 2.5f;  // 5 ugrids
+	float occlusionDistance = 10000.f;
 
 	// cached variables
 	bool queuedResetSkylighting = true;

@@ -12,6 +12,8 @@ public:
 	virtual bool IsCore() const override { return true; }
 	virtual bool IsInMenu() const override { return true; }
 
+	static constexpr uint32_t kSharedShadowMapShaderSlot = 18;
+
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
@@ -47,14 +49,11 @@ public:
 	STATIC_ASSERT_ALIGNAS_16(PerGeometry);
 
 	// Compute shaders
-	ID3D11ComputeShader* copyShadowCS = nullptr;
 	ID3D11ComputeShader* downsampleShadowMip0CS = nullptr;
 	ID3D11ComputeShader* downsampleShadowMip1CS = nullptr;
 	ID3D11ComputeShader* blurShadowHorizontalCS = nullptr;
 	ID3D11ComputeShader* blurShadowVerticalCS = nullptr;
 
-	// Shadow data buffer
-	Buffer* perShadow = nullptr;
 	ID3D11ShaderResourceView* shadowView = nullptr;
 
 	// Downsampled shadow texture with 2 mip levels
@@ -81,7 +80,7 @@ public:
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
-	void CopyShadowData();
+	void CopyShadowLightData();
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
@@ -90,4 +89,7 @@ public:
 	virtual bool SupportsVR() override { return true; }
 
 	virtual void PostPostLoad() override;
+
+private:
+	static void SetSharedShadowMapSRV(ID3D11DeviceContext* a_context, ID3D11ShaderResourceView* a_srv);
 };

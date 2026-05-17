@@ -1,9 +1,11 @@
 #pragma once
 
 #include <Tracy/Tracy.hpp>
+#include <Tracy/TracyC.h>
 #include <Tracy/TracyD3D11.hpp>
 
 #include <Buffer.h>
+#include <atomic>
 #include <mutex>
 #include <nlohmann/json.hpp>
 
@@ -130,6 +132,13 @@ public:
 	void ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_targetIndex, RE::BSGraphics::RenderTargetProperties* a_properties);
 
 	void SetupResources();
+
+	/// @brief Log per-format support for D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD.
+	///        We perform typed UAV loads on a number of non-guaranteed formats; on GPUs
+	///        that lack TypedUAVLoadAdditionalFormats those reads return undefined data.
+	///        Called once at startup; emits one info line per supported format and one
+	///        warn line per unsupported format with the feature that needs it.
+	void CheckTypedUAVLoadSupport();
 	void ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor, bool a_forceDeferred = false);
 
 	void BeginPerfEvent(std::string_view title);
@@ -139,6 +148,21 @@ public:
 	void SetAdapterDescription(const std::wstring& description);
 
 	bool frameAnnotations = false;
+
+	// Pass D3DCOMPILE_PARTIAL_PRECISION to fxc. With explicit min16float types this is
+	// mostly belt-and-braces in SM5, but it lets the compiler downgrade unmarked float
+	// ops to FP16 where it can prove safety. On by default; toggle off when reversing
+	// shaders or chasing a precision bug.
+	// Atomic: written from the UI thread, read from compilation pool workers.
+	std::atomic_bool enablePartialPrecision{ false };
+
+	// Pass D3DCOMPILE_AVOID_FLOW_CONTROL to fxc. Forces the compiler to flatten branches
+	// into predicated ops instead of using dynamic flow control. Can win on uniform-branch
+	// or short-body branches; can lose on long divergent branches that vanilla flow
+	// control would skip. Transient (session-only); not saved to config because the
+	// right setting depends on the current scene/work, not the user.
+	// Atomic: written from the UI thread, read from compilation pool workers.
+	std::atomic_bool enableAvoidFlowControl{ false };
 
 	uint lastVertexDescriptor = 0;
 	uint lastPixelDescriptor = 0;
@@ -154,7 +178,9 @@ public:
 		InWorld = 1 << 0,
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
-		GrassSphereNormal = 1 << 3
+		GrassSphereNormal = 1 << 3,
+		IsSun = 1 << 4,
+		SuppressExternalEmittance = 1 << 5
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t
@@ -177,8 +203,16 @@ public:
 	bool isMainMenuOpen = false;
 	bool isLoadingMenuOpen = false;
 	bool isMapMenuOpen = false;
+	bool IsMainOrLoadingMenuOpen() const { return isMainMenuOpen || isLoadingMenuOpen; }
+	bool IsMainOrLoadingMenuOpen(RE::UI* ui) const
+	{
+		return IsMainOrLoadingMenuOpen() ||
+		       (ui && (ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME)));
+	}
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
+	void UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass);
+	bool HasDirectionalShadows() const;
 
 	struct PermutationCB
 	{
@@ -213,13 +247,16 @@ public:
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
 		uint InInterior;
+		uint HasDirectionalShadows;
 		uint InMapMenu;
 		uint HideSky;
 		float MipBias;
-		float pad0;
+		float WaterSystemHeight;  // TES::GetWaterHeight at eye-0 in camera-relative Z; -NI_INFINITY when no water body found (VR only)
+		float3 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;
+		float4 HDRData;  // xyz + menu scene encoding in w — see HDRDisplay::GetSharedDataHDR
 	};
 	STATIC_ASSERT_ALIGNAS_16(SharedDataCB);
 
@@ -298,10 +335,6 @@ public:
 		});
 	}
 
-	// Features that are more special then others
-	std::unordered_map<std::string, bool> specialFeatures = {
-		{ "TruePBR", false }
-	};
 	std::unordered_map<std::string, bool> disabledFeatures;
 	std::mutex m_mutex;
 

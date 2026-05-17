@@ -37,6 +37,8 @@ struct WeatherEditor;
 struct Raytracing;
 struct SceneGraphExplorer;
 struct ExponentialHeightFog;
+struct HDRDisplay;
+struct ScreenshotFeature;
 
 class State;
 class Deferred;
@@ -92,11 +94,14 @@ namespace globals
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
+		extern HDRDisplay hdrDisplay;
 		extern RenderDoc renderDoc;
+		extern ScreenshotFeature screenshotFeature;
 		extern WeatherEditor weatherEditor;
 		extern ExponentialHeightFog exponentialHeightFog;
 		extern Raytracing raytracing;
 		extern SceneGraphExplorer sceneGraphExplorer;
+		extern TruePBR truePBR;
 
 		namespace llf
 		{
@@ -261,7 +266,6 @@ namespace globals
 
 	extern State* state;
 	extern Deferred* deferred;
-	extern TruePBR* truePBR;
 	extern Menu* menu;
 	extern SIE::ShaderCache* shaderCache;
 

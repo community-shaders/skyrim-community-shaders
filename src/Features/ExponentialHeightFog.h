@@ -33,16 +33,22 @@ struct ExponentialHeightFog : Feature
 
 	struct alignas(16) Settings
 	{
-		uint enabled = 1;
+		uint enabled = 0;
 		uint useDynamicCubemaps = 0;
 		float startDistance = 0.0f;
 		float fogHeight = 0.0f;
 		float fogHeightFalloff = 0.2f;
 		float fogDensity = 0.02f;
 		float directionalInscatteringMultiplier = 1.0f;
-		float directionalInscatteringExponent = 4.0f;
+		float directionalInscatteringAnisotropy = 0.7f;
 		float4 inscatteringTint = { 1.0f, 1.0f, 1.0f, 1.0f };
 		float cubemapMipLevel = 3.0f;
-		float pad[3];
+		float sunlightAttenuationAmount = 1.0f;
+		uint respectVanillaFogFade = 0;
+		uint disableVanillaFog = 0;
+		float4 fogInscatteringColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+		float originalFogColorAmount = 1.0f;
+		float3 pad;
 	} settings;
+	static_assert(sizeof(Settings) == sizeof(float4) * 6, "Settings must match HLSL ExponentialHeightFogSettings.");
 };

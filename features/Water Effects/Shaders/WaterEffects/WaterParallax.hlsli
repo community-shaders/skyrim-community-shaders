@@ -10,14 +10,11 @@ namespace WaterEffects
 	float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
 	{
 		// Compute the current gradients:
-		float2 textureDims;
-		tex.GetDimensions(textureDims.x, textureDims.y);
+		float2 actualTextureDims;
+		tex.GetDimensions(actualTextureDims.x, actualTextureDims.y);
 
-#if defined(VR)
-		textureDims /= 16.0;
-#else
-		textureDims /= 8.0;
-#endif
+		// Use hardcoded 512x512 for mip calculation
+		float2 textureDims = float2(512.0, 512.0);
 
 		float2 texCoordsPerSize = coords * textureDims;
 
@@ -33,6 +30,11 @@ namespace WaterEffects
 		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
 		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
+		// Offset mip level to sample as if texture were 512x512
+		float mipOffset = log2(actualTextureDims.x / 512.0);
+
+		mipLevel = max(mipLevel + mipOffset, 0.0);
+
 		// Stochastic mip selection: use screen noise to select between adjacent mip levels
 		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
 
@@ -45,8 +47,9 @@ namespace WaterEffects
 		heights.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + currentOffset * normalScalesRcp.x, mipLevels.x).w;
 		heights.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw + currentOffset * normalScalesRcp.y, mipLevels.y).w;
 		heights.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy + currentOffset * normalScalesRcp.z, mipLevels.z).w;
+		heights = 1.0 - heights;
 		heights *= NormalsAmplitude.xyz;
-		return 1.0 - (heights.x + heights.y + heights.z);
+		return heights.x + heights.y + heights.z;
 	}
 
 	float2 GetParallaxOffset(PS_INPUT input, float3 normalScalesRcp)
@@ -63,12 +66,6 @@ namespace WaterEffects
 		mipLevels.x = GetMipLevel(input.TexCoord1.xy, Normals01Tex, screenNoise);
 		mipLevels.y = GetMipLevel(input.TexCoord1.zw, Normals02Tex, screenNoise);
 		mipLevels.z = GetMipLevel(input.TexCoord2.xy, Normals03Tex, screenNoise);
-
-#if defined(VR)
-		mipLevels = mipLevels + 4;
-#else
-		mipLevels = mipLevels + 3;
-#endif
 
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;
@@ -159,8 +156,9 @@ namespace WaterEffects
 	float GetFlowmapParallaxHeight(PS_INPUT input, float2 currentOffset, float3 normalScalesRcp, float mipLevel)
 	{
 		float height = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + currentOffset * normalScalesRcp.x, mipLevel).w;
+		height = 1.0 - height;
 		height *= NormalsAmplitude.x;
-		return 1.0 - height;
+		return height;
 	}
 
 	float2 GetFlowmapParallaxUVOffset(PS_INPUT input, float3 viewDirection, float3 normalScalesRcp)
@@ -168,24 +166,8 @@ namespace WaterEffects
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
 		parallaxOffsetTS *= 80.0;
 
-		float2 textureDims;
-		Normals01Tex.GetDimensions(textureDims.x, textureDims.y);
-#	if defined(VR)
-		textureDims /= 16.0;
-#	else
-		textureDims /= 8.0;
-#	endif
-		float2 texCoordsPerSize = input.TexCoord1.xy * textureDims;
-		float2 dxSize = ddx(texCoordsPerSize);
-		float2 dySize = ddy(texCoordsPerSize);
-		float2 dTexCoords = dxSize * dxSize + dySize * dySize;
-		float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
-		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
-#	if defined(VR)
-		mipLevel += 4;
-#	else
-		mipLevel += 3;
-#	endif
+		float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
+		float mipLevel = GetMipLevel(input.TexCoord1.xy, Normals01Tex, screenNoise);
 
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;

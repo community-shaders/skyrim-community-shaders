@@ -58,6 +58,7 @@ namespace ShaderConstants
 				.LandscapeTexture4GlintParameters = 55,
 				.LandscapeTexture5GlintParameters = 56,
 				.LandscapeTexture6GlintParameters = 57,
+				.MaterialObjectRGBScale = 58,	// RGB multipliers for material objects
 
 				.ShadowSampleParam = 18,
 				.EndSplitDistances = 19,
@@ -120,6 +121,8 @@ namespace ShaderConstants
 		const int32_t LandscapeTexture4GlintParameters = 47;
 		const int32_t LandscapeTexture5GlintParameters = 48;
 		const int32_t LandscapeTexture6GlintParameters = 49;
+
+		const int32_t MaterialObjectRGBScale = 50;  // RGB multipliers for material objects
 
 		const int32_t ShadowSampleParam = -1;
 		const int32_t EndSplitDistances = -1;
@@ -296,6 +299,10 @@ namespace SIE
 		std::atomic<uint64_t> totalTasks = 0;
 		std::atomic<uint64_t> failedTasks = 0;
 		std::atomic<uint64_t> cacheHitTasks = 0;            // number of compiles of a previously seen shader combo
+		std::atomic<uint64_t> diskHitTasks = 0;             // tasks resolved from disk cache rather than compiled
+		std::atomic<uint64_t> diskHitPriorityWeight = 0;    // cumulative priority weight of disk-hit tasks
+		LARGE_INTEGER compilationPhaseStart = { 0 };        // time of first non-disk-hit task dispatch
+		std::atomic<bool> compilationPhaseStarted = false;  // set when first actual compilation begins
 		std::atomic<uint64_t> slowTasks = 0;                // shaders taking >= 2s
 		std::atomic<uint64_t> verySlowTasks = 0;            // shaders taking >= 8s
 		std::atomic<uint64_t> totalPriorityWeight = 0;      // sum of (GetPriority()+1) for all queued tasks
@@ -352,6 +359,7 @@ namespace SIE
 		ID3DBlob* blob;
 		ShaderCompilationTask::Status status;
 		system_clock::time_point compileTime = system_clock::now();
+		bool loadedFromDisk = false;  ///< true when the shader blob was read from the disk cache rather than compiled
 	};
 
 	class UpdateListener;
@@ -411,6 +419,8 @@ namespace SIE
 		void DeleteDiskCache();
 		void ValidateDiskCache();
 		void WriteDiskCacheInfo();
+		bool IsSkipUnchangedShaders() const;
+		void SetSkipUnchangedShaders(bool value);
 		bool UseFileWatcher() const;
 		void SetFileWatcher(bool value);
 
@@ -465,7 +475,7 @@ namespace SIE
 		*/
 		bool Clear(const std::string& a_path);
 
-		bool AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, ID3DBlob* a_blob);
+		bool AddCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, ID3DBlob* a_blob, bool fromDisk = false);
 
 		enum class ClaimResult
 		{
@@ -478,6 +488,7 @@ namespace SIE
 		ID3DBlob* GetCompletedShader(const std::string& a_key);
 		ID3DBlob* GetCompletedShader(const SIE::ShaderCompilationTask& a_task);
 		ID3DBlob* GetCompletedShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
+		bool IsShaderLoadedFromDisk(const std::string& a_key);
 		ShaderCompilationTask::Status GetShaderStatus(const std::string& a_key);
 		std::string GetShaderStatsString(bool a_timeOnly = false, bool a_elapsedOnly = false);
 
@@ -507,6 +518,7 @@ namespace SIE
 		 */
 		uint64_t GetCurrentFailedCount();
 		uint64_t GetTotalTasks();
+		uint64_t GetDiskHitTasks();
 		void IncCacheHitTasks();
 		void ToggleErrorMessages();
 		void DisableShaderBlocking();
@@ -535,10 +547,21 @@ namespace SIE
 
 		ShaderFileDependencyTracker* GetDependencyTracker() { return dependencyTracker.get(); }
 
-		// Use all logical cores minus one at startup for OS headroom (E-cores included).
+		static constexpr int32_t kLowCoreCompilationThreadThreshold = 8;
+		static constexpr int32_t kLowCoreReservedCompilationThreads = 1;
+		static constexpr int32_t kDefaultReservedCompilationThreads = 2;
+
+		static int32_t GetDefaultCompilationThreadCount()
+		{
+			const auto threadCount = static_cast<int32_t>(std::thread::hardware_concurrency());
+			const auto reservedThreads = threadCount <= kLowCoreCompilationThreadThreshold ? kLowCoreReservedCompilationThreads : kDefaultReservedCompilationThreads;
+			return std::max(threadCount - reservedThreads, 1);
+		}
+
+		// Reserve fewer threads on low-core systems to avoid overly slow startup compilation.
 		// Management and file watcher run on dedicated jthreads, not pool slots.
 		// Background (in-game): half of P-cores only, to avoid starving the render thread.
-		int32_t compilationThreadCount = std::max(static_cast<int32_t>(std::thread::hardware_concurrency()) - 1, 1);
+		int32_t compilationThreadCount = GetDefaultCompilationThreadCount();
 		int32_t backgroundCompilationThreadCount = std::max(static_cast<int32_t>(Util::GetPerformanceCoreCount()) / 2, 1);
 		BS::thread_pool<> compilationPool{ static_cast<std::size_t>(compilationThreadCount) };
 		std::jthread managementJthread;  // dedicated thread for ManageCompilationSet (not in pool)
@@ -799,6 +822,7 @@ namespace SIE
 
 		bool isEnabled = true;
 		bool isDiskCache = true;
+		bool isSkipUnchangedShaders = true;  ///< when true, recompile a disk-cached shader only if its source is newer
 		bool isAsync = true;
 		bool isDump = false;
 		bool hideError = false;

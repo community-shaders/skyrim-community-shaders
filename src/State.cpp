@@ -7,6 +7,8 @@
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
+#include "Features/HDRDisplay.h"
+#include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
@@ -24,6 +26,24 @@
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
 
+#ifdef TRACY_ENABLE
+static thread_local std::vector<TracyCZoneCtx> s_tracyPerfZones;
+#endif
+
+void State::UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass)
+{
+	permutationData.ExtraShaderDescriptor &= ~static_cast<uint32_t>(State::ExtraShaderDescriptors::IsSun);
+
+	if (!a_pass || !a_pass->shaderProperty)
+		return;
+
+	auto* skyProperty = static_cast<const RE::BSSkyShaderProperty*>(a_pass->shaderProperty);
+	if (skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN ||
+		skyProperty->uiSkyObjectType == RE::BSSkyShaderProperty::SkyObject::SO_SUN_GLARE) {
+		permutationData.ExtraShaderDescriptor |= static_cast<uint32_t>(State::ExtraShaderDescriptors::IsSun);
+	}
+}
+
 void State::Draw()
 {
 	ZoneScoped;
@@ -33,7 +53,7 @@ void State::Draw()
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
 	auto& weatherEditor = globals::features::weatherEditor;
-	auto truePBR = globals::truePBR;
+	auto& truePBR = globals::features::truePBR;
 	auto context = globals::d3d::context;
 	auto& volumetricShadows = globals::features::volumetricShadows;
 
@@ -61,9 +81,9 @@ void State::Draw()
 			terrainHelper.SetShaderResouces(context);
 		}
 
-		{
+		if (truePBR.loaded) {
 			ZoneScopedN("TruePBR::SetShaderResouces");
-			truePBR->SetShaderResouces(context);
+			truePBR.SetShaderResouces(context);
 		}
 
 		if (permutationData != permutationDataPrevious) {
@@ -75,7 +95,7 @@ void State::Draw()
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
 					if (volumetricShadows.loaded)
-						volumetricShadows.CopyShadowData();
+						volumetricShadows.CopyShadowLightData();
 				}
 			}
 		}
@@ -186,8 +206,12 @@ void State::Reset()
 
 void State::Setup()
 {
-	globals::truePBR->SetupResources();
 	SetupResources();
+
+	// Probe typed UAV load support before features set up their resources, so any
+	// gating logic that wants to read the log can run during feature SetupResources.
+	CheckTypedUAVLoadSupport();
+
 	globals::deferred->SetupResources();
 	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 
@@ -327,11 +351,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				logger::warn("Invalid entry for feature '{}' in 'Disable at Boot', expected boolean.", featureName);
 			}
 		}
-		for (const auto& [featureName, _] : specialFeatures) {
-			if (IsFeatureDisabled(featureName)) {
-				logger::info("Special Feature '{}' disabled at boot", featureName);
-			}
-		}
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
@@ -418,11 +437,13 @@ void State::SaveToJson(nlohmann::json& settings)
 	advanced["Background Compiler Threads"] = shaderCache->backgroundCompilationThreadCount;
 	advanced["Use FileWatcher"] = shaderCache->UseFileWatcher();
 	advanced["Frame Annotations"] = frameAnnotations;
+	advanced["Partial Precision"] = enablePartialPrecision.load(std::memory_order_relaxed);
 	settings["Advanced"] = advanced;
 
 	json general;
 	general["Enable Shaders"] = shaderCache->IsEnabled();
 	general["Enable Disk Cache"] = shaderCache->IsDiskCache();
+	general["Skip Unchanged Shaders"] = shaderCache->IsSkipUnchangedShaders();
 	general["Enable Async"] = shaderCache->IsAsync();
 
 	settings["General"] = general;
@@ -491,6 +512,8 @@ void State::LoadFromJson(nlohmann::json& settings)
 			shaderCache->SetFileWatcher(advanced["Use FileWatcher"]);
 		if (advanced.contains("Frame Annotations") && advanced["Frame Annotations"].is_boolean())
 			frameAnnotations = advanced["Frame Annotations"];
+		if (advanced.contains("Partial Precision") && advanced["Partial Precision"].is_boolean())
+			enablePartialPrecision.store(advanced["Partial Precision"].get<bool>(), std::memory_order_relaxed);
 	}
 
 	if (settings.contains("General") && settings["General"].is_object()) {
@@ -499,6 +522,8 @@ void State::LoadFromJson(nlohmann::json& settings)
 			shaderCache->SetEnabled(general["Enable Shaders"]);
 		if (general.contains("Enable Disk Cache") && general["Enable Disk Cache"].is_boolean())
 			shaderCache->SetDiskCache(general["Enable Disk Cache"]);
+		if (general.contains("Skip Unchanged Shaders") && general["Skip Unchanged Shaders"].is_boolean())
+			shaderCache->SetSkipUnchangedShaders(general["Skip Unchanged Shaders"]);
 		if (general.contains("Enable Async") && general["Enable Async"].is_boolean())
 			shaderCache->SetAsync(general["Enable Async"]);
 	}
@@ -636,6 +661,64 @@ void State::ModifyRenderTarget(RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::B
 	logger::debug("Adding UAV access to {}", magic_enum::enum_name(a_target));
 }
 
+void State::CheckTypedUAVLoadSupport()
+{
+	auto device = globals::d3d::device;
+	if (!device) {
+		logger::warn("[TypedUAVLoad] Device unavailable; skipping format support probe.");
+		return;
+	}
+
+	// Formats this codebase does typed UAV loads on (RWTexture<T> read via subscript).
+	// Identified by static analysis; keep in sync with new typed reads.
+	// All require the optional D3D11 feature D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD —
+	// guaranteed only for R32_FLOAT/R32_UINT/R32_SINT, otherwise gated by
+	// D3D11_FEATURE_DATA_D3D11_OPTIONS2.TypedUAVLoadAdditionalFormats (FL12+).
+	struct FormatEntry
+	{
+		DXGI_FORMAT format;
+		const char* name;
+		const char* usage;
+	};
+	static const FormatEntry kFormats[] = {
+		{ DXGI_FORMAT_R11G11B10_FLOAT, "R11G11B10_FLOAT", "Dynamic Cubemaps (envCapture/Raw/Position) — non-HDR" },
+		{ DXGI_FORMAT_R16G16B16A16_FLOAT, "R16G16B16A16_FLOAT", "Dynamic Cubemaps (HDR), Skylighting outProbeArray" },
+		{ DXGI_FORMAT_R16G16B16A16_UNORM, "R16G16B16A16_UNORM", "Grass Collision (collisionTexture)" },
+		{ DXGI_FORMAT_R16G16_UNORM, "R16G16_UNORM", "Terrain Shadows (RWTexShadowHeights)" },
+		{ DXGI_FORMAT_R16G16_FLOAT, "R16G16_FLOAT", "VR Stereo Blend (kMOTION_VECTOR reprojection)" },
+		{ DXGI_FORMAT_R8G8B8A8_UNORM, "R8G8B8A8_UNORM", "HDR Display UI brightness (uiTexture)" },
+		{ DXGI_FORMAT_R8_UINT, "R8_UINT", "Skylighting accumulation frames (outAccumFramesArray)" },
+		{ DXGI_FORMAT_R16_FLOAT, "R16_FLOAT", "Vanilla volumetric lighting density (DensityRW)" },
+	};
+
+	bool anyUnsupported = false;
+	logger::info("[TypedUAVLoad] Probing per-format UAV typed-load support:");
+	for (const auto& entry : kFormats) {
+		D3D11_FEATURE_DATA_FORMAT_SUPPORT2 support2{};
+		support2.InFormat = entry.format;
+		HRESULT hr = device->CheckFeatureSupport(D3D11_FEATURE_FORMAT_SUPPORT2, &support2, sizeof(support2));
+		if (FAILED(hr)) {
+			logger::warn("[TypedUAVLoad] {} ({}): CheckFeatureSupport failed (hr=0x{:08x})", entry.name, entry.usage, static_cast<uint32_t>(hr));
+			anyUnsupported = true;
+			continue;
+		}
+		const bool supported = (support2.OutFormatSupport2 & D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0;
+		if (supported) {
+			logger::info("[TypedUAVLoad] {} — supported ({})", entry.name, entry.usage);
+		} else {
+			logger::warn("[TypedUAVLoad] {} — UNSUPPORTED ({})", entry.name, entry.usage);
+			anyUnsupported = true;
+		}
+	}
+
+	if (anyUnsupported) {
+		logger::warn(
+			"[TypedUAVLoad] One or more required formats lack typed-UAV-load support on this GPU. "
+			"Affected features will read undefined data and may produce visual artifacts. "
+			"Consider disabling: Dynamic Cubemaps, Grass Collision, Terrain Shadows, Skylighting, HDR Display, VR Stereo Optimisations.");
+	}
+}
+
 void State::SetupResources()
 {
 	for (auto& c : drawCalls)
@@ -669,6 +752,9 @@ void State::SetupResources()
 	featureLevel = globals::d3d::device->GetFeatureLevel();
 
 	tracyCtx = TracyD3D11Context(globals::d3d::device, globals::d3d::context);
+#ifdef TRACY_ENABLE
+	Feature::SetTracyCtx(tracyCtx);
+#endif
 }
 
 void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor, bool a_forceDeferred)
@@ -778,11 +864,31 @@ void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescr
 
 void State::BeginPerfEvent(std::string_view title)
 {
+#ifdef TRACY_ENABLE
+	// Use dynamic source location so Tracy displays the title as the zone name
+	// rather than the static function name "BeginPerfEvent".
+	const auto srcloc = ___tracy_alloc_srcloc_name(
+		static_cast<uint32_t>(__LINE__),
+		__FILE__, sizeof(__FILE__) - 1,
+		__func__, sizeof(__func__) - 1,
+		title.data(), title.size(),
+		0);
+	const TracyCZoneCtx ctx = ___tracy_emit_zone_begin_alloc(srcloc, true);
+	s_tracyPerfZones.push_back(ctx);
+#endif
 	pPerf->BeginEvent(std::wstring(title.begin(), title.end()).c_str());
 }
 
 void State::EndPerfEvent()
 {
+#ifdef TRACY_ENABLE
+	if (!s_tracyPerfZones.empty()) {
+		TracyCZoneEnd(s_tracyPerfZones.back());
+		s_tracyPerfZones.pop_back();
+	} else {
+		logger::warn("EndPerfEvent called without a matching BeginPerfEvent");
+	}
+#endif
 	pPerf->EndEvent();
 }
 
@@ -838,7 +944,26 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			}
 		}
 
+		// Fallback water height for the VR analytical mask when tile 12 returns the sentinel.
+		// Uses player->GetWaterHeight() (reads relevantWaterHeight from LOADED_REF_DATA) gated by
+		// underwaterCount > 0 so it is only set when the player is actually in a water body.
+		// Covers both interior water (where TES::GetWaterHeight returns -NI_INFINITY) and exterior
+		// partial submersion.  Stored as eye-0 camera-relative Z to match WaterData[].w.
+		data.WaterSystemHeight = -RE::NI_INFINITY;
+		if (globals::game::isVR) {
+			if (auto player = globals::game::player) {
+				if (player->loadedData && player->loadedData->underwaterCount > 0) {
+					float worldHeight = player->GetWaterHeight();
+					if (worldHeight > -RE::NI_INFINITY) {
+						auto eye0Pos = Util::GetEyePosition(0);
+						data.WaterSystemHeight = worldHeight - eye0Pos.z;
+					}
+				}
+			}
+		}
+
 		data.InInterior = Util::IsInterior();
+		data.HasDirectionalShadows = HasDirectionalShadows();
 
 		if (globals::game::sky)
 			data.HideSky = globals::game::sky->flags.any(RE::Sky::Flags::kHideSky);
@@ -876,6 +1001,8 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		data.AmbientSHR = { dalcSH.r.c0, dalcSH.r.c1[0], dalcSH.r.c1[1], dalcSH.r.c1[2] };
 		data.AmbientSHG = { dalcSH.g.c0, dalcSH.g.c1[0], dalcSH.g.c1[1], dalcSH.g.c1[2] };
 		data.AmbientSHB = { dalcSH.b.c0, dalcSH.b.c1[0], dalcSH.b.c1[1], dalcSH.b.c1[2] };
+
+		data.HDRData = globals::features::hdrDisplay.GetSharedDataHDR();
 
 		sharedDataCB->Update(data);
 	}
@@ -955,6 +1082,11 @@ void State::LoadTheme()
 			logger::warn("Fallback to 'Default' theme failed");
 		}
 	}
+}
+
+bool State::HasDirectionalShadows() const
+{
+	return !Util::IsInterior() || globals::features::interiorSun.IsActiveInteriorSun();
 }
 
 void State::SaveTheme()

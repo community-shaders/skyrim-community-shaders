@@ -1,6 +1,7 @@
 #include "UI.h"
 
 #include "../WeatherEditor/EditorWindow.h"
+#include "D3D.h"
 #include "FileSystem.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
@@ -113,6 +114,24 @@ namespace Util
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}
+	}
+
+	CenteredPopupModal::CenteredPopupModal(const char* name, bool* p_open, ImGuiWindowFlags flags, ImVec2 pos, ImVec2 pivot)
+	{
+		if (pos.x == -FLT_MAX && pos.y == -FLT_MAX)
+			pos = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(pos, ImGuiCond_Always, pivot);
+		// Fix first-frame vertical stretch: AlwaysAutoResize resets width to 0 on the hidden
+		// measurement frame, causing TextWrapped to wrap at 0px and produce an enormous height.
+		// Setting an initial width gives TextWrapped a sensible wrap column on that frame.
+		ImGui::SetNextWindowSize(ImVec2(400.0f * GetUIScale(), 0.0f), ImGuiCond_Appearing);
+		isOpen = ImGui::BeginPopupModal(name, p_open, flags | ImGuiWindowFlags_NoSavedSettings);
+	}
+
+	CenteredPopupModal::~CenteredPopupModal()
+	{
+		if (isOpen)
+			ImGui::EndPopup();
 	}
 
 	DisableGuard::DisableGuard(bool disable) :
@@ -263,11 +282,7 @@ namespace Util
 
 		ImGui::OpenPopup("Clear Shader Cache?");
 
-		// Center the popup
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-
-		if (ImGui::BeginPopupModal("Clear Shader Cache?", &showClearCacheConfirmation, ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (auto popup = CenteredPopupModal("Clear Shader Cache?", &showClearCacheConfirmation)) {
 			ImGui::Text("Are you sure you want to clear the shader cache?");
 			ImGui::Spacing();
 			ImGui::Spacing();
@@ -311,8 +326,6 @@ namespace Util
 				showClearCacheConfirmation = false;
 				ImGui::CloseCurrentPopup();
 			}
-
-			ImGui::EndPopup();
 		}
 	}
 
@@ -339,11 +352,9 @@ namespace Util
 			return false;
 
 		ImGui::OpenPopup(title.c_str());
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
 		bool result = false;
-		if (ImGui::BeginPopupModal(title.c_str(), &show, ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (auto popup = CenteredPopupModal(title.c_str(), &show)) {
 			ImGui::TextWrapped("%s", message.c_str());
 			ImGui::Spacing();
 			ImGui::Separator();
@@ -373,8 +384,6 @@ namespace Util
 				show = false;
 				ImGui::CloseCurrentPopup();
 			}
-
-			ImGui::EndPopup();
 		}
 		return result;
 	}
@@ -510,14 +519,88 @@ namespace Util
 		}
 	}
 
-	StyledButtonWrapper ErrorButtonStyle()
+	namespace ButtonHelpers
 	{
-		constexpr float kHoverBrighten = 0.2f;
-		constexpr float kActiveBrighten = 0.3f;
-		auto color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-		auto hover = ImVec4(std::min(color.x + kHoverBrighten, 1.0f), std::min(color.y + kHoverBrighten, 1.0f), std::min(color.z + kHoverBrighten, 1.0f), color.w);
-		auto active = ImVec4(std::min(color.x + kActiveBrighten, 1.0f), std::min(color.y + kActiveBrighten, 1.0f), std::min(color.z + kActiveBrighten, 1.0f), color.w);
+		ImVec4 AdjustButtonColor(const ImVec4& color, float amount)
+		{
+			const float maxChannel = std::max({ color.x, color.y, color.z });
+			const float minChannel = ThemeManager::Constants::BUTTON_MIN_COLOR_CHANNEL;
+			const float maxColorChannel = ThemeManager::Constants::BUTTON_MAX_COLOR_CHANNEL;
+			const float adjustment = maxChannel <= (maxColorChannel - amount) ? amount : -amount;
+			return ImVec4(
+				std::clamp(color.x + adjustment, minChannel, maxColorChannel),
+				std::clamp(color.y + adjustment, minChannel, maxColorChannel),
+				std::clamp(color.z + adjustment, minChannel, maxColorChannel),
+				color.w);
+		}
+
+		ImVec4 WithAlpha(const ImVec4& color, float alpha)
+		{
+			return ImVec4(color.x, color.y, color.z, alpha);
+		}
+
+		template <typename StyleFn, typename ButtonFn>
+		bool InvokeStyledButton(StyleFn styleProvider, ButtonFn buttonCall)
+		{
+			auto _style = styleProvider();
+			return buttonCall();
+		}
+	}
+
+	StyledButtonWrapper StatusButtonStyle(const ImVec4& color)
+	{
+		auto hover = ButtonHelpers::AdjustButtonColor(color, ThemeManager::Constants::BUTTON_HOVER_BRIGHTEN);
+		auto active = ButtonHelpers::AdjustButtonColor(color, ThemeManager::Constants::BUTTON_ACTIVE_BRIGHTEN);
 		return StyledButtonWrapper(color, hover, active);
+	}
+
+	StyledButtonWrapper DestructiveButtonStyle()
+	{
+		return StatusButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error);
+	}
+
+	bool ErrorButton(const char* label, const ImVec2& size)
+	{
+		return ButtonHelpers::InvokeStyledButton(DestructiveButtonStyle, [&] { return ImGui::Button(label, size); });
+	}
+
+	bool ErrorButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
+	{
+		return ButtonHelpers::InvokeStyledButton(DestructiveButtonStyle, [&] { return ButtonWithFlash(label, size, flashDurationMs); });
+	}
+
+	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color)
+	{
+		return StyledButtonWrapper(color,
+			ButtonHelpers::WithAlpha(color, ThemeManager::Constants::BUTTON_STATUS_TEXT_HOVER_ALPHA),
+			ButtonHelpers::WithAlpha(color, ThemeManager::Constants::BUTTON_STATUS_TEXT_ACTIVE_ALPHA));
+	}
+
+	StyledButtonWrapper SuccessButtonStyle()
+	{
+		return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor);
+	}
+
+	StyledButtonWrapper WarningButtonStyle()
+	{
+		return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Warning);
+	}
+
+	bool SuccessButton(const char* label, const ImVec2& size)
+	{
+		return ButtonHelpers::InvokeStyledButton(SuccessButtonStyle, [&] { return ImGui::Button(label, size); });
+	}
+
+	bool WarningButton(const char* label, const ImVec2& size)
+	{
+		return ButtonHelpers::InvokeStyledButton(WarningButtonStyle, [&] { return ImGui::Button(label, size); });
+	}
+
+	bool ErrorTextButton(const char* label, const ImVec2& size)
+	{
+		return ButtonHelpers::InvokeStyledButton(
+			[] { return StatusTextButtonStyle(Menu::GetSingleton()->GetTheme().StatusPalette.Error); },
+			[&] { return ImGui::Button(label, size); });
 	}
 
 	StyledButtonWrapper TransparentIconButtonStyle()
@@ -1274,6 +1357,25 @@ namespace Util
 		}
 	}
 
+	void DrawDllVersionTable(
+		const char* label,
+		const wchar_t* pluginDir,
+		const std::vector<std::pair<std::string, std::string>>& dllVersions,
+		const char* tableId)
+	{
+		if (ImGui::Selectable(label)) {
+			auto realPath = Util::PathHelpers::GetRealPathFromDataRelative(pluginDir);
+			ShellExecuteW(nullptr, L"open", realPath.empty() ? pluginDir : realPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+		}
+		std::vector<std::string> headers = { "DLL Name", "Version" };
+		std::vector<std::vector<std::string>> rows;
+		rows.reserve(dllVersions.size());
+		for (const auto& [name, version] : dllVersions)
+			rows.push_back({ name, version });
+		std::vector<TableSortFunc> sorters = { nullptr, VersionSortComparator };
+		ShowSortedStringTableStrings(tableId, headers, rows, 0, true, sorters);
+	}
+
 	// Theme-aware color accessor functions
 	namespace Colors
 	{
@@ -1321,6 +1423,55 @@ namespace Util
 		{
 			return globals::menu->GetTheme().StatusPalette.Disable;
 		}
+
+	}
+
+	namespace Text
+	{
+		static void ColoredTextV(ImVec4 color, const char* fmt, va_list args)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
+			ImGui::TextV(fmt, args);
+			ImGui::PopStyleColor();
+		}
+
+		static void ColoredTextWrappedV(ImVec4 color, const char* fmt, va_list args)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
+			ImGui::TextWrappedV(fmt, args);
+			ImGui::PopStyleColor();
+		}
+
+#define UTIL_TEXT(Name, ColorFn)                    \
+	void Name(const char* fmt, ...)                 \
+	{                                               \
+		va_list args;                               \
+		va_start(args, fmt);                        \
+		ColoredTextV(Colors::ColorFn(), fmt, args); \
+		va_end(args);                               \
+	}
+#define UTIL_TEXT_WRAPPED(Name, ColorFn)                   \
+	void Name(const char* fmt, ...)                        \
+	{                                                      \
+		va_list args;                                      \
+		va_start(args, fmt);                               \
+		ColoredTextWrappedV(Colors::ColorFn(), fmt, args); \
+		va_end(args);                                      \
+	}
+
+		UTIL_TEXT(Warning, GetWarning)
+		UTIL_TEXT_WRAPPED(WrappedWarning, GetWarning)
+		UTIL_TEXT(Error, GetError)
+		UTIL_TEXT_WRAPPED(WrappedError, GetError)
+		UTIL_TEXT(Success, GetSuccess)
+		UTIL_TEXT_WRAPPED(WrappedSuccess, GetSuccess)
+		UTIL_TEXT(Info, GetInfo)
+		UTIL_TEXT_WRAPPED(WrappedInfo, GetInfo)
+		UTIL_TEXT(Disabled, GetDisabled)
+		UTIL_TEXT_WRAPPED(WrappedDisabled, GetDisabled)
+
+#undef UTIL_TEXT
+#undef UTIL_TEXT_WRAPPED
 	}
 
 	namespace Input
@@ -1600,6 +1751,8 @@ namespace Util
 				return VK_RWIN;  // right win
 			case DIK_APPS:
 				return VK_APPS;
+			case DIK_SYSRQ:
+				return VK_SNAPSHOT;
 			default:
 				return dikKey;
 			}
@@ -1784,6 +1937,8 @@ namespace Util
 		};
 
 		HRESULT hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+		if (SUCCEEDED(hr) && *out_srv)
+			Util::SetResourceName(*out_srv, "UI::DDS:%s", filename);
 		pTexture->Release();
 
 		if (FAILED(hr) || !*out_srv) {

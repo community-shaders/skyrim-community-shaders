@@ -64,7 +64,9 @@ void HomePageRenderer::RenderWelcomeSection()
 	}
 
 	ImVec2 windowSize = ImGui::GetWindowSize();
-	std::string titleWithVersion = "Welcome to Community Shaders " + Util::GetFormattedVersion(Plugin::VERSION);
+	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
+	auto expectedTag = std::format("v{}", versionStr);
+	std::string titleWithVersion = Plugin::BUILD_DESCRIBE == expectedTag ? std::format("Welcome to Community Shaders {}", versionStr) : std::format("Welcome to Community Shaders {} [{}]", versionStr, Plugin::BUILD_DESCRIBE);
 	ImVec2 titleSize = ImGui::CalcTextSize(titleWithVersion.c_str());
 	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
 	ImGui::Text("%s", titleWithVersion.c_str());
@@ -129,19 +131,15 @@ void HomePageRenderer::RenderWelcomeSection()
 		ImGui::PopStyleColor(3);
 		ImGui::PopStyleVar();
 
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Join Community Shaders Discord Server");
-		}
+		Util::AddTooltip("Join Community Shaders Discord Server");
 	} else {
 		// Fallback button when Discord icon is not available
-		float buttonWidth = QUICK_LINKS_BUTTON_WIDTH * scale;
+		float buttonWidth = DISCORD_BANNER_MIN_WIDTH * scale;
 		ImGui::SetCursorPosX((windowSize.x - buttonWidth) * 0.5f);
 		if (ImGui::Button("Join Discord Server", ImVec2(buttonWidth, 0))) {
 			ShellExecuteA(NULL, "open", DISCORD_URL, NULL, NULL, SW_SHOWNORMAL);
 		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Join Community Shaders Discord Server");
-		}
+		Util::AddTooltip("Join Community Shaders Discord Server");
 	}
 
 	ImGui::PopStyleVar();
@@ -155,30 +153,29 @@ void HomePageRenderer::RenderQuickLinksSection()
 	ImGui::SetCursorPosX((windowSize.x - titleSize.x) * 0.5f);
 	ImGui::Text("Quick Links");
 
-	// Center the button layout
-	float buttonWidth = QUICK_LINKS_BUTTON_WIDTH * Util::GetUIScale();
-	float totalWidth = buttonWidth * 3 + ImGui::GetStyle().ItemSpacing.x * 2;  // 3 buttons with spacing
-	ImGui::SetCursorPosX((windowSize.x - totalWidth) * 0.5f);
+	ImGui::Columns(4, nullptr, false);
 
 	// External links in a row
-	if (ImGui::Button("Nexus Mods", ImVec2(buttonWidth, 0))) {
+	if (ImGui::Button("Nexus Mods", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://www.nexusmods.com/skyrimspecialedition/mods/86492", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("GitHub", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("GitHub", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("Wiki", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("Wiki", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://modding.wiki/en/skyrim/developers/community-shaders", NULL, NULL, SW_SHOWNORMAL);
 	}
 
-	ImGui::SameLine();
-	if (ImGui::Button("Developer Wiki", ImVec2(buttonWidth, 0))) {
+	ImGui::NextColumn();
+	if (ImGui::Button("Developer Wiki", ImVec2(-1, 0))) {
 		ShellExecuteA(NULL, "open", "https://github.com/doodlum/skyrim-community-shaders/wiki", NULL, NULL, SW_SHOWNORMAL);
 	}
+
+	ImGui::Columns(1);
 }
 
 void HomePageRenderer::RenderFAQSection()
@@ -524,6 +521,20 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		const char* pressKeyText = "Press any key to set as toggle key...";
 		centerText(pressKeyText);
 		ImGui::TextDisabled("%s", pressKeyText);
+	}
+
+	// Weather Editor hotkey status — updates live as user picks keys
+	{
+		auto& weatherKey = menu->GetSettings().WeatherEditorToggleKey;
+		if (weatherKey.empty()) {
+			const char* warnText = "Weather Editor hotkey unbound \xe2\x80\x94 chosen key uses Shift";
+			centerText(warnText);
+			ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.0f, 1.0f), "%s", warnText);
+		} else {
+			std::string infoStr = "Weather Editor hotkey will be: " + Util::Input::KeyIdToString(weatherKey);
+			centerText(infoStr.c_str());
+			ImGui::TextDisabled("%s", infoStr.c_str());
+		}
 	}
 
 	ImGui::Spacing();

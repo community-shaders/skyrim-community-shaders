@@ -4,6 +4,7 @@
 
 #include "Globals.h"
 #include "Menu.h"
+#include "Utils/D3D.h"
 #include "Utils/FileSystem.h"
 
 #include <d3d11.h>
@@ -53,6 +54,7 @@ namespace Util::IconLoader
 			stbi_image_free(image_data);
 			return false;
 		}
+		Util::SetResourceName(pTexture, "IconLoader::%s", filename);
 
 		ID3D11DeviceContext* context = nullptr;
 		device->GetImmediateContext(&context);
@@ -74,6 +76,7 @@ namespace Util::IconLoader
 				context->Release();
 			return false;
 		}
+		Util::SetResourceName(*out_srv, "IconLoader::%s SRV", filename);
 
 		if (context) {
 			context->GenerateMips(*out_srv);

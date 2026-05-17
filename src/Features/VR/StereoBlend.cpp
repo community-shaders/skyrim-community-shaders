@@ -7,6 +7,33 @@
 #include "State.h"
 #include "Utils/D3D.h"
 
+void VR::CompileStereoBlendShaders()
+{
+	std::vector<std::pair<const char*, const char*>> defines = { { "VR", "" }, { "FRAMEBUFFER", "" } };
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", defines, "cs_5_0")))
+		stereoBlendCS.attach(rawPtr);
+
+	auto backCheckDefines = defines;
+	backCheckDefines.push_back({ "DEBUG_BACKCHECK", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", backCheckDefines, "cs_5_0")))
+		stereoBlendDebugBackCheckCS.attach(rawPtr);
+
+	auto blendWeightDefines = defines;
+	blendWeightDefines.push_back({ "DEBUG_BLEND_WEIGHT", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", blendWeightDefines, "cs_5_0")))
+		stereoBlendDebugBlendWeightCS.attach(rawPtr);
+
+	auto edgeDetectionDefines = defines;
+	edgeDetectionDefines.push_back({ "DEBUG_EDGE_DETECTION", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", edgeDetectionDefines, "cs_5_0")))
+		stereoBlendDebugEdgeDetectionCS.attach(rawPtr);
+
+	auto overwriteDefines = defines;
+	overwriteDefines.push_back({ "STEREO_OVERWRITE", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", overwriteDefines, "cs_5_0")))
+		stereoBlendOverwriteCS.attach(rawPtr);
+}
+
 void VR::ClearShaderCache()
 {
 	stereoBlendCS = nullptr;
@@ -15,6 +42,10 @@ void VR::ClearShaderCache()
 	stereoBlendDebugEdgeDetectionCS = nullptr;
 	stereoBlendOverwriteCS = nullptr;
 	stereoOpt.ClearShaderCache();
+
+	// Framework calls ClearShaderCache without a follow-up SetupResources for these runtime
+	// CS shaders, so recompile here to leave the feature in a usable state.
+	CompileStereoBlendShaders();
 }
 
 bool VR::AnyScreenSpaceEffectLoaded()
@@ -26,20 +57,19 @@ bool VR::AnyScreenSpaceEffectLoaded()
 
 void VR::DrawStereoBlend()
 {
-	bool vrStereoOptActive = globals::features::vr.stereoOpt.loaded &&
-	                         globals::features::vr.stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off &&
-	                         stereoBlendOverwriteCS;
+	bool vrStereoOptActive = IsStereoOptimizationCullingReady();
 
 	if (!REL::Module::IsVR() || !stereoBlendCopyTex || !stereoBlendCB)
 		return;
 
-	if (vrStereoOptActive && globals::features::vr.stereoOpt.settings.debugSkipMerge)
+	// Modes 4/5 visualize the overwrite path (mode classification, POM depth) without requiring
+	// active reprojection — useful when stereoOpt is loaded but reprojection stencil hasn't fired.
+	bool overwriteVisualizationActive = (settings.StereoBlendDebugMode == 4 || settings.StereoBlendDebugMode == 5) && stereoBlendOverwriteCS;
+
+	if (!vrStereoOptActive && !overwriteVisualizationActive && (!settings.EnableStereoBlend || !stereoBlendCS))
 		return;
 
-	if (!vrStereoOptActive && (!settings.EnableStereoBlend || !stereoBlendCS))
-		return;
-
-	if (!vrStereoOptActive && !AnyScreenSpaceEffectLoaded() && !globals::state->IsDeveloperMode())
+	if (!vrStereoOptActive && !overwriteVisualizationActive && !AnyScreenSpaceEffectLoaded() && !globals::state->IsDeveloperMode())
 		return;
 
 	ZoneScoped;
@@ -69,18 +99,25 @@ void VR::DrawStereoBlend()
 	cbData.MaxBlendFactor = settings.StereoBlendMaxFactor;
 	cbData.ColorDiffThreshold = settings.StereoBlendColorThreshold;
 
-	// Pass debug edge tint from VRStereoOptimizations settings
-	if (vrStereoOptActive && globals::features::vr.stereoOpt.settings.debugVisualization)
+	bool isOverwriteMode = vrStereoOptActive || overwriteVisualizationActive;
+
+	// Edge tint from reprojection debug visualization flag
+	if (isOverwriteMode && globals::features::vr.stereoOpt.settings.debugVisualization)
 		cbData.DebugEdgeTint = 0.3f;
 	else
 		cbData.DebugEdgeTint = 0.0f;
 
-	// Debug mode: 0=normal, 1=depth map diagnostic, 2=full blend depth visualizer
-	if (vrStereoOptActive && globals::features::vr.stereoOpt.settings.debugDepthMap)
+	// Debug mode: 0=normal, 1=depth map (mode classification), 2=full blend depth, 3=POM depth heatmap
+	// StereoBlendDebugMode 4/5 take priority over the individual reprojection debug booleans
+	if (settings.StereoBlendDebugMode == 4)
+		cbData.DebugMode = 1u;  // "Overwrite": mode texture classification heatmap
+	else if (settings.StereoBlendDebugMode == 5)
+		cbData.DebugMode = 3u;  // "Overwrite Eye1": POM depth heatmap
+	else if (isOverwriteMode && globals::features::vr.stereoOpt.settings.debugDepthMap)
 		cbData.DebugMode = 1u;
-	else if (vrStereoOptActive && globals::features::vr.stereoOpt.settings.debugFullBlendDepth)
+	else if (isOverwriteMode && globals::features::vr.stereoOpt.settings.debugFullBlendDepth)
 		cbData.DebugMode = 2u;
-	else if (vrStereoOptActive && globals::features::vr.stereoOpt.settings.debugPOMDepth)
+	else if (isOverwriteMode && globals::features::vr.stereoOpt.settings.debugPOMDepth)
 		cbData.DebugMode = 3u;
 	else
 		cbData.DebugMode = 0u;
@@ -93,12 +130,10 @@ void VR::DrawStereoBlend()
 
 	auto& motionVectors = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
-	bool isOverwriteMode = vrStereoOptActive;
-
 	ID3D11ComputeShader* activeCS = stereoBlendCS.get();
-	if (vrStereoOptActive) {
+	if (isOverwriteMode) {
 		activeCS = stereoBlendOverwriteCS.get();
-	} else {
+	} else if (settings.EnableStereoBlend) {
 		int effectiveMode = settings.StereoBlendDebugMode;
 		if (effectiveMode == 1 && stereoBlendDebugBackCheckCS)
 			activeCS = stereoBlendDebugBackCheckCS.get();
@@ -128,9 +163,9 @@ void VR::DrawStereoBlend()
 		ID3D11ShaderResourceView* modeSRV = globals::features::vr.stereoOpt.GetModeTextureSRV();
 		context->CSSetShaderResources(2, 1, &modeSRV);
 
-		// Bind REFLECTANCE SRV for POM depth offset (stored in .w by Lighting pass)
-		auto& reflectanceRT = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
-		context->CSSetShaderResources(3, 1, &reflectanceRT.SRV);
+		// Bind dedicated POM offset SRV (R16_FLOAT, written by Lighting PS at u7)
+		auto* pomSRV = globals::features::vr.stereoOpt.GetPomOffsetSRV();
+		context->CSSetShaderResources(3, 1, &pomSRV);
 
 		ID3D11UnorderedAccessView* uavs[2]{ main.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
@@ -148,13 +183,20 @@ void VR::DrawStereoBlend()
 			sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
 			sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 			globals::d3d::device->CreateSamplerState(&sampDesc, stereoBlendLinearSampler.put());
+			Util::SetResourceName(stereoBlendLinearSampler.get(), "VR::StereoBlendLinearSampler");
 		}
 		ID3D11SamplerState* samplers[] = { stereoBlendLinearSampler.get() };
 		context->CSSetSamplers(0, 1, samplers);
 	}
 
 	context->CSSetShader(activeCS, nullptr, 0);
-	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	if (isOverwriteMode) {
+		TracyD3D11Zone(globals::state->tracyCtx, "StereoBlend - Overwrite");
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	} else {
+		TracyD3D11Zone(globals::state->tracyCtx, "StereoBlend - Bilateral");
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	}
 
 	// Cleanup
 	ID3D11ShaderResourceView* nullSRVs[4] = {};

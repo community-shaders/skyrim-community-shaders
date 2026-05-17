@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string>
+#include "Feature.h"
 
 struct GlintParameters
 {
@@ -11,27 +11,55 @@ struct GlintParameters
 	float densityRandomization = 2.f;
 };
 
-struct TruePBR
+struct TruePBR : Feature
 {
 public:
-	static TruePBR* GetSingleton()
+	virtual std::string GetName() override { return "True PBR"; }
+	virtual std::string GetShortName() override { return "TruePBR"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
+	virtual bool IsCore() const override { return true; }
+	virtual bool SupportsVR() override { return true; }
+	virtual bool IsInMenu() const override { return true; }
+	virtual bool DrawFailLoadMessage() const override { return false; }
+
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		static TruePBR singleton;
-		return &singleton;
+		return std::make_pair(
+			"True PBR replaces Skyrim's legacy material system with physically-based rendering. "
+			"Mod authors can supply PBR texture sets (roughness, metallic, displacement, etc.) "
+			"that are interpreted in a physically correct BRDF, producing realistic surface "
+			"response to lighting across all weather and time-of-day conditions.",
+			std::vector<std::string>{
+				"Physically-based BRDF (energy-conserving specular & diffuse)",
+				"Roughness, metallic, and displacement map support",
+				"Clearcoat, subsurface scattering, and fuzz layers",
+				"Procedural glint rendering for sparkle effects",
+				"Full landscape and decal PBR support" });
 	}
 
-	inline std::string GetShortName() { return "TruePBR"; }
+	virtual void DrawSettings() override;
+	virtual void SetupResources() override;
+	virtual void Prepass() override;
+	virtual void PostPostLoad() override;
+	virtual void DataLoaded() override;
 
-	void DrawSettings();
-	void SetupResources();
-	void PrePass();
-	void PostPostLoad();
-	void DataLoaded();
+	virtual void SaveSettings(json& o_json) override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void RestoreDefaultSettings() override;
+
+	struct alignas(16) Settings
+	{
+		float VertexAOStrength = 1.0f;
+		uint pad[3];
+	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
+
+	Settings settings;
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
 	bool BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material);
 
 	void SetShaderResouces(ID3D11DeviceContext* a_context);
-	void GenerateShaderPermutations(RE::BSShader* shader);
+	virtual void GenerateShaderPermutations(RE::BSShader* shader) override;
 
 	void SetupGlintsTexture();
 	eastl::unique_ptr<Texture2D> glintsNoiseTexture = nullptr;
@@ -58,8 +86,6 @@ public:
 
 		GlintParameters glintParameters;
 	};
-
-	void SetupFrame();
 
 	void SetupTextureSetData();
 	void ReloadTextureSetData();

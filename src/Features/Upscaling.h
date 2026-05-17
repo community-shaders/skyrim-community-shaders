@@ -65,6 +65,7 @@ public:
 		uint frameLimitMode = 1;
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
+		bool frameGenerationAllowInMenus = false;
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
@@ -88,8 +89,9 @@ public:
 
 	struct UpscalingDataCB
 	{
-		float2 resolutionScale;
-		float2 pad0;
+		float2 trueSamplingDim;  // per-eye render dim in VR, full render dim otherwise
+		uint eyeOffsetX;         // X offset into stereo source buffers; 0 for non-VR / left eye
+		uint pad0;
 	};
 
 	ConstantBuffer* jitterCB = nullptr;
@@ -109,6 +111,7 @@ public:
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationDx12PathActive() const;
 	bool IsFrameGenerationActive() const;
+	bool ShouldUseFrameGenerationThisFrame() const;
 	float GetFrameGenerationFrameTime() const;
 	bool IsUpscalingActive() const;
 
@@ -136,6 +139,8 @@ public:
 
 	eastl::unordered_map<UpscaleMethod, winrt::com_ptr<ID3D11ComputeShader>> encodeTexturesCS;    // One for each UpscaleMethod
 	eastl::unordered_map<UpscaleMethod, winrt::com_ptr<ID3D11ComputeShader>> encodeTexturesPTCS;  // PATH_TRACING variants
+	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesCSDepthOutput;                              // FSR + VR: converts R24G8_TYPELESS depth to R32_FLOAT
+	winrt::com_ptr<ID3D11ComputeShader> encodeTexturesPTCSDepthOutput;                            // FSR + VR + PATH_TRACING variant
 	ID3D11ComputeShader* GetEncodeTexturesCS(bool pathTracing = false);
 
 	winrt::com_ptr<ID3D11PixelShader> depthRefractionUpscalePS;
@@ -166,7 +171,8 @@ public:
 	// Owned here so both Streamline (DLSS) and FidelityFX (FSR) can use them.
 	eastl::unique_ptr<Texture2D> vrIntermediateColorIn[2];           // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateColorOut[2];          // per-eye output resolution
-	eastl::unique_ptr<Texture2D> vrIntermediateDepth[2];             // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateDepth;                // right-eye render resolution (R24G8_TYPELESS, DLSS only)
+	eastl::unique_ptr<Texture2D> vrIntermediateLinearDepth[2];       // per-eye render resolution (R32_FLOAT, for FSR)
 	eastl::unique_ptr<Texture2D> vrIntermediateMotionVectors[2];     // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateReactiveMask[2];      // per-eye render resolution
 	eastl::unique_ptr<Texture2D> vrIntermediateTransparencyMask[2];  // per-eye render resolution
@@ -180,8 +186,15 @@ public:
 		bool copyBindFlags = false, bool createSRV = false, bool createUAV = false, const char* name = nullptr);
 
 	// Shared Pipeline Steps
-	void PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* depthSrc, ID3D11Resource* mvecSrc,
-		ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc);
+
+	/// Ensures VR per-eye intermediate textures exist at the correct resolution.
+	/// Must be called before any per-eye EncodeTexturesCS dispatch or PreparePerEyeInputs.
+	void EnsureVRIntermediateTextures();
+
+	/// Splits the combined stereo color buffer into per-eye intermediates, copies raw
+	/// motion vectors, and clears the HMD hidden area. FSR-only.
+	/// Reactive/transparency masks are written by EncodeTexturesCS.
+	void PreparePerEyeInputs(ID3D11Resource* colorSrc);
 	void FinalizePerEyeOutputs(ID3D11Resource* colorDst);
 
 	void ConfigureTAA();
@@ -215,6 +228,13 @@ public:
 
 	bool d3d12Mode = false;
 
+	/// Set by MenuOpenCloseEventHandler when LoadingMenu closes (cell/worldspace transitions,
+	/// initial load). Consumed at the start of Upscale() to force a one-frame DLSS feature
+	/// rebuild — works around a VR-only persistent ~2-3ms GPU regression after worldspace
+	/// loads that otherwise only clears when the user manually toggles DLSS/preset. VR+DLSS
+	/// only; flat has no repro and per-eye extent asymmetry doesn't apply.
+	std::atomic<bool> pendingDLSSReset{ false };
+
 	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();
@@ -236,7 +256,6 @@ public:
 
 	// Unified interface methods - external code should use these instead of direct access
 	void LoadUpscalingSDKs();  // Loads all SDKs at once
-	void SetUIBuffer();
 	HANDLE GetFrameLatencyWaitableObject() const;
 	float GetFrameTime() const;
 
@@ -298,6 +317,13 @@ private:
 	{
 		static void thunk();
 		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+		static bool Register();
 	};
 };
 
