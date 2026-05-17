@@ -2502,20 +2502,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
-	// Engine pre-renders the 4-cascade directional shadow into a screen-space
-	// mask at t14. LLF's in-shader sampling only covers cascades 0/1, so we
-	// pass the engine mask through and fall back to it past cascade 1 (see
-	// LightLimitFix::GetDirectionalShadow). Always declared so the LLF point-
-	// light loop below can sample shadow channels regardless of whether the
-	// directional path consumed it.
+#	if !defined(LIGHT_LIMIT_FIX)
 	float4 shadowColor = (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) ? TexShadowMaskSampler.Load(int3(input.Position.xy, 0)) : 1.0;
+#	endif
 
 	if (inWorld && !inReflection && !SharedData::InInterior) {
 #	if !defined(LOD)
 		// On non-deferred passes, use the cheaper VSM shadows if available
 #		if defined(LIGHT_LIMIT_FIX) && (defined(DEFERRED) || !defined(VOLUMETRIC_SHADOWS))
-		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex,
-			(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir) ? shadowColor.x : 1.0);
+		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
 #		elif !defined(LIGHT_LIMIT_FIX)
 		dirDetailedShadow = (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir) ? shadowColor.x : 1.0;
 #		endif  // LIGHT_LIMIT_FIX

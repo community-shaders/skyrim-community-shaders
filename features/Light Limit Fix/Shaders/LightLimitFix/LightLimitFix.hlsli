@@ -73,25 +73,14 @@ namespace LightLimitFix
 	Texture2DArray<float> ShadowMaps : register(t101);
 	Texture2DArray<float> DirectionalShadowCascades : register(t99);
 
-	// engineMaskShadow: the engine's pre-rendered shadow-mask sample at this
-	// pixel (TexShadowMaskSampler.Load(int3(Position.xy, 0)).x). The engine
-	// renders all four cascades into that mask using its native sampling.
-	// LLF's DirectionalShadowLightData cbuffer only carries the first two
-	// cascade matrices (ShadowProj[2] / EndSplitDistances.xy), so this
-	// function only has cascade 0/1 detail available. Past EndSplitDistances.y
-	// we fall through to the engine mask -- previously the function returned
-	// 1.0 (fully lit) there, which produced a visible shadow termination
-	// plane anchored to camera-relative depth that swept across world
-	// geometry on HMD rotation in VR.
-	float GetDirectionalShadow(float3 worldPosition, float3 worldPositionWS, float2x2 rotationMatrix, uint eyeIndex, float engineMaskShadow)
+	float GetDirectionalShadow(float3 worldPosition, float3 worldPositionWS, float2x2 rotationMatrix, uint eyeIndex)
 	{
 		DirectionalShadowLightData shadowLightData = DirectionalShadowLights[0];
 
 		float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(worldPosition, eyeIndex));
 
-		// Past cascade 1 -- defer to the engine's 4-cascade mask.
 		if (shadowMapDepth > shadowLightData.EndSplitDistances.y)
-			return engineMaskShadow;
+			return 1.0;
 
 		// Blend from LLF PCF deep in cascade 1 toward the engine mask as we
 		// approach cascade 1's far edge, avoiding a hard discontinuity at the
@@ -155,23 +144,12 @@ namespace LightLimitFix
 			shadow = lerp(shadow, shadowBlend, cascadeSelect);
 		}
 
-		// Within cascade 1's far edge, blend from LLF's PCF result toward
-		// the engine mask -- avoids a hard discontinuity at the cascade
-		// boundary where LLF stops and engine sampling takes over.
-		return lerp(shadow, engineMaskShadow, fadeFactor);
-	}
-
-	float GetDirectionalShadow(float3 worldPosition, float3 worldPositionWS, float2x2 rotationMatrix, uint eyeIndex)
-	{
-		// Convenience overload: lit fallback when the caller doesn't have
-		// the engine mask available. Preserves the previous behaviour for
-		// any caller that pre-dates the engineMaskShadow parameter.
-		return GetDirectionalShadow(worldPosition, worldPositionWS, rotationMatrix, eyeIndex, 1.0);
+		return lerp(shadow, 1.0, fadeFactor);
 	}
 
 	float GetDirectionalShadow(float3 worldPosition, float3 worldPositionWS, float2x2 rotationMatrix)
 	{
-		return GetDirectionalShadow(worldPosition, worldPositionWS, rotationMatrix, 0, 1.0);
+		return GetDirectionalShadow(worldPosition, worldPositionWS, rotationMatrix, 0);
 	}
 
 	float SampleShadowGather(uint shadowIndex, float2 uv, float receiverDepth)
