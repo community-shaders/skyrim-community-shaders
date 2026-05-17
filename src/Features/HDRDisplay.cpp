@@ -5,6 +5,7 @@
 #include "Buffer.h"
 #include "Globals.h"
 #include "LinearLighting.h"
+#include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Upscaling.h"
@@ -912,6 +913,143 @@ void HDRDisplay::SetUIBuffer()
 	// Redirect to our UI texture
 	fb.RTV = uiTexture->rtv.get();
 	globals::d3d::context->OMSetRenderTargets(1, &fb.RTV, nullptr);
+}
+
+bool HDRDisplay::UsesDeferredPresentComposite() const
+{
+	return loaded && settings.enableHDR && !globals::game::isVR &&
+	       !globals::features::upscaling.d3d12SwapChainActive && uiTexture && uiTexture->rtv && hdrOutputCS;
+}
+
+void HDRDisplay::SyncFramebufferUIRedirect()
+{
+	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	fb.RTV = uiTexture->rtv.get();
+	globals::d3d::context->OMSetRenderTargets(1, &fb.RTV, nullptr);
+}
+
+namespace
+{
+	struct PresentSuppressionScope
+	{
+		PresentSuppressionScope() { globals::features::hdrDisplay.SetPresentSuppressed(true); }
+		~PresentSuppressionScope() { globals::features::hdrDisplay.SetPresentSuppressed(false); }
+	};
+
+	struct SwapChainPresentBottom
+	{
+		static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
+		{
+			if (globals::features::hdrDisplay.IsPresentSuppressed())
+				return S_OK;
+
+			return func(This, SyncInterval, Flags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+}
+
+void HDRDisplay::InstallSwapChainPresentHooks(IDXGISwapChain* swapChain)
+{
+	stl::detour_vfunc<8, SwapChainPresentBottom>(swapChain);
+}
+
+HRESULT HDRDisplay::PresentToSwapChain(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags)
+{
+	return SwapChainPresentBottom::func(swapChain, syncInterval, flags);
+}
+
+void HDRDisplay::DrawImGuiForPresent(bool frameGenActive, bool hdrReady)
+{
+	if (frameGenActive) {
+		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	} else if (hdrReady && !globals::game::isVR && uiTexture && uiTexture->rtv && uiTexture->resource) {
+		ID3D11RenderTargetView* uiRTV = uiTexture->rtv.get();
+		D3D11_TEXTURE2D_DESC texDesc{};
+		uiTexture->resource->GetDesc(&texDesc);
+
+		if (texDesc.Width > 0) {
+			globals::d3d::context->OMSetRenderTargets(1, &uiRTV, nullptr);
+
+			D3D11_VIEWPORT uiViewport{};
+			uiViewport.Width = static_cast<float>(texDesc.Width);
+			uiViewport.Height = static_cast<float>(texDesc.Height);
+			uiViewport.MinDepth = 0.0f;
+			uiViewport.MaxDepth = 1.0f;
+			globals::d3d::context->RSSetViewports(1, &uiViewport);
+		}
+	} else {
+		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	}
+}
+
+void HDRDisplay::RunHDRBeforePresentChain(bool hdrReady)
+{
+	if (!hdrReady)
+		return;
+
+	ID3D11RenderTargetView* nullRTV = nullptr;
+	globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
+	ApplyHDR();
+}
+
+HRESULT HDRDisplay::RunPresentChainWithHDR(
+	IDXGISwapChain* swapChain,
+	UINT syncInterval,
+	UINT flags,
+	bool hdrReady,
+	bool frameGenActive,
+	const std::function<HRESULT(IDXGISwapChain*, UINT, UINT)>& presentChain)
+{
+	if (UsesDeferredPresentComposite()) {
+		SyncFramebufferUIRedirect();
+		HRESULT retval;
+		{
+			PresentSuppressionScope suppress;
+			retval = presentChain(swapChain, syncInterval, flags);
+		}
+
+		ID3D11RenderTargetView* nullRTV = nullptr;
+		globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
+		ApplyHDR();
+		retval = PresentToSwapChain(swapChain, syncInterval, flags);
+		ClearUIBuffer();
+		return retval;
+	}
+
+	RunHDRBeforePresentChain(hdrReady);
+
+	if (hdrReady) {
+		if (!frameGenActive) {
+			ClearUIBuffer();
+		}
+		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	}
+
+	return presentChain(swapChain, syncInterval, flags);
+}
+
+HRESULT HDRDisplay::HandleSwapChainPresent(
+	IDXGISwapChain* swapChain,
+	UINT syncInterval,
+	UINT flags,
+	const std::function<HRESULT(IDXGISwapChain*, UINT, UINT)>& presentChain)
+{
+	const bool frameGenActive = globals::features::upscaling.d3d12SwapChainActive;
+	const bool hdrReady = loaded && hdrDataCB && outputTexture && (settings.enableHDR || frameGenActive);
+
+	D3D11_VIEWPORT savedViewport{};
+	UINT viewportCount = 1;
+	globals::d3d::context->RSGetViewports(&viewportCount, &savedViewport);
+
+	DrawImGuiForPresent(frameGenActive, hdrReady);
+	globals::menu->DrawOverlay();
+	globals::d3d::context->RSSetViewports(1, &savedViewport);
+
+	return RunPresentChainWithHDR(swapChain, syncInterval, flags, hdrReady, frameGenActive, presentChain);
 }
 
 void HDRDisplay::ClearUIBuffer()
