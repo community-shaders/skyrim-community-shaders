@@ -445,6 +445,13 @@ namespace ShadowCasterManager
 	// -------------------------------------------------------------------------
 	static void Hook_OverwriteShadowMapIndex(CONTEXT& ctx)
 	{
+		// Enabled is a boot-time gate (see Init early-return) -- this
+		// hook is only installed when SCM is enabled at boot, so it
+		// runs unconditionally per-frame from there. Toggling Enabled
+		// off at runtime no longer affects the hook; restart is the
+		// only safe way to revert. See Hook_CalculateActiveShadowCasters
+		// comment for the crash rationale.
+
 		auto* light = reinterpret_cast<RE::BSShadowLight*>(REL::Relocate(ctx.R15, ctx.R15, ctx.R14));
 		int32_t idx = s_lights.FindLight(light, s_settings.ShadowLightCount);
 		if (idx < 0)
@@ -2786,10 +2793,43 @@ namespace ShadowCasterManager
 		RenderScheduledShadowLights();
 	};
 
-	// Hook struct for stl::detour_thunk
+	// Hook struct for stl::detour_thunk.
+	//
+	// `s_settings.Enabled` is now a BOOT-TIME flag only -- toggling at
+	// runtime has no effect on this thunk, the same way ShadowLightCount
+	// and atlas texture sizes are restart-gated. See Init() at the
+	// settings.Enabled early-return for the boot-time gate.
+	//
+	// Rationale (Ghidra-verified by crash 2026-05-17 20:31:12): the AV
+	// at BSBatchRenderer::sub_SE100843_AE107633 +0x54
+	// (`mov rax, [r14+0x48]`, r14=1 = vfunc bool returned as pointer)
+	// is reached via:
+	//   NiCamera::CalculateAndDrawShadowCasterLights
+	//   -> CalculateActiveShadowCasterLights  (the engine's vanilla
+	//                                          scheduler -- what we'd
+	//                                          route to on disable)
+	//     -> BSShadowDirectionalLight::sub_SE100818_AE107602 (sun
+	//                                                        shadow)
+	//       -> FUN_1414bf320 (BSCullingProcess inner)
+	//         -> BSCullingProcess::sub
+	//           -> FUN_1414f50d0
+	//             -> BSBatchRenderer::sub_SE100843_AE107633  (AV)
+	//
+	// The crash is in the vanilla scheduler itself. SCM's boot-time
+	// modifications (kSHADOWMAPS texture sized to ShadowLightCount,
+	// depth-buffer creation loop redirected via Hook_CreateNormalDepthBuffer
+	// and Hook_CreateReadOnlyDepthBuffer, color-mask pass replaced by
+	// Hook_DisableColorMask) make the engine state incompatible with
+	// the vanilla traversal even when our runtime tracking is left
+	// untouched (soft-disable still crashed). The deep engine hooking
+	// is not safely reversible at runtime; restart is the only safe
+	// way to revert to vanilla.
 	struct Hook_CalculateActiveShadowCasters
 	{
-		static void thunk() { ScheduleShadowCasters(); }
+		static void thunk()
+		{
+			ScheduleShadowCasters();
+		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -3552,6 +3592,26 @@ namespace ShadowCasterManager
 			s_lights.Lights = newLights;
 			s_lights.Size = newTotal;
 		}
+
+		// Apply settings as a pure flag flip. Conversion-related state
+		// (s_normalConvert, s_shadowConvert, s_lights pool) is NOT
+		// drained on toggles -- it ages out at the next LoadingMenu
+		// via the natural ResetSession() in SceneTransitionEventHandler.
+		// See Hook_CalculateActiveShadowCasters::thunk for the rationale:
+		// wholesale clearing mid-session caused engine accumulate-shadow
+		// crashes (2026-05-17 crash logs) because the engine still had
+		// our converted/promoted lights in activeShadowLights with
+		// shadowmapDescriptors already cleared by Hook_DisableColorMask,
+		// and tearing our tracking left the engine walking half-state.
+		//
+		// Each setting's gating still takes effect immediately via the
+		// runtime checks in the relevant hook / scheduler branches:
+		//   - Enabled: per-frame thunk routes to vanilla; OverwriteShadowMapIndex no-ops.
+		//   - ConvertExcessToNormal: convertOrDisable routes excess omnis to DisableLight.
+		//   - PromoteNormalToShadow: Hook_ConvertLights_Add stops promoting.
+		// "Off = stop converting" is the documented semantic; existing
+		// converted/promoted lights persist in their current form until
+		// the engine itself drops them at cell change.
 		s_settings = capped;
 	}
 
@@ -4570,7 +4630,15 @@ namespace ShadowCasterManager
 				"distance, intensity, and a configurable priority formula.\n\n"
 				"Based on Intellightent by meh321.\n"
 				"https://www.nexusmods.com/skyrimspecialedition/mods/172423\n\n"
-				"Requires a game restart to take effect.");
+				"Restart required to take effect in either direction. The boot-time\n"
+				"patches (extended atlas slices, depth buffer creation loop, color-mask\n"
+				"pass replacement) cannot be safely reversed at runtime -- vanilla\n"
+				"shadow scheduling crashes when run on top of them. Toggle and restart.");
+		// Either direction requires restart -- the boot-time patches modify
+		// the engine's shadow texture array, depth buffer creation, and
+		// color-mask pass. Vanilla scheduling cannot run on top of those
+		// (verified by AV in BSShadowDirectionalLight processing during a
+		// runtime-disable test, 2026-05-17 crash logs).
 		if (settings.Enabled != s_settings.Enabled) {
 			const auto& theme = Menu::GetSingleton()->GetTheme();
 			ImGui::TextColored(theme.StatusPalette.RestartNeeded,
