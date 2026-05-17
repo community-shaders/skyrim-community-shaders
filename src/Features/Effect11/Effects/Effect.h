@@ -47,6 +47,7 @@ public:
 
 	// Pure virtual methods for derived classes to implement
 	virtual std::string GetName() const = 0;
+	virtual bool IsRequired() const { return false; }
 
 	struct TechniqueBinding
 	{

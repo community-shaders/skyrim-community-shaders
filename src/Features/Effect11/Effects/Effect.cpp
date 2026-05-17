@@ -164,6 +164,11 @@ bool Effect::Apply()
 
 	if (!LoadFXFile()) {
 		if (!filePresent) {
+			if (IsRequired()) {
+				errors.push_back("Required effect file not found");
+				logger::error("[EFFECT11] Required effect file not found for '{}'", GetName());
+				return false;
+			}
 			logger::info("[EFFECT11] Effect file not found for '{}', skipping", GetName());
 			return true;
 		}
