@@ -857,14 +857,10 @@ namespace SceneSettingsUI
 			return;
 
 		ImGui::OpenPopup(popupId);
-		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-		ImGui::SetNextWindowSize(ImVec2(C::Em(C::SCENE_ADD_DIALOG_WIDTH_EM), 0));
 
-		if (!ImGui::BeginPopupModal(popupId, &state.dialogOpen, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
-			state.dialogOpen = false;
+		auto popup = Util::CenteredPopupModal(popupId, &state.dialogOpen, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+		if (!popup)
 			return;
-		}
 
 		ImGui::TextUnformatted("Select settings to export as overwrite files:");
 		ImGui::Spacing();
@@ -926,8 +922,6 @@ namespace SceneSettingsUI
 				ImGui::CloseCurrentPopup();
 			}
 		}
-
-		ImGui::EndPopup();
 	}
 
 	void DrawExportAllPopup(SceneType type, const std::vector<SceneSettingsManager::SettingEntry>& entries, ExportAllPopupState& state)
