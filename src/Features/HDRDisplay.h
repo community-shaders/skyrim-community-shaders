@@ -5,6 +5,7 @@
 
 #include <DirectXMath.h>
 #include <dxgi.h>
+#include <functional>
 #include <mutex>
 
 struct HDRDisplay : public Feature
@@ -82,12 +83,28 @@ public:
 	// Frame Gen style UI buffer - redirects kFRAMEBUFFER.RTV for vanilla UI capture
 	void SetUIBuffer();
 	void ClearUIBuffer();
+	// Non-FG HDR: composite after Present-hook mods, then call DXGI Present once.
+	bool UsesDeferredPresentComposite() const;
+	// Align kFRAMEBUFFER.RTV with uiTexture for engine paths (ImGui already bound OM).
+	void SyncFramebufferUIRedirect();
 
 	// Scale UI brightness in uiBufferWrapped for Frame Gen.
 	void ScaleUIBrightnessForFG();
 	bool ShouldUseD3D12UIBuffer();
 
 	void ApplyHDR();
+
+	// Swap-chain Present hook (installed from Hooks::InitD3D).
+	static void InstallSwapChainPresentHooks(IDXGISwapChain* swapChain);
+	HRESULT HandleSwapChainPresent(
+		IDXGISwapChain* swapChain,
+		UINT syncInterval,
+		UINT flags,
+		const std::function<HRESULT(IDXGISwapChain*, UINT, UINT)>& presentChain);
+
+	// Used by the swap-chain Present bottom hook while deferred compositing runs.
+	bool IsPresentSuppressed() const { return presentSuppressed; }
+	void SetPresentSuppressed(bool value) { presentSuppressed = value; }
 
 	void DestroyResources();
 
@@ -155,6 +172,18 @@ public:
 private:
 	bool showHDRWarningPopup = false;
 	bool pendingHDREnable = false;
+	bool presentSuppressed = false;
+
+	HRESULT PresentToSwapChain(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags);
+	void DrawImGuiForPresent(bool frameGenActive, bool hdrReady);
+	void RunHDRBeforePresentChain(bool hdrReady);
+	HRESULT RunPresentChainWithHDR(
+		IDXGISwapChain* swapChain,
+		UINT syncInterval,
+		UINT flags,
+		bool hdrReady,
+		bool frameGenActive,
+		const std::function<HRESULT(IDXGISwapChain*, UINT, UINT)>& presentChain);
 
 	struct D3D12UIBufferMode
 	{
