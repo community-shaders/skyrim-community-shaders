@@ -133,7 +133,12 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 			if (upscaling.IsBackendInitialized()) {
 				upscaling.UpgradeBackendInterface((void**)&(*ppDevice));
-				upscaling.UpgradeBackendInterface((void**)&(*ppSwapChain));
+				// Don't wrap the swap chain with Streamline when using the D3D12
+				// proxy.  The proxy's GetDevice() returns the D3D11 device for
+				// IID_ID3D11Device, which other SKSE plugins (e.g. SkyrimPlatform)
+				// rely on.  Streamline's wrapper would bypass this override and
+				// forward to the underlying D3D12 swap chain, causing
+				// E_NOINTERFACE.  The proxy must remain the outermost layer.
 				upscaling.SetBackendD3DDevice(*ppDevice);
 				// Some features (notably Reflex/PCL) may report availability only after device bind.
 				upscaling.CheckBackendFeatures(pAdapter);
@@ -1919,16 +1924,9 @@ void Upscaling::UpscaleDepth()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Upscaling - Depth Upscale");
 
-		// Engine copies kMAIN→kMAIN_COPY during 3D scene rendering.
-		// In non-3D contexts (map, main menu, loading, pause) the engine skips its copy.
-		auto* ui = globals::game::ui;
-		const bool inMenuContext = globals::state->isMapMenuOpen ||
-		                           globals::state->isMainMenuOpen ||
-		                           globals::state->isLoadingMenuOpen ||
-		                           (ui && ui->GameIsPaused());
-		if (inMenuContext) {
-			copyIfNonAliased(depthCopy.texture, depth.texture);
-		}
+		// Sometimes this is not already copied e.g. map menu.
+		// Skip alias copies to reduce unnecessary copy churn.
+		copyIfNonAliased(depthCopy.texture, depth.texture);
 
 		// Clear stencil to be 0xFF
 		if (globals::game::isVR) {

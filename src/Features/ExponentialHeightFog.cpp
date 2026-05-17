@@ -9,10 +9,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	fogHeightFalloff,
 	fogDensity,
 	directionalInscatteringMultiplier,
-	directionalInscatteringExponent,
+	directionalInscatteringAnisotropy,
 	inscatteringTint,
 	cubemapMipLevel,
-	respectVanillaFogFade)
+	sunlightAttenuationAmount,
+	respectVanillaFogFade,
+	disableVanillaFog,
+	fogInscatteringColor,
+	originalFogColorAmount)
 
 void ExponentialHeightFog::RestoreDefaultSettings()
 {
@@ -35,9 +39,22 @@ void ExponentialHeightFog::DrawSettings()
 	ImGui::SliderFloat("Start Distance", &settings.startDistance, 0.0f, 100000.0f, "%.1f");
 	ImGui::SliderFloat("Fog Height", &settings.fogHeight, -22000.0f, 22000.0f, "%.1f");
 	ImGui::SliderFloat("Fog Height Falloff", &settings.fogHeightFalloff, 0.001f, 2.0f, "%.3f");
+	ImGui::ColorEdit4("Fog Inscattering Color", (float*)&settings.fogInscatteringColor);
+	ImGui::SliderFloat("Original Fog Color Amount", &settings.originalFogColorAmount, 0.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat("Fog Density", &settings.fogDensity, 0.0f, 1.0f, "%.3f");
 	ImGui::SliderFloat("Directional Light Inscattering Multiplier", &settings.directionalInscatteringMultiplier, 0.0f, 10.0f, "%.2f");
-	ImGui::SliderFloat("Directional Light Inscattering Exponent", &settings.directionalInscatteringExponent, 1.0f, 128.0f, "%.2f");
+	ImGui::SliderFloat("Sunlight Attenuation Amount", &settings.sunlightAttenuationAmount, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat("Directional Light Inscattering Anisotropy", &settings.directionalInscatteringAnisotropy, -0.99f, 0.99f, "%.3f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Controls the asymmetry of inscattering via the Henyey-Greenstein phase function.\n"
+			"Positive values produce forward scattering (glow around sun).\n"
+			"Zero is isotropic. Negative values produce back scattering.");
+	}
+	ImGui::Checkbox("Disable Vanilla Fog", (bool*)&settings.disableVanillaFog);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Disables the vanilla fog entirely. Only exponential height fog will be applied.");
+	}
 	ImGui::Checkbox("Apply Vanilla Fade", (bool*)&settings.respectVanillaFogFade);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Applies vanilla fade brightness to exponential height fog.");

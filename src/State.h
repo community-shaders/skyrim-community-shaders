@@ -179,7 +179,8 @@ public:
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
 		GrassSphereNormal = 1 << 3,
-		IsSun = 1 << 4
+		IsSun = 1 << 4,
+		SuppressExternalEmittance = 1 << 5
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t
@@ -211,6 +212,7 @@ public:
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 	void UpdateSkyShaderPermutation(RE::BSRenderPass* a_pass);
+	bool HasDirectionalShadows() const;
 
 	struct PermutationCB
 	{
@@ -245,10 +247,12 @@ public:
 		uint FrameCount;
 		uint FrameCountAlwaysActive;
 		uint InInterior;
+		uint HasDirectionalShadows;
 		uint InMapMenu;
 		uint HideSky;
 		float MipBias;
 		float WaterSystemHeight;  // TES::GetWaterHeight at eye-0 in camera-relative Z; -NI_INFINITY when no water body found (VR only)
+		float3 pad0;
 		float4 AmbientSHR;
 		float4 AmbientSHG;
 		float4 AmbientSHB;

@@ -127,6 +127,8 @@ private:
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();
 	void DrawFogSettings();
+	void DrawFogSlider(const char* id, float& prop, float min, float max, const char* fmt, bool& inheritRef, bool isInherited, bool& changed);
+	void DrawFogRow(bool matches, const char* inheritKey, const char* label, const char* dayPropKey, const char* nightPropKey, float min, float max, const char* fmt, bool hasParent, WeatherWidget* parentWidget, bool& changed);
 
 	// Cloud texture loading
 	ID3D11ShaderResourceView* GetCloudTexture(int layerIndex);
@@ -136,5 +138,7 @@ private:
 	void DrawProperties(std::string category, std::map<std::string, int> properties);
 	void InheritFromParent(const std::string& property);
 	void InheritAllFromParent();
+	void SyncInheritedValuesFromParent();
+	void PropagateToChildren();
 	bool pendingReinit = false;
 };

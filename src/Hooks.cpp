@@ -1,6 +1,7 @@
 #include "Hooks.h"
 
 #include "ShaderTools/BSShaderHooks.h"
+#include "Utils/ExternalEmittance.h"
 
 #include "Feature.h"
 #include "Globals.h"
@@ -168,6 +169,7 @@ namespace EffectExtensions
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			func(shader, pass, renderFlags);
+			ExternalEmittance::UpdatePermutation(pass);
 			globals::state->permutationData.EffectRadius = pass->geometry->worldBound.radius;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -311,8 +313,10 @@ struct IDXGISwapChain_Present
 		// OMGetRenderTargets to find a target to render overlays into. Without this, they
 		// get nullptr (we unbound everything for the ApplyHDR resource hazard) and their
 		// UI elements are invisible.
-		if (hdrReady && !frameGenActive) {
-			hdr->ClearUIBuffer();  // restores kFRAMEBUFFER.RTV to original backbuffer RTV
+		if (hdrReady) {
+			if (!frameGenActive) {
+				hdr->ClearUIBuffer();  // restores kFRAMEBUFFER.RTV to original backbuffer RTV
+			}
 			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
 		}

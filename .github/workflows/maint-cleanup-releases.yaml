@@ -1,4 +1,4 @@
-name: Cleanup Obsolete Releases (PRs and RCs)
+name: "Maint: Cleanup Obsolete Releases"
 
 on:
     workflow_dispatch:
