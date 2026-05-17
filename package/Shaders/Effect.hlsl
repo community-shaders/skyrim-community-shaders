@@ -11,6 +11,13 @@
 
 #define EFFECT
 
+#if defined(SOFT) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(VC) && \
+    !defined(LIGHTING) && !defined(PARTICLES) && !defined(STRIP_PARTICLES) &&                    \
+    !defined(BLOOD) && !defined(MEMBRANE) && !defined(ADDBLEND) && !defined(MULTBLEND) &&        \
+    !defined(MULTBLEND_DECAL) && !defined(ALPHA_TEST) && !defined(DEFERRED) && !defined(SKINNED)
+#	define IS_VOLUMETRIC_FOG
+#endif
+
 #if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
 #	undef IBL
 #endif
@@ -615,11 +622,6 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 #		endif
 
-	if (SharedData::enbSettings.Enable) {
-		dirColor *= SharedData::enbSettings.ParticleLightingInfluence;
-		ambientColor *= SharedData::enbSettings.ParticleAmbientInfluence;
-	}
-
 	static const uint sampleCount = 8;
 	static const float rcpSampleCount = 1.0 / float(sampleCount);
 
@@ -722,8 +724,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 	float shadowVariance = 1.0;
 
-	if (SharedData::enbSettings.Enable)
+#	if !defined(IS_VOLUMETRIC_FOG)
+	if (SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject))
 		propertyColor *= SharedData::enbSettings.ParticleIntensity;
+#	endif
 
 #	if defined(LIGHTING)
 	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, eyeIndex, shadowVariance);
@@ -952,7 +956,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
 #		else
-	psout.Albedo = float4(psout.Diffuse.xyz, finalColor.w);
+	psout.Albedo = float4(psout.Diffuse.xyz * !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject), finalColor.w);
 	psout.Specular = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);
