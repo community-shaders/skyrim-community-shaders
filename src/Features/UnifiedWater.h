@@ -3,7 +3,7 @@
 #include "UnifiedWater/Flowmap.h"
 #include "UnifiedWater/WaterCache.h"
 
-#include <atomic>
+#include <vector>
 
 struct UnifiedWater : OverlayFeature
 {
@@ -60,18 +60,6 @@ struct UnifiedWater : OverlayFeature
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	struct TES_SetWorldSpace
-	{
-		static void thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct TES_DestroySkyCell
-	{
-		static void thunk(RE::TES* tes);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
 	struct BSWaterShader_SetupGeometry
 	{
 		static void thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass);
@@ -113,12 +101,7 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
-	std::atomic<RE::TESWorldSpace*> currentPlayerWorldSpace{ nullptr };
-	std::atomic<bool> pendingChildWsCull{ false };
-	// Game-thread TES snapshot used by deferred child-worldspace cull fallbacks.
-	std::atomic<RE::TES*> cachedTes{ nullptr };
-
-	void TryCompleteDeferredChildWorldspaceCull(RE::TES* tes = nullptr);
+	bool BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSystem* waterSystem);
 
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();
