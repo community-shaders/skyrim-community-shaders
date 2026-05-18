@@ -729,6 +729,7 @@ void ColorGrading::CompileComputeShaders()
 	}
 
 	recompileFlag = false;
+	curveNeedsUpdate = true;  // shader changed, curve must update
 }
 
 void ColorGrading::Draw(TextureInfo& inout_tex)
@@ -832,6 +833,12 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	};
 	colorCB->Update(colorCBData);
 
+	// Check if curve needs update (CB changed = settings changed)
+	if (memcmp(&colorCBData, &prevCurveCB, sizeof(ColorCB)) != 0) {
+		curveNeedsUpdate = true;
+		prevCurveCB = colorCBData;
+	}
+
 	ID3D11Buffer* cb = colorCB->CB();
 	context->CSSetConstantBuffers(1, 1, &cb);
 
@@ -877,7 +884,8 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	inout_tex = { texColor->resource.get(), texColor->srv.get() };
 
 	// Debug: evaluate color grading pipeline on a neutral ramp for curve preview
-	if (curveReadbackRequested && texCurveInput && texCurveOutput && colorgradingCS) {
+	if (curveReadbackRequested && curveNeedsUpdate && texCurveInput && texCurveOutput && colorgradingCS) {
+		curveNeedsUpdate = false;
 		// Re-bind CB and samplers for the curve dispatch
 		ID3D11Buffer* curveCB = colorCB->CB();
 		std::array<ID3D11SamplerState*, 1> curveSamplers = { linearSampler.get() };
