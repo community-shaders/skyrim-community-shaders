@@ -1817,6 +1817,9 @@ namespace SIE
 			if (it == descriptors.cend()) {
 				return false;
 			}
+			if (globals::game::isVR && strcmp(imagespaceShader.name, "BSImagespaceShaderISTemporalAA") == 0) {
+				return false;
+			}
 			descriptor = it->second;
 			return true;
 		}
