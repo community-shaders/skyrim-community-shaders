@@ -4,9 +4,6 @@
 
 struct InverseSquareLighting : Feature
 {
-private:
-	static constexpr std::string_view MOD_ID = "153542";
-
 public:
 	virtual inline std::string GetName() override { return "Inverse Square Lighting"; }
 
