@@ -449,8 +449,6 @@ SamplerState SampLandLodBlend2Sampler : register(s15);
 SamplerState SampLandLodNoiseSampler : register(s15);
 #	endif
 
-SamplerState SampShadowMaskSampler : register(s14);
-
 #	if defined(LANDSCAPE)
 
 Texture2D<float4> TexColorSampler : register(t0);
@@ -896,14 +894,6 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "ScreenSpaceShadows/ScreenSpaceShadows.hlsli"
 #	endif
 
-#	if defined(LIGHT_LIMIT_FIX)
-#		include "LightLimitFix/LightLimitFix.hlsli"
-#	endif
-
-#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
-#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
-#	endif
-
 #	if defined(TREE_ANIM)
 #		undef WETNESS_EFFECTS
 #	endif
@@ -940,6 +930,14 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #	define LinearSampler SampColorSampler
 
 #	include "Common/ShadowSampling.hlsli"
+
+#	if defined(LIGHT_LIMIT_FIX)
+#		include "LightLimitFix/LightLimitFix.hlsli"
+#	endif
+
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
 
 #	if defined(IBL)
 #		include "IBL/IBL.hlsli"
@@ -2023,15 +2021,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif  // SPARKLE
 #	endif      // defined (MODELSPACENORMALS) && !defined (SKINNED)
 
-	float2 baseShadowUV = 1.0.xx;
-	float4 shadowColor = 1.0;
-	if ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir) || inWorld) || numShadowLights > 0) {
-		baseShadowUV = input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy;
-		float2 adjustedShadowUV = baseShadowUV * VPOSOffset.xy + VPOSOffset.zw;
-		float2 shadowUV = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(adjustedShadowUV);
-		shadowColor = TexShadowMaskSampler.Sample(SampShadowMaskSampler, shadowUV);
-	}
-
 	float projectedMaterialWeight = 0;
 
 	float projWeight = 0;
@@ -2508,20 +2497,46 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float dirDetailedShadow = 1.0;
 
-	if ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir)) {
-		dirDetailedShadow *= shadowColor.x;
+	float2 rotation;
+	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+	float3 worldPositionWS = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
-#	if !defined(VOLUMETRIC_SHADOWS)
-		dirSoftShadow = dirDetailedShadow;
+#	if !defined(LIGHT_LIMIT_FIX)
+	float4 shadowColor = (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) ? TexShadowMaskSampler.Load(int3(input.Position.xy, 0)) : 1.0;
 #	endif
-	} else {
-		dirDetailedShadow = dirVSMDetailedShadow;
-	}
+
+	if (inWorld && !inReflection && !SharedData::InInterior) {
+#	if !defined(LOD)
+		// On non-deferred passes, use the cheaper VSM shadows if available
+#		if defined(LIGHT_LIMIT_FIX) && (defined(DEFERRED) || !defined(VOLUMETRIC_SHADOWS))
+		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(input.WorldPosition.xyz, worldPositionWS, rotationMatrix, eyeIndex);
+#		elif !defined(LIGHT_LIMIT_FIX)
+		dirDetailedShadow = (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir) ? shadowColor.x : 1.0;
+#		endif  // LIGHT_LIMIT_FIX
+
+#		if defined(VOLUMETRIC_SHADOWS)
+		float vsmDetailedShadow = 1.0;
+		dirSoftShadow = VolumetricShadows::GetVSMShadow2D(input.WorldPosition.xyz, worldPositionWS, eyeIndex, vsmDetailedShadow);
+		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
+
+#			if !defined(LIGHT_LIMIT_FIX)
+		if (!(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir))
+			dirDetailedShadow = vsmDetailedShadow;
+#			elif !(defined(DEFERRED))
+		dirDetailedShadow = vsmDetailedShadow;
+#			endif
+
+#		else
+		dirSoftShadow = dirDetailedShadow;
+#		endif  // VOLUMETRIC_SHADOWS
+#	endif
 
 #	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
-	if (!SharedData::InInterior && dirLightAngle >= 0.0)
-		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex);
-#	endif
+		if (!SharedData::InInterior && dirLightAngle >= 0.0)
+			dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex);
+#	endif  // SCREEN_SPACE_SHADOWS
+	}
 
 #	if defined(EMAT) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	[branch] if (inWorld && SharedData::extendedMaterialSettings.EnableShadows)
@@ -2678,6 +2693,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
 	}
 
+#			if defined(LLFDEBUG)
+	LightLimitFix::LLFDebugInfo llfDebug = LightLimitFix::LLFDebugInfoInit();
+#			endif
+
 	[loop] for (uint lightIndex = 0; lightIndex < totalLightCount; lightIndex++)
 	{
 		LightLimitFix::Light light;
@@ -2710,12 +2729,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float lightShadow = 1.0;
 
 		float shadowComponent = 1.0;
-		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
+		bool shadowCoverage = false;
+		if (inWorld && !inReflection) {
 			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-				shadowComponent = shadowColor[light.shadowLightIndex];
+				shadowComponent = LightLimitFix::GetShadowLightShadow(light.shadowMapIndex, worldPositionWS, rotationMatrix, shadowCoverage);
 				lightShadow *= shadowComponent;
 			}
 		}
+
+#			if defined(LLFDEBUG)
+		uint llfShadowType = (light.lightFlags & LightLimitFix::LightFlags::Shadow &&
+								 light.shadowMapIndex < SharedData::lightLimitFixSettings.ShadowMapSlots) ?
+		                         (uint)LightLimitFix::Shadows[light.shadowMapIndex].ShadowLightParam.x :
+		                         0;
+		LightLimitFix::LLFDebugAccumulate(llfDebug, light, shadowComponent, shadowCoverage, llfShadowType);
+#			endif
 
 		float3 normalizedLightDirection = normalize(lightDirection);
 		float lightAngle = dot(worldNormal.xyz, normalizedLightDirection.xyz);
@@ -2799,7 +2827,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(LANDSCAPE)
 	if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::CharacterLight) {
 		float charLightMul = saturate(dot(viewDirection, worldNormal.xyz)) * CharacterLightParams.x + CharacterLightParams.y * saturate(dot(float2(0.164398998, -0.986393988), worldNormal.yz));
-		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z * TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, baseShadowUV).x));
+		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z * TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, screenUV).x));
 		diffuseColor += (charLightMul * charLightColor).xxx;
 	}
 #	endif
@@ -3250,15 +3278,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
-		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
-			psout.Diffuse.xyz = Color::TurboColormap(LightLimitFix::NumStrictLights >= 7.0);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 1) {
-			psout.Diffuse.xyz = Color::TurboColormap((float)LightLimitFix::NumStrictLights / 15.0);
-		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 2) {
-			psout.Diffuse.xyz = Color::TurboColormap((float)numClusteredLights / MAX_CLUSTER_LIGHTS);
-		} else {
-			psout.Diffuse.xyz = shadowColor.xyz;
-		}
+		psout.Diffuse.xyz = LightLimitFix::LLFDebugGetVizColor(
+			llfDebug,
+			Color::TurboColormap(LightLimitFix::NumStrictLights >= 7.0),
+			Color::TurboColormap((float)LightLimitFix::NumStrictLights / 15.0),
+			Color::TurboColormap((float)numClusteredLights / MAX_CLUSTER_LIGHTS),
+			float3(dirSoftShadow, dirDetailedShadow, 0.0),
+			color.xyz);
 		baseColor.xyz = 0.0;
 	} else {
 		psout.Diffuse.xyz = color.xyz;
@@ -3325,7 +3351,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if !defined(HDR_OUTPUT)  // Do not apply gamma correction before we pass to ISHDR.
-	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {
+	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting) {
 		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
 #	endif

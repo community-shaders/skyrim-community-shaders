@@ -130,7 +130,7 @@ namespace VolumetricShadows
 		return ComputeVSM(moments, positionLS.z);
 	}
 
-	float GetVSMShadow2D(float3 position, uint eyeIndex, out float detailedShadow)
+	float GetVSMShadow2D(float3 position, float3 positionWS, uint eyeIndex, out float detailedShadow)
 	{
 		DirectionalShadowLightData directionalShadowLightData = DirectionalShadowLights[0];
 
@@ -144,9 +144,6 @@ namespace VolumetricShadows
 
 		// Reduce over distance
 		float fade = saturate(shadowMapDepth / directionalShadowLightData.EndSplitDistances.y);
-
-		// Cascade projections are world-space; position comes in camera-relative.
-		float3 positionWS = position + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
 
 		// Compute cascade blend factor with smoothstep
 		float cascadeSelect = saturate((shadowMapDepth - directionalShadowLightData.StartSplitDistances.y) / (directionalShadowLightData.EndSplitDistances.x - directionalShadowLightData.StartSplitDistances.y));

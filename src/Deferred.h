@@ -4,6 +4,7 @@
 
 #include "Buffer.h"
 #include "RE/B/BSShadowDirectionalLight.h"
+#include "RE/B/BSShadowLight.h"
 
 #define ALBEDO RE::RENDER_TARGETS::kINDIRECT
 #define SPECULAR RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED
@@ -30,6 +31,15 @@ public:
 	};
 	STATIC_ASSERT_ALIGNAS_16(DirectionalShadowLightData);
 
+	struct alignas(16) ShadowLightData
+	{
+		float4x4 ShadowProj;
+		float4x4 InvShadowProj;
+		float4 ShadowParam;
+	};
+
+	STATIC_ASSERT_ALIGNAS_16(ShadowLightData);
+
 	void SetupResources();
 	void ReflectionsPrepasses();
 	void EarlyPrepasses();
@@ -43,15 +53,15 @@ public:
 
 	void ClearShaderCache();
 
-	ID3D11ComputeShader* GetComputeMainComposite();
-	ID3D11ComputeShader* GetComputeMainCompositeInterior();
-
 	// Reads directional shadow parameters from BSShadowDirectionalLight and uploads
 	// to the structured buffer at t98 (DirectionalShadowLightData — cascade splits +
 	// world-to-shadow projections). Called during EarlyPrepasses once shadow maps
 	// have been rendered. Replaces the previous compute-shader dispatch that copied
 	// constant-buffer fields into a UAV.
 	void CopyShadowLightData();
+
+	ID3D11ComputeShader* GetComputeMainComposite();
+	ID3D11ComputeShader* GetComputeMainCompositeInterior();
 
 	ID3D11BlendState* deferredBlendStates[7][2][13][2];
 	ID3D11BlendState* forwardBlendStates[7][2][13][2];

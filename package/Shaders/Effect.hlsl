@@ -503,14 +503,6 @@ cbuffer PerGeometry : register(b2)
 #	endif
 };
 
-#	if defined(LIGHT_LIMIT_FIX)
-#		include "LightLimitFix/LightLimitFix.hlsli"
-#	endif
-
-#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
-#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
-#	endif
-
 #	define LinearSampler SampBaseSampler
 
 #	if defined(SKYLIGHTING)
@@ -527,6 +519,14 @@ cbuffer PerGeometry : register(b2)
 #	endif
 
 #	include "Common/ShadowSampling.hlsli"
+
+#	if defined(LIGHT_LIMIT_FIX)
+#		include "LightLimitFix/LightLimitFix.hlsli"
+#	endif
+
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
 
 #	if defined(LIGHTING)
 float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, uint eyeIndex, inout float shadowVariance)
@@ -598,7 +598,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	return color;
 }
 #	else
-float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, uint eyeIndex, inout float shadowVariance)
+float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, uint eyeIndex, inout float shadowVariance, float noise)
 {
 	float3 dirColor;
 	float3 ambientColor;
@@ -611,12 +611,6 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 
 	static const uint sampleCount = 8;
 	static const float rcpSampleCount = 1.0 / float(sampleCount);
-
-	float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
-	float noiseTransform = noise * 2.0 - 1.0;
-	float2 rotation;
-	sincos(Math::TAU * noise, rotation.y, rotation.x);
-	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
 	// Enough for sky statics
 	float maxDistance = max(0, SharedData::GetScreenDepth(depth));
@@ -711,41 +705,64 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 	float shadowVariance = 1.0;
 
+	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
+
+	float2 rotation;
+	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+
 #	if defined(LIGHTING)
 	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, eyeIndex, shadowVariance);
 
 #		if defined(LIGHT_LIMIT_FIX)
-	uint lightCount = 0;
-
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 	bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
 
+	uint numClusteredLights = 0;
+	uint lightOffset = 0;
 	uint clusterIndex = 0;
 	if (inWorld && LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
-		lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
-		uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
-		[loop] for (uint i = 0; i < lightCount; i++)
-		{
-			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
-			LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
-			if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+		numClusteredLights = LightLimitFix::lightGrid[clusterIndex].lightCount;
+		lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
+	}
+	uint totalLightCount = LightLimitFix::NumStrictLights + numClusteredLights;
+
+	[loop] for (uint i = 0; i < totalLightCount; i++)
+	{
+		LightLimitFix::Light light;
+		if (i < LightLimitFix::NumStrictLights) {
+			light = LightLimitFix::StrictLights[i];
+		} else {
+			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + (i - LightLimitFix::NumStrictLights)];
+			light = LightLimitFix::lights[clusteredLightIndex];
+			if (LightLimitFix::IsLightIgnored(light))
 				continue;
-			}
-			float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
-			float lightDist = length(lightDirection);
+		}
+
+		float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
+		float lightDist = length(lightDirection);
 
 #			if defined(ISL)
-			float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+		float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+		if (intensityMultiplier < 1e-5)
+			continue;
 #			else
-			float intensityFactor = saturate(lightDist / light.radius);
-			float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+		float intensityFactor = saturate(lightDist / light.radius);
+		if (intensityFactor == 1)
+			continue;
+		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #			endif
 
-			const bool isPointLightLinear = light.lightFlags & LightLimitFix::LightFlags::Linear;
-			float3 lightColor = Color::PointLight(light.color.xyz, isPointLightLinear) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingMult();
-			propertyColor += lightColor;
+		float shadowMul = 1.0;
+		if (inWorld && (light.lightFlags & LightLimitFix::LightFlags::Shadow)) {
+			bool shadowCoverage;
+			shadowMul = LightLimitFix::GetShadowLightShadow(light.shadowMapIndex, input.WorldPosition.xyz, rotationMatrix, shadowCoverage);
 		}
+
+		const bool isPointLightLinear = light.lightFlags & LightLimitFix::LightFlags::Linear;
+		float3 lightColor = Color::PointLight(light.color.xyz, isPointLightLinear) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingMult() * shadowMul;
+		propertyColor += lightColor;
 	}
 
 #		endif
@@ -840,7 +857,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
 	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
-		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, eyeIndex, shadowVariance);
+		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, eyeIndex, shadowVariance, screenNoise);
 #	endif
 
 	lightColor = Color::EffectMult(lightColor);

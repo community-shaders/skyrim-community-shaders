@@ -548,6 +548,10 @@ public:
 	void DetectOpenVRInfo();
 	bool IsOpenVRCompatible() const;
 
+	/// Returns the HMD display refresh rate in Hz, or 0.0 if unavailable.
+	/// Queries IVRSystem via the game's already-loaded OpenVR DLL — no extra linking required.
+	float GetHMDRefreshRate() const;
+
 private:
 	//=============================================================================
 	// PRIVATE HELPERS

@@ -622,7 +622,13 @@ namespace Util
 		const std::vector<T>& footerRows = {},
 		const ImVec2& outerSize = ImVec2(0, 0))
 	{
-		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;
+		// ScrollY makes the table scroll internally when its bounded
+		// outerSize is smaller than its content. For unbounded tables
+		// (outerSize.y==0, auto-sized below) the size always fits the rows
+		// so the scrollbar stays hidden -- adding the flag is harmless in
+		// that case and lets bounded callers (overlay's host window) keep
+		// content above the table visible regardless of row count.
+		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY;
 		ImVec2 tableSize = outerSize;
 		if (outerSize.y == 0.0f) {
 			size_t totalRows = rows.size() + footerRows.size();

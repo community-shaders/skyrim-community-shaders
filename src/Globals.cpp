@@ -92,6 +92,8 @@ namespace globals
 
 		namespace llf
 		{
+			void** normalDepthBuffer = nullptr;
+			void** readOnlyDepthBuffer = nullptr;
 		}
 	}
 
@@ -131,6 +133,11 @@ namespace globals
 
 		D3D11_MAPPED_SUBRESOURCE* mappedFrameBuffer = nullptr;
 		FrameBufferCache frameBufferCached{};
+
+		int32_t* frameCounter = nullptr;
+		int* viewWidth = nullptr;
+		int* viewHeight = nullptr;
+		bool* drawStereo = nullptr;
 	}
 
 	static void RefreshTES()
@@ -192,6 +199,12 @@ namespace globals
 			perFrame = { REL::RelocationID(524768, 411384) };
 
 			currentAccumulator = { REL::RelocationID(527650, 414600) };
+
+			frameCounter = reinterpret_cast<int32_t*>(REL::RelocationID(525008, 411489).address());
+			viewWidth = reinterpret_cast<int*>(REL::RelocationID(524978, 411459).address());
+			viewHeight = reinterpret_cast<int*>(REL::RelocationID(524979, 411460).address());
+			if (REL::Module::IsVR())
+				drawStereo = reinterpret_cast<bool*>(REL::RelocationID(524907, 411393).address() + sizeof(void*));
 		}
 
 		{

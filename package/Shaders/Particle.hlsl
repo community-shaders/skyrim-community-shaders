@@ -215,14 +215,6 @@ struct PS_OUTPUT
 
 #ifdef PSHADER
 
-#	if defined(LIGHT_LIMIT_FIX)
-#		include "LightLimitFix/LightLimitFix.hlsli"
-#	endif
-
-#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
-#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
-#	endif
-
 SamplerState SampSourceTexture : register(s0);
 #	if defined(GRAYSCALE_TO_COLOR) || defined(GRAYSCALE_TO_ALPHA)
 SamplerState SampGrayscaleTexture : register(s1);
@@ -248,7 +240,16 @@ cbuffer PerGeometry : register(b2)
 };
 
 #	define LinearSampler SampSourceTexture
+
 #	include "Common/ShadowSampling.hlsli"
+
+#	if defined(LIGHT_LIMIT_FIX)
+#		include "LightLimitFix/LightLimitFix.hlsli"
+#	endif
+
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -295,8 +296,27 @@ PS_OUTPUT main(PS_INPUT input)
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
-	float unusedDetailedShadow;
-	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetLightingShadow(positionWS.xyz, eyeIndex, unusedDetailedShadow);
+	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
+	float2 rotation;
+	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+
+	float3 worldPositionWS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+
+	float dirSoftShadow = 1.0;
+	float dirDetailedShadow = 1.0;
+
+	float3 dirLightColor = SharedData::DirLightColor.xyz;
+
+	if (!SharedData::InInterior) {
+		// Use the cheaper VSM shadows if available
+#	if defined(VOLUMETRIC_SHADOWS)
+		dirSoftShadow = VolumetricShadows::GetVSMShadow2D(positionWS.xyz, worldPositionWS, eyeIndex, dirDetailedShadow);
+#	elif defined(LIGHT_LIMIT_FIX)
+		dirDetailedShadow = LightLimitFix::GetDirectionalShadow(positionWS.xyz, worldPositionWS, rotationMatrix, eyeIndex);
+#	endif
+	}
+
 	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 
 	propertyColor += dirLightColor;

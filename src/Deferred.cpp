@@ -8,6 +8,7 @@
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
+#include "Features/LightLimitFix/ShadowCasterManager.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -571,6 +572,9 @@ void Deferred::CopyShadowLightData()
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowLightData");
 
+	if (ShadowCasterManager::GetInstalledSlotCount() == 0)
+		return;
+
 	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
 	if (!shadowSceneNode)
 		return;
@@ -598,6 +602,10 @@ void Deferred::CopyShadowLightData()
 
 	ID3D11ShaderResourceView* srv = directionalShadowLights->srv.get();
 	context->PSSetShaderResources(98, 1, &srv);
+
+	// t99: cascade depth array used by LightLimitFix::GetDirectionalShadow for PCF sampling.
+	ID3D11ShaderResourceView* cascadeSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS_ESRAM].depthSRV;
+	context->PSSetShaderResources(99, 1, &cascadeSRV);
 }
 
 void Deferred::ClearShaderCache()

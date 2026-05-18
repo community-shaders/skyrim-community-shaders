@@ -292,3 +292,18 @@ void VR::Reset()
 {
 	stereoOpt.Reset();
 }
+
+float VR::GetHMDRefreshRate() const
+{
+	if (!globals::game::isVR)
+		return 0.0f;
+	auto* openvr = RE::BSOpenVR::GetSingleton();
+	if (!openvr || !openvr->vrSystem)
+		return 0.0f;
+	vr::ETrackedPropertyError err = vr::TrackedProp_Success;
+	float hz = openvr->vrSystem->GetFloatTrackedDeviceProperty(
+		vr::k_unTrackedDeviceIndex_Hmd,
+		vr::Prop_DisplayFrequency_Float,
+		&err);
+	return (err == vr::TrackedProp_Success && hz > 1.0f) ? hz : 0.0f;
+}
