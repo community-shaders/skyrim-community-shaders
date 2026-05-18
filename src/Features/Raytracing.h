@@ -546,16 +546,16 @@ struct Raytracing : public OverlayFeature
 
 	virtual void DrawOverlay() override;
 
-	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override 
-	{ 
+	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override
+	{
 		if (!loaded)
 			return {};
 
-		return { 
+		return {
 			{ { "UnifiedWater", "Enabled" },
-			false,
-			"Unified Water alters the behaviour of water meshes which breaks raytracing scene management",
-			true } 
+				false,
+				"Unified Water alters the behaviour of water meshes which breaks raytracing scene management",
+				true }
 		};
 	}
 
@@ -686,6 +686,7 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
 
 	eastl::unique_ptr<WrappedResource> waterFlowMap = nullptr;
+	bool waterFlowMapFallbackCleared = false;
 	RE::NiPointer<RE::TESWaterReflections> waterReflections = nullptr;
 
 	eastl::unique_ptr<CreationEngineRaytracing> creationEngineRaytracing = nullptr;
@@ -774,18 +775,45 @@ struct Raytracing : public OverlayFeature
 			{
 				func(a1, a2, a3);
 
+				auto& rt = globals::features::raytracing;
+				if (!rt.initialized || rt.forcedDisabled || !rt.waterFlowMap || !rt.waterFlowMap->resource11 ||
+					!globals::d3d::context)
+					return;
+
+				auto clearFlowMap = [&]() {
+					if (rt.waterFlowMapFallbackCleared)
+						return;
+
+					static constexpr std::array<uint32_t, WATER_FLOWMAP_SIZE * WATER_FLOWMAP_SIZE> blackFlowMap{};
+					globals::d3d::context->UpdateSubresource(
+						rt.waterFlowMap->resource11,
+						0,
+						nullptr,
+						blackFlowMap.data(),
+						WATER_FLOWMAP_SIZE * sizeof(uint32_t),
+						0);
+					rt.waterFlowMapFallbackCleared = true;
+				};
+
 				REL::Relocation<RE::NiPointer<RE::NiSourceTexture>*> gFlowMapSourceTex{ REL::RelocationID(527694, 414616) };
-				if (gFlowMapSourceTex.get()) {
-					if (auto* rendererTexture = gFlowMapSourceTex->get()->rendererTexture) {
-						auto& rt = globals::features::raytracing;
-						globals::d3d::context->CopyResource(rt.waterFlowMap->resource11, rendererTexture->texture);
-					}
+				auto* flowMapSourceTex = gFlowMapSourceTex.get();
+				if (!flowMapSourceTex) {
+					clearFlowMap();
+					return;
 				}
+
+				auto* sourceTexture = flowMapSourceTex->get();
+				if (!sourceTexture || !sourceTexture->rendererTexture || !sourceTexture->rendererTexture->texture) {
+					clearFlowMap();
+					return;
+				}
+
+				globals::d3d::context->CopyResource(rt.waterFlowMap->resource11, sourceTexture->rendererTexture->texture);
+				rt.waterFlowMapFallbackCleared = false;
 			}
 
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
-
 
 		static void Install()
 		{
