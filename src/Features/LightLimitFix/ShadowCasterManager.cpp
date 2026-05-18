@@ -217,7 +217,6 @@ namespace ShadowCasterManager
 		int reconciliation_clears = 0;       // slot freed because light gone from activeShadowLights
 		int slots_in_use = 0;                // sampled at frame end
 		int first_render_skips = 0;          // chosen lights deferred from shadow set: no valid slice yet
-		int dropped_frustum = 0;             // c.invalidFrustum: light off-screen, no engine call
 	};
 	static SchedDiagCounters s_schedDiag;
 
@@ -1580,7 +1579,7 @@ namespace ShadowCasterManager
 		//
 		// Sub-reasons are not mutually exclusive at the bit level but action
 		// selection treats frustum-out as terminal.
-		bool invalidFrustum{ false };  // engine's frustum cull failed (BSMultiBoundSphere::Func41 / cone-frustum)
+		bool invalidFrustum{ false };  // engine's frustum cull failed (BSMultiBoundSphere::WithinFrustum / cone-frustum)
 		bool invalidLod{ false };      // engine's LOD-fade zeroed lodDimmer
 	};
 
@@ -1734,20 +1733,41 @@ namespace ShadowCasterManager
 			for (auto& c : candidates) {
 				auto* l = c.light;
 				// UpdateCamera (vfunc 16, +0x80) is the engine's type-aware visibility
-				// test and rejects lights that can't contribute to any visible pixel:
-				//   - BSShadowParabolicLight: BSMultiBoundSphere::Func41 — sphere vs
-				//     camera frustum (verified via Ghidra at 0x14151b620 / AE 1.6.1170)
-				//   - BSShadowFrustumLight:   FUN_14150aba0 (cone vs camera frustum)
-				//     -- cone-aware so a spot light positioned off-screen but pointing
-				//     INTO the camera frustum is correctly kept (sphere test would
-				//     wrongly reject such a spot since its bounding sphere stays
-				//     centered on the off-screen origin).
+				// test. Verified via Ghidra (BSShadowParabolicLight_UpdateCamera at
+				// 0x14151b620 in 1.6.1170, 0x14132ddf0 in 1.6.640, 0x141370c80 in VR):
+				//
+				//   - BSShadowParabolicLight: TWO cull conditions, both setting
+				//     frustrumCull=0xff:
+				//       (1) BSMultiBoundSphere::WithinFrustum (BSMultiBoundShape
+				//           vfunc 0x29) -- sphere(niLight.pos, niLight.Radius.x)
+				//           vs camera frustum. Geometrically correct;
+				//           failure means no visible pixel can be lit because the
+				//           light's bounding sphere doesn't touch the camera frustum.
+				//           The radius source matches what the cluster builder reads
+				//           (LightLimitFix.cpp's `runtimeData.radius.x`).
+				//       (2) Shadow-distance LOD -- if (lodFade flag set on
+				//           BSShadowLight) AND
+				//           ((camDist^2 - radius^2) * camera.LodAdjust) >
+				//               ShadowDistanceSquared_Current => cull.
+				//           ShadowDistanceSquared_Current = fShadowDistance^2
+				//           (8000^2 outdoors, 3000^2 indoors by default).
+				//           This is NOT a visibility test -- it's "skip per-light
+				//           shadow rendering at this distance". A light past
+				//           shadow distance can still be IN the camera frustum and
+				//           illuminating visible pixels via cluster lighting.
+				//
+				//   - BSShadowFrustumLight: cone-vs-frustum test (cone-aware so an
+				//     off-screen spot pointing INTO the frustum is correctly kept).
+				//
 				//   - BSShadowDirectionalLight: cascades, separate code path.
-				// Trusting UpdateCamera's verdict reuses the engine's own culling math
-				// per light type. An earlier revision added a redundant sphere test
-				// here via RE::NiCamera::BoundInFrustum — that under-approximated the
-				// reach of spots and produced regressions where off-screen-but-cone-in-
-				// frustum spots flickered on/off as the camera moved.
+				//
+				// Implication for SCM: a `frustrumCull != 0` verdict does NOT mean
+				// "geometrically off-screen". The convertOrDisable path below treats
+				// all c.invalid cases uniformly (omnis convert, spots disable, portal
+				// disable) so distant lights past shadow distance still reach the
+				// cluster pipeline. The cluster builder's own
+				// `(color * fade) > 1e-4 && radius > 1e-4` filter discards lights
+				// that genuinely don't contribute.
 				if (!l->UpdateCamera(camera)) {
 					c.invalidCamera = true;
 					c.invalid = true;
@@ -2368,44 +2388,30 @@ namespace ShadowCasterManager
 					// isUsableLight (membership + vtable) is the same gate the
 					// excess branch uses. Both ConvertLight and DisableLight
 					// fan into virtually-dispatched callees (ReturnShadowmaps),
-					// so a freed-but-still-canonical pointer must be skipped
-					// for either path.
+					// so a freed-but-canonical pointer must be skipped for
+					// either path.
 					if (!isUsableLight(c.light))
 						continue;
 
-					// Frustum-out fast path. UpdateCamera's bounding-sphere/
-					// cone test against the camera frustum means this light
-					// cannot contribute to any visible pixel -- not via the
-					// shadow pipeline, not via cluster lighting. ConvertLight
-					// would be wasted work (~6 us each); captures of heavy
-					// outdoor scenes show ~99% of invalidCamera fails are
-					// frustum-out. Drop: no engine call, light remains in
-					// activeShadowLights for next frame's re-evaluation.
-					if (c.invalidFrustum) {
-						s_schedDiag.dropped_frustum++;
-						continue;
-					}
-
-					// Remaining cases: invalidLod (engine thinks too far for
-					// useful shadow rendering, but light is still visible) and
-					// invalidPortal (cluster lighting has no portal-graph
-					// awareness). Convert is allowed for invalidCamera only --
-					// portal-occluded lights would leak across cells if
-					// promoted to non-shadow.
+					// All c.invalid cases route through convertOrDisable. Per the
+					// Ghidra-verified UpdateCamera analysis above, frustrumCull
+					// is set both by the genuine sphere-vs-frustum cull AND by
+					// the shadow-distance LOD cull; treating them uniformly lets
+					// distant lights past shadow distance still reach the
+					// cluster pipeline. allowConvert=c.invalidCamera so portal-
+					// occluded omnis fall to Disable (cluster lighting has no
+					// portal-graph awareness and would leak across cells).
 					ZoneNamedN(zCvt, "SCM::Engine::convertOrDisable(invalid)", true);
 					if (convertOrDisable(c.light, /*allowConvert=*/c.invalidCamera)) {
 						s_schedDiag.converted_invalid++;
 						// UpdateCamera zeros lodDimmer alongside frustrumCull
 						// when LOD fade fires. The cluster lighting builder
 						// multiplies light.fade by lodDimmer and drops the
-						// light if the product falls below 1e-4 -- so a
-						// LOD-faded light that we convert would still
-						// disappear from clusters. Restore lodDimmer to 1
-						// so the converted light contributes its full
-						// non-shadow diffuse; the engine resets it back to 0
-						// next frame if the light is still LOD-faded, and
-						// we restore again -- self-correcting as the camera
-						// moves.
+						// light if the product falls below 1e-4. Restore
+						// lodDimmer to 1 so the converted light contributes
+						// its full non-shadow diffuse; the engine resets it
+						// next frame if still LOD-faded, and we restore
+						// again -- self-correcting as the camera moves.
 						c.light->lodDimmer = 1.0f;
 					} else {
 						s_schedDiag.disabled_invalid++;
@@ -2684,7 +2690,6 @@ namespace ShadowCasterManager
 			TracyPlot("scm.reconciliation.clears", (int64_t)s_schedDiag.reconciliation_clears);
 			TracyPlot("scm.slots.in_use", (int64_t)s_schedDiag.slots_in_use);
 			TracyPlot("scm.first_render_skips", (int64_t)s_schedDiag.first_render_skips);
-			TracyPlot("scm.dropped_frustum", (int64_t)s_schedDiag.dropped_frustum);
 
 			// Live config plots — record the *current* settings on each frame so
 			// a single capture spanning a settings change captures both sides.
