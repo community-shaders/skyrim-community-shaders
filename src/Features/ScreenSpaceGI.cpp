@@ -625,6 +625,10 @@ void ScreenSpaceGI::CompileComputeShaders()
 			info.defines.push_back({ "SSGI_SH", "" });
 		if (settings.HalfRes)
 			info.defines.push_back({ "SSGI_HALF", "" });
+		if (globals::features::dynamicCubemaps.loaded)
+			info.defines.push_back({ "DYNAMIC_CUBEMAPS", "" });
+		if (globals::features::skylighting.loaded)
+			info.defines.push_back({ "SKYLIGHTING", "" });
 	}
 
 	for (auto& info : shaderInfos) {
@@ -905,10 +909,19 @@ void ScreenSpaceGI::DrawSSGI()
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - GI");
 
+		auto& dynamicCubemaps = globals::features::dynamicCubemaps;
+		auto& skylighting = globals::features::skylighting;
+
 		resetViews();
 		srvs.at(0) = texWorkingDepth->srv.get();
 		srvs.at(2) = texRadiance->srv.get();
 		srvs.at(3) = texNoise->srv.get();
+		if (dynamicCubemaps.loaded) {
+			srvs.at(4) = dynamicCubemaps.envTexture->srv.get();
+			srvs.at(5) = dynamicCubemaps.envReflectionsTexture->srv.get();
+		}
+		if (dynamicCubemaps.loaded && skylighting.loaded)
+			srvs.at(6) = skylighting.texProbeArray->srv.get();
 		srvs.at(8) = texNormal->srv.get();
 
 		uavs.at(0) = texNRDInput->uav.get();

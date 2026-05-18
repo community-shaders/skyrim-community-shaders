@@ -37,6 +37,14 @@
 Texture2D<float> srcWorkingDepth : register(t0);
 Texture2D<float3> srcRadiance : register(t2);
 Texture2D<unorm float2> srcNoise : register(t3);
+#if defined(DYNAMIC_CUBEMAPS)
+TextureCube<float3> EnvTexture : register(t4);
+TextureCube<float3> EnvReflectionsTexture : register(t5);
+#	if defined(SKYLIGHTING)
+#		define SKYLIGHTING_PROBE_REGISTER t6
+#		include "Skylighting/Skylighting.hlsli"
+#	endif
+#endif
 Texture2D<float2> srcNormal : register(t8);
 
 RWTexture2D<float4> outRadianceHitDist : register(u0);
@@ -206,6 +214,63 @@ void CalculateGI(
 		}
 
 		visibility += countbits(bitmask) * 0.03125;
+
+#if defined(DYNAMIC_CUBEMAPS)
+		if (SpecUseDynamicCubemap != 0) {
+			float3 worldPos = ViewToWorldPosition(pixCenterPos, FrameBuffer::CameraViewInverse[eyeIndex]);
+			float3 worldNormal = ViewToWorldVector(viewspaceNormal, FrameBuffer::CameraViewInverse[eyeIndex]);
+
+#	if defined(SKYLIGHTING)
+			float fadeOutFactor = 1.0;
+			float3 skylightingNormal = worldNormal;
+			float skylightingBoost = 1.0;
+			if (!SharedData::InInterior) {
+				fadeOutFactor = Skylighting::GetFadeOutFactor(worldPos);
+				skylightingNormal = normalize(float3(worldNormal.xy, max(0, worldNormal.z)));
+				skylightingBoost = 1.0 + saturate(worldNormal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
+			}
+#	endif
+
+			const uint FALLBACK_SAMPLES = 4;
+			const uint BITS_PER_SAMPLE = 32 / FALLBACK_SAMPLES;
+			uint bitmaskCopy = bitmask;
+			float orthoLen = max(dot(orthoDirectionVec, orthoDirectionVec), EPSILON_LENGTH_SQ);
+			float3 sliceTangent = orthoDirectionVec * rsqrt(orthoLen);
+
+			for (uint j = 0; j < FALLBACK_SAMPLES; j++) {
+				uint segMask = (1u << BITS_PER_SAMPLE) - 1u;
+				uint occluded = countbits(bitmaskCopy & segMask);
+				float weight = float(BITS_PER_SAMPLE - occluded) * 0.03125;
+
+				if (weight > 0) {
+					float cosAngle = (1.0 - ((float(j) + 0.5) / float(FALLBACK_SAMPLES))) * 2.0 - 1.0;
+					float angle = FastMath::ACos(cosAngle);
+					float3 rayDir = normalize(sliceTangent * cos(angle) + viewspaceNormal * sin(angle));
+					rayDir = normalize(rayDir - axisVec * dot(rayDir, axisVec));
+
+					float3 worldDir = ViewToWorldVector(rayDir, FrameBuffer::CameraViewInverse[eyeIndex]);
+					float3 envColor = EnvReflectionsTexture.SampleLevel(samplerLinearClamp, worldDir, 0);
+
+#	if defined(SKYLIGHTING)
+					if (!SharedData::InInterior) {
+						sh2 skylightingSH = Skylighting::Sample(worldPos, worldDir);
+						float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, skylightingNormal, fadeOutFactor);
+						skylightingDiffuse *= skylightingBoost;
+
+						float3 envNoSkyColor = EnvTexture.SampleLevel(samplerLinearClamp, worldDir, 0);
+						float3 skyColor = max(envColor - envNoSkyColor, 0);
+						envColor = envNoSkyColor * skylightingDiffuse + skyColor * skylightingDiffuse;
+					}
+#	endif
+
+					envColor = Color::IrradianceToLinear(envColor);
+					totalRadiance += envColor * weight;
+				}
+
+				bitmaskCopy >>= BITS_PER_SAMPLE;
+			}
+		}
+#endif
 	}
 
 	visibility = saturate(visibility);
@@ -238,7 +303,8 @@ void CalculateGI(
 	float2 normalSample = FULLRES_LOAD(srcNormal, pxCoord, uv * OUT_FRAME_SCALE, samplerLinearClamp);
 	float3 viewspaceNormal = GBuffer::DecodeNormal(normalSample);
 
-	half2 encodedWorldNormal = GBuffer::EncodeNormal(ViewToWorldVector(viewspaceNormal, FrameBuffer::CameraViewInverse[eyeIndex]));
+	float3 worldNormal = ViewToWorldVector(viewspaceNormal, FrameBuffer::CameraViewInverse[eyeIndex]);
+	half2 encodedWorldNormal = GBuffer::EncodeNormal(worldNormal);
 	outPrevGeo[pxCoord] = half3(viewspaceZ, encodedWorldNormal);
 
 	float ao = 0;

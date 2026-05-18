@@ -93,7 +93,6 @@ void SampleSSGITracedSpecular(uint2 pixCoord, out float3 specularRadiance, out f
 {
 	float4 data = SsgiSpecularTexture[pixCoord];
 	REBLUR_BackEnd_UnpackRadianceAndNormHitDist(data, specularRadiance, normHitDist);
-	specularRadiance *= SharedData::ssgiSettings.SpecularMult;
 }
 #	endif
 #endif
@@ -206,9 +205,6 @@ void SampleSSGITracedSpecular(uint2 pixCoord, out float3 specularRadiance, out f
 		diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
 		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 		linDiffuseColor *= sqrt(multiBounceSSGIAo);
-		diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
-		diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceSSGIAo);
-		linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 	}
 
 	linDiffuseColor += ssgiIl * linAlbedo;
@@ -231,59 +227,75 @@ void SampleSSGITracedSpecular(uint2 pixCoord, out float3 specularRadiance, out f
 
 		float3 finalIrradiance = 0;
 
-		float directionalAmbientColorSpecular = Color::RGBToLuminance(Color::Ambient(max(0, SharedData::GetAmbient(R)))) * Color::ReflectionNormalisationScale;
+#	if defined(SSGI) && defined(SSGI_SPECULAR)
+		float3 tracedSpecular;
+		float specNormHitDist;
+		SampleSSGITracedSpecular(dispatchID.xy, tracedSpecular, specNormHitDist);
 
-#	if defined(SKYLIGHTING)
-#		if defined(VR)
+#		if defined(SKYLIGHTING)
+#			if defined(VR)
 		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#		else
+#			else
 		float3 positionMS = positionWS.xyz;
-#		endif
+#			endif
 
 		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, R);
 		float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe);
-#	endif
+		tracedSpecular *= skylightingSpecular;
+#		endif
 
-#	if defined(IBL)
+		finalIrradiance = tracedSpecular;
+#	else
+		float directionalAmbientColorSpecular = Color::RGBToLuminance(Color::Ambient(max(0, SharedData::GetAmbient(R)))) * Color::ReflectionNormalisationScale;
+
+#		if defined(SKYLIGHTING)
+#			if defined(VR)
+		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#			else
+		float3 positionMS = positionWS.xyz;
+#			endif
+
+		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, R);
+		float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe);
+#		endif
+
+#		if defined(IBL)
 		if (SharedData::iblSettings.EnableIBL) {
 			float3 envSample = EnvTexture.SampleLevel(LinearSampler, R, level);
 			float3 fullSample = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level);
 			float3 envSpecular, skySpecular;
 
 			if (SharedData::iblSettings.DALCMode >= 2) {
-				// Mode 2/3: DALC-normalized env scaled by DALCAmount + sky overlay
 				float envLum = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
 				envSpecular = Color::IrradianceToLinear((envSample / max(envLum, 0.001)) * directionalAmbientColorSpecular) * SharedData::iblSettings.DALCAmount;
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
-#		if defined(SKYLIGHTING)
+#			if defined(SKYLIGHTING)
 				envSpecular *= (SharedData::iblSettings.DALCMode == 3) ? skylightingSpecular : 1.0;
 				skySpecular *= skylightingSpecular;
-#		elif defined(INTERIOR)
+#			elif defined(INTERIOR)
 				skySpecular = 0;
-#		endif
+#			endif
 			} else {
-				// Mode 0/1: IBL ratio-based
 				float3 ratio = ImageBasedLighting::GetIBLRatio();
 				envSpecular = Color::IrradianceToLinear(envSample * ratio) * SharedData::iblSettings.EnvIBLScale;
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
-#		if defined(SKYLIGHTING)
+#			if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
-#		elif defined(INTERIOR)
+#			elif defined(INTERIOR)
 				skySpecular = 0;
-#		endif
+#			endif
 			}
 
 			finalIrradiance = envSpecular + skySpecular;
 		} else
-#	endif
+#		endif
 		{
-			// Fallback without IBL: normalize-by-luminance with DALC
-#	if defined(INTERIOR)
+#		if defined(INTERIOR)
 			float3 specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level);
 			float specularIrradianceLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
 			specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 			finalIrradiance = Color::IrradianceToLinear(specularIrradiance);
-#	elif defined(SKYLIGHTING)
+#		elif defined(SKYLIGHTING)
 			float3 specularIrradianceReflections = 0.0;
 			if (skylightingSpecular > 0.0) {
 				specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level);
@@ -300,27 +312,15 @@ void SampleSSGITracedSpecular(uint2 pixCoord, out float3 specularRadiance, out f
 				specularIrradiance = Color::IrradianceToLinear(specularIrradiance);
 			}
 			finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
-#	else
+#		else
 			float3 specularIrradiance = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level);
 			float specularIrradianceLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15));
 			specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 			finalIrradiance = Color::IrradianceToLinear(specularIrradiance);
-#	endif
+#		endif
 		}
 
-#	if defined(SSGI)
-#		if defined(SSGI_SPECULAR)
-		float3 tracedSpecular;
-		float specNormHitDist;
-		SampleSSGITracedSpecular(dispatchID.xy, tracedSpecular, specNormHitDist);
-
-		float NdotV = dot(normalWS, V);
-		float alpha = roughness * roughness;
-		float specAo = SpecularOcclusion(saturate(NdotV), alpha, ssgiAo);
-
-		finalIrradiance *= specAo;
-		finalIrradiance = lerp(finalIrradiance, tracedSpecular, specNormHitDist);
-#		else
+#		if defined(SSGI)
 		float3 ssgiIlSpecular;
 		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
 
