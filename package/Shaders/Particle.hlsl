@@ -3,6 +3,10 @@
 #include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
 
+#if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
+#	undef IBL
+#endif
+
 struct VS_INPUT
 {
 	float4 Position: POSITION0;
@@ -250,6 +254,10 @@ cbuffer PerGeometry : register(b2)
 #	define LinearSampler SampSourceTexture
 #	include "Common/ShadowSampling.hlsli"
 
+#	if defined(IBL)
+#		include "IBL/IBL.hlsli"
+#	endif
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -298,6 +306,11 @@ PS_OUTPUT main(PS_INPUT input)
 	float unusedDetailedShadow;
 	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetLightingShadow(positionWS.xyz, eyeIndex, unusedDetailedShadow);
 	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
+#	if defined(IBL)
+	if (SharedData::iblSettings.EnableIBL) {
+		ambientColor = ImageBasedLighting::GetDiffuseIBL(ambientColor, float3(0, 0, -1));
+	}
+#	endif
 
 	propertyColor += dirLightColor;
 	propertyColor += ambientColor;
