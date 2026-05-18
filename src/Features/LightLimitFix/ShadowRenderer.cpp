@@ -8,12 +8,20 @@
 #include "Util.h"
 
 // Fills a ShadowLightData entry from a light's shadowmap descriptor transform.
-// Mirrors the former Deferred::SetShadowParameters private template.
+// Returns true on success, false when the light has no usable descriptors --
+// the caller must treat false as "do not advertise a valid shadow for this
+// slot", because ShadowProj remains at its default zero matrix and the
+// shader's depth-comparison sampling against that matrix collapses to
+// "fully shadowed" (the worst possible visual outcome -- e.g. grass goes
+// pitch black under any shadow-flagged point light). Pair this with a
+// ShadowParam.y = 0 fallback in the caller so the shader's safe sentinel
+// (`if (ShadowLightParam.y == 0) return 1.0;`) keeps the slot fully lit
+// instead of fully dark.
 template <typename T>
-static void SetShadowParameters(T& lightData, Deferred::ShadowLightData& sd)
+static bool SetShadowParameters(T& lightData, Deferred::ShadowLightData& sd)
 {
 	if (lightData.shadowmapDescriptors.empty())
-		return;
+		return false;
 
 	auto& desc = lightData.shadowmapDescriptors[0];
 	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
@@ -23,6 +31,7 @@ static void SetShadowParameters(T& lightData, Deferred::ShadowLightData& sd)
 	DirectX::XMStoreFloat4x4(&sd.InvShadowProj, invProj);
 
 	sd.ShadowParam.z = lightData.shadowBiasScale * 0.00025f;
+	return true;
 }
 
 // ─── Per-frame shadow data copy ───────────────────────────────────────────────
@@ -110,16 +119,24 @@ void LightLimitFix::CopyShadowLightData()
 				float shadowTypeF = light->GetIsParabolicLight() ? float(light->shadowMapCount == 2 ? 2 : 1) : 0.f;
 				sd[depthSlot].ShadowParam.x = shadowTypeF;
 
-				if (globals::game::isVR)
-					SetShadowParameters(light->GetVRRuntimeData(), sd[depthSlot]);
-				else
-					SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
+				const bool projValid = globals::game::isVR ?
+			                               SetShadowParameters(light->GetVRRuntimeData(), sd[depthSlot]) :
+			                               SetShadowParameters(light->GetRuntimeData(), sd[depthSlot]);
 
 				float range = light->light->GetLightRuntimeData().radius.x;
-				// -1.0 sentinel: shader returns 0.0 (fully dark) → light invisible.
-				// 0.0 means unwritten slot → shader returns 1.0 (fully lit, no shadow).
+				// ShadowParam.y semantics in the shader:
+				//   > 0  → valid radius; sample kSHADOWMAPS via ShadowProj at the slot.
+				//   == 0 → safe sentinel; shader returns 1.0 (fully lit, no shadow).
+				//   < 0  → suppression sentinel; shader returns 0.0 (fully dark).
+				// If SetShadowParameters skipped (empty descriptors -> ShadowProj
+				// stays default zero matrix), we MUST leave ShadowParam.y at 0 so
+				// the safe sentinel fires. Otherwise the shader samples a zero
+				// projection -> depth comparison says fully shadowed -> any
+				// shadow-flagged light with stale descriptors makes grass go
+				// pitch black under that light.
 				uintptr_t lightKey = reinterpret_cast<uintptr_t>(light);
-				sd[depthSlot].ShadowParam.y = ShadowCasterManager::IsSuppressed(lightKey) ? -1.0f : range;
+				const bool suppressed = ShadowCasterManager::IsSuppressed(lightKey);
+				sd[depthSlot].ShadowParam.y = suppressed ? -1.0f : (projValid ? range : 0.0f);
 				ShadowCasterManager::RecordSlot(depthSlot,
 					{ static_cast<uint32_t>(shadowTypeF), range, true, lightKey });
 			}
