@@ -4,7 +4,6 @@
 #include "DynamicCubemaps.h"
 #include "Shadercache.h"
 #include "State.h"
-#include "WeatherVariableRegistry.h"
 
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
@@ -25,27 +24,27 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void IBL::DrawSettings()
 {
-	Util::WeatherUI::Checkbox("Enable IBL", this, "EnableIBL", (bool*)&settings.EnableIBL);
+	ImGui::Checkbox("Enable IBL", (bool*)&settings.EnableIBL);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Toggle IBL. When enabled, ambient lighting is derived from cubemap spherical harmonics instead of the vanilla system.");
 	}
-	Util::WeatherUI::SliderFloat("Env IBL Scale", this, "EnvIBLScale", &settings.EnvIBLScale, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Env IBL Scale", &settings.EnvIBLScale, 0.0f, 10.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Intensity multiplier for the environment IBL (from Dynamic Cubemaps).\nControls how strongly the surrounding environment contributes to ambient lighting.");
 	}
-	Util::WeatherUI::SliderFloat("Sky IBL Scale", this, "SkyIBLScale", &settings.SkyIBLScale, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Sky IBL Scale", &settings.SkyIBLScale, 0.0f, 10.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Intensity multiplier for the sky IBL (from the game's native reflections cubemap).\nControls how strongly the sky contributes to ambient lighting.");
 	}
-	Util::WeatherUI::SliderFloat("Env IBL Saturation", this, "EnvIBLSaturation", &settings.EnvIBLSaturation, 0.0f, 2.0f, "%.2f");
+	ImGui::SliderFloat("Env IBL Saturation", &settings.EnvIBLSaturation, 0.0f, 2.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Color saturation of the environment IBL.\nLower values produce more neutral ambient light; higher values produce more vivid color.");
 	}
-	Util::WeatherUI::SliderFloat("Sky IBL Saturation", this, "SkyIBLSaturation", &settings.SkyIBLSaturation, 0.0f, 2.0f, "%.2f");
+	ImGui::SliderFloat("Sky IBL Saturation", &settings.SkyIBLSaturation, 0.0f, 2.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Color saturation of the sky IBL.\nLower values produce more neutral ambient light; higher values produce more vivid color.");
 	}
-	Util::WeatherUI::SliderFloat("DALC Amount", this, "DALCAmount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Blends the IBL brightness toward the game's vanilla ambient (DALC) level.\n"
@@ -70,7 +69,7 @@ void IBL::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Uses pre-baked static IBL cubemap textures for objects rendered outside the game world (e.g. inventory items, loading screens).");
 	}
-	Util::WeatherUI::SliderFloat("Fog Mix", this, "FogAmount", &settings.FogAmount, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat("Fog Mix", &settings.FogAmount, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Blends the fog color toward the IBL ambient color.\n0 = vanilla fog, 1 = fog fully tinted by IBL.");
 	}
@@ -99,76 +98,6 @@ void IBL::RestoreDefaultSettings()
 	settings = {};
 }
 
-void IBL::RegisterWeatherVariables()
-{
-	auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()
-	                     ->GetOrCreateFeatureRegistry(GetShortName());
-	// Toggle IBL for this weather (SH-based ambient replaces vanilla)
-	registry->RegisterVariable(std::make_shared<WeatherVariables::WeatherVariable<bool>>(
-		"EnableIBL",
-		"Enable IBL",
-		"Enable or disable SH-based ambient lighting for this weather",
-		(bool*)&settings.EnableIBL,
-		true,
-		[](const bool& from, const bool& to, float factor) {
-			return factor > 0.5f ? to : from;  // Switch at transition midpoint
-		}));
-
-	// Intensity of environment IBL (from Dynamic Cubemaps)
-	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"EnvIBLScale",
-		"Env IBL Scale",
-		"Intensity of environment IBL from the Dynamic Cubemaps environment cubemap",
-		&settings.EnvIBLScale,
-		1.0f,
-		0.0f, 10.0f));
-
-	// Intensity of sky IBL (from the game's native reflections cubemap)
-	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"SkyIBLScale",
-		"Sky IBL Scale",
-		"Intensity of sky IBL from the game's native reflections cubemap",
-		&settings.SkyIBLScale,
-		1.0f,
-		0.0f, 10.0f));
-
-	// Color saturation of environment IBL
-	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"EnvIBLSaturation",
-		"Env IBL Saturation",
-		"Color saturation of the environment IBL ambient contribution",
-		&settings.EnvIBLSaturation,
-		1.0f,
-		0.0f, 2.0f));
-
-	// Color saturation of sky IBL
-	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"SkyIBLSaturation",
-		"Sky IBL Saturation",
-		"Color saturation of the sky IBL ambient contribution",
-		&settings.SkyIBLSaturation,
-		1.0f,
-		0.0f, 2.0f));
-
-	// How much IBL brightness is matched to vanilla ambient (DALC)
-	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"DALCAmount",
-		"DALC Amount",
-		"Blend factor toward vanilla ambient brightness (0 = pure IBL, 1 = fully matched to DALC)",
-		&settings.DALCAmount,
-		1.0f,
-		0.0f, 1.0f));
-
-	// Fog color blending toward IBL ambient color
-	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"FogAmount",
-		"Fog Mix",
-		"Blends fog color toward IBL ambient color (0 = vanilla fog, 1 = fully IBL-tinted)",
-		&settings.FogAmount,
-		0.0f,
-		0.0f, 1.0f));
-}
-
 IBL::Settings IBL::GetCommonBufferData() const
 {
 	Settings data = settings;
@@ -176,7 +105,6 @@ IBL::Settings IBL::GetCommonBufferData() const
 		data.EnableIBL = 0;
 	return data;
 }
-
 void IBL::ReflectionsPrepass()
 {
 	if (loaded) {

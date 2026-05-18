@@ -6,11 +6,11 @@
 #include "imgui_internal.h"
 
 #include "../EditorWindow.h"
+#include "../SceneSettingsUI.h"
 #include "FeatureIssues.h"
 #include "State.h"
 #include "Utils/UI.h"
 #include "WeatherManager.h"
-#include "WeatherVariableRegistry.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Atmosphere, colorTimes)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DirectionalColor, max, min)
@@ -27,6 +27,7 @@ namespace
 		constexpr const char* kClouds = "Clouds";
 		constexpr const char* kFog = "Fog";
 		constexpr const char* kRecords = "Records";
+		constexpr const char* kSceneSettings = "Scene Settings";
 	}
 
 	namespace WeatherSetting
@@ -187,8 +188,8 @@ void WeatherWidget::DrawWidget()
 		const ImGuiTabItemFlags atmosphereFlags = GetTabFlagsForOverride(WeatherTab::kAtmosphere);
 		const ImGuiTabItemFlags cloudsFlags = GetTabFlagsForOverride(WeatherTab::kClouds);
 		const ImGuiTabItemFlags fogFlags = GetTabFlagsForOverride(WeatherTab::kFog);
-		const ImGuiTabItemFlags featuresFlags = GetTabFlagsForOverride("Features");
 		const ImGuiTabItemFlags recordsFlags = GetTabFlagsForOverride(WeatherTab::kRecords);
+		const ImGuiTabItemFlags sceneFlags = GetTabFlagsForOverride(WeatherTab::kSceneSettings);
 
 		if (ImGui::BeginTabItem(WeatherTab::kBasic, nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
@@ -226,13 +227,6 @@ void WeatherWidget::DrawWidget()
 		if (ImGui::BeginTabItem(WeatherTab::kFog, nullptr, fogFlags)) {
 			BeginScrollableContent("##FogScroll");
 			DrawFogSettings();
-			EndScrollableContent();
-			ImGui::EndTabItem();
-		}
-
-		if (ImGui::BeginTabItem("Features", nullptr, featuresFlags)) {
-			BeginScrollableContent("##FeaturesScroll");
-			DrawFeatureSettings();
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
@@ -363,6 +357,13 @@ void WeatherWidget::DrawWidget()
 				ApplyChanges();
 			}
 
+			EndScrollableContent();
+			ImGui::EndTabItem();
+		}
+
+		if (ImGui::BeginTabItem(WeatherTab::kSceneSettings, nullptr, sceneFlags)) {
+			BeginScrollableContent("##SceneScroll");
+			SceneSettingsUI::DrawWeatherScenePanel(weather->GetFormID());
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
@@ -603,18 +604,15 @@ void WeatherWidget::SetWeatherValues()
 	// If this weather is currently active, immediately apply feature settings to game memory
 	auto* weatherManager = WeatherManager::GetSingleton();
 	if (weatherManager->GetCurrentWeathers().currentWeather == weather) {
-		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-		json emptyWeather;
-
 		for (const auto& [featureName, featureSettings] : settings.featureSettings) {
-			if (!featureSettings.value("__enabled", false) || !globalRegistry->HasWeatherSupport(featureName)) {
+			if (!featureSettings.value("__enabled", false)) {
 				continue;
 			}
 
 			// Filter out __enabled flag and apply settings
 			json filteredSettings = featureSettings;
 			filteredSettings.erase("__enabled");
-			globalRegistry->UpdateFeatureFromWeathers(featureName, emptyWeather, filteredSettings, 1.0f);
+			weatherManager->SaveSettingsToWeather(weather, featureName, filteredSettings);
 		}
 	}
 }
@@ -1569,8 +1567,6 @@ void WeatherWidget::SaveFeatureSettings()
 void WeatherWidget::LoadFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
-	auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-
 	// First, validate that all feature settings in the JSON exist as loaded features.
 	// Prevents loading a .json that references features that aren't installed. (Will load only settings for installed features.)
 	// Should make it very obvious to users when they have not followed the correct installation instructions.
@@ -1639,11 +1635,6 @@ void WeatherWidget::LoadFeatureSettings()
 
 		std::string featureName = feature->GetShortName();
 
-		// Check if feature has registered weather variables
-		if (!globalRegistry->HasWeatherSupport(featureName)) {
-			continue;
-		}
-
 		json featureJson;
 		if (weatherManager->LoadSettingsFromWeather(weather, featureName, featureJson)) {
 			settings.featureSettings[featureName] = featureJson;
@@ -1664,25 +1655,6 @@ void WeatherWidget::ApplyChanges()
 void WeatherWidget::RevertChanges()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
-
-	// If this weather is currently active, reset enabled feature overrides to user defaults
-	if (weather == weatherManager->GetCurrentWeathers().currentWeather) {
-		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-
-		for (const auto& [featureName, featureSettings] : settings.featureSettings) {
-			if (!featureSettings.value("__enabled", false) || !globalRegistry->HasWeatherSupport(featureName)) {
-				continue;
-			}
-
-			globalRegistry->EndFeatureTransition(featureName);
-
-			if (auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName)) {
-				for (const auto& var : featureRegistry->GetVariables()) {
-					var->SetToUserSettings();
-				}
-			}
-		}
-	}
 
 	weatherManager->ClearAllFeatureSettingsForWeather(weather);
 	settings = vanillaSettings;
@@ -1722,268 +1694,9 @@ bool WeatherWidget::HasUnsavedChanges() const
 	return !(settings == originalSettings);
 }
 
-void WeatherWidget::DrawFeatureSettings()
+void WeatherWidget::NavigateToFeatureSetting(const std::string&, const std::string&)
 {
-	ImGui::TextWrapped(
-		"Configure feature-specific settings that will be applied when this weather is active. "
-		"These override the feature's global settings for this weather only.");
-	ImGui::Spacing();
-
-	auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-
-	for (auto* feature : Feature::GetFeatureList()) {
-		if (!feature || !feature->loaded) {
-			continue;
-		}
-
-		std::string featureName = feature->GetShortName();
-		auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName);
-
-		// Check if feature has registered weather variables
-		if (!featureRegistry) {
-			continue;
-		}
-
-		std::string displayName = feature->GetName();
-		auto featureIt = settings.featureSettings.find(featureName);
-		const json* featureJsonView = (featureIt != settings.featureSettings.end()) ? &featureIt->second : nullptr;
-		auto getFeatureJson = [&]() -> json& {
-			return settings.featureSettings.try_emplace(featureName, json::object()).first->second;
-		};
-
-		// Handle pending navigation - auto-expand this feature if it matches
-		bool shouldAutoExpand = (pendingFeatureNavigation == featureName);
-		if (shouldAutoExpand) {
-			ImGui::SetNextItemOpen(true);
-		}
-
-		if (ImGui::TreeNodeEx(displayName.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
-			// Check if weather-specific overrides are enabled (using special key)
-			bool overridesEnabled = featureJsonView ? featureJsonView->value("__enabled", false) : false;
-
-			// Weather-specific override toggle
-			ImGui::PushStyleColor(ImGuiCol_Button, overridesEnabled ? WidgetUI::kOverrideEnabledButton : Util::Colors::GetDisabled());
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, overridesEnabled ? WidgetUI::kOverrideEnabledButtonHovered : WidgetUI::kOverrideDisabledButtonHovered);
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, overridesEnabled ? WidgetUI::kOverrideEnabledButtonActive : WidgetUI::kOverrideDisabledButtonActive);
-
-			bool toggleClicked = ImGui::Button(overridesEnabled ? "Using Weather-Specific Settings" : "Using Global Settings", ImVec2(-1, 0));
-
-			ImGui::PopStyleColor(3);
-
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				if (overridesEnabled) {
-					ImGui::Text("This weather has custom overrides for this feature.");
-					ImGui::Text("Click to disable overrides and use global settings instead.");
-					ImGui::Text("(Settings will be preserved but not applied)");
-				} else {
-					ImGui::Text("This weather uses global feature settings.");
-					ImGui::Text("Click to enable weather-specific overrides.");
-				}
-			}
-
-			if (toggleClicked) {
-				auto& featureJson = getFeatureJson();
-				if (overridesEnabled) {
-					// Disable overrides - mark as disabled but keep the settings
-					featureJson["__enabled"] = false;
-				} else {
-					// Enable overrides - mark as enabled
-					featureJson["__enabled"] = true;
-					// If no settings exist yet, copy current global values as starting point
-					bool hasActualSettings = false;
-					for (auto it = featureJson.begin(); it != featureJson.end(); ++it) {
-						if (it.key() != "__enabled") {
-							hasActualSettings = true;
-							break;
-						}
-					}
-					if (!hasActualSettings) {
-						const auto& variables = featureRegistry->GetVariables();
-						for (const auto& var : variables) {
-							json tempJson;
-							var->SaveToJson(tempJson);
-							std::string varName = var->GetName();
-							if (tempJson.contains(varName)) {
-								featureJson[varName] = tempJson[varName];
-							}
-						}
-					}
-				}
-				EditorWindow::GetSingleton()->PushUndoState(this);
-				if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-					ApplyChanges();
-				}
-			}
-
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::Spacing();
-
-			// Only show controls if weather-specific overrides are enabled
-			if (overridesEnabled) {
-				auto& featureJson = getFeatureJson();
-				// Draw UI for each registered variable
-				const auto& variables = featureRegistry->GetVariables();
-				bool modified = false;
-
-				for (const auto& var : variables) {
-					std::string varName = var->GetName();
-					std::string varDisplayName = var->GetDisplayName();
-					std::string tooltip = var->GetTooltip();
-
-					ImGui::PushID(varName.c_str());
-
-					// Check if this variable has a weather-specific value
-					bool hasOverride = featureJson.contains(varName);
-
-					json currentValue;
-					if (hasOverride) {
-						currentValue = featureJson.at(varName);
-					} else {
-						json tempJson;
-						var->SaveToJson(tempJson);
-						auto it = tempJson.find(varName);
-						if (it == tempJson.end()) {
-							ImGui::PopID();
-							continue;
-						}
-						currentValue = *it;
-					}
-
-					// Try to detect variable type and render appropriate control
-					// Check if it's a bool variable first
-					if (auto* boolVar = dynamic_cast<WeatherVariables::WeatherVariable<bool>*>(var.get())) {
-						bool value = currentValue.get<bool>();
-
-						if (ImGui::Checkbox(varDisplayName.c_str(), &value)) {
-							featureJson[varName] = value;
-							modified = true;
-						}
-
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text("%s", tooltip.c_str());
-						}
-
-						// Right-click context menu to reset individual values
-						if (ImGui::BeginPopupContextItem()) {
-							if (ImGui::MenuItem("Reset to Global")) {
-								featureJson.erase(varName);
-								modified = true;
-							}
-							ImGui::EndPopup();
-						}
-
-					} else if (auto* floatVar = dynamic_cast<WeatherVariables::FloatVariable*>(var.get())) {
-						float value = currentValue.get<float>();
-						float minVal = floatVar->GetMin();
-						float maxVal = floatVar->GetMax();
-
-						if (ImGui::SliderFloat(varDisplayName.c_str(), &value, minVal, maxVal, "%.3f")) {
-							featureJson[varName] = value;
-							modified = true;
-						}
-
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text("%s", tooltip.c_str());
-						}
-
-						// Right-click context menu to reset individual values
-						if (ImGui::BeginPopupContextItem()) {
-							if (ImGui::MenuItem("Reset to Global")) {
-								featureJson.erase(varName);
-								modified = true;
-							}
-							ImGui::EndPopup();
-						}
-
-					} else if (auto* float3Var = dynamic_cast<WeatherVariables::Float3Variable*>(var.get())) {
-						// Handle float3 (color) variables
-						float3 value = currentValue.get<float3>();
-						float colorArray[3] = { value.x, value.y, value.z };
-
-						if (ImGui::ColorEdit3(varDisplayName.c_str(), colorArray)) {
-							featureJson[varName] = json{ colorArray[0], colorArray[1], colorArray[2] };
-							modified = true;
-						}
-
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text("%s", tooltip.c_str());
-						}
-
-						if (ImGui::BeginPopupContextItem()) {
-							if (ImGui::MenuItem("Reset to Global")) {
-								featureJson.erase(varName);
-								modified = true;
-							}
-							ImGui::EndPopup();
-						}
-
-					} else if (auto* float4Var = dynamic_cast<WeatherVariables::Float4Variable*>(var.get())) {
-						// Handle float4 (color with alpha) variables
-						float4 value = currentValue.get<float4>();
-						float colorArray[4] = { value.x, value.y, value.z, value.w };
-
-						if (ImGui::ColorEdit4(varDisplayName.c_str(), colorArray)) {
-							featureJson[varName] = json{ colorArray[0], colorArray[1], colorArray[2], colorArray[3] };
-							modified = true;
-						}
-
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text("%s", tooltip.c_str());
-						}
-
-						if (ImGui::BeginPopupContextItem()) {
-							if (ImGui::MenuItem("Reset to Global")) {
-								featureJson.erase(varName);
-								modified = true;
-							}
-							ImGui::EndPopup();
-						}
-
-					} else {
-						// Generic handling for other types
-						ImGui::TextDisabled("%s: %s", varDisplayName.c_str(), currentValue.dump().c_str());
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							Util::Text::Warning("Unsupported Variable Type");
-							ImGui::Text("%s", tooltip.c_str());
-							ImGui::Separator();
-							ImGui::TextWrapped("This variable type doesn't have a custom UI implementation yet. The raw JSON value is shown above.");
-						}
-					}
-
-					ImGui::PopID();
-				}
-
-				if (modified) {
-					EditorWindow::GetSingleton()->PushUndoState(this);
-					if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-						ApplyChanges();
-					}
-				}
-
-			} else {
-				ImGui::TextColored(WidgetUI::kHelpTextColor, "Enable weather-specific overrides above to customize settings for this weather.");
-			}
-
-			ImGui::TreePop();
-		}
-	}
-
-	// Clear navigation state after processing
-	if (!pendingFeatureNavigation.empty()) {
-		pendingFeatureNavigation.clear();
-		pendingSettingHighlight.clear();
-	}
-}
-
-void WeatherWidget::NavigateToFeatureSetting(const std::string& featureName, const std::string& settingName)
-{
-	// Store the navigation request
-	pendingFeatureNavigation = featureName;
-	pendingSettingHighlight = settingName;
-
-	// Switch to Features tab
-	activeTabOverride = "Features";
+	activeTabOverride = WeatherTab::kSceneSettings;
 }
 
 std::vector<Widget::SearchResult> WeatherWidget::CollectSearchableSettings() const

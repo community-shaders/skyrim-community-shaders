@@ -39,7 +39,7 @@ RE::FormID Util::SpidToFormId(const std::string& spid)
 {
 	auto components = ParseSpid(spid);
 	if (components.pluginName.empty() || components.localFormId == 0) {
-		logger::warn("[FormIdentity] SpidToFormId: bad parse for '{}' — plugin='{}' localId=0x{:X}", spid, components.pluginName, components.localFormId);
+		logger::warn("[FormIdentity] SpidToFormId: bad parse for '{}' - plugin='{}' localId=0x{:X}", spid, components.pluginName, components.localFormId);
 		return 0;
 	}
 	auto* handler = RE::TESDataHandler::GetSingleton();
@@ -74,7 +74,7 @@ RE::FormID Util::SpidToFormId(const std::string& spid)
 		return reconstructed;
 	}
 
-	logger::warn("[FormIdentity] SpidToFormId: plugin '{}' index=0x{:X} smallIndex=0x{:X} localId=0x{:X} reconstructed=0x{:08X} — form not found",
+	logger::warn("[FormIdentity] SpidToFormId: plugin '{}' index=0x{:X} smallIndex=0x{:X} localId=0x{:X} reconstructed=0x{:08X} - form not found",
 		components.pluginName, file->compileIndex, file->smallFileCompileIndex, components.localFormId, reconstructed);
 	return 0;
 }

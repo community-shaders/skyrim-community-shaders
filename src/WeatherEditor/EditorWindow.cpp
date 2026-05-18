@@ -4,10 +4,10 @@
 #include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
 #include "Globals.h"
-#include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "Menu/BackgroundBlur.h"
 #include "PaletteWindow.h"
+#include "SceneSettingsUI.h"
 #include "State.h"
 #include "Utils/UI.h"
 #include "Weather/LightingTemplateWidget.h"
@@ -213,7 +213,7 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::Spacing();
 
 			// List of categories
-			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
+			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Time of Day", "Interior Only" };
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
 				if (ImGui::Selectable(categories[i], m_selectedCategory == categories[i])) {
@@ -228,15 +228,11 @@ void EditorWindow::ShowObjectsWindow()
 		// Right column: Objects
 		ImGui::TableSetColumnIndex(1);
 
+		// Time of Day / Interior Only categories have their own panels
 		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Borders, kStickyHeaderFlags)) {
-			// Interior Only category has its own panel
-			if (m_selectedCategory == "Interior Only") {
-				InteriorOnlyPanel::Draw();
-				ImGui::EndChild();
-				ImGui::EndTable();
-				ImGui::End();
+			if (SceneSettingsUI::DrawCategoryPanel("Time of Day", m_selectedCategory, SceneSettingsUI::DrawTimeOfDayPanel) ||
+				SceneSettingsUI::DrawCategoryPanel("Interior Only", m_selectedCategory, SceneSettingsUI::DrawInteriorOnlyPanel))
 				return;
-			}
 
 			// Returns the widget collection for a given category; Cell Lighting and unknown
 			// categories return an empty collection since they have no standalone widget list.

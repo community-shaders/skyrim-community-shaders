@@ -150,13 +150,6 @@ public:
 	virtual WeatherAnalysisConfig GetWeatherAnalysisConfig() const { return {}; }
 
 	/**
-	 * @brief Called during feature initialization to register weather-controllable variables
-	 * Features should register their weather variables here using the WeatherVariables::GlobalWeatherRegistry
-	 * The weather system will automatically handle save/load/lerp for all registered variables
-	 */
-	virtual void RegisterWeatherVariables() {}
-
-	/**
 	 * @brief Returns constraints this feature imposes on other features' settings
 	 *
 	 * Features override this to declare runtime incompatibilities with other features.

@@ -9,8 +9,6 @@
 #include "Menu/ThemeManager.h"
 #include "PerfUtils.h"
 #include "ShaderCache.h"
-#include "WeatherManager.h"
-#include "WeatherVariableRegistry.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -1992,8 +1990,8 @@ namespace Util
 		// Create unique ID for the toggle
 		ImGui::PushID(label);
 
-		// Draw the toggle button
-		bool clicked = ImGui::Button("", toggleSize);
+		// Draw the toggle button (##t avoids ID collision with PushID parent)
+		bool clicked = ImGui::Button("##t", toggleSize);
 
 		// Draw the toggle knob
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -2023,257 +2021,6 @@ namespace Util
 		}
 
 		return clicked;
-	}
-
-	namespace WeatherUI
-	{
-		bool IsWeatherControlled(Feature* feature, const char* settingName)
-		{
-			if (!feature || !settingName) {
-				return false;
-			}
-
-			auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-			auto* weatherManager = WeatherManager::GetSingleton();
-
-			// Check if this feature has registered weather variables
-			std::string featureName = feature->GetShortName();
-			if (!globalRegistry->HasWeatherSupport(featureName)) {
-				return false;
-			}
-
-			// Still controlled if variable is mid-transition (e.g., transitioning to a weather without an override)
-			if (globalRegistry->IsFeatureVariableInTransition(featureName, settingName)) {
-				return true;
-			}
-
-			// Check if current weather exists
-			auto currentWeathers = weatherManager->GetCurrentWeathers();
-			if (!currentWeathers.currentWeather) {
-				return false;
-			}
-
-			// Load weather settings for this feature
-			json weatherSettings;
-			if (!weatherManager->LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, weatherSettings)) {
-				return false;
-			}
-
-			// Check if this specific setting has an override
-			return weatherSettings.contains(settingName) && !weatherSettings[settingName].is_null();
-		}
-
-		bool SliderFloat(const char* label, Feature* feature, const char* settingName, float* value, float min, float max, const char* format)
-		{
-			bool isControlled = IsWeatherControlled(feature, settingName);
-
-			if (isControlled) {
-				auto* weatherManager = WeatherManager::GetSingleton();
-				auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-				// Make it look like a clickable button when weather-controlled
-				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
-				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
-				ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
-			}
-
-			ImGuiSliderFlags flags = isControlled ? (static_cast<ImGuiSliderFlags>(ImGuiSliderFlags_NoInput) | static_cast<ImGuiSliderFlags>(ImGuiSliderFlags_ReadOnly)) : ImGuiSliderFlags_None;
-			bool changed = ImGui::SliderFloat(label, value, min, max, format, flags);
-
-			if (isControlled) {
-				ImGui::PopStyleVar();
-				ImGui::PopStyleColor(3);
-
-				// Check if clicked
-				if (ImGui::IsItemClicked()) {
-					auto* weatherManager = WeatherManager::GetSingleton();
-					auto* editorWindow = EditorWindow::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-					if (currentWeathers.currentWeather && editorWindow) {
-						editorWindow->OpenWeatherFeatureSetting(
-							currentWeathers.currentWeather,
-							feature->GetShortName(),
-							settingName);
-					}
-				}
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					auto* weatherManager = WeatherManager::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
-					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
-						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
-					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
-				}
-
-				return false;  // Prevent changes when weather-controlled
-			}
-
-			return changed;
-		}
-
-		bool Checkbox(const char* label, Feature* feature, const char* settingName, bool* value)
-		{
-			bool isControlled = IsWeatherControlled(feature, settingName);
-
-			if (isControlled) {
-				auto* weatherManager = WeatherManager::GetSingleton();
-				auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
-				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
-				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			}
-
-			bool changed = ImGui::Checkbox(label, value);
-
-			if (isControlled) {
-				ImGui::PopItemFlag();
-				ImGui::PopStyleVar();
-				ImGui::PopStyleColor(2);
-
-				if (ImGui::IsItemClicked()) {
-					auto* weatherManager = WeatherManager::GetSingleton();
-					auto* editorWindow = EditorWindow::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-					if (currentWeathers.currentWeather && editorWindow) {
-						editorWindow->OpenWeatherFeatureSetting(
-							currentWeathers.currentWeather,
-							feature->GetShortName(),
-							settingName);
-					}
-				}
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					auto* weatherManager = WeatherManager::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
-					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
-						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
-					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
-				}
-
-				return false;
-			}
-
-			return changed;
-		}
-
-		bool ColorEdit3(const char* label, Feature* feature, const char* settingName, float col[3])
-		{
-			bool isControlled = IsWeatherControlled(feature, settingName);
-
-			if (isControlled) {
-				auto* weatherManager = WeatherManager::GetSingleton();
-				auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
-				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			}
-
-			bool changed = ImGui::ColorEdit3(label, col);
-
-			if (isControlled) {
-				ImGui::PopItemFlag();
-				ImGui::PopStyleVar();
-
-				if (ImGui::IsItemClicked()) {
-					auto* weatherManager = WeatherManager::GetSingleton();
-					auto* editorWindow = EditorWindow::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-					if (currentWeathers.currentWeather && editorWindow) {
-						editorWindow->OpenWeatherFeatureSetting(
-							currentWeathers.currentWeather,
-							feature->GetShortName(),
-							settingName);
-					}
-				}
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					auto* weatherManager = WeatherManager::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
-					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
-						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
-					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
-				}
-
-				return false;
-			}
-
-			return changed;
-		}
-
-		bool ColorEdit4(const char* label, Feature* feature, const char* settingName, float col[4])
-		{
-			bool isControlled = IsWeatherControlled(feature, settingName);
-
-			if (isControlled) {
-				auto* weatherManager = WeatherManager::GetSingleton();
-				auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
-				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-			}
-
-			bool changed = ImGui::ColorEdit4(label, col);
-
-			if (isControlled) {
-				ImGui::PopItemFlag();
-				ImGui::PopStyleVar();
-
-				if (ImGui::IsItemClicked()) {
-					auto* weatherManager = WeatherManager::GetSingleton();
-					auto* editorWindow = EditorWindow::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-
-					if (currentWeathers.currentWeather && editorWindow) {
-						editorWindow->OpenWeatherFeatureSetting(
-							currentWeathers.currentWeather,
-							feature->GetShortName(),
-							settingName);
-					}
-				}
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					auto* weatherManager = WeatherManager::GetSingleton();
-					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
-					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
-						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
-					ImGui::Separator();
-					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
-				}
-
-				return false;
-			}
-
-			return changed;
-		}
 	}
 
 	bool InputComboWidget(
@@ -2491,4 +2238,272 @@ namespace Util
 			return ImGui::SliderInt(label, value, min, max, format);
 		}
 	}
+
+	// --- Flyout Menu ---
+
+	static constexpr float kFlyoutCloseDelay = 0.25f;
+	static constexpr float kFlyoutRounding = 4.0f;
+	static constexpr float kSmallToggleScale = 0.7f;
+	static constexpr float kFlyoutSlideOpenSpeed = 10.0f;  // progress/sec (0→1 in 0.1s)
+	static constexpr float kFlyoutSlideCloseSpeed = 14.0f; // progress/sec (1→0 in ~0.07s)
+	static constexpr float kFlyoutSlideDistance = 6.0f;    // unscaled px of slide offset
+	static constexpr float kFlyoutLeftOffset = 8.0f;       // shift below-flyout left by this many unscaled px
+	static constexpr float kFlyoutGap = 2.0f;
+	static constexpr float kFlyoutAlphaScale = 4.0f;
+	static constexpr float kFlyoutWindowAlpha = 0.95f;
+	static constexpr float kFlyoutPaddingX = 6.0f;
+	static constexpr float kFlyoutPaddingY = 2.0f;
+	static constexpr float kIconShrink = 0.15f;            // shrink icon within button by this fraction
+	static constexpr float kFlyoutEdgeTolerance = 0.5f;
+
+	static void ResetFlyout(FlyoutState& state) noexcept
+	{
+		state.isOpen = false;
+		state.closing = false;
+		state.activeId = 0;
+		state.openProgress = 0.0f;
+		state.draggedFromFlyout = false;
+	}
+
+	static bool ContainsPoint(const ImVec2& min, const ImVec2& max, const ImVec2& point)
+	{
+		return point.x >= min.x && point.x <= max.x && point.y >= min.y && point.y <= max.y;
+	}
+
+	static ImRect GetFlyoutWindowRect()
+	{
+		auto* viewport = ImGui::GetMainViewport();
+		auto* window = ImGui::GetCurrentWindow();
+		auto* rootWin = window->RootWindow;
+
+		return ImRect(
+			ImVec2(std::max(viewport->Pos.x, rootWin->Pos.x), std::max(viewport->Pos.y, rootWin->Pos.y)),
+			ImVec2(std::min(viewport->Pos.x + viewport->Size.x, rootWin->Pos.x + rootWin->Size.x),
+				std::min(viewport->Pos.y + viewport->Size.y, rootWin->Pos.y + rootWin->Size.y)));
+	}
+
+	static bool IsRectFullyVisible(const ImVec2& min, const ImVec2& max, const ImRect& visible)
+	{
+		return min.x >= visible.Min.x - kFlyoutEdgeTolerance &&
+		       min.y >= visible.Min.y - kFlyoutEdgeTolerance &&
+		       max.x <= visible.Max.x + kFlyoutEdgeTolerance &&
+		       max.y <= visible.Max.y + kFlyoutEdgeTolerance;
+	}
+
+	static float ClampVisible(float value, float min, float max)
+	{
+		return std::clamp(value, min, std::max(min, max));
+	}
+
+	static bool IsFlyoutSourceHovered(const ImVec2& min, const ImVec2& max)
+	{
+		constexpr auto popupFlags = ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel;
+		return ContainsPoint(min, max, ImGui::GetIO().MousePos) &&
+		       !ImGui::IsMouseDragging(ImGuiMouseButton_Left) &&
+		       !ImGui::IsPopupOpen(nullptr, popupFlags) &&
+		       ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+	}
+
+	static ImVec2 GetFlyoutPos(FlyoutState& state, const ImVec2& hoverMin, const ImVec2& anchorMax,
+		float slideOffset, float scale, const ImRect& visible, bool& canOpen)
+	{
+		const float gap = kFlyoutGap * scale;
+		ImVec2 pos;
+
+		if (state.slideRight) {
+			pos = ImVec2(anchorMax.x + gap - slideOffset, hoverMin.y);
+			pos.y = ClampVisible(pos.y, visible.Min.y, visible.Max.y - state.lastSize.y);
+		} else {
+			pos = ImVec2(hoverMin.x - kFlyoutLeftOffset * scale, anchorMax.y + gap - slideOffset);
+			canOpen = state.lastSize.y <= 0.0f || anchorMax.y + gap + state.lastSize.y <= visible.Max.y;
+			if (state.lastSize.x > 0.0f && pos.x < visible.Min.x)
+				pos.x = visible.Min.x;
+		}
+
+		pos.x = std::floor(pos.x + 0.5f);
+		pos.y = std::floor(pos.y + 0.5f);
+		return pos;
+	}
+
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, bool slideRight)
+	{
+		return BeginFlyout(state, itemId, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), slideRight);
+	}
+
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax, const ImVec2& anchorMax, bool slideRight)
+	{
+		if (slideRight && !IsRectFullyVisible(hoverMin, hoverMax, ImGui::GetCurrentWindow()->ClipRect)) {
+			ResetFlyout(state);
+			return false;
+		}
+
+		float dt = ImGui::GetIO().DeltaTime;
+		bool hovered = IsFlyoutSourceHovered(hoverMin, hoverMax);
+
+		// Open flyout: only reset openProgress if this is a fresh open (not already open on same item)
+		if (hovered && (!state.isOpen || (state.activeId != itemId && !state.flyoutHovered))) {
+			const bool freshOpen = !state.isOpen || state.activeId != itemId;
+			state.activeId = itemId;
+			state.isOpen = true;
+			state.closing = false;
+			state.closeTimer = 0.0f;
+			if (freshOpen)
+				state.openProgress = 0.0f;
+			state.slideRight = slideRight;
+		}
+
+		if (hovered && state.closing && state.activeId == itemId) {
+			state.closing = false;
+			state.closeTimer = 0.0f;
+		}
+
+		if (!state.isOpen || state.activeId != itemId)
+			return false;
+
+		if (!state.closing)
+			state.openProgress = std::min(state.openProgress + kFlyoutSlideOpenSpeed * dt, 1.0f);
+
+		// Hover detection uses full rect, but source rect for EndFlyout uses hover area
+		state.sourceMin = hoverMin;
+		state.sourceMax = hoverMax;
+
+		float scale = GetUIScale();
+		float p = state.openProgress;
+		float eased = 1.0f - (1.0f - p) * (1.0f - p);
+		float slideOffset = (1.0f - eased) * kFlyoutSlideDistance * scale;
+		float alpha = std::min(p * kFlyoutAlphaScale, 1.0f);
+		bool canOpen = true;
+		ImVec2 flyoutPos = GetFlyoutPos(state, hoverMin, anchorMax, slideOffset, scale, GetFlyoutWindowRect(), canOpen);
+		if (!canOpen) {
+			ResetFlyout(state);
+			return false;
+		}
+
+		ImGui::SetNextWindowPos(flyoutPos, ImGuiCond_Always);
+		ImGui::SetNextWindowBgAlpha(kFlyoutWindowAlpha * alpha);
+
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+		                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+		                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
+
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kFlyoutRounding * scale);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kFlyoutPaddingX * scale, kFlyoutPaddingY * scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+
+		auto flyoutLabel = std::format("##flyout_{}", itemId);
+		bool visible = ImGui::Begin(flyoutLabel.c_str(), nullptr, flags);
+		state.lastSize = ImGui::GetWindowSize();
+
+		if (visible)
+			ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+
+		ImGui::PopStyleVar(3);
+
+		if (!visible) {
+			ImGui::End();
+			return false;
+		}
+
+		return true;
+	}
+
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax, bool slideRight)
+	{
+		return BeginFlyout(state, itemId, hoverMin, hoverMax, hoverMax, slideRight);
+	}
+
+	void EndFlyout(FlyoutState& state)
+	{
+		bool flyoutHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem | ImGuiHoveredFlags_RootAndChildWindows);
+		state.flyoutHovered = flyoutHovered;
+		// Track drags that start inside the flyout so we don't close while a widget is being dragged
+		if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && flyoutHovered)
+			state.draggedFromFlyout = true;
+		else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+			state.draggedFromFlyout = false;
+		ImGui::End();
+
+		// Force-close on click outside flyout, but not when clicking the source item itself
+		ImVec2 mousePos = ImGui::GetIO().MousePos;
+		bool overSource = ContainsPoint(state.sourceMin, state.sourceMax, mousePos);
+		if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !flyoutHovered && !overSource) {
+			ResetFlyout(state);
+			return;
+		}
+
+		// Check if mouse is over the source item or the gap between source and flyout
+		float dt = ImGui::GetIO().DeltaTime;
+		float scale = GetUIScale();
+		float gap = kFlyoutGap * scale;
+		bool mouseDragging = ImGui::IsMouseDragging(ImGuiMouseButton_Left);
+		bool itemHovered;
+		if (state.slideRight) {
+			// Cover source item and the horizontal gap to the right
+			itemHovered = ContainsPoint(state.sourceMin, ImVec2(state.sourceMax.x + gap, state.sourceMax.y), mousePos);
+		} else {
+			// Cover source item (with left offset) and the vertical gap below
+			float leftOffset = kFlyoutLeftOffset * scale;
+			itemHovered = ContainsPoint(ImVec2(state.sourceMin.x - leftOffset, state.sourceMin.y),
+				ImVec2(state.sourceMax.x, state.sourceMax.y + gap), mousePos);
+		}
+
+		// Once close animation has started, commit to it — only BeginFlyout
+		// re-hover on the source item can cancel slide-into-cursor oscillation.
+		if (state.closing) {
+			state.openProgress = std::max(state.openProgress - kFlyoutSlideCloseSpeed * dt, 0.0f);
+			if (state.openProgress <= 0.0f)
+				ResetFlyout(state);
+		} else if (flyoutHovered || itemHovered || state.draggedFromFlyout || mouseDragging) {
+			state.closeTimer = 0.f;
+		} else {
+			state.closeTimer += dt;
+			if (state.closeTimer >= kFlyoutCloseDelay) {
+				state.closing = true;
+			}
+		}
+	}
+
+
+
+	bool SmallFeatureToggle(const char* label, bool* enabled)
+	{
+		float scale = kSmallToggleScale;
+		ImVec2 size(ImGui::GetFrameHeight() * 1.6f * scale, ImGui::GetFrameHeight() * 0.8f * scale);
+		return FeatureToggle(label, enabled, size);
+	}
+
+	bool ThemedDeleteButton(const char* label)
+	{
+		auto& colors = ImGui::GetStyle().Colors;
+		ImGui::PushStyleColor(ImGuiCol_Button, colors[ImGuiCol_FrameBg]);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors[ImGuiCol_FrameBgHovered]);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, colors[ImGuiCol_FrameBgActive]);
+		float h = ImGui::GetFrameHeight() * 0.8f;
+		// Center text within the small button
+		float fontSize = ImGui::GetFontSize();
+		float padY = std::max(0.f, (h - fontSize) * 0.5f);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, h * 0.3f);
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padY, padY));
+		bool clicked = ImGui::Button(label, ImVec2(h, h));
+		ImGui::PopStyleVar(2);
+		ImGui::PopStyleColor(3);
+		return clicked;
+	}
+
+	bool IconButton(const char* id, void* texture, const ImVec2& size, float iconPadding)
+	{
+		if (!texture)
+			return false;
+		// Shrink icon within button area so it visually matches text buttons
+		float pad = (iconPadding >= 0.0f) ? iconPadding : size.x * kIconShrink;
+		ImVec2 iconSize(size.x - pad * 2.0f, size.y - pad * 2.0f);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(pad, pad));
+		bool clicked = ImGui::ImageButton(id, texture, iconSize);
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor(2);
+		return clicked;
+	}
+
 }  // namespace Util

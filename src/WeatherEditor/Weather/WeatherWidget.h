@@ -119,9 +119,6 @@ public:
 	void SaveFeatureSettings();
 	void LoadFeatureSettings();
 
-	// Navigation state for opening specific features
-	std::string pendingFeatureNavigation = "";
-	std::string pendingSettingHighlight = "";
 	void NavigateToFeatureSetting(const std::string& featureName, const std::string& settingName);
 
 private:
@@ -132,7 +129,6 @@ private:
 	void DrawFogSettings();
 	void DrawFogSlider(const char* id, float& prop, float min, float max, const char* fmt, bool& inheritRef, bool isInherited, bool& changed);
 	void DrawFogRow(bool matches, const char* inheritKey, const char* label, const char* dayPropKey, const char* nightPropKey, float min, float max, const char* fmt, bool hasParent, WeatherWidget* parentWidget, bool& changed);
-	void DrawFeatureSettings();
 
 	// Cloud texture loading
 	ID3D11ShaderResourceView* GetCloudTexture(int layerIndex);

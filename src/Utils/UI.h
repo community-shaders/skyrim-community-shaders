@@ -408,46 +408,6 @@ namespace Util
 	float GetCenterOffsetForContent(float contentWidth);
 
 	/**
-	 * Weather-controlled UI helpers
-	 * These functions automatically check if a setting has a weather-specific override
-	 * and disable the control if it's being controlled by the current weather
-	 */
-	namespace WeatherUI
-	{
-		/**
-		 * Check if a specific setting is currently controlled by weather
-		 * @param feature The feature to check
-		 * @param settingName The name of the setting (must match registered weather variable name)
-		 * @return True if weather is overriding this setting
-		 */
-		bool IsWeatherControlled(Feature* feature, const char* settingName);
-
-		/**
-		 * Weather-aware slider float that greys out when controlled by weather
-		 * @param label The label for the slider
-		 * @param feature The feature this setting belongs to
-		 * @param settingName The name of the setting (must match registered weather variable name)
-		 * @param value Pointer to the value
-		 * @param min Minimum value
-		 * @param max Maximum value
-		 * @param format Display format
-		 * @return True if value was changed (only possible when not weather-controlled)
-		 */
-		bool SliderFloat(const char* label, Feature* feature, const char* settingName, float* value, float min, float max, const char* format = "%.3f");
-
-		/**
-		 * Weather-aware checkbox that greys out when controlled by weather
-		 */
-		bool Checkbox(const char* label, Feature* feature, const char* settingName, bool* value);
-
-		/**
-		 * Weather-aware color edit that greys out when controlled by weather
-		 */
-		bool ColorEdit3(const char* label, Feature* feature, const char* settingName, float col[3]);
-		bool ColorEdit4(const char* label, Feature* feature, const char* settingName, float col[4]);
-	}
-
-	/**
 	 * Constraint-aware UI helpers
 	 * These functions automatically check if a setting is constrained by another feature
 	 * and disable the control with an informative tooltip explaining why
@@ -1518,6 +1478,52 @@ namespace Util
 		std::vector<InputCombo>& combo,
 		bool& isRecording,
 		const char* recordingLabel);
+
+	// --- Flyout Menu ---
+
+	/// Persistent state for a flyout menu attached to a value cell.
+	struct FlyoutState
+	{
+		ImGuiID activeId = 0;    // ID of the item the flyout is open for
+		bool isOpen = false;
+		bool closing = false;    // True when close animation is playing
+		bool flyoutHovered = false;  // True when mouse is over the flyout window (set by EndFlyout)
+		bool slideRight = false;     // True when flyout slides right from item (set by BeginFlyout)
+		float closeTimer = 0.f;  // Countdown before closing on mouse-leave
+		float openProgress = 0.f;  // Slide animation progress (0..1)
+		ImVec2 sourceMin{};      // Source item rect min (for hover tracking)
+		ImVec2 sourceMax{};      // Source item rect max (for hover tracking)
+		ImVec2 lastSize{};       // Flyout window size from previous frame, used to clamp position
+		bool draggedFromFlyout = false;  // True while a drag that started inside the flyout is active
+	};
+
+	/// Begin a flyout below the last item. Returns true if the flyout is visible.
+	/// Call between the value widget and EndFlyout().
+	/// @param state  Shared flyout state (one per panel).
+	/// @param itemId Unique ID for this flyout instance (use ImGui::GetItemID() after the value widget).
+	/// @param slideRight If true, flyout appears to the right of the item with a left-to-right animation.
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, bool slideRight = false);
+
+	/// Begin a flyout with an explicit hover source rect.
+	/// Use when the hover target should be larger than the last item (e.g. full table cell).
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax, bool slideRight = false);
+
+	/// Begin a flyout with separate hover detection and flyout anchor rects.
+	/// Hover uses hoverMin/hoverMax, but the flyout position anchors to anchorMax.y.
+	bool BeginFlyout(FlyoutState& state, ImGuiID itemId, const ImVec2& hoverMin, const ImVec2& hoverMax, const ImVec2& anchorMax, bool slideRight = false);
+
+	/// End the flyout region. Must be called if BeginFlyout returned true.
+	void EndFlyout(FlyoutState& state);
+
+	/// Draw a small toggle switch (20% smaller than FeatureToggle).
+	bool SmallFeatureToggle(const char* label, bool* enabled);
+
+	/// Draw a themed delete button (follows theme color instead of red).
+	bool ThemedDeleteButton(const char* label);
+
+	/// Draw an icon button using a texture (e.g. undo icon).
+	/// @param iconPadding  Override internal padding (-1 uses default kIconShrink).
+	bool IconButton(const char* id, void* texture, const ImVec2& size, float iconPadding = -1.0f);
 
 	/**
 	 * @brief Displays a DLL version information table with a clickable folder link.

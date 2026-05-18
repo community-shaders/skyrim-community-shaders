@@ -33,8 +33,6 @@ public:
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
-	void RegisterWeatherVariables() override;
-
 	struct alignas(16) Settings
 	{
 		uint enabled = 0;
