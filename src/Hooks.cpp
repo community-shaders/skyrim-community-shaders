@@ -13,11 +13,9 @@
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
-#include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
-#include "TruePBR.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 
@@ -895,26 +893,35 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	namespace MaterialHooks
+	{
+		HookChain<TESObjectLANDPostCallback>& TESObjectLANDPost()
+		{
+			static HookChain<TESObjectLANDPostCallback> chain;
+			return chain;
+		}
+		HookChain<BSLightingShaderInterceptor>& BSLightingShaderInterceptors()
+		{
+			static HookChain<BSLightingShaderInterceptor> chain;
+			return chain;
+		}
+		HookChain<BSLightingShaderPostCallback>& BSLightingShaderPost()
+		{
+			static HookChain<BSLightingShaderPostCallback> chain;
+			return chain;
+		}
+	}
+
 	struct TESObjectLAND_SetupMaterial
 	{
 		static bool thunk(RE::TESObjectLAND* land)
 		{
 			bool vanillaResult = func(land);
-
-			if (globals::features::truePBR.loaded) {
-				if (globals::features::truePBR.TESObjectLAND_SetupMaterial(land)) {
+			for (auto cb : MaterialHooks::TESObjectLANDPost().callbacks) {
+				if (cb(land, vanillaResult)) {
 					return true;
 				}
 			}
-
-			if (globals::features::terrainHelper.loaded) {
-				if (!land->data.flags.any(static_cast<RE::OBJ_LAND::Flag>(8))) {
-					if (vanillaResult) {
-						globals::features::terrainHelper.TESObjectLAND_SetupMaterial(land);
-					}
-				}
-			}
-
 			return vanillaResult;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -924,16 +931,14 @@ namespace Hooks
 	{
 		static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
 		{
-			if (globals::features::truePBR.loaded) {
-				if (globals::features::truePBR.BSLightingShader_SetupMaterial(shader, material)) {
+			for (auto cb : MaterialHooks::BSLightingShaderInterceptors().callbacks) {
+				if (cb(shader, material)) {
 					return;
 				}
 			}
-
 			func(shader, material);
-
-			if (globals::features::terrainHelper.loaded) {
-				globals::features::terrainHelper.BSLightingShader_SetupMaterial(material);
+			for (auto cb : MaterialHooks::BSLightingShaderPost().callbacks) {
+				cb(shader, material);
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;

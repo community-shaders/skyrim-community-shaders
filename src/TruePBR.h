@@ -11,6 +11,10 @@ struct GlintParameters
 	float densityRandomization = 2.f;
 };
 
+// TruePBR tags land cells it processes by setting this flag on TESObjectLAND::data.flags.
+// TerrainHelper reads it to skip cells that PBR has already claimed.
+inline constexpr auto kPBRProcessedLandFlag = static_cast<RE::OBJ_LAND::Flag>(8);
+
 struct TruePBR : Feature
 {
 public:

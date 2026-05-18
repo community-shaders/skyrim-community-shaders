@@ -1,8 +1,10 @@
 #include "TerrainHelper.h"
 
 #include "Globals.h"
+#include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "TruePBR.h"
 
 void TerrainHelper::DataLoaded()
 {
@@ -196,4 +198,23 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 
 void TerrainHelper::PostPostLoad()
 {
+	logger::info("[Terrain Helper] Registering material hook post callbacks");
+	// TerrainHelper augments vanilla land setup; it never claims, so PBR (registered earlier) wins
+	// when both flag the cell.
+	Hooks::MaterialHooks::TESObjectLANDPost().Register(
+		+[](RE::TESObjectLAND* land, bool vanillaResult) -> bool {
+			if (!vanillaResult) {
+				return false;
+			}
+			// TruePBR tags land cells it processes; skip TerrainHelper for those.
+			if (land->data.flags.any(kPBRProcessedLandFlag)) {
+				return false;
+			}
+			globals::features::terrainHelper.TESObjectLAND_SetupMaterial(land);
+			return false;
+		});
+	Hooks::MaterialHooks::BSLightingShaderPost().Register(
+		+[](RE::BSLightingShader*, RE::BSLightingShaderMaterialBase const* material) {
+			globals::features::terrainHelper.BSLightingShader_SetupMaterial(material);
+		});
 }
