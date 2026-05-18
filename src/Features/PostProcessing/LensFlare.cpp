@@ -167,6 +167,16 @@ void LensFlare::DrawSettings()
 		ImGui::Checkbox("Disable Blur", &debugsettings.disableBlur);
 		ImGui::SliderInt("Blur Iterations", &debugsettings.blurIterations, 1, 4);
 		tooltip("Kawase blur cycles (down+up). 1 = sharp, 2+ = smoother");
+
+		static float debugRescale = .25f;
+		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
+		BUFFER_VIEWER_NODE_TITLE(texThreshold, "Threshold (half-res)", debugRescale);
+		BUFFER_VIEWER_NODE_TITLE(texGhostHalo, "Ghost + Halo (half-res)", debugRescale);
+		BUFFER_VIEWER_NODE_TITLE(texFlare, "Final Flare Output", debugRescale);
+		BUFFER_VIEWER_NODE_TITLE(texBlurTemp, "Blur Temp (quarter-res)", debugRescale);
+		if (settings.GhostModeInt >= (int)GhostMode::Quality) {
+			BUFFER_VIEWER_NODE_TITLE(texFFTResult, "FFT Convolution Result", debugRescale);
+		}
 	}
 }
 

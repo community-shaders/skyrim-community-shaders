@@ -48,6 +48,15 @@ void LocalExposure::DrawSettings()
 	ImGui::Checkbox("Boost Local Contrast", &settings.BoostLocalContrast);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Gives high-contrast local details more influence during pyramid reconstruction.");
+
+	if (ImGui::CollapsingHeader("Debug")) {
+		static float debugRescale = .3f;
+		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
+		BUFFER_VIEWER_NODE_TITLE(texExposure, "Exposure Map (per-pixel multiplier)", debugRescale);
+		BUFFER_VIEWER_NODE_TITLE(texExposures, "Synthetic Exposures (RGB=H/M/S)", debugRescale);
+		BUFFER_VIEWER_NODE_TITLE(texWeights, "Fusion Weights", debugRescale);
+		BUFFER_VIEWER_NODE_TITLE(texAssemble, "Reconstructed Fusion", debugRescale);
+	}
 }
 
 void LocalExposure::RestoreDefaultSettings()

@@ -71,4 +71,10 @@ struct HistogramAutoExposure : public PostProcessFeature
 
 	/// Get the constant buffer containing exposure parameters (for Composite pass).
 	ID3D11Buffer* GetConstantBuffer() const { return autoExposureCB ? autoExposureCB->CB() : nullptr; }
+
+	// Debug visualization
+	winrt::com_ptr<ID3D11Buffer> histogramStagingBuffer = nullptr;
+	std::array<uint32_t, 256> histogramData = {};
+	float adaptationValue = 0.f;
+	bool debugReadbackRequested = false;
 };

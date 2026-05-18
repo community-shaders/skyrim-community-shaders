@@ -3,12 +3,13 @@
 #include "State.h"
 #include "Util.h"
 
-#include "ColourSpace.h"
+#include "ColorSpace.h"
 #include "Features/HDRDisplay.h"
 #include "Features/LinearLighting.h"
 #include "Features/PostProcessing.h"
 
 #include <DDSTextureLoader.h>
+#include <DirectXPackedVector.h>
 #include <DirectXTex.h>
 
 #include "IconsFontAwesome5.h"
@@ -425,6 +426,26 @@ void ColorGrading::DrawSettings()
 		ImGui::PushID(tonemapperType);
 		tonemappers[tonemapperType].draw_settings_func(settings.tonemapParams);
 		ImGui::PopID();
+
+		// Tonemapping curve visualization (from LUT diagonal readback)
+		if (ImGui::TreeNode("Curve Preview")) {
+			curveReadbackRequested = true;
+
+			if (settings.skipLUT) {
+				ImGui::TextDisabled("Enable LUT generation to see curve preview (uncheck 'Skip LUT')");
+			} else {
+				float plotHeight = 150.f;
+				float plotWidth = ImGui::GetContentRegionAvail().x;
+
+				ImGui::PlotLines("##curve_R", curveR.data(), CurveSamples, 0, "R", 0.f, 1.1f, ImVec2(plotWidth, plotHeight));
+				ImGui::PlotLines("##curve_G", curveG.data(), CurveSamples, 0, "G", 0.f, 1.1f, ImVec2(plotWidth, plotHeight));
+				ImGui::PlotLines("##curve_B", curveB.data(), CurveSamples, 0, "B", 0.f, 1.1f, ImVec2(plotWidth, plotHeight));
+				ImGui::TextDisabled("Input: 0 - %.0f (HDR linear, R=G=B neutral gray)  Output: 0 - 1", CurveMaxInput);
+			}
+			ImGui::TreePop();
+		} else {
+			curveReadbackRequested = false;
+		}
 	}
 
 	ImGui::SeparatorText("Game Color Grading");
@@ -435,7 +456,7 @@ void ColorGrading::DrawSettings()
 	ImGui::SliderFloat("Tint Blend", &settings.gameTintBlend, 0.f, 1.f, "%.3f");
 	ImGui::SeparatorText("Color Space Transform");
 	{
-		auto& spaces = getAvailableColourSpaces();
+		auto& spaces = getAvailableColorSpaces();
 		auto& hdr = globals::features::hdrDisplay;
 		const bool hdrEnabled = hdr.loaded && hdr.settings.enableHDR;
 
@@ -473,7 +494,7 @@ void ColorGrading::LoadSettings(json& o_json)
 {
 	try {
 		settings = o_json;
-		auto& spaces = getAvailableColourSpaces();
+		auto& spaces = getAvailableColorSpaces();
 		settings.processColorSpace = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
 
 		auto& tonemappers = TonemapperInfo::GetTonemappers();
@@ -500,7 +521,7 @@ void ColorGrading::SaveSettings(json& o_json)
 
 void ColorGrading::UpdateColorSpaceTransforms(bool hdrEnabled)
 {
-	auto& spaces = getAvailableColourSpaces();
+	auto& spaces = getAvailableColorSpaces();
 	settings.processColorSpace = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
 
 	auto& tonemappers = TonemapperInfo::GetTonemappers();
@@ -532,6 +553,7 @@ void ColorGrading::SetupResources()
 {
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
+	auto context = globals::d3d::context;
 
 	logger::debug("Creating buffers...");
 	{
@@ -608,6 +630,59 @@ void ColorGrading::SetupResources()
 			.MaxLOD = D3D11_FLOAT32_MAX
 		};
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, linearSampler.put()));
+	}
+
+	// Curve preview textures: 256x1 ramp for GPU-based curve evaluation
+	{
+		D3D11_TEXTURE2D_DESC curveTexDesc = {
+			.Width = CurveSamples,
+			.Height = 1,
+			.MipLevels = 1,
+			.ArraySize = 1,
+			.Format = DXGI_FORMAT_R16G16B16A16_FLOAT,
+			.SampleDesc = { .Count = 1 },
+			.Usage = D3D11_USAGE_DEFAULT,
+			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
+		};
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC curveSrvDesc = {
+			.Format = curveTexDesc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+		};
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC curveUavDesc = {
+			.Format = curveTexDesc.Format,
+			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MipSlice = 0 }
+		};
+
+		texCurveInput = eastl::make_unique<Texture2D>(curveTexDesc);
+		texCurveInput->CreateSRV(curveSrvDesc);
+
+		texCurveOutput = eastl::make_unique<Texture2D>(curveTexDesc);
+		texCurveOutput->CreateSRV(curveSrvDesc);
+		texCurveOutput->CreateUAV(curveUavDesc);
+
+		// Fill input with linear ramp [0, CurveMaxInput] in R=G=B
+		std::array<DirectX::PackedVector::XMHALF4, CurveSamples> rampData;
+		for (int i = 0; i < CurveSamples; i++) {
+			float v = (float)i / (float)(CurveSamples - 1) * CurveMaxInput;
+			rampData[i] = {
+				DirectX::PackedVector::XMConvertFloatToHalf(v),
+				DirectX::PackedVector::XMConvertFloatToHalf(v),
+				DirectX::PackedVector::XMConvertFloatToHalf(v),
+				DirectX::PackedVector::XMConvertFloatToHalf(1.f)
+			};
+		}
+		context->UpdateSubresource(texCurveInput->resource.get(), 0, nullptr, rampData.data(), CurveSamples * sizeof(DirectX::PackedVector::XMHALF4), 0);
+
+		// Staging texture for readback
+		D3D11_TEXTURE2D_DESC stagingDesc = curveTexDesc;
+		stagingDesc.Usage = D3D11_USAGE_STAGING;
+		stagingDesc.BindFlags = 0;
+		stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+		device->CreateTexture2D(&stagingDesc, nullptr, curveStaging.put());
 	}
 
 	CompileComputeShaders();
@@ -696,7 +771,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 
 	// Always compute XYZ matrices for white balance
 	{
-		auto& spaces = getAvailableColourSpaces();
+		auto& spaces = getAvailableColorSpaces();
 		int wsIdx = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
 		auto storeMatrix = [](const DirectX::SimpleMath::Matrix& mat, std::array<float3, 3>& out) {
 			out = {
@@ -729,7 +804,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		.workingToXYZ = { float4{ workingToXYZMatrix[0].x, workingToXYZMatrix[0].y, workingToXYZMatrix[0].z, 0.f }, float4{ workingToXYZMatrix[1].x, workingToXYZMatrix[1].y, workingToXYZMatrix[1].z, 0.f }, float4{ workingToXYZMatrix[2].x, workingToXYZMatrix[2].y, workingToXYZMatrix[2].z, 0.f } },
 		.xyzToWorking = { float4{ xyzToWorkingMatrix[0].x, xyzToWorkingMatrix[0].y, xyzToWorkingMatrix[0].z, 0.f }, float4{ xyzToWorkingMatrix[1].x, xyzToWorkingMatrix[1].y, xyzToWorkingMatrix[1].z, 0.f }, float4{ xyzToWorkingMatrix[2].x, xyzToWorkingMatrix[2].y, xyzToWorkingMatrix[2].z, 0.f } },
 		.workingWhitePoint = [&]() {
-			auto& spaces = getAvailableColourSpaces();
+			auto& spaces = getAvailableColorSpaces();
 			int wsIdx = std::clamp(settings.processColorSpace, 0, static_cast<int>(spaces.size()) - 1);
 			auto wp = getWhitePoint(spaces[wsIdx]);
 			return float4{ wp.x, wp.y, 0.f, 0.f }; }(),
@@ -800,6 +875,49 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	}
 
 	inout_tex = { texColor->resource.get(), texColor->srv.get() };
+
+	// Debug: evaluate color grading pipeline on a neutral ramp for curve preview
+	if (curveReadbackRequested && texCurveInput && texCurveOutput && colorgradingCS) {
+		// Re-bind CB and samplers for the curve dispatch
+		ID3D11Buffer* curveCB = colorCB->CB();
+		std::array<ID3D11SamplerState*, 1> curveSamplers = { linearSampler.get() };
+		context->CSSetConstantBuffers(1, 1, &curveCB);
+		context->CSSetSamplers(0, 1, curveSamplers.data());
+
+		// Dispatch colorgradingCS on the 256x1 ramp input (same CB, same LUT)
+		std::array<ID3D11ShaderResourceView*, 2> curveSRVs = { texCurveInput->srv.get(), texLUT ? texLUT->srv.get() : nullptr };
+		ID3D11UnorderedAccessView* curveUAV = texCurveOutput->uav.get();
+
+		context->CSSetShaderResources(0, (UINT)(settings.skipLUT ? 1 : 2), curveSRVs.data());
+		context->CSSetUnorderedAccessViews(0, 1, &curveUAV, nullptr);
+		context->CSSetShader(colorgradingCS.get(), nullptr, 0);
+
+		context->Dispatch((CurveSamples + 7) >> 3, 1, 1);
+
+		// Clean up
+		curveUAV = nullptr;
+		curveSRVs.fill(nullptr);
+		curveCB = nullptr;
+		context->CSSetUnorderedAccessViews(0, 1, &curveUAV, nullptr);
+		context->CSSetShaderResources(0, 2, curveSRVs.data());
+		context->CSSetConstantBuffers(1, 1, &curveCB);
+		context->CSSetShader(nullptr, nullptr, 0);
+
+		// Readback
+		if (curveStaging) {
+			context->CopyResource(curveStaging.get(), texCurveOutput->resource.get());
+			D3D11_MAPPED_SUBRESOURCE mapped{};
+			if (SUCCEEDED(context->Map(curveStaging.get(), 0, D3D11_MAP_READ, 0, &mapped))) {
+				auto* pixels = reinterpret_cast<const uint16_t*>(mapped.pData);
+				for (int i = 0; i < CurveSamples; i++) {
+					curveR[i] = DirectX::PackedVector::XMConvertHalfToFloat(pixels[i * 4 + 0]);
+					curveG[i] = DirectX::PackedVector::XMConvertHalfToFloat(pixels[i * 4 + 1]);
+					curveB[i] = DirectX::PackedVector::XMConvertHalfToFloat(pixels[i * 4 + 2]);
+				}
+				context->Unmap(curveStaging.get(), 0);
+			}
+		}
+	}
 
 	state->EndPerfEvent();
 }

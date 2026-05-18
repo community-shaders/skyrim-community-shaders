@@ -166,4 +166,15 @@ struct ColorGrading : public PostProcessFeature
 	void UpdateColorSpaceTransforms(bool hdrEnabled = false);
 
 	void OutputTextures();
+
+	// Debug: tonemapping curve via GPU evaluation
+	static constexpr int CurveSamples = 256;
+	static constexpr float CurveMaxInput = 4.f;
+	eastl::unique_ptr<Texture2D> texCurveInput = nullptr;   // 256x1 RGBA16F ramp (0-4 linear)
+	eastl::unique_ptr<Texture2D> texCurveOutput = nullptr;  // 256x1 RGBA16F result
+	winrt::com_ptr<ID3D11Texture2D> curveStaging = nullptr;
+	std::array<float, CurveSamples> curveR = {};
+	std::array<float, CurveSamples> curveG = {};
+	std::array<float, CurveSamples> curveB = {};
+	bool curveReadbackRequested = false;
 };

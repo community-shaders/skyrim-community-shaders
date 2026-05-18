@@ -45,6 +45,61 @@ void HistogramAutoExposure::DrawSettings()
 
 		ImGui::TreePop();
 	}
+
+	// Debug: Histogram visualization
+	if (ImGui::CollapsingHeader("Debug")) {
+		debugReadbackRequested = true;
+
+		// Show current adaptation value as EV
+		float currentEV = (adaptationValue > 0.f) ? log2(adaptationValue) : -20.f;
+		ImGui::Text("Current Adaptation: %.3f (%.2f EV)", adaptationValue, currentEV);
+
+		// Histogram plot
+		// The histogram covers a log-luminance range of approximately [-8, 13] EV (256 bins)
+		constexpr float kMinLogLum = -8.f;
+		constexpr float kMaxLogLum = 13.f;
+
+		// Convert uint histogram to float for ImGui
+		float histogramFloat[256];
+		float maxBin = 1.f;
+		for (int i = 0; i < 256; i++) {
+			histogramFloat[i] = (float)histogramData[i];
+			if (histogramFloat[i] > maxBin)
+				maxBin = histogramFloat[i];
+		}
+
+		ImGui::Text("Luminance Histogram (%.0f - %.0f EV)", kMinLogLum, kMaxLogLum);
+		ImGui::PlotHistogram("##histogram", histogramFloat, 256, 0, nullptr, 0.f, maxBin, ImVec2(ImGui::GetContentRegionAvail().x, 120));
+
+		// Draw adaptation range markers below the histogram
+		{
+			float rangeMinNorm = (settings.AdaptationRange.x - kMinLogLum) / (kMaxLogLum - kMinLogLum);
+			float rangeMaxNorm = (settings.AdaptationRange.y - kMinLogLum) / (kMaxLogLum - kMinLogLum);
+			float currentNorm = (currentEV - kMinLogLum) / (kMaxLogLum - kMinLogLum);
+
+			float plotWidth = ImGui::GetContentRegionAvail().x;
+			ImVec2 plotPos = ImGui::GetCursorScreenPos();
+
+			auto* drawList = ImGui::GetWindowDrawList();
+
+			// Adaptation range lines (yellow)
+			float xMin = plotPos.x + rangeMinNorm * plotWidth;
+			float xMax = plotPos.x + rangeMaxNorm * plotWidth;
+			drawList->AddLine(ImVec2(xMin, plotPos.y), ImVec2(xMin, plotPos.y + 16), IM_COL32(255, 200, 0, 255), 2.f);
+			drawList->AddLine(ImVec2(xMax, plotPos.y), ImVec2(xMax, plotPos.y + 16), IM_COL32(255, 200, 0, 255), 2.f);
+
+			// Current adaptation line (green)
+			float xCur = plotPos.x + currentNorm * plotWidth;
+			drawList->AddLine(ImVec2(xCur, plotPos.y), ImVec2(xCur, plotPos.y + 16), IM_COL32(0, 255, 0, 255), 2.f);
+
+			ImGui::Dummy(ImVec2(plotWidth, 20));
+			ImGui::TextColored(ImVec4(0, 1, 0, 1), "Green: Current EV");
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(1, 0.8f, 0, 1), "Yellow: Adaptation Range");
+		}
+	} else {
+		debugReadbackRequested = false;
+	}
 }
 
 void HistogramAutoExposure::RestoreDefaultSettings()
@@ -74,6 +129,19 @@ void HistogramAutoExposure::SetupResources()
 		adaptationSB = std::make_unique<StructuredBuffer>(StructuredBufferDesc<float>(1u, false), 1);
 		adaptationSB->CreateSRV();
 		adaptationSB->CreateUAV();
+	}
+
+	// Create staging buffers for debug readback
+	{
+		auto device = globals::d3d::device;
+
+		D3D11_BUFFER_DESC stagingDesc{};
+		stagingDesc.ByteWidth = sizeof(uint32_t) * 256;
+		stagingDesc.Usage = D3D11_USAGE_STAGING;
+		stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+		stagingDesc.StructureByteStride = sizeof(uint32_t);
+		stagingDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		device->CreateBuffer(&stagingDesc, nullptr, histogramStagingBuffer.put());
 	}
 
 	CompileComputeShaders();
@@ -193,4 +261,42 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 	// The adaptation result is stored in adaptationSB and will be consumed
 	// by the Composite pass which applies exposure before color grading.
 	state->EndPerfEvent();
+
+	// Debug readback: copy histogram and adaptation data to CPU when debug panel is open
+	if (debugReadbackRequested && histogramStagingBuffer) {
+		// Get underlying resource from the UAV
+		ID3D11Resource* histResource = nullptr;
+		histogramSB->UAV()->GetResource(&histResource);
+		context->CopyResource(histogramStagingBuffer.get(), histResource);
+		histResource->Release();
+
+		D3D11_MAPPED_SUBRESOURCE mapped{};
+		if (SUCCEEDED(context->Map(histogramStagingBuffer.get(), 0, D3D11_MAP_READ, 0, &mapped))) {
+			memcpy(histogramData.data(), mapped.pData, sizeof(uint32_t) * 256);
+			context->Unmap(histogramStagingBuffer.get(), 0);
+		}
+
+		// Read adaptation value via a small staging buffer
+		D3D11_BUFFER_DESC adaptDesc{};
+		adaptDesc.ByteWidth = sizeof(float);
+		adaptDesc.Usage = D3D11_USAGE_STAGING;
+		adaptDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+		adaptDesc.StructureByteStride = sizeof(float);
+		adaptDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+
+		winrt::com_ptr<ID3D11Buffer> adaptStaging;
+		auto device = globals::d3d::device;
+		if (SUCCEEDED(device->CreateBuffer(&adaptDesc, nullptr, adaptStaging.put()))) {
+			ID3D11Resource* adaptResource = nullptr;
+			adaptationSB->SRV()->GetResource(&adaptResource);
+			context->CopyResource(adaptStaging.get(), adaptResource);
+			adaptResource->Release();
+
+			D3D11_MAPPED_SUBRESOURCE adaptMapped{};
+			if (SUCCEEDED(context->Map(adaptStaging.get(), 0, D3D11_MAP_READ, 0, &adaptMapped))) {
+				adaptationValue = *reinterpret_cast<float*>(adaptMapped.pData);
+				context->Unmap(adaptStaging.get(), 0);
+			}
+		}
+	}
 }
