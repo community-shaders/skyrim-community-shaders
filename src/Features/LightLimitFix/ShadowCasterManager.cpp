@@ -2405,14 +2405,17 @@ namespace ShadowCasterManager
 					if (convertOrDisable(c.light, /*allowConvert=*/c.invalidCamera)) {
 						s_schedDiag.converted_invalid++;
 						// UpdateCamera zeros lodDimmer alongside frustrumCull
-						// when LOD fade fires. The cluster lighting builder
-						// multiplies light.fade by lodDimmer and drops the
-						// light if the product falls below 1e-4. Restore
-						// lodDimmer to 1 so the converted light contributes
-						// its full non-shadow diffuse; the engine resets it
-						// next frame if still LOD-faded, and we restore
-						// again -- self-correcting as the camera moves.
-						c.light->lodDimmer = 1.0f;
+						// when its shadow-distance LOD cull fires. The
+						// cluster lighting builder multiplies light.fade by
+						// lodDimmer and drops the light if the product falls
+						// below 1e-4. Restore only when fully zeroed -- any
+						// smooth fade value the engine set is preserved so
+						// the cluster contribution fades gradually rather
+						// than snapping to full intensity. Matches the
+						// per-frame restore in LightLimitFix::UpdateLights
+						// for already-converted lights.
+						if (c.light->lodDimmer == 0.0f)
+							c.light->lodDimmer = 1.0f;
 					} else {
 						s_schedDiag.disabled_invalid++;
 					}
@@ -3442,13 +3445,22 @@ namespace ShadowCasterManager
 		}
 
 		// ---- Light conversion ------------------------------------------------
-		//   - IsShadowLight vtable slot 3: when ConvertExcessToNormal
-		//   - RemoveLight hook: when ConvertExcessToNormal || PromoteNormalToShadow
-		//   - AddLight hook: always (portal-strict is unconditional; also handles PromoteNormalToShadow)
-		//   - SetLight hook: when PromoteNormalToShadow
+		// All conversion-related hooks install unconditionally when SCM is
+		// enabled. Their runtime behaviour is gated by the relevant settings
+		// (s_settings.ConvertExcessToNormal, s_settings.PromoteNormalToShadow)
+		// and by container membership (s_normalConvert, s_shadowConvert) --
+		// so when the user has both flags false at boot the hooks fire but
+		// are no-ops. Installing them unconditionally means toggling the
+		// settings on at runtime takes effect immediately rather than
+		// silently doing nothing (the prior boot-time gating left the
+		// vtable patch and SetLight/RemoveLight hooks uninstalled if the
+		// flags were false at Init time, so a later toggle-on couldn't
+		// observe new conversions properly).
 
-		if (settings.ConvertExcessToNormal || settings.PromoteNormalToShadow) {
+		{
 			// BSShadowLight vtable slot 3 = IsShadowLight; replace on all 4 shadow light types.
+			// Reads s_normalConvert membership -- empty when ConvertExcessToNormal
+			// off, so the hook returns vanilla truth for every light.
 			REL::Relocation<uintptr_t> vtbl1{ RE::BSShadowLight::VTABLE[0] };
 			vtbl1.write_vfunc(3, Hook_IsShadowLight);
 			REL::Relocation<uintptr_t> vtbl2{ RE::BSShadowDirectionalLight::VTABLE[0] };
@@ -3459,8 +3471,10 @@ namespace ShadowCasterManager
 			vtbl4.write_vfunc(3, Hook_IsShadowLight);
 		}
 
-		if (settings.ConvertExcessToNormal || settings.PromoteNormalToShadow) {
-			// ShadowSceneNode::RemoveLight -- fires at +0x9 (SE: 6 bytes, AE: 5 bytes)
+		{
+			// ShadowSceneNode::RemoveLight -- fires at +0x9 (SE: 6 bytes, AE: 5 bytes).
+			// Drains s_normalConvert / s_shadowConvert entries for the removed light.
+			// No-op when both containers are empty.
 			static REL::RelocationID uid(99697, 106331);
 			int sz = REL::Relocate(6, 5, 6);
 			if (!SKSE::stl::install_context_hook(uid.address() + REL::Relocate(0x9, 0x9, 0x9), sz, Hook_ConvertLights_Remove, sz))
@@ -3468,14 +3482,18 @@ namespace ShadowCasterManager
 		}
 
 		{
-			// ShadowSceneNode::AddLight -- at function start (5 bytes)
+			// ShadowSceneNode::AddLight -- at function start (5 bytes).
+			// Applies portal-strict per type (always) and PromoteNormalToShadow
+			// flag mutation (when enabled).
 			static REL::RelocationID uid(99692, 106326);
 			if (!SKSE::stl::install_context_hook(uid.address(), 5, Hook_ConvertLights_Add, 5))
 				logger::error("[SCM] Failed to install Hook_ConvertLights_Add");
 		}
 
-		if (settings.PromoteNormalToShadow) {
-			// BSLight::SetLight -- at function start (5 bytes)
+		{
+			// BSLight::SetLight -- at function start (5 bytes).
+			// Tracks NiLight* reassignments for s_shadowConvert. No-op when
+			// PromoteNormalToShadow is off (s_shadowConvert is empty).
 			static REL::RelocationID uid(101302, 108289);
 			if (!SKSE::stl::install_context_hook(uid.address(), 5, Hook_ConvertLights_SetLight, 5))
 				logger::error("[SCM] Failed to install Hook_ConvertLights_SetLight");

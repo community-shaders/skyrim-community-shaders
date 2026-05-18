@@ -634,16 +634,21 @@ void LightLimitFix::UpdateLights()
 		// rendering as a shadow caster or demoted to non-shadow.
 		if (ShadowCasterManager::IsSuppressed(reinterpret_cast<uintptr_t>(light)))
 			return;
-		// Engine sets lodDimmer=0 on LOD-faded shadow casters so they cull
-		// from the vanilla shadow path; the cluster builder then multiplies
-		// light.fade by lodDimmer (line ~497) and drops the light at the
-		// fade > 1e-4 filter, leaving it completely dark. Converted lights
-		// are explicitly demoted to non-shadow contributors -- they should
-		// always be visible at full intensity in the cluster pipeline. The
-		// per-frame restore in SCM's atomic loop only catches the first
-		// conversion frame; on subsequent frames the light isn't in the
-		// candidates list anymore, so we restore here at the point of use.
-		light->lodDimmer = 1.0f;
+		// Engine zeroes lodDimmer when its shadow-distance LOD cull fires
+		// (BSShadowParabolicLight_UpdateCamera test 2, gated on the lodFade
+		// flag -- not a visibility test, see ShadowCasterManager.cpp's
+		// Ghidra-verified comment). Without restoration, addLight()'s
+		// `light.fade *= lodDimmer` would zero the contribution and the
+		// (color*fade > 1e-4) filter would drop the light entirely.
+		//
+		// Restore only when fully zeroed. Any smooth fade value the engine
+		// set (between 0 and 1) is preserved -- those represent the engine's
+		// own gradual distance attenuation, which is correct to honour for
+		// cluster lighting. Overriding unconditionally was producing
+		// distant always-full-bright converted lights that ignored the
+		// engine's intended fade-with-distance.
+		if (light->lodDimmer == 0.0f)
+			light->lodDimmer = 1.0f;
 		addLight(RE::NiPointer<RE::BSLight>(asBs));
 	});
 
