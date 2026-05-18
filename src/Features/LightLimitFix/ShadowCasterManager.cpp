@@ -3253,6 +3253,16 @@ namespace ShadowCasterManager
 		s_shadowResolutionDirty = false;
 	}
 
+	// Boot-time value of settings.Enabled, captured once in Install() and
+	// never modified afterwards. The ImGui "Restart required" label
+	// compares the user's current setting against this rather than the
+	// (mutable) s_settings.Enabled, so the label persists across Save
+	// Settings clicks until the user actually restarts. Without this the
+	// label vanished the moment they saved -- s_settings would catch up
+	// to the new value and the !=-against-staged condition cleared.
+	static bool s_bootEnabled = false;
+	static bool s_bootEnabledCaptured = false;
+
 	void Install(const Settings& settings)
 	{
 		s_settings = settings;
@@ -3262,6 +3272,13 @@ namespace ShadowCasterManager
 		// here). So the engine allocates exactly ShadowLightCount slices
 		// in kSHADOWMAPS; no +1 for the sun.
 		s_requestedSlotCount = static_cast<uint32_t>(settings.ShadowLightCount);
+
+		// One-shot capture of the boot Enabled value. Install() is called
+		// once at startup, but guard anyway in case it's ever re-invoked.
+		if (!s_bootEnabledCaptured) {
+			s_bootEnabled = settings.Enabled;
+			s_bootEnabledCaptured = true;
+		}
 
 		if (s_externalConflict)
 			return;
@@ -4639,10 +4656,16 @@ namespace ShadowCasterManager
 		// color-mask pass. Vanilla scheduling cannot run on top of those
 		// (verified by AV in BSShadowDirectionalLight processing during a
 		// runtime-disable test, 2026-05-17 crash logs).
-		if (settings.Enabled != s_settings.Enabled) {
+		//
+		// Compare the user's current value against the BOOT value, not
+		// against s_settings -- s_settings updates when the user saves,
+		// so a stale comparison against s_settings would hide the label
+		// the instant the user clicked Save Settings, leaving them with
+		// no indication that their change won't apply until restart.
+		if (s_bootEnabledCaptured && settings.Enabled != s_bootEnabled) {
 			const auto& theme = Menu::GetSingleton()->GetTheme();
 			ImGui::TextColored(theme.StatusPalette.RestartNeeded,
-				"Restart required -- currently %s.", s_settings.Enabled ? "enabled" : "disabled");
+				"Restart required -- this session is %s.", s_bootEnabled ? "enabled" : "disabled");
 		}
 
 		if (!settings.Enabled)
