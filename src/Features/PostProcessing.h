@@ -70,10 +70,10 @@ struct PostProcessing : Feature
 
 	enum class FeaturePipelineIndex : size_t
 	{
+		DoF,
 		LocalExposure,
 		AutoExposure,
 		MotionBlur,
-		DoF,
 		PhysicalGlare,
 		CODBloom,
 		LensFlare,
