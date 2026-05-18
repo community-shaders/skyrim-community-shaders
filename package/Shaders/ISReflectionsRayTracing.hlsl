@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/MotionBlur.hlsli"
@@ -114,7 +115,7 @@ float4 GetReflectionColor(
 				uint finalEyeIndex;
 				Stereo::ResolveMonoUVForEye(float3(binaryRaySample.xy, iterationDepth), eyeIndex, finalSampleUV, finalEyeIndex);
 
-				float3 color = ColorTex.SampleLevel(ColorSampler, ConvertRaySample(finalSampleUV, finalEyeIndex), 0).xyz;
+				float3 color = Color::IrradianceToLinear(ColorTex.SampleLevel(ColorSampler, ConvertRaySample(finalSampleUV, finalEyeIndex), 0).xyz);
 
 				// Final sample to world-space
 				float4 positionWS = float4(float2(finalSampleUV.x, 1.0 - finalSampleUV.y) * 2.0 - 1.0, iterationDepth, 1.0);
@@ -131,9 +132,9 @@ float4 GetReflectionColor(
 
 				// Check that the reprojected data is within the frame
 				if (!FrameBuffer::IsOutsideFrame(reprojectedRaySample.xy))
-					alpha = float4(AlphaTex.SampleLevel(AlphaSampler, ConvertRaySamplePrevious(reprojectedRaySample.xy, finalEyeIndex), 0).xyz, 1.0);
+					alpha = float4(Color::IrradianceToLinear(AlphaTex.SampleLevel(AlphaSampler, ConvertRaySamplePrevious(reprojectedRaySample.xy, finalEyeIndex), 0).xyz), 1.0);
 
-				float3 reflectionColor = color + SSRParams.z * alpha.xyz * alpha.w;
+				float3 reflectionColor = Color::IrradianceToGamma(color + SSRParams.z * alpha.xyz * alpha.w);
 				return float4(reflectionColor, fadeFactor);
 			}
 
