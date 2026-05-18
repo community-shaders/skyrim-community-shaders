@@ -354,9 +354,7 @@ struct PS_OUTPUT
 	float4 NormalGlossiness: SV_Target2;
 	float4 Albedo: SV_Target3;
 	float4 Specular: SV_Target4;
-#		if defined(TRUE_PBR)
 	float4 Reflectance: SV_Target5;
-#		endif  // TRUE_PBR
 	float4 Masks: SV_Target6;
 #		if defined(TRUE_PBR)
 	float4 Parameters: SV_Target7;
@@ -555,6 +553,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		baseColor.xyz *= SharedData::grassLightingSettings.BasicGrassBrightness;
 #			endif  // !TRUE_PBR
 
+#			if defined(VANILLA_FRESNEL)
+	const bool enableVanillaFresnel = SharedData::vanillaFresnelSettings.Enable;
+	float3 F0 = enableVanillaFresnel ? max(SharedData::vanillaFresnelSettings.MinF0, saturate(specColor.w * SharedData::grassLightingSettings.SpecularStrength * SharedData::vanillaFresnelSettings.BaseF0Multiplier / Math::PI)) : 0.0;
+#			else
+	float3 F0 = 0.0;
+#			endif
+	float roughness = saturate(1.0 - SharedData::grassLightingSettings.Glossiness * 0.01);
+
 #			if defined(TRUE_PBR)
 	float4 rawRMAOS = TexRMAOSSampler.SampleBias(SampRMAOSSampler, input.TexCoord.xy, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.y);
 
@@ -650,7 +656,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 subsurfaceColor = dirLightColor * dirDetailedShadow * (GetSoftLightMultiplier(dirLightAngle, softLightRolloff)) * Color::VanillaNormalization();
 
 	if (complex)
-		lightsSpecularColor += dirDetailedShadow * GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
+		lightsSpecularColor += dirDetailedShadow * GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, roughness, F0) * Color::VanillaNormalization();
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX)
@@ -716,7 +722,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				lightsDiffuseColor += lightDiffuseColor * Color::VanillaNormalization();
 
 				if (complex)
-					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
+					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, roughness, F0) * Color::VanillaNormalization();
 #				endif
 			}
 		}
@@ -763,7 +769,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif
 
 	specularColor += lightsSpecularColor;
-	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
+#				if defined(VANILLA_FRESNEL)
+	if (!(SharedData::vanillaFresnelSettings.Enable && SharedData::vanillaFresnelSettings.EnableGGXOnGrass))
+#				endif
+		specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
@@ -787,10 +796,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Albedo = float4(Color::IrradianceToGamma(indirectDiffuseLobeWeight), 1);
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(normalVS), 1 - pbrSurfaceProperties.Roughness, 1);
 	psout.Reflectance = float4(indirectSpecularLobeWeight, 1);
-	psout.Parameters = float4(0, 0, 1, 1);
 #			else
+
+	float3 reflectance = 0;
+#				if defined(DYNAMIC_CUBEMAPS) && (defined(VANILLA_FRESNEL) || defined(TRUE_PBR))
+#					if defined(VANILLA_FRESNEL)
+	if (SharedData::vanillaFresnelSettings.Enable) {
+#					endif
+		float2 specularBDRF = BRDF::EnvBRDF(roughness, saturate(dot(viewDirection, normal)));
+		reflectance = F0 * specularBDRF.x + specularBDRF.y;
+#					if defined(VANILLA_FRESNEL)
+	}
+#					endif
+#				endif
+
+	psout.Reflectance = float4(reflectance, 1);
 	psout.Albedo = float4(albedo, 1);
-	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(normalVS), specColor.w, 1);
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(normalVS), 1.0 - roughness, 1);
 #			endif
 
 	psout.Specular = float4(specularColor, 1);

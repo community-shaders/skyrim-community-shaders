@@ -95,6 +95,25 @@ float3 VanillaSpecular(DirectContext context, float shininess, float2 uv, float2
 	return lightColorMultiplier;
 }
 
+float3 MicrofacetSpecular(DirectContext context, float3 F0, float roughness)
+{
+	const float3 N = context.worldNormal;
+	const float3 V = context.viewDir;
+	const float3 L = context.lightDir;
+	const float3 H = context.halfVector;
+
+	float NdotL = clamp(dot(N, L), EPSILON_DOT_CLAMP, 1);
+	float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
+	float NdotH = saturate(dot(N, H));
+	float VdotH = saturate(dot(V, H));
+
+	float D = BRDF::D_GGX(roughness, NdotH);
+	float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
+	float3 F = BRDF::F_Schlick(F0, VdotH);
+
+	return D * G * F * NdotL;
+}
+
 void EvaluateLighting(DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv, float2 uv_ddx, float2 uv_ddy, out DirectLightingOutput lightingOutput)
 {
 	lightingOutput = (DirectLightingOutput)0;
@@ -122,6 +141,17 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 #	if defined(BACK_LIGHTING)
 	lightingOutput.diffuse += softLightColor * saturate(-NdotL) * material.backLightColor * Color::VanillaNormalization();
 #	endif
+
+#	if defined(VANILLA_FRESNEL)
+	if (SharedData::vanillaFresnelSettings.Enable && SharedData::vanillaFresnelSettings.EnableGGX) {
+		lightingOutput.specular = diffuseLightColor * MicrofacetSpecular(context, material.F0, material.Roughness) * Color::PBRLightingCompensation * Color::PBRLightingScale;
+
+		float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, saturate(dot(context.worldNormal, context.viewDir)));
+		lightingOutput.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+		return;
+	}
+#	endif
+
 	lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv, uv_ddx, uv_ddy) * material.SpecularColor * material.Glossiness * diffuseLightColor * Color::VanillaNormalization();
 #endif
 }
