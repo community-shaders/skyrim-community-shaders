@@ -834,9 +834,9 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	colorCB->Update(colorCBData);
 
 	// Check if curve needs update (CB changed = settings changed)
-	if (memcmp(&colorCBData, &prevCurveCB, sizeof(ColorCB)) != 0) {
+	if (memcmp(&colorCBData, prevCurveCB.data(), sizeof(ColorCB)) != 0) {
 		curveNeedsUpdate = true;
-		prevCurveCB = colorCBData;
+		memcpy(prevCurveCB.data(), &colorCBData, sizeof(ColorCB));
 	}
 
 	ID3D11Buffer* cb = colorCB->CB();
