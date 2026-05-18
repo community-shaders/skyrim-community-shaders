@@ -217,6 +217,26 @@ namespace DisplayMapping
 
 #endif
 
+	// AdvancedAutoHDR pass to generate some HDR brightness out of an SDR signal.
+	// https://github.com/Filoppi/PumboAutoHDR
+	float3 PumboAutoHDR(float3 SDRColor, float MaxPeakWhiteNits, float PaperWhiteNits, float ShoulderPow = 2.75f, float SaturationExpansionIntensity = 0.2f)
+	{
+		float SDRRatio = average(SDRColor);
+
+		float AutoHDRMaxWhite = max(min(MaxPeakWhiteNits / sRGB_WhiteLevelNits, 500 / PaperWhiteNits), 1.f);
+
+		float AutoHDRExtraRatio = pow(saturate(SDRRatio), ShoulderPow) * (AutoHDRMaxWhite - 1.f);
+		float AutoHDRTotalRatio = SDRRatio + AutoHDRExtraRatio;
+		float SingleColorScale = safeDivision(AutoHDRTotalRatio, SDRRatio, 1);
+
+		float3 SDRRatio3 = SDRColor;
+		float3 AutoHDRExtraRatio3 = pow(saturate(SDRRatio3), ShoulderPow) * (AutoHDRMaxWhite - 1.f);
+		float3 AutoHDRTotalRatio3 = SDRRatio3 + AutoHDRExtraRatio3;
+		float3 PerChannelColorScale = safeDivision(AutoHDRTotalRatio3, SDRRatio3, 1);
+
+		return SDRColor * lerp(SingleColorScale, PerChannelColorScale, SaturationExpansionIntensity);
+	}
+
 }  // namespace DisplayMapping
 
 #endif  // __DISPLAY_MAPPING_DEPENDENCY_HLSL__

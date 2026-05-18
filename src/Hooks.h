@@ -19,6 +19,12 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct Sky_UpdateColors
+	{
+		static void thunk(RE::Sky* sky, float a_delta);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	void Install();
 	void InstallEarlyHooks();
 }

@@ -1,0 +1,11 @@
+[
+	{
+		"file": "enbeffect.fx",
+		"patches": [
+			{
+				"find": "lerp( TOD(a), a##_Interior, EInteriorFactor )",
+				"replace": "(EInteriorFactor ? a##_Interior : TOD(a))"
+			}
+		]
+	}
+]

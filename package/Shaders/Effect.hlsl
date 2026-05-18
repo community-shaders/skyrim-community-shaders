@@ -11,6 +11,13 @@
 
 #define EFFECT
 
+#if defined(SOFT) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(VC) && \
+    !defined(LIGHTING) && !defined(PARTICLES) && !defined(STRIP_PARTICLES) &&                    \
+    !defined(BLOOD) && !defined(MEMBRANE) && !defined(ADDBLEND) && !defined(MULTBLEND) &&        \
+    !defined(MULTBLEND_DECAL) && !defined(ALPHA_TEST) && !defined(DEFERRED) && !defined(SKINNED)
+#	define IS_VOLUMETRIC_FOG
+#endif
+
 #if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
 #	undef IBL
 #endif
@@ -556,6 +563,11 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 #		endif
 
+	if (SharedData::enbSettings.Enable) {
+		dirColor *= SharedData::enbSettings.ParticleLightingInfluence;
+		ambientColor *= SharedData::enbSettings.ParticleAmbientInfluence;
+	}
+
 	float3 viewDirection = normalize(worldPosition.xyz);
 
 	float unusedSurfaceShadow;
@@ -590,9 +602,10 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	{
 		float4 lightDistanceSquared = (PLightPositionX[eyeIndex] - msPosition.xxxx) * (PLightPositionX[eyeIndex] - msPosition.xxxx) + (PLightPositionY[eyeIndex] - msPosition.yyyy) * (PLightPositionY[eyeIndex] - msPosition.yyyy) + (PLightPositionZ[eyeIndex] - msPosition.zzzz) * (PLightPositionZ[eyeIndex] - msPosition.zzzz);
 		float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
-		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
-		color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
-		color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
+		float pointScale = SharedData::enbSettings.Enable ? SharedData::enbSettings.ParticlePointLightingInfluence : 1.0;
+		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx) * pointScale;
+		color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx) * pointScale;
+		color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx) * pointScale;
 	}
 
 	return color;
@@ -710,6 +723,11 @@ PS_OUTPUT main(PS_INPUT input)
 	float lightingInfluence = LightingInfluence.x;
 	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 	float shadowVariance = 1.0;
+
+#	if !defined(IS_VOLUMETRIC_FOG)
+	if (SharedData::enbSettings.Enable && !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject))
+		propertyColor *= SharedData::enbSettings.ParticleIntensity;
+#	endif
 
 #	if defined(LIGHTING)
 	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, eyeIndex, shadowVariance);
@@ -838,9 +856,8 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
-#	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
-	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
-		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, eyeIndex, shadowVariance);
+#	if defined(IS_VOLUMETRIC_FOG)
+	lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, eyeIndex, shadowVariance);
 #	endif
 
 	lightColor = Color::EffectMult(lightColor);
@@ -875,6 +892,8 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(ADDBLEND)
 #			if defined(EXP_HEIGHT_FOG)
 	float3 blendedColor = lightColor * (1 - vanillaFogFactor) * (1 - expFogFactor);
+	if (SharedData::enbSettings.Enable)
+		blendedColor *= SharedData::enbSettings.LightSpriteIntensity;
 #			else
 	float3 blendedColor = lightColor * (1 - fogFactor);
 #			endif
@@ -895,7 +914,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	else
 	float3 blendedColor = lightColor.xyz;
 #	endif
-
+    
 	alpha = Color::EffectAlpha(alpha);
 
 	float4 finalColor = float4(blendedColor, alpha);
@@ -936,7 +955,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
 #		else
-	psout.Albedo = float4(0, 0, 0, finalColor.w);
+	psout.Albedo = float4(psout.Diffuse.xyz * !(Permutation::VertexShaderDescriptor & Permutation::EffectFlags::SkyObject), finalColor.w);
 	psout.Specular = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);

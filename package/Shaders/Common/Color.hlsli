@@ -2,7 +2,9 @@
 #define __COLOR_DEPENDENCY_HLSL__
 
 #include "Common/Math.hlsli"
-#include "Common/SharedData.hlsli"
+#ifndef UNIT_TEST
+#	include "Common/SharedData.hlsli"
+#endif
 
 #define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
 
@@ -197,6 +199,9 @@ namespace Color
 
 	float3 Diffuse(float3 color)
 	{
+		if (SharedData::enbSettings.Enable)
+			color = pow(abs(color), SharedData::enbSettings.ColorPow);
+
 #	if defined(TRUE_PBR)
 		return ENABLE_LL ? color : LinearToSrgb(color);
 #	else

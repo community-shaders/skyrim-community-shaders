@@ -1,5 +1,7 @@
 #include "ExponentialHeightFog.h"
 
+#include "Effect11.h"
+#include "Effect11/SettingManager.h"
 #include "WeatherVariableRegistry.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -35,8 +37,30 @@ void ExponentialHeightFog::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
+ExponentialHeightFog::Settings ExponentialHeightFog::GetCommonBufferData() const
+{
+	Settings data = settings;
+
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
+		if (enb.enableEffect) {
+			data.enabled = 0;
+		}
+	}
+
+	return data;
+}
+
 void ExponentialHeightFog::DrawSettings()
 {
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
+		if (enb.enableEffect) {
+			ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Settings are currently managed by ENB.");
+			return;
+		}
+	}
+
 	ImGui::Checkbox("Enable Exponential Height Fog", (bool*)&settings.enabled);
 	Util::WeatherUI::SliderFloat("Start Distance", this, "startDistance", &settings.startDistance, 0.0f, 100000.0f, "%.1f");
 	Util::WeatherUI::SliderFloat("Fog Height", this, "fogHeight", &settings.fogHeight, -22000.0f, 22000.0f, "%.1f");
@@ -68,6 +92,13 @@ void ExponentialHeightFog::DrawSettings()
 
 void ExponentialHeightFog::RegisterWeatherVariables()
 {
+	if (globals::features::effect11.loaded) {
+		auto& enb = globals::features::effect11;
+		if (enb.enableEffect) {
+			return;
+		}
+	}
+
 	auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()->GetOrCreateFeatureRegistry(GetShortName());
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"Start Distance",

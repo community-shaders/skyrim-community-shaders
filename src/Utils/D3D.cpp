@@ -4,6 +4,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/Format.h"
+#include "Utils/ShaderPatches.h"
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 #include <d3dcompiler.h>
@@ -126,10 +127,13 @@ namespace Util
 			file.seekg(0, std::ios::beg);
 
 			// Create buffer and read file
-			char* data = new char[size];
-			file.read(data, size);
+			std::string content(size, '\0');
+			file.read(content.data(), size);
+			ShaderPatches::Apply(pFileName, content);
+			char* data = new char[content.size()];
+			memcpy(data, content.data(), content.size());
 			*ppData = data;
-			*pBytes = size;
+			*pBytes = static_cast<UINT>(content.size());
 			return S_OK;
 		}
 

@@ -6,9 +6,12 @@
 #include "State.h"
 #include "Utils/D3D.h"
 
+#include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
+#include "Features/Effect11.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
+#include "Features/TerrainShadows.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
@@ -430,6 +433,8 @@ void Deferred::DeferredPasses()
 
 	if (dynamicCubemaps.loaded)
 		dynamicCubemaps.PostDeferred();
+
+	globals::features::effect11.DrawVolumetricRays();
 }
 
 void Deferred::EndDeferred()
@@ -679,6 +684,7 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 	}
 	return mainCompositeInteriorCS;
 }
+
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 {

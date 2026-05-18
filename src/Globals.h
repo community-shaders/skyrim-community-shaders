@@ -33,6 +33,7 @@ struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
 struct WeatherEditor;
+struct Effect11;
 struct ExponentialHeightFog;
 struct HDRDisplay;
 struct ScreenshotFeature;
@@ -91,6 +92,7 @@ namespace globals
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern HDRDisplay hdrDisplay;
+		extern Effect11 effect11;
 		extern RenderDoc renderDoc;
 		extern ScreenshotFeature screenshotFeature;
 		extern WeatherEditor weatherEditor;

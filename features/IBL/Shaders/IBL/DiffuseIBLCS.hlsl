@@ -33,9 +33,9 @@ groupshared sh2 sharedB[TOTAL_SAMPLES];
 	float2 sampleCoord = (float2(az, ze) + 0.5) * rcpAxisSampleCount;
 	float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
 
-	// Sample cubemap with optimized direction
+	// Sample cubemap
 	float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
-
+	
 	// Compute spherical harmonics basis for this direction
 	sh2 sh = SphericalHarmonics::Evaluate(rayDir);
 

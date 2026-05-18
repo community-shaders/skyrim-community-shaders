@@ -4,6 +4,7 @@
 #include "FeatureVersions.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
+#include "Features/Effect11.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
@@ -37,6 +38,7 @@
 #include "Features/WaterEffects.h"
 #include "Features/WeatherEditor.h"
 #include "Features/WetnessEffects.h"
+
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
@@ -243,6 +245,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::weatherEditor,
 		&globals::features::screenshotFeature,
 		&globals::features::linearLighting,
+		&globals::features::effect11,
 		&globals::features::unifiedWater,
 		&globals::features::exponentialHeightFog,
 		&globals::features::hdrDisplay

@@ -7,14 +7,18 @@
 
 namespace SharedData
 {
-
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	cbuffer SharedData : register(b5)
 	{
 		float4 WaterData[25];
 		row_major float3x4 DirectionalAmbient;
 		float4 DirLightDirection;
 		float4 DirLightColor;
+		float4 SunDirection;
+		float4 SunColor;
+		float4 MasserDirection;
+		float4 MasserColor;
+		float4 SecundaDirection;
+		float4 SecundaColor;
 		float4 CameraData;
 		float4 BufferDim;
 		float Timer;
@@ -247,6 +251,72 @@ namespace SharedData
 		uint pad0;
 	};
 
+	struct ENBSettings
+	{
+		uint Enable;
+		uint EnableSky;
+		float ColorPow;
+		float LightSpriteIntensity;
+
+		float CloudsCurve;
+		float CloudsDesaturation;
+		float CloudsEdgeIntensity;
+		float CloudsEdgeMoonMultiplier;
+
+		float VolumetricRaysDesaturation;
+		float3 VolumetricRaysColorFilter;
+
+		uint UseProceduralGradientWeights;
+		float ProceduralGradientWeightCurve;
+		uint EnableProceduralSun;
+		float ProceduralSunDiskRadiusSq;
+
+		float ProceduralSunDiskEdgeScale;
+		float ProceduralSunGlowIntensity;
+		float ProceduralSunCoronaFalloff;
+		float ProceduralSunCoronaScale;
+
+		float ParticleIntensity;
+		float ParticleLightingInfluence;
+		float ParticleAmbientInfluence;
+		float ParticlePointLightingInfluence;
+
+		uint _pad1;
+		uint EnableCloudsLightingFromMoon;
+		uint ScatteringColorHDRWeighting;
+		float SkyScatteringAtmosphereThickness;
+
+		float SkyScatteringHorizonRange;
+		float SkyScatteringIntensity;
+		float SkyScatteringAmount;
+		float SkyScatteringDustVolume;
+
+		float SkyScatteringDustDensity;
+		float SkyScatteringDustDarkening;
+		float SkyScatteringShadowAmount;
+		float SkyScatteringColorFromSun;
+
+		float3 SkyScatteringColor;
+		float SkyScatteringAirGlowIntensity;
+
+		float SkyScatteringAirGlowRange;
+		float SkyScatteringSunGlowIntensity;
+		float SkyScatteringSunGlowRange;
+		float SkyScatteringMoonGlowAmount;
+
+		float SkyScatteringMoonGlowRange;
+		float SkyScatteringCloudsLightingSunMinIntensity;
+		float SkyScatteringCloudsLightingSunMultiplier;
+		float SkyScatteringCloudsLightingMoonIntensity;
+
+		uint EnableCloudsScattering;
+		uint EnableVolumetricRays;
+		float VolumetricRaysIntensity;
+		float VolumetricRaysExtinction;
+
+		float VolumetricRaysSkyColorAmount;
+		float3 _pad0;
+	};
 	struct TerrainBlendingSettings
 	{
 		uint Enabled;
@@ -295,6 +365,7 @@ namespace SharedData
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		LinearLightingSettings linearLightingSettings;
+		ENBSettings enbSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
 		TruePBRSettings truePBRSettings;
@@ -354,11 +425,11 @@ namespace SharedData
 		[flatten] if (cellInt.x < 5 && cellInt.x >= 0 && cellInt.y < 5 && cellInt.y >= 0)
 			waterData = WaterData[waterTile];
 
-#	if defined(VR)
+#if defined(VR)
 		// Correct .w from eye-0 camera-relative Z to the current eye's camera-relative Z.
 		// No-op when eyeIndex == 0 (both terms are identical).
 		waterData.w += FrameBuffer::CameraPosAdjust[0].z - FrameBuffer::CameraPosAdjust[eyeIndex].z;
-#	endif
+#endif
 
 		return waterData;
 	}
@@ -367,7 +438,5 @@ namespace SharedData
 	{
 		return SphericalHarmonics::Unproject(AmbientSHR, AmbientSHG, AmbientSHB, normal);
 	}
-
-#endif  // PSHADER
 }
 #endif  // __SHARED_DATA_DEPENDENCY_HLSL__

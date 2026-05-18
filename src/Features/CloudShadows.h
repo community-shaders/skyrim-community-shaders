@@ -6,6 +6,8 @@ private:
 	static constexpr std::string_view MOD_ID = "139185";
 
 public:
+	static constexpr int kMaxCloudLayers = 32;
+
 	struct alignas(16) Settings
 	{
 		float Opacity = 0.8f;
@@ -35,11 +37,17 @@ public:
 	bool overrideSky = false;
 	void SkyShaderHacks();
 
-	Texture2D* texCubemapCloudOcc = nullptr;
+	Texture2D* texCloudShadowLayers[kMaxCloudLayers] = {};
+	ID3D11RenderTargetView* cloudShadowLayerRTVs[kMaxCloudLayers][6] = {};
 	Texture2D* texCubemapCloudOccCopy = nullptr;
+	Texture2D* texSelfShadowCopy = nullptr;
 
-	ID3D11RenderTargetView* cubemapCloudOccRTVs[6] = { nullptr };
-	ID3D11RenderTargetView* cubemapCloudOccCopyRTVs[6] = { nullptr };
+	UINT cubemapMipLevels = 1;
+	int currentLayerForDraw = 0;
+
+	uint32_t renderedLayersMask[6] = {};
+	uint32_t globalRenderedMask = 0;
+	int previouslyRenderedSide = -1;
 
 	ID3D11BlendState* cloudShadowBlendState = nullptr;
 
@@ -52,7 +60,11 @@ public:
 
 	virtual void RestoreDefaultSettings() override;
 
+	Settings GetCommonBufferData();
+
 	void CheckResourcesSide(int side);
+	void PropagateToCompletion(int side);
+	int FindCloudLayer(RE::BSRenderPass* Pass);
 	void ModifySky(RE::BSRenderPass* Pass);
 
 	virtual void ReflectionsPrepass() override;

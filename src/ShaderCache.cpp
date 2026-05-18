@@ -2,6 +2,7 @@
 #include "Globals.h"
 #include "ShaderFileWatcher.h"
 #include "Util.h"
+#include "Utils/ShaderPatches.h"
 
 #include <d3dcompiler.h>
 
@@ -56,6 +57,7 @@ namespace SIE
 					if (!ifs.read(buf.data(), size))
 						return E_FAIL;
 				}
+				Util::ShaderPatches::Apply(pFileName, buf);
 				buffers.push_back(std::move(buf));
 				const auto& storage = buffers.back();
 				*ppData = storage.empty() ? nullptr : storage.data();

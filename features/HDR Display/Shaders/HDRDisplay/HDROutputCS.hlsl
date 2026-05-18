@@ -4,6 +4,7 @@
  */
 
 #include "Common/Color.hlsli"
+#include "Common/DisplayMapping.hlsli"
 #include "Common/SharedData.hlsli"
 
 Texture2D<float4> SceneTex : register(t0);
@@ -38,6 +39,11 @@ cbuffer PerFrame : register(b0)
 
 	if (hdrEnabled) {
 		bool sceneIsLinear = isSceneLinear > 0.5;
+
+		float3 outputColor = sceneIsLinear ? scene.xyz : Color::GammaToLinearSafe(scene.xyz);
+		outputColor = DisplayMapping::PumboAutoHDR(outputColor, SharedData::HDRData.z, SharedData::HDRData.y, 2.75, 1.0);
+		scene.xyz = sceneIsLinear ? outputColor : Color::LinearToGammaSafe(outputColor);
+
 		float3 compositedColorLinear;
 
 		if (sceneIsLinear) {
