@@ -928,7 +928,11 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "Hair/Hair.hlsli"
 #	endif
 
-#	if defined(TERRAIN_VARIATION)
+#	if defined(LANDSCAPE)
+#		include "Common/LightingLandscape.hlsli"
+#	endif
+
+#	if defined(TERRAIN_VARIATION) && (defined(LANDSCAPE) || defined(LOD_LAND_BLEND) || (defined(LOD_BLENDING) && defined(LODLANDSCAPE)))
 #		include "TerrainVariation/TerrainVariation.hlsli"
 #	endif
 
@@ -1020,11 +1024,37 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float2 uvOriginal = uv;
 
 #	if defined(EMAT)
-	float parallaxShadowQuality = sqrt(1.0 - saturate(viewPosition.z / 2048.0));
+	float parallaxShadowQuality = viewPosition.z < ExtendedMaterials::ParallaxCheapDistance ? ExtendedMaterials::ParallaxNearShadowQuality : ExtendedMaterials::ParallaxFarShadowQuality;
+	float terrainDirectionalShadowQuality = parallaxShadowQuality;
+#		if defined(LANDSCAPE)
+	terrainDirectionalShadowQuality = ExtendedMaterials::ParallaxNearShadowQuality;
+#		endif
+#		define COMPUTE_TERRAIN_SHADOW_BASE(OUT_SH0) ExtendedMaterials::ComputeTerrainParallaxShadowBaseHeight(input, uv, terrainShadowMipLevels, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset, OUT_SH0)
+#		define EVAL_TERRAIN_DIR_SHADOW(BASE_SH0, DIR_TS) ExtendedMaterials::EvaluateTerrainDirectionalParallaxShadowMultiplier(input, uv, terrainShadowMipLevels, DIR_TS, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset, BASE_SH0)
+#		if defined(LANDSCAPE)
+#			if defined(TRUE_PBR)
+#				define LANDSCAPE_PARALLAX_ENABLED (SharedData::extendedMaterialSettings.EnableParallax)
+#			else
+#				define LANDSCAPE_PARALLAX_ENABLED                                 \
+					(SharedData::extendedMaterialSettings.EnableTerrainParallax || \
+						(SharedData::extendedMaterialSettings.EnableParallax && ((Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement) != 0)))
+#			endif
+#		endif
 #	endif
 
 #	if defined(LANDSCAPE)
 	float mipLevels[6];
+#		if defined(EMAT)
+	float terrainShadowMipLevels[6];
+#			if defined(TERRAIN_VARIATION)
+	StochasticOffsets sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
+#			else
+	StochasticOffsets sharedOffset = (StochasticOffsets)0;
+#			endif
+	float cachedDirectionalTerrainParallaxShadow = 1.0;
+	bool hasCachedDirectionalTerrainParallaxShadow = false;
+	bool hasCachedTerrainShadowBaseHeight = false;
+#		endif
 #	else
 	float mipLevel = 0;
 #	endif  // LANDSCAPE
@@ -1058,7 +1088,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 vertexNormal = tbnTr[2];
 #		if defined(EMAT)
 
-	if (SharedData::extendedMaterialSettings.EnableParallaxWarpingFix) {
+	if (SharedData::extendedMaterialSettings.EnableParallaxWarpingFix
+#			if defined(LANDSCAPE)
+		&& LANDSCAPE_PARALLAX_ENABLED
+#			endif
+	) {
 		float3 ndx = ddx(vertexNormal);
 		float3 ndy = ddy(vertexNormal);
 		float3 fdx = ddx(input.WorldPosition.xyz);
@@ -1088,14 +1122,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(EMAT)
 #		if defined(PARALLAX) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
-		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
-		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
+		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler);
+		uv = ExtendedMaterials::GetParallaxCoords(uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
 #			if defined(VR_STEREO_OPT) && !defined(SNOW)
 			,
 			hasPOM
 #			endif
 		);
-		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
+		if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0)
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
 #		endif  // defined(PARALLAX) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
@@ -1121,14 +1155,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (complexMaterial) {
 			if (envMaskSample.w > kMaskEpsilon) {
 				complexMaterialParallax = true;
-				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, screenNoise);
-				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset
+				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler);
+				uv = ExtendedMaterials::GetParallaxCoords(uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset
 #			if defined(VR_STEREO_OPT) && !defined(SNOW)
 					,
 					hasPOM
 #			endif
 				);
-				if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
+				if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0)
 					sh0 = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, mipLevel).w;
 				complexMaterialColor = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
 			} else {
@@ -1173,14 +1207,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		{
 			displacementParams.HeightScale *= PBRParams1.y;
 		}
-		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
-		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
+		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler);
+		uv = ExtendedMaterials::GetParallaxCoords(uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
 #				if defined(VR_STEREO_OPT) && !defined(SNOW)
 			,
 			hasPOM
 #				endif
 		);
-		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
+		if (SharedData::extendedMaterialSettings.EnableShadows && parallaxShadowQuality > 0.0)
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
 #			endif  // !FACEGEN
@@ -1225,36 +1259,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float4 blendedRMAOS = 0;
 #		endif
 
-	// Compute stochastic offsets and derivatives once for all layers (only when terrain variation is enabled)
-#		if defined(TERRAIN_VARIATION)
-	bool useTerrainVariation = SharedData::terrainVariationSettings.enableTilingFix;
-	// Initialise dx, dy, and sharedOffset for when Terrain Variation is disabled via enableTilingFix but still #defined
-	float2 dx = 0, dy = 0;
-	StochasticOffsets sharedOffset;
-	sharedOffset.offset1 = float2(0, 0);
-	sharedOffset.offset2 = float2(0, 0);
-	sharedOffset.offset3 = float2(0, 0);
-	sharedOffset.weights = float3(0, 0, 0);
-	[branch] if (useTerrainVariation)
-	{
-		dx = ddx(input.TexCoord0.zw);
-		dy = ddy(input.TexCoord0.zw);
-		sharedOffset = ComputeStochasticOffsets(input.TexCoord0.zw);
-	}
-#		endif
-
 #		if defined(EMAT)
-#			if defined(TRUE_PBR)
-	if (SharedData::extendedMaterialSettings.EnableParallax) {
-#			else
-	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
-#			endif
-		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler, screenNoise);
-		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler, screenNoise);
-		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler, screenNoise);
-		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler, screenNoise);
-		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler, screenNoise);
-		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler, screenNoise);
+	if (LANDSCAPE_PARALLAX_ENABLED) {
+		ExtendedMaterials::InitializeTerrainMipLevels(uv, mipLevels);
+		[loop] for (uint terrainMipIndex = 0; terrainMipIndex < 6; terrainMipIndex++)
+		{
+			terrainShadowMipLevels[terrainMipIndex] = min(mipLevels[terrainMipIndex], ExtendedMaterials::TerrainParallaxShadowMaxMipLevel);
+		}
 
 		displacementParams[1] = displacementParams[0];
 		displacementParams[2] = displacementParams[0];
@@ -1273,19 +1284,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float weights[6];
 		// Initialize weights array
 		weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
-#			if defined(TERRAIN_VARIATION)
-		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset,
+		uv = ExtendedMaterials::GetParallaxCoords(input, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, pixelOffset,
 #				if defined(VR_STEREO_OPT) && !defined(SNOW)
 			hasPOM,
 #				endif
 			weights);
-#			else
-		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset,
-#				if defined(VR_STEREO_OPT) && !defined(SNOW)
-			hasPOM,
-#				endif
-			weights);
-#			endif
 		if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
 			input.LandBlendWeights1.x = weights[0];
 			input.LandBlendWeights1.y = weights[1];
@@ -1294,26 +1297,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			input.LandBlendWeights2.x = weights[4];
 			input.LandBlendWeights2.y = weights[5];
 		}
-		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows)) {
-#			if defined(TERRAIN_VARIATION)
-			sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, weights);
-			float shadowMultiplier = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, DirLightDirection, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy);
-#			else
-			sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, weights);
-#			endif
+		if (SharedData::extendedMaterialSettings.EnableShadows && terrainDirectionalShadowQuality > 0.0) {
+			float3 dirLightDirectionTS = mul(DirLightDirection, tbn).xyz;
+			hasCachedTerrainShadowBaseHeight = COMPUTE_TERRAIN_SHADOW_BASE(sh0);
+			if (hasCachedTerrainShadowBaseHeight)
+				cachedDirectionalTerrainParallaxShadow = EVAL_TERRAIN_DIR_SHADOW(sh0, dirLightDirectionTS);
+			hasCachedDirectionalTerrainParallaxShadow = hasCachedTerrainShadowBaseHeight;
 		}
 	}
-#			if defined(TERRAIN_VARIATION)
-	else if (useTerrainVariation) {
-		// Calculate proper mip levels for terrain variation when parallax is disabled but EMAT is available
-		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler, screenNoise);
-		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler, screenNoise);
-		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler, screenNoise);
-		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler, screenNoise);
-		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler, screenNoise);
-		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler, screenNoise);
-	}
-#			endif
 #		else
 	// Initialize mip levels for non-EMAT case
 	mipLevels[0] = mipLevels[1] = mipLevels[2] = mipLevels[3] = mipLevels[4] = mipLevels[5] = 0.0;
@@ -1344,488 +1335,28 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(LANDSCAPE)
-	// Layer 1 (LandBlendWeights1.x)
-	if (input.LandBlendWeights1.x > 0.01) {
-		float weight = input.LandBlendWeights1.x;
-
-		// Sample diffuse texture for layer 1
-#		if defined(TERRAIN_VARIATION)
-		float4 landColor1;
-		[branch] if (useTerrainVariation)
-		{
-			landColor1 = StochasticEffect(TexColorSampler, SampColorSampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landColor1 = TexColorSampler.SampleBias(SampColorSampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landColor1 = TexColorSampler.SampleBias(SampColorSampler, uv, SharedData::MipBias);
+	float landDistanceTexMipBias = 0.0;
+#		if !defined(TERRAIN_VARIATION)
+#			define SampleTerrain(TEX, SAMP, UV, OFFSET, EXTRA_BIAS) TEX.SampleBias(SAMP, UV, SharedData::MipBias + EXTRA_BIAS)
 #		endif
-		float3 landColorRGB1 = landColor1.rgb;
 #		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) == 0)
-		{
-			landColorRGB1 = Color::SrgbToLinear(landColorRGB1 / Color::PBRLightingScale);
-		}
-#		endif
-		float landAlpha1 = landColor1.a;
-		float landSnowMask1 = GetLandSnowMaskValue(landColor1.w);
-
-		// Sample normal texture for layer 1
-#		if defined(TERRAIN_VARIATION)
-		float4 landNormal1;
-		[branch] if (useTerrainVariation)
-		{
-			landNormal1 = StochasticEffect(TexNormalSampler, SampNormalSampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landNormal1 = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
-		}
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_PBR(0, TexColorSampler, SampColorSampler, TexNormalSampler, SampNormalSampler, TexRMAOSSampler, SampRMAOSSampler, PBRParams1, LandscapeTexture1GlintParameters, input.LandBlendWeights1.x)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_PBR(1, TexLandColor2Sampler, SampLandColor2Sampler, TexLandNormal2Sampler, SampLandNormal2Sampler, TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, LandscapeTexture2PBRParams, LandscapeTexture2GlintParameters, input.LandBlendWeights1.y)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_PBR(2, TexLandColor3Sampler, SampLandColor3Sampler, TexLandNormal3Sampler, SampLandNormal3Sampler, TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, LandscapeTexture3PBRParams, LandscapeTexture3GlintParameters, input.LandBlendWeights1.z)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_PBR(3, TexLandColor4Sampler, SampLandColor4Sampler, TexLandNormal4Sampler, SampLandNormal4Sampler, TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, LandscapeTexture4PBRParams, LandscapeTexture4GlintParameters, input.LandBlendWeights1.w)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_PBR(4, TexLandColor5Sampler, SampLandColor5Sampler, TexLandNormal5Sampler, SampLandNormal5Sampler, TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, LandscapeTexture5PBRParams, LandscapeTexture5GlintParameters, input.LandBlendWeights2.x)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER_PBR(5, TexLandColor6Sampler, SampLandColor6Sampler, TexLandNormal6Sampler, SampLandNormal6Sampler, TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, LandscapeTexture6PBRParams, LandscapeTexture6GlintParameters, input.LandBlendWeights2.y)
 #		else
-		float4 landNormal1 = TexNormalSampler.SampleBias(SampNormalSampler, uv, SharedData::MipBias);
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TexColorSampler, SampColorSampler, TexNormalSampler, SampNormalSampler, input.LandBlendWeights1.x, LandscapeTexture1to4IsSnow.x)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TexLandColor2Sampler, SampLandColor2Sampler, TexLandNormal2Sampler, SampLandNormal2Sampler, input.LandBlendWeights1.y, LandscapeTexture1to4IsSnow.y)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TexLandColor3Sampler, SampLandColor3Sampler, TexLandNormal3Sampler, SampLandNormal3Sampler, input.LandBlendWeights1.z, LandscapeTexture1to4IsSnow.z)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TexLandColor4Sampler, SampLandColor4Sampler, TexLandNormal4Sampler, SampLandNormal4Sampler, input.LandBlendWeights1.w, LandscapeTexture1to4IsSnow.w)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TexLandColor5Sampler, SampLandColor5Sampler, TexLandNormal5Sampler, SampLandNormal5Sampler, input.LandBlendWeights2.x, LandscapeTexture5to6IsSnow.x)
+	LIGHTING_LANDSCAPE_BLEND_ONE_LAYER(TexLandColor6Sampler, SampLandColor6Sampler, TexLandNormal6Sampler, SampLandNormal6Sampler, input.LandBlendWeights2.y, LandscapeTexture5to6IsSnow.y)
 #		endif
-		float3 landNormalRGB1 = landNormal1.rgb;
-		float landNormalAlpha1 = landNormal1.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x * landSnowMask1;
-#		endif  // SNOW
-
-		// Sample RMAOS texture for layer 1
-#		if defined(TRUE_PBR)
-		float4 landRMAOS1;
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile0PBR) != 0)
-		{
-#			if defined(TERRAIN_VARIATION)
-			[branch] if (useTerrainVariation)
-			{
-				landRMAOS1 = StochasticEffect(TexRMAOSSampler, SampRMAOSSampler, uv, sharedOffset, dx, dy) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
-			}
-			else
-			{
-				landRMAOS1 = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
-			}
-#			else
-			landRMAOS1 = TexRMAOSSampler.SampleBias(SampRMAOSSampler, uv, SharedData::MipBias) * float4(PBRParams1.x, 1, 1, PBRParams1.z);
-#			endif
-			if ((PBRFlags & PBR::TerrainFlags::LandTile0HasGlint) != 0) {
-				glintParameters += weight * LandscapeTexture1GlintParameters;
-			}
-		}
-		else
-		{
-			landRMAOS1 = input.LandBlendWeights1.x * float4(1 - glossiness.x, 0, 1, 0);
-		}
-		blendedRMAOS += landRMAOS1 * weight;
+#		if !defined(TERRAIN_VARIATION)
+#			undef SampleTerrain
 #		endif
-		blendedRGB += landColorRGB1 * weight;
-		blendedAlpha += landAlpha1 * weight;
-		blendedNormalRGB += landNormalRGB1 * weight;
-		blendedNormalAlpha += landNormalAlpha1 * weight;
-	}
-
-	// Layer 2 (LandBlendWeights1.y)
-	if (input.LandBlendWeights1.y > 0.01) {
-		float weight = input.LandBlendWeights1.y;
-
-		// Sample diffuse texture for layer 2
-#		if defined(TERRAIN_VARIATION)
-		float4 landColor2;
-		[branch] if (useTerrainVariation)
-		{
-			landColor2 = StochasticEffect(TexLandColor2Sampler, SampLandColor2Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landColor2 = TexLandColor2Sampler.SampleBias(SampLandColor2Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landColor2 = TexLandColor2Sampler.SampleBias(SampLandColor2Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landColorRGB2 = landColor2.rgb;
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1PBR) == 0)
-		{
-			landColorRGB2 = Color::SrgbToLinear(landColorRGB2 / Color::PBRLightingScale);
-		}
-#		endif
-		float landAlpha2 = landColor2.a;
-		float landSnowMask2 = GetLandSnowMaskValue(landColor2.w);
-
-		// Sample normal texture for layer 2
-#		if defined(TERRAIN_VARIATION)
-		float4 landNormal2;
-		[branch] if (useTerrainVariation)
-		{
-			landNormal2 = StochasticEffect(TexLandNormal2Sampler, SampLandNormal2Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landNormal2 = TexLandNormal2Sampler.SampleBias(SampLandNormal2Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landNormal2 = TexLandNormal2Sampler.SampleBias(SampLandNormal2Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landNormalRGB2 = landNormal2.rgb;
-		float landNormalAlpha2 = landNormal2.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture1to4IsSnow.y * input.LandBlendWeights1.y * landSnowMask2;
-#		endif  // SNOW
-
-		// Sample RMAOS texture for layer 2
-#		if defined(TRUE_PBR)
-		float4 landRMAOS2;
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile1PBR) != 0)
-		{
-#			if defined(TERRAIN_VARIATION)
-			[branch] if (useTerrainVariation)
-			{
-				landRMAOS2 = StochasticEffect(TexLandRMAOS2Sampler, SampLandRMAOS2Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
-			}
-			else
-			{
-				landRMAOS2 = TexLandRMAOS2Sampler.SampleBias(SampLandRMAOS2Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
-			}
-#			else
-			landRMAOS2 = TexLandRMAOS2Sampler.SampleBias(SampLandRMAOS2Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture2PBRParams.x, 1, 1, LandscapeTexture2PBRParams.z);
-#			endif
-			if ((PBRFlags & PBR::TerrainFlags::LandTile1HasGlint) != 0) {
-				glintParameters += weight * LandscapeTexture2GlintParameters;
-			}
-		}
-		else
-		{
-			landRMAOS2 = input.LandBlendWeights1.y * float4(1 - glossiness.x, 0, 1, 0);
-		}
-		blendedRMAOS += landRMAOS2 * weight;
-#		endif
-		blendedRGB += landColorRGB2 * weight;
-		blendedAlpha += landAlpha2 * weight;
-		blendedNormalRGB += landNormalRGB2 * weight;
-		blendedNormalAlpha += landNormalAlpha2 * weight;
-	}
-
-	// Layer 3 (LandBlendWeights1.z)
-	if (input.LandBlendWeights1.z > 0.01) {
-		float weight = input.LandBlendWeights1.z;
-		// Sample diffuse texture for layer 3
-#		if defined(TERRAIN_VARIATION)
-		float4 landColor3;
-		[branch] if (useTerrainVariation)
-		{
-			landColor3 = StochasticEffect(TexLandColor3Sampler, SampLandColor3Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landColor3 = TexLandColor3Sampler.SampleBias(SampLandColor3Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landColor3 = TexLandColor3Sampler.SampleBias(SampLandColor3Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landColorRGB3 = landColor3.rgb;
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2PBR) == 0)
-		{
-			landColorRGB3 = Color::SrgbToLinear(landColorRGB3 / Color::PBRLightingScale);
-		}
-#		endif
-		float landAlpha3 = landColor3.a;
-		float landSnowMask3 = GetLandSnowMaskValue(landColor3.w);
-
-		// Sample normal texture for layer 3
-#		if defined(TERRAIN_VARIATION)
-		float4 landNormal3;
-		[branch] if (useTerrainVariation)
-		{
-			landNormal3 = StochasticEffect(TexLandNormal3Sampler, SampLandNormal3Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landNormal3 = TexLandNormal3Sampler.SampleBias(SampLandNormal3Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landNormal3 = TexLandNormal3Sampler.SampleBias(SampLandNormal3Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landNormalRGB3 = landNormal3.rgb;
-		float landNormalAlpha3 = landNormal3.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture1to4IsSnow.z * input.LandBlendWeights1.z * landSnowMask3;
-#		endif  // SNOW
-
-		// Sample RMAOS texture for layer 3
-#		if defined(TRUE_PBR)
-		float4 landRMAOS3;
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile2PBR) != 0)
-		{
-#			if defined(TERRAIN_VARIATION)
-			[branch] if (useTerrainVariation)
-			{
-				landRMAOS3 = StochasticEffect(TexLandRMAOS3Sampler, SampLandRMAOS3Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
-			}
-			else
-			{
-				landRMAOS3 = TexLandRMAOS3Sampler.SampleBias(SampLandRMAOS3Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
-			}
-#			else
-			landRMAOS3 = TexLandRMAOS3Sampler.SampleBias(SampLandRMAOS3Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture3PBRParams.x, 1, 1, LandscapeTexture3PBRParams.z);
-#			endif
-			if ((PBRFlags & PBR::TerrainFlags::LandTile2HasGlint) != 0) {
-				glintParameters += weight * LandscapeTexture3GlintParameters;
-			}
-		}
-		else
-		{
-			landRMAOS3 = input.LandBlendWeights1.z * float4(1 - glossiness.x, 0, 1, 0);
-		}
-		blendedRMAOS += landRMAOS3 * weight;
-#		endif
-		blendedRGB += landColorRGB3 * weight;
-		blendedAlpha += landAlpha3 * weight;
-		blendedNormalRGB += landNormalRGB3 * weight;
-		blendedNormalAlpha += landNormalAlpha3 * weight;
-	}
-	// Layer 4 (LandBlendWeights1.w)
-	if (input.LandBlendWeights1.w > 0.01) {
-		float weight = input.LandBlendWeights1.w;
-
-		// Sample diffuse texture for layer 4
-#		if defined(TERRAIN_VARIATION)
-		float4 landColor4;
-		[branch] if (useTerrainVariation)
-		{
-			landColor4 = StochasticEffect(TexLandColor4Sampler, SampLandColor4Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landColor4 = TexLandColor4Sampler.SampleBias(SampLandColor4Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landColor4 = TexLandColor4Sampler.SampleBias(SampLandColor4Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landColorRGB4 = landColor4.rgb;
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3PBR) == 0)
-		{
-			landColorRGB4 = Color::SrgbToLinear(landColorRGB4 / Color::PBRLightingScale);
-		}
-#		endif
-		float landAlpha4 = landColor4.a;
-		float landSnowMask4 = GetLandSnowMaskValue(landColor4.w);
-
-		// Sample normal texture for layer 4
-#		if defined(TERRAIN_VARIATION)
-		float4 landNormal4;
-		[branch] if (useTerrainVariation)
-		{
-			landNormal4 = StochasticEffect(TexLandNormal4Sampler, SampLandNormal4Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landNormal4 = TexLandNormal4Sampler.SampleBias(SampLandNormal4Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landNormal4 = TexLandNormal4Sampler.SampleBias(SampLandNormal4Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landNormalRGB4 = landNormal4.rgb;
-		float landNormalAlpha4 = landNormal4.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture1to4IsSnow.w * input.LandBlendWeights1.w * landSnowMask4;
-#		endif  // SNOW
-
-		// Sample RMAOS texture for layer 4
-#		if defined(TRUE_PBR)
-		float4 landRMAOS4;
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile3PBR) != 0)
-		{
-#			if defined(TERRAIN_VARIATION)
-			[branch] if (useTerrainVariation)
-			{
-				landRMAOS4 = StochasticEffect(TexLandRMAOS4Sampler, SampLandRMAOS4Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
-			}
-			else
-			{
-				landRMAOS4 = TexLandRMAOS4Sampler.SampleBias(SampLandRMAOS4Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
-			}
-#			else
-			landRMAOS4 = TexLandRMAOS4Sampler.SampleBias(SampLandRMAOS4Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture4PBRParams.x, 1, 1, LandscapeTexture4PBRParams.z);
-#			endif
-			if ((PBRFlags & PBR::TerrainFlags::LandTile3HasGlint) != 0) {
-				glintParameters += weight * LandscapeTexture4GlintParameters;
-			}
-		}
-		else
-		{
-			landRMAOS4 = input.LandBlendWeights1.w * float4(1 - glossiness.x, 0, 1, 0);
-		}
-		blendedRMAOS += landRMAOS4 * weight;
-#		endif
-		blendedRGB += landColorRGB4 * weight;
-		blendedAlpha += landAlpha4 * weight;
-		blendedNormalRGB += landNormalRGB4 * weight;
-		blendedNormalAlpha += landNormalAlpha4 * weight;
-	}
-
-	// Layer 5 (LandBlendWeights2.x)
-	if (input.LandBlendWeights2.x > 0.01) {
-		float weight = input.LandBlendWeights2.x;
-		// Sample diffuse texture for layer 5
-#		if defined(TERRAIN_VARIATION)
-		float4 landColor5;
-		[branch] if (useTerrainVariation)
-		{
-			landColor5 = StochasticEffect(TexLandColor5Sampler, SampLandColor5Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landColor5 = TexLandColor5Sampler.SampleBias(SampLandColor5Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landColor5 = TexLandColor5Sampler.SampleBias(SampLandColor5Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landColorRGB5 = landColor5.rgb;
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4PBR) == 0)
-		{
-			landColorRGB5 = Color::SrgbToLinear(landColorRGB5 / Color::PBRLightingScale);
-		}
-#		endif
-		float landAlpha5 = landColor5.a;
-		float landSnowMask5 = GetLandSnowMaskValue(landColor5.w);
-
-		// Sample normal texture for layer 5
-#		if defined(TERRAIN_VARIATION)
-		float4 landNormal5;
-		[branch] if (useTerrainVariation)
-		{
-			landNormal5 = StochasticEffect(TexLandNormal5Sampler, SampLandNormal5Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landNormal5 = TexLandNormal5Sampler.SampleBias(SampLandNormal5Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landNormal5 = TexLandNormal5Sampler.SampleBias(SampLandNormal5Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landNormalRGB5 = landNormal5.rgb;
-		float landNormalAlpha5 = landNormal5.a;
-
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture5to6IsSnow.x * input.LandBlendWeights2.x * landSnowMask5;
-#		endif  // SNOW
-
-		// Sample RMAOS texture for layer 5
-#		if defined(TRUE_PBR)
-		float4 landRMAOS5;
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile4PBR) != 0)
-		{
-#			if defined(TERRAIN_VARIATION)
-			[branch] if (useTerrainVariation)
-			{
-				landRMAOS5 = StochasticEffect(TexLandRMAOS5Sampler, SampLandRMAOS5Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
-			}
-			else
-			{
-				landRMAOS5 = TexLandRMAOS5Sampler.SampleBias(SampLandRMAOS5Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
-			}
-#			else
-			landRMAOS5 = TexLandRMAOS5Sampler.SampleBias(SampLandRMAOS5Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture5PBRParams.x, 1, 1, LandscapeTexture5PBRParams.z);
-#			endif
-			if ((PBRFlags & PBR::TerrainFlags::LandTile4HasGlint) != 0) {
-				glintParameters += weight * LandscapeTexture5GlintParameters;
-			}
-		}
-		else
-		{
-			landRMAOS5 = input.LandBlendWeights2.x * float4(1 - glossiness.x, 0, 1, 0);
-		}
-		blendedRMAOS += landRMAOS5 * weight;
-#		endif
-		blendedRGB += landColorRGB5 * weight;
-		blendedAlpha += landAlpha5 * weight;
-		blendedNormalRGB += landNormalRGB5 * weight;
-		blendedNormalAlpha += landNormalAlpha5 * weight;
-	}
-	// Layer 6 (LandBlendWeights2.y)
-	if (input.LandBlendWeights2.y > 0.01) {
-		float weight = input.LandBlendWeights2.y;
-
-		// Sample layer 6 textures
-#		if defined(TERRAIN_VARIATION)
-		float4 landColor6;
-		[branch] if (useTerrainVariation)
-		{
-			landColor6 = StochasticEffect(TexLandColor6Sampler, SampLandColor6Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landColor6 = TexLandColor6Sampler.SampleBias(SampLandColor6Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landColor6 = TexLandColor6Sampler.SampleBias(SampLandColor6Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landColorRGB6 = landColor6.rgb;
-#		if defined(TRUE_PBR)
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) == 0)
-		{
-			landColorRGB6 = Color::SrgbToLinear(landColorRGB6 / Color::PBRLightingScale);
-		}
-#		endif
-		float landAlpha6 = landColor6.a;
-		float landSnowMask6 = GetLandSnowMaskValue(landColor6.w);
-
-		// Sample normal texture for layer 6
-#		if defined(TERRAIN_VARIATION)
-		float4 landNormal6;
-		[branch] if (useTerrainVariation)
-		{
-			landNormal6 = StochasticEffect(TexLandNormal6Sampler, SampLandNormal6Sampler, uv, sharedOffset, dx, dy);
-		}
-		else
-		{
-			landNormal6 = TexLandNormal6Sampler.SampleBias(SampLandNormal6Sampler, uv, SharedData::MipBias);
-		}
-#		else
-		float4 landNormal6 = TexLandNormal6Sampler.SampleBias(SampLandNormal6Sampler, uv, SharedData::MipBias);
-#		endif
-		float3 landNormalRGB6 = landNormal6.rgb;
-		float landNormalAlpha6 = landNormal6.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture5to6IsSnow.y * input.LandBlendWeights2.y * landSnowMask6;
-#		endif  // SNOW
-
-		// Sample RMAOS texture for layer 6
-#		if defined(TRUE_PBR)
-		float4 landRMAOS6;
-		[branch] if ((PBRFlags & PBR::TerrainFlags::LandTile5PBR) != 0)
-		{
-#			if defined(TERRAIN_VARIATION)
-			[branch] if (useTerrainVariation)
-			{
-				landRMAOS6 = StochasticEffect(TexLandRMAOS6Sampler, SampLandRMAOS6Sampler, uv, sharedOffset, dx, dy) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
-			}
-			else
-			{
-				landRMAOS6 = TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
-			}
-#			else
-			landRMAOS6 = TexLandRMAOS6Sampler.SampleBias(SampLandRMAOS6Sampler, uv, SharedData::MipBias) * float4(LandscapeTexture6PBRParams.x, 1, 1, LandscapeTexture6PBRParams.z);
-#			endif
-			if ((PBRFlags & PBR::TerrainFlags::LandTile5HasGlint) != 0) {
-				glintParameters += weight * LandscapeTexture6GlintParameters;
-			}
-		}
-		else
-		{
-			landRMAOS6 = input.LandBlendWeights2.y * float4(1 - glossiness.x, 0, 1, 0);
-		}
-		blendedRMAOS += landRMAOS6 * weight;
-#		endif
-		blendedRGB += landColorRGB6 * weight;
-		blendedAlpha += landAlpha6 * weight;
-		blendedNormalRGB += landNormalRGB6 * weight;
-		blendedNormalAlpha += landNormalAlpha6 * weight;
-	}
 
 	float4 rawBaseColor = float4(blendedRGB, blendedAlpha);
 	baseColor = float4(Color::Diffuse(blendedRGB), blendedAlpha);
@@ -1850,15 +1381,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(LODOBJECTS) || defined(LODOBJECTSHD)
 	baseColor.xyz = pow(abs(baseColor.xyz), SharedData::lodBlendingSettings.LODObjectGamma) * SharedData::lodBlendingSettings.LODObjectBrightness;
 #		elif defined(LODLANDSCAPE)
-// First apply terrain variation if enabled
 #			if defined(TERRAIN_VARIATION)
-	if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
-		float2 dx = ddx(uv);
-		float2 dy = ddy(uv);
+	[branch] if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
+	{
 		StochasticOffsets lodOffset = ComputeStochasticOffsetsLOD(uv);
-		float4 lodStochasticColor = StochasticSampleLOD(screenNoise, TexColorSampler, SampColorSampler, uv, lodOffset, dx, dy);
-
-		// Apply the stochastic result directly
+		float4 lodStochasticColor = StochasticSampleLOD(StochasticSampleLODJitter(screenNoise), TexColorSampler, SampColorSampler, uv, lodOffset);
 		baseColor.xyz = Color::Diffuse(lodStochasticColor.rgb);
 	}
 #			endif
@@ -1956,16 +1483,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float4 lodLandColor;
 
 #		if defined(TERRAIN_VARIATION)
-	if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
-		// Apply stochastic sampling to LOD_LAND_BLEND color texture
-		float2 blendColorUV = input.TexCoord0.zw;
-		float2 dx = ddx(blendColorUV);
-		float2 dy = ddy(blendColorUV);
-		StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
-		lodLandColor = StochasticSampleLOD(screenNoise, TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset, dx, dy);
-	} else {
-		lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
-	}
+	float2 blendColorUV = input.TexCoord0.zw;
+	StochasticOffsets lodBlendColorOffset = ComputeStochasticOffsetsLOD(blendColorUV);
+	lodLandColor = StochasticSampleLOD(StochasticSampleLODJitter(screenNoise), TexLandLodBlend1Sampler, SampLandLodBlend1Sampler, blendColorUV, lodBlendColorOffset);
 #		else
 	lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 #		endif
@@ -2528,33 +2048,25 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	{
 		float3 dirLightDirectionTS = mul(refractedDirLightDirection, tbn).xyz;
 #		if defined(LANDSCAPE)
-#			if defined(TRUE_PBR)
-		if (SharedData::extendedMaterialSettings.EnableParallax) {
-#			else
-		if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
-#			endif
-#			if defined(TERRAIN_VARIATION)
-			float weights[6];
-			// Initialize weights array
-			weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
-
-			float sh0 = ExtendedMaterials::GetTerrainHeight(screenNoise, input, uv, mipLevels, displacementParams, parallaxShadowQuality, input.LandBlendWeights1, input.LandBlendWeights2.xy, sharedOffset, dx, dy, weights);
-
-			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy);
-#			else
-			// Standard terrain parallax shadow without stochastic sampling
-			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, dirLightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams);
-#			endif
+		if (LANDSCAPE_PARALLAX_ENABLED && dirLightAngle > 0.0) {
+			if (hasCachedDirectionalTerrainParallaxShadow) {
+				dirDetailedShadow *= cachedDirectionalTerrainParallaxShadow;
+			} else {
+				float sh0;
+				bool hasShadowBase = COMPUTE_TERRAIN_SHADOW_BASE(sh0);
+				if (hasShadowBase)
+					dirDetailedShadow *= EVAL_TERRAIN_DIR_SHADOW(sh0, dirLightDirectionTS);
+			}
 		}
 #		elif defined(PARALLAX)
 		[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
-			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, lerp(parallaxShadowQuality, 1.0, SharedData::extendedMaterialSettings.ExtendShadows), screenNoise, displacementParams);
+			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #		elif defined(EMAT_ENVMAP)
 		[branch] if (complexMaterialParallax)
-			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, lerp(parallaxShadowQuality, 1.0, SharedData::extendedMaterialSettings.ExtendShadows), screenNoise, displacementParams);
+			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, screenNoise, displacementParams);
 #		elif defined(TRUE_PBR) && !defined(LODLANDSCAPE) && !defined(FACEGEN)
 		[branch] if (PBRParallax)
-			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, lerp(parallaxShadowQuality, 1.0, SharedData::extendedMaterialSettings.ExtendShadows), screenNoise, displacementParams);
+			dirDetailedShadow *= ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, dirLightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #		endif  // LANDSCAPE
 	}
 #	endif  // defined(EMAT) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
@@ -2743,16 +2255,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			[branch] if (SharedData::extendedMaterialSettings.EnableParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #				elif defined(LANDSCAPE)
-#					if defined(TRUE_PBR)
-			if (SharedData::extendedMaterialSettings.EnableParallax)
-#					else
-			if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement))
-#					endif
-#					if defined(TERRAIN_VARIATION)
-				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams, sharedOffset, dx, dy);
-#					else
-				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, mipLevels, lightDirectionTS, sh0, parallaxShadowQuality, screenNoise, displacementParams);
-#					endif
+			if (LANDSCAPE_PARALLAX_ENABLED) {
+				if (ExtendedMaterials::TerrainHasSignificantBlend(input.LandBlendWeights1, input.LandBlendWeights2.xy) && ExtendedMaterials::TerrainHasAnyDisplacement()) {
+					float terrainHeightScale = ExtendedMaterials::TerrainMaxWeightedHeightScale(input, displacementParams);
+					if (terrainHeightScale > 0.01) {
+						float3 lightDirectionTS = normalize(mul(refractedLightDirection, tbn).xyz);
+						parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplierTerrain(input, uv, terrainShadowMipLevels, lightDirectionTS, sh0, terrainDirectionalShadowQuality, screenNoise, displacementParams, sharedOffset);
+					}
+				}
+			}
 #				elif defined(EMAT_ENVMAP)
 			[branch] if (complexMaterialParallax)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexEnvMaskSampler, SampEnvMaskSampler, 3, parallaxShadowQuality, screenNoise, displacementParams);
@@ -3320,14 +2831,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Masks = float4(0, 0, masksZ, psout.Diffuse.w);
 #		endif
 
-	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
-	psout.NormalGlossiness.w = stochasticBlend;
 #	endif
 
 #	if !defined(HDR_OUTPUT)  // Do not apply gamma correction before we pass to ISHDR.
 	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {
 		psout.Diffuse.xyz = Color::LinearToSrgb(psout.Diffuse.xyz);
 	}
+#	endif
+
+#	if defined(EMAT)
+#		undef COMPUTE_TERRAIN_SHADOW_BASE
+#		undef EVAL_TERRAIN_DIR_SHADOW
+#		undef LANDSCAPE_PARALLAX_ENABLED
 #	endif
 
 	return psout;
