@@ -258,8 +258,8 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(DITHER)
 	float2 noiseGradUv = frac(float2(0.125, 0.125) * (input.Position.xy + SharedData::FrameCount));
-	float noiseGrad = TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
-	noiseGrad *= 10.0;
+	float noiseGrad = TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 - 0.0078125;
+	noiseGrad *= 8.0;
 
 #			ifdef TEX
 	float3 sunGlareColor = (Color::Sky(input.Color.xyz) + noiseGrad) * baseColor.xyz;
@@ -290,11 +290,8 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 
-	float noiseGrad = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount) * 0.03125 + -0.0078125;
-	noiseGrad *= 10.0;
-
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = Color::Sky(input.Color.xyz + noiseGrad) * baseColor.xyz + skyScale;
+	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 
 #			if defined(CLOUDS)
 	if (SharedData::enbSettings.EnableSky) {
