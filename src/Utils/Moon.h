@@ -84,7 +84,7 @@ namespace Util::Moon
 		if (auto tex = prop->GetBaseTexture())
 			phase = GetPhaseIntensityFactor(GetPhaseFromTexture(tex->name.c_str()), newMoon, crescent, full);
 
-		return { prop->kBlendColor.red * baseColor.x * phase, prop->kBlendColor.green * baseColor.y * phase, prop->kBlendColor.blue * baseColor.z * phase, prop->kBlendColor.alpha * phase };
+		return { prop->kBlendColor.red * baseColor.x * phase, prop->kBlendColor.green * baseColor.y * phase, prop->kBlendColor.blue * baseColor.z * phase, 1.0 } * prop->kBlendColor.alpha;
 	}
 
 }
