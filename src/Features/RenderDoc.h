@@ -134,9 +134,10 @@ public:
 	// Track files that failed to delete for UI feedback
 	std::unordered_map<std::filesystem::path, std::string> failedDeletions;
 
-	static constexpr uint64_t kMinCaptureSpaceBytes = 100ULL * 1024ULL * 1024ULL;  // 100 MB minimum free space
-	static constexpr uint32_t kCacheRefreshIntervalSeconds = 5;                    // Cache refresh interval
-	static constexpr size_t kCommentsBufferSize = 1024;                            // Size of comments input buffer
+	static constexpr uint64_t kMinCaptureSpaceBytes = 100ULL * 1024ULL * 1024ULL;   // 100 MB minimum free space floor
+	static constexpr uint64_t kObservedPerFrameBytes = 256ULL * 1024ULL * 1024ULL;  // ~256 MB per frame observed for multi-frame captures
+	static constexpr uint32_t kCacheRefreshIntervalSeconds = 5;                     // Cache refresh interval
+	static constexpr size_t kCommentsBufferSize = 1024;                             // Size of comments input buffer
 	static constexpr uint32_t kMinCaptureFrameCount = 1;
 	static constexpr uint32_t kMaxCaptureFrameCount = 120;
 };

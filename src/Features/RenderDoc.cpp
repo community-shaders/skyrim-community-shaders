@@ -736,7 +736,8 @@ void RenderDoc::SetCaptureFrameCount(uint32_t a_frameCount)
 
 uint64_t RenderDoc::GetRequiredCaptureSpaceBytes() const
 {
-	return kMinCaptureSpaceBytes * GetCaptureFrameCount();
+	const uint64_t estimated = kObservedPerFrameBytes * GetCaptureFrameCount();
+	return std::max(estimated, kMinCaptureSpaceBytes);
 }
 
 bool RenderDoc::HasSufficientDiskSpaceForConfiguredCapture(uint64_t* a_requiredSpaceBytes) const
