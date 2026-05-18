@@ -260,7 +260,7 @@ PS_OUTPUT main(PS_INPUT input)
 	uint3 seed1 = uint3(input.Position.xy, SharedData::FrameCount);
 	uint3 seed2 = uint3(input.Position.xy, SharedData::FrameCount + 4729u);
 	float3 tpdfNoise = (Random::pcg3d(seed1) - Random::pcg3d(seed2)) / float(0xFFFFFFFFu);
-	tpdfNoise *= 0.02;
+	tpdfNoise *= 0.01;
 
 #			ifdef TEX
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
