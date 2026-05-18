@@ -456,8 +456,12 @@ namespace ShadowCasterManager
 		int32_t idx = s_lights.FindLight(light, s_settings.ShadowLightCount);
 		if (idx < 0)
 			idx = 0;  // should not happen; fail-safe to slot 0
-		// Sun (pool[0] when Sun=true) writes 0 here too — harmless since sun's
-		// descriptor.shadowmapIndex is unused (sun renders to kSHADOWMAPS_ESRAM).
+		// This hook runs inside BSShadowParabolicLight::RenderCascade's
+		// `renderTarget == kNONE` block, so it only fires for point/spot
+		// lights (the sun's RenderShadowmaps presets renderTarget to 2/3/4
+		// before each call, skipping the block). FindLight must therefore
+		// cover the same range as FindFreeIndex; a mismatch means a light
+		// silently gets idx=0 and corrupts the slot at index 0.
 
 		if (REL::Module::IsVR())
 			ctx.Rdx = static_cast<DWORD64>(idx);
@@ -492,6 +496,15 @@ namespace ShadowCasterManager
 	{
 		// Pool layout when Sun=true:  [0]=sun, [1..shadowCount]=point lights, [shadowCount+1..]=converted
 		//                  Sun=false: [0..shadowCount-1]=point lights,        [shadowCount..]=converted
+		//
+		// Slot 0 of the pool is reserved for the sun pointer when present
+		// (sunOff=1); point lights occupy slots 1..ShadowLightCount. This
+		// is a bookkeeping reservation for FindLight lookup -- the sun
+		// itself does not write kSHADOWMAPS (target 4), it writes
+		// kSHADOWMAPS_ESRAM (target 2). Keep the reservation: changing it
+		// requires re-verifying FindLight's range matches FindFreeIndex's
+		// range; a mismatch silently corrupts shadows by returning 0 from
+		// the FindLight fallback for any out-of-range light.
 		const int32_t sunOff = Sun ? 1 : 0;
 		if (shadowSlot) {
 			for (int i = sunOff; i < sunOff + shadowCount; i++)
@@ -525,14 +538,14 @@ namespace ShadowCasterManager
 
 	std::uint32_t MaxShadowAccumIterationBound()
 	{
-		// Each entry advances idx by its shadowMapCount. The widest type is
-		// BSShadowDirectionalLight (4 cascades). With ShadowLightCount user-
-		// capped at 127 and one sun bookkeeping slot, the realistic walked
-		// index never exceeds (1 + 127) * 4 = 512. Add a small margin so a
-		// transient mismatch between live settings and the engine's already-
-		// populated array doesn't tripwire iteration. If settings haven't
-		// initialised yet (s_settings is the default-constructed value with
-		// ShadowLightCount=16), the bound is still generous.
+		// Each entry advances idx by its shadowMapCount. Worst-case per
+		// light is the directional sun's cascade count (iNumSplits:Display,
+		// INI-capped at 3 by ShadowmapRasterizerFix). 4 is a defensive
+		// upper bound. With ShadowLightCount user-capped at 127 plus one
+		// sun bookkeeping slot, the walked index never exceeds
+		// (1 + 127) * 4 = 512; add a margin so a transient mismatch
+		// between live settings and an already-populated engine array
+		// doesn't tripwire iteration.
 		constexpr std::uint32_t kCascadesPerLight = 4;
 		constexpr std::uint32_t kMargin = 16;
 		const std::uint32_t lights = static_cast<std::uint32_t>(std::max(1, s_settings.ShadowLightCount));
