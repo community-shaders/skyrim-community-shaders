@@ -710,8 +710,8 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			reactiveMaskTexture->CreateRTV(rtvDesc);
 		}
 
-		// DLSS RR has no transparency mask
-		if (!transparencyCompositionMaskTexture && a_upscalemethod != UpscaleMethod::kDLSS_RR) {
+		// EncodeTexturesCS writes u1 for all upscale methods, even though DLSS RR does not consume it later.
+		if (!transparencyCompositionMaskTexture) {
 			transparencyCompositionMaskTexture = new Texture2D(texDesc);
 			transparencyCompositionMaskTexture->CreateSRV(srvDesc);
 			transparencyCompositionMaskTexture->CreateUAV(uavDesc);
