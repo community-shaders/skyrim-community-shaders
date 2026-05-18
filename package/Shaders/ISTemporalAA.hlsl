@@ -2,24 +2,29 @@
 #include "Common/DisplayMapping.hlsli"
 
 #if defined(PSHADER)
-Texture2D<float4> t5 : register(t5);
-Texture2D<float4> t4 : register(t4);
-Texture2D<float4> t3 : register(t3);
-Texture2D<float4> t2 : register(t2);
-Texture2D<float4> t1 : register(t1);
-Texture2D<float4> t0 : register(t0);  // Main Render
+Texture2D<float4> currentFrameTex : register(t0);
+Texture2D<float4> historyTex : register(t1);
+Texture2D<float4> velocityTex : register(t2);
+Texture2D<float4> depthTex : register(t3);
+Texture2D<float4> maskTex : register(t4);
+Texture2D<float4> alphaTex : register(t5);
 
-SamplerState s5_s : register(s5);
-SamplerState s4_s : register(s4);
-SamplerState s3_s : register(s3);
-SamplerState s2_s : register(s2);
-SamplerState s1_s : register(s1);
-SamplerState s0_s : register(s0);
+SamplerState currentFrameSampler : register(s0);
+SamplerState historySampler : register(s1);
+SamplerState velocitySampler : register(s2);
+SamplerState depthSampler : register(s3);
+SamplerState maskSampler : register(s4);
+SamplerState alphaSampler : register(s5);
 
-cbuffer cb2 : register(b2)
+cbuffer PerGeometry : register(b2)
 {
-	float4 cb2[6];
-}
+	float4 TexelSizeParams : packoffset(c0);
+	float4 JitterAndRes : packoffset(c1);
+	float4 NeighborWeights : packoffset(c2);
+	float4 TexelOffset : packoffset(c3);
+	float4 BlendParams : packoffset(c4);
+	float4 ThresholdParams : packoffset(c5);
+};
 
 cbuffer cb12 : register(b12)
 {
@@ -29,14 +34,14 @@ cbuffer cb12 : register(b12)
 #	define cmp -
 
 #	ifdef HDR_OUTPUT
-float3 convertRenderInput(float3 gammaColor)
+float3 ConvertRenderInput(float3 gammaColor)
 {
 	float3 linearColor = Color::GammaToLinearSafe(gammaColor);
 	linearColor = Color::BT709ToBT2020(linearColor);
 	return DisplayMapping::LinearToPQ(linearColor, 10000.0);
 }
 
-float3 convertRenderOutput(float3 pqColor)
+float3 ConvertRenderOutput(float3 pqColor)
 {
 	float3 linearColor = DisplayMapping::PQtoLinear(pqColor, 10000.0);
 	linearColor = Color::BT2020ToBT709(linearColor);
@@ -54,53 +59,53 @@ void main(
 	uint4 bitmask, uiDest;
 	float4 fDest;
 
-	r0.xy = -cb2[3].xy + v1.xy;
-	r0.zw = cb2[3].xy + v1.xy;
+	r0.xy = -TexelOffset.xy + v1.xy;
+	r0.zw = TexelOffset.xy + v1.xy;
 	r1.xy = cb12[43].xy * r0.zw;
 	r1.xy = max(float2(0, 0), r1.xy);
 	r2.x = cb12[44].z;
 	r2.y = cb12[43].y;
 	r1.xy = min(r2.xy, r1.xy);
-	r1.z = t3.Sample(s3_s, r1.xy).x;
-	r3.xyz = t0.Sample(s0_s, r1.xy).yxz;
+	r1.z = depthTex.Sample(depthSampler, r1.xy).x;
+	r3.xyz = currentFrameTex.Sample(currentFrameSampler, r1.xy).yxz;
 #	ifdef HDR_OUTPUT
-	r3.yxz = convertRenderInput(r3.yxz);
+	r3.yxz = ConvertRenderInput(r3.yxz);
 #	endif
 
-	r4.xyzw = cb2[3].xyxy * float4(1, -1, 1, 0) + v1.xyxy;
+	r4.xyzw = TexelOffset.xyxy * float4(1, -1, 1, 0) + v1.xyxy;
 	r5.xyzw = cb12[43].xyxy * r4.xyzw;
 	r5.xyzw = max(float4(0, 0, 0, 0), r5.xyzw);
 	r5.xyzw = min(r5.xyzw, r2.xyxy);
-	r1.x = t3.Sample(s3_s, r5.xy).x;
+	r1.x = depthTex.Sample(depthSampler, r5.xy).x;
 	r1.y = min(r1.x, r1.z);
 	r1.zw = cb12[43].xy * r0.xy;
 	r1.zw = max(float2(0, 0), r1.zw);
 	r1.zw = min(r1.zw, r2.xy);
-	r2.z = t3.Sample(s3_s, r1.zw).x;
+	r2.z = depthTex.Sample(depthSampler, r1.zw).x;
 	r1.y = min(r2.z, r1.y);
 	r2.z = cmp(r1.y == r2.z);
 	r0.xy = r2.zz ? r0.xy : r0.zw;
 	r0.z = cmp(r1.y == r1.x);
 	r0.xy = r0.zz ? r4.xy : r0.xy;
-	r6.xyzw = cb2[3].xyxy * float4(0, -1, -1, 1) + v1.xyxy;
+	r6.xyzw = TexelOffset.xyxy * float4(0, -1, -1, 1) + v1.xyxy;
 	r7.xyzw = cb12[43].xyxy * r6.xyzw;
 	r7.xyzw = max(float4(0, 0, 0, 0), r7.xyzw);
 	r7.xyzw = min(r7.xyzw, r2.xyxy);
-	r0.z = t3.Sample(s3_s, r7.xy).x;
+	r0.z = depthTex.Sample(depthSampler, r7.xy).x;
 	r0.w = min(r0.z, r1.y);
-	r1.x = t3.Sample(s3_s, r5.zw).x;
+	r1.x = depthTex.Sample(depthSampler, r5.zw).x;
 	r0.w = min(r1.x, r0.w);
 	r1.x = cmp(r0.w == r1.x);
 	r0.xy = r1.xx ? r4.zw : r0.xy;
 	r0.z = cmp(r0.w == r0.z);
 	r0.xy = r0.zz ? r6.xy : r0.xy;
-	r4.xyzw = cb2[3].xyxy * float4(-1, 0, 0, 1) + v1.xyxy;
+	r4.xyzw = TexelOffset.xyxy * float4(-1, 0, 0, 1) + v1.xyxy;
 	r8.xyzw = cb12[43].xyxy * r4.xyzw;
 	r8.xyzw = max(float4(0, 0, 0, 0), r8.xyzw);
 	r8.xyzw = min(r8.xyzw, r2.xyxy);
-	r0.z = t3.Sample(s3_s, r8.xy).x;
+	r0.z = depthTex.Sample(depthSampler, r8.xy).x;
 	r0.w = min(r0.z, r0.w);
-	r1.x = t3.Sample(s3_s, r7.zw).x;
+	r1.x = depthTex.Sample(depthSampler, r7.zw).x;
 	r0.w = min(r1.x, r0.w);
 	r1.x = cmp(r0.w == r1.x);
 	r0.xy = r1.xx ? r6.zw : r0.xy;
@@ -109,9 +114,9 @@ void main(
 	r1.xy = cb12[43].xy * v1.xy;
 	r1.xy = max(float2(0, 0), r1.xy);
 	r1.xy = min(r1.xy, r2.xy);
-	r0.z = t3.Sample(s3_s, r1.xy).x;
+	r0.z = depthTex.Sample(depthSampler, r1.xy).x;
 	r0.w = min(r0.z, r0.w);
-	r2.z = t3.Sample(s3_s, r8.zw).x;
+	r2.z = depthTex.Sample(depthSampler, r8.zw).x;
 	r0.w = min(r2.z, r0.w);
 	r2.z = cmp(r0.w == r2.z);
 	r0.z = cmp(r0.w == r0.z);
@@ -120,7 +125,7 @@ void main(
 	r0.xy = cb12[43].xy * r0.xy;
 	r0.xy = max(float2(0, 0), r0.xy);
 	r0.xy = min(r0.xy, r2.xy);
-	r0.xy = t2.Sample(s2_s, r0.xy).xy;
+	r0.xy = velocityTex.Sample(velocitySampler, r0.xy).xy;
 	r0.zw = v1.xy + r0.xy;
 	r0.x = dot(r0.xy, r0.xy);
 	r0.x = sqrt(r0.x);
@@ -128,63 +133,63 @@ void main(
 	r2.xy = max(float2(0, 0), r2.xy);
 	r4.x = min(cb12[44].w, r2.x);
 	r4.y = min(cb12[43].w, r2.y);
-	r2.xyw = t1.Sample(s1_s, r4.xy).xyz;
+	r2.xyw = historyTex.Sample(historySampler, r4.xy).xyz;
 	r3.w = dot(r3.xzy, float3(0.5, 0.25, 0.25));
 	r0.y = cmp(r3.w < r2.x);
-	r4.xyz = t0.Sample(s0_s, r1.zw).yxz;
+	r4.xyz = currentFrameTex.Sample(currentFrameSampler, r1.zw).yxz;
 #	ifdef HDR_OUTPUT
-	r4.yxz = convertRenderInput(r4.yxz);
+	r4.yxz = ConvertRenderInput(r4.yxz);
 #	endif
 
-	r1.z = t5.Sample(s5_s, r1.zw).z;
+	r1.z = alphaTex.Sample(alphaSampler, r1.zw).z;
 	r1.z = cmp(0 < r1.z);
 	r4.w = dot(r4.xzy, float3(0.5, 0.25, 0.25));
 	r1.w = cmp(r4.w < r2.x);
-	r6.xyz = t0.Sample(s0_s, r5.xy).yxz;
+	r6.xyz = currentFrameTex.Sample(currentFrameSampler, r5.xy).yxz;
 #	ifdef HDR_OUTPUT
-	r6.yxz = convertRenderInput(r6.yxz);
+	r6.yxz = ConvertRenderInput(r6.yxz);
 #	endif
 
 	r6.w = dot(r6.xzy, float3(0.5, 0.25, 0.25));
 	r3.x = cmp(r6.w < r2.x);
-	r9.xyz = t0.Sample(s0_s, r5.zw).yxz;
+	r9.xyz = currentFrameTex.Sample(currentFrameSampler, r5.zw).yxz;
 #	ifdef HDR_OUTPUT
-	r9.yxz = convertRenderInput(r9.yxz);
+	r9.yxz = ConvertRenderInput(r9.yxz);
 #	endif
 
 	r9.w = dot(r9.xzy, float3(0.5, 0.25, 0.25));
 	r4.x = cmp(r9.w < r2.x);
-	r10.xyz = t0.Sample(s0_s, r7.xy).yxz;
+	r10.xyz = currentFrameTex.Sample(currentFrameSampler, r7.xy).yxz;
 #	ifdef HDR_OUTPUT
-	r10.yxz = convertRenderInput(r10.yxz);
+	r10.yxz = ConvertRenderInput(r10.yxz);
 #	endif
 
 	r10.w = dot(r10.xzy, float3(0.5, 0.25, 0.25));
 	r6.x = cmp(r10.w < r2.x);
-	r11.xyz = t0.Sample(s0_s, r7.zw).yxz;
+	r11.xyz = currentFrameTex.Sample(currentFrameSampler, r7.zw).yxz;
 #	ifdef HDR_OUTPUT
-	r11.yxz = convertRenderInput(r11.yxz);
+	r11.yxz = ConvertRenderInput(r11.yxz);
 #	endif
 
 	r11.w = dot(r11.xzy, float3(0.5, 0.25, 0.25));
 	r9.x = cmp(r11.w < r2.x);
-	r12.xyz = t0.Sample(s0_s, r8.xy).yxz;
+	r12.xyz = currentFrameTex.Sample(currentFrameSampler, r8.xy).yxz;
 #	ifdef HDR_OUTPUT
-	r12.yxz = convertRenderInput(r12.yxz);
+	r12.yxz = ConvertRenderInput(r12.yxz);
 #	endif
 
 	r12.w = dot(r12.xzy, float3(0.5, 0.25, 0.25));
 	r10.x = cmp(r12.w < r2.x);
-	r13.xyz = t0.Sample(s0_s, r8.zw).yxz;
+	r13.xyz = currentFrameTex.Sample(currentFrameSampler, r8.zw).yxz;
 #	ifdef HDR_OUTPUT
-	r13.yxz = convertRenderInput(r13.yxz);
+	r13.yxz = ConvertRenderInput(r13.yxz);
 #	endif
 
 	r13.w = dot(r13.xzy, float3(0.5, 0.25, 0.25));
 	r14.x = cmp(r13.w < r2.x);
-	r14.yzw = t0.Sample(s0_s, r1.xy).xyz;
+	r14.yzw = currentFrameTex.Sample(currentFrameSampler, r1.xy).xyz;
 #	ifdef HDR_OUTPUT
-	r14.yzw = convertRenderInput(r14.yzw);
+	r14.yzw = ConvertRenderInput(r14.yzw);
 #	endif
 
 	r15.x = dot(r14.zwy, float3(0.5, 0.25, 0.25));
@@ -201,10 +206,10 @@ void main(
 	r17.x = cmp(r13.w < r16.w);
 	r17.xyz = r17.xxx ? r13.yzw : r16.yzw;
 	r16.yzw = r14.xxx ? r16.yzw : r17.xyz;
-	r17.xyz = cb2[2].zzz * r12.yxz;
-	r17.xyz = r11.yxz * cb2[2].www + r17.xyz;
-	r17.xyz = r13.yxz * cb2[2].yyy + r17.xyz;
-	r17.xyz = r14.yzw * cb2[2].xxx + r17.xyz;
+	r17.xyz = NeighborWeights.zzz * r12.yxz;
+	r17.xyz = r11.yxz * NeighborWeights.www + r17.xyz;
+	r17.xyz = r13.yxz * NeighborWeights.yyy + r17.xyz;
+	r17.xyz = r14.yzw * NeighborWeights.xxx + r17.xyz;
 	r11.x = cmp(r12.w < r16.w);
 	r18.xyz = r11.xxx ? r12.yzw : r16.yzw;
 	r16.yzw = r10.xxx ? r16.yzw : r18.xyz;
@@ -323,17 +328,17 @@ void main(
 	r1.w = cmp(0 >= r1.w);
 	r0.z = (int)r0.z | (int)r1.w;
 	r0.z = (int)r0.w | (int)r0.z;
-	r2.yz = t4.Sample(s4_s, r1.xy).xy;
-	r0.w = t5.Sample(s5_s, r1.xy).z;
+	r2.yz = maskTex.Sample(maskSampler, r1.xy).xy;
+	r0.w = alphaTex.Sample(alphaSampler, r1.xy).z;
 	r0.w = cmp(0 < r0.w);
-	r1.x = cmp(cb2[5].w < r2.z);
+	r1.x = cmp(ThresholdParams.w < r2.z);
 	r0.z = (int)r0.z | (int)r1.x;
 	r1.xyw = r0.zzz ? r14.yzw : r3.xyz;
 	r15.w = 0;
 	r2.xw = r0.zz ? r15.xw : r2.xw;
 	r3.xyz = r0.zzz ? r14.yzw : r17.xyz;
 	r4.xyz = r14.yzw + -r3.xyz;
-	r0.z = 128 * cb2[0].x;
+	r0.z = 128 * TexelSizeParams.x;
 	r6.z = saturate(r0.x / r0.z);
 	r0.x = r6.z + -r2.w;
 	r0.z = r2.x + -r15.x;
@@ -341,8 +346,8 @@ void main(
 	r2.xw = max(float2(0, 0), r2.xw);
 	r4.yzw = r2.xxx * r4.xyz + r3.xyz;
 	r1.xyw = -r4.yzw + r1.xyw;
-	r0.x = cb2[4].x + -cb2[4].y;
-	r0.x = r6.z * r0.x + cb2[4].y;
+	r0.x = BlendParams.x + -BlendParams.y;
+	r0.x = r6.z * r0.x + BlendParams.y;
 	r0.x = min(r0.x, r2.x);
 	r6.y = r2.w * r0.y;
 	r0.y = 0.99000001 + -r0.x;
@@ -356,16 +361,16 @@ void main(
 
 	r6.xyz = r1.xyw + -r3.xyz;
 #	ifdef HDR_OUTPUT
-	r1.xyw = (r6.xyz * cb2[4].zzz + r1.xyw);
+	r1.xyw = (r6.xyz * BlendParams.zzz + r1.xyw);
 #	else
-	r1.xyw = saturate(r6.xyz * cb2[4].zzz + r1.xyw);
+	r1.xyw = saturate(r6.xyz * BlendParams.zzz + r1.xyw);
 #	endif
 
 	r3.xyz = r3.xyz + -r1.xyw;
 #	ifdef HDR_OUTPUT
-	r3.yzw = (cb2[4].www * r3.xyz + r1.xyw);
+	r3.yzw = (BlendParams.www * r3.xyz + r1.xyw);
 #	else
-	r3.yzw = saturate(cb2[4].www * r3.xyz + r1.xyw);
+	r3.yzw = saturate(BlendParams.www * r3.xyz + r1.xyw);
 #	endif
 
 	r0.y = r0.x * r0.z + r15.x;
@@ -373,23 +378,23 @@ void main(
 	r0.x = cmp(abs(r0.x) < 0.00999999978);
 	r3.x = r0.x ? r15.x : r0.y;
 	r4.x = dot(r4.zwy, float3(0.5, 0.25, 0.25));
-	r0.x = t5.Sample(s5_s, r5.xy).z;
-	r0.y = t5.Sample(s5_s, r5.zw).z;
+	r0.x = alphaTex.Sample(alphaSampler, r5.xy).z;
+	r0.y = alphaTex.Sample(alphaSampler, r5.zw).z;
 	r0.xy = cmp(float2(0, 0) < r0.xy);
 	r0.x = r0.x ? r1.z : 0;
 	r0.x = r0.y ? r0.x : 0;
-	r0.y = t5.Sample(s5_s, r7.xy).z;
-	r0.z = t5.Sample(s5_s, r7.zw).z;
+	r0.y = alphaTex.Sample(alphaSampler, r7.xy).z;
+	r0.z = alphaTex.Sample(alphaSampler, r7.zw).z;
 	r0.yz = cmp(float2(0, 0) < r0.yz);
 	r0.x = r0.y ? r0.x : 0;
 	r0.x = r0.z ? r0.x : 0;
-	r0.y = t5.Sample(s5_s, r8.xy).z;
-	r0.z = t5.Sample(s5_s, r8.zw).z;
+	r0.y = alphaTex.Sample(alphaSampler, r8.xy).z;
+	r0.z = alphaTex.Sample(alphaSampler, r8.zw).z;
 	r0.yz = cmp(float2(0, 0) < r0.yz);
 	r0.x = r0.y ? r0.x : 0;
 	r0.x = r0.z ? r0.x : 0;
 	r0.x = r0.w ? r0.x : 0;
-	r0.y = cmp(cb2[5].w >= r2.y);
+	r0.y = cmp(ThresholdParams.w >= r2.y);
 	r0.z = 1 + -r2.z;
 	r0.x = r0.y ? r0.x : 0;
 	r1.xyzw = r0.xxxx ? r4.xyzw : r3.xyzw;
@@ -404,7 +409,7 @@ void main(
 
 #	ifdef HDR_OUTPUT
 	o1.x = max(0, o1.x);
-	o0.xyz = convertRenderOutput(o0.xyz);
+	o0.xyz = ConvertRenderOutput(o0.xyz);
 #	endif
 	return;
 }
