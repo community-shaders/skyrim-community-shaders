@@ -12,10 +12,6 @@ public:
 struct DynamicCubemaps : Feature
 {
 public:
-	static constexpr float kReflectionFallbackMin = 0.0f;
-	static constexpr float kReflectionFallbackMax = 1.0f;
-	static constexpr float kReflectionFallbackDefault = 0.5f;
-
 	const std::string defaultDynamicCubeMapSavePath = "Data\\textures\\DynamicCubemaps";
 
 	// Specular irradiance
@@ -120,10 +116,7 @@ public:
 		uint EnabledSSR = true;
 		uint pad0[2];
 		float4 CubemapColor{ 1.0f, 1.0f, 1.0f, 0.0f };
-		float ReflectionFallbackAmount = kReflectionFallbackDefault;
-		float pad1[3];
 	};
-	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;
 	bool enabledAtBoot = false;
