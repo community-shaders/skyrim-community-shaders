@@ -257,6 +257,9 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 #		if defined(DITHER)
+	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
+	float noiseGrad = TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 - 0.0078125;
+
 	uint3 seed1 = uint3(input.Position.xy, SharedData::FrameCount);
 	uint3 seed2 = uint3(input.Position.xy, SharedData::FrameCount + 4729u);
 	float3 tpdfNoise = (Random::pcg3d(seed1) - Random::pcg3d(seed2)) / float(0xFFFFFFFFu);
@@ -265,6 +268,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			ifdef TEX
 	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 	psout.Color.xyz *= 1.0 + tpdfNoise;
+	psout.Color.xyz += noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
 	float3 skyGradientColor = input.Color.xyz;
@@ -277,6 +281,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 	psout.Color.xyz = Color::Sky(skyGradientColor) + skyScale;
 	psout.Color.xyz *= 1.0 + tpdfNoise;
+	psout.Color.xyz += noiseGrad;
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
