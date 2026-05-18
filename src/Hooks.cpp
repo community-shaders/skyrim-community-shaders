@@ -893,6 +893,57 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	namespace MaterialHooks
+	{
+		HookChain<TESObjectLANDPostCallback>& TESObjectLANDPost()
+		{
+			static HookChain<TESObjectLANDPostCallback> chain;
+			return chain;
+		}
+		HookChain<BSLightingShaderInterceptor>& BSLightingShaderInterceptors()
+		{
+			static HookChain<BSLightingShaderInterceptor> chain;
+			return chain;
+		}
+		HookChain<BSLightingShaderPostCallback>& BSLightingShaderPost()
+		{
+			static HookChain<BSLightingShaderPostCallback> chain;
+			return chain;
+		}
+	}
+
+	struct TESObjectLAND_SetupMaterial
+	{
+		static bool thunk(RE::TESObjectLAND* land)
+		{
+			bool vanillaResult = func(land);
+			for (auto cb : MaterialHooks::TESObjectLANDPost().callbacks) {
+				if (cb(land, vanillaResult)) {
+					return true;
+				}
+			}
+			return vanillaResult;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSLightingShader_SetupMaterial
+	{
+		static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
+		{
+			for (auto cb : MaterialHooks::BSLightingShaderInterceptors().callbacks) {
+				if (cb(shader, material)) {
+					return;
+				}
+			}
+			func(shader, material);
+			for (auto cb : MaterialHooks::BSLightingShaderPost().callbacks) {
+				cb(shader, material);
+			}
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	/**
 	 * @brief Installs hooks, detours, and memory patches for graphics, input, and rendering subsystems.
 	 *
@@ -904,6 +955,12 @@ namespace Hooks
 			logger::info("Hooking BSImageSpace::Init::IBLF");
 			stl::detour_thunk<BSImageSpace_Init_IBLF>(REL::RelocationID(100480, 107198));
 		}
+
+		logger::info("Hooking TESObjectLAND::SetupMaterial");
+		stl::detour_thunk<TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
+
+		logger::info("Hooking BSLightingShader::SetupMaterial");
+		stl::write_vfunc<0x4, BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 
 		// This input hook also drives per-frame Reflex update (see BSInputDeviceManager_PollInputDevices::thunk).
 		logger::info("Hooking BSInputDeviceManager::PollInputDevices");

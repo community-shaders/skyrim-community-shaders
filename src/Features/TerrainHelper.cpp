@@ -1,8 +1,10 @@
 #include "TerrainHelper.h"
 
 #include "Globals.h"
+#include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "TruePBR.h"
 
 void TerrainHelper::DataLoaded()
 {
@@ -194,44 +196,25 @@ void TerrainHelper::BSLightingShader_SetupMaterial(RE::BSLightingShaderMaterialB
 	}
 }
 
-struct TH_TESObjectLAND_SetupMaterial
-{
-	static bool thunk(RE::TESObjectLAND* land)
-	{
-		bool result = func(land);
-
-		// TruePBR sets flag 8 on land cells it processes as PBR; skip TerrainHelper for those.
-		if (!land->data.flags.any(static_cast<RE::OBJ_LAND::Flag>(8))) {
-			auto& terrainHelper = globals::features::terrainHelper;
-			if (result && terrainHelper.loaded) {
-				terrainHelper.TESObjectLAND_SetupMaterial(land);
-			}
-		}
-
-		return result;
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct TH_BSLightingShader_SetupMaterial
-{
-	static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
-	{
-		func(shader, material);
-
-		auto& terrainHelper = globals::features::terrainHelper;
-		if (terrainHelper.loaded) {
-			terrainHelper.BSLightingShader_SetupMaterial(material);
-		}
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
 void TerrainHelper::PostPostLoad()
 {
-	logger::info("[Terrain Helper] Hooking TESObjectLAND");
-	stl::detour_thunk<TH_TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
-
-	logger::info("[Terrain Helper] Hooking BSLightingShader::SetupMaterial");
-	stl::write_vfunc<0x4, TH_BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
+	logger::info("[Terrain Helper] Registering material hook post callbacks");
+	// TerrainHelper augments vanilla land setup; it never claims, so PBR (registered earlier) wins
+	// when both flag the cell.
+	Hooks::MaterialHooks::TESObjectLANDPost().Register(
+		+[](RE::TESObjectLAND* land, bool vanillaResult) -> bool {
+			if (!vanillaResult) {
+				return false;
+			}
+			// TruePBR tags land cells it processes; skip TerrainHelper for those.
+			if (land->data.flags.any(kPBRProcessedLandFlag)) {
+				return false;
+			}
+			globals::features::terrainHelper.TESObjectLAND_SetupMaterial(land);
+			return false;
+		});
+	Hooks::MaterialHooks::BSLightingShaderPost().Register(
+		+[](RE::BSLightingShader*, RE::BSLightingShaderMaterialBase const* material) {
+			globals::features::terrainHelper.BSLightingShader_SetupMaterial(material);
+		});
 }

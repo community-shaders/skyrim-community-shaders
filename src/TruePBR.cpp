@@ -1174,7 +1174,7 @@ bool TruePBR::TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land)
 	auto memoryManager = RE::MemoryManager::GetSingleton();
 
 	if (land->loadedData != nullptr && land->loadedData->mesh[0] != nullptr) {
-		land->data.flags.set(static_cast<RE::OBJ_LAND::Flag>(8));
+		land->data.flags.set(kPBRProcessedLandFlag);
 		for (uint32_t quadIndex = 0; quadIndex < 4; ++quadIndex) {
 			auto shaderProperty = static_cast<RE::BSLightingShaderProperty*>(memoryManager->Allocate(REL::Module::IsVR() ? 0x178 : sizeof(RE::BSLightingShaderProperty), 0, false));
 			shaderProperty->Ctor();
@@ -1442,34 +1442,6 @@ struct BSLightingShaderProperty_OnLoadTextureSet
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-struct PBR_TESObjectLAND_SetupMaterial
-{
-	static bool thunk(RE::TESObjectLAND* land)
-	{
-		bool vanillaResult = func(land);
-
-		if (globals::features::truePBR.TESObjectLAND_SetupMaterial(land)) {
-			return true;
-		}
-
-		return vanillaResult;
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
-struct PBR_BSLightingShader_SetupMaterial
-{
-	static void thunk(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material)
-	{
-		if (globals::features::truePBR.BSLightingShader_SetupMaterial(shader, material)) {
-			return;
-		}
-
-		func(shader, material);
-	}
-	static inline REL::Relocation<decltype(thunk)> func;
-};
-
 void TruePBR::PostPostLoad()
 {
 	logger::info("[TruePBR] Hooking BGSTextureSet");
@@ -1505,11 +1477,17 @@ void TruePBR::PostPostLoad()
 	logger::info("[TruePBR] Hooking TESObjectSTAT");
 	stl::write_vfunc<0x4A, TESBoundObject_Clone3D>(RE::VTABLE_TESObjectSTAT[0]);
 
-	logger::info("[TruePBR] Hooking TESObjectLAND");
-	stl::detour_thunk<PBR_TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
-
-	logger::info("[TruePBR] Hooking BSLightingShader::SetupMaterial");
-	stl::write_vfunc<0x4, PBR_BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
+	logger::info("[TruePBR] Registering material hook callbacks");
+	// TruePBR claims LAND cells whose textures are PBR (after vanilla has run).
+	Hooks::MaterialHooks::TESObjectLANDPost().Register(
+		+[](RE::TESObjectLAND* land, bool) -> bool {
+			return globals::features::truePBR.TESObjectLAND_SetupMaterial(land);
+		});
+	// TruePBR intercepts BSLightingShader::SetupMaterial — replaces vanilla setup for PBR materials.
+	Hooks::MaterialHooks::BSLightingShaderInterceptors().Register(
+		+[](RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material) -> bool {
+			return globals::features::truePBR.BSLightingShader_SetupMaterial(shader, material);
+		});
 }
 
 void TruePBR::DataLoaded()
