@@ -25,45 +25,24 @@ struct ImVec4;
 
 namespace ShadowCasterManager
 {
-	// -------------------------------------------------------------------------
-	// Type-vs-state shadow-caster check
-	//
-	// Use this when the answer should reflect a light's intrinsic type rather
-	// than its current frame-by-frame shadow-casting state. SCM installs a
-	// vtable hook (Hook_IsShadowLight) that makes BSShadowLight::IsShadowLight()
-	// return false for shadow lights converted to normal-light overflow
-	// handling (issue #2121 #3, ConvertExcessToNormal). The engine's geometry
-	// / stencil shadow-masking pass and other state-aware callers correctly
-	// see those lights as non-shadow via the hooked virtual.
-	//
-	// Some callers (e.g. InverseSquareLighting's cutoff selection) want the
-	// stable type-based answer instead — the radius shouldn't oscillate as a
-	// light flips in and out of conversion. For those, query the underlying
-	// BSLight type via RTTI (skyrim_cast), which bypasses the vtable hook.
-	//
-	// Cost: one vtable-pointer compare. Cheap enough to call per-light per-frame.
+	// Type-based shadow-caster check that bypasses the IsShadowLight vtable
+	// hook (which flips to false for ConvertExcessToNormal-demoted lights).
+	// Use this when callers need the intrinsic type, not the current shadow
+	// state -- e.g. InverseSquareLighting's cutoff selection, where the
+	// radius shouldn't oscillate as a light flips in and out of conversion.
+	// Cost: one vtable-pointer compare.
 	inline bool IsShadowLightType(RE::BSLight* bsLight)
 	{
 		return skyrim_cast<RE::BSShadowLight*>(bsLight) != nullptr;
 	}
 
-	// -------------------------------------------------------------------------
-	// shadowLightsAccum iterator
+	// shadowLightsAccum iterator. shadowLightsAccum is a flat slot array
+	// where a dual-paraboloid light occupies shadowMapCount==2 consecutive
+	// physical slots (second is null). ForEachShadowLight advances by
+	// shadowMapCount so each logical light is visited once.
 	//
-	// shadowLightsAccum is a flat slot array where a dual-paraboloid (DP) light
-	// occupies shadowMapCount==2 consecutive physical slots (the second is null).
-	// A plain range-for visits every physical slot and will see the null padding.
-	// ForEachShadowLight advances by shadowMapCount so each logical light is
-	// visited exactly once, matching the game's own iteration contract.
-	//
-	// WARNING: This is no longer a proper BSTArray and cannot be treated as such.
-	// We do not push_back or set_size, so _size is never updated and iterators
-	// will not work correctly.
-	//
-	// Usage:
-	//   ShadowCasterManager::ForEachShadowLight(ssn->GetRuntimeData().shadowLightsAccum,
-	//       [](RE::BSShadowLight* light) { ... });
-	// -------------------------------------------------------------------------
+	// WARNING: _size is never updated -- do not push_back or use range-for /
+	// BSTArray iterators on this directly.
 	/// Conservative upper bound on shadowLightsAccum iteration index, derived
 	/// from the active scheduler settings (ShadowLightCount + sun cascades).
 	/// Used by ForEachShadowLight as a setting-aware safety cap so corrupt
@@ -290,28 +269,18 @@ namespace ShadowCasterManager
 
 		// --- Formula strings (exprtk expressions) ---
 
-		/// Light priority scoring formula.  Available variables:
-		/// lightindex, lightintensity, lightdistance, playerlightdistance, lightradius, lightx/y/z,
-		/// lightr/g/b, lightambientr/g/b, lightchosenlastframe, lightframessincerender,
-		/// lightneverfades, lightportalstrict, lightns, lightconverted, camerax/y/z,
-		/// isinterior, timeofday
-		///
-		/// Default favours spots whose cone plausibly reaches the camera
-		/// frustum. lightspotvisible is 1 for non-spots and for visible
-		/// spots; 0 for spots pointing away from the camera. The
-		/// (1 + lightisspot * lightspotvisible) term gives visible spots
-		/// a 2x score multiplier and leaves omnis at 1x.
-		///
-		/// The recency term `max(0, 1 - lightframessincerender / 8) * 0.4`
-		/// is a smooth temporal stickiness that decays linearly to zero
-		/// over 8 frames since the slot's last actual render. It
-		/// suppresses rank-drift churn at the chosen/excess boundary
-		/// (recently-rendered torches stay chosen across small
-		/// importance perturbations) without overriding structural
-		/// demotion -- once a light hasn't been redrawn in 8 frames the
-		/// bonus is 0 and ranking is decided purely on present merit.
-		/// This replaces the older boolean `(1 + lightchosenlastframe * 0.3)`
-		/// term; `lightchosenlastframe` remains available for custom formulas.
+		/// Light priority scoring formula (exprtk). Variables:
+		///   lightindex, lightintensity, lightdistance, playerlightdistance,
+		///   lightradius, lightx/y/z, lightr/g/b, lightambientr/g/b,
+		///   lightchosenlastframe, lightframessincerender, lightneverfades,
+		///   lightportalstrict, lightns, lightconverted, camerax/y/z,
+		///   isinterior, timeofday, lightisspot, lightspotvisible
+		/// Default-formula notes:
+		///   (1 + lightisspot * lightspotvisible) gives visible spots 2x,
+		///   omnis 1x. lightspotvisible=0 for spots pointing away from camera.
+		///   max(0, 1 - lightframessincerender / 8) * 0.4 is smooth temporal
+		///   stickiness; recently-rendered lights resist demotion across small
+		///   score perturbations, decaying to 0 over 8 frames since last redraw.
 		std::string ScoreFormula = "lightradius * lightintensity / (1 + ((1 - lightneverfades) * lightdistance) / 1000) * (1 + max(0, 1 - lightframessincerender / 8) * 0.4) * (1 + lightisspot * lightspotvisible)";
 
 		/// Redraw interval formula (per light).  Higher = less frequent redraws.
@@ -329,14 +298,10 @@ namespace ShadowCasterManager
 		/// stableframes, isinterior, plus the per-light variables (used by ScoreFormula
 		/// and RedrawIntervalFormula but evaluated to last-light values here).
 		///
-		/// Caveat — adaptive variants ping-pong: any formula that subtracts
-		/// shadow GPU cost from frametime headroom (e.g.
-		/// `max(0, frametarget - frametime - 0.5) * min(stableframes, 45) / 45`)
-		/// will oscillate between 0 and a positive value frame-to-frame, because
-		/// rendering shadows raises frametime, which zeroes the budget, which
-		/// drops frametime, which restores the budget. exprtk has no hysteresis
-		/// state, so adaptive control needs the C++ DRS controller (removed)
-		/// to work cleanly. Stick to static expressions like the default.
+		/// Avoid adaptive formulas that subtract shadow GPU cost from frametime
+		/// headroom -- they oscillate (rendering shadows raises frametime,
+		/// which zeroes the budget, which drops frametime, restoring the
+		/// budget). exprtk has no hysteresis state. Use static expressions.
 		std::string RedrawBudgetFormula = "1 + isinterior";
 
 		// --- Importance scheduling curve ---

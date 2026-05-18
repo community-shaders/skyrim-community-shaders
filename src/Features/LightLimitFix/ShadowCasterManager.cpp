@@ -1312,21 +1312,14 @@ namespace ShadowCasterManager
 		return std::round(f / step) * step;
 	}
 
-	/// Hash the inputs that determine a shadow map's content. Two inputs:
-	///   (1) the light's own pose + radius -- moves/rotates/resizes the
-	///       shadow frustum, all change the rendered depths
-	///   (2) each caster's worldBound (center + radius) and identity --
-	///       worldBound is engine-maintained: it tracks rigid motion AND
-	///       BSDynamicTriShape vertex updates, so we don't need to dig
-	///       deeper into mesh data
-	///
-	/// Identical hashes across frames means the shadow map currently in the
-	/// slot is byte-for-byte what a fresh re-render would produce -- the
-	/// caller can skip the redraw and keep the cached slot intact.
-	///
-	/// Returns 0 only when `light` or its inner NiLight is null (caller
-	/// treats 0 as "never rendered"). Otherwise the hash itself almost
-	/// never lands on 0 because of how HashCombine mixes constants in.
+	/// Hash of inputs that determine a shadow map's content: the light's
+	/// pose + radius, and each caster's worldBound + identity. worldBound
+	/// tracks rigid motion and BSDynamicTriShape vertex updates, so mesh
+	/// data isn't inspected directly. Identical hashes across frames mean
+	/// the cached slot is byte-for-byte current -- caller can skip the
+	/// redraw. Returns 0 only on null light/NiLight (sentinel for "never
+	/// rendered"); HashCombine constants make a real-data 0 essentially
+	/// impossible.
 
 	static std::uint64_t ComputeShadowGeomHash(RE::BSShadowLight* light)
 	{
@@ -1568,52 +1561,29 @@ namespace ShadowCasterManager
 		bool chosen{ false };         // valid + within ShadowLightCount budget
 		bool excess{ false };         // valid but over budget (convert or disable)
 		bool invalid{ false };        // shorthand: invalidCamera || invalidPortal
-		bool invalidCamera{ false };  // UpdateCamera returned false (any sub-reason).
-									  // Retained as a shorthand for downstream branches
-									  // that don't care WHY camera-validation failed.
-									  // For action selection, prefer the explicit
-									  // sub-reasons below.
-		bool invalidPortal{ false };  // portal cull says light's cell is not visible
-									  // from the camera's cell. Must DisableLight
-									  // entirely; converting routes through cluster
-									  // lighting which has no portal awareness and
-									  // would bleed light through walls.
+		bool invalidCamera{ false };  // UpdateCamera returned false -- shorthand for
+									  // branches that don't care which sub-reason
+		bool invalidPortal{ false };  // portal cull: light's cell not visible from
+									  // camera's cell. Must DisableLight; converting
+									  // routes through cluster lighting which has no
+									  // portal awareness and would bleed through walls.
 
-		// UpdateCamera() conflates three physically distinct fail conditions
-		// into one boolean. The engine sets two side-band flags as it walks
-		// per-light culling that let us recover the reason:
-		//
-		//   frustrumCull = 0xff -> light's bounding shape is outside the camera
-		//                          frustum (off-screen). Light contributes nothing
-		//                          visible this frame regardless of shadow state,
-		//                          so ConvertLight is wasted work -- drop instead.
-		//
-		//   lodDimmer == 0.0f  -> light is past the engine's per-light shadow LOD
-		//                          fade end distance. The light is still visible
-		//                          and *should* still illuminate via cluster
-		//                          lighting, so ConvertLight is the correct action
-		//                          (keep + reset lodDimmer so cluster picks it up).
-		//
-		// A light can hit both simultaneously (off-screen AND distant); the
-		// frustum check wins because off-screen contribution is zero.
-		//
-		// Sub-reasons are not mutually exclusive at the bit level but action
-		// selection treats frustum-out as terminal.
-		bool invalidFrustum{ false };  // engine's frustum cull failed (BSMultiBoundSphere::WithinFrustum / cone-frustum)
+		// Sub-reasons for invalidCamera, recovered from engine side-band flags:
+		//   frustrumCull == 0xff -> off-screen, ConvertLight wasted -> drop
+		//   lodDimmer == 0.0f    -> past LOD fade end, still visible -> ConvertLight
+		//                           (resets lodDimmer so cluster lighting picks it up)
+		// Both can fire together; frustum-out wins (contribution is zero either way).
+		bool invalidFrustum{ false };  // BSMultiBoundSphere::WithinFrustum / cone-frustum cull
 		bool invalidLod{ false };      // engine's LOD-fade zeroed lodDimmer
 	};
 
 	static void ScheduleShadowCasters()
 	{
 		ZoneScopedN("SCM::ScheduleShadowCasters");
-		// Reset per-frame diagnostic counters. Each release/clear path below
-		// increments its bucket; values are emitted as TracyPlot at function
-		// exit so capture-time analysis can pinpoint which path fires under
-		// which conditions.
+		// Per-frame diagnostic counters; emitted via TracyPlot at function exit.
 		s_schedDiag = SchedDiagCounters{};
-		// VR renders both eyes per frame, so the game calls CalculateAndDrawShadowCasterLights
-		// twice. Block the second call: s_lights is not thread-safe and a re-entrant call
-		// would null out entries the first call is still iterating over.
+		// VR calls CalculateAndDrawShadowCasterLights twice per frame (once per
+		// eye). Block the second call: s_lights isn't reentrancy-safe.
 		static std::atomic<bool> s_inSchedule{ false };
 		if (s_inSchedule.exchange(true, std::memory_order_acquire))
 			return;
@@ -1980,17 +1950,11 @@ namespace ShadowCasterManager
 				int idx = s_lights.FindFreeIndex(true, s_settings.ShadowLightCount, s_settings.ConvertedShadowSlots);
 				if (idx < 0)
 					continue;
-				// Reset slot metadata before installing the new occupant.
-				// FindFreeIndex returns slots whose Light pointer is nullptr,
-				// but eviction paths leave the rest of the LightEntry intact
-				// (LastDrawnFrame, lastGeomHash, etc.). Without this clear the
-				// new occupant inherits the previous owner's metadata, the
-				// first_render_skips gate fails to fire (LastDrawnFrame >= 0),
-				// and the cluster pipeline samples kSHADOWMAPS[idx] -- which
-				// still holds the previous owner's depth content -- producing
-				// a wrong-shadow visual artifact. Reset at acquire only --
-				// eviction paths just null the Light pointer, letting metadata
-				// persist as a cache key until the slot is genuinely reused.
+				// Eviction nulls Light* but leaves the rest of LightEntry intact
+				// so it can serve as a cache key. Clear at acquire so the new
+				// occupant doesn't inherit LastDrawnFrame / lastGeomHash from the
+				// previous owner (which would skip its first render and let the
+				// cluster pipeline sample stale kSHADOWMAPS[idx] content).
 				s_lights.Lights[idx].Clear();
 				s_lights.Lights[idx].Light = c.light;
 			}
@@ -2050,7 +2014,6 @@ namespace ShadowCasterManager
 				s_autoBudgetMs = static_cast<float>(budget);
 			}  // end SCM::ComputeBudget
 
-			// Reset redraw counter (will be updated at end of scheduling)
 			s_redrawnLightsThisFrame = 0;
 			s_totalShadowLightsThisFrame = s_settings.ShadowLightCount;
 
@@ -2128,25 +2091,13 @@ namespace ShadowCasterManager
 					}
 					interval += 1.0;
 
-					// Contribution-weighted importance scheduling
-					// ══════════════════════════════════════════════
-					// importance = luminance(diffuse × fade) × max(att_cam, att_plr)
-					//
-					// att(pos) = max(1 − (dist/radius)², 0)²   [Skyrim's quadratic falloff]
-					//
-					// Physically: this is proportional to how much illumination this
-					// light delivers at the camera or player position.  Dim or distant
-					// lights score near zero; bright lights with the viewer inside the
-					// radius score near 1 (or above for very intense lights).
-					//
-					// Interval multiplier:  2.0 × (0.025/2.0)^importance
-					//   importance = 0 → ×2.0  (deprioritise background lights)
-					//   importance = 0.5 → ×0.32 (~3× faster)
-					//   importance = 1.0 → ×0.05 (~40× faster, near-forced redraw)
-					//
-					// A reference for this technique: Wimmer & Scherzer 2006,
-					// "Instant Shadow Maps", Sec. 3 (importance-based priority);
-					// Valient 2014, "Practical Shadow Maps" (luminance × coverage).
+					// Contribution-weighted redraw interval:
+					//   importance = luminance(diffuse × fade) × max(att_cam, att_plr)
+					//   att(pos)   = max(1 - (dist/radius)^2, 0)^2     (Skyrim falloff)
+					//   interval  *= 2.0 * (0.025/2.0)^importance
+					// importance=0 -> x2.0 (deprioritise), 0.5 -> ~x0.32, 1.0 -> ~x0.05.
+					// Refs: Wimmer & Scherzer 2006 "Instant Shadow Maps" sec. 3;
+					//       Valient 2014 "Practical Shadow Maps".
 
 					float importance = 0.0f;
 
@@ -2292,38 +2243,25 @@ namespace ShadowCasterManager
 				++s_redrawnLightsThisFrame;
 		}
 
-		// Smooth the count for stable UI display (avoid flickering)
+		// EWMA so the UI counter doesn't flicker frame-to-frame.
 		s_redrawnLightsSmoothed = 0.8f * s_redrawnLightsSmoothed + 0.2f * s_redrawnLightsThisFrame;
 
-		// ---- ATOMIC PER-CANDIDATE LOOP ----
+		// Atomic per-candidate loop: process each score-sorted candidate to
+		// completion before moving on. Branch dispatch:
+		//   chosen + RedrawFrame + slot in budget: EnableLight + render
+		//   chosen otherwise:                      DisableLight (re-added below
+		//                                          via GameSetShadowCasterSlot)
+		//   excess + ConvertExcessToNormal:        ConvertLight
+		//   excess otherwise / invalid:            DisableLight
 		//
-		// Replaces the previous split selection / activation phases. For each
-		// candidate (in score order), perform its mutation immediately:
+		// Ordering matters: chosen (rank < ShadowLightCount) runs before any
+		// excess. ConvertLight's ReturnShadowmaps can mutate activeShadowLights
+		// and free other BSShadowLights, but by then chosen entries have
+		// already completed EnableLight + budget pairing in-iteration -- no
+		// later phase walks those pointers.
 		//
-		//   - chosen + RedrawFrame + slot < ShadowLightCount + !sun-slot:
-		//       Begin + EnableLight + End budget pair, render shadow map.
-		//   - chosen, otherwise: DisableLight (Phase 7 below re-adds it via
-		//       GameSetShadowCasterSlot at the cached-shadow tail).
-		//   - excess + ConvertExcessToNormal: ConvertLight (preserves diffuse
-		//       contribution as a normal non-shadow light).
-		//   - excess + !ConvertExcessToNormal: DisableLight (vanilla SLF behavior).
-		//   - invalid (failed UpdateCamera / culling / portal): DisableLight.
-		//
-		// Why this ordering matters:
-		//   Score-sorted candidates have all chosen entries (rank < ShadowLightCount)
-		//   processed BEFORE any excess (rank >= ShadowLightCount). When ConvertLight
-		//   on an excess light triggers ReturnShadowmaps (which mutates the scene's
-		//   activeShadowLights and may free other BSShadowLight objects), the chosen
-		//   lights have already completed their EnableLight + budget pairing
-		//   synchronously within their own iteration. There is no later phase
-		//   walking those pointers, so the ConvertLight side-effect cannot induce
-		//   the dangling-pointer crash that previously plagued the split design.
-		//
-		// Defense for chosen-light cross-invalidation: EnableLight on light A could
-		// in principle invalidate light B's pointer via game-side scene mutations.
-		// We rebuild a per-iteration alive check via aliveNow (cheap O(N) scan,
-		// N ~16) before each EnableLight / ConvertLight call so a dangling pointer
-		// is skipped rather than dereferenced.
+		// isUsableLight() per-iteration guard catches dangling pointers if an
+		// earlier EnableLight invalidated a later candidate via scene mutation.
 
 		auto* shadowSceneNodeRT = &ssn->GetRuntimeData();
 
@@ -3515,17 +3453,11 @@ namespace ShadowCasterManager
 		}
 
 		// ---- Light conversion ------------------------------------------------
-		// All conversion-related hooks install unconditionally when SCM is
-		// enabled. Their runtime behaviour is gated by the relevant settings
-		// (s_settings.ConvertExcessToNormal, s_settings.PromoteNormalToShadow)
-		// and by container membership (s_normalConvert, s_shadowConvert) --
-		// so when the user has both flags false at boot the hooks fire but
-		// are no-ops. Installing them unconditionally means toggling the
-		// settings on at runtime takes effect immediately rather than
-		// silently doing nothing (the prior boot-time gating left the
-		// vtable patch and SetLight/RemoveLight hooks uninstalled if the
-		// flags were false at Init time, so a later toggle-on couldn't
-		// observe new conversions properly).
+		// All conversion hooks install unconditionally; runtime behaviour is
+		// gated by s_settings.ConvertExcessToNormal / PromoteNormalToShadow
+		// and container membership. When both flags are false the hooks fire
+		// but are no-ops -- required so toggling either flag on at runtime
+		// takes effect without a restart.
 
 		{
 			// BSShadowLight vtable slot 3 = IsShadowLight; replace on all 4 shadow light types.
@@ -3883,18 +3815,12 @@ namespace ShadowCasterManager
 
 	void DrawShadowLightTable(bool compact, bool showColor, bool sceneOnly, bool readOnly)
 	{
-		// Hover key is set per-row inside this function and consumed by the
-		// cluster light builder (LightLimitFix::UpdateLights addLight) for the
-		// debug pulse. The consume call at the end of UpdateLights clears it
-		// each frame, so when this function runs again next frame the key
-		// starts at 0 and only gets re-set if a row is currently Shift-hovered.
-		// We deliberately do NOT reset at the top here -- when both the
-		// settings-menu table and the overlay table render in the same frame
-		// (overlay-window open while settings-menu is also open), a reset here
-		// would let the second-drawn table clobber the hover set by the first.
-		// Letting both calls coexist means hovering in either one fires the
-		// pulse (only one row can be hovered at a time, so the writes never
-		// fight).
+		// Hover key is set per-row here and consumed (cleared) once per frame
+		// by UpdateLights. Do NOT clear it at function entry -- if both the
+		// settings-menu table and the overlay table render in the same frame,
+		// a top-of-function clear would let the second table clobber the
+		// hover set by the first. Only one row hovers at a time, so the two
+		// callsites can't fight.
 
 		struct SlotRow
 		{
