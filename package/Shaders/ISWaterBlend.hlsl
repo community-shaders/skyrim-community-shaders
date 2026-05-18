@@ -1,5 +1,6 @@
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/VR.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
@@ -28,13 +29,29 @@ cbuffer PerGeometry : register(b2)
 	float4 NearFar_Menu_DistanceFactor : packoffset(c0);
 };
 
+namespace WaterBlend
+{
+	static const float WaterMaskThreshold = 1e-4f;
+	static const float FullHistoryCoverageThreshold = 1e-3f;
+
+	float SaturateRange(float value, float minValue, float maxValue)
+	{
+		return saturate((value - minValue) / max(maxValue - minValue, EPSILON_DIVISION));
+	}
+
+	float GetHistoryCoverage(float historyMask)
+	{
+		return SaturateRange(historyMask, WaterMaskThreshold, FullHistoryCoverageThreshold);
+	}
+}
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord);
 	float2 adjustedScreenPosition = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 	float waterMask = waterMaskTex.Sample(waterMaskSampler, adjustedScreenPosition).z;
-	if (waterMask < 1e-4) {
+	if (waterMask < WaterBlend::WaterMaskThreshold) {
 		discard;
 	}
 
@@ -43,16 +60,16 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 motionScreenPosition = Stereo::ConvertToStereoUV(Stereo::ConvertFromStereoUV(input.TexCoord, eyeIndex) + motion, eyeIndex);
 	float2 motionAdjustedScreenPosition =
 		FrameBuffer::GetPreviousDynamicResolutionAdjustedScreenPosition(motionScreenPosition);
-	float3 waterHistory =
-		waterHistoryTex.Sample(waterHistorySampler, motionAdjustedScreenPosition).xyz;
 
 	float historyMask = waterMaskTex.Sample(waterMaskSampler, motionAdjustedScreenPosition).z;
+	float historyCoverage = WaterBlend::GetHistoryCoverage(historyMask);
 	float3 finalColor = sourceColor;
 	if (
 #	ifndef VR
 		motionScreenPosition.x >= 0 && motionScreenPosition.y >= 0 && motionScreenPosition.x <= 1 &&
 #	endif
-		motionScreenPosition.y <= 1 && historyMask > 0.999) {
+		motionScreenPosition.y <= 1 && historyCoverage > 0.0) {
+		float3 waterHistory = waterHistoryTex.Sample(waterHistorySampler, motionAdjustedScreenPosition).xyz;
 		float historyFactor = 0.95;
 		if (NearFar_Menu_DistanceFactor.z == 0) {
 			float depth = depthBufferTex.Sample(depthBufferSampler, adjustedScreenPosition).x;
@@ -65,6 +82,7 @@ PS_OUTPUT main(PS_INPUT input)
 				0.1, 0.95);
 			historyFactor = NearFar_Menu_DistanceFactor.w * (distanceFactor * (waterMask * -0.85 + 0.95));
 		}
+		historyFactor *= historyCoverage;
 		finalColor = lerp(sourceColor, waterHistory.xyz, historyFactor);
 	}
 
