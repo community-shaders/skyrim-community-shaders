@@ -3,6 +3,7 @@
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
 #include "Features/CloudShadows.h"
+#include "Features/DeepDVC.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
@@ -239,6 +240,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::ibl,
 		&globals::features::extendedTranslucency,
 		&globals::features::upscaling,
+		&globals::features::deepDVC,
 		&globals::features::renderDoc,
 		&globals::features::weatherEditor,
 		&globals::features::screenshotFeature,

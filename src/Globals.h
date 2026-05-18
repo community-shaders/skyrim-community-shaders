@@ -32,6 +32,7 @@ struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
+struct DeepDVC;
 struct WeatherEditor;
 struct ExponentialHeightFog;
 struct HDRDisplay;
@@ -91,6 +92,7 @@ namespace globals
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern HDRDisplay hdrDisplay;
+		extern DeepDVC deepDVC;
 		extern RenderDoc renderDoc;
 		extern ScreenshotFeature screenshotFeature;
 		extern WeatherEditor weatherEditor;
