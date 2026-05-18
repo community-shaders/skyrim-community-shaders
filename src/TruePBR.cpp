@@ -1263,7 +1263,7 @@ struct TESForm_SetFormEditorID
 	{
 		auto* singleton = &globals::features::truePBR;
 		singleton->editorIDs[form->GetFormID()] = editorId;
-		return true;
+		return func(form, editorId);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
