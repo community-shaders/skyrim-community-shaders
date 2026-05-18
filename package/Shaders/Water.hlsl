@@ -1278,7 +1278,7 @@ PS_OUTPUT main(PS_INPUT input)
 #						endif
 #						if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(input.HPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, input.HPosition.z, 1));
 		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
 			fogColor = exponentialHeightFog.xyz;
 			fogColor *= GetWaterFogFade(eyeIndex);
@@ -1329,7 +1329,7 @@ PS_OUTPUT main(PS_INPUT input)
 #						endif
 #						if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, preFogColor);
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, preFogColor, float4(input.HPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, input.HPosition.z, 1));
 		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
 			preFogColor = exponentialHeightFog.xyz;
 			preFogColor *= GetWaterFogFade(eyeIndex);
