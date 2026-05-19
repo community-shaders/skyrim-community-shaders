@@ -932,10 +932,9 @@ void Raytracing::SetupResources()
 		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
 		waterFlowMap = eastl::make_unique<WrappedResource>(texDesc);
-		waterFlowMapFallbackCleared = false;
 		DX::ThrowIfFailed(waterFlowMap->resource->SetName(L"Water FlowMap"));
 
 		creationEngineRaytracing->SetWaterFlowMap(waterFlowMap->resource.get());

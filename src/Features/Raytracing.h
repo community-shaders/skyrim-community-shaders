@@ -686,7 +686,6 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
 
 	eastl::unique_ptr<WrappedResource> waterFlowMap = nullptr;
-	bool waterFlowMapFallbackCleared = false;
 	RE::NiPointer<RE::TESWaterReflections> waterReflections = nullptr;
 
 	eastl::unique_ptr<CreationEngineRaytracing> creationEngineRaytracing = nullptr;
@@ -776,23 +775,14 @@ struct Raytracing : public OverlayFeature
 				func(a1, a2, a3);
 
 				auto& rt = globals::features::raytracing;
-				if (!rt.initialized || rt.forcedDisabled || !rt.waterFlowMap || !rt.waterFlowMap->resource11 ||
-					!globals::d3d::context)
+				if (!rt.initialized || rt.forcedDisabled || !rt.waterFlowMap || !rt.waterFlowMap->resource11)
 					return;
 
-				auto clearFlowMap = [&]() {
-					if (rt.waterFlowMapFallbackCleared)
-						return;
+				auto* context = globals::d3d::context;
 
-					static constexpr std::array<uint32_t, WATER_FLOWMAP_SIZE * WATER_FLOWMAP_SIZE> blackFlowMap{};
-					globals::d3d::context->UpdateSubresource(
-						rt.waterFlowMap->resource11,
-						0,
-						nullptr,
-						blackFlowMap.data(),
-						WATER_FLOWMAP_SIZE * sizeof(uint32_t),
-						0);
-					rt.waterFlowMapFallbackCleared = true;
+				auto clearFlowMap = [&]() {
+					const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+					context->ClearRenderTargetView(rt.waterFlowMap->rtv, clearColor);
 				};
 
 				REL::Relocation<RE::NiPointer<RE::NiSourceTexture>*> gFlowMapSourceTex{ REL::RelocationID(527694, 414616) };
@@ -808,8 +798,7 @@ struct Raytracing : public OverlayFeature
 					return;
 				}
 
-				globals::d3d::context->CopyResource(rt.waterFlowMap->resource11, sourceTexture->rendererTexture->texture);
-				rt.waterFlowMapFallbackCleared = false;
+				context->CopyResource(rt.waterFlowMap->resource11, sourceTexture->rendererTexture->texture);
 			}
 
 			static inline REL::Relocation<decltype(thunk)> func;
