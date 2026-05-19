@@ -427,20 +427,97 @@ void ColorGrading::DrawSettings()
 		tonemappers[tonemapperType].draw_settings_func(settings.tonemapParams);
 		ImGui::PopID();
 
-		// Tonemapping curve visualization (from LUT diagonal readback)
+		// Tonemapping curve visualization (GPU-evaluated, RGB overlay)
 		if (ImGui::TreeNode("Curve Preview")) {
 			curveReadbackRequested = true;
 
 			if (settings.skipLUT) {
 				ImGui::TextDisabled("Enable LUT generation to see curve preview (uncheck 'Skip LUT')");
 			} else {
-				float plotHeight = 150.f;
-				float plotWidth = ImGui::GetContentRegionAvail().x;
+				auto& hdrRef = globals::features::hdrDisplay;
+				const bool hdrOn = hdrRef.loaded && hdrRef.settings.enableHDR;
 
-				ImGui::PlotLines("##curve_R", curveR.data(), CurveSamples, 0, "R", 0.f, 1.1f, ImVec2(plotWidth, plotHeight));
-				ImGui::PlotLines("##curve_G", curveG.data(), CurveSamples, 0, "G", 0.f, 1.1f, ImVec2(plotWidth, plotHeight));
-				ImGui::PlotLines("##curve_B", curveB.data(), CurveSamples, 0, "B", 0.f, 1.1f, ImVec2(plotWidth, plotHeight));
-				ImGui::TextDisabled("Input: 0 - %.0f (HDR linear, R=G=B neutral gray)  Output: 0 - 1", CurveMaxInput);
+				// Determine Y-axis max from data
+				float yMax = 1.f;
+				if (hdrOn) {
+					for (int i = 0; i < CurveSamples; i++) {
+						yMax = std::max({ yMax, curveR[i], curveG[i], curveB[i] });
+					}
+					yMax = std::ceil(yMax * 2.f) / 2.f;  // round up to nearest 0.5
+					yMax = std::max(yMax, 1.f);
+				}
+
+				// Plot area
+				float plotW = ImGui::GetContentRegionAvail().x;
+				float plotH = 180.f;
+				ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+				ImVec2 canvasSize = { plotW, plotH };
+				ImGui::InvisibleButton("##curve_canvas", canvasSize);
+				bool hovered = ImGui::IsItemHovered();
+
+				auto* dl = ImGui::GetWindowDrawList();
+
+				// Background
+				dl->AddRectFilled(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, IM_COL32(20, 20, 20, 255));
+				dl->AddRect(canvasPos, { canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y }, IM_COL32(80, 80, 80, 255));
+
+				// Grid lines
+				auto gridColor = IM_COL32(50, 50, 50, 255);
+				for (int g = 1; g <= 3; g++) {
+					float gy = canvasPos.y + canvasSize.y * (1.f - (float)g / 4.f);
+					dl->AddLine({ canvasPos.x, gy }, { canvasPos.x + canvasSize.x, gy }, gridColor);
+				}
+				// Vertical grid at input = 1.0
+				{
+					float gx = canvasPos.x + canvasSize.x * (1.f / CurveMaxInput);
+					dl->AddLine({ gx, canvasPos.y }, { gx, canvasPos.y + canvasSize.y }, gridColor);
+				}
+
+				// Identity line (input = output, clamped to plot range)
+				{
+					float identityEndX = std::min(1.f, yMax) / CurveMaxInput;  // where identity line hits yMax
+					float x0 = canvasPos.x;
+					float y0 = canvasPos.y + canvasSize.y;
+					float x1 = canvasPos.x + canvasSize.x * identityEndX;
+					float y1 = canvasPos.y + canvasSize.y * (1.f - std::min(1.f, yMax) / yMax);
+					dl->AddLine({ x0, y0 }, { x1, y1 }, IM_COL32(80, 80, 80, 128));
+				}
+
+				// Draw RGB curves
+				auto drawCurve = [&](const std::array<float, CurveSamples>& data, ImU32 color) {
+					for (int i = 0; i < CurveSamples - 1; i++) {
+						float x0 = canvasPos.x + canvasSize.x * ((float)i / (CurveSamples - 1));
+						float x1 = canvasPos.x + canvasSize.x * ((float)(i + 1) / (CurveSamples - 1));
+						float y0 = canvasPos.y + canvasSize.y * (1.f - std::clamp(data[i] / yMax, 0.f, 1.f));
+						float y1 = canvasPos.y + canvasSize.y * (1.f - std::clamp(data[i + 1] / yMax, 0.f, 1.f));
+						dl->AddLine({ x0, y0 }, { x1, y1 }, color, 1.5f);
+					}
+				};
+
+				drawCurve(curveR, IM_COL32(220, 60, 60, 255));
+				drawCurve(curveG, IM_COL32(60, 200, 60, 255));
+				drawCurve(curveB, IM_COL32(80, 80, 240, 255));
+
+				// Hover tooltip with Pre/Post values
+				if (hovered) {
+					ImVec2 mousePos = ImGui::GetMousePos();
+					float t = std::clamp((mousePos.x - canvasPos.x) / canvasSize.x, 0.f, 1.f);
+					int idx = std::clamp((int)(t * (CurveSamples - 1)), 0, CurveSamples - 1);
+					float preValue = t * CurveMaxInput;
+
+					// Vertical cursor line
+					dl->AddLine({ mousePos.x, canvasPos.y }, { mousePos.x, canvasPos.y + canvasSize.y }, IM_COL32(200, 200, 200, 100));
+
+					ImGui::BeginTooltip();
+					ImGui::Text("Pre:  %.3f", preValue);
+					ImGui::TextColored(ImVec4(0.9f, 0.25f, 0.25f, 1), "Post R: %.3f", curveR[idx]);
+					ImGui::TextColored(ImVec4(0.25f, 0.8f, 0.25f, 1), "Post G: %.3f", curveG[idx]);
+					ImGui::TextColored(ImVec4(0.35f, 0.35f, 0.95f, 1), "Post B: %.3f", curveB[idx]);
+					ImGui::EndTooltip();
+				}
+
+				// Axis labels
+				ImGui::TextDisabled("Pre: 0 - %.1f (HDR linear)  |  Post: 0 - %.1f%s", CurveMaxInput, yMax, hdrOn ? " (HDR)" : "");
 			}
 			ImGui::TreePop();
 		} else {
