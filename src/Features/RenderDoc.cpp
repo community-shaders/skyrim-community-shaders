@@ -117,6 +117,8 @@ void RenderDoc::Load()
 	}
 
 	renderDocApi->MaskOverlayBits(eRENDERDOC_Overlay_None, eRENDERDOC_Overlay_None);
+	// Menu input owns capture hotkeys so they respect the configured frame count.
+	renderDocApi->SetCaptureKeys(nullptr, 0);
 
 	// Initialize capture count tracking
 	lastCaptureCount = renderDocApi->GetNumCaptures();
@@ -188,18 +190,16 @@ void RenderDoc::DrawSettings()
 				ImGui::InputTextWithHint("##CaptureComments", "Additional comments for next capture (optional)", commentsBuffer, sizeof(commentsBuffer));
 				Util::AddTooltip("Additional comments will be appended to automatic metadata and embedded in the .rdc file");
 
+				int captureFrameCountUI = static_cast<int>(GetCaptureFrameCount());
+				if (ImGui::SliderInt("Capture Frames", &captureFrameCountUI, static_cast<int>(kMinCaptureFrameCount), static_cast<int>(kMaxCaptureFrameCount), "%d", ImGuiSliderFlags_AlwaysClamp)) {
+					SetCaptureFrameCount(static_cast<uint32_t>(captureFrameCountUI));
+				}
+				Util::AddTooltip("Number of consecutive frames to capture. 1 uses a normal RenderDoc capture; higher values use TriggerMultiFrameCapture.");
+
 				if (ImGui::Button("Create Capture")) {
 					// Check available disk space before allowing capture
 					try {
-						auto capturesDir = GetCapturesDirectory();
-						std::error_code ec;
-						uint64_t freeSpace = std::filesystem::space(capturesDir, ec).available;
-						if (ec) {
-							logger::warn("[RenderDoc] Failed to check available space in '{}': {}", capturesDir, ec.message());
-							freeSpace = 0;
-						}
-
-						if (freeSpace < kMinCaptureSpaceBytes) {
+						if (!HasSufficientDiskSpaceForConfiguredCapture()) {
 							ImGui::OpenPopup("Not enough disk space##RenderDoc");
 						} else {
 							// Set comments if provided
@@ -215,7 +215,7 @@ void RenderDoc::DrawSettings()
 
 							// Actual capture logic
 							logger::info("[RenderDoc] Manual capture triggered by user");
-							TriggerCapture();
+							TriggerConfiguredCapture(false);
 						}
 					} catch (const std::exception& e) {
 						logger::error("[RenderDoc] Exception during capture logic: {}", e.what());
@@ -224,7 +224,7 @@ void RenderDoc::DrawSettings()
 
 				if (ImGui::BeginPopup("Not enough disk space##RenderDoc")) {
 					ImGui::Text("Not enough free disk space to create a capture.");
-					ImGui::Text("At least {} MB of free space is required.", kMinCaptureSpaceBytes / (1024 * 1024));
+					ImGui::Text("At least {} MB of free space is required.", GetRequiredCaptureSpaceBytes() / (1024 * 1024));
 					if (ImGui::Button("OK")) {
 						ImGui::CloseCurrentPopup();
 					}
@@ -540,6 +540,7 @@ void RenderDoc::SetupResources()
 void RenderDoc::SaveSettings(json& o_json)
 {
 	o_json["Enable RenderDoc Capture"] = enableRenderDocCapture;
+	o_json["Capture Frame Count"] = GetCaptureFrameCount();
 }
 
 void RenderDoc::LoadSettings(json& o_json)
@@ -547,11 +548,27 @@ void RenderDoc::LoadSettings(json& o_json)
 	if (o_json.contains("Enable RenderDoc Capture") && o_json["Enable RenderDoc Capture"].is_boolean()) {
 		enableRenderDocCapture = o_json["Enable RenderDoc Capture"];
 	}
+	if (!o_json.contains("Capture Frame Count")) {
+		return;
+	}
+
+	const auto& frameCountJson = o_json["Capture Frame Count"];
+	if (frameCountJson.is_number_unsigned()) {
+		const auto frameCount = std::min(frameCountJson.get<uint64_t>(), static_cast<uint64_t>(kMaxCaptureFrameCount));
+		SetCaptureFrameCount(static_cast<uint32_t>(frameCount));
+	} else if (frameCountJson.is_number_integer()) {
+		const auto frameCount = std::clamp(
+			frameCountJson.get<int64_t>(),
+			static_cast<int64_t>(kMinCaptureFrameCount),
+			static_cast<int64_t>(kMaxCaptureFrameCount));
+		SetCaptureFrameCount(static_cast<uint32_t>(frameCount));
+	}
 }
 
 void RenderDoc::RestoreDefaultSettings()
 {
 	enableRenderDocCapture = false;
+	SetCaptureFrameCount(1);
 }
 
 void RenderDoc::ClearShaderCache()
@@ -641,6 +658,109 @@ void RenderDoc::TriggerCapture()
 
 	// Invalidate cache so it refreshes when next accessed (capture should appear in list)
 	InvalidateCaptureCache();
+}
+
+void RenderDoc::TriggerMultiFrameCapture(uint32_t a_frameCount)
+{
+	if (!renderDocApi) {
+		logger::warn("[RenderDoc] Cannot trigger multi-frame capture - RenderDoc API not available");
+		return;
+	}
+
+	const uint32_t frameCount = std::clamp(a_frameCount, kMinCaptureFrameCount, kMaxCaptureFrameCount);
+	logger::info("[RenderDoc] Triggering multi-frame capture for {} frame(s)", frameCount);
+	renderDocApi->TriggerMultiFrameCapture(frameCount);
+
+	// Invalidate cache so it refreshes when next accessed (capture should appear in list)
+	InvalidateCaptureCache();
+}
+
+bool RenderDoc::TriggerConfiguredCapture(bool a_checkDiskSpace)
+{
+	if (!renderDocApi) {
+		logger::warn("[RenderDoc] Cannot trigger configured capture - RenderDoc API not available");
+		return false;
+	}
+
+	if (a_checkDiskSpace) {
+		uint64_t requiredSpace = 0;
+		if (!HasSufficientDiskSpaceForConfiguredCapture(&requiredSpace)) {
+			logger::warn("[RenderDoc] Not enough free disk space to create a capture. At least {} MB required.", requiredSpace / (1024 * 1024));
+			return false;
+		}
+	}
+
+	const uint32_t frameCount = GetCaptureFrameCount();
+	if (frameCount > 1) {
+		TriggerMultiFrameCapture(frameCount);
+	} else {
+		TriggerCapture();
+	}
+
+	return true;
+}
+
+bool RenderDoc::HandleCaptureHotkey(uint32_t a_vkKey)
+{
+	if (a_vkKey != VK_F12 && a_vkKey != VK_SNAPSHOT) {
+		return false;
+	}
+
+	constexpr int kKeyPressedMask = 0x8000;
+	const bool modifierHeld =
+		(GetAsyncKeyState(VK_CONTROL) & kKeyPressedMask) != 0 ||
+		(GetAsyncKeyState(VK_SHIFT) & kKeyPressedMask) != 0 ||
+		(GetAsyncKeyState(VK_MENU) & kKeyPressedMask) != 0;
+	if (modifierHeld) {
+		return false;
+	}
+
+	if (!IsAvailable()) {
+		return false;
+	}
+
+	logger::info("[RenderDoc] Capture hotkey triggered");
+	TriggerConfiguredCapture();
+	return true;
+}
+
+uint32_t RenderDoc::GetCaptureFrameCount() const
+{
+	return std::clamp(captureFrameCount, kMinCaptureFrameCount, kMaxCaptureFrameCount);
+}
+
+void RenderDoc::SetCaptureFrameCount(uint32_t a_frameCount)
+{
+	captureFrameCount = std::clamp(a_frameCount, kMinCaptureFrameCount, kMaxCaptureFrameCount);
+}
+
+uint64_t RenderDoc::GetRequiredCaptureSpaceBytes() const
+{
+	const uint64_t estimated = kObservedPerFrameBytes * GetCaptureFrameCount();
+	return std::max(estimated, kMinCaptureSpaceBytes);
+}
+
+bool RenderDoc::HasSufficientDiskSpaceForConfiguredCapture(uint64_t* a_requiredSpaceBytes) const
+{
+	const uint64_t requiredSpace = GetRequiredCaptureSpaceBytes();
+	if (a_requiredSpaceBytes) {
+		*a_requiredSpaceBytes = requiredSpace;
+	}
+
+	try {
+		auto capturesDir = GetCapturesDirectory();
+		std::error_code ec;
+		const uint64_t freeSpace = std::filesystem::space(capturesDir, ec).available;
+		if (ec) {
+			logger::warn("[RenderDoc] Failed to check available space in '{}': {}", capturesDir, ec.message());
+			return false;
+		}
+
+		return freeSpace >= requiredSpace;
+	} catch (const std::exception& e) {
+		logger::error("[RenderDoc] Exception while checking capture disk space: {}", e.what());
+		return false;
+	}
 }
 
 void RenderDoc::SetCaptureFilePathTemplate(const std::string& a_template)

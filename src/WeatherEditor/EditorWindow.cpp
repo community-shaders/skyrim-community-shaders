@@ -1857,8 +1857,11 @@ void EditorWindow::DrawTimeControls()
 	if (!calendar || !calendar->gameHour || !calendar->timeScale)
 		return;
 
-	const float scale = Util::GetUIScale();
-	float buttonWidth = 120.0f * scale;
+	const float framePadX = ImGui::GetStyle().FramePadding.x * 2.0f;
+	const float buttonWidth = std::max({ ImGui::CalcTextSize("Resume Time").x,
+							   ImGui::CalcTextSize("Pause Time").x,
+							   ImGui::CalcTextSize("Reset Speed").x }) +
+	                          framePadX;
 	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(buttonWidth, 0)))
 		TogglePause();
 	if (auto _tt = Util::HoverTooltipWrapper())

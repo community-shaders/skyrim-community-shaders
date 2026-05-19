@@ -17,10 +17,14 @@
  */
 struct Upscaling : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "156952";
+
 public:
 	// Feature interface
 	virtual inline std::string GetName() override { return "Upscaling"; }
 	virtual inline std::string GetShortName() override { return "Upscaling"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline bool SupportsVR() override { return true; }
 	virtual inline bool IsCore() const override { return false; }
 	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kDisplay; }

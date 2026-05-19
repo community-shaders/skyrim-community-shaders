@@ -606,7 +606,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		dirDetailedShadow *= shadowColor.x;
 
 #			if defined(SCREEN_SPACE_SHADOWS)
-	if (!SharedData::InInterior)
+	if (!SharedData::InInterior && dirLightAngle >= 0.0)
 		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
 #			endif  // SCREEN_SPACE_SHADOWS
 

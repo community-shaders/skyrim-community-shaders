@@ -2,9 +2,13 @@
 
 struct TerrainBlending : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "157076";
+
 public:
 	virtual inline std::string GetName() override { return "Terrain Blending"; }
 	virtual inline std::string GetShortName() override { return "TerrainBlending"; }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_BLENDING"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
