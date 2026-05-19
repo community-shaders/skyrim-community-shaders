@@ -35,6 +35,7 @@ struct Upscaling;
 struct WeatherEditor;
 struct ExponentialHeightFog;
 struct HDRDisplay;
+struct PostProcessing;
 struct ScreenshotFeature;
 
 class State;
@@ -96,6 +97,7 @@ namespace globals
 		extern WeatherEditor weatherEditor;
 		extern ExponentialHeightFog exponentialHeightFog;
 		extern TruePBR truePBR;
+		extern PostProcessing postProcessing;
 
 		namespace llf
 		{

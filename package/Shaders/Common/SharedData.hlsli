@@ -214,6 +214,7 @@ namespace SharedData
 	struct LinearLightingSettings
 	{
 		uint enableLinearLighting;
+		uint enableACEScg;
 		uint isDirLightLinear;
 		float dirLightMult;
 		float lightGamma;
@@ -240,7 +241,6 @@ namespace SharedData
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		uint pad0;
 	};
 
 	struct TerrainBlendingSettings
@@ -275,6 +275,12 @@ namespace SharedData
 		uint3 pad;
 	};
 
+	struct PostProcessingSettings
+	{
+		uint DisableVanillaTonemapping;
+		uint3 pad0;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -294,6 +300,7 @@ namespace SharedData
 		TerrainBlendingSettings terrainBlendingSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
 		TruePBRSettings truePBRSettings;
+		PostProcessingSettings postProcessingSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

@@ -1,0 +1,660 @@
+#include "PostProcessing.h"
+
+#include "IconsFontAwesome5.h"
+#include "imgui_stdlib.h"
+
+#include "State.h"
+#include "Util.h"
+
+#include "Features/Upscaling.h"
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	PostProcessing::Settings,
+	DisableVanillaTonemapping)
+
+void PostProcessing::DrawSettings()
+{
+	static int pipelinePageNum = 0;
+	static int pipelineFeatIdx = 0;
+	static int presetIdx = -1;
+
+	ImGui::BeginGroup();
+	std::string currentPreset = (presetIdx >= 0 && presetIdx < presets.size()) ? presets[presetIdx] : "Select a preset";
+
+	if (ImGui::BeginCombo("##PresetCombo", currentPreset.c_str())) {
+		presets = LoadPresets();
+
+		for (int i = 0; i < presets.size(); ++i) {
+			bool isSelected = presetIdx == i;
+			if (ImGui::Selectable(presets[i].c_str(), isSelected))
+				presetIdx = i;
+			if (isSelected)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Load")) {
+		if (presetIdx >= 0 && presetIdx < presets.size()) {
+			LoadPresetFrom(presets[presetIdx]);
+		}
+	}
+
+	ImGui::EndGroup();
+	ImGui::BeginGroup();
+	static std::string newPresetName = "";
+	ImGui::InputText("##NewPresetName", &newPresetName);
+
+	ImGui::SameLine();
+	if (ImGui::Button("Save")) {
+		if (!newPresetName.empty())
+			SavePresetTo(newPresetName);
+	}
+
+	ImGui::EndGroup();
+
+	ImGui::Separator();
+	ImGui::Checkbox("Bypass", &bypass);
+	ImGui::SameLine();
+	ImGui::Checkbox("Disable Vanilla Tonemapping", (bool*)&settings.DisableVanillaTonemapping);
+
+	ImGui::Separator();
+
+	if (pipelinePageNum == 0) {
+		for (int i = 0; i < pipeline.size(); ++i) {
+			auto& feat = pipeline[i];
+			if (feat && feat->IsVisible()) {
+				ImGui::PushID(feat->GetType().c_str());
+				ImGui::Checkbox("##Enabled", &feat->enabled);
+				ImGui::SameLine();
+				if (ImGui::Button(ICON_FA_BARS)) {
+					pipelineFeatIdx = i;
+					pipelinePageNum = 1;
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("Edit settings for this feature.");
+				ImGui::SameLine();
+				ImGui::Text("%s", feat->GetType().c_str());
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text(feat->GetDesc().c_str());
+				ImGui::PopID();
+			}
+		}
+	} else if (pipelinePageNum == 1) {
+		if (ImGui::Button(ICON_FA_ARROW_LEFT " Back to Pipeline")) {
+			pipelinePageNum = 0;
+		}
+		ImGui::Separator();
+		if (pipelineFeatIdx >= 0 && pipelineFeatIdx < pipeline.size()) {
+			auto& feat = pipeline[pipelineFeatIdx];
+			if (feat) {
+				ImGui::PushID(feat->GetType().c_str());
+
+				ImGui::SeparatorText(feat->GetType().c_str());
+				ImGui::TextWrapped(feat->GetDesc().c_str());
+
+				ImGui::Spacing();
+				if (ImGui::Button(ICON_FA_SYNC " Recompile Shaders")) {
+					feat->ClearShaderCache();
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("Recompile shaders for this sub-feature only.");
+				ImGui::Separator();
+				ImGui::Spacing();
+				ImGui::Checkbox("Enabled", &feat->enabled);
+				if (feat->enabled) {
+					ImGui::Indent();
+					feat->DrawSettings();
+					ImGui::Unindent();
+				} else {
+					ImGui::TextDisabled("Enable the feature to see its settings.");
+				}
+
+				ImGui::PopID();
+			} else {
+				ImGui::TextDisabled("Selected feature is not valid.");
+				pipelinePageNum = 0;
+			}
+		} else {
+			ImGui::TextDisabled("Invalid feature selected. Returning to list.");
+			pipelinePageNum = 0;
+		}
+	}
+
+	ImGui::Separator();
+
+	if (ImGui::TreeNode("Debug")) {
+		if (ImGui::TreeNode("Game ImageSpace Values")) {
+			ImGui::Text("Base Amount: %.3f", imageSpaceManager->gameISData.baseAmount);
+			ImGui::Text("Base Data:");
+			ImGui::Text("Cinematic Values:");
+			ImGui::Text("Saturation: %.3f\nBrightness: %.3f\nContrast: %.3f",
+				imageSpaceManager->gameISData.baseData.cinematic.saturation,
+				imageSpaceManager->gameISData.baseData.cinematic.brightness,
+				imageSpaceManager->gameISData.baseData.cinematic.contrast);
+
+			ImGui::Text("HDR Values:");
+			ImGui::Text("Eye Adapt Speed: %.3f\nBloom Blur Radius: %.3f\nBloom Threshold: %.3f\nBloom Scale: %.3f\nReceive Bloom Threshold: %.3f\nWhite: %.3f\nSunlight Scale: %.3f\nSky Scale: %.3f\nEye Adapt Strength: %.3f",
+				imageSpaceManager->gameISData.baseData.hdr.eyeAdaptSpeed,
+				imageSpaceManager->gameISData.baseData.hdr.bloomBlurRadius,
+				imageSpaceManager->gameISData.baseData.hdr.bloomThreshold,
+				imageSpaceManager->gameISData.baseData.hdr.bloomScale,
+				imageSpaceManager->gameISData.baseData.hdr.receiveBloomThreshold,
+				imageSpaceManager->gameISData.baseData.hdr.white,
+				imageSpaceManager->gameISData.baseData.hdr.sunlightScale,
+				imageSpaceManager->gameISData.baseData.hdr.skyScale,
+				imageSpaceManager->gameISData.baseData.hdr.eyeAdaptStrength);
+
+			ImGui::Text("Tint Values:");
+			ImGui::Text("Tint Amount: %.3f\nTint Color: (%.3f, %.3f, %.3f)",
+				imageSpaceManager->gameISData.baseData.tint.amount,
+				imageSpaceManager->gameISData.baseData.tint.color.red,
+				imageSpaceManager->gameISData.baseData.tint.color.green,
+				imageSpaceManager->gameISData.baseData.tint.color.blue);
+
+			ImGui::Text("Depth of Field Values:");
+			ImGui::Text("DOF Strength: %.3f\nDOF Distance: %.3f\nDOF Range: %.3f\nDOF Flags: %d\nDOF Sky Blur Radius: %d",
+				imageSpaceManager->gameISData.baseData.depthOfField.strength,
+				imageSpaceManager->gameISData.baseData.depthOfField.distance,
+				imageSpaceManager->gameISData.baseData.depthOfField.range,
+				imageSpaceManager->gameISData.baseData.depthOfField.flags,
+				static_cast<int>(imageSpaceManager->gameISData.baseData.depthOfField.skyBlurRadius.get()));
+
+			ImGui::Text("Mod Amount: %.3f", imageSpaceManager->gameISData.modAmount);
+			ImGui::Text("Mod Data:");
+			ImGui::Text("Fade Amount: %.3f\nFade Color: (%.3f, %.3f, %.3f)\nBlur Radius: %.3f\nDouble Vision Strength: %.3f\n",
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeAmount],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeR],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeG],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kFadeB],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kBlurRadius],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDoubleVisionStrength]);
+			ImGui::Text("Radial Blur Strength: %.3f\nRadial Blur Rampup: %.3f\nRadial Blur Start: %.3f\nRadial Blur Rampdown: %.3f\nRadial Blur Down Start: %.3f\nRadial Blur Center: (%.3f, %.3f)",
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurStrength],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurRampup],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurStart],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurRampdown],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurDownStart],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterX],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kRadialBlurCenterY]);
+			ImGui::Text("DOF Strength: %.3f\nDOF Distance: %.3f\nDOF Range: %.3f\nDOF Mode: %d",
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFStrength],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFDistance],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFRange],
+				imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kDOFMode]);
+			ImGui::Text("Motion Blur Strength: %.3f", imageSpaceManager->gameISData.modData.data[RE::ImageSpaceModData::kMotionBlurStrength]);
+			ImGui::TreePop();
+		}
+		ImGui::TreePop();
+	}
+}
+
+void PostProcessing::LoadSettings(json& o_json)
+{
+	pendingSettings = o_json;
+}
+
+void PostProcessing::ProcessSettings(json& o_json)
+{
+	logger::info("Loading post processing settings...");
+
+	for (auto& feat : pipeline) {
+		if (feat && o_json.contains(feat->GetType())) {
+			if (!feat->IsAutoEnabled())
+				feat->enabled = o_json.value(feat->GetType(), json::object()).value("enabled", true);
+			json featSettings = o_json.value(feat->GetType(), json::object()).value("settings", json::object());
+			feat->LoadSettings(featSettings);
+			if (loaded)
+				feat->SetupResources();
+		}
+	}
+
+	if (o_json.contains("ppsettings"))
+		settings = o_json["ppsettings"];
+}
+
+void PostProcessing::SaveSettings(json& o_json)
+{
+	if (!pendingSettings.empty()) {
+		o_json = pendingSettings;
+		return;
+	}
+
+	for (auto& pipe : pipeline) {
+		if (pipe) {
+			json featureSetting{};
+			pipe->SaveSettings(featureSetting);
+			o_json[pipe->GetType()] = {
+				{ "enabled", pipe->enabled },
+				{ "settings", featureSetting }
+			};
+		}
+	}
+
+	o_json["ppsettings"] = settings;
+}
+
+std::vector<std::string> PostProcessing::LoadPresets()
+{
+	std::vector<std::string> o_presets = {};
+
+	try {
+		std::filesystem::create_directories(ppPresetPath);
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Error creating preset directory during Load ({}) : {}\n", ppPresetPath, e.what());
+		return o_presets;
+	}
+
+	for (const auto& entry : std::filesystem::directory_iterator(ppPresetPath)) {
+		if (entry.is_regular_file() && entry.path().extension() == ".json") {
+			o_presets.push_back(entry.path().stem().string());
+		}
+	}
+
+	return o_presets;
+}
+
+void PostProcessing::LoadPresetFrom(std::string a_name)
+{
+	json a_presets = {};
+
+	// if the name has .json, remove it
+	if (a_name.ends_with(".json"))
+		a_name = a_name.substr(0, a_name.size() - 5);
+
+	try {
+		logger::info("Loading preset: {}", a_name);
+		std::ifstream i{ std::format("{}\\{}.json", ppPresetPath, a_name) };
+		i >> a_presets;
+	} catch (const std::exception& e) {
+		logger::warn("Failed to load preset: {}. Error: {}", a_name, e.what());
+		return;
+	}
+
+	ProcessSettings(a_presets);
+}
+
+void PostProcessing::SavePresetTo(std::string a_name)
+{
+	// Check if the name is valid
+	if (a_name.empty()) {
+		logger::warn("Invalid preset name.");
+		return;
+	}
+
+	json a_presets = {};
+	SaveSettings(a_presets);
+	a_presets["preset_name"] = a_name;
+
+	try {
+		std::filesystem::create_directories(ppPresetPath);
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Error creating preset directory during Save ({}) : {}\n", ppPresetPath, e.what());
+		return;
+	}
+
+	std::string presetPath = std::format("{}\\{}.json", ppPresetPath, a_name);
+	std::ofstream o{ presetPath };
+	if (!o.is_open() || !o.good()) {
+		logger::warn("Failed to open preset file for writing: {}", presetPath);
+		return;
+	}
+
+	try {
+		o << std::setw(4) << a_presets;
+		logger::info("Saving preset to {}", presetPath);
+	} catch (const std::exception& e) {
+		logger::warn("Failed to write preset to file: {}. Error: {}", presetPath, e.what());
+	}
+}
+
+void PostProcessing::RestoreDefaultSettings()
+{
+	try {
+		LoadPresetFrom("default");
+	} catch (const std::exception& e) {
+		logger::warn("Failed to load default preset. Error: {}", e.what());
+		settings = {};
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::AutoExposure)].get()->enabled = true;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)].get()->enabled = true;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::LUT)].get()->enabled = false;
+
+		if (!REL::Module::IsVR()) {
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::MotionBlur)].get()->enabled = false;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::DoF)].get()->enabled = false;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)].get()->enabled = true;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)].get()->enabled = false;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)].get()->enabled = true;
+			pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)].get()->enabled = false;
+		}
+
+		for (auto& pipe : pipeline) {
+			if (pipe) {
+				pipe->RestoreDefaultSettings();
+			}
+		}
+	}
+}
+
+void PostProcessing::ClearShaderCache()
+{
+	for (auto& pipe : pipeline) {
+		if (pipe)
+			pipe->ClearShaderCache();
+	}
+}
+
+void PostProcessing::SetupResources()
+{
+	{
+		auto renderer = globals::game::renderer;
+		auto gameTexMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
+
+		D3D11_TEXTURE2D_DESC texDesc;
+		D3D11_TEXTURE2D_DESC texMainDesc;
+		D3D11_TEXTURE2D_DESC texMainCopyDesc;
+		gameTexMain.texture->GetDesc(&texMainDesc);
+		gameTexMainCopy.texture->GetDesc(&texMainCopyDesc);
+		texDesc = texMainDesc;
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = texDesc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+		};
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+			.Format = texDesc.Format,
+			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MipSlice = 0 }
+		};
+
+		texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		texDesc.MiscFlags = 0;
+
+		texCopyMain = eastl::make_unique<Texture2D>(texDesc);
+		texCopyMain->CreateUAV(uavDesc);
+
+		if (texMainCopyDesc.Format != texMainDesc.Format) {
+			texDesc = texMainCopyDesc;
+			srvDesc.Format = texDesc.Format;
+			uavDesc.Format = texDesc.Format;
+			texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
+			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+			texDesc.MiscFlags = 0;
+
+			texCopyMainCopy = eastl::make_unique<Texture2D>(texDesc);
+			texCopyMainCopy->CreateUAV(uavDesc);
+		} else {
+			texCopyMainCopy = nullptr;
+		}
+
+		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		srvDesc.Format = texDesc.Format;
+		uavDesc.Format = texDesc.Format;
+
+		texAfterTAA = eastl::make_unique<Texture2D>(texDesc);
+		texAfterTAA->CreateSRV(srvDesc);
+		texAfterTAA->CreateUAV(uavDesc);
+	}
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\PostProcessing\\copy.cs.hlsl", {}, "cs_5_0")))
+		copyCS.attach(rawPtr);
+
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::LocalExposure)] = std::make_unique<LocalExposure>();
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::LocalExposure)].get()->enabled = false;
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::AutoExposure)] = std::make_unique<HistogramAutoExposure>();
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::AutoExposure)].get()->enabled = true;
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)] = std::make_unique<ColorGrading>();
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::ColorGrading)].get()->enabled = true;
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::LUT)] = std::make_unique<LUT>();
+	pipeline[static_cast<size_t>(FeaturePipelineIndex::LUT)].get()->enabled = false;
+
+	if (!REL::Module::IsVR()) {
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::MotionBlur)] = std::make_unique<MotionBlur>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::MotionBlur)].get()->enabled = false;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::DoF)] = std::make_unique<DoF>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::DoF)].get()->enabled = false;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::PhysicalGlare)] = std::make_unique<PhysicalGlare>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::PhysicalGlare)].get()->enabled = false;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)] = std::make_unique<CODBloom>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::CODBloom)].get()->enabled = true;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)] = std::make_unique<LensFlare>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::LensFlare)].get()->enabled = false;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)] = std::make_unique<Composite>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Composite)].get()->enabled = true;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)] = std::make_unique<Vignette>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)].get()->enabled = true;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)] = std::make_unique<Camera>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)].get()->enabled = false;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Border)] = std::make_unique<Border>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Border)].get()->enabled = false;
+	}
+
+	for (auto& pipe : pipeline) {
+		if (pipe) {
+			pipe->owner = this;
+			pipe->SetupResources();
+		}
+	}
+
+	bokehResources.Setup();
+
+	ProcessSettings(pendingSettings);
+	pendingSettings = {};
+}
+
+void PostProcessing::Reset()
+{
+	for (auto& pipe : pipeline) {
+		if (pipe)
+			pipe->Reset();
+	}
+}
+
+void PostProcessing::CopyToRenderTarget(
+	RE::BSGraphics::RenderTargetData& targetRT,
+	Texture2D* convertTex,
+	ID3D11Texture2D* srcTex,
+	ID3D11ShaderResourceView* srcSRV)
+{
+	auto context = globals::d3d::context;
+
+	D3D11_TEXTURE2D_DESC srcDesc;
+	srcTex->GetDesc(&srcDesc);
+
+	D3D11_TEXTURE2D_DESC targetDesc;
+	targetRT.texture->GetDesc(&targetDesc);
+
+	if (srcDesc.Format == targetDesc.Format) {
+		context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, srcTex, 0, nullptr);
+		return;
+	}
+
+	if (!copyCS || !convertTex || !convertTex->uav || !convertTex->resource)
+		return;
+
+	ID3D11ShaderResourceView* srv = srcSRV;
+	ID3D11UnorderedAccessView* uav = convertTex->uav.get();
+
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	context->CSSetShaderResources(0, 1, &srv);
+	context->CSSetShader(copyCS.get(), nullptr, 0);
+	context->Dispatch((convertTex->desc.Width + 7) >> 3, (convertTex->desc.Height + 7) >> 3, 1);
+
+	srv = nullptr;
+	uav = nullptr;
+
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	context->CSSetShaderResources(0, 1, &srv);
+	context->CSSetShader(nullptr, nullptr, 0);
+
+	context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, convertTex->resource.get(), 0, nullptr);
+}
+
+void PostProcessing::DrawBeforeUpscaling()
+{
+	if (bypass)
+		return;
+
+	auto& upscaling = globals::features::upscaling;
+	if (!upscaling.loaded)
+		return;
+
+	auto renderer = globals::game::renderer;
+	auto state = globals::state;
+
+	bool inMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	auto gameTexMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };
+
+	state->BeginPerfEvent("[Post Processing] Pre-Upscale");
+
+	// update auto-enabled features
+	for (auto& pipe : pipeline) {
+		if (pipe && pipe->IsAutoEnabled())
+			pipe->UpdateAutoEnabled();
+	}
+
+	// go through each fx
+	for (auto& pipe : pipeline) {
+		if (pipe && pipe->enabled && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && pipe->DrawBeforeUpscaling()) {
+			if (pipe->WritesToMainTexture()) {
+				pipe->Draw(lastTexColor);
+			} else {
+				PostProcessFeature::TextureInfo inTex = lastTexColor;
+				pipe->Draw(inTex);
+			}
+		}
+	}
+
+	CopyToRenderTarget(gameTexMain, texCopyMain.get(), lastTexColor.tex, lastTexColor.srv);
+
+	state->EndPerfEvent();
+}
+
+void PostProcessing::PreProcess()
+{
+	if (bypass)
+		return;
+
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+
+	auto& upscaling = globals::features::upscaling;
+
+	bool inMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+
+	auto& gameTexMainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto& gameTexMainCopyRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
+
+	bool useMainCopy = isrefraction;
+	ID3D11RenderTargetView* currentRTV = nullptr;
+	ID3D11DepthStencilView* currentDSV = nullptr;
+	context->OMGetRenderTargets(1, &currentRTV, &currentDSV);
+	if (currentRTV) {
+		if (currentRTV == gameTexMainCopyRT.RTV) {
+			useMainCopy = true;
+		} else if (currentRTV == gameTexMainRT.RTV) {
+			useMainCopy = false;
+		}
+	}
+	if (currentRTV)
+		currentRTV->Release();
+	if (currentDSV)
+		currentDSV->Release();
+
+	auto gameTexMain = useMainCopy ? gameTexMainCopyRT : gameTexMainRT;
+	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };
+	auto gameTexMainAlt = useMainCopy ? gameTexMainRT : gameTexMainCopyRT;
+
+	// update auto-enabled features
+	for (auto& pipe : pipeline) {
+		if (pipe && pipe->IsAutoEnabled())
+			pipe->UpdateAutoEnabled();
+	}
+
+	// go through each fx
+	for (auto& pipe : pipeline) {
+		if (pipe && pipe->enabled && !pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
+			if (pipe->WritesToMainTexture()) {
+				pipe->Draw(lastTexColor);
+			} else {
+				PostProcessFeature::TextureInfo inTex = lastTexColor;
+				pipe->Draw(inTex);
+			}
+		}
+	}
+
+	for (auto& pipe : pipeline) {
+		if (pipe && pipe->enabled && pipe->DrawAfterColorGrading() && !(inMainLoadingMenu && pipe->DisableInMainLoadingMenu()) && (!pipe->DrawBeforeUpscaling() || !upscaling.loaded)) {
+			if (pipe->WritesToMainTexture()) {
+				pipe->Draw(lastTexColor);
+			} else {
+				PostProcessFeature::TextureInfo inTex = lastTexColor;
+				pipe->Draw(inTex);
+			}
+		}
+	}
+
+	Texture2D* mainConvertTex = texCopyMain.get();
+	Texture2D* mainCopyConvertTex = texCopyMainCopy ? texCopyMainCopy.get() : texCopyMain.get();
+
+	CopyToRenderTarget(gameTexMain, useMainCopy ? mainCopyConvertTex : mainConvertTex, lastTexColor.tex, lastTexColor.srv);
+	CopyToRenderTarget(gameTexMainAlt, useMainCopy ? mainConvertTex : mainCopyConvertTex, lastTexColor.tex, lastTexColor.srv);
+
+	isrefraction = false;
+}
+
+void PostProcessing::ClearBorderMotionVectorsForFrameGen()
+{
+	if (bypass)
+		return;
+
+	auto borderIdx = static_cast<size_t>(FeaturePipelineIndex::Border);
+	auto& pipe = pipeline[borderIdx];
+	if (pipe && pipe->enabled) {
+		auto* border = static_cast<Border*>(pipe.get());
+		border->ClearMotionVectorsForFrameGen();
+	}
+}
+
+void PostProcessing::Prepass()
+{
+	if (!pendingSettings.empty()) {
+		logger::info("Processing pending post processing settings...");
+		ProcessSettings(pendingSettings);
+		pendingSettings = {};
+	}
+
+	// Update gameISData
+	const auto ImageSpace = RE::ImageSpaceManager::GetSingleton();
+	if (globals::game::isVR) {
+		const auto& iSRuntimeData = ImageSpace->GetVRRuntimeData();
+		imageSpaceManager->gameISData = iSRuntimeData.data;
+		if (const auto& overrideBaseData = iSRuntimeData.overrideBaseData) {
+			imageSpaceManager->gameISData.baseData = *overrideBaseData;
+		} else {
+			imageSpaceManager->gameISData.baseData = *iSRuntimeData.currentBaseData;
+		}
+	} else {
+		const auto& iSRuntimeData = ImageSpace->GetRuntimeData();
+		imageSpaceManager->gameISData = iSRuntimeData.data;
+		if (const auto& overrideBaseData = iSRuntimeData.overrideBaseData) {
+			imageSpaceManager->gameISData.baseData = *overrideBaseData;
+		} else {
+			imageSpaceManager->gameISData.baseData = *iSRuntimeData.currentBaseData;
+		}
+	}
+}
+
+void PostProcessing::PostPostLoad()
+{
+	logger::info("Hooking preprocess passes");
+	stl::write_vfunc<0x2, BSImagespaceShaderRefraction_SetupTechnique>(RE::VTABLE_BSImagespaceShaderRefraction[0]);
+	stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematic_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematic[0]);
+	stl::write_vfunc<0x2, BSImagespaceShaderHDRTonemapBlendCinematicFade_SetupTechnique>(RE::VTABLE_BSImagespaceShaderHDRTonemapBlendCinematicFade[0]);
+}

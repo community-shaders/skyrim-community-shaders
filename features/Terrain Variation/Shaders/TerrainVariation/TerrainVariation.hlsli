@@ -5,6 +5,7 @@
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
 
+#include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
@@ -18,7 +19,7 @@ static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
 // Blending constants
 static const float3 DEFAULT_WEIGHTS = float3(0.33, 0.33, 0.34);
-static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
+// Luminance weights now use Color::RGBToLuminance() for correct gamut handling
 // Hash constants
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 // Performance optimization constants
@@ -157,9 +158,9 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 
 	// Height calculation - use luminance for RGB data, alpha when available
 	float3 luminanceHeights = float3(
-		dot(sample1.rgb, LUMINANCE_WEIGHTS),
-		dot(sample2.rgb, LUMINANCE_WEIGHTS),
-		dot(sample3.rgb, LUMINANCE_WEIGHTS));
+		Color::RGBToLuminance(sample1.rgb),
+		Color::RGBToLuminance(sample2.rgb),
+		Color::RGBToLuminance(sample3.rgb));
 
 	float3 alphaValues = float3(sample1.a, sample2.a, sample3.a);
 	float3 alphaMask = step(0.001, alphaValues);

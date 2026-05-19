@@ -352,6 +352,12 @@ public:
 		}
 	}
 
+	explicit Texture3D(ID3D11Texture3D* a_resource)
+	{
+		a_resource->GetDesc(&desc);
+		resource.attach(a_resource);
+	}
+
 	void CreateSRV(D3D11_SHADER_RESOURCE_VIEW_DESC const& a_desc)
 	{
 		auto device = globals::d3d::device;

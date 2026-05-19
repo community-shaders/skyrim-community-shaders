@@ -134,6 +134,25 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 inputColor = BlendTex.Sample(BlendSampler, uv).xyz;
 
+	float4 hdrShared = SharedData::HDRData;
+	bool isHDR = hdrShared.x > 0.5;
+	float menuSceneEncoding = hdrShared.w;
+	static const float MENU_SCENE_ISHDR_BYPASS_THRESHOLD = 0.9;  // encoding 1.0 == main/loading
+	if (menuSceneEncoding > MENU_SCENE_ISHDR_BYPASS_THRESHOLD)
+		isHDR = false;
+
+#		if defined(POSTPROCESS)
+	if (SharedData::postProcessingSettings.DisableVanillaTonemapping) {
+		if (SharedData::linearLightingSettings.enableLinearLighting && !isHDR) {
+			inputColor = Color::LinearToSrgb(inputColor);
+		}
+
+		psout.Color = float4(inputColor, 1.0);
+
+		return psout;
+	}
+#		endif
+
 	float3 bloomColor = 0;
 	if (Flags.x > 0.5) {
 		bloomColor = ImageTex.Sample(ImageSampler, uv).xyz;
@@ -142,13 +161,6 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
-
-	float4 hdrShared = SharedData::HDRData;
-	bool isHDR = hdrShared.x > 0.5;
-	float menuSceneEncoding = hdrShared.w;
-	static const float MENU_SCENE_ISHDR_BYPASS_THRESHOLD = 0.9;  // encoding 1.0 == main/loading
-	if (menuSceneEncoding > MENU_SCENE_ISHDR_BYPASS_THRESHOLD)
-		isHDR = false;
 
 	float3 outputColor = 0.0;
 

@@ -27,6 +27,7 @@ struct LinearLighting : Feature
 	struct Settings
 	{
 		uint enableLinearLighting = false;
+		uint enableACEScg = false;
 		float lightGamma = 1.8f;
 		float colorGamma = 1.8f;
 		float emitColorGamma = 1.8f;
@@ -60,6 +61,7 @@ struct LinearLighting : Feature
 	struct alignas(16) PerFrameData
 	{
 		uint enableLinearLighting;
+		uint enableACEScg;
 		uint isDirLightLinear;
 		float dirLightMult;
 		float lightGamma;
@@ -86,7 +88,6 @@ struct LinearLighting : Feature
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		uint pad0;
 	};
 	STATIC_ASSERT_ALIGNAS_16(PerFrameData);
 
