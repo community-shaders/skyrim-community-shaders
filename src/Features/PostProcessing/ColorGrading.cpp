@@ -434,12 +434,9 @@ void ColorGrading::DrawSettings()
 			if (settings.skipLUT) {
 				ImGui::TextDisabled("Enable LUT generation to see curve preview (uncheck 'Skip LUT')");
 			} else {
-				auto& hdrRef = globals::features::hdrDisplay;
-				const bool hdrOn = hdrRef.loaded && hdrRef.settings.enableHDR;
-
 				// Determine Y-axis max from data
 				float yMax = 1.f;
-				if (hdrOn) {
+				if (hdrActive) {
 					for (int i = 0; i < CurveSamples; i++) {
 						yMax = std::max({ yMax, curveR[i], curveG[i], curveB[i] });
 					}
@@ -517,7 +514,7 @@ void ColorGrading::DrawSettings()
 				}
 
 				// Axis labels
-				ImGui::TextDisabled("Pre: 0 - %.1f (HDR linear)  |  Post: 0 - %.1f%s", CurveMaxInput, yMax, hdrOn ? " (HDR)" : "");
+				ImGui::TextDisabled("Pre: 0 - %.1f (HDR linear)  |  Post: 0 - %.1f%s", CurveMaxInput, yMax, hdrActive ? " (HDR)" : "");
 			}
 			ImGui::TreePop();
 		} else {
