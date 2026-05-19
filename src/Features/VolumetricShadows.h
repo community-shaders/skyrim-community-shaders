@@ -28,6 +28,26 @@ public:
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
+	struct alignas(16) PerGeometry
+	{
+		float4 VPOSOffset;
+		float4 ShadowSampleParam;    // fPoissonRadiusScale / iShadowMapResolution in z and w
+		float4 EndSplitDistances;    // cascade end distances int xyz, cascade count int z
+		float4 StartSplitDistances;  // cascade start ditances int xyz, 4 int z
+		float4 FocusShadowFadeParam;
+		float4 DebugColor;
+		float4 PropertyColor;
+		float4 AlphaTestRef;
+		float4 ShadowLightParam;  // Falloff in x, ShadowDistance squared in z
+		DirectX::XMFLOAT4X3 FocusShadowMapProj[4];
+		// Since PerGeometry is passed between c++ and hlsl, can't have different defines due to strong typing
+		DirectX::XMFLOAT4X3 ShadowMapProj[2][3];
+		DirectX::XMFLOAT4X3 CameraViewProjInverse[2];
+		float4 Pad0;
+		float4 Pad1;
+	};
+	STATIC_ASSERT_ALIGNAS_16(PerGeometry);
+
 	// Compute shaders
 	ID3D11ComputeShader* downsampleShadowMip0CS = nullptr;
 	ID3D11ComputeShader* downsampleShadowMip1CS = nullptr;

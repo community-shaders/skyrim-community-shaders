@@ -10,9 +10,12 @@
 #include "State.h"
 #include "Util.h"
 
+#include "Features/DX12Interop.h"
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
+#include "Features/Raytracing.h"
+#include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
@@ -385,6 +388,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		pFeatureLevel,
 		ppImmediateContext);
 
+	auto& dx12Interop = globals::features::dx12Interop;
+	if (dx12Interop.loaded)
+		dx12Interop.Init(*ppDevice, *ppImmediateContext, pAdapter);
+
 	return ret;
 }
 
@@ -725,8 +732,8 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, uint32_t a_target, RE::BSGraphics::CubeMapRenderTargetProperties* a_properties)
 		{
-			a_properties->height = 128;
-			a_properties->width = 128;
+			a_properties->height = CubemapResolution();
+			a_properties->width = CubemapResolution();
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -736,8 +743,8 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, uint32_t a_target, RE::BSGraphics::DepthStencilTargetProperties* a_properties)
 		{
-			a_properties->height = 128;
-			a_properties->width = 128;
+			a_properties->height = CubemapResolution();
+			a_properties->width = CubemapResolution();
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -1002,5 +1009,16 @@ namespace Hooks
 
 		logger::info("Hooking CreateDXGIFactory");
 		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+	}
+
+	uint CubemapResolution()
+	{
+		auto& rt = globals::features::raytracing;
+
+		if (rt.loaded) {
+			return Raytracing::SKY_CUBEMAP_SIZE;
+		} else {
+			return 128;
+		}
 	}
 }

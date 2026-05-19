@@ -148,6 +148,17 @@ namespace Util
 		return vFOVRad;
 	}
 
+	float2 GetDynamicResolutionRatio(bool a_ignoreLock)
+	{
+		auto viewport = globals::game::graphicsState;
+		auto& runtimeData = viewport->GetRuntimeData();
+
+		if (runtimeData.dynamicResolutionLock && !a_ignoreLock)
+			return { 1.0f, 1.0f };
+
+		return { runtimeData.dynamicResolutionWidthRatio, runtimeData.dynamicResolutionHeightRatio };
+	}
+
 	float2 ConvertToDynamic(float2 a_size, bool a_ignoreLock)
 	{
 		auto viewport = globals::game::graphicsState;
@@ -166,7 +177,7 @@ namespace Util
 		float2 resolution = globals::state->screenSize;
 
 		if (a_dynamic)
-			ConvertToDynamic(resolution);
+			resolution = ConvertToDynamic(resolution);
 
 		uint dispatchX = (uint)std::ceil(resolution.x / 8.0f);
 		uint dispatchY = (uint)std::ceil(resolution.y / 8.0f);

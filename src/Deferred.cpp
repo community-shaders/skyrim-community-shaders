@@ -8,6 +8,7 @@
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
+#include "Features/Raytracing.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -34,12 +35,13 @@ struct BlendStates
 	}
 };
 
-void SetupRenderTarget(RE::RENDER_TARGET target, D3D11_TEXTURE2D_DESC texDesc, D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc, D3D11_RENDER_TARGET_VIEW_DESC rtvDesc, D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc, DXGI_FORMAT format, uint bindFlags)
+void SetupRenderTarget(RE::RENDER_TARGET target, D3D11_TEXTURE2D_DESC texDesc, D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc, D3D11_RENDER_TARGET_VIEW_DESC rtvDesc, D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc, DXGI_FORMAT format, uint bindFlags, UINT miscFlags = 0)
 {
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
 	texDesc.BindFlags = bindFlags;
+	texDesc.MiscFlags |= miscFlags;
 	texDesc.Format = format;
 	srvDesc.Format = format;
 	rtvDesc.Format = format;
@@ -61,6 +63,7 @@ void SetupRenderTarget(RE::RENDER_TARGET target, D3D11_TEXTURE2D_DESC texDesc, D
 void Deferred::SetupResources()
 {
 	auto renderer = globals::game::renderer;
+	auto& rt = globals::features::raytracing;
 
 	{
 		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -99,8 +102,10 @@ void Deferred::SetupResources()
 		// TEMPORAL_AA_WATER_1
 		// TEMPORAL_AA_WATER_2
 
+		UINT miscFlags = rt.loaded ? D3D11_RESOURCE_MISC_SHARED : 0;
+
 		// Albedo
-		SetupRenderTarget(ALBEDO, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		SetupRenderTarget(ALBEDO, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, miscFlags);
 		// Specular
 		SetupRenderTarget(SPECULAR, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Reflectance
@@ -113,6 +118,9 @@ void Deferred::SetupResources()
 		// TAA Water Buffers
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_1, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+
+		if (rt.loaded)
+			SetupRenderTarget(MASKS2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R10G10B10A2_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE, miscFlags);
 	}
 
 	{
@@ -243,7 +251,7 @@ void Deferred::StartDeferred()
 		SPECULAR,
 		REFLECTANCE,
 		MASKS,
-		RE::RENDER_TARGET::kNONE
+		MASKS2
 	};
 
 	for (uint i = 2; i < 8; i++) {
@@ -346,9 +354,16 @@ void Deferred::DeferredPasses()
 		dynamicCubemaps.UpdateCubemap();
 
 	auto& ibl = globals::features::ibl;
+	bool skipDeferredComposite = false;
+
+	if (auto& rt = globals::features::raytracing; rt.Active()) {
+		rt.DeferredPasses();
+		skipDeferredComposite = rt.settings.CreationEngineRaytracingSettings.Enabled &&
+		                        rt.Mode() == CreationEngineRaytracing::Mode::PathTracing;
+	}
 
 	// Deferred Composite
-	{
+	if (!skipDeferredComposite) {
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
 		ID3D11ShaderResourceView* srvs[16]{
@@ -630,6 +645,10 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
+
+		auto& rt = globals::features::raytracing;
+		if (rt.loaded)
+			defines.push_back({ rt.GetShaderDefineName().data(), nullptr });
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });

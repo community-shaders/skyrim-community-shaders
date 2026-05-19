@@ -3,6 +3,7 @@
 #include <atomic>
 
 struct CloudShadows;
+struct DX12Interop;
 struct DynamicCubemaps;
 struct VolumetricShadows;
 struct ExtendedMaterials;
@@ -33,6 +34,8 @@ struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
 struct WeatherEditor;
+struct Raytracing;
+struct SceneGraphExplorer;
 struct ExponentialHeightFog;
 struct HDRDisplay;
 struct ScreenshotFeature;
@@ -61,6 +64,7 @@ namespace globals
 	namespace features
 	{
 		extern CloudShadows cloudShadows;
+		extern DX12Interop dx12Interop;
 		extern DynamicCubemaps dynamicCubemaps;
 		extern VolumetricShadows volumetricShadows;
 		extern ExtendedMaterials extendedMaterials;
@@ -95,6 +99,8 @@ namespace globals
 		extern ScreenshotFeature screenshotFeature;
 		extern WeatherEditor weatherEditor;
 		extern ExponentialHeightFog exponentialHeightFog;
+		extern Raytracing raytracing;
+		extern SceneGraphExplorer sceneGraphExplorer;
 		extern TruePBR truePBR;
 
 		namespace llf

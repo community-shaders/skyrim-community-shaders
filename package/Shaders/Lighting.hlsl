@@ -13,6 +13,8 @@
 #include "Common/Triplanar.hlsli"
 #include "Common/VR.hlsli"
 
+#include "Raytracing/Includes/VanillaToPBR.hlsli"
+
 #if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
 #	define SKIN
 #endif
@@ -346,6 +348,8 @@ struct PS_OUTPUT
 	float4 Masks: SV_Target6;
 #	if defined(SNOW)
 	float4 Parameters: SV_Target7;
+#	elif defined(RAYTRACING)
+	float4 MetallicAO: SV_Target7;
 #	endif
 };
 #else
@@ -968,6 +972,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 #	endif
 	const bool inReflection = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection;
+
+#	if defined(RAYTRACING) && !defined(DEFERRED)
+	[branch] if (SharedData::raytracingSettings.PathTracing && inWorld)
+	{
+		psout.Diffuse = float4(0, 0, 0, 0);
+		return psout;
+	}
+#	endif
 
 	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, viewPosition.z);
 
@@ -2182,6 +2194,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), material.GlintScreenSpaceScale, material.GlintCache);
 #		endif
 
+#		if defined(RAYTRACING)
+	float3 trueBaseColor = baseColor.xyz;
+#		endif
+
 	baseColor.xyz *= 1 - material.Metallic;
 
 	material.BaseColor = baseColor.xyz;
@@ -2248,12 +2264,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		material.FuzzWeight = lerp(material.FuzzWeight, 0, projectedMaterialWeight);
 	}
 #		endif
-#	else
+#	else  // TRUE_PBR
 	material.BaseColor = baseColor.xyz;
-#		if defined(SPECULAR)
+#		if defined(SPECULAR) || defined(LANDSCAPE)
 	material.Shininess = shininess;
 	material.Glossiness = glossiness;
+#			if defined(LANDSCAPE)
+	material.SpecularColor = 1;
+#			else
 	material.SpecularColor = SpecularColor.xyz;
+#			endif  // LANDSCAPE
 #		else
 	material.Shininess = 0;
 	material.Glossiness = 0;
@@ -2283,6 +2303,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	float envMask = EnvmapData.x * MaterialData.x;
+
+#		if defined(RAYTRACING)
+	envMask *= SharedData::raytracingSettings.Reflection;
+#		endif
 
 	float viewNormalAngle = dot(worldNormal.xyz, viewDirection);
 	float3 envSamplingPoint = (viewNormalAngle * 2) * worldNormal.xyz - viewDirection;
@@ -2357,7 +2381,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			envColor = envColorBase.xyz * envMask;
 		}
 	}
-
 #	endif  // defined (ENVMAP) || defined (MULTI_LAYER_PARALLAX) || defined(EYE)
 
 	float porosity = 1.0;
@@ -2472,6 +2495,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float llDirLightMult = SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear && (inWorld || inReflection) && !SharedData::InInterior ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
 	float3 dirLightColor = Color::DirectionalLight(DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+	float3 dirLightColorMultiplier = 1;
 
 #	if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
@@ -2871,6 +2895,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(ambientNormal, SampColorSampler);
 		}
 	}
+#	endif
+
+#	if defined(RAYTRACING)
+	directionalAmbientColor *= SharedData::raytracingSettings.Ambient;
 #	endif
 
 #	if defined(SKYLIGHTING)
@@ -3281,7 +3309,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	psout.MotionVectors.zw = float2(0.0, psout.Diffuse.w);
 	psout.Specular = float4(specularColor, psout.Diffuse.w);
+
+#		if defined(TRUE_PBR) && defined(RAYTRACING)
+	psout.Albedo = float4(SharedData::raytracingSettings.Albedo ? trueBaseColor * vertexColor : outputAlbedo, psout.Diffuse.w);
+#		else
 	psout.Albedo = float4(outputAlbedo, psout.Diffuse.w);
+#		endif
 
 #		if defined(WETNESS_EFFECTS)
 	indirectLobeWeights.specular += wetnessReflectance;
@@ -3293,7 +3326,24 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
-	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
+#		if defined(TRUE_PBR)
+	const float roughness = material.Roughness;
+	const float metallic = material.Metallic;
+	const float ao = material.AO;
+
+#		else
+	const float roughness = VanillaToPBR::Roughness(material.Shininess, material.SpecularColor, glossiness);
+
+#			if (defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX)) && !defined(EYE)
+	const float metallic = envMask;
+#			else
+	const float metallic = 0.0f;
+#			endif
+
+	const float ao = 1.0f;
+#		endif  // !TRUE_PBR
+
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - roughness), psout.Diffuse.w);
 
 #		if defined(VR_STEREO_OPT) && !defined(SNOW)
 	// VR stereo reprojection: write POM depth offset to dedicated texture (u7) for StereoBlendCS.
@@ -3322,7 +3372,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
-#	endif
+
+#		if defined(RAYTRACING)
+#			if !defined(SNOW)
+	psout.MetallicAO = float4(metallic, ao, 0, psout.Diffuse.w);
+#			endif  // SNOW
+#		endif      // RAYTRACING
+#	endif          // DEFERRED
 
 #	if !defined(HDR_OUTPUT)  // Do not apply gamma correction before we pass to ISHDR.
 	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {

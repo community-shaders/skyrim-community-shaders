@@ -2,6 +2,7 @@
 
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
+#include "Features/DX12Interop.h"
 #include "Features/DynamicCubemaps.h"
 #include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
@@ -17,7 +18,9 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/Raytracing.h"
 #include "Features/RenderDoc.h"
+#include "Features/SceneGraphExplorer.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/ScreenshotFeature.h"
@@ -88,6 +91,9 @@ namespace globals
 		ScreenshotFeature screenshotFeature{};
 		WeatherEditor weatherEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
+		DX12Interop dx12Interop{};
+		Raytracing raytracing{};
+		SceneGraphExplorer sceneGraphExplorer{};
 		TruePBR truePBR{};
 
 		namespace llf

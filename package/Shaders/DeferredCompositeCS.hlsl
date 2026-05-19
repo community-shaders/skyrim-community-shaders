@@ -133,7 +133,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
-#if defined(SSGI)
+#if defined(SSGI) && !defined(RAYTRACING)
 
 	float ssgiAo;
 	float3 ssgiIl;
@@ -311,7 +311,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 		color += reflectance * finalIrradiance;
 	}
 
-#endif
+#endif  // DYNAMIC_CUBEMAPS
 
 	color = Color::IrradianceToGamma(color);
 

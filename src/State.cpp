@@ -212,8 +212,8 @@ void State::Setup()
 	// gating logic that wants to read the log can run during feature SetupResources.
 	CheckTypedUAVLoadSupport();
 
-	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 	globals::deferred->SetupResources();
+	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 
 	// Load per-weather settings after features are setup
 	WeatherManager::GetSingleton()->LoadPerWeatherSettingsFromDisk();

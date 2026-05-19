@@ -11,6 +11,7 @@
 #include "../../Util.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
+#include "Features/Raytracing.h"
 
 namespace
 {
@@ -74,8 +75,9 @@ void LoggingCallback(sl::LogType type, const char* msg)
 
 std::vector<std::pair<std::string, std::string>> Streamline::dllVersions = {};
 
-void Streamline::LoadInterposer()
+void Streamline::LoadInterposer(bool a_d3d12Mode)
 {
+	d3d12Mode = a_d3d12Mode;
 	triedInitialization = true;
 
 	std::wstring interposerPath = std::wstring(Streamline::PluginDir) + L"\\sl.interposer.dll";
@@ -98,10 +100,17 @@ void Streamline::LoadInterposer()
 
 	sl::Preferences pref;
 
-	sl::Feature featuresToLoad[] = { sl::kFeatureDLSS, sl::kFeatureReflex, sl::kFeaturePCL };
+	if (REL::Module::IsVR())
+		features = { sl::kFeatureDLSS, sl::kFeatureReflex, sl::kFeaturePCL };
+	else {
+		features = { sl::kFeatureDLSS, sl::kFeatureReflex, sl::kFeaturePCL };
 
-	pref.featuresToLoad = featuresToLoad;
-	pref.numFeaturesToLoad = _countof(featuresToLoad);
+		if (globals::features::raytracing.loaded && d3d12Mode)
+			features.push_back(sl::kFeatureDLSS_RR);
+	}
+
+	pref.featuresToLoad = features.data();
+	pref.numFeaturesToLoad = static_cast<uint32_t>(features.size());
 
 	// Set log level from settings
 	switch (globals::features::upscaling.settings.streamlineLogLevel) {
@@ -134,7 +143,7 @@ void Streamline::LoadInterposer()
 	pref.engineVersion = "1.0.0";
 	pref.projectId = "f8776929-c969-43bd-ac2b-294b4de58aac";
 
-	pref.renderAPI = sl::RenderAPI::eD3D11;
+	pref.renderAPI = d3d12Mode ? sl::RenderAPI::eD3D12 : sl::RenderAPI::eD3D11;
 	pref.flags = sl::PreferenceFlags::eUseManualHooking;
 
 	// Hook up all of the functions exported by the SL Interposer Library
@@ -160,7 +169,6 @@ void Streamline::LoadInterposer()
 		logger::critical("[Streamline] Failed to initialize Streamline");
 	} else {
 		initialized = true;
-		featureDLSS = false;
 		featureReflex = false;
 		featurePCL = false;
 		reflexSupportedOnCurrentAdapter = false;
@@ -202,16 +210,12 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 		outAvailable = slIsFeatureSupported(feature, adapterInfo) == sl::Result::eOk;
 	};
 
-	checkFeatureAvailability(sl::kFeatureDLSS, "DLSS", featureDLSS);
-	if (reflexSupportedOnCurrentAdapter) {
-		checkFeatureAvailability(sl::kFeatureReflex, "Reflex", featureReflex);
-		checkFeatureAvailability(sl::kFeaturePCL, "PCL", featurePCL);
-	} else {
-		featureReflex = false;
-		featurePCL = false;
-	}
+	// Check DLSS features using loadedFeatures bitmask
+	bool dlssAvailable = false;
+	checkFeatureAvailability(sl::kFeatureDLSS, "DLSS", dlssAvailable);
+	if (dlssAvailable) {
+		loadedFeatures |= Features::kDLSS;
 
-	if (featureDLSS) {
 		isRTXBelow40series = IsRTXAndBelow40Series(a_adapter);
 
 		if (isRTXBelow40series)
@@ -220,7 +224,27 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 			logger::info("[Streamline] Newer RTX GPU detected, DLSS 4.5 will be used instead of DLSS 4.0");
 	}
 
-	logger::info("[Streamline] DLSS {} available", featureDLSS ? "is" : "is not");
+	bool dlssRRAvailable = false;
+	for (auto& feature : features) {
+		if (feature == sl::kFeatureDLSS_RR) {
+			checkFeatureAvailability(sl::kFeatureDLSS_RR, "DLSS_RR", dlssRRAvailable);
+			if (dlssRRAvailable)
+				loadedFeatures |= Features::kDLSS_RR;
+			break;
+		}
+	}
+
+	// Check Reflex/PCL
+	if (reflexSupportedOnCurrentAdapter) {
+		checkFeatureAvailability(sl::kFeatureReflex, "Reflex", featureReflex);
+		checkFeatureAvailability(sl::kFeaturePCL, "PCL", featurePCL);
+	} else {
+		featureReflex = false;
+		featurePCL = false;
+	}
+
+	logger::info("[Streamline] DLSS {} available", dlssAvailable ? "is" : "is not");
+	logger::info("[Streamline] DLSS_RR {} available", dlssRRAvailable ? "is" : "is not");
 	if (reflexSupportedOnCurrentAdapter) {
 		logger::info("[Streamline] Reflex {} available", featureReflex ? "is" : "is not");
 		logger::info("[Streamline] PCL {} available", featurePCL ? "is" : "is not");
@@ -235,11 +259,14 @@ void Streamline::PostDevice()
 {
 	// Hook up all of the feature functions using the sl function slGetFeatureFunction
 
-	if (featureDLSS) {
+	if (loadedFeatures & Features::kDLSS) {
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetOptimalSettings", (void*&)slDLSSGetOptimalSettings);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSGetState", (void*&)slDLSSGetState);
 		slGetFeatureFunction(sl::kFeatureDLSS, "slDLSSSetOptions", (void*&)slDLSSSetOptions);
 	}
+
+	if (loadedFeatures & Features::kDLSS_RR)
+		SL_FEATURE_FUN_IMPORT(sl::kFeatureDLSS_RR, slDLSSDSetOptions);
 
 	slReflexGetState = nullptr;
 	slReflexSleep = nullptr;
@@ -298,9 +325,7 @@ void Streamline::PostDevice()
 }
 
 /**
- * @brief Updates and sets camera and frame constants for the current Streamline frame.
- *
- * Populates and submits camera parameters, projection matrices, motion vector settings, and other per-frame constants to the Streamline SDK for the current frame. Uses cached framebuffer data and global state to ensure correct configuration for upscaling and frame generation features.
+ * @brief Ensures a valid frame token is available for the current frame.
  */
 bool Streamline::EnsureFrameToken()
 {
@@ -319,6 +344,11 @@ bool Streamline::EnsureFrameToken()
 	return frameToken != nullptr;
 }
 
+/**
+ * @brief Updates and sets camera and frame constants for the current Streamline frame.
+ *
+ * Populates and submits camera parameters, projection matrices, motion vector settings, and other per-frame constants to the Streamline SDK for the current frame. Uses cached framebuffer data and global state to ensure correct configuration for upscaling and frame generation features.
+ */
 bool Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eyeIndex)
 {
 	if (!globals::features::upscaling.streamline.initialized)
@@ -503,6 +533,90 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 	}
 }
 
+void Streamline::SetDLSSDOptions(sl::ViewportHandle p_viewport, uint32_t width)
+{
+	sl::DLSSDOptions dlssOptions{};
+
+	auto worldToCameraView = globals::game::frameBufferCached.GetCameraView().Transpose();
+	auto cameraViewToWorld = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+
+	dlssOptions.worldToCameraView = sl::float4x4{
+		sl::float4{ worldToCameraView._11, worldToCameraView._12, worldToCameraView._13, worldToCameraView._14 },
+		sl::float4{ worldToCameraView._21, worldToCameraView._22, worldToCameraView._23, worldToCameraView._24 },
+		sl::float4{ worldToCameraView._31, worldToCameraView._32, worldToCameraView._33, worldToCameraView._34 },
+		sl::float4{ worldToCameraView._41, worldToCameraView._42, worldToCameraView._43, worldToCameraView._44 }
+	};
+
+	dlssOptions.cameraViewToWorld = sl::float4x4{
+		sl::float4{ cameraViewToWorld._11, cameraViewToWorld._12, cameraViewToWorld._13, cameraViewToWorld._14 },
+		sl::float4{ cameraViewToWorld._21, cameraViewToWorld._22, cameraViewToWorld._23, cameraViewToWorld._24 },
+		sl::float4{ cameraViewToWorld._31, cameraViewToWorld._32, cameraViewToWorld._33, cameraViewToWorld._34 },
+		sl::float4{ cameraViewToWorld._41, cameraViewToWorld._42, cameraViewToWorld._43, cameraViewToWorld._44 }
+	};
+
+	// Map quality mode to DLSS mode
+	uint32_t qualityMode = globals::features::upscaling.settings.qualityMode;
+	switch (qualityMode) {
+	case 1:
+		dlssOptions.mode = sl::DLSSMode::eMaxQuality;
+		break;
+	case 2:
+		dlssOptions.mode = sl::DLSSMode::eBalanced;
+		break;
+	case 3:
+		dlssOptions.mode = sl::DLSSMode::eMaxPerformance;
+		break;
+	case 4:
+		dlssOptions.mode = sl::DLSSMode::eUltraPerformance;
+		break;
+	default:
+		dlssOptions.mode = sl::DLSSMode::eDLAA;
+		break;
+	}
+
+	auto state = globals::state;
+
+	dlssOptions.outputWidth = width;
+	dlssOptions.outputHeight = (uint)state->screenSize.y;
+
+	std::optional<sl::DLSSDPreset> customPreset;
+	switch (globals::features::upscaling.settings.presetDLSSRR) {
+	case 1:
+		customPreset = sl::DLSSDPreset::ePresetD;
+		break;
+	case 2:
+		customPreset = sl::DLSSDPreset::ePresetE;
+		break;
+	}
+
+	if (customPreset.has_value()) {
+		dlssOptions.dlaaPreset = customPreset.value();
+		dlssOptions.ultraQualityPreset = customPreset.value();
+		dlssOptions.qualityPreset = customPreset.value();
+		dlssOptions.balancedPreset = customPreset.value();
+		dlssOptions.performancePreset = customPreset.value();
+		dlssOptions.ultraPerformancePreset = customPreset.value();
+	} else {
+		dlssOptions.dlaaPreset = sl::DLSSDPreset::eDefault;
+		dlssOptions.ultraQualityPreset = sl::DLSSDPreset::eDefault;
+		dlssOptions.qualityPreset = sl::DLSSDPreset::eDefault;
+		dlssOptions.balancedPreset = sl::DLSSDPreset::eDefault;
+		dlssOptions.performancePreset = sl::DLSSDPreset::eDefault;
+		dlssOptions.ultraPerformancePreset = sl::DLSSDPreset::eDefault;
+	}
+
+	dlssOptions.preExposure = 1.0f;
+	dlssOptions.sharpness = 0.0f;
+
+	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+	dlssOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+	dlssOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
+
+	if (SL_FAILED(result, slDLSSDSetOptions(p_viewport, dlssOptions))) {
+		logger::critical("[Streamline] Could not enable DLSSD");
+	}
+}
+
 void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 	ID3D11Resource* colorIn, ID3D11Resource* colorOut, ID3D11Resource* depth,
 	ID3D11Resource* mvec, ID3D11Resource* reactiveMask, ID3D11Resource* transparencyMask,
@@ -587,8 +701,126 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 	}
 }
 
+void Streamline::EvaluateDLSS(ID3D12GraphicsCommandList4* commandList, sl::ViewportHandle vp,
+	ID3D12Resource* colorIn, ID3D12Resource* colorOut, ID3D12Resource* depth, ID3D12Resource* mvec, ID3D12Resource* reactiveMask,
+	const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth)
+{
+	sl::Resource colorInRes = { sl::ResourceType::eTex2d, colorIn, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+	sl::Resource colorOutRes = { sl::ResourceType::eTex2d, colorOut, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+	sl::Resource depthRes = { sl::ResourceType::eTex2d, depth, 0 };
+	sl::Resource mvecRes = { sl::ResourceType::eTex2d, mvec, 0 };
+	sl::Resource reactiveMaskRes = { sl::ResourceType::eTex2d, reactiveMask, 0 };
+	//sl::Resource transparencyMaskRes = { sl::ResourceType::eTex2d, transparencyMask, 0 };
+
+	CheckFrameConstants(vp, 0);
+	SetDLSSOptions(vp, outputWidth);
+
+	sl::ResourceTag tags[] = {
+		{ &colorInRes, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentIn },
+		{ &colorOutRes, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentOut },
+		{ &depthRes, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &mvecRes, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &reactiveMaskRes, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },  // kBufferTypeReactiveMaskHint
+																														  //{ &transparencyMaskRes, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+	};
+
+	if (SL_FAILED(result, slSetTag(vp, tags, _countof(tags), commandList))) {
+		logger::error("[Streamline] Failed to set DLSS tags, error: {}", magic_enum::enum_name(result));
+		return;
+	}
+
+	sl::ViewportHandle view(vp);
+	const sl::BaseStructure* inputs[] = { &view };
+
+	auto state = globals::state;
+	if (state->frameAnnotations) {
+		state->BeginPerfEvent("DLSS Evaluate");
+	}
+
+	sl::Result evalResult = slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), commandList);
+
+	if (state->frameAnnotations)
+		state->EndPerfEvent();
+
+	if (evalResult != sl::Result::eOk) {
+		static bool evalErrorLogged = false;
+
+		if (!evalErrorLogged) {
+			evalErrorLogged = true;
+			logger::error("[Streamline] slEvaluateFeature failed, result: {}", magic_enum::enum_name(evalResult));
+		}
+	}
+}
+
+void Streamline::EvaluateDLSSD(ID3D12GraphicsCommandList4* commandList, sl::ViewportHandle vp,
+	ID3D12Resource* colorIn, ID3D12Resource* colorOut, ID3D12Resource* depth, ID3D12Resource* mvec, ID3D12Resource* reactiveMask,
+	ID3D12Resource* diffuseAlbedo, ID3D12Resource* specularAlbedo, ID3D12Resource* normalRoughness, ID3D12Resource* specHitDistance,
+	const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth)
+{
+	sl::Resource colorInRes = { sl::ResourceType::eTex2d, colorIn, D3D12_RESOURCE_STATE_COMMON };
+	sl::Resource colorOutRes = { sl::ResourceType::eTex2d, colorOut, D3D12_RESOURCE_STATE_COMMON };
+	sl::Resource depthRes = { sl::ResourceType::eTex2d, depth, 0 };
+	sl::Resource mvecRes = { sl::ResourceType::eTex2d, mvec, 0 };
+	sl::Resource reactiveMaskRes = { sl::ResourceType::eTex2d, reactiveMask, 0 };
+	//sl::Resource transparencyMaskRes = { sl::ResourceType::eTex2d, transparencyMask, 0 };
+
+	sl::Resource diffuseAlbedoRes = { sl::ResourceType::eTex2d, diffuseAlbedo, 0 };
+	sl::Resource specularAlbedoRes = { sl::ResourceType::eTex2d, specularAlbedo, 0 };
+	sl::Resource normalRoughnessRes = { sl::ResourceType::eTex2d, normalRoughness, 0 };
+	sl::Resource specHitDistanceRes = { sl::ResourceType::eTex2d, specHitDistance, 0 };
+
+	CheckFrameConstants(vp, 0);
+	SetDLSSDOptions(vp, outputWidth);
+
+	sl::ResourceTag tags[] = {
+		{ &colorInRes, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentIn },
+		{ &colorOutRes, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentOut },
+		{ &depthRes, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &mvecRes, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &reactiveMaskRes, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		//{ &transparencyMaskRes, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+
+		{ &diffuseAlbedoRes, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &specularAlbedoRes, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &normalRoughnessRes, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &specHitDistanceRes, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &extentIn }
+	};
+
+	if (SL_FAILED(result, slSetTag(vp, tags, _countof(tags), commandList))) {
+		logger::error("[Streamline] Failed to set DLSSD tags, error: {}", magic_enum::enum_name(result));
+		return;
+	}
+
+	sl::ViewportHandle view(vp);
+	const sl::BaseStructure* inputs[] = { &view };
+
+	auto state = globals::state;
+	if (state->frameAnnotations) {
+		state->BeginPerfEvent("DLSSD Evaluate");
+	}
+
+	sl::Result evalResult = slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), commandList);
+
+	if (state->frameAnnotations)
+		state->EndPerfEvent();
+
+	if (evalResult != sl::Result::eOk) {
+		static bool evalErrorLogged = false;
+
+		if (!evalErrorLogged) {
+			evalErrorLogged = true;
+			logger::error("[Streamline] slEvaluateFeature failed result={}", (int)evalResult);
+		}
+	}
+}
+
 void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors)
 {
+	if (d3d12Mode) {
+		logger::critical("[Upscaling] D3D11 Upscale method called in D3D12 mode.");
+		return;
+	}
+
 	auto state = globals::state;
 
 	auto renderer = globals::game::renderer;
@@ -683,6 +915,41 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 			depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask,
 			extentIn, extentOut, (uint)screenSize.x);
 	}
+}
+
+void Streamline::Upscale(ID3D12GraphicsCommandList4* a_commandList, ID3D12Resource* a_input, ID3D12Resource* a_output, ID3D12Resource* a_depth, ID3D12Resource* a_motionVectors, ID3D12Resource* a_reactiveMask)
+{
+	auto screenSize = globals::state->screenSize;
+	auto renderSize = Util::ConvertToDynamic(screenSize);
+
+	sl::Extent extentIn{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
+	sl::Extent extentOut{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+
+	EvaluateDLSS(a_commandList, viewport,
+		a_input, a_output, a_depth, a_motionVectors, a_reactiveMask,
+		extentIn, extentOut, (uint)screenSize.x);
+}
+
+void Streamline::DenoiseUpscale(ID3D12GraphicsCommandList4* a_commandList, ID3D12Resource* a_upscalingTexture, ID3D12Resource* a_depth, ID3D12Resource* a_motionVectors, ID3D12Resource* a_reactiveMask)
+{
+	ID3D12Resource* diffuseAlbedo = nullptr;
+	ID3D12Resource* specularAlbedo = nullptr;
+	ID3D12Resource* normalRoughness = nullptr;
+	ID3D12Resource* specHitDistance = nullptr;
+
+	globals::features::raytracing.GetRayReconstructionInputs(diffuseAlbedo, specularAlbedo, normalRoughness, specHitDistance);
+
+	auto screenSize = globals::state->screenSize;
+	auto renderSize = Util::ConvertToDynamic(screenSize);
+
+	sl::Extent extentIn{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
+	sl::Extent extentOut{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+
+	EvaluateDLSSD(a_commandList, viewport,
+		a_upscalingTexture, a_upscalingTexture,
+		a_depth, a_motionVectors, a_reactiveMask,
+		diffuseAlbedo, specularAlbedo, normalRoughness, specHitDistance,
+		extentIn, extentOut, (uint)screenSize.x);
 }
 
 void Streamline::UpdateReflex()
