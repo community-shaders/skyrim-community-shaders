@@ -2,9 +2,9 @@
 
 cbuffer UpscalingData : register(b0)
 {
-	float2 ResolutionScale;
-	float DepthDisocclusion;
-	float pad0;
+	float2 TrueSamplingDim;
+	uint EyeOffsetX;
+	uint pad0;
 };
 
 Texture2D<float> DepthIn : register(t0);
@@ -16,16 +16,15 @@ Texture2D<float4> PTColor : register(t2);
 #endif
 
 [numthreads(8, 8, 1)] void main(uint2 id : SV_DispatchThreadID) {
-	const uint2 trueSamplingDim = SharedData::BufferDim.xy * ResolutionScale;
-
-	if (any(id >= trueSamplingDim))
+	if (any(id >= uint2(TrueSamplingDim)))
 		return;
 
-	float depth = DepthIn[id.xy];
+	uint2 srcCoord = id.xy + uint2(EyeOffsetX, 0);
+	float depth = DepthIn[srcCoord];
 
 #ifdef PATH_TRACING
-	if (PTColor[id.xy].a > 0.5)
-		depth = PTDepth[id.xy];
+	if (PTColor[srcCoord].a > 0.5)
+		depth = PTDepth[srcCoord];
 #endif
 
 	DepthOut[id.xy] = depth;

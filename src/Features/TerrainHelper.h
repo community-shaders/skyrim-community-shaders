@@ -38,6 +38,7 @@ public:
 	bool enabled = false;
 
 	virtual void DataLoaded() override;
+	virtual void PostPostLoad() override;
 	virtual bool SupportsVR() override { return true; };
 	virtual std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 

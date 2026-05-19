@@ -141,6 +141,7 @@ public:
 	bool settingShaderBlockPrevKey = false;      // Debug: capture shader block prev key
 	bool settingShaderBlockNextKey = false;      // Debug: capture shader block next key
 	bool settingWeatherEditorToggleKey = false;  // Weather Editor toggle key
+	bool settingScreenshotKey = false;           // Screenshot capture key
 
 	// Font caching (made public for ThemeManager and OverlayRenderer access)
 	// Marked mutable because they're cache fields that may be updated from const methods
@@ -165,6 +166,10 @@ public:
 	// Deferred reload systems (public for SettingsTabRenderer access)
 	bool pendingFontReload = false;
 	bool pendingIconReload = false;
+
+	// Display size tracking for cross-session resolution change detection
+	float2 lastDisplaySize{};
+	bool resetLayout = false;
 
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
@@ -400,18 +405,21 @@ public:
 		std::vector<InputCombo> OverlayToggleKey = { InputCombo::Keyboard(VK_F10) };        // Global overlay toggle key for all overlays
 		std::vector<InputCombo> ShaderBlockPrevKey = { InputCombo::Keyboard(VK_PRIOR) };    // Debug: cycle backward through shaders (PageUp)
 		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };     // Debug: cycle forward through shaders (PageDown)
-		std::vector<InputCombo> WeatherEditorToggleKey = { InputCombo::Keyboard(VK_F11) };  // Weather Editor toggle key
+		std::vector<InputCombo> WeatherEditorToggleKey = { InputCombo::Keyboard(VK_SHIFT), InputCombo::Keyboard(VK_END) };  // Weather Editor toggle key
+		std::vector<InputCombo> ScreenshotKey = { InputCombo::Keyboard(VK_SNAPSHOT) };                                    // Screenshot capture key
 		bool EnableShaderBlocking = false;                                                  // Enable shader blocking hotkeys for debugging
 		bool FirstTimeSetupCompleted = false;                                               // Track if first-time setup has been completed
 		bool SkipClearCacheConfirmation = false;                                            // Skip confirmation dialog when clearing shader cache
 		bool AutoHideFeatureList = false;                                                   // Auto-hide left feature list panel, show on hover
 		bool SkipConstraintWarning = false;                                                 // Skip popup when a setting change creates new constraints
 		bool RequireShiftToDock = true;                                                     // Require holding Shift to dock windows
+		bool UseResolutionFont = true;                                                      // When true, runtime font size scales with screen resolution; when persisted to theme files, FontSize is zeroed for backward compatibility
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};
-	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
-	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components
+	const ThemeSettings& GetTheme() const { return settings.Theme; }  // Provide read-only access to the Theme.
+	Settings& GetSettings() { return settings; }                      // Provide access to settings for other components
+	const Settings& GetSettings() const { return settings; }
 	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
 	ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
 	const ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) const { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
@@ -497,5 +505,6 @@ private:
 
 	void addToEventQueue(KeyEvent e);
 	void ProcessInputEventQueue();
+	bool IsCapturingHotkeyInput() const;
 	winrt::com_ptr<IDXGIAdapter3> dxgiAdapter3;
 };

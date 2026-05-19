@@ -166,7 +166,7 @@ cbuffer PerGeometry : register(b2)
 
 VS_OUTPUT main(VS_INPUT input)
 {
-	VS_OUTPUT vsout;
+	VS_OUTPUT vsout = (VS_OUTPUT)0;
 
 	uint eyeIndex = Stereo::GetEyeIndexVS(
 #		if defined(VR)
@@ -437,6 +437,16 @@ float CalculateDepthMultFromUV(float2 uv, float depth, uint eyeIndex = 0)
 #		include "Common/ShadowSampling.hlsli"
 
 #		if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
+float GetWaterFogFade(uint eyeIndex)
+{
+#			if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		return ExponentialHeightFog::GetVanillaFogFade(PosAdjust[eyeIndex].w);
+	}
+#			endif
+	return PosAdjust[eyeIndex].w;
+}
+
 #			if defined(FLOWMAP)
 
 /**
@@ -1110,13 +1120,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 positionMSSkylight = input.WPosition.xyz;
 #				endif
 
-	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+	sh2 skylightingSH = Skylighting::SampleNoBias(positionMSSkylight);
 	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
 
-	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-	skylightingDiffuse = saturate(skylightingDiffuse);
-	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
-	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+	float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, float3(0, 0, 1), Skylighting::GetFadeOutFactor(input.WPosition.xyz));
 
 	wetnessOcclusion = inWorld ? pow(saturate(skylighting), 2) : 0;
 #			endif
@@ -1131,9 +1138,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			if defined(SKYLIGHTING)
 	sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
-	float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
-	skylightingSpecular = saturate(skylightingSpecular);
-	skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+	float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe, Skylighting::GetFadeOutFactor(input.WPosition.xyz));
 #			endif
 
 	float fresnel = GetFresnelValue(normal, viewDirection);
@@ -1274,13 +1279,26 @@ PS_OUTPUT main(PS_INPUT input)
 #						if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
-		fogColor = exponentialHeightFog.xyz;
-		fogDistanceFactor = exponentialHeightFog.w;
-	} else
+		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
+			fogColor = exponentialHeightFog.xyz;
+			fogColor *= GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, fogColor, exponentialHeightFog.w);
+		} else {
+			fogColor *= GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
+			float3 expFogColor = exponentialHeightFog.xyz * GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, expFogColor, exponentialHeightFog.w);
+		}
+	} else {
+		fogColor *= GetWaterFogFade(eyeIndex);
+		finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
+	}
+#						else
+	fogColor *= GetWaterFogFade(eyeIndex);
+	finalColorPreFog = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
 #						endif
-		fogColor *= PosAdjust[eyeIndex].w;
 
-	float3 finalColor = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
+	float3 finalColor = finalColorPreFog;
 
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
@@ -1312,20 +1330,32 @@ PS_OUTPUT main(PS_INPUT input)
 #						if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, preFogColor);
-		preFogColor = exponentialHeightFog.xyz;
-		fogDistanceFactor = exponentialHeightFog.w;
-	} else
-#						endif
-		preFogColor *= PosAdjust[eyeIndex].w;
+		if (ExponentialHeightFog::ShouldDisableVanillaFog()) {
+			preFogColor = exponentialHeightFog.xyz;
+			preFogColor *= GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, preFogColor, exponentialHeightFog.w);
+		} else {
+			preFogColor *= GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
+			float3 expFogColor = exponentialHeightFog.xyz * GetWaterFogFade(eyeIndex);
+			finalColorPreFog = lerp(finalColorPreFog, expFogColor, exponentialHeightFog.w);
+		}
+	} else {
+		preFogColor *= GetWaterFogFade(eyeIndex);
+		finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
+	}
+#						else
+	preFogColor *= GetWaterFogFade(eyeIndex);
 
 	finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
+#						endif
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
 	float3 fogColor = Color::Fog(lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor));
 #						if defined(EXP_HEIGHT_FOG)
-	if (SharedData::exponentialHeightFogSettings.enabled) {
+	if (SharedData::exponentialHeightFogSettings.enabled && ExponentialHeightFog::ShouldDisableVanillaFog()) {
 		fogFactor = 0;
 	}
 #						endif

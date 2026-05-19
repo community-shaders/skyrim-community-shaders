@@ -15,10 +15,10 @@ using json = nlohmann::json;
  * to fill those pixels. This avoids redundant pixel shading in overlapping stereo regions.
  *
  * Pipeline:
- *   1. DispatchStencil()       - CS classifies per-pixel reprojection viability into a mode texture,
- *                                then a fullscreen VS/PS pass writes that classification into the stencil buffer.
- *   2. (Game renders Eye 1)    - Hardware stencil test skips shading for marked pixels.
- *   3. DispatchReprojection()  - CS reprojects Eye 0 color into the skipped Eye 1 pixels.
+ *   1. DispatchStencil()             - CS classifies per-pixel reprojection viability into a mode texture,
+ *                                      then a fullscreen VS/PS pass writes that classification into the stencil buffer.
+ *   2. (Game renders Eye 1)          - Hardware stencil test skips shading for marked pixels.
+ *   3. VR::DrawStereoBlend()         - Stereo overwrite CS reprojects Eye 0 color into skipped Eye 1 pixels.
  */
 struct VRStereoOptimizations
 {
@@ -46,6 +46,14 @@ struct VRStereoOptimizations
 	};
 
 	//=============================================================================
+	// CONSTANTS
+	//=============================================================================
+
+	/// Sentinel written to texPomOffset when POM did not run for a pixel.
+	/// -1.0 = no POM; >= 0.0 = POM ran. Matches Stereo::POM_NO_DATA in Common/VR.hlsli.
+	static constexpr float kPomOffsetNoData = -1.0f;
+
+	//=============================================================================
 	// PUBLIC METHODS
 	//=============================================================================
 
@@ -63,13 +71,13 @@ struct VRStereoOptimizations
 
 	struct Settings
 	{
-		StereoMode stereoMode = StereoMode::Enable;
+		StereoMode stereoMode = StereoMode::Off;
 		float disocclusionDepthThreshold = 0.01f;
 		float edgeDepthThreshold = 0.05f;
 		float minEdgeDistance = 5000.0f;     ///< Minimum linearized depth for edge AA (game units)
 		float fullBlendDistance = 0.0f;      ///< Linearized depth below which both eyes are fully shaded + blended (game units)
 		float pomDepthScale = 22.5f;         ///< Scale factor for POM depth correction in stereo reprojection
-		float forwardOcclusionScale = 0.2f;  ///< Eye 0 depth multiplier for directional disocclusion; 0 = disabled
+		float forwardOcclusionScale = 0.1f;  ///< Eye 0 depth multiplier for directional disocclusion; 0 = disabled
 		bool debugFullBlendDepth = false;    ///< Show full blend depth zone as cyan overlay
 		float qualityJitterOffset = 0.125f;
 		float foveatedRegionRadius = 0.3f;
@@ -83,7 +91,7 @@ struct VRStereoOptimizations
 		bool debugForceAllStencil = false;
 		bool debugForceAllReprojectCS = false;
 		bool debugDepthMap = false;
-		bool debugPOMDepth = false;  ///< Show POM depth data (Reflectance.w) as heatmap overlay
+		bool debugPOMDepth = false;  ///< Show POM depth data (texPomOffset) as heatmap overlay
 
 	} settings;
 
@@ -125,13 +133,24 @@ struct VRStereoOptimizations
 	void DispatchStencil();
 
 	/**
-	 * @brief Reproject Eye 0 color into stencil-culled Eye 1 pixels.
+	 * @brief Returns true when stencil classification/write resources are ready.
 	 *
-	 * Copies the main render target, then dispatches a CS to fill skipped pixels
-	 * using lateral reprojection from Eye 0.
-	 * Called from Deferred::DeferredPasses() after DeferredCompositeCS.
+	 * This mirrors DispatchStencil prerequisites except transient per-frame inputs
+	 * like depth SRV availability.
 	 */
-	void DispatchReprojection();
+	bool CanDispatchStencil() const
+	{
+		return loaded &&
+		       settings.stereoMode != StereoMode::Off &&
+		       !settings.debugSkipMerge &&
+		       stencilCS &&
+		       stencilWriteVS &&
+		       stencilWritePS &&
+		       texPerPixelMode &&
+		       paramsCB &&
+		       stencilWriteDSS &&
+		       stencilWriteRS;
+	}
 
 	/**
 	 * @brief Creates or retrieves a modified DSS with stencil NOT_EQUAL test.
@@ -147,12 +166,22 @@ struct VRStereoOptimizations
 
 	/// Whether the stencil pass is currently active this frame
 	bool IsStencilActive() const { return stencilActive; }
+	void NoteStencilSwap() { ++stencilSwapCount; }
 
 	/// Deactivate stencil culling (called from Deferred after geometry rendering completes)
 	void DeactivateStencil();
 
 	/// Get mode texture SRV for external consumers (e.g., DeferredCompositeCS Eye 1 skip)
 	ID3D11ShaderResourceView* GetModeTextureSRV() const { return texPerPixelMode ? texPerPixelMode->srv.get() : nullptr; }
+
+	/// Get POM offset texture SRV for StereoBlendCS (reads per-pixel parallax depth offset)
+	ID3D11ShaderResourceView* GetPomOffsetSRV() const { return texPomOffset ? texPomOffset->srv.get() : nullptr; }
+
+	/// Get POM offset texture UAV for PS writes during deferred lighting (injected at u7)
+	ID3D11UnorderedAccessView* GetPomOffsetUAV() const { return texPomOffset ? texPomOffset->uav.get() : nullptr; }
+
+	/// Clear the POM offset texture to -1.0 (no-POM sentinel) at the start of each deferred frame
+	void ClearPomOffsetTexture();
 
 private:
 	//=============================================================================
@@ -173,8 +202,8 @@ private:
 	//=============================================================================
 
 	eastl::unique_ptr<ConstantBuffer> paramsCB;
-	eastl::unique_ptr<Texture2D> texPerPixelMode;      ///< R8_UINT classification texture (full SBS resolution)
-	eastl::unique_ptr<Texture2D> reprojectionCopyTex;  ///< Copy of main RT for reprojection read
+	eastl::unique_ptr<Texture2D> texPerPixelMode;  ///< R8_UINT classification texture (full SBS resolution)
+	eastl::unique_ptr<Texture2D> texPomOffset;     ///< R16_FLOAT POM depth offset written by Lighting PS, read by StereoBlendCS
 
 	winrt::com_ptr<ID3D11DepthStencilState> stencilWriteDSS;
 	winrt::com_ptr<ID3D11RasterizerState> stencilWriteRS;
@@ -183,7 +212,6 @@ private:
 	winrt::com_ptr<ID3D11ComputeShader> stencilDebugDepthMapCS;
 	winrt::com_ptr<ID3D11VertexShader> stencilWriteVS;
 	winrt::com_ptr<ID3D11PixelShader> stencilWritePS;
-	winrt::com_ptr<ID3D11ComputeShader> reprojectionCS;
 
 	/// Cache of original DSS -> modified DSS with stencil NOT_EQUAL enforcement
 	std::unordered_map<ID3D11DepthStencilState*, winrt::com_ptr<ID3D11DepthStencilState>> dssCache;

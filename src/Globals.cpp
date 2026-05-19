@@ -9,6 +9,7 @@
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/HDRDisplay.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
 #include "Features/InteriorSun.h"
@@ -22,6 +23,7 @@
 #include "Features/SceneGraphExplorer.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
+#include "Features/ScreenshotFeature.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -84,12 +86,15 @@ namespace globals
 		WetnessEffects wetnessEffects{};
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
+		HDRDisplay hdrDisplay{};
 		RenderDoc renderDoc{};
+		ScreenshotFeature screenshotFeature{};
 		WeatherEditor weatherEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
 		DX12Interop dx12Interop{};
 		Raytracing raytracing{};
 		SceneGraphExplorer sceneGraphExplorer{};
+		TruePBR truePBR{};
 
 		namespace llf
 		{
@@ -134,6 +139,12 @@ namespace globals
 		FrameBufferCache frameBufferCached{};
 	}
 
+	static void RefreshTES()
+	{
+		if (auto tes = RE::TES::GetSingleton())
+			game::tes = tes;
+	}
+
 	namespace rtti
 	{
 		REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
@@ -148,7 +159,6 @@ namespace globals
 
 	State* state = nullptr;
 	Deferred* deferred = nullptr;
-	TruePBR* truePBR = nullptr;
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
 
@@ -158,7 +168,6 @@ namespace globals
 		state = State::GetSingleton();
 		menu = Menu::GetSingleton();
 		deferred = Deferred::GetSingleton();
-		truePBR = TruePBR::GetSingleton();
 	}
 
 	void ReInit()
@@ -174,7 +183,7 @@ namespace globals
 			iniSettingCollection = RE::INISettingCollection::GetSingleton();
 			iniPrefSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
 			gameSettingCollection = RE::GameSettingCollection::GetSingleton();
-			tes = RE::TES::GetSingleton();
+			RefreshTES();
 			waterSystem = RE::TESWaterSystem::GetSingleton();
 			cameraNear = (float*)(REL::RelocationID(517032, 403540).address() + 0x40);
 			cameraFar = (float*)(REL::RelocationID(517032, 403540).address() + 0x44);
@@ -211,6 +220,7 @@ namespace globals
 	void OnDataLoaded()
 	{
 		using namespace game;
+		RefreshTES();
 		player = RE::PlayerCharacter::GetSingleton();
 		sky = RE::Sky::GetSingleton();
 		utilityShader = RE::BSUtilityShader::GetSingleton();
@@ -286,6 +296,36 @@ namespace globals
 	};
 
 	/**
+	 * @brief Hooked OMSetRenderTargets — injects POM offset UAV at slot 7 when in the deferred pass.
+	 *
+	 * vtable index 33 for ID3D11DeviceContext::OMSetRenderTargets.
+	 * After Skyrim binds the deferred MRT (clearing all UAVs), this hook re-adds the POM offset
+	 * UAV at slot u7 so the Lighting PS (VR_STEREO_OPT permutation) can write per-pixel parallax
+	 * depth offsets without overloading Reflectance.w.
+	 */
+	struct ID3D11DeviceContext_OMSetRenderTargets
+	{
+		static void STDMETHODCALLTYPE thunk(ID3D11DeviceContext* This, UINT NumViews, ID3D11RenderTargetView* const* ppRenderTargetViews, ID3D11DepthStencilView* pDepthStencilView)
+		{
+			func(This, NumViews, ppRenderTargetViews, pDepthStencilView);
+
+			// D3D11 handles any SRV/UAV conflict automatically (silently unbinds the UAV when
+			// the same resource is later bound as an SRV), so no NumViews guard is needed.
+			if (globals::deferred->deferredPass) {
+				auto& stereoOpt = globals::features::vr.stereoOpt;
+				if (stereoOpt.loaded) {
+					if (auto* uav = stereoOpt.GetPomOffsetUAV()) {
+						This->OMSetRenderTargetsAndUnorderedAccessViews(
+							D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL, nullptr, nullptr,
+							7, 1, &uav, nullptr);
+					}
+				}
+			}
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	/**
 	 * @brief Hooked OMSetDepthStencilState — replaces DSS with stencil-enforcing version when VR stereo opt is active.
 	 *
 	 * vtable index 36 for ID3D11DeviceContext::OMSetDepthStencilState.
@@ -301,6 +341,7 @@ namespace globals
 				auto& stereoOpt = globals::features::vr.stereoOpt;
 				if (stereoOpt.loaded && stereoOpt.IsStencilActive()) {
 					pDepthStencilState = stereoOpt.GetOrCreateModifiedDSS(pDepthStencilState);
+					stereoOpt.NoteStencilSwap();
 					StencilRef = 1;  // Must match the ref written by our stencil pass
 				}
 			}
@@ -314,7 +355,7 @@ namespace globals
 	 *
 	 * vtable index 53 for ID3D11DeviceContext::ClearDepthStencilView.
 	 * Prevents the game from clearing our stencil marks between the stencil write and
-	 * the reprojection pass by stripping the D3D11_CLEAR_STENCIL flag.
+	 * the stereo overwrite blend pass by stripping the D3D11_CLEAR_STENCIL flag.
 	 */
 	struct ID3D11DeviceContext_ClearDepthStencilView
 	{
@@ -360,8 +401,10 @@ namespace globals
 		stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
 		stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
 
-		// VR stereo optimization hooks: intercept DSS and stencil clear
-		if (globals::game::isVR) {
+		// VR stereo optimization hooks: installed only when stereo reprojection is enabled at startup.
+		// Changing stereoMode at runtime requires a restart; the UI communicates this to the user.
+		if (globals::game::isVR && globals::features::vr.stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off) {
+			stl::detour_vfunc<33, ID3D11DeviceContext_OMSetRenderTargets>(a_context);
 			stl::detour_vfunc<36, ID3D11DeviceContext_OMSetDepthStencilState>(a_context);
 			stl::detour_vfunc<53, ID3D11DeviceContext_ClearDepthStencilView>(a_context);
 		}

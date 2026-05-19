@@ -12,6 +12,10 @@ public:
 struct DynamicCubemaps : Feature
 {
 public:
+	static constexpr float kReflectionFallbackMin = 0.0f;
+	static constexpr float kReflectionFallbackMax = 1.0f;
+	static constexpr float kReflectionFallbackDefault = 0.5f;
+
 	const std::string defaultDynamicCubeMapSavePath = "Data\\textures\\DynamicCubemaps";
 
 	// Specular irradiance
@@ -75,12 +79,38 @@ public:
 		kCapture,
 		kInferrence,
 		kIrradiance,
+		kBC6HCompress,
 		kCapture2,
 		kInferrence2,
-		kIrradiance2
+		kIrradiance2,
+		kBC6HCompress2
 	};
 
 	NextTask nextTask = NextTask::kCapture;
+
+	// BC6H compression
+	struct alignas(16) BC6HEncodeCB
+	{
+		uint TextureSizeInBlocksX;
+		uint TextureSizeInBlocksY;
+		uint MipLevel;
+		uint pad;
+	};
+	STATIC_ASSERT_ALIGNAS_16(BC6HEncodeCB);
+
+	ID3D11ComputeShader* bc6hEncodeCS = nullptr;
+	ConstantBuffer* bc6hEncodeCB = nullptr;
+
+	ID3D11ShaderResourceView* envTextureArraySRV = nullptr;
+	ID3D11ShaderResourceView* envReflectionsTextureArraySRV = nullptr;
+
+	Texture2D* envTextureBC6H = nullptr;
+	Texture2D* envReflectionsTextureBC6H = nullptr;
+	Texture2D* bc6hScratchTexture = nullptr;
+
+	uint32_t bc6hMipLevels = 0;
+
+	ID3D11UnorderedAccessView* bc6hScratchUAVs[8] = {};
 
 	// Editor window
 
@@ -90,7 +120,10 @@ public:
 		uint EnabledSSR = true;
 		uint pad0[2];
 		float4 CubemapColor{ 1.0f, 1.0f, 1.0f, 0.0f };
+		float ReflectionFallbackAmount = kReflectionFallbackDefault;
+		float pad1[3];
 	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;
 	bool enabledAtBoot = false;
@@ -157,6 +190,10 @@ public:
 	void Inferrence(bool a_reflections);
 
 	void Irradiance(bool a_reflections);
+
+	void CompressToBC6H(bool a_reflections);
+
+	ID3D11ComputeShader* GetComputeShaderBC6HEncode();
 
 	virtual bool SupportsVR() override { return true; };
 	virtual bool IsCore() const override { return true; };

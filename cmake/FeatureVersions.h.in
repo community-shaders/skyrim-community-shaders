@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_set>
+
 namespace FeatureVersions
 {
 	using namespace std::literals::string_view_literals;
@@ -7,5 +9,10 @@ namespace FeatureVersions
 	static const std::map<std::string_view, REL::Version> FEATURE_MINIMAL_VERSIONS
 	{
 @FEATURE_VERSIONS@
+	};
+
+	static const std::unordered_set<std::string_view> FEATURE_CORE_NAMES
+	{
+@FEATURE_CORE_NAMES@
 	};
 }

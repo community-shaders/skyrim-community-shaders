@@ -10,6 +10,7 @@
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
+#include "Features/HDRDisplay.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
 #include "Features/InteriorSun.h"
@@ -18,10 +19,12 @@
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/Raytracing.h"
 #include "Features/RenderDoc.h"
 #include "Features/SceneGraphExplorer.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
+#include "Features/ScreenshotFeature.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -37,7 +40,6 @@
 #include "Features/WaterEffects.h"
 #include "Features/WeatherEditor.h"
 #include "Features/WetnessEffects.h"
-#include "Features/Raytracing.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
@@ -45,6 +47,7 @@
 #include "WeatherVariableRegistry.h"
 
 #include "State.h"
+#include "TruePBR.h"
 
 void Feature::Load(json& o_json)
 {
@@ -211,6 +214,7 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 const std::vector<Feature*>& Feature::GetFeatureList()
 {
 	static std::vector<Feature*> features = {
+		&globals::features::truePBR,
 		&globals::features::volumetricShadows,
 		&globals::features::grassLighting,
 		&globals::features::grassCollision,
@@ -243,9 +247,11 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::raytracing,
 		&globals::features::sceneGraphExplorer,
 		&globals::features::weatherEditor,
+		&globals::features::screenshotFeature,
 		&globals::features::linearLighting,
 		&globals::features::unifiedWater,
-		&globals::features::exponentialHeightFog
+		&globals::features::exponentialHeightFog,
+		&globals::features::hdrDisplay
 	};
 
 	if (REL::Module::IsVR()) {

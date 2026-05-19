@@ -451,6 +451,45 @@ Follow conventional commit format for consistency:
     -   `fix(imgui): resolve orphaned TableNextColumn calls`
     -   `refactor(constants): centralize UI constants in ThemeManager`
 
+Conventional commits drive semantic-release. `feat:` triggers a minor bump, `fix:` triggers a patch bump, `feat!:` or `BREAKING CHANGE:` triggers a major bump. `chore:`, `docs:`, `style:`, `test:`, `refactor:` produce no release on their own. Pick the type with the version impact in mind — a refactor mislabeled `feat:` will force a minor bump on the next release.
+
+### Release Branch Model
+
+| Branch         | Role                            | Releases produced                                                               |
+| -------------- | ------------------------------- | ------------------------------------------------------------------------------- |
+| `main`         | Stable release channel          | `vX.Y.Z`                                                                        |
+| `dev`          | Integration / RC                | `vX.Y.Z-rc.N` prereleases                                                       |
+| `hotfix/X.Y.x` | Maintenance for **older** lines | `vX.Y.Z` on the `X.Y` channel (also reused as staging for current-line patches) |
+
+**Default branch for PRs is `dev`.** Feature work, fixes, and refactors all land there via normal PRs. `main` is updated only through the release workflows — never PR a feature branch directly into `main`.
+
+**Branch lineage invariant:** `main` is always an ancestor of `dev`, and `dev` is always an ancestor of `main` after a release reconciles. The `Release: Semantic Version` workflow's `ff_target` promotion mode and the auto dev-FF-reconcile keep this invariant — do not break it by force-pushing or merging shared branches manually.
+
+**Patch flow (current line _or_ older line, same staging mechanism):**
+
+1. Land the fix on `dev` via normal PR (if applicable).
+2. Dispatch **Actions → Release: Hotfix Candidate** — auto-creates/reuses `hotfix/X.Y.x` from the latest stable tag, cherry-picks eligible `fix:`/`perf:` commits, opens a PR.
+3. PR checks build a `vX.Y.Z-prNNNN` prerelease for verification.
+4. Merge the candidate PR.
+5. Cut the release:
+    - **Current line** (`main` is on `X.Y`): dispatch **Release: Semantic Version** on `main` with `ff_target = <hotfix/X.Y.x tip SHA>`.
+    - **Older line** (`main` has shipped a newer minor/major): dispatch **Release: Semantic Version** on `hotfix/X.Y.x` with `ff_target` empty.
+
+**Minor/major release flow:**
+
+1. Cut RCs from `dev`: dispatch **Release: Semantic Version** on `dev`, `ff_target` empty → `vX.Y.Z-rc.N`.
+2. When ready, dispatch **Release: Semantic Version** on `main` with `ff_target = <dev SHA>` (typically the latest RC's SHA). The workflow FFs `main`, runs semantic-release to cut stable, then FFs `dev` to absorb the `chore(release):` commit.
+
+**Things agents should not do without explicit user direction:**
+
+-   Force-push or rebase `main`, `dev`, or any `hotfix/*` branch.
+-   Manually create tags matching `v*` (semantic-release owns these).
+-   Bump `CMakeLists.txt`'s `VERSION` field outside the release workflow.
+-   PR a feature branch directly into `main`.
+-   Run `Release: Semantic Version` on `hotfix/X.Y.x` for the current line — it will fail with `cannot be published as it is out of range` because the maintenance contract requires the hotfix line to be strictly older than `main`. Use `ff_target` into `main` instead.
+
+Full details: [Developers wiki — Patch Release Process](https://github.com/community-shaders/skyrim-community-shaders/wiki/Developers#patch-release-process-any-line).
+
 ### Code Organization and Refactoring Patterns
 
 -   **Extract Large Functions**: Functions over ~200 lines should be broken into focused helper methods (see `FeatureListRenderer::DrawMenuVisitor` refactoring)
@@ -498,6 +537,13 @@ Follow conventional commit format for consistency:
 -   **Single Responsibility**: Each feature class should handle one graphics technique only
 -   **Function Complexity**: Keep rendering functions focused; extract complex GPU operations into separate methods
 -   **Resource Management**: Always pair graphics resource creation with proper cleanup (RAII)
+-   **D3D11 Resource Naming**: Every D3D11 resource must be named for RenderDoc debuggability. Use
+    `Util::SetResourceName(ptr, "Feature::ResourceDescription")` after raw `device->Create*` calls.
+    For wrapper types (`Texture2D`, `Buffer`, `ConstantBuffer`, etc. in `Buffer.h`), pass the name
+    to the constructor and views are named automatically. Convention: `"Feature::Name"` for the
+    resource, `"Feature::Name SRV"` / `"Feature::Name UAV"` etc. for views (handled automatically
+    by the wrappers). The canonical implementation lives in `Util::SetResourceName` (`Utils/D3D.cpp`);
+    never duplicate the GUID or re-implement the call inline.
 
 ### Common Pitfalls to Avoid
 
@@ -509,3 +555,4 @@ Follow conventional commit format for consistency:
 -   **Buffer Conflicts**: Check hlslkit buffer scanning to avoid GPU register conflicts that cause rendering issues
 -   **Graphics State Corruption**: Minimize DirectX state changes; restore state after modifications
 -   **Thread Safety**: Graphics operations must consider Skyrim's rendering thread vs game logic thread
+-   **DRY Violations in Cross-Cutting Refactors**: When adding a utility pattern across many files (e.g., resource naming, debug hooks), check whether the implementation exists in multiple places before writing a new one. For example, `Buffer.h` helper classes and raw `device->Create*` callsites both need `SetResourceName` — ensure they share a single implementation, not duplicate GUID definitions or parallel helper functions. Use a forward declaration in headers to delegate to the canonical implementation in `Utils/D3D.cpp` rather than re-implementing inline.

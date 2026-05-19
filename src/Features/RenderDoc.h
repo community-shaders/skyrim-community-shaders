@@ -14,7 +14,7 @@ using json = nlohmann::json;
 
 // Forward declarations
 struct ID3D11Device;
-struct RENDERDOC_API_1_6_0;
+struct RENDERDOC_API_1_7_0;
 
 // Structure to hold capture file information for UI display
 struct CaptureFileInfo
@@ -104,7 +104,7 @@ public:
 
 	// RenderDoc library and API
 	void* renderDocModule = nullptr;
-	RENDERDOC_API_1_6_0* renderDocApi = nullptr;
+	RENDERDOC_API_1_7_0* renderDocApi = nullptr;
 
 	// Pending comments to attach to the next capture (applied when a new capture is detected)
 	std::string pendingCaptureComments;

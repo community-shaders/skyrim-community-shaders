@@ -35,13 +35,13 @@
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "TruePBR.h"
 #include "Util.h"
 #include "Utils/UI.h"
 
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
+#include "Features/ScreenshotFeature.h"
 #include "Features/VR.h"
 #include "Features/WeatherEditor.h"
 #include "WeatherEditor/EditorWindow.h"
@@ -169,6 +169,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	AutoHideFeatureList,
 	SkipConstraintWarning,
 	RequireShiftToDock,
+	UseResolutionFont,
 	Theme,
 	SelectedThemePreset)
 
@@ -341,6 +342,7 @@ void Menu::Load(json& o_json)
 	migrateKey(o_json, "ShaderBlockPrevKey", settings.ShaderBlockPrevKey);
 	migrateKey(o_json, "ShaderBlockNextKey", settings.ShaderBlockNextKey);
 	migrateKey(o_json, "WeatherEditorToggleKey", settings.WeatherEditorToggleKey);
+	migrateKey(o_json, "ScreenshotKey", settings.ScreenshotKey);
 
 	// Helper for new smart serialization with error handling
 	auto loadComboList = [](const json& j, const char* keyName, std::vector<InputCombo>& target) {
@@ -361,6 +363,7 @@ void Menu::Load(json& o_json)
 	loadComboList(o_json, "ShaderBlockPrevKey", settings.ShaderBlockPrevKey);
 	loadComboList(o_json, "ShaderBlockNextKey", settings.ShaderBlockNextKey);
 	loadComboList(o_json, "WeatherEditorToggleKey", settings.WeatherEditorToggleKey);
+	loadComboList(o_json, "ScreenshotKey", settings.ScreenshotKey);
 
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
 	if (o_json.contains("Theme") && o_json["Theme"].is_object() && settings.SelectedThemePreset.empty()) {
@@ -425,6 +428,7 @@ void Menu::Save(json& o_json)
 	InputCombo::ComboList::to_json(o_json["ShaderBlockPrevKey"], settings.ShaderBlockPrevKey);
 	InputCombo::ComboList::to_json(o_json["ShaderBlockNextKey"], settings.ShaderBlockNextKey);
 	InputCombo::ComboList::to_json(o_json["WeatherEditorToggleKey"], settings.WeatherEditorToggleKey);
+	InputCombo::ComboList::to_json(o_json["ScreenshotKey"], settings.ScreenshotKey);
 }
 
 void Menu::LoadTheme(json& o_json)
@@ -583,6 +587,23 @@ void Menu::Init()
 	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
 	imgui_io.IniFilename = cachedIniPath.c_str();
 
+	// Register settings handler to persist display size for cross-session resolution change detection
+	ImGuiSettingsHandler handler{};
+	handler.TypeName = "CommunityShaders";
+	handler.TypeHash = ImHashStr("CommunityShaders");
+	handler.UserData = &lastDisplaySize;
+	handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler*, const char*) -> void* { return (void*)1; };
+	handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler* h, void*, const char* line) {
+		float w, ht;
+		if (sscanf(line, "DisplaySize=%f,%f", &w, &ht) == 2)
+			*static_cast<float2*>(h->UserData) = { w, ht };
+	};
+	handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* h, ImGuiTextBuffer* buf) {
+		auto& ds = ImGui::GetIO().DisplaySize;
+		buf->appendf("[%s][Data]\nDisplaySize=%g,%g\n\n", h->TypeName, ds.x, ds.y);
+	};
+	ImGui::GetCurrentContext()->SettingsHandlers.push_back(handler);
+
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
@@ -641,9 +662,15 @@ void Menu::DrawSettings()
 
 	ImGui::DockSpaceOverViewport(0, NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
-	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
-	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
+	const auto layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), layoutCond, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), layoutCond);
+	resetLayout = false;
+	auto versionStr = Util::GetFormattedVersion(Plugin::VERSION);
+	auto expectedTag = std::format("v{}", versionStr);
+	auto displayTitle = Plugin::BUILD_DESCRIBE == expectedTag ? std::format("Community Shaders {}", versionStr) : std::format("Community Shaders {} [{}]", versionStr, Plugin::BUILD_DESCRIBE);
+	// Use ### to keep a stable window ID regardless of build suffix, preserving docking state
+	auto title = std::format("{}###CommunityShaders", displayTitle);
 
 	// Determine window flags based on docking state
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
@@ -731,7 +758,8 @@ void Menu::DrawGeneralSettings()
 		.settingOverlayToggleKey = settingOverlayToggleKey,
 		.settingShaderBlockPrevKey = settingShaderBlockPrevKey,
 		.settingShaderBlockNextKey = settingShaderBlockNextKey,
-		.settingWeatherEditorToggleKey = settingWeatherEditorToggleKey
+		.settingWeatherEditorToggleKey = settingWeatherEditorToggleKey,
+		.settingScreenshotKey = settingScreenshotKey
 	};
 
 	// Render settings using extracted component
@@ -747,9 +775,7 @@ void Menu::DrawGeneralSettings()
  */
 void Menu::DrawAdvancedSettings()
 {
-	// Render advanced settings using extracted component
 	AdvancedSettingsRenderer::RenderAdvancedSettings(
-		[this]() { globals::truePBR->DrawSettings(); },
 		[this]() { DrawDisableAtBootSettings(); });
 }
 
@@ -764,27 +790,6 @@ void Menu::DrawDisableAtBootSettings()
 		"Restart will be required to reenable.");
 
 	ImGui::Spacing();
-
-	if (ImGui::CollapsingHeader("Special Features", ImGuiTreeNodeFlags_DefaultOpen)) {
-		// Prepare a sorted list of special feature names
-		std::vector<std::string> specialFeatureNames;
-		for (const auto& [featureName, _] : state->specialFeatures) {
-			specialFeatureNames.push_back(featureName);
-		}
-		std::sort(specialFeatureNames.begin(), specialFeatureNames.end());
-
-		// Display sorted special features
-		for (const auto& featureName : specialFeatureNames) {
-			// Check if the feature is currently disabled
-			bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
-
-			// Create a checkbox for each feature
-			if (ImGui::Checkbox(featureName.c_str(), &isDisabled)) {
-				// Update the disabledFeatures map based on user interaction
-				disabledFeatures[featureName] = isDisabled;
-			}
-		}
-	}
 
 	if (ImGui::CollapsingHeader("Features", ImGuiTreeNodeFlags_DefaultOpen)) {
 		// Prepare a sorted list of feature pointers
@@ -879,6 +884,27 @@ void Menu::DrawOverlay()
  * @note This method contains Menu-specific logic and state management that makes it
  *       inappropriate for extraction to a utility class.
  */
+static std::vector<InputCombo> DeriveWeatherEditorKey(const std::vector<InputCombo>& menuKey)
+{
+	bool hasShift = false;
+	uint32_t baseKey = 0;
+
+	for (const auto& combo : menuKey) {
+		uint32_t vk = combo.GetKey();
+		if (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) {
+			hasShift = true;
+		} else if (vk != VK_CONTROL && vk != VK_LCONTROL && vk != VK_RCONTROL &&
+		           vk != VK_MENU && vk != VK_LMENU && vk != VK_RMENU) {
+			baseKey = vk;
+		}
+	}
+
+	if (hasShift || baseKey == 0)
+		return {};
+
+	return { InputCombo::Keyboard(VK_SHIFT), InputCombo::Keyboard(baseKey) };
+}
+
 void Menu::ProcessInputEventQueue()
 {
 	std::unique_lock<std::shared_mutex> mutex(_inputEventMutex);
@@ -931,6 +957,10 @@ void Menu::ProcessInputEventQueue()
 			logger::trace("Detected key code {} ({})", event.keyCode, key);
 			if (key == event.keyCode)
 				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
+
+			const bool wasCapturingHotkey = IsCapturingHotkeyInput();
+			const bool allowSetupCloseKey = wasCapturingHotkey && HomePageRenderer::ShouldShowFirstTimeSetup() &&
+			                                (key == VK_RETURN || key == VK_ESCAPE);
 			if (!event.IsPressed()) {
 				// Skip key release if it was used to close the first-time setup dialog
 				if (HomePageRenderer::ShouldSkipKeyRelease(key)) {
@@ -946,13 +976,19 @@ void Menu::ProcessInputEventQueue()
 				};
 				auto shaderCache = globals::shaderCache;
 				HotkeyAction hotkeyActions[] = {
-					{ &settings.ToggleKey, &settingToggleKey, [this](std::vector<InputCombo> keys) { settings.ToggleKey = keys; settingToggleKey = false; } },
+					{ &settings.ToggleKey, &settingToggleKey, [this](std::vector<InputCombo> keys) {
+						settings.ToggleKey = keys;
+						settingToggleKey = false;
+						if (!settings.FirstTimeSetupCompleted)
+							settings.WeatherEditorToggleKey = DeriveWeatherEditorKey(keys);
+					} },
 					{ &settings.SkipCompilationKey, &settingSkipCompilationKey, [this](std::vector<InputCombo> keys) { settings.SkipCompilationKey = keys; settingSkipCompilationKey = false; } },
 					{ &settings.EffectToggleKey, &settingsEffectsToggle, [this](std::vector<InputCombo> keys) { settings.EffectToggleKey = keys; settingsEffectsToggle = false; } },
 					{ &settings.OverlayToggleKey, &settingOverlayToggleKey, [this](std::vector<InputCombo> keys) { settings.OverlayToggleKey = keys; settingOverlayToggleKey = false; } },
 					{ &settings.ShaderBlockPrevKey, &settingShaderBlockPrevKey, [this](std::vector<InputCombo> keys) { settings.ShaderBlockPrevKey = keys; settingShaderBlockPrevKey = false; } },
 					{ &settings.ShaderBlockNextKey, &settingShaderBlockNextKey, [this](std::vector<InputCombo> keys) { settings.ShaderBlockNextKey = keys; settingShaderBlockNextKey = false; } },
 					{ &settings.WeatherEditorToggleKey, &settingWeatherEditorToggleKey, [this](std::vector<InputCombo> keys) { settings.WeatherEditorToggleKey = keys; settingWeatherEditorToggleKey = false; } },
+					{ &settings.ScreenshotKey, &settingScreenshotKey, [this](std::vector<InputCombo> keys) { settings.ScreenshotKey = keys; settingScreenshotKey = false; } },
 				};
 				bool handled = false;
 				for (auto& h : hotkeyActions) {
@@ -1005,8 +1041,14 @@ void Menu::ProcessInputEventQueue()
 						std::function<void()> action;
 					};
 					KeyAction keyActions[] = {
-						{ settings.ToggleKey, [this]() { if (!HomePageRenderer::ShouldShowFirstTimeSetup()) IsEnabled = !IsEnabled; } },
-						{ settings.SkipCompilationKey, [shaderCache]() { shaderCache->backgroundCompilation = true; } },
+						{ settings.ToggleKey, [this]() {
+							 if (!HomePageRenderer::ShouldShowFirstTimeSetup()) {
+								 IsEnabled = !IsEnabled;
+								 if (IsEnabled)
+									 ImGui::GetIO().ClearInputKeys();  // Prevent toggle key from remaining "held" in ImGui after open.
+							 }
+						 } },
+						{ settings.SkipCompilationKey, [this, shaderCache]() { if (!ShouldSwallowInput() && shaderCache->IsCompiling()) shaderCache->backgroundCompilation = true; } },
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
@@ -1021,42 +1063,19 @@ void Menu::ProcessInputEventQueue()
 							 } else if (ew->IsInPreviewMode()) {
 								 // Locked or PlayMode → fully exit preview
 								 ew->ExitPreviewMode();
-							 } else if (EditorWindow::CanBeOpen()) {
-								 ew->open = !ew->open;
+							 } else {
+								 WeatherEditor::ToggleEditorWindow();
 							 }
+						 } },
+						{ settings.ScreenshotKey, []() {
+							 if (globals::features::screenshotFeature.loaded)
+								 globals::features::screenshotFeature.captureRequested = true;
 						 } },
 					};
 					for (const auto& ka : keyActions) {
-						// Check if key matches last key in combo and all modifiers are held (exact match)
-						if (!ka.settingKey.empty() &&
-							ka.settingKey.back().GetKey() == key &&
-							ka.settingKey.back().GetDevice() == InputDeviceType::Keyboard) {
-							// Build set of required modifiers from combo
-							bool requiresCtrl = false, requiresShift = false, requiresAlt = false;
-							for (size_t i = 0; i < ka.settingKey.size() - 1; ++i) {
-								uint32_t modKey = ka.settingKey[i].GetKey();
-								if (modKey == VK_CONTROL || modKey == VK_LCONTROL || modKey == VK_RCONTROL)
-									requiresCtrl = true;
-								else if (modKey == VK_SHIFT || modKey == VK_LSHIFT || modKey == VK_RSHIFT)
-									requiresShift = true;
-								else if (modKey == VK_MENU || modKey == VK_LMENU || modKey == VK_RMENU)
-									requiresAlt = true;
-							}
-
-							// Check current modifier state
-							bool ctrlHeld = (GetAsyncKeyState(VK_CONTROL) & Constants::KEY_PRESSED_MASK) != 0;
-							bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & Constants::KEY_PRESSED_MASK) != 0;
-							bool altHeld = (GetAsyncKeyState(VK_MENU) & Constants::KEY_PRESSED_MASK) != 0;
-
-							// Exact match: required modifiers must be held, and no extra modifiers
-							bool exactMatch = (requiresCtrl == ctrlHeld) &&
-							                  (requiresShift == shiftHeld) &&
-							                  (requiresAlt == altHeld);
-
-							if (exactMatch) {
-								ka.action();
-								break;
-							}
+						if (InputCombo::MatchesKeyboardCombo(ka.settingKey, key)) {
+							ka.action();
+							break;
 						}
 					}
 				}
@@ -1074,20 +1093,43 @@ void Menu::ProcessInputEventQueue()
 				}
 			}
 
-			// DirectInput loses key-up events after alt-tab; validate against OS state.
-			bool pressed = event.IsPressed() && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
-			io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
+			// Don't forward hotkey events to ImGui when input is captured (prevents e.g. End key scrolling the feature list)
+			// SkipCompilationKey (ESC) is excluded — ESC must reach ImGui for menu/dialog close.
+			const std::vector<InputCombo>* hotkeys[] = {
+				&settings.ToggleKey, &settings.EffectToggleKey,
+				&settings.OverlayToggleKey, &settings.ShaderBlockPrevKey, &settings.ShaderBlockNextKey,
+				&settings.WeatherEditorToggleKey,
+				&settings.ScreenshotKey
+			};
+			bool isHotkey = ShouldSwallowInput() && std::any_of(std::begin(hotkeys), std::end(hotkeys),
+														[key](const auto* combo) { return InputCombo::MatchesKeyboardCombo(*combo, key); });
 
-			if (key == VK_LCONTROL || key == VK_RCONTROL)
-				io.AddKeyEvent(ImGuiMod_Ctrl, pressed);
-			else if (key == VK_LSHIFT || key == VK_RSHIFT)
-				io.AddKeyEvent(ImGuiMod_Shift, pressed);
-			else if (key == VK_LMENU || key == VK_RMENU)
-				io.AddKeyEvent(ImGuiMod_Alt, pressed);
+			// Always forward key-up events. Suppress key-down during active hotkeys,
+			// and during hotkey capture except setup close keys (Enter/Escape).
+			const bool isKeyDown = event.IsPressed();
+			const bool suppressForwarding = isKeyDown && (isHotkey || (wasCapturingHotkey && !allowSetupCloseKey));
+			if (!suppressForwarding) {
+				// DirectInput loses key-up events after alt-tab; validate against OS state.
+				bool pressed = isKeyDown && (GetAsyncKeyState(key) & Constants::KEY_PRESSED_MASK);
+				io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), pressed);
+
+				if (key == VK_LCONTROL || key == VK_RCONTROL)
+					io.AddKeyEvent(ImGuiMod_Ctrl, pressed);
+				else if (key == VK_LSHIFT || key == VK_RSHIFT)
+					io.AddKeyEvent(ImGuiMod_Shift, pressed);
+				else if (key == VK_LMENU || key == VK_RMENU)
+					io.AddKeyEvent(ImGuiMod_Alt, pressed);
+			}
 		}
 	}
 
 	_keyEventQueue.clear();
+}
+
+bool Menu::IsCapturingHotkeyInput() const
+{
+	return settingToggleKey || settingSkipCompilationKey || settingsEffectsToggle ||
+	       settingOverlayToggleKey || settingShaderBlockPrevKey || settingShaderBlockNextKey || settingWeatherEditorToggleKey || settingScreenshotKey;
 }
 
 void Menu::addToEventQueue(KeyEvent e)

@@ -33,6 +33,17 @@ namespace
 
 	bool IsMainWindow(ImGuiWindow* win) { return win->Name && strncmp(win->Name, MAIN_WINDOW_PREFIX, strlen(MAIN_WINDOW_PREFIX)) == 0; }
 
+	void DrawShaderCompilationFailures(uint64_t failed, const Menu::ThemeSettings& themeSettings)
+	{
+		ImGui::TextColored(themeSettings.StatusPalette.Error,
+			"ERROR: %llu shaders failed to compile. Check installation and CommunityShaders.log",
+			static_cast<unsigned long long>(failed));
+
+		if (FeatureIssues::HasPotentialShaderModifyingFeatures()) {
+			ImGui::TextColored(themeSettings.StatusPalette.Error, "Features that may have modified shaders detected. Check Feature Issues in the Menu.");
+		}
+	}
+
 	bool IsVisibleRootWindow(ImGuiWindow* win)
 	{
 		if (!win || !win->WasActive || win->Hidden)
@@ -217,12 +228,22 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
-	Util::UpdateImGuiInput(
-		desc.OutputWindow,
-		static_cast<float>(desc.BufferDesc.Width),
-		static_cast<float>(desc.BufferDesc.Height));
+	const float displayW = static_cast<float>(desc.BufferDesc.Width);
+	const float displayH = static_cast<float>(desc.BufferDesc.Height);
+	Util::UpdateImGuiInput(desc.OutputWindow, displayW, displayH);
 
 	ImGui::NewFrame();
+
+	// Detect display size change (cross-session via ini handler, mid-session via member)
+	const float2 currentDisplaySize{ displayW, displayH };
+	if (menu.lastDisplaySize.x > 0.f && menu.lastDisplaySize != currentDisplaySize) {
+		logger::info("Display size changed: {}x{} -> {}x{}, resetting window layout",
+			menu.lastDisplaySize.x, menu.lastDisplaySize.y, currentDisplaySize.x, currentDisplaySize.y);
+		menu.resetLayout = true;
+		EditorWindow::GetSingleton()->resetLayout = true;
+	}
+	menu.lastDisplaySize = currentDisplaySize;
+
 	ThemeManager::SetupImGuiStyle(menu);
 }
 
@@ -282,11 +303,15 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			ImGui::TextUnformatted(skipShadersText.c_str());
 			ImGui::TextUnformatted("WARNING: Uncompiled shaders will have visual errors or cause stuttering when loading.");
 		}
+		if (failed && !hide) {
+			DrawShaderCompilationFailures(failed, themeSettings);
+		}
 
 		if (renderDocAvailable)
 			ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
 
 		ImGui::End();
+		return;
 	}
 
 	if (failed) {
@@ -297,12 +322,7 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 				return;
 			}
 
-			ImGui::TextColored(themeSettings.StatusPalette.Error, "ERROR: %d shaders failed to compile. Check installation and CommunityShaders.log", failed, totalShaders);
-
-			// Check for features that may cause shader compilation issues
-			if (FeatureIssues::HasPotentialShaderModifyingFeatures()) {
-				ImGui::TextColored(themeSettings.StatusPalette.Error, "Features that may have modified shaders detected. Check Feature Issues in the Menu.");
-			}
+			DrawShaderCompilationFailures(failed, themeSettings);
 
 			if (renderDocAvailable)
 				ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
@@ -408,7 +428,7 @@ void OverlayRenderer::RenderShaderBlockingStatus()
 		return;
 	}
 
-	ImGui::TextColored(Util::Colors::GetError(), "Shader Blocking Active");
+	Util::Text::Error("Shader Blocking Active");
 	ImGui::Text("Blocked: %s", shaderCache->blockedKey.c_str());
 
 	// Try to get more details from active shaders

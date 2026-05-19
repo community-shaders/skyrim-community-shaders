@@ -20,7 +20,10 @@ BSLightingShaderMaterialPBR* BSLightingShaderMaterialPBR::Make()
 
 RE::BSShaderMaterial* BSLightingShaderMaterialPBR::Create()
 {
-	return Make();
+	// Must use regular heap (not scrap heap like Make()). BSLightingShaderProperty::LinkObject
+	// calls ScrapHeap::Free() after LinkMaterial — if Create() used scrap heap, it would pop
+	// the canonical off the stack, causing immediate use-after-free in property->material.
+	return new BSLightingShaderMaterialPBR();
 }
 
 void BSLightingShaderMaterialPBR::CopyMembers(RE::BSShaderMaterial* that)
@@ -182,12 +185,12 @@ void BSLightingShaderMaterialPBR::OnLoadTextureSet(std::uint64_t arg1, RE::BSTex
 			textureSet->SetTexture(FeaturesTexture0, featuresTexture0);
 			textureSet->SetTexture(FeaturesTexture1, featuresTexture1);
 
-			auto* bgsTextureSet = globals::truePBR->currentTextureSet;
+			auto* bgsTextureSet = globals::features::truePBR.currentTextureSet;
 			if (bgsTextureSet == nullptr) {
 				bgsTextureSet = skyrim_cast<RE::BGSTextureSet*>(inTextureSet);
 			}
 			if (bgsTextureSet) {
-				if (auto* textureSetData = globals::truePBR->GetPBRTextureSetData(bgsTextureSet)) {
+				if (auto* textureSetData = globals::features::truePBR.GetPBRTextureSetData(bgsTextureSet)) {
 					ApplyTextureSetData(*textureSetData);
 					All[this].textureSetData = textureSetData;
 				}

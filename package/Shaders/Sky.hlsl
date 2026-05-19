@@ -1,5 +1,8 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Permutation.hlsli"
+#include "Common/Random.hlsli"
+#include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
 
 struct VS_INPUT
@@ -188,12 +191,19 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	ifdef HDR_OUTPUT
+#		include "HDRDisplay/HDRSun.hlsli"
+#		include "Common/Random.hlsli"
+#	endif
+
 Texture2D<float> TexDepthSampler : register(t17);
 
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	float3 yyy = Color::Sky(PParams.yyy);
+	// Color::Sky is float3->float3 (per-channel sky gamma). PParams.yyy broadcasts the packed
+	// scalar in PParams.y to RGB; float3 matches output .xyz where skyScale is added.
+	float3 skyScale = Color::Sky(PParams.yyy);
 #	if !defined(VR)
 	uint eyeIndex = 0;
 #	else
@@ -215,16 +225,41 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
+#		ifdef HDR_OUTPUT
+	float hdrSunGain = HDRSun::GetHdrSunGain(
+		input.TexCoord0.xy,
+		baseColor);
+	baseColor.xyz *= hdrSunGain;
+	if (HDRSun::IsHdrSunActive()) {
+		// Dither bright output to reduce banding in high-boost sun path.
+		// Same baseColor/skyScale treatment for DITHER and non-DITHER; DITHER adds noiseGrad later.
+		baseColor.xyz += (Random::InterleavedGradientNoise(input.Position.xy) - 0.5f) *
+		                 (saturate(hdrSunGain - 1.0f) / 255.0f);
+		skyScale = 0.0f;
+	}
+
+#			if defined(CLOUD_SHADOWS)
+	if (HDRSun::IsHdrSunActive()) {
+		float cloudMult = CloudShadows::GetCloudShadowMult(input.WorldPosition.xyz, SampBaseSampler);
+		baseColor.xyz *= cloudMult;
+		baseColor.w *= cloudMult;
+	}
+#			endif
+#		endif
+
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
 	float noiseGrad =
 		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
-	psout.Color.xyz = (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy) + noiseGrad;
+	float3 skyVertColor = ENABLE_LL ? (input.Color.xyz + noiseGrad) : input.Color.xyz;
+	float3 sunGlareColor = Color::Sky(skyVertColor) * baseColor.xyz;
+	// Dither/noise term is the legacy sky path contribution for gradient smoothing.
+	psout.Color.xyz = (sunGlareColor + skyScale) + (ENABLE_LL ? 0.0 : noiseGrad);
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	psout.Color.xyz = (yyy + Color::Sky(input.Color.xyz)) + noiseGrad;
+	psout.Color.xyz = skyScale + Color::Sky(input.Color.xyz + noiseGrad);
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
@@ -236,11 +271,11 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		elif defined(HORIZFADE)
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy);
+	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
-#		else
+#		else  // not DITHER, not MOONMASK, not HORIZFADE
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + yyy;
+	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyScale;
 #		endif
 
 #	else
@@ -255,10 +290,18 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(CLOUD_SHADOWS) && defined(CLOUDS) && !defined(DEFERRED)
 	psout.CloudShadows = float4(1, 1, 1, psout.Color.w);
 
+	// Keep sun behind scene depth to prevent halo leaks through geometry.
 	float depth = TexDepthSampler.Load(int3(input.Position.xy, 0));
 	if (depth < input.Position.z)
 		psout.Color.w = 0;
 
+#	else
+	// Even without cloud shadows enabled, sun disc should be occluded by scene depth (clouds, terrain, etc.)
+	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+		float depth = TexDepthSampler.Load(int3(input.Position.xy, 0));
+		if (depth < input.Position.z)
+			psout.Color.w = 0;
+	}
 #	endif
 
 	return psout;

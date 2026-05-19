@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include "BackgroundBlur.h"
+#include "Features/ScreenshotFeature.h"
 #include "Features/VR.h"
 #include "Fonts.h"
 #include "Globals.h"
@@ -224,6 +225,22 @@ void SettingsTabRenderer::RenderShadersTab()
 			ImGui::Text("Disables loading shaders from disk and prevents saving compiled shaders to disk cache.");
 		}
 
+		bool skipUnchanged = shaderCache->IsSkipUnchangedShaders();
+		ImGui::BeginDisabled(!useDiskCache);
+		if (ImGui::Checkbox("Skip Unchanged Shaders", &skipUnchanged)) {
+			shaderCache->SetSkipUnchangedShaders(skipUnchanged);
+		}
+		ImGui::EndDisabled();
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"When enabled, each shader is recompiled from source only if its .hlsl file "
+				"is newer than the cached .bin on disk. "
+				"Shaders whose source has not changed are loaded directly from the disk cache, "
+				"avoiding the full startup compilation cost. "
+				"Useful for iterative testing: change a shader file and only that shader is rebuilt. "
+				"Requires 'Enable Disk Cache' to be active.");
+		}
+
 		bool useAsync = shaderCache->IsAsync();
 		if (ImGui::Checkbox("Enable Async", &useAsync)) {
 			shaderCache->SetAsync(useAsync);
@@ -252,11 +269,12 @@ void SettingsTabRenderer::RenderShadersTab()
 				uint64_t completed = shaderCache->GetCompletedTasks();
 				uint64_t failed = shaderCache->GetFailedTasks();
 				uint64_t cacheHits = shaderCache->GetCachedHitTasks();
+				uint64_t diskHits = shaderCache->GetDiskHitTasks();
 				uint64_t slow = shaderCache->GetSlowTasks();
 				uint64_t verySlow = shaderCache->GetVerySlowTasks();
-				// Compiled = tasks that actually went through compilation.
+				// Compiled = tasks that actually went through compilation (excluding disk hits).
 				// Cache hits are separate (returned early without queueing).
-				uint64_t compiled = completed;
+				uint64_t compiled = completed > diskHits ? completed - diskHits : 0;
 				uint64_t fast = compiled > slow ? compiled - slow : 0;
 				uint64_t medium = slow > verySlow ? slow - verySlow : 0;  // 2-8s
 
@@ -268,6 +286,7 @@ void SettingsTabRenderer::RenderShadersTab()
 				};
 				Segment segments[] = {
 					{ cacheHits, IM_COL32(120, 120, 120, 255), "Deduplicated" },
+					{ diskHits, IM_COL32(70, 130, 200, 255), "Disk cache" },
 					{ fast, IM_COL32(80, 180, 80, 255), "Fast (<2s)" },
 					{ medium, IM_COL32(220, 180, 50, 255), "Slow (2-8s)" },
 					{ verySlow, IM_COL32(220, 60, 60, 255), "Very slow (>=8s)" },
@@ -357,6 +376,12 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 			settings.WeatherEditorToggleKey,
 			state.settingWeatherEditorToggleKey,
 			"Change##WeatherEditorToggle");
+
+		Util::InputComboWidget(
+			"Screenshot Key:",
+			settings.ScreenshotKey,
+			state.settingScreenshotKey,
+			"Change##Screenshot");
 
 		ImGui::EndTabItem();
 	}
@@ -657,8 +682,7 @@ void SettingsTabRenderer::RenderThemesTab()
 
 		if (!isPreset && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
 			ImGui::SameLine();
-			auto _style = Util::ErrorButtonStyle();
-			if (Util::ButtonWithFlash("Delete")) {
+			if (Util::ErrorButtonWithFlash("Delete")) {
 				deleteThemePopup.message =
 					"Are you sure you want to delete the theme '" +
 					(currentThemeInfo->displayName.empty() ? currentThemePreset : currentThemeInfo->displayName) +
@@ -700,7 +724,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		}
 
 		// Popup modal for creating new theme
-		if (ImGui::BeginPopupModal("Create New Theme", &showCreateThemePopup, ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (auto popup = Util::CenteredPopupModal("Create New Theme", &showCreateThemePopup)) {
 			ImGui::Text("Create a new theme with your current settings:");
 			ImGui::Separator();
 
@@ -810,8 +834,6 @@ void SettingsTabRenderer::RenderThemesTab()
 				showCreateThemePopup = false;
 				ImGui::CloseCurrentPopup();
 			}
-
-			ImGui::EndPopup();
 		}
 
 		if (deleteThemePopup.Draw() && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
@@ -838,11 +860,10 @@ void SettingsTabRenderer::RenderFontsTab()
 
 		SeparatorTextWithFont("Font", Menu::FontRole::Subheading);
 
-		bool useAutoFont = (themeSettings.FontSize <= 0.0f);
+		bool& useAutoFont = menuInstance->GetSettings().UseResolutionFont;
 		if (ImGui::Checkbox("Use resolution-based font size", &useAutoFont)) {
-			if (useAutoFont) {
-				themeSettings.FontSize = 0.0f;
-			} else {
+			if (!useAutoFont) {
+				// Seed the fixed-size slider with the current effective size so it doesn't jump
 				float effective = ThemeManager::ResolveFontSize(*menuInstance);
 				themeSettings.FontSize = std::clamp(effective, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
 			}

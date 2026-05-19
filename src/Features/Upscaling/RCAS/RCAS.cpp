@@ -34,6 +34,9 @@ void RCAS::CreateComputeShader()
 
 void RCAS::ApplySharpen(ID3D11ShaderResourceView* inputSRV, ID3D11UnorderedAccessView* outputUAV, float sharpness)
 {
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "RCAS Sharpening");
+
 	auto state = globals::state;
 	auto context = globals::d3d::context;
 

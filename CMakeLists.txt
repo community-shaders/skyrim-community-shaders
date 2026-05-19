@@ -5,7 +5,7 @@ set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 project(
     # gersemi: ignore
     CommunityShaders
-    VERSION 1.4.11
+    VERSION 1.5.1
     LANGUAGES CXX
 )
 
@@ -49,6 +49,23 @@ message("\tZip to dist: ${ZIP_TO_DIST}")
 message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
 message("\tTracy profiler: ${TRACY_SUPPORT}")
 message("\tShader tests: ${BUILD_SHADER_TESTS}")
+
+# #######################################################################################################################
+# # Build version info from git
+# #######################################################################################################################
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_DESCRIBE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+else()
+    set(GIT_DESCRIBE "unknown")
+endif()
+message("\tBuild version: ${GIT_DESCRIBE}")
 
 # #######################################################################################################################
 # # Add CMake features
@@ -127,6 +144,17 @@ target_link_libraries(
         ${DETOURS_LIBRARY}
 )
 
+# Some third-party libs (e.g. FFX backend) are built with /GL.
+# In RelWithDebInfo, align linker options to avoid LNK4075/LNK1218 when warnings are treated as errors.
+if(MSVC)
+    target_link_options(
+        ${PROJECT_NAME}
+        PRIVATE
+            "$<$<CONFIG:RelWithDebInfo>:/LTCG>"
+            "$<$<CONFIG:RelWithDebInfo>:/INCREMENTAL:NO>"
+    )
+endif()
+
 # https://gitlab.kitware.com/cmake/cmake/-/issues/24922#note_1371990
 if(MSVC_VERSION GREATER_EQUAL 1936 AND MSVC_IDE) # 17.6+
     # When using /std:c++latest, "Build ISO C++23 Standard Library Modules" defaults to "Yes".
@@ -169,7 +197,7 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
     string(STRIP "${CONFIG_VALUE}" CONFIG_VALUE)
     if(CONFIG_VALUE)
         string(
-            REGEX MATCH "Version = ([0-9]+)-([0-9]+)-([0-9]+)"
+            REGEX MATCH "[Vv]ersion = ([0-9]+)-([0-9]+)-([0-9]+)"
             _
             "${CONFIG_VALUE}"
         )
@@ -197,6 +225,17 @@ foreach(FEATURE_PATH ${FEATURE_CONFIG_FILES})
             "Feature config file '${FEATURE_PATH}' is empty or contains only whitespace. Skipping version detection for this feature."
         )
     endif()
+
+    # Detect core features by checking for the CORE marker file in the
+    # feature root (features/<Folder>/CORE). FEATURE_PATH is
+    # features/<Folder>/Shaders/Features/<ShortName>.ini, so the feature
+    # root is three directories up.
+    get_filename_component(_FEATURE_DIR "${FEATURE_PATH}" DIRECTORY)
+    get_filename_component(_FEATURE_DIR "${_FEATURE_DIR}" DIRECTORY)
+    get_filename_component(_FEATURE_DIR "${_FEATURE_DIR}" DIRECTORY)
+    if(EXISTS "${_FEATURE_DIR}/CORE")
+        list(APPEND FEATURE_CORE_NAMES "\t\t\"${FEATURE}\"sv")
+    endif()
 endforeach()
 
 set_property(
@@ -206,6 +245,7 @@ set_property(
 )
 
 string(REPLACE ";" ",\n" FEATURE_VERSIONS "${FEATURE_VERSIONS}")
+string(REPLACE ";" ",\n" FEATURE_CORE_NAMES "${FEATURE_CORE_NAMES}")
 
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FeatureVersions.h.in
@@ -312,13 +352,19 @@ string(TIMESTAMP UTC_NOW "%Y-%m-%dT%H-%MZ" UTC)
 # Set AIO directory path used by multiple targets below
 set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
 
-# Robocopy wrapper for Windows incremental file copy (used by deployment targets)
+# Robocopy wrapper for Windows incremental file copy (used by deployment targets).
+# We invoke through `cmd /c "<absolute-path>"` rather than the bare wrapper path because
+# modern Windows refuses to execute scripts from the current directory without an explicit
+# `.\` prefix, and CMake strips the absolute path on COMMAND args that live inside
+# CMAKE_BINARY_DIR (the custom-build CWD). Treating the wrapper as an argument to cmd
+# keeps the absolute path intact in the generated MSBuild command.
 if(WIN32)
-    set(ROBOCOPY_WRAPPER "${CMAKE_BINARY_DIR}/robocopy_wrapper.cmd")
+    set(ROBOCOPY_WRAPPER_PATH "${CMAKE_BINARY_DIR}/robocopy_wrapper.cmd")
     file(
-        WRITE ${ROBOCOPY_WRAPPER}
+        WRITE ${ROBOCOPY_WRAPPER_PATH}
         "@echo off\r\nrem Robocopy wrapper: forwards all args to robocopy and normalizes exit codes\r\nrobocopy %*\r\nset rc=%ERRORLEVEL%\r\nif %rc% GEQ 8 exit /b %rc%\r\nexit /b 0\r\n"
     )
+    set(ROBOCOPY_WRAPPER cmd /c "${ROBOCOPY_WRAPPER_PATH}")
 endif()
 
 # #######################################################################################################################
@@ -353,16 +399,45 @@ install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
 if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     message("Preparing AIO package in ${AIO_DIR}")
 
+    function(append_copy_if_different _cmds _srcs _src_base _dst_base)
+        foreach(_src IN LISTS ${_srcs})
+            file(RELATIVE_PATH _rel "${_src_base}" "${_src}")
+            set(_dst "${_dst_base}/${_rel}")
+            get_filename_component(_dst_dir "${_dst}" DIRECTORY)
+            list(
+                APPEND ${_cmds}
+                COMMAND
+                ${CMAKE_COMMAND}
+                -E
+                make_directory
+                "${_dst_dir}"
+                COMMAND
+                ${CMAKE_COMMAND}
+                -E
+                copy_if_different
+                "${_src}"
+                "${_dst}"
+            )
+        endforeach()
+        set(${_cmds} ${${_cmds}} PARENT_SCOPE)
+    endfunction()
+
     # Prepare AIO only when sources change. Gather package + feature files as
     # inputs so the prepare step runs only when something actually changed.
+    # Shader files are intentionally excluded - copy_shaders.stamp owns those,
+    # and including them here causes a race where two parallel custom-build
+    # rules call cmake -E copy_if_different on the same destination file
+    # (Permission denied on Windows when one process has it open for write).
     file(
         GLOB_RECURSE _AIO_PACKAGE_FILES
         LIST_DIRECTORIES FALSE
         "${CMAKE_SOURCE_DIR}/package/*"
     )
     list(FILTER _AIO_PACKAGE_FILES EXCLUDE REGEX "/Tests/")
+    list(FILTER _AIO_PACKAGE_FILES EXCLUDE REGEX "/Shaders/")
     foreach(_fpath IN LISTS FEATURE_PATHS)
         file(GLOB_RECURSE _tmp LIST_DIRECTORIES FALSE "${_fpath}/*")
+        list(FILTER _tmp EXCLUDE REGEX "/Shaders/")
         list(APPEND _AIO_PACKAGE_FILES ${_tmp})
     endforeach()
 
@@ -370,6 +445,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     # timestamps for unchanged files and prevents downstream incremental
     # deploys from copying everything every build.
     set(_prepare_aio_cmds)
+    string(REPLACE ";" "\\;" _feature_paths_arg "${FEATURE_PATHS}")
 
     # Ensure SKSE/Plugins dir exists
     # Note: DLL and PDB are copied via POST_BUILD command to avoid race conditions
@@ -381,35 +457,33 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         make_directory
         "${AIO_DIR}/SKSE/Plugins"
     )
+    list(
+        APPEND _prepare_aio_cmds
+        COMMAND
+        ${CMAKE_COMMAND}
+        -DMODE=AIO
+        -DAIO_DIR="${AIO_DIR}"
+        -DSOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        -DFEATURE_PATHS="${_feature_paths_arg}"
+        -P
+        "${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake"
+    )
 
-    # Copy package files (exclude test files from production packages)
+    # Copy package files (exclude test files from production packages, and
+    # exclude shaders since copy_shaders.stamp owns those - see input-tracking
+    # comment above for the race-condition rationale).
     file(
         GLOB_RECURSE _AIO_PACKAGE_SOURCE_FILES
         LIST_DIRECTORIES FALSE
         "${CMAKE_SOURCE_DIR}/package/*"
     )
     list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Tests/")
-    foreach(_src IN LISTS _AIO_PACKAGE_SOURCE_FILES)
-        file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}/package" "${_src}")
-        set(_dst "${AIO_DIR}/${_rel}")
-        get_filename_component(_dst_dir "${_dst}" DIRECTORY)
-        list(
-            APPEND _prepare_aio_cmds
-            COMMAND
-            ${CMAKE_COMMAND}
-            -E
-            make_directory
-            "${_dst_dir}"
-            COMMAND
-            ${CMAKE_COMMAND}
-            -E
-            copy_if_different
-            "${_src}"
-            "${_dst}"
-        )
-    endforeach()
+    list(FILTER _AIO_PACKAGE_SOURCE_FILES EXCLUDE REGEX "/Shaders/")
+    append_copy_if_different(_prepare_aio_cmds _AIO_PACKAGE_SOURCE_FILES "${CMAKE_SOURCE_DIR}/package" "${AIO_DIR}")
 
-    # Copy feature folders (only files, preserve existing files in AIO)
+    # Copy feature folders (only files, preserve existing files in AIO).
+    # Shader files are excluded - copy_shaders.stamp owns the Shaders/ subdir
+    # so the two custom-build rules don't race on the same destinations.
     foreach(_fpath IN LISTS FEATURE_PATHS)
         if(EXISTS "${_fpath}")
             file(
@@ -417,25 +491,8 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 LIST_DIRECTORIES FALSE
                 "${_fpath}/*"
             )
-            foreach(_src IN LISTS _feature_files)
-                file(RELATIVE_PATH _rel "${_fpath}" "${_src}")
-                set(_dst "${AIO_DIR}/${_rel}")
-                get_filename_component(_dst_dir "${_dst}" DIRECTORY)
-                list(
-                    APPEND _prepare_aio_cmds
-                    COMMAND
-                    ${CMAKE_COMMAND}
-                    -E
-                    make_directory
-                    "${_dst_dir}"
-                    COMMAND
-                    ${CMAKE_COMMAND}
-                    -E
-                    copy_if_different
-                    "${_src}"
-                    "${_dst}"
-                )
-            endforeach()
+            list(FILTER _feature_files EXCLUDE REGEX "/Shaders/")
+            append_copy_if_different(_prepare_aio_cmds _feature_files "${_fpath}" "${AIO_DIR}")
         endif()
     endforeach()
 
@@ -461,8 +518,21 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         OUTPUT
             ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
             ${_prepare_aio_cmds}
-        DEPENDS ${_AIO_PACKAGE_FILES} ${PROJECT_NAME}
+        DEPENDS
+            ${_AIO_PACKAGE_FILES}
+            ${PROJECT_NAME}
+            ${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake
     )
+
+    # If AIO was manually (or programmatically) deleted, the stamp is stale —
+    # clear it so cmake --build re-runs PREPARE_AIO to recreate the directory.
+    if(NOT EXISTS "${AIO_DIR}")
+        file(
+            REMOVE
+            "${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp"
+            "${CMAKE_CURRENT_BINARY_DIR}/copy_shaders.stamp"
+        )
+    endif()
 
     add_custom_target(
         PREPARE_AIO
@@ -498,25 +568,34 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     # Exclude test files from production packages
     list(FILTER _package_shaders EXCLUDE REGEX "/Tests/")
     set(_shader_copy_cmds)
-    foreach(_src IN LISTS _package_shaders)
-        file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}/package/Shaders" "${_src}")
-        set(_dst "${AIO_DIR}/Shaders/${_rel}")
-        get_filename_component(_dst_dir "${_dst}" DIRECTORY)
-        list(
-            APPEND _shader_copy_cmds
-            COMMAND
-            ${CMAKE_COMMAND}
-            -E
-            make_directory
-            "${_dst_dir}"
-            COMMAND
-            ${CMAKE_COMMAND}
-            -E
-            copy_if_different
-            "${_src}"
-            "${_dst}"
-        )
+
+    set(_feature_shader_paths)
+    foreach(_fpath IN LISTS FEATURE_PATHS)
+        if(EXISTS "${_fpath}/Shaders")
+            list(APPEND _feature_shader_paths "${_fpath}/Shaders")
+        endif()
     endforeach()
+    string(
+        REPLACE ";"
+        "\\;"
+        _feature_shader_paths_arg
+        "${_feature_shader_paths}"
+    )
+
+    list(
+        APPEND _shader_copy_cmds
+        COMMAND
+        ${CMAKE_COMMAND}
+        -DMODE=SHADERS
+        -DAIO_DIR="${AIO_DIR}"
+        -DSOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        -DFEATURE_SHADER_PATHS="${_feature_shader_paths_arg}"
+        -P
+        "${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake"
+    )
+
+    append_copy_if_different(_shader_copy_cmds _package_shaders "${CMAKE_SOURCE_DIR}/package/Shaders" "${AIO_DIR}/Shaders")
+
     # feature shader folders
     foreach(_fpath IN LISTS FEATURE_PATHS)
         if(EXISTS "${_fpath}/Shaders")
@@ -526,28 +605,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 "${_fpath}/Shaders/*"
             )
             list(FILTER _feat_shaders EXCLUDE REGEX "/Tests/")
-            get_filename_component(_feat_name "${_fpath}" NAME)
-            foreach(_src IN LISTS _feat_shaders)
-                file(RELATIVE_PATH _rel "${_fpath}/Shaders" "${_src}")
-                # Place feature shader files directly under AIO_DIR/Shaders to preserve expected include paths
-                # This matches the package shader layout and ensures includes like "TerrainShadows/..." resolve correctly
-                set(_dst "${AIO_DIR}/Shaders/${_rel}")
-                get_filename_component(_dst_dir "${_dst}" DIRECTORY)
-                list(
-                    APPEND _shader_copy_cmds
-                    COMMAND
-                    ${CMAKE_COMMAND}
-                    -E
-                    make_directory
-                    "${_dst_dir}"
-                    COMMAND
-                    ${CMAKE_COMMAND}
-                    -E
-                    copy_if_different
-                    "${_src}"
-                    "${_dst}"
-                )
-            endforeach()
+            append_copy_if_different(_shader_copy_cmds _feat_shaders "${_fpath}/Shaders" "${AIO_DIR}/Shaders")
         endif()
     endforeach()
 
@@ -557,7 +615,9 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             ${CMAKE_COMMAND} -E make_directory "${AIO_DIR}/Shaders"
             ${_shader_copy_cmds}
         COMMAND ${CMAKE_COMMAND} -E touch copy_shaders.stamp
-        DEPENDS ${HLSL_FILES}
+        DEPENDS
+            ${HLSL_FILES}
+            ${CMAKE_SOURCE_DIR}/cmake/CleanupStaleEntries.cmake
         COMMENT "Copying changed shaders into AIO/Shaders"
     )
 
@@ -572,6 +632,58 @@ endif()
 
 # Automatic deployment to CommunityShaders output directory.
 if(AUTO_PLUGIN_DEPLOYMENT)
+    # Detect git HEAD changes (branch switch or new commit) and invalidate stale
+    # deploy state. BuildRelease.bat always reconfigures, so this runs on every
+    # build invocation. When HEAD changes we:
+    #   1. Touch all AIO files so robocopy /XO sees them as newer than any
+    #      previously-deployed files (including manual package installs).
+    #   2. Delete deploy stamps so CMake re-runs the robocopy commands.
+    # Files the user intentionally edited in-game remain protected by /XO on
+    # subsequent builds (same HEAD = no touch, same stamp file exists).
+    execute_process(
+        COMMAND git rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE _git_head
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(_git_head)
+        set(_git_head_stamp "${CMAKE_BINARY_DIR}/git-head.stamp")
+        set(_prev_git_head "")
+        if(EXISTS "${_git_head_stamp}")
+            file(READ "${_git_head_stamp}" _prev_git_head)
+            string(STRIP "${_prev_git_head}" _prev_git_head)
+        endif()
+        if(NOT "${_git_head}" STREQUAL "${_prev_git_head}")
+            message(
+                STATUS
+                "Git HEAD changed (${_prev_git_head} -> ${_git_head}): clearing AIO shaders and deploy stamps for full redeploy"
+            )
+            # Delete the entire AIO directory so PREPARE_AIO re-copies everything
+            # with fresh timestamps. Without this, copy_if_different skips
+            # content-identical files (shaders, textures, configs, etc.) and
+            # leaves them with old timestamps that deployed files (e.g. from a
+            # manual package install) may beat under /XO. The DLL is always
+            # rebuilt fresh by the C++ compile step so it doesn't need special
+            # handling.
+            file(REMOVE_RECURSE "${AIO_DIR}")
+            # Also clear the PREPARE_AIO / COPY_SHADERS stamps so cmake --build
+            # actually re-runs those targets.
+            file(
+                GLOB _build_stamps
+                "${CMAKE_BINARY_DIR}/*_deploy.stamp"
+                "${CMAKE_BINARY_DIR}/*_shaders_full.stamp"
+                "${CMAKE_BINARY_DIR}/*_shaders_only.stamp"
+                "${CMAKE_BINARY_DIR}/prepare_aio.stamp"
+                "${CMAKE_BINARY_DIR}/copy_shaders.stamp"
+            )
+            foreach(_stamp IN LISTS _build_stamps)
+                file(REMOVE "${_stamp}")
+            endforeach()
+        endif()
+        file(WRITE "${_git_head_stamp}" "${_git_head}")
+    endif()
+
     set(DEPLOY_TARGET_HASHES)
     if(WIN32)
         foreach(DEPLOY_TARGET $ENV{CommunityShadersOutputDir})
@@ -812,7 +924,7 @@ if(AIO_ZIP_TO_DIST)
         COMMAND ${CMAKE_COMMAND} -E tar cf ${AIO_ARCHIVE} --format=7zip -- .
         COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
         WORKING_DIRECTORY ${AIO_DIR}
-        DEPENDS PREPARE_AIO
+        DEPENDS PREPARE_AIO ${CMAKE_CURRENT_BINARY_DIR}/copy_shaders.stamp
         COMMENT "Creating AIO archive ${AIO_ARCHIVE}"
     )
 

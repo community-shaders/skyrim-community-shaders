@@ -92,6 +92,39 @@ namespace Util
 	};
 
 	/**
+	 * RAII wrapper for centered popup modals. Positions the window before BeginPopupModal
+	 * (prevents first-frame stretch) and calls EndPopup() automatically on destruction.
+	 *
+	 * By default centers to the viewport center. Pass an explicit pos/pivot to override.
+	 * Pass kPopupCenter as pos to use the default viewport-center behavior.
+	 *
+	 * Usage:
+	 * // Centered (default):
+	 * if (auto popup = Util::CenteredPopupModal("Title")) { ... }
+	 *
+	 * // Custom position:
+	 * if (auto popup = Util::CenteredPopupModal("Title", nullptr, ImGuiWindowFlags_AlwaysAutoResize,
+	 *                                            ImVec2(x, y), ImVec2(0.0f, 0.0f))) { ... }
+	 */
+	class CenteredPopupModal
+	{
+	public:
+		static constexpr ImVec2 kPopupCenter{ -FLT_MAX, -FLT_MAX };
+
+		CenteredPopupModal(const char* name, bool* p_open = nullptr, ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize, ImVec2 pos = kPopupCenter, ImVec2 pivot = ImVec2(0.5f, 0.5f));
+		~CenteredPopupModal();
+		operator bool() const { return isOpen; }
+
+		CenteredPopupModal(const CenteredPopupModal&) = delete;
+		CenteredPopupModal& operator=(const CenteredPopupModal&) = delete;
+		CenteredPopupModal(CenteredPopupModal&&) = delete;
+		CenteredPopupModal& operator=(CenteredPopupModal&&) = delete;
+
+	private:
+		bool isOpen;
+	};
+
+	/**
 	 * Usage:
 	 * {
 	 *      auto _ = DisableGuard(disableThis);
@@ -216,9 +249,67 @@ namespace Util
 	};
 
 	/**
-	 * Creates a StyledButtonWrapper using the theme's error color with auto-derived hover/active variants.
+	 * Creates a StyledButtonWrapper using a status color with shared hover/active adjustment.
+	 * Use when a caller needs a custom status color instead of one of the semantic helpers below.
 	 */
-	StyledButtonWrapper ErrorButtonStyle();
+	StyledButtonWrapper StatusButtonStyle(const ImVec4& color);
+
+	/**
+	 * Style for destructive or critical actions such as Delete, Clear, Remove, or irreversible confirms.
+	 * Uses the theme error color as the button fill and adjusts hover/active brightness for contrast.
+	 */
+	StyledButtonWrapper DestructiveButtonStyle();
+
+	/**
+	 * Creates a StyledButtonWrapper using alpha-based hover/active transitions.
+	 * Used for status text buttons where the color itself communicates intent.
+	 * Prefer the named helpers below.
+	 */
+	StyledButtonWrapper StatusTextButtonStyle(const ImVec4& color);
+
+	/** Style for confirmatory or positive actions such as Apply, Confirm, or Accept. */
+	StyledButtonWrapper SuccessButtonStyle();
+
+	/** Draws a theme success-colored button for confirmatory or positive actions. */
+	bool SuccessButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/** Style for cautionary or reversible actions such as Revert, Undo, or Reset to saved values. */
+	StyledButtonWrapper WarningButtonStyle();
+
+	/** Draws a theme warning-colored button for cautionary or reversible actions. */
+	bool WarningButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/**
+	 * Alpha-based error-color button — use in toolbar rows alongside SuccessButton/WarningButton
+	 * for visual consistency. For standalone destructive actions (delete icons, close buttons),
+	 * prefer ErrorButton which uses the brightness-based DestructiveButtonStyle.
+	 */
+	bool ErrorTextButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/** Draws a destructive theme error-colored button for delete, clear, remove, or irreversible actions. */
+	bool ErrorButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+
+	/**
+	 * Draws a destructive icon/image button using the theme error color for button chrome.
+	 * Use for destructive image-only controls such as delete icons.
+	 * id must be unique per ImGui element to prevent ID collisions.
+	 */
+	template <class TextureID>
+	bool ErrorImageButton(
+		const char* id,
+		TextureID textureId,
+		const ImVec2& imageSize,
+		const ImVec2& uv0 = ImVec2(0, 0),
+		const ImVec2& uv1 = ImVec2(1, 1),
+		const ImVec4& bgCol = ImVec4(0, 0, 0, 0),
+		const ImVec4& tintCol = ImVec4(1, 1, 1, 1))
+	{
+		auto _style = DestructiveButtonStyle();
+		return ImGui::ImageButton(id, textureId, imageSize, uv0, uv1, bgCol, tintCol);
+	}
+
+	/** Draws a destructive button with ButtonWithFlash click feedback. */
+	bool ErrorButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
 
 	/**
 	 * Creates a transparent button with theme text color hover. Caller must push/pop FrameBorderSize=0 separately.
@@ -846,6 +937,22 @@ namespace Util
 		ImVec4 GetError();     // Red - error/negative (from theme Error)
 		ImVec4 GetInfo();      // Blue - informational (from theme InfoColor)
 		ImVec4 GetDisabled();  // Gray - disabled items (from theme Disable)
+
+	}
+
+	/** Theme-colored text rendering — self-contained push/text/pop per call. */
+	namespace Text
+	{
+		void Warning(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedWarning(const char* fmt, ...) IM_FMTARGS(1);
+		void Error(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedError(const char* fmt, ...) IM_FMTARGS(1);
+		void Success(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedSuccess(const char* fmt, ...) IM_FMTARGS(1);
+		void Info(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedInfo(const char* fmt, ...) IM_FMTARGS(1);
+		void Disabled(const char* fmt, ...) IM_FMTARGS(1);
+		void WrappedDisabled(const char* fmt, ...) IM_FMTARGS(1);
 	}
 
 	/**
@@ -1411,4 +1518,23 @@ namespace Util
 		std::vector<InputCombo>& combo,
 		bool& isRecording,
 		const char* recordingLabel);
+
+	/**
+	 * @brief Displays a DLL version information table with a clickable folder link.
+	 *
+	 * Shows a selectable label that opens the given directory when clicked,
+	 * followed by a sortable table of DLL names and their versions.
+	 * This is a general-purpose utility for any feature that distributes DLLs
+	 * and wants to expose their versions in the settings UI.
+	 *
+	 * @param label  Display label for the clickable folder link.
+	 * @param pluginDir  Wide string path to the plugin directory (opened on click).
+	 * @param dllVersions  Vector of (name, version) pairs to display.
+	 * @param tableId  Unique ImGui table identifier.
+	 */
+	void DrawDllVersionTable(
+		const char* label,
+		const wchar_t* pluginDir,
+		const std::vector<std::pair<std::string, std::string>>& dllVersions,
+		const char* tableId);
 }  // namespace Util

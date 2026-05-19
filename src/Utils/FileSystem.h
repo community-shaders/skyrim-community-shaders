@@ -178,6 +178,19 @@ namespace Util
 		std::filesystem::path GetFeaturesRealPath();
 
 		/**
+		 * Resolves a game-root-relative path to a real filesystem path, bypassing MO2's VFS.
+		 *
+		 * MO2 maps the game's Data directory to a mod's physical root folder via its virtual
+		 * file system. Paths like "Data\Shaders\Upscaling\FidelityFX" don't exist on disk when
+		 * passed to ShellExecute outside the game process. This function strips the leading
+		 * "Data\" component and prepends GetRootRealPath() to produce the real on-disk path.
+		 *
+		 * @param dataRelativePath Path relative to the game root (e.g. L"Data\\Shaders\\Upscaling\\FidelityFX")
+		 * @return Real filesystem path, or empty path if GetRootRealPath() fails
+		 */
+		std::filesystem::path GetRealPathFromDataRelative(const std::filesystem::path& dataRelativePath);
+
+		/**
 		 * Returns the path to the Community Shaders log file in the default SKSE logging folder.
 		 * @return Documents / "My Games" / "Skyrim..." / "SKSE" / "CommunityShaders.log"
 		 */

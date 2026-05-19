@@ -2,14 +2,9 @@
 
 cbuffer UpscalingData : register(b0)
 {
-	float2 ResolutionScale;
-	float DepthDisocclusion;
-	float pad0;
-};
-
-cbuffer JitterCB : register(b1)
-{
-	float2 jitter;
+	float2 TrueSamplingDim;  // per-eye render dim in VR, full render dim otherwise
+	uint EyeOffsetX;         // X offset into stereo source buffers; 0 for non-VR / left eye
+	uint pad0;
 };
 
 Texture2D<float2> TAAMask : register(t0);
@@ -26,32 +21,27 @@ Texture2D<float> PTDepth : register(t6);
 RWTexture2D<float> ReactiveMask : register(u0);
 RWTexture2D<float> TransparencyCompositionMask : register(u1);
 RWTexture2D<float2> MotionVectorOutput : register(u2);
+#if defined(DEPTH_OUTPUT)
+RWTexture2D<float> DepthOutput : register(u3);
+#endif
 
-SamplerState PointSampler : register(s0);
-
-float ScreenToViewDepth(const float screenDepth)
-{
-	return (SharedData::CameraData.w / (-screenDepth * SharedData::CameraData.z + SharedData::CameraData.x));
-}
-
-[numthreads(8, 8, 1)] void main(uint2 dispatchID : SV_DispatchThreadID) {
-	const float2 trueSamplingDim = SharedData::BufferDim.xy * ResolutionScale;
-
-	// Early exit if dispatch thread is outside true sampling dimensions
-	if (any(dispatchID.xy >= uint2(trueSamplingDim)))
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
+	if (any(dispatchID.xy >= uint2(TrueSamplingDim)))
 		return;
 
-	float2 taaMask = TAAMask[dispatchID.xy];
-	float transparencyCompositionMask = NormalsWaterMask[dispatchID.xy].z;
+	uint2 srcCoord = dispatchID.xy + uint2(EyeOffsetX, 0);
+
+	float2 taaMask = TAAMask[srcCoord];
+	float transparencyCompositionMask = NormalsWaterMask[srcCoord].z;
 
 #if defined(DLSS) || defined(DLSS_RR)
 #	ifdef PATH_TRACING
-	float ptAlpha = PTColor[dispatchID.xy].a;
-	float depth = ptAlpha > 0.5 ? PTDepth[dispatchID.xy] : DepthMask[dispatchID.xy];
-	float2 motionVector = ptAlpha > 0.5 ? PTMotionVectors[dispatchID.xy].xy : MotionVectorMask[dispatchID.xy];
+	float ptAlpha = PTColor[srcCoord].a;
+	float depth = ptAlpha > 0.5 ? PTDepth[srcCoord] : DepthMask[srcCoord];
+	float2 motionVector = ptAlpha > 0.5 ? PTMotionVectors[srcCoord].xy : MotionVectorMask[srcCoord];
 #	else
-	const float depth = DepthMask[dispatchID.xy];
-	const float2 motionVector = MotionVectorMask[dispatchID.xy];
+	const float depth = DepthMask[srcCoord];
+	const float2 motionVector = MotionVectorMask[srcCoord];
 #	endif
 	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, SharedData::GetScreenDepth(depth));
 	float2 longestMotionVector = motionVector;
@@ -63,17 +53,14 @@ float ScreenToViewDepth(const float screenDepth)
 		{
 			int2 samplePos = int2(dispatchID.xy) + int2(x, y);
 
-			// Skip samples outside true sampling dimensions
-			if (any(samplePos < 0) || any(samplePos >= int2(trueSamplingDim)))
+			if (any(samplePos < 0) || any(samplePos >= int2(TrueSamplingDim)))
 				continue;
 
-			float neighborDepth = DepthMask[samplePos];
+			int2 srcPos = samplePos + int2(EyeOffsetX, 0);
+			float neighborDepth = DepthMask[srcPos];
 
-			// Take neighbor if it's longer AND closer
 			if (neighborDepth < depth) {
-				float2 neighborMotionVector = MotionVectorMask[samplePos];
-
-				// Square motion vector for length
+				float2 neighborMotionVector = MotionVectorMask[srcPos];
 				float motionLengthSq = dot(neighborMotionVector, neighborMotionVector);
 
 				if (motionLengthSq > maxMotionLengthSq) {
@@ -86,9 +73,13 @@ float ScreenToViewDepth(const float screenDepth)
 
 	MotionVectorOutput[dispatchID.xy] = lerp(longestMotionVector, motionVector, nearFactor);
 #elif defined(PATH_TRACING)
-	float ptAlpha = PTColor[dispatchID.xy].a;
-	float2 motionVector = ptAlpha > 0.5 ? PTMotionVectors[dispatchID.xy].xy : MotionVectorMask[dispatchID.xy];
+	float ptAlpha = PTColor[srcCoord].a;
+	float2 motionVector = ptAlpha > 0.5 ? PTMotionVectors[srcCoord].xy : MotionVectorMask[srcCoord];
 	MotionVectorOutput[dispatchID.xy] = motionVector;
+#endif
+
+#if defined(DEPTH_OUTPUT)
+	DepthOutput[dispatchID.xy] = DepthMask[srcCoord];
 #endif
 
 	TransparencyCompositionMask[dispatchID.xy] = transparencyCompositionMask;

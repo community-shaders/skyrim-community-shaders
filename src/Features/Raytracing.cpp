@@ -575,13 +575,13 @@ void Raytracing::DrawDebugSettings()
 
 			ImGui::Image(mainTexture->srv, { desc.Width * debugRescale, desc.Height * debugRescale });
 			ImGui::TreePop();
-		} 
+		}
 
 		if (ImGui::TreeNode("FlowMap")) {
 			D3D11_TEXTURE2D_DESC desc;
 			waterFlowMap->resource11->GetDesc(&desc);
 
-			ImGui::ImageWithBg(waterFlowMap->srv, { desc.Width * debugRescale, desc.Height * debugRescale }, { 0, 0 }, { 1, 1 }, {0, 0, 0, 1});
+			ImGui::ImageWithBg(waterFlowMap->srv, { desc.Width * debugRescale, desc.Height * debugRescale }, { 0, 0 }, { 1, 1 }, { 0, 0, 0, 1 });
 			ImGui::TreePop();
 		}
 
@@ -892,7 +892,7 @@ void Raytracing::SetupResources()
 		dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
 		dsDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
 
-		d3d11Device->CreateDepthStencilState(&dsDesc, depthStencilState.put());	
+		d3d11Device->CreateDepthStencilState(&dsDesc, depthStencilState.put());
 	}
 
 	// Sky Hemisphere
@@ -923,7 +923,7 @@ void Raytracing::SetupResources()
 	}
 
 	// Water FlowMap
-	{	
+	{
 		D3D11_TEXTURE2D_DESC texDesc{};
 		texDesc.Width = WATER_FLOWMAP_SIZE;
 		texDesc.Height = WATER_FLOWMAP_SIZE;
@@ -935,9 +935,10 @@ void Raytracing::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
 		waterFlowMap = eastl::make_unique<WrappedResource>(texDesc);
+		waterFlowMapFallbackCleared = false;
 		DX::ThrowIfFailed(waterFlowMap->resource->SetName(L"Water FlowMap"));
 
-		creationEngineRaytracing->SetWaterFlowMap(waterFlowMap->resource.get());		
+		creationEngineRaytracing->SetWaterFlowMap(waterFlowMap->resource.get());
 	}
 
 	CompileShaders();
@@ -1195,10 +1196,9 @@ void Raytracing::DeferredPasses()
 			ID3D11DepthStencilView* oldDSV;
 			context->OMGetRenderTargets(1, &oldRTV, &oldDSV);
 
-			context->OMSetRenderTargets(1, 
-				&renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].RTV, 
-				mainDepth.views[0]
-			);
+			context->OMSetRenderTargets(1,
+				&renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].RTV,
+				mainDepth.views[0]);
 
 			context->OMSetDepthStencilState(depthStencilState.get(), 0);
 
@@ -1225,8 +1225,7 @@ void Raytracing::DeferredPasses()
 
 			context->OMSetRenderTargets(1,
 				&oldRTV,
-				oldDSV
-			);
+				oldDSV);
 
 			if (oldDSS) {
 				oldDSS->Release();
