@@ -249,16 +249,6 @@ void SettingsTabRenderer::RenderShadersTab()
 			ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
 		}
 
-		// Skip confirmation when clearing shader cache
-		auto& menuSettings = globals::menu->GetSettings();
-		bool skipConfirmation = menuSettings.SkipClearCacheConfirmation;
-		if (ImGui::Checkbox("Skip Clear Cache Dialogue", &skipConfirmation)) {
-			menuSettings.SkipClearCacheConfirmation = skipConfirmation;
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("When checked, the shader cache will be cleared immediately without asking for confirmation.");
-		}
-
 		if (shaderCache->GetTotalTasks() > 0) {
 			ImGui::Text("Last shader cache build duration: %s",
 				shaderCache->GetShaderStatsString(true, true).c_str());
@@ -461,6 +451,16 @@ void SettingsTabRenderer::RenderBehaviorTab()
 		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
+		}
+
+		// Skip confirmation when clearing shader cache (UI behavior, not a shader setting).
+		auto& menuSettings = globals::menu->GetSettings();
+		bool skipConfirmation = menuSettings.SkipClearCacheConfirmation;
+		if (ImGui::Checkbox("Skip Clear Cache Dialogue", &skipConfirmation)) {
+			menuSettings.SkipClearCacheConfirmation = skipConfirmation;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("When checked, the shader cache will be cleared immediately without asking for confirmation.");
 		}
 
 		SeparatorTextWithFont("Visual Effects", Menu::FontRole::Subheading);

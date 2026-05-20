@@ -1462,73 +1462,69 @@ namespace FeatureIssues
 			auto* menu = Menu::GetSingleton();
 			const auto& themeSettings = menu->GetTheme();
 
-			if (ImGui::CollapsingHeader("Testing", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+			auto sectionWrapper = Util::SectionWrapper("Feature Issue Testing",
+				"These tools create test INI files to trigger all known feature issue types for testing purposes.",
+				themeSettings.Palette.Text);
+
+			if (sectionWrapper) {
+				const bool hasActiveTests = HasActiveTestInis();
+				if (hasActiveTests) {  // Warning section using theme colors
+					ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.RestartNeeded);
+					ImGui::TextWrapped("Test INI files are currently active. Restart CS to see feature issues.");
+					ImGui::PopStyleColor();  // Show detailed test state information
+					ImGui::Spacing();
+					ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.RestartNeeded);
+					ImGui::TextWrapped(GetTestStateDescription().c_str());
+					ImGui::PopStyleColor();
+					ImGui::Spacing();
+				}
+
+				// Create Test INIs button
 				{
-					auto sectionWrapper = Util::SectionWrapper("Feature Issue Testing",
-						"These tools create test INI files to trigger all known feature issue types for testing purposes.",
-						themeSettings.Palette.Text);
+					auto disableGuard = Util::DisableGuard(hasActiveTests);
+					auto buttonStyle = Util::StyledButtonWrapper(
+						themeSettings.Palette.FrameBorder,
+						themeSettings.StatusPalette.RestartNeeded,
+						themeSettings.StatusPalette.CurrentHotkey);
 
-					if (sectionWrapper) {
-						const bool hasActiveTests = HasActiveTestInis();
-						if (hasActiveTests) {  // Warning section using theme colors
-							ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.RestartNeeded);
-							ImGui::TextWrapped("Test INI files are currently active. Restart CS to see feature issues.");
-							ImGui::PopStyleColor();  // Show detailed test state information
-							ImGui::Spacing();
-							ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.RestartNeeded);
-							ImGui::TextWrapped(GetTestStateDescription().c_str());
-							ImGui::PopStyleColor();
-							ImGui::Spacing();
-						}
+					if (ImGui::Button("Create Test Inis", { -1, 0 })) {
+						auto testInis = CreateTestInis();
+						logger::info("Created {} test INI files for feature issue testing", testInis.size());
+					}
+				}
 
-						// Create Test INIs button
-						{
-							auto disableGuard = Util::DisableGuard(hasActiveTests);
-							auto buttonStyle = Util::StyledButtonWrapper(
-								themeSettings.Palette.FrameBorder,
-								themeSettings.StatusPalette.RestartNeeded,
-								themeSettings.StatusPalette.CurrentHotkey);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text(
+						"Creates test INI files that trigger all known feature issue cases:\n"
+						"- Obsolete features (ComplexParallaxMaterials, TerrainBlending, etc.)\n"
+						"- Unknown features (fake non-existent features)\n"
+						"- Version mismatch (modifies existing feature version)\n"
+						"Restart CS after creating to see the issues in action.");
+				}
 
-							if (ImGui::Button("Create Test Inis", { -1, 0 })) {
-								auto testInis = CreateTestInis();
-								logger::info("Created {} test INI files for feature issue testing", testInis.size());
-							}
-						}
+				// Restore button
+				{
+					auto disableGuard = Util::DisableGuard(!hasActiveTests);
+					auto buttonStyle = Util::StyledButtonWrapper(
+						themeSettings.Palette.FrameBorder,
+						themeSettings.StatusPalette.Error,
+						themeSettings.StatusPalette.CurrentHotkey);
 
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text(
-								"Creates test INI files that trigger all known feature issue cases:\n"
-								"- Obsolete features (ComplexParallaxMaterials, TerrainBlending, etc.)\n"
-								"- Unknown features (fake non-existent features)\n"
-								"- Version mismatch (modifies existing feature version)\n"
-								"Restart CS after creating to see the issues in action.");
-						}
-
-						// Restore button
-						{
-							auto disableGuard = Util::DisableGuard(!hasActiveTests);
-							auto buttonStyle = Util::StyledButtonWrapper(
-								themeSettings.Palette.FrameBorder,
-								themeSettings.StatusPalette.Error,
-								themeSettings.StatusPalette.CurrentHotkey);
-
-							if (ImGui::Button("Restore", { -1, 0 })) {
-								auto& testInis = GetCurrentTestInis();
-								if (RestoreOriginalState(testInis)) {
-									logger::info("Successfully restored original state");
-								} else {
-									logger::warn("Some restoration operations failed");
-								}
-							}
-						}
-
-						if (auto _tt = Util::HoverTooltipWrapper()) {
-							ImGui::Text(
-								"Removes all test INI files and restores any modified INI files to their original state.\n"
-								"This undoes all changes made by 'Create Test Inis'.\n"
-								"Restart CS after restoring to see normal operation.");
+					if (ImGui::Button("Restore", { -1, 0 })) {
+						auto& testInis = GetCurrentTestInis();
+						if (RestoreOriginalState(testInis)) {
+							logger::info("Successfully restored original state");
+						} else {
+							logger::warn("Some restoration operations failed");
 						}
 					}
+				}
+
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text(
+						"Removes all test INI files and restores any modified INI files to their original state.\n"
+						"This undoes all changes made by 'Create Test Inis'.\n"
+						"Restart CS after restoring to see normal operation.");
 				}
 			}
 		}

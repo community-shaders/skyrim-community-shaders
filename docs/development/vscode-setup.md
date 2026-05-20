@@ -60,7 +60,7 @@ Automatically deploy shaders when you save `.hlsl` or `.hlsli` files.
 
 **Interaction with built-in filewatcher:**
 
-Community Shaders has a built-in filewatcher (**Settings → Advanced → Shader Compilation → Enable File Watcher**) that hot-reloads shaders when files change in the game's `Data/Shaders/` directory. The workflow is:
+Community Shaders has a built-in filewatcher (**Settings → Advanced → Shaders → Cache & File Watcher → Enable File Watcher**) that hot-reloads shaders when files change in the game's `Data/Shaders/` directory. The workflow is:
 
 1. Edit shader in VSCode
 2. Save → RunOnSave deploys to `Data/Shaders/`
