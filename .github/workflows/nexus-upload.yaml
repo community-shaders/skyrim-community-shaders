@@ -69,6 +69,13 @@ on:
             UNEX_APIKEY:
                 required: false
 
+# Least-privilege for the whole workflow: every job here only reads from
+# GitHub (release listing via `gh api`, asset download via `gh release
+# download`) and writes only to Nexus via the UNEX_* secrets. No mutation
+# of repo state.
+permissions:
+    contents: read
+
 jobs:
     prepare-nexus-matrix:
         runs-on: ubuntu-latest

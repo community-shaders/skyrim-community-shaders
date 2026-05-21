@@ -10,6 +10,14 @@ on:
             MANUAL_BASE_REF:
                 description: "By default, the commit entered above is compared to the one directly before it; to go back further, enter an earlier SHA here"
                 required: false
+
+# Least-privilege scope: alstr/todo-to-issue-action creates issues from TODO/
+# FIXME comments it finds in the diff. `issues: write` for the create call,
+# `contents: read` for the checkout step.
+permissions:
+    contents: read
+    issues: write
+
 jobs:
     build:
         runs-on: "ubuntu-latest"
