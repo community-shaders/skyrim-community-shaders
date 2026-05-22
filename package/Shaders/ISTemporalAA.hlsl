@@ -71,22 +71,17 @@ float3 ConvertRenderOutput(float3 pqColor)
 
 float2 ClampScreenUV(float2 screenUV, float2 drMax)
 {
-	float2 uv = FrameBuffer::DynamicResolutionParams1.xy * screenUV;
-	uv = max(float2(0, 0), uv);
-	return min(uv, drMax);
+	return min(max(FrameBuffer::DynamicResolutionParams1.xy * screenUV, float2(0, 0)), drMax);
 }
 
 float4 ClampScreenUV4(float4 screenUV, float2 drMax)
 {
-	float4 uv = FrameBuffer::DynamicResolutionParams1.xyxy * screenUV;
-	uv = max(float4(0, 0, 0, 0), uv);
-	return min(uv, drMax.xyxy);
+	return min(max(FrameBuffer::DynamicResolutionParams1.xyxy * screenUV, float4(0, 0, 0, 0)), drMax.xyxy);
 }
 
 float2 ClampHistoryUV(float2 reprojectedUV)
 {
-	float2 uv = FrameBuffer::DynamicResolutionParams1.zw * reprojectedUV;
-	uv = max(float2(0, 0), uv);
+	float2 uv = max(FrameBuffer::DynamicResolutionParams1.zw * reprojectedUV, float2(0, 0));
 	uv.x = min(FrameBuffer::DynamicResolutionParams2.w, uv.x);
 	uv.y = min(FrameBuffer::DynamicResolutionParams1.w, uv.y);
 	return uv;
@@ -126,6 +121,13 @@ ISTAA_NeighborTap SampleNeighborGRB(float2 uv, float historyLuma)
 float4 PackNeighborTap(ISTAA_NeighborTap tap)
 {
 	return float4(tap.grb, tap.luma);
+}
+
+void AssignPackedNeighbor(float2 uv, float historyLuma, out float4 packed, out float belowHist)
+{
+	ISTAA_NeighborTap tap = SampleNeighborGRB(uv, historyLuma);
+	packed = PackNeighborTap(tap);
+	belowHist = tap.belowHist;
 }
 
 // Centre tap: .xyz sample into .yzw layout; luma via dot(.zwy, kLumaWeights).
@@ -225,30 +227,12 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 colorOut, feedbackOut;
 
 	// float4 packs — component reuse matches vanilla decompile (see header comment).
-	float4 motionReject;   // was r0
-	float4 sampleUV;       // was r1
-	float4 history;        // was r2
-	float4 corner;         // was r3
-	float4 tapMin;         // was r4
-	float4 tapA0;            // was r6
-	float4 tapA1;            // was r9
-	float4 tapB0;            // was r10
-	float4 tapB1;            // was r11
-	float4 tapC0;            // was r12
-	float4 tapC1;            // was r13
-	float4 center;           // was r14
-	float4 centerMeta;       // was r15
-	float4 bracketMax;       // was r16
-	float4 weightedColor;    // was r17
-	float4 mergeScratch;     // was r18
-	float4 bracketMinReg;    // was r19
+	float4 motionReject, sampleUV, history, corner, tapMin; // was r0–r4
+	float4 tapA0, tapA1, tapB0, tapB1, tapC0, tapC1;       // was r6–r13
+	float4 center, centerMeta, bracketMax, weightedColor, mergeScratch, bracketMinReg; // was r14–r19
 
-	float2 drMax = GetDynamicResolutionMax();
-	float2 drUVMin;
-	float2 drCenter;
-	float4 drNeighborsA;
-	float4 drNeighborsB;
-	float4 drNeighborsC;
+	float2 drMax = GetDynamicResolutionMax(), drUVMin, drCenter;
+	float4 drNeighborsA, drNeighborsB, drNeighborsC;
 
 	motionReject.xy = SelectDepthGuidedUV(
 		texCoord,
@@ -262,11 +246,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	// --- motion vector and history sample ---
 	history.xy = drMax;
-	motionReject.xy = ClampScreenUV(motionReject.xy, history.xy);
-	motionReject.xy = velocityTex.Sample(velocitySampler, motionReject.xy).xy;
+	motionReject.xy = velocityTex.Sample(velocitySampler, ClampScreenUV(motionReject.xy, history.xy)).xy;
 	motionReject.zw = texCoord.xy + motionReject.xy;
-	motionReject.x = dot(motionReject.xy, motionReject.xy);
-	motionReject.x = sqrt(motionReject.x);
+	motionReject.x = sqrt(dot(motionReject.xy, motionReject.xy));
 	tapMin.xy = ClampHistoryUV(motionReject.zw);
 	history.xyw = historyTex.Sample(historySampler, tapMin.xy).xyz;
 	corner.w = dot(corner.xzy, kLumaWeights);
@@ -275,7 +257,6 @@ PS_OUTPUT main(PS_INPUT input)
 	// --- neighbour colour / luma samples ---
 	sampleUV.zw = drUVMin;
 	sampleUV.xy = drCenter;
-
 	{
 		ISTAA_NeighborTap tap = SampleNeighborGRB(sampleUV.zw, history.x);
 		tapMin.xyz = tap.grb;
@@ -283,50 +264,18 @@ PS_OUTPUT main(PS_INPUT input)
 		tapMin.w = tap.luma;
 		sampleUV.w = tap.belowHist;
 	}
-
-	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsA.xy, history.x);
-		tapA0 = PackNeighborTap(tap);
-		corner.x = tap.belowHist;
-	}
-
-	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsA.zw, history.x);
-		tapA1 = PackNeighborTap(tap);
-		tapMin.x = tap.belowHist;
-	}
-
-	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsB.xy, history.x);
-		tapB0 = PackNeighborTap(tap);
-		tapA0.x = tap.belowHist;
-	}
-
-	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsB.zw, history.x);
-		tapB1 = PackNeighborTap(tap);
-		tapA1.x = tap.belowHist;
-	}
-
-	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsC.xy, history.x);
-		tapC0 = PackNeighborTap(tap);
-		tapB0.x = tap.belowHist;
-	}
-
-	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsC.zw, history.x);
-		tapC1 = PackNeighborTap(tap);
-		center.x = tap.belowHist;
-	}
-
+	AssignPackedNeighbor(drNeighborsA.xy, history.x, tapA0, corner.x);
+	AssignPackedNeighbor(drNeighborsA.zw, history.x, tapA1, tapMin.x);
+	AssignPackedNeighbor(drNeighborsB.xy, history.x, tapB0, tapA0.x);
+	AssignPackedNeighbor(drNeighborsB.zw, history.x, tapB1, tapA1.x);
+	AssignPackedNeighbor(drNeighborsC.xy, history.x, tapC0, tapB0.x);
+	AssignPackedNeighbor(drNeighborsC.zw, history.x, tapC1, center.x);
 	center.yzw = SampleCenterRGB(sampleUV.xy);
 
 	// --- centre bracket seed, neighbourhood bracket, flicker, temporal blend (verbatim math) ---
 	centerMeta.x = dot(center.zwy, kLumaWeights);
 	bracketMax.x = cmp(centerMeta.x < history.x);
 	centerMeta.yz = center.yw;
-
 	// removing this causes flickering on high contrast edges
 	// flickering is even stronger when removing it in PQ
 	// won't matter in PQ as 1.0 is already 10k nits
