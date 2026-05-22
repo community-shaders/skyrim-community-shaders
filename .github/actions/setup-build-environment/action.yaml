@@ -96,8 +96,36 @@ runs:
           with:
               vcpkgJsonGlob: vcpkg.json
 
-        - name: Cache CMake build output
+        # Cache strategy is split by event trust level to avoid the
+        # pull_request_target cache-poisoning class of bug (CodeQL rule
+        # `actions/cache-poisoning/poisonable-step`):
+        #
+        # - Trusted events (push to dev/main, workflow_dispatch, workflow_call
+        #   from a release pipeline): use the combined `actions/cache` which
+        #   restores at this step and auto-saves at job-end. Cache writes only
+        #   happen from these trusted contexts.
+        # - Untrusted events (pull_request_target, pull_request): use the
+        #   restore-only sub-action. PR builds still benefit from caches
+        #   warmed by trusted runs but cannot themselves write back, so a
+        #   malicious PR cannot poison a cache that a later default-branch
+        #   run would consume.
+        #
+        # Both steps use the same key / restore-keys so cache hits cross the
+        # trust boundary in the allowed direction (trusted-saved → untrusted-restore).
+
+        - name: Cache CMake build output (trusted, restore + save)
+          if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
           uses: actions/cache@v5
+          with:
+              path: ${{ inputs.build-dir }}
+              key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+              restore-keys: |
+                  ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                  ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-
+
+        - name: Restore CMake build cache (untrusted PR, restore-only)
+          if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+          uses: actions/cache/restore@v5
           with:
               path: ${{ inputs.build-dir }}
               key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}

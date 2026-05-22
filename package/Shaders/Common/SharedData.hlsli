@@ -60,13 +60,9 @@ namespace SharedData
 	struct CubemapCreatorSettings
 	{
 		uint Enabled;
-		uint EnabledSSR;
-		float2 pad0;
+		float3 pad0;
 
 		float4 CubemapColor;
-
-		float ReflectionFallbackAmount;
-		float3 pad1;
 	};
 
 	struct TerraOccSettings

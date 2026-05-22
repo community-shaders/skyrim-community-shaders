@@ -5,11 +5,8 @@
 
 struct ExtendedTranslucency final : Feature
 {
-	static constexpr std::string_view MOD_ID = "150755"sv;
-
 	virtual inline std::string GetName() override { return "Extended Translucency"; }
 	virtual inline std::string GetShortName() override { return "ExtendedTranslucency"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_TRANSLUCENCY"sv; }
 	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override;

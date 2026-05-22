@@ -27,7 +27,10 @@
         "pystring",
         "renderdoc",
         "stb",
-        "tracy",
+        {
+            "name": "tracy",
+            "features": ["on-demand"]
+        },
         "unordered-dense",
         "xbyak"
     ],
@@ -55,7 +58,7 @@
         },
         {
             "name": "tracy",
-            "version": "0.13.1"
+            "version-string": "0.13.3-14a1a322"
         },
         {
             "name": "directx-headers",

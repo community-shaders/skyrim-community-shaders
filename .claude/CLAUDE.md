@@ -463,7 +463,12 @@ Conventional commits drive semantic-release. `feat:` triggers a minor bump, `fix
 
 **Default branch for PRs is `dev`.** Feature work, fixes, and refactors all land there via normal PRs. `main` is updated only through the release workflows — never PR a feature branch directly into `main`.
 
-**Branch lineage invariant:** `main` is always an ancestor of `dev`, and `dev` is always an ancestor of `main` after a release reconciles. The `Release: Semantic Version` workflow's `ff_target` promotion mode and the auto dev-FF-reconcile keep this invariant — do not break it by force-pushing or merging shared branches manually.
+**Branch lineage invariant:** after every release reconciles, `main` is an ancestor of `dev`, so every tag on `main` is reachable from `dev`. The `Release: Semantic Version` workflow keeps this invariant in two ways depending on the promotion source:
+
+-   **dev → main promotion** (minor/major): main fast-forwards to the dev SHA, semantic-release appends a `chore(release):` commit on top, then dev fast-forwards to absorb that commit. No history rewrites on either branch.
+-   **hotfix-staging → main promotion** (current-line patch): main fast-forwards to the hotfix-staging SHA, semantic-release appends the `chore(release):` commit, then dev is **rebase-reconciled** onto the new main. `git rebase` drops dev's originals of the cherry-picked fixes (patch-id match) and replays any unique dev work on top. This is the only place the workflow force-pushes (`--force-with-lease`) — it is intentional and load-bearing.
+
+After a hotfix release, open PRs targeting `dev` are auto-rebased by the `Auto-rebase open PRs` workflow (a thin wrapper around `peter-evans/rebase@v3`). PRs from forks need "Allow edits by maintainers" enabled or the action silently skips them; drafts and PRs labeled `no-auto-rebase` are also excluded. The workflow's job summary reports the rebased count and lists the buckets PRs can fall into; conflict-skipped PRs need a manual `git rebase origin/dev` by the author.
 
 **Patch flow (current line _or_ older line, same staging mechanism):**
 
@@ -482,7 +487,7 @@ Conventional commits drive semantic-release. `feat:` triggers a minor bump, `fix
 
 **Things agents should not do without explicit user direction:**
 
--   Force-push or rebase `main`, `dev`, or any `hotfix/*` branch.
+-   Force-push or rebase `main`, `dev`, or any `hotfix/*` branch. (The release workflow's rebase-reconcile of `dev` after a hotfix-staging promotion is the one sanctioned exception; humans should not replicate it manually unless the workflow's remediation block explicitly instructs them to.)
 -   Manually create tags matching `v*` (semantic-release owns these).
 -   Bump `CMakeLists.txt`'s `VERSION` field outside the release workflow.
 -   PR a feature branch directly into `main`.
