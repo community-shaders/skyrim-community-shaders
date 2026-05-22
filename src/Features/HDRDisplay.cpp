@@ -947,11 +947,82 @@ namespace
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	// Vtable slot 35 — patches alpha blend to [One, InvSrcAlpha, Add] when UI is composited from a
+	// separate buffer. Mods using [InvSrcAlpha, Zero] (e.g. IED) write alpha*(1-alpha) instead
+	// of alpha, causing ~94% scene bleed through opaque windows in the HDROutputCS composite.
+	struct ID3D11DeviceContext_OMSetBlendState
+	{
+		static void WINAPI thunk(ID3D11DeviceContext* This, ID3D11BlendState* pBlendState, const FLOAT BlendFactor[4], UINT SampleMask)
+		{
+			if (pBlendState && !globals::game::isVR) {
+				auto& hdr = globals::features::hdrDisplay;
+				const bool d3d11HdrCapture = hdr.loaded && hdr.settings.enableHDR && hdr.uiTexture;
+				const bool fgCapture = globals::features::upscaling.d3d12SwapChainActive;
+				if (d3d11HdrCapture || fgCapture)
+					pBlendState = hdr.GetPatchedAlphaBlendState(pBlendState);
+			}
+			func(This, pBlendState, BlendFactor, SampleMask);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 }
 
 void HDRDisplay::InstallSwapChainPresentHooks(IDXGISwapChain* swapChain)
 {
 	stl::detour_vfunc<8, SwapChainPresentBottom>(swapChain);
+	stl::detour_vfunc<35, ID3D11DeviceContext_OMSetBlendState>(globals::d3d::context);
+}
+
+ID3D11BlendState* HDRDisplay::GetPatchedAlphaBlendState(ID3D11BlendState* original)
+{
+	auto it = patchedBlendStateCache.find(original);
+	if (it != patchedBlendStateCache.end())
+		return it->second ? it->second.get() : original;
+
+	D3D11_BLEND_DESC desc{};
+	original->GetDesc(&desc);
+
+	const int slotCount = desc.IndependentBlendEnable ? 8 : 1;
+	bool needsPatch = false;
+	for (int i = 0; i < slotCount; i++) {
+		const auto& rt = desc.RenderTarget[i];
+		if (rt.BlendEnable &&
+		    (rt.SrcBlendAlpha != D3D11_BLEND_ONE ||
+		     rt.DestBlendAlpha != D3D11_BLEND_INV_SRC_ALPHA ||
+		     rt.BlendOpAlpha != D3D11_BLEND_OP_ADD)) {
+			needsPatch = true;
+			break;
+		}
+	}
+
+	if (!needsPatch) {
+		patchedBlendStateCache[original] = nullptr;
+		return original;
+	}
+
+	for (int i = 0; i < slotCount; i++) {
+		auto& rt = desc.RenderTarget[i];
+		if (rt.BlendEnable) {
+			rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+			rt.DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+			rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+		}
+	}
+	if (!desc.IndependentBlendEnable) {
+		for (int i = 1; i < 8; i++)
+			desc.RenderTarget[i] = desc.RenderTarget[0];
+	}
+
+	winrt::com_ptr<ID3D11BlendState> patched;
+	if (FAILED(globals::d3d::device->CreateBlendState(&desc, patched.put()))) {
+		patchedBlendStateCache[original] = nullptr;
+		return original;
+	}
+
+	auto* raw = patched.get();
+	patchedBlendStateCache[original] = std::move(patched);
+	return raw;
 }
 
 HRESULT HDRDisplay::PresentToSwapChain(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags)

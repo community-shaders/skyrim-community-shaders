@@ -7,6 +7,7 @@
 #include <dxgi.h>
 #include <functional>
 #include <mutex>
+#include <unordered_map>
 
 struct HDRDisplay : public Feature
 {
@@ -94,6 +95,8 @@ public:
 
 	void ApplyHDR();
 
+	ID3D11BlendState* GetPatchedAlphaBlendState(ID3D11BlendState* original);
+
 	// Swap-chain Present hook (installed from Hooks::InitD3D).
 	static void InstallSwapChainPresentHooks(IDXGISwapChain* swapChain);
 	HRESULT HandleSwapChainPresent(
@@ -149,6 +152,7 @@ public:
 	ID3D11RenderTargetView* savedRTV = nullptr;
 	ID3D11DepthStencilView* savedDSV = nullptr;
 	ID3D11RenderTargetView* savedFramebufferRTV = nullptr;  // Original kFRAMEBUFFER.RTV for restoration
+	std::unordered_map<ID3D11BlendState*, winrt::com_ptr<ID3D11BlendState>> patchedBlendStateCache;
 
 	// Saved kFRAMEBUFFER state for HDR redirect (ISHDR writes to hdrTexture instead)
 	ID3D11Texture2D* savedFramebufferTexture = nullptr;
