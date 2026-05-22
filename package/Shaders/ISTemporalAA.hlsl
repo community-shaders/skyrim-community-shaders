@@ -56,46 +56,67 @@ float3 ConvertRenderOutput(float3 pqColor)
 }
 #endif
 
+// Same math as the repeated DR clamp blocks in the original shader.
+float2 ClampScreenUV(float2 screenUV, float2 drMax)
+{
+	float2 uv = FrameBuffer::DynamicResolutionParams1.xy * screenUV;
+	uv = max(float2(0, 0), uv);
+	return min(uv, drMax);
+}
+
+float4 ClampScreenUV4(float4 screenUV, float2 drMax)
+{
+	float4 uv = FrameBuffer::DynamicResolutionParams1.xyxy * screenUV;
+	uv = max(float4(0, 0, 0, 0), uv);
+	return min(uv, drMax.xyxy);
+}
+
+float2 ClampHistoryUV(float2 reprojectedUV)
+{
+	float2 uv = FrameBuffer::DynamicResolutionParams1.zw * reprojectedUV;
+	uv = max(float2(0, 0), uv);
+	uv.x = min(FrameBuffer::DynamicResolutionParams2.w, uv.x);
+	uv.y = min(FrameBuffer::DynamicResolutionParams1.w, uv.y);
+	return uv;
+}
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	float2 v1 = input.TexCoord;
-	float4 o0, o1;
+	float2 texCoord = input.TexCoord;
+	float4 colorOut, feedbackOut;
+	// Registers are reused throughout (original decompiler layout); math is unchanged.
 	float4 r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19;
-	
+
 	// --- depth-guided neighborhood UV selection ---
-	r0.xy = -TexelOffset.xy + v1.xy;
-	r0.zw = TexelOffset.xy + v1.xy;
-	r1.xy = FrameBuffer::DynamicResolutionParams1.xy * r0.zw;
-	r1.xy = max(float2(0, 0), r1.xy);
+	// r0.xy = uvMin, r0.zw = uvMax
+	r0.xy = -TexelOffset.xy + texCoord.xy;
+	r0.zw = TexelOffset.xy + texCoord.xy;
 	r2.x = FrameBuffer::DynamicResolutionParams2.z;
 	r2.y = FrameBuffer::DynamicResolutionParams1.y;
-	r1.xy = min(r2.xy, r1.xy);
+	r1.xy = ClampScreenUV(r0.zw, r2.xy);
 	r1.z = depthTex.Sample(depthSampler, r1.xy).x;
 	r3.xyz = currentFrameTex.Sample(currentFrameSampler, r1.xy).yxz;
 #	ifdef HDR_OUTPUT
 	r3.yxz = ConvertRenderInput(r3.yxz);
 #	endif
 
-	r4.xyzw = TexelOffset.xyxy * float4(1, -1, 1, 0) + v1.xyxy;
-	r5.xyzw = FrameBuffer::DynamicResolutionParams1.xyxy * r4.xyzw;
-	r5.xyzw = max(float4(0, 0, 0, 0), r5.xyzw);
-	r5.xyzw = min(r5.xyzw, r2.xyxy);
+	// Neighbor UVs batch 1: offsets (1,-1), (1,0)
+	r4.xyzw = TexelOffset.xyxy * float4(1, -1, 1, 0) + texCoord.xyxy;
+	r5.xyzw = ClampScreenUV4(r4.xyzw, r2.xy);
 	r1.x = depthTex.Sample(depthSampler, r5.xy).x;
 	r1.y = min(r1.x, r1.z);
-	r1.zw = FrameBuffer::DynamicResolutionParams1.xy * r0.xy;
-	r1.zw = max(float2(0, 0), r1.zw);
-	r1.zw = min(r1.zw, r2.xy);
+	r1.zw = ClampScreenUV(r0.xy, r2.xy);
 	r2.z = depthTex.Sample(depthSampler, r1.zw).x;
 	r1.y = min(r2.z, r1.y);
 	r2.z = cmp(r1.y == r2.z);
 	r0.xy = r2.zz ? r0.xy : r0.zw;
 	r0.z = cmp(r1.y == r1.x);
 	r0.xy = r0.zz ? r4.xy : r0.xy;
-	r6.xyzw = TexelOffset.xyxy * float4(0, -1, -1, 1) + v1.xyxy;
-	r7.xyzw = FrameBuffer::DynamicResolutionParams1.xyxy * r6.xyzw;
-	r7.xyzw = max(float4(0, 0, 0, 0), r7.xyzw);
-	r7.xyzw = min(r7.xyzw, r2.xyxy);
+
+	// Neighbor UVs batch 2: offsets (0,-1), (-1,1)
+	r6.xyzw = TexelOffset.xyxy * float4(0, -1, -1, 1) + texCoord.xyxy;
+	r7.xyzw = ClampScreenUV4(r6.xyzw, r2.xy);
 	r0.z = depthTex.Sample(depthSampler, r7.xy).x;
 	r0.w = min(r0.z, r1.y);
 	r1.x = depthTex.Sample(depthSampler, r5.zw).x;
@@ -104,10 +125,10 @@ PS_OUTPUT main(PS_INPUT input)
 	r0.xy = r1.xx ? r4.zw : r0.xy;
 	r0.z = cmp(r0.w == r0.z);
 	r0.xy = r0.zz ? r6.xy : r0.xy;
-	r4.xyzw = TexelOffset.xyxy * float4(-1, 0, 0, 1) + v1.xyxy;
-	r8.xyzw = FrameBuffer::DynamicResolutionParams1.xyxy * r4.xyzw;
-	r8.xyzw = max(float4(0, 0, 0, 0), r8.xyzw);
-	r8.xyzw = min(r8.xyzw, r2.xyxy);
+
+	// Neighbor UVs batch 3: offsets (-1,0), (0,1)
+	r4.xyzw = TexelOffset.xyxy * float4(-1, 0, 0, 1) + texCoord.xyxy;
+	r8.xyzw = ClampScreenUV4(r4.xyzw, r2.xy);
 	r0.z = depthTex.Sample(depthSampler, r8.xy).x;
 	r0.w = min(r0.z, r0.w);
 	r1.x = depthTex.Sample(depthSampler, r7.zw).x;
@@ -116,9 +137,8 @@ PS_OUTPUT main(PS_INPUT input)
 	r0.xy = r1.xx ? r6.zw : r0.xy;
 	r0.z = cmp(r0.w == r0.z);
 	r0.xy = r0.zz ? r4.xy : r0.xy;
-	r1.xy = FrameBuffer::DynamicResolutionParams1.xy * v1.xy;
-	r1.xy = max(float2(0, 0), r1.xy);
-	r1.xy = min(r1.xy, r2.xy);
+
+	r1.xy = ClampScreenUV(texCoord.xy, r2.xy);
 	r0.z = depthTex.Sample(depthSampler, r1.xy).x;
 	r0.w = min(r0.z, r0.w);
 	r2.z = depthTex.Sample(depthSampler, r8.zw).x;
@@ -126,23 +146,22 @@ PS_OUTPUT main(PS_INPUT input)
 	r2.z = cmp(r0.w == r2.z);
 	r0.z = cmp(r0.w == r0.z);
 	r0.xy = r2.zz ? r4.zw : r0.xy;
-	r0.xy = r0.zz ? v1.xy : r0.xy;
+	r0.xy = r0.zz ? texCoord.xy : r0.xy;
+
 	// --- motion vector and history sample ---
-	r0.xy = FrameBuffer::DynamicResolutionParams1.xy * r0.xy;
-	r0.xy = max(float2(0, 0), r0.xy);
-	r0.xy = min(r0.xy, r2.xy);
+	// r0.xy = selected UV (DR), then velocity; r0.zw = reprojected UV; r0.x = motion length
+	r0.xy = ClampScreenUV(r0.xy, r2.xy);
 	r0.xy = velocityTex.Sample(velocitySampler, r0.xy).xy;
-	r0.zw = v1.xy + r0.xy;
+	r0.zw = texCoord.xy + r0.xy;
 	r0.x = dot(r0.xy, r0.xy);
 	r0.x = sqrt(r0.x);
-	r2.xy = FrameBuffer::DynamicResolutionParams1.zw * r0.zw;
-	r2.xy = max(float2(0, 0), r2.xy);
-	r4.x = min(FrameBuffer::DynamicResolutionParams2.w, r2.x);
-	r4.y = min(FrameBuffer::DynamicResolutionParams1.w, r2.y);
+	r4.xy = ClampHistoryUV(r0.zw);
 	r2.xyw = historyTex.Sample(historySampler, r4.xy).xyz;
 	r3.w = dot(r3.xzy, float3(0.5, 0.25, 0.25));
 	r0.y = cmp(r3.w < r2.x);
+
 	// --- neighbor color / luma samples ---
+	// r1.zw = DR(uvMin), r5/r7/r8 = DR neighbor corners, r1.xy = DR(texCoord)
 	r4.xyz = currentFrameTex.Sample(currentFrameSampler, r1.zw).yxz;
 #	ifdef HDR_OUTPUT
 	r4.yxz = ConvertRenderInput(r4.yxz);
@@ -213,6 +232,7 @@ PS_OUTPUT main(PS_INPUT input)
 	r17.x = cmp(r13.w < r16.w);
 	r17.xyz = r17.xxx ? r13.yzw : r16.yzw;
 	r16.yzw = r14.xxx ? r16.yzw : r17.xyz;
+
 	// --- neighborhood min/max color bracket ---
 	r17.xyz = NeighborWeights.zzz * r12.yxz;
 	r17.xyz = r11.yxz * NeighborWeights.www + r17.xyz;
@@ -244,6 +264,7 @@ PS_OUTPUT main(PS_INPUT input)
 	r11.x = cmp(r16.z < r13.w);
 	r13.xyz = r11.xxx ? r13.yzw : r16.xyz;
 	r13.xyz = r14.xxx ? r13.xyz : r16.xyz;
+
 	// --- flicker score from neighbor luma spread ---
 	r11.x = r15.x + -r13.w;
 	r11.x = 0.200000003 + -abs(r11.x);
@@ -301,6 +322,7 @@ PS_OUTPUT main(PS_INPUT input)
 	r0.y = r0.y + -r9.x;
 	r0.y = r0.y + -r10.x;
 	r0.y = saturate(r0.y + -r11.x);
+
 	// --- temporal blend, clamp, and sharpen ---
 	r1.w = cmp(1 < r13.w);
 	r3.x = -r13.y * 0.25 + r13.w;
@@ -333,7 +355,9 @@ PS_OUTPUT main(PS_INPUT input)
 	r3.xyz = r1.www ? r6.xyz : r3.xyz;
 	r3.xyz = r3.xyz + -r4.xyz;
 	r3.xyz = r2.yyy * r3.xyz + r4.xyz;
+
 	// --- disocclusion / mask rejection ---
+	// r0.zw still holds reprojected UV from motion pass; r0.x = motion length
 	r1.w = min(r0.z, r0.w);
 	r0.zw = cmp(r0.zw >= float2(1, 1));
 	r1.w = cmp(0 >= r1.w);
@@ -363,7 +387,7 @@ PS_OUTPUT main(PS_INPUT input)
 	r6.y = r2.w * r0.y;
 	r0.y = 0.99000001 + -r0.x;
 	r0.x = r6.y * r0.y + r0.x;
-	o1.yz = r6.yz;
+	feedbackOut.yz = r6.yz;
 #	ifdef HDR_OUTPUT
 	r1.xyw = (r0.xxx * r1.xyw + r4.yzw);
 #	else
@@ -389,6 +413,7 @@ PS_OUTPUT main(PS_INPUT input)
 	r0.x = cmp(abs(r0.x) < 0.00999999978);
 	r3.x = r0.x ? r15.x : r0.y;
 	r4.x = dot(r4.zwy, float3(0.5, 0.25, 0.25));
+
 	// --- alpha-aware output ---
 	r0.x = alphaTex.Sample(alphaSampler, r5.xy).z;
 	r0.y = alphaTex.Sample(alphaSampler, r5.zw).z;
@@ -410,22 +435,22 @@ PS_OUTPUT main(PS_INPUT input)
 	r0.z = 1 + -r2.z;
 	r0.x = r0.y ? r0.x : 0;
 	r1.xyzw = r0.xxxx ? r4.xyzw : r3.xyzw;
-	o0.xyz = r1.yzw;
+	colorOut.xyz = r1.yzw;
 #	ifdef HDR_OUTPUT
-	o1.x = (r1.x * r0.z);
+	feedbackOut.x = (r1.x * r0.z);
 #	else
-	o1.x = saturate(r1.x * r0.z);
+	feedbackOut.x = saturate(r1.x * r0.z);
 #	endif
-	o0.w = 1;
-	o1.w = 1;
+	colorOut.w = 1;
+	feedbackOut.w = 1;
 
 #	ifdef HDR_OUTPUT
-	o1.x = max(0, o1.x);
-	o0.xyz = ConvertRenderOutput(o0.xyz);
+	feedbackOut.x = max(0, feedbackOut.x);
+	colorOut.xyz = ConvertRenderOutput(colorOut.xyz);
 #	endif
 
-	psout.Color = o0;
-	psout.Feedback = o1;
+	psout.Color = colorOut;
+	psout.Feedback = feedbackOut;
 	return psout;
 }
 #endif
