@@ -44,10 +44,13 @@ static const float3 kLumaWeights = float3(0.5, 0.25, 0.25);
 
 /*
  * Channel layout (vanilla decompile — swizzles are load-bearing):
- * - Neighbour taps: .yxz sample; luma via dot(.xzy, kLumaWeights).
- * - Centre tap: .xyz sample into r14.yzw; luma via dot(r14.zwy, kLumaWeights).
- * - Bracket colours: .yzw holds (R, B, G); luma in .w.
- * - Output: colorOut.xyz = r1.yzw.
+ * - Neighbour taps: .yxz sample; luma via dot(.xzy, kLumaWeights); stored as float4(.xyz=GRB, .w=luma).
+ * - center: float4 .x=belowHistC1, .yzw=centre RGB; luma via dot(center.zwy, kLumaWeights).
+ * - corner: float4 .xyz=corner GRB, .w=corner luma (depth-guided); .x reused for belowHistA0 mask.
+ * - Bracket colours: .yzw holds (R, B, G); .w = luma.
+ * - Output colour lives in .yzw (vanilla r3.yzw after blend; colorOut = sampleUV.yzw), not .xyz.
+ *
+ * Registers are float4 packs — names are semantic but components reuse like the decompile.
  */
 
 #ifdef HDR_OUTPUT
@@ -118,6 +121,11 @@ ISTAA_NeighborTap SampleNeighborGRB(float2 uv, float historyLuma)
 	tap.luma = dot(tap.grb.xzy, kLumaWeights);
 	tap.belowHist = cmp(tap.luma < historyLuma);
 	return tap;
+}
+
+float4 PackNeighborTap(ISTAA_NeighborTap tap)
+{
+	return float4(tap.grb, tap.luma);
 }
 
 // Centre tap: .xyz sample into .yzw layout; luma via dot(.zwy, kLumaWeights).
@@ -216,8 +224,24 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 texCoord = input.TexCoord;
 	float4 colorOut, feedbackOut;
 
-	// Registers r0–r19 are reused below (vanilla layout); do not rename past neighbour setup.
-	float4 r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19;
+	// float4 packs — component reuse matches vanilla decompile (see header comment).
+	float4 motionReject;   // was r0
+	float4 sampleUV;       // was r1
+	float4 history;        // was r2
+	float4 corner;         // was r3
+	float4 tapMin;         // was r4
+	float4 tapA0;            // was r6
+	float4 tapA1;            // was r9
+	float4 tapB0;            // was r10
+	float4 tapB1;            // was r11
+	float4 tapC0;            // was r12
+	float4 tapC1;            // was r13
+	float4 center;           // was r14
+	float4 centerMeta;       // was r15
+	float4 bracketMax;       // was r16
+	float4 weightedColor;    // was r17
+	float4 mergeScratch;     // was r18
+	float4 bracketMinReg;    // was r19
 
 	float2 drMax = GetDynamicResolutionMax();
 	float2 drUVMin;
@@ -226,7 +250,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 drNeighborsB;
 	float4 drNeighborsC;
 
-	r0.xy = SelectDepthGuidedUV(
+	motionReject.xy = SelectDepthGuidedUV(
 		texCoord,
 		drMax,
 		drUVMin,
@@ -234,276 +258,273 @@ PS_OUTPUT main(PS_INPUT input)
 		drNeighborsA,
 		drNeighborsB,
 		drNeighborsC,
-		r3.xyz);
+		corner.xyz);
 
 	// --- motion vector and history sample ---
-	r2.xy = drMax;
-	r0.xy = ClampScreenUV(r0.xy, r2.xy);
-	r0.xy = velocityTex.Sample(velocitySampler, r0.xy).xy;
-	r0.zw = texCoord.xy + r0.xy;
-	r0.x = dot(r0.xy, r0.xy);
-	r0.x = sqrt(r0.x);
-	r4.xy = ClampHistoryUV(r0.zw);
-	r2.xyw = historyTex.Sample(historySampler, r4.xy).xyz;
-	r3.w = dot(r3.xzy, kLumaWeights);
-	r0.y = cmp(r3.w < r2.x);
+	history.xy = drMax;
+	motionReject.xy = ClampScreenUV(motionReject.xy, history.xy);
+	motionReject.xy = velocityTex.Sample(velocitySampler, motionReject.xy).xy;
+	motionReject.zw = texCoord.xy + motionReject.xy;
+	motionReject.x = dot(motionReject.xy, motionReject.xy);
+	motionReject.x = sqrt(motionReject.x);
+	tapMin.xy = ClampHistoryUV(motionReject.zw);
+	history.xyw = historyTex.Sample(historySampler, tapMin.xy).xyz;
+	corner.w = dot(corner.xzy, kLumaWeights);
+	motionReject.y = cmp(corner.w < history.x);
 
 	// --- neighbour colour / luma samples ---
-	r1.zw = drUVMin;
-	r5 = drNeighborsA;
-	r7 = drNeighborsB;
-	r8 = drNeighborsC;
-	r1.xy = drCenter;
+	sampleUV.zw = drUVMin;
+	sampleUV.xy = drCenter;
 
 	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(r1.zw, r2.x);
-		r4.xyz = tap.grb;
-		r1.z = AlphaCoverageMask(r1.zw);
-		r4.w = tap.luma;
-		r1.w = tap.belowHist;
+		ISTAA_NeighborTap tap = SampleNeighborGRB(sampleUV.zw, history.x);
+		tapMin.xyz = tap.grb;
+		sampleUV.z = AlphaCoverageMask(sampleUV.zw);
+		tapMin.w = tap.luma;
+		sampleUV.w = tap.belowHist;
 	}
 
 	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(r5.xy, r2.x);
-		r6 = float4(tap.grb, tap.luma);
-		r3.x = tap.belowHist;
+		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsA.xy, history.x);
+		tapA0 = PackNeighborTap(tap);
+		corner.x = tap.belowHist;
 	}
 
 	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(r5.zw, r2.x);
-		r9 = float4(tap.grb, tap.luma);
-		r4.x = tap.belowHist;
+		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsA.zw, history.x);
+		tapA1 = PackNeighborTap(tap);
+		tapMin.x = tap.belowHist;
 	}
 
 	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(r7.xy, r2.x);
-		r10 = float4(tap.grb, tap.luma);
-		r6.x = tap.belowHist;
+		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsB.xy, history.x);
+		tapB0 = PackNeighborTap(tap);
+		tapA0.x = tap.belowHist;
 	}
 
 	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(r7.zw, r2.x);
-		r11 = float4(tap.grb, tap.luma);
-		r9.x = tap.belowHist;
+		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsB.zw, history.x);
+		tapB1 = PackNeighborTap(tap);
+		tapA1.x = tap.belowHist;
 	}
 
 	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(r8.xy, r2.x);
-		r12 = float4(tap.grb, tap.luma);
-		r10.x = tap.belowHist;
+		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsC.xy, history.x);
+		tapC0 = PackNeighborTap(tap);
+		tapB0.x = tap.belowHist;
 	}
 
 	{
-		ISTAA_NeighborTap tap = SampleNeighborGRB(r8.zw, r2.x);
-		r13 = float4(tap.grb, tap.luma);
-		r14.x = tap.belowHist;
+		ISTAA_NeighborTap tap = SampleNeighborGRB(drNeighborsC.zw, history.x);
+		tapC1 = PackNeighborTap(tap);
+		center.x = tap.belowHist;
 	}
 
-	r14.yzw = SampleCenterRGB(r1.xy);
+	center.yzw = SampleCenterRGB(sampleUV.xy);
 
 	// --- centre bracket seed, neighbourhood bracket, flicker, temporal blend (verbatim math) ---
-	r15.x = dot(r14.zwy, kLumaWeights);
-	r16.x = cmp(r15.x < r2.x);
-	r15.yz = r14.yw;
+	centerMeta.x = dot(center.zwy, kLumaWeights);
+	bracketMax.x = cmp(centerMeta.x < history.x);
+	centerMeta.yz = center.yw;
 
 	// removing this causes flickering on high contrast edges
 	// flickering is even stronger when removing it in PQ
 	// won't matter in PQ as 1.0 is already 10k nits
-	r16.y = cmp(r15.x < 1.00100005);
-	r16.yzw = r16.yyy ? r15.yzx : float3(1.00100005, 1.00100005, 1.00100005);
-	r16.yzw = r16.xxx ? float3(1.00100005, 1.00100005, 1.00100005) : r16.yzw;
+	bracketMax.y = cmp(centerMeta.x < 1.00100005);
+	bracketMax.yzw = bracketMax.yyy ? centerMeta.yzx : float3(1.00100005, 1.00100005, 1.00100005);
+	bracketMax.yzw = bracketMax.xxx ? float3(1.00100005, 1.00100005, 1.00100005) : bracketMax.yzw;
 
-	r17.x = cmp(r13.w < r16.w);
-	r17.xyz = r17.xxx ? r13.yzw : r16.yzw;
-	r16.yzw = r14.xxx ? r16.yzw : r17.xyz;
+	weightedColor.x = cmp(tapC1.w < bracketMax.w);
+	weightedColor.xyz = weightedColor.xxx ? tapC1.yzw : bracketMax.yzw;
+	bracketMax.yzw = center.xxx ? bracketMax.yzw : weightedColor.xyz;
 
 	// --- neighborhood min/max color bracket ---
-	r17.xyz = NeighborWeights.zzz * r12.yxz;
-	r17.xyz = r11.yxz * NeighborWeights.www + r17.xyz;
-	r17.xyz = r13.yxz * NeighborWeights.yyy + r17.xyz;
-	r17.xyz = r14.yzw * NeighborWeights.xxx + r17.xyz;
-	r11.x = cmp(r12.w < r16.w);
-	r18.xyz = r11.xxx ? r12.yzw : r16.yzw;
-	r16.yzw = r10.xxx ? r16.yzw : r18.xyz;
-	r11.x = cmp(r11.w < r16.w);
-	r18.xyz = r11.xxx ? r11.yzw : r16.yzw;
-	r16.yzw = r9.xxx ? r16.yzw : r18.xyz;
-	r11.x = cmp(r10.w < r16.w);
-	r18.xyz = r11.xxx ? r10.yzw : r16.yzw;
-	r16.yzw = r6.xxx ? r16.yzw : r18.xyz;
-	r11.x = cmp(r9.w < r16.w);
-	r18.xyz = r11.xxx ? r9.yzw : r16.yzw;
-	r16.yzw = r4.xxx ? r16.yzw : r18.xyz;
-	r11.x = cmp(r6.w < r16.w);
-	r18.xyz = r11.xxx ? r6.yzw : r16.yzw;
-	r16.yzw = r3.xxx ? r16.yzw : r18.xyz;
-	r11.x = cmp(r4.w < r16.w);
-	r18.xyz = r11.xxx ? r4.yzw : r16.yzw;
-	r18.yzw = r1.www ? r16.yzw : r18.xyz;
-	r11.x = cmp(r3.w < r18.w);
-	r19.yzw = r11.xxx ? r3.yzw : r18.yzw;
-	r11.x = cmp(-0.00100000005 < r15.x);
-	r16.yzw = r11.xxx ? r15.yzx : float3(-0.00100000005, -0.00100000005, -0.00100000005);
-	r16.xyz = r16.xxx ? r16.yzw : float3(-0.00100000005, -0.00100000005, -0.00100000005);
-	r11.x = cmp(r16.z < r13.w);
-	r13.xyz = r11.xxx ? r13.yzw : r16.xyz;
-	r13.xyz = r14.xxx ? r13.xyz : r16.xyz;
+	weightedColor.xyz = NeighborWeights.zzz * tapC0.yxz;
+	weightedColor.xyz = tapB1.yxz * NeighborWeights.www + weightedColor.xyz;
+	weightedColor.xyz = tapC1.yxz * NeighborWeights.yyy + weightedColor.xyz;
+	weightedColor.xyz = center.yzw * NeighborWeights.xxx + weightedColor.xyz;
+	tapB1.x = cmp(tapC0.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapC0.yzw : bracketMax.yzw;
+	bracketMax.yzw = tapB0.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapB1.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapB1.yzw : bracketMax.yzw;
+	bracketMax.yzw = tapA1.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapB0.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapB0.yzw : bracketMax.yzw;
+	bracketMax.yzw = tapA0.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapA1.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapA1.yzw : bracketMax.yzw;
+	bracketMax.yzw = tapMin.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapA0.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapA0.yzw : bracketMax.yzw;
+	bracketMax.yzw = corner.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapMin.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapMin.yzw : bracketMax.yzw;
+	mergeScratch.yzw = sampleUV.www ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(corner.w < mergeScratch.w);
+	bracketMinReg.yzw = tapB1.xxx ? corner.yzw : mergeScratch.yzw;
+	tapB1.x = cmp(-0.00100000005 < centerMeta.x);
+	bracketMax.yzw = tapB1.xxx ? centerMeta.yzx : float3(-0.00100000005, -0.00100000005, -0.00100000005);
+	bracketMax.xyz = bracketMax.xxx ? bracketMax.yzw : float3(-0.00100000005, -0.00100000005, -0.00100000005);
+	tapB1.x = cmp(bracketMax.z < tapC1.w);
+	tapC1.xyz = tapB1.xxx ? tapC1.yzw : bracketMax.xyz;
+	tapC1.xyz = center.xxx ? tapC1.xyz : bracketMax.xyz;
 
 	// --- flicker score from neighbor luma spread ---
-	r11.x = FlickerLumaContribution(r15.x, r13.w);
-	r12.x = cmp(r13.z < r12.w);
-	r12.xyz = r12.xxx ? r12.yzw : r13.xyz;
-	r12.xyz = r10.xxx ? r12.xyz : r13.xyz;
-	r10.x = FlickerLumaContribution(r15.x, r12.w);
-	r12.w = cmp(r12.z < r11.w);
-	r13.xyz = r12.www ? r11.yzw : r12.xyz;
-	r12.xyz = r9.xxx ? r13.xyz : r12.xyz;
-	r9.x = FlickerLumaContribution(r15.x, r11.w);
-	r11.y = cmp(r12.z < r10.w);
-	r11.yzw = r11.yyy ? r10.yzw : r12.xyz;
-	r11.yzw = r6.xxx ? r11.yzw : r12.xyz;
-	r6.x = FlickerLumaContribution(r15.x, r10.w);
-	r10.y = cmp(r11.w < r9.w);
-	r10.yzw = r10.yyy ? r9.yzw : r11.yzw;
-	r10.yzw = r4.xxx ? r10.yzw : r11.yzw;
-	r4.x = FlickerLumaContribution(r15.x, r9.w);
-	r9.y = cmp(r10.w < r6.w);
-	r9.yzw = r9.yyy ? r6.yzw : r10.yzw;
-	r9.yzw = r3.xxx ? r9.yzw : r10.yzw;
-	r3.x = FlickerLumaContribution(r15.x, r6.w);
-	r6.y = cmp(r9.w < r4.w);
-	r6.yzw = r6.yyy ? r4.yzw : r9.yzw;
-	r6.yzw = r1.www ? r6.yzw : r9.yzw;
-	r1.w = FlickerLumaContribution(r15.x, r4.w);
-	r19.x = r6.z;
-	r4.y = cmp(r6.w < r3.w);
-	r4.yzw = r4.yyy ? r3.yzw : r6.yzw;
-	r12.xw = r0.yy ? r4.yw : r6.yw;
-	r18.x = r4.z;
-	r13.xyzw = r0.yyyy ? r18.xyzw : r19.xyzw;
-	r0.y = FlickerLumaContribution(r15.x, r3.w);
-	r0.y = 4 + -r0.y;
-	r0.y = r0.y + -r1.w;
-	r0.y = r0.y + -r3.x;
-	r0.y = r0.y + -r4.x;
-	r0.y = r0.y + -r6.x;
-	r0.y = r0.y + -r9.x;
-	r0.y = r0.y + -r10.x;
-	r0.y = saturate(r0.y + -r11.x);
+	tapB1.x = FlickerLumaContribution(centerMeta.x, tapC1.w);
+	tapC0.x = cmp(tapC1.z < tapC0.w);
+	tapC0.xyz = tapC0.xxx ? tapC0.yzw : tapC1.xyz;
+	tapC0.xyz = tapB0.xxx ? tapC0.xyz : tapC1.xyz;
+	tapB0.x = FlickerLumaContribution(centerMeta.x, tapC0.w);
+	tapC0.w = cmp(tapC0.z < tapB1.w);
+	tapC1.xyz = tapC0.www ? tapB1.yzw : tapC0.xyz;
+	tapC0.xyz = tapA1.xxx ? tapC1.xyz : tapC0.xyz;
+	tapA1.x = FlickerLumaContribution(centerMeta.x, tapB1.w);
+	tapB1.y = cmp(tapC0.z < tapB0.w);
+	tapB1.yzw = tapB1.yyy ? tapB0.yzw : tapC0.xyz;
+	tapB1.yzw = tapA0.xxx ? tapB1.yzw : tapC0.xyz;
+	tapA0.x = FlickerLumaContribution(centerMeta.x, tapB0.w);
+	tapB0.y = cmp(tapB1.w < tapA1.w);
+	tapB0.yzw = tapB0.yyy ? tapA1.yzw : tapB1.yzw;
+	tapB0.yzw = tapMin.xxx ? tapB0.yzw : tapB1.yzw;
+	tapMin.x = FlickerLumaContribution(centerMeta.x, tapA1.w);
+	tapA1.y = cmp(tapB0.w < tapA0.w);
+	tapA1.yzw = tapA1.yyy ? tapA0.yzw : tapB0.yzw;
+	tapA1.yzw = corner.xxx ? tapA1.yzw : tapB0.yzw;
+	corner.x = FlickerLumaContribution(centerMeta.x, tapA0.w);
+	tapA0.y = cmp(tapA1.w < tapMin.w);
+	tapA0.yzw = tapA0.yyy ? tapMin.yzw : tapA1.yzw;
+	tapA0.yzw = sampleUV.www ? tapA0.yzw : tapA1.yzw;
+	sampleUV.w = FlickerLumaContribution(centerMeta.x, tapMin.w);
+	bracketMinReg.x = tapA0.z;
+	tapMin.y = cmp(tapA0.w < corner.w);
+	tapMin.yzw = tapMin.yyy ? corner.yzw : tapA0.yzw;
+	tapC0.xw = motionReject.yy ? tapMin.yw : tapA0.yw;
+	mergeScratch.x = tapMin.z;
+	tapC1.xyzw = motionReject.yyyy ? mergeScratch.xyzw : bracketMinReg.xyzw;
+	motionReject.y = FlickerLumaContribution(centerMeta.x, corner.w);
+	motionReject.y = 4 + -motionReject.y;
+	motionReject.y = motionReject.y + -sampleUV.w;
+	motionReject.y = motionReject.y + -corner.x;
+	motionReject.y = motionReject.y + -tapMin.x;
+	motionReject.y = motionReject.y + -tapA0.x;
+	motionReject.y = motionReject.y + -tapA1.x;
+	motionReject.y = motionReject.y + -tapB0.x;
+	motionReject.y = saturate(motionReject.y + -tapB1.x);
 
 	// --- temporal blend, clamp, and sharpen ---
-	r1.w = cmp(1 < r13.w);
-	r3.x = -r13.y * 0.25 + r13.w;
-	r3.x = -r13.z * 0.25 + r3.x;
-	r3.y = r3.x + r3.x;
-	r12.z = r13.x;
-	r3.xzw = r13.yzw;
-	r4.x = -r12.x * 0.25 + r12.w;
-	r4.x = -r13.x * 0.25 + r4.x;
-	r12.y = r4.x + r4.x;
-	r4.x = cmp(r12.w < 0);
-	r4.xyzw = r4.xxxx ? r3.xyzw : r12.xyzw;
-	r6.xyzw = r1.wwww ? r4.xyzw : r3.xyzw;
-	r1.w = max(r4.w, r2.x);
-	r9.x = min(r1.w, r6.w);
-	r9.z = r6.w;
-	r9.y = r4.w;
-	r10.z = r3.w;
-	r10.x = r2.x;
-	r10.y = r12.w;
-	r1.w = 0.949999988 * r2.y;
-	r0.y = saturate(r0.y * 0.25 + r1.w);
-	r1.w = cmp(r0.y < 0.902499974);
-	r2.xyz = r1.www ? r9.xyz : r10.xyz;
-	r2.yz = r2.zx + -r2.yy;
-	r3.w = cmp(0.00999999978 < r2.y);
-	r2.y = r2.z / r2.y;
-	r2.y = r3.w ? r2.y : 0.5;
-	r4.xyz = r1.www ? r4.xyz : r12.xyz;
-	r3.xyz = r1.www ? r6.xyz : r3.xyz;
-	r3.xyz = r3.xyz + -r4.xyz;
-	r3.xyz = r2.yyy * r3.xyz + r4.xyz;
+	sampleUV.w = cmp(1 < tapC1.w);
+	corner.x = -tapC1.y * 0.25 + tapC1.w;
+	corner.x = -tapC1.z * 0.25 + corner.x;
+	corner.y = corner.x + corner.x;
+	tapC0.z = tapC1.x;
+	corner.xzw = tapC1.yzw;
+	tapMin.x = -tapC0.x * 0.25 + tapC0.w;
+	tapMin.x = -tapC1.x * 0.25 + tapMin.x;
+	tapC0.y = tapMin.x + tapMin.x;
+	tapMin.x = cmp(tapC0.w < 0);
+	tapMin.xyzw = tapMin.xxxx ? corner.xyzw : tapC0.xyzw;
+	tapA0.xyzw = sampleUV.wwww ? tapMin.xyzw : corner.xyzw;
+	sampleUV.w = max(tapMin.w, history.x);
+	tapA1.x = min(sampleUV.w, tapA0.w);
+	tapA1.z = tapA0.w;
+	tapA1.y = tapMin.w;
+	tapB0.z = corner.w;
+	tapB0.x = history.x;
+	tapB0.y = tapC0.w;
+	sampleUV.w = 0.949999988 * history.y;
+	motionReject.y = saturate(motionReject.y * 0.25 + sampleUV.w);
+	sampleUV.w = cmp(motionReject.y < 0.902499974);
+	history.xyz = sampleUV.www ? tapA1.xyz : tapB0.xyz;
+	history.yz = history.zx + -history.yy;
+	corner.w = cmp(0.00999999978 < history.y);
+	history.y = history.z / history.y;
+	history.y = corner.w ? history.y : 0.5;
+	tapMin.xyz = sampleUV.www ? tapMin.xyz : tapC0.xyz;
+	corner.xyz = sampleUV.www ? tapA0.xyz : corner.xyz;
+	corner.xyz = corner.xyz + -tapMin.xyz;
+	corner.xyz = history.yyy * corner.xyz + tapMin.xyz;
 
 	// --- disocclusion / mask rejection ---
-	// r0.zw still holds reprojected UV from motion pass; r0.x = motion length
-	r1.w = min(r0.z, r0.w);
-	r0.zw = cmp(r0.zw >= float2(1, 1));
-	r1.w = cmp(0 >= r1.w);
-	r0.z = (int)r0.z | (int)r1.w;
-	r0.z = (int)r0.w | (int)r0.z;
-	r2.yz = maskTex.Sample(maskSampler, r1.xy).xy;
-	r0.w = AlphaCoverageMask(r1.xy);
-	r1.x = cmp(ThresholdParams.w < r2.z);
-	r0.z = (int)r0.z | (int)r1.x;
-	r1.xyw = r0.zzz ? r14.yzw : r3.xyz;
-	r15.w = 0;
-	r2.xw = r0.zz ? r15.xw : r2.xw;
-	r3.xyz = r0.zzz ? r14.yzw : r17.xyz;
-	r4.xyz = r14.yzw + -r3.xyz;
-	r0.z = 128 * TexelSizeParams.x;
-	r6.z = saturate(r0.x / r0.z);
-	r0.x = r6.z + -r2.w;
-	r0.z = r2.x + -r15.x;
-	r2.xw = -abs(r0.xx) * float2(20, 100) + float2(1, 1);
-	r2.xw = max(float2(0, 0), r2.xw);
-	r4.yzw = r2.xxx * r4.xyz + r3.xyz;
-	r1.xyw = -r4.yzw + r1.xyw;
-	r0.x = BlendParams.x + -BlendParams.y;
-	r0.x = r6.z * r0.x + BlendParams.y;
-	r0.x = min(r0.x, r2.x);
-	r6.y = r2.w * r0.y;
-	r0.y = 0.99000001 + -r0.x;
-	r0.x = r6.y * r0.y + r0.x;
-	feedbackOut.yz = r6.yz;
+	// motionReject.zw still holds reprojected UV from motion pass; motionReject.x = motion length
+	sampleUV.w = min(motionReject.z, motionReject.w);
+	motionReject.zw = cmp(motionReject.zw >= float2(1, 1));
+	sampleUV.w = cmp(0 >= sampleUV.w);
+	motionReject.z = (int)motionReject.z | (int)sampleUV.w;
+	motionReject.z = (int)motionReject.w | (int)motionReject.z;
+	history.yz = maskTex.Sample(maskSampler, sampleUV.xy).xy;
+	motionReject.w = AlphaCoverageMask(sampleUV.xy);
+	sampleUV.x = cmp(ThresholdParams.w < history.z);
+	motionReject.z = (int)motionReject.z | (int)sampleUV.x;
+	sampleUV.xyw = motionReject.zzz ? center.yzw : corner.xyz;
+	centerMeta.w = 0;
+	history.xw = motionReject.zz ? centerMeta.xw : history.xw;
+	corner.xyz = motionReject.zzz ? center.yzw : weightedColor.xyz;
+	tapMin.xyz = center.yzw + -corner.xyz;
+	motionReject.z = 128 * TexelSizeParams.x;
+	tapA0.z = saturate(motionReject.x / motionReject.z);
+	motionReject.x = tapA0.z + -history.w;
+	motionReject.z = history.x + -centerMeta.x;
+	history.xw = -abs(motionReject.xx) * float2(20, 100) + float2(1, 1);
+	history.xw = max(float2(0, 0), history.xw);
+	tapMin.yzw = history.xxx * tapMin.xyz + corner.xyz;
+	sampleUV.xyw = -tapMin.yzw + sampleUV.xyw;
+	motionReject.x = BlendParams.x + -BlendParams.y;
+	motionReject.x = tapA0.z * motionReject.x + BlendParams.y;
+	motionReject.x = min(motionReject.x, history.x);
+	tapA0.y = history.w * motionReject.y;
+	motionReject.y = 0.99000001 + -motionReject.x;
+	motionReject.x = tapA0.y * motionReject.y + motionReject.x;
+	feedbackOut.yz = tapA0.yz;
 #	ifdef HDR_OUTPUT
-	r1.xyw = (r0.xxx * r1.xyw + r4.yzw);
+	sampleUV.xyw = (motionReject.xxx * sampleUV.xyw + tapMin.yzw);
 #	else
-	r1.xyw = saturate(r0.xxx * r1.xyw + r4.yzw);
+	sampleUV.xyw = saturate(motionReject.xxx * sampleUV.xyw + tapMin.yzw);
 #	endif
 
-	r6.xyz = r1.xyw + -r3.xyz;
+	tapA0.xyz = sampleUV.xyw + -corner.xyz;
 #	ifdef HDR_OUTPUT
-	r1.xyw = (r6.xyz * BlendParams.zzz + r1.xyw);
+	sampleUV.xyw = (tapA0.xyz * BlendParams.zzz + sampleUV.xyw);
 #	else
-	r1.xyw = saturate(r6.xyz * BlendParams.zzz + r1.xyw);
+	sampleUV.xyw = saturate(tapA0.xyz * BlendParams.zzz + sampleUV.xyw);
 #	endif
 
-	r3.xyz = r3.xyz + -r1.xyw;
+	corner.xyz = corner.xyz + -sampleUV.xyw;
 #	ifdef HDR_OUTPUT
-	r3.yzw = (BlendParams.www * r3.xyz + r1.xyw);
+	corner.yzw = (BlendParams.www * corner.xyz + sampleUV.xyw);
 #	else
-	r3.yzw = saturate(BlendParams.www * r3.xyz + r1.xyw);
+	corner.yzw = saturate(BlendParams.www * corner.xyz + sampleUV.xyw);
 #	endif
 
-	r0.y = r0.x * r0.z + r15.x;
-	r0.x = r0.x * r0.z;
-	r0.x = cmp(abs(r0.x) < 0.00999999978);
-	r3.x = r0.x ? r15.x : r0.y;
-	r4.x = dot(r4.zwy, kLumaWeights);
+	motionReject.y = motionReject.x * motionReject.z + centerMeta.x;
+	motionReject.x = motionReject.x * motionReject.z;
+	motionReject.x = cmp(abs(motionReject.x) < 0.00999999978);
+	corner.x = motionReject.x ? centerMeta.x : motionReject.y;
+	tapMin.x = dot(tapMin.zwy, kLumaWeights);
 
 	// --- alpha-aware output ---
-	r0.x = AlphaCoverageMask(r5.xy);
-	r0.y = AlphaCoverageMask(r5.zw);
-	r0.x = r0.x ? r1.z : 0;
-	r0.x = r0.y ? r0.x : 0;
-	r0.y = AlphaCoverageMask(r7.xy);
-	r0.z = AlphaCoverageMask(r7.zw);
-	r0.x = r0.y ? r0.x : 0;
-	r0.x = r0.z ? r0.x : 0;
-	r0.y = AlphaCoverageMask(r8.xy);
-	r0.z = AlphaCoverageMask(r8.zw);
-	r0.x = r0.y ? r0.x : 0;
-	r0.x = r0.z ? r0.x : 0;
-	r0.x = r0.w ? r0.x : 0;
-	r0.y = cmp(ThresholdParams.w >= r2.y);
-	r0.z = 1 + -r2.z;
-	r0.x = r0.y ? r0.x : 0;
-	r1.xyzw = r0.xxxx ? r4.xyzw : r3.xyzw;
-	colorOut.xyz = r1.yzw;
+	motionReject.x = AlphaCoverageMask(drNeighborsA.xy);
+	motionReject.y = AlphaCoverageMask(drNeighborsA.zw);
+	motionReject.x = motionReject.x ? sampleUV.z : 0;
+	motionReject.x = motionReject.y ? motionReject.x : 0;
+	motionReject.y = AlphaCoverageMask(drNeighborsB.xy);
+	motionReject.z = AlphaCoverageMask(drNeighborsB.zw);
+	motionReject.x = motionReject.y ? motionReject.x : 0;
+	motionReject.x = motionReject.z ? motionReject.x : 0;
+	motionReject.y = AlphaCoverageMask(drNeighborsC.xy);
+	motionReject.z = AlphaCoverageMask(drNeighborsC.zw);
+	motionReject.x = motionReject.y ? motionReject.x : 0;
+	motionReject.x = motionReject.z ? motionReject.x : 0;
+	motionReject.x = motionReject.w ? motionReject.x : 0;
+	motionReject.y = cmp(ThresholdParams.w >= history.y);
+	motionReject.z = 1 + -history.z;
+	motionReject.x = motionReject.y ? motionReject.x : 0;
+	sampleUV.xyzw = motionReject.xxxx ? tapMin.xyzw : corner.xyzw;
+	colorOut.xyz = sampleUV.yzw;
 #	ifdef HDR_OUTPUT
-	feedbackOut.x = (r1.x * r0.z);
+	feedbackOut.x = (sampleUV.x * motionReject.z);
 #	else
-	feedbackOut.x = saturate(r1.x * r0.z);
+	feedbackOut.x = saturate(sampleUV.x * motionReject.z);
 #	endif
 	colorOut.w = 1;
 	feedbackOut.w = 1;
