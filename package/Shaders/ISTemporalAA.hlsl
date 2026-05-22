@@ -1,5 +1,4 @@
 #include "Common/Color.hlsli"
-#include "Common/DisplayMapping.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 
@@ -88,7 +87,7 @@ float3 LoadNeighborGRB(float2 uv)
 {
 	float3 grb = currentFrameTex.Sample(currentFrameSampler, uv).yxz;
 #	ifdef HDR_OUTPUT
-	grb.yxz = DisplayMapping::ConvertGameToPQ(grb.yxz);
+	grb.yxz = Color::BT709ToBT2020(Color::GammaToLinearSafe(grb.yxz));
 #	endif
 	return grb;
 }
@@ -119,7 +118,7 @@ float3 SampleCenterRGB(float2 uv)
 {
 	float3 rgb = currentFrameTex.Sample(currentFrameSampler, uv).xyz;
 #	ifdef HDR_OUTPUT
-	rgb = DisplayMapping::ConvertGameToPQ(rgb);
+	rgb = Color::BT709ToBT2020(Color::GammaToLinearSafe(rgb));
 #	endif
 	return rgb;
 }
@@ -263,11 +262,13 @@ PS_OUTPUT main(PS_INPUT input)
 	bracketMax.x = cmp(centerMeta.x < history.x);
 	centerMeta.yz = center.yw;
 	// removing this causes flickering on high contrast edges
-	// flickering is even stronger when removing it in PQ
-	// won't matter in PQ as 1.0 is already 10k nits
 	bracketMax.y = cmp(centerMeta.x < 1.00100005);
 	bracketMax.yzw = bracketMax.yyy ? centerMeta.yzx : float3(1.00100005, 1.00100005, 1.00100005);
 	bracketMax.yzw = bracketMax.xxx ? float3(1.00100005, 1.00100005, 1.00100005) : bracketMax.yzw;
+#	ifdef HDR_OUTPUT
+	// Linear HDR: vanilla 1.001 stabilizes grass; sun/sky (luma >= 1) need center color or ramps go grey.
+	bracketMax.yzw = cmp(1.0 <= centerMeta.x).xxx ? centerMeta.yzx : bracketMax.yzw;
+#	endif
 
 	weightedColor.x = cmp(tapC1.w < bracketMax.w);
 	weightedColor.xyz = weightedColor.xxx ? tapC1.yzw : bracketMax.yzw;
@@ -472,7 +473,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	ifdef HDR_OUTPUT
 	feedbackOut.x = max(0, feedbackOut.x);
-	colorOut.xyz = DisplayMapping::ConvertPQToGame(colorOut.xyz);
+	colorOut.xyz = Color::LinearToGammaSafe(Color::BT2020ToBT709(colorOut.xyz));
 #	endif
 
 	psout.Color = colorOut;
