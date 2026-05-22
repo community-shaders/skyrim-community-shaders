@@ -152,7 +152,6 @@ public:
 	ID3D11RenderTargetView* savedRTV = nullptr;
 	ID3D11DepthStencilView* savedDSV = nullptr;
 	ID3D11RenderTargetView* savedFramebufferRTV = nullptr;  // Original kFRAMEBUFFER.RTV for restoration
-	std::unordered_map<ID3D11BlendState*, winrt::com_ptr<ID3D11BlendState>> patchedBlendStateCache;
 
 	// Saved kFRAMEBUFFER state for HDR redirect (ISHDR writes to hdrTexture instead)
 	ID3D11Texture2D* savedFramebufferTexture = nullptr;
@@ -177,6 +176,7 @@ private:
 	bool showHDRWarningPopup = false;
 	bool pendingHDREnable = false;
 	bool presentSuppressed = false;
+	std::unordered_map<ID3D11BlendState*, winrt::com_ptr<ID3D11BlendState>> patchedBlendStateCache;
 
 	HRESULT PresentToSwapChain(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags);
 	void DrawImGuiForPresent(bool frameGenActive, bool hdrReady);

@@ -454,6 +454,8 @@ namespace Hooks
 			globals::ReInit();
 
 			logger::info("Detouring virtual function tables");
+			// InstallSwapChainPresentHooks installs SwapChainPresentBottom (suppression) and OMSetBlendState first.
+			// IDXGISwapChain_Present is installed last so it sits at the top of the Detours chain and fires first.
 			HDRDisplay::InstallSwapChainPresentHooks(globals::d3d::swapChain);
 			stl::detour_vfunc<8, IDXGISwapChain_Present>(globals::d3d::swapChain);
 

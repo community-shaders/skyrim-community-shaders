@@ -1076,16 +1076,17 @@ HRESULT HDRDisplay::RunPresentChainWithHDR(
 {
 	if (UsesDeferredPresentComposite()) {
 		SyncFramebufferUIRedirect();
-		HRESULT retval;
 		{
 			PresentSuppressionScope suppress;
-			retval = presentChain(swapChain, syncInterval, flags);
+			const HRESULT suppressedResult = presentChain(swapChain, syncInterval, flags);
+			if (FAILED(suppressedResult))
+				logger::warn("Suppressed presentChain returned {:08X} (expected S_OK)", static_cast<unsigned>(suppressedResult));
 		}
 
 		ID3D11RenderTargetView* nullRTV = nullptr;
 		globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
 		ApplyHDR();
-		retval = PresentToSwapChain(swapChain, syncInterval, flags);
+		const HRESULT retval = PresentToSwapChain(swapChain, syncInterval, flags);
 		ClearUIBuffer();
 		return retval;
 	}
