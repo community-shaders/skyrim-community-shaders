@@ -53,22 +53,6 @@ static const float3 kLumaWeights = float3(0.5, 0.25, 0.25);
  * Registers are float4 packs — names are semantic but components reuse like the decompile.
  */
 
-#ifdef HDR_OUTPUT
-float3 ConvertRenderInput(float3 gammaColor)
-{
-	float3 linearColor = Color::GammaToLinearSafe(gammaColor);
-	linearColor = Color::BT709ToBT2020(linearColor);
-	return DisplayMapping::LinearToPQ(linearColor, 10000.0);
-}
-
-float3 ConvertRenderOutput(float3 pqColor)
-{
-	float3 linearColor = DisplayMapping::PQtoLinear(pqColor, 10000.0);
-	linearColor = Color::BT2020ToBT709(linearColor);
-	return Color::LinearToGammaSafe(linearColor);
-}
-#endif
-
 float2 ClampScreenUV(float2 screenUV, float2 drMax)
 {
 	return min(max(FrameBuffer::DynamicResolutionParams1.xy * screenUV, float2(0, 0)), drMax);
@@ -104,7 +88,7 @@ float3 LoadNeighborGRB(float2 uv)
 {
 	float3 grb = currentFrameTex.Sample(currentFrameSampler, uv).yxz;
 #	ifdef HDR_OUTPUT
-	grb.yxz = ConvertRenderInput(grb.yxz);
+	grb.yxz = DisplayMapping::ConvertGameToPQ(grb.yxz);
 #	endif
 	return grb;
 }
@@ -135,7 +119,7 @@ float3 SampleCenterRGB(float2 uv)
 {
 	float3 rgb = currentFrameTex.Sample(currentFrameSampler, uv).xyz;
 #	ifdef HDR_OUTPUT
-	rgb = ConvertRenderInput(rgb);
+	rgb = DisplayMapping::ConvertGameToPQ(rgb);
 #	endif
 	return rgb;
 }
@@ -163,6 +147,7 @@ float2 SelectDepthGuidedUV(
 	float2 texCoord,
 	float2 drMax,
 	out float2 drUVMin,
+	out float2 drUVMax,
 	out float2 drCenter,
 	out float4 drNeighborsA,
 	out float4 drNeighborsB,
@@ -172,7 +157,7 @@ float2 SelectDepthGuidedUV(
 	float2 uvMin = -TexelOffset.xy + texCoord;
 	float2 uvMax = TexelOffset.xy + texCoord;
 
-	float2 drUVMax = ClampScreenUV(uvMax, drMax);
+	drUVMax = ClampScreenUV(uvMax, drMax);
 	float depthMaxCorner = depthTex.Sample(depthSampler, drUVMax).x;
 	cornerColorGRB = LoadNeighborGRB(drUVMax);
 
@@ -231,13 +216,14 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 tapA0, tapA1, tapB0, tapB1, tapC0, tapC1;       // was r6–r13
 	float4 center, centerMeta, bracketMax, weightedColor, mergeScratch, bracketMinReg; // was r14–r19
 
-	float2 drMax = GetDynamicResolutionMax(), drUVMin, drCenter;
+	float2 drMax = GetDynamicResolutionMax(), drUVMin, drUVMax, drCenter;
 	float4 drNeighborsA, drNeighborsB, drNeighborsC;
 
 	motionReject.xy = SelectDepthGuidedUV(
 		texCoord,
 		drMax,
 		drUVMin,
+		drUVMax,
 		drCenter,
 		drNeighborsA,
 		drNeighborsB,
@@ -464,6 +450,8 @@ PS_OUTPUT main(PS_INPUT input)
 	motionReject.z = AlphaCoverageMask(drNeighborsC.zw);
 	motionReject.x = motionReject.y ? motionReject.x : 0;
 	motionReject.x = motionReject.z ? motionReject.x : 0;
+	motionReject.y = AlphaCoverageMask(drUVMax);
+	motionReject.x = motionReject.y ? motionReject.x : 0;
 	motionReject.x = motionReject.w ? motionReject.x : 0;
 	motionReject.y = cmp(ThresholdParams.w >= history.y);
 	motionReject.z = 1 + -history.z;
@@ -484,7 +472,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	ifdef HDR_OUTPUT
 	feedbackOut.x = max(0, feedbackOut.x);
-	colorOut.xyz = ConvertRenderOutput(colorOut.xyz);
+	colorOut.xyz = DisplayMapping::ConvertPQToGame(colorOut.xyz);
 #	endif
 
 	psout.Color = colorOut;
