@@ -94,6 +94,60 @@ float2 GetDynamicResolutionMax()
 	return float2(FrameBuffer::DynamicResolutionParams2.z, FrameBuffer::DynamicResolutionParams1.y);
 }
 
+// Neighbour tap: .yxz sample; luma via dot(.xzy, kLumaWeights). See channel-layout comment above.
+struct ISTAA_NeighborTap
+{
+	float3 grb;
+	float luma;
+	float belowHist;
+};
+
+float3 LoadNeighborGRB(float2 uv)
+{
+	float3 grb = currentFrameTex.Sample(currentFrameSampler, uv).yxz;
+#	ifdef HDR_OUTPUT
+	grb.yxz = ConvertRenderInput(grb.yxz);
+#	endif
+	return grb;
+}
+
+ISTAA_NeighborTap SampleNeighborGRB(float2 uv, float historyLuma)
+{
+	ISTAA_NeighborTap tap;
+	tap.grb = LoadNeighborGRB(uv);
+	tap.luma = dot(tap.grb.xzy, kLumaWeights);
+	tap.belowHist = cmp(tap.luma < historyLuma);
+	return tap;
+}
+
+// Centre tap: .xyz sample into .yzw layout; luma via dot(.zwy, kLumaWeights).
+float3 SampleCenterRGB(float2 uv)
+{
+	float3 rgb = currentFrameTex.Sample(currentFrameSampler, uv).xyz;
+#	ifdef HDR_OUTPUT
+	rgb = ConvertRenderInput(rgb);
+#	endif
+	return rgb;
+}
+
+float AlphaCoverageMask(float2 uv)
+{
+	return cmp(0 < alphaTex.Sample(alphaSampler, uv).z);
+}
+
+float FlickerLumaContribution(float centerLuma, float neighborLuma)
+{
+	float d = centerLuma + -neighborLuma;
+	d = 0.200000003 + -abs(d);
+	return ceil(d);
+}
+
+// shallowestDepth must already include depth before calling.
+float2 PickIfShallowestUV(float2 selectedUV, float shallowestDepth, float depth, float2 uvIfMatch)
+{
+	return cmp(shallowestDepth == depth) ? uvIfMatch : selectedUV;
+}
+
 // Pick the shallowest-depth UV in the 3x3 neighbourhood (outputs clamped DR UV sets for later taps).
 float2 SelectDepthGuidedUV(
 	float2 texCoord,
@@ -110,10 +164,7 @@ float2 SelectDepthGuidedUV(
 
 	float2 drUVMax = ClampScreenUV(uvMax, drMax);
 	float depthMaxCorner = depthTex.Sample(depthSampler, drUVMax).x;
-	cornerColorGRB = currentFrameTex.Sample(currentFrameSampler, drUVMax).yxz;
-#	ifdef HDR_OUTPUT
-	cornerColorGRB.yxz = ConvertRenderInput(cornerColorGRB.yxz);
-#	endif
+	cornerColorGRB = LoadNeighborGRB(drUVMax);
 
 	float4 neighborsA = TexelOffset.xyxy * float4(1, -1, 1, 0) + texCoord.xyxy;
 	drNeighborsA = ClampScreenUV4(neighborsA, drMax);
@@ -124,9 +175,8 @@ float2 SelectDepthGuidedUV(
 	float depthMinCorner = depthTex.Sample(depthSampler, drUVMin).x;
 	shallowestDepth = min(depthMinCorner, shallowestDepth);
 
-	float2 selectedUV = cmp(shallowestDepth == depthMinCorner) ? uvMin : uvMax;
-	float pickA0 = cmp(shallowestDepth == depthA0);
-	selectedUV = pickA0 ? neighborsA.xy : selectedUV;
+	float2 selectedUV = PickIfShallowestUV(uvMax, shallowestDepth, depthMinCorner, uvMin);
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthA0, neighborsA.xy);
 
 	float4 neighborsB = TexelOffset.xyxy * float4(0, -1, -1, 1) + texCoord.xyxy;
 	drNeighborsB = ClampScreenUV4(neighborsB, drMax);
@@ -135,10 +185,8 @@ float2 SelectDepthGuidedUV(
 	float depthA1 = depthTex.Sample(depthSampler, drNeighborsA.zw).x;
 	shallowestDepth = min(depthA1, shallowestDepth);
 
-	float pickA1 = cmp(shallowestDepth == depthA1);
-	selectedUV = pickA1 ? neighborsA.zw : selectedUV;
-	float pickB0 = cmp(shallowestDepth == depthB0);
-	selectedUV = pickB0 ? neighborsB.xy : selectedUV;
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthA1, neighborsA.zw);
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthB0, neighborsB.xy);
 
 	float4 neighborsC = TexelOffset.xyxy * float4(-1, 0, 0, 1) + texCoord.xyxy;
 	drNeighborsC = ClampScreenUV4(neighborsC, drMax);
@@ -147,10 +195,8 @@ float2 SelectDepthGuidedUV(
 	float depthB1 = depthTex.Sample(depthSampler, drNeighborsB.zw).x;
 	shallowestDepth = min(depthB1, shallowestDepth);
 
-	float pickB1 = cmp(shallowestDepth == depthB1);
-	selectedUV = pickB1 ? neighborsB.zw : selectedUV;
-	float pickC0 = cmp(shallowestDepth == depthC0);
-	selectedUV = pickC0 ? neighborsC.xy : selectedUV;
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthB1, neighborsB.zw);
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthC0, neighborsC.xy);
 
 	drCenter = ClampScreenUV(texCoord, drMax);
 	float depthCenter = depthTex.Sample(depthSampler, drCenter).x;
@@ -158,10 +204,8 @@ float2 SelectDepthGuidedUV(
 	float depthC1 = depthTex.Sample(depthSampler, drNeighborsC.zw).x;
 	shallowestDepth = min(depthC1, shallowestDepth);
 
-	float pickC1 = cmp(shallowestDepth == depthC1);
-	selectedUV = pickC1 ? neighborsC.zw : selectedUV;
-	float pickCenter = cmp(shallowestDepth == depthCenter);
-	selectedUV = pickCenter ? texCoord : selectedUV;
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthC1, neighborsC.zw);
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthCenter, texCoord);
 
 	return selectedUV;
 }
@@ -211,62 +255,51 @@ PS_OUTPUT main(PS_INPUT input)
 	r8 = drNeighborsC;
 	r1.xy = drCenter;
 
-	r4.xyz = currentFrameTex.Sample(currentFrameSampler, r1.zw).yxz;
-#	ifdef HDR_OUTPUT
-	r4.yxz = ConvertRenderInput(r4.yxz);
-#	endif
+	{
+		ISTAA_NeighborTap tap = SampleNeighborGRB(r1.zw, r2.x);
+		r4.xyz = tap.grb;
+		r1.z = AlphaCoverageMask(r1.zw);
+		r4.w = tap.luma;
+		r1.w = tap.belowHist;
+	}
 
-	r1.z = alphaTex.Sample(alphaSampler, r1.zw).z;
-	r1.z = cmp(0 < r1.z);
-	r4.w = dot(r4.xzy, kLumaWeights);
-	r1.w = cmp(r4.w < r2.x);
+	{
+		ISTAA_NeighborTap tap = SampleNeighborGRB(r5.xy, r2.x);
+		r6 = float4(tap.grb, tap.luma);
+		r3.x = tap.belowHist;
+	}
 
-	r6.xyz = currentFrameTex.Sample(currentFrameSampler, r5.xy).yxz;
-#	ifdef HDR_OUTPUT
-	r6.yxz = ConvertRenderInput(r6.yxz);
-#	endif
-	r6.w = dot(r6.xzy, kLumaWeights);
-	r3.x = cmp(r6.w < r2.x);
+	{
+		ISTAA_NeighborTap tap = SampleNeighborGRB(r5.zw, r2.x);
+		r9 = float4(tap.grb, tap.luma);
+		r4.x = tap.belowHist;
+	}
 
-	r9.xyz = currentFrameTex.Sample(currentFrameSampler, r5.zw).yxz;
-#	ifdef HDR_OUTPUT
-	r9.yxz = ConvertRenderInput(r9.yxz);
-#	endif
-	r9.w = dot(r9.xzy, kLumaWeights);
-	r4.x = cmp(r9.w < r2.x);
+	{
+		ISTAA_NeighborTap tap = SampleNeighborGRB(r7.xy, r2.x);
+		r10 = float4(tap.grb, tap.luma);
+		r6.x = tap.belowHist;
+	}
 
-	r10.xyz = currentFrameTex.Sample(currentFrameSampler, r7.xy).yxz;
-#	ifdef HDR_OUTPUT
-	r10.yxz = ConvertRenderInput(r10.yxz);
-#	endif
-	r10.w = dot(r10.xzy, kLumaWeights);
-	r6.x = cmp(r10.w < r2.x);
+	{
+		ISTAA_NeighborTap tap = SampleNeighborGRB(r7.zw, r2.x);
+		r11 = float4(tap.grb, tap.luma);
+		r9.x = tap.belowHist;
+	}
 
-	r11.xyz = currentFrameTex.Sample(currentFrameSampler, r7.zw).yxz;
-#	ifdef HDR_OUTPUT
-	r11.yxz = ConvertRenderInput(r11.yxz);
-#	endif
-	r11.w = dot(r11.xzy, kLumaWeights);
-	r9.x = cmp(r11.w < r2.x);
+	{
+		ISTAA_NeighborTap tap = SampleNeighborGRB(r8.xy, r2.x);
+		r12 = float4(tap.grb, tap.luma);
+		r10.x = tap.belowHist;
+	}
 
-	r12.xyz = currentFrameTex.Sample(currentFrameSampler, r8.xy).yxz;
-#	ifdef HDR_OUTPUT
-	r12.yxz = ConvertRenderInput(r12.yxz);
-#	endif
-	r12.w = dot(r12.xzy, kLumaWeights);
-	r10.x = cmp(r12.w < r2.x);
+	{
+		ISTAA_NeighborTap tap = SampleNeighborGRB(r8.zw, r2.x);
+		r13 = float4(tap.grb, tap.luma);
+		r14.x = tap.belowHist;
+	}
 
-	r13.xyz = currentFrameTex.Sample(currentFrameSampler, r8.zw).yxz;
-#	ifdef HDR_OUTPUT
-	r13.yxz = ConvertRenderInput(r13.yxz);
-#	endif
-	r13.w = dot(r13.xzy, kLumaWeights);
-	r14.x = cmp(r13.w < r2.x);
-
-	r14.yzw = currentFrameTex.Sample(currentFrameSampler, r1.xy).xyz;
-#	ifdef HDR_OUTPUT
-	r14.yzw = ConvertRenderInput(r14.yzw);
-#	endif
+	r14.yzw = SampleCenterRGB(r1.xy);
 
 	// --- centre bracket seed, neighbourhood bracket, flicker, temporal blend (verbatim math) ---
 	r15.x = dot(r14.zwy, kLumaWeights);
@@ -317,54 +350,38 @@ PS_OUTPUT main(PS_INPUT input)
 	r13.xyz = r14.xxx ? r13.xyz : r16.xyz;
 
 	// --- flicker score from neighbor luma spread ---
-	r11.x = r15.x + -r13.w;
-	r11.x = 0.200000003 + -abs(r11.x);
-	r11.x = ceil(r11.x);
+	r11.x = FlickerLumaContribution(r15.x, r13.w);
 	r12.x = cmp(r13.z < r12.w);
 	r12.xyz = r12.xxx ? r12.yzw : r13.xyz;
 	r12.xyz = r10.xxx ? r12.xyz : r13.xyz;
-	r10.x = r15.x + -r12.w;
-	r10.x = 0.200000003 + -abs(r10.x);
-	r10.x = ceil(r10.x);
+	r10.x = FlickerLumaContribution(r15.x, r12.w);
 	r12.w = cmp(r12.z < r11.w);
 	r13.xyz = r12.www ? r11.yzw : r12.xyz;
 	r12.xyz = r9.xxx ? r13.xyz : r12.xyz;
-	r9.x = r15.x + -r11.w;
-	r9.x = 0.200000003 + -abs(r9.x);
-	r9.x = ceil(r9.x);
+	r9.x = FlickerLumaContribution(r15.x, r11.w);
 	r11.y = cmp(r12.z < r10.w);
 	r11.yzw = r11.yyy ? r10.yzw : r12.xyz;
 	r11.yzw = r6.xxx ? r11.yzw : r12.xyz;
-	r6.x = r15.x + -r10.w;
-	r6.x = 0.200000003 + -abs(r6.x);
-	r6.x = ceil(r6.x);
+	r6.x = FlickerLumaContribution(r15.x, r10.w);
 	r10.y = cmp(r11.w < r9.w);
 	r10.yzw = r10.yyy ? r9.yzw : r11.yzw;
 	r10.yzw = r4.xxx ? r10.yzw : r11.yzw;
-	r4.x = r15.x + -r9.w;
-	r4.x = 0.200000003 + -abs(r4.x);
-	r4.x = ceil(r4.x);
+	r4.x = FlickerLumaContribution(r15.x, r9.w);
 	r9.y = cmp(r10.w < r6.w);
 	r9.yzw = r9.yyy ? r6.yzw : r10.yzw;
 	r9.yzw = r3.xxx ? r9.yzw : r10.yzw;
-	r3.x = r15.x + -r6.w;
-	r3.x = 0.200000003 + -abs(r3.x);
-	r3.x = ceil(r3.x);
+	r3.x = FlickerLumaContribution(r15.x, r6.w);
 	r6.y = cmp(r9.w < r4.w);
 	r6.yzw = r6.yyy ? r4.yzw : r9.yzw;
 	r6.yzw = r1.www ? r6.yzw : r9.yzw;
-	r1.w = r15.x + -r4.w;
-	r1.w = 0.200000003 + -abs(r1.w);
-	r1.w = ceil(r1.w);
+	r1.w = FlickerLumaContribution(r15.x, r4.w);
 	r19.x = r6.z;
 	r4.y = cmp(r6.w < r3.w);
 	r4.yzw = r4.yyy ? r3.yzw : r6.yzw;
 	r12.xw = r0.yy ? r4.yw : r6.yw;
 	r18.x = r4.z;
 	r13.xyzw = r0.yyyy ? r18.xyzw : r19.xyzw;
-	r0.y = r15.x + -r3.w;
-	r0.y = 0.200000003 + -abs(r0.y);
-	r0.y = ceil(r0.y);
+	r0.y = FlickerLumaContribution(r15.x, r3.w);
 	r0.y = 4 + -r0.y;
 	r0.y = r0.y + -r1.w;
 	r0.y = r0.y + -r3.x;
@@ -415,8 +432,7 @@ PS_OUTPUT main(PS_INPUT input)
 	r0.z = (int)r0.z | (int)r1.w;
 	r0.z = (int)r0.w | (int)r0.z;
 	r2.yz = maskTex.Sample(maskSampler, r1.xy).xy;
-	r0.w = alphaTex.Sample(alphaSampler, r1.xy).z;
-	r0.w = cmp(0 < r0.w);
+	r0.w = AlphaCoverageMask(r1.xy);
 	r1.x = cmp(ThresholdParams.w < r2.z);
 	r0.z = (int)r0.z | (int)r1.x;
 	r1.xyw = r0.zzz ? r14.yzw : r3.xyz;
@@ -466,19 +482,16 @@ PS_OUTPUT main(PS_INPUT input)
 	r4.x = dot(r4.zwy, kLumaWeights);
 
 	// --- alpha-aware output ---
-	r0.x = alphaTex.Sample(alphaSampler, r5.xy).z;
-	r0.y = alphaTex.Sample(alphaSampler, r5.zw).z;
-	r0.xy = cmp(float2(0, 0) < r0.xy);
+	r0.x = AlphaCoverageMask(r5.xy);
+	r0.y = AlphaCoverageMask(r5.zw);
 	r0.x = r0.x ? r1.z : 0;
 	r0.x = r0.y ? r0.x : 0;
-	r0.y = alphaTex.Sample(alphaSampler, r7.xy).z;
-	r0.z = alphaTex.Sample(alphaSampler, r7.zw).z;
-	r0.yz = cmp(float2(0, 0) < r0.yz);
+	r0.y = AlphaCoverageMask(r7.xy);
+	r0.z = AlphaCoverageMask(r7.zw);
 	r0.x = r0.y ? r0.x : 0;
 	r0.x = r0.z ? r0.x : 0;
-	r0.y = alphaTex.Sample(alphaSampler, r8.xy).z;
-	r0.z = alphaTex.Sample(alphaSampler, r8.zw).z;
-	r0.yz = cmp(float2(0, 0) < r0.yz);
+	r0.y = AlphaCoverageMask(r8.xy);
+	r0.z = AlphaCoverageMask(r8.zw);
 	r0.x = r0.y ? r0.x : 0;
 	r0.x = r0.z ? r0.x : 0;
 	r0.x = r0.w ? r0.x : 0;
