@@ -923,6 +923,9 @@ bool HDRDisplay::UsesDeferredPresentComposite() const
 
 void HDRDisplay::SyncFramebufferUIRedirect()
 {
+	if (!uiTexture || !uiTexture->rtv)
+		return;
+
 	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 	fb.RTV = uiTexture->rtv.get();
 	globals::d3d::context->OMSetRenderTargets(1, &fb.RTV, nullptr);
