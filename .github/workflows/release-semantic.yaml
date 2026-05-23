@@ -7,7 +7,7 @@ name: "Release: Semantic Version"
 # release, then reconcile dev. Dev-source reconciles FF-only; hotfix-
 # staging source rebases dev onto the new main so the release tag
 # enters dev's ancestry — the only force-push this workflow performs.
-# `auto-rebase-prs.yaml` then rebases open PRs targeting dev.
+# Open PRs targeting dev will need a manual rebase by their authors.
 
 on:
     workflow_dispatch:
@@ -249,6 +249,6 @@ jobs:
                     echo "- Source: hotfix-staging \`${{ steps.validate.outputs.source }}\`"
                     echo "- New main: \`$(git rev-parse --short=9 "${NEW_MAIN}")\`"
                     echo "- Dev rebased linearly onto new main; identical-patch commits auto-dropped by \`git rebase\`."
-                    echo "- Open PRs against dev are auto-rebased by the \`Auto-rebase open PRs\` workflow."
+                    echo "- Open PRs against dev will need a manual rebase by their authors."
                   } >> "$GITHUB_STEP_SUMMARY"
                   echo "::notice::Reconciled dev onto main via rebase (linear history preserved)."
