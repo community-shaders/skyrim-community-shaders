@@ -471,7 +471,8 @@ jobs:
                     | python3 -c "
                   import json, sys, os
                   data = json.load(sys.stdin)
-                  versions = [f.get('version', '') for f in data.get('files', [])]
+                  main = [f for f in data.get('files', []) if f.get('category_name') == 'MAIN']
+                  versions = [f.get('version', '') for f in (main or data.get('files', []))]
                   print('true' if os.environ['VERSION'] in versions else 'false')
                   " 2>/dev/null || echo "false")
                   if [ "$EXISTING" = "true" ]; then
@@ -500,6 +501,18 @@ jobs:
                     printf 'description=%s Full changelog: %s\n' "$FILE_DESC" "$LINK" >> $GITHUB_OUTPUT
                   else
                     printf 'description=Full changelog: %s\n' "$LINK" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Validate file_group_id
+              if: steps.version-check.outputs.should_upload == 'true'
+              env:
+                  FILE_GROUP_ID: ${{ matrix.file_group_id }}
+                  MOD_NAME: ${{ matrix.mod_filename }}
+              run: |
+                  if [ -z "$FILE_GROUP_ID" ] || [ "$FILE_GROUP_ID" = "000000" ]; then
+                    echo "ERROR: file_group_id is '${FILE_GROUP_ID}' for '$MOD_NAME'." >&2
+                    echo "Set nexusfilegroupid in the feature's [Nexus] ini section." >&2
+                    exit 1
                   fi
 
             - name: Upload to Nexus
