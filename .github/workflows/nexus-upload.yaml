@@ -36,7 +36,7 @@ on:
             nexus_file_group_id:
                 description: "Nexus file group ID for the core mod"
                 required: false
-                default: ""
+                default: "3119152"
     workflow_call:
         inputs:
             tag:
@@ -70,7 +70,7 @@ on:
             nexus_file_group_id:
                 required: false
                 type: string
-                default: ""
+                default: "3119152"
         secrets:
             UNEX_APIKEY:
                 required: false
