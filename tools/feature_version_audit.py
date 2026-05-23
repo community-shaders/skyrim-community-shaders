@@ -1030,8 +1030,8 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
         if release_version and mod_version:
             file_description = f'{mod_filename} {mod_version} — released for Community Shaders {release_version}.'
 
-        file_group_id = ini_metadata.get('file_group_id', '')
-        if auto_upload and not file_group_id:
+        file_group_id = ini_metadata.get('file_group_id', '').strip()
+        if auto_upload and (not file_group_id or file_group_id == '000000'):
             print(
                 f"WARNING: {name} has auto_upload=true but nexusfilegroupid is not set in its [Nexus] ini section.",
                 file=sys.stderr,
