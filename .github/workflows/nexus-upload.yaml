@@ -503,7 +503,9 @@ jobs:
                   fi
 
             - name: Upload to Nexus
+              id: upload
               if: steps.version-check.outputs.should_upload == 'true'
+              continue-on-error: true
               uses: Nexus-Mods/upload-action@a746f1867153abc77beed950bf7526ece1a9f8c4  # v1.0.0-beta.5
               with:
                   api_key: ${{ secrets.UNEX_APIKEY }}
@@ -513,6 +515,33 @@ jobs:
                   display_name: ${{ matrix.mod_filename }}
                   description: ${{ steps.prep.outputs.description }}
                   file_category: main
+
+            - name: Report upload failure
+              if: steps.upload.outcome == 'failure'
+              env:
+                  MOD_NAME: ${{ matrix.mod_filename }}
+                  MOD_ID: ${{ matrix.nexus_mod_id }}
+                  FILE_GROUP_ID: ${{ matrix.file_group_id }}
+                  VERSION: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
+                  GAME_ID: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
+                  ARTIFACT_NAME: nexus-upload-${{ matrix.name }}
+              run: |
+                  {
+                    echo "## ❌ Upload failed: $MOD_NAME v$VERSION"
+                    echo ""
+                    echo "| Field | Value |"
+                    echo "|-------|-------|"
+                    echo "| Mod | [$MOD_NAME](https://www.nexusmods.com/$GAME_ID/mods/$MOD_ID) |"
+                    echo "| Version | \`$VERSION\` |"
+                    echo "| File group ID | \`$FILE_GROUP_ID\` |"
+                    echo "| Artifact | \`$ARTIFACT_NAME\` |"
+                    echo ""
+                    echo "**Check the _Upload to Nexus_ step log above for the specific error.**"
+                    echo ""
+                    echo "To upload manually: download \`$ARTIFACT_NAME\` from this workflow run's"
+                    echo "artifacts and upload it to the mod's Files page on Nexus."
+                  } >> "$GITHUB_STEP_SUMMARY"
+                  exit 1
 
     upload-summary:
         name: Upload Summary
