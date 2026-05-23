@@ -193,7 +193,7 @@ jobs:
 
                   # Inject core file_group_id from workflow input if provided.
                   if [ -n "$INPUT_NEXUS_FILE_GROUP_ID" ]; then
-                    python3 -c "
+                    python -c "
                   import json, os
                   with open('nexus-matrix-raw.json') as f:
                       data = json.load(f)
@@ -504,7 +504,7 @@ jobs:
 
             - name: Upload to Nexus
               if: steps.version-check.outputs.should_upload == 'true'
-              uses: Nexus-Mods/upload-action@v1
+              uses: Nexus-Mods/upload-action@a746f1867153abc77beed950bf7526ece1a9f8c4  # v1.0.0-beta.5
               with:
                   api_key: ${{ secrets.UNEX_APIKEY }}
                   file_group_id: ${{ matrix.file_group_id }}
