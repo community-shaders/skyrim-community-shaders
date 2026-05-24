@@ -241,7 +241,9 @@ void EditorWindow::ShowObjectsWindow()
 			}
 
 			if (m_selectedCategory == "Lighting editor") {
+				BeginScrollableContent("##LightEditorScroll");
 				lightEditor.DrawSettings();
+				EndScrollableContent();
 				ImGui::EndChild();
 				ImGui::EndTable();
 				ImGui::End();
