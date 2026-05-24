@@ -2,6 +2,7 @@
 #define __SKYLIGHTING_DEPENDENCY_HLSL__
 
 #include "Common/Math.hlsli"
+#include "Common/Random.hlsli"
 #include "Common/Shading.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
@@ -12,6 +13,10 @@ namespace Skylighting
 	Texture3D<sh2> SkylightingProbeArray : register(SKYLIGHTING_PROBE_REGISTER);
 #elif defined(PSHADER)
 	Texture3D<sh2> SkylightingProbeArray : register(t50);
+#endif
+
+#if defined(PSHADER)
+	Texture3D<float> ShadowVisibilityProbeArray : register(t53);
 #endif
 
 	const static sh2 UNIT_SH = float4(sqrt(4.0 * Math::PI), 0, 0, 0);
@@ -75,7 +80,7 @@ namespace Skylighting
 #endif
 
 #if defined(PSHADER) || defined(SKYLIGHTING_PROBE_REGISTER)
-	sh2 Sample(float3 positionMS, float3 normalWS)
+	sh2 Sample(float3 positionMS, float3 normalWS, float2 screenPosition)
 	{
 		sh2 scaledUnitSH = UNIT_SH / 1e-10;
 
@@ -83,6 +88,11 @@ namespace Skylighting
 			return scaledUnitSH;
 
 		positionMS.xyz += normalWS * CELL_SIZE * 0.5;  // Receiver normal bias
+
+		if (SharedData::FrameCount) {
+			float3 offset = float3(Random::pcg3d(uint3(screenPosition.xy, SharedData::FrameCount))) / 4294967295.0 * 2.0 - 1.0;
+			positionMS.xyz += offset * CELL_SIZE * 0.5;
+		}
 
 		float3 positionMSAdjusted = positionMS - SharedData::skylightingSettings.PosOffset.xyz;
 		float3 uvw = positionMSAdjusted / ARRAY_SIZE + .5;
@@ -125,25 +135,19 @@ namespace Skylighting
 		return SphericalHarmonics::Scale(sum, rcp(wsum + EPSILON_WEIGHT_SUM));
 	}
 
-	// Compute skylighting diffuse for a receiver biased to face upward (grass/foliage).
-	// The result is pre-divided by vertexAO so that a subsequent multiply by vertexAO
-	// yields min(skylightingDiffuse, vertexAO). Pass vertexAO = 1 to skip this compensation.
-	float GetVertexSkylightingDiffuse(float3 positionMS, float3 normalWS, float vertexAO)
+	float GetSkylightingDiffuse(sh2 skylightingSH, float3 positionMS, float3 evalNormal, float vertexAO = 1.0)
 	{
 		if (SharedData::InInterior)
 			return 1.0;
 
+		float3 biasedNormal = normalize(float3(evalNormal.xy, max(0.0, evalNormal.z)));
 		float fadeOutFactor = GetFadeOutFactor(positionMS);
-
-		float3 biasedNormal = normalWS;
-		biasedNormal.z = max(0.0, biasedNormal.z);
-		biasedNormal = normalize(biasedNormal);
-
-		sh2 skylightingSH = Sample(positionMS, normalWS);
 		float skylightingDiffuse = EvaluateDiffuse(skylightingSH, biasedNormal, fadeOutFactor);
 
-		return saturate(skylightingDiffuse / max(vertexAO, 1e-5));
+		return saturate(skylightingDiffuse / max(vertexAO, EPSILON_DIVISION));
 	}
+
+
 
 	sh2 SampleNoBias(float3 positionMS)
 	{
@@ -188,6 +192,55 @@ namespace Skylighting
 		}
 
 		return SphericalHarmonics::Scale(sum, rcp(wsum + EPSILON_WEIGHT_SUM));
+	}
+#endif
+
+#if defined(PSHADER)
+	float SampleShadowVisibility(float3 positionMS, float3 normalWS, float2 screenPosition)
+	{
+		if (SharedData::InInterior)
+			return 1.0;
+
+		positionMS.xyz += normalWS * CELL_SIZE * 0.5;
+
+		if (SharedData::FrameCount) {
+			float3 offset = float3(Random::pcg3d(uint3(screenPosition.xy, SharedData::FrameCount))) / 4294967295.0 * 2.0 - 1.0;
+			positionMS.xyz += offset * CELL_SIZE * 0.5;
+		}
+
+		float3 positionMSAdjusted = positionMS - SharedData::skylightingSettings.PosOffset.xyz;
+		float3 uvw = positionMSAdjusted / ARRAY_SIZE + .5;
+
+		if (any(uvw < 0) || any(uvw > 1))
+			return 1.0;
+
+		float3 cellVxCoord = uvw * ARRAY_DIM;
+		int3 cell000 = floor(cellVxCoord - 0.5);
+		float3 trilinearPos = cellVxCoord - 0.5 - cell000;
+
+		float sum = 0;
+		float wsum = 0;
+		[unroll] for (int i = 0; i < 2; i++)
+			[unroll] for (int j = 0; j < 2; j++)
+				[unroll] for (int k = 0; k < 2; k++)
+		{
+			int3 offset = int3(i, j, k);
+			int3 cellID = cell000 + offset;
+
+			if (any(cellID < 0) || any((uint3)cellID >= ARRAY_DIM))
+				continue;
+
+			float3 trilinearWeights = 1 - abs(offset - trilinearPos);
+			float w = trilinearWeights.x * trilinearWeights.y * trilinearWeights.z;
+
+			uint3 cellTexID = (cellID + SharedData::skylightingSettings.ArrayOrigin.xyz) % ARRAY_DIM;
+			sum += ShadowVisibilityProbeArray[cellTexID] * w;
+			wsum += w;
+		}
+
+		float fadeOut = GetFadeOutFactor(positionMS);
+		float shadow = sum / max(wsum, 0.0001);
+		return lerp(1.0, shadow, fadeOut);
 	}
 #endif
 }

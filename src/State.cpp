@@ -10,6 +10,7 @@
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/Skylighting.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
@@ -56,6 +57,7 @@ void State::Draw()
 	auto& truePBR = globals::features::truePBR;
 	auto context = globals::d3d::context;
 	auto& volumetricShadows = globals::features::volumetricShadows;
+	auto& skylighting = globals::features::skylighting;
 
 	if (shaderCache->IsEnabled()) {
 		// Process deferred cell transitions (interior detection)
@@ -96,6 +98,8 @@ void State::Draw()
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
 					if (volumetricShadows.loaded)
 						volumetricShadows.CopyShadowLightData();
+					if (skylighting.loaded)
+						skylighting.CaptureShadowCascadeSRV();
 				}
 			}
 		}

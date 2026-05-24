@@ -154,7 +154,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #			else
 		float3 positionMS = positionWS.xyz;
 #			endif
-		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, normalWS);
+		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, normalWS, float2(dispatchID.xy));
 		float skylightingDiffuse = Skylighting::EvaluateDiffuse(skylightingSH, normalWS);
 		directionalAmbientColor = ImageBasedLighting::GetDiffuseIBLOccluded(vanillaDALC, -normalWS, skylightingDiffuse) * albedo;
 #		else
@@ -224,7 +224,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 		float3 positionMS = positionWS.xyz;
 #		endif
 
-		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, R);
+		sh2 skylightingSH = Skylighting::Sample(positionMS.xyz, R, float2(dispatchID.xy));
 		float skylightingSpecular = Skylighting::EvaluateSpecular(skylightingSH, specularLobe);
 #	endif
 

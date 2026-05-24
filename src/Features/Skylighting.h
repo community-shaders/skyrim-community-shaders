@@ -73,6 +73,10 @@ public:
 	Texture2D* texOcclusion = nullptr;
 	Texture3D* texProbeArray = nullptr;
 	Texture3D* texAccumFramesArray = nullptr;
+	Texture3D* texShadowBitmask = nullptr;
+	Texture3D* texShadowVisibility = nullptr;
+
+	ID3D11ShaderResourceView* shadowCascadeSRV = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> probeUpdateCompute = nullptr;
 
@@ -88,6 +92,7 @@ public:
 	uint frameCount = 0;
 
 	void ResetSkylighting();
+	void CaptureShadowCascadeSRV();
 
 	std::chrono::time_point<std::chrono::system_clock> lastUpdateTimer = std::chrono::system_clock::now();
 
