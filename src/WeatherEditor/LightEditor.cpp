@@ -30,14 +30,14 @@ void LightEditor::DrawSettings()
 
 		ImGui::SetNextItemWidth(filterComboWidth);
 		int selectedFilter = static_cast<int>(filterOption);
-		if (ImGui::Combo("##filterBy", &selectedFilter, FilterOptionLabels, static_cast<int>(FilterOption::Count))) {
+		if (ImGui::Combo("##Type", &selectedFilter, FilterOptionLabels, static_cast<int>(FilterOption::Count))) {
 			filterOption = static_cast<FilterOption>(selectedFilter);
 		}
 
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(sortComboWidth);
 		int selectedSort = static_cast<int>(sortOption);
-		if (ImGui::Combo("##sortBy", &selectedSort, SortOptionLabels, static_cast<int>(SortOption::Count))) {
+		if (ImGui::Combo("##Sorting", &selectedSort, SortOptionLabels, static_cast<int>(SortOption::Count))) {
 			sortOption = static_cast<SortOption>(selectedSort);
 		}
 
