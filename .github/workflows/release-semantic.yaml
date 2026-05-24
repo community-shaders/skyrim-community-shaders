@@ -1,16 +1,13 @@
 name: "Release: Semantic Version"
 
-# Dispatch on:
-#   - dev           → cuts vX.Y.Z-rc.N (RC channel)
-#   - main          → cuts vX.Y.Z stable (current line)
-#   - hotfix/X.Y.x  → cuts vX.Y.Z+1 on the X.Y maintenance channel
-#                     (only valid when main has shipped a higher minor/major)
+# Dispatch on: dev (RC) | main (stable, current line) | hotfix/X.Y.x
+# (older line, only valid when main has shipped a newer minor/major).
 #
-# Promotion mode (dev → main):
-#   Dispatch on main with `ff_target` set to a dev SHA. The workflow
-#   fast-forwards main to that SHA, runs semantic-release to cut stable,
-#   then fast-forwards dev to absorb the chore(release) commit. One click,
-#   no PR, no merge commits, no force pushes.
+# Promotion (ff_target on main): FF main to ff_target, run semantic-
+# release, then reconcile dev. Dev-source reconciles FF-only; hotfix-
+# staging source rebases dev onto the new main so the release tag
+# enters dev's ancestry — the only force-push this workflow performs.
+# Open PRs targeting dev will need a manual rebase by their authors.
 
 on:
     workflow_dispatch:
@@ -33,6 +30,13 @@ jobs:
     release:
         runs-on: ubuntu-latest
         steps:
+            - name: Generate app token
+              uses: actions/create-github-app-token@v1
+              id: app-token
+              with:
+                  app-id: ${{ secrets.APP_ID }}
+                  private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
             - name: Checkout repository
               uses: actions/checkout@v6
               with:
@@ -40,9 +44,9 @@ jobs:
                   persist-credentials: false
                   # Token used for the working checkout. The actual pushes
                   # (FF main, semantic-release commit/tag, FF dev) all go
-                  # through RELEASE_PAT below so they can bypass branch
+                  # through the app token below so they can bypass branch
                   # protection and fire downstream workflows.
-                  token: ${{ secrets.RELEASE_PAT }}
+                  token: ${{ steps.app-token.outputs.token }}
 
             - name: Configure git identity
               run: |
@@ -71,9 +75,13 @@ jobs:
                     echo "::error::main is not an ancestor of ff_target ${FF_TARGET} — fast-forward is not possible."
                     exit 1
                   fi
-                  # Identify the source branch for the promotion. dev → reconcile
-                  # dev afterward; hotfix/* → patch-id dedup handles it at the
-                  # next dev→main promotion, no reconcile.
+                  # Identify the source branch for the promotion.
+                  #   dev source     → FF-reconcile dev afterward (no rewrite).
+                  #   hotfix-staging → rebase-reconcile dev afterward so the
+                  #                    release commit + tag enter dev's
+                  #                    ancestry. Force-with-lease push; `git
+                  #                    rebase` drops patch-id duplicates of
+                  #                    the cherry-picks already on main.
                   SOURCE=""
                   if git merge-base --is-ancestor "${FF_TARGET}" origin/dev; then
                     SOURCE="dev"
@@ -106,7 +114,7 @@ jobs:
             - name: Fast-forward main to ff_target
               if: ${{ inputs.ff_target != '' }}
               env:
-                  TOKEN: ${{ secrets.RELEASE_PAT }}
+                  TOKEN: ${{ steps.app-token.outputs.token }}
                   FF_TARGET: ${{ inputs.ff_target }}
               run: |
                   set -euo pipefail
@@ -135,17 +143,19 @@ jobs:
                       @semantic-release/github
                   tag_format: "v${version}"
               env:
-                  # RELEASE_PAT required for two reasons:
+                  # App token required for two reasons:
                   # 1. Allows pushing the version commit and tag to the protected
                   #    target branch (GITHUB_TOKEN cannot bypass branch protection).
-                  # 2. A PAT-sourced tag push triggers downstream workflows
+                  #    Prerequisite: the GitHub App must be in the bypass actor
+                  #    list for main and dev — the token alone is not sufficient.
+                  # 2. An app-token tag push triggers downstream workflows
                   #    (release-build.yaml); GITHUB_TOKEN pushes do not.
-                  GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+                  GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
             - name: Reconcile dev with release commit (promotion mode, dev source only)
               if: ${{ inputs.ff_target != '' && steps.semantic.outputs.new_release_published == 'true' && steps.validate.outputs.source == 'dev' }}
               env:
-                  TOKEN: ${{ secrets.RELEASE_PAT }}
+                  TOKEN: ${{ steps.app-token.outputs.token }}
               run: |
                   set -euo pipefail
                   git fetch origin main dev
@@ -153,17 +163,19 @@ jobs:
                   # to dev during the release, exit with a warning instead of
                   # rewriting their work.
                   if ! git merge-base --is-ancestor origin/dev origin/main; then
-                    echo "::warning::dev moved during promotion; FF-reconcile skipped."
                     {
                       echo ""
-                      echo "## Dev reconcile skipped"
+                      echo "## ⚠️ Dev reconcile skipped — dev moved during promotion"
                       echo "Dev was pushed to during the release. To reconcile manually:"
                       echo ""
                       echo '```bash'
                       echo "git fetch && git checkout dev && git merge --ff-only origin/main && git push"
                       echo '```'
                     } >> "$GITHUB_STEP_SUMMARY"
-                    exit 0
+                    # Fail loud: tag is on main but dev isn't reconciled
+                    # (same invariant break as the hotfix-staging path).
+                    echo "::error::dev moved during promotion — dev is unreconciled. See job summary for manual remediation."
+                    exit 1
                   fi
                   NEW_MAIN=$(git rev-parse origin/main)
                   REMOTE="https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
@@ -171,12 +183,72 @@ jobs:
                   git push --force-with-lease="dev:${CURRENT_DEV}" "${REMOTE}" "${NEW_MAIN}:refs/heads/dev"
                   echo "::notice::Reconciled dev to main ($NEW_MAIN)."
 
-            - name: Note dev reconcile skipped (hotfix-staging source)
+            - name: Rebase-reconcile dev with release commit (promotion mode, hotfix-staging source)
               if: ${{ inputs.ff_target != '' && steps.semantic.outputs.new_release_published == 'true' && steps.validate.outputs.source != 'dev' && steps.validate.outputs.source != '' }}
+              env:
+                  TOKEN: ${{ steps.app-token.outputs.token }}
               run: |
+                  set -euo pipefail
+                  git fetch origin main dev
+                  NEW_MAIN=$(git rev-parse origin/main)
+                  CURRENT_DEV=$(git rev-parse origin/dev)
+
+                  # FF-only won't work: dev and main diverged. Rebase
+                  # preserves linear history; patch-id dedup drops the
+                  # cherry-picked-fix commits automatically.
+                  git checkout -B dev "${CURRENT_DEV}"
+                  if ! git rebase "${NEW_MAIN}"; then
+                    git rebase --abort || true
+                    {
+                      echo ""
+                      echo "## ⚠️ Dev reconcile FAILED — manual intervention required"
+                      echo ""
+                      echo "Rebasing \`dev\` onto the new \`main\` (\`$(git rev-parse --short=9 "${NEW_MAIN}")\`) hit a conflict."
+                      echo "The hotfix release is live on \`main\`, but \`dev\` has NOT absorbed it."
+                      echo "Until reconciled, the next RC cut on \`dev\` will compute the wrong version floor."
+                      echo ""
+                      echo "**Recover by running locally:**"
+                      echo ""
+                      echo '```bash'
+                      echo "git fetch origin"
+                      echo "git checkout dev && git reset --hard origin/dev"
+                      echo "git rebase origin/main      # resolve conflicts, git rebase --continue"
+                      echo "git push --force-with-lease origin dev"
+                      echo '```'
+                    } >> "$GITHUB_STEP_SUMMARY"
+                    echo "::error::Dev rebase-reconcile failed — see job summary for remediation."
+                    exit 1
+                  fi
+
+                  REMOTE="https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
+                  # --force-with-lease guards against a concurrent push to
+                  # dev: if someone landed a commit during the release,
+                  # abort instead of overwriting their work.
+                  if ! git push --force-with-lease="dev:${CURRENT_DEV}" "${REMOTE}" "HEAD:refs/heads/dev"; then
+                    {
+                      echo ""
+                      echo "## ⚠️ Dev push rejected (lease check failed)"
+                      echo ""
+                      echo "Dev was pushed to during the release. Reconcile manually:"
+                      echo ""
+                      echo '```bash'
+                      echo "git fetch origin && git checkout dev && git reset --hard origin/dev"
+                      echo "git rebase origin/main && git push --force-with-lease origin dev"
+                      echo '```'
+                    } >> "$GITHUB_STEP_SUMMARY"
+                    # Fail loud: tag is on main but dev's history doesn't
+                    # contain it, so the next RC would compute its floor
+                    # and changelog against the wrong prior tag.
+                    echo "::error::Dev moved during release — dev is unreconciled. See job summary for manual remediation."
+                    exit 1
+                  fi
+
                   {
                     echo ""
-                    echo "## Dev reconcile not applicable"
-                    echo "Promotion source was \`${{ steps.validate.outputs.source }}\` (hotfix staging branch). The cherry-picked commits on main have different SHAs than their originals on dev — semantic-release's patch-id-dedup will collapse the duplicates at the next dev→main promotion, so no FF-reconcile is needed (and would not be possible)."
+                    echo "## Dev reconciled (rebase-forward)"
+                    echo "- Source: hotfix-staging \`${{ steps.validate.outputs.source }}\`"
+                    echo "- New main: \`$(git rev-parse --short=9 "${NEW_MAIN}")\`"
+                    echo "- Dev rebased linearly onto new main; identical-patch commits auto-dropped by \`git rebase\`."
+                    echo "- Open PRs against dev will need a manual rebase by their authors."
                   } >> "$GITHUB_STEP_SUMMARY"
-                  echo "::notice::Hotfix-staging promotion — dev reconcile not applicable."
+                  echo "::notice::Reconciled dev onto main via rebase (linear history preserved)."

@@ -305,6 +305,7 @@ bool UnifiedWater::BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSy
 		RemoveLODWater(waterSystem, shape, *gWaterLOD);
 	}
 
+	RemoveDuplicateWaterSystemObjects(waterSystem, *gWaterLOD);
 	DetachAllChildOccurrences(*gWaterLOD, block->water);
 	(*gWaterLOD)->AttachChild(block->water, true);
 	waterSystem->Enable();
@@ -645,13 +646,12 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 	func(block);
 
 	if (water) {
-		auto count = water->GetChildren().size();
-		while (count > 0) {
-			water->DetachChildAt(--count);
-		}
+		ClearWaterNodeChildren(water, globals::game::waterSystem);
 
-		DetachAllChildOccurrences(*uw.gWaterLOD, water);
-		block->waterAttached = false;
+		if (uw.gWaterLOD && *uw.gWaterLOD)
+			DetachAllChildOccurrences(*uw.gWaterLOD, water);
+		if (block)
+			block->waterAttached = false;
 	}
 }
 
@@ -659,7 +659,20 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 {
 	auto& uw = globals::features::unifiedWater;
 
-	if (uw.flowmap) {
+	if (pass && pass->geometry) {
+		// Re-stabilize BSWaterShaderProperty.plane every draw. After interior/exterior
+		// transitions the cached plane can be stale for exactly one of two overlapping
+		// water surfaces, which presents as heavy flicker rather than missing water.
+		if (const auto prop = pass->geometry->GetGeometryRuntimeData().shaderProperty.get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
+			const float waterHeight = pass->geometry->world.translate.z;
+
+			waterShaderProp->plane.normal = { 0.0f, 0.0f, 1.0f };
+			waterShaderProp->plane.constant = waterHeight;
+		}
+	}
+
+	if (uw.flowmap && pass && pass->geometry) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
 		*uw.gFlowMapSize = uw.flowmap->GetWidth();                                            // ObjectUV.x

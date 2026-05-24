@@ -37,6 +37,7 @@ public:
 	RE::BGSTextureSet* defaultLandTexture;
 	bool enabled = false;
 
+	virtual void Load() override;
 	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
 	virtual bool SupportsVR() override { return true; };

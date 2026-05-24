@@ -4,13 +4,9 @@
 
 struct ScreenSpaceShadows : Feature
 {
-private:
-	static constexpr std::string_view MOD_ID = "93209";
-
 public:
 	virtual inline std::string GetName() override { return "Screen Space Shadows"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceShadows"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "SCREEN_SPACE_SHADOWS"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 

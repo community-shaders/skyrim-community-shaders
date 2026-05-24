@@ -22,6 +22,7 @@
 #include "Feature.h"
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Features/RenderDoc.h"
 #include "Features/Upscaling.h"
 #include "Menu/AdvancedSettingsRenderer.h"
 #include "Menu/BackgroundBlur.h"
@@ -894,7 +895,7 @@ static std::vector<InputCombo> DeriveWeatherEditorKey(const std::vector<InputCom
 		if (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) {
 			hasShift = true;
 		} else if (vk != VK_CONTROL && vk != VK_LCONTROL && vk != VK_RCONTROL &&
-		           vk != VK_MENU && vk != VK_LMENU && vk != VK_RMENU) {
+				   vk != VK_MENU && vk != VK_LMENU && vk != VK_RMENU) {
 			baseKey = vk;
 		}
 	}
@@ -977,11 +978,11 @@ void Menu::ProcessInputEventQueue()
 				auto shaderCache = globals::shaderCache;
 				HotkeyAction hotkeyActions[] = {
 					{ &settings.ToggleKey, &settingToggleKey, [this](std::vector<InputCombo> keys) {
-						settings.ToggleKey = keys;
-						settingToggleKey = false;
-						if (!settings.FirstTimeSetupCompleted)
-							settings.WeatherEditorToggleKey = DeriveWeatherEditorKey(keys);
-					} },
+						 settings.ToggleKey = keys;
+						 settingToggleKey = false;
+						 if (!settings.FirstTimeSetupCompleted)
+							 settings.WeatherEditorToggleKey = DeriveWeatherEditorKey(keys);
+					 } },
 					{ &settings.SkipCompilationKey, &settingSkipCompilationKey, [this](std::vector<InputCombo> keys) { settings.SkipCompilationKey = keys; settingSkipCompilationKey = false; } },
 					{ &settings.EffectToggleKey, &settingsEffectsToggle, [this](std::vector<InputCombo> keys) { settings.EffectToggleKey = keys; settingsEffectsToggle = false; } },
 					{ &settings.OverlayToggleKey, &settingOverlayToggleKey, [this](std::vector<InputCombo> keys) { settings.OverlayToggleKey = keys; settingOverlayToggleKey = false; } },
@@ -1072,10 +1073,12 @@ void Menu::ProcessInputEventQueue()
 								 globals::features::screenshotFeature.captureRequested = true;
 						 } },
 					};
-					for (const auto& ka : keyActions) {
-						if (InputCombo::MatchesKeyboardCombo(ka.settingKey, key)) {
-							ka.action();
-							break;
+					if (!globals::features::renderDoc.HandleCaptureHotkey(key)) {
+						for (const auto& ka : keyActions) {
+							if (InputCombo::MatchesKeyboardCombo(ka.settingKey, key)) {
+								ka.action();
+								break;
+							}
 						}
 					}
 				}

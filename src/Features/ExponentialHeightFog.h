@@ -2,10 +2,14 @@
 
 struct ExponentialHeightFog : Feature
 {
+private:
+	static constexpr std::string_view MOD_ID = "180146";
+
+public:
 	virtual bool SupportsVR() override { return true; };
 	virtual inline std::string GetName() override { return "Exponential Height Fog"; }
 	virtual inline std::string GetShortName() override { return "ExponentialHeightFog"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL("999999"); }
+	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
