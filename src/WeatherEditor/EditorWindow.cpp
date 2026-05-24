@@ -1414,6 +1414,7 @@ void EditorWindow::UpdateOpenState()
 		BackgroundBlur::SetWeatherEditorActive(IsViewportActive());
 
 	} else if (!open && wasOpen) {
+		lightEditor.ResetOverrides();
 		RestoreVanityCamera();
 		ShowGameMenus();
 		BackgroundBlur::SetWeatherEditorActive(false);
