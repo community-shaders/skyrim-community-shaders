@@ -20,8 +20,7 @@ public:
 				"Lights smoothly fade out at a configurable cutoff, solving the infinite distance problem",
 				"Does not modify any existing lighting",
 				"Requires the use of mods with lights enabled for inverse square falloff.",
-				"Full integration with Light Placer",
-				"Built in Light Editor for mod authors to preview lighting changes in real-time" }
+				"Full integration with Light Placer" }
 		};
 	}
 
