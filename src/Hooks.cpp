@@ -512,6 +512,29 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	// kSNOW / kSNOW_SWAP are created at R8G8B8A8_UNORM by vanilla; the snow shader
+	// writes accumulated wetness/sparkle values that exceed the 8-bit range and
+	// quantize into visible banding on tessellated snow. Promote to fp16 for headroom.
+	struct CreateRenderTarget_Snow
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			a_properties->format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
+			func(This, a_target, a_properties);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_SnowSwap
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			a_properties->format.set(RE::BSGraphics::Format::kR16G16B16A16_FLOAT);
+			func(This, a_target, a_properties);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	// kNORMAL_TAAMASK_SSRMASK and its swap need UAV bind because DeferredCompositeCS
 	// writes vanilla-encoded normals through UAV1 (`normals.UAV` in Deferred::DeferredPasses),
 	// which feeds the post-pass vanilla SSAO chain (ISSAORawAO -> ISSAOComposite). Without
@@ -856,6 +879,8 @@ namespace Hooks
 
 		logger::info("Hooking BSShaderRenderTargets::Create::CreateRenderTarget(s)");
 		stl::write_thunk_call<CreateRenderTarget_Main>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x3F0, 0x3F3, 0x548));
+		stl::write_thunk_call<CreateRenderTarget_Snow>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x406, 0x409, 0x55E));
+		stl::write_thunk_call<CreateRenderTarget_SnowSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x41C, 0x41F, 0x574));
 		stl::write_thunk_call<CreateRenderTarget_Normals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x458, 0x45B, 0x5B0));
 		stl::write_thunk_call<CreateRenderTarget_NormalsSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x46B, 0x46E, 0x5C3));
 		stl::write_thunk_call<CreateRenderTarget_MotionVectors>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x4F0, 0x4EF, 0x64E));
