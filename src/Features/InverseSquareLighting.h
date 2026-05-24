@@ -1,5 +1,4 @@
 #pragma once
-#include "Features/InverseSquareLighting/LightEditor.h"
 #include "LightLimitFix.h"
 
 struct InverseSquareLighting : Feature
@@ -28,10 +27,6 @@ public:
 
 	inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
-	virtual void DrawSettings() override;
-
-	virtual void EarlyPrepass() override;
-
 	virtual bool SupportsVR() override { return true; }
 
 	virtual void PostPostLoad() override;
@@ -56,8 +51,6 @@ public:
 	virtual bool IsCore() const override { return true; };
 
 private:
-	LightEditor editor = LightEditor();
-
 	static constexpr float DefaultCutoff = 0.05f;
 	static constexpr float DefaultShadowCasterCutoff = 0.022f;
 
