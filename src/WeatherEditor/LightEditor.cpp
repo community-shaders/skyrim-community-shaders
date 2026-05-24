@@ -154,9 +154,7 @@ std::string LightEditor::GetLightName(LightInfo& lightInfo)
 void LightEditor::GatherLights()
 {
 	if (!Menu::GetSingleton()->ShouldSwallowInput()) {
-		RestoreOriginal();
-		selected = {};
-		previous = {};
+		ResetOverrides();
 		return;
 	}
 
@@ -270,6 +268,13 @@ void LightEditor::GatherLights()
 	}
 
 	SortLights();
+}
+
+void LightEditor::ResetOverrides()
+{
+	RestoreOriginal();
+	selected = {};
+	previous = {};
 }
 
 void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight)
