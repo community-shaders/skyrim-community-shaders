@@ -3,7 +3,6 @@
 
 struct LightEditor
 {
-	bool enabled;
 	bool disableInvSqLights;
 	bool disableRegularLights;
 	bool shadowsOnly = false;
