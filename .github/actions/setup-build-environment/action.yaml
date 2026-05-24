@@ -24,9 +24,10 @@ runs:
           shell: bash
 
         - name: Install CMake 4.x
-          uses: lukka/get-cmake@latest
+          uses: lukka/get-cmake@v4.3.3
           with:
               cmakeVersion: "~4.2.0"
+              useCloudCache: false
 
         - name: Install Visual Studio 2026 Build Tools
           shell: pwsh
