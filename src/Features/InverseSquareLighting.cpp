@@ -53,7 +53,7 @@ void InverseSquareLighting::ProcessLight(LightLimitFix::LightData& light, RE::BS
 	light.color = { runtimeData->diffuse.red, runtimeData->diffuse.green, runtimeData->diffuse.blue };
 
 	const bool isInvSq = light.lightFlags.any(LightLimitFix::LightFlags::InverseSquare);
-	if (bsLight->pointLight && editorRef.enabled && ((isInvSq && editorRef.disableInvSqLights) || (!isInvSq && editorRef.disableRegularLights)))
+	if (bsLight->pointLight && ((isInvSq && editorRef.disableInvSqLights) || (!isInvSq && editorRef.disableRegularLights)))
 		light.lightFlags.set(LightLimitFix::LightFlags::Disabled);
 
 	if (bsLight->pointLight && isInvSq) {
