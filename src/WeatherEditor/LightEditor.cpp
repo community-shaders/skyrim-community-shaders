@@ -10,29 +10,42 @@
 
 void LightEditor::DrawSettings()
 {
+	// Header
+	ImGui::Text("Lighting Editor");
+	ImGui::Separator();
+
 	ImGui::Checkbox("Disable Regular Falloff Lights", &disableRegularLights);
 	ImGui::Checkbox("Disable Inverse Square Falloff Lights", &disableInvSqLights);
-
-	ImGui::Spacing();
+	ImGui::Separator();
+	
 	ImGui::Text("Total Lights: %u", totalLightCount);
 	ImGui::Text("Active Shadow Lights: %u", activeShadowLightCount);
-	ImGui::Spacing();
 	ImGui::Separator();
-	ImGui::Spacing();
 
-	ImGui::Checkbox("Shadows Only", &shadowsOnly);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Only show lights with HemiShadow or OmniShadow flags.");
-	}
+	{
+		const auto& style = ImGui::GetStyle();
+		const float arrowWidth = ImGui::GetFrameHeight();
+		const float filterComboWidth = ImGui::CalcTextSize("Attached Lights").x + style.FramePadding.x * 2 + arrowWidth;
+		const float sortComboWidth = ImGui::CalcTextSize("EditorID").x + style.FramePadding.x * 2 + arrowWidth;
 
-	int selectedFilter = static_cast<int>(filterOption);
-	if (ImGui::Combo("Filter By", &selectedFilter, FilterOptionLabels, static_cast<int>(FilterOption::Count))) {
-		filterOption = static_cast<FilterOption>(selectedFilter);
-	}
+		ImGui::SetNextItemWidth(filterComboWidth);
+		int selectedFilter = static_cast<int>(filterOption);
+		if (ImGui::Combo("##filterBy", &selectedFilter, FilterOptionLabels, static_cast<int>(FilterOption::Count))) {
+			filterOption = static_cast<FilterOption>(selectedFilter);
+		}
 
-	int selectedSort = static_cast<int>(sortOption);
-	if (ImGui::Combo("Sort By", &selectedSort, SortOptionLabels, static_cast<int>(SortOption::Count))) {
-		sortOption = static_cast<SortOption>(selectedSort);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(sortComboWidth);
+		int selectedSort = static_cast<int>(sortOption);
+		if (ImGui::Combo("##sortBy", &selectedSort, SortOptionLabels, static_cast<int>(SortOption::Count))) {
+			sortOption = static_cast<SortOption>(selectedSort);
+		}
+
+		ImGui::SameLine();
+		ImGui::Checkbox("Shadows Only", &shadowsOnly);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Only show lights with HemiShadow or OmniShadow flags.");
+		}
 	}
 
 	if (ImGui::BeginCombo("Lights", selected.isSelected ? GetLightName(selected).c_str() : "Select a light")) {
@@ -49,7 +62,6 @@ void LightEditor::DrawSettings()
 		ImGui::EndCombo();
 	}
 
-	ImGui::Spacing();
 	ImGui::Separator();
 	ImGui::Spacing();
 

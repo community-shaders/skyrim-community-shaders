@@ -215,7 +215,7 @@ void EditorWindow::ShowObjectsWindow()
 			// List of categories
 			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting",
 				"Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect",
-				"Interior Only", "Lighting editor" };
+				"Interior Only", "Lighting Editor" };
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
 				if (ImGui::Selectable(categories[i], m_selectedCategory == categories[i])) {
@@ -240,7 +240,7 @@ void EditorWindow::ShowObjectsWindow()
 				return;
 			}
 
-			if (m_selectedCategory == "Lighting editor") {
+			if (m_selectedCategory == "Lighting Editor") {
 				BeginScrollableContent("##LightEditorScroll");
 				lightEditor.DrawSettings();
 				EndScrollableContent();
