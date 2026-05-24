@@ -33,6 +33,10 @@ on:
             changelog:
                 description: "Optional release notes or changelog for Nexus"
                 required: false
+            nexus_file_group_id:
+                description: "Nexus file group ID for the core mod"
+                required: false
+                default: "3119152"
     workflow_call:
         inputs:
             tag:
@@ -63,9 +67,11 @@ on:
                 required: false
                 type: string
                 default: ""
-        secrets:
-            UNEX_NEXUSMODS_SESSION_COOKIE:
+            nexus_file_group_id:
                 required: false
+                type: string
+                default: "3119152"
+        secrets:
             UNEX_APIKEY:
                 required: false
 
@@ -185,6 +191,21 @@ jobs:
                       json.dump(data, f)
                   "
 
+                  # Inject core file_group_id from workflow input if provided.
+                  if [ -n "$INPUT_NEXUS_FILE_GROUP_ID" ]; then
+                    python -c "
+                  import json, os
+                  with open('nexus-matrix-raw.json') as f:
+                      data = json.load(f)
+                  for row in data:
+                      if row.get('name') == 'core':
+                          row['file_group_id'] = os.environ['INPUT_NEXUS_FILE_GROUP_ID']
+                          break
+                  with open('nexus-matrix-raw.json', 'w') as f:
+                      json.dump(data, f)
+                  "
+                  fi
+
                   python -c "
                   import json, os, fnmatch
                   with open('nexus-matrix-raw.json') as f:
@@ -265,6 +286,7 @@ jobs:
                   INPUT_NEXUS_MOD_ID: ${{ inputs.nexus_mod_id || '' }}
                   INPUT_MOD_FILENAME: ${{ inputs.mod_filename || '' }}
                   INPUT_ARTIFACT_PATTERN: ${{ inputs.artifact_pattern || '' }}
+                  INPUT_NEXUS_FILE_GROUP_ID: ${{ inputs.nexus_file_group_id || '' }}
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     prepare-artifacts:
@@ -415,35 +437,124 @@ jobs:
                   UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
 
     upload-to-nexus:
-        # Reusable workflow call: runs-on is intentionally omitted (runner is defined by the
-        # called workflow). IDE schema validators may flag this as an error — it is valid syntax.
-        # auto_upload=false items are pre-filtered from upload_matrix so no matrix-context
-        # filtering is needed in the if condition (matrix is not available in job-level if).
         needs: [prepare-nexus-matrix, prepare-artifacts]
         if: >
             needs.prepare-nexus-matrix.outputs.dry_run != 'true' &&
             needs.prepare-nexus-matrix.outputs.has_uploads == 'true'
+        runs-on: ubuntu-latest
         strategy:
             matrix: ${{ fromJson(needs.prepare-nexus-matrix.outputs.upload_matrix) }}
             fail-fast: false
-        uses: alandtse/nexus-workflows/.github/workflows/upload-nexus.yml@main
-        with:
-            nexus_game_id: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
-            nexus_mod_id: ${{ matrix.nexus_mod_id }}
-            artifact_name: nexus-upload-${{ matrix.name }}
-            tag_name: ${{ needs.prepare-nexus-matrix.outputs.tag }}
-            mod_version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
-            mod_filename: ${{ matrix.mod_filename }}
-            changelog: ${{ inputs.changelog || matrix.changelog || '' }}
-            # file_description anchors each .7z to the CS release it shipped
-            # with. Empty string falls back to the upstream default
-            # ("See mod description for details.") so non-release dispatches
-            # without an audit-tool-built matrix still work.
-            file_description: ${{ matrix.file_description || '' }}
-            check_existing: true
-        secrets:
-            UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
-            UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
+        steps:
+            - name: Download artifact
+              uses: actions/download-artifact@v7
+              with:
+                  name: nexus-upload-${{ matrix.name }}
+                  path: upload/
+
+            - name: Check if version already exists on Nexus
+              id: version-check
+              env:
+                  MOD_ID: ${{ matrix.nexus_mod_id }}
+                  VERSION: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
+                  GAME_ID: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
+                  API_KEY: ${{ secrets.UNEX_APIKEY }}
+              run: |
+                  if [ -z "$API_KEY" ] || [ -z "$MOD_ID" ]; then
+                    echo "should_upload=true" >> $GITHUB_OUTPUT
+                    exit 0
+                  fi
+                  EXISTING=$(curl -sf \
+                    -H "apikey: $API_KEY" \
+                    -H "Accept: application/json" \
+                    "https://api.nexusmods.com/v1/games/$GAME_ID/mods/$MOD_ID/files.json" \
+                    | python3 -c "
+                  import json, sys, os
+                  data = json.load(sys.stdin)
+                  main = [f for f in data.get('files', []) if f.get('category_name') == 'MAIN']
+                  versions = [f.get('version', '') for f in (main or data.get('files', []))]
+                  print('true' if os.environ['VERSION'] in versions else 'false')
+                  " 2>/dev/null || echo "false")
+                  if [ "$EXISTING" = "true" ]; then
+                    echo "Version $VERSION already exists on Nexus for mod $MOD_ID — skipping upload."
+                    echo "should_upload=false" >> $GITHUB_OUTPUT
+                  else
+                    echo "should_upload=true" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Find artifact and build description
+              if: steps.version-check.outputs.should_upload == 'true'
+              id: prep
+              env:
+                  FILE_DESC: ${{ matrix.file_description }}
+                  RELEASE_TAG: ${{ needs.prepare-nexus-matrix.outputs.tag }}
+                  REPO: ${{ github.repository }}
+              run: |
+                  FILE=$(find upload/ -maxdepth 1 -name "*.7z" | sort | head -n 1)
+                  if [ -z "$FILE" ]; then
+                    echo "ERROR: No .7z file found in upload/ directory" >&2
+                    exit 1
+                  fi
+                  echo "file=$FILE" >> $GITHUB_OUTPUT
+                  LINK="https://github.com/${REPO}/releases/tag/${RELEASE_TAG}"
+                  if [ -n "$FILE_DESC" ]; then
+                    printf 'description=%s Full changelog: %s\n' "$FILE_DESC" "$LINK" >> $GITHUB_OUTPUT
+                  else
+                    printf 'description=Full changelog: %s\n' "$LINK" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Validate file_group_id
+              if: steps.version-check.outputs.should_upload == 'true'
+              env:
+                  FILE_GROUP_ID: ${{ matrix.file_group_id }}
+                  MOD_NAME: ${{ matrix.mod_filename }}
+              run: |
+                  if [ -z "$FILE_GROUP_ID" ] || [ "$FILE_GROUP_ID" = "000000" ]; then
+                    echo "ERROR: file_group_id is '${FILE_GROUP_ID}' for '$MOD_NAME'." >&2
+                    echo "Set nexusfilegroupid in the feature's [Nexus] ini section." >&2
+                    exit 1
+                  fi
+
+            - name: Upload to Nexus
+              id: upload
+              if: steps.version-check.outputs.should_upload == 'true'
+              continue-on-error: true
+              uses: Nexus-Mods/upload-action@a746f1867153abc77beed950bf7526ece1a9f8c4  # v1.0.0-beta.5
+              with:
+                  api_key: ${{ secrets.UNEX_APIKEY }}
+                  file_group_id: ${{ matrix.file_group_id }}
+                  filename: ${{ steps.prep.outputs.file }}
+                  version: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
+                  display_name: ${{ matrix.mod_filename }}
+                  description: ${{ steps.prep.outputs.description }}
+                  file_category: main
+
+            - name: Report upload failure
+              if: steps.upload.outcome == 'failure'
+              env:
+                  MOD_NAME: ${{ matrix.mod_filename }}
+                  MOD_ID: ${{ matrix.nexus_mod_id }}
+                  FILE_GROUP_ID: ${{ matrix.file_group_id }}
+                  VERSION: ${{ matrix.mod_version || needs.prepare-nexus-matrix.outputs.version }}
+                  GAME_ID: ${{ inputs.nexus_game_id || 'skyrimspecialedition' }}
+                  ARTIFACT_NAME: nexus-upload-${{ matrix.name }}
+              run: |
+                  {
+                    echo "## ❌ Upload failed: $MOD_NAME v$VERSION"
+                    echo ""
+                    echo "| Field | Value |"
+                    echo "|-------|-------|"
+                    echo "| Mod | [$MOD_NAME](https://www.nexusmods.com/$GAME_ID/mods/$MOD_ID) |"
+                    echo "| Version | \`$VERSION\` |"
+                    echo "| File group ID | \`$FILE_GROUP_ID\` |"
+                    echo "| Artifact | \`$ARTIFACT_NAME\` |"
+                    echo ""
+                    echo "**Check the _Upload to Nexus_ step log above for the specific error.**"
+                    echo ""
+                    echo "To upload manually: download \`$ARTIFACT_NAME\` from this workflow run's"
+                    echo "artifacts and upload it to the mod's Files page on Nexus."
+                  } >> "$GITHUB_STEP_SUMMARY"
+                  exit 1
 
     upload-summary:
         name: Upload Summary

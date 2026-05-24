@@ -206,5 +206,4 @@ jobs:
             artifact_pattern: "CommunityShaders-*.7z"
             dry_run: "true"
         secrets:
-            UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
             UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}
