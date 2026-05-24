@@ -1,4 +1,5 @@
 #include "Common/Color.hlsli"
+#include "Common/DisplayMapping.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 
@@ -38,6 +39,37 @@ cbuffer PerGeometry : register(b2)
 
 // Decompiler comparison idiom: cmp(expr) => -(expr), used as a truthy mask in ?: selects.
 #define cmp -
+
+#ifdef HDR_OUTPUT
+// Internal working space for TAA is PQ/BT2020.
+// PQ maps [0, 10000 nits] to [0, 1], so the vanilla 1.001 bracket ceiling is correct —
+// nothing in the scene legitimately exceeds 1.0 PQ. This is why PQ avoids the bracket
+// collapse that caused halos with the linear BT2020 working space.
+float3 ConvertRenderInput(float3 gammaColor)
+{
+	return DisplayMapping::LinearToPQ(Color::BT709ToBT2020(Color::GammaToLinearSafe(gammaColor)), 10000.0);
+}
+float3 ConvertRenderOutput(float3 pqColor)
+{
+	return Color::LinearToGammaSafe(Color::BT2020ToBT709(DisplayMapping::PQtoLinear(pqColor, 10000.0)));
+}
+// Feedback luma round-trip: feedbackOut.x is read back as history.x next frame.
+// Storing raw PQ luma [0,1] in a low-precision RT causes quantization banding in highlights
+// because PQ encodes high nit values in the upper portion of the [0,1] range where
+// 8/10-bit steps are perceptible. Encoding as game-gamma spreads precision like SDR
+// and round-trips cleanly through whatever precision the feedback RT uses.
+float EncodeFeedbackLuma(float pqLuma)
+{
+	// PQ → linear (single channel: luma only, no colour transform needed)
+	float linearLuma = DisplayMapping::PQtoLinear(pqLuma.xxx, 10000.0).x;
+	return Color::LinearToGammaSafe(linearLuma);
+}
+float DecodeFeedbackLuma(float gammaLuma)
+{
+	float linearLuma = Color::GammaToLinearSafe(gammaLuma);
+	return DisplayMapping::LinearToPQ(linearLuma.xxx, 10000.0).x;
+}
+#endif
 
 static const float3 kLumaWeights = float3(0.5, 0.25, 0.25);
 
@@ -87,7 +119,7 @@ float3 LoadNeighborGRB(float2 uv)
 {
 	float3 grb = currentFrameTex.Sample(currentFrameSampler, uv).yxz;
 #	ifdef HDR_OUTPUT
-	grb.yxz = Color::BT709ToBT2020(Color::GammaToLinearSafe(grb.yxz));
+	grb.yxz = ConvertRenderInput(grb.yxz);
 #	endif
 	return grb;
 }
@@ -118,7 +150,7 @@ float3 SampleCenterRGB(float2 uv)
 {
 	float3 rgb = currentFrameTex.Sample(currentFrameSampler, uv).xyz;
 #	ifdef HDR_OUTPUT
-	rgb = Color::BT709ToBT2020(Color::GammaToLinearSafe(rgb));
+	rgb = ConvertRenderInput(rgb);
 #	endif
 	return rgb;
 }
@@ -236,6 +268,12 @@ PS_OUTPUT main(PS_INPUT input)
 	motionReject.x = sqrt(dot(motionReject.xy, motionReject.xy));
 	tapMin.xy = ClampHistoryUV(motionReject.zw);
 	history.xyw = historyTex.Sample(historySampler, tapMin.xy).xyz;
+#	ifdef HDR_OUTPUT
+	// history.x is stored as game-gamma luma (see EncodeFeedbackLuma on write).
+	// Decode to PQ luma to match the working space of all neighbour taps.
+	// history.y and history.w are motion scalars — do NOT convert them.
+	history.x = DecodeFeedbackLuma(history.x);
+#	endif
 	corner.w = dot(corner.xzy, kLumaWeights);
 	motionReject.y = cmp(corner.w < history.x);
 
@@ -261,14 +299,12 @@ PS_OUTPUT main(PS_INPUT input)
 	centerMeta.x = dot(center.zwy, kLumaWeights);
 	bracketMax.x = cmp(centerMeta.x < history.x);
 	centerMeta.yz = center.yw;
-	// removing this causes flickering on high contrast edges
+	// Bracket ceiling: 1.001 is just above the maximum PQ value (1.0 = 10000 nits).
+	// Nothing in the scene exceeds this, so the ceiling works correctly in PQ working space.
+	// (In linear BT2020 this would be wrong — sky/specular exceed 1.0 linear — but PQ is bounded.)
 	bracketMax.y = cmp(centerMeta.x < 1.00100005);
 	bracketMax.yzw = bracketMax.yyy ? centerMeta.yzx : float3(1.00100005, 1.00100005, 1.00100005);
 	bracketMax.yzw = bracketMax.xxx ? float3(1.00100005, 1.00100005, 1.00100005) : bracketMax.yzw;
-#	ifdef HDR_OUTPUT
-	// Linear HDR: vanilla 1.001 stabilizes grass; sun/sky (luma >= 1) need center color or ramps go grey.
-	bracketMax.yzw = cmp(1.0 <= centerMeta.x).xxx ? centerMeta.yzx : bracketMax.yzw;
-#	endif
 
 	weightedColor.x = cmp(tapC1.w < bracketMax.w);
 	weightedColor.xyz = weightedColor.xxx ? tapC1.yzw : bracketMax.yzw;
@@ -400,8 +436,21 @@ PS_OUTPUT main(PS_INPUT input)
 	motionReject.z = 128 * TexelSizeParams.x;
 	tapA0.z = saturate(motionReject.x / motionReject.z);
 	motionReject.x = tapA0.z + -history.w;
+	// Luma convergence decay: the *20 and *100 constants were tuned for gamma-space luma.
+	// PQ is perceptually uniform — a single linear rescale of the PQ diff is accurate
+	// across all luminance levels (unlike converting through gamma, which has a varying
+	// derivative and overcorrects at bright and dark extremes).
+	// Scale factor: 0.05 gamma ≈ 0.020 PQ at mid-scene luminance → factor ≈ 2.5.
+#	ifdef HDR_OUTPUT
+	motionReject.z = history.x + -centerMeta.x;
+	{
+		float lumaDiffScaled = abs(motionReject.z) * 0.05;
+		history.xw = -lumaDiffScaled.xx * float2(20, 100) + float2(1, 1);
+	}
+#	else
 	motionReject.z = history.x + -centerMeta.x;
 	history.xw = -abs(motionReject.xx) * float2(20, 100) + float2(1, 1);
+#	endif
 	history.xw = max(float2(0, 0), history.xw);
 	tapMin.yzw = history.xxx * tapMin.xyz + corner.xyz;
 	sampleUV.xyw = -tapMin.yzw + sampleUV.xyw;
@@ -413,22 +462,18 @@ PS_OUTPUT main(PS_INPUT input)
 	motionReject.x = tapA0.y * motionReject.y + motionReject.x;
 	feedbackOut.yz = tapA0.yz;
 #	ifdef HDR_OUTPUT
-	sampleUV.xyw = (motionReject.xxx * sampleUV.xyw + tapMin.yzw);
+	tapMin.yzw = max(tapMin.yzw, 0);
+	sampleUV.xyw = saturate(motionReject.xxx * sampleUV.xyw + tapMin.yzw);
+	// Skip vanilla BlendParams.z/w detail recovery — neighbourhood delta blows up in linear HDR
+	// and causes dark bezels / halos on the alpha-aware corner.yzw output path.
+	corner.yzw = sampleUV.xyw;
 #	else
 	sampleUV.xyw = saturate(motionReject.xxx * sampleUV.xyw + tapMin.yzw);
-#	endif
 
 	tapA0.xyz = sampleUV.xyw + -corner.xyz;
-#	ifdef HDR_OUTPUT
-	sampleUV.xyw = (tapA0.xyz * BlendParams.zzz + sampleUV.xyw);
-#	else
 	sampleUV.xyw = saturate(tapA0.xyz * BlendParams.zzz + sampleUV.xyw);
-#	endif
 
 	corner.xyz = corner.xyz + -sampleUV.xyw;
-#	ifdef HDR_OUTPUT
-	corner.yzw = (BlendParams.www * corner.xyz + sampleUV.xyw);
-#	else
 	corner.yzw = saturate(BlendParams.www * corner.xyz + sampleUV.xyw);
 #	endif
 
@@ -460,7 +505,11 @@ PS_OUTPUT main(PS_INPUT input)
 	sampleUV.xyzw = motionReject.xxxx ? tapMin.xyzw : corner.xyzw;
 	colorOut.xyz = sampleUV.yzw;
 #	ifdef HDR_OUTPUT
-	feedbackOut.x = (sampleUV.x * motionReject.z);
+	// Encode PQ luma to game-gamma for feedback RT storage.
+	// Storing raw PQ [0,1] in a low-precision RT causes highlight banding because
+	// PQ packs high-nit values into the upper range where RT quantization is visible.
+	// Game-gamma encoding spreads precision evenly — symmetric with DecodeFeedbackLuma on read.
+	feedbackOut.x = EncodeFeedbackLuma(saturate(sampleUV.x * motionReject.z));
 #	else
 	feedbackOut.x = saturate(sampleUV.x * motionReject.z);
 #	endif
@@ -472,8 +521,9 @@ PS_OUTPUT main(PS_INPUT input)
 	feedbackOut.w = 1;
 
 #	ifdef HDR_OUTPUT
-	feedbackOut.x = max(0, feedbackOut.x);
-	colorOut.xyz = Color::LinearToGammaSafe(Color::BT2020ToBT709(colorOut.xyz));
+	// colorOut is the display path — convert from PQ/BT2020 working space to game-gamma/BT709.
+	// feedbackOut.x was already encoded above; do not modify it here.
+	colorOut.xyz = ConvertRenderOutput(colorOut.xyz);
 #	endif
 
 	psout.Color = colorOut;
