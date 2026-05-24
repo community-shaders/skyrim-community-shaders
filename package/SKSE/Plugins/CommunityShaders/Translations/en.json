@@ -1208,7 +1208,7 @@
     "feature.sss.burley": "Burley",
     "feature.sss.burley_samples": "Burley Samples",
     "feature.sss.enable_character_lighting": "Enable Character Lighting",
-    "feature.sss.enable_character_lighting_tooltip": "Vanilla feature, not recommended.",
+    "feature.sss.enable_character_lighting_tooltip": "Vanilla feature.",
     "feature.sss.falloff": "Falloff",
     "feature.sss.human_profile": "Human Profile",
     "feature.sss.mean_free_path_color": "Mean Free Path Color",

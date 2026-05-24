@@ -1207,7 +1207,7 @@
     "feature.sss.burley": "Burley",
     "feature.sss.burley_samples": "Burley采样数",
     "feature.sss.enable_character_lighting": "启用角色光照",
-    "feature.sss.enable_character_lighting_tooltip": "原版功能，不推荐。",
+    "feature.sss.enable_character_lighting_tooltip": "原版功能。",
     "feature.sss.falloff": "衰减",
     "feature.sss.human_profile": "人类预设",
     "feature.sss.mean_free_path_color": "平均自由路径颜色",
