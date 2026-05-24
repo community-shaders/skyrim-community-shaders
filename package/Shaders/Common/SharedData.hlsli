@@ -15,6 +15,12 @@ namespace SharedData
 		row_major float3x4 DirectionalAmbient;
 		float4 DirLightDirection;
 		float4 DirLightColor;
+		float4 SunDirection;
+		float4 SunColor;
+		float4 MasserDirection;
+		float4 MasserColor;
+		float4 SecundaDirection;
+		float4 SecundaColor;
 		float4 CameraData;
 		float4 BufferDim;
 		float Timer;
