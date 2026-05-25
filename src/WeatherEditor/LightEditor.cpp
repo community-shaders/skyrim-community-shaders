@@ -16,19 +16,31 @@ static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nu
 {
 	if (auto* taskInterface = SKSE::GetTaskInterface()) {
 		taskInterface->AddTask([cmd = std::move(cmd), refr]() {
-			const auto console = globals::game::ui ? globals::game::ui->GetMenu<RE::Console>() : nullptr;
+			// Write the console selected-ref global directly (same RELOCATION_ID as
+			// CommonLibSSE-NG/src/RE/C/Console.cpp:32 Console::GetSelectedRefHandle).
+			// Console::SetSelectedRef requires a Console instance that only exists
+			// while the console UI is open, so we write the global directly.
+			// We also pass refr to CompileAndRun as thisObj to cover command handlers
+			// that read from the script parameter rather than the console global.
+			static REL::Relocation<RE::ObjectRefHandle*> selectedRef{
+				RELOCATION_ID(519394, AE_CHECK(SKSE::RUNTIME_SSE_1_6_1130, 405935, 504099))
+			};
 
-			RE::NiPointer<RE::TESObjectREFR> prevRef;
-			if (refr && console) {
-				prevRef = RE::Console::GetSelectedRef();
-				console->SetSelectedRef(refr);
+			RE::ObjectRefHandle prevHandle;
+			if (refr) {
+				prevHandle = *selectedRef;
+				*selectedRef = RE::ObjectRefHandle(refr);
 			}
 
-			RE::Console::ExecuteCommand(cmd.c_str());
-
-			if (refr && console) {
-				console->SetSelectedRef(prevRef.get());
+			const auto factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::Script>();
+			if (auto* script = factory ? static_cast<RE::Script*>(factory->Create()) : nullptr) {
+				script->SetCommand(cmd);
+				script->CompileAndRun(refr);
+				delete script;
 			}
+
+			if (refr)
+				*selectedRef = prevHandle;
 		});
 	}
 }
@@ -142,8 +154,12 @@ void LightEditor::DrawSettings()
 	if (ImGui::Button("Toggle Light")) {
 		if (lpInfo.isLPLight && activeRefr)
 			ScheduleConsoleCommand("tlp 0", activeRefr);
-		else
-			current.data.fade = (current.data.fade == 0.0f) ? original.data.fade : 0.0f;
+		else if (current.data.fade == 0.0f)
+			current.data.fade = cachedFadeBeforeToggle;
+		else {
+			cachedFadeBeforeToggle = current.data.fade;
+			current.data.fade = 0.0f;
+		}
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		if (lpInfo.isLPLight)
@@ -241,6 +257,11 @@ void LightEditor::GatherLights()
 	if (!Menu::GetSingleton()->ShouldSwallowInput()) {
 		ResetOverrides();
 		return;
+	}
+
+	if (!selected.isSelected && savedSelection.isSelected) {
+		selected = savedSelection;
+		savedSelection = {};
 	}
 
 	if (waitFrames > 0) {
@@ -357,6 +378,8 @@ void LightEditor::GatherLights()
 
 void LightEditor::ResetOverrides()
 {
+	if (selected.isSelected)
+		savedSelection = selected;
 	RestoreOriginal();
 	selected = {};
 	previous = {};
@@ -387,6 +410,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		                            ? static_cast<RE::BSShadowLight*>(bsLight)->GetRuntimeData().shadowBiasScale
 		                            : 0.0f;
 		shadowDepthBias = originalShadowDepthBias;
+		cachedFadeBeforeToggle = 0.0f;
 
 		lpInfo = selected.isAttached ? ParseLPLightName(niLight->name.c_str()) : LPLightInfo{};
 		if (lpInfo.isLPLight && refr) {
