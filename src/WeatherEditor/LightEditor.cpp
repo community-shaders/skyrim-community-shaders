@@ -63,7 +63,6 @@ void LightEditor::DrawSettings()
 	}
 
 	ImGui::Separator();
-	ImGui::Spacing();
 
 	if (!selected.isSelected)
 		return;
@@ -79,9 +78,7 @@ void LightEditor::DrawSettings()
 		ImGui::Text("NiLight Name: %s", selected.name.c_str());
 	}
 
-	ImGui::Spacing();
 	ImGui::Separator();
-	ImGui::Spacing();
 
 	if (ImGui::Button("Revert Changes")) {
 		current = original;
@@ -100,8 +97,7 @@ void LightEditor::DrawSettings()
 	}
 
 	ImGui::Spacing();
-	ImGui::Spacing();
-
+	
 	if (selected.isSpotlight)
 		ImGui::TextDisabled("Spotlight: ISL light type flags not applicable");
 	ImGui::BeginDisabled(selected.isSpotlight);
@@ -109,7 +105,6 @@ void LightEditor::DrawSettings()
 	ImGui::EndDisabled();
 	ImGui::CheckboxFlags("Linear Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
 
-	ImGui::Spacing();
 	ImGui::Spacing();
 
 	ImGui::ColorEdit3("Color", &current.data.diffuse.red);
@@ -129,7 +124,6 @@ void LightEditor::DrawSettings()
 	}
 
 	ImGui::Spacing();
-	ImGui::Spacing();
 
 	if (!selected.isOther && current.data.lighFormId != 0 && selected.hasPosition) {
 		ImGui::Text("X: %.2f, Y: %.2f, Z: %.2f", displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
@@ -137,10 +131,8 @@ void LightEditor::DrawSettings()
 		ImGui::SliderFloat3("Position Offset", &current.pos.x, -500.f, 500.f, "%.0f");
 
 		ImGui::Spacing();
-		ImGui::Spacing();
 
 		auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
-		ImGui::Spacing();
 		ImGui::Text("Light Flags");
 		ImGui::CheckboxFlags("Dynamic", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
 		ImGui::CheckboxFlags("Negative", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
@@ -367,6 +359,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";
 	displayInfo.baseObjectFormId = refr && refr->GetBaseObject() ? refr->GetBaseObject()->formID : 0;
 	displayInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : "Unknown";
+	displayInfo.cellFormId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormID() : 0;
 	displayInfo.cellEditorId = refr && refr->GetParentCell() ? refr->GetParentCell()->GetFormEditorID() : "Unknown";
 	displayInfo.lighFormId = ligh ? ligh->GetFormID() : 0;
 	displayInfo.lighEditorId = ligh ? clib_util::editorID::get_editorID(ligh) : "Unknown";
