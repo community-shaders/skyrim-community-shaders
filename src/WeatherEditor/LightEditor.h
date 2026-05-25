@@ -40,6 +40,7 @@ private:
 		std::string ownerEditorId;
 		RE::FormID baseObjectFormId = 0;
 		std::string ownerLastEditedBy;
+		RE::FormID cellFormId = 0;
 		std::string cellEditorId;
 		RE::FormID lighFormId = 0;
 		std::string lighEditorId;
