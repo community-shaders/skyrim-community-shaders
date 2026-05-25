@@ -2,6 +2,8 @@
 #include "../Features/InverseSquareLighting.h"
 #include "../Features/LightLimitFix.h"
 #include "../Menu.h"
+#include "EditorWindow.h"
+#include "WeatherUtils.h"
 
 #include <array>
 #include <filesystem>
@@ -72,7 +74,7 @@ void LightEditor::DrawSettings()
 		ImGui::Text("Owner last edited by: %s", displayInfo.ownerLastEditedBy.c_str());
 		ImGui::Text("Base Object: 0x%08X | %s", displayInfo.baseObjectFormId, selected.name.c_str());
 		ImGui::Text("LIGH: 0x%08X | %s", displayInfo.lighFormId, displayInfo.lighEditorId.c_str());
-		ImGui::Text("Cell: %s", displayInfo.cellEditorId.c_str());
+		ImGui::Text("Cell: 0x%08X | %s", displayInfo.cellFormId, displayInfo.cellEditorId.c_str());
 	} else {
 		ImGui::Text("Memory Address: %p", selected.ptr);
 		ImGui::Text("NiLight Name: %s", selected.name.c_str());
@@ -89,7 +91,10 @@ void LightEditor::DrawSettings()
 	if (lpInfo.isLPLight) {
 		ImGui::SameLine();
 		if (ImGui::Button("Save to Light Placer")) {
-			SaveToLightPlacer();
+			const bool ok = SaveToLightPlacer();
+			EditorWindow::GetSingleton()->ShowNotification(
+				ok ? fmt::format("Saved to {}", lpInfo.configPath) : "Save failed — see log",
+				ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Save current settings to the Light Placer JSON.");
@@ -107,20 +112,20 @@ void LightEditor::DrawSettings()
 
 	ImGui::Spacing();
 
-	ImGui::ColorEdit3("Color", &current.data.diffuse.red);
-	ImGui::SliderFloat("Intensity", &current.data.fade, 0.01f, 16.f, "%.3f");
+	WeatherUtils::DrawColorEdit("Color", reinterpret_cast<float3&>(current.data.diffuse));
+	WeatherUtils::DrawSliderFloat("Intensity", current.data.fade, 0.01f, 16.f, nullptr, "%.3f");
 
 	const auto isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
 
 	if (isInvSq)
 		ImGui::BeginDisabled();
-	ImGui::SliderFloat("Radius", &current.data.radius, 2.f, 8096.f, "%.0f");
+	WeatherUtils::DrawSliderFloat("Radius", current.data.radius, 2.f, 8096.f, nullptr, "%.0f");
 	if (isInvSq)
 		ImGui::EndDisabled();
 
 	if (isInvSq) {
-		ImGui::SliderFloat("Size", &current.data.size, 0.01f, 10.0f, "%.3f");
-		ImGui::SliderFloat("Cutoff", &current.data.cutoffOverride, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+		WeatherUtils::DrawSliderFloat("Size", current.data.size, 0.01f, 10.0f, nullptr, "%.3f");
+		WeatherUtils::DrawSliderFloat("Cutoff", current.data.cutoffOverride, 0.01f, 1.f, nullptr, "%.3f");
 	}
 
 	ImGui::Spacing();
@@ -445,14 +450,16 @@ LightEditor::LPLightInfo LightEditor::ParseLPLightName(const std::string& name)
 	return info;
 }
 
-std::string LightEditor::UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear)
+std::string LightEditor::UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear, bool flicker, bool portalStrict, bool shadow)
 {
+	static constexpr std::array managed = { "InverseSquare", "Linear", "Flicker", "PortalStrict", "Shadow" };
+
 	std::vector<std::string> flags;
 	if (!existingFlags.empty()) {
 		std::istringstream ss(existingFlags);
 		std::string flag;
 		while (std::getline(ss, flag, '|')) {
-			if (flag != "InverseSquare" && flag != "Linear")
+			if (std::find(managed.begin(), managed.end(), flag) == managed.end())
 				flags.push_back(flag);
 		}
 	}
@@ -460,6 +467,12 @@ std::string LightEditor::UpdateLPFlags(const std::string& existingFlags, bool in
 		flags.push_back("InverseSquare");
 	if (linear)
 		flags.push_back("Linear");
+	if (flicker)
+		flags.push_back("Flicker");
+	if (portalStrict)
+		flags.push_back("PortalStrict");
+	if (shadow)
+		flags.push_back("Shadow");
 
 	std::string result;
 	for (size_t i = 0; i < flags.size(); ++i) {
@@ -633,7 +646,11 @@ bool LightEditor::SaveToLightPlacer()
 			std::string existingFlags = data.value("flags", std::string{});
 			bool isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
 			bool isLinear = current.data.flags.any(LightLimitFix::LightFlags::Linear);
-			std::string newFlags = UpdateLPFlags(existingFlags, isInvSq, isLinear);
+			const uint32_t tesUnderlying = current.tesFlags.underlying();
+			bool isFlicker = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) != 0;
+			bool isPortalStrict = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) != 0;
+			bool isOmniShadow = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) != 0;
+			std::string newFlags = UpdateLPFlags(existingFlags, isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
 			if (!newFlags.empty())
 				data["flags"] = newFlags;
 			else
