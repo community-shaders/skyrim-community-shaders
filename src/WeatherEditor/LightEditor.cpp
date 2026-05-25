@@ -12,6 +12,20 @@
 #include <fstream>
 #include <sstream>
 
+static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nullptr)
+{
+	if (auto* taskInterface = SKSE::GetTaskInterface()) {
+		taskInterface->AddTask([cmd = std::move(cmd), refr]() {
+			const auto factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::Script>();
+			if (auto* script = factory ? static_cast<RE::Script*>(factory->Create()) : nullptr) {
+				script->SetCommand(cmd);
+				script->CompileAndRun(refr);
+				delete script;
+			}
+		});
+	}
+}
+
 void LightEditor::DrawSettings()
 {
 	// Header
@@ -103,6 +117,30 @@ void LightEditor::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Save current settings to the Light Placer JSON.");
 		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reload LP")) {
+			ScheduleConsoleCommand("reloadlp");
+			EditorWindow::GetSingleton()->ShowNotification("Reloading Light Placer configs...", Util::Colors::GetInfo());
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Reload all Light Placer JSON configs in-game (reloadlp).");
+		}
+	}
+
+	if (activeRefr) {
+		if (ImGui::Button("Toggle LP Light")) {
+			ScheduleConsoleCommand("tlp 0", activeRefr);
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Toggle this reference's LP-placed lights on/off (tlp 0).");
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Toggle All LP Lights")) {
+			ScheduleConsoleCommand("tlp 1");
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Toggle all Light Placer lights globally (tlp 1).");
+		}
 	}
 
 	ImGui::Spacing();
@@ -132,10 +170,7 @@ void LightEditor::DrawSettings()
 		WeatherUtils::DrawSliderFloat("Cutoff", current.data.cutoffOverride, 0.01f, 1.f, nullptr, "%.3f");
 	}
 
-	const uint32_t shadowFlagMask = static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow) |
-	                                static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow) |
-	                                static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kSpotShadow);
-	if (current.tesFlags.underlying() & shadowFlagMask) {
+	if (HasShadowFlags(current.tesFlags.underlying())) {
 		if (WeatherUtils::DrawSliderFloat("Shadow Depth Bias", shadowDepthBias, 0.0f, 100.0f, nullptr, "%.2f"))
 			ApplyShadowDepthBias();
 	}
@@ -225,7 +260,7 @@ void LightEditor::GatherLights()
 			ligh = RE::TESForm::LookupByID(runtimeData->lighFormId)->As<RE::TESObjectLIGH>();
 
 		current.isSpotlight = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow);
-		const bool isShadow = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow, RE::TES_LIGHT_FLAGS::kSpotShadow);
+		const bool isShadow = ligh && HasShadowFlags(ligh->data.flags.underlying());
 
 		totalLightCount++;
 		if (isShadow)
