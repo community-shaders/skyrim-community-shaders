@@ -58,6 +58,7 @@ private:
 
 	bool showAttachedLights = false;
 	bool showEffectLights = false;
+	bool extendedLogMode = false;
 	int32_t waitFrames = 0;
 	uint32_t totalLightCount = 0;
 	uint32_t activeShadowLightCount = 0;
