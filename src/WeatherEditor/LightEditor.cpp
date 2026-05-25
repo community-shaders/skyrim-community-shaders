@@ -16,11 +16,18 @@ static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nu
 {
 	if (auto* taskInterface = SKSE::GetTaskInterface()) {
 		taskInterface->AddTask([cmd = std::move(cmd), refr]() {
-			const auto factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::Script>();
-			if (auto* script = factory ? static_cast<RE::Script*>(factory->Create()) : nullptr) {
-				script->SetCommand(cmd);
-				script->CompileAndRun(refr);
-				delete script;
+			const auto console = globals::ui ? globals::ui->GetMenu<RE::Console>() : nullptr;
+
+			RE::NiPointer<RE::TESObjectREFR> prevRef;
+			if (refr && console) {
+				prevRef = RE::Console::GetSelectedRef();
+				console->SetSelectedRef(refr);
+			}
+
+			RE::Console::ExecuteCommand(cmd.c_str());
+
+			if (refr && console) {
+				console->SetSelectedRef(prevRef.get());
 			}
 		});
 	}
@@ -34,6 +41,31 @@ void LightEditor::DrawSettings()
 
 	ImGui::Checkbox("Disable Regular Falloff Lights", &disableRegularLights);
 	ImGui::Checkbox("Disable Inverse Square Falloff Lights", &disableInvSqLights);
+
+	if (ImGui::Button("Toggle All LP Lights")) {
+		ScheduleConsoleCommand("tlp 0");
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Toggle all Light Placer lights on/off (tlp 0).");
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Toggle LP Markers")) {
+		ScheduleConsoleCommand("tlp 1");
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Toggle Light Placer debug markers (tlp 1).");
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Reload LP")) {
+		ScheduleConsoleCommand("reloadlp");
+		EditorWindow::GetSingleton()->ShowNotification("Reloading Light Placer configs...", Util::Colors::GetInfo());
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Reload all Light Placer JSON configs in-game (reloadlp).");
+	}
+
 	ImGui::Separator();
 	
 	ImGui::Text("Total Lights: %u", totalLightCount);
@@ -98,12 +130,26 @@ void LightEditor::DrawSettings()
 
 	ImGui::Separator();
 
-	if (ImGui::Button("Revert Changes")) {
+	if (ImGui::Button("Reset")) {
 		current = original;
 		current.pos = { 0, 0, 0 };
 		shadowDepthBias = originalShadowDepthBias;
 		ApplyShadowDepthBias();
 		waitFrames = 1;
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Toggle Light")) {
+		if (lpInfo.isLPLight && activeRefr)
+			ScheduleConsoleCommand("tlp 0", activeRefr);
+		else
+			current.data.fade = (current.data.fade == 0.0f) ? original.data.fade : 0.0f;
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		if (lpInfo.isLPLight)
+			ImGui::Text("Toggle this reference's LP-placed lights on/off (tlp 0).");
+		else
+			ImGui::Text("Toggle this light on/off.");
 	}
 
 	if (lpInfo.isLPLight) {
@@ -116,30 +162,6 @@ void LightEditor::DrawSettings()
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Save current settings to the Light Placer JSON.");
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Reload LP")) {
-			ScheduleConsoleCommand("reloadlp");
-			EditorWindow::GetSingleton()->ShowNotification("Reloading Light Placer configs...", Util::Colors::GetInfo());
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Reload all Light Placer JSON configs in-game (reloadlp).");
-		}
-	}
-
-	if (activeRefr) {
-		if (ImGui::Button("Toggle LP Light")) {
-			ScheduleConsoleCommand("tlp 0", activeRefr);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Toggle this reference's LP-placed lights on/off (tlp 0).");
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Toggle All LP Lights")) {
-			ScheduleConsoleCommand("tlp 1");
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Toggle all Light Placer lights globally (tlp 1).");
 		}
 	}
 
