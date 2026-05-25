@@ -16,7 +16,7 @@ static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nu
 {
 	if (auto* taskInterface = SKSE::GetTaskInterface()) {
 		taskInterface->AddTask([cmd = std::move(cmd), refr]() {
-			const auto console = globals::ui ? globals::ui->GetMenu<RE::Console>() : nullptr;
+			const auto console = globals::game::ui ? globals::game::ui->GetMenu<RE::Console>() : nullptr;
 
 			RE::NiPointer<RE::TESObjectREFR> prevRef;
 			if (refr && console) {
