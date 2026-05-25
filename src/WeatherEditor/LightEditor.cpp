@@ -180,6 +180,11 @@ void LightEditor::DrawSettings()
 			ImGui::Text("Save current settings to the Light Placer JSON.");
 		}
 	}
+	ImGui::SameLine();
+	ImGui::Checkbox("Log Mode", &extendedLogMode);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Extend slider ranges and use a logarithmic scale.");
+	}
 
 	ImGui::Spacing();
 	
@@ -193,23 +198,35 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 
 	WeatherUtils::DrawColorEdit("Color", reinterpret_cast<float3&>(current.data.diffuse));
-	WeatherUtils::DrawSliderFloat("Intensity", current.data.fade, 0.01f, 16.f, nullptr, "%.3f");
+
+	// Dispatches to logarithmic+extended or normal slider based on extendedLogMode.
+	// Log scale requires min > 0, so extended mins are nudged above zero where needed.
+	auto drawSlider = [&](const char* label, float& value,
+	                       float normalMin, float normalMax,
+	                       float extMin, float extMax,
+	                       const char* format) -> bool {
+		if (extendedLogMode)
+			return ImGui::SliderFloat(label, &value, extMin, extMax, format, ImGuiSliderFlags_Logarithmic);
+		return static_cast<bool>(WeatherUtils::DrawSliderFloat(label, value, normalMin, normalMax, nullptr, format));
+	};
+
+	drawSlider("Intensity", current.data.fade, 0.01f, 16.f, 0.01f, 1024.f, "%.3f");
 
 	const auto isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
 
 	if (isInvSq)
 		ImGui::BeginDisabled();
-	WeatherUtils::DrawSliderFloat("Radius", current.data.radius, 2.f, 8096.f, nullptr, "%.0f");
+	drawSlider("Radius", current.data.radius, 2.f, 8096.f, 2.f, 65536.f, "%.0f");
 	if (isInvSq)
 		ImGui::EndDisabled();
 
 	if (isInvSq) {
-		WeatherUtils::DrawSliderFloat("Size", current.data.size, 0.01f, 10.0f, nullptr, "%.3f");
+		drawSlider("Size", current.data.size, 0.01f, 10.0f, 0.001f, 100.f, "%.3f");
 		WeatherUtils::DrawSliderFloat("Cutoff", current.data.cutoffOverride, 0.01f, 1.f, nullptr, "%.3f");
 	}
 
 	if (HasShadowFlags(current.tesFlags.underlying())) {
-		if (WeatherUtils::DrawSliderFloat("Shadow Depth Bias", shadowDepthBias, 0.0f, 100.0f, nullptr, "%.2f"))
+		if (drawSlider("Shadow Depth Bias", shadowDepthBias, 0.0f, 10.0f, 0.01f, 50.f, "%.2f"))
 			ApplyShadowDepthBias();
 	}
 
