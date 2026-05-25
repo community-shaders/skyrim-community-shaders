@@ -4,6 +4,8 @@
 #include "../Menu.h"
 #include "EditorWindow.h"
 #include "WeatherUtils.h"
+#include "RE/B/BSLight.h"
+#include "RE/B/BSShadowLight.h"
 
 #include <array>
 #include <filesystem>
@@ -85,6 +87,8 @@ void LightEditor::DrawSettings()
 	if (ImGui::Button("Revert Changes")) {
 		current = original;
 		current.pos = { 0, 0, 0 };
+		shadowDepthBias = originalShadowDepthBias;
+		ApplyShadowDepthBias();
 		waitFrames = 1;
 	}
 
@@ -128,6 +132,14 @@ void LightEditor::DrawSettings()
 		WeatherUtils::DrawSliderFloat("Cutoff", current.data.cutoffOverride, 0.01f, 1.f, nullptr, "%.3f");
 	}
 
+	const uint32_t shadowFlagMask = static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow) |
+	                                static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow) |
+	                                static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kSpotShadow);
+	if (current.tesFlags.underlying() & shadowFlagMask) {
+		if (WeatherUtils::DrawSliderFloat("Shadow Depth Bias", shadowDepthBias, 0.0f, 100.0f, nullptr, "%.2f"))
+			ApplyShadowDepthBias();
+	}
+
 	ImGui::Spacing();
 
 	if (!selected.isOther && current.data.lighFormId != 0 && selected.hasPosition) {
@@ -149,6 +161,13 @@ void LightEditor::DrawSettings()
 		ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
 		ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
 	}
+}
+
+bool LightEditor::HasShadowFlags(uint32_t tesFlags)
+{
+	return (tesFlags & (static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow) |
+	                    static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow) |
+	                    static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kSpotShadow))) != 0;
 }
 
 std::string LightEditor::GetLightName(LightInfo& lightInfo)
@@ -248,7 +267,7 @@ void LightEditor::GatherLights()
 			return;
 		selected = current;
 		foundSelected = true;
-		UpdateSelectedLight(refr, ligh, niLight);
+		UpdateSelectedLight(refr, ligh, niLight, bsLight);
 	};
 
 	lights.clear();
@@ -286,7 +305,13 @@ void LightEditor::ResetOverrides()
 	previous = {};
 }
 
-void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight)
+void LightEditor::ApplyShadowDepthBias()
+{
+	if (activeBsLight && activeBsLight->IsShadowLight())
+		static_cast<RE::BSShadowLight*>(activeBsLight.get())->GetRuntimeData().shadowBiasScale = shadowDepthBias;
+}
+
+void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight)
 {
 	const auto runtimeData = ISLCommon::RuntimeLightDataExt::Get(niLight);
 	auto tesFlags = ligh ? &ligh->data.flags : nullptr;
@@ -300,6 +325,11 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 		current = original;
 		current.pos = { 0, 0, 0 };
+
+		originalShadowDepthBias = (bsLight && bsLight->IsShadowLight())
+		                            ? static_cast<RE::BSShadowLight*>(bsLight)->GetRuntimeData().shadowBiasScale
+		                            : 0.0f;
+		shadowDepthBias = originalShadowDepthBias;
 
 		lpInfo = selected.isAttached ? ParseLPLightName(niLight->name.c_str()) : LPLightInfo{};
 		if (lpInfo.isLPLight && refr) {
@@ -320,6 +350,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 	}
 
 	activeNiLight.reset(niLight);
+	activeBsLight.reset(bsLight);
 
 	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare)) {
 		const bool isShadow = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kHemiShadow, RE::TES_LIGHT_FLAGS::kOmniShadow);
@@ -415,7 +446,11 @@ void LightEditor::RestoreOriginal()
 		activeRefr->Enable(false);
 	}
 
+	if (activeBsLight && activeBsLight->IsShadowLight())
+		static_cast<RE::BSShadowLight*>(activeBsLight.get())->GetRuntimeData().shadowBiasScale = originalShadowDepthBias;
+
 	activeNiLight.reset();
+	activeBsLight.reset();
 	activeRefr = nullptr;
 	activeLigh = nullptr;
 	activeIsRef = false;
@@ -635,6 +670,10 @@ bool LightEditor::SaveToLightPlacer()
 			data["radius"] = current.data.radius;
 			data["cutoff"] = current.data.cutoffOverride;
 			data["size"] = current.data.size;
+			if (shadowDepthBias > 0.0f)
+				data["shadowDepthBias"] = shadowDepthBias;
+			else
+				data.erase("shadowDepthBias");
 
 			auto offset = GetJsonVec3(data, "offset");
 			data["offset"] = {

@@ -1,6 +1,8 @@
 #pragma once
 #include "../Features/InverseSquareLighting/Common.h"
 
+namespace RE { class BSLight; }
+
 struct LightEditor
 {
 	bool disableInvSqLights;
@@ -114,13 +116,19 @@ private:
 
 	LPLightInfo lpInfo;
 	RE::NiPointer<RE::NiLight> activeNiLight;
+	RE::NiPointer<RE::BSLight> activeBsLight;
 	RE::TESObjectREFR* activeRefr = nullptr;
 	RE::TESObjectLIGH* activeLigh = nullptr;
 	bool activeIsRef = false;
 
+	float shadowDepthBias = 0.0f;
+	float originalShadowDepthBias = 0.0f;
+
 	void SortLights();
 	void RestoreOriginal();
+	void ApplyShadowDepthBias();
 
+	static bool HasShadowFlags(uint32_t tesFlags);
 	static std::string GetLightName(LightInfo& lightInfo);
 	static LPLightInfo ParseLPLightName(const std::string& name);
 	static std::string UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear, bool flicker, bool portalStrict, bool shadow);
@@ -128,5 +136,5 @@ private:
 	static std::array<float, 3> GetJsonVec3(const json& data, const char* key);
 	bool SaveToLightPlacer();
 
-	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight);
+	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);
 };
