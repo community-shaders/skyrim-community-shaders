@@ -123,7 +123,7 @@ private:
 
 	static std::string GetLightName(LightInfo& lightInfo);
 	static LPLightInfo ParseLPLightName(const std::string& name);
-	static std::string UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear);
+	static std::string UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear, bool flicker, bool portalStrict, bool shadow);
 	static bool MatchesLPFilters(const json& lightEntry, RE::TESObjectREFR* refr);
 	static std::array<float, 3> GetJsonVec3(const json& data, const char* key);
 	bool SaveToLightPlacer();
