@@ -100,6 +100,7 @@ private:
 
 	LightInfo selected = {};
 	LightInfo previous = {};
+	LightInfo savedSelection = {};
 
 	LightDisplayInfo displayInfo = {};
 	LightSettings original = {};
@@ -123,6 +124,7 @@ private:
 
 	float shadowDepthBias = 0.0f;
 	float originalShadowDepthBias = 0.0f;
+	float cachedFadeBeforeToggle = 0.0f;
 
 	void SortLights();
 	void RestoreOriginal();
