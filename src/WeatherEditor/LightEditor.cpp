@@ -15,7 +15,7 @@
 void LightEditor::DrawSettings()
 {
 	// Header
-	ImGui::Text("Lighting Editor");
+	ImGui::Text("Light Editor");
 	ImGui::Separator();
 
 	ImGui::Checkbox("Disable Regular Falloff Lights", &disableRegularLights);
