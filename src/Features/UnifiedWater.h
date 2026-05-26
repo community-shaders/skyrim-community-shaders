@@ -3,6 +3,8 @@
 #include "UnifiedWater/Flowmap.h"
 #include "UnifiedWater/WaterCache.h"
 
+#include <atomic>
+
 struct UnifiedWater : OverlayFeature
 {
 	virtual inline std::string GetName() override { return "Unified Water"; }
@@ -112,6 +114,10 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
+	std::atomic_bool exteriorWorldspaceActive{ false };
+
 	void SetFlowmapTex() const;
+	bool IsExteriorWorldspaceActive() const;
+	void UpdateWaterLODCull() const;
 	static bool LoadOrderChanged();
 };

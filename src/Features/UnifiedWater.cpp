@@ -10,6 +10,16 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
 	UseOptimisedMeshes)
 
+namespace
+{
+	bool IsInteriorCellActive()
+	{
+		const auto tes = RE::TES::GetSingleton();
+		return tes && tes->interiorCell;
+	}
+
+}
+
 void UnifiedWater::LoadSettings(json& o_json)
 {
 	settings = o_json;
@@ -318,18 +328,37 @@ int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShade
 	return func(material, srcHash);
 }
 
+bool UnifiedWater::IsExteriorWorldspaceActive() const
+{
+	// Interior cells may still inherit stale exterior worldspace state during transitions
+	return exteriorWorldspaceActive.load(std::memory_order_acquire) && !IsInteriorCellActive();
+}
+
+void UnifiedWater::UpdateWaterLODCull() const
+{
+	// Only hide UW's generated LOD root, preserving child tile cull flags
+	if (gWaterLOD && *gWaterLOD)
+		(*gWaterLOD)->SetAppCulled(!IsExteriorWorldspaceActive());
+}
+
 void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior)
 {
 	func(tes, worldSpace, isExterior);
 
-	globals::features::unifiedWater.waterCache->SetCurrentWorldSpace(worldSpace);
+	auto& singleton = globals::features::unifiedWater;
+	singleton.exteriorWorldspaceActive.store(worldSpace && isExterior, std::memory_order_release);
+	singleton.waterCache->SetCurrentWorldSpace(worldSpace);
+	singleton.UpdateWaterLODCull();
 }
 
 void UnifiedWater::TES_DestroySkyCell::thunk(RE::TES* tes)
 {
 	func(tes);
 
-	globals::features::unifiedWater.waterCache->SetCurrentWorldSpace(nullptr);
+	auto& singleton = globals::features::unifiedWater;
+	singleton.exteriorWorldspaceActive.store(false, std::memory_order_release);
+	singleton.waterCache->SetCurrentWorldSpace(nullptr);
+	singleton.UpdateWaterLODCull();
 }
 
 void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::BGSTerrainNode* node, RE::BSMultiBoundNode* waterParent)
@@ -454,6 +483,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 	}
 
 	(*singleton.gWaterLOD)->AttachChild(block->water, true);
+	singleton.UpdateWaterLODCull();
 	waterSystem->Enable();
 }
 
@@ -474,13 +504,15 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 
 		(*globals::features::unifiedWater.gWaterLOD)->DetachChild(water);
 		block->waterAttached = false;
+		globals::features::unifiedWater.UpdateWaterLODCull();
 	}
 }
 
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
 	const auto& singleton = globals::features::unifiedWater;
-	if (singleton.flowmap) {
+
+	if (singleton.IsExteriorWorldspaceActive() && singleton.flowmap && pass && pass->geometry) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
 		*singleton.gFlowMapSize = singleton.flowmap->GetWidth();                                            // ObjectUV.x
@@ -510,7 +542,9 @@ void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESW
 	func(waterSystem);
 
 	const auto& singleton = globals::features::unifiedWater;
-	if (!singleton.flowmap)
+	singleton.UpdateWaterLODCull();
+
+	if (!singleton.flowmap || !singleton.IsExteriorWorldspaceActive())
 		return;
 
 	const float posX = singleton.gDisplacementMeshPos->x / 4096.0f;
