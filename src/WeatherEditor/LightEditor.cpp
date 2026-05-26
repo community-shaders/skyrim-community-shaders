@@ -223,8 +223,11 @@ void LightEditor::DrawSettings()
 		ImGui::SameLine();
 		if (ImGui::Button("Save to Light Placer")) {
 			const bool ok = SaveToLightPlacer(saveColorToLP);
-			if (ok)
+			if (ok) {
 				ScheduleConsoleCommand("reloadlp");
+				previous = {};
+				waitFrames = 3;
+			}
 			EditorWindow::GetSingleton()->ShowNotification(
 				ok ? fmt::format("Saved to {}", lpInfo.configPath) : "Save failed — see log",
 				ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
