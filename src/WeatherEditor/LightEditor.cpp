@@ -10,6 +10,7 @@
 
 #include <array>
 #include <filesystem>
+#include <numbers>
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -47,6 +48,27 @@ static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nu
 				*selectedRef = prevHandle;
 		});
 	}
+}
+
+void LightEditor::ApplyLighFormData(const RE::TESObjectLIGH* ligh)
+{
+	current.data.lighFormId = ligh->formID;
+
+	current.data.flags.reset(LightLimitFix::LightFlags::InverseSquare);
+	current.data.flags.reset(LightLimitFix::LightFlags::Linear);
+	if (ligh->data.flags.any(static_cast<RE::TES_LIGHT_FLAGS>(ISLCommon::TES_LIGHT_FLAGS_EXT::kInverseSquare)))
+		current.data.flags.set(LightLimitFix::LightFlags::InverseSquare);
+	if (ligh->data.flags.any(static_cast<RE::TES_LIGHT_FLAGS>(ISLCommon::TES_LIGHT_FLAGS_EXT::kLinear)))
+		current.data.flags.set(LightLimitFix::LightFlags::Linear);
+
+	const float size = ligh->data.fov >= 50.f ? std::numbers::sqrt2_v<float> : ligh->data.fov;
+	current.data.size = std::clamp(size, 0.01f, 50.f);
+	current.data.cutoffOverride = std::clamp(ligh->data.fallofExponent, 0.01f, 1.f);
+	current.data.radius = static_cast<float>(ligh->data.radius);
+	current.data.fade = ligh->fade;
+	current.data.diffuse.red   = ligh->data.color.red   / 255.f;
+	current.data.diffuse.green = ligh->data.color.green / 255.f;
+	current.data.diffuse.blue  = ligh->data.color.blue  / 255.f;
 }
 
 void LightEditor::EnsureLighFormListBuilt()
@@ -228,7 +250,7 @@ void LightEditor::DrawSettings()
 			auto searchText = Util::DrawComboSearchInput(kLighOverrideId);
 			if (searchText.empty() || Util::StringMatchesSearch("(Original)", searchText)) {
 				if (ImGui::Selectable("(Original)", current.data.lighFormId == original.data.lighFormId)) {
-					current.data.lighFormId = original.data.lighFormId;
+					current.data = original.data;
 					Util::ClearComboSearch(kLighOverrideId);
 				}
 				if (current.data.lighFormId == original.data.lighFormId)
@@ -239,7 +261,7 @@ void LightEditor::DrawSettings()
 					continue;
 				const bool isCurrent = ligh->GetFormID() == current.data.lighFormId;
 				if (ImGui::Selectable(edid.c_str(), isCurrent)) {
-					current.data.lighFormId = ligh->GetFormID();
+					ApplyLighFormData(ligh);
 					Util::ClearComboSearch(kLighOverrideId);
 				}
 				if (isCurrent)
@@ -250,15 +272,6 @@ void LightEditor::DrawSettings()
 			Util::ClearComboSearch(kLighOverrideId);
 		}
 	}
-
-	ImGui::Spacing();
-
-	if (selected.isSpotlight)
-		ImGui::TextDisabled("Spotlight: ISL light type flags not applicable");
-	ImGui::BeginDisabled(selected.isSpotlight);
-	ImGui::CheckboxFlags("Inverse Square Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
-	ImGui::EndDisabled();
-	ImGui::CheckboxFlags("Linear Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
 
 	ImGui::Spacing();
 
@@ -313,6 +326,10 @@ void LightEditor::DrawSettings()
 
 		auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
 		ImGui::Text("Light Flags");
+		ImGui::BeginDisabled(selected.isSpotlight);
+		ImGui::CheckboxFlags("Inverse Square", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
+		ImGui::EndDisabled();
+		ImGui::CheckboxFlags("Linear", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
 		ImGui::CheckboxFlags("Dynamic", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
 		ImGui::CheckboxFlags("Negative", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
 		ImGui::CheckboxFlags("Flicker", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
@@ -874,6 +891,19 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 				if (std::ranges::find(managedDataKeys, key) == managedDataKeys.end())
 					newData[key] = val;
 			data = std::move(newData);
+
+			auto getPointsKey = [&]() -> const char* {
+				return lightEntry.contains("points") ? "points" : (lightEntry.contains("nodes") ? "nodes" : nullptr);
+			};
+			if (const char* key = getPointsKey()) {
+				auto& pts = lightEntry[key];
+				if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3) {
+					const float px = pts[0][0].get<float>() + current.pos.x;
+					const float py = pts[0][1].get<float>() + current.pos.y;
+					const float pz = pts[0][2].get<float>() + current.pos.z;
+					pts[0] = nlohmann::ordered_json::array({ px, py, pz });
+				}
+			}
 
 			found = true;
 			break;

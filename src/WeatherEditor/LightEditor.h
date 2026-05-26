@@ -134,6 +134,7 @@ private:
 
 	static void EnsureLighFormListBuilt();
 	static std::vector<std::pair<std::string, RE::TESObjectLIGH*>> s_lighFormList;
+	void ApplyLighFormData(const RE::TESObjectLIGH* ligh);
 
 	static bool HasShadowFlags(uint32_t tesFlags);
 	static std::string GetLightName(LightInfo& lightInfo);
