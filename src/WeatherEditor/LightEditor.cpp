@@ -783,22 +783,25 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 			const auto offset = GetJsonVec3(data, "offset");
 			const std::string newFlags = UpdateLPFlags(data.value("flags", std::string{}), isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
 
+			auto r3 = [](float v) { return std::round(v * 1000.f) / 1000.f; };
+			auto r4 = [](float v) { return std::round(v * 10000.f) / 10000.f; };
+
 			nlohmann::ordered_json newData;
 			if (includeColor || data.contains("color"))
-				newData["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
+				newData["color"] = { r4(current.data.diffuse.red), r4(current.data.diffuse.green), r4(current.data.diffuse.blue) };
 			newData["light"] = data["light"];
-			newData["fade"] = current.data.fade;
+			newData["fade"] = r3(current.data.fade);
 			if (isInvSq) {
-				newData["size"] = current.data.size;
-				newData["cutoff"] = current.data.cutoffOverride;
+				newData["size"] = r3(current.data.size);
+				newData["cutoff"] = r3(current.data.cutoffOverride);
 			} else {
-				newData["radius"] = current.data.radius;
+				newData["radius"] = r3(current.data.radius);
 			}
 			if (data.contains("shadowDepthBias"))
-				newData["shadowDepthBias"] = shadowDepthBias;
+				newData["shadowDepthBias"] = r3(shadowDepthBias);
 			if (!newFlags.empty())
 				newData["flags"] = newFlags;
-			const float ox = offset[0] + current.pos.x, oy = offset[1] + current.pos.y, oz = offset[2] + current.pos.z;
+			const float ox = r3(offset[0] + current.pos.x), oy = r3(offset[1] + current.pos.y), oz = r3(offset[2] + current.pos.z);
 			if (ox != 0.f || oy != 0.f || oz != 0.f)
 				newData["offset"] = { ox, oy, oz };
 			if (data.contains("rotation"))
