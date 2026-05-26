@@ -867,7 +867,6 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 			const bool isFlicker = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) != 0;
 			const bool isPortalStrict = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) != 0;
 			const bool isOmniShadow = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) != 0;
-			const auto offset = GetJsonVec3(data, "offset");
 			const std::string newFlags = UpdateLPFlags(data.value("flags", std::string{}), isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
 
 			nlohmann::ordered_json newData;
@@ -885,9 +884,8 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 				newData["shadowDepthBias"] = shadowDepthBias;
 			if (!newFlags.empty())
 				newData["flags"] = newFlags;
-			const float ox = offset[0] + current.pos.x, oy = offset[1] + current.pos.y, oz = offset[2] + current.pos.z;
-			if (ox != 0.f || oy != 0.f || oz != 0.f)
-				newData["offset"] = { ox, oy, oz };
+			if (data.contains("offset"))
+				newData["offset"] = data["offset"];
 			if (data.contains("rotation"))
 				newData["rotation"] = data["rotation"];
 			for (auto& [key, val] : data.items())
