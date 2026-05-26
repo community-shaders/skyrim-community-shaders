@@ -10,6 +10,7 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <regex>
 #include <sstream>
 
 static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nullptr)
@@ -174,7 +175,7 @@ void LightEditor::DrawSettings()
 	if (lpInfo.isLPLight) {
 		ImGui::SameLine();
 		if (ImGui::Button("Save to Light Placer")) {
-			const bool ok = SaveToLightPlacer();
+			const bool ok = SaveToLightPlacer(saveColorToLP);
 			EditorWindow::GetSingleton()->ShowNotification(
 				ok ? fmt::format("Saved to {}", lpInfo.configPath) : "Save failed — see log",
 				ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
@@ -201,6 +202,13 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 
 	WeatherUtils::DrawColorEdit("Color", reinterpret_cast<float3&>(current.data.diffuse));
+	if (lpInfo.isLPLight) {
+		ImGui::SameLine();
+		ImGui::Checkbox("Save##color", &saveColorToLP);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Include color when saving to Light Placer.\nWhen unchecked, the light falls back to the LIGH form color.");
+		}
+	}
 
 	// Dispatches to logarithmic+extended or normal slider based on extendedLogMode.
 	// Log scale requires min > 0, so extended mins are nudged above zero where needed.
@@ -619,7 +627,7 @@ std::string LightEditor::UpdateLPFlags(const std::string& existingFlags, bool in
 	return result;
 }
 
-bool LightEditor::MatchesLPFilters(const json& lightEntry, RE::TESObjectREFR* refr)
+bool LightEditor::MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr)
 {
 	if (!refr)
 		return true;
@@ -658,12 +666,12 @@ bool LightEditor::MatchesLPFilters(const json& lightEntry, RE::TESObjectREFR* re
 		return false;
 	};
 
-	auto getArray = [&](const char* key) -> const json* {
+	auto getArray = [&](const char* key) -> const nlohmann::ordered_json* {
 		auto it = lightEntry.find(key);
 		return (it != lightEntry.end() && it->is_array()) ? &*it : nullptr;
 	};
 
-	auto anyMatches = [&](const json& list) {
+	auto anyMatches = [&](const nlohmann::ordered_json& list) {
 		for (const auto& item : list)
 			if (item.is_string() && matchesEntry(item.get<std::string>()))
 				return true;
@@ -678,7 +686,7 @@ bool LightEditor::MatchesLPFilters(const json& lightEntry, RE::TESObjectREFR* re
 	return true;
 }
 
-std::array<float, 3> LightEditor::GetJsonVec3(const json& data, const char* key)
+std::array<float, 3> LightEditor::GetJsonVec3(const nlohmann::ordered_json& data, const char* key)
 {
 	auto it = data.find(key);
 	if (it != data.end() && it->is_array() && it->size() >= 3 && (*it)[0].is_number() && (*it)[1].is_number() && (*it)[2].is_number())
@@ -686,7 +694,7 @@ std::array<float, 3> LightEditor::GetJsonVec3(const json& data, const char* key)
 	return { 0.f, 0.f, 0.f };
 }
 
-bool LightEditor::SaveToLightPlacer()
+bool LightEditor::SaveToLightPlacer(bool includeColor)
 {
 	if (!lpInfo.isLPLight)
 		return false;
@@ -697,7 +705,7 @@ bool LightEditor::SaveToLightPlacer()
 		return false;
 	}
 
-	json configArray;
+	nlohmann::ordered_json configArray;
 	{
 		std::ifstream inFile(filePath);
 		if (!inFile.is_open()) {
@@ -706,7 +714,7 @@ bool LightEditor::SaveToLightPlacer()
 		}
 		try {
 			inFile >> configArray;
-		} catch (const json::parse_error& e) {
+		} catch (const nlohmann::json::parse_error& e) {
 			logger::warn("[LightEditor] Failed to parse Light Placer config: {} - {}", filePath.string(), e.what());
 			return false;
 		}
@@ -723,7 +731,7 @@ bool LightEditor::SaveToLightPlacer()
 		return path;
 	};
 
-	auto arrayContainsString = [](const json& arr, const std::function<bool(const std::string&)>& pred) -> bool {
+	auto arrayContainsString = [](const nlohmann::ordered_json& arr, const std::function<bool(const std::string&)>& pred) -> bool {
 		for (const auto& elem : arr)
 			if (elem.is_string() && pred(elem.get<std::string>()))
 				return true;
@@ -737,7 +745,7 @@ bool LightEditor::SaveToLightPlacer()
 		if (lightsIt == entry.end() || !lightsIt->is_array())
 			continue;
 
-		auto getArray = [&](const char* key) -> const json* {
+		auto getArray = [&](const char* key) -> const nlohmann::ordered_json* {
 			auto it = entry.find(key);
 			return (it != entry.end() && it->is_array()) ? &*it : nullptr;
 		};
@@ -773,33 +781,54 @@ bool LightEditor::SaveToLightPlacer()
 			const bool isPortalStrict = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) != 0;
 			const bool isOmniShadow = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) != 0;
 			const auto offset = GetJsonVec3(data, "offset");
-			const std::string existingFlags = data.value("flags", std::string{});
+			const std::string newFlags = UpdateLPFlags(data.value("flags", std::string{}), isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
 
-			data["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
-			data["fade"] = current.data.fade;
-			if (isInvSq) {
-				data.erase("radius");
-				data["cutoff"] = current.data.cutoffOverride;
-				data["size"] = current.data.size;
-			} else {
-				data["radius"] = current.data.radius;
-				data.erase("cutoff");
-				data.erase("size");
-			}
-			if (shadowDepthBias > 0.0f)
-				data["shadowDepthBias"] = shadowDepthBias;
-			else
-				data.erase("shadowDepthBias");
-			data["offset"] = {
-				offset[0] + current.pos.x,
-				offset[1] + current.pos.y,
-				offset[2] + current.pos.z
+			// Rebuild data in canonical key order: color, light, fade, size+cutoff/radius,
+			// shadowDepthBias, flags, offset. Unrecognized keys are appended at the end.
+			static constexpr std::array managedKeys = {
+				"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "flags", "offset", "rotation"
 			};
-			const std::string newFlags = UpdateLPFlags(existingFlags, isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
+			nlohmann::ordered_json newData;
+			if (includeColor || data.contains("color"))
+				newData["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
+			newData["light"] = data["light"];
+			newData["fade"] = current.data.fade;
+			if (isInvSq) {
+				newData["size"] = current.data.size;
+				newData["cutoff"] = current.data.cutoffOverride;
+			} else {
+				newData["radius"] = current.data.radius;
+			}
+			if (data.contains("shadowDepthBias"))
+				newData["shadowDepthBias"] = shadowDepthBias;
 			if (!newFlags.empty())
-				data["flags"] = newFlags;
-			else
-				data.erase("flags");
+				newData["flags"] = newFlags;
+			const float ox = offset[0] + current.pos.x, oy = offset[1] + current.pos.y, oz = offset[2] + current.pos.z;
+			if (ox != 0.f || oy != 0.f || oz != 0.f)
+				newData["offset"] = { ox, oy, oz };
+			if (data.contains("rotation"))
+				newData["rotation"] = data["rotation"];
+			for (auto& [key, val] : data.items())
+				if (std::ranges::find(managedKeys, key) == managedKeys.end())
+					newData[key] = val;
+			data = std::move(newData);
+
+			// Rebuild lightEntry in canonical key order: data, points/nodes, whiteList, blackList.
+			static constexpr std::array managedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
+			nlohmann::ordered_json newEntry;
+			newEntry["data"] = lightEntry["data"];
+			if (lightEntry.contains("points"))
+				newEntry["points"] = lightEntry["points"];
+			else if (lightEntry.contains("nodes"))
+				newEntry["nodes"] = lightEntry["nodes"];
+			if (lightEntry.contains("whiteList"))
+				newEntry["whiteList"] = lightEntry["whiteList"];
+			if (lightEntry.contains("blackList"))
+				newEntry["blackList"] = lightEntry["blackList"];
+			for (auto& [key, val] : lightEntry.items())
+				if (std::ranges::find(managedEntryKeys, key) == managedEntryKeys.end())
+					newEntry[key] = val;
+			lightEntry = std::move(newEntry);
 
 			found = true;
 			break;
@@ -819,7 +848,10 @@ bool LightEditor::SaveToLightPlacer()
 			logger::warn("[LightEditor] Failed to write Light Placer config: {}", filePath.string());
 			return false;
 		}
-		outFile << configArray.dump(1, '\t');
+		std::string output = configArray.dump(1, '\t');
+		static const std::regex vec3Pattern(R"(\[\n\s*([-\d.eE+]+),\n\s*([-\d.eE+]+),\n\s*([-\d.eE+]+)\n\s*\])");
+		output = std::regex_replace(output, vec3Pattern, "[$1, $2, $3]");
+		outFile << output;
 		outFile.flush();
 		if (outFile.fail()) {
 			logger::warn("[LightEditor] Failed to write Light Placer config to {}: stream error", filePath.string());

@@ -59,6 +59,7 @@ private:
 	bool showAttachedLights = false;
 	bool showEffectLights = false;
 	bool extendedLogMode = false;
+	bool saveColorToLP = false;
 	int32_t waitFrames = 0;
 	uint32_t totalLightCount = 0;
 	uint32_t activeShadowLightCount = 0;
@@ -135,9 +136,9 @@ private:
 	static std::string GetLightName(LightInfo& lightInfo);
 	static LPLightInfo ParseLPLightName(const std::string& name);
 	static std::string UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear, bool flicker, bool portalStrict, bool shadow);
-	static bool MatchesLPFilters(const json& lightEntry, RE::TESObjectREFR* refr);
-	static std::array<float, 3> GetJsonVec3(const json& data, const char* key);
-	bool SaveToLightPlacer();
+	static bool MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr);
+	static std::array<float, 3> GetJsonVec3(const nlohmann::ordered_json& data, const char* key);
+	bool SaveToLightPlacer(bool includeColor = false);
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);
 };
