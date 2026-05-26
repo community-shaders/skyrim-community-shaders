@@ -59,13 +59,16 @@ void LightEditor::EnsureEmittanceFormListBuilt()
 	auto* dh = RE::TESDataHandler::GetSingleton();
 	if (!dh)
 		return;
-	for (auto* form : dh->GetFormArray<RE::TESObjectLIGH>()) {
-		if (!form || form->formID == 0 || form->GetFormType() != RE::FormType::Light)
-			continue;
-		std::string edid = clib_util::editorID::get_editorID(form);
-		if (!edid.empty())
-			s_emittanceFormList.emplace_back(std::move(edid), static_cast<RE::TESForm*>(form));
-	}
+	auto addForms = [&](auto& formArray, RE::FormType expectedType) {
+		for (auto* form : formArray) {
+			if (!form || form->formID == 0 || form->GetFormType() != expectedType)
+				continue;
+			std::string edid = clib_util::editorID::get_editorID(form);
+			if (!edid.empty())
+				s_emittanceFormList.emplace_back(std::move(edid), static_cast<RE::TESForm*>(form));
+		}
+	};
+	addForms(dh->GetFormArray<RE::TESRegion>(), RE::FormType::Region);
 	std::ranges::sort(s_emittanceFormList, [](const auto& a, const auto& b) { return a.first < b.first; });
 }
 
