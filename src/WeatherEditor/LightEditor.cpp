@@ -223,6 +223,8 @@ void LightEditor::DrawSettings()
 		ImGui::SameLine();
 		if (ImGui::Button("Save to Light Placer")) {
 			const bool ok = SaveToLightPlacer(saveColorToLP);
+			if (ok)
+				ScheduleConsoleCommand("reloadlp");
 			EditorWindow::GetSingleton()->ShowNotification(
 				ok ? fmt::format("Saved to {}", lpInfo.configPath) : "Save failed — see log",
 				ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
@@ -239,8 +241,9 @@ void LightEditor::DrawSettings()
 
 	ImGui::Spacing();
 
+	if (selected.isAttached)
 	EnsureLighFormListBuilt();
-	{
+	if (selected.isAttached) {
 		const char* previewEdid = "(Original)";
 		for (auto& [edid, ligh] : s_lighFormList)
 			if (ligh->GetFormID() == current.data.lighFormId) { previewEdid = edid.c_str(); break; }
