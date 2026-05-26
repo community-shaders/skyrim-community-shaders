@@ -2,6 +2,7 @@
 #include "../Features/InverseSquareLighting.h"
 #include "../Features/LightLimitFix.h"
 #include "../Menu.h"
+#include "../Utils/UI.h"
 #include "EditorWindow.h"
 #include "WeatherUtils.h"
 #include "RE/B/BSLight.h"
@@ -12,6 +13,8 @@
 #include <fstream>
 #include <regex>
 #include <sstream>
+
+std::vector<std::pair<std::string, RE::TESObjectLIGH*>> LightEditor::s_lighFormList;
 
 static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nullptr)
 {
@@ -43,6 +46,22 @@ static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nu
 			if (refr)
 				*selectedRef = prevHandle;
 		});
+	}
+}
+
+void LightEditor::EnsureLighFormListBuilt()
+{
+	if (!s_lighFormList.empty())
+		return;
+	if (auto* dh = RE::TESDataHandler::GetSingleton()) {
+		for (auto* form : dh->GetFormArray<RE::TESObjectLIGH>()) {
+			if (!form)
+				continue;
+			std::string edid = clib_util::editorID::get_editorID(form);
+			if (!edid.empty())
+				s_lighFormList.emplace_back(std::move(edid), form);
+		}
+		std::ranges::sort(s_lighFormList, [](const auto& a, const auto& b) { return a.first < b.first; });
 	}
 }
 
@@ -114,18 +133,24 @@ void LightEditor::DrawSettings()
 		}
 	}
 
+	static constexpr const char* kLightsComboId = "LightsCombo";
 	if (ImGui::BeginCombo("Lights", selected.isSelected ? GetLightName(selected).c_str() : "Select a light")) {
+		auto searchText = Util::DrawComboSearchInput(kLightsComboId);
 		for (auto& light : lights) {
 			const auto displayName = GetLightName(light);
+			if (!searchText.empty() && !Util::StringMatchesSearch(displayName, searchText))
+				continue;
 			const bool isSelected = light == selected;
-
-			if (ImGui::Selectable(displayName.c_str(), isSelected))
+			if (ImGui::Selectable(displayName.c_str(), isSelected)) {
 				selected = light;
-
+				Util::ClearComboSearch(kLightsComboId);
+			}
 			if (isSelected)
 				ImGui::SetItemDefaultFocus();
 		}
 		ImGui::EndCombo();
+	} else {
+		Util::ClearComboSearch(kLightsComboId);
 	}
 
 	ImGui::Separator();
@@ -191,7 +216,43 @@ void LightEditor::DrawSettings()
 	}
 
 	ImGui::Spacing();
-	
+
+	EnsureLighFormListBuilt();
+	{
+		const char* previewEdid = "(Original)";
+		for (auto& [edid, ligh] : s_lighFormList)
+			if (ligh->GetFormID() == current.data.lighFormId) { previewEdid = edid.c_str(); break; }
+
+		static constexpr const char* kLighOverrideId = "LighFormOverride";
+		if (ImGui::BeginCombo("LIGH Form", previewEdid)) {
+			auto searchText = Util::DrawComboSearchInput(kLighOverrideId);
+			if (searchText.empty() || Util::StringMatchesSearch("(Original)", searchText)) {
+				if (ImGui::Selectable("(Original)", current.data.lighFormId == original.data.lighFormId)) {
+					current.data.lighFormId = original.data.lighFormId;
+					Util::ClearComboSearch(kLighOverrideId);
+				}
+				if (current.data.lighFormId == original.data.lighFormId)
+					ImGui::SetItemDefaultFocus();
+			}
+			for (auto& [edid, ligh] : s_lighFormList) {
+				if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
+					continue;
+				const bool isCurrent = ligh->GetFormID() == current.data.lighFormId;
+				if (ImGui::Selectable(edid.c_str(), isCurrent)) {
+					current.data.lighFormId = ligh->GetFormID();
+					Util::ClearComboSearch(kLighOverrideId);
+				}
+				if (isCurrent)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		} else {
+			Util::ClearComboSearch(kLighOverrideId);
+		}
+	}
+
+	ImGui::Spacing();
+
 	if (selected.isSpotlight)
 		ImGui::TextDisabled("Spotlight: ISL light type flags not applicable");
 	ImGui::BeginDisabled(selected.isSpotlight);
@@ -515,6 +576,7 @@ bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDa
 	if (niLight != activeNiLight.get())
 		return false;
 
+	runtimeData->lighFormId = current.data.lighFormId;
 	runtimeData->diffuse = current.data.diffuse;
 	runtimeData->fade = current.data.fade;
 	runtimeData->cutoffOverride = current.data.cutoffOverride;

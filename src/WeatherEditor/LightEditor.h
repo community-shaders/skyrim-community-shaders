@@ -132,6 +132,9 @@ private:
 	void RestoreOriginal();
 	void ApplyShadowDepthBias();
 
+	static void EnsureLighFormListBuilt();
+	static std::vector<std::pair<std::string, RE::TESObjectLIGH*>> s_lighFormList;
+
 	static bool HasShadowFlags(uint32_t tesFlags);
 	static std::string GetLightName(LightInfo& lightInfo);
 	static LPLightInfo ParseLPLightName(const std::string& name);
