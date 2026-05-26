@@ -195,7 +195,6 @@ void LightEditor::DrawSettings()
 
 	if (ImGui::Button("Reset")) {
 		current = original;
-		current.pos = { 0, 0, 0 };
 		shadowDepthBias = originalShadowDepthBias;
 		ApplyShadowDepthBias();
 		waitFrames = 1;
@@ -326,7 +325,7 @@ void LightEditor::DrawSettings()
 	if (!selected.isOther && current.data.lighFormId != 0 && selected.hasPosition) {
 		ImGui::Text("X: %.2f, Y: %.2f, Z: %.2f", displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
 		ImGui::Spacing();
-		ImGui::SliderFloat3("Position Offset", &current.pos.x, -500.f, 500.f, "%.0f");
+		ImGui::SliderFloat3("Position", &current.pos.x, -1000.f, 1000.f, "%.0f");
 
 		ImGui::Spacing();
 
@@ -516,7 +515,6 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		original.pos = selected.isRef ? refr->GetPosition() : (niLight->parent ? niLight->parent->local.translate : RE::NiPoint3{});
 
 		current = original;
-		current.pos = { 0, 0, 0 };
 
 		originalShadowDepthBias = (bsLight && bsLight->IsShadowLight())
 		                            ? static_cast<RE::BSShadowLight*>(bsLight)->GetRuntimeData().shadowBiasScale
@@ -555,23 +553,21 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 	if (selected.isRef) {
 		const auto currentPos = refr->GetPosition();
-		const auto newPos = original.pos + current.pos;
-		if (currentPos != newPos) {
-			refr->SetPosition(newPos);
+		if (currentPos != current.pos) {
+			refr->SetPosition(current.pos);
 			waitFrames = 1;
 		}
-		displayInfo.pos = newPos;
+		displayInfo.pos = current.pos;
 	} else if (selected.isAttached) {
 		if (niLight->parent) {
 			const auto currentPos = niLight->parent->local.translate;
-			const auto newPos = original.pos + current.pos;
-			if (currentPos != newPos) {
-				niLight->parent->local.translate = newPos;
+			if (currentPos != current.pos) {
+				niLight->parent->local.translate = current.pos;
 				RE::NiUpdateData updateData;
 				niLight->parent->Update(updateData);
 				waitFrames = 1;
 			}
-			displayInfo.pos = newPos;
+			displayInfo.pos = current.pos;
 		} else {
 			displayInfo.pos = {};
 		}
@@ -901,12 +897,8 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 			};
 			if (const char* key = getPointsKey()) {
 				auto& pts = lightEntry[key];
-				if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3) {
-					const float px = pts[0][0].get<float>() + current.pos.x;
-					const float py = pts[0][1].get<float>() + current.pos.y;
-					const float pz = pts[0][2].get<float>() + current.pos.z;
-					pts[0] = nlohmann::ordered_json::array({ px, py, pz });
-				}
+				if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3)
+					pts[0] = nlohmann::ordered_json::array({ static_cast<int>(current.pos.x), static_cast<int>(current.pos.y), static_cast<int>(current.pos.z) });
 			}
 
 			found = true;
@@ -1007,8 +999,7 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 		}
 	}
 
-	original.pos = original.pos + current.pos;
-	current.pos = { 0, 0, 0 };
+	original.pos = current.pos;
 
 	logger::info("[LightEditor] Saved light settings to {}", filePath.string());
 	return true;
