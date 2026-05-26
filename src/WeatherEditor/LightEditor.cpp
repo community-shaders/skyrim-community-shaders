@@ -71,6 +71,9 @@ void LightEditor::DrawSettings()
 
 	ImGui::SameLine();
 	if (ImGui::Button("Reload LP")) {
+		RestoreOriginal();
+		previous = {};
+		waitFrames = 3;
 		ScheduleConsoleCommand("reloadlp");
 		EditorWindow::GetSingleton()->ShowNotification("Reloading Light Placer configs...", Util::Colors::GetInfo());
 	}
@@ -763,31 +766,36 @@ bool LightEditor::SaveToLightPlacer()
 			if (!MatchesLPFilters(lightEntry, activeRefr))
 				continue;
 
+			const bool isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
+			const bool isLinear = current.data.flags.any(LightLimitFix::LightFlags::Linear);
+			const uint32_t tesUnderlying = current.tesFlags.underlying();
+			const bool isFlicker = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) != 0;
+			const bool isPortalStrict = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) != 0;
+			const bool isOmniShadow = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) != 0;
+			const auto offset = GetJsonVec3(data, "offset");
+			const std::string existingFlags = data.value("flags", std::string{});
+
 			data["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
 			data["fade"] = current.data.fade;
-			data["radius"] = current.data.radius;
-			data["cutoff"] = current.data.cutoffOverride;
-			data["size"] = current.data.size;
+			if (isInvSq) {
+				data.erase("radius");
+				data["cutoff"] = current.data.cutoffOverride;
+				data["size"] = current.data.size;
+			} else {
+				data["radius"] = current.data.radius;
+				data.erase("cutoff");
+				data.erase("size");
+			}
 			if (shadowDepthBias > 0.0f)
 				data["shadowDepthBias"] = shadowDepthBias;
 			else
 				data.erase("shadowDepthBias");
-
-			auto offset = GetJsonVec3(data, "offset");
 			data["offset"] = {
 				offset[0] + current.pos.x,
 				offset[1] + current.pos.y,
 				offset[2] + current.pos.z
 			};
-
-			std::string existingFlags = data.value("flags", std::string{});
-			bool isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
-			bool isLinear = current.data.flags.any(LightLimitFix::LightFlags::Linear);
-			const uint32_t tesUnderlying = current.tesFlags.underlying();
-			bool isFlicker = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) != 0;
-			bool isPortalStrict = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) != 0;
-			bool isOmniShadow = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) != 0;
-			std::string newFlags = UpdateLPFlags(existingFlags, isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
+			const std::string newFlags = UpdateLPFlags(existingFlags, isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
 			if (!newFlags.empty())
 				data["flags"] = newFlags;
 			else
