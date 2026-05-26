@@ -249,13 +249,17 @@ void UnifiedWater::PostPostLoad()
 	stl::write_vfunc<0x4, BSWaterShaderMaterial_ComputeCRC32>(RE::VTABLE_BSWaterShaderMaterial[0]);
 
 	stl::detour_thunk<BGSTerrainBlock_Attach>(REL::RelocationID(30934, 31737));
+
 	// Skip iterating attached meshes and calling TESWaterSystem::AddLODWater, this is handled in Attach now
 	const auto addLoopOffset = REL::RelocationID(30934, 31737).address() + REL::Relocate(0x109, 0x109);
-	if (REL::Module::IsAE())
+	const auto addLoopOffset2 = REL::RelocationID(30978, 31751).address() + REL::Relocate(0x54, 0xEA);
+	if (REL::Module::IsAE()) {
 		REL::safe_write(addLoopOffset, &REL::JMP8, 1);
-	else {
+		REL::safe_write(addLoopOffset2, &REL::JMP8, 1);
+	} else {
 		constexpr std::uint8_t patch[2] = { REL::NOP, REL::JMP32 };
 		REL::safe_write(addLoopOffset, patch, 2);
+		REL::safe_write(addLoopOffset2, patch, 2);
 	}
 
 	stl::detour_thunk<BGSTerrainBlock_Detach>(REL::RelocationID(30936, 31739));
