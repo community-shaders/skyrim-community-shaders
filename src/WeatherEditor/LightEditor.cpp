@@ -783,11 +783,6 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 			const auto offset = GetJsonVec3(data, "offset");
 			const std::string newFlags = UpdateLPFlags(data.value("flags", std::string{}), isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
 
-			// Rebuild data in canonical key order: color, light, fade, size+cutoff/radius,
-			// shadowDepthBias, flags, offset. Unrecognized keys are appended at the end.
-			static constexpr std::array managedKeys = {
-				"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "flags", "offset", "rotation"
-			};
 			nlohmann::ordered_json newData;
 			if (includeColor || data.contains("color"))
 				newData["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
@@ -809,26 +804,9 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 			if (data.contains("rotation"))
 				newData["rotation"] = data["rotation"];
 			for (auto& [key, val] : data.items())
-				if (std::ranges::find(managedKeys, key) == managedKeys.end())
+				if (std::ranges::find(managedDataKeys, key) == managedDataKeys.end())
 					newData[key] = val;
 			data = std::move(newData);
-
-			// Rebuild lightEntry in canonical key order: data, points/nodes, whiteList, blackList.
-			static constexpr std::array managedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
-			nlohmann::ordered_json newEntry;
-			newEntry["data"] = lightEntry["data"];
-			if (lightEntry.contains("points"))
-				newEntry["points"] = lightEntry["points"];
-			else if (lightEntry.contains("nodes"))
-				newEntry["nodes"] = lightEntry["nodes"];
-			if (lightEntry.contains("whiteList"))
-				newEntry["whiteList"] = lightEntry["whiteList"];
-			if (lightEntry.contains("blackList"))
-				newEntry["blackList"] = lightEntry["blackList"];
-			for (auto& [key, val] : lightEntry.items())
-				if (std::ranges::find(managedEntryKeys, key) == managedEntryKeys.end())
-					newEntry[key] = val;
-			lightEntry = std::move(newEntry);
 
 			found = true;
 			break;
@@ -840,6 +818,53 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 	if (!found) {
 		logger::warn("[LightEditor] No matching entry found for model '{}' with light EDID '{}' in {}", lpInfo.ownerModelPath, lpInfo.lightEDID, filePath.string());
 		return false;
+	}
+
+	// Normalise key order for every data and lightEntry in the file so the whole config is consistent.
+	static constexpr std::array managedDataKeys = {
+		"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "flags", "offset", "rotation"
+	};
+	static constexpr std::array managedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
+
+	auto normalizeData = [](nlohmann::ordered_json& d) {
+		nlohmann::ordered_json nd;
+		if (d.contains("color"))           nd["color"]           = d["color"];
+		if (d.contains("light"))           nd["light"]           = d["light"];
+		if (d.contains("fade"))            nd["fade"]            = d["fade"];
+		if (d.contains("radius"))          nd["radius"]          = d["radius"];
+		if (d.contains("size"))            nd["size"]            = d["size"];
+		if (d.contains("cutoff"))          nd["cutoff"]          = d["cutoff"];
+		if (d.contains("shadowDepthBias")) nd["shadowDepthBias"] = d["shadowDepthBias"];
+		if (d.contains("flags"))           nd["flags"]           = d["flags"];
+		if (d.contains("offset"))          nd["offset"]          = d["offset"];
+		if (d.contains("rotation"))        nd["rotation"]        = d["rotation"];
+		for (auto& [key, val] : d.items())
+			if (std::ranges::find(managedDataKeys, key) == managedDataKeys.end())
+				nd[key] = val;
+		d = std::move(nd);
+	};
+
+	auto normalizeLightEntry = [&normalizeData](nlohmann::ordered_json& le) {
+		if (le.contains("data"))
+			normalizeData(le["data"]);
+		nlohmann::ordered_json newEntry;
+		if (le.contains("data"))       newEntry["data"]      = le["data"];
+		if (le.contains("points"))     newEntry["points"]    = le["points"];
+		else if (le.contains("nodes")) newEntry["nodes"]     = le["nodes"];
+		if (le.contains("whiteList"))  newEntry["whiteList"] = le["whiteList"];
+		if (le.contains("blackList"))  newEntry["blackList"] = le["blackList"];
+		for (auto& [key, val] : le.items())
+			if (std::ranges::find(managedEntryKeys, key) == managedEntryKeys.end())
+				newEntry[key] = val;
+		le = std::move(newEntry);
+	};
+
+	for (auto& topEntry : configArray) {
+		auto lightsIt = topEntry.find("lights");
+		if (lightsIt == topEntry.end() || !lightsIt->is_array())
+			continue;
+		for (auto& le : *lightsIt)
+			normalizeLightEntry(le);
 	}
 
 	{
