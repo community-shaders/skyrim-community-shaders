@@ -59,19 +59,13 @@ void LightEditor::EnsureEmittanceFormListBuilt()
 	auto* dh = RE::TESDataHandler::GetSingleton();
 	if (!dh)
 		return;
-	auto addForms = [&](auto& formArray) {
-		for (auto* form : formArray) {
-			if (!form || form->formID == 0)
-				continue;
-			std::string edid = clib_util::editorID::get_editorID(form);
-			if (!edid.empty())
-				s_emittanceFormList.emplace_back(std::move(edid), static_cast<RE::TESForm*>(form));
-		}
-	};
-	addForms(dh->GetFormArray<RE::TESObjectLIGH>());
-	addForms(dh->GetFormArray<RE::TESObjectACTI>());
-	addForms(dh->GetFormArray<RE::TESObjectSTAT>());
-	addForms(dh->GetFormArray<RE::BGSMovableStatic>());
+	for (auto* form : dh->GetFormArray<RE::TESObjectLIGH>()) {
+		if (!form || form->formID == 0 || form->GetFormType() != RE::FormType::Light)
+			continue;
+		std::string edid = clib_util::editorID::get_editorID(form);
+		if (!edid.empty())
+			s_emittanceFormList.emplace_back(std::move(edid), static_cast<RE::TESForm*>(form));
+	}
 	std::ranges::sort(s_emittanceFormList, [](const auto& a, const auto& b) { return a.first < b.first; });
 }
 
@@ -278,7 +272,7 @@ void LightEditor::DrawSettings()
 			if (ligh->GetFormID() == current.data.lighFormId) { previewEdid = edid.c_str(); break; }
 
 		static constexpr const char* kLighOverrideId = "LighFormOverride";
-		if (ImGui::BeginCombo("LIGH Form", previewEdid)) {
+		if (ImGui::BeginCombo("Bulb type##combo", previewEdid)) {
 			auto searchText = Util::DrawComboSearchInput(kLighOverrideId);
 			if (searchText.empty() || Util::StringMatchesSearch("(Original)", searchText)) {
 				if (ImGui::Selectable("(Original)", current.data.lighFormId == original.data.lighFormId)) {
@@ -315,7 +309,7 @@ void LightEditor::DrawSettings()
 		if (lpInfo.isLPLight && useExternalEmittance) {
 			static constexpr const char* kEmittanceComboId = "EmittanceFormCombo";
 			const char* preview = externalEmittanceEdid.empty() ? "(None)" : externalEmittanceEdid.c_str();
-			if (ImGui::BeginCombo("External Emittance", preview)) {
+			if (ImGui::BeginCombo("External Emittance##combo", preview)) {
 				auto searchText = Util::DrawComboSearchInput(kEmittanceComboId);
 				if (searchText.empty() || Util::StringMatchesSearch("(None)", searchText)) {
 					if (ImGui::Selectable("(None)", externalEmittanceEdid.empty())) {
@@ -410,7 +404,7 @@ void LightEditor::DrawSettings()
 		ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
 		ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
 		if (lpInfo.isLPLight)
-			ImGui::Checkbox("External Emittance", &useExternalEmittance);
+			ImGui::Checkbox("External Emittance##flag", &useExternalEmittance);
 	}
 }
 
