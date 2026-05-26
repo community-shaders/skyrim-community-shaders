@@ -271,19 +271,26 @@ void LightEditor::DrawSettings()
 
 	if (lpInfo.isLPLight) {
 		ImGui::SameLine();
-		if (ImGui::Button("Save to Light Placer")) {
-			const bool ok = SaveToLightPlacer(saveColorToLP);
-			if (ok) {
-				ScheduleConsoleCommand("reloadlp");
-				previous = {};
-				waitFrames = 3;
+		{
+			auto _style = Util::StatusButtonStyle(lpMatchFound ? Util::Colors::GetSuccess() : Util::Colors::GetError());
+			if (ImGui::Button("Save to Light Placer")) {
+				const bool ok = SaveToLightPlacer(saveColorToLP);
+				if (ok) {
+					ScheduleConsoleCommand("reloadlp");
+					previous = {};
+					waitFrames = 3;
+					lpMatchFound = true;
+				}
+				EditorWindow::GetSingleton()->ShowNotification(
+					ok ? fmt::format("Saved to {}", lpInfo.configPath) : "Save failed — see log",
+					ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
 			}
-			EditorWindow::GetSingleton()->ShowNotification(
-				ok ? fmt::format("Saved to {}", lpInfo.configPath) : "Save failed — see log",
-				ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Save current settings to the Light Placer JSON.");
+			if (lpMatchFound)
+				ImGui::Text("Matching entry found in %s.\nSave current settings to the Light Placer JSON.", lpInfo.configPath.c_str());
+			else
+				ImGui::Text("No matching entry found in %s.\nSaving will fail.", lpInfo.configPath.c_str());
 		}
 	}
 	ImGui::SameLine();
@@ -624,6 +631,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 				}
 			}
 		}
+		lpMatchFound = lpInfo.isLPLight && SaveToLightPlacer(false, true);
 
 		activeIsRef = selected.isRef;
 		activeRefr = refr;
@@ -859,7 +867,7 @@ std::array<float, 3> LightEditor::GetJsonVec3(const nlohmann::ordered_json& data
 	return { 0.f, 0.f, 0.f };
 }
 
-bool LightEditor::SaveToLightPlacer(bool includeColor)
+bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 {
 	if (!lpInfo.isLPLight)
 		return false;
@@ -956,6 +964,9 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 
 			if (!MatchesLPFilters(lightEntry, activeRefr))
 				continue;
+
+			if (dryRun)
+				return true;
 
 			const bool isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
 			const bool isLinear = current.data.flags.any(LightLimitFix::LightFlags::Linear);
@@ -1101,7 +1112,8 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 		}
 	}
 
-	original.pos = current.pos;
+	if (!dryRun)
+		original.pos = current.pos;
 
 	logger::info("[LightEditor] Saved light settings to {}", filePath.string());
 	return true;

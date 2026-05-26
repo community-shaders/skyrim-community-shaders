@@ -61,6 +61,7 @@ private:
 	bool extendedLogMode = false;
 	bool saveColorToLP = false;
 	bool useExternalEmittance = false;
+	bool lpMatchFound = false;
 	std::string externalEmittanceEdid;
 	int32_t waitFrames = 0;
 	uint32_t totalLightCount = 0;
@@ -148,7 +149,7 @@ private:
 	static std::string UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear, bool flicker, bool portalStrict, bool shadow);
 	static bool MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr);
 	static std::array<float, 3> GetJsonVec3(const nlohmann::ordered_json& data, const char* key);
-	bool SaveToLightPlacer(bool includeColor = false);
+	bool SaveToLightPlacer(bool includeColor = false, bool dryRun = false);
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);
 };
