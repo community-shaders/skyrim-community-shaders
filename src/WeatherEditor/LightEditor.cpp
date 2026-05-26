@@ -813,7 +813,7 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 		return false;
 
 	static constexpr std::array managedDataKeys = {
-		"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "flags", "offset", "rotation"
+		"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "externalEmittance", "flags", "offset", "rotation"
 	};
 	static constexpr std::array managedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
 
@@ -930,8 +930,9 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 		if (d.contains("radius"))          nd["radius"]          = d["radius"];
 		if (d.contains("size"))            nd["size"]            = d["size"];
 		if (d.contains("cutoff"))          nd["cutoff"]          = d["cutoff"];
-		if (d.contains("shadowDepthBias")) nd["shadowDepthBias"] = d["shadowDepthBias"];
-		if (d.contains("flags"))           nd["flags"]           = d["flags"];
+		if (d.contains("shadowDepthBias"))   nd["shadowDepthBias"]   = d["shadowDepthBias"];
+		if (d.contains("externalEmittance")) nd["externalEmittance"] = d["externalEmittance"];
+		if (d.contains("flags"))             nd["flags"]             = d["flags"];
 		if (d.contains("offset"))          nd["offset"]          = d["offset"];
 		if (d.contains("rotation"))        nd["rotation"]        = d["rotation"];
 		for (auto& [key, val] : d.items())
