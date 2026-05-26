@@ -60,6 +60,8 @@ private:
 	bool showEffectLights = false;
 	bool extendedLogMode = false;
 	bool saveColorToLP = false;
+	bool useExternalEmittance = false;
+	std::string externalEmittanceEdid;
 	int32_t waitFrames = 0;
 	uint32_t totalLightCount = 0;
 	uint32_t activeShadowLightCount = 0;
@@ -135,6 +137,9 @@ private:
 	static void EnsureLighFormListBuilt();
 	static std::vector<std::pair<std::string, RE::TESObjectLIGH*>> s_lighFormList;
 	void ApplyLighFormData(const RE::TESObjectLIGH* ligh);
+
+	static void EnsureEmittanceFormListBuilt();
+	static std::vector<std::pair<std::string, RE::TESForm*>> s_emittanceFormList;
 
 	static bool HasShadowFlags(uint32_t tesFlags);
 	static std::string GetLightName(LightInfo& lightInfo);

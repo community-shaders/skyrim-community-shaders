@@ -7,6 +7,7 @@
 #include "WeatherUtils.h"
 #include "RE/B/BSLight.h"
 #include "RE/B/BSShadowLight.h"
+#include "RE/E/ExtraEmittanceSource.h"
 
 #include <array>
 #include <filesystem>
@@ -16,6 +17,7 @@
 #include <sstream>
 
 std::vector<std::pair<std::string, RE::TESObjectLIGH*>> LightEditor::s_lighFormList;
+std::vector<std::pair<std::string, RE::TESForm*>> LightEditor::s_emittanceFormList;
 
 static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nullptr)
 {
@@ -49,6 +51,30 @@ static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nu
 		});
 	}
 }
+
+void LightEditor::EnsureEmittanceFormListBuilt()
+{
+	if (!s_emittanceFormList.empty())
+		return;
+	auto* dh = RE::TESDataHandler::GetSingleton();
+	if (!dh)
+		return;
+	auto addForms = [&](auto& formArray) {
+		for (auto* form : formArray) {
+			if (!form)
+				continue;
+			std::string edid = clib_util::editorID::get_editorID(form);
+			if (!edid.empty())
+				s_emittanceFormList.emplace_back(std::move(edid), static_cast<RE::TESForm*>(form));
+		}
+	};
+	addForms(dh->GetFormArray<RE::TESObjectLIGH>());
+	addForms(dh->GetFormArray<RE::TESObjectACTI>());
+	addForms(dh->GetFormArray<RE::TESObjectSTAT>());
+	addForms(dh->GetFormArray<RE::BGSMovableStatic>());
+	std::ranges::sort(s_emittanceFormList, [](const auto& a, const auto& b) { return a.first < b.first; });
+}
+
 
 void LightEditor::ApplyLighFormData(const RE::TESObjectLIGH* ligh)
 {
@@ -243,9 +269,10 @@ void LightEditor::DrawSettings()
 
 	ImGui::Spacing();
 
-	if (selected.isAttached)
-	EnsureLighFormListBuilt();
 	if (selected.isAttached) {
+		EnsureLighFormListBuilt();
+		if (lpInfo.isLPLight && useExternalEmittance)
+			EnsureEmittanceFormListBuilt();
 		const char* previewEdid = "(Original)";
 		for (auto& [edid, ligh] : s_lighFormList)
 			if (ligh->GetFormID() == current.data.lighFormId) { previewEdid = edid.c_str(); break; }
@@ -283,6 +310,36 @@ void LightEditor::DrawSettings()
 			ImGui::EndCombo();
 		} else {
 			Util::ClearComboSearch(kLighOverrideId);
+		}
+
+		if (lpInfo.isLPLight && useExternalEmittance) {
+			static constexpr const char* kEmittanceComboId = "EmittanceFormCombo";
+			const char* preview = externalEmittanceEdid.empty() ? "(None)" : externalEmittanceEdid.c_str();
+			if (ImGui::BeginCombo("External Emittance", preview)) {
+				auto searchText = Util::DrawComboSearchInput(kEmittanceComboId);
+				if (searchText.empty() || Util::StringMatchesSearch("(None)", searchText)) {
+					if (ImGui::Selectable("(None)", externalEmittanceEdid.empty())) {
+						externalEmittanceEdid = {};
+						Util::ClearComboSearch(kEmittanceComboId);
+					}
+					if (externalEmittanceEdid.empty())
+						ImGui::SetItemDefaultFocus();
+				}
+				for (auto& [edid, form] : s_emittanceFormList) {
+					if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
+						continue;
+					const bool isCurrent = edid == externalEmittanceEdid;
+					if (ImGui::Selectable(edid.c_str(), isCurrent)) {
+						externalEmittanceEdid = edid;
+						Util::ClearComboSearch(kEmittanceComboId);
+					}
+					if (isCurrent)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			} else {
+				Util::ClearComboSearch(kEmittanceComboId);
+			}
 		}
 	}
 
@@ -352,6 +409,8 @@ void LightEditor::DrawSettings()
 		ImGui::CheckboxFlags("Hemi Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
 		ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
 		ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
+		if (lpInfo.isLPLight)
+			ImGui::Checkbox("External Emittance", &useExternalEmittance);
 	}
 }
 
@@ -544,6 +603,15 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		activeIsRef = selected.isRef;
 		activeRefr = refr;
 		activeLigh = ligh;
+
+		externalEmittanceEdid = {};
+		useExternalEmittance = false;
+		if (refr) {
+			if (const auto* extra = refr->extraList.GetByType<RE::ExtraEmittanceSource>())
+				if (extra->source)
+					externalEmittanceEdid = clib_util::editorID::get_editorID(extra->source);
+			useExternalEmittance = !externalEmittanceEdid.empty();
+		}
 
 		previous = selected;
 	}
@@ -889,6 +957,10 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 			}
 			if (data.contains("shadowDepthBias"))
 				newData["shadowDepthBias"] = shadowDepthBias;
+			if (useExternalEmittance && !externalEmittanceEdid.empty())
+				newData["externalEmittance"] = externalEmittanceEdid;
+			else if (!useExternalEmittance && data.contains("externalEmittance"))
+				newData["externalEmittance"] = data["externalEmittance"];
 			if (!newFlags.empty())
 				newData["flags"] = newFlags;
 			if (data.contains("offset"))
