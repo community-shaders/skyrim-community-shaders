@@ -61,7 +61,7 @@ void LightEditor::EnsureEmittanceFormListBuilt()
 		return;
 	auto addForms = [&](auto& formArray) {
 		for (auto* form : formArray) {
-			if (!form)
+			if (!form || form->formID == 0)
 				continue;
 			std::string edid = clib_util::editorID::get_editorID(form);
 			if (!edid.empty())
@@ -103,7 +103,7 @@ void LightEditor::EnsureLighFormListBuilt()
 		return;
 	if (auto* dh = RE::TESDataHandler::GetSingleton()) {
 		for (auto* form : dh->GetFormArray<RE::TESObjectLIGH>()) {
-			if (!form)
+			if (!form || form->formID == 0)
 				continue;
 			std::string edid = clib_util::editorID::get_editorID(form);
 			if (!edid.empty())
