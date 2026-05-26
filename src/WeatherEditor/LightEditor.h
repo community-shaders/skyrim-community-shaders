@@ -5,8 +5,8 @@ namespace RE { class BSLight; }
 
 struct LightEditor
 {
-	bool disableInvSqLights;
-	bool disableRegularLights;
+	bool disableInvSqLights = false;
+	bool disableRegularLights = false;
 	bool shadowsOnly = false;
 
 	void DrawSettings();
@@ -19,13 +19,13 @@ private:
 	struct LightInfo
 	{
 		bool isSelected = false;
-		uint32_t id;
-		void* ptr;
-		uint32_t index;
+		uint32_t id = 0;
+		void* ptr = nullptr;
+		uint32_t index = 0;
 		std::string name;
-		bool isRef;
-		bool isAttached;
-		bool isOther;
+		bool isRef = false;
+		bool isAttached = false;
+		bool isOther = false;
 		bool isSpotlight = false;
 		bool hasPosition = false;
 		RE::NiPoint3 position;
@@ -56,8 +56,6 @@ private:
 		RE::NiPoint3 pos = {};
 	};
 
-	bool showAttachedLights = false;
-	bool showEffectLights = false;
 	bool extendedLogMode = false;
 	bool saveColorToLP = false;
 	bool useExternalEmittance = false;
@@ -148,7 +146,6 @@ private:
 	static LPLightInfo ParseLPLightName(const std::string& name);
 	static std::string UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear, bool flicker, bool portalStrict, bool shadow);
 	static bool MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr);
-	static std::array<float, 3> GetJsonVec3(const nlohmann::ordered_json& data, const char* key);
 	bool SaveToLightPlacer(bool includeColor = false, bool dryRun = false);
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);

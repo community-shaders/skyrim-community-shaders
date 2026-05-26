@@ -19,6 +19,19 @@
 std::vector<std::pair<std::string, RE::TESObjectLIGH*>> LightEditor::s_lighFormList;
 std::vector<std::pair<std::string, RE::TESForm*>> LightEditor::s_emittanceFormList;
 
+// Returns the named array member of a JSON object, or nullptr if missing / not an array.
+static const nlohmann::ordered_json* GetArrayMember(const nlohmann::ordered_json& obj, const char* key)
+{
+	const auto it = obj.find(key);
+	return (it != obj.end() && it->is_array()) ? &*it : nullptr;
+}
+
+// Downcast a BSLight to BSShadowLight only when it actually is one. Returns nullptr otherwise.
+static RE::BSShadowLight* AsShadowLight(RE::BSLight* light)
+{
+	return (light && light->IsShadowLight()) ? static_cast<RE::BSShadowLight*>(light) : nullptr;
+}
+
 static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nullptr)
 {
 	if (auto* taskInterface = SKSE::GetTaskInterface()) {
@@ -427,20 +440,29 @@ void LightEditor::DrawSettings()
 		ImGui::Spacing();
 
 		auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
+		auto* runtimeFlags = reinterpret_cast<uint32_t*>(&current.data.flags);
 		ImGui::Text("Light Flags");
+
+		// Inverse Square is disabled for spotlights since they have their own falloff model.
 		ImGui::BeginDisabled(selected.isSpotlight);
-		ImGui::CheckboxFlags("Inverse Square", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
+		ImGui::CheckboxFlags("Inverse Square", runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
 		ImGui::EndDisabled();
-		ImGui::CheckboxFlags("Linear", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
-		ImGui::CheckboxFlags("Dynamic", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
-		ImGui::CheckboxFlags("Negative", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
-		ImGui::CheckboxFlags("Flicker", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
-		ImGui::CheckboxFlags("Flicker Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
-		ImGui::CheckboxFlags("Pulse", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
-		ImGui::CheckboxFlags("Pulse Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
-		ImGui::CheckboxFlags("Hemi Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
-		ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
-		ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
+		ImGui::CheckboxFlags("Linear", runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
+
+		static constexpr std::pair<const char*, RE::TES_LIGHT_FLAGS> kTesFlagCheckboxes[] = {
+			{ "Dynamic",       RE::TES_LIGHT_FLAGS::kDynamic      },
+			{ "Negative",      RE::TES_LIGHT_FLAGS::kNegative     },
+			{ "Flicker",       RE::TES_LIGHT_FLAGS::kFlicker      },
+			{ "Flicker Slow",  RE::TES_LIGHT_FLAGS::kFlickerSlow  },
+			{ "Pulse",         RE::TES_LIGHT_FLAGS::kPulse        },
+			{ "Pulse Slow",    RE::TES_LIGHT_FLAGS::kPulseSlow    },
+			{ "Hemi Shadow",   RE::TES_LIGHT_FLAGS::kHemiShadow   },
+			{ "Omni Shadow",   RE::TES_LIGHT_FLAGS::kOmniShadow   },
+			{ "Portal Strict", RE::TES_LIGHT_FLAGS::kPortalStrict },
+		};
+		for (const auto& [label, flag] : kTesFlagCheckboxes)
+			ImGui::CheckboxFlags(label, flags, static_cast<uint32_t>(flag));
+
 		if (lpInfo.isLPLight)
 			ImGui::Checkbox("External Emittance##flag", &useExternalEmittance);
 	}
@@ -474,6 +496,8 @@ void LightEditor::GatherLights()
 		savedSelection = {};
 	}
 
+	// Skip a few frames after disruptive operations (reloadlp, Disable/Enable, position change)
+	// so the game has time to rebuild the light list before we resample it.
 	if (waitFrames > 0) {
 		waitFrames--;
 		return;
@@ -509,8 +533,10 @@ void LightEditor::GatherLights()
 
 		current.isRef = ligh != nullptr;
 
-		if (!current.isRef && runtimeData->lighFormId != 0)
-			ligh = RE::TESForm::LookupByID(runtimeData->lighFormId)->As<RE::TESObjectLIGH>();
+		if (!current.isRef && runtimeData->lighFormId != 0) {
+			if (auto* lighForm = RE::TESForm::LookupByID(runtimeData->lighFormId))
+				ligh = lighForm->As<RE::TESObjectLIGH>();
+		}
 
 		current.isSpotlight = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow);
 		const bool isShadow = ligh && HasShadowFlags(ligh->data.flags.underlying());
@@ -597,8 +623,8 @@ void LightEditor::ResetOverrides()
 
 void LightEditor::ApplyShadowDepthBias()
 {
-	if (activeBsLight && activeBsLight->IsShadowLight())
-		static_cast<RE::BSShadowLight*>(activeBsLight.get())->GetRuntimeData().shadowBiasScale = shadowDepthBias;
+	if (auto* shadowLight = AsShadowLight(activeBsLight.get()))
+		shadowLight->GetRuntimeData().shadowBiasScale = shadowDepthBias;
 }
 
 void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight)
@@ -606,6 +632,8 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 	const auto runtimeData = ISLCommon::RuntimeLightDataExt::Get(niLight);
 	auto tesFlags = ligh ? &ligh->data.flags : nullptr;
 
+	// Per-selection initialization: snapshots the light's original state, populates lpInfo,
+	// and runs a dry-run save to determine whether a matching LP JSON entry exists.
 	if (previous != selected) {
 		RestoreOriginal();
 
@@ -615,9 +643,8 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 		current = original;
 
-		originalShadowDepthBias = (bsLight && bsLight->IsShadowLight())
-		                            ? static_cast<RE::BSShadowLight*>(bsLight)->GetRuntimeData().shadowBiasScale
-		                            : 0.0f;
+		auto* originalShadowLight = AsShadowLight(bsLight);
+		originalShadowDepthBias = originalShadowLight ? originalShadowLight->GetRuntimeData().shadowBiasScale : 0.0f;
 		shadowDepthBias = originalShadowDepthBias;
 		cachedFadeBeforeToggle = 0.0f;
 
@@ -631,11 +658,11 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 				}
 			}
 		}
-		lpMatchFound = lpInfo.isLPLight && SaveToLightPlacer(false, true);
-
 		activeIsRef = selected.isRef;
 		activeRefr = refr;
 		activeLigh = ligh;
+
+		lpMatchFound = lpInfo.isLPLight && SaveToLightPlacer(false, true);
 
 		externalEmittanceEdid = {};
 		useExternalEmittance = false;
@@ -745,8 +772,8 @@ void LightEditor::RestoreOriginal()
 		activeRefr->Enable(false);
 	}
 
-	if (activeBsLight && activeBsLight->IsShadowLight())
-		static_cast<RE::BSShadowLight*>(activeBsLight.get())->GetRuntimeData().shadowBiasScale = originalShadowDepthBias;
+	if (auto* shadowLight = AsShadowLight(activeBsLight.get()))
+		shadowLight->GetRuntimeData().shadowBiasScale = originalShadowDepthBias;
 
 	activeNiLight.reset();
 	activeBsLight.reset();
@@ -839,11 +866,6 @@ bool LightEditor::MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE:
 		return false;
 	};
 
-	auto getArray = [&](const char* key) -> const nlohmann::ordered_json* {
-		auto it = lightEntry.find(key);
-		return (it != lightEntry.end() && it->is_array()) ? &*it : nullptr;
-	};
-
 	auto anyMatches = [&](const nlohmann::ordered_json& list) {
 		for (const auto& item : list)
 			if (item.is_string() && matchesEntry(item.get<std::string>()))
@@ -851,20 +873,12 @@ bool LightEditor::MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE:
 		return false;
 	};
 
-	if (auto* wl = getArray("whiteList"); wl && !anyMatches(*wl))
+	if (auto* wl = GetArrayMember(lightEntry, "whiteList"); wl && !anyMatches(*wl))
 		return false;
-	if (auto* bl = getArray("blackList"); bl && anyMatches(*bl))
+	if (auto* bl = GetArrayMember(lightEntry, "blackList"); bl && anyMatches(*bl))
 		return false;
 
 	return true;
-}
-
-std::array<float, 3> LightEditor::GetJsonVec3(const nlohmann::ordered_json& data, const char* key)
-{
-	auto it = data.find(key);
-	if (it != data.end() && it->is_array() && it->size() >= 3 && (*it)[0].is_number() && (*it)[1].is_number() && (*it)[2].is_number())
-		return { (*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>() };
-	return { 0.f, 0.f, 0.f };
 }
 
 bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
@@ -923,16 +937,11 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 		if (lightsIt == entry.end() || !lightsIt->is_array())
 			continue;
 
-		auto getArray = [&](const char* key) -> const nlohmann::ordered_json* {
-			auto it = entry.find(key);
-			return (it != entry.end() && it->is_array()) ? &*it : nullptr;
-		};
-
 		bool entryMatches = false;
-		if (auto* models = getArray("models"); !normalizedOwner.empty() && models)
+		if (auto* models = GetArrayMember(entry, "models"); !normalizedOwner.empty() && models)
 			entryMatches = arrayContainsString(*models, [&](const std::string& s) { return normalizePath(s) == normalizedOwner; });
 		if (!entryMatches) {
-			if (auto* formIDs = getArray("formIDs"); formIDs) {
+			if (auto* formIDs = GetArrayMember(entry, "formIDs"); formIDs) {
 				const RE::FormID baseFormId = activeRefr && activeRefr->GetObjectReference()
 				                                  ? activeRefr->GetObjectReference()->formID
 				                                  : 0;
@@ -1137,7 +1146,7 @@ void LightEditor::SortLights()
 		}
 	case SortOption::FormID:
 		std::ranges::sort(lights, [](const LightInfo& a, const LightInfo& b) {
-			return (a.id * 10 + a.index) < (b.id * 10 + b.index);
+			return std::tie(a.id, a.index) < std::tie(b.id, b.index);
 		});
 		break;
 	case SortOption::EditorID:
