@@ -266,7 +266,15 @@ void LightEditor::DrawSettings()
 					continue;
 				const bool isCurrent = ligh->GetFormID() == current.data.lighFormId;
 				if (ImGui::Selectable(edid.c_str(), isCurrent)) {
+					const float savedFade     = current.data.fade;
+					const float savedRadius   = current.data.radius;
+					const float savedSize     = current.data.size;
+					const float savedCutoff   = current.data.cutoffOverride;
 					ApplyLighFormData(ligh);
+					current.data.fade          = savedFade;
+					current.data.radius        = savedRadius;
+					current.data.size          = savedSize;
+					current.data.cutoffOverride = savedCutoff;
 					Util::ClearComboSearch(kLighOverrideId);
 				}
 				if (isCurrent)
