@@ -635,11 +635,12 @@ if(AUTO_PLUGIN_DEPLOYMENT)
     # Detect git HEAD changes (branch switch or new commit) and invalidate stale
     # deploy state. BuildRelease.bat always reconfigures, so this runs on every
     # build invocation. When HEAD changes we:
-    #   1. Touch all AIO files so robocopy /XO sees them as newer than any
-    #      previously-deployed files (including manual package installs).
+    #   1. Clear the AIO directory so PREPARE_AIO re-copies everything with
+    #      fresh timestamps (catches content-identical files cmake's
+    #      copy_if_different would otherwise skip).
     #   2. Delete deploy stamps so CMake re-runs the robocopy commands.
-    # Files the user intentionally edited in-game remain protected by /XO on
-    # subsequent builds (same HEAD = no touch, same stamp file exists).
+    # Per-build incremental relies on robocopy's default name+size+timestamp
+    # detection to copy any file whose size or mtime differs from dest.
     execute_process(
         COMMAND git rev-parse --short HEAD
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
@@ -662,10 +663,10 @@ if(AUTO_PLUGIN_DEPLOYMENT)
             # Delete the entire AIO directory so PREPARE_AIO re-copies everything
             # with fresh timestamps. Without this, copy_if_different skips
             # content-identical files (shaders, textures, configs, etc.) and
-            # leaves them with old timestamps that deployed files (e.g. from a
-            # manual package install) may beat under /XO. The DLL is always
-            # rebuilt fresh by the C++ compile step so it doesn't need special
-            # handling.
+            # leaves them with old timestamps that previously-deployed files
+            # (e.g. from a manual package install) can beat on timestamp delta.
+            # The DLL is always rebuilt fresh by the C++ compile step so it
+            # doesn't need special handling.
             file(REMOVE_RECURSE "${AIO_DIR}")
             # Also clear the PREPARE_AIO / COPY_SHADERS stamps so cmake --build
             # actually re-runs those targets.
@@ -703,10 +704,18 @@ if(AUTO_PLUGIN_DEPLOYMENT)
             add_custom_command(
                 OUTPUT ${DEPLOY_TARGET_HASH}_deploy.stamp
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_TARGET}"
+                # No /XO: a previous manual or external deploy can leave dest
+                # files with mtime > source. /XO then skips them even when the
+                # source file changed (different size and/or content), so build
+                # output silently diverges from what runs in-game. Without /XO,
+                # robocopy's default name+size+timestamp delta catches both
+                # newer-source and size-mismatch cases. The git-HEAD-change
+                # block above handles bulk-redeploy when checking out a new
+                # branch; this command handles the per-build incremental.
                 COMMAND
                     ${ROBOCOPY_WRAPPER} "${AIO_DIR}" "${DEPLOY_TARGET}" "/E"
-                    "/XD" "${AIO_DIR}/Shaders" "/COPY:DAT" "/XO" "/R:1" "/W:1"
-                    "/NFL" "/NDL" "/NJH" "/NJS"
+                    "/XD" "${AIO_DIR}/Shaders" "/COPY:DAT" "/R:1" "/W:1" "/NFL"
+                    "/NDL" "/NJH" "/NJS"
                 COMMAND
                     ${CMAKE_COMMAND} -E touch ${DEPLOY_TARGET_HASH}_deploy.stamp
                 DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
@@ -746,10 +755,11 @@ if(AUTO_PLUGIN_DEPLOYMENT)
                 COMMAND
                     ${CMAKE_COMMAND} -E make_directory
                     "${DEPLOY_TARGET}/Shaders"
+                # See /XO rationale above on the main deploy block.
                 COMMAND
                     ${ROBOCOPY_WRAPPER} "${AIO_DIR}/Shaders"
-                    "${DEPLOY_TARGET}/Shaders" "/E" "/COPY:DAT" "/XO" "/R:1"
-                    "/W:1" "/NFL" "/NDL" "/NJH" "/NJS"
+                    "${DEPLOY_TARGET}/Shaders" "/E" "/COPY:DAT" "/R:1" "/W:1"
+                    "/NFL" "/NDL" "/NJH" "/NJS"
                 COMMAND
                     ${CMAKE_COMMAND} -E touch
                     ${DEPLOY_TARGET_HASH}_shaders_only.stamp
@@ -769,10 +779,11 @@ if(AUTO_PLUGIN_DEPLOYMENT)
                 COMMAND
                     ${CMAKE_COMMAND} -E make_directory
                     "${DEPLOY_TARGET}/Shaders"
+                # See /XO rationale above on the main deploy block.
                 COMMAND
                     ${ROBOCOPY_WRAPPER} "${AIO_DIR}/Shaders"
-                    "${DEPLOY_TARGET}/Shaders" "/E" "/COPY:DAT" "/XO" "/R:1"
-                    "/W:1" "/NFL" "/NDL" "/NJH" "/NJS"
+                    "${DEPLOY_TARGET}/Shaders" "/E" "/COPY:DAT" "/R:1" "/W:1"
+                    "/NFL" "/NDL" "/NJH" "/NJS"
                 COMMAND
                     ${CMAKE_COMMAND} -E touch
                     ${DEPLOY_TARGET_HASH}_shaders_full.stamp
