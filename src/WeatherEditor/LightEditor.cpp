@@ -788,25 +788,22 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 			const auto offset = GetJsonVec3(data, "offset");
 			const std::string newFlags = UpdateLPFlags(data.value("flags", std::string{}), isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
 
-			auto r3 = [](float v) { return std::round(v * 1000.f) / 1000.f; };
-			auto r4 = [](float v) { return std::round(v * 10000.f) / 10000.f; };
-
 			nlohmann::ordered_json newData;
 			if (includeColor || data.contains("color"))
-				newData["color"] = { r4(current.data.diffuse.red), r4(current.data.diffuse.green), r4(current.data.diffuse.blue) };
+				newData["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
 			newData["light"] = data["light"];
-			newData["fade"] = r3(current.data.fade);
+			newData["fade"] = current.data.fade;
 			if (isInvSq) {
-				newData["size"] = r3(current.data.size);
-				newData["cutoff"] = r3(current.data.cutoffOverride);
+				newData["size"] = current.data.size;
+				newData["cutoff"] = current.data.cutoffOverride;
 			} else {
-				newData["radius"] = r3(current.data.radius);
+				newData["radius"] = current.data.radius;
 			}
 			if (data.contains("shadowDepthBias"))
-				newData["shadowDepthBias"] = r3(shadowDepthBias);
+				newData["shadowDepthBias"] = shadowDepthBias;
 			if (!newFlags.empty())
 				newData["flags"] = newFlags;
-			const float ox = r3(offset[0] + current.pos.x), oy = r3(offset[1] + current.pos.y), oz = r3(offset[2] + current.pos.z);
+			const float ox = offset[0] + current.pos.x, oy = offset[1] + current.pos.y, oz = offset[2] + current.pos.z;
 			if (ox != 0.f || oy != 0.f || oz != 0.f)
 				newData["offset"] = { ox, oy, oz };
 			if (data.contains("rotation"))
@@ -877,8 +874,35 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 			return false;
 		}
 		std::string output = configArray.dump(1, '\t');
+
+		// Inline vec3 arrays onto a single line.
 		static const std::regex vec3Pattern(R"(\[\n\s*([-\d.eE+]+),\n\s*([-\d.eE+]+),\n\s*([-\d.eE+]+)\n\s*\])");
 		output = std::regex_replace(output, vec3Pattern, "[$1, $2, $3]");
+
+		// Re-round all floats to 4 decimal places and strip trailing zeros.
+		// nlohmann serializes floats at full binary precision, so e.g. 0.498f becomes
+		// 0.49799999594688416; this pass restores the intended rounded representation.
+		{
+			static const std::regex floatPattern(R"(-?\d+\.\d+)");
+			std::string rounded;
+			rounded.reserve(output.size());
+			std::sregex_iterator it(output.begin(), output.end(), floatPattern), end;
+			size_t pos = 0;
+			for (; it != end; ++it) {
+				rounded += output.substr(pos, it->position() - pos);
+				double v = std::round(std::stod(it->str()) * 10000.0) / 10000.0;
+				char buf[32];
+				std::snprintf(buf, sizeof(buf), "%.4f", v);
+				std::string s(buf);
+				s.erase(s.find_last_not_of('0') + 1);
+				if (s.back() == '.') s.pop_back();
+				rounded += s;
+				pos = it->position() + it->length();
+			}
+			rounded += output.substr(pos);
+			output = std::move(rounded);
+		}
+
 		outFile << output;
 		outFile.flush();
 		if (outFile.fail()) {
