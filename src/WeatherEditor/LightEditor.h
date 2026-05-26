@@ -141,6 +141,7 @@ private:
 	static void EnsureEmittanceFormListBuilt();
 	static std::vector<std::pair<std::string, RE::TESForm*>> s_emittanceFormList;
 
+	static RE::FormID ResolveFormEntry(const std::string& entry);
 	static bool HasShadowFlags(uint32_t tesFlags);
 	static std::string GetLightName(LightInfo& lightInfo);
 	static LPLightInfo ParseLPLightName(const std::string& name);

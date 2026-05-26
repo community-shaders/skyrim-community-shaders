@@ -59,19 +59,47 @@ void LightEditor::EnsureEmittanceFormListBuilt()
 	auto* dh = RE::TESDataHandler::GetSingleton();
 	if (!dh)
 		return;
+	auto containsCaseInsensitive = [](const std::string& str, std::string_view needle) {
+		return std::ranges::search(str, needle, [](char a, char b) {
+			return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+		}).begin() != str.end();
+	};
+
 	auto addForms = [&](auto& formArray, RE::FormType expectedType) {
 		for (auto* form : formArray) {
 			if (!form || form->formID == 0 || form->GetFormType() != expectedType)
 				continue;
 			std::string edid = clib_util::editorID::get_editorID(form);
-			if (!edid.empty())
-				s_emittanceFormList.emplace_back(std::move(edid), static_cast<RE::TESForm*>(form));
+			if (edid.empty())
+				continue;
+			if (!containsCaseInsensitive(edid, "fx") && !containsCaseInsensitive(edid, "weather"))
+				continue;
+			s_emittanceFormList.emplace_back(std::move(edid), static_cast<RE::TESForm*>(form));
 		}
 	};
 	addForms(dh->GetFormArray<RE::TESRegion>(), RE::FormType::Region);
 	std::ranges::sort(s_emittanceFormList, [](const auto& a, const auto& b) { return a.first < b.first; });
 }
 
+
+RE::FormID LightEditor::ResolveFormEntry(const std::string& entry)
+{
+	const auto tildePos = entry.find('~');
+	const bool hasPrefix = entry.starts_with("0x") || entry.starts_with("0X");
+	if (tildePos == std::string::npos) {
+		if (!hasPrefix)
+			return 0;
+		try { return static_cast<RE::FormID>(std::stoul(entry.substr(2), nullptr, 16)); }
+		catch (...) { return 0; }
+	}
+	const auto hexStart = hasPrefix ? 2 : 0;
+	RE::FormID relativeID;
+	try { relativeID = static_cast<RE::FormID>(std::stoul(entry.substr(hexStart, tildePos - hexStart), nullptr, 16)); }
+	catch (...) { return 0; }
+	auto* dh = RE::TESDataHandler::GetSingleton();
+	auto* form = dh ? dh->LookupForm(relativeID, entry.substr(tildePos + 1)) : nullptr;
+	return form ? form->GetFormID() : 0;
+}
 
 void LightEditor::ApplyLighFormData(const RE::TESObjectLIGH* ligh)
 {
@@ -786,27 +814,10 @@ bool LightEditor::MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE:
 	if (!refr)
 		return true;
 
-	auto resolveFilterEntry = [](const std::string& entry) -> RE::FormID {
-		auto tildePos = entry.find('~');
-		if (tildePos == std::string::npos || !entry.starts_with("0x"))
-			return 0;
-		RE::FormID relativeID;
-		try {
-			relativeID = static_cast<RE::FormID>(std::stoul(entry.substr(2, tildePos - 2), nullptr, 16));
-		} catch (...) {
-			return 0;
-		}
-		std::string plugin = entry.substr(tildePos + 1);
-		auto* dataHandler = RE::TESDataHandler::GetSingleton();
-		if (!dataHandler)
-			return 0;
-		auto* form = dataHandler->LookupForm(relativeID, plugin);
-		return form ? form->GetFormID() : 0;
-	};
-
 	auto matchesEntry = [&](const std::string& entry) -> bool {
-		if (entry.find('~') != std::string::npos) {
-			RE::FormID resolvedId = resolveFilterEntry(entry);
+		const bool hasPrefix = entry.starts_with("0x") || entry.starts_with("0X");
+		if (entry.find('~') != std::string::npos || hasPrefix) {
+			const RE::FormID resolvedId = ResolveFormEntry(entry);
 			return resolvedId != 0 && resolvedId == refr->GetFormID();
 		}
 		if (auto* cell = refr->GetParentCell())
@@ -912,9 +923,22 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 		bool entryMatches = false;
 		if (auto* models = getArray("models"); !normalizedOwner.empty() && models)
 			entryMatches = arrayContainsString(*models, [&](const std::string& s) { return normalizePath(s) == normalizedOwner; });
-		if (!entryMatches)
-			if (auto* formIDs = getArray("formIDs"); !lpInfo.ownerEditorId.empty() && formIDs)
-				entryMatches = arrayContainsString(*formIDs, [&](const std::string& s) { return s == lpInfo.ownerEditorId; });
+		if (!entryMatches) {
+			if (auto* formIDs = getArray("formIDs"); formIDs) {
+				const RE::FormID baseFormId = activeRefr && activeRefr->GetObjectReference()
+				                                  ? activeRefr->GetObjectReference()->formID
+				                                  : 0;
+				entryMatches = arrayContainsString(*formIDs, [&](const std::string& s) -> bool {
+					const bool hasPrefix = s.starts_with("0x") || s.starts_with("0X");
+					if (s.find('~') == std::string::npos && !hasPrefix)
+						return !lpInfo.ownerEditorId.empty() && s == lpInfo.ownerEditorId;
+					if (baseFormId == 0)
+						return false;
+					const RE::FormID resolved = ResolveFormEntry(s);
+					return resolved != 0 && resolved == baseFormId;
+				});
+			}
+		}
 
 		if (!entryMatches)
 			continue;
