@@ -723,6 +723,11 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 	if (!configArray.is_array())
 		return false;
 
+	static constexpr std::array managedDataKeys = {
+		"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "flags", "offset", "rotation"
+	};
+	static constexpr std::array managedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
+
 	bool found = false;
 
 	auto normalizePath = [](std::string path) -> std::string {
@@ -824,11 +829,6 @@ bool LightEditor::SaveToLightPlacer(bool includeColor)
 	}
 
 	// Normalise key order for every data and lightEntry in the file so the whole config is consistent.
-	static constexpr std::array managedDataKeys = {
-		"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "flags", "offset", "rotation"
-	};
-	static constexpr std::array managedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
-
 	auto normalizeData = [](nlohmann::ordered_json& d) {
 		nlohmann::ordered_json nd;
 		if (d.contains("color"))           nd["color"]           = d["color"];
