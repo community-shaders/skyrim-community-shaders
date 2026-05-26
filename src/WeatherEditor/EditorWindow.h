@@ -199,8 +199,8 @@ public:
 		std::vector<std::string> favoriteWidgets;
 		std::map<std::string, std::vector<std::string>> recentWidgets;
 		int maxRecentWidgets = 10;
-
 		bool showViewport = true;
+		std::string selectedCategory = "Weather";
 
 		// Per-widget-type window sizes (serialized as JSON for persistence)
 		json widgetTypeSizes;
