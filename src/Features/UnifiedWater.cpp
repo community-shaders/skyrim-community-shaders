@@ -4,6 +4,10 @@
 #include "Menu/ThemeManager.h"
 #include "Util.h"
 
+#include "RE/L/LoadingMenu.h"
+#include "RE/M/MapMenu.h"
+#include "RE/P/PlayerCharacter.h"
+
 #include <imgui_internal.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -15,7 +19,45 @@ namespace
 	bool IsInteriorCellActive()
 	{
 		const auto tes = RE::TES::GetSingleton();
-		return tes && tes->interiorCell;
+		if (tes && tes->interiorCell)
+			return true;
+
+		// TES::interiorCell can lag behind during load transitions
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		const auto cell = player ? player->GetParentCell() : nullptr;
+		return cell && cell->IsInteriorCell();
+	}
+
+	bool IsShortBranch(const std::uint8_t opcode)
+	{
+		return opcode == 0xEB || (opcode >= 0x70 && opcode <= 0x7F);
+	}
+
+	bool IsNearConditionalBranch(const std::uint8_t first, const std::uint8_t second)
+	{
+		return first == 0x0F && second >= 0x80 && second <= 0x8F;
+	}
+
+	void PatchBranchToUnconditional(const std::uintptr_t address, const char* label)
+	{
+		const auto bytes = reinterpret_cast<const std::uint8_t*>(address);
+
+		// Match the branch width in the loaded executable before patching
+		if (IsShortBranch(bytes[0])) {
+			REL::safe_write(address, &REL::JMP8, 1);
+			logger::debug("[Unified Water] Patched short branch for {} at {:X}", label, address);
+			return;
+		}
+
+		if (IsNearConditionalBranch(bytes[0], bytes[1])) {
+			// Preserve the existing rel32 target when replacing a near conditional jump
+			constexpr std::uint8_t patch[2] = { REL::NOP, REL::JMP32 };
+			REL::safe_write(address, patch, sizeof(patch));
+			logger::debug("[Unified Water] Patched near branch for {} at {:X}", label, address);
+			return;
+		}
+
+		logger::error("[Unified Water] Skipping {} patch at {:X}: unexpected branch bytes {:02X} {:02X}", label, address, bytes[0], bytes[1]);
 	}
 
 }
@@ -180,6 +222,56 @@ void UnifiedWater::DataLoaded()
 	while (waterCache->IsBuildRunning()) {
 		std::this_thread::sleep_for(100ms);
 	}
+
+	if (!MenuOpenCloseEventHandler::Register()) {
+		logger::warn("[Unified Water] MenuOpenCloseEventHandler registration failed");
+	}
+}
+
+RE::BSEventNotifyControl UnifiedWater::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
+{
+	if (!event)
+		return RE::BSEventNotifyControl::kContinue;
+
+	auto& singleton = globals::features::unifiedWater;
+
+	if (event->menuName == RE::LoadingMenu::MENU_NAME && !event->opening) {
+		// Some interiors keep exterior state alive until after the load screen closes
+		singleton.UpdateWaterLODCull();
+	} else if (event->menuName == RE::MapMenu::MENU_NAME) {
+		// The world map renders exterior LOD even while the player is in an interior
+		singleton.mapMenuOpen.store(event->opening, std::memory_order_release);
+		singleton.UpdateWaterLODCull();
+	}
+
+	return RE::BSEventNotifyControl::kContinue;
+}
+
+bool UnifiedWater::MenuOpenCloseEventHandler::Register()
+{
+	static MenuOpenCloseEventHandler singleton;
+	static bool registered = false;
+
+	// DataLoaded can run more than once on some reload paths
+	if (registered)
+		return true;
+
+	const auto ui = globals::game::ui;
+	if (!ui) {
+		logger::error("[Unified Water] UI event source not found");
+		return false;
+	}
+
+	const auto source = ui->GetEventSource<RE::MenuOpenCloseEvent>();
+	if (!source) {
+		logger::error("[Unified Water] MenuOpenCloseEvent source not found");
+		return false;
+	}
+
+	source->AddEventSink(&singleton);
+	registered = true;
+	logger::info("[Unified Water] Registered MenuOpenCloseEventHandler");
+	return true;
 }
 
 bool UnifiedWater::LoadOrderChanged()
@@ -263,14 +355,8 @@ void UnifiedWater::PostPostLoad()
 	// Skip iterating attached meshes and calling TESWaterSystem::AddLODWater, this is handled in Attach now
 	const auto addLoopOffset = REL::RelocationID(30934, 31737).address() + REL::Relocate(0x109, 0x109);
 	const auto addLoopOffset2 = REL::RelocationID(30978, 31751).address() + REL::Relocate(0x54, 0xEA);
-	if (REL::Module::IsAE()) {
-		REL::safe_write(addLoopOffset, &REL::JMP8, 1);
-		REL::safe_write(addLoopOffset2, &REL::JMP8, 1);
-	} else {
-		constexpr std::uint8_t patch[2] = { REL::NOP, REL::JMP32 };
-		REL::safe_write(addLoopOffset, patch, 2);
-		REL::safe_write(addLoopOffset2, patch, 2);
-	}
+	PatchBranchToUnconditional(addLoopOffset, "attached mesh add loop");
+	PatchBranchToUnconditional(addLoopOffset2, "LOD water add loop");
 
 	stl::detour_thunk<BGSTerrainBlock_Detach>(REL::RelocationID(30936, 31739));
 
@@ -337,8 +423,12 @@ bool UnifiedWater::IsExteriorWorldspaceActive() const
 void UnifiedWater::UpdateWaterLODCull() const
 {
 	// Only hide UW's generated LOD root, preserving child tile cull flags
-	if (gWaterLOD && *gWaterLOD)
-		(*gWaterLOD)->SetAppCulled(!IsExteriorWorldspaceActive());
+	if (gWaterLOD && *gWaterLOD) {
+		const bool cull = !IsExteriorWorldspaceActive() && !mapMenuOpen.load(std::memory_order_acquire);
+		if ((*gWaterLOD)->GetAppCulled() != cull) {
+			(*gWaterLOD)->SetAppCulled(cull);
+		}
+	}
 }
 
 void UnifiedWater::TES_SetWorldSpace::thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior)
@@ -406,23 +496,16 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 
 	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
 	bool attaching = false;
+	RE::NiPointer<RE::BSMultiBoundNode> water;
 
 	if (block && block->loaded && !block->attached && block->chunk && block->water) {
-		block->chunk->DetachChild2(block->water);
-		block->water->local.translate = block->chunk->local.translate;
+		// Keep terrain water alive while moving it out of its owning node
+		water = RE::NiPointer<RE::BSMultiBoundNode>(block->water);
+		block->chunk->DetachChild2(water.get());
+		water->local.translate = block->chunk->local.translate;
 
 		RE::NiUpdateData updateData;
-		block->water->UpdateUpwardPass(updateData);
-
-		const auto water = block->water;
-		for (auto& child : water->GetChildren()) {
-			if (child) {
-				waterSystem->RemoveWater(child.get());
-				water->DetachChild(child.get());
-			}
-		}
-
-		attaching = true;
+		water->UpdateUpwardPass(updateData);
 
 		const auto node = block->node;
 		const auto lodLevel = node->GetLODLevel();
@@ -431,8 +514,37 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		const auto instructions = singleton.waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
 		if (!instructions) {
 			logger::warn("[Unified Water] No instructions found for {} chunk at {}, {}", worldSpace->GetFormEditorID(), node->baseCellX, node->baseCellY);
+			// Reattach the saved node before falling back to vanilla
+			block->chunk->AttachChild(water.get(), true);
 			func(block);
+			singleton.UpdateWaterLODCull();
 			return;
+		}
+
+		bool hasInstruction = false;
+		for (const auto& instruction : *instructions) {
+			if (instruction.form.ptr) {
+				hasInstruction = true;
+				break;
+			}
+		}
+
+		if (!hasInstruction) {
+			// Empty instruction sets mean this block should stay vanilla
+			block->chunk->AttachChild(water.get(), true);
+			func(block);
+			singleton.UpdateWaterLODCull();
+			return;
+		}
+
+		// Detach by index because DetachChild mutates the child list
+		auto count = water->GetChildren().size();
+		while (count > 0) {
+			const auto child = water->GetChildren()[count - 1];
+			if (child) {
+				waterSystem->RemoveWater(child.get());
+			}
+			water->DetachChildAt(--count);
 		}
 
 		for (auto& instruction : *instructions) {
@@ -454,12 +566,21 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 
 			block->waterAttached = true;
 		}
+
+		if (built.empty()) {
+			// If every UW tile failed to build, keep the original water visible
+			block->chunk->AttachChild(water.get(), true);
+		} else {
+			attaching = true;
+		}
 	}
 
 	func(block);
 
-	if (!attaching || !block->waterAttached)
+	if (!attaching || !block->waterAttached) {
+		singleton.UpdateWaterLODCull();
 		return;
+	}
 
 	for (auto& [shape, instruction] : built) {
 		waterSystem->AddWater(shape, instruction->form.ptr, instruction->waterHeight, nullptr, true, false);
@@ -482,27 +603,53 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		}
 	}
 
-	(*singleton.gWaterLOD)->AttachChild(block->water, true);
-	singleton.UpdateWaterLODCull();
+	if (auto waterLOD = singleton.gWaterLOD; waterLOD && *waterLOD) {
+		(*waterLOD)->AttachChild(water.get(), true);
+		singleton.UpdateWaterLODCull();
+	} else if (block->chunk) {
+		// If the LOD root is unavailable, keep ownership on the chunk
+		block->chunk->AttachChild(water.get(), true);
+		block->waterAttached = false;
+	} else {
+		block->water = nullptr;
+		block->waterAttached = false;
+	}
 	waterSystem->Enable();
 }
 
 void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 {
-	const auto water = block->water;
-	block->water = nullptr;
+	if (!block) {
+		return;
+	}
+
+	RE::NiPointer<RE::BSMultiBoundNode> water(block->water);
+	const bool wasWaterAttached = water && block->waterAttached;
+
+	// Hide UW-managed water from vanilla detach so it does not delete it
+	if (wasWaterAttached)
+		block->water = nullptr;
 
 	func(block);
 
-	block->water = water;
-
-	if (water) {
+	if (wasWaterAttached) {
+		// Drop generated child tiles before parking the reusable water node
 		auto count = water->GetChildren().size();
 		while (count > 0) {
 			water->DetachChildAt(--count);
 		}
 
-		(*globals::features::unifiedWater.gWaterLOD)->DetachChild(water);
+		if (auto waterLOD = globals::features::unifiedWater.gWaterLOD; waterLOD && *waterLOD)
+			(*waterLOD)->DetachChild(water.get());
+
+		// Park water under the detached chunk so block->water stays valid
+		if (block->chunk) {
+			block->chunk->AttachChild(water.get(), true);
+			block->water = water.get();
+		} else {
+			block->water = nullptr;
+		}
+
 		block->waterAttached = false;
 		globals::features::unifiedWater.UpdateWaterLODCull();
 	}
