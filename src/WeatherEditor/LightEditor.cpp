@@ -65,6 +65,48 @@ static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nu
 	}
 }
 
+static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::ordered_json& config)
+{
+	std::ofstream outFile(filePath);
+	if (!outFile.is_open()) {
+		logger::warn("[LightEditor] Failed to write Light Placer config: {}", filePath.string());
+		return false;
+	}
+	std::string output = config.dump(1, '\t');
+
+	static const std::regex vec3Pattern(R"(\[\n\s*([-\d.eE+]+),\n\s*([-\d.eE+]+),\n\s*([-\d.eE+]+)\n\s*\])");
+	output = std::regex_replace(output, vec3Pattern, "[$1, $2, $3]");
+
+	{
+		static const std::regex floatPattern(R"(-?\d+\.\d+)");
+		std::string rounded;
+		rounded.reserve(output.size());
+		std::sregex_iterator it(output.begin(), output.end(), floatPattern), end;
+		size_t pos = 0;
+		for (; it != end; ++it) {
+			rounded += output.substr(pos, it->position() - pos);
+			double v = std::round(std::stod(it->str()) * 10000.0) / 10000.0;
+			char buf[32];
+			std::snprintf(buf, sizeof(buf), "%.4f", v);
+			std::string s(buf);
+			s.erase(s.find_last_not_of('0') + 1);
+			if (s.back() == '.') s.pop_back();
+			rounded += s;
+			pos = it->position() + it->length();
+		}
+		rounded += output.substr(pos);
+		output = std::move(rounded);
+	}
+
+	outFile << output;
+	outFile.flush();
+	if (outFile.fail()) {
+		logger::warn("[LightEditor] Failed to write Light Placer config to {}: stream error", filePath.string());
+		return false;
+	}
+	return true;
+}
+
 void LightEditor::EnsureEmittanceFormListBuilt()
 {
 	if (!s_emittanceFormList.empty())
@@ -250,6 +292,8 @@ void LightEditor::DrawSettings()
 		ImGui::Text("Base Object: 0x%08X | %s", displayInfo.baseObjectFormId, selected.name.c_str());
 		ImGui::Text("LIGH: 0x%08X | %s", displayInfo.lighFormId, displayInfo.lighEditorId.c_str());
 		ImGui::Text("Cell: 0x%08X | %s", displayInfo.cellFormId, displayInfo.cellEditorId.c_str());
+		if (lpInfo.isLPLight)
+			ImGui::Text("Config: Data\\LightPlacer\\%s.json", lpInfo.configPath.c_str());
 	} else {
 		ImGui::Text("Memory Address: %p", selected.ptr);
 		ImGui::Text("NiLight Name: %s", selected.name.c_str());
@@ -310,6 +354,42 @@ void LightEditor::DrawSettings()
 	ImGui::Checkbox("Log Mode", &extendedLogMode);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Extend slider ranges and use a logarithmic scale.");
+	}
+
+	if (lpInfo.isLPLight) {
+		auto doFilterButton = [&](bool isWhiteList) {
+			bool& inList = isWhiteList ? lpInWhitelist : lpInBlacklist;
+			const char* addLabel    = isWhiteList ? "Add to Whitelist"      : "Add to Blacklist";
+			const char* removeLabel = isWhiteList ? "Remove from Whitelist" : "Remove from Blacklist";
+			const ImVec4 activeColor = isWhiteList ? Util::Colors::GetSuccess() : Util::Colors::GetError();
+
+			bool clicked = false;
+			if (inList) {
+				auto _style = Util::StatusButtonStyle(activeColor);
+				clicked = ImGui::Button(removeLabel);
+			} else {
+				clicked = ImGui::Button(addLabel);
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("%s\nFormat: %s\nReload LP to apply.", inList ? removeLabel : addLabel,
+					FormatOwnerFormEntry(activeRefr).c_str());
+			}
+			if (clicked) {
+				if (ModifyLPFilterList(isWhiteList, !inList)) {
+					inList = !inList;
+					const char* msg = inList
+					    ? (isWhiteList ? "Added to whitelist" : "Added to blacklist")
+					    : (isWhiteList ? "Removed from whitelist" : "Removed from blacklist");
+					EditorWindow::GetSingleton()->ShowNotification(msg, Util::Colors::GetInfo());
+				} else {
+					EditorWindow::GetSingleton()->ShowNotification("Filter update failed \xe2\x80\x94 see log", Util::Colors::GetError());
+				}
+			}
+		};
+
+		doFilterButton(true);
+		ImGui::SameLine();
+		doFilterButton(false);
 	}
 
 	ImGui::Spacing();
@@ -663,6 +743,8 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		activeLigh = ligh;
 
 		lpMatchFound = lpInfo.isLPLight && SaveToLightPlacer(false, true);
+		if (lpInfo.isLPLight)
+			RefreshLPFilterState();
 
 		externalEmittanceEdid = {};
 		useExternalEmittance = false;
@@ -881,56 +963,41 @@ bool LightEditor::MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE:
 	return true;
 }
 
-bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
+bool LightEditor::LoadLPConfig(nlohmann::ordered_json& out) const
 {
-	if (!lpInfo.isLPLight)
-		return false;
-
-	std::filesystem::path filePath = std::filesystem::path("Data\\LightPlacer") / (lpInfo.configPath + ".json");
+	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (lpInfo.configPath + ".json");
 	if (!std::filesystem::exists(filePath)) {
 		logger::warn("[LightEditor] Light Placer config not found: {}", filePath.string());
 		return false;
 	}
-
-	nlohmann::ordered_json configArray;
-	{
-		std::ifstream inFile(filePath);
-		if (!inFile.is_open()) {
-			logger::warn("[LightEditor] Failed to open Light Placer config: {}", filePath.string());
-			return false;
-		}
-		try {
-			inFile >> configArray;
-		} catch (const nlohmann::json::parse_error& e) {
-			logger::warn("[LightEditor] Failed to parse Light Placer config: {} - {}", filePath.string(), e.what());
-			return false;
-		}
-	}
-
-	if (!configArray.is_array())
+	std::ifstream inFile(filePath);
+	if (!inFile.is_open()) {
+		logger::warn("[LightEditor] Failed to open Light Placer config: {}", filePath.string());
 		return false;
+	}
+	try {
+		inFile >> out;
+	} catch (const nlohmann::json::parse_error& e) {
+		logger::warn("[LightEditor] Failed to parse Light Placer config: {} - {}", filePath.string(), e.what());
+		return false;
+	}
+	return out.is_array();
+}
 
-	static constexpr std::array managedDataKeys = {
-		"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "externalEmittance", "flags", "offset", "rotation"
-	};
-	static constexpr std::array managedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
-
-	bool found = false;
-
+nlohmann::ordered_json* LightEditor::FindMatchingLightEntry(nlohmann::ordered_json& configArray, bool applyFilters)
+{
 	auto normalizePath = [](std::string path) -> std::string {
 		std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 		std::replace(path.begin(), path.end(), '\\', '/');
 		return path;
 	};
-
 	auto arrayContainsString = [](const nlohmann::ordered_json& arr, const std::function<bool(const std::string&)>& pred) -> bool {
 		for (const auto& elem : arr)
 			if (elem.is_string() && pred(elem.get<std::string>()))
 				return true;
 		return false;
 	};
-
-	std::string normalizedOwner = normalizePath(lpInfo.ownerModelPath);
+	const std::string normalizedOwner = normalizePath(lpInfo.ownerModelPath);
 
 	for (auto& entry : configArray) {
 		auto lightsIt = entry.find("lights");
@@ -966,88 +1033,99 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 			auto& data = lightEntry["data"];
 			if (!data.contains("light") || !data["light"].is_string())
 				continue;
-
-			std::string edid = data["light"].get<std::string>();
-			if (edid != lpInfo.lightEDID)
+			if (data["light"].get<std::string>() != lpInfo.lightEDID)
 				continue;
-
-			if (!MatchesLPFilters(lightEntry, activeRefr))
+			if (applyFilters && !MatchesLPFilters(lightEntry, activeRefr))
 				continue;
-
-			if (dryRun)
-				return true;
-
-			const bool isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
-			const bool isLinear = current.data.flags.any(LightLimitFix::LightFlags::Linear);
-			const uint32_t tesUnderlying = current.tesFlags.underlying();
-			const bool isFlicker = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) != 0;
-			const bool isPortalStrict = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) != 0;
-			const bool isOmniShadow = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) != 0;
-			const std::string newFlags = UpdateLPFlags(data.value("flags", std::string{}), isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
-
-			nlohmann::ordered_json newData;
-			if (includeColor || data.contains("color"))
-				newData["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
-			newData["light"] = data["light"];
-			newData["fade"] = current.data.fade;
-			if (isInvSq) {
-				newData["size"] = current.data.size;
-				newData["cutoff"] = current.data.cutoffOverride;
-			} else {
-				newData["radius"] = current.data.radius;
-			}
-			if (data.contains("shadowDepthBias"))
-				newData["shadowDepthBias"] = shadowDepthBias;
-			if (useExternalEmittance && !externalEmittanceEdid.empty())
-				newData["externalEmittance"] = externalEmittanceEdid;
-			else if (!useExternalEmittance && data.contains("externalEmittance"))
-				newData["externalEmittance"] = data["externalEmittance"];
-			if (!newFlags.empty())
-				newData["flags"] = newFlags;
-			if (data.contains("offset"))
-				newData["offset"] = data["offset"];
-			if (data.contains("rotation"))
-				newData["rotation"] = data["rotation"];
-			for (auto& [key, val] : data.items())
-				if (std::ranges::find(managedDataKeys, key) == managedDataKeys.end())
-					newData[key] = val;
-			data = std::move(newData);
-
-			auto getPointsKey = [&]() -> const char* {
-				return lightEntry.contains("points") ? "points" : (lightEntry.contains("nodes") ? "nodes" : nullptr);
-			};
-			if (const char* key = getPointsKey()) {
-				auto& pts = lightEntry[key];
-				if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3)
-					pts[0] = nlohmann::ordered_json::array({ static_cast<int>(current.pos.x), static_cast<int>(current.pos.y), static_cast<int>(current.pos.z) });
-			}
-
-			found = true;
-			break;
+			return &lightEntry;
 		}
-		if (found)
-			break;
+	}
+	return nullptr;
+}
+
+bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
+{
+	if (!lpInfo.isLPLight)
+		return false;
+
+	nlohmann::ordered_json configArray;
+	if (!LoadLPConfig(configArray))
+		return false;
+
+	auto* matchedEntry = FindMatchingLightEntry(configArray);
+	if (!matchedEntry) {
+		logger::warn("[LightEditor] No matching entry found for model '{}' with light EDID '{}' in {}.json",
+			lpInfo.ownerModelPath, lpInfo.lightEDID, lpInfo.configPath);
+		return false;
 	}
 
-	if (!found) {
-		logger::warn("[LightEditor] No matching entry found for model '{}' with light EDID '{}' in {}", lpInfo.ownerModelPath, lpInfo.lightEDID, filePath.string());
-		return false;
+	if (dryRun)
+		return true;
+
+	static constexpr std::array managedDataKeys = {
+		"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "externalEmittance", "flags", "offset", "rotation"
+	};
+	static constexpr std::array managedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
+
+	auto& data = (*matchedEntry)["data"];
+
+	const bool isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
+	const bool isLinear = current.data.flags.any(LightLimitFix::LightFlags::Linear);
+	const uint32_t tesUnderlying = current.tesFlags.underlying();
+	const bool isFlicker = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) != 0;
+	const bool isPortalStrict = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) != 0;
+	const bool isOmniShadow = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) != 0;
+	const std::string newFlags = UpdateLPFlags(data.value("flags", std::string{}), isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
+
+	nlohmann::ordered_json newData;
+	if (includeColor || data.contains("color"))
+		newData["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
+	newData["light"] = data["light"];
+	newData["fade"] = current.data.fade;
+	if (isInvSq) {
+		newData["size"] = current.data.size;
+		newData["cutoff"] = current.data.cutoffOverride;
+	} else {
+		newData["radius"] = current.data.radius;
+	}
+	if (data.contains("shadowDepthBias"))
+		newData["shadowDepthBias"] = shadowDepthBias;
+	if (useExternalEmittance && !externalEmittanceEdid.empty())
+		newData["externalEmittance"] = externalEmittanceEdid;
+	else if (!useExternalEmittance && data.contains("externalEmittance"))
+		newData["externalEmittance"] = data["externalEmittance"];
+	if (!newFlags.empty())
+		newData["flags"] = newFlags;
+	if (data.contains("offset"))
+		newData["offset"] = data["offset"];
+	if (data.contains("rotation"))
+		newData["rotation"] = data["rotation"];
+	for (auto& [key, val] : data.items())
+		if (std::ranges::find(managedDataKeys, key) == managedDataKeys.end())
+			newData[key] = val;
+	data = std::move(newData);
+
+	const char* pointsKey = matchedEntry->contains("points") ? "points" : (matchedEntry->contains("nodes") ? "nodes" : nullptr);
+	if (pointsKey) {
+		auto& pts = (*matchedEntry)[pointsKey];
+		if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3)
+			pts[0] = nlohmann::ordered_json::array({ static_cast<int>(current.pos.x), static_cast<int>(current.pos.y), static_cast<int>(current.pos.z) });
 	}
 
 	// Normalise key order for every data and lightEntry in the file so the whole config is consistent.
 	auto normalizeData = [](nlohmann::ordered_json& d) {
 		nlohmann::ordered_json nd;
-		if (d.contains("color"))           nd["color"]           = d["color"];
-		if (d.contains("light"))           nd["light"]           = d["light"];
-		if (d.contains("fade"))            nd["fade"]            = d["fade"];
-		if (d.contains("radius"))          nd["radius"]          = d["radius"];
-		if (d.contains("size"))            nd["size"]            = d["size"];
-		if (d.contains("cutoff"))          nd["cutoff"]          = d["cutoff"];
+		if (d.contains("color"))             nd["color"]             = d["color"];
+		if (d.contains("light"))             nd["light"]             = d["light"];
+		if (d.contains("fade"))              nd["fade"]              = d["fade"];
+		if (d.contains("radius"))            nd["radius"]            = d["radius"];
+		if (d.contains("size"))              nd["size"]              = d["size"];
+		if (d.contains("cutoff"))            nd["cutoff"]            = d["cutoff"];
 		if (d.contains("shadowDepthBias"))   nd["shadowDepthBias"]   = d["shadowDepthBias"];
 		if (d.contains("externalEmittance")) nd["externalEmittance"] = d["externalEmittance"];
 		if (d.contains("flags"))             nd["flags"]             = d["flags"];
-		if (d.contains("offset"))          nd["offset"]          = d["offset"];
-		if (d.contains("rotation"))        nd["rotation"]        = d["rotation"];
+		if (d.contains("offset"))            nd["offset"]            = d["offset"];
+		if (d.contains("rotation"))          nd["rotation"]          = d["rotation"];
 		for (auto& [key, val] : d.items())
 			if (std::ranges::find(managedDataKeys, key) == managedDataKeys.end())
 				nd[key] = val;
@@ -1077,53 +1155,11 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 			normalizeLightEntry(le);
 	}
 
-	{
-		std::ofstream outFile(filePath);
-		if (!outFile.is_open()) {
-			logger::warn("[LightEditor] Failed to write Light Placer config: {}", filePath.string());
-			return false;
-		}
-		std::string output = configArray.dump(1, '\t');
+	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (lpInfo.configPath + ".json");
+	if (!WriteLPConfig(filePath, configArray))
+		return false;
 
-		// Inline vec3 arrays onto a single line.
-		static const std::regex vec3Pattern(R"(\[\n\s*([-\d.eE+]+),\n\s*([-\d.eE+]+),\n\s*([-\d.eE+]+)\n\s*\])");
-		output = std::regex_replace(output, vec3Pattern, "[$1, $2, $3]");
-
-		// Re-round all floats to 4 decimal places and strip trailing zeros.
-		// nlohmann serializes floats at full binary precision, so e.g. 0.498f becomes
-		// 0.49799999594688416; this pass restores the intended rounded representation.
-		{
-			static const std::regex floatPattern(R"(-?\d+\.\d+)");
-			std::string rounded;
-			rounded.reserve(output.size());
-			std::sregex_iterator it(output.begin(), output.end(), floatPattern), end;
-			size_t pos = 0;
-			for (; it != end; ++it) {
-				rounded += output.substr(pos, it->position() - pos);
-				double v = std::round(std::stod(it->str()) * 10000.0) / 10000.0;
-				char buf[32];
-				std::snprintf(buf, sizeof(buf), "%.4f", v);
-				std::string s(buf);
-				s.erase(s.find_last_not_of('0') + 1);
-				if (s.back() == '.') s.pop_back();
-				rounded += s;
-				pos = it->position() + it->length();
-			}
-			rounded += output.substr(pos);
-			output = std::move(rounded);
-		}
-
-		outFile << output;
-		outFile.flush();
-		if (outFile.fail()) {
-			logger::warn("[LightEditor] Failed to write Light Placer config to {}: stream error", filePath.string());
-			return false;
-		}
-	}
-
-	if (!dryRun)
-		original.pos = current.pos;
-
+	original.pos = current.pos;
 	logger::info("[LightEditor] Saved light settings to {}", filePath.string());
 	return true;
 }
@@ -1158,4 +1194,89 @@ void LightEditor::SortLights()
 	default:
 		break;
 	}
+}
+
+std::string LightEditor::FormatOwnerFormEntry(RE::TESObjectREFR* refr)
+{
+	if (!refr)
+		return {};
+	const auto* ownerFile = refr->GetDescriptionOwnerFile();
+	if (!ownerFile || !ownerFile->fileName)
+		return {};
+	const RE::FormID relativeId = refr->formID & 0x00FFFFFF;
+	return fmt::format("0x{:X}~{}", relativeId, ownerFile->fileName);
+}
+
+void LightEditor::RefreshLPFilterState()
+{
+	lpInWhitelist = false;
+	lpInBlacklist = false;
+	if (!lpInfo.isLPLight || !activeRefr)
+		return;
+
+	const std::string ownerEntry = FormatOwnerFormEntry(activeRefr);
+	if (ownerEntry.empty())
+		return;
+
+	nlohmann::ordered_json configArray;
+	if (!LoadLPConfig(configArray))
+		return;
+
+	const auto* lightEntry = FindMatchingLightEntry(configArray, false);
+	if (!lightEntry)
+		return;
+
+	auto containsEntry = [&](const char* listKey) {
+		const auto it = lightEntry->find(listKey);
+		if (it == lightEntry->end() || !it->is_array())
+			return false;
+		for (const auto& elem : *it)
+			if (elem.is_string() && elem.get<std::string>() == ownerEntry)
+				return true;
+		return false;
+	};
+
+	lpInWhitelist = containsEntry("whiteList");
+	lpInBlacklist = containsEntry("blackList");
+}
+
+bool LightEditor::ModifyLPFilterList(bool isWhiteList, bool add)
+{
+	if (!lpInfo.isLPLight || !activeRefr)
+		return false;
+
+	const std::string ownerEntry = FormatOwnerFormEntry(activeRefr);
+	if (ownerEntry.empty())
+		return false;
+
+	nlohmann::ordered_json configArray;
+	if (!LoadLPConfig(configArray))
+		return false;
+
+	auto* lightEntry = FindMatchingLightEntry(configArray, false);
+	if (!lightEntry)
+		return false;
+
+	const char* listKey = isWhiteList ? "whiteList" : "blackList";
+	auto& list = (*lightEntry)[listKey];
+
+	if (add) {
+		if (!list.is_array())
+			list = nlohmann::ordered_json::array();
+		for (const auto& elem : list)
+			if (elem.is_string() && elem.get<std::string>() == ownerEntry)
+				return true;
+		list.push_back(ownerEntry);
+	} else {
+		if (!list.is_array())
+			return true;
+		list.erase(std::remove_if(list.begin(), list.end(), [&](const auto& elem) {
+			return elem.is_string() && elem.template get<std::string>() == ownerEntry;
+		}), list.end());
+		if (list.empty())
+			lightEntry->erase(listKey);
+	}
+
+	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (lpInfo.configPath + ".json");
+	return WriteLPConfig(filePath, configArray);
 }

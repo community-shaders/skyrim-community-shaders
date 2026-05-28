@@ -1,5 +1,6 @@
 #pragma once
 #include "../Features/InverseSquareLighting/Common.h"
+#include <nlohmann/json.hpp>
 
 namespace RE { class BSLight; }
 
@@ -60,6 +61,8 @@ private:
 	bool saveColorToLP = false;
 	bool useExternalEmittance = false;
 	bool lpMatchFound = false;
+	bool lpInWhitelist = false;
+	bool lpInBlacklist = false;
 	std::string externalEmittanceEdid;
 	int32_t waitFrames = 0;
 	uint32_t totalLightCount = 0;
@@ -147,6 +150,12 @@ private:
 	static std::string UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear, bool flicker, bool portalStrict, bool shadow);
 	static bool MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr);
 	bool SaveToLightPlacer(bool includeColor = false, bool dryRun = false);
+
+	static std::string FormatOwnerFormEntry(RE::TESObjectREFR* refr);
+	bool LoadLPConfig(nlohmann::ordered_json& out) const;
+	nlohmann::ordered_json* FindMatchingLightEntry(nlohmann::ordered_json& configArray, bool applyFilters = true);
+	bool ModifyLPFilterList(bool isWhiteList, bool add);
+	void RefreshLPFilterState();
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);
 };
