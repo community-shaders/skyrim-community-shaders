@@ -1,6 +1,7 @@
 #pragma once
 #include "../Features/InverseSquareLighting/Common.h"
 #include <nlohmann/json.hpp>
+#include <set>
 
 namespace RE { class BSLight; }
 
@@ -63,6 +64,8 @@ private:
 	bool lpMatchFound = false;
 	bool lpInWhitelist = false;
 	bool lpInBlacklist = false;
+	std::set<std::string> lpFlagSet;
+	std::set<std::string> originalLpFlagSet;
 	std::string externalEmittanceEdid;
 	int32_t waitFrames = 0;
 	uint32_t totalLightCount = 0;
@@ -147,7 +150,6 @@ private:
 	static bool HasShadowFlags(uint32_t tesFlags);
 	static std::string GetLightName(LightInfo& lightInfo);
 	static LPLightInfo ParseLPLightName(const std::string& name);
-	static std::string UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear, bool flicker, bool portalStrict, bool shadow);
 	static bool MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr);
 	bool SaveToLightPlacer(bool includeColor = false, bool dryRun = false);
 
@@ -155,7 +157,8 @@ private:
 	bool LoadLPConfig(nlohmann::ordered_json& out) const;
 	nlohmann::ordered_json* FindMatchingLightEntry(nlohmann::ordered_json& configArray, bool applyFilters = true);
 	bool ModifyLPFilterList(bool isWhiteList, bool add);
-	void RefreshLPFilterState();
+	void RefreshLPJsonState();
+	void SyncLPFlagsToRuntime();
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);
 };

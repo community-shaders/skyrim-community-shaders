@@ -303,6 +303,10 @@ void LightEditor::DrawSettings()
 
 	if (ImGui::Button("Reset")) {
 		current = original;
+		if (lpInfo.isLPLight) {
+			lpFlagSet = originalLpFlagSet;
+			SyncLPFlagsToRuntime();
+		}
 		shadowDepthBias = originalShadowDepthBias;
 		ApplyShadowDepthBias();
 		waitFrames = 1;
@@ -521,13 +525,38 @@ void LightEditor::DrawSettings()
 
 		auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
 		auto* runtimeFlags = reinterpret_cast<uint32_t*>(&current.data.flags);
-		ImGui::Text("Light Flags");
 
-		// Inverse Square is disabled for spotlights since they have their own falloff model.
-		ImGui::BeginDisabled(selected.isSpotlight);
-		ImGui::CheckboxFlags("Inverse Square", runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
-		ImGui::EndDisabled();
-		ImGui::CheckboxFlags("Linear", runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
+		if (lpInfo.isLPLight) {
+			ImGui::Text("LP Flags");
+			static constexpr const char* kLPFlagNames[] = {
+				"NoExternalEmittance", "PortalStrict", "IgnoreScale",
+				"InverseSquare", "Flicker", "Linear", "Shadow",
+				"RandomAnimStart", "SyncAddonNodes", "UpdateOnCellTransition", "UpdateOnWaiting"
+			};
+			for (const char* flagName : kLPFlagNames) {
+				const bool isInvSqEntry = (std::string_view(flagName) == "InverseSquare");
+				const bool disabled = isInvSqEntry && selected.isSpotlight;
+				if (disabled) ImGui::BeginDisabled();
+				bool inSet = lpFlagSet.contains(flagName);
+				if (ImGui::Checkbox(flagName, &inSet)) {
+					if (inSet) lpFlagSet.insert(flagName);
+					else       lpFlagSet.erase(flagName);
+					SyncLPFlagsToRuntime();
+				}
+				if (disabled) ImGui::EndDisabled();
+			}
+		}
+
+		ImGui::Text("Light Flags");
+		ImGui::BeginDisabled(lpInfo.isLPLight);
+
+		if (!lpInfo.isLPLight) {
+			// Inverse Square is disabled for spotlights since they have their own falloff model.
+			ImGui::BeginDisabled(selected.isSpotlight);
+			ImGui::CheckboxFlags("Inverse Square", runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
+			ImGui::EndDisabled();
+			ImGui::CheckboxFlags("Linear", runtimeFlags, static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
+		}
 
 		static constexpr std::pair<const char*, RE::TES_LIGHT_FLAGS> kTesFlagCheckboxes[] = {
 			{ "Dynamic",       RE::TES_LIGHT_FLAGS::kDynamic      },
@@ -540,11 +569,15 @@ void LightEditor::DrawSettings()
 			{ "Omni Shadow",   RE::TES_LIGHT_FLAGS::kOmniShadow   },
 			{ "Portal Strict", RE::TES_LIGHT_FLAGS::kPortalStrict },
 		};
-		for (const auto& [label, flag] : kTesFlagCheckboxes)
+		for (const auto& [label, flag] : kTesFlagCheckboxes) {
+			if (lpInfo.isLPLight && (flag == RE::TES_LIGHT_FLAGS::kFlicker ||
+			                         flag == RE::TES_LIGHT_FLAGS::kOmniShadow ||
+			                         flag == RE::TES_LIGHT_FLAGS::kPortalStrict))
+				continue;
 			ImGui::CheckboxFlags(label, flags, static_cast<uint32_t>(flag));
+		}
 
-		if (lpInfo.isLPLight)
-			ImGui::Checkbox("External Emittance##flag", &useExternalEmittance);
+		ImGui::EndDisabled();
 	}
 }
 
@@ -743,8 +776,10 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		activeLigh = ligh;
 
 		lpMatchFound = lpInfo.isLPLight && SaveToLightPlacer(false, true);
-		if (lpInfo.isLPLight)
-			RefreshLPFilterState();
+		if (lpInfo.isLPLight) {
+			RefreshLPJsonState();
+			originalLpFlagSet = lpFlagSet;
+		}
 
 		externalEmittanceEdid = {};
 		useExternalEmittance = false;
@@ -893,38 +928,7 @@ LightEditor::LPLightInfo LightEditor::ParseLPLightName(const std::string& name)
 	return info;
 }
 
-std::string LightEditor::UpdateLPFlags(const std::string& existingFlags, bool inverseSquare, bool linear, bool flicker, bool portalStrict, bool shadow)
-{
-	static constexpr std::array managed = { "InverseSquare", "Linear", "Flicker", "PortalStrict", "Shadow" };
 
-	std::vector<std::string> flags;
-	if (!existingFlags.empty()) {
-		std::istringstream ss(existingFlags);
-		std::string flag;
-		while (std::getline(ss, flag, '|')) {
-			if (std::find(managed.begin(), managed.end(), flag) == managed.end())
-				flags.push_back(flag);
-		}
-	}
-	if (inverseSquare)
-		flags.push_back("InverseSquare");
-	if (linear)
-		flags.push_back("Linear");
-	if (flicker)
-		flags.push_back("Flicker");
-	if (portalStrict)
-		flags.push_back("PortalStrict");
-	if (shadow)
-		flags.push_back("Shadow");
-
-	std::string result;
-	for (size_t i = 0; i < flags.size(); ++i) {
-		if (i > 0)
-			result += "|";
-		result += flags[i];
-	}
-	return result;
-}
 
 bool LightEditor::MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr)
 {
@@ -1069,13 +1073,12 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 
 	auto& data = (*matchedEntry)["data"];
 
-	const bool isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
-	const bool isLinear = current.data.flags.any(LightLimitFix::LightFlags::Linear);
-	const uint32_t tesUnderlying = current.tesFlags.underlying();
-	const bool isFlicker = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker)) != 0;
-	const bool isPortalStrict = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict)) != 0;
-	const bool isOmniShadow = (tesUnderlying & static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow)) != 0;
-	const std::string newFlags = UpdateLPFlags(data.value("flags", std::string{}), isInvSq, isLinear, isFlicker, isPortalStrict, isOmniShadow);
+	const bool isInvSq = lpFlagSet.contains("InverseSquare");
+	std::string newFlags;
+	for (const auto& flag : lpFlagSet) {
+		if (!newFlags.empty()) newFlags += "|";
+		newFlags += flag;
+	}
 
 	nlohmann::ordered_json newData;
 	if (includeColor || data.contains("color"))
@@ -1207,16 +1210,15 @@ std::string LightEditor::FormatOwnerFormEntry(RE::TESObjectREFR* refr)
 	return fmt::format("0x{:X}~{}", relativeId, ownerFile->fileName);
 }
 
-void LightEditor::RefreshLPFilterState()
+void LightEditor::RefreshLPJsonState()
 {
 	lpInWhitelist = false;
 	lpInBlacklist = false;
+	lpFlagSet.clear();
 	if (!lpInfo.isLPLight || !activeRefr)
 		return;
 
 	const std::string ownerEntry = FormatOwnerFormEntry(activeRefr);
-	if (ownerEntry.empty())
-		return;
 
 	nlohmann::ordered_json configArray;
 	if (!LoadLPConfig(configArray))
@@ -1226,18 +1228,62 @@ void LightEditor::RefreshLPFilterState()
 	if (!lightEntry)
 		return;
 
-	auto containsEntry = [&](const char* listKey) {
-		const auto it = lightEntry->find(listKey);
-		if (it == lightEntry->end() || !it->is_array())
+	// Filter state
+	if (!ownerEntry.empty()) {
+		auto containsEntry = [&](const char* listKey) {
+			const auto it = lightEntry->find(listKey);
+			if (it == lightEntry->end() || !it->is_array())
+				return false;
+			for (const auto& elem : *it)
+				if (elem.is_string() && elem.get<std::string>() == ownerEntry)
+					return true;
 			return false;
-		for (const auto& elem : *it)
-			if (elem.is_string() && elem.get<std::string>() == ownerEntry)
-				return true;
-		return false;
-	};
+		};
+		lpInWhitelist = containsEntry("whiteList");
+		lpInBlacklist = containsEntry("blackList");
+	}
 
-	lpInWhitelist = containsEntry("whiteList");
-	lpInBlacklist = containsEntry("blackList");
+	// LP flags
+	const auto dataIt = lightEntry->find("data");
+	if (dataIt != lightEntry->end() && dataIt->is_object()) {
+		const auto flagsIt = dataIt->find("flags");
+		if (flagsIt != dataIt->end() && flagsIt->is_string()) {
+			std::istringstream ss(flagsIt->get<std::string>());
+			std::string flag;
+			while (std::getline(ss, flag, '|')) {
+				if (!flag.empty())
+					lpFlagSet.insert(flag);
+			}
+		}
+	}
+
+	SyncLPFlagsToRuntime();
+}
+
+void LightEditor::SyncLPFlagsToRuntime()
+{
+	if (!lpInfo.isLPLight)
+		return;
+
+	if (lpFlagSet.contains("InverseSquare"))
+		current.data.flags.set(LightLimitFix::LightFlags::InverseSquare);
+	else
+		current.data.flags.reset(LightLimitFix::LightFlags::InverseSquare);
+
+	if (lpFlagSet.contains("Linear"))
+		current.data.flags.set(LightLimitFix::LightFlags::Linear);
+	else
+		current.data.flags.reset(LightLimitFix::LightFlags::Linear);
+
+	auto& tesUnderlying = reinterpret_cast<uint32_t&>(current.tesFlags);
+	auto syncTesBit = [&](RE::TES_LIGHT_FLAGS bit, bool val) {
+		const auto mask = static_cast<uint32_t>(bit);
+		if (val) tesUnderlying |= mask;
+		else     tesUnderlying &= ~mask;
+	};
+	syncTesBit(RE::TES_LIGHT_FLAGS::kFlicker,      lpFlagSet.contains("Flicker"));
+	syncTesBit(RE::TES_LIGHT_FLAGS::kOmniShadow,   lpFlagSet.contains("Shadow"));
+	syncTesBit(RE::TES_LIGHT_FLAGS::kPortalStrict,  lpFlagSet.contains("PortalStrict"));
 }
 
 bool LightEditor::ModifyLPFilterList(bool isWhiteList, bool add)
