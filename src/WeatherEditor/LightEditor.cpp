@@ -262,7 +262,9 @@ void LightEditor::DrawSettings()
 	}
 
 	static constexpr const char* kLightsComboId = "LightsCombo";
-	if (ImGui::BeginCombo("Lights", selected.isSelected ? GetLightName(selected).c_str() : "Select a light")) {
+	LightInfo thisFrameHovered = {};
+	const bool lightsComboOpen = ImGui::BeginCombo("Lights", selected.isSelected ? GetLightName(selected).c_str() : "Select a light");
+	if (lightsComboOpen) {
 		auto searchText = Util::DrawComboSearchInput(kLightsComboId);
 		for (auto& light : lights) {
 			const auto displayName = GetLightName(light);
@@ -273,12 +275,36 @@ void LightEditor::DrawSettings()
 				selected = light;
 				Util::ClearComboSearch(kLightsComboId);
 			}
+			if (ImGui::IsItemHovered())
+				thisFrameHovered = light;
 			if (isSelected)
 				ImGui::SetItemDefaultFocus();
 		}
 		ImGui::EndCombo();
 	} else {
 		Util::ClearComboSearch(kLightsComboId);
+	}
+
+	// Hover flash: update state when hovered item changes or combo closes.
+	// Only apply to lights with a valid id (ref/attached); skip Other lights.
+	if (thisFrameHovered.id != 0 || !lightsComboOpen) {
+		if (!(thisFrameHovered == comboHoveredLight)) {
+			if (hoverFlashNiLight) {
+				if (auto* rd = ISLCommon::RuntimeLightDataExt::Get(hoverFlashNiLight.get()))
+					rd->fade = hoverFlashOriginalFade;
+				hoverFlashNiLight.reset();
+			}
+			comboHoveredLight = thisFrameHovered;
+			hoverFlashVisible = true;
+			hoverFlashLastToggle = ImGui::GetTime();
+		}
+	}
+	if (comboHoveredLight.id != 0) {
+		const double now = ImGui::GetTime();
+		if (now - hoverFlashLastToggle >= 0.25) {
+			hoverFlashVisible = !hoverFlashVisible;
+			hoverFlashLastToggle = now;
+		}
 	}
 
 	ImGui::Separator();
@@ -690,6 +716,13 @@ void LightEditor::GatherLights()
 
 		lights.push_back(current);
 
+		// Capture the NiLight for hover-flash on the first frame this light is hovered.
+		if (comboHoveredLight.id != 0 && current == comboHoveredLight && !hoverFlashNiLight) {
+			hoverFlashNiLight.reset(niLight);
+			const auto* rd = ISLCommon::RuntimeLightDataExt::Get(niLight);
+			hoverFlashOriginalFade = (rd && rd->fade > 0.f) ? rd->fade : 1.f;
+		}
+
 		if (!current.isSelected)
 			return;
 		selected = current;
@@ -730,6 +763,12 @@ void LightEditor::ResetOverrides()
 	if (selected.isSelected)
 		savedSelection = selected;
 	RestoreOriginal();
+	if (hoverFlashNiLight) {
+		if (auto* rd = ISLCommon::RuntimeLightDataExt::Get(hoverFlashNiLight.get()))
+			rd->fade = hoverFlashOriginalFade;
+		hoverFlashNiLight.reset();
+	}
+	comboHoveredLight = {};
 	selected = {};
 	previous = {};
 }
@@ -845,6 +884,11 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const
 {
+	if (hoverFlashNiLight && niLight == hoverFlashNiLight.get() && niLight != activeNiLight.get()) {
+		runtimeData->fade = hoverFlashVisible ? hoverFlashOriginalFade : 0.f;
+		return true;
+	}
+
 	if (niLight != activeNiLight.get())
 		return false;
 

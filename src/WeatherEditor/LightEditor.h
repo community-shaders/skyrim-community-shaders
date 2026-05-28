@@ -110,6 +110,12 @@ private:
 	LightInfo selected = {};
 	LightInfo previous = {};
 	LightInfo savedSelection = {};
+	LightInfo comboHoveredLight = {};
+
+	RE::NiPointer<RE::NiLight> hoverFlashNiLight;
+	float hoverFlashOriginalFade = 0.f;
+	bool hoverFlashVisible = true;
+	double hoverFlashLastToggle = 0.0;
 
 	LightDisplayInfo displayInfo = {};
 	LightSettings original = {};
