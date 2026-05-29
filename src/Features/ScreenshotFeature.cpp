@@ -625,11 +625,10 @@ void ScreenshotFeature::DrawSettings()
 			16,
 			"%d-bit",
 			ImGuiSliderFlags_AlwaysClamp);
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip(
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text(
 				"Quantization for the 48 bpp RGB PNG payload. 11-bit is a good default; "
 				"higher values increase file size with diminishing returns.");
-		}
 
 	} else {
 		ImGui::TextWrapped(
@@ -646,9 +645,8 @@ void ScreenshotFeature::DrawSettings()
 	ImGui::SeparatorText("Output");
 
 	ImGui::Checkbox("Copy saved file to clipboard", &copyToClipboard);
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip("Places the saved screenshot on the clipboard as a file (paste in Explorer or attach in chat apps).");
-	}
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Places the saved screenshot on the clipboard as a file (paste in Explorer or attach in chat apps).");
 
 	if (!hdrCaptureAvailable || globals::game::isVR) {
 		int sdrFormat = sdrUsePng ? 1 : 0;
@@ -679,10 +677,9 @@ void ScreenshotFeature::DrawSettings()
 	ImGui::EndDisabled();
 	ImGui::SameLine();
 	ImGui::Text("Folder");
-	if (ImGui::IsItemHovered()) {
-		ImGui::SetTooltip(
-			"Relative paths resolve against the Skyrim install dir.\n"
-			"Absolute paths (e.g. D:\\Captures) save there directly.");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Relative paths resolve against the Skyrim install dir.");
+		ImGui::Text("Absolute paths (e.g. D:\\Captures) save there directly.");
 	}
 
 	auto& menuSettings = Menu::GetSingleton()->GetSettings();
