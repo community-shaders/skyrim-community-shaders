@@ -37,8 +37,6 @@ struct ScreenshotFeature : public Feature
 	unsigned int hdrPngBitDepth = 11;
 	// SDR / VR output (HDR captures always use PNG).
 	bool sdrUsePng = false;
-	// Also write a SDR-tonemapped SDR PNG alongside each HDR capture (flat HDR only).
-	bool hdrSaveTonemapCompanion = false;
 	// After save, put the file path on the clipboard (CF_HDROP).
 	bool copyToClipboard = false;
 
@@ -54,11 +52,7 @@ private:
 		std::filesystem::path outputPath;
 		bool saveAsHdrPng = false;
 		bool saveAsSdrPng = false;
-		bool saveTonemapCompanion = false;
-		float hdrPaperWhiteNits = 203.0f;
-		std::filesystem::path tonemapCompanionPath;
 		int hdrPngBitDepth = 11;
-		uint32_t hdrPngFormat = 0;
 		bool copyToClipboard = false;
 	};
 
