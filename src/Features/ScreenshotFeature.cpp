@@ -4,18 +4,20 @@
 // capture does not stall the frame.
 
 #include "Features/ScreenshotFeature.h"
+
+#include <PCH.h>
+
 #include "Features/HDRDisplay.h"
-#include "Globals.h"
+#include "Features/Upscaling.h"
 #include "Menu.h"
 #include "Utils/FileSystem.h"
+
 #include <DirectXTex.h>
-#include <PCH.h>
-#include <algorithm>
-#include <cstring>
-#include <filesystem>
+#include <sk_hdr_png.hpp>
+
 #include <format>
-#include <imgui.h>
-#include <thread>
+#include <malloc.h>
+#include <optional>
 
 namespace
 {
@@ -141,9 +143,149 @@ namespace
 		}
 	}
 
-	// Tonemaps an FP16 linear scene-referred ScratchImage in-place: Reinhard
-	// c / (1 + c) for the luminance map, then gamma-2.2 for sRGB encoding.
-	// Approximates HDRDisplay's on-screen tonemap closely enough for SDR save.
+	void TonemapHdrToSrgb(DirectX::ScratchImage& image);
+
+	// ST.2084 PQ decode matching Color.hlsli pq::Decode (paperWhite = scaling nits).
+	DirectX::XMVECTOR PqToLinearScene(DirectX::FXMVECTOR pq, float paperWhiteNits)
+	{
+		using namespace DirectX;
+
+		const XMVECTOR pqN = XMVectorReplicate(2610.0f / 4096.0f / 4.0f);
+		const XMVECTOR pqM = XMVectorReplicate(2523.0f / 4096.0f * 128.0f);
+		const XMVECTOR pqC1 = XMVectorReplicate(3424.0f / 4096.0f);
+		const XMVECTOR pqC2 = XMVectorReplicate(2413.0f / 4096.0f * 32.0f);
+		const XMVECTOR pqC3 = XMVectorReplicate(2392.0f / 4096.0f * 32.0f);
+		const XMVECTOR pqMax = XMVectorReplicate(125.0f);
+
+		XMVECTOR n = XMVectorSaturate(pq);
+		XMVECTOR ret = XMVectorPow(n, XMVectorReciprocal(pqM));
+		XMVECTOR nd = XMVectorDivide(
+			XMVectorMax(XMVectorSubtract(ret, pqC1), g_XMZero),
+			XMVectorSubtract(pqC2, XMVectorMultiply(pqC3, ret)));
+		ret = XMVectorMultiply(XMVectorPow(nd, XMVectorReciprocal(pqN)), pqMax);
+
+		const float scale = 10000.0f / std::max(paperWhiteNits, 1.0f);
+		return XMVectorMultiply(ret, XMVectorReplicate(scale));
+	}
+
+	// Decodes display-referred PQ (back buffer after ApplyHDR) to linear RGB for tonemapping.
+	bool DecodeDisplayPqToLinearImage(
+		const DirectX::ScratchImage& pqImage,
+		DirectX::ScratchImage& linearImage,
+		float paperWhiteNits)
+	{
+		using namespace DirectX;
+
+		const DirectX::Image* src = pqImage.GetImage(0, 0, 0);
+		if (!src || !src->pixels) {
+			return false;
+		}
+
+		const HRESULT initHr = linearImage.Initialize2D(
+			DXGI_FORMAT_R32G32B32A32_FLOAT,
+			src->width,
+			src->height,
+			1,
+			1);
+		if (FAILED(initHr)) {
+			return false;
+		}
+
+		DirectX::Image* dst = linearImage.GetImage(0, 0, 0);
+		if (!dst || !dst->pixels) {
+			return false;
+		}
+
+		if (src->format == DXGI_FORMAT_R10G10B10A2_UNORM) {
+			for (size_t y = 0; y < src->height; ++y) {
+				const auto* row = reinterpret_cast<const uint32_t*>(src->pixels + y * src->rowPitch);
+				auto* outRow = reinterpret_cast<XMFLOAT4*>(dst->pixels + y * dst->rowPitch);
+				for (size_t x = 0; x < src->width; ++x) {
+					const uint32_t color = row[x];
+					const uint16_t channels[] = {
+						static_cast<uint16_t>(((((color & 0x000003FFU) + 1U) * 64U) & 0xFFFFU) - 1U),
+						static_cast<uint16_t>(((((color & 0x000FFC00U) >> 10U) + 1U) * 64U) & 0xFFFFU) - 1U),
+						static_cast<uint16_t>(((((color & 0x3FF00000U) >> 20U) + 1U) * 64U) & 0xFFFFU) - 1U),
+					};
+					XMVECTOR pqRgb = XMVectorSet(
+						static_cast<float>(channels[0]) / 65535.0f,
+						static_cast<float>(channels[1]) / 65535.0f,
+						static_cast<float>(channels[2]) / 65535.0f,
+						1.0f);
+					XMStoreFloat4(outRow + x, PqToLinearScene(pqRgb, paperWhiteNits));
+				}
+			}
+			return true;
+		}
+
+		if (src->format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+			std::vector<DirectX::XMFLOAT4> rgba32(src->width);
+			for (size_t y = 0; y < src->height; ++y) {
+				const auto* row = reinterpret_cast<const uint16_t*>(src->pixels + y * src->rowPitch);
+				auto* outRow = reinterpret_cast<DirectX::XMFLOAT4*>(dst->pixels + y * dst->rowPitch);
+				XMConvertHalfToFloatStream(
+					reinterpret_cast<float*>(rgba32.data()),
+					sizeof(float),
+					row,
+					sizeof(DirectX::PackedVector::HALF),
+					4 * rgba32.size());
+				for (size_t x = 0; x < src->width; ++x) {
+					DirectX::XMVECTOR pqRgb = DirectX::XMLoadFloat4(rgba32.data() + x);
+					DirectX::XMStoreFloat4(
+						outRow + x,
+						PqToLinearScene(DirectX::XMVectorSaturate(pqRgb), paperWhiteNits));
+				}
+			}
+			return true;
+		}
+
+		return false;
+	}
+
+	std::filesystem::path BuildTonemapCompanionPath(const std::filesystem::path& hdrPath)
+	{
+		return hdrPath.parent_path() / (hdrPath.stem().string() + "_SDR.png");
+	}
+
+	void CopySavedPathToClipboard(bool enabled, const std::filesystem::path& path)
+	{
+		if (!enabled || path.empty()) {
+			return;
+		}
+		if (!sk_hdr_png::copy_to_clipboard(path.wstring().c_str())) {
+			logger::warn("Screenshot saved but clipboard copy failed: {}", path.string());
+		}
+	}
+
+	bool SaveSdrTonemappedImage(DirectX::ScratchImage& image, const std::filesystem::path& outputPath)
+	{
+		DirectX::ScratchImage convertedImage;
+		const DirectX::Image* saveImage = PrepareBmpImage(image, convertedImage);
+		if (!saveImage) {
+			return false;
+		}
+
+		return SUCCEEDED(DirectX::SaveToWICFile(
+			*saveImage,
+			DirectX::WIC_FLAGS_NONE,
+			DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG),
+			outputPath.c_str()));
+	}
+
+	bool SaveTonemapCompanionFromDisplayBuffer(
+		const DirectX::ScratchImage& displayImage,
+		const std::filesystem::path& outputPath,
+		float paperWhiteNits)
+	{
+		DirectX::ScratchImage linearImage;
+		if (!DecodeDisplayPqToLinearImage(displayImage, linearImage, paperWhiteNits)) {
+			return false;
+		}
+		TonemapHdrToSrgb(linearImage);
+		return SaveSdrTonemappedImage(linearImage, outputPath);
+	}
+
+	// Tonemaps a linear RGB ScratchImage in-place: Reinhard c/(1+c), then gamma-2.2.
 	void TonemapHdrToSrgb(DirectX::ScratchImage& image)
 	{
 		using namespace DirectX;
@@ -222,14 +364,33 @@ namespace
 		return resolveFromView(slot.RTV);
 	}
 
-	// Picks the capture source by where ISHDR wrote the scene this frame:
-	//   VR              -> RE::RENDER_TARGETS::kVR_FRAMEBUFFER (SBS).
-	//   HDR enabled     -> HDR::HdrTexture (FP16 linear; PrepareBmpImage tonemaps).
-	//   otherwise       -> kFRAMEBUFFER (already tonemapped UNORM).
-	//
-	// HDR::OutputTexture is intentionally not used: on HDR10 swap chains it
-	// holds PQ-encoded values regardless of the enableHDR toggle, which save
-	// as washed-out BMPs without a color transform.
+	// Returns the texture that was presented to the display (post-ApplyHDR).
+	ID3D11Texture2D* ResolveDisplayedBackBuffer(winrt::com_ptr<ID3D11Texture2D>& holder)
+	{
+		auto& upscaling = globals::features::upscaling;
+		if (upscaling.d3d12SwapChainActive &&
+			upscaling.dx12SwapChain.swapChainBufferWrapped &&
+			upscaling.dx12SwapChain.swapChainBufferWrapped->resource11) {
+			holder.copy_from(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11);
+			return holder.get();
+		}
+
+		if (!globals::d3d::swapChain) {
+			return nullptr;
+		}
+
+		winrt::com_ptr<ID3D11Texture2D> backBuffer;
+		if (FAILED(globals::d3d::swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), backBuffer.put_void()))) {
+			return nullptr;
+		}
+		holder = std::move(backBuffer);
+		return holder.get();
+	}
+
+	// Picks the capture source:
+	//   VR              -> kVR_FRAMEBUFFER (SBS).
+	//   HDR enabled     -> swap-chain back buffer after ApplyHDR (PQ HDR10 / PQ float).
+	//   otherwise       -> kFRAMEBUFFER (tonemapped UNORM).
 	CaptureSource SelectCaptureSource(winrt::com_ptr<ID3D11Texture2D>& holder)
 	{
 		CaptureSource src;
@@ -247,10 +408,10 @@ namespace
 		}
 
 		auto& hdr = globals::features::hdrDisplay;
-		if (hdr.loaded && hdr.settings.enableHDR && hdr.hdrTexture && hdr.hdrTexture->resource) {
-			src.texture = hdr.hdrTexture->resource.get();
-			src.srv = hdr.hdrTexture->srv.get();
-			src.description = "HDR::HdrTexture (FP16 linear, will tonemap)";
+		if (hdr.loaded && hdr.settings.enableHDR) {
+			src.texture = ResolveDisplayedBackBuffer(holder);
+			src.needsPreviewCache = true;
+			src.description = "Swap chain back buffer (HDR display composite)";
 			return src;
 		}
 
@@ -302,16 +463,112 @@ namespace
 		}
 	}
 
-	std::filesystem::path BuildScreenshotPath(const std::string& screenshotPath)
+	std::filesystem::path BuildScreenshotPath(const std::string& screenshotPath, bool usePng)
 	{
 		SYSTEMTIME st;
 		GetLocalTime(&st);
 		char buf[80];
-		snprintf(buf, sizeof(buf), "CS_%04d-%02d-%02d_%02d-%02d-%02d_%03d.bmp",
+		const char* extension = usePng ? ".png" : ".bmp";
+		snprintf(buf, sizeof(buf), "CS_%04d-%02d-%02d_%02d-%02d-%02d_%03d%s",
 			st.wYear, st.wMonth, st.wDay,
 			st.wHour, st.wMinute, st.wSecond,
-			st.wMilliseconds);
+			st.wMilliseconds,
+			extension);
 		return std::filesystem::path(screenshotPath) / buf;
+	}
+
+	bool IsHdrCaptureFormat(DXGI_FORMAT format)
+	{
+		switch (format) {
+		case DXGI_FORMAT_R10G10B10A2_UNORM:
+		case DXGI_FORMAT_R16G16B16A16_FLOAT:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	std::optional<sk_hdr_png::format> MapDxgiToHdrPngFormat(DXGI_FORMAT format)
+	{
+		switch (format) {
+		case DXGI_FORMAT_R10G10B10A2_UNORM:
+			return sk_hdr_png::format::r10g10b10a2_unorm;
+		case DXGI_FORMAT_R16G16B16A16_FLOAT:
+			// HDROutputCS writes PQ into the float swap-chain buffer.
+			return sk_hdr_png::format::r16g16b16a16_pq;
+		default:
+			return std::nullopt;
+		}
+	}
+
+	size_t GetDxgiPixelSize(DXGI_FORMAT format)
+	{
+		switch (format) {
+		case DXGI_FORMAT_R10G10B10A2_UNORM:
+			return 4;
+		case DXGI_FORMAT_R16G16B16A16_FLOAT:
+			return 8;
+		default:
+			return 0;
+		}
+	}
+
+	// sk_hdr_png requires 16-byte aligned pixel memory.
+	bool CopyToAlignedPixelBuffer(
+		const DirectX::Image& image,
+		size_t bytesPerPixel,
+		void*& outAligned,
+		size_t& outByteSize)
+	{
+		if (bytesPerPixel == 0) {
+			return false;
+		}
+
+		const size_t tightRowBytes = static_cast<size_t>(image.width) * bytesPerPixel;
+		outByteSize = tightRowBytes * image.height;
+
+		outAligned = _aligned_malloc(outByteSize, 16);
+		if (!outAligned) {
+			return false;
+		}
+
+		auto* dest = static_cast<uint8_t*>(outAligned);
+		const auto* src = image.pixels;
+		for (size_t row = 0; row < image.height; ++row) {
+			memcpy(dest + row * tightRowBytes, src + row * image.rowPitch, tightRowBytes);
+		}
+		return true;
+	}
+
+	bool SaveHdrPng(
+		const DirectX::ScratchImage& image,
+		const std::filesystem::path& outputPath,
+		int quantizationBits,
+		sk_hdr_png::format hdrFormat)
+	{
+		const DirectX::Image* firstImage = image.GetImage(0, 0, 0);
+		if (!firstImage || !IsHdrCaptureFormat(firstImage->format)) {
+			return false;
+		}
+
+		const size_t bytesPerPixel = GetDxgiPixelSize(firstImage->format);
+		void* alignedPixels = nullptr;
+		size_t byteSize = 0;
+		if (!CopyToAlignedPixelBuffer(*firstImage, bytesPerPixel, alignedPixels, byteSize)) {
+			return false;
+		}
+
+		const bool saved = sk_hdr_png::write_image_to_disk(
+			outputPath.wstring().c_str(),
+			static_cast<unsigned int>(firstImage->width),
+			static_cast<unsigned int>(firstImage->height),
+			alignedPixels,
+			quantizationBits,
+			hdrFormat,
+			false);
+
+		_aligned_free(alignedPixels);
+		return saved;
 	}
 
 }
@@ -347,6 +604,14 @@ void ScreenshotFeature::LoadSettings(json& a_json)
 		screenshotPath = a_json["ScreenshotPath"];
 	if (a_json.contains("ApplyCropToScreenshot"))
 		applyCropToScreenshot = a_json["ApplyCropToScreenshot"];
+	if (a_json.contains("HdrPngBitDepth"))
+		hdrPngBitDepth = std::clamp<unsigned int>(a_json["HdrPngBitDepth"], 7u, 16u);
+	if (a_json.contains("SdrUsePng"))
+		sdrUsePng = a_json["SdrUsePng"];
+	if (a_json.contains("HdrSaveTonemapCompanion"))
+		hdrSaveTonemapCompanion = a_json["HdrSaveTonemapCompanion"];
+	if (a_json.contains("CopyToClipboard"))
+		copyToClipboard = a_json["CopyToClipboard"];
 
 	subrect.LoadSettings(a_json);
 }
@@ -355,24 +620,76 @@ void ScreenshotFeature::SaveSettings(json& a_json)
 {
 	a_json["ScreenshotPath"] = screenshotPath;
 	a_json["ApplyCropToScreenshot"] = applyCropToScreenshot;
+	a_json["HdrPngBitDepth"] = hdrPngBitDepth;
+	a_json["SdrUsePng"] = sdrUsePng;
+	a_json["HdrSaveTonemapCompanion"] = hdrSaveTonemapCompanion;
+	a_json["CopyToClipboard"] = copyToClipboard;
 	subrect.SaveSettings(a_json);
 }
 
 void ScreenshotFeature::DrawSettings()
 {
-	Util::Text::Disabled("Capture and save run asynchronously - no frame stall.");
-	Util::Text::Disabled(
-		"Saves SDR .bmp files. HDR scenes are tonemapped (Reinhard) so the saved\n"
-		"image matches what's on screen. For true HDR files with HDR10 metadata,\n"
-		"use Xbox Game Bar (Win+G) or your GPU vendor's overlay (saves .jxr).");
+	Util::Text::WrappedInfo("Capture and save run asynchronously without stalling the game.");
+
+	const bool hdrCaptureAvailable = globals::features::hdrDisplay.loaded &&
+	                                 globals::features::hdrDisplay.settings.enableHDR;
+
+	if (hdrCaptureAvailable) {
+		Util::Text::WrappedInfo(
+			"HDR enabled: saves the displayed frame as PNG with HDR10 metadata (48 bpp RGB, cICP/cLLi). "
+			"Use an HDR-aware viewer such as Windows Photos (HDR on) or Special K SKIF.");
+		ImGui::SliderInt(
+			"HDR PNG bit depth",
+			reinterpret_cast<int*>(&hdrPngBitDepth),
+			7,
+			16,
+			"%d-bit",
+			ImGuiSliderFlags_AlwaysClamp);
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip(
+				"Quantization for the 48 bpp RGB PNG payload. 11-bit is a good default; "
+				"higher values increase file size with diminishing returns.");
+		}
+
+		if (!globals::game::isVR) {
+			ImGui::Checkbox("Also save tonemapped SDR (comparison)", &hdrSaveTonemapCompanion);
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip(
+					"Writes an additional *_SDR.png with Reinhard tonemapping for SDR displays. "
+					"Approximate only; does not match Windows HDR-to-SDR or future post-processing exactly.");
+			}
+		}
+	} else {
+		Util::Text::WrappedInfo(
+			"Enable HDR Display to capture HDR PNG screenshots with HDR10 metadata. "
+			"SDR and VR captures use the lossless format selected below.");
+	}
 
 	if (ImGui::Button("Take Screenshot Now")) {
-		Capture();
+		captureRequested = true;
 	}
 	ImGui::SameLine();
 	ImGui::Checkbox("Apply crop", &applyCropToScreenshot);
 
 	ImGui::SeparatorText("Output");
+
+	ImGui::Checkbox("Copy saved file to clipboard", &copyToClipboard);
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip(
+			"Places the saved screenshot on the clipboard as a file (paste in Explorer or attach in chat apps). "
+			"When a tonemapped companion is saved, that file is copied instead.");
+	}
+
+	if (!hdrCaptureAvailable || globals::game::isVR) {
+		int sdrFormat = sdrUsePng ? 1 : 0;
+		ImGui::RadioButton("BMP (lossless)", &sdrFormat, 0);
+		ImGui::SameLine();
+		ImGui::RadioButton("PNG (lossless)", &sdrFormat, 1);
+		sdrUsePng = sdrFormat != 0;
+		if (hdrCaptureAvailable && globals::game::isVR) {
+			Util::Text::WrappedInfo("VR captures use this format. Flat HDR mode always saves HDR PNG.");
+		}
+	}
 
 	char buf[260];
 	strncpy_s(buf, sizeof(buf), screenshotPath.c_str(), _TRUNCATE);
@@ -406,10 +723,9 @@ void ScreenshotFeature::DrawSettings()
 		"Change##ScreenshotFeature");
 
 	if (HotkeyCollidesWithVanilla()) {
-		Util::Text::Disabled(
-			"This hotkey collides with vanilla PrintScreen; both saves will fire.\n"
-			"Set bAllowScreenShot=0 in Skyrim.ini to suppress vanilla, or pick a\n"
-			"different hotkey above.");
+		Util::Text::WrappedWarning(
+			"This hotkey collides with vanilla PrintScreen; both saves will fire. "
+			"Set bAllowScreenShot=0 in Skyrim.ini to suppress vanilla, or pick a different hotkey above.");
 	}
 
 	ImGui::SeparatorText("Crop");
@@ -476,6 +792,10 @@ void ScreenshotFeature::EnsurePreviewCache(ID3D11Texture2D* sourceTexture)
 }
 
 void ScreenshotFeature::Reset()
+{
+}
+
+void ScreenshotFeature::ProcessCaptureRequest()
 {
 	if (captureRequested.exchange(false)) {
 		Capture();
@@ -546,29 +866,75 @@ void ScreenshotFeature::ScreenshotWorkerLoop()
 			continue;
 		}
 
-		StripAlphaForBmp(image);
-		DirectX::ScratchImage convertedImage;
-		const DirectX::Image* saveImage = PrepareBmpImage(image, convertedImage);
-		if (!saveImage) {
-			logger::error("Failed to prepare screenshot image for BMP output.");
-			continue;
-		}
-
 		Util::FileHelpers::EnsureDirectoryExists(screenshot.outputPath.parent_path());
 
-		HRESULT hr = DirectX::SaveToWICFile(
-			*saveImage,
-			DirectX::WIC_FLAGS_NONE,
-			DirectX::GetWICCodec(DirectX::WIC_CODEC_BMP),
-			screenshot.outputPath.c_str());
+		bool saveOk = false;
+		std::filesystem::path clipboardPath;
 
-		if (FAILED(hr)) {
-			logger::error("Failed to save screenshot: {:x}", static_cast<unsigned int>(hr));
+		if (screenshot.saveAsHdrPng) {
+			saveOk = SaveHdrPng(
+				image,
+				screenshot.outputPath,
+				screenshot.hdrPngBitDepth,
+				static_cast<sk_hdr_png::format>(screenshot.hdrPngFormat));
+			if (!saveOk) {
+				logger::error("Failed to save HDR PNG screenshot.");
+			} else {
+				clipboardPath = screenshot.outputPath;
+				if (screenshot.saveTonemapCompanion) {
+					if (!SaveTonemapCompanionFromDisplayBuffer(
+							image,
+							screenshot.tonemapCompanionPath,
+							screenshot.hdrPaperWhiteNits)) {
+						logger::warn("HDR PNG saved but tonemapped SDR companion failed.");
+						screenshot.tonemapCompanionPath.clear();
+					} else {
+						logger::info("Saved tonemapped SDR companion to {}", screenshot.tonemapCompanionPath.string());
+						clipboardPath = screenshot.tonemapCompanionPath;
+					}
+				}
+			}
+		} else {
+			StripAlphaForBmp(image);
+			DirectX::ScratchImage convertedImage;
+			const DirectX::Image* saveImage = PrepareBmpImage(image, convertedImage);
+			if (!saveImage) {
+				logger::error("Failed to prepare screenshot image for BMP output.");
+				continue;
+			}
+
+			const auto* codec = screenshot.saveAsSdrPng ?
+				DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG) :
+				DirectX::GetWICCodec(DirectX::WIC_CODEC_BMP);
+			const HRESULT hr = DirectX::SaveToWICFile(
+				*saveImage,
+				DirectX::WIC_FLAGS_NONE,
+				codec,
+				screenshot.outputPath.c_str());
+			saveOk = SUCCEEDED(hr);
+			if (!saveOk) {
+				logger::error("Failed to save screenshot: {:x}", static_cast<unsigned int>(hr));
+			} else {
+				clipboardPath = screenshot.outputPath;
+			}
+		}
+
+		if (saveOk) {
+			CopySavedPathToClipboard(screenshot.copyToClipboard, clipboardPath);
+		}
+
+		if (!saveOk) {
 			ShowInGameNotification("Screenshot failed - see CommunityShaders.log");
 		} else {
 			logger::info("Saved screenshot to {}", screenshot.outputPath.string());
-			ShowInGameNotification(std::format("Screenshot saved: {}",
-				screenshot.outputPath.filename().string()));
+			if (screenshot.saveTonemapCompanion && !screenshot.tonemapCompanionPath.empty()) {
+				ShowInGameNotification(std::format("Saved: {} and {}",
+					screenshot.outputPath.filename().string(),
+					screenshot.tonemapCompanionPath.filename().string()));
+			} else {
+				ShowInGameNotification(std::format("Screenshot saved: {}",
+					screenshot.outputPath.filename().string()));
+			}
 		}
 	}
 	CoUninitialize();
@@ -647,12 +1013,36 @@ void ScreenshotFeature::Capture()
 
 	context->CopySubresourceRegion(stagingTexture.get(), 0, 0, 0, 0, sourceTexture, 0, &sourceRegion);
 
+	const bool saveAsHdrPng = IsHdrCaptureFormat(srcDesc.Format);
+	const auto hdrPngFormat = saveAsHdrPng ? MapDxgiToHdrPngFormat(srcDesc.Format) : std::nullopt;
+	if (saveAsHdrPng && !hdrPngFormat) {
+		logger::error("Unsupported HDR screenshot format: {}", static_cast<uint32_t>(srcDesc.Format));
+		return;
+	}
+	const bool saveAsSdrPng = !saveAsHdrPng && sdrUsePng;
+	const bool saveTonemapCompanion = saveAsHdrPng && hdrSaveTonemapCompanion && !globals::game::isVR;
+
 	EnsureWorkerThread();
 	PendingScreenshot screenshot;
 	screenshot.stagingTexture = std::move(stagingTexture);
 	screenshot.format = srcDesc.Format;
 	screenshot.width = copyW;
 	screenshot.height = copyH;
-	screenshot.outputPath = BuildScreenshotPath(screenshotPath);
+	screenshot.saveAsHdrPng = saveAsHdrPng;
+	screenshot.saveAsSdrPng = saveAsSdrPng;
+	screenshot.saveTonemapCompanion = saveTonemapCompanion;
+	if (saveTonemapCompanion) {
+		const auto& hdr = globals::features::hdrDisplay;
+		screenshot.hdrPaperWhiteNits = static_cast<float>(hdr.settings.hdrPaperWhite);
+	}
+	screenshot.hdrPngBitDepth = static_cast<int>(hdrPngBitDepth);
+	screenshot.hdrPngFormat = saveAsHdrPng ?
+		static_cast<uint32_t>(*hdrPngFormat) :
+		0u;
+	screenshot.outputPath = BuildScreenshotPath(screenshotPath, saveAsHdrPng || saveAsSdrPng);
+	if (saveTonemapCompanion) {
+		screenshot.tonemapCompanionPath = BuildTonemapCompanionPath(screenshot.outputPath);
+	}
+	screenshot.copyToClipboard = copyToClipboard;
 	EnqueueScreenshot(std::move(screenshot));
 }
