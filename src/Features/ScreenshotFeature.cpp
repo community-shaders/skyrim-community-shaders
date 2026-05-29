@@ -275,12 +275,9 @@ namespace
 			return;
 		}
 
-		const std::wstring pathW = absolutePath.wstring();
-		RunOnMainThread([pathW]() {
-			if (!CopyFilePathToClipboardHDrop(pathW)) {
-				logger::warn("Screenshot saved but clipboard copy failed.");
-			}
-		});
+		if (!CopyFilePathToClipboardHDrop(absolutePath.wstring())) {
+			logger::warn("Screenshot saved but clipboard copy failed.");
+		}
 	}
 
 	// Resolves the slot's underlying texture, falling back to QueryInterface on
