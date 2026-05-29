@@ -337,6 +337,13 @@ namespace
 		return holder.get();
 	}
 
+	bool IsFlatHdrScreenshotCapture()
+	{
+		return !globals::game::isVR &&
+		       globals::features::hdrDisplay.loaded &&
+		       globals::features::hdrDisplay.settings.enableHDR;
+	}
+
 	// Picks the capture source:
 	//   VR              -> kVR_FRAMEBUFFER (SBS).
 	//   HDR enabled     -> swap-chain back buffer after ApplyHDR (PQ HDR10 / PQ float).
@@ -357,8 +364,7 @@ namespace
 			return src;
 		}
 
-		auto& hdr = globals::features::hdrDisplay;
-		if (hdr.loaded && hdr.settings.enableHDR) {
+		if (IsFlatHdrScreenshotCapture()) {
 			src.texture = ResolveDisplayedBackBuffer(holder);
 			src.needsPreviewCache = true;
 			src.description = "Swap chain back buffer (HDR display composite)";
@@ -930,7 +936,14 @@ void ScreenshotFeature::Capture()
 
 	context->CopySubresourceRegion(stagingTexture.get(), 0, 0, 0, 0, sourceTexture, 0, &sourceRegion);
 
-	const bool saveAsHdrPng = IsHdrCaptureFormat(srcDesc.Format);
+	// Match SelectCaptureSource: only the flat HDR back-buffer path uses HDR PNG.
+	// Do not key off DXGI format alone — kFRAMEBUFFER can be float/HDR-sized in SDR mode.
+	const bool flatHdrCapture = IsFlatHdrScreenshotCapture();
+	if (flatHdrCapture && !IsHdrCaptureFormat(srcDesc.Format)) {
+		logger::error("Unsupported HDR screenshot format: {}", static_cast<uint32_t>(srcDesc.Format));
+		return;
+	}
+	const bool saveAsHdrPng = flatHdrCapture && IsHdrCaptureFormat(srcDesc.Format);
 	const bool saveAsSdrPng = !saveAsHdrPng && sdrUsePng;
 
 	EnsureWorkerThread();
