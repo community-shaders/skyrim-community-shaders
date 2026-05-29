@@ -3,8 +3,8 @@
 
 struct LightEditor
 {
-	bool disableInvSqLights;
-	bool disableRegularLights;
+	bool disableInvSqLights = false;
+	bool disableRegularLights = false;
 	bool shadowsOnly = false;
 
 	void DrawSettings();
