@@ -1,5 +1,6 @@
 #pragma once
 #include "../Features/InverseSquareLighting/Common.h"
+#include "LightPicker.h"
 #include <nlohmann/json.hpp>
 #include <set>
 
@@ -167,4 +168,22 @@ private:
 	void SyncLPFlagsToRuntime();
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);
+
+	// Add-Light-to-Mesh workflow state.
+	LightPicker picker;
+	bool addLightPopupOpen = false;
+	LightPicker::PickedMesh pickedMesh;
+
+	// Popup selections.
+	std::vector<std::string> lpConfigPaths;   // relative paths under LightPlacer\, no extension
+	int  addSelectedConfig = -1;              // index into lpConfigPaths
+	int  addAttachMode = -1;                  // 0 = models, 1 = formIDs
+	RE::FormID addSelectedLighFormId = 0;     // chosen LIGH
+
+	void DrawAddLightButton();
+	void DrawAddLightPopup();
+	std::vector<std::string> ScanLPConfigPaths() const;
+	bool CanAddBulb(std::string& reasonOut) const;
+	std::string AddEntryTargetString() const;  // models path or formIDs entry for the picked mesh
+	bool AddBulbToConfig();
 };
