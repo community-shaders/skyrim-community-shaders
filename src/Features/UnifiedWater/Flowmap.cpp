@@ -166,6 +166,10 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 
 	auto dvc = globals::d3d::device;
 	auto ctx = globals::d3d::context;
+	if (!dvc || !ctx) {
+		logger::error("[Unified Water] [Flowmap] D3D device/context not available");
+		return false;
+	}
 
 	winrt::com_ptr<ID3D11DeviceContext> deferredCtx;
 	if (FAILED(dvc->CreateDeferredContext(0, deferredCtx.put()))) {
@@ -291,6 +295,11 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 				cells.emplace_back(FlowCell{ x, y, tex });
 			}
 		}
+	}
+
+	if (cells.empty()) {
+		logger::error("[Unified Water] [Flowmap] No source flow textures found");
+		return false;
 	}
 
 	const auto width = mapMaxX - mapMinX + 1;

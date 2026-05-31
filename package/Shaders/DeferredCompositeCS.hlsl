@@ -242,8 +242,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 #		if defined(SKYLIGHTING)
 				envSpecular *= (SharedData::iblSettings.DALCMode == 3) ? skylightingSpecular : 1.0;
 				skySpecular *= skylightingSpecular;
-#		elif defined(INTERIOR)
-				skySpecular = 0;
 #		endif
 			} else {
 				// Mode 0/1: IBL ratio-based
@@ -252,9 +250,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, inout float ao, out float3 il,
 				skySpecular = Color::IrradianceToLinear(max(0, fullSample - envSample)) * SharedData::iblSettings.SkyIBLScale;
 #		if defined(SKYLIGHTING)
 				skySpecular *= skylightingSpecular;
-#		elif defined(INTERIOR)
-				skySpecular = 0;
 #		endif
+			}
+			if (SharedData::InInterior) {
+				skySpecular = 0;
 			}
 
 			finalIrradiance = envSpecular + skySpecular;

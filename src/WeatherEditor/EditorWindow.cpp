@@ -213,7 +213,9 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::Spacing();
 
 			// List of categories
-			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
+			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting",
+				"Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect",
+				"Interior Only", "Lighting editor" };
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
 				if (ImGui::Selectable(categories[i], m_selectedCategory == categories[i])) {
@@ -232,6 +234,16 @@ void EditorWindow::ShowObjectsWindow()
 			// Interior Only category has its own panel
 			if (m_selectedCategory == "Interior Only") {
 				InteriorOnlyPanel::Draw();
+				ImGui::EndChild();
+				ImGui::EndTable();
+				ImGui::End();
+				return;
+			}
+
+			if (m_selectedCategory == "Lighting editor") {
+				BeginScrollableContent("##LightEditorScroll");
+				lightEditor.DrawSettings();
+				EndScrollableContent();
 				ImGui::EndChild();
 				ImGui::EndTable();
 				ImGui::End();
@@ -1402,6 +1414,7 @@ void EditorWindow::UpdateOpenState()
 		BackgroundBlur::SetWeatherEditorActive(IsViewportActive());
 
 	} else if (!open && wasOpen) {
+		lightEditor.ResetOverrides();
 		RestoreVanityCamera();
 		ShowGameMenus();
 		BackgroundBlur::SetWeatherEditorActive(false);
@@ -1412,6 +1425,9 @@ void EditorWindow::UpdateOpenState()
 
 void EditorWindow::Draw()
 {
+	if (open)
+		lightEditor.GatherLights();
+
 	// Keep background blur in sync when HDR toggles while the editor stays open
 	{
 		static bool prevViewportActive = false;
