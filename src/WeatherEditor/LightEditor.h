@@ -177,13 +177,32 @@ private:
 	// Popup selections.
 	std::vector<std::string> lpConfigPaths;   // relative paths under LightPlacer\, no extension
 	int  addSelectedConfig = -1;              // index into lpConfigPaths
-	int  addAttachMode = -1;                  // 0 = models, 1 = formIDs
+	int  addAttachMode = -1;                  // 0 = Model, 1 = FormID, 2 = EditorID
 	RE::FormID addSelectedLighFormId = 0;     // chosen LIGH
+	char addConfigSearch[256] = {};           // persisted search text for Target JSON combo
+	char addLighSearch[256] = {};             // persisted search text for Light record combo
+	bool addPopupPrefsLoaded = false;
+
+	// Post-add attaching sequence.
+	enum class AttachPhase { Idle, WaitingForReload, WaitingForRespawn };
+	AttachPhase attachPhase = AttachPhase::Idle;
+	int attachCountdown = 0;
+	RE::ObjectRefHandle attachPendingRefr;
+	std::string attachConfigPath;
+
+	// Auto-select the newly spawned LP light after the attaching sequence completes.
+	bool pendingAutoSelect = false;
+	int pendingAutoSelectTTL = 0;     // gather passes remaining before giving up
+	RE::FormID pendingSelectRefrId = 0;
+	std::string pendingSelectConfigPath;
+	std::string pendingSelectLighEdid;
 
 	void DrawAddLightButton();
 	void DrawAddLightPopup();
 	std::vector<std::string> ScanLPConfigPaths() const;
 	bool CanAddBulb(std::string& reasonOut) const;
-	std::string AddEntryTargetString() const;  // models path or formIDs entry for the picked mesh
+	std::string AddEntryTargetString() const;
 	bool AddBulbToConfig();
+	void SavePopupPrefs() const;
+	void LoadPopupPrefs();
 };
