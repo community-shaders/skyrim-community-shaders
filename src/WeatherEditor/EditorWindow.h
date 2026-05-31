@@ -10,6 +10,7 @@
 #include "Weather/ReferenceEffectWidget.h"
 #include "Weather/VolumetricLightingWidget.h"
 #include "Weather/WeatherWidget.h"
+#include "LightEditor.h"
 #include "WeatherUtils.h"
 #include "Widget.h"
 
@@ -62,6 +63,8 @@ public:
 
 	// Owned by EditorWindow, created on demand in ShowObjectsWindow(), released in destructor
 	std::unique_ptr<CellLightingWidget> currentCellLightingWidget;
+
+	LightEditor lightEditor;
 
 	// Weather locking for editing
 	RE::TESWeather* lockedWeather = nullptr;

@@ -1,15 +1,15 @@
-﻿#pragma once
-#include "Features/InverseSquareLighting/Common.h"
+#pragma once
+#include "../Features/InverseSquareLighting/Common.h"
 
 struct LightEditor
 {
-	bool enabled;
-	bool disableInvSqLights;
-	bool disableRegularLights;
+	bool disableInvSqLights = false;
+	bool disableRegularLights = false;
 	bool shadowsOnly = false;
 
 	void DrawSettings();
 	void GatherLights();
+	void ResetOverrides();
 
 	bool ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const;
 

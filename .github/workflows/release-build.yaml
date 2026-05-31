@@ -35,6 +35,10 @@ concurrency:
 jobs:
     build:
         name: Build
+        # Build on dispatch / tag push / a non-draft `release: created`, but NOT
+        # on `release: published`: the artifacts were already built and attached
+        # when the draft was created, so publishing must not rebuild.
+        if: github.event.action != 'published'
         uses: ./.github/workflows/_shared-build.yaml
         with:
             ref: ${{ github.ref }}
@@ -46,7 +50,7 @@ jobs:
 
     feature-audit:
         name: Feature Version Audit (Release)
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
+        if: (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release') && github.event.action != 'published'
         runs-on: ubuntu-latest
         continue-on-error: true
         steps:
@@ -78,6 +82,7 @@ jobs:
         if: >
             always() && !cancelled() &&
             needs.build.outputs.cpp-built == 'true' &&
+            github.event.action != 'published' &&
             (github.event_name == 'workflow_dispatch' ||
              startsWith(github.ref, 'refs/tags/v') ||
              (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
@@ -187,16 +192,13 @@ jobs:
                   allowUpdates: true
 
     nexus-dry-run:
-        # Chained from `release` to avoid the artifact-attachment race a
-        # parallel `release: published` trigger on a separate workflow had:
-        # the prior release-nexus-trigger.yaml fired in parallel with this
-        # build and tried to download artifacts before they existed.
+        # Runs only on publish, independently of the build jobs (which are
+        # skipped on publish). Artifacts were already built and attached to the
+        # release when its draft was created, and nexus-upload downloads them
+        # from the release assets — so there is nothing to wait on and no rebuild.
         # Stable tags only (no '-' in the tag name).
         name: Nexus Upload (dry run)
-        needs: [release]
         if: >
-            always() && !cancelled() &&
-            needs.release.result == 'success' &&
             github.event_name == 'release' &&
             github.event.action == 'published' &&
             !contains(github.event.release.tag_name, '-')

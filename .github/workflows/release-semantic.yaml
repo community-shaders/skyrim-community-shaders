@@ -19,6 +19,9 @@ on:
 
 permissions:
     contents: write
+    # actions:write lets this job dispatch release-build.yaml after cutting a
+    # release (the tag push can't trigger it — see the step below).
+    actions: write
 
 concurrency:
     # Serialize promotions so two concurrent dispatches on main can't race
@@ -172,6 +175,24 @@ jobs:
                   # 2. An app-token tag push triggers downstream workflows
                   #    (release-build.yaml); GITHUB_TOKEN pushes do not.
                   GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+            - name: Build artifacts for the new release
+              # The release tag does NOT auto-trigger release-build.yaml: it sits
+              # on a `chore(release): … [skip ci]` commit (the tag push is skipped)
+              # and the GitHub release is created as a draft (no `release: created`
+              # event fires). So dispatch the build explicitly here to populate the
+              # draft with .7z artifacts. Publishing the draft later does NOT
+              # rebuild — release-build.yaml skips its build job on the
+              # `release: published` event — it just publishes the already-attached
+              # artifacts and fires the Nexus dry-run via `release: published`.
+              if: steps.semantic.outputs.new_release_published == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ steps.semantic.outputs.new_release_git_tag }}
+              run: |
+                  gh workflow run release-build.yaml \
+                    --repo "${{ github.repository }}" \
+                    --ref "${TAG}"
 
             - name: Reconcile dev with release commit (promotion mode, dev source only)
               if: ${{ inputs.ff_target != '' && steps.semantic.outputs.new_release_published == 'true' && steps.validate.outputs.source == 'dev' }}
