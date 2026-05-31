@@ -12,6 +12,7 @@
 
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
+#include "Features/ScreenshotFeature.h"
 #include "Features/LightLimitFix.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
@@ -243,6 +244,8 @@ struct IDXGISwapChain_Present
 			[&](IDXGISwapChain* swapChain, UINT syncInterval, UINT presentFlags) {
 				return func(swapChain, syncInterval, presentFlags);
 			});
+
+		globals::features::screenshotFeature.ProcessCaptureRequest();
 
 		TracyD3D11Collect(globals::state->tracyCtx);
 

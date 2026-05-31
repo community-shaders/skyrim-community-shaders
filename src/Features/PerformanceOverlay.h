@@ -16,7 +16,8 @@ struct DrawCallRow;
 enum class SpecialShaderType
 {
 	Total = -1,
-	Other = -2
+	Other = -2,
+	CSPasses = -3
 };
 
 // Constants for special draw call values
@@ -267,6 +268,7 @@ struct PerformanceOverlay : OverlayFeature
 
 		bool ShowInOverlay = true;  // was: Enabled
 		bool ShowDrawCalls = true;
+		bool ShowCSPasses = true;
 		bool ShowVRAM = true;
 		bool ShowFPS = true;
 		bool ShowPreFGFrameTimeGraph = true;

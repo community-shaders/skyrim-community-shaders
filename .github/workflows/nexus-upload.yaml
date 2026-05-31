@@ -497,11 +497,19 @@ jobs:
                   fi
                   echo "file=$FILE" >> $GITHUB_OUTPUT
                   LINK="https://github.com/${REPO}/releases/tag/${RELEASE_TAG}"
-                  if [ -n "$FILE_DESC" ]; then
-                    printf 'description=%s Full changelog: %s\n' "$FILE_DESC" "$LINK" >> $GITHUB_OUTPUT
-                  else
-                    printf 'description=Full changelog: %s\n' "$LINK" >> $GITHUB_OUTPUT
-                  fi
+                  # file_description is multi-line (per-feature compatibility
+                  # bullets), so write it with the heredoc-delimiter form. A plain
+                  # 'description=...' breaks $GITHUB_OUTPUT on the embedded newlines
+                  # ("Error: Invalid format '• HDR 1.0.2'").
+                  {
+                    echo 'description<<NEXUS_DESC_EOF'
+                    if [ -n "$FILE_DESC" ]; then
+                      printf '%s Full changelog: %s\n' "$FILE_DESC" "$LINK"
+                    else
+                      printf 'Full changelog: %s\n' "$LINK"
+                    fi
+                    echo 'NEXUS_DESC_EOF'
+                  } >> "$GITHUB_OUTPUT"
 
             - name: Validate file_group_id
               if: steps.version-check.outputs.should_upload == 'true'
