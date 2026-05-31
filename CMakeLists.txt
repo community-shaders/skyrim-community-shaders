@@ -120,7 +120,13 @@ target_include_directories(
         ${BSHOSHANY_THREAD_POOL_INCLUDE_DIRS}
         ${CLIB_UTIL_INCLUDE_DIRS}
         "${CMAKE_SOURCE_DIR}/package/Shaders"
+        "${CMAKE_SOURCE_DIR}/extern/sk_hdr_png/include"
         ${DETOURS_INCLUDE_DIRS}
+)
+
+target_compile_definitions(
+    ${PROJECT_NAME}
+    PRIVATE SK_HDR_PNG_COMMUNITY_SHADERS
 )
 
 target_link_libraries(
@@ -142,6 +148,7 @@ target_link_libraries(
         d3d12.lib
         Microsoft::DirectX-Headers
         ${DETOURS_LIBRARY}
+        windowscodecs
 )
 
 # Some third-party libs (e.g. FFX backend) are built with /GL.

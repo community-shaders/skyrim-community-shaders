@@ -806,7 +806,9 @@ void TerrainBlending::BlendPrepassDepths()
 
 		context->CSSetShader(GetDepthBlendShader(), nullptr, 0);
 
+		globals::profiler->BeginPass("TerrainBlending::DepthBlend");
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		globals::profiler->EndPass();
 	}
 
 	ID3D11ShaderResourceView* views[2] = { nullptr, nullptr };

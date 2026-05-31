@@ -1,5 +1,6 @@
 #include "VolumetricShadows.h"
 
+#include "Globals.h"
 #include "State.h"
 #include "Utils/D3D.h"
 
@@ -193,13 +194,17 @@ void VolumetricShadows::CopyShadowLightData()
 					ID3D11UnorderedAccessView* csUavs[1]{ shadowCopyMip0UAV };
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip0CS, nullptr, 0);
+					globals::profiler->BeginPass("VolumetricShadows::DownsampleMip0");
 					context->Dispatch(dispatchSize, dispatchSize, 1);
+					globals::profiler->EndPass();
 
 					// Mip 1 (cascade 0)
 					csUavs[0] = shadowCopyMip1UAV;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip1CS, nullptr, 0);
+					globals::profiler->BeginPass("VolumetricShadows::DownsampleMip1");
 					context->Dispatch(dispatchSize, dispatchSize, 1);
+					globals::profiler->EndPass();
 
 					// Unbind SRVs before blur passes
 					csSrvs[0] = nullptr;
@@ -221,7 +226,9 @@ void VolumetricShadows::CopyShadowLightData()
 						csUavs[0] = shadowBlurTempMip0UAV;
 						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 						context->CSSetShader(blurShadowHorizontalCS, nullptr, 0);
+						globals::profiler->BeginPass("VolumetricShadows::BlurHMip0");
 						context->Dispatch((mip0Size + GROUP_SIZE - 1) / GROUP_SIZE, mip0Size, 1);
+						globals::profiler->EndPass();
 
 						// Unbind for next pass
 						blurSrvs[0] = nullptr;
@@ -235,7 +242,9 @@ void VolumetricShadows::CopyShadowLightData()
 						csUavs[0] = shadowCopyMip0UAV;
 						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 						context->CSSetShader(blurShadowVerticalCS, nullptr, 0);
+						globals::profiler->BeginPass("VolumetricShadows::BlurVMip0");
 						context->Dispatch(mip0Size, (mip0Size + GROUP_SIZE - 1) / GROUP_SIZE, 1);
+						globals::profiler->EndPass();
 
 						// Unbind
 						blurSrvs[0] = nullptr;
@@ -254,7 +263,9 @@ void VolumetricShadows::CopyShadowLightData()
 						csUavs[0] = shadowBlurTempMip1UAV;
 						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 						context->CSSetShader(blurShadowHorizontalCS, nullptr, 0);
+						globals::profiler->BeginPass("VolumetricShadows::BlurHMip1");
 						context->Dispatch((mip1Size + GROUP_SIZE - 1) / GROUP_SIZE, mip1Size, 1);
+						globals::profiler->EndPass();
 
 						// Unbind for next pass
 						blurSrvs[0] = nullptr;
@@ -268,7 +279,9 @@ void VolumetricShadows::CopyShadowLightData()
 						csUavs[0] = shadowCopyMip1UAV;
 						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 						context->CSSetShader(blurShadowVerticalCS, nullptr, 0);
+						globals::profiler->BeginPass("VolumetricShadows::BlurVMip1");
 						context->Dispatch(mip1Size, (mip1Size + GROUP_SIZE - 1) / GROUP_SIZE, 1);
+						globals::profiler->EndPass();
 
 						// Unbind
 						blurSrvs[0] = nullptr;
