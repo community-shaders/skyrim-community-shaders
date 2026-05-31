@@ -629,31 +629,36 @@ void LightEditor::DrawAddLightButton()
 std::vector<std::string> LightEditor::ScanLPConfigPaths() const
 {
 	std::vector<std::string> paths;
-	const std::filesystem::path root("Data\\LightPlacer");
-	std::error_code ec;
-	if (!std::filesystem::exists(root, ec))
+	// Mirrors LightPlacer's own scanning approach exactly:
+	//   - relative path (not absolute via GetDataPath) so USVFS intercepts correctly
+	//   - no error_code on the iterator (throwing version uses cached WIN32_FIND_DATA)
+	//   - is_directory() / extension() only (no is_regular_file(ec) which triggers an
+	//     unhookable GetFileAttributesW call that makes virtual files disappear)
+	const std::filesystem::path root(R"(Data\LightPlacer)");
+	std::error_code existsEc;
+	if (!std::filesystem::exists(root, existsEc)) {
+		logger::warn("[LightEditor] Data\\LightPlacer not found ({})", existsEc.message());
 		return paths;
-
-	for (std::filesystem::recursive_directory_iterator it(root, ec), end; it != end; it.increment(ec)) {
-		if (ec)
-			break;
-		const auto& entry = *it;
-		if (!entry.is_regular_file(ec))
-			continue;
-		const auto& p = entry.path();
-		if (_stricmp(p.extension().string().c_str(), ".json") != 0)
-			continue;
-
-		// Relative path under LightPlacer\, without extension, '/'-normalized.
-		std::filesystem::path rel = std::filesystem::relative(p, root, ec);
-		if (ec)
-			continue;
-		rel.replace_extension();
-		std::string relStr = rel.generic_string();  // forward slashes
-		if (relStr.find("..") != std::string::npos)
-			continue;
-		paths.push_back(std::move(relStr));
 	}
+	try {
+		for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+			if (entry.is_directory() || entry.path().extension() != L".json")
+				continue;
+			// Strip "Data\LightPlacer\" prefix and ".json" suffix → configPath.
+			std::string full = entry.path().string();
+			constexpr std::string_view prefix = R"(Data\LightPlacer\)";
+			if (full.size() <= prefix.size() + 5)
+				continue;
+			std::string rel = full.substr(prefix.size());
+			rel.erase(rel.size() - 5);  // strip ".json"
+			std::replace(rel.begin(), rel.end(), '\\', '/');
+			if (rel.find("..") == std::string::npos)
+				paths.push_back(std::move(rel));
+		}
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("[LightEditor] ScanLPConfigPaths error: {}", e.what());
+	}
+	logger::info("[LightEditor] Found {} LP config(s)", paths.size());
 	std::ranges::sort(paths);
 	return paths;
 }
@@ -666,6 +671,9 @@ void LightEditor::DrawAddLightPopup()
 	}
 
 	const float scale = Util::GetUIScale();
+	// Anchor toward the top of the screen so combo dropdowns have room to open below.
+	const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+	ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.1f), ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
 	ImGui::SetNextWindowSize(ImVec2(520 * scale, 0), ImGuiCond_Appearing);
 	if (ImGui::BeginPopupModal("Add Light to Mesh", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::Text("EditorID: %s", pickedMesh.editorId.empty() ? "(none)" : pickedMesh.editorId.c_str());
@@ -679,8 +687,11 @@ void LightEditor::DrawAddLightPopup()
 		const char* configPreview = (addSelectedConfig >= 0 && addSelectedConfig < (int)lpConfigPaths.size())
 		                                ? lpConfigPaths[addSelectedConfig].c_str()
 		                                : "Select a config";
-		if (ImGui::BeginCombo("Target JSON", configPreview)) {
+		if (ImGui::BeginCombo("Target JSON", configPreview, ImGuiComboFlags_HeightLarge)) {
 			auto searchText = Util::DrawComboSearchInput(kAddConfigComboId);
+			if (lpConfigPaths.empty()) {
+				ImGui::TextDisabled("No configs found in Data\\LightPlacer\\");
+			}
 			for (int i = 0; i < (int)lpConfigPaths.size(); ++i) {
 				if (!searchText.empty() && !Util::StringMatchesSearch(lpConfigPaths[i], searchText))
 					continue;
@@ -727,7 +738,7 @@ void LightEditor::DrawAddLightPopup()
 			const char* lighPreview = "Select a light";
 			for (auto& [edid, ligh] : s_lighFormList)
 				if (ligh->GetFormID() == addSelectedLighFormId) { lighPreview = edid.c_str(); break; }
-			if (ImGui::BeginCombo("Light record", lighPreview)) {
+			if (ImGui::BeginCombo("Light record", lighPreview, ImGuiComboFlags_HeightLarge)) {
 				auto searchText = Util::DrawComboSearchInput(kAddLighComboId);
 				for (auto& [edid, ligh] : s_lighFormList) {
 					if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
