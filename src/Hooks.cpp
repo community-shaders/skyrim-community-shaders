@@ -232,20 +232,11 @@ namespace GrassExtensions
 
 namespace WaterBlendHistory
 {
-	static std::uint32_t lastClearFrame = std::numeric_limits<std::uint32_t>::max();
-	static std::unordered_set<ID3D11RenderTargetView*> clearedThisFrame;
-
 	struct BSImagespaceShader_Render
 	{
 		static void thunk(void* imageSpaceShader, RE::BSTriShape* shape, RE::ImageSpaceEffectParam* param)
 		{
 			if (auto context = globals::d3d::context) {
-				const auto frameCount = globals::state ? globals::state->frameCount : 0;
-				if (lastClearFrame != frameCount) {
-					clearedThisFrame.clear();
-					lastClearFrame = frameCount;
-				}
-
 				const auto shadowState = globals::game::shadowState;
 				const auto renderer = globals::game::renderer;
 				if (shadowState && renderer) {
@@ -253,8 +244,7 @@ namespace WaterBlendHistory
 
 					const auto targetIndex = static_cast<int>(renderTargets[1]);
 					if (targetIndex >= 0 && targetIndex < Util::GetRenderTargetCount()) {
-						auto rtv = renderer->GetRuntimeData().renderTargets[targetIndex].RTV;
-						if (rtv && clearedThisFrame.insert(rtv).second) {
+						if (auto rtv = renderer->GetRuntimeData().renderTargets[targetIndex].RTV) {
 							// Clear stale coverage left by discarded non-water pixels
 							const float clearColor[4] = { 0.f, 0.f, 0.f, 0.f };
 							context->ClearRenderTargetView(rtv, clearColor);
