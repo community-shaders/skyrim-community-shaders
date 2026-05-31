@@ -286,14 +286,9 @@ jobs:
             - name: Open PR against hotfix branch
               if: ${{ !inputs.dry_run && steps.cherry.outputs.picked_count != '0' }}
               env:
-                  # Use GITHUB_TOKEN (not RELEASE_PAT). The workflow declares
-                  # `permissions: pull-requests: write`, which is sufficient
-                  # for creating the candidate PR — no branch-protection
-                  # bypass is required here, so there's no need to spend
-                  # RELEASE_PAT's broader scope (and avoids depending on the
-                  # PAT having pull_requests:write granted, which a previous
-                  # run hit: "Resource not accessible by personal access
-                  # token (createPullRequest)").
+                  # GITHUB_TOKEN suffices here: the workflow declares
+                  # `permissions: pull-requests: write`, and creating the
+                  # candidate PR requires no branch-protection bypass.
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   # Pass via env (not ${{ }} interpolation) so the literal
                   # backticks inside SOURCE_DESC don't get re-evaluated by
