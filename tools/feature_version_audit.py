@@ -327,15 +327,6 @@ def get_feature_changelog(feature_dir, feature_info, base_ref):
     if not base_ref:
         return ""
     paths = [str(feature_dir).replace("\\", "/")]
-    if feature_info:
-        name = feature_info.get('name', '')
-        for suffix in ('.h', '.cpp'):
-            p = DEFAULT_FEATURE_HEADERS_DIR / (name + suffix)
-            if p.exists():
-                paths.append(str(p).replace("\\", "/"))
-        src_dir = DEFAULT_FEATURE_HEADERS_DIR / name
-        if src_dir.exists() and src_dir.is_dir():
-            paths.append(str(src_dir).replace("\\", "/"))
     try:
         # Use ASCII unit-separator (0x1f) between subject and body so BREAKING
         # CHANGE footers are detected even when the subject lacks the '!' marker.
@@ -592,8 +583,8 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
     # If only_changed, build a set of changed feature names
     changed_features = set()
     if only_changed:
-        # Gather all changed files from the diff in both features regions
-        target_dirs = [str(FEATURES_DIR), str(DEFAULT_FEATURE_HEADERS_DIR)]
+        # Only packaged feature content should affect feature-version auditing.
+        target_dirs = [str(FEATURES_DIR)]
         cmd = ["git", "diff", "--name-status", f"{base_ref}...{HEAD_REF}", "--"] + target_dirs
         try:
             all_changes = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").splitlines()
@@ -615,19 +606,6 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                     feature_name = file_parts[idx+1]
                     changed_features.add(feature_name)
                     continue
-                except (ValueError, IndexError):
-                    pass
-
-            # Case 2: src/Features/[Feature Name].cpp or src/Features/[Feature Name]/...
-            if "src" in file_parts and "Features" in file_parts:
-                try:
-                    idx = file_parts.index("Features")
-                    name_part = file_parts[idx+1]
-                    # If it's a file, strip extension. If directory, it's the feature name.
-                    feature_name = os.path.splitext(name_part)[0]
-                    changed_features.add(feature_name)
-                    # We also add the normalized version to be safe
-                    changed_features.add(''.join(feature_name.lower().split()))
                 except (ValueError, IndexError):
                     pass
 
@@ -660,51 +638,14 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         pr_prior_ver = get_prior_version(ini_path, base_ref) if (ini_path and version_ref != base_ref) else prior_ver
         new_ver = get_version_from_ini(ini_path) if ini_path else None
 
-        # PR-scoped changes: used for change-type display and new-feature detection
+        # PR-scoped changes: used for change-type display and new-feature detection.
+        # Only packaged files under features/ participate in feature versioning.
         changes = get_changed_files(feature_dir, base_ref)
-        # Also check src/Features
-        cpp_types = (".h", ".hpp", ".cpp", ".c")
-        if meta:
-            header_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".h")
-            cpp_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".cpp")
-            feature_src_dir = DEFAULT_FEATURE_HEADERS_DIR / meta['name']
-            if header_path.exists():
-                changes.extend(get_changed_files(header_path, base_ref, file_types=cpp_types))
-            if cpp_path.exists():
-                changes.extend(get_changed_files(cpp_path, base_ref, file_types=cpp_types))
-            if feature_src_dir.exists() and feature_src_dir.is_dir():
-                changes.extend(get_changed_files(feature_src_dir, base_ref, file_types=cpp_types))
-            # Special case: VR feature includes VRStereoOptimizations
-            if meta['name'] == 'VR':
-                vr_stereo_h = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.h"
-                vr_stereo_cpp = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.cpp"
-                if vr_stereo_h.exists():
-                    changes.extend(get_changed_files(vr_stereo_h, base_ref, file_types=cpp_types))
-                if vr_stereo_cpp.exists():
-                    changes.extend(get_changed_files(vr_stereo_cpp, base_ref, file_types=cpp_types))
         changes = list(set(changes))
 
         # Release-scoped changes: all changes since last release, used to propose the correct
         # version so that a bump already applied by a prior PR satisfies this check.
         release_changes = get_changed_files(feature_dir, version_ref)
-        if meta:
-            header_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".h")
-            cpp_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".cpp")
-            feature_src_dir = DEFAULT_FEATURE_HEADERS_DIR / meta['name']
-            if header_path.exists():
-                release_changes.extend(get_changed_files(header_path, version_ref, file_types=cpp_types))
-            if cpp_path.exists():
-                release_changes.extend(get_changed_files(cpp_path, version_ref, file_types=cpp_types))
-            if feature_src_dir.exists() and feature_src_dir.is_dir():
-                release_changes.extend(get_changed_files(feature_src_dir, version_ref, file_types=cpp_types))
-            # Special case: VR feature includes VRStereoOptimizations
-            if meta['name'] == 'VR':
-                vr_stereo_h = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.h"
-                vr_stereo_cpp = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.cpp"
-                if vr_stereo_h.exists():
-                    release_changes.extend(get_changed_files(vr_stereo_h, version_ref, file_types=cpp_types))
-                if vr_stereo_cpp.exists():
-                    release_changes.extend(get_changed_files(vr_stereo_cpp, version_ref, file_types=cpp_types))
         release_changes = list(set(release_changes))
 
         change_types = set(os.path.splitext(f)[1].lower() for _, f in changes)

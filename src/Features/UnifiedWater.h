@@ -3,6 +3,8 @@
 #include "UnifiedWater/Flowmap.h"
 #include "UnifiedWater/WaterCache.h"
 
+#include <atomic>
+
 struct UnifiedWater : OverlayFeature
 {
 	virtual inline std::string GetName() override { return "Unified Water"; }
@@ -82,6 +84,14 @@ struct UnifiedWater : OverlayFeature
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+
+		static bool Register();
+	};
+
 	virtual void DrawSettings() override;
 
 	virtual void DrawOverlay() override;
@@ -112,6 +122,11 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
+	std::atomic_bool exteriorWorldspaceActive{ false };
+	std::atomic_bool mapMenuOpen{ false };
+
 	void SetFlowmapTex() const;
+	bool IsExteriorWorldspaceActive() const;
+	void UpdateWaterLODCull() const;
 	static bool LoadOrderChanged();
 };
