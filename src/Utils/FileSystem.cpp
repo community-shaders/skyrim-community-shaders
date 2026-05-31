@@ -160,6 +160,20 @@ namespace Util
 			return GetShadersRealPath() / "Features";
 		}
 
+		std::filesystem::path GetRealPathFromDataRelative(const std::filesystem::path& dataRelativePath)
+		{
+			std::filesystem::path root = GetRootRealPath();
+			if (root.empty())
+				return {};
+			auto it = dataRelativePath.begin();
+			// Skip leading "Data" — MO2 maps the game's Data directory to the mod's physical root
+			if (it != dataRelativePath.end() && _wcsicmp(it->c_str(), L"Data") == 0)
+				++it;
+			for (; it != dataRelativePath.end(); ++it)
+				root /= *it;
+			return root;
+		}
+
 		std::filesystem::path GetFeatureIniPath(const std::string& featureName)
 		{
 			return GetFeaturesPath() / (featureName + ".ini");

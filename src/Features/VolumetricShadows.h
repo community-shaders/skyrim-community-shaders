@@ -12,6 +12,8 @@ public:
 	virtual bool IsCore() const override { return true; }
 	virtual bool IsInMenu() const override { return true; }
 
+	static constexpr uint32_t kSharedShadowMapShaderSlot = 18;
+
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
@@ -67,4 +69,7 @@ public:
 	virtual bool SupportsVR() override { return true; }
 
 	virtual void PostPostLoad() override;
+
+private:
+	static void SetSharedShadowMapSRV(ID3D11DeviceContext* a_context, ID3D11ShaderResourceView* a_srv);
 };

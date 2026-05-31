@@ -1,9 +1,15 @@
+#include "Common/Game.hlsli"
+
 namespace CloudShadows
 {
 	TextureCube<float> CloudShadowsTexture : register(t25);
 
-	const static float CloudHeight = (2e3f / 1.428e-2) * 0.25;
-	const static float PlanetRadius = (6371e3f / 1.428e-2);
+	// 2 km cloud altitude / 6371 km planet radius converted from metres
+	// to game units. The original 1.428e-2 is GAME_UNIT_TO_M (1.428f / 100),
+	// so dividing by GAME_UNIT_TO_M is the exact same value. Game.hlsli
+	// parenthesizes the macro, so the operator precedence is preserved.
+	const static float CloudHeight = (2e3f / GAME_UNIT_TO_M) * 0.25;
+	const static float PlanetRadius = (6371e3f / GAME_UNIT_TO_M);
 	const static float RcpHPlusR = (1.0 / (CloudHeight + PlanetRadius));
 
 	float3 GetCloudShadowSampleDir(float3 rel_pos, float3 eye_to_sun)

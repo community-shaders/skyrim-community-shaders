@@ -451,6 +451,50 @@ Follow conventional commit format for consistency:
     -   `fix(imgui): resolve orphaned TableNextColumn calls`
     -   `refactor(constants): centralize UI constants in ThemeManager`
 
+Conventional commits drive semantic-release. `feat:` triggers a minor bump, `fix:` triggers a patch bump, `feat!:` or `BREAKING CHANGE:` triggers a major bump. `chore:`, `docs:`, `style:`, `test:`, `refactor:` produce no release on their own. Pick the type with the version impact in mind — a refactor mislabeled `feat:` will force a minor bump on the next release.
+
+### Release Branch Model
+
+| Branch         | Role                            | Releases produced                                                               |
+| -------------- | ------------------------------- | ------------------------------------------------------------------------------- |
+| `main`         | Stable release channel          | `vX.Y.Z`                                                                        |
+| `dev`          | Integration / RC                | `vX.Y.Z-rc.N` prereleases                                                       |
+| `hotfix/X.Y.x` | Maintenance for **older** lines | `vX.Y.Z` on the `X.Y` channel (also reused as staging for current-line patches) |
+
+**Default branch for PRs is `dev`.** Feature work, fixes, and refactors all land there via normal PRs. `main` is updated only through the release workflows — never PR a feature branch directly into `main`.
+
+**Branch lineage invariant:** after every release reconciles, `main` is an ancestor of `dev`, so every tag on `main` is reachable from `dev`. The `Release: Semantic Version` workflow keeps this invariant in two ways depending on the promotion source:
+
+-   **dev → main promotion** (minor/major): main fast-forwards to the dev SHA, semantic-release appends a `chore(release):` commit on top, then dev fast-forwards to absorb that commit. No history rewrites on either branch.
+-   **hotfix-staging → main promotion** (current-line patch): main fast-forwards to the hotfix-staging SHA, semantic-release appends the `chore(release):` commit, then dev is **rebase-reconciled** onto the new main. `git rebase` drops dev's originals of the cherry-picked fixes (patch-id match) and replays any unique dev work on top. This is the only place the workflow force-pushes (`--force-with-lease`) — it is intentional and load-bearing.
+
+After a hotfix release, open PRs targeting `dev` are auto-rebased by the `Auto-rebase open PRs` workflow (a thin wrapper around `peter-evans/rebase@v3`). PRs from forks need "Allow edits by maintainers" enabled or the action silently skips them; drafts and PRs labeled `no-auto-rebase` are also excluded. The workflow's job summary reports the rebased count and lists the buckets PRs can fall into; conflict-skipped PRs need a manual `git rebase origin/dev` by the author.
+
+**Patch flow (current line _or_ older line, same staging mechanism):**
+
+1. Land the fix on `dev` via normal PR (if applicable).
+2. Dispatch **Actions → Release: Hotfix Candidate** — auto-creates/reuses `hotfix/X.Y.x` from the latest stable tag, cherry-picks eligible `fix:`/`perf:` commits, opens a PR.
+3. PR checks build a `vX.Y.Z-prNNNN` prerelease for verification.
+4. Merge the candidate PR.
+5. Cut the release:
+    - **Current line** (`main` is on `X.Y`): dispatch **Release: Semantic Version** on `main` with `ff_target = <hotfix/X.Y.x tip SHA>`.
+    - **Older line** (`main` has shipped a newer minor/major): dispatch **Release: Semantic Version** on `hotfix/X.Y.x` with `ff_target` empty.
+
+**Minor/major release flow:**
+
+1. Cut RCs from `dev`: dispatch **Release: Semantic Version** on `dev`, `ff_target` empty → `vX.Y.Z-rc.N`.
+2. When ready, dispatch **Release: Semantic Version** on `main` with `ff_target = <dev SHA>` (typically the latest RC's SHA). The workflow FFs `main`, runs semantic-release to cut stable, then FFs `dev` to absorb the `chore(release):` commit.
+
+**Things agents should not do without explicit user direction:**
+
+-   Force-push or rebase `main`, `dev`, or any `hotfix/*` branch. (The release workflow's rebase-reconcile of `dev` after a hotfix-staging promotion is the one sanctioned exception; humans should not replicate it manually unless the workflow's remediation block explicitly instructs them to.)
+-   Manually create tags matching `v*` (semantic-release owns these).
+-   Bump `CMakeLists.txt`'s `VERSION` field outside the release workflow.
+-   PR a feature branch directly into `main`.
+-   Run `Release: Semantic Version` on `hotfix/X.Y.x` for the current line — it will fail with `cannot be published as it is out of range` because the maintenance contract requires the hotfix line to be strictly older than `main`. Use `ff_target` into `main` instead.
+
+Full details: [Developers wiki — Patch Release Process](https://github.com/community-shaders/skyrim-community-shaders/wiki/Developers#patch-release-process-any-line).
+
 ### Code Organization and Refactoring Patterns
 
 -   **Extract Large Functions**: Functions over ~200 lines should be broken into focused helper methods (see `FeatureListRenderer::DrawMenuVisitor` refactoring)

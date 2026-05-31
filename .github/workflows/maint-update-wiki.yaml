@@ -1,4 +1,4 @@
-name: Update Buffers Wiki
+name: "Maint: Update Buffers Wiki"
 
 on:
     push:

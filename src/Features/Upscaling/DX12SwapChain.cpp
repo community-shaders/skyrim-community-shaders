@@ -155,8 +155,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 
 	// Scale UI brightness BEFORE fence sync so the D3D11 UIBrightnessCS dispatch
 	// is covered by the D3D11→D3D12 fence. Without this, FidelityFX may read
-	// uiBufferWrapped on D3D12 before the PQ encoding completes on D3D11,
-	// causing intermittent UI brightness flickering.
+	// uiBufferWrapped on D3D12 before the PQ encoding completes on D3D11.
 	// Only runs when HDR Display feature is loaded (UIBrightnessCS may not exist otherwise)
 	auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
 	if (hdr)
@@ -194,7 +193,7 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused(), isHDR);
+	upscaling.fidelityFX.Present(upscaling.ShouldUseFrameGenerationThisFrame(), isHDR);
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 

@@ -1021,8 +1021,7 @@ void VR::DrawSettings()
 	// Combo recording popup
 	if (this->isCapturingCombo) {
 		ImGui::OpenPopup("Record Combo");
-		ImGui::SetNextWindowSize(ImVec2(400 * Util::GetUIScale(), 200 * Util::GetUIScale()), ImGuiCond_FirstUseEver);
-		if (ImGui::BeginPopupModal("Record Combo", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		if (auto popup = Util::CenteredPopupModal("Record Combo")) {
 			auto GetButtonName = [](uint32_t key) -> const char* {
 				switch (key) {
 				case static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kTrigger):
@@ -1135,8 +1134,6 @@ void VR::DrawSettings()
 				ResetComboRecording();
 				ImGui::CloseCurrentPopup();
 			}
-
-			ImGui::EndPopup();
 		}
 	}
 }

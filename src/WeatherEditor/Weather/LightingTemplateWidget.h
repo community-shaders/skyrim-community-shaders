@@ -66,6 +66,7 @@ public:
 	void LoadSettings() override;
 	void SaveSettings() override;
 	bool HasUnsavedChanges() const override;
+	std::vector<SearchResult> CollectSearchableSettings() const override;
 
 	void SetLightingTemplateValues();
 	void LoadLightingTemplateValues();

@@ -3,6 +3,7 @@
 #include "LinearLighting.h"
 
 #include "Menu/ThemeManager.h"
+#include "Utils/ExternalEmittance.h"
 #include "Shadercache.h"
 #include "State.h"
 #include "Util.h"
@@ -512,7 +513,9 @@ void LightLimitFix::UpdateStructure()
 		context->CSSetUnorderedAccessViews(0, 1, &clusters_uav, nullptr);
 
 		context->CSSetShader(clusterBuildingCS, nullptr, 0);
+		globals::profiler->BeginPass("LightLimitFix::ClusterBuild");
 		context->Dispatch(clusterSize[0], clusterSize[1], clusterSize[2]);
+		globals::profiler->EndPass();
 
 		ID3D11UnorderedAccessView* null_uav = nullptr;
 		context->CSSetUnorderedAccessViews(0, 1, &null_uav, nullptr);
@@ -538,7 +541,9 @@ void LightLimitFix::UpdateStructure()
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 		context->CSSetShader(clusterCullingCS, nullptr, 0);
+		globals::profiler->BeginPass("LightLimitFix::ClusterCull");
 		context->Dispatch((clusterSize[0] + 15) / 16, (clusterSize[1] + 15) / 16, (clusterSize[2] + 3) / 4);
+		globals::profiler->EndPass();
 	}
 
 	context->CSSetShader(nullptr, nullptr, 0);
@@ -564,6 +569,7 @@ void LightLimitFix::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSShader* T
 void LightLimitFix::Hooks::BSEffectShader_SetupGeometry::thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 {
 	func(This, Pass, RenderFlags);
+	ExternalEmittance::UpdatePermutation(Pass);
 	auto& singleton = globals::features::lightLimitFix;
 	singleton.BSLightingShader_SetupGeometry_Before(Pass);
 	singleton.BSLightingShader_SetupGeometry_After(Pass);

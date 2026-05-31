@@ -58,6 +58,7 @@ namespace ShaderConstants
 				.LandscapeTexture4GlintParameters = 55,
 				.LandscapeTexture5GlintParameters = 56,
 				.LandscapeTexture6GlintParameters = 57,
+				.MaterialObjectRGBScale = 58,	// RGB multipliers for material objects
 
 				.ShadowSampleParam = 18,
 				.EndSplitDistances = 19,
@@ -120,6 +121,8 @@ namespace ShaderConstants
 		const int32_t LandscapeTexture4GlintParameters = 47;
 		const int32_t LandscapeTexture5GlintParameters = 48;
 		const int32_t LandscapeTexture6GlintParameters = 49;
+
+		const int32_t MaterialObjectRGBScale = 50;  // RGB multipliers for material objects
 
 		const int32_t ShadowSampleParam = -1;
 		const int32_t EndSplitDistances = -1;

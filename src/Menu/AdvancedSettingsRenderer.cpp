@@ -235,7 +235,7 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 
 		float maxHeight = ImGui::GetContentRegionAvail().y * 0.3f;  // Limit to 30% to keep Active Shaders visible
 		if (ImGui::BeginChild("##BlockedShaderInfo", ImVec2(0, maxHeight), true, ImGuiChildFlags_AutoResizeY)) {
-			ImGui::TextColored(Util::Colors::GetError(), "Shader Blocking Active");
+			Util::Text::Error("Shader Blocking Active");
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Stop Blocking##Section")) {
 				shaderCache->DisableShaderBlocking();

@@ -1,7 +1,14 @@
-name: WIP
+name: "PR: WIP"
 on:
     pull_request:
         types: [opened, synchronize, reopened, edited]
+
+# Least-privilege scope for the wip/action: it sets a commit status on the PR
+# head (statuses: write) and reads PR metadata (pull-requests: read). No other
+# repo writes happen here.
+permissions:
+    statuses: write
+    pull-requests: read
 
 jobs:
     wip:

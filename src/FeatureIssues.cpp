@@ -663,7 +663,7 @@ namespace FeatureIssues
 			}
 
 			// Confirmation popup for deletion
-			if (ImGui::BeginPopupModal(confirmPopupId.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			if (auto popup = Util::CenteredPopupModal(confirmPopupId.c_str())) {
 				ImGui::TextWrapped("Are you sure? This will delete all files for feature '%s'?",
 					issue.displayName.empty() ? issue.shortName.c_str() : issue.displayName.c_str());
 				ImGui::Spacing();
@@ -712,7 +712,6 @@ namespace FeatureIssues
 				if (ImGui::Button("Cancel", ImVec2(120, 0))) {
 					ImGui::CloseCurrentPopup();
 				}
-				ImGui::EndPopup();
 			}
 		}
 		ImGui::PopID();

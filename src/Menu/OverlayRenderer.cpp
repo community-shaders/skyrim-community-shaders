@@ -428,7 +428,7 @@ void OverlayRenderer::RenderShaderBlockingStatus()
 		return;
 	}
 
-	ImGui::TextColored(Util::Colors::GetError(), "Shader Blocking Active");
+	Util::Text::Error("Shader Blocking Active");
 	ImGui::Text("Blocked: %s", shaderCache->blockedKey.c_str());
 
 	// Try to get more details from active shaders

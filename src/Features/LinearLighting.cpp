@@ -5,7 +5,6 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LinearLighting::Settings,
 	enableLinearLighting,
-	enableGammaCorrection,
 	lightGamma,
 	colorGamma,
 	emitColorGamma,
@@ -34,7 +33,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void LinearLighting::DrawSettings()
 {
 	ImGui::Checkbox("Enable Linear Lighting", (bool*)&settings.enableLinearLighting);
-	ImGui::Checkbox("Enable Gamma Correction", (bool*)&settings.enableGammaCorrection);
 
 	if (ImGui::BeginTabBar("##LinearLightingTabs", ImGuiTabBarFlags_None)) {
 		if (ImGui::BeginTabItem("General")) {
@@ -153,7 +151,6 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	bool isMainLoadingMenu = globals::state->isMainMenuOpen || globals::state->isLoadingMenuOpen;
 	auto data = PerFrameData{};
 	data.enableLinearLighting = settings.enableLinearLighting && !isMainLoadingMenu;
-	data.enableGammaCorrection = settings.enableGammaCorrection;
 	data.isDirLightLinear = isDirLightLinear;
 	data.dirLightMult = dirLightMult;
 	data.lightGamma = settings.lightGamma;

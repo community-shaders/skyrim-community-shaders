@@ -28,6 +28,8 @@ void FidelityFX::LoadFFX()
 	// Cache all DLL versions in the FidelityFX directory
 	std::filesystem::path pluginDir = std::filesystem::path(FidelityFX::PluginDir);
 	FidelityFX::dllVersions = Util::EnumerateDllVersions(pluginDir);
+	for (const auto& [name, versionStr] : FidelityFX::dllVersions)
+		logger::info("[FidelityFX] {} version: {}", name, versionStr);
 
 	if (module) {
 		logger::info("[FidelityFX] Loader DLL loaded successfully from plugin directory");

@@ -41,6 +41,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	specularLevel,
 	glintParameters);
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	TruePBR::Settings,
+	VertexAOStrength);
+
 #define CHECK_PBR_TEXTURE(textureName)                                                                         \
 	if (!(pbrMaterial->textureName)) {                                                                         \
 		logger::warn("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
@@ -136,6 +140,11 @@ void SetupPBRLandscapeTextureParameters(BSLightingShaderMaterialPBRLandscape& ma
 
 void TruePBR::DrawSettings()
 {
+	if (ImGui::TreeNodeEx("Global Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::SliderFloat("Vertex AO Strength", &settings.VertexAOStrength, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::TreePop();
+	}
+
 	if (ImGui::TreeNodeEx("Texture Set Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 		if (Util::SearchableCombo("Texture Set", selectedPbrTextureSetName, pbrTextureSets)) {
 			selectedPbrTextureSet = &pbrTextureSets[selectedPbrTextureSetName];
@@ -328,6 +337,21 @@ void TruePBR::DrawSettings()
 		}
 		ImGui::TreePop();
 	}
+}
+
+void TruePBR::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
+void TruePBR::LoadSettings(json& o_json)
+{
+	settings = o_json;
+}
+
+void TruePBR::RestoreDefaultSettings()
+{
+	settings = {};
 }
 
 void TruePBR::SetupResources()
@@ -979,7 +1003,7 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 				PBRProjectedUVParams1[0] = pbrMaterial->GetProjectedMaterialBaseColorScale()[0];
 				PBRProjectedUVParams1[1] = pbrMaterial->GetProjectedMaterialBaseColorScale()[1];
 				PBRProjectedUVParams1[2] = pbrMaterial->GetProjectedMaterialBaseColorScale()[2];
-				shadowState->SetPSConstant(PBRProjectedUVParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.EnvmapData);
+				shadowState->SetPSConstant(PBRProjectedUVParams1, RE::BSGraphics::ConstantGroupLevel::PerMaterial, lightingPSConstants.MaterialObjectRGBScale);
 
 				std::array<float, 4> PBRProjectedUVParams2;
 				PBRProjectedUVParams2[0] = pbrMaterial->GetProjectedMaterialRoughness();
@@ -1282,7 +1306,7 @@ struct TESForm_SetFormEditorID
 	{
 		auto* singleton = &globals::features::truePBR;
 		singleton->editorIDs[form->GetFormID()] = editorId;
-		return true;
+		return func(form, editorId);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
@@ -1380,12 +1404,8 @@ struct TESBoundObject_Clone3D
 			auto* stat = static_cast<RE::TESObjectSTAT*>(ref->data.objectReference);
 			RE::BGSMaterialObject* currentMato = stat->data.materialObj;
 
-			// Resolve PBR MATO data for the three-way condition as a single pointer:
-			//   non-null  -> apply MATO to geometries
-			//   null      -> clear any previously applied MATO from geometries
-			// This covers all negative cases (currentMato == nullptr, singlePass ==
-			// false, or no matching PBR entry) with one branch so the clear path is
-			// never silently skipped.
+			// Resolve PBR MATO data: non-null applies MATO to geometries with
+			// fork-before-write protection; null means no PBR config and is a no-op.
 			auto* pbrData = (currentMato != nullptr && currentMato->directionalData.singlePass) ? truePBR->GetPBRMaterialObjectData(currentMato) : nullptr;
 
 			if (pbrData != nullptr) {
@@ -1432,23 +1452,6 @@ struct TESBoundObject_Clone3D
 						}
 					}
 
-					return RE::BSVisit::BSVisitControl::kContinue;
-				});
-			} else {
-				RE::BSVisit::TraverseScenegraphGeometries(result, [](RE::BSGeometry* geometry) {
-					if (auto* shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().shaderProperty.get())) {
-						if (shaderProperty->GetMaterialType() == RE::BSShaderMaterial::Type::kLighting &&
-							shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexLighting)) {
-							if (auto* material = static_cast<BSLightingShaderMaterialPBR*>(shaderProperty->material)) {
-								auto& ext = BSLightingShaderMaterialPBR::All[material];
-								if (ext.materialObjectData != nullptr) {
-									material->ClearMaterialObjectData();
-									ext.materialObjectData = nullptr;
-									ext.lastOwnerRefFormID = 0;
-								}
-							}
-						}
-					}
 					return RE::BSVisit::BSVisitControl::kContinue;
 				});
 			}

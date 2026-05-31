@@ -175,6 +175,8 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 	float depth = depthTex.SampleLevel(depthSampler, screenPosition, 0).x;
+	static const float GeometryDepthMax = 1.0f - EPSILON_DIVISION;
+	bool isGeometryDepth = depth < GeometryDepthMax;
 
 #	if defined(APPLY_FOG)
 	float fogDistanceFactor = (2 * CameraNearFar.x * CameraNearFar.y) / ((CameraNearFar.y + CameraNearFar.x) - (2 * (1.01 * depth - 0.01) - 1) * (CameraNearFar.y - CameraNearFar.x));
@@ -186,21 +188,32 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #		endif
 #		if defined(EXP_HEIGHT_FOG)
+	bool exponentialHeightFogEnabled = SharedData::exponentialHeightFogSettings.enabled;
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord.xy);
 	float2 monoUV = Stereo::ConvertFromStereoUV(input.TexCoord.xy, eyeIndex);
 	float4 positionWS = float4(2 * float2(monoUV.x, -monoUV.y + 1) - 1, depth, 1);
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
-	if (SharedData::exponentialHeightFogSettings.enabled) {
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
-		fogColor = exponentialHeightFog.xyz;
-		fogFactor = exponentialHeightFog.w;
+	float4 exponentialHeightFog = (float4)0;
+	if (exponentialHeightFogEnabled) {
+		exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
 	}
-	if (depth < 0.999999 || SharedData::exponentialHeightFogSettings.enabled) {
-		composedColor.xyz = (SharedData::exponentialHeightFogSettings.enabled ? 1.0 : FogNearColor.w) * lerp(composedColor.xyz, fogColor, fogFactor);
+	if (isGeometryDepth || exponentialHeightFogEnabled) {
+		float fogFade = exponentialHeightFogEnabled ? ExponentialHeightFog::GetVanillaFogFade(FogNearColor.w) : FogNearColor.w;
+		float3 fogSource = exponentialHeightFogEnabled && !isGeometryDepth ? composedColor.xyz : fogFade * composedColor.xyz;
+		if (exponentialHeightFogEnabled && !ExponentialHeightFog::ShouldDisableVanillaFog()) {
+			// Apply vanilla fog first, then exp fog on top
+			composedColor.xyz = lerp(fogSource, fogFade * fogColor, Color::FogAlpha(fogFactor));
+			composedColor.xyz = lerp(composedColor.xyz, fogFade * exponentialHeightFog.xyz, exponentialHeightFog.w);
+		} else if (exponentialHeightFogEnabled) {
+			// Disable vanilla fog, only apply exp height fog
+			composedColor.xyz = lerp(fogSource, fogFade * exponentialHeightFog.xyz, exponentialHeightFog.w);
+		} else {
+			composedColor.xyz = lerp(fogSource, fogFade * fogColor, Color::FogAlpha(fogFactor));
+		}
 	}
 #		else
-	if (depth < 0.999999) {
+	if (isGeometryDepth) {
 		composedColor.xyz = FogNearColor.w * lerp(composedColor.xyz, fogColor, Color::FogAlpha(fogFactor));
 	}
 #		endif

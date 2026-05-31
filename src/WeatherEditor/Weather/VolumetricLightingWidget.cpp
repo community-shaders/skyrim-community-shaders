@@ -2,66 +2,92 @@
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
 
+namespace
+{
+	namespace VolumetricLightingTab
+	{
+		constexpr const char* kBasic = "Basic";
+		constexpr const char* kDensity = "Density";
+		constexpr const char* kAdvanced = "Advanced";
+	}
+
+	namespace VolumetricLightingSetting
+	{
+		constexpr const char* kIntensity = "Intensity";
+		constexpr const char* kContribution = "Contribution";
+		constexpr const char* kColor = "Color";
+		constexpr const char* kSize = "Size";
+		constexpr const char* kWindSpeed = "Wind Speed";
+		constexpr const char* kFallingSpeed = "Falling Speed";
+		constexpr const char* kScattering = "Scattering";
+		constexpr const char* kRangeFactor = "Range Factor";
+	}
+}
+
 void VolumetricLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	if (BeginWidgetWindow()) {
 		DrawWidgetHeader("##VolumetricLightingSearch", true, true);
+		DrawSearchDropdown();
 	}
 	bool changed = false;
 
 	if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
-		if (ImGui::BeginTabItem("Basic")) {
+		const ImGuiTabItemFlags basicFlags = GetTabFlagsForOverride(VolumetricLightingTab::kBasic);
+		const ImGuiTabItemFlags densityFlags = GetTabFlagsForOverride(VolumetricLightingTab::kDensity);
+		const ImGuiTabItemFlags advancedFlags = GetTabFlagsForOverride(VolumetricLightingTab::kAdvanced);
+		auto drawSection = [&](const char* settingId, const char* heading, auto draw) {
+			DrawSearchSectionIfMatches(settingId, [&](const char*) {
+				ImGui::SeparatorText(heading);
+				draw();
+			});
+		};
+
+		if (ImGui::BeginTabItem(VolumetricLightingTab::kBasic, nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
-			ImGui::SeparatorText("Intensity");
-			if (WeatherUtils::DrawSliderFloat("Intensity", settings.intensity, 0.0f, 50.0f))
-				changed = true;
-
-			ImGui::SeparatorText("Custom Color");
-			if (WeatherUtils::DrawSliderFloat("Contribution", settings.customColorContribution, 0.0f, 1.0f))
-				changed = true;
-
-			ImGui::SeparatorText("RGB Color");
-			float3 rgbColor{ settings.red, settings.green, settings.blue };
-			if (WeatherUtils::DrawColorEdit("Color", rgbColor)) {
-				settings.red = rgbColor.x;
-				settings.green = rgbColor.y;
-				settings.blue = rgbColor.z;
-				changed = true;
-			}
-
+			drawSection(VolumetricLightingSetting::kIntensity, "Intensity", [&]() {
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kIntensity, settings.intensity, 0.0f, 50.0f);
+			});
+			drawSection(VolumetricLightingSetting::kContribution, "Custom Color", [&]() {
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kContribution, settings.customColorContribution, 0.0f, 1.0f);
+			});
+			drawSection(VolumetricLightingSetting::kColor, "RGB Color", [&]() {
+				float3 rgbColor{ settings.red, settings.green, settings.blue };
+				if (WeatherUtils::DrawColorEdit(VolumetricLightingSetting::kColor, rgbColor)) {
+					settings.red = rgbColor.x;
+					settings.green = rgbColor.y;
+					settings.blue = rgbColor.z;
+					changed = true;
+				}
+			});
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem("Density")) {
+		if (ImGui::BeginTabItem(VolumetricLightingTab::kDensity, nullptr, densityFlags)) {
 			BeginScrollableContent("##DensityScroll");
-			ImGui::SeparatorText("Density Settings");
-			if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
-				changed = true;
-			if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
-				changed = true;
-			if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, 0.0f, 100.0f))
-				changed = true;
-			if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
-				changed = true;
-
+			if (MatchesAnySearch({ VolumetricLightingSetting::kContribution, VolumetricLightingSetting::kSize, VolumetricLightingSetting::kWindSpeed, VolumetricLightingSetting::kFallingSpeed })) {
+				ImGui::SeparatorText("Density Settings");
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kContribution, settings.densityContribution, 0.0f, 1.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kSize, settings.densitySize, 0.1f, 10000.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kWindSpeed, settings.densityWindSpeed, 0.0f, 100.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kFallingSpeed, settings.densityFallingSpeed, 0.0f, 100.0f);
+			}
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem("Advanced")) {
+		if (ImGui::BeginTabItem(VolumetricLightingTab::kAdvanced, nullptr, advancedFlags)) {
 			BeginScrollableContent("##AdvancedScroll");
-			ImGui::SeparatorText("Phase Function");
-			if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
-				changed = true;
-			if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, -1.0f, 1.0f))
-				changed = true;
-
-			ImGui::SeparatorText("Sampling");
-			if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 160.0f))
-				changed = true;
-
+			if (MatchesAnySearch({ VolumetricLightingSetting::kContribution, VolumetricLightingSetting::kScattering })) {
+				ImGui::SeparatorText("Phase Function");
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kContribution, settings.phaseFunctionContribution, 0.0f, 1.0f);
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kScattering, settings.phaseFunctionScattering, -1.0f, 1.0f);
+			}
+			drawSection(VolumetricLightingSetting::kRangeFactor, "Sampling", [&]() {
+				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kRangeFactor, settings.samplingRangeFactor, 0.0f, 160.0f);
+			});
 			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
@@ -182,4 +208,22 @@ void VolumetricLightingWidget::RevertChanges()
 bool VolumetricLightingWidget::HasUnsavedChanges() const
 {
 	return !(settings == originalSettings);
+}
+
+std::vector<Widget::SearchResult> VolumetricLightingWidget::CollectSearchableSettings() const
+{
+	// Many tabs share the same inner label ("Contribution"); display names are
+	// disambiguated for the dropdown while the inner id matches the ImGui label.
+	return {
+		{ VolumetricLightingSetting::kIntensity, VolumetricLightingTab::kBasic, VolumetricLightingSetting::kIntensity },
+		{ "Custom Color Contribution", VolumetricLightingTab::kBasic, VolumetricLightingSetting::kContribution },
+		{ VolumetricLightingSetting::kColor, VolumetricLightingTab::kBasic, VolumetricLightingSetting::kColor },
+		{ "Density Contribution", VolumetricLightingTab::kDensity, VolumetricLightingSetting::kContribution },
+		{ "Density Size", VolumetricLightingTab::kDensity, VolumetricLightingSetting::kSize },
+		{ VolumetricLightingSetting::kWindSpeed, VolumetricLightingTab::kDensity, VolumetricLightingSetting::kWindSpeed },
+		{ VolumetricLightingSetting::kFallingSpeed, VolumetricLightingTab::kDensity, VolumetricLightingSetting::kFallingSpeed },
+		{ "Phase Function Contribution", VolumetricLightingTab::kAdvanced, VolumetricLightingSetting::kContribution },
+		{ "Phase Function Scattering", VolumetricLightingTab::kAdvanced, VolumetricLightingSetting::kScattering },
+		{ "Sampling Range Factor", VolumetricLightingTab::kAdvanced, VolumetricLightingSetting::kRangeFactor },
+	};
 }

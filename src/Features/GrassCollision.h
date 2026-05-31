@@ -4,13 +4,9 @@
 
 struct GrassCollision : Feature
 {
-private:
-	static constexpr std::string_view MOD_ID = "87816";
-
 public:
 	virtual inline std::string GetName() override { return "Grass Collision"; }
 	virtual inline std::string GetShortName() override { return "GrassCollision"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "GRASS_COLLISION"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kGrass; }
 
@@ -68,6 +64,9 @@ public:
 	eastl::unique_ptr<Buffer> collisionBoundingBoxes = nullptr;
 	eastl::unique_ptr<Buffer> collisionInstances = nullptr;
 
+	eastl::vector<BoundingBoxPacked> queuedBoundingBoxes;
+	eastl::vector<float4> queuedCollisions;
+
 	virtual void ClearShaderCache() override;
 
 	ID3D11ComputeShader* GetCollisionUpdateCS();
@@ -78,7 +77,7 @@ public:
 	virtual void SetupResources() override;
 
 	virtual void DrawSettings() override;
-	void UpdateCollisions(PerFrame& perFrame);
+	void QueueCollisions();
 	void Update();
 
 	virtual void LoadSettings(json& o_json) override;
@@ -98,9 +97,16 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct MainUpdate_QueueCollisions
+		{
+			static void thunk();
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::write_vfunc<0x6, BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);
+			stl::write_thunk_call<MainUpdate_QueueCollisions>(REL::RelocationID(35565, 36564).address() + REL::Relocate(0x748, 0xC26, 0x7EE));
 			logger::info("[GRASS COLLISION] Installed hooks");
 		}
 	};

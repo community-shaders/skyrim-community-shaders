@@ -3,9 +3,6 @@
 
 struct InteriorSun : Feature
 {
-private:
-	static constexpr std::string_view MOD_ID = "153541";
-
 public:
 	virtual inline std::string GetName() override { return "Interior Sun"; }
 	virtual inline std::string GetShortName() override { return "InteriorSun"; }
@@ -97,6 +94,7 @@ public:
 	};
 
 	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
+	bool IsActiveInteriorSun() const { return loaded && isInteriorWithSun.load(); }
 	virtual bool IsCore() const override { return true; };
 
 private:

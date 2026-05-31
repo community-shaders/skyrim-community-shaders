@@ -8,6 +8,7 @@
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
 #include "Features/HDRDisplay.h"
+#include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
@@ -163,6 +164,8 @@ void State::Debug()
 
 void State::Reset()
 {
+	globals::profiler->EndFrame();
+
 	Feature::ForEachLoadedFeature("Reset", [](Feature* feature) { feature->Reset(); });
 	if (!globals::game::ui->GameIsPaused())
 		timer += RE::GetSecondsSinceLastFrame();
@@ -754,6 +757,16 @@ void State::SetupResources()
 #ifdef TRACY_ENABLE
 	Feature::SetTracyCtx(tracyCtx);
 #endif
+
+	globals::profiler->Initialize(globals::d3d::device, globals::d3d::context);
+
+	if (frameAnnotations) {
+		globals::profiler->SetPerfEventCallbacks(
+			[this](std::string_view name) { BeginPerfEvent(name); },
+			[this](std::string_view) { EndPerfEvent(); });
+	} else {
+		globals::profiler->SetPerfEventCallbacks({}, {});
+	}
 }
 
 void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor, bool a_forceDeferred)
@@ -962,6 +975,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		}
 
 		data.InInterior = Util::IsInterior();
+		data.HasDirectionalShadows = HasDirectionalShadows();
 
 		if (globals::game::sky)
 			data.HideSky = globals::game::sky->flags.any(RE::Sky::Flags::kHideSky);
@@ -976,7 +990,9 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			auto upscaleMethod = upscaling.GetUpscaleMethod();
 			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
 				auto renderSize = Util::ConvertToDynamic(screenSize, true);
-				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+				data.MipBias = std::log2f(renderSize.x / screenSize.x);
+				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
+					data.MipBias -= 1.0f;
 			} else {
 				data.MipBias = 0;
 			}
@@ -1080,6 +1096,11 @@ void State::LoadTheme()
 			logger::warn("Fallback to 'Default' theme failed");
 		}
 	}
+}
+
+bool State::HasDirectionalShadows() const
+{
+	return !Util::IsInterior() || globals::features::interiorSun.IsActiveInteriorSun();
 }
 
 void State::SaveTheme()

@@ -1,22 +1,23 @@
-const isRC = (process.env.RELEASE_TYPE || 'rc') === 'rc';
-
 module.exports = {
-  // RC:     'main' is the non-prerelease anchor required by semantic-release v25.
-  //         'dev' produces rc pre-releases.
-  // Stable: 'dev' is the primary release branch.
-  //         'hotfix/N.N.x' maintenance branches allow patch releases from a
-  //         tagged stable baseline without carrying unreleased dev work.
-  //         Branch naming: hotfix/1.5.x (the x.y maintenance line, not a specific patch).
-  branches: isRC
-    ? ['main', { name: 'dev', prerelease: 'rc' }]
-    : [
-        'dev',
-        {
-          name: 'hotfix/+([0-9])?(.{+([0-9]),x}).x',
-          range: '${name.split("/")[1]}',
-          channel: '${name.split("/")[1]}',
-        },
-      ],
+  // 'main' is the stable release channel. Patches to the current line land
+  // here directly (cherry-picked from dev) and produce vX.Y.Z. Minors/majors
+  // land here via the dev → main promotion flow in release-semantic.yaml.
+  //
+  // 'dev' is the integration channel and produces vX.Y.Z-rc.N prereleases.
+  //
+  // 'hotfix/X.Y.x' is the maintenance channel for OLDER release lines.
+  // semantic-release validates it as a maintenance branch, which means it is
+  // only valid once 'main' has shipped a release on a newer minor/major than
+  // X.Y. Patches to the current line do NOT use this — use a fix PR to main.
+  branches: [
+    'main',
+    { name: 'dev', prerelease: 'rc' },
+    {
+      name: 'hotfix/+([0-9])?(.{+([0-9]),x}).x',
+      range: '${name.split("/")[1]}',
+      channel: '${name.split("/")[1]}',
+    },
+  ],
   plugins: [
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',

@@ -84,6 +84,14 @@ struct UnifiedWater : OverlayFeature
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+
+		static bool Register();
+	};
+
 	virtual void DrawSettings() override;
 
 	virtual void DrawOverlay() override;
@@ -96,6 +104,7 @@ struct UnifiedWater : OverlayFeature
 
 	virtual void RestoreDefaultSettings() override;
 
+	virtual bool IsCore() const override { return true; }
 	virtual bool SupportsVR() override { return true; }
 
 	virtual void PostPostLoad() override;
@@ -113,13 +122,11 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
-	std::atomic<RE::TESWorldSpace*> currentPlayerWorldSpace{ nullptr };
-	std::atomic<bool> pendingChildWsCull{ false };
-	// Game-thread TES snapshot used by deferred child-worldspace cull fallbacks.
-	std::atomic<RE::TES*> cachedTes{ nullptr };
-
-	void TryCompleteDeferredChildWorldspaceCull(RE::TES* tes = nullptr);
+	std::atomic_bool exteriorWorldspaceActive{ false };
+	std::atomic_bool mapMenuOpen{ false };
 
 	void SetFlowmapTex() const;
+	bool IsExteriorWorldspaceActive() const;
+	void UpdateWaterLODCull() const;
 	static bool LoadOrderChanged();
 };
