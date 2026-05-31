@@ -198,6 +198,9 @@ def get_feature_ini_metadata(feature_dir_or_ini_path):
 
         # Activation-only features keep all code in the core mod; their toggle
         # .ini opts out of version auditing/bumping with `AuditVersion = false`.
+        # Auditing is on by default, so a blank value must NOT exclude the ini:
+        # only explicit falsy values opt out (unlike auto_upload, which is opt-in
+        # and treats blank as off).
         audit_version_str = section_items.get('auditversion') or section_items.get('audit_version')
         if audit_version_str is not None:
             metadata['audit_version'] = str(audit_version_str).strip().lower() not in ('false', '0', 'no', 'off')

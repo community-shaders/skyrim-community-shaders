@@ -181,8 +181,10 @@ jobs:
               # on a `chore(release): … [skip ci]` commit (the tag push is skipped)
               # and the GitHub release is created as a draft (no `release: created`
               # event fires). So dispatch the build explicitly here to populate the
-              # draft with .7z artifacts. Publishing the draft later re-runs the
-              # build and fires the Nexus dry-run via `release: published`.
+              # draft with .7z artifacts. Publishing the draft later does NOT
+              # rebuild — release-build.yaml skips its build job on the
+              # `release: published` event — it just publishes the already-attached
+              # artifacts and fires the Nexus dry-run via `release: published`.
               if: steps.semantic.outputs.new_release_published == 'true'
               env:
                   GH_TOKEN: ${{ github.token }}
