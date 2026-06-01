@@ -366,7 +366,16 @@ float4 Skin::GetWetness(RE::BSGeometry* geometry)
 			}
 			if (actor->IsInWater()) {
 				wetness.y = 2.0f;
-				float waterHeight = GetWaterHeight(actor->AsReference(), actor->GetPosition());
+				float waterHeight = -RE::NI_INFINITY;
+				const uint32_t formID = actor->AsReference()->formID;
+				const uint currentFrame = globals::state->frameCount;
+				auto cacheIt = waterHeightCache.find(formID);
+				if (cacheIt != waterHeightCache.end() && cacheIt->second.frameCount == currentFrame) {
+					waterHeight = cacheIt->second.waterHeight;
+				} else {
+					waterHeight = GetWaterHeight(actor->AsReference(), actor->GetPosition());
+					waterHeightCache[formID] = { currentFrame, waterHeight };
+				}
 				wetness.w = std::max(0.0f, waterHeight - positionZ);
 			} else {
 				wetness.y = 0.0f;

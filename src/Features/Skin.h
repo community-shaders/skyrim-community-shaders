@@ -95,6 +95,13 @@ struct Skin : Feature
 	float playerStamina = 0.0f;
 	float playerStaminaMax = 0.0f;
 
+	struct WaterHeightCacheEntry
+	{
+		uint frameCount = 0;
+		float waterHeight = 0.0f;
+	};
+	std::unordered_map<uint32_t, WaterHeightCacheEntry> waterHeightCache;  // keyed by actor formID
+
 	struct ExtraTextures
 	{
 		RE::NiSourceTexturePtr rfaosTexture;
