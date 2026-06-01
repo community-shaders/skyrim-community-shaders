@@ -1,13 +1,32 @@
 ﻿#include "WaterCache.h"
 
 #include <BS_thread_pool.hpp>
+#include <cmath>
 
 #include "Utils/WinApi.h"
 
+namespace
+{
+	// Far beyond normal terrain heights, but below sentinel/garbage values
+	constexpr float kMaxValidCellHeight = 50000.0f;
+
+	bool IsValidCellHeight(const float height)
+	{
+		// Cell records may use sentinel or garbage heights for absent water data
+		return std::isfinite(height) &&
+		       height != FLT_MIN &&
+		       height != FLT_MAX &&
+		       std::fabs(height) < kMaxValidCellHeight;
+	}
+}
+
 bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 {
-	if (!worldSpace)
+	if (!worldSpace) {
+		currentCache.reset();
+		currentWorldSpace.clear();
 		return false;
+	}
 
 	while (worldSpace->parentWorld && worldSpace->parentUseFlags.all(RE::TESWorldSpace::ParentUseFlag::kUseWaterData))
 		worldSpace = worldSpace->parentWorld;
@@ -349,25 +368,50 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 	auto cellData = std::vector<CellData>(hdr.width * hdr.height);
 
 	int32_t waterCellCount = 0;
+	int32_t precacheFallbackCount = 0;
+	int32_t skippedMissingCellDataCount = 0;
+	int32_t skippedInvalidHeightCount = 0;
 
 	for (auto y = minY; y <= maxY; ++y) {
 		for (auto x = minX; x <= maxX; ++x) {
 			const int32_t idx = (y - minY) * hdr.width + x - minX;
 
-			RE::FormID formID;
-			float landHeight, waterHeight;
+			RE::FormID formID = 0;
+			float landHeight = FLT_MAX;
+			float waterHeight = FLT_MAX;
 
-			if (!TryGetCellData(worldSpace, files, x, y, formID, waterHeight, landHeight, true) && hasPrecache) {
-				auto [land, water] = preCache.heights[idx];
+			if (!TryGetCellData(worldSpace, files, x, y, formID, waterHeight, landHeight, true)) {
+				if (!hasPrecache) {
+					skippedMissingCellDataCount++;
+					cellData[idx] = {};
+					continue;
+				}
+
+				const auto precacheIdx = static_cast<size_t>(idx);
+				if (precacheIdx >= preCache.heights.size()) {
+					// Corrupt precache files can have headers that outlive their payload
+					skippedMissingCellDataCount++;
+					cellData[idx] = {};
+					continue;
+				}
+
+				const auto [land, water] = preCache.heights[precacheIdx];
 				landHeight = land;
 				waterHeight = water;
+				precacheFallbackCount++;
 			}
 
-			if (waterHeight > landHeight && fabs(waterHeight) < 50000.0f) {
-				if (!formID)
+			const bool validHeights = IsValidCellHeight(waterHeight) && IsValidCellHeight(landHeight);
+
+			if (validHeights && waterHeight > landHeight) {
+				if (!formID && worldSpace->worldWater)
 					formID = worldSpace->worldWater->formID;  // Use default world water if no water form set
-			} else
+			} else {
+				if (!validHeights)
+					skippedInvalidHeightCount++;
+				// Discard invalid tiles before they can generate floating water planes
 				formID = 0;
+			}
 
 			RE::TESWaterForm* form = formID ? RE::TESWaterForm::LookupByID<RE::TESWaterForm>(formID) : nullptr;
 			if ((formID && !form) || (form && form->formType != RE::FormType::Water)) {
@@ -380,6 +424,11 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 
 			cellData[idx] = { landHeight, waterHeight, formID, form };
 		}
+	}
+
+	if (precacheFallbackCount || skippedMissingCellDataCount || skippedInvalidHeightCount) {
+		logger::debug("[Unified Water] [Cache] {}: {} cells used precache fallback, {} cells skipped due to missing data, {} cells skipped due to invalid heights",
+			editorID.c_str(), precacheFallbackCount, skippedMissingCellDataCount, skippedInvalidHeightCount);
 	}
 
 	logger::debug("[Unified Water] [Cache] {}: Generating instructions for {} water cells...", editorID.c_str(), waterCellCount);
@@ -557,6 +606,7 @@ bool WaterCache::TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& 
 	cache.header = hdr;
 
 	int32_t diskReadIndex = 0;
+	int32_t skippedInvalidInstructionCount = 0;
 
 	for (int32_t lodLevelIdx = 0; lodLevelIdx < 4; ++lodLevelIdx) {
 		auto& lodInstructions = cache.instructions[lodLevelIdx];
@@ -575,10 +625,23 @@ bool WaterCache::TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& 
 			if (instruction.lodLevel != static_cast<uint32_t>(lodLevel))
 				break;
 
+			if (!IsValidCellHeight(instruction.waterHeight)) {
+				// Keep old or malformed disk caches from restoring bad water tiles
+				skippedInvalidInstructionCount++;
+				diskReadIndex++;
+				continue;
+			}
+
 			int32_t lodX, lodY;
 			GetLODCoords(lodLevel, instruction.x, instruction.y, lodX, lodY);
 			lodX -= lodMinX;
 			lodY -= lodMinY;
+
+			if (lodX < 0 || lodY < 0 || lodX >= lodWidth || lodY >= lodHeight) {
+				logger::warn("[Unified Water] [Cache] Skipping out-of-bounds LOD{} instruction at {},{}", lodLevel, instruction.x, instruction.y);
+				diskReadIndex++;
+				continue;
+			}
 
 			instruction.form.ptr = RE::TESForm::LookupByID<RE::TESWaterForm>(instruction.form.id);
 			if (!instruction.form.ptr || instruction.form.ptr->formType != RE::FormType::Water) {
@@ -595,6 +658,10 @@ bool WaterCache::TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& 
 
 			diskReadIndex++;
 		}
+	}
+
+	if (skippedInvalidInstructionCount) {
+		logger::debug("[Unified Water] [Cache] Skipped {} cached instructions with invalid water heights", skippedInvalidInstructionCount);
 	}
 
 	return true;

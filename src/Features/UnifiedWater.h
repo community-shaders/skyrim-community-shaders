@@ -3,7 +3,7 @@
 #include "UnifiedWater/Flowmap.h"
 #include "UnifiedWater/WaterCache.h"
 
-#include <vector>
+#include <atomic>
 
 struct UnifiedWater : OverlayFeature
 {
@@ -60,6 +60,18 @@ struct UnifiedWater : OverlayFeature
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct TES_SetWorldSpace
+	{
+		static void thunk(RE::TES* tes, RE::TESWorldSpace* worldSpace, bool isExterior);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct TES_DestroySkyCell
+	{
+		static void thunk(RE::TES* tes);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	struct BSWaterShader_SetupGeometry
 	{
 		static void thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass);
@@ -70,6 +82,14 @@ struct UnifiedWater : OverlayFeature
 	{
 		static void thunk(RE::TESWaterSystem* waterSystem);
 		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+
+		static bool Register();
 	};
 
 	virtual void DrawSettings() override;
@@ -84,6 +104,7 @@ struct UnifiedWater : OverlayFeature
 
 	virtual void RestoreDefaultSettings() override;
 
+	virtual bool IsCore() const override { return true; }
 	virtual bool SupportsVR() override { return true; }
 
 	virtual void PostPostLoad() override;
@@ -101,8 +122,11 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
-	bool BuildWaterForBlock(RE::BGSTerrainBlock* block, RE::TESWaterSystem* waterSystem);
+	std::atomic_bool exteriorWorldspaceActive{ false };
+	std::atomic_bool mapMenuOpen{ false };
 
 	void SetFlowmapTex() const;
+	bool IsExteriorWorldspaceActive() const;
+	void UpdateWaterLODCull() const;
 	static bool LoadOrderChanged();
 };

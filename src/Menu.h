@@ -140,7 +140,7 @@ public:
 	bool settingOverlayToggleKey = false;
 	bool settingShaderBlockPrevKey = false;      // Debug: capture shader block prev key
 	bool settingShaderBlockNextKey = false;      // Debug: capture shader block next key
-	bool settingWeatherEditorToggleKey = false;  // Weather Editor toggle key
+	bool settingCSEditorToggleKey = false;  // CS Editor toggle key
 	bool settingScreenshotKey = false;           // Screenshot capture key
 
 	// Font caching (made public for ThemeManager and OverlayRenderer access)
@@ -203,11 +203,11 @@ public:
 		UIIcon logo;                  // New logo icon
 		UIIcon search;                // Search icon for search bars
 		UIIcon featureSettingRevert;  // Feature revert settings icon
-		UIIcon applyToGame;           // Apply changes to game icon (weather editor)
-		UIIcon pauseTime;             // Pause time icon (weather editor)
-		UIIcon undo;                  // Undo icon (weather editor)
-		UIIcon freeCamera;            // Free camera preview icon (weather editor)
-		UIIcon playMode;              // Play mode preview icon (weather editor)
+		UIIcon applyToGame;           // Apply changes to game icon (CS editor)
+		UIIcon pauseTime;             // Pause time icon (CS editor)
+		UIIcon undo;                  // Undo icon (CS editor)
+		UIIcon freeCamera;            // Free camera preview icon (CS editor)
+		UIIcon playMode;              // Play mode preview icon (CS editor)
 
 		// Social media/external link icons
 		UIIcon discord;
@@ -405,7 +405,7 @@ public:
 		std::vector<InputCombo> OverlayToggleKey = { InputCombo::Keyboard(VK_F10) };        // Global overlay toggle key for all overlays
 		std::vector<InputCombo> ShaderBlockPrevKey = { InputCombo::Keyboard(VK_PRIOR) };    // Debug: cycle backward through shaders (PageUp)
 		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };     // Debug: cycle forward through shaders (PageDown)
-		std::vector<InputCombo> WeatherEditorToggleKey = { InputCombo::Keyboard(VK_SHIFT), InputCombo::Keyboard(VK_END) };  // Weather Editor toggle key
+		std::vector<InputCombo> CSEditorToggleKey = { InputCombo::Keyboard(VK_SHIFT), InputCombo::Keyboard(VK_END) };  // CS Editor toggle key
 		std::vector<InputCombo> ScreenshotKey = { InputCombo::Keyboard(VK_SNAPSHOT) };                                    // Screenshot capture key
 		bool EnableShaderBlocking = false;                                                  // Enable shader blocking hotkeys for debugging
 		bool FirstTimeSetupCompleted = false;                                               // Track if first-time setup has been completed

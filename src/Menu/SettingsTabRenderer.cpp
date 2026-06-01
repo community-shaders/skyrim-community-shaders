@@ -372,10 +372,10 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 			"Change##OverlayToggle");
 
 		Util::InputComboWidget(
-			"Weather Editor Toggle Key:",
-			settings.WeatherEditorToggleKey,
-			state.settingWeatherEditorToggleKey,
-			"Change##WeatherEditorToggle");
+			"CS Editor Toggle Key:",
+			settings.CSEditorToggleKey,
+			state.settingCSEditorToggleKey,
+			"Change##CSEditorToggle");
 
 		Util::InputComboWidget(
 			"Screenshot Key:",

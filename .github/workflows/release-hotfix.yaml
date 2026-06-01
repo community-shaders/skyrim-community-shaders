@@ -65,6 +65,27 @@ jobs:
                   app-id: ${{ secrets.APP_ID }}
                   private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
+            # TEMPORARY DEBUG: verify the generated App token can actually reach
+            # the repo before checkout. Remove once the auth issue is resolved.
+            - name: Verify app token
+              env:
+                  TOKEN: ${{ steps.app-token.outputs.token }}
+              run: |
+                  set -euo pipefail
+                  if [ -z "${TOKEN}" ]; then
+                    echo "::error::App token is EMPTY — create-github-app-token produced no token (check APP_ID / APP_PRIVATE_KEY)."
+                    exit 1
+                  fi
+                  echo "Token length: ${#TOKEN}"
+                  echo "--- repo visibility & permissions ---"
+                  curl -sS -H "Authorization: Bearer ${TOKEN}" \
+                    "https://api.github.com/repos/${{ github.repository }}" \
+                    | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("full_name") or d); print("perms:", d.get("permissions"))'
+                  echo "--- repos this installation can reach ---"
+                  curl -sS -H "Authorization: Bearer ${TOKEN}" \
+                    "https://api.github.com/installation/repositories" \
+                    | python3 -c 'import sys,json; d=json.load(sys.stdin); print("total:", d.get("total_count")); print([r["full_name"] for r in d.get("repositories",[])])'
+
             - name: Checkout
               uses: actions/checkout@v6
               with:
@@ -265,15 +286,7 @@ jobs:
             - name: Open PR against hotfix branch
               if: ${{ !inputs.dry_run && steps.cherry.outputs.picked_count != '0' }}
               env:
-                  # Use GITHUB_TOKEN (not RELEASE_PAT). The workflow declares
-                  # `permissions: pull-requests: write`, which is sufficient
-                  # for creating the candidate PR — no branch-protection
-                  # bypass is required here, so there's no need to spend
-                  # RELEASE_PAT's broader scope (and avoids depending on the
-                  # PAT having pull_requests:write granted, which a previous
-                  # run hit: "Resource not accessible by personal access
-                  # token (createPullRequest)").
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
                   # Pass via env (not ${{ }} interpolation) so the literal
                   # backticks inside SOURCE_DESC don't get re-evaluated by
                   # bash as command substitution.

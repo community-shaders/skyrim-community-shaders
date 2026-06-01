@@ -19,7 +19,7 @@ public:
 		bool& settingOverlayToggleKey;
 		bool& settingShaderBlockPrevKey;      // Debug: shader block previous key
 		bool& settingShaderBlockNextKey;      // Debug: shader block next key
-		bool& settingWeatherEditorToggleKey;  // Weather Editor toggle key
+		bool& settingCSEditorToggleKey;  // CS Editor toggle key
 		bool& settingScreenshotKey;           // Screenshot capture key
 	};
 

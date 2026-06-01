@@ -47,7 +47,7 @@ namespace BackgroundBlur
 	{
 		std::mutex resourceMutex;
 		bool enabled = false;
-		bool weatherEditorActive = false;
+		bool csEditorActive = false;
 
 		// DirectX resources (RAII managed)
 		winrt::com_ptr<ID3D11VertexShader> vertexShader;
@@ -475,7 +475,7 @@ namespace BackgroundBlur
 			windowConstants.windowParams[0] = cornerRadius;
 			windowConstants.windowParams[1] = static_cast<float>(sourceDesc.Width);
 			windowConstants.windowParams[2] = static_cast<float>(sourceDesc.Height);
-			windowConstants.windowParams[3] = weatherEditorActive ? 1.0f : 0.0f;
+			windowConstants.windowParams[3] = csEditorActive ? 1.0f : 0.0f;
 			context->UpdateSubresource(windowConstantBuffer.get(), 0, nullptr, &windowConstants, 0, 0);
 			auto windowConstantBufferPtr = windowConstantBuffer.get();
 			context->PSSetConstantBuffers(1, 1, &windowConstantBufferPtr);
@@ -548,14 +548,14 @@ namespace BackgroundBlur
 		enabled = enable;
 	}
 
-	void SetWeatherEditorActive(bool active)
+	void SetCSEditorActive(bool active)
 	{
-		weatherEditorActive = active;
+		csEditorActive = active;
 	}
 
-	bool IsWeatherEditorActive()
+	bool IsCSEditorActive()
 	{
-		return weatherEditorActive;
+		return csEditorActive;
 	}
 
 	void RenderBackgroundBlur()
@@ -654,8 +654,8 @@ namespace BackgroundBlur
 			CreateBlurTextures(texDesc.Width, texDesc.Height, texDesc.Format);
 		}
 
-		// Weather editor mode: single fullscreen blur pass (better perf than per-window)
-		if (weatherEditorActive) {
+		// CS editor mode: single fullscreen blur pass (better perf than per-window)
+		if (csEditorActive) {
 			ImVec2 screenMin = { 0, 0 };
 			ImVec2 screenMax = { static_cast<float>(texDesc.Width), static_cast<float>(texDesc.Height) };
 			PerformBlur(currentTexture.get(), sourceSRV, currentRTV.get(), screenMin, screenMax, 0.0f, uiBuffer.srv, uiBuffer.rtv);

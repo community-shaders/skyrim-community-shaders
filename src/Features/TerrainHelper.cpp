@@ -121,7 +121,7 @@ struct THExtendedRendererState
 	}
 } thExtendedRendererState;
 
-void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
+void TerrainHelper::SetShaderResources(ID3D11DeviceContext* a_context)
 {
 	uint32_t mask = thExtendedRendererState.PSResourceModifiedBits;
 
