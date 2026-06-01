@@ -1,5 +1,9 @@
 #pragma once
 
+#include <shared_mutex>
+#include <unordered_set>
+#include <vector>
+
 struct TerrainVariation : Feature
 {
 private:
@@ -12,7 +16,8 @@ public:
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_VARIATION"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override
 	{
-		return (shaderType == RE::BSShader::Type::Lighting);
+		// Always compile the TERRAIN_VARIATION path when the feature is loaded; LOD terrain variation remains configurable via enableLODTerrainTilingFix.
+		return loaded && shaderType == RE::BSShader::Type::Lighting;
 	}
 	virtual bool IsCore() const override { return false; };
 	virtual bool SupportsVR() override { return true; }
@@ -30,12 +35,27 @@ public:
 		};
 	}
 
-	struct Settings
+	struct alignas(16) Settings
 	{
-		uint enableTilingFix = true;
-		uint enableLODTerrainTilingFix = true;
-		float pad0[2];
-	} settings;
+		uint32_t enableLODTerrainTilingFix = 1;
+		uint32_t pad[3]{};
+	};
+
+	STATIC_ASSERT_ALIGNAS_16(Settings);
+
+	Settings settings;
+	std::vector<std::string> pbrTextureOptInIds{};
+	mutable std::shared_mutex textureIdMutex;
+	std::unordered_set<std::string> pbrTextureOptInSet{};
+	std::unordered_set<std::string> pbrObservedTextureSet{};
+	std::vector<std::string> pbrObservedTextureIds{};
+
+	static std::string CanonicalizeTextureIdentity(std::string_view identity);
+	void RebuildOptInSet();
+
+public:
+	void RegisterObservedPBRTextureIdentity(std::string_view identity);
+	bool IsPBRTextureIdentityOptedIn(std::string_view identity) const;
 
 	virtual void DrawSettings() override;
 	virtual bool DrawFailLoadMessage() const override;
@@ -44,5 +64,4 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 	virtual void PostPostLoad() override;
-	void UpdateShaderSettings();
 };

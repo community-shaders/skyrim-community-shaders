@@ -4,6 +4,7 @@
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
 #include "Features/InteriorSun.h"
+#include "Features/TerrainVariation.h"
 #include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -49,6 +50,35 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 		logger::warn("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
 		return false;                                                                                          \
 	}
+
+namespace
+{
+	std::string ResolvePBRTextureIdentity(const TruePBR& truePBR, const BSLightingShaderMaterialPBR* pbrMaterial)
+	{
+		if (pbrMaterial == nullptr) {
+			return {};
+		}
+
+		const auto extIt = BSLightingShaderMaterialPBR::All.find(const_cast<BSLightingShaderMaterialPBR*>(pbrMaterial));
+		if (extIt != BSLightingShaderMaterialPBR::All.end() && extIt->second.textureSetData != nullptr) {
+			for (const auto& [editorId, data] : truePBR.pbrTextureSets) {
+				if (&data == extIt->second.textureSetData) {
+					return editorId;
+				}
+			}
+		}
+
+		const RE::BSTextureSet* fallbackTextureSet = pbrMaterial->textureSet.get();
+		if (fallbackTextureSet == nullptr) {
+			fallbackTextureSet = truePBR.currentTextureSet;
+		}
+		if (auto* bgsTextureSet = skyrim_cast<RE::BGSTextureSet*>(const_cast<RE::BSTextureSet*>(fallbackTextureSet)); bgsTextureSet != nullptr) {
+			return bgsTextureSet->GetFormEditorID();
+		}
+
+		return {};
+	}
+}
 
 namespace PNState
 {
@@ -428,6 +458,7 @@ void TruePBR::SetupTextureSetData()
 	PNState::ReadPBRRecordConfigs("Data\\PBRTextureSets", [this](const std::string& editorId, const json& config) {
 		try {
 			pbrTextureSets.insert_or_assign(editorId, config);
+			globals::features::terrainVariation.RegisterObservedPBRTextureIdentity(editorId);
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 		}
@@ -443,6 +474,7 @@ void TruePBR::ReloadTextureSetData()
 			if (auto it = pbrTextureSets.find(editorId); it != pbrTextureSets.cend()) {
 				it->second = config;
 			}
+			globals::features::terrainVariation.RegisterObservedPBRTextureIdentity(editorId);
 		} catch (const std::exception& e) {
 			logger::error("Failed to deserialize config for {}: {}.", editorId, e.what());
 		}
@@ -771,6 +803,8 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 	using enum SIE::ShaderCache::LightingShaderTechniques;
 
 	const auto& lightingPSConstants = ShaderConstants::LightingPS::Get();
+	auto* state = globals::state;
+	state->permutationData.ExtraFeatureDescriptor &= ~static_cast<uint32_t>(State::ExtraFeatureDescriptors::TVPBRTextureOptIn);
 
 	auto lightingFlags = shader->currentRawTechnique & ~(~0u << 24);
 	auto lightingType = static_cast<SIE::ShaderCache::LightingShaderTechniques>((shader->currentRawTechnique >> 24) & 0x3F);
@@ -869,6 +903,15 @@ bool TruePBR::BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::B
 			CHECK_PBR_TEXTURE(diffuseTexture);
 			CHECK_PBR_TEXTURE(normalTexture);
 			CHECK_PBR_TEXTURE(rmaosTexture);
+
+			const std::string textureIdentity = ResolvePBRTextureIdentity(*this, pbrMaterial);
+			if (!textureIdentity.empty()) {
+				auto& terrainVariation = globals::features::terrainVariation;
+				terrainVariation.RegisterObservedPBRTextureIdentity(textureIdentity);
+				if (terrainVariation.IsPBRTextureIdentityOptedIn(textureIdentity)) {
+					state->permutationData.ExtraFeatureDescriptor |= static_cast<uint32_t>(State::ExtraFeatureDescriptors::TVPBRTextureOptIn);
+				}
+			}
 			if (pbrMaterial->diffuseRenderTargetSourceIndex != -1) {
 				shadowState->SetPSTexture(0, renderer->GetRuntimeData().renderTargets[pbrMaterial->diffuseRenderTargetSourceIndex]);
 			} else {
