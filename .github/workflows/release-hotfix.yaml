@@ -286,10 +286,7 @@ jobs:
             - name: Open PR against hotfix branch
               if: ${{ !inputs.dry_run && steps.cherry.outputs.picked_count != '0' }}
               env:
-                  # GITHUB_TOKEN suffices here: the workflow declares
-                  # `permissions: pull-requests: write`, and creating the
-                  # candidate PR requires no branch-protection bypass.
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
                   # Pass via env (not ${{ }} interpolation) so the literal
                   # backticks inside SOURCE_DESC don't get re-evaluated by
                   # bash as command substitution.

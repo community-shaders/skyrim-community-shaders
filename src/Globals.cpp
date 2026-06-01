@@ -21,6 +21,7 @@
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/ScreenshotFeature.h"
+#include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -34,7 +35,7 @@
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
-#include "Features/WeatherEditor.h"
+#include "Features/CSEditor.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
 #include "ShaderCache.h"
@@ -86,9 +87,10 @@ namespace globals
 		HDRDisplay hdrDisplay{};
 		RenderDoc renderDoc{};
 		ScreenshotFeature screenshotFeature{};
-		WeatherEditor weatherEditor{};
+		CSEditor csEditor{};
 		ExponentialHeightFog exponentialHeightFog{};
 		TruePBR truePBR{};
+		Skin skin{};
 
 		namespace llf
 		{

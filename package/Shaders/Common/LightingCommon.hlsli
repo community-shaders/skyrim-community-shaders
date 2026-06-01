@@ -71,6 +71,17 @@ struct MaterialProperties
 #	endif
 	float Roughness;
 	float3 F0;
+#	if defined(CS_SKIN) && defined(SKIN)
+	float RoughnessSecondary;
+	float SecondarySpecIntensity;
+	float Curvature;
+	float Thickness;
+	float3 SubsurfaceColor;
+	float AO;
+	float FuzzRoughness;
+	float3 FuzzColor;
+	float FuzzWeight;
+#	endif
 #else
 	float Roughness;
 	float Metallic;

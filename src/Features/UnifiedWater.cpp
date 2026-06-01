@@ -481,8 +481,10 @@ void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::
 
 		bool cull = false;
 		if (x >= 0 && y >= 0 && x < length && y < length) {
-			if (const auto cell = gridCells->GetCell(x, y); cell && cell->cellState.any(RE::TESObjectCELL::CellState::kAttached, static_cast<RE::TESObjectCELL::CellState>(6)))
-				cull = true;
+			if (const auto cell = gridCells->GetCell(x, y); cell && cell->cellState.any(RE::TESObjectCELL::CellState::kAttached, static_cast<RE::TESObjectCELL::CellState>(6))) {
+				// Keep LOD visible when a loaded dry cell has no active water to replace it
+				cull = cell->cellFlags.any(RE::TESObjectCELL::Flag::kHasWater);
+			}
 		}
 
 		child->SetAppCulled(cull);
