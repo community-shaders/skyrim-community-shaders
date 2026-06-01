@@ -14,6 +14,7 @@
 #include "Features/InteriorSun.h"
 #include "Features/ScreenshotFeature.h"
 #include "Features/LightLimitFix.h"
+#include "Features/Skin.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"

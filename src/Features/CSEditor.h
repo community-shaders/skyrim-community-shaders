@@ -5,18 +5,18 @@
 #include "OverlayFeature.h"
 #include "State.h"
 
-struct WeatherEditor : OverlayFeature
+struct CSEditor : OverlayFeature
 {
 public:
-	static WeatherEditor* GetSingleton()
+	static CSEditor* GetSingleton()
 	{
-		static WeatherEditor singleton;
+		static CSEditor singleton;
 		return &singleton;
 	}
 
-	virtual inline std::string GetName() override { return "Weather Editor"; }
-	virtual inline std::string GetShortName() override { return "WeatherEditor"; }
-	virtual inline std::string_view GetShaderDefineName() override { return "WEATHER"; }
+	virtual inline std::string GetName() override { return "CS Editor"; }
+	virtual inline std::string GetShortName() override { return "CSEditor"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "CS_EDITOR"; }
 	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
@@ -25,7 +25,7 @@ public:
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Development tool for editing weather, testing weather transitions, and managing weather-related feature settings.",
+			"Development tool for inspecting, editing, and previewing renderer-facing data in-game.",
 			{ "Provides weather editing functionality",
 				"Includes dynamic saving and loading of vanilla post processing and weather settings.",
 				"Real-time editing and previewing of effects",
@@ -158,7 +158,7 @@ private:
 	{
 		bool operator()(const RE::TESWeather* a, const RE::TESWeather* b) const
 		{
-			return WeatherEditor::GetDisplayName(a) < WeatherEditor::GetDisplayName(b);
+			return CSEditor::GetDisplayName(a) < CSEditor::GetDisplayName(b);
 		}
 	};
 

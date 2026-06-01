@@ -2,7 +2,7 @@
 
 #include "Utils/UI.h"
 
-/// UI panel for managing Interior Only scene settings within the Weather Editor.
+/// UI panel for managing Interior Only scene settings within the CS Editor.
 /// Renders the list of entries with add/pause/delete controls.
 namespace InteriorOnlyPanel
 {

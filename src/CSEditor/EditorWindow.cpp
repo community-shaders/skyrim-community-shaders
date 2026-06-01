@@ -2,7 +2,7 @@
 
 #include "Features/HDRDisplay.h"
 #include "Features/Upscaling.h"
-#include "Features/WeatherEditor.h"
+#include "Features/CSEditor.h"
 #include "Globals.h"
 #include "InteriorOnlyPanel.h"
 #include "Menu.h"
@@ -180,7 +180,7 @@ std::string EditorWindow::ResolveEditorId(RE::TESForm* form, const WidgetVec& wi
 
 void EditorWindow::ShowObjectsWindow()
 {
-	Util::BeginWithRoundedClose("Weather and Lighting Browser", nullptr);
+	Util::BeginWithRoundedClose("CS Editor Browser", nullptr);
 
 	// Reset filter state when the user switches categories so stale column
 	// selections (e.g. Status) don't hide all items in the new category.
@@ -215,7 +215,7 @@ void EditorWindow::ShowObjectsWindow()
 			// List of categories
 			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting",
 				"Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect",
-				"Interior Only", "Lighting editor" };
+				"Interior Only", "Light Editor" };
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
 				if (ImGui::Selectable(categories[i], m_selectedCategory == categories[i])) {
@@ -240,7 +240,7 @@ void EditorWindow::ShowObjectsWindow()
 				return;
 			}
 
-			if (m_selectedCategory == "Lighting editor") {
+			if (m_selectedCategory == "Light Editor") {
 				BeginScrollableContent("##LightEditorScroll");
 				lightEditor.DrawSettings();
 				EndScrollableContent();
@@ -1006,7 +1006,7 @@ void EditorWindow::RenderUI()
 			if (hdrActive)
 				ImGui::BeginDisabled();
 			if (ImGui::Checkbox("Viewport", &settings.showViewport)) {
-				BackgroundBlur::SetWeatherEditorActive(settings.showViewport);
+				BackgroundBlur::SetCSEditorActive(settings.showViewport);
 				Save();
 			}
 			if (hdrActive) {
@@ -1039,7 +1039,7 @@ void EditorWindow::RenderUI()
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Help")) {
-			ImGui::Text("Weather Editor");
+			ImGui::Text("CS Editor");
 			ImGui::Separator();
 			ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Keyboard Shortcuts:");
 			ImGui::BulletText("Ctrl+F: Focus search");
@@ -1152,7 +1152,7 @@ void EditorWindow::RenderUI()
 		char previewStatusBuf[128] = {};
 		bool showPreviewStatus = previewMode != PreviewMode::None;
 		if (showPreviewStatus) {
-			std::string hotkey = Util::Input::KeyIdToString(menu->GetSettings().WeatherEditorToggleKey);
+			std::string hotkey = Util::Input::KeyIdToString(menu->GetSettings().CSEditorToggleKey);
 			if (previewMode == PreviewMode::FreeCamera)
 				std::snprintf(previewStatusBuf, sizeof(previewStatusBuf), " [ %s ] FREE CAMERA (Speed: %.0f)", hotkey.c_str(), flySpeed);
 			else if (previewMode == PreviewMode::FreeCameraLocked)
@@ -1264,7 +1264,7 @@ void EditorWindow::RenderUI()
 		ImGui::SetCursorScreenPos(ImVec2(xButtonX, cursorY));
 		if (Util::ErrorButton("X", ImVec2(closeButtonSize, closeButtonSize)))
 			open = false;
-		Util::AddTooltip("Close Weather Editor (Esc)");
+		Util::AddTooltip("Close CS Editor (Esc)");
 
 		ImGui::PopClipRect();  // End bottom-border clip rect
 
@@ -1411,13 +1411,13 @@ void EditorWindow::UpdateOpenState()
 	if (open && !wasOpen) {
 		DisableVanityCamera();
 		HideGameMenus();
-		BackgroundBlur::SetWeatherEditorActive(IsViewportActive());
+		BackgroundBlur::SetCSEditorActive(IsViewportActive());
 
 	} else if (!open && wasOpen) {
 		lightEditor.ResetOverrides();
 		RestoreVanityCamera();
 		ShowGameMenus();
-		BackgroundBlur::SetWeatherEditorActive(false);
+		BackgroundBlur::SetCSEditorActive(false);
 	}
 
 	wasOpen = open;
@@ -1433,7 +1433,7 @@ void EditorWindow::Draw()
 		static bool prevViewportActive = false;
 		const bool viewportActive = IsViewportActive();
 		if (viewportActive != prevViewportActive) {
-			BackgroundBlur::SetWeatherEditorActive(viewportActive);
+			BackgroundBlur::SetCSEditorActive(viewportActive);
 			prevViewportActive = viewportActive;
 		}
 	}
@@ -1959,7 +1959,7 @@ void EditorWindow::HideGameMenus()
 	if (auto ui = RE::UI::GetSingleton()) {
 		ui->ShowMenus(false);
 		gameMenusHidden = true;
-		logger::info("Game menus hidden for weather editor");
+		logger::info("Game menus hidden for CS editor");
 	}
 }
 
@@ -1971,7 +1971,7 @@ void EditorWindow::ShowGameMenus()
 	if (auto ui = RE::UI::GetSingleton()) {
 		ui->ShowMenus(true);
 		gameMenusHidden = false;
-		logger::info("Game menus restored after weather editor");
+		logger::info("Game menus restored after CS editor");
 	}
 }
 

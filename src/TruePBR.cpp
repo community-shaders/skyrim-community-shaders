@@ -1529,7 +1529,7 @@ void TruePBR::SetupDefaultPBRLandTextureSet()
 	}
 }
 
-void TruePBR::SetShaderResouces(ID3D11DeviceContext* a_context)
+void TruePBR::SetShaderResources(ID3D11DeviceContext* a_context)
 {
 	uint32_t mask = extendedRendererState.PSResourceModifiedBits;
 
