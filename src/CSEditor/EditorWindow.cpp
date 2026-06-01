@@ -180,7 +180,7 @@ std::string EditorWindow::ResolveEditorId(RE::TESForm* form, const WidgetVec& wi
 
 void EditorWindow::ShowObjectsWindow()
 {
-	Util::BeginWithRoundedClose("Weather and Lighting Browser", nullptr);
+	Util::BeginWithRoundedClose("CS Editor Browser", nullptr);
 
 	// Reset filter state when the user switches categories so stale column
 	// selections (e.g. Status) don't hide all items in the new category.
@@ -215,7 +215,7 @@ void EditorWindow::ShowObjectsWindow()
 			// List of categories
 			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting",
 				"Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect",
-				"Interior Only", "Lighting editor" };
+				"Interior Only", "Light Editor" };
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
 				if (ImGui::Selectable(categories[i], m_selectedCategory == categories[i])) {
@@ -240,7 +240,7 @@ void EditorWindow::ShowObjectsWindow()
 				return;
 			}
 
-			if (m_selectedCategory == "Lighting editor") {
+			if (m_selectedCategory == "Light Editor") {
 				BeginScrollableContent("##LightEditorScroll");
 				lightEditor.DrawSettings();
 				EndScrollableContent();
