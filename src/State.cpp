@@ -748,7 +748,6 @@ void State::SetupResources()
 
 	auto [data, size] = GetFeatureBufferData(false);
 	featureDataCB = new ConstantBuffer(ConstantBufferDesc((uint32_t)size));
-	delete[] data;
 
 	// Grab main texture to get resolution
 	// VR cannot use viewport->screenWidth/Height as it's the desktop preview window's resolution and not HMD
@@ -1032,8 +1031,6 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		auto [data, size] = GetFeatureBufferData(a_inWorld);
 
 		featureDataCB->Update(data, size);
-
-		delete[] data;
 	}
 
 	auto* srv = Util::GetCurrentSceneDepthSRV(true);
