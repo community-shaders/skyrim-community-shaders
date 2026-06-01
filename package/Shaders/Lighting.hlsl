@@ -1120,12 +1120,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::extendedMaterialSettings.EnableComplexMaterial) {
 		const float kMaskEpsilon = (4.0 / 255.0);
 
-		complexMaterial = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, 15).w < (1.0 - kMaskEpsilon);
+		const float4 mipSample = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, 15);
+		complexMaterial = mipSample.w < (1.0 - kMaskEpsilon);
 
-		// Detect texture saved in the wrong format
-		if ((abs(envMaskSample.x - envMaskSample.y) < kMaskEpsilon) &&
-			(abs(envMaskSample.x - envMaskSample.z) < kMaskEpsilon) &&
-			(abs(envMaskSample.y - envMaskSample.z) < kMaskEpsilon))
+		const bool grayscaleMask = (abs(mipSample.x - mipSample.y) < kMaskEpsilon) &&
+								   (abs(mipSample.x - mipSample.z) < kMaskEpsilon) &&
+								   (abs(mipSample.y - mipSample.z) < kMaskEpsilon);
+		// Preserve height-only masks while rejecting grayscale environment masks
+		const bool solidBlackHeightMask = all(mipSample.xyz < kMaskEpsilon) &&
+										  mipSample.w > kMaskEpsilon &&
+										  mipSample.w < (1.0 - kMaskEpsilon);
+		if (grayscaleMask && !solidBlackHeightMask)
 			complexMaterial = false;
 
 		if (complexMaterial) {
