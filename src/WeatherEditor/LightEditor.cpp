@@ -1,7 +1,7 @@
-﻿#include "Features/InverseSquareLighting/LightEditor.h"
-#include "Features/InverseSquareLighting.h"
-#include "Features/LightLimitFix.h"
-#include "Menu.h"
+#include "LightEditor.h"
+#include "../Features/InverseSquareLighting.h"
+#include "../Features/LightLimitFix.h"
+#include "../Menu.h"
 
 #include <array>
 #include <filesystem>
@@ -10,21 +10,6 @@
 
 void LightEditor::DrawSettings()
 {
-	ImGui::Checkbox("Enable Light Editor", &enabled);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Allows for modifying lights in real-time to preview changes. "
-			"Light Placer lights can be saved back to their JSON configs. "
-			"Not intended for gameplay use.");
-	}
-
-	if (!enabled)
-		return;
-
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-
 	ImGui::Checkbox("Disable Regular Falloff Lights", &disableRegularLights);
 	ImGui::Checkbox("Disable Inverse Square Falloff Lights", &disableInvSqLights);
 
@@ -168,10 +153,8 @@ std::string LightEditor::GetLightName(LightInfo& lightInfo)
 
 void LightEditor::GatherLights()
 {
-	if (!enabled || !Menu::GetSingleton()->ShouldSwallowInput()) {
-		RestoreOriginal();
-		selected = {};
-		previous = {};
+	if (!Menu::GetSingleton()->ShouldSwallowInput()) {
+		ResetOverrides();
 		return;
 	}
 
@@ -287,6 +270,13 @@ void LightEditor::GatherLights()
 	SortLights();
 }
 
+void LightEditor::ResetOverrides()
+{
+	RestoreOriginal();
+	selected = {};
+	previous = {};
+}
+
 void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight)
 {
 	const auto runtimeData = ISLCommon::RuntimeLightDataExt::Get(niLight);
@@ -372,7 +362,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDataExt* runtimeData) const
 {
-	if (!enabled || niLight != activeNiLight.get())
+	if (niLight != activeNiLight.get())
 		return false;
 
 	runtimeData->diffuse = current.data.diffuse;

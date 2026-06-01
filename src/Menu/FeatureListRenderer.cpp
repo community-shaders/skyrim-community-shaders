@@ -16,6 +16,7 @@
 #include "Globals.h"
 #include "Menu.h"
 #include "Menu/HomePageRenderer.h"
+#include "Menu/ProfilingRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "SceneSettingsManager.h"
 #include "SettingsOverrideManager.h"
@@ -26,7 +27,7 @@
 namespace
 {
 	// Core built-in menu names that always appear first in the menu list
-	constexpr std::array<const char*, 4> CORE_MENU_NAMES = { "Home", "General", "Advanced", "Display" };
+	constexpr std::array<const char*, 5> CORE_MENU_NAMES = { "Home", "General", "Advanced", "Profiling", "Display" };
 
 	bool IsCoreMenu(const std::string& menuName)
 	{
@@ -280,7 +281,8 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	auto menuList = std::vector<MenuFuncInfo>{
 		BuiltInMenu{ "Home", []() { HomePageRenderer::RenderHomePage(); } },
 		BuiltInMenu{ "General", drawGeneralSettings },
-		BuiltInMenu{ "Advanced", drawAdvancedSettings }
+		BuiltInMenu{ "Advanced", drawAdvancedSettings },
+		BuiltInMenu{ "Profiling", []() { ProfilingRenderer::RenderStatistics(); } }
 	};  // NOTE: The menu list is rebuilt every frame, so category expansion states
 	// persist correctly. This is acceptable since the list is small and built
 	// infrequently, but could be optimized if performance becomes an issue.
@@ -751,6 +753,10 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 
 			ImVec2 cursorPosBefore = ImGui::GetCursorPos();
 			feat->DrawSettings();
+
+			ImGui::SeparatorText("Profiling");
+			ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
+
 			ImVec2 cursorPosAfter = ImGui::GetCursorPos();
 
 			if (sceneControlled)

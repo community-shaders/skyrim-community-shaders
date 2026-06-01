@@ -195,6 +195,9 @@ void ScreenSpaceShadows::DrawShadows()
 	// Shared dispatch logic for both VR and non-VR
 	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
 						   float invTexSizeX, float invTexSizeY) {
+		std::string timerName = eyeName ? std::format("ScreenSpaceShadows::RayMarch({})", eyeName) : "ScreenSpaceShadows::RayMarch";
+		globals::profiler->BeginPass(timerName);
+
 		if (globals::state->frameAnnotations && eyeName) {
 			std::string eventName = std::format("SSS - Ray March ({})", eyeName);
 			globals::state->BeginPerfEvent(eventName);
@@ -243,6 +246,8 @@ void ScreenSpaceShadows::DrawShadows()
 		if (globals::state->frameAnnotations) {
 			globals::state->EndPerfEvent();
 		}
+
+		globals::profiler->EndPass();
 	};
 
 	float InvTexSizeX = 1.0f / (float)viewportSize[0];
@@ -300,6 +305,7 @@ void ScreenSpaceShadows::DrawStereoSync()
 		globals::state->BeginPerfEvent("SSS - Stereo Sync");
 
 	auto context = globals::d3d::context;
+	globals::profiler->BeginPass("ScreenSpaceShadows::StereoSync");
 
 	context->CopyResource(stereoSyncCopyTex->resource.get(), screenSpaceShadowsTexture->resource.get());
 
@@ -338,6 +344,8 @@ void ScreenSpaceShadows::DrawStereoSync()
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 	context->CSSetConstantBuffers(1, 1, &cbPtr);
 	context->CSSetShader(nullptr, nullptr, 0);
+
+	globals::profiler->EndPass();
 
 	if (globals::state->frameAnnotations)
 		globals::state->EndPerfEvent();

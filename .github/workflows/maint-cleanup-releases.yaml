@@ -57,7 +57,10 @@ jobs:
 
                   # Get all git tags that look like pre-releases but may not have GitHub releases
                   git fetch --tags
-                  orphaned_tags=$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-(pr[0-9]+|rc[0-9]+|alpha[0-9]*|beta[0-9]*|dev[0-9]*)' || true)
+                  # Optional '.' before the number so semantic-release's dotted
+                  # prerelease tags (e.g. v1.6.0-rc.1) are matched, not just
+                  # v1.6.0-rc1.
+                  orphaned_tags=$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-(pr|rc|alpha|beta|dev)\.?[0-9]+' || true)
 
                   # Combine both lists and remove duplicates
                   all_prerelease_tags=$(echo -e "$releases\n$orphaned_tags" | sort | uniq | grep -v '^$' || true)

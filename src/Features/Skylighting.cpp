@@ -50,6 +50,7 @@ void Skylighting::DrawSettings()
 	ImGui::SliderAngle("Max Zenith Angle", &settings.MaxZenith, 0, 90);
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Smaller angles creates more focused top-down shadow.");
+
 }
 
 void Skylighting::SetupResources()
@@ -227,7 +228,9 @@ void Skylighting::Prepass()
 			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 			context->CSSetShader(probeUpdateCompute.get(), nullptr, 0);
+			globals::profiler->BeginPass("Skylighting::ProbeUpdate");
 			context->Dispatch((probeArrayDims[0] + 7u) >> 3, (probeArrayDims[1] + 7u) >> 3, probeArrayDims[2]);
+			globals::profiler->EndPass();
 		}
 
 		// Reset
@@ -513,7 +516,9 @@ void Skylighting::RenderOcclusion()
 					auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
 					auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
 
+					globals::profiler->BeginPass("Skylighting::PrecipMask");
 					precip->RenderMask(rain);
+					globals::profiler->EndPass();
 				}
 
 				state->EndPerfEvent();
@@ -586,7 +591,9 @@ void Skylighting::RenderOcclusion()
 				BSParticleShaderRainEmitter* rain = new BSParticleShaderRainEmitter;
 				{
 					TracyD3D11Zone(state->tracyCtx, "Skylighting - Render Height Map");
+					globals::profiler->BeginPass("Skylighting::OcclusionMask");
 					precip->RenderMask((RE::BSParticleShaderRainEmitter*)rain);
+					globals::profiler->EndPass();
 				}
 				inOcclusion = false;
 
