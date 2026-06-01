@@ -44,8 +44,8 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/ScreenshotFeature.h"
 #include "Features/VR.h"
-#include "Features/WeatherEditor.h"
-#include "WeatherEditor/EditorWindow.h"
+#include "Features/CSEditor.h"
+#include "CSEditor/EditorWindow.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
@@ -163,7 +163,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	OverlayToggleKey,
 	ShaderBlockPrevKey,
 	ShaderBlockNextKey,
-	WeatherEditorToggleKey,
+	CSEditorToggleKey,
 	EnableShaderBlocking,
 	FirstTimeSetupCompleted,
 	SkipClearCacheConfirmation,
@@ -342,7 +342,7 @@ void Menu::Load(json& o_json)
 	migrateKey(o_json, "OverlayToggleKey", settings.OverlayToggleKey);
 	migrateKey(o_json, "ShaderBlockPrevKey", settings.ShaderBlockPrevKey);
 	migrateKey(o_json, "ShaderBlockNextKey", settings.ShaderBlockNextKey);
-	migrateKey(o_json, "WeatherEditorToggleKey", settings.WeatherEditorToggleKey);
+	migrateKey(o_json, "CSEditorToggleKey", settings.CSEditorToggleKey);
 	migrateKey(o_json, "ScreenshotKey", settings.ScreenshotKey);
 
 	// Helper for new smart serialization with error handling
@@ -363,7 +363,7 @@ void Menu::Load(json& o_json)
 	loadComboList(o_json, "OverlayToggleKey", settings.OverlayToggleKey);
 	loadComboList(o_json, "ShaderBlockPrevKey", settings.ShaderBlockPrevKey);
 	loadComboList(o_json, "ShaderBlockNextKey", settings.ShaderBlockNextKey);
-	loadComboList(o_json, "WeatherEditorToggleKey", settings.WeatherEditorToggleKey);
+	loadComboList(o_json, "CSEditorToggleKey", settings.CSEditorToggleKey);
 	loadComboList(o_json, "ScreenshotKey", settings.ScreenshotKey);
 
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
@@ -428,7 +428,7 @@ void Menu::Save(json& o_json)
 	InputCombo::ComboList::to_json(o_json["OverlayToggleKey"], settings.OverlayToggleKey);
 	InputCombo::ComboList::to_json(o_json["ShaderBlockPrevKey"], settings.ShaderBlockPrevKey);
 	InputCombo::ComboList::to_json(o_json["ShaderBlockNextKey"], settings.ShaderBlockNextKey);
-	InputCombo::ComboList::to_json(o_json["WeatherEditorToggleKey"], settings.WeatherEditorToggleKey);
+	InputCombo::ComboList::to_json(o_json["CSEditorToggleKey"], settings.CSEditorToggleKey);
 	InputCombo::ComboList::to_json(o_json["ScreenshotKey"], settings.ScreenshotKey);
 }
 
@@ -759,7 +759,7 @@ void Menu::DrawGeneralSettings()
 		.settingOverlayToggleKey = settingOverlayToggleKey,
 		.settingShaderBlockPrevKey = settingShaderBlockPrevKey,
 		.settingShaderBlockNextKey = settingShaderBlockNextKey,
-		.settingWeatherEditorToggleKey = settingWeatherEditorToggleKey,
+		.settingCSEditorToggleKey = settingCSEditorToggleKey,
 		.settingScreenshotKey = settingScreenshotKey
 	};
 
@@ -885,7 +885,7 @@ void Menu::DrawOverlay()
  * @note This method contains Menu-specific logic and state management that makes it
  *       inappropriate for extraction to a utility class.
  */
-static std::vector<InputCombo> DeriveWeatherEditorKey(const std::vector<InputCombo>& menuKey)
+static std::vector<InputCombo> DeriveCSEditorKey(const std::vector<InputCombo>& menuKey)
 {
 	bool hasShift = false;
 	uint32_t baseKey = 0;
@@ -981,14 +981,14 @@ void Menu::ProcessInputEventQueue()
 						 settings.ToggleKey = keys;
 						 settingToggleKey = false;
 						 if (!settings.FirstTimeSetupCompleted)
-							 settings.WeatherEditorToggleKey = DeriveWeatherEditorKey(keys);
+							 settings.CSEditorToggleKey = DeriveCSEditorKey(keys);
 					 } },
 					{ &settings.SkipCompilationKey, &settingSkipCompilationKey, [this](std::vector<InputCombo> keys) { settings.SkipCompilationKey = keys; settingSkipCompilationKey = false; } },
 					{ &settings.EffectToggleKey, &settingsEffectsToggle, [this](std::vector<InputCombo> keys) { settings.EffectToggleKey = keys; settingsEffectsToggle = false; } },
 					{ &settings.OverlayToggleKey, &settingOverlayToggleKey, [this](std::vector<InputCombo> keys) { settings.OverlayToggleKey = keys; settingOverlayToggleKey = false; } },
 					{ &settings.ShaderBlockPrevKey, &settingShaderBlockPrevKey, [this](std::vector<InputCombo> keys) { settings.ShaderBlockPrevKey = keys; settingShaderBlockPrevKey = false; } },
 					{ &settings.ShaderBlockNextKey, &settingShaderBlockNextKey, [this](std::vector<InputCombo> keys) { settings.ShaderBlockNextKey = keys; settingShaderBlockNextKey = false; } },
-					{ &settings.WeatherEditorToggleKey, &settingWeatherEditorToggleKey, [this](std::vector<InputCombo> keys) { settings.WeatherEditorToggleKey = keys; settingWeatherEditorToggleKey = false; } },
+					{ &settings.CSEditorToggleKey, &settingCSEditorToggleKey, [this](std::vector<InputCombo> keys) { settings.CSEditorToggleKey = keys; settingCSEditorToggleKey = false; } },
 					{ &settings.ScreenshotKey, &settingScreenshotKey, [this](std::vector<InputCombo> keys) { settings.ScreenshotKey = keys; settingScreenshotKey = false; } },
 				};
 				bool handled = false;
@@ -1054,7 +1054,7 @@ void Menu::ProcessInputEventQueue()
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
 						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
-						{ settings.WeatherEditorToggleKey, []() {
+						{ settings.CSEditorToggleKey, []() {
 							 auto* ew = EditorWindow::GetSingleton();
 							 if (!ew)
 								 return;
@@ -1065,7 +1065,7 @@ void Menu::ProcessInputEventQueue()
 								 // Locked or PlayMode → fully exit preview
 								 ew->ExitPreviewMode();
 							 } else {
-								 WeatherEditor::ToggleEditorWindow();
+								 CSEditor::ToggleEditorWindow();
 							 }
 						 } },
 						{ settings.ScreenshotKey, []() {
@@ -1101,7 +1101,7 @@ void Menu::ProcessInputEventQueue()
 			const std::vector<InputCombo>* hotkeys[] = {
 				&settings.ToggleKey, &settings.EffectToggleKey,
 				&settings.OverlayToggleKey, &settings.ShaderBlockPrevKey, &settings.ShaderBlockNextKey,
-				&settings.WeatherEditorToggleKey,
+				&settings.CSEditorToggleKey,
 				&settings.ScreenshotKey
 			};
 			bool isHotkey = ShouldSwallowInput() && std::any_of(std::begin(hotkeys), std::end(hotkeys),
@@ -1132,7 +1132,7 @@ void Menu::ProcessInputEventQueue()
 bool Menu::IsCapturingHotkeyInput() const
 {
 	return settingToggleKey || settingSkipCompilationKey || settingsEffectsToggle ||
-	       settingOverlayToggleKey || settingShaderBlockPrevKey || settingShaderBlockNextKey || settingWeatherEditorToggleKey || settingScreenshotKey;
+	       settingOverlayToggleKey || settingShaderBlockPrevKey || settingShaderBlockNextKey || settingCSEditorToggleKey || settingScreenshotKey;
 }
 
 void Menu::addToEventQueue(KeyEvent e)
@@ -1197,22 +1197,22 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 /**
  * @brief Renders the standalone weather details window when enabled
  *
- * Delegates to the WeatherEditor feature for rendering the weather details window
+ * Delegates to the CSEditor feature for rendering the weather details window
  * that can remain open even when the main menu is closed. This provides a simple
- * coordination layer between the Menu system and the WeatherEditor feature.
+ * coordination layer between the Menu system and the CSEditor feature.
  */
 void Menu::DrawWeatherDetailsWindow()
 {
-	if (!globals::features::weatherEditor.WeatherDetailsWindow.Enabled) {
+	if (!globals::features::csEditor.WeatherDetailsWindow.Enabled) {
 		return;
 	}
-	if (!globals::features::weatherEditor.loaded) {
+	if (!globals::features::csEditor.loaded) {
 		return;
 	}
 
 	// Use Weather core feature for all window management and rendering
-	auto& weather = globals::features::weatherEditor;
-	bool* p_open = &globals::features::weatherEditor.WeatherDetailsWindow.Enabled;
+	auto& weather = globals::features::csEditor;
+	bool* p_open = &globals::features::csEditor.WeatherDetailsWindow.Enabled;
 	weather.RenderWeatherDetailsWindow(p_open);
 }
 

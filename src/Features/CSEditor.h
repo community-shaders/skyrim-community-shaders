@@ -5,18 +5,18 @@
 #include "OverlayFeature.h"
 #include "State.h"
 
-struct WeatherEditor : OverlayFeature
+struct CSEditor : OverlayFeature
 {
 public:
-	static WeatherEditor* GetSingleton()
+	static CSEditor* GetSingleton()
 	{
-		static WeatherEditor singleton;
+		static CSEditor singleton;
 		return &singleton;
 	}
 
-	virtual inline std::string GetName() override { return "Weather Editor"; }
-	virtual inline std::string GetShortName() override { return "WeatherEditor"; }
-	virtual inline std::string_view GetShaderDefineName() override { return "WEATHER"; }
+	virtual inline std::string GetName() override { return "CS Editor"; }
+	virtual inline std::string GetShortName() override { return "CSEditor"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "CS_EDITOR"; }
 	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
@@ -158,7 +158,7 @@ private:
 	{
 		bool operator()(const RE::TESWeather* a, const RE::TESWeather* b) const
 		{
-			return WeatherEditor::GetDisplayName(a) < WeatherEditor::GetDisplayName(b);
+			return CSEditor::GetDisplayName(a) < CSEditor::GetDisplayName(b);
 		}
 	};
 
