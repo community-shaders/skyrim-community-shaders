@@ -747,6 +747,7 @@ void State::SetupResources()
 	sharedDataCB = new ConstantBuffer(ConstantBufferDesc<SharedDataCB>());
 
 	auto [data, size] = GetFeatureBufferData(false);
+	(void)data;
 	featureDataCB = new ConstantBuffer(ConstantBufferDesc((uint32_t)size));
 
 	// Grab main texture to get resolution
