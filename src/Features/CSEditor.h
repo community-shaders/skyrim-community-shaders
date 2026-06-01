@@ -25,7 +25,7 @@ public:
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Development tool for editing weather, testing weather transitions, and managing weather-related feature settings.",
+			"Development tool for inspecting, editing, and previewing renderer-facing data in-game.",
 			{ "Provides weather editing functionality",
 				"Includes dynamic saving and loading of vanilla post processing and weather settings.",
 				"Real-time editing and previewing of effects",
