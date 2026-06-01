@@ -477,7 +477,7 @@ After a hotfix release, open PRs targeting `dev` are auto-rebased by the `Auto-r
 3. PR checks build a `vX.Y.Z-prNNNN` prerelease for verification.
 4. Merge the candidate PR.
 5. Cut the release:
-    - **Current line** (`main` is on `X.Y`): dispatch **Release: Semantic Version** on `main` with `ff_target = <hotfix/X.Y.x tip SHA>`.
+    - **Current line** (`main` is on `X.Y`): dispatch **Release: Semantic Version** on `main` with `ff_target = <hotfix-staging branch tip SHA>` — **not** the `hotfix/X.Y.x` tip, which is a merge commit that `main`'s branch protection rejects. Use the second parent of the merge commit: `git rev-parse origin/hotfix/X.Y.x^2`.
     - **Older line** (`main` has shipped a newer minor/major): dispatch **Release: Semantic Version** on `hotfix/X.Y.x` with `ff_target` empty.
 
 **Minor/major release flow:**
