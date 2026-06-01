@@ -1,5 +1,6 @@
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Math.hlsli"
 #include "Common/VR.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
@@ -76,7 +77,7 @@ PS_OUTPUT main(PS_INPUT input)
 			historyFactor = NearFar_Menu_DistanceFactor.w * (distanceFactor * (waterMask * -0.85 + 0.95));
 		}
 		// Un-premultiply history so bilinear filtering against cleared pixels does not darken water edges
-		float3 historyColor = waterHistory.xyz / max(waterHistory.w, 0.0001);
+		float3 historyColor = waterHistory.xyz / max(waterHistory.w, EPSILON_DIVISION);
 
 		historyFactor *= waterHistory.w;
 		finalColor = lerp(sourceColor, historyColor, historyFactor);
