@@ -331,7 +331,7 @@ void CalculateGI(
 	radianceSpecular = lerp(radianceSpecular, 0, depthFade);
 
 	visibilitySpecular *= rcpNumSlices;
-	visibilitySpecular = lerp(saturate(visibility), 0, depthFade);
+	visibilitySpecular = lerp(saturate(visibilitySpecular), 0, depthFade);
 #	endif
 #endif
 

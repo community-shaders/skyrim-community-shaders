@@ -10,13 +10,14 @@
 #include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/VRStereoOptimizations.h"
 #include "Features/VolumetricShadows.h"
-#include "Features/WeatherEditor.h"
+#include "Features/CSEditor.h"
 #include "Menu.h"
 #include "SceneSettingsManager.h"
 #include "SettingsOverrideManager.h"
@@ -53,7 +54,8 @@ void State::Draw()
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
-	auto& weatherEditor = globals::features::weatherEditor;
+	auto& csEditor = globals::features::csEditor;
+	auto& skin = globals::features::skin;
 	auto& truePBR = globals::features::truePBR;
 	auto context = globals::d3d::context;
 	auto& volumetricShadows = globals::features::volumetricShadows;
@@ -62,7 +64,7 @@ void State::Draw()
 		// Process deferred cell transitions (interior detection)
 		SceneSettingsManager::GetSingleton()->Update();
 
-		if (weatherEditor.loaded) {
+		if (csEditor.loaded) {
 			ZoneScopedN("WeatherManager::UpdateFeatures");
 			WeatherManager::GetSingleton()->UpdateFeatures();
 		}
@@ -78,13 +80,18 @@ void State::Draw()
 		}
 
 		if (terrainHelper.loaded) {
-			ZoneScopedN("TerrainHelper::SetShaderResouces");
-			terrainHelper.SetShaderResouces(context);
+			ZoneScopedN("TerrainHelper::SetShaderResources");
+			terrainHelper.SetShaderResources(context);
+		}
+
+		if (skin.loaded) {
+			ZoneScopedN("Skin::SetShaderResources");
+			skin.SetShaderResources(context);
 		}
 
 		if (truePBR.loaded) {
-			ZoneScopedN("TruePBR::SetShaderResouces");
-			truePBR.SetShaderResouces(context);
+			ZoneScopedN("TruePBR::SetShaderResources");
+			truePBR.SetShaderResources(context);
 		}
 
 		if (permutationData != permutationDataPrevious) {
@@ -165,6 +172,8 @@ void State::Debug()
 
 void State::Reset()
 {
+	globals::profiler->EndFrame();
+
 	Feature::ForEachLoadedFeature("Reset", [](Feature* feature) { feature->Reset(); });
 	if (!globals::game::ui->GameIsPaused())
 		timer += RE::GetSecondsSinceLastFrame();
@@ -761,6 +770,16 @@ void State::SetupResources()
 #ifdef TRACY_ENABLE
 	Feature::SetTracyCtx(tracyCtx);
 #endif
+
+	globals::profiler->Initialize(globals::d3d::device, globals::d3d::context);
+
+	if (frameAnnotations) {
+		globals::profiler->SetPerfEventCallbacks(
+			[this](std::string_view name) { BeginPerfEvent(name); },
+			[this](std::string_view) { EndPerfEvent(); });
+	} else {
+		globals::profiler->SetPerfEventCallbacks({}, {});
+	}
 }
 
 void State::ModifyShaderLookup(const RE::BSShader& a_shader, uint& a_vertexDescriptor, uint& a_pixelDescriptor, bool a_forceDeferred)
