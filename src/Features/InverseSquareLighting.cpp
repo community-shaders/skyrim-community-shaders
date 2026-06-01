@@ -1,7 +1,7 @@
 #include "InverseSquareLighting.h"
 #include "Features/InverseSquareLighting/Common.h"
 #include "LightLimitFix.h"
-#include "WeatherEditor/EditorWindow.h"
+#include "CSEditor/EditorWindow.h"
 #include <numbers>
 
 void InverseSquareLighting::PostPostLoad()

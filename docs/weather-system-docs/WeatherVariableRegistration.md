@@ -135,7 +135,7 @@ The system now automatically:
 
 -   Saves/loads weather-specific settings to JSON
 -   Interpolates variables during weather transitions
--   Appears in the weather editor UI with per-weather toggle buttons
+-   Appears in the CS Editor UI with per-weather toggle buttons
 -   Handles default values and missing data
 -   Shows weather-controlled status in feature settings UI
 
@@ -278,7 +278,7 @@ Weather-specific settings are stored in:
 
 ```
 Data/SKSE/Plugins/CommunityShaders/Weathers/
-    WeatherEditorID_FormID.json
+    WeatherFormEditorID_FormID.json
 ```
 
 Each file contains settings for all features:

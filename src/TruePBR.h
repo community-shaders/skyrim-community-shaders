@@ -58,7 +58,7 @@ public:
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
 	bool BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material);
 
-	void SetShaderResouces(ID3D11DeviceContext* a_context);
+	void SetShaderResources(ID3D11DeviceContext* a_context);
 	virtual void GenerateShaderPermutations(RE::BSShader* shader) override;
 
 	void SetupGlintsTexture();

@@ -1,4 +1,4 @@
-#include "WeatherEditor.h"
+#include "CSEditor.h"
 
 #include "Deferred.h"
 #include "Feature.h"
@@ -9,7 +9,7 @@
 #include "Utils/UI.h"
 #include "WeatherManager.h"
 
-#include "WeatherEditor/EditorWindow.h"
+#include "CSEditor/EditorWindow.h"
 #include <cstring>
 #include <filesystem>
 #include <nlohmann/json.hpp>
@@ -20,18 +20,18 @@ namespace
 }
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	WeatherEditor::WeatherDetailsWindowSettings,
+	CSEditor::WeatherDetailsWindowSettings,
 	Enabled,
 	ShowInOverlay,
 	Position,
 	PositionSet)
 
-void WeatherEditor::DataLoaded()
+void CSEditor::DataLoaded()
 {
 	s_dataAvailable = true;
 }
 
-bool WeatherEditor::HasWidgetJsonFiles()
+bool CSEditor::HasWidgetJsonFiles()
 {
 	if (s_checkedWidgetJsonFiles)
 		return s_hasWidgetJsonFiles;
@@ -42,7 +42,7 @@ bool WeatherEditor::HasWidgetJsonFiles()
 		std::error_code ec;
 		const bool isDirectory = std::filesystem::is_directory(widgetSettingsPath, ec);
 		if (ec) {
-			logger::warn("[WeatherEditor] Failed to inspect widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
+			logger::warn("[CSEditor] Failed to inspect widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
 			continue;
 		}
 		if (!isDirectory)
@@ -52,7 +52,7 @@ bool WeatherEditor::HasWidgetJsonFiles()
 			std::error_code entryEc;
 			const bool isRegularFile = it->is_regular_file(entryEc);
 			if (entryEc) {
-				logger::warn("[WeatherEditor] Failed to inspect widget settings file '{}': {}", it->path().string(), entryEc.message());
+				logger::warn("[CSEditor] Failed to inspect widget settings file '{}': {}", it->path().string(), entryEc.message());
 				continue;
 			}
 			if (isRegularFile && _stricmp(it->path().extension().string().c_str(), kJsonExtension) == 0) {
@@ -62,7 +62,7 @@ bool WeatherEditor::HasWidgetJsonFiles()
 			}
 		}
 		if (ec) {
-			logger::warn("[WeatherEditor] Failed to scan widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
+			logger::warn("[CSEditor] Failed to scan widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
 			continue;
 		}
 	}
@@ -71,12 +71,12 @@ bool WeatherEditor::HasWidgetJsonFiles()
 	return false;
 }
 
-bool WeatherEditor::ShouldPreloadEditorResources()
+bool CSEditor::ShouldPreloadEditorResources()
 {
 	return s_dataAvailable && !s_resourcesInitialized && EditorWindow::CanBeOpen() && HasWidgetJsonFiles();
 }
 
-void WeatherEditor::EnsureWeatherListLoaded()
+void CSEditor::EnsureWeatherListLoaded()
 {
 	if (!s_dataAvailable)
 		return;
@@ -84,7 +84,7 @@ void WeatherEditor::EnsureWeatherListLoaded()
 	LoadAllWeathers();
 }
 
-void WeatherEditor::EnsureDataLoaded()
+void CSEditor::EnsureDataLoaded()
 {
 	if (!s_dataAvailable)
 		return;
@@ -96,7 +96,7 @@ void WeatherEditor::EnsureDataLoaded()
 	LoadAllWeathers();
 }
 
-void WeatherEditor::OpenEditorWindow()
+void CSEditor::OpenEditorWindow()
 {
 	if (!EditorWindow::CanBeOpen())
 		return;
@@ -105,7 +105,7 @@ void WeatherEditor::OpenEditorWindow()
 	EditorWindow::GetSingleton()->open = true;
 }
 
-void WeatherEditor::ToggleEditorWindow()
+void CSEditor::ToggleEditorWindow()
 {
 	auto* editorWindow = EditorWindow::GetSingleton();
 	if (!editorWindow)
@@ -154,26 +154,26 @@ void LerpDirectional(RE::BGSDirectionalAmbientLightingColors::Directional& oldCo
 	LerpColor(oldColor.z.min, newColor.z.min, changePct);
 }
 
-void WeatherEditor::DrawSettings()
+void CSEditor::DrawSettings()
 {
 	EnsureWeatherListLoaded();
 	bool canOpen = EditorWindow::CanBeOpen();
 	ImGui::BeginDisabled(!canOpen);
-	if (ImGui::Button("Open Editor", { -1, 0 }))
+	if (ImGui::Button("Open CS Editor", { -1, 0 }))
 		OpenEditorWindow();
 	ImGui::EndDisabled();
 
 	// Time controls
 	DrawTimeControls();
 
-	// Basic weather editor info
+	// Basic CS editor info
 	DrawWeatherStatusPanel();
 
 	// Integrated Weather Picker UI
 	DrawWeatherPickerSection();
 }
 
-void WeatherEditor::Prepass()
+void CSEditor::Prepass()
 {
 	if (ShouldPreloadEditorResources()) {
 		EnsureDataLoaded();
@@ -193,7 +193,7 @@ void WeatherEditor::Prepass()
 	editorWindow->UpdateTimeState();
 }
 
-void WeatherEditor::DrawWeatherPickerSection()
+void CSEditor::DrawWeatherPickerSection()
 {
 	ImGui::Spacing();
 	Util::DrawSectionHeader("Weather Details");
@@ -221,7 +221,7 @@ void WeatherEditor::DrawWeatherPickerSection()
 	RenderFeatureWeatherAnalysis();
 }
 
-void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newWeather, float currentWeatherPct)
+void CSEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newWeather, float currentWeatherPct)
 {
 	if (!oldWeather || !newWeather) {
 		// Avoid dereferencing null pointers; nothing to lerp.
@@ -294,7 +294,7 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 	}
 }
 
-void WeatherEditor::DrawTimeControls()
+void CSEditor::DrawTimeControls()
 {
 	ImGui::Spacing();
 	Util::DrawSectionHeader("Time Controls");
@@ -303,7 +303,7 @@ void WeatherEditor::DrawTimeControls()
 	ImGui::Spacing();
 }
 
-void WeatherEditor::DrawWeatherStatusPanel()
+void CSEditor::DrawWeatherStatusPanel()
 {
 	ImGui::Spacing();
 	Util::DrawSectionHeader("Weather Status");
@@ -364,7 +364,7 @@ void WeatherEditor::DrawWeatherStatusPanel()
 // Weather Picker functionality (integrated from WeatherPicker feature)
 // ================================================================================
 
-void WeatherEditor::RenderWeatherDetailsWindow(bool* open)
+void CSEditor::RenderWeatherDetailsWindow(bool* open)
 {
 	if (!open || !*open)
 		return;
@@ -406,7 +406,7 @@ void WeatherEditor::RenderWeatherDetailsWindow(bool* open)
 	ImGui::End();
 }
 
-ImVec4 WeatherEditor::GetWeatherTypeColor(RE::TESWeather* weather)
+ImVec4 CSEditor::GetWeatherTypeColor(RE::TESWeather* weather)
 {
 	if (!weather) {
 		return Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
@@ -440,7 +440,7 @@ ImVec4 WeatherEditor::GetWeatherTypeColor(RE::TESWeather* weather)
 }
 
 // --- Helper: Display basic weather info (name, flags, percentage) ---
-void WeatherEditor::DisplayWeatherBasicInfo(RE::TESWeather* weather, float weatherPct)
+void CSEditor::DisplayWeatherBasicInfo(RE::TESWeather* weather, float weatherPct)
 {
 	if (!weather) {
 		ImGui::BulletText("No Weather Found");
@@ -449,13 +449,13 @@ void WeatherEditor::DisplayWeatherBasicInfo(RE::TESWeather* weather, float weath
 	std::string weatherText = Util::FormatWeather(weather);
 	ImGui::Bullet();
 	ImGui::SameLine();
-	bool showTooltip = WeatherEditor::RenderMultiColorWeatherName(weather, weatherText);
+	bool showTooltip = CSEditor::RenderMultiColorWeatherName(weather, weatherText);
 	if (showTooltip) {
 		ImGui::BeginTooltip();
 		ImGui::Text("Name: %s", weather->GetName() ? weather->GetName() : "Unnamed");
 		ImGui::Text("Editor ID: %s", weather->GetFormEditorID() ? weather->GetFormEditorID() : "None");
 		ImGui::Text("Form ID: 0x%08X", weather->GetFormID());
-		auto flagNames = WeatherEditor::GetWeatherFlagNames(weather);
+		auto flagNames = CSEditor::GetWeatherFlagNames(weather);
 		if (!flagNames.empty()) {
 			std::string joinedFlags = flagNames[0];
 			for (size_t j = 1; j < flagNames.size(); ++j) {
@@ -472,7 +472,7 @@ void WeatherEditor::DisplayWeatherBasicInfo(RE::TESWeather* weather, float weath
 	}
 }
 
-void WeatherEditor::DisplayPrecipitationInfo(RE::TESWeather* weather)
+void CSEditor::DisplayPrecipitationInfo(RE::TESWeather* weather)
 {
 	if (!weather || !weather->precipitationData) {
 		ImGui::BulletText("Particle Density: No precipitation data");
@@ -500,7 +500,7 @@ void WeatherEditor::DisplayPrecipitationInfo(RE::TESWeather* weather)
 	}
 }
 
-void WeatherEditor::DisplayLightningInfo(RE::TESWeather* weather, bool showInteractiveElements)
+void CSEditor::DisplayLightningInfo(RE::TESWeather* weather, bool showInteractiveElements)
 {
 	if (!weather || (uint8_t)weather->data.thunderLightningFrequency == 0)
 		return;
@@ -554,7 +554,7 @@ void WeatherEditor::DisplayLightningInfo(RE::TESWeather* weather, bool showInter
 	}
 }
 
-void WeatherEditor::DisplayWindInfo(RE::TESWeather* weather)
+void CSEditor::DisplayWindInfo(RE::TESWeather* weather)
 {
 	auto sky = globals::game::sky;
 	if (!weather || (weather->data.windSpeed <= 0 && (!sky || sky->windSpeed <= 0.0f)))
@@ -616,15 +616,15 @@ void WeatherEditor::DisplayWindInfo(RE::TESWeather* weather)
 }
 
 // --- Main function: now just delegates to helpers ---
-void WeatherEditor::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct, bool showInteractiveElements)
+void CSEditor::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct, bool showInteractiveElements)
 {
-	WeatherEditor::DisplayWeatherBasicInfo(weather, weatherPct);
-	WeatherEditor::DisplayPrecipitationInfo(weather);
-	WeatherEditor::DisplayLightningInfo(weather, showInteractiveElements);
-	WeatherEditor::DisplayWindInfo(weather);
+	CSEditor::DisplayWeatherBasicInfo(weather, weatherPct);
+	CSEditor::DisplayPrecipitationInfo(weather);
+	CSEditor::DisplayLightningInfo(weather, showInteractiveElements);
+	CSEditor::DisplayWindInfo(weather);
 }
 
-void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
+void CSEditor::RenderWeatherControls(RE::Sky* sky)
 {
 	// Weather Selection Section (only show interactive elements in inline mode)
 	static bool weatherControlsExpanded = true;
@@ -706,7 +706,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 		sky->ResetWeather();
 		// Update the selection box to reflect the reset weather without double-applying
 		s_selectedWeatherIdx = FindWeatherIndex(sky->defaultWeather);
-		logger::info("[WeatherEditor] Reset weather to default");
+		logger::info("[CSEditor] Reset weather to default");
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -788,7 +788,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 					editorWindow->LockWeather(selectedWeather);
 
 				Util::ClearComboSearch(kWeatherSearchId);
-				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
+				logger::info("[CSEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
 				break;
 			}
 
@@ -809,7 +809,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	}
 }
 
-void WeatherEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements)
+void CSEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements)
 {
 	ImGui::Spacing();
 	ImGui::Spacing();
@@ -845,7 +845,7 @@ void WeatherEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInter
 	}
 }
 
-void WeatherEditor::RenderCoreWeatherDetails(bool showInteractiveElements)
+void CSEditor::RenderCoreWeatherDetails(bool showInteractiveElements)
 {
 	const auto showError = [](const char* msg) {
 		auto menu = Menu::GetSingleton();
@@ -868,7 +868,7 @@ void WeatherEditor::RenderCoreWeatherDetails(bool showInteractiveElements)
 	}
 }
 
-void WeatherEditor::LoadAllWeathers()
+void CSEditor::LoadAllWeathers()
 {
 	if (s_weathersLoaded)
 		return;
@@ -892,7 +892,7 @@ void WeatherEditor::LoadAllWeathers()
 	}
 }
 
-void WeatherEditor::UpdateFilteredWeathers()
+void CSEditor::UpdateFilteredWeathers()
 {
 	s_filteredWeathers.clear();
 	for (auto weather : s_allWeathers) {
@@ -931,7 +931,7 @@ void WeatherEditor::UpdateFilteredWeathers()
 	}
 }
 
-int WeatherEditor::FindWeatherIndex(RE::TESWeather* targetWeather)
+int CSEditor::FindWeatherIndex(RE::TESWeather* targetWeather)
 {
 	if (!targetWeather)
 		return -1;
@@ -943,13 +943,13 @@ int WeatherEditor::FindWeatherIndex(RE::TESWeather* targetWeather)
 	return -1;
 }
 
-void WeatherEditor::RenderFeatureWeatherAnalysis()
+void CSEditor::RenderFeatureWeatherAnalysis()
 {
 	// Iterate through all loaded features to show their weather analysis
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (feature->loaded) {
-			// Skip the WeatherEditor itself to avoid recursion
-			if (feature == &globals::features::weatherEditor) {
+			// Skip the CSEditor itself to avoid recursion
+			if (feature == &globals::features::csEditor) {
 				continue;
 			}
 
@@ -980,7 +980,7 @@ void WeatherEditor::RenderFeatureWeatherAnalysis()
 	}
 }
 
-std::vector<std::string> WeatherEditor::GetWeatherFlagNames(RE::TESWeather* weather)
+std::vector<std::string> CSEditor::GetWeatherFlagNames(RE::TESWeather* weather)
 {
 	std::vector<std::string> flagNames;
 	if (!weather) {
@@ -1032,7 +1032,7 @@ std::vector<std::string> WeatherEditor::GetWeatherFlagNames(RE::TESWeather* weat
 	return flagNames;
 }
 
-bool WeatherEditor::RenderMultiColorWeatherName(RE::TESWeather* weather, const std::string& weatherName)
+bool CSEditor::RenderMultiColorWeatherName(RE::TESWeather* weather, const std::string& weatherName)
 {
 	if (!weather) {
 		ImGui::Text("%s", weatherName.c_str());
@@ -1094,7 +1094,7 @@ bool WeatherEditor::RenderMultiColorWeatherName(RE::TESWeather* weather, const s
 }
 
 // Helper function to get color for a specific weather flag
-ImVec4 WeatherEditor::GetWeatherFlagColor(RE::TESWeather::WeatherDataFlag flag)
+ImVec4 CSEditor::GetWeatherFlagColor(RE::TESWeather::WeatherDataFlag flag)
 {
 	const auto& theme = Menu::GetSingleton()->GetTheme();
 
@@ -1117,7 +1117,7 @@ ImVec4 WeatherEditor::GetWeatherFlagColor(RE::TESWeather::WeatherDataFlag flag)
 }
 
 // Helper function to get color for a specific flag name
-ImVec4 WeatherEditor::GetWeatherFlagColorByName(const std::string& flagName)
+ImVec4 CSEditor::GetWeatherFlagColorByName(const std::string& flagName)
 {
 	// Map display flag names back to enum values
 	// Note: We use manual mapping here because the display names (from GetWeatherFlagNames)
@@ -1140,7 +1140,7 @@ ImVec4 WeatherEditor::GetWeatherFlagColorByName(const std::string& flagName)
 	return Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
 }
 
-std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
+std::string CSEditor::GetDisplayName(const RE::TESWeather* weather)
 {
 	if (!weather) {
 		return "Unknown";
@@ -1156,7 +1156,7 @@ std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
 	return std::to_string(weather->GetFormID());
 }
 
-void WeatherEditor::DrawOverlay()
+void CSEditor::DrawOverlay()
 {
 	auto player = RE::PlayerCharacter::GetSingleton();
 	if (!player || !player->parentCell)
@@ -1175,7 +1175,7 @@ void WeatherEditor::DrawOverlay()
 	s_prevOverlayVisible = overlayVisible;
 }
 
-bool WeatherEditor::IsOverlayVisible() const
+bool CSEditor::IsOverlayVisible() const
 {
 	return WeatherDetailsWindow.ShowInOverlay;
 }
