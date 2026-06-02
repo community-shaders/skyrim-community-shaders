@@ -319,8 +319,16 @@ namespace Util
 	/** Returns theme text color if monochrome icons enabled, otherwise white. */
 	ImVec4 GetIconTint();
 
-	/// ImGui::Begin() wrapper that replaces the native close button with a rounded one.
+	/// Draws a pill-rounded hover/active fill over a button rect.
+	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, ImDrawList* drawList = nullptr);
+	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, float rounding, ImDrawList* drawList);
+
+	/// Draws the rounded hover/active fill for the last submitted item.
+	bool DrawCurrentItemRoundedButtonHighlight(ImDrawList* drawList = nullptr);
+
+	/// ImGui::Begin() wrappers that replace native title-bar button highlights with rounded ones.
 	bool BeginWithRoundedClose(const char* name, bool* p_open, ImGuiWindowFlags flags = 0);
+	bool BeginPopupModalWithRoundedClose(const char* name, bool* p_open = nullptr, ImGuiWindowFlags flags = 0);
 
 	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)

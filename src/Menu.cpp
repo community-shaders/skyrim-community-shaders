@@ -684,7 +684,7 @@ void Menu::DrawSettings()
 		windowFlags |= ImGuiWindowFlags_NoTitleBar;
 	}
 
-	ImGui::Begin(title.c_str(), &IsEnabled, windowFlags);
+	Util::BeginWithRoundedClose(title.c_str(), &IsEnabled, windowFlags);
 	{
 		// Update docking state tracking
 		bool isDocked = ImGui::IsWindowDocked();

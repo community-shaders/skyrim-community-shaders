@@ -385,7 +385,7 @@ void CSEditor::RenderWeatherDetailsWindow(bool* open)
 	}
 
 	ImGui::SetNextWindowSize(ImVec2(600 * scale, 800 * scale), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Weather Details##Popup", open, ImGuiWindowFlags_None)) {
+	if (Util::BeginWithRoundedClose("Weather Details##Popup", open, ImGuiWindowFlags_None)) {
 		// Remember window position for next frame
 		ImVec2 currentPos = ImGui::GetWindowPos();
 		if (currentPos.x != WeatherDetailsWindow.Position.x || currentPos.y != WeatherDetailsWindow.Position.y) {

@@ -22,6 +22,7 @@
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 #include "WeatherVariableRegistry.h"
 
 namespace
@@ -893,7 +894,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
-	if (ImGui::BeginPopupModal("Setting Change Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (Util::BeginPopupModalWithRoundedClose("Setting Change Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::TextWrapped("Some of your settings have been automatically adjusted due to feature incompatibilities.");
 		ImGui::Spacing();
 		ImGui::Separator();
