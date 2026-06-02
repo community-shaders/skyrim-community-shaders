@@ -15,21 +15,21 @@ public:
 	Settings settings;
 
 	virtual inline std::string GetName() override { return "Cloud Shadows"; }
+	virtual std::string GetDisplayName() override { return T("feature.cloud_shadows.name", "Cloud Shadows"); }
 	virtual inline std::string GetShortName() override { return "CloudShadows"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kSky; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CLOUD_SHADOWS"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Adds realistic cloud shadows that move across the landscape, creating dynamic lighting changes as clouds pass overhead, enhancing atmospheric immersion.",
-			{ "Dynamic cloud shadow projection on terrain and objects",
-				"Configurable shadow opacity for artistic control",
-				"Real-time shadow movement synchronized with cloud motion",
-				"Cubemap-based shadow calculation for accurate projection",
-				"Enhanced sky rendering integration" }
-		};
-	}
+		return { T("feature.cloud_shadows.description", "Adds realistic cloud shadows that move across the landscape, creating dynamic lighting changes as clouds pass overhead, enhancing atmospheric immersion."),
+			{ T("feature.cloud_shadows.key_feature_1", "Dynamic cloud shadow projection on terrain and objects"),
+				T("feature.cloud_shadows.key_feature_2", "Configurable shadow opacity for artistic control"),
+				T("feature.cloud_shadows.key_feature_3", "Real-time shadow movement synchronized with cloud motion"),
+				T("feature.cloud_shadows.key_feature_4", "Cubemap-based shadow calculation for accurate projection"),
+				T("feature.cloud_shadows.key_feature_5", "Enhanced sky rendering integration") } };
+	};
+
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	bool overrideSky = false;

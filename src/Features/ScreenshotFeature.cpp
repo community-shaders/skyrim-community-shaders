@@ -9,8 +9,12 @@
 
 #include "Features/HDRDisplay.h"
 #include "Features/Upscaling.h"
+#include "Globals.h"
+#include "I18n/I18n.h"
 #include "Menu.h"
 #include "Utils/FileSystem.h"
+
+#define I18N_KEY_PREFIX "feature.screenshot."
 
 #include <DirectXTex.h>
 #include <sk_hdr_png.hpp>
@@ -528,8 +532,8 @@ namespace
 		}
 
 		const GUID& codec = saveAsPng ?
-			DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG) :
-			DirectX::GetWICCodec(DirectX::WIC_CODEC_BMP);
+		                        DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG) :
+		                        DirectX::GetWICCodec(DirectX::WIC_CODEC_BMP);
 		return SUCCEEDED(DirectX::SaveToWICFile(
 			*saveImage,
 			DirectX::WIC_FLAGS_NONE,
@@ -606,17 +610,18 @@ void ScreenshotFeature::SaveSettings(json& a_json)
 
 void ScreenshotFeature::DrawSettings()
 {
-	ImGui::TextWrapped("Capture and save run asynchronously without stalling the game.");
+	ImGui::TextWrapped("%s", T(TKEY("async_note"), "Capture and save run asynchronously without stalling the game."));
 
 	const bool hdrCaptureAvailable = globals::features::hdrDisplay.loaded &&
 	                                 globals::features::hdrDisplay.settings.enableHDR;
 
 	if (hdrCaptureAvailable) {
-		ImGui::TextWrapped(
-			"HDR enabled: saves the displayed frame as PNG with HDR10 metadata (48 bpp RGB, cICP/cLLi). "
-			"Use an HDR-aware viewer such as Windows Photos (HDR on) or Special K SKIF.");
+		ImGui::TextWrapped("%s",
+			T(TKEY("hdr_note"),
+				"HDR enabled: saves the displayed frame as PNG with HDR10 metadata (48 bpp RGB, cICP/cLLi). "
+				"Use an HDR-aware viewer such as Windows Photos (HDR on) or Special K SKIF."));
 		ImGui::SliderInt(
-			"HDR PNG bit depth",
+			T(TKEY("hdr_bit_depth"), "HDR PNG bit depth"),
 			reinterpret_cast<int*>(&hdrPngBitDepth),
 			7,
 			16,
@@ -624,22 +629,24 @@ void ScreenshotFeature::DrawSettings()
 			ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text(
-				"Quantization for the 48 bpp RGB PNG payload. 11-bit is a good default; "
-				"higher values increase file size with diminishing returns.");
+				"%s", T(TKEY("hdr_bit_depth_tooltip"),
+						  "Quantization for the 48 bpp RGB PNG payload. 11-bit is a good default; "
+						  "higher values increase file size with diminishing returns."));
 
 	} else {
-		ImGui::TextWrapped(
-			"Enable HDR Display to capture HDR PNG screenshots with HDR10 metadata. "
-			"SDR and VR captures use the lossless format selected below.");
+		ImGui::TextWrapped("%s",
+			T(TKEY("sdr_note"),
+				"Enable HDR Display to capture HDR PNG screenshots with HDR10 metadata. "
+				"SDR and VR captures use the lossless format selected below."));
 	}
 
-	if (ImGui::Button("Take Screenshot Now")) {
+	if (ImGui::Button(T(TKEY("take_screenshot"), "Take Screenshot Now"))) {
 		captureRequested = true;
 	}
 	ImGui::SameLine();
-	ImGui::Checkbox("Apply crop", &applyCropToScreenshot);
+	ImGui::Checkbox(T(TKEY("apply_crop"), "Apply crop"), &applyCropToScreenshot);
 
-	ImGui::SeparatorText("Output");
+	ImGui::SeparatorText(T(TKEY("output"), "Output"));
 
 	ImGui::Checkbox("Copy saved file to clipboard", &copyToClipboard);
 	if (auto _tt = Util::HoverTooltipWrapper())
@@ -658,7 +665,7 @@ void ScreenshotFeature::DrawSettings()
 
 	char buf[260];
 	strncpy_s(buf, sizeof(buf), screenshotPath.c_str(), _TRUNCATE);
-	ImGui::PushItemWidth(-FLT_MIN - 120.0f);  // leave room for Open button + label
+	ImGui::PushItemWidth(-FLT_MIN - 120.0f);
 	if (ImGui::InputText("##ScreenshotFolder", buf, sizeof(buf))) {
 		screenshotPath = buf;
 	}
@@ -666,33 +673,35 @@ void ScreenshotFeature::DrawSettings()
 	ImGui::SameLine();
 	const bool canOpen = !screenshotPath.empty();
 	ImGui::BeginDisabled(!canOpen);
-	if (ImGui::Button("Open")) {
+	if (ImGui::Button(T(TKEY("open"), "Open"))) {
 		std::error_code ec;
 		std::filesystem::create_directories(screenshotPath, ec);
 		ShellExecuteA(nullptr, "open", screenshotPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 	}
 	ImGui::EndDisabled();
 	ImGui::SameLine();
-	ImGui::Text("Folder");
+	ImGui::Text("%s", T(TKEY("folder"), "Folder"));
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Relative paths resolve against the Skyrim install dir.");
-		ImGui::Text("Absolute paths (e.g. D:\\Captures) save there directly.");
+		ImGui::Text("%s", T(TKEY("folder_tooltip"),
+							  "Relative paths resolve against the Skyrim install dir.\n"
+							  "Absolute paths (e.g. D:\\Captures) save there directly."));
 	}
 
 	auto& menuSettings = Menu::GetSingleton()->GetSettings();
 	Util::InputComboWidget(
-		"Hotkey",
+		T(TKEY("hotkey"), "Hotkey"),
 		menuSettings.ScreenshotKey,
 		Menu::GetSingleton()->settingScreenshotKey,
 		"Change##ScreenshotFeature");
 
 	if (HotkeyCollidesWithVanilla()) {
 		Util::Text::WrappedWarning(
-			"This hotkey collides with vanilla PrintScreen; both saves will fire. "
-			"Set bAllowScreenShot=0 in Skyrim.ini to suppress vanilla, or pick a different hotkey above.");
+			T(TKEY("hotkey_collision"),
+				"This hotkey collides with vanilla PrintScreen; both saves will fire. "
+				"Set bAllowScreenShot=0 in Skyrim.ini to suppress vanilla, or pick a different hotkey above."));
 	}
 
-	ImGui::SeparatorText("Crop");
+	ImGui::SeparatorText(T(TKEY("crop"), "Crop"));
 
 	// Preview reflects what Capture() would save. Full source frame so VR users
 	// can drag-crop across the eye boundary if a seeded preset doesn't fit.
@@ -953,3 +962,4 @@ void ScreenshotFeature::Capture()
 	screenshot.copyToClipboard = copyToClipboard;
 	EnqueueScreenshot(std::move(screenshot));
 }
+#undef I18N_KEY_PREFIX

@@ -561,3 +561,66 @@ Full details: [Developers wiki — Patch Release Process](https://github.com/com
 -   **Graphics State Corruption**: Minimize DirectX state changes; restore state after modifications
 -   **Thread Safety**: Graphics operations must consider Skyrim's rendering thread vs game logic thread
 -   **DRY Violations in Cross-Cutting Refactors**: When adding a utility pattern across many files (e.g., resource naming, debug hooks), check whether the implementation exists in multiple places before writing a new one. For example, `Buffer.h` helper classes and raw `device->Create*` callsites both need `SetResourceName` — ensure they share a single implementation, not duplicate GUID definitions or parallel helper functions. Use a forward declaration in headers to delegate to the canonical implementation in `Utils/D3D.cpp` rather than re-implementing inline.
+
+## Internationalization (i18n) System
+
+### Using Translations in Code
+
+All user-visible strings must use the translation system. The source of truth for English strings is `package/SKSE/Plugins/CommunityShaders/Translations/en.json`.
+
+**API**:
+
+```cpp
+// T() macro: key + inline English default
+ImGui::Text("%s", T("menu.faq.q10", "My new FAQ question?"));
+
+// TKEY macro: for feature files, prefixes are defined to keep keys short
+#define I18N_KEY_PREFIX "feature.my_feature."
+ImGui::Checkbox(T(TKEY("enabled"), "Enabled"), &settings.enabled);
+#undef I18N_KEY_PREFIX
+```
+
+**After adding new translatable strings**, regenerate `en.json`:
+
+```bash
+python tools/extract-i18n.py --write
+```
+
+### Key Naming Convention
+
+```
+menu.<page>.<item>              — Menu UI labels
+menu.<page>.<item>_tooltip      — Tooltip text
+feature.<short_name>.<setting>  — Feature settings
+overlay.<type>                  — Overlay messages
+common.<term>                   — Shared/reused text
+ui.<component>                  — Utility UI
+weather_editor.<item>           — Weather editor
+```
+
+### Translation Rules (Must Follow When Writing Strings)
+
+| Rule                              | Detail                                                        |
+| --------------------------------- | ------------------------------------------------------------- |
+| **Translate values, not keys**    | Keys (left side of JSON) are never translated                 |
+| **Preserve placeholders**         | `{version}`, `{count}`, `{key}` must be kept in all languages |
+| **Preserve format specifiers**    | `%s`, `%d`, `%.1f` must be kept                               |
+| **`\n` = line break**             | Line break positions may be adjusted                          |
+| **Don't translate `##` suffixes** | If a value contains `##xxx`, the part after `##` stays as-is  |
+| **Partial translations OK**       | Missing keys automatically fall back to English               |
+
+### CI Validation (`pr-i18n.yaml`)
+
+The CI workflow checks:
+
+-   `en.json` is in sync with source code (`--check`)
+-   No orphaned keys exist (`--orphans`)
+-   Translation files have valid JSON format
+-   Placeholders `{name}` are consistent across languages
+
+**Before submitting PRs that add/modify UI strings**, run locally:
+
+```bash
+python tools/extract-i18n.py --check
+python tools/extract-i18n.py --orphans
+```

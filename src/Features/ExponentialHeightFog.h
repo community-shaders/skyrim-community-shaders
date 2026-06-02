@@ -8,21 +8,18 @@ private:
 public:
 	virtual bool SupportsVR() override { return true; };
 	virtual inline std::string GetName() override { return "Exponential Height Fog"; }
+	virtual std::string GetDisplayName() override { return T("feature.exponential_height_fog.name", "Exponential Height Fog"); }
 	virtual inline std::string GetShortName() override { return "ExponentialHeightFog"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Exponential Height Fog adds a realistic fog effect that increases in density with height, enhancing atmospheric depth and immersion in the game environment.",
-			{
-				"Added exponential height fog effect",
-				"Adapted to vanilla fog settings",
-				"Creates atmospheric depth",
-			}
-		};
-	}
+		return { T("feature.exponential_height_fog.description", "Exponential Height Fog adds a realistic fog effect that increases in density with height, enhancing atmospheric depth and immersion in the game environment."),
+			{ T("feature.exponential_height_fog.key_feature_1", "Added exponential height fog effect"),
+				T("feature.exponential_height_fog.key_feature_2", "Adapted to vanilla fog settings"),
+				T("feature.exponential_height_fog.key_feature_3", "Creates atmospheric depth") } };
+	};
 
 	virtual inline std::string_view GetShaderDefineName() override { return "EXP_HEIGHT_FOG"; }
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };

@@ -1,6 +1,9 @@
 #include "ExponentialHeightFog.h"
 
+#include "I18n/I18n.h"
 #include "WeatherVariableRegistry.h"
+
+#define I18N_KEY_PREFIX "feature.exp_height_fog."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ExponentialHeightFog::Settings,
@@ -37,33 +40,33 @@ void ExponentialHeightFog::SaveSettings(json& o_json)
 
 void ExponentialHeightFog::DrawSettings()
 {
-	ImGui::Checkbox("Enable Exponential Height Fog", (bool*)&settings.enabled);
-	Util::WeatherUI::SliderFloat("Start Distance", this, "startDistance", &settings.startDistance, 0.0f, 100000.0f, "%.1f");
-	Util::WeatherUI::SliderFloat("Fog Height", this, "fogHeight", &settings.fogHeight, -22000.0f, 22000.0f, "%.1f");
-	Util::WeatherUI::SliderFloat("Fog Height Falloff", this, "fogHeightFalloff", &settings.fogHeightFalloff, 0.001f, 2.0f, "%.3f");
-	Util::WeatherUI::ColorEdit4("Fog Inscattering Color", this, "fogInscatteringColor", (float*)&settings.fogInscatteringColor);
-	Util::WeatherUI::SliderFloat("Original Fog Color Amount", this, "originalFogColorAmount", &settings.originalFogColorAmount, 0.0f, 1.0f, "%.2f");
-	Util::WeatherUI::SliderFloat("Fog Density", this, "fogDensity", &settings.fogDensity, 0.0f, 1.0f, "%.3f");
-	Util::WeatherUI::SliderFloat("Directional Light Inscattering Multiplier", this, "directionalInscatteringMultiplier", &settings.directionalInscatteringMultiplier, 0.0f, 10.0f, "%.2f");
-	Util::WeatherUI::SliderFloat("Sunlight Attenuation Amount", this, "sunlightAttenuationAmount", &settings.sunlightAttenuationAmount, 0.0f, 1.0f, "%.2f");
-	Util::WeatherUI::SliderFloat("Directional Light Inscattering Anisotropy", this, "directionalInscatteringAnisotropy", &settings.directionalInscatteringAnisotropy, -0.99f, 0.99f, "%.3f");
+	ImGui::Checkbox(T(TKEY("enable_exp_height_fog"), "Enable Exponential Height Fog"), (bool*)&settings.enabled);
+	Util::WeatherUI::SliderFloat(T(TKEY("start_distance"), "Start Distance"), this, "startDistance", &settings.startDistance, 0.0f, 100000.0f, "%.1f");
+	Util::WeatherUI::SliderFloat(T(TKEY("fog_height"), "Fog Height"), this, "fogHeight", &settings.fogHeight, -22000.0f, 22000.0f, "%.1f");
+	Util::WeatherUI::SliderFloat(T(TKEY("fog_height_falloff"), "Fog Height Falloff"), this, "fogHeightFalloff", &settings.fogHeightFalloff, 0.001f, 2.0f, "%.3f");
+	Util::WeatherUI::ColorEdit4(T(TKEY("fog_inscattering_color"), "Fog Inscattering Color"), this, "fogInscatteringColor", (float*)&settings.fogInscatteringColor);
+	Util::WeatherUI::SliderFloat(T(TKEY("original_fog_color_amount"), "Original Fog Color Amount"), this, "originalFogColorAmount", &settings.originalFogColorAmount, 0.0f, 1.0f, "%.2f");
+	Util::WeatherUI::SliderFloat(T(TKEY("fog_density"), "Fog Density"), this, "fogDensity", &settings.fogDensity, 0.0f, 1.0f, "%.3f");
+	Util::WeatherUI::SliderFloat(T(TKEY("dir_inscattering_mul"), "Directional Light Inscattering Multiplier"), this, "directionalInscatteringMultiplier", &settings.directionalInscatteringMultiplier, 0.0f, 10.0f, "%.2f");
+	Util::WeatherUI::SliderFloat(T(TKEY("sunlight_attenuation"), "Sunlight Attenuation Amount"), this, "sunlightAttenuationAmount", &settings.sunlightAttenuationAmount, 0.0f, 1.0f, "%.2f");
+	Util::WeatherUI::SliderFloat(T(TKEY("dir_inscattering_anisotropy"), "Directional Light Inscattering Anisotropy"), this, "directionalInscatteringAnisotropy", &settings.directionalInscatteringAnisotropy, -0.99f, 0.99f, "%.3f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Controls the asymmetry of inscattering via the Henyey-Greenstein phase function.\n"
-			"Positive values produce forward scattering (glow around sun).\n"
-			"Zero is isotropic. Negative values produce back scattering.");
+		ImGui::Text("%s", T(TKEY("dir_inscattering_anisotropy_tooltip"),
+							  "Controls the asymmetry of inscattering via the Henyey-Greenstein phase function.\n"
+							  "Positive values produce forward scattering (glow around sun).\n"
+							  "Zero is isotropic. Negative values produce back scattering."));
 	}
-	ImGui::Checkbox("Disable Vanilla Fog", (bool*)&settings.disableVanillaFog);
+	ImGui::Checkbox(T(TKEY("disable_vanilla_fog"), "Disable Vanilla Fog"), (bool*)&settings.disableVanillaFog);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Disables the vanilla fog entirely. Only exponential height fog will be applied.");
+		ImGui::Text("%s", T(TKEY("disable_vanilla_fog_tooltip"), "Disables the vanilla fog entirely. Only exponential height fog will be applied."));
 	}
-	Util::WeatherUI::Checkbox("Apply Vanilla Fade", this, "respectVanillaFogFade", (bool*)&settings.respectVanillaFogFade);
+	Util::WeatherUI::Checkbox(T(TKEY("apply_vanilla_fade"), "Apply Vanilla Fade"), this, "respectVanillaFogFade", (bool*)&settings.respectVanillaFogFade);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Applies vanilla fade brightness to exponential height fog.");
+		ImGui::Text("%s", T(TKEY("apply_vanilla_fade_tooltip"), "Applies vanilla fade brightness to exponential height fog."));
 	}
-	ImGui::Checkbox("Use Dynamic Cubemaps for Inscattering", (bool*)&settings.useDynamicCubemaps);
-	Util::WeatherUI::ColorEdit4("Inscattering Cubemap Tint", this, "inscatteringTint", (float*)&settings.inscatteringTint);
-	ImGui::SliderFloat("Cubemap Mip Level", &settings.cubemapMipLevel, 1.0f, 7.0f, "%.1f");
+	ImGui::Checkbox(T(TKEY("use_dynamic_cubemaps"), "Use Dynamic Cubemaps for Inscattering"), (bool*)&settings.useDynamicCubemaps);
+	Util::WeatherUI::ColorEdit4(T(TKEY("inscattering_cubemap_tint"), "Inscattering Cubemap Tint"), this, "inscatteringTint", (float*)&settings.inscatteringTint);
+	ImGui::SliderFloat(T(TKEY("cubemap_mip_level"), "Cubemap Mip Level"), &settings.cubemapMipLevel, 1.0f, 7.0f, "%.1f");
 }
 
 void ExponentialHeightFog::RegisterWeatherVariables()
@@ -167,3 +170,4 @@ void ExponentialHeightFog::RegisterWeatherVariables()
 			return factor > 0.5f ? to : from;
 		}));
 }
+#undef I18N_KEY_PREFIX

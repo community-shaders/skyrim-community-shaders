@@ -1,6 +1,11 @@
 #include "ReferenceEffectWidget.h"
+#include "../../I18n/I18n.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
+
+#include <format>
+
+#define I18N_KEY_PREFIX "cs_editor."
 
 namespace
 {
@@ -26,15 +31,19 @@ void ReferenceEffectWidget::DrawWidget()
 
 			auto editorWindow = EditorWindow::GetSingleton();
 			auto drawFormPicker = [&](const char* label, auto& currentForm, const auto& widgets) {
+				const char* displayLabel = label == ReferenceEffectSetting::kArtObject ?
+				                               T(TKEY("art_object"), "Art Object") :
+				                               T(TKEY("effect_shader"), "Effect Shader");
+				const auto controlLabel = std::format("{}##{}", displayLabel, label);
 				return DrawWithHighlight(label, [&]() {
-					return WeatherUtils::DrawFormPickerCached(label, currentForm, widgets, false, true);
+					return WeatherUtils::DrawFormPickerCached(controlLabel.c_str(), currentForm, widgets, false, true);
 				});
 			};
 
 			if (DrawIfMatchesSearch(ReferenceEffectSetting::kArtObject, [&](const char* label) {
 					ImGui::SeparatorText(label);
 					if (editorWindow->artObjectWidgets.empty()) {
-						ImGui::TextDisabled("No Art Objects available");
+						ImGui::TextDisabled("%s", T(TKEY("no_art_objects_available"), "No Art Objects available"));
 						return false;
 					}
 					return drawFormPicker(label, settings.artObject, editorWindow->artObjectWidgets);
@@ -43,14 +52,14 @@ void ReferenceEffectWidget::DrawWidget()
 			if (DrawIfMatchesSearch(ReferenceEffectSetting::kEffectShader, [&](const char* label) {
 					ImGui::SeparatorText(label);
 					if (editorWindow->effectShaderWidgets.empty()) {
-						ImGui::TextDisabled("No Effect Shaders available");
+						ImGui::TextDisabled("%s", T(TKEY("no_effect_shaders_available"), "No Effect Shaders available"));
 						return false;
 					}
 					return drawFormPicker(label, settings.effectShader, editorWindow->effectShaderWidgets);
 				}))
 				changed = true;
 			if (MatchesAnySearch({ ReferenceEffectSetting::kFaceTarget, ReferenceEffectSetting::kAttachToCamera, ReferenceEffectSetting::kInheritRotation })) {
-				ImGui::SeparatorText("Flags");
+				ImGui::SeparatorText(T(TKEY("flags"), "Flags"));
 				if (WeatherUtils::DrawCheckbox(ReferenceEffectSetting::kFaceTarget, settings.faceTarget))
 					changed = true;
 				if (WeatherUtils::DrawCheckbox(ReferenceEffectSetting::kAttachToCamera, settings.attachToCamera))
@@ -68,6 +77,8 @@ void ReferenceEffectWidget::DrawWidget()
 	}
 	ImGui::End();
 }
+
+#undef I18N_KEY_PREFIX
 
 void ReferenceEffectWidget::LoadSettings()
 {
@@ -167,10 +178,10 @@ bool ReferenceEffectWidget::HasUnsavedChanges() const
 std::vector<Widget::SearchResult> ReferenceEffectWidget::CollectSearchableSettings() const
 {
 	return {
-		{ ReferenceEffectSetting::kArtObject, "", ReferenceEffectSetting::kArtObject },
-		{ ReferenceEffectSetting::kEffectShader, "", ReferenceEffectSetting::kEffectShader },
-		{ ReferenceEffectSetting::kFaceTarget, "", ReferenceEffectSetting::kFaceTarget },
-		{ ReferenceEffectSetting::kAttachToCamera, "", ReferenceEffectSetting::kAttachToCamera },
-		{ ReferenceEffectSetting::kInheritRotation, "", ReferenceEffectSetting::kInheritRotation },
+		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kArtObject), "", ReferenceEffectSetting::kArtObject },
+		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kEffectShader), "", ReferenceEffectSetting::kEffectShader },
+		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kFaceTarget), "", ReferenceEffectSetting::kFaceTarget },
+		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kAttachToCamera), "", ReferenceEffectSetting::kAttachToCamera },
+		{ WeatherUtils::TranslateControlLabel(ReferenceEffectSetting::kInheritRotation), "", ReferenceEffectSetting::kInheritRotation },
 	};
 }

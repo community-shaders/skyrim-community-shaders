@@ -1,6 +1,7 @@
 #include "UI.h"
 
 #include "../CSEditor/EditorWindow.h"
+#include "../I18n/I18n.h"
 #include "D3D.h"
 #include "FileSystem.h"
 #include "Menu.h"
@@ -281,21 +282,22 @@ namespace Util
 		if (!showClearCacheConfirmation)
 			return;
 
-		ImGui::OpenPopup("Clear Shader Cache?");
+		ImGui::OpenPopup(T("ui.clear_shader_cache", "Clear Shader Cache?"));
 
-		if (auto popup = CenteredPopupModal("Clear Shader Cache?", &showClearCacheConfirmation)) {
-			ImGui::Text("Are you sure you want to clear the shader cache?");
+		if (auto popup = CenteredPopupModal(T("ui.clear_shader_cache", "Clear Shader Cache?"), &showClearCacheConfirmation)) {
+			ImGui::Text("%s", T("ui.clear_cache_confirm", "Are you sure you want to clear the shader cache?"));
 			ImGui::Spacing();
 			ImGui::Spacing();
 			ImGui::TextWrapped(
-				"This will clear all compiled shaders from memory and disk cache (if enabled). "
-				"Shaders will be recompiled when the game next encounters them.");
+				"%s", T("ui.clear_cache_desc",
+						  "This will clear all compiled shaders from memory and disk cache (if enabled). "
+						  "Shaders will be recompiled when the game next encounters them."));
 			ImGui::Spacing();
 			ImGui::Spacing();
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			ImGui::Checkbox("Don't ask me again", &dontAskAgainCheckbox);
+			ImGui::Checkbox(T("ui.dont_ask_again", "Don't ask me again"), &dontAskAgainCheckbox);
 
 			ImGui::Spacing();
 
@@ -308,7 +310,7 @@ namespace Util
 			if (offset > 0)
 				ImGui::SetCursorPosX(offset);
 
-			if (ImGui::Button("Clear Cache", ImVec2(buttonWidth, 0))) {
+			if (ImGui::Button(T("ui.clear_cache", "Clear Cache"), ImVec2(buttonWidth, 0))) {
 				// Save preference if checkbox is checked
 				if (dontAskAgainCheckbox) {
 					if (auto* menu = globals::menu) {
@@ -323,7 +325,7 @@ namespace Util
 
 			ImGui::SameLine();
 
-			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
+			if (ImGui::Button(T("ui.cancel", "Cancel"), ImVec2(buttonWidth, 0))) {
 				showClearCacheConfirmation = false;
 				ImGui::CloseCurrentPopup();
 			}
@@ -362,7 +364,7 @@ namespace Util
 			ImGui::Spacing();
 
 			if (showDontAskAgain)
-				ImGui::Checkbox("Don't ask me again", &dontAskCheckbox);
+				ImGui::Checkbox(T("ui.dont_ask_again", "Don't ask me again"), &dontAskCheckbox);
 
 			constexpr float buttonWidth = ThemeManager::Constants::POPUP_BUTTON_WIDTH;
 			const float spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -817,36 +819,36 @@ namespace Util
 		return m_shouldDraw;
 	}
 
-	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount)
+	bool DrawCategoryHeader(const char* categoryKey, const char* displayName, bool& isExpanded, int categoryCount)
 	{
 		// Get the appropriate icon for this category
 		ID3D11ShaderResourceView* categoryIcon = nullptr;
 		auto& menu = Menu::GetSingleton()->uiIcons;
 
-		if (strcmp(categoryName, "Characters") == 0) {
+		if (strcmp(categoryKey, "Characters") == 0) {
 			categoryIcon = menu.characters.texture;
-		} else if (strcmp(categoryName, "Display") == 0) {
+		} else if (strcmp(categoryKey, "Display") == 0) {
 			categoryIcon = menu.display.texture;
-		} else if (strcmp(categoryName, "Grass") == 0) {
+		} else if (strcmp(categoryKey, "Grass") == 0) {
 			categoryIcon = menu.grass.texture;
-		} else if (strcmp(categoryName, "Lighting") == 0) {
+		} else if (strcmp(categoryKey, "Lighting") == 0) {
 			categoryIcon = menu.lighting.texture;
-		} else if (strcmp(categoryName, "Sky") == 0) {
+		} else if (strcmp(categoryKey, "Sky") == 0) {
 			categoryIcon = menu.sky.texture;
-		} else if (strcmp(categoryName, "Landscape & Textures") == 0) {
+		} else if (strcmp(categoryKey, "Landscape & Textures") == 0) {
 			categoryIcon = menu.landscape.texture;
-		} else if (strcmp(categoryName, "Water") == 0) {
+		} else if (strcmp(categoryKey, "Water") == 0) {
 			categoryIcon = menu.water.texture;
-		} else if (strcmp(categoryName, "Utility") == 0) {
+		} else if (strcmp(categoryKey, "Utility") == 0) {
 			categoryIcon = menu.debug.texture;
-		} else if (strcmp(categoryName, "Materials") == 0) {
+		} else if (strcmp(categoryKey, "Materials") == 0) {
 			categoryIcon = menu.materials.texture;
-		} else if (strcmp(categoryName, "Post-Processing") == 0) {
+		} else if (strcmp(categoryKey, "Post-Processing") == 0) {
 			categoryIcon = menu.postProcessing.texture;
 		}
 
-		// Add categoryCount to categoryName
-		std::string displayName = std::format("{} ({})", categoryName, categoryCount);
+		// Keep icon lookup on the stable category key and render the translated label separately.
+		std::string headerText = std::format("{} ({})", displayName, categoryCount);
 
 		// Draw category header with custom styling
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -858,7 +860,7 @@ namespace Util
 		const float currentFontSize = ImGui::GetFontSize();
 		const float iconSize = currentFontSize * 1.2f;     // 20% larger than font height
 		const float iconSpacing = currentFontSize * 0.3f;  // 30% of font height for spacing
-		ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
+		ImVec2 textSize = ImGui::CalcTextSize(headerText.c_str());
 
 		// Calculate total content width (icon + spacing + text)
 		float contentWidth = textSize.x;
@@ -871,7 +873,7 @@ namespace Util
 		float lineLength = (availableWidth - contentWidth - 20.0f) * 0.5f;  // 20px for padding
 
 		// Create selectable area for the entire header
-		ImGui::PushID(displayName.c_str());
+		ImGui::PushID(categoryKey);
 		bool hovered = false;
 		bool clicked = false;
 
@@ -925,7 +927,7 @@ namespace Util
 
 		// Center text
 		ImVec2 textPos = ImVec2(currentX, pos.y + 2.0f);
-		drawList->AddText(textPos, headerColor, displayName.c_str());
+		drawList->AddText(textPos, headerColor, headerText.c_str());
 
 		// Handle click to toggle expansion
 		if (clicked) {
@@ -1308,7 +1310,7 @@ namespace Util
 		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
 
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(paddingLeft, ImGui::GetStyle().FramePadding.y));
-		ImGui::InputTextWithHint(widgetId, "Search...", state.buffer, IM_ARRAYSIZE(state.buffer));
+		ImGui::InputTextWithHint(widgetId, T("ui.search", "Search..."), state.buffer, IM_ARRAYSIZE(state.buffer));
 		ImGui::PopStyleVar();
 
 		ImVec2 iconPos = ImVec2(
@@ -1363,7 +1365,7 @@ namespace Util
 		strncpy_s(buffer, searchString.c_str(), sizeof(buffer) - 1);
 		buffer[sizeof(buffer) - 1] = '\0';
 
-		if (ImGui::InputTextWithHint("##feature_search", "Search Features...", buffer, sizeof(buffer))) {
+		if (ImGui::InputTextWithHint("##feature_search", T("ui.search_features", "Search Features..."), buffer, sizeof(buffer))) {
 			searchString = buffer;
 		}
 

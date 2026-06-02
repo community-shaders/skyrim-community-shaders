@@ -6,6 +6,7 @@ struct VolumetricShadows : Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Volumetric Shadows"; }
+	virtual std::string GetDisplayName() override { return T("feature.volumetric_shadows.name", "Volumetric Shadows"); }
 	virtual inline std::string GetShortName() override { return "VolumetricShadows"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "VOLUMETRIC_SHADOWS"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
@@ -16,15 +17,12 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Volumetric Shadows provides downsampled VSM shadow maps for use by effects like particles and decals.\n"
-			"This improves shadow quality on transparent objects with minimal performance impact.",
-			{ "Downsampled VSM shadows",
-				"Gaussian blur filtering",
-				"Multi-cascade support",
-				"Optimized for effects rendering" }
-		};
-	}
+		return { T("feature.volumetric_shadows.description", "Volumetric Shadows provides downsampled VSM shadow maps for use by effects like particles and decals.\nThis improves shadow quality on transparent objects with minimal performance impact."),
+			{ T("feature.volumetric_shadows.key_feature_1", "Downsampled VSM shadows"),
+				T("feature.volumetric_shadows.key_feature_2", "Gaussian blur filtering"),
+				T("feature.volumetric_shadows.key_feature_3", "Multi-cascade support"),
+				T("feature.volumetric_shadows.key_feature_4", "Optimized for effects rendering") } };
+	};
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 

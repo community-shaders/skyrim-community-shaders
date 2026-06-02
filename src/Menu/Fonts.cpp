@@ -1,6 +1,7 @@
 #include "Fonts.h"
 
 #include "../Globals.h"
+#include "../I18n/I18n.h"
 #include "../Utils/FileSystem.h"
 #include "ThemeManager.h"
 
@@ -195,6 +196,8 @@ namespace MenuFonts
 			signature += std::format("{}|{}|{:.2f};", Menu::GetFontRoleKey(role), roleSettings.File, roundedSize);
 		}
 		signature += std::format("base|{:.2f};", std::round(baseFontSize));
+		// Include locale in signature so CJK font merging triggers a rebuild on language change
+		signature += std::format("locale|{};", I18n::GetSingleton()->GetCurrentLocale());
 		return signature;
 	}
 }  // namespace MenuFonts

@@ -5,18 +5,18 @@ struct InteriorSun : Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Interior Sun"; }
+	virtual std::string GetDisplayName() override { return T("feature.interior_sun.name", "Interior Sun"); }
 	virtual inline std::string GetShortName() override { return "InteriorSun"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Allows for the sun and moon to cast light and shadows into interior spaces.",
-			{ "Functions only for explicitly enabled interiors",
-				"Utilizes existing sun, moon, and weather systems",
-				"Includes an option to force double-sided rendering for unprepared interiors",
-				"Fixes geometry culling issues that cause light leakage" }
-		};
-	}
+		return { T("feature.interior_sun.description", "Allows for the sun and moon to cast light and shadows into interior spaces."),
+			{ T("feature.interior_sun.key_feature_1", "Functions only for explicitly enabled interiors"),
+				T("feature.interior_sun.key_feature_2", "Utilizes existing sun, moon, and weather systems"),
+				T("feature.interior_sun.key_feature_3", "Includes an option to force double-sided rendering for unprepared interiors"),
+				T("feature.interior_sun.key_feature_4", "Fixes geometry culling issues that cause light leakage") } };
+	};
+
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;

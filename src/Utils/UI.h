@@ -505,7 +505,7 @@ namespace Util
 	 * @param categoryCount Number of features in the category
 	 * @return true if the expansion state was toggled
 	 */
-	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount);
+	bool DrawCategoryHeader(const char* categoryKey, const char* displayName, bool& isExpanded, int categoryCount);
 
 	/**
 	 * Draws a custom styled section header with lines extending from both sides
