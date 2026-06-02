@@ -7,19 +7,19 @@ private:
 
 public:
 	virtual inline std::string GetName() override { return "Hair Specular"; }
+	virtual std::string GetDisplayName() override { return T("feature.hair_specular.name", "Hair Specular"); }
 	virtual inline std::string GetShortName() override { return "HairSpecular"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CS_HAIR"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kCharacters; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Provides better hair shading with realistic specular highlights and tangent-based light interaction for more lifelike hair appearance.",
-			{ "Realistic hair specular highlights",
-				"Enhanced hair glossiness and saturation controls",
-				"Separate specular and diffuse lighting multipliers",
-				"Tangent shift texture support for varied hair highlights" }
-		};
-	}
+		return { T("feature.hair_specular.description", "Provides better hair shading with realistic specular highlights and tangent-based light interaction for more lifelike hair appearance."),
+			{ T("feature.hair_specular.key_feature_1", "Realistic hair specular highlights"),
+				T("feature.hair_specular.key_feature_2", "Enhanced hair glossiness and saturation controls"),
+				T("feature.hair_specular.key_feature_3", "Separate specular and diffuse lighting multipliers"),
+				T("feature.hair_specular.key_feature_4", "Tangent shift texture support for varied hair highlights") } };
+	};
+
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Lighting; };
 
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }

@@ -1,10 +1,15 @@
 #include "PrecipitationWidget.h"
+#include "../../I18n/I18n.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
 #include "Globals.h"
 #include "RE/B/BSShaderManager.h"
 #include "RE/N/NiSourceTexture.h"
 #include "Utils/Game.h"
+
+#include <format>
+
+#define I18N_KEY_PREFIX "cs_editor."
 
 namespace
 {
@@ -47,29 +52,29 @@ void PrecipitationWidget::DrawWidget()
 			const ImGuiTabItemFlags positionFlags = GetTabFlagsForOverride(PrecipitationTab::kPosition);
 			const ImGuiTabItemFlags textureFlags = GetTabFlagsForOverride(PrecipitationTab::kTexture);
 
-			if (ImGui::BeginTabItem(PrecipitationTab::kParticle, nullptr, particleFlags)) {
+			if (ImGui::BeginTabItem(T(TKEY("tab_particle"), "Particle"), nullptr, particleFlags)) {
 				BeginScrollableContent("##ParticleScroll");
 				if (DrawIfMatchesSearch(PrecipitationSetting::kType, [&](const char* label) {
-					ImGui::SeparatorText("Particle Type");
-					const char* types[] = { "Rain", "Snow" };
-					int currentType = static_cast<int>(settings.particleType);
-					bool comboChanged = DrawWithHighlight(label, [&]() {
-						return ImGui::Combo(label, &currentType, types, IM_ARRAYSIZE(types));
-					});
-					if (comboChanged) {
-						settings.particleType = static_cast<uint32_t>(currentType);
-						return true;
-					}
-					return false;
-				}))
+						ImGui::SeparatorText(T(TKEY("particle_type"), "Particle Type"));
+						const char* types[] = { T(TKEY("rain"), "Rain"), T(TKEY("snow"), "Snow") };
+						int currentType = static_cast<int>(settings.particleType);
+						bool comboChanged = DrawWithHighlight(label, [&]() {
+							return ImGui::Combo(std::format("{}##{}", T(TKEY("type"), "Type"), PrecipitationSetting::kType).c_str(), &currentType, types, IM_ARRAYSIZE(types));
+						});
+						if (comboChanged) {
+							settings.particleType = static_cast<uint32_t>(currentType);
+							return true;
+						}
+						return false;
+					}))
 					changed = true;
 				if (MatchesAnySearch({ PrecipitationSetting::kSizeX, PrecipitationSetting::kSizeY })) {
-					ImGui::SeparatorText("Particle Size");
+					ImGui::SeparatorText(T(TKEY("particle_size"), "Particle Size"));
 					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kSizeX, settings.particleSizeX, 0.0f, 200.0f);
 					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kSizeY, settings.particleSizeY, 0.0f, 200.0f);
 				}
 				if (MatchesAnySearch({ PrecipitationSetting::kGravityVelocity, PrecipitationSetting::kRotationVelocity })) {
-					ImGui::SeparatorText("Velocity");
+					ImGui::SeparatorText(T(TKEY("velocity"), "Velocity"));
 					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kGravityVelocity, settings.gravityVelocity, 0.0f, 10000.0f);
 					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kRotationVelocity, settings.rotationVelocity, 0.0f, 10000.0f);
 				}
@@ -77,16 +82,16 @@ void PrecipitationWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem(PrecipitationTab::kPosition, nullptr, positionFlags)) {
+			if (ImGui::BeginTabItem(T(TKEY("tab_position"), "Position"), nullptr, positionFlags)) {
 				BeginScrollableContent("##PositionScroll");
 				if (MatchesAnySearch({ PrecipitationSetting::kCenterOffsetMin, PrecipitationSetting::kCenterOffsetMax, PrecipitationSetting::kStartRotationRange })) {
-					ImGui::SeparatorText("Offset");
+					ImGui::SeparatorText(T(TKEY("offset"), "Offset"));
 					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kCenterOffsetMin, settings.centerOffsetMin, 0.0f, 200.0f);
 					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kCenterOffsetMax, settings.centerOffsetMax, 0.0f, 200.0f);
 					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kStartRotationRange, settings.startRotationRange, 0.0f, 360.0f);
 				}
 				if (MatchesAnySearch({ PrecipitationSetting::kBoxSize, PrecipitationSetting::kParticleDensity })) {
-					ImGui::SeparatorText("Volume");
+					ImGui::SeparatorText(T(TKEY("volume"), "Volume"));
 					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kBoxSize, settings.boxSize, 0.0f, 1000.0f);
 					changed |= WeatherUtils::DrawSliderFloat(PrecipitationSetting::kParticleDensity, settings.particleDensity, 0.0f, 1000.0f);
 				}
@@ -94,33 +99,33 @@ void PrecipitationWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem(PrecipitationTab::kTexture, nullptr, textureFlags)) {
+			if (ImGui::BeginTabItem(T(TKEY("tab_texture"), "Texture"), nullptr, textureFlags)) {
 				BeginScrollableContent("##TextureScroll");
 				if (MatchesAnySearch({ PrecipitationSetting::kNumSubtexturesX, PrecipitationSetting::kNumSubtexturesY })) {
-					ImGui::SeparatorText("Subtextures");
+					ImGui::SeparatorText(T(TKEY("subtextures"), "Subtextures"));
 					int numX = static_cast<int>(settings.numSubtexturesX);
 					int numY = static_cast<int>(settings.numSubtexturesY);
 					if (DrawIfMatchesSearch(PrecipitationSetting::kNumSubtexturesX, [&](const char* label) {
-						    return DrawWithHighlight(label, [&]() {
-							    return ImGui::InputInt(label, &numX);
-						    });
-					    })) {
+							return DrawWithHighlight(label, [&]() {
+								return ImGui::InputInt(std::format("{}##{}", T(TKEY("num_subtextures_x"), "Num Subtextures X"), PrecipitationSetting::kNumSubtexturesX).c_str(), &numX);
+							});
+						})) {
 						settings.numSubtexturesX = std::max(1, numX);
 						changed = true;
 					}
 					if (DrawIfMatchesSearch(PrecipitationSetting::kNumSubtexturesY, [&](const char* label) {
-						    return DrawWithHighlight(label, [&]() {
-							    return ImGui::InputInt(label, &numY);
-						    });
-					    })) {
+							return DrawWithHighlight(label, [&]() {
+								return ImGui::InputInt(std::format("{}##{}", T(TKEY("num_subtextures_y"), "Num Subtextures Y"), PrecipitationSetting::kNumSubtexturesY).c_str(), &numY);
+							});
+						})) {
 						settings.numSubtexturesY = std::max(1, numY);
 						changed = true;
 					}
 				}
 				DrawSearchSectionIfMatches(PrecipitationSetting::kParticleTexture, [&](const char* label) {
-					ImGui::SeparatorText("Texture Path");
+					ImGui::SeparatorText(T(TKEY("texture_path"), "Texture Path"));
 					const bool inputChanged = DrawWithHighlight(label, [&]() {
-						return ImGui::InputText(label, textureBuffer, sizeof(textureBuffer));
+						return ImGui::InputText(std::format("{}##{}", T(TKEY("particle_texture_label"), "Particle Texture"), PrecipitationSetting::kParticleTexture).c_str(), textureBuffer, sizeof(textureBuffer));
 					});
 					std::string_view buf(textureBuffer);
 					if (buf != lastCheckedBuffer) {
@@ -133,9 +138,9 @@ void PrecipitationWidget::DrawWidget()
 					}
 					if (settings.particleTexture != buf && !buf.empty()) {
 						if (!WeatherUtils::TexturePath::HasDdsExtension(buf))
-							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Path must end with '.dds'");
+							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "%s", T(TKEY("path_must_end_dds"), "Path must end with '.dds'"));
 						else if (!lastCheckedExists)
-							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "Texture file not found under Data/textures/.");
+							ImGui::TextColored(globals::menu->GetTheme().StatusPalette.Error, "%s", T(TKEY("texture_file_not_found"), "Texture file not found under Data/textures/."));
 					}
 				});
 
@@ -151,6 +156,8 @@ void PrecipitationWidget::DrawWidget()
 	}
 	ImGui::End();
 }
+
+#undef I18N_KEY_PREFIX
 
 void PrecipitationWidget::LoadSettings()
 {
@@ -345,7 +352,7 @@ std::vector<Widget::SearchResult> PrecipitationWidget::CollectSearchableSettings
 	std::vector<SearchResult> results;
 	for (const auto& [tab, names] : entries) {
 		for (const auto& name : names) {
-			results.push_back({ name, tab, name });
+			results.push_back({ WeatherUtils::TranslateControlLabel(name), tab, name });
 		}
 	}
 	return results;

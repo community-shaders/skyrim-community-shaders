@@ -1,11 +1,14 @@
 #include "InteriorOnlyPanel.h"
 
 #include "../Globals.h"
+#include "../I18n/I18n.h"
 #include "../Menu.h"
 #include "../Menu/ThemeManager.h"
 #include "../SceneSettingsManager.h"
 #include "../Utils/UI.h"
 #include "EditorWindow.h"
+
+#define I18N_KEY_PREFIX "cs_editor."
 
 namespace InteriorOnlyPanel
 {
@@ -52,7 +55,7 @@ namespace InteriorOnlyPanel
 		if (cachedFeatureNames.empty())
 			cachedFeatureNames = SceneSettingsManager::GetInteriorRelevantFeatureNames();
 
-		const char* featurePreview = (selectedFeatureIdx >= 0 && selectedFeatureIdx < static_cast<int>(cachedFeatureNames.size())) ? cachedFeatureNames[selectedFeatureIdx].c_str() : "Select Feature...";
+		const char* featurePreview = (selectedFeatureIdx >= 0 && selectedFeatureIdx < static_cast<int>(cachedFeatureNames.size())) ? cachedFeatureNames[selectedFeatureIdx].c_str() : T(TKEY("select_feature"), "Select Feature...");
 
 		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_FEATURE_DROPDOWN_RATIO);
 		if (ImGui::BeginCombo("##FeatureSelect", featurePreview)) {
@@ -75,7 +78,7 @@ namespace InteriorOnlyPanel
 		{
 			auto _ = Util::DisableGuard(selectedFeatureIdx < 0);
 
-			const char* settingPreview = (selectedSettingIdx >= 0 && selectedSettingIdx < static_cast<int>(cachedSettingKeys.size())) ? cachedSettingKeys[selectedSettingIdx].c_str() : "Select Setting...";
+			const char* settingPreview = (selectedSettingIdx >= 0 && selectedSettingIdx < static_cast<int>(cachedSettingKeys.size())) ? cachedSettingKeys[selectedSettingIdx].c_str() : T(TKEY("select_setting"), "Select Setting...");
 
 			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_SETTING_DROPDOWN_RATIO);
 			if (ImGui::BeginCombo("##SettingSelect", settingPreview)) {
@@ -105,7 +108,7 @@ namespace InteriorOnlyPanel
 		bool canAdd = selectedFeatureIdx >= 0 && selectedSettingIdx >= 0;
 		{
 			auto _ = Util::DisableGuard(!canAdd);
-			if (ImGui::Button("Add")) {
+			if (ImGui::Button(T(TKEY("add"), "Add"))) {
 				auto& featureName = cachedFeatureNames[selectedFeatureIdx];
 				auto& settingKey = cachedSettingKeys[selectedSettingIdx];
 				auto currentValue = SceneSettingsManager::GetFeatureSettingValue(featureName, settingKey);
@@ -181,7 +184,7 @@ namespace InteriorOnlyPanel
 			}
 			break;
 		default:
-			ImGui::TextDisabled("(unsupported type)");
+			ImGui::TextDisabled("%s", T(TKEY("unsupported_type"), "(unsupported type)"));
 			break;
 		}
 
@@ -194,7 +197,7 @@ namespace InteriorOnlyPanel
 		if (Util::FeatureToggle("##active", &active))
 			manager->TogglePauseEntry(kSceneType, index);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(entry.paused ? "Paused - click to resume" : "Active - click to pause");
+			ImGui::Text("%s", entry.paused ? T(TKEY("paused_click_resume"), "Paused - click to resume") : T(TKEY("active_click_pause"), "Active - click to pause"));
 
 		// Delete button
 		ImGui::SameLine();
@@ -212,7 +215,7 @@ namespace InteriorOnlyPanel
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(entry.source == EntrySource::Overwrite ? "Delete overwrite file from disk" : "Remove this setting");
+			ImGui::Text("%s", entry.source == EntrySource::Overwrite ? T(TKEY("delete_overwrite_file"), "Delete overwrite file from disk") : T(TKEY("remove_setting"), "Remove this setting"));
 
 		ImGui::PopID();
 	}
@@ -224,7 +227,7 @@ namespace InteriorOnlyPanel
 		auto& theme = globals::menu->GetSettings().Theme;
 
 		// Header
-		ImGui::Text("Interior Only Settings");
+		ImGui::Text("%s", T(TKEY("interior_only_settings"), "Interior Only Settings"));
 
 		ImGui::Separator();
 
@@ -257,28 +260,29 @@ namespace InteriorOnlyPanel
 		if (entries.empty()) {
 			ImGui::Spacing();
 			ImGui::TextColored(theme.StatusPalette.Disable,
-				"No interior-only settings configured.");
+				"%s", T(TKEY("no_interior_settings"), "No interior-only settings configured."));
 			ImGui::TextColored(theme.StatusPalette.Disable,
-				"Click + to add settings that will only apply in interiors.");
+				"%s", T(TKEY("click_plus_add"), "Click + to add settings that will only apply in interiors."));
 			ImGui::Spacing();
-			ImGui::TextWrapped(
-				"Settings added here will override feature defaults when you enter an interior cell. "
-				"Values revert automatically when you exit.");
+			ImGui::TextWrapped("%s",
+				T(TKEY("interior_settings_override"),
+					"Settings added here will override feature defaults when you enter an interior cell. "
+					"Values revert automatically when you exit."));
 			return;
 		}
 
 		// --- Overwrite Files Section ---
 		if (!overwriteIndices.empty()) {
 			ImGui::Spacing();
-			ImGui::TextColored(theme.StatusPalette.InfoColor, "Overwrite Files");
+			ImGui::TextColored(theme.StatusPalette.InfoColor, "%s", T(TKEY("overwrite_files"), "Overwrite Files"));
 			ImGui::SameLine();
 
 			bool allPaused = manager->AreAllOverwritesPaused(kSceneType);
-			if (ImGui::SmallButton(allPaused ? "Unpause All" : "Pause All"))
+			if (ImGui::SmallButton(allPaused ? T(TKEY("unpause_all"), "Unpause All") : T(TKEY("pause_all"), "Pause All")))
 				manager->SetAllOverwritesPaused(kSceneType, !allPaused);
 
 			ImGui::SameLine();
-			if (ImGui::SmallButton("Delete All"))
+			if (ImGui::SmallButton(T(TKEY("delete_all"), "Delete All")))
 				deleteAllOverwritesPopup.Request();
 
 			ImGui::Separator();
@@ -291,16 +295,18 @@ namespace InteriorOnlyPanel
 		if (!userIndices.empty()) {
 			if (!overwriteIndices.empty()) {
 				ImGui::Spacing();
-				ImGui::TextColored(theme.FeatureHeading.ColorDefault, "User Settings");
+				ImGui::TextColored(theme.FeatureHeading.ColorDefault, "%s", T(TKEY("user_settings"), "User Settings"));
 				ImGui::SameLine();
 			}
 
 			bool allUserPaused = manager->AreAllUserPaused(kSceneType);
-			if (ImGui::SmallButton(allUserPaused ? "Unpause All##user" : "Pause All##user"))
+			auto pauseAllLabel = std::format("{}##user", allUserPaused ? T(TKEY("unpause_all"), "Unpause All") : T(TKEY("pause_all"), "Pause All"));
+			if (ImGui::SmallButton(pauseAllLabel.c_str()))
 				manager->SetAllUserPaused(kSceneType, !allUserPaused);
 
 			ImGui::SameLine();
-			if (ImGui::SmallButton("Delete All##user"))
+			auto deleteAllLabel = std::format("{}##user", T(TKEY("delete_all"), "Delete All"));
+			if (ImGui::SmallButton(deleteAllLabel.c_str()))
 				deleteAllUserPopup.Request();
 
 			if (!overwriteIndices.empty())
@@ -315,3 +321,5 @@ namespace InteriorOnlyPanel
 		}
 	}
 }
+
+#undef I18N_KEY_PREFIX

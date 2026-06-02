@@ -5,6 +5,7 @@
 
 #include "Fonts.h"
 #include "Globals.h"
+#include "I18n/I18n.h"
 #include "Plugin.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -161,43 +162,43 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 		if (ImGui::BeginTable("##ActionButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
 			// Save Settings Button
 			ImGui::TableNextColumn();
-			if (Util::ButtonWithFlash("Save Settings", { -1, 0 })) {
+			if (Util::ButtonWithFlash(T("menu.save_settings", "Save Settings"), { -1, 0 })) {
 				globals::state->Save();
 				globals::state->SaveTheme();
 			}
 
 			// Restore Saved Settings Button
 			ImGui::TableNextColumn();
-			if (ImGui::Button("Restore Saved Settings", { -1, 0 })) {
+			if (ImGui::Button(T("menu.restore_settings", "Restore Saved Settings"), { -1, 0 })) {
 				globals::state->Load();
 			}
 
 			// Clear Shader Cache Button
 			ImGui::TableNextColumn();
-			if (ImGui::Button("Clear Shader Cache", { -1, 0 })) {
+			if (ImGui::Button(T("menu.clear_shader_cache", "Clear Shader Cache"), { -1, 0 })) {
 				Util::RequestClearShaderCacheConfirmation();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"Clears the shader cache and disk cache (if enabled). "
-					"The Shader Cache is the collection of compiled shaders which replace the vanilla shaders at runtime. "
-					"The Disk Cache is a collection of compiled shaders on disk. "
-					"Clearing will mean that shaders are recompiled only when the game re-encounters them. ");
+				ImGui::Text("%s", T("menu.clear_shader_cache_tooltip",
+									  "Clears the shader cache and disk cache (if enabled). "
+									  "The Shader Cache is the collection of compiled shaders which replace the vanilla shaders at runtime. "
+									  "The Disk Cache is a collection of compiled shaders on disk. "
+									  "Clearing will mean that shaders are recompiled only when the game re-encounters them."));
 			}
 
 			// Error message toggle if needed
 			if (shaderCache->GetFailedTasks()) {
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
-				if (ImGui::Button("Toggle Error Message", { -1, 0 })) {
+				if (ImGui::Button(T("menu.toggle_error_message", "Toggle Error Message"), { -1, 0 })) {
 					shaderCache->ToggleErrorMessages();
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"Hide or show the shader failure message. "
-						"Your installation is broken and will likely see errors in game. "
-						"Please double check you have updated all features and that your load order is correct. "
-						"See CommunityShaders.log for details and check the Nexus Mods page or Discord server. ");
+					ImGui::Text("%s", T("menu.toggle_error_message_tooltip",
+										  "Hide or show the shader failure message. "
+										  "Your installation is broken and will likely see errors in game. "
+										  "Please double check you have updated all features and that your load order is correct. "
+										  "See CommunityShaders.log for details and check the Nexus Mods page or Discord server."));
 				}
 			}
 
@@ -213,15 +214,15 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 	} else if (shaderCache->GetFailedTasks() && !isDocked) {
 		// If icons are enabled but there are failed tasks, show error toggle button
 		// and add the second separator (only when not docked)
-		if (ImGui::Button("Toggle Error Message", { -1, 0 })) {
+		if (ImGui::Button(T("menu.toggle_error_message", "Toggle Error Message"), { -1, 0 })) {
 			shaderCache->ToggleErrorMessages();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Hide or show the shader failure message. "
-				"Your installation is broken and will likely see errors in game. "
-				"Please double check you have updated all features and that your load order is correct. "
-				"See CommunityShaders.log for details and check the Nexus Mods page or Discord server. ");
+			ImGui::Text("%s", T("menu.toggle_error_message_tooltip",
+								  "Hide or show the shader failure message. "
+								  "Your installation is broken and will likely see errors in game. "
+								  "Please double check you have updated all features and that your load order is correct. "
+								  "See CommunityShaders.log for details and check the Nexus Mods page or Discord server."));
 		}
 
 		// Add second separator when showing error button
@@ -242,7 +243,7 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	// Build list of available action icons (in display order)
 	if (uiIcons.saveSettings.texture) {
 		actionIcons.push_back({ uiIcons.saveSettings.texture,
-			"Save Settings",
+			T("menu.save_settings", "Save Settings"),
 			[]() {
 				globals::state->Save();
 				globals::state->SaveTheme();
@@ -250,19 +251,18 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	}
 	if (uiIcons.loadSettings.texture) {
 		actionIcons.push_back({ uiIcons.loadSettings.texture,
-			"Restore Saved Settings",
+			T("menu.restore_settings", "Restore Saved Settings"),
 			[]() {
 				globals::state->Load();
 			} });
 	}
 	if (uiIcons.clearCache.texture) {
 		actionIcons.push_back({ uiIcons.clearCache.texture,
-			"Clear Shader Cache\n\n"
-			"Clears the shader cache and disk cache (if enabled).\n"
-			"The Shader Cache is the collection of compiled shaders which replace\n"
-			"the vanilla shaders at runtime. The Disk Cache is a collection of\n"
-			"compiled shaders on disk. Clearing will mean that shaders are\n"
-			"recompiled only when the game re-encounters them.",
+			T("menu.clear_shader_cache_tooltip",
+				"Clears the shader cache and disk cache (if enabled). "
+				"The Shader Cache is the collection of compiled shaders which replace the vanilla shaders at runtime. "
+				"The Disk Cache is a collection of compiled shaders on disk. "
+				"Clearing will mean that shaders are recompiled only when the game re-encounters them."),
 			[]() {
 				Util::RequestClearShaderCacheConfirmation();
 			} });
@@ -313,13 +313,11 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 		ImVec2 iconMax(iconX + iconSize - paddingReduction, iconY + iconSize - paddingReduction);
 
 		// Use the full area for mouse interaction (including padding)
-		ImVec2 interactionMin(iconX, iconY);
-		ImVec2 interactionMax(iconX + iconSize, iconY + iconSize);
+		ImRect interactionRect({ iconX, iconY }, { iconX + iconSize, iconY + iconSize });
 
 		// Check mouse interaction against full area
-		ImVec2 mousePos = ImGui::GetMousePos();
-		bool isHovered = mousePos.x >= interactionMin.x && mousePos.x <= interactionMax.x &&
-		                 mousePos.y >= interactionMin.y && mousePos.y <= interactionMax.y;
+		const bool isHovered = ImGui::IsMouseHoveringRect(interactionRect.Min, interactionRect.Max, false);
+		Util::DrawRoundedButtonHighlight(interactionRect, isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), fgDrawList);
 
 		// Only render if texture is valid
 		if (it->texture) {
@@ -341,9 +339,6 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 
 		// Handle interaction
 		if (isHovered) {
-			// Draw subtle background for hovered icon using interaction area
-			fgDrawList->AddRectFilled(interactionMin, interactionMax, IM_COL32(255, 255, 255, 40));
-
 			if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
 				it->callback();
 			}

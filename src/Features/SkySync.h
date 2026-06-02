@@ -8,22 +8,21 @@ private:
 
 public:
 	virtual inline std::string GetName() override { return "Sky Sync"; }
+	virtual std::string GetDisplayName() override { return T("feature.sky_sync.name", "Sky Sync"); }
 	virtual inline std::string GetShortName() override { return "SkySync"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kSky; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Synchronizes volumetric lighting and shadows with the actual sun and moon positions in the sky.",
-			{ "Fixes the mismatch between the positions of the sun and moons and the lighting direction",
-				"Includes a configurable alternative sun path for more realistic and dramatic lighting",
-				"Smoothly switches the light source between the sun and moons based on visibility",
-				"Moon light source can be switched between Masser, Secunda, or the brightest",
-				"Automatic calculation of moon lighting intensity based on moon phase",
-				"Fixes the sun appearing higher on the horizon when the player gains altitude" }
-		};
-	}
+		return { T("feature.sky_sync.description", "Synchronizes volumetric lighting and shadows with the actual sun and moon positions in the sky."),
+			{ T("feature.sky_sync.key_feature_1", "Fixes the mismatch between the positions of the sun and moons and the lighting direction"),
+				T("feature.sky_sync.key_feature_2", "Includes a configurable alternative sun path for more realistic and dramatic lighting"),
+				T("feature.sky_sync.key_feature_3", "Smoothly switches the light source between the sun and moons based on visibility"),
+				T("feature.sky_sync.key_feature_4", "Moon light source can be switched between Masser, Secunda, or the brightest"),
+				T("feature.sky_sync.key_feature_5", "Automatic calculation of moon lighting intensity based on moon phase"),
+				T("feature.sky_sync.key_feature_6", "Fixes the sun appearing higher on the horizon when the player gains altitude") } };
+	};
 
 	struct Settings
 	{

@@ -66,22 +66,20 @@ public:
 	RE::BGSKeyword* isBeastRaceKeyword = nullptr;
 
 	virtual inline std::string GetName() override { return "Subsurface Scattering"; }
+	virtual std::string GetDisplayName() override { return T("feature.subsurface_scattering.name", "Subsurface Scattering"); }
 	virtual inline std::string GetShortName() override { return "SubsurfaceScattering"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SSS"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kCharacters; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Subsurface Scattering simulates light penetration through translucent materials like skin, creating more realistic character lighting.\n"
-			"This technique makes organic materials appear more lifelike and natural.",
-			{ "Realistic skin lighting",
-				"Light penetration simulation",
-				"Separate profiles for different materials",
-				"Enhanced character appearance",
-				"Configurable scattering properties" }
-		};
-	}
+		return { T("feature.subsurface_scattering.description", "Subsurface Scattering simulates light penetration through translucent materials like skin, creating more realistic character lighting.\nThis technique makes organic materials appear more lifelike and natural."),
+			{ T("feature.subsurface_scattering.key_feature_1", "Realistic skin lighting"),
+				T("feature.subsurface_scattering.key_feature_2", "Light penetration simulation"),
+				T("feature.subsurface_scattering.key_feature_3", "Separate profiles for different materials"),
+				T("feature.subsurface_scattering.key_feature_4", "Enhanced character appearance"),
+				T("feature.subsurface_scattering.key_feature_5", "Configurable scattering properties") } };
+	};
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 

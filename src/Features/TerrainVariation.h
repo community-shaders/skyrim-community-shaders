@@ -7,6 +7,7 @@ private:
 
 public:
 	virtual inline std::string GetName() override { return "Terrain Variation"; }
+	virtual std::string GetDisplayName() override { return T("feature.terrain_variation.name", "Terrain Variation"); }
 	virtual inline std::string GetShortName() override { return "TerrainVariation"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_VARIATION"; }
@@ -20,15 +21,12 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Terrain Variation reduces the repeating pattern effect on terrain textures.\n"
-			"This technique creates more natural-looking terrain by adding variation to texture sampling.",
-			{ "Reduces terrain texture tiling",
-				"Adjustable distance-based blending",
-				"Improved terrain visual quality",
-				"Compatible with Extended Materials parallax" }
-		};
-	}
+		return { T("feature.terrain_variation.description", "Terrain Variation reduces the repeating pattern effect on terrain textures.\nThis technique creates more natural-looking terrain by adding variation to texture sampling."),
+			{ T("feature.terrain_variation.key_feature_1", "Reduces terrain texture tiling"),
+				T("feature.terrain_variation.key_feature_2", "Adjustable distance-based blending"),
+				T("feature.terrain_variation.key_feature_3", "Improved terrain visual quality"),
+				T("feature.terrain_variation.key_feature_4", "Compatible with Extended Materials parallax") } };
+	};
 
 	struct Settings
 	{

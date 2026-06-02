@@ -121,12 +121,23 @@ struct PerformanceOverlay : OverlayFeature
 	// VIRTUAL OVERRIDES (Feature.h interface)
 	// ============================================================================
 	std::string GetName() override { return "Performance Overlay"; }
+	virtual std::string GetDisplayName() override { return T("feature.performance_overlay.name", "Performance Overlay"); }
 	std::string GetShortName() override { return "PerformanceOverlay"; }
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
 	virtual bool IsInMenu() const override { return true; }
 	bool IsOverlayVisible() const override { return settings.ShowInOverlay; }
-	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override;
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return { T("feature.performance_overlay.description", "Real-time performance monitoring system that displays FPS, frame times, draw calls, VRAM usage, and detailed shader performance analysis."),
+			{ T("feature.performance_overlay.key_feature_1", "Real-time FPS and frame time monitoring with configurable update intervals"),
+				T("feature.performance_overlay.key_feature_2", "Interactive draw call analysis with per-shader type performance breakdown"),
+				T("feature.performance_overlay.key_feature_3", "VRAM usage monitoring with visual progress bars"),
+				T("feature.performance_overlay.key_feature_4", "Frame time graphs for pre and post-frame generation analysis"),
+				T("feature.performance_overlay.key_feature_5", "A/B testing support for performance comparison between configurations"),
+				T("feature.performance_overlay.key_feature_6", "Color-coded performance metrics with customizable thresholds"),
+				T("feature.performance_overlay.key_feature_7", "Movable overlay window with persistent positioning") } };
+	}
 	virtual void DrawSettings() override;
 	virtual void DataLoaded() override;
 	void DrawOverlay() override;

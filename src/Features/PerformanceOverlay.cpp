@@ -23,6 +23,7 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/Upscaling.h"
 #include "Globals.h"
+#include "I18n/I18n.h"
 #include "Menu.h"
 #include "Menu/ProfilingRenderer.h"
 #include "State.h"
@@ -30,6 +31,9 @@
 #include "Utils/Format.h"
 #include "Utils/Game.h"
 #include "Utils/UI.h"
+
+#define I18N_KEY_PREFIX "feature.perf_overlay."
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -132,32 +136,15 @@ static const std::unordered_map<RE::BSShader::Type, std::string> kShaderTypeTool
 // VIRTUAL OVERRIDES (Feature.h interface)
 // ============================================================================
 
-std::pair<std::string, std::vector<std::string>> PerformanceOverlay::GetFeatureSummary()
-{
-	std::string description = "Real-time performance monitoring system that displays FPS, frame times, draw calls, VRAM usage, and detailed shader performance analysis.";
-
-	std::vector<std::string> keyFeatures = {
-		"Real-time FPS and frame time monitoring with configurable update intervals",
-		"Interactive draw call analysis with per-shader type performance breakdown",
-		"VRAM usage monitoring with visual progress bars",
-		"Frame time graphs for pre and post-frame generation analysis",
-		"A/B testing support for performance comparison between configurations",
-		"Color-coded performance metrics with customizable thresholds",
-		"Movable overlay window with persistent positioning"
-	};
-
-	return { description, keyFeatures };
-}
-
 void PerformanceOverlay::DrawSettings()
 {
 	auto menu = Menu::GetSingleton();
 	const auto& themeSettings = menu->GetTheme();
 	const auto& menuSettings = menu->GetSettings();
-	ImGui::Checkbox("Show in Overlay", &this->settings.ShowInOverlay);
+	ImGui::Checkbox(T(TKEY("show_in_overlay"), "Show in Overlay"), &this->settings.ShowInOverlay);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Opens performance overlay in a separate window that stays open\neven when the main menu is closed. ");
-		ImGui::Text("Toggle with ");
+		ImGui::Text("%s", T(TKEY("show_in_overlay_tooltip"), "Opens performance overlay in a separate window that stays open\neven when the main menu is closed. "));
+		ImGui::Text("%s", T(TKEY("toggle_with"), "Toggle with "));
 		ImGui::SameLine();
 		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
 			Util::Input::KeyIdToString(menuSettings.OverlayToggleKey).c_str());
@@ -167,53 +154,53 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::Indent();
 
 		// Display options
-		ImGui::TextUnformatted("Display Options");
+		ImGui::TextUnformatted(T(TKEY("display_options"), "Display Options"));
 		ImGui::Separator();
 
-		ImGui::Checkbox("Show FPS Counter", &this->settings.ShowFPS);
-		ImGui::Checkbox("Show Draw Calls", &this->settings.ShowDrawCalls);
-		ImGui::Checkbox("Show VRAM Usage", &this->settings.ShowVRAM);
-		ImGui::Checkbox("Show CS Render Passes", &this->settings.ShowCSPasses);
+		ImGui::Checkbox(T(TKEY("show_fps"), "Show FPS Counter"), &this->settings.ShowFPS);
+		ImGui::Checkbox(T(TKEY("show_draw_calls"), "Show Draw Calls"), &this->settings.ShowDrawCalls);
+		ImGui::Checkbox(T(TKEY("show_vram"), "Show VRAM Usage"), &this->settings.ShowVRAM);
+		ImGui::Checkbox(T(TKEY("show_cs_passes"), "Show CS Render Passes"), &this->settings.ShowCSPasses);
 
 		bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
 		if (this->settings.ShowFPS && isFrameGenerationActive) {
-			ImGui::Checkbox("Show Pre-FG Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
+			ImGui::Checkbox(T(TKEY("show_pre_fg_graph"), "Show Pre-FG Frametime Graph"), &this->settings.ShowPreFGFrameTimeGraph);
 
-			ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
+			ImGui::Checkbox(T(TKEY("show_post_fg_graph"), "Show Post-FG Frametime Graph"), &this->settings.ShowPostFGFrameTimeGraph);
 			if (ImGui::IsItemHovered()) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data.");
+					ImGui::Text("%s", T(TKEY("post_fg_graph_tooltip"), "FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data."));
 				}
 			}
 		} else if (this->settings.ShowFPS) {
-			ImGui::Checkbox("Show Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
+			ImGui::Checkbox(T(TKEY("show_frametime_graph"), "Show Frametime Graph"), &this->settings.ShowPreFGFrameTimeGraph);
 		}
 
 		ImGui::Spacing();
 		ImGui::Spacing();
 
 		// Appearance settings
-		ImGui::TextUnformatted("Appearance");
+		ImGui::TextUnformatted(T(TKEY("appearance"), "Appearance"));
 		ImGui::Separator();
 
-		ImGui::SliderFloat("Text Size", &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
-		ImGui::SliderFloat("Background Opacity", &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
-		ImGui::Checkbox("Show Border", &this->settings.ShowBorder);
-		ImGui::SliderFloat("Update Interval", &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
-		ImGui::SliderInt("Frame History Size", &this->settings.FrameHistorySize,
+		ImGui::SliderFloat(T(TKEY("text_size"), "Text Size"), &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
+		ImGui::SliderFloat(T(TKEY("bg_opacity"), "Background Opacity"), &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
+		ImGui::Checkbox(T(TKEY("show_border"), "Show Border"), &this->settings.ShowBorder);
+		ImGui::SliderFloat(T(TKEY("update_interval"), "Update Interval"), &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
+		ImGui::SliderInt(T(TKEY("frame_history_size"), "Frame History Size"), &this->settings.FrameHistorySize,
 			this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize);
 
 		ImGui::Separator();
-		ImGui::Text("Position:");
-		if (ImGui::Button("Reset Position")) {
+		ImGui::Text("%s", T(TKEY("position"), "Position:"));
+		if (ImGui::Button(T(TKEY("reset_position"), "Reset Position"))) {
 			this->settings.PositionSet = false;
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Restore Defaults")) {
+		if (ImGui::Button(T(TKEY("restore_defaults"), "Restore Defaults"))) {
 			RestoreDefaultSettings();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted("Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals.");
+			ImGui::TextUnformatted(T(TKEY("restore_defaults_tooltip"), "Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals."));
 		}
 
 		ImGui::Unindent();
@@ -357,7 +344,7 @@ void PerformanceOverlay::DrawOverlay()
 	}
 
 	// Create the window
-	ImGui::Begin("Performance Overlay", NULL, windowFlags);
+	Util::BeginWithRoundedClose(T(TKEY("overlay_title"), "Performance Overlay"), nullptr, windowFlags);
 
 	// Remember window position for next frame
 	if (ImGui::IsWindowAppearing()) {
@@ -425,7 +412,7 @@ void PerformanceOverlay::DrawFPS()
 		ImGui::TableSetupColumn("##value");
 
 		ImGui::TableNextColumn();
-		ImGui::Text(this->state.isFrameGenerationActive ? "Raw FPS:" : "FPS:");
+		ImGui::Text(this->state.isFrameGenerationActive ? T(TKEY("raw_fps"), "Raw FPS:") : T(TKEY("fps"), "FPS:"));
 		ImGui::TableNextColumn();
 
 		// Check if buffer is full for the avg
@@ -443,7 +430,7 @@ void PerformanceOverlay::DrawFPS()
 
 		if (this->state.isFrameGenerationActive) {
 			ImGui::TableNextColumn();
-			ImGui::Text("Post-FG FPS:");
+			ImGui::Text(T(TKEY("post_fg_fps"), "Post-FG FPS:"));
 			ImGui::TableNextColumn();
 			ImGui::Text("%.1f (%.2f ms)", this->state.postFGSmoothFps, this->state.postFGSmoothFrameTimeMs);
 		}
@@ -497,7 +484,7 @@ void PerformanceOverlay::DrawFPS()
 
 		if (isFrameGenActive) {
 			// Show note that FSR uses calculated data
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Post-FG: Calculated timing (2x Pre-FG)");
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%s", T(TKEY("post_fg_calculated"), "Post-FG: Calculated timing (2x Pre-FG)"));
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("AMD FSR Frame Generation uses calculated timing data (2x Pre-FG).\nNVIDIA DLSS Frame Generation provides measured timing data.");
 			}
@@ -507,7 +494,6 @@ void PerformanceOverlay::DrawFPS()
 		this->DrawPostFGFrameTimeGraph();
 	}
 }
-
 
 void PerformanceOverlay::DrawVRAM()
 {
@@ -527,7 +513,7 @@ void PerformanceOverlay::DrawVRAM()
 		float percent = currentGpuUsage / totalGpuMemory;
 
 		// Center the VRAM text
-		ImGui::Text("VRAM Usage:");
+		ImGui::Text(T(TKEY("vram_usage"), "VRAM Usage:"));
 
 		// Use a centered text format for the numeric values
 		std::string vramText = std::format("{:.2f}GB/{:.2f}GB ({:.1f}%)", currentGpuUsage, totalGpuMemory, 100 * percent);
@@ -546,7 +532,7 @@ void PerformanceOverlay::DrawVRAM()
 		ImGui::ProgressBar(percent, ImVec2(ImGui::GetWindowWidth() * 0.9f, 0.0f), "");
 	} else {
 		// Display a fallback message if we couldn't get the VRAM info
-		ImGui::Text("VRAM Usage: Not available");
+		ImGui::Text("%s", T(TKEY("vram_not_available"), "VRAM Usage: Not available"));
 	}
 }
 
@@ -1334,7 +1320,7 @@ void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& main
 	overlay.CaptureTestData();
 	bool anyTestData = !overlay.testData.empty();
 	if (anyTestData) {
-		if (ImGui::Button("Clear Test Data")) {
+		if (ImGui::Button(T(TKEY("clear_test_data"), "Clear Test Data"))) {
 			clearTestDataRequested = true;
 		}
 	}
@@ -2043,3 +2029,4 @@ void PerformanceOverlay::UpdateGraphValues()
 		state.updateTimer = 0.0f;
 	}
 }
+#undef I18N_KEY_PREFIX

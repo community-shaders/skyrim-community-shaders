@@ -3,6 +3,7 @@
 #include "FrameAnnotations.h"
 #include "Globals.h"
 #include "Hooks.h"
+#include "I18n/I18n.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
 #include "SceneSettingsManager.h"
@@ -161,6 +162,10 @@ bool Load()
 	globals::ReInit();
 
 	auto state = globals::state;
+
+	// Initialize i18n system (loads English fallback and discovers available locales)
+	I18n::GetSingleton()->Init();
+
 	state->Load();
 	state->LoadTheme();  // Load theme settings from SettingsTheme.json
 

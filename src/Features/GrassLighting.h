@@ -6,6 +6,7 @@ struct GrassLighting : Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Grass Lighting"; }
+	virtual std::string GetDisplayName() override { return T("feature.grass_lighting.name", "Grass Lighting"); }
 	virtual inline std::string GetShortName() override { return "GrassLighting"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "GRASS_LIGHTING"; }
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return shaderType == RE::BSShader::Type::Grass; };
@@ -13,16 +14,13 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Grass Lighting enhances grass rendering with improved lighting, specularity, and subsurface scattering.\n"
-			"This makes grass appear more natural and responsive to lighting conditions.",
-			{ "Enhanced grass lighting model",
-				"Specular highlights on grass",
-				"Subsurface scattering effects",
-				"Improved grass visual quality",
-				"Configurable material properties" }
-		};
-	}
+		return { T("feature.grass_lighting.description", "Grass Lighting enhances grass rendering with improved lighting, specularity, and subsurface scattering.\nThis makes grass appear more natural and responsive to lighting conditions."),
+			{ T("feature.grass_lighting.key_feature_1", "Enhanced grass lighting model"),
+				T("feature.grass_lighting.key_feature_2", "Specular highlights on grass"),
+				T("feature.grass_lighting.key_feature_3", "Subsurface scattering effects"),
+				T("feature.grass_lighting.key_feature_4", "Improved grass visual quality"),
+				T("feature.grass_lighting.key_feature_5", "Configurable material properties") } };
+	};
 
 	struct alignas(16) Settings
 	{

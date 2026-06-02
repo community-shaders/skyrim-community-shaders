@@ -1,8 +1,11 @@
 #include "VolumetricLighting.h"
 
+#include "I18n/I18n.h"
 #include "InteriorSun.h"
 #include "ShaderCache.h"
 #include "State.h"
+
+#define I18N_KEY_PREFIX "feature.volumetric_lighting."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VolumetricLighting::TextureSize,
@@ -21,13 +24,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void VolumetricLighting::DrawSettings()
 {
-	if (ImGui::Checkbox("Enable Volumetric Lighting in Exteriors", &settings.ExteriorEnabled))
+	if (ImGui::Checkbox(T(TKEY("enable_exteriors"), "Enable Volumetric Lighting in Exteriors"), &settings.ExteriorEnabled))
 		SetupVL();
 
 	if (settings.ExteriorEnabled)
 		DrawVolumetricLightingSettings(settings.ExteriorQuality, settings.ExteriorCustomSize, false, !inInterior);
 
-	if (ImGui::Checkbox("Enable Volumetric Lighting in Interiors", &settings.InteriorEnabled))
+	if (ImGui::Checkbox(T(TKEY("enable_interiors"), "Enable Volumetric Lighting in Interiors"), &settings.InteriorEnabled))
 		SetupVL();
 
 	if (settings.InteriorEnabled)
@@ -37,8 +40,14 @@ void VolumetricLighting::DrawSettings()
 void VolumetricLighting::DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize, const bool isInterior, const bool inLocationType)
 {
 	auto& [Width, Height, Depth] = FetchCurrentSizeInUnits(isInterior);
+	const char* qualityNames[] = {
+		T(TKEY("quality_low"), "Low"),
+		T(TKEY("quality_medium"), "Medium"),
+		T(TKEY("quality_high"), "High"),
+		T(TKEY("quality_custom"), "Custom")
+	};
 
-	if (ImGui::SliderInt(isInterior ? "Interior Quality" : "Exterior Quality", &quality, 0, static_cast<uint8_t>(Quality::Count) - 1, QualityNames[quality])) {
+	if (ImGui::SliderInt(isInterior ? T(TKEY("interior_quality"), "Interior Quality") : T(TKEY("exterior_quality"), "Exterior Quality"), &quality, 0, static_cast<uint8_t>(Quality::Count) - 1, qualityNames[quality])) {
 		if (inLocationType)
 			SetupVL();
 	}
@@ -47,19 +56,19 @@ void VolumetricLighting::DrawVolumetricLightingSettings(int32_t& quality, Textur
 	if (!isCustomQuality)
 		ImGui::BeginDisabled();
 
-	if (ImGui::SliderInt(isInterior ? "Interior Width" : "Exterior Width", &Width, 1, 20, FromUnits(Width, 32), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
+	if (ImGui::SliderInt(isInterior ? T(TKEY("interior_width"), "Interior Width") : T(TKEY("exterior_width"), "Exterior Width"), &Width, 1, 20, FromUnits(Width, 32), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
 		customSize.Width = Width * 32;
 		if (inLocationType)
 			SetupVL();
 	}
 
-	if (ImGui::SliderInt(isInterior ? "Interior Height" : "Exterior Height", &Height, 1, 20, FromUnits(Height, 32), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
+	if (ImGui::SliderInt(isInterior ? T(TKEY("interior_height"), "Interior Height") : T(TKEY("exterior_height"), "Exterior Height"), &Height, 1, 20, FromUnits(Height, 32), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
 		customSize.Height = Height * 32;
 		if (inLocationType)
 			SetupVL();
 	}
 
-	if (ImGui::SliderInt(isInterior ? "Interior Depth" : "Exterior Depth", &Depth, 1, 64, FromUnits(Depth, 10), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
+	if (ImGui::SliderInt(isInterior ? T(TKEY("interior_depth"), "Interior Depth") : T(TKEY("exterior_depth"), "Exterior Depth"), &Depth, 1, 64, FromUnits(Depth, 10), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
 		customSize.Depth = Depth * 10;
 		if (inLocationType)
 			SetupVL();
@@ -338,3 +347,5 @@ void VolumetricLighting::CopyResource::thunk(ID3D11DeviceContext* a_this, ID3D11
 		a_this->CopyResource(a_renderTarget, a_renderTargetSource);
 	}
 }
+
+#undef I18N_KEY_PREFIX

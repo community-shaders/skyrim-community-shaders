@@ -1,4 +1,5 @@
 #include "GameSetting.h"
+#include "I18n/I18n.h"
 
 #include "Utils/UI.h"
 
@@ -220,7 +221,7 @@ namespace Util
 		}
 		if (settingData.offset != 0) {
 			ImGui::SameLine();
-			if (ImGui::Button("Copy")) {
+			if (ImGui::Button(::T("ui.copy", "Copy"))) {
 				ImGui::SetClipboardText(settingName.c_str());
 			}
 			if (auto _tt = HoverTooltipWrapper()) {

@@ -1,6 +1,7 @@
 #include "LightEditor.h"
 #include "../Features/InverseSquareLighting.h"
 #include "../Features/LightLimitFix.h"
+#include "../I18n/I18n.h"
 #include "../Menu.h"
 #include "../Utils/UI.h"
 #include "EditorWindow.h"
@@ -8,6 +9,8 @@
 #include "RE/B/BSLight.h"
 #include "RE/B/BSShadowLight.h"
 #include "RE/E/ExtraEmittanceSource.h"
+
+#define I18N_KEY_PREFIX "feature.light_editor."
 
 #include <array>
 #include <filesystem>
@@ -339,8 +342,8 @@ void LightEditor::DrawSettings()
 		if (lpInfo.isLPLight)
 			ImGui::Text("Config: Data\\LightPlacer\\%s.json", lpInfo.configPath.c_str());
 	} else {
-		ImGui::Text("Memory Address: %p", selected.ptr);
-		ImGui::Text("NiLight Name: %s", selected.name.c_str());
+		ImGui::Text(T(TKEY("memory_address"), "Memory Address: %p"), selected.ptr);
+		ImGui::Text(T(TKEY("ni_light_name"), "NiLight Name: %s"), selected.name.c_str());
 	}
 
 	ImGui::Separator();
@@ -561,7 +564,7 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 
 	if (!selected.isOther && current.data.lighFormId != 0 && selected.hasPosition) {
-		ImGui::Text("X: %.2f, Y: %.2f, Z: %.2f", displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
+		ImGui::Text(T(TKEY("position_format"), "X: %.2f, Y: %.2f, Z: %.2f"), displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
 		ImGui::Spacing();
 		ImGui::SliderFloat3("Position", &current.pos.x, -1000.f, 1000.f, "%.0f");
 
@@ -1028,6 +1031,8 @@ bool LightEditor::HasShadowFlags(uint32_t tesFlags)
 	                    static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow) |
 	                    static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kSpotShadow))) != 0;
 }
+
+#undef I18N_KEY_PREFIX
 
 std::string LightEditor::GetLightName(LightInfo& lightInfo)
 {
