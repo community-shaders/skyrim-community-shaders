@@ -12,6 +12,7 @@
 #include "Feature.h"
 #include "FeatureConstraints.h"
 #include "FeatureIssues.h"
+#include "Features/CSEditor.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
@@ -811,8 +812,10 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 			ImVec2 cursorPosBefore = ImGui::GetCursorPos();
 			feat->DrawSettings();
 
-			ImGui::SeparatorText("Profiling");
-			ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
+			if (feat != &globals::features::csEditor) {
+				ImGui::SeparatorText("Profiling");
+				ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
+			}
 
 			ImVec2 cursorPosAfter = ImGui::GetCursorPos();
 

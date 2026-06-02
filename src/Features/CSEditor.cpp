@@ -167,6 +167,9 @@ void CSEditor::DrawSettings()
 		OpenEditorWindow();
 	ImGui::EndDisabled();
 
+	ImGui::Spacing();
+	ImGui::SeparatorText(T(TKEY("weather_picker"), "Weather Picker"));
+
 	// Time controls
 	DrawTimeControls();
 
@@ -175,6 +178,27 @@ void CSEditor::DrawSettings()
 
 	// Integrated Weather Picker UI
 	DrawWeatherPickerSection();
+
+	ImGui::Spacing();
+	DrawShowInOverlayToggle();
+}
+
+void CSEditor::DrawShowInOverlayToggle()
+{
+	const auto& themeSettings = Menu::GetSingleton()->GetTheme();
+	const auto& menuSettings = Menu::GetSingleton()->GetSettings();
+
+	bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
+	if (ImGui::Checkbox(T(TKEY("show_in_overlay"), "Show in Overlay"), &showInOverlay)) {
+		WeatherDetailsWindow.ShowInOverlay = showInOverlay;
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T(TKEY("show_in_overlay_tooltip"),
+							  "Opens weather details in a separate window that stays open\neven when the main menu is closed. "));
+		ImGui::Text(T(TKEY("toggle_with"), "Toggle with "));
+		ImGui::SameLine();
+		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey).c_str());
+	}
 }
 
 void CSEditor::Prepass()
@@ -200,27 +224,9 @@ void CSEditor::Prepass()
 void CSEditor::DrawWeatherPickerSection()
 {
 	ImGui::Spacing();
-	Util::DrawSectionHeader(T(TKEY("weather_details"), "Weather Details"));
-
-	const auto& themeSettings = Menu::GetSingleton()->GetTheme();
-	const auto& menuSettings = Menu::GetSingleton()->GetSettings();
-
-	// Show as Overlay checkbox
-	bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
-	if (ImGui::Checkbox(T(TKEY("show_in_overlay"), "Show in Overlay"), &showInOverlay)) {
-		WeatherDetailsWindow.ShowInOverlay = showInOverlay;
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("%s", T(TKEY("show_in_overlay_tooltip"),
-							  "Opens weather details in a separate window that stays open\neven when the main menu is closed. "));
-		ImGui::Text(T(TKEY("toggle_with"), "Toggle with "));
-		ImGui::SameLine();
-		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey).c_str());
-	}
-	ImGui::Spacing();
 
 	// Render core weather details
-	RenderCoreWeatherDetails(true);  // true = show interactive elements in main settings panel
+	RenderCoreWeatherDetails(true, false);  // true = show interactive elements in main settings panel
 
 	// Render weather analysis from features with collapsible headers
 	RenderFeatureWeatherAnalysis();
@@ -302,16 +308,12 @@ void CSEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newWeathe
 void CSEditor::DrawTimeControls()
 {
 	ImGui::Spacing();
-	Util::DrawSectionHeader(T(TKEY("time_controls"), "Time Controls"));
-	ImGui::Spacing();
 	EditorWindow::GetSingleton()->DrawTimeControls();
 	ImGui::Spacing();
 }
 
 void CSEditor::DrawWeatherStatusPanel()
 {
-	ImGui::Spacing();
-	Util::DrawSectionHeader(T(TKEY("weather_status"), "Weather Status"));
 	ImGui::Spacing();
 
 	auto weatherManager = WeatherManager::GetSingleton();
@@ -371,7 +373,7 @@ void CSEditor::DrawWeatherStatusPanel()
 // Weather Picker functionality (integrated from WeatherPicker feature)
 // ================================================================================
 
-void CSEditor::RenderWeatherDetailsWindow(bool* open)
+void CSEditor::RenderWeatherDetailsWindow(bool* open, bool showSectionHeaders)
 {
 	if (!open || !*open)
 		return;
@@ -405,7 +407,7 @@ void CSEditor::RenderWeatherDetailsWindow(bool* open)
 					(globals::game::ui && globals::game::ui->IsMenuOpen(RE::CursorMenu::MENU_NAME)));
 		};
 
-		RenderCoreWeatherDetails(shouldEnableInteractiveElements());
+		RenderCoreWeatherDetails(shouldEnableInteractiveElements(), showSectionHeaders);
 
 		// Render weather analysis from features with collapsible headers
 		RenderFeatureWeatherAnalysis();
@@ -635,14 +637,16 @@ void CSEditor::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct, boo
 	CSEditor::DisplayWindInfo(weather);
 }
 
-void CSEditor::RenderWeatherControls(RE::Sky* sky)
+void CSEditor::RenderWeatherControls(RE::Sky* sky, bool showSectionHeader)
 {
 	// Weather Selection Section (only show interactive elements in inline mode)
 	static bool weatherControlsExpanded = true;
-	Util::DrawSectionHeader(T(TKEY("weather_controls"), "Weather Controls"), false, true, &weatherControlsExpanded);
+	if (showSectionHeader) {
+		Util::DrawSectionHeader(T(TKEY("weather_controls"), "Weather Controls"), false, true, &weatherControlsExpanded);
 
-	if (!weatherControlsExpanded)
-		return;
+		if (!weatherControlsExpanded)
+			return;
+	}
 
 	ImGui::Text("%s", T(TKEY("filter_by_weather_type"), "Filter by Weather Type:"));
 	if (ImGui::Button(T(TKEY("select_all"), "Select All"))) {
@@ -820,12 +824,14 @@ void CSEditor::RenderWeatherControls(RE::Sky* sky)
 	}
 }
 
-void CSEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements)
+void CSEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements, bool showSectionHeader)
 {
 	ImGui::Spacing();
 	ImGui::Spacing();
 	ImGui::Spacing();
-	Util::DrawSectionHeader(T(TKEY("weather_information"), "Weather Information"), false, true);
+	if (showSectionHeader) {
+		Util::DrawSectionHeader(T(TKEY("weather_information"), "Weather Information"), false, true);
+	}
 
 	// Update cache: store current lastWeather if it exists, otherwise keep the cached one
 	if (sky->lastWeather) {
@@ -836,7 +842,7 @@ void CSEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiv
 	RE::TESWeather* displayLastWeather = sky->lastWeather ? sky->lastWeather : s_cachedLastWeather;
 
 	// Create resizable 2-column table for current and last weather
-	if (ImGui::BeginTable("WeatherComparison", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersV)) {
+	if (ImGui::BeginTable("WeatherComparison", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders)) {
 		// Set up columns
 		ImGui::TableSetupColumn(T(TKEY("current_weather_column"), "Current Weather"), ImGuiTableColumnFlags_WidthStretch, 0.5f);
 		ImGui::TableSetupColumn(T(TKEY("last_weather_column"), "Last Weather"), ImGuiTableColumnFlags_WidthStretch, 0.5f);
@@ -856,7 +862,7 @@ void CSEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiv
 	}
 }
 
-void CSEditor::RenderCoreWeatherDetails(bool showInteractiveElements)
+void CSEditor::RenderCoreWeatherDetails(bool showInteractiveElements, bool showSectionHeaders)
 {
 	const auto showError = [](const char* msg) {
 		auto menu = Menu::GetSingleton();
@@ -867,9 +873,9 @@ void CSEditor::RenderCoreWeatherDetails(bool showInteractiveElements)
 	if (auto sky = globals::game::sky) {
 		if (sky->mode.get() == RE::Sky::Mode::kFull) {
 			if (showInteractiveElements) {
-				RenderWeatherControls(sky);
+				RenderWeatherControls(sky, showSectionHeaders);
 			}
-			RenderWeatherInformationDisplay(sky, showInteractiveElements);
+			RenderWeatherInformationDisplay(sky, showInteractiveElements, showSectionHeaders);
 			ImGui::Spacing();
 		} else {
 			showError(T(TKEY("sky_not_full"), "Sky not in full mode"));
@@ -973,8 +979,8 @@ void CSEditor::RenderFeatureWeatherAnalysis()
 			auto featureName = feature->GetShortName();
 			ImGui::PushID(featureName.c_str());
 
-			// Create collapsible header for feature weather analysis
-			bool isExpanded = ImGui::CollapsingHeader(weatherConfig.sectionName.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+			const ImGuiTreeNodeFlags treeFlags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+			bool isExpanded = ImGui::TreeNodeEx(weatherConfig.sectionName.c_str(), treeFlags);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("%s", T(TKEY("feature_weather_analysis_tooltip_0"), "Weather analysis provided by: "));
 				ImGui::Text("%s", feature->GetDisplayName().c_str());
@@ -984,9 +990,12 @@ void CSEditor::RenderFeatureWeatherAnalysis()
 					isExpanded ? T(TKEY("collapse"), "collapse") : T(TKEY("expand"), "expand"));
 			}
 
-			if (isExpanded && weatherConfig.drawFunction) {
-				// Call the feature's weather analysis draw function
-				weatherConfig.drawFunction();
+			if (isExpanded) {
+				if (weatherConfig.drawFunction) {
+					// Call the feature's weather analysis draw function
+					weatherConfig.drawFunction();
+				}
+				ImGui::TreePop();
 			}
 
 			ImGui::PopID();
@@ -1188,7 +1197,7 @@ void CSEditor::DrawOverlay()
 			WeatherDetailsWindow.Enabled = true;
 		}
 		bool* p_open = &WeatherDetailsWindow.Enabled;
-		RenderWeatherDetailsWindow(p_open);
+		RenderWeatherDetailsWindow(p_open, false);
 	}
 	s_prevOverlayVisible = overlayVisible;
 }
