@@ -660,6 +660,25 @@ namespace Util
 		return ImRect(origin, ImVec2(origin.x + full, origin.y + full));
 	}
 
+	static ImVec2 RightTitleBarButtonOrigin(ImGuiWindow* window, float fontSize, float offset = 0.0f)
+	{
+		const auto& style = ImGui::GetStyle();
+		return ImVec2(window->Rect().Max.x - window->WindowBorderSize - style.FramePadding.x - fontSize - offset - kTitleBarButtonPadding,
+			window->Rect().Min.y + style.FramePadding.y - kTitleBarButtonPadding);
+	}
+
+	static ImVec2 CollapseTitleBarButtonOrigin(ImGuiWindow* window, bool hasCloseButton, float fontSize)
+	{
+		const auto& style = ImGui::GetStyle();
+		IM_ASSERT(style.WindowMenuButtonPosition == ImGuiDir_Left || style.WindowMenuButtonPosition == ImGuiDir_Right);
+
+		if (style.WindowMenuButtonPosition == ImGuiDir_Right)
+			return RightTitleBarButtonOrigin(window, fontSize, hasCloseButton ? fontSize : 0.0f);
+
+		return ImVec2(window->Pos.x + window->WindowBorderSize + style.FramePadding.x - kTitleBarButtonPadding,
+			window->Pos.y + style.FramePadding.y - kTitleBarButtonPadding);
+	}
+
 	static bool IsTitleBarButtonHovered(ImGuiWindow* window, const ImRect& bb)
 	{
 		ImGuiContext& g = *ImGui::GetCurrentContext();
@@ -684,10 +703,8 @@ namespace Util
 		if (window->Flags & ImGuiWindowFlags_NoTitleBar)
 			return;
 
-		const auto& style = ImGui::GetStyle();
 		const float sz = ImGui::GetFontSize();
-		const ImVec2 pos(window->Rect().Max.x - window->WindowBorderSize - style.FramePadding.x - sz - kTitleBarButtonPadding,
-			window->Rect().Min.y + style.FramePadding.y - kTitleBarButtonPadding);
+		const ImVec2 pos = RightTitleBarButtonOrigin(window, sz);
 		const ImRect bb = TitleBarButtonRect(pos, sz);
 		const bool hovered = IsTitleBarButtonHovered(window, bb);
 		const bool held = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
@@ -707,7 +724,7 @@ namespace Util
 	}
 
 	// Draws a rounded highlight for the collapse/triangle button in the title bar.
-	static void DrawRoundedCollapseHighlight(ImGuiWindow* window)
+	static void DrawRoundedCollapseHighlight(ImGuiWindow* window, bool hasCloseButton)
 	{
 		if (window->Flags & ImGuiWindowFlags_NoTitleBar)
 			return;
@@ -716,10 +733,8 @@ namespace Util
 		if (ImGui::GetStyle().WindowMenuButtonPosition == ImGuiDir_None)
 			return;
 
-		const auto& style = ImGui::GetStyle();
 		const float sz = ImGui::GetFontSize();
-		const ImVec2 pos(window->Pos.x + window->WindowBorderSize + style.FramePadding.x - kTitleBarButtonPadding,
-			window->Pos.y + style.FramePadding.y - kTitleBarButtonPadding);
+		const ImVec2 pos = CollapseTitleBarButtonOrigin(window, hasCloseButton, sz);
 		const ImRect bb = TitleBarButtonRect(pos, sz);
 		const bool hovered = IsTitleBarButtonHovered(window, bb);
 		const bool held = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
@@ -742,7 +757,7 @@ namespace Util
 			return;
 
 		if (hasCollapseButton)
-			DrawRoundedCollapseHighlight(window);
+			DrawRoundedCollapseHighlight(window, hasCloseButton);
 		if (hasCloseButton)
 			DrawRoundedCloseHighlight(window);
 	}
