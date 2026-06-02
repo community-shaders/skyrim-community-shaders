@@ -626,9 +626,16 @@ namespace Util
 		return ImMin(max.x - min.x, max.y - min.y) * 0.5f;
 	}
 
+	static float GetThemedButtonHighlightRounding(const ImVec2& min, const ImVec2& max)
+	{
+		const float frameRounding = ImGui::GetStyle().FrameRounding;
+		IM_ASSERT(frameRounding >= 0.0f);
+		return ImMin(ImMax(frameRounding, 0.0f), GetPillRounding(min, max));
+	}
+
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, ImDrawList* drawList)
 	{
-		return DrawRoundedButtonHighlight(min, max, hovered, active, GetPillRounding(min, max), drawList);
+		return DrawRoundedButtonHighlight(min, max, hovered, active, GetThemedButtonHighlightRounding(min, max), drawList);
 	}
 
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, float rounding, ImDrawList* drawList)
