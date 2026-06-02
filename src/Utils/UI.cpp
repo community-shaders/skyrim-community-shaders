@@ -638,6 +638,11 @@ namespace Util
 		return DrawRoundedButtonHighlight(min, max, hovered, active, GetThemedButtonHighlightRounding(min, max), drawList);
 	}
 
+	bool DrawRoundedButtonHighlight(const ImRect& rect, bool hovered, bool active, ImDrawList* drawList)
+	{
+		return DrawRoundedButtonHighlight(rect.Min, rect.Max, hovered, active, drawList);
+	}
+
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, float rounding, ImDrawList* drawList)
 	{
 		if (!hovered && !active)
@@ -654,7 +659,7 @@ namespace Util
 
 	bool DrawCurrentItemRoundedButtonHighlight(ImDrawList* drawList)
 	{
-		return DrawRoundedButtonHighlight(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::IsItemHovered(), ImGui::IsItemActive(), drawList);
+		return DrawRoundedButtonHighlight(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()), ImGui::IsItemHovered(), ImGui::IsItemActive(), drawList);
 	}
 
 	// Shared constants for title-bar button overlays
@@ -719,7 +724,7 @@ namespace Util
 		const bool held = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 
 		window->DrawList->PushClipRect(window->Rect().Min, window->Rect().Max);
-		const bool highlighted = DrawRoundedButtonHighlight(bb.Min, bb.Max, hovered, held, window->DrawList);
+		const bool highlighted = DrawRoundedButtonHighlight(bb, hovered, held, window->DrawList);
 
 		// Cross lines match ImGui's internal RenderCloseButton geometry.
 		if (highlighted) {
@@ -749,7 +754,7 @@ namespace Util
 		const bool held = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 
 		window->DrawList->PushClipRect(window->Rect().Min, window->Rect().Max);
-		const bool highlighted = DrawRoundedButtonHighlight(bb.Min, bb.Max, hovered, held, window->DrawList);
+		const bool highlighted = DrawRoundedButtonHighlight(bb, hovered, held, window->DrawList);
 
 		if (highlighted) {
 			const ImVec2 arrowPos(pos.x + kTitleBarButtonPadding, pos.y + kTitleBarButtonPadding);

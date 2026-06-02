@@ -15,6 +15,7 @@
 // Forward declarations
 struct ID3D11Device;
 struct ID3D11ShaderResourceView;
+struct ImRect;
 struct ImVec2;
 class Menu;
 class Feature;
@@ -320,6 +321,7 @@ namespace Util
 	ImVec4 GetIconTint();
 
 	/// Draws a theme-rounded hover/active fill over a button rect.
+	bool DrawRoundedButtonHighlight(const ImRect& rect, bool hovered, bool active, ImDrawList* drawList = nullptr);
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, ImDrawList* drawList = nullptr);
 	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, float rounding, ImDrawList* drawList);
 

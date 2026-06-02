@@ -317,7 +317,7 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 
 		// Check mouse interaction against full area
 		const bool isHovered = ImGui::IsMouseHoveringRect(interactionRect.Min, interactionRect.Max, false);
-		Util::DrawRoundedButtonHighlight(interactionRect.Min, interactionRect.Max, isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), fgDrawList);
+		Util::DrawRoundedButtonHighlight(interactionRect, isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), fgDrawList);
 
 		// Only render if texture is valid
 		if (it->texture) {
