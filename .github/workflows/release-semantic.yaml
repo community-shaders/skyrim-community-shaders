@@ -107,12 +107,21 @@ jobs:
                   #                    minor/major promotion folds the hotfix in
                   #                    via its dev-source merge pre-step.
                   SOURCE=""
-                  if git merge-base --is-ancestor "${FF_TARGET}" origin/dev; then
+                  FF_RESOLVED="$(git rev-parse "${FF_TARGET}^{commit}")"
+                  DEV_TIP="$(git rev-parse origin/dev^{commit})"
+                  if [[ "${FF_RESOLVED}" == "${DEV_TIP}" ]]; then
+                    # dev-source promotion: ff_target must be the CURRENT dev tip
+                    # exactly. A stale (ancestor-but-not-tip) dev SHA would make
+                    # the reconcile merge's first parent an old commit, and the
+                    # force-with-lease push would then rewrite newer dev work.
                     SOURCE="dev"
+                  elif git merge-base --is-ancestor "${FF_RESOLVED}" origin/dev; then
+                    echo "::error::ff_target ${FF_TARGET} is an ancestor of dev but not its tip ($(git rev-parse --short=9 origin/dev)). Promote the current dev tip (or cut a fresh RC) — promoting a stale dev point would rewrite newer dev commits."
+                    exit 1
                   else
                     while read -r REF; do
                       [[ -z "${REF}" ]] && continue
-                      if git merge-base --is-ancestor "${FF_TARGET}" "${REF}"; then
+                      if git merge-base --is-ancestor "${FF_RESOLVED}" "${REF}"; then
                         SOURCE="${REF#origin/}"
                         break
                       fi
