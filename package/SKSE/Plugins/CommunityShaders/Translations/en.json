@@ -1729,6 +1729,7 @@
     "menu.features.scene_specific_settings": "Scene Specific Settings",
     "menu.features.select_feature_left": "Please select a feature from the left.",
     "menu.features.select_item_left": "Please select an item on the left.",
+    "menu.features.setting_change_warning_title": "Setting Change Warning",
     "menu.features.settings_adjusted_warning": "Some of your settings have been automatically adjusted due to feature incompatibilities.",
     "menu.features.settings_hidden_disabled": "Feature settings are hidden because this feature is disabled at boot.",
     "menu.features.unloaded_features": "Unloaded Features",
