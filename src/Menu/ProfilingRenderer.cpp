@@ -64,14 +64,15 @@ struct GraphLayout
 static GraphLayout GetGraphLayout(float availableWidth, float baseLegendWidth, float baseHeight)
 {
 	const float uiScale = Util::GetUIScale();
+	const float contentWidth = std::max(0.0f, availableWidth);
 	const float minGraphWidth = kMinGraphWidth * uiScale;
 	const float desiredLegendWidth = baseLegendWidth * uiScale;
-	const float legendWidth = availableWidth > minGraphWidth ?
-	                              std::min(desiredLegendWidth, availableWidth - minGraphWidth) :
+	const float legendWidth = contentWidth > minGraphWidth ?
+	                              std::min(desiredLegendWidth, contentWidth - minGraphWidth) :
 	                              0.0f;
 
 	return {
-		std::max(minGraphWidth, availableWidth - legendWidth),
+		contentWidth - legendWidth,
 		legendWidth,
 		baseHeight * uiScale,
 		uiScale
@@ -127,7 +128,7 @@ void ProfilingRenderer::TextHeat(const char* fmt, float value, float maxValue)
 	ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), fmt, value);
 }
 
-void ProfilingRenderer::RenderTimingModeToggle(bool refreshCachedStats)
+void ProfilingRenderer::RenderTimingModeToggle()
 {
 	int mode = static_cast<int>(timingMode);
 
@@ -140,8 +141,7 @@ void ProfilingRenderer::RenderTimingModeToggle(bool refreshCachedStats)
 	const auto newMode = static_cast<TimingMode>(mode);
 	if (newMode != timingMode) {
 		timingMode = newMode;
-		if (refreshCachedStats)
-			timeSinceLastUpdate = kStatsRefreshSeconds;
+		timeSinceLastUpdate = kStatsRefreshSeconds;
 	}
 }
 
@@ -212,7 +212,7 @@ void ProfilingRenderer::RenderStatistics(bool showTable, bool showModeToggle)
 
 	bool cpuMode = (timingMode == TimingMode::CPU);
 	if (showModeToggle) {
-		RenderTimingModeToggle(true);
+		RenderTimingModeToggle();
 		cpuMode = (timingMode == TimingMode::CPU);
 		ImGui::Separator();
 	}
@@ -348,7 +348,7 @@ void ProfilingRenderer::RenderFeatureTimers(const std::string& featurePrefix)
 	auto& profiler = (*globals::profiler);
 	const auto& results = profiler.GetResults();
 
-	RenderTimingModeToggle(false);
+	RenderTimingModeToggle();
 
 	bool cpuMode = (timingMode == TimingMode::CPU);
 

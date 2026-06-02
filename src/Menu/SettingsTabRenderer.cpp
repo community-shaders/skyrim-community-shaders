@@ -1211,9 +1211,7 @@ void SettingsTabRenderer::RenderColorsTab()
 		const float scale = Util::GetSearchUIScale();
 		const float iconSize = ThemeManager::Constants::SEARCH_ICON_SIZE * scale;
 		const float iconSpace = iconSize + ThemeManager::Constants::SEARCH_INPUT_PADDING_EXTRA * scale;
-		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 		float availableWidth = ImGui::GetFontSize() * 16;
-		float frameHeight = ImGui::GetFrameHeight();
 
 		// Custom style for filter with icon space
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, ThemeManager::Constants::SEARCH_INPUT_FRAME_PADDING_Y * scale));
@@ -1221,7 +1219,9 @@ void SettingsTabRenderer::RenderColorsTab()
 		ImGui::PopStyleVar();
 
 		// Draw search icon
-		ImVec2 iconPos = ImVec2(cursorPos.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, cursorPos.y + (frameHeight - iconSize) * 0.5f);
+		const ImVec2 filterMin = ImGui::GetItemRectMin();
+		const ImVec2 filterSize = ImGui::GetItemRectSize();
+		ImVec2 iconPos = ImVec2(filterMin.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, filterMin.y + (filterSize.y - iconSize) * 0.5f);
 		Util::DrawSearchIcon(iconPos, iconSize, ThemeManager::Constants::SEARCH_ICON_ALPHA);
 
 		ImGui::Spacing();

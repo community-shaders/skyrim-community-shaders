@@ -126,7 +126,8 @@ namespace ImGuiUtils
 			ImDrawList* drawList = ImGui::GetWindowDrawList();
 			const ImVec2 widgetPos = ImGui::GetCursorScreenPos();
 			RenderGraph(drawList, widgetPos, ImVec2(graphWidth, height), frameIndexOffset, maxFrameTime, uiScale);
-			RenderLegend(drawList, ImVec2(widgetPos.x + graphWidth, widgetPos.y), ImVec2(legendWidth, height), frameIndexOffset, maxFrameTime, uiScale);
+			if (legendWidth > 0.0f)
+				RenderLegend(drawList, ImVec2(widgetPos.x + graphWidth, widgetPos.y), ImVec2(legendWidth, height), frameIndexOffset, maxFrameTime, uiScale);
 			ImGui::Dummy(ImVec2(graphWidth + legendWidth, height));
 		}
 
