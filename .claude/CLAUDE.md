@@ -87,7 +87,16 @@ hlslkit-generate-defines --log CommunityShaders.log
 
 # Scan for buffer conflicts across features
 hlslkit-buffer-scan --features-dir features/
+
+# Prove a shader refactor changed no behavior (compiles base ref vs working tree,
+# compares DXBC across VR x HDR_OUTPUT permutations; exit 0 identical / 2 differs)
+pwsh tools/verify-shader-refactor.ps1 package/Shaders/Foo.hlsl   # bash: tools/verify-shader-refactor.sh
 ```
+
+When refactoring an existing shader (especially the decompile-transcription shaders like
+`ISTemporalAA.hlsl`), use `tools/verify-shader-refactor.ps1` to prove the change is
+behavior-preserving: identical compiled bytecode means a provable no-op. See
+`docs/development/shader-workflow.md` for details.
 
 ### Custom CMake Targets
 
