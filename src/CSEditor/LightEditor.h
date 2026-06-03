@@ -2,6 +2,7 @@
 #include "../Features/InverseSquareLighting/Common.h"
 #include "LightPicker.h"
 #include <nlohmann/json.hpp>
+#include <chrono>
 #include <set>
 
 namespace RE { class BSLight; }
@@ -160,9 +161,25 @@ private:
 	static bool MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr);
 	bool SaveToLightPlacer(bool includeColor = false, bool dryRun = false);
 
+	// Context used to match an LP config entry. Defaults (via MakeSelectedContext) reproduce
+	// the historical member-driven behavior; the Select-Mesh popup builds one from the picked
+	// mesh + a chosen attached bulb instead.
+	struct MatchContext
+	{
+		std::string ownerModelPath;
+		std::string ownerEditorId;
+		RE::FormID  baseFormId = 0;     // base object FormID of the owner ref
+		std::string lightEDID;
+		RE::TESObjectREFR* refr = nullptr;
+	};
+
+	MatchContext MakeSelectedContext() const;
+	static void MutateFilterList(nlohmann::ordered_json& lightEntry, const char* listKey, const std::string& ownerEntry, bool add);
+	bool ModifyLPFilterListFor(const std::string& configPath, const MatchContext& ctx, bool isWhiteList, bool add);
+
 	static std::string FormatOwnerFormEntry(RE::TESObjectREFR* refr);
 	bool LoadLPConfig(nlohmann::ordered_json& out) const;
-	nlohmann::ordered_json* FindMatchingLightEntry(nlohmann::ordered_json& configArray, bool applyFilters = true);
+	nlohmann::ordered_json* FindMatchingLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, bool applyFilters = true);
 	bool ModifyLPFilterList(bool isWhiteList, bool add);
 	void RefreshLPJsonState();
 	void SyncLPFlagsToRuntime();
@@ -174,6 +191,17 @@ private:
 	bool addLightPopupOpen = false;
 	LightPicker::PickedMesh pickedMesh;
 
+	struct AttachedBulb
+	{
+		std::string lightEDID;
+		std::string configPath;
+		RE::FormID  refrId = 0;   // owner reference (the picked mesh ref)
+		uint32_t    index  = 0;   // running per-ref index, mirrors GatherLights ordering
+	};
+	std::vector<AttachedBulb> attachedBulbs;   // bulbs live-attached to pickedMesh, built on popup open
+	int  addSelectedBulb = -1;                 // index into attachedBulbs
+	char addBulbSearch[256] = {};              // search text for the bulb combo
+
 	// Popup selections.
 	std::vector<std::string> lpConfigPaths;   // relative paths under LightPlacer\, no extension
 	int  addSelectedConfig = -1;              // index into lpConfigPaths
@@ -181,12 +209,16 @@ private:
 	RE::FormID addSelectedLighFormId = 0;     // chosen LIGH
 	char addConfigSearch[256] = {};           // persisted search text for Target JSON combo
 	char addLighSearch[256] = {};             // persisted search text for Light record combo
+	int  addPopupMode = -1;                   // 0 = Add Light, 1 = Edit Bulb, 2 = Whitelist, 3 = Blacklist
+	enum AddPopupMode { ModeAddLight = 0, ModeEditBulb = 1, ModeWhitelist = 2, ModeBlacklist = 3 };
 	bool addPopupPrefsLoaded = false;
 
-	// Post-add attaching sequence.
-	enum class AttachPhase { Idle, WaitingForReload, WaitingForRespawn };
+	// Post-add attaching sequence. Each step is spaced by kAttachStepDelay so the game
+	// has time to flush the disable/enable and respawn the reference with its new bulb.
+	enum class AttachPhase { Idle, WaitingForReload, WaitingForEnable, WaitingForRespawn };
+	static constexpr std::chrono::milliseconds kAttachStepDelay{ 500 };
 	AttachPhase attachPhase = AttachPhase::Idle;
-	int attachCountdown = 0;
+	std::chrono::steady_clock::time_point attachPhaseStart;
 	RE::ObjectRefHandle attachPendingRefr;
 	std::string attachConfigPath;
 
@@ -200,6 +232,7 @@ private:
 	void DrawAddLightButton();
 	void DrawAddLightPopup();
 	std::vector<std::string> ScanLPConfigPaths() const;
+	void GatherAttachedBulbs(RE::TESObjectREFR* refr);
 	bool CanAddBulb(std::string& reasonOut) const;
 	std::string AddEntryTargetString() const;
 	bool AddBulbToConfig();

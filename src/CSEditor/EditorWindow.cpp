@@ -2109,8 +2109,12 @@ void EditorWindow::AdjustFlySpeed(float scrollDelta)
 	RE::Console::ExecuteCommand(std::format("sucsm {:.0f}", flySpeed).c_str());
 }
 
-bool EditorWindow::ShouldHandleEscapeKey() const
+bool EditorWindow::ShouldHandleEscapeKey()
 {
+	if (suppressNextEditorEscape) {
+		suppressNextEditorEscape = false;
+		return false;
+	}
 	return !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 }
 
