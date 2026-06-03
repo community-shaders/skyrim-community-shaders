@@ -11,6 +11,7 @@
 #include "State.h"
 #include "Upscaling.h"
 #include "Util.h"
+#include <algorithm>
 #include <dxgi1_4.h>
 #include <dxgi1_6.h>
 #include <imgui.h>
@@ -424,7 +425,18 @@ void HDRDisplay::DrawSettings()
 		ImGui::Separator();
 		ImGui::Spacing();
 
-		if (ImGui::Button(T(TKEY("force_enable_hdr"), "Force Enable HDR"), ImVec2(150, 0))) {
+		const auto buttonWidthForLabel = [](const char* label) {
+			return ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+		};
+		const char* forceEnableLabel = T(TKEY("force_enable_hdr"), "Force Enable HDR");
+		const char* cancelLabel = T(TKEY("cancel"), "Cancel");
+		const float buttonWidth = std::max({
+			ThemeManager::Constants::POPUP_BUTTON_WIDTH * Util::GetUIScale(),
+			buttonWidthForLabel(forceEnableLabel),
+			buttonWidthForLabel(cancelLabel)
+		});
+
+		if (ImGui::Button(forceEnableLabel, ImVec2(buttonWidth, 0))) {
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
 				settings.enableHDR = true;
@@ -437,7 +449,7 @@ void HDRDisplay::DrawSettings()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button(T(TKEY("cancel"), "Cancel"), ImVec2(150, 0))) {
+		if (ImGui::Button(cancelLabel, ImVec2(buttonWidth, 0))) {
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
 				settings.enableHDR = false;

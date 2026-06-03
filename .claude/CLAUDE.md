@@ -87,7 +87,16 @@ hlslkit-generate-defines --log CommunityShaders.log
 
 # Scan for buffer conflicts across features
 hlslkit-buffer-scan --features-dir features/
+
+# Prove a shader refactor changed no behavior (compiles base ref vs working tree,
+# compares DXBC across VR x HDR_OUTPUT permutations; exit 0 identical / 2 differs)
+pwsh tools/verify-shader-refactor.ps1 package/Shaders/Foo.hlsl   # bash: tools/verify-shader-refactor.sh
 ```
+
+When refactoring an existing shader (especially the decompile-transcription shaders like
+`ISTemporalAA.hlsl`), use `tools/verify-shader-refactor.ps1` to prove the change is
+behavior-preserving: identical compiled bytecode means a provable no-op. See
+`docs/development/shader-workflow.md` for details.
 
 ### Custom CMake Targets
 
@@ -615,6 +624,7 @@ The CI workflow checks:
 
 -   `en.json` is in sync with source code (`--check`)
 -   No orphaned keys exist (`--orphans`)
+-   Translation file key order matches `en.json` (`sort-i18n.py --check`)
 -   Translation files have valid JSON format
 -   Placeholders `{name}` are consistent across languages
 
@@ -623,4 +633,13 @@ The CI workflow checks:
 ```bash
 python tools/extract-i18n.py --check
 python tools/extract-i18n.py --orphans
+python tools/sort-i18n.py --check
 ```
+
+If `sort-i18n.py --check` fails, fix it with:
+
+```bash
+python tools/sort-i18n.py --write
+```
+
+This reorders non-English translation files so their keys follow `en.json`'s order (with `_meta` first, then keys in en.json order, then any extra keys alphabetically).

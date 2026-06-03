@@ -7,7 +7,7 @@
 #include "State.h"
 #include "Util.h"
 
-#define I18N_KEY_PREFIX "feature.ssgi."
+#define I18N_KEY_PREFIX "feature.screen_space_gi."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ScreenSpaceGI::Settings,
