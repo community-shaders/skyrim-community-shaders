@@ -33,8 +33,10 @@ namespace Triplanar
 	float4 SampleStochastic(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float noise)
 	{
 		float3 scaledPos = worldPos * scale;
-		float3 dPdx = ddx(scaledPos);
-		float3 dPdy = ddy(scaledPos);
+		float3 dPdx = 0.0;
+		float3 dPdy = 0.0;
+		dPdx = ddx(scaledPos);
+		dPdy = ddy(scaledPos);
 
 		if (noise < weights.x)
 			return tex.SampleGrad(samp, scaledPos.yz, dPdx.yz, dPdy.yz);
@@ -48,8 +50,10 @@ namespace Triplanar
 	{
 		float3 scaledPos = worldPos * scale;
 		float biasScale = exp2(bias);
-		float3 dPdx = ddx(scaledPos) * biasScale;
-		float3 dPdy = ddy(scaledPos) * biasScale;
+		float3 dPdx = 0.0;
+		float3 dPdy = 0.0;
+		dPdx = ddx(scaledPos) * biasScale;
+		dPdy = ddy(scaledPos) * biasScale;
 
 		if (noise < weights.x)
 			return tex.SampleGrad(samp, scaledPos.yz, dPdx.yz, dPdy.yz);

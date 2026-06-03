@@ -117,18 +117,15 @@ inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 {
-	[branch] if (!SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
-		return ZeroStochasticOffsets();
-
-	float2 cellID = floor(landscapeUV * 255437.0);
-	float2 h1 = hashLOD(cellID);
-	float2 h2 = hashLOD(cellID + 127.0);
-
-	StochasticOffsets o;
-	o.offset1 = h1 * 0.08;
-	o.offset2 = h2 * 0.08;
-	o.offset3 = 0;
-	o.weights = float3(0.65, 0.35, 0.0);
+	StochasticOffsets o = ZeroStochasticOffsets();
+	if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+		float2 cellID = floor(landscapeUV * 255437.0);
+		float2 h1 = hashLOD(cellID);
+		float2 h2 = hashLOD(cellID + 127.0);
+		o.offset1 = h1 * 0.08;
+		o.offset2 = h2 * 0.08;
+		o.weights = float3(0.65, 0.35, 0.0);
+	}
 	return o;
 }
 
@@ -176,15 +173,15 @@ inline float4 StochasticBlendTwoSamples(float mipLevel, float4 s1, float4 s2, fl
 // LOD terrain stochastic sampling — 2 SampleBias, fixed blend (pass jitter from StochasticSampleLODJitter(screenNoise)).
 inline float4 StochasticSampleLOD(float2 jitter, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD)
 {
-	// Feature off: a single plain fetch (offsets are zero anyway) instead of two identical reads + lerp.
-	[branch] if (!SharedData::terrainVariationSettings.enableLODTerrainTilingFix)
-		return tex.SampleBias(samp, uv, SharedData::MipBias);
-
-	float2 j1 = (offsetsLOD.offset1 + jitter) * 0.01;
-	float2 j2 = (offsetsLOD.offset2 + float2(jitter.y, -jitter.x)) * 0.01;
-	float4 s1 = tex.SampleBias(samp, uv + j1, SharedData::MipBias);
-	float4 s2 = tex.SampleBias(samp, uv + j2, SharedData::MipBias);
-	return lerp(s2, s1, offsetsLOD.weights.x);
+	float4 result = tex.SampleBias(samp, uv, SharedData::MipBias);
+	if (SharedData::terrainVariationSettings.enableLODTerrainTilingFix) {
+		float2 j1 = (offsetsLOD.offset1 + jitter) * 0.01;
+		float2 j2 = (offsetsLOD.offset2 + float2(jitter.y, -jitter.x)) * 0.01;
+		float4 s1 = tex.SampleBias(samp, uv + j1, SharedData::MipBias);
+		float4 s2 = tex.SampleBias(samp, uv + j2, SharedData::MipBias);
+		result = lerp(s2, s1, offsetsLOD.weights.x);
+	}
+	return result;
 }
 
 // 2-sample height-blended stochastic sampling. Uses one shared gradient (SampleGrad) for both taps so
@@ -206,16 +203,14 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	float secondSampleFade = saturate((TV_SINGLE_SAMPLE_MIP_START - mipLevel) * TV_SINGLE_SAMPLE_FADE_RCP);
 
 	float4 s1 = tex.SampleGrad(samp, uv + offsets.offset1, dUVdx, dUVdy);
-	// Far/minified: second tap has fully faded out -> one anisotropic sample (still offset, still breaks tiling).
-	[branch] if (secondSampleFade <= 0.0)
-		return s1;
-
-	float4 s2 = tex.SampleGrad(samp, uv + offsets.offset2, dUVdx, dUVdy);
-
-	float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
-	float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
-
-	return StochasticBlendTwoSamples(mipLevel, s1, s2, offsets.weights, h1, h2, secondSampleFade);
+	float4 result = s1;
+	if (secondSampleFade > 0.0) {
+		float4 s2 = tex.SampleGrad(samp, uv + offsets.offset2, dUVdx, dUVdy);
+		float h1 = lerp(dot(s1.rgb, LUMINANCE_WEIGHTS), s1.a, step(0.001, s1.a));
+		float h2 = lerp(dot(s2.rgb, LUMINANCE_WEIGHTS), s2.a, step(0.001, s2.a));
+		result = StochasticBlendTwoSamples(mipLevel, s1, s2, offsets.weights, h1, h2, secondSampleFade);
+	}
+	return result;
 }
 
 // 2-sample parallax/height sampling. MUST use the same dual-tap stochastic blend (same offsets/weights)

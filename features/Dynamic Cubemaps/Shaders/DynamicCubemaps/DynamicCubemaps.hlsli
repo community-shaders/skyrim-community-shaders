@@ -42,7 +42,8 @@ namespace DynamicCubemaps
 		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
 		if (SharedData::iblSettings.EnableIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
-			return ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
+			finalIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
+			return finalIrradiance;
 		}
 #		endif
 
