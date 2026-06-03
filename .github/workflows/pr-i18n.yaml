@@ -7,6 +7,7 @@ on:
             - "src/**"
             - "package/SKSE/Plugins/CommunityShaders/Translations/**"
             - "tools/extract-i18n.py"
+            - "tools/sort-i18n.py"
 
 permissions:
     contents: read
@@ -29,6 +30,9 @@ jobs:
 
             - name: Check for orphaned keys
               run: python tools/extract-i18n.py --orphans
+
+            - name: Check translation file key order matches en.json
+              run: python tools/sort-i18n.py --check
 
             - name: Validate translation file formats
               run: |

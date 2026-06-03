@@ -1208,33 +1208,21 @@ void SettingsTabRenderer::RenderColorsTab()
 		// Color filter at the top with search icon
 		static ImGuiTextFilter colorFilter;
 
-		float iconSize = 20.0f;
-		float iconSpace = iconSize + 14.0f;
-		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+		const float scale = Util::GetSearchUIScale();
+		const float iconSize = ThemeManager::Constants::SEARCH_ICON_SIZE * scale;
+		const float iconSpace = iconSize + ThemeManager::Constants::SEARCH_INPUT_PADDING_EXTRA * scale;
 		float availableWidth = ImGui::GetFontSize() * 16;
-		float frameHeight = ImGui::GetFrameHeight();
 
 		// Custom style for filter with icon space
-		float scale = Util::GetUIScale();
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f * scale));
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, ThemeManager::Constants::SEARCH_INPUT_FRAME_PADDING_Y * scale));
 		colorFilter.Draw(T("menu.settings.filter_colors", "Filter colors"), availableWidth);
 		ImGui::PopStyleVar();
 
 		// Draw search icon
-		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f * scale, cursorPos.y + (frameHeight - iconSize) * 0.5f);
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
-		float radius = iconSize * 0.3f;
-
-		auto& palette = globals::menu->GetTheme().Palette;
-		ImVec4 iconColor = palette.Text;
-		iconColor.w *= 0.7f;
-		ImU32 iconColorU32 = ImGui::GetColorU32(iconColor);
-
-		drawList->AddCircle(center, radius, iconColorU32, 12, 2.2f);
-		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
-		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
-		drawList->AddLine(handleStart, handleEnd, iconColorU32, 2.1f);
+		const ImVec2 filterMin = ImGui::GetItemRectMin();
+		const ImVec2 filterSize = ImGui::GetItemRectSize();
+		ImVec2 iconPos = ImVec2(filterMin.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, filterMin.y + (filterSize.y - iconSize) * 0.5f);
+		Util::DrawSearchIcon(iconPos, iconSize, ThemeManager::Constants::SEARCH_ICON_ALPHA);
 
 		ImGui::Spacing();
 

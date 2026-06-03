@@ -45,6 +45,7 @@ struct VS_OUTPUT
 
 	float4 WorldPosition: POSITION1;
 	float4 PreviousWorldPosition: POSITION2;
+	float3 FogPosition: TEXCOORD4;
 #if defined(VR)
 	float ClipDistance: SV_ClipDistance0;  // o11
 	float CullDistance: SV_CullDistance0;  // p11
@@ -138,6 +139,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.Position = mul(WorldViewProj[eyeIndex], inputPosition).xyww;
 	vsout.WorldPosition = mul(World[eyeIndex], inputPosition);
+	vsout.FogPosition = vsout.WorldPosition.xyz - EyePosition[eyeIndex].xyz;
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], inputPosition);
 
 #	ifdef VR
@@ -281,6 +283,15 @@ PS_OUTPUT main(PS_INPUT input)
 #	else
 	psout.Color = float4(0, 0, 0, 1.0);
 #	endif  // OCCLUSION
+
+#	if defined(EXP_HEIGHT_FOG)
+	const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection) != 0;
+	if (inReflection && SharedData::exponentialHeightFogSettings.enabled) {
+		float3 skyFogPosition = normalize(input.FogPosition.xyz) * SharedData::CameraData.x;
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(skyFogPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, psout.Color.xyz, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
+		psout.Color.xyz = lerp(psout.Color.xyz, exponentialHeightFog.xyz, exponentialHeightFog.w);
+	}
+#	endif
 
 	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 

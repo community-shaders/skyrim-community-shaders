@@ -2284,8 +2284,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.Metallic = saturate(rawRMAOS.y);
 	material.AO = rawRMAOS.z;
 
-	// Apply vertex color to base color so PBR metals use it
-	float3 pbrVertexColor = Color::SrgbToLinear(input.Color.xyz);
+	// Apply vertex color to base color so PBR metals use it. On LANDSCAPE,
+	// honor DisableTerrainVertexColors (as the non-PBR path does) by
+	// neutralizing the source color so terrain vertex colors don't tint PBR;
+	// a white source yields VertexAO == 1, i.e. no AO darkening either.
+	float3 pbrVertexColorSrc = input.Color.xyz;
+#		if defined(LANDSCAPE)
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		pbrVertexColorSrc = 1;
+#		endif
+	float3 pbrVertexColor = Color::SrgbToLinear(pbrVertexColorSrc);
 	float pbrVertexAO = max(max(pbrVertexColor.x, pbrVertexColor.y), pbrVertexColor.z);
 	pbrVertexColor = pbrVertexAO == 0.0f ? 1.0f : pbrVertexColor * lerp(1 / max(pbrVertexAO, 0.001), 1, SharedData::truePBRSettings.VertexAOStrength);
 
@@ -2905,7 +2913,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 		float parallaxShadow = 1;
 
-#			if defined(EMAT)
+#			if defined(EMAT) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 		[branch] if (
 			SharedData::extendedMaterialSettings.EnableShadows &&
 			!(light.lightFlags & LightLimitFix::LightFlags::Simple) &&
@@ -2935,7 +2943,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				parallaxShadow = ExtendedMaterials::GetParallaxSoftShadowMultiplier(uv, mipLevel, lightDirectionTS, sh0, TexParallaxSampler, SampParallaxSampler, 0, parallaxShadowQuality, screenNoise, displacementParams);
 #				endif
 		}
-#			endif
+#			endif  // defined(EMAT) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 
 		DirectContext pointLightContext;
 		DirectLightingOutput pointLightOutput;
@@ -3283,12 +3291,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 vanillaFogColor = fogColor;
 	float vanillaFogFactor = fogFactor;
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+		float4 exponentialHeightFog;
+		if (inReflection) {
+			exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
+		} else {
+			exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
+		}
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
 	}
 #		endif
-	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z) {
+	if ((FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z) || inReflection) {
 #		if defined(EXP_HEIGHT_FOG)
 		if (SharedData::exponentialHeightFogSettings.enabled) {
 			if (!ExponentialHeightFog::ShouldDisableVanillaFog()) {
