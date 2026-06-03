@@ -1,4 +1,5 @@
 #include "LightPicker.h"
+#include "EditorWindow.h"
 
 #include "RE/B/bhkPickData.h"
 #include "RE/N/NiCamera.h"
@@ -105,6 +106,8 @@ void LightPicker::Update()
 		return;
 
 	if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+		if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+			EditorWindow::GetSingleton()->suppressNextEditorEscape = true;
 		Cancel();
 		return;
 	}

@@ -176,6 +176,7 @@ private:
 	MatchContext MakeSelectedContext() const;
 	static void MutateFilterList(nlohmann::ordered_json& lightEntry, const char* listKey, const std::string& ownerEntry, bool add);
 	bool ModifyLPFilterListFor(const std::string& configPath, const MatchContext& ctx, bool isWhiteList, bool add);
+	bool ModifyLPFilterListFor(const std::string& configPath, const MatchContext& ctx, const std::string& entryStr, bool isWhiteList, bool add);
 
 	static std::string FormatOwnerFormEntry(RE::TESObjectREFR* refr);
 	bool LoadLPConfig(nlohmann::ordered_json& out) const;
@@ -202,6 +203,18 @@ private:
 	int  addSelectedBulb = -1;                 // index into attachedBulbs
 	char addBulbSearch[256] = {};              // search text for the bulb combo
 
+	struct FilterListEntry
+	{
+		std::string lightEDID;
+		std::string configPath;
+		std::string matchedEntry;  // the exact string found in whiteList/blackList
+		bool        isWhiteList = false;
+	};
+	std::vector<FilterListEntry> filterListEntries;  // WL/BL entries where pickedMesh's ref appears
+	int  addSelectedFilterEntry = -1;
+	char addFilterSearch[256]   = {};
+	int  addFilterEntryType = 0;  // 0 = Reference (FormID), 1 = Cell EditorID
+
 	// Popup selections.
 	std::vector<std::string> lpConfigPaths;   // relative paths under LightPlacer\, no extension
 	int  addSelectedConfig = -1;              // index into lpConfigPaths
@@ -209,8 +222,8 @@ private:
 	RE::FormID addSelectedLighFormId = 0;     // chosen LIGH
 	char addConfigSearch[256] = {};           // persisted search text for Target JSON combo
 	char addLighSearch[256] = {};             // persisted search text for Light record combo
-	int  addPopupMode = -1;                   // 0 = Add Light, 1 = Edit Bulb, 2 = Whitelist, 3 = Blacklist
-	enum AddPopupMode { ModeAddLight = 0, ModeEditBulb = 1, ModeWhitelist = 2, ModeBlacklist = 3 };
+	int  addPopupMode = -1;                   // 0 = Add Light, 1 = Edit Bulb, 2 = Whitelist, 3 = Blacklist, 4 = Remove from List
+	enum AddPopupMode { ModeAddLight = 0, ModeEditBulb = 1, ModeWhitelist = 2, ModeBlacklist = 3, ModeRemoveFromList = 4 };
 	int  addLightSubMode = -1;                // 0 = Add new point, 1 = Add to entry, 2 = Add new entry
 	enum AddLightSubMode { SubModeNewPoint = 0, SubModeToEntry = 1, SubModeNewEntry = 2 };
 	bool addPopupPrefsLoaded = false;
@@ -235,6 +248,7 @@ private:
 	void DrawAddLightPopup();
 	std::vector<std::string> ScanLPConfigPaths() const;
 	void GatherAttachedBulbs(RE::TESObjectREFR* refr);
+	void ScanFilterListEntries(RE::TESObjectREFR* refr);
 	bool CanAddBulb(std::string& reasonOut) const;
 	std::string AddEntryTargetString() const;
 	bool AddBulbToConfig();
