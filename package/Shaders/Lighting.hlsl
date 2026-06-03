@@ -3283,12 +3283,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 vanillaFogColor = fogColor;
 	float vanillaFogFactor = fogFactor;
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+		float4 exponentialHeightFog;
+		if (inReflection) {
+			exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
+		} else {
+			exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
+		}
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
 	}
 #		endif
-	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z) {
+	if ((FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z) || inReflection) {
 #		if defined(EXP_HEIGHT_FOG)
 		if (SharedData::exponentialHeightFogSettings.enabled) {
 			if (!ExponentialHeightFog::ShouldDisableVanillaFog()) {
