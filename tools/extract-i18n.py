@@ -292,7 +292,14 @@ def unescape_cpp_string(s: str) -> str:
     s = s.replace("\\t", "\t")
     s = s.replace('\\"', '"')
     s = s.replace("\\\\", "\\")
-    s = re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: chr(int(m.group(1), 16)), s)
+    # Decode runs of \xNN byte escapes as a single UTF-8 sequence so multi-byte
+    # characters (e.g. an em dash written as \xe2\x80\x94) round-trip correctly
+    # instead of producing one Latin-1 codepoint per byte (mojibake).
+    def _decode_hex_run(match: "re.Match[str]") -> str:
+        byte_values = bytes(int(b, 16) for b in re.findall(r"[0-9a-fA-F]{2}", match.group(0)))
+        return byte_values.decode("utf-8", errors="replace")
+
+    s = re.sub(r"(?:\\x[0-9a-fA-F]{2})+", _decode_hex_run, s)
     return s
 
 

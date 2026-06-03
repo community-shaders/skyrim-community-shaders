@@ -170,6 +170,7 @@ void LightPicker::BeginPick()
 {
 	picking = true;
 	result = {};
+	InvalidateHover();
 	logger::info("[LightPicker] Pick mode started");
 }
 
@@ -178,6 +179,13 @@ void LightPicker::Cancel()
 	if (picking)
 		logger::info("[LightPicker] Pick mode cancelled");
 	picking = false;
+}
+
+void LightPicker::InvalidateHover()
+{
+	hoverMesh = {};
+	lastMouseX = -1.f;
+	lastMouseY = -1.f;
 }
 
 void LightPicker::Update()

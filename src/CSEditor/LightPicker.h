@@ -39,6 +39,10 @@ struct LightPicker
 	void Cancel();
 	[[nodiscard]] bool IsPicking() const { return picking; }
 
+	// Clears the cached hover hit so Update() recomputes on the next frame even if the
+	// cursor is stationary. Call when pick mode changes to avoid showing a stale hit.
+	void InvalidateHover();
+
 	// Called once per frame while the editor is active. Performs the raycast on a
 	// qualifying left-click and stores a result; handles right-click / ESC cancel.
 	void Update();

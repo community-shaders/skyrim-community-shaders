@@ -811,7 +811,7 @@
     "feature.key_features": "主要特性：",
     "feature.light_editor.active_shadow_lights": "活跃阴影光源：%u",
     "feature.light_editor.base_object": "基础对象：0x%08X | %s",
-    "feature.light_editor.cell": "单元格：%s",
+    "feature.light_editor.cell": "单元格：0x%08X | %s",
     "feature.light_editor.color": "颜色",
     "feature.light_editor.cutoff": "截止",
     "feature.light_editor.disable_inverse_square_falloff_lights": "禁用平方反比衰减光源",

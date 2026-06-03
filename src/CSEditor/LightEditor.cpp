@@ -810,7 +810,11 @@ void LightEditor::DrawAddLightButton()
 		ImGui::RadioButton(T(TKEY("pick_mode_collision"), "Collision"), &pm, 0);
 		ImGui::SameLine();
 		ImGui::RadioButton(T(TKEY("pick_mode_effect"), "Effect mesh"), &pm, 1);
-		picker.pickMode = static_cast<LightPicker::PickMode>(pm);
+		const auto newPickMode = static_cast<LightPicker::PickMode>(pm);
+		if (newPickMode != picker.pickMode) {
+			picker.pickMode = newPickMode;
+			picker.InvalidateHover();  // recompute the hover hit under the new mode immediately
+		}
 	}
 }
 
@@ -2174,7 +2178,10 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 	nlohmann::ordered_json newData;
 	if (includeColor || data.contains("color"))
 		newData["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
-	newData["light"] = data["light"];
+	// Persist the edited bulb type (LIGH form); fall back to the existing entry value
+	// when the edited form has no resolvable EditorID.
+	const std::string editedLighEdid = LighEdidForFormId(current.data.lighFormId);
+	newData["light"] = editedLighEdid.empty() ? data["light"] : nlohmann::ordered_json(editedLighEdid);
 	newData["fade"] = current.data.fade;
 	if (isInvSq) {
 		newData["size"] = current.data.size;
