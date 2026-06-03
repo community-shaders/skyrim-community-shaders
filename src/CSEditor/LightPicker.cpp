@@ -146,6 +146,14 @@ LightPicker::PickedMesh LightPicker::ResolveNearestToCursor()
 	if (!baseObj)
 		return out;
 
+	// Discard if the collision raycast also resolves this same ref — it has Havok geometry
+	// and is reachable in normal collision mode.
+	{
+		PickedMesh collisionHit = ResolveUnderCursor(false);
+		if (collisionHit.valid && collisionHit.refrHandle == bestRef->GetHandle())
+			return out;  // out.valid is still false
+	}
+
 	out.refrHandle  = bestRef->GetHandle();
 	out.baseFormId  = baseObj->formID;
 	out.editorId    = clib_util::editorID::get_editorID(baseObj);

@@ -726,11 +726,13 @@ void LightEditor::DrawAddLightButton()
 		ImGui::Text("%s", T(TKEY("select_mesh_tooltip"), "Click a mesh in the world to attach a new bulb, edit an existing bulb, or whitelist/blacklist this reference."));
 	}
 
-	int pm = static_cast<int>(picker.pickMode);
-	ImGui::RadioButton(T(TKEY("pick_mode_collision"), "Collision"), &pm, 0);
-	ImGui::SameLine();
-	ImGui::RadioButton(T(TKEY("pick_mode_effect"), "Effect mesh"), &pm, 1);
-	picker.pickMode = static_cast<LightPicker::PickMode>(pm);
+	if (picker.IsPicking()) {
+		int pm = static_cast<int>(picker.pickMode);
+		ImGui::RadioButton(T(TKEY("pick_mode_collision"), "Collision"), &pm, 0);
+		ImGui::SameLine();
+		ImGui::RadioButton(T(TKEY("pick_mode_effect"), "Effect mesh"), &pm, 1);
+		picker.pickMode = static_cast<LightPicker::PickMode>(pm);
+	}
 }
 
 std::vector<std::string> LightEditor::ScanLPConfigPaths() const
