@@ -211,6 +211,8 @@ private:
 	char addLighSearch[256] = {};             // persisted search text for Light record combo
 	int  addPopupMode = -1;                   // 0 = Add Light, 1 = Edit Bulb, 2 = Whitelist, 3 = Blacklist
 	enum AddPopupMode { ModeAddLight = 0, ModeEditBulb = 1, ModeWhitelist = 2, ModeBlacklist = 3 };
+	int  addLightSubMode = -1;                // 0 = Add new point, 1 = Add to entry, 2 = Add new entry
+	enum AddLightSubMode { SubModeNewPoint = 0, SubModeToEntry = 1, SubModeNewEntry = 2 };
 	bool addPopupPrefsLoaded = false;
 
 	// Post-add attaching sequence. Each step is spaced by kAttachStepDelay so the game
@@ -236,6 +238,9 @@ private:
 	bool CanAddBulb(std::string& reasonOut) const;
 	std::string AddEntryTargetString() const;
 	bool AddBulbToConfig();
+	bool AddPointToConfig(const AttachedBulb& bulb);
+	bool LightAlreadyInEntry(const AttachedBulb& bulb, const std::string& lighEdid) const;
+	bool AddLightToExistingEntry(const AttachedBulb& bulb, const std::string& lighEdid);
 	void SavePopupPrefs() const;
 	void LoadPopupPrefs();
 };
