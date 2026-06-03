@@ -42,9 +42,7 @@ namespace DynamicCubemaps
 		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
 		if (SharedData::iblSettings.EnableIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
-			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
-			finalIrradiance = specularIrradiance;
-			return finalIrradiance;
+			return ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
 		}
 #		endif
 
@@ -59,7 +57,8 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableIBL) {
 			float3 envSample = EnvTexture.SampleLevel(SampColorSampler, R, level);
 			float3 fullSample = EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level);
-			float3 envSpecular, skySpecular;
+			float3 envSpecular = 0.0;
+			float3 skySpecular = 0.0;
 
 			if (SharedData::iblSettings.DALCMode == 2) {
 				// Mode 2: DALC-normalized env scaled by DALCAmount + sky overlay
@@ -147,8 +146,7 @@ namespace DynamicCubemaps
 		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
 		if (SharedData::iblSettings.EnableIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
-			finalIrradiance += specularIrradiance;
-			return (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+			return (F0 * specularBRDF.x + specularBRDF.y) * specularIrradiance;
 		}
 #		endif
 
@@ -163,7 +161,8 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableIBL) {
 			float3 envSample = EnvTexture.SampleLevel(SampColorSampler, R, level);
 			float3 fullSample = EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level);
-			float3 envSpecular, skySpecular;
+			float3 envSpecular = 0.0;
+			float3 skySpecular = 0.0;
 
 			if (SharedData::iblSettings.DALCMode == 2) {
 				// Mode 2: DALC-normalized env scaled by DALCAmount + sky overlay

@@ -17,34 +17,30 @@ namespace WaterEffects
 		float causticsDistToWater = waterData.w - worldPosition.z;
 		float shoreFactorCaustics = saturate(causticsDistToWater / 64.0);
 
-		if (shoreFactorCaustics > 0.0) {
-			float causticsFade = 1.0 - saturate(causticsDistToWater / 1024.0);
-			causticsFade *= causticsFade;
+		if (shoreFactorCaustics <= 0.0)
+			return 1.0;
 
-			float2 causticsUV = (worldPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy) * 0.005;
+		float causticsFade = 1.0 - saturate(causticsDistToWater / 1024.0);
+		causticsFade *= causticsFade;
 
-			float2 causticsUV1 = PanCausticsUV(causticsUV, 0.5 * 0.2, 1.0);
-			float2 causticsUV2 = PanCausticsUV(causticsUV, 1.0 * 0.2, -0.5);
+		float2 causticsUV = (worldPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy) * 0.005;
 
-			const float causticsHigh =
-				(causticsFade > 0.0)
-					? (min(SampleCaustics(causticsUV1), SampleCaustics(causticsUV2)) * 4.0)
-					: 1.0;
+		float2 causticsUV1 = PanCausticsUV(causticsUV, 0.5 * 0.2, 1.0);
+		float2 causticsUV2 = PanCausticsUV(causticsUV, 1.0 * 0.2, -0.5);
 
-			causticsUV *= 0.5;
+		float causticsHigh = 1.0;
+		if (causticsFade > 0.0)
+			causticsHigh = min(SampleCaustics(causticsUV1), SampleCaustics(causticsUV2)) * 4.0;
 
-			causticsUV1 = PanCausticsUV(causticsUV, 0.5 * 0.1, 1.0);
-			causticsUV2 = PanCausticsUV(causticsUV, 1.0 * 0.1, -0.5);
+		float2 causticsUVLow = causticsUV * 0.5;
+		float2 causticsUVLow1 = PanCausticsUV(causticsUVLow, 0.5 * 0.1, 1.0);
+		float2 causticsUVLow2 = PanCausticsUV(causticsUVLow, 1.0 * 0.1, -0.5);
 
-			const float causticsLow =
-				(causticsFade < 1.0)
-					? (min(SampleCaustics(causticsUV1), SampleCaustics(causticsUV2)) * 4.0)
-					: 1.0;
+		float causticsLow = 1.0;
+		if (causticsFade < 1.0)
+			causticsLow = min(SampleCaustics(causticsUVLow1), SampleCaustics(causticsUVLow2)) * 4.0;
 
-			const float caustics = lerp(causticsLow, causticsHigh, causticsFade);
-			return lerp(1.0, caustics, shoreFactorCaustics);
-		}
-
-		return 1.0;
+		float caustics = lerp(causticsLow, causticsHigh, causticsFade);
+		return lerp(1.0, caustics, shoreFactorCaustics);
 	}
 }

@@ -32,32 +32,30 @@ namespace Triplanar
 	/// Stochastic triplanar: select one projection plane via noise, reducing 3 texture reads to 1.
 	float4 SampleStochastic(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float noise)
 	{
-		float3 dPdx = 0.0;
-		float3 dPdy = 0.0;
-		ComputeGradients(worldPos, scale, dPdx, dPdy);
+		float3 scaledPos = worldPos * scale;
+		float3 dPdx = ddx(scaledPos);
+		float3 dPdy = ddy(scaledPos);
 
 		if (noise < weights.x)
-			return tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
+			return tex.SampleGrad(samp, scaledPos.yz, dPdx.yz, dPdy.yz);
 		if (noise < weights.x + weights.y)
-			return tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
-		return tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+			return tex.SampleGrad(samp, scaledPos.xz, dPdx.xz, dPdy.xz);
+		return tex.SampleGrad(samp, scaledPos.xy, dPdx.xy, dPdy.xy);
 	}
 
 	/// Stochastic triplanar with mip bias via gradient scaling.
 	float4 SampleStochasticBias(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float bias, float noise)
 	{
-		float3 dPdx = 0.0;
-		float3 dPdy = 0.0;
-		ComputeGradients(worldPos, scale, dPdx, dPdy);
+		float3 scaledPos = worldPos * scale;
 		float biasScale = exp2(bias);
-		dPdx *= biasScale;
-		dPdy *= biasScale;
+		float3 dPdx = ddx(scaledPos) * biasScale;
+		float3 dPdy = ddy(scaledPos) * biasScale;
 
 		if (noise < weights.x)
-			return tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
+			return tex.SampleGrad(samp, scaledPos.yz, dPdx.yz, dPdy.yz);
 		if (noise < weights.x + weights.y)
-			return tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
-		return tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+			return tex.SampleGrad(samp, scaledPos.xz, dPdx.xz, dPdy.xz);
+		return tex.SampleGrad(samp, scaledPos.xy, dPdx.xy, dPdy.xy);
 	}
 }
 
