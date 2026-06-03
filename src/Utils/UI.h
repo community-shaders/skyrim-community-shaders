@@ -10,6 +10,7 @@
 
 #include "../FeatureConstraints.h"
 #include "../Menu/Fonts.h"
+#include "../Menu/ThemeManager.h"
 #include "Utils/Input.h"
 
 // Forward declarations
@@ -66,11 +67,15 @@ namespace Util
 
 	// Baseline font size for UI layout scaling (1080p dynamic font: DEFAULT_SCREEN_HEIGHT * DEFAULT_FONT_RATIO).
 	// Theme style values and pixel constants are designed for this size.
-	constexpr float kBaselineFontSize = 21.0f;
+	constexpr float kBaselineFontSize = ThemeManager::Constants::DEFAULT_SCREEN_HEIGHT * ThemeManager::Constants::DEFAULT_FONT_RATIO;
 
-	/// Returns a scale factor relative to the baseline font size, accounting for resolution and GlobalScale.
-	/// Use to scale hardcoded pixel sizes so layouts adapt to any font size.
-	inline float GetUIScale() { return ImGui::GetFontSize() / kBaselineFontSize; }
+	inline float GetUIScaleForBaseline(float baselineFontSize) { return ImGui::GetFontSize() / baselineFontSize; }
+
+	/// Returns a scale factor relative to the 1080p baseline font size.
+	inline float GetUIScale() { return GetUIScaleForBaseline(kBaselineFontSize); }
+
+	/// Returns a scale factor for search controls authored against the 2K baseline.
+	inline float GetSearchUIScale() { return GetUIScaleForBaseline(ThemeManager::Constants::SEARCH_BASELINE_SCREEN_HEIGHT * ThemeManager::Constants::DEFAULT_FONT_RATIO); }
 
 	/**
 	 * Usage:
@@ -865,7 +870,7 @@ namespace Util
 	 * @param size The size of the icon (default: 20.0f)
 	 * @param alpha Alpha multiplier for the icon color (default: 0.7f for subtle appearance)
 	 */
-	void DrawSearchIcon(const ImVec2& position, float size = 20.0f, float alpha = 0.7f);
+	void DrawSearchIcon(const ImVec2& position, float size = ThemeManager::Constants::SEARCH_ICON_SIZE, float alpha = ThemeManager::Constants::SEARCH_ICON_ALPHA);
 
 	/**
 	 * @brief Draws a search input field with icon inside a combo dropdown.

@@ -98,8 +98,27 @@ The `pr-i18n.yaml` workflow checks:
 
 -   `en.json` is in sync with source code (`--check`)
 -   No orphaned keys exist (`--orphans`)
+-   Translation file key order matches `en.json` (`sort-i18n.py --check`)
 -   Translation files have valid JSON format
 -   Placeholders `{name}` are consistent across languages
+
+### Translation Key Ordering
+
+All non-English translation files must have their keys ordered to match `en.json`. This ensures consistency and makes diffs easier to review.
+
+```bash
+# Check if translation files are correctly ordered
+python tools/sort-i18n.py --check
+
+# Automatically reorder translation files to match en.json
+python tools/sort-i18n.py --write
+```
+
+Ordering rules:
+
+1. `_meta` always comes first
+2. Keys present in `en.json` follow `en.json`'s order
+3. Any extra keys not in `en.json` are appended alphabetically at the end
 
 ### Key Naming Convention
 
