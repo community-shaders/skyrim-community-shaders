@@ -5,17 +5,17 @@
 #include "../Menu.h"
 #include "../Utils/UI.h"
 #include "EditorWindow.h"
-#include "WeatherUtils.h"
 #include "RE/B/BSLight.h"
 #include "RE/B/BSShadowLight.h"
 #include "RE/E/ExtraEmittanceSource.h"
+#include "WeatherUtils.h"
 
 #define I18N_KEY_PREFIX "feature.light_editor."
 
 #include <array>
 #include <filesystem>
-#include <numbers>
 #include <fstream>
+#include <numbers>
 #include <regex>
 #include <sstream>
 
@@ -93,7 +93,8 @@ static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::order
 			std::snprintf(buf, sizeof(buf), "%.4f", v);
 			std::string s(buf);
 			s.erase(s.find_last_not_of('0') + 1);
-			if (s.back() == '.') s.pop_back();
+			if (s.back() == '.')
+				s.pop_back();
 			rounded += s;
 			pos = it->position() + it->length();
 		}
@@ -119,7 +120,8 @@ static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::order
 			line += '[';
 			bool first = true;
 			for (std::sregex_iterator s(block.cbegin() + bracket, block.cend(), quotedStr), sEnd; s != sEnd; ++s) {
-				if (!first) line += ", ";
+				if (!first)
+					line += ", ";
 				line += (*s)[0];
 				first = false;
 			}
@@ -138,6 +140,64 @@ static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::order
 		return false;
 	}
 	return true;
+}
+
+// Absolute-relative path to a Light Placer config from its extension-less relative path.
+static std::filesystem::path LPConfigFilePath(const std::string& configPath)
+{
+	return std::filesystem::path("Data\\LightPlacer") / (configPath + ".json");
+}
+
+// Loads a Light Placer config into `out`. Returns false if the file is missing, fails to
+// parse, or is not a JSON array. Logs parse errors.
+static bool LoadConfigArray(const std::string& configPath, nlohmann::ordered_json& out)
+{
+	const auto filePath = LPConfigFilePath(configPath);
+	std::ifstream in(filePath);
+	if (!in.is_open())
+		return false;
+	try {
+		in >> out;
+	} catch (const nlohmann::json::parse_error& e) {
+		logger::warn("[LightEditor] Failed to parse {}: {}", filePath.string(), e.what());
+		return false;
+	}
+	return out.is_array();
+}
+
+// Lower-cases and forward-slashes a model path so casing/separator variants compare equal.
+static std::string NormalizeModelPath(std::string path)
+{
+	std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	std::replace(path.begin(), path.end(), '\\', '/');
+	return path;
+}
+
+// Builds the default LP light object for a freshly added bulb.
+static nlohmann::ordered_json MakeLightObject(const std::string& lighEdid)
+{
+	nlohmann::ordered_json data;
+	data["light"] = lighEdid;
+	data["fade"] = 1;
+	data["radius"] = 1;
+	data["flags"] = "";
+
+	nlohmann::ordered_json light;
+	light["data"] = std::move(data);
+	light["points"] = nlohmann::ordered_json::array({ nlohmann::ordered_json::array({ 0, 0, 1 }) });
+	return light;
+}
+
+// True if the entry's "lights" array already contains a light with the given EDID.
+static bool EntryContainsLight(const nlohmann::ordered_json& entry, const std::string& lighEdid)
+{
+	if (auto* lights = GetArrayMember(entry, "lights"))
+		for (const auto& le : *lights)
+			if (le.contains("data") && le["data"].contains("light") &&
+				le["data"]["light"].is_string() &&
+				le["data"]["light"].get<std::string>() == lighEdid)
+				return true;
+	return false;
 }
 
 void LightEditor::EnsureEmittanceFormListBuilt()
@@ -169,7 +229,6 @@ void LightEditor::EnsureEmittanceFormListBuilt()
 	std::ranges::sort(s_emittanceFormList, [](const auto& a, const auto& b) { return a.first < b.first; });
 }
 
-
 RE::FormID LightEditor::ResolveFormEntry(const std::string& entry)
 {
 	const auto tildePos = entry.find('~');
@@ -177,13 +236,19 @@ RE::FormID LightEditor::ResolveFormEntry(const std::string& entry)
 	if (tildePos == std::string::npos) {
 		if (!hasPrefix)
 			return 0;
-		try { return static_cast<RE::FormID>(std::stoul(entry.substr(2), nullptr, 16)); }
-		catch (...) { return 0; }
+		try {
+			return static_cast<RE::FormID>(std::stoul(entry.substr(2), nullptr, 16));
+		} catch (...) {
+			return 0;
+		}
 	}
 	const auto hexStart = hasPrefix ? 2 : 0;
 	RE::FormID relativeID;
-	try { relativeID = static_cast<RE::FormID>(std::stoul(entry.substr(hexStart, tildePos - hexStart), nullptr, 16)); }
-	catch (...) { return 0; }
+	try {
+		relativeID = static_cast<RE::FormID>(std::stoul(entry.substr(hexStart, tildePos - hexStart), nullptr, 16));
+	} catch (...) {
+		return 0;
+	}
 	auto* dh = RE::TESDataHandler::GetSingleton();
 	auto* form = dh ? dh->LookupForm(relativeID, entry.substr(tildePos + 1)) : nullptr;
 	return form ? form->GetFormID() : 0;
@@ -205,9 +270,9 @@ void LightEditor::ApplyLighFormData(const RE::TESObjectLIGH* ligh)
 	current.data.cutoffOverride = std::clamp(ligh->data.fallofExponent, 0.01f, 1.f);
 	current.data.radius = static_cast<float>(ligh->data.radius);
 	current.data.fade = ligh->fade;
-	current.data.diffuse.red   = ligh->data.color.red   / 255.f;
+	current.data.diffuse.red = ligh->data.color.red / 255.f;
 	current.data.diffuse.green = ligh->data.color.green / 255.f;
-	current.data.diffuse.blue  = ligh->data.color.blue  / 255.f;
+	current.data.diffuse.blue = ligh->data.color.blue / 255.f;
 }
 
 void LightEditor::EnsureLighFormListBuilt()
@@ -224,6 +289,14 @@ void LightEditor::EnsureLighFormListBuilt()
 		}
 		std::ranges::sort(s_lighFormList, [](const auto& a, const auto& b) { return a.first < b.first; });
 	}
+}
+
+std::string LightEditor::LighEdidForFormId(RE::FormID formId)
+{
+	for (auto& [edid, ligh] : s_lighFormList)
+		if (ligh->GetFormID() == formId)
+			return edid;
+	return {};
 }
 
 void LightEditor::DrawSettings()
@@ -372,7 +445,8 @@ void LightEditor::DrawSettings()
 	ImGui::Separator();
 
 	if (!selected.isSelected) {
-		if (isAttaching) ImGui::EndDisabled();
+		if (isAttaching)
+			ImGui::EndDisabled();
 		return;
 	}
 
@@ -433,8 +507,7 @@ void LightEditor::DrawSettings()
 					lpMatchFound = true;
 				}
 				EditorWindow::GetSingleton()->ShowNotification(
-					ok ? I18n::GetSingleton()->Format(TKEY("saved_to_config"), {{"path", lpInfo.configPath}}, "Saved to {path}").c_str()
-					   : T(TKEY("save_failed"), "Save failed \xe2\x80\x94 see log"),
+					ok ? I18n::GetSingleton()->Format(TKEY("saved_to_config"), { { "path", lpInfo.configPath } }, "Saved to {path}").c_str() : T(TKEY("save_failed"), "Save failed \xe2\x80\x94 see log"),
 					ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
 			}
 		}
@@ -454,7 +527,7 @@ void LightEditor::DrawSettings()
 	if (lpInfo.isLPLight) {
 		auto doFilterButton = [&](bool isWhiteList) {
 			bool& inList = isWhiteList ? lpInWhitelist : lpInBlacklist;
-			const char* addLabel    = isWhiteList ? T(TKEY("add_to_whitelist"), "Add to Whitelist")         : T(TKEY("add_to_blacklist"), "Add to Blacklist");
+			const char* addLabel = isWhiteList ? T(TKEY("add_to_whitelist"), "Add to Whitelist") : T(TKEY("add_to_blacklist"), "Add to Blacklist");
 			const char* removeLabel = isWhiteList ? T(TKEY("remove_from_whitelist"), "Remove from Whitelist") : T(TKEY("remove_from_blacklist"), "Remove from Blacklist");
 			const ImVec4 activeColor = isWhiteList ? Util::Colors::GetSuccess() : Util::Colors::GetError();
 
@@ -472,9 +545,7 @@ void LightEditor::DrawSettings()
 			if (clicked) {
 				if (ModifyLPFilterList(isWhiteList, !inList)) {
 					inList = !inList;
-					const char* msg = inList
-					    ? (isWhiteList ? T(TKEY("added_to_whitelist"), "Added to whitelist") : T(TKEY("added_to_blacklist"), "Added to blacklist"))
-					    : (isWhiteList ? T(TKEY("removed_from_whitelist"), "Removed from whitelist") : T(TKEY("removed_from_blacklist"), "Removed from blacklist"));
+					const char* msg = inList ? (isWhiteList ? T(TKEY("added_to_whitelist"), "Added to whitelist") : T(TKEY("added_to_blacklist"), "Added to blacklist")) : (isWhiteList ? T(TKEY("removed_from_whitelist"), "Removed from whitelist") : T(TKEY("removed_from_blacklist"), "Removed from blacklist"));
 					EditorWindow::GetSingleton()->ShowNotification(msg, Util::Colors::GetInfo());
 				} else {
 					EditorWindow::GetSingleton()->ShowNotification(T(TKEY("filter_update_failed"), "Filter update failed \xe2\x80\x94 see log"), Util::Colors::GetError());
@@ -496,7 +567,10 @@ void LightEditor::DrawSettings()
 		const char* kOriginalLabel = T(TKEY("original"), "(Original)");
 		const char* previewEdid = kOriginalLabel;
 		for (auto& [edid, ligh] : s_lighFormList)
-			if (ligh->GetFormID() == current.data.lighFormId) { previewEdid = edid.c_str(); break; }
+			if (ligh->GetFormID() == current.data.lighFormId) {
+				previewEdid = edid.c_str();
+				break;
+			}
 
 		static constexpr const char* kLighOverrideId = "LighFormOverride";
 		const auto bulbTypeLabel = fmt::format("{}##combo", T(TKEY("bulb_type"), "Bulb type"));
@@ -515,14 +589,14 @@ void LightEditor::DrawSettings()
 					continue;
 				const bool isCurrent = ligh->GetFormID() == current.data.lighFormId;
 				if (ImGui::Selectable(edid.c_str(), isCurrent)) {
-					const float savedFade     = current.data.fade;
-					const float savedRadius   = current.data.radius;
-					const float savedSize     = current.data.size;
-					const float savedCutoff   = current.data.cutoffOverride;
+					const float savedFade = current.data.fade;
+					const float savedRadius = current.data.radius;
+					const float savedSize = current.data.size;
+					const float savedCutoff = current.data.cutoffOverride;
 					ApplyLighFormData(ligh);
-					current.data.fade          = savedFade;
-					current.data.radius        = savedRadius;
-					current.data.size          = savedSize;
+					current.data.fade = savedFade;
+					current.data.radius = savedRadius;
+					current.data.size = savedSize;
 					current.data.cutoffOverride = savedCutoff;
 					Util::ClearComboSearch(kLighOverrideId);
 				}
@@ -582,9 +656,9 @@ void LightEditor::DrawSettings()
 	// Dispatches to logarithmic+extended or normal slider based on extendedLogMode.
 	// Log scale requires min > 0, so extended mins are nudged above zero where needed.
 	auto drawSlider = [&](const char* label, float& value,
-	                       float normalMin, float normalMax,
-	                       float extMin, float extMax,
-	                       const char* format) -> bool {
+						  float normalMin, float normalMax,
+						  float extMin, float extMax,
+						  const char* format) -> bool {
 		if (extendedLogMode)
 			return ImGui::SliderFloat(label, &value, extMin, extMax, format, ImGuiSliderFlags_Logarithmic);
 		return static_cast<bool>(WeatherUtils::DrawSliderFloat(label, value, normalMin, normalMax, nullptr, format));
@@ -632,14 +706,18 @@ void LightEditor::DrawSettings()
 			for (const char* flagName : kLPFlagNames) {
 				const bool isInvSqEntry = (std::string_view(flagName) == "InverseSquare");
 				const bool disabled = isInvSqEntry && selected.isSpotlight;
-				if (disabled) ImGui::BeginDisabled();
+				if (disabled)
+					ImGui::BeginDisabled();
 				bool inSet = lpFlagSet.contains(flagName);
 				if (ImGui::Checkbox(flagName, &inSet)) {
-					if (inSet) lpFlagSet.insert(flagName);
-					else       lpFlagSet.erase(flagName);
+					if (inSet)
+						lpFlagSet.insert(flagName);
+					else
+						lpFlagSet.erase(flagName);
 					SyncLPFlagsToRuntime();
 				}
-				if (disabled) ImGui::EndDisabled();
+				if (disabled)
+					ImGui::EndDisabled();
 			}
 		}
 
@@ -655,23 +733,24 @@ void LightEditor::DrawSettings()
 		}
 
 		// Dynamic and Negative are always shown; Flicker/OmniShadow/PortalStrict are hidden for LP lights.
-		ImGui::CheckboxFlags(T(TKEY("tes_flag_dynamic"),        "Dynamic"),       flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
-		ImGui::CheckboxFlags(T(TKEY("tes_flag_negative"),       "Negative"),      flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_dynamic"), "Dynamic"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_negative"), "Negative"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
 		if (!lpInfo.isLPLight)
-			ImGui::CheckboxFlags(T(TKEY("tes_flag_flicker"),    "Flicker"),       flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
-		ImGui::CheckboxFlags(T(TKEY("tes_flag_flicker_slow"),   "Flicker Slow"),  flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
-		ImGui::CheckboxFlags(T(TKEY("tes_flag_pulse"),          "Pulse"),         flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
-		ImGui::CheckboxFlags(T(TKEY("tes_flag_pulse_slow"),     "Pulse Slow"),    flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
-		ImGui::CheckboxFlags(T(TKEY("tes_flag_hemi_shadow"),    "Hemi Shadow"),   flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
+			ImGui::CheckboxFlags(T(TKEY("tes_flag_flicker"), "Flicker"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_flicker_slow"), "Flicker Slow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_pulse"), "Pulse"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_pulse_slow"), "Pulse Slow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
+		ImGui::CheckboxFlags(T(TKEY("tes_flag_hemi_shadow"), "Hemi Shadow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
 		if (!lpInfo.isLPLight)
-			ImGui::CheckboxFlags(T(TKEY("tes_flag_omni_shadow"),   "Omni Shadow"),   flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
+			ImGui::CheckboxFlags(T(TKEY("tes_flag_omni_shadow"), "Omni Shadow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
 		if (!lpInfo.isLPLight)
 			ImGui::CheckboxFlags(T(TKEY("tes_flag_portal_strict"), "Portal Strict"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
 
 		ImGui::EndDisabled();
 	}
 
-	if (isAttaching) ImGui::EndDisabled();
+	if (isAttaching)
+		ImGui::EndDisabled();
 }
 
 static constexpr std::string_view kPopupPrefsPath =
@@ -681,9 +760,9 @@ void LightEditor::SavePopupPrefs() const
 {
 	nlohmann::ordered_json j;
 	j["addConfigSearch"] = addConfigSearch;
-	j["addAttachMode"]   = addAttachMode;
-	j["addLighSearch"]   = addLighSearch;
-	j["addPopupMode"]    = addPopupMode;
+	j["addAttachMode"] = addAttachMode;
+	j["addLighSearch"] = addLighSearch;
+	j["addPopupMode"] = addPopupMode;
 	j["addLightSubMode"] = addLightSubMode;
 	std::ofstream out(kPopupPrefsPath.data());
 	if (out.is_open())
@@ -769,6 +848,80 @@ std::vector<std::string> LightEditor::ScanLPConfigPaths() const
 	return paths;
 }
 
+int LightEditor::DrawAttachedBulbCombo(const char* searchId, bool openOnAppear)
+{
+	int clicked = -1;
+	const char* preview = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size()) ? attachedBulbs[addSelectedBulb].lightEDID.c_str() : T(TKEY("select_a_bulb"), "Select a bulb");
+	if (openOnAppear)
+		ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+	if (ImGui::BeginCombo(T(TKEY("attached_bulb"), "Attached bulb"), preview, ImGuiComboFlags_HeightLarge)) {
+		if (ImGui::IsWindowAppearing())
+			ImGui::SetKeyboardFocusHere();
+		ImGui::SetNextItemWidth(-1.0f);
+		ImGui::InputText(searchId, addBulbSearch, sizeof(addBulbSearch));
+		ImGui::Separator();
+		const std::string_view filter = addBulbSearch;
+		for (int i = 0; i < (int)attachedBulbs.size(); ++i) {
+			const auto& bulb = attachedBulbs[i];
+			const std::string label = fmt::format("{}[{}]  ({})", bulb.lightEDID, bulb.index, bulb.configPath);
+			if (!filter.empty() && !Util::StringMatchesSearch(label, std::string(filter)))
+				continue;
+			const bool isSel = (i == addSelectedBulb);
+			if (ImGui::Selectable(label.c_str(), isSel)) {
+				addSelectedBulb = i;
+				clicked = i;
+			}
+			if (isSel)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
+	}
+	return clicked;
+}
+
+void LightEditor::DrawLightRecordCombo(const char* searchId)
+{
+	EnsureLighFormListBuilt();
+	const char* preview = T(TKEY("select_a_light"), "Select a light");
+	for (auto& [edid, ligh] : s_lighFormList)
+		if (ligh->GetFormID() == addSelectedLighFormId) {
+			preview = edid.c_str();
+			break;
+		}
+	if (ImGui::BeginCombo(T(TKEY("light_record"), "Light record"), preview, ImGuiComboFlags_HeightLarge)) {
+		if (ImGui::IsWindowAppearing())
+			ImGui::SetKeyboardFocusHere();
+		ImGui::SetNextItemWidth(-1.0f);
+		ImGui::InputText(searchId, addLighSearch, sizeof(addLighSearch));
+		ImGui::Separator();
+		const std::string_view filter = addLighSearch;
+		for (auto& [edid, ligh] : s_lighFormList) {
+			if (!filter.empty() && !Util::StringMatchesSearch(edid, std::string(filter)))
+				continue;
+			const bool isSel = ligh->GetFormID() == addSelectedLighFormId;
+			if (ImGui::Selectable(edid.c_str(), isSel))
+				addSelectedLighFormId = ligh->GetFormID();
+			if (isSel)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
+	}
+}
+
+void LightEditor::BeginAttachSequence(const std::string& configPath)
+{
+	attachConfigPath = configPath;
+	pendingSelectConfigPath = configPath;
+	RestoreOriginal();
+	previous = {};
+	ScheduleConsoleCommand("reloadlp");
+	attachPendingRefr = pickedMesh.refrHandle;
+	attachPhase = AttachPhase::WaitingForReload;
+	attachPhaseStart = std::chrono::steady_clock::now();
+	SavePopupPrefs();
+	ImGui::CloseCurrentPopup();
+}
+
 void LightEditor::DrawAddLightPopup()
 {
 	if (addLightPopupOpen) {
@@ -792,24 +945,30 @@ void LightEditor::DrawAddLightPopup()
 		ImGui::Text(T(TKEY("picked_plugin"), "Plugin: %s"), pickedMesh.sourcePlugin.empty() ? T(TKEY("unknown_value"), "(unknown)") : pickedMesh.sourcePlugin.c_str());
 		ImGui::Separator();
 
+		// Renders a "selectable button": info-styled when active, clickable when available,
+		// disabled with a tooltip otherwise. Returns true when clicked this frame.
+		auto selectableButton = [&](const char* label, bool active, bool available, const char* unavailTip) -> bool {
+			if (active) {
+				auto _s = Util::StatusButtonStyle(Util::Colors::GetInfo());
+				ImGui::Button(label);
+				return false;
+			}
+			if (available)
+				return ImGui::Button(label);
+			{
+				auto _d = Util::DisableGuard(true);
+				ImGui::Button(label);
+			}
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip("%s", unavailTip);
+			return false;
+		};
+
 		// --- Mode selector ---
 		const bool hasBulbs = !attachedBulbs.empty();
 		auto drawModeBtn = [&](const char* label, int mode, bool available, const char* unavailTip) {
-			const bool selected = (addPopupMode == mode);
-			if (selected) {
-				auto _s = Util::StatusButtonStyle(Util::Colors::GetInfo());
-				ImGui::Button(label);
-			} else if (available) {
-				if (ImGui::Button(label))
-					addPopupMode = mode;
-			} else {
-				{
-					auto _d = Util::DisableGuard(true);
-					ImGui::Button(label);
-				}
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-					ImGui::SetTooltip("%s", unavailTip);
-			}
+			if (selectableButton(label, addPopupMode == mode, available, unavailTip))
+				addPopupMode = mode;
 		};
 
 		const char* noBulbsTip = T(TKEY("no_attached_bulbs"), "This mesh has no attached Light Placer bulbs.");
@@ -819,12 +978,12 @@ void LightEditor::DrawAddLightPopup()
 		if (hasBulbs && attachedBulbs.size() == 1) {
 			if (ImGui::Button(T(TKEY("mode_edit_bulb"), "Edit Bulb"))) {
 				const auto& bulb = attachedBulbs[0];
-				pendingSelectRefrId     = bulb.refrId;
+				pendingSelectRefrId = bulb.refrId;
 				pendingSelectConfigPath = bulb.configPath;
-				pendingSelectLighEdid   = bulb.lightEDID;
-				pendingAutoSelect       = true;
-				pendingAutoSelectTTL    = 10;
-				filterOption            = FilterOption::AttachedLights;
+				pendingSelectLighEdid = bulb.lightEDID;
+				pendingAutoSelect = true;
+				pendingAutoSelectTTL = 10;
+				filterOption = FilterOption::AttachedLights;
 				SavePopupPrefs();
 				ImGui::CloseCurrentPopup();
 			}
@@ -837,26 +996,20 @@ void LightEditor::DrawAddLightPopup()
 		drawModeBtn(T(TKEY("add_to_blacklist"), "Add to Blacklist"), ModeBlacklist, hasBulbs, noBulbsTip);
 		ImGui::SameLine();
 		drawModeBtn(T(TKEY("mode_remove_from_list"), "Remove from List"), ModeRemoveFromList,
-		    !filterListEntries.empty(),
-		    T(TKEY("no_filter_list_entries"), "This mesh has no whitelist or blacklist entries."));
+			!filterListEntries.empty(),
+			T(TKEY("no_filter_list_entries"), "This mesh has no whitelist or blacklist entries."));
 		ImGui::Separator();
 
 		if (addPopupMode == ModeAddLight) {
 			auto drawSubModeBtn = [&](const char* label, int subMode) {
-				const bool selected = (addLightSubMode == subMode);
-				if (selected) {
-					auto _s = Util::StatusButtonStyle(Util::Colors::GetInfo());
-					ImGui::Button(label);
-				} else {
-					if (ImGui::Button(label))
-						addLightSubMode = subMode;
-				}
+				if (selectableButton(label, addLightSubMode == subMode, true, nullptr))
+					addLightSubMode = subMode;
 			};
 
 			if (hasBulbs) {
 				drawSubModeBtn(T(TKEY("sub_mode_new_point"), "Add new point"), SubModeNewPoint);
 				ImGui::SameLine();
-				drawSubModeBtn(T(TKEY("sub_mode_to_entry"),  "Add to entry"),  SubModeToEntry);
+				drawSubModeBtn(T(TKEY("sub_mode_to_entry"), "Add to entry"), SubModeToEntry);
 				ImGui::SameLine();
 				drawSubModeBtn(T(TKEY("sub_mode_new_entry"), "Add new entry"), SubModeNewEntry);
 				ImGui::Separator();
@@ -864,9 +1017,7 @@ void LightEditor::DrawAddLightPopup()
 
 			if (!hasBulbs || addLightSubMode == SubModeNewEntry) {
 				// --- Target JSON ---
-				const char* configPreview = (addSelectedConfig >= 0 && addSelectedConfig < (int)lpConfigPaths.size())
-				                                ? lpConfigPaths[addSelectedConfig].c_str()
-				                                : T(TKEY("select_a_config"), "Select a config");
+				const char* configPreview = (addSelectedConfig >= 0 && addSelectedConfig < (int)lpConfigPaths.size()) ? lpConfigPaths[addSelectedConfig].c_str() : T(TKEY("select_a_config"), "Select a config");
 				if (ImGui::BeginCombo(T(TKEY("target_json"), "Target JSON"), configPreview, ImGuiComboFlags_HeightLarge)) {
 					if (ImGui::IsWindowAppearing())
 						ImGui::SetKeyboardFocusHere();
@@ -894,55 +1045,20 @@ void LightEditor::DrawAddLightPopup()
 					ImGui::SameLine();
 
 					auto drawAttachBtn = [&](const char* label, int mode, bool available, const char* unavailTip) {
-						const bool selected = (addAttachMode == mode);
-						if (selected) {
-							auto _s = Util::StatusButtonStyle(Util::Colors::GetInfo());
-							ImGui::Button(label);
-						} else if (available) {
-							if (ImGui::Button(label))
-								addAttachMode = mode;
-						} else {
-							{
-								auto _d = Util::DisableGuard(true);
-								ImGui::Button(label);
-							}
-							if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-								ImGui::SetTooltip("%s", unavailTip);
-						}
+						if (selectableButton(label, addAttachMode == mode, available, unavailTip))
+							addAttachMode = mode;
 					};
 
-					drawAttachBtn(T(TKEY("attach_model"),     "Model"),    0, !pickedMesh.modelPath.empty(),    T(TKEY("no_model_path"),    "No model path on this object."));
+					drawAttachBtn(T(TKEY("attach_model"), "Model"), 0, !pickedMesh.modelPath.empty(), T(TKEY("no_model_path"), "No model path on this object."));
 					ImGui::SameLine();
-					drawAttachBtn(T(TKEY("attach_form_id"),   "FormID"),   1, !pickedMesh.sourcePlugin.empty(), T(TKEY("no_source_plugin"), "No source plugin on this object."));
+					drawAttachBtn(T(TKEY("attach_form_id"), "FormID"), 1, !pickedMesh.sourcePlugin.empty(), T(TKEY("no_source_plugin"), "No source plugin on this object."));
 					ImGui::SameLine();
-					drawAttachBtn(T(TKEY("attach_editor_id"), "EditorID"), 2, !pickedMesh.editorId.empty(),     T(TKEY("no_editor_id_on_object"), "No EditorID on this object."));
+					drawAttachBtn(T(TKEY("attach_editor_id"), "EditorID"), 2, !pickedMesh.editorId.empty(), T(TKEY("no_editor_id_on_object"), "No EditorID on this object."));
 				}
 
 				// --- Light record (only after attach mode is chosen) ---
-				if (addSelectedConfig >= 0 && addAttachMode >= 0) {
-					EnsureLighFormListBuilt();
-					const char* lighPreview = T(TKEY("select_a_light"), "Select a light");
-					for (auto& [edid, ligh] : s_lighFormList)
-						if (ligh->GetFormID() == addSelectedLighFormId) { lighPreview = edid.c_str(); break; }
-					if (ImGui::BeginCombo(T(TKEY("light_record"), "Light record"), lighPreview, ImGuiComboFlags_HeightLarge)) {
-						if (ImGui::IsWindowAppearing())
-							ImGui::SetKeyboardFocusHere();
-						ImGui::SetNextItemWidth(-1.0f);
-						ImGui::InputText("##ligh_search", addLighSearch, sizeof(addLighSearch));
-						ImGui::Separator();
-						const std::string_view lighFilter = addLighSearch;
-						for (auto& [edid, ligh] : s_lighFormList) {
-							if (!lighFilter.empty() && !Util::StringMatchesSearch(edid, std::string(lighFilter)))
-								continue;
-							const bool isSel = ligh->GetFormID() == addSelectedLighFormId;
-							if (ImGui::Selectable(edid.c_str(), isSel))
-								addSelectedLighFormId = ligh->GetFormID();
-							if (isSel)
-								ImGui::SetItemDefaultFocus();
-						}
-						ImGui::EndCombo();
-					}
-				}
+				if (addSelectedConfig >= 0 && addAttachMode >= 0)
+					DrawLightRecordCombo("##ligh_search");
 
 				ImGui::Separator();
 				if (addSelectedConfig >= 0 && addAttachMode >= 0 && addSelectedLighFormId != 0) {
@@ -955,24 +1071,12 @@ void LightEditor::DrawAddLightPopup()
 						ImGui::SetTooltip("%s", reason.c_str());
 
 					if (clicked && canAdd) {
-						const bool ok = AddBulbToConfig();
-						if (ok) {
-							attachConfigPath = lpConfigPaths[addSelectedConfig];
-							pendingSelectConfigPath = attachConfigPath;
-							pendingSelectLighEdid = {};
-							for (auto& [edid, ligh] : s_lighFormList)
-								if (ligh->GetFormID() == addSelectedLighFormId) { pendingSelectLighEdid = edid; break; }
+						if (AddBulbToConfig()) {
+							pendingSelectLighEdid = LighEdidForFormId(addSelectedLighFormId);
 							pendingSelectRefrId = 0;
 							if (auto refr = pickedMesh.refrHandle.get())
 								pendingSelectRefrId = refr->GetFormID();
-							RestoreOriginal();
-							previous = {};
-							ScheduleConsoleCommand("reloadlp");
-							attachPendingRefr = pickedMesh.refrHandle;
-							attachPhase = AttachPhase::WaitingForReload;
-							attachPhaseStart = std::chrono::steady_clock::now();
-							SavePopupPrefs();
-							ImGui::CloseCurrentPopup();
+							BeginAttachSequence(lpConfigPaths[addSelectedConfig]);
 						} else {
 							EditorWindow::GetSingleton()->ShowNotification(
 								T(TKEY("add_light_failed"), "Failed to add light \xE2\x80\x94 see log"),
@@ -983,29 +1087,7 @@ void LightEditor::DrawAddLightPopup()
 			}
 
 			if (hasBulbs && addLightSubMode == SubModeNewPoint) {
-				const char* bulbPreview = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size())
-				    ? attachedBulbs[addSelectedBulb].lightEDID.c_str()
-				    : T(TKEY("select_a_bulb"), "Select a bulb");
-				if (ImGui::BeginCombo(T(TKEY("attached_bulb"), "Attached bulb"), bulbPreview, ImGuiComboFlags_HeightLarge)) {
-					if (ImGui::IsWindowAppearing())
-						ImGui::SetKeyboardFocusHere();
-					ImGui::SetNextItemWidth(-1.0f);
-					ImGui::InputText("##bulb_search_pt", addBulbSearch, sizeof(addBulbSearch));
-					ImGui::Separator();
-					const std::string_view filter = addBulbSearch;
-					for (int i = 0; i < (int)attachedBulbs.size(); ++i) {
-						const auto& b = attachedBulbs[i];
-						const std::string lbl = fmt::format("{}[{}]  ({})", b.lightEDID, b.index, b.configPath);
-						if (!filter.empty() && !Util::StringMatchesSearch(lbl, std::string(filter)))
-							continue;
-						const bool isSel = (i == addSelectedBulb);
-						if (ImGui::Selectable(lbl.c_str(), isSel))
-							addSelectedBulb = i;
-						if (isSel)
-							ImGui::SetItemDefaultFocus();
-					}
-					ImGui::EndCombo();
-				}
+				DrawAttachedBulbCombo("##bulb_search_pt", false);
 
 				ImGui::Separator();
 				const bool canAddPt = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size());
@@ -1015,20 +1097,10 @@ void LightEditor::DrawAddLightPopup()
 
 				if (clickedPt && canAddPt) {
 					const auto& bulb = attachedBulbs[addSelectedBulb];
-					const bool ok = AddPointToConfig(bulb);
-					if (ok) {
-						attachConfigPath        = bulb.configPath;
-						pendingSelectConfigPath = bulb.configPath;
-						pendingSelectLighEdid   = bulb.lightEDID;
-						pendingSelectRefrId     = bulb.refrId;
-						RestoreOriginal();
-						previous = {};
-						ScheduleConsoleCommand("reloadlp");
-						attachPendingRefr  = pickedMesh.refrHandle;
-						attachPhase        = AttachPhase::WaitingForReload;
-						attachPhaseStart   = std::chrono::steady_clock::now();
-						SavePopupPrefs();
-						ImGui::CloseCurrentPopup();
+					if (AddPointToConfig(bulb)) {
+						pendingSelectLighEdid = bulb.lightEDID;
+						pendingSelectRefrId = bulb.refrId;
+						BeginAttachSequence(bulb.configPath);
 					} else {
 						EditorWindow::GetSingleton()->ShowNotification(
 							T(TKEY("add_light_failed"), "Failed to add light \xE2\x80\x94 see log"),
@@ -1039,64 +1111,15 @@ void LightEditor::DrawAddLightPopup()
 
 			if (hasBulbs && addLightSubMode == SubModeToEntry) {
 				// Bulb picker — identifies the parent top-level entry
-				const char* bulbPreview2 = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size())
-				    ? attachedBulbs[addSelectedBulb].lightEDID.c_str()
-				    : T(TKEY("select_a_bulb"), "Select a bulb");
-				if (ImGui::BeginCombo(T(TKEY("attached_bulb"), "Attached bulb"), bulbPreview2, ImGuiComboFlags_HeightLarge)) {
-					if (ImGui::IsWindowAppearing())
-						ImGui::SetKeyboardFocusHere();
-					ImGui::SetNextItemWidth(-1.0f);
-					ImGui::InputText("##bulb_search_te", addBulbSearch, sizeof(addBulbSearch));
-					ImGui::Separator();
-					const std::string_view filter2 = addBulbSearch;
-					for (int i = 0; i < (int)attachedBulbs.size(); ++i) {
-						const auto& b = attachedBulbs[i];
-						const std::string lbl2 = fmt::format("{}[{}]  ({})", b.lightEDID, b.index, b.configPath);
-						if (!filter2.empty() && !Util::StringMatchesSearch(lbl2, std::string(filter2)))
-							continue;
-						const bool isSel2 = (i == addSelectedBulb);
-						if (ImGui::Selectable(lbl2.c_str(), isSel2))
-							addSelectedBulb = i;
-						if (isSel2)
-							ImGui::SetItemDefaultFocus();
-					}
-					ImGui::EndCombo();
-				}
-
-				// Light record picker
-				EnsureLighFormListBuilt();
-				const char* lighPreview2 = T(TKEY("select_a_light"), "Select a light");
-				for (auto& [edid, ligh] : s_lighFormList)
-					if (ligh->GetFormID() == addSelectedLighFormId) { lighPreview2 = edid.c_str(); break; }
-				if (ImGui::BeginCombo(T(TKEY("light_record"), "Light record"), lighPreview2, ImGuiComboFlags_HeightLarge)) {
-					if (ImGui::IsWindowAppearing())
-						ImGui::SetKeyboardFocusHere();
-					ImGui::SetNextItemWidth(-1.0f);
-					ImGui::InputText("##ligh_search_te", addLighSearch, sizeof(addLighSearch));
-					ImGui::Separator();
-					const std::string_view lighFilter2 = addLighSearch;
-					for (auto& [edid, ligh] : s_lighFormList) {
-						if (!lighFilter2.empty() && !Util::StringMatchesSearch(edid, std::string(lighFilter2)))
-							continue;
-						const bool isSel3 = ligh->GetFormID() == addSelectedLighFormId;
-						if (ImGui::Selectable(edid.c_str(), isSel3))
-							addSelectedLighFormId = ligh->GetFormID();
-						if (isSel3)
-							ImGui::SetItemDefaultFocus();
-					}
-					ImGui::EndCombo();
-				}
+				DrawAttachedBulbCombo("##bulb_search_te", false);
+				DrawLightRecordCombo("##ligh_search_te");
 
 				ImGui::Separator();
 				const bool bulbOk = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size());
-				const std::string teEdid = [&]() -> std::string {
-					for (auto& [edid, ligh] : s_lighFormList)
-						if (ligh->GetFormID() == addSelectedLighFormId) return edid;
-					return {};
-				}();
+				const std::string teEdid = LighEdidForFormId(addSelectedLighFormId);
 				const bool lightOk = !teEdid.empty();
-				const bool isDupe  = bulbOk && lightOk &&
-				                     LightAlreadyInEntry(attachedBulbs[addSelectedBulb], teEdid);
+				const bool isDupe = bulbOk && lightOk &&
+				                    LightAlreadyInEntry(attachedBulbs[addSelectedBulb], teEdid);
 				const bool canAddTE = bulbOk && lightOk && !isDupe;
 
 				ImGui::BeginDisabled(!canAddTE);
@@ -1113,20 +1136,10 @@ void LightEditor::DrawAddLightPopup()
 
 				if (clickedTE && canAddTE) {
 					const auto& bulb = attachedBulbs[addSelectedBulb];
-					const bool ok = AddLightToExistingEntry(bulb, teEdid);
-					if (ok) {
-						attachConfigPath        = bulb.configPath;
-						pendingSelectConfigPath = bulb.configPath;
-						pendingSelectLighEdid   = teEdid;
-						pendingSelectRefrId     = bulb.refrId;
-						RestoreOriginal();
-						previous = {};
-						ScheduleConsoleCommand("reloadlp");
-						attachPendingRefr  = pickedMesh.refrHandle;
-						attachPhase        = AttachPhase::WaitingForReload;
-						attachPhaseStart   = std::chrono::steady_clock::now();
-						SavePopupPrefs();
-						ImGui::CloseCurrentPopup();
+					if (AddLightToExistingEntry(bulb, teEdid)) {
+						pendingSelectLighEdid = teEdid;
+						pendingSelectRefrId = bulb.refrId;
+						BeginAttachSequence(bulb.configPath);
 					} else {
 						EditorWindow::GetSingleton()->ShowNotification(
 							T(TKEY("add_light_failed"), "Failed to add light \xE2\x80\x94 see log"),
@@ -1134,69 +1147,27 @@ void LightEditor::DrawAddLightPopup()
 					}
 				}
 			}
-		} // end ModeAddLight
+		}  // end ModeAddLight
 
 		if (addPopupMode == ModeEditBulb) {
-			// Multi-bulb: combo fires immediately on selection (no confirm button).
-			// CloseCurrentPopup is deferred until after EndCombo — calling it inside
-			// the combo body closes the combo popup, not the modal.
-			bool closeAfterCombo = false;
-			const char* bulbPreview = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size())
-			                              ? attachedBulbs[addSelectedBulb].lightEDID.c_str()
-			                              : T(TKEY("select_a_bulb"), "Select a bulb");
-			ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-			if (ImGui::BeginCombo(T(TKEY("attached_bulb"), "Attached bulb"), bulbPreview, ImGuiComboFlags_HeightLarge)) {
-				if (ImGui::IsWindowAppearing())
-					ImGui::SetKeyboardFocusHere();
-				ImGui::SetNextItemWidth(-1.0f);
-				ImGui::InputText("##bulb_search", addBulbSearch, sizeof(addBulbSearch));
-				ImGui::Separator();
-				const std::string_view bulbFilter = addBulbSearch;
-				for (int i = 0; i < (int)attachedBulbs.size(); ++i) {
-					const auto& bulb = attachedBulbs[i];
-					const std::string label = fmt::format("{}[{}]  ({})", bulb.lightEDID, bulb.index, bulb.configPath);
-					if (!bulbFilter.empty() && !Util::StringMatchesSearch(label, std::string(bulbFilter)))
-						continue;
-					if (ImGui::Selectable(label.c_str(), i == addSelectedBulb)) {
-						pendingSelectRefrId     = bulb.refrId;
-						pendingSelectConfigPath = bulb.configPath;
-						pendingSelectLighEdid   = bulb.lightEDID;
-						pendingAutoSelect       = true;
-						pendingAutoSelectTTL    = 10;
-						filterOption            = FilterOption::AttachedLights;
-						SavePopupPrefs();
-						closeAfterCombo = true;
-					}
-				}
-				ImGui::EndCombo();
-			}
-			if (closeAfterCombo)
+			// Multi-bulb: combo fires immediately on selection (no confirm button). The combo
+			// returns the clicked index so the modal is closed after the combo, not inside it
+			// (closing inside the combo body would close the combo popup, not the modal).
+			const int clickedBulb = DrawAttachedBulbCombo("##bulb_search", true);
+			if (clickedBulb >= 0) {
+				const auto& bulb = attachedBulbs[clickedBulb];
+				pendingSelectRefrId = bulb.refrId;
+				pendingSelectConfigPath = bulb.configPath;
+				pendingSelectLighEdid = bulb.lightEDID;
+				pendingAutoSelect = true;
+				pendingAutoSelectTTL = 10;
+				filterOption = FilterOption::AttachedLights;
+				SavePopupPrefs();
 				ImGui::CloseCurrentPopup();
+			}
 		} else if (addPopupMode == ModeWhitelist || addPopupMode == ModeBlacklist) {
 			// Whitelist / Blacklist: bulb combo + entry-type selector + confirm button.
-			const char* bulbPreview = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size())
-			                              ? attachedBulbs[addSelectedBulb].lightEDID.c_str()
-			                              : T(TKEY("select_a_bulb"), "Select a bulb");
-			if (ImGui::BeginCombo(T(TKEY("attached_bulb"), "Attached bulb"), bulbPreview, ImGuiComboFlags_HeightLarge)) {
-				if (ImGui::IsWindowAppearing())
-					ImGui::SetKeyboardFocusHere();
-				ImGui::SetNextItemWidth(-1.0f);
-				ImGui::InputText("##bulb_search", addBulbSearch, sizeof(addBulbSearch));
-				ImGui::Separator();
-				const std::string_view bulbFilter = addBulbSearch;
-				for (int i = 0; i < (int)attachedBulbs.size(); ++i) {
-					const auto& bulb = attachedBulbs[i];
-					const std::string label = fmt::format("{}[{}]  ({})", bulb.lightEDID, bulb.index, bulb.configPath);
-					if (!bulbFilter.empty() && !Util::StringMatchesSearch(label, std::string(bulbFilter)))
-						continue;
-					const bool isSel = (i == addSelectedBulb);
-					if (ImGui::Selectable(label.c_str(), isSel))
-						addSelectedBulb = i;
-					if (isSel)
-						ImGui::SetItemDefaultFocus();
-				}
-				ImGui::EndCombo();
-			}
+			DrawAttachedBulbCombo("##bulb_search", false);
 
 			// Entry type: what string to write into the filter list.
 			{
@@ -1209,17 +1180,8 @@ void LightEditor::DrawAddLightPopup()
 				ImGui::Text("%s", T(TKEY("filter_entry_type"), "Add as:"));
 				ImGui::SameLine();
 				auto drawEntryTypeBtn = [&](const char* label, int type, bool available, const char* unavailTip) {
-					if (addFilterEntryType == type) {
-						auto _s = Util::StatusButtonStyle(Util::Colors::GetInfo());
-						ImGui::Button(label);
-					} else if (available) {
-						if (ImGui::Button(label))
-							addFilterEntryType = type;
-					} else {
-						{ auto _d = Util::DisableGuard(true); ImGui::Button(label); }
-						if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-							ImGui::SetTooltip("%s", unavailTip);
-					}
+					if (selectableButton(label, addFilterEntryType == type, available, unavailTip))
+						addFilterEntryType = type;
 				};
 				drawEntryTypeBtn(T(TKEY("entry_type_reference"), "Reference"), 0, true, "");
 				ImGui::SameLine();
@@ -1232,9 +1194,7 @@ void LightEditor::DrawAddLightPopup()
 			const bool bulbChosen = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size());
 			// Append ##confirm to the label so the button has a unique ImGui ID distinct
 			// from the identically-labelled mode selector button rendered in the same popup.
-			const std::string confirmLabel = std::string(addPopupMode == ModeWhitelist
-			    ? T(TKEY("add_to_whitelist"), "Add to Whitelist")
-			    : T(TKEY("add_to_blacklist"), "Add to Blacklist")) + "##confirm";
+			const std::string confirmLabel = std::string(addPopupMode == ModeWhitelist ? T(TKEY("add_to_whitelist"), "Add to Whitelist") : T(TKEY("add_to_blacklist"), "Add to Blacklist")) + "##confirm";
 			ImGui::BeginDisabled(!bulbChosen);
 			const bool confirm = ImGui::Button(confirmLabel.c_str());
 			ImGui::EndDisabled();
@@ -1255,17 +1215,16 @@ void LightEditor::DrawAddLightPopup()
 
 				MatchContext ctx;
 				ctx.ownerModelPath = pickedMesh.modelPath;
-				ctx.ownerEditorId  = pickedMesh.editorId;
-				ctx.baseFormId     = pickedMesh.baseFormId;
-				ctx.lightEDID      = bulb.lightEDID;
-				ctx.refr           = refr;
+				ctx.ownerEditorId = pickedMesh.editorId;
+				ctx.baseFormId = pickedMesh.baseFormId;
+				ctx.lightEDID = bulb.lightEDID;
+				ctx.refr = refr;
 				const bool isWhite = (addPopupMode == ModeWhitelist);
 				const bool ok = ModifyLPFilterListFor(bulb.configPath, ctx, entryStr, isWhite, true);
 				if (ok) {
 					ScheduleConsoleCommand("reloadlp");
 					EditorWindow::GetSingleton()->ShowNotification(
-						isWhite ? T(TKEY("added_to_whitelist"), "Added to whitelist")
-						        : T(TKEY("added_to_blacklist"), "Added to blacklist"),
+						isWhite ? T(TKEY("added_to_whitelist"), "Added to whitelist") : T(TKEY("added_to_blacklist"), "Added to blacklist"),
 						Util::Colors::GetSuccess());
 				} else {
 					EditorWindow::GetSingleton()->ShowNotification(
@@ -1278,9 +1237,7 @@ void LightEditor::DrawAddLightPopup()
 		}
 
 		if (addPopupMode == ModeRemoveFromList) {
-			const char* filterPreview = (addSelectedFilterEntry >= 0 && addSelectedFilterEntry < (int)filterListEntries.size())
-			    ? filterListEntries[addSelectedFilterEntry].lightEDID.c_str()
-			    : T(TKEY("select_a_bulb"), "Select a bulb");
+			const char* filterPreview = (addSelectedFilterEntry >= 0 && addSelectedFilterEntry < (int)filterListEntries.size()) ? filterListEntries[addSelectedFilterEntry].lightEDID.c_str() : T(TKEY("select_a_bulb"), "Select a bulb");
 			if (ImGui::BeginCombo(T(TKEY("attached_bulb"), "Attached bulb"), filterPreview, ImGuiComboFlags_HeightLarge)) {
 				if (ImGui::IsWindowAppearing())
 					ImGui::SetKeyboardFocusHere();
@@ -1291,9 +1248,9 @@ void LightEditor::DrawAddLightPopup()
 				for (int i = 0; i < (int)filterListEntries.size(); ++i) {
 					const auto& fe = filterListEntries[i];
 					const std::string lbl = fmt::format("[{}]  {}  ({})  \"{}\"",
-					    fe.isWhiteList ? "whitelist" : "blacklist",
-					    fe.lightEDID, fe.configPath,
-					    fe.matchedEntry);
+						fe.isWhiteList ? "whitelist" : "blacklist",
+						fe.lightEDID, fe.configPath,
+						fe.matchedEntry);
 					if (!filterSv.empty() && !Util::StringMatchesSearch(lbl, std::string(filterSv)))
 						continue;
 					const bool isSel = (i == addSelectedFilterEntry);
@@ -1315,10 +1272,10 @@ void LightEditor::DrawAddLightPopup()
 				const auto& fe = filterListEntries[addSelectedFilterEntry];
 				MatchContext ctx;
 				ctx.ownerModelPath = pickedMesh.modelPath;
-				ctx.ownerEditorId  = pickedMesh.editorId;
-				ctx.baseFormId     = pickedMesh.baseFormId;
-				ctx.lightEDID      = fe.lightEDID;
-				ctx.refr           = pickedMesh.refrHandle.get().get();
+				ctx.ownerEditorId = pickedMesh.editorId;
+				ctx.baseFormId = pickedMesh.baseFormId;
+				ctx.lightEDID = fe.lightEDID;
+				ctx.refr = pickedMesh.refrHandle.get().get();
 				const bool ok = ModifyLPFilterListFor(fe.configPath, ctx, fe.matchedEntry, fe.isWhiteList, false);
 				if (ok) {
 					ScheduleConsoleCommand("reloadlp");
@@ -1401,12 +1358,7 @@ bool LightEditor::AddBulbToConfig()
 	if (addSelectedConfig < 0 || addSelectedConfig >= (int)lpConfigPaths.size())
 		return false;
 
-	const std::string lighEdid = [this]() -> std::string {
-		for (auto& [edid, ligh] : s_lighFormList)
-			if (ligh->GetFormID() == addSelectedLighFormId)
-				return edid;
-		return {};
-	}();
+	const std::string lighEdid = LighEdidForFormId(addSelectedLighFormId);
 	if (lighEdid.empty())
 		return false;
 
@@ -1415,8 +1367,9 @@ bool LightEditor::AddBulbToConfig()
 		return false;
 
 	const auto configPath = lpConfigPaths[addSelectedConfig];
-	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (configPath + ".json");
+	const auto filePath = LPConfigFilePath(configPath);
 
+	// Create the config if it doesn't exist yet (LoadConfigArray would reject a missing file).
 	nlohmann::ordered_json configArray = nlohmann::ordered_json::array();
 	{
 		std::ifstream in(filePath);
@@ -1432,19 +1385,9 @@ bool LightEditor::AddBulbToConfig()
 	if (!configArray.is_array())
 		return false;
 
-	nlohmann::ordered_json data;
-	data["light"] = lighEdid;
-	data["fade"] = 1;
-	data["radius"] = 1;
-	data["flags"] = "";
-
-	nlohmann::ordered_json light;
-	light["data"] = std::move(data);
-	light["points"] = nlohmann::ordered_json::array({ nlohmann::ordered_json::array({ 0, 0, 1 }) });
-
 	nlohmann::ordered_json newEntry;
 	newEntry[addAttachMode == 0 ? "models" : "formIDs"] = nlohmann::ordered_json::array({ target });
-	newEntry["lights"] = nlohmann::ordered_json::array({ std::move(light) });
+	newEntry["lights"] = nlohmann::ordered_json::array({ MakeLightObject(lighEdid) });
 
 	configArray.push_back(std::move(newEntry));
 
@@ -1458,33 +1401,23 @@ bool LightEditor::AddBulbToConfig()
 
 bool LightEditor::AddPointToConfig(const AttachedBulb& bulb)
 {
-	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (bulb.configPath + ".json");
 	nlohmann::ordered_json configArray;
-	{
-		std::ifstream in(filePath);
-		if (!in.is_open()) {
-			logger::warn("[LightEditor] AddPointToConfig: cannot open {}", filePath.string());
-			return false;
-		}
-		try { in >> configArray; } catch (const nlohmann::json::parse_error& e) {
-			logger::warn("[LightEditor] AddPointToConfig: parse error in {}: {}", filePath.string(), e.what());
-			return false;
-		}
-	}
-	if (!configArray.is_array())
+	if (!LoadConfigArray(bulb.configPath, configArray)) {
+		logger::warn("[LightEditor] AddPointToConfig: cannot load {}", bulb.configPath);
 		return false;
+	}
 
 	MatchContext ctx;
 	ctx.ownerModelPath = pickedMesh.modelPath;
-	ctx.ownerEditorId  = pickedMesh.editorId;
-	ctx.baseFormId     = pickedMesh.baseFormId;
-	ctx.lightEDID      = bulb.lightEDID;
-	ctx.refr           = pickedMesh.refrHandle.get().get();
+	ctx.ownerEditorId = pickedMesh.editorId;
+	ctx.baseFormId = pickedMesh.baseFormId;
+	ctx.lightEDID = bulb.lightEDID;
+	ctx.refr = pickedMesh.refrHandle.get().get();
 
 	auto* lightEntry = FindMatchingLightEntry(configArray, ctx, false);
 	if (!lightEntry) {
 		logger::warn("[LightEditor] AddPointToConfig: no matching entry for '{}' in {}",
-			bulb.lightEDID, filePath.string());
+			bulb.lightEDID, bulb.configPath);
 		return false;
 	}
 
@@ -1493,156 +1426,82 @@ bool LightEditor::AddPointToConfig(const AttachedBulb& bulb)
 		points = nlohmann::ordered_json::array();
 	points.push_back(nlohmann::ordered_json::array({ 0, 0, 1 }));
 
-	if (!WriteLPConfig(filePath, configArray)) {
-		logger::warn("[LightEditor] AddPointToConfig: write failed for {}", filePath.string());
+	if (!WriteLPConfig(LPConfigFilePath(bulb.configPath), configArray)) {
+		logger::warn("[LightEditor] AddPointToConfig: write failed for {}", bulb.configPath);
 		return false;
 	}
-	logger::info("[LightEditor] AddPointToConfig: added point to '{}' in {}", bulb.lightEDID, filePath.string());
+	logger::info("[LightEditor] AddPointToConfig: added point to '{}' in {}", bulb.lightEDID, bulb.configPath);
 	return true;
 }
 
 bool LightEditor::LightAlreadyInEntry(const AttachedBulb& bulb, const std::string& lighEdid) const
 {
-	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (bulb.configPath + ".json");
-	std::ifstream in(filePath);
-	if (!in.is_open())
-		return false;
 	nlohmann::ordered_json configArray;
-	try { in >> configArray; } catch (...) { return false; }
-	if (!configArray.is_array())
+	if (!LoadConfigArray(bulb.configPath, configArray))
 		return false;
 
-	auto normalizePath = [](std::string path) -> std::string {
-		std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-		std::replace(path.begin(), path.end(), '\\', '/');
-		return path;
-	};
-	const std::string normModel = normalizePath(pickedMesh.modelPath);
-
-	for (const auto& entry : configArray) {
-		bool entryMatches = false;
-		if (auto* models = GetArrayMember(entry, "models"); !normModel.empty() && models)
-			for (const auto& v : *models)
-				if (v.is_string() && normalizePath(v.get<std::string>()) == normModel) { entryMatches = true; break; }
-		if (!entryMatches) {
-			if (auto* formIDs = GetArrayMember(entry, "formIDs"); formIDs) {
-				for (const auto& v : *formIDs) {
-					if (!v.is_string()) continue;
-					const std::string s = v.get<std::string>();
-					const bool hasPrefix = s.starts_with("0x") || s.starts_with("0X");
-					if (s.find('~') == std::string::npos && !hasPrefix) {
-						if (!pickedMesh.editorId.empty() && s == pickedMesh.editorId) { entryMatches = true; break; }
-					} else if (pickedMesh.baseFormId != 0) {
-						if (ResolveFormEntry(s) == pickedMesh.baseFormId) { entryMatches = true; break; }
-					}
-				}
-			}
-		}
-		if (!entryMatches) continue;
-		if (auto* lightsArr = GetArrayMember(entry, "lights"))
-			for (const auto& le : *lightsArr)
-				if (le.contains("data") && le["data"].contains("light") &&
-				    le["data"]["light"].is_string() &&
-				    le["data"]["light"].get<std::string>() == lighEdid)
-					return true;
-	}
-	return false;
+	MatchContext ctx;
+	ctx.ownerModelPath = pickedMesh.modelPath;
+	ctx.ownerEditorId = pickedMesh.editorId;
+	ctx.baseFormId = pickedMesh.baseFormId;
+	ctx.lightEDID = lighEdid;
+	ctx.refr = pickedMesh.refrHandle.get().get();
+	// A matching light entry (model/formID match + same light EDID) means it is already present.
+	return FindMatchingLightEntry(configArray, ctx, false) != nullptr;
 }
 
 bool LightEditor::AddLightToExistingEntry(const AttachedBulb& bulb, const std::string& lighEdid)
 {
-	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (bulb.configPath + ".json");
 	nlohmann::ordered_json configArray;
-	{
-		std::ifstream in(filePath);
-		if (!in.is_open()) {
-			logger::warn("[LightEditor] AddLightToExistingEntry: cannot open {}", filePath.string());
-			return false;
-		}
-		try { in >> configArray; } catch (const nlohmann::json::parse_error& e) {
-			logger::warn("[LightEditor] AddLightToExistingEntry: parse error in {}: {}", filePath.string(), e.what());
-			return false;
-		}
-	}
-	if (!configArray.is_array())
+	if (!LoadConfigArray(bulb.configPath, configArray)) {
+		logger::warn("[LightEditor] AddLightToExistingEntry: cannot load {}", bulb.configPath);
 		return false;
+	}
 
-	auto normalizePath = [](std::string path) -> std::string {
-		std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-		std::replace(path.begin(), path.end(), '\\', '/');
-		return path;
-	};
-	const std::string normModel  = normalizePath(pickedMesh.modelPath);
-	const std::string ownerEdid  = pickedMesh.editorId;
-	const RE::FormID  baseFormId = pickedMesh.baseFormId;
+	MatchContext ctx;
+	ctx.ownerModelPath = pickedMesh.modelPath;
+	ctx.ownerEditorId = pickedMesh.editorId;
+	ctx.baseFormId = pickedMesh.baseFormId;
+	ctx.lightEDID = lighEdid;
+	ctx.refr = pickedMesh.refrHandle.get().get();
 
 	nlohmann::ordered_json* parentEntry = nullptr;
-	for (auto& entry : configArray) {
-		if (auto* models = GetArrayMember(entry, "models"); !normModel.empty() && models)
-			for (const auto& v : *models)
-				if (v.is_string() && normalizePath(v.get<std::string>()) == normModel) { parentEntry = &entry; break; }
-		if (!parentEntry) {
-			if (auto* formIDs = GetArrayMember(entry, "formIDs"); formIDs) {
-				for (const auto& v : *formIDs) {
-					if (!v.is_string()) continue;
-					const std::string s = v.get<std::string>();
-					const bool hasPrefix = s.starts_with("0x") || s.starts_with("0X");
-					if (s.find('~') == std::string::npos && !hasPrefix) {
-						if (!ownerEdid.empty() && s == ownerEdid) { parentEntry = &entry; break; }
-					} else if (baseFormId != 0) {
-						const RE::FormID resolved = ResolveFormEntry(s);
-						if (resolved != 0 && resolved == baseFormId) { parentEntry = &entry; break; }
-					}
-				}
-			}
+	for (auto& entry : configArray)
+		if (EntryMatchesContext(entry, ctx)) {
+			parentEntry = &entry;
+			break;
 		}
-		if (parentEntry) break;
-	}
 
 	if (!parentEntry) {
-		logger::warn("[LightEditor] AddLightToExistingEntry: no matching top-level entry in {}", filePath.string());
+		logger::warn("[LightEditor] AddLightToExistingEntry: no matching top-level entry in {}", bulb.configPath);
 		return false;
 	}
 
 	// Duplicate guard (should be checked by UI already, but be safe)
-	if (auto* lightsArr = GetArrayMember(*parentEntry, "lights"))
-		for (const auto& le : *lightsArr)
-			if (le.contains("data") && le["data"].contains("light") &&
-			    le["data"]["light"].is_string() &&
-			    le["data"]["light"].get<std::string>() == lighEdid)
-				return false;
-
-	nlohmann::ordered_json newData;
-	newData["light"]  = lighEdid;
-	newData["fade"]   = 1;
-	newData["radius"] = 1;
-	newData["flags"]  = "";
-
-	nlohmann::ordered_json newLight;
-	newLight["data"]   = std::move(newData);
-	newLight["points"] = nlohmann::ordered_json::array({ nlohmann::ordered_json::array({ 0, 0, 1 }) });
+	if (EntryContainsLight(*parentEntry, lighEdid))
+		return false;
 
 	auto& lightsArr = (*parentEntry)["lights"];
 	if (!lightsArr.is_array())
 		lightsArr = nlohmann::ordered_json::array();
-	lightsArr.push_back(std::move(newLight));
+	lightsArr.push_back(MakeLightObject(lighEdid));
 
-	if (!WriteLPConfig(filePath, configArray)) {
-		logger::warn("[LightEditor] AddLightToExistingEntry: write failed for {}", filePath.string());
+	if (!WriteLPConfig(LPConfigFilePath(bulb.configPath), configArray)) {
+		logger::warn("[LightEditor] AddLightToExistingEntry: write failed for {}", bulb.configPath);
 		return false;
 	}
-	logger::info("[LightEditor] AddLightToExistingEntry: added '{}' to existing entry in {}", lighEdid, filePath.string());
+	logger::info("[LightEditor] AddLightToExistingEntry: added '{}' to existing entry in {}", lighEdid, bulb.configPath);
 	return true;
 }
 
 bool LightEditor::HasShadowFlags(uint32_t tesFlags)
 {
 	return (tesFlags & (static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow) |
-	                    static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow) |
-	                    static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kSpotShadow))) != 0;
+						   static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow) |
+						   static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kSpotShadow))) != 0;
 }
 
-std::string LightEditor::GetLightName(LightInfo& lightInfo)
+std::string LightEditor::GetLightName(const LightInfo& lightInfo)
 {
 	if (lightInfo.isRef)
 		return fmt::format("0x{:08X} - {}", lightInfo.id, lightInfo.name.c_str());
@@ -1679,7 +1538,7 @@ void LightEditor::GatherLights()
 				pendingAutoSelectTTL = 10;
 				filterOption = FilterOption::AttachedLights;
 				EditorWindow::GetSingleton()->ShowNotification(
-					I18n::GetSingleton()->Format(TKEY("added_light_to_config"), {{"path", attachConfigPath}}, "Added light to {path}").c_str(),
+					I18n::GetSingleton()->Format(TKEY("added_light_to_config"), { { "path", attachConfigPath } }, "Added light to {path}").c_str(),
 					Util::Colors::GetSuccess());
 				break;
 			default:
@@ -1730,7 +1589,7 @@ void LightEditor::GatherLights()
 		if (!niLight)
 			return;
 
-		LightInfo current;
+		LightInfo info;
 		RE::TESObjectLIGH* ligh = nullptr;
 
 		const auto runtimeData = ISLCommon::RuntimeLightDataExt::Get(niLight);
@@ -1741,20 +1600,20 @@ void LightEditor::GatherLights()
 			if (auto* objRef = refr->GetObjectReference()) {
 				if (objRef->GetFormType() == RE::FormType::Light)
 					ligh = objRef->As<RE::TESObjectLIGH>();
-				current.id = refr->GetFormID();
-				current.name = clib_util::editorID::get_editorID(objRef);
-				current.index = lightsAttached[refr]++;
+				info.id = refr->GetFormID();
+				info.name = clib_util::editorID::get_editorID(objRef);
+				info.index = lightsAttached[refr]++;
 			}
 		}
 
-		current.isRef = ligh != nullptr;
+		info.isRef = ligh != nullptr;
 
-		if (!current.isRef && runtimeData->lighFormId != 0) {
+		if (!info.isRef && runtimeData->lighFormId != 0) {
 			if (auto* lighForm = RE::TESForm::LookupByID(runtimeData->lighFormId))
 				ligh = lighForm->As<RE::TESObjectLIGH>();
 		}
 
-		current.isSpotlight = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow);
+		info.isSpotlight = ligh && ligh->data.flags.any(RE::TES_LIGHT_FLAGS::kSpotlight, RE::TES_LIGHT_FLAGS::kSpotShadow);
 		const bool isShadow = ligh && HasShadowFlags(ligh->data.flags.underlying());
 
 		totalLightCount++;
@@ -1765,52 +1624,52 @@ void LightEditor::GatherLights()
 			return;
 		}
 
-		current.isAttached = !current.isRef && refr != nullptr;
-		current.isOther = (!current.isRef && !current.isAttached) || (current.isSpotlight);
+		info.isAttached = !info.isRef && refr != nullptr;
+		info.isOther = (!info.isRef && !info.isAttached) || (info.isSpotlight);
 
-		const bool isRefMatch = (current.isRef && !current.isSpotlight) && filterOption == FilterOption::RefLights;
-		const bool isAttachedMatch = current.isAttached && filterOption == FilterOption::AttachedLights;
-		const bool isOtherMatch = current.isOther && filterOption == FilterOption::OtherLights;
+		const bool isRefMatch = (info.isRef && !info.isSpotlight) && filterOption == FilterOption::RefLights;
+		const bool isAttachedMatch = info.isAttached && filterOption == FilterOption::AttachedLights;
+		const bool isOtherMatch = info.isOther && filterOption == FilterOption::OtherLights;
 
 		if (!(isRefMatch || isAttachedMatch || isOtherMatch))
 			return;
 
-		if (current.isRef) {
-			current.position = refr->GetPosition();
-			current.hasPosition = true;
+		if (info.isRef) {
+			info.position = refr->GetPosition();
+			info.hasPosition = true;
 		} else if (niLight->parent) {
-			current.position = niLight->parent->world.translate;
-			current.hasPosition = true;
+			info.position = niLight->parent->world.translate;
+			info.hasPosition = true;
 		}
-		if (current.isOther) {
-			current.ptr = reinterpret_cast<void*>(niLight);
-			if (current.name.empty())
-				current.name = niLight->name.c_str();
-			current.index = 0;
+		if (info.isOther) {
+			info.ptr = reinterpret_cast<void*>(niLight);
+			if (info.name.empty())
+				info.name = niLight->name.c_str();
+			info.index = 0;
 		}
 
-		if (pendingAutoSelect && current.isAttached && current.id == pendingSelectRefrId) {
+		if (pendingAutoSelect && info.isAttached && info.id == pendingSelectRefrId) {
 			const auto parsedName = ParseLPLightName(niLight->name.c_str());
 			if (parsedName.isLPLight && parsedName.configPath == pendingSelectConfigPath && parsedName.lightEDID == pendingSelectLighEdid) {
-				selected = current;
+				selected = info;
 				pendingAutoSelect = false;
 			}
 		}
 
-		current.isSelected = selected == current;
+		info.isSelected = selected == info;
 
-		lights.push_back(current);
+		lights.push_back(info);
 
 		// Capture the NiLight for hover-flash on the first frame this light is hovered.
-		if (comboHoveredLight.id != 0 && current == comboHoveredLight && !hoverFlashNiLight) {
+		if (comboHoveredLight.id != 0 && info == comboHoveredLight && !hoverFlashNiLight) {
 			hoverFlashNiLight.reset(niLight);
 			const auto* rd = ISLCommon::RuntimeLightDataExt::Get(niLight);
 			hoverFlashOriginalFade = (rd && rd->fade > 0.f) ? rd->fade : 1.f;
 		}
 
-		if (!current.isSelected)
+		if (!info.isSelected)
 			return;
-		selected = current;
+		selected = info;
 		foundSelected = true;
 		UpdateSelectedLight(refr, ligh, niLight, bsLight);
 	};
@@ -1868,14 +1727,19 @@ void LightEditor::GatherAttachedBulbs(RE::TESObjectREFR* refr)
 		auto* owner = niLight->GetUserData();
 		if (owner != refr)
 			return;
+		// Count every light owned by this ref, not just LP bulbs, so the index matches the
+		// one shown in the main Lights combo (GatherLights increments per owner over all its
+		// lights). Otherwise an LP bulb sitting after a non-LP owner light would be numbered
+		// differently in the two UIs.
+		const uint32_t ownerIndex = running[owner]++;
 		const auto parsed = ParseLPLightName(niLight->name.c_str());
 		if (!parsed.isLPLight)
 			return;
 		AttachedBulb bulb;
-		bulb.lightEDID  = parsed.lightEDID;
+		bulb.lightEDID = parsed.lightEDID;
 		bulb.configPath = parsed.configPath;
-		bulb.refrId     = refr->GetFormID();
-		bulb.index      = running[owner]++;
+		bulb.refrId = refr->GetFormID();
+		bulb.index = ownerIndex;
 		attachedBulbs.push_back(std::move(bulb));
 	};
 
@@ -1910,15 +1774,8 @@ void LightEditor::ScanFilterListEntries(RE::TESObjectREFR* refr)
 		return;
 
 	for (const auto& configPath : ScanLPConfigPaths()) {
-		const auto filePath = std::filesystem::path("Data\\LightPlacer") / (configPath + ".json");
 		nlohmann::ordered_json configArray;
-		{
-			std::ifstream in(filePath);
-			if (!in.is_open())
-				continue;
-			try { in >> configArray; } catch (...) { continue; }
-		}
-		if (!configArray.is_array())
+		if (!LoadConfigArray(configPath, configArray))
 			continue;
 
 		for (const auto& entry : configArray) {
@@ -1937,7 +1794,8 @@ void LightEditor::ScanFilterListEntries(RE::TESObjectREFR* refr)
 					const char* key = isWhiteList ? "whiteList" : "blackList";
 					if (auto* list = GetArrayMember(le, key)) {
 						for (const auto& item : *list) {
-							if (!item.is_string()) continue;
+							if (!item.is_string())
+								continue;
 							const std::string& itemStr = item.get_ref<const std::string&>();
 							for (const auto& candidate : entriesToScan) {
 								if (itemStr == candidate) {
@@ -2072,7 +1930,6 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		waitFrames = 1;
 	}
 
-	displayInfo.ownerFormId = refr ? refr->GetFormID() : 0;
 	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";
 	displayInfo.baseObjectFormId = refr && refr->GetBaseObject() ? refr->GetBaseObject()->formID : 0;
 	displayInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : "Unknown";
@@ -2176,10 +2033,10 @@ LightEditor::MatchContext LightEditor::MakeSelectedContext() const
 {
 	MatchContext ctx;
 	ctx.ownerModelPath = lpInfo.ownerModelPath;
-	ctx.ownerEditorId  = lpInfo.ownerEditorId;
-	ctx.baseFormId     = (activeRefr && activeRefr->GetObjectReference()) ? activeRefr->GetObjectReference()->formID : 0;
-	ctx.lightEDID      = lpInfo.lightEDID;
-	ctx.refr           = activeRefr;
+	ctx.ownerEditorId = lpInfo.ownerEditorId;
+	ctx.baseFormId = (activeRefr && activeRefr->GetObjectReference()) ? activeRefr->GetObjectReference()->formID : 0;
+	ctx.lightEDID = lpInfo.lightEDID;
+	ctx.refr = activeRefr;
 	return ctx;
 }
 
@@ -2222,66 +2079,49 @@ bool LightEditor::MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE:
 
 bool LightEditor::LoadLPConfig(nlohmann::ordered_json& out) const
 {
-	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (lpInfo.configPath + ".json");
-	if (!std::filesystem::exists(filePath)) {
-		logger::warn("[LightEditor] Light Placer config not found: {}", filePath.string());
+	if (!LoadConfigArray(lpInfo.configPath, out)) {
+		logger::warn("[LightEditor] Could not load Light Placer config: {}", lpInfo.configPath);
 		return false;
 	}
-	std::ifstream inFile(filePath);
-	if (!inFile.is_open()) {
-		logger::warn("[LightEditor] Failed to open Light Placer config: {}", filePath.string());
-		return false;
-	}
-	try {
-		inFile >> out;
-	} catch (const nlohmann::json::parse_error& e) {
-		logger::warn("[LightEditor] Failed to parse Light Placer config: {} - {}", filePath.string(), e.what());
-		return false;
-	}
-	return out.is_array();
+	return true;
 }
 
-nlohmann::ordered_json* LightEditor::FindMatchingLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, bool applyFilters)
+bool LightEditor::EntryMatchesContext(const nlohmann::ordered_json& entry, const MatchContext& ctx)
 {
-	auto normalizePath = [](std::string path) -> std::string {
-		std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-		std::replace(path.begin(), path.end(), '\\', '/');
-		return path;
-	};
-	auto arrayContainsString = [](const nlohmann::ordered_json& arr, const std::function<bool(const std::string&)>& pred) -> bool {
-		for (const auto& elem : arr)
-			if (elem.is_string() && pred(elem.get<std::string>()))
+	const std::string normalizedOwner = NormalizeModelPath(ctx.ownerModelPath);
+	if (auto* models = GetArrayMember(entry, "models"); !normalizedOwner.empty() && models)
+		for (const auto& v : *models)
+			if (v.is_string() && NormalizeModelPath(v.get<std::string>()) == normalizedOwner)
 				return true;
-		return false;
-	};
-	const std::string normalizedOwner = normalizePath(ctx.ownerModelPath);
+	if (auto* formIDs = GetArrayMember(entry, "formIDs"); formIDs)
+		for (const auto& v : *formIDs) {
+			if (!v.is_string())
+				continue;
+			const std::string s = v.get<std::string>();
+			const bool hasPrefix = s.starts_with("0x") || s.starts_with("0X");
+			if (s.find('~') == std::string::npos && !hasPrefix) {
+				if (!ctx.ownerEditorId.empty() && s == ctx.ownerEditorId)
+					return true;
+			} else if (ctx.baseFormId != 0) {
+				const RE::FormID resolved = ResolveFormEntry(s);
+				if (resolved != 0 && resolved == ctx.baseFormId)
+					return true;
+			}
+		}
+	return false;
+}
 
+nlohmann::ordered_json* LightEditor::FindMatchingLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, bool applyFilters) const
+{
 	for (auto& entry : configArray) {
 		auto lightsIt = entry.find("lights");
 		if (lightsIt == entry.end() || !lightsIt->is_array())
 			continue;
 
-		bool entryMatches = false;
-		if (auto* models = GetArrayMember(entry, "models"); !normalizedOwner.empty() && models)
-			entryMatches = arrayContainsString(*models, [&](const std::string& s) { return normalizePath(s) == normalizedOwner; });
-		if (!entryMatches) {
-			if (auto* formIDs = GetArrayMember(entry, "formIDs"); formIDs) {
-				entryMatches = arrayContainsString(*formIDs, [&](const std::string& s) -> bool {
-					const bool hasPrefix = s.starts_with("0x") || s.starts_with("0X");
-					if (s.find('~') == std::string::npos && !hasPrefix)
-						return !ctx.ownerEditorId.empty() && s == ctx.ownerEditorId;
-					if (ctx.baseFormId == 0)
-						return false;
-					const RE::FormID resolved = ResolveFormEntry(s);
-					return resolved != 0 && resolved == ctx.baseFormId;
-				});
-			}
-		}
-
-		if (!entryMatches)
+		if (!EntryMatchesContext(entry, ctx))
 			continue;
 
-		for (auto& lightEntry : entry["lights"]) {
+		for (auto& lightEntry : *lightsIt) {
 			if (!lightEntry.contains("data"))
 				continue;
 			auto& data = lightEntry["data"];
@@ -2326,7 +2166,8 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 	const bool isInvSq = lpFlagSet.contains("InverseSquare");
 	std::string newFlags;
 	for (const auto& flag : lpFlagSet) {
-		if (!newFlags.empty()) newFlags += "|";
+		if (!newFlags.empty())
+			newFlags += "|";
 		newFlags += flag;
 	}
 
@@ -2368,17 +2209,28 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 	// Normalise key order for every data and lightEntry in the file so the whole config is consistent.
 	auto normalizeData = [](nlohmann::ordered_json& d) {
 		nlohmann::ordered_json nd;
-		if (d.contains("color"))             nd["color"]             = d["color"];
-		if (d.contains("light"))             nd["light"]             = d["light"];
-		if (d.contains("fade"))              nd["fade"]              = d["fade"];
-		if (d.contains("radius"))            nd["radius"]            = d["radius"];
-		if (d.contains("size"))              nd["size"]              = d["size"];
-		if (d.contains("cutoff"))            nd["cutoff"]            = d["cutoff"];
-		if (d.contains("shadowDepthBias"))   nd["shadowDepthBias"]   = d["shadowDepthBias"];
-		if (d.contains("externalEmittance")) nd["externalEmittance"] = d["externalEmittance"];
-		if (d.contains("flags"))             nd["flags"]             = d["flags"];
-		if (d.contains("offset"))            nd["offset"]            = d["offset"];
-		if (d.contains("rotation"))          nd["rotation"]          = d["rotation"];
+		if (d.contains("color"))
+			nd["color"] = d["color"];
+		if (d.contains("light"))
+			nd["light"] = d["light"];
+		if (d.contains("fade"))
+			nd["fade"] = d["fade"];
+		if (d.contains("radius"))
+			nd["radius"] = d["radius"];
+		if (d.contains("size"))
+			nd["size"] = d["size"];
+		if (d.contains("cutoff"))
+			nd["cutoff"] = d["cutoff"];
+		if (d.contains("shadowDepthBias"))
+			nd["shadowDepthBias"] = d["shadowDepthBias"];
+		if (d.contains("externalEmittance"))
+			nd["externalEmittance"] = d["externalEmittance"];
+		if (d.contains("flags"))
+			nd["flags"] = d["flags"];
+		if (d.contains("offset"))
+			nd["offset"] = d["offset"];
+		if (d.contains("rotation"))
+			nd["rotation"] = d["rotation"];
 		for (auto& [key, val] : d.items())
 			if (std::ranges::find(managedDataKeys, key) == managedDataKeys.end())
 				nd[key] = val;
@@ -2389,11 +2241,16 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 		if (le.contains("data"))
 			normalizeData(le["data"]);
 		nlohmann::ordered_json newEntry;
-		if (le.contains("data"))       newEntry["data"]      = le["data"];
-		if (le.contains("points"))     newEntry["points"]    = le["points"];
-		else if (le.contains("nodes")) newEntry["nodes"]     = le["nodes"];
-		if (le.contains("whiteList"))  newEntry["whiteList"] = le["whiteList"];
-		if (le.contains("blackList"))  newEntry["blackList"] = le["blackList"];
+		if (le.contains("data"))
+			newEntry["data"] = le["data"];
+		if (le.contains("points"))
+			newEntry["points"] = le["points"];
+		else if (le.contains("nodes"))
+			newEntry["nodes"] = le["nodes"];
+		if (le.contains("whiteList"))
+			newEntry["whiteList"] = le["whiteList"];
+		if (le.contains("blackList"))
+			newEntry["blackList"] = le["blackList"];
 		for (auto& [key, val] : le.items())
 			if (std::ranges::find(managedEntryKeys, key) == managedEntryKeys.end())
 				newEntry[key] = val;
@@ -2408,7 +2265,7 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 			normalizeLightEntry(le);
 	}
 
-	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (lpInfo.configPath + ".json");
+	const auto filePath = LPConfigFilePath(lpInfo.configPath);
 	if (!WriteLPConfig(filePath, configArray))
 		return false;
 
@@ -2528,12 +2385,14 @@ void LightEditor::SyncLPFlagsToRuntime()
 	auto& tesUnderlying = reinterpret_cast<uint32_t&>(current.tesFlags);
 	auto syncTesBit = [&](RE::TES_LIGHT_FLAGS bit, bool val) {
 		const auto mask = static_cast<uint32_t>(bit);
-		if (val) tesUnderlying |= mask;
-		else     tesUnderlying &= ~mask;
+		if (val)
+			tesUnderlying |= mask;
+		else
+			tesUnderlying &= ~mask;
 	};
-	syncTesBit(RE::TES_LIGHT_FLAGS::kFlicker,      lpFlagSet.contains("Flicker"));
-	syncTesBit(RE::TES_LIGHT_FLAGS::kOmniShadow,   lpFlagSet.contains("Shadow"));
-	syncTesBit(RE::TES_LIGHT_FLAGS::kPortalStrict,  lpFlagSet.contains("PortalStrict"));
+	syncTesBit(RE::TES_LIGHT_FLAGS::kFlicker, lpFlagSet.contains("Flicker"));
+	syncTesBit(RE::TES_LIGHT_FLAGS::kOmniShadow, lpFlagSet.contains("Shadow"));
+	syncTesBit(RE::TES_LIGHT_FLAGS::kPortalStrict, lpFlagSet.contains("PortalStrict"));
 }
 
 void LightEditor::MutateFilterList(nlohmann::ordered_json& lightEntry, const char* listKey, const std::string& ownerEntry, bool add)
@@ -2551,7 +2410,8 @@ void LightEditor::MutateFilterList(nlohmann::ordered_json& lightEntry, const cha
 			return;
 		list.erase(std::remove_if(list.begin(), list.end(), [&](const auto& elem) {
 			return elem.is_string() && elem.template get<std::string>() == ownerEntry;
-		}), list.end());
+		}),
+			list.end());
 		if (list.empty())
 			lightEntry.erase(listKey);
 	}
@@ -2562,19 +2422,8 @@ bool LightEditor::ModifyLPFilterListFor(const std::string& configPath, const Mat
 	if (entryStr.empty())
 		return false;
 
-	const auto filePath = std::filesystem::path("Data\\LightPlacer") / (configPath + ".json");
 	nlohmann::ordered_json configArray;
-	{
-		std::ifstream in(filePath);
-		if (!in.is_open())
-			return false;
-		try {
-			in >> configArray;
-		} catch (const nlohmann::json::parse_error&) {
-			return false;
-		}
-	}
-	if (!configArray.is_array())
+	if (!LoadConfigArray(configPath, configArray))
 		return false;
 
 	auto* lightEntry = FindMatchingLightEntry(configArray, ctx, false);
@@ -2582,7 +2431,7 @@ bool LightEditor::ModifyLPFilterListFor(const std::string& configPath, const Mat
 		return false;
 
 	MutateFilterList(*lightEntry, isWhiteList ? "whiteList" : "blackList", entryStr, add);
-	return WriteLPConfig(filePath, configArray);
+	return WriteLPConfig(LPConfigFilePath(configPath), configArray);
 }
 
 bool LightEditor::ModifyLPFilterListFor(const std::string& configPath, const MatchContext& ctx, bool isWhiteList, bool add)

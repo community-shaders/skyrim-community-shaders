@@ -8,6 +8,8 @@
 namespace RE
 {
 	class NiCamera;
+	class TESObjectREFR;
+	class TESBoundObject;
 }
 
 // Resolves the mesh/reference under the cursor via a camera-through-cursor havok raycast.
@@ -16,16 +18,20 @@ struct LightPicker
 {
 	struct PickedMesh
 	{
-		RE::ObjectRefHandle refrHandle;          // safe across cell changes
-		RE::FormID          baseFormId = 0;      // base object FormID
-		std::string        editorId;         // base object EditorID (may be empty)
-		std::string        modelPath;        // base object .nif path (may be empty)
-		std::string        sourcePlugin;     // plugin defining the base FormID (may be empty)
-		bool               valid = false;
+		RE::ObjectRefHandle refrHandle;  // safe across cell changes
+		RE::FormID baseFormId = 0;       // base object FormID
+		std::string editorId;            // base object EditorID (may be empty)
+		std::string modelPath;           // base object .nif path (may be empty)
+		std::string sourcePlugin;        // plugin defining the base FormID (may be empty)
+		bool valid = false;
 	};
 
-	enum class PickMode { kCollision = 0, kEffect = 1 };
-	PickMode pickMode = PickMode::kCollision;   // persists across picks
+	enum class PickMode
+	{
+		kCollision = 0,
+		kEffect = 1
+	};
+	PickMode pickMode = PickMode::kCollision;  // persists across picks
 
 	// Enters pick mode. While active, Update() watches for a world click.
 	void BeginPick();
@@ -44,10 +50,12 @@ private:
 	static RE::NiCamera* GetPlayerNiCamera();
 	static PickedMesh ResolveUnderCursor(bool logResult = true);
 	static PickedMesh ResolveNearestToCursor();
+	// Fills the identifying fields of `out` (handle, FormID, EditorID, model, plugin) from a ref.
+	static void PopulateFromRef(PickedMesh& out, RE::TESObjectREFR* refr, RE::TESBoundObject* baseObj);
 
-	bool       picking = false;
+	bool picking = false;
 	PickedMesh result;
-	PickedMesh hoverMesh;           // last raycast hit under the cursor (updated per frame)
-	float      lastMouseX = -1.f;
-	float      lastMouseY = -1.f;
+	PickedMesh hoverMesh;  // last raycast hit under the cursor (updated per frame)
+	float lastMouseX = -1.f;
+	float lastMouseY = -1.f;
 };

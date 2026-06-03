@@ -18,6 +18,20 @@ namespace
 	constexpr float kRayLengthSkyrim = 100000.0f;
 }
 
+void LightPicker::PopulateFromRef(PickedMesh& out, RE::TESObjectREFR* refr, RE::TESBoundObject* baseObj)
+{
+	out.refrHandle = refr->GetHandle();
+	out.baseFormId = baseObj->formID;
+	out.editorId = clib_util::editorID::get_editorID(baseObj);
+	if (auto* model = baseObj->As<RE::TESModel>()) {
+		if (const char* path = model->GetModel())
+			out.modelPath = path;
+	}
+	if (const auto* file = baseObj->GetFile(0))
+		out.sourcePlugin = file->fileName;
+	out.valid = true;
+}
+
 RE::NiCamera* LightPicker::GetPlayerNiCamera()
 {
 	auto* playerCamera = RE::PlayerCamera::GetSingleton();
@@ -72,16 +86,7 @@ LightPicker::PickedMesh LightPicker::ResolveUnderCursor(bool logResult)
 	if (!baseObj)
 		return out;
 
-	out.refrHandle = refr->GetHandle();
-	out.baseFormId = baseObj->formID;
-	out.editorId = clib_util::editorID::get_editorID(baseObj);
-	if (auto* model = baseObj->As<RE::TESModel>()) {
-		if (const char* path = model->GetModel())
-			out.modelPath = path;
-	}
-	if (const auto* file = baseObj->GetFile(0))
-		out.sourcePlugin = file->fileName;
-	out.valid = true;
+	PopulateFromRef(out, refr, baseObj);
 
 	if (logResult)
 		logger::info("[LightPicker] Hit ref 0x{:08X} '{}' model '{}' plugin '{}'",
@@ -105,16 +110,16 @@ LightPicker::PickedMesh LightPicker::ResolveNearestToCursor()
 	if (!cell)
 		return out;
 
-	const ImVec2 cursor  = ImGui::GetMousePos();
+	const ImVec2 cursor = ImGui::GetMousePos();
 	const ImVec2 display = ImGui::GetIO().DisplaySize;
 	if (display.x <= 0.0f || display.y <= 0.0f)
 		return out;
 
-	static constexpr float kSearchRadius   = 5000.0f;  // Skyrim units (~50 m)
+	static constexpr float kSearchRadius = 5000.0f;          // Skyrim units (~50 m)
 	static constexpr float kScreenThreshSq = 64.0f * 64.0f;  // pixels
 
-	float               bestDistSq = kScreenThreshSq;
-	RE::TESObjectREFR*  bestRef    = nullptr;
+	float bestDistSq = kScreenThreshSq;
+	RE::TESObjectREFR* bestRef = nullptr;
 
 	cell->ForEachReferenceInRange(player->GetPosition(), kSearchRadius,
 		[&](RE::TESObjectREFR* refr) -> RE::BSContainer::ForEachResult {
@@ -134,7 +139,7 @@ LightPicker::PickedMesh LightPicker::ResolveNearestToCursor()
 
 			if (distSq < bestDistSq) {
 				bestDistSq = distSq;
-				bestRef    = refr;
+				bestRef = refr;
 			}
 			return RE::BSContainer::ForEachResult::kContinue;
 		});
@@ -154,15 +159,7 @@ LightPicker::PickedMesh LightPicker::ResolveNearestToCursor()
 			return out;  // out.valid is still false
 	}
 
-	out.refrHandle  = bestRef->GetHandle();
-	out.baseFormId  = baseObj->formID;
-	out.editorId    = clib_util::editorID::get_editorID(baseObj);
-	if (auto* model = baseObj->As<RE::TESModel>())
-		if (const char* path = model->GetModel())
-			out.modelPath = path;
-	if (const auto* file = baseObj->GetFile(0))
-		out.sourcePlugin = file->fileName;
-	out.valid = true;
+	PopulateFromRef(out, bestRef, baseObj);
 
 	logger::info("[LightPicker] Effect-pick ref 0x{:08X} '{}' model '{}' plugin '{}'",
 		bestRef->GetFormID(), out.editorId, out.modelPath, out.sourcePlugin);
@@ -188,8 +185,9 @@ void LightPicker::Update()
 	if (!picking)
 		return;
 
-	if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-		if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+	const bool escapePressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
+	if (escapePressed || ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+		if (escapePressed)
 			EditorWindow::GetSingleton()->suppressNextEditorEscape = true;
 		Cancel();
 		return;
@@ -225,7 +223,7 @@ void LightPicker::Update()
 	if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
 		// Reuse the hover result if the mouse didn't move between the last hover update and click.
 		PickedMesh hit = hoverMesh.valid ? hoverMesh :
-		    (pickMode == PickMode::kEffect ? ResolveNearestToCursor() : ResolveUnderCursor());
+		                                   (pickMode == PickMode::kEffect ? ResolveNearestToCursor() : ResolveUnderCursor());
 		if (hit.valid) {
 			result = hit;
 			picking = false;

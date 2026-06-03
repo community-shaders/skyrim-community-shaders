@@ -1,11 +1,14 @@
 #pragma once
 #include "../Features/InverseSquareLighting/Common.h"
 #include "LightPicker.h"
-#include <nlohmann/json.hpp>
 #include <chrono>
+#include <nlohmann/json.hpp>
 #include <set>
 
-namespace RE { class BSLight; }
+namespace RE
+{
+	class BSLight;
+}
 
 struct LightEditor
 {
@@ -42,7 +45,6 @@ private:
 
 	struct LightDisplayInfo
 	{
-		RE::FormID ownerFormId = 0;
 		std::string ownerEditorId;
 		RE::FormID baseObjectFormId = 0;
 		std::string ownerLastEditedBy;
@@ -156,7 +158,9 @@ private:
 
 	static RE::FormID ResolveFormEntry(const std::string& entry);
 	static bool HasShadowFlags(uint32_t tesFlags);
-	static std::string GetLightName(LightInfo& lightInfo);
+	static std::string GetLightName(const LightInfo& lightInfo);
+	// EditorID for a LIGH FormID from the cached form list, or "" if not found.
+	static std::string LighEdidForFormId(RE::FormID formId);
 	static LPLightInfo ParseLPLightName(const std::string& name);
 	static bool MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr);
 	bool SaveToLightPlacer(bool includeColor = false, bool dryRun = false);
@@ -168,7 +172,7 @@ private:
 	{
 		std::string ownerModelPath;
 		std::string ownerEditorId;
-		RE::FormID  baseFormId = 0;     // base object FormID of the owner ref
+		RE::FormID baseFormId = 0;  // base object FormID of the owner ref
 		std::string lightEDID;
 		RE::TESObjectREFR* refr = nullptr;
 	};
@@ -180,7 +184,9 @@ private:
 
 	static std::string FormatOwnerFormEntry(RE::TESObjectREFR* refr);
 	bool LoadLPConfig(nlohmann::ordered_json& out) const;
-	nlohmann::ordered_json* FindMatchingLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, bool applyFilters = true);
+	// True if a top-level config entry's models/formIDs identify the context's owner ref.
+	static bool EntryMatchesContext(const nlohmann::ordered_json& entry, const MatchContext& ctx);
+	nlohmann::ordered_json* FindMatchingLightEntry(nlohmann::ordered_json& configArray, const MatchContext& ctx, bool applyFilters = true) const;
 	bool ModifyLPFilterList(bool isWhiteList, bool add);
 	void RefreshLPJsonState();
 	void SyncLPFlagsToRuntime();
@@ -196,41 +202,59 @@ private:
 	{
 		std::string lightEDID;
 		std::string configPath;
-		RE::FormID  refrId = 0;   // owner reference (the picked mesh ref)
-		uint32_t    index  = 0;   // running per-ref index, mirrors GatherLights ordering
+		RE::FormID refrId = 0;  // owner reference (the picked mesh ref)
+		uint32_t index = 0;     // running per-ref index, mirrors GatherLights ordering
 	};
-	std::vector<AttachedBulb> attachedBulbs;   // bulbs live-attached to pickedMesh, built on popup open
-	int  addSelectedBulb = -1;                 // index into attachedBulbs
-	char addBulbSearch[256] = {};              // search text for the bulb combo
+	std::vector<AttachedBulb> attachedBulbs;  // bulbs live-attached to pickedMesh, built on popup open
+	int addSelectedBulb = -1;                 // index into attachedBulbs
+	char addBulbSearch[256] = {};             // search text for the bulb combo
 
 	struct FilterListEntry
 	{
 		std::string lightEDID;
 		std::string configPath;
 		std::string matchedEntry;  // the exact string found in whiteList/blackList
-		bool        isWhiteList = false;
+		bool isWhiteList = false;
 	};
 	std::vector<FilterListEntry> filterListEntries;  // WL/BL entries where pickedMesh's ref appears
-	int  addSelectedFilterEntry = -1;
-	char addFilterSearch[256]   = {};
-	int  addFilterEntryType = 0;  // 0 = Reference (FormID), 1 = Cell EditorID
+	int addSelectedFilterEntry = -1;
+	char addFilterSearch[256] = {};
+	int addFilterEntryType = 0;  // 0 = Reference (FormID), 1 = Cell EditorID
 
 	// Popup selections.
-	std::vector<std::string> lpConfigPaths;   // relative paths under LightPlacer\, no extension
-	int  addSelectedConfig = -1;              // index into lpConfigPaths
-	int  addAttachMode = -1;                  // 0 = Model, 1 = FormID, 2 = EditorID
-	RE::FormID addSelectedLighFormId = 0;     // chosen LIGH
-	char addConfigSearch[256] = {};           // persisted search text for Target JSON combo
-	char addLighSearch[256] = {};             // persisted search text for Light record combo
-	int  addPopupMode = -1;                   // 0 = Add Light, 1 = Edit Bulb, 2 = Whitelist, 3 = Blacklist, 4 = Remove from List
-	enum AddPopupMode { ModeAddLight = 0, ModeEditBulb = 1, ModeWhitelist = 2, ModeBlacklist = 3, ModeRemoveFromList = 4 };
-	int  addLightSubMode = -1;                // 0 = Add new point, 1 = Add to entry, 2 = Add new entry
-	enum AddLightSubMode { SubModeNewPoint = 0, SubModeToEntry = 1, SubModeNewEntry = 2 };
+	std::vector<std::string> lpConfigPaths;  // relative paths under LightPlacer\, no extension
+	int addSelectedConfig = -1;              // index into lpConfigPaths
+	int addAttachMode = -1;                  // 0 = Model, 1 = FormID, 2 = EditorID
+	RE::FormID addSelectedLighFormId = 0;    // chosen LIGH
+	char addConfigSearch[256] = {};          // persisted search text for Target JSON combo
+	char addLighSearch[256] = {};            // persisted search text for Light record combo
+	int addPopupMode = -1;                   // 0 = Add Light, 1 = Edit Bulb, 2 = Whitelist, 3 = Blacklist, 4 = Remove from List
+	enum AddPopupMode
+	{
+		ModeAddLight = 0,
+		ModeEditBulb = 1,
+		ModeWhitelist = 2,
+		ModeBlacklist = 3,
+		ModeRemoveFromList = 4
+	};
+	int addLightSubMode = -1;  // 0 = Add new point, 1 = Add to entry, 2 = Add new entry
+	enum AddLightSubMode
+	{
+		SubModeNewPoint = 0,
+		SubModeToEntry = 1,
+		SubModeNewEntry = 2
+	};
 	bool addPopupPrefsLoaded = false;
 
 	// Post-add attaching sequence. Each step is spaced by kAttachStepDelay so the game
 	// has time to flush the disable/enable and respawn the reference with its new bulb.
-	enum class AttachPhase { Idle, WaitingForReload, WaitingForEnable, WaitingForRespawn };
+	enum class AttachPhase
+	{
+		Idle,
+		WaitingForReload,
+		WaitingForEnable,
+		WaitingForRespawn
+	};
 	static constexpr std::chrono::milliseconds kAttachStepDelay{ 500 };
 	AttachPhase attachPhase = AttachPhase::Idle;
 	std::chrono::steady_clock::time_point attachPhaseStart;
@@ -239,13 +263,20 @@ private:
 
 	// Auto-select the newly spawned LP light after the attaching sequence completes.
 	bool pendingAutoSelect = false;
-	int pendingAutoSelectTTL = 0;     // gather passes remaining before giving up
+	int pendingAutoSelectTTL = 0;  // gather passes remaining before giving up
 	RE::FormID pendingSelectRefrId = 0;
 	std::string pendingSelectConfigPath;
 	std::string pendingSelectLighEdid;
 
 	void DrawAddLightButton();
 	void DrawAddLightPopup();
+	// Searchable "Attached bulb" combo over attachedBulbs. Returns the index clicked this
+	// frame (or -1); sets addSelectedBulb on click. openOnAppear opens the dropdown on first show.
+	int DrawAttachedBulbCombo(const char* searchId, bool openOnAppear);
+	// Searchable "Light record" combo over the cached LIGH list; writes addSelectedLighFormId.
+	void DrawLightRecordCombo(const char* searchId);
+	// Kicks off the timed reload/disable/enable/respawn sequence for the picked mesh.
+	void BeginAttachSequence(const std::string& configPath);
 	std::vector<std::string> ScanLPConfigPaths() const;
 	void GatherAttachedBulbs(RE::TESObjectREFR* refr);
 	void ScanFilterListEntries(RE::TESObjectREFR* refr);
