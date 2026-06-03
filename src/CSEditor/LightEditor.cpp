@@ -1046,8 +1046,6 @@ bool LightEditor::HasShadowFlags(uint32_t tesFlags)
 	                    static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kSpotShadow))) != 0;
 }
 
-#undef I18N_KEY_PREFIX
-
 std::string LightEditor::GetLightName(LightInfo& lightInfo)
 {
 	if (lightInfo.isRef)
@@ -1237,6 +1235,8 @@ void LightEditor::GatherLights()
 	if (pendingAutoSelect && --pendingAutoSelectTTL <= 0)
 		pendingAutoSelect = false;
 }
+
+#undef I18N_KEY_PREFIX
 
 void LightEditor::ResetOverrides()
 {
