@@ -2284,8 +2284,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.Metallic = saturate(rawRMAOS.y);
 	material.AO = rawRMAOS.z;
 
-	// Apply vertex color to base color so PBR metals use it
-	float3 pbrVertexColor = Color::SrgbToLinear(input.Color.xyz);
+	// Apply vertex color to base color so PBR metals use it. On LANDSCAPE,
+	// honor DisableTerrainVertexColors (as the non-PBR path does) by
+	// neutralizing the source color so terrain vertex colors don't tint PBR;
+	// a white source yields VertexAO == 1, i.e. no AO darkening either.
+	float3 pbrVertexColorSrc = input.Color.xyz;
+#		if defined(LANDSCAPE)
+	if (SharedData::lodBlendingSettings.DisableTerrainVertexColors)
+		pbrVertexColorSrc = 1;
+#		endif
+	float3 pbrVertexColor = Color::SrgbToLinear(pbrVertexColorSrc);
 	float pbrVertexAO = max(max(pbrVertexColor.x, pbrVertexColor.y), pbrVertexColor.z);
 	pbrVertexColor = pbrVertexAO == 0.0f ? 1.0f : pbrVertexColor * lerp(1 / max(pbrVertexAO, 0.001), 1, SharedData::truePBRSettings.VertexAOStrength);
 
