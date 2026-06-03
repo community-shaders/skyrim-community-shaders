@@ -194,6 +194,7 @@ cbuffer AlphaTestRefCB : register(b11)
 #	endif
 
 #	if defined(EXP_HEIGHT_FOG)
+#		define SampColorSampler SampBaseSampler
 #		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
 #	endif
 
