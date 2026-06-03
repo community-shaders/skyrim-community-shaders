@@ -1136,6 +1136,7 @@ void LightEditor::DrawAddLightPopup()
 			const char* bulbPreview = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size())
 			                              ? attachedBulbs[addSelectedBulb].lightEDID.c_str()
 			                              : T(TKEY("select_a_bulb"), "Select a bulb");
+			ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
 			if (ImGui::BeginCombo(T(TKEY("attached_bulb"), "Attached bulb"), bulbPreview, ImGuiComboFlags_HeightLarge)) {
 				if (ImGui::IsWindowAppearing())
 					ImGui::SetKeyboardFocusHere();
@@ -1281,9 +1282,9 @@ void LightEditor::DrawAddLightPopup()
 				const std::string_view filterSv = addFilterSearch;
 				for (int i = 0; i < (int)filterListEntries.size(); ++i) {
 					const auto& fe = filterListEntries[i];
-					const std::string lbl = fmt::format("{}  ({})  [{}]  \"{}\"",
-					    fe.lightEDID, fe.configPath,
+					const std::string lbl = fmt::format("[{}]  {}  ({})  \"{}\"",
 					    fe.isWhiteList ? "whitelist" : "blacklist",
+					    fe.lightEDID, fe.configPath,
 					    fe.matchedEntry);
 					if (!filterSv.empty() && !Util::StringMatchesSearch(lbl, std::string(filterSv)))
 						continue;
