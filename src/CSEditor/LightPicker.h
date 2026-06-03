@@ -24,6 +24,9 @@ struct LightPicker
 		bool               valid = false;
 	};
 
+	enum class PickMode { kCollision = 0, kEffect = 1 };
+	PickMode pickMode = PickMode::kCollision;   // persists across picks
+
 	// Enters pick mode. While active, Update() watches for a world click.
 	void BeginPick();
 	// Leaves pick mode without producing a result.
@@ -39,8 +42,12 @@ struct LightPicker
 
 private:
 	static RE::NiCamera* GetPlayerNiCamera();
-	static PickedMesh ResolveUnderCursor();
+	static PickedMesh ResolveUnderCursor(bool logResult = true);
+	static PickedMesh ResolveNearestToCursor();
 
 	bool       picking = false;
 	PickedMesh result;
+	PickedMesh hoverMesh;           // last raycast hit under the cursor (updated per frame)
+	float      lastMouseX = -1.f;
+	float      lastMouseY = -1.f;
 };

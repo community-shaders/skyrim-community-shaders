@@ -881,6 +881,8 @@
     "feature.light_editor.owner": "Owner: 0x%08X | %s",
     "feature.light_editor.owner_last_edited_by": "Owner last edited by: %s",
     "feature.light_editor.pick_mesh_prompt": "Click a mesh to attach a light... (right-click / ESC to cancel)",
+    "feature.light_editor.pick_mode_collision": "Collision",
+    "feature.light_editor.pick_mode_effect": "Effect mesh",
     "feature.light_editor.picked_base_form_id": "Base FormID: 0x%08X",
     "feature.light_editor.picked_editor_id": "EditorID: %s",
     "feature.light_editor.picked_mesh": "Mesh: %s",
