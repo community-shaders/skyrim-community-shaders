@@ -93,16 +93,12 @@ bool IconButton(const char* label, bool filled, const char* iconType)
 
 	bool result = ImGui::InvisibleButton(label, buttonSize);
 
-	bool hovered = ImGui::IsItemHovered();
-	bool active = ImGui::IsItemActive();
-
-	ImU32 bgColor = active  ? ImGui::GetColorU32(ImGuiCol_ButtonActive) :
-	                hovered ? ImGui::GetColorU32(ImGuiCol_ButtonHovered) :
-	                          ImGui::GetColorU32(ImGuiCol_Button);
 	ImU32 iconColor = ImGui::GetColorU32(ImGuiCol_Text);
 
 	auto* drawList = ImGui::GetWindowDrawList();
-	drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + buttonSize.x, cursorPos.y + buttonSize.y), bgColor, ImGui::GetStyle().FrameRounding);
+	const ImVec2 buttonMax(cursorPos.x + buttonSize.x, cursorPos.y + buttonSize.y);
+	drawList->AddRectFilled(cursorPos, buttonMax, ImGui::GetColorU32(ImGuiCol_Button), ImGui::GetStyle().FrameRounding);
+	Util::DrawCurrentItemRoundedButtonHighlight(drawList);
 
 	ImVec2 center(cursorPos.x + buttonSize.x * 0.5f, cursorPos.y + buttonSize.y * 0.5f);
 	float iconSize = buttonSize.x * 0.35f;

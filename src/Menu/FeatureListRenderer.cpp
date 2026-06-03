@@ -12,6 +12,7 @@
 #include "Feature.h"
 #include "FeatureConstraints.h"
 #include "FeatureIssues.h"
+#include "Features/CSEditor.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
@@ -23,6 +24,7 @@
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 #include "WeatherVariableRegistry.h"
 
 namespace
@@ -810,8 +812,10 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 			ImVec2 cursorPosBefore = ImGui::GetCursorPos();
 			feat->DrawSettings();
 
-			ImGui::SeparatorText("Profiling");
-			ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
+			if (feat != &globals::features::csEditor) {
+				ImGui::SeparatorText("Profiling");
+				ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
+			}
 
 			ImVec2 cursorPosAfter = ImGui::GetCursorPos();
 
@@ -942,16 +946,19 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 		return;
 	}
 
+	constexpr const char* popupId = "###SettingChangeWarning";
+	const std::string popupTitle = fmt::format("{}{}", T("menu.features.setting_change_warning_title", "Setting Change Warning"), popupId);
+
 	// OpenPopup is idempotent while the popup is already open, so calling it
 	// every frame while the flag is set is safe and ensures we don't miss the
 	// one-frame window where ImGui expects it.
-	ImGui::OpenPopup("Setting Change Warning");
+	ImGui::OpenPopup(popupId);
 
 	// Center the popup (ImGuiCond_Always matches the Clear Cache dialog pattern)
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
-	if (ImGui::BeginPopupModal("Setting Change Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (Util::BeginPopupModalWithRoundedClose(popupTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::TextWrapped("%s", T("menu.features.settings_adjusted_warning", "Some of your settings have been automatically adjusted due to feature incompatibilities."));
 		ImGui::Spacing();
 		ImGui::Separator();

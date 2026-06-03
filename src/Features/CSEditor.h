@@ -50,7 +50,7 @@ public:
 	 * Renders the standalone weather details window.
 	 * @param open Pointer to the open/close state owned by the caller.
 	 */
-	void RenderWeatherDetailsWindow(bool* open);
+	void RenderWeatherDetailsWindow(bool* open, bool showSectionHeaders = true);
 
 	// Core weather display functions that other features can use
 	/**
@@ -64,7 +64,7 @@ public:
 	 * Renders the core weather details UI section.
 	 * @param showInteractiveElements Enables interactive controls when true.
 	 */
-	static void RenderCoreWeatherDetails(bool showInteractiveElements = true);
+	static void RenderCoreWeatherDetails(bool showInteractiveElements = true, bool showSectionHeaders = true);
 	/**
 	 * Renders weather analysis sections contributed by other features.
 	 */
@@ -75,13 +75,13 @@ public:
 	 * Renders the weather controls section.
 	 * @param sky Active sky instance.
 	 */
-	static void RenderWeatherControls(RE::Sky* sky);
+	static void RenderWeatherControls(RE::Sky* sky, bool showSectionHeader = true);
 	/**
 	 * Renders the weather information display section.
 	 * @param sky Active sky instance.
 	 * @param showInteractiveElements Enables interactive controls when true.
 	 */
-	static void RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements = true);
+	static void RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements = true, bool showSectionHeader = true);
 
 	struct WeatherDetailsWindowSettings
 	{
@@ -122,6 +122,7 @@ public:
 	static ImVec4 GetWeatherFlagColorByName(const std::string& flagName);
 
 private:
+	void DrawShowInOverlayToggle();
 	void DrawTimeControls();
 	void DrawWeatherStatusPanel();
 	void DrawWeatherPickerSection();

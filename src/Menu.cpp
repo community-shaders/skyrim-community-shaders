@@ -685,7 +685,7 @@ void Menu::DrawSettings()
 		windowFlags |= ImGuiWindowFlags_NoTitleBar;
 	}
 
-	ImGui::Begin(title.c_str(), &IsEnabled, windowFlags);
+	Util::BeginWithRoundedClose(title.c_str(), &IsEnabled, windowFlags);
 	{
 		// Update docking state tracking
 		bool isDocked = ImGui::IsWindowDocked();
@@ -1225,7 +1225,7 @@ void Menu::DrawWeatherDetailsWindow()
 	// Use Weather core feature for all window management and rendering
 	auto& weather = globals::features::csEditor;
 	bool* p_open = &globals::features::csEditor.WeatherDetailsWindow.Enabled;
-	weather.RenderWeatherDetailsWindow(p_open);
+	weather.RenderWeatherDetailsWindow(p_open, !weather.WeatherDetailsWindow.ShowInOverlay);
 }
 
 /**

@@ -344,7 +344,7 @@ void PerformanceOverlay::DrawOverlay()
 	}
 
 	// Create the window
-	ImGui::Begin(T(TKEY("overlay_title"), "Performance Overlay"), NULL, windowFlags);
+	Util::BeginWithRoundedClose(T(TKEY("overlay_title"), "Performance Overlay"), nullptr, windowFlags);
 
 	// Remember window position for next frame
 	if (ImGui::IsWindowAppearing()) {
