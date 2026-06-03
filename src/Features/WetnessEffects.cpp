@@ -233,6 +233,13 @@ static const char* GetClimatePresetShortDescription(size_t a_index)
 	}
 }
 
+static void DrawWeatherAnalysisLabel(const char* a_label)
+{
+	const auto& palette = Menu::GetSingleton()->GetTheme().Palette;
+	ImGui::TextColored(palette.Text, "%s", a_label);
+	ImGui::Spacing();
+}
+
 static std::vector<const char*> GetClimatePresetDetailedDescription(size_t a_index)
 {
 	switch (a_index) {
@@ -615,13 +622,12 @@ void WetnessEffects::DrawSettings()
 	ImGui::Spacing();
 	auto& csEditor = globals::features::csEditor;
 	if (csEditor.loaded) {
-		std::string csEditorName = csEditor.GetName();
-		if (ImGui::SmallButton(std::vformat(T(TKEY("open_feature"), "Open {}"), std::make_format_args(csEditorName)).c_str())) {
+		if (ImGui::SmallButton(T(TKEY("open_weather_picker"), "Open Weather Picker"))) {
 			// Navigate to the replacement feature in the menu
 			Menu::GetSingleton()->SelectFeatureMenu(csEditor.GetShortName());
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(T(TKEY("open_installed_feature_tooltip"), "Open the installed %s feature"), csEditorName.c_str());
+			ImGui::Text("%s", T(TKEY("open_weather_picker_tooltip"), "Open the Weather Picker in CS Utility"));
 		}
 	}
 
@@ -1001,14 +1007,11 @@ void WetnessEffects::DrawWeatherAnalysis() const
 	if (weatherMaxParticleDensity <= 0.0f && sky->lastWeather && sky->lastWeather->precipitationData) {
 		weatherMaxParticleDensity = sky->lastWeather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
 	}
-	// // Consolidated Shader & Weather Analysis
-	static bool rainAnalysisExpanded = true;
-	Util::DrawSectionHeader("Rain Analysis", false, true, &rainAnalysisExpanded);
-
-	if (rainAnalysisExpanded) {
+	// Consolidated Shader & Weather Analysis
+	{
 		// Climate Preset Information Section
-		auto climateSection = Util::SectionWrapper("Current Climate Preset");
-		if (climateSection) {
+		DrawWeatherAnalysisLabel(T(TKEY("current_climate_preset"), "Current Climate Preset"));
+		{
 			// const auto& climate = GetClimateSettings(climatePreset); // Unused, remove to fix warning treated as error
 			const auto& presetInfo = CLIMATE_PRESET_INFO[static_cast<size_t>(climatePreset)];
 
@@ -1037,8 +1040,9 @@ void WetnessEffects::DrawWeatherAnalysis() const
 			ImGui::Text("Raindrop Chance: %.1f%% (preset value)", settings.RaindropChance * 100.0f);
 			ImGui::Unindent();
 		}
-		auto section = Util::SectionWrapper("Rain System State");
-		if (section && sky->currentWeather) {
+		ImGui::Spacing();
+		DrawWeatherAnalysisLabel(T(TKEY("rain_system_state"), "Rain System State"));
+		if (sky->currentWeather) {
 			float gridSizeGameUnits = 1.0f / frameData.settings.RaindropGridSize;
 			float gridSizeMeters = Util::Units::GameUnitsToMeters(gridSizeGameUnits);
 			float intervalSeconds = 1.0f / frameData.settings.RaindropInterval;
@@ -1050,7 +1054,7 @@ void WetnessEffects::DrawWeatherAnalysis() const
 			float theoreticalMaxRainRate = CalculatePrecipitationRate(
 				presetSettings.raindropChance, presetSettings.raindropGridSize, presetSettings.raindropInterval);
 
-			if (ImGui::BeginTable("RainAnalysis", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersV)) {
+			if (ImGui::BeginTable("RainAnalysis", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders)) {
 				ImGui::TableSetupColumn("Current Shader State", ImGuiTableColumnFlags_WidthStretch, 0.5f);
 				ImGui::TableSetupColumn("Precipitation Analysis", ImGuiTableColumnFlags_WidthStretch, 0.5f);
 				ImGui::TableHeadersRow();

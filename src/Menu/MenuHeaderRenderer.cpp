@@ -313,13 +313,11 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 		ImVec2 iconMax(iconX + iconSize - paddingReduction, iconY + iconSize - paddingReduction);
 
 		// Use the full area for mouse interaction (including padding)
-		ImVec2 interactionMin(iconX, iconY);
-		ImVec2 interactionMax(iconX + iconSize, iconY + iconSize);
+		ImRect interactionRect({ iconX, iconY }, { iconX + iconSize, iconY + iconSize });
 
 		// Check mouse interaction against full area
-		ImVec2 mousePos = ImGui::GetMousePos();
-		bool isHovered = mousePos.x >= interactionMin.x && mousePos.x <= interactionMax.x &&
-		                 mousePos.y >= interactionMin.y && mousePos.y <= interactionMax.y;
+		const bool isHovered = ImGui::IsMouseHoveringRect(interactionRect.Min, interactionRect.Max, false);
+		Util::DrawRoundedButtonHighlight(interactionRect, isHovered, isHovered && ImGui::IsMouseDown(ImGuiMouseButton_Left), fgDrawList);
 
 		// Only render if texture is valid
 		if (it->texture) {
@@ -341,9 +339,6 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 
 		// Handle interaction
 		if (isHovered) {
-			// Draw subtle background for hovered icon using interaction area
-			fgDrawList->AddRectFilled(interactionMin, interactionMax, IM_COL32(255, 255, 255, 40));
-
 			if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
 				it->callback();
 			}

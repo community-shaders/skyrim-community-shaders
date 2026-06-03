@@ -12,7 +12,18 @@ namespace WaterEffects
 		return WaterCaustics.Sample(SampColorSampler, uv).x;
 	}
 
-	float ComputeCaustics(float4 waterData, float3 worldPosition, uint eyeIndex)
+	// Approximate wavelength-dependent refraction by offsetting red/blue around green.
+	float3 SampleCausticsDispersion(float2 uv, float2 dispersionOffset)
+	{
+		float center = SampleCaustics(uv);
+		float3 dispersed = float3(
+			SampleCaustics(uv - dispersionOffset * 0.75),
+			center,
+			SampleCaustics(uv + dispersionOffset));
+		return lerp(center.xxx, dispersed, 0.5);
+	}
+
+	float3 ComputeCaustics(float4 waterData, float3 worldPosition, uint eyeIndex)
 	{
 		float causticsDistToWater = waterData.w - worldPosition.z;
 		float shoreFactorCaustics = saturate(causticsDistToWater / 64.0);
@@ -22,29 +33,27 @@ namespace WaterEffects
 			causticsFade *= causticsFade;
 
 			float2 causticsUV = (worldPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy) * 0.005;
+			float2 dispersionOffset = float2(0.6, 0.8) * (0.025 * shoreFactorCaustics * saturate(causticsDistToWater / 256.0));
 
 			float2 causticsUV1 = PanCausticsUV(causticsUV, 0.5 * 0.2, 1.0);
 			float2 causticsUV2 = PanCausticsUV(causticsUV, 1.0 * 0.2, -0.5);
 
-			const float causticsHigh =
-				(causticsFade > 0.0)
-					? (min(SampleCaustics(causticsUV1), SampleCaustics(causticsUV2)) * 4.0)
-					: 1.0;
+			const float3 causticsHigh =
+				(causticsFade > 0.0) ? (min(SampleCausticsDispersion(causticsUV1, dispersionOffset), SampleCausticsDispersion(causticsUV2, dispersionOffset)) * 4.0) : 1.0.xxx;
 
 			causticsUV *= 0.5;
+			dispersionOffset *= 0.5;
 
 			causticsUV1 = PanCausticsUV(causticsUV, 0.5 * 0.1, 1.0);
 			causticsUV2 = PanCausticsUV(causticsUV, 1.0 * 0.1, -0.5);
 
-			const float causticsLow =
-				(causticsFade < 1.0)
-					? (min(SampleCaustics(causticsUV1), SampleCaustics(causticsUV2)) * 4.0)
-					: 1.0;
+			const float3 causticsLow =
+				(causticsFade < 1.0) ? (min(SampleCausticsDispersion(causticsUV1, dispersionOffset), SampleCausticsDispersion(causticsUV2, dispersionOffset)) * 4.0) : 1.0.xxx;
 
-			const float caustics = lerp(causticsLow, causticsHigh, causticsFade);
-			return lerp(1.0, caustics, shoreFactorCaustics);
+			const float3 caustics = lerp(causticsLow, causticsHigh, causticsFade);
+			return lerp(1.0.xxx, caustics, shoreFactorCaustics);
 		}
 
-		return 1.0;
+		return 1.0.xxx;
 	}
 }
