@@ -2,7 +2,7 @@ name: "PR: i18n Check"
 
 on:
     pull_request:
-        types: [opened, synchronize, reopened]
+        types: [opened, synchronize, reopened, ready_for_review]
         paths:
             - "src/**"
             - "package/SKSE/Plugins/CommunityShaders/Translations/**"
@@ -15,6 +15,7 @@ permissions:
 jobs:
     i18n-check:
         name: Verify en.json is in sync with source
+        if: ${{ !github.event.pull_request.draft }}
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
