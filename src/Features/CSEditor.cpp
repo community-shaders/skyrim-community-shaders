@@ -46,7 +46,10 @@ bool CSEditor::HasWidgetJsonFiles()
 		std::error_code ec;
 		const bool isDirectory = std::filesystem::is_directory(widgetSettingsPath, ec);
 		if (ec) {
-			logger::warn("[CSEditor] Failed to inspect widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
+			// A missing folder is the normal case (the user simply has no saved
+			// widgets for this category), so don't treat it as a warning.
+			if (ec != std::errc::no_such_file_or_directory)
+				logger::warn("[CSEditor] Failed to inspect widget settings path '{}': {}", widgetSettingsPath.string(), ec.message());
 			continue;
 		}
 		if (!isDirectory)
@@ -60,6 +63,7 @@ bool CSEditor::HasWidgetJsonFiles()
 				continue;
 			}
 			if (isRegularFile && _stricmp(it->path().extension().string().c_str(), kJsonExtension) == 0) {
+				logger::info("[CSEditor] Detected widget settings in '{}'", widgetSettingsPath.string());
 				s_hasWidgetJsonFiles = true;
 				s_checkedWidgetJsonFiles = true;
 				return true;
