@@ -1124,12 +1124,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		complexMaterial = mipSample.w < (1.0 - kMaskEpsilon);
 
 		const bool grayscaleMask = (abs(mipSample.x - mipSample.y) < kMaskEpsilon) &&
-								   (abs(mipSample.x - mipSample.z) < kMaskEpsilon) &&
-								   (abs(mipSample.y - mipSample.z) < kMaskEpsilon);
+		                           (abs(mipSample.x - mipSample.z) < kMaskEpsilon) &&
+		                           (abs(mipSample.y - mipSample.z) < kMaskEpsilon);
 		// Preserve height-only masks while rejecting grayscale environment masks
 		const bool solidBlackHeightMask = all(mipSample.xyz < kMaskEpsilon) &&
-										  mipSample.w > kMaskEpsilon &&
-										  mipSample.w < (1.0 - kMaskEpsilon);
+		                                  mipSample.w > kMaskEpsilon &&
+		                                  mipSample.w < (1.0 - kMaskEpsilon);
 		if (grayscaleMask && !solidBlackHeightMask)
 			complexMaterial = false;
 
@@ -2428,6 +2428,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		material.FuzzWeight *= skinFuzzMask;
 	}
 #	endif  // CS_SKIN
+
+#	if defined(SKIN)
+	material.BaseColor = max(material.BaseColor, EPSILON_SKIN_ALBEDO);
+#	endif
 
 #	if defined(CS_HAIR) && defined(HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
