@@ -689,9 +689,11 @@ void LightEditor::DrawSettings()
 		return static_cast<bool>(WeatherUtils::DrawSliderFloat(label, value, normalMin, normalMax, nullptr, format));
 	};
 
-	drawSlider(T(TKEY("intensity"), "Intensity"), current.data.fade, 0.01f, 16.f, 0.01f, 1024.f, "%.3f");
-
 	const auto isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
+
+	// "Intensity" is only meaningful for Inverse Square bulbs; otherwise this value is the light's fade.
+	const char* fadeLabel = isInvSq ? T(TKEY("intensity"), "Intensity") : T(TKEY("fade"), "Fade");
+	drawSlider(fadeLabel, current.data.fade, 0.01f, 16.f, 0.01f, 1024.f, "%.3f");
 
 	if (isInvSq)
 		ImGui::BeginDisabled();

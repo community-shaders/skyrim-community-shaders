@@ -841,6 +841,7 @@
     "feature.light_editor.entry_type_cell": "Cell",
     "feature.light_editor.entry_type_reference": "Reference",
     "feature.light_editor.external_emittance": "External Emittance",
+    "feature.light_editor.fade": "Fade",
     "feature.light_editor.filter_attached_lights": "Attached Lights",
     "feature.light_editor.filter_button_tooltip": "%s\nFormat: %s\nReload LP to apply.",
     "feature.light_editor.filter_entry_type": "Add as:",
