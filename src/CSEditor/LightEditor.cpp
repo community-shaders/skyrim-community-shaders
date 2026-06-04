@@ -2357,9 +2357,21 @@ void LightEditor::RefreshLPJsonState()
 		lpInBlacklist = containsEntry("blackList");
 	}
 
-	// LP flags
 	const auto dataIt = lightEntry->find("data");
 	if (dataIt != lightEntry->end() && dataIt->is_object()) {
+		// Base intensity comes from the LP JSON, not the runtime snapshot taken in
+		// UpdateSelectedLight. The live runtime fade is continuously modulated by the
+		// Flicker flag's animation, so snapshotting it freezes a random oscillation
+		// point; the JSON value is the stable authored base the user expects to edit.
+		// Applied to both original (so Reset/RestoreOriginal use the base) and current
+		// (so the Intensity slider reflects it).
+		if (const auto fadeIt = dataIt->find("fade"); fadeIt != dataIt->end() && fadeIt->is_number()) {
+			const float jsonFade = fadeIt->get<float>();
+			original.data.fade = jsonFade;
+			current.data.fade = jsonFade;
+		}
+
+		// LP flags
 		const auto flagsIt = dataIt->find("flags");
 		if (flagsIt != dataIt->end() && flagsIt->is_string()) {
 			std::istringstream ss(flagsIt->get<std::string>());
