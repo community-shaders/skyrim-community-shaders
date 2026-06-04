@@ -23,6 +23,7 @@ struct LightPicker
 		std::string editorId;            // base object EditorID (may be empty)
 		std::string modelPath;           // base object .nif path (may be empty)
 		std::string sourcePlugin;        // plugin defining the base FormID (may be empty)
+		std::string refFormEntry;        // reference FormID in LP filter-list form ("0x...~Plugin.esp"); may be empty
 		bool valid = false;
 	};
 
@@ -49,6 +50,10 @@ struct LightPicker
 
 	// Returns and clears the last successful pick (valid==true at most once per pick).
 	[[nodiscard]] PickedMesh TakeResult();
+
+	// Formats a reference into the Light Placer filter-list entry string ("0x{relativeID}~Plugin.esp"),
+	// matching exactly what white/black-list operations use. Returns "" if the ref has no owner file.
+	static std::string FormatRefFormEntry(RE::TESObjectREFR* refr);
 
 private:
 	static RE::NiCamera* GetPlayerNiCamera();

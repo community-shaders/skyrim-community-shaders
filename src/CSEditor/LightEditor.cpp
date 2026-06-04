@@ -417,7 +417,10 @@ void LightEditor::DrawSettings()
 				selected = light;
 				Util::ClearComboSearch(kLightsComboId);
 			}
-			if (ImGui::IsItemHovered())
+			// Never hover-flash the already-selected light: it's the active light whose fade
+			// ApplyOverrides drives directly, so flashing it does nothing visible yet still arms
+			// the flash on the active NiLight and triggers a redundant fade write-back on hover-off.
+			if (ImGui::IsItemHovered() && !isSelected)
 				thisFrameHovered = light;
 			if (isSelected)
 				ImGui::SetItemDefaultFocus();
@@ -1880,6 +1883,12 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 		original.tesFlags = tesFlags ? static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(tesFlags->underlying()) : static_cast<ISLCommon::TES_LIGHT_FLAGS_EXT>(0);
 		original.data = *runtimeData;
+		// The hover-flash blinks the to-be-selected light's runtime fade to 0 (see ApplyOverrides);
+		// snapshotting mid-blink would freeze that 0 as the base. Recover the stable pre-flash value
+		// the flash machinery stashed. LP lights get this for free via the JSON read in RefreshLPJsonState;
+		// this covers non-LP refs (e.g. spotlights, vanilla lights) that have no JSON fallback.
+		if (hoverFlashNiLight && niLight == hoverFlashNiLight.get())
+			original.data.fade = hoverFlashOriginalFade;
 		original.pos = selected.isRef ? refr->GetPosition() : (niLight->parent ? niLight->parent->local.translate : RE::NiPoint3{});
 
 		current = original;
@@ -2412,13 +2421,8 @@ void LightEditor::SortLights()
 
 std::string LightEditor::FormatOwnerFormEntry(RE::TESObjectREFR* refr)
 {
-	if (!refr)
-		return {};
-	const auto* ownerFile = refr->GetDescriptionOwnerFile();
-	if (!ownerFile || !ownerFile->fileName)
-		return {};
-	const RE::FormID relativeId = refr->formID & 0x00FFFFFF;
-	return fmt::format("0x{:X}~{}", relativeId, ownerFile->fileName);
+	// Single source of truth lives in the picker, which owns reference-identity resolution.
+	return LightPicker::FormatRefFormEntry(refr);
 }
 
 void LightEditor::RefreshLPJsonState()
@@ -2435,7 +2439,11 @@ void LightEditor::RefreshLPJsonState()
 	if (!LoadLPConfig(configArray))
 		return;
 
-	const auto* lightEntry = FindMatchingLightEntry(configArray, MakeSelectedContext(), false);
+	// Apply white/black-list filters so we resolve the entry that actually governs this
+	// reference. Without filtering, a model/formID with two entries for the same light
+	// (one blacklisting and one whitelisting this refr) would resolve to whichever entry
+	// appears first in the array, loading the wrong JSON fade/flags into the editor.
+	const auto* lightEntry = FindMatchingLightEntry(configArray, MakeSelectedContext(), true);
 	if (!lightEntry)
 		return;
 

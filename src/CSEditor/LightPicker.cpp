@@ -7,6 +7,7 @@
 #include "RE/T/TES.h"
 #include "RE/T/TESHavokUtilities.h"
 #include "RE/T/TESObjectCELL.h"
+#include "RE/T/TESObjectSTAT.h"
 
 #include <imgui.h>
 
@@ -16,6 +17,14 @@ namespace
 	constexpr float kSkyrimToHavok = 0.0142875f;
 	// Ray length in Skyrim units; long enough to reach any visible mesh.
 	constexpr float kRayLengthSkyrim = 100000.0f;
+
+	// Editor markers (collision/heading/animation markers, etc.) are STAT records flagged "Is Marker".
+	// They have no in-game-visible mesh, so they only clutter effect-mesh picks.
+	bool IsEditorMarker(const RE::TESBoundObject* baseObj)
+	{
+		const auto* stat = baseObj ? baseObj->As<RE::TESObjectSTAT>() : nullptr;
+		return stat && (stat->GetFormFlags() & RE::TESObjectSTAT::RecordFlags::kIsMarker) != 0;
+	}
 }
 
 void LightPicker::PopulateFromRef(PickedMesh& out, RE::TESObjectREFR* refr, RE::TESBoundObject* baseObj)
@@ -29,7 +38,19 @@ void LightPicker::PopulateFromRef(PickedMesh& out, RE::TESObjectREFR* refr, RE::
 	}
 	if (const auto* file = baseObj->GetFile(0))
 		out.sourcePlugin = file->fileName;
+	out.refFormEntry = FormatRefFormEntry(refr);
 	out.valid = true;
+}
+
+std::string LightPicker::FormatRefFormEntry(RE::TESObjectREFR* refr)
+{
+	if (!refr)
+		return {};
+	const auto* ownerFile = refr->GetDescriptionOwnerFile();
+	if (!ownerFile || !ownerFile->fileName)
+		return {};
+	const RE::FormID relativeId = refr->formID & 0x00FFFFFF;
+	return fmt::format("0x{:X}~{}", relativeId, ownerFile->fileName);
 }
 
 RE::NiCamera* LightPicker::GetPlayerNiCamera()
@@ -138,6 +159,8 @@ LightPicker::PickedMesh LightPicker::ResolveNearestToCursor()
 			const float distSq = dx * dx + dy * dy;
 
 			if (distSq < bestDistSq) {
+				if (IsEditorMarker(refr->GetObjectReference()))
+					return RE::BSContainer::ForEachResult::kContinue;
 				bestDistSq = distSq;
 				bestRef = refr;
 			}
@@ -223,6 +246,8 @@ void LightPicker::Update()
 		if (!hoverMesh.modelPath.empty())
 			ImGui::Text("Mesh: %s", hoverMesh.modelPath.c_str());
 		ImGui::Text("Base FormID: 0x%08X", hoverMesh.baseFormId);
+		if (!hoverMesh.refFormEntry.empty())
+			ImGui::Text("Reference FormID: %s", hoverMesh.refFormEntry.c_str());
 		if (!hoverMesh.sourcePlugin.empty())
 			ImGui::Text("Plugin: %s", hoverMesh.sourcePlugin.c_str());
 		ImGui::EndTooltip();
