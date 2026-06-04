@@ -75,8 +75,36 @@ static void ScheduleConsoleCommand(std::string cmd, RE::TESObjectREFR* refr = nu
 	}
 }
 
+// Light Placer's JSON parser rejects null values (e.g. a stray "whiteList": null), so recursively
+// strip every null object member and null array element before persisting. This makes WriteLPConfig
+// the single guarantee that we never write an invalid null, regardless of how one crept in.
+static void StripNullValues(nlohmann::ordered_json& node)
+{
+	if (node.is_object()) {
+		for (auto it = node.begin(); it != node.end();) {
+			if (it.value().is_null()) {
+				it = node.erase(it);
+			} else {
+				StripNullValues(it.value());
+				++it;
+			}
+		}
+	} else if (node.is_array()) {
+		for (auto it = node.begin(); it != node.end();) {
+			if (it->is_null()) {
+				it = node.erase(it);
+			} else {
+				StripNullValues(*it);
+				++it;
+			}
+		}
+	}
+}
+
 static bool WriteLPConfig(const std::filesystem::path& filePath, nlohmann::ordered_json& config)
 {
+	StripNullValues(config);
+
 	std::ofstream outFile(filePath);
 	if (!outFile.is_open()) {
 		logger::warn("[LightEditor] Failed to write Light Placer config: {}", filePath.string());
@@ -405,6 +433,7 @@ void LightEditor::DrawSettings()
 
 	static constexpr const char* kLightsComboId = "LightsCombo";
 	LightInfo thisFrameHovered = {};
+	bool anyItemHovered = false;  // mouse over any combo entry this frame (flashable or not)
 	const bool lightsComboOpen = ImGui::BeginCombo(T(TKEY("lights"), "Lights"), selected.isSelected ? GetLightName(selected).c_str() : T(TKEY("select_a_light"), "Select a light"));
 	if (lightsComboOpen) {
 		auto searchText = Util::DrawComboSearchInput(kLightsComboId);
@@ -417,11 +446,16 @@ void LightEditor::DrawSettings()
 				selected = light;
 				Util::ClearComboSearch(kLightsComboId);
 			}
-			// Never hover-flash the already-selected light: it's the active light whose fade
-			// ApplyOverrides drives directly, so flashing it does nothing visible yet still arms
-			// the flash on the active NiLight and triggers a redundant fade write-back on hover-off.
-			if (ImGui::IsItemHovered() && !isSelected)
-				thisFrameHovered = light;
+			// The flash target is the hovered entry only when it's flashable: a ref/attached light
+			// (id != 0) that isn't the already-selected one (the selected light is the active light,
+			// whose fade ApplyOverrides drives directly). Hovering the selected or an Other light
+			// leaves thisFrameHovered empty so the block below clears any existing flash; anyItemHovered
+			// distinguishes that from the mouse resting in dead space between entries.
+			if (ImGui::IsItemHovered()) {
+				anyItemHovered = true;
+				if (!isSelected && light.id != 0)
+					thisFrameHovered = light;
+			}
 			if (isSelected)
 				ImGui::SetItemDefaultFocus();
 		}
@@ -430,9 +464,10 @@ void LightEditor::DrawSettings()
 		Util::ClearComboSearch(kLightsComboId);
 	}
 
-	// Hover flash: update state when hovered item changes or combo closes.
-	// Only apply to lights with a valid id (ref/attached); skip Other lights.
-	if (thisFrameHovered.id != 0 || !lightsComboOpen) {
+	// Hover flash: re-evaluate whenever the mouse is over a combo entry, or the combo closed. Moving
+	// onto the selected/Other light (a non-flashable target → empty thisFrameHovered) thus stops the
+	// previously hovered light's blink; only resting in dead space between entries keeps it going.
+	if (anyItemHovered || !lightsComboOpen) {
 		if (!(thisFrameHovered == comboHoveredLight)) {
 			if (hoverFlashNiLight) {
 				if (auto* rd = ISLCommon::RuntimeLightDataExt::Get(hoverFlashNiLight.get()))
@@ -979,23 +1014,26 @@ void LightEditor::DrawAddLightPopup()
 		ImGui::Text(T(TKEY("picked_plugin"), "Plugin: %s"), pickedMesh.sourcePlugin.empty() ? T(TKEY("unknown_value"), "(unknown)") : pickedMesh.sourcePlugin.c_str());
 		ImGui::Separator();
 
-		// Renders a "selectable button": info-styled when active, clickable when available,
-		// disabled with a tooltip otherwise. Returns true when clicked this frame.
+		// Renders a "selectable button": disabled with a tooltip when unavailable, info-styled when
+		// active, clickable otherwise. Returns true when clicked this frame. Unavailability is checked
+		// first so a remembered-active option invalidated by a state change renders disabled rather
+		// than as a highlighted button the user can't actually press.
 		auto selectableButton = [&](const char* label, bool active, bool available, const char* unavailTip) -> bool {
+			if (!available) {
+				{
+					auto _d = Util::DisableGuard(true);
+					ImGui::Button(label);
+				}
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("%s", unavailTip);
+				return false;
+			}
 			if (active) {
 				auto _s = Util::StatusButtonStyle(Util::Colors::GetInfo());
 				ImGui::Button(label);
 				return false;
 			}
-			if (available)
-				return ImGui::Button(label);
-			{
-				auto _d = Util::DisableGuard(true);
-				ImGui::Button(label);
-			}
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-				ImGui::SetTooltip("%s", unavailTip);
-			return false;
+			return ImGui::Button(label);
 		};
 
 		// --- Mode selector ---
@@ -1602,6 +1640,11 @@ void LightEditor::GatherLights()
 		addSelectedLighFormId = 0;
 		addPopupMode = -1;
 		addLightSubMode = -1;
+		// Filter-flow selections are mesh-specific too: a remembered "Cell" entry type or filter-list
+		// index from the previous pick would otherwise stay highlighted/selected even when the newly
+		// picked mesh can't offer it (e.g. its cell has no EditorID), so reset them to safe defaults.
+		addFilterEntryType = 0;  // Reference — always available
+		addSelectedFilterEntry = -1;
 		addLightPopupOpen = true;
 	}
 
@@ -2521,8 +2564,8 @@ void LightEditor::SyncLPFlagsToRuntime()
 
 void LightEditor::MutateFilterList(nlohmann::ordered_json& lightEntry, const char* listKey, const std::string& ownerEntry, bool add)
 {
-	auto& list = lightEntry[listKey];
 	if (add) {
+		auto& list = lightEntry[listKey];
 		if (!list.is_array())
 			list = nlohmann::ordered_json::array();
 		for (const auto& elem : list)
@@ -2530,8 +2573,12 @@ void LightEditor::MutateFilterList(nlohmann::ordered_json& lightEntry, const cha
 				return;
 		list.push_back(ownerEntry);
 	} else {
-		if (!list.is_array())
+		// Use find, not operator[]: indexing a missing key would materialize a stray "listKey": null
+		// on this entry. Removal only ever runs on an entry already known to hold the value.
+		const auto it = lightEntry.find(listKey);
+		if (it == lightEntry.end() || !it->is_array())
 			return;
+		auto& list = *it;
 		list.erase(std::remove_if(list.begin(), list.end(), [&](const auto& elem) {
 			return elem.is_string() && elem.template get<std::string>() == ownerEntry;
 		}),
@@ -2550,11 +2597,49 @@ bool LightEditor::ModifyLPFilterListFor(const std::string& configPath, const Mat
 	if (!LoadConfigArray(configPath, configArray))
 		return false;
 
-	auto* lightEntry = FindMatchingLightEntry(configArray, ctx, false);
+	const char* listKey = isWhiteList ? "whiteList" : "blackList";
+
+	nlohmann::ordered_json* lightEntry = nullptr;
+	if (add) {
+		// Adding writes into the first model/light match (the shared base entry).
+		lightEntry = FindMatchingLightEntry(configArray, ctx, false);
+	} else {
+		// Removing must target the entry that actually holds entryStr in listKey. A model/formID can
+		// have several entries for the same light (e.g. one blacklisting this ref while a sibling
+		// whitelists it); the first match is often the wrong one — mutating it removes nothing and
+		// only leaves a stray empty list behind, while the real entry keeps the value.
+		for (auto& entry : configArray) {
+			auto lightsIt = entry.find("lights");
+			if (lightsIt == entry.end() || !lightsIt->is_array())
+				continue;
+			if (!EntryMatchesContext(entry, ctx))
+				continue;
+			for (auto& le : *lightsIt) {
+				const auto dataIt = le.find("data");
+				if (dataIt == le.end() || !dataIt->contains("light") || !(*dataIt)["light"].is_string())
+					continue;
+				if ((*dataIt)["light"].get<std::string>() != ctx.lightEDID)
+					continue;
+				const auto* list = GetArrayMember(le, listKey);
+				if (!list)
+					continue;
+				const bool holdsEntry = std::ranges::any_of(*list, [&](const auto& elem) {
+					return elem.is_string() && elem.template get<std::string>() == entryStr;
+				});
+				if (holdsEntry) {
+					lightEntry = &le;
+					break;
+				}
+			}
+			if (lightEntry)
+				break;
+		}
+	}
+
 	if (!lightEntry)
 		return false;
 
-	MutateFilterList(*lightEntry, isWhiteList ? "whiteList" : "blackList", entryStr, add);
+	MutateFilterList(*lightEntry, listKey, entryStr, add);
 	return WriteLPConfig(LPConfigFilePath(configPath), configArray);
 }
 

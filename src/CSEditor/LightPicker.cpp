@@ -107,6 +107,10 @@ LightPicker::PickedMesh LightPicker::ResolveUnderCursor(bool logResult)
 	if (!baseObj)
 		return out;
 
+	// Editor markers carry Havok geometry, so the raycast can land on them; skip so they aren't picked.
+	if (IsEditorMarker(baseObj))
+		return out;  // out.valid is still false
+
 	PopulateFromRef(out, refr, baseObj);
 
 	if (logResult)
