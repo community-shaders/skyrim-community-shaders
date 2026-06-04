@@ -164,6 +164,15 @@ private:
 	static LPLightInfo ParseLPLightName(const std::string& name);
 	static bool MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr);
 	bool SaveToLightPlacer(bool includeColor = false, bool dryRun = false);
+	// Forks the bulb's matching light entry into a new whitelist-only entry for the selected
+	// reference (capturing the current editor edits) and blacklists that reference in the
+	// original entry, so the edits apply solely to this reference. Returns false on no match.
+	bool SaveAsSeparateEntry(bool includeColor = false);
+	// Builds a fresh "data" object from the current editor state, carrying over any unmanaged
+	// keys from existingData. Shared by SaveToLightPlacer and SaveAsSeparateEntry.
+	nlohmann::ordered_json BuildEditedData(const nlohmann::ordered_json& existingData, bool includeColor) const;
+	// Re-orders the data/light-entry keys of every light in the config into the canonical layout.
+	static void NormalizeConfig(nlohmann::ordered_json& configArray);
 
 	// Context used to match an LP config entry. Defaults (via MakeSelectedContext) reproduce
 	// the historical member-driven behavior; the Select-Mesh popup builds one from the picked

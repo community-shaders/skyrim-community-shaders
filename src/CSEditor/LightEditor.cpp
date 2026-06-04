@@ -22,6 +22,13 @@
 std::vector<std::pair<std::string, RE::TESObjectLIGH*>> LightEditor::s_lighFormList;
 std::vector<std::pair<std::string, RE::TESForm*>> LightEditor::s_emittanceFormList;
 
+// Data/light-entry keys the editor authors itself, in canonical write order. Keys outside
+// these lists are preserved verbatim (carried over after the managed ones).
+static constexpr std::array kManagedDataKeys = {
+	"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "externalEmittance", "flags", "offset", "rotation"
+};
+static constexpr std::array kManagedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
+
 // Returns the named array member of a JSON object, or nullptr if missing / not an array.
 static const nlohmann::ordered_json* GetArrayMember(const nlohmann::ordered_json& obj, const char* key)
 {
@@ -556,6 +563,24 @@ void LightEditor::DrawSettings()
 		doFilterButton(true);
 		ImGui::SameLine();
 		doFilterButton(false);
+
+		ImGui::SameLine();
+		if (ImGui::Button(T(TKEY("save_as_separate_entry"), "Save as Separate Entry"))) {
+			const bool ok = SaveAsSeparateEntry(saveColorToLP);
+			if (ok) {
+				ScheduleConsoleCommand("reloadlp");
+				previous = {};
+				waitFrames = 3;
+				lpInBlacklist = true;
+			}
+			EditorWindow::GetSingleton()->ShowNotification(
+				ok ? T(TKEY("saved_as_separate_entry"), "Saved as separate entry") : T(TKEY("save_failed"), "Save failed \xe2\x80\x94 see log"),
+				ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(T(TKEY("save_as_separate_entry_tooltip"), "Fork this bulb into a new whitelist entry for %s with the current edits, and blacklist it from the shared entry so the edits apply only to this reference.\nReload LP to apply."),
+				FormatOwnerFormEntry(activeRefr).c_str());
+		}
 	}
 
 	ImGui::Spacing();
@@ -2160,13 +2185,29 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 	if (dryRun)
 		return true;
 
-	static constexpr std::array managedDataKeys = {
-		"color", "light", "fade", "radius", "size", "cutoff", "shadowDepthBias", "externalEmittance", "flags", "offset", "rotation"
-	};
-	static constexpr std::array managedEntryKeys = { "data", "points", "nodes", "whiteList", "blackList" };
-
 	auto& data = (*matchedEntry)["data"];
+	data = BuildEditedData(data, includeColor);
 
+	const char* pointsKey = matchedEntry->contains("points") ? "points" : (matchedEntry->contains("nodes") ? "nodes" : nullptr);
+	if (pointsKey) {
+		auto& pts = (*matchedEntry)[pointsKey];
+		if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3)
+			pts[0] = nlohmann::ordered_json::array({ static_cast<int>(current.pos.x), static_cast<int>(current.pos.y), static_cast<int>(current.pos.z) });
+	}
+
+	NormalizeConfig(configArray);
+
+	const auto filePath = LPConfigFilePath(lpInfo.configPath);
+	if (!WriteLPConfig(filePath, configArray))
+		return false;
+
+	original.pos = current.pos;
+	logger::info("[LightEditor] Saved light settings to {}", filePath.string());
+	return true;
+}
+
+nlohmann::ordered_json LightEditor::BuildEditedData(const nlohmann::ordered_json& existingData, bool includeColor) const
+{
 	const bool isInvSq = lpFlagSet.contains("InverseSquare");
 	std::string newFlags;
 	for (const auto& flag : lpFlagSet) {
@@ -2176,12 +2217,12 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 	}
 
 	nlohmann::ordered_json newData;
-	if (includeColor || data.contains("color"))
+	if (includeColor || existingData.contains("color"))
 		newData["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
 	// Persist the edited bulb type (LIGH form); fall back to the existing entry value
 	// when the edited form has no resolvable EditorID.
 	const std::string editedLighEdid = LighEdidForFormId(current.data.lighFormId);
-	newData["light"] = editedLighEdid.empty() ? data["light"] : nlohmann::ordered_json(editedLighEdid);
+	newData["light"] = editedLighEdid.empty() ? existingData.at("light") : nlohmann::ordered_json(editedLighEdid);
 	newData["fade"] = current.data.fade;
 	if (isInvSq) {
 		newData["size"] = current.data.size;
@@ -2189,57 +2230,34 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 	} else {
 		newData["radius"] = current.data.radius;
 	}
-	if (data.contains("shadowDepthBias"))
+	if (existingData.contains("shadowDepthBias"))
 		newData["shadowDepthBias"] = shadowDepthBias;
 	if (useExternalEmittance && !externalEmittanceEdid.empty())
 		newData["externalEmittance"] = externalEmittanceEdid;
-	else if (!useExternalEmittance && data.contains("externalEmittance"))
-		newData["externalEmittance"] = data["externalEmittance"];
+	else if (!useExternalEmittance && existingData.contains("externalEmittance"))
+		newData["externalEmittance"] = existingData["externalEmittance"];
 	if (!newFlags.empty())
 		newData["flags"] = newFlags;
-	if (data.contains("offset"))
-		newData["offset"] = data["offset"];
-	if (data.contains("rotation"))
-		newData["rotation"] = data["rotation"];
-	for (auto& [key, val] : data.items())
-		if (std::ranges::find(managedDataKeys, key) == managedDataKeys.end())
+	if (existingData.contains("offset"))
+		newData["offset"] = existingData["offset"];
+	if (existingData.contains("rotation"))
+		newData["rotation"] = existingData["rotation"];
+	for (auto& [key, val] : existingData.items())
+		if (std::ranges::find(kManagedDataKeys, key) == kManagedDataKeys.end())
 			newData[key] = val;
-	data = std::move(newData);
+	return newData;
+}
 
-	const char* pointsKey = matchedEntry->contains("points") ? "points" : (matchedEntry->contains("nodes") ? "nodes" : nullptr);
-	if (pointsKey) {
-		auto& pts = (*matchedEntry)[pointsKey];
-		if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3)
-			pts[0] = nlohmann::ordered_json::array({ static_cast<int>(current.pos.x), static_cast<int>(current.pos.y), static_cast<int>(current.pos.z) });
-	}
-
+void LightEditor::NormalizeConfig(nlohmann::ordered_json& configArray)
+{
 	// Normalise key order for every data and lightEntry in the file so the whole config is consistent.
 	auto normalizeData = [](nlohmann::ordered_json& d) {
 		nlohmann::ordered_json nd;
-		if (d.contains("color"))
-			nd["color"] = d["color"];
-		if (d.contains("light"))
-			nd["light"] = d["light"];
-		if (d.contains("fade"))
-			nd["fade"] = d["fade"];
-		if (d.contains("radius"))
-			nd["radius"] = d["radius"];
-		if (d.contains("size"))
-			nd["size"] = d["size"];
-		if (d.contains("cutoff"))
-			nd["cutoff"] = d["cutoff"];
-		if (d.contains("shadowDepthBias"))
-			nd["shadowDepthBias"] = d["shadowDepthBias"];
-		if (d.contains("externalEmittance"))
-			nd["externalEmittance"] = d["externalEmittance"];
-		if (d.contains("flags"))
-			nd["flags"] = d["flags"];
-		if (d.contains("offset"))
-			nd["offset"] = d["offset"];
-		if (d.contains("rotation"))
-			nd["rotation"] = d["rotation"];
+		for (const char* key : kManagedDataKeys)
+			if (d.contains(key))
+				nd[key] = d[key];
 		for (auto& [key, val] : d.items())
-			if (std::ranges::find(managedDataKeys, key) == managedDataKeys.end())
+			if (std::ranges::find(kManagedDataKeys, key) == kManagedDataKeys.end())
 				nd[key] = val;
 		d = std::move(nd);
 	};
@@ -2259,7 +2277,7 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 		if (le.contains("blackList"))
 			newEntry["blackList"] = le["blackList"];
 		for (auto& [key, val] : le.items())
-			if (std::ranges::find(managedEntryKeys, key) == managedEntryKeys.end())
+			if (std::ranges::find(kManagedEntryKeys, key) == kManagedEntryKeys.end())
 				newEntry[key] = val;
 		le = std::move(newEntry);
 	};
@@ -2271,13 +2289,90 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 		for (auto& le : *lightsIt)
 			normalizeLightEntry(le);
 	}
+}
+
+bool LightEditor::SaveAsSeparateEntry(bool includeColor)
+{
+	if (!lpInfo.isLPLight || !activeRefr)
+		return false;
+
+	const std::string ownerEntry = FormatOwnerFormEntry(activeRefr);
+	if (ownerEntry.empty())
+		return false;
+
+	nlohmann::ordered_json configArray;
+	if (!LoadLPConfig(configArray))
+		return false;
+
+	const MatchContext ctx = MakeSelectedContext();
+
+	// Locate the light entry currently governing this reference along with its parent "lights"
+	// array and index, so the forked copy can be inserted as the next sibling.
+	nlohmann::ordered_json* lightsArr = nullptr;
+	size_t lightIdx = 0;
+	for (auto& topEntry : configArray) {
+		auto lightsIt = topEntry.find("lights");
+		if (lightsIt == topEntry.end() || !lightsIt->is_array())
+			continue;
+		if (!EntryMatchesContext(topEntry, ctx))
+			continue;
+		for (size_t i = 0; i < lightsIt->size(); ++i) {
+			auto& le = (*lightsIt)[i];
+			if (!le.contains("data") || !le["data"].contains("light") || !le["data"]["light"].is_string())
+				continue;
+			if (le["data"]["light"].get<std::string>() != ctx.lightEDID)
+				continue;
+			if (!MatchesLPFilters(le, ctx.refr))
+				continue;
+			lightsArr = &*lightsIt;
+			lightIdx = i;
+			break;
+		}
+		if (lightsArr)
+			break;
+	}
+
+	if (!lightsArr) {
+		logger::warn("[LightEditor] SaveAsSeparateEntry: no matching entry for model '{}' with light EDID '{}' in {}.json",
+			lpInfo.ownerModelPath, lpInfo.lightEDID, lpInfo.configPath);
+		return false;
+	}
+
+	auto& sourceEntry = (*lightsArr)[lightIdx];
+
+	// Already forked into a dedicated whitelisted entry for this reference — nothing to do.
+	if (auto* wl = GetArrayMember(sourceEntry, "whiteList"))
+		for (const auto& elem : *wl)
+			if (elem.is_string() && elem.get<std::string>() == ownerEntry) {
+				logger::info("[LightEditor] SaveAsSeparateEntry: {} already has its own whitelisted entry", ownerEntry);
+				return false;
+			}
+
+	// Fork: deep copy, apply the current editor edits, whitelist only this reference.
+	nlohmann::ordered_json forkedEntry = sourceEntry;
+	forkedEntry["data"] = BuildEditedData(sourceEntry["data"], includeColor);
+
+	if (const char* pointsKey = forkedEntry.contains("points") ? "points" : (forkedEntry.contains("nodes") ? "nodes" : nullptr)) {
+		auto& pts = forkedEntry[pointsKey];
+		if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3)
+			pts[0] = nlohmann::ordered_json::array({ static_cast<int>(current.pos.x), static_cast<int>(current.pos.y), static_cast<int>(current.pos.z) });
+	}
+
+	forkedEntry.erase("blackList");
+	forkedEntry["whiteList"] = nlohmann::ordered_json::array({ ownerEntry });
+
+	// Blacklist this reference in the source so it now resolves solely to the forked entry.
+	MutateFilterList(sourceEntry, "blackList", ownerEntry, true);
+
+	lightsArr->insert(lightsArr->begin() + lightIdx + 1, std::move(forkedEntry));
+
+	NormalizeConfig(configArray);
 
 	const auto filePath = LPConfigFilePath(lpInfo.configPath);
 	if (!WriteLPConfig(filePath, configArray))
 		return false;
 
-	original.pos = current.pos;
-	logger::info("[LightEditor] Saved light settings to {}", filePath.string());
+	logger::info("[LightEditor] SaveAsSeparateEntry: forked {} into its own whitelisted entry in {}", ownerEntry, filePath.string());
 	return true;
 }
 
