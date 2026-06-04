@@ -32,34 +32,38 @@ namespace Triplanar
 	/// Stochastic triplanar: select one projection plane via noise, reducing 3 texture reads to 1.
 	float4 SampleStochastic(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float noise)
 	{
-		float3 scaledPos = worldPos * scale;
 		float3 dPdx = 0.0;
 		float3 dPdy = 0.0;
-		dPdx = ddx(scaledPos);
-		dPdy = ddy(scaledPos);
+		ComputeGradients(worldPos, scale, dPdx, dPdy);
 
+		float4 result = 0;
 		if (noise < weights.x)
-			return tex.SampleGrad(samp, scaledPos.yz, dPdx.yz, dPdy.yz);
-		if (noise < weights.x + weights.y)
-			return tex.SampleGrad(samp, scaledPos.xz, dPdx.xz, dPdy.xz);
-		return tex.SampleGrad(samp, scaledPos.xy, dPdx.xy, dPdy.xy);
+			result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
+		else if (noise < weights.x + weights.y)
+			result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
+		else
+			result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+		return result;
 	}
 
 	/// Stochastic triplanar with mip bias via gradient scaling.
 	float4 SampleStochasticBias(Texture2D<float4> tex, SamplerState samp, float3 worldPos, float3 weights, float scale, float bias, float noise)
 	{
-		float3 scaledPos = worldPos * scale;
-		float biasScale = exp2(bias);
 		float3 dPdx = 0.0;
 		float3 dPdy = 0.0;
-		dPdx = ddx(scaledPos) * biasScale;
-		dPdy = ddy(scaledPos) * biasScale;
+		ComputeGradients(worldPos, scale, dPdx, dPdy);
+		float biasScale = exp2(bias);
+		dPdx *= biasScale;
+		dPdy *= biasScale;
 
+		float4 result = 0;
 		if (noise < weights.x)
-			return tex.SampleGrad(samp, scaledPos.yz, dPdx.yz, dPdy.yz);
-		if (noise < weights.x + weights.y)
-			return tex.SampleGrad(samp, scaledPos.xz, dPdx.xz, dPdy.xz);
-		return tex.SampleGrad(samp, scaledPos.xy, dPdx.xy, dPdy.xy);
+			result = tex.SampleGrad(samp, worldPos.yz * scale, dPdx.yz, dPdy.yz);
+		else if (noise < weights.x + weights.y)
+			result = tex.SampleGrad(samp, worldPos.xz * scale, dPdx.xz, dPdy.xz);
+		else
+			result = tex.SampleGrad(samp, worldPos.xy * scale, dPdx.xy, dPdy.xy);
+		return result;
 	}
 }
 
