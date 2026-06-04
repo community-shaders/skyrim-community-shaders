@@ -2038,10 +2038,16 @@ bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDa
 	runtimeData->cutoffOverride = current.data.cutoffOverride;
 	runtimeData->size = current.data.size;
 
-	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare))
+	if (current.data.flags.any(LightLimitFix::LightFlags::InverseSquare)) {
 		runtimeData->flags.set(LightLimitFix::LightFlags::InverseSquare);
-	else
+	} else {
 		runtimeData->flags.reset(LightLimitFix::LightFlags::InverseSquare);
+		// Restore the authoritative radius. ProcessLight's inverse-square branch writes the computed
+		// radius into the shared runtimeData->radius field; once a light is no longer inverse-square
+		// the non-IS branch only reads that field, so a previously-computed (inflated) value would
+		// stick forever. Re-asserting current.data.radius here heals it.
+		runtimeData->radius = current.data.radius;
+	}
 
 	if (current.data.flags.any(LightLimitFix::LightFlags::Linear))
 		runtimeData->flags.set(LightLimitFix::LightFlags::Linear);
@@ -2519,6 +2525,17 @@ void LightEditor::RefreshLPJsonState()
 			current.data.fade = jsonFade;
 		}
 
+		// Likewise take the radius from the JSON, not the runtime snapshot. For inverse-square bulbs
+		// ProcessLight overwrites runtimeData->radius with a computed value; if such a bulb is later
+		// (or erroneously) treated as non-inverse-square, that inflated radius would otherwise be the
+		// snapshotted base. The JSON "radius" is the authored value for non-IS bulbs (IS bulbs persist
+		// size/cutoff instead, so this key is simply absent and the IS recompute drives the radius).
+		if (const auto radiusIt = dataIt->find("radius"); radiusIt != dataIt->end() && radiusIt->is_number()) {
+			const float jsonRadius = radiusIt->get<float>();
+			original.data.radius = jsonRadius;
+			current.data.radius = jsonRadius;
+		}
+
 		// LP flags
 		const auto flagsIt = dataIt->find("flags");
 		if (flagsIt != dataIt->end() && flagsIt->is_string()) {
@@ -2532,6 +2549,19 @@ void LightEditor::RefreshLPJsonState()
 	}
 
 	SyncLPFlagsToRuntime();
+
+	// SyncLPFlagsToRuntime only updates `current`. Apply the authoritative JSON InverseSquare/Linear
+	// state to `original` too, so RestoreOriginal (on deselect) can't re-assert a stale/spurious
+	// inverse-square bit that the snapshot picked up from the runtime overlay — which would make
+	// ProcessLight recompute and re-inflate the radius.
+	if (lpFlagSet.contains("InverseSquare"))
+		original.data.flags.set(LightLimitFix::LightFlags::InverseSquare);
+	else
+		original.data.flags.reset(LightLimitFix::LightFlags::InverseSquare);
+	if (lpFlagSet.contains("Linear"))
+		original.data.flags.set(LightLimitFix::LightFlags::Linear);
+	else
+		original.data.flags.reset(LightLimitFix::LightFlags::Linear);
 }
 
 void LightEditor::SyncLPFlagsToRuntime()
