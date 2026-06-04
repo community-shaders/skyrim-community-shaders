@@ -89,6 +89,15 @@ hlslkit-generate-defines --log CommunityShaders.log
 hlslkit-buffer-scan --features-dir features/
 ```
 
+When refactoring an existing shader (especially the decompile-transcription shaders like
+`ISTemporalAA.hlsl`), use `tools/verify-shader-refactor.ps1` to prove the change is
+behavior-preserving: identical compiled bytecode means a provable no-op. When the refactor
+legitimately reorders ops (bytecode differs but behavior shouldn't), validate it with the runtime
+A/B harness instead — capture one frame, swap just that shader, and diff the output against the
+shipping baseline (`tools/taa-renderdoc-ab.py`). See `docs/development/shader-workflow.md` and
+`docs/development/shader-runtime-ab.md` for details.
+
+
 ### Custom CMake Targets
 
 **Package and Deployment Targets**:
