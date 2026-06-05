@@ -2,10 +2,13 @@
 
 #include "Deferred.h"
 #include "Globals.h"
+#include "I18n/I18n.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/D3D.h"
 #include "VR.h"
+
+#define I18N_KEY_PREFIX "feature.terrain_blending."
 
 #include <intrin.h>
 #include <sstream>
@@ -455,10 +458,10 @@ namespace
 
 void TerrainBlending::DrawSettings()
 {
-	ImGui::Checkbox("Enable Terrain Blending", (bool*)&settings.Enabled);
+	ImGui::Checkbox(T(TKEY("enable"), "Enable Terrain Blending"), (bool*)&settings.Enabled);
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Enable seamless blending between terrain and objects.");
+		ImGui::Text("%s", T(TKEY("enable_tooltip"), "Enable seamless blending between terrain and objects."));
 	}
 }
 
@@ -806,7 +809,9 @@ void TerrainBlending::BlendPrepassDepths()
 
 		context->CSSetShader(GetDepthBlendShader(), nullptr, 0);
 
+		globals::profiler->BeginPass("TerrainBlending::DepthBlend");
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		globals::profiler->EndPass();
 	}
 
 	ID3D11ShaderResourceView* views[2] = { nullptr, nullptr };
@@ -1056,3 +1061,4 @@ void TerrainBlending::RenderTerrainBlendingPasses()
 	auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 	mainDepth.depthSRV = depthSRVBackup;
 }
+#undef I18N_KEY_PREFIX

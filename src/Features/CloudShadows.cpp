@@ -2,9 +2,12 @@
 
 #include <bit>
 
+#include "../I18n/I18n.h"
 #include "CloudRelight.h"
 #include "State.h"
 #include "Utils/D3D.h"
+
+#define I18N_KEY_PREFIX "feature.cloud_shadows."
 
 namespace
 {
@@ -20,12 +23,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void CloudShadows::DrawSettings()
 {
-	ImGui::SliderFloat("Opacity", &settings.Opacity, 0.0f, 1.0f, "%.1f");
+	ImGui::SliderFloat(T(TKEY("opacity"), "Opacity"), &settings.Opacity, 0.0f, 1.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Higher values make cloud shadows darker.");
+		ImGui::Text("%s", T(TKEY("opacity_tooltip"),
+							  "Higher values make cloud shadows darker."));
 	}
 }
+
+#undef I18N_KEY_PREFIX
 
 void CloudShadows::LoadSettings(json& o_json)
 {

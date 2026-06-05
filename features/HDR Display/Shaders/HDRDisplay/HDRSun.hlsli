@@ -19,7 +19,7 @@ namespace HDRSun
 		return SharedData::HDRData.x > 0.5f && (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun);
 	}
 
-	// Returns an HDR sun gain in normalized linear space. Caller owns all sampling/tint/noise output logic.
+	// Returns an HDR sun gain in normalized linear space. Sky.hlsl applies it after depth/cloud occlusion.
 	float GetHdrSunGain(
 		float2 texCoord0_xy,
 		float4 baseColor)

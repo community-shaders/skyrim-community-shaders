@@ -1,13 +1,14 @@
 #ifndef __MATH_DEPENDENCY_HLSL__
 #define __MATH_DEPENDENCY_HLSL__
 
-#define EPSILON_SSS_ALBEDO 1e-3f   // For albedo clamping in SSS calculations
-#define EPSILON_DOT_CLAMP 1e-5f    // For dot product clamping
-#define EPSILON_DEPTH_SKY 1e-5f    // Depth threshold for sky/unrendered pixel detection (raw reversed-Z near zero)
-#define EPSILON_DIVISION 1e-6f     // For division to avoid division by zero
-#define EPSILON_GLINTS 1e-8f       // For glints calculations
-#define EPSILON_WEIGHT_SUM 1e-10f  // For weight normalization
-#define EPSILON_LENGTH_SQ 1e-20f   // Minimum dot(v,v) before rsqrt to avoid inf on degenerate vectors
+#define EPSILON_SSS_ALBEDO 1e-3f    // For albedo clamping in SSS calculations
+#define EPSILON_SKIN_ALBEDO 0.001f  // Minimum per-channel skin base color to prevent SSS division explosion
+#define EPSILON_DOT_CLAMP 1e-5f     // For dot product clamping
+#define EPSILON_DEPTH_SKY 1e-5f     // Depth threshold for sky/unrendered pixel detection (raw reversed-Z near zero)
+#define EPSILON_DIVISION 1e-6f      // For division to avoid division by zero
+#define EPSILON_GLINTS 1e-8f        // For glints calculations
+#define EPSILON_WEIGHT_SUM 1e-10f   // For weight normalization
+#define EPSILON_LENGTH_SQ 1e-20f    // Minimum dot(v,v) before rsqrt to avoid inf on degenerate vectors
 
 #define DEPTH_SKY_SENTINEL 999999.0f  // Linearized depth sentinel for sky/unmapped pixels (beyond any real geometry)
 

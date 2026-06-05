@@ -3,8 +3,11 @@
 #include <DirectXTex.h>
 #include <pystring/pystring.h>
 
+#include "I18n/I18n.h"
 #include "State.h"
 #include "Util.h"
+
+#define I18N_KEY_PREFIX "feature.terrain_shadows."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainShadows::Settings,
@@ -22,9 +25,9 @@ void TerrainShadows::SaveSettings(json& o_json)
 
 void TerrainShadows::DrawSettings()
 {
-	ImGui::Checkbox("Enable Terrain Shadow", &settings.EnableTerrainShadow);
+	ImGui::Checkbox(T(TKEY("enable_terrain_shadow"), "Enable Terrain Shadow"), &settings.EnableTerrainShadow);
 
-	if (ImGui::CollapsingHeader("Debug")) {
+	if (ImGui::CollapsingHeader(T(TKEY("debug"), "Debug"))) {
 		std::string curr_worldspace = "N/A";
 		std::string curr_worldspace_name = "N/A";
 		auto tes = RE::TES::GetSingleton();
@@ -50,7 +53,7 @@ void TerrainShadows::DrawSettings()
 		}
 		ImGui::Unindent();
 
-		if (ImGui::TreeNode("Buffer Viewer")) {
+		if (ImGui::TreeNode(T(TKEY("buffer_viewer"), "Buffer Viewer"))) {
 			static float debugRescale = .1f;
 			ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
 
@@ -305,6 +308,7 @@ void TerrainShadows::Precompute()
 		texShadowHeight->CreateSRV(srvDesc);
 		texShadowHeight->CreateUAV(uavDesc);
 	}
+#undef I18N_KEY_PREFIX
 
 	needPrecompute = false;
 }
@@ -413,7 +417,9 @@ void TerrainShadows::UpdateShadow()
 	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(newer.uavs), newer.uavs, nullptr);
 	context->CSSetConstantBuffers(0, 1, &newer.buffer);
 	context->CSSetShader(shadowUpdateProgram.get(), nullptr, 0);
+	globals::profiler->BeginPass("TerrainShadows::ShadowUpdate");
 	context->Dispatch(abs(shadowUpdateCBData.LightPxDir.x) >= abs(shadowUpdateCBData.LightPxDir.y) ? height : width, 1, 1);
+	globals::profiler->EndPass();
 
 	/* ---- RESTORE ---- */
 	context->CSSetShaderResources(0, ARRAYSIZE(old.srvs), old.srvs);

@@ -107,6 +107,29 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 		return;
 	}
 #	endif
+#	if defined(SKIN) && defined(CS_SKIN)
+	if (SharedData::skinData.skinParams.w > 0.0f) {
+		Skin::SkinDirectLightInput(lightingOutput, context, material);
+		float3 softLightColor = context.lightColor * context.softShadow;
+
+		// SSS fallback for forward skin rendering
+#		if !defined(DEFERRED)
+		const float NdotL = dot(context.worldNormal, context.lightDir);
+#			if defined(SOFT_LIGHTING)
+		lightingOutput.diffuse += softLightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor;
+#			endif
+
+#			if defined(RIM_LIGHTING)
+		lightingOutput.diffuse += softLightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * material.rimSoftLightColor;
+#			endif
+
+#			if defined(BACK_LIGHTING)
+		lightingOutput.diffuse += softLightColor * saturate(-NdotL) * material.backLightColor;
+#			endif
+#		endif
+		return;
+	}
+#	endif
 	const float NdotL = dot(context.worldNormal, context.lightDir);
 	float3 diffuseLightColor = context.lightColor * context.detailedShadow;
 	float3 softLightColor = context.lightColor * context.softShadow;
@@ -135,6 +158,12 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 #	if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
 		Hair::GetHairIndirectLobeWeights(lobeWeights, context, material, uv);
+		return;
+	}
+#	endif
+#	if defined(SKIN) && defined(CS_SKIN)
+	if (SharedData::skinData.skinParams.w > 0.0f) {
+		Skin::SkinIndirectLobeWeights(lobeWeights, material, context);
 		return;
 	}
 #	endif

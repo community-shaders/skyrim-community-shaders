@@ -1,8 +1,11 @@
 #include "Skylighting.h"
 
+#include "I18n/I18n.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/D3D.h"
+
+#define I18N_KEY_PREFIX "feature.skylighting."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Skylighting::Settings,
@@ -35,21 +38,21 @@ void Skylighting::ResetSkylighting()
 
 void Skylighting::DrawSettings()
 {
-	ImGui::Text("Minimum visibility values. Diffuse darkens objects. Specular removes the sky from reflections.");
-	ImGui::SliderFloat("Diffuse Min Visibility", &settings.MinDiffuseVisibility, 0.01f, 1.f, "%.2f");
-	ImGui::SliderFloat("Specular Min Visibility", &settings.MinSpecularVisibility, 0.01f, 1.f, "%.2f");
+	ImGui::Text("%s", T(TKEY("min_visibility_desc"), "Minimum visibility values. Diffuse darkens objects. Specular removes the sky from reflections."));
+	ImGui::SliderFloat(T(TKEY("diffuse_min_visibility"), "Diffuse Min Visibility"), &settings.MinDiffuseVisibility, 0.01f, 1.f, "%.2f");
+	ImGui::SliderFloat(T(TKEY("specular_min_visibility"), "Specular Min Visibility"), &settings.MinSpecularVisibility, 0.01f, 1.f, "%.2f");
 
 	ImGui::Separator();
 
-	if (ImGui::Button("Rebuild Skylighting"))
+	if (ImGui::Button(T(TKEY("rebuild"), "Rebuild Skylighting")))
 		ResetSkylighting();
 
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("Changes below require rebuilding, a loading screen, or moving away from the current location to apply.");
+		ImGui::Text("%s", T(TKEY("rebuild_tooltip"), "Changes below require rebuilding, a loading screen, or moving away from the current location to apply."));
 
-	ImGui::SliderAngle("Max Zenith Angle", &settings.MaxZenith, 0, 90);
+	ImGui::SliderAngle(T(TKEY("max_zenith"), "Max Zenith Angle"), &settings.MaxZenith, 0, 90);
 	if (auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("Smaller angles creates more focused top-down shadow.");
+		ImGui::Text("%s", T(TKEY("max_zenith_tooltip"), "Smaller angles creates more focused top-down shadow."));
 }
 
 void Skylighting::SetupResources()
@@ -227,7 +230,9 @@ void Skylighting::Prepass()
 			context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 			context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 			context->CSSetShader(probeUpdateCompute.get(), nullptr, 0);
+			globals::profiler->BeginPass("Skylighting::ProbeUpdate");
 			context->Dispatch((probeArrayDims[0] + 7u) >> 3, (probeArrayDims[1] + 7u) >> 3, probeArrayDims[2]);
+			globals::profiler->EndPass();
 		}
 
 		// Reset
@@ -513,7 +518,9 @@ void Skylighting::RenderOcclusion()
 					auto particleShaderProperty = netimmerse_cast<RE::BSParticleShaderProperty*>(shaderProp);
 					auto rain = (RE::BSParticleShaderRainEmitter*)(particleShaderProperty->particleEmitter);
 
+					globals::profiler->BeginPass("Skylighting::PrecipMask");
 					precip->RenderMask(rain);
+					globals::profiler->EndPass();
 				}
 
 				state->EndPerfEvent();
@@ -586,7 +593,9 @@ void Skylighting::RenderOcclusion()
 				BSParticleShaderRainEmitter* rain = new BSParticleShaderRainEmitter;
 				{
 					TracyD3D11Zone(state->tracyCtx, "Skylighting - Render Height Map");
+					globals::profiler->BeginPass("Skylighting::OcclusionMask");
 					precip->RenderMask((RE::BSParticleShaderRainEmitter*)rain);
+					globals::profiler->EndPass();
 				}
 				inOcclusion = false;
 
@@ -628,3 +637,4 @@ RE::BSEventNotifyControl Skylighting::MenuOpenCloseEventHandler::ProcessEvent(co
 
 	return RE::BSEventNotifyControl::kContinue;
 }
+#undef I18N_KEY_PREFIX

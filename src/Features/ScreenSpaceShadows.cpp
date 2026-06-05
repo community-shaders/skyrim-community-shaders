@@ -1,8 +1,11 @@
 #include "ScreenSpaceShadows.h"
 
 #include "Features/TerrainBlending.h"
+#include "I18n/I18n.h"
 #include "State.h"
 #include "Utils/D3D.h"
+
+#define I18N_KEY_PREFIX "feature.screen_space_shadows."
 
 #pragma warning(push)
 #pragma warning(disable: 4838 4244)
@@ -21,34 +24,34 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void ScreenSpaceShadows::DrawSettings()
 {
-	if (ImGui::TreeNodeEx("General", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Enable", (bool*)&bendSettings.Enable);
+	if (ImGui::TreeNodeEx(T(TKEY("general"), "General"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox(T(TKEY("enable"), "Enable"), (bool*)&bendSettings.Enable);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Enable screen-space contact shadows from the sun/moon direction.");
+			ImGui::Text("%s", T(TKEY("enable_tooltip"), "Enable screen-space contact shadows from the sun/moon direction."));
 
-		ImGui::SliderInt("Sample Count Multiplier", (int*)&bendSettings.SampleCount, 1, 4);
+		ImGui::SliderInt(T(TKEY("sample_count"), "Sample Count Multiplier"), (int*)&bendSettings.SampleCount, 1, 4);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Multiplier for shadow ray sample count. Higher values increase shadow reach at the cost of performance. Adapts to render resolution.");
+			ImGui::Text("%s", T(TKEY("sample_count_tooltip"), "Multiplier for shadow ray sample count. Higher values increase shadow reach at the cost of performance. Adapts to render resolution."));
 
-		ImGui::SliderFloat("Surface Thickness", &bendSettings.SurfaceThickness, 0.005f, 0.05f);
+		ImGui::SliderFloat(T(TKEY("surface_thickness"), "Surface Thickness"), &bendSettings.SurfaceThickness, 0.005f, 0.05f);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Assumed thickness of surfaces for shadow detection. Lower values produce thinner, more precise shadows.");
+			ImGui::Text("%s", T(TKEY("surface_thickness_tooltip"), "Assumed thickness of surfaces for shadow detection. Lower values produce thinner, more precise shadows."));
 
-		ImGui::SliderFloat("Bilinear Threshold", &bendSettings.BilinearThreshold, 0.02f, 1.0f);
+		ImGui::SliderFloat(T(TKEY("bilinear_threshold"), "Bilinear Threshold"), &bendSettings.BilinearThreshold, 0.02f, 1.0f);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Depth threshold for edge detection during bilinear interpolation. Higher values smooth more aggressively across edges.");
+			ImGui::Text("%s", T(TKEY("bilinear_threshold_tooltip"), "Depth threshold for edge detection during bilinear interpolation. Higher values smooth more aggressively across edges."));
 
-		ImGui::SliderFloat("Shadow Contrast", &bendSettings.ShadowContrast, 0.0f, 4.0f);
+		ImGui::SliderFloat(T(TKEY("shadow_contrast"), "Shadow Contrast"), &bendSettings.ShadowContrast, 0.0f, 4.0f);
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Contrast boost for the shadow transition. Higher values produce harder shadow edges.");
+			ImGui::Text("%s", T(TKEY("shadow_contrast_tooltip"), "Contrast boost for the shadow transition. Higher values produce harder shadow edges."));
 
 		if (globals::game::isVR && globals::state->IsDeveloperMode()) {
-			ImGui::Checkbox("VR Stereo Sync", &enableStereoSync);
+			ImGui::Checkbox(T(TKEY("vr_stereo_sync"), "VR Stereo Sync"), &enableStereoSync);
 			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text(
-					"Synchronizes shadow data between left and right eyes via bilateral reprojection "
-					"and applies a depth-weighted blur to reduce per-eye noise. "
-					"Uses min-blend so if either eye detects an occluder, the shadow is preserved. ");
+				ImGui::Text("%s", T(TKEY("vr_stereo_sync_tooltip"),
+									  "Synchronizes shadow data between left and right eyes via bilateral reprojection "
+									  "and applies a depth-weighted blur to reduce per-eye noise. "
+									  "Uses min-blend so if either eye detects an occluder, the shadow is preserved. "));
 		}
 
 		ImGui::Spacing();
@@ -195,6 +198,9 @@ void ScreenSpaceShadows::DrawShadows()
 	// Shared dispatch logic for both VR and non-VR
 	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
 						   float invTexSizeX, float invTexSizeY) {
+		std::string timerName = eyeName ? std::format("ScreenSpaceShadows::RayMarch({})", eyeName) : "ScreenSpaceShadows::RayMarch";
+		globals::profiler->BeginPass(timerName);
+
 		if (globals::state->frameAnnotations && eyeName) {
 			std::string eventName = std::format("SSS - Ray March ({})", eyeName);
 			globals::state->BeginPerfEvent(eventName);
@@ -243,6 +249,8 @@ void ScreenSpaceShadows::DrawShadows()
 		if (globals::state->frameAnnotations) {
 			globals::state->EndPerfEvent();
 		}
+
+		globals::profiler->EndPass();
 	};
 
 	float InvTexSizeX = 1.0f / (float)viewportSize[0];
@@ -300,6 +308,7 @@ void ScreenSpaceShadows::DrawStereoSync()
 		globals::state->BeginPerfEvent("SSS - Stereo Sync");
 
 	auto context = globals::d3d::context;
+	globals::profiler->BeginPass("ScreenSpaceShadows::StereoSync");
 
 	context->CopyResource(stereoSyncCopyTex->resource.get(), screenSpaceShadowsTexture->resource.get());
 
@@ -338,6 +347,8 @@ void ScreenSpaceShadows::DrawStereoSync()
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 	context->CSSetConstantBuffers(1, 1, &cbPtr);
 	context->CSSetShader(nullptr, nullptr, 0);
+
+	globals::profiler->EndPass();
 
 	if (globals::state->frameAnnotations)
 		globals::state->EndPerfEvent();
@@ -437,3 +448,4 @@ void ScreenSpaceShadows::SetupResources()
 		}
 	}
 }
+#undef I18N_KEY_PREFIX

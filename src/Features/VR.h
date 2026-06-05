@@ -96,19 +96,18 @@ public:
 	//=============================================================================
 
 	virtual inline std::string GetName() override { return "VR"; }
+	virtual std::string GetDisplayName() override { return T("feature.vr.name", "VR"); }
 	virtual inline std::string GetShortName() override { return "VR"; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Provides VR-specific optimizations and enhancements for Community Shaders, improving performance and visual quality in virtual reality environments.",
-			{ "Depth buffer culling optimization for VR performance",
-				"In-scene overlay menu with HMD/Controller/Fixed World attach modes",
-				"VR controller input with customizable button mappings",
-				"Grip-to-drag overlay positioning with depth control",
-				"Configurable occlusion culling parameters",
-				"Enhanced VR compatibility with SteamVR and OpenComposite" }
-		};
-	}
+		return { T("feature.vr.description", "Provides VR-specific optimizations and enhancements for Community Shaders, improving performance and visual quality in virtual reality environments."),
+			{ T("feature.vr.key_feature_1", "Depth buffer culling optimization for VR performance"),
+				T("feature.vr.key_feature_2", "In-scene overlay menu with HMD/Controller/Fixed World attach modes"),
+				T("feature.vr.key_feature_3", "VR controller input with customizable button mappings"),
+				T("feature.vr.key_feature_4", "Grip-to-drag overlay positioning with depth control"),
+				T("feature.vr.key_feature_5", "Configurable occlusion culling parameters"),
+				T("feature.vr.key_feature_6", "Enhanced VR compatibility with SteamVR and OpenComposite") } };
+	};
 
 	virtual inline std::string_view GetShaderDefineName() override { return "VR_STEREO_OPT"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return stereoOpt.CanDispatchStencil() && (t == RE::BSShader::Type::Utility || t == RE::BSShader::Type::Lighting); }

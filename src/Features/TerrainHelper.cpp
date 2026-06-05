@@ -121,7 +121,7 @@ struct THExtendedRendererState
 	}
 } thExtendedRendererState;
 
-void TerrainHelper::SetShaderResouces(ID3D11DeviceContext* a_context)
+void TerrainHelper::SetShaderResources(ID3D11DeviceContext* a_context)
 {
 	uint32_t mask = thExtendedRendererState.PSResourceModifiedBits;
 
@@ -200,12 +200,9 @@ struct TH_TESObjectLAND_SetupMaterial
 	{
 		bool result = func(land);
 
-		// TruePBR sets flag 8 on land cells it processes as PBR; skip TerrainHelper for those.
-		if (!land->data.flags.any(static_cast<RE::OBJ_LAND::Flag>(8))) {
-			auto& terrainHelper = globals::features::terrainHelper;
-			if (result && terrainHelper.loaded) {
-				terrainHelper.TESObjectLAND_SetupMaterial(land);
-			}
+		auto& terrainHelper = globals::features::terrainHelper;
+		if (result && terrainHelper.loaded) {
+			terrainHelper.TESObjectLAND_SetupMaterial(land);
 		}
 
 		return result;
@@ -227,11 +224,18 @@ struct TH_BSLightingShader_SetupMaterial
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-void TerrainHelper::PostPostLoad()
+void TerrainHelper::Load()
 {
+	// Install TESObjectLAND hook early so TH is inner relative to TruePBR's PostPostLoad hook.
+	// This ensures TH reads the vanilla material hashKey before TruePBR replaces it with a PBR material.
+	// This intentionally matches TruePBR's REL::RelocationID(18368, 18791), so no extra
+	// VR gate is needed unless those offsets diverge.
 	logger::info("[Terrain Helper] Hooking TESObjectLAND");
 	stl::detour_thunk<TH_TESObjectLAND_SetupMaterial>(REL::RelocationID(18368, 18791));
+}
 
+void TerrainHelper::PostPostLoad()
+{
 	logger::info("[Terrain Helper] Hooking BSLightingShader::SetupMaterial");
 	stl::write_vfunc<0x4, TH_BSLightingShader_SetupMaterial>(RE::VTABLE_BSLightingShader[0]);
 }

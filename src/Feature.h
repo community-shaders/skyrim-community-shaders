@@ -3,6 +3,7 @@
 #include "FeatureCategories.h"
 #include "FeatureConstraints.h"
 #include "FeatureVersions.h"
+#include "I18n/I18n.h"
 #ifdef TRACY_ENABLE
 #	include <Tracy/Tracy.hpp>
 #	include <Tracy/TracyD3D11.hpp>
@@ -29,6 +30,8 @@ struct Feature
 
 	virtual std::string GetName() = 0;
 	virtual std::string GetShortName() = 0;
+	virtual std::string GetDisplayName() { return GetName(); }
+	std::string GetDisplayCategory() const;
 	virtual std::string GetFeatureModLink() { return ""; }
 	virtual std::string_view GetShaderDefineName() { return ""; }
 	virtual std::vector<std::pair<std::string_view, std::string_view>> GetShaderDefineOptions() { return {}; }

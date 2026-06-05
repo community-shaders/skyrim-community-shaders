@@ -11,30 +11,23 @@ public:
 	bool inline SupportsVR() override { return true; }
 
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
+	virtual std::string GetDisplayName() override { return T("feature.screen_space_gi.name", "Screen Space GI"); }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		std::string desc =
-			"Screen Space Global Illumination adds realistic indirect lighting and "
-			"ambient occlusion to the game. This technique simulates how light "
-			"bounces off surfaces to illuminate other objects naturally.";
+		std::string desc = T("feature.screen_space_gi.description", "Screen Space Global Illumination adds realistic indirect lighting and ambient occlusion to the game. This technique simulates how light bounces off surfaces to illuminate other objects naturally.");
 		if (REL::Module::IsVR()) {
-			desc +=
-				"\n\nWarning: In VR, this feature may have visual artifacts and "
-				"can have a significant performance impact due to the nature of "
-				"screen space effects.";
+			desc += T("feature.screen_space_gi.vr_warning", "\n\nWarning: In VR, this feature may have visual artifacts and can have a significant performance impact due to the nature of screen space effects.");
 		}
-		return std::make_pair(
-			desc,
-			std::vector<std::string>{
-				"Realistic indirect lighting",
-				"Enhanced ambient occlusion",
-				"Improved visual depth and atmosphere",
-				"Temporal denoising for smooth results",
-				"Configurable quality and performance settings" });
+		return { desc,
+			{ T("feature.screen_space_gi.key_feature_1", "Realistic indirect lighting"),
+				T("feature.screen_space_gi.key_feature_2", "Enhanced ambient occlusion"),
+				T("feature.screen_space_gi.key_feature_3", "Improved visual depth and atmosphere"),
+				T("feature.screen_space_gi.key_feature_4", "Temporal denoising for smooth results"),
+				T("feature.screen_space_gi.key_feature_5", "Configurable quality and performance settings") } };
 	}
 
 	virtual void RestoreDefaultSettings() override;

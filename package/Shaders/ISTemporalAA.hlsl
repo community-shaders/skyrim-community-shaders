@@ -2,45 +2,24 @@
 #include "Common/DisplayMapping.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
-#include "Common/Math.hlsli"
-#include "Common/VR.hlsli"
-
-namespace TAA
-{
-	float3 SaturateSDR(float3 color)
-	{
-#ifdef HDR_OUTPUT
-		return color;
-#else
-		return saturate(color);
-#endif
-	}
-}
 
 typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Color: SV_Target0;
-	// Feedback buffer — read back next frame via historyTex.xyz:
-	//   .x = lumaFeedback   (outputLuma × (1−mask); drives historyLuma next frame)
-	//   .y = historyFlicker (flickerFactor accumulated with decay; drives bracket stability)
-	//   .z = prevMotion     (SE only: normalizedMotion; drives motionDiff next frame. VR writes 0.)
-	//   .w = 1.0
-	float4 Feedback: SV_Target1;
+	float4 Color : SV_Target0;
+	float4 Feedback : SV_Target1;
 };
 
 #if defined(PSHADER)
 
-// Textures
-Texture2D<float4> currentFrameTex : register(t0);  // Main render (current frame)
-Texture2D<float4> historyTex : register(t1);       // History scalars (lumaFeedback, historyFlicker, prevMotion)
-Texture2D<float4> velocityTex : register(t2);      // Motion vector / velocity buffer
-Texture2D<float4> depthTex : register(t3);         // Scene depth buffer
-Texture2D<float4> maskTex : register(t4);          // TAA validity / mask buffer
-Texture2D<float4> alphaTex : register(t5);         // Alpha / transparency buffer
+Texture2D<float4> currentFrameTex : register(t0);
+Texture2D<float4> historyTex : register(t1);
+Texture2D<float4> velocityTex : register(t2);
+Texture2D<float4> depthTex : register(t3);
+Texture2D<float4> maskTex : register(t4);
+Texture2D<float4> alphaTex : register(t5);
 
-// Samplers
 SamplerState currentFrameSampler : register(s0);
 SamplerState historySampler : register(s1);
 SamplerState velocitySampler : register(s2);
@@ -48,387 +27,507 @@ SamplerState depthSampler : register(s3);
 SamplerState maskSampler : register(s4);
 SamplerState alphaSampler : register(s5);
 
-// Per-pass TAA constants.
 cbuffer PerGeometry : register(b2)
 {
-	float4 TexelSizeParams : packoffset(c0);  // xy = texel size (1/W, 1/H), zw = 1.0
-	float4 JitterAndRes : packoffset(c1);     // xy = jitter, zw = render resolution
-	float4 NeighborWeights : packoffset(c2);  // xyzw = 4-tap weighted average weights
-	float4 TexelOffset : packoffset(c3);      // xy = texel size (same as c0.xy)
-	float4 BlendParams : packoffset(c4);      // x = minBlend, y = maxBlend, z = sharpenA, w = sharpenB
-	float4 ThresholdParams : packoffset(c5);  // w = depth rejection threshold
+	float4 TexelSizeParams : packoffset(c0);
+	float4 JitterAndRes : packoffset(c1);
+	float4 NeighborWeights : packoffset(c2);
+	float4 TexelOffset : packoffset(c3);
+	float4 BlendParams : packoffset(c4);
+	float4 ThresholdParams : packoffset(c5);
 };
 
-namespace TAA
+// Decompiler comparison idiom: cmp(expr) => -(expr), used as a truthy mask in ?: selects.
+#define cmp -
+
+#ifdef HDR_OUTPUT
+// Internal working space for TAA is PQ/BT2020.
+// PQ maps [0, 10000 nits] to [0, 1], so the vanilla 1.001 bracket ceiling is correct —
+// nothing in the scene legitimately exceeds 1.0 PQ. This is why PQ avoids the bracket
+// collapse that caused halos with the linear BT2020 working space.
+float3 ConvertRenderInput(float3 gammaColor)
 {
-	// Neighbor tap indices within the 9-tap grid (row-major, 3x3).
-	// 0=UL, 1=U,  2=RU,
-	// 3=L,  4=C,  5=R,
-	// 6=LD, 7=D,  8=BR
-	static const float2 NeighborOffsets[9] = {
-		float2(-1, -1),  // 0: UL
-		float2(0, -1),   // 1: U
-		float2(1, -1),   // 2: RU
-		float2(-1, 0),   // 3: L
-		float2(0, 0),    // 4: C (center)
-		float2(1, 0),    // 5: R
-		float2(-1, 1),   // 6: LD
-		float2(0, 1),    // 7: D
-		float2(1, 1),    // 8: BR
-	};
+	return DisplayMapping::LinearToPQ(Color::BT709ToBT2020(Color::GammaToLinearSafe(gammaColor)), 10000.0);
+}
+float3 ConvertRenderOutput(float3 pqColor)
+{
+	return Color::LinearToGammaSafe(Color::BT2020ToBT709(DisplayMapping::PQtoLinear(pqColor, 10000.0)));
+}
+// Feedback luma round-trip: feedbackOut.x is read back as history.x next frame.
+// Storing raw PQ luma [0,1] in a low-precision RT causes quantization banding in highlights
+// because PQ encodes high nit values in the upper portion of the [0,1] range where
+// 8/10-bit steps are perceptible. Encoding as game-gamma spreads precision like SDR
+// and round-trips cleanly through whatever precision the feedback RT uses.
+float EncodeFeedbackLuma(float pqLuma)
+{
+	// PQ → linear (single channel: luma only, no colour transform needed)
+	float linearLuma = DisplayMapping::PQtoLinear(pqLuma.xxx, 10000.0).x;
+	return Color::LinearToGammaSafe(linearLuma);
+}
+float DecodeFeedbackLuma(float gammaLuma)
+{
+	float linearLuma = Color::GammaToLinearSafe(gammaLuma);
+	return DisplayMapping::LinearToPQ(linearLuma.xxx, 10000.0).x;
+}
+#endif
 
-	namespace Constants
-	{
-		// Algorithm Magic Constants (Derived from Decompile)
-		// =========================================================================
+static const float3 kLumaWeights = float3(0.5, 0.25, 0.25);
 
-		// Luma approximations and constraints
-		static const float MaxLumaCap = 1.00100005;
-		static const float MinLumaCap = -0.00100000005;
+/*
+ * Channel layout (vanilla decompile — swizzles are load-bearing):
+ * - Neighbour taps: .yxz sample; luma via dot(.xzy, kLumaWeights); stored as float4(.xyz=GRB, .w=luma).
+ * - center: float4 .x=belowHistC1, .yzw=centre RGB; luma via dot(center.zwy, kLumaWeights).
+ * - corner: float4 .xyz=corner GRB, .w=corner luma (depth-guided); .x reused for belowHistA0 mask.
+ * - Bracket colours: .yzw holds (R, B, G); .w = luma.
+ * - Output colour lives in .yzw (vanilla r3.yzw after blend; colorOut = sampleUV.yzw), not .xyz.
+ *
+ * Registers are float4 packs — names are semantic but components reuse like the decompile.
+ */
 
-		// Flicker detection scaling
-		static const float FlickerLumaThreshold = 0.2;
-		static const float FlickerDecay = 0.95;
-		static const float FlickerWeightScale = 0.25;
-		static const float ClampBlendThreshold = 0.902499974;  // Approx 0.95^2
-
-		// Motion resolution bounds
-		static const float MaxMotionMagnitudePixels = 128.0;
-		static const float MotionSimilarityScale = 20.0;
-		static const float StrictSimilarityScale = 100.0;
-		static const float BlendFloorScale = 0.99;
-
-		// VR sky detection bounds
-		static const float SkyDepthThresholdSq = 0.95;
-		static const float SkyBlendScale = 20.0;
-
-		// Luma logic and thresholds
-		static const float3 LumaWeights = float3(0.25, 0.5, 0.25);
-		static const float LumaThreshold = 0.01;
-		static const float LumaRatioFallback = 0.5;
-
-		// Flicker score initial value
-		static const float FlickerMaxScore = 4.0;
-
-		// =========================================================================
-		// Engine / CBuffer Semantic Aliases
-		// =========================================================================
-
-		// Texel parameters
-		static const float InvWidth = TexelSizeParams.x;
-		static const float InvHeight = TexelSizeParams.y;
-		static const float2 TexelSize = TexelSizeParams.xy;
-
-		// Blend & Sharpen settings
-		static const float MinBlend = BlendParams.x;
-		static const float MaxBlend = BlendParams.y;
-		static const float SharpenA = BlendParams.z;
-		static const float SharpenB = BlendParams.w;
-
-		// Rejection thresholds
-		static const float DepthRejectionThreshold = ThresholdParams.w;
-	}
-
-	// TAA-specific luma approximation matching Bethesda's decompile weights (not ITU-R BT.709).
-	// Bethesda's native math: G=0.5, R=0.25, B=0.25. Input from SampleCurrentFrame is standard x=R, y=G, z=B.
-	float Luma(float3 rgb)
-	{
-		return dot(rgb, Constants::LumaWeights);
-	}
+float2 ClampScreenUV(float2 screenUV, float2 drMax)
+{
+	return min(max(FrameBuffer::DynamicResolutionParams1.xy * screenUV, float2(0, 0)), drMax);
 }
 
-// Sample current frame natively. HDR output conversions strictly require correct RGB channel ordering.
-float3 SampleCurrentFrame(float2 uv)
+float4 ClampScreenUV4(float4 screenUV, float2 drMax)
 {
-	float3 color = currentFrameTex.Sample(currentFrameSampler, uv).xyz;  // Native RGB layout
+	return min(max(FrameBuffer::DynamicResolutionParams1.xyxy * screenUV, float4(0, 0, 0, 0)), drMax.xyxy);
+}
+
+float2 ClampHistoryUV(float2 reprojectedUV)
+{
+	float2 uv = max(FrameBuffer::DynamicResolutionParams1.zw * reprojectedUV, float2(0, 0));
+	uv.x = min(FrameBuffer::DynamicResolutionParams2.w, uv.x);
+	uv.y = min(FrameBuffer::DynamicResolutionParams1.w, uv.y);
+	return uv;
+}
+
+float2 GetDynamicResolutionMax()
+{
+	return float2(FrameBuffer::DynamicResolutionParams2.z, FrameBuffer::DynamicResolutionParams1.y);
+}
+
+// Neighbour tap: .yxz sample; luma via dot(.xzy, kLumaWeights). See channel-layout comment above.
+struct ISTAA_NeighborTap
+{
+	float3 grb;
+	float luma;
+	float belowHist;
+};
+
+float3 LoadNeighborGRB(float2 uv)
+{
+	float3 grb = currentFrameTex.Sample(currentFrameSampler, uv).yxz;
 #	ifdef HDR_OUTPUT
-	color = DisplayMapping::ConvertGameToPQ(color);
+	grb.yxz = ConvertRenderInput(grb.yxz);
 #	endif
-	return color;
+	return grb;
+}
+
+ISTAA_NeighborTap SampleNeighborGRB(float2 uv, float historyLuma)
+{
+	ISTAA_NeighborTap tap;
+	tap.grb = LoadNeighborGRB(uv);
+	tap.luma = dot(tap.grb.xzy, kLumaWeights);
+	tap.belowHist = cmp(tap.luma < historyLuma);
+	return tap;
+}
+
+float4 PackNeighborTap(ISTAA_NeighborTap tap)
+{
+	return float4(tap.grb, tap.luma);
+}
+
+void AssignPackedNeighbor(float2 uv, float historyLuma, out float4 packed, out float belowHist)
+{
+	ISTAA_NeighborTap tap = SampleNeighborGRB(uv, historyLuma);
+	packed = PackNeighborTap(tap);
+	belowHist = tap.belowHist;
+}
+
+// Centre tap: .xyz sample into .yzw layout; luma via dot(.zwy, kLumaWeights).
+float3 SampleCenterRGB(float2 uv)
+{
+	float3 rgb = currentFrameTex.Sample(currentFrameSampler, uv).xyz;
+#	ifdef HDR_OUTPUT
+	rgb = ConvertRenderInput(rgb);
+#	endif
+	return rgb;
+}
+
+float AlphaCoverageMask(float2 uv)
+{
+	return cmp(0 < alphaTex.Sample(alphaSampler, uv).z);
+}
+
+float FlickerLumaContribution(float centerLuma, float neighborLuma)
+{
+	float d = centerLuma + -neighborLuma;
+	d = 0.200000003 + -abs(d);
+	return ceil(d);
+}
+
+// shallowestDepth must already include depth before calling.
+float2 PickIfShallowestUV(float2 selectedUV, float shallowestDepth, float depth, float2 uvIfMatch)
+{
+	return cmp(shallowestDepth == depth) ? uvIfMatch : selectedUV;
+}
+
+// Pick the shallowest-depth UV in the 3x3 neighbourhood (outputs clamped DR UV sets for later taps).
+float2 SelectDepthGuidedUV(
+	float2 texCoord,
+	float2 drMax,
+	out float2 drUVMin,
+	out float2 drUVMax,
+	out float2 drCenter,
+	out float4 drNeighborsA,
+	out float4 drNeighborsB,
+	out float4 drNeighborsC,
+	out float3 cornerColorGRB)
+{
+	float2 uvMin = -TexelOffset.xy + texCoord;
+	float2 uvMax = TexelOffset.xy + texCoord;
+
+	drUVMax = ClampScreenUV(uvMax, drMax);
+	float depthMaxCorner = depthTex.Sample(depthSampler, drUVMax).x;
+	cornerColorGRB = LoadNeighborGRB(drUVMax);
+
+	float4 neighborsA = TexelOffset.xyxy * float4(1, -1, 1, 0) + texCoord.xyxy;
+	drNeighborsA = ClampScreenUV4(neighborsA, drMax);
+	float depthA0 = depthTex.Sample(depthSampler, drNeighborsA.xy).x;
+	float shallowestDepth = min(depthA0, depthMaxCorner);
+
+	drUVMin = ClampScreenUV(uvMin, drMax);
+	float depthMinCorner = depthTex.Sample(depthSampler, drUVMin).x;
+	shallowestDepth = min(depthMinCorner, shallowestDepth);
+
+	float2 selectedUV = PickIfShallowestUV(uvMax, shallowestDepth, depthMinCorner, uvMin);
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthA0, neighborsA.xy);
+
+	float4 neighborsB = TexelOffset.xyxy * float4(0, -1, -1, 1) + texCoord.xyxy;
+	drNeighborsB = ClampScreenUV4(neighborsB, drMax);
+	float depthB0 = depthTex.Sample(depthSampler, drNeighborsB.xy).x;
+	shallowestDepth = min(depthB0, shallowestDepth);
+	float depthA1 = depthTex.Sample(depthSampler, drNeighborsA.zw).x;
+	shallowestDepth = min(depthA1, shallowestDepth);
+
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthA1, neighborsA.zw);
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthB0, neighborsB.xy);
+
+	float4 neighborsC = TexelOffset.xyxy * float4(-1, 0, 0, 1) + texCoord.xyxy;
+	drNeighborsC = ClampScreenUV4(neighborsC, drMax);
+	float depthC0 = depthTex.Sample(depthSampler, drNeighborsC.xy).x;
+	shallowestDepth = min(depthC0, shallowestDepth);
+	float depthB1 = depthTex.Sample(depthSampler, drNeighborsB.zw).x;
+	shallowestDepth = min(depthB1, shallowestDepth);
+
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthB1, neighborsB.zw);
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthC0, neighborsC.xy);
+
+	drCenter = ClampScreenUV(texCoord, drMax);
+	float depthCenter = depthTex.Sample(depthSampler, drCenter).x;
+	shallowestDepth = min(depthCenter, shallowestDepth);
+	float depthC1 = depthTex.Sample(depthSampler, drNeighborsC.zw).x;
+	shallowestDepth = min(depthC1, shallowestDepth);
+
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthC1, neighborsC.zw);
+	selectedUV = PickIfShallowestUV(selectedUV, shallowestDepth, depthCenter, texCoord);
+
+	return selectedUV;
 }
 
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-	float2 uv = input.TexCoord;
+	float2 texCoord = input.TexCoord;
+	float4 colorOut, feedbackOut;
 
-	// =========================================================================
-	// Sample all 9 neighborhood positions (3x3 grid around current pixel).
-	// =========================================================================
+	// float4 packs — component reuse matches vanilla decompile (see header comment).
+	float4 motionReject, sampleUV, history, corner, tapMin; // was r0–r4
+	float4 tapA0, tapA1, tapB0, tapB1, tapC0, tapC1;       // was r6–r13
+	float4 center, centerMeta, bracketMax, weightedColor, mergeScratch, bracketMinReg; // was r14–r19
 
-	float2 uvs[9];
-	float depths[9];
-	float3 colors[9];
-	float lumas[9];
+	float2 drMax = GetDynamicResolutionMax(), drUVMin, drUVMax, drCenter;
+	float4 drNeighborsA, drNeighborsB, drNeighborsC;
 
-	[unroll] for (int sampleIdx = 0; sampleIdx < 9; sampleIdx++)
+	motionReject.xy = SelectDepthGuidedUV(
+		texCoord,
+		drMax,
+		drUVMin,
+		drUVMax,
+		drCenter,
+		drNeighborsA,
+		drNeighborsB,
+		drNeighborsC,
+		corner.xyz);
+
+	// --- motion vector and history sample ---
+	history.xy = drMax;
+	motionReject.xy = velocityTex.Sample(velocitySampler, ClampScreenUV(motionReject.xy, history.xy)).xy;
+	motionReject.zw = texCoord.xy + motionReject.xy;
+	motionReject.x = sqrt(dot(motionReject.xy, motionReject.xy));
+	tapMin.xy = ClampHistoryUV(motionReject.zw);
+	history.xyw = historyTex.Sample(historySampler, tapMin.xy).xyz;
+#	ifdef HDR_OUTPUT
+	// history.x is stored as game-gamma luma (see EncodeFeedbackLuma on write).
+	// Decode to PQ luma to match the working space of all neighbour taps.
+	// history.y and history.w are motion scalars — do NOT convert them.
+	history.x = DecodeFeedbackLuma(history.x);
+#	endif
+	corner.w = dot(corner.xzy, kLumaWeights);
+	motionReject.y = cmp(corner.w < history.x);
+
+	// --- neighbour colour / luma samples ---
+	sampleUV.zw = drUVMin;
+	sampleUV.xy = drCenter;
 	{
-		uvs[sampleIdx] = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(TAA::NeighborOffsets[sampleIdx] * TexelOffset.xy + uv);
-		depths[sampleIdx] = depthTex.Sample(depthSampler, uvs[sampleIdx]).x;
-		colors[sampleIdx] = SampleCurrentFrame(uvs[sampleIdx]);
-		lumas[sampleIdx] = TAA::Luma(colors[sampleIdx]);
+		ISTAA_NeighborTap tap = SampleNeighborGRB(sampleUV.zw, history.x);
+		tapMin.xyz = tap.grb;
+		sampleUV.z = AlphaCoverageMask(sampleUV.zw);
+		tapMin.w = tap.luma;
+		sampleUV.w = tap.belowHist;
 	}
+	AssignPackedNeighbor(drNeighborsA.xy, history.x, tapA0, corner.x);
+	AssignPackedNeighbor(drNeighborsA.zw, history.x, tapA1, tapMin.x);
+	AssignPackedNeighbor(drNeighborsB.xy, history.x, tapB0, tapA0.x);
+	AssignPackedNeighbor(drNeighborsB.zw, history.x, tapB1, tapA1.x);
+	AssignPackedNeighbor(drNeighborsC.xy, history.x, tapC0, tapB0.x);
+	AssignPackedNeighbor(drNeighborsC.zw, history.x, tapC1, center.x);
+	center.yzw = SampleCenterRGB(sampleUV.xy);
 
-	// =========================================================================
-	// Phase 1: Closest-depth search — find the foreground pixel in the 3x3 grid.
-	//
-	// Using the foreground motion vector prevents background vectors ghosting
-	// onto foreground edges ("disocclusion ghosting").
-	// =========================================================================
+	// --- centre bracket seed, neighbourhood bracket, flicker, temporal blend (verbatim math) ---
+	centerMeta.x = dot(center.zwy, kLumaWeights);
+	bracketMax.x = cmp(centerMeta.x < history.x);
+	centerMeta.yz = center.yw;
+	// Bracket ceiling: 1.001 is just above the maximum PQ value (1.0 = 10000 nits).
+	// Nothing in the scene exceeds this, so the ceiling works correctly in PQ working space.
+	// (In linear BT2020 this would be wrong — sky/specular exceed 1.0 linear — but PQ is bounded.)
+	bracketMax.y = cmp(centerMeta.x < 1.00100005);
+	bracketMax.yzw = bracketMax.yyy ? centerMeta.yzx : float3(1.00100005, 1.00100005, 1.00100005);
+	bracketMax.yzw = bracketMax.xxx ? float3(1.00100005, 1.00100005, 1.00100005) : bracketMax.yzw;
 
-	int bestIdx = 0;
-	float minDepth = depths[0];
+	weightedColor.x = cmp(tapC1.w < bracketMax.w);
+	weightedColor.xyz = weightedColor.xxx ? tapC1.yzw : bracketMax.yzw;
+	bracketMax.yzw = center.xxx ? bracketMax.yzw : weightedColor.xyz;
 
-	[unroll] for (int depthIdx = 1; depthIdx < 9; depthIdx++)
+	// --- neighborhood min/max color bracket ---
+	weightedColor.xyz = NeighborWeights.zzz * tapC0.yxz;
+	weightedColor.xyz = tapB1.yxz * NeighborWeights.www + weightedColor.xyz;
+	weightedColor.xyz = tapC1.yxz * NeighborWeights.yyy + weightedColor.xyz;
+	weightedColor.xyz = center.yzw * NeighborWeights.xxx + weightedColor.xyz;
+	tapB1.x = cmp(tapC0.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapC0.yzw : bracketMax.yzw;
+	bracketMax.yzw = tapB0.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapB1.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapB1.yzw : bracketMax.yzw;
+	bracketMax.yzw = tapA1.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapB0.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapB0.yzw : bracketMax.yzw;
+	bracketMax.yzw = tapA0.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapA1.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapA1.yzw : bracketMax.yzw;
+	bracketMax.yzw = tapMin.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapA0.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapA0.yzw : bracketMax.yzw;
+	bracketMax.yzw = corner.xxx ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(tapMin.w < bracketMax.w);
+	mergeScratch.xyz = tapB1.xxx ? tapMin.yzw : bracketMax.yzw;
+	mergeScratch.yzw = sampleUV.www ? bracketMax.yzw : mergeScratch.xyz;
+	tapB1.x = cmp(corner.w < mergeScratch.w);
+	bracketMinReg.yzw = tapB1.xxx ? corner.yzw : mergeScratch.yzw;
+	tapB1.x = cmp(-0.00100000005 < centerMeta.x);
+	bracketMax.yzw = tapB1.xxx ? centerMeta.yzx : float3(-0.00100000005, -0.00100000005, -0.00100000005);
+	bracketMax.xyz = bracketMax.xxx ? bracketMax.yzw : float3(-0.00100000005, -0.00100000005, -0.00100000005);
+	tapB1.x = cmp(bracketMax.z < tapC1.w);
+	tapC1.xyz = tapB1.xxx ? tapC1.yzw : bracketMax.xyz;
+	tapC1.xyz = center.xxx ? tapC1.xyz : bracketMax.xyz;
+
+	// --- flicker score from neighbor luma spread ---
+	tapB1.x = FlickerLumaContribution(centerMeta.x, tapC1.w);
+	tapC0.x = cmp(tapC1.z < tapC0.w);
+	tapC0.xyz = tapC0.xxx ? tapC0.yzw : tapC1.xyz;
+	tapC0.xyz = tapB0.xxx ? tapC0.xyz : tapC1.xyz;
+	tapB0.x = FlickerLumaContribution(centerMeta.x, tapC0.w);
+	tapC0.w = cmp(tapC0.z < tapB1.w);
+	tapC1.xyz = tapC0.www ? tapB1.yzw : tapC0.xyz;
+	tapC0.xyz = tapA1.xxx ? tapC1.xyz : tapC0.xyz;
+	tapA1.x = FlickerLumaContribution(centerMeta.x, tapB1.w);
+	tapB1.y = cmp(tapC0.z < tapB0.w);
+	tapB1.yzw = tapB1.yyy ? tapB0.yzw : tapC0.xyz;
+	tapB1.yzw = tapA0.xxx ? tapB1.yzw : tapC0.xyz;
+	tapA0.x = FlickerLumaContribution(centerMeta.x, tapB0.w);
+	tapB0.y = cmp(tapB1.w < tapA1.w);
+	tapB0.yzw = tapB0.yyy ? tapA1.yzw : tapB1.yzw;
+	tapB0.yzw = tapMin.xxx ? tapB0.yzw : tapB1.yzw;
+	tapMin.x = FlickerLumaContribution(centerMeta.x, tapA1.w);
+	tapA1.y = cmp(tapB0.w < tapA0.w);
+	tapA1.yzw = tapA1.yyy ? tapA0.yzw : tapB0.yzw;
+	tapA1.yzw = corner.xxx ? tapA1.yzw : tapB0.yzw;
+	corner.x = FlickerLumaContribution(centerMeta.x, tapA0.w);
+	tapA0.y = cmp(tapA1.w < tapMin.w);
+	tapA0.yzw = tapA0.yyy ? tapMin.yzw : tapA1.yzw;
+	tapA0.yzw = sampleUV.www ? tapA0.yzw : tapA1.yzw;
+	sampleUV.w = FlickerLumaContribution(centerMeta.x, tapMin.w);
+	bracketMinReg.x = tapA0.z;
+	tapMin.y = cmp(tapA0.w < corner.w);
+	tapMin.yzw = tapMin.yyy ? corner.yzw : tapA0.yzw;
+	tapC0.xw = motionReject.yy ? tapMin.yw : tapA0.yw;
+	mergeScratch.x = tapMin.z;
+	tapC1.xyzw = motionReject.yyyy ? mergeScratch.xyzw : bracketMinReg.xyzw;
+	motionReject.y = FlickerLumaContribution(centerMeta.x, corner.w);
+	motionReject.y = 4 + -motionReject.y;
+	motionReject.y = motionReject.y + -sampleUV.w;
+	motionReject.y = motionReject.y + -corner.x;
+	motionReject.y = motionReject.y + -tapMin.x;
+	motionReject.y = motionReject.y + -tapA0.x;
+	motionReject.y = motionReject.y + -tapA1.x;
+	motionReject.y = motionReject.y + -tapB0.x;
+	motionReject.y = saturate(motionReject.y + -tapB1.x);
+
+	// --- temporal blend, clamp, and sharpen ---
+	sampleUV.w = cmp(1 < tapC1.w);
+	corner.x = -tapC1.y * 0.25 + tapC1.w;
+	corner.x = -tapC1.z * 0.25 + corner.x;
+	corner.y = corner.x + corner.x;
+	tapC0.z = tapC1.x;
+	corner.xzw = tapC1.yzw;
+	tapMin.x = -tapC0.x * 0.25 + tapC0.w;
+	tapMin.x = -tapC1.x * 0.25 + tapMin.x;
+	tapC0.y = tapMin.x + tapMin.x;
+	tapMin.x = cmp(tapC0.w < 0);
+	tapMin.xyzw = tapMin.xxxx ? corner.xyzw : tapC0.xyzw;
+	tapA0.xyzw = sampleUV.wwww ? tapMin.xyzw : corner.xyzw;
+	sampleUV.w = max(tapMin.w, history.x);
+	tapA1.x = min(sampleUV.w, tapA0.w);
+	tapA1.z = tapA0.w;
+	tapA1.y = tapMin.w;
+	tapB0.z = corner.w;
+	tapB0.x = history.x;
+	tapB0.y = tapC0.w;
+	sampleUV.w = 0.949999988 * history.y;
+	motionReject.y = saturate(motionReject.y * 0.25 + sampleUV.w);
+	sampleUV.w = cmp(motionReject.y < 0.902499974);
+	history.xyz = sampleUV.www ? tapA1.xyz : tapB0.xyz;
+	history.yz = history.zx + -history.yy;
+	corner.w = cmp(0.00999999978 < history.y);
+	history.y = history.z / history.y;
+	history.y = corner.w ? history.y : 0.5;
+	tapMin.xyz = sampleUV.www ? tapMin.xyz : tapC0.xyz;
+	corner.xyz = sampleUV.www ? tapA0.xyz : corner.xyz;
+	corner.xyz = corner.xyz + -tapMin.xyz;
+	corner.xyz = history.yyy * corner.xyz + tapMin.xyz;
+
+	// --- disocclusion / mask rejection ---
+	// motionReject.zw still holds reprojected UV from motion pass; motionReject.x = motion length
+	sampleUV.w = min(motionReject.z, motionReject.w);
+	motionReject.zw = cmp(motionReject.zw >= float2(1, 1));
+	sampleUV.w = cmp(0 >= sampleUV.w);
+	motionReject.z = (int)motionReject.z | (int)sampleUV.w;
+	motionReject.z = (int)motionReject.w | (int)motionReject.z;
+	history.yz = maskTex.Sample(maskSampler, sampleUV.xy).xy;
+	motionReject.w = AlphaCoverageMask(sampleUV.xy);
+	sampleUV.x = cmp(ThresholdParams.w < history.z);
+	motionReject.z = (int)motionReject.z | (int)sampleUV.x;
+	sampleUV.xyw = motionReject.zzz ? center.yzw : corner.xyz;
+	centerMeta.w = 0;
+	history.xw = motionReject.zz ? centerMeta.xw : history.xw;
+	corner.xyz = motionReject.zzz ? center.yzw : weightedColor.xyz;
+	tapMin.xyz = center.yzw + -corner.xyz;
+	motionReject.z = 128 * TexelSizeParams.x;
+	tapA0.z = saturate(motionReject.x / motionReject.z);
+	motionReject.x = tapA0.z + -history.w;
+	// Luma convergence decay: the *20 and *100 constants were tuned for gamma-space luma.
+	// PQ is perceptually uniform — a single linear rescale of the PQ diff is accurate
+	// across all luminance levels (unlike converting through gamma, which has a varying
+	// derivative and overcorrects at bright and dark extremes).
+	// Scale factor: 0.05 gamma ≈ 0.020 PQ at mid-scene luminance → factor ≈ 2.5.
+#	ifdef HDR_OUTPUT
+	motionReject.z = history.x + -centerMeta.x;
 	{
-		if (depths[depthIdx] < minDepth) {
-			minDepth = depths[depthIdx];
-			bestIdx = depthIdx;
-		}
+		float lumaDiffScaled = abs(motionReject.z) * 0.05;
+		history.xw = -lumaDiffScaled.xx * float2(20, 100) + float2(1, 1);
 	}
-
-	// =========================================================================
-	// Phase 2: Motion reprojection + history scalars
-	// =========================================================================
-
-	float2 velocity = velocityTex.Sample(velocitySampler, uvs[bestIdx]).xy;
-	float motionMagnitude = sqrt(dot(velocity, velocity));
-
-	// Apply velocity keeping stereoscopic boundaries strictly isolated per eye
-	bool prevUVOutOfBounds;
-	float2 prevUVunclamped = Stereo::ApplyVelocityToUV(uv, velocity, prevUVOutOfBounds);
-	float2 prevUV = FrameBuffer::GetPreviousDynamicResolutionAdjustedScreenPosition(prevUVunclamped);
-
-	// historyTex (t1) carries THREE scalar values from the previous frame's Feedback output:
-	//   .x = historyLuma    (lumaFeedback: outputLuma × (1−mask))
-	//   .y = historyFlicker (flickerFactor accumulated with 0.95 decay)
-	//   .z = prevMotion     (SE only: normalizedMotion. VR always 0.)
-	float3 historyData = historyTex.Sample(historySampler, prevUV).xyz;
-	float historyLuma = historyData.x;
-	float historyFlicker = historyData.y;
-	float prevMotion = historyData.z;
-
-	// =========================================================================
-	// Phase 3: Weighted neighborhood color
-	// =========================================================================
-
-	float normalizedMotion = saturate(motionMagnitude / (TAA::Constants::MaxMotionMagnitudePixels * TAA::Constants::InvWidth));
-
-	// 4-tap weighted blend: C + D + L + LD (NeighborWeights.xyzw maps to C, D, L, LD).
-	float3 neighborColor =
-		NeighborWeights.x * colors[4] +  // C
-		NeighborWeights.y * colors[7] +  // D
-		NeighborWeights.z * colors[3] +  // L
-		NeighborWeights.w * colors[6];   // LD
-
-	// =========================================================================
-	// Phase 4: Luminance-bounded AABB history clamping
-	//
-	// Builds two color brackets from the 8 non-center neighbors to constrain output:
-	//   maxBracket: neighbor with luma in [historyLuma, 1.001) — nearest brighter than history
-	//   minBracket: neighbor with luma in (-0.001, historyLuma) — nearest darker than history
-	//
-	// Also accumulates flickerFactor: counts neighbors with luma within ±0.2 of center.
-	// More similar neighbors = more stable pixel → flickerFactor grows → tighter temporal anchor.
-	// =========================================================================
-
-	float lumaC = lumas[4];
-
-	bool centerBelowHistory = lumaC < historyLuma;
-	bool centerAboveHistory = lumaC > historyLuma;
-
-	float maxLuma = centerBelowHistory ? TAA::Constants::MaxLumaCap : min(lumaC, TAA::Constants::MaxLumaCap);
-	float3 maxBracket = centerBelowHistory ? TAA::Constants::MaxLumaCap.xxx : colors[4];
-
-	float minLuma = centerAboveHistory ? TAA::Constants::MinLumaCap : max(lumaC, TAA::Constants::MinLumaCap);
-	float3 minBracket = centerAboveHistory ? TAA::Constants::MinLumaCap.xxx : colors[4];
-
-	// Count neighbors with luma similar to center (within FlickerLumaThreshold): stable regions score high,
-	// edges/flickering regions score low. Matches VR decompile: saturate(FlickerMaxScore - #similar_neighbors).
-	float flickerFactor = TAA::Constants::FlickerMaxScore;
-
-	// Walk all 8 non-center neighbors (0–3, 5–8); center is handled via initialization only.
-	// BR (index 8) is included — do not reduce this bound to < 8.
-	[unroll] for (int neighborIdx = 0; neighborIdx < 9; neighborIdx++)
-	{
-		if (neighborIdx == 4)
-			continue;  // center is initialization-only
-
-		float luma = lumas[neighborIdx];
-		float3 color = colors[neighborIdx];
-
-		if (luma < maxLuma && luma >= historyLuma) {
-			maxBracket = color;
-			maxLuma = luma;
-		}
-		if (luma > minLuma && luma < historyLuma) {
-			minBracket = color;
-			minLuma = luma;
-		}
-
-		// Each neighbor with |luma - center| < FlickerLumaThreshold decrements the flicker factor.
-		flickerFactor -= ceil(TAA::Constants::FlickerLumaThreshold - abs(luma - lumaC));
-	}
-	flickerFactor = saturate(flickerFactor);
-
-	// blendFactor_base: high at edges/flickering pixels, low in flat stable regions.
-	// FlickerDecay preserves temporal continuity across frames.
-	float blendFactor_base = saturate(flickerFactor * TAA::Constants::FlickerWeightScale + TAA::Constants::FlickerDecay * historyFlicker);
-
-	// Sentinel collapse: collapsed bracket values are computed unconditionally,
-	// then selected between collapsed and pre-collapse based on blendFactor_base.
-	//
-	// minSentinel: minLuma stayed at MinLumaCap (<0). Fires when centerAboveHistory AND no
-	// neighbor had luma in (-0.001, historyLuma) — rare but possible in high-contrast regions.
-	// Vanilla handles it defensively by swapping min/max brackets.
-	// maxSentinel: maxLuma stayed at MaxLumaCap (>1). Fires when centerBelowHistory AND no
-	// neighbor had luma >= historyLuma — the ghost-pixel trigger case.
-	bool minSentinel = minLuma < 0.0;
-	float3 minBracket_adj = minSentinel ? maxBracket : minBracket;
-	float minLuma_adj = minSentinel ? maxLuma : minLuma;
-	bool maxSentinel = maxLuma >= TAA::Constants::MaxLumaCap;
-	float3 maxBracket_collapsed = maxSentinel ? minBracket_adj : maxBracket;
-	float3 minBracket_collapsed = minBracket_adj;
-	float maxLuma_collapsed = maxSentinel ? minLuma_adj : maxLuma;
-	float minLuma_collapsed = minLuma_adj;
-	float effectiveHistLuma_collapsed = min(max(minLuma_collapsed, historyLuma), maxLuma_collapsed);
-
-	// Select collapsed vs pre-collapse based on blendFactor_base:
-	//   < 0.9025 (stable pixel)    → collapsed bracket + clamped historyLuma (prevents ghosting)
-	//   >= 0.9025 (flickery pixel) → pre-collapse bracket + raw historyLuma (trusts history)
-	bool useClamped = blendFactor_base < TAA::Constants::ClampBlendThreshold;
-	float effectiveHistoryLuma = useClamped ? effectiveHistLuma_collapsed : historyLuma;
-	float3 maxBracket_sel = useClamped ? maxBracket_collapsed : maxBracket;
-	float3 minBracket_sel = useClamped ? minBracket_collapsed : minBracket;
-	float maxLuma_sel = useClamped ? maxLuma_collapsed : maxLuma;
-	float minLuma_sel = useClamped ? minLuma_collapsed : minLuma;
-
-	// Interpolate within selected bracket using effectiveHistoryLuma as position reference.
-	// Vanilla raw uses unsaturated division with 0.5 fallback (no saturate on the ratio itself).
-	float lumaRange = maxLuma_sel - minLuma_sel;
-	float lumaRatio = (lumaRange > TAA::Constants::LumaThreshold) ? (effectiveHistoryLuma - minLuma_sel) / lumaRange : TAA::Constants::LumaRatioFallback;
-	float3 bracketColor = lerp(minBracket_sel, maxBracket_sel, lumaRatio);
-
-	// Mask sample and reject flag are computed here (before Phase 5) so the reject state
-	// is available inside the VR neighborBlend computation.
-	float2 maskSample = maskTex.Sample(maskSampler, uvs[4]).xy;
-	float maskGate = maskSample.x;    // allTransparent gate: DepthRejectionThreshold >= maskGate
-	float maskReject = maskSample.y;  // reject threshold; also scales lumaFeedback via (1 - maskReject)
-	bool reject = prevUVOutOfBounds || TAA::Constants::DepthRejectionThreshold < maskReject;
-
-	// =========================================================================
-	// Phase 5: Temporal blending
-	//
-	// VR:  blendFactor = sky detector only — saturate(20*(minDepth²−0.95)).
-	//      Regular objects: blendFactor = 0, output = neighborColor (current frame only).
-	//      Sky (minDepth≥0.975): blendFactor > 0, output blends toward bracketColor.
-	//      neighborBlend interpolates between neighborColor and center based on skyFactor.
-	//      When reject is true, neighborBase = centerColor so neighborBlend = centerColor.
-	//
-	// SE:  blendFactor = strictFeedback × (0.99 − motionBlend), no constant floor.
-	//      motionSimilarity (×20 decay) and strictSimilarity (×100 decay) are computed
-	//      from motionDiff vs the previous frame's normalizedMotion (t1.z = prevMotion).
-	//      neighborBlend interpolates between neighborColor and center based on motionSimilarity.
-	// =========================================================================
-
-	float3 neighborBlend;
-	float blendFactor;
-	float strictFeedback = 0.0;
-
-#	ifdef VR
-	// VR: sky-detection blend factor.
-	// minDepth < ~0.975 for regular objects → skyFactor = 0 → output = neighborColor.
-	// minDepth ≥ ~0.975 for sky/background → skyFactor > 0 → blend toward bracketColor.
-	float skyFactor = saturate(TAA::Constants::SkyBlendScale * (minDepth * minDepth - TAA::Constants::SkyDepthThresholdSq));
-	float3 neighborBase = reject ? colors[4] : neighborColor;
-	neighborBlend = skyFactor * (colors[4] - neighborBase) + neighborBase;
-	blendFactor = min(TAA::Constants::MaxBlend, skyFactor);
 #	else
-	// SE: motion-continuity blend factor.
-	// motionSimilarity/strictSimilarity: how closely current motion matches previous frame.
-	float motionDiff = normalizedMotion - prevMotion;
-	float motionSimilarity = max(0.0, 1.0 - TAA::Constants::MotionSimilarityScale * abs(motionDiff));
-	float strictSimilarity = max(0.0, 1.0 - TAA::Constants::StrictSimilarityScale * abs(motionDiff));
-	// motionBlend: lerp from maxBlend→minBlend with motion, then clamped by motionSimilarity.
-	float motionBlend = min(lerp(TAA::Constants::MaxBlend, TAA::Constants::MinBlend, normalizedMotion), motionSimilarity);
-	neighborBlend = motionSimilarity * (colors[4] - neighborColor) + neighborColor;
-	strictFeedback = strictSimilarity * blendFactor_base;
-	// blendFactor has a motionBlend floor: ensures at least motionBlend-worth of temporal mixing
-	// even in perfectly stable regions.
-	blendFactor = strictFeedback * (TAA::Constants::BlendFloorScale - motionBlend) + motionBlend;
+	motionReject.z = history.x + -centerMeta.x;
+	history.xw = -abs(motionReject.xx) * float2(20, 100) + float2(1, 1);
+#	endif
+	history.xw = max(float2(0, 0), history.xw);
+	tapMin.yzw = history.xxx * tapMin.xyz + corner.xyz;
+	sampleUV.xyw = -tapMin.yzw + sampleUV.xyw;
+	motionReject.x = BlendParams.x + -BlendParams.y;
+	motionReject.x = tapA0.z * motionReject.x + BlendParams.y;
+	motionReject.x = min(motionReject.x, history.x);
+	tapA0.y = history.w * motionReject.y;
+	motionReject.y = 0.99000001 + -motionReject.x;
+	motionReject.x = tapA0.y * motionReject.y + motionReject.x;
+	feedbackOut.yz = tapA0.yz;
+#	ifdef HDR_OUTPUT
+	tapMin.yzw = max(tapMin.yzw, 0);
+	sampleUV.xyw = saturate(motionReject.xxx * sampleUV.xyw + tapMin.yzw);
+	// Skip vanilla BlendParams.z/w detail recovery — neighbourhood delta blows up in linear HDR
+	// and causes dark bezels / halos on the alpha-aware corner.yzw output path.
+	corner.yzw = sampleUV.xyw;
+#	else
+	sampleUV.xyw = saturate(motionReject.xxx * sampleUV.xyw + tapMin.yzw);
+
+	tapA0.xyz = sampleUV.xyw + -corner.xyz;
+	sampleUV.xyw = saturate(tapA0.xyz * BlendParams.zzz + sampleUV.xyw);
+
+	corner.xyz = corner.xyz + -sampleUV.xyw;
+	corner.yzw = saturate(BlendParams.www * corner.xyz + sampleUV.xyw);
 #	endif
 
-	// Non-HDR path saturates each stage (raw wraps all three in saturate() outside
-	// #ifdef HDR_OUTPUT). HDR path leaves values unclamped so the PQ range survives.
-	// Final lerp is toward neighborColor (unsharpened current-frame mix), not toward blended.
+	motionReject.y = motionReject.x * motionReject.z + centerMeta.x;
+	motionReject.x = motionReject.x * motionReject.z;
+	motionReject.x = cmp(abs(motionReject.x) < 0.00999999978);
+	corner.x = motionReject.x ? centerMeta.x : motionReject.y;
+	tapMin.x = dot(tapMin.zwy, kLumaWeights);
 
-	float3 blended = TAA::SaturateSDR(blendFactor * (bracketColor - neighborBlend) + neighborBlend);
-	float3 sharpened = TAA::SaturateSDR(blended + (blended - neighborColor) * TAA::Constants::SharpenA);
-	float3 finalColor = TAA::SaturateSDR(lerp(sharpened, neighborColor, TAA::Constants::SharpenB));
-
-	// =========================================================================
-	// Phase 6: History rejection
-	//
-	// maskTex.x gates allTransparent; maskTex.y is the rejection channel.
-	// mask sample and reject flag were computed before Phase 5 — see above.
-	// =========================================================================
-
-	// If all 8 non-BR neighbors are transparent (glass/water), bypass TAA —
-	// but only when the mask gate permits it (DepthRejectionThreshold >= maskGate). Masked
-	// regions always run the regular blend path regardless of alpha.
-	// BR (index 8) is intentionally excluded here — loop bound < 8 is correct for alpha.
-	bool allTransparent = TAA::Constants::DepthRejectionThreshold >= maskGate;
-	[unroll] for (int alphaIdx = 0; alphaIdx < 8; alphaIdx++)
-	{
-		allTransparent = allTransparent && (alphaTex.Sample(alphaSampler, uvs[alphaIdx]).z > 0);
-	}
-
-	float3 outputColor = reject ? colors[4] : finalColor;
-	// allTransparent path outputs neighborBlend (not center) with alpha=0.
-	float3 finalOutput = allTransparent ? neighborBlend : outputColor;
+	// --- alpha-aware output ---
+	motionReject.x = AlphaCoverageMask(drNeighborsA.xy);
+	motionReject.y = AlphaCoverageMask(drNeighborsA.zw);
+	motionReject.x = motionReject.x ? sampleUV.z : 0;
+	motionReject.x = motionReject.y ? motionReject.x : 0;
+	motionReject.y = AlphaCoverageMask(drNeighborsB.xy);
+	motionReject.z = AlphaCoverageMask(drNeighborsB.zw);
+	motionReject.x = motionReject.y ? motionReject.x : 0;
+	motionReject.x = motionReject.z ? motionReject.x : 0;
+	motionReject.y = AlphaCoverageMask(drNeighborsC.xy);
+	motionReject.z = AlphaCoverageMask(drNeighborsC.zw);
+	motionReject.x = motionReject.y ? motionReject.x : 0;
+	motionReject.x = motionReject.z ? motionReject.x : 0;
+	motionReject.y = AlphaCoverageMask(drUVMax);
+	motionReject.x = motionReject.y ? motionReject.x : 0;
+	motionReject.x = motionReject.w ? motionReject.x : 0;
+	motionReject.y = cmp(ThresholdParams.w >= history.y);
+	motionReject.z = 1 + -history.z;
+	motionReject.x = motionReject.y ? motionReject.x : 0;
+	sampleUV.xyzw = motionReject.xxxx ? tapMin.xyzw : corner.xyzw;
+	colorOut.xyz = sampleUV.yzw;
+#	ifdef HDR_OUTPUT
+	// Encode PQ luma to game-gamma for feedback RT storage.
+	// Storing raw PQ [0,1] in a low-precision RT causes highlight banding because
+	// PQ packs high-nit values into the upper range where RT quantization is visible.
+	// Game-gamma encoding spreads precision evenly — symmetric with DecodeFeedbackLuma on read.
+	feedbackOut.x = EncodeFeedbackLuma(saturate(sampleUV.x * motionReject.z));
+#	else
+	feedbackOut.x = saturate(sampleUV.x * motionReject.z);
+#	endif
+#	if defined(VR)
+	colorOut.w = motionReject.x ? 1 : 0;
+#	else
+	colorOut.w = 1;
+#	endif
+	feedbackOut.w = 1;
 
 #	ifdef HDR_OUTPUT
-	finalOutput = DisplayMapping::ConvertPQToGame(finalOutput);
+	// colorOut is the display path — convert from PQ/BT2020 working space to game-gamma/BT709.
+	// feedbackOut.x was already encoded above; do not modify it here.
+	colorOut.xyz = ConvertRenderOutput(colorOut.xyz);
 #	endif
 
-	// lumaFeedback anchors on lumaC (center luma), not Luma(finalColor).
-	// effectiveHistoryLuma was computed in Phase 4 (sentinel collapse + bfb gate).
-	// Collapse to lumaC when rejected so history decays cleanly.
-	// rawLuma = lumaC + blendFactor * (effectiveHistoryLuma - lumaC)
-	// (epsilon-guarded: |correction| < LumaThreshold ⇒ rawLuma = lumaC)
-	// allTransparent path uses Luma(neighborBlend) instead.
-	effectiveHistoryLuma = reject ? lumaC : effectiveHistoryLuma;
-	float bf_correction = blendFactor * (effectiveHistoryLuma - lumaC);
-	float rawLuma = (abs(bf_correction) < TAA::Constants::LumaThreshold) ? lumaC : (lumaC + bf_correction);
-	float lumaFeedback = (allTransparent ? TAA::Luma(neighborBlend) : rawLuma) * (1.0 - maskReject);
-
-	// =========================================================================
-	// Phase 7: Output Packaging
-	// =========================================================================
-
-#	ifdef VR
-	// VR uses alpha=0 for transparent surfaces to signal downstream compositing.
-	float outAlpha = allTransparent ? 0.0 : 1.0;
-	// VR historyFlicker: zeroed when minDepth >= 1.0 (sky/void pixels get no temporal anchor).
-	// ceil(minDepth - (1.0 - EPSILON_DEPTH_SKY)) = 1 when minDepth >= 1.0, 0 otherwise → 1 - that = gate.
-	float outFlicker = saturate(blendFactor_base * (1.0 - ceil(minDepth - (1.0f - EPSILON_DEPTH_SKY))));
-	float outMotion = 0.0;  // VR does not use prevMotion.
-#	else
-	// SE always writes alpha=1.
-	float outAlpha = 1.0;
-	float outFlicker = saturate(strictFeedback);  // historyFlicker for next frame
-	float outMotion = normalizedMotion;           // prevMotion: drives motionDiff next frame
-#	endif
-
-#	ifdef HDR_OUTPUT
-	float outLuma = max(0.0, lumaFeedback);
-#	else
-	float outLuma = saturate(lumaFeedback);
-#	endif
-
-	psout.Color = float4(finalOutput, outAlpha);
-	psout.Feedback = float4(outLuma, outFlicker, outMotion, 1.0);
-
+	psout.Color = colorOut;
+	psout.Feedback = feedbackOut;
 	return psout;
 }
 #endif

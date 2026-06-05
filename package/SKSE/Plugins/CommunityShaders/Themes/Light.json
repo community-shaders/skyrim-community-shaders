@@ -41,6 +41,7 @@
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
+        "UseMonochromeIcons": true,
         "ShowFooter": false,
         "CenterHeader": true,
         "TooltipHoverDelay": 0.5,

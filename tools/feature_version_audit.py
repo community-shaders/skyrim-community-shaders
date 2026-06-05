@@ -186,7 +186,7 @@ def get_feature_ini_metadata(feature_dir_or_ini_path):
     if not sections:
         sections = ['Info'] if parser.has_section('Info') else []
 
-    metadata = {'auto_upload': False}
+    metadata = {'auto_upload': False, 'audit_version': True}
     for section in sections:
         if not parser.has_section(section):
             continue
@@ -196,6 +196,15 @@ def get_feature_ini_metadata(feature_dir_or_ini_path):
         if auto_upload_str is not None:
             metadata['auto_upload'] = str(auto_upload_str).strip().lower() not in ('false', '0', 'no', 'off', '')
 
+        # Activation-only features keep all code in the core mod; their toggle
+        # .ini opts out of version auditing/bumping with `AuditVersion = false`.
+        # Auditing is on by default, so a blank value must NOT exclude the ini:
+        # only explicit falsy values opt out (unlike auto_upload, which is opt-in
+        # and treats blank as off).
+        audit_version_str = section_items.get('auditversion') or section_items.get('audit_version')
+        if audit_version_str is not None:
+            metadata['audit_version'] = str(audit_version_str).strip().lower() not in ('false', '0', 'no', 'off')
+
         section_metadata = {
             'mod_id': section_items.get('nexusmodid') or section_items.get('nexus_mod_id') or section_items.get('mod_id'),
             'mod_filename': section_items.get('nexusfilename') or section_items.get('nexus_filename') or section_items.get('nexusmodfilename') or section_items.get('nexus_mod_filename') or section_items.get('mod_filename') or section_items.get('modname') or section_items.get('name'),
@@ -203,6 +212,7 @@ def get_feature_ini_metadata(feature_dir_or_ini_path):
             'description': section_items.get('nexusdescription') or section_items.get('nexus_description') or section_items.get('description'),
             'artifact_pattern': section_items.get('nexusartifactpattern') or section_items.get('nexus_artifact_pattern') or section_items.get('artifact_pattern'),
             'short_name': section_items.get('shortname') or section_items.get('short_name') or section_items.get('nexusshortname') or section_items.get('nexus_short_name'),
+            'file_group_id': section_items.get('nexusfilegroupid') or section_items.get('nexus_file_group_id'),
         }
         metadata.update({k: v for k, v in section_metadata.items() if v is not None and v != ""})
         key_features = section_items.get('nexuskeyfeatures') or section_items.get('nexus_key_features') or section_items.get('key_features') or section_items.get('keyfeatures')
@@ -326,15 +336,6 @@ def get_feature_changelog(feature_dir, feature_info, base_ref):
     if not base_ref:
         return ""
     paths = [str(feature_dir).replace("\\", "/")]
-    if feature_info:
-        name = feature_info.get('name', '')
-        for suffix in ('.h', '.cpp'):
-            p = DEFAULT_FEATURE_HEADERS_DIR / (name + suffix)
-            if p.exists():
-                paths.append(str(p).replace("\\", "/"))
-        src_dir = DEFAULT_FEATURE_HEADERS_DIR / name
-        if src_dir.exists() and src_dir.is_dir():
-            paths.append(str(src_dir).replace("\\", "/"))
     try:
         # Use ASCII unit-separator (0x1f) between subject and body so BREAKING
         # CHANGE footers are detected even when the subject lacks the '!' marker.
@@ -591,8 +592,8 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
     # If only_changed, build a set of changed feature names
     changed_features = set()
     if only_changed:
-        # Gather all changed files from the diff in both features regions
-        target_dirs = [str(FEATURES_DIR), str(DEFAULT_FEATURE_HEADERS_DIR)]
+        # Only packaged feature content should affect feature-version auditing.
+        target_dirs = [str(FEATURES_DIR)]
         cmd = ["git", "diff", "--name-status", f"{base_ref}...{HEAD_REF}", "--"] + target_dirs
         try:
             all_changes = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").splitlines()
@@ -617,19 +618,6 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                 except (ValueError, IndexError):
                     pass
 
-            # Case 2: src/Features/[Feature Name].cpp or src/Features/[Feature Name]/...
-            if "src" in file_parts and "Features" in file_parts:
-                try:
-                    idx = file_parts.index("Features")
-                    name_part = file_parts[idx+1]
-                    # If it's a file, strip extension. If directory, it's the feature name.
-                    feature_name = os.path.splitext(name_part)[0]
-                    changed_features.add(feature_name)
-                    # We also add the normalized version to be safe
-                    changed_features.add(''.join(feature_name.lower().split()))
-                except (ValueError, IndexError):
-                    pass
-
     # Always use GetShortName() for feature key normalization if available
     def get_feature_key(feature_dir, feature_meta_map):
         # Try to use GetShortName from metadata if present
@@ -651,6 +639,12 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
 
         meta = feature_meta_map.get(feature_key)
         ini_path = get_feature_ini(feature_dir)
+        # Activation-only features (e.g. Terrain Helper) opt out of version
+        # auditing via `AuditVersion = false` in their .ini: all their code lives
+        # in the core mod, so bumping the toggle .ini on every edit is meaningless
+        # churn. Skip them entirely from bump suggestions and PR-check failures.
+        if ini_path and not get_feature_ini_metadata(ini_path).get('audit_version', True):
+            continue
         # Use last release tag (version_ref) as the baseline for version proposals so that
         # multiple PRs between releases don't accumulate spurious bumps.
         prior_ver = get_prior_version(ini_path, version_ref) if ini_path else None
@@ -659,51 +653,14 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         pr_prior_ver = get_prior_version(ini_path, base_ref) if (ini_path and version_ref != base_ref) else prior_ver
         new_ver = get_version_from_ini(ini_path) if ini_path else None
 
-        # PR-scoped changes: used for change-type display and new-feature detection
+        # PR-scoped changes: used for change-type display and new-feature detection.
+        # Only packaged files under features/ participate in feature versioning.
         changes = get_changed_files(feature_dir, base_ref)
-        # Also check src/Features
-        cpp_types = (".h", ".hpp", ".cpp", ".c")
-        if meta:
-            header_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".h")
-            cpp_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".cpp")
-            feature_src_dir = DEFAULT_FEATURE_HEADERS_DIR / meta['name']
-            if header_path.exists():
-                changes.extend(get_changed_files(header_path, base_ref, file_types=cpp_types))
-            if cpp_path.exists():
-                changes.extend(get_changed_files(cpp_path, base_ref, file_types=cpp_types))
-            if feature_src_dir.exists() and feature_src_dir.is_dir():
-                changes.extend(get_changed_files(feature_src_dir, base_ref, file_types=cpp_types))
-            # Special case: VR feature includes VRStereoOptimizations
-            if meta['name'] == 'VR':
-                vr_stereo_h = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.h"
-                vr_stereo_cpp = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.cpp"
-                if vr_stereo_h.exists():
-                    changes.extend(get_changed_files(vr_stereo_h, base_ref, file_types=cpp_types))
-                if vr_stereo_cpp.exists():
-                    changes.extend(get_changed_files(vr_stereo_cpp, base_ref, file_types=cpp_types))
         changes = list(set(changes))
 
         # Release-scoped changes: all changes since last release, used to propose the correct
         # version so that a bump already applied by a prior PR satisfies this check.
         release_changes = get_changed_files(feature_dir, version_ref)
-        if meta:
-            header_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".h")
-            cpp_path = DEFAULT_FEATURE_HEADERS_DIR / (meta['name'] + ".cpp")
-            feature_src_dir = DEFAULT_FEATURE_HEADERS_DIR / meta['name']
-            if header_path.exists():
-                release_changes.extend(get_changed_files(header_path, version_ref, file_types=cpp_types))
-            if cpp_path.exists():
-                release_changes.extend(get_changed_files(cpp_path, version_ref, file_types=cpp_types))
-            if feature_src_dir.exists() and feature_src_dir.is_dir():
-                release_changes.extend(get_changed_files(feature_src_dir, version_ref, file_types=cpp_types))
-            # Special case: VR feature includes VRStereoOptimizations
-            if meta['name'] == 'VR':
-                vr_stereo_h = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.h"
-                vr_stereo_cpp = DEFAULT_FEATURE_HEADERS_DIR / "VRStereoOptimizations.cpp"
-                if vr_stereo_h.exists():
-                    release_changes.extend(get_changed_files(vr_stereo_h, version_ref, file_types=cpp_types))
-                if vr_stereo_cpp.exists():
-                    release_changes.extend(get_changed_files(vr_stereo_cpp, version_ref, file_types=cpp_types))
         release_changes = list(set(release_changes))
 
         change_types = set(os.path.splitext(f)[1].lower() for _, f in changes)
@@ -918,7 +875,63 @@ def format_metadata_summary(feature_metadata):
     return lines, metadata_issues
 
 
-def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core_artifact_pattern, base_ref=None):
+def _build_compat_bullets(feature_metadata, base_ref):
+    """Compatibility bullets for the core file_description.
+
+    Lists every Nexus auto_upload feature with its current mod_version,
+    annotating rows whose version is unchanged from `base_ref` so users
+    can see at a glance which features moved and which carried over.
+    Sorted by display name for stable diff-friendly output.
+
+    Returns a list of strings like:
+        ['• Cloud Shadows 1.4.0',
+         '• HDR 1.0.1',
+         '• Upscaling 1.3.1',
+         '• Wetness Effects 1.0.0 (unchanged)']
+    Returns [] if there are no auto_upload features.
+    """
+    bullets = []
+    for info in sorted(feature_metadata, key=lambda x: (x.get('mod_filename') or x['name']).lower()):
+        if info.get('is_core') or not info.get('mod_id'):
+            continue
+        ini_path = get_feature_ini(info['name'])
+        if not ini_path:
+            continue
+        ini_meta = get_feature_ini_metadata(ini_path)
+        if not ini_meta.get('auto_upload', False):
+            continue
+        cur_tuple = get_version_from_ini(ini_path)
+        if not cur_tuple:
+            continue
+        cur_ver = '.'.join(str(v) for v in cur_tuple)
+        display = ini_meta.get('mod_filename') or info.get('mod_filename') or info['name']
+        suffix = ''
+        if base_ref:
+            prior = get_prior_version(ini_path, base_ref)
+            if prior is not None and prior == cur_tuple:
+                suffix = ' (unchanged)'
+        bullets.append(f'• {display} {cur_ver}{suffix}')
+    return bullets
+
+
+def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core_artifact_pattern, base_ref=None, release_version=None):
+    """Build the Nexus upload matrix.
+
+    `release_version` is the Community Shaders version being released
+    (e.g. "1.5.2"). When provided, each row gets a `file_description`
+    that anchors the upload to this CS release — replacing the upstream
+    "See mod description for details." default. Empty when omitted so
+    the upstream default is preserved.
+    """
+    compat_bullets = _build_compat_bullets(feature_metadata, base_ref) if release_version else []
+    if release_version and compat_bullets:
+        core_description = (
+            f'Community Shaders {release_version} — feature versions in this release:\n'
+            + '\n'.join(compat_bullets)
+        )
+    else:
+        core_description = ''
+
     rows = [
         {
             'name': 'core',
@@ -927,6 +940,7 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
             'nexus_mod_id': core_mod_id,
             'mod_filename': core_filename,
             'changelog': '',  # filled by workflow from GitHub release body
+            'file_description': core_description,
         }
     ]
     def sanitize_name(name):
@@ -963,6 +977,22 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
         # Auto-upload is opt-in; missing metadata should not enable uploads.
         auto_upload = ini_metadata.get('auto_upload', False)
 
+        # Per-feature file_description anchors this .7z to the CS release
+        # it shipped with. We don't know forward compatibility (the next CS
+        # may or may not re-bundle this version), so the description is a
+        # single-CS-version stamp and never gets revised — Nexus uploads
+        # are skipped via check_existing once a version is on file.
+        file_description = ''
+        if release_version and mod_version:
+            file_description = f'{mod_filename} {mod_version} — released for Community Shaders {release_version}.'
+
+        file_group_id = ini_metadata.get('file_group_id', '').strip()
+        if auto_upload and (not file_group_id or file_group_id == '000000'):
+            print(
+                f"WARNING: {name} has auto_upload=true but nexusfilegroupid is not set in its [Nexus] ini section.",
+                file=sys.stderr,
+            )
+
         row = {
             'name': name,
             'artifact_pattern': artifact_pattern,
@@ -970,6 +1000,8 @@ def build_nexus_upload_matrix(feature_metadata, core_mod_id, core_filename, core
             'nexus_mod_id': mod_id,
             'mod_filename': mod_filename,
             'auto_upload': auto_upload,
+            'file_description': file_description,
+            'file_group_id': file_group_id,
         }
         if mod_version:
             row['mod_version'] = mod_version
@@ -1119,6 +1151,7 @@ def main():
     parser.add_argument('--core-mod-id', type=str, default='86492', help='Core Nexus mod ID for the generated upload matrix')
     parser.add_argument('--core-filename', type=str, default='Community Shaders', help='Core Nexus filename for the generated upload matrix')
     parser.add_argument('--core-artifact-pattern', type=str, default='CommunityShaders-*.7z', help='Core artifact pattern for the generated upload matrix')
+    parser.add_argument('--release-version', type=str, default=None, help='Community Shaders release version (e.g. "1.5.2") used to anchor file_description on each upload row. When omitted, file_description is empty and the upstream Nexus action default ("See mod description for details.") is preserved.')
     args = parser.parse_args()
 
     global HEAD_REF
@@ -1185,6 +1218,7 @@ def main():
             args.core_filename,
             args.core_artifact_pattern,
             base_ref=base_ref,
+            release_version=args.release_version,
         )
         output_path = args.matrix_output
         with open(output_path, 'w', encoding='utf-8') as f:

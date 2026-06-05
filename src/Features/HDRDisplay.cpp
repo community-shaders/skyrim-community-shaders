@@ -4,14 +4,19 @@
 
 #include "Buffer.h"
 #include "Globals.h"
+#include "I18n/I18n.h"
 #include "LinearLighting.h"
+#include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Upscaling.h"
 #include "Util.h"
+#include <algorithm>
 #include <dxgi1_4.h>
 #include <dxgi1_6.h>
 #include <imgui.h>
+
+#define I18N_KEY_PREFIX "feature.hdr_display."
 
 // Win11 24H2 display config types. Compat_ prefix avoids collision with SDK enum members.
 typedef enum
@@ -293,24 +298,26 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void HDRDisplay::DrawSettings()
 {
+	auto hdrWarningPopupTitle = std::format("{}##HDRDisplay", T(TKEY("warning_popup_title"), "HDR Warning"));
+
 	if (isHDRMonitor) {
-		Util::Text::Success("HDR Display Detected");
+		Util::Text::Success(T(TKEY("display_detected"), "HDR Display Detected"));
 	} else if (isHDRCapableMonitor) {
-		Util::Text::Warning("HDR Capable Display (Windows HDR is off)");
+		Util::Text::Warning(T(TKEY("capable_display_windows_hdr_off"), "HDR Capable Display (Windows HDR is off)"));
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Your monitor supports HDR, but Windows HDR is currently disabled.");
-			ImGui::Text("Enable HDR in Windows Display Settings to allow auto-detection.");
+			ImGui::TextUnformatted(T(TKEY("capable_display_windows_hdr_off_tooltip_0"), "Your monitor supports HDR, but Windows HDR is currently disabled."));
+			ImGui::TextUnformatted(T(TKEY("capable_display_windows_hdr_off_tooltip_1"), "Enable HDR in Windows Display Settings to allow auto-detection."));
 		}
 	} else {
-		Util::Text::Warning("SDR Display (HDR not detected)");
+		Util::Text::Warning(T(TKEY("sdr_display_not_detected"), "SDR Display (HDR not detected)"));
 	}
 
 	const bool isExclusiveFullscreen = globals::features::upscaling.loaded ? !globals::features::upscaling.isWindowed : wasExclusiveFullscreen;
 
 	if (isExclusiveFullscreen) {
 		ImGui::Spacing();
-		Util::Text::WrappedWarning("WARNING: Exclusive Fullscreen detected.");
-		Util::Text::WrappedWarning("HDR is not compatible with Exclusive Fullscreen and may not work correctly. Switch to Borderless Windowed mode for proper HDR support.");
+		Util::Text::WrappedWarning(T(TKEY("exclusive_fullscreen_warning"), "WARNING: Exclusive Fullscreen detected."));
+		Util::Text::WrappedWarning(T(TKEY("exclusive_fullscreen_warning_detail"), "HDR is not compatible with Exclusive Fullscreen and may not work correctly. Switch to Borderless Windowed mode for proper HDR support."));
 		ImGui::Spacing();
 	}
 
@@ -331,7 +338,7 @@ void HDRDisplay::DrawSettings()
 		ImGui::BeginDisabled();
 	}
 
-	if (ImGui::Checkbox("Enable HDR", &currentEnableHDR)) {
+	if (ImGui::Checkbox(T(TKEY("enable_hdr"), "Enable HDR"), &currentEnableHDR)) {
 		{
 			std::lock_guard<std::mutex> lock(settingsMutex);
 			settings.enableHDR = currentEnableHDR;
@@ -353,18 +360,18 @@ void HDRDisplay::DrawSettings()
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		if (isHDRMonitor) {
-			ImGui::Text("Enable HDR output. Matches vanilla visuals with extended dynamic range.");
+			ImGui::TextUnformatted(T(TKEY("enable_hdr_tooltip"), "Enable HDR output. Matches vanilla visuals with extended dynamic range."));
 		} else if (isHDRCapableMonitor) {
-			ImGui::Text("Monitor supports HDR but Windows HDR is off. Enable HDR in Windows Display Settings, then restart the game.");
+			ImGui::TextUnformatted(T(TKEY("enable_hdr_tooltip_windows_off"), "Monitor supports HDR but Windows HDR is off. Enable HDR in Windows Display Settings, then restart the game."));
 		} else {
-			ImGui::Text("HDR display not detected. Use Advanced button to override.");
+			ImGui::TextUnformatted(T(TKEY("enable_hdr_tooltip_not_detected"), "HDR display not detected. Use Advanced button to override."));
 		}
 	}
 
 	// Advanced override button — shown when HDR is neither active nor auto-detected
 	if (!isHDRMonitor && !oldEnableHDR) {
 		ImGui::SameLine();
-		if (ImGui::Button("Advanced")) {
+		if (ImGui::Button(T(TKEY("advanced"), "Advanced"))) {
 			bool dontShowWarning;
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
@@ -373,7 +380,7 @@ void HDRDisplay::DrawSettings()
 			if (!dontShowWarning) {
 				pendingHDREnable = true;
 				showHDRWarningPopup = true;
-				ImGui::OpenPopup("HDR Warning##HDRDisplay");
+				ImGui::OpenPopup(hdrWarningPopupTitle.c_str());
 			} else {
 				// User previously dismissed warnings, enable directly
 				{
@@ -387,9 +394,9 @@ void HDRDisplay::DrawSettings()
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			if (isHDRCapableMonitor) {
-				ImGui::Text("Enable Windows HDR instead of forcing it here.");
+				ImGui::TextUnformatted(T(TKEY("advanced_tooltip_enable_windows_hdr"), "Enable Windows HDR instead of forcing it here."));
 			} else {
-				ImGui::Text("Force enable HDR even without detection (not recommended).");
+				ImGui::TextUnformatted(T(TKEY("advanced_tooltip_force_enable"), "Force enable HDR even without detection (not recommended)."));
 			}
 		}
 	}
@@ -399,26 +406,37 @@ void HDRDisplay::DrawSettings()
 		std::lock_guard<std::mutex> lock(settingsMutex);
 		if (!isHDRMonitor && settings.enableHDR) {
 			ImGui::Spacing();
-			Util::Text::WrappedWarning("HDR is enabled but no HDR display was detected.");
+			Util::Text::WrappedWarning(T(TKEY("enabled_without_detected_display"), "HDR is enabled but no HDR display was detected."));
 		}
 	}
 
-	if (auto popup = Util::CenteredPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+	if (auto popup = Util::CenteredPopupModal(hdrWarningPopupTitle.c_str(), &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
 		// Prevent background dimming by pushing lower modal dimming
 		ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
 
-		Util::Text::Warning("WARNING: Force Enable HDR");
+		Util::Text::Warning(T(TKEY("force_enable_hdr_warning"), "WARNING: Force Enable HDR"));
 		ImGui::Separator();
 		ImGui::Spacing();
-		Util::Text::WrappedWarning("HDR was not detected on your monitor.");
-		Util::Text::WrappedWarning("The game will look VERY WRONG on an SDR (standard) display.");
+		Util::Text::WrappedWarning(T(TKEY("force_enable_hdr_detected_warning"), "HDR was not detected on your monitor."));
+		Util::Text::WrappedWarning(T(TKEY("force_enable_hdr_sdr_warning"), "The game will look VERY WRONG on an SDR (standard) display."));
 		ImGui::Spacing();
-		ImGui::TextWrapped("Only proceed if you have an HDR-capable display that was not detected correctly.");
+		ImGui::TextWrapped("%s", T(TKEY("force_enable_hdr_confirm"), "Only proceed if you have an HDR-capable display that was not detected correctly."));
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
 
-		if (ImGui::Button("Force Enable HDR", ImVec2(150, 0))) {
+		const auto buttonWidthForLabel = [](const char* label) {
+			return ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+		};
+		const char* forceEnableLabel = T(TKEY("force_enable_hdr"), "Force Enable HDR");
+		const char* cancelLabel = T(TKEY("cancel"), "Cancel");
+		const float buttonWidth = std::max({
+			ThemeManager::Constants::POPUP_BUTTON_WIDTH * Util::GetUIScale(),
+			buttonWidthForLabel(forceEnableLabel),
+			buttonWidthForLabel(cancelLabel)
+		});
+
+		if (ImGui::Button(forceEnableLabel, ImVec2(buttonWidth, 0))) {
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
 				settings.enableHDR = true;
@@ -431,7 +449,7 @@ void HDRDisplay::DrawSettings()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(150, 0))) {
+		if (ImGui::Button(cancelLabel, ImVec2(buttonWidth, 0))) {
 			{
 				std::lock_guard<std::mutex> lock(settingsMutex);
 				settings.enableHDR = false;
@@ -453,7 +471,7 @@ void HDRDisplay::DrawSettings()
 		}
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y * 0.5f));
 		ImGui::SetWindowFontScale(0.9f);
-		if (ImGui::Checkbox("Don't show me this again", &dontShowWarning)) {
+		if (ImGui::Checkbox(T(TKEY("dont_show_again"), "Don't show me this again"), &dontShowWarning)) {
 			std::lock_guard<std::mutex> lock(settingsMutex);
 			settings.dontShowHDRWarning = dontShowWarning;
 		}
@@ -485,7 +503,7 @@ void HDRDisplay::DrawSettings()
 			currentPeakNits = settings.hdrPeakNits;
 		}
 
-		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&currentPaperWhite), 80, 500);
+		ImGui::SliderInt(T(TKEY("paper_white_nits"), "Paper White (nits)"), reinterpret_cast<int*>(&currentPaperWhite), 80, 500);
 		{
 			std::lock_guard<std::mutex> lock(settingsMutex);
 			if (currentPaperWhite >= settings.hdrPeakNits) {
@@ -497,11 +515,11 @@ void HDRDisplay::DrawSettings()
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("How bright SDR white appears on your HDR display.");
-			ImGui::Text("203 nits is the ITU BT.2408 reference. Increase for a brighter image.");
+			ImGui::TextUnformatted(T(TKEY("paper_white_tooltip_0"), "How bright SDR white appears on your HDR display."));
+			ImGui::TextUnformatted(T(TKEY("paper_white_tooltip_1"), "203 nits is the ITU BT.2408 reference. Increase for a brighter image."));
 		}
 
-		ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&currentPeakNits), 400, 10000);
+		ImGui::SliderInt(T(TKEY("peak_brightness_nits"), "Peak Brightness (nits)"), reinterpret_cast<int*>(&currentPeakNits), 400, 10000);
 		{
 			std::lock_guard<std::mutex> lock(settingsMutex);
 			if (currentPeakNits <= settings.hdrPaperWhite) {
@@ -513,15 +531,15 @@ void HDRDisplay::DrawSettings()
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Maximum brightness your display can produce.");
-			ImGui::Text("Set to match your display's actual peak brightness.");
+			ImGui::TextUnformatted(T(TKEY("peak_brightness_tooltip_0"), "Maximum brightness your display can produce."));
+			ImGui::TextUnformatted(T(TKEY("peak_brightness_tooltip_1"), "Set to match your display's actual peak brightness."));
 		}
 
-		ImGui::TextDisabled("Display reports: %.0f nits max", cachedDisplayMaxLuminance);
+		ImGui::TextDisabled(T(TKEY("display_reports_max_nits"), "Display reports: %.0f nits max"), cachedDisplayMaxLuminance);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Reported by OS/driver (DXGI MaxLuminance), not a direct meter reading.");
-			ImGui::Text("It may be EDID metadata and can differ from real highlight peak output.");
-			ImGui::Text("Treat this as a starting point and tune Peak Brightness as needed.");
+			ImGui::TextUnformatted(T(TKEY("display_reports_max_nits_tooltip_0"), "Reported by OS/driver (DXGI MaxLuminance), not a direct meter reading."));
+			ImGui::TextUnformatted(T(TKEY("display_reports_max_nits_tooltip_1"), "It may be EDID metadata and can differ from real highlight peak output."));
+			ImGui::TextUnformatted(T(TKEY("display_reports_max_nits_tooltip_2"), "Treat this as a starting point and tune Peak Brightness as needed."));
 		}
 	}
 
@@ -533,19 +551,21 @@ void HDRDisplay::DrawSettings()
 			float oldUIBrightness = settings.hdrUIBrightness;
 			float currentUIBrightness = settings.hdrUIBrightness;
 
-			ImGui::SliderFloat("UI Brightness Multiplier", &currentUIBrightness, 0.5f, 5.0f, "%.2fx");
+			ImGui::SliderFloat(T(TKEY("ui_brightness_multiplier"), "UI Brightness Multiplier"), &currentUIBrightness, 0.5f, 5.0f, "%.2fx");
 			if (oldUIBrightness != currentUIBrightness) {
 				settings.hdrUIBrightness = currentUIBrightness;
 				UpdateHDRData();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("UI brightness = Paper White × this multiplier in HDR mode.");
-				ImGui::Text("1.00x = UI renders at Paper White brightness. Higher values make UI brighter relative to scene content.");
-				ImGui::Text("Note: Main menu and loading screens always render at Paper White brightness.");
+				ImGui::TextUnformatted(T(TKEY("ui_brightness_multiplier_tooltip_0"), "UI brightness = Paper White x this multiplier in HDR mode."));
+				ImGui::TextUnformatted(T(TKEY("ui_brightness_multiplier_tooltip_1"), "1.00x = UI renders at Paper White brightness. Higher values make UI brighter relative to scene content."));
+				ImGui::TextUnformatted(T(TKEY("ui_brightness_multiplier_tooltip_2"), "Note: Main menu and loading screens always render at Paper White brightness."));
 			}
 		}
 	}
 }
+
+#undef I18N_KEY_PREFIX
 
 void HDRDisplay::SaveSettings(json& o_json)
 {
@@ -876,7 +896,7 @@ void HDRDisplay::SetUIBuffer()
 		ID3D11RenderTargetView* targetRTV = uiBufferMode.useUIBuffer ?
 		                                        upscaling.dx12SwapChain.uiBufferWrapped->rtv :
 		                                    uiBufferMode.useFallbackCopy ? fb.RTV :
-		                                                                  upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
+		                                                                   upscaling.dx12SwapChain.swapChainBufferWrapped->rtv;
 
 		if (uiBufferMode.useUIBuffer) {
 			float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -912,6 +932,218 @@ void HDRDisplay::SetUIBuffer()
 	// Redirect to our UI texture
 	fb.RTV = uiTexture->rtv.get();
 	globals::d3d::context->OMSetRenderTargets(1, &fb.RTV, nullptr);
+}
+
+bool HDRDisplay::UsesDeferredPresentComposite() const
+{
+	return loaded && settings.enableHDR && !globals::game::isVR &&
+	       !globals::features::upscaling.d3d12SwapChainActive && uiTexture && uiTexture->rtv && hdrOutputCS;
+}
+
+void HDRDisplay::SyncFramebufferUIRedirect()
+{
+	if (!uiTexture || !uiTexture->rtv)
+		return;
+
+	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	fb.RTV = uiTexture->rtv.get();
+	globals::d3d::context->OMSetRenderTargets(1, &fb.RTV, nullptr);
+}
+
+namespace
+{
+	struct PresentSuppressionScope
+	{
+		PresentSuppressionScope() { globals::features::hdrDisplay.SetPresentSuppressed(true); }
+		~PresentSuppressionScope() { globals::features::hdrDisplay.SetPresentSuppressed(false); }
+	};
+
+	struct SwapChainPresentBottom
+	{
+		static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
+		{
+			if (globals::features::hdrDisplay.IsPresentSuppressed())
+				return S_OK;
+
+			return func(This, SyncInterval, Flags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	// Vtable slot 35 — patches alpha blend to [One, InvSrcAlpha, Add] when UI is composited from a
+	// separate buffer. Mods using [InvSrcAlpha, Zero] (e.g. IED) write alpha*(1-alpha) instead
+	// of alpha, causing ~94% scene bleed through opaque windows in the HDROutputCS composite.
+	struct ID3D11DeviceContext_OMSetBlendState
+	{
+		static void WINAPI thunk(ID3D11DeviceContext* This, ID3D11BlendState* pBlendState, const FLOAT BlendFactor[4], UINT SampleMask)
+		{
+			if (pBlendState && !globals::game::isVR) {
+				auto& hdr = globals::features::hdrDisplay;
+				const bool d3d11HdrCapture = hdr.loaded && hdr.settings.enableHDR && hdr.uiTexture;
+				const bool fgCapture = globals::features::upscaling.d3d12SwapChainActive;
+				if (d3d11HdrCapture || fgCapture)
+					pBlendState = hdr.GetPatchedAlphaBlendState(pBlendState);
+			}
+			func(This, pBlendState, BlendFactor, SampleMask);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+}
+
+void HDRDisplay::InstallSwapChainPresentHooks(IDXGISwapChain* swapChain)
+{
+	stl::detour_vfunc<8, SwapChainPresentBottom>(swapChain);
+	stl::detour_vfunc<35, ID3D11DeviceContext_OMSetBlendState>(globals::d3d::context);
+}
+
+ID3D11BlendState* HDRDisplay::GetPatchedAlphaBlendState(ID3D11BlendState* original)
+{
+	auto it = patchedBlendStateCache.find(original);
+	if (it != patchedBlendStateCache.end())
+		return it->second ? it->second.get() : original;
+
+	D3D11_BLEND_DESC desc{};
+	original->GetDesc(&desc);
+
+	const int slotCount = desc.IndependentBlendEnable ? 8 : 1;
+	bool needsPatch = false;
+	for (int i = 0; i < slotCount; i++) {
+		const auto& rt = desc.RenderTarget[i];
+		if (rt.BlendEnable &&
+			(rt.SrcBlendAlpha != D3D11_BLEND_ONE ||
+				rt.DestBlendAlpha != D3D11_BLEND_INV_SRC_ALPHA ||
+				rt.BlendOpAlpha != D3D11_BLEND_OP_ADD)) {
+			needsPatch = true;
+			break;
+		}
+	}
+
+	if (!needsPatch) {
+		patchedBlendStateCache[original] = nullptr;
+		return original;
+	}
+
+	for (int i = 0; i < slotCount; i++) {
+		auto& rt = desc.RenderTarget[i];
+		if (rt.BlendEnable) {
+			rt.SrcBlendAlpha = D3D11_BLEND_ONE;
+			rt.DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+			rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+		}
+	}
+	if (!desc.IndependentBlendEnable) {
+		for (int i = 1; i < 8; i++)
+			desc.RenderTarget[i] = desc.RenderTarget[0];
+	}
+
+	winrt::com_ptr<ID3D11BlendState> patched;
+	if (FAILED(globals::d3d::device->CreateBlendState(&desc, patched.put()))) {
+		patchedBlendStateCache[original] = nullptr;
+		return original;
+	}
+
+	auto* raw = patched.get();
+	patchedBlendStateCache[original] = std::move(patched);
+	return raw;
+}
+
+HRESULT HDRDisplay::PresentToSwapChain(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags)
+{
+	return SwapChainPresentBottom::func(swapChain, syncInterval, flags);
+}
+
+void HDRDisplay::DrawImGuiForPresent(bool frameGenActive, bool hdrReady)
+{
+	if (frameGenActive) {
+		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	} else if (hdrReady && !globals::game::isVR && uiTexture && uiTexture->rtv && uiTexture->resource) {
+		ID3D11RenderTargetView* uiRTV = uiTexture->rtv.get();
+		D3D11_TEXTURE2D_DESC texDesc{};
+		uiTexture->resource->GetDesc(&texDesc);
+
+		if (texDesc.Width > 0) {
+			globals::d3d::context->OMSetRenderTargets(1, &uiRTV, nullptr);
+
+			D3D11_VIEWPORT uiViewport{};
+			uiViewport.Width = static_cast<float>(texDesc.Width);
+			uiViewport.Height = static_cast<float>(texDesc.Height);
+			uiViewport.MinDepth = 0.0f;
+			uiViewport.MaxDepth = 1.0f;
+			globals::d3d::context->RSSetViewports(1, &uiViewport);
+		}
+	} else {
+		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	}
+}
+
+void HDRDisplay::RunHDRBeforePresentChain(bool hdrReady)
+{
+	if (!hdrReady)
+		return;
+
+	ID3D11RenderTargetView* nullRTV = nullptr;
+	globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
+	ApplyHDR();
+}
+
+HRESULT HDRDisplay::RunPresentChainWithHDR(
+	IDXGISwapChain* swapChain,
+	UINT syncInterval,
+	UINT flags,
+	bool hdrReady,
+	bool frameGenActive,
+	const std::function<HRESULT(IDXGISwapChain*, UINT, UINT)>& presentChain)
+{
+	if (UsesDeferredPresentComposite()) {
+		SyncFramebufferUIRedirect();
+		{
+			PresentSuppressionScope suppress;
+			const HRESULT suppressedResult = presentChain(swapChain, syncInterval, flags);
+			if (FAILED(suppressedResult))
+				logger::warn("Suppressed presentChain returned {:08X} (expected S_OK)", static_cast<unsigned>(suppressedResult));
+		}
+
+		ID3D11RenderTargetView* nullRTV = nullptr;
+		globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
+		ApplyHDR();
+		const HRESULT retval = PresentToSwapChain(swapChain, syncInterval, flags);
+		ClearUIBuffer();
+		return retval;
+	}
+
+	RunHDRBeforePresentChain(hdrReady);
+
+	if (hdrReady) {
+		if (!frameGenActive) {
+			ClearUIBuffer();
+		}
+		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	}
+
+	return presentChain(swapChain, syncInterval, flags);
+}
+
+HRESULT HDRDisplay::HandleSwapChainPresent(
+	IDXGISwapChain* swapChain,
+	UINT syncInterval,
+	UINT flags,
+	const std::function<HRESULT(IDXGISwapChain*, UINT, UINT)>& presentChain)
+{
+	const bool frameGenActive = globals::features::upscaling.d3d12SwapChainActive;
+	const bool hdrReady = loaded && hdrDataCB && outputTexture && (settings.enableHDR || frameGenActive);
+
+	D3D11_VIEWPORT savedViewport{};
+	UINT viewportCount = 1;
+	globals::d3d::context->RSGetViewports(&viewportCount, &savedViewport);
+
+	DrawImGuiForPresent(frameGenActive, hdrReady);
+	globals::menu->DrawOverlay();
+	globals::d3d::context->RSSetViewports(1, &savedViewport);
+
+	return RunPresentChainWithHDR(swapChain, syncInterval, flags, hdrReady, frameGenActive, presentChain);
 }
 
 void HDRDisplay::ClearUIBuffer()
@@ -1031,7 +1263,9 @@ void HDRDisplay::ApplyHDR()
 		}
 
 		context->CSSetShader(computeShader, nullptr, 0);
+		globals::profiler->BeginPass("HDRDisplay::HDROutput");
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		globals::profiler->EndPass();
 
 		views[0] = nullptr;
 		views[1] = nullptr;
@@ -1285,7 +1519,9 @@ void HDRDisplay::ScaleUIBrightnessForFG()
 	auto computeShader = GetUIBrightnessCS();
 	if (computeShader) {
 		context->CSSetShader(computeShader, nullptr, 0);
+		globals::profiler->BeginPass("HDRDisplay::UIBrightness");
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		globals::profiler->EndPass();
 	}
 
 	// Cleanup

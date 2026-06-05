@@ -2,6 +2,7 @@
 
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Features/CSEditor.h"
 #include "Features/CloudShadows.h"
 #include "Features/CloudRelight.h"
 #include "Features/DynamicCubemaps.h"
@@ -22,6 +23,8 @@
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
+#include "Features/ScreenshotFeature.h"
+#include "Features/Skin.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -35,8 +38,8 @@
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
-#include "Features/WeatherEditor.h"
 #include "Features/WetnessEffects.h"
+#include "I18n/I18n.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
@@ -241,11 +244,13 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::extendedTranslucency,
 		&globals::features::upscaling,
 		&globals::features::renderDoc,
-		&globals::features::weatherEditor,
+		&globals::features::csEditor,
+		&globals::features::screenshotFeature,
 		&globals::features::linearLighting,
 		&globals::features::unifiedWater,
 		&globals::features::exponentialHeightFog,
-		&globals::features::hdrDisplay
+		&globals::features::hdrDisplay,
+		&globals::features::skin
 	};
 
 	if (REL::Module::IsVR()) {
@@ -336,6 +341,33 @@ bool Feature::ReapplyOverrideSettings()
 	return false;
 }
 
+std::string Feature::GetDisplayCategory() const
+{
+	const auto category = GetCategory();
+	if (category == FeatureCategories::kCharacters)
+		return T("feature.category.characters", "Characters");
+	if (category == FeatureCategories::kDisplay)
+		return T("feature.category.display", "Display");
+	if (category == FeatureCategories::kGrass)
+		return T("feature.category.grass", "Grass");
+	if (category == FeatureCategories::kLandscapeAndTextures)
+		return T("feature.category.landscape_and_textures", "Landscape & Textures");
+	if (category == FeatureCategories::kLighting)
+		return T("feature.category.lighting", "Lighting");
+	if (category == FeatureCategories::kMaterials)
+		return T("feature.category.materials", "Materials");
+	if (category == FeatureCategories::kOther)
+		return T("feature.category.other", "Other");
+	if (category == FeatureCategories::kSky)
+		return T("feature.category.sky", "Sky");
+	if (category == FeatureCategories::kUtility)
+		return T("feature.category.utility", "Utility");
+	if (category == FeatureCategories::kWater)
+		return T("feature.category.water", "Water");
+
+	return std::string(category);
+}
+
 void Feature::DrawUnloadedUI()
 {
 	// Prioritize detailed failure message if available
@@ -366,7 +398,7 @@ void Feature::DrawUnloadedUI()
 		if (description.empty()) {
 			ImGui::Spacing();
 		}
-		ImGui::TextWrapped("Key features:");
+		ImGui::TextWrapped("%s", T("feature.key_features", "Key features:"));
 		for (const auto& feature : keyFeatures) {
 			ImGui::BulletText("%s", feature.c_str());
 		}

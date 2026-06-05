@@ -5,14 +5,20 @@
 
 struct ExtendedTranslucency final : Feature
 {
-	static constexpr std::string_view MOD_ID = "150755"sv;
-
 	virtual inline std::string GetName() override { return "Extended Translucency"; }
+	virtual std::string GetDisplayName() override { return T("feature.extended_translucency.name", "Extended Translucency"); }
 	virtual inline std::string GetShortName() override { return "ExtendedTranslucency"; }
-	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "EXTENDED_TRANSLUCENCY"sv; }
 	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
-	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override;
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return { T("feature.extended_translucency.description", "Extended Translucency provides realistic rendering of thin fabric and other translucent materials.\nThis feature supports multiple material models for different types of translucent surfaces."),
+			{ T("feature.extended_translucency.key_feature_1", "Multiple translucency material models (rim edge, isotropic/anisotropic fabric)"),
+				T("feature.extended_translucency.key_feature_2", "Realistic fabric translucency with directional light transmission"),
+				T("feature.extended_translucency.key_feature_3", "Per-material override support via NIF extra data"),
+				T("feature.extended_translucency.key_feature_4", "Configurable transparency and softness controls"),
+				T("feature.extended_translucency.key_feature_5", "Performance-optimized translucency calculations") } };
+	}
 	virtual bool HasShaderDefine(RE::BSShader::Type shaderType) override { return RE::BSShader::Type::Lighting == shaderType; };
 	virtual void PostPostLoad() override;
 	virtual void DrawSettings() override;

@@ -1,8 +1,12 @@
 #include "GrassCollision.h"
 
+#include "Globals.h"
+#include "I18n/I18n.h"
 #include "State.h"
 #include "Utils/ActorUtils.h"
 #include "Utils/D3D.h"
+
+#define I18N_KEY_PREFIX "feature.grass_collision."
 
 static constexpr uint MAX_BOUNDING_BOXES = 64;
 static constexpr uint MAX_COLLISIONS_PER_BOUNDING_BOX = 64;
@@ -24,8 +28,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void GrassCollision::DrawSettings()
 {
-	if (ImGui::TreeNodeEx("Grass Collision", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Enable Grass Collision", (bool*)&settings.EnableGrassCollision);
+	if (ImGui::TreeNodeEx(T(TKEY("grass_collision"), "Grass Collision"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox(T(TKEY("enable"), "Enable Grass Collision"), (bool*)&settings.EnableGrassCollision);
 		ImGui::TreePop();
 	}
 }
@@ -396,7 +400,9 @@ void GrassCollision::UpdateCollisionTexture()
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
 		context->CSSetShader(GetCollisionUpdateCS(), nullptr, 0);
+		globals::profiler->BeginPass("GrassCollision::CollisionUpdate");
 		context->Dispatch(512 / 8, 512 / 8, 1);
+		globals::profiler->EndPass();
 	}
 
 	context->CSSetShader(nullptr, nullptr, 0);
@@ -407,3 +413,4 @@ void GrassCollision::UpdateCollisionTexture()
 	ID3D11UnorderedAccessView* null_uavs[1] = { nullptr };
 	context->CSSetUnorderedAccessViews(0, 1, null_uavs, nullptr);
 }
+#undef I18N_KEY_PREFIX

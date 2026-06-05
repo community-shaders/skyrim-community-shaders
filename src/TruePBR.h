@@ -15,6 +15,7 @@ struct TruePBR : Feature
 {
 public:
 	virtual std::string GetName() override { return "True PBR"; }
+	virtual std::string GetDisplayName() override { return T("feature.true_pbr.name", "True PBR"); }
 	virtual std::string GetShortName() override { return "TruePBR"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
 	virtual bool IsCore() const override { return true; }
@@ -42,10 +43,23 @@ public:
 	virtual void Prepass() override;
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
+
+	virtual void SaveSettings(json& o_json) override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void RestoreDefaultSettings() override;
+
+	struct alignas(16) Settings
+	{
+		float VertexAOStrength = 1.0f;
+		uint pad[3];
+	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
+
+	Settings settings;
 	bool TESObjectLAND_SetupMaterial(RE::TESObjectLAND* land);
 	bool BSLightingShader_SetupMaterial(RE::BSLightingShader* shader, RE::BSLightingShaderMaterialBase const* material);
 
-	void SetShaderResouces(ID3D11DeviceContext* a_context);
+	void SetShaderResources(ID3D11DeviceContext* a_context);
 	virtual void GenerateShaderPermutations(RE::BSShader* shader) override;
 
 	void SetupGlintsTexture();

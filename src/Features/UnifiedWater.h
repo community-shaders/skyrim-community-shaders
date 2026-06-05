@@ -8,19 +8,19 @@
 struct UnifiedWater : OverlayFeature
 {
 	virtual inline std::string GetName() override { return "Unified Water"; }
+	virtual std::string GetDisplayName() override { return T("feature.unified_water.name", "Unified Water"); }
 	virtual inline std::string GetShortName() override { return "UnifiedWater"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "UNIFIED_WATER"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kWater; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Unified Water provides a comprehensive fix to water LOD mismatch by replacing distant water tiles with LOD0 (Close Water).",
-			{ "Unifies distant and close water appearance, streamlining all lighting visuals.",
-				"Completely and fundamentally resolves water LOD mismatch issues.",
-				"Provides background systems for water geometry rendering, allowing more advanced water effects.",
-				"Improves vanilla performance by using optimized water meshes for distant water." }
-		};
-	}
+		return { T("feature.unified_water.description", "Unified Water provides a comprehensive fix to water LOD mismatch by replacing distant water tiles with LOD0 (Close Water)."),
+			{ T("feature.unified_water.key_feature_1", "Unifies distant and close water appearance, streamlining all lighting visuals."),
+				T("feature.unified_water.key_feature_2", "Completely and fundamentally resolves water LOD mismatch issues."),
+				T("feature.unified_water.key_feature_3", "Provides background systems for water geometry rendering, allowing more advanced water effects."),
+				T("feature.unified_water.key_feature_4", "Improves vanilla performance by using optimized water meshes for distant water.") } };
+	};
+
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	struct Settings
@@ -84,6 +84,14 @@ struct UnifiedWater : OverlayFeature
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	class MenuOpenCloseEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
+
+		static bool Register();
+	};
+
 	virtual void DrawSettings() override;
 
 	virtual void DrawOverlay() override;
@@ -96,6 +104,7 @@ struct UnifiedWater : OverlayFeature
 
 	virtual void RestoreDefaultSettings() override;
 
+	virtual bool IsCore() const override { return true; }
 	virtual bool SupportsVR() override { return true; }
 
 	virtual void PostPostLoad() override;
@@ -113,13 +122,11 @@ private:
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
 
-	std::atomic<RE::TESWorldSpace*> currentPlayerWorldSpace{ nullptr };
-	std::atomic<bool> pendingChildWsCull{ false };
-	// Game-thread TES snapshot used by deferred child-worldspace cull fallbacks.
-	std::atomic<RE::TES*> cachedTes{ nullptr };
-
-	void TryCompleteDeferredChildWorldspaceCull(RE::TES* tes = nullptr);
+	std::atomic_bool exteriorWorldspaceActive{ false };
+	std::atomic_bool mapMenuOpen{ false };
 
 	void SetFlowmapTex() const;
+	bool IsExteriorWorldspaceActive() const;
+	void UpdateWaterLODCull() const;
 	static bool LoadOrderChanged();
 };

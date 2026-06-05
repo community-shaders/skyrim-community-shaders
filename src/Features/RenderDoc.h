@@ -36,6 +36,8 @@ public:
 	// Core RenderDoc functionality
 	bool IsAvailable() const { return renderDocApi != nullptr; }
 	void TriggerCapture();
+	void TriggerMultiFrameCapture(uint32_t a_frameCount);
+	bool HandleCaptureHotkey(uint32_t a_vkKey);
 	void SetCaptureFilePathTemplate(const std::string& a_template);
 	std::string GetCapturesDirectory() const;
 	bool IsCapturing() const;
@@ -48,13 +50,17 @@ public:
 
 	// Feature overrides
 	std::string GetName() override { return "RenderDoc"; }
+	virtual std::string GetDisplayName() override { return T("feature.render_doc.name", "RenderDoc"); }
 	std::string GetShortName() override { return "RenderDoc"; }
 	std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 	bool IsCore() const override { return true; }
 	bool IsInMenu() const override { return true; }
 	std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return { "In-application RenderDoc capture support and convenience UI.", { "Attach comments to captures that appear in RenderDoc UI", "Open captures folder", "Capture file management" } };
+		return { T("feature.render_doc.description", "In-application RenderDoc capture support and convenience UI."),
+			{ T("feature.render_doc.key_feature_1", "Attach comments to captures that appear in RenderDoc UI"),
+				T("feature.render_doc.key_feature_2", "Open captures folder"),
+				T("feature.render_doc.key_feature_3", "Capture file management") } };
 	}
 	bool SupportsVR() override { return true; }
 	std::string_view GetShaderDefineName() override { return ""; }
@@ -87,6 +93,12 @@ public:
 	std::string GetOverlayWarningMessage() const;
 
 private:
+	bool TriggerConfiguredCapture(bool a_checkDiskSpace = true);
+	uint32_t GetCaptureFrameCount() const;
+	void SetCaptureFrameCount(uint32_t a_frameCount);
+	uint64_t GetRequiredCaptureSpaceBytes() const;
+	bool HasSufficientDiskSpaceForConfiguredCapture(uint64_t* a_requiredSpaceBytes = nullptr) const;
+
 	// Cache management for capture files
 	void RefreshCaptureFileCache();
 	const std::vector<CaptureFileInfo>& GetCachedCaptureFiles();
@@ -112,6 +124,7 @@ public:
 
 	// RenderDoc capture enable setting
 	bool enableRenderDocCapture = false;
+	uint32_t captureFrameCount = 1;
 
 	// Track the last capture count we've processed for automatic comments
 	uint32_t lastCaptureCount = 0;
@@ -125,7 +138,10 @@ public:
 	// Track files that failed to delete for UI feedback
 	std::unordered_map<std::filesystem::path, std::string> failedDeletions;
 
-	static constexpr uint64_t kMinCaptureSpaceBytes = 100ULL * 1024ULL * 1024ULL;  // 100 MB minimum free space
-	static constexpr uint32_t kCacheRefreshIntervalSeconds = 5;                    // Cache refresh interval
-	static constexpr size_t kCommentsBufferSize = 1024;                            // Size of comments input buffer
+	static constexpr uint64_t kMinCaptureSpaceBytes = 100ULL * 1024ULL * 1024ULL;   // 100 MB minimum free space floor
+	static constexpr uint64_t kObservedPerFrameBytes = 256ULL * 1024ULL * 1024ULL;  // ~256 MB per frame observed for multi-frame captures
+	static constexpr uint32_t kCacheRefreshIntervalSeconds = 5;                     // Cache refresh interval
+	static constexpr size_t kCommentsBufferSize = 1024;                             // Size of comments input buffer
+	static constexpr uint32_t kMinCaptureFrameCount = 1;
+	static constexpr uint32_t kMaxCaptureFrameCount = 120;
 };
