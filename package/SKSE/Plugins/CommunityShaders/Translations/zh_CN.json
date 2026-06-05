@@ -2102,15 +2102,5 @@
     "ui.copy": "复制",
     "ui.dont_ask_again": "不再提示",
     "ui.search": "搜索...",
-    "ui.search_features": "搜索功能...",
-    "feature.sky_sync.sun_position_offsets": "太阳位置偏移",
-    "feature.sky_sync.sun_position_offsets_desc": "在日出/日落时移动太阳高度。重置天气以查看更改。",
-    "feature.sky_sync.sunrise_begin": "日出开始（小时）",
-    "feature.sky_sync.sunrise_begin_tooltip": "太阳开始升起的时间偏移。",
-    "feature.sky_sync.sunrise_end": "日出结束（小时）",
-    "feature.sky_sync.sunrise_end_tooltip": "太阳完成升起的时间偏移。",
-    "feature.sky_sync.sunset_begin": "日落开始（小时）",
-    "feature.sky_sync.sunset_begin_tooltip": "太阳开始落下的时间偏移。",
-    "feature.sky_sync.sunset_end": "日落结束（小时）",
-    "feature.sky_sync.sunset_end_tooltip": "太阳完成落下的时间偏移。"
+    "ui.search_features": "搜索功能..."
 }
