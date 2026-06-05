@@ -426,7 +426,8 @@ void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float
 		bool secundaValid = isValidDir(dirs[static_cast<int>(Caster::Secunda)]);
 
 		if (!masserValid && !secundaValid) {
-			// No valid night caster — keep current state
+			// No valid night caster — default to directly above (shadows point down)
+			currentDir = { 0.0f, 0.0f, 1.0f };
 			SetLighting(sky, currentDir);
 			return;
 		}
