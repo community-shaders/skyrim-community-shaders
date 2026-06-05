@@ -81,29 +81,6 @@ void SkySync::DrawSettings()
 	ImGui::SliderFloat("Crescent Intensity", &settings.CrescentMoonIntensity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 	ImGui::SliderFloat("Full Moon Intensity", &settings.FullMoonIntensity, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
-	ImGui::Spacing();
-	ImGui::Spacing();
-	if (ImGui::TreeNodeEx(T(TKEY("sun_position_offsets"), "Sun Position Offsets"), ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::TextWrapped("%s", T(TKEY("sun_position_offsets_desc"), "Moves sun height during sunrise/sunset. Reset weather to see changes."));
-		ImGui::SliderFloat(T(TKEY("sunrise_begin"), "Sunrise Begin (Hours)"), &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted(T(TKEY("sunrise_begin_tooltip"), "Offset for when the sun starts rising."));
-		}
-		ImGui::SliderFloat(T(TKEY("sunrise_end"), "Sunrise End (Hours)"), &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted(T(TKEY("sunrise_end_tooltip"), "Offset for when the sun finishes rising."));
-		}
-		ImGui::SliderFloat(T(TKEY("sunset_begin"), "Sunset Begin (Hours)"), &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted(T(TKEY("sunset_begin_tooltip"), "Offset for when the sun starts setting."));
-		}
-		ImGui::SliderFloat(T(TKEY("sunset_end"), "Sunset End (Hours)"), &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted(T(TKEY("sunset_end_tooltip"), "Offset for when the sun finishes setting."));
-		}
-		ImGui::TreePop();
-	}
-
 	if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_None)) {
 		static constexpr const char* CasterNames[] = { "Sun", "Masser", "Secunda", "None" };
 		static constexpr const char* PhaseNames[] = { "Full", "Waning Gibbous", "Waning Quarter", "Waning Crescent", "New", "Waxing Crescent", "Waxing Quarter", "Waxing Gibbous" };
@@ -226,14 +203,18 @@ void SkySync::Sky_Update::thunk(RE::Sky* sky)
 
 void SkySync::Update(const RE::Sky* sky)
 {
-	if (!settings.Enabled)
+	if (!settings.Enabled) {
+		currentDim = 1.0f;
 		return;
+	}
 
 	const auto sun = sky->sun;
 	const auto climate = sky->currentClimate;
 	const auto player = RE::PlayerCharacter::GetSingleton();
-	if (!sun || !climate || !player)
+	if (!sun || !climate || !player) {
+		currentDim = 1.0f;
 		return;
+	}
 
 	const auto cell = player->GetParentCell();
 
@@ -247,6 +228,7 @@ void SkySync::Update(const RE::Sky* sky)
 
 	// Exterior worldspaces always run; interior cells require the sunlight-shadows flag.
 	if (cell && cell->IsInteriorCell() && !cell->cellFlags.all(static_cast<RE::TESObjectCELL::Flag>(CellFlagExt::kSunlightShadows))) {
+		currentDim = 1.0f;
 		return;
 	}
 
@@ -363,9 +345,6 @@ void SkySync::ProcessMoon(const RE::Sky* sky, const Caster type, RE::NiPoint3 di
 	float4 color = Util::Moon::GetBlendColor(moon, baseColor, settings.NewMoonIntensity, settings.CrescentMoonIntensity, settings.FullMoonIntensity);
 	colors[idx] = color;
 
-	if (currentDim > 0.0f)
-		return;
-
 	const auto src = static_cast<MoonLightSource>(settings.MoonLightSource);
 	const bool isValidSource = src == MoonLightSource::Brightest || (src == MoonLightSource::Masser && type == Caster::Masser) || (src == MoonLightSource::Secunda && type == Caster::Secunda);
 	if (!isValidSource)
@@ -438,11 +417,25 @@ void SkySync::ShadowFader::Reset()
 
 void SkySync::ShadowFader::Update(const RE::Sky* sky, RE::NiPoint3 dirs[], float intensities[], float fadeDuration)
 {
+	auto isValidDir = [](const RE::NiPoint3& d) { return d.x != 0.0f || d.y != 0.0f || d.z != 0.0f; };
+
 	Caster best;
 
 	if (globals::features::skySync.currentDim <= 0.0f) {
-		best = Caster::Masser;
-		if (intensities[static_cast<int>(Caster::Secunda)] > intensities[static_cast<int>(Caster::Masser)])
+		bool masserValid = isValidDir(dirs[static_cast<int>(Caster::Masser)]);
+		bool secundaValid = isValidDir(dirs[static_cast<int>(Caster::Secunda)]);
+
+		if (!masserValid && !secundaValid) {
+			// No valid night caster — keep current state
+			SetLighting(sky, currentDir);
+			return;
+		}
+
+		if (!masserValid)
+			best = Caster::Secunda;
+		else if (!secundaValid || intensities[static_cast<int>(Caster::Secunda)] <= intensities[static_cast<int>(Caster::Masser)])
+			best = Caster::Masser;
+		else
 			best = Caster::Secunda;
 	} else {
 		best = Caster::Sun;
@@ -527,66 +520,5 @@ inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 }
 
 
-
-void SkySync::Sky_OnNewClimate::thunk(RE::Sky* sky)
-{
-	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled && sky && sky->currentClimate)
-		singleton.timings.Update(sky->currentClimate);
-	func(sky);
-}
-
-void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
-{
-	const auto updateMoonTexture = moon->updateMoonTexture;
-
-	func(moon, sky);
-
-	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled && updateMoonTexture != moon->updateMoonTexture) {
-		// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
-		// Allows for compatability with other mods that don't directly update the in-game phase values
-		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().shaderProperty.get());
-
-		const auto name = moonShaderProperty->GetBaseTexture()->name.c_str();
-		const size_t len = std::strlen(name);
-		std::string lower;
-		lower.reserve(len);
-		for (size_t i = 0; i < len; ++i) {
-			lower.push_back(static_cast<char>(std::tolower(name[i])));
-		}
-
-		static constexpr std::array<std::pair<std::string_view, RE::Moon::Phases::Phase>, 8> Lookup{
-			{ { "full", RE::Moon::Phases::Phase::kFull },
-				{ "three_wan", RE::Moon::Phases::Phase::kWaningGibbous },
-				{ "half_wan", RE::Moon::Phases::Phase::kWaningQuarter },
-				{ "one_wan", RE::Moon::Phases::Phase::kWaningCrescent },
-				{ "new", RE::Moon::Phases::Phase::kNewMoon },
-				{ "one_wax", RE::Moon::Phases::Phase::kWaxingCrescent },
-				{ "half_wax", RE::Moon::Phases::Phase::kWaxingQuarter },
-				{ "three_wax", RE::Moon::Phases::Phase::kWaxingGibbous } }
-		};
-
-		RE::Moon::Phases::Phase phase = RE::Moon::Phases::Phase::kFull;
-		for (auto& [suffix, id] : Lookup) {
-			if (lower.find(suffix) != std::string::npos) {
-				phase = id;
-				break;
-			}
-		}
-
-		float* intensityFactor = moon == sky->masser ? &singleton.masserPhaseIntensityFactor : &singleton.secundaPhaseIntensityFactor;
-		if (phase == RE::Moon::Phases::Phase::kNewMoon) {
-			*intensityFactor = NewMoonIntensityFactor;
-		} else {
-			const float t = (abs(static_cast<float>(phase) - static_cast<float>(RE::Moon::Phases::Phase::kNewMoon)) - 1.0f) / 3.0f;
-			*intensityFactor = std::lerp(CrescentMoonIntensityFactor, FullMoonIntensityFactor, t);
-		}
-	}
-}
-
-inline float SkySync::SmoothStep(const float start, const float end, const float x)
-{
-	const float t = std::clamp((x - start) / (end - start), 0.0f, 1.0f);
-	return t * t * (3.0f - 2.0f * t);
-}
 
 #undef I18N_KEY_PREFIX
