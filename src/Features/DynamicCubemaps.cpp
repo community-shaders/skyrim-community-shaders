@@ -3,9 +3,12 @@
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 
+#include "I18n/I18n.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/D3D.h"
+
+#define I18N_KEY_PREFIX "feature.dynamic_cubemaps."
 
 constexpr auto MIPLEVELS = 8;
 
@@ -26,28 +29,28 @@ std::vector<std::pair<std::string_view, std::string_view>> DynamicCubemaps::GetS
 
 void DynamicCubemaps::DrawSettings()
 {
-	if (ImGui::TreeNodeEx("Screen Space Reflections", ImGuiTreeNodeFlags_DefaultOpen)) {
-		recompileFlag |= ImGui::Checkbox("Enable Screen Space Reflections", reinterpret_cast<bool*>(&settings.EnabledSSR));
+	if (ImGui::TreeNodeEx(T(TKEY("screen_space_reflections"), "Screen Space Reflections"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		recompileFlag |= ImGui::Checkbox(T(TKEY("enable_ssr"), "Enable Screen Space Reflections"), reinterpret_cast<bool*>(&settings.EnabledSSR));
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Enable Screen Space Reflections on Water");
+			ImGui::Text("%s", T(TKEY("enable_ssr_tooltip"), "Enable Screen Space Reflections on Water"));
 			if (REL::Module::IsVR() && !enabledAtBoot) {
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-				ImGui::Text(
-					"A restart is required to enable in VR. "
-					"Save Settings after enabling and restart the game.");
+				ImGui::Text("%s", T(TKEY("vr_restart_required"),
+									  "A restart is required to enable in VR. "
+									  "Save Settings after enabling and restart the game."));
 				ImGui::PopStyleColor();
 			}
 		}
 		ImGui::TreePop();
 	}
 
-	if (ImGui::TreeNodeEx("Dynamic Cubemap Creator", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text("You must enable creator mode by adding the shader define CREATOR");
-		ImGui::Checkbox("Enable Creator", reinterpret_cast<bool*>(&settings.EnabledCreator));
+	if (ImGui::TreeNodeEx(T(TKEY("dynamic_cubemap_creator"), "Dynamic Cubemap Creator"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text("%s", T(TKEY("creator_info"), "You must enable creator mode by adding the shader define CREATOR"));
+		ImGui::Checkbox(T(TKEY("enable_creator"), "Enable Creator"), reinterpret_cast<bool*>(&settings.EnabledCreator));
 		if (settings.EnabledCreator) {
-			ImGui::ColorEdit3("Color", reinterpret_cast<float*>(&settings.CubemapColor));
-			ImGui::SliderFloat("Roughness", &settings.CubemapColor.w, 0.0f, 1.0f, "%.2f");
-			if (ImGui::Button("Export")) {
+			ImGui::ColorEdit3(T(TKEY("color"), "Color"), reinterpret_cast<float*>(&settings.CubemapColor));
+			ImGui::SliderFloat(T(TKEY("roughness"), "Roughness"), &settings.CubemapColor.w, 0.0f, 1.0f, "%.2f");
+			if (ImGui::Button(T(TKEY("export"), "Export"))) {
 				auto device = globals::d3d::device;
 				auto context = globals::d3d::context;
 
@@ -120,7 +123,7 @@ void DynamicCubemaps::DrawSettings()
 		ImGui::TreePop();
 	}
 	if (REL::Module::IsVR()) {
-		if (ImGui::TreeNodeEx("Advanced VR Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::TreeNodeEx(T(TKEY("advanced_vr_settings"), "Advanced VR Settings"), ImGuiTreeNodeFlags_DefaultOpen)) {
 			Util::RenderImGuiSettingsTree(iniVRCubeMapSettings, "VR");
 			Util::RenderImGuiSettingsTree(hiddenVRCubeMapSettings, "hiddenVR");
 			ImGui::TreePop();
@@ -847,3 +850,4 @@ void DynamicCubemaps::Reset()
 		fakeReflections = true;
 	}
 }
+#undef I18N_KEY_PREFIX

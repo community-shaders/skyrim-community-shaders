@@ -50,13 +50,17 @@ public:
 
 	// Feature overrides
 	std::string GetName() override { return "RenderDoc"; }
+	virtual std::string GetDisplayName() override { return T("feature.render_doc.name", "RenderDoc"); }
 	std::string GetShortName() override { return "RenderDoc"; }
 	std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 	bool IsCore() const override { return true; }
 	bool IsInMenu() const override { return true; }
 	std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return { "In-application RenderDoc capture support and convenience UI.", { "Attach comments to captures that appear in RenderDoc UI", "Open captures folder", "Capture file management" } };
+		return { T("feature.render_doc.description", "In-application RenderDoc capture support and convenience UI."),
+			{ T("feature.render_doc.key_feature_1", "Attach comments to captures that appear in RenderDoc UI"),
+				T("feature.render_doc.key_feature_2", "Open captures folder"),
+				T("feature.render_doc.key_feature_3", "Capture file management") } };
 	}
 	bool SupportsVR() override { return true; }
 	std::string_view GetShaderDefineName() override { return ""; }

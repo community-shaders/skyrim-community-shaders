@@ -16,6 +16,7 @@ private:
 
 public:
 	virtual inline std::string GetName() override { return "HDR Display"; }
+	virtual std::string GetDisplayName() override { return T("feature.hdr_display.name", "HDR Display"); }
 	virtual inline std::string GetShortName() override { return "HDRDisplay"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetCategory() const override { return "Display"; }
@@ -30,15 +31,11 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Real High Dynamic Range output for HDR displays.",
-			{
-				"HDR10 output support (10-bit) with upgraded HDR buffers (16-Bit), and fully unclamped rendering pipeline for true HDR values.",
-				"HDR-aware tonemapping based on Skyrim's ISHDR path (Reinhard/Hejl-Burgess-Dawson), preserving the vanilla look while improving highlight handling on HDR displays.",
-				"Configurable paper white and peak brightness.",
-			}
-		};
-	}
+		return { T("feature.hdr_display.description", "Real High Dynamic Range output for HDR displays."),
+			{ T("feature.hdr_display.key_feature_1", "HDR10 output support (10-bit) with upgraded HDR buffers (16-Bit), and fully unclamped rendering pipeline for true HDR values."),
+				T("feature.hdr_display.key_feature_2", "HDR-aware tonemapping based on Skyrim's ISHDR path (Reinhard/Hejl-Burgess-Dawson), preserving the vanilla look while improving highlight handling on HDR displays."),
+				T("feature.hdr_display.key_feature_3", "Configurable paper white and peak brightness.") } };
+	};
 
 	struct Settings
 	{

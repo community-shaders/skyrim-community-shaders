@@ -2,11 +2,14 @@
 #include "InverseSquareLighting.h"
 #include "LinearLighting.h"
 
+#include "I18n/I18n.h"
 #include "Menu/ThemeManager.h"
-#include "Utils/ExternalEmittance.h"
 #include "Shadercache.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/ExternalEmittance.h"
+
+#define I18N_KEY_PREFIX "feature.light_limit_fix."
 
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 static constexpr uint MAX_LIGHTS = 1024;
@@ -15,30 +18,30 @@ void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
 
-	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx(T(TKEY("statistics"), "Statistics"), ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
 
 		ImGui::TreePop();
 	}
 
 	///////////////////////////////
-	ImGui::SeparatorText("Debug");
+	ImGui::SeparatorText(T(TKEY("debug"), "Debug"));
 
-	if (ImGui::TreeNode("Light Limit Visualization")) {
-		ImGui::Checkbox("Enable Lights Visualisation", &settings.EnableLightsVisualisation);
+	if (ImGui::TreeNode(T(TKEY("light_limit_vis"), "Light Limit Visualization"))) {
+		ImGui::Checkbox(T(TKEY("enable_lights_vis"), "Enable Lights Visualisation"), &settings.EnableLightsVisualisation);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Enables visualization of the light limit\n");
+			ImGui::Text("%s", T(TKEY("enable_lights_vis_tooltip"), "Enables visualization of the light limit\n"));
 		}
 
 		{
 			static const char* comboOptions[] = { "Light Limit", "Strict Lights Count", "Clustered Lights Count", "Shadow Mask" };
-			ImGui::Combo("Lights Visualisation Mode", (int*)&settings.LightsVisualisationMode, comboOptions, 4);
+			ImGui::Combo(T(TKEY("lights_vis_mode"), "Lights Visualisation Mode"), (int*)&settings.LightsVisualisationMode, comboOptions, 4);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					" - Visualise the light limit. Red when the \"strict\" light limit is reached (portal-strict lights).\n"
-					" - Visualise the number of strict lights.\n"
-					" - Visualise the number of clustered lights.\n"
-					" - Visualize the Shadow Mask.\n");
+				ImGui::Text("%s", T(TKEY("lights_vis_mode_tooltip"),
+									  " - Visualise the light limit. Red when the \"strict\" light limit is reached (portal-strict lights).\n"
+									  " - Visualise the number of strict lights.\n"
+									  " - Visualise the number of clustered lights.\n"
+									  " - Visualize the Shadow Mask.\n"));
 			}
 		}
 		currentEnableLightsVisualisation = settings.EnableLightsVisualisation;
@@ -59,7 +62,7 @@ void LightLimitFix::DrawOverlay()
 	const float pos = ThemeManager::Constants::OVERLAY_WINDOW_POSITION * Util::GetUIScale();
 	ImGui::SetNextWindowPos(ImVec2(pos, pos), ImGuiCond_Always);
 	ImGui::Begin("##LLFDebug", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
-	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "DEBUG FEATURE - LIGHT LIMIT VISUALISATION ENABLED");
+	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", T(TKEY("debug_feature_enabled"), "DEBUG FEATURE - LIGHT LIMIT VISUALISATION ENABLED"));
 	ImGui::End();
 }
 
@@ -582,3 +585,4 @@ void LightLimitFix::Hooks::BSWaterShader_SetupGeometry::thunk(RE::BSShader* This
 	singleton.BSLightingShader_SetupGeometry_Before(Pass);
 	singleton.BSLightingShader_SetupGeometry_After(Pass);
 };
+#undef I18N_KEY_PREFIX

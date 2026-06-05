@@ -1,8 +1,11 @@
 #include "SubsurfaceScattering.h"
 
+#include "../I18n/I18n.h"
 #include "Deferred.h"
 #include "ShaderCache.h"
 #include "State.h"
+
+#define I18N_KEY_PREFIX "feature.sss."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SubsurfaceScattering::DiffusionProfile,
 	BlurRadius, Thickness, Strength, Falloff)
@@ -20,75 +23,75 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void SubsurfaceScattering::DrawSettings()
 {
-	if (ImGui::TreeNodeEx("Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Enable Character Lighting", (bool*)&settings.EnableCharacterLighting);
+	if (ImGui::TreeNodeEx(T(TKEY("settings"), "Settings"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox(T(TKEY("enable_character_lighting"), "Enable Character Lighting"), (bool*)&settings.EnableCharacterLighting);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Vanilla feature, not recommended.");
+			ImGui::Text("%s", T(TKEY("enable_character_lighting_tooltip"), "Vanilla feature, not recommended."));
 		}
 		if (settings.EnableCharacterLighting) {
-			ImGui::SliderFloat("Strength", &settings.CharacterLightingStrength, 0, 5, "%.2f");
+			ImGui::SliderFloat(T(TKEY("strength"), "Strength"), &settings.CharacterLightingStrength, 0, 5, "%.2f");
 		}
 
-		ImGui::RadioButton("Separable SSS", &settings.SSMode, 0);
+		ImGui::RadioButton(T(TKEY("separable_sss"), "Separable SSS"), &settings.SSMode, 0);
 		ImGui::SameLine();
-		ImGui::RadioButton("Burley", &settings.SSMode, 1);
+		ImGui::RadioButton(T(TKEY("burley"), "Burley"), &settings.SSMode, 1);
 
 		if (settings.SSMode == 0) {
-			if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat("Blur Radius", &settings.BaseProfile.BlurRadius, 0, 3, "%.2f");
+			if (ImGui::TreeNodeEx(T(TKEY("base_profile"), "Base Profile"), ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::SliderFloat(T(TKEY("blur_radius"), "Blur Radius"), &settings.BaseProfile.BlurRadius, 0, 3, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Blur radius.");
+					ImGui::Text("%s", T(TKEY("blur_radius_tooltip"), "Blur radius."));
 				}
 
-				ImGui::SliderFloat("Thickness", &settings.BaseProfile.Thickness, 0, 3, "%.2f");
+				ImGui::SliderFloat(T(TKEY("thickness"), "Thickness"), &settings.BaseProfile.Thickness, 0, 3, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Blur radius relative to depth.");
+					ImGui::Text("%s", T(TKEY("thickness_tooltip"), "Blur radius relative to depth."));
 				}
 
-				updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.BaseProfile.Strength);
-				updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.BaseProfile.Falloff);
+				updateKernels = updateKernels || ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.BaseProfile.Strength);
+				updateKernels = updateKernels || ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.BaseProfile.Falloff);
 
 				ImGui::TreePop();
 			}
 
-			if (ImGui::TreeNodeEx("Human Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat("Blur Radius", &settings.HumanProfile.BlurRadius, 0, 3, "%.2f");
+			if (ImGui::TreeNodeEx(T(TKEY("human_profile"), "Human Profile"), ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::SliderFloat(T(TKEY("blur_radius"), "Blur Radius"), &settings.HumanProfile.BlurRadius, 0, 3, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Blur radius.");
+					ImGui::Text("%s", T(TKEY("blur_radius_tooltip"), "Blur radius."));
 				}
 
-				ImGui::SliderFloat("Thickness", &settings.HumanProfile.Thickness, 0, 3, "%.2f");
+				ImGui::SliderFloat(T(TKEY("thickness"), "Thickness"), &settings.HumanProfile.Thickness, 0, 3, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Blur radius relative to depth.");
+					ImGui::Text("%s", T(TKEY("thickness_tooltip"), "Blur radius relative to depth."));
 				}
 
-				updateKernels = updateKernels || ImGui::ColorEdit3("Strength", (float*)&settings.HumanProfile.Strength);
-				updateKernels = updateKernels || ImGui::ColorEdit3("Falloff", (float*)&settings.HumanProfile.Falloff);
+				updateKernels = updateKernels || ImGui::ColorEdit3(T(TKEY("strength"), "Strength"), (float*)&settings.HumanProfile.Strength);
+				updateKernels = updateKernels || ImGui::ColorEdit3(T(TKEY("falloff"), "Falloff"), (float*)&settings.HumanProfile.Falloff);
 
 				ImGui::TreePop();
 			}
 		} else if (settings.SSMode == 1) {
-			ImGui::SliderInt("Burley Samples", (int*)&settings.BurleySamples, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
-			if (ImGui::TreeNodeEx("Base Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::ColorEdit3("Mean Free Path Color", (float*)&settings.MeanFreePathBase);
+			ImGui::SliderInt(T(TKEY("burley_samples"), "Burley Samples"), (int*)&settings.BurleySamples, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+			if (ImGui::TreeNodeEx(T(TKEY("base_profile"), "Base Profile"), ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::ColorEdit3(T(TKEY("mean_free_path_color"), "Mean Free Path Color"), (float*)&settings.MeanFreePathBase);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance.");
+					ImGui::Text("%s", T(TKEY("mean_free_path_color_tooltip"), "Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance."));
 				}
-				ImGui::SliderFloat("Mean Free Path Distance", &settings.MeanFreePathBase.w, 0.01f, 10.0f, "%.2f");
+				ImGui::SliderFloat(T(TKEY("mean_free_path_distance"), "Mean Free Path Distance"), &settings.MeanFreePathBase.w, 0.01f, 10.0f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Controls the distance that Mean Free Path Color goes into subsurface.");
+					ImGui::Text("%s", T(TKEY("mean_free_path_distance_tooltip"), "Controls the distance that Mean Free Path Color goes into subsurface."));
 				}
 				ImGui::TreePop();
 			}
 
-			if (ImGui::TreeNodeEx("Human Profile", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::ColorEdit3("Mean Free Path Color", (float*)&settings.MeanFreePathHuman);
+			if (ImGui::TreeNodeEx(T(TKEY("human_profile"), "Human Profile"), ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::ColorEdit3(T(TKEY("mean_free_path_color"), "Mean Free Path Color"), (float*)&settings.MeanFreePathHuman);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance.");
+					ImGui::Text("%s", T(TKEY("mean_free_path_color_tooltip"), "Controls how far light goes into the subsurface in the red, green, and blue channel. It is scaled by the Mean Free Path Distance."));
 				}
-				ImGui::SliderFloat("Mean Free Path Distance", &settings.MeanFreePathHuman.w, 0.01f, 10.0f, "%.2f");
+				ImGui::SliderFloat(T(TKEY("mean_free_path_distance"), "Mean Free Path Distance"), &settings.MeanFreePathHuman.w, 0.01f, 10.0f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Controls the distance that Mean Free Path Color goes into subsurface.");
+					ImGui::Text("%s", T(TKEY("mean_free_path_distance_tooltip"), "Controls the distance that Mean Free Path Color goes into subsurface."));
 				}
 				ImGui::TreePop();
 			}
@@ -455,3 +458,5 @@ void SubsurfaceScattering::Hooks::BSLightingShader_SetupGeometry::thunk(RE::BSSh
 	globals::features::subsurfaceScattering.BSLightingShader_SetupSkin(Pass);
 	func(This, Pass, RenderFlags);
 }
+
+#undef I18N_KEY_PREFIX

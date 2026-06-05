@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <format>
 
+#include "../I18n/I18n.h"
 #include "EditorWindow.h"
 #include "State.h"
 #include "Util.h"
 #include "Utils/UI.h"
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
+
+#define I18N_KEY_PREFIX "cs_editor."
 
 void Widget::Save()
 {
@@ -190,17 +193,17 @@ bool Widget::HasSavedFile() const
 void Widget::DrawMenu()
 {
 	if (ImGui::BeginMenuBar()) {
-		if (ImGui::BeginMenu("Menu")) {
-			if (ImGui::MenuItem("Save")) {
+		if (ImGui::BeginMenu(T(TKEY("menu"), "Menu"))) {
+			if (ImGui::MenuItem(T(TKEY("save"), "Save"))) {
 				Save();
 			}
-			if (ImGui::MenuItem("Load")) {
+			if (ImGui::MenuItem(T(TKEY("load"), "Load"))) {
 				Load();
 			}
-			if (ImGui::MenuItem("Delete Saved File")) {
+			if (ImGui::MenuItem(T(TKEY("delete_saved_file"), "Delete Saved File"))) {
 				ImGui::OpenPopup("DeleteConfirmation");
 			}
-			if (ImGui::MenuItem("Revert to Game Values")) {
+			if (ImGui::MenuItem(T(TKEY("revert_to_game_values"), "Revert to Game Values"))) {
 				RevertChanges();
 			}
 
@@ -221,7 +224,7 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 
 	if (auto popup = Util::CenteredPopupModal(popupId)) {
 		deleteConfirmationFrame = ImGui::GetFrameCount();
-		ImGui::Text("Are you sure you want to delete the saved settings file?");
+		ImGui::Text("%s", T(TKEY("confirm_delete_saved_file"), "Are you sure you want to delete the saved settings file?"));
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
@@ -234,13 +237,13 @@ void Widget::DrawDeleteConfirmationModal(const char* popupId)
 
 		ImGui::SetCursorPosX(cursorX);
 
-		if (ImGui::Button("Yes, Delete", ImVec2(buttonWidth, 0))) {
+		if (ImGui::Button(T(TKEY("yes_delete"), "Yes, Delete"), ImVec2(buttonWidth, 0))) {
 			Delete();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
 
-		if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
+		if (ImGui::Button(T(TKEY("cancel"), "Cancel"), ImVec2(buttonWidth, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
@@ -319,7 +322,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			ClearSearchState(true);
 			ImGui::SetKeyboardFocusHere();
 		}
-		ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer));
+		ImGui::InputTextWithHint(searchId, T(TKEY("search_settings_hint"), "Search settings (Ctrl+F)"), searchBuffer, sizeof(searchBuffer));
 		searchInputMin = ImGui::GetItemRectMin();
 		searchInputMax = ImGui::GetItemRectMax();
 		if (ImGui::IsItemEdited())
@@ -331,7 +334,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			return;
 		ImGui::SameLine();
 		bool isLocked = editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather;
-		const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
+		const char* lockLabel = isLocked ? T(TKEY("unlock"), "Unlock") : T(TKEY("force_weather"), "Force Weather");
 
 		if (isLocked) {
 			ImGui::PushStyleColor(ImGuiCol_Button, WidgetUI::kLockButtonColor);
@@ -345,15 +348,15 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		}
 		if (isLocked)
 			ImGui::PopStyleColor(2);
-		Util::AddTooltip(isLocked ? "Unlock Weather" : "Force This Weather");
+		Util::AddTooltip(isLocked ? T(TKEY("unlock_weather"), "Unlock Weather") : T(TKEY("force_this_weather"), "Force This Weather"));
 	};
 
 	auto drawUnsavedIndicator = [&]() {
 		if (!HasUnsavedChanges() || !menu)
 			return;
 		ImGui::SameLine();
-		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES)");
-		Util::AddTooltip("Unsaved changes - click save to keep");
+		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "%s", T(TKEY("unsaved_changes"), "(UNSAVED CHANGES)"));
+		Util::AddTooltip(T(TKEY("unsaved_changes_tooltip"), "Unsaved changes - click save to keep"));
 	};
 
 	if (useIcons) {
@@ -382,26 +385,26 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		// Apply button
 		if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
 			if (menu->uiIcons.applyToGame.texture) {
-				iconButton("_Apply", menu->uiIcons.applyToGame.texture, "Apply changes to the game", [&]() { ApplyChanges(); });
+				iconButton("_Apply", menu->uiIcons.applyToGame.texture, T(TKEY("apply_changes"), "Apply changes to the game"), [&]() { ApplyChanges(); });
 			} else {
 				ImGui::SameLine();
-				if (ImGui::Button("Apply"))
+				if (ImGui::Button(T(TKEY("apply"), "Apply")))
 					ApplyChanges();
-				Util::AddTooltip("Apply changes to the game");
+				Util::AddTooltip(T(TKEY("apply_changes"), "Apply changes to the game"));
 			}
 		}
 
 		// Save/Load/Revert/Delete group
 		if (showSaveLoadRevert) {
-			iconButton("_Save", menu->uiIcons.saveSettings.texture, "Save to file", [&]() { Save(); });
-			iconButton("_Load", menu->uiIcons.loadSettings.texture, "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
-			iconButton("_Revert", menu->uiIcons.featureSettingRevert.texture, "Revert to original game values", [&]() { RevertChanges(); });
+			iconButton("_Save", menu->uiIcons.saveSettings.texture, T(TKEY("save_to_file"), "Save to file"), [&]() { Save(); });
+			iconButton("_Load", menu->uiIcons.loadSettings.texture, T(TKEY("load_saved_file"), "Load saved file (or reset to vanilla if no file)"), [&]() { Load(); });
+			iconButton("_Revert", menu->uiIcons.featureSettingRevert.texture, T(TKEY("revert_to_original"), "Revert to original game values"), [&]() { RevertChanges(); });
 
 			if (HasSavedFile() && menu->uiIcons.deleteSettings.texture) {
 				ImGui::SameLine();
 				if (Util::ErrorImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
 					ImGui::OpenPopup("DeleteConfirmation");
-				Util::AddTooltip("Delete saved file");
+				Util::AddTooltip(T(TKEY("delete_saved_file_tooltip"), "Delete saved file"));
 			}
 		}
 
@@ -426,25 +429,25 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 			// Apply button
 			if (showApply && (!editorWindow->settings.autoApplyChanges || RequiresManualApply())) {
 				ImGui::SameLine();
-				if (Util::SuccessButton("Apply"))
+				if (Util::SuccessButton(T(TKEY("apply"), "Apply")))
 					ApplyChanges();
-				Util::AddTooltip("Apply changes to the game");
+				Util::AddTooltip(T(TKEY("apply_changes"), "Apply changes to the game"));
 			}
 
 			// Save/Load/Revert/Delete group
 			if (showSaveLoadRevert) {
-				textButton("Save", "Save to file", [&]() { Save(); });
-				textButton("Load", "Load saved file (or reset to vanilla if no file)", [&]() { Load(); });
+				textButton(T(TKEY("save"), "Save"), T(TKEY("save_to_file"), "Save to file"), [&]() { Save(); });
+				textButton(T(TKEY("load"), "Load"), T(TKEY("load_saved_file"), "Load saved file (or reset to vanilla if no file)"), [&]() { Load(); });
 				ImGui::SameLine();
-				if (Util::WarningButton("Revert"))
+				if (Util::WarningButton(T(TKEY("revert"), "Revert")))
 					RevertChanges();
-				Util::AddTooltip("Revert to original game values");
+				Util::AddTooltip(T(TKEY("revert_to_original"), "Revert to original game values"));
 
 				if (HasSavedFile()) {
 					ImGui::SameLine();
-					if (Util::ErrorTextButton("Delete"))
+					if (Util::ErrorTextButton(T(TKEY("delete"), "Delete")))
 						ImGui::OpenPopup("DeleteConfirmation");
-					Util::AddTooltip("Delete saved file");
+					Util::AddTooltip(T(TKEY("delete_saved_file_tooltip"), "Delete saved file"));
 				}
 			}
 
@@ -456,8 +459,8 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 	if (showApply && RequiresManualApply() && editorWindow->settings.autoApplyChanges && menu) {
 		ImGui::SameLine();
-		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(Changes require manual apply)");
-		Util::AddTooltip("This form type is only re-read by the engine on weather reinit.\nAuto-apply is disabled - use the Apply button.");
+		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "%s", T(TKEY("changes_require_manual_apply"), "(Changes require manual apply)"));
+		Util::AddTooltip(T(TKEY("manual_apply_required_tooltip"), "This form type is only re-read by the engine on weather reinit.\nAuto-apply is disabled - use the Apply button."));
 	}
 
 	ImGui::Separator();
@@ -525,7 +528,9 @@ void Widget::DrawSearchDropdown()
 
 			if (searchResults.size() > WidgetUI::kSearchDropdownMaxResults) {
 				ImGui::Separator();
-				ImGui::TextDisabled("... %zu more results", searchResults.size() - WidgetUI::kSearchDropdownMaxResults);
+				auto count = searchResults.size() - WidgetUI::kSearchDropdownMaxResults;
+				auto formatted = std::vformat(T(TKEY("more_results"), "... {} more results"), std::make_format_args(count));
+				ImGui::TextDisabled("%s", formatted.c_str());
 			}
 		}
 	}
@@ -609,3 +614,5 @@ void Widget::PopHighlightStyle(const std::string& settingId)
 		scrollToHighlighted = false;
 	}
 }
+
+#undef I18N_KEY_PREFIX

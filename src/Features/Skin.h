@@ -1,5 +1,7 @@
 #pragma once
 
+#include "I18n/I18n.h"
+
 struct Skin : Feature
 {
 	static Skin* GetSingleton()
@@ -9,17 +11,18 @@ struct Skin : Feature
 	}
 
 	virtual inline std::string GetName() override { return "Advanced Skin"; }
+	virtual inline std::string GetDisplayName() override { return T("feature.skin.name", "Advanced Skin"); }
 	virtual inline std::string GetShortName() override { return "Skin"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CS_SKIN"; }
-	virtual std::string_view GetCategory() const override { return "Characters"; }
+	virtual std::string_view GetCategory() const override { return FeatureCategories::kCharacters; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Advanced Skin enhances character skin rendering with multiple techniques.",
-			{ "Physically-based dual specular lobes for realistic skin highlights",
-				"Tiled skin detail textures for enhanced realism",
-				"Extra textures support for roughness, translucency, and more",
-				"Reworked wetness system for dynamic skin effects" }
+			T("feature.skin.description", "Advanced Skin enhances character skin rendering with multiple techniques."),
+			{ T("feature.skin.key_feature_1", "Physically-based dual specular lobes for realistic skin highlights"),
+				T("feature.skin.key_feature_2", "Tiled skin detail textures for enhanced realism"),
+				T("feature.skin.key_feature_3", "Extra texture support for roughness, translucency, and wetness"),
+				T("feature.skin.key_feature_4", "Reworked wetness system for dynamic skin effects") }
 		};
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override

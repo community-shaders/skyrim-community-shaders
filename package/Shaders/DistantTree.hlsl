@@ -2,6 +2,7 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 #include "Common/MotionBlur.hlsli"
+#include "Common/Permutation.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
@@ -180,6 +181,15 @@ const static float DepthOffsets[16] = {
 
 #	include "Common/ShadowSampling.hlsli"
 
+#	if defined(EXP_HEIGHT_FOG)
+void ApplyReflectionExponentialHeightFog(inout float3 color, float3 positionWS, float4 screenPosition, uint eyeIndex)
+{
+	float3 fogColor = Color::Fog(AmbientColor.xyz);
+	float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(positionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(screenPosition.xy * FrameBuffer::DynamicResolutionParams2.xy, screenPosition.z, 1));
+	color = lerp(color, exponentialHeightFog.xyz, exponentialHeightFog.w);
+}
+#	endif
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -189,6 +199,9 @@ PS_OUTPUT main(PS_INPUT input)
 #	else
 	uint eyeIndex = input.EyeIndex;
 #	endif  // !VR
+#	if defined(EXP_HEIGHT_FOG)
+	const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection) != 0;
+#	endif
 
 #	if defined(RENDER_DEPTH)
 	uint2 temp = uint2(input.Position.xy);
@@ -255,6 +268,12 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Diffuse.xyz = diffuseColor * baseColor.xyz;
 	psout.Diffuse.w = 1;
 
+#			if defined(EXP_HEIGHT_FOG)
+	if (inReflection && SharedData::exponentialHeightFogSettings.enabled) {
+		ApplyReflectionExponentialHeightFog(psout.Diffuse.xyz, input.WorldPosition.xyz, input.Position, eyeIndex);
+	}
+#			endif
+
 	psout.MotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 
 	psout.Normal.xy = GBuffer::EncodeNormal(FrameBuffer::WorldToView(normal, false, eyeIndex));
@@ -287,6 +306,11 @@ PS_OUTPUT main(PS_INPUT input)
 	diffuseColor += directionalAmbientColor;
 
 	float3 color = diffuseColor * baseColor.xyz;
+#			if defined(EXP_HEIGHT_FOG)
+	if (inReflection && SharedData::exponentialHeightFogSettings.enabled) {
+		ApplyReflectionExponentialHeightFog(color, input.WorldPosition.xyz, input.Position, eyeIndex);
+	}
+#			endif
 	psout.Diffuse = float4(color, 1.0);
 #		endif  // DEFERRED
 #	endif      // RENDER_DEPTH

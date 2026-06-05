@@ -9,6 +9,7 @@ private:
 
 public:
 	virtual inline std::string GetName() override { return "Wetness Effects"; }
+	virtual std::string GetDisplayName() override { return T("feature.wetness_effects.name", "Wetness Effects"); }
 	virtual inline std::string GetShortName() override { return "WetnessEffects"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline std::string_view GetShaderDefineName() override { return "WETNESS_EFFECTS"; }
@@ -16,15 +17,13 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Adds realistic wetness effects including rain-based surface wetness, puddle formation, shore wetness, and dynamic raindrop effects for enhanced weather immersion.",
-			{ "Dynamic surface wetness based on weather conditions",
-				"Realistic puddle formation and shore wetness effects",
-				"Animated raindrop effects with splashes and ripples",
-				"Configurable wetness intensity and weather transitions",
-				"Support for skin wetness and material-specific responses" }
-		};
-	}
+		return { T("feature.wetness_effects.description", "Adds realistic wetness effects including rain-based surface wetness, puddle formation, shore wetness, and dynamic raindrop effects for enhanced weather immersion."),
+			{ T("feature.wetness_effects.key_feature_1", "Dynamic surface wetness based on weather conditions"),
+				T("feature.wetness_effects.key_feature_2", "Realistic puddle formation and shore wetness effects"),
+				T("feature.wetness_effects.key_feature_3", "Animated raindrop effects with splashes and ripples"),
+				T("feature.wetness_effects.key_feature_4", "Configurable wetness intensity and weather transitions"),
+				T("feature.wetness_effects.key_feature_5", "Support for skin wetness and material-specific responses") } };
+	};
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 

@@ -1,5 +1,8 @@
 ﻿#include "InteriorSun.h"
+#include "I18n/I18n.h"
 #include "State.h"
+
+#define I18N_KEY_PREFIX "feature.interior_sun."
 
 #include <numbers>
 
@@ -10,21 +13,21 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void InteriorSun::DrawSettings()
 {
-	ImGui::Checkbox("Force Double-Sided Rendering", &settings.ForceDoubleSidedRendering);
+	ImGui::Checkbox(T(TKEY("force_double_sided"), "Force Double-Sided Rendering"), &settings.ForceDoubleSidedRendering);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Disables backface culling during sun shadowmap rendering in interiors. "
-			"Will prevent most light leaking through unmasked/unprepared interiors at a small performance cost. ");
+		ImGui::Text("%s", T(TKEY("force_double_sided_tooltip"),
+							  "Disables backface culling during sun shadowmap rendering in interiors. "
+							  "Will prevent most light leaking through unmasked/unprepared interiors at a small performance cost. "));
 	}
-	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, 1000.0f, 8000.0f)) {
+	if (ImGui::SliderFloat(T(TKEY("interior_shadow_distance"), "Interior Shadow Distance"), &settings.InteriorShadowDistance, 1000.0f, 8000.0f)) {
 		*gInteriorShadowDistance = settings.InteriorShadowDistance;
 		auto tes = RE::TES::GetSingleton();
 		SetShadowDistance(tes && tes->interiorCell);
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Sets the distance shadows are rendered at in interiors. "
-			"Lower values provide higher quality shadows and improved performance but may cause distant interior spaces to light up incorrectly. ");
+		ImGui::Text("%s", T(TKEY("interior_shadow_distance_tooltip"),
+							  "Sets the distance shadows are rendered at in interiors. "
+							  "Lower values provide higher quality shadows and improved performance but may cause distant interior spaces to light up incorrectly. "));
 	}
 }
 
@@ -222,3 +225,4 @@ void InteriorSun::SetShadowDistance(bool inInterior)
 	static REL::Relocation<func_t> func{ REL::RelocationID(98978, 105631).address() };
 	func(inInterior);
 }
+#undef I18N_KEY_PREFIX

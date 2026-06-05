@@ -5,9 +5,12 @@
 
 #include "Features/InteriorSun.h"
 #include "Hooks.h"
+#include "I18n/I18n.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+
+#define I18N_KEY_PREFIX "feature.true_pbr."
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GlintParameters,
@@ -110,70 +113,70 @@ void SetupPBRLandscapeTextureParameters(BSLightingShaderMaterialPBRLandscape& ma
 
 void TruePBR::DrawSettings()
 {
-	if (ImGui::TreeNodeEx("Global Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::SliderFloat("Vertex AO Strength", &settings.VertexAOStrength, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+	if (ImGui::TreeNodeEx(T(TKEY("global_settings"), "Global Settings"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::SliderFloat(T(TKEY("vertex_ao_strength"), "Vertex AO Strength"), &settings.VertexAOStrength, 0.f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 		ImGui::TreePop();
 	}
 
-	if (ImGui::TreeNodeEx("Texture Set Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (Util::SearchableCombo("Texture Set", selectedPbrTextureSetName, pbrTextureSets)) {
+	if (ImGui::TreeNodeEx(T(TKEY("texture_set_settings"), "Texture Set Settings"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (Util::SearchableCombo(T(TKEY("texture_set"), "Texture Set"), selectedPbrTextureSetName, pbrTextureSets)) {
 			selectedPbrTextureSet = &pbrTextureSets[selectedPbrTextureSetName];
 		}
 
 		if (selectedPbrTextureSet != nullptr) {
 			bool wasEdited = false;
-			if (ImGui::SliderFloat("Displacement Scale", &selectedPbrTextureSet->displacementScale, 0.f, 3.f, "%.3f")) {
+			if (ImGui::SliderFloat(T(TKEY("displacement_scale"), "Displacement Scale"), &selectedPbrTextureSet->displacementScale, 0.f, 3.f, "%.3f")) {
 				wasEdited = true;
 			}
-			if (ImGui::SliderFloat("Roughness Scale", &selectedPbrTextureSet->roughnessScale, 0.f, 3.f, "%.3f")) {
+			if (ImGui::SliderFloat(T(TKEY("roughness_scale"), "Roughness Scale"), &selectedPbrTextureSet->roughnessScale, 0.f, 3.f, "%.3f")) {
 				wasEdited = true;
 			}
-			if (ImGui::SliderFloat("Specular Level", &selectedPbrTextureSet->specularLevel, 0.f, 3.f, "%.3f")) {
+			if (ImGui::SliderFloat(T(TKEY("specular_level"), "Specular Level"), &selectedPbrTextureSet->specularLevel, 0.f, 3.f, "%.3f")) {
 				wasEdited = true;
 			}
-			if (ImGui::TreeNodeEx("Subsurface")) {
-				if (ImGui::ColorPicker3("Subsurface Color", &selectedPbrTextureSet->subsurfaceColor.red)) {
+			if (ImGui::TreeNodeEx(T(TKEY("subsurface"), "Subsurface"))) {
+				if (ImGui::ColorPicker3(T(TKEY("subsurface_color"), "Subsurface Color"), &selectedPbrTextureSet->subsurfaceColor.red)) {
 					wasEdited = true;
 				}
-				if (ImGui::SliderFloat("Subsurface Opacity", &selectedPbrTextureSet->subsurfaceOpacity, 0.f, 1.f, "%.3f")) {
+				if (ImGui::SliderFloat(T(TKEY("subsurface_opacity"), "Subsurface Opacity"), &selectedPbrTextureSet->subsurfaceOpacity, 0.f, 1.f, "%.3f")) {
 					wasEdited = true;
 				}
 
 				ImGui::TreePop();
 			}
-			if (ImGui::TreeNodeEx("Coat")) {
-				if (ImGui::ColorPicker3("Coat Color", &selectedPbrTextureSet->coatColor.red)) {
+			if (ImGui::TreeNodeEx(T(TKEY("coat"), "Coat"))) {
+				if (ImGui::ColorPicker3(T(TKEY("coat_color"), "Coat Color"), &selectedPbrTextureSet->coatColor.red)) {
 					wasEdited = true;
 				}
-				if (ImGui::SliderFloat("Coat Strength", &selectedPbrTextureSet->coatStrength, 0.f, 1.f, "%.3f")) {
+				if (ImGui::SliderFloat(T(TKEY("coat_strength"), "Coat Strength"), &selectedPbrTextureSet->coatStrength, 0.f, 1.f, "%.3f")) {
 					wasEdited = true;
 				}
-				if (ImGui::SliderFloat("Coat Roughness", &selectedPbrTextureSet->coatRoughness, 0.f, 1.f, "%.3f")) {
+				if (ImGui::SliderFloat(T(TKEY("coat_roughness"), "Coat Roughness"), &selectedPbrTextureSet->coatRoughness, 0.f, 1.f, "%.3f")) {
 					wasEdited = true;
 				}
-				if (ImGui::SliderFloat("Coat Specular Level", &selectedPbrTextureSet->coatSpecularLevel, 0.f, 1.f, "%.3f")) {
+				if (ImGui::SliderFloat(T(TKEY("coat_specular_level"), "Coat Specular Level"), &selectedPbrTextureSet->coatSpecularLevel, 0.f, 1.f, "%.3f")) {
 					wasEdited = true;
 				}
-				if (ImGui::SliderFloat("Inner Layer Displacement Offset", &selectedPbrTextureSet->innerLayerDisplacementOffset, 0.f, 3.f, "%.3f")) {
+				if (ImGui::SliderFloat(T(TKEY("inner_layer_displacement_offset"), "Inner Layer Displacement Offset"), &selectedPbrTextureSet->innerLayerDisplacementOffset, 0.f, 3.f, "%.3f")) {
 					wasEdited = true;
 				}
 				ImGui::TreePop();
 			}
-			if (ImGui::TreeNodeEx("Glint")) {
-				if (ImGui::Checkbox("Enabled", &selectedPbrTextureSet->glintParameters.enabled)) {
+			if (ImGui::TreeNodeEx(T(TKEY("glint"), "Glint"))) {
+				if (ImGui::Checkbox(T(TKEY("enabled"), "Enabled"), &selectedPbrTextureSet->glintParameters.enabled)) {
 					wasEdited = true;
 				}
 				if (selectedPbrTextureSet->glintParameters.enabled) {
-					if (ImGui::SliderFloat("Screenspace Scale", &selectedPbrTextureSet->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("screenspace_scale"), "Screenspace Scale"), &selectedPbrTextureSet->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat("Log Microfacet Density", &selectedPbrTextureSet->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("log_microfacet_density"), "Log Microfacet Density"), &selectedPbrTextureSet->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat("Microfacet Roughness", &selectedPbrTextureSet->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("microfacet_roughness"), "Microfacet Roughness"), &selectedPbrTextureSet->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat("Density Randomization", &selectedPbrTextureSet->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("density_randomization"), "Density Randomization"), &selectedPbrTextureSet->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
 						wasEdited = true;
 					}
 				}
@@ -194,7 +197,7 @@ void TruePBR::DrawSettings()
 				}
 			}
 			if (selectedPbrTextureSet != nullptr) {
-				if (ImGui::Button("Save")) {
+				if (ImGui::Button(T(TKEY("save"), "Save"))) {
 					PNState::SavePBRRecordConfig("Data\\PBRTextureSets", selectedPbrTextureSetName, *selectedPbrTextureSet);
 				}
 			}
@@ -202,15 +205,16 @@ void TruePBR::DrawSettings()
 		ImGui::TreePop();
 	}
 
-	if (ImGui::TreeNodeEx("Material Object Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (Util::SearchableCombo("Material Object", selectedPbrMaterialObjectName, pbrMaterialObjects)) {
+	if (ImGui::TreeNodeEx(T(TKEY("material_object_settings"), "Material Object Settings"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (Util::SearchableCombo(T(TKEY("material_object"), "Material Object"), selectedPbrMaterialObjectName, pbrMaterialObjects)) {
 			selectedPbrMaterialObject = &pbrMaterialObjects[selectedPbrMaterialObjectName];
 		}
 
 		if (selectedPbrMaterialObject != nullptr) {
 			bool wasEdited = false;
-			if (ImGui::TreeNodeEx("Base Color Scale", ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::Button("Reset to 1.0##BaseColorScale")) {
+			if (ImGui::TreeNodeEx(T(TKEY("base_color_scale"), "Base Color Scale"), ImGuiTreeNodeFlags_DefaultOpen)) {
+				auto resetBaseColorScaleLabel = std::string(T(TKEY("reset_to_1_0"), "Reset to 1.0")) + "##BaseColorScale";
+				if (ImGui::Button(resetBaseColorScaleLabel.c_str())) {
 					selectedPbrMaterialObject->baseColorScale = { 1.f, 1.f, 1.f };
 					wasEdited = true;
 				}
@@ -225,7 +229,7 @@ void TruePBR::DrawSettings()
 				ImGui::AlignTextToFramePadding();
 				ImGui::SetCursorPosX(colorLabelStartX);
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
-				ImGui::Text("Red");
+				ImGui::TextUnformatted(T(TKEY("red"), "Red"));
 				ImGui::PopStyleColor();
 				ImGui::SameLine(sliderStartX);
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.4f, 0.1f, 0.1f, 0.6f));
@@ -239,7 +243,7 @@ void TruePBR::DrawSettings()
 				ImGui::AlignTextToFramePadding();
 				ImGui::SetCursorPosX(colorLabelStartX);
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
-				ImGui::Text("Green");
+				ImGui::TextUnformatted(T(TKEY("green"), "Green"));
 				ImGui::PopStyleColor();
 				ImGui::SameLine(sliderStartX);
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.1f, 0.4f, 0.1f, 0.6f));
@@ -253,7 +257,7 @@ void TruePBR::DrawSettings()
 				ImGui::AlignTextToFramePadding();
 				ImGui::SetCursorPosX(colorLabelStartX);
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.3f, 0.9f, 1.0f));
-				ImGui::Text("Blue");
+				ImGui::TextUnformatted(T(TKEY("blue"), "Blue"));
 				ImGui::PopStyleColor();
 				ImGui::SameLine(sliderStartX);
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.1f, 0.1f, 0.4f, 0.6f));
@@ -266,27 +270,27 @@ void TruePBR::DrawSettings()
 
 				ImGui::TreePop();
 			}
-			if (ImGui::SliderFloat("Roughness", &selectedPbrMaterialObject->roughness, 0.f, 1.f, "%.3f")) {
+			if (ImGui::SliderFloat(T(TKEY("roughness"), "Roughness"), &selectedPbrMaterialObject->roughness, 0.f, 1.f, "%.3f")) {
 				wasEdited = true;
 			}
-			if (ImGui::SliderFloat("Specular Level", &selectedPbrMaterialObject->specularLevel, 0.f, 1.f, "%.3f")) {
+			if (ImGui::SliderFloat(T(TKEY("material_specular_level"), "Specular Level"), &selectedPbrMaterialObject->specularLevel, 0.f, 1.f, "%.3f")) {
 				wasEdited = true;
 			}
-			if (ImGui::TreeNodeEx("Glint")) {
-				if (ImGui::Checkbox("Enabled", &selectedPbrMaterialObject->glintParameters.enabled)) {
+			if (ImGui::TreeNodeEx(T(TKEY("material_glint"), "Glint"))) {
+				if (ImGui::Checkbox(T(TKEY("material_glint_enabled"), "Enabled"), &selectedPbrMaterialObject->glintParameters.enabled)) {
 					wasEdited = true;
 				}
 				if (selectedPbrMaterialObject->glintParameters.enabled) {
-					if (ImGui::SliderFloat("Screenspace Scale", &selectedPbrMaterialObject->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("material_screenspace_scale"), "Screenspace Scale"), &selectedPbrMaterialObject->glintParameters.screenSpaceScale, 0.f, 3.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat("Log Microfacet Density", &selectedPbrMaterialObject->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("material_log_microfacet_density"), "Log Microfacet Density"), &selectedPbrMaterialObject->glintParameters.logMicrofacetDensity, 0.f, 40.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat("Microfacet Roughness", &selectedPbrMaterialObject->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("material_microfacet_roughness"), "Microfacet Roughness"), &selectedPbrMaterialObject->glintParameters.microfacetRoughness, 0.f, 1.f, "%.3f")) {
 						wasEdited = true;
 					}
-					if (ImGui::SliderFloat("Density Randomization", &selectedPbrMaterialObject->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
+					if (ImGui::SliderFloat(T(TKEY("material_density_randomization"), "Density Randomization"), &selectedPbrMaterialObject->glintParameters.densityRandomization, 0.f, 5.f, "%.3f")) {
 						wasEdited = true;
 					}
 				}
@@ -300,7 +304,7 @@ void TruePBR::DrawSettings()
 				}
 			}
 			if (selectedPbrMaterialObject != nullptr) {
-				if (ImGui::Button("Save")) {
+				if (ImGui::Button(T(TKEY("material_save"), "Save"))) {
 					PNState::SavePBRRecordConfig("Data\\PBRMaterialObjects", selectedPbrMaterialObjectName, *selectedPbrMaterialObject);
 				}
 			}
@@ -323,6 +327,8 @@ void TruePBR::RestoreDefaultSettings()
 {
 	settings = {};
 }
+
+#undef I18N_KEY_PREFIX
 
 void TruePBR::SetupResources()
 {

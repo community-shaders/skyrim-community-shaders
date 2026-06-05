@@ -7,20 +7,20 @@ struct TerrainShadows : public Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Terrain Shadows"; }
+	virtual std::string GetDisplayName() override { return T("feature.terrain_shadows.name", "Terrain Shadows"); }
 	virtual inline std::string GetShortName() override { return "TerrainShadows"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_SHADOWS"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Adds realistic shadow casting from terrain features using heightmap data to create accurate terrain shadows that enhance depth perception and visual realism.",
-			{ "Heightmap-based terrain shadow calculation",
-				"Dynamic shadow updates based on sun position",
-				"Support for custom heightmap files",
-				"Real-time shadow preprocessing and computation",
-				"Integration with existing shadow systems" }
-		};
-	}
+		return { T("feature.terrain_shadows.description", "Adds realistic shadow casting from terrain features using heightmap data to create accurate terrain shadows that enhance depth perception and visual realism."),
+			{ T("feature.terrain_shadows.key_feature_1", "Heightmap-based terrain shadow calculation"),
+				T("feature.terrain_shadows.key_feature_2", "Dynamic shadow updates based on sun position"),
+				T("feature.terrain_shadows.key_feature_3", "Support for custom heightmap files"),
+				T("feature.terrain_shadows.key_feature_4", "Real-time shadow preprocessing and computation"),
+				T("feature.terrain_shadows.key_feature_5", "Integration with existing shadow systems") } };
+	};
+
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
 	struct Settings

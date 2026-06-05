@@ -5,6 +5,7 @@ struct InverseSquareLighting : Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Inverse Square Lighting"; }
+	virtual std::string GetDisplayName() override { return T("feature.inverse_square_lighting.name", "Inverse Square Lighting"); }
 
 	virtual inline std::string GetShortName() override { return "InverseSquareLighting"; }
 
@@ -14,14 +15,12 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Implements an additional inverse square falloff for lighting which allows for a more physically accurate and realistic looking light attenuation.",
-			{ "Automatic light radius calculation based on intensity",
-				"Lights smoothly fade out at a configurable cutoff, solving the infinite distance problem",
-				"Does not modify any existing lighting",
-				"Requires the use of mods with lights enabled for inverse square falloff.",
-				"Full integration with Light Placer" }
-		};
+		return { T("feature.inverse_square_lighting.description", "Implements an additional inverse square falloff for lighting which allows for a more physically accurate and realistic looking light attenuation."),
+			{ T("feature.inverse_square_lighting.key_feature_1", "Automatic light radius calculation based on intensity"),
+				T("feature.inverse_square_lighting.key_feature_2", "Lights smoothly fade out at a configurable cutoff, solving the infinite distance problem"),
+				T("feature.inverse_square_lighting.key_feature_3", "Does not modify any existing lighting"),
+				T("feature.inverse_square_lighting.key_feature_4", "Requires the use of mods with lights enabled for inverse square falloff."),
+				T("feature.inverse_square_lighting.key_feature_5", "Full integration with Light Placer") } };
 	}
 
 	inline bool HasShaderDefine(RE::BSShader::Type) override { return true; };

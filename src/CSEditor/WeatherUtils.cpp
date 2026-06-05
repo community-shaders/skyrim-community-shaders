@@ -1,9 +1,13 @@
 #include "WeatherUtils.h"
+#include "../I18n/I18n.h"
 #include "EditorWindow.h"
 #include "PaletteWindow.h"
 #include "Utils/FileSystem.h"
 #include "Utils/UI.h"
 
+#define I18N_KEY_PREFIX "cs_editor."
+
+#include <algorithm>
 #include <cassert>
 
 namespace WeatherUtils::TexturePath
@@ -102,6 +106,156 @@ static std::string_view UnscopeKey(std::string_view key)
 {
 	const auto pos = key.find(kScopeSep);
 	return pos == std::string_view::npos ? key : key.substr(pos + kScopeSep.size());
+}
+
+const char* WeatherUtils::TranslateControlLabel(std::string_view label)
+{
+	if (label == "Ambient Color")
+		return T(TKEY("ambient_color"), "Ambient Color");
+	if (label == "Directional Color")
+		return T(TKEY("directional_color"), "Directional Color");
+	if (label == "Directional XY")
+		return T(TKEY("directional_xy"), "Directional XY");
+	if (label == "Directional Z")
+		return T(TKEY("directional_z"), "Directional Z");
+	if (label == "Directional Fade")
+		return T(TKEY("directional_fade"), "Directional Fade");
+	if (label == "Light Fade Start")
+		return T(TKEY("light_fade_start"), "Light Fade Start");
+	if (label == "Light Fade End")
+		return T(TKEY("light_fade_end"), "Light Fade End");
+	if (label == "Clip Distance")
+		return T(TKEY("clip_distance"), "Clip Distance");
+	if (label == "Fog Color Near" || label == "Fog Near Color")
+		return T(TKEY("fog_color_near"), "Fog Color Near");
+	if (label == "Fog Color Far" || label == "Fog Far Color")
+		return T(TKEY("fog_color_far"), "Fog Color Far");
+	if (label == "Fog Near")
+		return T(TKEY("color_fog_near"), "Fog Near");
+	if (label == "Fog Far")
+		return T(TKEY("color_fog_far"), "Fog Far");
+	if (label == "Fog Power")
+		return T(TKEY("fog_power"), "Fog Power");
+	if (label == "Fog Clamp" || label == "Fog Clamp (Max)")
+		return T(TKEY("fog_clamp"), "Fog Clamp");
+	if (label == "Specular")
+		return T(TKEY("dalc_specular"), "Specular");
+	if (label == "Fresnel Power")
+		return T(TKEY("dalc_fresnel_power"), "Fresnel Power");
+	if (label == "X+ (Right)")
+		return T(TKEY("direction_x_plus"), "X+ (Right)");
+	if (label == "X- (Left)")
+		return T(TKEY("direction_x_minus"), "X- (Left)");
+	if (label == "Y+ (Front)")
+		return T(TKEY("direction_y_plus"), "Y+ (Front)");
+	if (label == "Y- (Back)")
+		return T(TKEY("direction_y_minus"), "Y- (Back)");
+	if (label == "Z+ (Up)")
+		return T(TKEY("direction_z_plus"), "Z+ (Up)");
+	if (label == "Z- (Down)")
+		return T(TKEY("direction_z_minus"), "Z- (Down)");
+	if (label == "XY Rotation")
+		return T(TKEY("xy_rotation"), "XY Rotation");
+	if (label == "Z Rotation")
+		return T(TKEY("z_rotation"), "Z Rotation");
+	if (label == "Inherit Ambient Color")
+		return T(TKEY("inherit_ambient_color"), "Inherit Ambient Color");
+	if (label == "Inherit Directional Color")
+		return T(TKEY("inherit_directional_color"), "Inherit Directional Color");
+	if (label == "Inherit Fog Color")
+		return T(TKEY("inherit_fog_color"), "Inherit Fog Color");
+	if (label == "Inherit Fog Near")
+		return T(TKEY("inherit_fog_near"), "Inherit Fog Near");
+	if (label == "Inherit Fog Far")
+		return T(TKEY("inherit_fog_far"), "Inherit Fog Far");
+	if (label == "Inherit Directional Rotation")
+		return T(TKEY("inherit_directional_rotation"), "Inherit Directional Rotation");
+	if (label == "Inherit Directional Fade")
+		return T(TKEY("inherit_directional_fade"), "Inherit Directional Fade");
+	if (label == "Inherit Clip Distance")
+		return T(TKEY("inherit_clip_distance"), "Inherit Clip Distance");
+	if (label == "Inherit Fog Power")
+		return T(TKEY("inherit_fog_power"), "Inherit Fog Power");
+	if (label == "Inherit Fog Max (Clamp)")
+		return T(TKEY("inherit_fog_max_clamp"), "Inherit Fog Max (Clamp)");
+	if (label == "Inherit Light Fade Distances")
+		return T(TKEY("inherit_light_fade_distances"), "Inherit Light Fade Distances");
+	if (label == "Type")
+		return T(TKEY("type"), "Type");
+	if (label == "Size X")
+		return T(TKEY("size_x"), "Size X");
+	if (label == "Size Y")
+		return T(TKEY("size_y"), "Size Y");
+	if (label == "Gravity Velocity")
+		return T(TKEY("gravity_velocity"), "Gravity Velocity");
+	if (label == "Rotation Velocity")
+		return T(TKEY("rotation_velocity"), "Rotation Velocity");
+	if (label == "Center Offset Min")
+		return T(TKEY("center_offset_min"), "Center Offset Min");
+	if (label == "Center Offset Max")
+		return T(TKEY("center_offset_max"), "Center Offset Max");
+	if (label == "Start Rotation Range")
+		return T(TKEY("start_rotation_range"), "Start Rotation Range");
+	if (label == "Box Size")
+		return T(TKEY("box_size"), "Box Size");
+	if (label == "Particle Density")
+		return T(TKEY("particle_density_label"), "Particle Density");
+	if (label == "Num Subtextures X")
+		return T(TKEY("num_subtextures_x"), "Num Subtextures X");
+	if (label == "Num Subtextures Y")
+		return T(TKEY("num_subtextures_y"), "Num Subtextures Y");
+	if (label == "Particle Texture")
+		return T(TKEY("particle_texture_label"), "Particle Texture");
+	if (label == "Art Object")
+		return T(TKEY("art_object"), "Art Object");
+	if (label == "Effect Shader")
+		return T(TKEY("effect_shader"), "Effect Shader");
+	if (label == "Face Target")
+		return T(TKEY("face_target"), "Face Target");
+	if (label == "Attach To Camera")
+		return T(TKEY("attach_to_camera"), "Attach To Camera");
+	if (label == "Inherit Rotation")
+		return T(TKEY("inherit_rotation"), "Inherit Rotation");
+	if (label == "Intensity")
+		return T(TKEY("intensity"), "Intensity");
+	if (label == "Contribution")
+		return T(TKEY("contribution"), "Contribution");
+	if (label == "Color")
+		return T(TKEY("color"), "Color");
+	if (label == "Size")
+		return T(TKEY("size"), "Size");
+	if (label == "Wind Speed")
+		return T(TKEY("wind_speed"), "Wind Speed");
+	if (label == "Falling Speed")
+		return T(TKEY("falling_speed"), "Falling Speed");
+	if (label == "Scattering")
+		return T(TKEY("scattering"), "Scattering");
+	if (label == "Range Factor")
+		return T(TKEY("range_factor"), "Range Factor");
+	if (label == "Cloud Layer Speed X")
+		return T(TKEY("cloud_layer_speed_x"), "Cloud Layer Speed X");
+	if (label == "Cloud Layer Speed Y")
+		return T(TKEY("cloud_layer_speed_y"), "Cloud Layer Speed Y");
+
+	// Fallback: return the original label via T() which caches a stable null-terminated copy
+	return T(std::string(label).c_str(), std::string(label).c_str());
+}
+
+static std::string BuildLocalizedControlLabel(const std::string& label)
+{
+	if (label.starts_with("##"))
+		return label;
+
+	const auto idPos = label.find("##");
+	const auto visible = idPos == std::string::npos ? label : label.substr(0, idPos);
+	const auto id = idPos == std::string::npos ? visible : label.substr(idPos + 2);
+	const bool numericId = !id.empty() && std::all_of(id.begin(), id.end(), [](unsigned char c) { return std::isdigit(c); });
+	const auto key = numericId ? visible : id;
+	const auto* translated = WeatherUtils::TranslateControlLabel(key);
+	if (std::string_view(translated) == key)
+		return label;
+
+	return std::format("{}##{}", translated, id);
 }
 
 // Per-widget-type window sizes — shared across all instances of the same widget type
@@ -227,16 +381,16 @@ std::string ColorTimeLabel(const int i)
 	std::string label = "";
 	switch (i) {
 	case 0:
-		label = "Sunrise";
+		label = T(TKEY("tod_sunrise"), "Sunrise");
 		break;
 	case 1:
-		label = "Day";
+		label = T(TKEY("tod_day"), "Day");
 		break;
 	case 2:
-		label = "Sunset";
+		label = T(TKEY("tod_sunset"), "Sunset");
 		break;
 	case 3:
-		label = "Night";
+		label = T(TKEY("tod_night"), "Night");
 		break;
 	default:
 		break;
@@ -249,55 +403,55 @@ std::string ColorTypeLabel(const int i)
 	std::string label = "";
 	switch (i) {
 	case 0:
-		label = "Sky Upper";
+		label = T(TKEY("color_sky_upper"), "Sky Upper");
 		break;
 	case 1:
-		label = "Fog Near";
+		label = T(TKEY("color_fog_near"), "Fog Near");
 		break;
 	case 2:
-		label = "Unknown";
+		label = T(TKEY("unknown"), "Unknown");
 		break;
 	case 3:
-		label = "Ambient";
+		label = T(TKEY("color_ambient"), "Ambient");
 		break;
 	case 4:
-		label = "Sunlight";
+		label = T(TKEY("color_sunlight"), "Sunlight");
 		break;
 	case 5:
-		label = "Sun";
+		label = T(TKEY("color_sun"), "Sun");
 		break;
 	case 6:
-		label = "Stars";
+		label = T(TKEY("color_stars"), "Stars");
 		break;
 	case 7:
-		label = "Sky Lower";
+		label = T(TKEY("color_sky_lower"), "Sky Lower");
 		break;
 	case 8:
-		label = "Horizon";
+		label = T(TKEY("color_horizon"), "Horizon");
 		break;
 	case 9:
-		label = "Effect Lighting";
+		label = T(TKEY("color_effect_lighting"), "Effect Lighting");
 		break;
 	case 10:
-		label = "Cloud LOD Diffuse";
+		label = T(TKEY("color_cloud_lod_diffuse"), "Cloud LOD Diffuse");
 		break;
 	case 11:
-		label = "Cloud LOD Ambient";
+		label = T(TKEY("color_cloud_lod_ambient"), "Cloud LOD Ambient");
 		break;
 	case 12:
-		label = "Fog Far";
+		label = T(TKEY("color_fog_far"), "Fog Far");
 		break;
 	case 13:
-		label = "Sky Statics";
+		label = T(TKEY("color_sky_statics"), "Sky Statics");
 		break;
 	case 14:
-		label = "Water Multiplier";
+		label = T(TKEY("color_water_multiplier"), "Water Multiplier");
 		break;
 	case 15:
-		label = "Sun Glare";
+		label = T(TKEY("color_sun_glare"), "Sun Glare");
 		break;
 	case 16:
-		label = "Moon Glare";
+		label = T(TKEY("color_moon_glare"), "Moon Glare");
 		break;
 	default:
 		break;
@@ -320,9 +474,10 @@ namespace WeatherUtils
 	{
 		const double debounceDelay = 2.0;
 		double currentTime = ImGui::GetTime();
+		const auto displayLabel = BuildLocalizedControlLabel(label);
 
 		bool changed = DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
-			return ImGui::SliderInt(label.c_str(), &property, -127, 127);
+			return ImGui::SliderInt(displayLabel.c_str(), &property, -127, 127);
 		});
 		bool isNowActive = ImGui::IsItemActive();
 
@@ -364,7 +519,8 @@ namespace WeatherUtils
 		const std::string cacheId = effectiveWidget ?
 		                                std::format("{}{}{}", static_cast<const void*>(effectiveWidget), kScopeSep, hid) :
 		                                hid;
-		bool isActive = ImGui::IsPopupOpen(l.c_str(), ImGuiPopupFlags_AnyPopupId);
+		const auto displayLabel = BuildLocalizedControlLabel(l);
+		bool isActive = ImGui::IsPopupOpen(displayLabel.c_str(), ImGuiPopupFlags_AnyPopupId);
 		bool wasActive = wasPickerOpen[cacheId];
 
 		// Cache the original color and push undo state when picker is first activated
@@ -389,7 +545,7 @@ namespace WeatherUtils
 		}
 
 		bool changed = DrawWithWidgetHighlight(effectiveWidget, hid, [&]() {
-			return ImGui::ColorEdit3(l.c_str(), (float*)&property);
+			return ImGui::ColorEdit3(displayLabel.c_str(), (float*)&property);
 		});
 
 		// Track color usage only when picker closes
@@ -423,8 +579,9 @@ namespace WeatherUtils
 
 	bool DrawSliderUint8(const std::string& label, int& property)
 	{
+		const auto displayLabel = BuildLocalizedControlLabel(label);
 		bool changed = DrawWithWidgetHighlight(g_currentWidget, label, [&]() {
-			return ImGui::SliderInt(label.c_str(), &property, 0, 255);
+			return ImGui::SliderInt(displayLabel.c_str(), &property, 0, 255);
 		});
 		return changed;
 	}
@@ -436,12 +593,13 @@ namespace WeatherUtils
 
 		// Strip leading "##" so hidden-label sliders still match highlight/search ids.
 		std::string hid = label.starts_with("##") ? label.substr(2) : label;
+		const auto displayLabel = BuildLocalizedControlLabel(label);
 		Widget* w = widget ? widget : g_currentWidget;
 		if (w && !w->MatchesSearch(hid))
 			return false;
 
 		bool changed = DrawWithWidgetHighlight(w, hid, [&]() {
-			return ImGui::SliderFloat(label.c_str(), &property, min, max, format);
+			return ImGui::SliderFloat(displayLabel.c_str(), &property, min, max, format);
 		});
 		bool isNowActive = ImGui::IsItemActive();
 
@@ -473,11 +631,12 @@ namespace WeatherUtils
 	{
 		Widget* w = widget ? widget : g_currentWidget;
 		const std::string hid = label.starts_with("##") ? label.substr(2) : label;
+		const auto displayLabel = BuildLocalizedControlLabel(label);
 		if (w && !w->MatchesSearch(hid))
 			return false;
 
 		return DrawWithWidgetHighlight(w, hid, [&]() {
-			return ImGui::Checkbox(label.c_str(), &value);
+			return ImGui::Checkbox(displayLabel.c_str(), &value);
 		});
 	}
 }
@@ -487,10 +646,18 @@ namespace TOD
 {
 	const char* GetPeriodName(int index)
 	{
-		static const char* names[Count] = { "Sunrise", "Day", "Sunset", "Night" };
-		if (index >= 0 && index < Count)
-			return names[index];
-		return "Unknown";
+		switch (index) {
+		case Sunrise:
+			return T(TKEY("tod_sunrise"), "Sunrise");
+		case Day:
+			return T(TKEY("tod_day"), "Day");
+		case Sunset:
+			return T(TKEY("tod_sunset"), "Sunset");
+		case Night:
+			return T(TKEY("tod_night"), "Night");
+		default:
+			return T(TKEY("unknown"), "Unknown");
+		}
 	}
 
 	float GetCurrentGameTime()
@@ -841,7 +1008,7 @@ namespace TOD
 						changed = true;
 					}
 				}
-				Util::AddTooltip("Inherit from parent");
+				Util::AddTooltip(T(TKEY("inherit_from_parent"), "Inherit from parent"));
 				ImGui::PopStyleVar();
 				ImGui::SameLine(0, 2 * scale);
 			}
@@ -882,7 +1049,7 @@ namespace TOD
 
 			ImGui::EndDisabled();
 
-			Util::AddTooltip(isInherited ? "Inherited from parent weather" : std::format("{:.0f}%", factors[i] * 100.0f).c_str());
+			Util::AddTooltip(isInherited ? T(TKEY("inherited_from_parent_weather"), "Inherited from parent weather") : std::format("{:.0f}%", factors[i] * 100.0f).c_str());
 			ImGui::PopItemWidth();
 
 			if (isInherited)
@@ -949,7 +1116,7 @@ namespace TOD
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
 
-			Util::AddTooltip("Inherit from parent weather");
+			Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
 		}
 
 		if (!anyActive)
@@ -1061,7 +1228,7 @@ namespace TOD
 			ImGui::EndDisabled();
 
 			if (inheritFlag) {
-				Util::AddTooltip("Inherited from parent weather");
+				Util::AddTooltip(T(TKEY("inherited_from_parent_weather"), "Inherited from parent weather"));
 				PopInheritedStyle();
 			}
 
@@ -1149,7 +1316,7 @@ namespace TOD
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
 
-			Util::AddTooltip("Inherit from parent weather");
+			Util::AddTooltip(T(TKEY("inherit_from_parent_weather"), "Inherit from parent weather"));
 		}
 
 		ImGui::TableSetColumnIndex(1);
@@ -1177,7 +1344,7 @@ namespace TOD
 				changed = true;
 			}
 			if (inheritFlag)
-				Util::AddTooltip("Inherited from parent weather");
+				Util::AddTooltip(T(TKEY("inherited_from_parent_weather"), "Inherited from parent weather"));
 			ImGui::PopID();
 		}
 		ImGui::EndDisabled();
@@ -1234,8 +1401,8 @@ namespace TOD
 		if (paramColumnWidth <= 0.0f)
 			paramColumnWidth = WidgetDefaults::kTODLabelWidth;
 		if (ImGui::BeginTable(tableId, 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, paramColumnWidth * Util::GetUIScale());
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn(T(TKEY("parameter"), "Parameter"), ImGuiTableColumnFlags_WidthFixed, paramColumnWidth * Util::GetUIScale());
+			ImGui::TableSetupColumn(T(TKEY("value"), "Value"), ImGuiTableColumnFlags_WidthStretch);
 			return true;
 		}
 		return false;
@@ -1270,8 +1437,8 @@ namespace PropertyDrawer
 	bool BeginTable(const char* tableId, float labelWidth)
 	{
 		if (ImGui::BeginTable(tableId, 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, labelWidth * Util::GetUIScale());
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn(T(TKEY("parameter"), "Parameter"), ImGuiTableColumnFlags_WidthFixed, labelWidth * Util::GetUIScale());
+			ImGui::TableSetupColumn(T(TKEY("value"), "Value"), ImGuiTableColumnFlags_WidthStretch);
 			return true;
 		}
 		return false;
@@ -1342,3 +1509,5 @@ namespace PropertyDrawer
 		});
 	}
 }  // namespace PropertyDrawer
+
+#undef I18N_KEY_PREFIX

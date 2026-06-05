@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../I18n/I18n.h"
 #include "../Widget.h"
 
 // Simple widget for displaying form information without editing
@@ -22,11 +23,11 @@ public:
 
 	void DrawWidget() override
 	{
-		ImGui::Text("EditorID: %s", editorID.c_str());
-		ImGui::Text("FormID: %08X", formID);
-		ImGui::Text("File: %s", filename.c_str());
+		ImGui::Text(T("cs_editor.editor_id_label", "EditorID: %s"), editorID.c_str());
+		ImGui::Text(T("cs_editor.form_id_label", "FormID: %08X"), formID);
+		ImGui::Text(T("cs_editor.file_label", "File: %s"), filename.c_str());
 		ImGui::Separator();
-		ImGui::TextWrapped("This form is referenced by weather records. To change which form is used, edit the Records tab in the Weather widget.");
+		ImGui::TextWrapped("%s", T("cs_editor.form_reference_note", "This form is referenced by weather records. To change which form is used, edit the Records tab in the Weather widget."));
 	}
 
 	void LoadSettings() override {}

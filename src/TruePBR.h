@@ -15,6 +15,7 @@ struct TruePBR : Feature
 {
 public:
 	virtual std::string GetName() override { return "True PBR"; }
+	virtual std::string GetDisplayName() override { return T("feature.true_pbr.name", "True PBR"); }
 	virtual std::string GetShortName() override { return "TruePBR"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
 	virtual bool IsCore() const override { return true; }

@@ -266,7 +266,26 @@ namespace SharedData
 		uint disableVanillaFog;
 		float4 fogInscatteringColor;
 		float originalFogColorAmount;
-		float3 pad;
+		uint volumetricFogEnabled;
+		uint volumetricGridPixelSize;
+		uint volumetricGridSizeZ;
+		float volumetricFogDistance;
+		float volumetricFogStartDistance;
+		float volumetricFogNearFadeInDistance;
+		float volumetricFogExtinctionScale;
+		float4 volumetricFogAlbedo;
+		float4 volumetricFogEmissive;
+		float volumetricDirectionalScatteringIntensity;
+		float volumetricShadowBias;
+		float volumetricDepthDistributionScale;
+		float volumetricSkyLightingIntensity;
+		float volumetricFogScatteringDistribution;
+		float volumetricHistoryWeight;
+		uint volumetricHistoryMissSampleCount;
+		float volumetricSampleJitterMultiplier;
+		float volumetricUpsampleJitterMultiplier;
+		float volumetricLocalLightScatteringIntensity;
+		float2 pad0;
 	};
 
 	struct TruePBRSettings
