@@ -25,21 +25,19 @@ public:
 	bool enabledAtBoot = false;
 
 	virtual inline std::string GetName() override { return "Volumetric Lighting"; }
+	virtual std::string GetDisplayName() override { return T("feature.volumetric_lighting.name", "Volumetric Lighting"); }
 	virtual inline std::string GetShortName() override { return "VolumetricLighting"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Volumetric Lighting creates realistic light scattering effects through fog, dust, and atmospheric particles.\n"
-			"This adds dramatic god rays and atmospheric depth to both interior and exterior environments.",
-			{ "Realistic light scattering",
-				"God rays and atmospheric effects",
-				"Separate interior/exterior settings",
-				"Configurable quality levels",
-				"Enhanced atmospheric immersion" }
-		};
-	}
+		return { T("feature.volumetric_lighting.description", "Volumetric Lighting creates realistic light scattering effects through fog, dust, and atmospheric particles.\nThis adds dramatic god rays and atmospheric depth to both interior and exterior environments."),
+			{ T("feature.volumetric_lighting.key_feature_1", "Realistic light scattering"),
+				T("feature.volumetric_lighting.key_feature_2", "God rays and atmospheric effects"),
+				T("feature.volumetric_lighting.key_feature_3", "Separate interior/exterior settings"),
+				T("feature.volumetric_lighting.key_feature_4", "Configurable quality levels"),
+				T("feature.volumetric_lighting.key_feature_5", "Enhanced atmospheric immersion") } };
+	};
 
 	virtual void SaveSettings(json&) override;
 	virtual void LoadSettings(json&) override;

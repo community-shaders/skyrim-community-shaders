@@ -1,8 +1,10 @@
 #pragma once
 
+#include "../I18n/I18n.h"
 #include "Util.h"
 #include "Widget.h"
 #include <cctype>
+#include <format>
 #include <functional>
 #include <map>
 #include <string>
@@ -170,6 +172,29 @@ namespace PropertyDrawer
 // ============================================================================
 namespace WidgetFactory
 {
+	inline const char* TranslateWidgetTypeName(std::string_view widgetTypeName)
+	{
+		if (widgetTypeName == "Weather")
+			return T("cs_editor.widget_type_weather", "Weather");
+		if (widgetTypeName == "ImageSpace")
+			return T("cs_editor.widget_type_imagespace", "ImageSpace");
+		if (widgetTypeName == "Lighting")
+			return T("cs_editor.widget_type_lighting", "Lighting");
+		if (widgetTypeName == "Cell Lighting")
+			return T("cs_editor.widget_type_cell_lighting", "Cell Lighting");
+		if (widgetTypeName == "Volumetric Lighting")
+			return T("cs_editor.widget_type_volumetric_lighting", "Volumetric Lighting");
+		if (widgetTypeName == "Precipitation")
+			return T("cs_editor.widget_type_precipitation", "Precipitation");
+		if (widgetTypeName == "Lens Flare")
+			return T("cs_editor.widget_type_lens_flare", "Lens Flare");
+		if (widgetTypeName == "Visual Effect")
+			return T("cs_editor.widget_type_visual_effect", "Visual Effect");
+
+		// Fallback: use T() to cache a stable null-terminated copy
+		return T(std::string(widgetTypeName).c_str(), std::string(widgetTypeName).c_str());
+	}
+
 	// Populate a widget container from a form array
 	// WidgetType must have a constructor taking FormType*
 	template <typename WidgetType, typename FormType>
@@ -234,7 +259,7 @@ namespace WidgetFactory
 		for (auto& widget : widgets) {
 			if (widget->IsOpen()) {
 				++count;
-				if (ImGui::MenuItem(std::format("{}: {}", widget->GetWidgetTypeName(), widget->GetEditorID()).c_str()))
+				if (ImGui::MenuItem(std::format("{}: {}", TranslateWidgetTypeName(widget->GetWidgetTypeName()), widget->GetEditorID()).c_str()))
 					ImGui::SetWindowFocus(widget->GetWindowTitle().c_str());
 			}
 		}
@@ -248,7 +273,8 @@ namespace WidgetFactory
 		for (auto& widget : widgets) {
 			if (widget->IsOpen()) {
 				hasOpen = true;
-				if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str()))
+				auto editorId = widget->GetEditorID();
+				if (ImGui::MenuItem(std::vformat(T("cs_editor.save_widget", "Save {}"), std::make_format_args(editorId)).c_str()))
 					widget->Save();
 			}
 		}
@@ -261,7 +287,8 @@ namespace WidgetFactory
 	{
 		if (widgets.empty())
 			return;
-		if (ImGui::MenuItem(std::format("Close All {} Widgets", widgets[0]->GetWidgetTypeName()).c_str())) {
+		auto typeName = TranslateWidgetTypeName(widgets[0]->GetWidgetTypeName());
+		if (ImGui::MenuItem(std::vformat(T("cs_editor.close_all_widgets", "Close All {} Widgets"), std::make_format_args(typeName)).c_str())) {
 			for (auto& widget : widgets)
 				widget->SetOpen(false);
 		}
@@ -377,6 +404,7 @@ namespace WeatherUtils
 	void SetCurrentWidget(Widget* widget);
 
 	// UI helper functions
+	const char* TranslateControlLabel(std::string_view label);
 	bool DrawSliderInt8(const std::string& label, int& property);
 	bool DrawColorEdit(const std::string& l, float3& property, Widget* widget = nullptr);
 	bool DrawSliderUint8(const std::string& label, int& property);
@@ -402,14 +430,14 @@ namespace WeatherUtils
 				                  std::format("{} (0x{:08X})", effectiveID, currentForm->GetFormID()) :
 				                  effectiveID;
 			} else {
-				previewText = "None";
+				previewText = ::T("cs_editor.none_filter", "None");
 			}
 
 			if (width > 0.0f)
 				ImGui::SetNextItemWidth(width);
 
 			if (ImGui::BeginCombo(label, previewText.c_str())) {
-				if (allowNone && ImGui::Selectable("None", currentForm == nullptr)) {
+				if (allowNone && ImGui::Selectable(::T("cs_editor.none_filter", "None"), currentForm == nullptr)) {
 					currentForm = nullptr;
 					changed = true;
 				}

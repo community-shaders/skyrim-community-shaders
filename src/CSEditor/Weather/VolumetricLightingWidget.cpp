@@ -1,6 +1,9 @@
 #include "VolumetricLightingWidget.h"
+#include "../../I18n/I18n.h"
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
+
+#define I18N_KEY_PREFIX "cs_editor."
 
 namespace
 {
@@ -44,15 +47,15 @@ void VolumetricLightingWidget::DrawWidget()
 			});
 		};
 
-		if (ImGui::BeginTabItem(VolumetricLightingTab::kBasic, nullptr, basicFlags)) {
+		if (ImGui::BeginTabItem(T(TKEY("tab_basic"), "Basic"), nullptr, basicFlags)) {
 			BeginScrollableContent("##BasicScroll");
-			drawSection(VolumetricLightingSetting::kIntensity, "Intensity", [&]() {
+			drawSection(VolumetricLightingSetting::kIntensity, T(TKEY("intensity"), "Intensity"), [&]() {
 				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kIntensity, settings.intensity, 0.0f, 50.0f);
 			});
-			drawSection(VolumetricLightingSetting::kContribution, "Custom Color", [&]() {
+			drawSection(VolumetricLightingSetting::kContribution, T(TKEY("custom_color"), "Custom Color"), [&]() {
 				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kContribution, settings.customColorContribution, 0.0f, 1.0f);
 			});
-			drawSection(VolumetricLightingSetting::kColor, "RGB Color", [&]() {
+			drawSection(VolumetricLightingSetting::kColor, T(TKEY("rgb_color"), "RGB Color"), [&]() {
 				float3 rgbColor{ settings.red, settings.green, settings.blue };
 				if (WeatherUtils::DrawColorEdit(VolumetricLightingSetting::kColor, rgbColor)) {
 					settings.red = rgbColor.x;
@@ -65,10 +68,10 @@ void VolumetricLightingWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem(VolumetricLightingTab::kDensity, nullptr, densityFlags)) {
+		if (ImGui::BeginTabItem(T(TKEY("tab_density"), "Density"), nullptr, densityFlags)) {
 			BeginScrollableContent("##DensityScroll");
 			if (MatchesAnySearch({ VolumetricLightingSetting::kContribution, VolumetricLightingSetting::kSize, VolumetricLightingSetting::kWindSpeed, VolumetricLightingSetting::kFallingSpeed })) {
-				ImGui::SeparatorText("Density Settings");
+				ImGui::SeparatorText(T(TKEY("density_settings"), "Density Settings"));
 				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kContribution, settings.densityContribution, 0.0f, 1.0f);
 				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kSize, settings.densitySize, 0.1f, 10000.0f);
 				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kWindSpeed, settings.densityWindSpeed, 0.0f, 100.0f);
@@ -78,14 +81,14 @@ void VolumetricLightingWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 
-		if (ImGui::BeginTabItem(VolumetricLightingTab::kAdvanced, nullptr, advancedFlags)) {
+		if (ImGui::BeginTabItem(T(TKEY("tab_advanced"), "Advanced"), nullptr, advancedFlags)) {
 			BeginScrollableContent("##AdvancedScroll");
 			if (MatchesAnySearch({ VolumetricLightingSetting::kContribution, VolumetricLightingSetting::kScattering })) {
-				ImGui::SeparatorText("Phase Function");
+				ImGui::SeparatorText(T(TKEY("phase_function"), "Phase Function"));
 				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kContribution, settings.phaseFunctionContribution, 0.0f, 1.0f);
 				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kScattering, settings.phaseFunctionScattering, -1.0f, 1.0f);
 			}
-			drawSection(VolumetricLightingSetting::kRangeFactor, "Sampling", [&]() {
+			drawSection(VolumetricLightingSetting::kRangeFactor, T(TKEY("sampling"), "Sampling"), [&]() {
 				changed |= WeatherUtils::DrawSliderFloat(VolumetricLightingSetting::kRangeFactor, settings.samplingRangeFactor, 0.0f, 160.0f);
 			});
 			EndScrollableContent();
@@ -215,15 +218,17 @@ std::vector<Widget::SearchResult> VolumetricLightingWidget::CollectSearchableSet
 	// Many tabs share the same inner label ("Contribution"); display names are
 	// disambiguated for the dropdown while the inner id matches the ImGui label.
 	return {
-		{ VolumetricLightingSetting::kIntensity, VolumetricLightingTab::kBasic, VolumetricLightingSetting::kIntensity },
-		{ "Custom Color Contribution", VolumetricLightingTab::kBasic, VolumetricLightingSetting::kContribution },
-		{ VolumetricLightingSetting::kColor, VolumetricLightingTab::kBasic, VolumetricLightingSetting::kColor },
-		{ "Density Contribution", VolumetricLightingTab::kDensity, VolumetricLightingSetting::kContribution },
-		{ "Density Size", VolumetricLightingTab::kDensity, VolumetricLightingSetting::kSize },
-		{ VolumetricLightingSetting::kWindSpeed, VolumetricLightingTab::kDensity, VolumetricLightingSetting::kWindSpeed },
-		{ VolumetricLightingSetting::kFallingSpeed, VolumetricLightingTab::kDensity, VolumetricLightingSetting::kFallingSpeed },
-		{ "Phase Function Contribution", VolumetricLightingTab::kAdvanced, VolumetricLightingSetting::kContribution },
-		{ "Phase Function Scattering", VolumetricLightingTab::kAdvanced, VolumetricLightingSetting::kScattering },
-		{ "Sampling Range Factor", VolumetricLightingTab::kAdvanced, VolumetricLightingSetting::kRangeFactor },
+		{ WeatherUtils::TranslateControlLabel(VolumetricLightingSetting::kIntensity), VolumetricLightingTab::kBasic, VolumetricLightingSetting::kIntensity },
+		{ T(TKEY("custom_color_contribution"), "Custom Color Contribution"), VolumetricLightingTab::kBasic, VolumetricLightingSetting::kContribution },
+		{ WeatherUtils::TranslateControlLabel(VolumetricLightingSetting::kColor), VolumetricLightingTab::kBasic, VolumetricLightingSetting::kColor },
+		{ T(TKEY("density_contribution"), "Density Contribution"), VolumetricLightingTab::kDensity, VolumetricLightingSetting::kContribution },
+		{ T(TKEY("density_size"), "Density Size"), VolumetricLightingTab::kDensity, VolumetricLightingSetting::kSize },
+		{ WeatherUtils::TranslateControlLabel(VolumetricLightingSetting::kWindSpeed), VolumetricLightingTab::kDensity, VolumetricLightingSetting::kWindSpeed },
+		{ WeatherUtils::TranslateControlLabel(VolumetricLightingSetting::kFallingSpeed), VolumetricLightingTab::kDensity, VolumetricLightingSetting::kFallingSpeed },
+		{ T(TKEY("phase_function_contribution"), "Phase Function Contribution"), VolumetricLightingTab::kAdvanced, VolumetricLightingSetting::kContribution },
+		{ T(TKEY("phase_function_scattering"), "Phase Function Scattering"), VolumetricLightingTab::kAdvanced, VolumetricLightingSetting::kScattering },
+		{ T(TKEY("sampling_range_factor"), "Sampling Range Factor"), VolumetricLightingTab::kAdvanced, VolumetricLightingSetting::kRangeFactor },
 	};
 }
+
+#undef I18N_KEY_PREFIX

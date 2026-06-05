@@ -9,6 +9,7 @@
 #include "State.h"
 
 #include "DynamicWetness_PublicAPI.h"
+#include "I18n/I18n.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Skin::Settings,
@@ -42,149 +43,149 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void Skin::DrawSettings()
 {
-	ImGui::Checkbox("Enable Advanced Skin", &settings.EnableSkin);
+	ImGui::Checkbox(T("feature.skin.enable_advanced_skin", "Enable Advanced Skin"), &settings.EnableSkin);
 
-	ImGui::Text("Advanced Skin Shader using dual specular lobes.");
-
-	ImGui::Spacing();
-	ImGui::SliderFloat("Primary Roughness", &settings.SkinMainRoughness, 0.0f, 1.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls microscopic roughness of stratum corneum layer");
-	}
-
-	ImGui::SliderFloat("Secondary Roughness", &settings.SkinSecondRoughness, 0.0f, 1.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Smoothness of epidermal cell layer reflections");
-		ImGui::BulletText("Should be 30-50%% lower than Primary");
-	}
-
-	ImGui::SliderFloat("Specular Texture Multiplier", &settings.SkinSpecularTexMultiplier, 0.0f, 10.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Multiplier for specular map");
-		ImGui::BulletText("A multiplier for the vanilla specular map, applied to the first layer's roughness");
-	}
-
-	ImGui::SliderFloat("Secondary Specular Strength", &settings.SecondarySpecularStrength, 0.0f, 1.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Intensity of secondary specular highlights");
-	}
-
-	ImGui::SliderFloat("Fresnel F0", &settings.F0, 0.0f, 0.1f, "%.4f");
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Fresnel reflectance");
-	}
-
-	ImGui::SliderFloat("Base Color Multiplier", &settings.BaseColorMultiplier, 0.0f, 2.0f, "%.2f");
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Multiplier for the base color texture");
-	}
+	ImGui::Text("%s", T("feature.skin.advanced_skin_shader_using_dual_specular_lobes", "Advanced Skin Shader using dual specular lobes."));
 
 	ImGui::Spacing();
-	ImGui::Text("Options for additional roughness and specular maps.");
-
-	ImGui::SliderFloat("Physical Main Roughness Multiplier", &settings.PhysicalMainRoughnessMultiplier, 0.0f, 2.0f, "%.2f");
-	ImGui::SliderFloat("Physical Second Roughness Multiplier", &settings.PhysicalSecondRoughnessMultiplier, 0.0f, 2.0f, "%.2f");
-	ImGui::SliderFloat("Physical Specular Multiplier", &settings.PhysicalSpecularStrength, 0.0f, 2.0f, "%.2f");
-
-	ImGui::Spacing();
-
-	ImGui::SliderFloat("Extra Edge Roughness", &settings.ExtraEdgeRoughness, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.skin.primary_roughness", "Primary Roughness"), &settings.SkinMainRoughness, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Extra roughness at the edges of the skin, to approximate peach fuzz on the face.");
+		ImGui::Text("%s", T("feature.skin.controls_microscopic_roughness_of_stratum_corneum_layer", "Controls microscopic roughness of stratum corneum layer"));
 	}
 
-	ImGui::SliderFloat("Fuzz Strength", &settings.FuzzStrength, 0.0f, 2.0f, "%.2f");
-
-	ImGui::SliderFloat("Fuzz Roughness", &settings.FuzzRoughness, 0.1f, 1.0f, "%.2f");
-
-	ImGui::SliderFloat("Fuzz F0", &settings.FuzzF0, 0.0f, 0.5f, "%.4f");
-
-	ImGui::Spacing();
-
-	ImGui::Checkbox("Enable SSS Transmission", &settings.UseSSS);
-
-	ImGui::SliderFloat("Translucency", &settings.Translucency, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.skin.secondary_roughness", "Secondary Roughness"), &settings.SkinSecondRoughness, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Translucency of the SSS Transmittance effect");
+		ImGui::Text("%s", T("feature.skin.smoothness_of_epidermal_cell_layer_reflections", "Smoothness of epidermal cell layer reflections"));
+		ImGui::BulletText(T("feature.skin.should_be_30_50_lower_than_primary", "Should be 30-50%% lower than Primary"));
 	}
 
-	ImGui::SliderFloat("SSS Width", &settings.sssWidth, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.skin.specular_texture_multiplier", "Specular Texture Multiplier"), &settings.SkinSpecularTexMultiplier, 0.0f, 10.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Width of the SSS Transmittance effect");
+		ImGui::Text("%s", T("feature.skin.multiplier_for_specular_map", "Multiplier for specular map"));
+		ImGui::BulletText("%s", T("feature.skin.a_multiplier_for_the_vanilla_specular_map_applied", "A multiplier for the vanilla specular map, applied to the first layer's roughness"));
+	}
+
+	ImGui::SliderFloat(T("feature.skin.secondary_specular_strength", "Secondary Specular Strength"), &settings.SecondarySpecularStrength, 0.0f, 1.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("feature.skin.intensity_of_secondary_specular_highlights", "Intensity of secondary specular highlights"));
+	}
+
+	ImGui::SliderFloat(T("feature.skin.fresnel_f0", "Fresnel F0"), &settings.F0, 0.0f, 0.1f, "%.4f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("feature.skin.fresnel_reflectance", "Fresnel reflectance"));
+	}
+
+	ImGui::SliderFloat(T("feature.skin.base_color_multiplier", "Base Color Multiplier"), &settings.BaseColorMultiplier, 0.0f, 2.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("feature.skin.multiplier_for_the_base_color_texture", "Multiplier for the base color texture"));
 	}
 
 	ImGui::Spacing();
+	ImGui::Text("%s", T("feature.skin.options_for_additional_roughness_and_specular_maps", "Options for additional roughness and specular maps."));
 
-	ImGui::SliderFloat("Extra Skin Wetness", &settings.ExtraSkinWetness, 0.0f, 2.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.skin.physical_main_roughness_multiplier", "Physical Main Roughness Multiplier"), &settings.PhysicalMainRoughnessMultiplier, 0.0f, 2.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.skin.physical_second_roughness_multiplier", "Physical Second Roughness Multiplier"), &settings.PhysicalSecondRoughnessMultiplier, 0.0f, 2.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.skin.physical_specular_multiplier", "Physical Specular Multiplier"), &settings.PhysicalSpecularStrength, 0.0f, 2.0f, "%.2f");
+
+	ImGui::Spacing();
+
+	ImGui::SliderFloat(T("feature.skin.extra_edge_roughness", "Extra Edge Roughness"), &settings.ExtraEdgeRoughness, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Adds a constant layer of wetness to all skin, making it look slightly damp or sweaty at all times, even when not in water or exerting effort.");
+		ImGui::Text("%s", T("feature.skin.extra_roughness_at_the_edges_of_the_skin", "Extra roughness at the edges of the skin, to approximate peach fuzz on the face."));
 	}
 
-	ImGui::SliderFloat("Wetness Fade Out Time", &settings.WetFadeTime, 0.0f, 50.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.skin.fuzz_strength", "Fuzz Strength"), &settings.FuzzStrength, 0.0f, 2.0f, "%.2f");
+
+	ImGui::SliderFloat(T("feature.skin.fuzz_roughness", "Fuzz Roughness"), &settings.FuzzRoughness, 0.1f, 1.0f, "%.2f");
+
+	ImGui::SliderFloat(T("feature.skin.fuzz_f0", "Fuzz F0"), &settings.FuzzF0, 0.0f, 0.5f, "%.4f");
+
+	ImGui::Spacing();
+
+	ImGui::Checkbox(T("feature.skin.enable_sss_transmission", "Enable SSS Transmission"), &settings.UseSSS);
+
+	ImGui::SliderFloat(T("feature.skin.translucency", "Translucency"), &settings.Translucency, 0.0f, 1.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("How many seconds it takes for skin to fully dry after leaving water. Higher values mean wetness lingers longer.");
+		ImGui::Text("%s", T("feature.skin.translucency_of_the_sss_transmittance_effect", "Translucency of the SSS Transmittance effect"));
+	}
+
+	ImGui::SliderFloat(T("feature.skin.sss_width", "SSS Width"), &settings.sssWidth, 0.0f, 1.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("feature.skin.width_of_the_sss_transmittance_effect", "Width of the SSS Transmittance effect"));
+	}
+
+	ImGui::Spacing();
+
+	ImGui::SliderFloat(T("feature.skin.extra_skin_wetness", "Extra Skin Wetness"), &settings.ExtraSkinWetness, 0.0f, 2.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("feature.skin.adds_a_constant_layer_of_wetness_to_all", "Adds a constant layer of wetness to all skin, making it look slightly damp or sweaty at all times, even when not in water or exerting effort."));
+	}
+
+	ImGui::SliderFloat(T("feature.skin.wetness_fade_out_time", "Wetness Fade Out Time"), &settings.WetFadeTime, 0.0f, 50.0f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("%s", T("feature.skin.how_many_seconds_it_takes_for_skin_to", "How many seconds it takes for skin to fully dry after leaving water. Higher values mean wetness lingers longer."));
 	}
 
 	if (isDynamicWetnessAvailable) {
-		ImGui::Text("Dynamic Wetness detected.");
-		ImGui::Checkbox("Use Dynamic Wetness", &settings.UseDynamicWetness);
+		ImGui::Text("%s", T("feature.skin.dynamic_wetness_detected", "Dynamic Wetness detected."));
+		ImGui::Checkbox(T("feature.skin.use_dynamic_wetness", "Use Dynamic Wetness"), &settings.UseDynamicWetness);
 	} else {
 		settings.UseDynamicWetness = false;
 	}
 
 	if (!settings.UseDynamicWetness) {
-		ImGui::SliderFloat("Stamina Threshold for Sweat", &settings.StartSweat, 0.0f, 1.0f, "%.2f",
+		ImGui::SliderFloat(T("feature.skin.stamina_threshold_for_sweat", "Stamina Threshold for Sweat"), &settings.StartSweat, 0.0f, 1.0f, "%.2f",
 			ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("The character starts sweating when their stamina drops below this percentage. For example, 0.75 means sweat appears below 75%% stamina.");
+			ImGui::Text(T("feature.skin.the_character_starts_sweating_when_their_stamina_drops", "The character starts sweating when their stamina drops below this percentage. For example, 0.75 means sweat appears below 75%% stamina."));
 		}
-		ImGui::SliderFloat("Full Sweat Threshold", &settings.FullSweat, 0.0f, 1.0f, "%.2f",
+		ImGui::SliderFloat(T("feature.skin.full_sweat_threshold", "Full Sweat Threshold"), &settings.FullSweat, 0.0f, 1.0f, "%.2f",
 			ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("The character reaches maximum sweat when stamina drops below this percentage. For example, 0.15 means full sweat below 15%% stamina.");
+			ImGui::Text(T("feature.skin.the_character_reaches_maximum_sweat_when_stamina_drops", "The character reaches maximum sweat when stamina drops below this percentage. For example, 0.15 means full sweat below 15%% stamina."));
 		}
 	}
 
-	ImGui::SliderFloat("Wetness Perlin Noise Scale", &settings.WetParams.x, 0.0f, 1024.0f, "%1.f");
+	ImGui::SliderFloat(T("feature.skin.wetness_perlin_noise_scale", "Wetness Perlin Noise Scale"), &settings.WetParams.x, 0.0f, 1024.0f, "%1.f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls the size of the wet/dry pattern on skin. Higher values create a finer, more detailed pattern; lower values produce larger, broader wet patches.");
+		ImGui::Text("%s", T("feature.skin.controls_the_size_of_the_wet_dry_pattern", "Controls the size of the wet/dry pattern on skin. Higher values create a finer, more detailed pattern; lower values produce larger, broader wet patches."));
 	}
-	ImGui::SliderFloat("Wetness Perlin Noise Lacunarity", &settings.WetParams.y, 0.0f, 2.0f, "%.1f");
+	ImGui::SliderFloat(T("feature.skin.wetness_perlin_noise_lacunarity", "Wetness Perlin Noise Lacunarity"), &settings.WetParams.y, 0.0f, 2.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls how much fine detail is added to the wetness pattern. Higher values add more small-scale variation on top of the base pattern.");
+		ImGui::Text("%s", T("feature.skin.controls_how_much_fine_detail_is_added_to", "Controls how much fine detail is added to the wetness pattern. Higher values add more small-scale variation on top of the base pattern."));
 	}
-	ImGui::SliderFloat("Wetness Perlin Noise Persistence", &settings.WetParams.z, 0.0f, 20.0f, "%.2f");
+	ImGui::SliderFloat(T("feature.skin.wetness_perlin_noise_persistence", "Wetness Perlin Noise Persistence"), &settings.WetParams.z, 0.0f, 20.0f, "%.2f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls the overall contrast and roughness of the wetness pattern. Higher values make the pattern more pronounced and varied.");
+		ImGui::Text("%s", T("feature.skin.controls_the_overall_contrast_and_roughness_of_the", "Controls the overall contrast and roughness of the wetness pattern. Higher values make the pattern more pronounced and varied."));
 	}
-	ImGui::SliderFloat("Wetness Normal Scale", &settings.WetParams.w, 0.0f, 20.0f, "%.1f");
+	ImGui::SliderFloat(T("feature.skin.wetness_normal_scale", "Wetness Normal Scale"), &settings.WetParams.w, 0.0f, 20.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Controls how bumpy wet skin appears. Higher values create more visible surface ripples and distortion on wet areas.");
+		ImGui::Text("%s", T("feature.skin.controls_how_bumpy_wet_skin_appears_higher_values", "Controls how bumpy wet skin appears. Higher values create more visible surface ripples and distortion on wet areas."));
 	}
 
 	ImGui::Spacing();
 
-	ImGui::Checkbox("Enable Skin Detail", &settings.EnableSkinDetail);
+	ImGui::Checkbox(T("feature.skin.enable_skin_detail", "Enable Skin Detail"), &settings.EnableSkinDetail);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Enable skin detail texture");
+		ImGui::Text("%s", T("feature.skin.enable_skin_detail_texture", "Enable skin detail texture"));
 	}
 
-	ImGui::SliderFloat("Skin Detail Strength", &settings.SkinDetailStrength, -2.0f, 2.0f);
+	ImGui::SliderFloat(T("feature.skin.skin_detail_strength", "Skin Detail Strength"), &settings.SkinDetailStrength, -2.0f, 2.0f);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Strength of skin detail texture");
+		ImGui::Text("%s", T("feature.skin.strength_of_skin_detail_texture", "Strength of skin detail texture"));
 	}
 
-	ImGui::SliderFloat("Skin Detail Tiling", &settings.SkinDetailTiling, 1.0f, 50.0f, "%1.f");
+	ImGui::SliderFloat(T("feature.skin.skin_detail_tiling", "Skin Detail Tiling"), &settings.SkinDetailTiling, 1.0f, 50.0f, "%1.f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("The more tiling, the more detailed the skin will be");
+		ImGui::Text("%s", T("feature.skin.the_more_tiling_the_more_detailed_the_skin", "The more tiling, the more detailed the skin will be"));
 	}
 
-	ImGui::SliderFloat("Body Tiling Multiplier", &settings.BodyTilingMultiplier, 0.5f, 5.0f, "%.1f");
+	ImGui::SliderFloat(T("feature.skin.body_tiling_multiplier", "Body Tiling Multiplier"), &settings.BodyTilingMultiplier, 0.5f, 5.0f, "%.1f");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Multiply the tiling for the body to match the face");
+		ImGui::Text("%s", T("feature.skin.multiply_the_tiling_for_the_body_to_match", "Multiply the tiling for the body to match the face"));
 	}
 
-	if (ImGui::Button("Reload Skin Detail Texture")) {
+	if (ImGui::Button(T("feature.skin.reload_skin_detail_texture", "Reload Skin Detail Texture"))) {
 		ReloadSkinDetail();
 	}
 

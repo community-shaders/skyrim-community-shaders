@@ -92,6 +92,12 @@ namespace Util
 		std::filesystem::path GetThemesPath();
 
 		/**
+		 * Gets the Translations directory path for i18n locale files
+		 * @return CommunityShaderPath / "Translations"
+		 */
+		std::filesystem::path GetTranslationsPath();
+
+		/**
 		 * Gets the Overrides directory path
 		 * @return CommunityShaderPath / "Overrides"
 		 */

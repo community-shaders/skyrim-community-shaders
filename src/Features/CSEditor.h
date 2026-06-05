@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Buffer.h"
+#include "I18n/I18n.h"
 #include "Menu.h"
 #include "OverlayFeature.h"
 #include "State.h"
@@ -15,6 +16,7 @@ public:
 	}
 
 	virtual inline std::string GetName() override { return "CS Editor"; }
+	virtual std::string GetDisplayName() override { return T("feature.cs_editor.name", "CS Editor"); }
 	virtual inline std::string GetShortName() override { return "CSEditor"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "CS_EDITOR"; }
 	virtual inline std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
@@ -24,17 +26,15 @@ public:
 
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Development tool for inspecting, editing, and previewing renderer-facing data in-game.",
-			{ "Provides weather editing functionality",
-				"Includes dynamic saving and loading of vanilla post processing and weather settings.",
-				"Real-time editing and previewing of effects",
-				"Instantly switch between any weather with immediate or gradual transitions",
-				"Filter weather by type (Pleasant, Cloudy, Rainy, Snow, Aurora) for easy browsing",
-				"View detailed weather information including wind, precipitation, and lightning data",
-				"Color-coded weather names show all weather properties at a glance",
-				"Persistent overlay window for continuous weather monitoring while playing" }
-		};
+		return { T("feature.cs_editor.description", "Development tool for inspecting, editing, and previewing renderer-facing data in-game."),
+			{ T("feature.cs_editor.key_feature_1", "Provides weather editing functionality"),
+				T("feature.cs_editor.key_feature_2", "Includes dynamic saving and loading of vanilla post processing and weather settings."),
+				T("feature.cs_editor.key_feature_3", "Real-time editing and previewing of effects"),
+				T("feature.cs_editor.key_feature_4", "Instantly switch between any weather with immediate or gradual transitions"),
+				T("feature.cs_editor.key_feature_5", "Filter weather by type (Pleasant, Cloudy, Rainy, Snow, Aurora) for easy browsing"),
+				T("feature.cs_editor.key_feature_6", "View detailed weather information including wind, precipitation, and lightning data"),
+				T("feature.cs_editor.key_feature_7", "Color-coded weather names show all weather properties at a glance"),
+				T("feature.cs_editor.key_feature_8", "Persistent overlay window for continuous weather monitoring while playing") } };
 	}
 
 	virtual void DrawSettings() override;
@@ -50,7 +50,7 @@ public:
 	 * Renders the standalone weather details window.
 	 * @param open Pointer to the open/close state owned by the caller.
 	 */
-	void RenderWeatherDetailsWindow(bool* open);
+	void RenderWeatherDetailsWindow(bool* open, bool showSectionHeaders = true);
 
 	// Core weather display functions that other features can use
 	/**
@@ -64,7 +64,7 @@ public:
 	 * Renders the core weather details UI section.
 	 * @param showInteractiveElements Enables interactive controls when true.
 	 */
-	static void RenderCoreWeatherDetails(bool showInteractiveElements = true);
+	static void RenderCoreWeatherDetails(bool showInteractiveElements = true, bool showSectionHeaders = true);
 	/**
 	 * Renders weather analysis sections contributed by other features.
 	 */
@@ -75,13 +75,13 @@ public:
 	 * Renders the weather controls section.
 	 * @param sky Active sky instance.
 	 */
-	static void RenderWeatherControls(RE::Sky* sky);
+	static void RenderWeatherControls(RE::Sky* sky, bool showSectionHeader = true);
 	/**
 	 * Renders the weather information display section.
 	 * @param sky Active sky instance.
 	 * @param showInteractiveElements Enables interactive controls when true.
 	 */
-	static void RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements = true);
+	static void RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements = true, bool showSectionHeader = true);
 
 	struct WeatherDetailsWindowSettings
 	{
@@ -122,6 +122,7 @@ public:
 	static ImVec4 GetWeatherFlagColorByName(const std::string& flagName);
 
 private:
+	void DrawShowInOverlayToggle();
 	void DrawTimeControls();
 	void DrawWeatherStatusPanel();
 	void DrawWeatherPickerSection();

@@ -1,8 +1,11 @@
 ﻿#include "UnifiedWater.h"
 
+#include "I18n/I18n.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
 #include "Util.h"
+
+#define I18N_KEY_PREFIX "feature.unified_water."
 
 #include "RE/L/LoadingMenu.h"
 #include "RE/M/MapMenu.h"
@@ -79,22 +82,22 @@ void UnifiedWater::RestoreDefaultSettings()
 
 void UnifiedWater::DrawSettings()
 {
-	ImGui::Checkbox("Use Optimised Meshes", &settings.UseOptimisedMeshes);
+	ImGui::Checkbox(T(TKEY("use_optimised_meshes"), "Use Optimised Meshes"), &settings.UseOptimisedMeshes);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Uses meshes with significantly lower tri-count for improved performance with no visual quality loss.\n"
-			"Will only affect newly created water - requires a change of location or game restart to take effect.");
+		ImGui::Text("%s", T(TKEY("use_optimised_meshes_tooltip"),
+							  "Uses meshes with significantly lower tri-count for improved performance with no visual quality loss.\n"
+							  "Will only affect newly created water - requires a change of location or game restart to take effect."));
 	}
 
 	ImGui::Spacing();
 
-	if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (ImGui::Button("Regenerate Flowmap") && flowmap) {
+	if (ImGui::TreeNodeEx(T(TKEY("debug"), "Debug"), ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::Button(T(TKEY("regenerate_flowmap"), "Regenerate Flowmap")) && flowmap) {
 			if (flowmap->RegenerateAndLoadFlowmap())
 				SetFlowmapTex();
 		}
 
-		if (ImGui::Button("Regenerate Caches") && waterCache)
+		if (ImGui::Button(T(TKEY("regenerate_caches"), "Regenerate Caches")) && waterCache)
 			waterCache->RegenerateCaches();
 
 		ImGui::TreePop();
@@ -131,7 +134,7 @@ void UnifiedWater::DrawOverlay()
 	auto& themeSettings = Menu::GetSingleton()->GetTheme();
 
 	if (waterCache->IsBuildRunning()) {
-		auto progressTitle = fmt::format("Generating Water Cache:");
+		auto progressTitle = T(TKEY("generating_water_cache"), "Generating Water Cache:");
 		auto percent = static_cast<float>(snapshot.completed) / static_cast<float>(snapshot.total);
 		auto progressOverlay = fmt::format("{}/{} ({:2.1f}%)", snapshot.completed, snapshot.total, 100 * percent);
 
@@ -140,7 +143,7 @@ void UnifiedWater::DrawOverlay()
 			ImGui::End();
 			return;
 		}
-		ImGui::TextUnformatted(progressTitle.c_str());
+		ImGui::TextUnformatted(progressTitle);
 		ImGui::ProgressBar(percent, ImVec2(0.0f, 0.0f), progressOverlay.c_str());
 
 		ImGui::End();
@@ -151,7 +154,7 @@ void UnifiedWater::DrawOverlay()
 			return;
 		}
 
-		ImGui::TextColored(themeSettings.StatusPalette.Error, "ERROR: Water cache generation failed for %d WorldSpaces. Check installation and CommunityShaders.log", snapshot.failed);
+		ImGui::TextColored(themeSettings.StatusPalette.Error, T("feature.unified_water.error_water_cache_generation_failed_for_worldspaces_check", "ERROR: Water cache generation failed for %d WorldSpaces. Check installation and CommunityShaders.log"), snapshot.failed);
 
 		ImGui::End();
 	}
@@ -481,8 +484,10 @@ void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::
 
 		bool cull = false;
 		if (x >= 0 && y >= 0 && x < length && y < length) {
-			if (const auto cell = gridCells->GetCell(x, y); cell && cell->cellState.any(RE::TESObjectCELL::CellState::kAttached, static_cast<RE::TESObjectCELL::CellState>(6)))
-				cull = true;
+			if (const auto cell = gridCells->GetCell(x, y); cell && cell->cellState.any(RE::TESObjectCELL::CellState::kAttached, static_cast<RE::TESObjectCELL::CellState>(6))) {
+				// Keep LOD visible when a loaded dry cell has no active water to replace it
+				cull = cell->cellFlags.any(RE::TESObjectCELL::Flag::kHasWater);
+			}
 		}
 
 		child->SetAppCulled(cull);
@@ -704,3 +709,4 @@ void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESW
 	// Previously the values were calculated relative to the 5x5 flow grid
 	*singleton.gDisplacementCellTexCoordOffset = float4(posX + offsetX, height - (posY + offsetY), posX, 1 - posY);
 }
+#undef I18N_KEY_PREFIX

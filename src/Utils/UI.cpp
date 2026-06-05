@@ -1,6 +1,7 @@
 #include "UI.h"
 
 #include "../CSEditor/EditorWindow.h"
+#include "../I18n/I18n.h"
 #include "D3D.h"
 #include "FileSystem.h"
 #include "Menu.h"
@@ -39,6 +40,7 @@
 #include <functional>
 #include <iomanip>
 #include <mutex>
+#include <numbers>
 #include <sstream>
 #include <stb_image.h>
 #include <string>
@@ -125,7 +127,7 @@ namespace Util
 		// measurement frame, causing TextWrapped to wrap at 0px and produce an enormous height.
 		// Setting an initial width gives TextWrapped a sensible wrap column on that frame.
 		ImGui::SetNextWindowSize(ImVec2(400.0f * GetUIScale(), 0.0f), ImGuiCond_Appearing);
-		isOpen = ImGui::BeginPopupModal(name, p_open, flags | ImGuiWindowFlags_NoSavedSettings);
+		isOpen = BeginPopupModalWithRoundedClose(name, p_open, flags | ImGuiWindowFlags_NoSavedSettings);
 	}
 
 	CenteredPopupModal::~CenteredPopupModal()
@@ -280,21 +282,22 @@ namespace Util
 		if (!showClearCacheConfirmation)
 			return;
 
-		ImGui::OpenPopup("Clear Shader Cache?");
+		ImGui::OpenPopup(T("ui.clear_shader_cache", "Clear Shader Cache?"));
 
-		if (auto popup = CenteredPopupModal("Clear Shader Cache?", &showClearCacheConfirmation)) {
-			ImGui::Text("Are you sure you want to clear the shader cache?");
+		if (auto popup = CenteredPopupModal(T("ui.clear_shader_cache", "Clear Shader Cache?"), &showClearCacheConfirmation)) {
+			ImGui::Text("%s", T("ui.clear_cache_confirm", "Are you sure you want to clear the shader cache?"));
 			ImGui::Spacing();
 			ImGui::Spacing();
 			ImGui::TextWrapped(
-				"This will clear all compiled shaders from memory and disk cache (if enabled). "
-				"Shaders will be recompiled when the game next encounters them.");
+				"%s", T("ui.clear_cache_desc",
+						  "This will clear all compiled shaders from memory and disk cache (if enabled). "
+						  "Shaders will be recompiled when the game next encounters them."));
 			ImGui::Spacing();
 			ImGui::Spacing();
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			ImGui::Checkbox("Don't ask me again", &dontAskAgainCheckbox);
+			ImGui::Checkbox(T("ui.dont_ask_again", "Don't ask me again"), &dontAskAgainCheckbox);
 
 			ImGui::Spacing();
 
@@ -307,7 +310,7 @@ namespace Util
 			if (offset > 0)
 				ImGui::SetCursorPosX(offset);
 
-			if (ImGui::Button("Clear Cache", ImVec2(buttonWidth, 0))) {
+			if (ImGui::Button(T("ui.clear_cache", "Clear Cache"), ImVec2(buttonWidth, 0))) {
 				// Save preference if checkbox is checked
 				if (dontAskAgainCheckbox) {
 					if (auto* menu = globals::menu) {
@@ -322,7 +325,7 @@ namespace Util
 
 			ImGui::SameLine();
 
-			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
+			if (ImGui::Button(T("ui.cancel", "Cancel"), ImVec2(buttonWidth, 0))) {
 				showClearCacheConfirmation = false;
 				ImGui::CloseCurrentPopup();
 			}
@@ -361,7 +364,7 @@ namespace Util
 			ImGui::Spacing();
 
 			if (showDontAskAgain)
-				ImGui::Checkbox("Don't ask me again", &dontAskCheckbox);
+				ImGui::Checkbox(T("ui.dont_ask_again", "Don't ask me again"), &dontAskCheckbox);
 
 			constexpr float buttonWidth = ThemeManager::Constants::POPUP_BUTTON_WIDTH;
 			const float spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -617,96 +620,182 @@ namespace Util
 		return theme.UseMonochromeIcons ? theme.Palette.Text : ImVec4(1, 1, 1, 1);
 	}
 
-	// Shared constants for title-bar button overlays
-	static constexpr float kButtonPad = 2.0f;            // extra padding around hit/highlight area
-	static constexpr float kCrossDiag = 0.5f * 0.7071f;  // half-size * 1/sqrt(2) for cross line endpoints
-	static constexpr float kCrossInset = 1.0f;           // inward inset so cross doesn't touch edges
-
-	// Compute the bounding rect for a title-bar button of font-sized square + padding.
-	static ImRect ButtonBB(const ImVec2& origin, float fontSize)
+	static float GetPillRounding(const ImVec2& min, const ImVec2& max)
 	{
-		const float full = fontSize + kButtonPad * 2.0f;
+		IM_ASSERT(max.x >= min.x && max.y >= min.y);
+		return ImMin(max.x - min.x, max.y - min.y) * 0.5f;
+	}
+
+	static float GetThemedButtonHighlightRounding(const ImVec2& min, const ImVec2& max)
+	{
+		const float frameRounding = ImGui::GetStyle().FrameRounding;
+		IM_ASSERT(frameRounding >= 0.0f);
+		return ImMin(ImMax(frameRounding, 0.0f), GetPillRounding(min, max));
+	}
+
+	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, ImDrawList* drawList)
+	{
+		return DrawRoundedButtonHighlight(min, max, hovered, active, GetThemedButtonHighlightRounding(min, max), drawList);
+	}
+
+	bool DrawRoundedButtonHighlight(const ImRect& rect, bool hovered, bool active, ImDrawList* drawList)
+	{
+		return DrawRoundedButtonHighlight(rect.Min, rect.Max, hovered, active, drawList);
+	}
+
+	bool DrawRoundedButtonHighlight(const ImVec2& min, const ImVec2& max, bool hovered, bool active, float rounding, ImDrawList* drawList)
+	{
+		if (!hovered && !active)
+			return false;
+
+		IM_ASSERT(max.x >= min.x && max.y >= min.y);
+		IM_ASSERT(rounding >= 0.0f);
+		if (!drawList)
+			drawList = ImGui::GetWindowDrawList();
+
+		drawList->AddRectFilled(min, max, ImGui::GetColorU32(active ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered), rounding);
+		return true;
+	}
+
+	bool DrawCurrentItemRoundedButtonHighlight(ImDrawList* drawList)
+	{
+		return DrawRoundedButtonHighlight(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()), ImGui::IsItemHovered(), ImGui::IsItemActive(), drawList);
+	}
+
+	// Shared constants for title-bar button overlays
+	static constexpr float kTitleBarButtonPadding = 2.0f;
+	static constexpr float kCloseCrossDiagonalScale = 0.5f / std::numbers::sqrt2_v<float>;
+	static constexpr float kCloseCrossInset = 1.0f;
+	static constexpr ImVec4 kTransparentButtonChrome(0, 0, 0, 0);
+
+	static ImRect TitleBarButtonRect(const ImVec2& origin, float fontSize)
+	{
+		const float full = fontSize + kTitleBarButtonPadding * 2.0f;
 		return ImRect(origin, ImVec2(origin.x + full, origin.y + full));
 	}
 
-	// Draws a rounded highlight overlay for a title bar button.
-	static void DrawRoundedButtonHighlight(ImGuiWindow* window, const ImRect& bb, float rounding)
-	{
-		ImGuiContext& g = *ImGui::GetCurrentContext();
-		bool isTop = (g.HoveredWindow == window);
-		bool hovered = isTop && ImGui::IsMouseHoveringRect(bb.Min, bb.Max, false);
-		bool held = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
-		if (hovered || held)
-			window->DrawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered), rounding);
-	}
-
-	// Draws a rounded close button overlay, matching native ImGui CloseButton position.
-	static void DrawRoundedCloseButton(ImGuiWindow* window, bool* p_open)
+	static ImVec2 RightTitleBarButtonOrigin(ImGuiWindow* window, float fontSize, float offset = 0.0f)
 	{
 		const auto& style = ImGui::GetStyle();
-		const float sz = ImGui::GetFontSize();
-		const ImVec2 pos(window->Rect().Max.x - window->WindowBorderSize - style.FramePadding.x - sz - kButtonPad,
-			window->Rect().Min.y + style.FramePadding.y - kButtonPad);
-		const ImRect bb = ButtonBB(pos, sz);
-		const float rounding = (sz + kButtonPad * 2.0f) * 0.5f;
+		return ImVec2(window->Rect().Max.x - window->WindowBorderSize - style.FramePadding.x - fontSize - offset - kTitleBarButtonPadding,
+			window->Rect().Min.y + style.FramePadding.y - kTitleBarButtonPadding);
+	}
 
+	static ImVec2 CollapseTitleBarButtonOrigin(ImGuiWindow* window, bool hasCloseButton, float fontSize)
+	{
+		const auto& style = ImGui::GetStyle();
+		IM_ASSERT(style.WindowMenuButtonPosition == ImGuiDir_Left || style.WindowMenuButtonPosition == ImGuiDir_Right);
+
+		if (style.WindowMenuButtonPosition == ImGuiDir_Right)
+			return RightTitleBarButtonOrigin(window, fontSize, hasCloseButton ? fontSize : 0.0f);
+
+		return ImVec2(window->Pos.x + window->WindowBorderSize + style.FramePadding.x - kTitleBarButtonPadding,
+			window->Pos.y + style.FramePadding.y - kTitleBarButtonPadding);
+	}
+
+	static bool IsTitleBarButtonHovered(ImGuiWindow* window, const ImRect& bb)
+	{
 		ImGuiContext& g = *ImGui::GetCurrentContext();
-		bool isTop = (g.HoveredWindow == window);
-		bool hovered = isTop && ImGui::IsMouseHoveringRect(bb.Min, bb.Max, false);
+		return g.HoveredWindow == window && ImGui::IsMouseHoveringRect(bb.Min, bb.Max, false);
+	}
+
+	class NativeTitleBarButtonHighlightGuard
+	{
+	public:
+		NativeTitleBarButtonHighlightGuard()
+		{
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, kTransparentButtonChrome);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, kTransparentButtonChrome);
+		}
+
+		~NativeTitleBarButtonHighlightGuard() { ImGui::PopStyleColor(2); }
+	};
+
+	// Draws a rounded close button overlay, matching native ImGui CloseButton position.
+	static void DrawRoundedCloseHighlight(ImGuiWindow* window)
+	{
+		if (window->Flags & ImGuiWindowFlags_NoTitleBar)
+			return;
+
+		const float sz = ImGui::GetFontSize();
+		const ImVec2 pos = RightTitleBarButtonOrigin(window, sz);
+		const ImRect bb = TitleBarButtonRect(pos, sz);
+		const bool hovered = IsTitleBarButtonHovered(window, bb);
+		const bool held = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 
 		window->DrawList->PushClipRect(window->Rect().Min, window->Rect().Max);
-		DrawRoundedButtonHighlight(window, bb, rounding);
+		const bool highlighted = DrawRoundedButtonHighlight(bb, hovered, held, window->DrawList);
 
-		// Cross lines — matches ImGui's internal RenderCloseButton geometry
-		const ImVec2 c = bb.GetCenter();
-		const float d = sz * kCrossDiag - kCrossInset;
-		const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-		window->DrawList->AddLine({ c.x - d, c.y - d }, { c.x + d, c.y + d }, col);
-		window->DrawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
+		// Cross lines match ImGui's internal RenderCloseButton geometry.
+		if (highlighted) {
+			const ImVec2 c = bb.GetCenter();
+			const float d = sz * kCloseCrossDiagonalScale - kCloseCrossInset;
+			const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+			window->DrawList->AddLine({ c.x - d, c.y - d }, { c.x + d, c.y + d }, col);
+			window->DrawList->AddLine({ c.x + d, c.y - d }, { c.x - d, c.y + d }, col);
+		}
 		window->DrawList->PopClipRect();
-
-		if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-			*p_open = false;
 	}
 
 	// Draws a rounded highlight for the collapse/triangle button in the title bar.
-	static void DrawRoundedCollapseHighlight(ImGuiWindow* window)
+	static void DrawRoundedCollapseHighlight(ImGuiWindow* window, bool hasCloseButton)
 	{
+		if (window->Flags & ImGuiWindowFlags_NoTitleBar)
+			return;
 		if (window->Flags & ImGuiWindowFlags_NoCollapse)
 			return;
 		if (ImGui::GetStyle().WindowMenuButtonPosition == ImGuiDir_None)
 			return;
 
-		const auto& style = ImGui::GetStyle();
 		const float sz = ImGui::GetFontSize();
-		const ImVec2 pos(window->Pos.x + window->WindowBorderSize + style.FramePadding.x - kButtonPad,
-			window->Pos.y + style.FramePadding.y - kButtonPad);
-		const ImRect bb = ButtonBB(pos, sz);
-		const float rounding = (sz + kButtonPad * 2.0f) * 0.5f;
+		const ImVec2 pos = CollapseTitleBarButtonOrigin(window, hasCloseButton, sz);
+		const ImRect bb = TitleBarButtonRect(pos, sz);
+		const bool hovered = IsTitleBarButtonHovered(window, bb);
+		const bool held = hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 
 		window->DrawList->PushClipRect(window->Rect().Min, window->Rect().Max);
-		DrawRoundedButtonHighlight(window, bb, rounding);
+		const bool highlighted = DrawRoundedButtonHighlight(bb, hovered, held, window->DrawList);
 
-		// Redraw the triangle arrow on top of the highlight so it stays visible
-		const ImVec2 arrowPos(pos.x + kButtonPad, pos.y + kButtonPad);
-		const ImGuiDir dir = window->Collapsed ? ImGuiDir_Right : ImGuiDir_Down;
-		ImGui::RenderArrow(window->DrawList, arrowPos, ImGui::GetColorU32(ImGuiCol_Text), dir, 1.0f);
+		if (highlighted) {
+			const ImVec2 arrowPos(pos.x + kTitleBarButtonPadding, pos.y + kTitleBarButtonPadding);
+			const ImGuiDir dir = window->Collapsed ? ImGuiDir_Right : ImGuiDir_Down;
+			ImGui::RenderArrow(window->DrawList, arrowPos, ImGui::GetColorU32(ImGuiCol_Text), dir, 1.0f);
+		}
 
 		window->DrawList->PopClipRect();
 	}
 
+	static void DrawRoundedTitleBarButtonHighlights(ImGuiWindow* window, bool hasCloseButton, bool hasCollapseButton)
+	{
+		if (!window)
+			return;
+
+		if (hasCollapseButton)
+			DrawRoundedCollapseHighlight(window, hasCloseButton);
+		if (hasCloseButton)
+			DrawRoundedCloseHighlight(window);
+	}
+
 	bool BeginWithRoundedClose(const char* name, bool* p_open, ImGuiWindowFlags flags)
 	{
-		// Hide native sharp-cornered highlights; we draw rounded ones after Begin()
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0, 0, 0, 0));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0, 0, 0, 0));
-		bool visible = ImGui::Begin(name, p_open, flags);
-		ImGui::PopStyleColor(2);
-		if (auto* window = ImGui::GetCurrentWindowRead()) {
-			DrawRoundedCollapseHighlight(window);
-			if (p_open)
-				DrawRoundedCloseButton(window, p_open);
+		bool visible = false;
+		{
+			NativeTitleBarButtonHighlightGuard guard;
+			visible = ImGui::Begin(name, p_open, flags);
 		}
+		DrawRoundedTitleBarButtonHighlights(ImGui::GetCurrentWindowRead(), p_open != nullptr, true);
+		return visible;
+	}
+
+	bool BeginPopupModalWithRoundedClose(const char* name, bool* p_open, ImGuiWindowFlags flags)
+	{
+		bool visible = false;
+		{
+			NativeTitleBarButtonHighlightGuard guard;
+			visible = ImGui::BeginPopupModal(name, p_open, flags);
+		}
+		if (visible)
+			DrawRoundedTitleBarButtonHighlights(ImGui::GetCurrentWindowRead(), p_open != nullptr, false);
 		return visible;
 	}
 
@@ -742,36 +831,36 @@ namespace Util
 		return m_shouldDraw;
 	}
 
-	bool DrawCategoryHeader(const char* categoryName, bool& isExpanded, int categoryCount)
+	bool DrawCategoryHeader(const char* categoryKey, const char* displayName, bool& isExpanded, int categoryCount)
 	{
 		// Get the appropriate icon for this category
 		ID3D11ShaderResourceView* categoryIcon = nullptr;
 		auto& menu = Menu::GetSingleton()->uiIcons;
 
-		if (strcmp(categoryName, "Characters") == 0) {
+		if (strcmp(categoryKey, "Characters") == 0) {
 			categoryIcon = menu.characters.texture;
-		} else if (strcmp(categoryName, "Display") == 0) {
+		} else if (strcmp(categoryKey, "Display") == 0) {
 			categoryIcon = menu.display.texture;
-		} else if (strcmp(categoryName, "Grass") == 0) {
+		} else if (strcmp(categoryKey, "Grass") == 0) {
 			categoryIcon = menu.grass.texture;
-		} else if (strcmp(categoryName, "Lighting") == 0) {
+		} else if (strcmp(categoryKey, "Lighting") == 0) {
 			categoryIcon = menu.lighting.texture;
-		} else if (strcmp(categoryName, "Sky") == 0) {
+		} else if (strcmp(categoryKey, "Sky") == 0) {
 			categoryIcon = menu.sky.texture;
-		} else if (strcmp(categoryName, "Landscape & Textures") == 0) {
+		} else if (strcmp(categoryKey, "Landscape & Textures") == 0) {
 			categoryIcon = menu.landscape.texture;
-		} else if (strcmp(categoryName, "Water") == 0) {
+		} else if (strcmp(categoryKey, "Water") == 0) {
 			categoryIcon = menu.water.texture;
-		} else if (strcmp(categoryName, "Utility") == 0) {
+		} else if (strcmp(categoryKey, "Utility") == 0) {
 			categoryIcon = menu.debug.texture;
-		} else if (strcmp(categoryName, "Materials") == 0) {
+		} else if (strcmp(categoryKey, "Materials") == 0) {
 			categoryIcon = menu.materials.texture;
-		} else if (strcmp(categoryName, "Post-Processing") == 0) {
+		} else if (strcmp(categoryKey, "Post-Processing") == 0) {
 			categoryIcon = menu.postProcessing.texture;
 		}
 
-		// Add categoryCount to categoryName
-		std::string displayName = std::format("{} ({})", categoryName, categoryCount);
+		// Keep icon lookup on the stable category key and render the translated label separately.
+		std::string headerText = std::format("{} ({})", displayName, categoryCount);
 
 		// Draw category header with custom styling
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -783,7 +872,7 @@ namespace Util
 		const float currentFontSize = ImGui::GetFontSize();
 		const float iconSize = currentFontSize * 1.2f;     // 20% larger than font height
 		const float iconSpacing = currentFontSize * 0.3f;  // 30% of font height for spacing
-		ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
+		ImVec2 textSize = ImGui::CalcTextSize(headerText.c_str());
 
 		// Calculate total content width (icon + spacing + text)
 		float contentWidth = textSize.x;
@@ -796,7 +885,7 @@ namespace Util
 		float lineLength = (availableWidth - contentWidth - 20.0f) * 0.5f;  // 20px for padding
 
 		// Create selectable area for the entire header
-		ImGui::PushID(displayName.c_str());
+		ImGui::PushID(categoryKey);
 		bool hovered = false;
 		bool clicked = false;
 
@@ -850,7 +939,7 @@ namespace Util
 
 		// Center text
 		ImVec2 textPos = ImVec2(currentX, pos.y + 2.0f);
-		drawList->AddText(textPos, headerColor, displayName.c_str());
+		drawList->AddText(textPos, headerColor, headerText.c_str());
 
 		// Handle click to toggle expansion
 		if (clicked) {
@@ -1184,6 +1273,8 @@ namespace Util
 
 		ImVec2 center = ImVec2(position.x + size * 0.46f, position.y + size * 0.5f);
 		float radius = size * 0.3f;
+		const float circleStroke = size * ThemeManager::Constants::SEARCH_ICON_STROKE_RATIO;
+		const float handleStroke = size * ThemeManager::Constants::SEARCH_ICON_HANDLE_STROKE_RATIO;
 
 		// Use themed text color with reduced alpha for search icon
 		auto& theme = globals::menu->GetTheme().Palette;
@@ -1192,12 +1283,12 @@ namespace Util
 		ImU32 placeholderColor = ImGui::GetColorU32(iconColor);
 
 		// Draw circle
-		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
+		drawList->AddCircle(center, radius, placeholderColor, 12, circleStroke);
 
 		// Draw handle
 		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
 		ImVec2 handleEnd = ImVec2(handleStart.x + size * 0.29f, handleStart.y + size * 0.29f);
-		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
+		drawList->AddLine(handleStart, handleEnd, placeholderColor, handleStroke);
 	}
 
 	namespace detail
@@ -1224,16 +1315,17 @@ namespace Util
 			state.needsFocus = false;
 		}
 
-		constexpr float iconSize = ThemeManager::Constants::COMBO_SEARCH_ICON_SIZE;
+		const float scale = GetSearchUIScale();
+		const float iconSize = ThemeManager::Constants::COMBO_SEARCH_ICON_SIZE * scale;
 		constexpr float iconAlpha = ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
-		constexpr float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X;
-		constexpr float paddingLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT;
+		const float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X * scale;
+		const float paddingLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT * scale;
 
 		char widgetId[128];
 		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
 
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(paddingLeft, ImGui::GetStyle().FramePadding.y));
-		ImGui::InputTextWithHint(widgetId, "Search...", state.buffer, IM_ARRAYSIZE(state.buffer));
+		ImGui::InputTextWithHint(widgetId, T("ui.search", "Search..."), state.buffer, IM_ARRAYSIZE(state.buffer));
 		ImGui::PopStyleVar();
 
 		ImVec2 iconPos = ImVec2(
@@ -1257,8 +1349,9 @@ namespace Util
 	{
 		ImGui::PushID("FeatureSearchBar");
 
-		float iconSize = 20.0f;
-		float iconSpace = iconSize + 14.0f;
+		const float scale = GetSearchUIScale();
+		const float iconSize = ThemeManager::Constants::SEARCH_ICON_SIZE * scale;
+		const float iconSpace = iconSize + ThemeManager::Constants::SEARCH_INPUT_PADDING_EXTRA * scale;
 
 		// Get the current cursor position and available width
 		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
@@ -1280,7 +1373,7 @@ namespace Util
 		ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
 		ImGui::PushStyleColor(ImGuiCol_Text, textColor);
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, ThemeManager::Constants::SEARCH_INPUT_FRAME_PADDING_Y * scale));
 
 		// Draw the input field
 		ImGui::SetNextItemWidth(availableWidth);
@@ -1288,13 +1381,13 @@ namespace Util
 		strncpy_s(buffer, searchString.c_str(), sizeof(buffer) - 1);
 		buffer[sizeof(buffer) - 1] = '\0';
 
-		if (ImGui::InputTextWithHint("##feature_search", "Search Features...", buffer, sizeof(buffer))) {
+		if (ImGui::InputTextWithHint("##feature_search", T("ui.search_features", "Search Features..."), buffer, sizeof(buffer))) {
 			searchString = buffer;
 		}
 
 		// Draw search icon using the reusable function
-		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
-		DrawSearchIcon(iconPos, iconSize, 0.7f);
+		ImVec2 iconPos = ImVec2(cursorPos.x + ThemeManager::Constants::SEARCH_ICON_OFFSET_X * scale, cursorPos.y + (frameHeight - iconSize) * 0.5f);
+		DrawSearchIcon(iconPos, iconSize, ThemeManager::Constants::SEARCH_ICON_ALPHA);
 
 		ImGui::PopStyleVar(2);
 		ImGui::PopStyleColor(5);

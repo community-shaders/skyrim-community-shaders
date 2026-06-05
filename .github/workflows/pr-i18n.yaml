@@ -1,0 +1,95 @@
+name: "PR: i18n Check"
+
+on:
+    pull_request:
+        types: [opened, synchronize, reopened, ready_for_review]
+        paths:
+            - "src/**"
+            - "package/SKSE/Plugins/CommunityShaders/Translations/**"
+            - "tools/extract-i18n.py"
+            - "tools/sort-i18n.py"
+
+permissions:
+    contents: read
+
+jobs:
+    i18n-check:
+        name: Verify en.json is in sync with source
+        if: ${{ !github.event.pull_request.draft }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.sha }}
+
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Check en.json is up to date
+              run: python tools/extract-i18n.py --check
+
+            - name: Check for orphaned keys
+              run: python tools/extract-i18n.py --orphans
+
+            - name: Check translation file key order matches en.json
+              run: python tools/sort-i18n.py --check
+
+            - name: Validate translation file formats
+              run: |
+                  python -c "
+                  import json, sys, pathlib
+
+                  translations_dir = pathlib.Path('package/SKSE/Plugins/CommunityShaders/Translations')
+                  if not translations_dir.exists():
+                      print('No Translations directory found')
+                      sys.exit(0)
+
+                  # Load en.json keys as reference
+                  en_path = translations_dir / 'en.json'
+                  if not en_path.exists():
+                      print('ERROR: en.json not found')
+                      sys.exit(1)
+
+                  with open(en_path, encoding='utf-8') as f:
+                      en_data = json.load(f)
+                  en_keys = {k for k in en_data if k != '_meta'}
+
+                  errors = []
+                  for path in sorted(translations_dir.glob('*.json')):
+                      if path.name == 'en.json':
+                          continue
+                      try:
+                          with open(path, encoding='utf-8') as f:
+                              data = json.load(f)
+                      except json.JSONDecodeError as e:
+                          errors.append(f'{path.name}: Invalid JSON - {e}')
+                          continue
+
+                      if not isinstance(data, dict):
+                          errors.append(f'{path.name}: Root must be a JSON object')
+                          continue
+
+                      # Check for keys not in en.json (stale/typo keys)
+                      locale_keys = {k for k in data if k != '_meta'}
+                      extra_keys = locale_keys - en_keys
+                      if extra_keys:
+                          errors.append(f'{path.name}: {len(extra_keys)} key(s) not in en.json: {sorted(extra_keys)[:5]}')
+
+                      # Check placeholder consistency
+                      import re
+                      placeholder_re = re.compile(r'\{(\w+)\}')
+                      for key in locale_keys & en_keys:
+                          en_placeholders = set(placeholder_re.findall(en_data[key]))
+                          locale_placeholders = set(placeholder_re.findall(data[key]))
+                          if en_placeholders != locale_placeholders:
+                              errors.append(f'{path.name}: Key \"{key}\" has mismatched placeholders: expected {en_placeholders}, got {locale_placeholders}')
+
+                  if errors:
+                      print(f'Found {len(errors)} error(s):')
+                      for e in errors:
+                          print(f'  - {e}')
+                      sys.exit(1)
+                  else:
+                      print(f'All translation files valid. Checked {len(list(translations_dir.glob(\"*.json\"))) - 1} locale(s).')
+                  "

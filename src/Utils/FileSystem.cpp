@@ -82,6 +82,11 @@ namespace Util
 			return GetCommunityShaderPath() / "Themes";
 		}
 
+		std::filesystem::path GetTranslationsPath()
+		{
+			return GetCommunityShaderPath() / "Translations";
+		}
+
 		std::filesystem::path GetOverridesPath()
 		{
 			return GetCommunityShaderPath() / "Overrides";

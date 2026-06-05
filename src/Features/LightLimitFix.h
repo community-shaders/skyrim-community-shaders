@@ -7,22 +7,20 @@ struct LightLimitFix : OverlayFeature
 {
 public:
 	virtual inline std::string GetName() override { return "Light Limit Fix"; }
+	virtual std::string GetDisplayName() override { return T("feature.light_limit_fix.name", "Light Limit Fix"); }
 	virtual inline std::string GetShortName() override { return "LightLimitFix"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "LIGHT_LIMIT_FIX"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Light Limit Fix removes the vanilla game's 4-light limit, allowing unlimited dynamic lights in scenes.\n"
-			"This dramatically improves lighting quality and enables more realistic illumination scenarios.",
-			{ "Removes 4-light limit",
-				"Unlimited dynamic lights",
-				"Improved lighting quality",
-				"Enhanced visual realism",
-				"Enhanced visual realism" }
-		};
-	}
+		return { T("feature.light_limit_fix.description", "Light Limit Fix removes the vanilla game's 4-light limit, allowing unlimited dynamic lights in scenes.\nThis dramatically improves lighting quality and enables more realistic illumination scenarios."),
+			{ T("feature.light_limit_fix.key_feature_1", "Removes 4-light limit"),
+				T("feature.light_limit_fix.key_feature_2", "Unlimited dynamic lights"),
+				T("feature.light_limit_fix.key_feature_3", "Improved lighting quality"),
+				T("feature.light_limit_fix.key_feature_4", "Enhanced visual realism"),
+				T("feature.light_limit_fix.key_feature_5", "Enhanced visual realism") } };
+	};
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 

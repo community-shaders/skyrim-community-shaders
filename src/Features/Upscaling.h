@@ -23,6 +23,7 @@ private:
 public:
 	// Feature interface
 	virtual inline std::string GetName() override { return "Upscaling"; }
+	virtual std::string GetDisplayName() override { return T("feature.upscaling.name", "Upscaling"); }
 	virtual inline std::string GetShortName() override { return "Upscaling"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL(MOD_ID); }
 	virtual inline bool SupportsVR() override { return true; }
@@ -31,14 +32,12 @@ public:
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Advanced upscaling and frame generation technologies for improved performance",
-			{ "DLSS (Deep Learning Super Sampling) support",
-				"FSR (FidelityFX Super Resolution) support",
-				"TAA (Temporal Anti-Aliasing) support",
-				"Frame generation for supported systems" }
-		};
-	}
+		return { T("feature.upscaling.description", "Advanced upscaling and frame generation technologies for improved performance"),
+			{ T("feature.upscaling.key_feature_1", "DLSS (Deep Learning Super Sampling) support"),
+				T("feature.upscaling.key_feature_2", "FSR (FidelityFX Super Resolution) support"),
+				T("feature.upscaling.key_feature_3", "TAA (Temporal Anti-Aliasing) support"),
+				T("feature.upscaling.key_feature_4", "Frame generation for supported systems") } };
+	};
 
 	float2 jitter = { 0, 0 };
 

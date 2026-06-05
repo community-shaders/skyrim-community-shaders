@@ -9,17 +9,16 @@ struct LinearLighting : Feature
 	}
 
 	virtual inline std::string GetName() override { return "Linear Lighting"; }
+	virtual std::string GetDisplayName() override { return T("feature.linear_lighting.name", "Linear Lighting"); }
 	virtual inline std::string GetShortName() override { return "LinearLighting"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Linear Lighting does internal color space conversion to improve lighting calculation accuracy.",
-			{ "Customizable gamma correction",
-				"Corrects lighting calculations",
-				"Makes PBR really work" }
-		};
-	}
+		return { T("feature.linear_lighting.description", "Linear Lighting does internal color space conversion to improve lighting calculation accuracy."),
+			{ T("feature.linear_lighting.key_feature_1", "Customizable gamma correction"),
+				T("feature.linear_lighting.key_feature_2", "Corrects lighting calculations"),
+				T("feature.linear_lighting.key_feature_3", "Makes PBR really work") } };
+	};
 
 	virtual bool SupportsVR() override { return true; };
 	virtual bool IsCore() const override { return true; };

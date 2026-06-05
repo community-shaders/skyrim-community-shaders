@@ -7,21 +7,20 @@ private:
 
 public:
 	virtual inline std::string GetName() override { return "Terrain Helper"; }
+	virtual std::string GetDisplayName() override { return T("feature.terrain_helper.name", "Terrain Helper"); }
 	virtual inline std::string GetShortName() override { return "TerrainHelper"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "TERRAIN_HELPER"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLandscapeAndTextures; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Provides enhanced terrain material support for terrain mods that require additional texture slots and parallax mapping capabilities.",
-			{ "Extended texture slot support for terrain materials",
-				"Parallax mapping integration for terrain textures",
-				"Automatic terrain material detection and setup",
-				"Support for advanced terrain modifications",
-				"Compatibility layer for terrain enhancement mods" }
-		};
-	}
+		return { T("feature.terrain_helper.description", "Provides enhanced terrain material support for terrain mods that require additional texture slots and parallax mapping capabilities."),
+			{ T("feature.terrain_helper.key_feature_1", "Extended texture slot support for terrain materials"),
+				T("feature.terrain_helper.key_feature_2", "Parallax mapping integration for terrain textures"),
+				T("feature.terrain_helper.key_feature_3", "Automatic terrain material detection and setup"),
+				T("feature.terrain_helper.key_feature_4", "Support for advanced terrain modifications"),
+				T("feature.terrain_helper.key_feature_5", "Compatibility layer for terrain enhancement mods") } };
+	};
 
 	struct Settings
 	{

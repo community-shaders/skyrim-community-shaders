@@ -12,8 +12,10 @@
 #include "Feature.h"
 #include "FeatureConstraints.h"
 #include "FeatureIssues.h"
+#include "Features/CSEditor.h"
 #include "Fonts.h"
 #include "Globals.h"
+#include "I18n/I18n.h"
 #include "Menu.h"
 #include "Menu/HomePageRenderer.h"
 #include "Menu/ProfilingRenderer.h"
@@ -22,12 +24,31 @@
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 #include "WeatherVariableRegistry.h"
 
 namespace
 {
 	// Core built-in menu names that always appear first in the menu list
-	constexpr std::array<const char*, 5> CORE_MENU_NAMES = { "Home", "General", "Advanced", "Profiling", "Display" };
+	// These are canonical identifiers used for logic — NOT translated
+	constexpr std::array<const char*, 5> CORE_MENU_NAMES = {
+		"Home", "General", "Advanced", "Profiling", "Display"
+	};
+
+	const char* GetCoreMenuDisplayName(const char* canonicalName)
+	{
+		if (std::strcmp(canonicalName, "Home") == 0)
+			return T("menu.features.home", "Home");
+		if (std::strcmp(canonicalName, "General") == 0)
+			return T("menu.features.general", "General");
+		if (std::strcmp(canonicalName, "Advanced") == 0)
+			return T("menu.features.advanced", "Advanced");
+		if (std::strcmp(canonicalName, "Profiling") == 0)
+			return T("menu.features.profiling", "Profiling");
+		if (std::strcmp(canonicalName, "Display") == 0)
+			return T("menu.features.display", "Display");
+		return canonicalName;
+	}
 
 	bool IsCoreMenu(const std::string& menuName)
 	{
@@ -108,6 +129,34 @@ namespace
 	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
 	{
 		return MenuFonts::BeginTabItemWithFont(label, role, flags);
+	}
+
+	std::string TranslateFeatureCategory(std::string_view category)
+	{
+		if (category == FeatureCategories::kCharacters)
+			return T("feature.category.characters", "Characters");
+		if (category == FeatureCategories::kDisplay)
+			return T("feature.category.display", "Display");
+		if (category == FeatureCategories::kGrass)
+			return T("feature.category.grass", "Grass");
+		if (category == FeatureCategories::kLandscapeAndTextures)
+			return T("feature.category.landscape_and_textures", "Landscape & Textures");
+		if (category == FeatureCategories::kLighting)
+			return T("feature.category.lighting", "Lighting");
+		if (category == FeatureCategories::kMaterials)
+			return T("feature.category.materials", "Materials");
+		if (category == "Post-Processing")
+			return T("feature.category.post_processing", "Post-Processing");
+		if (category == FeatureCategories::kOther)
+			return T("feature.category.other", "Other");
+		if (category == FeatureCategories::kSky)
+			return T("feature.category.sky", "Sky");
+		if (category == FeatureCategories::kUtility)
+			return T("feature.category.utility", "Utility");
+		if (category == FeatureCategories::kWater)
+			return T("feature.category.water", "Water");
+
+		return std::string(category);
 	}
 
 	/**
@@ -268,7 +317,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	auto& featureList = Feature::GetFeatureList();
 	auto sortedFeatureList{ featureList };  // need a copy so the load order is not lost
 	std::ranges::sort(sortedFeatureList, [](Feature* a, Feature* b) {
-		return a->GetName() < b->GetName();
+		return a->GetDisplayName() < b->GetDisplayName();
 	});
 
 	// Filter features by search string
@@ -279,10 +328,10 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 
 	auto menuList = std::vector<MenuFuncInfo>{
-		BuiltInMenu{ "Home", []() { HomePageRenderer::RenderHomePage(); } },
-		BuiltInMenu{ "General", drawGeneralSettings },
-		BuiltInMenu{ "Advanced", drawAdvancedSettings },
-		BuiltInMenu{ "Profiling", []() { ProfilingRenderer::RenderStatistics(); } }
+		BuiltInMenu{ T("menu.features.home", "Home"), []() { HomePageRenderer::RenderHomePage(); } },
+		BuiltInMenu{ T("menu.features.general", "General"), drawGeneralSettings },
+		BuiltInMenu{ T("menu.features.advanced", "Advanced"), drawAdvancedSettings },
+		BuiltInMenu{ T("menu.features.profiling", "Profiling"), []() { ProfilingRenderer::RenderStatistics(); } }
 	};  // NOTE: The menu list is rebuilt every frame, so category expansion states
 	// persist correctly. This is acceptable since the list is small and built
 	// infrequently, but could be optimized if performance becomes an issue.
@@ -299,7 +348,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	// Sort features within each category
 	for (auto& [category, features] : categorizedFeatures) {
 		std::ranges::sort(features, [](Feature* a, Feature* b) {
-			return a->GetName() < b->GetName();
+			return a->GetDisplayName() < b->GetDisplayName();
 		});
 	}
 
@@ -345,12 +394,12 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 		return !feat->loaded && feat->IsInMenu() && (!FeatureIssues::IsObsoleteFeature(feat->GetShortName()) || globals::state->IsDeveloperMode());
 	});
 	if (std::ranges::distance(unloadedFeatures) != 0) {
-		menuList.push_back("Unloaded Features"s);
+		menuList.push_back(T("menu.features.unloaded_features", "Unloaded Features"));
 		std::ranges::copy(unloadedFeatures, std::back_inserter(menuList));
 	}
 	// Add top section for feature issues (rejected features, obsolete info, etc.)
 	if (FeatureIssues::HasFeatureIssues()) {
-		menuList.insert(menuList.begin(), BuiltInMenu{ "Feature Issues", []() {
+		menuList.insert(menuList.begin(), BuiltInMenu{ T("menu.features.feature_issues", "Feature Issues"), []() {
 														  FeatureIssues::DrawFeatureIssuesUI();
 													  } });
 	}
@@ -413,7 +462,7 @@ void FeatureListRenderer::RenderLeftColumn(
 		}
 
 		// Add Features header and search bar after built-in settings
-		Util::DrawSectionHeader("Features", true);
+		Util::DrawSectionHeader(T("menu.features.features", "Features"), true);
 		Util::DrawFeatureSearchBar(featureSearch);
 
 		// Then render the rest (features and categories, but skip already rendered core menus)
@@ -443,7 +492,7 @@ void FeatureListRenderer::RenderRightColumn(
 	if (selectedMenu < menuList.size()) {
 		std::visit(DrawMenuVisitor{ pendingFeatureSelection }, menuList[selectedMenu]);
 	} else {
-		ImGui::TextDisabled("Please select an item on the left.");
+		ImGui::TextDisabled("%s", T("menu.features.select_item_left", "Please select an item on the left."));
 	}
 }
 
@@ -452,7 +501,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 	MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
 
 	// Use error color for Feature Issues menu item
-	bool isFeatureIssues = (menu.name == "Feature Issues");
+	bool isFeatureIssues = (menu.name == T("menu.features.feature_issues", "Feature Issues"));
 	if (isFeatureIssues) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
@@ -470,7 +519,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 void FeatureListRenderer::ListMenuVisitor::operator()(const std::string& label)
 {
 	// Style "Unloaded Features" to match category headers
-	if (label == "Unloaded Features") {
+	if (label == T("menu.features.unloaded_features", "Unloaded Features")) {
 		Util::DrawSectionHeader(label.c_str(), true);
 	} else {
 		// Use default separator text for other labels - should be themed via ImGuiCol_Separator
@@ -488,7 +537,8 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& head
 	{
 		MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Heading);
 		int count = Menu::categoryCounts[std::string(header.name)];
-		Util::DrawCategoryHeader(header.name.c_str(), isExpanded, count);
+		const auto categoryLabel = TranslateFeatureCategory(header.name);
+		Util::DrawCategoryHeader(header.name.c_str(), categoryLabel.c_str(), isExpanded, count);
 	}
 
 	// Update expansion state
@@ -527,7 +577,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 
 	// Create selectable item with semantic color
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (ImGui::Selectable(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
+	if (ImGui::Selectable(fmt::format(" {} ", feat->GetDisplayName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
 		selectedMenuRef = listId;
 	}
 	ImGui::PopStyleColor();
@@ -545,7 +595,7 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(const BuiltInMenu& menu)
 {
 	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
 		// Add spacing only for Home menu
-		if (menu.name == "Home") {
+		if (menu.name == T("menu.features.home", "Home")) {
 			ImGui::Dummy(ImVec2(0, ThemeManager::Constants::BUTTON_SPACING));
 		}
 		menu.func();
@@ -562,7 +612,7 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(const std::string&)
 void FeatureListRenderer::DrawMenuVisitor::operator()(const CategoryHeader&)
 {
 	// Category headers are not selectable in the right panel
-	ImGui::TextDisabled("Please select a feature from the left.");
+	ImGui::TextDisabled("%s", T("menu.features.select_feature_left", "Please select a feature from the left."));
 }
 
 void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
@@ -607,7 +657,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	float buttonPadding = ThemeManager::Constants::BUTTON_PADDING;
 	float buttonSpacing = ThemeManager::Constants::BUTTON_SPACING;
 
-	const char* overrideButtonText = "Apply Override";
+	const char* overrideButtonText = T("menu.features.apply_override", "Apply Override");
 	float bootToggleWidth = ImGui::GetFrameHeight() * 1.6f;
 	float overrideButtonWidth = ImGui::CalcTextSize(overrideButtonText).x + buttonPadding;
 
@@ -632,7 +682,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 
 	// Draw feature title, version, and description on the left
 	// Returns title-only height for button alignment
-	float titleOnlyHeight = DrawFeatureHeader(feat->GetName(), isLoaded ? feat->version : "", description);
+	float titleOnlyHeight = DrawFeatureHeader(feat->GetDisplayName(), isLoaded ? feat->version : "", description);
 
 	// Save cursor position after header (for restoring after buttons are drawn)
 	ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();
@@ -664,11 +714,12 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Toggle feature loading at boot.\n"
-			"Current state: %s\n"
-			"Restart required for changes to take effect.\n"
-			"Disabling removes performance impact.",
-			bootEnabled ? "Enabled" : "Disabled");
+			T("menu.features.boot_toggle_tooltip",
+				"Toggle feature loading at boot.\n"
+				"Current state: %s\n"
+				"Restart required for changes to take effect.\n"
+				"Disabling removes performance impact."),
+			bootEnabled ? T("menu.features.enabled", "Enabled") : T("menu.features.disabled", "Disabled"));
 	}
 
 	// Apply Override button (when feature has available overrides)
@@ -689,13 +740,17 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			if (sceneControlled) {
 				ImGui::Text(
-					"Cannot apply overrides while scene-specific settings are active.\n"
-					"Pause scene settings for this feature first.");
+					"%s",
+					T("menu.features.cannot_apply_overrides_scene",
+						"Cannot apply overrides while scene-specific settings are active.\n"
+						"Pause scene settings for this feature first."));
 			} else {
 				ImGui::Text(
-					"Restores original override settings from mod files.\n"
-					"This will discard your customizations and revert to\n"
-					"the mod author's recommended settings.");
+					"%s",
+					T("menu.features.restore_override_tooltip",
+						"Restores original override settings from mod files.\n"
+						"This will discard your customizations and revert to\n"
+						"the mod author's recommended settings."));
 			}
 		}
 	}
@@ -709,21 +764,23 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 
 	if (isDisabled) {
-		ImGui::TextColored(themeSettings.StatusPalette.Disable, "Feature settings are hidden because this feature is disabled at boot.");
+		ImGui::TextColored(themeSettings.StatusPalette.Disable, "%s", T("menu.features.settings_hidden_disabled", "Feature settings are hidden because this feature is disabled at boot."));
 		ImGui::Spacing();
-		ImGui::Text("Enable the feature above to access its configuration options.");
+		ImGui::Text("%s", T("menu.features.enable_to_access_config", "Enable the feature above to access its configuration options."));
 	} else {
 		if (isLoaded) {
 			auto weatherRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
 			if (weatherRegistry->HasWeatherSupport(feat->GetShortName())) {
 				bool paused = weatherRegistry->IsFeaturePaused(feat->GetShortName());
-				if (ImGui::Checkbox("Pause Weather Overrides", &paused)) {
+				if (ImGui::Checkbox(T("menu.features.pause_weather_overrides", "Pause Weather Overrides"), &paused)) {
 					weatherRegistry->SetFeaturePaused(feat->GetShortName(), paused);
 				}
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text(
-						"Temporarily disable weather-based setting adjustments for this feature.\n"
-						"This state is not saved.");
+						"%s",
+						T("menu.features.pause_weather_tooltip",
+							"Temporarily disable weather-based setting adjustments for this feature.\n"
+							"This state is not saved."));
 				}
 				ImGui::Separator();
 			}
@@ -739,9 +796,10 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 					if (Util::FeatureToggle("##PauseSceneSettings", &active))
 						sceneMgr->SetFeaturePaused(featureShortName, !active);
 					ImGui::SameLine();
-					ImGui::Text("Scene Specific Settings");
+					ImGui::Text("%s", T("menu.features.scene_specific_settings", "Scene Specific Settings"));
 					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text(scenePaused ? "Paused - click to resume" : "Active - click to pause");
+						ImGui::Text("%s", T(scenePaused ? "menu.features.scene_paused_tooltip" : "menu.features.scene_active_tooltip",
+											  scenePaused ? "Paused - click to resume" : "Active - click to pause"));
 					}
 					ImGui::Separator();
 				}
@@ -754,8 +812,10 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 			ImVec2 cursorPosBefore = ImGui::GetCursorPos();
 			feat->DrawSettings();
 
-			ImGui::SeparatorText("Profiling");
-			ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
+			if (feat != &globals::features::csEditor && ProfilingRenderer::HasFeatureTimers(feat->GetShortName())) {
+				ImGui::SeparatorText(T("menu.features.profiling", "Profiling"));
+				ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
+			}
 
 			ImVec2 cursorPosAfter = ImGui::GetCursorPos();
 
@@ -808,23 +868,25 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 			bool cursorMoved = (std::abs(cursorPosAfter.x - cursorPosBefore.x) > cursorEpsilon ||
 								std::abs(cursorPosAfter.y - cursorPosBefore.y) > cursorEpsilon);
 			if (!cursorMoved) {
-				ImGui::TextColored(themeSettings.StatusPalette.Disable, "There are no settings available for this feature.");
+				ImGui::TextColored(themeSettings.StatusPalette.Disable, "%s", T("menu.features.no_settings_available", "There are no settings available for this feature."));
 			}
 		} else {
 			if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 				feat->DrawUnloadedUI();
 			} else if (IsFeatureInstalled(feat->GetShortName())) {
-				ImGui::Text("This feature will be available after restart.");
+				ImGui::Text("%s", T("menu.features.available_after_restart", "This feature will be available after restart."));
 			} else {
 				feat->DrawUnloadedUI();
 				if (!feat->GetFeatureModLink().empty()) {
 					ImGui::Spacing();
-					const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
+					auto featureModLink = feat->GetFeatureModLink();
+					const auto downloadText = std::vformat(
+						T("menu.features.download_link", "Click here to download this feature ({})"), std::make_format_args(featureModLink));
 					if (ImGui::Selectable(downloadText.c_str())) {
-						ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
+						ShellExecuteA(NULL, "open", featureModLink.c_str(), NULL, NULL, SW_SHOWNORMAL);
 					}
 					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("Download the feature from the mod page.");
+						ImGui::Text("%s", T("menu.features.download_tooltip", "Download the feature from the mod page."));
 					}
 				}
 			}
@@ -833,7 +895,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 
 	if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
 		ImGui::Spacing();
-		SeparatorTextWithFont("Error", Menu::FontRole::Subheading);
+		SeparatorTextWithFont(T("menu.features.error_header", "Error"), Menu::FontRole::Subheading);
 		ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
 	}
 }
@@ -874,7 +936,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* 
 	ImGui::PopStyleColor(3);
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Restore default settings for this feature");
+		ImGui::Text("%s", T("menu.features.restore_defaults_tooltip", "Restore default settings for this feature"));
 	}
 }
 
@@ -884,27 +946,30 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 		return;
 	}
 
+	constexpr const char* popupId = "###SettingChangeWarning";
+	const std::string popupTitle = fmt::format("{}{}", T("menu.features.setting_change_warning_title", "Setting Change Warning"), popupId);
+
 	// OpenPopup is idempotent while the popup is already open, so calling it
 	// every frame while the flag is set is safe and ensures we don't miss the
 	// one-frame window where ImGui expects it.
-	ImGui::OpenPopup("Setting Change Warning");
+	ImGui::OpenPopup(popupId);
 
 	// Center the popup (ImGuiCond_Always matches the Clear Cache dialog pattern)
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
-	if (ImGui::BeginPopupModal("Setting Change Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::TextWrapped("Some of your settings have been automatically adjusted due to feature incompatibilities.");
+	if (Util::BeginPopupModalWithRoundedClose(popupTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextWrapped("%s", T("menu.features.settings_adjusted_warning", "Some of your settings have been automatically adjusted due to feature incompatibilities."));
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
 
 		// Table columns: Impacted Feature | Setting | Constrained By | Forced To
 		if (ImGui::BeginTable("##ReactiveConstraintTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Impacted Feature", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Setting", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Constrained By", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Forced To", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn(T("menu.features.col_impacted_feature", "Impacted Feature"), ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn(T("menu.features.col_setting", "Setting"), ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn(T("menu.features.col_constrained_by", "Constrained By"), ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn(T("menu.features.col_forced_to", "Forced To"), ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableHeadersRow();
 
 			size_t rowIndex = 0;
@@ -918,7 +983,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 					std::string targetDisplayName = settingId.featureShortName;
 					for (auto* f : Feature::GetFeatureList()) {
 						if (f->GetShortName() == settingId.featureShortName) {
-							targetDisplayName = f->GetName();
+							targetDisplayName = f->GetDisplayName();
 							break;
 						}
 					}
@@ -930,7 +995,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 						return;
 					}
 					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("Click to navigate to %s", targetDisplayName.c_str());
+						ImGui::Text(T("menu.features.click_to_navigate", "Click to navigate to %s"), targetDisplayName.c_str());
 					}
 				}
 
@@ -949,11 +1014,11 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 						return;
 					}
 					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("Click to navigate to %s", result.sources[0].featureName.c_str());
+						ImGui::Text(T("menu.features.click_to_navigate", "Click to navigate to %s"), result.sources[0].featureName.c_str());
 						if (result.sources.size() > 1) {
 							ImGui::Separator();
 							for (size_t i = 1; i < result.sources.size(); ++i) {
-								ImGui::Text("Also: %s", result.sources[i].featureName.c_str());
+								ImGui::Text(T("menu.features.also_feature", "Also: %s"), result.sources[i].featureName.c_str());
 							}
 						}
 						ImGui::Separator();
@@ -976,13 +1041,15 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 		ImGui::Spacing();
 
 		ImGui::TextWrapped(
-			"These settings are disabled in their respective feature menus while the constraints are active. "
-			"Adjust the constraining features to remove them.");
+			"%s",
+			T("menu.features.constraints_explanation",
+				"These settings are disabled in their respective feature menus while the constraints are active. "
+				"Adjust the constraining features to remove them."));
 
 		ImGui::Spacing();
 
 		// "Don't show again" checkbox -- same pattern as Clear Cache dialog
-		ImGui::Checkbox("Don't show this warning again", &g_dontShowAgainCheckbox);
+		ImGui::Checkbox(T("menu.features.dont_show_warning", "Don't show this warning again"), &g_dontShowAgainCheckbox);
 
 		ImGui::Spacing();
 
@@ -993,7 +1060,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog
 		if (offset > 0)
 			ImGui::SetCursorPosX(offset);
 
-		if (ImGui::Button("OK", ImVec2(buttonWidth, 0))) {
+		if (ImGui::Button(T("menu.features.ok_button", "OK"), ImVec2(buttonWidth, 0))) {
 			if (g_dontShowAgainCheckbox) {
 				if (auto* menu = globals::menu) {
 					menu->GetSettings().SkipConstraintWarning = true;

@@ -95,24 +95,33 @@ jobs:
                     echo "::error::ff_target SHA ${FF_TARGET} does not exist."
                     exit 1
                   fi
-                  if ! git merge-base --is-ancestor origin/main "${FF_TARGET}"; then
-                    echo "::error::main is not an ancestor of ff_target ${FF_TARGET} — fast-forward is not possible."
-                    exit 1
-                  fi
+                  # main being an ancestor of ff_target is enforced per-source
+                  # below. dev-source promotions may legitimately have a
+                  # diverged main (interim hotfixes); the reconcile pre-step
+                  # merges main into dev to fix that before the FF.
+                  #
                   # Identify the source branch for the promotion.
-                  #   dev source     → FF-reconcile dev afterward (no rewrite).
-                  #   hotfix-staging → rebase-reconcile dev afterward so the
-                  #                    release commit + tag enter dev's
-                  #                    ancestry. Force-with-lease push; `git
-                  #                    rebase` drops patch-id duplicates of
-                  #                    the cherry-picks already on main.
+                  #   dev source     → merge main into dev first (if diverged),
+                  #                    then FF-reconcile dev afterward. No rewrite.
+                  #   hotfix-staging → dev is NOT reconciled here; the next
+                  #                    minor/major promotion folds the hotfix in
+                  #                    via its dev-source merge pre-step.
                   SOURCE=""
-                  if git merge-base --is-ancestor "${FF_TARGET}" origin/dev; then
+                  FF_RESOLVED="$(git rev-parse "${FF_TARGET}^{commit}")"
+                  DEV_TIP="$(git rev-parse origin/dev^{commit})"
+                  if [[ "${FF_RESOLVED}" == "${DEV_TIP}" ]]; then
+                    # dev-source promotion: ff_target must be the CURRENT dev tip
+                    # exactly. A stale (ancestor-but-not-tip) dev SHA would make
+                    # the reconcile merge's first parent an old commit, and the
+                    # force-with-lease push would then rewrite newer dev work.
                     SOURCE="dev"
+                  elif git merge-base --is-ancestor "${FF_RESOLVED}" origin/dev; then
+                    echo "::error::ff_target ${FF_TARGET} is an ancestor of dev but not its tip ($(git rev-parse --short=9 origin/dev)). Promote the current dev tip (or cut a fresh RC) — promoting a stale dev point would rewrite newer dev commits."
+                    exit 1
                   else
                     while read -r REF; do
                       [[ -z "${REF}" ]] && continue
-                      if git merge-base --is-ancestor "${FF_TARGET}" "${REF}"; then
+                      if git merge-base --is-ancestor "${FF_RESOLVED}" "${REF}"; then
                         SOURCE="${REF#origin/}"
                         break
                       fi
@@ -121,6 +130,15 @@ jobs:
                   if [[ -z "${SOURCE}" ]]; then
                     echo "::error::ff_target ${FF_TARGET} is not an ancestor of dev or any origin/hotfix/* branch — refusing to promote an unreviewed SHA."
                     exit 1
+                  fi
+                  # hotfix-staging sources must be a clean fast-forward of main
+                  # (no reconcile pre-step runs for them). dev sources may have a
+                  # diverged main; the reconcile step merges it in first.
+                  if [[ "${SOURCE}" != "dev" ]]; then
+                    if ! git merge-base --is-ancestor origin/main "${FF_TARGET}"; then
+                      echo "::error::hotfix-staging ff_target ${FF_TARGET} is not a fast-forward of main."
+                      exit 1
+                    fi
                   fi
                   echo "source=${SOURCE}" >> "$GITHUB_OUTPUT"
                   {
@@ -135,11 +153,95 @@ jobs:
                     git log --oneline "origin/main..${FF_TARGET}" | sed 's/^/    /'
                   } >> "$GITHUB_STEP_SUMMARY"
 
+            - name: Reconcile dev (merge main into dev, dev source only)
+              id: reconcile
+              if: ${{ inputs.ff_target != '' && steps.validate.outputs.source == 'dev' }}
+              env:
+                  TOKEN: ${{ steps.app-token.outputs.token }}
+                  FF_TARGET: ${{ inputs.ff_target }}
+              run: |
+                  set -euo pipefail
+                  git fetch origin main dev
+                  MAIN_BEFORE="$(git rev-parse origin/main)"
+                  DEV_SHA="$(git rev-parse "${FF_TARGET}")"
+                  echo "main_before=${MAIN_BEFORE}" >> "$GITHUB_OUTPUT"
+                  echo "dev_before=${DEV_SHA}" >> "$GITHUB_OUTPUT"
+
+                  # dev is the sole source of truth. Version-bump files are the
+                  # only paths allowed to diverge between main and dev (resolved
+                  # to dev); anything else is a process violation and hard-fails.
+                  ALLOWLIST_REGEX='^(CMakeLists\.txt|features/.+/Shaders/Features/[^/]+\.ini)$'
+
+                  if git merge-base --is-ancestor "${MAIN_BEFORE}" "${DEV_SHA}"; then
+                    # main already folded into dev — nothing to merge.
+                    echo "effective_target=${DEV_SHA}" >> "$GITHUB_OUTPUT"
+                    echo "::notice::main already an ancestor of dev; no merge needed."
+                    exit 0
+                  fi
+
+                  # Merge main into dev to establish ANCESTRY ONLY, on a detached
+                  # HEAD so no local branch is mutated. The result tree must equal
+                  # dev's tree (the merge adds history, not content).
+                  git checkout --quiet --detach "${DEV_SHA}"
+                  if git merge --no-ff --no-edit \
+                       -m "chore: merge main into dev (reconcile hotfixes) [skip ci]" "${MAIN_BEFORE}"; then
+                    mapfile -t CHANGED < <(git diff --name-only "${DEV_SHA}" HEAD)
+                  else
+                    mapfile -t CHANGED < <(git diff --name-only --diff-filter=U)
+                    MERGE_CONFLICTED=1
+                  fi
+
+                  # Any diverging path outside the allowlist is a tripwire: main
+                  # must not carry non-dev-sourced content. Fail before any push.
+                  VIOLATIONS=()
+                  for p in "${CHANGED[@]}"; do
+                    [[ -z "$p" ]] && continue
+                    [[ "$p" =~ ${ALLOWLIST_REGEX} ]] || VIOLATIONS+=("$p")
+                  done
+                  if (( ${#VIOLATIONS[@]} > 0 )); then
+                    echo "::error::main carries non-dev-sourced changes outside the version-file allowlist:"
+                    printf '  %s\n' "${VIOLATIONS[@]}"
+                    git merge --abort 2>/dev/null || true
+                    exit 1
+                  fi
+
+                  # Resolve every diverging (allowlisted) path to dev's content.
+                  for p in "${CHANGED[@]}"; do
+                    [[ -z "$p" ]] && continue
+                    git checkout "${DEV_SHA}" -- "$p"
+                    git add -- "$p"
+                  done
+                  if [[ "${MERGE_CONFLICTED:-0}" -eq 1 ]]; then
+                    git -c core.editor=true commit --no-edit >/dev/null
+                  else
+                    git diff --cached --quiet || git commit --amend --no-edit >/dev/null
+                  fi
+
+                  # Belt-and-suspenders: merge tree MUST equal dev's tree.
+                  if ! git diff --quiet "${DEV_SHA}" HEAD; then
+                    echo "::error::post-resolution tree differs from dev; refusing to proceed"
+                    git diff --name-only "${DEV_SHA}" HEAD
+                    exit 1
+                  fi
+
+                  TARGET="$(git rev-parse HEAD)"
+                  echo "effective_target=${TARGET}" >> "$GITHUB_OUTPUT"
+
+                  # Fast-forward push of dev to the merge commit (its first parent
+                  # is the old dev tip) — no force, so dev's protection (force-push
+                  # disabled) is respected; the App's PR-bypass authorizes it.
+                  REMOTE="https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
+                  CURRENT_DEV="$(git rev-parse origin/dev)"
+                  git push --force-with-lease="dev:${CURRENT_DEV}" "${REMOTE}" "${TARGET}:refs/heads/dev"
+                  echo "::notice::Merged main into dev (${TARGET}); dev fast-forwarded."
+
             - name: Fast-forward main to ff_target
               if: ${{ inputs.ff_target != '' }}
               env:
                   TOKEN: ${{ steps.app-token.outputs.token }}
-                  FF_TARGET: ${{ inputs.ff_target }}
+                  # Use the reconcile merge commit when dev was reconciled,
+                  # otherwise the originally dispatched ff_target.
+                  FF_TARGET: ${{ steps.reconcile.outputs.effective_target || inputs.ff_target }}
               run: |
                   set -euo pipefail
                   REMOTE="https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
@@ -194,6 +296,50 @@ jobs:
                     --repo "${{ github.repository }}" \
                     --ref "${TAG}"
 
+            - name: Dedup release notes (drop interim hotfix entries)
+              # Best-effort: prune fixes already shipped via interim hotfixes
+              # from this minor/major's draft notes. semantic-release created the
+              # draft (with notes) in the step above; release-build.yaml only
+              # updates it minutes later after its build, so this quick edit lands
+              # first. continue-on-error so notes cosmetics never block a release.
+              if: ${{ inputs.ff_target != '' && steps.validate.outputs.source == 'dev' && steps.semantic.outputs.new_release_published == 'true' }}
+              continue-on-error: true
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+                  GH_REPO: ${{ github.repository }}
+                  MAIN_BEFORE: ${{ steps.reconcile.outputs.main_before }}
+                  DEV_BEFORE: ${{ steps.reconcile.outputs.dev_before }}
+                  TAG: ${{ steps.semantic.outputs.new_release_git_tag }}
+              run: |
+                  set -euo pipefail
+                  git fetch origin --tags --force
+                  # Interim hotfix commits live between the previous minor (the
+                  # merge-base of the pre-promotion main and dev) and the
+                  # pre-promotion main tip. Collect their PR numbers and the
+                  # `cherry picked from commit <sha>` trailers as dedup keys.
+                  BASE="$(git merge-base "${MAIN_BEFORE}" "${DEV_BEFORE}")"
+                  KEYS="$(mktemp)"
+                  {
+                    git log "${BASE}..${MAIN_BEFORE}" --format='%s' | grep -oE '#[0-9]+' || true
+                    git log "${BASE}..${MAIN_BEFORE}" --format='%b' \
+                      | grep -oiE 'cherry picked from commit [0-9a-f]{7,40}' \
+                      | awk '{print substr($NF,1,9)}' || true
+                  } | sort -u > "${KEYS}"
+                  if [[ ! -s "${KEYS}" ]]; then
+                    echo "no interim hotfix keys; nothing to dedup"; exit 0
+                  fi
+                  # semantic-release already created the draft with notes; drop
+                  # any line referencing an already-shipped key, then update it.
+                  BODY="$(mktemp)"
+                  gh release view "${TAG}" --json body -q .body > "${BODY}" 2>/dev/null || true
+                  grep -vF -f "${KEYS}" "${BODY}" > "${BODY}.new" || true
+                  if ! diff -q "${BODY}" "${BODY}.new" >/dev/null; then
+                    gh release edit "${TAG}" --notes-file "${BODY}.new"
+                    echo "deduped release notes for ${TAG}"
+                  else
+                    echo "no shipped keys found in ${TAG} notes"
+                  fi
+
             - name: Reconcile dev with release commit (promotion mode, dev source only)
               if: ${{ inputs.ff_target != '' && steps.semantic.outputs.new_release_published == 'true' && steps.validate.outputs.source == 'dev' }}
               env:
@@ -214,8 +360,8 @@ jobs:
                       echo "git fetch && git checkout dev && git merge --ff-only origin/main && git push"
                       echo '```'
                     } >> "$GITHUB_STEP_SUMMARY"
-                    # Fail loud: tag is on main but dev isn't reconciled
-                    # (same invariant break as the hotfix-staging path).
+                    # Fail loud: tag is on main but dev isn't reconciled, so the
+                    # next RC would compute its floor against the wrong prior tag.
                     echo "::error::dev moved during promotion — dev is unreconciled. See job summary for manual remediation."
                     exit 1
                   fi
@@ -224,73 +370,3 @@ jobs:
                   CURRENT_DEV=$(git rev-parse origin/dev)
                   git push --force-with-lease="dev:${CURRENT_DEV}" "${REMOTE}" "${NEW_MAIN}:refs/heads/dev"
                   echo "::notice::Reconciled dev to main ($NEW_MAIN)."
-
-            - name: Rebase-reconcile dev with release commit (promotion mode, hotfix-staging source)
-              if: ${{ inputs.ff_target != '' && steps.semantic.outputs.new_release_published == 'true' && steps.validate.outputs.source != 'dev' && steps.validate.outputs.source != '' }}
-              env:
-                  TOKEN: ${{ steps.app-token.outputs.token }}
-              run: |
-                  set -euo pipefail
-                  git fetch origin main dev
-                  NEW_MAIN=$(git rev-parse origin/main)
-                  CURRENT_DEV=$(git rev-parse origin/dev)
-
-                  # FF-only won't work: dev and main diverged. Rebase
-                  # preserves linear history; patch-id dedup drops the
-                  # cherry-picked-fix commits automatically.
-                  git checkout -B dev "${CURRENT_DEV}"
-                  if ! git rebase "${NEW_MAIN}"; then
-                    git rebase --abort || true
-                    {
-                      echo ""
-                      echo "## ⚠️ Dev reconcile FAILED — manual intervention required"
-                      echo ""
-                      echo "Rebasing \`dev\` onto the new \`main\` (\`$(git rev-parse --short=9 "${NEW_MAIN}")\`) hit a conflict."
-                      echo "The hotfix release is live on \`main\`, but \`dev\` has NOT absorbed it."
-                      echo "Until reconciled, the next RC cut on \`dev\` will compute the wrong version floor."
-                      echo ""
-                      echo "**Recover by running locally:**"
-                      echo ""
-                      echo '```bash'
-                      echo "git fetch origin"
-                      echo "git checkout dev && git reset --hard origin/dev"
-                      echo "git rebase origin/main      # resolve conflicts, git rebase --continue"
-                      echo "git push --force-with-lease origin dev"
-                      echo '```'
-                    } >> "$GITHUB_STEP_SUMMARY"
-                    echo "::error::Dev rebase-reconcile failed — see job summary for remediation."
-                    exit 1
-                  fi
-
-                  REMOTE="https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
-                  # --force-with-lease guards against a concurrent push to
-                  # dev: if someone landed a commit during the release,
-                  # abort instead of overwriting their work.
-                  if ! git push --force-with-lease="dev:${CURRENT_DEV}" "${REMOTE}" "HEAD:refs/heads/dev"; then
-                    {
-                      echo ""
-                      echo "## ⚠️ Dev push rejected (lease check failed)"
-                      echo ""
-                      echo "Dev was pushed to during the release. Reconcile manually:"
-                      echo ""
-                      echo '```bash'
-                      echo "git fetch origin && git checkout dev && git reset --hard origin/dev"
-                      echo "git rebase origin/main && git push --force-with-lease origin dev"
-                      echo '```'
-                    } >> "$GITHUB_STEP_SUMMARY"
-                    # Fail loud: tag is on main but dev's history doesn't
-                    # contain it, so the next RC would compute its floor
-                    # and changelog against the wrong prior tag.
-                    echo "::error::Dev moved during release — dev is unreconciled. See job summary for manual remediation."
-                    exit 1
-                  fi
-
-                  {
-                    echo ""
-                    echo "## Dev reconciled (rebase-forward)"
-                    echo "- Source: hotfix-staging \`${{ steps.validate.outputs.source }}\`"
-                    echo "- New main: \`$(git rev-parse --short=9 "${NEW_MAIN}")\`"
-                    echo "- Dev rebased linearly onto new main; identical-patch commits auto-dropped by \`git rebase\`."
-                    echo "- Open PRs against dev will need a manual rebase by their authors."
-                  } >> "$GITHUB_STEP_SUMMARY"
-                  echo "::notice::Reconciled dev onto main via rebase (linear history preserved)."

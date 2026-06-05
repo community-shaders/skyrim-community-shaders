@@ -6,21 +6,19 @@ struct ScreenSpaceShadows : Feature
 {
 public:
 	virtual inline std::string GetName() override { return "Screen Space Shadows"; }
+	virtual std::string GetDisplayName() override { return T("feature.screen_space_shadows.name", "Screen Space Shadows"); }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceShadows"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "SCREEN_SPACE_SHADOWS"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kLighting; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
-		return {
-			"Screen Space Shadows enhances shadow quality by adding detailed contact shadows and improving shadow accuracy.\n"
-			"This technique adds fine-detail shadows that traditional shadow mapping might miss.",
-			{ "Enhanced contact shadows",
-				"Improved shadow detail",
-				"Better shadow accuracy",
-				"Fine-scale shadow effects",
-				"Configurable shadow contrast" }
-		};
+		return { T("feature.screen_space_shadows.description", "Screen Space Shadows enhances shadow quality by adding detailed contact shadows and improving shadow accuracy.\nThis technique adds fine-detail shadows that traditional shadow mapping might miss."),
+			{ T("feature.screen_space_shadows.key_feature_1", "Enhanced contact shadows"),
+				T("feature.screen_space_shadows.key_feature_2", "Improved shadow detail"),
+				T("feature.screen_space_shadows.key_feature_3", "Better shadow accuracy"),
+				T("feature.screen_space_shadows.key_feature_4", "Fine-scale shadow effects"),
+				T("feature.screen_space_shadows.key_feature_5", "Configurable shadow contrast") } };
 	}
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;

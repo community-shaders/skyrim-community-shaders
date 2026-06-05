@@ -1,7 +1,10 @@
 #include "LightEditor.h"
 #include "../Features/InverseSquareLighting.h"
 #include "../Features/LightLimitFix.h"
+#include "../I18n/I18n.h"
 #include "../Menu.h"
+
+#define I18N_KEY_PREFIX "feature.light_editor."
 
 #include <array>
 #include <filesystem>
@@ -10,32 +13,32 @@
 
 void LightEditor::DrawSettings()
 {
-	ImGui::Checkbox("Disable Regular Falloff Lights", &disableRegularLights);
-	ImGui::Checkbox("Disable Inverse Square Falloff Lights", &disableInvSqLights);
+	ImGui::Checkbox(T(TKEY("disable_regular_falloff_lights"), "Disable Regular Falloff Lights"), &disableRegularLights);
+	ImGui::Checkbox(T(TKEY("disable_inverse_square_falloff_lights"), "Disable Inverse Square Falloff Lights"), &disableInvSqLights);
 
 	ImGui::Spacing();
-	ImGui::Text("Total Lights: %u", totalLightCount);
-	ImGui::Text("Active Shadow Lights: %u", activeShadowLightCount);
+	ImGui::Text(T(TKEY("total_lights"), "Total Lights: %u"), totalLightCount);
+	ImGui::Text(T(TKEY("active_shadow_lights"), "Active Shadow Lights: %u"), activeShadowLightCount);
 	ImGui::Spacing();
 	ImGui::Separator();
 	ImGui::Spacing();
 
-	ImGui::Checkbox("Shadows Only", &shadowsOnly);
+	ImGui::Checkbox(T(TKEY("shadows_only"), "Shadows Only"), &shadowsOnly);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Only show lights with HemiShadow or OmniShadow flags.");
+		ImGui::Text("%s", T(TKEY("shadows_only_tooltip"), "Only show lights with HemiShadow or OmniShadow flags."));
 	}
 
 	int selectedFilter = static_cast<int>(filterOption);
-	if (ImGui::Combo("Filter By", &selectedFilter, FilterOptionLabels, static_cast<int>(FilterOption::Count))) {
+	if (ImGui::Combo(T(TKEY("filter_by"), "Filter By"), &selectedFilter, FilterOptionLabels, static_cast<int>(FilterOption::Count))) {
 		filterOption = static_cast<FilterOption>(selectedFilter);
 	}
 
 	int selectedSort = static_cast<int>(sortOption);
-	if (ImGui::Combo("Sort By", &selectedSort, SortOptionLabels, static_cast<int>(SortOption::Count))) {
+	if (ImGui::Combo(T(TKEY("sort_by"), "Sort By"), &selectedSort, SortOptionLabels, static_cast<int>(SortOption::Count))) {
 		sortOption = static_cast<SortOption>(selectedSort);
 	}
 
-	if (ImGui::BeginCombo("Lights", selected.isSelected ? GetLightName(selected).c_str() : "Select a light")) {
+	if (ImGui::BeginCombo(T(TKEY("lights"), "Lights"), selected.isSelected ? GetLightName(selected).c_str() : T(TKEY("select_a_light"), "Select a light"))) {
 		for (auto& light : lights) {
 			const auto displayName = GetLightName(light);
 			const bool isSelected = light == selected;
@@ -57,21 +60,21 @@ void LightEditor::DrawSettings()
 		return;
 
 	if (selected.isRef || selected.isAttached) {
-		ImGui::Text("Owner: 0x%08X | %s", selected.id, displayInfo.ownerEditorId.c_str());
-		ImGui::Text("Owner last edited by: %s", displayInfo.ownerLastEditedBy.c_str());
-		ImGui::Text("Base Object: 0x%08X | %s", displayInfo.baseObjectFormId, selected.name.c_str());
-		ImGui::Text("LIGH: 0x%08X | %s", displayInfo.lighFormId, displayInfo.lighEditorId.c_str());
-		ImGui::Text("Cell: %s", displayInfo.cellEditorId.c_str());
+		ImGui::Text(T(TKEY("owner"), "Owner: 0x%08X | %s"), selected.id, displayInfo.ownerEditorId.c_str());
+		ImGui::Text(T(TKEY("owner_last_edited_by"), "Owner last edited by: %s"), displayInfo.ownerLastEditedBy.c_str());
+		ImGui::Text(T(TKEY("base_object"), "Base Object: 0x%08X | %s"), displayInfo.baseObjectFormId, selected.name.c_str());
+		ImGui::Text(T(TKEY("ligh"), "LIGH: 0x%08X | %s"), displayInfo.lighFormId, displayInfo.lighEditorId.c_str());
+		ImGui::Text(T(TKEY("cell"), "Cell: %s"), displayInfo.cellEditorId.c_str());
 	} else {
-		ImGui::Text("Memory Address: %p", selected.ptr);
-		ImGui::Text("NiLight Name: %s", selected.name.c_str());
+		ImGui::Text(T(TKEY("memory_address"), "Memory Address: %p"), selected.ptr);
+		ImGui::Text(T(TKEY("ni_light_name"), "NiLight Name: %s"), selected.name.c_str());
 	}
 
 	ImGui::Spacing();
 	ImGui::Separator();
 	ImGui::Spacing();
 
-	if (ImGui::Button("Revert Changes")) {
+	if (ImGui::Button(T(TKEY("revert_changes"), "Revert Changes"))) {
 		current = original;
 		current.pos = { 0, 0, 0 };
 		waitFrames = 1;
@@ -79,11 +82,11 @@ void LightEditor::DrawSettings()
 
 	if (lpInfo.isLPLight) {
 		ImGui::SameLine();
-		if (ImGui::Button("Save to Light Placer")) {
+		if (ImGui::Button(T(TKEY("save_to_light_placer"), "Save to Light Placer"))) {
 			SaveToLightPlacer();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Save current settings to the Light Placer JSON.");
+			ImGui::Text("%s", T(TKEY("save_to_light_placer_tooltip"), "Save current settings to the Light Placer JSON."));
 		}
 	}
 
@@ -91,56 +94,58 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 
 	if (selected.isSpotlight)
-		ImGui::TextDisabled("Spotlight: ISL light type flags not applicable");
+		ImGui::TextDisabled("%s", T(TKEY("spotlight_not_applicable"), "Spotlight: ISL light type flags not applicable"));
 	ImGui::BeginDisabled(selected.isSpotlight);
-	ImGui::CheckboxFlags("Inverse Square Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
+	ImGui::CheckboxFlags(T(TKEY("inverse_square_light"), "Inverse Square Light"), reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
 	ImGui::EndDisabled();
-	ImGui::CheckboxFlags("Linear Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
+	ImGui::CheckboxFlags(T(TKEY("linear_light"), "Linear Light"), reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
 
 	ImGui::Spacing();
 	ImGui::Spacing();
 
-	ImGui::ColorEdit3("Color", &current.data.diffuse.red);
-	ImGui::SliderFloat("Intensity", &current.data.fade, 0.01f, 16.f, "%.3f");
+	ImGui::ColorEdit3(T(TKEY("color"), "Color"), &current.data.diffuse.red);
+	ImGui::SliderFloat(T(TKEY("intensity"), "Intensity"), &current.data.fade, 0.01f, 16.f, "%.3f");
 
 	const auto isInvSq = current.data.flags.any(LightLimitFix::LightFlags::InverseSquare);
 
 	if (isInvSq)
 		ImGui::BeginDisabled();
-	ImGui::SliderFloat("Radius", &current.data.radius, 2.f, 8096.f, "%.0f");
+	ImGui::SliderFloat(T(TKEY("radius"), "Radius"), &current.data.radius, 2.f, 8096.f, "%.0f");
 	if (isInvSq)
 		ImGui::EndDisabled();
 
 	if (isInvSq) {
-		ImGui::SliderFloat("Size", &current.data.size, 0.01f, 10.0f, "%.3f");
-		ImGui::SliderFloat("Cutoff", &current.data.cutoffOverride, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat(T(TKEY("size"), "Size"), &current.data.size, 0.01f, 10.0f, "%.3f");
+		ImGui::SliderFloat(T(TKEY("cutoff"), "Cutoff"), &current.data.cutoffOverride, 0.01f, 1.f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 	}
 
 	ImGui::Spacing();
 	ImGui::Spacing();
 
 	if (!selected.isOther && current.data.lighFormId != 0 && selected.hasPosition) {
-		ImGui::Text("X: %.2f, Y: %.2f, Z: %.2f", displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
+		ImGui::Text(T(TKEY("position_format"), "X: %.2f, Y: %.2f, Z: %.2f"), displayInfo.pos.x, displayInfo.pos.y, displayInfo.pos.z);
 		ImGui::Spacing();
-		ImGui::SliderFloat3("Position Offset", &current.pos.x, -500.f, 500.f, "%.0f");
+		ImGui::SliderFloat3(T(TKEY("position_offset"), "Position Offset"), &current.pos.x, -500.f, 500.f, "%.0f");
 
 		ImGui::Spacing();
 		ImGui::Spacing();
 
 		auto* flags = reinterpret_cast<uint32_t*>(&current.tesFlags);
 		ImGui::Spacing();
-		ImGui::Text("Light Flags");
-		ImGui::CheckboxFlags("Dynamic", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
-		ImGui::CheckboxFlags("Negative", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
-		ImGui::CheckboxFlags("Flicker", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
-		ImGui::CheckboxFlags("Flicker Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
-		ImGui::CheckboxFlags("Pulse", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
-		ImGui::CheckboxFlags("Pulse Slow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
-		ImGui::CheckboxFlags("Hemi Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
-		ImGui::CheckboxFlags("Omni Shadow", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
-		ImGui::CheckboxFlags("Portal Strict", flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
+		ImGui::Text("%s", T(TKEY("light_flags"), "Light Flags"));
+		ImGui::CheckboxFlags(T(TKEY("dynamic"), "Dynamic"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kDynamic));
+		ImGui::CheckboxFlags(T(TKEY("negative"), "Negative"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kNegative));
+		ImGui::CheckboxFlags(T(TKEY("flicker"), "Flicker"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlicker));
+		ImGui::CheckboxFlags(T(TKEY("flicker_slow"), "Flicker Slow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kFlickerSlow));
+		ImGui::CheckboxFlags(T(TKEY("pulse"), "Pulse"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulse));
+		ImGui::CheckboxFlags(T(TKEY("pulse_slow"), "Pulse Slow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPulseSlow));
+		ImGui::CheckboxFlags(T(TKEY("hemi_shadow"), "Hemi Shadow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kHemiShadow));
+		ImGui::CheckboxFlags(T(TKEY("omni_shadow"), "Omni Shadow"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kOmniShadow));
+		ImGui::CheckboxFlags(T(TKEY("portal_strict"), "Portal Strict"), flags, static_cast<uint32_t>(RE::TES_LIGHT_FLAGS::kPortalStrict));
 	}
 }
+
+#undef I18N_KEY_PREFIX
 
 std::string LightEditor::GetLightName(LightInfo& lightInfo)
 {

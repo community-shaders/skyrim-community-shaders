@@ -14,6 +14,7 @@ struct ScreenshotFeature : public Feature
 {
 	virtual ~ScreenshotFeature();
 	virtual std::string GetName() override { return "Screenshot"; }
+	virtual std::string GetDisplayName() override { return T("feature.screenshot.name", "Screenshot"); }
 	virtual std::string GetShortName() override { return "Screenshot"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kUtility; }
 
