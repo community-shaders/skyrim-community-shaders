@@ -265,38 +265,33 @@ void LightEditor::EnsureEmittanceFormListBuilt()
 	std::ranges::sort(s_emittanceFormList, [](const auto& a, const auto& b) { return a.first < b.first; });
 }
 
-void LightEditor::ApplyExternalEmittance(RE::TESObjectREFR* refr, RE::TESForm* source)
+void LightEditor::ApplyExternalEmittance(RE::TESForm* source)
 {
-	if (!refr)
-		return;
-
-	// Drives our own per-frame color lerp for the selected bulb (UpdateEmittanceColor), independent
-	// of whether the engine supports emittance for this reference type.
+	// Selected-bulb-only: the lerp (UpdateEmittanceColor) drives the color via this member and
+	// ApplyOverrides applies it to the active bulb alone. We deliberately do NOT write the
+	// reference's ExtraEmittanceSource — doing so makes the engine partially drive (brightness)
+	// every bulb we ever touched, even when unselected. Persistence is via Save to Light Placer
+	// (which writes the JSON and lets reloadlp recreate the source); ref/other bulbs are preview-only.
 	activeEmittanceSource = source;
 
-	auto* extra = refr->extraList.GetByType<RE::ExtraEmittanceSource>();
-	bool changed = false;
-	if (source) {
-		if (extra) {
-			if (extra->source != source) {
-				extra->source = source;
-				changed = true;
-			}
-		} else {
-			auto* created = RE::BSExtraData::Create<RE::ExtraEmittanceSource>();
-			created->source = source;
-			refr->extraList.Add(created);
-			changed = true;
-		}
-	} else if (extra) {
-		refr->extraList.RemoveByType(RE::ExtraDataType::kEmittanceSource);
-		changed = true;
-	}
+	// For LP bulbs an explicit source is incompatible with the NoExternalEmittance flag, so drop it
+	// from the flag set; otherwise the saved entry (and reloadlp) would suppress the source.
+	if (lpInfo.isLPLight && source)
+		lpFlagSet.erase("NoExternalEmittance");
+}
 
-	// LP bulbs are driven by the engine's emittance system, so force it to re-read the source via a
-	// deferred (strand-safe) rebuild. Ref/other bulbs are driven by our own lerp and need no rebuild.
-	if (changed && lpInfo.isLPLight)
-		RequestRefRefresh(refr);
+void LightEditor::QueueReselectCurrentLP()
+{
+	// reloadlp despawns and recreates LP bulbs, so the selection's per-iteration index can shift and
+	// the (id, index) match fails. Re-acquire by stable identity (owner ref + config + light EDID)
+	// via the same pendingAutoSelect path the attach flow uses.
+	if (!lpInfo.isLPLight)
+		return;
+	pendingSelectRefrId = selected.id;
+	pendingSelectConfigPath = lpInfo.configPath;
+	pendingSelectLighEdid = lpInfo.lightEDID;
+	pendingAutoSelect = true;
+	pendingAutoSelectTTL = 10;
 }
 
 void LightEditor::UpdateEmittanceColor()
@@ -309,21 +304,10 @@ void LightEditor::UpdateEmittanceColor()
 		return;
 	}
 
-	const RE::NiColor target = region->emittanceColor;
-	const auto now = std::chrono::steady_clock::now();
-	if (!emittanceColorActive) {
-		// Seed from the bulb's current base color so the first frame lerps in smoothly.
-		emittanceColorLerped = current.data.diffuse;
-		emittanceLastUpdate = now;
-		emittanceColorActive = true;
-	}
-
-	const float dt = std::chrono::duration<float>(now - emittanceLastUpdate).count();
-	emittanceLastUpdate = now;
-	const float f = std::clamp(1.0f - std::exp(-dt / kEmittanceLerpTau), 0.0f, 1.0f);
-	emittanceColorLerped.red += (target.red - emittanceColorLerped.red) * f;
-	emittanceColorLerped.green += (target.green - emittanceColorLerped.green) * f;
-	emittanceColorLerped.blue += (target.blue - emittanceColorLerped.blue) * f;
+	// The region's emittanceColor is already varied smoothly by the game with time/weather, so track
+	// it directly. No smoothing — it would only add lag (e.g. when scrubbing the time slider).
+	emittanceColor = region->emittanceColor;
+	emittanceColorActive = true;
 }
 
 // Searchable "External Emittance" combo shared by every bulb type backed by a reference. Picking a
@@ -346,7 +330,7 @@ void LightEditor::DrawExternalEmittanceCombo()
 			if (ImGui::Selectable(kNoneLabel, externalEmittanceEdid.empty())) {
 				externalEmittanceEdid = {};
 				useExternalEmittance = false;
-				ApplyExternalEmittance(activeRefr, nullptr);
+				ApplyExternalEmittance(nullptr);
 				Util::ClearComboSearch(kEmittanceComboId);
 			}
 			if (externalEmittanceEdid.empty())
@@ -359,7 +343,7 @@ void LightEditor::DrawExternalEmittanceCombo()
 			if (ImGui::Selectable(edid.c_str(), isCurrent)) {
 				externalEmittanceEdid = edid;
 				useExternalEmittance = true;
-				ApplyExternalEmittance(activeRefr, form);
+				ApplyExternalEmittance(form);
 				Util::ClearComboSearch(kEmittanceComboId);
 			}
 			if (isCurrent)
@@ -474,6 +458,7 @@ void LightEditor::DrawSettings()
 
 	ImGui::SameLine();
 	if (ImGui::Button(T(TKEY("reload_lp"), "Reload LP"))) {
+		QueueReselectCurrentLP();  // capture before RestoreOriginal clears lpInfo/activeRefr
 		RestoreOriginal();
 		previous = {};
 		waitFrames = 3;
@@ -653,6 +638,7 @@ void LightEditor::DrawSettings()
 			if (ImGui::Button(T(TKEY("save_to_light_placer"), "Save to Light Placer"))) {
 				const bool ok = SaveToLightPlacer(saveColorToLP);
 				if (ok) {
+					QueueReselectCurrentLP();
 					ScheduleConsoleCommand("reloadlp");
 					previous = {};
 					waitFrames = 3;
@@ -713,6 +699,7 @@ void LightEditor::DrawSettings()
 		if (ImGui::Button(T(TKEY("save_as_separate_entry"), "Save as Separate Entry"))) {
 			const bool ok = SaveAsSeparateEntry(saveColorToLP);
 			if (ok) {
+				QueueReselectCurrentLP();
 				ScheduleConsoleCommand("reloadlp");
 				previous = {};
 				waitFrames = 3;
@@ -2036,23 +2023,26 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		activeRefr = refr;
 		activeLigh = ligh;
 
-		lpMatchFound = lpInfo.isLPLight && SaveToLightPlacer(false, true);
-		if (lpInfo.isLPLight) {
-			RefreshLPJsonState();
-			originalLpFlagSet = lpFlagSet;
-		}
-
+		// Reset emittance state; populated below from the JSON (LP) or the runtime extra (non-LP).
 		externalEmittanceEdid = {};
 		useExternalEmittance = false;
 		activeEmittanceSource = nullptr;
-		emittanceColorActive = false;  // re-seed the lerp from the new bulb's base color
-		if (refr) {
+		emittanceColorActive = false;  // recomputed by UpdateEmittanceColor for the new bulb
+		// LP bulbs author their emittance in the JSON (LightPlacer doesn't reliably expose it as a
+		// runtime extra), so RefreshLPJsonState reads it below. Non-LP bulbs carry it as extra data.
+		if (!lpInfo.isLPLight && refr) {
 			if (const auto* extra = refr->extraList.GetByType<RE::ExtraEmittanceSource>())
 				if (extra->source) {
 					externalEmittanceEdid = clib_util::editorID::get_editorID(extra->source);
 					activeEmittanceSource = extra->source;
 				}
 			useExternalEmittance = !externalEmittanceEdid.empty();
+		}
+
+		lpMatchFound = lpInfo.isLPLight && SaveToLightPlacer(false, true);
+		if (lpInfo.isLPLight) {
+			RefreshLPJsonState();
+			originalLpFlagSet = lpFlagSet;
 		}
 
 		previous = selected;
@@ -2124,9 +2114,9 @@ bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDa
 		return false;
 
 	runtimeData->lighFormId = current.data.lighFormId;
-	// While an emittance source drives this bulb, replace the base color with the lerped emittance
+	// While an emittance source drives this bulb, replace the base color with the source's emittance
 	// color (see UpdateEmittanceColor); otherwise use the editor's color.
-	runtimeData->diffuse = emittanceColorActive ? emittanceColorLerped : current.data.diffuse;
+	runtimeData->diffuse = emittanceColorActive ? emittanceColor : current.data.diffuse;
 	runtimeData->fade = current.data.fade;
 	runtimeData->cutoffOverride = current.data.cutoffOverride;
 	runtimeData->size = current.data.size;
@@ -2400,8 +2390,11 @@ nlohmann::ordered_json LightEditor::BuildEditedData(const nlohmann::ordered_json
 	}
 
 	nlohmann::ordered_json newData;
-	if (includeColor || existingData.contains("color"))
-		newData["color"] = { current.data.diffuse.red, current.data.diffuse.green, current.data.diffuse.blue };
+	if (includeColor || existingData.contains("color")) {
+		// Light Placer stores color as 0-255 integers; current.data.diffuse is normalized 0-1.
+		auto toByte = [](float c) { return static_cast<int>(std::lround(std::clamp(c, 0.0f, 1.0f) * 255.0f)); };
+		newData["color"] = { toByte(current.data.diffuse.red), toByte(current.data.diffuse.green), toByte(current.data.diffuse.blue) };
+	}
 	// Persist the edited bulb type (LIGH form); fall back to the existing entry value
 	// when the edited form has no resolvable EditorID.
 	const std::string editedLighEdid = LighEdidForFormId(current.data.lighFormId);
@@ -2667,6 +2660,27 @@ void LightEditor::RefreshLPJsonState()
 			while (std::getline(ss, flag, '|')) {
 				if (!flag.empty())
 					lpFlagSet.insert(flag);
+			}
+		}
+
+		// External emittance source: authored in the JSON, so read it here (LightPlacer doesn't reliably
+		// expose it as runtime extra data). Resolving it to a form lets the color lerp follow the source's
+		// live, time/weather-driven emittanceColor, and re-derives the EDID so the combo matches the list.
+		if (const auto emitIt = dataIt->find("externalEmittance"); emitIt != dataIt->end() && emitIt->is_string()) {
+			if (const std::string entry = emitIt->get<std::string>(); !entry.empty()) {
+				EnsureEmittanceFormListBuilt();
+				RE::TESForm* form = nullptr;
+				for (auto& [edid, f] : s_emittanceFormList)
+					if (edid == entry) {
+						form = f;
+						break;
+					}
+				if (!form)
+					if (const auto formId = ResolveFormEntry(entry); formId != 0)
+						form = RE::TESForm::LookupByID(formId);
+				activeEmittanceSource = form;
+				externalEmittanceEdid = form ? clib_util::editorID::get_editorID(form) : entry;
+				useExternalEmittance = true;
 			}
 		}
 	}

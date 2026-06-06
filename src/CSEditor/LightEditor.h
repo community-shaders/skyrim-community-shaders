@@ -141,16 +141,15 @@ private:
 	RE::TESObjectLIGH* activeLigh = nullptr;
 	bool activeIsRef = false;
 
-	// External-emittance color preview (CS-driven, selected bulb only). The game only drives
-	// emittance color for references registered in the cell's emittance maps (e.g. LP bulbs); a
-	// reference we patch an ExtraEmittanceSource onto isn't, so its color never follows the source.
-	// While such a bulb is selected we drive it ourselves: each frame we lerp the displayed color
-	// toward the source region's live emittanceColor, replacing the base color. Reverts on deselect.
+	// External-emittance color preview (CS-driven, selected bulb only). The game only drives emittance
+	// color for references registered in the cell's emittance maps (e.g. LP bulbs); a reference we
+	// patch an ExtraEmittanceSource onto isn't, so its color never follows the source. While such a
+	// bulb is selected we apply the source region's live emittanceColor ourselves, replacing the base
+	// color. No smoothing: the game already varies emittanceColor smoothly with time/weather, so we
+	// just track it directly (smoothing only adds lag when scrubbing the time slider). Reverts on deselect.
 	RE::TESForm* activeEmittanceSource = nullptr;
-	bool emittanceColorActive = false;  // true once seeded; gates ApplyOverrides to the lerped color
-	RE::NiColor emittanceColorLerped{};
-	std::chrono::steady_clock::time_point emittanceLastUpdate{};
-	static constexpr float kEmittanceLerpTau = 0.5f;  // seconds; exponential-smoothing time constant
+	bool emittanceColorActive = false;  // gates ApplyOverrides to the emittance color below
+	RE::NiColor emittanceColor{};
 
 	// Deferred 3D rebuild after a light-flag edit. The engine's despawn (Disable -> unload 3D)
 	// and respawn (Enable -> load 3D) are async tasks; issued back-to-back in the same frame they
@@ -186,12 +185,15 @@ private:
 	// Draws the shared External Emittance combo for the active reference (any bulb type) and applies
 	// the selection live. Self-gates: does nothing when the selection has no backing reference.
 	void DrawExternalEmittanceCombo();
-	// Sets/swaps/clears the reference's runtime ExtraEmittanceSource (pass nullptr to clear) and
-	// refreshes the light so the change is visible immediately.
-	void ApplyExternalEmittance(RE::TESObjectREFR* refr, RE::TESForm* source);
+	// Sets the emittance source that drives the selected bulb's color preview (pass nullptr to clear).
+	// Does not modify the reference; persistence for LP is handled by Save to Light Placer.
+	void ApplyExternalEmittance(RE::TESForm* source);
 	// Advances the per-frame lerp of the selected bulb's color toward its emittance source's live
 	// color. No-op (and clears the active flag) when there is no emittance source.
 	void UpdateEmittanceColor();
+	// Queues an identity-based re-selection of the current LP bulb so it survives a reloadlp (which
+	// recreates the bulbs and invalidates the index-based selection match). No-op for non-LP.
+	void QueueReselectCurrentLP();
 
 	static RE::FormID ResolveFormEntry(const std::string& entry);
 	static bool HasShadowFlags(uint32_t tesFlags);
