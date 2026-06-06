@@ -2052,7 +2052,13 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		}
 	}
 
-	if (!selected.isOther && refr && tesFlags && current.tesFlags.underlying() != tesFlags->underlying()) {
+	// Only non-LP lights apply TES-flag edits by mutating the base LIGH form and rebuilding the
+	// reference. For LP lights the TES-flag checkboxes are disabled (flags are edited via lpFlagSet
+	// -> JSON -> reloadlp); SyncLPFlagsToRuntime additionally rewrites current.tesFlags from the LP
+	// flag subset, which can legitimately differ from the shared base form (e.g. the form has flicker
+	// but the LP entry doesn't). Running this branch for LP lights would mutate the shared form and
+	// disable/enable the reference every frame, making the mesh vanish.
+	if (!selected.isOther && !lpInfo.isLPLight && refr && tesFlags && current.tesFlags.underlying() != tesFlags->underlying()) {
 		*tesFlags = static_cast<RE::TES_LIGHT_FLAGS>(current.tesFlags.underlying());
 		RequestRefRefresh(refr);
 	}
@@ -2117,7 +2123,9 @@ void LightEditor::RestoreOriginal()
 		activeNiLight->parent->Update(updateData);
 	}
 
-	if (activeLigh && activeRefr && current.tesFlags.underlying() != original.tesFlags.underlying()) {
+	// Mirror the non-LP gate in UpdateSelectedLight: only non-LP lights ever mutated the base form's
+	// flags, so only they need the revert + rebuild here.
+	if (!lpInfo.isLPLight && activeLigh && activeRefr && current.tesFlags.underlying() != original.tesFlags.underlying()) {
 		activeLigh->data.flags = static_cast<RE::TES_LIGHT_FLAGS>(original.tesFlags.underlying());
 		RequestRefRefresh(activeRefr);
 	}
