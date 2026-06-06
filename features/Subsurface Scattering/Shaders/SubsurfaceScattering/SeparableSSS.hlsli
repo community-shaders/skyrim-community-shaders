@@ -132,9 +132,8 @@ float4 SSSSBlurCS(
 	finalStep *= FrameBuffer::DynamicResolutionParams1.xy;
 
 	// Per-pixel rotation to break separable axis-aligned banding
-	float jitter = Random::InterleavedGradientNoise(texcoord * SharedData::BufferDim.xy, SharedData::FrameCount) * Math::TAU;
+	float jitter = Random::InterleavedGradientNoise(texcoord * SharedData::BufferDim.xy, 0) * Math::TAU;
 	float2x2 rotationMatrix = float2x2(cos(jitter), sin(jitter), -sin(jitter), cos(jitter));
-	float2x2 identityMatrix = float2x2(1.0, 0.0, 0.0, 1.0);
 
 	// Accumulate the other samples:
 	for (uint i = kernelOffset + 1; i < kernelOffset + SSSS_N_SAMPLES; i++) {
