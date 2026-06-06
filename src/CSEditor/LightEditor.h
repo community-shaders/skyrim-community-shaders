@@ -228,6 +228,8 @@ private:
 	};
 
 	MatchContext MakeSelectedContext() const;
+	// MatchContext for the Add-Light workflow's picked mesh, paired with the given light EDID.
+	MatchContext MakePickedContext(const std::string& lightEDID) const;
 	static void MutateFilterList(nlohmann::ordered_json& lightEntry, const char* listKey, const std::string& ownerEntry, bool add);
 	bool ModifyLPFilterListFor(const std::string& configPath, const MatchContext& ctx, bool isWhiteList, bool add);
 	bool ModifyLPFilterListFor(const std::string& configPath, const MatchContext& ctx, const std::string& entryStr, bool isWhiteList, bool add);

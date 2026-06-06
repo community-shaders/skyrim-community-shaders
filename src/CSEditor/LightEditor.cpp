@@ -225,6 +225,18 @@ static nlohmann::ordered_json MakeLightObject(const std::string& lighEdid)
 	return light;
 }
 
+// Overwrites a light entry's first point/node with the integer-rounded position. No-op when the
+// entry has neither a "points" nor "nodes" array whose first element is a vec3.
+static void SetFirstPointFromPos(nlohmann::ordered_json& lightEntry, const RE::NiPoint3& pos)
+{
+	const char* pointsKey = lightEntry.contains("points") ? "points" : (lightEntry.contains("nodes") ? "nodes" : nullptr);
+	if (!pointsKey)
+		return;
+	auto& pts = lightEntry[pointsKey];
+	if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3)
+		pts[0] = nlohmann::ordered_json::array({ static_cast<int>(pos.x), static_cast<int>(pos.y), static_cast<int>(pos.z) });
+}
+
 // True if the entry's "lights" array already contains a light with the given EDID.
 static bool EntryContainsLight(const nlohmann::ordered_json& entry, const std::string& lighEdid)
 {
@@ -1093,6 +1105,12 @@ void LightEditor::DrawAddLightPopup()
 		ImGui::Text(T(TKEY("picked_plugin"), "Plugin: %s"), pickedMesh.sourcePlugin.empty() ? T(TKEY("unknown_value"), "(unknown)") : pickedMesh.sourcePlugin.c_str());
 		ImGui::Separator();
 
+		auto notifyAddFailed = [] {
+			EditorWindow::GetSingleton()->ShowNotification(
+				T(TKEY("add_light_failed"), "Failed to add light \xE2\x80\x94 see log"),
+				Util::Colors::GetError());
+		};
+
 		// Renders a "selectable button": disabled with a tooltip when unavailable, info-styled when
 		// active, clickable otherwise. Returns true when clicked this frame. Unavailability is checked
 		// first so a remembered-active option invalidated by a state change renders disabled rather
@@ -1233,9 +1251,7 @@ void LightEditor::DrawAddLightPopup()
 								pendingSelectRefrId = refr->GetFormID();
 							BeginAttachSequence(lpConfigPaths[addSelectedConfig]);
 						} else {
-							EditorWindow::GetSingleton()->ShowNotification(
-								T(TKEY("add_light_failed"), "Failed to add light \xE2\x80\x94 see log"),
-								Util::Colors::GetError());
+							notifyAddFailed();
 						}
 					}
 				}
@@ -1257,9 +1273,7 @@ void LightEditor::DrawAddLightPopup()
 						pendingSelectRefrId = bulb.refrId;
 						BeginAttachSequence(bulb.configPath);
 					} else {
-						EditorWindow::GetSingleton()->ShowNotification(
-							T(TKEY("add_light_failed"), "Failed to add light \xE2\x80\x94 see log"),
-							Util::Colors::GetError());
+						notifyAddFailed();
 					}
 				}
 			}
@@ -1296,9 +1310,7 @@ void LightEditor::DrawAddLightPopup()
 						pendingSelectRefrId = bulb.refrId;
 						BeginAttachSequence(bulb.configPath);
 					} else {
-						EditorWindow::GetSingleton()->ShowNotification(
-							T(TKEY("add_light_failed"), "Failed to add light \xE2\x80\x94 see log"),
-							Util::Colors::GetError());
+						notifyAddFailed();
 					}
 				}
 			}
@@ -1370,12 +1382,7 @@ void LightEditor::DrawAddLightPopup()
 				if (entryStr.empty())
 					entryStr = FormatOwnerFormEntry(refr);
 
-				MatchContext ctx;
-				ctx.ownerModelPath = pickedMesh.modelPath;
-				ctx.ownerEditorId = pickedMesh.editorId;
-				ctx.baseFormId = pickedMesh.baseFormId;
-				ctx.lightEDID = bulb.lightEDID;
-				ctx.refr = refr;
+				const MatchContext ctx = MakePickedContext(bulb.lightEDID);
 				const bool isWhite = (addPopupMode == ModeWhitelist);
 				const bool ok = ModifyLPFilterListFor(bulb.configPath, ctx, entryStr, isWhite, true);
 				if (ok) {
@@ -1427,12 +1434,7 @@ void LightEditor::DrawAddLightPopup()
 
 			if (clickedRemove && entryChosen) {
 				const auto& fe = filterListEntries[addSelectedFilterEntry];
-				MatchContext ctx;
-				ctx.ownerModelPath = pickedMesh.modelPath;
-				ctx.ownerEditorId = pickedMesh.editorId;
-				ctx.baseFormId = pickedMesh.baseFormId;
-				ctx.lightEDID = fe.lightEDID;
-				ctx.refr = pickedMesh.refrHandle.get().get();
+				const MatchContext ctx = MakePickedContext(fe.lightEDID);
 				const bool ok = ModifyLPFilterListFor(fe.configPath, ctx, fe.matchedEntry, fe.isWhiteList, false);
 				if (ok) {
 					ScheduleConsoleCommand("reloadlp");
@@ -1564,12 +1566,7 @@ bool LightEditor::AddPointToConfig(const AttachedBulb& bulb)
 		return false;
 	}
 
-	MatchContext ctx;
-	ctx.ownerModelPath = pickedMesh.modelPath;
-	ctx.ownerEditorId = pickedMesh.editorId;
-	ctx.baseFormId = pickedMesh.baseFormId;
-	ctx.lightEDID = bulb.lightEDID;
-	ctx.refr = pickedMesh.refrHandle.get().get();
+	const MatchContext ctx = MakePickedContext(bulb.lightEDID);
 
 	auto* lightEntry = FindMatchingLightEntry(configArray, ctx, false);
 	if (!lightEntry) {
@@ -1597,14 +1594,8 @@ bool LightEditor::LightAlreadyInEntry(const AttachedBulb& bulb, const std::strin
 	if (!LoadConfigArray(bulb.configPath, configArray))
 		return false;
 
-	MatchContext ctx;
-	ctx.ownerModelPath = pickedMesh.modelPath;
-	ctx.ownerEditorId = pickedMesh.editorId;
-	ctx.baseFormId = pickedMesh.baseFormId;
-	ctx.lightEDID = lighEdid;
-	ctx.refr = pickedMesh.refrHandle.get().get();
 	// A matching light entry (model/formID match + same light EDID) means it is already present.
-	return FindMatchingLightEntry(configArray, ctx, false) != nullptr;
+	return FindMatchingLightEntry(configArray, MakePickedContext(lighEdid), false) != nullptr;
 }
 
 bool LightEditor::AddLightToExistingEntry(const AttachedBulb& bulb, const std::string& lighEdid)
@@ -1615,12 +1606,7 @@ bool LightEditor::AddLightToExistingEntry(const AttachedBulb& bulb, const std::s
 		return false;
 	}
 
-	MatchContext ctx;
-	ctx.ownerModelPath = pickedMesh.modelPath;
-	ctx.ownerEditorId = pickedMesh.editorId;
-	ctx.baseFormId = pickedMesh.baseFormId;
-	ctx.lightEDID = lighEdid;
-	ctx.refr = pickedMesh.refrHandle.get().get();
+	const MatchContext ctx = MakePickedContext(lighEdid);
 
 	nlohmann::ordered_json* parentEntry = nullptr;
 	for (auto& entry : configArray)
@@ -2264,6 +2250,17 @@ LightEditor::MatchContext LightEditor::MakeSelectedContext() const
 	return ctx;
 }
 
+LightEditor::MatchContext LightEditor::MakePickedContext(const std::string& lightEDID) const
+{
+	MatchContext ctx;
+	ctx.ownerModelPath = pickedMesh.modelPath;
+	ctx.ownerEditorId = pickedMesh.editorId;
+	ctx.baseFormId = pickedMesh.baseFormId;
+	ctx.lightEDID = lightEDID;
+	ctx.refr = pickedMesh.refrHandle.get().get();
+	return ctx;
+}
+
 bool LightEditor::MatchesLPFilters(const nlohmann::ordered_json& lightEntry, RE::TESObjectREFR* refr)
 {
 	if (!refr)
@@ -2383,12 +2380,7 @@ bool LightEditor::SaveToLightPlacer(bool includeColor, bool dryRun)
 	auto& data = (*matchedEntry)["data"];
 	data = BuildEditedData(data, includeColor);
 
-	const char* pointsKey = matchedEntry->contains("points") ? "points" : (matchedEntry->contains("nodes") ? "nodes" : nullptr);
-	if (pointsKey) {
-		auto& pts = (*matchedEntry)[pointsKey];
-		if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3)
-			pts[0] = nlohmann::ordered_json::array({ static_cast<int>(current.pos.x), static_cast<int>(current.pos.y), static_cast<int>(current.pos.z) });
-	}
+	SetFirstPointFromPos(*matchedEntry, current.pos);
 
 	NormalizeConfig(configArray);
 
@@ -2555,11 +2547,7 @@ bool LightEditor::SaveAsSeparateEntry(bool includeColor)
 	nlohmann::ordered_json forkedEntry = sourceEntry;
 	forkedEntry["data"] = BuildEditedData(sourceEntry["data"], includeColor);
 
-	if (const char* pointsKey = forkedEntry.contains("points") ? "points" : (forkedEntry.contains("nodes") ? "nodes" : nullptr)) {
-		auto& pts = forkedEntry[pointsKey];
-		if (pts.is_array() && !pts.empty() && pts[0].is_array() && pts[0].size() >= 3)
-			pts[0] = nlohmann::ordered_json::array({ static_cast<int>(current.pos.x), static_cast<int>(current.pos.y), static_cast<int>(current.pos.z) });
-	}
+	SetFirstPointFromPos(forkedEntry, current.pos);
 
 	forkedEntry.erase("blackList");
 	forkedEntry["whiteList"] = nlohmann::ordered_json::array({ ownerEntry });
