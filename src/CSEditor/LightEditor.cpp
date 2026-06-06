@@ -5,6 +5,7 @@
 #include "../Menu.h"
 #include "../Utils/UI.h"
 #include "EditorWindow.h"
+#include "imgui_internal.h"
 #include "RE/B/BSLight.h"
 #include "RE/B/BSShadowLight.h"
 #include "RE/E/ExtraEmittanceSource.h"
@@ -280,6 +281,14 @@ void LightEditor::ApplyExternalEmittance(RE::TESForm* source)
 		lpFlagSet.erase("NoExternalEmittance");
 }
 
+void LightEditor::ClearExternalEmittance()
+{
+	externalEmittanceEdid = {};
+	useExternalEmittance = false;
+	activeEmittanceSource = nullptr;
+	emittanceColorActive = false;
+}
+
 void LightEditor::QueueReselectCurrentLP()
 {
 	// reloadlp despawns and recreates LP bulbs, so the selection's per-iteration index can shift and
@@ -328,9 +337,7 @@ void LightEditor::DrawExternalEmittanceCombo()
 		auto searchText = Util::DrawComboSearchInput(kEmittanceComboId);
 		if (searchText.empty() || Util::StringMatchesSearch(kNoneLabel, searchText)) {
 			if (ImGui::Selectable(kNoneLabel, externalEmittanceEdid.empty())) {
-				externalEmittanceEdid = {};
-				useExternalEmittance = false;
-				ApplyExternalEmittance(nullptr);
+				ClearExternalEmittance();
 				Util::ClearComboSearch(kEmittanceComboId);
 			}
 			if (externalEmittanceEdid.empty())
@@ -843,6 +850,10 @@ void LightEditor::DrawSettings()
 						lpFlagSet.insert(flagName);
 					else
 						lpFlagSet.erase(flagName);
+					// NoExternalEmittance and an emittance source are mutually exclusive: enabling the
+					// flag clears the source (combo shows None; the source line is dropped on save).
+					if (inSet && std::string_view(flagName) == "NoExternalEmittance")
+						ClearExternalEmittance();
 					SyncLPFlagsToRuntime();
 				}
 				if (disabled)
@@ -981,13 +992,17 @@ std::vector<std::string> LightEditor::ScanLPConfigPaths() const
 	return paths;
 }
 
-int LightEditor::DrawAttachedBulbCombo(const char* searchId, bool openOnAppear)
+int LightEditor::DrawAttachedBulbCombo(const char* searchId, bool openNow)
 {
 	int clicked = -1;
 	const char* preview = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size()) ? attachedBulbs[addSelectedBulb].lightEDID.c_str() : T(TKEY("select_a_bulb"), "Select a bulb");
-	if (openOnAppear)
-		ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-	if (ImGui::BeginCombo(T(TKEY("attached_bulb"), "Attached bulb"), preview, ImGuiComboFlags_HeightLarge)) {
+	const char* comboLabel = T(TKEY("attached_bulb"), "Attached bulb");
+	// SetNextItemOpen is ignored for combos; a combo opens only via its derived popup id. Open it
+	// directly so the list is visible without an extra click (one-shot: openNow is true only the
+	// frame the mode is entered, so the user can still close it).
+	if (openNow)
+		ImGui::OpenPopup(ImHashStr("##ComboPopup", 0, ImGui::GetID(comboLabel)));
+	if (ImGui::BeginCombo(comboLabel, preview, ImGuiComboFlags_HeightLarge)) {
 		if (ImGui::IsWindowAppearing())
 			ImGui::SetKeyboardFocusHere();
 		ImGui::SetNextItemWidth(-1.0f);
@@ -1103,8 +1118,12 @@ void LightEditor::DrawAddLightPopup()
 		// --- Mode selector ---
 		const bool hasBulbs = !attachedBulbs.empty();
 		auto drawModeBtn = [&](const char* label, int mode, bool available, const char* unavailTip) {
-			if (selectableButton(label, addPopupMode == mode, available, unavailTip))
+			if (selectableButton(label, addPopupMode == mode, available, unavailTip)) {
 				addPopupMode = mode;
+				// Auto-open the bulb list when entering multi-bulb Edit Bulb mode (saves a click).
+				if (mode == ModeEditBulb)
+					editBulbComboPendingOpen = true;
+			}
 		};
 
 		const char* noBulbsTip = T(TKEY("no_attached_bulbs"), "This mesh has no attached Light Placer bulbs.");
@@ -1289,7 +1308,9 @@ void LightEditor::DrawAddLightPopup()
 			// Multi-bulb: combo fires immediately on selection (no confirm button). The combo
 			// returns the clicked index so the modal is closed after the combo, not inside it
 			// (closing inside the combo body would close the combo popup, not the modal).
-			const int clickedBulb = DrawAttachedBulbCombo("##bulb_search", true);
+			const bool openNow = editBulbComboPendingOpen;
+			editBulbComboPendingOpen = false;
+			const int clickedBulb = DrawAttachedBulbCombo("##bulb_search", openNow);
 			if (clickedBulb >= 0) {
 				const auto& bulb = attachedBulbs[clickedBulb];
 				pendingSelectRefrId = bulb.refrId;
@@ -1708,6 +1729,7 @@ void LightEditor::GatherLights()
 		addSelectedLighFormId = 0;
 		addPopupMode = -1;
 		addLightSubMode = -1;
+		editBulbComboPendingOpen = false;
 		// Filter-flow selections are mesh-specific too: a remembered "Cell" entry type or filter-list
 		// index from the previous pick would otherwise stay highlighted/selected even when the newly
 		// picked mesh can't offer it (e.g. its cell has no EditorID), so reset them to safe defaults.
@@ -2390,7 +2412,10 @@ nlohmann::ordered_json LightEditor::BuildEditedData(const nlohmann::ordered_json
 	}
 
 	nlohmann::ordered_json newData;
-	if (includeColor || existingData.contains("color")) {
+	// Only write color when the user opts in via the Save checkbox; otherwise omit it entirely so the
+	// entry falls back to the LIGH form color (writing it unconditionally would overwrite/keep a color
+	// the user chose not to save).
+	if (includeColor) {
 		// Light Placer stores color as 0-255 integers; current.data.diffuse is normalized 0-1.
 		auto toByte = [](float c) { return static_cast<int>(std::lround(std::clamp(c, 0.0f, 1.0f) * 255.0f)); };
 		newData["color"] = { toByte(current.data.diffuse.red), toByte(current.data.diffuse.green), toByte(current.data.diffuse.blue) };
@@ -2408,10 +2433,11 @@ nlohmann::ordered_json LightEditor::BuildEditedData(const nlohmann::ordered_json
 	}
 	if (existingData.contains("shadowDepthBias"))
 		newData["shadowDepthBias"] = shadowDepthBias;
+	// Write the source only when one is set; otherwise omit it so the line is removed from the entry
+	// (selecting None or enabling NoExternalEmittance both clear it). The editor reads the current
+	// source from the JSON on selection, so external state is always reflected here.
 	if (useExternalEmittance && !externalEmittanceEdid.empty())
 		newData["externalEmittance"] = externalEmittanceEdid;
-	else if (!useExternalEmittance && existingData.contains("externalEmittance"))
-		newData["externalEmittance"] = existingData["externalEmittance"];
 	if (!newFlags.empty())
 		newData["flags"] = newFlags;
 	if (existingData.contains("offset"))
@@ -2664,9 +2690,11 @@ void LightEditor::RefreshLPJsonState()
 		}
 
 		// External emittance source: authored in the JSON, so read it here (LightPlacer doesn't reliably
-		// expose it as runtime extra data). Resolving it to a form lets the color lerp follow the source's
-		// live, time/weather-driven emittanceColor, and re-derives the EDID so the combo matches the list.
-		if (const auto emitIt = dataIt->find("externalEmittance"); emitIt != dataIt->end() && emitIt->is_string()) {
+		// expose it as runtime extra data). Resolving it to a form lets the color tracking follow the
+		// source's live, time/weather-driven emittanceColor, and re-derives the EDID so the combo matches
+		// the list. NoExternalEmittance suppresses the source in LP, so honor that here (show None).
+		if (!lpFlagSet.contains("NoExternalEmittance"))
+			if (const auto emitIt = dataIt->find("externalEmittance"); emitIt != dataIt->end() && emitIt->is_string()) {
 			if (const std::string entry = emitIt->get<std::string>(); !entry.empty()) {
 				EnsureEmittanceFormListBuilt();
 				RE::TESForm* form = nullptr;

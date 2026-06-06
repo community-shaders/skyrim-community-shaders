@@ -188,6 +188,8 @@ private:
 	// Sets the emittance source that drives the selected bulb's color preview (pass nullptr to clear).
 	// Does not modify the reference; persistence for LP is handled by Save to Light Placer.
 	void ApplyExternalEmittance(RE::TESForm* source);
+	// Clears the external-emittance editor state (combo shows None; the source line is dropped on save).
+	void ClearExternalEmittance();
 	// Advances the per-frame lerp of the selected bulb's color toward its emittance source's live
 	// color. No-op (and clears the active flag) when there is no emittance source.
 	void UpdateEmittanceColor();
@@ -256,6 +258,7 @@ private:
 	std::vector<AttachedBulb> attachedBulbs;  // bulbs live-attached to pickedMesh, built on popup open
 	int addSelectedBulb = -1;                 // index into attachedBulbs
 	char addBulbSearch[256] = {};             // search text for the bulb combo
+	bool editBulbComboPendingOpen = false;    // one-shot: open the Edit Bulb combo on mode entry
 
 	struct FilterListEntry
 	{
@@ -319,8 +322,8 @@ private:
 	void DrawAddLightButton();
 	void DrawAddLightPopup();
 	// Searchable "Attached bulb" combo over attachedBulbs. Returns the index clicked this
-	// frame (or -1); sets addSelectedBulb on click. openOnAppear opens the dropdown on first show.
-	int DrawAttachedBulbCombo(const char* searchId, bool openOnAppear);
+	// frame (or -1); sets addSelectedBulb on click. openNow opens the dropdown this frame (one-shot).
+	int DrawAttachedBulbCombo(const char* searchId, bool openNow);
 	// Searchable "Light record" combo over the cached LIGH list; writes addSelectedLighFormId.
 	void DrawLightRecordCombo(const char* searchId);
 	// Kicks off the timed reload/disable/enable/respawn sequence for the picked mesh.
