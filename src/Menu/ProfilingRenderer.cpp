@@ -370,9 +370,9 @@ void ProfilingRenderer::RenderFeatureTimers(const std::string& featurePrefix)
 	float maxP95 = 0.0f;
 	float maxP99 = 0.0f;
 
-	std::string prefix = featurePrefix + "::";
+	const auto prefix = GetFeatureTimerPrefix(featurePrefix);
 	for (const auto& r : results) {
-		if (!r.valid || !r.name.starts_with(prefix))
+		if (!IsFeatureTimerResult(r, prefix))
 			continue;
 		std::string label = r.name.substr(prefix.size());
 		float timeMs = cpuMode ? r.cpuTimeMs : r.gpuTimeMs;
@@ -450,4 +450,24 @@ void ProfilingRenderer::RenderFeatureTimers(const std::string& featurePrefix)
 
 		ImGui::EndTable();
 	}
+}
+
+bool ProfilingRenderer::HasFeatureTimers(const std::string& featurePrefix)
+{
+	const auto prefix = GetFeatureTimerPrefix(featurePrefix);
+	const auto& results = globals::profiler->GetResults();
+
+	return std::ranges::any_of(results, [&prefix](const auto& result) {
+		return IsFeatureTimerResult(result, prefix);
+	});
+}
+
+std::string ProfilingRenderer::GetFeatureTimerPrefix(const std::string& featurePrefix)
+{
+	return featurePrefix + "::";
+}
+
+bool ProfilingRenderer::IsFeatureTimerResult(const Profiler::TimerResult& result, std::string_view prefix)
+{
+	return result.valid && result.name.starts_with(prefix);
 }

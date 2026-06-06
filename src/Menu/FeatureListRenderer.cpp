@@ -812,7 +812,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 			ImVec2 cursorPosBefore = ImGui::GetCursorPos();
 			feat->DrawSettings();
 
-			if (feat != &globals::features::csEditor) {
+			if (feat != &globals::features::csEditor && ProfilingRenderer::HasFeatureTimers(feat->GetShortName())) {
 				ImGui::SeparatorText(T("menu.features.profiling", "Profiling"));
 				ProfilingRenderer::RenderFeatureTimers(feat->GetShortName());
 			}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -20,6 +21,7 @@ public:
 
 	static void RenderStatistics(bool showTable = true, bool showModeToggle = true);
 	static void RenderFeatureTimers(const std::string& featurePrefix);
+	static bool HasFeatureTimers(const std::string& featurePrefix);
 
 private:
 	static inline TimingMode timingMode = TimingMode::GPU;
@@ -67,4 +69,6 @@ private:
 	static void RenderTimingModeToggle();
 	static void SetupTimingTableColumns(bool includePercentColumn);
 	static void RenderGraph();
+	static std::string GetFeatureTimerPrefix(const std::string& featurePrefix);
+	static bool IsFeatureTimerResult(const Profiler::TimerResult& result, std::string_view prefix);
 };

@@ -366,6 +366,10 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		for (auto* feature : Feature::GetFeatureList()) {
 			try {
 				const std::string featureName = feature->GetShortName();
+				if (!disabledFeatures.contains(featureName) && feature->IsDisabledByDefault()) {
+					disabledFeatures[featureName] = true;
+					logger::info("Feature '{}' is disabled by default", featureName);
+				}
 				bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
 				if (!isDisabled) {
 					logger::info("Loading Feature: '{}'", featureName);

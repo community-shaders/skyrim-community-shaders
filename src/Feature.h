@@ -74,6 +74,13 @@ public:
 	virtual std::string_view GetCategory() const { return FeatureCategories::kOther; }
 
 	/**
+	 * Whether the feature is disabled at boot by default (before any user override).
+	 * Features that override this to return true will start disabled on first install;
+	 * users can still enable them via the "Disable at Boot" menu.
+	 */
+	virtual bool IsDisabledByDefault() const { return false; }
+
+	/**
 	 * Whether the feature will show up in the GUI menu
 	 */
 	virtual bool IsInMenu() const { return true; }
