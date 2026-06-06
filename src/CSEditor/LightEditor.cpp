@@ -2412,13 +2412,14 @@ nlohmann::ordered_json LightEditor::BuildEditedData(const nlohmann::ordered_json
 	}
 
 	nlohmann::ordered_json newData;
-	// Only write color when the user opts in via the Save checkbox; otherwise omit it entirely so the
-	// entry falls back to the LIGH form color (writing it unconditionally would overwrite/keep a color
-	// the user chose not to save).
+	// Only mutate color when the user opts in via the Save checkbox; otherwise leave any existing color
+	// untouched (don't overwrite the user's saved value, and don't drop it).
 	if (includeColor) {
 		// Light Placer stores color as 0-255 integers; current.data.diffuse is normalized 0-1.
 		auto toByte = [](float c) { return static_cast<int>(std::lround(std::clamp(c, 0.0f, 1.0f) * 255.0f)); };
 		newData["color"] = { toByte(current.data.diffuse.red), toByte(current.data.diffuse.green), toByte(current.data.diffuse.blue) };
+	} else if (existingData.contains("color")) {
+		newData["color"] = existingData["color"];
 	}
 	// Persist the edited bulb type (LIGH form); fall back to the existing entry value
 	// when the edited form has no resolvable EditorID.
