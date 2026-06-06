@@ -14,6 +14,7 @@
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace MenuFonts
 {
@@ -130,14 +131,24 @@ namespace MenuFonts
 		if (menuInstance) {
 			font_ = menuInstance->GetFont(role);
 			if (font_) {
-				ImGui::PushFont(font_, font_->LegacySize);
+				guard_.emplace(font_);
 			}
 		}
 	}
 
-	FontRoleGuard::~FontRoleGuard()
+	FontRoleGuard::~FontRoleGuard() = default;
+
+	ImFontGuard::ImFontGuard(ImFont* font)
 	{
-		if (font_) {
+		if (font) {
+			ImGui::PushFont(font, font->LegacySize);
+			pushed_ = true;
+		}
+	}
+
+	ImFontGuard::~ImFontGuard()
+	{
+		if (pushed_) {
 			ImGui::PopFont();
 		}
 	}
@@ -181,6 +192,65 @@ namespace MenuFonts
 		// Simply begin the tab item - padding adjustments should be handled
 		// by the tab bar wrapper, not individual tab items
 		return ImGui::BeginTabItem(label, nullptr, flags);
+	}
+
+	namespace
+	{
+		std::unordered_map<std::string, ImFont*> g_previewFontsByFile;
+
+		const ImWchar g_previewGlyphRanges[] = {
+			0x0020, 0x00FF,  // Basic Latin + Latin-1 Supplement
+			0,
+		};
+	}  // namespace
+
+	void AddPreviewFontsToAtlas(float previewFontSize)
+	{
+		g_previewFontsByFile.clear();
+
+		const float clampedSize = std::clamp(
+			std::round(previewFontSize),
+			ThemeManager::Constants::MIN_FONT_SIZE,
+			ThemeManager::Constants::MAX_FONT_SIZE);
+
+		const auto catalog = Util::Fonts::DiscoverFontCatalog();
+		const auto fontsRoot = Util::PathHelpers::GetFontsPath();
+		ImGuiIO& io = ImGui::GetIO();
+
+		ImFontConfig cfg{};
+		ThemeManager::InitDefaultFontConfig(cfg);
+
+		std::unordered_set<std::string> seenFiles;
+		for (const auto& family : catalog.families) {
+			for (const auto& style : family.styles) {
+				if (!seenFiles.insert(style.file).second) {
+					continue;
+				}
+
+				const auto fontPath = fontsRoot / style.file;
+				if (!Util::IsPathWithinDirectory(fontsRoot, fontPath)) {
+					continue;
+				}
+				if (!std::filesystem::exists(fontPath)) {
+					continue;
+				}
+
+				ImFont* font = io.Fonts->AddFontFromFileTTF(
+					fontPath.string().c_str(), clampedSize, &cfg, g_previewGlyphRanges);
+				if (font) {
+					g_previewFontsByFile.emplace(style.file, font);
+				}
+			}
+		}
+	}
+
+	ImFont* GetPreviewFont(const std::string& file)
+	{
+		if (file.empty()) {
+			return nullptr;
+		}
+		const auto it = g_previewFontsByFile.find(file);
+		return it != g_previewFontsByFile.end() ? it->second : nullptr;
 	}
 
 	std::string BuildFontSignature(const Menu::ThemeSettings& theme, float baseFontSize)
@@ -590,6 +660,51 @@ namespace Util
 		Catalog DiscoverFontCatalog()
 		{
 			return DiscoverFontCatalog(false);
+		}
+
+		const StyleInfo* FindRegularStyle(const FamilyInfo& family)
+		{
+			for (const auto& style : family.styles) {
+				if (Util::IEquals(style.style, "Regular") || Util::IEquals(style.style, "Normal") || Util::IEquals(style.style, "Book")) {
+					return &style;
+				}
+			}
+
+			if (family.styles.empty()) {
+				return nullptr;
+			}
+
+			return &family.styles[family.styles.size() / 2];
+		}
+
+		int FindFamilyIndex(const Catalog& catalog, const std::string& familyName)
+		{
+			if (catalog.families.empty()) {
+				return 0;
+			}
+
+			for (size_t i = 0; i < catalog.families.size(); ++i) {
+				if (Util::IEquals(catalog.families[i].name, familyName)) {
+					return static_cast<int>(i);
+				}
+			}
+
+			return 0;
+		}
+
+		int FindStyleIndex(const FamilyInfo& family, const std::string& styleName)
+		{
+			if (family.styles.empty()) {
+				return 0;
+			}
+
+			for (size_t i = 0; i < family.styles.size(); ++i) {
+				if (Util::IEquals(family.styles[i].style, styleName)) {
+					return static_cast<int>(i);
+				}
+			}
+
+			return 0;
 		}
 	}  // namespace Fonts
 
