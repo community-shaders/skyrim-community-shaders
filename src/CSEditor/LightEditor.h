@@ -141,6 +141,17 @@ private:
 	RE::TESObjectLIGH* activeLigh = nullptr;
 	bool activeIsRef = false;
 
+	// Deferred 3D rebuild after a light-flag edit. The engine's despawn (Disable -> unload 3D)
+	// and respawn (Enable -> load 3D) are async tasks; issued back-to-back in the same frame they
+	// can complete out of order (unload after load), leaving the reference's 3D unloaded and the
+	// mesh stuck disabled. We Disable now and Enable a few frames later, coalescing repeated edits
+	// on the same reference into one pending rebuild (mirrors the spaced disable/enable the attach
+	// sequence already uses). A pending refresh on a different reference is flushed first so we
+	// never strand a previously-disabled reference.
+	RE::ObjectRefHandle pendingRefreshRefr;
+	int32_t pendingRefreshFrames = 0;
+	static constexpr int32_t kRefreshEnableDelay = 3;
+
 	float shadowDepthBias = 0.0f;
 	float originalShadowDepthBias = 0.0f;
 	float cachedFadeBeforeToggle = 0.0f;
@@ -148,6 +159,12 @@ private:
 	void SortLights();
 	void RestoreOriginal();
 	void ApplyShadowDepthBias();
+	// Disables refr now and schedules its Enable kRefreshEnableDelay frames later (see members
+	// above). Use instead of a same-frame Disable()/Enable() pair to force a light-flag rebuild.
+	void RequestRefRefresh(RE::TESObjectREFR* refr);
+	// Counts down a pending refresh and fires the deferred Enable. Call once per frame, before any
+	// early-out, so the Enable still runs while resampling is paused or menu focus is lost.
+	void UpdateRefRefresh();
 
 	static void EnsureLighFormListBuilt();
 	static std::vector<std::pair<std::string, RE::TESObjectLIGH*>> s_lighFormList;

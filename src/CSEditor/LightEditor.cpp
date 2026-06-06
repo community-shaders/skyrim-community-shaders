@@ -745,7 +745,7 @@ void LightEditor::DrawSettings()
 	}
 
 	if (HasShadowFlags(current.tesFlags.underlying())) {
-		if (drawSlider(T(TKEY("shadow_depth_bias"), "Shadow Depth Bias"), shadowDepthBias, 0.0f, 10.0f, 0.01f, 50.f, "%.2f"))
+		if (drawSlider(T(TKEY("shadow_depth_bias"), "Shadow Depth Bias"), shadowDepthBias, 0.0f, 50.0f, 0.01f, 50.f, "%.2f"))
 			ApplyShadowDepthBias();
 	}
 
@@ -1619,6 +1619,10 @@ void LightEditor::GatherLights()
 		}
 	}
 
+	// Fire any deferred Enable (light-flag rebuild) before the early-outs below, so a pending
+	// re-enable still runs while resampling is paused or the menu has lost input focus.
+	UpdateRefRefresh();
+
 	if (!Menu::GetSingleton()->ShouldSwallowInput()) {
 		ResetOverrides();
 		return;
@@ -2008,9 +2012,7 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 	if (!selected.isOther && refr && tesFlags && current.tesFlags.underlying() != tesFlags->underlying()) {
 		*tesFlags = static_cast<RE::TES_LIGHT_FLAGS>(current.tesFlags.underlying());
-		refr->Disable();
-		refr->Enable(false);
-		waitFrames = 1;
+		RequestRefRefresh(refr);
 	}
 
 	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";
@@ -2075,8 +2077,7 @@ void LightEditor::RestoreOriginal()
 
 	if (activeLigh && activeRefr && current.tesFlags.underlying() != original.tesFlags.underlying()) {
 		activeLigh->data.flags = static_cast<RE::TES_LIGHT_FLAGS>(original.tesFlags.underlying());
-		activeRefr->Disable();
-		activeRefr->Enable(false);
+		RequestRefRefresh(activeRefr);
 	}
 
 	if (auto* shadowLight = AsShadowLight(activeBsLight.get()))
@@ -2087,6 +2088,33 @@ void LightEditor::RestoreOriginal()
 	activeRefr = nullptr;
 	activeLigh = nullptr;
 	activeIsRef = false;
+}
+
+void LightEditor::RequestRefRefresh(RE::TESObjectREFR* refr)
+{
+	if (!refr)
+		return;
+	// Flush a still-pending refresh on a different reference so it doesn't stay disabled.
+	if (pendingRefreshFrames > 0) {
+		if (auto prev = pendingRefreshRefr.get(); prev && prev.get() != refr)
+			prev->Enable(false);
+	}
+	refr->Disable();
+	pendingRefreshRefr = RE::ObjectRefHandle(refr);
+	pendingRefreshFrames = kRefreshEnableDelay;
+	// Hold off resampling until after the deferred Enable so we don't read a mid-rebuild reference.
+	waitFrames = std::max(waitFrames, kRefreshEnableDelay + 1);
+}
+
+void LightEditor::UpdateRefRefresh()
+{
+	if (pendingRefreshFrames <= 0)
+		return;
+	if (--pendingRefreshFrames == 0) {
+		if (auto refr = pendingRefreshRefr.get())
+			refr->Enable(false);
+		pendingRefreshRefr = {};
+	}
 }
 
 LightEditor::LPLightInfo LightEditor::ParseLPLightName(const std::string& name)
