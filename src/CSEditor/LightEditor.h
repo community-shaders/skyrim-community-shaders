@@ -172,6 +172,12 @@ private:
 
 	static void EnsureEmittanceFormListBuilt();
 	static std::vector<std::pair<std::string, RE::TESForm*>> s_emittanceFormList;
+	// Draws the shared External Emittance combo for the active reference (any bulb type) and applies
+	// the selection live. Self-gates: does nothing when the selection has no backing reference.
+	void DrawExternalEmittanceCombo();
+	// Sets/swaps/clears the reference's runtime ExtraEmittanceSource (pass nullptr to clear) and
+	// refreshes the light so the change is visible immediately.
+	void ApplyExternalEmittance(RE::TESObjectREFR* refr, RE::TESForm* source);
 
 	static RE::FormID ResolveFormEntry(const std::string& entry);
 	static bool HasShadowFlags(uint32_t tesFlags);

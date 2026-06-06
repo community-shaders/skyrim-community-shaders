@@ -264,6 +264,78 @@ void LightEditor::EnsureEmittanceFormListBuilt()
 	std::ranges::sort(s_emittanceFormList, [](const auto& a, const auto& b) { return a.first < b.first; });
 }
 
+void LightEditor::ApplyExternalEmittance(RE::TESObjectREFR* refr, RE::TESForm* source)
+{
+	if (!refr)
+		return;
+
+	auto* extra = refr->extraList.GetByType<RE::ExtraEmittanceSource>();
+	if (source) {
+		if (extra) {
+			if (extra->source == source)
+				return;  // already the requested source
+			extra->source = source;
+		} else {
+			auto* created = RE::BSExtraData::Create<RE::ExtraEmittanceSource>();
+			created->source = source;
+			refr->extraList.Add(created);
+		}
+	} else {
+		if (!extra)
+			return;  // already has no source
+		refr->extraList.RemoveByType(RE::ExtraDataType::kEmittanceSource);
+	}
+
+	// Force the engine to rebuild the reference so it re-reads the emittance source. Uses the
+	// deferred disable/enable so the 3D rebuild can't strand the mesh disabled.
+	RequestRefRefresh(refr);
+}
+
+// Searchable "External Emittance" combo shared by every bulb type backed by a reference. Picking a
+// form sets the reference's runtime emittance source live (adding the extra data if missing); "(None)"
+// removes it. LP bulbs additionally persist the choice via Save to Light Placer.
+void LightEditor::DrawExternalEmittanceCombo()
+{
+	if (!activeRefr)
+		return;
+
+	EnsureEmittanceFormListBuilt();
+
+	static constexpr const char* kEmittanceComboId = "EmittanceFormCombo";
+	const char* kNoneLabel = T(TKEY("none"), "(None)");
+	const char* preview = externalEmittanceEdid.empty() ? kNoneLabel : externalEmittanceEdid.c_str();
+	const auto externalEmittanceLabel = fmt::format("{}##combo", T(TKEY("external_emittance"), "External Emittance"));
+	if (ImGui::BeginCombo(externalEmittanceLabel.c_str(), preview)) {
+		auto searchText = Util::DrawComboSearchInput(kEmittanceComboId);
+		if (searchText.empty() || Util::StringMatchesSearch(kNoneLabel, searchText)) {
+			if (ImGui::Selectable(kNoneLabel, externalEmittanceEdid.empty())) {
+				externalEmittanceEdid = {};
+				useExternalEmittance = false;
+				ApplyExternalEmittance(activeRefr, nullptr);
+				Util::ClearComboSearch(kEmittanceComboId);
+			}
+			if (externalEmittanceEdid.empty())
+				ImGui::SetItemDefaultFocus();
+		}
+		for (auto& [edid, form] : s_emittanceFormList) {
+			if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
+				continue;
+			const bool isCurrent = edid == externalEmittanceEdid;
+			if (ImGui::Selectable(edid.c_str(), isCurrent)) {
+				externalEmittanceEdid = edid;
+				useExternalEmittance = true;
+				ApplyExternalEmittance(activeRefr, form);
+				Util::ClearComboSearch(kEmittanceComboId);
+			}
+			if (isCurrent)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
+	} else {
+		Util::ClearComboSearch(kEmittanceComboId);
+	}
+}
+
 RE::FormID LightEditor::ResolveFormEntry(const std::string& entry)
 {
 	const auto tildePos = entry.find('~');
@@ -625,8 +697,6 @@ void LightEditor::DrawSettings()
 
 	if (selected.isAttached) {
 		EnsureLighFormListBuilt();
-		if (lpInfo.isLPLight && useExternalEmittance)
-			EnsureEmittanceFormListBuilt();
 		const char* kOriginalLabel = T(TKEY("original"), "(Original)");
 		const char* previewEdid = kOriginalLabel;
 		for (auto& [edid, ligh] : s_lighFormList)
@@ -670,39 +740,11 @@ void LightEditor::DrawSettings()
 		} else {
 			Util::ClearComboSearch(kLighOverrideId);
 		}
-
-		if (lpInfo.isLPLight && useExternalEmittance) {
-			static constexpr const char* kEmittanceComboId = "EmittanceFormCombo";
-			const char* kNoneLabel = T(TKEY("none"), "(None)");
-			const char* preview = externalEmittanceEdid.empty() ? kNoneLabel : externalEmittanceEdid.c_str();
-			const auto externalEmittanceLabel = fmt::format("{}##combo", T(TKEY("external_emittance"), "External Emittance"));
-			if (ImGui::BeginCombo(externalEmittanceLabel.c_str(), preview)) {
-				auto searchText = Util::DrawComboSearchInput(kEmittanceComboId);
-				if (searchText.empty() || Util::StringMatchesSearch(kNoneLabel, searchText)) {
-					if (ImGui::Selectable(kNoneLabel, externalEmittanceEdid.empty())) {
-						externalEmittanceEdid = {};
-						Util::ClearComboSearch(kEmittanceComboId);
-					}
-					if (externalEmittanceEdid.empty())
-						ImGui::SetItemDefaultFocus();
-				}
-				for (auto& [edid, form] : s_emittanceFormList) {
-					if (!searchText.empty() && !Util::StringMatchesSearch(edid, searchText))
-						continue;
-					const bool isCurrent = edid == externalEmittanceEdid;
-					if (ImGui::Selectable(edid.c_str(), isCurrent)) {
-						externalEmittanceEdid = edid;
-						Util::ClearComboSearch(kEmittanceComboId);
-					}
-					if (isCurrent)
-						ImGui::SetItemDefaultFocus();
-				}
-				ImGui::EndCombo();
-			} else {
-				Util::ClearComboSearch(kEmittanceComboId);
-			}
-		}
 	}
+
+	// External emittance applies to any bulb backed by a reference (LP, ref, or other), so it
+	// lives outside the attached-only block above.
+	DrawExternalEmittanceCombo();
 
 	ImGui::Spacing();
 
