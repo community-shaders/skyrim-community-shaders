@@ -57,6 +57,11 @@ namespace Util
 			return GetInterfacePath() / "Icons";
 		}
 
+		std::filesystem::path GetCursorsPath()
+		{
+			return GetInterfacePath() / "Cursors";
+		}
+
 		std::filesystem::path GetSettingsUserPath()
 		{
 			return GetCommunityShaderPath() / "SettingsUser.json";

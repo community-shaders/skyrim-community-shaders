@@ -19,6 +19,7 @@
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Menu/CursorLoader.h"
 #include "Util.h"
 
 #include "Features/PerformanceOverlay.h"
@@ -379,6 +380,10 @@ void OverlayRenderer::HandleABTesting()
 
 void OverlayRenderer::FinalizeImGuiFrame()
 {
+	if (auto* menu = Menu::GetSingleton()) {
+		Util::CursorLoader::DrawCustomCursor(*menu);
+	}
+
 	ImGui::Render();
 
 	// Apply background blur behind ImGui windows before rendering them

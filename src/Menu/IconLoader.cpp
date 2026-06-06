@@ -7,25 +7,13 @@
 #include "Utils/D3D.h"
 #include "Utils/FileSystem.h"
 
-#include <d3d11.h>
-#include <imgui.h>
-#include <stb_image.h>
-
-#include <array>
 #include <chrono>
 #include <filesystem>
-#include <string>
+#include <stb_image.h>
 #include <thread>
 
-namespace Util::IconLoader
+namespace Util
 {
-	struct IconDefinition
-	{
-		std::string filename;
-		ID3D11ShaderResourceView** texture;
-		ImVec2* size;
-	};
-
 	bool LoadTextureFromFile(ID3D11Device* device, const char* filename, ID3D11ShaderResourceView** out_srv, ImVec2& out_size)
 	{
 		int image_width = 0;
@@ -86,9 +74,19 @@ namespace Util::IconLoader
 		pTexture->Release();
 		stbi_image_free(image_data);
 
-		out_size = ImVec2((float)image_width, (float)image_height);
+		out_size = ImVec2(static_cast<float>(image_width), static_cast<float>(image_height));
 		return true;
 	}
+}
+
+namespace Util::IconLoader
+{
+	struct IconDefinition
+	{
+		std::string filename;
+		ID3D11ShaderResourceView** texture;
+		ImVec2* size;
+	};
 
 	std::vector<IconDefinition> GetIconDefinitions(Menu* menu)
 	{
@@ -156,7 +154,7 @@ namespace Util::IconLoader
 					*iconDef.texture = nullptr;
 				}
 
-				if (LoadTextureFromFile(device, iconPath.string().c_str(), iconDef.texture, *iconDef.size)) {
+				if (Util::LoadTextureFromFile(device, iconPath.string().c_str(), iconDef.texture, *iconDef.size)) {
 					logger::debug("LoadThemeSpecificIcons: Loaded custom icon: {}", iconPath.filename().string());
 					iconsOverridden++;
 				}
@@ -217,7 +215,7 @@ namespace Util::IconLoader
 
 		for (const auto& iconDef : iconDefs) {
 			std::string fullPath = basePath + iconDef.filename;
-			if (LoadTextureFromFile(device, fullPath.c_str(), iconDef.texture, *iconDef.size)) {
+			if (Util::LoadTextureFromFile(device, fullPath.c_str(), iconDef.texture, *iconDef.size)) {
 				iconsLoaded++;
 				anyIconLoaded = true;
 			} else {
@@ -228,7 +226,7 @@ namespace Util::IconLoader
 					if (pos != std::string::npos) {
 						fallbackPath.erase(pos, 11);  // Remove "\Monochrome"
 					}
-					if (LoadTextureFromFile(device, fallbackPath.c_str(), iconDef.texture, *iconDef.size)) {
+					if (Util::LoadTextureFromFile(device, fallbackPath.c_str(), iconDef.texture, *iconDef.size)) {
 						iconsLoaded++;
 						anyIconLoaded = true;
 					} else {

@@ -11,6 +11,7 @@
 #include "Fonts.h"
 #include "Globals.h"
 #include "I18n/I18n.h"
+#include "CursorLoader.h"
 #include "IconLoader.h"
 #include "Menu.h"
 #include "ShaderCache.h"
@@ -514,6 +515,25 @@ void SettingsTabRenderer::RenderBehaviorTab()
 		ImGui::SliderFloat(T("menu.settings.tooltip_hover_delay", "Tooltip Hover Delay"), &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::TextUnformatted(T("menu.settings.tooltip_hover_delay_tooltip", "Time in seconds to wait before a tooltip appears when hovering over an item."));
+		}
+
+		if (ImGui::Checkbox(T("menu.settings.use_custom_cursor", "Use Custom Theme Cursor"), &themeSettings.UseCustomCursor)) {
+			globals::menu->pendingCursorReload = true;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s", T("menu.settings.use_custom_cursor_tooltip",
+				"Loads cursor PNGs from the active theme folder (Themes/<preset>/).\n"
+				"Supported files include cursor.png (arrow), cursor_text.png (typing), cursor_resize_ew.png, cursor_resize_ns.png, and more.\n"
+				"Missing types fall back to the default ImGui cursor. Configure per-type hotspots in theme JSON."));
+		}
+
+		if (themeSettings.UseCustomCursor) {
+			ImGui::Indent();
+			const int loadedCount = Util::CursorLoader::GetLoadedCount();
+			ImGui::TextDisabled("%s: %d",
+				T("menu.settings.custom_cursor_status", "Custom cursor images loaded"),
+				loadedCount);
+			ImGui::Unindent();
 		}
 
 		SeparatorTextWithFont(T("menu.settings.visual_effects", "Visual Effects"), Menu::FontRole::Subheading);
