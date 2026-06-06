@@ -8,6 +8,7 @@
 #include "RE/B/BSLight.h"
 #include "RE/B/BSShadowLight.h"
 #include "RE/E/ExtraEmittanceSource.h"
+#include "RE/T/TESRegion.h"
 #include "WeatherUtils.h"
 
 #define I18N_KEY_PREFIX "feature.light_editor."
@@ -269,26 +270,60 @@ void LightEditor::ApplyExternalEmittance(RE::TESObjectREFR* refr, RE::TESForm* s
 	if (!refr)
 		return;
 
+	// Drives our own per-frame color lerp for the selected bulb (UpdateEmittanceColor), independent
+	// of whether the engine supports emittance for this reference type.
+	activeEmittanceSource = source;
+
 	auto* extra = refr->extraList.GetByType<RE::ExtraEmittanceSource>();
+	bool changed = false;
 	if (source) {
 		if (extra) {
-			if (extra->source == source)
-				return;  // already the requested source
-			extra->source = source;
+			if (extra->source != source) {
+				extra->source = source;
+				changed = true;
+			}
 		} else {
 			auto* created = RE::BSExtraData::Create<RE::ExtraEmittanceSource>();
 			created->source = source;
 			refr->extraList.Add(created);
+			changed = true;
 		}
-	} else {
-		if (!extra)
-			return;  // already has no source
+	} else if (extra) {
 		refr->extraList.RemoveByType(RE::ExtraDataType::kEmittanceSource);
+		changed = true;
 	}
 
-	// Force the engine to rebuild the reference so it re-reads the emittance source. Uses the
-	// deferred disable/enable so the 3D rebuild can't strand the mesh disabled.
-	RequestRefRefresh(refr);
+	// LP bulbs are driven by the engine's emittance system, so force it to re-read the source via a
+	// deferred (strand-safe) rebuild. Ref/other bulbs are driven by our own lerp and need no rebuild.
+	if (changed && lpInfo.isLPLight)
+		RequestRefRefresh(refr);
+}
+
+void LightEditor::UpdateEmittanceColor()
+{
+	// Only regions carry a live, time/weather-driven emittanceColor (the editor's emittance list is
+	// region-only). Anything else leaves the lerp inactive so ApplyOverrides uses the base color.
+	auto* region = activeEmittanceSource ? activeEmittanceSource->As<RE::TESRegion>() : nullptr;
+	if (!region) {
+		emittanceColorActive = false;
+		return;
+	}
+
+	const RE::NiColor target = region->emittanceColor;
+	const auto now = std::chrono::steady_clock::now();
+	if (!emittanceColorActive) {
+		// Seed from the bulb's current base color so the first frame lerps in smoothly.
+		emittanceColorLerped = current.data.diffuse;
+		emittanceLastUpdate = now;
+		emittanceColorActive = true;
+	}
+
+	const float dt = std::chrono::duration<float>(now - emittanceLastUpdate).count();
+	emittanceLastUpdate = now;
+	const float f = std::clamp(1.0f - std::exp(-dt / kEmittanceLerpTau), 0.0f, 1.0f);
+	emittanceColorLerped.red += (target.red - emittanceColorLerped.red) * f;
+	emittanceColorLerped.green += (target.green - emittanceColorLerped.green) * f;
+	emittanceColorLerped.blue += (target.blue - emittanceColorLerped.blue) * f;
 }
 
 // Searchable "External Emittance" combo shared by every bulb type backed by a reference. Picking a
@@ -2009,10 +2044,14 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 
 		externalEmittanceEdid = {};
 		useExternalEmittance = false;
+		activeEmittanceSource = nullptr;
+		emittanceColorActive = false;  // re-seed the lerp from the new bulb's base color
 		if (refr) {
 			if (const auto* extra = refr->extraList.GetByType<RE::ExtraEmittanceSource>())
-				if (extra->source)
+				if (extra->source) {
 					externalEmittanceEdid = clib_util::editorID::get_editorID(extra->source);
+					activeEmittanceSource = extra->source;
+				}
 			useExternalEmittance = !externalEmittanceEdid.empty();
 		}
 
@@ -2063,6 +2102,8 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		RequestRefRefresh(refr);
 	}
 
+	UpdateEmittanceColor();
+
 	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";
 	displayInfo.baseObjectFormId = refr && refr->GetBaseObject() ? refr->GetBaseObject()->formID : 0;
 	displayInfo.ownerLastEditedBy = refr && refr->GetDescriptionOwnerFile() ? refr->GetDescriptionOwnerFile()->fileName : "Unknown";
@@ -2083,7 +2124,9 @@ bool LightEditor::ApplyOverrides(RE::NiLight* niLight, ISLCommon::RuntimeLightDa
 		return false;
 
 	runtimeData->lighFormId = current.data.lighFormId;
-	runtimeData->diffuse = current.data.diffuse;
+	// While an emittance source drives this bulb, replace the base color with the lerped emittance
+	// color (see UpdateEmittanceColor); otherwise use the editor's color.
+	runtimeData->diffuse = emittanceColorActive ? emittanceColorLerped : current.data.diffuse;
 	runtimeData->fade = current.data.fade;
 	runtimeData->cutoffOverride = current.data.cutoffOverride;
 	runtimeData->size = current.data.size;
@@ -2138,6 +2181,8 @@ void LightEditor::RestoreOriginal()
 	activeRefr = nullptr;
 	activeLigh = nullptr;
 	activeIsRef = false;
+	activeEmittanceSource = nullptr;
+	emittanceColorActive = false;
 }
 
 void LightEditor::RequestRefRefresh(RE::TESObjectREFR* refr)
