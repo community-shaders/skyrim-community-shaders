@@ -421,6 +421,7 @@ void SubsurfaceScattering::RestoreDefaultSettings()
 void SubsurfaceScattering::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	settings.ScatterMode = std::clamp(settings.ScatterMode, (int)kPreScatter, (int)kPreAndPostScatter);
 }
 
 void SubsurfaceScattering::SaveSettings(json& o_json)
