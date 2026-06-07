@@ -350,7 +350,7 @@ void UnifiedWater::PostPostLoad()
 	stl::detour_thunk<TES_SetWorldSpace>(REL::RelocationID(13170, 13315));
 	stl::detour_thunk<TES_DestroySkyCell>(REL::RelocationID(20029, 20463));
 
-	stl::write_thunk_call<TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams>(REL::RelocationID(31388, 32179).address() + REL::Relocate(0x360, 0x3BC, 0x35B));
+	stl::write_thunk_call<TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams>(REL::RelocationID(31388, 32179).address() + REL::Relocate(0x360, 0x3BC));
 	stl::write_vfunc<0x4, BSWaterShaderMaterial_ComputeCRC32>(RE::VTABLE_BSWaterShaderMaterial[0]);
 
 	stl::detour_thunk<BGSTerrainBlock_Attach>(REL::RelocationID(30934, 31737));

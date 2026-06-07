@@ -10,7 +10,7 @@ class Menu;
  * @brief Specialized renderer component for overlay and frame management
  *
  * This class was extracted from Menu.cpp to handle all overlay-related rendering
- * responsibilities including VR setup, shader compilation status, feature overlays,
+ * responsibilities including shader compilation status, feature overlays,
  * A/B testing, and ImGui frame lifecycle management.
  *
  * The renderer uses a callback-based architecture to maintain separation of concerns
@@ -25,7 +25,7 @@ public:
 	/**
 	 * @brief Main overlay rendering entry point
 	 *
-	 * Coordinates all overlay rendering activities including VR setup, input processing,
+	 * Coordinates all overlay rendering activities including input processing,
 	 * shader compilation status display, feature overlays, A/B testing, and ImGui frame
 	 * management. Uses callback functions to access Menu functionality while maintaining
 	 * architectural separation.
@@ -46,7 +46,6 @@ public:
 		float currentFontSize);
 
 private:
-	static void HandleVRSetup();
 	static bool ShouldSkipRendering();
 	static void HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize);
 	static void InitializeImGuiFrame(Menu& menu);

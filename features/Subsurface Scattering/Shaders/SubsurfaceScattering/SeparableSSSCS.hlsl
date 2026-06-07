@@ -25,7 +25,6 @@ SamplerState PointSampler : register(s0);
 		return;
 
 	float2 texCoord = (DTid.xy + 0.5) * SharedData::BufferDim.zw;
-	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(texCoord);
 
 #if defined(BURLEY)
 
@@ -34,7 +33,7 @@ SamplerState PointSampler : register(s0);
 	if (sssAmount > 0.0) {
 		bool humanProfile = MaskTexture[DTid.xy].y > 0.0;
 
-		float4 color = BurleyNormalizedSS(DTid.xy, texCoord, eyeIndex, sssAmount, humanProfile);
+		float4 color = BurleyNormalizedSS(DTid.xy, texCoord, sssAmount, humanProfile);
 		SSSRW[DTid.xy] = max(0, color);
 	}
 

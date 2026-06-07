@@ -50,8 +50,6 @@ Install them manually only if you want them in everywhere.
 
 -   [Address Library for SKSE](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
     -   Needed for SSE/AE
--   [VR Address Library for SKSEVR](https://www.nexusmods.com/skyrimspecialedition/mods/58101)
-    -   Needed for VR
 
 ## Build Instructions
 

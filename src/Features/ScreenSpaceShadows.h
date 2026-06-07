@@ -25,9 +25,9 @@ public:
 
 	struct BendSettings
 	{
-		float SurfaceThickness = !globals::game::isVR ? 0.02f : 0.010f;
+		float SurfaceThickness = 0.02f;
 		float BilinearThreshold = 0.02f;
-		float ShadowContrast = !globals::game::isVR ? 1.0f : 4.0f;
+		float ShadowContrast = 1.0f;
 		uint Enable = 1;
 		uint SampleCount = 1;
 		uint pad0[3];
@@ -56,27 +56,12 @@ public:
 	};
 	STATIC_ASSERT_ALIGNAS_16(RaymarchCB);
 
-	bool enableStereoSync = true;
-
-	struct alignas(16) StereoSyncCB
-	{
-		float FrameDim[2];
-		float RcpFrameDim[2];
-	};
-	STATIC_ASSERT_ALIGNAS_16(StereoSyncCB);
-
 	ID3D11SamplerState* pointBorderSampler = nullptr;
 
 	ConstantBuffer* raymarchCB = nullptr;
 	ID3D11ComputeShader* raymarchCS = nullptr;
-	ID3D11ComputeShader* raymarchRightCS = nullptr;
 
 	Texture2D* screenSpaceShadowsTexture = nullptr;
-
-	// VR stereo sync resources
-	Texture2D* stereoSyncCopyTex = nullptr;
-	ConstantBuffer* stereoSyncCB = nullptr;
-	ID3D11ComputeShader* stereoSyncCS = nullptr;
 
 	virtual void SetupResources() override;
 
@@ -87,7 +72,6 @@ public:
 	uint GetScaledSampleCount();
 	uint lastCompiledSampleCount = 0;
 	ID3D11ComputeShader* GetComputeRaymarch();
-	ID3D11ComputeShader* GetComputeRaymarchRight();
 
 	virtual void Prepass() override;
 
@@ -95,9 +79,7 @@ public:
 	virtual void SaveSettings(json& o_json) override;
 
 	void DrawShadows();
-	void DrawStereoSync();
 
 	virtual void RestoreDefaultSettings() override;
 
-	virtual bool SupportsVR() override { return true; };
 };

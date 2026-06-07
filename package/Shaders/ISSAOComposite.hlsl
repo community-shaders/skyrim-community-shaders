@@ -157,13 +157,11 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float snowMask = 0;
-#	if !defined(VR)
 	if (EyePosition.w != 0) {
 		float2 specSnow = snowSpecAlphaTex.Sample(snowSpecAlphaSampler, screenPosition).xy;
 		composedColor.xyz += specSnow.x * specSnow.y;
 		snowMask = specSnow.y;
 	}
-#	endif
 
 #	if defined(APPLY_SAO)
 	if (EyePosition.w != 0 && 1e-5 < snowMask) {
@@ -189,15 +187,14 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 #		if defined(EXP_HEIGHT_FOG)
 	bool exponentialHeightFogEnabled = SharedData::exponentialHeightFogSettings.enabled;
-	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord.xy);
-	float2 monoUV = Stereo::ConvertFromStereoUV(input.TexCoord.xy, eyeIndex);
+	float2 monoUV = input.TexCoord.xy;
 	float4 positionWS = float4(2 * float2(monoUV.x, -monoUV.y + 1) - 1, depth, 1);
-	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse, positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 	float4 exponentialHeightFog = (float4)0;
 	if (exponentialHeightFogEnabled) {
-		float4 fogScreenPosition = float4(Stereo::ConvertToStereoUV(monoUV, eyeIndex) * SharedData::BufferDim.xy, depth, 1.0f);
-		exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, fogScreenPosition);
+		float4 fogScreenPosition = float4(monoUV * SharedData::BufferDim.xy, depth, 1.0f);
+		exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(positionWS.xyz, FrameBuffer::CameraPosAdjust.xyz, fogColor, fogScreenPosition);
 	}
 	if (isGeometryDepth || exponentialHeightFogEnabled) {
 		float fogFade = exponentialHeightFogEnabled ? ExponentialHeightFog::GetVanillaFogFade(FogNearColor.w) : FogNearColor.w;
@@ -220,16 +217,15 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 #	endif
 
-#	if !defined(VR)
 	float sparklesInput = 0;
 	if (EyePosition.w != 0 && snowMask != 0 && 1e-5 < SparklesParameters2.z) {
 		float shadowMask = shadowMaskTex.SampleLevel(shadowMaskSampler, screenPosition, 0).x;
 
 		float4 vsPosition = float4(2 * input.TexCoord.x - 1, 1 - 2 * input.TexCoord.y, depth, 1);
 
-		float4 csPosition = mul(FrameBuffer::CameraViewProjInverse[0], vsPosition);
+		float4 csPosition = mul(FrameBuffer::CameraViewProjInverse, vsPosition);
 		csPosition.xyz /= csPosition.w;
-		csPosition.xyz += FrameBuffer::CameraPosAdjust[0].xyz;
+		csPosition.xyz += FrameBuffer::CameraPosAdjust.xyz;
 
 		float3 noiseSeed = 0.07 * (SparklesParameters2.x * csPosition.xyz);
 		float noiseValue = 0.5 * (SimplexNoise(noiseSeed) + 1);
@@ -248,7 +244,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	composedColor *= 1 - SparklesParameters2.w;
 	composedColor += sparklesColor;
-#	endif
 
 	psout.Color = composedColor;
 

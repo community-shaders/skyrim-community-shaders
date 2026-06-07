@@ -211,7 +211,8 @@ void ExponentialHeightFog::EnsureVolumetricResources()
 {
 	uint32_t pixelSize = std::clamp(settings.volumetricGridPixelSize, 4u, 64u);
 	const uint32_t gridZ = std::clamp(settings.volumetricGridSizeZ, 16u, 160u);
-	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+	float2 screenSz{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
+	auto renderSize = Util::ConvertToDynamic(screenSz);
 
 	auto getGridSize = [&renderSize, gridZ](uint32_t a_pixelSize) {
 		return DirectX::XMUINT4{
@@ -440,13 +441,7 @@ void ExponentialHeightFog::Prepass()
 		0.0f
 	};
 
-	const uint32_t eyeCount = globals::game::isVR ? 2u : 1u;
-	for (uint32_t eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
-		cb.clipToWorld[eyeIndex] = globals::game::frameBufferCached.GetCameraViewProjUnjittered(eyeIndex).Invert();
-	}
-	if (eyeCount == 1u) {
-		cb.clipToWorld[1] = cb.clipToWorld[0];
-	}
+	cb.clipToWorld = globals::game::frameBufferCached.GetCameraViewProjUnjittered().Invert();
 
 	for (uint32_t i = 0; i < std::size(cb.frameJitterOffsets); i++) {
 		const uint32_t temporalFrame = (globals::state->frameCount - i) & 1023u;

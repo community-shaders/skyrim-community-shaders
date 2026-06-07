@@ -31,7 +31,6 @@
 #include "Features/TerrainVariation.h"
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
-#include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
@@ -78,7 +77,6 @@ namespace globals
 		TerrainShadows terrainShadows{};
 		UnifiedWater unifiedWater{};
 		VolumetricLighting volumetricLighting{};
-		VR vr{};
 		WaterEffects waterEffects{};
 		PerformanceOverlay performanceOverlay{};
 		WetnessEffects wetnessEffects{};
@@ -104,7 +102,6 @@ namespace globals
 		RE::BSGraphics::Renderer* renderer = nullptr;
 		RE::BSShaderManager::State* smState = nullptr;
 		RE::TES* tes = nullptr;
-		bool isVR = false;
 		RE::MemoryManager* memoryManager = nullptr;
 		RE::INISettingCollection* iniSettingCollection = nullptr;
 		RE::INIPrefSettingCollection* iniPrefSettingCollection = nullptr;
@@ -177,7 +174,6 @@ namespace globals
 			graphicsState = RE::BSGraphics::State::GetSingleton();
 			renderer = RE::BSGraphics::Renderer::GetSingleton();
 			smState = &RE::BSShaderManager::State::GetSingleton();
-			isVR = REL::Module::IsVR();
 			iniSettingCollection = RE::INISettingCollection::GetSingleton();
 			iniPrefSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
 			gameSettingCollection = RE::GameSettingCollection::GetSingleton();
@@ -186,9 +182,9 @@ namespace globals
 			cameraFar = (float*)(REL::RelocationID(517032, 403540).address() + 0x44);
 			deltaTime = (float*)REL::RelocationID(523660, 410199).address();
 
-			currentPixelShader = GET_INSTANCE_MEMBER_PTR(currentPixelShader, shadowState);
-			currentVertexShader = GET_INSTANCE_MEMBER_PTR(currentVertexShader, shadowState);
-			stateUpdateFlags = GET_INSTANCE_MEMBER_PTR(stateUpdateFlags, shadowState);
+			currentPixelShader = &(shadowState->GetRuntimeData().currentPixelShader);
+			currentVertexShader = &(shadowState->GetRuntimeData().currentVertexShader);
+			stateUpdateFlags = &(shadowState->GetRuntimeData().stateUpdateFlags);
 
 			ui = RE::UI::GetSingleton();
 			calendar = RE::Calendar::GetSingleton();
@@ -243,13 +239,8 @@ namespace globals
 	void CacheFramebuffer()
 	{
 		using namespace game;
-		if (REL::Module::IsVR()) {
-			auto frameBufferVR = (FrameBufferVR*)mappedFrameBuffer->pData;
-			frameBufferCached.vr = *frameBufferVR;
-		} else {
-			auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
-			frameBufferCached.nonVR = *frameBuffer;
-		}
+		auto frameBuffer = (FrameBuffer*)mappedFrameBuffer->pData;
+		frameBufferCached.data = *frameBuffer;
 		mappedFrameBuffer = nullptr;
 	}
 
@@ -291,118 +282,9 @@ namespace globals
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	/**
-	 * @brief Hooked OMSetRenderTargets — injects POM offset UAV at slot 7 when in the deferred pass.
-	 *
-	 * vtable index 33 for ID3D11DeviceContext::OMSetRenderTargets.
-	 * After Skyrim binds the deferred MRT (clearing all UAVs), this hook re-adds the POM offset
-	 * UAV at slot u7 so the Lighting PS (VR_STEREO_OPT permutation) can write per-pixel parallax
-	 * depth offsets without overloading Reflectance.w.
-	 */
-	struct ID3D11DeviceContext_OMSetRenderTargets
-	{
-		static void STDMETHODCALLTYPE thunk(ID3D11DeviceContext* This, UINT NumViews, ID3D11RenderTargetView* const* ppRenderTargetViews, ID3D11DepthStencilView* pDepthStencilView)
-		{
-			func(This, NumViews, ppRenderTargetViews, pDepthStencilView);
-
-			// D3D11 handles any SRV/UAV conflict automatically (silently unbinds the UAV when
-			// the same resource is later bound as an SRV), so no NumViews guard is needed.
-			if (globals::deferred->deferredPass) {
-				auto& stereoOpt = globals::features::vr.stereoOpt;
-				if (stereoOpt.loaded) {
-					if (auto* uav = stereoOpt.GetPomOffsetUAV()) {
-						This->OMSetRenderTargetsAndUnorderedAccessViews(
-							D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL, nullptr, nullptr,
-							7, 1, &uav, nullptr);
-					}
-				}
-			}
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	/**
-	 * @brief Hooked OMSetDepthStencilState — replaces DSS with stencil-enforcing version when VR stereo opt is active.
-	 *
-	 * vtable index 36 for ID3D11DeviceContext::OMSetDepthStencilState.
-	 * When VRStereoOptimizations has written stencil marks, this hook transparently swaps
-	 * the game's DSS for a modified version that adds a stencil NOT_EQUAL test, causing
-	 * marked Eye 1 pixels to be skipped during normal rendering.
-	 */
-	struct ID3D11DeviceContext_OMSetDepthStencilState
-	{
-		static void thunk(ID3D11DeviceContext* This, ID3D11DepthStencilState* pDepthStencilState, UINT StencilRef)
-		{
-			if (globals::game::isVR) {
-				auto& stereoOpt = globals::features::vr.stereoOpt;
-				if (stereoOpt.loaded && stereoOpt.IsStencilActive()) {
-					pDepthStencilState = stereoOpt.GetOrCreateModifiedDSS(pDepthStencilState);
-					stereoOpt.NoteStencilSwap();
-					StencilRef = 1;  // Must match the ref written by our stencil pass
-				}
-			}
-			func(This, pDepthStencilState, StencilRef);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	/**
-	 * @brief Hooked ClearDepthStencilView — blocks stencil clears when VR stereo opt stencil is active.
-	 *
-	 * vtable index 53 for ID3D11DeviceContext::ClearDepthStencilView.
-	 * Prevents the game from clearing our stencil marks between the stencil write and
-	 * the stereo overwrite blend pass by stripping the D3D11_CLEAR_STENCIL flag.
-	 */
-	struct ID3D11DeviceContext_ClearDepthStencilView
-	{
-		static void thunk(ID3D11DeviceContext* This, ID3D11DepthStencilView* pDepthStencilView, UINT ClearFlags, FLOAT Depth, UINT8 Stencil)
-		{
-			if (globals::game::isVR) {
-				auto& stereoOpt = globals::features::vr.stereoOpt;
-				if (stereoOpt.loaded && stereoOpt.IsStencilActive()) {
-					// Only protect the main scene DSV — allow other DSVs to clear normally
-					auto renderer = globals::game::renderer;
-					auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-					if (mainDepth.views[0]) {
-						// Compare the DSV being cleared against the main scene DSV
-						ID3D11Resource* clearRes = nullptr;
-						ID3D11Resource* mainRes = nullptr;
-						pDepthStencilView->GetResource(&clearRes);
-						mainDepth.views[0]->GetResource(&mainRes);
-						bool isMainDSV = (clearRes == mainRes);
-						if (clearRes)
-							clearRes->Release();
-						if (mainRes)
-							mainRes->Release();
-						if (isMainDSV) {
-							ClearFlags &= ~D3D11_CLEAR_STENCIL;
-							if (ClearFlags == 0)
-								return;
-						}
-					}
-				}
-			}
-			func(This, pDepthStencilView, ClearFlags, Depth, Stencil);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	/**
- * @brief Installs hooks on the Map and Unmap methods of the provided D3D11 device context.
- *
- * This enables interception of resource mapping and unmapping operations for frame buffer caching.
- */
 	void InstallD3DHooks(ID3D11DeviceContext* a_context)
 	{
 		stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
 		stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
-
-		// VR stereo optimization hooks: installed only when stereo reprojection is enabled at startup.
-		// Changing stereoMode at runtime requires a restart; the UI communicates this to the user.
-		if (globals::game::isVR && globals::features::vr.stereoOpt.settings.stereoMode != VRStereoOptimizations::StereoMode::Off) {
-			stl::detour_vfunc<33, ID3D11DeviceContext_OMSetRenderTargets>(a_context);
-			stl::detour_vfunc<36, ID3D11DeviceContext_OMSetDepthStencilState>(a_context);
-			stl::detour_vfunc<53, ID3D11DeviceContext_ClearDepthStencilView>(a_context);
-		}
 	}
 }

@@ -1,7 +1,6 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/SharedData.hlsli"
-#include "Common/VR.hlsli"
 
 struct VS_INPUT
 {
@@ -16,9 +15,6 @@ struct VS_INPUT
 	int4
 #endif
 		TexCoord1: TEXCOORD1;
-#if defined(VR)
-	uint InstanceID: SV_INSTANCEID;
-#endif  // VR
 };
 
 struct VS_OUTPUT
@@ -29,11 +25,6 @@ struct VS_OUTPUT
 #if defined(ENVCUBE)
 	float4 PrecipitationOcclusionTexCoord: TEXCOORD1;
 #endif
-#if defined(VR)
-	float ClipDistance: SV_ClipDistance0;  // o11
-	float CullDistance: SV_CullDistance0;  // p11
-	uint EyeIndex: EYEIDX0;
-#endif  // VR
 };
 
 #ifdef VSHADER
@@ -44,13 +35,8 @@ cbuffer PerTechnique : register(b0)
 
 cbuffer PerGeometry : register(b2)
 {
-#	if !defined(VR)
-	row_major float4x4 WorldViewProj[1];  // 0
-	row_major float4x4 WorldView[1];      // 4
-#	else
-	row_major float4x4 WorldViewProj[2];  // 0
-	row_major float4x4 WorldView[2];      // 8
-#	endif
+	row_major float4x4 WorldViewProj;  // 0
+	row_major float4x4 WorldView;      // 4
 #	if defined(ENVCUBE)
 	row_major float4x4 PrecipitationOcclusionWorldViewProj;  // 8, 16
 #	endif
@@ -79,12 +65,6 @@ VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout;
 
-	uint eyeIndex = Stereo::GetEyeIndexVS(
-#	if defined(VR)
-		input.InstanceID
-#	endif
-	);
-
 #	if defined(ENVCUBE)
 #		if defined(RAIN)
 	float2 positionOffset = input.TexCoord1.xy;
@@ -101,11 +81,11 @@ VS_OUTPUT main(VS_INPUT input)
 	msPosition.xyz = normalizedPosition * fVars2.xxx + (-(fVars2.x * 0.5).xxx + fVars1.xyz);
 	msPosition.w = 1;
 
-	float4 viewPosition = mul(WorldViewProj[eyeIndex], msPosition);
+	float4 viewPosition = mul(WorldViewProj, msPosition);
 #		if defined(RAIN)
 	float4 adjustedMsPosition = msPosition - float4(Velocity.xyz, 0);
 	float positionBlendParam = 0.5 * (1 + input.TexCoord1.y);
-	float4 adjustedViewPosition = mul(WorldViewProj[eyeIndex], adjustedMsPosition);
+	float4 adjustedViewPosition = mul(WorldViewProj, adjustedMsPosition);
 	float4 finalViewPosition = lerp(adjustedViewPosition, viewPosition, positionBlendParam);
 #		else
 	float4 finalViewPosition = viewPosition;
@@ -160,7 +140,7 @@ VS_OUTPUT main(VS_INPUT input)
 							 input.Position.xyz));
 	msPosition.w = 1;
 
-	float4 viewPosition = mul(WorldViewProj[eyeIndex], msPosition);
+	float4 viewPosition = mul(WorldViewProj, msPosition);
 	vsout.Position.xy = positionOffset * ScaleAdjust + viewPosition.xy;
 	vsout.Position.zw = viewPosition.zw;
 
@@ -194,13 +174,6 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Color.xyz = color.xyz;
 #	endif
 
-#	ifdef VR
-	vsout.EyeIndex = eyeIndex;
-	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(vsout.Position, eyeIndex);
-	vsout.Position = VRout.VRPosition;
-	vsout.ClipDistance.x = VRout.ClipDistance;
-	vsout.CullDistance.x = VRout.CullDistance;
-#	endif  // VR
 	return vsout;
 }
 #endif
@@ -254,17 +227,8 @@ PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
 
-#	if !defined(VR)
-	uint eyeIndex = 0;
-#	else
-	uint eyeIndex = input.EyeIndex;
-#	endif  // !VR
-
 #	if defined(ENVCUBE)
 	float2 precipitationOcclusionUV = (input.PrecipitationOcclusionTexCoord.xy * 0.5 + 0.5) * TextureSize.x;
-#		ifdef VR
-	precipitationOcclusionUV *= FrameBuffer::DynamicResolutionParams1.x;  // only difference in VR
-#		endif
 	float precipitationOcclusion = -input.PrecipitationOcclusionTexCoord.z + TexPrecipitationOcclusionTexture.Load(float3(precipitationOcclusionUV, 0)).x;
 	float2 underwaterMaskUv = TextureSize.yz * input.Position.xy;
 	float underwaterMask = TexUnderwaterMask.Sample(SampUnderwaterMask, underwaterMaskUv).x;
@@ -289,14 +253,14 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 propertyColor = 0.0;
 
-	float2 uv = Stereo::ConvertFromStereoUV(input.Position.xy * SharedData::BufferDim.zw, eyeIndex);
+	float2 uv = input.Position.xy * SharedData::BufferDim.zw;
 
 	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, input.Position.z, 1);
-	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse, positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
 	float unusedDetailedShadow;
-	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetLightingShadow(positionWS.xyz, eyeIndex, unusedDetailedShadow);
+	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetLightingShadow(positionWS.xyz, unusedDetailedShadow);
 	float3 ambientColor = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 
 	propertyColor += dirLightColor;
@@ -305,8 +269,8 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
 	{
-		float3 viewPosition = FrameBuffer::WorldToView(positionWS.xyz, true, eyeIndex);
-		float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
+		float3 viewPosition = FrameBuffer::WorldToView(positionWS.xyz);
+		float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 
 		uint clusterIndex = 0;
 		if (LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
@@ -319,7 +283,7 @@ PS_OUTPUT main(PS_INPUT input)
 				if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
 					continue;
 				}
-				float3 lightDirection = light.positionWS[eyeIndex].xyz - positionWS.xyz;
+				float3 lightDirection = light.positionWS.xyz - positionWS.xyz;
 				float lightDist = length(lightDirection);
 
 #		if defined(ISL)

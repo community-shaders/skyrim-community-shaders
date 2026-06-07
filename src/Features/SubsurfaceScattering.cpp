@@ -230,7 +230,7 @@ void SubsurfaceScattering::DrawSSS()
 	auto dispatchCount = Util::GetScreenDispatchCount();
 
 	{
-		auto cameraData = Util::GetCameraData(0);
+		auto cameraData = globals::game::shadowState->GetRuntimeData().cameraData.getEye();
 
 		blurCBData.SSSS_FOVY = atan(1.0f / cameraData.projMat.m[0][0]) * 2.0f * (180.0f / 3.14159265359f);
 

@@ -23,7 +23,7 @@ namespace WaterEffects
 		return lerp(center.xxx, dispersed, 0.5);
 	}
 
-	float3 ComputeCaustics(float4 waterData, float3 worldPosition, uint eyeIndex)
+	float3 ComputeCaustics(float4 waterData, float3 worldPosition)
 	{
 		float causticsDistToWater = waterData.w - worldPosition.z;
 		float shoreFactorCaustics = saturate(causticsDistToWater / 64.0);
@@ -32,7 +32,7 @@ namespace WaterEffects
 			float causticsFade = 1.0 - saturate(causticsDistToWater / 1024.0);
 			causticsFade *= causticsFade;
 
-			float2 causticsUV = (worldPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy) * 0.005;
+			float2 causticsUV = (worldPosition.xy + FrameBuffer::CameraPosAdjust.xy) * 0.005;
 			float2 dispersionOffset = float2(0.6, 0.8) * (0.025 * shoreFactorCaustics * saturate(causticsDistToWater / 256.0));
 
 			float2 causticsUV1 = PanCausticsUV(causticsUV, 0.5 * 0.2, 1.0);

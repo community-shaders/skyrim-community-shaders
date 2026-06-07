@@ -19,7 +19,6 @@ public:
 	virtual std::string GetShortName() override { return "TruePBR"; }
 	virtual std::string_view GetCategory() const override { return FeatureCategories::kMaterials; }
 	virtual bool IsCore() const override { return true; }
-	virtual bool SupportsVR() override { return true; }
 	virtual bool IsInMenu() const override { return true; }
 	virtual bool DrawFailLoadMessage() const override { return false; }
 

@@ -44,7 +44,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float2 drAdjustedTexCoord = FrameBuffer::DynamicResolutionParams1.xy * input.TexCoord;
 		float2 minifiedTexCoord = GetMinifiedTexCoord(drAdjustedTexCoord);
 		finalTexCoord = clamp(minifiedTexCoord, 0,
-			FrameBuffer::DynamicResolutionParams1.xy - float2(FrameBuffer::CameraPreviousPosAdjust[0].w, 0));
+			FrameBuffer::DynamicResolutionParams1.xy - float2(FrameBuffer::CameraPreviousPosAdjust.w, 0));
 	} else {
 		finalTexCoord = GetMinifiedTexCoord(input.TexCoord);
 	}

@@ -133,8 +133,6 @@ jobs:
                 config:
                     - name: "Flatrim"
                       file: ".github/configs/shader-validation.yaml"
-                    - name: "VR"
-                      file: ".github/configs/shader-validation-vr.yaml"
             fail-fast: false
         steps:
             - name: Checkout code

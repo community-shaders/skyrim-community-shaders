@@ -24,8 +24,6 @@
 
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
-#include "Features/VR.h"
-
 namespace
 {
 	std::unordered_map<ImGuiID, float> s_windowOverlapAlpha;
@@ -133,12 +131,7 @@ void OverlayRenderer::RenderOverlay(
 	float& cachedFontSize,
 	float currentFontSize)
 {
-	HandleVRSetup();
 	processInputEventQueue();
-
-	if (globals::features::vr.IsOpenVRCompatible()) {
-		globals::features::vr.ProcessControllerInputForImGui();
-	}
 
 	if (ShouldSkipRendering()) {
 		auto& io = ImGui::GetIO();
@@ -182,13 +175,6 @@ void OverlayRenderer::RenderOverlay(
 	HandleABTesting();
 	PatchOverlappingWindowBackgrounds();
 	FinalizeImGuiFrame();
-}
-
-void OverlayRenderer::HandleVRSetup()
-{
-	if (globals::features::vr.IsOpenVRCompatible()) {
-		globals::features::vr.RecreateOverlayTexturesIfNeeded();
-	}
 }
 
 bool OverlayRenderer::ShouldSkipRendering()
@@ -391,9 +377,6 @@ void OverlayRenderer::FinalizeImGuiFrame()
 
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-	if (globals::features::vr.IsOpenVRCompatible()) {
-		globals::features::vr.SubmitOverlayFrame();
-	}
 }
 
 void OverlayRenderer::RenderFirstTimeSetupOverlay()

@@ -11,7 +11,7 @@ namespace FeatureConstraints
 	 */
 	struct SettingId
 	{
-		std::string featureShortName;  // e.g., "VR"
+		std::string featureShortName;
 		std::string settingPath;       // e.g., "EnableDepthBufferCullingExterior"
 
 		bool operator==(const SettingId& other) const

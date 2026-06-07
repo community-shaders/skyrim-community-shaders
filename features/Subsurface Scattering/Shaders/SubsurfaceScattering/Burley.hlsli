@@ -48,7 +48,7 @@ float3 GetScalingFactor(float3 albedo)
 	return 3.5f + 100.f * pow(abs(value), 4);
 }
 
-float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssAmount, bool humanProfile)
+float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, float sssAmount, bool humanProfile)
 {
 	float centerDepth = SharedData::GetScreenDepth(DepthTexture[DTid].x);
 
@@ -71,7 +71,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	float3 d3d = diffuseMeanFreePath.xyz * dmfpForSampling / s3d;
 
 	const float3 normalVS = GBuffer::DecodeNormal(NormalTexture[DTid].xy);
-	const float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
+	const float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse, float4(normalVS, 0)).xyz);
 
 	float3 weightSum = 0.0f;
 	float3 colorSum = 0.0f;
@@ -115,7 +115,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 		float3 sampleColor = ColorTexture[samplePixcoord].xyz * maskSample;
 		float sampleDepth = SharedData::GetScreenDepth(DepthTexture[samplePixcoord].x);
 		float3 sampleNormalVS = GBuffer::DecodeNormal(NormalTexture[samplePixcoord].xy);
-		float3 sampleNormalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(sampleNormalVS, 0)).xyz);
+		float3 sampleNormalWS = normalize(mul(FrameBuffer::CameraViewInverse, float4(sampleNormalVS, 0)).xyz);
 
 		float deltaDepth = (sampleDepth - centerDepth) * 10.f / GAME_UNIT_TO_CM;  // convert to mm
 		float radiusSampledInMM = sqrt(radius * radius + deltaDepth * deltaDepth);

@@ -1,5 +1,5 @@
 // Screenshot Feature
-// Non-blocking screenshot tool for flat (SE/AE) and VR. GPU copy runs on the
+// Non-blocking screenshot tool. GPU copy runs on the
 // render thread; encoding and disk I/O run on a dedicated worker thread so
 // capture does not stall the frame.
 
@@ -17,7 +17,10 @@
 #define I18N_KEY_PREFIX "feature.screenshot."
 
 #include <DirectXTex.h>
+#pragma warning(push)
+#pragma warning(disable : 4244)  // double->float conversion in third-party header
 #include <sk_hdr_png.hpp>
+#pragma warning(pop)
 
 #include <format>
 #include <functional>
@@ -340,13 +343,11 @@ namespace
 
 	bool IsFlatHdrScreenshotCapture()
 	{
-		return !globals::game::isVR &&
-		       globals::features::hdrDisplay.loaded &&
+		return globals::features::hdrDisplay.loaded &&
 		       globals::features::hdrDisplay.settings.enableHDR;
 	}
 
 	// Picks the capture source:
-	//   VR              -> kVR_FRAMEBUFFER (SBS).
 	//   HDR enabled     -> swap-chain back buffer after ApplyHDR (PQ HDR10 / PQ float).
 	//   otherwise       -> kFRAMEBUFFER (tonemapped UNORM).
 	CaptureSource SelectCaptureSource(winrt::com_ptr<ID3D11Texture2D>& holder)
@@ -357,13 +358,6 @@ namespace
 			return src;
 		}
 
-		if (globals::game::isVR) {
-			auto& slot = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kVR_FRAMEBUFFER];
-			src.texture = ResolveSlotTexture(slot, holder);
-			src.srv = slot.SRV;
-			src.description = "VR SBS framebuffer";
-			return src;
-		}
 
 		if (IsFlatHdrScreenshotCapture()) {
 			src.texture = ResolveDisplayedBackBuffer(holder);
@@ -396,11 +390,9 @@ namespace
 	//   1. BlendEnable must stay FALSE - the source texture carries non-1 alpha
 	//      where Skyrim composited UI plates; default SRC_ALPHA blend lets the
 	//      host window background show through (visible on the desktop mirror).
-	//   2. WriteMask must exclude alpha (RGB only). In VR, Skyrim's menu UI
-	//      shader recomposites our menu plate over the SBS framebuffer with
-	//      alpha blending; writing texture alpha into the menu plate RT
-	//      produces a cutout visible only through the HMD. RGB-only writes
-	//      leave the plate's pre-cleared alpha=1 in place.
+	//   2. WriteMask must exclude alpha (RGB only) to avoid compositing
+	//      artifacts. RGB-only writes leave the plate's pre-cleared alpha=1
+	//      in place.
 	// Paired with ImDrawCallback_ResetRenderState queued by Subrect::DrawEditor
 	// immediately after the image draw.
 	void OpaquePreviewBlendCallback(const ImDrawList*, const ImDrawCmd*)
@@ -569,17 +561,6 @@ bool ScreenshotFeature::IsInMenu() const
 
 void ScreenshotFeature::PostPostLoad()
 {
-	// Seed VR-specific presets here rather than in LoadSettings: Feature::Load
-	// only dispatches to LoadSettings when the JSON already has a settings
-	// block, so a fresh install would skip a seed placed there. Left first so
-	// it's the initial selection (matches vanilla Skyrim VR's left-eye save).
-	if (REL::Module::IsVR()) {
-		subrect.SeedDefaultPresets({
-			{ .name = "Left Eye", .uv = { 0.0f, 0.0f, 0.5f, 1.0f } },
-			{ .name = "Right Eye", .uv = { 0.5f, 0.0f, 0.5f, 1.0f } },
-			{ .name = "Full Frame", .uv = { 0.0f, 0.0f, 1.0f, 1.0f } },
-		});
-	}
 }
 
 void ScreenshotFeature::LoadSettings(json& a_json)
@@ -637,7 +618,7 @@ void ScreenshotFeature::DrawSettings()
 		ImGui::TextWrapped("%s",
 			T(TKEY("sdr_note"),
 				"Enable HDR Display to capture HDR PNG screenshots with HDR10 metadata. "
-				"SDR and VR captures use the lossless format selected below."));
+				"SDR captures use the lossless format selected below."));
 	}
 
 	if (ImGui::Button(T(TKEY("take_screenshot"), "Take Screenshot Now"))) {
@@ -652,15 +633,12 @@ void ScreenshotFeature::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Places the saved screenshot on the clipboard as a file (paste in Explorer or attach in chat apps).");
 
-	if (!hdrCaptureAvailable || globals::game::isVR) {
+	if (!hdrCaptureAvailable) {
 		int sdrFormat = sdrUsePng ? 1 : 0;
 		ImGui::RadioButton("BMP (lossless)", &sdrFormat, 0);
 		ImGui::SameLine();
 		ImGui::RadioButton("PNG (lossless)", &sdrFormat, 1);
 		sdrUsePng = sdrFormat != 0;
-		if (hdrCaptureAvailable && globals::game::isVR) {
-			ImGui::TextWrapped("VR captures use this format. Flat HDR mode always saves HDR PNG.");
-		}
 	}
 
 	char buf[260];
@@ -703,8 +681,7 @@ void ScreenshotFeature::DrawSettings()
 
 	ImGui::SeparatorText(T(TKEY("crop"), "Crop"));
 
-	// Preview reflects what Capture() would save. Full source frame so VR users
-	// can drag-crop across the eye boundary if a seeded preset doesn't fit.
+	// Preview reflects what Capture() would save.
 	winrt::com_ptr<ID3D11Texture2D> previewTextureKeepAlive;
 	const auto src = SelectCaptureSource(previewTextureKeepAlive);
 

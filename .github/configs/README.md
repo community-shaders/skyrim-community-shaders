@@ -5,29 +5,27 @@ This directory contains configuration files used by the CI/CD pipeline for build
 ## Files
 
 -   `shader-validation.yaml`: Configuration for shader compilation validation using hlslkit (Skyrim SE)
--   `shader-validation-vr.yaml`: VR Configuration for shader compilation validation using hlslkit (Skyrim VR)
 
 ## Generating Configuration Files
 
 These configuration files can be regenerated using the `generate-shader-configs.ps1` script in this directory. This script requires:
 
-1. A valid Skyrim installation (SE and/or VR)
+1. A valid Skyrim Special Edition installation
 2. The [hlslkit](https://github.com/alandtse/hlslkit) package installed (`pip install hlslkit`)
 3. Community Shaders to be run once with specific settings to generate the required log data
 
 ### Prerequisites
 
-Before running the generation script, you must run each version of Skyrim (SE and VR) **once** with the following Community Shaders settings:
+Before running the generation script, you must run Skyrim SE **once** with the following Community Shaders settings:
 
 1. **Set Debug Log Level**: In the Community Shaders menu, set the log level to "Debug" or "Trace"
 2. **Clear Disk Cache**: Clear the shader disk cache before running
 3. **Enable Disk Cache**: Ensure disk cache is enabled and will be saved
 4. **Run the Game**: Launch and wait for compilation to complete to generate shader compilation logs
 
-The required log files will be created at:
+The required log file will be created at:
 
 -   **Skyrim SE**: `%USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\CommunityShaders.log`
--   **Skyrim VR**: `%USERPROFILE%\Documents\My Games\Skyrim VR\SKSE\CommunityShaders.log`
 
 ### Running the Script
 
@@ -52,11 +50,7 @@ The script will:
 You can also generate the files manually using hlslkit:
 
 ```bash
-# For Skyrim SE
 hlslkit-generate --log "%USERPROFILE%\Documents\My Games\Skyrim Special Edition\SKSE\CommunityShaders.log" --output .\.github\configs\shader-validation.yaml
-
-# For Skyrim VR
-hlslkit-generate --log "%USERPROFILE%\Documents\My Games\Skyrim VR\SKSE\CommunityShaders.log" --output .\.github\configs\shader-validation-vr.yaml
 ```
 
 ## Usage in CI/CD

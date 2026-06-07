@@ -56,7 +56,7 @@
             "cacheVariables": {
                 "ENABLE_SKYRIM_AE": "ON",
                 "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "ON",
+                "ENABLE_SKYRIM_VR": "OFF",
                 "AUTO_PLUGIN_DEPLOYMENT": "OFF",
                 "COMMONLIB_PREBUILT_MULTICONFIG": "ON"
             },
@@ -68,7 +68,7 @@
             "cacheVariables": {
                 "ENABLE_SKYRIM_AE": "ON",
                 "ENABLE_SKYRIM_SE": "ON",
-                "ENABLE_SKYRIM_VR": "ON",
+                "ENABLE_SKYRIM_VR": "OFF",
                 "AUTO_PLUGIN_DEPLOYMENT": "OFF",
                 "COMMONLIB_PREBUILT_MULTICONFIG": "ON"
             },

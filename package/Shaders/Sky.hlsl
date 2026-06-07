@@ -3,7 +3,6 @@
 #include "Common/Permutation.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
-#include "Common/VR.hlsli"
 
 struct VS_INPUT
 {
@@ -14,9 +13,6 @@ struct VS_INPUT
 #endif
 
 	float4 Color: COLOR0;
-#if defined(VR)
-	uint InstanceID: SV_INSTANCEID;
-#endif  // VR
 };
 
 struct VS_OUTPUT
@@ -46,43 +42,23 @@ struct VS_OUTPUT
 	float4 WorldPosition: POSITION1;
 	float4 PreviousWorldPosition: POSITION2;
 	float3 FogPosition: TEXCOORD4;
-#if defined(VR)
-	float ClipDistance: SV_ClipDistance0;  // o11
-	float CullDistance: SV_CullDistance0;  // p11
-	uint EyeIndex: EYEIDX0;
-#endif  // VR
 };
 
 #ifdef VSHADER
 cbuffer PerGeometry : register(b2)
 {
-#	if !defined(VR)
-	row_major float4x4 WorldViewProj[1] : packoffset(c0);
-	row_major float4x4 World[1] : packoffset(c4);
-	row_major float4x4 PreviousWorld[1] : packoffset(c8);
-	float3 EyePosition[1] : packoffset(c12);
+	row_major float4x4 WorldViewProj : packoffset(c0);
+	row_major float4x4 World : packoffset(c4);
+	row_major float4x4 PreviousWorld : packoffset(c8);
+	float3 EyePosition : packoffset(c12);
 	float VParams : packoffset(c12.w);
 	float4 BlendColor[3] : packoffset(c13);
 	float2 TexCoordOff : packoffset(c16);
-#	else
-	row_major float4x4 WorldViewProj[2] : packoffset(c0);
-	row_major float4x4 World[2] : packoffset(c8);
-	row_major float4x4 PreviousWorld[2] : packoffset(c16);
-	float3 EyePosition[2] : packoffset(c24);
-	float VParams : packoffset(c25.w);
-	float4 BlendColor[3] : packoffset(c26);
-	float2 TexCoordOff : packoffset(c29);
-#	endif  // !VR
 };
 
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout;
-	uint eyeIndex = Stereo::GetEyeIndexVS(
-#	if defined(VR)
-		input.InstanceID
-#	endif
-	);
 
 	float4 inputPosition = float4(input.Position.xyz, 1.0);
 
@@ -97,8 +73,8 @@ VS_OUTPUT main(VS_INPUT input)
 
 #	elif defined(HORIZFADE)
 
-	float worldHeight = mul(World[eyeIndex], inputPosition).z;
-	float eyeHeightDelta = -EyePosition[eyeIndex].z + worldHeight;
+	float worldHeight = mul(World, inputPosition).z;
+	float eyeHeightDelta = -EyePosition.z + worldHeight;
 
 	vsout.TexCoord0.xy = input.TexCoord;
 	vsout.TexCoord2.x = saturate((1.0 / 17.0) * eyeHeightDelta);
@@ -137,18 +113,11 @@ VS_OUTPUT main(VS_INPUT input)
 
 #	endif  // OCCLUSION MOONMASK HORIZFADE
 
-	vsout.Position = mul(WorldViewProj[eyeIndex], inputPosition).xyww;
-	vsout.WorldPosition = mul(World[eyeIndex], inputPosition);
-	vsout.FogPosition = vsout.WorldPosition.xyz - EyePosition[eyeIndex].xyz;
-	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], inputPosition);
+	vsout.Position = mul(WorldViewProj, inputPosition).xyww;
+	vsout.WorldPosition = mul(World, inputPosition);
+	vsout.FogPosition = vsout.WorldPosition.xyz - EyePosition.xyz;
+	vsout.PreviousWorldPosition = mul(PreviousWorld, inputPosition);
 
-#	ifdef VR
-	vsout.EyeIndex = eyeIndex;
-	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(vsout.Position, eyeIndex);
-	vsout.Position = VRout.VRPosition;
-	vsout.ClipDistance.x = VRout.ClipDistance;
-	vsout.CullDistance.x = VRout.CullDistance;
-#	endif  // VR
 	return vsout;
 }
 #endif
@@ -179,12 +148,10 @@ cbuffer PerGeometry : register(b2)
 	float2 PParams : packoffset(c0);
 };
 
-#	if !defined(VR)
 cbuffer AlphaTestRefCB : register(b11)
 {
 	float AlphaTestRefRS : packoffset(c0);
 }
-#	endif
 
 #	include "Common/MotionBlur.hlsli"
 #	include "Common/SharedData.hlsli"
@@ -211,11 +178,6 @@ PS_OUTPUT main(PS_INPUT input)
 	// Color::Sky is float3->float3 (per-channel sky gamma). PParams.yyy broadcasts the packed
 	// scalar in PParams.y to RGB; float3 matches output .xyz where skyScale is added.
 	float3 skyScale = Color::Sky(PParams.yyy);
-#	if !defined(VR)
-	uint eyeIndex = 0;
-#	else
-	uint eyeIndex = input.EyeIndex;
-#	endif  // !VR
 
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
@@ -293,12 +255,12 @@ PS_OUTPUT main(PS_INPUT input)
 	const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection) != 0;
 	if (inReflection && SharedData::exponentialHeightFogSettings.enabled) {
 		float3 skyFogPosition = normalize(input.FogPosition.xyz) * SharedData::CameraData.x;
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(skyFogPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, psout.Color.xyz, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(skyFogPosition, FrameBuffer::CameraPosAdjust.xyz, psout.Color.xyz, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
 		psout.Color.xyz = lerp(psout.Color.xyz, exponentialHeightFog.xyz, exponentialHeightFog.w);
 	}
 #	endif
 
-	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
+	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition);
 
 	psout.MotionVectors = float4(screenMotionVector, 0, psout.Color.w);
 	psout.Normal = float4(0.5, 0.5, 0, psout.Color.w);

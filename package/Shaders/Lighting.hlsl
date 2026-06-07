@@ -11,7 +11,6 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
 #include "Common/Triplanar.hlsli"
-#include "Common/VR.hlsli"
 
 #if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
 #	define SKIN
@@ -52,9 +51,6 @@ struct VS_INPUT
 #if defined(EYE)
 	float EyeParameter: TEXCOORD2;
 #endif  // EYE
-#if defined(VR)
-	uint InstanceID: SV_INSTANCEID;
-#endif  // VR
 };
 
 struct VS_OUTPUT
@@ -90,28 +86,16 @@ struct VS_OUTPUT
 	float4 Color: COLOR0;
 	float4 FogParam: COLOR1;
 
-#if defined(VR)
-	float ClipDistance: SV_ClipDistance0;  // o11
-	float CullDistance: SV_CullDistance0;  // p11
-#endif
-
 	float3 ModelPosition: TEXCOORD12;
 };
 #ifdef VSHADER
 
 cbuffer PerTechnique : register(b0)
 {
-#	if !defined(VR)
-	float4 HighDetailRange[1] : packoffset(c0);  // loaded cells center in xy, size in zw
+	float4 HighDetailRange : packoffset(c0);  // loaded cells center in xy, size in zw
 	float4 FogParam : packoffset(c1);
 	float4 FogNearColor : packoffset(c2);
 	float4 FogFarColor : packoffset(c3);
-#	else
-	float4 HighDetailRange[2] : packoffset(c0);  // loaded cells center in xy, size in zw
-	float4 FogParam : packoffset(c2);
-	float4 FogNearColor : packoffset(c3);
-	float4 FogFarColor : packoffset(c4);
-#	endif  // VR
 };
 
 cbuffer PerMaterial : register(b1)
@@ -123,46 +107,25 @@ cbuffer PerMaterial : register(b1)
 
 cbuffer PerGeometry : register(b2)
 {
-#	if !defined(VR)
-	row_major float3x4 World[1] : packoffset(c0);
-	row_major float3x4 PreviousWorld[1] : packoffset(c3);
-	float4 EyePosition[1] : packoffset(c6);
+	row_major float3x4 World : packoffset(c0);
+	row_major float3x4 PreviousWorld : packoffset(c3);
+	float4 EyePosition : packoffset(c6);
 	float4 LandBlendParams : packoffset(c7);  // offset in xy, gridPosition in yw
 	float4 TreeParams : packoffset(c8);       // wind magnitude in y, amplitude in z, leaf frequency in w
 	float2 WindTimers : packoffset(c9);
-	row_major float3x4 TextureProj[1] : packoffset(c10);
+	row_major float3x4 TextureProj : packoffset(c10);
 	float IndexScale : packoffset(c13);
 	float4 WorldMapOverlayParameters : packoffset(c14);
-#	else   // VR has 49 vs 30 entries
-	row_major float3x4 World[2] : packoffset(c0);
-	row_major float3x4 PreviousWorld[2] : packoffset(c6);
-	float4 EyePosition[2] : packoffset(c12);
-	float4 LandBlendParams : packoffset(c14);  // offset in xy, gridPosition in yw
-	float4 TreeParams : packoffset(c15);       // wind magnitude in y, amplitude in z, leaf frequency in w
-	float2 WindTimers : packoffset(c16);
-	row_major float3x4 TextureProj[2] : packoffset(c17);
-	float IndexScale : packoffset(c23);
-	float4 WorldMapOverlayParameters : packoffset(c24);
-#	endif  // VR
 };
 
 cbuffer VS_PerFrame : register(b12)
 {
-#	if !defined(VR)
-	row_major float3x3 ScreenProj[1] : packoffset(c0);
-	row_major float4x4 ViewProj[1] : packoffset(c8);
-#		if defined(SKINNED)
-	float3 BonesPivot[1] : packoffset(c40);
-	float3 PreviousBonesPivot[1] : packoffset(c41);
-#		endif  // SKINNED
-#	else
-	row_major float3x3 ScreenProj[2] : packoffset(c0);
-	row_major float4x4 ViewProj[2] : packoffset(c16);
-#		if defined(SKINNED)
-	float3 BonesPivot[2] : packoffset(c80);
-	float3 PreviousBonesPivot[2] : packoffset(c82);
-#		endif  // SKINNED
-#	endif      // VR
+	row_major float3x3 ScreenProj : packoffset(c0);
+	row_major float4x4 ViewProj : packoffset(c8);
+#	if defined(SKINNED)
+	float3 BonesPivot : packoffset(c40);
+	float3 PreviousBonesPivot : packoffset(c41);
+#	endif  // SKINNED
 };
 
 #	if defined(TREE_ANIM)
@@ -182,13 +145,8 @@ VS_OUTPUT main(VS_INPUT input)
 
 	precise float4 inputPosition = float4(input.Position.xyz, 1.0);
 
-	uint eyeIndex = Stereo::GetEyeIndexVS(
-#	if defined(VR)
-		input.InstanceID
-#	endif
-	);
 #	if defined(LODLANDNOISE) || defined(LODLANDSCAPE)
-	inputPosition = LodLandscape::AdjustLodLandscapeVertexPositionMS(inputPosition, float4x4(World[eyeIndex], float4(0, 0, 0, 1)), HighDetailRange[eyeIndex]);
+	inputPosition = LodLandscape::AdjustLodLandscapeVertexPositionMS(inputPosition, float4x4(World, float4(0, 0, 0, 1)), HighDetailRange);
 #	endif  // defined(LODLANDNOISE) || defined(LODLANDSCAPE)                                                                   \
 
 	precise float4 previousInputPosition = inputPosition;
@@ -205,19 +163,19 @@ VS_OUTPUT main(VS_INPUT input)
 	precise int4 actualIndices = 765.01.xxxx * input.BoneIndices.xyzw;
 
 	float3x4 previousWorldMatrix =
-		Skinned::GetBoneTransformMatrix(PreviousBones, actualIndices, PreviousBonesPivot[eyeIndex], input.BoneWeights);
+		Skinned::GetBoneTransformMatrix(PreviousBones, actualIndices, PreviousBonesPivot, input.BoneWeights);
 	precise float4 previousWorldPosition =
 		float4(mul(inputPosition, transpose(previousWorldMatrix)), 1);
 
-	float3x4 worldMatrix = Skinned::GetBoneTransformMatrix(Bones, actualIndices, BonesPivot[eyeIndex], input.BoneWeights);
+	float3x4 worldMatrix = Skinned::GetBoneTransformMatrix(Bones, actualIndices, BonesPivot, input.BoneWeights);
 	precise float4 worldPosition = float4(mul(inputPosition, transpose(worldMatrix)), 1);
 
-	float4 viewPos = mul(ViewProj[eyeIndex], worldPosition);
+	float4 viewPos = mul(ViewProj, worldPosition);
 #	else   // !SKINNED
-	precise float4 previousWorldPosition = float4(mul(PreviousWorld[eyeIndex], inputPosition), 1);
-	precise float4 worldPosition = float4(mul(World[eyeIndex], inputPosition), 1);
-	precise float4x4 world4x4 = float4x4(World[eyeIndex][0], World[eyeIndex][1], World[eyeIndex][2], float4(0, 0, 0, 1));
-	precise float4x4 modelView = mul(ViewProj[eyeIndex], world4x4);
+	precise float4 previousWorldPosition = float4(mul(PreviousWorld, inputPosition), 1);
+	precise float4 worldPosition = float4(mul(World, inputPosition), 1);
+	precise float4x4 world4x4 = float4x4(World[0], World[1], World[2], float4(0, 0, 0, 1));
+	precise float4x4 modelView = mul(ViewProj, world4x4);
 	float4 viewPos = mul(modelView, inputPosition);
 #	endif  // SKINNED
 
@@ -231,8 +189,8 @@ VS_OUTPUT main(VS_INPUT input)
 #	if defined(LANDSCAPE)
 	vsout.TexCoord0.zw = (uv * 0.010416667.xx + LandBlendParams.xy) * float2(1, -1) + float2(0, 1);
 #	elif defined(PROJECTED_UV) && !defined(SKINNED)
-	vsout.TexCoord0.z = mul(TextureProj[eyeIndex][0], inputPosition);
-	vsout.TexCoord0.w = mul(TextureProj[eyeIndex][1], inputPosition);
+	vsout.TexCoord0.z = mul(TextureProj[0], inputPosition);
+	vsout.TexCoord0.w = mul(TextureProj[1], inputPosition);
 #	endif
 	vsout.TexCoord0.xy = uv;
 
@@ -262,9 +220,9 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.TBN1.xyz = worldTbnTr[1];
 	vsout.TBN2.xyz = worldTbnTr[2];
 #		else
-	vsout.TBN0.xyz = mul(tbn, World[eyeIndex][0].xyz);
-	vsout.TBN1.xyz = mul(tbn, World[eyeIndex][1].xyz);
-	vsout.TBN2.xyz = mul(tbn, World[eyeIndex][2].xyz);
+	vsout.TBN0.xyz = mul(tbn, World[0].xyz);
+	vsout.TBN1.xyz = mul(tbn, World[1].xyz);
+	vsout.TBN2.xyz = mul(tbn, World[2].xyz);
 	float3x3 tempTbnTr = transpose(float3x3(vsout.TBN0.xyz, vsout.TBN1.xyz, vsout.TBN2.xyz));
 	tempTbnTr[0] = normalize(tempTbnTr[0]);
 	tempTbnTr[1] = normalize(tempTbnTr[1]);
@@ -291,8 +249,8 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.LandBlendWeights2.w = 1 - saturate(0.000375600968 * (9625.59961 - length(gridOffset)));
 	vsout.LandBlendWeights2.xyz = input.LandBlendWeights2.xyz;
 #	elif defined(PROJECTED_UV) && !defined(SKINNED)
-	float3x3 texProjWorld3x3 = float3x3(World[eyeIndex][0].xyz, World[eyeIndex][1].xyz, World[eyeIndex][2].xyz);
-	vsout.TexProj = mul(texProjWorld3x3, TextureProj[eyeIndex][2].xyz);
+	float3x3 texProjWorld3x3 = float3x3(World[0].xyz, World[1].xyz, World[2].xyz);
+	vsout.TexProj = mul(texProjWorld3x3, TextureProj[2].xyz);
 #	endif
 
 #	if defined(EYE)
@@ -314,13 +272,6 @@ VS_OUTPUT main(VS_INPUT input)
 
 	vsout.FogParam.xyz = lerp(FogNearColor.xyz, FogFarColor.xyz, fogColorParam);
 	vsout.FogParam.w = fogColorParam;
-
-#	if defined(VR)
-	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(vsout.Position, eyeIndex);
-	vsout.Position = VRout.VRPosition;
-	vsout.ClipDistance.x = VRout.ClipDistance;
-	vsout.CullDistance.x = VRout.CullDistance;
-#	endif  // VR
 
 	vsout.ModelPosition = input.Position.xyz;
 
@@ -355,13 +306,6 @@ struct PS_OUTPUT
 #endif
 
 #ifdef PSHADER
-
-#	if defined(VR_STEREO_OPT) && !defined(SNOW)
-// POM depth offset UAV — written per-pixel for StereoBlendCS depth-aware reprojection.
-// Bound at u7 (after the 7 deferred MRT slots 0-6) via OMSetRenderTargetsAndUnorderedAccessViews.
-// -1.0 = no POM (sentinel, matches ClearPomOffsetTexture); >= 0 = POM ran (StereoBlendCS checks >= 0).
-RWTexture2D<float> PomOffsetTex : register(u7);
-#	endif
 
 SamplerState SampTerrainParallaxSampler : register(s1);
 
@@ -601,7 +545,6 @@ cbuffer PerMaterial : register(b1)
 #	endif
 
 	float4 CharacterLightParams : packoffset(c14);
-	// VR is [9] instead of [15]
 
 	uint PBRFlags : packoffset(c15.x);
 	float3 PBRParams1 : packoffset(c15.y);  // roughness scale, displacement scale, specular level
@@ -612,7 +555,6 @@ cbuffer PerMaterial : register(b1)
 
 cbuffer PerGeometry : register(b2)
 {
-#	if !defined(VR)
 	float3 DirLightDirection : packoffset(c0);
 	float3 DirLightColor : packoffset(c1);
 	float4 ShadowLightMaskSelect : packoffset(c2);
@@ -629,34 +571,12 @@ cbuffer PerGeometry : register(b2)
 	float4 PointLightPosition[7] : packoffset(c15);               // point light radius in w
 	float4 PointLightColor[7] : packoffset(c22);
 	float2 NumLightNumShadowLight : packoffset(c29);
-#	else
-	// VR is [49] instead of [30]
-	float3 DirLightDirection : packoffset(c0);
-	float4 UnknownPerGeometry[12] : packoffset(c1);
-	float3 DirLightColor : packoffset(c13);
-	float4 ShadowLightMaskSelect : packoffset(c14);
-	float4 MaterialData : packoffset(c15);  // envmapLODFade in x, specularLODFade in y, alpha in z
-	float AlphaTestRef : packoffset(c16);
-	float3 EmitColor : packoffset(c16.y);
-	float4 ProjectedUVParams : packoffset(c18);
-	float4 SSRParams : packoffset(c19);
-	float4 WorldMapOverlayParametersPS : packoffset(c20);
-	float4 ProjectedUVParams2 : packoffset(c21);
-	float4 ProjectedUVParams3 : packoffset(c22);  // fProjectedUVDiffuseNormalTilingScale in x,	fProjectedUVNormalDetailTilingScale in y, EnableProjectedNormals in w
-	row_major float3x4 DirectionalAmbient : packoffset(c23);
-	float4 AmbientSpecularTintAndFresnelPower : packoffset(c26);  // Fresnel power in z, color in xyz
-	float4 PointLightPosition[14] : packoffset(c27);              // point light radius in w
-	float4 PointLightColor[7] : packoffset(c41);
-	float2 NumLightNumShadowLight : packoffset(c48);
-#	endif  // VR
 };
 
-#	if !defined(VR)
 cbuffer AlphaTestRefBuffer : register(b11)
 {
 	float AlphaTestRefRS : packoffset(c0);
 }
-#	endif
 
 float GetSoftLightMultiplier(float angle)
 {
@@ -962,12 +882,11 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
 	PS_OUTPUT psout;
-	uint eyeIndex = Stereo::GetEyeIndexPS(input.Position, VPOSOffset);
 
-	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
+	float3 viewPosition = mul(FrameBuffer::CameraView, float4(input.WorldPosition.xyz, 1)).xyz;
 	float3 viewDirection = -normalize(input.WorldPosition.xyz);
 
-	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
+	float2 screenUV = FrameBuffer::ViewToUV(viewPosition);
 	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
 
 #	if defined(DEFERRED)
@@ -1038,9 +957,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif  // LANDSCAPE
 	float sh0 = 0;
 	float pixelOffset = 0;
-#	if defined(VR_STEREO_OPT) && !defined(SNOW)
-	bool hasPOM = false;
-#	endif
 
 #	if defined(EMAT)
 #		if defined(LANDSCAPE)
@@ -1097,12 +1013,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(PARALLAX) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
 		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
-		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
-#			if defined(VR_STEREO_OPT) && !defined(SNOW)
-			,
-			hasPOM
-#			endif
-		);
+		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset);
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
@@ -1135,12 +1046,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			if (envMaskSample.w > kMaskEpsilon && envMaskSample.w < (1.0 - kMaskEpsilon)) {
 				complexMaterialParallax = true;
 				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, screenNoise);
-				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset
-#			if defined(VR_STEREO_OPT) && !defined(SNOW)
-					,
-					hasPOM
-#			endif
-				);
+				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset);
 				if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 					sh0 = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, mipLevel).w;
 				complexMaterialColor = TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv);
@@ -1187,12 +1093,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			displacementParams.HeightScale *= PBRParams1.y;
 		}
 		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
-		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset
-#				if defined(VR_STEREO_OPT) && !defined(SNOW)
-			,
-			hasPOM
-#				endif
-		);
+		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset);
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
 	}
@@ -1288,15 +1189,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		weights[0] = weights[1] = weights[2] = weights[3] = weights[4] = weights[5] = 0.0;
 #			if defined(TERRAIN_VARIATION)
 		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, sharedOffset, dx, dy, pixelOffset,
-#				if defined(VR_STEREO_OPT) && !defined(SNOW)
-			hasPOM,
-#				endif
 			weights);
 #			else
 		uv = ExtendedMaterials::GetParallaxCoords(input, viewPosition.z, uv, mipLevels, viewDirection, tbnTr, screenNoise, displacementParams, pixelOffset,
-#				if defined(VR_STEREO_OPT) && !defined(SNOW)
-			hasPOM,
-#				endif
 			weights);
 #			endif
 		if (SharedData::extendedMaterialSettings.EnableHeightBlending) {
@@ -2084,9 +1979,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	else
 	float3 worldNormal = normalize(mul(tbn, normal.xyz));
 #		if defined(TREE_ANIM)
-	float3 viewNormal = normalize(FrameBuffer::WorldToView(worldNormal, false, eyeIndex));
+	float3 viewNormal = normalize(FrameBuffer::WorldToView(worldNormal, false));
 	viewNormal = float3(viewNormal.xy, -abs(viewNormal.z));
-	worldNormal = normalize(FrameBuffer::ViewToWorld(viewNormal, false, eyeIndex));
+	worldNormal = normalize(FrameBuffer::ViewToWorld(viewNormal, false));
 #		endif
 
 #		if defined(SPARKLE)
@@ -2102,7 +1997,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 	float2 wetUV = uv * SharedData::skinData.skinDetailParams.y;
 #			endif
-	float2 dynamicWet = Skin::GetWetness(input.WorldPosition.z + FrameBuffer::CameraPosAdjust[eyeIndex].z, worldNormal.xyz);
+	float2 dynamicWet = Skin::GetWetness(input.WorldPosition.z + FrameBuffer::CameraPosAdjust.z, worldNormal.xyz);
 	float skinWetness = Skin::PerlinNoise(wetUV, SharedData::skinData.wetParams.x, SharedData::skinData.wetParams.y, SharedData::skinData.wetParams.z, clamp(dynamicWet.x + dynamicWet.y + SharedData::skinData.skinParams2.y, 0.f, 2.f) * (hasSkinWetness ? 1.0 : 0.5));
 	if ((SharedData::skinData.skinDetailParams.w > 0.0f || skinWetness > 0.0f) && skinEnabled)
 #		else
@@ -2161,7 +2056,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float projWeight = 0;
 
 #	if defined(PROJECTED_UV)
-	float3 projWorldPos = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+	float3 projWorldPos = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz;
 	float3 triFaceNormal = normalize(-cross(ddx(input.WorldPosition.xyz), ddy(input.WorldPosition.xyz)));
 	float3 triWeights = Triplanar::GetWeights(tbnTr[2], triFaceNormal);
 	float projNoise = Triplanar::Sample(TexCharacterLightProjNoiseSampler, SampCharacterLightProjNoiseSampler, projWorldPos, triWeights, ProjectedUVParams.z).x;
@@ -2235,7 +2130,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 vertexNormal = worldNormal;
 #	endif
 
-	float3 screenSpaceNormal = normalize(FrameBuffer::WorldToView(worldNormal, false, eyeIndex));
+	float3 screenSpaceNormal = normalize(FrameBuffer::WorldToView(worldNormal, false));
 
 #	if defined(HAIR) && defined(CS_HAIR)
 	float3 Bitangent = normalize(float3(input.TBN0.y, input.TBN1.y, input.TBN2.y));
@@ -2250,7 +2145,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::hairSpecularSettings.Enabled) {
 		if (SharedData::hairSpecularSettings.EnableTangentShift && SharedData::hairSpecularSettings.HairMode != 1) {
 			float3 shiftedNormal = Hair::ShiftWorldNormal(hairT, worldNormal, 0, uv);
-			screenSpaceNormal = normalize(FrameBuffer::WorldToView(shiftedNormal, false, eyeIndex));
+			screenSpaceNormal = normalize(FrameBuffer::WorldToView(shiftedNormal, false));
 		}
 	}
 #	endif
@@ -2512,11 +2407,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float porosity = 1.0;
 
 #	if defined(SKYLIGHTING)
-#		if defined(VR)
-	float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#		else
 	float3 positionMSSkylight = input.WorldPosition.xyz;
-#		endif
 #		if defined(DEFERRED)
 	sh2 skylightingSH = Skylighting::Sample(positionMSSkylight, worldNormal);
 #		else
@@ -2525,7 +2416,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	endif
 
-	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz, eyeIndex);
+	float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
 	float waterHeight = waterData.w;
 
 	float waterRoughnessSpecular = 1;
@@ -2560,9 +2451,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(SKINNED)
 		float3 ripplePosition = input.ModelPosition.xyz;
 #		elif defined(DEFERRED)
-		float3 ripplePosition = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+		float3 ripplePosition = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz;
 #		else
-		float3 ripplePosition = !FrameBuffer::FrameParams.y ? input.ModelPosition.xyz : input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+		float3 ripplePosition = !FrameBuffer::FrameParams.y ? input.ModelPosition.xyz : input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz;
 #		endif
 		raindropInfo = WetnessEffects::GetRainDrops(ripplePosition, SharedData::wetnessEffectsSettings.Time, wetnessNormal, flatnessAmount);
 	}
@@ -2577,7 +2468,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(CS_SKIN) && !defined(SKIN)
 	if (skinEnabled) {
-		float2 dynamicWetness = Skin::GetWetness(input.WorldPosition.z + FrameBuffer::CameraPosAdjust[eyeIndex].z, worldNormal.xyz);
+		float2 dynamicWetness = Skin::GetWetness(input.WorldPosition.z + FrameBuffer::CameraPosAdjust.z, worldNormal.xyz);
 #			if defined(TRUE_PBR)
 		dynamicWetness.x = lerp(dynamicWetness.x, 0.0f, material.Metallic);
 #			endif
@@ -2597,7 +2488,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if !defined(SKINNED) && !(defined(SKIN) && defined(CS_SKIN))
 	if (wetness > 0.0 || puddleWetness > 0.0) {
-		float3 puddleCoords = ((input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz) * 0.5 + 0.5) * 0.01 / SharedData::wetnessEffectsSettings.PuddleRadius;
+		float3 puddleCoords = ((input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust.xyz) * 0.5 + 0.5) * 0.01 / SharedData::wetnessEffectsSettings.PuddleRadius;
 		puddle = Random::perlinNoise(puddleCoords) * 0.5 + 0.5;
 		puddle = puddle * ((minWetnessAngle / SharedData::wetnessEffectsSettings.PuddleMaxAngle) * SharedData::wetnessEffectsSettings.MaxPuddleWetness * 0.25) + 0.5;
 		puddle *= lerp(wetness, puddleWetness, saturate(puddle - 0.25));
@@ -2644,17 +2535,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		dirLightColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+		dirLightColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 	}
 #	endif
 
 #	if defined(WATER_EFFECTS)
-	dirLightColor *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
+	dirLightColor *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz);
 #	endif
 
 	// Apply world shadow (terrain shadows, cloud shadows) directly to light color
 	if (inWorld || inReflection)
-		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz);
 
 	float dirLightAngle = dot(worldNormal.xyz, DirLightDirection.xyz);
 
@@ -2672,7 +2563,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(VOLUMETRIC_SHADOWS)
 	if (inWorld && !inReflection && ShadowSampling::HasDirectionalShadows())
-		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirVSMDetailedShadow);
+		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, dirVSMDetailedShadow);
 #	endif
 
 	float dirDetailedShadow = 1.0;
@@ -2689,7 +2580,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
 	if (!SharedData::InInterior && dirLightAngle >= 0.0)
-		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise, eyeIndex);
+		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.Position.xyz, screenUV, screenNoise);
 #	endif
 
 #	if defined(EMAT) && (defined(SKINNED) || !defined(MODELSPACENORMALS))
@@ -2754,7 +2645,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, DirLightDirection, dirLightColor, dirDetailedShadow, dirSoftShadow);
 #		if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
-		float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, DirLightDirection, screenNoise, eyeIndex);
+		float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, DirLightDirection, screenNoise);
 		dirLightContext.hairShadow = hairShadow;
 	}
 #		endif
@@ -2782,7 +2673,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if !defined(LIGHT_LIMIT_FIX)
 	[loop] for (uint lightIndex = 0; lightIndex < numLights; lightIndex++)
 	{
-		float3 lightDirection = PointLightPosition[eyeIndex * numLights + lightIndex].xyz - input.WorldPosition.xyz;
+		float3 lightDirection = PointLightPosition[lightIndex].xyz - input.WorldPosition.xyz;
 		float lightDist = length(lightDirection);
 		float intensityFactor = saturate(lightDist / PointLightPosition[lightIndex].w);
 		if (intensityFactor == 1)
@@ -2817,7 +2708,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, normalizedLightDirection, lightColor, lightShadow, lightShadow);
 #				if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled) {
-			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
+			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise);
 			pointLightContext.hairShadow = hairShadow;
 		}
 #				endif
@@ -2860,7 +2751,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				continue;
 		}
 
-		float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
+		float3 lightDirection = light.positionWS.xyz - input.WorldPosition.xyz;
 		float lightDist = length(lightDirection);
 
 #			if defined(ISL)
@@ -2941,7 +2832,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, normalizedLightDirection, lightColor, pointLightShadow, pointLightShadow);
 #				if defined(HAIR) && defined(CS_HAIR)
 		if (SharedData::hairSpecularSettings.Enabled) {
-			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
+			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise);
 			pointLightContext.hairShadow = hairShadow;
 		}
 #				endif
@@ -3028,7 +2919,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			ambientNormal = normalize(viewDirection - hairT * dot(viewDirection, hairT));
 		else
 			ambientNormal = vertexNormal.xyz;
-		screenSpaceNormal = normalize(FrameBuffer::WorldToView(ambientNormal, false, eyeIndex));
+		screenSpaceNormal = normalize(FrameBuffer::WorldToView(ambientNormal, false));
 	}
 #	endif
 
@@ -3101,7 +2992,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	lodLandDiffuseColor += directionalAmbientColor;
 #	endif
 
-	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
+	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition);
 
 #	if defined(WETNESS_EFFECTS)
 #		if !(defined(FACEGEN) || defined(FACEGEN_RGB_TINT) || defined(EYE)) || defined(TREE_ANIM)
@@ -3157,7 +3048,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		color.xyz += directLightsDiffuseInput;
 	}
 
-	// Fixes white items in UI for VR
 	[branch] if ((PBRFlags & PBR::Flags::HasEmissive) != 0)
 	{
 		color.xyz += emitColor.xyz;
@@ -3282,9 +3172,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog;
 		if (inReflection) {
-			exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
+			exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFogNoVolumetric(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
 		} else {
-			exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
+			exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust.xyz, fogColor, float4(input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy, input.Position.z, 1));
 		}
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
@@ -3463,7 +3353,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	indirectLobeWeights.specular += wetnessReflectance;
 	if (waterRoughnessSpecular < 1) {
 		// Reflection is from the water film surface; wetnessReflectance scales intensity by wetness amount.
-		screenSpaceNormal = normalize(FrameBuffer::WorldToView(wetnessNormal, false, eyeIndex));
+		screenSpaceNormal = normalize(FrameBuffer::WorldToView(wetnessNormal, false));
 		material.Roughness = waterRoughnessSpecular;
 	}
 #		endif
@@ -3471,11 +3361,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
 
-#		if defined(VR_STEREO_OPT) && !defined(SNOW)
-	// VR stereo reprojection: write POM depth offset to dedicated texture (u7) for StereoBlendCS.
-	// hasPOM disambiguates "POM ran at geometry plane (pixelOffset=0.5)" from "POM did not run".
-	// -1.0 is the explicit no-POM sentinel (R16_FLOAT supports negatives); StereoBlendCS checks >= 0.
-	PomOffsetTex[uint2(input.Position.xy)] = hasPOM ? pixelOffset : Stereo::POM_NO_DATA;
+#		if defined(SNOW)
+#			if defined(TRUE_PBR)
+	psout.Parameters.x = Color::RGBToLuminanceAlternative(specularColor);
+	psout.Parameters.y = 0;
+#			else
+	psout.Parameters.x = Color::RGBToLuminanceAlternative(lightsSpecularColor);
+#			endif
+	psout.Parameters.w = psout.Diffuse.w;
 #		endif
 
 	float masksZ = Color::RGBToYCoCg(directionalAmbientColor).x;

@@ -13,7 +13,6 @@
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
-#include "Features/VR.h"
 #include "Features/CSEditor.h"
 
 #include "Hooks.h"
@@ -228,9 +227,9 @@ void Deferred::StartDeferred()
 	globals::state->UpdateSharedData(true, false);
 
 	auto shadowState = globals::game::shadowState;
-	GET_INSTANCE_MEMBER(renderTargets, shadowState)
-	GET_INSTANCE_MEMBER(setRenderTargetMode, shadowState)
-	GET_INSTANCE_MEMBER(stateUpdateFlags, shadowState)
+	auto& renderTargets = shadowState->GetRuntimeData().renderTargets;
+	auto& setRenderTargetMode = shadowState->GetRuntimeData().setRenderTargetMode;
+	auto& stateUpdateFlags = shadowState->GetRuntimeData().stateUpdateFlags;
 
 	// Backup original render targets
 	for (uint i = 0; i < 4; i++) {
@@ -260,35 +259,13 @@ void Deferred::StartDeferred()
 	{
 		auto context = globals::d3d::context;
 
-		// Clear POM offset texture to -1.0 sentinel so pixels the Lighting PS never touches read "no POM"
-		if (globals::features::vr.stereoOpt.loaded)
-			globals::features::vr.stereoOpt.ClearPomOffsetTexture();
-
 		ID3D11Buffer* buffers[1] = { *globals::game::perFrame.get() };
-
-		ID3D11Buffer* vrBuffer = nullptr;
-
-		if (REL::Module::IsVR()) {
-			static REL::Relocation<ID3D11Buffer**> VRValues{ REL::Offset(0x3180688) };
-			vrBuffer = *VRValues.get();
-		}
-		if (vrBuffer) {
-			context->CSSetConstantBuffers(12, 1, buffers);
-			context->CSSetConstantBuffers(13, 1, &vrBuffer);
-		} else {
-			context->CSSetConstantBuffers(12, 1, buffers);
-		}
+		context->CSSetConstantBuffers(12, 1, buffers);
 	}
 
 	PrepassPasses();
 
 	OverrideBlendStates();
-
-	// VR: Classify Eye 1 pixels and write hardware stencil marks before geometry rendering.
-	// Only enable stencil culling when overwrite reprojection is available for this frame.
-	if (globals::game::isVR && globals::features::vr.IsStereoOptimizationCullingReady()) {
-		globals::features::vr.stereoOpt.DispatchStencil();
-	}
 }
 
 void Deferred::DeferredPasses()
@@ -301,18 +278,7 @@ void Deferred::DeferredPasses()
 
 	{
 		ID3D11Buffer* buffers[1] = { *globals::game::perFrame };
-		ID3D11Buffer* vrBuffer = nullptr;
-
-		if (REL::Module::IsVR()) {
-			static REL::Relocation<ID3D11Buffer**> VRValues{ REL::Offset(0x3180688) };
-			vrBuffer = *VRValues.get();
-		}
-		if (vrBuffer) {
-			context->CSSetConstantBuffers(12, 1, buffers);
-			context->CSSetConstantBuffers(13, 1, &vrBuffer);
-		} else {
-			context->CSSetConstantBuffers(12, 1, buffers);
-		}
+		context->CSSetConstantBuffers(12, 1, buffers);
 	}
 
 	auto specular = renderer->GetRuntimeData().renderTargets[SPECULAR];
@@ -359,7 +325,7 @@ void Deferred::DeferredPasses()
 			albedo.SRV,                                                                                      // t1  AlbedoTexture
 			normalRoughness.SRV,                                                                             // t2  NormalRoughnessTexture
 			masks.SRV,                                                                                       // t3  MasksTexture
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? Util::GetCurrentSceneDepthSRV(false) : nullptr,  // t4  DepthTexture (24/32-bit; HLSL type baked at compile via TERRAIN_BLENDING)
+			dynamicCubemaps.loaded ? Util::GetCurrentSceneDepthSRV(false) : nullptr,                         // t4  DepthTexture (24/32-bit; HLSL type baked at compile via TERRAIN_BLENDING)
 			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,                                              // t5  ReflectanceTexture
 			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,                        // t6  EnvTexture
 			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,             // t7  EnvReflectionsTexture
@@ -378,14 +344,6 @@ void Deferred::DeferredPasses()
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
-		// Bind VRStereoOptimizations mode texture for Eye 1 skip.
-		// Bind null when disabled so stale mode data doesn't cause incorrect early-exits
-		// in DeferredCompositeCS (null SRV reads return 0 = MODE_DISOCCLUDED, all pixels composite normally).
-		auto& vrStereoOpt = globals::features::vr.stereoOpt;
-		bool stereoCullingReady = globals::features::vr.IsStereoOptimizationCullingReady();
-		ID3D11ShaderResourceView* modeSRV = stereoCullingReady ? vrStereoOpt.GetModeTextureSRV() : nullptr;
-		context->CSSetShaderResources(16, 1, &modeSRV);
-
 		ID3D11UnorderedAccessView* uavs[3]{ main.UAV, normals.UAV, motionVectors.UAV };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
 
@@ -398,27 +356,6 @@ void Deferred::DeferredPasses()
 			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 			globals::profiler->EndPass();
 		}
-
-		// Unbind mode texture SRV
-		ID3D11ShaderResourceView* nullSRV = nullptr;
-		context->CSSetShaderResources(16, 1, &nullSRV);
-	}
-
-	// VR: Deactivate stencil culling now that geometry rendering is complete.
-	// Must happen before StereoBlend so the blend pass itself isn't stencil-blocked.
-	if (globals::game::isVR) {
-		auto& stereoOpt = globals::features::vr.stereoOpt;
-		if (stereoOpt.IsStencilActive()) {
-			stereoOpt.DeactivateStencil();
-		}
-	}
-
-	// VR: Stereo reprojection fills Eye 1 holes here (after DeferredComposite, before SSR/water/sky)
-	// so that ISReflectionsRayTracing sees valid pixels in both eyes.
-	if (globals::game::isVR) {
-		globals::profiler->BeginPass("VR::StereoBlend");
-		globals::features::vr.DrawStereoBlend();
-		globals::profiler->EndPass();
 	}
 
 	// Clear
@@ -450,8 +387,8 @@ void Deferred::EndDeferred()
 		return;
 
 	auto shadowState = globals::game::shadowState;
-	GET_INSTANCE_MEMBER(renderTargets, shadowState)
-	GET_INSTANCE_MEMBER(stateUpdateFlags, shadowState)
+	auto& renderTargets = shadowState->GetRuntimeData().renderTargets;
+	auto& stateUpdateFlags = shadowState->GetRuntimeData().stateUpdateFlags;
 
 	// Do not render to our targets past this point
 	for (uint i = 0; i < 4; i++) {
@@ -593,10 +530,7 @@ void Deferred::CopyShadowLightData()
 	dd.EndSplitDistances = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
 	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
-	if (globals::game::isVR)
-		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), dd);
-	else
-		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
+	SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
 
 	D3D11_MAPPED_SUBRESOURCE mapped{};
 	DX::ThrowIfFailed(context->Map(directionalShadowLights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
@@ -638,12 +572,6 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
-		if (REL::Module::IsVR())
-			defines.push_back({ "FRAMEBUFFER", nullptr });
-
-		if (REL::Module::IsVR())
-			defines.push_back({ "VR_STEREO_OPT", nullptr });
-
 		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
 		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).
 		if (globals::features::terrainBlending.loaded)
@@ -670,12 +598,6 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
-
-		if (REL::Module::IsVR())
-			defines.push_back({ "FRAMEBUFFER", nullptr });
-
-		if (REL::Module::IsVR())
-			defines.push_back({ "VR_STEREO_OPT", nullptr });
 
 		// TERRAIN_BLENDING flips DepthTexture's HLSL type from `Texture2D<unorm float>`
 		// (R24_UNORM_X8_TYPELESS game depth) to `Texture2D<float>` (R32_FLOAT blendedDepth).

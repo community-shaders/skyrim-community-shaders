@@ -238,7 +238,7 @@ public:
 
 		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
 		std::string FontName = "Jost/Jost-Regular.ttf";         // Default font file name (legacy)
-		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
+		float GlobalScale = 0.f;  // exponential
 		std::array<FontRoleSettings, static_cast<size_t>(FontRole::Count)> FontRoles = []() {
 			std::array<FontRoleSettings, static_cast<size_t>(FontRole::Count)> roles{};
 			auto setRole = [&roles](FontRole role, std::string family, std::string style, std::string file, float sizeScale) {
@@ -499,8 +499,6 @@ public:
 		[[nodiscard]] constexpr bool IsHeld() const noexcept { return IsPressed() && IsRepeating(); }
 		[[nodiscard]] constexpr bool IsUp() const noexcept { return (value == 0.0F) && IsRepeating(); }
 	};
-	// VR overlay input and cursor helpers
-	void ProcessVROverlayInput();
 
 private:
 	Settings settings;

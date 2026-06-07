@@ -135,5 +135,4 @@ public:
 		}
 	};
 
-	virtual bool SupportsVR() override { return true; };
 };

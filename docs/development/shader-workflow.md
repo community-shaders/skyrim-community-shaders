@@ -17,7 +17,7 @@ pwsh tools/verify-shader-refactor.ps1 package/Shaders/Foo.hlsl   # or tools/veri
 
 `tools/verify-shader-refactor.ps1` (bash wrapper: `tools/verify-shader-refactor.sh`)
 compiles a shader from a base git ref and from the working tree across the
-`VR` × `HDR_OUTPUT` permutations, then compares the compiled bytecode. The base
+`HDR_OUTPUT` permutations, then compares the compiled bytecode. The base
 ref's whole include tree is materialized (via `git archive`), so the base compiles
 against base-ref `.hlsli` headers and the working tree against working headers — a
 refactor that also edits a shared header is compared correctly, not masked:

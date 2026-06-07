@@ -6,7 +6,6 @@ private:
 	static constexpr std::string_view MOD_ID = "139352";
 
 public:
-	virtual bool SupportsVR() override { return true; };
 
 	virtual inline std::string GetName() override { return "Skylighting"; }
 	virtual std::string GetDisplayName() override { return T("feature.skylighting.name", "Skylighting"); }
@@ -111,12 +110,6 @@ public:
 	struct SetViewFrustum
 	{
 		static void thunk(RE::NiCamera* a_camera, RE::NiFrustum* a_frustum);
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	struct SetViewFrustumVR
-	{
-		static void thunk(RE::NiCamera* a_camera, RE::NiFrustum* a_frustum, uint a_eyeIndex);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 

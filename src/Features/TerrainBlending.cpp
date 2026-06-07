@@ -6,7 +6,6 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/D3D.h"
-#include "VR.h"
 
 #define I18N_KEY_PREFIX "feature.terrain_blending."
 
@@ -44,7 +43,7 @@ namespace
 	// 1) PS slot 17 override: bind TB-selected depth SRV for OBB depth reads; prevents occlusion instability / mesh popping.
 	// 2) PS slot 2 override: bind TB-selected depth SRV for shadowmask reads; prevents unstable/moving ground shadow imprint, and dark overlay style artifacts.
 	// 3) OM depth override: force DepthFunc=ALWAYS only on descriptor 0x1062002; mitigate shadowmask ground artifacts caused by failed depth testing in 0x1062002.
-	// All override paths below are gated by IsEngineHookFeatureGateSatisfied and all are VR-specific at runtime (isVR, gateSatisfied).
+	// All override paths below are gated by IsEngineHookFeatureGateSatisfied.
 	// Developer Mode only: logs one hook snapshot per session ([TB Override]/[TB DepthOverride]) and explicit fallback activate/reset events.
 	// Fallbacks: caller fallback is in ShouldAllowCallerWithFallback(...) (2 and 3 widen after 5 rejects and collapse on first allowlisted hit), SRV-source fallback is in Util::GetCurrentSceneDepthSRV(...).
 	// Pixel descriptors:
@@ -53,27 +52,9 @@ namespace
 	constexpr uint32_t kShadowmaskDepthDescriptor0 = 0x262002u;
 	constexpr uint32_t kShadowmaskDepthDescriptor1 = 0x1062002u;
 
-	// Module RVAs from _ReturnAddress() at hooked engine callsites.
-	// Ownership:
-	// - Shared slot2 + depth-override callers: 0x1351AD4, 0xDBDD68
-	// - Depth-override-only caller: 0x1349B7F
-	const uint32_t kCallerRvaSlot2AndDepthOverrideA = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1351AD4u));
-	const uint32_t kCallerRvaSlot2AndDepthOverrideB = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDBDD68u));
-	const uint32_t kCallerRvaDepthOverrideOnly = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1349B7Fu));
-
-	// Slot2 rewrite allowlist (PS slot 2 = shadowmask depth SRV override path).
-	// Includes only callsites validated for shadowmask slot2 rebinding.
-	const std::array<uint32_t, 2> kSlot2CallerAllowlistRvas = {
-		kCallerRvaSlot2AndDepthOverrideA,
-		kCallerRvaSlot2AndDepthOverrideB
-	};
-	// Descriptor-scoped OM depth override allowlist (0x1062002 only).
-	// Contains the two shared callers above plus one depth-override-only caller.
-	const std::array<uint32_t, 3> kDepthOverrideCallerAllowlistRvas = {
-		kCallerRvaSlot2AndDepthOverrideB,
-		kCallerRvaSlot2AndDepthOverrideA,
-		kCallerRvaDepthOverrideOnly
-	};
+	// Allowlists of module RVAs for _ReturnAddress()-based hook dispatch.
+	const std::array<uint32_t, 0> kSlot2CallerAllowlistRvas = {};
+	const std::array<uint32_t, 0> kDepthOverrideCallerAllowlistRvas = {};
 	constexpr bool kEnableAutoBroadSlot2Fallback = true;
 	constexpr uint64_t kSlot2AutoFallbackRejectThreshold = 5;
 	constexpr bool kEnableAutoBroadDepthOverrideFallback = true;
@@ -118,8 +99,7 @@ namespace
 
 	bool ShouldUseBlendedDepthSRV()
 	{
-		auto& vr = globals::features::vr;
-		return !globals::game::isVR || !vr.gDepthBufferCulling || !*vr.gDepthBufferCulling;
+		return true;
 	}
 
 	bool IsShadowmaskDepthDescriptorWhitelisted(const uint32_t a_descriptor)
@@ -228,13 +208,9 @@ namespace
 			a_callerRva);
 	}
 
-	bool IsEngineHookFeatureGateSatisfied(const TerrainBlending& a_singleton)
+	bool IsEngineHookFeatureGateSatisfied([[maybe_unused]] const TerrainBlending& a_singleton)
 	{
-		if (!globals::game::isVR || !a_singleton.loaded || !a_singleton.settings.Enabled) {
-			return false;
-		}
-
-		return !ShouldUseBlendedDepthSRV();
+		return false;
 	}
 
 	struct EngineHookPassGateState
@@ -751,7 +727,7 @@ void TerrainBlending::TerrainShaderHacks()
 			auto dsv = terrainDepth.views[0];
 			context->OMSetRenderTargets(0, nullptr, dsv);
 			auto shadowState = globals::game::shadowState;
-			GET_INSTANCE_MEMBER(currentVertexShader, shadowState)
+			auto& currentVertexShader = shadowState->GetRuntimeData().currentVertexShader;
 			context->VSSetShader((ID3D11VertexShader*)currentVertexShader->shader, NULL, NULL);
 		}
 		renderAltTerrain = !renderAltTerrain;
@@ -826,7 +802,7 @@ void TerrainBlending::BlendPrepassDepths()
 	auto stateUpdateFlags = globals::game::stateUpdateFlags;
 	stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);
 	// CopyResource(terrainDepth <- mainDepth) eliminated: main depth is now written
-	// directly into mainDepthCopy (u2) by the CS above, saving a full-stereo D24S8 copy.
+	// directly into mainDepthCopy (u2) by the CS above, saving a full D24S8 copy.
 
 	if (globals::state->frameAnnotations)
 		globals::state->EndPerfEvent();
@@ -861,7 +837,7 @@ void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
 
 	globals::game::graphicsState->SetCameraData(RE::Main::WorldRootCamera(), 1);
 
-	singleton.averageEyePosition = Util::GetAverageEyePosition();
+	singleton.eyePosition = Util::GetEyePosition();
 
 	const bool tbActive = shaderCache->IsEnabled() && singleton.settings.Enabled;
 	const bool useBlendedDepthSRV = tbActive && ShouldUseBlendedDepthSRV();
@@ -913,7 +889,7 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 			bool inTerrain = a_pass->shaderProperty && a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape);
 
 			if (inTerrain && a_pass->geometry) {
-				if ((a_pass->geometry->worldBound.center.GetDistance(singleton.averageEyePosition) - a_pass->geometry->worldBound.radius) > 1024.0f) {
+				if ((a_pass->geometry->worldBound.center.GetDistance(singleton.eyePosition) - a_pass->geometry->worldBound.radius) > 1024.0f) {
 					inTerrain = false;
 				}
 			}
@@ -1025,9 +1001,9 @@ void TerrainBlending::RenderTerrainBlendingPasses()
 		if (globals::state->frameAnnotations)
 			globals::state->BeginPerfEvent("Terrain Blending - Render Passes");
 
-		GET_INSTANCE_MEMBER(alphaBlendMode, shadowState)
-		GET_INSTANCE_MEMBER(alphaBlendWriteMode, shadowState)
-		GET_INSTANCE_MEMBER(depthStencilDepthMode, shadowState)
+		auto& alphaBlendMode = shadowState->GetRuntimeData().alphaBlendMode;
+		auto& alphaBlendWriteMode = shadowState->GetRuntimeData().alphaBlendWriteMode;
+		auto& depthStencilDepthMode = shadowState->GetRuntimeData().depthStencilDepthMode;
 
 		// Reset alpha write and enable alpha blending
 		alphaBlendWriteMode = 1;

@@ -2,14 +2,13 @@
 #define __EXPONENTIAL_HEIGHT_FOG_VOLUMETRIC_CS_COMMON_HLSLI__
 
 #include "Common/FrameBuffer.hlsli"
-#include "Common/VR.hlsli"
 
 cbuffer VolumetricFogCB : register(b0)
 {
 	uint4 VolumetricFogGridSizeAndFlags;
 	float4 VolumetricFogInvGridSizeAndNearFade;
 	float4 VolumetricFogGridZParams;
-	row_major float4x4 VolumetricFogClipToWorld[2];
+	row_major float4x4 VolumetricFogClipToWorld;
 	float4 VolumetricFogFrameJitterOffsets[16];
 	float4 VolumetricFogHistoryParameters;
 	float4 VolumetricFogJitterParameters;
@@ -40,17 +39,15 @@ namespace ExponentialHeightFog
 		return all(coord < VolumetricFogGridSize);
 	}
 
-	float3 ComputeCellWorldPosition(uint3 coord, float3 cellOffset, out uint eyeIndex, out float viewDepth)
+	float3 ComputeCellWorldPosition(uint3 coord, float3 cellOffset, out float viewDepth)
 	{
 		float2 volumeUV = (float2(coord.xy) + cellOffset.xy) * VolumetricFogInvGridSize.xy;
-		eyeIndex = Stereo::GetEyeIndexFromTexCoord(volumeUV);
-		float2 eyeUV = Stereo::ConvertFromStereoUV(volumeUV, eyeIndex);
 
 		viewDepth = ComputeVolumetricSliceDepth(max(float(coord.z) + cellOffset.z, 0.0f));
 
-		float2 ndc = eyeUV * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+		float2 ndc = volumeUV * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
 		float deviceZ = (SharedData::CameraData.x - SharedData::CameraData.w / viewDepth) / SharedData::CameraData.z;
-		float4 worldPosition = mul(VolumetricFogClipToWorld[eyeIndex], float4(ndc, deviceZ, 1.0f));
+		float4 worldPosition = mul(VolumetricFogClipToWorld, float4(ndc, deviceZ, 1.0f));
 		return worldPosition.xyz / worldPosition.w;
 	}
 }

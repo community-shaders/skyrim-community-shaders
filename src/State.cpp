@@ -17,7 +17,6 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
-#include "Features/VRStereoOptimizations.h"
 #include "Features/VolumetricShadows.h"
 #include "Menu.h"
 #include "SceneSettingsManager.h"
@@ -201,7 +200,7 @@ void State::Reset()
 	frameCount++;
 
 	if (auto* imageSpaceManager = RE::ImageSpaceManager::GetSingleton()) {
-		GET_INSTANCE_MEMBER(BSImagespaceShaderApplyReflections, imageSpaceManager);
+		auto& BSImagespaceShaderApplyReflections = imageSpaceManager->GetRuntimeData().BSImagespaceShaderApplyReflections;
 
 		// Disable reflections being applied to things other than water
 		if (BSImagespaceShaderApplyReflections.get()) {
@@ -210,9 +209,7 @@ void State::Reset()
 	}
 
 	// Disable "improved" snow shader, unsupported
-	if (!globals::game::isVR) {
-		RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
-	}
+	RE::GetINISetting("bEnableImprovedSnow:Display")->data.b = false;
 
 	activeReflections = false;
 }
@@ -725,7 +722,6 @@ void State::CheckTypedUAVLoadSupport()
 		{ DXGI_FORMAT_R16G16B16A16_FLOAT, "R16G16B16A16_FLOAT", "Dynamic Cubemaps (HDR), Skylighting outProbeArray" },
 		{ DXGI_FORMAT_R16G16B16A16_UNORM, "R16G16B16A16_UNORM", "Grass Collision (collisionTexture)" },
 		{ DXGI_FORMAT_R16G16_UNORM, "R16G16_UNORM", "Terrain Shadows (RWTexShadowHeights)" },
-		{ DXGI_FORMAT_R16G16_FLOAT, "R16G16_FLOAT", "VR Stereo Blend (kMOTION_VECTOR reprojection)" },
 		{ DXGI_FORMAT_R8G8B8A8_UNORM, "R8G8B8A8_UNORM", "HDR Display UI brightness (uiTexture)" },
 		{ DXGI_FORMAT_R8_UINT, "R8_UINT", "Skylighting accumulation frames (outAccumFramesArray)" },
 		{ DXGI_FORMAT_R16_FLOAT, "R16_FLOAT", "Vanilla volumetric lighting density (DensityRW)" },
@@ -755,7 +751,7 @@ void State::CheckTypedUAVLoadSupport()
 		logger::warn(
 			"[TypedUAVLoad] One or more required formats lack typed-UAV-load support on this GPU. "
 			"Affected features will read undefined data and may produce visual artifacts. "
-			"Consider disabling: Dynamic Cubemaps, Grass Collision, Terrain Shadows, Skylighting, HDR Display, VR Stereo Optimisations.");
+			"Consider disabling: Dynamic Cubemaps, Grass Collision, Terrain Shadows, Skylighting, HDR Display.");
 	}
 }
 
@@ -782,11 +778,9 @@ void State::SetupResources()
 	featureDataCB = new ConstantBuffer(ConstantBufferDesc((uint32_t)size));
 
 	// Grab main texture to get resolution
-	// VR cannot use viewport->screenWidth/Height as it's the desktop preview window's resolution and not HMD
 	D3D11_TEXTURE2D_DESC texDesc{};
 	renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture->GetDesc(&texDesc);
 
-	screenSize = { (float)texDesc.Width, (float)texDesc.Height };
 	globals::d3d::context->QueryInterface(__uuidof(pPerf), reinterpret_cast<void**>(&pPerf));
 
 	featureLevel = globals::d3d::device->GetFeatureLevel();
@@ -970,14 +964,14 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		data.DirLightColor *= lightRuntimeData.fade;
 
 		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		data.DirLightColor *= !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale : imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;
+		data.DirLightColor *= imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale;
 
 		const auto& direction = dirLight->GetWorldDirection();
 		data.DirLightDirection = { -direction.x, -direction.y, -direction.z, 0.0f };
 		data.DirLightDirection.Normalize();
 
 		data.CameraData = Util::GetCameraData();
-		data.BufferDim = { screenSize.x, screenSize.y, 1.0f / screenSize.x, 1.0f / screenSize.y };
+		data.BufferDim = { (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight, 1.0f / (float)globals::game::graphicsState->screenWidth, 1.0f / (float)globals::game::graphicsState->screenHeight };
 		data.Timer = timer;
 
 		auto temporal = Util::GetTemporal();
@@ -994,23 +988,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			}
 		}
 
-		// Fallback water height for the VR analytical mask when tile 12 returns the sentinel.
-		// Uses player->GetWaterHeight() (reads relevantWaterHeight from LOADED_REF_DATA) gated by
-		// underwaterCount > 0 so it is only set when the player is actually in a water body.
-		// Covers both interior water (where TES::GetWaterHeight returns -NI_INFINITY) and exterior
-		// partial submersion.  Stored as eye-0 camera-relative Z to match WaterData[].w.
 		data.WaterSystemHeight = -RE::NI_INFINITY;
-		if (globals::game::isVR) {
-			if (auto player = globals::game::player) {
-				if (player->loadedData && player->loadedData->underwaterCount > 0) {
-					float worldHeight = player->GetWaterHeight();
-					if (worldHeight > -RE::NI_INFINITY) {
-						auto eye0Pos = Util::GetEyePosition(0);
-						data.WaterSystemHeight = worldHeight - eye0Pos.z;
-					}
-				}
-			}
-		}
 
 		data.InInterior = Util::IsInterior();
 		data.HasDirectionalShadows = HasDirectionalShadows();
@@ -1027,8 +1005,9 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		if (upscaling.loaded) {
 			auto upscaleMethod = upscaling.GetUpscaleMethod();
 			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
-				auto renderSize = Util::ConvertToDynamic(screenSize, true);
-				data.MipBias = std::log2f(renderSize.x / screenSize.x);
+				float2 screenSz{ (float)globals::game::graphicsState->screenWidth, (float)globals::game::graphicsState->screenHeight };
+				auto renderSize = Util::ConvertToDynamic(screenSz, true);
+				data.MipBias = std::log2f(renderSize.x / screenSz.x);
 				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
 					data.MipBias -= 1.0f;
 			} else {

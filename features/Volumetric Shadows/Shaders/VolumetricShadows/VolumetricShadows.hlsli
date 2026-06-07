@@ -57,17 +57,17 @@ namespace VolumetricShadows
 		return shadow * rcpSampleCount;
 	}
 
-	float GetVSMShadow3D(float3 startPosition, float3 endPosition, float noise, uint baseSampleCount, uint eyeIndex, out float surfaceShadow)
+	float GetVSMShadow3D(float3 startPosition, float3 endPosition, float noise, uint baseSampleCount, out float surfaceShadow)
 	{
 		DirectionalShadowLightData directionalShadowLightData = DirectionalShadowLights[0];
 
 		// View-space z — matches the linear cascade split distances from BSShadowDirectionalLight.
 		float3 midPosition = (startPosition + endPosition) * 0.5;
-		float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(midPosition, eyeIndex));
+		float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(midPosition));
 
 		// Cascade projections are world-space; positions come in camera-relative.
-		startPosition += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-		endPosition += FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+		startPosition += FrameBuffer::CameraPosAdjust.xyz;
+		endPosition += FrameBuffer::CameraPosAdjust.xyz;
 
 		// Early out beyond cascade range
 		if (shadowMapDepth >= directionalShadowLightData.EndSplitDistances.y) {
@@ -130,11 +130,11 @@ namespace VolumetricShadows
 		return ComputeVSM(moments, positionLS.z);
 	}
 
-	float GetVSMShadow2D(float3 position, uint eyeIndex, out float detailedShadow)
+	float GetVSMShadow2D(float3 position, out float detailedShadow)
 	{
 		DirectionalShadowLightData directionalShadowLightData = DirectionalShadowLights[0];
 
-		float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(position, eyeIndex));
+		float shadowMapDepth = SharedData::GetScreenDepth(FrameBuffer::GetShadowDepth(position));
 
 		// Early out beyond cascade range
 		if (shadowMapDepth >= directionalShadowLightData.EndSplitDistances.y) {
@@ -146,7 +146,7 @@ namespace VolumetricShadows
 		float fade = saturate(shadowMapDepth / directionalShadowLightData.EndSplitDistances.y);
 
 		// Cascade projections are world-space; position comes in camera-relative.
-		float3 positionWS = position + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+		float3 positionWS = position + FrameBuffer::CameraPosAdjust.xyz;
 
 		// Compute cascade blend factor with smoothstep
 		float cascadeSelect = saturate((shadowMapDepth - directionalShadowLightData.StartSplitDistances.y) / (directionalShadowLightData.EndSplitDistances.x - directionalShadowLightData.StartSplitDistances.y));

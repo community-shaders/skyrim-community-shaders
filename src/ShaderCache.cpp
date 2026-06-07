@@ -762,12 +762,12 @@ namespace SIE
 				{ "SplitDistance", lightingPSConstants.SplitDistance },
 				{ "SSRParams", lightingPSConstants.SSRParams },
 				{ "WorldMapOverlayParametersPS", lightingPSConstants.WorldMapOverlayParametersPS },
-				{ "ShadowSampleParam", lightingPSConstants.ShadowSampleParam },      // VR only
-				{ "EndSplitDistances", lightingPSConstants.EndSplitDistances },      // VR only
-				{ "StartSplitDistances", lightingPSConstants.StartSplitDistances },  // VR only
-				{ "DephBiasParam", lightingPSConstants.DephBiasParam },              // VR only
-				{ "ShadowLightParam", lightingPSConstants.ShadowLightParam },        // VR only
-				{ "ShadowMapProj", lightingPSConstants.ShadowMapProj },              // VR only
+				{ "ShadowSampleParam", lightingPSConstants.ShadowSampleParam },
+				{ "EndSplitDistances", lightingPSConstants.EndSplitDistances },
+				{ "StartSplitDistances", lightingPSConstants.StartSplitDistances },
+				{ "DephBiasParam", lightingPSConstants.DephBiasParam },
+				{ "ShadowLightParam", lightingPSConstants.ShadowLightParam },
+				{ "ShadowMapProj", lightingPSConstants.ShadowMapProj },
 				{ "AmbientColor", lightingPSConstants.AmbientColor },
 				{ "FogColor", lightingPSConstants.FogColor },
 				{ "ColourOutputClamp", lightingPSConstants.ColourOutputClamp },
@@ -786,8 +786,8 @@ namespace SIE
 				{ "LandscapeTexture5to6IsSpecPower", lightingPSConstants.LandscapeTexture5to6IsSpecPower },
 				{ "SnowRimLightParameters", lightingPSConstants.SnowRimLightParameters },
 				{ "CharacterLightParams", lightingPSConstants.CharacterLightParams },
-				{ "InvWorldMat", lightingPSConstants.InvWorldMat },            // VR only
-				{ "PreviousWorldMat", lightingPSConstants.PreviousWorldMat },  // VR only
+				{ "InvWorldMat", lightingPSConstants.InvWorldMat },
+				{ "PreviousWorldMat", lightingPSConstants.PreviousWorldMat },
 
 				{ "PBRFlags", lightingPSConstants.PBRFlags },
 				{ "PBRParams1", lightingPSConstants.PBRParams1 },
@@ -879,11 +879,7 @@ namespace SIE
 				{ "ScaleMask", 13 },
 			};
 
-			if (REL::Module::IsVR()) {
-				grassVS.insert({ "Padding", 14 });
-			} else {
-				grassVS.insert({ "ShadowClampValue", 14 });
-			}
+			grassVS.insert({ "ShadowClampValue", 14 });
 
 			const auto& grassPSConstants = ShaderConstants::GrassPS::Get();
 
@@ -985,14 +981,12 @@ namespace SIE
 				{ "CellTexCoordOffset", 11 },
 			};
 
-			if (!REL::Module::IsVR()) {
-				waterVS.insert(
-					{
-						{ "SubTexOffset", 12 },
-						{ "PosAdjust", 13 },
-						{ "MatProj", 14 },
-					});
-			}
+			waterVS.insert(
+				{
+					{ "SubTexOffset", 12 },
+					{ "PosAdjust", 13 },
+					{ "MatProj", 14 },
+				});
 
 			auto& waterPS = result[static_cast<size_t>(RE::BSShader::Type::Water)]
 								  [static_cast<size_t>(ShaderClass::Pixel)];
@@ -1052,26 +1046,14 @@ namespace SIE
 				{ "ShadowLightParam", 8 },
 			};
 
-			if (!REL::Module::IsVR()) {
-				utilityPS.insert(
-					{
-						{ "ShadowFadeParam", 9 },
-						{ "VPOSOffset", 10 },
-						{ "EndSplitDistances", 11 },
-						{ "StartSplitDistances", 12 },
-						{ "FocusShadowFadeParam", 13 },
-					});
-			} else {
-				utilityPS.insert(
-					{
-						{ "StereoClipRects", 9 },  // VR only
-						{ "ShadowFadeParam", 10 },
-						{ "VPOSOffset", 11 },
-						{ "EndSplitDistances", 12 },
-						{ "StartSplitDistances", 13 },
-						{ "FocusShadowFadeParam", 14 },
-					});
-			}
+			utilityPS.insert(
+				{
+					{ "ShadowFadeParam", 9 },
+					{ "VPOSOffset", 10 },
+					{ "EndSplitDistances", 11 },
+					{ "StartSplitDistances", 12 },
+					{ "FocusShadowFadeParam", 13 },
+				});
 
 			return result;
 		}
@@ -1427,8 +1409,6 @@ namespace SIE
 				defines[lastIndex++] = { "D3DCOMPILE_SKIP_OPTIMIZATION", nullptr };
 				defines[lastIndex++] = { "D3DCOMPILE_DEBUG", nullptr };
 			}
-			if (REL::Module::IsVR())
-				defines[lastIndex++] = { "VR", nullptr };
 			auto shaderDefines = globals::state->GetDefines();
 			if (!shaderDefines->empty()) {
 				for (unsigned int i = 0; i < shaderDefines->size(); i++)
@@ -1792,16 +1772,9 @@ namespace SIE
 				{ "BSImagespaceShaderVolumetricLightingBlurHCS", RE::ImageSpaceManager::GetCurrentIndex(ISVolumetricLightingBlurHCS) },
 				{ "BSImagespaceShaderVolumetricLightingBlurVCS", RE::ImageSpaceManager::GetCurrentIndex(ISVolumetricLightingBlurVCS) },
 
-				// VR only shaders
-				// Disable BSImagespaceShaderCopyDepthBuffer since we don't have it REed and it causes issues with cache and upscaling
-				// https://github.com/doodlum/skyrim-community-shaders/issues/1552
-				// { "BSImagespaceShaderCopyDepthBuffer", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBuffer) },
-				// { "BSImagespaceShaderCopyDepthBuffer_DR", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBuffer_DR) },
-				// { "BSImagespaceShaderCopyDepthBufferTargetSize", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBufferTargetSize) },
 				{ "BSImagespaceShaderGraphicsTextureFilterMode", RE::ImageSpaceManager::GetCurrentIndex(ISGraphicsTextureFilterMode) },
 				{ "BSImagespaceShaderISDownsampleHierarchicalDepthBufferCS", RE::ImageSpaceManager::GetCurrentIndex(ISDownsampleHierarchicalDepthBufferCS) },
 				{ "BSImagespaceShaderISDiffScaleDownsampleDepthBufferCS", RE::ImageSpaceManager::GetCurrentIndex(ISDiffScaleDownsampleDepthBufferCS) },
-				{ "BSImagespaceShaderISFullScreenVR", RE::ImageSpaceManager::GetCurrentIndex(ISFullScreenVR) },
 				{ "BSImagespaceShaderISTransformLvl7PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISTransformLvl7PreTest) },
 				{ "BSImagespaceShaderISLvl6PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISLvl6PreTest) },
 				{ "BSImagespaceShaderISLvl5PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISLvl5PreTest) },
@@ -1839,9 +1812,6 @@ namespace SIE
 		}
 
 		auto state = globals::state;
-		if (globals::game::isVR && strcmp(shader.fxpFilename, "OBBOcclusionTesting") == 0)
-			// use vanilla shader
-			return nullptr;
 
 		if (!((ShaderCache::IsSupportedShader(shader) || state->IsDeveloperMode() && state->IsShaderEnabled(shader)) && state->enableVShaders)) {
 			return nullptr;
@@ -1883,9 +1853,6 @@ namespace SIE
 		uint32_t descriptor)
 	{
 		auto state = globals::state;
-		if (globals::game::isVR && strcmp(shader.fxpFilename, "OBBOcclusionTesting") == 0)
-			// use vanilla shader
-			return nullptr;
 
 		if (!((ShaderCache::IsSupportedShader(shader) || state->IsDeveloperMode() && state->IsShaderEnabled(shader)) && state->enablePShaders)) {
 			return nullptr;

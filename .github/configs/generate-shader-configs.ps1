@@ -4,9 +4,9 @@
     Generates shader validation configuration files for Community Shaders.
 
 .DESCRIPTION
-    This script generates shader-validation.yaml and shader-validation-vr.yaml files by analyzing
-    Community Shaders log files from Skyrim installations. It requires hlslkit to be installed
-    and both Skyrim Special Edition and/or Skyrim VR to have been run with specific settings.
+    This script generates shader-validation.yaml by analyzing Community Shaders log files from
+    Skyrim Special Edition installations. It requires hlslkit to be installed and Skyrim Special
+    Edition to have been run with specific settings.
 
 .PARAMETER OutputDir
     Directory where the generated YAML files will be saved. Defaults to current directory.
@@ -88,32 +88,14 @@ function Find-SkyrimPaths {
         }
     }
 
-    # Check for Skyrim VR
-    $vrPath = Join-Path $myGamesPath "Skyrim VR"
-    if (Test-Path $vrPath) {
-        $paths += @{
-            Name = "Skyrim VR"
-            Path = $vrPath
-            LogPath = Join-Path $vrPath "SKSE\CommunityShaders.log"
-            ConfigName = "shader-validation-vr.yaml"
-            Type = "VR"
-        }
-    }
-
     # Check CommunityShadersOutputDir environment variable
     $outputDir = $env:CommunityShadersOutputDir
     if ($outputDir -and (Test-Path $outputDir)) {
         Write-Host "Found CommunityShadersOutputDir: $outputDir" -ForegroundColor Yellow
 
-        # Try to detect if this is a Skyrim installation by looking for common files
         $skyrimExe = Get-ChildItem -Path $outputDir -Recurse -Name "SkyrimSE.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-        $skyrimVRExe = Get-ChildItem -Path $outputDir -Recurse -Name "SkyrimVR.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-
         if ($skyrimExe) {
             Write-Host "Detected Skyrim SE installation in CommunityShadersOutputDir" -ForegroundColor Green
-        }
-        if ($skyrimVRExe) {
-            Write-Host "Detected Skyrim VR installation in CommunityShadersOutputDir" -ForegroundColor Green
         }
     }
 
@@ -207,7 +189,7 @@ if ($LogFile) {
 $skyrimPaths = Find-SkyrimPaths
 
 if ($skyrimPaths.Count -eq 0) {
-    Write-Error "No Skyrim installations found. Please ensure Skyrim SE or VR is installed."
+    Write-Error "No Skyrim installations found. Please ensure Skyrim Special Edition is installed."
     exit 1
 }
 

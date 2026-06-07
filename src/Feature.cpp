@@ -33,7 +33,6 @@
 #include "Features/TerrainVariation.h"
 #include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
-#include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
@@ -251,34 +250,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::skin
 	};
 
-	if (REL::Module::IsVR()) {
-		// Helper function to build VR feature list
-		static auto BuildVRList = []() -> std::vector<Feature*> {
-			auto v = features;
-			v.push_back(&globals::features::vr);
-
-			// In developer mode, keep all features for testing
-			// In production mode, filter to VR-compatible only
-			if (!globals::state->IsDeveloperMode()) {
-				std::erase_if(v, [](Feature* a) { return !a->SupportsVR(); });
-			}
-			return v;
-		};
-
-		// Cache the VR feature list but invalidate when developer mode changes
-		static std::vector<Feature*> featuresVR;
-		static bool cachedDevMode = false;
-
-		bool currentDevMode = globals::state->IsDeveloperMode();
-		if (featuresVR.empty() || currentDevMode != cachedDevMode) {
-			featuresVR = BuildVRList();
-			cachedDevMode = currentDevMode;
-		}
-
-		return featuresVR;
-	} else {
-		return features;
-	}
+	return features;
 }
 
 Feature* Feature::FindFeatureByShortName(const std::string& shortName)
