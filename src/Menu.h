@@ -166,6 +166,7 @@ public:
 	// Deferred reload systems (public for SettingsTabRenderer access)
 	bool pendingFontReload = false;
 	bool pendingIconReload = false;
+	bool pendingCursorReload = false;
 
 	// Display size tracking for cross-session resolution change detection
 	float2 lastDisplaySize{};
@@ -265,6 +266,21 @@ public:
 		bool CenterHeader = false;          // whether to center the header title and logo
 		float TooltipHoverDelay = 0.5f;     // tooltip hover delay in seconds
 		bool BackgroundBlurEnabled = true;  // enable background blur effect
+		bool UseCustomCursor = false;     // use theme cursor images instead of default ImGui cursors
+		struct CursorImageSettings
+		{
+			std::string File;
+			float HotspotX = 0.0f;
+			float HotspotY = 0.0f;
+		};
+		struct CursorSettings
+		{
+			float Scale = 1.0f;
+			std::string File;  // legacy arrow file (migrated into Types[Arrow] on load)
+			float HotspotX = 0.0f;
+			float HotspotY = 0.0f;
+			std::array<CursorImageSettings, ImGuiMouseCursor_COUNT> Types = {};
+		} Cursor;
 		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
 		{
@@ -396,6 +412,9 @@ public:
 	// Named-map palette serialization (resilient to ImGui enum changes)
 	static void PaletteToJson(json& themeJson, const std::array<ImVec4, ImGuiCol_COUNT>& palette);
 	static void PaletteFromJson(const json& themeJson, std::array<ImVec4, ImGuiCol_COUNT>& palette);
+
+	static void CursorToJson(json& cursorJson, const ThemeSettings::CursorSettings& cursorSettings);
+	static void CursorFromJson(const json& cursorJson, ThemeSettings::CursorSettings& cursor);
 
 	struct Settings
 	{

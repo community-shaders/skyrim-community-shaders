@@ -18,6 +18,18 @@ namespace
 		       height != FLT_MAX &&
 		       std::fabs(height) < kMaxValidCellHeight;
 	}
+
+	RE::TESWaterForm* LookupWaterForm(const RE::FormID formID)
+	{
+		if (!formID)
+			return nullptr;
+
+		auto* form = RE::TESWaterForm::LookupByID<RE::TESWaterForm>(formID);
+		if (!form || form->formType != RE::FormType::Water)
+			return nullptr;
+
+		return form;
+	}
 }
 
 bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
@@ -168,6 +180,7 @@ bool WaterCache::LoadCaches()
 	auto worldSpaces = GetValidWorldSpaces();
 
 	auto newCacheMap = std::make_shared<CacheMap>();
+	uint32_t unavailableCount = 0;
 
 	for (auto& worldSpace : worldSpaces) {
 		const auto editorID = worldSpace ? worldSpace->GetFormEditorID() : nullptr;
@@ -185,7 +198,8 @@ bool WaterCache::LoadCaches()
 		const auto fileName = std::format("{}_cache.wc", key);
 		if (!TryReadCacheFromFile(fileName, diskCache.header, diskCache.instructions)) {
 			logger::info("[Unified Water] [Cache] Could not locate disk cache for {}", key);
-			return false;
+			unavailableCount++;
+			continue;
 		}
 
 		logger::debug("[Unified Water] [Cache] Loaded cache for {} - Bounds {},{}  {},{} - Instructions {}", editorID, diskCache.header.bounds.minX, diskCache.header.bounds.minY, diskCache.header.bounds.maxX, diskCache.header.bounds.maxY, diskCache.header.dataCount);
@@ -193,10 +207,19 @@ bool WaterCache::LoadCaches()
 		auto newCache = std::make_unique<RuntimeCache>();
 		if (!TryBuildRuntimeCache(diskCache, *newCache)) {
 			logger::warn("[Unified Water] [Cache] Failed to build runtime cache for {}", key);
-			return false;
+			unavailableCount++;
+			continue;
 		}
 
 		newCacheMap->emplace(std::move(key), std::move(newCache));
+	}
+
+	if (unavailableCount) {
+		logger::info("[Unified Water] [Cache] Loaded {} / {} worldspace caches ({} unavailable)", newCacheMap->size(), worldSpaces.size(), unavailableCount);
+	}
+
+	if (newCacheMap->empty()) {
+		return false;
 	}
 
 	std::atomic_store_explicit(&cacheMap, std::const_pointer_cast<const CacheMap>(newCacheMap), std::memory_order_release);
@@ -371,6 +394,10 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 	int32_t precacheFallbackCount = 0;
 	int32_t skippedMissingCellDataCount = 0;
 	int32_t skippedInvalidHeightCount = 0;
+	int32_t skippedUnresolvedFormCount = 0;
+	int32_t firstUnresolvedFormX = 0;
+	int32_t firstUnresolvedFormY = 0;
+	RE::FormID firstUnresolvedFormID = 0;
 
 	for (auto y = minY; y <= maxY; ++y) {
 		for (auto x = minX; x <= maxX; ++x) {
@@ -413,10 +440,23 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 				formID = 0;
 			}
 
-			RE::TESWaterForm* form = formID ? RE::TESWaterForm::LookupByID<RE::TESWaterForm>(formID) : nullptr;
-			if ((formID && !form) || (form && form->formType != RE::FormType::Water)) {
-				logger::warn("[Unified Water] [Cache] {}: Failed to load WaterForm {:08X}", editorID.c_str(), formID);
-				return false;
+			const RE::FormID requestedFormID = formID;
+			RE::TESWaterForm* form = LookupWaterForm(formID);
+
+			if (!form && requestedFormID && worldSpace->worldWater && requestedFormID != worldSpace->worldWater->formID) {
+				formID = worldSpace->worldWater->formID;
+				form = LookupWaterForm(formID);
+			}
+
+			if (requestedFormID && !form) {
+				if (!skippedUnresolvedFormCount) {
+					firstUnresolvedFormX = x;
+					firstUnresolvedFormY = y;
+					firstUnresolvedFormID = requestedFormID;
+				}
+				skippedUnresolvedFormCount++;
+				cellData[idx] = {};
+				continue;
 			}
 
 			if (form)
@@ -424,6 +464,11 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 
 			cellData[idx] = { landHeight, waterHeight, formID, form };
 		}
+	}
+
+	if (skippedUnresolvedFormCount) {
+		logger::warn("[Unified Water] [Cache] {}: Skipped {} cells due to unresolvable water forms (first at {},{} form {:08X})",
+			editorID.c_str(), skippedUnresolvedFormCount, firstUnresolvedFormX, firstUnresolvedFormY, firstUnresolvedFormID);
 	}
 
 	if (precacheFallbackCount || skippedMissingCellDataCount || skippedInvalidHeightCount) {
@@ -607,6 +652,7 @@ bool WaterCache::TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& 
 
 	int32_t diskReadIndex = 0;
 	int32_t skippedInvalidInstructionCount = 0;
+	int32_t skippedUnresolvedFormCount = 0;
 
 	for (int32_t lodLevelIdx = 0; lodLevelIdx < 4; ++lodLevelIdx) {
 		auto& lodInstructions = cache.instructions[lodLevelIdx];
@@ -643,10 +689,15 @@ bool WaterCache::TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& 
 				continue;
 			}
 
-			instruction.form.ptr = RE::TESForm::LookupByID<RE::TESWaterForm>(instruction.form.id);
-			if (!instruction.form.ptr || instruction.form.ptr->formType != RE::FormType::Water) {
-				logger::warn("[Unified Water] [Cache] Failed to load WaterForm {:08X}", instruction.form.id);
-				return false;
+			instruction.form.ptr = LookupWaterForm(instruction.form.id);
+			if (!instruction.form.ptr) {
+				if (!skippedUnresolvedFormCount) {
+					logger::warn("[Unified Water] [Cache] Failed to load WaterForm {:08X} at LOD{} cell {},{} - skipping instruction",
+						instruction.form.id, lodLevel, instruction.x, instruction.y);
+				}
+				skippedUnresolvedFormCount++;
+				diskReadIndex++;
+				continue;
 			}
 
 			if (!instruction.form.ptr->IsInitialized()) {
@@ -662,6 +713,10 @@ bool WaterCache::TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& 
 
 	if (skippedInvalidInstructionCount) {
 		logger::debug("[Unified Water] [Cache] Skipped {} cached instructions with invalid water heights", skippedInvalidInstructionCount);
+	}
+
+	if (skippedUnresolvedFormCount > 1) {
+		logger::warn("[Unified Water] [Cache] Skipped {} cached instructions with unresolvable water forms", skippedUnresolvedFormCount);
 	}
 
 	return true;

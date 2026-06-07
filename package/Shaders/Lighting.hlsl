@@ -344,9 +344,7 @@ struct PS_OUTPUT
 	float4 Specular: SV_Target4;
 	float4 Reflectance: SV_Target5;
 	float4 Masks: SV_Target6;
-#	if defined(SNOW)
-	float4 Parameters: SV_Target7;
-#	endif
+	float4 Masks2: SV_Target7;
 };
 #else
 struct PS_OUTPUT
@@ -2184,9 +2182,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	rawBaseColor = Triplanar::SampleStochasticBias(TexColorSampler, SampColorSampler, projWorldPos, triWeights, ProjectedUVParams2.y, SharedData::MipBias, screenNoise);
 	baseColor = float4(Color::Diffuse(rawBaseColor.rgb), rawBaseColor.a);
 	worldNormal.xyz = projectedNormal;
-#			if defined(SNOW)
-	psout.Parameters.y = 1;
-#			endif  // SNOW
 #		elif !defined(FACEGEN) && !defined(MULTI_LAYER_PARALLAX) && !defined(PARALLAX) && !defined(SPARKLE)
 	if (ProjectedUVParams3.w > 0.5) {
 		float diffuseNormalScale = ProjectedUVParams3.x * ProjectedUVParams.z;
@@ -2215,18 +2210,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #			if defined(SNOW)
 		useSnowDecalSpecular = true;
-		psout.Parameters.y = GetSnowParameterY(projectedMaterialWeight, baseColor.w);
 #			endif  // SNOW
 	} else {
 		if (projWeight > 0) {
 			baseColor.xyz = Color::Diffuse(ProjectedUVParams2.xyz);
 #			if defined(SNOW)
 			useSnowDecalSpecular = true;
-			psout.Parameters.y = GetSnowParameterY(projWeight, baseColor.w);
-#			endif  // SNOW
-		} else {
-#			if defined(SNOW)
-			psout.Parameters.y = 0;
 #			endif  // SNOW
 		}
 	}
@@ -2236,12 +2225,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif  // SPECULAR
 #		endif      // SPARKLE
 
-#	elif defined(SNOW)
-#		if defined(LANDSCAPE)
-	psout.Parameters.y = landSnowMask;
-#		else
-	psout.Parameters.y = baseColor.w;
-#		endif  // LANDSCAPE
 #	endif      // SNOW
 
 #	if defined(WORLD_MAP)
@@ -3077,13 +3060,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(HAIR)
 	float3 vertexColor = lerp(1, Color::ColorToLinear(TintColor.xyz), Color::ColorToLinear(input.Color.y));
+	float vertexAO = 1;
 #		if defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled)
 		vertexColor = 1;
 #		endif
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
-	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
+	float vertexAO = Color::ColorToLinear(max(max(vertexColor.r, vertexColor.g), vertexColor.b).xxx).x;
 #		if defined(TRUE_PBR)
 	vertexAO = lerp(1, vertexAO, SharedData::truePBRSettings.VertexAOStrength);
 	vertexColor = 1;
@@ -3096,6 +3080,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 	float3 vertexColor = input.Color.xyz;
 #		endif
+	float vertexAO = Color::ColorToLinear(max(max(vertexColor.r, vertexColor.g), vertexColor.b).xxx).x;
 #	endif  // defined (HAIR)
 
 #	if defined(IBL)
@@ -3493,16 +3478,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	PomOffsetTex[uint2(input.Position.xy)] = hasPOM ? pixelOffset : Stereo::POM_NO_DATA;
 #		endif
 
-#		if defined(SNOW)
-#			if defined(TRUE_PBR)
-	psout.Parameters.x = Color::RGBToLuminanceAlternative(specularColor);
-	psout.Parameters.y = 0;
-#			else
-	psout.Parameters.x = Color::RGBToLuminanceAlternative(lightsSpecularColor);
-#			endif
-	psout.Parameters.w = psout.Diffuse.w;
-#		endif
-
 	float masksZ = Color::RGBToYCoCg(directionalAmbientColor).x;
 
 #		if defined(SSS) && defined(SKIN)
@@ -3510,6 +3485,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 	psout.Masks = float4(0, 0, masksZ, psout.Diffuse.w);
 #		endif
+
+	// Stored as 1 - vertexAO so the cleared default (0) means no occlusion
+	// for pixels that do not write to this RT (sky, water, grass, effects).
+	psout.Masks2 = float4(1.0 - vertexAO, 0, 0, 0);
 
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;

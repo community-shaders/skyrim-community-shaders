@@ -210,7 +210,6 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	styleCopy.SeparatorTextBorderSize = scaleSize(themeSettings.Style.SeparatorTextBorderSize);
 	styleCopy.DockingSeparatorSize = scaleSize(themeSettings.Style.DockingSeparatorSize);
 
-	styleCopy.MouseCursorScale = 1.f;
 	style = styleCopy;
 	style.HoverDelayNormal = themeSettings.TooltipHoverDelay;
 	style.FontScaleMain = exp2(globalScale);

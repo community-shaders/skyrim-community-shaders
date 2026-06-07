@@ -90,26 +90,27 @@
 //-----------------------------------------------------------------------------
 
 #include "Common/Math.hlsli"
+#include "Common/Random.hlsli"
 
 float4 SSSSBlurCS(
-	uint2 DTid,
 	float2 texcoord,
 	float2 dir,
 	float sssAmount,
 	bool humanProfile)
 {
-	// Fetch color of current pixel:
-	float4 colorM = ColorTexture[DTid.xy];
+	// texcoord is in DR-space UVs (coming from DTid / full buffer dim), so it already
+	// addresses the rendered sub-rectangle of the texture. Non-DR UVs are derived for
+	// eye-half detection during clamping.
+	float2 texcoordNonDR = texcoord * FrameBuffer::DynamicResolutionParams2.xy;
 
-#if defined(HORIZONTAL)
-	colorM.rgb = Color::IrradianceToLinear(colorM.rgb);
-#endif
+	// Input is already linear and albedo-free from the pre-pass
+	float4 colorM = ColorTexture.SampleLevel(PointSampler, texcoord, 0);
 
 	if (sssAmount == 0)
 		return colorM;
 
 	// Fetch linear depth of current pixel:
-	float depthM = DepthTexture[DTid.xy].r;
+	float depthM = DepthTexture.SampleLevel(PointSampler, texcoord, 0).r;
 	depthM = SharedData::GetScreenDepth(depthM);
 
 	float2 profile = humanProfile ? HumanProfile.xy : BaseProfile.xy;
@@ -124,38 +125,31 @@ float4 SSSSBlurCS(
 	float scale = distanceToProjectionWindow / depthM;
 
 	// Calculate the final step to fetch the surrounding pixels:
-	float2 finalStep = scale * SharedData::BufferDim.xy * dir;
+	float2 finalStep = scale * dir;
 	finalStep *= sssAmount;
 	finalStep *= profile.x;  // Modulate it using the profile
-	finalStep *= 1.0 / 3.0;  // Divide by 3 as the kernels range from -3 to 3.
+	// Scale the step into DR-UV space so blur width in rendered pixels stays consistent.
+	finalStep *= FrameBuffer::DynamicResolutionParams1.xy;
 
-#if defined(VR)
-	finalStep.x *= 0.5;                 // Halve horizontal screen resolution
-	uint eyeIndex = texcoord.x >= 0.5;  // 0 = left 1 = right
-	uint bufferDimHalfX = uint(SharedData::BufferDim.x * 0.5);
-	uint2 minCoord = uint2(eyeIndex ? bufferDimHalfX : 0, 0);
-	uint2 maxCoord = uint2(eyeIndex ? SharedData::BufferDim.x : bufferDimHalfX, SharedData::BufferDim.y);
-#else
-	uint2 minCoord = uint2(0, 0);
-	uint2 maxCoord = uint2(SharedData::BufferDim.x, SharedData::BufferDim.y);
-#endif
+	// Per-pixel rotation to break separable axis-aligned banding
+	float jitter = Random::InterleavedGradientNoise(texcoord * SharedData::BufferDim.xy, SharedData::FrameCount) * Math::TAU;
+	float2x2 rotationMatrix = float2x2(cos(jitter), sin(jitter), -sin(jitter), cos(jitter));
 
 	// Accumulate the other samples:
 	for (uint i = kernelOffset + 1; i < kernelOffset + SSSS_N_SAMPLES; i++) {
 		float2 offset = Kernels[i].a * finalStep;
 
-		uint2 coords = DTid.xy + int2(offset + 0.5);
+		// Apply randomized rotation
+		offset = mul(offset, rotationMatrix);
 
-		// Clamp for dynamic resolution
-		coords = clamp(coords, minCoord, maxCoord);
+		float2 sampleCoord = texcoord + offset;
 
-		float3 color = ColorTexture[coords].rgb;
+		// Clamp to the DR-rendered region (per-eye in VR) to avoid sampling outside it.
+		sampleCoord = FrameBuffer::ClampDynamicResolutionAdjustedScreenPosition(sampleCoord, texcoordNonDR);
 
-#if defined(HORIZONTAL)
-		color.rgb = Color::IrradianceToLinear(color.rgb);
-#endif
+		float3 color = ColorTexture.SampleLevel(PointSampler, sampleCoord, 0).rgb;
 
-		float depth = DepthTexture[coords].r;
+		float depth = DepthTexture.SampleLevel(PointSampler, sampleCoord, 0).r;
 		depth = SharedData::GetScreenDepth(depth);
 
 		// If the difference in depth is huge, we lerp color back to "colorM":

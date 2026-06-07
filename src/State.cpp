@@ -13,6 +13,7 @@
 #include "Features/InteriorSun.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/Skin.h"
+#include "Features/SkySync.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
@@ -218,6 +219,11 @@ void State::Reset()
 
 void State::Setup()
 {
+	// Detect Moon and Stars mod for compatibility adjustments
+	moonAndStarsLoaded = GetModuleHandle(L"po3_MoonMod.dll") != nullptr;
+	if (moonAndStarsLoaded)
+		logger::info("Moon and Stars detected, compatibility enabled");
+
 	SetupResources();
 
 	// Probe typed UAV load support before features set up their resources, so any
@@ -1030,6 +1036,34 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			}
 		} else {
 			data.MipBias = 0;
+		}
+
+		if (auto sky = globals::game::sky) {
+			// Process sun
+			if (auto sun = sky->sun; sun && sun->root && sky->root) {
+				const auto& sunPos = sun->root->world.translate;
+				const auto& skyPos = sky->root->world.translate;
+				float3 sunDirection = { sunPos.x - skyPos.x, sunPos.y - skyPos.y, sunPos.z - skyPos.z };
+				sunDirection.Normalize();
+				data.SunDirection = { sunDirection.x, sunDirection.y, sunDirection.z, 0.0f };
+
+				if (sun->sunBase) {
+					if (const auto prop = skyrim_cast<RE::BSSkyShaderProperty*>(sun->sunBase->GetGeometryRuntimeData().shaderProperty.get()))
+						data.SunColor = { prop->kBlendColor.red * prop->kBlendColor.alpha, prop->kBlendColor.green * prop->kBlendColor.alpha, prop->kBlendColor.blue * prop->kBlendColor.alpha, prop->kBlendColor.alpha };
+				}
+			}
+
+			if (auto masser = sky->masser) {
+				auto dir = Util::Moon::GetDirection(masser, moonAndStarsLoaded);
+				data.MasserDirection = { dir.x, dir.y, dir.z, 0.0f };
+				data.MasserColor = Util::Moon::GetBlendColor(masser, Util::Moon::MasserBaseColor, globals::features::skySync.settings.NewMoonIntensity, globals::features::skySync.settings.CrescentMoonIntensity, globals::features::skySync.settings.FullMoonIntensity);
+			}
+
+			if (auto secunda = sky->secunda) {
+				auto dir = Util::Moon::GetDirection(secunda, moonAndStarsLoaded);
+				data.SecundaDirection = { dir.x, dir.y, dir.z, 0.0f };
+				data.SecundaColor = Util::Moon::GetBlendColor(secunda, Util::Moon::SecundaBaseColor, globals::features::skySync.settings.NewMoonIntensity, globals::features::skySync.settings.CrescentMoonIntensity, globals::features::skySync.settings.FullMoonIntensity);
+			}
 		}
 
 		// DALC to SH
