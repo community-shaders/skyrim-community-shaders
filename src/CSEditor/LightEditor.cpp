@@ -657,15 +657,11 @@ void LightEditor::DrawSettings()
 			if (ImGui::Button(T(TKEY("save_to_light_placer"), "Save to Light Placer"))) {
 				const bool ok = SaveToLightPlacer(saveColorToLP);
 				if (ok) {
-					QueueReselectCurrentLP();
-					ScheduleConsoleCommand("reloadlp");
-					previous = {};
-					waitFrames = 3;
+					ReloadLPAndReselect();
 					lpMatchFound = true;
 				}
-				EditorWindow::GetSingleton()->ShowNotification(
-					ok ? I18n::GetSingleton()->Format(TKEY("saved_to_config"), { { "path", lpInfo.configPath } }, "Saved to {path}").c_str() : T(TKEY("save_failed"), "Save failed \xe2\x80\x94 see log"),
-					ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
+				const std::string okMsg = I18n::GetSingleton()->Format(TKEY("saved_to_config"), { { "path", lpInfo.configPath } }, "Saved to {path}");
+				NotifyResult(ok, okMsg.c_str(), T(TKEY("save_failed"), "Save failed \xe2\x80\x94 see log"));
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -718,15 +714,12 @@ void LightEditor::DrawSettings()
 		if (ImGui::Button(T(TKEY("save_as_separate_entry"), "Save as Separate Entry"))) {
 			const bool ok = SaveAsSeparateEntry(saveColorToLP);
 			if (ok) {
-				QueueReselectCurrentLP();
-				ScheduleConsoleCommand("reloadlp");
-				previous = {};
-				waitFrames = 3;
+				ReloadLPAndReselect();
 				lpInBlacklist = true;
 			}
-			EditorWindow::GetSingleton()->ShowNotification(
-				ok ? T(TKEY("saved_as_separate_entry"), "Saved as separate entry") : T(TKEY("save_failed"), "Save failed \xe2\x80\x94 see log"),
-				ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
+			NotifyResult(ok,
+				T(TKEY("saved_as_separate_entry"), "Saved as separate entry"),
+				T(TKEY("save_failed"), "Save failed \xe2\x80\x94 see log"));
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(T(TKEY("save_as_separate_entry_tooltip"), "Fork this bulb into a new whitelist entry for %s with the current edits, and blacklist it from the shared entry so the edits apply only to this reference.\nReload LP to apply."),
@@ -1004,27 +997,55 @@ std::vector<std::string> LightEditor::ScanLPConfigPaths() const
 	return paths;
 }
 
-int LightEditor::DrawAttachedBulbCombo(const char* searchId, bool openNow)
+bool LightEditor::MatchesComboFilter(std::string_view filter, const std::string& text)
 {
-	int clicked = -1;
-	const char* preview = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size()) ? attachedBulbs[addSelectedBulb].lightEDID.c_str() : T(TKEY("select_a_bulb"), "Select a bulb");
-	const char* comboLabel = T(TKEY("attached_bulb"), "Attached bulb");
+	return filter.empty() || Util::StringMatchesSearch(text, std::string(filter));
+}
+
+bool LightEditor::BeginSearchableCombo(const char* label, const char* preview, const char* searchId,
+	char* searchBuf, size_t searchBufSize, std::string_view& filterOut, bool openNow)
+{
+	filterOut = {};
 	// SetNextItemOpen is ignored for combos; a combo opens only via its derived popup id. Open it
 	// directly so the list is visible without an extra click (one-shot: openNow is true only the
 	// frame the mode is entered, so the user can still close it).
 	if (openNow)
-		ImGui::OpenPopup(ImHashStr("##ComboPopup", 0, ImGui::GetID(comboLabel)));
-	if (ImGui::BeginCombo(comboLabel, preview, ImGuiComboFlags_HeightLarge)) {
-		if (ImGui::IsWindowAppearing())
-			ImGui::SetKeyboardFocusHere();
-		ImGui::SetNextItemWidth(-1.0f);
-		ImGui::InputText(searchId, addBulbSearch, sizeof(addBulbSearch));
-		ImGui::Separator();
-		const std::string_view filter = addBulbSearch;
+		ImGui::OpenPopup(ImHashStr("##ComboPopup", 0, ImGui::GetID(label)));
+	if (!ImGui::BeginCombo(label, preview, ImGuiComboFlags_HeightLarge))
+		return false;
+	if (ImGui::IsWindowAppearing())
+		ImGui::SetKeyboardFocusHere();
+	ImGui::SetNextItemWidth(-1.0f);
+	ImGui::InputText(searchId, searchBuf, searchBufSize);
+	ImGui::Separator();
+	filterOut = searchBuf;
+	return true;
+}
+
+void LightEditor::NotifyResult(bool ok, const char* okMsg, const char* failMsg)
+{
+	EditorWindow::GetSingleton()->ShowNotification(ok ? okMsg : failMsg,
+		ok ? Util::Colors::GetSuccess() : Util::Colors::GetError());
+}
+
+void LightEditor::ReloadLPAndReselect()
+{
+	QueueReselectCurrentLP();
+	ScheduleConsoleCommand("reloadlp");
+	previous = {};
+	waitFrames = 3;
+}
+
+int LightEditor::DrawAttachedBulbCombo(const char* searchId, bool openNow)
+{
+	int clicked = -1;
+	const char* preview = (addSelectedBulb >= 0 && addSelectedBulb < (int)attachedBulbs.size()) ? attachedBulbs[addSelectedBulb].lightEDID.c_str() : T(TKEY("select_a_bulb"), "Select a bulb");
+	std::string_view filter;
+	if (BeginSearchableCombo(T(TKEY("attached_bulb"), "Attached bulb"), preview, searchId, addBulbSearch, sizeof(addBulbSearch), filter, openNow)) {
 		for (int i = 0; i < (int)attachedBulbs.size(); ++i) {
 			const auto& bulb = attachedBulbs[i];
 			const std::string label = fmt::format("{}[{}]  ({})", bulb.lightEDID, bulb.index, bulb.configPath);
-			if (!filter.empty() && !Util::StringMatchesSearch(label, std::string(filter)))
+			if (!MatchesComboFilter(filter, label))
 				continue;
 			const bool isSel = (i == addSelectedBulb);
 			if (ImGui::Selectable(label.c_str(), isSel)) {
@@ -1048,15 +1069,10 @@ void LightEditor::DrawLightRecordCombo(const char* searchId)
 			preview = edid.c_str();
 			break;
 		}
-	if (ImGui::BeginCombo(T(TKEY("light_record"), "Light record"), preview, ImGuiComboFlags_HeightLarge)) {
-		if (ImGui::IsWindowAppearing())
-			ImGui::SetKeyboardFocusHere();
-		ImGui::SetNextItemWidth(-1.0f);
-		ImGui::InputText(searchId, addLighSearch, sizeof(addLighSearch));
-		ImGui::Separator();
-		const std::string_view filter = addLighSearch;
+	std::string_view filter;
+	if (BeginSearchableCombo(T(TKEY("light_record"), "Light record"), preview, searchId, addLighSearch, sizeof(addLighSearch), filter, false)) {
 		for (auto& [edid, ligh] : s_lighFormList) {
-			if (!filter.empty() && !Util::StringMatchesSearch(edid, std::string(filter)))
+			if (!MatchesComboFilter(filter, edid))
 				continue;
 			const bool isSel = ligh->GetFormID() == addSelectedLighFormId;
 			if (ImGui::Selectable(edid.c_str(), isSel))
@@ -1191,17 +1207,12 @@ void LightEditor::DrawAddLightPopup()
 			if (!hasBulbs || addLightSubMode == SubModeNewEntry) {
 				// --- Target JSON ---
 				const char* configPreview = (addSelectedConfig >= 0 && addSelectedConfig < (int)lpConfigPaths.size()) ? lpConfigPaths[addSelectedConfig].c_str() : T(TKEY("select_a_config"), "Select a config");
-				if (ImGui::BeginCombo(T(TKEY("target_json"), "Target JSON"), configPreview, ImGuiComboFlags_HeightLarge)) {
-					if (ImGui::IsWindowAppearing())
-						ImGui::SetKeyboardFocusHere();
-					ImGui::SetNextItemWidth(-1.0f);
-					ImGui::InputText("##cfg_search", addConfigSearch, sizeof(addConfigSearch));
-					ImGui::Separator();
+				std::string_view cfgFilter;
+				if (BeginSearchableCombo(T(TKEY("target_json"), "Target JSON"), configPreview, "##cfg_search", addConfigSearch, sizeof(addConfigSearch), cfgFilter, false)) {
 					if (lpConfigPaths.empty())
 						ImGui::TextDisabled("%s", T(TKEY("no_configs_found"), "No configs found in Data\\LightPlacer\\"));
-					const std::string_view cfgFilter = addConfigSearch;
 					for (int i = 0; i < (int)lpConfigPaths.size(); ++i) {
-						if (!cfgFilter.empty() && !Util::StringMatchesSearch(lpConfigPaths[i], std::string(cfgFilter)))
+						if (!MatchesComboFilter(cfgFilter, lpConfigPaths[i]))
 							continue;
 						const bool isSel = (i == addSelectedConfig);
 						if (ImGui::Selectable(lpConfigPaths[i].c_str(), isSel))
@@ -1340,7 +1351,7 @@ void LightEditor::DrawAddLightPopup()
 
 			// Entry type: what string to write into the filter list.
 			{
-				auto* refr = pickedMesh.refrHandle.get().get();
+				auto* refr = PickedRefr();
 				std::string cellEdid;
 				if (refr)
 					if (auto* cell = refr->GetParentCell())
@@ -1370,7 +1381,7 @@ void LightEditor::DrawAddLightPopup()
 
 			if (confirm && bulbChosen) {
 				const auto& bulb = attachedBulbs[addSelectedBulb];
-				auto* refr = pickedMesh.refrHandle.get().get();
+				auto* refr = PickedRefr();
 
 				// Build the entry string from the chosen type.
 				std::string entryStr;
@@ -1385,16 +1396,11 @@ void LightEditor::DrawAddLightPopup()
 				const MatchContext ctx = MakePickedContext(bulb.lightEDID);
 				const bool isWhite = (addPopupMode == ModeWhitelist);
 				const bool ok = ModifyLPFilterListFor(bulb.configPath, ctx, entryStr, isWhite, true);
-				if (ok) {
+				if (ok)
 					ScheduleConsoleCommand("reloadlp");
-					EditorWindow::GetSingleton()->ShowNotification(
-						isWhite ? T(TKEY("added_to_whitelist"), "Added to whitelist") : T(TKEY("added_to_blacklist"), "Added to blacklist"),
-						Util::Colors::GetSuccess());
-				} else {
-					EditorWindow::GetSingleton()->ShowNotification(
-						T(TKEY("filter_update_failed"), "Filter update failed \xe2\x80\x94 see log"),
-						Util::Colors::GetError());
-				}
+				NotifyResult(ok,
+					isWhite ? T(TKEY("added_to_whitelist"), "Added to whitelist") : T(TKEY("added_to_blacklist"), "Added to blacklist"),
+					T(TKEY("filter_update_failed"), "Filter update failed \xe2\x80\x94 see log"));
 				SavePopupPrefs();
 				ImGui::CloseCurrentPopup();
 			}
@@ -1402,20 +1408,15 @@ void LightEditor::DrawAddLightPopup()
 
 		if (addPopupMode == ModeRemoveFromList) {
 			const char* filterPreview = (addSelectedFilterEntry >= 0 && addSelectedFilterEntry < (int)filterListEntries.size()) ? filterListEntries[addSelectedFilterEntry].lightEDID.c_str() : T(TKEY("select_a_bulb"), "Select a bulb");
-			if (ImGui::BeginCombo(T(TKEY("attached_bulb"), "Attached bulb"), filterPreview, ImGuiComboFlags_HeightLarge)) {
-				if (ImGui::IsWindowAppearing())
-					ImGui::SetKeyboardFocusHere();
-				ImGui::SetNextItemWidth(-1.0f);
-				ImGui::InputText("##filter_search", addFilterSearch, sizeof(addFilterSearch));
-				ImGui::Separator();
-				const std::string_view filterSv = addFilterSearch;
+			std::string_view filterSv;
+			if (BeginSearchableCombo(T(TKEY("attached_bulb"), "Attached bulb"), filterPreview, "##filter_search", addFilterSearch, sizeof(addFilterSearch), filterSv, false)) {
 				for (int i = 0; i < (int)filterListEntries.size(); ++i) {
 					const auto& fe = filterListEntries[i];
 					const std::string lbl = fmt::format("[{}]  {}  ({})  \"{}\"",
 						fe.isWhiteList ? "whitelist" : "blacklist",
 						fe.lightEDID, fe.configPath,
 						fe.matchedEntry);
-					if (!filterSv.empty() && !Util::StringMatchesSearch(lbl, std::string(filterSv)))
+					if (!MatchesComboFilter(filterSv, lbl))
 						continue;
 					const bool isSel = (i == addSelectedFilterEntry);
 					if (ImGui::Selectable(lbl.c_str(), isSel))
@@ -1436,16 +1437,11 @@ void LightEditor::DrawAddLightPopup()
 				const auto& fe = filterListEntries[addSelectedFilterEntry];
 				const MatchContext ctx = MakePickedContext(fe.lightEDID);
 				const bool ok = ModifyLPFilterListFor(fe.configPath, ctx, fe.matchedEntry, fe.isWhiteList, false);
-				if (ok) {
+				if (ok)
 					ScheduleConsoleCommand("reloadlp");
-					EditorWindow::GetSingleton()->ShowNotification(
-						T(TKEY("removed_from_list"), "Removed from list"),
-						Util::Colors::GetSuccess());
-				} else {
-					EditorWindow::GetSingleton()->ShowNotification(
-						T(TKEY("filter_update_failed"), "Filter update failed \xe2\x80\x94 see log"),
-						Util::Colors::GetError());
-				}
+				NotifyResult(ok,
+					T(TKEY("removed_from_list"), "Removed from list"),
+					T(TKEY("filter_update_failed"), "Filter update failed \xe2\x80\x94 see log"));
 				SavePopupPrefs();
 				ImGui::CloseCurrentPopup();
 			}
@@ -1707,8 +1703,8 @@ void LightEditor::GatherLights()
 	picker.Update();
 	if (auto hit = picker.TakeResult(); hit.valid) {
 		pickedMesh = hit;
-		GatherAttachedBulbs(pickedMesh.refrHandle.get().get());
-		ScanFilterListEntries(pickedMesh.refrHandle.get().get());
+		GatherAttachedBulbs(PickedRefr());
+		ScanFilterListEntries(PickedRefr());
 		lpConfigPaths = ScanLPConfigPaths();
 		addSelectedConfig = -1;
 		addAttachMode = -1;
@@ -2257,7 +2253,7 @@ LightEditor::MatchContext LightEditor::MakePickedContext(const std::string& ligh
 	ctx.ownerEditorId = pickedMesh.editorId;
 	ctx.baseFormId = pickedMesh.baseFormId;
 	ctx.lightEDID = lightEDID;
-	ctx.refr = pickedMesh.refrHandle.get().get();
+	ctx.refr = PickedRefr();
 	return ctx;
 }
 
@@ -2682,8 +2678,8 @@ void LightEditor::RefreshLPJsonState()
 		// expose it as runtime extra data). Resolving it to a form lets the color tracking follow the
 		// source's live, time/weather-driven emittanceColor, and re-derives the EDID so the combo matches
 		// the list. NoExternalEmittance suppresses the source in LP, so honor that here (show None).
-		if (!lpFlagSet.contains("NoExternalEmittance"))
-			if (const auto emitIt = dataIt->find("externalEmittance"); emitIt != dataIt->end() && emitIt->is_string()) {
+		if (const auto emitIt = dataIt->find("externalEmittance");
+			!lpFlagSet.contains("NoExternalEmittance") && emitIt != dataIt->end() && emitIt->is_string()) {
 			if (const std::string entry = emitIt->get<std::string>(); !entry.empty()) {
 				EnsureEmittanceFormListBuilt();
 				RE::TESForm* form = nullptr;
@@ -2708,14 +2704,19 @@ void LightEditor::RefreshLPJsonState()
 	// state to `original` too, so RestoreOriginal (on deselect) can't re-assert a stale/spurious
 	// inverse-square bit that the snapshot picked up from the runtime overlay — which would make
 	// ProcessLight recompute and re-inflate the radius.
-	if (lpFlagSet.contains("InverseSquare"))
-		original.data.flags.set(LightLimitFix::LightFlags::InverseSquare);
-	else
-		original.data.flags.reset(LightLimitFix::LightFlags::InverseSquare);
-	if (lpFlagSet.contains("Linear"))
-		original.data.flags.set(LightLimitFix::LightFlags::Linear);
-	else
-		original.data.flags.reset(LightLimitFix::LightFlags::Linear);
+	ApplyLPFalloffFlags(original.data, lpFlagSet);
+}
+
+void LightEditor::ApplyLPFalloffFlags(ISLCommon::RuntimeLightDataExt& data, const std::set<std::string>& lpFlagSet)
+{
+	auto apply = [&](LightLimitFix::LightFlags bit, const char* name) {
+		if (lpFlagSet.contains(name))
+			data.flags.set(bit);
+		else
+			data.flags.reset(bit);
+	};
+	apply(LightLimitFix::LightFlags::InverseSquare, "InverseSquare");
+	apply(LightLimitFix::LightFlags::Linear, "Linear");
 }
 
 void LightEditor::SyncLPFlagsToRuntime()
@@ -2723,15 +2724,7 @@ void LightEditor::SyncLPFlagsToRuntime()
 	if (!lpInfo.isLPLight)
 		return;
 
-	if (lpFlagSet.contains("InverseSquare"))
-		current.data.flags.set(LightLimitFix::LightFlags::InverseSquare);
-	else
-		current.data.flags.reset(LightLimitFix::LightFlags::InverseSquare);
-
-	if (lpFlagSet.contains("Linear"))
-		current.data.flags.set(LightLimitFix::LightFlags::Linear);
-	else
-		current.data.flags.reset(LightLimitFix::LightFlags::Linear);
+	ApplyLPFalloffFlags(current.data, lpFlagSet);
 
 	auto& tesUnderlying = reinterpret_cast<uint32_t&>(current.tesFlags);
 	auto syncTesBit = [&](RE::TES_LIGHT_FLAGS bit, bool val) {

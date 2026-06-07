@@ -4,6 +4,7 @@
 #include <chrono>
 #include <nlohmann/json.hpp>
 #include <set>
+#include <string_view>
 
 namespace RE
 {
@@ -83,12 +84,6 @@ private:
 		Count
 	};
 
-	const char* FilterOptionLabels[3] = {
-		"Ref Lights",
-		"Attached Lights",
-		"Other Lights"
-	};
-
 	enum class SortOption
 	{
 		None,
@@ -96,13 +91,6 @@ private:
 		FormID,
 		EditorID,
 		Count
-	};
-
-	const char* SortOptionLabels[4] = {
-		"None",
-		"Distance",
-		"FormID",
-		"EditorID"
 	};
 
 	FilterOption filterOption = FilterOption::RefLights;
@@ -242,6 +230,8 @@ private:
 	bool ModifyLPFilterList(bool isWhiteList, bool add);
 	void RefreshLPJsonState();
 	void SyncLPFlagsToRuntime();
+	// Mirrors the InverseSquare/Linear falloff bits of an LP flag set onto a runtime light's flags.
+	static void ApplyLPFalloffFlags(ISLCommon::RuntimeLightDataExt& data, const std::set<std::string>& lpFlagSet);
 
 	void UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH* ligh, RE::NiLight* niLight, RE::BSLight* bsLight);
 
@@ -249,6 +239,8 @@ private:
 	LightPicker picker;
 	bool addLightPopupOpen = false;
 	LightPicker::PickedMesh pickedMesh;
+	// The picked mesh's live reference, or nullptr if the handle is stale.
+	RE::TESObjectREFR* PickedRefr() const { return pickedMesh.refrHandle.get().get(); }
 
 	struct AttachedBulb
 	{
@@ -323,6 +315,18 @@ private:
 
 	void DrawAddLightButton();
 	void DrawAddLightPopup();
+	// Opens a persistent-buffer searchable combo (the Add-Light popup style: HeightLarge, auto-focused
+	// search input, separator). Returns true while open, writing the current filter text to filterOut;
+	// the caller renders the items and calls ImGui::EndCombo(). openNow opens the dropdown one-shot.
+	static bool BeginSearchableCombo(const char* label, const char* preview, const char* searchId,
+		char* searchBuf, size_t searchBufSize, std::string_view& filterOut, bool openNow);
+	// True when text should be shown for the given combo filter (empty filter matches everything).
+	static bool MatchesComboFilter(std::string_view filter, const std::string& text);
+	// Shows a success- or error-styled notification for an operation result.
+	static void NotifyResult(bool ok, const char* okMsg, const char* failMsg);
+	// Re-selects the current LP bulb by identity and reloads the LP configs so the selection survives
+	// the despawn/respawn. Used by the in-place save buttons.
+	void ReloadLPAndReselect();
 	// Searchable "Attached bulb" combo over attachedBulbs. Returns the index clicked this
 	// frame (or -1); sets addSelectedBulb on click. openNow opens the dropdown this frame (one-shot).
 	int DrawAttachedBulbCombo(const char* searchId, bool openNow);
