@@ -45,6 +45,32 @@ void SetupRenderTarget(RE::RENDER_TARGET target, D3D11_TEXTURE2D_DESC texDesc, D
 	uavDesc.Format = format;
 
 	auto& data = renderer->GetRuntimeData().renderTargets[target];
+
+	if (data.UAV) {
+		data.UAV->Release();
+		data.UAV = nullptr;
+	}
+	if (data.RTV) {
+		data.RTV->Release();
+		data.RTV = nullptr;
+	}
+	if (data.SRVCopy) {
+		data.SRVCopy->Release();
+		data.SRVCopy = nullptr;
+	}
+	if (data.SRV) {
+		data.SRV->Release();
+		data.SRV = nullptr;
+	}
+	if (data.textureCopy) {
+		data.textureCopy->Release();
+		data.textureCopy = nullptr;
+	}
+	if (data.texture) {
+		data.texture->Release();
+		data.texture = nullptr;
+	}
+
 	DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, &data.texture));
 
 	if (texDesc.BindFlags & D3D11_BIND_SHADER_RESOURCE)
@@ -110,6 +136,10 @@ void Deferred::SetupResources()
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 		// Masks2 (vertexAO; fp16 to allow blending)
 		SetupRenderTarget(MASKS2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+
+		// TAA water history buffers need RGBA16: alpha stores premultiplied coverage for ISWaterBlend
+		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_1, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
+		SetupRenderTarget(RE::RENDER_TARGETS::kWATER_2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 	}
 
 	{
