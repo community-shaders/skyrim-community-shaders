@@ -119,6 +119,22 @@ namespace Util
 		return imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled;
 	}
 
+	void SetTemporal(bool enabled)
+	{
+		auto* imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+		if (!imageSpaceManager)
+			return;
+		auto& taaShader = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA;
+		if (taaShader)
+			taaShader->taaEnabled = enabled;
+	}
+
+	void DisableVanillaTAA()
+	{
+		if (auto* setting = RE::GetINISetting("bUseTAA:Display"))
+			setting->data.b = false;
+	}
+
 	float GetVerticalFOVRad()
 	{
 		static float& cameraFOVDeg = (*(float*)(REL::RelocationID(513786, 388785).address()));  // FOV degrees

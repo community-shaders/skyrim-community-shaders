@@ -9,6 +9,12 @@ namespace Util
 	float4 TryGetWaterData(float offsetX, float offsetY);
 	float4 GetCameraData();
 	bool GetTemporal();
+	// Toggle the ISTemporalAA scene-resolve flag (the runtime companion to GetTemporal).
+	void SetTemporal(bool enabled);
+	// Disable Skyrim's built-in TAA system (the bUseTAA:Display ini flag). Used when Community
+	// Shaders drives TAA directly (Upscaling, and HDR Display when Upscaling is not loaded), because
+	// vanilla bUseTAA also runs a paused-menu UI temporal-AA pass that breaks HDR compositing.
+	void DisableVanillaTAA();
 	float GetVerticalFOVRad();
 
 	RE::NiPoint3 GetEyePosition();

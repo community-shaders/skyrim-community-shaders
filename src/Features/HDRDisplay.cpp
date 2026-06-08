@@ -225,10 +225,18 @@ namespace
 		static void thunk(RE::ImageSpaceManager* a_this, uint32_t a3, RE::RENDER_TARGET a_target, void* a_4, bool a_5)
 		{
 			auto* hdr = &globals::features::hdrDisplay;
+
+			// Vanilla bUseTAA is force-disabled in DataLoaded (it drives the paused-menu UI temporal-AA
+			// pass that pollutes the HDR UI buffer with the opaque scene). Run the scene TAA resolve
+			// here instead, mirroring Upscaling: enable it only around the post-process call so it does
+			// not re-introduce the menu pollution. Jitter is applied by HDR_Main_UpdateJitter.
+			Util::SetTemporal(hdr->taaRequested);
+
 			hdr->RedirectFramebuffer();
 			func(a_this, a3, a_target, a_4, a_5);
 			hdr->RestoreFramebuffer();
 
+			Util::SetTemporal(false);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -239,6 +247,18 @@ namespace
 		{
 			globals::features::hdrDisplay.SetUIBuffer();
 			func(a1);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	// Force the scene TAA flag on before the game computes jitter so it still applies sub-pixel
+	// jitter even though vanilla bUseTAA is disabled. Mirrors Upscaling::Main_UpdateJitter.
+	struct HDR_Main_UpdateJitter
+	{
+		static void thunk(RE::BSGraphics::State* a_state)
+		{
+			Util::SetTemporal(globals::features::hdrDisplay.taaRequested);
+			func(a_state);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -597,6 +617,19 @@ void HDRDisplay::DataLoaded()
 	} else {
 		logger::warn("[HDR Display] bUse64bitsHDRRenderTarget ini setting not found");
 	}
+
+	// When Upscaling is not loaded, vanilla bUseTAA drives a UI temporal-AA pass that, in paused
+	// menus, re-renders the opaque scene into the redirected HDR UI buffer (alpha=1). HDROutputCS
+	// then discards the real HDR scene and the view washes grey. Disable the vanilla TAA system and
+	// drive the scene TAA resolve manually (HDR_Main_UpdateJitter + HDR_Main_PostProcessing),
+	// mirroring how Upscaling handles TAA. The user's preference is captured so jitter and the
+	// resolve still run during gameplay.
+	if (!globals::features::upscaling.loaded) {
+		if (auto* taaSetting = RE::GetINISetting("bUseTAA:Display"))
+			taaRequested = taaSetting->data.b;
+		Util::DisableVanillaTAA();
+		logger::info("[HDR Display] Disabled vanilla bUseTAA (was {}); scene TAA driven manually", taaRequested);
+	}
 }
 
 void HDRDisplay::PostPostLoad()
@@ -605,7 +638,10 @@ void HDRDisplay::PostPostLoad()
 	// PostPostLoad. Only install here when Upscaling is absent.
 	if (!globals::features::upscaling.loaded) {
 		logger::info("[HDR Display] Installing HDR pipeline hooks (Upscaling not loaded)");
+		bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 		stl::detour_thunk<HDR_MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
+		// Calculates jitter — force scene TAA on first so the game still jitters with bUseTAA off
+		stl::write_thunk_call<HDR_Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2));
 		stl::write_thunk_call<HDR_Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7));
 	}
 }
