@@ -628,7 +628,6 @@ void HDRDisplay::DataLoaded()
 		if (auto* taaSetting = RE::GetINISetting("bUseTAA:Display"))
 			taaRequested = taaSetting->data.b;
 		Util::DisableVanillaTAA();
-		logger::info("[HDR Display] Disabled vanilla bUseTAA (was {}); scene TAA driven manually", taaRequested);
 	}
 }
 
