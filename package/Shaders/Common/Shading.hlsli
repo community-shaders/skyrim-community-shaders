@@ -1,6 +1,8 @@
 #ifndef __SHADING_HLSLI__
 #define __SHADING_HLSLI__
 
+#include "Common/Math.hlsli"
+
 // [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
 float3 MultiBounceAO(float3 baseColor, float ao)
 {
@@ -71,7 +73,7 @@ float3 CalculateNormalFromHeight(float height, float heightScale, float2 uv)
 	float2 dUVdy = ddy(uv);
 
 	float det = dUVdx.x * dUVdy.y - dUVdx.y * dUVdy.x;
-	if (det == 0.0f) {
+	if (det < EPSILON_DIVISION) {
 		return float3(0, 0, 1);  // Avoid division by zero
 	}
 
