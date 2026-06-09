@@ -226,10 +226,8 @@ namespace
 		{
 			auto* hdr = &globals::features::hdrDisplay;
 
-			// Vanilla bUseTAA is force-disabled in DataLoaded (it drives the paused-menu UI temporal-AA
-			// pass that pollutes the HDR UI buffer with the opaque scene). Run the scene TAA resolve
-			// here instead, mirroring Upscaling: enable it only around the post-process call so it does
-			// not re-introduce the menu pollution. Jitter is applied by HDR_Main_UpdateJitter.
+			// bUseTAA is force-disabled in DataLoaded, so drive the scene TAA resolve here, enabled
+			// only around the post-process call.
 			Util::SetTemporal(hdr->taaRequested);
 
 			hdr->RedirectFramebuffer();
@@ -251,8 +249,7 @@ namespace
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	// Force the scene TAA flag on before the game computes jitter so it still applies sub-pixel
-	// jitter even though vanilla bUseTAA is disabled. Mirrors Upscaling::Main_UpdateJitter.
+	// Force scene TAA on before the game computes jitter, so jitter still applies with bUseTAA off.
 	struct HDR_Main_UpdateJitter
 	{
 		static void thunk(RE::BSGraphics::State* a_state)
@@ -618,12 +615,9 @@ void HDRDisplay::DataLoaded()
 		logger::warn("[HDR Display] bUse64bitsHDRRenderTarget ini setting not found");
 	}
 
-	// When Upscaling is not loaded, vanilla bUseTAA drives a UI temporal-AA pass that, in paused
-	// menus, re-renders the opaque scene into the redirected HDR UI buffer (alpha=1). HDROutputCS
-	// then discards the real HDR scene and the view washes grey. Disable the vanilla TAA system and
-	// drive the scene TAA resolve manually (HDR_Main_UpdateJitter + HDR_Main_PostProcessing),
-	// mirroring how Upscaling handles TAA. The user's preference is captured so jitter and the
-	// resolve still run during gameplay.
+	// When Upscaling is absent, vanilla bUseTAA's paused-menu UI pass re-renders the opaque scene
+	// into the redirected HDR UI buffer, washing the view grey. Disable it and drive the scene TAA
+	// resolve manually (jitter + post-process), capturing the user's preference first.
 	if (!globals::features::upscaling.loaded) {
 		if (auto* taaSetting = RE::GetINISetting("bUseTAA:Display"))
 			taaRequested = taaSetting->data.b;
