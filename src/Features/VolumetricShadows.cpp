@@ -101,7 +101,7 @@ void VolumetricShadows::CopyShadowLightData()
 				copyDesc.Height = SHADOW_COPY_SIZE;
 				copyDesc.MipLevels = 2;
 				copyDesc.ArraySize = 1;
-				copyDesc.Format = DXGI_FORMAT_R32G32_UNORM;
+				copyDesc.Format = DXGI_FORMAT_R32G32_FLOAT;
 				copyDesc.SampleDesc.Count = 1;
 				copyDesc.SampleDesc.Quality = 0;
 				copyDesc.Usage = D3D11_USAGE_DEFAULT;
