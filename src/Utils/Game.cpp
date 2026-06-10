@@ -1,5 +1,6 @@
 #include "Game.h"
 
+#include "Globals.h"
 #include "State.h"
 
 namespace Util
@@ -115,17 +116,12 @@ namespace Util
 
 	bool GetTemporal()
 	{
-		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		return imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled;
+		return globals::game::imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled;
 	}
 
 	void SetTemporal(bool enabled)
 	{
-		auto* imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		if (!imageSpaceManager)
-			return;
-		auto& taaShader = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA;
-		if (taaShader)
+		if (auto& taaShader = globals::game::imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA)
 			taaShader->taaEnabled = enabled;
 	}
 

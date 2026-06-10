@@ -11,8 +11,7 @@ namespace Util
 	bool GetTemporal();
 	// Toggle the ISTemporalAA scene-resolve flag (companion to GetTemporal).
 	void SetTemporal(bool enabled);
-	// Disable vanilla TAA (bUseTAA:Display). CS drives TAA itself: Upscaling always,
-	// HDR only when Upscaling is absent. HDR needs it off so vanilla's paused-menu UI pass can't wash out the HDR buffer.
+	// Disable vanilla TAA (bUseTAA:Display). CS drives TAA itself.
 	void DisableVanillaTAA();
 	float GetVerticalFOVRad();
 

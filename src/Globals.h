@@ -159,6 +159,7 @@ namespace globals
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
 		extern RE::Calendar* calendar;
+		extern RE::ImageSpaceManager* imageSpaceManager;
 		extern std::atomic<bool> quitGame;
 
 		extern RE::BSGraphics::PixelShader** currentPixelShader;

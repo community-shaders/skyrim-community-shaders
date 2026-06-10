@@ -114,6 +114,7 @@ namespace globals
 		RE::Sky* sky = nullptr;
 		RE::UI* ui = nullptr;
 		RE::Calendar* calendar = nullptr;
+		RE::ImageSpaceManager* imageSpaceManager = nullptr;
 		std::atomic<bool> quitGame{ false };
 
 		RE::BSGraphics::PixelShader** currentPixelShader = nullptr;
@@ -188,6 +189,7 @@ namespace globals
 
 			ui = RE::UI::GetSingleton();
 			calendar = RE::Calendar::GetSingleton();
+			imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 			perFrame = { REL::RelocationID(524768, 411384) };
 
 			currentAccumulator = { REL::RelocationID(527650, 414600) };

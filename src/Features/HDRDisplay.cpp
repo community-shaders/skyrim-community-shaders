@@ -249,16 +249,17 @@ namespace
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	// Force scene TAA on before the game computes jitter, so jitter still applies with bUseTAA off.
 	struct HDR_Main_UpdateJitter
 	{
 		static void thunk(RE::BSGraphics::State* a_state)
 		{
-			Util::SetTemporal(globals::features::hdrDisplay.taaRequested);
+			if (globals::features::hdrDisplay.taaRequested)
+				Util::SetTemporal(true);
 			func(a_state);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
 }
 
 bool HDRDisplay::isHDRMonitor = false;
@@ -633,7 +634,6 @@ void HDRDisplay::PostPostLoad()
 		logger::info("[HDR Display] Installing HDR pipeline hooks (Upscaling not loaded)");
 		bool isGOG = !GetModuleHandle(L"steam_api64.dll");
 		stl::detour_thunk<HDR_MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
-		// Calculates jitter — force scene TAA on first so the game still jitters with bUseTAA off
 		stl::write_thunk_call<HDR_Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2));
 		stl::write_thunk_call<HDR_Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7));
 	}
