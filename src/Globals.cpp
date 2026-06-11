@@ -189,7 +189,6 @@ namespace globals
 
 			ui = RE::UI::GetSingleton();
 			calendar = RE::Calendar::GetSingleton();
-			imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 			perFrame = { REL::RelocationID(524768, 411384) };
 
 			currentAccumulator = { REL::RelocationID(527650, 414600) };
