@@ -154,9 +154,6 @@ public:
 	ID3D11ShaderResourceView* savedFramebufferSRV = nullptr;
 	bool framebufferRedirected = false;
 
-	// User's bUseTAA preference, captured before it is force-disabled. Drives the manual scene TAA resolve.
-	bool taaRequested = false;
-
 	// Upgraded LDR render targets (post-tonemapping targets need float16 for HDR values)
 	void UpgradeLDRRenderTargets();
 	void RestoreLDRRenderTargets();

@@ -503,6 +503,19 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	// Disable scene TAA for the duration of the menu interface render, then restore it.
+	struct MenuManagerDrawInterfaceStart
+	{
+		static void thunk(int64_t a1)
+		{
+			const bool temporal = Util::GetTemporal();
+			Util::SetTemporal(false);
+			func(a1);
+			Util::SetTemporal(temporal);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 	struct CreateRenderTarget_Main
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
@@ -922,6 +935,9 @@ namespace Hooks
 
 		logger::info("Hooking Sky::UpdateColors");
 		stl::detour_thunk<Sky_UpdateColors>(REL::RelocationID(25686, 26233));
+
+		logger::info("Hooking MenuManager::DrawInterfaceStart for menu TAA");
+		stl::detour_thunk<MenuManagerDrawInterfaceStart>(REL::RelocationID(79947, 82084));
 
 		logger::info("Installing SetupGeometry hooks");
 		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
