@@ -218,6 +218,7 @@ namespace globals
 		player = RE::PlayerCharacter::GetSingleton();
 		sky = RE::Sky::GetSingleton();
 		utilityShader = RE::BSUtilityShader::GetSingleton();
+		imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 
 		bEnableLandFade = iniSettingCollection->GetSetting("bEnableLandFade:Display");
 

@@ -114,17 +114,9 @@ namespace Util
 		return cameraData;
 	}
 
-	// The singleton is created after globals are cached in ReInit, so resolve it lazily on first use.
-	static RE::ImageSpaceManager* GetImageSpaceManager()
-	{
-		if (!globals::game::imageSpaceManager)
-			globals::game::imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		return globals::game::imageSpaceManager;
-	}
-
 	bool GetTemporal()
 	{
-		auto* imageSpaceManager = GetImageSpaceManager();
+		auto* imageSpaceManager = globals::game::imageSpaceManager;
 		if (!imageSpaceManager)
 			return false;
 		auto& taaShader = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA;
@@ -133,7 +125,7 @@ namespace Util
 
 	void SetTemporal(bool enabled)
 	{
-		auto* imageSpaceManager = GetImageSpaceManager();
+		auto* imageSpaceManager = globals::game::imageSpaceManager;
 		if (!imageSpaceManager)
 			return;
 		if (auto& taaShader = imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA)
