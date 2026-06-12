@@ -91,6 +91,14 @@ public:
 
 	void ApplyHDR();
 
+	// Snapshot hdrTexture before the menu blur dirties it in place.
+	void SnapshotCleanScene();
+
+	// HDR output transform on a clean scene with no UI buffer, into outputTexture
+	// (no vanilla UI, ImGui menu, or blur). sdrPreview emits sRGB for the crop
+	// preview; otherwise HDR10 PQ for screenshots. Null if HDR output unavailable.
+	ID3D11Texture2D* ComposeCleanCapture(ID3D11ShaderResourceView* sceneSRV, bool sdrPreview);
+
 	ID3D11BlendState* GetPatchedAlphaBlendState(ID3D11BlendState* original);
 
 	// Swap-chain Present hook (installed from Hooks::InitD3D).
@@ -118,15 +126,23 @@ public:
 		float isSceneLinear;             ///< 1.0 = Linear Lighting active, scene already linear
 		float pad0;                      ///< 1.0 = main menu/loading screen active
 		float fgTweenMenuMidAlphaBoost;  ///< 1.0 = TweenMenu (pause) open — FG UIBrightnessCS mid-alpha boost only
+		float previewSDR;                ///< 1.0 = emit sRGB SDR (crop preview) instead of PQ HDR10
+		float pad1;
+		float pad2;
+		float pad3;
 	};
 
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");
+
+	// HDR data CB contents from current settings/game state (previewSDR=0).
+	HDRDataCB BuildHDRData() const;
 
 	ConstantBuffer* hdrDataCB = nullptr;
 
 	Texture2D* hdrTexture = nullptr;
 	Texture2D* outputTexture = nullptr;
-	Texture2D* uiTexture = nullptr;  // Separate UI render target for proper compositing
+	Texture2D* uiTexture = nullptr;          // Separate UI render target for proper compositing
+	Texture2D* cleanSceneCapture = nullptr;  // Pre-blur copy of hdrTexture for clean captures
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	ID3D11ComputeShader* GetHDROutputCS();
@@ -192,6 +208,9 @@ private:
 	};
 
 	D3D12UIBufferMode GetD3D12UIBufferMode();
+
+	// Bind scene (t0), UI (t1, may be null), UAV (u0), CB (b0); dispatch the output CS; unbind.
+	void DispatchHDROutput(ID3D11ShaderResourceView* sceneSRV, ID3D11ShaderResourceView* uiSRV, ID3D11UnorderedAccessView* uav);
 
 	// True when FFX frame generation is actively compositing UI this frame.
 	bool IsFGCompositingThisFrame() const;
